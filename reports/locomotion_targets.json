@@ -1,0 +1,22 @@
+{
+  "targets": {
+    "npc-move-to": [
+      {
+        "address": "0x14295EF20",
+        "value": "npc-move-to"
+      }
+    ],
+    "wait-npc-move-to": [
+      {
+        "address": "0x14295F5C0",
+        "value": "wait-npc-move-to"
+      }
+    ],
+    "ProcessCommand_StartLocomoting": [
+      {
+        "address": "0x14295A460",
+        "value": "bool __cdecl AiLocomotionController::ProcessCommand_StartLocomoting(const class LocoCommand &)"
+      }
+    ]
+  }
+}

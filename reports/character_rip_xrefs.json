@@ -1,0 +1,246 @@
+{
+  "image_base": "0x140000000",
+  "targets": {
+    "chloe-base": [
+      {
+        "string_va": "0x1428D56D0",
+        "value": "chloe-base",
+        "xrefs": [
+          {
+            "displacement_va": "0x1401588D5",
+            "function_va": "0x140155760",
+            "function_end_va": "0x140158EA5",
+            "bytes": "00 84 c9 74 10 4c 8d 05 f7 cd 77 02 48 8d 8d 10 05 00 00 eb"
+          },
+          {
+            "displacement_va": "0x1410EB4C3",
+            "function_va": "0x1410EB3E0",
+            "function_end_va": "0x1410EB56C",
+            "bytes": "ba 0a 00 00 00 4c 8d 0d 09 a2 7e 01 48 8d 4c 24 30 0f 1f 40"
+          },
+          {
+            "displacement_va": "0x1412FA072",
+            "function_va": "0x1412F9F00",
+            "function_end_va": "0x1412FA101",
+            "bytes": "4d 00 48 8b f0 4c 8d 0d 5a b6 5d 01 44 8b c7 48 8d 4c 24 40"
+          },
+          {
+            "displacement_va": "0x1412FC666",
+            "function_va": "0x1412FC4C0",
+            "function_end_va": "0x1412FCAF9",
+            "bytes": "00 48 89 45 38 4c 8d 0d 66 90 5d 01 45 8b c5 48 8d 8d 00 01"
+          },
+          {
+            "displacement_va": "0x141C74EED",
+            "function_va": "0x141C749D0",
+            "function_end_va": "0x141C754B9",
+            "bytes": "d2 44 8d 4a 0a 4c 8d 05 df 07 c6 00 48 8d 45 a0 48 8b cf 4d"
+          }
+        ]
+      }
+    ],
+    "nadine-auction": [
+      {
+        "string_va": "0x1428FED18",
+        "value": "nadine-auction",
+        "xrefs": [
+          {
+            "displacement_va": "0x140295235",
+            "function_va": "0x1402951F0",
+            "function_end_va": "0x140295300",
+            "bytes": "00 00 00 33 d2 4c 8d 05 df 9a 66 02 48 8d 44 24 30 48 8d 0d"
+          },
+          {
+            "displacement_va": "0x1420F34D3",
+            "function_va": "0x1420F3100",
+            "function_end_va": "0x1420F3520",
+            "bytes": "e8 05 00 00 66 89 7d f0 41 b8 80 00 00 00 c5 fb 10 4d f0 c5"
+          }
+        ]
+      }
+    ],
+    "coop-chloe": [
+      {
+        "string_va": "0x1428FF4E0",
+        "value": "coop-chloe",
+        "xrefs": [
+          {
+            "displacement_va": "0x140295D70",
+            "function_va": "0x140295BB0",
+            "function_end_va": "0x140296186",
+            "bytes": "b8 0a 00 00 00 4c 8d 0d 6c 97 66 02 48 8d 8d f0 03 00 00 48"
+          },
+          {
+            "displacement_va": "0x140B581FB",
+            "function_va": "0x140B580C0",
+            "function_end_va": "0x140B5834F",
+            "bytes": "b8 0a 00 00 00 48 8d 15 e1 72 da 01 48 8d 4c 24 70 48 8d 05"
+          }
+        ]
+      }
+    ],
+    "nadine-base": [
+      {
+        "string_va": "0x142903FF8",
+        "value": "nadine-base",
+        "xrefs": [
+          {
+            "displacement_va": "0x14029A5F5",
+            "function_va": "0x14029A420",
+            "function_end_va": "0x14029A6A6",
+            "bytes": "b8 0b 00 00 00 48 8d 15 ff 99 66 02 48 8d 44 24 50 66 90 c5"
+          },
+          {
+            "displacement_va": "0x141981B9B",
+            "function_va": "0x141980E03",
+            "function_end_va": "0x141981D53",
+            "bytes": "ba 0b 00 00 00 48 8d 0d 59 24 f8 00 e8 6c bd 7c fe 44 3b f8"
+          },
+          {
+            "displacement_va": "0x141C74FFD",
+            "function_va": "0x141C749D0",
+            "function_end_va": "0x141C754B9",
+            "bytes": "00 00 45 8b d3 4c 8d 05 f7 ef c8 00 48 8b cf 4d 8b ce 66 0f"
+          }
+        ]
+      }
+    ],
+    "nadine-buddy": [
+      {
+        "string_va": "0x142937E18",
+        "value": "nadine-buddy",
+        "xrefs": [
+          {
+            "displacement_va": "0x14042FD35",
+            "function_va": "0x14042FD0B",
+            "function_end_va": "0x14042FE4A",
+            "bytes": "00 00 00 33 ff 48 8d 15 df 80 50 02 48 8d 44 24 30 48 8d 0d"
+          },
+          {
+            "displacement_va": "0x14046FF86",
+            "function_va": "0x14046FC60",
+            "function_end_va": "0x140470046",
+            "bytes": "01 00 00 8b d6 4c 8d 05 8e 7e 4c 02 48 8d 4c 24 60 90 48 8d"
+          },
+          {
+            "displacement_va": "0x1404A0CEE",
+            "function_va": "0x1404A0CD0",
+            "function_end_va": "0x1404A0D9E",
+            "bytes": "04 00 00 33 c9 4c 8d 0d 26 71 49 02 4c 8b d2 48 8d 04 24 48"
+          },
+          {
+            "displacement_va": "0x1404A1129",
+            "function_va": "0x1404A111A",
+            "function_end_va": "0x1404A11E2",
+            "bytes": "00 48 8d 57 08 48 8d 1d eb 6c 49 02 41 b8 20 00 00 00 48 8b"
+          },
+          {
+            "displacement_va": "0x1404A310E",
+            "function_va": "0x1404A30F0",
+            "function_end_va": "0x1404A31BE",
+            "bytes": "04 00 00 33 c9 4c 8d 0d 06 4d 49 02 4c 8b d2 48 8d 04 24 48"
+          },
+          {
+            "displacement_va": "0x1404D5BCF",
+            "function_va": "0x1404D5B52",
+            "function_end_va": "0x1404D5C6D",
+            "bytes": "b8 0c 00 00 00 48 8d 15 45 22 46 02 48 8d 44 24 70 48 8d 0d"
+          },
+          {
+            "displacement_va": "0x1404DF7C8",
+            "function_va": "0x1404DF5E0",
+            "function_end_va": "0x1404DF880",
+            "bytes": "b9 0c 00 00 00 4c 8d 05 4c 86 45 02 48 8d 44 24 20 c5 fc 10"
+          },
+          {
+            "displacement_va": "0x140539982",
+            "function_va": "0x1405398EA",
+            "function_end_va": "0x140539BF6",
+            "bytes": "b9 0c 00 00 00 48 8d 15 92 e4 3f 02 44 8b d7 48 8d 84 24 a0"
+          },
+          {
+            "displacement_va": "0x14124D2E7",
+            "function_va": "0x14124D230",
+            "function_end_va": "0x14124E1C8",
+            "bytes": "b9 0c 00 00 00 48 8d 05 2d ab 6e 01 0f 1f 44 00 00 40 38 30"
+          },
+          {
+            "displacement_va": "0x141252EFE",
+            "function_va": "0x14125299A",
+            "function_end_va": "0x14125326C",
+            "bytes": "02 00 00 33 d2 4c 8d 05 16 4f 6e 01 48 8d 44 24 60 48 8b ce"
+          },
+          {
+            "displacement_va": "0x1412A7B2F",
+            "function_va": "0x1412A79D0",
+            "function_end_va": "0x1412A7BE8",
+            "bytes": "bb 0c 00 00 00 4c 8d 15 e5 02 69 01 48 8d 04 24 66 0f 1f 84"
+          },
+          {
+            "displacement_va": "0x1413C26BE",
+            "function_va": "0x1413C2341",
+            "function_end_va": "0x1413C2E02",
+            "bytes": "24 a8 00 00 00 4c 8d 05 56 57 57 01 c5 f8 77 e8 c6 c9 ff ff"
+          },
+          {
+            "displacement_va": "0x141D22D57",
+            "function_va": "0x141D22970",
+            "function_end_va": "0x141D22E91",
+            "bytes": "00 00 00 33 db 4c 8d 05 bd 50 c1 00 48 8d 4c 24 40 48 8d 05"
+          },
+          {
+            "displacement_va": "0x14216FC39",
+            "function_va": "0x14216FBC0",
+            "function_end_va": "0x14216FD87",
+            "bytes": "bf 08 00 00 00 4c 8d 05 db 81 7c 00 8b d6 48 8d 44 24 50 48"
+          }
+        ]
+      }
+    ],
+    "NadineBuddy": [
+      {
+        "string_va": "0x142949620",
+        "value": "NadineBuddy",
+        "xrefs": [
+          {
+            "displacement_va": "0x14004D953",
+            "function_va": "0x14004D930",
+            "function_end_va": "0x14004D9A1",
+            "bytes": "63 03 41 b1 01 4c 8d 05 c9 bc 8f 02 33 d2 48 8d 4c 24 48 8b"
+          },
+          {
+            "displacement_va": "0x14004D974",
+            "function_va": "0x14004D930",
+            "function_end_va": "0x14004D9A1",
+            "bytes": "0d cf 35 45 00 48 8d 15 a8 bc 8f 02 48 c7 44 24 20 00 80 0c"
+          },
+          {
+            "displacement_va": "0x14061BD37",
+            "function_va": "0x14061ADB0",
+            "function_end_va": "0x14061C062",
+            "bytes": "d2 44 8d 4a 0b 4c 8d 05 e5 d8 32 02 0f 1f 44 00 00 41 0f b6"
+          },
+          {
+            "displacement_va": "0x14061BEE2",
+            "function_va": "0x14061ADB0",
+            "function_end_va": "0x14061C062",
+            "bytes": "d2 44 8d 4a 0b 4c 8d 05 3a d7 32 02 41 0f b6 00 84 c0 74 21"
+          },
+          {
+            "displacement_va": "0x1413C2607",
+            "function_va": "0x1413C2341",
+            "function_end_va": "0x1413C2E02",
+            "bytes": "00 00 41 8b d5 4c 8d 05 15 70 58 01 41 b9 0b 00 00 00 48 8d"
+          }
+        ]
+      }
+    ],
+    "RTTI NadineBuddy": [
+      {
+        "string_va": "0x143750CF0",
+        "value": ".?AVNadineBuddy@@",
+        "xrefs": []
+      }
+    ]
+  }
+}

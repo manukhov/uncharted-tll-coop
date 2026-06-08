@@ -1,0 +1,28 @@
+# Build output
+scanner/build/
+build/
+
+# IDA databases (large binaries)
+ida/*.i64
+ida/*.id0
+ida/*.id1
+ida/*.id2
+ida/*.nam
+ida/*.til
+
+# Binary dumps from runtime scans
+*.bin
+
+# Compiled Python cache
+__pycache__/
+*.pyc
+
+# VS Code
+.vscode/
+
+# Windows
+*.exe
+*.dll
+*.pdb
+*.exp
+*.lib
