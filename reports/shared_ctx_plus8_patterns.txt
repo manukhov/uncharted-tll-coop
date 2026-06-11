@@ -1,0 +1,61 @@
+2821941:   1409ec43c:	48 8b 51 08          	mov    rdx,QWORD PTR [rcx+0x8]
+2903488:   140a390ce:	48 8d 5b 08          	lea    rbx,[rbx+0x8]
+2903544:   140a391ce:	48 8d 5b 08          	lea    rbx,[rbx+0x8]
+2904135:   140a39ba2:	48 8d 51 08          	lea    rdx,[rcx+0x8]
+2904290:   140a39e3b:	48 8d 76 08          	lea    rsi,[rsi+0x8]
+2904333:   140a39efb:	48 8d 76 08          	lea    rsi,[rsi+0x8]
+3053455:   140ac03c1:	c6 43 08 05          	mov    BYTE PTR [rbx+0x8],0x5
+3054698:   140ac1767:	66 c7 41 08 00 00    	mov    WORD PTR [rcx+0x8],0x0
+3054734:   140ac17d1:	c6 41 08 01          	mov    BYTE PTR [rcx+0x8],0x1
+3054739:   140ac17e6:	44 8d 73 08          	lea    r14d,[rbx+0x8]
+3055370:   140ac2243:	c6 47 08 00          	mov    BYTE PTR [rdi+0x8],0x0
+3055539:   140ac24e0:	0f b6 41 08          	movzx  eax,BYTE PTR [rcx+0x8]
+3055579:   140ac2537:	c6 41 08 00          	mov    BYTE PTR [rcx+0x8],0x0
+3055831:   140ac2931:	41 88 76 08          	mov    BYTE PTR [r14+0x8],sil
+3056165:   140ac2eae:	41 c6 46 08 01       	mov    BYTE PTR [r14+0x8],0x1
+3056190:   140ac2ef0:	0f b6 41 08          	movzx  eax,BYTE PTR [rcx+0x8]
+3056244:   140ac2f86:	44 8d 4f 08          	lea    r9d,[rdi+0x8]
+3056897:   140ac3885:	48 8b 41 08          	mov    rax,QWORD PTR [rcx+0x8]
+3057457:   140ac40c3:	48 8b 41 08          	mov    rax,QWORD PTR [rcx+0x8]
+3057985:   140ac4957:	48 8b 41 08          	mov    rax,QWORD PTR [rcx+0x8]
+3059694:   140ac6331:	48 89 43 08          	mov    QWORD PTR [rbx+0x8],rax
+3059715:   140ac6360:	8b 41 08             	mov    eax,DWORD PTR [rcx+0x8]
+3059750:   140ac63ce:	44 8d 76 08          	lea    r14d,[rsi+0x8]
+3060171:   140ac6aeb:	89 41 08             	mov    DWORD PTR [rcx+0x8],eax
+3062145:   140ac8ad6:	41 8d 4f 08          	lea    ecx,[r15+0x8]
+3062247:   140ac8c87:	48 8b 46 08          	mov    rax,QWORD PTR [rsi+0x8]
+3062267:   140ac8cc0:	48 8b 46 08          	mov    rax,QWORD PTR [rsi+0x8]
+3062307:   140ac8d67:	48 8b 46 08          	mov    rax,QWORD PTR [rsi+0x8]
+3062529:   140ac90f0:	c5 fc 10 4e 08       	vmovups ymm1,YMMWORD PTR [rsi+0x8]
+3062655:   140ac92e2:	48 89 51 08          	mov    QWORD PTR [rcx+0x8],rdx
+3062848:   140ac963f:	48 8b 49 08          	mov    rcx,QWORD PTR [rcx+0x8]
+3063262:   140ac9c9d:	48 8b 49 08          	mov    rcx,QWORD PTR [rcx+0x8]
+3063327:   140ac9d9d:	48 8b 49 08          	mov    rcx,QWORD PTR [rcx+0x8]
+3063496:   140aca04b:	4c 2b 49 08          	sub    r9,QWORD PTR [rcx+0x8]
+3063596:   140aca200:	c5 fa 11 57 08       	vmovss DWORD PTR [rdi+0x8],xmm2
+3063721:   140aca453:	8b 46 08             	mov    eax,DWORD PTR [rsi+0x8]
+3064706:   140acb591:	c5 fb 10 43 08       	vmovsd xmm0,QWORD PTR [rbx+0x8]
+3065156:   140acbb37:	45 8d 5f 08          	lea    r11d,[r15+0x8]
+3065460:   140acbeb0:	48 89 7b 08          	mov    QWORD PTR [rbx+0x8],rdi
+3065767:   140acc0f6:	48 8d 5b 08          	lea    rbx,[rbx+0x8]
+3066455:   140accbc1:	48 8d 5b 08          	lea    rbx,[rbx+0x8]
+3066716:   140accf92:	48 8d 7f 08          	lea    rdi,[rdi+0x8]
+3066739:   140accfe0:	48 8b 49 08          	mov    rcx,QWORD PTR [rcx+0x8]
+3066783:   140acd066:	44 8d 4b 08          	lea    r9d,[rbx+0x8]
+3066883:   140acd202:	48 8d 7f 08          	lea    rdi,[rdi+0x8]
+3067035:   140acd3bb:	44 8d 4b 08          	lea    r9d,[rbx+0x8]
+3067135:   140acd552:	48 8d 7f 08          	lea    rdi,[rdi+0x8]
+3069115:   140acef0f:	48 c7 41 08 00 00 00 	mov    QWORD PTR [rcx+0x8],0x0
+3069915:   140acfb5b:	44 8d 5f 08          	lea    r11d,[rdi+0x8]
+3070003:   140acfccc:	44 8d 5f 08          	lea    r11d,[rdi+0x8]
+3155052:   140b1fe81:	48 8d 7f 08          	lea    rdi,[rdi+0x8]
+3155259:   140b201c1:	48 8d 76 08          	lea    rsi,[rsi+0x8]
+3155333:   140b202af:	44 8d 4b 08          	lea    r9d,[rbx+0x8]
+3155432:   140b20442:	48 8d 7f 08          	lea    rdi,[rdi+0x8]
+3155479:   140b204a9:	4c 8b 49 08          	mov    r9,QWORD PTR [rcx+0x8]
+3155516:   140b2052b:	44 8d 4b 08          	lea    r9d,[rbx+0x8]
+3155616:   140b206c2:	48 8d 7f 08          	lea    rdi,[rdi+0x8]
+3155656:   140b20739:	48 8b 49 08          	mov    rcx,QWORD PTR [rcx+0x8]
+3155881:   140b20a71:	48 8d 7f 08          	lea    rdi,[rdi+0x8]
+3156212:   140b20f83:	48 8d 76 08          	lea    rsi,[rsi+0x8]
+4832515:   141140ac6:	48 89 41 08          	mov    QWORD PTR [rcx+0x8],rax

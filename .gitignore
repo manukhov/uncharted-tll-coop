@@ -17,6 +17,16 @@ ida/*.til
 __pycache__/
 *.pyc
 
+# Generated reports / scratch
+reports/_tmp_*
+reports/*.log
+reports/*runtime_objects.json
+reports/probe_addrs.txt
+scanner/_build*.cmd
+scanner/build-wincheck/
+ida/*.log
+ida/*.txt
+
 # VS Code
 .vscode/
 

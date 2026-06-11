@@ -5,6 +5,8 @@ add_executable(tll_object_scanner src/main.cpp)
 add_executable(tll_nudge src/nudge.cpp)
 add_executable(tll_injector src/injector.cpp)
 add_executable(tll_buddy_teleport src/buddy_teleport.cpp)
+add_executable(tll_remote_input_client src/remote_input_client.cpp)
+add_executable(tll_runtime_code_dump src/runtime_code_dump.cpp)
 add_library(tll_teleport_hook SHARED src/teleport_hook.cpp)
 
 foreach(
@@ -13,6 +15,8 @@ foreach(
     tll_nudge
     tll_injector
     tll_buddy_teleport
+    tll_remote_input_client
+    tll_runtime_code_dump
     tll_teleport_hook
 )
     target_compile_features(${target} PRIVATE cxx_std_20)
@@ -39,3 +43,6 @@ set_target_properties(
         PREFIX ""
         OUTPUT_NAME "tll_teleport_hook"
 )
+
+target_link_libraries(tll_teleport_hook PRIVATE ws2_32)
+target_link_libraries(tll_remote_input_client PRIVATE ws2_32)

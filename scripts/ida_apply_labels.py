@@ -1,0 +1,4165 @@
+import ida_bytes
+import ida_funcs
+import ida_loader
+import _ida_loader
+import ida_name
+import ida_pro
+import idc
+
+
+FUNCTIONS = {
+    0x140048440: (
+        "RegisterScriptCommand_SpawnPlayer",
+        "Registers the retained script command entry for spawn-player. Stores a "
+        "generic command callback and command metadata; the larger script-side "
+        "implementation is recovered separately around 0x140F73910.",
+    ),
+    0x14007D040: (
+        "RegisterNetSpawnCoopBuddyCommand",
+        "Registers the retained network command net-spawn-coop-buddy and binds "
+        "it to the large runtime handler at 0x140B56090.",
+    ),
+    0x1403F6890: (
+        "NadineNpcMoveTo_Type02",
+        "Confirmed native NPC MoveTo writer. Initializes type 0x02 locomotion "
+        "command and fills nav frame, facing, move parameters, flags, and "
+        "aux fields.",
+    ),
+    0x141DF2D60: (
+        "BuildNavigationFrame",
+        "Confirmed navigation-goal builder used by Nadine movement paths.",
+    ),
+    0x1403F5D30: (
+        "RequestDisableAi",
+        "Confirmed Nadine AI disable path. Tested as RequestDisableAi(npc, false, true).",
+    ),
+    0x1403F5C80: (
+        "RequestEnableAi",
+        "Confirmed Nadine AI restore path. Tested as RequestEnableAi(npc, false).",
+    ),
+    0x1403F5B60: (
+        "InitPendingLocoCommand",
+        "Resets and initializes pending locomotion command block at npc+0x2470. "
+        "Writes command type at +0x24F4 and timing/flags around +0x24F8/+0x2500/+0x2560.",
+    ),
+    0x1403F61C0: (
+        "WriteLocoCommand_Type13",
+        "Writer for locomotion command type 0x13. Sets +0x2500, mutates +0x2560, "
+        "and rebuilds nav frame via 0x14014E240 + BuildNavigationFrame.",
+    ),
+    0x1403F68C0: (
+        "WriteLocoCommand_Type02",
+        "Writer for locomotion command type 0x02. Fills nav frame, facing, move "
+        "parameters, +0x2514, +0x2560, +0x2561.",
+    ),
+    0x1403F69B0: (
+        "WriteLocoCommand_Type04",
+        "Writer for locomotion command type 0x04. Stores +0x2508, move payload, "
+        "and flags consumed by dedicated interpreter branch.",
+    ),
+    0x1403F6C20: (
+        "WriteLocoCommand_Type07",
+        "Writer for locomotion command type 0x07. Stores scalar parameters at "
+        "+0x2558/+0x255C and clears npc+0x1D57 bit 0x2.",
+    ),
+    0x14041F700: (
+        "CopyLocoCommandBlock",
+        "Copies locomotion command block from source (&npc+0x2470) into another "
+        "internal buffer. Preserves flag bytes at offsets +0xF0/+0xF1.",
+    ),
+    0x14041E0A8: (
+        "CheckLocoCommandTimeGate",
+        "Reads npc+0x2500 and npc+0x24F8 before command copy/dispatch path.",
+    ),
+    0x1403E0400: (
+        "ValidateAcquireLocoContext",
+        "Validation/acquisition helper used before locomotion command processing.",
+    ),
+    0x1403DF370: (
+        "ProcessLocoStateBranch",
+        "Large locomotion-related state handler reached by downstream command paths.",
+    ),
+    0x1406B2360: (
+        "IsInterestingLocoCommandType",
+        "Classifier on npc+0x24F4 using bitmask 0x914 over command types 0..0x0B.",
+    ),
+    0x1406B2C90: (
+        "BuildLocoDirectionFromCommand",
+        "Interpreter helper for command types 0x02/0x04/0x08/0x0B. Type 0x04 uses "
+        "dedicated branch; others either use stored nav frame or fallback orientation path.",
+    ),
+    0x1406B591C: (
+        "DispatchSpecialLocoCommandTypes",
+        "Special dispatcher for command types 0x09 and 0x11 before generic "
+        "locomotion processing continues.",
+    ),
+    0x1406AD290: (
+        "ResetPendingLocoDispatch",
+        "Clears pending dispatch-related state around npc+0x27D8 and npc+0x26A4.",
+    ),
+    0x140176990: (
+        "GetNpcFlag_1D57_Bit1",
+        "Getter for npc+0x1D57 bit 0x2.",
+    ),
+    0x140177D4F: (
+        "CheckNpcFlag_1D57_Bit1_Path",
+        "Downstream state path that tests npc+0x1D57 bit 0x2.",
+    ),
+    0x140420441: (
+        "CheckNpcFlag_1D57_Bit2_Path",
+        "Downstream state path that tests npc+0x1D57 bit 0x4.",
+    ),
+    0x140B56090: (
+        "HandleNetSpawnCoopBuddy",
+        "Large retained co-op buddy/network spawn handler. Resolves level or "
+        "context objects, consumes roster-like state, and can resolve a live "
+        "entity through 0x141D22420.",
+    ),
+    0x140B580C0: (
+        "SelectRetainedCoopPlayerLookHash",
+        "Selects the retained co-op player-look hash from the network/co-op mode "
+        "field at manager+0x558. Confirmed stock modes choose coop-drake, "
+        "coop-chloe, or coop-sullivan.",
+    ),
+    0x140F73910: (
+        "ScriptSpawnPlayer",
+        "Large retained spawn-player implementation. Builds or copies a spawn "
+        "descriptor, then dispatches into 0x1410F1910 or 0x1410F3350.",
+    ),
+    0x1400AA8C0: (
+        "RegisterPlayerCtorFactoryIntoGlobalPlayerSlotBF00",
+        "Startup registration helper that publishes 0x1410C6F00 as the real "
+        "Player alloc/ctor pointer through 0x1417C4650 into the global slot "
+        "at 0x143EEBF00.",
+    ),
+    0x1400AA940: (
+        "RegisterSiblingPlayerHelperFactoryIntoGlobalSlotBF90",
+        "Startup registration helper adjacent to the Player ctor registration. "
+        "Seeds the sibling global slot family at 0x143EEBF90/0x143EEBFA0 with "
+        "0x1410C6F60 and fixed metadata size 0x8.",
+    ),
+    0x1401696B0: (
+        "CheckEntityAgainstGlobalPlayerSlotBF00Bitset",
+        "Small runtime gate that tests a live object's bitset at rcx+0x30 "
+        "against selector/id data stored in the globally registered Player "
+        "slot record at 0x143EEBF00.",
+    ),
+    0x140F73C90: (
+        "CopySpawnDescriptor_0x184",
+        "Memcpy-like helper for the retained spawn-player descriptor block. "
+        "Copies two 0x80-byte chunks plus tail fields through offset 0x184.",
+    ),
+    0x1410F14C0: (
+        "CommitResolvedPlayerSpawn",
+        "Central retained player-spawn commit path. Accepts resolved look/"
+        "transform/context data, seeds a real ProcessSpawnInfo-class stack "
+        "packet with vtable 0x14291CF98, initializes it through 0x1417C32A0, "
+        "builds a second local packet layer plus fallback via 0x1417651D0, "
+        "now clearly tags that path with `Player` and `*player-health-settings*`, "
+        "materializes a runtime object through 0x1417C3790, then harvests the "
+        "returned object's +0xA8/+0xBC retained-live pair and stores it in the "
+        "global retained player-slot table at 0x143EEBE80.",
+    ),
+    0x1417C32A0: (
+        "InitializeSelectorBackedProcessSpawnPacket",
+        "Compact packet initializer used by retained/player runtime builders. "
+        "Seeds packet fields at +0x10/+0x18/+0x20/+0x28/+0x30/+0x38/+0x48, "
+        "stores the incoming selector/hash id in +0x8, resolves a selector/"
+        "capability entry into +0x50, and derives a mask/limit into +0x40. "
+        "The base field at +0x20 is copied directly from arg4/r9, which is "
+        "important because the real Player::Init path later reads "
+        "incoming_packet+0x20 before any draw-control or late mounted-owner "
+        "stages run. ",
+        "This is the shared front-end base later consumed either directly by "
+        "0x1417C3790 or through the extended wrapper family at "
+        "0x1417C35A0 / vtable 0x1428D5D60.",
+    ),
+    0x1417C35A0: (
+        "InitializeExtendedSelectorBackedRuntimeStatePacket_1428D5D60",
+        "In-place initializer for the extended selector-backed packet family "
+        "with vtable 0x1428D5D60. Calls 0x1417C32A0 for the shared base "
+        "fields, then seeds wrapper-local state at +0x58/+0x60/+0x68/+0x70/"
+        "+0x78/+0x80/+0x88..+0x98. The base +0x20 source link survives this "
+        "wrap and is exactly what the early Player::Init path later passes "
+        "into 0x1416860A0. This wrapper also preserves the upper packet shape "
+        "at +0x40/+0x48/+0x58 used later by 0x1418C4840, which makes it a "
+        "stronger external_state candidate than the materialized object "
+        "returned by 0x1417C3790.",
+    ),
+    0x1417C3790: (
+        "ResolveOrMaterializeRuntimeStateObjectFromSelectorPacket",
+        "Consumes the compact packet built by 0x1417C32A0. Requires packet "
+        "+0x50, checks selector/capability gates through 0x1417C4800, builds "
+        "a returned runtime object family, copies packet payload blocks from "
+        "+0x20/+0x40 into that object, and exposes retained/live identity at "
+        "returned_object+0xA8/+0xBC. The returned object now looks more like "
+        "a materialized runtime companion to the packet than the final "
+        "Player-side external_state itself; the stronger direct shape match "
+        "for 0x1418C4840 is the extended wrapper family at 0x1417C35A0.",
+    ),
+    0x1415FC800: (
+        "InsertOrRelinkRuntimeStateNodeBySpanIntoIndexedContainer",
+        "Intrusive-node/container helper used directly inside "
+        "0x1417C3790. Claims or re-links a node, stores span/count at "
+        "node+0x20, links it through owner+0x70/+0x80/+0x98, and updates "
+        "owner+0xA8. This is object-local bookkeeping for the materialized "
+        "runtime family, not the upper Player apply seam.",
+    ),
+    0x1415FC9F0: (
+        "UnlinkRuntimeStateNodeFromIndexedContainer",
+        "Inverse intrusive-node/container helper paired with 0x1415FC800. "
+        "Detaches a node from owner+0x70/+0x80/+0x98, decrements owner+0xA8, "
+        "and clears node fields. Also used directly inside 0x1417C3790, "
+        "which pins both helpers as internal bookkeeping for the returned "
+        "materialized object family.",
+    ),
+    0x1410F0D10: (
+        "GetRetainedPlayerEntityBySlot",
+        "Reads a 16-byte entry from g_RetainedPlayerSlotTable[slot], validates "
+        "the embedded runtime id against entity+0xBC, and returns the live "
+        "entity pointer when the slot is still valid.",
+    ),
+    0x1410F0D60: (
+        "CopyRetainedPlayerSlotEntry",
+        "Copies a raw 16-byte entry from g_RetainedPlayerSlotTable[slot] into "
+        "caller-provided storage.",
+    ),
+    0x1410F0D80: (
+        "FocusRetainedPlayerEntityBySlot",
+        "Resolves a retained player entity by slot and jumps into a downstream "
+        "focus/activation path at 0x14029ACB0.",
+    ),
+    0x1410F0DD0: (
+        "FindRetainedPlayerSlotIndex",
+        "Searches the 6-entry g_RetainedPlayerSlotTable for a matching "
+        "(handle,id) pair and returns the slot index.",
+    ),
+    0x1410F0E00: (
+        "CopyRetainedPlayerSlot0Entry",
+        "Copies g_RetainedPlayerSlotTable[0] into caller-provided storage.",
+    ),
+    0x1410F0F60: (
+        "ResolveRetainedPlayerHandleBySlot",
+        "Resolves a retained slot entry into the live player handle/object. In "
+        "debug-enabled builds it can also query an alternate retained lookup "
+        "path before falling back to g_RetainedPlayerSlotTable.",
+    ),
+    0x1410F3DD0: (
+        "RefreshPrimaryRetainedPlayerCamera",
+        "Touches retained player slot 0, restores entity focus, then queries "
+        "GetCameraManager(0) and updates camera state through 0x141C078D0.",
+    ),
+    0x1410F3E40: (
+        "CheckRetainedPlayerSlotActive",
+        "Validates a retained slot entry, resolves the live entity, and calls "
+        "entity virtual slot +0x860 to test or update active state.",
+    ),
+    0x1410F3A80: (
+        "WritePrimaryRetainedPlayerSlot0",
+        "Writes a resolved (handle,id) pair into g_RetainedPlayerSlotTable[0] "
+        "and mirrors the same pair into caller-provided output storage.",
+    ),
+    0x1410F3B20: (
+        "PromoteRetainedPlayerSlot",
+        "Builds or resolves a retained player record for the requested slot, "
+        "stores the resulting (handle,id) pair into g_RetainedPlayerSlotTable[slot], "
+        "and marks the resolved entity with byte +0x368C. The current disasm "
+        "also shows that it manually builds the same base ProcessSpawnInfo "
+        "packet plus extended wrapper family (`0x1417C32A0` then local vtable "
+        "0x1428D5D60) before passing that state into the upper retained "
+        "manager path, which makes it one of the strongest concrete promotion-"
+        "adjacent retained entrypoints found so far.",
+    ),
+    0x1410F3F50: (
+        "IsPrimaryRetainedPlayerAvailable",
+        "Returns success when retained slot 0 is active/available, gated by "
+        "global debug/runtime flags.",
+    ),
+    0x1410F3F80: (
+        "HasPrimaryRetainedPlayerEntity",
+        "Checks whether retained slot 0 resolves to a live entity, falling back "
+        "to CheckRetainedPlayerSlotActive(0) when needed.",
+    ),
+    0x1410F3FC0: (
+        "IsRetainedPlayerSlotUsable",
+        "Validates an arbitrary retained slot index through "
+        "CheckRetainedPlayerSlotActive(slot), gated by the same global runtime "
+        "flags as the primary-slot helpers.",
+    ),
+    0x1410F8E90: (
+        "RefreshAllRetainedPlayerEntities",
+        "Iterates over the six entries of g_RetainedPlayerSlotTable and calls "
+        "0x1410F8D80 for each live slot entity.",
+    ),
+    0x141C07420: (
+        "SwitchRetainedCameraModeStateBlocks",
+        "Retained-camera mode-switch bridge. Writes CameraManager+0x128 and "
+        "updates two global camera-state blocks selected from the shared "
+        "slot-state array using CameraManager+0x124 plus relative indices "
+        "+2 and +4.",
+    ),
+    0x141C078D0: (
+        "UpdateCameraManagerFromRetainedPlayer",
+        "Heavy CameraManager update path used by retained-player camera refresh.",
+    ),
+    0x141C074E0: (
+        "AttachCameraManagerToRetainedPlayer",
+        "Enables a CameraManager player/camera attachment mode, refreshes "
+        "CameraManager cached retained-player handle at +0x2A8/+0x2B0, and "
+        "marks the active camera slot in global state.",
+    ),
+    0x141C07640: (
+        "DetachCameraManagerFromRetainedPlayer",
+        "Disables the CameraManager retained-player attachment mode and clears "
+        "or resets the corresponding camera slot state.",
+    ),
+    0x1413BA140: (
+        "HandleRetainedPlayerCameraMessage",
+        "Opcode/hash-dispatch handler for retained-player camera state. One "
+        "branch builds camera/transform state from the current live player, one "
+        "branch resolves a player/entity record and caches its (handle,id) at "
+        "this+0x658, and one branch re-activates that cached retained entity.",
+    ),
+    0x1413B9EA0: (
+        "ReactivateCachedRetainedPlayerEntity",
+        "Reads cached retained-player (handle,id) from this+0x658, validates "
+        "the live entity, marks it active via byte +0x72, then forwards the "
+        "owning object into downstream retained/camera update paths.",
+    ),
+    0x1414538E0: (
+        "BuildRetainedCameraStateRecord",
+        "Builds a larger retained-camera/player state record. Stores a "
+        "(handle,id) pair at the start, then fills transform/camera payload "
+        "and record flags used by higher retained-camera message builders.",
+    ),
+    0x1417BF750: (
+        "AppendRetainedCameraRecord",
+        "Appends a 0x30-byte retained-camera command/state record into a "
+        "grow-only array, preserving the embedded handle/id and flag bytes.",
+    ),
+    0x141634F20: (
+        "QueueRetainedCameraWorkItem",
+        "Allocates and enqueues a retained-camera work item/object, links it "
+        "into the owner's queue, then dispatches through a virtual method on "
+        "the new item.",
+    ),
+    0x1416350A0: (
+        "QueueRetainedCameraPayloadCommand_Type02",
+        "Builds and enqueues a larger retained-camera command with inline "
+        "payload data copied from the caller-supplied record. Marks queue bit "
+        "0x2 and can dispatch immediately through the new item's vtable.",
+    ),
+    0x141635210: (
+        "QueueRetainedCameraSimpleCommand_Type04",
+        "Allocates and enqueues a simple retained-camera command of type 0x4. "
+        "Stores the requested command id in the queue entry and mirrors it into "
+        "the new item at +0x20.",
+    ),
+    0x141635310: (
+        "QueueRetainedCameraSentinelCommand_Type04",
+        "Allocates and enqueues a type-0x4 retained-camera command with "
+        "sentinel id 0x7FFFFFFF and no explicit payload id.",
+    ),
+    0x1416354E0: (
+        "QueueRetainedCameraSimpleCommand_Type08",
+        "Allocates and enqueues a simple retained-camera command of type 0x8.",
+    ),
+    0x1416355B0: (
+        "QueueRetainedCameraParameterizedCommand_Type10",
+        "Allocates and enqueues a retained-camera command of type 0x10 with "
+        "two caller-provided integer parameters copied into the new item.",
+    ),
+    0x1416D1330: (
+        "InitRetainedCameraCommandContext",
+        "Initializes a retained-camera command context, resolves an attached "
+        "runtime node by command id, caches it at +0x50, and normalizes an "
+        "aligned pointer/state value into +0x40.",
+    ),
+    0x1417A4B00: (
+        "ConstructRetainedCameraCommandBus",
+        "Large owner/manager constructor for the retained-camera command bus. "
+        "Initializes command-record blocks, queue storage, descriptor tables, "
+        "and multiple owner-side arrays/flags through roughly +0x5B0.",
+    ),
+    0x1417A4AB0: (
+        "ResolveRetainedCameraPrimarySource",
+        "Returns owner+0x58 when present, otherwise falls back to owner+0x50. "
+        "Used by bus initialization and later query/dispatch helpers.",
+    ),
+    0x1417A5A90: (
+        "ResetRetainedCameraCommandBusState",
+        "Flushes descriptor buffers referenced by owner+0x4E0, clears queued/"
+        "active bus state around +0x4E8/+0x500/+0x510/+0x51C, and resets "
+        "several owner-side pointers while leaving subsystem enabled.",
+    ),
+    0x1417A5C10: (
+        "HasRetainedCameraActiveRoot",
+        "Checks whether the bus has active entries and whether the primary "
+        "root reachable from owner+0x4F8 resolves to a non-null runtime node.",
+    ),
+    0x1417A5C40: (
+        "DispatchRetainedCameraActiveRootVFunc10",
+        "Resolves the active root from owner+0x4F8 and invokes its virtual "
+        "slot +0x10 when available.",
+    ),
+    0x1417A5CA0: (
+        "CheckRetainedCameraRouteForCommand",
+        "Tests the active retained-camera route for a command id using helpers "
+        "under the root node reachable from owner+0x4F8 and owner+0x530.",
+    ),
+    0x1417A5D50: (
+        "ResolveRetainedCameraCommandResult",
+        "Resolves a command-specific result/value through the active retained-"
+        "camera root and writes it to caller output when found.",
+    ),
+    0x1417A5DD0: (
+        "QueryRetainedCameraCommandInt",
+        "Queries an integer-like value through the active retained-camera root "
+        "using owner+0x530 and writes zero on failure.",
+    ),
+    0x1417AEDE0: (
+        "DispatchRetainedCameraCommandBool",
+        "Builds a compact retained-camera context snapshot from the root object, "
+        "then tests command handling through root branches at +0x38/+0x40. "
+        "Returns a boolean-like result via the downstream root handlers.",
+    ),
+    0x1417AEE60: (
+        "ResolveRetainedCameraCommandObject",
+        "Builds the same compact retained-camera context snapshot, then "
+        "resolves a command-specific object/result through root branches "
+        "+0x38/+0x40.",
+    ),
+    0x1417AF120: (
+        "BuildRetainedCameraRootContextSnapshot",
+        "Builds a compact 0x30-byte snapshot from a retained-camera root "
+        "object, including timing/scalar state, route ids, and flags derived "
+        "from the attached bus at root+0x60.",
+    ),
+    0x141844140: (
+        "HandleRetainedCameraEventType04_UpdateGlobals",
+        "Small event/callback-style stub for retained-camera event type 4. "
+        "Reads a global context pointer at +0x1C0 and forwards it into "
+        "UpdateRetainedCameraRouteGlobals.",
+    ),
+    0x141844170: (
+        "ConstructRetainedCameraRouteGraph",
+        "Monolithic retained-camera route-graph constructor. Allocates and "
+        "links a chain/tree of typed route nodes and callbacks rather than "
+        "acting as a simple runtime matcher API.",
+    ),
+    0x141844DE0: (
+        "ConstructRetainedCameraRouteGraph_InternalBlockA",
+        "Internal block inside ConstructRetainedCameraRouteGraph; one of "
+        "several typed route-node allocation/link stages, not a standalone "
+        "external function.",
+    ),
+    0x141845590: (
+        "ConstructRetainedCameraRouteGraph_CommandIdLeafBlock",
+        "Internal route-graph construction block associated with command-id "
+        "leaf handling. This address lies inside the larger constructor body, "
+        "not at a standalone function boundary.",
+    ),
+    0x141845640: (
+        "ConstructRetainedCameraRouteGraph_LinkedDescriptorLeafBlock",
+        "Internal route-graph construction block associated with "
+        "descriptor-linked leaf handling. This address is an internal stage of "
+        "the monolithic constructor.",
+    ),
+    0x1418457A0: (
+        "BuildRetainedCameraRouteResolutionRecord",
+        "Standalone helper that builds a compact route-resolution record from "
+        "a resolved route candidate. Scans runtime registries and writes "
+        "result indices/ranges into the output structure.",
+    ),
+    0x141845790: (
+        "BuildRetainedCameraRouteResolutionRecord_Thunk",
+        "Small thunk/adapter that forwards into "
+        "BuildRetainedCameraRouteResolutionRecord.",
+    ),
+    0x141845980: (
+        "UpdateRetainedCameraRouteGlobals",
+        "Standalone retained-camera route-state helper reached from event/callback "
+        "paths. Updates a small global state block from the supplied record/context; "
+        "likely route/debug/global sync rather than the core matcher itself.",
+    ),
+    0x141845990: (
+        "UpdateRetainedCameraRouteGlobals_InternalBlock",
+        "Internal block inside UpdateRetainedCameraRouteGlobals, not a "
+        "standalone query-object matcher function.",
+    ),
+    0x1409D6C90: (
+        "BuildRetainedCameraStateWrapper",
+        "Thin wrapper around BuildRetainedCameraStateRecord that stores the "
+        "resulting record plus auxiliary state at object offsets +0x130..+0x170.",
+    ),
+    0x140745CD0: (
+        "SyncCameraManager0RetainedBindingByMode",
+        "Queries CameraManager(0) and conditionally detaches or attaches the "
+        "retained-player binding based on mode/state 4 and whether the cached "
+        "retained handle/id still resolves to the same live entity.",
+    ),
+    0x140746150: (
+        "SyncCameraManager1RetainedBindingByMode",
+        "Queries CameraManager(1) and conditionally detaches or attaches the "
+        "retained-player binding using the same cached retained handle/id "
+        "validation logic as the CameraManager(0) path.",
+    ),
+    0x14074D200: (
+        "RegisterRetainedCameraHandlerCluster",
+        "Builds and registers a coordinated retained-camera handler set, "
+        "including CameraManager(0)/(1) retained-binding and sibling camera "
+        "lifecycle handlers through 0x141638C10.",
+    ),
+    0x140746260: (
+        "HandleCameraManager0RetainedStateTransition",
+        "CameraManager(0) retained-state transition handler. Validates the "
+        "live retained entity and either drives 0x141C07420 or toggles "
+        "camera/global state blocks through 0x141837530.",
+    ),
+    0x140746340: (
+        "HandleCameraManager1RetainedStateTransition",
+        "CameraManager(1) retained-state transition handler. Mirrors/toggles "
+        "mode bits between paired objects, validates the live retained entity, "
+        "and then drives the same state-transition path as the CameraManager(0) "
+        "handler.",
+    ),
+    0x140746460: (
+        "HandleRetainedCameraOwnerFocusUpdate",
+        "Higher retained-camera owner/focus update handler. Uses the shared "
+        "(handle,id) cache at 0x143D76C10/18, calls a target virtual slot "
+        "+0x208 when a live retained entity exists, writes CameraManager+0x153, "
+        "and otherwise builds a fallback descriptor for 0x141C0DFD0.",
+    ),
+    0x1407465E0: (
+        "HandleRetainedCameraOwnerFocusUpdate_Sibling",
+        "Sibling higher-level retained-camera owner/focus update handler that "
+        "shares the same cached (handle,id) state and fallback descriptor path.",
+    ),
+    0x141C04CE0: (
+        "ApplyCameraTargetState",
+        "Applies/finalizes a concrete camera target-state object from an "
+        "incoming descriptor: copies transform/scalar payload, refreshes the "
+        "retained (handle,id) pair, and resolves a downstream runtime object.",
+    ),
+    0x141C0DFD0: (
+        "CommitCameraTargetDescriptor",
+        "Builds and commits a camera target descriptor into CameraManager "
+        "state. Uses the lock at camera+0x2C0, writes through camera+0x2F0 "
+        "via ApplyCameraTargetState, and then notifies an external observer.",
+    ),
+    0x14015BB60: (
+        "CopyLargeCameraStateStruct_0x3F8",
+        "Bulk copier for a large camera-state struct spanning at least "
+        "0x3F8 bytes. Includes the byte range around +0x150 and the "
+        "target-state block around +0x2F0.",
+    ),
+    0x140882F00: (
+        "GetCameraStateFlag153",
+        "Tiny accessor that returns byte +0x153 from a camera-state object.",
+    ),
+    0x140882F10: (
+        "BuildRuntimeCameraStateWithRetainedTarget",
+        "Builds or refreshes a runtime camera-state object that includes "
+        "spatial state, embedded retained target pairs, and flag byte +0x153.",
+    ),
+    0x140883530: (
+        "ActivateEmbeddedRetainedTargetAndUpdateCameraState",
+        "Validates the embedded retained pair at +0x80/+0x88, marks the live "
+        "entity active if found, then continues into the main camera-state "
+        "update path at 0x140883570.",
+    ),
+    0x140883570: (
+        "UpdateRuntimeCameraState_GatedByPrimaryCameraFlag153",
+        "Main runtime camera-state update path. Immediately queries "
+        "GetCameraManager(0) and gates behavior on CameraManager(0)+0x153 "
+        "before continuing normal simulation over the local camera-state "
+        "object; a non-zero flag takes the early-return epilogue rather than "
+        "a separate retained-specific worker path.",
+    ),
+    0x14088AC70: (
+        "SyncCameraStateOwnerCompanionRetainedFlags",
+        "Validates the retained/live pair cached at owner+0x5F0/+0x5F8, "
+        "compares the companion objects at +0x198, propagates retained-camera "
+        "slot activity through 0x141754C10, and then dispatches follow-up "
+        "companion updates through 0x141754340 or 0x141754820.",
+    ),
+    0x14088AD40: (
+        "UpdateCompanionCameraRigFromTrackedEntity",
+        "Builds a companion-camera rig from the tracked entity at owner+0x1A8/"
+        "+0x1B0, writes transforms into owner+0x108 and owner+0x420, queries "
+        "four child nodes through the embedded camera-state object at +0x4E0, "
+        "and marks the owner active via byte +0x440.",
+    ),
+    0x141BB8C30: (
+        "RelocateCompanionCameraRigOwner",
+        "Large relocation helper for the companion camera-rig owner. Rebases "
+        "tracked pointers at +0x188/+0x198/+0x1A0, a hashed node list behind "
+        "+0x1A8/+0x288, multi-pointer clusters at +0x3F8/+0x400 and +0x218, "
+        "and dispatches relocation into nested child objects.",
+    ),
+    0x141BB95C0: (
+        "DestroyCompanionCameraRigOwner",
+        "Destructor path for the companion camera-rig owner. Tears down nested "
+        "runtime objects at +0x218/+0x238, notifies external systems using the "
+        "cached retained pair at +0xA8/+0xBC when byte +0x16D is set, and "
+        "continues with deeper cleanup of companion and child-node state.",
+    ),
+    0x141BBDD30: (
+        "PushCompanionCameraRigPoseToChildNodes",
+        "Pushes the owner's cached pose/state vectors at +0x100/+0x120/+0x140 "
+        "into child runtime nodes obtained from the object at owner+0x1A0. "
+        "Iterates the child-node pointer table at +0x4F8/+0x500 and seeds each "
+        "eligible node's transform block when bit 0x400000000000 is set.",
+    ),
+    0x141C07FC0: (
+        "SeedCameraStateFlag153FromGlobalToggle",
+        "Writes camera-state byte +0x153 from the shared global toggle at "
+        "0x143682FA1.",
+    ),
+    0x141837530: (
+        "UpdateSharedCameraSlotStateBlob",
+        "Writes a large per-slot camera-state blob at slot_state+0xBE0. "
+        "Called by retained-camera mode switch and attach/detach paths with "
+        "two observed modes controlled by the third argument.",
+    ),
+    0x141754C10: (
+        "SyncObjectBit02ByActiveRetainedCameraSlots",
+        "Reads the two-byte global retained-camera slot gate at "
+        "0x14383DE48[0..1] and sets or clears bit 0x2 in the target object "
+        "through 0x141753DB0 depending on whether either camera slot is active.",
+    ),
+    0x141754460: (
+        "ClearFlockingChildByte1A0ByModeId",
+        "Finds the flocking/player entry with matching mode id at +0x18 inside "
+        "the companion object and clears byte +0x1A0 on each linked child node.",
+    ),
+    0x141754820: (
+        "ClearFlockingFlag0x40AndCompanionBit0",
+        "Clears bit 0x1 on the companion object and clears child-node flag "
+        "0x40 in each linked flocking/player entry.",
+    ),
+    0x141754940: (
+        "SetFlockingChildFlag0x80ByModeId",
+        "Finds the flocking/player entry with matching mode id and ORs flag "
+        "0x80 into each linked child node's +0x18 flags.",
+    ),
+    0x141754EF0: (
+        "OrFlockingChildFlagsByCompanionMask",
+        "Iterates all flocking/player entries owned by the companion object "
+        "and ORs the requested bitmask into each linked child node's +0x18 "
+        "flags.",
+    ),
+    0x141BBACC0: (
+        "BindUpperWrapperIntoPlayerCompanionBehaviorAndDrawControlState",
+        "Initializes behavior bindings between the rig owner and its companion "
+        "flocking/player object at +0x198. Reads mode-dependent booleans from "
+        "source descriptors, updates companion-object flags, and dispatches "
+        "child-node state changes through 0x141754460/0x141754940. In the real "
+        "Player path it is fed from 0x1410CF370 with the extended wrapper "
+        "packet at 0x1417C35A0 / vtable 0x1428D5D60 as the third argument and "
+        "a draw-control context as the fourth. Direct disassembly now also "
+        "shows selector-gating through wrapper+0x10->+0x30 and owner "
+        "capability checks before it mutates player+0x198 and builds late "
+        "owner arrays, which makes this a downstream upper behavior/draw-"
+        "control bind stage rather than the source of Player ownership or the "
+        "authored id pair later used by 0x140CC1450.",
+    ),
+    0x141BB8BC0: (
+        "GetCurrentUpperPlayerStateIdFromLiveActorAndWriteOutDword",
+        "Real Player vtable slot +0x300. If player+0x190 is non-zero, resolves "
+        "the live actor through 0x1417D1170, reads a compact state id from "
+        "live_actor->+0x18->+0x10, and writes it to the caller-provided dword. "
+        "This is a compact current-state getter used by 0x140CC1450 before the "
+        "late `proto`-promotion branch; it is not itself the upper apply seam.",
+    ),
+    0x1410F1840: (
+        "ResolveRetainedPlayerModeFromPair",
+        "Seeds an output mode id from the global default at 0x143EEBE7C, then "
+        "optionally overrides it from the retained pair's runtime object at "
+        "+0x48 via the shared value-reader callback 0x143682D30.",
+    ),
+    0x1410F18A0: (
+        "ResetRetainedPlayerRuntimeGlobals",
+        "Clears the retained-player runtime global block rooted at "
+        "0x143EEC160/0x143EEC220..0x143EEC262 and seeds the default scalar at "
+        "0x143EEC240.",
+    ),
+    0x140159C00: (
+        "LookupSelectorMetadataInRuntimeQueryTable",
+        "Binary-searches the selector table at object+0x68 for the hashed "
+        "runtime selector id in r8d and returns selector metadata through the "
+        "out parameters. Used immediately before retained-entity virtual query "
+        "dispatch.",
+    ),
+    0x141D21C80: (
+        "DispatchRetainedEntityRuntimeCommand_0x538",
+        "Validates the retained/runtime pair at object+0x60, resolves the live "
+        "entity, builds a temporary descriptor through 0x1417C32A0 or "
+        "0x1417C35A0 depending on the mode flag, and calls the entity-side "
+        "virtual slot +0x538 with that descriptor. The extended 0x1417C35A0 "
+        "wrapper therefore is not just shape-compatible with the upper Player "
+        "external_state seam; it is already an accepted runtime-command "
+        "packet on the generic entity-side interface. Returns a boolean-like "
+        "success result.",
+    ),
+    0x141D21DE0: (
+        "ResolveLiveEntityFromRetainedPair60",
+        "Resolves the live entity referenced by the retained/runtime pair at "
+        "object+0x60, validates entity+0xBC against the stored runtime id at "
+        "pair+0x38, marks the entity active via byte +0x72, and returns the "
+        "live entity pointer on success.",
+    ),
+    0x141D21E20: (
+        "ResolveLiveEntityFromRetainedPair60_GatedByRegistryBit",
+        "Extends ResolveLiveEntityFromRetainedPair60 with a second registry-bit "
+        "gate through the entity-owned bitset at entity+0x30 and global index "
+        "0x146920B54. Returns null when the live entity exists but is not "
+        "enabled in that registry mask.",
+    ),
+    0x141D21F90: (
+        "BuildRetainedEntityQueryRecord_0x30",
+        "Builds a 0x30-byte query/result record from the retained/runtime pair "
+        "stored at object+0x60. Resolves the active live entity through "
+        "ResolveLiveEntityFromRetainedPair60_GatedByRegistryBit, queries the "
+        "entity through virtual slot +0x530 using selector metadata from "
+        "LookupSelectorMetadataInRuntimeQueryTable, and writes a compact output "
+        "record with default scalar/vector fields plus an optional returned id pair.",
+    ),
+    0x141D231E0: (
+        "BuildRetainedEntityParentToJointTransform",
+        "Builds a fallback or entity-derived transform for the retained/runtime "
+        "pair at object+0x60. Resolves an attachment-capable runtime object, "
+        "looks up the selector metadata for 'ParentToJoint', queries the "
+        "runtime object, and composes the returned transform with the owner's "
+        "local transform when successful.",
+    ),
+    0x1417C4800: (
+        "CheckSelectorHashEnabledInBitsetRegistry",
+        "Checks whether the hashed selector id in edx is enabled in the target "
+        "bitset registry at rcx. Uses a global hash-bucket table at "
+        "0x14383F198 and then tests the corresponding bit in the owner bitset.",
+    ),
+    0x141DE55E0: (
+        "DispatchNestedActionStateViaControlObject_A0",
+        "After a guard through owner virtual +0x5E8, resolves the nested "
+        "control object from owner+0x15C8 via virtual +0x58 and dispatches the "
+        "requested action state in edx through nested virtual +0xA0.",
+    ),
+    0x141DE5630: (
+        "ForwardToNestedControlObject_A8",
+        "Resolves the nested control object from owner+0x15C8 via virtual +0x50 "
+        "and tail-calls its virtual +0xA8 handler.",
+    ),
+    0x141DE5660: (
+        "ForwardToNestedControlObject_B0",
+        "Resolves the nested control object from owner+0x15C8 via virtual +0x50 "
+        "and tail-calls its virtual +0xB0 handler when the nested object is present.",
+    ),
+    0x141DE5690: (
+        "SetNestedInjuredLayerFlagByCompanionTable",
+        "Hashes the selector string 'injured-layer', scans the companion table "
+        "at owner+0x1A0 (+0x298 entries, count +0x2A4, stride 0x18), and writes "
+        "a 0/1 byte for the matching entry.",
+    ),
+    0x141DE57F0: (
+        "GetNestedInjuredLayerFlagByCompanionTable",
+        "Hashes 'injured-layer', scans the same companion selector table at "
+        "owner+0x1A0, and returns whether the matching entry's flag byte is non-zero.",
+    ),
+    0x141DE5980: (
+        "ForwardToNestedControlObject_178",
+        "Resolves owner+0x15C8 via virtual +0x20 and tail-calls the returned "
+        "nested object's virtual +0x178 handler.",
+    ),
+    0x141DF0000: (
+        "QueryControlBlendScalarFromTypeOrIndexedActionState",
+        "Checks the control/type object at owner+0x15C0 against 0x143738130, "
+        "gates through owner virtual +0xC20, and otherwise returns either an "
+        "indexed scalar from owner+0x1A38 (index owner+0x19E0) or the fallback "
+        "scalar at owner+0x1760.",
+    ),
+    0x141DF00A0: (
+        "QueryNestedControlFloat_A8OrDefault",
+        "Resolves owner+0x15C8 via virtual +0x78 and tail-calls the returned "
+        "object's virtual +0xA8, falling back to the default float at "
+        "0x142BE8FC4 when no nested object is available.",
+    ),
+    0x141DE59B0: (
+        "StoreBlobIntoNestedControlObject_188",
+        "Resolves owner+0x15C8 via virtual +0x20 and forwards the caller blob "
+        "pointer in rdx into the returned nested object's virtual +0x188, then "
+        "returns the original blob pointer.",
+    ),
+    0x141DE59E0: (
+        "GetControlTypeRuntimeId_15C0_14C",
+        "Reads the control/type object at owner+0x15C0 and stores its dword "
+        "field +0x14C into the caller-supplied output pointer.",
+    ),
+    0x141DE5A00: (
+        "GetControlActionStateId_1748",
+        "Returns the current dword action/state id cached at owner+0x1748.",
+    ),
+    0x141DE5A10: (
+        "SetControlActionStateIdAndForward_168",
+        "Stores edx into owner+0x1748, resolves owner+0x15C8 via virtual +0x28, "
+        "and forwards the same state id into the returned nested object's "
+        "virtual +0x168.",
+    ),
+    0x141DE5A40: (
+        "ForwardStateIdToNestedControl_158",
+        "Resolves owner+0x15C8 via virtual +0x20 and forwards edx into the "
+        "returned nested object's virtual +0x158.",
+    ),
+    0x141DE5A70: (
+        "ForwardStateIdToNestedControl_160",
+        "Resolves owner+0x15C8 via virtual +0x20 and forwards edx into the "
+        "returned nested object's virtual +0x160.",
+    ),
+    0x141DE5AA0: (
+        "ForwardToNestedControlObject_E0",
+        "Resolves owner+0x15C8 via virtual +0x20 and tail-calls the returned "
+        "nested object's virtual +0xE0.",
+    ),
+    0x1406B3640: (
+        "BuildAndApplyExtendedControlRoutingPath",
+        "Heavy sibling path in the 0x1406B3D70 control router. Builds a large "
+        "runtime descriptor stack, allocates/attaches intermediate objects, "
+        "updates owner+0x2830 and owner+0x2010, clears bit 0x8 in owner+0x15AA "
+        "on success, and writes a scalar into companion child field +0xD0.",
+    ),
+    0x1406B3940: (
+        "BuildAndApplyCompactControlRoutingPathByStateId",
+        "Sibling path used by the same 0x1406B3D70 router when a low-cardinality "
+        "state id in edx is available. Rebuilds local transforms/state from the "
+        "owner, consults current locomotion payload fields around +0x24B0..+0x24C8, "
+        "and feeds the result into the same post-routing owner updates.",
+    ),
+    0x1406B3D70: (
+        "RouteControlPathByProbeFlagAndStateId",
+        "Entry router for the 0x1406B3640/0x1406B3940 sibling control paths. "
+        "Calls 0x1406B2390 to obtain a probe flag and scalar, dispatches either "
+        "the extended path or the state-id path, then clears bit 0x80 in "
+        "owner+0x1D57 and pushes the scalar into companion child field +0xD0.",
+    ),
+    0x1406B2390: (
+        "ProbeControlRoutingThresholdsAndSelectStateId",
+        "Computes a distance/threshold probe from owner transform and the "
+        "pending locomotion command block at owner+0x2470, writes a bool flag "
+        "to the caller byte pointer, optionally writes a scalar to the caller "
+        "float pointer, and returns a low-cardinality state id used by the "
+        "0x1406B3D70 control router.",
+    ),
+    0x140462020: (
+        "ExecuteAuthoredControlSelectionDescriptorModes",
+        "Large consumer of the authored task-node/control-selection descriptor "
+        "returned by 0x141765580. Branches on descriptor mode 0/1/2/3, builds "
+        "selection masks, mutates the global byte table at 0x143D44880, caches "
+        "chosen candidate ids, and eventually emits owner-local state near "
+        "+0x500/+0x510.",
+    ),
+    0x140463A70: (
+        "RefreshOwnerDecisionBitFromAuthoredDescriptor",
+        "Small owner-side wrapper around 0x140462020. Refreshes owner+0x20/"
+        "+0x28 from runtime timing pointers, clears owner+0x30 state bits, "
+        "executes the authored descriptor consumer, and latches the returned "
+        "decision bit back into owner+0x30 bit 0.",
+    ),
+    0x140463AC0: (
+        "UpdateOwnerStateThroughAuthoredDescriptorAndRuntimeGates",
+        "Large owner-side update wrapper around 0x140462020. Builds selector "
+        "hash state, consults capability gates, conditionally resolves retained "
+        "slot 0 and compares transforms, executes the authored descriptor path "
+        "when owner+0x30 bit 0 is clear, then continues into mode/timer/object "
+        "gates driven by owner+0x30 flags and runtime state.",
+    ),
+    0x1404641A0: (
+        "ResolveTwoSelectorIdsAndPushOwnerRuntimeState",
+        "Owner-family sibling in the same 0x14293E240 dispatch table. Resolves "
+        "two selector ids through 0x140159C00 using runtime+0xD4 and authored "
+        "hash blocks, then pushes the results into owner/runtime state via "
+        "0x140461500.",
+    ),
+    0x1404643C0: (
+        "UpdateOwnerThresholdGatedSelectorState",
+        "Threshold-gated sibling in the same owner dispatch family. Samples "
+        "runtime timing/state from runtime+0xA0, derives a scalar, resolves "
+        "selector ids through 0x140159B40/0x140159C00, pushes state through "
+        "0x140461500, and falls back to owner+0x40 state-blob notifications.",
+    ),
+    0x140464710: (
+        "ResetOwnerRuntimeStateBlocksAndFlushPendingNode",
+        "Owner-family reset/teardown sibling. Clears runtime+0x2830 and "
+        "runtime+0x15E0 state blocks, emits a debug/state record if runtime+0x4038 "
+        "is live, and flushes the pending node at owner+8->0x30 back into "
+        "runtime+0x1F78.",
+    ),
+    0x140464930: (
+        "BuildOwnerMaterializedStateObjectFromActorRuntime",
+        "Materialize/build sibling in the same owner dispatch family. Queries "
+        "the actor-like runtime object through runtime+0xA0 virtual +0xA10, "
+        "builds a large state descriptor on the stack, feeds it through "
+        "0x141C9ED50, materializes an intermediate object via 0x14048B270, and "
+        "attaches the result back to the owner/runtime through 0x14048F260.",
+    ),
+    0x141C9ED50: (
+        "DispatchOrResolveActorStateDescriptorIntoRuntimeSlot",
+        "Consumes a structured actor-state descriptor and a target runtime slot. "
+        "Either routes immediately through 0x1417F8910 when the descriptor type "
+        "matches a small built-in table, or scans a live registry/roster, "
+        "activates matching entities, and dispatches them back through the same "
+        "0x1417F8910 path.",
+    ),
+    0x14048B270: (
+        "ConstructMaterializedOwnerStateObject_0x4D0",
+        "Ctor/builder for a 0x4D0 materialized owner-state object. Initializes "
+        "the object, sets vtable 0x142941FB0, seeds the embedded subobject at "
+        "+0xB0 via 0x14048AE80, and optionally copies a small 0x20-byte state "
+        "header plus virtual payload from the source descriptor.",
+    ),
+    0x14048B200: (
+        "AllocateAndConstructMaterializedOwnerStateObject_0x4D0",
+        "Small allocation wrapper for the 0x4D0 materialized owner-state "
+        "variant. Either forwards an existing descriptor into "
+        "ConstructMaterializedOwnerStateObject_0x4D0 or allocates 0x4D0 bytes "
+        "through the shared allocator and then runs the same constructor.",
+    ),
+    0x14048B3E0: (
+        "DestroyMaterializedOwnerStateObject_0x4D0",
+        "Freeing destructor for the 0x4D0 materialized owner-state variant. "
+        "Tears down the embedded helper at +0xC0, releases the object-local "
+        "state host, and optionally frees the 0x4D0 allocation when requested.",
+    ),
+    0x14048B450: (
+        "TeardownMaterializedOwnerStateObject_0x4D0",
+        "In-place teardown for the 0x4D0 materialized owner-state variant. "
+        "Releases the embedded helper at +0xC0 and then tears down the object-"
+        "local state host without freeing the parent allocation.",
+    ),
+    0x14048B4A0: (
+        "CopyMaterializedStateHeaderAndPayload",
+        "Copies the compact 0x20-byte materialized-state header and clones the "
+        "embedded payload object through its virtual copy slot.",
+    ),
+    0x14048F180: (
+        "DetachMaterializedStateObjectFromOwnerRuntime",
+        "Shared detach primitive for owner+0x30 materialized state objects. "
+        "Calls the old object virtual +0x68 when active, writes its state word "
+        "back into runtime+0x1F78, clears owner+0x30, and opens the shared "
+        "materialized-state update window through global timing/flag state.",
+    ),
+    0x14048F260: (
+        "AttachMaterializedStateObjectToOwnerRuntime",
+        "Attaches a materialized state object to owner+0x30, syncs it against "
+        "runtime+0x1F78 and runtime+0xE0 timing state, toggles object flags, "
+        "stores the owner pointer at object+0x28, and calls the object virtual "
+        "+0x60 activation hook.",
+    ),
+    0x14048F320: (
+        "SwapMaterializedStateObjectOnOwnerRuntime",
+        "Local owner+0x30 swap helper. Detaches the previous materialized state "
+        "object without the global update-window bookkeeping used by "
+        "DetachMaterializedStateObjectFromOwnerRuntime, clears its owner pointer "
+        "and active bits, then binds and activates the replacement object using "
+        "the same object+0x28/object+0x38 setup as the main attach primitive.",
+    ),
+    0x14048F410: (
+        "NotifyMaterializedStateObjectOfTrackedEntityChange",
+        "Pushes a tracked live-entity pair into the shared materialized-state "
+        "globals at 0x143D45E60, then conditionally notifies the current "
+        "owner+0x30 object through virtual +0x50 or +0x48 depending on its "
+        "local flags and mode bits.",
+    ),
+    0x14048BF60: (
+        "RefreshMaterializedOwnerStateFromDescriptorAndReadiness",
+        "0x4D0-variant refresh/finalize path. Resolves a descriptor from "
+        "object+0xB4, calls the owner-side readiness gate at 0x140423440, "
+        "sets owner+0x15AA bit 0 when the gate fails, queries the nested "
+        "control family through owner+0x15C8 virtual +0x88, conditionally "
+        "marks object+0x4C8, runs 0x14048EEF0, then tail-calls 0x140458630.",
+    ),
+    0x140423330: (
+        "CheckOwnerNestedControlReadiness_Minimal",
+        "Owner-side readiness gate used ahead of higher-level state updates. "
+        "Requires owner+0x15C8, checks the nested control family via "
+        "owner+0x15C8->(+8)->+0x28 virtual +0x60 and the collection helper "
+        "0x1404C1060, then blocks on several owner virtual gates (+0x4C0, "
+        "+0x7D0, +0xA28) before consulting owner+0x1808 virtual slot 0.",
+    ),
+    0x140423440: (
+        "CheckOwnerNestedControlReadiness_WithRuntimeCooldown",
+        "Stricter owner-side readiness gate. Requires owner flag "
+        "owner+0x57C bit 0x2, owner+0x15C8, nested control readiness from "
+        "owner+0x15C8->(+8)->+0x28 virtual +0x60, owner+0x15C8->(+8)->+0xC8 "
+        "virtual +0xE0, and the collection helper 0x1404C1060. It then "
+        "enforces a runtime cooldown using owner virtual +0xA10 and "
+        "owner+0x2308 vs runtime+0xE0->0x10 before consulting owner+0x1808 "
+        "virtual slot 0.",
+    ),
+    0x1404C1060: (
+        "AnyNestedControlCollectionEntryReportsFlag68",
+        "Iterates a small array-like collection (entries at +0x8, count at "
+        "+0x10) and ORs together each non-null entry's virtual +0x68 result.",
+    ),
+    0x1404C10C0: (
+        "AnyNestedControlCollectionEntryReportsFlag70",
+        "Sibling of 0x1404C1060 that iterates the same collection and ORs "
+        "each non-null entry's virtual +0x70 result.",
+    ),
+    0x1404C1120: (
+        "BuildNestedControlCollectionFlag70Bitset",
+        "Builds a two-qword bitset of collection entries whose virtual +0x70 "
+        "returns true. Uses the same entry array/count layout as "
+        "0x1404C1060/0x1404C10C0.",
+    ),
+    0x141DEF5D0: (
+        "DispatchOwnerLateDecisionObjectSlot08WhenPrimaryAllows",
+        "Owner-local proxy into the object at owner+0x1808. Calls virtual slot "
+        "+0x0 first; when that returns false, tail-calls the same object's "
+        "virtual slot +0x8 with (decision_object, owner).",
+    ),
+    0x141DEF610: (
+        "DispatchOwnerLateDecisionObjectSlot20WhenPrimaryAllows",
+        "Owner-local proxy into owner+0x1808. Calls virtual slot +0x0 first; "
+        "when that returns true, tail-calls slot +0x20 with (decision_object, "
+        "owner, const_float@0x142BEA0A8).",
+    ),
+    0x141DEF650: (
+        "DispatchOwnerLateDecisionObjectSlot18WhenPrimaryAllows",
+        "Owner-local proxy into owner+0x1808. Calls virtual slot +0x0 first; "
+        "when that returns true, tail-calls slot +0x18 with "
+        "(decision_object, owner).",
+    ),
+    0x141DEF690: (
+        "ForwardToOwnerLateDecisionObjectPrimary",
+        "Thin wrapper that resolves owner+0x1808 and jumps directly to its "
+        "virtual slot +0x0 with (decision_object, owner).",
+    ),
+    0x140CA17E0: (
+        "PublishRuntimeStateFromDecisionNodeLikeObject",
+        "Large state-publication path that expects a node-like object with a "
+        "parent/runtime pointer at +0x8. Reads broad owner/runtime state from "
+        "that parent, builds multiple transform/state payloads, and publishes "
+        "them through downstream runtime/debug channels.",
+    ),
+    0x141DE1600: (
+        "ConstructOwnerRuntimeClass_WithNestedControlAndDecisionNode",
+        "Constructor-like path for the owner/runtime class that contains the "
+        "nested control family at +0x15C8, control-mode fields around +0x1748, "
+        "and the late-decision node slot at +0x1808. Installs vtable "
+        "0x142B82F00 and seeds the larger state cluster through +0x19D8.",
+    ),
+    0x141DE1CA0: (
+        "DestroyOwnerRuntimeClass_WithNestedControlAndDecisionNode",
+        "Freeing destructor wrapper for the same owner/runtime class. Calls "
+        "the in-place teardown at 0x141DE1CE0 and frees the 0x1C00-byte "
+        "allocation when requested.",
+    ),
+    0x141DE1CE0: (
+        "TeardownOwnerRuntimeClass_WithNestedControlAndDecisionNode",
+        "In-place teardown for the owner/runtime class rooted at vtable "
+        "0x142B82F00. Reinstalls the class vtable, releases the nested "
+        "control collection at +0x15C8, frees the owned cluster at +0x15D0, "
+        "and clears additional owned state in the +0x1700 region.",
+    ),
+    0x141DE3C80: (
+        "RelocateOwnerRuntimeClass_WithDecisionNodeSlot",
+        "Relocate/update path for the same owner/runtime class. Rebases fields "
+        "including +0x15A0, +0x1738, +0x1740, +0x1808, +0x19A8 and relocates "
+        "the object stored at +0x19D8 via its virtual +0x48.",
+    ),
+    0x141DE3AC0: (
+        "VtableRelocateOwnerRuntimeClass_WithDecisionNodeSlot",
+        "Vtable-facing relocate/update method for the same owner/runtime class. "
+        "Rebases fields from +0x15B0 upward, including nested-control-adjacent "
+        "pointers and owned state used by the control/decision stack.",
+    ),
+    0x141DE2180: (
+        "SetupOwnerRuntimeClassOwnedObject_1728_AndActivateState",
+        "Large class-local setup/activation method. Clears owner+0x174C, sets "
+        "bit 0x1 in owner+0x15A8, resets owner+0x1728, and uses a global "
+        "callback to construct/store an owned object back into +0x1728.",
+    ),
+    0x141DE99D0: (
+        "RefreshOwnerRuntimeClassFromRetainedLiveObject",
+        "Class-local retained/live refresh method. Clears owner+0x1500/+0x1508, "
+        "resolves a retained/live object through the global retained table "
+        "using owner+0x108/+0x10C, copies its leading payload into owner+0x110, "
+        "and combines it with owner transforms around +0x120/+0x130.",
+    ),
+    0x141DE73D0: (
+        "ResolveOwnerControlMode1748_WithRuntimeDecisionGates",
+        "Large class-local resolver that starts from owner+0x1748 and applies "
+        "additional runtime gates before returning a low-cardinality control "
+        "mode. Used before dispatching nested control virtual +0x168.",
+    ),
+    0x141DE8B03: (
+        "UpdateOwnerRuntimeStateFromDecisionNodeAndNestedControl",
+        "Large owner-runtime update method that combines the late-decision "
+        "object at owner+0x1808 (virtual +0x10), nested control state at "
+        "+0x15C0/+0x15C8, retained/live refresh, per-entry nested-control "
+        "virtual +0x38 fanout, injured-layer publish, and a final owner "
+        "virtual +0xE08 call.",
+    ),
+    0x1403DD180: (
+        "GetMaterializedStateSlotOwner",
+        "Tiny getter that returns the managed materialized-state slot at "
+        "owner+0x1F80.",
+    ),
+    0x140409160: (
+        "GetAttachedMaterializedStateObject",
+        "Returns the currently attached materialized state object from the "
+        "managed slot at owner+0x1F80 -> +0x30.",
+    ),
+    0x140409170: (
+        "DetachAttachedMaterializedStateObject",
+        "Thin owner-side wrapper over DetachMaterializedStateObjectFromOwnerRuntime "
+        "using the managed slot at owner+0x1F80.",
+    ),
+    0x140409180: (
+        "AttachMaterializedStateObjectViaOwnerSlot",
+        "Thin owner-side wrapper over AttachMaterializedStateObjectToOwnerRuntime "
+        "using the managed slot at owner+0x1F80.",
+    ),
+    0x1404091A0: (
+        "ClearAttachedMaterializedStateObject_Local",
+        "Local clear path for the currently attached materialized state object. "
+        "Replays the object virtual +0x68 when needed, writes the state word "
+        "back into owner+0x1F78, and clears slot+0x30 without opening the "
+        "global detach/update window.",
+    ),
+    0x1404280D0: (
+        "RelocateMaterializedStateOwnerCluster",
+        "Relocates the owner cluster that includes +0x1F78/+0x1F80/+0x1F88/"
+        "+0x1FB0/+0x1FF8. Invokes per-object relocate virtuals and then "
+        "rebases in-range pointers by the supplied delta.",
+    ),
+    0x1403E0400: (
+        "QueryMaterializedStateSelectionRecord",
+        "Builds a small output record by querying the attached materialized "
+        "state object through virtual +0x30, then falling back through "
+        "owner+0x1FF0 virtual +0x68 and 0x1403E02C0 when needed.",
+    ),
+    0x1403F9570: (
+        "GetSelectorCapableAttachedMaterializedStateObject",
+        "Returns owner+0x1F80->+0x30 only when the attached materialized "
+        "object exists and its selector/capability id at +0x20 is enabled "
+        "through CheckSelectorHashEnabledInBitsetRegistry (0x1417C4800).",
+    ),
+    0x14043B710: (
+        "HasSelectorCapableAttachedMaterializedStateObject",
+        "Boolean helper over owner+0x1F80->+0x30. Returns true only when the "
+        "attached materialized object exists and its selector/capability id at "
+        "+0x20 is enabled through CheckSelectorHashEnabledInBitsetRegistry.",
+    ),
+    0x1404B7D50: (
+        "ReplaceAttachedMaterializedStateObject_WithVariant540",
+        "Detaches the current owner+0x1F80 materialized-state object, allocates "
+        "0x540 bytes, constructs the replacement through 0x14045C0D0, then "
+        "reattaches it through AttachMaterializedStateObjectToOwnerRuntime.",
+    ),
+    0x1404B7E30: (
+        "ReplaceAttachedMaterializedStateObject_WithVariant48",
+        "Detaches the current owner+0x1F80 materialized-state object, allocates "
+        "0x48 bytes, constructs the replacement through 0x14045B8D0, then "
+        "reattaches it through AttachMaterializedStateObjectToOwnerRuntime.",
+    ),
+    0x140665923: (
+        "ReplaceAttachedMaterializedStateObject_WithVariant9B0",
+        "Detaches the current owner+0x1F80 materialized-state object, allocates "
+        "0x9B0 bytes, constructs the replacement through 0x140480230, then "
+        "reattaches it through AttachMaterializedStateObjectToOwnerRuntime.",
+    ),
+    0x1403DB300: (
+        "GetOwnerStateHelper_1FD8",
+        "Tiny owner accessor that returns the helper object stored at "
+        "owner+0x1FD8.",
+    ),
+    0x1403DB310: (
+        "GetOwnerStateHelper_1FE0",
+        "Tiny owner accessor that returns the helper object stored at "
+        "owner+0x1FE0.",
+    ),
+    0x1403DB320: (
+        "GetOwnerStateHelper_1FE8",
+        "Tiny owner accessor that returns the actor-bound runtime helper "
+        "stored at owner+0x1FE8.",
+    ),
+    0x1403FC050: (
+        "GetOwnerStateHelper_1FD8_Duplicate",
+        "Duplicate tiny owner accessor for the helper object at owner+0x1FD8.",
+    ),
+    0x1403FC060: (
+        "GetOwnerStateHelper_1FE0_Duplicate",
+        "Duplicate tiny owner accessor for the helper object at owner+0x1FE0.",
+    ),
+    0x1403FC070: (
+        "GetOwnerStateHelper_1FE8_Duplicate",
+        "Duplicate tiny owner accessor for the actor-bound runtime helper at "
+        "owner+0x1FE8.",
+    ),
+    0x1403FC080: (
+        "GetOwnerStateHelper_1FF8",
+        "Tiny owner accessor that returns the helper object stored at "
+        "owner+0x1FF8.",
+    ),
+    0x1403FC090: (
+        "GetOwnerStateHelper_1FF8_Duplicate",
+        "Duplicate tiny owner accessor for the helper object at owner+0x1FF8.",
+    ),
+    0x1404024E0: (
+        "InitOwnerStateHelper_1FE8",
+        "Zero-initializes the small actor-bound runtime helper later stored at "
+        "owner+0x1FE8. Clears the leading handle/id pair and owned pointers at "
+        "+0x28/+0x30.",
+    ),
+    0x140643570: (
+        "BindOwnerStateHelper_1FE8_ToActorRuntime",
+        "Owner-side binder for the 0x48 helper stored at owner+0x1FE8. Seeds "
+        "it from the owner's retained/live pair at +0xA8/+0xBC, initializes "
+        "its local state id at +0x10, clears +0x28/+0x38, and continues into "
+        "the deeper actor-bound runtime setup path.",
+    ),
+    0x14041F1D0: (
+        "RefreshOrSelectCurrentStateObject_1FF0",
+        "Large owner-side selector over the current gameplay-state object at "
+        "owner+0x1FF0. Can scan candidate objects, compare descriptor/hash "
+        "state, install a new current object, and dispatch virtual +0x20/+0x30/"
+        "+0x40 on that selected object.",
+    ),
+    0x140416AB0: (
+        "GetCurrentStateObject_1FF0",
+        "Tiny owner accessor that returns the currently installed gameplay-state "
+        "selection object at owner+0x1FF0.",
+    ),
+    0x140416AC0: (
+        "GetCurrentStateObject_1FF0_Duplicate",
+        "Duplicate tiny accessor for the currently installed gameplay-state "
+        "selection object at owner+0x1FF0.",
+    ),
+    0x140416AD0: (
+        "GetCurrentStateObjectLabel_1FF0",
+        "Returns current_state_object+0x70 from owner+0x1FF0, or a fallback "
+        "label pointer when no current object is installed.",
+    ),
+    0x140416AF0: (
+        "CopyCurrentStateSelector_1FF0",
+        "Copies the current gameplay-state selector/hash from "
+        "owner+0x1FF0->+0x78 into caller storage, defaulting to 0 when no "
+        "current object is installed.",
+    ),
+    0x140416B10: (
+        "GetCurrentStateSignedId236C",
+        "Returns owner+0x236C, which is synchronized from the current "
+        "gameplay-state object's signed id at +0x7C.",
+    ),
+    0x140416B20: (
+        "InstallOrApplyCurrentStateRecord",
+        "Owner-side install/apply entry for a current-state record. Clears any "
+        "attached materialized state at owner+0x1F80->+0x30, seeds owner "
+        "runtime state through 0x141DE9E60, refreshes owner transform caches "
+        "at +0x4160..+0x4180, validates/logs the record, updates owner cache "
+        "fields +0x4600..+0x460A, and on the zero-state branch dispatches the "
+        "heavy nested-control apply path 0x141DE4F90.",
+    ),
+    0x14041C7E0: (
+        "ActivateCurrentStateObject_1FF0",
+        "Owner-side activation path for owner+0x1FF0. Clears owner state bits, "
+        "dispatches current_state_object virtual +0x30, and clears bit 0x8 in "
+        "current_state_object+0x80.",
+    ),
+    0x14041C820: (
+        "ClearCurrentStateObject_1FF0",
+        "Owner-side teardown/reset path for owner+0x1FF0. Releases nested "
+        "attachments, dispatches current_state_object virtual +0x38, syncs "
+        "owner flags and signed ids from +0x80/+0x7C, clears owner+0x1FF0, "
+        "and drops a mode bit in owner+0x1FA8.",
+    ),
+    0x140416F90: (
+        "ReportAndClearCurrentStateObject_1FF0",
+        "If owner+0x1FF0 exists, reports its +0x70 label through "
+        "0x1403CF8B0 and then jumps into ClearCurrentStateObject_1FF0.",
+    ),
+    0x140417040: (
+        "CheckOwnerReadinessViaNestedControlAndHelper1FF8",
+        "Compact owner-side readiness gate. First queries nested control at "
+        "owner+0x15C8 via virtual +0x50/+0xC8, otherwise falls back to owner "
+        "virtual +0x8C0, touches helper owner+0x1FF8 via virtual +0xA0, and "
+        "under negative mode byte in owner+0x1FA8 dispatches nested-control "
+        "virtual +0x58/+0xC0 before returning success.",
+    ),
+    0x14041C900: (
+        "ReconcileCurrentStateObjectAndNestedControl",
+        "Owner-side monitor/reconcile path over current_state_object at "
+        "owner+0x1FF0, nested control at owner+0x15C8, and owner caches "
+        "+0x1EC0/+0x1EC4. Uses owner bytes +0x1D51/+0x1D52 as pending gates, "
+        "logs current labels and state names, compares nested-control state "
+        "through virtual +0x50/+0xB0, and can dispatch current_state_object "
+        "virtual +0x28 or nested-control virtual +0xA0/+0xD0.",
+    ),
+    0x14041CBF0: (
+        "ComputeOwnerActorStateScalarFromRuntimeAndDecisionNode",
+        "Large owner-side actor-state metric builder. Validates the authored "
+        "descriptor at owner+0x108/+0x10C, pulls a runtime object through "
+        "owner virtual +0xFB8, combines its orientation with owner transforms, "
+        "applies late-decision gating through owner+0x1808 and owner virtual "
+        "+0x1018, selects nested-control branches via owner+0x15C8, and "
+        "stores the resulting scalar back into helper state under owner+0x1A0 "
+        "and owner virtual +0xCE8.",
+    ),
+    0x14041FA90: (
+        "RefreshOwnerRuntimeHelperBundle_1FC0_1FD8_1FE8_1FF8",
+        "Owner-side update over the helper bundle after +0x1F80. Refreshes the "
+        "attached materialized-state slot, conditionally updates helpers "
+        "+0x1FC0/+0x1FD8/+0x1FE8/+0x1FF8, rebinds the actor-bound helper "
+        "owner+0x1FE8 to the current live actor, then combines late-decision "
+        "and nested-control scalar paths into the helper state under "
+        "owner+0x1A0 and owner virtual +0xCE8.",
+    ),
+    0x14041CED0: (
+        "ResolveOwnerReferenceTransformViaHelper1FC0OrRetainedPlayers",
+        "Produces a reference transform for the owner by first consulting the "
+        "helper at owner+0x1FC0, then selector-capable helper objects, and "
+        "finally falling back to retained player slots 0/1 through "
+        "0x1410F0D10 before reading the chosen actor transform at +0x100.",
+    ),
+    0x14041D0A0: (
+        "PublishOwnerRuntimeRecordsFromHelper1FC0Candidates",
+        "Large owner-side publish/refresh pass over helper owner+0x1FC0. Locks "
+        "the helper, enumerates candidate entries through 0x140640360, filters "
+        "them through 0x14063CF00 and retained/live matching, synthesizes large "
+        "runtime record blocks, and pushes those blocks into the current live "
+        "actor through virtual +0xD0.",
+    ),
+    0x14041D710: (
+        "CheckOwnerReadinessViaHighLevelObjectOrNestedControl",
+        "Owner-side readiness gate that first tries a higher object through "
+        "owner virtual +0x9B0 and two subqueries via 0x14128C910, then falls "
+        "back to nested control owner+0x15C8 via virtual +0x80/+0x180/+0x128, "
+        "with additional modulation by owner virtual +0x4C0, global mode, and "
+        "owner byte +0x1D0B.",
+    ),
+    0x14041D820: (
+        "CheckOwnerHelper1F90Availability",
+        "Availability gate over owner+0x1F90. If helper mode +0x840 is not 1, "
+        "it resolves an owner object through virtual +0xE20, passes it into "
+        "0x1405F3F10, and requires the returned object to have byte +0x189 "
+        "set before reporting success.",
+    ),
+    0x14063D800: (
+        "RefreshHelper1FC0HostAnchorsFromPreferredCandidate",
+        "Post-pass over owner+0x1FC0 that selects a preferred candidate entry, "
+        "then refreshes four runtime anchors behind owner+0x1FB0->+0x10. It "
+        "computes world-space vectors from helper entries and live actors, "
+        "writes them into anchor regions around +0x460/+0x4D0/+0x540/+0x5B0, "
+        "and toggles per-anchor active flags at +0x6E.",
+    ),
+    0x1404370C0: (
+        "RunHelper1FC0HostAnchorPostPass",
+        "Thin owner-side wrapper that forwards owner+0x1FC0 into "
+        "RefreshHelper1FC0HostAnchorsFromPreferredCandidate as part of the "
+        "regular gameplay-state update loop.",
+    ),
+    0x140436F20: (
+        "SyncHostAnchors620_690FromCurrentActorAndStateVector",
+        "Owner-side anchor sync that updates two host anchor regions at "
+        "owner+0x1FB0->+0x10 +0x620/+0x690 from the current actor and helper "
+        "owner+0x1FF8, gated by owner bytes +0x1D54/+0x1D56 and actor tag "
+        "0xAC710200.",
+    ),
+    0x140439E60: (
+        "RunGeometryThresholdGateForNestedControlAction",
+        "Heavy geometry/threshold gate that combines current-actor transforms, "
+        "nested-control state from owner+0x15C8, owner transform +0x1C8, and "
+        "helper-resolved reference geometry. If the final scalar falls below "
+        "threshold, it seeds owner-side scalar state and triggers a nested-"
+        "control action through virtual +0x78.",
+    ),
+    0x14043A2F0: (
+        "PrepareHighLevelActionTargetsFromOwnerState",
+        "Large high-level action/target preparation pass over the owner state. "
+        "Combines owner byte +0x1D59, owner virtual +0x9B0, the current-state "
+        "object at +0x1FF0, helper availability through +0x1FC0/+0x1F90, "
+        "retained/live actor capability bits, global table lookups via "
+        "+0x1E84, and candidate-array iteration to select valid target/action "
+        "state.",
+    ),
+    0x14043AC60: (
+        "ContinueHighLevelActionTargetPreparation",
+        "Sibling to PrepareHighLevelActionTargetsFromOwnerState. Reuses the "
+        "same owner byte +0x1D59, +0x1E84 table, owner virtual +0x438/+0x9B0, "
+        "capability-bit tests, and candidate-array scans to continue the same "
+        "high-level action/target-preparation family.",
+    ),
+    0x14043B380: (
+        "UpdateOwnerDescriptorCapabilityFlag18B0",
+        "Clears owner+0x18B0, resolves the authored descriptor at "
+        "owner+0x108/+0x10C, follows descriptor+0x68 into a retained/live "
+        "runtime object, and sets +0x18B0 if that object exposes the required "
+        "capability bit.",
+    ),
+    0x14043B490: (
+        "EnsureDefaultAnimStateNpcInfoKnowledgeRecord",
+        "Owner-side helper that resolves or creates the shared knowledge record "
+        "for 'default-anim-state-npc-info' through 0x1417651D0 when the "
+        "required subrecord is not already present on the current owner-side "
+        "runtime object.",
+    ),
+    0x14043B5B0: (
+        "EnsureDefaultAnimStateNpcInfoKnowledgeRecord_Variant",
+        "Sibling helper to EnsureDefaultAnimStateNpcInfoKnowledgeRecord that "
+        "builds the same 'default-anim-state-npc-info' record id and resolves "
+        "it through 0x1417651D0 from a nearby owner/runtime path.",
+    ),
+    0x14043B740: (
+        "PublishResolvedKnowledgeRecordsIntoSink",
+        "Resolves the owner's current knowledge/state record and additional "
+        "records from owner+0x2388 through 0x141765030, then publishes each "
+        "resolved record into an external sink via 0x1417F9150.",
+    ),
+    0x140425BC0: (
+        "CheckOwnerDecisionGateViaActorStateScalar",
+        "Higher-level owner decision gate that first tries a cached live object "
+        "at +0x23D8/+0x23E0, otherwise requests a direction/target vector via "
+        "0x141DE6500 and feeds it into "
+        "ComputeOwnerActorStateScalarFromRuntimeAndDecisionNode.",
+    ),
+    0x1404586B0: (
+        "InitMaterializedStateHost",
+        "Initializes the object-local materialized-state host used by the 0x4D0 "
+        "variant. Seeds the embedded sub-vtable at +0x40 and clears the owned "
+        "runtime/object pointers up through +0xA0.",
+    ),
+    0x1404588A0: (
+        "TeardownMaterializedStateHost",
+        "Tears down the object-local materialized-state host. Releases the "
+        "owned runtime/object pointers at +0x50/+0x90 and restores the host "
+        "vtable state.",
+    ),
+    0x141765580: (
+        "ResolveGlobalTaskNodeThresholdRecord",
+        "General resolver that looks up hashed/global task-node records using "
+        "the strings 'global' and '*start-task-node*'. Returns either a direct "
+        "registry hit or a fallback/global task node record consumed by "
+        "ProbeControlRoutingThresholdsAndSelectStateId and other systems.",
+    ),
+    0x141765030: (
+        "ResolveKnowledgeRegistryEntryById",
+        "Global registry lookup for authored knowledge/state records by "
+        "integer id. Searches sorted and hashed secondary containers and "
+        "returns the matching registry entry payload when present.",
+    ),
+    0x1417651D0: (
+        "ResolveOrCreateKnowledgeRegistryEntryById",
+        "Wrapper over ResolveKnowledgeRegistryEntryById that returns an "
+        "existing knowledge/state entry when present and otherwise enters the "
+        "creation/assert path for a missing registry record.",
+    ),
+    0x141DF35F0: (
+        "ResolveRuntimeObjectFromPackedHandle",
+        "Resolves a packed runtime handle/id through the global handle tables "
+        "and returns the live runtime object only when the handle and object "
+        "id still agree.",
+    ),
+    0x141DE4F90: (
+        "ApplyStateRecordThroughNestedControlAndActorRuntime",
+        "Heavy owner-side apply path for a current-state record object. Resolves "
+        "old/new nested-control nodes by record tag, deactivates the previous "
+        "node through virtual +0xC0, applies the new one through virtual +0xE0 "
+        "with packed owner transforms, then commits the record-object transform "
+        "through owner virtual +0xC48 and finalizes via owner+0x15C0/+0x15B8.",
+    ),
+    0x141DE5430: (
+        "ResolveSharedNestedControlRuntimeObjectBlock310",
+        "Owner-side helper that resolves nested-control handles at +0x2F8 and "
+        "+0x258 through 0x141DF35F0, verifies that both point to the same live "
+        "runtime object, and then returns the follow-up control block at "
+        "owner+0x15C0+0x310.",
+    ),
+    0x141DE6500: (
+        "BuildOwnerDirectionVectorFromStateSlotsAndDescriptor",
+        "Synthesizes a world/reference vector from owner state slots "
+        "+0x18F0/+0x1990, validates the authored descriptor at +0x108/+0x10C, "
+        "refreshes owner+0x110, and combines that descriptor offset with owner "
+        "transform +0x120 before writing the final vector to caller storage.",
+    ),
+    0x14063CF00: (
+        "CheckHelper1FC0CandidateAgainstRetainedPair",
+        "Helper-side filter for owner+0x1FC0. Enumerates helper entries, "
+        "matches them against an incoming retained/live pair, and rejects "
+        "special entry kinds identified by state byte +0x190 before returning "
+        "a bool-like match result.",
+    ),
+    0x14063C260: (
+        "FindHelper1FC0EntryMatchingRetainedPair",
+        "Helper-side lookup that scans the owner+0x1FC0 entry pool, resolves "
+        "each enabled entry through virtual +0x10, and returns the first entry "
+        "whose retained/live pair matches the input pair.",
+    ),
+    0x140640360: (
+        "CollectHelper1FC0EntriesByStateKind",
+        "Enumerates the entry pool behind owner+0x1FC0, filters entries by the "
+        "requested state-kind byte at entry->virtual +0x10 -> +0x190, and "
+        "appends matching entries into a bounded output list.",
+    ),
+    0x14063E890: (
+        "PublishPreparedStateRecordIntoHelper1FC0",
+        "Helper-side publish/apply path for a prepared owner/action record. "
+        "Locks helper+0xC0, scans watcher nodes around +0x1D8 via virtual "
+        "+0x28, allocates and initializes a watcher object when needed, then "
+        "dispatches the incoming record through watcher virtual +0x30.",
+    ),
+    0x1406427E0: (
+        "InitHelper1FC0PublishedRecordObject",
+        "Initializes the helper-side published record object used by "
+        "PublishPreparedStateRecordIntoHelper1FC0. Installs the object vtable, "
+        "clears embedded retained/live pairs and helper subobjects, and seeds "
+        "a unique object id.",
+    ),
+    0x14040DB30: (
+        "CacheSelectedActionTargetSnapshot",
+        "Caches a selected action target back into owner state. Copies target "
+        "transform/orientation blocks into owner+0x1ED0..+0x1F30, stores the "
+        "target retained/live pair at +0x1F48/+0x1F50, and sets owner byte "
+        "+0x1D55 bit 0x2.",
+    ),
+    0x140404240: (
+        "LatchOwnerPerceptionBit40FromHelperType6",
+        "Helper-driven owner latch that resolves a +0x1FC0 entry, requires "
+        "entry kind 6 and several inactive helper predicates, then sets "
+        "owner+0x1D59 bit 0x40.",
+    ),
+    0x140407910: (
+        "CheckCurrentActorGlobalSlotBusy",
+        "Scans the global actor-slot table for the current actor identity and "
+        "reports whether the matching slot is already occupied or otherwise "
+        "busy according to per-slot flags and counts.",
+    ),
+    0x140421E70: (
+        "ProcessOwnerPerceptionEventTagAndUpdateRecentState",
+        "Processes owner event tags returned through virtual +0x10D8. Handles "
+        "two special hashes by setting owner+0x1D59 bits 0x1/0x2, snapshotting "
+        "current runtime handles into +0x2190/+0x2198, and rebuilding derived "
+        "vectors at +0x2450/+0x2460 from the current descriptor and event "
+        "source position.",
+    ),
+    0x140422100: (
+        "CheckOwnerRecentPerceptionBit1Fresh",
+        "Reports whether owner+0x1D59 bit 0x1 is still fresh by comparing the "
+        "current runtime handle against the snapshot stored at +0x2190 within "
+        "a short time window.",
+    ),
+    0x140422140: (
+        "CheckOwnerRecentPerceptionBit2Fresh",
+        "Reports whether owner+0x1D59 bit 0x2 is still fresh by comparing the "
+        "current runtime handle against the snapshot stored at +0x2198 within "
+        "a short time window.",
+    ),
+    0x14043B380: (
+        "UpdateOwnerDescriptorCapabilityFlag18B0",
+        "Clears owner+0x18B0, resolves the authored descriptor at "
+        "owner+0x108/+0x10C, follows descriptor+0x68 into a retained/live "
+        "runtime object, and sets +0x18B0 if that object exposes the required "
+        "capability bit.",
+    ),
+    0x14043B740: (
+        "PublishResolvedKnowledgeRecordsIntoSink",
+        "Resolves the owner's current knowledge/state record and additional "
+        "records from owner+0x2388 through 0x141765030, then publishes each "
+        "resolved record into an external sink via 0x1417F9150.",
+    ),
+    0x1417F9150: (
+        "CommitResolvedKnowledgeRecordIntoSinkSlot",
+        "Sink-side slot/registry commit. Resolves a destination slot from the "
+        "incoming record key, writes record+0x10 into the sink value array, "
+        "writes the record pointer into the parallel pointer array, and then "
+        "finalizes the sink through 0x1417FA5A0.",
+    ),
+    0x1417FA5A0: (
+        "FinalizeOrRefreshStructuredSinkState",
+        "Large sink-side finalize/refresh helper used after slot insert/clear. "
+        "Builds a CRC/hash-like accumulator over sink entries and metadata and "
+        "refreshes the sink's derived state.",
+    ),
+    0x141E63660: (
+        "BroadcastKnowledgeRecordsFromOwnerManager1FA0",
+        "Manager-wide outward broadcast over owner+0x1FA0. Iterates entry "
+        "records, resolves live actors, builds compact hashed records, and "
+        "pushes them into those actors through virtual +0xD0.",
+    ),
+    0x141EC4E90: (
+        "RunWorldSpaceProbeBetweenTransforms",
+        "World/probe-system query between two transform vectors plus an "
+        "external config/output record. Validates both vectors, packages them "
+        "for the world query layer, and dispatches the final probe through "
+        "0x1420A7D30.",
+    ),
+    0x14123F260: (
+        "ResolveGlobalKnowledgeStateRecordById",
+        "Global table/cache-driven resolver for authored knowledge/state "
+        "records. Resolves a record object by id through registry helpers and "
+        "returns the record whose flag block is later consumed by owner "
+        "perception/action code.",
+    ),
+    0x1406AD290: (
+        "AdvanceControlRoutingAfterActorStateScalarSuccess",
+        "Second-stage control-routing transition reached after "
+        "ComputeOwnerActorStateScalarFromRuntimeAndDecisionNode succeeds. Clears "
+        "transient bits around +0x27D0/+0x26A4, then evaluates a follow-up "
+        "record/current-object path and nested-control gate before reporting "
+        "the next control-routing status.",
+    ),
+    0x141DE9E60: (
+        "SeedOwnerRuntimeFromIncomingStateRecord",
+        "Large owner-state seeding routine that validates an incoming state "
+        "record against the authored table at 0x14386FD00, passes the matching "
+        "descriptor into owner virtual +0x1E8, copies record transforms into "
+        "owner+0x130/+0x140, dispatches owner+0x15B8 helpers, resets broad "
+        "owner state mirrors around +0x175C..+0x19FC, refreshes live retained "
+        "actor state, and marks companion/runtime bits after install.",
+    ),
+    0x1410F1910: (
+        "SpawnPlayerFromRetainedDescriptor",
+        "Retained spawn-player path that consumes an explicit descriptor block "
+        "and then commits spawn state through 0x1410F14C0. It now also reads "
+        "as a richer Player-facing packet builder around "
+        "`*player-starting-weapons*` and the "
+        "`TrySpawnPlayerAtContinue(): m_pistol=%s, m_longGun=%s, m_rope=%s, "
+        "useCheckpointed=%d` branch. Nearby literals tie it directly to "
+        "TaskManager::SpawnPlayer / TrySpawnPlayerAtContinue and "
+        "player/camera spawner lookup.",
+    ),
+    0x140B56090: (
+        "HandleNetSpawnCoopBuddy",
+        "Network/retained coop-buddy spawn path. Resolves retained roster "
+        "entries, materializes live entity state, and feeds player-labelled "
+        "spawn descriptors into the shared retained spawn stack.",
+    ),
+    0x140B580C0: (
+        "SelectRetainedCoopPlayerLookHash",
+        "Chooses a player-labelled retained coop look/descriptor variant based "
+        "on runtime state gates and global mode selection.",
+    ),
+    0x1410F3350: (
+        "SpawnPlayerFallback",
+        "Fallback retained spawn-player path. Builds default transforms, "
+        "initializes shared player-labelled registries, then calls "
+        "CommitResolvedPlayerSpawn and post-spawn runtime gating on the "
+        "resolved live entity.",
+    ),
+    0x141D22420: (
+        "ResolveRetainedRosterEntity",
+        "Resolves a live entity from a retained roster/slot entry. Walks nested "
+        "lists, checks script/runtime flags, and can recurse until a valid live "
+        "entity handle is found.",
+    ),
+    0x141EB8950: (
+        "DestroyManagedPointerArrayNodes_2NPlus3",
+        "Iterates the managed pointer array at owner+0x4A0 with logical length "
+        "(2*N+3) derived from owner+0x4A8, calling each non-null node's "
+        "virtual +0x28 method before tail-calling the parent teardown.",
+    ),
+    0x141EB7CE0: (
+        "ConstructCompanionCameraRigOwner_Allocating",
+        "Allocating constructor for the companion camera-rig owner. Requests "
+        "a 0x4E0-byte object, installs the vtable at 0x142B99A98, and zeros "
+        "the managed child-node cluster at +0x4A0..+0x4C0.",
+    ),
+    0x141EB7E70: (
+        "ConstructCompanionCameraRigOwner_InPlace",
+        "In-place constructor variant for the same 0x4E0-byte owner type. "
+        "Calls the shared base constructor, installs the vtable at "
+        "0x142B99A98, and clears +0x4A0..+0x4C0.",
+    ),
+    0x141EB7EC0: (
+        "DestroyCompanionCameraRigOwner_Freeing",
+        "Freeing destructor for the 0x4E0-byte companion camera-rig owner. "
+        "Destroys the managed object at +0x4B8, tail-calls the base teardown, "
+        "and conditionally frees the storage when the low bit of the dtor "
+        "flags is set.",
+    ),
+    0x141EB8890: (
+        "AttachManagedNodeGraphToCompanionCameraRigOwner",
+        "Builds or acquires the managed node graph stored at owner+0x4B8 "
+        "through virtual slot +0x790, links it back to the owner via "
+        "0x141E60E80, then continues shared owner initialization through "
+        "0x141BBACC0.",
+    ),
+    0x14087D390: (
+        "InitCompanionCameraRigOwner_ModeFlag_0x10000000",
+        "Thin wrapper over AttachManagedNodeGraphToCompanionCameraRigOwner "
+        "that then ORs mode flag 0x10000000 into the companion object at "
+        "owner+0x198 via 0x141754EF0.",
+    ),
+    0x1414FBC20: (
+        "InitCompanionCameraRigOwner_ModeFlag_0x01000000",
+        "Thin wrapper over AttachManagedNodeGraphToCompanionCameraRigOwner "
+        "that then ORs mode flag 0x01000000 into the companion object at "
+        "owner+0x198 via 0x141754EF0.",
+    ),
+    0x1402A2450: (
+        "InitCompanionCameraRigOwner_ModeFlag_0x00000800",
+        "Thin wrapper over AttachManagedNodeGraphToCompanionCameraRigOwner "
+        "that then ORs mode flag 0x00000800 into the companion object at "
+        "owner+0x198 via 0x141754EF0.",
+    ),
+    0x14088B250: (
+        "ConstructDerivedCompanionCameraRigOwner_0x500",
+        "Constructor for a 0x500-byte derived companion camera-rig owner. "
+        "Calls the shared base constructor, installs vtable 0x1429B32F8, "
+        "clears the inherited managed child-node cluster at +0x4A0..+0x4C0, "
+        "and adds derived fields at +0x4E0/+0x4E8.",
+    ),
+    0x141EB89E0: (
+        "RelocateManagedPointerArrayOwner",
+        "Relocates pointer fields and pointer-array entries for a managed owner "
+        "object. Adjusts owner+0x4B8, the nested pointer at [owner+0x4B8]+0x60, "
+        "the pointer array at owner+0x4A0 sized as (2*N+3), then tail-calls "
+        "the parent relocation helper.",
+    ),
+    0x141EB8AE0: (
+        "RefreshManagedPointerArrayNodesIfClean",
+        "When owner+0x4A0 and owner+0x1A0 are present and owner+0x4C0 is clear, "
+        "iterates the managed pointer array at owner+0x4A0 with logical length "
+        "(2*N+3) and refreshes each node through 0x141E4D760 while keeping the "
+        "cached state vector at +0x110 in sync.",
+    ),
+    0x1411DE2E0: (
+        "ConstructPlayerTaggedMeleeScriptObserver_0x1C0",
+        "Player-tagged melee observer constructor/factory. CRCs the string "
+        "'Player', compares it against the incoming runtime descriptor, then "
+        "allocates a 0x1C0 observer object, installs vtable 0x142A69798, "
+        "and seeds default runtime/transform fields for the melee script "
+        "observer family.",
+    ),
+    0x14124AE60: (
+        "SeedMeleeObserverTrackedActorPairsAndBaseScalar",
+        "Copies incoming tracked actor/runtime pairs into the melee observer "
+        "object at +0xB0/+0xB8 and into the linked runtime owner cache, then "
+        "derives the observer's base scalar at +0xC4 from the actor-side "
+        "graph under +0x1A0.",
+    ),
+    0x14124AFC0: (
+        "UpdateMeleeObserverKnowledgeAndSettings",
+        "Main update path for the player-tagged melee observer. Resolves the "
+        "live actor from the retained/runtime pair at +0xB0/+0xB8, queries "
+        "actor virtual slots +0x5C8/+0x9B0/+0xBE0, resolves authored records "
+        "through 0x14123F260, hashes the melee-settings vs net-melee-no-ap "
+        "paths, packages the state through 0x1411E00D0/0x1411E0230, and "
+        "stores the resolved state id at +0xC0.",
+    ),
+    0x14124C060: (
+        "PushMeleeObserverActorTransformIfReady",
+        "Resolves the melee observer's live actor from +0xB0/+0xB8, requires "
+        "the readiness gate at 0x14124C0E0, then pushes a transform from the "
+        "actor-side graph into 0x14189F410.",
+    ),
+    0x14124C0E0: (
+        "CheckMeleeObserverActorState10Ready",
+        "Resolves the observer's live actor/runtime pair, marks it active, "
+        "walks actor+0x1A0 through 0x14172B7F0 and returns true only when "
+        "0x14189E170 reports state id 0x10 for the observer's cached state "
+        "slot at +0xC0.",
+    ),
+    0x14124C180: (
+        "GetMeleeObserverScaledWeightFromLiveActor",
+        "If the melee observer passes 0x14124C0E0, resolves another actor-side "
+        "node through virtual +0x70, reads node+0x168, and multiplies it "
+        "against the observer's base scalar. Otherwise falls back to the "
+        "default scalar at +0xC4.",
+    ),
+    0x14189E170: (
+        "QueryActorGraphStateByteByStateId",
+        "Looks up an actor-side state id in the primary 0x100-byte table at "
+        "graph+0x140 and the fallback 0x1C-byte table at graph+0x460, then "
+        "returns the corresponding one-byte state marker used by the melee "
+        "observer readiness path.",
+    ),
+    0x14189F410: (
+        "ExtractActorGraphTargetTransformRecord",
+        "Builds a compact target/transform record from an actor graph. Uses "
+        "the selector in out_record+0x8/+0xC, prefers a matching live object "
+        "from 0x14386FD00, copies its first 0x20 bytes when valid, and then "
+        "mixes in local actor-graph transform/state fields.",
+    ),
+    0x1418A5CD0: (
+        "ResolveActorRootCandidateEntryByStateId",
+        "Seeds a compact selector record from actor_root+0x90 through "
+        "0x1418A6010, prefers actor_root->0x38 and falls back to +0x40, then "
+        "dispatches candidate resolution through 0x14193D250.",
+    ),
+    0x14193CD10: (
+        "FindRecursiveCandidateEntryByPointerAndStateId",
+        "Recursively walks 0x40-byte candidate entries. Follows child "
+        "containers when flag 0x40 is set; otherwise matches the incoming "
+        "candidate pointer and rejects entries whose state id already equals "
+        "the requested one.",
+    ),
+    0x14193CDB0: (
+        "ValidateCandidateEntryAgainstSelectorRecord",
+        "Validates a candidate entry against the compact selector record built "
+        "by the melee observer path, including gating bits in entry+0x4 and "
+        "boolean selectors at record+0x2D/+0x2E.",
+    ),
+    0x14055D940: (
+        "HandleNpcHolsterWeaponViaNestedControlObject",
+        "Builds the npc-holster-weapon command record, resolves the nested "
+        "control object through owner+0x15C8->virtual +0x58, and then routes "
+        "the action either through 0x141DE55E0 (+0xA0) or direct nested "
+        "virtual +0xB8 depending on the local action-state value.",
+    ),
+    0x141C965A0: (
+        "RegisterInteractSelectorRegistryEntries",
+        "Bootstrap registration path for interact-related selector ids. "
+        "Hashes authored strings such as 'interact-command-id' through "
+        "0x14014D910 and stores global selector/type/size metadata records "
+        "under 0x146C742A8..0x146C742E4.",
+    ),
+    0x1408BDF40: (
+        "BuildInteractHookRuntimeStateFromLiveObject",
+        "Gameplay-facing interact/rope runtime builder. Hashes selector ids "
+        "including 'interact-hook', 'interactable-def', and "
+        "'rope-holster-offset', resolves the gated live runtime object "
+        "through 0x141D21E20, packages its +0xA8/+0xBC retained-runtime pair, "
+        "and feeds the resulting records through owner-side build/apply paths "
+        "including virtual +0xE8, 0x141ECEFE0, virtual +0x20, and 0x141C9ED50.",
+    ),
+    0x1408C4A80: (
+        "UpdateWinchHookActionStateFromRuntimeSelectors",
+        "Large winch-hook action/state update path. Consumes selector ids "
+        "such as 'winch-hook-attach', 'attach-winch-hook', "
+        "'winch-hook-secure', and 'interactable-def', resolves actor/runtime "
+        "pairs, materializes records through 0x141C9ED50/0x141C9EB30, and "
+        "writes the resulting action state back into owner/runtime fields "
+        "around +0x12F0..+0x1330, +0x14F8, +0x1511/+0x1514/+0x1518, and "
+        "+0x17B8.",
+    ),
+    0x140E964F0: (
+        "RefreshHookStateRecordsAndCooldownFlags",
+        "Owner-side hook-state refresh helper. Walks compact records under "
+        "object+0x1A0, resets/refreshes per-entry cooldown/state fields, and "
+        "clears cached output at owner+0x220/+0x228 when the current hook "
+        "state no longer matches the active runtime ids.",
+    ),
+    0x14124E7C0: (
+        "RoutePlayerGrabWinchHookStateIntoNestedActionDispatch",
+        "Actor-aware bridge from the player-grab-winch-hook family back into "
+        "the shared nested action dispatcher. Resolves and validates the live "
+        "actor through virtuals +0x8C0/+0xFA8/+0x860, compares it against the "
+        "cached actor-side object at +0x2E8, then calls 0x141DE55E0 with a "
+        "binary action-state argument.",
+    ),
+    0x140484C20: (
+        "EvaluateCurrentActionAgainstNestedControlAndStateBundle",
+        "Shared owner-side current-action gate. Starts from owner+0x15C8, "
+        "checks cached live runtime pairs at +0x23D8/+0x23E0, special runtime "
+        "tag 0xAC710201, and owner virtual +0x7D0; if those do not short-"
+        "circuit, probes nested virtual +0xA8 and falls back to 0x141DE55E0. "
+        "Then continues through helper/state objects under +0x1FB0/+0x1FF8/"
+        "+0x1FA8 and owner virtuals +0xFD0/+0x478.",
+    ),
+    0x14058B900: (
+        "HandleCombatActionStateThroughNestedControlAndActorGraph",
+        "Large combat/action-state handler. Resolves live actor/runtime "
+        "identity, filters a state-id list, forces low-cardinality nested "
+        "state through 0x141DE5A10 when owner+0x24C8<3, commits packaged "
+        "records through 0x141E0EDF0/0x141E0ED10, uses actor-graph helpers "
+        "0x1418B7060/0x14189E5A0/0x14189CC80, and routes follow-up work "
+        "through nested virtuals +0x178/+0x170/+0xB0.",
+    ),
+    0x14124ED20: (
+        "PublishActorObserverRecordFromPrimaryRetainedPlayerAndScalarQuery",
+        "Observer-style publish path built on the primary retained player. "
+        "Resolves slot 0 through 0x1410F0D10, fetches the shared scalar query "
+        "through 0x141DF0000, compares world-space transforms and thresholds, "
+        "and when enabled publishes a structured record through the sink at "
+        "0x143FDF520 via virtual +0xA8.",
+    ),
+    0x14124F700: (
+        "PublishSiblingActorObserverRecordThroughSink90",
+        "Sibling observer-style publish path. Resolves live actors from "
+        "retained/runtime pairs, computes transform-derived thresholds, calls "
+        "the shared scalar query 0x141DF0000, and when enabled publishes a "
+        "structured record through the same sink object 0x143FDF520 but via "
+        "virtual +0x90 before forwarding the result to 0x1411DF370.",
+    ),
+    0x140437F80: (
+        "ResolveAndApplySpecialTaggedStateCandidateOrFallback",
+        "Special-tag state-application helper. Builds owner transform, "
+        "classifies it through 0x142145490, forwards the 0x2010 case into "
+        "0x1404380F0 with tag 0xAC710200, otherwise resolves a candidate from "
+        "global registries and applies it through 0x141DE4F90 when "
+        "candidate->virtual +0xB0(owner) succeeds.",
+    ),
+    0x1404380F0: (
+        "ResolveAndApplySpecialTaggedStateCandidateByTag",
+        "Builds an owner transform, resolves a special-tag candidate object "
+        "through 0x1409DA630(tag, transform), validates it through virtual "
+        "+0xB0, and commits it through 0x141DE4F90.",
+    ),
+    0x140394B20: (
+        "QueueVehicleControllerSetDriverEvent",
+        "Vehicle-controller event builder for the authored drive-event "
+        "'set-driver'. Captures target vehicle state through virtual +0xF8, "
+        "packages role/index data, hashes the event string, and continues into "
+        "the shared vehicle-controller commit path.",
+    ),
+    0x140395000: (
+        "QueueVehicleControllerAddPassengerEvent",
+        "Vehicle-controller event builder for the authored drive-event "
+        "'add-passenger'. Builds the same event record shape as the driver "
+        "path but for passenger entry, then continues into the shared "
+        "vehicle-controller event commit path.",
+    ),
+    0x140395430: (
+        "QueueVehicleControllerPassengerEnteredEvent",
+        "Vehicle-controller event builder for the authored drive-event "
+        "'passenger-entered'. Captures the current vehicle state and packages "
+        "the passenger-entered event into the same shared controller path used "
+        "by set-driver/add-passenger.",
+    ),
+    0x14059D740: (
+        "BuildPassengerFrontEntryStateAndCommitVehicleControllerRecord",
+        "Concrete passenger-entry builder. Validates a live actor, measures "
+        "entry transforms, hashes the authored state 'hero-passenger-a-enter-"
+        "front', stores it into controller state at +0xA0, writes a role-like "
+        "value at +0xB0, updates entry flags at +0x12C, and commits entry "
+        "transforms back into controller fields.",
+    ),
+    0x1406B19F0: (
+        "UseTeleportIntoVehicleScriptPathFromVehicleActionRuntime",
+        "Runtime user of the TeleportIntoVehicle script-skill family. Reads "
+        "pending vehicle-action state, packages the TeleportIntoVehicle string "
+        "block, and feeds it into the larger scripted vehicle-entry path.",
+    ),
+    0x1414115B0: (
+        "NotifyPlayerEnteringVehicleAndPublishEntryRecordToActor",
+        "VehicleCtrl::NotifyPlayerEntering path. Hashes 'vehicle-entry-def', "
+        "builds packaged entry records from the incoming VehicleEntryDef, "
+        "serializes them through 0x1417F8B00, and when a matching live actor "
+        "is present publishes the resulting entry record through actor "
+        "virtual +0xD0.",
+    ),
+    0x14059DAB0: (
+        "SelectVehicleExitSideAndDispatchSeatStateUpdate",
+        "Sibling vehicle seat-state method. Chooses between authored exit-side "
+        "strings, uses the same seat/controller object as the passenger-entry "
+        "builder, dispatches through nested control virtual +0xD0, and caches "
+        "a resulting value/timestamp into object+0x48.",
+    ),
+    0x14059DC30: (
+        "GateVehicleSeatStateByCapabilityHashAndDispatchNestedControlA0",
+        "Small seat-state applicability gate. Requires the target actor to "
+        "carry capability bit 0x143D43FA4, matches action hash 0x465123BF, "
+        "then resolves nested control through owner+0x15C8->virtual +0x58 and "
+        "tail-dispatches into nested virtual +0xA0.",
+    ),
+    0x14059F199: (
+        "CallSeatStateExitSelectorOnEmbeddedVehicleSeatState",
+        "Thin outer-owner wrapper. Resolves the embedded vehicle seat-state "
+        "subobject at owner+0x690, forces the binary side flag to 1, and "
+        "jumps into SelectVehicleExitSideAndDispatchSeatStateUpdate.",
+    ),
+    0x14059F1E0: (
+        "UpdateVehicleActionOwnerAndRefreshEmbeddedSeatState",
+        "Large outer vehicle-action owner update. Reads the embedded seat-state "
+        "object at owner+0x690, queries nested control +0xB0 through "
+        "owner+0x15C8, stores the resulting low-cardinality state in "
+        "owner+0x69C, checks action/capability gates, and then continues into "
+        "the larger owner runtime path.",
+    ),
+    0x14039EB80: (
+        "ResolveQualifiedRailVehicleActorFromPackedPair",
+        "Resolves a live actor from a packed retained/runtime pair and then "
+        "requires the selector capability 'RailVehicle' through "
+        "CheckSelectorHashEnabledInBitsetRegistry.",
+    ),
+    0x14039EC50: (
+        "ResolveQualifiedDriveableVehicleActorFromPackedPair",
+        "Resolves a live actor from a packed retained/runtime pair and then "
+        "requires the selector capability 'DriveableVehicle' through "
+        "CheckSelectorHashEnabledInBitsetRegistry.",
+    ),
+    0x1413571B0: (
+        "UpdatePlayerHudAimingAndWeaponAccuracyPublishes",
+        "Large player/HUD runtime update. Combines player-state booleans, "
+        "CameraManager state, and authored scalars such as "
+        "'grenade-throw-time', 'player-live-time', 'is-aiming', and "
+        "'weapon-accuracy', then publishes them through object-local sinks "
+        "around +0x1D98 and the big state block at +0xF0.",
+    ),
+    0x14009BC80: (
+        "RegisterSelector_PlayerIsAimingFirearmAtNpc",
+        "Registration stub for the authored selector "
+        "'player-is-aiming-firearm-at-npc?'. Not a live runtime consumer.",
+    ),
+    0x14090AB80: (
+        "UpdateBuddyMeleeCoordinatorAttackInternalAndPublishAttackRecords",
+        "Large buddy attack-behavior path anchored by nearby strings "
+        "'BuddyMeleeCoordinator::AttackInternal', 'pAttackList', and "
+        "'Buddy Attacking Behavior'. Seeds the +0x1D90..+0x1E70 block, "
+        "resolves an object into +0x1D98, and publishes structured attack "
+        "records through the global sink 0x143FDF520 via virtual +0x90/+0xC8.",
+    ),
+    0x141356F80: (
+        "UpdateHudRuntimePublishes_CameraInside_GrenadeMove_BlindVis",
+        "HUD/runtime presentation path anchored by nearby strings "
+        "'Camera Inside', 'GrenadeMove', 'vis: blind', 'vis: %s', and "
+        "ghud.cpp. Publishes a structured record into the global sink "
+        "0x143FDF520 via virtual +0x38.",
+    ),
+    0x14013A110: (
+        "UpdateIggyAllocFreeTelemetryAndPublishSinkEvents",
+        "Allocator/telemetry runtime path anchored by nearby strings "
+        "'Iggy Alloc', 'Iggy Free', and flash allocator overflow warnings. "
+        "Builds small structured records, publishes them into the global sink "
+        "0x143FDF520 via virtual +0x28, and continues through local object "
+        "virtuals +0x38/+0x90.",
+    ),
+    0x1403EF6D0: (
+        "BufferQualifiedWeaponFireStateSampleInOwnerRuntimeArray",
+        "Live runtime user of the 'weapon-fire' string id. Matches the incoming "
+        "runtime id against the hashed 'weapon-fire' token, gates on actor "
+        "capability bits and object+0x1DB8 virtuals, computes a derived vector "
+        "sample, and stores the result plus retained/runtime metadata into the "
+        "owner's buffered state array around +0xC00..+0xC30.",
+    ),
+    0x141436EA0: (
+        "ResolveWeaponFireObserverStateFromLiveRetainedPlayer",
+        "Higher-level runtime user of the 'weapon-fire' token. Builds the same "
+        "hashed id, pushes it through nearby runtime helpers, resolves retained "
+        "player slot 0, checks gameplay-state gates, computes a world-space "
+        "vector/qualification result, and forwards it through 0x141434DA0 "
+        "with a toggled binary state.",
+    ),
+    0x141432B90: (
+        "ResolveOwnerWeaponObserverScalarByStateId",
+        "Reads owner+0x624 as a current state id, resolves a cached "
+        "'weapon-art-defs-online-hash' registry through 0x1414FA800, looks up "
+        "the matching record via 0x141764B50 / 0x141434E90, and returns its "
+        "leading float scalar with a fallback default when the record is absent.",
+    ),
+    0x141434E90: (
+        "ResolveOwnerWeaponObserverRecordByStateId",
+        "Pointer-returning sibling of 0x141432B90. Resolves the cached "
+        "'weapon-art-defs-online-hash' registry, uses owner+0x624 as the key, "
+        "and returns the matching state/observer record pointer.",
+    ),
+    0x141434DA0: (
+        "UpdateOwnerWeaponObserverStateByModeFlag",
+        "Reads owner+0x624 as the current state id, optionally hashes the "
+        "authored token at 0x142A854B0 ('helicopter-igc-mg'), resolves a "
+        "cached 'weapon-art-defs-hash' registry through 0x1414FA380, and "
+        "routes the resulting state id through 0x141614E40 under a binary "
+        "mode/toggle flag.",
+    ),
+    0x1414FA380: (
+        "GetCachedWeaponArtDefsHashRegistry",
+        "Cached accessor for the registry keyed by the '*weapon-art-defs-hash*' "
+        "string family.",
+    ),
+    0x1414FA800: (
+        "GetCachedWeaponArtDefsOnlineHashRegistry",
+        "Cached accessor for the registry keyed by the "
+        "'*weapon-art-defs-online-hash*' string family.",
+    ),
+    0x1414FA9A0: (
+        "GetCachedWeaponDryFireEventRegistry",
+        "Sibling cached accessor keyed by the 'frags-event-weapon-dry-fire' "
+        "string family.",
+    ),
+    0x141614E40: (
+        "LookupRegistryRecordPointerById",
+        "Generic id->record lookup over a registry with record_count at +0x0, "
+        "id table at +0x8, and record pointer table at +0x10. Uses open-"
+        "addressing style probing and returns the matched record pointer.",
+    ),
+    0x1414FAC10: (
+        "GetWeaponObserverRecordField00ByStateId",
+        "Uses the cached '*weapon-art-defs-online-hash*' registry and the "
+        "state id key to return record+0x0.",
+    ),
+    0x1414FAC50: (
+        "GetWeaponObserverRecordField08ByStateId",
+        "Uses the cached '*weapon-art-defs-online-hash*' registry and the "
+        "state id key to return record+0x8.",
+    ),
+    0x1414FAC90: (
+        "GetWeaponObserverRecordField10ByStateId",
+        "Uses the cached '*weapon-art-defs-online-hash*' registry and the "
+        "state id key to return record+0x10.",
+    ),
+    0x1414FACD0: (
+        "GetWeaponObserverRecordField18ByStateId",
+        "Uses the cached '*weapon-art-defs-online-hash*' registry and the "
+        "state id key to return record+0x18.",
+    ),
+    0x1414FAD10: (
+        "GetWeaponObserverRecordField20ByStateId",
+        "Uses the cached '*weapon-art-defs-online-hash*' registry and the "
+        "state id key to return record+0x20.",
+    ),
+    0x1414FAD50: (
+        "GetWeaponObserverPrimaryObjectField2B0ByStateId",
+        "Resolves the '*weapon-art-defs-online-hash*' record by state id and, "
+        "if record+0x0 is a live object pointer, returns that object's +0x2B0 "
+        "field.",
+    ),
+    0x141520750: (
+        "BuildUsingJointDifferenceStateRecord",
+        "Builds a large structured state record from input vectors, the current "
+        "actor/runtime pair, and a downstream registry record. Used at the tail "
+        "of the higher 'weapon-fire' observer path after owner-local observer "
+        "state has been updated through 0x141434DA0.",
+    ),
+    0x140A40A30: (
+        "BuildUsingJointDifferenceStateRecordAndResetWrapperTail",
+        "Thin wrapper over 0x141520750. Builds the shared UsingJointDifference "
+        "record, stores one extra pointer at +0x130, and clears/defaults tail "
+        "fields around +0x140/+0x150/+0x160/+0x170.",
+    ),
+    0x141520890: (
+        "ProcessUsingJointDifferenceStateRecordForCalcStartPhase",
+        "Heavy downstream consumer of the shared UsingJointDifference record "
+        "family. Anchored by nearby authored tokens 'calc-start-phase-*' and "
+        "'DcCalcStartPhaseUsingJointDifference'; reuses actor/runtime pair "
+        "queries and continues into a larger produced-state/application path.",
+    ),
+    0x140A40AB0: (
+        "SelectSpawnerOrGroupEntryByValue",
+        "Searches spawner/group-related tables and a fallback lookup path to "
+        "resolve a matching entry/index for the requested value. Separate from "
+        "the real UsingJointDifference start-phase transition family.",
+    ),
+    0x1417F8910: (
+        "PublishStructuredStateBlockToActorVirtualD0",
+        "Actor-facing publish/apply helper. If the target is valid and not "
+        "blocked by target+0x40 bit 0x1, it acquires/releases guards through "
+        "0x1416A2E80/0x1416A2ED0 and forwards the structured block through the "
+        "target object's virtual +0xD0; otherwise it writes the fallback block.",
+    ),
+    0x1402EF0A0: (
+        "ConsumeResolvedPhaseStateAndForwardToRuntimeHandler",
+        "Heavy runtime consumer that starts from a 0x1417651D0-resolved record "
+        "id and vector payload, packages several actor/runtime pairs plus a "
+        "large phase/state block, resolves live actor identity, and forwards "
+        "the result into 0x1402EF420.",
+    ),
+    0x1402EF420: (
+        "ApplyPhaseTransitionPayloadToRuntimeState",
+        "Heavy downstream apply path for the shared UsingJointDifference / "
+        "calc-start-phase family. Selects branch/state ids from record fields "
+        "+0x90/+0x94/+0x9C/+0xA0/+0xA8, rebuilds world-space phase/orientation "
+        "bases, dispatches transition instructions, writes actor-side "
+        "transition fields, and fans follow-up logic across retained player "
+        "slots 0 and 1.",
+    ),
+    0x1402EE240: (
+        "BuildPhaseTransitionInstructionDispatchRecord",
+        "Builds a large phase-transition dispatch record from the incoming "
+        "state block, hashes local descriptor tokens, resolves a live "
+        "actor/runtime pair, and prepares the instruction payload later "
+        "consumed by 0x1402EF420.",
+    ),
+    0x1401781E0: (
+        "BuildWorldBasisVectorFromRuntimeTransform",
+        "Resolves a runtime object through the retained/runtime table at "
+        "0x14386FD00, copies its cached transform at +0x10 when valid, and "
+        "emits a world-space basis vector from the object's orientation and "
+        "translation.",
+    ),
+    0x1415D23B0: (
+        "BuildNormalizedPhaseBasisFromTwoVectors",
+        "Normalizes and cross-combines two incoming vectors into a packed "
+        "phase/orientation basis block used by the downstream transition "
+        "application family.",
+    ),
+    0x142177E50: (
+        "BuildInterpolatedVectorFromThresholdRecord",
+        "Converts a packed threshold/range record into an interpolated vector "
+        "block using fields around +0x0/+0x4/+0x8/+0x10/+0x14/+0x18/+0x20/"
+        "+0x24/+0x28. Used directly under 0x1402EF420.",
+    ),
+    0x141BE20C0: (
+        "DispatchPhaseTransitionInstructionListToActorState",
+        "Consumes a live actor/runtime pair plus a small instruction list, "
+        "iterates 0x20-byte entries with type-like values 0/1/2, and routes "
+        "them into nested transition writers such as 0x141BE1E60 or recursive "
+        "self-dispatch.",
+    ),
+    0x141BE2D90: (
+        "WriteActorTransitionTargetVector50_58",
+        "Resolves the target actor through a runtime pair, sets bit 0x8 in the "
+        "actor-side transition record, and writes three floats to +0x50/+0x54/"
+        "+0x58.",
+    ),
+    0x141BE2E70: (
+        "WriteActorTransitionScalar5C",
+        "Sibling actor-side transition writer that resolves the same runtime "
+        "pair, sets bit 0x8, and writes a scalar to +0x5C.",
+    ),
+    0x141BE2F50: (
+        "WriteActorTransitionScaledShort2C",
+        "Sibling actor-side transition writer that resolves the same runtime "
+        "pair and writes a scaled short/integer field to +0x2C.",
+    ),
+    0x1417423B0: (
+        "BuildPhaseTransitionBasisFromObjectTransforms",
+        "Rebuilds a world-space phase/orientation basis from two object-backed "
+        "transforms plus scalar parameters, then returns the derived block "
+        "through 0x141742290.",
+    ),
+    0x141BE4EA0: (
+        "FinalizeActorPhaseTransitionRecordFromBasis",
+        "Consumes the rebuilt phase payload plus live actor/runtime data, "
+        "recomputes orientation/basis state, queries actor-side objects through "
+        "virtual +0x168, and finalizes a structured transition record through "
+        "0x141BDFE70.",
+    ),
+    0x141BDFE70: (
+        "ResolveActorPhaseTransitionResultState",
+        "Actor-side phase-transition result resolver/finalizer. Consults owner "
+        "state around +0x960/+0x987/+0x990/+0x998/+0xA28, queries authored "
+        "state through 0x141764B50/0x141765030/0x14209A8B0/0x14209A740, emits "
+        "explicit status codes, and may recurse into itself or sibling "
+        "0x141BDF510 for multi-entry transition selection.",
+    ),
+    0x141BDF510: (
+        "AcquireParticleRootDataSlotForTransitionEffect",
+        "Sibling helper under the phase-transition family that descends into "
+        "ParticleManager/ParticleRootData allocation. Computes a slot-like "
+        "index from owner+0x58, probes owner-local bitsets around +0x3B0/"
+        "+0x430/+0x4B0/+0x630, acquires a claim path around owner+0x390, and "
+        "drives ParticleRootData allocation/retiring/active assertions.",
+    ),
+    0x141F84640: (
+        "DispatchRetainedSlotPhaseFollowupIntoCameraShakePath",
+        "Retained-slot follow-up path reached from 0x1402EF420 after phase "
+        "state application. Gates on global runtime state, checks per-slot "
+        "thresholds, packages records through 0x1417C3790, and continues into "
+        "camera-shake / explosion-shake / shoot-shake follow-up via "
+        "0x141BEB0F0.",
+    ),
+    0x141BEB0F0: (
+        "DispatchCameraShakeOrExplosionShakeFromPhaseFollowup",
+        "Downstream camera-shake/explosion-shake dispatcher under the retained-"
+        "slot phase follow-up branch. Resolves effect records and routes into "
+        "0x141BE8FF0/0x141BE9AE0/0x141BE9B90 using global effect registries "
+        "rooted around 0x146921700 and 0x146922710.",
+    ),
+    0x141F83CC0: (
+        "QueueOrRefreshCameraShakeEntryBySlotAndSource",
+        "Maintains capped per-slot camera-shake entries in global arrays around "
+        "0x146AA5A20/0x146AA5A28. Updates or appends timing/strength/source "
+        "records for the camera-shake follow-up path.",
+    ),
+    0x14209A740: (
+        "ResolveOwnerAuthoredStateNodeById_Primary90",
+        "Owner-local dual-hash resolver used under 0x141BDFE70. Resolves a "
+        "state node by id through the primary hash rooted at owner+0x90 and "
+        "cross-validates an optional linked node through the secondary hash "
+        "family at owner+0x398/+0x428.",
+    ),
+    0x14209A8B0: (
+        "ResolveOwnerAuthoredStateNodeById_Primary98",
+        "Sibling owner-local dual-hash resolver used under 0x141BDFE70. "
+        "Resolves a state node by id through the primary hash rooted at "
+        "owner+0x98/+0x128 and validates the linked object at node+0x18 "
+        "through the secondary hash family at owner+0x398/+0x428.",
+    ),
+    0x141EF59C0: (
+        "FilterPrimary90AuthoredStateNodesByModeMasksAndBuildObserverPayload",
+        "External consumer of 0x14209A740. Iterates authored-state ids, "
+        "filters resolved nodes by long capability/category masks at node+0x30 "
+        "using mode-specific constants 0x200000000000 / 0x100000000000, then "
+        "builds downstream observer payload objects via "
+        "0x14036BD80/0x1415A0E90/0x14163F930.",
+    ),
+    0x141F564E0: (
+        "GateObserverPublishPathByPrimary98AuthoredStateBit3",
+        "External consumer of 0x14209A8B0. Canonicalizes an authored-state id, "
+        "resolves the linked node, extracts bit3 from node+0x12, and uses it "
+        "as an early enable/override gate before the larger observer/publish "
+        "runtime path continues.",
+    ),
+    0x141BDC880: (
+        "ConsumeTransitionResultAndCacheResolvedEntityPair",
+        "Actor-local direct consumer of 0x141BDFE70. Validates the returned "
+        "(ptr,id,status)-style transition record, marks the resolved object "
+        "with bit 0x10, caches the transition result into the local consumer, "
+        "and mirrors or resolves a live entity handle/id pair into a sibling "
+        "slot.",
+    ),
+    0x141BDFFD0: (
+        "IterateAuthoredTransitionIdsAndRefreshLocalTransitionState",
+        "Looped direct consumer family around 0x141BDFE70. Rebuilds structured "
+        "transition inputs from authored id arrays and refreshes local owner "
+        "state around +0x984/+0x990/+0x998/+0xA28 from the returned transition "
+        "results.",
+    ),
+    0x141BE07F0: (
+        "IterateGlobalAuthoredTransitionIdsAndRefreshSingletonState",
+        "Global/singleton sibling of the local 0x141BDFFD0 family. Invokes "
+        "0x141BDFE70 through the global owner context rooted at 0x146920CA0 "
+        "and refreshes global transition state around "
+        "0x146921624/0x146921630/0x146921638/0x1469216C8.",
+    ),
+    0x141BE4DF0: (
+        "BuildCompositeTransitionResultFromResolvedEntityState",
+        "Higher transition-result builder over 0x141BDFE70. Seeds one result "
+        "slot, derives extra entity/runtime state through validated handle "
+        "pairs and entity->virtual+0x168, then feeds the derived state into a "
+        "second transition-result resolution pass.",
+    ),
+    0x141BD4DD0: (
+        "InitializeParticleManagerGlobals_920CA0_920CF0_920CF8",
+        "Anchors to ParticleManager::Init in shared/src/gamelib/render/"
+        "particle/particle.cpp. Initializes the global ParticleManager-owned "
+        "context at 0x146920CA0, the separate manager-owned authored-state/"
+        "event resolver at 0x146920CF0, and the compact short-id helper at "
+        "0x146920CF8.",
+    ),
+    0x141BD8BE0: (
+        "ParticleManager_UpdateEvents_FilterAuthoredStateNodes",
+        "ParticleManager::UpdateEvents-side consumer of the global "
+        "0x146920CA0/0x146920CF0/0x146920CF8 family. Iterates manager-owned "
+        "entries, resolves authored-state ids through 0x14209A740, filters "
+        "them by node+0x30 mask under the current manager mode, and feeds the "
+        "resulting structured state into 0x141BE4EA0.",
+    ),
+    0x141BDF020: (
+        "RefreshParticleManagerFrontObject",
+        "Small helper over the ParticleManager-owned global context family. "
+        "Clears an optional owned object at context+0x20, queries the current "
+        "front object through 0x14160C120, and conditionally routes into the "
+        "deeper manager-owned runtime gate around 0x141A81A90.",
+    ),
+    0x141A81B80: (
+        "CheckContext130PolicyBitsAgainstNode30Masks",
+        "Shared policy helper used from the ParticleManager-owned branch. "
+        "Reads policy bits 8/9 from context+0x130 and tests them against the "
+        "long authored-state capability masks 0x100000000000 / "
+        "0x200000000000 at node+0x30, returning a boolean gate.",
+    ),
+    0x141BDC640: (
+        "ProcessPendingParticleRootTransitionEntriesAndConsumeTransitionResults",
+        "Large local processor above 0x141BDFE70 inside the same ParticleManager "
+        "/ ParticleRootData owner family. Walks a pending-entry cluster at "
+        "owner+0x668/+0x670/+0x6F0/+0x6F8, resolves authored-state ids through "
+        "owner_context+0x50 -> 0x14209A8B0, falls back into "
+        "0x141D21F90/0x141D231E0 when needed, then consumes and caches "
+        "transition results or unlinks cleared entries from the local list.",
+    ),
+    0x141BDCED0: (
+        "RefreshParticleRootOwnerRuntimeObject30AndDerivedStateBytes",
+        "Large local refresh path in the ParticleManager/ParticleRootData owner "
+        "family. Rebuilds/refreshes the runtime subobject rooted at owner+0x30, "
+        "copies a broad state image from owner fields around +0x994..+0xA2C, "
+        "updates derived flags/counters around +0x987..+0x98C/+0x9C1, and feeds "
+        "the same local owner family later consumed by 0x141BDC640.",
+    ),
+    0x141BDD400: (
+        "ConstructParticleRootOwnerRuntimeSubobject30AndSeedLinkedStateBlocks",
+        "Constructor/builder for the large local runtime/root subobject stored "
+        "at owner+0x30 in the ParticleManager owner family. Also seeds linked "
+        "owned blocks around owner+0x1E0/+0x1F8/+0x200 before the later "
+        "refresh/transition paths consume them.",
+    ),
+    0x141BDD3E0: (
+        "InvokeQueuedOwnerRuntimeRefreshCallbackRecord",
+        "Thin callback adapter over a compact 0x18 record. Reads owner/context "
+        "at +0x0/+0x8 and a byte flag at +0x10, then tail-calls into "
+        "0x141BDDbe0.",
+    ),
+    0x141BDDBE0: (
+        "RefreshAndCommitParticleRootOwnerRuntimeShell",
+        "Central refresh/commit wrapper for the current ParticleManager local "
+        "owner family. Derives local flags around +0x987..+0x98C, builds "
+        "owner+0x30 via 0x141BDD400, refreshes it via 0x141BDCED0, runs "
+        "follow-up local methods, then commits the resulting runtime object and "
+        "staging state back into the outer shell object at owner->0.",
+    ),
+    0x140164420: (
+        "InitializeQueuedOwnerRuntimeRefreshCallbackRecord_Global",
+        "Global/bootstrap producer for the compact callback record consumed via "
+        "0x141BDD3E0. Allocates a 0x18 record, stores owner/context at +0x0/+0x8 "
+        "and a byte flag at +0x10, then publishes callback target 0x141BDD3E0.",
+    ),
+    0x141BDE160: (
+        "BuildQueuedOwnerRuntimeRefreshCallbackRecord_Local",
+        "Local producer for the same compact callback-record form used by "
+        "0x141BDD3E0. Stores owner/context pointers and byte flag, then routes "
+        "execution toward the central wrapper 0x141BDDBE0.",
+    ),
+    0x141BDE250: (
+        "ResetAndRebuildParticleRootStateBanksAndQueues",
+        "Local reset/rebuild pass under the central 0x141BDDBE0 wrapper in the "
+        "ParticleManager family. Clears outer-shell staging pointers, zeroes "
+        "owner+0x630 and owner+0x430, rebuilds missing state entries through "
+        "0x141BD7D00, and continues through root-data list/queue state around "
+        "+0x798/+0x818/+0x828.",
+    ),
+    0x141BD79D0: (
+        "ParticleManager_FreeRootDataAndPromoteBitsetState",
+        "FreeRootData-side state/bank update in the ParticleManager family. "
+        "Scans owner+0x5B0, cross-checks presence bits in "
+        "owner+0x3B0/+0x430/+0x4B0/+0x530, updates the live root-data record "
+        "from owner+0x58, then writes back promoted bits and marks owner+0x98E.",
+    ),
+    0x141BD8020: (
+        "ParticleManager_CreateRenderDataFromRootStateBanks",
+        "CreateRenderData-side derived-batch builder for the same particle root "
+        "bank family. Starts from owner+0x3B0, validates consistency against "
+        "owner+0x430 and owner+0x630, resolves live root-data records through "
+        "owner+0x58, and writes compact tuples into produced helper storage.",
+    ),
+    0x141BD74B0: (
+        "ParticleManager_UpdateFreeRetiredRootDataFromPendingBitsetBanks",
+        "Early gate over the particle root-state bank family. Starts from "
+        "owner+0x4B0 with fallback into owner+0x528, derives the next candidate "
+        "slot index, checks corresponding presence bits, and advances into the "
+        "free/retired root-data update pass.",
+    ),
+    0x140EF6EB0: (
+        "BuildMoveModeTransitionRecord_PlayerEnterBalanceMode_GlobalPath",
+        "Gameplay-facing runtime producer that hashes the literal "
+        "`move-mode-transition`, pairs it with `player-enter-balance-mode`, "
+        "resolves/publishes a small structured record through 0x143682D30 and "
+        "0x1417D5F50, then seeds a follow-up runtime object/reference slot.",
+    ),
+    0x140F7D220: (
+        "BuildMoveModeTransitionRecord_PlayerEnterBalanceMode_IndexedPath",
+        "Sibling gameplay-facing move-mode transition producer. Walks a local "
+        "indexed owner/list, then hashes the same `move-mode-transition` + "
+        "`player-enter-balance-mode` pair and builds the same style of small "
+        "structured runtime record.",
+    ),
+    0x141271D20: (
+        "MatchPlayerMeleeButtonAndGrappleReactionTransitionHashes",
+        "Gameplay-facing matcher over explicit player/melee button strings. "
+        "Checks hashed names including melee-r1-hold/release, "
+        "melee-lmouse-release, melee-rmouse-hold/release, and "
+        "`transition-player-into-appropriate-grapple-reaction`, then routes "
+        "toward the local melee command queue / command-dispatch family.",
+    ),
+    0x141272860: (
+        "DumpMeleeCommandQueueDebugView",
+        "Large debug/inspection path for the same owner family as the melee "
+        "command queue. Anchors on the banner "
+        "`============== Melee Command Queue ==============` and "
+        "`*melee-button-names*`, then iterates/prints structured queue state.",
+    ),
+    0x141273B20: (
+        "DispatchPlayerMeleeButtonHoldReleaseAndGrappleReactionCommands",
+        "Live gameplay-facing dispatcher over the melee command queue family. "
+        "Probes active button/transition hashes through 0x141E39D50 and, on "
+        "match, either inserts queued command entries through 0x141273FA0 or "
+        "updates existing entry scalar state through 0x1412743F0.",
+    ),
+    0x141273FA0: (
+        "PushOrRotateMeleeCommandQueueEntry",
+        "Maintains a 16-slot queue of 0x40-byte melee/action command entries. "
+        "If requested and an identical command id already exists with zero "
+        "secondary scalar, updates that entry in place; otherwise shifts older "
+        "entries backward and inserts a new front command containing payload "
+        "vectors, scalar values, and a small byte state.",
+    ),
+    0x1412743F0: (
+        "UpdateExistingMeleeCommandQueueEntryScalar",
+        "Walks the same 16-slot melee command queue as 0x141273FA0, finds a "
+        "matching command id, and updates only the secondary scalar at "
+        "slot+0x34.",
+    ),
+    0x141274470: (
+        "ConstructMeleeCommandQueueOwner",
+        "Constructor for the large owner object behind the explicit melee "
+        "command queue. Installs vtable 0x142A6C2E8, zeroes the queue/control "
+        "state, and anchors on the banner "
+        "`============== Melee Command Queue ==============`.",
+    ),
+    0x1412746B0: (
+        "InitializeProcessNpcMeleeManagerOwnerState",
+        "Large melee/gameplay manager initializer anchored by the literal "
+        "`ProcessNpcMeleeManager`. Seeds external references at "
+        "owner+0x108/+0x110/+0x130, resolves/caches authored ids including "
+        "`player-attacks`, `player-throws`, `*camera-melee-settings*`, "
+        "`*camera-melee-settings-net*`, and `stealth-edge`, builds another "
+        "owned runtime object at owner+0x820, and initializes broad local "
+        "melee state around +0x6C0/+0x6D0/+0x6F0/+0x7B8/+0x840/+0x854/+0x860.",
+    ),
+    0x141274E20: (
+        "TeardownProcessNpcMeleeManagerOwnerState",
+        "Teardown/reset path on the same 0x142A6C2E8 ProcessNpcMeleeManager "
+        "family. Releases owned object +0x130 and owned runtime object +0x820, "
+        "then drops back to the smaller common base layout.",
+    ),
+    0x141274EC0: (
+        "MarkCachedProcessNpcMeleeManagerTargetEntityActive",
+        "Small cached actor-pair helper in the ProcessNpcMeleeManager family. "
+        "Checks cached pair/state at +0x138/+0x140 and, when the object id "
+        "matches, marks the resolved live entity active via entity+0x72.",
+    ),
+    0x141283A20: (
+        "DestroyProcessNpcMeleeManagerOwnerState",
+        "Freeing-dtor style sibling for the 0x142A6C2E8 ProcessNpcMeleeManager "
+        "family. Reuses the same release logic for +0x130 and +0x820, then "
+        "optionally frees the outer 0x870 owner object.",
+    ),
+    0x14125C600: (
+        "PublishMountedMeleeState1F68ThroughCameraAndPresentation",
+        "Large live path over outer_owner+0x1F68. Marks the local state active, "
+        "pulls state data through virtual +0x48, packages actor/runtime pairs, "
+        "then publishes through GetCameraManager(0) / 0x141C0DFD0. Later uses "
+        "virtual +0x60 on the same mounted object as a gate.",
+    ),
+    0x14125E650: (
+        "SelectMountedMeleeStateBetween1F68_1F70_AndQueueOwner1F60",
+        "Large sibling control-flow path over the mounted melee graph. "
+        "Consults outer_owner+0x1F70 through virtuals +0x40/+0x48/+0x38/+0x30, "
+        "mixes that with outer_owner+0x1F68, outer_owner+0x1D98, and the queue "
+        "owner at +0x1F60 (virtual +0x210), then chooses the follow-up melee/"
+        "control path.",
+    ),
+    0x140DE5CC0: (
+        "ConstructMountedPlayerFallAndFreeRopeState1DF8",
+        "Constructor for the mounted outer_owner+0x1DF8 object. Installs "
+        "0x142A1F690 and seeds hashed/authored state from player-fall/free-rope "
+        "anchors such as DiveFall, run^fall-high, desired-fall-state, "
+        "free-rope-grip, and time-in-air.",
+    ),
+    0x140E14490: (
+        "ConstructMountedEdgeRopeStaffStateSet1E58",
+        "Constructor for the mounted outer_owner+0x1E58 object. Installs "
+        "0x142A216C8 and seeds a broad authored edge/corner/wall-rope/"
+        "free-rope/staff state set used by the same outer player-control graph.",
+    ),
+    0x140FCCD20: (
+        "ConstructMountedWaterCurrentAndSlideState1E20",
+        "Constructor for the mounted outer_owner+0x1E20 object. Installs "
+        "0x142A3C490, builds a mounted 0x130 child at +0x138, and anchors to "
+        "water-current / slide-barrier / player-slide-barrier-settings / "
+        "default-water-forces data.",
+    ),
+    0x140E4ECA0: (
+        "InitializePlayerMeleeControlCoreSubobject_FromOuterOwner1D60",
+        "Initializer for the large embedded block under the outer root owner at "
+        "+0x1D60. Seeds the 0x142A26CB0 family inside the same rdata region as "
+        "player-melee-control.cpp and resets a large player-facing control/"
+        "observer state block.",
+    ),
+    0x1410CA720: (
+        "AssembleLargePlayerOwnerSubsystemGraph",
+        "Large assembly pass that mounts a long run of player-facing subobjects "
+        "into one outer owner. This same pass wires player-melee-control, "
+        "look-at IK, inspect/investigate, perch, bump-bend-align, flame/"
+        "flashlight, drag-edge, drag-rope, fall, slide, and other mounted "
+        "player-control subsystems.",
+    ),
+    0x140E5DDF0: (
+        "ConstructPlayerControlRootOwner1D60_InPlace",
+        "Standalone in-place constructor for the 0x142A268C0 root owner family "
+        "that later lands in outer_owner+0x1D60. Installs the root table, "
+        "initializes the embedded +0x120 player-melee-control core through "
+        "0x140E4ECA0, and seeds the same large state block later seen in the "
+        "outer assembly pass.",
+    ),
+    0x1410484F0: (
+        "ConstructMountedPlayerInvestigateReadableOwner1E98",
+        "Large in-place constructor for the mounted outer_owner+0x1E98 Player "
+        "subsystem. Current best read is the Player-investigate/read-mode/"
+        "readable-object owner: it lives in recurring per-player update loops "
+        "through virtuals +0x430/+0x438/+0x220, and its virtual +0x208 already "
+        "participates in Player-tagged gameplay gating.",
+    ),
+    0x140DCB1A0: (
+        "ConstructMountedPlayerCoverEvadeOwner1EB0",
+        "Constructor for the mounted outer_owner+0x1EB0 Player subsystem. "
+        "Current best read is the Player cover/evade/dodge-roll owner: "
+        "surrounding authored/runtime anchors include player-cover.cpp, "
+        "player-cover-actions.cpp, player-cover-states.cpp, player-evade.cpp, "
+        "use-surface-type-probe, monkey-base, and frags-event-dodging-rolling.",
+    ),
+    0x140F49300: (
+        "ConstructMountedPlayerSubsystem1EB8_Size4A0",
+        "Constructor for the mounted outer_owner+0x1EB8 Player subsystem. "
+        "Semantic role is still unresolved, but the real Player assembly pass "
+        "mounts it directly as a peer beside 1EB0/1E98/1EE0.",
+    ),
+    0x140CEDCA0: (
+        "ConstructMountedPlayerSubsystem1EE0_Size320",
+        "Constructor for the mounted outer_owner+0x1EE0 Player subsystem. "
+        "Current best read is a live sibling/activation partner for the same "
+        "cover-evade family as 1EB0, but the label stays slot-level until the "
+        "class role is pinned harder.",
+    ),
+    0x14105E220: (
+        "ConstructMountedPlayerSubsystem1E68_Size340",
+        "Constructor for the mounted outer_owner+0x1E68 Player subsystem. "
+        "Semantic role is still unresolved; current value is structural, as "
+        "this sits in the same dense Player-side region as investigate/read-"
+        "mode and cover/evade owners.",
+    ),
+    0x141301710: (
+        "ConstructMountedPlayerSubsystem1DA0_Size52C0",
+        "Constructor for the mounted outer_owner+0x1DA0 Player subsystem. "
+        "This is a major Player-side owner by size and placement in the real "
+        "Player assembly pass, but it remains semantically unresolved.",
+    ),
+    0x1410B4B10: (
+        "ConstructMountedPlayerSubsystem1D88_Size4B0",
+        "Constructor for the mounted outer_owner+0x1D88 Player subsystem. "
+        "Builds repeated entry/state storage and helper blocks at +0x2C0 and "
+        "+0x380; this matches its later role as a heavy readiness/blocker "
+        "owner in the mounted Player qualification family.",
+    ),
+    0x140D64BF0: (
+        "ConstructMountedPlayerSubsystem1DB8_Size15C0",
+        "Constructor for the mounted outer_owner+0x1DB8 Player subsystem. "
+        "Lives in the same broad Player interaction/combat/presentation band; "
+        "kept slot-level until stronger semantic anchors are found.",
+    ),
+    0x140D64FB0: (
+        "RefreshMountedPlayerCooldownAnchorFromOwnerState",
+        "Initializes a tiny owner-local helper, probes actor-root state, and "
+        "refreshes a cached baseline from owner->0xE0->0x10 when the local "
+        "probe or scalar threshold requires it.",
+    ),
+    0x140D65030: (
+        "EvaluateMountedPlayerQualificationHashesAndFallback",
+        "Player-side qualification gate that consults outer_owner+0x1D88, "
+        "outer_owner+0x1DB8, owner virtual +0x8C0, and fallback helper "
+        "0x1410F75C0 before allowing the path.",
+    ),
+    0x140D65290: (
+        "EvaluateMountedPlayerExecutionReadinessCluster",
+        "Companion gate to 0x140D65030. Combines outer_owner+0x1D88, "
+        "outer_owner+0x1E50, outer_owner+0x1DB8, and outer_owner+0x1D98 "
+        "through a compact Player-side readiness/execution test.",
+    ),
+    0x1410F75C0: (
+        "CheckOwner2E0HashAgainstKnownMountedPlayerActionFamilies",
+        "Fallback hash-family checker used by 0x140D65030. Builds two known "
+        "hash sets, asks the owner for a +0x2E0 record, and rejects paths "
+        "when that record already belongs to one of the known action families.",
+    ),
+    0x140D654F0: (
+        "EvaluateAggregateMountedPlayerExecutionPolicy",
+        "Aggregate Player-side execution policy gate. Succeeds only when a "
+        "family of lower threshold/cooldown checks stays clear, including "
+        "0x140D65940, 0x140D65540, 0x140D65740, and 0x140D65B20.",
+    ),
+    0x140D65B20: (
+        "CheckMountedPlayerCooldownWindowByRegistryScalar",
+        "Resolves a hashed registry scalar, scales it, and compares it against "
+        "the delta between owner->0xE0->0x10 and a cached helper baseline at "
+        "+0x8. Used as the cooldown/window member of the mounted Player "
+        "execution policy family.",
+    ),
+    0x1410DD0FC: (
+        "InvokePlayerOwnerAssemblyFromPlayerInitChain",
+        "Direct callsite where the higher-level player.cpp-anchored init path "
+        "invokes 0x1410CA720. This is currently the strongest upward link from "
+        "the mounted player-control graph into the real Player construction/"
+        "initialization chain.",
+    ),
+    0x1410DC160: (
+        "InitializeTopLevelPlayerOwnerFromProcessSpawnInfo",
+        "Large top-level Player construction/init pass on the outer owner. "
+        "RTTI/vtable layout now confirms this is a real Player virtual method at "
+        "slot +0x58 of vtable 0x142A4BFE8. Seeds broad Player state, creates "
+        "the owner-local +0x3BD0 runtime object through 0x1410DE520, invokes "
+        "0x1410DD0FC -> 0x1410CA720 to assemble the mounted graph, and then "
+        "continues higher-level finalize/setup work through +0x1DF0, +0x1A8, "
+        "+0x1B10, +0x3D98, and +0x3C20.",
+    ),
+    0x1410DE520: (
+        "InitializeOwnerLocalRuntimeObject3BD0_Size190",
+        "In-place initializer for the owner-local runtime/control object "
+        "stored into outer_player+0x3BD0 during the top-level Player init "
+        "pass. Seeds vtable 0x142A4BFD8 and two repeated state bands with "
+        "0x1000-sized capacity fields, making +0x3BD0 one of the strongest "
+        "upper promotion/rebind anchors above the mounted graph. Its local "
+        "+0x108 field belongs to this sibling owner-local object, not to the "
+        "top-level Player descriptor/id pair later consumed by 0x140CC1450.",
+    ),
+    0x1410DE740: (
+        "FinalizeTopLevelPlayerOwnerWithExternalSpawnState",
+        "Thin Player-side finalize/apply wrapper adjacent to the +0x3BD0 "
+        "initializer cluster. Logs through outer_player+0x3C20 using the "
+        "player.cpp / Player::Player(void) / Player::AllocateAnimData(...) "
+        "literal block, then does little beyond calling "
+        "0x140CC1450(outer_player, external_state) and running the paired "
+        "cleanup/finalize at 0x1415A1B80. This is therefore a stable Player-"
+        "side wrapper around the stronger promotion seam below it.",
+    ),
+    0x1413C04A0: (
+        "RunSecondaryRetainedPlayerSpawnAndNotifyOuterOwner240",
+        "Independent upper runtime caller of 0x1410F1910. Builds local retained "
+        "spawn state, publishes a large local retained/runtime snapshot through "
+        "0x141C88050, validates the returned retained/live pair, and if valid "
+        "dispatches outer-owner virtual +0x240 with the incoming context. "
+        "Sibling upper methods around 0x1413BC7E0 reuse the same owner family "
+        "with virtual +0x238 and +0x258, and RTTI now pins that family to "
+        "TaskManager / TaskManagerPlayMovie. The slot family is therefore a "
+        "real retained-notify surface, but not a direct Player promotion hook: "
+        "+0x240 is flashlight-oriented and +0x238 is menu/main-menu bootstrap. "
+        "Surrounding literals tie this path to TaskManager::SpawnPlayer and "
+        "the checkpoint/continue branch of task-manager.cpp.",
+    ),
+    0x1413BF7B0: (
+        "TaskManager_PublishRetainedFlashlightRuntimeRecords_Slot240",
+        "TaskManager / TaskManagerPlayMovie virtual +0x240 implementation. "
+        "Consumes an incoming packet field at +0x14, validates live actor "
+        "identity through the global retained slot table 0x143EEBE80, hashes "
+        "`spawn-flashlight` and later `turn-on-flashlight`, then publishes "
+        "structured records into live actors through virtual +0xD0. This is "
+        "a real upper retained/runtime TaskManager path, but it is flashlight/"
+        "state publication, not the direct Player promotion hook for Nadine.",
+    ),
+    0x1413C3310: (
+        "TaskManager_BootstrapMenuAndMainMenuRuntimePublishOnce_Slot238",
+        "TaskManager / TaskManagerPlayMovie virtual +0x238 implementation. "
+        "One-time gated initializer that hashes `menu` and `main-menu`, "
+        "resolves/creates manager-side records through the 0x141CBA1B0 / "
+        "0x141CBAC10 / 0x141CBACC0 / 0x141CBAE10 family, and publishes a "
+        "compact packet through 0x141CB95B0. This looks like a TaskManager "
+        "menu/main-menu bootstrap/publish stage, not a Player ownership "
+        "binder.",
+    ),
+    0x1413BCAE0: (
+        "TaskManagerPlayMovie_ActivateRetainedCameraOverlayState_Slot258",
+        "TaskManagerPlayMovie override for virtual +0x258. Touches global "
+        "state around 0x143FE10D8, drives 0x1417D5F50, calls 0x1410F3DD0, "
+        "and sets this+0x1F0=1, which makes it look like a specialized "
+        "play-movie / retained-camera / overlay activation helper rather than "
+        "a general Player promotion hook.",
+    ),
+    0x1410DE430: (
+        "InitializeOwnerLocalFixedEntryTable1E_Size7A0",
+        "Sibling upper-layer owner-local object initializer beside "
+        "0x1410DE520. Zeros repeated pointer fields every 0x40 bytes, seeds "
+        "object+0x10 = self+0x20, and sets object+0x18 = 0x1E, which looks "
+        "like a fixed-entry table/list owned by the same top-level Player "
+        "band above the mounted graph.",
+    ),
+    0x1410DE660: (
+        "StampUpperPlayerVirtualFamilyVftableBFC0",
+        "Tiny vptr stamper for the upper Player virtual-family object whose "
+        "family block begins at 0x142A4BFC0. The surrounding assembly pass "
+        "allocates this sibling upper-layer object and stores it at "
+        "outer_owner+0x2018, which ties 0x1410DC160 and 0x1410DE740 to the "
+        "same upper class family as the +0x3BD0 registry object. The raw "
+        "table should be treated as a mixed upper-family block rather than a "
+        "clean function-only vtable read.",
+    ),
+    0x1410C6BA0: (
+        "GetUpperPlayerVirtualFamilyObject2018",
+        "Trivial getter that returns outer_owner+0x2018. This pins +0x2018 as "
+        "a first-class upper-layer runtime object in the same Player band as "
+        "+0x3BD0 rather than a transient setup pointer.",
+    ),
+    0x140CBFB30: (
+        "InitializeSharedBaseCtorBeforePlayerVftable",
+        "Shared base ctor reached first from 0x1410C8FD0 before the real "
+        "Player vtable is stamped. Zero-initializes the common action/"
+        "gameplay band, including +0x15B4/+0x15C8/+0x1680/+0x1748/+0x1808/"
+        "+0x1B10, and initializes the embedded object at +0x1A20. It does "
+        "not visibly seed the later descriptor/id pair at player+0x108/"
+        "+0x10C.",
+    ),
+    0x140CBFF50: (
+        "InitializeSharedPlayerPolicyStateFromUpperInitPacket",
+        "Shared upper/base init stage beneath the visible Player-only phases. "
+        "Consumes a compact incoming packet through arg3+0x28, copies packet "
+        "fields into player+0x15A4/+0x15A8/+0x15AC/+0x15B0, merges packet "
+        "bit0 into player+0x161A, allocates/builds player+0x1B10, and then "
+        "continues through 0x141E994C0 while seeding broader shared state "
+        "around +0x16A0/+0x1680/+0x16AC/+0x16D0/+0x1A8. A direct pass also "
+        "shows a copy from shared source 0x143FE1088 into the upper Player "
+        "band +0x18B0..+0x1910, including source+0x108 -> player+0x18E0; "
+        "this still does not directly seed player+0x108/+0x10C.",
+    ),
+    0x1410C9F20: (
+        "InitializeEmbeddedPlayerAuthoredDescriptorState100",
+        "Small in-place initializer for the embedded Player subobject at "
+        "player+0x100. Writes vtable 0x142AB08C8, clears late fields around "
+        "+0x110/+0x122/+0x128, but does not itself seed the authored key later "
+        "consumed at player+0x108/+0x10C.",
+    ),
+    0x1410C9F50: (
+        "ZeroEmbeddedPlayerAuthoredDescriptorKey_8_10",
+        "Tiny helper immediately adjacent to the embedded +0x100 initializer. "
+        "Clears the key fields at object+0x8 and object+0x10 and returns the "
+        "same pointer. No direct rel32 callers have surfaced yet, but the "
+        "shape matches the hidden authored pair inside player+0x100.",
+    ),
+    0x1416860A0: (
+        "RefreshEmbeddedPlayerAuthoredDescriptorState100FromSharedTable",
+        "Consumes the embedded Player subobject rooted at player+0x100. Uses "
+        "the authored key at +0x108/+0x10C to resolve 0x14386FD00, copies the "
+        "matched 0x20-byte record into +0x110, then derives follow-up vector/"
+        "transform state into +0x130/+0x140. In the real Player::Init path "
+        "this is called very early with rdx sourced from incoming_packet+0x20, "
+        "making player+0x100 the strongest current container for the hidden "
+        "promotion pair.",
+    ),
+    0x141E7C600: (
+        "CompareEmbeddedDescriptorCarrierOrderingAndWarn_141E7C600",
+        "Small comparison/logging helper immediately after the ret stub at "
+        "0x141E7C5F0. Compares two carrier objects through their virtual +0x28 "
+        "results, logs a warning when ordering is unexpected, and returns a "
+        "boolean-like permit byte. The real Player::Init call still targets "
+        "the stub at 0x141E7C5F0, so this body is a sibling implementation, "
+        "not the active early bringup step.",
+    ),
+    0x1413BF090: (
+        "BuildExtendedRuntimeStateWrapperAndDispatchRetainedEntityCommand",
+        "Upper retained/runtime helper that resolves an object through the "
+        "global registry, builds a local extended packet through 0x1417C35A0, "
+        "then dispatches it through 0x141D21C80 / entity virtual +0x538. This "
+        "is one of the clearest retained-side producers of the same wrapper "
+        "family later matched by the upper Player apply path.",
+    ),
+    0x140A90E50: (
+        "GetNetGameManagerInlineSlotBand43D0",
+        "Returns the inline 0x43D0 per-slot band at manager+0x3C0+idx*0x43D0. "
+        "Runtime readback from slot 1 shows session/map/mode string state "
+        "such as `NET_MAP_REMNANTS_FOREST_VIP_TDM`, so this is not the "
+        "materialized tracker object used by the spawn path.",
+    ),
+    0x140A90E70: (
+        "GetNetGameManagerTrackerPointerArrayBase",
+        "Small getter for the pointer-family rooted at manager+0x3A0. Treat "
+        "this as an upper pointer-array helper, not as the real inline slot "
+        "object seam.",
+    ),
+    0x140A90E80: (
+        "GetMeNetPlayerTrackerByScreenIndex",
+        "Screen-indexed accessor in the NetGameManager family. The assert "
+        "strings explicitly mention `NetGameManager::GetMeNetPlayerTracker`, "
+        "but runtime probing showed that treating this as a direct safe "
+        "tracker getter can yield code-like pointers instead of a live slot "
+        "object. Keep it demoted below the explicit inline-slot helper "
+        "0x140A90E50 until a clean tracker-object contract is proven.",
+    ),
+    0x140A90F40: (
+        "FindNetPlayerTrackerByRuntimePlayerObjectAndPlayerHash",
+        "Scans the two-slot NetGameManager tracker family for a tracker entry "
+        "that matches the hashed `Player` token and the supplied runtime "
+        "player object. This is a broader generic tracker lookup than "
+        "GetMeNetPlayerTrackerByScreenIndex and appears all over gameplay code.",
+    ),
+    0x140A38FA0: (
+        "DriveDualSlotNetPlayerBringupFromCtxA_WithCtxBAvailabilityGates",
+        "Upper dual-slot bringup caller above 0x140A90550. It does inspect "
+        "ctxB=0x143E0EF00 through 0x14194D5F0 and count/selection gates, but "
+        "the actual AddOrUpdate calls at 0x140A392EC/0x140A3936A still pass "
+        "rdx=&0x143E08C80 and source entries resolved from ctxA. This makes "
+        "ctxB a gating/availability input here, not the direct source context "
+        "for manager-side slot creation.",
+    ),
+    0x140A9AAD0: (
+        "NetGameManager_RespawnPlayer",
+        "Manager-side respawn path identified by the `NetGameManager::RespawnPlayer` "
+        "string xref. Works on a live tracker object, stages fresh state into "
+        "tracker+0x500..+0x540 and tracker+0x840/+0x844, then either hands "
+        "control to NetPlayerTracker_StartOrQueueSpawnPlayer with edx="
+        "tracker+0x4F8 or queues a deferred respawn through tracker+0xA00/"
+        "+0xA04 with timing in tracker+0x4C0/+0x4C8.",
+    ),
+    0x140A90550: (
+        "NetGameManager_AddOrUpdateNetPlayerTracker",
+        "Heavy manager-side tracker bringup/update helper from the "
+        "`NetGameManager::AddOrUpdateNetPlayer` string family. Scans the "
+        "0x43D0 tracker array, allocates or selects a tracker object, seeds "
+        "tracker state from incoming spawn/loadout data, writes payload into "
+        "tracker+0x7C0..+0x7DF/+0x7E0/+0x7B8/+0x1DC/+0x7BC, writes the "
+        "effective screen/player index into tracker+0x1E0, derives "
+        "tracker+0x1E4 from the `NetCharacter-` token family, and stores the "
+        "tracker in manager+0x3A0/+0x3B0 under the matching local-player "
+        "conditions. Real callers now pin the low call shape as: rcx=global "
+        "manager 0x143DD70C0, rdx=shared context 0x143E08C80, r8=source "
+        "object, r9d=slot, stack arg5=flag. Also note that direct callers "
+        "still apply additional post-call tracker initialization, so this is "
+        "the low create/update worker rather than the whole stable bringup "
+        "sequence by itself.",
+    ),
+    0x140ACBE10: (
+        "ConstructNetSharedContextBase_0x800Entries",
+        "Base constructor used by the global shared-context objects at "
+        "0x143E08C80 / 0x143E0EF00. Seeds a large 0x800-backed entry family, "
+        "zeroes the embedded owner pointer at +0x8, and initializes the tail "
+        "helper block through 0x140AC62D0.",
+    ),
+    0x140B1E050: (
+        "ResetCtxBPendingPublishAndOwnerLifecycle",
+        "CtxB reset helper. Clears staged publish globals around "
+        "0x143E10E80/0x143E10E90, tears down through ctxB+0x8->owner->virtual "
+        "+0x50 when present, then clears ctxB+0x8 and re-enters the ctxB "
+        "vtable +0x60 refresh path.",
+    ),
+    0x140B1E100: (
+        "PublishCtxBPendingSelectionVector",
+        "Small ctxB-side publisher for pending selection state. Marks the "
+        "family dirty, stores the candidate pointer into 0x143E10E90, and "
+        "optionally mirrors the vector block into 0x143E0F618..+0x38 before "
+        "clearing 0x143E10EC8.",
+    ),
+    0x140B1E400: (
+        "ProcessCtxBCandidateSyncAndStagePendingSelection",
+        "Major ctxB lifecycle/synchronization pass. Scans candidate objects, "
+        "compares them against the current-selected pointer at ctxB+0x18 "
+        "(global 0x143E0EF18), and on mismatch stages a pending selection into "
+        "0x143E10E90 plus 0x143E0F618..+0x38 before calling 0x140BF1FF0(1,0). "
+        "This is a pending-selection publisher, not the final writer of "
+        "ctxB+0x18.",
+    ),
+    0x140B1E890: (
+        "RunCtxBSelectionStateMachineAndDispatchPendingCommit",
+        "Large ctxB-side state machine keyed by 0x143E10E84. Walks ctxB/ctxA "
+        "selection bands, publishes intermediate records through "
+        "0x140A59540/0x140141840, and reaches the first confirmed pending "
+        "commit handoff at 0x140B1ECBC.",
+    ),
+    0x140B1DF30: (
+        "ReturnFixedCtxBSelectionToken_0xA",
+        "ctxB vtable slot +0x28 from the concrete vtable installed by "
+        "0x140B1DF80. Returns fixed token 0xA. This corrected the earlier "
+        "misread that mapped ctxB->virtual +0x28 to 0x140B204E0.",
+    ),
+    0x140B1ECBC: (
+        "DispatchCtxBPendingSelectionToGlobalCommitService",
+        "First confirmed pending->commit handoff for ctxB. Loads the staged "
+        "candidate from 0x143E10E90, calls *(0x143880318)->virtual +0x48 with "
+        "(&ctxB=0x143E0EF00, pending=r8), then clears 0x143E10E90 and emits a "
+        "follow-up packet through 0x142204E50. The remaining unknown is the "
+        "service-side implementation of the +0x48 commit.",
+    ),
+    0x140B1EE70: (
+        "DispatchFixedCtxBSelectionTokenThroughGlobalService28",
+        "Active campaign request path for ctxB. First calls ctxB->virtual "
+        "+0x28, which is the fixed-token slot 0x140B1DF30 returning 0xA, then "
+        "forwards that token into *(0x143880318)->virtual "
+        "+0x28(service, &ctxB, token, 1). This is the live request surface "
+        "above the service-side commit family.",
+    ),
+    0x140B204E0: (
+        "BuildHeavySelectionPayloadFromGlobalObjectList",
+        "Neighboring heavy request/payload builder in the local ctx/service "
+        "family. Computes a CRC-like token from a fixed authored string, folds "
+        "in optional world/runtime data, iterates the global object list "
+        "rooted at 0x143FE1128+0x3D0, and packages the result through "
+        "0x141C9ED50. Current vtable decode no longer ties this worker to "
+        "ctxB->virtual +0x28.",
+    ),
+    0x140B1E220: (
+        "EmitCtxBSelectionOrOwnerSourceEvents_0x104",
+        "ctxB-side notification/emission helper. With a direct source pointer "
+        "it emits one 0x104 packet through 0x140A59540; without one, if "
+        "ctxB+0x8 is bound, it first rebuilds the owner/fallback source list "
+        "through 0x14194D5F0 and emits 0x104 for each non-current source. "
+        "This is downstream of owner bind, not the bind itself.",
+    ),
+    0x140B21E70: (
+        "HasCtxBResolvedSourceWithFlag42",
+        "Post-bind consumer gate for ctxB. Requires both ctxB+0x18 and "
+        "ctxB+0x8, builds a source list through 0x14194D5F0(&ctxB, out, 0), "
+        "resolves each entry through 0x14194E510, and returns success once a "
+        "resolved object has byte +0x42 set.",
+    ),
+    0x140B21F10: (
+        "IsCtxBSourceListUnavailableOrEmpty",
+        "Companion post-bind consumer gate for ctxB. If ctxB+0x18 or ctxB+0x8 "
+        "is missing it returns true/unavailable; otherwise it calls "
+        "0x14194D5F0(&ctxB, out, 0) and returns false once at least one "
+        "source entry is available.",
+    ),
+    0x140AEAAFC: (
+        "NotifyCtxBOwner58ThenRebuildSources_0x114",
+        "Live owner-consumer path for ctxB. If ctxB+0x8 is bound, calls "
+        "owner->virtual +0x58(&ctxB, 1), then immediately rebuilds the ctxB "
+        "source list through 0x14194D5F0. This is a strong downstream anchor "
+        "for the real ctxB owner contract.",
+    ),
+    0x140835A70: (
+        "DispatchCtxBOwner70ForIndexedSource",
+        "Loads an indexed source entry, then if ctxB+0x8 is bound calls "
+        "owner->virtual +0x70(&ctxB, source_id_from_entry+0xE8). This pins a "
+        "second live method on the concrete ctxB owner interface.",
+    ),
+    0x14083E580: (
+        "DispatchCtxBOwner70ForResolvedSource",
+        "Sibling owner-consumer path that resolves a source entry and then "
+        "calls owner->virtual +0x70(&ctxB, source_id). Another live user of "
+        "the same bound ctxB owner interface.",
+    ),
+    0x1409F9B20: (
+        "RunNetStartupCallbackThatBindsGlobalSelectionService",
+        "Outer startup callback used by the net/front-end lifecycle. The "
+        "restart path in 0x1409FBA60 takes this address and passes it through "
+        "0x1415B43B0 -> 0x1415B4870 -> 0x1415B47C0 as a callback record. Its "
+        "inner bringup branch at 0x1409FA94E installs the mode-dependent "
+        "global selection service and performs the shared-context binds.",
+    ),
+    0x1409FA94E: (
+        "InitializeModeDependentGlobalSelectionService_143880318",
+        "Inner bringup block inside 0x1409F9B20. Installs a mode-dependent "
+        "global selection service into 0x143880318 (and sibling slots "
+        "0x143880300/0x143880320), binds it through 0x1409EB500 with an "
+        "upper context packet, then runs the service virtual +0x8 bringup "
+        "path. 0x1430641DC is the Net Init Error Testing selector. If init "
+        "succeeds and 0x1430641DC!=0x14, startup keeps variant A; only "
+        "failing init or 0x1430641DC==0x14 constructs variant B and "
+        "overwrites 0x143880318. The later startup bind calls "
+        "service->virtual +0x20 exactly three times: for 0x143E08C80, for "
+        "0x143E0AC40, and for ctxB=0x143E0EF00 via rsi set at 0x1409FA6DE. "
+        "This supersedes the earlier misread that startup skipped ctxB.",
+    ),
+    0x1409EB500: (
+        "CopyUpperPacketHeaderIntoGlobalSelectionService",
+        "Tiny startup helper used by the mode-dependent global selection "
+        "service. Copies the first 0x20 bytes plus trailing dword from the "
+        "upper packet in r8 into the live service object at 0x143880318 "
+        "before the service virtual +0x8 bringup stage runs. Those exact "
+        "owner+0x8..+0x28 bytes are what 0x14194D5F0 later clones into "
+        "ctxB+0x1D00 for the single-entry fallback source path.",
+    ),
+    0x1409EE7D0: (
+        "HandleFrontEndStageTokenForNetShutdown",
+        "Upper token handler in the net/front-end lifecycle. Hash-matches the "
+        "incoming stage token against strings including 'added-to-stage' and "
+        "'popped'; on the matched transition it can drive the broad "
+        "0x1409FD360 shutdown path.",
+    ),
+    0x1409EE9B0: (
+        "RunMultiplayerFrontEndShutdownFlow",
+        "Large multiplayer/front-end state machine above the global net "
+        "shutdown path. References tokens such as 'ss-fmenu-multi-main', "
+        "'PAGE_MULTIPLAYER_CONNECTING', and 'part-module/part-multiplayer', "
+        "and calls 0x1409FD360 from that upper lifecycle band.",
+    ),
+    0x1409F78B0: (
+        "HandleNetUpdateTokenAndMaybeRestart",
+        "Upper event/token handler keyed by the hash of 'update'. Works "
+        "through the 0x14383E560 interface (virtual +0x30/+0x38), and on the "
+        "restart branch calls 0x1409FD360 before continuing into the paired "
+        "net re-entry worker at 0x1409FBA60.",
+    ),
+    0x1409F7C60: (
+        "HandleNetUpdateOrPoppedTokenAndMaybeRestart",
+        "Sibling upper event/token handler above the same global shutdown "
+        "family. Checks hashes for 'update' and 'popped', drives "
+        "0x14383E560->virtual +0x40 on one branch, and can call 0x1409FD360 "
+        "plus 0x1409FBA60 from that front-end/net lifecycle.",
+    ),
+    0x1409FBA60: (
+        "RestartNetLifecycleAndScheduleStartupCallback",
+        "Broad net/front-end re-entry worker used after the upper shutdown "
+        "handlers. It does not directly jump into 0x1409FA94E, but around "
+        "0x1409FD068 it materializes a callback record whose function pointer "
+        "is 0x1409F9B20, then hands that record into "
+        "0x1415B43B0/0x1415B4870/0x1415B47C0. This makes the later bind path "
+        "an indirect scheduled callback problem, not a missing re-entry "
+        "surface.",
+    ),
+    0x1415B43B0: (
+        "AllocateDeferredNetWorkBatch",
+        "Allocates a 0x80-stride work batch from the global 0x1437E9700 "
+        "scheduler state. Used by 0x1409FBA60 before copying callback "
+        "records such as the one that points at 0x1409F9B20.",
+    ),
+    0x1415B4870: (
+        "CopyDeferredNetWorkBatchRecords",
+        "Copies one or more 0x80-byte callback/work records into the "
+        "allocated batch. In the 0x1409FBA60 path this is where the record "
+        "containing callback=0x1409F9B20 gets staged for later delivery.",
+    ),
+    0x1415B47C0: (
+        "FinalizeAndSubmitDeferredNetWorkBatch",
+        "Finalizes the staged work batch and jumps into 0x1415B4560 for queue "
+        "submission. This confirms that the 0x1409F9B20 startup callback is "
+        "not invoked inline here.",
+    ),
+    0x1415B4560: (
+        "QueueDeferredNetWorkBatchToPerLaneScheduler",
+        "Per-lane scheduler submit path for the deferred work batches. "
+        "Pushes the finalized batch into a 0x2200-stride queue rooted in the "
+        "global 0x1437E9700 state, with a 0x400-entry depth cap, and can "
+        "signal the downstream scheduler/worker path once the batch is "
+        "queued.",
+    ),
+    0x1409FD360: (
+        "ShutdownNetFrontEndAndTeardownGlobalSelectionService",
+        "Broad net/front-end shutdown path, not just a local ctxB helper. "
+        "Toggles the category-0x16 subsystem gates, resets ctxB/ctxA active "
+        "entries, clears the bound owner globals at 0x143E0EF08/0x143E08C88, "
+        "tears down 0x143880318 through virtual +0x18/+0x0, and clears the "
+        "service aliases. Direct callers now sit in upper front-end/net "
+        "transition handlers rather than the local ctxB object family.",
+    ),
+    0x1409FDD70: (
+        "TeardownGlobalSelectionService_143880318",
+        "Inner teardown block inside 0x1409FD360. Resets the concrete shared "
+        "contexts, calls service virtual +0x18 and then virtual +0x0 when "
+        "the service is live, and finally clears 0x143880318 plus the "
+        "sibling alias at 0x143880300.",
+    ),
+    0x140072A54: (
+        "InitializeGlobalNetSharedContextA_143E08C80",
+        "Early startup init for the concrete global shared-context object at "
+        "0x143E08C80. Calls ConstructNetSharedContextBase_0x800Entries and "
+        "then swaps in a context-specific vtable.",
+    ),
+    0x14007C104: (
+        "InitializeGlobalNetSharedContextB_143E0EF00",
+        "Early startup init for the sibling global shared-context object at "
+        "0x143E0EF00. Reinitializes the object, explicitly zeroes the "
+        "embedded owner field at +0x8 (global 0x143E0EF08), and installs its "
+        "context-specific vtable.",
+    ),
+    0x14194CD20: (
+        "ResetNetSharedContextActiveEntries_12x0x1C0",
+        "Reset/teardown helper for the shared-context objects. Iterates the "
+        "12-entry 0x1C0-stride family rooted at +0x800, clears active "
+        "entries, and resets their +0xE0/+0xF0 state.",
+    ),
+    0x14194CFB0: (
+        "CountCtxBActiveSourcesOrFallbackOne",
+        "Counts active source entries for the second shared-context family. If "
+        "ctxB+0x18 is null, falls back to the single-entry path; otherwise it "
+        "counts active 0x1C0-stride entries rooted at ctxB+0x800.",
+    ),
+    0x14194D5F0: (
+        "BuildCtxBSourceListFromOwnerOrFallback",
+        "Central source-list builder for ctxB. If ctxB+0x18 is null, it "
+        "materializes a single fallback entry at ctxB+0x1D00 by copying "
+        "owner+0x8..+0x27 plus dword owner+0x28 from the pointer in ctxB+0x8. "
+        "This exact layout matches the startup header copy into "
+        "0x143880318 via 0x1409EB500, which strengthens the reading that the "
+        "fallback owner can be the global selection service object itself. "
+        "Otherwise it enumerates the active "
+        "0x800/0x1C0-stride entry family and builds the output list.",
+    ),
+    0x14194DB30: (
+        "DispatchCtxBOwner58OrReturn2",
+        "Small ctxB wrapper. If ctxB+0x8 is bound, tail-calls "
+        "owner->virtual +0x58(ctxB, bool_flag); otherwise returns 2.",
+    ),
+    0x14194DB70: (
+        "DispatchCtxBOwner60OrReturn2",
+        "Small ctxB wrapper. If ctxB+0x8 is bound, tail-calls "
+        "owner->virtual +0x60(ctxB, bool_flag); otherwise returns 2.",
+    ),
+    0x14194DB90: (
+        "DispatchCtxBOwner98",
+        "Thin ctxB wrapper for owner->virtual +0x98(ctxB).",
+    ),
+    0x14194DBB0: (
+        "DispatchCtxBOwnerA0",
+        "Thin ctxB wrapper for owner->virtual +0xA0(ctxB).",
+    ),
+    0x14194DBD0: (
+        "DispatchCtxBOwnerA8",
+        "Thin ctxB wrapper for owner->virtual +0xA8(ctxB, token).",
+    ),
+    0x14194DBF0: (
+        "StoreCtxBTokenAt200ThenDispatchOwner78",
+        "Writes the incoming token to ctxB+0x200, then if ctxB+0x8 is bound "
+        "tail-calls owner->virtual +0x78(ctxB, token). This confirms another "
+        "live owner slot above the previously anchored +0x50/+0x58/+0x70/+0x78 "
+        "band.",
+    ),
+    0x1419739E0: (
+        "BindSharedContextIntoVariantASelectionServiceAndWriteOwner8",
+        "Variant-A global selection-service bind worker (vtable +0x20). Finds "
+        "or allocates a free 0x8D68-stride service slot at service+0x50, "
+        "stores the incoming context pointer into that slot, and then writes "
+        "context+0x8 = service. Combined with 0x1409EB500 + 0x14194D5F0, this "
+        "now looks like a real bind of ctxB to the service object itself, not "
+        "to a separate service-entry pointer. This is the first confirmed "
+        "non-null writer for the embedded shared-context owner field.",
+    ),
+    0x141973A90: (
+        "RebuildVariantASelectionServiceRequestTable",
+        "Variant-A service worker reached from the global request family "
+        "(vtable +0x28). Rebuilds the request/payload store at service+0x24600 "
+        "from authored/time-derived state and writes compact records into that "
+        "service-local table.",
+    ),
+    0x141974E10: (
+        "DispatchDerivedSelectionTokenThroughVariantAService28",
+        "Exact variant-A implementation of the global service request slot "
+        "(vtable +0x28). Accepts (service, ctx, derived_token, bool_flag), "
+        "resets the ctx entry, stores the token in ctx+0x208, seeds "
+        "ctx+0x1ECC=0x100, and emits a larger 0x128 request payload into the "
+        "variant-A service-local table at service+0x24600.",
+    ),
+    0x141975870: (
+        "CommitCtxSelectionPendingCandidateThroughVariantAService48",
+        "Variant-A implementation of the global service commit slot "
+        "(vtable +0x48). Finds the bound ctx entry, clears ctx+0x18, resets "
+        "ctx active-entry state, packages ctx+0x1ED0/+0x1ED4 plus the pending "
+        "candidate pointer, publishes a 0x98-byte payload into service+0x24600, "
+        "and updates the service-local queue/global slot family. This is still "
+        "packet/queue-heavy and does not end in a plain ctx+0x18 assignment.",
+    ),
+    0x141975C00: (
+        "ToggleCtxSelectionStateAndEmitVariantAEntryPayload",
+        "Variant-A service-side helper over a bound ctx entry. Toggles the "
+        "byte at ctx+0x1ECC, and when ctx+0x18 is live emits a compact 0x13E "
+        "payload into the variant-A service-local table at service+0x24600. "
+        "This looks like a bool/toggle request path, not the token-carrying "
+        "campaign service->+0x28 call shape.",
+    ),
+    0x141979A60: (
+        "BindSharedContextIntoVariantBSelectionServiceAndWriteOwner8",
+        "Variant-B global selection-service bind worker (vtable +0x20). Finds "
+        "or allocates a free 0x9570-stride service slot at service+0x4B8, "
+        "stores the incoming context pointer into that slot, and then writes "
+        "context+0x8 = service. This is the sibling non-null writer for the "
+        "embedded shared-context owner field.",
+    ),
+    0x14197AE50: (
+        "CommitCtxSelectionPendingCandidateThroughVariantBService48",
+        "Variant-B implementation of the global service commit slot "
+        "(vtable +0x48). Finds the bound ctx entry, resets entry-local state, "
+        "calls service->virtual +0x10, packages ctx+0x1ED0/+0x1ED4 plus the "
+        "pending candidate pointer, writes ctx+0x18 = pending, then waits "
+        "through repeated service->virtual +0x10 calls until ctx+0xB8 flips. "
+        "If unresolved, stores -1 in ctx+0xBC and finally sets ctx+0xB8=1.",
+    ),
+    0x14197ABC0: (
+        "DispatchDerivedSelectionTokenThroughVariantBService28",
+        "Exact variant-B implementation of the global service request slot "
+        "(vtable +0x28). Accepts (service, ctx, derived_token, bool_flag), "
+        "resets the ctx entry, stores the token in ctx+0x208, clears the "
+        "entry-local request state at +0x8D68, seeds the 0x2332 request lane "
+        "through 0x141920B00, and drives local follow-up through ctx->virtual "
+        "+0x48 plus 0x14194CA10.",
+    ),
+    0x14197B0C0: (
+        "EmitCtxSelectionTokenThroughVariantBEntryPayloadTable",
+        "Variant-B service-side helper over a bound ctx entry. If ctx+0x18 is "
+        "live, packages the caller-supplied token in r8d together with the "
+        "current selected object pointer into a compact 0xD1 payload at "
+        "entry+0x8D28.",
+    ),
+    0x14194E0D0: (
+        "DispatchCtxBStateWithWildcardMinus1",
+        "Tiny ctxB dispatcher that re-enters the main ctxB virtual +0x10 "
+        "path with r8d=-1, i.e. a wildcard/any-state request.",
+    ),
+    0x14194E0E0: (
+        "DispatchCtxBCurrentDesiredStateThroughVirtual8",
+        "CtxB helper that scans the 12-entry table rooted at ctxB+0x8E8, "
+        "matches the current desired id from ctxB+0x1EC8, and then dispatches "
+        "that id through the ctxB virtual +0x08 path.",
+    ),
+    0x14194DE00: (
+        "DispatchCtxBRequestedStateAcrossEntryTable",
+        "Main ctxB dispatch path for a requested state id. Walks the 12-entry "
+        "0x1C0-stride table at ctxB+0x8E8, checks current-selection and entry "
+        "ids, and either forwards through 0x143FE1080->virtual +0xB0 or "
+        "re-enters ctxB virtual +0x10 for matching entries.",
+    ),
+    0x14194DEE0: (
+        "RebuildCtxBEntrySelectionSetAndDispatch",
+        "Heavier ctxB rebuild/select path over the same 12-entry entry table. "
+        "Uses the 0x1436866C0 service plus 0x141982510 to rebuild per-entry "
+        "selection state before dispatching follow-up work. Still no plain "
+        "direct writer to ctxB+0x18 is visible here.",
+    ),
+    0x14194C550: (
+        "EmitCtxBSelectionPresentEventThroughPacketBus",
+        "CtxB publish path reached through ctxB virtual +0x60. When "
+        "ctxB+0x718 is live, emits a packet/event through 0x142204E50. "
+        "Consumes current selection state but does not write ctxB+0x18.",
+    ),
+    0x14194C5F0: (
+        "EmitCtxBCurrentSelectionPresentEvent",
+        "Sibling ctxB publish helper. Checks whether current-selection state "
+        "exists and emits another packet/event through the same upper packet "
+        "bus family. No direct current-selection assignment here either.",
+    ),
+    0x14194C690: (
+        "EmitCtxBSelectionPresentEventWhenCurrentBound",
+        "Another small ctxB packet publisher. If ctx+0x18 is non-null, emits "
+        "a packet/event through 0x142204E50. This consumes live selection but "
+        "does not assign it.",
+    ),
+    0x14194C730: (
+        "RefreshCtxBThroughOwner50ThenSelf60",
+        "Bridge between the ctxB object and its bound owner. If ctxB+0x8 is "
+        "live, calls owner->virtual +0x50(ctxB), then re-enters ctxB virtual "
+        "+0x60. This is downstream of the confirmed startup bind, not the "
+        "first owner-writer.",
+    ),
+    0x1407DF190: (
+        "GetCtxBCurrentSelectionIfLive",
+        "Concrete ctxB vtable slot +0x20 from 0x1429EF890. Returns ctxB+0x18 "
+        "only when byte +0xC8 is set, otherwise returns null. This cuts off "
+        "the false bind hypothesis around upper callers that only invoke "
+        "ctxB->virtual +0x20.",
+    ),
+    0x140B204A0: (
+        "SetCtxBTokenBitAndDispatchOwner78",
+        "Concrete ctxB vtable slot +0x38 from 0x1429EF890. Toggles bit 0 in "
+        "ctxB+0x200 from dl, loads the bound owner from ctxB+0x8, and "
+        "tail-calls owner->virtual +0x78(ctxB). This proves the ctxB object "
+        "consumes an already-bound owner and does not perform the bind here.",
+    ),
+    0x140B204D0: (
+        "IsCtxBTokenBitClear",
+        "Concrete ctxB vtable slot +0x40 from 0x1429EF890. Returns the "
+        "inverted low-bit state of ctxB+0x200.",
+    ),
+    0x140B20760: (
+        "MarkCtxBGlobalDirtyFlag7513",
+        "Tiny ctxB slot that only marks the global dirty byte "
+        "0x1437E7513=1.",
+    ),
+    0x140B20770: (
+        "ResetCtxBRuntimeFlagsAndTailRefresh",
+        "CtxB runtime reset slot. Clears a small set of globals plus local "
+        "ctx fields around +0x10/+0x1FD0, then tails into the broader "
+        "refresh/reset helper at 0x140ACC140.",
+    ),
+    0x140B1FAF0: (
+        "ConsumeCtxBCurrentSelectionAndEntryCounters",
+        "CtxB-side refresh/consume path that checks ctx+0x18 plus counters at "
+        "+0x1EC4/+0x1EC8 and 0x1436866C0-backed state before proceeding. It "
+        "uses current selection but does not directly assign it.",
+    ),
+    0x140B1E1A0: (
+        "CheckCtxSelectionPermitAgainstCtxACtxBCounts",
+        "Upper permit gate that consults both shared-context families through "
+        "0x14194CFB0 and returns a bool-like result for whether selection "
+        "work should proceed.",
+    ),
+    0x140A90A00: (
+        "NetGameManager_AddOrUpdateNetPlayerCinema",
+        "Cinema-flavored wrapper above NetGameManager_AddOrUpdateNetPlayerTracker. "
+        "The function carries the `NetGameManager::AddOrUpdateNetPlayerCinema` "
+        "string, finds or creates a tracker, seeds spawn/loadout payload, "
+        "stores tracker+0x1DC=incoming_r8d and tracker+0x1E0=0 for the "
+        "local-player/cinema path, mirrors the incoming 0x40 payload into "
+        "tracker-local bands around +0x159/+0xD9/+0x119, hashes the fixed "
+        "`NetCharacter-` token to derive tracker+0x1E4, and returns the "
+        "tracker pointer. Useful as a payload template, but not as a slot-1 "
+        "seam because it hardcodes local slot 0.",
+    ),
+    0x140A58310: (
+        "NetGameManager_UpdateOrCreateLateJoinerTrackerFromExternalRecord",
+        "Higher late-joiner bridge that consumes an external player-like "
+        "record. Reuses an existing tracker by matching record+0x18/+0x1C "
+        "against tracker+0x1DC/+0x1E0, otherwise builds through the "
+        "`late-joiner-%d` token family and falls back to "
+        "NetGameManager_AddOrUpdateNetPlayerCinema or "
+        "NetGameManager_AddOrUpdateNetPlayerTracker, then copies the wider "
+        "state block record+0x20..0x3C into tracker fields +0x86C..+0x884. "
+        "Retail disassembly now pins additional external-record fields: a "
+        "19-entry WORD array at +0x40, paired signed-byte array at +0x66, "
+        "and later state at +0x7C/+0x80/+0x84/+0x88/+0x89/+0x8C/+0x90/+0x91/"
+        "+0xB4/+0xC0/+0xC8.",
+    ),
+    0x140A58190: (
+        "NetGameManager_CreateOrReuseLateJoinerTrackerFromCompactRecord",
+        "Compact late-joiner bridge above the tracker layer. Builds the local "
+        "packet through `late-joiner-%d`, then either routes into "
+        "NetGameManager_AddOrUpdateNetPlayerCinema or resolves a source object "
+        "and falls back to NetGameManager_AddOrUpdateNetPlayerTracker.",
+    ),
+    0x140A4DDA0: (
+        "NetGameManager_CreateCinemaTrackerFromSingleIdRecord",
+        "Thin cinema-only wrapper above NetGameManager_AddOrUpdateNetPlayerCinema. "
+        "Requires the same global gate, only consumes record+0x18 as the id, "
+        "builds the local 0x40 packet, calls the cinema wrapper, and then "
+        "stamps the usual tracker flags.",
+    ),
+    0x140A4E7DC: (
+        "NetGameManager_CreateCinemaTrackersFromIdArray10",
+        "Bulk thin wrapper above NetGameManager_AddOrUpdateNetPlayerCinema. "
+        "Iterates a compact 10-entry id array, builds the same local 0x40 "
+        "packet through the `cinema-player-%d` token family for each entry, "
+        "calls the cinema wrapper, and stamps the same tracker flags.",
+    ),
+    0x140B346B0: (
+        "NetPlayerTracker_StartOrQueueSpawnPlayer",
+        "Thin tracker-side gate above NetPlayerTracker_SpawnPlayer. Clears "
+        "pending bits at +0xA7C/+0x814, checks tracker readiness through "
+        "virtual +0x18 and current live-entity state, and then either "
+        "tail-calls NetPlayerTracker_SpawnPlayer or queues deferred spawn "
+        "state in the tracker fields around +0xA00/+0xA04/+0x4C0/+0x4C8.",
+    ),
+    0x140B31F60: (
+        "NetPlayerTracker_SpawnPlayer",
+        "Heavy net-player spawn routine. Resolves the look id, derives online "
+        "starting-weapon records, checks startup placement modes such as "
+        "`start-on-edge` / `start-in-cover` / `start-in-swim`, and then calls "
+        "PromoteRetainedPlayerSlot to materialize the real Player object for "
+        "the requested tracker slot. The retained slot comes from tracker+0x1E0, "
+        "later upper authored/runtime production consumes tracker+0x1E4, and "
+        "the body snapshots tracker+0x840/+0x844 into +0x848/+0x84C before "
+        "continuing. The returned Player object is then used directly through "
+        "fields such as +0x1D88, which makes this one of the strongest built-in "
+        "second-player bringup paths found so far.",
+    ),
+    0x140B44EC0: (
+        "BuildNetPlayerTrackerRespawnTransformBlock",
+        "Builds the staged respawn transform block later stored into "
+        "tracker+0x500..+0x540. Prefers a valid live actor pair from "
+        "tracker+0x8/+0x10 and copies live_actor+0x100/+0x120/+0x140; "
+        "otherwise falls back through tracker+0x20, which on this path is "
+        "just the 16-byte reference-position carrier later consumed by "
+        "0x141685C30 rather than a compact actor-pair record. Static recovery "
+        "now also shows this fallback still funnels into the same crashing "
+        "builder contract, so it does not bypass the remaining lifecycle gap.",
+    ),
+    0x140B45030: (
+        "InitializeCompactActorPairRecord",
+        "Zero-initializes the small actor-pair record used by the upper "
+        "respawn and actor-selection helpers. Layout is dword at +0x0, "
+        "qword at +0x8, dword at +0x10.",
+    ),
+    0x140B45040: (
+        "BuildCompactActorPairRecordFromCurrentContext",
+        "Builds the compact actor-pair record from current context. Either "
+        "publishes a resolved actor key through the manager lookup path or "
+        "falls back to a direct live object pair (object+0xA8 / object+0xBC).",
+    ),
+    0x140B45100: (
+        "BuildCompactActorPairRecordFromSourcePair",
+        "Normalizes an incoming compact actor-pair/source pair into the same "
+        "record shape used by respawn and actor-selection helpers. Prefers "
+        "the manager lookup/key path and falls back to direct object+0xA8 / "
+        "object+0xBC storage when needed.",
+    ),
+    0x140B451B0: (
+        "AreCompactActorPairRecordsEquivalent",
+        "Compares two compact actor-pair records. Accepts either matching "
+        "dword keys or matching live object pair identity.",
+    ),
+    0x140B411F0: (
+        "ResolveNetPlayerPostSpawnSelectorFromPlayer854",
+        "Returns the integer selector used after promotion from player+0x854, "
+        "falling back to a hashed default if the field is zero.",
+    ),
+    0x140B412D0: (
+        "ResolveNetPlayerPostSpawnSelectorFromPlayer858",
+        "Returns the integer selector used after promotion from player+0x858, "
+        "falling back to a hashed default if the field is zero.",
+    ),
+    0x140B347C0: (
+        "NetPlayerTracker_NetRespawn",
+        "Tracker-side respawn entry identified by the `NetPlayerTracker::NetRespawn` "
+        "string xref. With r8b=1 it copies the caller-supplied 0x50 respawn "
+        "transform block from r9 straight into tracker+0x500..+0x540 and "
+        "bypasses BuildNetPlayerTrackerRespawnTransformBlock. With r8b=0 it "
+        "falls back to the older tracker+0x8/+0x10 or tracker+0x20 source "
+        "paths. This makes it a cleaner first local patch seam than the "
+        "manager wrapper above it.",
+    ),
+    0x141685BC0: (
+        "BuildRespawnTransformBlockFromSeedRecord",
+        "Builds the 0x50 transform/orientation block from a compact seed "
+        "record and then resolves authored transform overrides through "
+        "0x1416860A0.",
+    ),
+    0x141685C30: (
+        "BuildRespawnTransformBlockFromReferenceTransformAndSeedRecord",
+        "Builds the 0x50 respawn transform block from a reference transform "
+        "plus a compact seed record. This is the helper used by live callers "
+        "that later pass r8b=1 into NetPlayerTracker_NetRespawn. The live "
+        "tracker-side caller uses tracker+0x20 as the reference transform "
+        "carrier and a stack seed shaped as: dword(+0), qword(+4), dword(+0xC), "
+        "vec4(+0x10), vec4(+0x20). Raw disassembly shows the helper only "
+        "consumes the first 16 bytes at rdx as reference position. Runtime "
+        "testing has already ruled out three naive sources (`actor+0x100`, "
+        "inline slot+0x20, and global source0+0x20`), so the remaining "
+        "unknown is the caller-side lifecycle that prepares a valid source "
+        "band before this helper becomes safe.",
+    ),
+    0x140BDB2E0: (
+        "NetEventRespawnPlayer_Fill",
+        "Builds the concrete respawn event payload from a tracker plus optional "
+        "BoundFrame and boolean flag. Serializes tracker identity into "
+        "event+0x18, has-transform into event+0x1C, optional transform data "
+        "into event+0x20..+0x60, and the final byte flag into event+0xC8.",
+    ),
+    0x140BDB440: (
+        "NetEventRespawnPlayer_HostFill",
+        "Host-side fill/validation pass for NetEventRespawnPlayer. Derives "
+        "tracker-side spawn mode/timing fields into event offsets "
+        "+0xB0/+0xB8/+0xBC/+0xC0/+0xC4.",
+    ),
+    0x140BDB620: (
+        "SendNetEventRespawnPlayer",
+        "Send/broadcast helper for NetEventRespawnPlayer. Allocates the event, "
+        "calls the fill helpers, and packages the message for the net-event "
+        "transport layer.",
+    ),
+    0x140BDBF70: (
+        "SendNetEventSignalRespawnPlayer",
+        "Sends the lighter respawn-signal event with tracker pointer, boolean, "
+        "and timeframe payload, using the same net-event transport family as "
+        "SendNetEventRespawnPlayer.",
+    ),
+    0x140B6B970: (
+        "HandleNetEventRespawnPlayer_ResolveTrackerAndCallRespawn",
+        "Upper net-event style handler that resolves tracker/event ids, "
+        "walks the NetGameManager tracker array, and is the only direct "
+        ".text caller of NetGameManager_RespawnPlayer. Useful as a conceptual "
+        "bridge above the tracker layer, but still less direct than the "
+        "manager-side AddOrUpdate/Respawn entrypoints for a local runtime patch.",
+    ),
+    0x140BBFD70: (
+        "NetPlayerTracker_HandleRespawnAndResumeDeferredQueue",
+        "Broader tracker-side consumer above NetPlayerTracker_NetRespawn. "
+        "Calls NetRespawn, then if tracker+0xA00 is set uses tracker+0xA04 "
+        "through 0x140B33CF0, clears the pending byte, and refreshes the live "
+        "tracker object again.",
+    ),
+    0x141E994C0: (
+        "SharedBasePlayerUpperHandoffIntoDrawControlAndUpperStateBands",
+        "Large shared/base upper Player handoff called from 0x140CBFF50 after "
+        "player+0x15A4..+0x15B0 and player+0x1B10 are initialized. It seeds "
+        "fixed upper defaults around +0x1510/+0x1530/+0x1550, invokes "
+        "0x141BB4280 as the broader draw-control/upper-lifecycle stage, then "
+        "continues through player virtual +0x788, resets late flags, "
+        "materializes player+0x4A8, and allocates a fresh 0x2B0 upper owner "
+        "family. This makes it a strong shared/base handoff into the upper "
+        "Player lifecycle, still upstream of mounted verb subsystems but "
+        "already downstream of the compact init packet.",
+    ),
+    0x1410C6F00: (
+        "ConstructPlayer_Size49E0OrInitializeExistingStorage",
+        "Alloc-ctor wrapper for the RTTI-backed Player class. If rdx is non-null, "
+        "jumps directly into 0x1410C8FD0; otherwise allocates 0x49E0 bytes and "
+        "then calls 0x1410C8FD0.",
+    ),
+    0x1410C8FD0: (
+        "InitializePlayerCtorAndStampPlayerVftable",
+        "Real in-place Player constructor. Calls base ctor at 0x140CBFB30, "
+        "stamps the RTTI-backed Player vtable 0x142A4BFE8, and zero-initializes "
+        "the broad Player layout including the upper owner bands and mounted "
+        "subsystem slots.",
+    ),
+    0x1410C6F60: (
+        "ConstructSiblingPlayerHelperForGlobalSlotBF90",
+        "Allocates a 0x20-byte helper object, stamps vtable 0x142A0A678, and "
+        "stores the incoming owner/context pointer at +0x10. This helper is "
+        "registered by 0x1400AA940 into the global slot family at "
+        "0x143EEBF90/0x143EEBFA0.",
+    ),
+    0x1410C6FC0: (
+        "AttachGlobalPlayerHelperBF90ToOwnerIfSupported",
+        "Checks the owner-side object at rcx+0xC0, asks it about the global "
+        "slot family rooted at 0x143EEBF90 through virtual +0x198, and on "
+        "success stores that global slot pointer back into the owner's +0xC0 "
+        "subobject while setting local flags at +0x3D/+0x3E. This makes "
+        "player+0xC0 look like a live Player-side helper/state registry, not "
+        "dead ctor-only storage.",
+    ),
+    0x1410CF370: (
+        "Player_InitializeDrawControl_FromProcessSpawnInfoAndResolvedLook",
+        "Upper Player init stage identified by the embedded "
+        "Player::InitializeDrawControl(const ProcessSpawnInfo &, const "
+        "ResolvedLook &) string. Real Player vtable slot +0x718. Logs through "
+        "outer_player+0x3C20, binds the incoming extended wrapper packet "
+        "(0x1417C35A0 / vtable 0x1428D5D60) plus the draw-control context "
+        "through 0x141BBACC0, wires player+0x1B10 to that same context, "
+        "applies companion flag masks 0x200 and 0x800, resets local "
+        "draw-control bands at +0x3B0/+0x3B8/+0x3C0, and returns the incoming "
+        "ProcessSpawnInfo-like state pointer. This is now the clearest upper "
+        "Player-side consumer of the wrapper family, but it behaves as a "
+        "downstream draw-control/behavior bind stage rather than the place "
+        "where the real Player authored identity is created.",
+    ),
+    0x1410CF470: (
+        "Player_InitializeCompositeBody",
+        "Upper Player init stage identified by the embedded "
+        "Player::InitializeCompositeBody(void) string. Called directly from "
+        "0x1410DC160, builds additional mounted runtime owners, and continues "
+        "the upper Player bringup after the early draw/control path.",
+    ),
+    0x140CC1450: (
+        "ApplyProcessSpawnInfoStateIntoTopLevelPlayerOwner",
+        "Top-level Player apply/finalize path reached from 0x1410DE740. "
+        "Validates a lookup record against owner ids at +0x108/+0x10C, using "
+        "player+0x164 as the runtime-state slot kind and optionally forcing "
+        "kind 0x80 when global 0x143E07473 is set and player+0x161A bit0 is "
+        "set. After copying accepted state back into outer_player+0x110 it "
+        "builds a transform block from +0x110/+0x120/+0x130/+0x140 and "
+        "commits through 0x1418C4840. That callee immediately consumes "
+        "external_state+0x40/+0x48/+0x58 and seeds them into the runtime "
+        "slot, which makes the packet shape concrete. The path then "
+        "conditionally refreshes a `proto`-tagged upper state into "
+        "player+0x1A0 through 0x1417CD200/0x1417CD3D0 and finally sets "
+        "player+0x2D1=1. The same +0x108/+0x10C pair is later re-resolved by "
+        "multiple upper Player helper families through the shared table "
+        "0x14386FD00, so this is a stable upper authored-record key rather "
+        "than a one-shot apply detail. The consumed external_state is now "
+        "best read as a real ProcessSpawnInfo-derived packet family seeded "
+        "earlier by 0x1410F14C0; the closest currently pinned shape match is "
+        "the extended wrapper family at 0x1417C35A0 / vtable 0x1428D5D60, "
+        "not the returned materialized object from 0x1417C3790.",
+    ),
+    0x140CC18D0: (
+        "SeedPlayer15B4FromIncomingContext58E0",
+        "Real Player vtable slot +0x738. If the incoming context pointer is "
+        "non-null, copies context+0x58E0 into player+0x15B4; otherwise clears "
+        "player+0x15B4. This is a narrow upper-context seed helper used from "
+        "0x1410FE840 after the typed context block is built, not a broad apply "
+        "or promotion hook.",
+    ),
+    0x1410DE890: (
+        "UpperPlayerRebuildRetainedStateAndPublishPairInto3828",
+        "Real Player vtable slot +0x850. Upper Player rebuild/update path that "
+        "checks action-policy state through +0x1D88, drives sibling Player "
+        "owners such as +0x1E50, first seeds narrow upper context through "
+        "Player slot +0x738, then resolves/attaches the active upper state "
+        "object through Player slot +0x6F0, and only after that builds an "
+        "extended wrapper packet at 0x1417C35A0 / vtable 0x1428D5D60 and "
+        "feeds it into Player slot +0x718. Earlier in the same rebuild it "
+        "also runs the smaller wrapper materialization path through "
+        "0x1417C3790 and writes the resulting retained/live pair back into "
+        "player+0x3828. This makes +0x850 a real upper rebuild path over "
+        "retained state, but still downstream of the main promotion/apply "
+        "seam at 0x1410DE740 -> 0x140CC1450.",
+    ),
+    0x141BBA490: (
+        "BuildUpperPlayerStateOwnerAt1A0ThenRunPlayerSlot710",
+        "Real Player vtable slot +0x700. Allocates a 0x2B0 upper state owner "
+        "through 0x1415A0E90 -> 0x141728690, stores it into player+0x1A0, "
+        "links player+0x1A8->+0x10 back to that owner, optionally queries "
+        "Player slot +0x708 for a small classifier/count, then feeds "
+        "player+0x1A0, player+0x1A8, player+0x160, and the +0x708 result into "
+        "0x141728720 before immediately calling Player slot +0x710. This "
+        "makes +0x700 the entry point of a distinct upper state-build/publish "
+        "band over player+0x1A0/+0x1A8. It is now clearly neighboring the "
+        "upper +0x6F0/+0x718 lifecycle, but not yet proven to sit inside the "
+        "same +0x850 rebuild ordering.",
+    ),
+    0x141BBA2A0: (
+        "ApplyUpperActiveStatePayloadIntoPlayer1A8AndSetSelectorGateFlag",
+        "Real Player vtable slot +0x6F8. Consumes an incoming upper payload "
+        "record, copies vector/scalar fields into the active upper state at "
+        "player+0x1A8 (+0x150..+0x194), derives a delta vector, and checks a "
+        "selector/capability through player+0x30 via 0x1417C4800. On success "
+        "it raises the byte flag at the caller-provided helper offset "
+        "+0x2D0. This makes +0x6F8 a concrete upper active-state payload "
+        "applicator sitting after the +0x718 wrapper bind in the sibling "
+        "upper lifecycle block.",
+    ),
+    0x1410CE260: (
+        "PublishUpperPlayerOverlayReadJointAndReferenceState",
+        "Real Player vtable slot +0x710. Consumes the upper state owner at "
+        "player+0x1A0 together with the active upper state at player+0x1A8 "
+        "and publishes multiple authored upper Player families: "
+        "`anim-net-player`, `*player-overlay-priorities*`, "
+        "`*player-default-overlays-count*`, `*player-default-overlays*`, "
+        "`apReference`, `align`, `run-chloe`, and `base-read-joints-layer`. "
+        "Early in the path it resolves knowledge/state ids through "
+        "0x1417651D0/0x141765030 and publishes them into the sink at "
+        "[active_state+0x60] via 0x1417F9150. Later it builds the owner at "
+        "player+0x4260, seeds typed subrecords through 0x141728D90/0x14172A720/"
+        "0x14172ACD0, and only after those upper overlay/reference layers are "
+        "prepared does control continue into the animation-snapshot stage at "
+        "player+0x3FD8. This is therefore a real upper Player state-build/"
+        "publish phase, not a side helper. Direct vcall scans currently show "
+        "it only being entered from Player slot +0x700.",
+    ),
+    0x141308680: (
+        "UpperPlayerBlock_Drive700And708ThenEnterMounted1E98VerbPath",
+        "Upper block that invokes Player slot +0x700, immediately invokes "
+        "Player slot +0x708, then continues into the mounted Player subsystem "
+        "at player+0x1E98 through virtual +0x190. This makes the upper "
+        "+0x700/+0x708 band a live feeder into a concrete mounted Player verb "
+        "owner rather than an isolated helper path.",
+    ),
+    0x141728690: (
+        "InitializeUpperPlayerStateOwner2B0",
+        "In-place initializer for the 0x2B0 upper state owner allocated by "
+        "Player slot +0x700. Zeroes the main bands, allocates a 0x200 scratch/"
+        "entry area at +0x78, and clears the late fields through +0x2AC. The "
+        "result is the owner later stored into player+0x1A0.",
+    ),
+    0x141728720: (
+        "PopulateUpperPlayerStateOwnerFromActiveStateAndClassifier",
+        "Populates the 0x2B0 upper state owner built by 0x141728690. Mirrors "
+        "an optional retained/live pair into +0x38, stores the active upper "
+        "state object at +0x20, copies classifier/count fields from the "
+        "incoming active-state descriptor into +0x214/+0x218, synchronizes a "
+        "live runtime object through 0x141780990, forwards a compact state "
+        "summary through 0x1418BBEB0, and allocates the per-entry table at "
+        "+0x30 using the classifier/count passed from Player slot +0x708. "
+        "This is the concrete build step that prepares player+0x1A0 before "
+        "Player slot +0x710 publishes overlay/read-joint/reference state.",
+    ),
+    0x141BB4AA0: (
+        "UpperPlayerLifecycleBlock_738_6F0_700_718",
+        "Sibling upper block that explicitly chains Player slots "
+        "+0x738, +0x6F0, +0x700, and +0x718 in one continuous path. It caches "
+        "the compact state from +0x738 into player+0x170 (and may seed "
+        "player+0x190), resolves an authored record through 0x1417CD080, "
+        "stores the +0x6F0 result into player+0x1A8, then runs the upper "
+        "state-owner band through +0x700 before continuing into +0x718. This "
+        "is currently the strongest concrete upper lifecycle anchor above the "
+        "mounted Player graph that includes both the direct apply seam and the "
+        "new +0x700 state-owner band.",
+    ),
+    0x141BB4280: (
+        "PlayerUpperDrawControlLifecycleAndAmbientOccluderStage",
+        "Containing Player-side stage that owns the block at 0x141BB4AA0. It "
+        "seeds look-randomizer / prop-set style ids at player+0x178/+0x17C, "
+        "threads the upper lifecycle through +0x238, +0x738, +0x6F0, +0x700, "
+        "+0x718, +0x6F8, and +0x4A8, and then delegates ambient-occluder "
+        "selection plus draw-control mesh refresh through Player slot +0x740. "
+        "This makes it a real upper draw-control/finalization stage inside "
+        "the broader Player/NdGameObject bringup, not a direct ownership/"
+        "promotion hook.",
+    ),
+    0x141BCD340: (
+        "ResolvePlayerAmbientOccluderSelectionAndRefreshDrawControlMeshes",
+        "Real Player vtable slot +0x740. Resolves authored ambient-occluder "
+        "ids around `character-ambient-occluder-array`, `ambient-occluders`, "
+        "and `*characters-ambient-occluders-map*`, writes the selected id to "
+        "player+0x180, optionally refreshes the draw-control object at "
+        "player+0x198 via 0x1417567C0, then scans draw-control meshes and "
+        "updates ambient-occluder usage through 0x141756570/0x141755B10. "
+        "This pins +0x740 as a draw-control/ambient-classification stage, "
+        "not an ownership or verb-dispatch seam.",
+    ),
+    0x141308220: (
+        "UpperPlayerVerbStage_EdgeAimReload_And_IdleReach0",
+        "Containing upper Player verb stage around the block at 0x141308680. "
+        "Hashes authored tokens such as `edge-aim-reload`, "
+        "`idle-reach0-stamina`, and `idle-reach0`, gates through the Player "
+        "qualification owner at +0x1D88, reuses the owner-local registry at "
+        "+0x3BD0, then drives Player slots +0x700/+0x708 and continues into "
+        "the mounted Player subsystem at +0x1E98. This is strong evidence "
+        "that the +0x700 state-owner band is reused by concrete upper verbs, "
+        "but the stage itself is still downstream of the real promotion/apply "
+        "surface.",
+    ),
+    0x140CC17A0: (
+        "ResolveEffectivePlayerStateKindIntoOutDword",
+        "Real Player vtable slot +0x4A8. Writes an effective upper state-kind "
+        "dword to the caller-provided output. In the normal case it returns "
+        "player+0x174; under the global gate at 0x143E07473 it instead hashes "
+        "the `Player` token and writes that override. This slot is used in the "
+        "same sibling upper lifecycle block after the +0x6F8 payload "
+        "application path.",
+    ),
+    0x1401D48D0: (
+        "ReturnTrue_PlayerUpperPermit768",
+        "Real Player vtable slot +0x768. Trivial `return true` permit gate "
+        "used after the +0x6F8 path in the sibling upper lifecycle block.",
+    ),
+    0x1401D48E0: (
+        "ReturnTrue_PlayerUpperPermit760",
+        "Real Player vtable slot +0x760. Trivial `return true` permit gate "
+        "queried by Player slot +0x700 before the +0x708 classifier stage.",
+    ),
+    0x14102F6B0: (
+        "LookupHashedEntryInPlayerOwner3BD0Registry",
+        "Consumer of the owner-local object at outer_player+0x3BD0. Uses "
+        "object+0xB0 as bucket count, object+0x20 as bucket table, and linked "
+        "entries with hashed ids at entry+0x10, which pins +0x3BD0 as a real "
+        "hashed owner-local runtime registry rather than a passive state blob.",
+    ),
+    0x14177F7F0: (
+        "AllocateGlobalRuntimeStateSlot380AndSeedRetainedPair",
+        "Generic global runtime-state slot allocator used by the top-level "
+        "Player ProcessSpawnInfo path and several non-Player callsites. Claims "
+        "a 0x380-byte slot from the global pool at 0x1466D0200, resets it, "
+        "copies an optional retained/runtime pair into +0x1A8, stores the "
+        "incoming type/context id into +0x208, zeroes +0x20C, and may "
+        "allocate an auxiliary payload into +0x210.",
+    ),
+    0x1418C4840: (
+        "ApplyExternalStateAndTransformBlockIntoRuntimeStateSlot",
+        "Generic apply/commit helper over the 0x380 runtime-state slots "
+        "allocated by 0x14177F7F0. Copies source links from external_state "
+        "into +0x20/+0x130/+0x138 and +0x18/+0x1A0, using external_state "
+        "payload fields at +0x40/+0x48/+0x58. Initializes the auxiliary "
+        "subobject at +0x200, converts the incoming transform block into the "
+        "committed spatial block at +0x1C0..+0x1F0, and seeds late defaults "
+        "across +0x280..+0x320 before returning the populated slot object. "
+        "That packet shape lines up more naturally with the extended wrapper "
+        "family initialized by 0x1417C35A0 than with the returned object "
+        "family materialized by 0x1417C3790.",
+    ),
+    0x1417CD200: (
+        "LookupUpperPlayerStateRecordByAuthoredHash",
+        "Global authored-state lookup keyed by a hashed token. Searches the "
+        "registry rooted at 0x1466EC480 / 0x143862600 and returns the matched "
+        "upper Player state record object, used by 0x140CC1450 to resolve the "
+        "`proto`-tagged state before writing it into player+0x1A0.",
+    ),
+    0x1417CD3D0: (
+        "FinalizeOrActivateUpperPlayerStateRecord",
+        "Follow-up helper over an upper Player state record. Uses the record "
+        "field at +0x24 and internal registry state to retain/finalize the "
+        "record, and is called after 0x140CC1450 stores a freshly resolved "
+        "state into player+0x1A0.",
+    ),
+    0x1410DB040: (
+        "ValidateTopLevelPlayerActionContextAgainstProcessSpawnInfoState",
+        "Broad top-layer Player preflight validator over ProcessSpawnInfo-style "
+        "input. Now clearly reads as a gesture/verb permit gate: it checks the "
+        "current outer-owner state across +0x1A0, +0x1D88, +0x1D50, +0x1D48, "
+        "+0x1E58, +0x1FF0, and +0x3D98 and emits structured failure reasons "
+        "such as `cinematic is playing`, `player has two-handed weapon in "
+        "hands`, `player is aiming`, `player is in an IGC`, `player is "
+        "crouched`, `player has flashlight/torch/flare`, `character is in "
+        "melee`, and other locomotion/gesture restrictions.",
+    ),
+    0x1410DBF10: (
+        "AdaptTopLevelPlayerValidationResultIntoIncomingRecord",
+        "Small wrapper around 0x1410DB040. The incoming record now reads as: "
+        "record+0x0 = live actor, record+0xC = minimum accepted result "
+        "threshold or -1 wildcard, record+0x10 = optional out pointer for the "
+        "chosen failure token. Feeds that record into the top-layer Player "
+        "preflight validator and copies the produced reason/result pointer "
+        "back through record+0x10 when the threshold rejects the action.",
+    ),
+    0x1410DC120: (
+        "ClassifyUpperPlayerStateTagIntoSmallEnum",
+        "Reads the authored/state tag at incoming_record+0x4 and maps four "
+        "known hashes into a compact result enum 0..3, else returns -1. Sits "
+        "directly above the top-level Player init family around 0x1410DC160.",
+    ),
+    0x1410DBFA0: (
+        "InitializeUpperPlayerOwnerBridgeWrapperBF50",
+        "Seeds a tiny wrapper object with vtable 0x142A4BF50 and stores the "
+        "real outer Player owner in object+0x8. This wrapper is then used to "
+        "expose upper Player surfaces without passing the raw owner directly.",
+    ),
+    0x1410DBF80: (
+        "AcceptWildcardIncomingUpperStateOrResolveBridgeIndexedSubstate",
+        "If incoming_record+0xC is -1, returns success immediately. Otherwise "
+        "tail-calls the bridge-wrapper virtual at +0x10, which resolves one of "
+        "the compact indexed upper Player substates under owner+0x1A0.",
+    ),
+    0x1401B8420: (
+        "BuildFixedTwoEntryUpperPlayerDescriptorFromBridgeWrapper",
+        "Shared bridge-wrapper virtual that jumps into 0x141E52590. Builds a "
+        "compact descriptor object with count=2 and a secondary authored-id "
+        "array, which is then consumed by the upper Player manager at +0x3FD8 "
+        "during registration.",
+    ),
+    0x1401B8430: (
+        "ReturnFalseFromBridgeWrapperVirtual",
+        "Trivial bridge-wrapper virtual that returns false. Sits beside the "
+        "shared descriptor-builder slot in the 0x142A4BF50 wrapper family.",
+    ),
+    0x1410DBFC0: (
+        "GetUpperPlayerActionPolicy2018FromBridgeWrapper",
+        "Returns wrapper->owner->+0x2018 from the tiny upper Player bridge "
+        "object at 0x142A4BF50.",
+    ),
+    0x1410DBFE0: (
+        "GetIndexedUpperPlayerSubstateFromOwner1A0ViaBridgeWrapper",
+        "For indices 0..1 resolves an indexed substate entry through "
+        "wrapper->owner->+0x1A0 -> +0x58 -> +0x318 + 0x30*index. This exposes "
+        "compact upper Player substate via the same bridge wrapper family.",
+    ),
+    0x1410DC020: (
+        "GetUpperPlayerFinalizeLogBand3C20FromBridgeWrapper",
+        "Returns wrapper->owner + 0x3C20 from the tiny upper Player bridge "
+        "object at 0x142A4BF50.",
+    ),
+    0x1410DC030: (
+        "RelocateOuterPlayerPointerInsideBridgeWrapperIfInRange",
+        "Bridge-wrapper relocate helper. If wrapper->owner falls inside the "
+        "supplied [old_base, old_end) image/window, rewrites object+0x8 to "
+        "new_base + (owner-old_base).",
+    ),
+    0x1410DC050: (
+        "DestroyBridgeWrapperAndOptionallyFree",
+        "Tiny freeing dtor for the upper Player bridge wrapper. Stamps the "
+        "wrapper-local vtable 0x1428DF6B0 and optionally releases the 0x10-byte "
+        "object when dl&1 is set.",
+    ),
+    0x1410C6B90: (
+        "GetUpperPlayerManager3FD8",
+        "Trivial getter that returns outer_owner+0x3FD8. This pins +0x3FD8 as "
+        "another formal upper Player manager slot beside +0x2018 and +0x3BD0.",
+    ),
+    0x141E65C60: (
+        "ConstructUpperPlayerManager3FD8_Size5E70",
+        "Allocator wrapper for the large upper Player manager stored at "
+        "outer_owner+0x3FD8. Allocates size 0x5E70 and then jumps into "
+        "0x141E66090 for in-place initialization.",
+    ),
+    0x141E66090: (
+        "InitializeUpperPlayerManager3FD8",
+        "In-place initializer for the large upper Player manager at "
+        "outer_owner+0x3FD8. Stamps vtable 0x142B91B60, stores the outer owner "
+        "in +0x10, seeds large internal tables and state bands, and prepares "
+        "late links around +0x830/+0x838/+0x840 and +0x5E50/+0x5E60.",
+    ),
+    0x141E668C0: (
+        "RegisterUpperPlayerBridgeIntoManager3FD8AndBuildEntryHandlers",
+        "Manager-side registration path for outer_owner+0x3FD8. Stores the "
+        "incoming owner-derived value in +0x18, stores the tiny upper bridge "
+        "wrapper in +0x20, calls wrapper->virtual +0x18, derives an entry "
+        "count through manager->virtual +0x38, allocates arrays in +0xD8/+0xE0, "
+        "and builds per-entry handler objects keyed by authored/state tags. "
+        "The current body allocates at least one trivial compact handler shell "
+        "and one heavier 0x290 per-entry handler that stores the bridge wrapper "
+        "at +0x288 and owner-derived state bands across +0x1C0..+0x284.",
+    ),
+    0x141E52590: (
+        "BuildFixedTwoEntryUpperPlayerAuthoredDescriptor",
+        "Shared upper bridge/helper that allocates a compact descriptor object "
+        "with count=2, allocates a two-entry dword array, and fills it with "
+        "two fixed authored ids derived from short baked byte sequences before "
+        "returning the descriptor to manager-side registration paths like "
+        "0x141E668C0.",
+    ),
+    0x141E65BE0: (
+        "GetRegisteredUpperPlayerBridgeEntryCountFromManager3FD8",
+        "Reads manager+0x840 and returns DWORD [that_object+0x0]. Used by the "
+        "manager registration path as the entry count for upper bridge-derived "
+        "handler arrays.",
+    ),
+    0x141E66D50: (
+        "BindUpperPlayerAnimSnapshotManager3FD8FromInitPacketAndOwner4260State",
+        "Top-level upper-manager bind path called directly from Player init. "
+        "Consumes a compact typed packet/builder plus owner-local state at "
+        "outer_player+0x4260, derives authored hash families, stores a "
+        "compact object into manager+0x838, and dispatches handler->virtual "
+        "+0x10 across all registered upper manager entries. The typed packet "
+        "entries wired into this path now resolve to AnimSnapshotLayer setup "
+        "families, so +0x3FD8 should be treated as an upper animation/"
+        "snapshot manager rather than the final Player ownership surface.",
+    ),
+    0x141E69AA0: (
+        "ResetUpperPlayerAnimSnapshotManager3FD8PerEntryStateAndInvalidateHandlers",
+        "Upper Player manager phase used from the high-level Player update path. "
+        "Clears repeated per-entry counters/pointers across the manager body "
+        "and then iterates registered handlers in +0xD8 via handler->virtual "
+        "+0xD8, passing owner/context state from +0x10, +0x170, +0x838, and "
+        "+0x850. This is now best read as the invalidate/reset phase of the "
+        "upper Player AnimSnapshotLayer manager.",
+    ),
+    0x141E69BD0: (
+        "RebuildUpperPlayerAnimSnapshotManager3FD8EightSlotAggregateAndPublishToHandlers",
+        "Upper Player manager rebuild/publish phase. Reinitializes the shared "
+        "state band at +0x170, builds a temporary 8-slot aggregate from "
+        "owner-derived state, and then pushes that aggregate back into all "
+        "registered handlers through handler->virtual +0xE0. Current typed "
+        "handlers and nearby strings tie this phase to upper AnimSnapshotLayer "
+        "publication rather than to direct Player ownership rebinding.",
+    ),
+    0x141A77430: (
+        "RelocateAnimSnapshotLayerSetupEntry04PointersIfInRange",
+        "Relocation helper for the typed `0x04` upper bind packet entry. "
+        "Rebases embedded pointers at +0x10/+0x18/+0x40/+0x48 when they fall "
+        "inside the moving range, matching the entry vtable at 0x142B35140.",
+    ),
+    0x141A774B0: (
+        "CheckAnimSnapshotLayerSetupEntry04HasAttachedSources",
+        "Readiness/helper check for the typed `0x04` upper bind packet entry. "
+        "Returns true when either +0x40 or +0x48 is non-null.",
+    ),
+    0x141A774E0: (
+        "AssertThenDispatchAnimSnapshotLayerSetupEntry04ViaVirtual58",
+        "Diagnostic/assert wrapper for the typed `0x04` AnimSnapshotLayer "
+        "setup entry. Validates the variant, then tail-dispatches the real "
+        "operation through entry virtual +0x58.",
+    ),
+    0x141A77550: (
+        "SeedAnimSnapshotLayerSetupEntry04PrimarySource",
+        "Compact initializer for the typed `0x04` AnimSnapshotLayer setup "
+        "entry. Seeds the owner/state fields and stores the primary source "
+        "pointer in +0x40.",
+    ),
+    0x141A77580: (
+        "SeedAnimSnapshotLayerSetupEntry04SecondarySource",
+        "Compact initializer for the typed `0x04` AnimSnapshotLayer setup "
+        "entry. Seeds the owner/state fields and stores the secondary source "
+        "pointer in +0x48.",
+    ),
+    0x141A77A20: (
+        "RelocateAnimSnapshotLayerSetupEntry08PointersIfInRange",
+        "Relocation helper for the typed `0x08` upper bind packet entry. "
+        "Rebases embedded pointers at +0x10/+0x18/+0x40 when they fall "
+        "inside the moving range, matching the entry vtable at 0x142B352E0.",
+    ),
+    0x141A77A80: (
+        "CheckAnimSnapshotLayerSetupEntry08HasAttachedSource",
+        "Readiness/helper check for the typed `0x08` upper bind packet entry. "
+        "Returns true when +0x40 is non-null.",
+    ),
+    0x141A77AA0: (
+        "AssertThenDispatchAnimSnapshotLayerSetupEntry08ViaVirtual58",
+        "Diagnostic/assert wrapper for the typed `0x08` AnimSnapshotLayer "
+        "setup entry. Validates the variant, then tail-dispatches the real "
+        "operation through entry virtual +0x58.",
+    ),
+    0x141A77B50: (
+        "SeedAnimSnapshotLayerSetupEntry08PrimarySource",
+        "Compact initializer for the typed `0x08` AnimSnapshotLayer setup "
+        "entry. Seeds the owner/state fields and stores the primary source "
+        "pointer in +0x40.",
+    ),
+    0x141A77B90: (
+        "AppendResolvedAnimSnapshotLayerRecordIntoUpperPacketWriter",
+        "Takes a resolved authored record from the entry source object, packs "
+        "it into the destination packet writer as a `0x0A000C`-shaped chunk, "
+        "and advances the writer cursor by 10 dwords.",
+    ),
+    0x140CB5050: (
+        "WriteKeyedByteFlagIntoPlayerOwner3BD0Registry",
+        "Resolves/creates a keyed entry inside outer_owner+0x3BD0 and writes "
+        "a one-byte payload into it. Used by upper Player action-policy paths "
+        "to publish compact verb/state flags like ReloadWeapon, RechamberWeapon, "
+        "kRopeClimb, and piton-stab-fx.",
+    ),
+    0x141099520: (
+        "BuildUpperPlayerGesturePermitContextFromMountedGraph",
+        "Upper Player verb/gesture policy builder. Gathers state from mounted "
+        "siblings +0x1E50 and +0x1E58, owner-local runtime state at +0x4320, "
+        "and higher Player surfaces +0x1DF0, +0x1D78+0x120, and +0x3BD0 to "
+        "produce a local gesture/action context block.",
+    ),
+    0x141099175: (
+        "QueryUpperPlayerGesturePermitFamily2018WithBuiltContext",
+        "Calls 0x141099520 to build a local gesture/action context, then feeds "
+        "that context into the upper Player family object at outer_owner+0x2018. "
+        "This is a live upper PlayerGesturePermit/action-policy path above the "
+        "mounted graph, not just a lower weapon-action helper.",
+    ),
+    0x14109BE19: (
+        "ConsumeUpperGesturePermitResultAndPublishKeyedPolicyFlag",
+        "Consumes the compact result returned by the upper +0x2018 family, "
+        "stores the returned scalar/state-id into local verb state, and then "
+        "publishes a keyed one-byte policy/action flag back into outer_owner+0x3BD0. "
+        "This ties the upper gesture/action-permit family directly to the "
+        "owner-local registry surface.",
+    ),
+    0x140CB5050: (
+        "WriteKeyedByteFlagIntoPlayerOwner3BD0Registry",
+        "Takes rcx = outer_owner+0x3BD0, edx = hashed key, r8 = pointer to a "
+        "one-byte payload, resolves/allocates storage through the internal "
+        "tables at object+0xB8, copies the byte, and then dispatches a "
+        "follow-up registry update. This makes +0x3BD0 an owner-local keyed "
+        "byte/flag registry, not just a passive lookup cache.",
+    ),
+    0x1411A65C0: (
+        "ConstructMountedPlayerSubsystem1DE0_Size6090",
+        "Constructor for the mounted outer_owner+0x1DE0 Player subsystem. "
+        "Seeds several large internal tables/subregions and calls the mounted-"
+        "player action-family hash checker 0x1410F75C0 during setup. This is "
+        "a substantial member of the real Player action-owner graph.",
+    ),
+    0x140F187B0: (
+        "ConstructMountedPlayerSubsystem1D48_Size690",
+        "Constructor for the mounted outer_owner+0x1D48 Player subsystem. "
+        "Lives in the same early Player::Init band as the later qualification/"
+        "policy owners and should be treated as part of the same promotion map.",
+    ),
+    0x14100D5A0: (
+        "BuildMountedPlayerSubsystem1D50",
+        "Direct builder for outer_owner+0x1D50 in the same early Player::Init "
+        "mount band surrounding the later qualification and presentation "
+        "owners.",
+    ),
+    0x141301710: (
+        "ConstructMountedPlayerSubsystem1DA0_Size52C0",
+        "Heavy mounted Player subsystem constructed into outer_owner+0x1DA0. "
+        "This sits in the same investigate/read-mode/presentation region as "
+        "other real Player owners, not in a helper-only bucket.",
+    ),
+    0x140FF5560: (
+        "BuildMountedPlayerSubsystem1DE8",
+        "Direct builder for outer_owner+0x1DE8 in the main Player::Init "
+        "assembly pass. This is another formal mounted Player subsystem.",
+    ),
+    0x140F49300: (
+        "ConstructMountedPlayerSubsystem1EB8_Size4B0",
+        "Constructor for mounted outer_owner+0x1EB8. Seeds a formal runtime "
+        "class with repeated paired state slots across roughly +0x130..+0x408, "
+        "so this is clearly a real Player subsystem rather than a tiny cache.",
+    ),
+    0x140F61490: (
+        "DispatchMountedPlayerCallbackIntoOuter1FB0ReadyPath",
+        "Small callback helper that resolves an owner-side object, queries "
+        "outer_owner+0x1FB0 via virtual +0x78, and if present tail-calls the "
+        "same dispatch object via virtual +0x48. This is a direct ingress into "
+        "the outer Player verb-dispatch hub.",
+    ),
+    0x140F614E0: (
+        "RouteAuthoredPlayerEventIdIntoOuter1FB0Dispatch",
+        "Callback-family dispatcher under vtable 0x142A35090. Reads an "
+        "authored event id from the incoming record and routes directly into "
+        "outer_owner+0x1FB0 via virtual +0x100 or +0x128, with a few compact "
+        "event ids only toggling local callback state bytes.",
+    ),
+    0x140F615B0: (
+        "ConstructMountedPlayerEventCallback_40",
+        "Allocating constructor for the compact authored-event callback object "
+        "with vtable 0x142A35090. Stores the outer Player owner pointer and "
+        "feeds the callback family that routes events into +0x1FB0.",
+    ),
+    0x140F61610: (
+        "InitializeMountedPlayerEventCallbackInPlace",
+        "In-place initializer for the compact authored-event callback family "
+        "with vtable 0x142A35090.",
+    ),
+    0x140F5F920: (
+        "ConstructMountedPlayerDispatchHub1FB0_Size3E0",
+        "Allocating constructor for the real outer_owner+0x1FB0 dispatch hub. "
+        "Allocates 0x3E0 bytes, clears the block, and tail-calls the in-place "
+        "initializer at 0x140F5F980.",
+    ),
+    0x140F5F980: (
+        "InitializeMountedPlayerDispatchHub1FB0",
+        "In-place initializer for the real outer_owner+0x1FB0 dispatch hub "
+        "with vtable 0x142A34E10. Seeds the state bands later consumed by the "
+        "outer verb orchestrator and authored-event callback family.",
+    ),
+    0x140F60680: (
+        "ProcessOuterPlayerMountedVerbOrchestrator",
+        "Large outer Player-side verb orchestrator. Chooses among mounted "
+        "subsystems (+0x1DE0/+0x1E98/+0x1E50/+0x1EB0/+0x1DB8), uses the "
+        "+0x1FB0 dispatch object heavily, and commits through owner virtuals "
+        "+0xBD0/+0xC78/+0xC98/+0xCB8.",
+    ),
+}
+
+
+def ensure_function(ea):
+    function = ida_funcs.get_func(ea)
+    if function is None:
+        ida_funcs.add_func(ea)
+        function = ida_funcs.get_func(ea)
+    return function
+
+
+def apply_labels():
+    for ea, (name, comment) in FUNCTIONS.items():
+        ensure_function(ea)
+        ida_name.set_name(
+            ea,
+            name,
+            ida_name.SN_FORCE | ida_name.SN_NOCHECK,
+        )
+        ida_funcs.set_func_cmt(ea, comment, False)
+        ida_bytes.set_cmt(ea, comment, False)
+
+
+def main():
+    apply_labels()
+
+    output_path = idc.get_idb_path()
+    _ida_loader.save_database(
+        output_path,
+        ida_loader.DBFL_KILL,
+    )
+    ida_pro.qexit(0)
+
+
+main()

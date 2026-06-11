@@ -1,0 +1,81 @@
+{
+  "image_base": "0x140000000",
+  "targets": {
+    "GetCurrentCameraIncludingOverride": [
+      {
+        "string_va": "0x142B5BCC0",
+        "value": "CameraManager::GetCurrentCameraIncludingOverride",
+        "xrefs": [
+          {
+            "displacement_va": "0x141C0D64A",
+            "function_va": "0x141C0D610",
+            "function_end_va": "0x141C0D75A",
+            "bytes": "50 27 09 00 00 48 8d 0d 72 e6 f4 00 48 89 4c 24 48 49 b9 ff"
+          },
+          {
+            "displacement_va": "0x141C0EFD3",
+            "function_va": "0x141C0ECC0",
+            "function_end_va": "0x141C0FAB4",
+            "bytes": "00 27 09 00 00 48 8d 0d e9 cc f4 00 48 89 8c 24 c0 00 00 00"
+          }
+        ]
+      }
+    ],
+    "GetCurrentCamera": [
+      {
+        "string_va": "0x142B5BD20",
+        "value": "CameraManager::GetCurrentCamera",
+        "xrefs": [
+          {
+            "displacement_va": "0x141C0D4EE",
+            "function_va": "0x141C0D4B0",
+            "function_end_va": "0x141C0D602",
+            "bytes": "50 15 09 00 00 48 8d 0d 2e e8 f4 00 48 89 4c 24 48 49 ba ff"
+          }
+        ]
+      }
+    ],
+    "ActiveCameraStack": [
+      {
+        "string_va": "0x142B5BBB8",
+        "value": "Active Camera Stack",
+        "xrefs": [
+          {
+            "displacement_va": "0x141C0D0F5",
+            "function_va": "0x141C0D030",
+            "function_end_va": "0x141C0D255",
+            "bytes": "96 24 01 00 00 48 8d 0d bf ea f4 00 e8 92 ea 99 ff b9 02 00"
+          }
+        ]
+      }
+    ],
+    "CameraRight": [
+      {
+        "string_va": "0x142989E10",
+        "value": "Camera Right",
+        "xrefs": [
+          {
+            "displacement_va": "0x14074C556",
+            "function_va": "0x140749920",
+            "function_end_va": "0x14074D4F3",
+            "bytes": "05 1d 6e f2 02 48 8d 15 b6 d8 23 02 48 8b c8 e8 0e c5 ee 00"
+          }
+        ]
+      }
+    ],
+    "CameraForward": [
+      {
+        "string_va": "0x142989E20",
+        "value": "Camera Forward",
+        "xrefs": [
+          {
+            "displacement_va": "0x14074C49F",
+            "function_va": "0x140749920",
+            "function_end_va": "0x14074D4F3",
+            "bytes": "05 d1 6e f2 02 48 8d 15 7d d9 23 02 48 8b c8 e8 c5 c5 ee 00"
+          }
+        ]
+      }
+    ]
+  }
+}

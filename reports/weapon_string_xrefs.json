@@ -1,0 +1,431 @@
+{
+  "input": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Uncharted Legacy of Thieves Collection\\tll.exe",
+  "image_base": "0x140000000",
+  "targets": {
+    "weapon-fire": [
+      {
+        "address": "0x1429336D8",
+        "value": "weapon-fire",
+        "xrefs": []
+      }
+    ],
+    "fire-weapon-at-target": [
+      {
+        "address": "0x142918CF0",
+        "value": "fire-weapon-at-target",
+        "xrefs": []
+      }
+    ],
+    "hud-show-weapon-hud": [
+      {
+        "address": "0x142922B60",
+        "value": "hud-show-weapon-hud",
+        "xrefs": []
+      }
+    ],
+    "ammo-is-full": [
+      {
+        "address": "0x142A76648",
+        "value": "ammo-is-full",
+        "xrefs": []
+      }
+    ],
+    "update-reticle-aspect": [
+      {
+        "address": "0x142A767D0",
+        "value": "update-reticle-aspect",
+        "xrefs": []
+      }
+    ],
+    "reticle-show-time": [
+      {
+        "address": "0x142A76800",
+        "value": "reticle-show-time",
+        "xrefs": []
+      }
+    ],
+    "player-is-aiming-firearm-at-npc?": [
+      {
+        "address": "0x142A36028",
+        "value": "player-is-aiming-firearm-at-npc?",
+        "xrefs": []
+      }
+    ],
+    "show-scope-reticle": [
+      {
+        "address": "0x142919940",
+        "value": "show-scope-reticle",
+        "xrefs": []
+      }
+    ],
+    "shot-fired-aim-mode": [
+      {
+        "address": "0x1428E67C0",
+        "value": "shot-fired-aim-mode",
+        "xrefs": []
+      }
+    ],
+    "reloading": [
+      {
+        "address": "0x1428D5860",
+        "value": "void __cdecl PsoPreLoading::AddSource<class GlobalTaskDependenciesPsoPreLoadingRequestSource,const classPsoPreLoadingTaskDependencies*>(const char *,unsigned char,const class PsoPreLoadingTaskDependencies *)",
+        "xrefs": []
+      },
+      {
+        "address": "0x1428D59B8",
+        "value": "PsoPreLoading::AddSource",
+        "xrefs": []
+      },
+      {
+        "address": "0x1428D59E0",
+        "value": "void __cdecl PsoPreLoading::AddSource<class LinearTaskDependenciesPsoPreLoadingRequestSource,const classPsoPreLoadingTaskDependencies*>(const char *,unsigned char,const class PsoPreLoadingTaskDependencies *)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142930E88",
+        "value": " Reloading",
+        "xrefs": []
+      },
+      {
+        "address": "0x142940D48",
+        "value": ", Reloading",
+        "xrefs": []
+      },
+      {
+        "address": "0x142940F28",
+        "value": "reloading",
+        "xrefs": []
+      },
+      {
+        "address": "0x1429AE898",
+        "value": "FMenuVCStoreLoadingRingController",
+        "xrefs": []
+      },
+      {
+        "address": "0x1429C6888",
+        "value": "ALLOCATION_LOADING_HEAP_PSO_PRELOADING",
+        "xrefs": []
+      },
+      {
+        "address": "0x1429FA7F0",
+        "value": "ScriptedRevealInterpolator: preloading '%s' (%s)\n",
+        "xrefs": []
+      },
+      {
+        "address": "0x142A47438",
+        "value": "kStateReloading",
+        "xrefs": []
+      },
+      {
+        "address": "0x142A4B778",
+        "value": "is-reloading-or-necessary?",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AB0218",
+        "value": "PluginUsePreloading",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AB0230",
+        "value": "PluginUsePreloadingName",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AB9760",
+        "value": "LoadingHeap::AllocPsoPreloading() - Out of pso preloading heap memory!",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AB9850",
+        "value": "LoadingHeap::AllocPsoPreloading",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AC19E0",
+        "value": "pPackage->m_refCt > 0 || pPackage->m_preloading",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AC7BE8",
+        "value": "PsoPreLoading::AddLoader",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AF9A00",
+        "value": "void __cdecl PsoPreLoading::RemoveSourcesMarkedForRemoval(void)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AF9A40",
+        "value": "void __cdecl PsoPreLoading::DumpAllFailingPreloads(void)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AF9A80",
+        "value": "void __cdecl PsoPreLoading::ProcessedCallback(void *,const class PsoPreLoader::ProcessedRequest &)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AF9B58",
+        "value": "PsoPreLoading::DumpAllFailingPreloads",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AF9C98",
+        "value": "void __cdecl PsoPreLoading::RemoveSource(class StringId)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AF9CE0",
+        "value": "class PsoPreLoadingRequestSource *__cdecl PsoPreLoading::GetSource(class StringId) const",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AF9D40",
+        "value": "void __cdecl PsoPreLoading::Shutdown(void)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AF9DD0",
+        "value": "void __cdecl PsoPreLoading::PropagateTaskChange(void)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AF9E08",
+        "value": "void __cdecl PsoPreLoading::FillRequests(void)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AF9E40",
+        "value": "bool __cdecl PsoPreLoading::IsSourceFinished(class StringId) const",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AF9E90",
+        "value": "struct PsoPreLoading::Status __cdecl PsoPreLoading::GetStatus(void) const",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AFA1F0",
+        "value": "void __cdecl PsoPreLoading::ShowRequestSourceStatus(class ndgi::PsoCacheRecorder::Printer &)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AFA2A0",
+        "value": "class DMENU::Menu *__cdecl PsoPreLoading::CreateDevMenu(void)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AFA350",
+        "value": "void __cdecl PsoPreLoading::AddSource<class RecentTaskDependenciesPsoPreLoadingRequestSource,const classPsoPreLoadingTaskDependencies*>(const char *,unsigned char,const class PsoPreLoadingTaskDependencies *)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142AFA7C0",
+        "value": "bool __cdecl ndlib::TextureDictionaryManager::FindTexture(struct ndlib::TextureLoadingInformation &,class LoadedTextureId)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B02020",
+        "value": "PsoPreLoadingLibraryTable::GetOrAddSourceToSet",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B02070",
+        "value": "void __cdecl PsoPreLoadingLibraryTable::OnSourceRemoved(const class PsoPreLoadingRequestSource *)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B02100",
+        "value": "PsoPreLoadingLibraryTable::OnSourceRemoved",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B021A0",
+        "value": "__cdecl PsoPreLoadingLibraryTable::~PsoPreLoadingLibraryTable(void)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B02280",
+        "value": "__cdecl LinearTaskDependenciesPsoPreLoadingRequestSource::~LinearTaskDependenciesPsoPreLoadingRequestSource(void)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B38EA0",
+        "value": "PsoPreLoadingTaskDependencies::BuildTaskInfo",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B38F60",
+        "value": "void __cdecl PsoPreLoadingTaskDependencies::BuildTaskInfo(void)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B38FC0",
+        "value": "void __cdecl PsoPreLoadingTaskDependencies::Load(class Memory::Context)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B39010",
+        "value": "RobinHoodHashTable<class StringId,struct PsoPreLoadingTaskDependencies::TaskInfo,struct HashT<class StringId>,struct equality<class StringId,class StringId> >::Insert",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B390B8",
+        "value": "void __cdecl PsoPreLoadingTaskDependencies::Release(void)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B3A440",
+        "value": "bool __cdecl PsoPreLoadingHistory::Load(void)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B3A470",
+        "value": "bool __cdecl PsoPreLoadingHistory::Save(void)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B3A4A0",
+        "value": "__cdecl PsoPreLoadingHistory::~PsoPreLoadingHistory(void)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B3A550",
+        "value": "__cdecl PsoPreLoadingHistory::PsoPreLoadingHistory(class Memory::Context,const char *,const char *,unsigned int,unsigned int,bool)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B3A810",
+        "value": "void __cdecl PsoPreLoadingFailedTracker::Add(enum PsoPreLoadingFailedTracker::ErrorKind,enum PackageMgr::LoadError,const class Package *)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B3A910",
+        "value": "__cdecl PsoPreLoadingFailedTracker::~PsoPreLoadingFailedTracker(void)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B3AE00",
+        "value": "PsoPreLoadingRequestSource::PsoPreLoadingRequestSource",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B71800",
+        "value": "LevelUtil::ReloadIngamePakProcess::Init",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B71828",
+        "value": "ReloadIngamePakProcess",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B7F768",
+        "value": "bUnreferenced || m_bReloadActive || pBank->m_bReloading",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B9F120",
+        "value": "void __cdecl Level::ReloadInGameData(void)",
+        "xrefs": []
+      },
+      {
+        "address": "0x14375B590",
+        "value": ".?AVFMenuVCStoreLoadingRingController@@",
+        "xrefs": []
+      },
+      {
+        "address": "0x14375B5C8",
+        "value": ".?AVIdle@FMenuVCStoreLoadingRingController@@",
+        "xrefs": []
+      },
+      {
+        "address": "0x143770B10",
+        "value": ".?AVTaskDependenciesPsoPreLoadingRequestSource@@",
+        "xrefs": []
+      },
+      {
+        "address": "0x143770B60",
+        "value": ".?AVGlobalTaskDependenciesPsoPreLoadingRequestSource@@",
+        "xrefs": []
+      },
+      {
+        "address": "0x143770BA8",
+        "value": ".?AVPsoPreLoadingRequestSource@@",
+        "xrefs": []
+      },
+      {
+        "address": "0x143770BE0",
+        "value": ".?AVLinearTaskDependenciesPsoPreLoadingRequestSource@@",
+        "xrefs": []
+      },
+      {
+        "address": "0x143772610",
+        "value": ".?AVRecentTaskDependenciesPsoPreLoadingRequestSource@@",
+        "xrefs": []
+      },
+      {
+        "address": "0x1437739A8",
+        "value": ".?AVReloadIngamePakProcess@LevelUtil@@",
+        "xrefs": []
+      },
+      {
+        "address": "0x1437739E0",
+        "value": ".?AVMissingLevel@ReloadIngamePakProcess@LevelUtil@@",
+        "xrefs": []
+      },
+      {
+        "address": "0x143773A28",
+        "value": ".?AVReload@ReloadIngamePakProcess@LevelUtil@@",
+        "xrefs": []
+      }
+    ],
+    "weapon-is-down": [
+      {
+        "address": "0x142940F60",
+        "value": "weapon-is-down",
+        "xrefs": []
+      }
+    ],
+    "not-aiming": [
+      {
+        "address": "0x142940F70",
+        "value": "not-aiming",
+        "xrefs": []
+      },
+      {
+        "address": "0x142940FD0",
+        "value": "not-aiming-at-target",
+        "xrefs": []
+      },
+      {
+        "address": "0x142941000",
+        "value": "shooting-logic-not-aiming",
+        "xrefs": []
+      }
+    ],
+    "no-shooting-logic": [
+      {
+        "address": "0x142940F80",
+        "value": "no-shooting-logic",
+        "xrefs": []
+      }
+    ],
+    "shooting-logic-not-ready": [
+      {
+        "address": "0x142940F98",
+        "value": "shooting-logic-not-ready",
+        "xrefs": []
+      }
+    ],
+    "shooting-logic-not-aiming": [
+      {
+        "address": "0x142941000",
+        "value": "shooting-logic-not-aiming",
+        "xrefs": []
+      }
+    ]
+  }
+}

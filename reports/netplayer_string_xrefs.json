@@ -1,0 +1,320 @@
+{
+  "input": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Uncharted Legacy of Thieves Collection\\tll.exe",
+  "image_base": "0x140000000",
+  "targets": {
+    "NetPlayerTracker::SpawnPlayer": [
+      {
+        "address": "0x1429F0D00",
+        "value": "NetPlayerTracker::SpawnPlayer",
+        "xrefs": [
+          {
+            "xref": "0x140B32794",
+            "function": "0x140B31F60",
+            "function_name": "sub_140B31F60"
+          }
+        ]
+      }
+    ],
+    "NetPlayerTracker::Spawn": [
+      {
+        "address": "0x1429F0D00",
+        "value": "NetPlayerTracker::SpawnPlayer",
+        "xrefs": [
+          {
+            "xref": "0x140B32794",
+            "function": "0x140B31F60",
+            "function_name": "sub_140B31F60"
+          }
+        ]
+      },
+      {
+        "address": "0x1429F0F00",
+        "value": "NetPlayerTracker::Spawn",
+        "xrefs": [
+          {
+            "xref": "0x140B346ED",
+            "function": "0x140B346B0",
+            "function_name": "sub_140B346B0"
+          }
+        ]
+      }
+    ],
+    "NetPlayerTracker::NetRespawn": [
+      {
+        "address": "0x1429F0EB0",
+        "value": "NetPlayerTracker::NetRespawn",
+        "xrefs": [
+          {
+            "xref": "0x140B34805",
+            "function": "0x140B347C0",
+            "function_name": "sub_140B347C0"
+          }
+        ]
+      }
+    ],
+    "NetGameManager::RespawnPlayer": [
+      {
+        "address": "0x1429E28C8",
+        "value": "NetGameManager::RespawnPlayer",
+        "xrefs": [
+          {
+            "xref": "0x140A9AD25",
+            "function": "0x140A9AAD0",
+            "function_name": "sub_140A9AAD0"
+          }
+        ]
+      }
+    ],
+    "NetGameManager::AddOrUpdateNetPlayer": [
+      {
+        "address": "0x1429E1A70",
+        "value": "NetGameManager::AddOrUpdateNetPlayerCinema",
+        "xrefs": [
+          {
+            "xref": "0x140A90BFC",
+            "function": "0x140A90A00",
+            "function_name": "sub_140A90A00"
+          }
+        ]
+      },
+      {
+        "address": "0x1429E1AA0",
+        "value": "NetGameManager::AddOrUpdateNetPlayer",
+        "xrefs": [
+          {
+            "xref": "0x140A906BC",
+            "function": "0x140A90550",
+            "function_name": "sub_140A90550"
+          }
+        ]
+      }
+    ],
+    "NetGameManager::AddOrUpdateNetPlayerCinema": [
+      {
+        "address": "0x1429E1A70",
+        "value": "NetGameManager::AddOrUpdateNetPlayerCinema",
+        "xrefs": [
+          {
+            "xref": "0x140A90BFC",
+            "function": "0x140A90A00",
+            "function_name": "sub_140A90A00"
+          }
+        ]
+      }
+    ],
+    "NetGameManager::GetMeNetPlayerTracker": [
+      {
+        "address": "0x1429E1F00",
+        "value": "NetGameManager::GetMeNetPlayerTracker",
+        "xrefs": [
+          {
+            "xref": "0x140A90EB1",
+            "function": "0x140A90E80",
+            "function_name": "sub_140A90E80"
+          },
+          {
+            "xref": "0x140A90EFB",
+            "function": "0x140A90E80",
+            "function_name": "sub_140A90E80"
+          }
+        ]
+      }
+    ],
+    "NetEventRespawnPlayer": [
+      {
+        "address": "0x1429DD880",
+        "value": "NetEventRespawnPlayer",
+        "xrefs": []
+      },
+      {
+        "address": "0x1429FE308",
+        "value": "NetEventRespawnPlayer::HostFill",
+        "xrefs": [
+          {
+            "xref": "0x140BDB54A",
+            "function": "0x140BDB440",
+            "function_name": "sub_140BDB440"
+          }
+        ]
+      },
+      {
+        "address": "0x1429FE350",
+        "value": "void __cdecl SendNetEventRespawnPlayer(class NetPlayerTracker *,class BoundFrame *,bool)",
+        "xrefs": [
+          {
+            "xref": "0x140BDB6F3",
+            "function": "0x140BDB620",
+            "function_name": "sub_140BDB620"
+          }
+        ]
+      },
+      {
+        "address": "0x1429FE5B8",
+        "value": "NetEventRespawnPlayer::Fill",
+        "xrefs": [
+          {
+            "xref": "0x140BDB350",
+            "function": "0x140BDB2E0",
+            "function_name": "sub_140BDB2E0"
+          },
+          {
+            "xref": "0x140BDB7BD",
+            "function": "0x140BDB620",
+            "function_name": "sub_140BDB620"
+          }
+        ]
+      },
+      {
+        "address": "0x143761808",
+        "value": ".?AVNetEventRespawnPlayer@@",
+        "xrefs": []
+      }
+    ],
+    "NetEventRespawnPlayer::HostFill": [
+      {
+        "address": "0x1429FE308",
+        "value": "NetEventRespawnPlayer::HostFill",
+        "xrefs": [
+          {
+            "xref": "0x140BDB54A",
+            "function": "0x140BDB440",
+            "function_name": "sub_140BDB440"
+          }
+        ]
+      }
+    ],
+    "NetEventRespawnPlayer::Fill": [
+      {
+        "address": "0x1429FE5B8",
+        "value": "NetEventRespawnPlayer::Fill",
+        "xrefs": [
+          {
+            "xref": "0x140BDB350",
+            "function": "0x140BDB2E0",
+            "function_name": "sub_140BDB2E0"
+          },
+          {
+            "xref": "0x140BDB7BD",
+            "function": "0x140BDB620",
+            "function_name": "sub_140BDB620"
+          }
+        ]
+      }
+    ],
+    "SendNetEventRespawnPlayer": [
+      {
+        "address": "0x1429FE350",
+        "value": "void __cdecl SendNetEventRespawnPlayer(class NetPlayerTracker *,class BoundFrame *,bool)",
+        "xrefs": [
+          {
+            "xref": "0x140BDB6F3",
+            "function": "0x140BDB620",
+            "function_name": "sub_140BDB620"
+          }
+        ]
+      }
+    ],
+    "SendNetEventSignalRespawnPlayer": [
+      {
+        "address": "0x1429FE3B0",
+        "value": "void __cdecl SendNetEventSignalRespawnPlayer(class NetPlayerTracker *,bool,class TTimeFrame<__int64,1288490188800>)",
+        "xrefs": [
+          {
+            "xref": "0x140BDC016",
+            "function": "0x140BDBF70",
+            "function_name": "sub_140BDBF70"
+          }
+        ]
+      }
+    ],
+    "*player-starting-weapons-online*": [
+      {
+        "address": "0x1429F0CB0",
+        "value": "*player-starting-weapons-online*",
+        "xrefs": [
+          {
+            "xref": "0x140B32853",
+            "function": "0x140B31F60",
+            "function_name": "sub_140B31F60"
+          }
+        ]
+      }
+    ],
+    "start-in-swim": [
+      {
+        "address": "0x1429F0D20",
+        "value": "start-in-swim",
+        "xrefs": [
+          {
+            "xref": "0x140B32516",
+            "function": "0x140B31F60",
+            "function_name": "sub_140B31F60"
+          }
+        ]
+      }
+    ],
+    "start-on-edge": [
+      {
+        "address": "0x1429F0D40",
+        "value": "start-on-edge",
+        "xrefs": [
+          {
+            "xref": "0x140B323B6",
+            "function": "0x140B31F60",
+            "function_name": "sub_140B31F60"
+          },
+          {
+            "xref": "0x140B330F1",
+            "function": "0x140B31F60",
+            "function_name": "sub_140B31F60"
+          },
+          {
+            "xref": "0x1410F21A0",
+            "function": "0x1410F1910",
+            "function_name": "SpawnPlayerFromRetainedDescriptor"
+          },
+          {
+            "xref": "0x1410F2E3B",
+            "function": "0x1410F1910",
+            "function_name": "SpawnPlayerFromRetainedDescriptor"
+          }
+        ]
+      },
+      {
+        "address": "0x142A1E360",
+        "value": "Start-on-edge - Failed to find player edge spawner location %s\n",
+        "xrefs": [
+          {
+            "xref": "0x140DD5147",
+            "function": "0x140DCDEA0",
+            "function_name": "sub_140DCDEA0"
+          }
+        ]
+      },
+      {
+        "address": "0x142A1E440",
+        "value": "Start-on-edge - Failed to an edge close to %s\n",
+        "xrefs": [
+          {
+            "xref": "0x140DD512B",
+            "function": "0x140DCDEA0",
+            "function_name": "sub_140DCDEA0"
+          }
+        ]
+      }
+    ],
+    "start-in-cover": [
+      {
+        "address": "0x1429F0D50",
+        "value": "start-in-cover",
+        "xrefs": [
+          {
+            "xref": "0x140B32466",
+            "function": "0x140B31F60",
+            "function_name": "sub_140B31F60"
+          }
+        ]
+      }
+    ]
+  }
+}

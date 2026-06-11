@@ -1,0 +1,70 @@
+{
+  "image_base": "0x140000000",
+  "targets": {
+    "RequestDisableAi": [
+      {
+        "string_va": "0x142934398",
+        "value": "RequestDisableAi",
+        "xrefs": []
+      },
+      {
+        "string_va": "0x142934298",
+        "value": "ScriptSkill::RequestDisableAi log",
+        "xrefs": [
+          {
+            "displacement_va": "0x1403F5DC9",
+            "function_va": "0x1403F5D69",
+            "function_end_va": "0x1403F5E11",
+            "bytes": "81 80 00 00 00 4c 8d 05 cb e4 53 02 0c 04 ba 06 00 00 00 41"
+          }
+        ]
+      }
+    ],
+    "RequestEnableAi": [
+      {
+        "string_va": "0x142934460",
+        "value": "RequestEnableAi",
+        "xrefs": []
+      },
+      {
+        "string_va": "0x1429343C0",
+        "value": "ScriptSkill::RequestEnableAi log",
+        "xrefs": [
+          {
+            "displacement_va": "0x1403F5CEB",
+            "function_va": "0x1403F5C80",
+            "function_end_va": "0x1403F5D2A",
+            "bytes": "8b d0 27 00 00 4c 8d 05 d1 e6 53 02 80 e1 fb 40 0f b6 c7 c0"
+          },
+          {
+            "displacement_va": "0x14055F1E1",
+            "function_va": "0x14055EEE0",
+            "function_end_va": "0x14055F37D",
+            "bytes": "01 4c 0f 44 c8 4c 8d 05 db 51 3d 02 ba 06 00 00 00 48 8b ce"
+          }
+        ]
+      }
+    ],
+    "ScriptRequestEnableAi": [
+      {
+        "string_va": "0x142934470",
+        "value": "Npc::ScriptRequestEnableAi",
+        "xrefs": []
+      }
+    ],
+    "npc-stop-behavior": [
+      {
+        "string_va": "0x1429604E0",
+        "value": "npc-stop-behavior",
+        "xrefs": [
+          {
+            "displacement_va": "0x140055E3A",
+            "function_va": "0x140055E30",
+            "function_end_va": "0x140055E88",
+            "bytes": "ec 28 41 b1 01 4c 8d 05 a2 a6 90 02 33 d2 48 8d 4c 24 30 ff"
+          }
+        ]
+      }
+    ]
+  }
+}

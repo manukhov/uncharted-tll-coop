@@ -1,0 +1,133 @@
+
+/mnt/c/users/vladimir/desktop/TLLCoopResearch/reports/code_141685C30.bin:     file format binary
+
+
+Disassembly of section .data:
+
+0000000141685c30 <.data>:
+   141685c30:	48 83 ec 78          	sub    $0x78,%rsp
+   141685c34:	c7 01 cc cc cc 7f    	movl   $0x7fcccccc,(%rcx)
+   141685c3a:	45 33 c9             	xor    %r9d,%r9d
+   141685c3d:	48 c7 41 04 cc cc cc 	movq   $0x7fcccccc,0x4(%rcx)
+   141685c44:	7f 
+   141685c45:	44 89 49 0c          	mov    %r9d,0xc(%rcx)
+   141685c49:	c5 f8 29 74 24 60    	vmovaps %xmm6,0x60(%rsp)
+   141685c4f:	c5 f8 29 7c 24 50    	vmovaps %xmm7,0x50(%rsp)
+   141685c55:	c5 78 29 44 24 40    	vmovaps %xmm8,0x40(%rsp)
+   141685c5b:	c5 78 29 4c 24 30    	vmovaps %xmm9,0x30(%rsp)
+   141685c61:	c5 78 29 54 24 20    	vmovaps %xmm10,0x20(%rsp)
+   141685c67:	c5 78 29 5c 24 10    	vmovaps %xmm11,0x10(%rsp)
+   141685c6d:	c4 41 20 57 db       	vxorps %xmm11,%xmm11,%xmm11
+   141685c72:	c5 78 11 59 10       	vmovups %xmm11,0x10(%rcx)
+   141685c77:	c5 f8 10 05 51 a9 1f 	vmovups 0x11fa951(%rip),%xmm0        # 0x1428805d0
+   141685c7e:	01 
+   141685c7f:	c5 f8 11 41 20       	vmovups %xmm0,0x20(%rcx)
+   141685c84:	41 8b 00             	mov    (%r8),%eax
+   141685c87:	89 01                	mov    %eax,(%rcx)
+   141685c89:	41 8b 40 04          	mov    0x4(%r8),%eax
+   141685c8d:	89 41 04             	mov    %eax,0x4(%rcx)
+   141685c90:	49 8b 40 08          	mov    0x8(%r8),%rax
+   141685c94:	48 89 41 08          	mov    %rax,0x8(%rcx)
+   141685c98:	c4 c1 78 10 40 10    	vmovups 0x10(%r8),%xmm0
+   141685c9e:	c5 f8 11 41 10       	vmovups %xmm0,0x10(%rcx)
+   141685ca3:	c4 41 78 10 50 20    	vmovups 0x20(%r8),%xmm10
+   141685ca9:	c5 78 11 51 20       	vmovups %xmm10,0x20(%rcx)
+   141685cae:	c5 78 29 24 24       	vmovaps %xmm12,(%rsp)
+   141685cb3:	c5 f8 10 12          	vmovups (%rdx),%xmm2
+   141685cb7:	8b 41 08             	mov    0x8(%rcx),%eax
+   141685cba:	48 8d 15 3f a0 1e 02 	lea    0x21ea03f(%rip),%rdx        # 0x14386fd00
+   141685cc1:	c5 78 10 25 07 a9 1f 	vmovups 0x11fa907(%rip),%xmm12        # 0x1428805d0
+   141685cc8:	01 
+   141685cc9:	48 8b 14 c2          	mov    (%rdx,%rax,8),%rdx
+   141685ccd:	48 85 d2             	test   %rdx,%rdx
+   141685cd0:	74 0c                	je     0x141685cde
+   141685cd2:	8b 41 0c             	mov    0xc(%rcx),%eax
+   141685cd5:	39 42 50             	cmp    %eax,0x50(%rdx)
+   141685cd8:	75 04                	jne    0x141685cde
+   141685cda:	b0 01                	mov    $0x1,%al
+   141685cdc:	eb 02                	jmp    0x141685ce0
+   141685cde:	32 c0                	xor    %al,%al
+   141685ce0:	84 c0                	test   %al,%al
+   141685ce2:	4c 0f 45 ca          	cmovne %rdx,%r9
+   141685ce6:	4d 85 c9             	test   %r9,%r9
+   141685ce9:	74 15                	je     0x141685d00
+   141685ceb:	c4 c1 78 10 01       	vmovups (%r9),%xmm0
+   141685cf0:	c4 41 78 10 51 10    	vmovups 0x10(%r9),%xmm10
+   141685cf6:	c5 f8 11 41 10       	vmovups %xmm0,0x10(%rcx)
+   141685cfb:	c5 78 11 51 20       	vmovups %xmm10,0x20(%rcx)
+   141685d00:	c5 e8 5c 71 10       	vsubps 0x10(%rcx),%xmm2,%xmm6
+   141685d05:	c5 28 57 0d 03 a9 1f 	vxorps 0x11fa903(%rip),%xmm10,%xmm9        # 0x142880610
+   141685d0c:	01 
+   141685d0d:	c4 c1 20 5c f9       	vsubps %xmm9,%xmm11,%xmm7
+   141685d12:	c5 78 28 5c 24 10    	vmovaps 0x10(%rsp),%xmm11
+   141685d18:	48 8b c1             	mov    %rcx,%rax
+   141685d1b:	c5 b0 c6 c7 93       	vshufps $0x93,%xmm7,%xmm9,%xmm0
+   141685d20:	c5 78 c6 c0 93       	vshufps $0x93,%xmm0,%xmm0,%xmm8
+   141685d25:	c5 c8 c6 c6 09       	vshufps $0x9,%xmm6,%xmm6,%xmm0
+   141685d2a:	c4 c1 78 59 d2       	vmulps %xmm10,%xmm0,%xmm2
+   141685d2f:	c4 c1 28 c6 ea 09    	vshufps $0x9,%xmm10,%xmm10,%xmm5
+   141685d35:	c5 d0 59 ce          	vmulps %xmm6,%xmm5,%xmm1
+   141685d39:	c5 f0 5c da          	vsubps %xmm2,%xmm1,%xmm3
+   141685d3d:	c5 e0 c6 e3 09       	vshufps $0x9,%xmm3,%xmm3,%xmm4
+   141685d42:	c5 e0 c6 c3 52       	vshufps $0x52,%xmm3,%xmm3,%xmm0
+   141685d47:	c4 c1 78 59 d2       	vmulps %xmm10,%xmm0,%xmm2
+   141685d4c:	c5 d0 59 cc          	vmulps %xmm4,%xmm5,%xmm1
+   141685d50:	c5 f0 5c da          	vsubps %xmm2,%xmm1,%xmm3
+   141685d54:	c5 e0 c6 cb 09       	vshufps $0x9,%xmm3,%xmm3,%xmm1
+   141685d59:	c4 c1 28 c6 c2 ff    	vshufps $0xff,%xmm10,%xmm10,%xmm0
+   141685d5f:	c5 78 28 54 24 20    	vmovaps 0x20(%rsp),%xmm10
+   141685d65:	c5 f8 59 d4          	vmulps %xmm4,%xmm0,%xmm2
+   141685d69:	c5 e8 58 d9          	vaddps %xmm1,%xmm2,%xmm3
+   141685d6d:	c5 e0 59 15 8b 79 56 	vmulps 0x156798b(%rip),%xmm3,%xmm2        # 0x142bed700
+   141685d74:	01 
+   141685d75:	c5 e8 58 f6          	vaddps %xmm6,%xmm2,%xmm6
+   141685d79:	c4 c1 18 c6 c4 ff    	vshufps $0xff,%xmm12,%xmm12,%xmm0
+   141685d7f:	c4 c1 78 59 d9       	vmulps %xmm9,%xmm0,%xmm3
+   141685d84:	c5 b0 c6 c7 1b       	vshufps $0x1b,%xmm7,%xmm9,%xmm0
+   141685d89:	c4 c1 18 c6 d4 00    	vshufps $0x0,%xmm12,%xmm12,%xmm2
+   141685d8f:	c5 e8 59 c8          	vmulps %xmm0,%xmm2,%xmm1
+   141685d93:	c4 c1 18 c6 d4 55    	vshufps $0x55,%xmm12,%xmm12,%xmm2
+   141685d99:	c4 c1 68 59 c0       	vmulps %xmm8,%xmm2,%xmm0
+   141685d9e:	c5 78 28 44 24 40    	vmovaps 0x40(%rsp),%xmm8
+   141685da4:	c5 e0 58 d9          	vaddps %xmm1,%xmm3,%xmm3
+   141685da8:	c5 b0 c6 ef 8d       	vshufps $0x8d,%xmm7,%xmm9,%xmm5
+   141685dad:	c5 f8 28 7c 24 50    	vmovaps 0x50(%rsp),%xmm7
+   141685db3:	c5 78 28 4c 24 30    	vmovaps 0x30(%rsp),%xmm9
+   141685db9:	c5 e0 58 e0          	vaddps %xmm0,%xmm3,%xmm4
+   141685dbd:	c4 c1 18 c6 dc aa    	vshufps $0xaa,%xmm12,%xmm12,%xmm3
+   141685dc3:	c5 78 28 24 24       	vmovaps (%rsp),%xmm12
+   141685dc8:	c5 f8 11 71 30       	vmovups %xmm6,0x30(%rcx)
+   141685dcd:	c5 f8 28 74 24 60    	vmovaps 0x60(%rsp),%xmm6
+   141685dd3:	c5 d0 c6 cd d8       	vshufps $0xd8,%xmm5,%xmm5,%xmm1
+   141685dd8:	c5 e0 59 c1          	vmulps %xmm1,%xmm3,%xmm0
+   141685ddc:	c5 d8 58 d0          	vaddps %xmm0,%xmm4,%xmm2
+   141685de0:	c5 f8 11 51 40       	vmovups %xmm2,0x40(%rcx)
+   141685de5:	48 83 c4 78          	add    $0x78,%rsp
+   141685de9:	c3                   	ret
+   141685dea:	cc                   	int3
+   141685deb:	cc                   	int3
+   141685dec:	cc                   	int3
+   141685ded:	cc                   	int3
+   141685dee:	cc                   	int3
+   141685def:	cc                   	int3
+   141685df0:	48 83 ec 78          	sub    $0x78,%rsp
+   141685df4:	c7 01 cc cc cc 7f    	movl   $0x7fcccccc,(%rcx)
+   141685dfa:	45 33 d2             	xor    %r10d,%r10d
+   141685dfd:	48 c7 41 04 cc cc cc 	movq   $0x7fcccccc,0x4(%rcx)
+   141685e04:	7f 
+   141685e05:	44 89 51 0c          	mov    %r10d,0xc(%rcx)
+   141685e09:	c5 f8 29 74 24 60    	vmovaps %xmm6,0x60(%rsp)
+   141685e0f:	c5 f8 29 7c 24 50    	vmovaps %xmm7,0x50(%rsp)
+   141685e15:	c5 78 29 44 24 40    	vmovaps %xmm8,0x40(%rsp)
+   141685e1b:	c5 78 29 4c 24 30    	vmovaps %xmm9,0x30(%rsp)
+   141685e21:	c5 78 29 54 24 20    	vmovaps %xmm10,0x20(%rsp)
+   141685e27:	c5 78 29 5c 24 10    	vmovaps %xmm11,0x10(%rsp)
+   141685e2d:	c4 41 20 57 db       	vxorps %xmm11,%xmm11,%xmm11
+   141685e32:	c5 78 11 59 10       	vmovups %xmm11,0x10(%rcx)
+   141685e37:	c5 f8 10 05 91 a7 1f 	vmovups 0x11fa791(%rip),%xmm0        # 0x1428805d0
+   141685e3e:	01 
+   141685e3f:	c5 f8 11 41 20       	vmovups %xmm0,0x20(%rcx)
+   141685e44:	41 8b 01             	mov    (%r9),%eax
+   141685e47:	89 01                	mov    %eax,(%rcx)
+   141685e49:	41 8b 41 04          	mov    0x4(%r9),%eax
+   141685e4d:	89 41 04             	mov    %eax,0x4(%rcx)
