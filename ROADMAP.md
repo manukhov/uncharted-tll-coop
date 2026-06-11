@@ -119,6 +119,25 @@ Do not make these the main track right now:
 - camera polish before real second-player ownership exists
 - transport/render work before host-side second-player path is real
 
+## Already Established
+
+These points are already established and should not be re-reversed first:
+
+- startup bind for shared contexts does exist
+  - outer callback: `0x1409F9B20`
+  - inner bringup block: `0x1409FA94E`
+  - service bind path: `0x143880318 -> virtual +0x20`
+- the main live blocker is not "startup never binds `ctxB`"
+- `0x1409FD360` is broad shutdown/teardown, not a tiny local helper
+- `0x1409FBA60` does not jump straight into startup
+  - it schedules deferred work instead
+- deferred restart delivery already narrows to the queue rooted at `0x1437E9700`
+- blind `slot1_probe*.dll` style runtime pokes are no longer the primary path
+- `BuildRespawnTransformBlock` is not the current main blocker
+- the current frontier is the deferred queue consumer/drain path above restart rebind
+
+Full evidence and chronology remain in `reports/initial-findings.md`.
+
 ## Notes
 
 - Detailed reverse-engineering evidence belongs in

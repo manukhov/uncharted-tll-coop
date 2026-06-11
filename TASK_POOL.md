@@ -72,6 +72,22 @@ Do later, not now:
 - [ ] Camera polish before real second-player ownership exists.
 - [ ] Second-PC rendering work before host-side second-player path is proven.
 
+## Already Closed Enough
+
+Do not reopen these as the first move:
+
+- [x] Startup bind exists:
+  - `0x1409F9B20`
+  - `0x1409FA94E`
+  - `0x143880318 -> virtual +0x20`
+- [x] `ctxB` missing owner is not explained by "startup never ran"
+- [x] `0x1409FD360` is already typed as upper shutdown/teardown
+- [x] `0x1409FBA60` already narrowed to deferred restart scheduling
+- [x] restart work already narrowed to queue root `0x1437E9700`
+- [x] old `slot1_probe*.dll` loop is intentionally retired
+- [x] `BuildRespawnTransformBlock` is not the current primary blocker
+- [x] low net-player seams `0x140A90550 / 0x140A9AAD0 / 0x140B347C0` are not the first-return track right now
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
