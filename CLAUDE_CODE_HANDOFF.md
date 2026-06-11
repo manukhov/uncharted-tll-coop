@@ -14,6 +14,28 @@
   - required user input,
   - or a large finished result worth showing.
 
+## Single project focus
+
+There is only one north star:
+
+**полноценный кооп кампании на двух ПК.**
+
+That means:
+
+- Chloe on host
+- Nadine as real second player
+- independent input/camera
+- host-authoritative campaign state
+
+Do not drift into side-goals unless they are directly required for that.
+
+De-prioritize:
+
+- buddy-control polish for its own sake
+- resurrecting old probe iterations just because they exist
+- IDA hygiene work that does not unblock co-op
+- camera/render polish before the real second-player path exists
+
 ## Canon / source of truth
 
 Primary working files:
