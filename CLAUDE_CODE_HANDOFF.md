@@ -47,6 +47,24 @@ Primary working files:
 
 When you get a meaningful result, update those files immediately.
 
+## Where the accumulated research lives
+
+Use these in this order:
+
+1. `reports/initial-findings.md`
+   - full chronological reverse-engineering log
+   - this is the main place where already-tested hypotheses and corrections are stored
+2. `CLAUDE_CODE_HANDOFF.md`
+   - compressed current frontier
+   - intended to prevent re-opening old loops
+3. `scripts/ida_apply_labels.py`
+   - reproducible names/comments for the important anchors
+4. `reports/*.asm.txt`, `reports/*xrefs*.txt`, `reports/*xrefs*.json`
+   - supporting disasm/xref artifacts for the deeper static paths
+
+Do not treat `ROADMAP.md` or `TASK_POOL.md` as the full research log.
+They are intentionally short planning files now.
+
 ## IDA / local environment notes
 
 - Current workspace root:
@@ -197,6 +215,21 @@ This means:
 - the blocker is:
   - which consumer drains this deferred lane queue,
   - and under what runtime conditions the queued `0x1409F9B20` callback actually runs
+
+## Closed loops / do not repeat first
+
+These are already investigated enough that they should not be the first move again:
+
+- Do not go back to blind `slot1_probe*.dll` style runtime pokes.
+  That loop was intentionally removed.
+- Do not treat `BuildRespawnTransformBlock` as the main blocker.
+  Earlier crashes around it were traced to the probe-side seed/layout issue, and the project focus moved higher.
+- Do not treat `0x1409FA94E` as a standalone public seam.
+  It is an inner bringup block inside `0x1409F9B20`.
+- Do not restart from `0x140A90550 / 0x140A9AAD0 / 0x140B347C0` runtime patch attempts first.
+  The net-player bringup path was useful, but the current blocker sits higher in the deferred restart/rebind lifecycle.
+- Do not re-open the old “startup probably never binds ctxB” hypothesis.
+  Startup bind sites are already pinned; the open question is why live campaign still ends up with the owner missing later.
 
 ## Exact next step
 
