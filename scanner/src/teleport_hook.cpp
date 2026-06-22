@@ -139,6 +139,8 @@ using StringHashFunction = std::uint32_t(__fastcall*)(const char*, std::uint64_t
 using ResolveUpperActorRecordFunction = void*(__fastcall*)(std::uint32_t);
 
 UpdateFunction g_original_update = nullptr;
+// DIAGNOSTIC toggle (VK_HOME): INERT = DLL no-op pass-through. Default ACTIVE.
+volatile bool g_dll_inert = false;
 
 // Player vtable[92] (sub_140A1DCC0) = the APPEARANCE-hash getter (returns
 // object+0x15A4 into *a2), fed to the look builder -> appearance-record -> mesh.
@@ -150,20 +152,6 @@ using AppearanceFunction = std::uint32_t* (__fastcall*)(void*, std::uint32_t*);
 AppearanceFunction g_original_appearance = nullptr;
 volatile bool g_appearance_swap_active = false;
 std::uint32_t g_nadine_appearance_hash = 0;
-
-// Player vtable[26] (sub_141BB7960) = GiveWeapon(player, weaponConfig*, bool). We
-// hook it to MIRROR weapon gives between the two players: when one player (e.g.
-// Chloe at spawn / on pickup) is given a weapon, give the SAME weapon to the other
-// player (the clone) using the engine's already-built config struct in-place (no
-// fragile struct copy). => the clone gets armed with the same loadout/ammo.
-constexpr std::size_t kGiveWeaponSlot = 26;
-using GiveWeaponFunction = std::int64_t (__fastcall*)(void*, void*, std::uint8_t);
-GiveWeaponFunction g_original_give_weapon = nullptr;
-// DEFAULT OFF: mirroring Chloe's weapon-give struct onto the clone CRASHES (the
-// give is player-specific; the struct can't be reused cross-player). Kept inert;
-// weapons need a deeper approach (build a per-clone give, or independent pickup).
-volatile bool g_mirror_weapons = false;
-volatile bool g_in_weapon_mirror = false;  // recursion guard
 ResolveLocalPlayerFunction g_original_resolve_local_player = nullptr;
 std::uintptr_t* g_nadine_vtable = nullptr;
 std::uintptr_t g_module = 0;
@@ -261,7 +249,6 @@ std::uint32_t g_xinput_inject_packet = 0;
 ULONGLONG g_xinput_p0_inject_until = 0;
 bool g_xinput_p0_armed_in_scene = false;
 bool g_slot1_auto_reissue_done = false;
-ULONGLONG g_scene_reload_ms = 0;  // time of last fresh main-player spawn; delay clone respawn so assets (hair) stream first
 ULONGLONG g_slot1_autodrive_until = 0;
 bool g_slot1_branch_struct_logged = false;
 
@@ -513,31 +500,6 @@ std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
         return g_original_appearance(a1, a2);
     }
     return a2;
-}
-
-// Hooked Player vtable[26] GiveWeapon: mirror the give to the OTHER player so the
-// clone gets the same weapon/ammo as the main player. Swap-agnostic (uses both
-// retained slots). Direct call to the original on the mirror target avoids the hook.
-std::int64_t __fastcall hooked_give_weapon(void* a1, void* a2, std::uint8_t a3) {
-    if (g_mirror_weapons && !g_in_weapon_mirror && a1 != nullptr && a2 != nullptr &&
-        g_original_give_weapon != nullptr) {
-        void* p0 = retained_player_object(0);
-        void* p1 = retained_player_object(1);
-        void* other = nullptr;
-        if (a1 == p0 && p1 != nullptr && p1 != a1) other = p1;
-        else if (a1 == p1 && p0 != nullptr && p0 != a1) other = p0;
-        if (other != nullptr && readable_bytes(other) >= 0x40) {
-            g_in_weapon_mirror = true;
-            __try {
-                g_original_give_weapon(other, a2, a3);
-            } __except (EXCEPTION_EXECUTE_HANDLER) {
-                // swallow: a mirror failure must not break the real give
-            }
-            g_in_weapon_mirror = false;
-            log_line("WEAPON mirror: gave the other player the same weapon");
-        }
-    }
-    return g_original_give_weapon != nullptr ? g_original_give_weapon(a1, a2, a3) : 0;
 }
 
 // SEH-isolated call of vtable[94] (off 752) = the character's "get look id" method.
@@ -1614,8 +1576,6 @@ void diagnose_split_screen_login() {
 
 void log_local_player_targets(void* nadine_object) {
     auto* resolver_owner = reinterpret_cast<void*>(g_module + kLocalPlayerResolverGlobalRva);
-    const auto resolve_local_player =
-        reinterpret_cast<ResolveLocalPlayerFunction>(0x0); // unused placeholder for type clarity
     auto resolve = [&](std::uint32_t index) -> void* {
         auto* owner = reinterpret_cast<void**>(resolver_owner);
         if (owner == nullptr || *owner == nullptr) {
@@ -2375,11 +2335,6 @@ void send_local_player_state() {
 // velocity override) so we can observe its native input-driven locomotion.
 bool g_puppet_net_apply = false;
 volatile bool g_drive_screen1_cam = false;  // NUMPAD6: drive screen-1 cam + fwd input test
-volatile bool g_remote_anim_test = false;   // F7: disable auto transform-drag so the clone is input-driven with camera on player 1
-volatile bool g_suppress_main_input = false; // play-as-clone: freeze the main player (Chloe) so WASD only moves the clone
-float g_chloe_pin[3] = {0, 0, 0};            // pinned world pos of Chloe while frozen
-bool g_chloe_pin_valid = false;
-void* g_chloe_obj = nullptr;                 // cached real-Chloe pointer (before swap)
 // g_play_as_clone defined earlier (before hooked_resolve_local_player)
 // Single-instance test: when there is no network peer, mirror the LOCAL Chloe
 // onto the puppet (+2m) so actions/transform can be verified on one PC.
@@ -2775,17 +2730,6 @@ struct SyntheticPadLite {
     XInputStateLite state{};
 };
 
-// Freeze the main player (slot-0 / Chloe) by zeroing her LEFT stick in the slot-0
-// input block (0x1466E4220) each frame, so hardware WASD no longer moves her while
-// we drive the clone. The right stick (camera, +0x08/+0x0C) is left alone so the
-// view can still be controlled. Runs on the game thread.
-void suppress_main_player_input() {
-    // DISABLED: position-pinning the cached Chloe object crashed (writing to a freed
-    // object after a location reload) and did not reliably freeze her. Reverted to a
-    // no-op until a safe input-routing approach is found.
-    return;
-}
-
 void drive_slot1_tick() {
     if (!g_drive_slot1 || g_module == 0) {
         return;
@@ -2843,11 +2787,9 @@ void drive_slot1_tick() {
         ly = static_cast<int>(g_auto_stick_y * 22000.0F);
     }
 
-    // Gamepad (controller 0): LEFT stick steers the clone. Do not forward the
-    // right stick into slot 1 yet: it mutates slot 1's hidden camera/yaw basis and
-    // makes movement directions drift.
-    float cx = 0.0F;  // camera yaw input (right stick X)
-    float cy = 0.0F;  // camera pitch input (right stick Y)
+    // Gamepad (controller 0): LEFT stick steers the clone. The right stick is not
+    // forwarded into slot 1 (it mutates slot 1's hidden camera/yaw basis and makes
+    // movement directions drift).
     if (g_real_xinput_get_state != nullptr) {
         XInputStateLite pad{};
         if (g_real_xinput_get_state(0, &pad) == 0) {
@@ -2879,8 +2821,6 @@ void drive_slot1_tick() {
     {
         float fx = static_cast<float>(lx) / 22000.0F;
         float fy = static_cast<float>(ly) / 22000.0F;
-        float cx_from_block0 = 0.0F;
-        float cy_from_block0 = 0.0F;
         bool used_block0_input = false;
         auto* blk0b = reinterpret_cast<std::byte*>(g_module + 0x66E4220);
         if (readable_bytes(blk0b) >= 0x528) {
@@ -3304,122 +3244,6 @@ void materialize_screen1_camera_once() {
     }
 }
 
-bool get_camera_axes_idx(int, float&, float&, float&, float&);
-
-// The real animated co-op puppet: (1) keep screen-1's gameplay camera alive so
-// the puppet's locomotion has a yaw; (2) feed its slot-1 input a stick pointing in
-// the PEER's world-movement direction (converted via the screen-1 camera axes),
-// magnitude = peer speed -> the puppet runs/idles exactly like the peer, WITH
-// animation. Position is then softly corrected in apply_puppet_transform_post.
-void drive_animated_puppet() {
-    // DISABLED: animated tracking is unresolved (locomotion movement vs hard
-    // position tracking vs direction). Stable avatar = transform-only.
-    return;
-#if 0
-    if (!g_puppet_net_apply) return;
-    coop::StatePacket pkt{};
-    void* puppet = nullptr;
-    if (!latest_peer_state(pkt, puppet)) return;
-    materialize_screen1_camera_once();  // anim enabler (game thread)
-
-    void* fs = *reinterpret_cast<void**>(g_module + 0x3FE1088);
-    if (fs == nullptr || readable_bytes(fs) < 0x7100) return;
-    auto* idxb = static_cast<std::uint8_t*>(fs) + 0xE88 + 0xBF0 + 0x18;
-    if (readable_bytes(idxb) >= 1) *idxb = 1;
-    *reinterpret_cast<std::uint8_t*>(static_cast<std::byte*>(fs) + 0x70B8 + 1) = 0;
-    auto* b1 = static_cast<std::byte*>(fs) + 0x6FC8 + 0x28;
-    std::memset(b1, 0, 0x28);
-    b1[0] = std::byte{1};
-    *reinterpret_cast<float*>(b1 + 0x0C) = 1.0e9F;  // duration
-
-    const float vx = pkt.velocity[0], vz = pkt.velocity[2];
-    const float speed = std::sqrt(vx * vx + vz * vz);
-    static float stick_angle = 0.0F;
-    if (speed > 0.3F) {
-        const float dx = vx / speed, dz = vz / speed;  // DESIRED world dir D (peer)
-        // FEEDBACK STEER on the puppet's ACTUAL locomotion velocity (+0x260):
-        // rotate the fed stick so the avatar's real motion converges to D. Position
-        // is only SOFT-corrected (apply_puppet_transform_post) so +0x260 reflects the
-        // locomotion, not a snap artifact. Low gain + deadband + clamp = stable.
-        auto* pv = reinterpret_cast<const float*>(
-            static_cast<std::byte*>(puppet) + kPlayerVelocityOffset);
-        const float ps = std::sqrt(pv[0] * pv[0] + pv[2] * pv[2]);
-        if (ps > 0.8F) {
-            const float ax = pv[0] / ps, az = pv[2] / ps;     // ACTUAL world dir A
-            const float cross = ax * dz - az * dx;
-            const float dot = ax * dx + az * dz;
-            const float err = std::atan2(cross, dot);          // angle A -> D
-            if (std::fabs(err) > 0.08F) {                       // deadband
-                const float sign = g_move_swap ? 1.0F : -1.0F;  // NUMPAD8 flips if spinning
-                float step = sign * 0.18F * err;                // low gain
-                if (step > 0.12F) step = 0.12F;
-                if (step < -0.12F) step = -0.12F;
-                stick_angle += step;
-            }
-        }
-        const float mag = speed > 6.0F ? 1.0F : speed / 6.0F;
-        *reinterpret_cast<float*>(b1 + 0x14) = std::cos(stick_angle) * mag;
-        *reinterpret_cast<float*>(b1 + 0x18) = std::sin(stick_angle) * mag;
-        *reinterpret_cast<std::uint32_t*>(b1 + 0x10) = 0x500;
-    } else {
-        *reinterpret_cast<std::uint32_t*>(b1 + 0x10) = 0;  // idle
-    }
-    {  // (legacy camera-conversion drive, kept disabled)
-    void* fs2 = nullptr; auto* b1x = b1; (void)fs2; (void)b1x;
-    std::memset(b1, 0, 0x28);
-    b1[0] = std::byte{1};
-    *reinterpret_cast<float*>(b1 + 0x0C) = 1.0e9F;  // duration
-
-    const float vx = pkt.velocity[0], vz = pkt.velocity[2];
-    const float speed = std::sqrt(vx * vx + vz * vz);
-    bool have_cam1 = false;
-    float fwx = 0.0F, fwz = 1.0F, rx = 1.0F, rz = 0.0F;
-    float raw_sx = 0.0F, raw_sy = 0.0F;
-    float fed_sx = 0.0F, fed_sy = 0.0F;
-    if (speed > 0.3F) {
-        // Constant "forward" in the puppet frame (block+0x04 = -1). The puppet's
-        // FACING is replicated from the peer (quat) in apply_puppet_transform_post,
-        // so it runs toward the peer's direction without the unstable follow-cam
-        // conversion. Magnitude ~ peer speed -> run/jog anim blend.
-        const float mag = speed > 6.0F ? 1.0F : speed / 6.0F;
-        fed_sx = 0.0F;
-        fed_sy = -mag;
-        *reinterpret_cast<float*>(b1 + 0x14) = 0.0F;
-        *reinterpret_cast<float*>(b1 + 0x18) = -mag;
-        *reinterpret_cast<std::uint32_t*>(b1 + 0x10) = 0x500;
-    } else {
-        *reinterpret_cast<std::uint32_t*>(b1 + 0x10) = 0;  // idle
-    }
-    (void)have_cam1; (void)fwx; (void)fwz; (void)rx; (void)rz;
-    (void)raw_sx; (void)raw_sy;
-
-    static ULONGLONG last_cam_log = 0;
-    const ULONGLONG now = GetTickCount64();
-    if (now - last_cam_log > 500) {
-        last_cam_log = now;
-        auto* block1 = reinterpret_cast<std::byte*>(g_module + 0x66E4220 + 0x530);
-        std::ostringstream line;
-        line << "S1CAMTEST cam1=" << (have_cam1 ? 1 : 0)
-             << " speed=" << speed
-             << " camF=(" << fwx << "," << fwz << ")"
-             << " camR=(" << rx << "," << rz << ")"
-             << " raw=(" << raw_sx << "," << raw_sy << ")"
-             << " fed=(" << fed_sx << "," << fed_sy << ")"
-             << " flags=0x" << std::hex
-             << *reinterpret_cast<std::uint32_t*>(b1 + 0x10);
-        if (readable_bytes(block1) >= 0x528) {
-            auto* f = reinterpret_cast<float*>(block1);
-            line << std::dec
-                 << " block=(" << f[0] << "," << f[1]
-                 << "," << f[2] << "," << f[3] << ")"
-                 << " btn=0x" << std::hex
-                 << *reinterpret_cast<std::uint64_t*>(block1 + 1304);
-        }
-        log_line(line.str().c_str());
-    }
-#endif
-}
-
 DWORD WINAPI aux_input_thread(void*) {
     bool prev_insert = false;
     bool prev_swap = false;
@@ -3512,25 +3336,32 @@ DWORD WINAPI aux_input_thread(void*) {
                                          : "screen1 camera drive OFF");
         }
         prev_s1c = s1c;
+        // DIAGNOSTIC: VK_HOME toggles the DLL between INERT (no-op pass-through) and
+        // ACTIVE (clone + drives). Lets us isolate whether our active behavior breaks
+        // the main player's aiming. (Runs in the aux thread so it works while inert.)
+        static bool prev_inert_key = false;
+        const bool ik = (GetAsyncKeyState(VK_HOME) & 0x8000) != 0;
+        if (ik && !prev_inert_key) {
+            g_dll_inert = !g_dll_inert;
+            log_line(g_dll_inert ? "DLL INERT (pass-through; no clone/drives)"
+                                 : "DLL ACTIVE (clone + drives enabled)");
+        }
+        prev_inert_key = ik;
         static bool prev_pac = false;
         const bool pac = (GetAsyncKeyState(VK_NUMPAD3) & 0x8000) != 0;
         if (pac && !prev_pac) {
             g_play_as_clone = !g_play_as_clone;
             if (g_play_as_clone) {
                 g_puppet_net_apply = false;       // stop puppet tracking
-                g_chloe_obj = retained_player_object(0);  // cache Chloe BEFORE swap
-                swap_local_player_slots();        // camera -> clone (proven)
+                swap_local_player_slots();        // camera -> clone
                 g_drive_slot1 = true;             // scripted WASD drives the clone
                 g_drive_slot_index = 1;
-                // Pin Chloe in place (record her current pos) so WASD doesn't move
-                // her - input-level suppression is mistimed, position-pin is reliable.
-                g_chloe_pin_valid = false;
-                g_suppress_main_input = true;
-                log_line("PLAY-AS-CLONE ON: WASD drives clone, Chloe pinned in place");
+                // NOTE: with one local input set, WASD also drives Chloe (the game
+                // routes all local input to the active player). Real co-op uses
+                // separate per-player input, so this conflict does not occur there.
+                log_line("PLAY-AS-CLONE ON: WASD drives clone (camera on clone)");
             } else {
                 g_drive_slot1 = false;
-                g_suppress_main_input = false;
-                g_chloe_pin_valid = false;
                 swap_local_player_slots();        // swap back (camera -> Chloe)
                 log_line("PLAY-AS-CLONE OFF: control back to Chloe");
             }
@@ -3921,19 +3752,16 @@ void install_xinput_hook() {
 }
 
 void __fastcall hooked_update(void* object) {
+    // DIAGNOSTIC: when inert, the DLL does NOTHING but pass the update through (no
+    // clone spawn, no drives, no per-frame logic) - used to isolate whether our
+    // active behavior breaks the main player's aiming/firing. Toggle with VK_END.
+    if (g_dll_inert) {
+        g_original_update(object);
+        return;
+    }
     net_tick();
     // (PLAY-AS-CLONE camera comes from the retained-slot SWAP done on toggle, not
     // a per-frame attach.)
-    // Real animated co-op puppet: drive screen-1 camera + peer-directed locomotion
-    // input once per frame (rate-limited; the camera update is heavy).
-    if (g_puppet_net_apply && !g_play_as_clone) {
-        static ULONGLONG last = 0;
-        const ULONGLONG now = GetTickCount64();
-        if (now - last >= 16) {
-            last = now;
-            drive_animated_puppet();
-        }
-    }
     // ANIM FROM PLAYER-1 VIEW: the engine only auto-updates the ACTIVE player's
     // animated-camera-control owner, so the remote clone freezes when the main
     // camera is on player 1. Keep the clone's owner (puppet+0x36C0) driven every
@@ -3979,20 +3807,18 @@ void __fastcall hooked_update(void* object) {
             reissue_spawn_for_slot1();
             log_line("slot1 auto-spawn armed (no forced movement)");
         }
-        // One-shot auto control test: once the slot-1 clone exists, enable the
-        // clean per-slot drive and feed a forward stick for ~6s with NO manual
-        // keys. Camera stays on Chloe so both are visible: clone walks forward
-        // while Chloe stands = clean control; if Chloe moves = bleed.
-        // Pure slot-control test: once the clone exists, feed slot 1 through the
-        // engine's own per-slot input branch and do not force networked
-        // transform/velocity. This isolates real control/facing from the older
-        // Chloe+2m mirror path.
+        // SEPARATION: do NOT auto-enable the slot-1 drive. Marking slot 1 as an
+        // active input slot every frame (drive_slot1_tick) makes the engine treat the
+        // session as 2-player and GATES the main player's aiming/firing. The clone
+        // now stays a passive 2nd actor (Nadine body + collision) until you explicitly
+        // control it with NUMPAD3 (play-as-clone). Real co-op will drive it from the
+        // network, not from an always-on local marker.
         if (retained_player_object(1) != nullptr && !g_autotest_done) {
             g_autotest_done = true;
-            g_drive_slot1 = true;
+            g_drive_slot1 = false;
             g_auto_stick_active = false;
             g_puppet_net_apply = false;
-            log_line("PURE slot1 control ON: per-slot input only, no mirror transform");
+            log_line("clone spawned passive (drive OFF; use NUMPAD3 to control it)");
         }
         g_last_nadine_object = object;
         force_split_render_mode();
@@ -4031,21 +3857,6 @@ void __fastcall hooked_update(void* object) {
             log_line(g_puppet_net_apply
                          ? "Puppet net-apply ON (force networked transform/velocity)"
                          : "Puppet net-apply OFF (puppet = pure local-input player)");
-        }
-        // F7 = REMOTE-ANIM TEST: camera stays on player 1, clone is NOT dragged by
-        // transform (g_puppet_net_apply OFF) and is driven by its OWN locomotion via
-        // slot-1 input (arrow keys), with the anim-cam enabler on. Tests whether the
-        // non-active clone ANIMATES when moved by input (vs the teleport-drag that
-        // kills animation). Move the clone with ARROW KEYS, watch from player-1 view.
-        if ((GetAsyncKeyState(VK_F7) & 1) != 0) {
-            g_remote_anim_test = true;     // stop the per-frame auto transform-drag
-            g_play_as_clone = false;       // camera stays on player 1
-            g_puppet_net_apply = false;    // NO transform drag
-            g_drive_slot1 = true;          // clone driven by its own locomotion
-            g_drive_slot_index = 1;
-            g_drive_screen1_cam = true;    // 0x238800 anim-cam enabler each frame
-            log_line("REMOTE-ANIM TEST ON: cam on player1, clone input-driven (arrows), "
-                     "no transform drag - move clone with ARROWS and watch it animate");
         }
         if ((GetAsyncKeyState(VK_PRIOR) & 1) != 0) {
             arm_velwriter_breakpoint_all_threads();
@@ -4223,7 +4034,6 @@ void __fastcall hooked_update(void* object) {
         }
     }
 
-    suppress_main_player_input();  // freeze Chloe (slot-0) in play-as-clone
     drive_slot1_tick();
     apply_slot1_perslot_on_game_thread();
     g_original_update(object);
@@ -5243,11 +5053,6 @@ DWORD WINAPI install_hook(void*) {
         } else {
             log_line("Player vtable[92] unexpected; appearance hook skipped");
         }
-        // Player vtable[26] = GiveWeapon hook DISABLED: it sits in the weapon-pickup
-        // path and may break the pickup/aim flow even in pass-through. Re-enable only
-        // when the weapon work resumes with a safe approach.
-        (void)kGiveWeaponSlot;
-        (void)&hooked_give_weapon;
     }
     submit_remote_input_packet(coop::InputPacket{});
     start_udp_receiver();
