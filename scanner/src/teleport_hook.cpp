@@ -141,6 +141,10 @@ using ResolveUpperActorRecordFunction = void*(__fastcall*)(std::uint32_t);
 UpdateFunction g_original_update = nullptr;
 // DIAGNOSTIC toggle (VK_HOME): INERT = DLL no-op pass-through. Default ACTIVE.
 volatile bool g_dll_inert = false;
+// PROVEN: nulling the clone's retained-slot pointer to hide it from single-player
+// player-count gating CRASHES (the engine holds/derefs the slot). Default OFF.
+volatile bool g_hide_clone_from_slot = false;
+void* g_clone_cached = nullptr;
 
 // Player vtable[92] (sub_140A1DCC0) = the APPEARANCE-hash getter (returns
 // object+0x15A4 into *a2), fed to the look builder -> appearance-record -> mesh.
@@ -152,6 +156,9 @@ using AppearanceFunction = std::uint32_t* (__fastcall*)(void*, std::uint32_t*);
 AppearanceFunction g_original_appearance = nullptr;
 volatile bool g_appearance_swap_active = false;
 std::uint32_t g_nadine_appearance_hash = 0;
+// VARIANT B step 1: make the LOCAL player render as Nadine (no clone). Single local
+// player => full mechanics, weapons/aim work (no 2-player gating).
+volatile bool g_local_make_nadine = true;
 ResolveLocalPlayerFunction g_original_resolve_local_player = nullptr;
 std::uintptr_t* g_nadine_vtable = nullptr;
 std::uintptr_t g_module = 0;
@@ -489,11 +496,16 @@ void observe_nadine_visual_identity(void* object) {
 // vtable RVAs so we can identify the draw-control/look class statically.
 void* retained_player_object(int index);  // defined below
 
-// Hooked Player vtable[92]: during the clone spawn window, force the appearance
-// hash to Nadine's so the look builder resolves Nadine's mesh on the player.
+// Hooked Player vtable[92] (appearance-hash getter). VARIANT B step 1: when
+// g_local_make_nadine is on (and we are NOT spawning a 2nd Player clone), force the
+// appearance hash to Nadine for the local Player so the LOCAL player renders as
+// Nadine with full mechanics (single local player => no 2-player gating, weapons/aim
+// work). Also still supports the legacy clone-spawn-window swap.
 std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
-    if (g_appearance_swap_active && g_nadine_appearance_hash != 0 && a2 != nullptr) {
-        *a2 = g_nadine_appearance_hash;
+    if (a2 != nullptr &&
+        (g_local_make_nadine ||
+         (g_appearance_swap_active && g_nadine_appearance_hash != 0))) {
+        *a2 = 0xd27c074fu;  // hash("nadine")
         return a2;
     }
     if (g_original_appearance != nullptr) {
@@ -3516,6 +3528,48 @@ void reissue_spawn_for_slot1() {
     }
     g_slot1_visual_override_active = false;
     log_line("reissue spawn idx=1 returned");
+    // GATING PROBE: did spawning the clone bump any "co-op / num-players" globals?
+    // If yes -> a simple "hold them at 1" fix; if no -> the gate is the retained-slot
+    // occupancy itself (deeper). Read after the spawn.
+    {
+        auto rd32 = [&](std::uintptr_t rva) -> std::uint32_t {
+            auto* p = reinterpret_cast<std::uint32_t*>(g_module + rva);
+            return readable_bytes(p) >= 4 ? *p : 0xFFFFFFFFu;
+        };
+        auto rd8 = [&](std::uintptr_t rva) -> std::uint32_t {
+            auto* p = reinterpret_cast<std::uint8_t*>(g_module + rva);
+            return readable_bytes(p) >= 1 ? *p : 0xFFu;
+        };
+        std::ostringstream l;
+        l << "GATING globals after clone spawn: max_local_players="
+          << std::dec << rd32(kMaxLocalPlayersRva)
+          << " second_available=" << rd8(kSplitSecondPlayerAvailableRva)
+          << " split_login_state=" << rd32(kSplitLoginStateRva)
+          << " slot0=" << (retained_player_object(0) ? 1 : 0)
+          << " slot1=" << (retained_player_object(1) ? 1 : 0);
+        log_line(l.str().c_str());
+    }
+    // TEST: hide the clone from the retained-slot table (so single-player weapon/aim
+    // systems count only player 0) while keeping the clone OBJECT alive (it still
+    // renders/animates via the engine update list + our vtable hook). If the main
+    // player regains aiming AND Nadine stays visible, this is the "separate players"
+    // fix for the local/active-player case.
+    if (g_hide_clone_from_slot) {
+        auto* table = reinterpret_cast<std::uint8_t*>(g_module + kRetainedSlotTableRva);
+        auto* slot1ptr = reinterpret_cast<void**>(table + 0x10);
+        g_clone_cached = *slot1ptr;
+        DWORD oldp = 0;
+        if (VirtualProtect(slot1ptr, sizeof(void*), PAGE_READWRITE, &oldp)) {
+            *slot1ptr = nullptr;
+            DWORD ign = 0;
+            VirtualProtect(slot1ptr, sizeof(void*), oldp, &ign);
+            std::ostringstream l;
+            l << "CLONE hidden from retained slot 1 (cached obj=0x" << std::hex
+              << reinterpret_cast<std::uintptr_t>(g_clone_cached)
+              << ") - main player should regain weapons; Nadine should stay visible";
+            log_line(l.str().c_str());
+        }
+    }
     // Auto-drive removed: it fed slot-1 input forward and destabilized the
     // active player (Chloe carried forward). Drive is now manual (Numpad+) only.
 }
@@ -3798,9 +3852,12 @@ void __fastcall hooked_update(void* object) {
             g_slot1_scaffold_attempted = true;
             try_slot1_netplayer_respawn_scaffold(object);
         }
-        // Wait for Nadine's visual identity to be captured (when body-swap is
-        // wanted) so the clone auto-spawns directly with Nadine's record/skeleton.
-        if (g_spawn_captured && retained_player_object(1) == nullptr &&
+        // VARIANT B: do NOT auto-spawn a 2nd Player clone (it breaks the local
+        // player's weapons/aim via 2-player gating). The local player itself is made
+        // Nadine via the appearance hook (g_local_make_nadine). Manual F12 still
+        // spawns a clone if needed for legacy experiments.
+        if (!g_local_make_nadine && g_spawn_captured &&
+            retained_player_object(1) == nullptr &&
             !g_slot1_auto_reissue_done &&
             (!g_want_nadine_body || g_nadine_visual_identity_valid)) {
             g_slot1_auto_reissue_done = true;

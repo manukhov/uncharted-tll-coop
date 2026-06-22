@@ -10,6 +10,31 @@ players, not just the clone).
 
 ---
 
+## ★ DIRECTION: Variant B (current) — drop the "2nd Player clone"
+
+A 2nd full Player on one machine is a dead end: a 2nd **retained Player breaks the
+LOCAL player's weapon/aim** (single-player gating on retained-slot occupancy;
+confirmed — inert/no-clone = aim works, clone present even passive = aim gated). Every
+escape (remove slot / co-op gate / split-screen) crashes or is dormant.
+
+**Variant B (correct co-op model):** each PC runs its OWN single full local Player;
+the other player is a lightweight non-Player **avatar** (visual mirror via the net),
+NOT a local Player. On player-2's PC the local player is made **Nadine** (full Chloe
+mechanics + Nadine body) — the original goal, achieved on the 2nd player's own machine.
+Each machine has 1 local player => no gating.
+
+- **Step 1 — DONE & VALIDATED:** apply the appearance hook to the LOCAL player (not a
+  clone) -> the local player renders as Nadine AND weapons/aim/everything work. Flag
+  `g_local_make_nadine` (Player vtable[92] -> 0xd27c074f); no clone is spawned.
+- **Step 2 — TODO:** lightweight remote avatar (non-Player; base on NPC NadineBuddy or
+  render-only), driven by replicated state; does not trip player-count gating.
+- **Step 3 — TODO:** net layer (replicate transform + pose/input); dev/test via a
+  fake-peer loopback since Steam blocks two `tll.exe` on one PC.
+
+(The "clone" sections below are the prior approach, kept for reference.)
+
+---
+
 ## ✅ WHAT WORKS (validated in-game)
 
 ### 1. Second player spawn (the "clone")
