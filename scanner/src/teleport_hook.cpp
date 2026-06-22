@@ -150,6 +150,20 @@ using AppearanceFunction = std::uint32_t* (__fastcall*)(void*, std::uint32_t*);
 AppearanceFunction g_original_appearance = nullptr;
 volatile bool g_appearance_swap_active = false;
 std::uint32_t g_nadine_appearance_hash = 0;
+
+// Player vtable[26] (sub_141BB7960) = GiveWeapon(player, weaponConfig*, bool). We
+// hook it to MIRROR weapon gives between the two players: when one player (e.g.
+// Chloe at spawn / on pickup) is given a weapon, give the SAME weapon to the other
+// player (the clone) using the engine's already-built config struct in-place (no
+// fragile struct copy). => the clone gets armed with the same loadout/ammo.
+constexpr std::size_t kGiveWeaponSlot = 26;
+using GiveWeaponFunction = std::int64_t (__fastcall*)(void*, void*, std::uint8_t);
+GiveWeaponFunction g_original_give_weapon = nullptr;
+// DEFAULT OFF: mirroring Chloe's weapon-give struct onto the clone CRASHES (the
+// give is player-specific; the struct can't be reused cross-player). Kept inert;
+// weapons need a deeper approach (build a per-clone give, or independent pickup).
+volatile bool g_mirror_weapons = false;
+volatile bool g_in_weapon_mirror = false;  // recursion guard
 ResolveLocalPlayerFunction g_original_resolve_local_player = nullptr;
 std::uintptr_t* g_nadine_vtable = nullptr;
 std::uintptr_t g_module = 0;
@@ -158,7 +172,7 @@ bool g_control_enabled = false;
 // player avatar) via animated NPC move-intent instead of local WASD.
 bool g_net_drive_nadine = false;
 bool g_local_player1_bind_enabled = false;
-bool g_force_split_render_enabled = true;
+bool g_force_split_render_enabled = false;  // OFF: split-render mode broke main-player aiming
 bool g_split_render_applied = false;
 bool g_split_login_done = false;
 void* g_last_nadine_object = nullptr;
@@ -499,6 +513,31 @@ std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
         return g_original_appearance(a1, a2);
     }
     return a2;
+}
+
+// Hooked Player vtable[26] GiveWeapon: mirror the give to the OTHER player so the
+// clone gets the same weapon/ammo as the main player. Swap-agnostic (uses both
+// retained slots). Direct call to the original on the mirror target avoids the hook.
+std::int64_t __fastcall hooked_give_weapon(void* a1, void* a2, std::uint8_t a3) {
+    if (g_mirror_weapons && !g_in_weapon_mirror && a1 != nullptr && a2 != nullptr &&
+        g_original_give_weapon != nullptr) {
+        void* p0 = retained_player_object(0);
+        void* p1 = retained_player_object(1);
+        void* other = nullptr;
+        if (a1 == p0 && p1 != nullptr && p1 != a1) other = p1;
+        else if (a1 == p1 && p0 != nullptr && p0 != a1) other = p0;
+        if (other != nullptr && readable_bytes(other) >= 0x40) {
+            g_in_weapon_mirror = true;
+            __try {
+                g_original_give_weapon(other, a2, a3);
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+                // swallow: a mirror failure must not break the real give
+            }
+            g_in_weapon_mirror = false;
+            log_line("WEAPON mirror: gave the other player the same weapon");
+        }
+    }
+    return g_original_give_weapon != nullptr ? g_original_give_weapon(a1, a2, a3) : 0;
 }
 
 // SEH-isolated call of vtable[94] (off 752) = the character's "get look id" method.
@@ -3918,9 +3957,14 @@ void __fastcall hooked_update(void* object) {
                                         // can read Nadine's look2 for the body swap.
         // (Removed: a leftover diagnostic auto-injected ly=22000 on controller 0
         // for 2s on scene load = the "carried forward right after spawn" bug.)
+        // DISABLED: auto split-screen login (max_local_players=2 / net_login_split_
+        // screen) put the game into a half-activated 2-player mode that BREAKS the
+        // main player's weapon AIM/FIRE controls on inject. Not needed for the clone
+        // (it spawns + drives independently). Re-enable manually only if pursuing the
+        // engine's split-screen path.
         if (!g_split_login_done) {
             g_split_login_done = true;
-            split_login_persistent();
+            // split_login_persistent();  // <- breaks aiming; left off
         }
         if (!g_slot1_scaffold_attempted) {
             g_slot1_scaffold_attempted = true;
@@ -5199,6 +5243,11 @@ DWORD WINAPI install_hook(void*) {
         } else {
             log_line("Player vtable[92] unexpected; appearance hook skipped");
         }
+        // Player vtable[26] = GiveWeapon hook DISABLED: it sits in the weapon-pickup
+        // path and may break the pickup/aim flow even in pass-through. Re-enable only
+        // when the weapon work resumes with a safe approach.
+        (void)kGiveWeaponSlot;
+        (void)&hooked_give_weapon;
     }
     submit_remote_input_packet(coop::InputPacket{});
     start_udp_receiver();
@@ -5229,15 +5278,13 @@ DWORD WINAPI install_hook(void*) {
         log_line(l.str().c_str());
     }
     arm_spawn_breakpoint_all_threads();
-    arm_perslot_breakpoint_all_threads();
-    arm_inputstate_breakpoint_all_threads();
-    arm_inputwrite_breakpoint_all_threads();
-    arm_inputwrite_stick_breakpoint_all_threads();
+    // DIAGNOSTIC input-capture HW breakpoints (perslot / inputstate / inputwrite /
+    // stick) are NO LONGER auto-armed: they hook stick/input processing and BREAK
+    // AIMING (right stick) for the main player on inject. They were only needed for
+    // the original input RE; the clone drive writes FrameState directly without them.
+    // Re-arm manually via the Numpad/PageUp hotkeys if input RE is needed again.
     log_line("Spawn-arg capture armed (trigger a checkpoint/respawn to capture)");
-    log_line("PERSLOT entry capture AUTO-ARMED on load");
-    log_line("INPUT block0 writer capture AUTO-ARMED on load");
-    log_line("INPUT block0 stick writer capture AUTO-ARMED on load");
-    log_line("REALINPUT branch capture AUTO-ARMED on load");
+    log_line("input-capture breakpoints NOT auto-armed (they broke aiming); spawn only");
     log_line("velprobe disabled on load (press Insert to enable)");
     log_line("Press PageUp to capture the velocity-writer RIP (run, then read log)");
     log_line("Press Numpad1 to capture block[0]+0/+4 writers (move Chloe after arming)");

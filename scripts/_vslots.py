@@ -6,7 +6,7 @@ PVT=0x142A4BFE8  # Player vtable
 NVT=0x142949638  # NadineBuddy vtable
 for label,vt in [("Player",PVT),("NadineBuddy",NVT)]:
     print(f"=== {label} vtable 0x{vt:X} ===")
-    for off in [752,568,736,1776,1792,1848]:
+    for off in [208,752]:
         fn=ida_bytes.get_qword(vt+off)
         print(f"  +{off} [slot {off//8}] -> 0x{fn:X} {ida_name.get_ea_name(fn)!r}")
 ida_pro.qexit(0)
