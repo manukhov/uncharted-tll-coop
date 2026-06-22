@@ -1,0 +1,32 @@
+=== 0x1410DE740: FinalizeTopLevelPlayerOwnerWithExternalSpawnState [0x1410DE740..0x1410DE79D] ===
+// Thin Player-side finalize/apply wrapper adjacent to the +0x3BD0 initializer cluster. Logs through outer_player+0x3C20 using the player.cpp / Player::Player(void) / Player::AllocateAnimData(...) literal block, then does little beyond calling 0x140CC1450(outer_player, external_state) and running the paired cleanup/finalize at 0x1415A1B80. This is therefore a stable Player-side wrapper around the stronger promotion seam below it.
+// Hidden C++ exception states: #wind=2
+__int64 __fastcall FinalizeTopLevelPlayerOwnerWithExternalSpawnState(__int64 a1, __int64 a2)
+{
+  __int64 v4; // rbx
+
+  sub_1415A17E0(
+    a1 + 15392,
+    "d:\\perforce\\code\\big4final-tll-release\\big4\\src\\game\\player\\player.cpp",
+    4753,
+    "struct FgAnimData *__cdecl Player::AllocateAnimData(const class ArtItemSkeleton *)",
+    -2);
+  v4 = ApplyProcessSpawnInfoStateIntoTopLevelPlayerOwner(a1, a2);
+  sub_1415A1B80();
+  return v4;
+}
+
+=== 0x1403D1CD0: sub_1403D1CD0 [0x1403D1CD0..0x1403D1CF3] ===
+__int64 sub_1403D1CD0()
+{
+  __int64 result; // rax
+
+  result = sub_141BBA060();
+  if ( result )
+  {
+    if ( HIBYTE(dword_143E07470) )
+      *(_BYTE *)(result + 721) = 1;
+  }
+  return result;
+}
+

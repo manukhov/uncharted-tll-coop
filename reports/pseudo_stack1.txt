@@ -1,0 +1,295 @@
+=== 0x1406CD220: sub_1406CD220 [0x1406CD220..0x1406CD50A] ===
+// Hidden C++ exception states: #wind=2
+char __fastcall sub_1406CD220(__int64 a1, __int64 a2, int a3, unsigned int a4, _QWORD *a5, __int64 a6)
+{
+  __int16 v7; // cx
+  int v8; // eax
+  __int64 v9; // rdx
+  void **v22; // [rsp+38h] [rbp-30h] BYREF
+  _BYTE *v23; // [rsp+40h] [rbp-28h]
+  _DWORD *v24; // [rsp+48h] [rbp-20h]
+  __int64 v25; // [rsp+50h] [rbp-18h]
+  __int64 v26; // [rsp+58h] [rbp-10h]
+  char v27; // [rsp+88h] [rbp+20h] BYREF
+
+  if ( a4 > 0xAE0F63DB )
+  {
+    if ( a4 == -1272203904 || a4 == -258032951 )
+      goto LABEL_7;
+    if ( a4 == -62434542 )
+    {
+      LOBYTE(v8) = sub_140C7BF80(a1, a2, a6, a5);
+      __asm { vzeroupper }
+      return v8;
+    }
+  }
+  else if ( a4 == -1374723109 || a4 == 167465181 || a4 == 1168772934 || a4 == -1804179740 || a4 == -1479071038 )
+  {
+LABEL_7:
+    if ( a4 > 0xA7D72AC2 )
+    {
+      if ( a4 == -1374723109 )
+      {
+        v7 = 1;
+      }
+      else if ( a4 == -1272203904 )
+      {
+        v7 = 6;
+      }
+      else
+      {
+        v7 = 5;
+      }
+    }
+    else
+    {
+      switch ( a4 )
+      {
+        case 0xA7D72AC2:
+          v7 = 7;
+          break;
+        case 0x9FB50DDu:
+          v7 = 0;
+          break;
+        case 0x45AA0F46u:
+          v7 = 4;
+          break;
+        default:
+          v7 = 2;
+          break;
+      }
+    }
+    if ( *((_DWORD *)a5 + 4) == 1 )
+    {
+      v9 = a5[1];
+      _RBX = (_DWORD *)(*a5 + 960LL);
+      v8 = *(_DWORD *)*a5 >> 3;
+      if ( (*(_DWORD *)*a5 & 8) != 0 )
+      {
+        _RCX = (_BYTE *)(*a5 + 304LL);
+        LOBYTE(v8) = *_RCX;
+        if ( *_RCX )
+        {
+          if ( (_BYTE)v8 == 1 )
+          {
+            v22 = &LegIkModeFreeze::`vftable';
+            v23 = _RCX;
+            v24 = _RBX;
+            v25 = a6;
+            v26 = v9;
+            LOBYTE(v8) = sub_140700BC0(&v22);
+          }
+          else
+          {
+            LOBYTE(v8) = v8 - 2;
+            if ( (unsigned __int8)v8 <= 2u )
+            {
+              v22 = &LegIkModeMoving::`vftable';
+              v23 = _RCX;
+              v24 = _RBX;
+              v25 = a6;
+              v26 = v9;
+              LOBYTE(v8) = sub_140700590(&v22);
+            }
+          }
+        }
+        else
+        {
+          __asm
+          {
+            vxorps  xmm0, xmm0, xmm0
+            vcomiss xmm0, dword ptr [rcx+4]
+          }
+        }
+      }
+      if ( _RBX )
+      {
+        _RBX[20] = 0;
+        __asm
+        {
+          vmovups ymm0, ymmword ptr [rbx]
+          vmovups ymmword ptr [rbx], ymm0
+          vmovups ymm0, ymmword ptr [rbx+20h]
+          vmovups ymmword ptr [rbx+20h], ymm0
+        }
+        _RBX[16] = _RBX[16];
+        _RBX[17] = _RBX[17];
+        __asm
+        {
+          vmovss  xmm0, dword ptr [rbx+48h]
+          vmovss  dword ptr [rbx+48h], xmm0
+          vmovss  xmm1, dword ptr [rbx+4Ch]
+          vmovss  dword ptr [rbx+4Ch], xmm1
+        }
+        _RBX[20] = _RBX[20];
+        _RBX[21] = _RBX[21];
+        _RBX[22] = _RBX[22];
+        _RBX[23] = _RBX[23];
+        _RBX[24] = _RBX[24];
+        _RBX[25] = _RBX[25];
+        _RBX[26] = _RBX[26];
+        __asm
+        {
+          vmovss  xmm0, dword ptr [rbx+6Ch]
+          vmovss  dword ptr [rbx+6Ch], xmm0
+          vmovss  xmm1, dword ptr [rbx+70h]
+          vmovss  dword ptr [rbx+70h], xmm1
+          vmovups xmm0, xmmword ptr [rbx+74h]
+          vmovups xmmword ptr [rbx+74h], xmm0
+        }
+        _RBX[33] = _RBX[33];
+        _RBX[34] = _RBX[34];
+        v8 = _RBX[35];
+        _RBX[35] = v8;
+        __asm
+        {
+          vmovups xmm0, xmmword ptr [rbx+90h]
+          vmovups xmmword ptr [rbx+90h], xmm0
+          vzeroupper
+        }
+        return v8;
+      }
+    }
+    else
+    {
+      LOBYTE(v8) = sub_141AE15B0((unsigned int)&v27, a2, *a5, a5[1], v7, a6);
+    }
+    __asm { vzeroupper }
+    return v8;
+  }
+  LOBYTE(v8) = sub_141937D20(a1, a2, a3, a4, (__int64)a5);
+  __asm { vzeroupper }
+  return v8;
+}
+
+=== 0x1406CCB30: sub_1406CCB30 [0x1406CCB30..0x1406CCD3F] ===
+// Hidden C++ exception states: #wind=1
+__int64 __fastcall sub_1406CCB30(__int64 a1, int a2, __int64 a3, __int64 a4, int a5, __int64 a6)
+{
+  __int64 result; // rax
+  unsigned __int16 *v7; // rbp
+  __int64 v8; // rsi
+  __int64 v9; // rbx
+  int v12; // edx
+  int v14; // [rsp+20h] [rbp-4E8h]
+  int v15; // [rsp+20h] [rbp-4E8h]
+  int v16; // [rsp+28h] [rbp-4E0h]
+  __int64 v17; // [rsp+40h] [rbp-4C8h] BYREF
+  __int64 v18; // [rsp+48h] [rbp-4C0h]
+  __int64 v19; // [rsp+50h] [rbp-4B8h]
+  __int64 v20; // [rsp+58h] [rbp-4B0h]
+  _BYTE v21[32]; // [rsp+60h] [rbp-4A8h] BYREF
+  _BYTE v22[1104]; // [rsp+80h] [rbp-488h] BYREF
+
+  v20 = -2;
+  switch ( a5 )
+  {
+    case 40233453:
+      v17 = a1;
+      v18 = a3;
+      v19 = a4;
+      result = *(_QWORD *)a3;
+      if ( !*(_WORD *)(*(_QWORD *)a3 + 72LL) )
+        result = sub_1406FB070(&v17, a6);
+      break;
+    case 700301452:
+      v17 = a1;
+      v18 = a3;
+      v19 = a4;
+      result = sub_1406FD4A0(&v17, a6);
+      break;
+    case 1012015440:
+      result = *(_QWORD *)a3;
+      if ( !*(_WORD *)(*(_QWORD *)a3 + 72LL) && !*(_WORD *)(a3 + 40) )
+      {
+        v7 = *(unsigned __int16 **)(result + 56);
+        result = *(_QWORD *)(a3 + 8);
+        v8 = *(_QWORD *)(result + 8LL * *(unsigned __int8 *)(*(_QWORD *)(a3 + 32) + 4LL) * *(_DWORD *)(a6 + 32));
+        if ( v8 )
+        {
+          sub_1415B86A0(
+            v21,
+            "d:\\perforce\\code\\big4final-tll-release\\big4\\src\\game\\anim\\anim-plugins.cpp",
+            112,
+            "void __cdecl ProcessAnimPhasePluginFunc(class OrbisAnim::WorkBuffer *,struct OrbisAnim::SegmentContext *,str"
+            "uct OrbisAnim::ProcessingGroupContext *,const class AnimCmdContext *,class StringId,const void *,class JointSet *)");
+          v9 = *(_QWORD *)(a6 + 8);
+          __asm
+          {
+            vmovss  xmm6, cs:dword_142BE91F4
+            vmovss  [rsp+508h+var_4E8], xmm6
+          }
+          sub_14181DF20(v9, v8, *v7, v7[8], v14, 0, 0);
+          sub_1406CCD40(v22, *(_QWORD *)(a6 + 24));
+          sub_1418CD770(&v17, v22, 0);
+          __asm { vmovaps xmm1, xmm6 }
+          sub_14181E400(v9, v12, v8, *v7, v15, v16, 0);
+          result = sub_1415B8CA0(v21);
+        }
+      }
+      break;
+    case -1129839055:
+      v19 = a4;
+      v18 = a3;
+      v17 = a1;
+      result = *(_QWORD *)a3;
+      if ( !*(_WORD *)(*(_QWORD *)a3 + 72LL) )
+        result = sub_141FF6DE0(&v17, a6);
+      break;
+    default:
+      result = sub_141937780(a1, a2, a3, a4, a5, a6);
+      break;
+  }
+  __asm { vmovaps xmm6, [rsp+508h+var_28] }
+  return result;
+}
+
+=== 0x141E9C480: sub_141E9C480 [0x141E9C480..0x141E9C551] ===
+__int64 __fastcall sub_141E9C480(__int64 a1)
+{
+  __int64 v1; // rdi
+  __int64 v3; // rdx
+  __int64 v4; // rcx
+  __int64 v5; // rdi
+  __int64 result; // rax
+  int v7; // ecx
+
+  v1 = *(_QWORD *)(a1 + 5368);
+  if ( v1 )
+  {
+    sub_1415B5300(*(_QWORD *)(a1 + 5368), 0, 0);
+    sub_1415B4200(v1);
+    *(_QWORD *)(a1 + 5368) = 0;
+  }
+  sub_141BBDF70(a1);
+  if ( *(_QWORD *)(a1 + 1408) )
+  {
+    sub_141E5AEE0();
+    v4 = *(_QWORD *)(*(_QWORD *)(a1 + 1408) + 288LL);
+    v5 = *(_QWORD *)(v4 + 88);
+    if ( *(_BYTE *)(v5 + 62) )
+    {
+      LOBYTE(v3) = 1;
+      sub_1420F0E90(*(_QWORD *)(v4 + 88), v3);
+      sub_141E5E960(*(_QWORD *)v5);
+    }
+    sub_141EA1340(a1);
+  }
+  sub_14207D840(*(_QWORD *)(a1 + 1320), a1);
+  result = *(_QWORD *)(a1 + 1704);
+  if ( result )
+  {
+    v7 = *(_DWORD *)(a1 + 1712);
+    if ( v7 )
+    {
+      result = *(_QWORD *)(result + 8);
+      if ( result )
+      {
+        if ( *(_DWORD *)(result + 188) == v7 )
+          return (*(__int64 (__fastcall **)(__int64))(*(_QWORD *)a1 + 2800LL))(a1);
+      }
+    }
+  }
+  return result;
+}
+

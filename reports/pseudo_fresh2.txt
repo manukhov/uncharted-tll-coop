@@ -1,0 +1,199 @@
+=== 0x141837530: sub_141837530 [0x141837530..0x14183775D] ===
+__int64 __fastcall sub_141837530(__int64 a1, char a2, int a3)
+{
+  __int64 v10; // rdx
+  const char *v11; // r8
+  __int64 v14; // r9
+  __int64 v15; // r10
+  char v21; // al
+  int v22; // edx
+  const char *v24; // r8
+  __int64 v26; // r9
+  __int64 v27; // r10
+  char v34; // al
+  int v36; // [rsp+40h] [rbp-438h]
+  char v37; // [rsp+50h] [rbp-428h] BYREF
+  __int64 v38; // [rsp+58h] [rbp-420h] BYREF
+  _DWORD v39[256]; // [rsp+60h] [rbp-418h] BYREF
+
+  v37 = a2;
+  if ( !a3 )
+    return sub_1417D71B0(a1, (int)a1 + 3040, (unsigned int)&v37, 1, 0);
+  if ( *(_DWORD *)(a1 + 256) == 1 )
+    goto LABEL_11;
+  _RAX = qword_143FE1088;
+  __asm
+  {
+    vxorps  xmm0, xmm0, xmm0
+    vmovss  xmm1, dword ptr [rax+0F0h]
+    vucomiss xmm1, xmm0
+  }
+  if ( __SETP__(*(_DWORD *)(a1 + 256), 1) || *(_DWORD *)(a1 + 256) != 1 )
+  {
+LABEL_11:
+    v22 = 0;
+    __asm { vcvttss2si rdi, cs:dword_142BE9E84 }
+    v24 = "Joypad";
+    _RCX = v39;
+    v26 = 6;
+    v27 = 8;
+    _RAX = qword_142BEA360;
+    do
+    {
+      __asm
+      {
+        vmovups ymm0, ymmword ptr [rax]
+        vmovups xmm1, xmmword ptr [rax+70h]
+        vmovups ymmword ptr [rcx], ymm0
+        vmovups ymm0, ymmword ptr [rax+20h]
+        vmovups ymmword ptr [rcx+20h], ymm0
+        vmovups ymm0, ymmword ptr [rax+40h]
+        vmovups ymmword ptr [rcx+40h], ymm0
+        vmovups xmm0, xmmword ptr [rax+60h]
+        vmovups xmmword ptr [rcx+60h], xmm0
+      }
+      _RAX += 16;
+      _RCX += 32;
+      __asm { vmovups xmmword ptr [rcx-10h], xmm1 }
+      --v27;
+    }
+    while ( v27 );
+    do
+    {
+      v34 = *v24;
+      if ( !*v24 )
+        break;
+      ++v24;
+      v22 = (v22 << 8) ^ v39[(unsigned __int8)(v34 ^ HIBYTE(v22))];
+      --v26;
+    }
+    while ( v26 );
+    __asm { vmovss  xmm0, cs:dword_142BE91F4 }
+    __asm { vmovss  [rsp+478h+var_438], xmm0 }
+    v38 = _RDI + qword_1466EC688;
+    __asm { vzeroupper }
+    return sub_1417D73C0(
+             (int)_RDI + (int)qword_1466EC688,
+             v22,
+             (int)a1 + 3040,
+             (unsigned int)&v37,
+             1,
+             (__int64)&v38,
+             a3,
+             (__int64)sub_1417D57D0,
+             v36);
+  }
+  else
+  {
+    v10 = 0;
+    v11 = "Joypad";
+    _RCX = (unsigned __int64)v39;
+    _RAX = qword_142BEA360;
+    v14 = 6;
+    v15 = 8;
+    do
+    {
+      __asm
+      {
+        vmovups ymm0, ymmword ptr [rax]
+        vmovups xmm1, xmmword ptr [rax+70h]
+        vmovups ymmword ptr [rcx], ymm0
+        vmovups ymm0, ymmword ptr [rax+20h]
+        vmovups ymmword ptr [rcx+20h], ymm0
+        vmovups ymm0, ymmword ptr [rax+40h]
+        vmovups ymmword ptr [rcx+40h], ymm0
+        vmovups xmm0, xmmword ptr [rax+60h]
+        vmovups xmmword ptr [rcx+60h], xmm0
+      }
+      _RAX += 16;
+      _RCX += 128LL;
+      __asm { vmovups xmmword ptr [rcx-10h], xmm1 }
+      --v15;
+    }
+    while ( v15 );
+    do
+    {
+      v21 = *v11;
+      if ( !*v11 )
+        break;
+      ++v11;
+      _RCX = (unsigned int)((_DWORD)v10 << 8);
+      v10 = (unsigned int)_RCX ^ v39[(unsigned __int8)(v21 ^ BYTE3(v10))];
+      --v14;
+    }
+    while ( v14 );
+    __asm { vzeroupper }
+    return sub_1417D5D40(_RCX, v10, a1 + 3040, 0);
+  }
+}
+
+=== 0x14160C120: sub_14160C120 [0x14160C120..0x14160C29B] ===
+__int64 sub_14160C120()
+{
+  unsigned __int64 v0; // rax
+  bool v1; // bl
+  unsigned __int64 v3; // rax
+  __int64 v4; // rdi
+  unsigned int v5; // ebx
+  const char *v6; // rdx
+  __int64 v9; // r8
+  __int64 v10; // r9
+  char v16; // al
+  _QWORD *Value; // rax
+  _BYTE v18[128]; // [rsp+60h] [rbp+0h] BYREF
+
+  v0 = sub_142207E90();
+  v1 = v0 < 0x18;
+  if ( v0 < 0x18 && *((_QWORD *)FlsGetValue(dwFlsIndex) + 4) )
+    return *((_QWORD *)FlsGetValue(dwFlsIndex) + 5);
+  v3 = sub_1415B1C80();
+  if ( v3 >= 0x18 || (v4 = qword_146B18090, (*(_DWORD *)(384 * (v3 + 8) + qword_1437E9700 + 64) & 8) == 0) )
+    v4 = qword_146B18088;
+  if ( v1 && v4 )
+  {
+    v5 = 0;
+    v6 = "renderFrameParams";
+    _RAX = ((unsigned __int64)v18 & 0xFFFFFFFFFFFFFFC0uLL) + 128;
+    _RCX = qword_142BEA360;
+    v9 = 17;
+    v10 = 8;
+    do
+    {
+      __asm
+      {
+        vmovups ymm0, ymmword ptr [rcx]
+        vmovups xmm1, xmmword ptr [rcx+70h]
+        vmovups ymmword ptr [rax], ymm0
+        vmovups ymm0, ymmword ptr [rcx+20h]
+        vmovups ymmword ptr [rax+20h], ymm0
+        vmovups ymm0, ymmword ptr [rcx+40h]
+        vmovups ymmword ptr [rax+40h], ymm0
+        vmovups xmm0, xmmword ptr [rcx+60h]
+        vmovups xmmword ptr [rax+60h], xmm0
+      }
+      _RAX += 128LL;
+      _RCX += 16;
+      __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+      --v10;
+    }
+    while ( v10 );
+    do
+    {
+      v16 = *v6;
+      if ( !*v6 )
+        break;
+      ++v6;
+      v5 = (v5 << 8)
+         ^ *(_DWORD *)(((unsigned __int64)v18 & 0xFFFFFFFFFFFFFFC0uLL) + 0x80 + 4LL
+                                                                              * (unsigned __int8)(v16 ^ HIBYTE(v5)));
+      --v9;
+    }
+    while ( v9 );
+    __asm { vzeroupper }
+    Value = FlsGetValue(dwFlsIndex);
+    Value[4] = v5;
+    Value[5] = v4;
+  }
+  return v4;
+}
+

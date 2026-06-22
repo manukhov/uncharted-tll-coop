@@ -1,0 +1,7 @@
+TARGET 0x1410F14C0: func_start=0x1410f14c0 name=CommitResolvedPlayerSpawn
+  xref=0x1410F1A2B type=17 func_start=0x1410f1910 func_name=SpawnPlayerFromRetainedDescriptor
+  xref=0x1410F2123 type=17 func_start=0x1410f1910 func_name=SpawnPlayerFromRetainedDescriptor
+  xref=0x1410F2DE1 type=17 func_start=0x1410f1910 func_name=SpawnPlayerFromRetainedDescriptor
+  xref=0x1410F3541 type=17 func_start=0x1410f3350 func_name=SpawnPlayerFallback
+  xref=0x146E4CD68 type=1 func_start=None func_name=None
+

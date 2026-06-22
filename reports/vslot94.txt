@@ -1,0 +1,14 @@
+=== Player vtable 0x142A4BFE8 ===
+  +752 [slot 94] -> 0x140CC17E0 'sub_140CC17E0'
+  +568 [slot 71] -> 0x141BB5E00 'sub_141BB5E00'
+  +736 [slot 92] -> 0x140A1DCC0 'sub_140A1DCC0'
+  +1776 [slot 222] -> 0x1410DE740 'FinalizeTopLevelPlayerOwnerWithExternalSpawnState'
+  +1792 [slot 224] -> 0x141BBA490 'BuildUpperPlayerStateOwnerAt1A0ThenRunPlayerSlot710'
+  +1848 [slot 231] -> 0x140CC18D0 'SeedPlayer15B4FromIncomingContext58E0'
+=== NadineBuddy vtable 0x142949638 ===
+  +752 [slot 94] -> 0x1401D4D20 'sub_1401D4D20'
+  +568 [slot 71] -> 0x141BB5E00 'sub_141BB5E00'
+  +736 [slot 92] -> 0x14042F6C0 'sub_14042F6C0'
+  +1776 [slot 222] -> 0x1403D1CD0 'sub_1403D1CD0'
+  +1792 [slot 224] -> 0x141BBA490 'BuildUpperPlayerStateOwnerAt1A0ThenRunPlayerSlot710'
+  +1848 [slot 231] -> 0x140433AC0 'sub_140433AC0'

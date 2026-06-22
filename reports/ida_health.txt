@@ -1,0 +1,7 @@
+=== 0x140A1DCC0: sub_140A1DCC0 [0x140A1DCC0..0x140A1DCCC] ===
+_DWORD *__fastcall sub_140A1DCC0(__int64 a1, _DWORD *a2)
+{
+  *a2 = *(_DWORD *)(a1 + 5540);
+  return a2;
+}
+

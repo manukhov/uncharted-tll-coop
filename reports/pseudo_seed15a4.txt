@@ -1,0 +1,19 @@
+=== 0x140CC18D0: SeedPlayer15B4FromIncomingContext58E0 [0x140CC18D0..0x140CC18F3] ===
+// Real Player vtable slot +0x738. If the incoming context pointer is non-null, copies context+0x58E0 into player+0x15B4; otherwise clears player+0x15B4. This is a narrow upper-context seed helper used from 0x1410FE840 after the typed context block is built, not a broad apply or promotion hook.
+__int64 __fastcall SeedPlayer15B4FromIncomingContext58E0(__int64 a1, __int64 a2)
+{
+  __int64 result; // rax
+
+  if ( a2 )
+  {
+    result = *(_QWORD *)(a2 + 22752);
+    *(_QWORD *)(a1 + 5556) = result;
+  }
+  else
+  {
+    *(_QWORD *)(a1 + 5556) = 0;
+    return 0;
+  }
+  return result;
+}
+

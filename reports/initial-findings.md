@@ -2503,15 +2503,16 @@ and restoration of normal buddy AI.
 The local controller was then upgraded from world-relative input to
 camera-relative movement.
 
-The active gameplay camera is retrieved through:
+The active gameplay camera route is now best read as:
 
-- `CameraManager* GetCameraManager(uint32_t screenIndex)` at `0x141C06420`
-- `CameraControl* CameraManager::GetCurrentCamera(bool)` at `0x141C0D4B0`
+- `ResolveScreenRouteEntityByIndex` at `0x141C06420`
+- `SelectPreferredCameraChildFromRouteEntity` at `0x141C0D4B0`
 
 The current camera's own transform getter at virtual slot `+0x2F0`
 (`0x1407723B0`) returns a stable camera-control transform, but it does not
 track the final orbit/look rotation seen by the player. The final gameplay
-camera orientation is instead cached on `CameraManager`.
+camera orientation is instead reached through the resolved route entity and its
+preferred camera child.
 
 Confirmed camera data:
 
@@ -15472,3 +15473,5118 @@ It is now:
 - the remaining unknown is which consumer drains that lane queue, and under
   what conditions it actually executes the queued startup callback in the
   campaign runtime
+
+### DECISIVE: The Deferred Queue Is `ndjob`, And The Scheduler Is `NdiNetInit` (multiplayer-gated)
+
+New tooling: `scripts/disasm_va.py` disassembles any VA directly from retail
+`tll.exe` with capstone (rip-relative resolved), bypassing the corruption-prone
+`ida/tll.i64`. `scripts/scan_drain.py` scans the 218 functions referencing the
+scheduler global for the queue drain side. These replace headless IDA disasm
+for the scheduler band, which the packed DB had left undefined (db bytes).
+
+Two identities are now confirmed by decoded assert strings, not inference:
+
+1. The deferred work queue rooted at `0x1437E9700` is the Naughty Dog **ndjob**
+   fiber job system (`shared/src/corelib/job/job.cpp`; strings `ndjob::Yield`,
+   `This job (%s) is not allowed to sleep`). The drain consumer is therefore
+   the generic ndjob worker pool, which always runs — it is NOT a special
+   per-feature consumer and NOT the blocker.
+
+2. The restart worker `0x1409FBA60` is **`NdiNetInit`** from
+   `game/net/flow.cpp`. Decoded strings inside it:
+   - `NdiNetInit`, `!g_ndiStartNetInit`
+   - `Trying to initialize net while it's active. This is very wrong.`
+   - `PAGE_MULTIPLAYER_CONNECTING`, `popup_mp_connecting`, `pMainPageStack`
+
+Exact enqueue mechanics (decoded, `0x1415B4560`):
+- global `0x1437E9700` holds a pointer to ndjob scheduler state
+- lane array at `state + 0x4FC0`, stride `0x2200` per lane, depth cap `0x400`
+- a task-group pointer (`r15`) is priority-inserted into `lane + 0xC8`, count at
+  `lane + 0`; lane id = `[group + 0x4C]`; affinity mask = `[group + 0x38]`
+- on insert it wakes workers via import `0x1425D6668`
+
+Exact record build in `NdiNetInit` (`0x1409FD068`):
+- `[rbp+0xC0] = 0x1409F9B20` (callback = field 0 of the 0x80-byte record)
+- trailing fields zeroed; priority field `[rsp+0x20] = 3`
+- `0x1415B43B0(handle,0)` alloc -> `0x1415B4870(batch,&record,handle)` copy 0x80
+  -> `0x1415B47C0(batch)` finalize -> tail into enqueue `0x1415B4560`
+- a second record at `[rbp+0x58]` schedules callback `0x1409F8320`
+
+Consequence (closes the P0 drain question, reframes the blocker):
+
+- The queue drain is generic ndjob and always fires; "the consumer never runs"
+  is the wrong model.
+- The thing that is multiplayer-gated is the **scheduling** side: the only
+  address-taken site of the ctxB-rebinding callback `0x1409F9B20` is inside
+  `NdiNetInit`, behind `PAGE_MULTIPLAYER_CONNECTING`.
+- So the live `ctxB+0x8 == 0` in single-player campaign is best explained as:
+  net is initialized once at boot (ctxB bound), the front-end/stage teardown
+  family `0x1409FD360` later clears it, and only `NdiNetInit` (entered through
+  the multiplayer connecting flow) ever re-schedules the rebind. Campaign never
+  runs `NdiNetInit`, so ctxB's owner is never re-bound.
+
+Strategic redirect:
+- Chasing "make the queued `0x1409F9B20` job fire in campaign" effectively means
+  booting the multiplayer net stack — wrong layer for local two-PC co-op.
+- The earlier finding stands and is now the better lever: the strongest
+  dual-slot manager caller already sources `AddOrUpdateNetPlayer (0x140A90550)`
+  from **ctxA** (`0x143E08C80`), using ctxB only as a gating/selection input.
+- Therefore the second-player bringup path should target ctxA / the net-player
+  manager directly, instead of resurrecting the multiplayer-gated ctxB owner
+  bind.
+
+### Verification + Pivot Evidence: NdiNetInit Is Front-End-Gated, AddOrUpdateNetPlayer Sources Via ctxA With A Local-Player Flag
+
+New tool `scripts/find_callers.py` does a byte-level scan of `.text`
+(opcode E8/E9 rel32 + `lea r64,[rip+disp]`), alignment-independent, because the
+packed IDB misses most direct CALL xrefs (IDA reported only `.pdata` refs for
+these). Verified against known data (it reproduces the 0x1409FD360 caller set
+and the 0x1409FD068 lea).
+
+Reframe verification — who actually calls the net-restart:
+- `NdiNetInit (0x1409FBA60)` direct callers: exactly three, all inside the
+  front-end `update`-token handlers:
+  - `0x1409F7AC2` (in `0x1409F78B0`)
+  - `0x1409F7E5F` (in `0x1409F7C60`)
+  - `0x1409FF205`
+- These are front-end stage/menu transition handlers; combined with the
+  `PAGE_MULTIPLAYER_CONNECTING` strings inside NdiNetInit, the ctxB owner rebind
+  is confirmed to ride the multiplayer connect flow, not normal campaign play.
+
+Pivot evidence — `AddOrUpdateNetPlayer (0x140A90550)`, full caller set (12) and
+internals:
+- callers cluster in the NetGameManager band (`0x140A392EC`, `0x140A3936A`,
+  `0x140A394C8`, `0x140A3A02C/06E`, `0x140A4DFFA/E035`, `0x140A58287/494`,
+  `0x140AD69B5`, `0x140ADF307`, `0x140C08656`).
+- manager `rcx` holds an array of up to 10 player slots, stride `0x43D0`,
+  scanned from `manager + 0x59C` (match key `[entry+0xE8]` vs slot, plus slot
+  index `r9`).
+- on create/update it resolves the source entry through **ctxA**:
+  - `0x140A9075E: lea rcx, [0x143E08C80]` (ctxA)
+  - `0x140A90765: call 0x14194E510(&ctxA, source_entry)`  -> resolved object
+  - then `0x140A90826: call 0x14194E6E0(source, slot, resolved, 1)`
+- slot population from source entry `r14`:
+  - `[slot+0x1DC] = [r14+0xE8]` (source/player id)
+  - `[slot+0x7B8] = [r14+0xE4]`, `[slot+0x7BC] = [r14+0xF0]`
+  - `[slot+0x7C0] = ymm [r14]` (32-byte block), `[slot+0x7E0] = [r14+0x20]`
+  - `[slot+0x1E0] = r9d` (player index)
+- 5th arg (byte `[rsp+0x4F0]`, `r12b`) is an **is-local-player** flag:
+  - when set, `[slot+0x1DC]` is overwritten from a local-id counter byte at
+    `0x14304172A`, which is then incremented
+  - `[slot+0x1E8] = r12b` records local-vs-remote on the slot
+
+Why this matters for the north star:
+- AddOrUpdateNetPlayer binds players via **ctxA**, exactly the context startup
+  binds and that does not depend on the multiplayer-gated ctxB owner.
+- It already has a local-player branch (the is-local flag + local-id counter at
+  `0x14304172A`).
+- So the concrete second-player seam is:
+  `AddOrUpdateNetPlayer(manager=0x143DD70C0, rdx=?, r8=source_entry, r9d=slot,
+  is_local=1)` with a minimal source entry carrying `+0xE8/+0xE4/+0xF0/+0x20`
+  and the leading 32-byte block, resolvable through ctxA.
+- Open follow-ups (P0b): (1) decode `0x14194E510` to pin the minimal valid
+  source-entry shape; (2) find the existing caller that already passes
+  is_local=1 (split-screen / second-controller path) and copy its source-entry
+  construction; (3) identify the promotion that gives that slot real
+  player-like ownership vs buddy/NPC.
+
+#### Exact AddOrUpdateNetPlayer call ABI (confirmed at 0x140A58287)
+
+```
+rcx       = 0x143DD70C0   ; NetGameManager
+rdx       = 0x143E08C80   ; ctxA  (2nd arg is literally ctxA)
+r8        = source_entry  ; rdi
+r9d       = slot_index    ; e.g. [rbx+0x1c]
+[rsp+0x20]= is_local byte ; 0 = remote here
+-> rax    = slot pointer  ; caller then inits [rax+0x220]=-1, [rax+0x455]=0, ...
+```
+
+is_local across callers: `0x140A58287` -> 0; `0x140A392EC` -> r15b (computed);
+`0x140A3A02C`/`0x140A3A06E` -> r14b (computed). So a local-player branch already
+exists in the dual-slot manager callers; finding the one that passes is_local=1
+gives a ready-made second-local-player construction to mirror.
+
+### P0b Progress: The Networked Second-Player Path Is The Multiplayer Net Subsystem
+
+Decoded the ctxA source resolver `0x14194E510(ctx, key)`:
+- ctxA holds a 12-entry named table at `ctx+0x800`, stride `0x1C0`; entry name at
+  `+0xE0`, typed value (tag 0x70) at `+0xFC`; global fallback at `ctx+0x1ED4`.
+- AddOrUpdateNetPlayer's `source_entry` is matched/resolved against this table,
+  i.e. a second player needs a corresponding ctxA entry.
+
+Decoded the remote add path `sub_140A58190` (contains the is_local=0 caller
+0x140A58287):
+- selects by global byte `0x143E02054`:
+  - ==0: scans the ctxA entry table (base `0x143E09568 = ctxA+0x8E8`, stride
+    0x1C0, 12 entries) matching id `[entry] == [desc+0x18]`; sets
+    `source_entry = matched ctxA entry`, then
+    `AddOrUpdateNetPlayer(manager, ctxA, entry, slot, is_local=0)`.
+    Post-init writes remote markers `[slot+0x88D/0x88E/0x88F] = (entry id !=
+    desc id)`.
+  - !=0: builds a name via 0x14014DB00 (string "late-join") and uses the
+    late-join variant `0x140A90A00`.
+- `0x140A90A00` (late-join AddOrUpdate variant) callers: 0x140A4DE0D,
+  0x140A4E829, 0x140A581FD, 0x140A583F5 (all in the net band).
+
+Identity confirmed: this whole path is the **multiplayer NetGameManager** (names
+`NetGameManager`, `NetCharacter-`, `late-join`). So both candidate seams for a
+real second player are parts of the multiplayer net subsystem:
+- ctxB owner bind  -> gated by NdiNetInit (multiplayer connect flow)
+- ctxA net-player  -> NetGameManager (multiplayer session player tracker)
+
+### Strategic fork (needs a decision)
+
+Two-PC co-op is inherently networked, and the engine's "real second player"
+machinery is the multiplayer net subsystem, which single-player campaign does
+not run. The decisive open question that picks the path:
+
+**Does single-player campaign register the local player (Chloe) through
+NetGameManager (0x143DD70C0) at all (an is_local=1 registration that runs
+offline)?**
+- If YES: the manager is live in campaign; adding Nadine as a second entry
+  (mirroring the is_local path + a ctxA entry) is the clean route.
+- If NO: the manager is dormant in campaign, and a real second player means
+  either standing up multiplayer net infra in campaign (heavy, fights mode
+  gating) OR elevating the existing campaign companion (Nadine buddy) to a
+  player-controlled entity with independent camera + a thin PC2 input/camera
+  transport (different track than buddy-control polish).
+
+### DECISIVE RUNTIME RESULT: NetGameManager Is Dormant In Single-Player Campaign
+
+Probe `scanner/src/netplayer_probe.cpp` (built
+`scanner/build/tll_netplayer_probe.exe`) read NetGameManager (0x143DD70C0) live
+during confirmed single-player campaign gameplay (as Chloe):
+
+- module base 0x7FF79F5E0000; manager 0x7FF7A33B70C0.
+- manager object IS constructed: `manager+0 = 0x7FF7A1FC3900` (vtable), ~6.4K
+  non-zero bytes, a constructed sub-object vtable at `slot[0]+0x3C0`.
+- but ALL 10 player slots (stride 0x43D0) are empty: id@0x1DC, idx@0x1E0,
+  local@0x1E8, id@0x59C, obj@0x3C8, payload — all zero.
+- RESULT: 0/10 occupied -> the local player (Chloe) is NOT registered through
+  NetGameManager in campaign.
+
+Conclusion (closes the P0b decisive question):
+- NetGameManager / the ctxA net-player path is multiplayer-only and dormant in
+  single-player campaign; the +0x3C0 vtables are constructed-but-unassigned
+  per-slot sub-objects, not live players.
+- Together with ctxB being NdiNetInit-gated, BOTH "real net player" seams belong
+  to the multiplayer subsystem that campaign never runs.
+- Therefore a second player in campaign cannot come from re-binding ctxB or
+  populating NetGameManager without effectively booting multiplayer net infra.
+- The viable route is to ELEVATE the existing live campaign companion (Nadine)
+  into a player-controlled entity (independent input + camera, host-authority),
+  then add a thin PC2 input/camera transport — distinct from buddy-control
+  polish. This becomes the new primary track.
+
+### MAJOR: The Engine Has Native Split-Screen / Local-2-Player Infrastructure
+
+String + disasm sweep of retail tll.exe shows the second-view and local-second-
+player machinery is NATIVE, not something the mod must build:
+
+Camera — two managers exist:
+- `GetCameraManager` (0x141C06420) takes an index and asserts `index <= 1`
+  (file camera*.cpp line 0x1AD). Manager handle table at `0x14697AD50`
+  (stride 0x10 handle/id pairs). So `CameraManager(0)` and `CameraManager(1)`
+  are first-class — a real second camera path.
+- `CameraManager::*` methods, `Hack separate split screen mode camera`,
+  `Switch on split screen mode`.
+
+Split-screen rendering — native:
+- `!g_renderOptions.IsHorizontalSplitscreenMode()`
+- `Cs_MergeSplitScreenBufferPost` (split-screen buffer merge compute shader)
+- `Foreground LOD split-screen tweak`, `Enable Split MP HUD`, `Fake Splitscreen`,
+  `Split Screen Debug`, `CONTROLLER_TYPE_SPLITINHALF`.
+
+Local-2-player — native:
+- `local-player-0`, `local-player-1`, `logicalPlayerID < g_maxLocalPlayers`,
+  `i < m_numPlayers`, `num-players`, `spot-player-count`
+- `controller-player-1`, `controller-player-2`,
+  `net-is-second-player-available?`, `net-login-split-screen`,
+  `net-logout-split-screen`, `AssignTeams: ... are splitscreen players`.
+
+Implication / architecture reframe (removes the "kludge" concern):
+- The two project fundamentals (second viewport + second local player) are
+  present in the engine, used by the MP modes, not by campaign.
+- Goal becomes: enable the engine's own split-screen / local-2-player path
+  INSIDE campaign, with Nadine as local-player-1.
+- That makes it a genuine local co-op build; Steam Remote Play Together (built
+  for native local co-op) then delivers the two-PC, own-screen experience with
+  no custom video stream and no input-routing hacks.
+- Open caveat: this infra is wired through the MP/net layer; need to prove it can
+  be activated in campaign without booting a full net session (render-level
+  splitscreen flag + CameraManager(1) + g_maxLocalPlayers may be drivable
+  independently). Next step = runtime activation probe.
+
+### DECISIVE RUNTIME RESULT: CameraManager(1) Is Live In Campaign
+
+Runtime read in a live campaign session (`scanner/build/tll_read.exe`):
+
+`0x14697AD50` camera-manager table:
+- slot0 handle/id = `(0x10E0200160, 0x19)`
+- slot1 handle/id = `(0x10E0200188, 0x1A)`
+
+Both referenced objects were then read directly as raw process addresses:
+- `0x10E0200160`
+- `0x10E0200188`
+
+They are not null placeholders. They are live paired objects with cross-links:
+- slot0 `+0x10 -> 0x10E0200188`
+- slot1 `+0x18 -> 0x10E0200160`
+- both also hold distinct downstream object pointers at `+0x28/+0x30/+0x38`
+
+This materially strengthens the architecture reframe:
+- `CameraManager(1)` is not just present in retail code; it is already
+  constructed and alive during single-player campaign gameplay.
+- Therefore the second-view foundation exists in campaign runtime right now.
+- The remaining activation problem is narrower: not "invent a second camera",
+  but "bind/use the already-live secondary camera path as local-player-1's
+  gameplay view".
+
+### Narrowed Static Activation Track: g_maxLocalPlayers / logicalPlayerID checks
+
+The assert string `logicalPlayerID < g_maxLocalPlayers` at `0x142841F48` has at
+least four code sites taking its address:
+- `0x14245FB87`
+- `0x14246907F`
+- `0x142490ABC`
+- `0x142499070`
+
+Three useful decoded windows show the same pattern:
+- extract a compact player-id field (`sar ... 8`, `and ... 3`)
+- compare against a global dword via `cmp reg, dword ptr [rip+...]`
+- assert via the `g_maxLocalPlayers` string if out of range
+- then branch on higher mode bits like `0x10000 / 0x20000`
+
+Concrete compare sites now pinned:
+- `0x142469076: cmp r14d, dword ptr [rip+0x1366293]`
+- `0x142490AB4: cmp ebp,  dword ptr [rip+0x133E856]`
+- `0x142499068: cmp esi,  dword ptr [rip+0x13362A2]`
+
+These are strong candidates for the runtime local-player limit / activation
+layer. Next step is to resolve those rip-relative globals and classify the three
+surrounding functions, then test whether bumping the limit and the splitscreen
+render flag wakes a usable second local-player path in campaign.
+
+### BREAKTHROUGH: `net-login-split-screen` Boots Local-Player-1 In Campaign
+
+A real in-process diagnostic was finally executed on the game thread through the
+live `NadineBuddy` update hook (`tll_teleport_hook.dll`, hotkey F7). The hook:
+- set `g_maxLocalPlayers` low dword to `2` (global `0x1437CF310`),
+- forced the second-player availability byte `0x143071038 = 1`,
+- called `net-login-split-screen` handler `0x140C02220`,
+- queried `net-is-second-player-available?` before/after,
+- then called `net-logout-split-screen` handler `0x140C02420`.
+
+Observed live log in confirmed campaign gameplay:
+
+- before:
+  - `avail_byte=0`
+  - `login_state=0`
+  - `max_local_players=2`
+  - `query=0`
+- after login:
+  - `avail_byte=1`
+  - `login_state=3`
+  - `max_local_players=2`
+  - `query=1`
+  - `cam0=0x10E0232880`
+  - `cam1=0x10E0236A00`
+- after logout:
+  - `avail_byte=1`
+  - `login_state=3`
+  - `query=1`
+
+This is the decisive activation result:
+- `net-login-split-screen` DOES successfully boot the second-local-player path
+  in single-player campaign once the two simple gates are satisfied:
+  - local-player limit = 2
+  - second-player availability byte = 1
+- The engine's own split-screen/local-2-player machinery is therefore NOT hard-
+  blocked behind a full multiplayer net session.
+- The returned camera objects (`cam0`, `cam1`) differ from the earlier handle
+  table objects, which strongly suggests the login path resolves/activates the
+  usable gameplay camera layer after boot.
+- `net-logout-split-screen` did not immediately clear the state in this test;
+  either logout is asynchronous/deferred, or the query reflects a latched local
+  activation state. That is secondary now.
+
+New primary question (much narrower than before):
+- after the local-player-1 path is live, how do we bind **Nadine** to it instead
+  of whatever stock local-player-1 target/slot the engine expects?
+- and can we switch the active second local player/camera to campaign Nadine
+  without relying on dormant multiplayer player-tracker paths?
+
+This is the first runtime proof that the project's preferred architecture is
+real: activate the engine's own local-2-player/split-screen path in campaign,
+then attach Nadine to local-player-1.
+
+### Runtime Local-Player Target Snapshot Before Split Login
+
+New in-process F6 diagnostic on the live `NadineBuddy` hook logged the local
+player resolver state during ordinary campaign gameplay, before another
+split-screen login attempt:
+
+- `local-player-0 = 0x10E1060F80`
+  - vtable RVA `0x2A4BFE8`
+  - inline name `Player`
+- `local-player-1 = 0x0`
+- `nadine-buddy = 0x10E1304880`
+  - vtable RVA `0x2949638`
+  - inline name `nadine-buddy`
+
+This is a very strong simplification of the binding problem:
+- campaign does NOT already keep a hidden stock actor in `local-player-1`
+- `local-player-1` is simply null before split-screen login
+- so the next question is not "which existing actor do we have to evict from
+  local-player-1", but "what object appears there after `net-login-split-screen`,
+  and can we make that object resolve to Nadine?"
+
+### BREAKTHROUGH 2: `local-player-1` Can Be Resolved To `NadineBuddy`
+
+A follow-up in-process experiment hooked the local-player resolver vfunc
+(`0x143FE1070->virtual +0xA8`) so that requests for index `1` return the live
+`NadineBuddy` object when present.
+
+Observed live log after `F7` (split login) then `F6` (target snapshot):
+
+- `resolve_local_player(1): original=0x0 patched=0x10E12FCB80`
+- `local-player-0=0x10E1060900`
+  - vtable RVA `0x2A4BFE8`
+  - inline name `Player`
+- `local-player-1=0x10E12FCB80`
+  - vtable RVA `0x2949638`
+  - inline name `nadine-buddy`
+- `nadine-buddy=0x10E12FCB80`
+  - same object as local-player-1
+
+This proves a second decisive point:
+- the engine's native local-player-1 path does NOT require a stock `Player`
+  class specifically at resolver time;
+- a live campaign `NadineBuddy` object can stand in as the resolved
+  `local-player-1` target, at least far enough for the runtime lookup layer to
+  accept and publish it.
+
+So the campaign co-op path is now materially narrowed to:
+1. raise native split-screen/local-player machinery in campaign (`F7` path);
+2. bind resolver/player-1 lookup to `NadineBuddy`;
+3. verify whether second camera / control / HUD actually consume that binding,
+   or whether a deeper compatibility layer still expects a `Player`-class actor.
+
+This is far beyond the earlier hypothesis stage. We now have runtime proof that:
+- campaign split-screen/local-player boot works,
+- and `NadineBuddy` can occupy the `local-player-1` resolver slot.
+
+### Runtime Owner-Mode Probe: `NadineBuddy + 0x1748 = 0` Produces Follower Behavior
+
+Live owner graph snapshot established that for the current `NadineBuddy`:
+- `owner + 0x1748 = 1`
+- `owner + 0x1894 = 0`
+- `owner + 0x1895 = 0`
+
+Given `0x141DE73D0`, that means the mode resolver effectively falls back to the
+cached mode at `+0x1748` directly. A targeted runtime patch then changed:
+
+- `0x10E1305FC8` (`NadineBuddy + 0x1748`) from `1` -> `0`
+
+Verified by immediate read-back.
+
+Observed in gameplay: Nadine simply follows Chloe / stays in buddy-follow
+behavior, i.e. no direct-control effect.
+
+Conclusion:
+- mode `0` is the follower/buddy-authored path, not a player-like control mode.
+- This is a clean narrowing of the owner graph: `+0x1748` is a real behavior
+  selector, and mode `0` is now characterized.
+- Next highest-value runtime mode probe is `+0x1748 = 2`.
+
+### Camera Layer Narrowing: Second Camera Needs A Higher Retained-Camera Transition/Bus, Not Just Pair Injection
+
+Further camera-side runtime/static work sharpened the second-view problem.
+
+What is now established:
+
+- The earlier global retained/live pair at `0x143D76C10/18` is **not** the right
+  seam for `CameraManager(1)` specifically. The higher focus handlers
+  `0x140746460` and `0x1407465E0` both call `GetCameraManager(0)` and therefore
+  primarily drive the primary camera/focus path.
+
+- The real second-camera-local cached target seam is inside the live object
+  returned by `GetCameraManager(1)` (e.g. `cam1=0x10E0236A00` during the probe):
+  - `cam1 + 0x2A8`
+  - `cam1 + 0x2B0`
+
+- `CameraManager(1)`-specific handlers:
+  - `0x140746150` = sync retained binding by mode for manager 1
+  - `0x140746340` = retained state transition handler for manager 1
+  Both validate `manager1+0x2A8/+0x2B0` against `ptr->(+8)->+0xBC`, mirror mode
+  bits, and then drive the same lower transition path as manager 0.
+
+- Lower second-camera state transition helpers:
+  - `0x141C074E0` = direct attach retained binding
+  - `0x141C07640` = direct detach retained binding
+  - `0x141C07730` = toggle attach/detach based on whether `+0x2A8/+0x2B0` are
+    currently valid
+
+- Runtime probes already tried:
+  1. global pair injection (`0x143D76C10/18`) with Nadine pair -> no visible effect
+  2. manager1-local pair injection (`cam1+0x2A8/+0x2B0`) -> no visible effect
+  3. direct manager1 attach (`0x141C074E0`) after injecting Nadine pair -> no visible effect
+  4. manager1 toggle path -> no visible effect
+
+- Fresh live Nadine identity fields for the camera seam:
+  - `Nadine + 0xA8 = 0x10E020FAE8`
+  - `Nadine + 0xBC = 0x000006BD` (or nearby session-specific variants like 0x6C0/0x6C1)
+
+Practical conclusion:
+- second camera ownership is deeper than the cached target pair and direct attach helpers;
+- the next real layer is the retained-camera command/message bus above them, not
+  more raw pair patching.
+
+Most promising next bus/commit seams:
+- `0x1413BA140` / `0x1413B9EA0` retained-player camera message handlers
+- `0x1414538E0` retained-camera state record builder
+- `0x141634F20` / `0x1416350A0` retained-camera work-item / payload queue helpers
+- `0x1416D1330` retained-camera command context initializer
+
+This means the camera problem is now well framed:
+`manager1 pair + attach` is not enough; need the higher retained-camera bus to
+commit/activate a stable second-camera owner/focus state for Nadine.
+
+### Retained-Camera Bus Narrowing: The Real Next Layer Is Above Manager1 Pair/Attach
+
+Deeper reverse on the retained-camera bus clarified why direct manager1 attach was
+still insufficient.
+
+Established lower layer:
+- `0x141C074E0` = direct attach retained binding for a camera manager
+  - sets `manager + 0x128 = 1`
+  - updates global camera-state blocks through `0x141837530`
+  - if `manager + 0x2A8/+0x2B0` form a valid live pair, accepts them and marks
+    slot activity
+- `0x141C07640` = inverse/detach path
+- `0x141C07730` = toggle attach/detach based on whether `+0x2A8/+0x2B0` are valid
+
+Runtime probes already tried and now considered closed enough:
+- manager1-local pair injection into live `cam1 + 0x2A8/+0x2B0`
+- direct attach `0x141C074E0`
+- toggle `0x141C07730`
+All produced no stable visible second-camera ownership.
+
+This pushed the camera investigation upward to the retained-camera bus.
+
+Key upper-layer constraints:
+- `0x140746150` / `0x140746340` are true CameraManager(1) retained transition
+  handlers; they mirror mode bits, validate `+0x2A8/+0x2B0`, then drive the
+  lower attach/detach helpers.
+- `0x140746460` / `0x1407465E0` are higher retained-camera owner/focus handlers,
+  but both currently query `GetCameraManager(0)` and primarily drive the primary
+  camera/focus path, not manager1 directly.
+- `0x141C0DFD0` (`CommitCameraTargetDescriptor`) and `0x141C04CE0`
+  (`ApplyCameraTargetState`) are the concrete target-state commit path, but they
+  still need a correct higher-level descriptor/command source.
+
+Most important new upper-bus finding:
+- `0x1414538E0` (`BuildRetainedCameraStateRecord`) is not a trivial payload copy.
+  It branches on multiple hashed command/opcode ids and can produce materially
+  different retained-camera records.
+- One especially relevant branch (`hash 0xCBD12A27`) uses a source pair from
+  `rsi`, validates it, resolves a runtime object, computes a transform from that
+  runtime object, and finally dispatches `0x14145BAD0(..., edx=4)` with the
+  built transform payload.
+- This is the first strong sign that the real second-camera ownership path is a
+  message/record-driven bus operation rather than just "put pair in +0x2A8 and
+  attach".
+
+Practical next focus:
+- identify the opcode/hash meanings for the `0x1414538E0` branches,
+- especially `0xCBD12A27`, `0xDD1AA255`, `0xC300E067`, `0xDC3D0961`,
+- then trace how those records are queued through `0x141634F20/0x1416350A0/...`
+  into the command bus and which one corresponds to stable camera-owner/focus
+  activation for a second view.
+
+### Correction: The `0x1414538E0 / 0x14145BAD0` Family Is Rail/Vehicle-Specific, Not A Generic Second-Camera Ownership Bus
+
+Further retail disassembly plus exact engine-hash recovery from the table at
+`0x142BEA360` materially narrows the retained-camera branch that previously
+looked like a generic second-camera owner/focus bus.
+
+Exact branch hashes now matched:
+
+- `0x6FE024E2` -> `npc-started-vehicle-jump`
+- `0x80D9115E` -> `get-speed`
+- `0x89BC72B5` -> `on-animation-done`
+- `0x9ADE823E` -> `slow-to-stop`
+- `0xC132C051` -> `on-animation-started`
+- `0xC300E067` -> `rail-scrub`
+- `0xDC3D0961` -> `get-spline-id`
+- `0xEB5AB718` -> `get-surface-pat`
+- `0xF515BD98` -> `transfer-to-spline`
+
+This reclassifies `0x1414538E0` sharply:
+
+- the surrounding helpers are not generic retained-camera verbs;
+- they are tightly anchored on rail/vehicle state:
+  - `0x141444010` hashes and dispatches `get-vehicle-class`
+  - `0x141444C50` hashes and dispatches `get-rail-controller`
+  - `0x14145BAD0` hashes and dispatches `go-ragdoll`
+- the `0xCBD12A27` branch still remains unnamed, but it now clearly sits in the
+  same rail/vehicle family:
+  - validates a retained/live pair from `rsi + 0x8/+0x10`
+  - resolves the corresponding live object through `0x141444C50`
+  - extracts a transform from `object + 0x100`
+  - then calls `0x14145BAD0(..., edx=4)` with that derived payload
+
+Concrete meaning of the correction:
+
+- `0x1414538E0` is not the generic second-camera ownership activation seam we
+  were hoping for;
+- it is a retained rail/vehicle camera-state/transition builder, likely used
+  when camera ownership has to follow rail-controller / vehicle / spline state.
+- `0x14145BAD0` is the corresponding retained rail-controller state-apply path,
+  not a general second-view owner commit.
+
+Practical consequence:
+
+- do **not** spend the next cycle trying to force manager1 ownership through
+  `0x1414538E0/0x14145BAD0`;
+- they remain useful as a supporting retained-camera family for vehicle/rail
+  scenarios,
+- but the generic `Nadine -> second camera` problem now needs a different,
+  more campaign-native camera ownership seam.
+
+### Split-Screen Boot Is Real, But The Stock Player-2 Source Still Routes Through `ctxB` / `NetPlayerData`, Not Nadine
+
+The next pass tightened what the split/local-player activation path actually
+does in campaign.
+
+`net-login-split-screen` (`0x140C02220`) is now better characterized:
+
+- its string gate is `*net-allow-sub-sign-in*`
+- it still requires the runtime availability byte `0x143071038`
+- it promotes the split login state at `0x14307103C` to `3`
+- it flips the render-side split flag `0x143FE0268 = 1`
+
+Its immediate helper band is also less opaque now:
+
+- `0x140B22C00`
+  - copies a `0x24`-byte sub-player descriptor block
+  - source is either the live global block at `0x143071008..+0x28` or a
+    fallback/default block when split state is not active yet
+- `0x140B22D00`
+  - is anchored by the assert strings:
+    - `NetPlayerData::Init`
+    - `m_isSlave == isSlave`
+  - so split login explicitly configures a `NetPlayerData` object as a
+    slave/sub-player-side record
+- `0x140B222B0`
+  - seeds split-side `NetPlayerData`/profile blocks from:
+    - `*net-starting-gold*`
+    - `*net-starting-xp*`
+    - `*net-starting-mission-0*`
+    - `*net-starting-mission-1*`
+    - `*net-starting-mission-2*`
+
+The decisive new correction is one layer higher:
+
+- after split login, the large refresh path `0x140ACC140` still pulls its
+  stock player-2 content through the old `ctxB` band
+- it calls `0x14194CFB0(&ctxB)` to count active source entries
+- and if more than one source is available, it calls `0x140B21DE0`
+  before continuing the refresh
+
+That means:
+
+- campaign **can** boot the engine's native split/local-player state
+- but the stock player-2 source behind that state is still tied to the
+  `ctxB` / owner-selection family, not to a campaign-native Nadine owner path
+
+`net-logout-split-screen` (`0x140C02420`) sharpens the same picture from the
+other side:
+
+- it funnels into `0x140B9DE90`
+- that helper reinitializes the same split-side `NetPlayerData` blocks,
+  clears `0x14307103C` and `0x143071038`,
+  and conditionally re-runs `0x140ACC140`
+
+Practical consequence:
+
+- split/local-player activation remains a **real and useful** supporting seam
+- but it is **not** yet a self-sufficient foundation for Nadine's stable second
+  view
+- the real next camera-side options are now narrower:
+  1. override the stock `ctxB`-fed player-2 source that `0x140ACC140`
+     refreshes from, or
+  2. bypass that stock feed and attach a campaign-native Nadine camera owner
+     path directly
+
+### Further Narrowing: Split Login Boots Summary State, But Stock `local-player-1` Actor Resolution Still Stays Null
+
+The next static/runtime pass sharpened the exact boundary between the useful
+split/local-player seam and the still-missing actor/camera ownership layer.
+
+`0x140ACC140` is now narrower than "generic split refresh":
+
+- it does **not** call `GetCameraManager(1)` or any direct camera-owner handoff
+  path
+- after `0x14194CFB0(&ctxB)` and optional `0x140B21DE0`, it just publishes the
+  chosen source-summary pointer back through:
+  - `0x14194E3B0(&ctxA, &chosen_source)`
+  - `0x14194E3B0(&ctxB, &chosen_source)`
+- so the function refreshes source/session summary state; it is not where a
+  live second actor or camera owner is born
+
+The chosen source path is also more concrete now:
+
+- `0x140B21DE0`
+  - if `ctxB+0x18` is valid, returns the current-selected ctxB source pointer
+  - otherwise falls back to the split sub-player descriptor block rooted at
+    `0x143071008`
+- `0x140B22C00`
+  - copies only a `0x24`-byte split sub-player descriptor
+  - this is a descriptor/state feed, not a live actor pointer
+- `0x14194E510`
+  - resolves only **kind `0x70`** payloads from those source entries
+  - returns either:
+    - `ctx+0x1ED4` when fallback kind `ctx+0x1ED0 == 0x70`, or
+    - `entry+0xFC` when an active 0x1C0-stride ctx entry has kind `0x70`
+- `0x14194E3B0`
+  - hands that selected source summary through `ctx+0x8->virtual +0x80(..., 0x70)`
+  - then refreshes the concrete `0x70` payload behind either
+    `ctx+0x1D00+0xFC` or the matching active entry's `+0xFC`
+
+That means the stock split path is still operating on a source-descriptor /
+summary layer, not directly on `NadineBuddy` or a campaign-native second camera
+owner.
+
+The runtime side tightened the same picture:
+
+- the hook log repeatedly shows
+  `resolve_local_player(1): original=0x0 patched=0x...`
+  while split login is already active (`login_state=3`, `cam1 != 0`)
+- so even after `net-login-split-screen` has successfully raised split state
+  and `CameraManager(1)`, the stock campaign resolver path can still return
+  null for `local-player-1`
+- `NadineBuddy` appears there only because the hook on
+  `0x143FE1070->virtual +0xA8` patches the return value
+
+So the current state is now much cleaner:
+
+- split/local-player boot is real
+- `CameraManager(1)` is real
+- but stock campaign actor resolution for local-player-1 is still separate from
+  that summary/descriptor path and still unresolved
+
+This sharply narrows the next frontier:
+
+1. identify the stock `local-player-1` resolver-owner contract behind
+   `0x143FE1070->virtual +0xA8`, and
+2. separately identify a campaign-native camera owner/follow path for Nadine,
+   instead of assuming the split summary helpers already solve actor ownership
+
+### Resolver-State Narrowing: `0x143FE1070` Is A Startup-Copied Local-Player Routing Block
+
+One last static pass also narrowed the global behind the local-player hook.
+
+`0x143FE1070` is not just a raw "current local-player pointer":
+
+- startup/init code at `0x140154A59` copies a template block into it
+- a later config/update path at `0x1415EF17F` copies another `0x120`-byte
+  block over the same global
+- so this is a real local-player routing/resolver state object, not a single
+  actor pointer
+
+The first nontrivial consumer also makes that concrete:
+
+- `0x14128396E`
+  - indexes `0x143FE1070 + 0x78 + local_index*8`
+  - and calls the resulting object's `virtual +0x30(token)`
+
+That means the current local-player seam is already split into layers:
+
+- `0x143FE1070` = routing/resolver state block
+- `virtual +0xA8` = later actor-resolution step inside that block
+- the current camera/ownership blocker is therefore inside the resolver-owner
+  contract above `+0xA8`, not inside the split summary helpers below
+
+### New Class Split: `ctxA` And `ctxB` Are Separate Startup-Built Context Classes
+
+The next pass pinned the two campaign-visible source/selection globals as real
+sibling classes rather than one fuzzy "shared context" blob.
+
+Early init is now concrete:
+
+- `0x140072A50`
+  - calls `0x140ACBE10` on `0x143E08C80`
+  - installs vtable `0x1429E61F0`
+- `0x14007C100`
+  - calls `0x140ACBE10` on `0x143E0EF00`
+  - zeroes the embedded owner field at `ctxB + 0x8`
+  - installs vtable `0x1429EF890`
+  - seeds `0x143E10E88`
+
+`0x14194AF00` is the real hard reset for these context objects:
+
+- clears the 12 `0x1C0`-stride active-entry bands
+- clears `ctx+0x18`, `ctx+0x8`, `ctx+0x200`, `ctx+0x20C`
+- resets `ctx+0x1EC0`, `ctx+0x1ECC`, `ctx+0x1F54..+0x1F5C`
+- seeds the default bytes around `+0xA1/+0xB0..+0xF0`, `+0x7C0`, `+0x748`
+
+This also forced one correction:
+
+- `0x140B1E050` is **not** an owner teardown helper by itself
+- it hard-resets global `ctxB` through `0x14194AF00`
+- then clears the staged globals around `0x143E10E80/0x143E10E90`
+
+So `ctxA` / `ctxB` are now a real, typed pair:
+
+- `ctxA = 0x143E08C80`, vtable `0x1429E61F0`
+- `ctxB = 0x143E0EF00`, vtable `0x1429EF890`
+
+### New `ctxB` Surface: Concrete Vtable Slots And Owner Wrappers
+
+The `ctxB` vtable is now concrete enough to stop treating it as an opaque
+selection helper.
+
+Pinned slots:
+
+- `+0x28 = 0x140B1DF30`
+  - returns fixed token `0xA`
+- `+0x30 = 0x140B1DF20`
+  - returns `1`
+- `+0x38 = 0x140B204A0`
+  - toggles bit `ctxB+0x200` and dispatches owner `+0x78`
+- `+0x40 = 0x140B204D0`
+  - returns inverted low-bit state of `ctxB+0x200`
+- `+0x48 = 0x140B20710`
+  - clears `ctxB+0x1FD0`
+  - under global gate `0x1437E6F39`, sets `ctxB+0x200=1` and calls
+    `owner->virtual +0x78(ctxB, 1)`
+  - clears `ctxB+0x10`
+- `+0x50 = 0x140B20760`
+  - only marks dirty byte `0x1437E7513`
+- `+0x58 = 0x140B20770`
+  - resets small ctx/global runtime flags and tails into `0x140ACC140`
+- `+0x60 = 0x140B207A0 -> 0x14194C550`
+- `+0x80 = 0x140B20240`
+  - if `ctxB+0x18` is live, sets `ctxB+0x1F80=1`
+  - always sets `0x1437E7513=1`
+- `+0x88 = 0x140B20260`
+  - packet/publish worker that sets `ctxB+0x10=1` and packages a large payload
+    through `0x141C9ED50`
+- `+0x98 = 0x140B20490`
+  - returns `0`
+- `+0xA8 = 0x140B204E0`
+  - heavy token-keyed packet/publish worker through `0x141C9ED50`
+
+The owner wrappers above it are also now concrete and operate on the embedded
+owner field directly:
+
+- `0x14194DB30` -> `ctxB+0x8 -> owner->virtual +0x58(ctxB, bool)`
+- `0x14194DB70` -> `ctxB+0x8 -> owner->virtual +0x60(ctxB, bool)`
+- `0x14194DB90` -> `ctxB+0x8 -> owner->virtual +0x98(ctxB)`
+- `0x14194DBD0` -> `ctxB+0x8 -> owner->virtual +0xA8(ctxB, token)`
+- `0x14194DD80` -> `ctxB+0x8 -> owner->virtual +0x88(ctxB, bool)`
+
+That matters because the current bind question is now narrower:
+
+- the active `ctxB` object already knows exactly which owner interface it wants
+- the unresolved part is the live producer of `ctxB+0x8`, not the shape of the
+  consumer side
+
+### New Narrowing: `ctxB` Is Stock Player-2 Source Selection, Not The Actual Local-Player Resolver
+
+The next static pass also clarified the dividing line between the split/session
+summary path and the real local-player resolver path.
+
+Useful local helpers:
+
+- `0x14194C980`
+  - returns the current-selected source entry:
+    - fallback `ctxB+0x1D00` when `ctxB+0x18 == 0`
+    - otherwise the matching active `0x1C0` entry by `ctxB+0x1EC4`
+- `0x14194C870`
+  - returns active entry `index` from `ctx+0x800 + index*0x1C0`
+  - or null if that slot is inactive
+
+And the wider front-end/state users now line up with that reading:
+
+- `0x1409ECB50`
+  - refreshes `ctxA`
+  - consults `ctxB+0x18`, pending state, and selection counters
+  - publishes follow-up records
+- `0x140AC0CE0` and `0x140AC1780`
+  - refresh `ctxA`
+  - then consult the bound `ctxB` owner through `+0x50/+0x60`
+  - then continue into packet/session state publication
+
+So the current role split is now sharp:
+
+- `ctxB` = stock player-2 source-selection / summary controller
+- `0x143FE1070->virtual +0xA8` = separate local-player actor resolver path
+
+That leaves the actual frontier much cleaner:
+
+1. identify the resolver-owner contract above `0x143FE1070->virtual +0xA8`
+2. identify the campaign-native Nadine camera owner/follow path
+3. treat `ctxB` as a supporting stock player-2 source family, not as the final
+   actor/camera ownership layer
+
+### Camera-Layer Correction: `0x143FE1070` Feeds The Second-Camera Attach Path Directly
+
+The next pass forced one important correction:
+
+- `0x143FE1070` is **not** a monolithic local-player actor object.
+- It is a startup/config-copied `0x120`-byte bundle whose first qword is used as
+  a live owner pointer, while the rest of the block includes generic registered
+  descriptor/formatter state.
+
+Static startup/config refresh now lines up like this:
+
+- startup copy:
+  - `0x1401546E7 .. 0x140154ABC`
+- later refresh from config payload:
+  - `0x1415EF130`
+- both then register the same descriptor blocks through:
+  - `0x141830F50`
+
+The generic descriptor side is now concrete enough to separate it from the
+actor resolver:
+
+- registered blocks around `0x143684668 .. 0x143684898` and `0x14317C3C8`
+- formatter/helper family:
+  - `0x141830C70` boolean formatter
+  - `0x141830CA0` integer formatter
+  - `0x141830CB0/0x141830CC0/0x141830CD0/0x141830CE0`
+  - `0x141831150`
+  - `0x1418311D0`
+
+So the earlier broad reading
+
+- "`0x143FE1070` is the local-player resolver object and the `+0x78` family are
+  its resolver subobjects"
+
+is too coarse.
+
+The sharper reading is:
+
+- `0x143FE1070` = startup/config bundle
+- `*(qword*)0x143FE1070` = live owner pointer
+- that owner pointer supplies `virtual +0xA8(local_index)` for actor
+  resolution
+
+The decisive proof is now camera-side:
+
+- `0x141C0DFD0`
+  - reads `rcx = qword ptr [0x143FE1070]`
+  - then calls `owner->virtual +0xA8(screen_index)`
+
+That means the Nadine `resolve_local_player(1)` hook sits directly in the
+second-camera attach pipeline, not just in a higher summary/query layer.
+
+### Second-Camera Manual Cluster: Exact Registration Map
+
+The registration block around `0x14074D220` is now concrete:
+
+- `0x140745CD0` <- `Manual Camera 1`
+- `0x140746260` <- `Joypad 1 Controls Game`
+- `0x140745D70` <- `Manual Orthographic Sun Camera`
+- `0x140746150` <- `Manual Camera 2`
+- `0x140746340` <- `Joypad 2 Controls Game`
+- `0x140745C80` <- `Swap Joypad Screens`
+- `0x1436732CA` <- `Bind Manual Cam To Player Parent`
+- `0x1436732C9` <- `Bind Manual Cam To Player`
+
+Current file defaults in retail image:
+
+- `0x1436732CA = 1`
+- `0x1436732C9 low byte = 0`
+
+Sibling runtime bytes that participate in the same cluster:
+
+- `0x1436732CB`
+- `0x1436732CC`
+- vector/scalar payload region:
+  - `0x1436732D0`
+  - `0x1436732E0`
+
+### `CameraManager(1)` Attach/Detach Path Is Now Concrete
+
+`0x141C074E0` is the actual attach side:
+
+- sets `camera+0x128 = 1`
+- toggles two lane/state bands under:
+  - `0x143FE1088 + 0xDB0 + (screen_index + 4) * 0xBF0`
+  - `0x143FE1088 + 0xDB0 + (screen_index + 2) * 0xBF0`
+- if `camera+0x2A8/+0x2B0` does **not** already resolve to a live retained
+  object:
+  - builds fallback descriptor `0x14373A820`
+  - pushes it through `0x141C0DFD0`
+  - caches returned `(ptr,id)` back into `camera+0x2A8/+0x2B0`
+
+`0x141C07640` is the detach side:
+
+- sets `camera+0x128 = 0`
+- flips the same `0x143FE1088` lane/state bands the opposite way
+- if cached retained target is still valid, calls:
+  - `target->virtual +0x208(..., 2)`
+- then clears per-screen active byte under `0x14383DE48`
+- and clears runtime byte `0x1436732CB`
+
+`0x141C07420` is the smaller lane-state helper:
+
+- sets `camera+0x128 = bool`
+- only toggles the two `0x143FE1088 + 0xDB0 + idx*0xBF0` bands
+
+### `0x141C04CE0` Accepts Actor Override, Not Just Stock Player
+
+The builder below the resolver path is now clearer:
+
+- `0x141C0DFD0`
+  - resolves actor through `(*0x143FE1070)->virtual +0xA8`
+  - packages descriptor + small control payload
+  - calls `0x141C04CE0`
+
+And `0x141C04CE0` itself:
+
+- accepts an optional resolved actor override
+- falls back to descriptor-owned object only when override is null
+- later copies:
+  - `[actor + 0xA8]`
+  - `[actor + 0xBC]`
+- into camera-state payload
+- calls actor virtual `+0x10`, then potentially returned object `+0x20`
+- shows no obvious static `Player`-only class gate
+
+So on the static path, a resolved `NadineBuddy` can flow through this builder.
+
+### Manual-Camera Follow Layer: Concrete Campaign-Side Sinks
+
+The manual-camera cluster above the attach helper is now split more cleanly.
+
+`0x140746150` (`Manual Camera 2`):
+
+- for mode/state `4`, toggles `CameraManager(1)` between:
+  - `0x141C07640` detach
+  - `0x141C074E0` attach
+- returns whether a valid `(ptr,id)` is now cached at `camera+0x2A8/+0x2B0`
+
+`0x140746340` (`Joypad 2 Controls Game`):
+
+- mirrors/toggles bit `0x10` between paired objects
+- if cached retained target exists:
+  - drives `0x141C07420`
+- otherwise:
+  - clears `camera+0x128`
+  - toggles the same `0x143FE1088` lane/state bands
+
+`0x140746500` / `0x140746640` establish a more useful sink than the old
+split-summary path:
+
+- both call `0x141C0DFD0`
+- both cache the returned `(ptr,id)` into:
+  - `0x143D76C10`
+  - `0x143D76C18`
+- `0x140746640` uses fallback descriptor:
+  - `0x143053770`
+- `0x140746500` uses caller-provided descriptor and writes the same cache
+
+This cache is now the practical manual-camera actor seam:
+
+- not `ctxB`
+- not the generic descriptor sub-blocks under `0x143FE1070`
+- but the resolved actor pair cached at `0x143D76C10/18`
+
+`0x141C07E20` is the follow-state writer sitting immediately under that layer:
+
+- called from:
+  - `0x140745B2D`
+  - `0x14074610C`
+  - `0x141767DA5`
+  - `0x141DA7CFE`
+- resolves the currently cached actor under `camera+0x100`
+- validates it through `0x141F53500`
+- writes:
+  - transform block to `actor+0x3A0/+0x3B0`
+  - follow vectors/scalars to `actor+0x1D0..+0x21C`
+
+But the next pass forced one more correction:
+
+- `0x141C07E20` itself now looks **manual/debug-heavy**, not like the final
+  campaign gameplay camera path.
+- two of its extra callers are now clearly or strongly debug-flavored:
+  - `0x141767DA5`
+    - sits under `teleportplayer`
+  - `0x141DA7CFE`
+    - follows a selected-object / top-camera flavored loop
+- the nearby registration cluster around `0x14074A580` also confirms camera
+  debug tooling:
+  - `Stick Camera`
+  - `Draw Stick Camera Debug`
+  - `Draw Stick Pan Camera Debug`
+  - `Focus Top Camera on Selected Object`
+
+So the manual-camera layer remains useful as a resolver proof, but it should
+not be treated as the final campaign-native second-camera ownership path.
+
+### Stronger Gameplay Camera Anchor: The Existing Manager-0 Retained-Camera Family
+
+The more useful non-debug camera result now sits back in the already-known
+retained-player family.
+
+`0x140EDE5E0` is now concrete:
+
+- if retained state is absent:
+  - calls `0x1410F3350`
+  - then `GetCameraManager(0)`
+  - then `0x141C07640`
+- if retained state is present:
+  - calls `0x1410F3DD0`
+  - then `GetCameraManager(0)`
+  - then `0x141C074E0`
+- both branches finish by resolving slot `0` through `0x1410F0F60`
+
+This makes the manager-0 path sharper:
+
+- `0x1410F3350`
+  - fallback spawn/refresh path in the upper retained-player family
+- `0x1410F3DD0`
+  - `RefreshPrimaryRetainedPlayerCamera`
+- `0x141C078D0`
+  - heavy retained-camera update path
+- `0x141C074E0 / 0x141C07640`
+  - attach/detach bridge for the active retained player
+
+That means the current strongest gameplay-facing question is no longer
+"what else can the manual camera debug tools do?"
+
+It is now:
+
+- whether there is a **manager-1 / local-player-1 analog** to this mature
+  manager-0 retained-camera lifecycle,
+- or whether Nadine camera ownership will require adapting the manager-0 family
+  rather than leaning on the debug/manual camera stack.
+
+So the remaining camera blocker is now narrower than before, but slightly
+different:
+
+1. which exact owner pointer gets installed at `*(qword*)0x143FE1070` at
+   runtime,
+2. whether a manager-1/local-player-1 analog to
+   `0x1410F3DD0 -> 0x141C078D0 -> 0x141C074E0`
+   already exists,
+3. if not, where the manager-0 retained-camera lifecycle can be reused or
+   adapted for Nadine.
+
+### Camera Route Family Is Now Clearer Than The Old `GetCameraManager` Reading
+
+One important correction is now strong enough to treat as canonical:
+
+- `0x141C06420` is **not** a raw `CameraManager(index)` getter.
+- it takes a screen/route index `0..1`,
+- reads the corresponding `(ptr,id)` pair from the two-entry table at
+  `0x14697AD50`,
+- validates the live object through `ptr->+8 / entity+0xBC`,
+- marks `entity+0x72`,
+- and returns the resolved **screen-route entity**.
+
+So the live second-camera seam is now better described as a
+`screen-route entity` family, not as a direct `CameraManager(index)` family.
+
+The startup builder for that table is now concrete too:
+
+- `0x141C04F80`
+  - loops exactly two entries,
+  - hashes the `CameraManager` request token,
+  - builds selector-backed packets via `0x1417C32A0`,
+  - wraps/materializes them through `0x1417C3790`,
+  - and stores the resulting `(ptr,id)` pairs into `0x14697AD50`.
+
+There is also a direct table consumer below it:
+
+- `0x141C051F0`
+  - iterates the same two-entry table,
+  - resolves each live route entity,
+  - notifies the global observer at `0x1438929B8` through `virtual +0x8`,
+  - then calls route-entity `virtual +0x48`.
+
+So the startup route-table itself is already live and consumed, not dead setup.
+
+### Route Entity vs Retained Slot: The Useful Split
+
+The current camera frontier is cleaner if we separate two indices:
+
+- retained-player slot paths continue to key off `+0x144` in their own owner
+  families:
+  - `0x14104EC00`
+  - `0x14104F080`
+  - `0x141051500`
+  - `0x1410F0D10`
+  - `0x1410F0F60`
+  - `0x141C077B0`
+- screen-route/camera ownership paths key off `+0x124` in their own owner
+  families:
+  - `0x141C0DFD0`
+  - `0x141C0F57B`
+  - `0x140746260`
+  - `0x140745CD0`
+
+That means the previous "find manager1 clone" framing was too coarse.
+What we actually need is the owner family that carries the **screen-route
+index at `+0x124`**, not another pass through generic retained-slot helpers.
+
+### `0x141C0D4B0` And `0x141C0DFD0` Are Route-Entity Workers
+
+`0x141C0D4B0` now reads as a route-entity child selector:
+
+- scans the route entity child list at `route+0x100`
+- validates live children
+- filters on child mode `+0x1B0`
+- and returns the preferred camera child
+
+This is a stronger read than the old "CameraManager::GetCurrentCamera(bool)"
+guess.
+
+`0x141C0DFD0` also got stronger:
+
+- it is not just a manual-camera one-off
+- it has a broad direct-call fanout across gameplay code
+- it locks `route+0x2C0`
+- resolves the actor through:
+  - `(*(qword*)0x143FE1070)->virtual +0xA8(route+0x124)`
+- commits the descriptor through:
+  - `route+0x2F0`
+  - `0x141C04CE0`
+- then notifies the external observer at `0x1438929B8` through `virtual +0x30`
+
+So `0x141C0DFD0` is now the strongest generic campaign-facing camera-route
+worker on this layer, not just a debug/manual attach stub.
+
+### The `0x143FE1070` Bundle Still Matters, But As A Resolver Owner
+
+The startup/config bundle reading is now stronger too:
+
+- `0x140154A59`
+  - bulk-copies a prepared block into `0x143FE1070`
+- `0x1415EF17F`
+  - does the same from another config/startup path
+- `0x14128396E`
+  - uses subobjects under `0x143FE1070 + 0x78 + idx*8`
+  - and dispatches through their `virtual +0x30`
+
+So `0x143FE1070` still does **not** look like a direct actor pointer.
+It looks like a startup-copied resolver-owner bundle with per-index subobjects,
+and `0x141C0DFD0` depends on that bundle's `virtual +0xA8` contract.
+
+### Manual Camera Paths Are Now Easier To Place
+
+The explicit handlers around the old manual seam now fit the route-entity model:
+
+- `0x140745CD0`
+  - `Manual Camera 1`
+  - toggles attach/detach on screen-route entity `0`
+- `0x140746260`
+  - `Joypad 1 Controls Game`
+  - uses screen-route entity `0`
+  - drives `0x141C07420` or lane-state bands under `0x143FE1088`
+- `0x140746460`
+  - uses the cached actor pair at `0x143D76C10/18`
+  - otherwise rebuilds it through `0x141C0DFD0`
+- `0x1407465E0`
+  - sibling path with fallback descriptor `0x143053770`
+- internal block `0x141C075DC`
+  - writes the returned `(ptr,id)` into `route+0x2A8/+0x2B0`
+  - and sets a per-screen activity byte at `0x14383DE48[route+0x124]`
+
+This means the manual-camera family is no longer our best *final* gameplay
+camera seam, but it does show a stable, writable route-entity contract:
+
+- actor override cache at `0x143D76C10/18`
+- attached target pair at `route+0x2A8/+0x2B0`
+- activity byte keyed by `route+0x124`
+
+### Updated Camera Frontier
+
+So the next camera step is now narrower and more concrete:
+
+1. type the owner class/family that carries `route+0x124`
+2. type the `0x143FE1070` resolver-owner contract above `virtual +0xA8`
+3. find the campaign caller that can drive `0x141C0DFD0` / `0x141C075DC`
+   with a Nadine-compatible override, without leaning on the manual/debug
+   toggle path
+
+### First Non-Manual Gameplay Caller Above `0x141C0DFD0`
+
+That third blocker is now narrower too.
+
+The cluster around:
+
+- `0x14073C9E3`
+- `0x14073CB4D`
+- `0x14073CBF6`
+- `0x14073CCBC`
+
+is a real non-manual caller family for `0x141C0DFD0`.
+
+What it does:
+
+- repeatedly calls `0x141C0D4B0`
+  - gets the current preferred camera child from the route entity
+  - reads `child+0x1A8`
+- compares that result against multiple descriptor/sentinel objects:
+  - `0x1430542E0`
+  - `0x143054560`
+- builds compact descriptor records on the stack
+- pushes them through `0x141C0DFD0`
+
+The surrounding body also:
+
+- maintains a priority/score-like ladder over a repeated local array
+  (`+0x4C/+0x68`, `+0x94/+0xB0`, `+0xDC/+0xF8`, `+0x124/+0x140`, ...)
+- emits debug text under strings that clearly include `Camera` and
+  `Priority`
+
+So this is a much better frontier than the old manual-camera toggle handlers:
+
+- `0x141C0DFD0` now has an explicit gameplay-facing caller cluster,
+- that cluster already chooses between camera descriptors/sentinels,
+- and it already uses the same route-entity child selection via
+  `0x141C0D4B0`.
+
+That does **not** yet prove Nadine camera ownership is solved.
+But it does mean the next question is no longer
+"is there any non-debug caller at all?"
+
+It is now:
+
+- what exact owner/state machine contains the `0x14073C9E3..0x14073CCBC`
+  camera-priority loop,
+- and whether Nadine-compatible route descriptors can be introduced there
+  cleanly.
+
+### Camera Overlay Family Behind The Gameplay Route Loop
+
+The `0x14073C9E3..0x14073CCBC` cluster is no longer just a loose caller band.
+It sits inside a real per-screen overlay updater:
+
+- `0x14073C8A0`
+  - `UpdatePerScreenCameraOverlayPriorityStateAndCommitRouteDescriptors`
+  - keyed by `route+0x124`
+  - uses a zero-initialized dynamic state bank at `0x143D763E0` with stride
+    `0x2B0`
+  - keeps per-screen cached/selected overlay state in repeated lanes around:
+    - `+0x184`
+    - `+0x18C/+0x1D4`
+    - `+0x1D4/+0x21C`
+    - `+0x21C/+0x264`
+  - and commits route-descriptor overrides through `0x141C0DFD0`
+
+This updater is driven by concrete camera-control sentinels, not anonymous
+objects:
+
+- `0x143054040` = `kCameraStrafe`
+- `0x1430542E0` = `kCameraSwim`
+- `0x143054560` = `kCameraZoom`
+- exclusion/special-case controls already confirmed nearby:
+  - `0x143053820` = `kCameraCheat`
+  - `0x1430539E0` = `kCameraShield`
+  - `0x143053BB0` = `kCameraMelee`
+  - `0x143053BE0` = `kCameraMeleeOverride`
+
+The companion builder under the same family is now clear too:
+
+- `0x14073CDD0`
+  - `BuildPerScreenCameraOverlayFollowStateFromRouteDescriptor`
+  - copies/merges a `0x50`-byte overlay descriptor state
+  - reads route index from `r8+0x124`
+  - hash-matches `CameraControlZoom` and `CameraControlScreenShot`
+  - consumes a static per-screen tuning bank at `0x1430732F8` with stride
+    `0xC0`
+  - and outputs the resolved follow-state used by the gameplay route path
+
+That static tuning bank is now a useful anchor in its own right. For each
+screen it provides byte/float tuning fields around:
+
+- `+0x00/+0x01/+0x02` enable/mode bytes
+- `+0x04/+0x05` gate bytes
+- `+0x08/+0x0C/+0x10/+0x14` scalar thresholds
+
+So the current second-view frontier is stronger than before:
+
+- `0x141C0DFD0` is not the whole story;
+- the real gameplay layer above it is a per-screen camera-overlay state machine
+  keyed by `route+0x124`;
+- and that state machine already reasons in stock campaign camera-control
+  descriptors like strafe, swim, zoom, melee, shield, contextual-look, and
+  vehicle.
+
+RTTI now gives a strong owner-side anchor for this layer:
+
+- `0x142C99C00` = `CameraManagerCustom`
+- `0x142C99C50` = `ICameraManagerCustom`
+- `0x142C99BB0` = `CameraControlStick`
+
+This does **not** yet type the route entity itself.
+But it does prove that the gameplay overlay loop we are sitting in is a real
+`CameraManagerCustom` / `CameraControlStick` camera-control layer, not an
+anonymous helper band.
+
+### Special Camera Normalization Gates
+
+Two sibling methods in the same family are now concrete enough to matter:
+
+- `0x14073C620`
+  - `NormalizeSpecialCameraControlDescriptorToContextualLook`
+  - remaps special camera descriptors through `0x141C04E90` using
+    `kCameraContextualLook`
+  - the proven descriptor set includes:
+    - `kCameraEdge`
+    - `kCameraCover`
+    - `kCameraKnockedDown`
+    - `kCameraEvade`
+    - `kCameraMonkeyBars`
+    - `kCameraBalance`
+    - `kCameraOffBalance`
+    - `kCameraFreeRope`
+    - `kCameraShield`
+    - `kCameraFollow`
+    - `kCameraVehicle`
+  - plus a special-case for `kCameraStrafe` when byte `+0x120` is clear
+
+- `0x14073C760`
+  - `ShouldAcceptCameraOverlayCandidateForRouteEntity`
+  - filters overlay candidates against the current preferred route child
+  - rejects melee/melee-override sentinels in the current route conditions
+  - combines the `0x14073BF80` and `0x14073C0E0` filter bands before
+    accepting the candidate
+
+This matters because the camera blocker is now tighter:
+
+- the non-manual route caller cluster is already real;
+- the descriptors it works with are now typed;
+- the next unresolved layer is no longer "what does the overlay loop do?"
+- it is "where does the route-owner/overlay-owner get allocated and bound, and
+  can a Nadine-compatible descriptor path be inserted there without fighting
+  the stock strafe/swim/zoom/melee gates?"
+
+### CameraControlStick Subclass Identities Around The Overlay Layer
+
+The `CameraManagerCustom / CameraControlStick` family is now concrete enough
+to stop treating the nearby init wrappers as anonymous:
+
+- `0x141F521B0`
+  - `ConstructCameraControlStickBaseAndAssignUniqueScreenId`
+  - primary in-place constructor for the `0x320` `CameraControlStick` base
+  - installs the vtable at `0x142BB1D98`
+  - seeds the default descriptor/follow state through:
+    - `+0x1A8..+0x240`
+    - `+0x260..+0x2F0`
+    - `+0x300..+0x314`
+  - assigns the unique per-control screen id in `+0x124` through globals:
+    - `0x146DB1628`
+    - `0x146DB1630`
+
+- `0x141F52660`
+  - `InitCameraControlStickBaseForScreenAndConfig`
+  - remains the shared init phase on top of that base constructor
+  - reads screen index from `config+0xA0`
+  - seeds `kCameraNone` at `+0x1A8`
+  - pulls per-screen defaults from `0x1466BFFB0`
+
+The surrounding subclass identities are no longer speculative:
+
+- `0x142983288`
+  - vtable for `CameraControlCinemaFollow`
+  - slot `0` = `0x14070C6E0`
+  - slot `11` = `0x14070C750`
+
+- `0x14070C620`
+  - `AllocOrInitCameraControlCinemaFollow3E0`
+  - alloc-or-init wrapper for a `0x3E0` `CameraControlCinemaFollow`
+  - optionally allocates `0x3E0`
+  - runs `ConstructCameraControlStickBaseAndAssignUniqueScreenId`
+  - installs `0x142983288`
+  - clears subclass state around:
+    - `+0x350`
+    - `+0x3A8`
+    - `+0x3B0`
+    - `+0x3B8`
+
+- `0x14070C6E0`
+  - `DestroyCameraControlCinemaFollowAndFree3E0`
+  - freeing destructor for that `0x3E0` object
+  - restores `0x142BB1D98`
+  - clears `+0x124`
+  - runs shared cleanup `0x1416A3800`
+
+- `0x14070C750`
+  - `InitCameraControlCinemaFollowSubclass`
+  - calls `InitCameraControlStickBaseForScreenAndConfig`
+  - then seeds follow-specific state:
+    - `+0x398`
+    - `+0x39C`
+    - `+0x3A4`
+    - `+0x3A8`
+  - this now aligns with nearby strings:
+    - `CameraControlCinemaFollow`
+    - `camera-cinema-follow.cpp`
+    - `CameraControlCinemaFollow::Init`
+
+- `0x142981FE8`
+  - vtable block for `CameraControlAnimatedPhotographMode`
+  - slot `11` = `0x141C13A80`
+  - this block sits directly after the strings:
+    - `CameraControlAnimatedPhotographMode`
+    - `kCameraAnimatedPhotographMode`
+
+- `0x141C13A80`
+  - `InitCameraControlAnimatedPhotographModeSubclass`
+  - copies `config+0x80` into `+0x398`
+  - then tail-runs `InitCameraControlStickBaseForScreenAndConfig`
+
+- `0x142986048..`
+  - camera-control block anchored by the strings:
+    - `CameraControlFixedLookAround`
+    - `*camera-fixed-look-around-settings*`
+    - `kCameraFixedLookAround`
+  - the hit at `0x1429860A0` is slot `11` inside that vtable family
+
+- `0x141F6C1A0`
+  - `InitCameraControlFixedLookAroundSubclass`
+  - copies `config+0x80` into `+0x368`
+  - then tail-runs `InitCameraControlStickBaseForScreenAndConfig`
+
+- `0x14298B5A0`
+  - vtable for `CameraControlSpider`
+  - slot `0` = `0x140750DB0`
+  - slot `11` = `0x140750E70`
+  - confirmed by the adjacent strings:
+    - `CameraControlSpider::UpdateLocation`
+    - `CameraControlSpider::StickToGroundFalling`
+
+- `0x140750D20`
+  - `AllocOrInitCameraControlSpider520`
+  - alloc-or-init wrapper for a `0x520` `CameraControlSpider`
+  - runs `ConstructCameraControlStickBaseAndAssignUniqueScreenId`
+  - installs `0x14298B5A0`
+  - initializes the embedded band at `+0x3A0` through `0x141D9EF50`
+  - clears subclass state around:
+    - `+0x380`
+    - `+0x388`
+    - `+0x4B0..+0x4F0`
+
+- `0x140750E70`
+  - `InitCameraControlSpiderSubclass`
+  - calls `InitCameraControlStickBaseForScreenAndConfig`
+  - builds an 8-block CRC over static template `0x142BEA360`
+  - publishes it through `0x141E776A0`
+  - stores resulting handle at `+0x390`
+  - seeds subclass scalars at:
+    - `+0x3B0`
+    - `+0x480`
+
+This matters because the camera frontier is now tied to real gameplay
+`CameraControl*` subclasses, not only to anonymous route/entity helpers.
+The next useful bind search is therefore:
+
+- who allocates/binds these `CameraControlStick`-derived objects into the
+  per-screen `CameraManagerCustom` lifecycle,
+- and which of those subclasses is responsible for the stock `screen 1`
+  gameplay camera when split/local-player state is alive.
+
+### RTTI Split Inside The Camera Overlay Owner Family
+
+The owner-side camera family is now sharper because the adjacent vtable blocks
+finally separate cleanly under MSVC RTTI:
+
+- `0x142987DB8`
+  - `vfptr[-1] = 0x142C99C00`
+  - complete-object RTTI name:
+    - `.?AVCameraManagerCustom@@`
+
+- `0x142987E00`
+  - `vfptr[-1] = 0x142C99BB0`
+  - complete-object RTTI name:
+    - `.?AVCameraControlStick@@`
+
+- `0x14298E820`
+  - `vfptr[-1] = 0x142C9A3F0`
+  - complete-object RTTI name:
+    - `.?AVCameraControlStrafe@@`
+
+That means the current overlay/camera owner frontier is not one flat class.
+It is at least a three-way family split:
+
+- a `CameraManagerCustom`-typed bundle rooted at `0x143053850`
+- a `CameraControlStick`-typed large overlay subclass using vfptr
+  `0x142987E00`
+- and a larger `CameraControlStrafe`-typed constructor base at `0x14298E820`
+
+Concrete new pieces:
+
+- `0x14073C460`
+  - initializes the global bundle at `0x143053850`
+  - writes vfptr `0x142987DB8`
+  - clears adjacent cached pointers/flags/scalars through `0x1430538B8`
+
+- `0x14073C520`
+  - reset/teardown companion for that same global bundle
+  - re-seeds `0x143053850` with vfptr `0x142987DB8`
+  - frees and clears the neighboring cached heap pointers
+
+- `0x140772E20`
+  - shared in-place constructor for a `0x1FA0` large camera-control object
+  - calls `ConstructCameraControlStickBaseAndAssignUniqueScreenId`
+  - then installs vfptr `0x14298E820`
+  - by RTTI, this is a `CameraControlStrafe`-typed constructor base
+  - seeds extended state across:
+    - `+0x330..+0x5A0`
+    - `+0x1CA0..+0x1EF0`
+  - initializes an embedded band at `+0x7C0` through `0x140773180`
+
+- `0x14073B6E0`
+  - alloc-or-init wrapper for a `0x1FA0` overlay/route-family object
+  - allocates `0x1FA0` when needed
+  - runs `0x140772E20`
+  - then overwrites vfptr `0x142987E00`
+
+So the current strong reading is:
+
+- `0x140772E20` gives us the large shared `CameraControlStrafe`-typed base
+- `0x14073B6E0` turns that into a more specialized large
+  `CameraControlStick`-typed overlay object
+- `0x143053850` separately carries a `CameraManagerCustom`-typed global bundle
+
+The relationship between the `CameraManagerCustom` global bundle and the live
+`0x1FA0` `CameraControlStick`-typed overlay object is still unresolved.
+But this is already enough to tighten the next bind search:
+
+- not "what class even owns this camera loop?"
+- but "where does the live `0x1FA0` overlay object created by
+  `0x14073B6E0` get attached to the per-screen route/camera lifecycle, and how
+  does the `CameraManagerCustom` bundle at `0x143053850` participate in that
+  handoff?"
+
+### CameraManagerCustom Vtable Contract And Real Route-Owner Path
+
+The `CameraManagerCustom` bundle at `0x143053850` is not a flat no-op.
+Its vtable at `0x142987DB8` now splits cleanly like this:
+
+- `+0x00 -> 0x14073B4E0`
+  - immediate `ret 0`
+- `+0x08 -> 0x14073B4F0`
+  - immediate `ret 0`
+- `+0x10 -> 0x14073C8A0`
+  - per-screen overlay priority updater
+- `+0x18 -> 0x14073CDD0`
+  - per-screen overlay follow-state builder
+- `+0x20 -> 0x14073C400`
+  - raw `0x50` descriptor/follow-state copier with low flag-bit merge
+- `+0x28 -> 0x14073B650`
+  - tiny predicate over descriptor-state dword `+0xC == 2`
+- `+0x30 -> 0x14073C620`
+  - special-camera normalization into `kCameraContextualLook`
+- `+0x38 -> 0x14073C760`
+  - candidate gate against the current preferred route child
+
+This matters because the top two published observer callbacks are no-op, but
+the later slots are live and participate in the route update loop.
+
+The route-local update contract is now much tighter:
+
+- `0x141C04C50`
+  - hard-resets a route descriptor block at `route+0x2F0`
+  - clears:
+    - descriptor pointer at `+0x10`
+    - descriptor-state kind at `+0x18`
+    - actor override payload at `+0x20..+0x58`
+    - attached pair at `+0x60`
+    - active helper pointer at `+0x70`
+    - mode bytes at `+0x78/+0x7A`
+
+- `0x141C04CE0`
+  - writes a fresh descriptor block into `route+0x2F0`
+  - copies:
+    - descriptor pointer / kind into `+0x10/+0x18`
+    - actor override payload into `+0x20..+0x58`
+    - active/fallback actor pair into `+0xD0`
+    - helper object from the descriptor source into `+0x70`
+
+- `0x141C077B0`
+  - resolves screen-route pose seed by screen index
+  - path:
+    - `ResolveScreenRouteEntityByIndex(screen)`
+    - `route->+0xB0`
+    - gate bytes `+0x55/+0x56`
+    - bitset gate through `0x14697AE34`
+  - outputs either:
+    - active pose payload from `route->+0xB0+0x60`
+    - or a zero/identity default
+
+- `0x141C078D0`
+  - no longer reads like a retained-only helper
+  - it is a real screen-route entity camera-state updater:
+    - walks child-control list at `route+0x100`
+    - writes child follow-state into:
+      - `child+0x1D0..+0x21C`
+      - optional actor override into `child+0x3A0..+0x468`
+    - chooses a preferred child / fallback descriptor
+    - then calls `0x141C06F20`
+
+- `0x141C06F20`
+  - core route-child insertion/recompute worker
+  - inserts or refreshes a child entry under the route
+  - carries forward best available follow-state from the current child list
+  - caches active descriptor/follow payload into route-local state such as:
+    - `route+0x158..+0x198`
+    - `route+0x1D0..+0x21C`
+    - `route+0x528..+0x5A0`
+  - final commit goes through `0x141C06F20 -> 0x141C078D0` caller chain, not
+    through the old manual-only helpers
+
+- `0x141C0E9F0`
+  - walks the child-control list at `route+0x520`
+  - probes each child owner through `child->+0x70->virtual +0x8/+0x10`
+  - then uses `CameraManagerCustom->virtual +0x38`
+  - first accepted child gets cached into route state
+
+This is the real correction:
+
+- `0x1438929B8` is still only a published bundle pointer,
+- but the bundle is not useless;
+- its live policy methods are `+0x10/+0x18/+0x20/+0x28/+0x30/+0x38`,
+- and the real camera-owner lifecycle sits in the route entity around:
+  - `0x141C04C50`
+  - `0x141C04CE0`
+  - `0x141C077B0`
+  - `0x141C078D0`
+  - `0x141C06F20`
+  - `0x141C0E9F0`
+
+This also sharpens the old manager0 retained path:
+
+- `0x1410F3E00`
+  - marks the retained slot-0 live actor active
+  - builds a pose seed through `0x141C077B0`
+  - resolves screen-route entity `0`
+  - then directly calls `0x141C078D0`
+
+So the mature camera route is now better read as:
+
+- `retained actor / gameplay caller`
+- `ResolveScreenRouteEntityByIndex(screen)`
+- `ResolveScreenRoutePoseSeedOrDefault`
+- `UpdateScreenRouteEntityCameraStateFromActorTransform`
+- route-local child selection / descriptor commit
+
+The next useful question is no longer "does second camera exist?".
+It is:
+
+- which gameplay caller can feed `screen 1` into this same route lifecycle with
+  a Nadine-compatible actor override,
+- or where `route+0x100/+0x520` children get built for screen `1` in campaign.
+
+One more boundary is now concrete:
+
+- every direct `0x141C078D0` caller checked so far still resolves
+  `ResolveScreenRouteEntityByIndex(0)` first:
+  - `0x1410F3E32`
+  - `0x1402171FD`
+  - `0x14029EEE2`
+  - `0x1402CEE79`
+  - `0x141F65846`
+  - and sibling gameplay paths
+
+- `screen 1` still appears directly in:
+  - manual-camera cluster around `0x140746192 / 0x140746389`
+  - descriptor/attach workers around `0x141C0DFD0`
+
+So the second-screen problem is tighter than "find another camera object":
+
+- stock direct route-update path currently looks primary-screen-only,
+- second screen seems to rely on either:
+  - a separate `screen 1` route updater not yet pinned,
+  - or a descriptor-only attach/override path above `0x141C0DFD0`.
+
+### `screen 1` Is Not Manual-Only: Generic Route Push And A Stock Two-Screen Loop
+
+The old boundary around `screen 1` tightened again.
+
+`0x14073E330` is now pinned as a generic per-screen route push:
+
+- it does **not** hardcode screen `0`
+- it takes the explicit screen index in `ecx`
+- then:
+  - calls `ResolveScreenRouteEntityByIndex(ecx)` via `0x141C06420`
+  - forwards the descriptor/follow pair into `0x141C0DFD0`
+
+That already means second-screen route work is not limited to the manual-camera
+helpers.
+
+The stronger result is above it:
+
+- `0x1413CB6F0..0x1413CB80C`
+  - is a real two-screen loop
+  - iterates `ebx = 0 .. 1`
+  - resolves both route entities through `0x141C06420`
+  - checks the preferred child through `0x141C0D4B0`
+  - requires `child+0x1A8 == 0x1430535E0`
+  - then pushes a zeroed descriptor through `0x14073E330`
+
+That sentinel matches the already established `kCameraContextualLook` family:
+
+- `0x14073C620`
+  - normalizes special camera controls into `kCameraContextualLook`
+- `0x1430535E0`
+  - is now the strongest current `kCameraContextualLook`-side sentinel in the
+    stock two-screen loop
+
+So the boundary changed:
+
+- `screen 1` is **not** only a manual/debug attach path
+- there is at least one stock gameplay-facing two-screen route push
+- but it currently sits at the **contextual-look / descriptor** layer, not yet
+  at a proven Nadine follow-owner layer
+
+This is the new practical frontier:
+
+- prove which higher owner/state machine contains the
+  `0x1413CB6F0..0x1413CB80C` two-screen loop
+- decide whether that loop can be fed a Nadine-compatible descriptor/owner
+- keep the separate question of a stable Nadine follow-owner path open
+
+### The Stock Two-Screen Descriptor Loops Sit In `CameraControlFollow`
+
+The owner-side type question got much narrower.
+
+The string anchor at `0x1429865A0` is:
+
+- `CameraControlFollow`
+
+and it now shows up in both proven stock two-screen loops:
+
+- `0x1413CB6F0..0x1413CB80C`
+- `0x1413CF013..0x1413CF14A`
+
+Both loops:
+
+- iterate `ebx = 0 .. 1`
+- hash/compare against route child token `+0x1A8`
+- then resolve the route by explicit screen index
+- and push through:
+  - `0x14073E330`
+  - `0x141C0DFD0`
+
+This matters because it clarifies the screen-1 split:
+
+- a stock **two-screen gameplay path does exist**
+- but it currently appears in the `CameraControlFollow` /
+  descriptor-commit layer
+- not in a symmetric direct `screen 1 -> 0x141C078D0` route updater
+
+So the current camera picture is now:
+
+- `0x141C078D0`
+  - still the heavier direct route-entity follow-state updater
+  - checked gameplay callers are still predominantly screen-0-facing
+
+- `0x14073E330 -> 0x141C0DFD0`
+  - generic per-screen descriptor push
+  - now proven to be used by stock two-screen loops under
+    `CameraControlFollow`
+
+The next useful question is no longer "does stock screen 1 exist?".
+It is:
+
+- whether `CameraControlFollow`-side two-screen descriptor routing is enough to
+  hold a stable Nadine view,
+- or whether Nadine still needs a separate follow-owner path under the heavier
+  `0x141C078D0` route-state updater.
+
+### `screen 1` Descriptor Routing Already Feeds A Real Mode-Based Route-Child Updater
+
+The next layer below the two-screen descriptor loops is no longer opaque.
+
+- `0x141C0E590`
+  - selects the first active route child in `route+0x520`
+  - requires:
+    - `child+0x78 != 0`
+    - `child+0x18 == mode_id`
+  - stages that child through `0x141C0E500`
+  - then forwards the descriptor into `0x141C0ECC0`
+
+- `0x141C0ECC0`
+  - is the heavy route-state recompute worker below that seam
+  - it:
+    - locks `route+0x2C0`
+    - pulls preferred child through `0x141C0D4B0`
+    - pulls accepted child through `0x141C0E9F0`
+    - compares those against route-local override state such as:
+      - `route+0x2F0`
+      - `route+0x300`
+      - `route+0x368/+0x378`
+    - then rebuilds the effective route follow / descriptor payload
+
+This changes the screen-1 question again:
+
+- stock `screen 1` descriptor routing is not just a shallow `0x141C0DFD0`
+  write
+- it already feeds a real mode-based route-child update stack
+- so the next blocker is narrower:
+  - whether Nadine can be introduced at the descriptor/child-selection layer
+    already used by `CameraControlFollow`
+  - or whether she still needs a separate heavy follow-owner path under
+    `0x141C078D0`
+
+### The Camera Frontier Has Moved Up To A Mounted `player+0x36C0` Animated-Camera Owner
+
+The next useful step above the route-child layer is no longer hypothetical.
+
+`0x140238500` now reads as a mounted per-screen camera-mode owner worker:
+
+- `owner+0x84`
+  - explicit screen index
+- `owner+0x88`
+  - current mode id
+- resolves the route through `0x141C06420`
+- dispatches an owner virtual `+0x10` on mode change
+- then builds an `apReference-extra` keyed descriptor/state record around the
+  current animation contribution id
+
+This is already above plain descriptor commit and above the raw route-child
+recompute helpers.
+
+`0x140238800` is the heavier sibling of the same owner family:
+
+- rooted at `player+0x36C0`
+- reads current/secondary actor pairs from:
+  - `+0x70/+0x78`
+  - `+0x60/+0x68`
+- uses the strings:
+  - `player-animated`
+  - `animated-camera-control`
+  - `CameraAnimationDirector`
+  - `apReference-extra`
+- feeds the resulting descriptor into `0x141C0E590`
+- and in both the normal and fallback paths still ends up rebuilding route-child
+  state and materializing gameplay camera objects under `0x143FE1088`
+
+The strongest gameplay caller above this owner is no longer the isolated
+`0x1410EA7C0` tail. The broader live caller block around `0x1410E9D80` now
+looks like:
+
+- choose / hash player animation tokens such as:
+  - `player-roll`
+  - `player-air-punch`
+- build a small local state record
+- call the mounted owner at `player+0x36C0 -> 0x140238800`
+- then continue through the same surrounding mounted Player bands:
+  - `+0x1E70`
+  - `+0x1DE0`
+  - `+0x1DF8`
+  - `+0x1D90`
+  - `+0x1DC0`
+  - `+0x1DF0`
+
+That is the cleanest camera result so far:
+
+- the second-screen stock path is not stopping at generic route helpers
+- it already rises into a real mounted Player owner
+- and that owner is animation / gameplay-state aware, not just a debug camera
+  shim
+
+So the frontier shifts again:
+
+- not back to `ctxB`
+- not back to generic split refresh
+- not even primarily to `0x141C0DFD0`
+
+The practical camera question is now:
+
+- whether this mounted animated-camera owner at `player+0x36C0` is reusable for
+  a `NadineBuddy`-compatible route/actor pair
+- or whether Nadine needs a parallel owner that obeys the same
+  `0x140238500 / 0x140238800 -> 0x141C0E590` contract
+
+### `player+0x36C0` Now Has A Real Class Identity: `PlayerCameraAnimationDirector`
+
+The mounted owner above the second-screen route stack is no longer anonymous.
+
+`0x140C30290` is the in-place constructor for the object stored at
+`player+0x36C0`, and RTTI on its installed vtable `0x142A04C38` resolves to:
+
+- `PlayerCameraAnimationDirector`
+
+That immediately tightens several earlier guesses:
+
+- `player+0x36C0` is a formal top-level Player field, not an ad hoc helper
+  pointer
+- the early top-level Player zero-init band clears it at `0x1410C97A6`
+- the later Player init path writes the real object pointer at `0x1410DDEE3`
+- relocation/fixup code at `0x140F649FB` also treats `+0x36C0` as a real
+  pointer-bearing mounted subobject
+
+The constructor shape is now concrete:
+
+- seeds actor-pair fields:
+  - `+0x60/+0x68`
+  - `+0x70/+0x78`
+- seeds mode/state fields:
+  - `+0x80/+0x84/+0x88`
+- seeds an embedded contribution band at:
+  - `+0x90..+0xD8`
+
+That lines up directly with the live workers already pinned above it:
+
+- `0x140238500`
+  - mode switch worker over `+0x84/+0x88`
+- `0x140238800`
+  - heavy animated-camera update over the actor pairs at
+    `+0x60/+0x68/+0x70/+0x78`
+
+The initialization side also got sharper:
+
+- `0x1410DDEE3`
+  - stores the constructed object into `player+0x36C0`
+  - then continues through `player+0x3D98`, `player+0x4220`, and a larger
+    Player setup band
+- this is not a late optional camera attachment; it belongs to the real Player
+  bringup
+
+One more useful detail from the owner contract:
+
+- `PlayerCameraAnimationDirector::virtual +0x10` (`0x140C35960`)
+  - already uses the actor pair at `+0x70/+0x78`
+  - hashes an authored camera token (`FreeRope`)
+  - consults `player+0x108/+0x10C` against the shared lookup table at
+    `0x14386FD00`
+  - and copies the resolved player record into `player+0x110`
+
+So this layer is not just “camera with some strings around it”.
+It is already tied back into the same hidden Player identity/record machinery
+we had pinned earlier.
+
+That narrows the camera frontier again:
+
+- we no longer need to ask what class owns the stable second-screen route stack
+- we now need to ask whether `PlayerCameraAnimationDirector` can be fed a
+  Nadine-compatible actor/identity pair through:
+  - `+0x60/+0x68`
+  - `+0x70/+0x78`
+- or whether Nadine needs a sibling owner that implements the same virtual
+  contract
+
+The virtual surface is also already meaningful enough to guide the next pass:
+
+- `virtual +0x10` (`0x140C35960`)
+  - derives the current animated camera contribution id from the stable pair at
+    `+0x70/+0x78`
+  - and uses the hidden player identity path (`+0x108/+0x10C -> 0x14386FD00 ->
+    +0x110`) while doing it
+
+- `virtual +0x28` (`0x140C30760`)
+  - queries contribution timing/type data from the same stable pair
+  - and still special-cases the `FreeRope` authored token on that path
+
+- `virtual +0x30` (`0x140C30930`)
+  - returns another timing/type flavor over the stable pair
+  - again by walking the live actor path rather than a detached camera cache
+
+- `virtual +0x40` (`0x140C35D00`)
+  - exposes a compact value derived from the contribution counter at `+0xE4`
+
+So the owner contract is no longer vague:
+
+- this class consumes a real actor pair
+- turns it into contribution ids / timing / type
+- and then feeds the route-child camera stack above it
+
+That makes the next question very concrete:
+
+- who writes the transient/stable pair fields
+  - `+0x60/+0x68`
+  - `+0x70/+0x78`
+- and can those writers be redirected from Chloe to `NadineBuddy`
+
+Two small predicates made that contract sharper:
+
+- `0x140237760`
+  - returns true when `PlayerCameraAnimationDirector` already has:
+    - a valid pending actor pair at `+0x60/+0x68`
+    - or a resolved contribution id at `+0x80 != 0xFF`
+- `0x140239100`
+  - is the plain inline validator for a `(ptr,id)` actor pair field
+  - confirmed live use:
+    - `lea rcx, [director + 0x60]`
+    - `call 0x140239100`
+
+That matters because `+0x36C0` is now proven to sit directly on the stock
+descriptor push path, not only on a deeper camera-owner layer:
+
+- `0x141004E08`
+  - calls `DirectorHasPendingActorPairOrResolvedContribution`
+  - if false, falls back to `player+0x1F60 -> virtual +0x310`
+  - then still builds a descriptor and pushes it through:
+    - `0x14073E330`
+    - `0x141C0DFD0`
+
+There are also multiple live writers/consumers around the same state:
+
+- `0x140DD2E66`
+  - validates `director+0x60`
+  - and if that fails while `director+0x80 == 0xFF`, calls the director's
+    `virtual +0x0` and then writes `director+0x88`
+
+- `0x141261179`
+  - reaches `player+0x36C0`
+  - can write:
+    - `director+0x88`
+    - `director+0xF0`
+
+- `0x1412666C2`
+  - forces `director+0x80 = 0x64` on one authored branch
+
+- `0x1412682A4`
+  - reaches `player+0x36C0`
+  - and calls the director's `virtual +0x0`
+
+So the current camera frontier is no longer abstract at all:
+
+- `PlayerCameraAnimationDirector` is already inside the stock descriptor-routing
+  path for gameplay camera state
+- and the concrete remaining problem is to find the writers that seed or swap:
+  - `+0x60/+0x68`
+  - `+0x70/+0x78`
+
+That is the narrowest current route to a stable Nadine second view.
+
+### `player+0xA8/+0xBC` And `player+0x100` Are Separate Upper-Layer Tracks
+
+One ambiguity is now closed.
+
+The canonical Player pair at:
+
+- `player + 0xA8/+0xBC`
+
+is not the same thing as the hidden authored-descriptor carrier rooted at:
+
+- `player + 0x100`
+
+The separation is visible directly in `Player::Init`:
+
+- `0x1410DCC76`
+  - copies `player + 0xA8/+0xBC`
+  - straight into `player + 0x3BE0`
+
+while the later optional retained/input packet branch:
+
+- `0x1410DE392..0x1410DE3CC`
+
+does something else entirely:
+
+1. takes `incoming_packet + 0x70`
+2. resolves it through:
+   - `0x141D23180`
+   - `0x141BB3210`
+   - `0x1402B13C0`
+3. builds a compact carrier through:
+   - `0x1416858E0`
+4. refreshes the embedded authored-descriptor object at:
+   - `player + 0x100`
+   through:
+   - `0x1416862B0`
+
+So that late retained branch updates the hidden descriptor track, not the
+canonical Player pair used by `PlayerCameraAnimationDirector`.
+
+The helper family is now concrete enough to stop conflating the two:
+
+- `0x1416858E0`
+  - builds a compact descriptor carrier from a runtime object exposing
+    `+0x50/+0x54`
+- `0x1416862B0`
+  - consumes that carrier
+  - validates the keyed entry against `0x14386FD00`
+  - and rebuilds the embedded authored-descriptor state under `player+0x100`
+
+At the same time, `PlayerCameraAnimationDirector` is still seeded from the
+canonical Player pair path:
+
+- `0x140C30290`
+  - copies `owner + 0xA8/+0xBC` into director `+0x70/+0x78`
+
+That means the camera frontier narrows again:
+
+- the next concrete task is no longer "type `player+0x100` more"
+- it is to find the real writers/seeders for the canonical Player live pair at
+  `+0xA8/+0xBC`, because that pair feeds the stable `PlayerCameraAnimationDirector`
+  actor path while the late retained branch does not
+
+### The Canonical `+0xA8/+0xBC` Pair Is Generic Runtime-Object Identity Materialized By `0x1417C3790`
+
+The canonical pair is no longer floating.
+
+The lowest shared runtime-object ctor is now pinned at:
+
+- `0x1416A3330`
+
+and it gives the base identity shape directly:
+
+- `object+0xA8 = 0`
+- `object+0xBC = 0x1416A38A0()`
+
+So the ctor only seeds:
+
+- a null identity/owner handle at `+0xA8`
+- a fresh object id at `+0xBC`
+
+It does **not** attach the final live handle used later by `Player`.
+
+The generic materializer `0x1417C3790` now closes the missing half.
+
+In the concrete materialization block around `0x1417C3CD1..0x1417C3D1C` it:
+
+- writes packet source/owner into:
+  - `object+0xA0`
+- links the intrusive node back to the object through:
+  - `node+0x8 = object`
+- stores that node pointer into:
+  - `object+0xA8 = node`
+- recomputes the runtime id through:
+  - `0x14161FC60`
+  - then writes the result into:
+    - `object+0xBC`
+
+So the canonical `+0xA8/+0xBC` pair later consumed by:
+
+- `PlayerCameraAnimationDirector`
+- retained-player slot tables
+- upper gameplay/runtime builders
+
+is not a special `Player`-only field pair.
+
+It is generic runtime-object identity:
+
+- `+0xA8` = intrusive materialization node / owner handle
+- `+0xBC` = materialized runtime object id
+
+That changes the camera/control frontier again:
+
+- the old question "which Player ctor writes `+0xA8/+0xBC`?" is closed
+- the next real question is:
+  - which runtime-materialization path produces the `Player` object whose
+    generic identity later seeds `PlayerCameraAnimationDirector`,
+  - or whether it is cleaner to bypass that and redirect the director through
+    explicit writers of `+0x60/+0x68` or `+0x70/+0x78`
+
+### One Live `PlayerCameraAnimationDirector` Path Already Comes Back Through Retained Slot `0`
+
+The retained-slot bridge is now explicit in one live camera/gameplay caller.
+
+In the block around `0x141290F96..0x141290FAE`:
+
+- it calls:
+  - `0x1410F0D10(0)`
+- does it twice on the success path
+- then uses:
+  - `returned_entity + 0x36C0`
+  - `-> 0x140237760`
+
+So at least one live `PlayerCameraAnimationDirector` predicate path already
+reads the actor through:
+
+- retained player slot table
+- `GetRetainedPlayerEntityBySlot(0)`
+- then `entity+0x36C0`
+
+That is a useful closure:
+
+- retained slot identity seeded by the generic runtime-object/materializer
+  family is not isolated bookkeeping
+- it is already upstream of live director/camera logic
+
+So the next fork is concrete:
+
+- either find a second retained/local-player entity path that can resolve to
+  `NadineBuddy` or a Nadine-compatible entity,
+- or bypass that layer and feed `PlayerCameraAnimationDirector` directly
+  through its pair fields/writers
+
+### `0x140C34AC0` Is A Secondary-Pair Contribution Worker, Not A Pair Seeder
+
+The only direct caller currently confirmed for `0x140C34AC0` is:
+
+- `0x141261301`
+
+Its actual contract is narrower than the older wording implied.
+
+`0x140C34AC0`:
+
+- first validates the secondary actor pair:
+  - `director+0x70`
+  - `director+0x78`
+- if that pair resolves, marks the live actor through byte `+0x72`
+- then compares contribution age against:
+  - `director+0xF0`
+- and updates only the contribution/ring state:
+  - `director+0xD0`
+  - `director+0xD8`
+  - `director+0xE0`
+  - `director+0xE4`
+
+What it does **not** do:
+
+- it does not seed `director+0x60/+0x68`
+- it does not seed `director+0x70/+0x78`
+
+So this worker now clearly belongs downstream of pair ownership rather than at
+the point where the animated-camera target is chosen.
+
+### The Known `0x141290F96..0x141290FAE` Bridge Is Slot `0` Twice, Not A Slot `0/1` Pair
+
+The concrete disassembly around `0x141290F96..0x141290FAE` now matters more
+than the older shorthand summary.
+
+Current exact block:
+
+- `xor ecx, ecx`
+- `call 0x1410F0D10`
+- `test rax, rax`
+- if live:
+  - `xor ecx, ecx`
+  - `call 0x1410F0D10`
+  - `mov rcx, [rax+0x36C0]`
+  - `call 0x140237760`
+
+So this already-proven live bridge is:
+
+- retained slot `0`
+- then retained slot `0` again
+- then `entity+0x36C0`
+- then `DirectorHasPendingActorPairOrResolvedContribution`
+
+This does **not** currently prove a symmetric slot-`1` live bridge into the
+director path. That remains an open question and should not be inferred from
+this block.
+
+### `0x141261140` Is The First Confirmed Animation-Driven Update Path Above `player+0x36C0`
+
+The only currently confirmed direct caller of
+`AdvancePlayerCameraAnimationDirectorContributionState` is:
+
+- `0x141261301`
+
+That call sits inside the larger block beginning at `0x141261140`, which now
+reads as a real animation-driven update path over `player+0x36C0`, not a
+generic camera helper.
+
+Confirmed behavior in this block:
+
+- loads:
+  - `player+0x36C0`
+- writes:
+  - `director+0x88`
+  - optional contribution age into `director+0xF0`
+- gates on contribution/control bits under:
+  - `r13+0x50`
+- if the filtered path is accepted:
+  - calls `0x140C34AC0`
+- otherwise:
+  - falls back to `director->virtual +0x0`
+
+This matters because it narrows the next search:
+
+- the primary pair writers are still not here,
+- but `PlayerCameraAnimationDirector` is now confirmed to sit under a live
+  animation-contribution update path rather than only under route plumbing or
+  retained-slot predicates.
+
+### `0x140C349D0` Is The First Director Method That Touches Both Pair Families At Once
+
+`0x140C349D0` is a more useful `PlayerCameraAnimationDirector` method than the
+earlier tiny predicates because it spans both pair families in one place.
+
+Observed behavior:
+
+- validates the primary pair:
+  - `+0x60/+0x68`
+- when that pair resolves:
+  - increments `director+0xE4`
+  - and under one global byte forces `director+0x80 = 0xFF`
+- then hard-resets contribution ring state:
+  - `director+0xD0 = 0`
+  - `director+0xE0 = -1`
+- then validates the secondary pair:
+  - `+0x70/+0x78`
+- when that pair resolves:
+  - marks the live actor through byte `+0x72`
+  - refreshes `director+0xF0` from the actor's `+0xE0 -> +0x10` time source
+
+This is the first method on the director that proves:
+
+- the two pair families are not redundant;
+- the primary pair `+0x60/+0x68` participates in contribution invalidation /
+  epoch advance;
+- the secondary pair `+0x70/+0x78` participates in stable live contribution
+  timing.
+
+It still does **not** seed either pair family. So the real writer search stays
+upstream of this method.
+
+### The Director Constructor Already Seeds The Secondary Pair `+0x70/+0x78`
+
+The constructor `0x140C30290` is no longer just generic setup for
+`PlayerCameraAnimationDirector`.
+
+It now reads concretely as:
+
+- zeroes the primary pair:
+  - `+0x60/+0x68`
+- if incoming `rdx` is non-null:
+  - reads:
+    - `rdx+0xA8`
+    - `rdx+0xBC`
+  - copies that 16-byte pair into:
+    - `director+0x70/+0x78`
+- otherwise zeroes that secondary pair too
+- then initializes:
+  - `+0x80/+0x84/+0x88`
+  - contribution band `+0x90..+0xD8`
+  - `+0xE0 = -1`
+  - `+0xF0 = 0`
+
+This is the first concrete write site for a director pair family:
+
+- the stable/secondary pair `+0x70/+0x78` is seeded directly in the ctor
+  from the incoming **Player** object's canonical runtime identity
+  `(+0xA8/+0xBC)`;
+- the pending/primary pair `+0x60/+0x68` is *not* seeded there and remains a
+  separate upstream writer problem.
+
+That narrows the search materially:
+
+- one branch now goes upward through the exact call shape:
+  - `0x1410DDED3: mov rdx, rsi`
+  - `0x1410DDED9: call 0x140C30290`
+  so the ctor receives the top-level `Player` itself as the source object;
+- the other goes upward through explicit writers of `+0x60/+0x68`.
+
+Concrete meaning:
+
+- `PlayerCameraAnimationDirector` does not need a separate helper object to
+  learn its stable camera subject;
+- the stock path simply copies the Player's own canonical live pair into
+  `director+0x70/+0x78` during mounted-subobject construction.
+
+### `0x140238800` Is The First Confirmed Direct Writer Of `director+0x60/+0x68`, But It Only Consumes And Clears The Pair
+
+The earlier writer search for the transient/pending pair is now split more
+cleanly.
+
+`0x140238800` does directly write `PlayerCameraAnimationDirector +0x60/+0x68`,
+but not in the way the older hypothesis implied.
+
+What the function does on its live path:
+
+- resolves the stable pair first:
+  - `director+0x70/+0x78`
+- validates the transient pair:
+  - `director+0x60/+0x68`
+- uses both while building the animated-camera descriptor and route-child state
+  through:
+  - `0x141C0E590`
+- and then writes a zeroed inline pair back into:
+  - `director+0x60/+0x68`
+
+Concrete reset writes are now confirmed twice inside this worker:
+
+- `0x140238C25..0x140238C35`
+  - zeroes stack `(ptr,id)`
+  - copies it into `director+0x60/+0x68`
+- `0x140238FDF..0x140238FEF`
+  - does the same on the fallback tail
+
+So `0x140238800` is not the upstream producer of a non-zero pending pair.
+It is the first confirmed **consume-and-clear** point for that pair.
+
+That changes the real frontier:
+
+- the writer question is no longer "who touches `+0x60/+0x68` at all?"
+- it is now:
+  - who seeds a **non-zero** pending pair before `0x140238800` consumes it,
+  - or whether the stock path expects that pair only as a short-lived one-shot
+    handoff from some higher animation/camera owner
+
+One neighboring helper also sharpened:
+
+- `0x140237E60`
+  - resolves the current screen route from `owner+0x84`
+  - refreshes the hidden descriptor track through `0x1416860A0`
+  - marks `owner+0x8C = 1`
+  - builds a `player-animated` fallback descriptor
+
+That helper sits exactly on the reset branches around `0x140238800`, so it now
+belongs to the same "pending pair was not reusable, rebuild fallback camera
+state instead" lifecycle.
+
+### The Broad Caller Around `0x1410E9EBA` Still Does Not Seed A Non-Zero Director Pending Pair Before `0x140238800`
+
+The strongest gameplay caller above `PlayerCameraAnimationDirector` was worth
+checking directly because it was the obvious place for a one-shot pair seed.
+
+The widened block around `0x1410E9D80..0x1410EA0D2` does **not** populate
+`player+0x36C0` before calling:
+
+- `0x1410E9EB0`
+  - `mov rcx, [player + 0x36C0]`
+- `0x1410E9EBA`
+  - `call 0x140238800`
+
+What happens before that call:
+
+- token/hash work around:
+  - `player-roll`
+  - a second authored token at `0x142A4B2A0`
+- hidden-descriptor work through:
+  - `player+0x100`
+  - `0x14014E240`
+  - `0x1405D96B0`
+
+What happens after that call is the more interesting correction:
+
+- the same caller loops over validated `(ptr,id)` candidates
+- and passes each one into:
+  - `0x1403D4070(player, &pair)`
+
+But `0x1403D4070` still does not come back to `player+0x36C0`.
+Its live work is on:
+
+- `player+0x100`
+- hidden descriptor refresh / record publication
+- actor-side geometry / authored-camera calculations
+
+So this upper caller gives a useful negative result:
+
+- the non-zero pending pair for `PlayerCameraAnimationDirector +0x60/+0x68`
+  is not being written inline immediately before `0x140238800` here
+- and the post-call candidate loop through `0x1403D4070` still feeds the
+  hidden descriptor path rather than the director directly
+
+That narrows the frontier again:
+
+- the pending-pair seeder is likely elsewhere in the mounted camera/animation
+  owner family, or arrives through a virtual path not visible in flat callers
+
+### The Formal `PlayerCameraAnimationDirector` Vtable Surface Is Now Typed Enough To Rule Out Pair Setters
+
+The live vtable at `0x142A04C38` now reads concretely as:
+
+- `+0x00 -> 0x140C349D0`
+- `+0x08 -> 0x140C303E0`
+- `+0x10 -> 0x140C35960`
+- `+0x18 -> 0x140C30410`
+- `+0x20 -> 0x140C30420`
+- `+0x28 -> 0x140C30760`
+- `+0x30 -> 0x140C30930`
+- `+0x38 -> 0x140C35CF0`
+- `+0x40 -> 0x140C35D00`
+
+The important correction is not the exact table itself, but what it rules out.
+
+The newly closed slots behave like this:
+
+- `0x140C303E0`
+  - only advances the contribution-ring base at `+0xD8` when an existing entry
+    pointer falls within a supplied bounds window
+- `0x140C35CF0`
+  - immediate no-op return
+- `0x140C30760`
+  - reads the stable pair `+0x70/+0x78`
+  - derives timed output / mode-class result
+  - does not write either pair family
+- `0x140C30930`
+  - same shape: stable-pair reader, derived timing/mode output, no pair writes
+- `0x140C30410`
+  - just returns helper code pointer `0x140C30250`
+- `0x140C30420`
+  - just returns helper code pointer `0x140C2FAC0`
+
+So the director's formal virtual surface is now strong enough to close another
+loop:
+
+- there is still no evidence that any exposed `PlayerCameraAnimationDirector`
+  slot materializes a non-zero pending pair into `+0x60/+0x68`
+- the stock pending-pair seeder is therefore more likely to be an external
+  upstream helper in the same mounted camera/animation family than a hidden
+  setter inside the director's own vtable contract
+
+### The Control Frontier Above `MoveTo` Is Now Sharper: Shared Callers Feed Full Snapshots Into `owner+0x15B8`
+
+The older `MoveTo` work was already known to be too low-level for a playable
+Nadine. The more useful update here is that the shared locomotion/controller
+seams above it are now clearer.
+
+Two helpers on the `owner+0x15B8` controller have now been typed more tightly:
+
+- `0x141E0ED10`
+  - compares incoming mode against `controller+0x34`
+  - maps labels such as:
+    - `None`
+    - `NavPoly`
+    - `NavLedge`
+  - checks whether the owner object is currently active through its bitset
+  - publishes the active-state transition through `0x141DE05D0("SetActive", ...)`
+  - stores the new mode back into `+0x34`
+- `0x141E0EDF0`
+  - consumes a `0x30`-byte snapshot block
+  - copies it into `controller+0x40/+0x50/+0x60`
+  - clears `+0x70/+0x78`
+  - then runs mode-specific follow-up helpers to rebuild auxiliary state when
+    the current mode needs it
+
+The strongest new caller on this layer is the shared path around `0x141E18B03`:
+
+- it pulls a transform/state snapshot from:
+  - `source + 0x230`
+  - `source + 0x240`
+  - `source + 0x250`
+- resolves the locomotion/controller object through:
+  - `(source_owner + 0x1D0) + 0x15B8`
+- then calls, in order:
+  - `0x141E0ED10(controller, owner, mode)`
+  - `0x141E0EDF0(controller, snapshot)`
+
+That matters because it is materially closer to a real "play as Nadine" ingress
+than the older nav-goal backend:
+
+- it is not just `MoveTo`
+- it is not just `NpcMoveTo`
+- it is an owner-side mode switch plus full snapshot apply into the shared
+  locomotion/controller subobject
+
+So the direct-control frontier is now cleaner too:
+
+- for a first playable Nadine demo, the better control-side target is no longer
+  the raw `MoveTo` issue path
+- it is the broader `owner+0x15B8` mode/snapshot layer above it
+
+### `0x141DE9E60` Still Looks Like The Better Real Control/Application Bridge Than Raw `MoveTo`
+
+The older reading of `0x141DE9E60` already had it seeding owner runtime state
+from an incoming state record. The new correction is that this path still looks
+closer to a first "play as Nadine" bridge than the lower `MoveTo` backend.
+
+The useful shape is now concrete:
+
+- `rcx = owner`
+- `rdx = incoming state record`
+- `r8d = mode`
+- `r9b = optional flag`
+
+Early effects:
+
+- logs/labels the incoming record
+- validates it against `0x14386FD00` via `record+0x8/+0xC`
+- pushes the resolved descriptor (or null) into `owner->virtual +0x1E8`
+- copies:
+  - `record+0x30 -> owner+0x130`
+  - `record+0x40 -> owner+0x140`
+- calls `owner->virtual +0x208`
+- then drops into the shared `owner+0x15B8` layer through:
+  - `0x141E0ED10`
+  - `0x141E0EDF0`
+
+The more important downstream part remains:
+
+- it rebuilds broad owner runtime mirrors
+- reuses the canonical owner pair at `+0xA8/+0xBC`
+- and later re-dispatches a large synthesized actor-side block through the
+  resolved live actor's `virtual +0xD0`
+
+That makes the control-side frontier more specific:
+
+- if the first demo target is "switch to Nadine and actually play",
+  the strongest current control/application seam is no longer:
+  - `MoveTo`
+  - `NpcMoveTo`
+- it is:
+  - `incoming state record`
+  - `0x141DE9E60(owner, record, mode, flag)`
+  - shared `owner+0x15B8` mode/snapshot apply
+
+So the next useful question is not "how do we push another nav goal into Nadine",
+but:
+
+- what live source path normally materializes the incoming state record passed
+  into `0x141DE9E60`,
+- and whether that source can be redirected from Chloe's active control stream
+  into `NadineBuddy`.
+
+### `0x141DE9E60` Now Looks Embedded In a Materialized `BehaviorScavenge` Dispatch Family
+
+The direct `.text` caller search above `0x141DE9E60` stayed mostly cold, but
+the function itself now has a stronger indirect shape.
+
+Three repeated `.rdata` blocks include the same contiguous function family:
+
+- `0x142930060`
+- `0x142B83B08`
+- `0x142BD9910`
+
+Each block contains, in the same order:
+
+- `0x1403CF9F0`
+- `0x141DE71C0`
+- `0x1403CFA00`
+- `0x141DE9E60`
+- `0x141DEE3E0`
+- `0x141DEE560`
+- trailing helper entries
+
+Those are not ordinary flat callsites. They look like repeated indirect dispatch
+tables for closely related materialized-state variants.
+
+That matters because the current-state apply bridge is no longer best treated as
+"one standalone helper with two rare callers". It now looks embedded in a
+formal materialized-state behavior interface.
+
+### `BehaviorScavenge` Registration Publishes the Relevant Indirect Tables
+
+The first concrete registration seam on this family is now pinned too.
+
+- string `0x142940348` = `BehaviorScavenge`
+- `0x1404B8180` writes:
+  - `0x143048978 -> 0x142940348`
+  - `0x143048970 -> 0x142952020`
+
+So at least one live materialized-state behavior family is explicitly
+registered as `BehaviorScavenge`, with an indirect dispatch table published in
+globals instead of direct flat calls.
+
+The nearby table roots now read as:
+
+- `0x142951FC0`
+- `0x142952020`
+
+Both include the same small helper band and behavior-side workers, including:
+
+- `0x1404B7F00`
+- `0x1404B80C0`
+
+That is the strongest new reason to stop expecting a simple direct caller above
+`0x141DE9E60`: the live ingress is very likely behavior-table driven.
+
+### `0x1404B7F00` Is a Live Indirect Installer For a `0x570` Materialized State Variant
+
+One of the newly pinned behavior-side workers is materially more useful than the
+older `0x48/0x540/0x9B0` replacement helpers.
+
+`0x1404B7F00`:
+
+- starts from `owner+0x15B8`;
+- builds a nav/snapshot block through `0x141DF2D60`;
+- optionally specializes the source from an actor-like object when
+  `source+0x60 == 0xAC710201`;
+- detaches the current `owner+0x1F80` object through `0x14048F180`;
+- allocates `0x570`;
+- constructs it through `0x140473590`;
+- reattaches it through `0x14048F260`.
+
+This is not the old blind `MoveTo` backend. It is a real materialized-state
+install path that already consumes locomotion snapshot/state from the same broad
+owner layer we care about for playable Nadine.
+
+### `0x140473590` Constructs The `0x570` BehaviorScavenge Variant
+
+The ctor path is now concrete enough to pin:
+
+- `0x140473590` initializes a `0x570` object;
+- installs vtable `0x14293F7D0`;
+- seeds a local `+0x40` subobject through `0x140473240`;
+- initializes behavior-side fields at:
+  - `+0x538`
+  - `+0x540`
+  - `+0x558`
+  - `+0x560`
+- then passes the caller-supplied snapshot/source payload into the subobject
+  through `0x140473020`.
+
+So the control frontier sharpened again:
+
+- `0x141DE9E60` is one useful record-apply bridge;
+- but a broader current-state path already exists through:
+  - `BehaviorScavenge` registration
+  - indirect materialized-state tables
+  - `0x1404B7F00`
+  - `0x140473590`
+  - `owner+0x1F80`
+
+That looks closer to a real "switch current playable state" surface than the
+old flat caller hunt around `0x141DE9E60` alone.
+
+### The Published `BehaviorScavenge` Root Is Metadata, Not A Clean Flat Dispatch Table
+
+One earlier reading was too aggressive.
+
+`0x1404B8180` still publishes:
+
+- `0x143048978 -> "BehaviorScavenge"`
+- `0x143048970 -> 0x142952020`
+
+But the target region around `0x142951CC0..0x142952020` is not a simple qword
+array of direct worker pointers.
+
+Raw retail bytes show a mixed metadata blob:
+
+- a small pointer-heavy head around `0x142951CC0`
+- then controller/debug strings such as:
+  - `Dodge`
+  - `Panic`
+  - `ClimbController`
+  - `MeleeActionController`
+  - `CoverController`
+  - `EvadeController`
+  - `LookAtController`
+  - `AimController`
+  - `WeaponController`
+  - `CombatController`
+  - `TraverseController`
+  - `CinematicController`
+  - `ShieldController`
+  - `SearchController`
+  - `ReviveController`
+  - `InvestigateController`
+
+So the useful correction is:
+
+- the `BehaviorScavenge` registration is real;
+- but `0x142952020` is better treated as a behavior/controller metadata root,
+  not as a neat direct dispatch table to walk entry-by-entry.
+
+That pushes the practical control frontier away from metadata-root hunting and
+toward the live state-preparation branches that actually converge into owner
+state install/apply.
+
+### `0x9B0` And `0x70` Variants Are Now Named: `BehaviorShootMoving` And `BehaviorTurnToFace`
+
+The sibling materialized-state ctors are no longer anonymous.
+
+- `0x140480230`
+  - seeds a large `0x9B0` variant;
+  - hashes the label string `BehaviorShootMoving`;
+  - copies caller payload into the large behavior object and tail state.
+- `0x14048A260`
+  - seeds a small `0x70` variant;
+  - hashes the label string `BehaviorTurnToFace`;
+  - copies the compact turn-to-face payload into `+0x40..+0x64`.
+
+That matters because the `+0x1F80` installation surface is now clearly a
+multi-behavior family with named movement/combat-side variants, not one opaque
+"generic state blob".
+
+### `0x1404BA9C0` Is A Stronger Direct-Control Branch Than The Metadata Roots
+
+The branch around `0x1404BA9C0` is now a better practical seam for playable
+Nadine work than continued metadata-root hunting.
+
+What tightened:
+
+- it carries the debug string
+  `-- NavCharacter::SetStrafeMode: %s @ %s`;
+- it uses `Normal / Always / Never` mode strings through `0x1403CF8B0`;
+- for accepted branches it prepares staged state blocks in globals:
+  - `0x143048E80`
+  - `0x143048EA0`
+  - `0x143048EC0`
+  - `0x143048ED4`
+- then it calls `owner->virtual +0xC48` with that prepared state;
+- and later converges into `0x141DE4D20`.
+
+This is the important control-side correction:
+
+- the useful live seam is no longer just
+  `BehaviorScavenge registration -> maybe some indirect worker`;
+- it is now
+  `NavCharacter::SetStrafeMode-style branch -> owner virtual +0xC48 -> prepared state sink`.
+
+That is much closer to "switch Nadine into a Chloe-like controllable state"
+than another pass over behavior metadata.
+
+### `0x141DE4D20 -> 0x141E15030` Is The Shared Prepared-State Sink
+
+The low-level convergence point is now concrete.
+
+`0x141DE4D20`:
+
+- copies a compact prepared record into stack-local owner state;
+- writes `owner+0x1748` from `record+0x18`;
+- routes through `owner+0x15C0`;
+- then calls `0x141E15030`.
+
+`0x141E15030` is the heavy shared sink:
+
+- validates the owner actor pair through `0x14386FD00`;
+- updates `owner+0x110/+0x120` from the validated actor state;
+- compares the incoming state record against current nested-control state;
+- rebuilds control deltas and thresholds;
+- emits `NavMesh...`-tagged diagnostics;
+- commits accepted state into owner-side nested-control storage.
+
+Direct caller scan confirms this is not niche:
+
+- `0x141DE4D20` has many gameplay callers
+  (`0x1404707C5`, `0x140474089`, `0x1404BB24B`, ...)
+- `0x141E15030` is called from multiple wrappers in the same family
+  (`0x141DE4E1A`, `0x141DE4F52`, `0x141DE52A7`, `0x141DE53CB`).
+
+So the current strongest control-side path for the first demo now reads:
+
+- high-level `NavCharacter::SetStrafeMode`-style branch
+- `owner->virtual +0xC48`
+- `0x141DE4D20`
+- `0x141E15030`
+
+rather than:
+
+- old raw `MoveTo`
+- or abstract `BehaviorScavenge` metadata roots by themselves.
+
+### `0x141DE4F90` Is Stronger Than A Generic Apply Helper: It Already Bridges Control, Selection, And Snapshot Push
+
+The older summary of `0x141DE4F90` was still too neutral.
+
+The fuller body now reads as a real owner-side takeover seam:
+
+- pulls a scalar/mode snapshot from `owner+0x15B8` through `0x141E0D530`;
+- normalizes it through `0x14190F9F0`;
+- logs the chosen record label through `0x1403CF8B0`;
+- inspects current nested-control selection through `owner+0x15C0+0x2F8`;
+- if a competing live record is present, deactivates it through
+  `owner+0x15C8 -> virtual +0x10 -> virtual +0xC0`;
+- resolves the accepted runtime object for `record->+0x60`;
+- applies the new one through `virtual +0xE0` with packed owner transforms;
+- pushes the record transform through `owner->virtual +0xC48`;
+- refreshes `owner+0x15C0` through `0x141E17530`;
+- and finally re-applies the accepted snapshot into `owner+0x15B8` through
+  `0x141E0EDF0`.
+
+That is much closer to a real "switch active controllable state" seam than a
+generic record sink. It already joins:
+
+- control scalar/source state,
+- nested-control selection,
+- current-state object install,
+- and locomotion snapshot apply.
+
+### `0x141DE5190` Is A Higher-Level Prepared-State Builder Above The Shared Sink
+
+There is also a more specific wrapper above `0x141E15030`.
+
+`0x141DE5190`:
+
+- copies the incoming compact record;
+- injects two extra scalar inputs from `xmm2/xmm3`;
+- forces prepared record kind `4`;
+- writes `owner+0x1748` from the source record;
+- then routes the result into `0x141E15030`.
+
+Direct callers now pinned:
+
+- `0x140474051`
+- `0x1404BC0EC`
+
+This matters because the takeover frontier is no longer a single flat
+prepared-state sink. We now have:
+
+- `0x141DE4D20` for direct prepared transform/state blocks
+- `0x141DE5190` for the scalar-augmented prepared-state variant
+- `0x141DE4F90` for the heavier current-state-object + nested-control path
+
+For the first Nadine demo, `0x141DE4F90` and `0x141DE5190` now look more
+valuable than another round of raw `MoveTo` or metadata-root hunting.
+
+### The `0x1403F5B60` Family Is A Prepared NPC Action Layer, Not The Best First Direct-Control Seam
+
+The older reading of `0x1403F5B60` as a generic locomotion initializer is now
+too broad.
+
+What tightened:
+
+- the surrounding `0x140545000..0x14056B000` callers repeatedly resolve source
+  objects through `0x141E31150 / 0x141E31230 / 0x141E31310`;
+- they then write command kind into `owner+0x24F4` and fill the pending action
+  block at `owner+0x2470..+0x24DC`;
+- several of those callers sit directly under script/NPC command strings such
+  as:
+  - `npc-set-allow-lose-target-out-of-zone`
+  - `npc-in-melee-with-player?`
+  - nearby `npc-turn-to` / `npc-stop-aiming` string families.
+
+So this whole family is better read as a prepared NPC action/behavior layer.
+It is still useful, but it should not be confused with the first clean seam
+for "play as Nadine like Chloe".
+
+### `0x14058B900` Is The Strongest Live Non-Script Layer Above `owner+0x15B8`
+
+The strongest new control-side result is that there is already a live,
+non-script branch above the shared controller at `owner+0x15B8`.
+
+`0x14058B900` now reads as a large combat/action-state handler that:
+
+- resolves live actor/runtime identity;
+- filters a state-id set;
+- forces low-cardinality nested state through `0x141DE5A10` when
+  `owner+0x24C8 < 3`;
+- commits packaged state through:
+  - `0x141E0EDF0`
+  - `0x141E0ED10`
+- uses actor-graph/state helpers through:
+  - `0x1418B7060`
+  - `0x14189E5A0`
+  - `0x14189CC80`
+- and routes follow-up work through nested virtuals `+0x178 / +0x170 / +0xB0`.
+
+Two live inner branches now stand out:
+
+#### `0x14058BA40`
+
+- writes a full snapshot into `owner+0x15B8` through `0x141E0EDF0`;
+- switches controller mode `1` through `0x141E0ED10`;
+- then resolves actor-graph selection data through `owner+0x1E0` and
+  `0x1418B7060`.
+
+#### `0x14058BC70`
+
+- writes a blended snapshot into `owner+0x15B8`;
+- switches controller mode `2`;
+- then finalizes the nested-control side through `0x141DEF910`.
+
+This is the most important control-side correction from this pass:
+
+- the `0x1403F5B60` command family looks more like prepared NPC actions;
+- the `0x14058B900 -> 0x14058BA40 / 0x14058BC70` family looks like a live
+  runtime action layer that already drives the same shared controller used by
+  the stronger Nadine ingress around `0x141DE9E60`.
+
+### The Immediate Control Frontier Is Now Narrower
+
+The next useful step is no longer "search more command writers".
+
+It is:
+
+1. climb above `0x14058B900`;
+2. identify which live owner/state family decides when the mode-1 and mode-2
+   branches fire;
+3. check whether that decision can be redirected toward `NadineBuddy` for the
+   first playable switch demo.
+
+### The Control Bridge `0x141DE9E60` Is Reached Through A Shared Character Virtual NadineBuddy Already Has (slot +0xC48)
+
+Climbed above `0x141DE9E60` (the stronger "play as Nadine" control/application
+bridge). It has exactly two direct callers:
+
+- `0x140416B9C` inside `InstallOrApplyCurrentStateRecord` (`0x140416B20`)
+- `0x1404872D8` inside `sub_140486EB0`
+
+Neither caller has further direct `.text` callers (both are dispatched as
+virtuals). Pointer scan of `.rdata` shows their vtable membership:
+
+- `0x140416B20` (InstallOrApplyCurrentStateRecord) appears in ~12 character-class
+  vtables at the same slot, i.e. it is a SHARED character virtual, not a
+  one-off. Confirmed slots:
+  - NadineBuddy vtable (`0x142949638`) + `0xC48` -> `0x140416B20`
+  - This is exactly the slot earlier used for the "native teleport" effect on
+    NadineBuddy. So that slot is really the install/apply-current-state-record
+    virtual, and the visible teleport was a side effect of applying a state
+    record.
+- `0x140486EB0` appears in exactly ONE vtable (slot ptr at `0x142941490`); it is
+  a class-specific aim/transform-basis virtual that builds an orientation basis
+  from runtime objects (validates retained slot via `0x14386FD00`, quaternion
+  math over record `+0xA0/+0xC0/+0xF0`) and then seeds owner state via
+  `0x141DE9E60`.
+- `0x141DE9E60` itself is referenced from 3 vtables
+  (`0x1429300A0`, `0x142B83B48`, `0x142BD9950`).
+
+Why this matters for the elevation goal:
+- the control-apply bridge into `owner+0x15B8` (`0x141DE9E60` -> `0x141E0ED10` /
+  `0x141E0EDF0`) is reached through a SHARED character virtual that NadineBuddy
+  already implements at slot `+0xC48`;
+- so NadineBuddy is not missing the ingress virtual; the open question stays
+  "what live owner/state family decides to call slot +0xC48 / `sub_140486EB0`
+  with a real current-state record, and can that decision be driven for Nadine".
+
+Next concrete probe:
+- decode the upper owner update that invokes character virtual `+0xC48` and the
+  aim virtual `sub_140486EB0` per frame, and find the gate that selects when a
+  real (non-null) current-state record is applied vs cleared.
+
+### SYNTHESIS: Camera Route (screen 1) And Control/Local-Player Both Converge On The Same Resolver `0x143FE1070->+0xA8(index)`, And index 1 Is Empty
+
+Cross-checking the camera-route track and the control/local-player track shows
+they bottom out at the SAME resolver, which unifies the whole second-player
+problem:
+
+- camera route side (per the camera lifecycle anchors):
+  - `0x141C04F80` builds the two-entry route table `0x14697AD50`
+  - `0x141C06420` resolves a live route entity from that table by index
+  - `0x141C0DFD0` resolves the route's actor through
+    `(*(qword*)0x143FE1070)->virtual +0xA8(route+0x124)` where `route+0x124`
+    is the screen index (0/1)
+  - `0x141C075DC` then writes the attached target pair into `route+0x2A8/+0x2B0`
+
+- control / local-player side (earlier):
+  - `local-player-0/1` resolve through `(*(qword*)0x143FE1070)->virtual +0xA8(index)`
+  - this is the CharacterManager-style `GetCharacter(index)` family
+    (`0x141D63C50` = `CharacterManager::GetCharacter`, asserts
+    `index < m_maxCharacterCount`)
+  - runtime: `local-player-0 = Player`, `local-player-1 = 0`
+
+So both the second camera (screen index 1) and the second local player resolve
+their actor from `0x143FE1070->+0xA8(1)`, and that returns null in campaign
+because CharacterManager has no character at index 1.
+
+This is the unifying blocker:
+- it is NOT two separate problems (camera vs control);
+- both need `0x143FE1070->+0xA8(1)` to return a valid character;
+- and the control-apply ingress already exists on NadineBuddy (shared virtual
+  slot `+0xC48` -> `0x141DE9E60`).
+
+Why the earlier resolver-hook test (returning NadineBuddy for index 1) did not
+visibly work is now better framed: returning the raw `NadineBuddy` object is not
+the same as registering a valid CharacterManager character entry with a matching
+`+0xBC` id and `+8` backing object that the route/control validators accept
+(`ptr->(+8)->+0xBC == id`).
+
+Next concrete probe (unifies both tracks):
+- decode `0x143FE1070`'s object + its `+0xA8` vfunc target and the
+  CharacterManager character array layout;
+- determine the minimal valid character entry shape (`+8` object, `+0xBC` id)
+  that `GetCharacter(1)` must return so BOTH the screen-1 camera route and the
+  local-player-1 control path accept it;
+- then test registering NadineBuddy as character index 1 rather than hooking the
+  resolver to return the bare object.
+
+### CharacterManager Layout + Why The Resolver Hook Was Insufficient (observers not notified)
+
+`sub_141D63640` is `CharacterManager::RemoveCharacter` (file
+`character-manager.cpp`, asserts use the `CharacterManager` / `m_character`
+strings). Decoded layout:
+
+- character array base = `manager + 0`
+- array entry = 16 bytes: `{ character_ptr (+0), id (+8) }`
+- count field = `manager + 0xC`
+- character validity check used everywhere:
+  `entry.ptr->(+8)->+0xBC == entry.id`
+- Remove scans for the matching entry, compacts the array down, decrements
+  `manager+0xC`, then:
+  - iterates an observer/listener list at `manager+0x10 .. +0x18`
+    (linked nodes; `node->vtable +8(node, character)`),
+  - and calls `character->virtual +0x810` -> `0x141FEBE20`.
+
+`CharacterManager::GetCharacter` (`0x141D63C50`) is the matching index accessor
+(`index << 4 + base`, validate, return `entry.ptr`). The resolver
+`0x143FE1070->virtual +0xA8(index)` used by both the screen camera route and the
+local-player path resolves characters from this same manager.
+
+Critical correction to the earlier resolver-hook experiment:
+- returning `NadineBuddy` directly from the `+0xA8` resolver did NOT run the real
+  registration, so the CharacterManager observer list (`manager+0x10`) was never
+  notified and `character->+0x810` was never called;
+- that is the most likely reason nothing visibly changed: camera/control
+  observers only react to a real Add/Remove, not to a hooked getter return.
+
+So the correct lever is the real `CharacterManager::AddCharacter` (inverse of
+`0x141D63640`): write `{NadineBuddy-character, id}` into the array, increment
+`manager+0xC`, and let it notify the observer list. That is the single unifying
+action that should wake BOTH the screen-1 camera route and the local-player-1
+control path.
+
+Next probe:
+- find `AddCharacter` (sibling in the `0x141D63xxx` cluster that writes
+  array[count] and increments `manager+0xC` while notifying `manager+0x10`),
+- and determine the exact character object/id shape it expects so NadineBuddy
+  (or a thin character wrapper over her) qualifies as `entry.ptr` with
+  `entry.ptr->(+8)->+0xBC == id`.
+
+### KEY: `CharacterManager::AddCharacter (0x141D63420)` Is The Single Unifying Registration For A Second Character
+
+`sub_141D63420` is `CharacterManager::AddCharacter(manager, character)`:
+- `rcx = manager` (the object behind `*(0x143FE1070)`)
+- `rdx = character`
+
+Behavior:
+- capacity = `manager + 8`, count = `manager + 0xC`; asserts count < capacity
+- dedupe-scans existing entries [0..count) against the incoming character
+- builds the new 16-byte array entry from the character's canonical identity pair:
+  - `entry.ptr = character + 0xA8`
+  - `entry.id  = character + 0xBC`
+- writes it into `array[count]` (array base = `manager + 0`), then `count++`
+- notifies the observer list at `manager + 0x10 .. +0x18`:
+  `node->vtable[0](node, character)` for every registered observer
+
+This is the decisive lever, because:
+- the entry uses exactly `character+0xA8 / character+0xBC`, the canonical
+  runtime-identity pair that NadineBuddy already has
+  (live: `Nadine+0xA8 = 0x10E020FAE8`, `Nadine+0xBC ~= 0x6BD`);
+- so NadineBuddy already qualifies as a valid `character` argument with no
+  wrapper needed for registration;
+- AddCharacter performs the REAL registration and notifies observers, which is
+  exactly what the earlier resolver-hook skipped.
+
+Concrete next experiment (replaces the resolver hook):
+- resolve `manager = *(uintptr_t*)(module + 0x3FE1070)`
+- call `AddCharacter(manager, NadineBuddy)` on the game thread
+- expect: `GetCharacter(1)` now returns the Nadine entry, count becomes 2, and
+  observers (screen-1 camera route + local-player-1 control) get notified
+- watch whether the screen-1 camera route and local-player-1 control path wake
+  up using Nadine as the real character at index 1
+
+`sub_141D63640` = `CharacterManager::RemoveCharacter` (inverse: compacts array,
+decrements `manager+0xC`, notifies observers via `node->vtable+8`, calls
+`character->virtual +0x810`). Use it to cleanly unregister for test toggling.
+
+### CORRECTION: Nadine Is Already A Registered CharacterManager Character — The Resolver Has A Separate "active local player" Filter
+
+The AddCharacter lead was followed to a concrete result that corrects the earlier
+convergence claim.
+
+The real `CharacterManager` instance is `*(0x143898630)` (NOT `*(0x143FE1070)`;
+that latter global is a separate local-player resolver owner). AddCharacter
+callers (`0x140402904`, `0x1410D34B7`, ...) load `this` from `*(0x143898630)`.
+
+Live CharacterManager (`*(0x143898630)`):
+- array base = manager+0, capacity (manager+8) = 0x20, count (manager+0xC) = 2
+- entry0: `{ptr=0x10E0201128, id=0x69E}` -> Player (object 0x10E1060900)
+- entry1: `{ptr=0x10E020FAE8, id=0x6BF}` -> NadineBuddy (object 0x10E1304200);
+  note `ptr` equals `Nadine+0xA8`, `id` equals `Nadine+0xBC`.
+
+So Nadine IS ALREADY character index 1 in CharacterManager. AddCharacter is not
+the blocker, and registering her again would just hit the dedupe path.
+
+Why `local-player-1` still resolves to 0 (corrected model):
+- the local-player resolver `(*(0x143FE1070))->virtual +0xA8(index)` returns the
+  character, and the local-player lookup then passes it through `0x141E98C10`,
+  which returns the object only if a bit is set:
+  - `id = [0x146AA11B4]` (a current view/screen/context selector)
+  - `bitset = character->[+0x30]`
+  - returns character only if `bit[id]` is set in that bitset, else 0
+- Nadine exists as a character, but her `+0x30` "active local player / view" bit
+  for the current selector is not set, so `local-player-1` resolves to 0.
+
+Corrected frontier (replaces the AddCharacter plan):
+- the second-player lever is NOT character registration (already done);
+- it is the "active local player / view membership" gate: make Nadine's `+0x30`
+  bitset include the bit indexed by `[0x146AA11B4]` (or whatever per-screen
+  selector the screen-1 route/control uses), so the resolver + `0x141E98C10`
+  filter return her as local-player-1 / the screen-1 route actor.
+
+Next probe:
+- decode `0x141E98C10` filter inputs precisely (what `[0x146AA11B4]` is, and the
+  `character+0x30` bitset structure / which bit = "local player N" or "visible on
+  screen N");
+- find who sets that bit for Player (index 0) and whether the split-screen login
+  path is supposed to set it for index 1.
+
+### Accuracy Note: The `0x141E98C10` Bit-Filter Reconstruction Is Inconclusive
+
+Runtime check of the candidate filter for the local-player resolver:
+- selector `[0x146AA11B4] = 0x1A2` (word index 6, bit 34)
+- Player entry.ptr+0x30 bitset = 0x10E023B880; word[6] = 0; bit34 = 0
+- Nadine entry.ptr+0x30 bitset = 0x10E1258C80; word[6] = 0; bit34 = 0
+
+Both Player and Nadine read bit34 = 0, so `0x141E98C10` with this selector is NOT
+the gate that distinguishes "Player resolves as local-player-0" from "Nadine does
+not resolve as local-player-1". Either the local-player resolver `+0xA8` does not
+funnel through this exact filter/selector, or the bitset base/word math here is
+not the one used at the live call site.
+
+What IS solid from this pass:
+- `CharacterManager` (`*(0x143898630)`) already holds Player (id 0x69E) AND
+  Nadine (id 0x6BF) as characters 0 and 1 — character registration is NOT the
+  blocker.
+- The local-player resolver owner `*(0x143FE1070)` is a SEPARATE object from
+  CharacterManager; do not conflate them.
+
+Corrected next probe (more careful):
+- decode the actual local-player resolver vfunc `(*(0x143FE1070))->+0xA8` body
+  (not assume it is CharacterManager::GetCharacter), and capture exactly how it
+  decides player 0 vs player 1;
+- find who registers a local player into THAT resolver (vs CharacterManager),
+  and whether the split-screen login path is supposed to populate index 1 there.
+
+### Local-Player Resolver Struct `0x143FE1070` (0x120 bytes): Player-1 id Slot Is Unset, Distinct id Space
+
+`0x143FE1070` is NOT a pointer; it is an embedded 0x120-byte resolver struct.
+`sub_1400C63C0` zero-inits it (memset 0x120 via 0x1424ECF80) and sets two dword
+"id" fields to -1:
+- `+0xE8` (`0x143FE1158`)
+- `+0x104` (`0x143FE1174`)
+(the 0x1C delta between them = per-local-player slot stride; two slots.)
+
+Live runtime dump (campaign) of `0x143FE1070`:
+- `+0xE0 = 2`, `+0xE4 = 2`  (look like local-player counts)
+- `+0xE8 = 0x5ACA`          (player-0 id slot: SET)
+- `+0x104 = 0xFFFFFFFF`     (player-1 id slot: STILL UNSET / -1)
+- `+0x00 = 0x1103294000`    (a sub-object/manager pointer; its vtable+0xA8 read
+  external/garbage this session, so treat with care)
+
+So the corrected, verified blocker shape:
+- character registration is done (CharacterManager already has Player + Nadine);
+- the local-player RESOLVER has two id slots, and the player-1 id slot (+0x104)
+  is never populated in campaign (stays -1);
+- the resolver id space is distinct from CharacterManager ids
+  (player-0 resolver id 0x5ACA != CharacterManager Player id 0x69E), so the
+  player-1 slot cannot be naively set to a CharacterManager id.
+
+Writer search:
+- only `sub_1400C63C0` (init) references `+0xE8/+0x104` via direct rip-relative
+  stores;
+- runtime population of `+0xE8` must come from an INDEXED write
+  (`[base + idx*0x1C + off]`), and the resolver base is taken via `lea` in only
+  that one init site, so the registrar is not locatable by static rip-xref.
+
+Recommended next step (dynamic, higher yield than more static/poke):
+- attach x64dbg, set a hardware write breakpoint on `resolver+0xE8`
+  (`module+0x3FE1158`) during a normal campaign load;
+- capture the function that writes player-0's id there — that is the local-player
+  registrar whose index-1 path is the real second-player lever;
+- only then decide whether to drive it for Nadine.
+
+### Correction: The `0x1406B3D70` Family Is `Patrol@ScriptSkill`, Not A Clean First Direct-Control Path
+
+The newer climb above `owner+0x15B8` needed one more correction.
+
+The qword hit at `0x14297B260` is a real vtable slot for:
+- `0x1406B3D70`
+- `0x1406B3E00`
+- `0x1406B3FA0`
+- `0x1406B4260`
+- `0x1406B4530`
+
+The complete object locator at `0x142C95C38` resolves this vtable block to:
+- `.?AVPatrol@ScriptSkill@@`
+
+So:
+- `0x1406B3D70`
+- `0x1406B3640`
+- `0x1406B3940`
+- the branch rooted at `0x1406B40D0`
+
+are not the best "play as Nadine" seam after all. They are a patrol/script-skill
+control layer for AI behavior.
+
+This does NOT make them useless, but it does mean:
+- they are too high in the AI stack;
+- they should not be treated as the primary direct-control ingress for the first
+  playable Nadine demo.
+
+The practical correction is:
+- keep `owner+0x15B8` itself as the important shared controller layer;
+- stop treating the `Patrol@ScriptSkill` router as the main takeover point.
+
+### Correction: The Second Direct Caller Above `0x141DE9E60` Is `BehaviorTeleport`
+
+The single vtable block containing `0x140486EB0` sits at `0x142941490`.
+Its complete object locator at `0x142C84510` resolves to:
+- `.?AVBehaviorTeleport@@`
+
+So `0x140486EB0` is not a generic player-control producer. It is
+`BehaviorTeleport`-specific logic that:
+- validates a retained/runtime pair;
+- builds an orientation/aim basis from record fields around `+0xA0/+0xC0/+0xF0`;
+- then calls `0x141DE9E60`.
+
+This tightens the earlier picture:
+- one direct path into `0x141DE9E60` is the shared character virtual
+  `0x140416B20` that NadineBuddy already has at vtable slot `+0xC48`;
+- the other direct path is AI behavior logic (`BehaviorTeleport`), not raw
+  gameplay input.
+
+So the strongest reusable ingress for a first playable Nadine demo remains:
+- the shared state-record apply virtual `0x140416B20`,
+- plus the lower shared controller methods on `owner+0x15B8`,
+  especially `0x141E0ED10` / `0x141E0EDF0`.
+
+### The Clean Control Frontier Is Now The Shared `owner+0x15B8` Layer, Not Patrol/Teleport
+
+After the two corrections above, the cleanest control-facing layer is:
+- `0x141DE9E60`
+- `0x141E0ED10`
+- `0x141E0EDF0`
+- and the broader shared caller region around `0x141E18B03`
+
+What is already clear there:
+- snapshots are materialized from `source+0x230/+0x240/+0x250`;
+- the controller is resolved from `(source_owner+0x1D0)+0x15B8`;
+- the path then pushes:
+  - mode via `0x141E0ED10`
+  - snapshot via `0x141E0EDF0`
+
+That is a better frontier for "switch to Nadine and play as her" than the
+Patrol/Teleport families above it.
+
+### Concrete Shared Snapshot/Publish Block: `0x141E18A70..0x141E18BA3`
+
+The earlier anchor "around `0x141E18B03`" can now be tightened into a full
+working block:
+- `0x141E18A70 .. 0x141E18BA3`
+
+What this block concretely does:
+- optional setup through:
+  - `0x141CCAE20`
+  - `0x141CCABA0`
+  - `0x141E14890(rcx=rdi, edx=4, r8=rdi+0x260)`
+- marks `rdi+0x468 |= 1`
+- copies the live snapshot from:
+  - `rsi+0x230`
+  - `rsi+0x240`
+  - `rsi+0x250`
+- resolves the shared controller through:
+  - `rdx = *(rdi+0x1D0)`
+  - `controller = *(rdx+0x15B8)`
+- applies:
+  - mode via `0x141E0ED10`
+  - snapshot via `0x141E0EDF0`
+- then continues owner-side publication:
+  - `rdi+0x240 = (*( *(rdi+0x1D0)+0xE0 )+0x10)`
+  - `0x141E16CF0(rdi)`
+  - `0x14189AF80(rdi, ..., ..., 0)`
+  - tail jump into `0x14189AF30`
+
+This is materially stronger than the earlier "some caller near `0x141E18B03`"
+reading. It is now a concrete shared snapshot-to-controller-and-publish block.
+
+That matters because the first playable Nadine demo does NOT need the whole AI
+patrol stack if this block can be redirected or reproduced with:
+- a Nadine-owned `rdi+0x1D0`
+- a valid source snapshot at `rsi+0x230/+0x240/+0x250`
+
+### Sibling Publish Block: `0x141E18D00`
+
+The neighboring block at `0x141E18D00` is a useful contrast:
+
+- it does **not** pull the shared snapshot from `source+0x230/+0x240/+0x250`;
+- instead it works through owner-local state at:
+  - `+0x258`
+  - `+0x2F8`
+  - `+0x300`
+- it may call `0x141E16CF0(owner)`;
+- then it runs `0x141E14890(owner, ..., owner+0x260)`;
+- and finally publishes through the **same** storage pair:
+  - `0x14189AF80`
+  - `0x14189AF30`
+
+So the shared storage/publication tail is now clear:
+- one branch (`0x141E18A70`) publishes after feeding `owner+0x15B8` from a
+  source snapshot;
+- the sibling branch (`0x141E18D00`) publishes from owner-local state instead.
+
+That makes the remaining open question even narrower:
+- where exactly does the source object that owns `+0x230/+0x240/+0x250` come
+  from before `0x141E18A70`.
+
+### Small Descriptor-Node Builders Used By The Same Publish Tail
+
+Three tiny sibling allocators are now pinned:
+- `0x141E1D110`
+- `0x141E1D5C0`
+- `0x141E1F890`
+
+All three:
+- allocate a 0x20-byte helper object;
+- store the owner back-pointer at `+0x10`;
+- clear `+0x18`;
+- install different vtables.
+
+This matters because `0x141E18A70` passes one of these node types
+(`0x141E1F890`) into `0x14189AF80`, while `0x141E18D00` uses a sibling node
+type (`0x141E1D110`).
+
+So the publication tail is now structured enough that the unresolved part is no
+longer "what happens after the snapshot is applied". The unresolved part is
+strictly the producer of the incoming source snapshot.
+
+### `owner+0x2F8` Now Reads As A Live `ActionPack` Handle, Not An Anonymous Snapshot Source
+
+The next pass tightened the producer side enough to stop treating the
+`owner+0x2F8` source as an unknown blob.
+
+Two live paths now clearly write `owner+0x2F8 = source+0x64` and then continue
+through the same validation/install machinery:
+
+1. a `ProcessCommand_MoveTo` family path around `0x141E16500`
+2. a `SwitchActionPack / ResumeMoving` family path around `0x141E17600`
+
+String anchors on those paths are now concrete:
+- `ProcessCommandMoveTo: Already There`
+- `ProcessCommand_MoveTo: %s Controller Exit -> EnterImmediately`
+- `SwitchActionPack: NavAnimController::Reset()`
+- `ResumeMoving: Setting new action pack:`
+- `ResumeMoving: Setting AP to pathfind TAP:`
+- `ResumeMoving: Setting AP to goal AP:`
+
+That is the decisive semantic shift:
+- the shared source behind `0x141E18A70` is not just "some object with
+  +0x230/+0x240/+0x250";
+- it is a live `ActionPack`-side runtime object carrying:
+  - id at `+0x64`
+  - kind tag at `+0x60`
+  - snapshot payload at `+0x230/+0x240/+0x250`
+
+### Shared `ActionPack` Validation / Release / Enter Helpers
+
+The surrounding helper family is now much sharper:
+
+- `0x141E18350`
+  - resolves `owner+0x2F8`
+  - validates the live source through source virtual `+0xB0`
+  - stores `source+0x60` into `owner+0x304`
+  - runs the special `0xAC710201` gate through `0x141E181D0`
+  - then enters the reserve/prepare path
+  - sets `owner+0x300 = 1` on success
+
+- `0x141E18450`
+  - releases the live source resolved from `owner+0x2F8` through source
+    virtual `+0xD0`
+  - clears the five pending handle slots at `owner+0x2E4..+0x2F4`
+  - resets `owner+0x300` back to `0`
+
+- `0x141E18700`
+  - takes a validated source object
+  - records `owner+0x300 = 2`
+  - copies the shared snapshot from `source+0x230/+0x240/+0x250` into
+    `owner+0x260..+0x280`
+  - and then drops into the same publication tail used by the shared snapshot
+    block
+
+- `0x141E189C0`
+  - refreshes `owner+0x238` from the controller time source at
+    `owner+0x1D0+0xE0+0x10`
+
+- `0x141E181D0`
+  - is now firmly the special "first tap window" gate for source kind
+    `0xAC710201`
+
+### The Control Frontier Is Narrower Now
+
+The control question is no longer:
+- what kind of object lives behind `owner+0x2F8`
+
+That part is now good enough:
+- it is an `ActionPack`-side runtime object
+
+The open question is narrower:
+- which Chloe-side path chooses and fills that live `ActionPack` source
+- and whether that same source-selection path can be redirected onto
+  `NadineBuddy` for the first demo where control switches from Chloe to Nadine.
+
+### `owner+0xE90` And `owner+0x258` Are Backup `ActionPack` Handles Feeding `owner+0x2F8`
+
+The next pass tightened the owner-local side enough to stop treating
+`owner+0x258` and `owner+0xE90` as random neighbor fields.
+
+The sibling publish block `0x141E18D00` now reads concretely:
+- it first tries to resolve `owner+0x258`
+- for a broad mode range it prefers `owner+0xE90` if that handle is live
+- otherwise it falls back to `owner+0x258`
+- and then copies the chosen handle into `owner+0x2F8`
+
+So the current source handle is not seeded out of nowhere:
+- `owner+0x2F8` is rebuilt from backup `ActionPack` handles already cached on
+  the owner
+
+Two producer-side facts are now concrete:
+
+- around `0x141E15DE0`
+  - the code resolves `owner+0xF0`
+  - stores the resulting source id into `owner+0x258`
+  - copies the source snapshot into `owner+0x260..+0x280`
+  - and also updates nearby owner-side state such as `+0x2E0`, `+0x440`,
+    `+0xEB8..+0xECC`
+
+- around `0x141E1A900`
+  - when the selected object passes a local gate, its id at `+0xA10` is copied
+    into `owner+0xE90`
+  - then owner flags `+0x470/+0x471/+0x468` and staging state around
+    `+0x290/+0xEE0` are updated
+
+This is the strongest practical narrowing so far for the first playable Nadine
+demo:
+- we no longer need to guess where `owner+0x2F8` comes from;
+- it can be rebuilt from `owner+0xE90` and `owner+0x258`;
+- the next useful question is which Chloe-side path populates those two backup
+  `ActionPack` handles in normal play, and whether the same writes can be
+  redirected onto `NadineBuddy`.
+
+### The Two Backup `ActionPack` Feeds Already Have Clear Gameplay Meaning
+
+One more pass made the two backup feeds much less abstract.
+
+#### `0x141E15A00` = `StopAndStand`
+
+The branch around `0x141E15A00` is now pinned by strings:
+- `ProcessCommand_StopAndStand: NavAnimController::StopLocomoting()`
+- `ProcessCommand_StopAndStand: status CommandSucceeded (already stopped)`
+
+What it does:
+- builds a local snapshot through `0x141E179D0`
+- publishes it through `0x14189AF80 / 0x14189AF30`
+- then releases the current `ActionPack` through `0x141E18450`
+- and clears `owner+0x2F8 = -1`
+
+So this branch is a stop/stand owner command over the same `ActionPack`
+machinery, not a separate control system.
+
+#### `0x141E1C820` = `Resume`
+
+The branch around `0x141E1C820` is now pinned by strings:
+- `NavStateMachine::Resume(void)`
+- `Resuming navigation with invalid/non-moving handoff (and no pending cmd), forcing nav anim controller to stop`
+- `Resuming navigation with a valid moving handoff, going to blind moving`
+
+What it does:
+- scans resumable entries
+- builds a handoff snapshot through `0x141E179D0`
+- chooses between moving and non-moving resume cases
+- and publishes the result through the same owner-side storage tail
+
+This matters because it shows the current control frontier is already inside a
+real gameplay state machine:
+- stop
+- resume
+- current `ActionPack`
+- handoff snapshot
+
+That is closer to "switch to Nadine and play" than the older low-level
+`MoveTo` picture.
+
+### The Next Useful Question Is Now Very Tight
+
+The next control-side question is no longer:
+- what object is stored in `owner+0x2F8`
+- or what `owner+0xE90` / `owner+0x258` mean
+
+Those are now good enough.
+
+The narrow question now is:
+- in ordinary Chloe gameplay, who chooses between the `StopAndStand`,
+  `Resume`, and other `ActionPack` sources,
+- and which function actually writes `owner+0xF0`, `owner+0xE90`, and
+  `owner+0x258` before the snapshot/publish block runs.
+
+### `owner+0x258` Sits Under The Real Moving-State Updater
+
+One more pass finally tied `owner+0x258` to a concrete owner state machine.
+
+`0x141E15C80` is now strong enough to read as the heavy moving-state updater:
+- it branches on the descriptor at `owner+0x80`
+- it validates current moving inputs
+- it resolves the moving source from `owner+0xF0`
+- it stores that source id into `owner+0x258`
+- it copies the source snapshot into `owner+0x260..+0x280`
+- and it updates nearby moving-state bands like:
+  - `+0x2E0`
+  - `+0x440`
+  - `+0xEB8..+0xECC`
+
+The string anchors on this path are now concrete:
+- `Processing command MoveToActionPack (but action pack is blocked by '%s') FAILED`
+- `Processing command MoveAlongSpline (but spline has disappeared!) FAILED`
+- `Processing command MoveToActionPack (but action pack has disappeared!) FAILED`
+
+So `owner+0x258` is no longer just a spare slot. It is the moving-state backup
+`ActionPack` handle.
+
+### There Is Also A Higher Dispatcher Over `owner+0x80`
+
+`0x141E1A040` is now the useful owner-side dispatcher above that moving-state
+logic:
+- it reads the current mode from `owner+0x80`
+- for one mode it goes into `0x141E158B0`
+- for several others it goes into `0x141E15C80`
+- then it copies the resolved descriptor fields from `owner+0x80` into
+  `owner+0x120..+0x1B0`
+- refreshes owner-side time fields like `+0x228/+0x218`
+- and marks publication state through `+0x468`
+
+This matters because it gives the first clear nontrivial owner-side chooser
+above the raw `ActionPack` helpers.
+
+### Where `owner+0xE90` Fits
+
+`owner+0xE90` still comes from a different branch:
+- the path around `0x141E1A900`
+- that path writes `owner+0xE90 = selected_object+0xA10`
+- and then updates:
+  - `+0x470`
+  - `+0x471`
+  - `+0x468`
+  - `+0x290`
+  - `+0xEE0`
+
+That means the owner currently has at least two distinct backup feeds into the
+same final `ActionPack` selection:
+- moving-state feed via `owner+0xF0 -> owner+0x258`
+- selected-object feed via `owner+0xE90`
+
+This is a stronger frontier for the first playable Nadine demo than another
+pass on low-level movement commands, because it is finally sitting on the same
+owner-side chooser that already drives Chloe's live movement states.
+
+### `owner+0x80` Now Has A Usable Mode Map
+
+The reset/log path at `0x141E17240` now gives a practical mode map for the
+state descriptor stored at `owner+0x80`:
+
+- `1` -> `StopAndStand`
+- `2` -> `MoveToLocation`
+- `3` -> `MoveToActionPack`
+- `4` -> `MoveAlongSpline`
+
+This is important because `0x141E1A040` already dispatches on that same field.
+So the state chooser above Chloe's movement is no longer opaque.
+
+### Two More Neighbor Paths Around The Same Command-State Layer
+
+Two neighboring functions are now useful enough to keep together with the
+moving-state updater:
+
+- `0x141E158B0`
+  - exit/cleanup path for the current command state under `owner+0x80`
+  - refreshes publication state
+  - inspects the current action-pack through the controller
+  - then routes command-specific cleanup and release
+
+- `0x141E16920`
+  - exit path for the reserved-action-pack state (`owner+0x300 == 2`)
+  - publishes current or fallback descriptor
+  - refreshes `owner+0x238`
+  - releases the current action-pack through `0x141E18450`
+  - advances `owner+0x208` into the post-exit phase
+
+This means the owner-side command layer is now readable as a small state
+machine instead of a bag of unrelated helpers:
+- current command kind in `owner+0x80`
+- current phase in `owner+0x208`
+- current action-pack kind in `owner+0x304`
+- current/reserved status in `owner+0x300`
+- moving backup action-pack in `owner+0x258`
+- selected-object backup action-pack in `owner+0xE90`
+
+### There Is A Shared Prepared Movement Setter Above The Command-State Layer
+
+`0x141E14890` is now the strongest common setter above those branches:
+
+- it accepts:
+  - `rcx = owner`
+  - `edx = mode id`
+  - `r8  = prepared descriptor`
+- it validates actor context through `owner+0x1D0` and `0x14386FD00`
+- it stores the mode in `owner+0x444`
+- it copies the prepared descriptor into:
+  - `owner+0x290`
+  - `owner+0x2A0`
+  - `owner+0x2B0`
+- it derives owner-side follow vectors into `owner+0x2D0`
+
+This does **not** write `owner+0x80` directly, but it is already a central
+live ingress for movement-state changes.
+
+Its gameplay callers now cover several ordinary paths:
+
+- `0x141DE4A0A` with `edx = 4`
+- `0x141E1818A` with `edx = 4`
+- `0x141E18AF7` with `edx = 4`
+- `0x141E18D1A` with `edx = 4`
+- `0x141E18E2A` with `edx = 0` or `4`
+- `0x141E1B159` with `edx = 0,1,2,3,4`
+
+So the owner-side movement machinery is no longer just:
+- raw `MoveTo`
+- raw `owner+0x80`
+
+There is now a common prepared-state setter sitting in between.
+
+### The Large Chooser Above It Is `0x141E1BA20`
+
+`0x141E1BA20` is now the strongest ordinary-Chloe path above that setter.
+
+What it does:
+- reads queued entries and current owner/action-pack state
+- unpacks candidate records through `0x141E06C00`
+- compares them against the current prepared descriptor in `owner+0x290`
+- then feeds `0x141E14890` with concrete mode ids
+
+This is where the practical mode feed is now visible:
+- `edx = 1`
+- `edx = 2`
+- `edx = 3`
+- `edx = 4`
+- plus `edx = 0` on the fallback branch
+
+That means the nearest useful frontier has shifted again:
+- not to the low NPC command writers
+- not only to the `owner+0x80` dispatcher
+- but to the large live chooser that already converts ordinary Chloe state into
+  the prepared descriptor setter `0x141E14890`.
+
+### `owner+0x80` Is Starting To Look More Like A Mirror Than The Primary Ingress
+
+The direct caller map around `0x141E14890` makes this sharper.
+
+There are now many ordinary gameplay callers that bypass `owner+0x80` and feed
+the shared prepared setter directly:
+
+- `0x141DE4A0A` with mode `4`
+- `0x141E17051` with mode `4`
+- `0x141E1818A` with mode `4`
+- `0x141E18D1A` with mode `4`
+- `0x141E18E2A` with mode `0` or `4`
+- `0x141E1CDA0` with mode `2`
+- `0x141E1CDB9` with mode `0`
+- `0x141E1E595` with mode `2`
+- `0x141E1E74A` with mode `3`
+- `0x141E1E795` with mode `0`
+- `0x141E1E8CD` with mode `2`
+- `0x141E1F1E9` with mode `1`
+- `0x141E1F26D` with mode `0`
+- `0x141E1F3AA` with mode `2`
+- `0x141E1F46E` with mode `1`
+- `0x141E1F5AF` with mode `0`
+- `0x141E202B9` with mode `4`
+
+And those callers feed it from several concrete descriptor sources:
+
+- `owner+0x260`
+- `owner+0x290`
+- stack-built temporary descriptors
+
+So the practical picture has changed:
+
+- `owner+0x80` is still a real command-state description
+- but it no longer looks like the cleanest upstream interception point
+- the stronger live center now looks like:
+  - `0x141E14890`
+  - its mode field `owner+0x444`
+  - its prepared descriptor at `owner+0x290/+0x2A0/+0x2B0`
+
+That is a better frontier for the first playable-switch demo than treating
+`owner+0x80` as the only place where Chloe's live movement state is chosen.
+
+### `0x141E1A000` Is The Main Owner-Side Movement Update Loop
+
+One more pass finally showed that the broad owner update loop above all of this
+is already visible.
+
+`0x141E1A000` is now the strongest ordinary-Chloe owner update loop above both
+`0x141E1BA20` and the older `owner+0x80` dispatcher.
+
+What it does:
+- first runs `0x141E1BA20`
+- then checks controller state through `owner+0x1D0`
+- if needed, dispatches `owner+0x80` into:
+  - `0x141E15C80`
+  - or `0x141E158B0`
+- mirrors the resolved descriptor into `owner+0x120..+0x1B0`
+- refreshes owner time at `+0x228/+0x218`
+- updates flags under `+0x468/+0x472`
+- and then handles several follow-up cases:
+  - disappeared traversal action-pack
+  - reserved action-pack cleanup
+  - further moving-state follow-up through `0x141E1AA20`
+
+So the practical center shifted again:
+- `0x141E14890` is still the shared setter
+- but the stronger ordinary update loop above it is now
+  `0x141E1A000`
+
+### `0x141E1AA20` Is The Pathfind-Result Follow-Up Inside That Loop
+
+The next pass made the inner follow-up at `0x141E1AA20` much clearer.
+
+It is pinned by strings:
+- `ProcessPathFindResults`
+- `Our ActionPack turned invalid, releasing`
+- `We are action pack usage state reserved, but we have no valid AP pointer, releasing`
+- `Releasing old AP`
+- `for new AP`
+
+What it does:
+- works from the current prepared mode in `owner+0x444`
+- resolves the current, reserved, and backup action-pack handles:
+  - `owner+0x2F8`
+  - `owner+0xE90`
+  - `owner+0x258`
+- compares them against path results
+- releases invalid or disappeared action-packs
+- builds compact descriptors through `0x141E06C00`
+- then feeds replacement modes into `0x141E14890`:
+  - `0`
+  - `1`
+  - `2`
+  - `4`
+
+This matters because `0x141E1A000` is no longer just a wrapper over
+`0x141E1BA20`.
+
+It has its own real second-stage movement/path chooser in `0x141E1AA20`.
+
+### `0x141E1E4F0` Is The Ordinary `UpdateStateMoving` Family
+
+The large family around `0x141E1E4F0` is now pinned by strings:
+- `UpdateStateMoving: can arrive`
+- `UpdateStateMoving: LocoCtrl HasArrivedAtGoal = TRUE`
+- `UpdateStateMoving: status CommandSucceeded (goal reached)`
+- `UpdateStateMoving: NavAnimController::StopNavigating()`
+- waypoint-change logging
+
+What it does:
+- uses the current prepared mode from `owner+0x444`
+- validates the current moving action-pack state
+- can feed `0x141E14890` with:
+  - mode `2`
+  - mode `3`
+  - mode `0`
+- checks arrival and waypoint changes
+- then routes into success/failure handling for the moving command
+
+This is important because it looks like a normal moving-state updater for Chloe,
+not an edge-case helper.
+
+### `0x141E1F300` Is A Narrower `PostRootLocatorUpdate` Family
+
+The sibling family around `0x141E1F300` is now pinned by strings:
+- `PostRootLocatorUpdate: resolve entry succeeded but requires me to be stopped - stopping`
+- `PostRootLocatorUpdate: resolved entry - Repath to new entry point (%0.2fm away)`
+
+What it does:
+- builds temporary descriptors from:
+  - `owner+0x360`
+  - `owner+0x370`
+  - `owner+0x380`
+- feeds `0x141E14890` with:
+  - mode `2`
+  - mode `1`
+  - mode `0`
+- then does publication and post-root follow-up checks
+
+So this path is live and useful, but it looks narrower than the main
+`UpdateStateMoving` family.
+
+### Two Neighbor Paths Are Real, But Not The Main Ingress
+
+`0x141E18120` is pinned by:
+- `Abandoning interrupted state '%s'`
+
+What it does:
+- resets the helper at `owner+0x1D8`
+- can release the current action-pack
+- rebuilds a fresh descriptor through `owner+0x1D0 -> virtual +0x1C8`
+- feeds mode `4` into `0x141E14890`
+- republishes through `0x141DE0690`
+
+This is a cleanup/rebuild path, not the cleanest primary ingress for live
+movement.
+
+`0x141E20280` is pinned by:
+- `UpdateStatePlayingEnterAnimation: status CommandSucceeded (entered action pack)`
+- `UpdateStatePlayingEnterAnimation: ActionPack vanished, exiting`
+- `UpdateStatePlayingEnterAnimation: status CommandFailed (action pack disappeared)`
+
+What it does:
+- if the current action-pack is still live, feeds mode `4` into `0x141E14890`
+- otherwise falls into failure/exit handling and republishes
+
+So it is useful for classification, but also not the strongest generic movement
+entry.
+
+### Current Best Control Frontier
+
+The strongest ordinary-Chloe control picture is now:
+- shared setter:
+  - `0x141E14890`
+- large chooser:
+  - `0x141E1BA20`
+- broad owner update loop:
+  - `0x141E1A000`
+- ordinary moving-state family:
+  - `0x141E1E4F0`
+
+And the weaker neighboring families now look like:
+- `0x141E1F300` = post-root / interrupted-state update
+- `0x141E18120` = abandon interrupted state
+- `0x141E20280` = enter-animation update
+
+That means the next useful step is no longer another pass on every direct
+caller of `0x141E14890`.
+
+The tighter question now is:
+- who calls the broad owner update loop `0x141E1A000` in ordinary Chloe
+  gameplay,
+- and whether that same loop can be redirected onto `NadineBuddy`.
+
+### `0x141E1A000` Is An Internal Label Inside Real `NavStateMachine::Update(bool)`
+
+One more pass corrected the boundary.
+
+`0x141E1A000` is not the real function start.
+
+The real function start is:
+- `0x141E19F90`
+
+And it is now pinned by the literal string:
+- `void __cdecl NavStateMachine::Update(bool)`
+
+The block at `0x141E1A000` is just the central internal label inside that
+larger function.
+
+This matters because the call search now finally found the first real outer
+edge:
+- `0x141DE8CB1 -> 0x141E19F90`
+
+### The First Real Outer Caller Sits Inside `NavCharacter::Update`
+
+The caller block around `0x141DE8B80..0x141DE8E60` is anchored by:
+- `void __cdecl NavCharacter::Update(void)`
+- source path `...\\gameplay\\ai\\agent\\nav-character.cpp`
+
+The important part is:
+- it checks `owner+0x15B8`
+- reads a bit from `owner+0x15A8`
+- then calls:
+  - `0x141E19F90`
+  - with `rcx = owner+0x15C0`
+  - and `dl` derived from that owner-side flag
+
+So the strongest current control stack is now no longer abstract:
+
+- outer gameplay update:
+  - `NavCharacter::Update` block around `0x141DE8B80..0x141DE8E60`
+- state-machine update:
+  - `0x141E19F90 = NavStateMachine::Update(bool)`
+- inner update labels:
+  - `0x141E1A000`
+  - `0x141E1AA20`
+  - `0x141E1BA20`
+  - `0x141E1E4F0`
+
+That is the best control frontier so far for the first Nadine demo.
+
+### BREAKTHROUGH (resolver line): Campaign `GetLocalPlayer(index)` Reads The Pair Table `0x143EEBE80` — Slot 1 Empty Is The Direct Blocker
+
+Closed the resolver line that was left hanging (resolver vtable `+0xA8`).
+
+`*(0x143FE1070)` sub-object vtable `+0xA8` = `0x140298D70` (GetLocalPlayer-style):
+- gate byte `0x143E07473` (split/coop-active). If NOT active (ordinary campaign),
+  it tail-calls `0x1410F0F60(index)`.
+- if split/coop active, it instead scans the net-player slot array
+  `0x143DD7488` (= NetGameManager `0x143DD70C0 + 0x3C8`), stride `0x43D0`, which
+  is dormant/empty in campaign (already proven).
+
+`0x1410F0F60(index)` is the campaign resolver:
+- if split gate `0x143E07473` (and `0x143E02054`) not set -> branch `0x1410F0F90`:
+  - reads a 16-byte pair from `0x143EEBE80 + index*0x10` = `{ptr(+0), id(+8)}`
+  - validates `ptr->(+8)->+0xBC == id`
+  - returns `ptr` (and marks `ptr+0x72=1`) or 0
+- if split active -> calls `0x140A90E80(NetGameManager, index)` instead (net path)
+
+So the REAL campaign local-player slot table is `0x143EEBE80` (16-byte
+`{ptr,id}` pairs, index 0/1). `local-player-1 = 0` because
+`0x143EEBE80 + 0x10` (slot 1) is unpopulated in campaign.
+
+This supersedes the earlier `0x143FE1070 +0xE8/+0x104` id-slot model and the
+CharacterManager model as the blocker: those are different registries; the value
+that BOTH the campaign control resolver and (per the camera convergence) the
+screen route consume is this `0x143EEBE80` pair table.
+
+Direct lever (to test):
+- write Nadine's pair into slot 1:
+  - `0x143EEBE80 + 0x10 + 0 = Nadine+0xA8` (ptr, e.g. 0x10E020FAE8)
+  - `0x143EEBE80 + 0x10 + 8 = Nadine+0xBC` (id, e.g. 0x6BF)
+- then `GetLocalPlayer(1)` returns Nadine in campaign without touching the
+  net/split path.
+- runtime-verify slots 0/1 first (slot 0 should already hold Chloe's pair).
+
+Caveat to verify: confirm `0x143EEBE80` is the table the SCREEN-1 camera route
+also reads (camera route used `route+0x124` index through the same
+`0x143FE1070->+0xA8`); if so, populating slot 1 is the single unifying lever for
+both control and camera. If the camera route uses the split-active branch, it may
+need the split gate too.
+
+### CONVERGENCE: Reader (this line) + Writer (Codex line) Both Center On `g_RetainedPlayerSlotTable 0x143EEBE80`
+
+The two parallel investigations meet exactly here:
+
+- READER: `0x1410F0F60 ResolveRetainedPlayerHandleBySlot` (campaign branch) reads
+  `0x143EEBE80 + index*0x10` {ptr,id}, validated by `ptr->(+8)->+0xBC==id`. The
+  top resolver vfunc `0x140298D70` funnels campaign into this reader.
+- WRITER: `0x1410F14C0 CommitResolvedPlayerSpawn` is the central retained
+  player-spawn commit path; it builds a ProcessSpawnInfo packet (vtable
+  0x14291CF98) tagged `Player` / `*player-health-settings*`, materializes a
+  runtime object via `0x1417C3790`, harvests its `+0xA8/+0xBC` retained-live
+  pair, and stores it into `0x143EEBE80`.
+
+So `g_RetainedPlayerSlotTable 0x143EEBE80` is the single shared registry behind
+the local-player resolution (and, per the earlier camera convergence, the
+screen-route actor too). Slot 0 = Chloe; slot 1 unpopulated in campaign.
+
+Two candidate levers, increasing fidelity:
+1. DIRECT (fast test): write Nadine's pair into slot 1 at runtime
+   - `0x143EEBE80 + 0x10 + 0 = Nadine+0xA8` (ptr)
+   - `0x143EEBE80 + 0x10 + 8 = Nadine+0xBC` (id)
+   then check whether GetLocalPlayer(1) / screen-1 route / control wake up.
+2. PROPER: drive `0x1410F14C0 CommitResolvedPlayerSpawn` for a second player so
+   the slot is populated through the real spawn path.
+
+Recommended order: do the DIRECT slot-1 pair write first (cheap, reversible);
+if consumers need full spawn init, escalate to CommitResolvedPlayerSpawn.
+
+### Runtime Result: Raw Slot-1 Pair Write Crashes — Confirms Slot Table Is A Live Gate, Needs Full Spawn Init
+
+DIRECT test executed: wrote Nadine's pair into `g_RetainedPlayerSlotTable` slot 1
+- `0x143EEBE90 (slot1.ptr) = 0x10E020FAE8` (Nadine+0xA8)
+- `0x143EEBE98 (slot1.id)  = 0x6C0`        (Nadine+0xBC)
+Verified table: slot0 {0x10E0201128, 0x69F}=Chloe, slot1 {0x10E020FAE8, 0x6C0}=Nadine.
+
+Result: the game CRASHED shortly after.
+
+Interpretation:
+- consumers DO read slot 1 (the write was not inert) — confirms `0x143EEBE80` is
+  a real live gate for the second local player;
+- but a raw {ptr,id} pair is insufficient: downstream consumers expect a fully
+  initialized second-player runtime (the state that `CommitResolvedPlayerSpawn`
+  builds: ProcessSpawnInfo packet, materialized runtime object, associated
+  player/camera/control substructures), not just a validated handle pair;
+- so the correct lever is to drive the real writer
+  `0x1410F14C0 CommitResolvedPlayerSpawn` for a second player, OR to understand
+  exactly which extra per-slot substructures the consumers dereference and
+  ensure they exist for Nadine before publishing the pair.
+
+Decision: pause runtime poking; switch to STATIC analysis of
+`0x1410F14C0 CommitResolvedPlayerSpawn` to learn the full slot-1 init contract.
+
+### CommitResolvedPlayerSpawn Contract: The Slot Pair Is Harvested From A Materialized Player-Runtime Object (`0x1417C3790`)
+
+Static decode of `0x1410F14C0 CommitResolvedPlayerSpawn` end-to-end:
+
+Args (Win64): `rcx, edx, r8, r9, [stack...]`. Internally:
+- `r12 = r8`  -> the SLOT INDEX used for the table store
+- `rdi = rcx`, `r15 = r9`, `edx` spilled to `[rsp+0x30]`
+
+Build sequence before the store:
+- `0x1417C32A0 InitializeSelectorBackedProcessSpawnPacket` (ProcessSpawnInfo,
+  vtable `0x14291CF98`, tagged with strings `Player` `0x1428D8960`,
+  `*player-...*` `0x14292B6A8/0x14292B6C8`)
+- `0x1417651D0` record resolve/create (second packet layer + fallback)
+- `0x1417C3790` MATERIALIZES the runtime player object (returns `obj` in rax)
+
+Store into the slot table (`0x1410F17A4..0x1410F17E9`):
+- if `obj != 0`: `pair = { obj+0xA8, obj+0xBC }` else `{0,0}`
+- `*(0x143EEBE80 + index*0x10) = pair`  (index = r12)
+- also mirrors the pair into the caller out-struct at `rdi+0/+8`
+
+Conclusion on the crash:
+- the slot pair format I wrote manually ({Nadine+0xA8, Nadine+0xBC}) is exactly
+  the format the reader validates, so the crash was NOT a malformed pair;
+- the crash is because slot 1 had no MATERIALIZED player-runtime object
+  (`0x1417C3790` output) and its associated per-player substructures that
+  consumers dereference. Raw pair publish skips all of that.
+
+So the real second-player init contract = run the full
+`CommitResolvedPlayerSpawn` build (packet -> record -> materialize 0x1417C3790)
+for index 1, not a raw slot poke.
+
+Next static step:
+- decode `0x1417C3790` (what player-runtime object it materializes and from what
+  spawn-info), and the 4 callers of CommitResolvedPlayerSpawn
+  (`0x1410F1A2B/0x1410F2123/0x1410F2DE1/0x1410F3541`) to see how the slot index
+  (r8) and spawn-info are chosen — i.e. how slot 0 (Chloe) is normally spawned
+  and what a slot-1 invocation would require.
+
+### Full Second-Player Spawn Pipeline Mapped (parameterized by player index)
+
+The retained-player slot table is populated by a real, index-parameterized
+spawn pipeline:
+
+`ScriptSpawnPlayer 0x140F73910` (TaskManager::SpawnPlayer; reads/validates slot
+table `0x143EEBE80`, builds spawn descriptor, passes player index in `edx=esi`)
+  -> `SpawnPlayerFromRetainedDescriptor 0x1410F1910` (or `SpawnPlayerFallback
+     0x1410F3350`); builds Player-facing packet (`*player-starting-weapons*`,
+     `TrySpawnPlayerAtContinue`)
+    -> `CommitResolvedPlayerSpawn 0x1410F14C0` (slot index = arg r8 -> r12)
+      -> `ResolveOrMaterializeRuntimeStateObjectFromSelectorPacket 0x1417C3790`
+         (materializes the player-runtime object)
+      -> store `{obj+0xA8, obj+0xBC}` into `0x143EEBE80 + index*0x10`
+
+Key implication:
+- the pipeline is INDEX-PARAMETERIZED (player/slot index flows
+  ScriptSpawnPlayer.esi -> ... -> CommitResolvedPlayerSpawn.r8 -> table index),
+  so the engine structurally supports spawning a player into slot 1;
+- the earlier raw slot-1 pair write crashed precisely because it skipped this
+  whole pipeline (no materialized runtime object / packet / per-player state);
+- therefore the correct second-player lever is to drive this spawn pipeline with
+  index=1 and a valid spawn descriptor, NOT to poke the slot table.
+
+Upper entry callers of the spawn path also include the retained-player camera
+message band (`0x1413C076A` in RunSecondaryRetainedPlayerSpawnAndNotifyOuterOwner240,
+`0x1413BAC98`), tying spawn to the retained/camera owner family.
+
+Next static step:
+- decode how `ScriptSpawnPlayer` derives the player index `esi` and who calls
+  ScriptSpawnPlayer (script command / TaskManager entry), to find the point
+  where index=1 (second player) could be requested with a valid descriptor;
+- and what minimal spawn descriptor a second player needs (weapons/look/transform)
+  so CommitResolvedPlayerSpawn(index=1) materializes Nadine safely.
+
+### GRAND SYNTHESIS: Spawn + Local-Player + Camera All Hang Off The Two-Screen Route Table `0x14697AD50`; Split-Screen Route 1 Is The Root Gate
+
+Decoding how the spawn pipeline chooses its slot index closed the loop across
+every line of this investigation.
+
+`ScriptSpawnPlayer 0x140F73910` (script command) hardcodes the primary path
+index 0 (`xor esi,esi`); `RunSecondaryRetainedPlayerSpawn 0x1413C04A0` also
+passes edx=0. The actual per-spawn slot index is NOT a plain player number — it
+is derived inside `SpawnPlayerFromRetainedDescriptor` via
+`0x141C077B0(out, index)`.
+
+`0x141C077B0` (GetCameraRouteEntityByIndex; assert `index <= 1`, camera.cpp:0x19D):
+- reads the two-entry CAMERA ROUTE TABLE `0x14697AD50 + index*0x10` {ptr,id}
+- validates the route entity (`ptr->(+8)->+0xBC==id`, bytes `+0x55/+0x56`, and a
+  bit test via selector `0x14697AE34`)
+- returns the pair/payload from `route_entity + 0x60`
+
+So the slot index used by the spawn pipeline IS the camera screen-route index.
+
+This unifies everything found so far:
+- camera route table `0x14697AD50` (route 0/1; = CameraManager(0)/(1))
+- local-player slot table `0x143EEBE80` (slot 0/1; written by
+  CommitResolvedPlayerSpawn, read by ResolveRetainedPlayerHandleBySlot)
+- spawn pipeline (ScriptSpawnPlayer -> SpawnPlayerFromRetainedDescriptor ->
+  CommitResolvedPlayerSpawn) keyed by route index
+- the control resolver `(*(0x143FE1070))->+0xA8` -> campaign branch reads the
+  same slot table
+
+All of them are index-parameterized over the SAME two-screen route, and route 1
+is inactive in ordinary campaign. That is why:
+- local-player-1 = 0,
+- screen-1 camera produced only artifacts/blink,
+- raw slot-1 pair write crashed (route 1 / its entity were never stood up).
+
+Root gate (single): the two-screen route / split-screen activation. Route entity
+1 in `0x14697AD50` must be a valid, stood-up route (the split-screen path we
+already exercised via `net-login-split-screen 0x140C02220`, CameraManager(1)
+live, `IsHorizontalSplitscreenMode`, etc.). Once route 1 is a valid route entity,
+the spawn pipeline can target index 1 and populate slot 1 properly, and the
+local-player + camera consumers resolve Nadine without a raw poke.
+
+Reframed plan (converged):
+- the second player is NOT primarily a CharacterManager / slot-table / spawn
+  problem in isolation; those are all consumers of route index 1;
+- the primary lever is standing up a VALID screen-route entity 1 in
+  `0x14697AD50` (split-screen route), then letting the existing spawn pipeline
+  fill slot 1 for that route;
+- next: decode what makes a route entity in `0x14697AD50` "valid" (the
+  `+0x55/+0x56` bytes and the `0x14697AE34` selector bit), and which function
+  constructs/stands up route entity 1 during split-screen — that constructor is
+  the true second-player entry point.
+
+### CORRECTION: Both Route Entities (0 AND 1) Are Built At CameraManager Init — Blocker Is Route-1 "active" Gate, Not A Missing Entity
+
+`0x141C04F70` is `CameraManager::Init` (strings `CameraManager`,
+`CameraManager::Co...`, `A Device...`). It builds BOTH route entities in a loop
+`ebx = 0..1` (`cmp ebx,2; jb`):
+- per entry: hash "CameraManager", init packet `0x1417C32A0`, materialize via
+  `0x1417C3790`, harvest `{obj+0xA8, obj+0xBC}`, store into
+  `0x14697AD50 + ebx*0x10`.
+
+So the two-entry route table `0x14697AD50` is FULLY populated at init — route
+entity 1 already exists. This matches the earlier runtime read where BOTH slots
+were live: slot0 {0x10E0200160, 0x19}, slot1 {0x10E0200188, 0x1A}.
+
+This corrects the prior "route 1 not stood up" claim:
+- route entity 1 EXISTS;
+- what differs is the per-route ACTIVE/VALID gate that `0x141C077B0`
+  (ResolveScreenRoutePoseSeedOrDefault) and the local-player slot path require:
+  - `route->(+8)->+0xBC == id` (identity ok by construction)
+  - `route->+0xB0` child present, with bytes `route_child+0x55 != 0` and
+    `+0x56 != 0`
+  - a bit test via selector `0x14697AE34` in the child's bitset
+  When those gates are not set for route 1, the pose-seed/active path falls back
+  to default and the spawn/local-player slot 1 stays unfed.
+
+So the real second-player gate is narrower and more precise:
+- not "create route 1" (already created),
+- not "register a character" (Nadine already a CharacterManager char),
+- but "mark route 1 ACTIVE": populate `route1->+0xB0` child + set its
+  `+0x55/+0x56` bytes and the `0x14697AE34` selector bit, which is what
+  split-screen activation is supposed to do for the second screen.
+
+Next step:
+- runtime-inspect route1 entity `0x10E0200188`: its `+0xB0` child, `+0x55/+0x56`
+  bytes, and compare to route0 `0x10E0200160` (which IS active);
+- find the function that sets route_child `+0x55/+0x56` and the `0x14697AE34`
+  selector bit (the route-activation path), and whether split-screen login drives
+  it.
+
+### CORRECTION 2: Route 0 vs Route 1 Gate Bytes Are IDENTICAL — "Route-1 inactive" Hypothesis Not Supported; Blocker Is The Unfilled Slot, Filled Only By A Route-1 Spawn
+
+Runtime diff of the two route entities in `0x14697AD50`:
+- route0: entry {0x10E0200160, 0x19} -> route obj 0x10E0232880 -> +0xB0 child
+  0x10E0236970; child+0x50 qword = 0x7F01010000000006 (so +0x55=1, +0x56=1)
+- route1: entry {0x10E0200188, 0x1A} -> route obj 0x10E0236A00 -> +0xB0 child
+  0x10E023AAF0; child+0x50 qword = 0x7F01010000000006 (so +0x55=1, +0x56=1)
+
+The route-1 child gate bytes are IDENTICAL to route-0. So route 1 is not
+"inactive" by those bytes — both route entities look structurally valid/active.
+(The hand-decoded selector-bit `0x14697AE34` check was inconclusive: both
+children's +8 pointed at the same static global, indicating my manual layout walk
+for that last check is unreliable; do not trust it.)
+
+Honest corrected model:
+- route entity 1 exists AND looks as valid as route 0 at the route-table level;
+- the concrete missing thing remains the LOCAL-PLAYER SLOT `0x143EEBE80[1]`
+  (still empty) which is ONLY written by the spawn pipeline
+  `CommitResolvedPlayerSpawn` when a spawn runs for route index 1;
+- in campaign no spawn runs for route index 1 because the only spawn entry
+  (`ScriptSpawnPlayer`) hardcodes route index 0.
+
+So the true lever is: invoke the spawn pipeline for ROUTE INDEX 1 with a valid
+descriptor. The cleanest known seam:
+- `SpawnPlayerFromRetainedDescriptor 0x1410F1910` takes the route index as an
+  arg (passed as edx by ScriptSpawnPlayer = 0); calling it with index=1 and a
+  Chloe-like descriptor would drive CommitResolvedPlayerSpawn for slot 1 and
+  materialize a real runtime object (avoiding the earlier raw-pair crash).
+
+Caveat: needs the correct descriptor/context args (a1,a3,a4,a6) that
+ScriptSpawnPlayer builds; next static step is to capture exactly what
+ScriptSpawnPlayer passes into 0x1410F1910 so the same shape can be reissued with
+index=1.
+
+### Exact Call Shape: ScriptSpawnPlayer -> SpawnPlayerFromRetainedDescriptor (0x140F73C34)
+
+Captured the dispatch:
+- `rcx = [rsp+0x30]` : local spawn DESCRIPTOR block (built just above by a 0x70+
+  byte vmovups copy loop from a source struct, plus per-field fixups; ProcessSpawnInfo-like)
+- `rdx = esi`        : ROUTE INDEX (= 0 in the primary path; xor esi,esi earlier)
+- `r8  = r14`        : spawner/player context object (selected at func start via
+  `r14 = [rdx+rcx*8]` from a spawner table)
+- `[rsp+0x28] = rbp-0x80` : secondary out/context pointer
+- `[rsp+0x20] = dword`    : flag set earlier
+
+So `SpawnPlayerFromRetainedDescriptor(rcx=descriptor, rdx=routeIndex, r8=context,
+stack: outptr, flag)`. The route index is literally arg2 (`rdx`).
+
+Concrete second-player experiment plan (in-process, captures real args; avoids
+the earlier raw-pair crash by going through the real spawn path):
+1. hook `SpawnPlayerFromRetainedDescriptor 0x1410F1910`; on the normal Chloe
+   spawn, log rcx (descriptor), rdx (index, expect 0), r8 (context),
+   [rsp+0x28], [rsp+0x20].
+2. snapshot/copy that descriptor + context.
+3. re-issue `SpawnPlayerFromRetainedDescriptor(copy_descriptor, 1, context, ...)`
+   to drive a real spawn into route/slot index 1 (materializes a runtime object,
+   fills 0x143EEBE80[1] via CommitResolvedPlayerSpawn).
+4. observe: GetLocalPlayer(1) non-null, screen-1 camera + local-player-1 control
+   wake, ideally no crash since the runtime object is properly materialized.
+
+This is the cleanest path to a real second player and is the recommended next
+build/runtime step.
+
+### Spawn-Arg Capture Succeeded (HW breakpoint, no code patch)
+
+Injected the spawn-capture hook (DR0 hardware breakpoint on
+`SpawnPlayerFromRetainedDescriptor 0x1410F1910` via VEH, armed on all threads;
+no code modification). Triggered a location load. Captured a real Chloe spawn:
+
+`SPAWN captured: desc=0x672C6E0 idx=0 ctx=0x11484F49B8 a4=0x672C6F0 flag=0x0 out=0x672C6F0`
+
+- idx=0 confirms primary route index 0 (Chloe), as predicted (ScriptSpawnPlayer
+  hardcodes 0).
+- descriptor content (0x200 bytes from rcx) copied into the DLL buffer; ctx
+  (r8), a4 (r9), flag ([rsp+0x28]=0), out ([rsp+0x30]) saved.
+- desc/out are low/stack-ish addresses (0x672C6E0/0x672C6F0), confirming the
+  descriptor is a caller-local block — copying it at capture time was required.
+
+Caveat observed: black screen during/after the location load while the HW
+breakpoint stayed armed. Likely the persistent breakpoint + VEH overhead (or
+all-thread DR0) slows spawns during load. Mitigation for next build: disarm the
+breakpoint immediately after the first capture (clear DR7 on all threads) so it
+does not keep firing.
+
+Next: add reissue — call
+`SpawnPlayerFromRetainedDescriptor(g_spawn_desc, 1, g_spawn_ctx, out, flag)` to
+drive a real spawn into route/slot index 1, and disarm the breakpoint after
+capture to avoid the load-time stall.
+
+### Fix: HW Breakpoint Hang Root Cause = Missing Resume Flag; Added Auto-Disarm + Reissue
+
+The black-screen/hang after the location load was caused by the exec hardware
+breakpoint re-trapping the SAME instruction in an infinite loop: on
+EXCEPTION_CONTINUE_EXECUTION the Resume Flag (EFlags bit 0x10000) must be set,
+otherwise the breakpoint immediately re-fires. Fixed:
+- VEH now sets `ContextRecord->EFlags |= 0x10000` before continue.
+- After the first capture it also disarms on the current thread
+  (`Dr0=0; Dr7 &= ~1`) so it stops firing during load.
+- Added `reissue_spawn_for_slot1()` (hotkey F12): calls
+  `SpawnPlayerFromRetainedDescriptor(g_spawn_desc, 1, g_spawn_ctx, g_spawn_a4,
+  g_spawn_flag, g_spawn_out)` to drive a real spawn into route/slot index 1.
+
+Test sequence: inject -> trigger one checkpoint/respawn (capture, no hang now)
+-> press F12 (reissue with idx=1) -> check GetLocalPlayer(1)/slot table
+0x143EEBE80[1], screen-1 camera, control; watch for crash.
+Risk note: g_spawn_desc is a copied stack block; if the descriptor embeds
+pointers to other caller-local stack objects, reissue may use stale pointers.
+
+### MAJOR BREAKTHROUGH: Reissuing The Spawn Pipeline With index=1 Creates A REAL Second Playable Local Player In Campaign
+
+Executed the planned experiment and it WORKED:
+- captured a real Chloe spawn (`SPAWN captured idx=0 ctx=0x11484F49B8 ...`)
+- pressed F12 -> `reissue spawn idx=1` via
+  `SpawnPlayerFromRetainedDescriptor(g_spawn_desc, 1, g_spawn_ctx, g_spawn_a4,
+   g_spawn_flag, g_spawn_out)`
+- `reissue spawn idx=1 returned` (no crash)
+
+In-game result (user observed): Chloe "cloned" — a second Chloe appeared; one
+stays in place, the other is PLAYER-CONTROLLED. That is a genuine second local
+player (route/slot index 1) running in single-player campaign.
+
+This validates the entire converged model:
+- second player = drive the existing spawn pipeline for route/slot index 1
+  (NOT raw slot pokes, NOT multiplayer net, NOT CharacterManager re-registration);
+- `SpawnPlayerFromRetainedDescriptor(desc, 1, ctx, ...)` materializes a real
+  player runtime object and fills `0x143EEBE80[1]`, and the engine's native
+  local-2-player path then makes it controllable.
+
+Significance: this is the first time a real, controllable second player exists in
+campaign. The remaining work is now well-shaped and incremental:
+1. make the second player's look/character = Nadine instead of a Chloe clone
+   (swap the descriptor's character/look fields, or post-spawn retarget);
+2. give the second player independent camera (screen-1 camera route should now
+   have a valid slot-1 actor to follow);
+3. route a separate input source to the second player (PC2);
+4. stability: the spawn descriptor is a copied stack block — verify robustness,
+   ideally build a clean descriptor instead of reusing the captured copy.
+
+Repro: inject hook -> trigger one checkpoint/respawn (auto-captures, no hang) ->
+press F12 -> second controllable player appears.
+
+### Next Experiment Plan: Combine Spawn(idx=1) + Split-Screen Activation For Player-2 Camera
+
+Now that a valid slot-1 actor exists (spawn idx=1 works), retry split-screen
+camera — earlier F7 only produced artifacts because slot 1 had no actor.
+
+Combined runtime test (no code change; hotkeys already present):
+1. inject hook; trigger one checkpoint/respawn (auto-capture, no hang).
+2. press F12 -> spawn second player into route/slot 1 (controllable clone).
+3. press F7 -> split-screen login/activation (net-login-split-screen +
+   one-shot split render mode) — now with a real slot-1 actor for screen route 1.
+4. observe: does a proper second viewport render following player 2 (vs the
+   earlier blink/artifacts)?
+
+If the second view follows player 2, that is the "own screen" half for two-PC
+(then Steam Remote Play Together / transport handles delivery). If it still
+artifacts, decode how screen-route 1 selects its follow actor now that slot 1 is
+populated, and which extra render/route bind is missing.
+
+### Confirmed: Player 2 (slot 1) Is A Full `Player` Class, Slot Table Stably Populated
+
+After spawn idx=1, runtime read of the slot table and player objects:
+- slot table `0x143EEBE80`: slot0 {0x10E02129A0, 0x1117}, slot1 {0x10E02102B8,
+  0x1310} — BOTH populated (slot1 stays filled; spawn idx=1 is durable).
+- slot0 -> player obj 0x10E1065680, vtable RVA 0x2A4BFE8, name "Player"
+- slot1 -> player obj 0x10E1406700, vtable RVA 0x2A4BFE8, name "Player"
+
+So player 2 is a real full `Player`-class actor (full player moveset/control),
+not a NadineBuddy/NPC. Functionally this is the stronger base for co-op than
+elevating the buddy. The "Chloe clone" look is just the look/character on a real
+Player; making it Nadine is a look/character-def swap, secondary to gameplay.
+
+Split viewport status: F7 (split login + render mode=2) after spawn did NOT
+produce a visible second viewport (Nadine merely entered buddy-follow on the
+mode change); cam0/cam1 route entities unchanged. So a real second on-screen view
+is still a separate task from having a second playable Player.
+
+Updated remaining tracks (priority for two-PC):
+1. Second on-screen viewport for player 2 (split render / second camera actually
+   rendering) — the real "own screen" half; current blocker.
+2. Independent input to player 2 (PC2).
+3. (cosmetic) make player 2 look = Nadine.
+
+### Variant A Phase 1 MVP Implemented: Player-State Replication Over UDP
+
+Per the approved plan (variant A, host-authoritative two-instance co-op), Phase 1
+"players only" state replication is implemented in the hook:
+
+- `coop_protocol.h`: added `StatePacket` (pos[4], quat[4], velocity[3],
+  anim_state, seq/ts) + `kStatePort=31338`, magic "COPS".
+- `teleport_hook.cpp`:
+  - `retained_player_object(index)`: resolves the live `Player` from
+    `g_RetainedPlayerSlotTable 0x143EEBE80` slot index (entry.ptr -> +8).
+  - `start_state_net()`: UDP recv socket bound to 31338 + send socket; peer IP
+    read from `reports/coop_peer.txt` (default 127.0.0.1); recv thread stores
+    latest `StatePacket`.
+  - `send_local_player_state()`: reads LOCAL player (slot 0) world transform
+    `+0x240` + quat `+0x140`, sends to peer.
+  - `apply_peer_state_to_puppet()`: writes peer pos/quat onto the REMOTE puppet
+    (slot 1 Player, the idx=1 spawn) at `+0x240/+0x130/+0x140` (direct-write MVP).
+  - `net_tick()` runs each game-thread `hooked_update`; `start_state_net()` runs
+    at install.
+
+Test setup (two instances):
+1. Put the peer's LAN IP in `reports/coop_peer.txt` on each machine (or
+   127.0.0.1 for loopback if two instances on one box are possible).
+2. Both load the SAME checkpoint; inject the DLL into both.
+3. On each, run the capture (checkpoint/respawn) + F12 reissue to spawn the
+   remote puppet (slot 1).
+4. Move on one machine; the other machine's puppet (slot 1 Player) should mirror
+   position/orientation.
+
+Expected first issues to iterate on:
+- direct-write transform may be overwritten by the puppet's own sim -> switch
+  apply to native teleport vfunc (slot 0xC48) or disable puppet AI/sim;
+- jitter -> add interpolation;
+- two instances on one PC may be blocked by Steam (use two machines / LAN).
+
+### Variant A Phase 1: Position Replication WORKS (loopback self-test)
+
+Single-PC loopback test (peer=127.0.0.1, +2m offset): injected hook, spawned
+puppet (F12), moved Chloe. Result: the puppet mirrors Chloe's position/heading
+in real time (slides alongside, +2m). So the netcode pipeline
+(send local transform -> UDP -> recv -> apply to puppet) is VALID end-to-end.
+
+Known gap (expected): the puppet has NO locomotion animation — it "slides/gets
+dragged" because we hard-write its transform each tick; the engine never plays
+run/roll/etc. on it. Position fidelity is there; animation fidelity is not.
+
+This is exactly the Phase 1 success criterion (see each other move) and cleanly
+exposes the next increment.
+
+### Phase 2 direction: animation fidelity on the puppet
+
+Two viable approaches:
+1. Drive the puppet via MOVE INTENT / locomotion instead of teleport: feed a
+   target/velocity so the engine plays the proper run/turn animations itself
+   (reuse the NpcMoveTo/locomotion path already proven for the buddy, or feed
+   the player locomotion controller at +0x15B8). Smoothest, engine-authentic
+   anims, but the puppet is a Player not an NPC, so the control-feed must match
+   Player locomotion.
+2. Replicate a coarse anim/state id + velocity in StatePacket and set the
+   puppet's anim/locomotion state from it; keep transform authoritative for
+   position. More explicit, needs the anim-state field mapping.
+
+Recommended: approach 1 (move-intent driven) — let the engine animate from
+motion, only correct position drift periodically. Velocity is already in
+StatePacket (currently unused) to support this.
+
+### Input Layer Mapped: Campaign Uses A Single-Active-Pad Front-End (2026-06-16)
+
+Goal of this pass: find how to give the 2nd player (slot-1 puppet) movement
+input, after confirming a virtual XInput controller (idx=1) works but its stick
+drives the SINGLE existing player, not a 2nd one.
+
+XInput hooks (teleport_hook.cpp) established:
+- `XInputGetState` IAT slot RVA `0x25D6D60` (ord 2), `XInputGetCapabilities`
+  `0x25D6D68` (ord 4), `XInputSetState` `0x25D6D58` (ord 3). Hooking GetState +
+  GetCapabilities for idx=1 makes a virtual pad the engine accepts.
+- Pad poll function `0x141A9A790(manager, inputStateOut)`; thin per-pad wrapper
+  `0x141A99F40`. Each pad object: index@+0x0, connected@+0x4, caps@+0xC,
+  `XINPUT_STATE`@+0x20 (so sThumbLX@+0x28, sThumbLY@+0x2A).
+- Stick normalizer `0x141A99FD0(pad, dst)`: reads pad+0x28/+0x2A (int16),
+  /32768, clamps, writes normalized LX/LY to `dst+0x10/+0x14` (RX/RY follow).
+
+Input-manager object (vtable base `0x142B37E50`, ctor at `0x14179C495`, size
+`0x70`, heap-allocated via `0x1415A0E90(0x70)`):
+- +0x0 vtable; +0x8..+0x20 = FOUR pad-object pointers (controller slots 0..3);
+- +0x28 = ACTIVE pad pointer; +0x58 = round-robin scan counter (cycles 0..3).
+- Poll logic: every 4th frame (counter==0) it polls GetCapabilities for all 4
+  slots (idx 0..3 observed; idx0=connected, idx1/2/3=1167), and only calls
+  GetState for connected ones; then scans connected pads and the FIRST one with
+  input activity (`0x14179C170` = "any axis non-zero" predicate) becomes the
+  active pad (+0x28), feeding THE one player.
+
+CONCLUSION: the campaign input front-end is **single-player / single-active-pad**
+("any controller controls the game"). It does NOT route pad-index -> player-
+index. That is why a virtual idx=1 pad just becomes the active pad and moves
+Chloe (player 0). A true 2nd controllable player needs the engine's separate
+2-local-player input routing, which campaign does not invoke (split-login set
+max_local_players=2 + spawning the slot-1 Player did NOT make idx=1 feed a 2nd
+player). Net: input injection is proven to work; the remaining blocker is the
+2-player input ROUTING, a separate uninvoked system.
+
+### Input Dispatch Pipeline Mapped (2026-06-16) — toward redirecting control
+
+Goal: redirect player control from Chloe to our spawned Player clone (camera
+already follows it via the retained-slot swap). Traced the input pipeline:
+
+- Stick normalizer `0x141A99FD0(pad, dst)` writes the normalized left stick to
+  `dst+0x10/+0x14`. `dst` = a MODULE GLOBAL input-state at RVA `0x66E4220`
+  (.data), captured at runtime (exec bp on the normalizer, hotkey numpad0).
+- Refs to that global (found via scripts/find_global_refs.py = per-.pdata-
+  function decode; linear sweep is unreliable): functions `0x14179C775`,
+  `0x14179E310`, `0x14179E6C0`.
+- `0x14179E310` is the INPUT DISPATCH loop: r14 = `*(0x143FE1088)`, r15 = input-
+  state global. It iterates the consumer array `0x146B2C620` (count
+  `0x146B1B55C`); for each consumer: `rcx=consumer; rdx=input-state;
+  call [*(consumer)+0x30]`. The FIRST consumer whose +0x30 returns true claims
+  focus (stored at `0x146B2C618`) and the loop breaks. So input is FOCUS-based:
+  input-state -> first consumer that handles it -> drives the focused player.
+- => "control" is not a direct player pointer; it's a focus consumer object
+  (vtable+0x30 = try-handle-input) that holds/drives the controlled player.
+  Current focused consumer = `*(0x146B2C618)`.
+
+NEXT to redirect control to the clone: identify the gameplay consumer (RTTI of
+`*(0x146B2C618)`) and the player reference inside it, then repoint that to the
+clone; OR change which consumer/player has focus. Reverse tooling added:
+scripts/find_global_refs.py (per-function rip-rel ref finder),
+scripts/rtti_name_by_vtable.py. Component map of the Player object: +0xb0
+PlayerSnapshot (Nadine = NpcSnapshot), +0x340 CharacterAttackHandler, +0x4a8
+HealthSystem, +0x1b0 EffectControl, +0x330 RegionControl, +0x350
+FoliageSfxController, +0xa0 ProcessHeap.
+
+### Input chain deeper still (2026-06-16) — control ref not yet reached
+
+Read-bp on the input-state stick global (g_module+0x66E4230, hotkey numpad0)
+caught readers: rva 0x1A9A054 (input module, self) and rva 0x183B571. The latter
+is inside a large virtual `0x14183B4DA` (size 0x1067, no direct callers = vtable
+method): it reads the input-state global (r15) and writes a SENSITIVITY-SCALED
+copy (xmm6 = +/-scale) element-by-element into another buffer (rsi). So input is
+processed/copied through more stages before reaching the gameplay player control;
+the read-bp keeps catching intermediate copy/scale stages, not the final
+apply-to-player. The focus-consumer global 0x146B2C618 is null in gameplay (it's
+the UI/overlay input stack, not gameplay control). The gameplay player-control's
+player reference has NOT been reached after: input manager -> active pad ->
+normalizer 0x141A99FD0 -> input-state global 0x66E4220 -> scale-copy virtual
+0x14183B4DA -> (more). Net: redirecting control to the clone is a multi-layer
+chain not yet cracked; the campaign input/control is deeply staged.
+
+### BREAKTHROUGH: Fresh IDA DB + per-player input slots (2026-06-16)
+
+Rebuilt a clean IDA database from the real exe: ida/tll_fresh.exe.i64 (the old
+ida/tll.i64 is corrupt — Hex-Rays returned JUMPOUT stubs; the fresh one
+decompiles cleanly). Tooling: scripts/ida_dump_pseudo_env.py (TLL_IDA_TARGETS/
+TLL_IDA_OUTPUT), run on ida/tll_fresh.exe.i64.
+
+Hex-Rays of the input dispatch sub_14179E310 (and sibling sub_14179E6C0(mgr))
+reveals the MULTI-PLAYER input distribution:
+- After the UI focus loop (consumer array qword_146B2C620, count 146B1B55C,
+  vtable+0x30 try-handle, focus stored 146B2C618), there is a SECOND loop over
+  6 slots (v5 = 0..5):
+    for slot in 0..5:
+      idx = *(slotstruct+0x18)
+      inputblock = &qword_1466E4220[166 * idx]      // 6 input-state blocks, 166 qwords each
+      (*manager+0x20)(manager, *manager, inputblock, slotstruct, slot)
+  manager = *(0x143FE1088); slot structs at manager+0xE88 + slot*0xBF0 (same
+  0xBF0 stride as the per-screen camera bands under 0x143FE1088).
+- So per-player input EXISTS (6 slots). Slot 0 = active player (Chloe); slots
+  1-5 idle in campaign. The "single active pad" front-end feeds slot 0's block.
+- => path to a real player-2: activate slot 1 (bind a character + feed its input
+  block), the engine's own native local-multiplayer distribution. Connects to
+  g_maxLocalPlayers / split-login / our virtual XInput idx=1.
+NEXT: decompile the per-slot apply (manager vtable+0x20) to see how a slot binds
+its player, to activate slot 1.
+
+### FrameState per-slot map + control-binding still buried (2026-06-16)
+
+Fresh DB (ida/tll.i64, labeled) decompilation results:
+- The per-player input manager *(0x143FE1088) is class **FrameState** (vtable RVA
+  0x28FB968). Per-slot input apply = FrameState vtable+0x20 = **0x140289150**
+  (FrameState_PerSlotInputApply). It processes per-slot camera heading (cos/sin)
+  into the slot's input block and calls Input_ScaleCopyVirtual.
+- Per-slot ENABLE gates: byte FrameState+0x70B8+slot and struct
+  FrameState+0x6FC8+0x28*slot (set for slot 0, 0 for 1-5). Slot struct passed to
+  the apply = FrameState+0xDB0+0xBF0*slot (the per-screen camera bands).
+- Runtime scan of FrameState slot structs (FrameState+0xDB0+0xBF0*{0,1}) for the
+  controlled player: NO hits for the player object, its retained handle
+  (chloe+0xA8), its id (chloe+0xBC), or the retained-table slot0 handle. So the
+  FrameState slots do NOT reference the controlled player — they are pure
+  per-viewport camera/input state.
+- IDA xrefs to the input-block global 0x1466E4220: only the input system
+  (sub_14179C740, sub_14179D1E0, Input_FocusDispatch, Input_PerPlayerDispatch).
+  The player reads its block via a passed/cached pointer, not the global.
+
+CONCLUSION: the control->player binding is a buried passed-pointer/handle/index
+chain; static xrefs + runtime memory scans did NOT pin it after many layers.
+RECOMMENDED next: LIVE debug (x64dbg) — HW breakpoint on the controlled player's
+velocity write (chloe+0x260) or move field, then read the CALL STACK to see the
+control->player chain and the controlled-player reference directly.
+
+### Velocity-write call stack = animation/IK, not control (2026-06-16)
+
+DLL velwriter HW-bp on Chloe+0x260 now also logs the call stack (return RVAs in
+.text). The chain (0x1bb857d kinematics -> ... -> 0x1406CD220 etc.) decompiles to
+LegIk processing (LegIkModeFreeze/LegIkModeMoving). So the velocity write happens
+during the ANIMATION/IK pass; its stack does NOT reach the input/control. Confirms
+velocity is an animation-time output; the control->player binding is upstream and
+not reachable from here. Combined with all prior negative results (FrameState
+slots hold no player ref; input-block global only referenced by input system;
+CharacterManager 0x143898630 is a 32-entry scene list, not the player resolver;
+retained-slot swap moves camera but not control), the control->player binding
+remains a buried passed-pointer chain. Reaching it efficiently needs live
+call-stack inspection at the PLAYER's input-read / move-intent write (x64dbg HW
+bp + stack), not the velocity/animation path.
+
+### Move-intent is NOT a player field; it's the per-slot input block (2026-06-16)
+
+velprobe extended to scan PlayerSnapshot (*(player+0xb0)): it holds only velocity
+copies (PS+0x120 == player+0x260 velocity; PS+0x130 == horizontal "desired"
+velocity, Y=0), magnitude ~run speed, direction = movement. No stick-magnitude
+(~1) intent anywhere in the player / controller / PlayerSnapshot. => the player
+does NOT cache the raw move-intent; it reads its per-slot input block
+(0x1466E4220 + 166*localIndex) transiently each frame.
+
+CONSOLIDATED control model (fully mapped):
+- A player reads input from block[localIndex]. Active player = index 0 ->
+  block[0], fed by the single-active-pad front-end. block[1..5] are never fed
+  (no 2nd pad/player in campaign).
+- FrameState (*(0x143FE1088), 6 slots) processes the blocks; per-slot ENABLE
+  gates byte FrameState+0x70B8+slot and struct FrameState+0x6FC8+0x28*slot are
+  set only for slot 0.
+
+CONCRETE PATH to a controllable player-2 (the dormant native local-2-player):
+  (1) set FrameState slot-1 gates; (2) feed input block[1] = 0x1466E4220+166
+      (our virtual XInput idx=1, or write it directly); (3) bind the slot-1
+      spawned Player to localIndex 1 so it reads block[1].
+This replaces the earlier dead ends (CharacterManager swap, FrameState player-ref
+scan, velocity/animation stack). Now tractable with ida/tll.i64 (fresh, labeled).
+
+### BREAKTHROUGH: FrameState slot-1 gate activates a moving 2nd player (2026-06-16)
+
+Setting the FrameState slot-1 enable byte (*(FrameState+0x70B8+1)=1, FrameState =
+*(0x143FE1088)) ACTIVATED slot-1 input processing: the spawned slot-1 Player
+(F12 clone) came alive and MOVES on its own (runs in a circle) without any input
+from us. This is the first time the 2nd player is an ACTIVE, MOVING slot-1
+player driven by the native per-slot path (not a teleported/NPC puppet).
+The circling = slot-1's input block (0x1466E4220 + 1*0x530) holds uninitialized/
+garbage state (spinning camera heading); we are not yet feeding it clean move
+input. Hotkey: numpad + toggles g_drive_slot1 (sets the gate each tick + writes
+arrow keys to block[1]+0x10/+0x14).
+NEXT: find the correct MOVE field in the input block (probe block[0]=0x1466E4220
+while Chloe moves for the stick-magnitude vector), then feed block[1] there to
+steer the clone cleanly; and initialize slot-1 camera so it stops spinning.
+
+### Slot-1 clone control: spin branch is a demo; sub_1402893D0 isn't Chloe's path (2026-06-16)
+
+After the slot-1 gate breakthrough (clone moves), tried to steer it cleanly:
+- The MOVING branch (FrameState+0x70B8+slot gate) computes heading = cos/sin of
+  angle = (float)(*(int64)(FrameState+0xE0)) * const — FrameState+0xE0 is a
+  GLOBAL frame counter (freezing it = BLACK SCREEN). So that branch is a default/
+  demo rotating heading, not real per-player input. The clone circles because of
+  this global angle.
+- The other branch sub_1402893D0 (FrameState+0x6FC8+0x28*slot gate) IS a real-
+  input copier (struct+0x14/+0x18 heading, +0x1C mag, +0x10 flags -> block), but:
+  (a) feeding the struct at mgr+0x6FF0 produced block heading=0 (wrong address —
+  decompiler showed `(int)_RBP+...` truncation; real struct addr differs), and
+  (b) an exec-bp on sub_1402893D0 (0x2893D0) did NOT fire while Chloe moves =>
+  Chloe's main movement input does NOT go through sub_1402893D0.
+NET: slot-1 activation moves the clone (real milestone), but clean directional
+control needs Chloe's ACTUAL move-input application function (not sub_1402893D0,
+not the demo spin). Next: breakpoint where Chloe's per-frame move-heading is
+computed from her stick (capture that function + its struct), then replicate for
+slot 1. Hotkeys: numpad+ = slot-1 spin gate (clone circles), numpad0 = exec-bp
+capture on sub_1402893D0.
+
+### Runtime follow-up: input block writers and look-field probe (2026-06-19)
+
+Current run produced two useful concrete results.
+
+1. PlayerSnapshot look field:
+   - `player+0xB0` points to a PlayerSnapshot-like object.
+   - `PlayerSnapshot+0x140` holds a packed pair; the upper dword at
+     `PlayerSnapshot+0x144` is the character/base hash.
+   - slot 0 and slot 1 both originally held `chloe-base` (`0xB70B7EAF`) there.
+   - Runtime patching `PlayerSnapshot+0x144` to `nadine-base` (`0x8A419C8E`)
+     for both slots survived and did not crash:
+     `snapshot+140=0x8a419c8e7fbbee02`.
+   - Visual effect is still not proven. The Windows screenshot captured the
+     desktop/terminal, not the game window. Treat this as a durable metadata
+     patch, not yet a confirmed model swap.
+   - `tll_slot_dump.exe` now prints this field and supports
+     `--set-look <slot|all> <chloe|nadine|hex>` so future sessions do not need
+     hardcoded live addresses.
+
+2. Spawn descriptor look patch:
+   - `reissue_spawn_for_slot1()` now hashes `chloe-base`, `coop-chloe`, and
+     `nadine-base` and scans the captured 0x200-byte spawn descriptor before
+     spawning slot 1.
+   - Live result: `slot1 spawn look patch summary: patched=0 already_nadine=0`.
+   - So the currently copied descriptor block does NOT contain the direct
+     Chloe/Nadine look hashes. Player 2's visible Chloe clone is sourced either
+     from adjacent context (`ctx/a4/out`), a pointed-to subobject, or a later
+     materialized PlayerSnapshot/character definition.
+
+Input-block writer breakpoints also resolved the writer side:
+
+- `InputManager_NormalizeStick 0x141A99FD0(pad, dst)` writes the live normalized
+  left stick to `dst+0x10/+0x14`; runtime hits:
+  - `0x141A9A054` / `0x141A9A059` for `block[0]+0x10/+0x14`.
+- Its helper `0x141A99CE0` writes the first camera-adjusted pair:
+  - `0x141A99E58` / `0x141A99E5C` for `block[0]+0/+4`.
+- Runtime examples while Chloe moved:
+  - `block0[+0]=1.37688e-08`, `block0[+4]=-0.567903`
+  - `block0[+10]=0`, `block0[+14]=-0.671407`
+
+This confirms the concrete input-block fields. The current slot-1 experiment
+still fails because the manual call to the per-slot apply function wipes the
+prepared slot-1 block:
+
+- before manual slot-1 apply: `[1.37688e-08,-0.567903,0,-0.671407]`
+- after manual slot-1 apply:  `[0,0,0,0]`
+
+Next implementation step: stop manually calling the per-slot apply function from
+the hook, feed/copy the prepared block[1] only, and let the engine's own update
+sample it. If movement still does not respond, the missing piece is the
+local-index binding for the spawned slot-1 Player, not the stick values.
+
+Follow-up static/runtime correction:
+
+- The per-slot dispatch loop at `0x14179E310` always iterates all 6 FrameState
+  slots. For each slot it chooses the input block through:
+  `inputBlock = 0x1466E4220 + 0x530 * *(uint8_t*)(slotStruct+0x18)`.
+- The relevant `slotStruct` is the large per-slot state at:
+  `FrameState+0xE88 + slot*0xBF0`, not the small `FrameState+0x6FC8+0x28*slot`
+  branch-control structure.
+- Runtime read on the current run confirmed:
+  - slot 0 large struct at `FrameState+0xE88`: byte `+0x18 == 0`
+  - slot 1 large struct at `FrameState+0xE88+0xBF0`: byte `+0x18 == 1`
+- Therefore slot 1 already selects `block[1]` correctly. The latest blocker was
+  self-inflicted: the hook manually called `FrameState_PerSlotInputApply` with a
+  mismatched argument shape, and that call zeroed the prepared slot-1 block.
+
+Source change now in `teleport_hook.cpp` (requires rebuild + reinject before
+runtime verification):
+
+- `apply_slot1_perslot_on_game_thread()` is disabled by default behind
+  `g_manual_slot1_apply` (toggle Numpad2 only for diagnostics).
+- `drive_slot1_tick()` keeps `slot1Struct+0x18 = 1`, keeps the spin/demo gate
+  off, and fills `block[1]`.
+- After `reissue_spawn_for_slot1()` returns, the hook now enables `g_drive_slot1`
+  for 4 seconds and feeds forward input into `block[1]`.
+
+Next runtime test:
+
+0. rebuild/reinject the DLL with the latest source change;
+1. load a gameplay save;
+2. wait for auto spawn capture + auto slot-1 spawn;
+3. observe whether the clone moves forward cleanly for 4 seconds.
+
+If yes, the clean per-slot input path is proven. If no, the next missing piece is
+not the stick values or slot input index; it is the downstream binding between
+the spawned slot-1 `Player` and the per-slot control consumer.
+
+### Runtime confirm: look-hash patch + clean block[1] feed both insufficient (2026-06-19, Opus)
+
+Tested Codex's pending changes live:
+1. Clean block[1] feed (no manual per-slot apply): the slot-1 clone STILL does
+   NOT move. So feeding the input block alone is not enough — the engine's own
+   per-slot apply (real-input branch, branch1 gate=1) overwrites block[1] from
+   the branch1 struct (FrameState+0x6FC8+0x28), which is empty (mirrored from
+   slot0's unused branch0) => block[1] zeroed => clone stands. The spin path
+   moved the clone only because it WROTE the block AND called
+   Input_ScaleCopyVirtual to propagate to the player.
+2. `tll_slot_dump.exe --set-look slot1 nadine`: snapshot+0x144 changed
+   0xb70b7eaf(chloe-base) -> 0x8a419c8e(nadine-base) on the slot-1 Player, no
+   crash, BUT the clone is VISUALLY STILL CHLOE. Confirmed: the look hash is
+   load-time metadata; patching it post-spawn does not reload the model/skeleton.
+   A Nadine model needs the correct character def at SPAWN time (descriptor does
+   not carry the hash; it comes from ctx/a4/out or a pointed-to subobject).
+
+STATE: two core pieces of "playable Nadine" remain blocked — (a) clean
+directional control of the slot-1 Player (binding spawned-Player <-> per-slot
+control consumer / feeding the real-input branch struct correctly), and (b) the
+Nadine model (load-time). Slot-1 clone exists and can be made to move in a circle
+(spin gate) but not cleanly controlled, and looks like Chloe.
+
+### Slot-1 per-slot input structs are NOT cleanly isolated (2026-06-19, Opus)
+
+Tried driving the slot-1 clone via the per-slot real-input branch struct
+(branch1 = FrameState+0x6FC8+0x28*1), built clean (zeroed + gate byte + our
+heading/mag, no branch0 mirror, no direct block feed; let the engine's
+sub_1402893D0 propagate). RESULT: the CLONE stands, but writing branch1
+drives CHLOE (the active player is "carried forward" by our auto-forward feed).
+- Codex's branch0->branch1 mirror previously made the clone run/jump/open-map =
+  it dragged Chloe's live control/button state into slot 1.
+- So the +0x6FC8 per-slot "branch" structs do NOT map cleanly to slot index in
+  the way assumed: writing branch1 affects the ACTIVE player, not the slot-1
+  clone. The structures bleed into Chloe -> instability (chaos, Chloe death,
+  Chloe auto-walk).
+NET: the slot-1 clone can be made to MOVE (spin-gate demo) but cannot be cleanly
+& independently controlled via these per-slot structs without destabilizing the
+active player. Clean isolation of slot-1 input from slot-0 (Chloe) is the
+unsolved crux. The clone also lacks the Nadine model (load-time streaming) and
+collision. Recommend reassessing the clone route vs alternatives at this point.
+
+### Spawn-time look-source probe: descriptor/nearby ctx do not carry Nadine base hash (2026-06-19, Codex)
+
+Added bounded runtime instrumentation in `teleport_hook.cpp` at
+`SpawnPlayerFromRetainedDescriptor 0x1410F1910`. On the first real Chloe spawn it
+now scans:
+- captured 0x200-byte descriptor copy;
+- live descriptor;
+- ctx/a4/out;
+- the current stack slice;
+- first-level pointers from those regions.
+
+Live run after rebuild/reinject:
+
+```
+SPAWN captured: desc=0x511c570 idx=0 ctx=0x11484f49b8 a4=0x511c580 flag=0x0 out=0x511c580
+SPAWN look-source probe hashes: chloe-base=0xb70b7eaf coop-chloe=0x9ffcfd6c nadine-base=0x8a419c8e ...
+SPAWN look-source probe done: hits=16
+```
+
+Important result:
+- no `chloe-base`, `coop-chloe`, or `nadine-base` hit in the descriptor, live
+  descriptor, ctx, a4, out, or stack window;
+- only generic `player` hash hits and text hits containing `nadine`;
+- raw memory dump of those `nadine` text pointers showed level/script names
+  like `ganesh-...-nadine...`, not a character/model selector.
+
+Narrowed process scan:
+- around ctx `0x11484f0000..0x1148502000`: no `chloe-base`, no `nadine-base`;
+  only `player` hits;
+- around live player heap `0x10e0000000..0x10e2000000`:
+  - `chloe-base` appears only in player snapshot objects
+    (`slot0 snapshot+0x144`, `slot1 snapshot+0x144`, plus one sibling snapshot);
+  - `nadine-base` not present in that range.
+
+Current implication:
+- the small spawn descriptor and immediate ctx/a4/out arguments still do not
+  carry the final player look/base id;
+- post-spawn `PlayerSnapshot+0x144` is confirmed as metadata, but the visible
+  model was already selected earlier;
+- next useful frontier is the builder/materializer that creates or fills
+  `player+0xB0` / `PlayerSnapshot`, especially the upstream path that writes
+  `snapshot+0x140/0x144` during `CommitResolvedPlayerSpawn ->
+  0x1417C3790` or the surrounding player construction path.
+
+Follow-up live test:
+- set slot0 `PlayerSnapshot+0x144` to `nadine-base` before manually reissuing
+  `SpawnPlayerFromRetainedDescriptor(..., idx=1, ...)`;
+- `F12` did call the reissue path and returned:
+  `slot1 spawn look patch summary: patched=0 already_nadine=0`,
+  `reissue spawn idx=1 returned`;
+- immediately after that `tll.exe` was no longer running, so the process likely
+  crashed after the reissue;
+- no post-reissue slot dump was possible.
+
+Conclusion: "patch slot0 snapshot before reissuing slot1 spawn" is not a clean
+or proven route. Treat it as unsafe unless a future run adds tighter guards and
+captures the crash site. The still-clean route is to find the actual
+PlayerSnapshot / visual asset source during materialization rather than patching
+a live snapshot ad hoc.
+
+### PlayerSnapshot is downstream; visible character source is `player+0x190` (2026-06-19, Codex)
+
+Static follow-up narrowed the model/look source past `PlayerSnapshot`:
+
+- `PlayerSnapshot` type registration:
+  - vtable/type area: `0x142A3CFA0`
+  - registration thunk: `0x1400A9190`
+  - factory stored at `0x143ED31D0+0x68 = 0x143ED3238`
+  - concrete creator: `0x140FDD4D0`
+  - constructor: `0x140FDD610`
+- `0x140FDD610` only initializes an empty `PlayerSnapshot`; it zeroes
+  `snapshot+0x140/+0x144`. It does not choose Chloe/Nadine.
+- During player materialization, `0x1417C3790` writes `player+0xB0` from
+  `Player::vtable+0x1A8`; that slot is the `PlayerSnapshot` factory path above.
+- The first `PlayerSnapshot` virtual method `0x141BB3EC0` fills
+  `snapshot+0x144` by calling `Player::vtable+0x300`.
+- `Player::vtable+0x300 = 0x141BB8BC0`; it reads `player+0x190`, resolves that
+  id through the upper actor/state registry, and returns the resolved hash to
+  the caller.
+
+Therefore `PlayerSnapshot+0x144` is downstream metadata. The earlier visible
+character/model selection must be controlled by the Player upper visual state,
+especially:
+
+```
+0x141BB4280 Player upper draw-control lifecycle
+  0x141BB4A9A: rbx = r12+0x98 pair, or fallback from Player+0x238
+  0x141BB4AFB: Player+0x738(pair)
+  0x141BB4B03: player+0x170 = pair[0]
+  0x141BB4B17: player+0x190 = pair[1]   <-- current spawn-as-Nadine seam
+  0x141BB4B48: resolve player+0x190 through 0x1417CD080
+  0x141BB4BC0: Player+0x6F0(resolved record)
+  0x141BB4BC6: player+0x1A8 = result
+```
+
+Runtime hook added in `teleport_hook.cpp`:
+
+- logs live NadineBuddy `+0x170/+0x190` once it appears;
+- resolves NadineBuddy `+0x190` through `0x1417CD080`;
+- around reissued slot-1 spawn, arms one-shot current-thread breakpoints at:
+  - `0x141BB4B01` before `player+0x170 = pair[0]`
+  - `0x141BB4B14` before `player+0x190 = pair[1]`
+- if the Nadine visual pair is valid, skips the original source reads and feeds
+  Nadine's `+0x170/+0x190` pair into the two following Player writes.
+
+First runtime check with only `player+0x190` patched was partial: the user saw
+only hair left on the clone. That is useful signal, not a dead end: mixing
+Chloe's `+0x170` with Nadine's `+0x190` can produce a broken partial visual, so
+the spawn-time override must patch the pair atomically.
+
+Second runtime check after rebuilding/reinjecting paired override:
+
+```
+Nadine visual identity candidate: object=... +170=0xd27c074f +190=0xed25c708 resolved(+190)->0x5e0f6b9f valid=1
+visual seed bp armed ... look=...4b01 state=...4b14 nadine_look=0xd27c074f nadine_state=0xed25c708 valid=1
+VISUAL look seed hit ... src(+0/+4)=0x3f334972/0x6c2b2396 nadine=0xd27c074f/0xed25c708 active=1 valid=1 PATCHED
+VISUAL state seed hit ... src(+0/+4)=0x3f334972/0x6c2b2396 nadine=0xd27c074f/0xed25c708 active=1 valid=1 PATCHED
+reissue spawn idx=1 returned
+```
+
+So the pair override is proven to execute during slot-1 creation.
+
+Visual result reported in-game: still only floating hair, no full Nadine body.
+External slot dump confirmed that the second Player really did receive Nadine's
+two patched visual ids:
+
+```
+slot1 object=0x10e13c7180
+  +170 = 0xd27c074f   (Nadine look id)
+  +190 = 0xed25c708   (Nadine state id)
+```
+
+But nearby Player identity/model fields were still mixed:
+
+```
+  +174 = 0xcde4b742   (same "player" hash seen on Chloe)
+  +180 = 0xde7baff5   (unchanged from player path)
+  +1A8 = 0x11191f2f00 (graph/object produced from the mixed state)
+  snapshot+144 = 0xc67a06f1, not nadine-base
+```
+
+Static follow-up explains why this can happen:
+
+```
+0x141BB4A49: mov eax, [player+0xD8]
+0x141BB4A50: player+0x174 = eax
+...
+0x141BB4B03: player+0x170 = pair[0]
+0x141BB4B17: player+0x190 = pair[1]
+0x141BB4BC0: player->virtual +0x6F0(resolved +0x190 record)
+0x141BB4BC6: player+0x1A8 = result
+0x141BB4BEE: player->virtual +0x700(...)
+```
+
+Conclusion: `+0x170/+0x190` are necessary but not sufficient for a full character
+swap. They are enough to pull Nadine hair, but the body/rig/clothing source still
+comes from the surrounding Player identity/visual graph path, especially
+`+0x174/+0x180/+0x1A8` and the `+0x6F0/+0x700` virtuals. Do not repeat the
+paired `+0x170/+0x190` test as if it could produce full Nadine by itself.
+
+Next useful test is to capture/compare the complete source packet consumed by
+`0x141BB4280` and the outputs from `+0x6F0/+0x700`, then identify which field
+selects the body/rig record in addition to the hair/look record.
+
+### Visual swap: body mesh is streamed at spawn, NOT swappable post-spawn (2026-06-19, Opus)
+
+Continued Codex's visual seam. Findings:
+- player+0x170 = a RESOLVED look id, NOT a selector. Feeding hash("nadine")
+  (0xc7e2539b, the selector) -> clone is plain Chloe (no effect). Feeding
+  NadineBuddy's resolved +0x170 (0xd27c074f, Codex) -> Nadine HAIR only.
+  So +0x170 swaps an attachable look item (hair), not the body.
+- Player vtable+0x740 (0x141BCD340) = ResolvePlayerAmbientOccluder... = AMBIENT
+  OCCLUDER (lighting) selection + draw-control mesh refresh, writes player+0x180
+  (occluder id), refreshes draw-control at player+0x198. It is lighting, NOT the
+  body mesh source.
+- Identified hashes (CRC32 poly 0x04C11DB7 init 0): player+0x174 = hash("player")
+  (class id, same on Chloe+clone), player+0x170 source pair[0] = hash("chloe")
+  = 0x3f334972, clone snapshot+0x144 after patch = hash("nadine-dlc-base").
+CONCLUSION: the BODY/RIG is the streamed character mesh, loaded at spawn/
+materialize from the (Chloe) retained descriptor. Only attachable look items
+(hair) are swappable via the Player draw-control ids. A full Nadine body requires
+spawning from a Nadine character def, but campaign has no Nadine-as-Player
+descriptor. So the clone's body is fundamentally Chloe; the visual swap is
+blocked at the body-mesh streaming layer (confirmed by 2 agents: hair-only).
+
+### BREAKTHROUGH: clean per-slot input injection into the slot-1 clone (2026-06-19, Opus)
+
+Decompiled the per-slot apply (0x140289150) + real-input branch (0x1402893D0).
+Two distinct slot gates in FrameState (*0x143FE1088):
+- FrameState+0x70B8+slot  = DEMO-SPIN enable. Heading = global frame counter
+  [FrameState+0xE0] -> cos/sin -> constant rotation = the "runs in a circle".
+  (I had been setting this -> that WAS the circle.) DO NOT use for control.
+- FrameState+0x6FC8+0x28*slot = per-slot SCRIPTED-INPUT injector (clean). Byte[0]
+  = enable real-input branch. sub_1402893D0 maps this struct into slot's input
+  block (0x1466E4220+0x530*slot):
+    struct+0x14 -> block LEFT stick X (move)   (block+0x00 / +0x10)
+    struct+0x18 -> block LEFT stick Y (move)   (block+0x04 / +0x14)
+    struct+0x1C -> block+0x08 / +0x18 = RIGHT stick X (camera/turn)
+    struct+0x20 -> block+0x0C / +0x1C = RIGHT stick Y (camera/turn)
+    struct+0x10 (u32) -> block buttons qword (block+1304/+1288/+1296)
+    struct+0x0C = duration(float), struct+0x24 = elapsed accumulator
+RESULT (live log): feeding struct with leftstick=(0,1), flags=0x500 ->
+block1 read back as sx=0 sy=1 btn=0x500 => the engine CONSUMED our input for
+slot 1. The clone comes alive from OUR struct, NOT from Chloe. Two bugs fixed:
+  (1) "stands" = struct+0x10 flags were 0; the spin path forces block-buttons
+      |=0x500 ("input active"); the real branch writes them verbatim, so 0 =
+      locomotion ignores a valid stick. Set 0x500.
+  (2) "circle" = I put magnitude into struct+0x1C, which is the RIGHT stick
+      (camera) -> constant turn. Zero the right stick; left stick carries the
+      move magnitude. -> clone should walk STRAIGHT.
+This is the clean slot-1 control surface (no Chloe bleed): we own only
+FrameState+0x6FC8+0x28 (slot 1) and the engine's own per-slot apply does the rest.
+
+### Input format NAILED; clone's sole blocker = per-slot camera basis (2026-06-20)
+
+Drove Chloe (slot 0, HAS camera) via the per-slot scripted-input struct with the
+right-stick zeroed -> Chloe walks STRAIGHT. So clean per-slot input injection is
+fully proven on a real camera'd player. Field semantics of the slot input block
+(0x1466E4220+0x530*slot), written by sub_1402893D0 from struct+0x14/18/1C/20:
+  block+0x00/+0x04 = LEFT stick = camera-RELATIVE move vector
+  block+0x08/+0x0c = RIGHT stick = camera YAW RATE (incremental; not a static basis)
+  block buttons (block+1304) = struct+0x10 flags; 0x500 = "input active"
+The earlier "circle" (on BOTH the clone AND Chloe) = nonzero right-stick spinning
+the camera every frame while moving camera-relative. Zeroing it -> straight.
+=> The clone (slot 1) STANDS with right-stick 0 because slot-1's camera basis is
+NULL: a camera-relative stick through a null camera yields a zero world vector.
+CONCLUSION: control plumbing is solved. The ONLY remaining blocker for a
+natively-controllable clone is giving slot 1 a CAMERA BASIS (yaw). Camera follows
+the retained-slot table; input slot-0 is bound to Chloe via a cached ref (the two
+are decoupled). Next: test swap(cam->clone)+drive-slot1, and find where the
+locomotion reads the per-local-player camera yaw so we can seed slot 1.
+
+### Appearance/body swap — exhaustive RE (2026-06-20)
+
+Goal: fully-playable Nadine = Chloe mechanics + Nadine body, replacing NPC Nadine.
+The clone is already a full Player (control/abilities); the ONLY blocker is the
+BODY/appearance. Findings:
+- The co-op LOOK system exists: SelectRetainedCoopPlayerLookHash (0x140B580C0)
+  returns a character look hash by index: 0=coop-drake, 1=coop-chloe,
+  2=coop-sullivan (NO nadine). It's a registered callback (sub_14007D3A0) and
+  returns 0 unless in a "coop game" (dword_143E07470 HIBYTE + byte_143E03568) -
+  DORMANT in campaign.
+- CommitResolvedPlayerSpawn (0x1410F14C0) is the central spawn; it's called ONLY
+  by SpawnPlayerFromRetainedDescriptor (0x1410F1910, our clone path) and
+  SpawnPlayerFallback (0x1410F3350). So all player spawns go through the retained
+  descriptor; the co-op variant passes a co-op descriptor (look=drake/etc.).
+- Nadine look asset names exist: nadine-base(0x8A419C8E), nadine-default(0xBA17B98B),
+  nadine-dlc-base(0xC67A06F1) - but these are NPC art, not a coop player skin.
+- TEST (LOOKSWAP): scanned the clone's captured spawn args (desc 0x200, ctx 0x800,
+  a4 0x800) for chloe-base/coop-chloe/hash("chloe")/chloe-default and replaced with
+  coop-drake(0x9ba01002). RESULT: patched=0 - NONE of the Chloe look hashes are in
+  the spawn args. So the body look is NOT a patchable hash in our spawn; it's a
+  CHARACTER-RECORD reference resolved internally (the captured Chloe descriptor
+  references Chloe's record).
+CONCLUSION: body-swap to Drake/Nadine requires either (a) activating/replicating
+the dormant co-op spawn (which builds a non-Chloe descriptor) or (b) injecting a
+look-hash override into the spawn packet's base field (packet+0x20, read by
+Player::Init; currently 0=default Chloe) by hooking InitializeSelectorBacked
+ProcessSpawnPacket (0x1417C32A0) gated to our clone spawn - SPECULATIVE, untested.
+The mechanically-playable clone keeps Chloe's body (+ Nadine hair via +0x170).
+
+### Look-injection (packet base) test — CONFIRMED DEAD (2026-06-20)
+Armed a DR2 breakpoint at InitializeSelectorBackedProcessSpawnPacket (0x1417C32A0)
+entry during the clone reissue spawn; when rdx(selector)==hash("Player")=0xa5a63e9b,
+overrode r9 (arg4 -> packet+0x20 "base") from 0 to coop-drake (0x9ba01002).
+RESULT: interception fired and overrode r9, BUT the body stayed CHLOE. So
+packet+0x20 (base) is NOT the character/body selector - overriding it has no visual
+effect. The Player PROCESS CLASS itself = Chloe (hardcoded character art); the
+selector +0x8 = "Player" resolves to that. There is no "Player-Nadine" class. The
+co-op skins (drake/chloe/sullivan) override the body via a DIFFERENT field in the
+(dormant) co-op spawn path - not packet+0x20.
+FINAL WALL (appearance): a Player's BODY in campaign = Chloe, bound by the Player
+process class / character record, NOT overridable via any spawn field we can reach.
+Body-swap to Nadine would require reconstructing/activating the co-op character
+spawn (which builds a non-Chloe character) AND a Nadine co-op skin (which isn't in
+the campaign coop look set). This is multi-session deep work with no guarantee.
+The clone remains a FULL playable Player mechanically, but with Chloe's body.

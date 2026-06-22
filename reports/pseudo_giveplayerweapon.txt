@@ -1,0 +1,14 @@
+=== 0x1400A0900: sub_1400A0900 [0x1400A0900..0x1400A0958] ===
+__int64 *sub_1400A0900()
+{
+  int *v0; // rax
+
+  v0 = (int *)off_143682D30();
+  ++dword_14383DE50;
+  dword_143ED0FF0 = *v0;
+  qword_143ED0FF8 = qword_14383DE58;
+  qword_14383DE58 = (__int64)&qword_143ED0FE8;
+  qword_143ED0FE8 = (__int64)sub_140F95850;
+  return &qword_143ED0FE8;
+}
+

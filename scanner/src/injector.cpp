@@ -47,10 +47,19 @@ std::optional<DWORD> find_process_id() {
 }  // namespace
 
 int wmain(int argc, wchar_t** argv) {
+    // Optional explicit target PID via "--pid <N>" (needed to inject into a
+    // SPECIFIC instance when two tll.exe are running for single-PC co-op).
+    std::optional<DWORD> forced_pid;
     std::filesystem::path dll_path;
-    if (argc == 2) {
-        dll_path = argv[1];
-    } else {
+    for (int i = 1; i < argc; ++i) {
+        const std::wstring a = argv[i];
+        if (a == L"--pid" && i + 1 < argc) {
+            forced_pid = static_cast<DWORD>(_wtoi(argv[++i]));
+        } else {
+            dll_path = a;  // treat any other arg as the DLL path
+        }
+    }
+    if (dll_path.empty()) {
         std::array<wchar_t, MAX_PATH> executable_path{};
         GetModuleFileNameW(
             nullptr,
@@ -67,7 +76,7 @@ int wmain(int argc, wchar_t** argv) {
         return 1;
     }
 
-    const auto process_id = find_process_id();
+    const auto process_id = forced_pid ? forced_pid : find_process_id();
     if (!process_id) {
         std::cerr << "tll.exe is not running\n";
         return 2;

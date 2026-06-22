@@ -1,0 +1,14 @@
+=== 0x14007D3A0: sub_14007D3A0 [0x14007D3A0..0x14007D3F8] ===
+__int64 *sub_14007D3A0()
+{
+  int *v0; // rax
+
+  v0 = (int *)off_143682D30();
+  ++dword_14383DE50;
+  dword_143E25B30 = *v0;
+  qword_143E25B38 = qword_14383DE58;
+  qword_14383DE58 = (__int64)&qword_143E25B28;
+  qword_143E25B28 = (__int64)SelectRetainedCoopPlayerLookHash;
+  return &qword_143E25B28;
+}
+

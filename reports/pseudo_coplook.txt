@@ -1,0 +1,400 @@
+=== 0x140B580C0: SelectRetainedCoopPlayerLookHash [0x140B580C0..0x140B5834F] ===
+// Chooses a player-labelled retained coop look/descriptor variant based on runtime state gates and global mode selection.
+// Hidden C++ exception states: #wind=1
+_QWORD *__fastcall SelectRetainedCoopPlayerLookHash(_QWORD *a1, int a2, int a3, int a4)
+{
+  unsigned int v5; // ebx
+  int v6; // ecx
+  int v7; // ecx
+  const char *v8; // rdx
+  __int64 v9; // r8
+  const char *v10; // rdx
+  __int64 v13; // r9
+  __int64 v19; // r8
+  const char *v20; // rdx
+  __int64 v23; // r9
+  __int64 v29; // r8
+  const char *v30; // rdx
+  __int64 v33; // r9
+  _BYTE v40[56]; // [rsp+38h] [rbp-450h] BYREF
+  _DWORD v41[256]; // [rsp+70h] [rbp-418h] BYREF
+
+  v5 = 0;
+  sub_141CE7EF0((unsigned int)v40, a2, a3, a4, 0);
+  if ( !HIBYTE(dword_143E07470) )
+    goto LABEL_4;
+  if ( byte_143E03568 )
+  {
+    if ( (_QWORD)xmmword_143DD7460 )
+    {
+      v6 = *(_DWORD *)(xmmword_143DD7460 + 1368);
+      if ( !v6 )
+      {
+        v29 = 10;
+        v30 = "coop-drake";
+        _RCX = v41;
+        _RAX = qword_142BEA360;
+        v33 = 8;
+        do
+        {
+          __asm
+          {
+            vmovups ymm0, ymmword ptr [rax]
+            vmovups ymmword ptr [rcx], ymm0
+            vmovups ymm0, ymmword ptr [rax+20h]
+            vmovups ymmword ptr [rcx+20h], ymm0
+            vmovups ymm0, ymmword ptr [rax+40h]
+            vmovups ymmword ptr [rcx+40h], ymm0
+            vmovups xmm0, xmmword ptr [rax+60h]
+            vmovups xmmword ptr [rcx+60h], xmm0
+          }
+          _RCX += 32;
+          __asm
+          {
+            vmovups xmm1, xmmword ptr [rax+70h]
+            vmovups xmmword ptr [rcx-10h], xmm1
+          }
+          _RAX += 16;
+          --v33;
+        }
+        while ( v33 );
+        do
+        {
+          if ( !*v30 )
+            break;
+          v5 = (v5 << 8) ^ v41[(unsigned __int8)(*v30++ ^ HIBYTE(v5))];
+          --v29;
+        }
+        while ( v29 );
+        goto LABEL_27;
+      }
+      v7 = v6 - 1;
+      if ( !v7 )
+      {
+        v19 = 10;
+        v20 = "coop-chloe";
+        _RCX = v41;
+        _RAX = qword_142BEA360;
+        v23 = 8;
+        do
+        {
+          __asm
+          {
+            vmovups ymm0, ymmword ptr [rax]
+            vmovups ymmword ptr [rcx], ymm0
+            vmovups ymm0, ymmword ptr [rax+20h]
+            vmovups ymmword ptr [rcx+20h], ymm0
+            vmovups ymm0, ymmword ptr [rax+40h]
+            vmovups ymmword ptr [rcx+40h], ymm0
+            vmovups xmm0, xmmword ptr [rax+60h]
+            vmovups xmmword ptr [rcx+60h], xmm0
+          }
+          _RCX += 32;
+          __asm
+          {
+            vmovups xmm1, xmmword ptr [rax+70h]
+            vmovups xmmword ptr [rcx-10h], xmm1
+          }
+          _RAX += 16;
+          --v23;
+        }
+        while ( v23 );
+        do
+        {
+          if ( !*v20 )
+            break;
+          v5 = (v5 << 8) ^ v41[(unsigned __int8)(*v20++ ^ HIBYTE(v5))];
+          --v19;
+        }
+        while ( v19 );
+        goto LABEL_27;
+      }
+      if ( v7 == 1 )
+      {
+        v9 = 13;
+        v10 = "coop-sullivan";
+        _RCX = v41;
+        _RAX = qword_142BEA360;
+        v13 = 8;
+        do
+        {
+          __asm
+          {
+            vmovups ymm0, ymmword ptr [rax]
+            vmovups ymmword ptr [rcx], ymm0
+            vmovups ymm0, ymmword ptr [rax+20h]
+            vmovups ymmword ptr [rcx+20h], ymm0
+            vmovups ymm0, ymmword ptr [rax+40h]
+            vmovups ymmword ptr [rcx+40h], ymm0
+            vmovups xmm0, xmmword ptr [rax+60h]
+            vmovups xmmword ptr [rcx+60h], xmm0
+          }
+          _RCX += 32;
+          __asm
+          {
+            vmovups xmm1, xmmword ptr [rax+70h]
+            vmovups xmmword ptr [rcx-10h], xmm1
+          }
+          _RAX += 16;
+          --v13;
+        }
+        while ( v13 );
+        do
+        {
+          if ( !*v10 )
+            break;
+          v5 = (v5 << 8) ^ v41[(unsigned __int8)(*v10++ ^ HIBYTE(v5))];
+          --v9;
+        }
+        while ( v9 );
+        goto LABEL_27;
+      }
+      v8 = "invalid spawner index\n";
+    }
+    else
+    {
+      v8 = "no player tracker\n";
+    }
+    sub_141CEB2B0(v40, v8);
+LABEL_27:
+    *a1 = v5;
+    __asm { vzeroupper }
+    goto LABEL_28;
+  }
+  sub_141CEB2B0(v40, "called outside of a coop game\n");
+LABEL_4:
+  *a1 = 0;
+LABEL_28:
+  sub_141CE8040(v40);
+  return a1;
+}
+
+=== 0x1410F14C0: CommitResolvedPlayerSpawn [0x1410F14C0..0x1410F183C] ===
+// Central retained player-spawn commit path. Accepts resolved look/transform/context data, seeds a real ProcessSpawnInfo-class stack packet with vtable 0x14291CF98, initializes it through 0x1417C32A0, builds a second local packet layer plus fallback via 0x1417651D0, now clearly tags that path with `Player` and `*player-health-settings*`, materializes a runtime object through 0x1417C3790, then harvests the returned object's +0xA8/+0xBC retained-live pair and stores it in the global retained player-slot table at 0x143EEBE80.
+__int64 __fastcall CommitResolvedPlayerSpawn(
+        __int64 a1,
+        int a2,
+        __int64 a3,
+        __int64 a4,
+        int a5,
+        __int64 a6,
+        __int64 a7,
+        int a8,
+        int a9,
+        char a10)
+{
+  __int64 v12; // rsi
+  int v16; // edx
+  const char *v17; // r8
+  __int64 v18; // r10
+  __int64 v20; // r9
+  char v26; // al
+  const char *v28; // r8
+  __int64 v30; // r9
+  int v32; // edx
+  __int64 v34; // r10
+  char v40; // al
+  unsigned int v41; // r8d
+  const char *v42; // r9
+  __int64 v43; // r10
+  char v50; // al
+  __int64 v51; // rax
+  __int64 v52; // rdx
+  __int64 result; // rax
+  __int128 v58; // [rsp+38h] [rbp-C8h]
+  _QWORD v59[3]; // [rsp+48h] [rbp-B8h] BYREF
+  __int64 KnowledgeRegistryEntryById; // [rsp+60h] [rbp-A0h]
+  int v61; // [rsp+68h] [rbp-98h]
+  int v62; // [rsp+6Ch] [rbp-94h]
+  __int128 v63; // [rsp+70h] [rbp-90h]
+  __m256 v64; // [rsp+80h] [rbp-80h] BYREF
+  _QWORD v65[13]; // [rsp+A0h] [rbp-60h] BYREF
+  int v66; // [rsp+108h] [rbp+8h]
+  __int64 v67; // [rsp+110h] [rbp+10h]
+  __int64 v68; // [rsp+118h] [rbp+18h]
+  int v69; // [rsp+120h] [rbp+20h]
+  __int64 v70; // [rsp+128h] [rbp+28h]
+  _DWORD v72[256]; // [rsp+4A0h] [rbp+3A0h] BYREF
+
+  _RBX = qword_142BEA360;
+  _RAX = v65;
+  v12 = 8;
+  _R15 = a4;
+  v16 = 0;
+  v17 = "Player";
+  v18 = 6;
+  _RCX = qword_142BEA360;
+  v20 = 8;
+  do
+  {
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [rcx]
+      vmovups xmm1, xmmword ptr [rcx+70h]
+      vmovups ymmword ptr [rax], ymm0
+      vmovups ymm0, ymmword ptr [rcx+20h]
+      vmovups ymmword ptr [rax+20h], ymm0
+      vmovups ymm0, ymmword ptr [rcx+40h]
+      vmovups ymmword ptr [rax+40h], ymm0
+      vmovups xmm0, xmmword ptr [rcx+60h]
+      vmovups xmmword ptr [rax+60h], xmm0
+    }
+    _RAX += 16;
+    _RCX += 16;
+    __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+    --v20;
+  }
+  while ( v20 );
+  do
+  {
+    v26 = *v17;
+    if ( !*v17 )
+      break;
+    ++v17;
+    v16 = (v16 << 8) ^ *((_DWORD *)v65 + (unsigned __int8)(v26 ^ HIBYTE(v16)));
+    --v18;
+  }
+  while ( v18 );
+  v65[0] = &ProcessSpawnInfo::`vftable';
+  __asm { vzeroupper }
+  *(double *)&_XMM0 = InitializeSelectorBackedProcessSpawnPacket(
+                        (unsigned int)v65,
+                        v16,
+                        DWORD2(xmmword_146467100),
+                        0,
+                        0,
+                        0);
+  __asm { vmovups ymm1, ymmword ptr [r15] }
+  v65[4] = a3;
+  v65[0] = &SpawnInfo::`vftable';
+  v28 = "*player-health-settings*";
+  v65[12] = 0;
+  __asm { vpxor   xmm0, xmm0, xmm0 }
+  v59[2] = &v64;
+  v30 = 24;
+  _RAX = v72;
+  v70 = 0;
+  v66 = -1;
+  v32 = 0;
+  __asm { vmovdqu [rbp+7E0h+var_7B0], xmm0 }
+  v68 = 0;
+  _RCX = qword_142BEA360;
+  v69 = 0;
+  v34 = 8;
+  v65[11] = 0;
+  v67 = a7;
+  v59[0] = 0;
+  v59[1] = 0;
+  KnowledgeRegistryEntryById = 0;
+  v61 = 0;
+  __asm { vmovdqu [rsp+8E0h+var_870], xmm0 }
+  v62 = a2;
+  __asm { vmovups [rbp+7E0h+var_860], ymm1 }
+  do
+  {
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [rcx]
+      vmovups xmm1, xmmword ptr [rcx+70h]
+      vmovups ymmword ptr [rax], ymm0
+      vmovups ymm0, ymmword ptr [rcx+20h]
+      vmovups ymmword ptr [rax+20h], ymm0
+      vmovups ymm0, ymmword ptr [rcx+40h]
+      vmovups ymmword ptr [rax+40h], ymm0
+      vmovups xmm0, xmmword ptr [rcx+60h]
+      vmovups xmmword ptr [rax+60h], xmm0
+    }
+    _RAX += 32;
+    _RCX += 16;
+    __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+    --v34;
+  }
+  while ( v34 );
+  do
+  {
+    v40 = *v28;
+    if ( !*v28 )
+      break;
+    ++v28;
+    v32 = (v32 << 8) ^ v72[(unsigned __int8)(v40 ^ HIBYTE(v32))];
+    --v30;
+  }
+  while ( v30 );
+  v61 = v32;
+  if ( a6 )
+  {
+    KnowledgeRegistryEntryById = a6;
+  }
+  else
+  {
+    v41 = 0;
+    v42 = "*player-starting-weapons*";
+    v43 = 25;
+    _RAX = v72;
+    do
+    {
+      __asm
+      {
+        vmovups ymm0, ymmword ptr [rbx]
+        vmovups xmm1, xmmword ptr [rbx+70h]
+        vmovups ymmword ptr [rax], ymm0
+        vmovups ymm0, ymmword ptr [rbx+20h]
+        vmovups ymmword ptr [rax+20h], ymm0
+        vmovups ymm0, ymmword ptr [rbx+40h]
+        vmovups ymmword ptr [rax+40h], ymm0
+        vmovups xmm0, xmmword ptr [rbx+60h]
+        vmovups xmmword ptr [rax+60h], xmm0
+      }
+      _RAX += 32;
+      _RBX += 16;
+      __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+      --v12;
+    }
+    while ( v12 );
+    do
+    {
+      v50 = *v42;
+      if ( !*v42 )
+        break;
+      ++v42;
+      v41 = (v41 << 8) ^ v72[(unsigned __int8)(v50 ^ HIBYTE(v41))];
+      --v43;
+    }
+    while ( v43 );
+    __asm { vzeroupper }
+    KnowledgeRegistryEntryById = ResolveOrCreateKnowledgeRegistryEntryById(v41);
+  }
+  LODWORD(v59[0]) = a5;
+  LOBYTE(v63) = (4 * a10) | v63 & 0xFA;
+  v65[5] = v59;
+  __asm { vzeroupper }
+  v51 = ResolveOrMaterializeRuntimeStateObjectFromSelectorPacket((__int64)v65, 0);
+  v52 = v51;
+  if ( v51 )
+  {
+    *(_QWORD *)&v58 = *(_QWORD *)(v51 + 168);
+    DWORD2(v58) = *(_DWORD *)(v51 + 188);
+  }
+  else
+  {
+    *(_QWORD *)&v58 = 0;
+    DWORD2(v58) = 0;
+  }
+  __asm { vmovups xmm0, [rsp+8E0h+var_8A8] }
+  _RAX = &xmmword_143EEBE80;
+  _RCX = 2LL * a2;
+  __asm { vmovups xmmword ptr [rax+rcx*8], xmm0 }
+  result = a1;
+  if ( v52 )
+  {
+    *(_QWORD *)a1 = *(_QWORD *)(v52 + 168);
+    *(_DWORD *)(a1 + 8) = *(_DWORD *)(v52 + 188);
+  }
+  else
+  {
+    *(_QWORD *)a1 = 0;
+    *(_DWORD *)(a1 + 8) = 0;
+  }
+  return result;
+}
+

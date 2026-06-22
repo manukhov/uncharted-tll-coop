@@ -1,0 +1,3 @@
+apply_labels OK: 725 functions, 5 data names
+idb_path=C:\users\vladimir\desktop\TLLCoopResearch\ida\tll_fresh.exe.i64
+save_database returned True

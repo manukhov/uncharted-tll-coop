@@ -1,0 +1,15 @@
+==== 0x1410E9E80 (section .text) ====
+
+==== 0x1410EA620 (section .text) ====
+0x1410EA620: js      0x1410ea64a
+0x1410EA622: ror     byte ptr [r9 - 0x75], 0xe3
+0x1410EA627: pop     r15
+0x1410EA629: pop     r14
+0x1410EA62B: pop     r13
+0x1410EA62D: pop     r12
+0x1410EA62F: pop     rdi
+0x1410EA630: pop     rsi
+0x1410EA631: pop     rbp
+0x1410EA632: ret     
+0x1410EA633: int3    
+

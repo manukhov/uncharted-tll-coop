@@ -1,0 +1,39 @@
+==== 0x140237760 (section .text) ====
+0x140237760: mov     rax, qword ptr [rcx + 0x60]
+0x140237764: test    rax, rax
+0x140237767: je      0x140237788
+0x140237769: mov     edx, dword ptr [rcx + 0x68]
+0x14023776C: test    edx, edx
+0x14023776E: je      0x140237788
+0x140237770: mov     rax, qword ptr [rax + 8]
+0x140237774: test    rax, rax
+0x140237777: je      0x140237788
+0x140237779: cmp     dword ptr [rax + 0xbc], edx
+0x14023777F: jne     0x140237788
+0x140237781: mov     byte ptr [rax + 0x72], 1
+0x140237785: mov     al, 1
+0x140237787: ret     
+0x140237788: cmp     dword ptr [rcx + 0x80], 0xff
+0x140237792: jne     0x140237785
+0x140237794: xor     al, al
+0x140237796: ret     
+0x140237797: int3    
+
+==== 0x140239100 (section .text) ====
+0x140239100: mov     rax, qword ptr [rcx]
+0x140239103: test    rax, rax
+0x140239106: je      0x140239125
+0x140239108: mov     ecx, dword ptr [rcx + 8]
+0x14023910B: test    ecx, ecx
+0x14023910D: je      0x140239125
+0x14023910F: mov     rax, qword ptr [rax + 8]
+0x140239113: test    rax, rax
+0x140239116: je      0x140239125
+0x140239118: cmp     dword ptr [rax + 0xbc], ecx
+0x14023911E: jne     0x140239125
+0x140239120: mov     byte ptr [rax + 0x72], 1
+0x140239124: ret     
+0x140239125: xor     eax, eax
+0x140239127: ret     
+0x140239128: int3    
+

@@ -38,9 +38,12 @@ FUNCTIONS = {
         "Confirmed Nadine AI restore path. Tested as RequestEnableAi(npc, false).",
     ),
     0x1403F5B60: (
-        "InitPendingLocoCommand",
-        "Resets and initializes pending locomotion command block at npc+0x2470. "
-        "Writes command type at +0x24F4 and timing/flags around +0x24F8/+0x2500/+0x2560.",
+        "InitPendingNpcActionCommand",
+        "Resets and initializes the pending NPC action block at npc+0x2470. "
+        "Writers in the 0x140545000..0x14056B000 family then fill command kind "
+        "at +0x24F4, timing/flags around +0x24F8/+0x2500/+0x2560, and optional "
+        "snapshot payloads. This is a prepared action/behavior layer, not a raw "
+        "direct-input seam.",
     ),
     0x1403F61C0: (
         "WriteLocoCommand_Type13",
@@ -169,7 +172,7 @@ FUNCTIONS = {
         "The base field at +0x20 is copied directly from arg4/r9, which is "
         "important because the real Player::Init path later reads "
         "incoming_packet+0x20 before any draw-control or late mounted-owner "
-        "stages run. ",
+        "stages run. "
         "This is the shared front-end base later consumed either directly by "
         "0x1417C3790 or through the extended wrapper family at "
         "0x1417C35A0 / vtable 0x1428D5D60.",
@@ -191,11 +194,16 @@ FUNCTIONS = {
         "Consumes the compact packet built by 0x1417C32A0. Requires packet "
         "+0x50, checks selector/capability gates through 0x1417C4800, builds "
         "a returned runtime object family, copies packet payload blocks from "
-        "+0x20/+0x40 into that object, and exposes retained/live identity at "
-        "returned_object+0xA8/+0xBC. The returned object now looks more like "
-        "a materialized runtime companion to the packet than the final "
+        "+0x20/+0x40 into that object, stores the packet owner/source at "
+        "object+0xA0, links the intrusive node back to the object through "
+        "node+0x8, stores that node pointer at object+0xA8, and recomputes "
+        "object+0xBC from descriptor-local state via 0x14161FC60. So the "
+        "canonical +0xA8/+0xBC runtime identity later consumed by Player-side "
+        "camera/state code is generic materializer output, not a direct "
+        "Player ctor field. The returned object still looks more like a "
+        "materialized runtime companion to the packet than the final "
         "Player-side external_state itself; the stronger direct shape match "
-        "for 0x1418C4840 is the extended wrapper family at 0x1417C35A0.",
+        "for 0x1418C4840 remains the extended wrapper family at 0x1417C35A0.",
     ),
     0x1415FC800: (
         "InsertOrRelinkRuntimeStateNodeBySpanIntoIndexedContainer",
@@ -212,6 +220,20 @@ FUNCTIONS = {
         "and clears node fields. Also used directly inside 0x1417C3790, "
         "which pins both helpers as internal bookkeeping for the returned "
         "materialized object family.",
+    ),
+    0x1416A3330: (
+        "ConstructBaseRuntimeObjectWithNullHandleAndFreshObjectId",
+        "Lowest shared runtime-object constructor beneath the hidden "
+        "descriptor/object family. Installs the base vtable, clears the "
+        "canonical identity handle at +0xA8, seeds +0xBC from 0x1416A38A0, "
+        "and leaves the object ready for a later materializer to attach a "
+        "real owner/node link.",
+    ),
+    0x1416A38A0: (
+        "AllocateFreshRuntimeObjectId",
+        "Atomic shared id allocator used by the base runtime-object ctor at "
+        "0x1416A3330 to seed the initial object id stored at +0xBC before any "
+        "later materialization step rewrites that runtime identity.",
     ),
     0x1410F0D10: (
         "GetRetainedPlayerEntityBySlot",
@@ -238,16 +260,29 @@ FUNCTIONS = {
         "CopyRetainedPlayerSlot0Entry",
         "Copies g_RetainedPlayerSlotTable[0] into caller-provided storage.",
     ),
+    0x140298D70: (
+        "ResolveLocalPlayerVFunc_A8",
+        "Resolver sub-object (*(0x143FE1070)) vtable +0xA8. Split/coop gate byte "
+        "0x143E07473: if inactive (ordinary campaign) tail-calls "
+        "ResolveRetainedPlayerHandleBySlot 0x1410F0F60(index). If split/coop "
+        "active, scans net-player slot array 0x143DD7488 (NetGameManager+0x3C8, "
+        "stride 0x43D0, dormant in campaign). So in campaign local-player "
+        "resolution funnels into the 0x143EEBE80 slot table reader.",
+    ),
     0x1410F0F60: (
         "ResolveRetainedPlayerHandleBySlot",
-        "Resolves a retained slot entry into the live player handle/object. In "
-        "debug-enabled builds it can also query an alternate retained lookup "
-        "path before falling back to g_RetainedPlayerSlotTable.",
+        "Resolves a retained slot entry into the live player handle/object. "
+        "Campaign branch (split gate 0x143E07473 inactive) reads 16-byte pair "
+        "from g_RetainedPlayerSlotTable 0x143EEBE80 + index*0x10 {ptr+0,id+8}, "
+        "validates ptr->(+8)->+0xBC==id, returns ptr (marks +0x72) else 0. Slot "
+        "1 empty in campaign => local-player-1==0. Writer of these pairs is "
+        "CommitResolvedPlayerSpawn 0x1410F14C0.",
     ),
     0x1410F3DD0: (
         "RefreshPrimaryRetainedPlayerCamera",
         "Touches retained player slot 0, restores entity focus, then queries "
-        "GetCameraManager(0) and updates camera state through 0x141C078D0.",
+        "the primary screen-route entity and updates camera state through "
+        "0x141C078D0.",
     ),
     0x1410F3E40: (
         "CheckRetainedPlayerSlotActive",
@@ -299,19 +334,44 @@ FUNCTIONS = {
         "+2 and +4.",
     ),
     0x141C078D0: (
-        "UpdateCameraManagerFromRetainedPlayer",
-        "Heavy CameraManager update path used by retained-player camera refresh.",
+        "UpdateScreenRouteEntityCameraStateFromActorTransform",
+        "Heavy screen-route entity update path. Walks the route's child-control "
+        "list at +0x100, selects a preferred child/fallback descriptor, "
+        "refreshes route-local follow state through +0x2F0, and commits the "
+        "final camera descriptor through 0x141C06F20.",
     ),
     0x141C074E0: (
-        "AttachCameraManagerToRetainedPlayer",
-        "Enables a CameraManager player/camera attachment mode, refreshes "
-        "CameraManager cached retained-player handle at +0x2A8/+0x2B0, and "
-        "marks the active camera slot in global state.",
+        "AttachScreenRouteEntityToResolvedActorPair",
+        "Enables route-entity attachment mode, refreshes the attached actor "
+        "pair at +0x2A8/+0x2B0 via 0x141C0DFD0, and marks the active screen "
+        "lane in the shared camera state block.",
     ),
     0x141C07640: (
-        "DetachCameraManagerFromRetainedPlayer",
-        "Disables the CameraManager retained-player attachment mode and clears "
-        "or resets the corresponding camera slot state.",
+        "DetachScreenRouteEntityFromResolvedActorPair",
+        "Disables route-entity attachment mode, clears the corresponding "
+        "screen-lane state, and notifies the currently attached actor pair "
+        "through virtual +0x208 when still valid.",
+    ),
+    0x141C077B0: (
+        "ResolveScreenRoutePoseSeedOrDefault",
+        "Resolves the screen route entity by index through 0x141C06420, then "
+        "extracts the active route-pose seed from the route's +0xB0 child when "
+        "its gate bits are valid; otherwise falls back to a default "
+        "zero-plus-identity seed.",
+    ),
+    0x141C06F20: (
+        "InsertRouteChildAndRecomputeActiveCameraDescriptor",
+        "Core screen-route entity update worker. Inserts or refreshes a route "
+        "child entry, carries forward the best available follow-state from the "
+        "current child list, and commits the resulting active camera "
+        "descriptor/follow payload back into the route entity.",
+    ),
+    0x141C0E9F0: (
+        "SelectFirstRouteChildAcceptedByCameraManagerCustom",
+        "Walks the route entity's child-control list at +0x520. Uses each "
+        "child's owner callbacks at +0x70 and the CameraManagerCustom bundle "
+        "callback at virtual +0x38 to choose the first acceptable child, then "
+        "caches that child's descriptor payload into route-local state.",
     ),
     0x1413BA140: (
         "HandleRetainedPlayerCameraMessage",
@@ -327,10 +387,36 @@ FUNCTIONS = {
         "owning object into downstream retained/camera update paths.",
     ),
     0x1414538E0: (
-        "BuildRetainedCameraStateRecord",
-        "Builds a larger retained-camera/player state record. Stores a "
-        "(handle,id) pair at the start, then fills transform/camera payload "
-        "and record flags used by higher retained-camera message builders.",
+        "BuildRailVehicleRetainedCameraStateRecord",
+        "Builds retained rail/vehicle camera-state records, not a generic "
+        "second-camera owner command. Exact engine-hash branches now match "
+        "`npc-started-vehicle-jump`, `get-speed`, `on-animation-started`, "
+        "`on-animation-done`, `slow-to-stop`, `rail-scrub`, `get-spline-id`, "
+        "`get-surface-pat`, and `transfer-to-spline`; an additional branch "
+        "resolves a retained/live pair through `get-rail-controller`, derives "
+        "a transform from the live object, and forwards it into "
+        "`ApplyRetainedRailControllerCameraCommand(..., edx=4)`.",
+    ),
+    0x141444010: (
+        "ResolveRetainedVehicleClassFromPair",
+        "Hashes and dispatches the retained query `get-vehicle-class` against "
+        "the live object resolved from a retained (handle,id) pair, returning "
+        "the resulting boxed/typed value when the pair is valid.",
+    ),
+    0x141444C50: (
+        "ResolveRetainedRailControllerFromPair",
+        "Hashes and dispatches the retained query `get-rail-controller` "
+        "against the live object resolved from a retained (handle,id) pair, "
+        "then returns the resulting rail-controller-like object when valid.",
+    ),
+    0x14145BAD0: (
+        "ApplyRetainedRailControllerCameraCommand",
+        "Applies a retained rail-controller/vehicle camera command. Stores "
+        "the command type at +0x574, mirrors the payload into +0x9F0, toggles "
+        "state bits at +0x572, hashes `go-ragdoll`, and dispatches the "
+        "resulting record through the resolved live object via virtual +0xD0. "
+        "Used from the rail/vehicle retained-camera state builder with command "
+        "types 1/2/3/4.",
     ),
     0x1417BF750: (
         "AppendRetainedCameraRecord",
@@ -493,59 +579,732 @@ FUNCTIONS = {
         "resulting record plus auxiliary state at object offsets +0x130..+0x170.",
     ),
     0x140745CD0: (
-        "SyncCameraManager0RetainedBindingByMode",
-        "Queries CameraManager(0) and conditionally detaches or attaches the "
-        "retained-player binding based on mode/state 4 and whether the cached "
-        "retained handle/id still resolves to the same live entity.",
+        "ToggleManualCamera1Binding",
+        "Registered as `Manual Camera 1`. For mode/state 4, toggles "
+        "screen-route entity 0 between 0x141C07640 detach and 0x141C074E0 "
+        "attach based on whether route+0x2A8/+0x2B0 already resolves to the "
+        "same live actor.",
     ),
     0x140746150: (
-        "SyncCameraManager1RetainedBindingByMode",
-        "Queries CameraManager(1) and conditionally detaches or attaches the "
-        "retained-player binding using the same cached retained handle/id "
-        "validation logic as the CameraManager(0) path.",
+        "ToggleManualCamera2Binding",
+        "Registered as `Manual Camera 2`. For mode/state 4, toggles "
+        "screen-route entity 1 between 0x141C07640 detach and 0x141C074E0 "
+        "attach using the same cached actor-pair validation as the screen-0 "
+        "path.",
     ),
     0x14074D200: (
-        "RegisterRetainedCameraHandlerCluster",
-        "Builds and registers a coordinated retained-camera handler set, "
-        "including CameraManager(0)/(1) retained-binding and sibling camera "
-        "lifecycle handlers through 0x141638C10.",
+        "RegisterManualCameraAndJoypadHandlerCluster",
+        "Builds and registers the Manual Camera 1/2, Joypad 1/2 Controls Game, "
+        "Swap Joypad Screens, and Bind Manual Cam To Player(/Parent) cluster.",
     ),
     0x140746260: (
-        "HandleCameraManager0RetainedStateTransition",
-        "CameraManager(0) retained-state transition handler. Validates the "
-        "live retained entity and either drives 0x141C07420 or toggles "
-        "camera/global state blocks through 0x141837530.",
+        "HandleJoypad1ControlsGameForManualCamera2",
+        "Registered as `Joypad 1 Controls Game`. For screen-route entity 0, "
+        "either drives 0x141C07420 when a cached actor pair is live or only "
+        "toggles the lane-state bands under 0x143FE1088.",
     ),
     0x140746340: (
-        "HandleCameraManager1RetainedStateTransition",
-        "CameraManager(1) retained-state transition handler. Mirrors/toggles "
-        "mode bits between paired objects, validates the live retained entity, "
-        "and then drives the same state-transition path as the CameraManager(0) "
-        "handler.",
+        "HandleJoypad2ControlsGameForManualCamera2",
+        "Registered as `Joypad 2 Controls Game`. Mirrors/toggles bit 0x10 "
+        "between paired objects, then either drives 0x141C07420 for a live "
+        "cached actor pair or clears/toggles the same lane-state bands under "
+        "0x143FE1088.",
     ),
     0x140746460: (
-        "HandleRetainedCameraOwnerFocusUpdate",
-        "Higher retained-camera owner/focus update handler. Uses the shared "
-        "(handle,id) cache at 0x143D76C10/18, calls a target virtual slot "
-        "+0x208 when a live retained entity exists, writes CameraManager+0x153, "
-        "and otherwise builds a fallback descriptor for 0x141C0DFD0.",
+        "RefreshManualCameraResolvedActorCache_Primary",
+        "Manual-camera owner/focus update path. Uses the cached actor pair at "
+        "0x143D76C10/18, calls the cached target virtual slot +0x208 when a "
+        "live actor exists, updates the base screen-route entity byte +0x153, "
+        "and otherwise rebuilds the cache through 0x141C0DFD0.",
     ),
     0x1407465E0: (
-        "HandleRetainedCameraOwnerFocusUpdate_Sibling",
-        "Sibling higher-level retained-camera owner/focus update handler that "
-        "shares the same cached (handle,id) state and fallback descriptor path.",
+        "RefreshManualCameraResolvedActorCache_Sibling",
+        "Sibling manual-camera owner/focus update path that shares the same "
+        "0x143D76C10/18 actor-pair cache and 0x141C0DFD0 fallback build.",
+    ),
+    0x14073C9E3: (
+        "CommitGameplayCameraPriorityDescriptorViaRouteEntity_Internal",
+        "Internal gameplay-facing caller block above 0x141C0DFD0. Uses "
+        "0x141C0D4B0 to select the current route child, compares that child "
+        "against descriptor/sentinel objects, then pushes stack-built "
+        "descriptors through 0x141C0DFD0.",
+    ),
+    0x14073C400: (
+        "CopyCameraOverlayDescriptorStateAndMergeFlagBits",
+        "Copies the 0x50-byte camera-overlay descriptor state and only merges "
+        "the low two flag bits at +0x4C, leaving the rest of the payload "
+        "byte-for-byte identical.",
+    ),
+    0x14073B4E0: (
+        "CameraManagerCustom_NoOpCallback0",
+        "Top CameraManagerCustom vtable slot. Returns immediately and acts as "
+        "a startup-published no-op observer callback.",
+    ),
+    0x14073B4F0: (
+        "CameraManagerCustom_NoOpCallback8",
+        "Second CameraManagerCustom vtable slot. Also returns immediately; the "
+        "bundle's live behavior starts at later slots, not here.",
+    ),
+    0x14073B650: (
+        "IsCameraManagerCustomDescriptorStateKind2",
+        "Small CameraManagerCustom vtable predicate. Returns true only when "
+        "the descriptor state's dword at +0xC equals 2.",
+    ),
+    0x14070C620: (
+        "AllocOrInitCameraControlCinemaFollow3E0",
+        "Alloc-or-init wrapper for a 0x3E0 CameraControlCinemaFollow object. "
+        "Optionally allocates 0x3E0 bytes through 0x1415A0E90, runs the "
+        "CameraControlStick base constructor, installs the "
+        "CameraControlCinemaFollow vtable at 0x142983288, and clears the "
+        "subclass follow-state fields around +0x350/+0x3A8/+0x3B0/+0x3B8.",
+    ),
+    0x14070C6E0: (
+        "DestroyCameraControlCinemaFollowAndFree3E0",
+        "Freeing destructor for CameraControlCinemaFollow. Restores the "
+        "CameraControlStick vtable at 0x142BB1D98, clears screen index +0x124, "
+        "runs shared camera-control cleanup through 0x1416A3800, and frees "
+        "0x3E0 bytes when the low destructor flag is set.",
+    ),
+    0x14070C750: (
+        "InitCameraControlCinemaFollowSubclass",
+        "CameraControlCinemaFollow-flavored init wrapper. Calls "
+        "InitCameraControlStickBaseForScreenAndConfig, then seeds additional "
+        "follow-state fields around +0x398/+0x39C/+0x3A4/+0x3A8 for the "
+        "screen-specific follow behavior.",
+    ),
+    0x140750D20: (
+        "AllocOrInitCameraControlSpider520",
+        "Alloc-or-init wrapper for a 0x520 CameraControlSpider object. Runs "
+        "the CameraControlStick base constructor, installs the "
+        "CameraControlSpider vtable at 0x14298B5A0, initializes the embedded "
+        "subobject at +0x3A0 through 0x141D9EF50, and clears subclass state "
+        "around +0x380/+0x388/+0x4B0..+0x4F0.",
+    ),
+    0x140750E70: (
+        "InitCameraControlSpiderSubclass",
+        "CameraControlSpider-flavored init wrapper above "
+        "InitCameraControlStickBaseForScreenAndConfig. Builds an 8-block CRC "
+        "over the static overlay template at 0x142BEA360, publishes the "
+        "result through 0x141E776A0, and stores the produced handle at +0x390 "
+        "with scalar defaults at +0x3B0/+0x480.",
+    ),
+    0x14073C620: (
+        "NormalizeSpecialCameraControlDescriptorToContextualLook",
+        "CameraManagerCustom vtable method. For special camera-control "
+        "descriptors such as edge, cover, "
+        "knocked-down, evade, monkey-bars, balance/off-balance, free-rope, "
+        "shield, follow, and vehicle, rewrites the target state through "
+        "0x141C04E90 using `kCameraContextualLook`. Also special-cases "
+        "`kCameraStrafe` when byte +0x120 is clear.",
+    ),
+    0x14073C760: (
+        "ShouldAcceptCameraOverlayCandidateForRouteEntity",
+        "CameraManagerCustom vtable method. Overlay-compatibility gate over a "
+        "route entity and candidate camera descriptor. Rejects "
+        "melee/melee-override sentinels, checks the current preferred route "
+        "child through 0x141C0D4B0, and combines 0x14073BF80 / 0x14073C0E0 "
+        "filter results before accepting the candidate.",
+    ),
+    0x14073C8A0: (
+        "UpdatePerScreenCameraOverlayPriorityStateAndCommitRouteDescriptors",
+        "CameraManagerCustom vtable method. Per-screen gameplay camera-overlay "
+        "updater keyed by route+0x124. Uses the zero-initialized dynamic "
+        "state bank at 0x143D763E0 with stride 0x2B0, chooses between overlay "
+        "sentinels such as `kCameraStrafe`, `kCameraSwim`, and `kCameraZoom`, "
+        "and commits the resulting stack-built descriptors through "
+        "0x141C0DFD0.",
+    ),
+    0x14073CDD0: (
+        "BuildPerScreenCameraOverlayFollowStateFromRouteDescriptor",
+        "CameraManagerCustom vtable method. Builds/refreshes a 0x50-byte "
+        "per-screen overlay follow-state from a source descriptor and route "
+        "entity. Hash-matches `CameraControlZoom` and "
+        "`CameraControlScreenShot`, consumes the static tuning banks at "
+        "0x1430732F8 with stride 0xC0, and outputs the resolved follow state "
+        "used by the gameplay camera overlay path.",
+    ),
+    0x14073B780: (
+        "DestroyLargeCameraControlOverlaySubclassAndFree1FA0",
+        "Freeing destructor for the live 0x1FA0 overlay subclass produced by "
+        "0x14073B6E0. Tears down the embedded subobject at +0x910 through "
+        "0x141DA5AA0, restores the CameraControlStick-class vfptr, resets "
+        "screen index +0x124, then runs the shared camera-control cleanup at "
+        "0x1416A3800. Frees 0x1FA0 bytes when the low destructor flag is set.",
+    ),
+    0x14073C460: (
+        "InitializeGlobalCameraManagerCustomBundle_3053850",
+        "Startup initializer for the global CameraManagerCustom-flavored bundle "
+        "at 0x143053850. Seeds the bundle's first qword with vfptr "
+        "0x142987DB8 and clears the adjacent cached pointers/flags/scalars "
+        "through 0x1430538B8.",
+    ),
+    0x14073C520: (
+        "ResetGlobalCameraManagerCustomBundle_3053850",
+        "Reset/teardown companion for the global bundle at 0x143053850. "
+        "Re-seeds the first qword with vfptr 0x142987DB8, then frees and "
+        "clears the cached heap pointers stored in the neighboring qword slots.",
+    ),
+    0x14073B6E0: (
+        "AllocOrInitLargeCameraControlOverlaySubclass1FA0",
+        "Alloc-or-init wrapper for a 0x1FA0 large camera-control subclass in "
+        "the overlay/route family. Allocates 0x1FA0 when needed, runs the "
+        "shared large CameraControlStrafe-flavored constructor at 0x140772E20, "
+        "then overwrites vfptr 0x142987E00 on the resulting object.",
+    ),
+    0x14073E3C0: (
+        "DoesScreenRouteCurrentCameraChildMatchDescriptor",
+        "Resolves the screen-route entity by index through 0x141C06420, "
+        "selects the current preferred camera child via 0x141C0D4B0, and "
+        "checks whether the child's descriptor at +0x1A8 matches the "
+        "descriptor pointer supplied by the caller.",
+    ),
+    0x141C04F80: (
+        "InitializeTwoScreenRouteEntityPairTable",
+        "Startup/EvaluateCameraRequests helper that loops exactly two screen "
+        "indices, builds selector-backed runtime packets through "
+        "0x1417C32A0 -> 0x1417C3790, and stores the resulting (ptr,id) pairs "
+        "into the two-entry screen-route table at 0x14697AD50.",
+    ),
+    0x141C04E90: (
+        "ApplyCameraTargetStateFromDescriptorWithControlFallback",
+        "Packages a camera-control object's current descriptor state plus an "
+        "optional live actor pair and forwards it to "
+        "ApplyCameraTargetStateFromDescriptorAndActorOverride. Used by the "
+        "special-camera normalization path to remap descriptors such as "
+        "`kCameraContextualLook`.",
+    ),
+    0x1416A3800: (
+        "DestroyCameraControlBaseAndRestoreCoreVtable",
+        "Shared camera-control cleanup path. Temporarily installs an internal "
+        "camera-control vtable, asserts if a live pair remains in +0xD0 when "
+        "the global bypass is clear, then restores the core CameraControl "
+        "vtable at 0x14297E9B0.",
+    ),
+    0x1416A3920: (
+        "CacheCameraControlProcessTokenIdIfMissing",
+        "Shared camera-control finalize/init helper. If +0xD8 is zero, queries "
+        "the process/control token through virtual +0x28, appends a dash plus "
+        "the current global index, interns the token through 0x1416A2CE0 / "
+        "0x1417AA820, and stores the resulting id at +0xD8.",
+    ),
+    0x1416A3C80: (
+        "RelocateCameraControlEmbeddedPointersAcrossAddressRange",
+        "Shared relocation helper for CameraControl-derived objects. Slides the "
+        "embedded pointers at +0xB0, +0xC0, and the nested payload behind "
+        "+0xC0 when they fall inside the caller-provided address range, then "
+        "marks byte +0x3C bit 0x80.",
+    ),
+    0x141C13A80: (
+        "InitCameraControlAnimatedPhotographModeSubclass",
+        "CameraControlAnimatedPhotographMode-flavored init wrapper. Copies the "
+        "config scalar at +0x80 into +0x398, then tail-runs "
+        "InitCameraControlStickBaseForScreenAndConfig.",
+    ),
+    0x141F523F0: (
+        "DestroyCameraControlStickAndFree320",
+        "Freeing destructor for CameraControlStick. Restores the "
+        "CameraControlStick vtable, clears screen index +0x124, runs shared "
+        "camera-control cleanup through 0x1416A3800, and frees 0x320 bytes "
+        "when the low destructor flag is set.",
+    ),
+    0x141F521B0: (
+        "ConstructCameraControlStickBaseAndAssignUniqueScreenId",
+        "Primary in-place constructor for the 0x320 CameraControlStick base. "
+        "Installs the CameraControlStick vtable at 0x142BB1D98, seeds the "
+        "descriptor/follow bands through +0x1A8..+0x314, and assigns a unique "
+        "screen-local control id at +0x124 via the global counter pair "
+        "0x146DB1628/0x146DB1630.",
+    ),
+    0x141F52660: (
+        "InitCameraControlStickBaseForScreenAndConfig",
+        "Primary CameraControlStick init path. Copies screen index from "
+        "config+0xA0 into +0x128, seeds default descriptor `kCameraNone` into "
+        "+0x1A8, initializes the route/follow bands around "
+        "+0x1D0..+0x240/+0x300..+0x314 from per-screen globals, and finalizes "
+        "the token id through CacheCameraControlProcessTokenIdIfMissing.",
+    ),
+    0x141F6C1A0: (
+        "InitCameraControlFixedLookAroundSubclass",
+        "CameraControlFixedLookAround-flavored init wrapper. Copies the config "
+        "scalar at +0x80 into +0x368, then tail-runs "
+        "InitCameraControlStickBaseForScreenAndConfig.",
+    ),
+    0x140772E20: (
+        "ConstructLargeCameraControlStrafeBase1FA0",
+        "Shared in-place constructor for a 0x1FA0 large camera-control family "
+        "whose installed vfptr 0x14298E820 resolves by RTTI to "
+        "CameraControlStrafe. Calls ConstructCameraControlStickBaseAndAssignUniqueScreenId, "
+        "installs 0x14298E820, seeds extended state across +0x330..+0x5A0 and "
+        "+0x1CA0..+0x1EF0, and initializes the embedded band at +0x7C0 via "
+        "0x140773180.",
     ),
     0x141C04CE0: (
-        "ApplyCameraTargetState",
-        "Applies/finalizes a concrete camera target-state object from an "
-        "incoming descriptor: copies transform/scalar payload, refreshes the "
-        "retained (handle,id) pair, and resolves a downstream runtime object.",
+        "ApplyCameraTargetStateFromDescriptorAndActorOverride",
+        "Finalizes a camera target-state object from an incoming descriptor plus "
+        "an optional resolved actor override. Copies transform/scalar payload, "
+        "refreshes the retained (ptr,id) pair, and resolves a downstream runtime "
+        "object without an obvious static Player-only class check.",
+    ),
+    0x141C075DC: (
+        "CommitResolvedRouteOverrideIntoAttachedTargetPair_Internal",
+        "Internal writeback block after ResolveScreenRouteTargetAndCommitDescriptor. "
+        "Stores the returned (ptr,id) into route+0x2A8/+0x2B0 and sets the "
+        "per-screen activity byte at 0x14383DE48[route+0x124].",
+    ),
+    0x141C051F0: (
+        "RefreshAllScreenRouteEntitiesFromStartupTable",
+        "Iterates the two-entry screen-route table at 0x14697AD50, resolves "
+        "each live route entity, notifies the global observer at 0x1438929B8 "
+        "through virtual +0x8 when present, then calls route-entity virtual "
+        "+0x48 on each live entry.",
+    ),
+    0x141C06420: (
+        "ResolveScreenRouteEntityByIndex",
+        "Takes a screen/route index 0..1, loads the corresponding (ptr,id) "
+        "pair from the two-entry table at 0x14697AD50, validates the live "
+        "entity, marks byte +0x72, and returns the resolved route entity. "
+        "This is a screen-route resolver, not a raw CameraManager getter.",
+    ),
+    0x141C0D4B0: (
+        "SelectPreferredCameraChildFromRouteEntity",
+        "Scans a route entity's child list at +0x100, validates live children, "
+        "and returns the preferred camera child while filtering on child mode "
+        "stored at +0x1B0. The caller-provided byte flag relaxes the default "
+        "mode filtering.",
     ),
     0x141C0DFD0: (
-        "CommitCameraTargetDescriptor",
-        "Builds and commits a camera target descriptor into CameraManager "
-        "state. Uses the lock at camera+0x2C0, writes through camera+0x2F0 "
-        "via ApplyCameraTargetState, and then notifies an external observer.",
+        "ResolveScreenRouteTargetAndCommitDescriptor",
+        "Builds and commits a camera target descriptor into a screen-route "
+        "owner. Uses the lock at route+0x2C0, resolves the actor through "
+        "(*(qword*)0x143FE1070)->virtual +0xA8(route+0x124 screen_index), "
+        "writes through route+0x2F0 via "
+        "ApplyCameraTargetStateFromDescriptorAndActorOverride, and then "
+        "notifies an external observer. The wide direct-call fanout shows "
+        "this is a generic gameplay camera-route worker, not just a manual "
+        "camera debug stub.",
+    ),
+    0x14073E330: (
+        "PushCameraDescriptorToExplicitScreenRoute",
+        "Generic per-screen route push. Takes an explicit screen index in ecx, "
+        "a descriptor pointer in rdx, a follow-state block in r9, resolves "
+        "the route through ResolveScreenRouteEntityByIndex, and forwards the "
+        "pair into ResolveScreenRouteTargetAndCommitDescriptor. This is not "
+        "screen-0-only; callers can feed screen 0 or 1.",
+    ),
+    0x1413CB6F0: (
+        "RefreshContextualLookDescriptorForBothScreenRoutes",
+        "Two-screen loop inside a higher camera-control owner. Iterates ebx "
+        "from 0 to 1, resolves each route, requires the preferred child token "
+        "at child+0x1A8 to match the `kCameraContextualLook` sentinel "
+        "(0x1430535E0), then pushes a zeroed follow descriptor through "
+        "PushCameraDescriptorToExplicitScreenRoute for both screens.",
+    ),
+    0x141C0E590: (
+        "ApplyDescriptorToActiveRouteChildByMode",
+        "Selects the first active route child in route+0x520 whose byte +0x78 "
+        "is set and whose mode id at +0x18 matches edx, then stages that "
+        "child through 0x141C0E500 and forwards the supplied descriptor into "
+        "0x141C0ECC0. This is a real mode-based route-child updater, not just "
+        "a descriptor cache poke.",
+    ),
+    0x141C0ECC0: (
+        "RecomputeRouteStateFromDescriptorAndSelectedChild",
+        "Heavy route-state recompute worker. Locks route+0x2C0, gathers the "
+        "preferred child through 0x141C0D4B0 and 0x141C0E9F0, compares that "
+        "against route+0x2F0 / route+0x300 override state, and rebuilds the "
+        "effective route follow/descriptor payload. This sits downstream of "
+        "screen-1-capable descriptor pushes and is the stronger candidate for "
+        "stable second-view state than 0x141C0DFD0 alone.",
+    ),
+    0x140238500: (
+        "SwitchAnimatedCameraModeForScreenRouteOwner",
+        "Mounted per-screen camera-mode owner worker rooted at player+0x36C0. "
+        "Resolves the screen route from owner+0x84, compares the requested "
+        "mode id against owner+0x88, dispatches a virtual +0x10 mode-change "
+        "callback, and then builds an apReference-extra keyed descriptor/state "
+        "record around the current animation contribution id. This sits above "
+        "the route-child updater and is part of the animated gameplay camera "
+        "stack, not a generic route helper.",
+    ),
+    0x140238800: (
+        "UpdatePlayerAnimatedCameraControlOwnerAndRouteState",
+        "Heavy player-mounted animated-camera worker for the owner at "
+        "player+0x36C0. Uses the current/secondary actor pairs at +0x70/+0x78 "
+        "and +0x60/+0x68, strings 'player-animated', "
+        "'animated-camera-control', 'CameraAnimationDirector', and "
+        "'apReference-extra', then feeds the resulting descriptor into "
+        "0x141C0E590. It also directly consumes and clears the transient "
+        "primary pair at +0x60/+0x68 by copying a zeroed inline pair back "
+        "into the director after the route/descriptor update. The normal and "
+        "fallback paths both end up rebuilding route-child state and "
+        "materializing gameplay camera objects under 0x143FE1088.",
+    ),
+    0x140237E60: (
+        "RebuildAnimatedCameraDirectorFallbackDescriptorAndClearPendingPair",
+        "Fallback/reset helper for PlayerCameraAnimationDirector. Resolves the "
+        "screen route from owner+0x84, refreshes the hidden descriptor track "
+        "through 0x1416860A0, marks owner+0x8C active, builds a "
+        "'player-animated' fallback descriptor, and feeds it toward the route "
+        "camera stack. This sits on the same reset branches as "
+        "UpdatePlayerAnimatedCameraControlOwnerAndRouteState and is part of "
+        "the consume-and-clear lifecycle for the transient primary pair.",
+    ),
+    0x140C30290: (
+        "ConstructPlayerCameraAnimationDirectorSubobject",
+        "In-place constructor for the PlayerCameraAnimationDirector object "
+        "stored at player+0x36C0. RTTI on vtable 0x142A04C38 resolves to "
+        "PlayerCameraAnimationDirector. Zeroes the primary pair "
+        "+0x60/+0x68, seeds the secondary pair +0x70/+0x78 from incoming "
+        "player-source rdx->+0xA8/+0xBC when that Player object is present, then "
+        "initializes the mode fields +0x80/+0x84/+0x88 and the embedded "
+        "contribution band at +0x90..+0xD8. This makes the ctor itself the "
+        "first concrete writer of the stable secondary pair family.",
+    ),
+    0x140237760: (
+        "DirectorHasPendingActorPairOrResolvedContribution",
+        "Predicate over PlayerCameraAnimationDirector. Returns true when the "
+        "pending actor pair at +0x60/+0x68 resolves to a live actor, or when "
+        "the current contribution id at +0x80 is not 0xFF. Used directly by "
+        "camera descriptor push paths before they fall back to other player "
+        "state sources.",
+    ),
+    0x140C303E0: (
+        "AdvanceDirectorContributionRingBaseIfCurrentEntryWithinBounds",
+        "Small PlayerCameraAnimationDirector helper that only adjusts the "
+        "contribution-ring base pointer at +0xD8 when the current entry falls "
+        "within a supplied [r8,r9) window. This does not touch either actor "
+        "pair family and is part of the contribution bookkeeping surface, not "
+        "a pending-pair seeder.",
+    ),
+    0x140C349D0: (
+        "ResetDirectorContributionStateUsingPrimaryAndSecondaryPairs",
+        "PlayerCameraAnimationDirector method that validates both pair "
+        "families. If the primary pair at +0x60/+0x68 resolves, increments "
+        "the contribution epoch at +0xE4 and may force +0x80 back to 0xFF. "
+        "Then clears the contribution ring state at +0xD0/+0xE0, revalidates "
+        "the secondary pair at +0x70/+0x78, marks that live actor through "
+        "+0x72, and refreshes the contribution timestamp at +0xF0.",
+    ),
+    0x140239100: (
+        "ValidateInlineActorPairAtOffset0",
+        "Small inline actor-pair validator used on PlayerCameraAnimationDirector "
+        "subfields such as +0x60. Accepts (ptr,id) only when the live actor at "
+        "ptr->+8 still matches the stored id at +8.",
+    ),
+    0x140C34AC0: (
+        "AdvancePlayerCameraAnimationDirectorContributionState",
+        "Contribution-ring worker for PlayerCameraAnimationDirector. Validates "
+        "the secondary actor pair at +0x70/+0x78, marks the resolved actor "
+        "live through byte +0x72, compares contribution age against +0xF0, "
+        "and updates the contribution queue/state fields at "
+        "+0xD0/+0xD8/+0xE0/+0xE4. It does not seed either actor pair family, "
+        "so +0x60/+0x68 and +0x70/+0x78 must be established earlier.",
+    ),
+    0x140C35CF0: (
+        "NoopPlayerCameraAnimationDirectorVirtualSlot38",
+        "No-op PlayerCameraAnimationDirector method that immediately returns. "
+        "This confirms the vtable slot at +0x38 is not part of pending-pair "
+        "materialization.",
+    ),
+    0x141E0ED10: (
+        "SetLocomotionControllerModeAndActiveStateLabel",
+        "Mode-switch helper over the locomotion/controller object rooted at "
+        "owner+0x15B8. Compares incoming mode against controller+0x34, maps "
+        "the mode to labels such as None / NavPoly / NavLedge, checks whether "
+        "the incoming owner object is currently active through its bitset, "
+        "publishes that active-state change through 0x141DE05D0('SetActive', "
+        "...), and finally stores the new mode back into +0x34.",
+    ),
+    0x141E0EDF0: (
+        "ApplyLocomotionControllerSnapshotAndResolveModeAuxState",
+        "Consumes a 0x30-byte snapshot block for the owner+0x15B8 controller. "
+        "Copies incoming transform/state into +0x40/+0x50/+0x60, clears "
+        "+0x70/+0x78, and then runs mode-specific follow-up helpers to "
+        "materialize auxiliary state under +0x70 when the current mode "
+        "requires it. This is a concrete snapshot/apply seam above the old "
+        "MoveTo path, not just nav-goal setup.",
+    ),
+    0x141E18A70: (
+        "ApplySharedSourceSnapshotIntoOwner15B8AndPublishDescriptor",
+        "Concrete shared block above the owner+0x15B8 controller. Pulls a "
+        "snapshot from source+0x230/+0x240/+0x250, resolves the controller via "
+        "(owner+0x1D0)+0x15B8, applies mode through 0x141E0ED10 and snapshot "
+        "through 0x141E0EDF0, then publishes the result through 0x141E16CF0 "
+        "and the 0x14189AF80/0x14189AF30 descriptor-storage pair.",
+    ),
+    0x141E18D00: (
+        "PublishOwnerStateWithoutSharedSnapshotIntoDescriptorStore",
+        "Sibling owner-side block next to 0x141E18A70. Does not pull the "
+        "shared source snapshot from +0x230/+0x240/+0x250. Instead it refreshes "
+        "owner-local mode/state around +0x258/+0x2F8/+0x300, optionally calls "
+        "0x141E16CF0, runs 0x141E14890 over owner+0x260, and then publishes a "
+        "different descriptor kind through the same 0x14189AF80/0x14189AF30 "
+        "storage pair.",
+    ),
+    0x141E1D110: (
+        "AllocateSmallOwnerDescriptorNode_TypeD110",
+        "Allocates a 0x20-byte helper object, stores owner back-pointer at "
+        "+0x10, clears +0x18, and installs vtable 0x142B898A0 "
+        "(constructor entry 0x141E1D190). Used as one of the descriptor-node "
+        "types later published through 0x14189AF80.",
+    ),
+    0x141E1D5C0: (
+        "AllocateSmallOwnerDescriptorNode_TypeD5C0",
+        "Sibling 0x20-byte helper-object allocator with owner back-pointer at "
+        "+0x10 and vtable 0x142B89850 (constructor entry 0x141E1D640). Used by "
+        "the same publication/storage family as 0x141E1D110.",
+    ),
+    0x141E1F890: (
+        "AllocateSmallOwnerDescriptorNode_TypeF890",
+        "Another sibling 0x20-byte helper-object allocator with owner back-"
+        "pointer at +0x10 and vtable 0x142B897D0 (constructor entry "
+        "0x141E1F910). This is the concrete descriptor-node type passed from "
+        "0x141E18A70 into 0x14189AF80.",
+    ),
+    0x141E17240: (
+        "ResetOwnerSharedSnapshotSourceState",
+        "Reset/helper block for the same owner family as 0x141E18A70. Clears "
+        "the owner state bands at +0x220..+0x250, resets mode-dependent data, "
+        "re-seeds controller-side state through owner+0x1D0/+0x15B8, and then "
+        "continues into owner+0x15C8 follow-up work. This is the null-source "
+        "fallback used before 0x141E18A00 publishes the small descriptor node.",
+    ),
+    0x141E181D0: (
+        "CheckFirstTapWindowForActionPackKindAC710201",
+        "Special gate for action-pack objects with kind tag 0xAC710201. Uses "
+        "owner-side time windows at +0x228/+0x248/+0x250, compares them "
+        "against the current controller time source under owner+0x1D0+0xE0, "
+        "and blocks the rest of the install path when the first-tap window is "
+        "still active.",
+    ),
+    0x141E15A00: (
+        "ProcessCommandStopAndStandThroughCurrentActionPack",
+        "Owner-side stop-and-stand command path. Builds a snapshot through "
+        "0x141E179D0, publishes it through 0x14189AF80/0x14189AF30, then "
+        "releases the current action-pack selection through 0x141E18450 and "
+        "clears owner+0x2F8 back to -1. String anchors identify this family as "
+        "ProcessCommand_StopAndStand.",
+    ),
+    0x141E15C80: (
+        "UpdateStateMovingAndSeedBackupActionPack258",
+        "Heavy owner-side moving-state updater. Validates current moving "
+        "inputs, resolves the moving action-pack source from owner+0xF0, "
+        "stores its id into owner+0x258, copies the shared snapshot into "
+        "owner+0x260..+0x280, and updates nearby moving-state bands such as "
+        "+0x2E0, +0x440, and +0xEB8..+0xECC. String anchors identify blocked "
+        "and disappeared MoveToActionPack / MoveAlongSpline failure cases.",
+    ),
+    0x141E158B0: (
+        "ExitCurrentOwner80CommandStateAndReleaseActionPack",
+        "Owner-side exit/cleanup path for the command state described by "
+        "owner+0x80. Logs the current owner+0x208 phase, refreshes owner "
+        "publication state, inspects the current action-pack object through the "
+        "controller, and then routes command-specific cleanup such as stop/"
+        "stand and release through the shared action-pack helpers.",
+    ),
+    0x141E16920: (
+        "PublishExitOfReservedActionPackStateAndReleaseCurrentSelection",
+        "Owner-side exit path for the reserved-action-pack state "
+        "(owner+0x300 == 2). Publishes either the active descriptor node or a "
+        "fallback one, refreshes owner+0x238 from controller time, releases the "
+        "current action-pack selection through 0x141E18450, and advances "
+        "owner+0x208 into the post-exit phase.",
+    ),
+    0x141E18350: (
+        "ValidateCurrentActionPackSourceAndSetOwner304Kind",
+        "Resolves the current packed handle at owner+0x2F8, validates the live "
+        "action-pack source through source virtual +0xB0 against owner+0x1D0, "
+        "stores source kind source+0x60 into owner+0x304, and then runs the "
+        "special kind-0xAC710201 gate plus the reserve/prepare path before "
+        "marking owner+0x300 = 1 on success.",
+    ),
+    0x141E18450: (
+        "ReleaseCurrentActionPackAndPendingHandleSlots",
+        "Release/reset helper for the current action-pack selection. Releases "
+        "the live source resolved from owner+0x2F8 through source virtual "
+        "+0xD0, clears the five pending handle slots at owner+0x2E4..+0x2F4, "
+        "and resets owner+0x300 back to 0.",
+    ),
+    0x141E18700: (
+        "EnterReservedActionPackAndPublishSharedSnapshot",
+        "Takes a validated action-pack source object, records owner+0x300 = 2, "
+        "copies action-pack data and transforms, applies the shared snapshot "
+        "from source+0x230/+0x240/+0x250 into owner+0x260..+0x280, and then "
+        "publishes the result through the same owner-side descriptor/storage "
+        "tail used by 0x141E18A70.",
+    ),
+    0x141E189C0: (
+        "RefreshOwner238FromControllerE0TimeSource",
+        "Small helper that clears the temporary bit under owner+0x1D0+0x1510 "
+        "when needed and refreshes owner+0x238 from the controller time source "
+        "at owner+0x1D0+0xE0+0x10.",
+    ),
+    0x141E14890: (
+        "StoreMovementMode444AndPreparedSnapshot290",
+        "Shared owner-side setter for the prepared movement snapshot. Accepts "
+        "a prepared descriptor in r8 and a mode id in edx, validates actor "
+        "context through owner+0x1D0 and 0x14386FD00, stores the mode in "
+        "owner+0x444, copies the descriptor snapshot into "
+        "owner+0x290/+0x2A0/+0x2B0, derives owner+0x2D0 from the current "
+        "actor basis, and then runs the heavy follow-up path used by many "
+        "ordinary gameplay callers. This is a central ingress for live "
+        "movement-state updates, but it still does not write owner+0x80 "
+        "directly.",
+    ),
+    0x141E15760: (
+        "DispatchOwner80CommandStateAndPublishOwner120Mirror",
+        "Small owner-side dispatcher over owner+0x80. Sets owner+0x208 = 2, "
+        "routes mode 1 into 0x141E158B0 and modes 2..4 into 0x141E15C80, then "
+        "copies the resolved descriptor fields from owner+0x80 into "
+        "owner+0x120..+0x1B0, refreshes owner+0x228/+0x218 from controller "
+        "time, and tail-calls 0x141DE0690.",
+    ),
+    0x141E1A040: (
+        "UpdateOwner80StateDescriptorAndDispatchMovementMode",
+        "Owner-side dispatcher over the state descriptor stored at owner+0x80. "
+        "Uses the current mode value there to branch into moving-state update "
+        "logic such as 0x141E15C80, then copies the resolved descriptor fields "
+        "from owner+0x80 into owner+0x120..+0x1B0, refreshes owner time fields "
+        "+0x228/+0x218, and marks publication flags.",
+    ),
+    0x141E1A000: (
+        "UpdateOwnerMovementStateMachineAndPublishCurrentDescriptor",
+        "Broader owner-side movement-state update loop above 0x141E1BA20 and "
+        "0x141E1A040. First runs the large queued-entry chooser "
+        "0x141E1BA20, then dispatches owner+0x80 through 0x141E15C80 or "
+        "0x141E158B0 when needed, mirrors the resolved descriptor into "
+        "owner+0x120..+0x1B0, refreshes owner+0x228/+0x218, advances state "
+        "flags under +0x468/+0x472, and handles several follow-up cases such "
+        "as disappeared traversal action-packs and reserved-action-pack "
+        "cleanup. This currently looks like the strongest ordinary-Chloe "
+        "movement-state loop above the prepared setter 0x141E14890.",
+    ),
+    0x141E19F90: (
+        "NavStateMachineUpdateBool",
+        "Real function start for NavStateMachine::Update(bool). Owns the broad "
+        "movement-state update loop whose internal label at 0x141E1A000 runs "
+        "0x141E1BA20, dispatches owner+0x80, and then continues into "
+        "0x141E1AA20 and other moving/action-pack follow-up work.",
+    ),
+    0x141E1AA20: (
+        "ProcessPathFindResultsAndSwitchPreparedMovementState",
+        "Owner-side follow-up inside the broader update loop 0x141E1A000. "
+        "Works from the current prepared mode at owner+0x444 together with the "
+        "current, reserved, and backup action-pack handles at +0x2F8/+0xE90/"
+        "+0x258, logs ProcessPathFindResults strings, releases invalid or "
+        "disappeared action-packs when needed, and feeds 0x141E14890 with "
+        "replacement modes 0, 1, 2, or 4 through compact descriptors built by "
+        "0x141E06C00.",
+    ),
+    0x141E1BA20: (
+        "BuildMovementModeFromQueuedEntriesAndFeedPreparedSetter",
+        "Large owner-side chooser over queued entries and current action-pack "
+        "state. Unpacks candidate entries through 0x141E06C00, compares them "
+        "against owner+0x290 and current action-pack state, and then feeds "
+        "0x141E14890 with concrete mode ids 0, 1, 2, 3, or 4 depending on the "
+        "accepted path. This is currently the strongest ordinary-Chloe path "
+        "above the prepared movement snapshot setter.",
+    ),
+    0x141E1C820: (
+        "ResumeNavigationAndBuildActionPackHandoffSnapshot",
+        "Owner-side resume path in the nav state machine. Scans resumable "
+        "navigation entries, builds a handoff snapshot through 0x141E179D0, "
+        "and then publishes the result through the same descriptor/storage tail. "
+        "String anchors identify this family as ResumeMoving / Resume.",
+    ),
+    0x141E18A00: (
+        "ResolveOwner2F8SourceAndApplySharedSnapshotIfPresent",
+        "Owner-side dispatcher that resolves the current source handle stored at "
+        "owner+0x2F8 via 0x141DF35F0. If the source is absent, it falls back to "
+        "0x141E17240 and publishes a small descriptor node of type "
+        "0x141E1D110. If the source is present, it consumes source fields "
+        "+0x170, +0x230, +0x240, +0x250, updates owner fields such as +0x2FC, "
+        "+0x468, and then enters the shared snapshot/apply block at "
+        "0x141E18A70 using descriptor node type 0x141E1F890. The source now "
+        "reads as a live ActionPack-like object, not an anonymous snapshot "
+        "blob.",
+    ),
+    0x141E18120: (
+        "AbandonInterruptedStateAndRebuildMode4Descriptor",
+        "Cleanup path identified by the string 'Abandoning interrupted state "
+        "%s'. Resets the owner+0x1D8 helper back to the small node type "
+        "0x141E1D110, optionally releases the current action-pack selection, "
+        "rebuilds a fresh descriptor from owner+0x1D0 through virtual +0x1C8, "
+        "feeds mode 4 into 0x141E14890, and then republishes through "
+        "0x141DE0690.",
+    ),
+    0x141E1E4F0: (
+        "UpdateStateMovingAndSwitchPreparedModes",
+        "Ordinary moving-state update family identified by UpdateStateMoving "
+        "strings. Uses the current prepared mode at owner+0x444 together with "
+        "the moving action-pack state, can feed mode 2, mode 3, or mode 0 "
+        "back into 0x141E14890, checks arrival and waypoint changes, and then "
+        "continues through success/failure handling for the moving command. "
+        "This currently looks like one of the strongest ordinary movement "
+        "families above the prepared movement setter.",
+    ),
+    0x141E1F300: (
+        "PostRootLocatorUpdateAndSwitchPreparedModes",
+        "Post-root / interrupted-state update family identified by "
+        "PostRootLocatorUpdate strings. Builds temporary descriptors from "
+        "owner+0x360/+0x370/+0x380, feeds modes 2, 1, or 0 into "
+        "0x141E14890, and then drives publication plus post-root follow-up "
+        "checks. Strong live path, but currently looks narrower than the main "
+        "moving-state updater.",
+    ),
+    0x141E20280: (
+        "UpdateStatePlayingEnterAnimationAndFeedMode4",
+        "Action-pack enter-animation state update identified by "
+        "UpdateStatePlayingEnterAnimation strings. If a live current "
+        "action-pack exists it feeds mode 4 into 0x141E14890 and publishes the "
+        "result; otherwise it falls into failure/exit handling. Useful for "
+        "classification, but not the strongest generic movement ingress.",
+    ),
+    0x141261140: (
+        "UpdatePlayerCameraAnimationDirectorFromAnimationContributionFlags",
+        "Heavy animation-driven update path above player+0x36C0. Writes "
+        "director+0x88 and optional contribution age at +0xF0, gates on bits "
+        "under r13+0x50 plus local animation-token filters, and is currently "
+        "the only confirmed direct caller of "
+        "AdvancePlayerCameraAnimationDirectorContributionState.",
+    ),
+    0x141C07420: (
+        "SetScreenRouteAttachLaneState",
+        "Small helper that stores route+0x128 = bool and flips the paired "
+        "lane-state bands under 0x143FE1088 + 0xDB0 using 0x141837530.",
+    ),
+    0x141C074E0: (
+        "AttachScreenRouteWithManualFallbackDescriptor",
+        "Attach side for the manual-camera path. Sets route+0x128 = 1, flips "
+        "the paired 0x143FE1088 lane-state bands, and if route+0x2A8/+0x2B0 "
+        "does not already resolve to a live actor, builds fallback descriptor "
+        "0x14373A820 and pushes it through "
+        "ResolveScreenRouteTargetAndCommitDescriptor.",
+    ),
+    0x141C07640: (
+        "DetachScreenRouteManualBinding",
+        "Detach side for the manual-camera path. Clears camera+0x128, flips the "
+        "paired 0x143FE1088 lane-state bands, optionally calls retained target "
+        "virtual +0x208(...,2), and clears per-screen activity bytes.",
+    ),
+    0x141C07E20: (
+        "WriteManualOrDebugCameraFollowStateIntoResolvedActor",
+        "Manual/debug-camera follow writer. Resolves the actor cached under "
+        "camera+0x100, validates it through 0x141F53500, then writes "
+        "transform/follow state into actor+0x3A0/+0x3B0 and actor+0x1D0..+0x21C. "
+        "Observed callers include the manual-camera cluster plus debug-flavored "
+        "`teleportplayer` / top-camera selection paths, so this is useful but "
+        "not yet the final gameplay camera seam.",
+    ),
+    0x140EDE5E0: (
+        "SwitchPrimaryCameraRetainedBindingByRetainedSlotState",
+        "Gameplay-facing manager-0 retained-camera switch. If retained state is "
+        "absent, calls 0x1410F3350 then detaches the primary screen-route "
+        "entity through "
+        "0x141C07640; if retained state is present, calls "
+        "RefreshPrimaryRetainedPlayerCamera (0x1410F3DD0) then attaches through "
+        "0x141C074E0. Both branches finish by resolving slot 0 via "
+        "0x1410F0F60.",
     ),
     0x14015BB60: (
         "CopyLargeCameraStateStruct_0x3F8",
@@ -571,7 +1330,7 @@ FUNCTIONS = {
     0x140883570: (
         "UpdateRuntimeCameraState_GatedByPrimaryCameraFlag153",
         "Main runtime camera-state update path. Immediately queries "
-        "GetCameraManager(0) and gates behavior on CameraManager(0)+0x153 "
+        "the primary screen-route entity and gates behavior on route+0x153 "
         "before continuing normal simulation over the local camera-state "
         "object; a non-zero flag takes the early-return epilogue rather than "
         "a separate retained-specific worker path.",
@@ -821,25 +1580,29 @@ FUNCTIONS = {
         "nested object's virtual +0xE0.",
     ),
     0x1406B3640: (
-        "BuildAndApplyExtendedControlRoutingPath",
-        "Heavy sibling path in the 0x1406B3D70 control router. Builds a large "
-        "runtime descriptor stack, allocates/attaches intermediate objects, "
-        "updates owner+0x2830 and owner+0x2010, clears bit 0x8 in owner+0x15AA "
-        "on success, and writes a scalar into companion child field +0xD0.",
+        "PatrolScriptSkill_BuildAndApplyExtendedControlRoutingPath",
+        "Heavy sibling path in the Patrol@ScriptSkill router at 0x1406B3D70. "
+        "Builds a large runtime descriptor stack, allocates/attaches "
+        "intermediate objects, updates owner+0x2830 and owner+0x2010, clears "
+        "bit 0x8 in owner+0x15AA on success, and writes a scalar into "
+        "companion child field +0xD0.",
     ),
     0x1406B3940: (
-        "BuildAndApplyCompactControlRoutingPathByStateId",
-        "Sibling path used by the same 0x1406B3D70 router when a low-cardinality "
-        "state id in edx is available. Rebuilds local transforms/state from the "
-        "owner, consults current locomotion payload fields around +0x24B0..+0x24C8, "
-        "and feeds the result into the same post-routing owner updates.",
+        "PatrolScriptSkill_BuildAndApplyCompactControlRoutingPathByStateId",
+        "Sibling path used by the same Patrol@ScriptSkill router when a "
+        "low-cardinality state id in edx is available. Rebuilds local "
+        "transforms/state from the owner, consults current locomotion payload "
+        "fields around +0x24B0..+0x24C8, and feeds the result into the same "
+        "post-routing owner updates.",
     ),
     0x1406B3D70: (
-        "RouteControlPathByProbeFlagAndStateId",
-        "Entry router for the 0x1406B3640/0x1406B3940 sibling control paths. "
+        "PatrolScriptSkill_RouteControlPathByProbeFlagAndStateId",
+        "Entry router in the Patrol@ScriptSkill vtable block at 0x14297B260. "
         "Calls 0x1406B2390 to obtain a probe flag and scalar, dispatches either "
         "the extended path or the state-id path, then clears bit 0x80 in "
-        "owner+0x1D57 and pushes the scalar into companion child field +0xD0.",
+        "owner+0x1D57 and pushes the scalar into companion child field +0xD0. "
+        "This is an AI patrol layer, not the first direct-control seam for a "
+        "playable Nadine.",
     ),
     0x1406B2390: (
         "ProbeControlRoutingThresholdsAndSelectStateId",
@@ -1163,6 +1926,53 @@ FUNCTIONS = {
         "0x48 bytes, constructs the replacement through 0x14045B8D0, then "
         "reattaches it through AttachMaterializedStateObjectToOwnerRuntime.",
     ),
+    0x140473590: (
+        "ConstructBehaviorScavengeMaterializedStateVariant570",
+        "Constructs a 0x570 BehaviorScavenge materialized-state object. Seeds "
+        "its local behavior block, installs the 0x14293F7D0 vtable, initializes "
+        "the +0x40 subobject, and attaches the caller-supplied snapshot/source "
+        "payload through 0x140473020.",
+    ),
+    0x140473460: (
+        "ConstructBehaviorScavengeMaterializedStateVariant570Base",
+        "Shared base ctor for the 0x570 BehaviorScavenge materialized-state "
+        "family. Initializes the base behavior object through 0x14048EC20, "
+        "installs vtable 0x14293F7D0, initializes the +0x40 subobject, and "
+        "seeds tail fields around +0x538..+0x560 before caller-specific payload "
+        "copy runs.",
+    ),
+    0x140480230: (
+        "ConstructBehaviorShootMovingMaterializedStateVariant9B0",
+        "Constructs the 0x9B0 materialized-state variant tagged with the "
+        "BehaviorShootMoving label. Seeds the generic base, installs its vtable, "
+        "copies the caller payload into +0x40 and +0x570-side state, and "
+        "materializes shot-moving flags around +0x980..+0x9A1.",
+    ),
+    0x14048A260: (
+        "ConstructBehaviorTurnToFaceMaterializedStateVariant70",
+        "Constructs the 0x70 materialized-state variant tagged with the "
+        "BehaviorTurnToFace label. Seeds the generic base and copies the small "
+        "turn-to-face payload into +0x40..+0x64.",
+    ),
+    0x1404B7F00: (
+        "InstallBehaviorScavengeMaterializedStateVariant570FromLocoSnapshot",
+        "Indirect BehaviorScavenge install path for owner+0x1F80. Builds a "
+        "0x570 materialized-state payload from the owner's locomotion snapshot "
+        "and optional actor/source input, detaches the current slot object, "
+        "constructs the replacement through 0x140473590, then reattaches it "
+        "through AttachMaterializedStateObjectToOwnerRuntime.",
+    ),
+    0x1404B80C0: (
+        "DispatchBehaviorScavengeOwnerVirtualD58WithPreparedState",
+        "BehaviorScavenge-side dispatcher that materializes a small state block "
+        "through 0x141DE1280 and then calls owner virtual +0xD58 with the "
+        "prepared payload and external source object.",
+    ),
+    0x1404B8180: (
+        "RegisterBehaviorScavengeMetadataRoots",
+        "Publishes the BehaviorScavenge label pointer and the paired metadata "
+        "root at 0x142952020 into globals 0x143048978/0x143048970.",
+    ),
     0x140665923: (
         "ReplaceAttachedMaterializedStateObject_WithVariant9B0",
         "Detaches the current owner+0x1F80 materialized-state object, allocates "
@@ -1259,7 +2069,47 @@ FUNCTIONS = {
         "runtime state through 0x141DE9E60, refreshes owner transform caches "
         "at +0x4160..+0x4180, validates/logs the record, updates owner cache "
         "fields +0x4600..+0x460A, and on the zero-state branch dispatches the "
-        "heavy nested-control apply path 0x141DE4F90.",
+        "heavy nested-control apply path 0x141DE4F90. NOTE: this is a SHARED "
+        "character virtual; it sits at NadineBuddy vtable slot +0xC48 (the slot "
+        "earlier seen producing the 'native teleport' effect, which is really a "
+        "state-record apply side effect). So NadineBuddy already exposes this "
+        "control-apply ingress that reaches 0x141DE9E60.",
+    ),
+    0x141D63420: (
+        "CharacterManager_AddCharacter",
+        "CharacterManager::AddCharacter(rcx=manager=*(0x143898630), rdx=character). "
+        "Array base manager+0, capacity manager+8, count manager+0xC; 16-byte "
+        "entries {character+0xA8 ptr, character+0xBC id}. Dedupe-scans, writes "
+        "array[count], increments count, then notifies observers at "
+        "manager+0x10..+0x18 via node->vtable[0](node, character). This is the "
+        "real CharacterManager registration path, but it is NOT the campaign "
+        "blocker for second-player routing: Nadine is already registered there. "
+        "The separate local-player resolver lives under 0x143FE1070.",
+    ),
+    0x141D63640: (
+        "CharacterManager_RemoveCharacter",
+        "Inverse of AddCharacter: scans the {ptr,id} array for the character, "
+        "compacts it down, decrements count at manager+0xC, notifies observers "
+        "via node->vtable+8(node, character), and calls character->virtual+0x810 "
+        "(0x141FEBE20).",
+    ),
+    0x141D63C50: (
+        "CharacterManager_GetCharacter",
+        "Index accessor: asserts index<count(manager+8), entry=array[index] "
+        "(index<<4 + manager+0), validates entry.ptr->(+8)->+0xBC==entry.id, "
+        "returns entry.ptr. This is the CharacterManager array accessor itself; "
+        "do not conflate it with the separate local-player resolver owner at "
+        "0x143FE1070.",
+    ),
+    0x140486EB0: (
+        "BehaviorTeleport_ComputeAimBasisAndSeedOwnerStateViaDE9E60",
+        "BehaviorTeleport-specific aim/transform virtual (sole vtable slot ptr "
+        "at 0x142941490; RTTI = BehaviorTeleport). Validates a retained slot via "
+        "0x14386FD00, builds an orientation/aim basis from runtime objects "
+        "using record +0xA0/+0xC0/+0xF0 quaternion math, then seeds owner "
+        "runtime state through the control bridge 0x141DE9E60. This confirms "
+        "that one direct path above 0x141DE9E60 is AI behavior logic, not raw "
+        "player input.",
     ),
     0x14041C7E0: (
         "ActivateCurrentStateObject_1FF0",
@@ -1462,11 +2312,20 @@ FUNCTIONS = {
     ),
     0x141DE4F90: (
         "ApplyStateRecordThroughNestedControlAndActorRuntime",
-        "Heavy owner-side apply path for a current-state record object. Resolves "
-        "old/new nested-control nodes by record tag, deactivates the previous "
-        "node through virtual +0xC0, applies the new one through virtual +0xE0 "
-        "with packed owner transforms, then commits the record-object transform "
-        "through owner virtual +0xC48 and finalizes via owner+0x15C0/+0x15B8.",
+        "Heavy owner-side apply path for a current-state record object. Builds "
+        "a temporary control/runtime block from owner+0x15B8, resolves/evicts "
+        "competing selection through owner+0x15C0+0x2F8, deactivates the "
+        "previous nested-control node through virtual +0xC0, applies the new "
+        "one through virtual +0xE0 with packed owner transforms, then commits "
+        "the record-object transform through owner virtual +0xC48 and finalizes "
+        "via owner+0x15C0/+0x15B8, including a final 0x141E0EDF0 snapshot push.",
+    ),
+    0x141DE5190: (
+        "ApplyPreparedNavCharacterStateRecordWithBlendScalars",
+        "Prepared-state wrapper above 0x141E15030. Copies the incoming compact "
+        "record, injects two extra scalar inputs into the prepared payload, "
+        "forces record kind 4, then routes the result into owner+0x15C0 "
+        "through the shared nested-control sink.",
     ),
     0x141DE5430: (
         "ResolveSharedNestedControlRuntimeObjectBlock310",
@@ -1616,6 +2475,20 @@ FUNCTIONS = {
         "owner+0x130/+0x140, dispatches owner+0x15B8 helpers, resets broad "
         "owner state mirrors around +0x175C..+0x19FC, refreshes live retained "
         "actor state, and marks companion/runtime bits after install.",
+    ),
+    0x141DE4D20: (
+        "ApplyPreparedNavCharacterStateRecordThroughNestedControlSink",
+        "Copies a compact prepared state block into owner+nested-control state, "
+        "writes owner+0x1748 from the record mode id, then forwards the payload "
+        "into 0x141E15030 through owner+0x15C0.",
+    ),
+    0x141E15030: (
+        "ConsumePreparedNavCharacterStateRecordAndRefreshNestedControl",
+        "Heavy nested-control sink for prepared NavCharacter state records. "
+        "Validates owner actor identity, compares the incoming record against "
+        "current control state, updates owner+0x110/+0x120 live transforms, "
+        "rebuilds control deltas, emits NavMesh-tagged diagnostics, and commits "
+        "accepted state into owner-side nested-control storage.",
     ),
     0x1410F1910: (
         "SpawnPlayerFromRetainedDescriptor",
@@ -1865,6 +2738,20 @@ FUNCTIONS = {
         "records through 0x141E0EDF0/0x141E0ED10, uses actor-graph helpers "
         "0x1418B7060/0x14189E5A0/0x14189CC80, and routes follow-up work "
         "through nested virtuals +0x178/+0x170/+0xB0.",
+    ),
+    0x14058BA40: (
+        "ApplyCombatActionMode1SnapshotAndSelection",
+        "Live branch inside 0x14058B900. Applies a full snapshot into "
+        "owner+0x15B8 through 0x141E0EDF0, switches controller mode 1 through "
+        "0x141E0ED10, then resolves actor-graph selection data through "
+        "owner+0x1E0 and 0x1418B7060.",
+    ),
+    0x14058BC70: (
+        "ApplyCombatActionMode2SnapshotAndFinalizeSelection",
+        "Sibling live branch inside 0x14058B900. Applies a blended snapshot "
+        "into owner+0x15B8, switches controller mode 2, then finalizes the "
+        "nested-control side through 0x141DEF910 after selecting actor-graph "
+        "data via 0x1418B7060.",
     ),
     0x14124ED20: (
         "PublishActorObserverRecordFromPrimaryRetainedPlayerAndScalarQuery",
@@ -2508,8 +3395,8 @@ FUNCTIONS = {
         "PublishMountedMeleeState1F68ThroughCameraAndPresentation",
         "Large live path over outer_owner+0x1F68. Marks the local state active, "
         "pulls state data through virtual +0x48, packages actor/runtime pairs, "
-        "then publishes through GetCameraManager(0) / 0x141C0DFD0. Later uses "
-        "virtual +0x60 on the same mounted object as a gate.",
+        "then publishes through the primary screen-route entity / 0x141C0DFD0. "
+        "Later uses virtual +0x60 on the same mounted object as a gate.",
     ),
     0x14125E650: (
         "SelectMountedMeleeStateBetween1F68_1F70_AndQueueOwner1F60",
@@ -2802,6 +3689,32 @@ FUNCTIONS = {
         "making player+0x100 the strongest current container for the hidden "
         "promotion pair.",
     ),
+    0x1416858E0: (
+        "BuildCompactDescriptorCarrierFromRuntimeObject50_54",
+        "Builds a small carrier record from a runtime object that exposes "
+        "dword +0x50 and word +0x54. Seeds carrier header words with "
+        "0x7FCCCCCC, copies +0x50/+0x54 into the compact descriptor key at "
+        "+0x8/+0xC when present, and clears the local transform/quaternion "
+        "bands. In Player::Init this feeds 0x1416862B0 and refreshes the "
+        "embedded authored descriptor state under player+0x100, not the "
+        "canonical Player live pair at +0xA8/+0xBC.",
+    ),
+    0x141685B40: (
+        "InitializeEmptyExtendedDescriptorCarrier",
+        "Initializes the larger empty descriptor carrier used by the wide "
+        "0x50-byte descriptor banks under Player bringup and sibling gameplay "
+        "paths. Seeds the same 0x7FCCCCCC headers, zeroes local state, and "
+        "copies the default vector bands from 0x1428805D0.",
+    ),
+    0x1416862B0: (
+        "RefreshEmbeddedPlayerAuthoredDescriptorFromCompactCarrier",
+        "Consumes the compact descriptor carrier built by 0x1416858E0 and "
+        "refreshes the embedded Player authored-descriptor object rooted at "
+        "player+0x100. Validates the keyed entry against 0x14386FD00, copies "
+        "resolved records into +0x10/+0x20, rebuilds derived basis/vector "
+        "state at +0x30/+0x40, and leaves the canonical Player live pair at "
+        "+0xA8/+0xBC untouched.",
+    ),
     0x141E7C600: (
         "CompareEmbeddedDescriptorCarrierOrderingAndWarn_141E7C600",
         "Small comparison/logging helper immediately after the ret stub at "
@@ -2881,7 +3794,13 @@ FUNCTIONS = {
         "object, r9d=slot, stack arg5=flag. Also note that direct callers "
         "still apply additional post-call tracker initialization, so this is "
         "the low create/update worker rather than the whole stable bringup "
-        "sequence by itself.",
+        "sequence by itself. PIVOT SEAM: resolves the source via ctxA "
+        "(lea rcx,[0x143E08C80]; call 0x14194E510) at 0x140A9075E, NOT ctxB. "
+        "Arg5 is an is-local-player flag: when set, slot+0x1DC is taken from a "
+        "local-id counter byte at 0x14304172A (then incremented) and slot+0x1E8 "
+        "records local-vs-remote. is_local varies per caller (0x140A58287->0, "
+        "0x140A392EC->r15b, 0x140A3A02C/06E->r14b); the caller passing 1 is the "
+        "ready local-second-player construction to mirror for campaign co-op.",
     ),
     0x140ACBE10: (
         "ConstructNetSharedContextBase_0x800Entries",
@@ -2890,12 +3809,25 @@ FUNCTIONS = {
         "zeroes the embedded owner pointer at +0x8, and initializes the tail "
         "helper block through 0x140AC62D0.",
     ),
+    0x140072A50: (
+        "InitializeCtxAObjectAndInstallVtable_1429E61F0",
+        "Early startup builder for ctxA at 0x143E08C80. Calls the shared "
+        "base constructor 0x140ACBE10 and then installs the ctxA-specific "
+        "vtable 0x1429E61F0.",
+    ),
+    0x14007C100: (
+        "InitializeCtxBObjectAndInstallVtable_1429EF890",
+        "Early startup builder for ctxB at 0x143E0EF00. Calls the shared base "
+        "constructor 0x140ACBE10, zeroes the embedded owner field at +0x8, "
+        "installs the ctxB-specific vtable 0x1429EF890, and seeds "
+        "0x143E10E88.",
+    ),
     0x140B1E050: (
-        "ResetCtxBPendingPublishAndOwnerLifecycle",
-        "CtxB reset helper. Clears staged publish globals around "
-        "0x143E10E80/0x143E10E90, tears down through ctxB+0x8->owner->virtual "
-        "+0x50 when present, then clears ctxB+0x8 and re-enters the ctxB "
-        "vtable +0x60 refresh path.",
+        "ResetCtxBObjectAndClearPendingSelectionGlobals",
+        "Global ctxB reset helper. Calls 0x14194AF00 on 0x143E0EF00 and then "
+        "clears the staged pending-selection globals around "
+        "0x143E10E80/0x143E10E90/0x143E10EC4..+0x10. It does not consume the "
+        "incoming rcx and is not itself the owner-teardown path.",
     ),
     0x140B1E100: (
         "PublishCtxBPendingSelectionVector",
@@ -2958,6 +3890,15 @@ FUNCTIONS = {
         "ctxB+0x8 is bound, it first rebuilds the owner/fallback source list "
         "through 0x14194D5F0 and emits 0x104 for each non-current source. "
         "This is downstream of owner bind, not the bind itself.",
+    ),
+    0x140B21DE0: (
+        "ResolveCtxBSecondPlayerSelectionForSplitRefresh",
+        "Helper used by the split/local-player refresh family. Checks the "
+        "ctxB source-count path through 0x14194CFB0, falls back through the "
+        "sub-sign-in descriptor block at 0x143071008 when needed, and "
+        "otherwise returns the active/pending ctxB selection. This keeps the "
+        "stock split player-2 source tied to ctxB rather than a campaign-"
+        "native Nadine path.",
     ),
     0x140B21E70: (
         "HasCtxBResolvedSourceWithFlag42",
@@ -3052,40 +3993,42 @@ FUNCTIONS = {
         "plus 0x1409FBA60 from that front-end/net lifecycle.",
     ),
     0x1409FBA60: (
-        "RestartNetLifecycleAndScheduleStartupCallback",
-        "Broad net/front-end re-entry worker used after the upper shutdown "
-        "handlers. It does not directly jump into 0x1409FA94E, but around "
-        "0x1409FD068 it materializes a callback record whose function pointer "
-        "is 0x1409F9B20, then hands that record into "
-        "0x1415B43B0/0x1415B4870/0x1415B47C0. This makes the later bind path "
-        "an indirect scheduled callback problem, not a missing re-entry "
-        "surface.",
+        "NdiNetInit",
+        "CONFIRMED by decoded strings: NdiNetInit from game/net/flow.cpp "
+        "(!g_ndiStartNetInit, 'Trying to initialize net while it's active', "
+        "PAGE_MULTIPLAYER_CONNECTING, popup_mp_connecting, pMainPageStack). "
+        "This is the multiplayer net-init flow. Around 0x1409FD068 it builds an "
+        "0x80-byte ndjob record with callback field 0 = 0x1409F9B20 (priority "
+        "3), then schedules it via 0x1415B43B0/0x1415B4870/0x1415B47C0. The "
+        "ctxB owner rebind is therefore gated behind multiplayer net-init; "
+        "single-player campaign never runs this, which explains live "
+        "ctxB+0x8 == 0.",
     ),
     0x1415B43B0: (
-        "AllocateDeferredNetWorkBatch",
-        "Allocates a 0x80-stride work batch from the global 0x1437E9700 "
-        "scheduler state. Used by 0x1409FBA60 before copying callback "
-        "records such as the one that points at 0x1409F9B20.",
+        "NdjobAllocWorkBatch",
+        "ndjob (corelib/job/job.cpp) work-batch allocator from scheduler global "
+        "0x1437E9700. Generic job system, not net-specific. Used by NdiNetInit "
+        "before staging the 0x1409F9B20 record.",
     ),
     0x1415B4870: (
-        "CopyDeferredNetWorkBatchRecords",
-        "Copies one or more 0x80-byte callback/work records into the "
-        "allocated batch. In the 0x1409FBA60 path this is where the record "
-        "containing callback=0x1409F9B20 gets staged for later delivery.",
+        "NdjobCopyJobRecords",
+        "Copies one or more 0x80-byte ndjob job records into the batch. In the "
+        "NdiNetInit path this stages the record whose callback field 0 is "
+        "0x1409F9B20.",
     ),
     0x1415B47C0: (
-        "FinalizeAndSubmitDeferredNetWorkBatch",
-        "Finalizes the staged work batch and jumps into 0x1415B4560 for queue "
-        "submission. This confirms that the 0x1409F9B20 startup callback is "
-        "not invoked inline here.",
+        "NdjobFinalizeAndSubmitBatch",
+        "Finalizes the ndjob batch and tails into enqueue 0x1415B4560. Callback "
+        "is not invoked inline.",
     ),
     0x1415B4560: (
-        "QueueDeferredNetWorkBatchToPerLaneScheduler",
-        "Per-lane scheduler submit path for the deferred work batches. "
-        "Pushes the finalized batch into a 0x2200-stride queue rooted in the "
-        "global 0x1437E9700 state, with a 0x400-entry depth cap, and can "
-        "signal the downstream scheduler/worker path once the batch is "
-        "queued.",
+        "NdjobEnqueueToLane",
+        "ndjob per-lane enqueue. Global 0x1437E9700 holds a pointer to ndjob "
+        "scheduler state; lane array at state+0x4FC0, stride 0x2200, depth cap "
+        "0x400. Priority-inserts the task-group pointer at lane+0xC8 (count at "
+        "lane+0); lane id = group+0x4C, affinity mask = group+0x38; wakes "
+        "workers via import 0x1425D6668. Drain side is the generic ndjob worker "
+        "pool, which always runs.",
     ),
     0x1409FD360: (
         "ShutdownNetFrontEndAndTeardownGlobalSelectionService",
@@ -3122,6 +4065,15 @@ FUNCTIONS = {
         "12-entry 0x1C0-stride family rooted at +0x800, clears active "
         "entries, and resets their +0xE0/+0xF0 state.",
     ),
+    0x14194AF00: (
+        "HardResetSharedContextEntryBandsAndOwnerState",
+        "Hard reset for the ctxA/ctxB-style shared-context objects. Clears the "
+        "12 active 0x1C0-stride entry bands, resets current-selection state "
+        "at +0x18/+0x200/+0x208/+0x20C/+0x1ED0..+0x1ED4, zeroes the embedded "
+        "owner field at +0x8, re-seeds default bytes around +0xA1/+0xB0..+0xF0 "
+        "and +0x7C0/+0x748, and resets the pending-token/output fields near "
+        "+0x1F54.",
+    ),
     0x14194CFB0: (
         "CountCtxBActiveSourcesOrFallbackOne",
         "Counts active source entries for the second shared-context family. If "
@@ -3138,6 +4090,40 @@ FUNCTIONS = {
         "fallback owner can be the global selection service object itself. "
         "Otherwise it enumerates the active "
         "0x800/0x1C0-stride entry family and builds the output list.",
+    ),
+    0x14194E3B0: (
+        "PublishKind70SourceSummaryIntoCtxOwnerAndRefreshPayload",
+        "Pushes a selected source-summary pointer block through ctx+0x8 "
+        "owner->virtual +0x80(ctx, summary_ptr, 0x70). Then refreshes the "
+        "kind-0x70 payload behind either the fallback entry at ctx+0x1D00+0xFC "
+        "or the currently selected active entry's +0xFC payload. Used by the "
+        "split/session refresh path after it chooses a stock player-2 source, "
+        "so this is source-summary publication, not a direct camera-manager "
+        "handoff.",
+    ),
+    0x14194E510: (
+        "ResolveKind70PayloadFromCtxSourceEntryOrFallback",
+        "Given a ctx object and one source-entry pointer, resolves only the "
+        "kind-0x70 payload. If ctx+0x18 is null, it falls back to ctx+0x1ED4 "
+        "when ctx+0x1ED0 == 0x70. Otherwise it scans the 12-entry 0x1C0-stride "
+        "family at ctx+0x800, matches the incoming source entry by string "
+        "identity, and returns entry+0xFC when that entry's kind dword at "
+        "+0xF8 is 0x70. This is the concrete record layer consumed by post-bind "
+        "ctxB users and by the stock split player-2 summary path.",
+    ),
+    0x14194C870: (
+        "GetActiveSharedContextEntryByOrdinal",
+        "Returns the active 0x1C0-stride entry at ctx+0x800 + index*0x1C0 "
+        "when that slot's active byte +0xE0 is set, otherwise null. Live "
+        "callers use this as a stock entry-selection helper before comparing "
+        "against current/fallback ctx state.",
+    ),
+    0x14194C980: (
+        "GetCtxCurrentSelectedOrFallbackEntry",
+        "Returns the current-selected 0x1C0 entry for a shared-context object. "
+        "If ctx+0x18 is null it falls back to ctx+0x1D00; otherwise it scans "
+        "the 12-entry family at +0x800 and returns the entry matching the "
+        "current id dword at ctx+0x1EC4.",
     ),
     0x14194DB30: (
         "DispatchCtxBOwner58OrReturn2",
@@ -3312,16 +4298,96 @@ FUNCTIONS = {
         "Concrete ctxB vtable slot +0x40 from 0x1429EF890. Returns the "
         "inverted low-bit state of ctxB+0x200.",
     ),
+    0x140B20240: (
+        "MarkCtxBSelectionPresentAndGlobalDirty",
+        "Concrete ctxB vtable slot +0x80 from 0x1429EF890. If ctxB+0x18 is "
+        "live, sets ctxB+0x1F80=1; always sets global dirty byte "
+        "0x1437E7513=1.",
+    ),
+    0x140B20260: (
+        "PublishCtxBModePacketAndSetActiveBit",
+        "Concrete ctxB vtable slot +0x88 from 0x1429EF890. Sets ctxB+0x10=1, "
+        "packages a large token-keyed payload from a retained/runtime/object-"
+        "list band, and publishes it through 0x141C9ED50.",
+    ),
     0x140B20760: (
         "MarkCtxBGlobalDirtyFlag7513",
         "Tiny ctxB slot that only marks the global dirty byte "
         "0x1437E7513=1.",
+    ),
+    0x140B20710: (
+        "ClearCtxBPendingLatchAndOptionallyDispatchOwner78",
+        "Concrete ctxB vtable slot +0x48 from 0x1429EF890. Clears "
+        "ctxB+0x1FD0, and when the global gate at 0x1437E6F39 is set writes "
+        "ctxB+0x200=1 and tail-calls owner->virtual +0x78(ctxB,1); then "
+        "clears ctxB+0x10.",
     ),
     0x140B20770: (
         "ResetCtxBRuntimeFlagsAndTailRefresh",
         "CtxB runtime reset slot. Clears a small set of globals plus local "
         "ctx fields around +0x10/+0x1FD0, then tails into the broader "
         "refresh/reset helper at 0x140ACC140.",
+    ),
+    0x140B222B0: (
+        "InitNetPlayerDataStartingValues",
+        "Seeds a split/net-side NetPlayerData block from starting-value script "
+        "queries such as *net-starting-gold*, *net-starting-xp*, and the "
+        "*net-starting-mission-0/1/2* family. Reached from split login/logout "
+        "and wider session-state refresh helpers.",
+    ),
+    0x140B22C00: (
+        "CopySplitSubPlayerDescriptorBlock",
+        "Copies the 0x24-byte split sub-player descriptor block. Uses the "
+        "live global descriptor at 0x143071008..+0x28 when split state is "
+        "active, otherwise falls back to a default descriptor payload. This is "
+        "the stock sub-player descriptor feed used by split login and by the "
+        "ctxB fallback selector; it is not itself a live local-player actor "
+        "pointer path.",
+    ),
+    0x140B22D00: (
+        "SetNetPlayerDataSlaveFlags",
+        "Split-side NetPlayerData helper anchored by the assert "
+        "'m_isSlave == isSlave' in NetPlayerData::Init. Validates the "
+        "incoming slave-state byte at +0x9604 and stores the companion flag "
+        "byte at +0x9605.",
+    ),
+    0x140B9DE90: (
+        "HandleNetLogoutSplitScreenCommit",
+        "Split logout commit/reset helper. Reinitializes the split-side "
+        "NetPlayerData blocks through InitNetPlayerDataStartingValues, clears "
+        "the split availability/login state, and conditionally re-runs the "
+        "large split refresh at 0x140ACC140.",
+    ),
+    0x140ACC140: (
+        "RefreshSplitScreenSummaryFromSessionAndCtxB",
+        "Large split/local-player refresh helper reached from split login, "
+        "split logout, and broader session-state transitions. Rebuilds summary "
+        "state under 0x1437E7740, consults ctxB through 0x14194CFB0 and "
+        "0x140B21DE0, then publishes kind-0x70 source summaries back through "
+        "0x14194E3B0 for both ctxA and ctxB. This keeps the stock player-2 "
+        "source tied to the ctxB selection family, but it still operates on "
+        "descriptor/summary state rather than directly producing a live "
+        "local-player-1 actor pointer or camera-manager owner.",
+    ),
+    0x140C021C0: (
+        "QueryNetIsSecondPlayerAvailable",
+        "Script command handler for net-is-second-player-available?. Reads the "
+        "runtime split-availability state rather than booting split mode.",
+    ),
+    0x140C02220: (
+        "HandleNetLoginSplitScreen",
+        "Script command handler for net-login-split-screen. Gated by "
+        "*net-allow-sub-sign-in*, the runtime availability byte, and the "
+        "split login state; copies the split descriptor block, enables split "
+        "render state, seeds NetPlayerData, and refreshes the stock "
+        "player-2/session summary path. Runtime probing shows this boots split "
+        "state and CameraManager(1) in campaign, but stock local-player-1 "
+        "resolution can still remain null until separately patched.",
+    ),
+    0x140C02420: (
+        "HandleNetLogoutSplitScreen",
+        "Script command handler for net-logout-split-screen. Hands off to the "
+        "split logout/reset helper 0x140B9DE90.",
     ),
     0x140B1FAF0: (
         "ConsumeCtxBCurrentSelectionAndEntryCounters",
@@ -4128,6 +5194,121 @@ FUNCTIONS = {
         "+0x1FB0 dispatch object heavily, and commits through owner virtuals "
         "+0xBD0/+0xC78/+0xC98/+0xCB8.",
     ),
+    # --- Input pipeline (2026-06-16 capstone trace; toward redirecting control) ---
+    0x141A99F40: (
+        "XInputGetStateWrapper",
+        "Thin per-pad wrapper: reads pad-object index at +0x0, calls "
+        "XInputGetCapabilities(idx) then XInputGetState(idx, &pad+0x20); sets "
+        "connected byte at pad+0x4. Pad object layout: index +0x0, connected "
+        "+0x4, caps +0xC, XINPUT_STATE +0x20 (sThumbLX +0x28).",
+    ),
+    0x141A9A790: (
+        "InputManager_PollPads_SingleActivePad",
+        "Pad poll loop of the single global input manager (vtable base "
+        "0x142B37E50, ctor 0x14179C280, size 0x70). Iterates 4 pad slots at "
+        "mgr+8..+0x20; mgr+0x28 = active pad; mgr+0x58 = round-robin scan "
+        "counter. GetCapabilities gates GetState per index. Picks the FIRST "
+        "connected pad with input as the active pad -> drives THE one player "
+        "(campaign = single-player input, no pad-index->player-index routing).",
+    ),
+    0x141A99FD0: (
+        "InputManager_NormalizeStick",
+        "Normalizes a pad's XINPUT_STATE into the shared input-state: reads "
+        "pad+0x28/+0x2A (int16 LX/LY), /32768, clamps, writes normalized LX/LY "
+        "to dst+0x10/+0x14 (RX/RY follow). dst (rdx) = the input-state GLOBAL at "
+        "module RVA 0x66E4220.",
+    ),
+    0x14179C280: (
+        "InputManager_Init",
+        "Creates the single global input manager (heap, 0x70) + outer 0xf0 "
+        "object; registers a Steam callback. Called once from the engine init "
+        "0x140155760 (no per-player loop) => single-player input architecture.",
+    ),
+    0x14179C170: (
+        "Input_AnyAxisNonzeroPredicate",
+        "Returns whether any of several float axes (rbx+0/4/8/0xc, "
+        "+0x4E8..+0x504) are non-zero (deadzone/has-activity test). Used by the "
+        "focus dispatch to decide if a consumer has live input.",
+    ),
+    0x14179E310: (
+        "Input_FocusDispatch",
+        "Distributes the input-state (global 0x66E4220) to the consumer array "
+        "0x146B2C620 (count 0x146B1B55C). For each consumer calls "
+        "*(consumer)+0x30(input-state); FIRST that returns true claims focus "
+        "(stored at 0x146B2C618) and the loop breaks. This is the UI/overlay "
+        "input-focus stack (null in plain gameplay); gameplay player-control is "
+        "the downstream default path.",
+    ),
+    0x14183B410: (
+        "Input_ScaleCopyVirtual",
+        "Virtual (vtable-called). sub_14183B410(dst, src, scaleSel): reads the "
+        "input-state global (src) and writes a SENSITIVITY-SCALED copy "
+        "(xmm6 = +/-scale) element-by-element into dst (rsi). A processing stage "
+        "between the raw input-state and the gameplay player control. Capture "
+        "hit at 0x14183B571 (vmovss [rsi+0x10], scaled LX).",
+    ),
+    0x14179EA90: (
+        "Input_ScaleCopyThunk",
+        "Thunk: forwards to Input_ScaleCopyVirtual(a4, a3, a5); then optionally "
+        "sub_141836BB0(a4) if a1+0x10 set.",
+    ),
+    0x140289150: (
+        "FrameState_PerSlotInputApply",
+        "Per-slot input/camera apply = FrameState vtable+0x20 (FrameState = "
+        "*(g_LocalPlayerInputManager_Ptr 0x143FE1088), RTTI FrameState, vtable "
+        "RVA 0x28FB968). Args (mgr, vtbl, inputblock(rbx), slotstruct(a4), "
+        "slot(a5)). Processes per-slot camera heading (cos/sin) into the input "
+        "block and calls Input_ScaleCopyVirtual. PER-SLOT ENABLE GATES: byte at "
+        "FrameState+0x70B8+slot and struct at FrameState+0x6FC8+0x28*slot; both "
+        "set for slot 0 (active), 0 for slots 1-5 (idle). Activating slot 1 "
+        "(gates + player binding + feeding its input block 0x1466E4220[166*1]) "
+        "is the native per-viewport/per-player path to a real player 2.",
+    ),
+    0x140289A90: (
+        "FrameState_PerSlotInputApply_Sub",
+        "Helper called by FrameState_PerSlotInputApply (per-slot input math).",
+    ),
+    0x1402893D0: (
+        "FrameState_PerSlotInputApply_Branch",
+        "Branch of the per-slot apply taken when FrameState+0x6FC8+0x28*slot is "
+        "set (slot has an active per-slot input struct).",
+    ),
+    0x14179E6C0: (
+        "Input_PerPlayerDispatch_MgrArg",
+        "Sibling of Input_FocusDispatch taking the manager as arg a1. Same body: "
+        "UI focus loop over consumer array, then a 6-SLOT loop applying each "
+        "slot's input-state block &qword_1466E4220[166*idx] via "
+        "(*mgr+0x20)(mgr,*mgr,inputblock,slotstruct,slot). This is the engine's "
+        "native PER-PLAYER input distribution (6 slots; slot 0 active in "
+        "campaign, slots 1-5 idle). Manager = *(0x143FE1088); slot structs at "
+        "mgr+0xE88 + slot*0xBF0. Per-slot apply = manager vtable+0x20.",
+    ),
+}
+
+# Data/global names (set via ida_name on data addresses).
+DATA_NAMES = {
+    0x143FE1088: (
+        "g_LocalPlayerInputManager_Ptr",
+        "Pointer to the native local-player/input manager. Per-player input "
+        "distribution iterates 6 slots here (slot structs at *+0xE88 + i*0xBF0); "
+        "per-slot input apply = its vtable+0x20. Slot 0 = active player; slots "
+        "1-5 idle in campaign = the dormant native multiplayer input path.",
+    ),
+    0x1466E4220: (
+        "g_InputStateBlocks",
+        "Array of 6 per-player input-state blocks (166 qwords / 0x530 bytes "
+        "each). Stick normalizer 0x141A99FD0 writes the active pad's normalized "
+        "stick to block+0x10/+0x14. Read by the per-player dispatch "
+        "0x14179E6C0/0x14179E310.",
+    ),
+    0x146B2C620: (
+        "g_InputFocusConsumerArray",
+        "Array of UI/overlay input-focus consumers (count g_InputFocusConsumerCount "
+        "0x146B1B55C). First whose vtable+0x30 returns true claims focus "
+        "(g_InputFocusCurrent 0x146B2C618). Null in plain gameplay.",
+    ),
+    0x146B1B55C: ("g_InputFocusConsumerCount", "Count for g_InputFocusConsumerArray."),
+    0x146B2C618: ("g_InputFocusCurrent", "Currently-focused UI input consumer (null in gameplay)."),
 }
 
 
@@ -4149,17 +5330,43 @@ def apply_labels():
         )
         ida_funcs.set_func_cmt(ea, comment, False)
         ida_bytes.set_cmt(ea, comment, False)
+    for ea, (name, comment) in DATA_NAMES.items():
+        ida_name.set_name(
+            ea,
+            name,
+            ida_name.SN_FORCE | ida_name.SN_NOCHECK,
+        )
+        ida_bytes.set_cmt(ea, comment, False)
 
 
 def main():
-    apply_labels()
+    import os
+    import traceback
 
-    output_path = idc.get_idb_path()
-    _ida_loader.save_database(
-        output_path,
-        ida_loader.DBFL_KILL,
+    log_path = os.environ.get(
+        "TLL_APPLY_LOG",
+        r"C:\users\vladimir\desktop\TLLCoopResearch\reports\apply_status.txt",
     )
-    ida_pro.qexit(0)
+    log = open(log_path, "w", encoding="utf-8")
+    rc = 0
+    try:
+        n_fn = len(FUNCTIONS)
+        n_data = len(DATA_NAMES)
+        apply_labels()
+        log.write(f"apply_labels OK: {n_fn} functions, {n_data} data names\n")
+        # Save the open database (IDA 9.x). flags=0 keeps the DB; this repacks
+        # the .i64. (Old DBFL_KILL via _ida_loader was unreliable here.)
+        path = idc.get_idb_path()
+        log.write(f"idb_path={path}\n")
+        ok = ida_loader.save_database(path, 0)
+        log.write(f"save_database returned {ok}\n")
+    except Exception as e:  # noqa: BLE001
+        rc = 1
+        log.write("ERROR: " + repr(e) + "\n" + traceback.format_exc())
+    finally:
+        log.flush()
+        log.close()
+    ida_pro.qexit(rc)
 
 
 main()

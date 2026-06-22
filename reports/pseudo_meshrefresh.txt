@@ -1,0 +1,348 @@
+=== 0x141BCD340: ResolvePlayerAmbientOccluderSelectionAndRefreshDrawControlMeshes [0x141BCD340..0x141BCD858] ===
+// Real Player vtable slot +0x740. Resolves authored ambient-occluder ids around `character-ambient-occluder-array`, `ambient-occluders`, and `*characters-ambient-occluders-map*`, writes the selected id to player+0x180, optionally refreshes the draw-control object at player+0x198 via 0x1417567C0, then scans draw-control meshes and updates ambient-occluder usage through 0x141756570/0x141755B10. This pins +0x740 as a draw-control/ambient-classification stage, not an ownership or verb-dispatch seam.
+__int64 __fastcall ResolvePlayerAmbientOccluderSelectionAndRefreshDrawControlMeshes(
+        __int64 a1,
+        unsigned int a2,
+        unsigned int a3)
+{
+  int v3; // ebp
+  __int64 v5; // r12
+  const char *v9; // r8
+  __int64 v10; // r9
+  __int64 v11; // r13
+  __int64 v13; // r10
+  char v19; // al
+  _DWORD **v20; // rax
+  __int64 v21; // rdx
+  _DWORD *v22; // r8
+  int v23; // edx
+  const char *v24; // r8
+  __int64 v27; // r10
+  __int64 v28; // r9
+  char v34; // al
+  __int64 v35; // r15
+  const char *v36; // r14
+  __int64 v37; // r11
+  const char *v39; // r10
+  unsigned int v40; // r9d
+  __int64 v42; // r8
+  char v48; // al
+  _QWORD *v49; // rax
+  __int64 v50; // r13
+  int v51; // eax
+  __int64 v52; // rdx
+  __int64 v53; // r8
+  __int64 v54; // r9
+  _DWORD **v55; // rax
+  char v62; // al
+  __int64 v63; // r8
+  __int64 v64; // r9
+  _DWORD **v65; // rax
+  _DWORD **v66; // rax
+  __int64 v67; // rbp
+  int v68; // r12d
+  int v69; // r13d
+  unsigned int v70; // ebx
+  unsigned int v71; // eax
+  __int64 v72; // r14
+  __int64 v73; // r10
+  __int64 v74; // r15
+  __int64 v75; // rsi
+  int v76; // r9d
+  __int64 *v77; // rcx
+  __int64 v78; // rcx
+  unsigned int v81; // [rsp+38h] [rbp-450h] BYREF
+  __int64 v82; // [rsp+40h] [rbp-448h]
+  _DWORD v83[256]; // [rsp+50h] [rbp-438h] BYREF
+
+  v3 = 0;
+  _RSI = qword_142BEA360;
+  v5 = 8;
+  _RAX = v83;
+  v9 = "character-ambient-occluder-array";
+  v10 = 32;
+  v11 = a1;
+  _RDX = qword_142BEA360;
+  v13 = 8;
+  do
+  {
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [rdx]
+      vmovups xmm1, xmmword ptr [rdx+70h]
+      vmovups ymmword ptr [rax], ymm0
+      vmovups ymm0, ymmword ptr [rdx+20h]
+      vmovups ymmword ptr [rax+20h], ymm0
+      vmovups ymm0, ymmword ptr [rdx+40h]
+      vmovups ymmword ptr [rax+40h], ymm0
+      vmovups xmm0, xmmword ptr [rdx+60h]
+      vmovups xmmword ptr [rax+60h], xmm0
+    }
+    _RAX += 32;
+    _RDX += 16;
+    __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+    --v13;
+  }
+  while ( v13 );
+  do
+  {
+    v19 = *v9;
+    if ( !*v9 )
+      break;
+    ++v9;
+    v3 = (v3 << 8) ^ v83[(unsigned __int8)(v19 ^ HIBYTE(v3))];
+    --v10;
+  }
+  while ( v10 );
+  *(_DWORD *)(a1 + 384) = 0;
+  __asm { vzeroupper }
+  v20 = (_DWORD **)ResolveKnowledgeRegistryEntryById(a2, _RDX, v9, v10);
+  if ( v20 )
+  {
+    v22 = *v20;
+    if ( *v20 )
+    {
+      if ( *(v22 - 1) == v3 )
+      {
+        *(_DWORD *)(v11 + 384) = a2;
+        goto LABEL_40;
+      }
+    }
+  }
+  v23 = 0;
+  v24 = "ambient-occluders";
+  _RAX = v83;
+  _RCX = qword_142BEA360;
+  v27 = 8;
+  v28 = 17;
+  do
+  {
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [rcx]
+      vmovups xmm1, xmmword ptr [rcx+70h]
+      vmovups ymmword ptr [rax], ymm0
+      vmovups ymm0, ymmword ptr [rcx+20h]
+      vmovups ymmword ptr [rax+20h], ymm0
+      vmovups ymm0, ymmword ptr [rcx+40h]
+      vmovups ymmword ptr [rax+40h], ymm0
+      vmovups xmm0, xmmword ptr [rcx+60h]
+      vmovups xmmword ptr [rax+60h], xmm0
+    }
+    _RAX += 32;
+    _RCX += 16;
+    __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+    --v27;
+  }
+  while ( v27 );
+  do
+  {
+    v34 = *v24;
+    if ( !*v24 )
+      break;
+    ++v24;
+    v23 = (v23 << 8) ^ v83[(unsigned __int8)(v34 ^ HIBYTE(v23))];
+    --v28;
+  }
+  while ( v28 );
+  v35 = 34;
+  v36 = "*characters-ambient-occluders-map*";
+  v37 = 34;
+  _RAX = v83;
+  v39 = "*characters-ambient-occluders-map*";
+  v40 = 0;
+  _RCX = qword_142BEA360;
+  v42 = 8;
+  do
+  {
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [rcx]
+      vmovups xmm1, xmmword ptr [rcx+70h]
+      vmovups ymmword ptr [rax], ymm0
+      vmovups ymm0, ymmword ptr [rcx+20h]
+      vmovups ymmword ptr [rax+20h], ymm0
+      vmovups ymm0, ymmword ptr [rcx+40h]
+      vmovups ymmword ptr [rax+40h], ymm0
+      vmovups xmm0, xmmword ptr [rcx+60h]
+      vmovups xmmword ptr [rax+60h], xmm0
+    }
+    _RAX += 32;
+    _RCX += 16;
+    __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+    --v42;
+  }
+  while ( v42 );
+  do
+  {
+    v48 = *v39;
+    if ( !*v39 )
+      break;
+    ++v39;
+    v40 = (v40 << 8) ^ v83[(unsigned __int8)(v48 ^ HIBYTE(v40))];
+    --v37;
+  }
+  while ( v37 );
+  __asm { vzeroupper }
+  v49 = (_QWORD *)sub_141764C40(v40);
+  if ( v49 )
+  {
+    v50 = *v49;
+    if ( *v49 )
+    {
+      v51 = sub_141764BC0(*v49, a2);
+      if ( v51 != -1 )
+      {
+        v55 = (_DWORD **)ResolveKnowledgeRegistryEntryById(
+                           *(unsigned int *)(*(_QWORD *)(*(_QWORD *)(v50 + 16) + 8LL * v51) + 4LL),
+                           v52,
+                           v53,
+                           v54);
+        if ( v55 )
+        {
+          v22 = *v55;
+          if ( *v55 )
+          {
+            v21 = 0;
+            _RAX = v83;
+            do
+            {
+              __asm
+              {
+                vmovups ymm0, ymmword ptr [rsi]
+                vmovups xmm1, xmmword ptr [rsi+70h]
+                vmovups ymmword ptr [rax], ymm0
+                vmovups ymm0, ymmword ptr [rsi+20h]
+                vmovups ymmword ptr [rax+20h], ymm0
+                vmovups ymm0, ymmword ptr [rsi+40h]
+                vmovups ymmword ptr [rax+40h], ymm0
+                vmovups xmm0, xmmword ptr [rsi+60h]
+                vmovups xmmword ptr [rax+60h], xmm0
+              }
+              _RAX += 32;
+              _RSI += 16;
+              __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+              --v5;
+            }
+            while ( v5 );
+            do
+            {
+              v62 = *v36;
+              if ( !*v36 )
+                break;
+              ++v36;
+              v21 = (unsigned int)(((_DWORD)v21 << 8) ^ v83[(unsigned __int8)(v62 ^ BYTE3(v21))]);
+              --v35;
+            }
+            while ( v35 );
+            v11 = a1;
+            *(_DWORD *)(a1 + 384) = v21;
+            goto LABEL_40;
+          }
+        }
+      }
+    }
+    v11 = a1;
+  }
+  (*(void (__fastcall **)(__int64, unsigned int *))(*(_QWORD *)v11 + 776LL))(v11, &v81);
+  if ( v81
+    && (v65 = (_DWORD **)ResolveKnowledgeRegistryEntryById(v81, v21, v63, v64)) != 0
+    && (v22 = *v65) != 0
+    && *(v22 - 1) == v3 )
+  {
+    *(_DWORD *)(v11 + 384) = v81;
+  }
+  else
+  {
+    v22 = 0;
+    if ( a3 && a3 != a2 )
+    {
+      v66 = (_DWORD **)ResolveKnowledgeRegistryEntryById(a3, v21, 0, v64);
+      if ( v66 && (v22 = *v66) != 0 && *(v22 - 1) == v3 )
+        *(_DWORD *)(v11 + 384) = a3;
+      else
+        v22 = 0;
+    }
+  }
+LABEL_40:
+  if ( *(_QWORD *)(v11 + 480) && v22 )
+  {
+    __asm { vzeroupper }
+    sub_1417567C0(*(_QWORD *)(v11 + 408), v11);
+  }
+  v67 = *(_QWORD *)(v11 + 408);
+  v68 = 0;
+  v69 = 0;
+  v70 = a2;
+  v71 = *(_DWORD *)(v67 + 20);
+  if ( v71 )
+  {
+    v72 = 0;
+    v82 = *(unsigned int *)(v67 + 20);
+    v73 = v71;
+    do
+    {
+      v74 = *(_QWORD *)(v67 + 8);
+      v75 = *(_QWORD *)(v74 + v72 + 16);
+      if ( !v75 )
+      {
+        if ( !qword_146B17C08 )
+        {
+          __asm { vzeroupper }
+LABEL_50:
+          sub_1422053E0();
+          __debugbreak();
+        }
+        __asm { vzeroupper }
+        if ( !(unsigned __int8)qword_146B17C08(
+                                 "artItemGeo",
+                                 "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\render\\draw-control.cpp",
+                                 "IDrawControl::MeshesUseAmbientOccluders",
+                                 "Jun 30 2023 19:06:03",
+                                 1790,
+                                 *(_QWORD *)(v74 + v72 + 16)) )
+          goto LABEL_50;
+        v73 = v82;
+      }
+      v76 = dword_1438401DC - 1;
+      v21 = dword_1438401DC - 1;
+      if ( dword_1438401DC - 1 >= 0 )
+      {
+        v22 = (_DWORD *)&qword_143868A00[5 * v76 + 3] + 1;
+        while ( *v22 != *(_DWORD *)(v75 + 24) )
+        {
+          --v76;
+          v22 -= 10;
+          if ( --v21 < 0 )
+            goto LABEL_61;
+        }
+        v77 = &qword_143868A00[5 * v76];
+        if ( v77 )
+        {
+          v78 = *v77;
+          if ( v78 )
+          {
+            if ( a2 == v70 )
+              a2 = *(_DWORD *)(v74 + v72 + 24);
+            v69 += *(unsigned __int16 *)(v78 + 4);
+            v68 += *(unsigned __int16 *)(v78 + 6);
+          }
+        }
+      }
+LABEL_61:
+      v72 += 592;
+      v82 = --v73;
+    }
+    while ( v73 );
+    v67 = *(_QWORD *)(a1 + 408);
+    if ( v69 || v68 )
+    {
+      __asm { vzeroupper }
+      sub_141756570(*(_QWORD *)(a1 + 408), v21, v22);
+      v67 = *(_QWORD *)(a1 + 408);
+    }
+  }
+  __asm { vzeroupper }
+  return sub_141755B10(v67, v21, v22);
+}
+

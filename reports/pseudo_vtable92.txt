@@ -1,0 +1,21 @@
+=== 0x140A1DCC0: sub_140A1DCC0 [0x140A1DCC0..0x140A1DCCC] ===
+_DWORD *__fastcall sub_140A1DCC0(__int64 a1, _DWORD *a2)
+{
+  *a2 = *(_DWORD *)(a1 + 5540);
+  return a2;
+}
+
+=== 0x14042F6C0: sub_14042F6C0 [0x14042F6C0..0x14042F704] ===
+_DWORD *__fastcall sub_14042F6C0(__int64 a1, _DWORD *a2)
+{
+  __int64 v2; // rax
+  __int64 v5; // rcx
+
+  v2 = *(_QWORD *)(a1 + 8048);
+  v5 = qword_143898F98;
+  *a2 = *(_DWORD *)(v2 + 88);
+  if ( v5 && !HIBYTE(dword_143E07470) )
+    (*(void (__fastcall **)(__int64, _DWORD *, __int64))(*(_QWORD *)v5 + 104LL))(v5, a2, a1);
+  return a2;
+}
+

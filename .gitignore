@@ -36,3 +36,7 @@ ida/*.txt
 *.pdb
 *.exp
 *.lib
+
+# runtime logs / junk
+reports/locomotion_hook.log
+NUL

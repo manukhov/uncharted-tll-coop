@@ -1,0 +1,13 @@
+TARGET 0x140416B9C: InstallOrApplyCurrentStateRecord start=0x140416B20 end=0x140416BFA
+// Owner-side install/apply entry for a current-state record. Clears any attached materialized state at owner+0x1F80->+0x30, seeds owner runtime state through 0x141DE9E60, refreshes owner transform caches at +0x4160..+0x4180, validates/logs the record, updates owner cache fields +0x4600..+0x460A, and on the zero-state branch dispatches the heavy nested-control apply path 0x141DE4F90.
+void InstallOrApplyCurrentStateRecord()
+{
+  JUMPOUT(0x140416B25LL);
+}
+
+TARGET 0x1404872D8: sub_140486EB0 start=0x140486EB0 end=0x14048736A
+void sub_140486EB0()
+{
+  JUMPOUT(0x140486EB3LL);
+}
+

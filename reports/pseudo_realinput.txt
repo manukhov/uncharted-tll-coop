@@ -1,0 +1,83 @@
+=== 0x1402893D0: sub_1402893D0 [0x1402893D0..0x140289869] ===
+// local variable allocation has failed, the output may be wrong!
+__int64 __fastcall sub_1402893D0(__int64 _RCX, double _XMM1_8, __int64 a3, __int64 a4, unsigned int a5)
+{
+  __int64 v9; // rdx
+  __int64 v13; // rcx
+
+  __asm { vaddss  xmm0, xmm1, dword ptr [rcx+24h] }
+  __asm
+  {
+    vcomiss xmm0, dword ptr [rcx+0Ch]
+    vmovss  dword ptr [rcx+24h], xmm0
+  }
+  _RBX = a3;
+  _RDI = _RCX;
+  __asm { vmovss  xmm0, dword ptr [rdi+14h] }
+  v9 = *(_QWORD *)(a3 + 1304);
+  __asm
+  {
+    vmovss  dword ptr [rbx+10h], xmm0
+    vmovss  dword ptr [rbx], xmm0
+    vmovss  xmm1, dword ptr [rdi+18h]
+    vmovss  dword ptr [rbx+14h], xmm1
+    vmovss  dword ptr [rbx+4], xmm1
+    vmovss  xmm0, dword ptr [rdi+1Ch]
+    vmovss  dword ptr [rbx+18h], xmm0
+    vmovss  dword ptr [rbx+8], xmm0
+    vmovss  xmm1, dword ptr [rdi+20h]
+  }
+  *(_QWORD *)(a3 + 1312) = v9;
+  __asm
+  {
+    vmovss  dword ptr [rbx+1Ch], xmm1
+    vmovss  dword ptr [rbx+0Ch], xmm1
+  }
+  v13 = *(unsigned int *)(_RCX + 16);
+  *(_QWORD *)(a3 + 1288) = v13 & ~v9;
+  *(_QWORD *)(a3 + 1304) = v13;
+  *(_QWORD *)(a3 + 1296) = v9 & ~v13;
+  *(_DWORD *)(a3 + 32) = 0;
+  *(_DWORD *)(a3 + 36) = -1082130432;
+  *(_QWORD *)(a3 + 40) = 0;
+  *(_QWORD *)(a3 + 1256) = 0;
+  *(_QWORD *)(a3 + 1264) = 0;
+  *(_QWORD *)(a3 + 1272) = 0;
+  *(_QWORD *)(a3 + 1280) = 0;
+  return Input_ScaleCopyVirtual(a4, a3, a5);
+}
+
+=== 0x140289A90: sub_140289A90 [0x140289A90..0x140289B6F] ===
+// local variable allocation has failed, the output may be wrong!
+void __fastcall sub_140289A90(double _XMM0_8, double _XMM1_8, double _XMM2_8, double _XMM3_8, int a5)
+{
+  __asm { vmovaps xmm5, xmm1 }
+  __asm
+  {
+    vmovaps xmm6, xmm2
+    vcmpltss xmm4, xmm5, xmm0
+    vcmpltss xmm2, xmm5, xmm0
+    vcmpltss xmm1, xmm5, xmm0
+  }
+  __asm
+  {
+    vblendvps xmm7, xmm5, xmm0, xmm4
+    vblendvps xmm4, xmm6, xmm3, xmm2
+    vmovss  xmm2, [rsp+38h+arg_20]
+  }
+  __asm
+  {
+    vblendvps xmm8, xmm0, xmm5, xmm1
+    vcomiss xmm8, xmm2
+    vcmpltss xmm1, xmm5, xmm0
+    vblendvps xmm5, xmm3, xmm6, xmm1
+  }
+  __asm
+  {
+    vmovaps xmm0, xmm4
+    vmovaps xmm6, [rsp+38h+var_18]
+    vmovaps xmm7, [rsp+38h+var_28]
+    vmovaps xmm8, [rsp+38h+var_38]
+  }
+}
+

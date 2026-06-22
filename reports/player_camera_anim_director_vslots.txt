@@ -1,0 +1,150 @@
+==== 0x140C35960 (section .text) ====
+0x140C35960: mov     rax, rsp
+0x140C35963: push    rsi
+0x140C35964: push    rdi
+0x140C35965: push    r12
+0x140C35967: push    r14
+0x140C35969: push    r15
+0x140C3596B: sub     rsp, 0x4a0
+0x140C35972: mov     qword ptr [rsp + 0x60], 0xfffffffffffffffe
+0x140C3597B: mov     qword ptr [rax + 0x10], rbx
+0x140C3597F: mov     qword ptr [rax + 0x20], rbp
+0x140C35983: vmovaps xmmword ptr [rax - 0x38], xmm6
+0x140C35988: mov     rax, qword ptr [rip + 0x23bf1e9]   ; rip=0x142FF4B78 ->[0x2b992ddfa232]
+0x140C3598F: xor     rax, rsp
+0x140C35992: mov     qword ptr [rsp + 0x480], rax
+0x140C3599A: vmovaps xmm6, xmm3
+0x140C3599E: mov     r14, r8
+0x140C359A1: mov     ebx, edx
+0x140C359A3: mov     rdi, rcx
+0x140C359A6: xor     r12d, r12d
+0x140C359A9: mov     ebp, r12d
+0x140C359AC: mov     rax, qword ptr [rcx + 0x70]
+0x140C359B0: test    rax, rax
+0x140C359B3: je      0x140c359d4
+0x140C359B5: mov     ecx, dword ptr [rcx + 0x78]
+0x140C359B8: test    ecx, ecx
+0x140C359BA: je      0x140c359d4
+0x140C359BC: mov     rax, qword ptr [rax + 8]
+0x140C359C0: test    rax, rax
+0x140C359C3: je      0x140c359d4
+0x140C359C5: cmp     dword ptr [rax + 0xbc], ecx
+0x140C359CB: jne     0x140c359d4
+0x140C359CD: mov     rbp, rax
+0x140C359D0: mov     byte ptr [rax + 0x72], 1
+0x140C359D4: mov     edx, r12d
+0x140C359D7: mov     r9d, 8
+0x140C359DD: lea     r8, [rip + 0x1cd319c]   ; rip=0x142908B80 ->[0x65706f5265657246]
+0x140C359E4: lea     rax, [rsp + 0x80]
+0x140C359EC: lea     rcx, [rip + 0x1fb496d]   ; rip=0x142BEA360 ->[0x4c11db700000000]
+0x140C359F3: mov     r10d, r9d
+0x140C359F6: nop     word ptr [rax + rax]
+0x140C35A00: vmovups ymm0, ymmword ptr [rcx]
+0x140C35A04: vmovups ymmword ptr [rax], ymm0
+0x140C35A08: vmovups ymm0, ymmword ptr [rcx + 0x20]
+0x140C35A0D: vmovups ymmword ptr [rax + 0x20], ymm0
+0x140C35A12: vmovups ymm0, ymmword ptr [rcx + 0x40]
+0x140C35A17: vmovups ymmword ptr [rax + 0x40], ymm0
+0x140C35A1C: vmovups xmm0, xmmword ptr [rcx + 0x60]
+0x140C35A21: vmovups xmmword ptr [rax + 0x60], xmm0
+0x140C35A26: sub     rax, -0x80
+0x140C35A2A: vmovups xmm1, xmmword ptr [rcx + 0x70]
+0x140C35A2F: vmovups xmmword ptr [rax - 0x10], xmm1
+0x140C35A34: lea     rcx, [rcx + 0x80]
+0x140C35A3B: sub     r10, 1
+0x140C35A3F: jne     0x140c35a00
+0x140C35A41: movzx   eax, byte ptr [r8]
+0x140C35A45: test    al, al
+0x140C35A47: je      0x140c35a6a
+0x140C35A49: mov     ecx, edx
+0x140C35A4B: shr     ecx, 0x18
+0x140C35A4E: xor     ecx, eax
+0x140C35A50: movzx   eax, cl
+0x140C35A53: mov     ecx, edx
+0x140C35A55: shl     ecx, 8
+0x140C35A58: mov     edx, dword ptr [rsp + rax*4 + 0x80]
+0x140C35A5F: xor     edx, ecx
+0x140C35A61: inc     r8
+0x140C35A64: sub     r9, 1
+0x140C35A68: jne     0x140c35a41
+0x140C35A6A: mov     rax, qword ptr [rbp + 0xc0]
+0x140C35A71: test    rax, rax
+0x140C35A74: je      0x140c35a8e
+0x140C35A76: mov     rax, qword ptr [rax]
+0x140C35A79: test    rax, rax
+0x140C35A7C: je      0x140c35a8e
+0x140C35A7E: mov     rax, qword ptr [rax + 0x10]
+0x140C35A82: cmp     dword ptr [rax + 0x18], edx
+0x140C35A85: jne     0x140c35a8e
+0x140C35A87: xor     eax, eax
+0x140C35A89: jmp     0x140c35cb2   ; => 0x140C35CB2
+0x140C35A8E: mov     esi, 0xff
+0x140C35A93: mov     eax, dword ptr [rip + 0x243e29b]   ; rip=0x143073D34 ->[0xffffffff]
+0x140C35A99: cmp     eax, -1
+0x140C35A9C: je      0x140c35ac0
+0x140C35A9E: mov     dword ptr [rdi + 0xec], eax
+0x140C35AA4: mov     dword ptr [rdi + 0xd0], r12d
+0x140C35AAB: mov     dword ptr [rdi + 0xe0], 0xffffffff
+0x140C35AB5: mov     eax, dword ptr [rip + 0x243e279]   ; rip=0x143073D34 ->[0xffffffff]
+0x140C35ABB: jmp     0x140c35cb2   ; => 0x140C35CB2
+0x140C35AC0: mov     rcx, rbp
+0x140C35AC3: vzeroupper 
+0x140C35AC6: call    0x140c2faf0   ; => 0x140C2FAF0
+0x140C35ACB: test    al, al
+0x140C35ACD: je      0x140c35c91
+0x140C35AD3: lea     r9, [rip + 0x1dcef16]   ; rip=0x142A049F0 ->[0x64656e6769736e75]
+0x140C35ADA: mov     r8d, 0x470
+0x140C35AE0: lea     rdx, [rip + 0x1dcee99]   ; rip=0x142A04980 ->[0x6f667265705c3a64]
+0x140C35AE7: lea     rcx, [rsp + 0x68]
+0x140C35AEC: call    0x1415b86a0   ; => 0x1415B86A0
+0x140C35AF1: nop     
+0x140C35AF2: mov     dword ptr [rsp + 0x50], r12d
+0x140C35AF7: mov     dword ptr [rsp + 0x54], 0xa
+0x140C35AFF: lea     r8, [rip + 0x1c9e792]   ; rip=0x1428D4298 ->[0x4e574f4e4b4e55]
+0x140C35B06: mov     qword ptr [rsp + 0x20], r8
+0x140C35B0B: xor     r9d, r9d
+0x140C35B0E: mov     rdx, qword ptr [rip + 0x1c96023]   ; rip=0x1428CBB38 ->[0x10]
+0x140C35B15: lea     ecx, [r9 + 0x28]
+0x140C35B19: call    0x1415a0e90   ; => 0x1415A0E90
+0x140C35B1E: mov     qword ptr [rsp + 0x58], rax
+0x140C35B23: mov     eax, dword ptr [rbp + 0x108]
+0x140C35B29: lea     rdx, [rip + 0x2c3a1d0]   ; rip=0x14386FD00 ->[0x1c7657e01c763c0]
+0x140C35B30: mov     rdx, qword ptr [rdx + rax*8]
+0x140C35B34: test    rdx, rdx
+0x140C35B37: je      0x140c35b48
+0x140C35B39: mov     eax, dword ptr [rbp + 0x10c]
+0x140C35B3F: cmp     dword ptr [rdx + 0x50], eax
+0x140C35B42: jne     0x140c35b48
+0x140C35B44: mov     cl, 1
+0x140C35B46: jmp     0x140c35b4a   ; => 0x140C35B4A
+0x140C35B48: xor     cl, cl
+0x140C35B4A: mov     rax, r12
+0x140C35B4D: test    cl, cl
+0x140C35B4F: cmovne  rax, rdx
+0x140C35B53: test    rax, rax
+0x140C35B56: je      0x140c35b64
+0x140C35B58: vmovups ymm0, ymmword ptr [rax]
+0x140C35B5C: vmovups ymmword ptr [rbp + 0x110], ymm0
+0x140C35B64: mov     dword ptr [rdi + 0xe8], ebx
+0x140C35B6A: mov     eax, dword ptr [rdi + 0xe0]
+0x140C35B70: cmp     eax, -1
+0x140C35B73: jne     0x140c35bfe
+
+==== 0x140C30410 (section .text) ====
+0x140C30410: lea     rax, [rip - 0x1c7]   ; rip=0x140C30250
+0x140C30417: ret     
+0x140C30418: int3    
+
+==== 0x140C30420 (section .text) ====
+0x140C30420: lea     rax, [rip - 0x967]   ; rip=0x140C2FAC0
+0x140C30427: ret     
+0x140C30428: int3    
+
+==== 0x140C35D00 (section .text) ====
+0x140C35D00: mov     eax, dword ptr [rcx + 0xe4]
+0x140C35D06: add     eax, 0xca00000
+0x140C35D0B: mov     dword ptr [rdx], eax
+0x140C35D0D: mov     rax, rdx
+0x140C35D10: ret     
+0x140C35D11: int3    
+
