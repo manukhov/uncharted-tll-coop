@@ -562,8 +562,10 @@ void dump_body_subobject_diff() {
         << reinterpret_cast<std::uintptr_t>(nadine)
         << " module=0x" << g_module;
     log_line(hdr.str().c_str());
-    if (chloe0 == nullptr || clone1 == nullptr || nadine == nullptr) {
-        log_line("BODY-DIFF aborted: need all three objects live");
+    // clone1 may be null (Variant B has no clone); the clone-comparison probes
+    // null-check it internally. Only the local player + Nadine NPC are required.
+    if (chloe0 == nullptr || nadine == nullptr) {
+        log_line("BODY-DIFF aborted: need local player + Nadine NPC live");
         return;
     }
     // Resolve the MSVC-x64 RTTI class name of a polymorphic object (vtable[-1] ->
@@ -716,6 +718,43 @@ void dump_body_subobject_diff() {
     probe_appearance("chloe0", chloe0);
     probe_appearance("clone1", clone1);
     probe_appearance("nadine", nadine);
+
+    // JOINT-CACHE probe (Variant B avatar): locate a character's draw-control +
+    // FgAnimData + joint cache so we can drive its pose from the net. From the look
+    // builder: object+0x198 = IDrawControl, +0x1A8 = FgAnimData, +0x164 = jointCount.
+    // IDrawControl layout: [0]=FgAnimData, +8=joint array (592 B/joint = pose), +16=count.
+    auto probe_joints = [&](const char* tag, void* obj) {
+        if (obj == nullptr || readable_bytes(obj) < 0x1B0) return;
+        auto* o = static_cast<std::byte*>(obj);
+        void* dc  = *reinterpret_cast<void**>(o + 0x198);   // IDrawControl
+        void* fg  = *reinterpret_cast<void**>(o + 0x1A8);   // FgAnimData
+        std::uint32_t jc = *reinterpret_cast<std::uint32_t*>(o + 0x164);
+        std::ostringstream l;
+        l << "JOINTS " << tag << " drawctrl(+0x198)=0x" << std::hex
+          << reinterpret_cast<std::uintptr_t>(dc)
+          << " fganim(+0x1A8)=0x" << reinterpret_cast<std::uintptr_t>(fg)
+          << " jointCount(+0x164)=" << std::dec << jc;
+        if (dc != nullptr && readable_bytes(dc) >= 0x18) {
+            auto* d = static_cast<std::byte*>(dc);
+            void* fgInDc = *reinterpret_cast<void**>(d + 0x00);
+            void* jarr   = *reinterpret_cast<void**>(d + 0x08);
+            std::uint32_t dcCount = *reinterpret_cast<std::uint32_t*>(d + 0x10);
+            l << std::hex << " | dc[0]=fg?0x" << reinterpret_cast<std::uintptr_t>(fgInDc)
+              << " dc[+8]=jointArr=0x" << reinterpret_cast<std::uintptr_t>(jarr)
+              << " dc[+0x10]=count=" << std::dec << dcCount;
+        }
+        // Dump the FgAnimData head (qwords 0..0x78) to find the FULL joint/pose cache.
+        if (fg != nullptr && readable_bytes(fg) >= 0x80) {
+            auto* f = static_cast<std::byte*>(fg);
+            l << std::hex << " | fg[";
+            for (std::size_t o = 0; o <= 0x78; o += 8)
+                l << "+0x" << o << "=0x" << *reinterpret_cast<std::uint64_t*>(f + o) << " ";
+            l << "]" << std::dec;
+        }
+        log_line(l.str().c_str());
+    };
+    probe_joints("chloe0", chloe0);
+    probe_joints("nadine", nadine);
 
     // DESC-SCAN: hunt Chloe's per-instance identity values inside the captured
     // spawn descriptor/ctx/a4 (these are PER-SPAWN, so a hit = a field we can flip
