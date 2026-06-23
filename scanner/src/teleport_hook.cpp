@@ -158,8 +158,17 @@ AppearanceFunction g_original_appearance = nullptr;
 volatile bool g_appearance_swap_active = false;
 std::uint32_t g_nadine_appearance_hash = 0;
 // VARIANT B step 1: make the LOCAL player render as Nadine (no clone). Single local
-// player => full mechanics, weapons/aim work (no 2-player gating).
+// player => full mechanics, weapons/aim work (no 2-player gating). Defaults true;
+// in two-instance play start_state_net() sets it per ROLE (player-2 machine = Nadine
+// local; player-1 machine = Chloe local).
 volatile bool g_local_make_nadine = true;
+// Two-instance role: false = role A (recv :31338, "player 1", local Chloe), true =
+// role B (recv :31339, "player 2", local Nadine). Set in start_state_net().
+volatile bool g_net_role_b = false;
+// EXPERIMENTAL: on role B, render the remote avatar (buddy) as Chloe. Default OFF
+// (Chloe mesh on the NadineBuddy may be unavailable/crash-prone); enable only once
+// the safe local-appearance role cosmetic is confirmed stable.
+volatile bool g_avatar_show_chloe = false;
 // VARIANT B avatar mirror-test: copy the local player's joint cache (pose) into NPC
 // NadineBuddy each frame so the NPC mirrors the player's pose (validates joint-driving).
 volatile bool g_mirror_pose = false;
@@ -535,11 +544,28 @@ std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
     // Swap to Nadine ONLY for the look builder (mesh); everyone else -> real Chloe so
     // lasso/rope and other ability gating keyed on the character hash keep working.
     bool from_lookbuilder = (rva == kLookBuilderAppearCallRva);
-    if (a2 != nullptr && from_lookbuilder &&
-        (g_local_make_nadine ||
-         (g_appearance_swap_active && g_nadine_appearance_hash != 0))) {
-        *a2 = 0xd27c074fu;  // hash("nadine")
-        return a2;
+    if (a2 != nullptr && from_lookbuilder) {
+        // Role B (player-2 machine): the REMOTE avatar represents player 1 = Chloe,
+        // so render the NadineBuddy avatar as Chloe. (Hook-domain hashes: chloe
+        // 0x3f334972, nadine 0xd27c074f.) EXPERIMENTAL + default OFF until the safe
+        // local-appearance role cosmetic is confirmed stable (Chloe mesh on the buddy
+        // may be unavailable/unsafe). Toggle via g_avatar_show_chloe.
+        if (g_avatar_show_chloe && g_net_role_b && g_last_nadine_object != nullptr &&
+            a1 == g_last_nadine_object) {
+            *a2 = 0x3f334972u;  // hash("chloe")
+            return a2;
+        }
+        // Local-player Nadine swap (role B / player-2 machine): ONLY the local player
+        // object, so the shared look builder doesn't recolor the buddy or other NPCs.
+        if (g_local_make_nadine && a1 == retained_player_object(0)) {
+            *a2 = 0xd27c074fu;  // hash("nadine")
+            return a2;
+        }
+        // Legacy clone-spawn-window swap.
+        if (g_appearance_swap_active && g_nadine_appearance_hash != 0) {
+            *a2 = 0xd27c074fu;  // hash("nadine")
+            return a2;
+        }
     }
     if (g_original_appearance != nullptr) {
         return g_original_appearance(a1, a2);
@@ -2421,6 +2447,32 @@ bool start_state_net() {
     } else if (loopback) {
         // Loopback first instance ("A"): send to the B port.
         peer_port = coop::kStatePort + 1;
+    }
+    // ROLE assignment (cosmetic): role B = "player 2" machine (local Nadine), role A
+    // = "player 1" (local Chloe). Authoritative source = reports/coop_role.txt ("1"
+    // or "2"), which works for REAL two-PC play (both bind 31338 there, so port can't
+    // distinguish). Fallback for loopback two-instance = the bound port (B = 31339).
+    {
+        std::ifstream rin(R"(C:\Users\Vladimir\Desktop\TLLCoopResearch\reports\coop_role.txt)");
+        std::string role;
+        if (rin && std::getline(rin, role)) {
+            while (!role.empty() && (role.back() == '\r' || role.back() == '\n' ||
+                                     role.back() == ' ')) {
+                role.pop_back();
+            }
+        }
+        if (role == "2") {
+            g_net_role_b = true;
+        } else if (role == "1") {
+            g_net_role_b = false;
+        } else {
+            g_net_role_b = (my_port == coop::kStatePort + 1);  // loopback B instance
+        }
+        g_local_make_nadine = g_net_role_b;  // player-2 machine renders local as Nadine
+        std::ostringstream rl;
+        rl << "co-op role = " << (g_net_role_b ? "B (player 2, local Nadine)"
+                                               : "A (player 1, local Chloe)");
+        log_line(rl.str().c_str());
     }
     g_state_net.peer_addr.sin_family = AF_INET;
     g_state_net.peer_addr.sin_port = htons(peer_port);
