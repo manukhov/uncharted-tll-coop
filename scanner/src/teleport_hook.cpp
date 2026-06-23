@@ -165,10 +165,16 @@ volatile bool g_local_make_nadine = true;
 // Two-instance role: false = role A (recv :31338, "player 1", local Chloe), true =
 // role B (recv :31339, "player 2", local Nadine). Set in start_state_net().
 volatile bool g_net_role_b = false;
-// EXPERIMENTAL: on role B, render the remote avatar (buddy) as Chloe. Default OFF
-// (Chloe mesh on the NadineBuddy may be unavailable/crash-prone); enable only once
-// the safe local-appearance role cosmetic is confirmed stable.
+// EXPERIMENTAL (DISPROVEN): tried rendering the role-B remote avatar (NadineBuddy)
+// as Chloe via the appearance-hash swap. Result: NO visual change — the NPC's mesh
+// is hard-bound (Nadine is streamed for the NadineBuddy), and the hash swap that
+// works for the Player does NOT recolor the NPC's model. So the avatar stays Nadine.
+// Left OFF; a distinct-Chloe avatar would need a Chloe-based actor, not a hash swap.
 volatile bool g_avatar_show_chloe = false;
+// Legacy 2nd-Player clone auto-spawn (the old single-PC clone experiment). Default
+// OFF: it breaks the local player's aim (2-player gating) and spawned a rogue static
+// 2nd Nadine in the role-A co-op window. Manual F12 still spawns a clone if needed.
+volatile bool g_enable_legacy_clone_autospawn = false;
 // VARIANT B avatar mirror-test: copy the local player's joint cache (pose) into NPC
 // NadineBuddy each frame so the NPC mirrors the player's pose (validates joint-driving).
 volatile bool g_mirror_pose = false;
@@ -544,17 +550,18 @@ std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
     // Swap to Nadine ONLY for the look builder (mesh); everyone else -> real Chloe so
     // lasso/rope and other ability gating keyed on the character hash keep working.
     bool from_lookbuilder = (rva == kLookBuilderAppearCallRva);
+    // Role B (player-2 machine): the REMOTE avatar represents player 1 = Chloe, so
+    // render the NadineBuddy avatar as Chloe. (Hook-domain hashes: chloe 0x3f334972,
+    // nadine 0xd27c074f.) The NPC renders through a DIFFERENT look path than the
+    // player look builder (0x1bb4ab9), so this swap is gated by OBJECT only (the
+    // buddy), for ANY caller — the buddy is AI-disabled + net-driven, so we don't
+    // care that its gameplay/identity reads also see Chloe. EXPERIMENTAL.
+    if (a2 != nullptr && g_avatar_show_chloe && g_net_role_b &&
+        g_last_nadine_object != nullptr && a1 == g_last_nadine_object) {
+        *a2 = 0x3f334972u;  // hash("chloe")
+        return a2;
+    }
     if (a2 != nullptr && from_lookbuilder) {
-        // Role B (player-2 machine): the REMOTE avatar represents player 1 = Chloe,
-        // so render the NadineBuddy avatar as Chloe. (Hook-domain hashes: chloe
-        // 0x3f334972, nadine 0xd27c074f.) EXPERIMENTAL + default OFF until the safe
-        // local-appearance role cosmetic is confirmed stable (Chloe mesh on the buddy
-        // may be unavailable/unsafe). Toggle via g_avatar_show_chloe.
-        if (g_avatar_show_chloe && g_net_role_b && g_last_nadine_object != nullptr &&
-            a1 == g_last_nadine_object) {
-            *a2 = 0x3f334972u;  // hash("chloe")
-            return a2;
-        }
         // Local-player Nadine swap (role B / player-2 machine): ONLY the local player
         // object, so the shared look builder doesn't recolor the buddy or other NPCs.
         if (g_local_make_nadine && a1 == retained_player_object(0)) {
@@ -4075,11 +4082,13 @@ void __fastcall hooked_update(void* object) {
             g_slot1_scaffold_attempted = true;
             try_slot1_netplayer_respawn_scaffold(object);
         }
-        // VARIANT B: do NOT auto-spawn a 2nd Player clone (it breaks the local
-        // player's weapons/aim via 2-player gating). The local player itself is made
-        // Nadine via the appearance hook (g_local_make_nadine). Manual F12 still
-        // spawns a clone if needed for legacy experiments.
-        if (!g_local_make_nadine && g_spawn_captured &&
+        // VARIANT B / NET CO-OP: never auto-spawn a 2nd Player clone. A 2nd retained
+        // Player breaks the local player's weapons/aim (2-player gating), and it spawned
+        // the rogue "static 2nd Nadine" in the role-A window once we set
+        // g_local_make_nadine=false for role A. The old gate keyed on
+        // !g_local_make_nadine, which role A now legitimately sets. Gate on an explicit
+        // (default-off) flag instead; the legacy clone is only for manual F12 experiments.
+        if (g_enable_legacy_clone_autospawn && g_spawn_captured &&
             retained_player_object(1) == nullptr &&
             !g_slot1_auto_reissue_done &&
             (!g_want_nadine_body || g_nadine_visual_identity_valid)) {
