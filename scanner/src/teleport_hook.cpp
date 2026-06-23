@@ -2,6 +2,7 @@
 #include <Windows.h>
 #include <WS2tcpip.h>
 #include <TlHelp32.h>
+#include <intrin.h>
 
 #include <array>
 #include <algorithm>
@@ -159,6 +160,10 @@ std::uint32_t g_nadine_appearance_hash = 0;
 // VARIANT B step 1: make the LOCAL player render as Nadine (no clone). Single local
 // player => full mechanics, weapons/aim work (no 2-player gating).
 volatile bool g_local_make_nadine = true;
+// VARIANT B avatar mirror-test: copy the local player's joint cache (pose) into NPC
+// NadineBuddy each frame so the NPC mirrors the player's pose (validates joint-driving).
+volatile bool g_mirror_pose = false;
+bool g_mirror_nadine_ai_disabled = false;
 ResolveLocalPlayerFunction g_original_resolve_local_player = nullptr;
 std::uintptr_t* g_nadine_vtable = nullptr;
 std::uintptr_t g_module = 0;
@@ -501,8 +506,36 @@ void* retained_player_object(int index);  // defined below
 // appearance hash to Nadine for the local Player so the LOCAL player renders as
 // Nadine with full mechanics (single local player => no 2-player gating, weapons/aim
 // work). Also still supports the legacy clone-spawn-window swap.
+// Diagnostic: collect distinct caller RVAs of the appearance getter so we can tell
+// the LOOK/RENDER callers (mesh) apart from gameplay/ability gating callers (lasso).
+// Set true to gather; logged once per distinct caller. Default ON for one run.
+volatile bool g_log_appearance_callers = false;
+// RVA of the LOOK BUILDER's call to vtable[92] (PlayerUpperDrawControlLifecycle...
+// @0x1bb4280; the `call [r8+0x2e0]` at 0x1bb4ab2 returns here). This is the ONLY
+// caller that drives the rendered MESH. All other callers of the appearance getter
+// are gameplay/identity checks (e.g. lasso/rope ability gating) and MUST see the
+// real character (Chloe) so abilities stay intact. => caller-gated swap.
+constexpr std::uintptr_t kLookBuilderAppearCallRva = 0x1bb4ab9;
 std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
-    if (a2 != nullptr &&
+    std::uintptr_t ret = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    std::uintptr_t rva = (g_module != 0 && ret > g_module) ? (ret - g_module) : ret;
+    if (g_log_appearance_callers && g_module != 0) {
+        static std::uintptr_t seen[64]{};
+        static int seen_n = 0;
+        bool known = false;
+        for (int i = 0; i < seen_n; ++i) if (seen[i] == rva) { known = true; break; }
+        if (!known && seen_n < 64) {
+            seen[seen_n++] = rva;
+            std::ostringstream l;
+            l << "APPEAR-CALLER rva=0x" << std::hex << rva
+              << " (caller #" << std::dec << seen_n << ")";
+            log_line(l.str().c_str());
+        }
+    }
+    // Swap to Nadine ONLY for the look builder (mesh); everyone else -> real Chloe so
+    // lasso/rope and other ability gating keyed on the character hash keep working.
+    bool from_lookbuilder = (rva == kLookBuilderAppearCallRva);
+    if (a2 != nullptr && from_lookbuilder &&
         (g_local_make_nadine ||
          (g_appearance_swap_active && g_nadine_appearance_hash != 0))) {
         *a2 = 0xd27c074fu;  // hash("nadine")
@@ -744,14 +777,44 @@ void dump_body_subobject_diff() {
               << " dc[+0x10]=count=" << std::dec << dcCount;
         }
         // Dump the FgAnimData head (qwords 0..0x78) to find the FULL joint/pose cache.
+        void* skel = nullptr;
+        void* pose = nullptr;
         if (fg != nullptr && readable_bytes(fg) >= 0x80) {
             auto* f = static_cast<std::byte*>(fg);
-            l << std::hex << " | fg[";
-            for (std::size_t o = 0; o <= 0x78; o += 8)
-                l << "+0x" << o << "=0x" << *reinterpret_cast<std::uint64_t*>(f + o) << " ";
-            l << "]" << std::dec;
+            pose = *reinterpret_cast<void**>(f + 0x10);  // per-instance joint cache (pose)
+            skel = *reinterpret_cast<void**>(f + 0x18);  // shared ArtItemSkeleton
         }
         log_line(l.str().c_str());
+        // Skeleton head (find joint count) + joint-cache head (find matrix size).
+        if (skel != nullptr && readable_bytes(skel) >= 0x40) {
+            auto* s = static_cast<std::byte*>(skel);
+            std::ostringstream sl;
+            sl << "JOINTS " << tag << " SKEL=0x" << std::hex
+               << reinterpret_cast<std::uintptr_t>(skel) << " head[";
+            for (std::size_t o = 0; o <= 0x38; o += 4)
+                sl << "+0x" << o << "=0x" << *reinterpret_cast<std::uint32_t*>(s + o) << " ";
+            sl << "]" << std::dec;
+            log_line(sl.str().c_str());
+        }
+        if (pose != nullptr && readable_bytes(pose) >= 0x60) {
+            auto* p = static_cast<std::byte*>(pose);
+            std::uint64_t xforms = *reinterpret_cast<std::uint64_t*>(p + 0x0);  // transforms array
+            std::uint32_t jc2 = *reinterpret_cast<std::uint32_t*>(p + 0x8);     // joint count
+            std::ostringstream pl;
+            pl << "JOINTS " << tag << " JointCache=0x" << std::hex
+               << reinterpret_cast<std::uintptr_t>(pose)
+               << " xforms=0x" << xforms << " count=" << std::dec << jc2;
+            log_line(pl.str().c_str());
+            // dump first 2 joints' transform as floats to find the per-joint stride/format
+            if (xforms != 0 && readable_bytes(reinterpret_cast<void*>(xforms)) >= 0x60) {
+                auto* x = reinterpret_cast<float*>(xforms);
+                std::ostringstream xl;
+                xl << "JOINTS " << tag << " xform[0..23]=[";
+                for (int i = 0; i < 24; ++i) xl << x[i] << " ";
+                xl << "]";
+                log_line(xl.str().c_str());
+            }
+        }
     };
     probe_joints("chloe0", chloe0);
     probe_joints("nadine", nadine);
@@ -1390,17 +1453,43 @@ void issue_type7_steering(
 // Drive the remote-player avatar (NadineBuddy) toward the replicated peer
 // position using native NPC move-intent, so she RUNS with full animation
 // instead of being teleported. This is the proven buddy locomotion path.
+// Single-PC validation: when there is no network peer, feed the LOCAL player's own
+// position as the "peer" target. Combined with the 1200ms replay ring below, the
+// NadineBuddy avatar then RETRACES the player's path with full run animation — the
+// unambiguous one-PC proof of the animated-avatar drive. Harmless on two real PCs
+// (has_peer_state is true there, so this fallback never runs).
+bool g_avatar_self_mirror = true;
 void drive_nadine_toward_peer(void* object, ObjectControlState& control_state) {
-    if (!g_state_net.enabled || !g_state_net.has_peer_state.load()) {
+    coop::StatePacket live{};
+    bool have_live = false;
+    bool from_network = false;
+    if (g_state_net.enabled && g_state_net.has_peer_state.load()) {
+        live = g_state_net.peer_state;
+        have_live = true;
+        from_network = true;
+    } else if (g_avatar_self_mirror) {
+        void* chloe = retained_player_object(0);
+        if (chloe != nullptr &&
+            readable_bytes(static_cast<std::byte*>(chloe) + kWorldPositionOffset) >= 16) {
+            const auto* p = reinterpret_cast<const float*>(
+                static_cast<std::byte*>(chloe) + kWorldPositionOffset);
+            live.pos[0] = p[0];
+            live.pos[1] = p[1];
+            live.pos[2] = p[2];
+            have_live = true;
+        }
+    }
+    if (!have_live) {
         return;
     }
     // Time-delayed path replay: record the incoming peer position each frame and
     // steer Nadine toward where the peer was ~kReplayDelayMs ago. On a single PC
     // (loopback, peer == our own Chloe) this makes Nadine visibly RETRACE the
     // player's route with a lag — unambiguous proof the send->recv->drive path
-    // works (distinct from her stock AI follow). For real two-PC play the peer
-    // is the other player and the small delay is just normal interpolation lag.
-    constexpr ULONGLONG kReplayDelayMs = 1200;
+    // works (distinct from her stock AI follow). For REAL peer data (two instances)
+    // use a small interpolation lag instead, so the avatar tracks the other player
+    // responsively rather than 1.2s behind.
+    const ULONGLONG kReplayDelayMs = from_network ? 120 : 1200;
     constexpr int kRingSize = 256;
     struct Sample { float x, z; ULONGLONG t; };
     static Sample ring[kRingSize]{};
@@ -1408,7 +1497,6 @@ void drive_nadine_toward_peer(void* object, ObjectControlState& control_state) {
     static bool ring_primed = false;
 
     const ULONGLONG now = GetTickCount64();
-    const coop::StatePacket live = g_state_net.peer_state;
     ring[ring_head] = {live.pos[0], live.pos[2], now};
     ring_head = (ring_head + 1) % kRingSize;
     if (ring_head == 0) {
@@ -3844,6 +3932,32 @@ void install_xinput_hook() {
                    reinterpret_cast<void**>(&g_real_xinput_get_caps), "XInputGetCapabilities");
 }
 
+// Copy the local player's joint cache (pose) into the NPC NadineBuddy so it mirrors
+// the player. JointCache = FgAnimData(+0x1A8)+0x10; cache+0x0 = transforms array,
+// cache+0x8 = joint count; ~32 bytes/joint. Validated pointers; same skeleton => same
+// layout/count so a raw copy reproduces the pose.
+void mirror_pose_to_nadine(void* nadine) {
+    void* chloe = retained_player_object(0);
+    if (chloe == nullptr || nadine == nullptr) return;
+    auto get_xforms = [](void* obj, void*& xf, std::uint32_t& cnt) -> bool {
+        xf = nullptr; cnt = 0;
+        if (readable_bytes(obj) < 0x1B0) return false;
+        void* fg = *reinterpret_cast<void**>(static_cast<std::byte*>(obj) + 0x1A8);
+        if (fg == nullptr || readable_bytes(fg) < 0x20) return false;
+        void* jc = *reinterpret_cast<void**>(static_cast<std::byte*>(fg) + 0x10);
+        if (jc == nullptr || readable_bytes(jc) < 0x10) return false;
+        xf = *reinterpret_cast<void**>(static_cast<std::byte*>(jc) + 0x0);
+        cnt = *reinterpret_cast<std::uint32_t*>(static_cast<std::byte*>(jc) + 0x8);
+        return xf != nullptr;
+    };
+    void* xc; void* xn; std::uint32_t cc; std::uint32_t cn;
+    if (!get_xforms(chloe, xc, cc) || !get_xforms(nadine, xn, cn)) return;
+    if (cc == 0 || cc != cn || cc > 256) return;          // sanity: same count
+    std::size_t bytes = static_cast<std::size_t>(cc) * 32;  // 32 bytes/joint
+    if (readable_bytes(xc) < bytes || readable_bytes(xn) < bytes) return;
+    std::memcpy(xn, xc, bytes);
+}
+
 void __fastcall hooked_update(void* object) {
     // DIAGNOSTIC: when inert, the DLL does NOTHING but pass the update through (no
     // clone spawn, no drives, no per-frame logic) - used to isolate whether our
@@ -3876,6 +3990,24 @@ void __fastcall hooked_update(void* object) {
         observe_nadine_visual_identity(object);
         g_last_nadine_object = object;  // set EARLY so the clone auto-spawn (below)
                                         // can read Nadine's look2 for the body swap.
+        // AUTO joint-cache dump (no key press): once, ~6s after Nadine first appears
+        // and the local player exists, so the diagnostic data lands in the log
+        // automatically.
+        {
+            static ULONGLONG first_nadine_ms = 0;
+            static bool auto_jointdump_done = false;
+            if (first_nadine_ms == 0) first_nadine_ms = GetTickCount64();
+            if (!auto_jointdump_done && retained_player_object(0) != nullptr &&
+                GetTickCount64() - first_nadine_ms > 6000) {
+                auto_jointdump_done = true;
+                dump_body_subobject_diff();
+                // MIRROR auto-enable removed: raw joint-cache copy produced broken
+                // poses ("arms out of back") - the cache holds FINAL positioned
+                // matrices, not directly copyable across characters at different
+                // positions. Needs local-space pose transfer via engine joint
+                // accessors. Left off until that's implemented.
+            }
+        }
         // (Removed: a leftover diagnostic auto-injected ly=22000 on controller 0
         // for 2s on scene load = the "carried forward right after spawn" bug.)
         // DISABLED: auto split-screen login (max_local_players=2 / net_login_split_
@@ -3919,6 +4051,22 @@ void __fastcall hooked_update(void* object) {
         g_last_nadine_object = object;
         force_split_render_mode();
         auto& control_state = g_object_states[object];
+        // TWO-INSTANCE AUTO-ENABLE: when a real network peer is present, turn the
+        // animated-avatar drive on automatically (no need to press END in each
+        // window). Set g_controlled_object BEFORE the (object!=controlled) guard
+        // below so this buddy reaches the drive path. Fires once.
+        if (!g_net_drive_nadine && g_state_net.enabled &&
+            g_state_net.has_peer_state.load()) {
+            g_net_drive_nadine = true;
+            g_control_enabled = true;
+            g_controlled_object = object;
+            for (auto& [ignored, state] : g_object_states) {
+                state.was_moving = false;
+                state.last_input_mask = 0;
+                state.last_command_time = 0;
+            }
+            log_line("Net-drive Nadine AUTO-enabled (network peer detected)");
+        }
         if ((GetAsyncKeyState(VK_F9) & 1) != 0) {
             log_camera_transform();
         }
@@ -3989,13 +4137,9 @@ void __fastcall hooked_update(void* object) {
               << " (watch for per-slot character behavior / instability)";
             log_line(l.str().c_str());
         }
-        if ((GetAsyncKeyState(VK_END) & 1) != 0) {
-            g_want_nadine_body = !g_want_nadine_body;
-            log_line(g_want_nadine_body
-                         ? "BODY-SWAP toggle ON: next F12 reissue builds clone with "
-                           "Nadine record/skeleton (press F12 to respawn)"
-                         : "BODY-SWAP toggle OFF: next F12 reissue = plain Chloe body");
-        }
+        // (Removed duplicate VK_END handler that toggled g_want_nadine_body — it
+        // consumed the END key-edge before the net-drive toggle below. The legacy
+        // clone body-swap is unused in Variant B. END now cleanly toggles net-drive.)
         if ((GetAsyncKeyState(VK_NUMPAD2) & 1) != 0) {
             g_manual_slot1_apply = !g_manual_slot1_apply;
             log_line(g_manual_slot1_apply
@@ -4133,6 +4277,12 @@ void __fastcall hooked_update(void* object) {
     drive_slot1_tick();
     apply_slot1_perslot_on_game_thread();
     g_original_update(object);
+    // VARIANT B avatar mirror-test: AFTER the NPC's own update wrote its joint cache,
+    // overwrite it with the local player's pose so the NPC mirrors the player (proves
+    // joint-driving). Only for the Nadine NPC.
+    if (g_mirror_pose && object == g_last_nadine_object) {
+        mirror_pose_to_nadine(object);
+    }
     // Puppet (slot-1 Player): let its own update run above (so the anim graph
     // samples the velocity we wrote in net_tick), then assert the networked
     // transform last so the engine can't fight it into a flicker.
