@@ -435,10 +435,18 @@ struct StateNetState {
     bool winsock_ready = false;
     std::atomic<bool> has_peer_state = false;
     coop::StatePacket peer_state{};        // latest received peer state
+    std::atomic<bool> has_peer_enemies = false;
+    coop::EnemyPacket peer_enemies{};      // latest received host enemy snapshot
     std::uint32_t send_seq = 0;
+    std::uint32_t enemy_send_seq = 0;
     bool enabled = false;                  // toggled on once peer + puppet ready
 };
 StateNetState g_state_net{};
+// Master toggle for enemy replication (host sends / client applies). Default ON;
+// only acts when a network peer is present and per-role (A sends, B applies).
+volatile bool g_enemy_sync = true;
+// Phase 3 recon: periodic CharacterManager dump (default off; recon complete).
+volatile bool g_charmgr_dump_periodic = false;
 // Position offset added to the peer state before applying to the puppet. 0 for
 // real two-instance/two-PC play (puppet sits at the peer's actual position).
 float g_state_loopback_offset_x = 0.0F;
@@ -2380,19 +2388,35 @@ void swap_character_manager_0_1() {
 }
 
 DWORD WINAPI state_recv_thread(void*) {
+    // One buffer big enough for the largest packet (EnemyPacket); dispatch by magic.
+    alignas(8) char buf[sizeof(coop::EnemyPacket) + 64];
     while (g_state_net.running.load()) {
-        coop::StatePacket packet{};
-        const int received = recvfrom(g_state_net.recv_socket,
-                                      reinterpret_cast<char*>(&packet),
-                                      sizeof(packet), 0, nullptr, nullptr);
-        if (received == sizeof(coop::StatePacket) &&
-            packet.magic == coop::kStatePacketMagic &&
-            packet.version == coop::kStatePacketVersion) {
-            g_state_net.peer_state = packet;
-            g_state_net.has_peer_state.store(true);
-        } else if (received == SOCKET_ERROR) {
-            if (!g_state_net.running.load()) {
-                break;
+        const int received = recvfrom(g_state_net.recv_socket, buf, sizeof(buf), 0,
+                                      nullptr, nullptr);
+        if (received == SOCKET_ERROR) {
+            if (!g_state_net.running.load()) break;
+            continue;
+        }
+        if (received < static_cast<int>(sizeof(std::uint32_t))) continue;
+        std::uint32_t magic;
+        std::memcpy(&magic, buf, sizeof(magic));
+        if (magic == coop::kStatePacketMagic &&
+            received == static_cast<int>(sizeof(coop::StatePacket))) {
+            coop::StatePacket packet{};
+            std::memcpy(&packet, buf, sizeof(packet));
+            if (packet.version == coop::kStatePacketVersion) {
+                g_state_net.peer_state = packet;
+                g_state_net.has_peer_state.store(true);
+            }
+        } else if (magic == coop::kEnemyPacketMagic &&
+                   received >= static_cast<int>(offsetof(coop::EnemyPacket, enemies)) &&
+                   received <= static_cast<int>(sizeof(coop::EnemyPacket))) {
+            coop::EnemyPacket ep{};
+            std::memcpy(&ep, buf, static_cast<std::size_t>(received));
+            if (ep.version == coop::kEnemyPacketVersion &&
+                ep.count <= coop::kMaxEnemies) {
+                g_state_net.peer_enemies = ep;
+                g_state_net.has_peer_enemies.store(true);
             }
         }
     }
@@ -3275,13 +3299,141 @@ void update_inject_stick() {
     g_inject_ly = ly;
 }
 
-void net_tick() {
-    // hooked_update now fires for every Player each frame; rate-limit the send.
-    static ULONGLONG last_send = 0;
+// ===== Phase 3: host-authoritative ENEMY replication =====
+// Enemy NPC vtable RVA (from the CharacterManager dump; grunt class shared by all
+// npc-forest1-* enemies). Other enemy archetypes may add more vtables later.
+constexpr std::uintptr_t kEnemyVtableRva = 0x294b9d0;
+
+// FNV-1a over the actor name (bounded). Both instances hash the same name string,
+// so this is a stable cross-instance key (does not need to match the game's hash).
+std::uint32_t coop_name_hash(const char* s, std::size_t maxlen) {
+    std::uint32_t h = 2166136261u;
+    for (std::size_t i = 0; i < maxlen && s[i] != '\0'; ++i) {
+        h ^= static_cast<unsigned char>(s[i]);
+        h *= 16777619u;
+    }
+    return h;
+}
+
+// Iterate valid Character objects in the CharacterManager (global *(base+0x3898630)),
+// invoking fn(obj, name). Heavily readable_bytes-guarded.
+template <class F>
+void for_each_character(F&& fn) {
+    if (g_module == 0) return;
+    void* mgr = *reinterpret_cast<void**>(g_module + 0x3898630);
+    if (mgr == nullptr || readable_bytes(mgr) < 0x10) return;
+    void* ents = *reinterpret_cast<void**>(mgr);
+    std::uint32_t count =
+        *reinterpret_cast<std::uint32_t*>(static_cast<std::byte*>(mgr) + 0xc);
+    if (ents == nullptr || count == 0 || count > 4096) return;
+    if (readable_bytes(ents) < static_cast<std::size_t>(count) * 16) return;
+    for (std::uint32_t i = 0; i < count; ++i) {
+        auto* e = static_cast<std::byte*>(ents) + static_cast<std::size_t>(i) * 16;
+        void* rec = *reinterpret_cast<void**>(e);
+        std::uint32_t id = *reinterpret_cast<std::uint32_t*>(e + 8);
+        if (rec == nullptr || readable_bytes(rec) < 0x10) continue;
+        void* obj = *reinterpret_cast<void**>(static_cast<std::byte*>(rec) + 8);
+        if (obj == nullptr || readable_bytes(obj) < 0x300) continue;
+        if (*reinterpret_cast<std::uint32_t*>(static_cast<std::byte*>(obj) + 0xbc) != id)
+            continue;
+        const char* name = reinterpret_cast<const char*>(obj) + sizeof(void*);
+        fn(obj, name);
+    }
+}
+
+bool is_enemy_object(void* obj) {
+    std::uintptr_t vt = *reinterpret_cast<std::uintptr_t*>(obj);
+    return vt == g_module + kEnemyVtableRva;
+}
+
+// HOST (role A): enumerate enemies and send their transforms to the client.
+void send_enemy_states() {
+    if (!g_enemy_sync || !g_state_net.enabled || !g_state_net.peer_set) return;
+    if (g_net_role_b) return;  // only the authoritative host sends enemies
+    coop::EnemyPacket pkt{};
+    int n = 0;
+    for_each_character([&](void* obj, const char* name) {
+        if (n >= coop::kMaxEnemies || !is_enemy_object(obj)) return;
+        auto& es = pkt.enemies[n];
+        es.name_hash = coop_name_hash(name, 64);
+        std::memcpy(es.pos,
+                    static_cast<std::byte*>(obj) + kWorldPositionOffset, sizeof(es.pos));
+        std::memcpy(es.quat,
+                    static_cast<std::byte*>(obj) + kPlayerQuatOffset, sizeof(es.quat));
+        ++n;
+    });
+    pkt.count = static_cast<std::uint16_t>(n);
+    pkt.sequence = ++g_state_net.enemy_send_seq;
+    pkt.timestamp_ms = static_cast<std::uint32_t>(GetTickCount64());
+    const int bytes = static_cast<int>(offsetof(coop::EnemyPacket, enemies) +
+                                       static_cast<std::size_t>(n) * sizeof(coop::EnemyState));
+    sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&pkt), bytes, 0,
+           reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+           sizeof(g_state_net.peer_addr));
+}
+
+std::unordered_map<void*, bool> g_enemy_ai_disabled;  // disable each enemy's AI once
+
+// CLIENT (role B): match local enemies to host snapshot by name-hash, disable AI,
+// apply the host transform (positions; "sliding" MVP - animation/deaths later).
+void apply_peer_enemies() {
+    if (!g_enemy_sync || !g_net_role_b) return;
+    if (!g_state_net.enabled || !g_state_net.has_peer_enemies.load()) return;
+    const coop::EnemyPacket ep = g_state_net.peer_enemies;  // snapshot copy
+    int applied = 0;
+    for_each_character([&](void* obj, const char* name) {
+        if (!is_enemy_object(obj)) return;
+        const std::uint32_t h = coop_name_hash(name, 64);
+        for (int i = 0; i < ep.count && i < coop::kMaxEnemies; ++i) {
+            if (ep.enemies[i].name_hash != h) continue;
+            if (!g_enemy_ai_disabled[obj]) {
+                const auto disable = reinterpret_cast<RequestDisableAiFunction>(
+                    g_module + kRequestDisableAiRva);
+                disable(obj, false, true);
+                g_enemy_ai_disabled[obj] = true;
+            }
+            auto* world = reinterpret_cast<float*>(
+                static_cast<std::byte*>(obj) + kWorldPositionOffset);
+            auto* localp = reinterpret_cast<float*>(
+                static_cast<std::byte*>(obj) + kPlayerLocalPosOffset);
+            auto* quat = reinterpret_cast<float*>(
+                static_cast<std::byte*>(obj) + kPlayerQuatOffset);
+            std::memcpy(world, ep.enemies[i].pos, sizeof(ep.enemies[i].pos));
+            std::memcpy(localp, ep.enemies[i].pos, sizeof(ep.enemies[i].pos));
+            std::memcpy(quat, ep.enemies[i].quat, sizeof(ep.enemies[i].quat));
+            ++applied;
+            break;
+        }
+    });
+    static ULONGLONG last_diag = 0;
     const ULONGLONG now = GetTickCount64();
-    if (now - last_send >= 16) {  // ~60 Hz
+    if (now - last_diag > 1000) {
+        last_diag = now;
+        std::ostringstream l;
+        l << "ENEMY-SYNC client applied " << applied << "/" << ep.count
+          << " (seq " << ep.sequence << ")";
+        log_line(l.str().c_str());
+    }
+}
+
+void net_tick() {
+    // hooked_update fires for every Player + the buddy each frame; rate-limit by clock.
+    static ULONGLONG last_send = 0, last_enemy_send = 0, last_enemy_apply = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_send >= 16) {  // ~60 Hz local player state
         last_send = now;
         send_local_player_state();
+    }
+    if (!g_net_role_b) {
+        if (now - last_enemy_send >= 33) {  // ~30 Hz host enemy snapshot
+            last_enemy_send = now;
+            send_enemy_states();
+        }
+    } else {
+        if (now - last_enemy_apply >= 16) {
+            last_enemy_apply = now;
+            apply_peer_enemies();
+        }
     }
 }
 
@@ -4017,6 +4169,72 @@ void mirror_pose_to_nadine(void* nadine) {
     std::memcpy(xn, xc, bytes);
 }
 
+// PHASE 3 RECON: enumerate the CharacterManager (global *(module+0x3898630)) to learn
+// what actors it holds (players + NPCs + enemies). Layout from sub_141D63420: [+0]=
+// entries array {recPtr, id}[16B]; [+8]=capacity; [+0xc]=count. Per entry: obj =
+// *(recPtr+8), valid when *(u32*)(obj+0xbc)==id. Logs vtable RVA + name + world pos
+// for each. Heavily readable_bytes-guarded; safe to call once.
+void dump_character_manager() {
+    if (g_module == 0) return;
+    void* mgr = *reinterpret_cast<void**>(g_module + 0x3898630);
+    if (mgr == nullptr || readable_bytes(mgr) < 0x10) {
+        log_line("CHARMGR: null/unreadable manager");
+        return;
+    }
+    void* ents = *reinterpret_cast<void**>(static_cast<std::byte*>(mgr) + 0x0);
+    std::uint32_t cap = *reinterpret_cast<std::uint32_t*>(static_cast<std::byte*>(mgr) + 0x8);
+    std::uint32_t count = *reinterpret_cast<std::uint32_t*>(static_cast<std::byte*>(mgr) + 0xc);
+    {
+        std::ostringstream h;
+        h << "CHARMGR: mgr=0x" << std::hex << reinterpret_cast<std::uintptr_t>(mgr)
+          << " ents=0x" << reinterpret_cast<std::uintptr_t>(ents)
+          << std::dec << " cap=" << cap << " count=" << count;
+        log_line(h.str().c_str());
+    }
+    if (ents == nullptr || count == 0 || count > 4096) return;
+    if (readable_bytes(ents) < static_cast<std::size_t>(count) * 16) {
+        log_line("CHARMGR: entries array too small to read");
+        return;
+    }
+    int logged = 0;
+    for (std::uint32_t i = 0; i < count && logged < 128; ++i) {
+        auto* e = static_cast<std::byte*>(ents) + static_cast<std::size_t>(i) * 16;
+        void* rec = *reinterpret_cast<void**>(e + 0);
+        std::uint32_t id = *reinterpret_cast<std::uint32_t*>(e + 8);
+        if (rec == nullptr || readable_bytes(rec) < 0x10) continue;
+        void* obj = *reinterpret_cast<void**>(static_cast<std::byte*>(rec) + 8);
+        if (obj == nullptr || readable_bytes(obj) < 0x300) continue;
+        std::uint32_t objid = *reinterpret_cast<std::uint32_t*>(static_cast<std::byte*>(obj) + 0xbc);
+        if (objid != id) continue;  // not a live/valid character slot
+        std::uintptr_t vt = *reinterpret_cast<std::uintptr_t*>(obj);
+        std::uintptr_t vtrva = (vt > g_module) ? (vt - g_module) : vt;
+        // name string lives at obj+sizeof(void*) for these character objects
+        const char* name = "?";
+        const char* cand = reinterpret_cast<const char*>(obj) + sizeof(void*);
+        if (readable_bytes(cand) >= 1) {
+            bool printable = true;
+            for (int k = 0; k < 24; ++k) {
+                char c = cand[k];
+                if (c == 0) break;
+                if (c < 0x20 || c > 0x7e) { printable = false; break; }
+            }
+            if (printable) name = cand;
+        }
+        const auto* pos = reinterpret_cast<const float*>(
+            static_cast<std::byte*>(obj) + kWorldPositionOffset);
+        std::ostringstream l;
+        l << "CHARMGR[" << std::dec << i << "] obj=0x" << std::hex
+          << reinterpret_cast<std::uintptr_t>(obj)
+          << " vtRVA=0x" << vtrva << std::dec
+          << " name='" << name << "'"
+          << " pos=(" << pos[0] << "," << pos[1] << "," << pos[2] << ")";
+        log_line(l.str().c_str());
+        ++logged;
+    }
+    std::ostringstream d; d << "CHARMGR: logged " << logged << " valid characters";
+    log_line(d.str().c_str());
+}
+
 void __fastcall hooked_update(void* object) {
     // DIAGNOSTIC: when inert, the DLL does NOTHING but pass the update through (no
     // clone spawn, no drives, no per-frame logic) - used to isolate whether our
@@ -4024,6 +4242,16 @@ void __fastcall hooked_update(void* object) {
     if (g_dll_inert) {
         g_original_update(object);
         return;
+    }
+    // PHASE 3 RECON: periodic CharacterManager dump (every ~5s). Done its job
+    // (confirmed enemies are enumerable); gated off now to keep the log clean.
+    if (g_charmgr_dump_periodic) {
+        static ULONGLONG last_dump_ms = 0;
+        const ULONGLONG now = GetTickCount64();
+        if (now - last_dump_ms > 5000) {
+            last_dump_ms = now;
+            dump_character_manager();
+        }
     }
     net_tick();
     // (PLAY-AS-CLONE camera comes from the retained-slot SWAP done on toggle, not
