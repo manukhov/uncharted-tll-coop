@@ -445,6 +445,10 @@ StateNetState g_state_net{};
 // Master toggle for enemy replication (host sends / client applies). Default ON;
 // only acts when a network peer is present and per-role (A sends, B applies).
 volatile bool g_enemy_sync = true;
+// Single-instance validation of the enemy client-apply code path (enumerate +
+// RequestDisableAi + transform write) without needing two instances: freeze all
+// enemies in place with AI off. Toggle NUMPAD5. Default off.
+volatile bool g_enemy_freeze_selftest = false;
 // Phase 3 recon: periodic CharacterManager dump (default off; recon complete).
 volatile bool g_charmgr_dump_periodic = false;
 // Position offset added to the peer state before applying to the puppet. 0 for
@@ -3416,10 +3420,55 @@ void apply_peer_enemies() {
     }
 }
 
+// Single-instance self-test: exercise the enemy client-apply path (enumerate +
+// RequestDisableAi + transform write) by freezing every enemy at its own current
+// position. If enemies cleanly stop with AI off and no crash, the apply path is
+// validated; the two-instance test then only adds the (low-risk) network transport.
+std::unordered_map<void*, std::array<float, 8>> g_enemy_freeze_pose;  // pos[4]+quat[4]
+void enemy_freeze_selftest() {
+    int frozen = 0;
+    for_each_character([&](void* obj, const char* /*name*/) {
+        if (!is_enemy_object(obj)) return;
+        if (!g_enemy_ai_disabled[obj]) {
+            const auto disable = reinterpret_cast<RequestDisableAiFunction>(
+                g_module + kRequestDisableAiRva);
+            disable(obj, false, true);
+            g_enemy_ai_disabled[obj] = true;
+        }
+        // Capture each enemy's pose ONCE, then overwrite to that FIXED pose every
+        // frame so the write actually fights the engine (real apply-path test).
+        auto it = g_enemy_freeze_pose.find(obj);
+        if (it == g_enemy_freeze_pose.end()) {
+            std::array<float, 8> pose{};
+            std::memcpy(pose.data(), static_cast<std::byte*>(obj) + kWorldPositionOffset, 16);
+            std::memcpy(pose.data() + 4, static_cast<std::byte*>(obj) + kPlayerQuatOffset, 16);
+            it = g_enemy_freeze_pose.emplace(obj, pose).first;
+        }
+        const float* pose = it->second.data();
+        std::memcpy(static_cast<std::byte*>(obj) + kWorldPositionOffset, pose, 16);
+        std::memcpy(static_cast<std::byte*>(obj) + kPlayerLocalPosOffset, pose, 16);
+        std::memcpy(static_cast<std::byte*>(obj) + kPlayerQuatOffset, pose + 4, 16);
+        ++frozen;
+    });
+    static ULONGLONG last_diag = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_diag > 1000) {
+        last_diag = now;
+        std::ostringstream l;
+        l << "ENEMY-FREEZE selftest: froze " << frozen << " enemies (AI off + pinned)";
+        log_line(l.str().c_str());
+    }
+}
+
 void net_tick() {
     // hooked_update fires for every Player + the buddy each frame; rate-limit by clock.
     static ULONGLONG last_send = 0, last_enemy_send = 0, last_enemy_apply = 0;
+    static ULONGLONG last_freeze = 0;
     const ULONGLONG now = GetTickCount64();
+    if (g_enemy_freeze_selftest && now - last_freeze >= 16) {
+        last_freeze = now;
+        enemy_freeze_selftest();
+    }
     if (now - last_send >= 16) {  // ~60 Hz local player state
         last_send = now;
         send_local_player_state();
@@ -4434,6 +4483,13 @@ void __fastcall hooked_update(void* object) {
             log_line(g_manual_slot1_apply
                          ? "manual slot1 apply ON"
                          : "manual slot1 apply OFF");
+        }
+        if ((GetAsyncKeyState(VK_NUMPAD5) & 1) != 0) {
+            g_enemy_freeze_selftest = !g_enemy_freeze_selftest;
+            if (!g_enemy_freeze_selftest) { g_enemy_ai_disabled.clear(); g_enemy_freeze_pose.clear(); }
+            log_line(g_enemy_freeze_selftest
+                         ? "ENEMY-FREEZE selftest ON (enemies AI-off + pinned)"
+                         : "ENEMY-FREEZE selftest OFF");
         }
         // Live move-mapping calibration for the clone.
         if ((GetAsyncKeyState(VK_NUMPAD7) & 1) != 0) {
