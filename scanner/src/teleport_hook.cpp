@@ -3460,11 +3460,62 @@ void enemy_freeze_selftest() {
     }
 }
 
+// HEALTH PROBE: watch enemy fields for any 4-byte value that DECREASES (health drops
+// on a hit). OFF now — the inline brute scan was too noisy and did NOT reveal HP
+// (health lives in a damageable sub-component, not inline). Use static RE of the
+// damage/death function instead.
+volatile bool g_enemy_health_probe = false;
+constexpr std::size_t kHpLo = 0x80, kHpHi = 0x1200;
+std::unordered_map<void*, std::array<std::uint32_t, (kHpHi - kHpLo) / 4>> g_hp_snap;
+void enemy_health_probe() {
+    for_each_character([&](void* obj, const char* /*name*/) {
+        if (!is_enemy_object(obj)) return;
+        auto* base = static_cast<std::byte*>(obj);
+        // Per-object readable extent (objects may be shorter than kHpHi).
+        const std::size_t avail = readable_bytes(base);
+        const std::size_t hi = (avail < kHpHi) ? (avail & ~std::size_t{3}) : kHpHi;
+        if (hi <= kHpLo) return;
+        auto it = g_hp_snap.find(obj);
+        if (it == g_hp_snap.end()) {  // baseline this enemy
+            std::array<std::uint32_t, (kHpHi - kHpLo) / 4> s{};
+            for (std::size_t off = kHpLo; off < hi; off += 4)
+                s[(off - kHpLo) / 4] = *reinterpret_cast<std::uint32_t*>(base + off);
+            g_hp_snap.emplace(obj, s);
+            return;
+        }
+        auto& snap = it->second;
+        for (std::size_t off = kHpLo; off < hi; off += 4) {
+            if (off >= 0x120 && off < 0x2b0) continue;  // skip transform/velocity churn
+            std::uint32_t& prev = snap[(off - kHpLo) / 4];
+            std::uint32_t cur = *reinterpret_cast<std::uint32_t*>(base + off);
+            if (cur == prev) continue;
+            float pf, cf; std::memcpy(&pf, &prev, 4); std::memcpy(&cf, &cur, 4);
+            // Death catch: any nonzero field that becomes exactly 0 (or float 0).
+            const bool zeroed = prev != 0 && (cur == 0 || cf == 0.0f) &&
+                                (pf > 1.0f || (prev > 0 && prev <= 1000000u));
+            const bool floatdrop = pf >= 2.0f && pf <= 1.0e6f && cf < pf - 1.0f && cf >= 0.0f;
+            const bool intdrop = prev > 0 && prev <= 1000000u && cur < prev && (prev - cur) <= 100u;
+            if (zeroed || floatdrop || intdrop) {
+                std::ostringstream l;
+                l << "HP-PROBE enemy=0x" << std::hex << reinterpret_cast<std::uintptr_t>(obj)
+                  << " +0x" << off << std::dec
+                  << " : " << prev << "->" << cur << " (f " << pf << "->" << cf << ")";
+                log_line(l.str().c_str());
+            }
+            prev = cur;
+        }
+    });
+}
+
 void net_tick() {
     // hooked_update fires for every Player + the buddy each frame; rate-limit by clock.
     static ULONGLONG last_send = 0, last_enemy_send = 0, last_enemy_apply = 0;
-    static ULONGLONG last_freeze = 0;
+    static ULONGLONG last_freeze = 0, last_hp_probe = 0;
     const ULONGLONG now = GetTickCount64();
+    if (g_enemy_health_probe && now - last_hp_probe >= 100) {
+        last_hp_probe = now;
+        enemy_health_probe();
+    }
     if (g_enemy_freeze_selftest && now - last_freeze >= 16) {
         last_freeze = now;
         enemy_freeze_selftest();
