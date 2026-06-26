@@ -3357,6 +3357,91 @@ bool is_dead_ragdoll(void* obj) {
     return *reinterpret_cast<std::uintptr_t*>(obj) == g_module + kRagdollVtableRva;
 }
 
+// DIAGNOSTIC hook of AiHitController::TakeHit (vtable[17] @0x5001e0): captures real
+// HitDescription bytes + the controller->owner(enemy) mapping when an enemy is hit, so
+// we learn the HitDescription size and how to reach an enemy's controller for the
+// client->host damage relay (Path 1). Logs the first few hits, then calls the original.
+using TakeHitFn = std::uint64_t(__fastcall*)(void*, const void*);
+std::uint64_t g_orig_takehit = 0;
+// OFF: the per-hit owner/controller scan (0x8000 + VirtualQuery per qword) + dumps caused
+// severe in-combat lag. Recon done (ownerOff=0x8, HitDescription layout, template). The
+// cheap template/last-controller capture below still runs.
+volatile bool g_takehit_probe = false;
+// Captured real HitDescription (TEMPLATE with valid local pointers) + the most recent
+// enemy controller, for the single-instance host-apply self-test (VK_DECIMAL).
+std::array<std::byte, 0x100> g_hd_template{};
+volatile bool g_hd_template_valid = false;
+void* g_last_enemy_controller = nullptr;
+std::uint64_t __fastcall hooked_takehit(void* self, const void* hitDesc) {
+    // Always (cheaply) capture a template + the last controller, regardless of logging.
+    if (self != nullptr && hitDesc != nullptr) {
+        g_last_enemy_controller = self;
+        if (!g_hd_template_valid && readable_bytes(hitDesc) >= 0x100) {
+            std::memcpy(g_hd_template.data(), hitDesc, 0x100);
+            g_hd_template_valid = true;
+        }
+    }
+    if (g_takehit_probe && self != nullptr && hitDesc != nullptr) {
+        static int n = 0;
+        if (n < 24) {
+            ++n;
+            // Find the owner enemy: a pointer in the controller whose +8 = "npc-" name.
+            const char* ename = "?";
+            std::size_t owner_off = 0xffff;
+            if (readable_bytes(self) >= 0x90) {
+                for (std::size_t off = 0; off <= 0x88; off += 8) {
+                    void* p = *reinterpret_cast<void* const*>(
+                        static_cast<const std::byte*>(self) + off);
+                    if (p != nullptr && readable_bytes(p) >= 0x20) {
+                        const char* nm = reinterpret_cast<const char*>(p) + 8;
+                        if (readable_bytes(nm) >= 4 && nm[0] == 'n' && nm[1] == 'p' &&
+                            nm[2] == 'c' && nm[3] == '-') {
+                            ename = nm; owner_off = off; break;
+                        }
+                    }
+                }
+            }
+            std::ostringstream l;
+            l << "TAKEHIT self=0x" << std::hex << reinterpret_cast<std::uintptr_t>(self)
+              << " hd=0x" << reinterpret_cast<std::uintptr_t>(hitDesc) << std::dec
+              << " ownerOff=0x" << std::hex << owner_off
+              << " enemy='" << ename << "'";
+            log_line(l.str().c_str());
+            // Reverse mapping enemy->controller: scan the owner enemy object for a qword
+            // == self (the controller). Per-qword readable check, small range, AFTER the
+            // header so the header always lands even if the scan finds nothing.
+            if (owner_off != 0xffff) {
+                void* owner = *reinterpret_cast<void* const*>(
+                    static_cast<const std::byte*>(self) + owner_off);
+                std::size_t found = 0xffffffff;
+                for (std::size_t off = 0; off < 0x8000; off += 8) {
+                    auto* slotp = static_cast<std::byte*>(owner) + off;
+                    if (readable_bytes(slotp) < 8) break;
+                    if (*reinterpret_cast<void* const*>(slotp) == self) { found = off; break; }
+                }
+                std::ostringstream c;
+                c << "  enemyCtrlOff=0x" << std::hex << found;
+                log_line(c.str().c_str());
+            }
+            // Dump HitDescription as qwords + float pairs (first 0xC0 bytes).
+            if (readable_bytes(hitDesc) >= 0xC0) {
+                const auto* b = static_cast<const std::byte*>(hitDesc);
+                for (std::size_t off = 0; off < 0xC0; off += 8) {
+                    std::uint64_t q = *reinterpret_cast<const std::uint64_t*>(b + off);
+                    float f0, f1;
+                    std::memcpy(&f0, b + off, 4);
+                    std::memcpy(&f1, b + off + 4, 4);
+                    std::ostringstream d;
+                    d << "  HD+0x" << std::hex << off << " = 0x" << q << std::dec
+                      << "  (f " << f0 << ", " << f1 << ")";
+                    log_line(d.str().c_str());
+                }
+            }
+        }
+    }
+    return reinterpret_cast<TakeHitFn>(g_orig_takehit)(self, hitDesc);
+}
+
 // HOST (role A): enumerate enemies and send their transforms to the client.
 void send_enemy_states() {
     if (!g_enemy_sync || !g_state_net.enabled || !g_state_net.peer_set) return;
@@ -4562,6 +4647,25 @@ void __fastcall hooked_update(void* object) {
                          ? "ENEMY-FREEZE selftest ON (enemies AI-off + pinned)"
                          : "ENEMY-FREEZE selftest OFF");
         }
+        // DAMAGE host-apply self-test: clone the captured HitDescription template,
+        // set lethal damage, and call TakeHit on the last-hit enemy's controller. If
+        // the enemy takes damage / ragdolls with no crash, the host-apply primitive
+        // (controller->TakeHit(clonedTemplate)) is validated for the client->host relay.
+        if ((GetAsyncKeyState(VK_DECIMAL) & 1) != 0) {
+            if (g_hd_template_valid && g_last_enemy_controller != nullptr &&
+                g_module != 0) {
+                alignas(16) std::byte clone[0x100];
+                std::memcpy(clone, g_hd_template.data(), sizeof(clone));
+                *reinterpret_cast<float*>(clone + 0x48) = 9999.0f;
+                using DieFn = void(__fastcall*)(void*, const void*, bool);
+                auto die = reinterpret_cast<DieFn>(g_module + 0x500c20);  // Die vtable[23]
+                log_line("DMG-SELFTEST: calling AiHitController::Die(false) on last enemy controller");
+                die(g_last_enemy_controller, clone, false);
+                log_line("DMG-SELFTEST: Die returned (no crash)");
+            } else {
+                log_line("DMG-SELFTEST: no template/controller yet (shoot an enemy first)");
+            }
+        }
         // Live move-mapping calibration for the clone.
         if ((GetAsyncKeyState(VK_NUMPAD7) & 1) != 0) {
             g_move_rot -= 0.2617994F;  // -15 deg
@@ -5714,6 +5818,28 @@ DWORD WINAPI install_hook(void*) {
             }
         } else {
             log_line("Player vtable[92] unexpected; appearance hook skipped");
+        }
+    }
+    // Hook AiHitController::TakeHit = vtable[17] @ module+0x2959448 (func 0x5001e0).
+    // Captures real HitDescription bytes + controller->owner mapping when enemies are
+    // hit (Path 1 client->host damage recon). Single shared vtable -> hooks all enemies.
+    {
+        auto* tslot = reinterpret_cast<std::uintptr_t*>(g_module + 0x2959448);
+        if (*tslot == g_module + 0x5001e0) {
+            g_orig_takehit = *tslot;
+            DWORD oldp = 0;
+            if (VirtualProtect(tslot, sizeof(*tslot), PAGE_READWRITE, &oldp)) {
+                *tslot = reinterpret_cast<std::uintptr_t>(&hooked_takehit);
+                FlushInstructionCache(GetCurrentProcess(), tslot, sizeof(*tslot));
+                DWORD ign = 0;
+                VirtualProtect(tslot, sizeof(*tslot), oldp, &ign);
+                log_line("AiHitController::TakeHit hook installed (HitDescription probe)");
+            }
+        } else {
+            std::ostringstream l;
+            l << "TakeHit vtable[17] unexpected 0x" << std::hex << *tslot
+              << " (expected 0x" << (g_module + 0x5001e0) << "); hook skipped";
+            log_line(l.str().c_str());
         }
     }
     submit_remote_input_packet(coop::InputPacket{});
