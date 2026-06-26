@@ -52,7 +52,9 @@ struct EnemyState {
     std::uint32_t name_hash = 0;  // FNV-1a of the actor name (stable cross-instance)
     float pos[4]{};               // world position block (Char+0x240)
     float quat[4]{};              // orientation quaternion (Char+0x140)
+    std::uint32_t flags = 0;      // bit0 = dead (host vtable became ProcessRagdoll)
 };
+constexpr std::uint32_t kEnemyFlagDead = 0x1;
 
 struct EnemyPacket {
     std::uint32_t magic = kEnemyPacketMagic;

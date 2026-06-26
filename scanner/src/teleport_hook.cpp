@@ -449,7 +449,8 @@ volatile bool g_enemy_sync = true;
 // RequestDisableAi + transform write) without needing two instances: freeze all
 // enemies in place with AI off. Toggle NUMPAD5. Default off.
 volatile bool g_enemy_freeze_selftest = false;
-// Phase 3 recon: periodic CharacterManager dump (default off; recon complete).
+// Phase 3 recon: periodic CharacterManager dump (default off; recon done — death =
+// vtable flip Pirate->ProcessRagdoll, not manager removal).
 volatile bool g_charmgr_dump_periodic = false;
 // Position offset added to the peer state before applying to the puppet. 0 for
 // real two-instance/two-PC play (puppet sits at the peer's actual position).
@@ -3306,7 +3307,8 @@ void update_inject_stick() {
 // ===== Phase 3: host-authoritative ENEMY replication =====
 // Enemy NPC vtable RVA (from the CharacterManager dump; grunt class shared by all
 // npc-forest1-* enemies). Other enemy archetypes may add more vtables later.
-constexpr std::uintptr_t kEnemyVtableRva = 0x294b9d0;
+constexpr std::uintptr_t kEnemyVtableRva = 0x294b9d0;     // .?AVPirate@@ (live enemy)
+constexpr std::uintptr_t kRagdollVtableRva = 0x29137a0;  // .?AVProcessRagdoll@@ (dead)
 
 // FNV-1a over the actor name (bounded). Both instances hash the same name string,
 // so this is a stable cross-instance key (does not need to match the game's hash).
@@ -3347,7 +3349,12 @@ void for_each_character(F&& fn) {
 
 bool is_enemy_object(void* obj) {
     std::uintptr_t vt = *reinterpret_cast<std::uintptr_t*>(obj);
-    return vt == g_module + kEnemyVtableRva;
+    // Track both the live enemy (Pirate) and its dead form (ProcessRagdoll) so the
+    // Pirate->Ragdoll death transition stays matched by name.
+    return vt == g_module + kEnemyVtableRva || vt == g_module + kRagdollVtableRva;
+}
+bool is_dead_ragdoll(void* obj) {
+    return *reinterpret_cast<std::uintptr_t*>(obj) == g_module + kRagdollVtableRva;
 }
 
 // HOST (role A): enumerate enemies and send their transforms to the client.
@@ -3364,6 +3371,7 @@ void send_enemy_states() {
                     static_cast<std::byte*>(obj) + kWorldPositionOffset, sizeof(es.pos));
         std::memcpy(es.quat,
                     static_cast<std::byte*>(obj) + kPlayerQuatOffset, sizeof(es.quat));
+        es.flags = is_dead_ragdoll(obj) ? coop::kEnemyFlagDead : 0;
         ++n;
     });
     pkt.count = static_cast<std::uint16_t>(n);
@@ -3402,9 +3410,21 @@ void apply_peer_enemies() {
                 static_cast<std::byte*>(obj) + kPlayerLocalPosOffset);
             auto* quat = reinterpret_cast<float*>(
                 static_cast<std::byte*>(obj) + kPlayerQuatOffset);
-            std::memcpy(world, ep.enemies[i].pos, sizeof(ep.enemies[i].pos));
-            std::memcpy(localp, ep.enemies[i].pos, sizeof(ep.enemies[i].pos));
-            std::memcpy(quat, ep.enemies[i].quat, sizeof(ep.enemies[i].quat));
+            const bool dead = (ep.enemies[i].flags & coop::kEnemyFlagDead) != 0;
+            if (dead) {
+                // MVP death: the host's enemy ragdolled. We can't cleanly ragdoll the
+                // client copy (kill primitives need HitDescription), so SINK it far
+                // below the world -> it disappears, conveying "dead/removed". Proper
+                // ragdoll via AiHitController::Die is a later refinement.
+                float sink[4] = {ep.enemies[i].pos[0], -10000.0f, ep.enemies[i].pos[2],
+                                 ep.enemies[i].pos[3]};
+                std::memcpy(world, sink, sizeof(sink));
+                std::memcpy(localp, sink, sizeof(sink));
+            } else {
+                std::memcpy(world, ep.enemies[i].pos, sizeof(ep.enemies[i].pos));
+                std::memcpy(localp, ep.enemies[i].pos, sizeof(ep.enemies[i].pos));
+                std::memcpy(quat, ep.enemies[i].quat, sizeof(ep.enemies[i].quat));
+            }
             ++applied;
             break;
         }
