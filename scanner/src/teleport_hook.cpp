@@ -449,8 +449,7 @@ volatile bool g_enemy_sync = true;
 // RequestDisableAi + transform write) without needing two instances: freeze all
 // enemies in place with AI off. Toggle NUMPAD5. Default off.
 volatile bool g_enemy_freeze_selftest = false;
-// Phase 3 recon: periodic CharacterManager dump (default off; recon done — death =
-// vtable flip Pirate->ProcessRagdoll, not manager removal).
+// Phase 3 recon: periodic CharacterManager dump (off).
 volatile bool g_charmgr_dump_periodic = false;
 // Position offset added to the peer state before applying to the puppet. 0 for
 // real two-instance/two-PC play (puppet sits at the peer's actual position).
@@ -3376,14 +3375,9 @@ std::array<std::byte, 0x100> g_hd_template{};
 volatile bool g_hd_template_valid = false;
 void* g_last_enemy_controller = nullptr;
 std::uint64_t __fastcall hooked_takehit(void* self, const void* hitDesc) {
-    // Always (cheaply) capture a template + the last controller, regardless of logging.
-    if (self != nullptr && hitDesc != nullptr) {
-        g_last_enemy_controller = self;
-        if (!g_hd_template_valid && readable_bytes(hitDesc) >= 0x100) {
-            std::memcpy(g_hd_template.data(), hitDesc, 0x100);
-            g_hd_template_valid = true;
-        }
-    }
+    // MINIMAL hot-path capture (NO VirtualQuery — that per-call readable_bytes was the FPS
+    // killer): just remember the last controller. Template/HP read happen low-rate elsewhere.
+    if (self != nullptr) g_last_enemy_controller = self;
     if (g_takehit_probe && self != nullptr && hitDesc != nullptr) {
         static int n = 0;
         if (n < 24) {
@@ -3616,11 +3610,83 @@ void enemy_health_probe() {
     });
 }
 
+// Low-rate HealthSystem probe: for the first live enemy, read *(enemy+0x16a0) = its
+// HealthSystem (0xe0 bytes) and log any plausible float field that CHANGES (the current
+// HP drops when the player shoots). Low rate => no FPS hit. Default ON for this build.
+volatile bool g_hp_sys_probe = false;  // HP located (enemy+0x4a8 -> HS, HP int@+0x3c); heavy scan off
+bool plausible_ptr(std::uintptr_t v) {
+    return v >= 0x10000000ull && v < 0x800000000000ull && (v & 7) == 0;
+}
+void enemy_hp_probe() {
+    void* enemy = nullptr;
+    for_each_character([&](void* obj, const char* /*nm*/) {
+        if (enemy == nullptr && is_enemy_object(obj) && !is_dead_ragdoll(obj)) enemy = obj;
+    });
+    if (enemy == nullptr) return;
+    const std::uintptr_t hsvt = g_module + 0x2bbe128;
+    // 2-level scan from the enemy for a HealthSystem (vtable hsvt). HP = int at HS+0x3c.
+    static void* found_hs = nullptr;
+    static std::int32_t snap_hp = -999;
+    if (found_hs == nullptr) {
+        const std::size_t avail = readable_bytes(enemy);
+        const std::size_t hi = avail < 0x4000 ? avail : 0x4000;
+        auto* base = static_cast<std::byte*>(enemy);
+        for (std::size_t o1 = 0x10; o1 + 8 <= hi && found_hs == nullptr; o1 += 8) {
+            std::uintptr_t v1 = *reinterpret_cast<std::uintptr_t*>(base + o1);
+            if (!plausible_ptr(v1)) continue;
+            auto* p1 = reinterpret_cast<std::byte*>(v1);
+            if (readable_bytes(p1) < 0xe0) continue;
+            if (*reinterpret_cast<std::uintptr_t*>(p1) == hsvt) {
+                std::int32_t curhp = *reinterpret_cast<std::int32_t*>(p1 + 0x3c);
+                if (curhp <= 0) continue;  // skip dead/downed; lock onto a LIVE enemy
+                found_hs = p1;
+                std::ostringstream l; l << "HPC HS direct enemy+0x" << std::hex << o1
+                    << " hs=0x" << v1 << " HP@+0x3c=" << std::dec << curhp
+                    << " max@+0x44=" << *reinterpret_cast<std::int32_t*>(p1 + 0x44);
+                log_line(l.str().c_str()); break;
+            }
+            // level 2: scan p1's first 0x300 for a HealthSystem ptr.
+            const std::size_t a2 = readable_bytes(p1);
+            const std::size_t hi2 = a2 < 0x300 ? a2 : 0x300;
+            for (std::size_t o2 = 0; o2 + 8 <= hi2; o2 += 8) {
+                std::uintptr_t v2 = *reinterpret_cast<std::uintptr_t*>(p1 + o2);
+                if (!plausible_ptr(v2)) continue;
+                auto* p2 = reinterpret_cast<std::byte*>(v2);
+                if (readable_bytes(p2) < 0xe0) continue;
+                if (*reinterpret_cast<std::uintptr_t*>(p2) == hsvt) {
+                    found_hs = p2;
+                    std::ostringstream l; l << "HPC HS 2lvl enemy+0x" << std::hex << o1
+                        << "->+0x" << o2 << " hs=0x" << v2 << " HP@+0x3c=" << std::dec
+                        << *reinterpret_cast<std::int32_t*>(p2 + 0x3c)
+                        << " max@+0x44=" << *reinterpret_cast<std::int32_t*>(p2 + 0x44);
+                    log_line(l.str().c_str()); break;
+                }
+            }
+        }
+        if (found_hs == nullptr) {
+            static bool warned = false; if (!warned) { warned = true;
+                log_line("HPC: HealthSystem not found in enemy (2-level scan)"); }
+        }
+        return;
+    }
+    // watch HP int at HS+0x3c
+    if (readable_bytes(static_cast<std::byte*>(found_hs) + 0x48) < 8) { found_hs = nullptr; return; }
+    std::int32_t hp = *reinterpret_cast<std::int32_t*>(static_cast<std::byte*>(found_hs) + 0x3c);
+    if (hp != snap_hp) {
+        std::ostringstream l; l << "HPC HP " << snap_hp << " -> " << hp; log_line(l.str().c_str());
+        snap_hp = hp;
+    }
+}
+
 void net_tick() {
     // hooked_update fires for every Player + the buddy each frame; rate-limit by clock.
     static ULONGLONG last_send = 0, last_enemy_send = 0, last_enemy_apply = 0;
-    static ULONGLONG last_freeze = 0, last_hp_probe = 0;
+    static ULONGLONG last_freeze = 0, last_hp_probe = 0, last_hpsys = 0;
     const ULONGLONG now = GetTickCount64();
+    if (g_hp_sys_probe && now - last_hpsys >= 150) {
+        last_hpsys = now;
+        enemy_hp_probe();
+    }
     if (g_enemy_health_probe && now - last_hp_probe >= 100) {
         last_hp_probe = now;
         enemy_health_probe();
