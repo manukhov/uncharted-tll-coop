@@ -3363,6 +3363,9 @@ bool is_dead_ragdoll(void* obj) {
 // client->host damage relay (Path 1). Logs the first few hits, then calls the original.
 using TakeHitFn = std::uint64_t(__fastcall*)(void*, const void*);
 std::uint64_t g_orig_takehit = 0;
+// Install the TakeHit vtable hook? Default OFF (only for damage-relay work); avoids
+// per-hit combat overhead.
+volatile bool g_install_takehit_hook = false;
 // OFF: the per-hit owner/controller scan (0x8000 + VirtualQuery per qword) + dumps caused
 // severe in-combat lag. Recon done (ownerOff=0x8, HitDescription layout, template). The
 // cheap template/last-controller capture below still runs.
@@ -3445,6 +3448,7 @@ std::uint64_t __fastcall hooked_takehit(void* self, const void* hitDesc) {
 // HOST (role A): enumerate enemies and send their transforms to the client.
 void send_enemy_states() {
     if (!g_enemy_sync || !g_state_net.enabled || !g_state_net.peer_set) return;
+    if (!g_state_net.has_peer_state.load()) return;  // no real peer -> skip enumeration
     if (g_net_role_b) return;  // only the authoritative host sends enemies
     coop::EnemyPacket pkt{};
     int n = 0;
@@ -5823,7 +5827,9 @@ DWORD WINAPI install_hook(void*) {
     // Hook AiHitController::TakeHit = vtable[17] @ module+0x2959448 (func 0x5001e0).
     // Captures real HitDescription bytes + controller->owner mapping when enemies are
     // hit (Path 1 client->host damage recon). Single shared vtable -> hooks all enemies.
-    {
+    // Default OFF: the TakeHit hook is only needed for the damage-relay recon/build.
+    // Leaving it installed adds per-hit overhead in combat; skip unless explicitly on.
+    if (g_install_takehit_hook) {
         auto* tslot = reinterpret_cast<std::uintptr_t*>(g_module + 0x2959448);
         if (*tslot == g_module + 0x5001e0) {
             g_orig_takehit = *tslot;
