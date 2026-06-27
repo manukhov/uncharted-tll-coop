@@ -1,0 +1,883 @@
+=== 0x1414F0880: sub_1414F0880 [0x1414F0880..0x1414F141D] ===
+// Hidden C++ exception states: #wind=1
+char __fastcall sub_1414F0880(
+        unsigned __int64 a1,
+        unsigned __int64 a2,
+        __int64 a3,
+        __int64 a4,
+        __int64 a5,
+        __int64 a6,
+        unsigned int a7)
+{
+  int v13; // r11d
+  unsigned __int8 v14; // bl
+  unsigned int v16; // ecx
+  __int64 v19; // rax
+  __int64 v20; // r9
+  __int64 v21; // r10
+  int v22; // r8d
+  __int64 v23; // rax
+  unsigned int v24; // ecx
+  __int64 v25; // rax
+  __int64 v26; // rdx
+  __int64 v44; // rax
+  __int64 v47; // rax
+  __int64 CachedWeaponArtDefsOnlineHashRegistry; // rax
+  __int64 v50; // r13
+  unsigned int v51; // ebx
+  __int64 v53; // r10
+  __int64 v54; // r11
+  int v55; // r8d
+  int v56; // ecx
+  __int64 v57; // rbx
+  __int64 v58; // rdx
+  __int64 v59; // rax
+  int v60; // ecx
+  __int64 v61; // rax
+  __int64 v62; // rcx
+  __int64 v63; // r11
+  __int64 v68; // rdx
+  __int64 v69; // r10
+  const char *v70; // r8
+  __int64 v73; // r9
+  __int64 v85; // r8
+  const char *v86; // rdx
+  __int64 v88; // rcx
+  char v97; // cl
+  char v99; // r13
+  char v106; // bl
+  __int64 v107; // rcx
+  __int64 *v115; // rbx
+  bool v116; // zf
+  bool v117; // pf
+  __int64 v118; // rdx
+  __int64 v119; // r10
+  const char *v120; // r8
+  __int64 v123; // r9
+  __int64 v144; // rsi
+  unsigned int v145; // ebx
+  unsigned int v146; // r13d
+  _OWORD *v147; // r12
+  __int64 v167; // rcx
+  int v168; // eax
+  int v176; // [rsp+30h] [rbp-9D8h]
+  unsigned __int8 v177; // [rsp+40h] [rbp-9C8h]
+  char v178; // [rsp+41h] [rbp-9C7h]
+  char v179; // [rsp+42h] [rbp-9C6h]
+  _QWORD v181[3]; // [rsp+60h] [rbp-9A8h] BYREF
+  char v182[24]; // [rsp+78h] [rbp-990h] BYREF
+  _OWORD v183[2]; // [rsp+90h] [rbp-978h] BYREF
+  void **v184; // [rsp+B0h] [rbp-958h] BYREF
+  int v186; // [rsp+C8h] [rbp-940h]
+  int v187; // [rsp+CCh] [rbp-93Ch]
+  int v188; // [rsp+D0h] [rbp-938h] BYREF
+  unsigned int v189; // [rsp+D4h] [rbp-934h]
+  _OWORD v190[120]; // [rsp+E0h] [rbp-928h] BYREF
+  char v192; // [rsp+878h] [rbp-190h]
+  int v195; // [rsp+890h] [rbp-178h]
+  int v199; // [rsp+8F0h] [rbp-118h]
+  char v200; // [rsp+8F4h] [rbp-114h]
+  char v201; // [rsp+8F5h] [rbp-113h]
+  int v202; // [rsp+900h] [rbp-108h]
+  int v203; // [rsp+904h] [rbp-104h]
+  __m256 v204; // [rsp+910h] [rbp-F8h]
+  int v207; // [rsp+960h] [rbp-A8h]
+  char v208; // [rsp+964h] [rbp-A4h]
+  char v209; // [rsp+9D0h] [rbp-38h] BYREF
+
+  v181[2] = -2;
+  _R15 = a1;
+  v181[0] = a6;
+  sub_14014E240(a1 + 304, v183);
+  v14 = *(_BYTE *)(_R15 + 432) & 1;
+  v177 = v14;
+  v178 = 0;
+  _EDI = 0;
+  v16 = 0;
+  __asm
+  {
+    vxorps  xmm6, xmm6, xmm6
+    vmovss  xmm10, cs:dword_142BE9A6C
+  }
+  if ( *(_DWORD *)(_R15 + 1648) )
+  {
+    while ( 1 )
+    {
+      v19 = *(_QWORD *)(_R15 + 1656) + 48LL * v16;
+      v20 = 0;
+      v21 = *(_QWORD *)v19;
+      if ( *(_QWORD *)v19 )
+      {
+        v22 = *(_DWORD *)(v19 + 8);
+        if ( v22 )
+        {
+          v23 = *(_QWORD *)(v21 + 8);
+          if ( v23 )
+          {
+            if ( *(_DWORD *)(v23 + 188) == v22 )
+            {
+              v20 = *(_QWORD *)(v21 + 8);
+              *(_BYTE *)(v23 + 114) = 1;
+            }
+          }
+        }
+      }
+      if ( v20 == a2 )
+        break;
+      if ( ++v16 >= *(_DWORD *)(_R15 + 1648) )
+        goto LABEL_9;
+    }
+    v44 = *(_QWORD *)(_R15 + 1656);
+    LODWORD(_R12) = *(_DWORD *)(v44 + 48LL * v16 + 32);
+    v178 = *(_BYTE *)(v44 + 48LL * v16 + 36);
+  }
+  else
+  {
+LABEL_9:
+    v24 = *(_DWORD *)(a5 + 4);
+    if ( v24 )
+    {
+      __asm { vmovups xmm7, cs:xmmword_142BEC910 }
+      v25 = a5 + 16;
+      v26 = v24;
+      __asm
+      {
+        vmovups xmm8, [rsp+0A08h+var_978]
+        vmovups xmm9, cs:xmmword_14287FA30
+      }
+      do
+      {
+        __asm
+        {
+          vsubps  xmm0, xmm8, xmmword ptr [rax]
+          vmulps  xmm1, xmm0, xmm0
+          vshufps xmm2, xmm1, xmm1, 0
+          vshufps xmm0, xmm1, xmm1, 55h ; 'U'
+          vshufps xmm1, xmm1, xmm1, 0AAh
+          vaddps  xmm0, xmm0, xmm2
+          vaddps  xmm5, xmm1, xmm0
+          vrsqrtps xmm2, xmm5
+          vrcpps  xmm4, xmm2
+          vmulps  xmm3, xmm2, xmm7
+          vmulps  xmm0, xmm4, xmm4
+          vsubps  xmm1, xmm0, xmm5
+          vmulps  xmm2, xmm1, xmm3
+          vsubps  xmm3, xmm4, xmm2
+          vcmpleps xmm0, xmm9, xmm5
+          vandps  xmm1, xmm0, xmm3
+          vmovss  dword ptr [rsp+0A08h+var_978], xmm1
+        }
+        v25 += 80;
+        --v26;
+      }
+      while ( v26 );
+    }
+    if ( v14 )
+    {
+      if ( v13
+        && a2
+        && ((*(void (__fastcall **)(unsigned __int64, _OWORD *))(*(_QWORD *)a2 + 1408LL))(a2, v183), !LOBYTE(v183[0])) )
+      {
+        __asm { vmovss  [rsp+0A08h+var_9D8], xmm6 }
+        *(double *)&_XMM0 = sub_141523EB0(_R15, *(_DWORD *)(_R15 + 436), (int)_R15 + 440, a2, 0, 0, v176);
+        __asm
+        {
+          vxorps  xmm0, xmm0, xmm0
+          vcvtsi2ss xmm0, xmm0, rax
+          vdivss  xmm1, xmm0, xmm10
+          vmulss  xmm2, xmm1, xmm10
+          vcvttss2si r12, xmm2
+        }
+      }
+      else
+      {
+        LODWORD(_R12) = 0;
+      }
+    }
+    else if ( a2
+           && (v47 = *(_QWORD *)(*(_QWORD *)(a2 + 48) + 8 * ((unsigned __int64)(unsigned int)dword_146AA11B4 >> 6) + 32),
+               _bittest64(&v47, dword_146AA11B4 & 0x3F)) )
+    {
+      LODWORD(_R12) = *(_DWORD *)(_R15 + 1104);
+    }
+    else
+    {
+      LODWORD(_R12) = *(_DWORD *)(_R15 + 1108);
+    }
+  }
+  if ( a2 )
+    (*(void (__fastcall **)(unsigned __int64, char *))(*(_QWORD *)a2 + 1408LL))(a2, v182);
+  else
+    v182[0] = 1;
+  LOBYTE(CachedWeaponArtDefsOnlineHashRegistry) = 0;
+  v179 = 0;
+  _RSI = qword_142BEA360;
+  v50 = 8;
+  if ( !HIBYTE(dword_143E07470) )
+    goto LABEL_54;
+  v51 = *(_DWORD *)(a4 + 152);
+  CachedWeaponArtDefsOnlineHashRegistry = GetCachedWeaponArtDefsOnlineHashRegistry();
+  __asm { vmovss  xmm8, cs:dword_142BE8FC4 }
+  if ( !CachedWeaponArtDefsOnlineHashRegistry )
+    goto LABEL_35;
+  if ( !*(_DWORD *)CachedWeaponArtDefsOnlineHashRegistry )
+    goto LABEL_35;
+  v53 = *(_QWORD *)(CachedWeaponArtDefsOnlineHashRegistry + 8);
+  v54 = *(_QWORD *)(CachedWeaponArtDefsOnlineHashRegistry + 16);
+  v55 = 0;
+  v56 = *(_DWORD *)CachedWeaponArtDefsOnlineHashRegistry - 1;
+  if ( v56 < 0 )
+    goto LABEL_35;
+  while ( 1 )
+  {
+    LODWORD(CachedWeaponArtDefsOnlineHashRegistry) = (v56 + v55) / 2;
+    if ( *(_DWORD *)(v53 + 4LL * (int)CachedWeaponArtDefsOnlineHashRegistry) >= v51 )
+      break;
+    v55 = CachedWeaponArtDefsOnlineHashRegistry + 1;
+LABEL_34:
+    if ( v55 > v56 )
+      goto LABEL_35;
+  }
+  if ( *(_DWORD *)(v53 + 4LL * (int)CachedWeaponArtDefsOnlineHashRegistry) > v51 )
+  {
+    v56 = CachedWeaponArtDefsOnlineHashRegistry - 1;
+    goto LABEL_34;
+  }
+  v115 = *(__int64 **)(v54 + 8LL * (int)CachedWeaponArtDefsOnlineHashRegistry);
+  if ( !v115 )
+  {
+LABEL_35:
+    v57 = 0;
+    goto LABEL_36;
+  }
+  v57 = *v115;
+  if ( v57 )
+  {
+    if ( a2 )
+    {
+      CachedWeaponArtDefsOnlineHashRegistry = *(_QWORD *)(*(_QWORD *)(a2 + 48)
+                                                        + 8 * ((unsigned __int64)(unsigned int)dword_143D43FA4 >> 6)
+                                                        + 32);
+      if ( _bittest64(&CachedWeaponArtDefsOnlineHashRegistry, dword_143D43FA4 & 0x3F) )
+      {
+        CachedWeaponArtDefsOnlineHashRegistry = (*(__int64 (__fastcall **)(unsigned __int64))(*(_QWORD *)a2 + 4232LL))(a2);
+        *(_QWORD *)&v183[0] = CachedWeaponArtDefsOnlineHashRegistry;
+        if ( CachedWeaponArtDefsOnlineHashRegistry )
+        {
+          *(double *)&_XMM0 = sub_1405DD1A0(CachedWeaponArtDefsOnlineHashRegistry, *(unsigned int *)(v57 + 648));
+          __asm { vmovaps xmm7, xmm0 }
+          v116 = v178 == 0;
+          v117 = __SETP__(v178, 0);
+          if ( !v178 )
+          {
+            v118 = 0;
+            v119 = 30;
+            v120 = "coop-damage-taken-not-headshot";
+            _RCX = &v184;
+            _RAX = qword_142BEA360;
+            v123 = 8;
+            do
+            {
+              __asm
+              {
+                vmovups ymm1, ymmword ptr [rax]
+                vmovups ymmword ptr [rcx], ymm1
+                vmovups ymm1, ymmword ptr [rax+20h]
+                vmovups ymmword ptr [rcx+20h], ymm1
+                vmovups ymm1, ymmword ptr [rax+40h]
+                vmovups ymmword ptr [rcx+40h], ymm1
+                vmovups xmm1, xmmword ptr [rax+60h]
+                vmovups xmmword ptr [rcx+60h], xmm1
+              }
+              _RCX += 16;
+              __asm
+              {
+                vmovups xmm0, xmmword ptr [rax+70h]
+                vmovups xmmword ptr [rcx-10h], xmm0
+              }
+              _RAX += 16;
+              --v123;
+            }
+            while ( v123 );
+            do
+            {
+              if ( !*v120 )
+                break;
+              v118 = (unsigned int)(((_DWORD)v118 << 8) ^ *((_DWORD *)&v184 + (unsigned __int8)(*v120++ ^ BYTE3(v118))));
+              --v119;
+            }
+            while ( v119 );
+            __asm { vzeroupper }
+            *(double *)&_XMM0 = sub_1405DC140(*(_QWORD *)&v183[0], v118);
+            __asm { vmulss  xmm7, xmm7, xmm0 }
+          }
+          __asm { vucomiss xmm7, xmm6 }
+          if ( !v117 && v116 )
+            v179 = 1;
+          LOBYTE(CachedWeaponArtDefsOnlineHashRegistry) = _R12;
+          __asm
+          {
+            vxorps  xmm0, xmm0, xmm0
+            vcvtsi2ss xmm0, xmm0, rax
+            vmulss  xmm1, xmm0, xmm7
+            vaddss  xmm2, xmm1, xmm8
+            vcvttss2si r12, xmm2
+          }
+        }
+      }
+    }
+  }
+LABEL_36:
+  if ( v177 )
+  {
+    v58 = 0;
+    v59 = *(_QWORD *)(_R15 + 256);
+    if ( v59 )
+    {
+      v60 = *(_DWORD *)(_R15 + 264);
+      if ( v60 )
+      {
+        v61 = *(_QWORD *)(v59 + 8);
+        if ( v61 )
+        {
+          if ( *(_DWORD *)(v61 + 188) == v60 )
+          {
+            v58 = v61;
+            *(_BYTE *)(v61 + 114) = 1;
+          }
+        }
+      }
+    }
+    CachedWeaponArtDefsOnlineHashRegistry = FindNetPlayerTrackerByRuntimePlayerObjectAndPlayerHash(
+                                              &qword_143DD70C0,
+                                              v58);
+    v63 = CachedWeaponArtDefsOnlineHashRegistry;
+    *(_QWORD *)&v183[0] = CachedWeaponArtDefsOnlineHashRegistry;
+    if ( CachedWeaponArtDefsOnlineHashRegistry )
+    {
+      if ( v57 )
+      {
+        LOBYTE(CachedWeaponArtDefsOnlineHashRegistry) = sub_140A0EB80(
+                                                          v62,
+                                                          *(unsigned int *)(v57 + 648),
+                                                          CachedWeaponArtDefsOnlineHashRegistry);
+        __asm
+        {
+          vxorps  xmm1, xmm1, xmm1
+          vcvtsi2ss xmm1, xmm1, rcx
+          vmulss  xmm0, xmm1, xmm0
+          vaddss  xmm2, xmm0, xmm8
+          vcvttss2si r12, xmm2
+        }
+        v63 = *(_QWORD *)&v183[0];
+      }
+      if ( a2 )
+      {
+        CachedWeaponArtDefsOnlineHashRegistry = *(_QWORD *)(*(_QWORD *)(a2 + 48)
+                                                          + 8 * ((unsigned __int64)(unsigned int)dword_143D43FA4 >> 6)
+                                                          + 32);
+        if ( _bittest64(&CachedWeaponArtDefsOnlineHashRegistry, dword_143D43FA4 & 0x3F) )
+        {
+          if ( (*(_BYTE *)(a2 + 1404) & 4) != 0 )
+          {
+            v68 = 0;
+            v69 = 31;
+            v70 = "deal-sidekick-damage-projectile";
+            _RAX = &v184;
+            _RCX = qword_142BEA360;
+            v73 = 8;
+            do
+            {
+              __asm
+              {
+                vmovups ymm0, ymmword ptr [rcx]
+                vmovups ymmword ptr [rax], ymm0
+                vmovups ymm0, ymmword ptr [rcx+20h]
+                vmovups ymmword ptr [rax+20h], ymm0
+                vmovups ymm0, ymmword ptr [rcx+40h]
+                vmovups ymmword ptr [rax+40h], ymm0
+                vmovups xmm0, xmmword ptr [rcx+60h]
+                vmovups xmmword ptr [rax+60h], xmm0
+              }
+              _RAX += 16;
+              __asm
+              {
+                vmovups xmm1, xmmword ptr [rcx+70h]
+                vmovups xmmword ptr [rax-10h], xmm1
+              }
+              _RCX += 16;
+              --v73;
+            }
+            while ( v73 );
+            do
+            {
+              if ( !*v70 )
+                break;
+              v68 = (unsigned int)(((_DWORD)v68 << 8) ^ *((_DWORD *)&v184 + (unsigned __int8)(*v70++ ^ BYTE3(v68))));
+              --v69;
+            }
+            while ( v69 );
+            __asm { vzeroupper }
+            sub_140A0E980(&xmmword_1430558E0, v68, v63, 0);
+            LOBYTE(CachedWeaponArtDefsOnlineHashRegistry) = _R12;
+            __asm
+            {
+              vxorps  xmm1, xmm1, xmm1
+              vcvtsi2ss xmm1, xmm1, rax
+              vmulss  xmm0, xmm1, xmm0
+              vaddss  xmm2, xmm0, xmm8
+              vcvttss2si r12, xmm2
+            }
+          }
+        }
+      }
+    }
+  }
+  v14 = v177;
+LABEL_54:
+  if ( (_DWORD)_R12 || !v182[0] )
+  {
+    if ( byte_1437E7A06 )
+    {
+      if ( v14 )
+      {
+        _RAX = a5;
+        if ( *(_DWORD *)(a5 + 4) )
+          __asm { vcvttss2si r12, dword ptr [rax+50h] }
+      }
+    }
+    v85 = 0;
+    v86 = "AimAtPos";
+    _RAX = &v184;
+    v88 = 8;
+    do
+    {
+      __asm
+      {
+        vmovups ymm0, ymmword ptr [rsi]
+        vmovups ymmword ptr [rax], ymm0
+        vmovups ymm0, ymmword ptr [rsi+20h]
+        vmovups ymmword ptr [rax+20h], ymm0
+        vmovups ymm0, ymmword ptr [rsi+40h]
+        vmovups ymmword ptr [rax+40h], ymm0
+        vmovups xmm0, xmmword ptr [rsi+60h]
+        vmovups xmmword ptr [rax+60h], xmm0
+      }
+      _RAX += 16;
+      __asm
+      {
+        vmovups xmm1, xmmword ptr [rsi+70h]
+        vmovups xmmword ptr [rax-10h], xmm1
+      }
+      _RSI += 16;
+      --v88;
+    }
+    while ( v88 );
+    do
+    {
+      if ( !*v86 )
+        break;
+      v85 = (unsigned int)(((_DWORD)v85 << 8) ^ *((_DWORD *)&v184 + (unsigned __int8)(*v86++ ^ BYTE3(v85))));
+      --v50;
+    }
+    while ( v50 );
+    __asm { vzeroupper }
+    (*(void (__fastcall **)(unsigned __int64, _OWORD *, __int64))(*(_QWORD *)a2 + 728LL))(a2, v183, v85);
+    AttackInfoConstructor((__int64)&v184, 0);
+    v184 = &ProjectileAttackInfo::`vftable';
+    v204.m256_f32[0] = NAN;
+    *(_QWORD *)&v204.m256_f32[1] = 2144128204;
+    v204.m256_f32[3] = 0.0;
+    __asm
+    {
+      vxorps  xmm1, xmm1, xmm1
+      vmovups xmmword ptr [rsp+0A08h+var_F8+10h], xmm1
+      vmovups xmm0, cs:xmmword_1428805D0
+      vmovups xmmword ptr [rsp+0A08h+var_D8], xmm0
+      vmovups xmmword ptr [rsp+0A08h+var_D8+10h], xmm1
+      vmovups [rsp+0A08h+var_B8], xmm0
+    }
+    v207 = 1;
+    v208 = 0;
+    v187 = 0;
+    _RSI = *(_QWORD *)(_R15 + 424);
+    v97 = *(_BYTE *)(_RSI + 116);
+    __asm
+    {
+      vmovups xmm0, xmmword ptr [r15+100h]
+      vmovups [rsp+0A08h+var_950], xmm0
+    }
+    v99 = v178;
+    v207 = 3;
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [r15+130h]
+      vmovups [rsp+0A08h+var_F8], ymm0
+      vmovups ymm1, ymmword ptr [r15+150h]
+      vmovups [rsp+0A08h+var_D8], ymm1
+      vmovups xmm0, xmmword ptr [r15+170h]
+      vmovups [rsp+0A08h+var_B8], xmm0
+    }
+    v195 = *(_DWORD *)(_R15 + 1216);
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [r15+4D0h]
+      vmovups [rsp+0A08h+var_168], ymm0
+      vmovups ymm1, ymmword ptr [r15+4F0h]
+      vmovups [rsp+0A08h+var_148], ymm1
+      vmovups xmm0, xmmword ptr [r15+510h]
+      vmovups [rsp+0A08h+var_128], xmm0
+    }
+    v199 = *(_DWORD *)(_R15 + 1312);
+    v200 = *(_BYTE *)(_R15 + 1316);
+    v201 = *(_BYTE *)(_R15 + 1317);
+    v106 = v178 & 1
+         | (*(_BYTE *)(_R15 + 432) >> 1) & 0xC
+         | (2 * (v97 & 1 | (32 * (v178 & 1 | *(_BYTE *)(_R15 + 1162) & 0xFE))));
+    v208 = v106;
+    v192 = (v179 << 6) | v192 & 0xBF;
+    v107 = *(_QWORD *)(*(_QWORD *)(a2 + 48) + 8 * ((unsigned __int64)(unsigned int)dword_143D43FA4 >> 6) + 32);
+    if ( _bittest64(&v107, dword_143D43FA4 & 0x3F) )
+    {
+      __asm { vzeroupper }
+      v106 |= 32 * (unsigned __int8)sub_14043B680(a2, v181[0], a7);
+      v208 = v106;
+    }
+    __asm
+    {
+      vxorps  xmm7, xmm7, xmm7
+      vxorps  xmm1, xmm1, xmm1
+    }
+    if ( v177 )
+    {
+      __asm
+      {
+        vcvtsi2ss xmm7, xmm7, rax
+        vmulss  xmm0, xmm7, dword ptr [rsi+0ACh]
+        vdivss  xmm2, xmm0, xmm10
+      }
+      __asm
+      {
+        vcvtsi2ss xmm1, xmm1, dword ptr [rax+0D0h]
+        vdivss  xmm0, xmm2, xmm1
+        vmovss  [rsp+0A08h+var_188], xmm0
+      }
+    }
+    else
+    {
+      __asm
+      {
+        vcvtsi2ss xmm1, xmm1, rax
+        vmovss  xmm0, dword ptr [rsi+0ACh]
+        vdivss  xmm1, xmm0, xmm1
+        vmovss  [rsp+0A08h+var_188], xmm1
+      }
+      __asm { vcvtsi2ss xmm7, xmm7, rax }
+    }
+    __asm { vmovd   xmm1, edi }
+    _EAX = v177;
+    __asm
+    {
+      vmovd   xmm0, eax
+      vpcmpeqd xmm3, xmm0, xmm1
+      vmovss  xmm2, cs:dword_1437E8330
+      vmovss  xmm1, cs:dword_142BE91F4
+      vblendvps xmm0, xmm1, xmm2, xmm3
+      vmulss  xmm2, xmm0, dword ptr [rsi+0B0h]
+      vmovss  [rsp+0A08h+var_180], xmm2
+    }
+    v186 = *(_DWORD *)(_R15 + 436);
+    v208 = (v106 ^ (8 * *(_BYTE *)(_R15 + 1161))) & 0x10 ^ v106;
+    __asm { vzeroupper }
+    sub_1414F1420(&v188, a5);
+    __asm { vmovss  [rsp+0A08h+var_938], xmm7 }
+    _RAX = a4;
+    __asm
+    {
+      vmovss  xmm0, dword ptr [rax+58h]
+      vmovss  [rsp+0A08h+var_1A8], xmm0
+    }
+    if ( v182[0] )
+    {
+      v144 = v189;
+      v145 = v189;
+      if ( !v178 )
+      {
+        v146 = 0;
+        if ( !v189 )
+          goto LABEL_92;
+        v147 = v190;
+        do
+        {
+          v145 = v146 + 1;
+          if ( (unsigned __int8)sub_1414EFDE0(v147) )
+            v145 = v146;
+          v147 += 5;
+          v146 = v145;
+          --v144;
+        }
+        while ( v144 );
+        LODWORD(v144) = v189;
+        if ( !v145 )
+LABEL_92:
+          v145 = v144;
+        v99 = v178;
+      }
+      __asm
+      {
+        vxorps  xmm0, xmm0, xmm0
+        vcvtsi2ss xmm0, xmm0, ebx
+        vdivss  xmm7, xmm7, xmm0
+      }
+      if ( (_DWORD)v144 )
+      {
+        do
+        {
+          if ( v99 || v145 == (_DWORD)v144 || !(unsigned __int8)sub_1414EFDE0(&v190[5 * _EDI]) )
+          {
+            __asm { vcvttss2si rcx, xmm6 }
+            __asm
+            {
+              vxorps  xmm0, xmm0, xmm0
+              vcvtsi2ss xmm0, xmm0, rcx
+              vsubss  xmm1, xmm7, xmm0
+              vaddss  xmm6, xmm6, xmm1
+              vcvttss2si rcx, xmm6
+            }
+            __asm
+            {
+              vxorps  xmm0, xmm0, xmm0
+              vcvtsi2ss xmm0, xmm0, rcx
+            }
+            _RCX = 10LL * _EDI;
+            __asm { vmovss  [rsp+rcx*8+0A08h+var_8E8], xmm0 }
+            LODWORD(v144) = v189;
+          }
+          ++_EDI;
+        }
+        while ( _EDI < (unsigned int)v144 );
+      }
+    }
+    else
+    {
+      __asm
+      {
+        vxorps  xmm0, xmm0, xmm0
+        vcvtsi2ss xmm0, xmm0, rcx
+        vdivss  xmm1, xmm7, xmm0
+      }
+      if ( v189 )
+      {
+        __asm { vmovaps xmm0, xmm6 }
+        do
+        {
+          __asm
+          {
+            vsubss  xmm0, xmm1, xmm0
+            vaddss  xmm6, xmm6, xmm0
+            vcvttss2si rcx, xmm6
+          }
+          __asm
+          {
+            vxorps  xmm0, xmm0, xmm0
+            vcvtsi2ss xmm0, xmm0, rcx
+          }
+          _RCX = 10LL * _EDI;
+          __asm { vmovss  [rsp+rcx*8+0A08h+var_8E8], xmm0 }
+          ++_EDI;
+        }
+        while ( _EDI < v189 );
+      }
+    }
+    if ( HIBYTE(dword_143E07470) )
+    {
+      v167 = *(_QWORD *)(*(_QWORD *)(a2 + 48) + 8 * ((unsigned __int64)(unsigned int)dword_143ECC224 >> 6) + 32);
+      if ( _bittest64(&v167, dword_143ECC224 & 0x3F) )
+      {
+        sub_140FD18E0(v181, a2, &v184);
+        v116 = (*(__int64 (__fastcall **)(unsigned __int64))(*(_QWORD *)a2 + 2480LL))(a2) == 0;
+        v168 = 0x8000;
+        if ( v116 )
+          v168 = *(_DWORD *)(a2 + 5800);
+        v202 = v168;
+        v203 = sub_140FD1AA0(a2, &v184, v181);
+      }
+    }
+    LOBYTE(CachedWeaponArtDefsOnlineHashRegistry) = sub_141526AA0(_R15, a2, (__int64)&v184, 0);
+  }
+  _R11 = &v209;
+  __asm
+  {
+    vmovaps xmm6, xmmword ptr [r11-10h]
+    vmovaps xmm7, xmmword ptr [r11-20h]
+    vmovaps xmm8, xmmword ptr [r11-30h]
+    vmovaps xmm9, xmmword ptr [r11-40h]
+    vmovaps xmm10, xmmword ptr [r11-50h]
+  }
+  return CachedWeaponArtDefsOnlineHashRegistry;
+}
+
+=== 0x1414F1420: sub_1414F1420 [0x1414F1420..0x1414F18E5] ===
+char *__fastcall sub_1414F1420(char *a1, char *a2)
+{
+  __int64 v4; // r10
+
+  _R8 = a1 + 32;
+  *(_DWORD *)a1 = *(_DWORD *)a2;
+  _R9 = a2 - a1;
+  *((_DWORD *)a1 + 1) = *((_DWORD *)a2 + 1);
+  v4 = 2;
+  do
+  {
+    __asm
+    {
+      vmovups xmm0, xmmword ptr [r8+r9-10h]
+      vmovups xmmword ptr [r8-10h], xmm0
+      vmovups xmm1, xmmword ptr [r8+r9]
+      vmovups xmmword ptr [r8], xmm1
+      vmovups xmm0, xmmword ptr [r8+r9+10h]
+      vmovups xmmword ptr [r8+10h], xmm0
+    }
+    *((_QWORD *)_R8 + 4) = *(_QWORD *)((char *)_R8 + _R9 + 32);
+    *((_QWORD *)_R8 + 5) = *(_QWORD *)((char *)_R8 + _R9 + 40);
+    _R8[12] = *(_DWORD *)((char *)_R8 + _R9 + 48);
+    __asm
+    {
+      vmovups xmm0, xmmword ptr [r8+r9+40h]
+      vmovups xmmword ptr [r8+40h], xmm0
+      vmovups xmm1, xmmword ptr [r8+r9+50h]
+      vmovups xmmword ptr [r8+50h], xmm1
+      vmovups xmm0, xmmword ptr [r8+r9+60h]
+      vmovups xmmword ptr [r8+60h], xmm0
+    }
+    *((_QWORD *)_R8 + 14) = *(_QWORD *)((char *)_R8 + _R9 + 112);
+    *((_QWORD *)_R8 + 15) = *(_QWORD *)((char *)_R8 + _R9 + 120);
+    _R8[32] = *(_DWORD *)((char *)_R8 + _R9 + 128);
+    __asm
+    {
+      vmovups xmm0, xmmword ptr [r8+r9+90h]
+      vmovups xmmword ptr [r8+90h], xmm0
+      vmovups xmm1, xmmword ptr [r8+r9+0A0h]
+      vmovups xmmword ptr [r8+0A0h], xmm1
+      vmovups xmm0, xmmword ptr [r8+r9+0B0h]
+      vmovups xmmword ptr [r8+0B0h], xmm0
+    }
+    *((_QWORD *)_R8 + 24) = *(_QWORD *)((char *)_R8 + _R9 + 192);
+    *((_QWORD *)_R8 + 25) = *(_QWORD *)((char *)_R8 + _R9 + 200);
+    _R8[52] = *(_DWORD *)((char *)_R8 + _R9 + 208);
+    __asm
+    {
+      vmovups xmm0, xmmword ptr [r8+r9+0E0h]
+      vmovups xmmword ptr [r8+0E0h], xmm0
+      vmovups xmm1, xmmword ptr [r9+r8+0F0h]
+      vmovups xmmword ptr [r8+0F0h], xmm1
+      vmovups xmm0, xmmword ptr [r9+r8+100h]
+      vmovups xmmword ptr [r8+100h], xmm0
+    }
+    *((_QWORD *)_R8 + 34) = *(_QWORD *)((char *)_R8 + _R9 + 272);
+    *((_QWORD *)_R8 + 35) = *(_QWORD *)((char *)_R8 + _R9 + 280);
+    _R8[72] = *(_DWORD *)((char *)_R8 + _R9 + 288);
+    __asm
+    {
+      vmovups xmm0, xmmword ptr [r8+r9+130h]
+      vmovups xmmword ptr [r8+130h], xmm0
+      vmovups xmm1, xmmword ptr [r8+r9+140h]
+      vmovups xmmword ptr [r8+140h], xmm1
+      vmovups xmm0, xmmword ptr [r8+r9+150h]
+      vmovups xmmword ptr [r8+150h], xmm0
+    }
+    *((_QWORD *)_R8 + 44) = *(_QWORD *)((char *)_R8 + _R9 + 352);
+    *((_QWORD *)_R8 + 45) = *(_QWORD *)((char *)_R8 + _R9 + 360);
+    _R8[92] = *(_DWORD *)((char *)_R8 + _R9 + 368);
+    __asm
+    {
+      vmovups xmm0, xmmword ptr [r8+r9+180h]
+      vmovups xmmword ptr [r8+180h], xmm0
+      vmovups xmm1, xmmword ptr [r8+r9+190h]
+      vmovups xmmword ptr [r8+190h], xmm1
+      vmovups xmm0, xmmword ptr [r8+r9+1A0h]
+      vmovups xmmword ptr [r8+1A0h], xmm0
+    }
+    *((_QWORD *)_R8 + 54) = *(_QWORD *)((char *)_R8 + _R9 + 432);
+    *((_QWORD *)_R8 + 55) = *(_QWORD *)((char *)_R8 + _R9 + 440);
+    _R8[112] = *(_DWORD *)((char *)_R8 + _R9 + 448);
+    __asm
+    {
+      vmovups xmm0, xmmword ptr [r8+r9+1D0h]
+      vmovups xmmword ptr [r8+1D0h], xmm0
+      vmovups xmm1, xmmword ptr [r8+r9+1E0h]
+      vmovups xmmword ptr [r8+1E0h], xmm1
+      vmovups xmm0, xmmword ptr [r8+r9+1F0h]
+      vmovups xmmword ptr [r8+1F0h], xmm0
+    }
+    *((_QWORD *)_R8 + 64) = *(_QWORD *)((char *)_R8 + _R9 + 512);
+    *((_QWORD *)_R8 + 65) = *(_QWORD *)((char *)_R8 + _R9 + 520);
+    _R8[132] = *(_DWORD *)((char *)_R8 + _R9 + 528);
+    __asm
+    {
+      vmovups xmm0, xmmword ptr [r9+r8+220h]
+      vmovups xmmword ptr [r8+220h], xmm0
+      vmovups xmm1, xmmword ptr [r8+r9+230h]
+      vmovups xmmword ptr [r8+230h], xmm1
+      vmovups xmm0, xmmword ptr [r8+r9+240h]
+      vmovups xmmword ptr [r8+240h], xmm0
+    }
+    *((_QWORD *)_R8 + 74) = *(_QWORD *)((char *)_R8 + _R9 + 592);
+    *((_QWORD *)_R8 + 75) = *(_QWORD *)((char *)_R8 + _R9 + 600);
+    _R8[152] = *(_DWORD *)((char *)_R8 + _R9 + 608);
+    __asm
+    {
+      vmovups xmm0, xmmword ptr [r9+r8+270h]
+      vmovups xmmword ptr [r8+270h], xmm0
+      vmovups xmm1, xmmword ptr [r8+r9+280h]
+      vmovups xmmword ptr [r8+280h], xmm1
+      vmovups xmm0, xmmword ptr [r8+r9+290h]
+      vmovups xmmword ptr [r8+290h], xmm0
+    }
+    *((_QWORD *)_R8 + 84) = *(_QWORD *)((char *)_R8 + _R9 + 672);
+    *((_QWORD *)_R8 + 85) = *(_QWORD *)((char *)_R8 + _R9 + 680);
+    _R8[172] = *(_DWORD *)((char *)_R8 + _R9 + 688);
+    __asm
+    {
+      vmovups xmm0, xmmword ptr [r9+r8+2C0h]
+      vmovups xmmword ptr [r8+2C0h], xmm0
+      vmovups xmm1, xmmword ptr [r9+r8+2D0h]
+      vmovups xmmword ptr [r8+2D0h], xmm1
+      vmovups xmm0, xmmword ptr [r9+r8+2E0h]
+      vmovups xmmword ptr [r8+2E0h], xmm0
+    }
+    *((_QWORD *)_R8 + 94) = *(_QWORD *)((char *)_R8 + _R9 + 752);
+    *((_QWORD *)_R8 + 95) = *(_QWORD *)((char *)_R8 + _R9 + 760);
+    _R8[192] = *(_DWORD *)((char *)_R8 + _R9 + 768);
+    __asm
+    {
+      vmovups xmm0, xmmword ptr [r9+r8+310h]
+      vmovups xmmword ptr [r8+310h], xmm0
+      vmovups xmm1, xmmword ptr [r8+r9+320h]
+      vmovups xmmword ptr [r8+320h], xmm1
+      vmovups xmm0, xmmword ptr [r8+r9+330h]
+      vmovups xmmword ptr [r8+330h], xmm0
+    }
+    *((_QWORD *)_R8 + 104) = *(_QWORD *)((char *)_R8 + _R9 + 832);
+    *((_QWORD *)_R8 + 105) = *(_QWORD *)((char *)_R8 + _R9 + 840);
+    _R8[212] = *(_DWORD *)((char *)_R8 + _R9 + 848);
+    __asm
+    {
+      vmovups xmm0, xmmword ptr [r9+r8+360h]
+      vmovups xmmword ptr [r8+360h], xmm0
+      vmovups xmm1, xmmword ptr [r8+r9+370h]
+      vmovups xmmword ptr [r8+370h], xmm1
+      vmovups xmm0, xmmword ptr [r8+r9+380h]
+      vmovups xmmword ptr [r8+380h], xmm0
+    }
+    *((_QWORD *)_R8 + 114) = *(_QWORD *)((char *)_R8 + _R9 + 912);
+    *((_QWORD *)_R8 + 115) = *(_QWORD *)((char *)_R8 + _R9 + 920);
+    _R8[232] = *(_DWORD *)((char *)_R8 + _R9 + 928);
+    _R8 += 240;
+    --v4;
+  }
+  while ( v4 );
+  *((_DWORD *)a1 + 484) = *((_DWORD *)a2 + 484);
+  return a1;
+}
+

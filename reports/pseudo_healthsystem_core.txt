@@ -1,0 +1,263 @@
+=== 0x141FCAE40: sub_141FCAE40 [0x141FCAE40..0x141FCAEAB] ===
+void __fastcall sub_141FCAE40(__int64 a1, int a2)
+{
+  bool v2; // zf
+  __int64 v5; // rax
+  unsigned int v6; // r8d
+  __int64 v7; // rdx
+  __int64 v8; // rax
+
+  v2 = *(_QWORD *)(a1 + 88) == 0;
+  *(_DWORD *)(a1 + 56) = a2;
+  if ( !v2 )
+  {
+    v5 = (*(__int64 (__fastcall **)(__int64))(*(_QWORD *)a1 + 440LL))(a1);
+    v6 = *(_DWORD *)(a1 + 96);
+    v7 = *(_QWORD *)(a1 + 88);
+    v8 = *(_QWORD *)(v5 + 16);
+    if ( *(_QWORD *)(v7 + 16LL * v6 + 8) != v8 )
+    {
+      *(_DWORD *)(a1 + 96) = ((_BYTE)v6 + 1) & 0xF;
+      v6 = ((_BYTE)v6 + 1) & 0xF;
+    }
+    *(_DWORD *)(v7 + 16LL * v6) = a2;
+    *(_QWORD *)(*(_QWORD *)(a1 + 88) + 16LL * *(unsigned int *)(a1 + 96) + 8) = v8;
+  }
+}
+
+=== 0x141FCA840: sub_141FCA840 [0x141FCA840..0x141FCA8BC] ===
+__int64 sub_141FCA840()
+{
+  __int64 v1; // rcx
+  __int64 v2; // rax
+
+  if ( *(_BYTE *)(qword_143FE1080 + 179) )
+    return g_LocalPlayerInputManager_Ptr + 768;
+  if ( !*((_QWORD *)FlsGetValue(dwFlsIndex) + 18) )
+    return *(_QWORD *)(*((_QWORD *)&xmmword_146467200 + 1) + 224LL);
+  v1 = *((_QWORD *)FlsGetValue(dwFlsIndex) + 19);
+  v2 = *((_QWORD *)&xmmword_146467200 + 1);
+  if ( v1 )
+    v2 = v1;
+  return *(_QWORD *)(v2 + 224);
+}
+
+=== 0x141FCB540: sub_141FCB540 [0x141FCB540..0x141FCB544] ===
+void __fastcall sub_141FCB540(__int64 a1, int a2)
+{
+  *(_DWORD *)(a1 + 76) = a2;
+}
+
+=== 0x141FCB550: sub_141FCB550 [0x141FCB550..0x141FCB562] ===
+__int64 __fastcall sub_141FCB550(unsigned int *a1)
+{
+  __int64 result; // rax
+
+  result = a1[19];
+  if ( (int)result < 0 )
+    return (*(__int64 (__fastcall **)(unsigned int *))(*(_QWORD *)a1 + 192LL))(a1);
+  return result;
+}
+
+=== 0x141FCB570: sub_141FCB570 [0x141FCB570..0x141FCB5DC] ===
+// local variable allocation has failed, the output may be wrong!
+__m128 __fastcall sub_141FCB570(__int64 a1, double _XMM1_8)
+{
+  char v8; // cf
+  char v9; // zf
+  __m128 result; // xmm0
+
+  *(double *)&_XMM0 = (*(double (__fastcall **)(__int64))(*(_QWORD *)a1 + 192LL))(a1);
+  __asm
+  {
+    vxorps  xmm0, xmm0, xmm0
+    vcvtsi2ss xmm0, xmm0, eax
+    vxorps  xmm1, xmm1, xmm1
+    vcomiss xmm0, xmm1
+  }
+  if ( v8 | v9 )
+  {
+    __asm { vxorps  xmm0, xmm0, xmm0 }
+  }
+  else
+  {
+    __asm { vmovaps [rsp+38h+var_18], xmm6 }
+    (*(void (__fastcall **)(__int64))(*(_QWORD *)a1 + 184LL))(a1);
+    __asm
+    {
+      vxorps  xmm6, xmm6, xmm6
+      vcvtsi2ss xmm6, xmm6, eax
+    }
+    *(double *)&_XMM0 = (*(double (__fastcall **)(__int64))(*(_QWORD *)a1 + 192LL))(a1);
+    __asm
+    {
+      vxorps  xmm0, xmm0, xmm0
+      vcvtsi2ss xmm0, xmm0, eax
+      vdivss  xmm0, xmm6, xmm0
+      vmovaps xmm6, [rsp+38h+var_18]
+    }
+  }
+  return result;
+}
+
+=== 0x141FCB5E0: sub_141FCB5E0 [0x141FCB5E0..0x141FCB68D] ===
+__int64 __fastcall sub_141FCB5E0(_QWORD *a1)
+{
+  __int64 result; // rax
+  char v10; // cf
+  char v11; // zf
+
+  _RBX = a1;
+  __asm
+  {
+    vxorps  xmm6, xmm6, xmm6
+    vcvtsi2ss xmm6, xmm6, dword ptr [rcx+38h]
+  }
+  result = (*(__int64 (__fastcall **)(_QWORD *))(*a1 + 192LL))(a1);
+  __asm
+  {
+    vxorps  xmm7, xmm7, xmm7
+    vcvtsi2ss xmm7, xmm7, eax
+    vcomiss xmm7, xmm6
+  }
+  if ( !(v10 | v11) )
+  {
+    __asm
+    {
+      vmovaps [rsp+58h+var_38], xmm8
+      vxorps  xmm8, xmm8, xmm8
+      vcomiss xmm6, xmm8
+    }
+    __asm
+    {
+      vmovss  xmm0, dword ptr [rbx+34h]
+      vcomiss xmm0, xmm8
+    }
+    result = (*(__int64 (__fastcall **)(_QWORD *))(*_RBX + 440LL))(_RBX);
+    __asm { vxorps  xmm0, xmm0, xmm0 }
+    __asm
+    {
+      vcvtsi2ss xmm0, xmm0, rcx
+      vmulss  xmm1, xmm0, cs:dword_142BE8AE8
+      vsubss  xmm2, xmm1, dword ptr [rbx+30h]
+      vcomiss xmm2, xmm8
+    }
+    if ( *(_QWORD *)(result + 16) > _RBX[4] )
+    {
+      __asm
+      {
+        vmulss  xmm0, xmm2, dword ptr [rbx+34h]
+        vaddss  xmm1, xmm0, xmm6
+        vminss  xmm6, xmm1, xmm7
+      }
+    }
+    __asm { vmovaps xmm8, [rsp+58h+var_38] }
+  }
+  __asm
+  {
+    vdivss  xmm0, xmm6, xmm7
+    vmovaps xmm6, [rsp+58h+var_18]
+    vmovaps xmm7, [rsp+58h+var_28]
+  }
+  return result;
+}
+
+=== 0x141FCB690: sub_141FCB690 [0x141FCB690..0x141FCB69F] ===
+// local variable allocation has failed, the output may be wrong!
+void __fastcall sub_141FCB690(__int64 _RCX, __int64 _RDX, double _XMM2_8)
+{
+  __asm
+  {
+    vmovss  dword ptr [rcx+64h], xmm2
+    vmovups xmm0, xmmword ptr [rdx]
+    vmovups xmmword ptr [rcx+10h], xmm0
+  }
+}
+
+=== 0x141FCB920: sub_141FCB920 [0x141FCB920..0x141FCB973] ===
+// local variable allocation has failed, the output may be wrong!
+__int64 __fastcall sub_141FCB920(__int64 *a1, double _XMM1_8)
+{
+  __int64 v5; // rax
+  __int64 result; // rax
+
+  _RBX = a1;
+  __asm { vmovaps xmm6, xmm1 }
+  *(double *)&_XMM0 = (*(double (__fastcall **)(__int64 *))(*a1 + 376))(a1);
+  v5 = *_RBX;
+  __asm
+  {
+    vsubss  xmm2, xmm0, xmm6
+    vxorps  xmm1, xmm1, xmm1
+    vmaxss  xmm2, xmm1, xmm2
+    vmovss  dword ptr [rbx+0A0h], xmm2
+  }
+  result = (*(__int64 (__fastcall **)(__int64 *))(v5 + 440))(_RBX);
+  __asm { vmovaps xmm6, [rsp+38h+var_18] }
+  _RBX[19] = *(_QWORD *)(result + 16);
+  return result;
+}
+
+=== 0x141FCB980: sub_141FCB980 [0x141FCB980..0x141FCB9B7] ===
+__int64 __fastcall sub_141FCB980(__int64 *a1)
+{
+  __int64 v3; // rax
+  __int64 result; // rax
+
+  _RBX = a1;
+  *(double *)&_XMM0 = (*(double (__fastcall **)(__int64 *))(*a1 + 384))(a1);
+  v3 = *_RBX;
+  __asm { vmovss  dword ptr [rbx+0A0h], xmm0 }
+  result = (*(__int64 (__fastcall **)(__int64 *))(v3 + 440))(_RBX);
+  _RBX[19] = *(_QWORD *)(result + 16);
+  return result;
+}
+
+=== 0x141FCB9D0: sub_141FCB9D0 [0x141FCB9D0..0x141FCBA2D] ===
+// local variable allocation has failed, the output may be wrong!
+__int64 __fastcall sub_141FCB9D0(_QWORD *a1, __int64 a2, double _XMM2_8)
+{
+  unsigned __int64 v5; // rbx
+  __int64 result; // rax
+
+  v5 = a1[4];
+  result = (*(__int64 (__fastcall **)(_QWORD *))(*a1 + 440LL))(a1);
+  __asm
+  {
+    vxorps  xmm0, xmm0, xmm0
+    vxorps  xmm2, xmm2, xmm2
+  }
+  __asm
+  {
+    vcvtsi2ss xmm0, xmm0, rdx
+    vmulss  xmm1, xmm0, cs:dword_142BE8AE8
+    vsubss  xmm3, xmm1, dword ptr [rdi+30h]
+    vcomiss xmm2, xmm3
+  }
+  if ( *(_QWORD *)(result + 16) > v5 )
+  {
+    __asm
+    {
+      vmulss  xmm0, xmm3, cs:dword_142BE9EC4
+      vcvttss2si rax, xmm0
+    }
+    a1[4] += result;
+  }
+  return result;
+}
+
+=== 0x141FCBA30: sub_141FCBA30 [0x141FCBA30..0x141FCBA6D] ===
+__int64 __fastcall sub_141FCBA30(_QWORD *a1)
+{
+  __int64 v1; // rbx
+  unsigned int v3; // eax
+  __int64 result; // rax
+
+  v1 = *a1;
+  v3 = (*(__int64 (__fastcall **)(_QWORD *))(*a1 + 184LL))(a1);
+  (*(void (__fastcall **)(_QWORD *, _QWORD))(v1 + 104))(a1, v3);
+  result = (*(__int64 (__fastcall **)(_QWORD *))(*a1 + 440LL))(a1);
+  a1[4] = *(_QWORD *)(result + 16);
+  return result;
+}
+

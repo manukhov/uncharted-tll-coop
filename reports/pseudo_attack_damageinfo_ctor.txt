@@ -1,0 +1,202 @@
+=== 0x1402791C0: sub_1402791C0 [0x1402791C0..0x140279524] ===
+__int64 __fastcall sub_1402791C0(__int64 _RCX)
+{
+  *(_QWORD *)_RCX = 0;
+  __asm
+  {
+    vxorps  xmm0, xmm0, xmm0
+    vmovups ymmword ptr [rcx+10h], ymm0
+    vmovups xmmword ptr [rcx+30h], xmm0
+  }
+  *(_QWORD *)(_RCX + 64) = 0;
+  *(_QWORD *)(_RCX + 72) = 0;
+  *(_DWORD *)(_RCX + 80) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+60h], ymm0
+    vmovups xmmword ptr [rcx+80h], xmm0
+  }
+  *(_QWORD *)(_RCX + 144) = 0;
+  *(_QWORD *)(_RCX + 152) = 0;
+  *(_DWORD *)(_RCX + 160) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+0B0h], ymm0
+    vmovups xmmword ptr [rcx+0D0h], xmm0
+  }
+  *(_QWORD *)(_RCX + 224) = 0;
+  *(_QWORD *)(_RCX + 232) = 0;
+  *(_DWORD *)(_RCX + 240) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+100h], ymm0
+    vmovups xmmword ptr [rcx+120h], xmm0
+  }
+  *(_QWORD *)(_RCX + 304) = 0;
+  *(_QWORD *)(_RCX + 312) = 0;
+  *(_DWORD *)(_RCX + 320) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+150h], ymm0
+    vmovups xmmword ptr [rcx+170h], xmm0
+  }
+  *(_QWORD *)(_RCX + 384) = 0;
+  *(_QWORD *)(_RCX + 392) = 0;
+  *(_DWORD *)(_RCX + 400) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+1A0h], ymm0
+    vmovups xmmword ptr [rcx+1C0h], xmm0
+  }
+  *(_QWORD *)(_RCX + 464) = 0;
+  *(_QWORD *)(_RCX + 472) = 0;
+  *(_DWORD *)(_RCX + 480) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+1F0h], ymm0
+    vmovups xmmword ptr [rcx+210h], xmm0
+  }
+  *(_QWORD *)(_RCX + 544) = 0;
+  *(_QWORD *)(_RCX + 552) = 0;
+  *(_DWORD *)(_RCX + 560) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+240h], ymm0
+    vmovups xmmword ptr [rcx+260h], xmm0
+  }
+  *(_QWORD *)(_RCX + 624) = 0;
+  *(_QWORD *)(_RCX + 632) = 0;
+  *(_DWORD *)(_RCX + 640) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+290h], ymm0
+    vmovups xmmword ptr [rcx+2B0h], xmm0
+  }
+  *(_QWORD *)(_RCX + 704) = 0;
+  *(_QWORD *)(_RCX + 712) = 0;
+  *(_DWORD *)(_RCX + 720) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+2E0h], ymm0
+    vmovups xmmword ptr [rcx+300h], xmm0
+  }
+  *(_QWORD *)(_RCX + 784) = 0;
+  *(_QWORD *)(_RCX + 792) = 0;
+  *(_DWORD *)(_RCX + 800) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+330h], ymm0
+    vmovups xmmword ptr [rcx+350h], xmm0
+  }
+  *(_QWORD *)(_RCX + 864) = 0;
+  *(_QWORD *)(_RCX + 872) = 0;
+  *(_DWORD *)(_RCX + 880) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+380h], ymm0
+    vmovups xmmword ptr [rcx+3A0h], xmm0
+  }
+  *(_QWORD *)(_RCX + 944) = 0;
+  *(_QWORD *)(_RCX + 952) = 0;
+  *(_DWORD *)(_RCX + 960) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+3D0h], ymm0
+    vmovups xmmword ptr [rcx+3F0h], xmm0
+  }
+  *(_QWORD *)(_RCX + 1024) = 0;
+  *(_QWORD *)(_RCX + 1032) = 0;
+  *(_DWORD *)(_RCX + 1040) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+420h], ymm0
+    vmovups xmmword ptr [rcx+440h], xmm0
+  }
+  *(_QWORD *)(_RCX + 1104) = 0;
+  *(_QWORD *)(_RCX + 1112) = 0;
+  *(_DWORD *)(_RCX + 1120) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+470h], ymm0
+    vmovups xmmword ptr [rcx+490h], xmm0
+  }
+  *(_QWORD *)(_RCX + 1184) = 0;
+  *(_QWORD *)(_RCX + 1192) = 0;
+  *(_DWORD *)(_RCX + 1200) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+4C0h], ymm0
+    vmovups xmmword ptr [rcx+4E0h], xmm0
+  }
+  *(_QWORD *)(_RCX + 1264) = 0;
+  *(_QWORD *)(_RCX + 1272) = 0;
+  *(_DWORD *)(_RCX + 1280) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+510h], ymm0
+    vmovups xmmword ptr [rcx+530h], xmm0
+  }
+  *(_QWORD *)(_RCX + 1344) = 0;
+  *(_QWORD *)(_RCX + 1352) = 0;
+  *(_DWORD *)(_RCX + 1360) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+560h], ymm0
+    vmovups xmmword ptr [rcx+580h], xmm0
+  }
+  *(_QWORD *)(_RCX + 1424) = 0;
+  *(_QWORD *)(_RCX + 1432) = 0;
+  *(_DWORD *)(_RCX + 1440) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+5B0h], ymm0
+    vmovups xmmword ptr [rcx+5D0h], xmm0
+  }
+  *(_QWORD *)(_RCX + 1504) = 0;
+  *(_QWORD *)(_RCX + 1512) = 0;
+  *(_DWORD *)(_RCX + 1520) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+600h], ymm0
+    vmovups xmmword ptr [rcx+620h], xmm0
+  }
+  *(_QWORD *)(_RCX + 1584) = 0;
+  *(_QWORD *)(_RCX + 1592) = 0;
+  *(_DWORD *)(_RCX + 1600) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+650h], ymm0
+    vmovups xmmword ptr [rcx+670h], xmm0
+  }
+  *(_QWORD *)(_RCX + 1664) = 0;
+  *(_QWORD *)(_RCX + 1672) = 0;
+  *(_DWORD *)(_RCX + 1680) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+6A0h], ymm0
+    vmovups xmmword ptr [rcx+6C0h], xmm0
+  }
+  *(_QWORD *)(_RCX + 1744) = 0;
+  *(_QWORD *)(_RCX + 1752) = 0;
+  *(_DWORD *)(_RCX + 1760) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+6F0h], ymm0
+    vmovups xmmword ptr [rcx+710h], xmm0
+  }
+  *(_QWORD *)(_RCX + 1824) = 0;
+  *(_QWORD *)(_RCX + 1832) = 0;
+  *(_DWORD *)(_RCX + 1840) = 0;
+  __asm
+  {
+    vmovups ymmword ptr [rcx+740h], ymm0
+    vmovups xmmword ptr [rcx+760h], xmm0
+  }
+  *(_QWORD *)(_RCX + 1904) = 0;
+  *(_QWORD *)(_RCX + 1912) = 0;
+  *(_DWORD *)(_RCX + 1920) = 0;
+  *(_DWORD *)(_RCX + 1936) = 0;
+  __asm { vzeroupper }
+  return _RCX;
+}
+

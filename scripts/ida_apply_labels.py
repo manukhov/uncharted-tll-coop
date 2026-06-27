@@ -8,6 +8,100 @@ import idc
 
 
 FUNCTIONS = {
+    0x14027A270: (
+        "PublishAttackEventToTarget",
+        "Native high-level attack publisher. Accepts a polymorphic AttackInfo "
+        "object and a target character, builds the authored Attack event, "
+        "dispatches it through the target event path, and publishes the "
+        "Attack-broadcast state. This is the preferred damage relay entry.",
+    ),
+    0x14040E7C0: (
+        "NpcHandleAttackEvent",
+        "Npc Attack-event handler. Extracts AttackInfo from event+0x28, then "
+        "dispatches character virtual slot +0x1170 and performs the surrounding "
+        "hitmarker, last-hit, knockdown, kill, and notification logic.",
+    ),
+    0x140409F70: (
+        "CharacterApplyAttackInfo",
+        "Shared character virtual at vtable +0x1170 (slot 558). Applies a valid "
+        "AttackInfo to a character, calls NpcArmor::OnHealthDamage, updates "
+        "HealthSystem, and participates in knockdown/death decisions. Do not "
+        "call directly with a partial copied structure.",
+    ),
+    0x1403D7DF0: (
+        "NpcArmorOnHealthDamage",
+        "NpcArmor::OnHealthDamage(Npc*, AttackInfo*, float, float). Processes "
+        "armor/body-part damage and detach definitions after AttackInfo has "
+        "already been built by the upper attack path.",
+    ),
+    0x1402791C0: (
+        "DamageInfoConstructor",
+        "Initializes the complete 0x7A0-byte DamageInfo: total damage, point "
+        "count, and 24 zeroed points with stride 0x50.",
+    ),
+    0x1414F1420: (
+        "CopyDamageInfo",
+        "Copies a complete 0x7A0-byte DamageInfo including total damage, point "
+        "count, and all 24 damage points.",
+    ),
+    0x1402942A0: (
+        "GameArmorComputeDamage",
+        "Ordinary GameArmor damage calculation. Distributes AttackInfo+0x20 "
+        "over AttackInfo+0x24 points and preserves damage for points that do "
+        "not map to an armor piece.",
+    ),
+    0x140294610: (
+        "GameArmorComputeExplosionDamage",
+        "GameArmor explosion-damage calculation using the derived explosion "
+        "fields and armor-piece distances.",
+    ),
+    0x140294C30: (
+        "GameArmorFindPieceForDamagePoint",
+        "Maps a damage point's hit-object handle at +0x30/+0x34 to an armor "
+        "piece. Returns -1 for zero, stale, non-collision, or unmapped handles.",
+    ),
+    0x141F38A90: (
+        "GameArmorApplyDamageResults",
+        "Applies prepared armor-damage result entries to armor pieces.",
+    ),
+    0x14027A160: (
+        "AttackInfoConstructor",
+        "Constructs the common 0x860-byte AttackInfo base and initializes damage "
+        "points, source handle, type, flags, scalars, and auxiliary fields.",
+    ),
+    0x140279590: (
+        "AttackInfoCopyConstructor",
+        "Copies a complete common AttackInfo object, including the large damage "
+        "point block and fields through +0x858. Used by derived clone helpers.",
+    ),
+    0x140279540: (
+        "CloneAttackInfo",
+        "Virtual clone for the common AttackInfo type. Allocates 0x860 bytes and "
+        "calls AttackInfoCopyConstructor.",
+    ),
+    0x140279FB0: (
+        "DeleteAttackInfo",
+        "AttackInfo deleting destructor. Frees the complete 0x860-byte object "
+        "when flag bit 0 is set.",
+    ),
+    0x1403FB340: (
+        "CloneProjectileAttackInfo",
+        "Virtual clone for ProjectileAttackInfo. Allocates 0x8C0 bytes, copies "
+        "the AttackInfo base, then copies projectile fields through +0x8B4.",
+    ),
+    0x1403FB4E0: (
+        "DeleteProjectileAttackInfo",
+        "ProjectileAttackInfo deleting destructor used through virtual slot +0x0.",
+    ),
+    0x1408F89E0: (
+        "CloneCloseCombatAttackInfo",
+        "Virtual clone for CloseCombatAttackInfo. Allocates 0x880 bytes, copies "
+        "the AttackInfo base, then copies close-combat fields through +0x878.",
+    ),
+    0x1408F8B20: (
+        "DeleteCloseCombatAttackInfo",
+        "CloseCombatAttackInfo deleting destructor used through virtual slot +0x0.",
+    ),
     0x140048440: (
         "RegisterScriptCommand_SpawnPlayer",
         "Registers the retained script command entry for spawn-player. Stores a "

@@ -20588,3 +20588,341 @@ Body-swap to Nadine would require reconstructing/activating the co-op character
 spawn (which builds a non-Chloe character) AND a Nadine co-op skin (which isn't in
 the campaign coop look set). This is multi-session deep work with no guarantee.
 The clone remains a FULL playable Player mechanically, but with Chloe's body.
+
+### Enemy damage/death relay tests — direct AiHitController calls are unsafe (2026-06-26)
+
+Goal: find a host-side primitive for "client hit enemy -> host applies damage".
+
+Runtime results:
+- Enemy `HealthSystem` confirmed at `enemy+0x4A8 -> HealthSystem`, with
+  current HP `int32 @ +0x3C` and max HP `int32 @ +0x44`.
+- In the tested encounter, all listed `npc-*` enemies can show `HP=0` while
+  still being live `Pirate` objects (`vtable RVA 0x294B9D0`) and not ragdolls.
+  So HP=0 alone is NOT the death transition.
+- Writing HP to 0 did not produce a kill/ragdoll.
+- Capturing real `AiHitController::TakeHit` calls works; owner is normally
+  controller+0x8 -> enemy, e.g. `npc-sv-shotgun-*`.
+- Calling `AiHitController::Die(false)` with a copied real HitDescription returns
+  without crashing but only knocks the enemy down; the enemy remains live
+  (`vtable RVA 0x294B9D0`, not `ProcessRagdoll`).
+- Re-calling native `TakeHit` with a copied/amplified HitDescription CRASHES.
+- Calling `AiHitController::Die(true)` with the captured controller/template
+  CRASHES.
+
+Conclusion:
+- Directly replaying enemy damage/death through `AiHitController` is CLOSED as a
+  safe path for now.
+- For enemy sync, use safer surfaces:
+  - host observes native deaths caused by normal local gameplay and replicates
+    dead/remove state to the peer;
+  - client copy can be hidden/sunk when host says dead;
+  - client->host damage needs a different native entry point found statically or
+    by call-stack tracing, not manual `TakeHit`/`Die` replay.
+
+### Enemy damage static reverse — HealthSystem and NpcArmor layer (2026-06-26)
+
+Goal: find the safe native entry point for "client hit enemy -> host applies
+damage" without replaying low-level `AiHitController::TakeHit`/`Die`.
+
+Static artifacts:
+- `reports/pseudo_healthsystem.txt`
+- `reports/pseudo_healthsystem_core.txt`
+- `reports/pseudo_damage_cluster.txt`
+- `reports/pseudo_damage_support.txt`
+- `reports/pseudo_damage_plus88_candidates.txt`
+- `reports/xrefs_damage_strings.txt`
+- `reports/xrefs_damage_npc_strings.txt`
+- `reports/pseudo_npc_damage_kill.txt`
+- `reports/pseudo_npc_damage_callers.txt`
+
+HealthSystem vtable:
+- Base `0x142BBE128`.
+- Important slots:
+  - `+0x68` -> `0x141FCADD0`
+  - `+0x70` -> `0x141FCA8C0`
+  - `+0x80` -> `0x141FCA910`
+  - `+0x88` -> `0x141FCA920`
+  - `+0xB8` -> `0x141FCAFA0`
+  - `+0x1B8` -> `0x141FCA840`
+  - `+0x1C0` -> `0x141FCAE40`
+- `0x141FCA920` only writes `health+0x30`.
+- `0x141FCA910` only writes `health+0x34`.
+- `0x141FCA8C0` only writes max HP at `health+0x44`.
+- `0x141FCADD0` is the proper current-HP setter path:
+  - calls `+0xB8` (`0x141FCAFA0`) to compute current/effective HP;
+  - stores old HP into `health+0x3C`;
+  - updates timestamp/history fields;
+  - calls `+0x1C0` (`0x141FCAE40`) with the new HP.
+- `0x141FCAE40` only writes `health+0x38` and the history ring under
+  `health+0x58`; it does not notify `AiHitController` and does not perform the
+  death transition.
+- Static conclusion matches runtime: even the proper HealthSystem setter is not
+  enough to kill an enemy. Death conversion is higher, in the Npc/AttackInfo/
+  armor damage layer.
+
+Script health setter:
+- `0x14055AAE0` is a script-exposed health setter.
+- It resolves an actor, checks `actor+0x4A8 -> HealthSystem`, and calls
+  HealthSystem virtuals `+0x88`, `+0x80`, `+0x70`, `+0x68`.
+- It logs strings like `'%s' is already dead` and `'%s' has no health system`.
+- This is useful evidence for HealthSystem layout, but not a safe kill/damage
+  primitive because it still goes through the non-death HealthSystem setter path.
+
+NpcArmor/AttackInfo layer:
+- The important damage string is:
+  `bool __cdecl NpcArmor::OnHealthDamage(class Npc *,const struct AttackInfo *,float,float)`
+  at string address `0x142930A50`.
+- Exact function found:
+  - `0x1403D7DF0` = `NpcArmor::OnHealthDamage(...)`.
+- Direct callers:
+  - call from `0x14040AA70` inside function `0x140409F70`;
+  - call from `0x14040B404` inside function `0x14040B250`.
+- `0x1403D7DF0` appears to be an armor/body-part damage processor, not the
+  top-level "apply damage to this NPC" API. It receives an already built
+  `AttackInfo`, checks hit/body-piece state, detachment definitions, mesh/prop
+  damage, and can call lower helpers such as `sub_1403D9F50`, `sub_1403DA520`,
+  `sub_1403DAAB0`, and `sub_141BBF130`.
+- `0x140409F70` is a much more promising upper damage handler:
+  - `a1` is the NPC/character;
+  - `a2` is the `AttackInfo` pointer;
+  - it reads HealthSystem from `a1[149]` (`a1+0x4A8`);
+  - it calls virtual `+0xB8` and `+0xF8`-like HealthSystem paths;
+  - it calls the NpcArmor object at `a1[1064]` (`a1+0x2140`);
+  - it invokes `NpcArmor::OnHealthDamage(a1[1064], a1, AttackInfo, ...)`;
+  - it contains knocked-down/death-state decision logic after the armor call.
+- `0x14040B250` is a smaller related handler that also calls
+  `NpcArmor::OnHealthDamage(*(_QWORD *)(a1+0x2140), a1, AttackInfo, ...)`, but
+  it is less complete than `0x140409F70`.
+
+Important non-candidates:
+- `AiHitController::TakeHit` (`0x1405001E0`) and `Die` (`0x140500C20`) are low
+  reaction/death-animation paths and are unsafe to replay manually.
+- `0x140504FF0`, `0x1405048C0`, `0x140508840`, `0x140508C20`, and
+  `0x140502AB0` are reaction selection/application/update helpers, not the safe
+  high-level damage entry.
+- A broad scan for virtual `+0x88` calls produced many false positives. In
+  particular, `0x140510C90`/`0x140510D60` call a global service at
+  `qword_143FDF520+0x88/+0x90`, not `AiHitController::TakeHit`.
+- `0x1403E7310` is `NpcManager::SetupVisionChecks`, not a kill command despite
+  being near NPC-manager strings.
+
+Current static conclusion:
+- Safe damage is most likely not "set HP" and not "call AiHitController".
+- The next promising target is the real caller chain above `0x140409F70`: find
+  who builds/fills `AttackInfo`, calls `0x140409F70`, and what minimal
+  `AttackInfo` fields must be valid for bullets/melee/explosions.
+- Next static commands:
+  - inspect direct callers of `0x140409F70` and `0x14040B250`;
+  - inspect vtable slot(s) that dispatch to these functions;
+  - identify `AttackInfo` fields around offsets already seen in
+    `0x140409F70`: `+0x08`, `+0x10`, `+0x14`, `+0x1C`, `+0x20`, `+0x28`,
+    `+0x30`, `+0x40`, `+0x8B0`, `+0x8B4`;
+  - only after that design a safe host-side damage relay test.
+
+### Enemy damage static reverse — native Attack event publisher found (2026-06-27)
+
+The previous next-step list is now completed.
+
+New artifacts:
+- `reports/pseudo_attack_event_entry.txt`
+- `reports/pseudo_attack_event_sites.txt`
+- `reports/pseudo_attack_string_refs.txt`
+- `reports/pseudo_attack_publish_callers.txt`
+- `reports/pseudo_attackinfo_ctors.txt`
+- `reports/pseudo_attackinfo_base.txt`
+
+Full native chain:
+
+1. `0x14027A270(AttackInfo*, target)` builds and publishes the authored
+   `"Attack"` event (`event id 0x0539335E`) to the target.
+2. `Npc::EventHandler` at `0x140410C50` recognizes `0x0539335E` and calls
+   `0x14040E7C0(target, event)`.
+3. `0x14040E7C0`:
+   - requires at least one event argument (`event+0x128`, `int16`);
+   - extracts `AttackInfo*` from the boxed value at `event+0x28` through
+     `0x141831310`;
+   - calls target virtual slot `+0x1170`;
+   - performs the surrounding hitmarker, last-hit, knockdown, kill-combo,
+     killer/victim notification, and multiplayer notification logic.
+4. Character virtual slot `+0x1170` is `0x140409F70` for the common campaign
+   character families.
+5. `0x140409F70` calls `NpcArmor::OnHealthDamage` (`0x1403D7DF0`) and runs the
+   HealthSystem/knockdown/death decision path.
+
+`0x140409F70` vtable membership:
+- common slot offset `+0x1170`, index 558;
+- present in `Npc`, `Alcazar`, `Buddy`, `Cutter`, `Drake`, `Elena`, `Human`,
+  `NadineBuddy`, `Nadine`, `Pirate`, `NetBuddy`, `Rafe`, `Samuel`, and
+  `Sullivan`.
+
+`0x14027A270` is confirmed as the high-level publisher, not an inferred helper:
+- explosion path passes a complete explosion AttackInfo;
+- carry-object contact path passes a complete AttackInfo;
+- melee paths pass `CloseCombatAttackInfo`;
+- projectile/network paths pass `ProjectileAttackInfo`;
+- generic paths pass `NdAttackInfo`/`AttackInfo`;
+- all use the same `(attackInfo, target)` call shape.
+
+AttackInfo class layout and clone contract:
+- `NdAttackInfo`:
+  - vtable `0x1428F91B0`;
+  - small polymorphic base size `0x18`;
+  - deleting destructor `0x140279140`;
+  - virtual clone at `+0x8` -> `0x1402790F0`.
+- `AttackInfo`:
+  - vtable `0x1428F9198`;
+  - size `0x860`;
+  - constructor `0x14027A160`;
+  - copy constructor `0x140279590`;
+  - deleting destructor `0x140279FB0`;
+  - virtual clone at `+0x8` -> `0x140279540`.
+- `CloseCombatAttackInfo`:
+  - vtable `0x1429C4970`;
+  - size `0x880`;
+  - constructor `0x1408F8990`;
+  - heap clone `0x1408F89E0`;
+  - in-place copy `0x1408F8B60`;
+  - deleting destructor `0x1408F8B20`.
+- `ProjectileAttackInfo`:
+  - vtable `0x142935C50`;
+  - size `0x8C0`;
+  - constructor `0x1403FB2B0`;
+  - heap clone `0x1403FB340`;
+  - in-place copy `0x1403FB520`;
+  - deleting destructor `0x1403FB4E0`.
+
+Critical correction to the current DLL prototype:
+- The old prototype copied only `0x100` bytes from `AttackInfo`.
+- That is structurally invalid: the common object is `0x860`, close combat is
+  `0x880`, and projectile is `0x8C0`.
+- Important fields used by the damage path exist around `+0x7C0..+0x858` and
+  derived fields extend through `+0x878` / `+0x8B4`.
+- The old direct call
+  `0x140409F70(enemy, partialCopy, savedA3)` must not be tested.
+- It has been disabled in `scanner/src/teleport_hook.cpp`; the damage hook is
+  also disabled by default.
+
+Safe relay design supported by the static evidence:
+1. While a real AttackInfo is alive, clone it through its own virtual `+0x8`.
+   This preserves the correct derived type and full object size.
+2. Retain the heap clone only while its referenced process handles remain valid.
+3. Apply it through `0x14027A270(clone, target)`, not through
+   `0x140409F70`/`AiHitController`.
+4. Destroy the clone through its virtual `+0x0` deleting destructor.
+
+Remaining static gate before enabling a live test:
+- decide whether the relay should clone a projectile/melee template or construct
+  a fresh generic `AttackInfo` with `0x14027A160`;
+- validate which embedded handles may become stale between capture and replay;
+- enable the prepared test only for an explicit controlled run.
+
+The first and third items from the previous gate are now complete:
+- `0x140279540` allocates exactly `0x860` bytes and calls the complete
+  `AttackInfo` copy constructor `0x140279590`.
+- Native call sites pass stack-allocated AttackInfo subclasses to
+  `0x14027A270` and destroy/reset them immediately after it returns. Therefore
+  the publisher consumes the pointer synchronously; a relay clone can be
+  destroyed immediately after the call.
+- `scanner/src/teleport_hook.cpp` now contains the full polymorphic
+  clone/publish/delete prototype:
+  - validates known AttackInfo vtables;
+  - clones through virtual `+0x8`;
+  - publishes through `0x14027A270`;
+  - deletes through virtual `+0x0`;
+  - rejects captured templates older than 15 seconds.
+- Both `g_install_npc_damage_hook` and
+  `g_enable_attackinfo_replay_test` remain `false`, so no runtime behavior has
+  been enabled.
+- Release builds of both `tll_teleport_hook.dll` and
+  `tll_teleport_hook_v2.dll` succeeded after this change.
+
+### AttackInfo field accessors and delayed-replay hazards (2026-06-27)
+
+Artifact:
+- `reports/pseudo_attack_event_accessors.txt`
+
+The authored script accessors provide direct field evidence:
+- `AttackInfo+0x08/+0x10` = source/attacker process-handle pair.
+  - The engine resolves it through `*(handle.ptr+0x8)` and validates the
+    generation against the target object's `+0xBC`.
+  - `event-attack-source?` uses this pair through `sub_1401ABD00` /
+    `sub_140177F30`.
+- `AttackInfo+0x14` = float attack magnitude exposed by the no-argument attack
+  value accessor.
+- `AttackInfo+0x18` = weapon/type symbol used by `event-attack-weapon?`.
+- `AttackInfo+0x1C` = attack type used by `event-attack-type?`; valid script
+  values are `0..5`.
+- `AttackInfo+0x24` = damage-point count.
+- Damage points begin at `AttackInfo+0x30`, stride `0x50`.
+- Per damage point:
+  - `point+0x40` = float damage value;
+  - `point+0x30/+0x34` = hit-object handle pair;
+  - the script getter resolves that pair through `qword_14386FD00`;
+  - other point fields include authored impact position/direction and joint/
+    object metadata.
+- Derived projectile fields used by the script view remain at
+  `AttackInfo+0x8B0/+0x8B4`.
+
+Implications:
+- A full clone is memory-safe, but a delayed clone is not automatically
+  semantically safe.
+- `AttackInfo+0x08/+0x10` may refer to an attacker that has despawned or changed
+  generation. For co-op relay this pair should be rewritten from the current
+  host-side representation of the remote player.
+- Each damage point can refer to the original target's hit object/joint. Reusing
+  it on another enemy can select the wrong armor/body part or leave a stale
+  handle.
+- A production relay should either:
+  - rebuild the damage-point list for the current target; or
+  - construct a fresh generic AttackInfo with `0x14027A160` and fill only
+    validated source, damage, attack type, impact, and target fields.
+- The prepared clone-based prototype remains appropriate only for a short,
+  controlled feasibility test on a compatible live enemy. Its 15-second expiry
+  limits but does not eliminate stale-handle risk.
+
+### Fresh AttackInfo construction and armor calculation (2026-06-27)
+
+Artifacts:
+- `reports/pseudo_damagepoint_builders.txt`
+- `reports/pseudo_damageinfo_build_core.txt`
+- `reports/ida_names_npcarmor.txt`
+- `reports/pseudo_npcarmor_damage_builders.txt`
+- `reports/disasm_npcarmor_compute_damage.txt`
+- `reports/pseudo_damagepoint_armor_map.txt`
+- `reports/disasm_damagepoint_armor_map.txt`
+
+Recovered `DamageInfo` layout:
+- `AttackInfo+0x20` / `DamageInfo+0x00` = total float damage.
+- `AttackInfo+0x24` / `DamageInfo+0x04` = damage-point count.
+- First point starts at `AttackInfo+0x30`; stride is `0x50`.
+- Point vectors occupy `point+0x00`, `+0x10`, and `+0x20`.
+- `point+0x30/+0x34` is the hit-object registry handle.
+- `point+0x38` is additional collision/object metadata.
+- `point+0x40` is the per-point float damage written by the projectile collision
+  builder.
+- `0x1402791C0` initializes the complete `0x7A0`-byte `DamageInfo`.
+- `0x1414F1420` copies a complete `DamageInfo`.
+
+`NpcArmor` vtable `0x1429348C0` resolves the damage stages:
+- `+0x10 -> 0x1402942A0` = ordinary `GameArmor::ComputeDamage`.
+- `+0x18 -> 0x140294610` = `GameArmor::ComputeExplosionDamage`.
+- `+0x20 -> 0x141F38A90` = apply armor-damage results.
+
+The ordinary calculation requires positive total damage and a non-zero point
+count before distributing damage over points. Each point is mapped to an armor
+piece through `0x140294C30`. A point that does not map to armor is not rejected:
+its share remains in the final health damage. Therefore a fresh generic attack
+can safely start with one zero-initialized point and no stale hit-object handle.
+`0x140294C30` explicitly returns `-1` when the point handle is zero, invalid, or
+not a damageable collision object; it does not dereference a null registry entry.
+
+`scanner/src/teleport_hook.cpp` now contains a disabled fresh-object probe:
+- construct base `AttackInfo` through `0x14027A160`;
+- copy Nadine's live process handle from `+0xA8/+0xBC`;
+- set total damage, first-point damage, and count to one;
+- set the first impact position from the selected enemy's world position;
+- publish through `0x14027A270`;
+- run the virtual destructor in-place without freeing the stack storage.
+
+`g_enable_fresh_attackinfo_test` remains `false`; no live behavior is enabled.
+Both release DLL targets build successfully with this probe.

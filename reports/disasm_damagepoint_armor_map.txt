@@ -1,0 +1,81 @@
+TARGET 0x140294C30: sub_140294C30 start=0x140294C30 end=0x140294D35
+0x140294C30: sub     rsp, 8
+0x140294C34: mov     r9, rcx
+0x140294C37: test    rdx, rdx
+0x140294C3A: jz      loc_140294D2B
+0x140294C40: mov     eax, [rdx+30h]
+0x140294C43: lea     r8, qword_14386FD00
+0x140294C4A: mov     r8, [r8+rax*8]
+0x140294C4E: test    r8, r8
+0x140294C51: jz      short loc_140294C60
+0x140294C53: mov     eax, [rdx+34h]
+0x140294C56: cmp     [r8+50h], eax
+0x140294C5A: jnz     short loc_140294C60
+0x140294C5C: mov     cl, 1
+0x140294C5E: jmp     short loc_140294C62
+0x140294C60: xor     cl, cl
+0x140294C62: xor     eax, eax
+0x140294C64: test    cl, cl
+0x140294C66: cmovnz  rax, r8
+0x140294C6A: test    rax, rax
+0x140294C6D: jz      loc_140294D2B
+0x140294C73: test    r8, r8
+0x140294C76: jz      short loc_140294C85
+0x140294C78: mov     eax, [rdx+34h]
+0x140294C7B: cmp     [r8+50h], eax
+0x140294C7F: jnz     short loc_140294C85
+0x140294C81: mov     cl, 1
+0x140294C83: jmp     short loc_140294C87
+0x140294C85: xor     cl, cl
+0x140294C87: xor     eax, eax
+0x140294C89: test    cl, cl
+0x140294C8B: cmovnz  rax, r8
+0x140294C8F: test    rax, rax
+0x140294C92: jz      loc_140294D2B
+0x140294C98: cmp     byte ptr [rax+0C6h], 3
+0x140294C9F: jnz     loc_140294D2B
+0x140294CA5: test    dword ptr [rax+0A0h], 1000h
+0x140294CAF: jz      short loc_140294D2B
+0x140294CB1: mov     rax, [rax+0B0h]
+0x140294CB8: mov     eax, [rax+40h]
+0x140294CBB: test    eax, eax
+0x140294CBD: jz      short loc_140294D2B
+0x140294CBF: mov     r11, [r9+10h]
+0x140294CC3: test    r11, r11
+0x140294CC6: jnz     short loc_140294CD6
+0x140294CC8: mov     r8d, 0FFFFFFFFh
+0x140294CCE: mov     eax, r8d
+0x140294CD1: add     rsp, 8
+0x140294CD5: retn
+0x140294CD6: mov     [rsp+8+var_8], rbx
+0x140294CDA: xor     r8d, r8d
+0x140294CDD: mov     ebx, [r9+8]
+0x140294CE1: test    ebx, ebx
+0x140294CE3: jz      short loc_140294D19
+0x140294CE5: mov     rdx, [r11]
+0x140294CE8: test    rdx, rdx
+0x140294CEB: jz      short loc_140294D0D
+0x140294CED: mov     r9d, [rdx+8]
+0x140294CF1: xor     ecx, ecx
+0x140294CF3: test    r9d, r9d
+0x140294CF6: jz      short loc_140294D0D
+0x140294CF8: mov     r10, [rdx]
+0x140294CFB: nop     dword ptr [rax+rax+00h]
+0x140294D00: cmp     [r10+rcx*4], eax
+0x140294D04: jz      short loc_140294D1F
+0x140294D06: inc     ecx
+0x140294D08: cmp     ecx, r9d
+0x140294D0B: jb      short loc_140294D00
+0x140294D0D: inc     r8d
+0x140294D10: add     r11, 10h
+0x140294D14: cmp     r8d, ebx
+0x140294D17: jb      short loc_140294CE5
+0x140294D19: mov     r8d, 0FFFFFFFFh
+0x140294D1F: mov     rbx, [rsp+8+var_8]
+0x140294D23: mov     eax, r8d
+0x140294D26: add     rsp, 8
+0x140294D2A: retn
+0x140294D2B: mov     eax, 0FFFFFFFFh
+0x140294D30: add     rsp, 8
+0x140294D34: retn
+

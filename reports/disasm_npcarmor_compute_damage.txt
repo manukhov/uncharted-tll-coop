@@ -1,0 +1,212 @@
+TARGET 0x1402942A0: sub_1402942A0 start=0x1402942A0 end=0x140294601
+0x1402942A0: mov     rax, rsp
+0x1402942A3: mov     [rax+8], rcx
+0x1402942A7: push    rbp
+0x1402942A8: push    rsi
+0x1402942A9: push    rdi
+0x1402942AA: push    r12
+0x1402942AC: push    r13
+0x1402942AE: push    r14
+0x1402942B0: push    r15
+0x1402942B2: sub     rsp, 80h
+0x1402942B9: mov     qword ptr [rax-78h], 0FFFFFFFFFFFFFFFEh
+0x1402942C1: mov     [rax+18h], rbx
+0x1402942C5: vmovaps xmmword ptr [rax-48h], xmm6
+0x1402942CA: vmovaps xmmword ptr [rax-58h], xmm7
+0x1402942CF: mov     rbx, r9
+0x1402942D2: mov     rbp, r8
+0x1402942D5: mov     r14, rcx
+0x1402942D8: test    rdx, rdx
+0x1402942DB: jz      loc_1402945D6
+0x1402942E1: test    r8, r8
+0x1402942E4: jz      loc_1402945D6
+0x1402942EA: test    rbx, rbx
+0x1402942ED: jz      loc_1402945D6
+0x1402942F3: cmp     dword ptr [rcx+8], 0
+0x1402942F7: jz      loc_1402945CE
+0x1402942FD: cmp     dword ptr [r8+24h], 0
+0x140294302: jz      loc_1402945CE
+0x140294308: vxorps  xmm7, xmm7, xmm7
+0x14029430C: vcomiss xmm7, dword ptr [r8+20h]
+0x140294312: jnb     loc_1402945CE
+0x140294318: lea     r9, aFloatCdeclGame; "float __cdecl GameArmor::ComputeDamage("...
+0x14029431F: mov     r8d, 48h ; 'H'
+0x140294325: lea     rdx, aDPerforceCodeB_137; "d:\\perforce\\code\\big4final-tll-relea"...
+0x14029432C: lea     rcx, [rax-70h]
+0x140294330: call    sub_1415B86A0
+0x140294335: nop
+0x140294336: mov     ecx, [r14+8]
+0x14029433A: mov     eax, 4
+0x14029433F: mul     rcx
+0x140294342: mov     rcx, 0FFFFFFFFFFFFFFFFh
+0x140294349: cmovo   rax, rcx
+0x14029434D: lea     r8, aUnknown; "UNKNOWN"
+0x140294354: mov     [rsp+0B8h+var_98], r8
+0x140294359: xor     r9d, r9d
+0x14029435C: mov     rdx, cs:qword_1428CBB38
+0x140294363: mov     ecx, eax
+0x140294365: call    sub_1415A0E90
+0x14029436A: mov     rdi, rax
+0x14029436D: mov     [rsp+0B8h+var_88], rax
+0x140294372: test    rax, rax
+0x140294375: jnz     short loc_1402943B9
+0x140294377: mov     r10, cs:qword_146B17C08
+0x14029437E: test    r10, r10
+0x140294381: jz      short loc_1402943B3
+0x140294383: mov     [rsp+0B8h+var_90], rax
+0x140294388: mov     dword ptr [rsp+0B8h+var_98], 4Ah ; 'J'
+0x140294390: lea     r9, aJun30202319081_4; "Jun 30 2023 19:08:15"
+0x140294397: lea     r8, aGamearmorCompu; "GameArmor::ComputeDamage"
+0x14029439E: lea     rdx, aDPerforceCodeB_137; "d:\\perforce\\code\\big4final-tll-relea"...
+0x1402943A5: lea     rcx, aAccuredpieceda; "accuredPieceDamage"
+0x1402943AC: call    r10 ; qword_146B17C08
+0x1402943AF: test    al, al
+0x1402943B1: jnz     short loc_1402943B9
+0x1402943B3: call    sub_1422053E0
+0x1402943B8: int     3; Trap to Debugger
+0x1402943B9: mov     r8d, [r14+8]
+0x1402943BD: shl     r8, 2; Size
+0x1402943C1: xor     edx, edx; Val
+0x1402943C3: mov     rcx, rdi; void *
+0x1402943C6: call    memset
+0x1402943CB: mov     r12d, [rbp+24h]
+0x1402943CF: vxorps  xmm1, xmm1, xmm1
+0x1402943D3: vcvtsi2ss xmm1, xmm1, r12
+0x1402943D8: vmovss  xmm0, dword ptr [rbp+20h]
+0x1402943DD: vdivss  xmm6, xmm0, xmm1
+0x1402943E1: mov     [rsp+0B8h+arg_8], 0
+0x1402943E9: cmp     dword ptr [rbp+1Ch], 0
+0x1402943ED: jnz     short loc_140294402
+0x1402943EF: movzx   eax, byte ptr [rbp+8B4h]
+0x1402943F6: shr     al, 2
+0x1402943F9: and     al, 1
+0x1402943FB: mov     [rsp+0B8h+arg_8], al
+0x140294402: xor     r15d, r15d
+0x140294405: test    r12d, r12d
+0x140294408: jz      loc_1402945AA
+0x14029440E: xchg    ax, ax
+0x140294410: lea     rcx, [r15+r15*4]
+0x140294414: shl     rcx, 4
+0x140294418: lea     rax, [rbp+30h]
+0x14029441C: add     rax, rcx
+0x14029441F: mov     [rsp+0B8h+var_80], rax
+0x140294424: mov     rdx, rax
+0x140294427: mov     rcx, r14
+0x14029442A: call    sub_140294C30
+0x14029442F: movsxd  r13, eax
+0x140294432: cmp     r13d, 0FFFFFFFFh
+0x140294436: jz      loc_14029459D
+0x14029443C: mov     rdi, r13
+0x14029443F: shl     rdi, 4
+0x140294443: add     rdi, [r14+10h]
+0x140294447: mov     r14, [rdi]
+0x14029444A: test    r14, r14
+0x14029444D: jnz     short loc_140294491
+0x14029444F: mov     r10, cs:qword_146B17C08
+0x140294456: test    r10, r10
+0x140294459: jz      short loc_14029448B
+0x14029445B: mov     [rsp+0B8h+var_90], r14
+0x140294460: mov     dword ptr [rsp+0B8h+var_98], 67h ; 'g'
+0x140294468: lea     r9, aJun30202319081_4; "Jun 30 2023 19:08:15"
+0x14029446F: lea     r8, aGamearmorCompu; "GameArmor::ComputeDamage"
+0x140294476: lea     rdx, aDPerforceCodeB_137; "d:\\perforce\\code\\big4final-tll-relea"...
+0x14029447D: lea     rcx, aPdcsettings; "pDcSettings"
+0x140294484: call    r10 ; qword_146B17C08
+0x140294487: test    al, al
+0x140294489: jnz     short loc_140294491
+0x14029448B: call    sub_1422053E0
+0x140294490: int     3; Trap to Debugger
+0x140294491: mov     r9, [rsp+0B8h+var_88]
+0x140294496: vmovss  xmm2, dword ptr [r9+r13*4]
+0x14029449C: vmovss  xmm1, dword ptr [rdi+8]
+0x1402944A1: vcomiss xmm2, xmm1
+0x1402944A5: jnb     loc_140294595
+0x1402944AB: cmp     byte ptr cs:dword_143E07470+3, 0
+0x1402944B2: jz      short loc_1402944BF
+0x1402944B4: cmp     byte ptr [r14+28h], 0
+0x1402944B9: jnz     loc_140294595
+0x1402944BF: vminss  xmm0, xmm1, xmm2
+0x1402944C3: vsubss  xmm1, xmm1, xmm0
+0x1402944C7: movzx   edx, [rsp+0B8h+arg_8]
+0x1402944CF: test    dl, dl
+0x1402944D1: jnz     short loc_1402944D7
+0x1402944D3: vminss  xmm1, xmm1, xmm6
+0x1402944D7: vaddss  xmm0, xmm2, xmm1
+0x1402944DB: vmovss  dword ptr [r9+r13*4], xmm0
+0x1402944E1: mov     eax, [rbx]
+0x1402944E3: lea     rcx, [rax+rax*2]
+0x1402944E7: add     rcx, rcx
+0x1402944EA: vmovss  dword ptr [rbx+rcx*8+10h], xmm1
+0x1402944F0: mov     eax, [rbx]
+0x1402944F2: lea     rcx, [rax+rax*2]
+0x1402944F6: add     rcx, rcx
+0x1402944F9: mov     [rbx+rcx*8+18h], r13d
+0x1402944FE: mov     eax, [rbx]
+0x140294500: lea     rcx, [rax+rax*2]
+0x140294504: add     rcx, rcx
+0x140294507: mov     r8, [rsp+0B8h+var_80]
+0x14029450C: vmovups xmm0, xmmword ptr [r8]
+0x140294511: vmovups xmmword ptr [rbx+rcx*8+20h], xmm0
+0x140294517: mov     eax, [rbx]
+0x140294519: inc     rax
+0x14029451C: lea     rcx, [rax+rax*2]
+0x140294520: add     rcx, rcx
+0x140294523: vmovups xmm0, xmmword ptr [r8+20h]
+0x140294529: vmovups xmmword ptr [rbx+rcx*8], xmm0
+0x14029452E: mov     eax, [rbx]
+0x140294530: lea     rcx, [rax+rax*2]
+0x140294534: add     rcx, rcx
+0x140294537: mov     dword ptr [rbx+rcx*8+14h], 0
+0x14029453F: cmp     byte ptr [r14+20h], 0
+0x140294544: jz      short loc_14029458E
+0x140294546: mov     byte ptr [rbx+614h], 1
+0x14029454D: vmovss  xmm0, dword ptr [r9+r13*4]
+0x140294553: vcomiss xmm0, dword ptr [rdi+8]
+0x140294558: jb      short loc_140294561
+0x14029455A: mov     byte ptr [rbx+615h], 1
+0x140294561: test    dl, dl
+0x140294563: jnz     short loc_14029458E
+0x140294565: cmp     [r14+21h], dl
+0x140294569: jz      short loc_140294586
+0x14029456B: vminss  xmm0, xmm6, xmm1
+0x14029456F: vsubss  xmm1, xmm6, xmm0
+0x140294573: mov     eax, [rbx]
+0x140294575: lea     rcx, [rax+rax*2]
+0x140294579: add     rcx, rcx
+0x14029457C: vmovss  dword ptr [rbx+rcx*8+14h], xmm1
+0x140294582: vaddss  xmm7, xmm7, xmm1
+0x140294586: test    r12d, r12d
+0x140294589: jz      short loc_14029458E
+0x14029458B: dec     r12d
+0x14029458E: inc     dword ptr [rbx]
+0x140294590: cmp     dword ptr [rbx], 20h ; ' '
+0x140294593: jnb     short loc_1402945AA
+0x140294595: mov     r14, [rsp+0B8h+arg_0]
+0x14029459D: inc     r15d
+0x1402945A0: cmp     r15d, [rbp+24h]
+0x1402945A4: jb      loc_140294410
+0x1402945AA: mov     eax, r12d
+0x1402945AD: vxorps  xmm0, xmm0, xmm0
+0x1402945B1: vcvtsi2ss xmm0, xmm0, rax
+0x1402945B6: vmulss  xmm1, xmm0, xmm6
+0x1402945BA: vaddss  xmm6, xmm1, xmm7
+0x1402945BE: lea     rcx, [rsp+0B8h+var_70]
+0x1402945C3: call    sub_1415B8CA0
+0x1402945C8: vmovaps xmm0, xmm6
+0x1402945CC: jmp     short loc_1402945DA
+0x1402945CE: vmovss  xmm0, dword ptr [r8+20h]
+0x1402945D4: jmp     short loc_1402945DA
+0x1402945D6: vxorps  xmm0, xmm0, xmm0
+0x1402945DA: mov     rbx, [rsp+0B8h+arg_10]
+0x1402945E2: vmovaps xmm6, [rsp+0B8h+var_48]
+0x1402945E8: vmovaps xmm7, [rsp+0B8h+var_58]
+0x1402945EE: add     rsp, 80h
+0x1402945F5: pop     r15
+0x1402945F7: pop     r14
+0x1402945F9: pop     r13
+0x1402945FB: pop     r12
+0x1402945FD: pop     rdi
+0x1402945FE: pop     rsi
+0x1402945FF: pop     rbp
+0x140294600: retn
+

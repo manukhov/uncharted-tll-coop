@@ -3308,6 +3308,10 @@ void update_inject_stick() {
 // npc-forest1-* enemies). Other enemy archetypes may add more vtables later.
 constexpr std::uintptr_t kEnemyVtableRva = 0x294b9d0;     // .?AVPirate@@ (live enemy)
 constexpr std::uintptr_t kRagdollVtableRva = 0x29137a0;  // .?AVProcessRagdoll@@ (dead)
+constexpr std::uintptr_t kHealthSystemVtableRva = 0x2bbe128;
+constexpr std::size_t kHealthSystemOffset = 0x4a8;
+constexpr std::size_t kCurrentHpOffset = 0x3c;
+constexpr std::size_t kMaxHpOffset = 0x44;
 
 // FNV-1a over the actor name (bounded). Both instances hash the same name string,
 // so this is a stable cross-instance key (does not need to match the game's hash).
@@ -3355,6 +3359,377 @@ bool is_enemy_object(void* obj) {
 bool is_dead_ragdoll(void* obj) {
     return *reinterpret_cast<std::uintptr_t*>(obj) == g_module + kRagdollVtableRva;
 }
+bool plausible_ptr(std::uintptr_t v);
+bool is_npc_enemy_name(const char* name) {
+    return name != nullptr && readable_bytes(name) >= 4 && name[0] == 'n' &&
+           name[1] == 'p' && name[2] == 'c' && name[3] == '-';
+}
+bool is_enemy_character(void* obj, const char* name) {
+    return is_enemy_object(obj) || is_npc_enemy_name(name);
+}
+
+struct EnemyHealthTarget {
+    void* enemy = nullptr;
+    void* health = nullptr;
+    const char* name = "?";
+    std::int32_t hp = 0;
+    std::int32_t max_hp = 0;
+};
+
+bool read_enemy_health(void* obj, EnemyHealthTarget& out) {
+    if (obj == nullptr || readable_bytes(static_cast<std::byte*>(obj) + kHealthSystemOffset + 8) < 8) {
+        return false;
+    }
+    void* const health = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(obj) + kHealthSystemOffset);
+    if (health == nullptr ||
+        readable_bytes(static_cast<std::byte*>(health) + kMaxHpOffset + sizeof(std::int32_t)) <
+            sizeof(std::int32_t)) {
+        return false;
+    }
+    if (*reinterpret_cast<std::uintptr_t*>(health) != g_module + kHealthSystemVtableRva) {
+        return false;
+    }
+    out.enemy = obj;
+    out.health = health;
+    out.hp = *reinterpret_cast<std::int32_t*>(
+        static_cast<std::byte*>(health) + kCurrentHpOffset);
+    out.max_hp = *reinterpret_cast<std::int32_t*>(
+        static_cast<std::byte*>(health) + kMaxHpOffset);
+    return true;
+}
+
+bool find_health_system_in_object(void* obj, EnemyHealthTarget& out) {
+    if (read_enemy_health(obj, out)) {
+        return true;
+    }
+    if (obj == nullptr) {
+        return false;
+    }
+    const std::uintptr_t hsvt = g_module + kHealthSystemVtableRva;
+    const std::size_t avail = readable_bytes(obj);
+    const std::size_t hi = avail < 0x4000 ? avail : 0x4000;
+    auto* base = static_cast<std::byte*>(obj);
+    for (std::size_t o1 = 0x10; o1 + 8 <= hi; o1 += 8) {
+        std::uintptr_t v1 = *reinterpret_cast<std::uintptr_t*>(base + o1);
+        if (!plausible_ptr(v1)) continue;
+        auto* p1 = reinterpret_cast<std::byte*>(v1);
+        if (readable_bytes(p1) < 0xe0) continue;
+        if (*reinterpret_cast<std::uintptr_t*>(p1) == hsvt) {
+            out.enemy = obj;
+            out.health = p1;
+            out.hp = *reinterpret_cast<std::int32_t*>(p1 + kCurrentHpOffset);
+            out.max_hp = *reinterpret_cast<std::int32_t*>(p1 + kMaxHpOffset);
+            return true;
+        }
+        const std::size_t a2 = readable_bytes(p1);
+        const std::size_t hi2 = a2 < 0x300 ? a2 : 0x300;
+        for (std::size_t o2 = 0; o2 + 8 <= hi2; o2 += 8) {
+            std::uintptr_t v2 = *reinterpret_cast<std::uintptr_t*>(p1 + o2);
+            if (!plausible_ptr(v2)) continue;
+            auto* p2 = reinterpret_cast<std::byte*>(v2);
+            if (readable_bytes(p2) < 0xe0) continue;
+            if (*reinterpret_cast<std::uintptr_t*>(p2) == hsvt) {
+                out.enemy = obj;
+                out.health = p2;
+                out.hp = *reinterpret_cast<std::int32_t*>(p2 + kCurrentHpOffset);
+                out.max_hp = *reinterpret_cast<std::int32_t*>(p2 + kMaxHpOffset);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool find_first_live_enemy_health(EnemyHealthTarget& out) {
+    for_each_character([&](void* obj, const char* name) {
+        if (out.enemy != nullptr || !is_enemy_character(obj, name) || is_dead_ragdoll(obj)) {
+            return;
+        }
+        EnemyHealthTarget candidate{};
+        if (!find_health_system_in_object(obj, candidate) || candidate.hp <= 0) {
+            return;
+        }
+        candidate.name = name;
+        out = candidate;
+    });
+    return out.enemy != nullptr;
+}
+
+void dump_enemy_health_candidates() {
+    int logged = 0;
+    int total = 0;
+    for_each_character([&](void* obj, const char* name) {
+        if (!is_enemy_character(obj, name) || logged >= 32) {
+            return;
+        }
+        ++total;
+        std::uintptr_t vt = readable_bytes(obj) >= 8
+            ? *reinterpret_cast<std::uintptr_t*>(obj)
+            : 0;
+        EnemyHealthTarget target{};
+        const bool has_health = find_health_system_in_object(obj, target);
+        std::ostringstream line;
+        line << "HP-CAND #" << logged
+             << " name='" << (name != nullptr ? name : "?") << "'"
+             << " obj=0x" << std::hex << reinterpret_cast<std::uintptr_t>(obj)
+             << " vt_rva=0x" << (vt > g_module ? vt - g_module : 0)
+             << std::dec << " dead=" << (is_dead_ragdoll(obj) ? 1 : 0);
+        if (has_health) {
+            line << " hs=0x" << std::hex << reinterpret_cast<std::uintptr_t>(target.health)
+                 << std::dec << " hp=" << target.hp << " max=" << target.max_hp;
+        } else {
+            line << " no HealthSystem";
+        }
+        log_line(line.str().c_str());
+        ++logged;
+    });
+    std::ostringstream line;
+    line << "HP-CAND total logged=" << logged << " total_seen=" << total;
+    log_line(line.str().c_str());
+}
+
+
+void* g_hp_kill_watch_enemy = nullptr;
+void* g_hp_kill_watch_health = nullptr;
+ULONGLONG g_hp_kill_watch_until = 0;
+ULONGLONG g_hp_kill_last_log = 0;
+
+void hp_kill_selftest() {
+    EnemyHealthTarget target{};
+    if (!find_first_live_enemy_health(target)) {
+        log_line("HP-KILL: no live enemy with HealthSystem found");
+        dump_enemy_health_candidates();
+        return;
+    }
+
+    *reinterpret_cast<std::int32_t*>(
+        static_cast<std::byte*>(target.health) + kCurrentHpOffset) = 0;
+    g_hp_kill_watch_enemy = target.enemy;
+    g_hp_kill_watch_health = target.health;
+    g_hp_kill_watch_until = GetTickCount64() + 3000;
+    g_hp_kill_last_log = 0;
+
+    std::ostringstream line;
+    line << "HP-KILL: enemy='" << target.name
+         << "' obj=0x" << std::hex << reinterpret_cast<std::uintptr_t>(target.enemy)
+         << " hs=0x" << reinterpret_cast<std::uintptr_t>(target.health)
+         << std::dec << " HP " << target.hp << "->0"
+         << " max=" << target.max_hp;
+    log_line(line.str().c_str());
+}
+
+void monitor_hp_kill_selftest(ULONGLONG now) {
+    if (g_hp_kill_watch_enemy == nullptr || now > g_hp_kill_watch_until ||
+        now - g_hp_kill_last_log < 250) {
+        return;
+    }
+    g_hp_kill_last_log = now;
+
+    const bool enemy_readable = readable_bytes(g_hp_kill_watch_enemy) >= 8;
+    const bool health_readable =
+        g_hp_kill_watch_health != nullptr &&
+        readable_bytes(static_cast<std::byte*>(g_hp_kill_watch_health) + kMaxHpOffset + sizeof(std::int32_t)) >=
+            sizeof(std::int32_t);
+    std::uintptr_t vt = 0;
+    bool dead = false;
+    if (enemy_readable) {
+        vt = *reinterpret_cast<std::uintptr_t*>(g_hp_kill_watch_enemy);
+        dead = vt == g_module + kRagdollVtableRva;
+    }
+    std::int32_t hp = -999999;
+    if (health_readable) {
+        hp = *reinterpret_cast<std::int32_t*>(
+            static_cast<std::byte*>(g_hp_kill_watch_health) + kCurrentHpOffset);
+    }
+
+    std::ostringstream line;
+    line << "HP-KILL watch: enemy=" << (enemy_readable ? "readable" : "gone")
+         << " vt_rva=0x" << std::hex << (vt > g_module ? vt - g_module : 0)
+         << std::dec << " dead=" << (dead ? 1 : 0)
+         << " hp=" << hp;
+    log_line(line.str().c_str());
+}
+
+// ===== NPC damage-handler capture: sub_140409F70(Npc* a1, AttackInfo* a2, a3) =====
+// The proper kill goes through this upper attack/damage handler (knockdown/death logic).
+// It is virtual slot +0x1170 in the character vtables. Static reverse showed that
+// AttackInfo is polymorphic and much larger than 0x100 bytes (AttackInfo=0x860,
+// CloseCombatAttackInfo=0x880, ProjectileAttackInfo=0x8c0), so raw partial copies are
+// invalid. Keep this hook disabled until capture uses AttackInfo virtual clone (+0x8)
+// and replay goes through the native event publisher at module+0x27a270.
+using NpcDamageFn = std::uint64_t(__fastcall*)(void*, void*, void*);
+using AttackInfoCloneFn = void*(__fastcall*)(void*);
+using AttackInfoDeleteFn = void*(__fastcall*)(void*, unsigned char);
+using AttackInfoConstructorFn = void*(__fastcall*)(void*, int);
+using PublishAttackFn = std::uint64_t(__fastcall*)(void*, void*);
+std::uint64_t g_orig_npc_damage = 0;
+volatile bool g_install_npc_damage_hook = false;
+volatile bool g_npc_damage_capture_log = true;
+volatile bool g_enable_attackinfo_replay_test = false;
+volatile bool g_enable_fresh_attackinfo_test = true;
+void* g_attackinfo_template = nullptr;
+void* g_attackinfo_original_target = nullptr;
+ULONGLONG g_attackinfo_capture_time = 0;
+
+bool is_supported_attackinfo(void* attack_info) {
+    if (attack_info == nullptr || readable_bytes(attack_info) < sizeof(std::uintptr_t)) {
+        return false;
+    }
+    const std::uintptr_t vt = *reinterpret_cast<std::uintptr_t*>(attack_info);
+    return vt == g_module + 0x28f9198 ||  // AttackInfo
+           vt == g_module + 0x2935c50 ||  // ProjectileAttackInfo
+           vt == g_module + 0x29c4970;    // CloseCombatAttackInfo
+}
+
+void destroy_attackinfo_clone(void*& attack_info) {
+    if (!is_supported_attackinfo(attack_info)) {
+        attack_info = nullptr;
+        return;
+    }
+    auto** const vt = *reinterpret_cast<void***>(attack_info);
+    const auto destroy = reinterpret_cast<AttackInfoDeleteFn>(vt[0]);
+    void* const old = attack_info;
+    attack_info = nullptr;
+    destroy(old, 1);
+}
+
+void* clone_attackinfo(void* attack_info) {
+    if (!is_supported_attackinfo(attack_info)) {
+        return nullptr;
+    }
+    auto** const vt = *reinterpret_cast<void***>(attack_info);
+    const auto clone = reinterpret_cast<AttackInfoCloneFn>(vt[1]);
+    return clone(attack_info);
+}
+
+void destroy_attackinfo_in_place(void* attack_info) {
+    if (!is_supported_attackinfo(attack_info)) {
+        return;
+    }
+    auto** const vt = *reinterpret_cast<void***>(attack_info);
+    const auto destroy = reinterpret_cast<AttackInfoDeleteFn>(vt[0]);
+    destroy(attack_info, 0);
+}
+
+bool publish_fresh_nadine_attackinfo() {
+    void* const source = g_last_nadine_object;
+    if (source == nullptr ||
+        readable_bytes(static_cast<std::byte*>(source) + 0xBC) < sizeof(std::uint32_t)) {
+        log_line("FRESH-ATTACKINFO: Nadine source is unavailable");
+        return false;
+    }
+
+    void* target = nullptr;
+    for_each_character([&](void* obj, const char* /*name*/) {
+        if (target == nullptr && obj != source && is_enemy_object(obj) &&
+            !is_dead_ragdoll(obj)) {
+            target = obj;
+        }
+    });
+    if (target == nullptr) {
+        log_line("FRESH-ATTACKINFO: no live enemy found");
+        return false;
+    }
+
+    alignas(16) std::array<std::byte, 0x860> storage{};
+    void* const attack_info =
+        reinterpret_cast<AttackInfoConstructorFn>(g_module + 0x27A160)(
+            storage.data(), 0);
+    if (!is_supported_attackinfo(attack_info)) {
+        log_line("FRESH-ATTACKINFO: constructor returned an unsupported object");
+        return false;
+    }
+
+    auto* const bytes = static_cast<std::byte*>(attack_info);
+    *reinterpret_cast<void**>(bytes + 0x08) =
+        *reinterpret_cast<void**>(static_cast<std::byte*>(source) + 0xA8);
+    *reinterpret_cast<std::uint32_t*>(bytes + 0x10) =
+        *reinterpret_cast<std::uint32_t*>(static_cast<std::byte*>(source) + 0xBC);
+
+    constexpr float kTestDamage = 25.0F;
+    *reinterpret_cast<float*>(bytes + 0x14) = kTestDamage;
+    *reinterpret_cast<float*>(bytes + 0x20) = kTestDamage;
+    *reinterpret_cast<std::uint32_t*>(bytes + 0x24) = 1;
+    *reinterpret_cast<float*>(bytes + 0x70) = kTestDamage;
+
+    if (readable_bytes(static_cast<std::byte*>(target) + kWorldPositionOffset) >=
+        sizeof(float) * 4) {
+        std::memcpy(
+            bytes + 0x30,
+            static_cast<std::byte*>(target) + kWorldPositionOffset,
+            sizeof(float) * 4);
+    }
+
+    log_line("FRESH-ATTACKINFO: publishing 25 damage from Nadine");
+    reinterpret_cast<PublishAttackFn>(g_module + 0x27A270)(attack_info, target);
+    destroy_attackinfo_in_place(attack_info);
+    log_line("FRESH-ATTACKINFO: publisher returned; stack object destroyed");
+    return true;
+}
+
+std::uint64_t __fastcall hooked_npc_damage(void* a1, void* a2, void* a3) {
+    if (a2 != nullptr) {
+        std::size_t a2sz = readable_bytes(a2);
+        if (g_attackinfo_template == nullptr && is_supported_attackinfo(a2)) {
+            g_attackinfo_template = clone_attackinfo(a2);
+            if (g_attackinfo_template != nullptr) {
+                g_attackinfo_original_target = a1;
+                g_attackinfo_capture_time = GetTickCount64();
+                std::ostringstream l;
+                l << "ATTACKINFO full clone captured: source=0x" << std::hex
+                  << reinterpret_cast<std::uintptr_t>(a2)
+                  << " clone=0x" << reinterpret_cast<std::uintptr_t>(g_attackinfo_template)
+                  << " vt_rva=0x"
+                  << (*reinterpret_cast<std::uintptr_t*>(a2) - g_module);
+                log_line(l.str().c_str());
+            }
+        }
+        if (g_npc_damage_capture_log) {
+            static int n = 0;
+            if (n < 6) { ++n;
+                std::uintptr_t vt = (a1 && readable_bytes(a1) >= 8)
+                    ? *reinterpret_cast<std::uintptr_t*>(a1) : 0;
+                std::ostringstream l; l << "NPCDMG a1=0x" << std::hex
+                    << reinterpret_cast<std::uintptr_t>(a1) << " a1vtRVA=0x"
+                    << (vt > g_module ? vt - g_module : vt) << " a2=0x"
+                    << reinterpret_cast<std::uintptr_t>(a2) << " a2sz=0x" << a2sz
+                    << " a3=0x" << reinterpret_cast<std::uintptr_t>(a3);
+                log_line(l.str().c_str());
+                if (a2sz >= 0x40) {
+                    const auto* b = static_cast<const std::byte*>(a2);
+                    std::ostringstream d; d << "  AI bytes:";
+                    for (std::size_t i = 0; i < 0x40; i += 8)
+                        d << " +0x" << std::hex << i << "=0x"
+                          << *reinterpret_cast<const std::uint64_t*>(b + i);
+                    log_line(d.str().c_str());
+                }
+            }
+        }
+    }
+    return reinterpret_cast<NpcDamageFn>(g_orig_npc_damage)(a1, a2, a3);
+}
+void install_npc_damage_hook_fn() {
+    if (g_module == 0) return;
+    const std::uintptr_t target = g_module + 0x409F70;
+    g_orig_npc_damage = target;
+    int patched = 0;
+    for (std::uintptr_t a = g_module + 0x2930000; a < g_module + 0x2960000; a += 8) {
+        auto* slot = reinterpret_cast<std::uintptr_t*>(a);
+        if (readable_bytes(slot) < 8) continue;
+        if (*slot != target) continue;
+        DWORD oldp = 0;
+        if (VirtualProtect(slot, 8, PAGE_READWRITE, &oldp)) {
+            *slot = reinterpret_cast<std::uintptr_t>(&hooked_npc_damage);
+            FlushInstructionCache(GetCurrentProcess(), slot, 8);
+            DWORD ign = 0; VirtualProtect(slot, 8, oldp, &ign);
+            ++patched;
+        }
+    }
+    std::ostringstream l; l << "NPC-damage hook installed: patched " << patched
+        << " vtable slots (sub_140409F70)";
+    log_line(l.str().c_str());
+}
 
 // DIAGNOSTIC hook of AiHitController::TakeHit (vtable[17] @0x5001e0): captures real
 // HitDescription bytes + the controller->owner(enemy) mapping when an enemy is hit, so
@@ -3362,8 +3737,8 @@ bool is_dead_ragdoll(void* obj) {
 // client->host damage relay (Path 1). Logs the first few hits, then calls the original.
 using TakeHitFn = std::uint64_t(__fastcall*)(void*, const void*);
 std::uint64_t g_orig_takehit = 0;
-// Install the TakeHit vtable hook? Default OFF (only for damage-relay work); avoids
-// per-hit combat overhead.
+// Install the TakeHit vtable hook? Default OFF (it fires per-frame-per-enemy and tanked
+// FPS 120->20). Use the NPC-damage-handler capture below instead.
 volatile bool g_install_takehit_hook = false;
 // OFF: the per-hit owner/controller scan (0x8000 + VirtualQuery per qword) + dumps caused
 // severe in-combat lag. Recon done (ownerOff=0x8, HitDescription layout, template). The
@@ -3374,10 +3749,34 @@ volatile bool g_takehit_probe = false;
 std::array<std::byte, 0x100> g_hd_template{};
 volatile bool g_hd_template_valid = false;
 void* g_last_enemy_controller = nullptr;
+void* g_last_enemy_owner = nullptr;
 std::uint64_t __fastcall hooked_takehit(void* self, const void* hitDesc) {
     // MINIMAL hot-path capture (NO VirtualQuery — that per-call readable_bytes was the FPS
     // killer): just remember the last controller. Template/HP read happen low-rate elsewhere.
-    if (self != nullptr) g_last_enemy_controller = self;
+    if (self != nullptr) {
+        g_last_enemy_controller = self;
+        if (readable_bytes(self) >= 0x10) {
+            void* owner = *reinterpret_cast<void**>(static_cast<std::byte*>(self) + 0x8);
+            if (owner != nullptr && readable_bytes(owner) >= 0x20) {
+                const char* name = reinterpret_cast<const char*>(owner) + 8;
+                if (is_npc_enemy_name(name)) {
+                    g_last_enemy_owner = owner;
+                }
+            }
+        }
+    }
+    if (hitDesc != nullptr && readable_bytes(hitDesc) >= g_hd_template.size()) {
+        const bool first = !g_hd_template_valid;
+        std::memcpy(g_hd_template.data(), hitDesc, g_hd_template.size());
+        g_hd_template_valid = true;
+        if (first) {
+            std::ostringstream l;
+            l << "TAKEHIT template captured controller=0x" << std::hex
+              << reinterpret_cast<std::uintptr_t>(self)
+              << " owner=0x" << reinterpret_cast<std::uintptr_t>(g_last_enemy_owner);
+            log_line(l.str().c_str());
+        }
+    }
     if (g_takehit_probe && self != nullptr && hitDesc != nullptr) {
         static int n = 0;
         if (n < 24) {
@@ -3437,6 +3836,53 @@ std::uint64_t __fastcall hooked_takehit(void* self, const void* hitDesc) {
         }
     }
     return reinterpret_cast<TakeHitFn>(g_orig_takehit)(self, hitDesc);
+}
+
+void prepare_lethal_hitdesc(std::byte* clone, std::size_t size) {
+    if (size < 0x80) {
+        return;
+    }
+    // Known live-hit captures put a damage-like float at +0x48. Touch a few
+    // neighboring scalar fields too; the packet is a copied real HitDescription,
+    // so its pointers/shape remain native.
+    for (std::size_t off : {0x40ull, 0x44ull, 0x48ull, 0x4Cull, 0x50ull}) {
+        *reinterpret_cast<float*>(clone + off) = 9999.0f;
+    }
+}
+
+void log_last_enemy_after_call(const char* tag) {
+    std::uintptr_t owner_vt = 0;
+    bool owner_dead = false;
+    std::int32_t hp = -999999;
+    std::int32_t max_hp = -999999;
+    if (g_last_enemy_owner != nullptr && readable_bytes(g_last_enemy_owner) >= 8) {
+        owner_vt = *reinterpret_cast<std::uintptr_t*>(g_last_enemy_owner);
+        owner_dead = owner_vt == g_module + kRagdollVtableRva;
+        EnemyHealthTarget health{};
+        if (find_health_system_in_object(g_last_enemy_owner, health)) {
+            hp = health.hp;
+            max_hp = health.max_hp;
+        }
+    }
+    std::ostringstream line;
+    line << tag << ": owner_vt_rva=0x" << std::hex
+         << (owner_vt > g_module ? owner_vt - g_module : 0)
+         << std::dec << " dead=" << (owner_dead ? 1 : 0)
+         << " hp=" << hp << " max=" << max_hp;
+    log_line(line.str().c_str());
+}
+
+void takehit_selftest_from_last_hit() {
+    log_line("TAKEHIT-SELFTEST disabled: repeat TakeHit crashed in live test");
+}
+
+void die_selftest_from_last_hit(bool force) {
+    log_line(force ? "DIE-SELFTEST disabled: Die(true) crashed in live test"
+                   : "DIE-SELFTEST disabled: Die(false) only knocks down, no kill");
+}
+
+void combo_kill_selftest_from_last_hit() {
+    log_line("COMBO-SELFTEST disabled: repeat TakeHit crashed in live test");
 }
 
 // HOST (role A): enumerate enemies and send their transforms to the client.
@@ -3683,6 +4129,7 @@ void net_tick() {
     static ULONGLONG last_send = 0, last_enemy_send = 0, last_enemy_apply = 0;
     static ULONGLONG last_freeze = 0, last_hp_probe = 0, last_hpsys = 0;
     const ULONGLONG now = GetTickCount64();
+    monitor_hp_kill_selftest(now);
     if (g_hp_sys_probe && now - last_hpsys >= 150) {
         last_hpsys = now;
         enemy_hp_probe();
@@ -4717,24 +5164,50 @@ void __fastcall hooked_update(void* object) {
                          ? "ENEMY-FREEZE selftest ON (enemies AI-off + pinned)"
                          : "ENEMY-FREEZE selftest OFF");
         }
-        // DAMAGE host-apply self-test: clone the captured HitDescription template,
-        // set lethal damage, and call TakeHit on the last-hit enemy's controller. If
-        // the enemy takes damage / ragdolls with no crash, the host-apply primitive
-        // (controller->TakeHit(clonedTemplate)) is validated for the client->host relay.
+        // Fresh AttackInfo is the preferred feasibility probe because it avoids stale
+        // handles from a captured attack. Both tests stay disabled until an explicit
+        // controlled live run.
         if ((GetAsyncKeyState(VK_DECIMAL) & 1) != 0) {
-            if (g_hd_template_valid && g_last_enemy_controller != nullptr &&
-                g_module != 0) {
-                alignas(16) std::byte clone[0x100];
-                std::memcpy(clone, g_hd_template.data(), sizeof(clone));
-                *reinterpret_cast<float*>(clone + 0x48) = 9999.0f;
-                using DieFn = void(__fastcall*)(void*, const void*, bool);
-                auto die = reinterpret_cast<DieFn>(g_module + 0x500c20);  // Die vtable[23]
-                log_line("DMG-SELFTEST: calling AiHitController::Die(false) on last enemy controller");
-                die(g_last_enemy_controller, clone, false);
-                log_line("DMG-SELFTEST: Die returned (no crash)");
+            if (g_enable_fresh_attackinfo_test) {
+                publish_fresh_nadine_attackinfo();
+            } else if (!g_enable_attackinfo_replay_test) {
+                log_line("ATTACKINFO-REPLAY disabled: safe publisher test not enabled");
+            } else if (g_attackinfo_template == nullptr) {
+                log_line("ATTACKINFO-REPLAY: no full AttackInfo clone captured");
+            } else if (GetTickCount64() - g_attackinfo_capture_time > 15000) {
+                destroy_attackinfo_clone(g_attackinfo_template);
+                g_attackinfo_original_target = nullptr;
+                log_line("ATTACKINFO-REPLAY: captured template expired");
             } else {
-                log_line("DMG-SELFTEST: no template/controller yet (shoot an enemy first)");
+                void* target = nullptr;
+                for_each_character([&](void* obj, const char* /*name*/) {
+                    if (target == nullptr && obj != g_attackinfo_original_target &&
+                        is_enemy_object(obj) && !is_dead_ragdoll(obj)) {
+                        target = obj;
+                    }
+                });
+                void* replay = clone_attackinfo(g_attackinfo_template);
+                if (target == nullptr) {
+                    destroy_attackinfo_clone(replay);
+                    log_line("ATTACKINFO-REPLAY: no second live enemy found");
+                } else if (replay == nullptr) {
+                    log_line("ATTACKINFO-REPLAY: full clone failed");
+                } else {
+                    log_line("ATTACKINFO-REPLAY: publishing native Attack event");
+                    reinterpret_cast<PublishAttackFn>(g_module + 0x27a270)(replay, target);
+                    destroy_attackinfo_clone(replay);
+                    log_line("ATTACKINFO-REPLAY: publisher returned; clone destroyed");
+                }
             }
+        }
+        if ((GetAsyncKeyState('K') & 1) != 0) {
+            log_line("DIE-SELFTEST disabled: Die(true) crashed in live test");
+        }
+        if ((GetAsyncKeyState('L') & 1) != 0) {
+            log_line("COMBO-SELFTEST disabled: repeat TakeHit crashed in live test");
+        }
+        if ((GetAsyncKeyState('J') & 1) != 0) {
+            log_line("TAKEHIT-SELFTEST disabled: repeat TakeHit crashed in live test");
         }
         // Live move-mapping calibration for the clone.
         if ((GetAsyncKeyState(VK_NUMPAD7) & 1) != 0) {
@@ -5913,6 +6386,9 @@ DWORD WINAPI install_hook(void*) {
               << " (expected 0x" << (g_module + 0x5001e0) << "); hook skipped";
             log_line(l.str().c_str());
         }
+    }
+    if (g_install_npc_damage_hook) {
+        install_npc_damage_hook_fn();
     }
     submit_remote_input_packet(coop::InputPacket{});
     start_udp_receiver();

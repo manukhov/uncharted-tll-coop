@@ -110,6 +110,27 @@ problems for the real two-PC co-op:
   data-bound. Every runtime lever to change the *base* body failed; the **look/
   appearance** layer (above) is what we use instead. (.pak modding would change both
   players — rejected.)
+- **Manual enemy kill via `AiHitController`**: closed as unsafe. HP lives at
+  `enemy+0x4A8 -> HealthSystem`, current HP `+0x3C`, but HP=0 does not itself
+  transition the enemy to a corpse. `Die(false)` only knocks down; replayed
+  `TakeHit` crashes; `Die(true)` crashes. Static reverse confirms the proper
+  HealthSystem setter still only updates HP/history and does not perform death.
+  The native upper path is now found: `0x14027A270(AttackInfo*, target)` publishes
+  the authored Attack event, `0x14040E7C0` extracts its AttackInfo, and character
+  vtable `+0x1170` (`0x140409F70`) performs armor/health/knockdown/death logic.
+  AttackInfo is polymorphic and large (`0x860` base, `0x880` melee, `0x8C0`
+  projectile); the old `0x100`-byte replay was invalid and is disabled. Each
+  type has a virtual heap clone at `+0x8`. The complete
+  clone -> `0x14027A270` -> virtual delete prototype is implemented and builds,
+  but both its capture hook and test switch remain disabled. Publisher lifetime
+  is confirmed synchronous. Static accessors show the stale fields explicitly:
+  attacker handle at `+0x08/+0x10`, damage-point count at `+0x24`, points at
+  `+0x30` stride `0x50`, each point's hit-object handle at `+0x30/+0x34`, and
+  point damage at `+0x40`. The fresh-object path is now recovered: total damage
+  is `AttackInfo+0x20`, ordinary armor calculation is `0x1402942A0`, and an
+  unmapped zero-handle point preserves full health damage. A disabled prototype
+  constructs a fresh attack from Nadine and publishes it without captured stale
+  handles. Production relay must still provide validated source/target data.
 - **Co-op mode gate** `HIBYTE(dword_143E07470)` + `byte_143E03568`: flipping it (mid-
   session OR at init before load) **CRASHES** — campaign levels have no co-op data/
   spawners, so co-op mode dereferences uninitialized co-op session state.
