@@ -442,9 +442,17 @@ struct StateNetState {
     bool enabled = false;                  // toggled on once peer + puppet ready
 };
 StateNetState g_state_net{};
+// SPSC ring for client->host damage events (recv thread = producer, game thread =
+// consumer on the host). Lock-free single-producer/single-consumer.
+struct ClientDmgEvent { std::uint32_t name_hash; float damage; };
+ClientDmgEvent g_client_dmg_ring[64]{};
+std::atomic<std::uint32_t> g_client_dmg_head{0};
+std::uint32_t g_client_dmg_tail = 0;
 // Master toggle for enemy replication (host sends / client applies). Default ON;
 // only acts when a network peer is present and per-role (A sends, B applies).
 volatile bool g_enemy_sync = true;
+// Client->host damage relay master toggle.
+volatile bool g_client_damage_relay = true;
 // Single-instance validation of the enemy client-apply code path (enumerate +
 // RequestDisableAi + transform write) without needing two instances: freeze all
 // enemies in place with AI off. Toggle NUMPAD5. Default off.
@@ -2422,6 +2430,13 @@ DWORD WINAPI state_recv_thread(void*) {
                 g_state_net.peer_enemies = ep;
                 g_state_net.has_peer_enemies.store(true);
             }
+        } else if (magic == coop::kClientDamageMagic &&
+                   received == static_cast<int>(sizeof(coop::ClientDamagePacket))) {
+            coop::ClientDamagePacket dp{};
+            std::memcpy(&dp, buf, sizeof(dp));
+            std::uint32_t head = g_client_dmg_head.load(std::memory_order_relaxed);
+            g_client_dmg_ring[head % 64] = {dp.name_hash, dp.damage};
+            g_client_dmg_head.store(head + 1, std::memory_order_release);
         }
     }
     return 0;
@@ -3564,7 +3579,7 @@ using AttackInfoDeleteFn = void*(__fastcall*)(void*, unsigned char);
 using AttackInfoConstructorFn = void*(__fastcall*)(void*, int);
 using PublishAttackFn = std::uint64_t(__fastcall*)(void*, void*);
 std::uint64_t g_orig_npc_damage = 0;
-volatile bool g_install_npc_damage_hook = false;
+volatile bool g_install_npc_damage_hook = true;  // per-damage-event (not per-frame) -> FPS-safe; needed for client->host relay
 volatile bool g_npc_damage_capture_log = true;
 volatile bool g_enable_attackinfo_replay_test = false;
 volatile bool g_enable_fresh_attackinfo_test = true;
@@ -3612,14 +3627,47 @@ void destroy_attackinfo_in_place(void* attack_info) {
     destroy(attack_info, 0);
 }
 
+// Apply `damage` HP to `target` enemy authoritatively, attributed to `source` (the
+// avatar/Nadine), by constructing a fresh AttackInfo and publishing it through the
+// engine's native attack publisher. This is the working damage primitive (no stale
+// capture, no crash). Returns true on publish.
+bool publish_attack_on(void* source, void* target, float damage) {
+    if (source == nullptr || target == nullptr) return false;
+    if (readable_bytes(static_cast<std::byte*>(source) + 0xBC) < sizeof(std::uint32_t))
+        return false;
+    if (!is_enemy_object(target) || is_dead_ragdoll(target)) return false;
+
+    alignas(16) std::array<std::byte, 0x860> storage{};
+    void* const attack_info =
+        reinterpret_cast<AttackInfoConstructorFn>(g_module + 0x27A160)(storage.data(), 0);
+    if (!is_supported_attackinfo(attack_info)) return false;
+
+    auto* const bytes = static_cast<std::byte*>(attack_info);
+    *reinterpret_cast<void**>(bytes + 0x08) =
+        *reinterpret_cast<void**>(static_cast<std::byte*>(source) + 0xA8);
+    *reinterpret_cast<std::uint32_t*>(bytes + 0x10) =
+        *reinterpret_cast<std::uint32_t*>(static_cast<std::byte*>(source) + 0xBC);
+    *reinterpret_cast<float*>(bytes + 0x14) = damage;
+    *reinterpret_cast<float*>(bytes + 0x20) = damage;   // total damage
+    *reinterpret_cast<std::uint32_t*>(bytes + 0x24) = 1;  // one damage point
+    *reinterpret_cast<float*>(bytes + 0x70) = damage;
+    if (readable_bytes(static_cast<std::byte*>(target) + kWorldPositionOffset) >=
+        sizeof(float) * 4) {
+        std::memcpy(bytes + 0x30,
+                    static_cast<std::byte*>(target) + kWorldPositionOffset,
+                    sizeof(float) * 4);
+    }
+    reinterpret_cast<PublishAttackFn>(g_module + 0x27A270)(attack_info, target);
+    destroy_attackinfo_in_place(attack_info);
+    return true;
+}
+
 bool publish_fresh_nadine_attackinfo() {
     void* const source = g_last_nadine_object;
-    if (source == nullptr ||
-        readable_bytes(static_cast<std::byte*>(source) + 0xBC) < sizeof(std::uint32_t)) {
+    if (source == nullptr) {
         log_line("FRESH-ATTACKINFO: Nadine source is unavailable");
         return false;
     }
-
     void* target = nullptr;
     for_each_character([&](void* obj, const char* /*name*/) {
         if (target == nullptr && obj != source && is_enemy_object(obj) &&
@@ -3631,45 +3679,33 @@ bool publish_fresh_nadine_attackinfo() {
         log_line("FRESH-ATTACKINFO: no live enemy found");
         return false;
     }
-
-    alignas(16) std::array<std::byte, 0x860> storage{};
-    void* const attack_info =
-        reinterpret_cast<AttackInfoConstructorFn>(g_module + 0x27A160)(
-            storage.data(), 0);
-    if (!is_supported_attackinfo(attack_info)) {
-        log_line("FRESH-ATTACKINFO: constructor returned an unsupported object");
-        return false;
-    }
-
-    auto* const bytes = static_cast<std::byte*>(attack_info);
-    *reinterpret_cast<void**>(bytes + 0x08) =
-        *reinterpret_cast<void**>(static_cast<std::byte*>(source) + 0xA8);
-    *reinterpret_cast<std::uint32_t*>(bytes + 0x10) =
-        *reinterpret_cast<std::uint32_t*>(static_cast<std::byte*>(source) + 0xBC);
-
-    constexpr float kTestDamage = 25.0F;
-    *reinterpret_cast<float*>(bytes + 0x14) = kTestDamage;
-    *reinterpret_cast<float*>(bytes + 0x20) = kTestDamage;
-    *reinterpret_cast<std::uint32_t*>(bytes + 0x24) = 1;
-    *reinterpret_cast<float*>(bytes + 0x70) = kTestDamage;
-
-    if (readable_bytes(static_cast<std::byte*>(target) + kWorldPositionOffset) >=
-        sizeof(float) * 4) {
-        std::memcpy(
-            bytes + 0x30,
-            static_cast<std::byte*>(target) + kWorldPositionOffset,
-            sizeof(float) * 4);
-    }
-
     log_line("FRESH-ATTACKINFO: publishing 25 damage from Nadine");
-    reinterpret_cast<PublishAttackFn>(g_module + 0x27A270)(attack_info, target);
-    destroy_attackinfo_in_place(attack_info);
-    log_line("FRESH-ATTACKINFO: publisher returned; stack object destroyed");
-    return true;
+    const bool ok = publish_attack_on(source, target, 25.0F);
+    log_line(ok ? "FRESH-ATTACKINFO: published" : "FRESH-ATTACKINFO: publish failed");
+    return ok;
 }
 
 std::uint64_t __fastcall hooked_npc_damage(void* a1, void* a2, void* a3) {
     if (a2 != nullptr) {
+        // CLIENT->HOST damage relay: on the client (role B), the local player's attack
+        // on an enemy lands here. Forward {enemy name-hash, damage} to the host, which
+        // re-applies it authoritatively. (On the client only the local player attacks;
+        // puppets + the avatar have AI disabled.)
+        if (g_client_damage_relay && g_net_role_b && g_state_net.enabled &&
+            g_state_net.peer_set && a1 != nullptr && is_supported_attackinfo(a2) &&
+            readable_bytes(a1) >= 0x20 && is_enemy_object(a1)) {
+            float dmg = *reinterpret_cast<float*>(static_cast<std::byte*>(a2) + 0x20);
+            const char* nm = reinterpret_cast<const char*>(a1) + sizeof(void*);
+            if (dmg > 0.0f && dmg < 1.0e5f && readable_bytes(nm) >= 4) {
+                coop::ClientDamagePacket dp{};
+                dp.name_hash = coop_name_hash(nm, 64);
+                dp.damage = dmg;
+                sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&dp),
+                       sizeof(dp), 0,
+                       reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+                       sizeof(g_state_net.peer_addr));
+            }
+        }
         std::size_t a2sz = readable_bytes(a2);
         if (g_attackinfo_template == nullptr && is_supported_attackinfo(a2)) {
             g_attackinfo_template = clone_attackinfo(a2);
@@ -3901,6 +3937,8 @@ void send_enemy_states() {
         std::memcpy(es.quat,
                     static_cast<std::byte*>(obj) + kPlayerQuatOffset, sizeof(es.quat));
         es.flags = is_dead_ragdoll(obj) ? coop::kEnemyFlagDead : 0;
+        EnemyHealthTarget eh{};
+        es.hp = read_enemy_health(obj, eh) ? eh.hp : -1;  // host current HP
         ++n;
     });
     pkt.count = static_cast<std::uint16_t>(n);
@@ -3953,6 +3991,16 @@ void apply_peer_enemies() {
                 std::memcpy(world, ep.enemies[i].pos, sizeof(ep.enemies[i].pos));
                 std::memcpy(localp, ep.enemies[i].pos, sizeof(ep.enemies[i].pos));
                 std::memcpy(quat, ep.enemies[i].quat, sizeof(ep.enemies[i].quat));
+                // Pin this puppet's HP to the host's authoritative value so the client
+                // shows correct HP and never kills the puppet locally (host is authority).
+                if (ep.enemies[i].hp >= 0) {
+                    EnemyHealthTarget eh{};
+                    if (read_enemy_health(obj, eh)) {
+                        *reinterpret_cast<std::int32_t*>(
+                            static_cast<std::byte*>(eh.health) + kCurrentHpOffset) =
+                            ep.enemies[i].hp;
+                    }
+                }
             }
             ++applied;
             break;
@@ -4150,6 +4198,25 @@ void net_tick() {
         if (now - last_enemy_send >= 33) {  // ~30 Hz host enemy snapshot
             last_enemy_send = now;
             send_enemy_states();
+        }
+        // HOST: drain client->host damage events and apply them authoritatively.
+        if (g_client_damage_relay) {
+            std::uint32_t head = g_client_dmg_head.load(std::memory_order_acquire);
+            int applied = 0;
+            while (g_client_dmg_tail != head && applied < 64) {
+                ClientDmgEvent ev = g_client_dmg_ring[g_client_dmg_tail % 64];
+                ++g_client_dmg_tail; ++applied;
+                void* tgt = nullptr;
+                for_each_character([&](void* obj, const char* name) {
+                    if (tgt == nullptr && is_enemy_object(obj) && !is_dead_ragdoll(obj) &&
+                        coop_name_hash(name, 64) == ev.name_hash) {
+                        tgt = obj;
+                    }
+                });
+                if (tgt != nullptr && g_last_nadine_object != nullptr) {
+                    publish_attack_on(g_last_nadine_object, tgt, ev.damage);
+                }
+            }
         }
     } else {
         if (now - last_enemy_apply >= 16) {

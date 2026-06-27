@@ -53,6 +53,7 @@ struct EnemyState {
     float pos[4]{};               // world position block (Char+0x240)
     float quat[4]{};              // orientation quaternion (Char+0x140)
     std::uint32_t flags = 0;      // bit0 = dead (host vtable became ProcessRagdoll)
+    std::int32_t hp = -1;         // host current HP (HealthSystem+0x3c); -1 = unknown
 };
 constexpr std::uint32_t kEnemyFlagDead = 0x1;
 
@@ -63,6 +64,17 @@ struct EnemyPacket {
     std::uint32_t sequence = 0;
     std::uint32_t timestamp_ms = 0;
     EnemyState enemies[kMaxEnemies]{};
+};
+
+// Client -> host damage relay: when the CLIENT player damages a puppet enemy, the
+// client's NPC-damage hook fires; we send {enemy name-hash, damage} to the host, and
+// the host re-applies it authoritatively (publish a fresh AttackInfo) on its matching
+// enemy. Host stays the single source of truth (enemy state replicates back).
+constexpr std::uint32_t kClientDamageMagic = 0x444E4F43;  // "COND"
+struct ClientDamagePacket {
+    std::uint32_t magic = kClientDamageMagic;
+    std::uint32_t name_hash = 0;  // FNV-1a of the target enemy actor name
+    float damage = 0.0f;
 };
 
 }  // namespace coop
