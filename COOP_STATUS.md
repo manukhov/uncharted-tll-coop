@@ -1,4 +1,4 @@
-# TLL Campaign Co-op — Status & Findings (2026-06-22)
+# TLL Campaign Co-op — Status & Findings (2026-06-28)
 
 Goal (north star): a fully-playable **second player as Nadine** in the *Uncharted:
 The Lost Legacy* campaign (`tll.exe`), via runtime DLL injection — eventually a
@@ -10,7 +10,31 @@ players, not just the clone).
 
 ---
 
-## ★ DIRECTION: Variant B (current) — drop the "2nd Player clone"
+## CURRENT PRIORITY: complete player synchronization first
+
+The current acceptance criterion is no longer a moving positional proxy. Both
+copies must reproduce the other player completely: locomotion and traversal,
+look/aim, weapons and firing, melee, interactions, health, death, respawn, and
+campaign lifecycle. Enemy synchronization is explicitly deferred until this is
+complete.
+
+The present packet is insufficient: it carries position, quaternion, velocity,
+and a 32-bit copy of input buttons mislabeled `anim_state`. Continuous state needs
+an expanded snapshot, while one-shot actions need a reliable ordered event stream.
+
+The immediate blocker is the remote actor. `NadineBuddy + MoveTo` cannot represent
+all Player actions. A second retained `Player` has the required graph and mechanics.
+The earlier claim that its mere presence gates local aim/fire was not cleanly
+isolated: the supposedly passive test automatically ran the slot-1 camera owner
+every frame. Player presence, slot-1 input, and the second camera must now be tested
+independently.
+
+Enemy snapshots, enemy damage relay, and mirrored enemy death remain preserved but
+are disabled by default during player work.
+
+---
+
+## Previous Direction: Variant B (reference)
 
 A 2nd full Player on one machine is a dead end: a 2nd **retained Player breaks the
 LOCAL player's weapon/aim** (single-player gating on retained-slot occupancy;
@@ -121,16 +145,60 @@ problems for the real two-PC co-op:
   AttackInfo is polymorphic and large (`0x860` base, `0x880` melee, `0x8C0`
   projectile); the old `0x100`-byte replay was invalid and is disabled. Each
   type has a virtual heap clone at `+0x8`. The complete
-  clone -> `0x14027A270` -> virtual delete prototype is implemented and builds,
-  but both its capture hook and test switch remain disabled. Publisher lifetime
-  is confirmed synchronous. Static accessors show the stale fields explicitly:
+  clone -> `0x14027A270` -> virtual delete prototype is implemented and builds.
+  More importantly, the fresh generic `AttackInfo` path has now been validated
+  live: it removed enemy health, returned normally, and required no captured
+  template. Nadine's live process handle was accepted as the source. The test
+  switch is disabled again after validation. Publisher lifetime is confirmed
+  synchronous. Static accessors show the stale fields explicitly:
   attacker handle at `+0x08/+0x10`, damage-point count at `+0x24`, points at
   `+0x30` stride `0x50`, each point's hit-object handle at `+0x30/+0x34`, and
   point damage at `+0x40`. The fresh-object path is now recovered: total damage
   is `AttackInfo+0x20`, ordinary armor calculation is `0x1402942A0`, and an
-  unmapped zero-handle point preserves full health damage. A disabled prototype
-  constructs a fresh attack from Nadine and publishes it without captured stale
-  handles. Production relay must still provide validated source/target data.
+  unmapped zero-handle point preserves full health damage. The probe now chooses
+  the nearest live enemy by 3D distance, logs HP before/after, and triggers only
+  once per physical key press; this target-selection correction still needs one
+  in-game confirmation. Production relay must still provide validated target
+  identity across the network.
+- **Two-instance enemy death:** a client kill reached the host and synchronized
+  back, proving the complete damage relay route executes. The original Y=`-10000`
+  death representation has been removed. A process-tagged run then isolated the
+  remaining client crash exactly: access violation at `RequestDisableAi+0x17`
+  (`RVA 0x3F5D47`) while applying an enemy snapshot. Client enemy synchronization
+  no longer calls `RequestDisableAi`; a follow-up role-A termination immediately
+  after the same call for Nadine showed that runtime AI toggling itself is unsafe
+  during scene construction. All automatic AI enable/disable calls are now off.
+  Health/transform replication and native MoveTo remain active. A discarded
+  pointer-identity cooldown and an over-broad focus gate temporarily suppressed
+  synchronization; background copies now keep sending read-only state while only
+  the foreground copy mutates its world. Final death presentation still needs a
+  stable implementation and confirmation.
+- **Current combat correction (2026-06-28):** role B had been relaying enemy damage
+  while suppressing the same hit locally, which explains enemies disappearing on the
+  host but surviving on the client. Role B now both relays and applies its native hit;
+  locally dead ragdolls are no longer overwritten by enemy snapshots. The NPC damage
+  vtable hook is no longer installed on role A, where it was unnecessary and was the
+  main remaining suspect in a delayed host-only combat termination. Live confirmation
+  is pending.
+- **Current world-sync correction:** `RequestDisableAi` was statically confirmed to
+  dereference unfinished NPC subobjects without checks. Calls now require the complete
+  `npc+0x1FC0` / `npc+0x1F88` chain to be readable. Client enemy pausing is currently
+  off because it also suppresses all reactions to local Nadine; pausing NadineBuddy
+  is disabled after a host fatal exit.
+  The same run caught an initial `FLT_MAX` player position reaching native movement;
+  all player/enemy positions are now bounded and checked at every network boundary.
+  Production
+  state application also no longer stops merely because its game window is in the
+  background; the foreground test remains only on manual diagnostics. Live two-window
+  confirmation is pending.
+- **Enemy death presentation:** lethal base `AttackInfo` is closed after a client
+  fail-fast during its kill branch. Replicated lethal damage now mirrors campaign
+  `npc-die`: full HealthSystem damage followed by a new pointer-free 0x70-byte
+  HitDescription and `AiHitController::Die(true)`. `npc-kill` was rejected because
+  it only destroys the process tree. Live confirmation is pending.
+- **MoveTo hardening:** the native navigation-frame validator `0x141DEF6C0` is now
+  mandatory; the NPC clock/controller/radius/target are checked and refresh returns
+  to the previously stable 250 ms interval.
 - **Co-op mode gate** `HIBYTE(dword_143E07470)` + `byte_143E03568`: flipping it (mid-
   session OR at init before load) **CRASHES** — campaign levels have no co-op data/
   spawners, so co-op mode dereferences uninitialized co-op session state.

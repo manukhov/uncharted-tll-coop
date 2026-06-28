@@ -8,6 +8,70 @@ import idc
 
 
 FUNCTIONS = {
+    0x140541EF0: (
+        "ScriptNpcDieHandler",
+        "Campaign npc-die command handler. Performs a native forced death: "
+        "checks Pirate death state, applies maximum health damage through "
+        "Pirate vtable +0xD00, resolves AiHitController through npc+0x15C8 "
+        "and virtual +0x78, builds a clean 0x70-byte HitDescription, then calls "
+        "AiHitController vtable +0xB8. This is the safe replicated-death model.",
+    ),
+    0x14055DF80: (
+        "ScriptNpcKillHandler",
+        "Script npc-kill handler. Routes to Process::KillTree rather than a "
+        "gameplay death transition; unsuitable for replicated combat death.",
+    ),
+    0x1416A5C20: (
+        "ProcessKillTree",
+        "ndlib Process::KillTree. Recursively tears down a process hierarchy "
+        "and bypasses normal health, hit, ragdoll, and gameplay death handling. "
+        "Do not use this as a networked NPC/player death primitive.",
+    ),
+    0x1402F8B40: (
+        "PirateIsDeadViaHealthSystem",
+        "Pirate virtual +0x860. Resolves the HealthSystem at npc+0x4A8 and "
+        "returns its virtual +0x30 dead test; used by ScriptNpcDieHandler.",
+    ),
+    0x141DEE1D0: (
+        "PirateApplyDirectHealthDamage",
+        "Pirate virtual +0xD00. Forwards damage to HealthSystem virtual +0x20 "
+        "and returns current health through virtual +0xB8. Used by npc-die "
+        "before the explicit AiHitController death transition.",
+    ),
+    0x140500C20: (
+        "AiHitControllerDie",
+        "AiHitController virtual +0xB8. Runs the authored NPC death transition "
+        "from a HitDescription. ScriptNpcDieHandler calls it with a zeroed "
+        "0x70-byte description, direction (0,0,1,0), +0x48=-1 and "
+        "+0x64=maxHealth.",
+    ),
+    0x141FCB210: (
+        "HealthSystemApplyDamage",
+        "HealthSystem virtual +0x20. Applies integer health damage and updates "
+        "the system's current-health/death-related state. Called by "
+        "PirateApplyDirectHealthDamage.",
+    ),
+    0x141FCB510: (
+        "HealthSystemIsDead",
+        "HealthSystem virtual +0x30. Returns whether virtual +0xB8 current "
+        "health is <= 0.",
+    ),
+    0x141FCAFA0: (
+        "HealthSystemGetCurrentHealth",
+        "HealthSystem virtual +0xB8. Returns current health, including the "
+        "system's bounded regeneration adjustment.",
+    ),
+    0x141FCA9C0: (
+        "HealthSystemGetMaxHealth",
+        "HealthSystem virtual +0xC0. Returns the sum of the base and bonus "
+        "maximum-health fields at +0x44 and +0x48.",
+    ),
+    0x141DEF6C0: (
+        "ValidateNavigationFrame",
+        "Validates a prepared navigation frame under the native NavMesh global "
+        "lock. The NPC MoveTo script path requires this check before submitting "
+        "a goal; invalid frames must not reach NadineNpcMoveTo_Type02.",
+    ),
     0x14027A270: (
         "PublishAttackEventToTarget",
         "Native high-level attack publisher. Accepts a polymorphic AttackInfo "
@@ -3004,13 +3068,28 @@ FUNCTIONS = {
         "sample, and stores the result plus retained/runtime metadata into the "
         "owner's buffered state array around +0xC00..+0xC30.",
     ),
-    0x141436EA0: (
+    0x141436E70: (
         "ResolveWeaponFireObserverStateFromLiveRetainedPlayer",
         "Higher-level runtime user of the 'weapon-fire' token. Builds the same "
         "hashed id, pushes it through nearby runtime helpers, resolves retained "
-        "player slot 0, checks gameplay-state gates, computes a world-space "
-        "vector/qualification result, and forwards it through 0x141434DA0 "
-        "with a toggled binary state.",
+        "player slot 0, and changes its qualification path when the multiplayer/"
+        "split byte in dword_143E07470 is active. This proves split activation "
+        "affects weapon observation, but does not prove slot-1 occupancy alone "
+        "blocks aim/fire. It then computes a world-space result and forwards it "
+        "through 0x141434DA0 with a toggled binary state.",
+    ),
+    0x1404CA550: (
+        "EnumerateLivePlayerActorsForClimbChecks",
+        "Collects valid Player actors. In campaign it reads retained slots 0 and "
+        "1 directly; in multiplayer it scans the ten NetGameManager slots. Its "
+        "only direct code caller is AiClimbController::IsBlocked, so this is not "
+        "the local weapon/aim gate.",
+    ),
+    0x1404CEFC0: (
+        "AiClimbControllerIsBlocked",
+        "AiClimbController::IsBlocked. Enumerates live players through "
+        "0x1404CA550 and tests Edge, EdgeAimNew, PeekOver and Melee geometry "
+        "against them while evaluating a climb segment.",
     ),
     0x141432B90: (
         "ResolveOwnerWeaponObserverScalarByStateId",

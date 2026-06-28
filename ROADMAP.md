@@ -1,4 +1,4 @@
-> **Current status & findings: see [COOP_STATUS.md](COOP_STATUS.md) (updated 2026-06-22).**
+> **Current status & findings: see [COOP_STATUS.md](COOP_STATUS.md) (updated 2026-06-28).**
 
 # TLL Co-op Mod Roadmap
 
@@ -13,15 +13,37 @@ Target build: `tll.exe 1.4.21058.0`
 - у каждого свой инпут и своя камера;
 - host остаётся authority для campaign state, checkpoints, combat, scripts и saves.
 
-## Single Focus
+## Single Focus (2026-06-28)
 
 Единственный текущий фокус:
 
-**поднять Nadine в реальный second-player path движка, а не улучшать buddy/NPC control.**
+**полностью синхронизировать двух игроков между двумя копиями игры.**
 
-Пока это не сделано, всё остальное вторично.
+Порядок обязателен:
 
-## Current Gate
+1. устойчивое представление удалённого игрока в каждой копии игры;
+2. положение, поворот, скорость и все режимы перемещения;
+3. направление взгляда и прицела, оружие, выстрелы, перезарядка и боезапас;
+4. ближний бой, урон, здоровье, смерть и возрождение игроков;
+5. прыжки, укрытия, лазание, уступы, верёвка, взаимодействия и транспорт;
+6. контрольные точки, сцены и переходы между главами;
+7. только после этого — синхронизация противников.
+
+Непрерывные величины передаются снимками состояния. Разовые действия передаются
+отдельными нумерованными событиями с подтверждением доставки. Поле
+`StatePacket::anim_state` сейчас содержит лишь кнопки и не считается
+синхронизацией анимации или действий.
+
+Текущий технический блокер: в каждой копии нужен устойчивый объект удалённого
+игрока. `NadineBuddy + MoveTo` не воспроизводит все возможности игрока. Старый
+вывод, что само наличие второго `Player` ломает прицеливание, оказался получен при
+автоматически работающей второй камере. Сначала проводится чистое разделение трёх
+признаков: объект `Player`, ввод слота 1 и камера/второй экран.
+
+Синхронизация противников и передача урона противникам сохранены как исследованный
+материал, но выключены по умолчанию и не развиваются до завершения игроков.
+
+## Previous Architecture Findings (reference, not current priority)
 
 Главная feasibility-проверка ПРОЙДЕНА:
 
@@ -76,7 +98,7 @@ screen-route index, читая two-screen route table `0x14697AD50` (route 0/1).
   - manual/debug follow-state writer `0x141C07E20`
   - or a manager1/local-player1 analog to the mature manager0 retained-camera path
 
-## Active Plan (Nadine elevation first; split/local-player only as supporting seam)
+## Previous Nadine Elevation Plan (reference)
 
 What is already strong but NOT yet sufficient as a foundation:
 - campaign can boot the engine's native split/local-player state;

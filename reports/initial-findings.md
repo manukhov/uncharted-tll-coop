@@ -20926,3 +20926,219 @@ not a damageable collision object; it does not dereference a null registry entry
 
 `g_enable_fresh_attackinfo_test` remains `false`; no live behavior is enabled.
 Both release DLL targets build successfully with this probe.
+
+### Fresh AttackInfo live validation (2026-06-27)
+
+The controlled `VK_DECIMAL` test succeeded in campaign gameplay:
+- a newly constructed base `AttackInfo` published through `0x14027A270`
+  actually removed health from a live enemy;
+- Nadine's current process handle was accepted as the attack source;
+- the publisher returned and the stack object was destroyed without a crash;
+- no captured attack template or stale hit-object handle was required.
+
+The first test did not hit the nearest enemy. This was not engine target
+selection: the probe selected the first live enemy in `CharacterManager` order.
+The implementation now computes 3D distance from Nadine, rejects dead/zero-HP
+enemies, and selects the minimum. It also logs target name, distance, and HP
+before/after publication. This nearest-target correction is built but still needs
+one in-game confirmation.
+
+One physical key press produced repeated publications because the old handler
+relied on the unreliable `GetAsyncKeyState` low bit and keyboard repeat. The
+handler now uses an explicit released-to-pressed transition. The live-test switch
+has been returned to its default disabled state.
+
+### Two-instance enemy death relay validation (reported 2026-06-27)
+
+A prior controlled run with two game instances reached an important end-to-end
+result: killing an enemy on the client was relayed to the host and the enemy death
+was synchronized back to the client. The client then crashed. This proves that
+client damage capture, network delivery, authoritative host application, and at
+least the beginning of enemy-death state delivery all executed.
+
+Code inspection identified a concrete unsafe client action: a dead host snapshot
+made the client write the still-live enemy's Y coordinate to `-10000` every 16 ms.
+Thus the visible disappearance was not a native death transition. Repeatedly moving
+a live physics/script actor outside the world is the leading crash cause. The fix
+is to apply one fresh native attack locally while suppressing relay recursion, then
+stop all transform writes for that dead actor. This correction still requires a
+two-instance confirmation.
+
+### Two-instance focus crash isolated (2026-06-28)
+
+Process-tagged logging and a breakpoint-free exception observer identified the
+client crash exactly:
+- host process remained alive;
+- client process raised `0xC0000005` at module RVA `0x3F5D47`;
+- this is `RequestDisableAi` (`0x3F5D30`) plus `0x17`;
+- the exception followed client enemy-snapshot application, not damage/death
+  publication.
+
+The client called `RequestDisableAi` on every matched enemy before applying the
+host transform. At least one enemy can be present in `CharacterManager` while its
+AI controller is not ready for that request. Generic pointer/readability checks
+cannot prove the internal controller is initialized. Enemy synchronization no
+longer disables enemy AI. Health and transform application remain enabled; local
+AI may temporarily fight transform correction until a safer controller-state test
+is recovered. The separate NadineBuddy manual-control call is retained because it
+succeeded and targets the known fully initialized buddy object.
+
+Follow-up correction: the separate NadineBuddy call is not safe during scene
+construction either. In the next clean run, role B remained alive while role A
+terminated immediately after `NadineBuddy AI disabled for manual control`; no
+damage or enemy-snapshot action preceded it. Runtime `RequestDisableAi`/
+`RequestEnableAi` calls are now disabled for the stable co-op build. Network avatar
+movement continues through native `MoveTo` with AI left enabled.
+
+The subsequent no-crash run exposed two over-broad guards that suppressed
+synchronization rather than improving safety:
+- the retained Player object address legitimately changes several times, so a
+  two-second pointer-identity cooldown could remain permanently blocked;
+- returning from the entire network tick when the process was not foreground also
+  stopped outgoing player-state packets, leaving the active copy with stale data.
+
+The pointer-identity cooldown has been removed. Background copies may continue the
+read-only state/enemy send path, while world mutation (enemy apply, damage apply,
+Nadine movement) remains foreground-only and packets expire after 1.5 seconds.
+
+### Combat divergence and delayed host termination (2026-06-28)
+
+The next two-instance combat run showed that client-to-host damage relay remained
+functional: enemies killed by the client disappeared on the host. The apparent
+desynchronization had a local cause. Role B forwarded each hit and then returned
+from the hooked damage handler without invoking the game's original handler, so
+the same hit was applied only on role A.
+
+The host terminated after several minutes of combat without reaching the exception
+observer. Role A did not need the NPC damage vtable hook: its own hits are already
+native, while relayed client hits are consumed by the network tick and published as
+fresh `AttackInfo` objects. The hook is now installed only after role assignment and
+only in role B, reducing the host combat path to unmodified game code.
+
+Role B now relays a hit and then invokes its native damage handler as well. This lets
+both worlds execute their own ordinary hit and death transitions. Client ragdolls are
+excluded from subsequent host transform/health writes, avoiding the earlier unsafe
+combination of a completed local death with continuously pinned physics state. The
+optional forced client death publisher remains disabled. This change requires a new
+two-instance combat confirmation.
+
+### AI pause preconditions and background synchronization (2026-06-28)
+
+The next run no longer crashed, but player and enemy worlds visibly diverged. Packet
+delivery continued. The client applied only 10 of 13 host enemy records because three
+local enemies had already completed their native death transition and were correctly
+excluded as ragdolls. Actor names in the tested encounter are unique; name matching is
+not the cause of this particular divergence.
+
+Static decompilation of `RequestDisableAi` (`0x1403F5D30`) explains the earlier exact
+crash at `+0x17`: the function immediately dereferences `npc+0x1FC0` and writes byte
+`+0x368`, then walks the binding rooted at `npc+0x1F88`, with no null checks. Scene
+construction can expose a registered `Pirate` before those subobjects exist. A guarded
+predicate now mirrors the complete native access chain, including the nested registry,
+before allowing the call.
+
+The guarded enemy pause worked without the previous access violation, but exposed a
+semantic problem: paused client enemies cannot react to the local Nadine, and the
+current packet does not contain host attack/animation state to replace that behavior.
+Client enemy pausing is therefore off by default until those states are recovered.
+NadineBuddy pausing also remains disabled after a host fatal exit.
+
+A separate one-PC test defect was also identified: all received world mutations were
+restricted to the foreground process. Switching windows therefore stopped remote
+player movement, client enemy application, and host consumption of relayed damage in
+the background copy. These operations already execute synchronously from the game's
+update hook and remain protected by `world_stable()`; the foreground restriction has
+been removed from the production synchronization paths and retained only for manual
+diagnostic probes.
+
+The same failed run exposed an independent packet-validity bug before the host
+terminated. Role B sent its first slot-0 position while the Player still contained
+the engine sentinel `FLT_MAX`; role A logged target `(3.40282e+38, 3.40282e+38)`,
+computed an infinite distance, and could feed NaN direction components into native
+`MoveTo`. Player packets are now rejected at send, receive, and application unless
+all three coordinates are finite and within a broad world bound. Enemy snapshots
+use the same validation. This is the strongest direct explanation for the fatal
+host exit and requires a clean rerun.
+
+The following live report also confirmed why a host kill remained live on the client:
+the dead flag arrived, but `g_enable_client_death_publish` was still deliberately off.
+It is now enabled. A host dead flag publishes one fresh lethal `AttackInfo` on the
+matching live client enemy under relay-recursion suppression. The unsafe
+`RequestEnableAi` call formerly placed before that publication has been removed.
+Locally completed ragdolls remain excluded from transform writes.
+
+### Static crash audit: lethal AttackInfo closed, npc-die recovered (2026-06-28)
+
+The next client terminated immediately after a host-side kill, before the post-call
+enemy-death log line. No ordinary exception reached the observer. Static comparison
+with native attack builders found that combat uses `ProjectileAttackInfo` or
+`CloseCombatAttackInfo` for complete kills. The fresh base object is proven only for
+non-lethal health damage; base `AttackInfo` is now prohibited from crossing zero HP.
+
+Script `npc-kill` (`0x14055DF80 -> 0x1416A5C20`) recursively destroys the process
+tree and bypasses gameplay death, so it was rejected. Script `npc-die`
+(`0x140541EF0`) provides the proper forced-death sequence without an `AttackInfo`:
+1. check Pirate virtual `+0x860` for an existing death;
+2. read total maximum health through HealthSystem virtual `+0xC0`;
+3. apply it through Pirate `+0xD00` / HealthSystem `+0x20`;
+4. resolve AiHitController through `npc+0x15C8`, virtual `+0x78`;
+5. zero `HitDescription[0x70]`, set `+0x10=(0,0,1,0)`, `+0x48=-1`, and
+   `+0x64=maxHealth`;
+6. call AiHitController virtual `+0xB8` (`0x140500C20`) with `true`.
+
+The implementation now mirrors this sequence with exact vtable/readability checks.
+Both host and client route potentially lethal replicated damage through it; base
+AttackInfo remains only for non-lethal damage.
+
+The MoveTo path was audited independently. Its native script wrapper validates every
+navigation frame through `0x141DEF6C0`; the mod previously skipped this check and
+refreshed commands every 140 ms. It now validates the NPC clock, controller, radius,
+target, and native navigation frame, and uses the previously stable 250 ms interval.
+
+### Priority reset: complete players before enemies (2026-06-28)
+
+The project order is now strict: first reproduce both players completely between
+the two game instances; only then resume enemy synchronization. Enemy snapshots,
+damage relay, and mirrored death are preserved but disabled by default.
+
+The existing `StatePacket` is only a positional prototype. It contains transform,
+velocity, and the low 32 bits of the slot-0 input button field; `anim_state` is not
+an engine animation state. Full player synchronization requires two channels:
+- frequent snapshots for continuous movement, orientation, aim, weapon and health;
+- reliable ordered events for fire, reload, weapon changes, melee, traversal,
+  interactions, damage, death and respawn.
+
+The first blocking dependency is a full remote actor in each process. The current
+`NadineBuddy + MoveTo` proxy cannot execute the full Player action graph, while a
+second retained `Player` has the required mechanics. Its interaction with local
+aim/fire must be isolated from slot-1 input and camera activation before choosing
+the remote-actor implementation.
+
+### Correction: the passive-Player aim test also ran camera 1 (2026-06-28)
+
+The prior conclusion that retained slot-1 occupancy alone disables local aim/fire
+was not cleanly isolated. In the old "passive clone" build, `aux_input_thread`
+automatically set `g_drive_screen1_cam=true` whenever slot 1 existed. The game-thread
+hook then called `UpdatePlayerAnimatedCameraControlOwnerAndRouteState` at
+`0x140238800` for the slot-1 owner every frame. Logs from the same run contain the
+repeating `screen1cam` calls.
+
+Static auditing found no direct weapon prohibition in the eight functions that
+reference retained slot 1 explicitly. `0x1404CA550` enumerates both players for
+`AiClimbController::IsBlocked`, not for weapon gating. A real weapon-state branch at
+`0x141436E70` does change behavior under the multiplayer/split mode byte in
+`dword_143E07470`, confirming that split activation can affect weapon logic, but it
+does not prove slot-1 occupancy alone is the cause.
+
+The automatic camera-1 call is now removed. The next valid runtime matrix is:
+1. slot-1 Player present, split login off, slot-1 input off, camera-1 update off;
+2. enable only slot-1 input;
+3. return to clean state, then enable only camera-1 update.
+
+### Player snapshot protocol v2 (2026-06-28)
+
+`StatePacket` version 2 replaces the misleading `anim_state` placeholder with the
+engine-resolved slot-0 input fields: left stick, right stick, complete 64-bit button
+mask, and pressed/released edges. Position, quaternion, and velocity remain. This is
+the continuous source stream needed for remote movement, camera, aiming and action
+recovery; reliable one-shot action delivery remains a separate required channel.

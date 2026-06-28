@@ -1,0 +1,323 @@
+=== 0x1403F5D30: RequestDisableAi [0x1403F5D30..0x1403F5E1C] ===
+// Confirmed Nadine AI disable path. Tested as RequestDisableAi(npc, false, true).
+__int64 __fastcall RequestDisableAi(__int64 a1, char a2, char a3)
+{
+  __int64 result; // rax
+  __int64 v5; // r9
+  __int64 *v6; // rax
+  unsigned int v7; // edx
+  unsigned int v8; // r10d
+  __int64 v9; // r11
+
+  *(_BYTE *)(*(_QWORD *)(a1 + 8128) + 872LL) = a3;
+  result = *(_QWORD *)(a1 + 8072);
+  v5 = **(_QWORD **)(result + 8);
+  if ( v5 )
+  {
+    v6 = *(__int64 **)(*(_QWORD *)(*(_QWORD *)(v5 + 104) + 9096LL) + 40LL);
+    v7 = 0;
+    v8 = *((_DWORD *)v6 + 2);
+    if ( v8 )
+    {
+      v9 = *v6;
+      while ( *(__int16 *)(v5 + 124) != *(_DWORD *)(v9 + 24LL * v7) || *(_DWORD *)(v9 + 24LL * v7 + 16) != 1 )
+      {
+        if ( ++v7 >= v8 )
+          goto LABEL_9;
+      }
+      *(_BYTE *)(v5 + 128) |= 1u;
+    }
+LABEL_9:
+    *(_BYTE *)(v5 + 128) |= 4u;
+    *(_BYTE *)(a1 + 10192) &= ~4u;
+    *(_BYTE *)(a1 + 10192) |= 4 * a2;
+    return sub_1403CF8B0(a1, 6, " - ScriptSkill::RequestDisableAi: Command from script (%s)\n");
+  }
+  return result;
+}
+
+=== 0x1403F5C80: RequestEnableAi [0x1403F5C80..0x1403F5D2A] ===
+// Confirmed Nadine AI restore path. Tested as RequestEnableAi(npc, false).
+__int64 __fastcall RequestEnableAi(__int64 a1, char a2)
+{
+  __int64 result; // rax
+  __int64 v7; // r8
+
+  __asm { vxorps  xmm1, xmm1, xmm1 }
+  *(_BYTE *)(*(_QWORD *)(a1 + 8128) + 872LL) = 0;
+  *(_BYTE *)(a1 + 7511) &= ~8u;
+  *(_QWORD *)(a1 + 8856) = qword_143077538;
+  (*(void (__fastcall **)(__int64))(*(_QWORD *)a1 + 3344LL))(a1);
+  result = *(_QWORD *)(a1 + 8072);
+  v7 = *(_QWORD *)(result + 8);
+  if ( *(_QWORD *)v7 )
+  {
+    *(_BYTE *)(*(_QWORD *)v7 + 128LL) &= 0xFAu;
+    *(_BYTE *)(a1 + 10192) = (4 * a2) & 0xF7 | *(_BYTE *)(a1 + 10192) & 0xF3;
+    return sub_1403CF8B0(a1, 6, " - ScriptSkill::RequestEnableAi: Command from script (%s)\n");
+  }
+  return result;
+}
+
+=== 0x1403F5D69: RequestDisableAi [0x1403F5D30..0x1403F5E1C] ===
+// Confirmed Nadine AI disable path. Tested as RequestDisableAi(npc, false, true).
+__int64 __fastcall RequestDisableAi(__int64 a1, char a2, char a3)
+{
+  __int64 result; // rax
+  __int64 v5; // r9
+  __int64 *v6; // rax
+  unsigned int v7; // edx
+  unsigned int v8; // r10d
+  __int64 v9; // r11
+
+  *(_BYTE *)(*(_QWORD *)(a1 + 8128) + 872LL) = a3;
+  result = *(_QWORD *)(a1 + 8072);
+  v5 = **(_QWORD **)(result + 8);
+  if ( v5 )
+  {
+    v6 = *(__int64 **)(*(_QWORD *)(*(_QWORD *)(v5 + 104) + 9096LL) + 40LL);
+    v7 = 0;
+    v8 = *((_DWORD *)v6 + 2);
+    if ( v8 )
+    {
+      v9 = *v6;
+      while ( *(__int16 *)(v5 + 124) != *(_DWORD *)(v9 + 24LL * v7) || *(_DWORD *)(v9 + 24LL * v7 + 16) != 1 )
+      {
+        if ( ++v7 >= v8 )
+          goto LABEL_9;
+      }
+      *(_BYTE *)(v5 + 128) |= 1u;
+    }
+LABEL_9:
+    *(_BYTE *)(v5 + 128) |= 4u;
+    *(_BYTE *)(a1 + 10192) &= ~4u;
+    *(_BYTE *)(a1 + 10192) |= 4 * a2;
+    return sub_1403CF8B0(a1, 6, " - ScriptSkill::RequestDisableAi: Command from script (%s)\n");
+  }
+  return result;
+}
+
+=== 0x14055EEE0: sub_14055EEE0 [0x14055EEE0..0x14055F37D] ===
+// Hidden C++ exception states: #wind=1
+_QWORD *__fastcall sub_14055EEE0(_QWORD *a1, int a2, int a3, int a4)
+{
+  __int64 v6; // rsi
+  __int64 *v7; // rbx
+  const char *v8; // rdi
+  int v9; // r8d
+  __int64 v10; // rdx
+  unsigned int v11; // r14d
+  int v12; // ecx
+  __int64 *v13; // rcx
+  __int64 v14; // rax
+  int v15; // r9d
+  const char *v16; // rax
+  unsigned int v17; // ebp
+  __int64 *v18; // rcx
+  __int64 v19; // rax
+  int v20; // r9d
+  __int64 *v21; // rcx
+  char v22; // bl
+  const char *v23; // rax
+  __int64 v25; // rcx
+  const char *v26; // r9
+  unsigned int v27; // r9d
+  __int64 v28; // r10
+  unsigned __int64 v29; // r8
+  __int64 v33; // rbx
+  __int64 v34; // r11
+  unsigned int v40; // edi
+  __int64 v41; // r10
+  const char *v42; // rcx
+  const char *v49; // rbx
+  __int64 v50; // r8
+  const char *v51; // rax
+  __int64 v53; // [rsp+30h] [rbp-468h] BYREF
+  int v54; // [rsp+38h] [rbp-460h]
+  int v55; // [rsp+3Ch] [rbp-45Ch]
+  __int64 v56; // [rsp+68h] [rbp-430h]
+  _DWORD v57[256]; // [rsp+70h] [rbp-428h] BYREF
+
+  v56 = -2;
+  sub_141CE7EF0((unsigned int)&v53, a2, a3, a4, 1);
+  v6 = sub_14030C0A0(&v53, 1);
+  v7 = qword_143738240;
+  v8 = &byte_146B2C640;
+  v9 = v54;
+  if ( v55 >= v54 )
+  {
+    if ( *((_QWORD *)FlsGetValue(dwFlsIndex) + 8) )
+      v13 = (__int64 *)*((_QWORD *)FlsGetValue(dwFlsIndex) + 9);
+    else
+      v13 = qword_143738240;
+    v14 = sub_141E31150(v13, 0xFFFFFFFFLL);
+    if ( v14 && (v15 = *(_DWORD *)(v14 + 40)) != 0 )
+    {
+      sub_14014DB00(&byte_146B2C640, 32, "#%08X", v15);
+      v16 = &byte_146B2C640;
+    }
+    else
+    {
+      v16 = &byte_1428D4552;
+    }
+    sub_141CEB2B0(&v53, "Arg %u (%s) missing in script %s\n", v55, "int32", v16);
+    v11 = 0;
+    v12 = v55;
+    v9 = v54;
+    v10 = v53;
+  }
+  else
+  {
+    v10 = v53;
+    v11 = *(_DWORD *)(v53 + 8LL * v55);
+    v12 = ++v55;
+  }
+  if ( v12 >= v9 )
+  {
+    if ( *((_QWORD *)FlsGetValue(dwFlsIndex) + 8) )
+      v18 = (__int64 *)*((_QWORD *)FlsGetValue(dwFlsIndex) + 9);
+    else
+      v18 = qword_143738240;
+    v19 = sub_141E31150(v18, 0xFFFFFFFFLL);
+    if ( v19 && (v20 = *(_DWORD *)(v19 + 40)) != 0 )
+      sub_14014DB00(&byte_146B2C640, 32, "#%08X", v20);
+    else
+      v8 = &byte_1428D4552;
+    sub_141CEB2B0(&v53, "Arg %u (%s) missing in script %s\n", v55, "int32", v8);
+    v17 = 0;
+  }
+  else
+  {
+    v17 = *(_DWORD *)(v10 + 8LL * v12);
+    v55 = v12 + 1;
+  }
+  if ( v6 )
+  {
+    if ( *((_QWORD *)FlsGetValue(dwFlsIndex) + 8) )
+      v21 = (__int64 *)*((_QWORD *)FlsGetValue(dwFlsIndex) + 9);
+    else
+      v21 = qword_143738240;
+    sub_141E31230(v21, 0xFFFFFFFFLL);
+    if ( *((_QWORD *)FlsGetValue(dwFlsIndex) + 8) )
+      v7 = (__int64 *)*((_QWORD *)FlsGetValue(dwFlsIndex) + 9);
+    sub_141E31310(v7, 0xFFFFFFFFLL);
+    v22 = v17 == 1;
+    if ( v11 )
+    {
+      if ( v11 == 1 )
+      {
+        RequestDisableAi(v6, v22, 0);
+      }
+      else if ( v11 == 2 )
+      {
+        RequestDisableAi(v6, v22, 1);
+      }
+      else
+      {
+        v23 = (const char *)(*(__int64 (__fastcall **)(__int64))(*(_QWORD *)v6 + 40LL))(v6);
+        sub_141CEB2B0(&v53, "invalid script mode (%d) passed to npc '%s'\n", v11, v23);
+      }
+    }
+    else
+    {
+      *(_BYTE *)(*(_QWORD *)(v6 + 8128) + 872LL) = 0;
+      *(_BYTE *)(v6 + 7511) &= ~8u;
+      *(_QWORD *)(v6 + 8856) = qword_143077538;
+      __asm { vxorps  xmm1, xmm1, xmm1 }
+      (*(void (__fastcall **)(__int64))(*(_QWORD *)v6 + 3344LL))(v6);
+      v25 = *(_QWORD *)(*(_QWORD *)(v6 + 8072) + 8LL);
+      if ( *(_QWORD *)v25 )
+      {
+        *(_BYTE *)(*(_QWORD *)v25 + 128LL) &= 0xFAu;
+        *(_BYTE *)(v6 + 10192) = *(_BYTE *)(v6 + 10192) & 0xF3 | (4 * v22) & 0xF7;
+        v26 = "not bound";
+        if ( v17 == 1 )
+          v26 = "bound";
+        sub_1403CF8B0(v6, 6, " - ScriptSkill::RequestEnableAi: Command from script (%s)\n", v26);
+      }
+    }
+    v27 = 0;
+    v28 = 24;
+    v29 = (unsigned __int64)"*npc-script-resume-mode*";
+    _RAX = v57;
+    _RDX = qword_142BEA360;
+    _RCX = qword_142BEA360;
+    v33 = 8;
+    v34 = 8;
+    do
+    {
+      __asm
+      {
+        vmovups ymm0, ymmword ptr [rcx]
+        vmovups ymmword ptr [rax], ymm0
+        vmovups ymm0, ymmword ptr [rcx+20h]
+        vmovups ymmword ptr [rax+20h], ymm0
+        vmovups ymm0, ymmword ptr [rcx+40h]
+        vmovups ymmword ptr [rax+40h], ymm0
+        vmovups xmm0, xmmword ptr [rcx+60h]
+        vmovups xmmword ptr [rax+60h], xmm0
+      }
+      _RAX += 32;
+      __asm
+      {
+        vmovups xmm1, xmmword ptr [rcx+70h]
+        vmovups xmmword ptr [rax-10h], xmm1
+      }
+      _RCX += 16;
+      --v34;
+    }
+    while ( v34 );
+    do
+    {
+      if ( !*(_BYTE *)v29 )
+        break;
+      v27 = (v27 << 8) ^ v57[(unsigned __int8)(*(_BYTE *)v29++ ^ HIBYTE(v27))];
+      --v28;
+    }
+    while ( v28 );
+    v40 = 0;
+    v41 = 17;
+    v42 = "*npc-script-mode*";
+    _RAX = v57;
+    do
+    {
+      __asm
+      {
+        vmovups ymm0, ymmword ptr [rdx]
+        vmovups ymmword ptr [rax], ymm0
+        vmovups ymm0, ymmword ptr [rdx+20h]
+        vmovups ymmword ptr [rax+20h], ymm0
+        vmovups ymm0, ymmword ptr [rdx+40h]
+        vmovups ymmword ptr [rax+40h], ymm0
+        vmovups xmm0, xmmword ptr [rdx+60h]
+        vmovups xmmword ptr [rax+60h], xmm0
+      }
+      _RAX += 32;
+      __asm
+      {
+        vmovups xmm1, xmmword ptr [rdx+70h]
+        vmovups xmmword ptr [rax-10h], xmm1
+      }
+      _RDX += 16;
+      --v33;
+    }
+    while ( v33 );
+    do
+    {
+      if ( !*v42 )
+        break;
+      v29 = v40 << 8;
+      v40 = v29 ^ v57[(unsigned __int8)(*v42++ ^ HIBYTE(v40))];
+      --v41;
+    }
+    while ( v41 );
+    __asm { vzeroupper }
+    v49 = (const char *)sub_141C6FC80(v27, v17, v29);
+    v51 = (const char *)sub_141C6FC80(v40, v11, v50);
+    sub_14030CD60(v6, "npc-set-script-mode %s/%s", v51, v49);
+  }
+  *a1 = 0;
+  sub_141CE8040(&v53);
+  return a1;
+}
+

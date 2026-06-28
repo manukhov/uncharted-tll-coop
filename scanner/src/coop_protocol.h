@@ -20,12 +20,11 @@ struct InputPacket {
     float look_pitch_delta = 0.0F;
 };
 
-// Variant A (two instances) player state replication. Each instance sends its
-// LOCAL player's transform every tick over UDP; the peer applies it to the
-// remote-player puppet (a second Player spawned via the idx=1 spawn path).
+// Two-instance player snapshot. This packet carries continuous state only.
+// One-shot gameplay actions need a separate reliable ordered event stream.
 constexpr std::uint16_t kStatePort = 31338;
 constexpr std::uint32_t kStatePacketMagic = 0x53504F43;  // "COPS"
-constexpr std::uint16_t kStatePacketVersion = 1;
+constexpr std::uint16_t kStatePacketVersion = 2;
 
 struct StatePacket {
     std::uint32_t magic = kStatePacketMagic;
@@ -36,7 +35,11 @@ struct StatePacket {
     float pos[4]{};                   // world position block (mirrors Player+0x240)
     float quat[4]{};                  // orientation quaternion (mirrors Player+0x140)
     float velocity[3]{};              // for interpolation/extrapolation
-    std::uint32_t anim_state = 0;     // coarse anim/state id (filled later)
+    float move_stick[2]{};            // resolved slot-0 left stick, block +0x00/+0x04
+    float look_stick[2]{};            // resolved slot-0 right stick, block +0x08/+0x0C
+    std::uint64_t input_buttons = 0;  // complete resolved button field, block +0x518
+    std::uint64_t buttons_pressed = 0;
+    std::uint64_t buttons_released = 0;
 };
 
 // Phase 3 (host-authoritative world sync): the HOST (role A) enumerates the

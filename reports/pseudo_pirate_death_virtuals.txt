@@ -1,0 +1,25 @@
+=== 0x1402F8B40: sub_1402F8B40 [0x1402F8B40..0x1402F8B56] ===
+char __fastcall sub_1402F8B40(__int64 a1)
+{
+  __int64 v1; // rcx
+
+  v1 = *(_QWORD *)(a1 + 1192);
+  if ( v1 )
+    return (*(__int64 (__fastcall **)(__int64))(*(_QWORD *)v1 + 48LL))(v1);
+  else
+    return 0;
+}
+
+=== 0x141DEE1D0: sub_141DEE1D0 [0x141DEE1D0..0x141DEE212] ===
+__int64 __fastcall sub_141DEE1D0(__int64 a1, __int64 a2, unsigned __int8 a3, int a4, char a5)
+{
+  (*(void (__fastcall **)(_QWORD, __int64, _QWORD, _QWORD, int, char))(**(_QWORD **)(a1 + 1192) + 32LL))(
+    *(_QWORD *)(a1 + 1192),
+    a2,
+    0,
+    a3,
+    a4,
+    a5);
+  return (*(__int64 (__fastcall **)(_QWORD))(**(_QWORD **)(a1 + 1192) + 184LL))(*(_QWORD *)(a1 + 1192));
+}
+

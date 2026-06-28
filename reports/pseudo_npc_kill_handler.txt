@@ -1,0 +1,16 @@
+=== 0x14055DF80: sub_14055DF80 [0x14055DF80..0x14055DFDC] ===
+// Hidden C++ exception states: #wind=1
+_QWORD *__fastcall sub_14055DF80(_QWORD *a1, int a2, int a3, int a4)
+{
+  __int64 v5; // rax
+  _BYTE v7[64]; // [rsp+38h] [rbp-40h] BYREF
+
+  sub_141CE7EF0((unsigned int)v7, a2, a3, a4, 1);
+  v5 = sub_14030C0A0(v7, 1);
+  if ( v5 )
+    sub_1416A5C20(v5);
+  *a1 = 0;
+  sub_141CE8040(v7);
+  return a1;
+}
+

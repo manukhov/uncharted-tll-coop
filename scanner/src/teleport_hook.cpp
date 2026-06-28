@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -86,6 +87,10 @@ constexpr ULONGLONG kRemoteCommandIntervalMs = 16;
 constexpr ULONGLONG kCommandIntervalMs = 250;
 constexpr ULONGLONG kType4CommandIntervalMs = 16;
 constexpr bool kEnableBuiltInSlot1NetPlayerScaffold = false;
+// Old reverse-engineering helpers suspend every game thread, install hardware
+// breakpoints, and poll game objects from a separate thread. They are incompatible
+// with a stable two-instance runtime and are never needed by the current co-op path.
+constexpr bool kEnableLegacyRuntimeDiagnostics = false;
 constexpr std::uint32_t kSlot1ScreenIndex = 1;
 constexpr float kGoalDistance = 3.0F;
 constexpr float kRemoteGoalDistance = 1.25F;
@@ -434,25 +439,98 @@ struct StateNetState {
     std::atomic<bool> running = false;
     bool winsock_ready = false;
     std::atomic<bool> has_peer_state = false;
+    std::atomic<ULONGLONG> peer_state_received_ms = 0;
+    SRWLOCK peer_state_lock = SRWLOCK_INIT;
     coop::StatePacket peer_state{};        // latest received peer state
     std::atomic<bool> has_peer_enemies = false;
+    std::atomic<ULONGLONG> peer_enemies_received_ms = 0;
+    SRWLOCK peer_enemies_lock = SRWLOCK_INIT;
     coop::EnemyPacket peer_enemies{};      // latest received host enemy snapshot
     std::uint32_t send_seq = 0;
     std::uint32_t enemy_send_seq = 0;
     bool enabled = false;                  // toggled on once peer + puppet ready
 };
 StateNetState g_state_net{};
+
+void publish_peer_state_snapshot(const coop::StatePacket& packet) {
+    AcquireSRWLockExclusive(&g_state_net.peer_state_lock);
+    g_state_net.peer_state = packet;
+    ReleaseSRWLockExclusive(&g_state_net.peer_state_lock);
+    g_state_net.peer_state_received_ms.store(GetTickCount64(), std::memory_order_release);
+    g_state_net.has_peer_state.store(true, std::memory_order_release);
+}
+
+bool copy_peer_state_snapshot(coop::StatePacket& out) {
+    if (!g_state_net.has_peer_state.load(std::memory_order_acquire)) {
+        return false;
+    }
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    if (received == 0 || GetTickCount64() - received > 1500) {
+        return false;
+    }
+    AcquireSRWLockShared(&g_state_net.peer_state_lock);
+    out = g_state_net.peer_state;
+    ReleaseSRWLockShared(&g_state_net.peer_state_lock);
+    return true;
+}
+
+void publish_peer_enemies_snapshot(const coop::EnemyPacket& packet) {
+    AcquireSRWLockExclusive(&g_state_net.peer_enemies_lock);
+    g_state_net.peer_enemies = packet;
+    ReleaseSRWLockExclusive(&g_state_net.peer_enemies_lock);
+    g_state_net.peer_enemies_received_ms.store(GetTickCount64(), std::memory_order_release);
+    g_state_net.has_peer_enemies.store(true, std::memory_order_release);
+}
+
+bool copy_peer_enemies_snapshot(coop::EnemyPacket& out) {
+    if (!g_state_net.has_peer_enemies.load(std::memory_order_acquire)) {
+        return false;
+    }
+    const ULONGLONG received =
+        g_state_net.peer_enemies_received_ms.load(std::memory_order_acquire);
+    if (received == 0 || GetTickCount64() - received > 1500) {
+        return false;
+    }
+    AcquireSRWLockShared(&g_state_net.peer_enemies_lock);
+    out = g_state_net.peer_enemies;
+    ReleaseSRWLockShared(&g_state_net.peer_enemies_lock);
+    return true;
+}
+
+bool process_owns_foreground_window() {
+    const HWND foreground = GetForegroundWindow();
+    if (foreground == nullptr) {
+        return false;
+    }
+    DWORD process_id = 0;
+    GetWindowThreadProcessId(foreground, &process_id);
+    return process_id == GetCurrentProcessId();
+}
 // SPSC ring for client->host damage events (recv thread = producer, game thread =
 // consumer on the host). Lock-free single-producer/single-consumer.
 struct ClientDmgEvent { std::uint32_t name_hash; float damage; };
 ClientDmgEvent g_client_dmg_ring[64]{};
 std::atomic<std::uint32_t> g_client_dmg_head{0};
 std::uint32_t g_client_dmg_tail = 0;
-// Master toggle for enemy replication (host sends / client applies). Default ON;
-// only acts when a network peer is present and per-role (A sends, B applies).
-volatile bool g_enemy_sync = true;
+// Deferred until player-to-player synchronization is complete. Keep all recovered
+// enemy paths available, but do not let them mutate either world during player work.
+volatile bool g_enemy_sync = false;
 // Client->host damage relay master toggle.
-volatile bool g_client_damage_relay = true;
+volatile bool g_client_damage_relay = false;
+// Pausing client enemy AI makes transforms deterministic, but also removes every
+// local reaction/attack because those states are not yet replicated. Keep local AI
+// active until the host action-state stream is recovered.
+volatile bool g_pause_client_enemy_ai = false;
+// RequestDisableAi remains disabled for NadineBuddy. Even after validating its
+// pointer chain, live runs have ended through the engine's fatal path after pausing
+// the buddy. Client enemy replicas use their own guarded one-shot call below.
+volatile bool g_allow_runtime_ai_toggle = false;
+// Client-side mirrored death through the campaign npc-die sequence. A lethal base
+// AttackInfo is forbidden; it lacks metadata required by the kill branch.
+volatile bool g_enable_client_death_publish = false;
+// Prevent the client-side mirrored death from being relayed back to the host.
+volatile bool g_applying_peer_enemy_death = false;
 // Single-instance validation of the enemy client-apply code path (enumerate +
 // RequestDisableAi + transform write) without needing two instances: freeze all
 // enemies in place with AI off. Toggle NUMPAD5. Default off.
@@ -464,13 +542,60 @@ volatile bool g_charmgr_dump_periodic = false;
 float g_state_loopback_offset_x = 0.0F;
 
 std::size_t readable_bytes(const void* p);
+bool world_stable();
+bool valid_network_position(const float* position);
 
 void log_line(const char* line) {
     std::ofstream output(
         R"(C:\Users\Vladimir\Desktop\TLLCoopResearch\reports\locomotion_hook.log)",
         std::ios::app
     );
-    output << line << '\n';
+    output << "[pid=" << GetCurrentProcessId() << "] " << line << '\n';
+}
+
+LONG CALLBACK crash_observer(EXCEPTION_POINTERS* exception) {
+    if (exception == nullptr || exception->ExceptionRecord == nullptr) {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+    const DWORD code = exception->ExceptionRecord->ExceptionCode;
+    if (code != EXCEPTION_ACCESS_VIOLATION && code != EXCEPTION_ILLEGAL_INSTRUCTION &&
+        code != EXCEPTION_STACK_OVERFLOW && code != EXCEPTION_ARRAY_BOUNDS_EXCEEDED &&
+        code != EXCEPTION_INT_DIVIDE_BY_ZERO && code != EXCEPTION_FLT_DIVIDE_BY_ZERO) {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+    static std::atomic<unsigned> event_count{0};
+    if (event_count.fetch_add(1, std::memory_order_relaxed) >= 8) {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+
+    char line[384]{};
+    const auto address = reinterpret_cast<std::uintptr_t>(
+        exception->ExceptionRecord->ExceptionAddress);
+    const auto rip = exception->ContextRecord != nullptr
+        ? static_cast<std::uintptr_t>(exception->ContextRecord->Rip)
+        : 0;
+    const auto rsp = exception->ContextRecord != nullptr
+        ? static_cast<std::uintptr_t>(exception->ContextRecord->Rsp)
+        : 0;
+    const int length = std::snprintf(
+        line, sizeof(line),
+        "[pid=%lu] EXCEPTION code=0x%08lX address=0x%llX rva=0x%llX rip=0x%llX rsp=0x%llX\r\n",
+        static_cast<unsigned long>(GetCurrentProcessId()),
+        static_cast<unsigned long>(code),
+        static_cast<unsigned long long>(address),
+        static_cast<unsigned long long>(address > g_module ? address - g_module : 0),
+        static_cast<unsigned long long>(rip),
+        static_cast<unsigned long long>(rsp));
+    const HANDLE file = CreateFileA(
+        R"(C:\Users\Vladimir\Desktop\TLLCoopResearch\reports\locomotion_hook.log)",
+        FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file != INVALID_HANDLE_VALUE && length > 0) {
+        DWORD written = 0;
+        WriteFile(file, line, static_cast<DWORD>(length), &written, nullptr);
+        CloseHandle(file);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
 }
 
 std::uint32_t resolve_upper_actor_record_hash(std::uint32_t id) {
@@ -1357,6 +1482,16 @@ void issue_move_command(
     float goal_distance,
     bool log_target
 ) {
+    if (object == nullptr || readable_bytes(object) < 0x27D1 ||
+        *reinterpret_cast<std::uintptr_t*>(object) !=
+            g_module + kNadineBuddyVtableRva) {
+        return;
+    }
+    void* const clock = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(object) + 0xE0);
+    if (clock == nullptr || readable_bytes(clock) < 0x18) {
+        return;
+    }
     alignas(32) std::byte navigation_frame[0x60]{};
     alignas(16) float target[4]{};
     alignas(16) std::byte facing[0x10]{};
@@ -1364,6 +1499,11 @@ void issue_move_command(
     const auto* world_position = reinterpret_cast<const float*>(
         static_cast<const std::byte*>(object) + kWorldPositionOffset
     );
+    if (!valid_network_position(world_position) || !std::isfinite(direction_x) ||
+        !std::isfinite(direction_z) || !std::isfinite(goal_distance) ||
+        goal_distance < 0.0F || goal_distance > 10.0F) {
+        return;
+    }
     target[0] = world_position[0] + direction_x * goal_distance;
     target[1] = world_position[1];
     target[2] = world_position[2] + direction_z * goal_distance;
@@ -1382,14 +1522,19 @@ void issue_move_command(
     const auto controller = *reinterpret_cast<std::uintptr_t*>(
         static_cast<std::byte*>(object) + kLocomotionControllerOffset
     );
-    if (controller == 0) {
-        log_line("NadineBuddy locomotion controller is null");
+    if (controller == 0 ||
+        readable_bytes(reinterpret_cast<void*>(controller)) <
+            kNavigationRadiusOffset + sizeof(float)) {
         return;
     }
 
     const float navigation_radius = *reinterpret_cast<float*>(
         controller + kNavigationRadiusOffset
     );
+    if (!std::isfinite(navigation_radius) || navigation_radius <= 0.0F ||
+        navigation_radius > 100.0F) {
+        return;
+    }
     const auto build_navigation_frame =
         reinterpret_cast<BuildNavigationFrameFunction>(
             g_module + kBuildNavigationFrameRva
@@ -1404,6 +1549,15 @@ void issue_move_command(
         1,
         navigation_radius
     );
+    // The campaign script wrapper always validates the projected frame before it
+    // writes command type 2. Calling MoveTo without this check can enqueue an
+    // off-navmesh/invalid command and fail later inside the navigation update.
+    using ValidateNavigationFrameFunction = bool(__fastcall*)(void*, const void*);
+    const auto validate_navigation_frame =
+        reinterpret_cast<ValidateNavigationFrameFunction>(g_module + 0x1DEF6C0);
+    if (!validate_navigation_frame(nullptr, navigation_frame)) {
+        return;
+    }
     move_to(
         object,
         navigation_frame,
@@ -1512,12 +1666,30 @@ void issue_type7_steering(
 // unambiguous one-PC proof of the animated-avatar drive. Harmless on two real PCs
 // (has_peer_state is true there, so this fallback never runs).
 bool g_avatar_self_mirror = true;
+bool valid_network_position(const float* position) {
+    constexpr float kCoordinateLimit = 1000000.0F;
+    return position != nullptr &&
+           std::isfinite(position[0]) && std::isfinite(position[1]) &&
+           std::isfinite(position[2]) &&
+           std::abs(position[0]) < kCoordinateLimit &&
+           std::abs(position[1]) < kCoordinateLimit &&
+           std::abs(position[2]) < kCoordinateLimit;
+}
+
 void drive_nadine_toward_peer(void* object, ObjectControlState& control_state) {
+    // This runs synchronously from the NPC's game-thread update. Keeping it behind
+    // foreground-window ownership made one-PC two-instance synchronization stop as
+    // soon as the user switched windows.
+    if (!world_stable()) {
+        return;
+    }
     coop::StatePacket live{};
     bool have_live = false;
     bool from_network = false;
-    if (g_state_net.enabled && g_state_net.has_peer_state.load()) {
-        live = g_state_net.peer_state;
+    if (g_state_net.enabled && g_state_net.has_peer_state.load(std::memory_order_acquire)) {
+        if (!copy_peer_state_snapshot(live)) {
+            return;
+        }
         have_live = true;
         from_network = true;
     } else if (g_avatar_self_mirror) {
@@ -1533,6 +1705,9 @@ void drive_nadine_toward_peer(void* object, ObjectControlState& control_state) {
         }
     }
     if (!have_live) {
+        return;
+    }
+    if (!valid_network_position(live.pos)) {
         return;
     }
     // Time-delayed path replay: record the incoming peer position each frame and
@@ -1581,9 +1756,15 @@ void drive_nadine_toward_peer(void* object, ObjectControlState& control_state) {
     const auto* cur = reinterpret_cast<const float*>(
         static_cast<std::byte*>(object) + kWorldPositionOffset
     );
+    if (!valid_network_position(cur)) {
+        return;
+    }
     const float dx = tgt_x - cur[0];
     const float dz = tgt_z - cur[2];
     const float dist = std::sqrt(dx * dx + dz * dz);
+    if (!std::isfinite(dist)) {
+        return;
+    }
     static ULONGLONG last_diag = 0;
     if (now - last_diag > 500) {
         last_diag = now;
@@ -1598,7 +1779,7 @@ void drive_nadine_toward_peer(void* object, ObjectControlState& control_state) {
     // Re-issue the move only periodically (not every frame) so the navmesh path
     // can run smoothly; re-issuing every 16ms toward a shifting short-lookahead
     // target makes the run stutter.
-    constexpr ULONGLONG kDriveCmdIntervalMs = 140;
+    constexpr ULONGLONG kDriveCmdIntervalMs = 250;
     if (dist > kArrive) {
         if (now - control_state.last_command_time >= kDriveCmdIntervalMs) {
             // Use a SHORT fixed lookahead as goal distance (the proven-safe
@@ -2416,9 +2597,9 @@ DWORD WINAPI state_recv_thread(void*) {
             received == static_cast<int>(sizeof(coop::StatePacket))) {
             coop::StatePacket packet{};
             std::memcpy(&packet, buf, sizeof(packet));
-            if (packet.version == coop::kStatePacketVersion) {
-                g_state_net.peer_state = packet;
-                g_state_net.has_peer_state.store(true);
+            if (packet.version == coop::kStatePacketVersion &&
+                valid_network_position(packet.pos)) {
+                publish_peer_state_snapshot(packet);
             }
         } else if (magic == coop::kEnemyPacketMagic &&
                    received >= static_cast<int>(offsetof(coop::EnemyPacket, enemies)) &&
@@ -2427,8 +2608,7 @@ DWORD WINAPI state_recv_thread(void*) {
             std::memcpy(&ep, buf, static_cast<std::size_t>(received));
             if (ep.version == coop::kEnemyPacketVersion &&
                 ep.count <= coop::kMaxEnemies) {
-                g_state_net.peer_enemies = ep;
-                g_state_net.has_peer_enemies.store(true);
+                publish_peer_enemies_snapshot(ep);
             }
         } else if (magic == coop::kClientDamageMagic &&
                    received == static_cast<int>(sizeof(coop::ClientDamagePacket))) {
@@ -2550,6 +2730,9 @@ void send_local_player_state() {
     const auto* pos = reinterpret_cast<const float*>(static_cast<std::byte*>(local_obj) + kWorldPositionOffset);
     const auto* quat = reinterpret_cast<const float*>(static_cast<std::byte*>(local_obj) + kPlayerQuatOffset);
     const auto* vel = reinterpret_cast<const float*>(static_cast<std::byte*>(local_obj) + kPlayerVelocityOffset);
+    if (!valid_network_position(pos)) {
+        return;
+    }
     coop::StatePacket pkt{};
     pkt.sequence = ++g_state_net.send_seq;
     pkt.timestamp_ms = static_cast<std::uint32_t>(GetTickCount64());
@@ -2557,13 +2740,26 @@ void send_local_player_state() {
     std::memcpy(pkt.pos, pos, sizeof(pkt.pos));
     std::memcpy(pkt.quat, quat, sizeof(pkt.quat));
     std::memcpy(pkt.velocity, vel, sizeof(pkt.velocity));
-    // Replicate the local player's resolved action buttons (slot-0 input block
-    // +1304 low 32 bits = jump/melee/dodge/aim) via anim_state so the peer can
-    // play the same actions on our puppet.
+    // Capture the engine-resolved local input, not raw keyboard/controller input.
+    // These fields are the common source for movement, camera, aim and actions.
+    static std::uint64_t previous_buttons = 0;
     auto* blk0 = reinterpret_cast<std::byte*>(g_module + 0x66E4220);
     if (readable_bytes(blk0) >= 0x528) {
-        pkt.anim_state = static_cast<std::uint32_t>(
-            *reinterpret_cast<const std::uint64_t*>(blk0 + 1304) & 0xFFFFFFFFu);
+        const auto* axes = reinterpret_cast<const float*>(blk0);
+        bool valid_axes = true;
+        for (int i = 0; i < 4; ++i) {
+            valid_axes = valid_axes && std::isfinite(axes[i]) && std::fabs(axes[i]) <= 2.0F;
+        }
+        if (valid_axes) {
+            pkt.move_stick[0] = axes[0];
+            pkt.move_stick[1] = axes[1];
+            pkt.look_stick[0] = axes[2];
+            pkt.look_stick[1] = axes[3];
+        }
+        pkt.input_buttons = *reinterpret_cast<const std::uint64_t*>(blk0 + 1304);
+        pkt.buttons_pressed = pkt.input_buttons & ~previous_buttons;
+        pkt.buttons_released = previous_buttons & ~pkt.input_buttons;
+        previous_buttons = pkt.input_buttons;
     }
     sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr), sizeof(g_state_net.peer_addr));
@@ -2582,15 +2778,17 @@ volatile bool g_drive_screen1_cam = false;  // NUMPAD6: drive screen-1 cam + fwd
 bool g_puppet_local_mirror = true;
 
 bool latest_peer_state(coop::StatePacket& out, void*& puppet) {
-    if (!g_puppet_net_apply || g_module == 0) {
+    if (!g_puppet_net_apply || g_module == 0 || !process_owns_foreground_window()) {
         return false;
     }
     puppet = retained_player_object(1);
     if (puppet == nullptr) {
         return false;
     }
-    if (g_state_net.enabled && g_state_net.has_peer_state.load()) {
-        out = g_state_net.peer_state;
+    if (g_state_net.enabled && g_state_net.has_peer_state.load(std::memory_order_acquire)) {
+        if (!copy_peer_state_snapshot(out)) {
+            return false;
+        }
         out.pos[0] += g_state_loopback_offset_x;  // 0 for real two-instance play
         return true;
     }
@@ -2626,10 +2824,14 @@ bool latest_peer_state(coop::StatePacket& out, void*& puppet) {
         out.velocity[0] = cvx; out.velocity[1] = cvy; out.velocity[2] = cvz;
     }
     auto* blk0 = reinterpret_cast<std::byte*>(g_module + 0x66E4220);
-    out.anim_state = (readable_bytes(blk0) >= 0x528)
-                         ? static_cast<std::uint32_t>(
-                               *reinterpret_cast<const std::uint64_t*>(blk0 + 1304) & 0xFFFFFFFFu)
-                         : 0;
+    if (readable_bytes(blk0) >= 0x528) {
+        const auto* axes = reinterpret_cast<const float*>(blk0);
+        out.move_stick[0] = axes[0];
+        out.move_stick[1] = axes[1];
+        out.look_stick[0] = axes[2];
+        out.look_stick[1] = axes[3];
+        out.input_buttons = *reinterpret_cast<const std::uint64_t*>(blk0 + 1304);
+    }
     out.pos[0] += 2.0F;  // visible beside Chloe
     return true;
 }
@@ -3374,6 +3576,40 @@ bool is_enemy_object(void* obj) {
 bool is_dead_ragdoll(void* obj) {
     return *reinterpret_cast<std::uintptr_t*>(obj) == g_module + kRagdollVtableRva;
 }
+
+// RequestDisableAi starts by dereferencing npc+0x1FC0 and later walks the binding at
+// npc+0x1F88 without checking either pointer. A partially constructed NPC therefore
+// crashes at RequestDisableAi+0x17. Mirror its complete access chain here and call it
+// only once all nodes are readable.
+bool npc_ai_control_ready(void* obj) {
+    if (obj == nullptr || readable_bytes(obj) < 0x27D1) return false;
+
+    auto* const skill = *reinterpret_cast<std::byte**>(
+        static_cast<std::byte*>(obj) + 0x1FC0);
+    if (skill == nullptr || readable_bytes(skill + 0x368) < 1) return false;
+
+    auto* const binding = *reinterpret_cast<std::byte**>(
+        static_cast<std::byte*>(obj) + 0x1F88);
+    if (binding == nullptr || readable_bytes(binding) < 0x10) return false;
+    auto* const holder = *reinterpret_cast<std::byte**>(binding + 0x08);
+    if (holder == nullptr || readable_bytes(holder) < sizeof(void*)) return false;
+    auto* const state = *reinterpret_cast<std::byte**>(holder);
+    if (state == nullptr) return true;
+    if (readable_bytes(state) < 0x81) return false;
+
+    auto* const owner = *reinterpret_cast<std::byte**>(state + 0x68);
+    if (owner == nullptr || readable_bytes(owner + 0x2388) < sizeof(void*)) return false;
+    auto* const registry = *reinterpret_cast<std::byte**>(owner + 0x2388);
+    if (registry == nullptr || readable_bytes(registry + 0x28) < sizeof(void*)) return false;
+    auto* const entries = *reinterpret_cast<std::byte**>(registry + 0x28);
+    if (entries == nullptr || readable_bytes(entries) < 0x0C) return false;
+    const std::uint32_t count = *reinterpret_cast<std::uint32_t*>(entries + 0x08);
+    if (count == 0) return true;
+    if (count > 4096) return false;
+    auto* const array = *reinterpret_cast<std::byte**>(entries);
+    return array != nullptr &&
+           readable_bytes(array) >= static_cast<std::size_t>(count) * 24;
+}
 bool plausible_ptr(std::uintptr_t v);
 bool is_npc_enemy_name(const char* name) {
     return name != nullptr && readable_bytes(name) >= 4 && name[0] == 'n' &&
@@ -3580,9 +3816,10 @@ using AttackInfoConstructorFn = void*(__fastcall*)(void*, int);
 using PublishAttackFn = std::uint64_t(__fastcall*)(void*, void*);
 std::uint64_t g_orig_npc_damage = 0;
 volatile bool g_install_npc_damage_hook = true;  // per-damage-event (not per-frame) -> FPS-safe; needed for client->host relay
-volatile bool g_npc_damage_capture_log = true;
+volatile bool g_capture_attackinfo_clone = false;  // OFF: clone_attackinfo(vtable[1]) crashed combat
+volatile bool g_npc_damage_capture_log = false;
 volatile bool g_enable_attackinfo_replay_test = false;
-volatile bool g_enable_fresh_attackinfo_test = true;
+volatile bool g_enable_fresh_attackinfo_test = false;
 void* g_attackinfo_template = nullptr;
 void* g_attackinfo_original_target = nullptr;
 ULONGLONG g_attackinfo_capture_time = 0;
@@ -3627,15 +3864,21 @@ void destroy_attackinfo_in_place(void* attack_info) {
     destroy(attack_info, 0);
 }
 
-// Apply `damage` HP to `target` enemy authoritatively, attributed to `source` (the
-// avatar/Nadine), by constructing a fresh AttackInfo and publishing it through the
-// engine's native attack publisher. This is the working damage primitive (no stale
-// capture, no crash). Returns true on publish.
+bool apply_scripted_npc_death(void* target);
+
+// Apply non-lethal damage through a fresh base AttackInfo. Static reverse and live
+// testing showed that the base class lacks metadata consumed by the kill branch, so
+// potentially lethal damage is routed through campaign `npc-die` instead.
 bool publish_attack_on(void* source, void* target, float damage) {
     if (source == nullptr || target == nullptr) return false;
     if (readable_bytes(static_cast<std::byte*>(source) + 0xBC) < sizeof(std::uint32_t))
         return false;
     if (!is_enemy_object(target) || is_dead_ragdoll(target)) return false;
+    EnemyHealthTarget health{};
+    if (read_enemy_health(target, health) && health.hp > 0 &&
+        damage >= static_cast<float>(health.hp)) {
+        return apply_scripted_npc_death(target);
+    }
 
     alignas(16) std::array<std::byte, 0x860> storage{};
     void* const attack_info =
@@ -3662,26 +3905,143 @@ bool publish_attack_on(void* source, void* target, float damage) {
     return true;
 }
 
+// Mirror the campaign script command `npc-die` without going through its script
+// argument decoder. Unlike a lethal base AttackInfo, this is the engine's native
+// forced-NPC-death sequence: remove the full health pool, then give Die() a fresh
+// pointer-free HitDescription.
+bool apply_scripted_npc_death(void* target) {
+    if (target == nullptr || !is_enemy_object(target) || is_dead_ragdoll(target) ||
+        readable_bytes(target) < 0x15D0) {
+        return false;
+    }
+
+    auto** const npc_vtable = *reinterpret_cast<void***>(target);
+    if (npc_vtable[0x860 / 8] != reinterpret_cast<void*>(g_module + 0x2F8B40) ||
+        npc_vtable[0xD00 / 8] != reinterpret_cast<void*>(g_module + 0x1DEE1D0)) {
+        return false;
+    }
+
+    void* const health = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(target) + kHealthSystemOffset);
+    if (health == nullptr || readable_bytes(health) < 0xD0 ||
+        *reinterpret_cast<std::uintptr_t*>(health) !=
+            g_module + kHealthSystemVtableRva) {
+        return false;
+    }
+
+    void* const controller_owner = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(target) + 0x15C8);
+    if (controller_owner == nullptr || readable_bytes(controller_owner) < 0x80) {
+        return false;
+    }
+    auto** const owner_vtable = *reinterpret_cast<void***>(controller_owner);
+    if (owner_vtable == nullptr || readable_bytes(owner_vtable) < 0x80 ||
+        owner_vtable[0x78 / 8] == nullptr) {
+        return false;
+    }
+    using GetHitControllerFunction = void*(__fastcall*)(void*);
+    void* const hit_controller = reinterpret_cast<GetHitControllerFunction>(
+        owner_vtable[0x78 / 8])(controller_owner);
+    constexpr std::uintptr_t kAiHitControllerVtableRva = 0x29593C0;
+    if (hit_controller == nullptr || readable_bytes(hit_controller) < 0xC0 ||
+        *reinterpret_cast<std::uintptr_t*>(hit_controller) !=
+            g_module + kAiHitControllerVtableRva) {
+        return false;
+    }
+    auto** const hit_vtable = *reinterpret_cast<void***>(hit_controller);
+    if (hit_vtable[0xB8 / 8] != reinterpret_cast<void*>(g_module + 0x500C20)) {
+        return false;
+    }
+
+    using IsDeadFunction = bool(__fastcall*)(void*);
+    if (reinterpret_cast<IsDeadFunction>(npc_vtable[0x860 / 8])(target)) {
+        return true;
+    }
+    using GetMaxHealthFunction = std::int32_t(__fastcall*)(void*);
+    auto** const health_vtable = *reinterpret_cast<void***>(health);
+    const std::int32_t max_health = reinterpret_cast<GetMaxHealthFunction>(
+        health_vtable[0xC0 / 8])(health);
+    if (max_health <= 0 || max_health > 1000000) {
+        return false;
+    }
+
+    using ApplyFullHealthDamageFunction = std::int64_t(__fastcall*)(
+        void*, std::int32_t, std::uint8_t, std::int32_t, std::uint8_t);
+    reinterpret_cast<ApplyFullHealthDamageFunction>(npc_vtable[0xD00 / 8])(
+        target, max_health, 0, 0, 0);
+
+    alignas(16) std::array<std::byte, 0x70> hit_description{};
+    const float direction[4] = {0.0F, 0.0F, 1.0F, 0.0F};
+    std::memcpy(hit_description.data() + 0x10, direction, sizeof(direction));
+    *reinterpret_cast<float*>(hit_description.data() + 0x48) = -1.0F;
+    *reinterpret_cast<std::int32_t*>(hit_description.data() + 0x64) = max_health;
+    using DieFunction = void(__fastcall*)(void*, const void*, bool);
+    reinterpret_cast<DieFunction>(hit_vtable[0xB8 / 8])(
+        hit_controller, hit_description.data(), true);
+    return true;
+}
+
 bool publish_fresh_nadine_attackinfo() {
     void* const source = g_last_nadine_object;
     if (source == nullptr) {
         log_line("FRESH-ATTACKINFO: Nadine source is unavailable");
         return false;
     }
-    void* target = nullptr;
-    for_each_character([&](void* obj, const char* /*name*/) {
-        if (target == nullptr && obj != source && is_enemy_object(obj) &&
-            !is_dead_ragdoll(obj)) {
-            target = obj;
+    if (readable_bytes(static_cast<std::byte*>(source) + kWorldPositionOffset) <
+        sizeof(float) * 4) {
+        log_line("FRESH-ATTACKINFO: Nadine position is unavailable");
+        return false;
+    }
+
+    const auto* const source_pos = reinterpret_cast<const float*>(
+        static_cast<std::byte*>(source) + kWorldPositionOffset);
+    EnemyHealthTarget target{};
+    float nearest_distance_sq = INFINITY;
+    for_each_character([&](void* obj, const char* name) {
+        if (obj == source || !is_enemy_object(obj) || is_dead_ragdoll(obj) ||
+            readable_bytes(static_cast<std::byte*>(obj) + kWorldPositionOffset) <
+                sizeof(float) * 4) {
+            return;
         }
+        EnemyHealthTarget candidate{};
+        if (!find_health_system_in_object(obj, candidate) || candidate.hp <= 0) {
+            return;
+        }
+        const auto* const pos = reinterpret_cast<const float*>(
+            static_cast<std::byte*>(obj) + kWorldPositionOffset);
+        const float dx = pos[0] - source_pos[0];
+        const float dy = pos[1] - source_pos[1];
+        const float dz = pos[2] - source_pos[2];
+        const float distance_sq = dx * dx + dy * dy + dz * dz;
+        if (!std::isfinite(distance_sq) || distance_sq >= nearest_distance_sq) {
+            return;
+        }
+        candidate.name = name;
+        target = candidate;
+        nearest_distance_sq = distance_sq;
     });
-    if (target == nullptr) {
+    if (target.enemy == nullptr) {
         log_line("FRESH-ATTACKINFO: no live enemy found");
         return false;
     }
-    log_line("FRESH-ATTACKINFO: publishing 25 damage from Nadine");
-    const bool ok = publish_attack_on(source, target, 25.0F);
-    log_line(ok ? "FRESH-ATTACKINFO: published" : "FRESH-ATTACKINFO: publish failed");
+
+    std::ostringstream before;
+    before << "FRESH-ATTACKINFO: target='" << target.name
+           << "' obj=0x" << std::hex << reinterpret_cast<std::uintptr_t>(target.enemy)
+           << std::dec << " distance=" << std::sqrt(nearest_distance_sq)
+           << " hp=" << target.hp << "/" << target.max_hp
+           << "; publishing 25 damage from Nadine";
+    log_line(before.str().c_str());
+
+    const bool ok = publish_attack_on(source, target.enemy, 25.0F);
+    EnemyHealthTarget after{};
+    const bool health_readable = find_health_system_in_object(target.enemy, after);
+    std::ostringstream result;
+    result << "FRESH-ATTACKINFO: " << (ok ? "published" : "publish failed");
+    if (health_readable) {
+        result << "; hp " << target.hp << "->" << after.hp;
+    }
+    log_line(result.str().c_str());
     return ok;
 }
 
@@ -3689,36 +4049,39 @@ std::uint64_t __fastcall hooked_npc_damage(void* a1, void* a2, void* a3) {
     if (a2 != nullptr) {
         // CLIENT->HOST damage relay: on the client (role B), the local player's attack
         // on an enemy lands here. Forward {enemy name-hash, damage} to the host, which
-        // re-applies it authoritatively. (On the client only the local player attacks;
-        // puppets + the avatar have AI disabled.)
-        if (g_client_damage_relay && g_net_role_b && g_state_net.enabled &&
-            g_state_net.peer_set && a1 != nullptr && is_supported_attackinfo(a2) &&
+        // re-applies it authoritatively. Keep the native client damage path running as
+        // well, so both copies perform the same hit/death transition.
+        if (g_client_damage_relay && !g_applying_peer_enemy_death &&
+            g_net_role_b && g_state_net.enabled &&
+            g_state_net.peer_set && a1 != nullptr &&
             readable_bytes(a1) >= 0x20 && is_enemy_object(a1)) {
-            float dmg = *reinterpret_cast<float*>(static_cast<std::byte*>(a2) + 0x20);
-            const char* nm = reinterpret_cast<const char*>(a1) + sizeof(void*);
-            if (dmg > 0.0f && dmg < 1.0e5f && readable_bytes(nm) >= 4) {
-                coop::ClientDamagePacket dp{};
-                dp.name_hash = coop_name_hash(nm, 64);
-                dp.damage = dmg;
-                sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&dp),
-                       sizeof(dp), 0,
-                       reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
-                       sizeof(g_state_net.peer_addr));
+            // Client hit an enemy: relay {name-hash, damage} to the host. The original
+            // handler below still applies the hit locally; dead ragdolls are excluded
+            // from snapshot transform writes in apply_peer_enemies().
+            if (is_supported_attackinfo(a2)) {
+                float dmg = *reinterpret_cast<float*>(static_cast<std::byte*>(a2) + 0x20);
+                const char* nm = reinterpret_cast<const char*>(a1) + sizeof(void*);
+                if (dmg > 0.0f && dmg < 1.0e5f && readable_bytes(nm) >= 4) {
+                    coop::ClientDamagePacket dp{};
+                    dp.name_hash = coop_name_hash(nm, 64);
+                    dp.damage = dmg;
+                    sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&dp),
+                           sizeof(dp), 0,
+                           reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+                           sizeof(g_state_net.peer_addr));
+                }
             }
         }
         std::size_t a2sz = readable_bytes(a2);
-        if (g_attackinfo_template == nullptr && is_supported_attackinfo(a2)) {
+        // AttackInfo clone-capture DISABLED: clone_attackinfo (vtable[1]) crashed both
+        // instances during early combat. The relay above doesn't need it (it reads the
+        // damage scalar + name directly). Kept behind a default-off flag.
+        if (g_capture_attackinfo_clone && g_attackinfo_template == nullptr &&
+            is_supported_attackinfo(a2)) {
             g_attackinfo_template = clone_attackinfo(a2);
             if (g_attackinfo_template != nullptr) {
                 g_attackinfo_original_target = a1;
                 g_attackinfo_capture_time = GetTickCount64();
-                std::ostringstream l;
-                l << "ATTACKINFO full clone captured: source=0x" << std::hex
-                  << reinterpret_cast<std::uintptr_t>(a2)
-                  << " clone=0x" << reinterpret_cast<std::uintptr_t>(g_attackinfo_template)
-                  << " vt_rva=0x"
-                  << (*reinterpret_cast<std::uintptr_t*>(a2) - g_module);
-                log_line(l.str().c_str());
             }
         }
         if (g_npc_damage_capture_log) {
@@ -3930,6 +4293,9 @@ void send_enemy_states() {
     int n = 0;
     for_each_character([&](void* obj, const char* name) {
         if (n >= coop::kMaxEnemies || !is_enemy_object(obj)) return;
+        const auto* const position = reinterpret_cast<const float*>(
+            static_cast<std::byte*>(obj) + kWorldPositionOffset);
+        if (!valid_network_position(position)) return;
         auto& es = pkt.enemies[n];
         es.name_hash = coop_name_hash(name, 64);
         std::memcpy(es.pos,
@@ -3952,25 +4318,34 @@ void send_enemy_states() {
 }
 
 std::unordered_map<void*, bool> g_enemy_ai_disabled;  // disable each enemy's AI once
+std::unordered_map<void*, bool> g_enemy_death_applied;  // consume each host death once
 
-// CLIENT (role B): match local enemies to host snapshot by name-hash, disable AI,
-// apply the host transform (positions; "sliding" MVP - animation/deaths later).
+// CLIENT (role B): match local enemies to host snapshot by name-hash and apply the
+// host transform. Pause local AI only after all unguarded RequestDisableAi pointers
+// are ready; otherwise leave this actor untouched until a later frame.
 void apply_peer_enemies() {
     if (!g_enemy_sync || !g_net_role_b) return;
-    if (!g_state_net.enabled || !g_state_net.has_peer_enemies.load()) return;
-    const coop::EnemyPacket ep = g_state_net.peer_enemies;  // snapshot copy
+    if (!g_state_net.enabled) return;
+    coop::EnemyPacket ep{};
+    if (!copy_peer_enemies_snapshot(ep)) return;
     int applied = 0;
     for_each_character([&](void* obj, const char* name) {
-        if (!is_enemy_object(obj)) return;
+        // A locally completed native death owns its ragdoll. Moving or overwriting it
+        // from a host snapshot destabilizes the physics/death pipeline.
+        if (!is_enemy_object(obj) || is_dead_ragdoll(obj)) return;
+        if (g_pause_client_enemy_ai && !g_enemy_ai_disabled[obj]) {
+            if (!npc_ai_control_ready(obj)) return;
+            reinterpret_cast<RequestDisableAiFunction>(
+                g_module + kRequestDisableAiRva)(obj, false, true);
+            g_enemy_ai_disabled[obj] = true;
+            std::ostringstream line;
+            line << "ENEMY-SYNC client AI paused for '" << name << "'";
+            log_line(line.str().c_str());
+        }
         const std::uint32_t h = coop_name_hash(name, 64);
         for (int i = 0; i < ep.count && i < coop::kMaxEnemies; ++i) {
             if (ep.enemies[i].name_hash != h) continue;
-            if (!g_enemy_ai_disabled[obj]) {
-                const auto disable = reinterpret_cast<RequestDisableAiFunction>(
-                    g_module + kRequestDisableAiRva);
-                disable(obj, false, true);
-                g_enemy_ai_disabled[obj] = true;
-            }
+            if (!valid_network_position(ep.enemies[i].pos)) continue;
             auto* world = reinterpret_cast<float*>(
                 static_cast<std::byte*>(obj) + kWorldPositionOffset);
             auto* localp = reinterpret_cast<float*>(
@@ -3979,15 +4354,22 @@ void apply_peer_enemies() {
                 static_cast<std::byte*>(obj) + kPlayerQuatOffset);
             const bool dead = (ep.enemies[i].flags & coop::kEnemyFlagDead) != 0;
             if (dead) {
-                // MVP death: the host's enemy ragdolled. We can't cleanly ragdoll the
-                // client copy (kill primitives need HitDescription), so SINK it far
-                // below the world -> it disappears, conveying "dead/removed". Proper
-                // ragdoll via AiHitController::Die is a later refinement.
-                float sink[4] = {ep.enemies[i].pos[0], -10000.0f, ep.enemies[i].pos[2],
-                                 ep.enemies[i].pos[3]};
-                std::memcpy(world, sink, sizeof(sink));
-                std::memcpy(localp, sink, sizeof(sink));
+                // Consume the host's death once through the same HealthSystem +
+                // AiHitController sequence used by the campaign `npc-die` command.
+                if (g_enable_client_death_publish && !g_enemy_death_applied[obj]) {
+                    g_applying_peer_enemy_death = true;
+                    const bool killed = apply_scripted_npc_death(obj);
+                    g_applying_peer_enemy_death = false;
+                    if (killed) g_enemy_death_applied[obj] = true;
+                    std::ostringstream line;
+                    line << "ENEMY-SYNC client scripted death "
+                         << (killed ? "applied" : "not ready")
+                         << " obj=0x" << std::hex
+                         << reinterpret_cast<std::uintptr_t>(obj);
+                    log_line(line.str().c_str());
+                }
             } else {
+                g_enemy_death_applied.erase(obj);
                 std::memcpy(world, ep.enemies[i].pos, sizeof(ep.enemies[i].pos));
                 std::memcpy(localp, ep.enemies[i].pos, sizeof(ep.enemies[i].pos));
                 std::memcpy(quat, ep.enemies[i].quat, sizeof(ep.enemies[i].quat));
@@ -4172,21 +4554,37 @@ void enemy_hp_probe() {
     }
 }
 
+// True only when the local player is a fully-constructed Player. During a
+// checkpoint/area reload (which the user can trigger by walking into a transition,
+// or that fires on alt-tab/minimize in some scenes) the engine FREES and recreates
+// the Player object; the retained-slot table transiently points at a half-torn-down
+// object whose vtable is null, or at a brand-new object. Dereferencing game state in
+// that window (enemy sync, state send, native publish) reads/walks freed memory and
+// crashes. Gate every per-tick world action on this.
+bool world_stable() {
+    void* p = retained_player_object(0);
+    if (p == nullptr || readable_bytes(p) < 0x300) return false;
+    return *reinterpret_cast<std::uintptr_t*>(p) == g_module + kPlayerVtableRva;
+}
+
 void net_tick() {
+    // Reload guard: do nothing while the local player is being recreated.
+    if (!world_stable()) return;
+    const bool foreground = process_owns_foreground_window();
     // hooked_update fires for every Player + the buddy each frame; rate-limit by clock.
     static ULONGLONG last_send = 0, last_enemy_send = 0, last_enemy_apply = 0;
     static ULONGLONG last_freeze = 0, last_hp_probe = 0, last_hpsys = 0;
     const ULONGLONG now = GetTickCount64();
-    monitor_hp_kill_selftest(now);
-    if (g_hp_sys_probe && now - last_hpsys >= 150) {
+    if (foreground) monitor_hp_kill_selftest(now);
+    if (foreground && g_hp_sys_probe && now - last_hpsys >= 150) {
         last_hpsys = now;
         enemy_hp_probe();
     }
-    if (g_enemy_health_probe && now - last_hp_probe >= 100) {
+    if (foreground && g_enemy_health_probe && now - last_hp_probe >= 100) {
         last_hp_probe = now;
         enemy_health_probe();
     }
-    if (g_enemy_freeze_selftest && now - last_freeze >= 16) {
+    if (foreground && g_enemy_freeze_selftest && now - last_freeze >= 16) {
         last_freeze = now;
         enemy_freeze_selftest();
     }
@@ -4406,7 +4804,10 @@ DWORD WINAPI aux_input_thread(void*) {
                                           // the main player. Control the clone by
                                           // switching the camera to it (NUMPAD3).
             g_drive_slot_index = 1;
-            g_drive_screen1_cam = true;   // keep anim-cam owner alive each frame
+            // Do not auto-run the slot-1 camera owner. The old "passive clone"
+            // aiming test did this every frame, so it did not isolate retained
+            // Player presence from second-camera side effects. NUMPAD6 remains the
+            // explicit camera diagnostic.
         }
         const bool ins = (GetAsyncKeyState(VK_INSERT) & 0x8000) != 0;
         if (ins && !prev_insert) {
@@ -5066,24 +5467,8 @@ void __fastcall hooked_update(void* object) {
         observe_nadine_visual_identity(object);
         g_last_nadine_object = object;  // set EARLY so the clone auto-spawn (below)
                                         // can read Nadine's look2 for the body swap.
-        // AUTO joint-cache dump (no key press): once, ~6s after Nadine first appears
-        // and the local player exists, so the diagnostic data lands in the log
-        // automatically.
-        {
-            static ULONGLONG first_nadine_ms = 0;
-            static bool auto_jointdump_done = false;
-            if (first_nadine_ms == 0) first_nadine_ms = GetTickCount64();
-            if (!auto_jointdump_done && retained_player_object(0) != nullptr &&
-                GetTickCount64() - first_nadine_ms > 6000) {
-                auto_jointdump_done = true;
-                dump_body_subobject_diff();
-                // MIRROR auto-enable removed: raw joint-cache copy produced broken
-                // poses ("arms out of back") - the cache holds FINAL positioned
-                // matrices, not directly copyable across characters at different
-                // positions. Needs local-space pose transfer via engine joint
-                // accessors. Left off until that's implemented.
-            }
-        }
+        // Deep body/joint inspection remains manual (Insert) only. Running that
+        // large pointer walk automatically in both instances raced scene teardown.
         // (Removed: a leftover diagnostic auto-injected ly=22000 on controller 0
         // for 2s on scene load = the "carried forward right after spawn" bug.)
         // DISABLED: auto split-screen login (max_local_players=2 / net_login_split_
@@ -5134,7 +5519,8 @@ void __fastcall hooked_update(void* object) {
         // window). Set g_controlled_object BEFORE the (object!=controlled) guard
         // below so this buddy reaches the drive path. Fires once.
         if (!g_net_drive_nadine && g_state_net.enabled &&
-            g_state_net.has_peer_state.load()) {
+            g_state_net.has_peer_state.load(std::memory_order_acquire) &&
+            world_stable()) {
             g_net_drive_nadine = true;
             g_control_enabled = true;
             g_controlled_object = object;
@@ -5231,10 +5617,16 @@ void __fastcall hooked_update(void* object) {
                          ? "ENEMY-FREEZE selftest ON (enemies AI-off + pinned)"
                          : "ENEMY-FREEZE selftest OFF");
         }
+        // Use an explicit up->down edge. GetAsyncKeyState's low bit is affected by
+        // keyboard auto-repeat and caused one physical press to publish many attacks.
+        static bool decimal_was_down = false;
+        const bool decimal_is_down = (GetAsyncKeyState(VK_DECIMAL) & 0x8000) != 0;
+        const bool decimal_pressed = decimal_is_down && !decimal_was_down;
+        decimal_was_down = decimal_is_down;
         // Fresh AttackInfo is the preferred feasibility probe because it avoids stale
         // handles from a captured attack. Both tests stay disabled until an explicit
         // controlled live run.
-        if ((GetAsyncKeyState(VK_DECIMAL) & 1) != 0) {
+        if (decimal_pressed) {
             if (g_enable_fresh_attackinfo_test) {
                 publish_fresh_nadine_attackinfo();
             } else if (!g_enable_attackinfo_replay_test) {
@@ -5321,6 +5713,12 @@ void __fastcall hooked_update(void* object) {
         if ((GetAsyncKeyState(VK_F7) & 1) != 0) {
             diagnose_split_screen_login();
         }
+        if ((GetAsyncKeyState(VK_OEM_3) & 1) != 0) {  // `~`/ё : toggle client death-publish
+            g_enable_client_death_publish = !g_enable_client_death_publish;
+            log_line(g_enable_client_death_publish
+                         ? "CLIENT-DEATH-PUBLISH ON (mirror host kills on puppet)"
+                         : "CLIENT-DEATH-PUBLISH OFF (host-dead enemy left frozen)");
+        }
         if ((GetAsyncKeyState(VK_F8) & 1) != 0) {
             g_control_enabled = !g_control_enabled;
             if (g_control_enabled) {
@@ -5375,7 +5773,9 @@ void __fastcall hooked_update(void* object) {
             return;
         }
 
-        if (control_state.ai_disabled != g_control_enabled) {
+        if (g_allow_runtime_ai_toggle &&
+            control_state.ai_disabled != g_control_enabled &&
+            npc_ai_control_ready(object)) {
             if (g_control_enabled) {
                 const auto request_disable_ai =
                     reinterpret_cast<RequestDisableAiFunction>(
@@ -6331,6 +6731,8 @@ DWORD WINAPI install_hook(void*) {
         log_line("tll.exe module not found");
         return 1;
     }
+    AddVectoredExceptionHandler(0, &crash_observer);
+    log_line("crash observer installed (no breakpoints)");
 
     // VARIANT A (co-op mode gate at init) PROVEN DEAD: setting HIBYTE(dword_143E07470)
     // + byte_143E03568 before save load CRASHES the campaign load — campaign levels
@@ -6454,27 +6856,36 @@ DWORD WINAPI install_hook(void*) {
             log_line(l.str().c_str());
         }
     }
-    if (g_install_npc_damage_hook) {
-        install_npc_damage_hook_fn();
-    }
     submit_remote_input_packet(coop::InputPacket{});
     start_udp_receiver();
     log_line("local-player-1 -> Nadine bind hook ENABLED");
     log_line("one-shot split render activation ENABLED after login_state==3");
     start_state_net();
+    // Role A applies its own attacks normally and receives relayed damage in the
+    // network tick. Only role B needs to observe local hits and forward them.
+    if (g_install_npc_damage_hook && g_net_role_b) {
+        install_npc_damage_hook_fn();
+    } else {
+        log_line("NPC-damage hook skipped on role A");
+    }
     install_xinput_hook();
     g_velprobe_enabled = false;
-    CreateThread(nullptr, 0, &aux_input_thread, nullptr, 0, nullptr);
-    g_spawn_veh = AddVectoredExceptionHandler(1, &spawn_capture_veh);
-    g_velwriter_veh = AddVectoredExceptionHandler(0, &velwriter_capture_veh);
-    g_perslot_veh = AddVectoredExceptionHandler(0, &perslot_capture_veh);
-    g_inputstate_veh = AddVectoredExceptionHandler(0, &inputstate_capture_veh);
-    g_stickread_veh = AddVectoredExceptionHandler(0, &stickread_capture_veh);
-    g_inputwrite_veh = AddVectoredExceptionHandler(0, &inputwrite_capture_veh);
-    g_inputwrite_stick_veh = AddVectoredExceptionHandler(0, &inputwrite_stick_capture_veh);
-    g_visual_seed_veh = AddVectoredExceptionHandler(0, &visual_seed_capture_veh);
-    g_packet_look_veh = AddVectoredExceptionHandler(1, &packet_look_veh);
-    g_record_swap_veh = AddVectoredExceptionHandler(1, &record_swap_veh);
+    if constexpr (kEnableLegacyRuntimeDiagnostics) {
+        CreateThread(nullptr, 0, &aux_input_thread, nullptr, 0, nullptr);
+        g_spawn_veh = AddVectoredExceptionHandler(1, &spawn_capture_veh);
+        g_velwriter_veh = AddVectoredExceptionHandler(0, &velwriter_capture_veh);
+        g_perslot_veh = AddVectoredExceptionHandler(0, &perslot_capture_veh);
+        g_inputstate_veh = AddVectoredExceptionHandler(0, &inputstate_capture_veh);
+        g_stickread_veh = AddVectoredExceptionHandler(0, &stickread_capture_veh);
+        g_inputwrite_veh = AddVectoredExceptionHandler(0, &inputwrite_capture_veh);
+        g_inputwrite_stick_veh =
+            AddVectoredExceptionHandler(0, &inputwrite_stick_capture_veh);
+        g_visual_seed_veh = AddVectoredExceptionHandler(0, &visual_seed_capture_veh);
+        g_packet_look_veh = AddVectoredExceptionHandler(1, &packet_look_veh);
+        g_record_swap_veh = AddVectoredExceptionHandler(1, &record_swap_veh);
+    } else {
+        log_line("legacy diagnostic thread/VEH/hardware breakpoints disabled");
+    }
     {
         const auto string_hash =
             reinterpret_cast<StringHashFunction>(g_module + kStringHashRva);
@@ -6485,13 +6896,17 @@ DWORD WINAPI install_hook(void*) {
           << " target(coop-drake)=0x" << g_inject_look_hash << std::dec;
         log_line(l.str().c_str());
     }
-    arm_spawn_breakpoint_all_threads();
+    if constexpr (kEnableLegacyRuntimeDiagnostics) {
+        arm_spawn_breakpoint_all_threads();
+    }
     // DIAGNOSTIC input-capture HW breakpoints (perslot / inputstate / inputwrite /
     // stick) are NO LONGER auto-armed: they hook stick/input processing and BREAK
     // AIMING (right stick) for the main player on inject. They were only needed for
     // the original input RE; the clone drive writes FrameState directly without them.
     // Re-arm manually via the Numpad/PageUp hotkeys if input RE is needed again.
-    log_line("Spawn-arg capture armed (trigger a checkpoint/respawn to capture)");
+    log_line(kEnableLegacyRuntimeDiagnostics
+                 ? "Spawn-arg capture armed (trigger a checkpoint/respawn to capture)"
+                 : "Spawn-arg capture disabled in stable co-op build");
     log_line("input-capture breakpoints NOT auto-armed (they broke aiming); spawn only");
     log_line("velprobe disabled on load (press Insert to enable)");
     log_line("Press PageUp to capture the velocity-writer RIP (run, then read log)");

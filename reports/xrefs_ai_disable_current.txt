@@ -1,0 +1,10 @@
+TARGET 0x1403F5D30: func_start=0x1403f5d30 name=RequestDisableAi
+  xref=0x14055F148 type=17 func_start=0x14055eee0 func_name=sub_14055EEE0
+  xref=0x14055F15B type=17 func_start=0x14055eee0 func_name=sub_14055EEE0
+  xref=0x142D2F828 type=1 func_start=None func_name=None
+  xref=0x142D2F838 type=1 func_start=None func_name=None
+  xref=0x146DE3E94 type=1 func_start=None func_name=None
+
+TARGET 0x1403F5C80: func_start=0x1403f5c80 name=RequestEnableAi
+  xref=0x146DE3E88 type=1 func_start=None func_name=None
+

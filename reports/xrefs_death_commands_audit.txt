@@ -1,0 +1,68 @@
+TARGET 0x142960038: func_start=None name=None
+  xref=0x140055A77 type=1 func_start=0x140055a70 func_name=sub_140055A70
+  xref=0x140BBB9C9 type=1 func_start=0x140bba740 func_name=sub_140BBA740
+  xref=0x140BBC15D type=1 func_start=0x140bba740 func_name=sub_140BBA740
+  xref=0x140BBC232 type=1 func_start=0x140bba740 func_name=sub_140BBA740
+
+TARGET 0x1429695F8: func_start=None name=None
+  xref=0x1405DB1AA type=1 func_start=0x1405db060 func_name=sub_1405DB060
+  xref=0x1405DB7B6 type=1 func_start=0x1405db320 func_name=sub_1405DB320
+  xref=0x1405DBF72 type=1 func_start=0x1405db320 func_name=sub_1405DB320
+  xref=0x140B3C855 type=1 func_start=0x140b3b360 func_name=sub_140B3B360
+  xref=0x140B421A4 type=1 func_start=0x140b42080 func_name=sub_140B42080
+  xref=0x140B426D0 type=1 func_start=0x140b42310 func_name=sub_140B42310
+  xref=0x140B42D52 type=1 func_start=0x140b42310 func_name=sub_140B42310
+  xref=0x140B479A0 type=1 func_start=0x140b47950 func_name=sub_140B47950
+
+TARGET 0x1428E4828: func_start=None name=None
+  xref=0x1401FAA83 type=1 func_start=0x1401fa9a0 func_name=sub_1401FA9A0
+  xref=0x1403C267D type=1 func_start=0x1403c25a0 func_name=sub_1403C25A0
+  xref=0x140701403 type=1 func_start=0x140701350 func_name=sub_140701350
+  xref=0x14070177D type=1 func_start=0x140701710 func_name=sub_140701710
+  xref=0x1408F94BB type=1 func_start=0x1408f93e0 func_name=sub_1408F93E0
+  xref=0x1408FFAB0 type=1 func_start=0x1408ff5e0 func_name=sub_1408FF5E0
+  xref=0x1408FFFEE type=1 func_start=0x1408ff5e0 func_name=sub_1408FF5E0
+  xref=0x140900303 type=1 func_start=0x140900250 func_name=sub_140900250
+  xref=0x1413B9560 type=1 func_start=0x1413b9500 func_name=sub_1413B9500
+  xref=0x1413DDF91 type=1 func_start=0x1413ddf00 func_name=sub_1413DDF00
+  xref=0x1413E5CF6 type=1 func_start=0x1413e5c20 func_name=sub_1413E5C20
+  xref=0x14140B0B5 type=1 func_start=0x14140ad00 func_name=sub_14140AD00
+  xref=0x14140B30C type=1 func_start=0x14140ad00 func_name=sub_14140AD00
+  xref=0x14140B55C type=1 func_start=0x14140ad00 func_name=sub_14140AD00
+  xref=0x14140B75D type=1 func_start=0x14140ad00 func_name=sub_14140AD00
+  xref=0x14140B941 type=1 func_start=0x14140ad00 func_name=sub_14140AD00
+  xref=0x14140BB34 type=1 func_start=0x14140ad00 func_name=sub_14140AD00
+  xref=0x14140BD36 type=1 func_start=0x14140ad00 func_name=sub_14140AD00
+  xref=0x14140BED5 type=1 func_start=0x14140ad00 func_name=sub_14140AD00
+  xref=0x1414186A0 type=1 func_start=0x141417da0 func_name=sub_141417DA0
+  xref=0x141418E69 type=1 func_start=0x141417da0 func_name=sub_141417DA0
+  xref=0x14141A05E type=1 func_start=0x141419f30 func_name=sub_141419F30
+  xref=0x14141A147 type=1 func_start=0x141419f30 func_name=sub_141419F30
+  xref=0x14141A226 type=1 func_start=0x141419f30 func_name=sub_141419F30
+  xref=0x1414573B8 type=1 func_start=0x141457020 func_name=sub_141457020
+  xref=0x141458503 type=1 func_start=0x141458470 func_name=sub_141458470
+  xref=0x1414A3340 type=1 func_start=0x1414a2d50 func_name=sub_1414A2D50
+  xref=0x1414A6A63 type=1 func_start=0x1414a69d0 func_name=sub_1414A69D0
+  xref=0x1414D41F3 type=1 func_start=0x1414d4140 func_name=sub_1414D4140
+  xref=0x14155D320 type=1 func_start=0x14155d2b0 func_name=sub_14155D2B0
+  xref=0x14155E4BD type=1 func_start=0x14155e410 func_name=sub_14155E410
+  xref=0x141BDE476 type=1 func_start=0x141bde250 func_name=ResetAndRebuildParticleRootStateBanksAndQueues
+
+TARGET 0x1428DAAB0: func_start=None name=None
+  xref=0x1400287A7 type=1 func_start=0x1400287a0 func_name=sub_1400287A0
+
+TARGET 0x14295D8B0: func_start=None name=None
+  xref=0x1400506C7 type=1 func_start=0x1400506c0 func_name=sub_1400506C0
+
+TARGET 0x14295D7EC: func_start=None name=None
+  xref=0x140542327 type=1 func_start=0x140541ef0 func_name=sub_140541EF0
+  xref=0x1409B7D21 type=1 func_start=0x1409b7030 func_name=sub_1409B7030
+  xref=0x140F817A6 type=1 func_start=0x140f81720 func_name=sub_140F81720
+  xref=0x1410EC634 type=1 func_start=0x1410ec230 func_name=sub_1410EC230
+  xref=0x1410F45EB type=1 func_start=0x1410f4580 func_name=sub_1410F4580
+  xref=0x1410F481B type=1 func_start=0x1410f47b0 func_name=sub_1410F47B0
+
+TARGET 0x142937D10: func_start=None name=None
+  xref=0x14042BB6B type=1 func_start=0x14042b400 func_name=sub_14042B400
+  xref=0x14042C382 type=1 func_start=0x14042b400 func_name=sub_14042B400
+
