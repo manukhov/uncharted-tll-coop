@@ -18,9 +18,9 @@ look/aim, weapons and firing, melee, interactions, health, death, respawn, and
 campaign lifecycle. Enemy synchronization is explicitly deferred until this is
 complete.
 
-The present packet is insufficient: it carries position, quaternion, velocity,
-and a 32-bit copy of input buttons mislabeled `anim_state`. Continuous state needs
-an expanded snapshot, while one-shot actions need a reliable ordered event stream.
+The present v2 packet carries position, quaternion, velocity, both stick pairs and
+the complete 64-bit button mask with press/release edges. It is still insufficient:
+one-shot actions need a reliable ordered event stream and authored gameplay state.
 
 The immediate blocker is the remote actor. `NadineBuddy + MoveTo` cannot represent
 all Player actions. A second retained `Player` has the required graph and mechanics.
@@ -29,17 +29,43 @@ isolated: the supposedly passive test automatically ran the slot-1 camera owner
 every frame. Player presence, slot-1 input, and the second camera must now be tested
 independently.
 
+The corrected first matrix case is complete: with slot-1 input, split login, and
+camera 1 all off, Chloe can aim normally while a second retained `Player` exists.
+The next failure is narrower: two Player jobs concurrently mutate the shared
+`joypad-2` disabled-command manager. Its fixed free count underflows to `-1/-2` and
+crashes at `0x14183A090`. Both per-slot pools were initialized correctly. The mod
+now serializes the original mutation function without changing command semantics.
+A fresh load with slot 1 survived for more than two minutes with valid pool counts,
+so this crash is closed.
+
+The current build creates a remote retained `Player` only after fresh packets from
+the second copy arrive. Role A renders that object as Nadine; role B keeps it Chloe.
+State application continues while either process is in the background, and the old
+NPC `MoveTo` network avatar is disabled to avoid duplicate remote actors.
+
+In the one-PC two-instance test, both processes were polling the same XInput user 0,
+which coupled their local cameras despite no camera state being applied over the
+network. Loopback mode now neutralizes controller input only in the background
+process. This test-only filter is disabled for real two-PC connections.
+
+The alt-tab false-death path is now validated fixed. When a background instance
+pauses packet production, its remote replica keeps the last confirmed transform
+and health instead of falling under local physics. Repeated window switching no
+longer killed either player; both processes remained responsive. Four native Player
+death entries (`+0xBE8..+0xC00`) are additionally guarded for a live peer, but none
+was reached in the successful run, confirming transform hold as the effective fix.
+
 Enemy snapshots, enemy damage relay, and mirrored enemy death remain preserved but
 are disabled by default during player work.
 
 ---
 
-## Previous Direction: Variant B (reference)
+## Previous Direction: Variant B (superseded reference)
 
-A 2nd full Player on one machine is a dead end: a 2nd **retained Player breaks the
-LOCAL player's weapon/aim** (single-player gating on retained-slot occupancy;
-confirmed — inert/no-clone = aim works, clone present even passive = aim gated). Every
-escape (remove slot / co-op gate / split-screen) crashes or is dormant.
+The earlier conclusion that a second retained Player inherently breaks local aim
+was disproved by the clean matrix test. The actual delayed crash was the concurrent
+joypad command-pool mutation described above. This section remains only as history;
+the active route now uses a full remote Player in each process.
 
 **Variant B (correct co-op model):** each PC runs its OWN single full local Player;
 the other player is a lightweight non-Player **avatar** (visual mirror via the net),

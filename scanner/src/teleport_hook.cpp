@@ -48,6 +48,9 @@ constexpr std::uintptr_t kRetainedSlotTableRva = 0x3EEBE80;   // g_RetainedPlaye
 constexpr std::uintptr_t kPlayerVtableRva = 0x2A4BFE8;        // Player class vtable
 constexpr std::size_t kPlayerQuatOffset = 0x140;              // orientation quaternion
 constexpr std::size_t kPlayerLocalPosOffset = 0x130;          // local position vec4
+constexpr std::size_t kPlayerHealthSystemOffset = 0x4A8;
+constexpr std::size_t kPlayerCurrentHealthOffset = 0x38;
+constexpr std::size_t kPlayerMaxHealthOffset = 0x44;
 constexpr std::uintptr_t kSetControlActionStateIdAndForward168Rva = 0x1DE5A10;
 constexpr std::uintptr_t kAttachCameraRetainedBindingRva = 0x1C074E0;
 constexpr std::uintptr_t kToggleCameraRetainedBindingRva = 0x1C07730;
@@ -91,6 +94,11 @@ constexpr bool kEnableBuiltInSlot1NetPlayerScaffold = false;
 // breakpoints, and poll game objects from a separate thread. They are incompatible
 // with a stable two-instance runtime and are never needed by the current co-op path.
 constexpr bool kEnableLegacyRuntimeDiagnostics = false;
+// Clean remote-Player feasibility test: capture only the normal slot-0 spawn
+// arguments. This installs one execute breakpoint that disarms itself after the
+// capture; it does not start the old diagnostic thread or input/camera probes.
+constexpr bool kEnableSpawnCaptureDiagnostic = true;
+constexpr std::uintptr_t kAddJoypadDisabledCommandsRva = 0x1839FB0;
 constexpr std::uint32_t kSlot1ScreenIndex = 1;
 constexpr float kGoalDistance = 3.0F;
 constexpr float kRemoteGoalDistance = 1.25F;
@@ -145,6 +153,10 @@ using StringHashFunction = std::uint32_t(__fastcall*)(const char*, std::uint64_t
 using ResolveUpperActorRecordFunction = void*(__fastcall*)(std::uint32_t);
 
 UpdateFunction g_original_update = nullptr;
+using AddJoypadDisabledCommandsFunction = std::int64_t(__fastcall*)(
+    void*, std::int64_t, int, int, const std::uint32_t*, int);
+AddJoypadDisabledCommandsFunction g_original_add_joypad_disabled_commands = nullptr;
+SRWLOCK g_joypad_disabled_commands_lock = SRWLOCK_INIT;
 // DIAGNOSTIC toggle (VK_HOME): INERT = DLL no-op pass-through. Default ACTIVE.
 volatile bool g_dll_inert = false;
 // PROVEN: nulling the clone's retained-slot pointer to hide it from single-player
@@ -170,16 +182,20 @@ volatile bool g_local_make_nadine = true;
 // Two-instance role: false = role A (recv :31338, "player 1", local Chloe), true =
 // role B (recv :31339, "player 2", local Nadine). Set in start_state_net().
 volatile bool g_net_role_b = false;
+// One-PC two-instance validation only: both processes otherwise poll the same
+// physical XInput pad and rotate both local cameras together. The background
+// process receives a neutral pad state. Real two-PC play leaves input untouched.
+volatile bool g_loopback_two_instance = false;
 // EXPERIMENTAL (DISPROVEN): tried rendering the role-B remote avatar (NadineBuddy)
 // as Chloe via the appearance-hash swap. Result: NO visual change — the NPC's mesh
 // is hard-bound (Nadine is streamed for the NadineBuddy), and the hash swap that
 // works for the Player does NOT recolor the NPC's model. So the avatar stays Nadine.
 // Left OFF; a distinct-Chloe avatar would need a Chloe-based actor, not a hash swap.
 volatile bool g_avatar_show_chloe = false;
-// Legacy 2nd-Player clone auto-spawn (the old single-PC clone experiment). Default
-// OFF: it breaks the local player's aim (2-player gating) and spawned a rogue static
-// 2nd Nadine in the role-A co-op window. Manual F12 still spawns a clone if needed.
+// Legacy single-process auto-spawn remains off. The network path creates slot 1 only
+// after a fresh peer packet arrives, so a lone campaign instance is unchanged.
 volatile bool g_enable_legacy_clone_autospawn = false;
+volatile bool g_enable_remote_player_autospawn = true;
 // VARIANT B avatar mirror-test: copy the local player's joint cache (pose) into NPC
 // NadineBuddy each frame so the NPC mirrors the player's pose (validates joint-driving).
 volatile bool g_mirror_pose = false;
@@ -475,6 +491,18 @@ bool copy_peer_state_snapshot(coop::StatePacket& out) {
     return true;
 }
 
+// Input and transform require a fresh packet. The last confirmed health remains
+// authoritative while an alt-tabbed instance is suspended and stops sending.
+bool copy_last_peer_state_snapshot(coop::StatePacket& out) {
+    if (!g_state_net.has_peer_state.load(std::memory_order_acquire)) {
+        return false;
+    }
+    AcquireSRWLockShared(&g_state_net.peer_state_lock);
+    out = g_state_net.peer_state;
+    ReleaseSRWLockShared(&g_state_net.peer_state_lock);
+    return true;
+}
+
 void publish_peer_enemies_snapshot(const coop::EnemyPacket& packet) {
     AcquireSRWLockExclusive(&g_state_net.peer_enemies_lock);
     g_state_net.peer_enemies = packet;
@@ -568,7 +596,7 @@ LONG CALLBACK crash_observer(EXCEPTION_POINTERS* exception) {
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
-    char line[384]{};
+    char line[1536]{};
     const auto address = reinterpret_cast<std::uintptr_t>(
         exception->ExceptionRecord->ExceptionAddress);
     const auto rip = exception->ContextRecord != nullptr
@@ -577,15 +605,65 @@ LONG CALLBACK crash_observer(EXCEPTION_POINTERS* exception) {
     const auto rsp = exception->ContextRecord != nullptr
         ? static_cast<std::uintptr_t>(exception->ContextRecord->Rsp)
         : 0;
-    const int length = std::snprintf(
+    const CONTEXT* const context = exception->ContextRecord;
+    const auto fault_kind = exception->ExceptionRecord->NumberParameters >= 1
+        ? exception->ExceptionRecord->ExceptionInformation[0]
+        : 0;
+    const auto fault_address = exception->ExceptionRecord->NumberParameters >= 2
+        ? exception->ExceptionRecord->ExceptionInformation[1]
+        : 0;
+    std::uintptr_t stack[12]{};
+    SIZE_T stack_read = 0;
+    if (rsp != 0) {
+        ReadProcessMemory(GetCurrentProcess(), reinterpret_cast<const void*>(rsp),
+                          stack, sizeof(stack), &stack_read);
+    }
+    int length = std::snprintf(
         line, sizeof(line),
-        "[pid=%lu] EXCEPTION code=0x%08lX address=0x%llX rva=0x%llX rip=0x%llX rsp=0x%llX\r\n",
+        "[pid=%lu] EXCEPTION code=0x%08lX address=0x%llX rva=0x%llX "
+        "access=%llu fault=0x%llX rip=0x%llX rsp=0x%llX "
+        "rcx=0x%llX rdx=0x%llX r8=0x%llX r9=0x%llX "
+        "rbx=0x%llX rbp=0x%llX rsi=0x%llX rdi=0x%llX r14=0x%llX r15=0x%llX",
         static_cast<unsigned long>(GetCurrentProcessId()),
         static_cast<unsigned long>(code),
         static_cast<unsigned long long>(address),
         static_cast<unsigned long long>(address > g_module ? address - g_module : 0),
+        static_cast<unsigned long long>(fault_kind),
+        static_cast<unsigned long long>(fault_address),
         static_cast<unsigned long long>(rip),
-        static_cast<unsigned long long>(rsp));
+        static_cast<unsigned long long>(rsp),
+        static_cast<unsigned long long>(context ? context->Rcx : 0),
+        static_cast<unsigned long long>(context ? context->Rdx : 0),
+        static_cast<unsigned long long>(context ? context->R8 : 0),
+        static_cast<unsigned long long>(context ? context->R9 : 0),
+        static_cast<unsigned long long>(context ? context->Rbx : 0),
+        static_cast<unsigned long long>(context ? context->Rbp : 0),
+        static_cast<unsigned long long>(context ? context->Rsi : 0),
+        static_cast<unsigned long long>(context ? context->Rdi : 0),
+        static_cast<unsigned long long>(context ? context->R14 : 0),
+        static_cast<unsigned long long>(context ? context->R15 : 0));
+    if (length > 0 && static_cast<std::size_t>(length) < sizeof(line)) {
+        length += std::snprintf(line + length, sizeof(line) - static_cast<std::size_t>(length),
+                                " stack=");
+        const std::size_t count = stack_read / sizeof(stack[0]);
+        for (std::size_t i = 0; i < count && length > 0 &&
+             static_cast<std::size_t>(length) < sizeof(line); ++i) {
+            const auto value = stack[i];
+            const auto value_rva = value >= g_module && value < g_module + 0x30000000
+                ? value - g_module
+                : 0;
+            length += std::snprintf(
+                line + length, sizeof(line) - static_cast<std::size_t>(length),
+                " 0x%llX(rva=0x%llX)",
+                static_cast<unsigned long long>(value),
+                static_cast<unsigned long long>(value_rva));
+        }
+        if (length > 0 && static_cast<std::size_t>(length) + 2 < sizeof(line)) {
+            line[length++] = '\r';
+            line[length++] = '\n';
+            line[length] = '\0';
+        }
+    }
     const HANDLE file = CreateFileA(
         R"(C:\Users\Vladimir\Desktop\TLLCoopResearch\reports\locomotion_hook.log)",
         FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
@@ -596,6 +674,74 @@ LONG CALLBACK crash_observer(EXCEPTION_POINTERS* exception) {
         CloseHandle(file);
     }
     return EXCEPTION_CONTINUE_SEARCH;
+}
+
+std::int64_t __fastcall hooked_add_joypad_disabled_commands(
+    void* manager, std::int64_t joypad_index, int owner_id, int from_code,
+    const std::uint32_t* commands, int command_count) {
+    AcquireSRWLockExclusive(&g_joypad_disabled_commands_lock);
+    const std::int64_t result = g_original_add_joypad_disabled_commands(
+        manager, joypad_index, owner_id, from_code, commands, command_count);
+    ReleaseSRWLockExclusive(&g_joypad_disabled_commands_lock);
+    return result;
+}
+
+bool install_joypad_disabled_commands_lock() {
+    auto* const target = reinterpret_cast<std::uint8_t*>(
+        g_module + kAddJoypadDisabledCommandsRva);
+    constexpr std::array<std::uint8_t, 14> expected{
+        0x40, 0x53, 0x55, 0x56, 0x57, 0x41, 0x57, 0x48,
+        0x81, 0xEC, 0x80, 0x00, 0x00, 0x00,
+    };
+    if (std::memcmp(target, expected.data(), expected.size()) != 0) {
+        log_line("joypad command lock hook skipped: unexpected function prologue");
+        return false;
+    }
+
+    constexpr std::size_t kPatchSize = expected.size();
+    constexpr std::size_t kJumpSize = 12;
+    auto* const trampoline = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, kPatchSize + kJumpSize, MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr) {
+        log_line("joypad command lock hook skipped: trampoline allocation failed");
+        return false;
+    }
+    std::memcpy(trampoline, target, kPatchSize);
+    std::uint8_t* jump_back = trampoline + kPatchSize;
+    jump_back[0] = 0x48;
+    jump_back[1] = 0xB8;  // mov rax, imm64
+    *reinterpret_cast<std::uintptr_t*>(jump_back + 2) =
+        reinterpret_cast<std::uintptr_t>(target + kPatchSize);
+    jump_back[10] = 0xFF;
+    jump_back[11] = 0xE0;  // jmp rax
+    FlushInstructionCache(GetCurrentProcess(), trampoline, kPatchSize + kJumpSize);
+
+    g_original_add_joypad_disabled_commands =
+        reinterpret_cast<AddJoypadDisabledCommandsFunction>(trampoline);
+
+    DWORD old_protection = 0;
+    if (!VirtualProtect(target, kPatchSize, PAGE_EXECUTE_READWRITE,
+                        &old_protection)) {
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        g_original_add_joypad_disabled_commands = nullptr;
+        log_line("joypad command lock hook skipped: VirtualProtect failed");
+        return false;
+    }
+    target[0] = 0x48;
+    target[1] = 0xB8;  // mov rax, imm64
+    *reinterpret_cast<std::uintptr_t*>(target + 2) =
+        reinterpret_cast<std::uintptr_t>(&hooked_add_joypad_disabled_commands);
+    target[10] = 0xFF;
+    target[11] = 0xE0;  // jmp rax
+    target[12] = 0x90;
+    target[13] = 0x90;
+    FlushInstructionCache(GetCurrentProcess(), target, kPatchSize);
+    DWORD ignored = 0;
+    VirtualProtect(target, kPatchSize, old_protection, &ignored);
+
+    log_line("joypad disabled-command mutation serialized for multiple Players");
+    return true;
 }
 
 std::uint32_t resolve_upper_actor_record_hash(std::uint32_t id) {
@@ -2649,6 +2795,7 @@ bool start_state_net() {
     // 31338+1 and sends to 31338. On TWO separate PCs the peer IP is not
     // loopback, both bind 31338 with no collision and talk port-to-port.
     const bool loopback = (peer_ip == "127.0.0.1" || peer_ip == "localhost");
+    g_loopback_two_instance = loopback;
     std::uint16_t my_port = coop::kStatePort;
     std::uint16_t peer_port = coop::kStatePort;
     sockaddr_in bind_addr{};
@@ -2740,6 +2887,24 @@ void send_local_player_state() {
     std::memcpy(pkt.pos, pos, sizeof(pkt.pos));
     std::memcpy(pkt.quat, quat, sizeof(pkt.quat));
     std::memcpy(pkt.velocity, vel, sizeof(pkt.velocity));
+    if (readable_bytes(static_cast<std::byte*>(local_obj) +
+                       kPlayerHealthSystemOffset + sizeof(void*)) >= sizeof(void*)) {
+        auto* health = *reinterpret_cast<std::byte**>(
+            static_cast<std::byte*>(local_obj) + kPlayerHealthSystemOffset);
+        if (health != nullptr &&
+            readable_bytes(health + kPlayerMaxHealthOffset + sizeof(std::int32_t)) >=
+                sizeof(std::int32_t)) {
+            const auto hp = *reinterpret_cast<const std::int32_t*>(
+                health + kPlayerCurrentHealthOffset);
+            const auto max_hp = *reinterpret_cast<const std::int32_t*>(
+                health + kPlayerMaxHealthOffset);
+            if (hp >= 0 && max_hp > 0 && hp <= max_hp && max_hp <= 100000) {
+                pkt.health = hp;
+                pkt.max_health = max_hp;
+                pkt.flags |= 2;
+            }
+        }
+    }
     // Capture the engine-resolved local input, not raw keyboard/controller input.
     // These fields are the common source for movement, camera, aim and actions.
     static std::uint64_t previous_buttons = 0;
@@ -2775,10 +2940,12 @@ volatile bool g_drive_screen1_cam = false;  // NUMPAD6: drive screen-1 cam + fwd
 // g_play_as_clone defined earlier (before hooked_resolve_local_player)
 // Single-instance test: when there is no network peer, mirror the LOCAL Chloe
 // onto the puppet (+2m) so actions/transform can be verified on one PC.
-bool g_puppet_local_mirror = true;
+bool g_puppet_local_mirror = false;
 
 bool latest_peer_state(coop::StatePacket& out, void*& puppet) {
-    if (!g_puppet_net_apply || g_module == 0 || !process_owns_foreground_window()) {
+    // Both copies must keep applying their peer while the other window has focus.
+    // Foreground ownership is relevant only to local diagnostic hotkeys.
+    if (!g_puppet_net_apply || g_module == 0) {
         return false;
     }
     puppet = retained_player_object(1);
@@ -2836,6 +3003,35 @@ bool latest_peer_state(coop::StatePacket& out, void*& puppet) {
     return true;
 }
 
+bool apply_peer_health_to_slot1(const coop::StatePacket& peer, bool log_once) {
+    if ((peer.flags & 2) == 0 || peer.health < 0 || peer.max_health <= 0 ||
+        peer.health > peer.max_health || peer.max_health > 100000) {
+        return false;
+    }
+    void* puppet = retained_player_object(1);
+    if (puppet == nullptr ||
+        readable_bytes(static_cast<std::byte*>(puppet) +
+                       kPlayerHealthSystemOffset + sizeof(void*)) < sizeof(void*)) {
+        return false;
+    }
+    auto* health = *reinterpret_cast<std::byte**>(
+        static_cast<std::byte*>(puppet) + kPlayerHealthSystemOffset);
+    if (health == nullptr ||
+        readable_bytes(health + kPlayerMaxHealthOffset + sizeof(std::int32_t)) <
+            sizeof(std::int32_t)) {
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(health + kPlayerCurrentHealthOffset) = peer.health;
+    *reinterpret_cast<std::int32_t*>(health + kPlayerMaxHealthOffset) = peer.max_health;
+    if (log_once) {
+        std::ostringstream line;
+        line << "remote Player health seeded " << peer.health << "/" << peer.max_health
+             << " from peer seq=" << peer.sequence;
+        log_line(line.str().c_str());
+    }
+    return true;
+}
+
 // PRE (before the puppet's own update runs): feed the replicated velocity into
 // the puppet's locomotion field so the engine's anim graph samples it this frame
 // and plays run/walk. Mirrored at +0x270.
@@ -2874,13 +3070,21 @@ void apply_puppet_transform_post(void* puppet) {
         }
     }
     if (!latest_peer_state(pkt, resolved) || resolved != puppet) {
-        return;
+        // A background instance can stop ticking for several seconds. Freeze its
+        // avatar at the last confirmed transform instead of releasing it to local
+        // physics, which can produce a false fall/death transition.
+        if (puppet != retained_player_object(1) ||
+            !copy_last_peer_state_snapshot(pkt) || (pkt.flags & 1) == 0) {
+            return;
+        }
+        resolved = puppet;
     }
+    apply_peer_health_to_slot1(pkt, false);
     // Persistence diagnostic: read +0x260 BEFORE we overwrite it. If last frame's
     // written velocity survived (≈ peer speed), the locomotion is NOT overwriting it
     // (good - anim should see it). If it's ~0, the locomotion recomputes it after
     // our write -> the decoupled-anim approach can't work via +0x260.
-    {
+    if (false) {
         static ULONGLONG last = 0;
         const ULONGLONG now = GetTickCount64();
         if (now - last > 400) {
@@ -2912,6 +3116,43 @@ void apply_puppet_transform_post(void* puppet) {
     auto* v1 = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerVelocityMirrorOffset);
     v0[0] = v0[1] = v0[2] = 0.0F;
     v1[0] = v1[1] = v1[2] = 0.0F;
+}
+
+using PlayerDeathEntryFunction = std::int64_t(__fastcall*)(void*);
+PlayerDeathEntryFunction g_original_player_death_entries[4]{};
+
+std::int64_t guard_remote_player_death(void* player, int entry) {
+    coop::StatePacket peer{};
+    const bool remote_clone = player != nullptr && player == retained_player_object(1);
+    const bool peer_alive = remote_clone && copy_last_peer_state_snapshot(peer) &&
+                            (peer.flags & 2) != 0 && peer.health > 0;
+    if (peer_alive) {
+        apply_peer_health_to_slot1(peer, false);
+        const ULONGLONG received =
+            g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+        std::ostringstream line;
+        line << "REMOTE-DEATH blocked entry=+0x" << std::hex
+             << (0xBE8 + entry * 8) << std::dec << " peer_hp=" << peer.health
+             << " packet_age_ms="
+             << (received != 0 ? GetTickCount64() - received : 0);
+        log_line(line.str().c_str());
+        return 0;
+    }
+    auto original = g_original_player_death_entries[entry];
+    return original != nullptr ? original(player) : 0;
+}
+
+std::int64_t __fastcall hooked_player_death_be8(void* player) {
+    return guard_remote_player_death(player, 0);
+}
+std::int64_t __fastcall hooked_player_death_bf0(void* player) {
+    return guard_remote_player_death(player, 1);
+}
+std::int64_t __fastcall hooked_player_death_bf8(void* player) {
+    return guard_remote_player_death(player, 2);
+}
+std::int64_t __fastcall hooked_player_death_c00(void* player) {
+    return guard_remote_player_death(player, 3);
 }
 
 // Diagnostic: find the Player's velocity field. While slot-0 Chloe runs, her
@@ -3172,6 +3413,63 @@ struct SyntheticPadLite {
     XInputCapabilitiesLite caps{};
     XInputStateLite state{};
 };
+
+// Feed the peer's resolved action state through the engine's native scripted-input
+// structure for retained slot 1. Transform replication alone can move the remote
+// Player but cannot make its weapon graph aim/fire. Keep movement axes zero here:
+// position/facing still come from the authoritative snapshot, while this first
+// stage isolates action delivery from the unresolved slot-1 camera basis.
+void drive_remote_slot1_actions_tick() {
+    if (!g_puppet_net_apply || g_module == 0 || retained_player_object(1) == nullptr) {
+        return;
+    }
+    void* fs = *reinterpret_cast<void**>(g_module + 0x3FE1088);
+    if (fs == nullptr || readable_bytes(fs) < 0x7100) {
+        return;
+    }
+    auto* branch1 = static_cast<std::byte*>(fs) + 0x6FC8 + 0x28;
+    auto* spin_gate = static_cast<std::uint8_t*>(fs) + 0x70B8 + 1;
+    coop::StatePacket peer{};
+    if (!copy_peer_state_snapshot(peer)) {
+        coop::StatePacket last_peer{};
+        if (copy_last_peer_state_snapshot(last_peer)) {
+            apply_peer_health_to_slot1(last_peer, false);
+        }
+        // Never leave held fire/aim behind after a stale or disconnected peer.
+        std::memset(branch1, 0, 0x28);
+        *spin_gate = 0;
+        return;
+    }
+
+    apply_peer_health_to_slot1(peer, false);
+
+    auto* slot1_index = static_cast<std::uint8_t*>(fs) + 0xE88 + 0xBF0 + 0x18;
+    if (readable_bytes(slot1_index) >= 1) {
+        *slot1_index = 1;
+    }
+    std::memset(branch1, 0, 0x28);
+    branch1[0] = std::byte{1};
+    *spin_gate = 0;
+    *reinterpret_cast<float*>(branch1 + 0x0C) = 0.1F;
+
+    std::uint32_t actions = static_cast<std::uint32_t>(peer.input_buttons);
+    if (actions != 0 || peer.buttons_pressed != 0 || peer.buttons_released != 0) {
+        actions |= 0x500u;  // native "input active" bits required by slot apply
+    }
+    *reinterpret_cast<std::uint32_t*>(branch1 + 0x10) = actions;
+
+    static std::uint32_t previous_actions = 0;
+    if (actions != previous_actions) {
+        std::ostringstream line;
+        line << "REMOTE-ACTIONS seq=" << peer.sequence
+             << " held=0x" << std::hex << peer.input_buttons
+             << " pressed=0x" << peer.buttons_pressed
+             << " released=0x" << peer.buttons_released
+             << " branch=0x" << actions << std::dec;
+        log_line(line.str().c_str());
+        previous_actions = actions;
+    }
+}
 
 void drive_slot1_tick() {
     if (!g_drive_slot1 || g_module == 0) {
@@ -3815,7 +4113,7 @@ using AttackInfoDeleteFn = void*(__fastcall*)(void*, unsigned char);
 using AttackInfoConstructorFn = void*(__fastcall*)(void*, int);
 using PublishAttackFn = std::uint64_t(__fastcall*)(void*, void*);
 std::uint64_t g_orig_npc_damage = 0;
-volatile bool g_install_npc_damage_hook = true;  // per-damage-event (not per-frame) -> FPS-safe; needed for client->host relay
+volatile bool g_install_npc_damage_hook = false;  // enemies deferred until player sync is complete
 volatile bool g_capture_attackinfo_clone = false;  // OFF: clone_attackinfo(vtable[1]) crashed combat
 volatile bool g_npc_damage_capture_log = false;
 volatile bool g_enable_attackinfo_replay_test = false;
@@ -4958,6 +5256,32 @@ void fix_clone_collision_filter() {
     log_line(l.str().c_str());
 }
 
+void log_joypad_command_slot_state(int slot, const char* phase) {
+    if (slot < 0 || slot > 5 || g_module == 0) return;
+    auto* const root_ptr = reinterpret_cast<std::byte**>(g_module + 0x3FE1088);
+    if (readable_bytes(root_ptr) < sizeof(*root_ptr) || *root_ptr == nullptr) return;
+    auto* const manager = *root_ptr + 3504 + 3056 * slot;
+    if (readable_bytes(manager) < 0x5A0) return;
+    const auto free_count = *reinterpret_cast<const std::uint32_t*>(manager + 0x538);
+    auto* const active = *reinterpret_cast<std::byte* const*>(manager + 0x598);
+    std::uint32_t active_count = 0xFFFFFFFFu;
+    if (active != nullptr && readable_bytes(active + 0x24) >= 4) {
+        active_count = *reinterpret_cast<const std::uint32_t*>(active + 0x20);
+    }
+    std::ostringstream line;
+    line << "JOYPAD-SLOT " << phase << " slot=" << slot
+         << " mgr=0x" << std::hex << reinterpret_cast<std::uintptr_t>(manager)
+         << " free_count=" << std::dec << free_count
+         << " active=0x" << std::hex << reinterpret_cast<std::uintptr_t>(active)
+         << " active_count=" << std::dec << active_count << " free_ptrs=";
+    for (int i = 0; i < 9; ++i) {
+        line << " 0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(
+                    *reinterpret_cast<std::byte* const*>(manager + 0x4F0 + 8 * i));
+    }
+    log_line(line.str().c_str());
+}
+
 void reissue_spawn_for_slot1() {
     if (!g_spawn_captured) {
         log_line("reissue spawn skipped: no captured spawn args yet");
@@ -5037,7 +5361,9 @@ void reissue_spawn_for_slot1() {
     // look build resolves Nadine's mesh. This is the look/mesh layer, NOT the
     // skeleton record (which broke the body when redirected).
     bool appear_swap = false;
-    if (g_want_nadine_body) {
+    // Role A sees remote Nadine. Role B already renders its local Player as Nadine,
+    // so its remote slot-1 Player must retain Chloe's appearance.
+    if (g_want_nadine_body && !g_net_role_b) {
         // FIXED Nadine appearance hash (hash("nadine")). Do NOT read it from
         // g_last_nadine_object: after a location reload that pointer is stale (the
         // old freed Nadine) -> garbage hash -> "bald Chloe". The constant is robust.
@@ -5049,13 +5375,21 @@ void reissue_spawn_for_slot1() {
           << std::hex << g_nadine_appearance_hash << std::dec;
         log_line(l.str().c_str());
     }
+    log_joypad_command_slot_state(0, "before-spawn");
+    log_joypad_command_slot_state(1, "before-spawn");
     spawn(g_spawn_desc, 1, g_spawn_ctx, g_spawn_a4, g_spawn_flag, g_spawn_out);
     if (appear_swap) {
         g_appearance_swap_active = false;
         log_line("APPEARSWAP done (clone spawn returned)");
     }
     g_slot1_visual_override_active = false;
+    coop::StatePacket peer_after_spawn{};
+    if (copy_last_peer_state_snapshot(peer_after_spawn)) {
+        apply_peer_health_to_slot1(peer_after_spawn, true);
+    }
     log_line("reissue spawn idx=1 returned");
+    log_joypad_command_slot_state(0, "after-spawn");
+    log_joypad_command_slot_state(1, "after-spawn");
     // GATING PROBE: did spawning the clone bump any "co-op / num-players" globals?
     // If yes -> a simple "hold them at 1" fix; if no -> the gate is the retained-slot
     // occupancy itself (deeper). Read after the spawn.
@@ -5216,6 +5550,18 @@ void maybe_disable_p0_xinput_injection() {
 
 DWORD WINAPI hooked_xinput_get_state(DWORD user_index, XInputStateLite* state) {
     maybe_disable_p0_xinput_injection();
+    if (g_loopback_two_instance && user_index == 0 && state != nullptr &&
+        !process_owns_foreground_window()) {
+        const DWORD result = g_real_xinput_get_state
+                                 ? g_real_xinput_get_state(user_index, state)
+                                 : 1167;
+        if (result == 0) {
+            // Keep the controller connected, but suppress controls belonging to
+            // the inactive copy so its local camera remains independent.
+            std::memset(&state->Gamepad, 0, sizeof(state->Gamepad));
+        }
+        return result;
+    }
     if (g_xinput_inject_p0 && user_index == 0 && state != nullptr) {
         std::memset(state, 0, sizeof(*state));
         state->dwPacketNumber = ++g_xinput_inject_packet;
@@ -5484,19 +5830,22 @@ void __fastcall hooked_update(void* object) {
             g_slot1_scaffold_attempted = true;
             try_slot1_netplayer_respawn_scaffold(object);
         }
-        // VARIANT B / NET CO-OP: never auto-spawn a 2nd Player clone. A 2nd retained
-        // Player breaks the local player's weapons/aim (2-player gating), and it spawned
-        // the rogue "static 2nd Nadine" in the role-A window once we set
-        // g_local_make_nadine=false for role A. The old gate keyed on
-        // !g_local_make_nadine, which role A now legitimately sets. Gate on an explicit
-        // (default-off) flag instead; the legacy clone is only for manual F12 experiments.
-        if (g_enable_legacy_clone_autospawn && g_spawn_captured &&
+        coop::StatePacket fresh_peer{};
+        const bool peer_is_fresh = copy_peer_state_snapshot(fresh_peer);
+        // A remote Player is created only for a live peer. This keeps ordinary
+        // single-player sessions untouched and gives both replicas the full Player
+        // graph needed for later action/event synchronization.
+        if ((g_enable_legacy_clone_autospawn ||
+             (g_enable_remote_player_autospawn && peer_is_fresh)) &&
+            g_spawn_captured &&
             retained_player_object(1) == nullptr &&
             !g_slot1_auto_reissue_done &&
             (!g_want_nadine_body || g_nadine_visual_identity_valid)) {
             g_slot1_auto_reissue_done = true;
             reissue_spawn_for_slot1();
-            log_line("slot1 auto-spawn armed (no forced movement)");
+            log_line(peer_is_fresh
+                         ? "remote Player auto-spawned for live peer"
+                         : "legacy slot1 auto-spawned");
         }
         // SEPARATION: do NOT auto-enable the slot-1 drive. Marking slot 1 as an
         // active input slot every frame (drive_slot1_tick) makes the engine treat the
@@ -5508,8 +5857,15 @@ void __fastcall hooked_update(void* object) {
             g_autotest_done = true;
             g_drive_slot1 = false;
             g_auto_stick_active = false;
-            g_puppet_net_apply = false;
-            log_line("clone spawned passive (drive OFF; use NUMPAD3 to control it)");
+            g_puppet_net_apply = peer_is_fresh && g_enable_remote_player_autospawn;
+            if (g_puppet_net_apply) {
+                std::ostringstream line;
+                line << "remote Player synchronization enabled, first peer seq="
+                     << fresh_peer.sequence;
+                log_line(line.str().c_str());
+            } else {
+                log_line("clone spawned passive (drive OFF; use NUMPAD3 to control it)");
+            }
         }
         g_last_nadine_object = object;
         force_split_render_mode();
@@ -5518,7 +5874,8 @@ void __fastcall hooked_update(void* object) {
         // animated-avatar drive on automatically (no need to press END in each
         // window). Set g_controlled_object BEFORE the (object!=controlled) guard
         // below so this buddy reaches the drive path. Fires once.
-        if (!g_net_drive_nadine && g_state_net.enabled &&
+        if (!g_enable_remote_player_autospawn && !g_net_drive_nadine &&
+            g_state_net.enabled &&
             g_state_net.has_peer_state.load(std::memory_order_acquire) &&
             world_stable()) {
             g_net_drive_nadine = true;
@@ -5583,9 +5940,8 @@ void __fastcall hooked_update(void* object) {
                 dump_body_subobject_diff();  // RTTI map + look-ids + desc-scan
             }
         }
-        if ((GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
-            fix_clone_collision_filter();  // copy Chloe's havok filter to clone colliders
-        }
+        // Collision-filter mutation is intentionally not automatic. It confounded
+        // the clean remote-Player lifetime test and is unrelated to input ownership.
         if ((GetAsyncKeyState(VK_PAUSE) & 1) != 0) {
             // Toggle the global CO-OP MODE gate: HIBYTE(dword_143E07470) +
             // byte_143E03568. This is the engine switch that wakes per-slot
@@ -5767,6 +6123,7 @@ void __fastcall hooked_update(void* object) {
             );
         }
         if (object != g_controlled_object) {
+            drive_remote_slot1_actions_tick();
             drive_slot1_tick();
             apply_slot1_perslot_on_game_thread();
             g_original_update(object);
@@ -5804,8 +6161,12 @@ void __fastcall hooked_update(void* object) {
         }
     }
 
+    drive_remote_slot1_actions_tick();
     drive_slot1_tick();
     apply_slot1_perslot_on_game_thread();
+    if (object == retained_player_object(1)) {
+        apply_puppet_velocity_pre();
+    }
     g_original_update(object);
     // VARIANT B avatar mirror-test: AFTER the NPC's own update wrote its joint cache,
     // overwrite it with the local player's pose so the NPC mirrors the player (proves
@@ -6733,6 +7094,7 @@ DWORD WINAPI install_hook(void*) {
     }
     AddVectoredExceptionHandler(0, &crash_observer);
     log_line("crash observer installed (no breakpoints)");
+    install_joypad_disabled_commands_lock();
 
     // VARIANT A (co-op mode gate at init) PROVEN DEAD: setting HIBYTE(dword_143E07470)
     // + byte_143E03568 before save load CRASHES the campaign load — campaign levels
@@ -6831,6 +7193,41 @@ DWORD WINAPI install_hook(void*) {
         } else {
             log_line("Player vtable[92] unexpected; appearance hook skipped");
         }
+
+        // Guard the four native Player death-entry variants. A remote replica must
+        // never author its own fall/death while the real peer still reports HP>0.
+        constexpr std::size_t first_death_slot = 0xBE8 / sizeof(void*);
+        const std::uintptr_t expected[4] = {
+            g_module + 0x0D79C00, g_module + 0x0D79950,
+            g_module + 0x0D78EC0, g_module + 0x0D792D0,
+        };
+        const std::uintptr_t replacements[4] = {
+            reinterpret_cast<std::uintptr_t>(&hooked_player_death_be8),
+            reinterpret_cast<std::uintptr_t>(&hooked_player_death_bf0),
+            reinterpret_cast<std::uintptr_t>(&hooked_player_death_bf8),
+            reinterpret_cast<std::uintptr_t>(&hooked_player_death_c00),
+        };
+        bool expected_all = true;
+        for (int i = 0; i < 4; ++i) {
+            expected_all = expected_all && pvt[first_death_slot + i] == expected[i];
+        }
+        if (expected_all) {
+            DWORD oldp = 0;
+            auto* first = &pvt[first_death_slot];
+            if (VirtualProtect(first, 4 * sizeof(*first), PAGE_READWRITE, &oldp)) {
+                for (int i = 0; i < 4; ++i) {
+                    g_original_player_death_entries[i] =
+                        reinterpret_cast<PlayerDeathEntryFunction>(first[i]);
+                    first[i] = replacements[i];
+                }
+                FlushInstructionCache(GetCurrentProcess(), first, 4 * sizeof(*first));
+                DWORD ign = 0;
+                VirtualProtect(first, 4 * sizeof(*first), oldp, &ign);
+                log_line("Player remote-death guards installed at +0xBE8..+0xC00");
+            }
+        } else {
+            log_line("Player death-entry vtable mismatch; guards skipped");
+        }
     }
     // Hook AiHitController::TakeHit = vtable[17] @ module+0x2959448 (func 0x5001e0).
     // Captures real HitDescription bytes + controller->owner mapping when enemies are
@@ -6870,9 +7267,11 @@ DWORD WINAPI install_hook(void*) {
     }
     install_xinput_hook();
     g_velprobe_enabled = false;
+    if constexpr (kEnableSpawnCaptureDiagnostic) {
+        g_spawn_veh = AddVectoredExceptionHandler(1, &spawn_capture_veh);
+    }
     if constexpr (kEnableLegacyRuntimeDiagnostics) {
         CreateThread(nullptr, 0, &aux_input_thread, nullptr, 0, nullptr);
-        g_spawn_veh = AddVectoredExceptionHandler(1, &spawn_capture_veh);
         g_velwriter_veh = AddVectoredExceptionHandler(0, &velwriter_capture_veh);
         g_perslot_veh = AddVectoredExceptionHandler(0, &perslot_capture_veh);
         g_inputstate_veh = AddVectoredExceptionHandler(0, &inputstate_capture_veh);
@@ -6896,7 +7295,7 @@ DWORD WINAPI install_hook(void*) {
           << " target(coop-drake)=0x" << g_inject_look_hash << std::dec;
         log_line(l.str().c_str());
     }
-    if constexpr (kEnableLegacyRuntimeDiagnostics) {
+    if constexpr (kEnableSpawnCaptureDiagnostic) {
         arm_spawn_breakpoint_all_threads();
     }
     // DIAGNOSTIC input-capture HW breakpoints (perslot / inputstate / inputwrite /
@@ -6904,7 +7303,7 @@ DWORD WINAPI install_hook(void*) {
     // AIMING (right stick) for the main player on inject. They were only needed for
     // the original input RE; the clone drive writes FrameState directly without them.
     // Re-arm manually via the Numpad/PageUp hotkeys if input RE is needed again.
-    log_line(kEnableLegacyRuntimeDiagnostics
+    log_line(kEnableSpawnCaptureDiagnostic
                  ? "Spawn-arg capture armed (trigger a checkpoint/respawn to capture)"
                  : "Spawn-arg capture disabled in stable co-op build");
     log_line("input-capture breakpoints NOT auto-armed (they broke aiming); spawn only");

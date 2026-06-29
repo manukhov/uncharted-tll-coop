@@ -21142,3 +21142,128 @@ engine-resolved slot-0 input fields: left stick, right stick, complete 64-bit bu
 mask, and pressed/released edges. Position, quaternion, and velocity remain. This is
 the continuous source stream needed for remote movement, camera, aiming and action
 recovery; reliable one-shot action delivery remains a separate required channel.
+
+### Clean passive Player test: aim works; joypad command pool crashes (2026-06-28)
+
+The corrected runtime test created retained slot 1 while all three unrelated paths
+were off: split login stayed 0, `max_local_players` stayed 1, slot-1 input stayed
+off, and the automatic camera-1 owner update had been removed. Chloe's normal aiming
+worked. This disproves the previous claim that retained slot-1 occupancy alone gates
+local aim/fire.
+
+The process then raised two access violations at RVA `0x183A090`, inside
+`0x141839FB0`. The function manages `disable-joypad-%i-commands-code/script` records.
+At the faulting instruction it writes through a record popped from a fixed free pool:
+- per-player joypad manager = `g_LocalPlayerInputManager + 0xDB0 + 0xBF0*index`;
+- free-record pointer array around manager `+0x4F0`;
+- free count at `+0x538`;
+- active-record array pointer at `+0x598` (count at active `+0x20`).
+
+The follow-up run showed that both manager 0 and manager 1 were initialized with
+eight valid records. The crash instead used the `joypad-2` manager. Two threads
+failed almost simultaneously; `free_count` had underflowed to `-1/-2`, and the
+record register contained the poison pattern `0xAEB3A273AEB3A273`. Thus this is a
+concurrent fixed-array mutation caused by two Player jobs sharing a manager whose
+native code assumes single-Player serialization, not a missing slot-1 constructor.
+
+The mod now detours only `0x141839FB0` through an exclusive SRW lock, then executes
+the original function unchanged. This preserves all local input commands while
+serializing the shared fixed-array mutation. Collision-filter mutation remains
+removed from the clean test.
+
+### Joypad serialization validated; remote Player path enabled (2026-06-29)
+
+The serialized build survived a fresh campaign load with a retained slot-1 Player
+for more than two minutes. The `joypad-2` manager remained valid (`free_count=6`,
+`active_count=1`) and no exception was raised. This closes the shared command-pool
+race as the cause of the previous delayed crashes.
+
+The two-instance path now creates slot 1 only after receiving a fresh peer packet.
+Role A gives the remote Player Nadine's appearance; role B keeps the remote Player
+as Chloe while its local slot-0 Player uses Nadine's appearance. Peer transform and
+velocity application no longer stops when the process loses foreground focus. The
+old `NadineBuddy + MoveTo` network avatar is disabled while this full Player path is
+selected, preventing two competing remote avatars.
+
+### One-PC camera coupling is shared XInput, not network state (2026-06-29)
+
+The current player packet carries resolved look-stick values but does not apply them
+to either camera. Both local cameras nevertheless rotated together during the
+two-instance loopback test because both processes poll XInput user 0 and therefore
+receive the same physical controller state even while one window is in the
+background. For loopback testing only, the XInput hook now returns a connected but
+neutral controller state to the background process. Non-loopback two-PC play is
+unchanged; each machine keeps its own local camera and controller.
+
+### Remote fire delay: button state was transmitted but never consumed (2026-06-29)
+
+The remote retained Player previously received only transform and velocity. Although
+`StatePacket` v2 already carried the complete slot-0 button mask and its edges, no
+code copied those fields into slot 1. Any observed remote shot was therefore stale
+native state, not synchronized firing. The first action layer now writes fresh peer
+buttons into the proven native slot-1 scripted-input structure
+`FrameState+0x6FC8+0x28`; it sets the required `0x500` active bits and clears the
+structure immediately when peer data becomes stale. Movement and right-stick axes
+remain zero in this test so weapon action delivery is isolated from the unresolved
+slot-1 camera basis.
+
+### False remote-player death: cloned HealthSystem starts at zero (2026-06-29)
+
+Live memory on role A showed local slot 0 at `100/100`, while the freshly spawned
+remote slot-1 Player had a valid HealthSystem at `Player+0x4A8` but current health
+`+0x38=0` and maximum `+0x44=100`. The passive clone did not evaluate the death
+transition; activating its weapon/input graph exposed the zero health and produced
+the false "second player died" state while the real peer remained alive.
+
+`StatePacket` v3 now carries current and maximum player health. Before slot-1 input
+is enabled, the receiver seeds the clone's HealthSystem from the fresh peer packet
+and maintains it thereafter. Enemy damage hooks remain disabled during player work.
+
+The first v3 build accidentally reused the enemy probe's `+0x3C` current-health
+offset. Static `HealthSystemGetCurrentHealth` and live memory both show that the
+Player HealthSystem reads current HP from `+0x38`; local `+0x38=100`, while `+0x3C`
+is zero. Sending `+0x3C` therefore marked both remote players dead and enabled the
+grey failure screen. The Player protocol now uses `+0x38`.
+
+### Alt-tab false death: preserve health across suspended peer (2026-06-29)
+
+The remaining false death was deterministic only after switching windows. A
+background TLL instance pauses its game loop and stops sending snapshots; after
+the 1500 ms freshness limit, the foreground copy stopped applying all peer state,
+including health. Slot-1 actions are still cleared on stale data, but the last
+confirmed health is now retained until fresh packets resume. Health is also seeded
+synchronously immediately after `SpawnPlayerFromRetainedDescriptor` returns, before
+network input is enabled, and restored after the clone update.
+
+Static correction: `0x1410DE890` / Player virtual `+0x850` lazily resolves
+`player-collision-settings*`; it is not an upper Player rebuild or
+`player+0x3828` publisher. The IDA label was corrected.
+
+### Player death path recovered; stale transform causes local replica death (2026-06-29)
+
+Preserving only health did not prevent the alt-tab death. Static reverse recovered
+the actual path:
+- Player virtual `+0xBE8` = `0x140D79C00`;
+- `+0xBF0` = `0x140D79950`;
+- `+0xBF8` = `0x140D78EC0`;
+- `+0xC00` = `0x140D792D0`.
+
+All four are native death-entry variants that publish `player-died`; two also drive
+the HealthSystem transition. Shared cleanup `0x14042B400` subsequently publishes
+`player-friend-died` when character `+0x57C bit 1` identifies a friend. Therefore
+the friend event is a consequence, not the trigger.
+
+The stale-packet path released the clone from transform enforcement while its local
+physics/update continued, allowing it to author a fall/death independently of the
+real peer. The replica now freezes at the last confirmed transform during peer
+suspension. All four death entries are guarded for retained slot 1: they are logged
+and suppressed while the last peer snapshot reports HP > 0; local slot 0 remains
+untouched. Real remote death still requires an explicit synchronized lifecycle
+event and is not considered complete.
+
+Runtime validation succeeded: repeated switching between the two instances no
+longer killed either remote Player. Both processes remained responsive. No
+`REMOTE-DEATH blocked` line was emitted, so none of the four guarded death entries
+was reached during the successful run. This isolates the effective fix to holding
+the last confirmed transform (and health) while peer packets are paused; the death
+entry guards remain a safety boundary for other local-only hazards.

@@ -24,7 +24,7 @@ struct InputPacket {
 // One-shot gameplay actions need a separate reliable ordered event stream.
 constexpr std::uint16_t kStatePort = 31338;
 constexpr std::uint32_t kStatePacketMagic = 0x53504F43;  // "COPS"
-constexpr std::uint16_t kStatePacketVersion = 2;
+constexpr std::uint16_t kStatePacketVersion = 3;
 
 struct StatePacket {
     std::uint32_t magic = kStatePacketMagic;
@@ -40,6 +40,8 @@ struct StatePacket {
     std::uint64_t input_buttons = 0;  // complete resolved button field, block +0x518
     std::uint64_t buttons_pressed = 0;
     std::uint64_t buttons_released = 0;
+    std::int32_t health = -1;         // Player HealthSystem current HP
+    std::int32_t max_health = -1;
 };
 
 // Phase 3 (host-authoritative world sync): the HOST (role A) enumerates the

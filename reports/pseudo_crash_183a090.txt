@@ -1,0 +1,117 @@
+=== 0x14183A090: sub_141839FB0 [0x141839FB0..0x14183A1BD] ===
+__int64 __fastcall sub_141839FB0(__int64 a1, __int64 a2, int a3, int a4, __int64 a5, int a6)
+{
+  char *v8; // rdx
+  __int64 v10; // rcx
+  __int64 result; // rax
+  __int64 v12; // rdx
+  _DWORD *v13; // rbx
+  __int64 v14; // rdx
+  int v15; // eax
+  __int64 v16; // rdi
+  __int64 v17; // rdi
+  char Buffer[64]; // [rsp+30h] [rbp-78h] BYREF
+
+  v8 = "disable-joypad-%i-commands-code";
+  if ( !a4 )
+    v8 = "disable-joypad-%i-commands-script";
+  sub_140141340(Buffer, v8);
+  v10 = *(_QWORD *)(a1 + 1432);
+  result = *(int *)(v10 + 32);
+  v12 = v10 + 8 * result;
+  if ( v10 == v12 )
+  {
+LABEL_7:
+    if ( !*(_DWORD *)(a1 + 1336) )
+      return result;
+    v14 = *(int *)(a1 + 1336);
+    v13 = *(_DWORD **)(a1 + 8 * v14 + 1264);
+    if ( !(_DWORD)v14
+      && (!qword_146B17C08
+       || !(unsigned __int8)qword_146B17C08(
+                              "!empty()",
+                              "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\corelib\\util\\fixed-array.h",
+                              "FixedArray<struct Joypad::sDisabledCommands *,8>::pop_back",
+                              "Jun 30 2023 19:05:57",
+                              109,
+                              0)) )
+    {
+      sub_1422053E0(v10);
+      __debugbreak();
+    }
+    --*(_DWORD *)(a1 + 1336);
+    *v13 = 0;
+    v15 = v13[24];
+    if ( v15 > 0 )
+    {
+      do
+        --v15;
+      while ( v15 > 0 );
+      v13[24] = v15;
+    }
+    v13[1] = a4;
+    *v13 = a3;
+    v16 = *(_QWORD *)(a1 + 1432);
+    if ( *(_DWORD *)(v16 + 32) >= 4u
+      && (!qword_146B17C08
+       || !(unsigned __int8)qword_146B17C08(
+                              "m_count < N",
+                              "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\corelib\\util\\fixed-array.h",
+                              "FixedArray<struct Joypad::sDisabledCommands *,4>::push_back",
+                              "Jun 30 2023 19:05:57",
+                              103,
+                              0)) )
+    {
+      sub_1422053E0(v10);
+      __debugbreak();
+    }
+    result = *(int *)(v16 + 32);
+    *(_QWORD *)(v16 + 8 * result) = v13;
+    ++*(_DWORD *)(v16 + 32);
+  }
+  else
+  {
+    while ( 1 )
+    {
+      v13 = *(_DWORD **)v10;
+      if ( **(_DWORD **)v10 == a3 && v13[1] == a4 )
+        break;
+      v10 += 8;
+      if ( v10 == v12 )
+        goto LABEL_7;
+    }
+  }
+  if ( v13[24] != 22 )
+  {
+    v17 = 0;
+    do
+    {
+      if ( v17 >= a6 )
+        break;
+      if ( *(_DWORD *)(a5 + 4 * v17) )
+      {
+        if ( v13[24] >= 0x16u
+          && (!qword_146B17C08
+           || !(unsigned __int8)qword_146B17C08(
+                                  "m_count < N",
+                                  "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\corelib\\util\\fixed-array.h",
+                                  "FixedArray<class StringId,22>::push_back",
+                                  "Jun 30 2023 19:05:57",
+                                  103,
+                                  0)) )
+        {
+          sub_1422053E0(v10);
+          __debugbreak();
+        }
+        v10 = (int)v13[24];
+        result = *(unsigned int *)(a5 + 4 * v17);
+        v13[v10 + 2] = result;
+        ++v13[24];
+      }
+      ++v17;
+    }
+    while ( v13[24] != 22 );
+  }
+  return result;
+}
+

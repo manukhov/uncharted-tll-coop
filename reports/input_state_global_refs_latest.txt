@@ -1,0 +1,81 @@
+refs to RVA [0x66e4220,0x66e5fff]: 276
+  func 0x1400ce7e0 @0x1400ce7e4: lea rax, [rip + 0x6616595] -> rva 0x66e4d80
+  func 0x1400ce7e0 @0x1400ce83f: mov qword ptr [rip + 0x661653a], rax -> rva 0x66e4d80
+  func 0x1400ce7e0 @0x1400ce846: mov qword ptr [rip + 0x661653b], rax -> rva 0x66e4d88
+  func 0x1400ce7e0 @0x1400ce84d: mov qword ptr [rip + 0x661653c], rax -> rva 0x66e4d90
+  func 0x1400ce7e0 @0x1400ce854: mov qword ptr [rip + 0x661653d], rax -> rva 0x66e4d98
+  func 0x1400ce7e0 @0x1400ce85b: mov qword ptr [rip + 0x661653e], rax -> rva 0x66e4da0
+  func 0x1400ce7e0 @0x1400ce862: mov qword ptr [rip + 0x661653f], rax -> rva 0x66e4da8
+  func 0x1400ce7e0 @0x1400ce869: mov qword ptr [rip + 0x6616540], rax -> rva 0x66e4db0
+  func 0x1400ce7e0 @0x1400ce870: mov qword ptr [rip + 0x6616541], rax -> rva 0x66e4db8
+  func 0x1400ce880 @0x1400ce884: lea rax, [rip + 0x6616535] -> rva 0x66e4dc0
+  func 0x1400ce880 @0x1400ce8df: mov qword ptr [rip + 0x66164da], rax -> rva 0x66e4dc0
+  func 0x1400ce880 @0x1400ce8e6: mov qword ptr [rip + 0x66164db], rax -> rva 0x66e4dc8
+  func 0x1400ce880 @0x1400ce8ed: mov qword ptr [rip + 0x66164dc], rax -> rva 0x66e4dd0
+  func 0x1400ce880 @0x1400ce8f4: mov qword ptr [rip + 0x66164dd], rax -> rva 0x66e4dd8
+  func 0x1400ce880 @0x1400ce8fb: mov qword ptr [rip + 0x66164de], rax -> rva 0x66e4de0
+  func 0x1400ce880 @0x1400ce902: mov qword ptr [rip + 0x66164df], rax -> rva 0x66e4de8
+  func 0x1400ce880 @0x1400ce909: mov qword ptr [rip + 0x66164e0], rax -> rva 0x66e4df0
+  func 0x1400ce880 @0x1400ce910: mov qword ptr [rip + 0x66164e1], rax -> rva 0x66e4df8
+  func 0x1400ce930 @0x1400ce93d: lea rcx, [rip + 0x661666c] -> rva 0x66e4fb0
+  func 0x1400ce960 @0x1400ce970: lea rcx, [rip + 0x6616669] -> rva 0x66e4fe0
+  func 0x1400ce990 @0x1400ce9a0: lea rcx, [rip + 0x6616669] -> rva 0x66e5010
+  func 0x1400ce9c0 @0x1400ce9d0: lea rcx, [rip + 0x6616669] -> rva 0x66e5040
+  func 0x1400ce9f0 @0x1400cea00: lea rcx, [rip + 0x6616669] -> rva 0x66e5070
+  func 0x1400cea20 @0x1400cea30: lea rcx, [rip + 0x6616669] -> rva 0x66e50a0
+  func 0x1400cea50 @0x1400cea60: lea rcx, [rip + 0x6616669] -> rva 0x66e50d0
+  func 0x1400cea80 @0x1400cea90: lea rcx, [rip + 0x6616669] -> rva 0x66e5100
+  func 0x1400ceab0 @0x1400ceac0: lea rcx, [rip + 0x6616669] -> rva 0x66e5130
+  func 0x1400ceae0 @0x1400ceaf0: lea rcx, [rip + 0x6616669] -> rva 0x66e5160
+  func 0x1400ceb10 @0x1400ceb20: lea rcx, [rip + 0x6616669] -> rva 0x66e5190
+  func 0x1400ceb40 @0x1400ceb50: lea rcx, [rip + 0x6616669] -> rva 0x66e51c0
+  func 0x1400ceb70 @0x1400ceb80: lea rcx, [rip + 0x6616669] -> rva 0x66e51f0
+  func 0x1400ceba0 @0x1400cebb0: lea rcx, [rip + 0x6616669] -> rva 0x66e5220
+  func 0x1400cebd0 @0x1400cebe0: lea rcx, [rip + 0x6616669] -> rva 0x66e5250
+  func 0x1400cec00 @0x1400cec10: lea rcx, [rip + 0x6616669] -> rva 0x66e5280
+  func 0x1400cec30 @0x1400cec40: lea rcx, [rip + 0x6616669] -> rva 0x66e52b0
+  func 0x1400cec60 @0x1400cec70: lea rcx, [rip + 0x6616669] -> rva 0x66e52e0
+  func 0x1400cec90 @0x1400ceca0: lea rcx, [rip + 0x6616669] -> rva 0x66e5310
+  func 0x1400cecc0 @0x1400cecd0: lea rcx, [rip + 0x6616669] -> rva 0x66e5340
+  func 0x1400cecf0 @0x1400ced00: lea rcx, [rip + 0x6616669] -> rva 0x66e5370
+  func 0x1400ced20 @0x1400ced30: lea rcx, [rip + 0x6616669] -> rva 0x66e53a0
+  func 0x1400ced50 @0x1400ced60: lea rcx, [rip + 0x6616669] -> rva 0x66e53d0
+  func 0x1400ced80 @0x1400ced90: lea rcx, [rip + 0x6616669] -> rva 0x66e5400
+  func 0x1400cedb0 @0x1400cedc0: lea rcx, [rip + 0x6616669] -> rva 0x66e5430
+  func 0x1400cef70 @0x1400cef76: lea rcx, [rip + 0x6616513] -> rva 0x66e5490
+  func 0x1400cef70 @0x1400cef7d: xchg qword ptr [rip + 0x66164fc], rax -> rva 0x66e5480
+  func 0x1400cef70 @0x1400cef89: lea rcx, [rip + 0x6616528] -> rva 0x66e54b8
+  func 0x1400cef70 @0x1400cef90: mov byte ptr [rip + 0x6616511], 0 -> rva 0x66e54a8
+  func 0x14014eab0 @0x14014fb53: cmp qword ptr [rip + 0x6595905], 0 -> rva 0x66e5460
+  func 0x14014eab0 @0x14014fb5d: cmp qword ptr [rip + 0x6595903], 0 -> rva 0x66e5468
+  func 0x14014eab0 @0x14014fb78: mov rcx, qword ptr [rip + 0x65958e1] -> rva 0x66e5460
+  func 0x14014eab0 @0x14014fb89: mov qword ptr [rip + 0x65958d0], r13 -> rva 0x66e5460
+  func 0x14014eab0 @0x14014fba8: mov byte ptr [rip + 0x65958fa], 1 -> rva 0x66e54a9
+  func 0x14014eab0 @0x14014fbaf: lea rcx, [rip + 0x65958da] -> rva 0x66e5490
+  func 0x14014eab0 @0x14014fbbf: lea rcx, [rip + 0x65958ca] -> rva 0x66e5490
+  func 0x14014eab0 @0x14014fbcb: lea rcx, [rip + 0x65958be] -> rva 0x66e5490
+  func 0x1402656e0 @0x140265703: lea rcx, [rip + 0x647fd76] -> rva 0x66e5480
+  func 0x1402656e0 @0x14026571e: lea rcx, [rip + 0x647fd6b] -> rva 0x66e5490
+  func 0x1402656e0 @0x140265725: mov byte ptr [rip + 0x647fd7d], 1 -> rva 0x66e54a9
+  func 0x1402656e0 @0x140265735: lea rcx, [rip + 0x647fd54] -> rva 0x66e5490
+  func 0x1402656e0 @0x140265741: lea rcx, [rip + 0x647fd48] -> rva 0x66e5490
+  func 0x14179c775 @0x14179c793: lea rdx, [rip + 0x4f47a86] -> rva 0x66e4220
+  func 0x14179e310 @0x14179e32a: lea r15, [rip + 0x4f45eef] -> rva 0x66e4220
+  func 0x14179e6c0 @0x14179e6d5: lea r15, [rip + 0x4f45b44] -> rva 0x66e4220
+  func 0x14179ef80 @0x14179f15c: xchg qword ptr [rip + 0x4f45b1d], rdi -> rva 0x66e4c80
+  func 0x14179f300 @0x14179f310: mov rax, qword ptr [rip + 0x4f45969] -> rva 0x66e4c80
+  func 0x14179f300 @0x14179f31c: lock cmpxchg qword ptr [rip + 0x4f4595b], rcx -> rva 0x66e4c80
+  func 0x14179f300 @0x14179f365: xchg qword ptr [rip + 0x4f45914], rax -> rva 0x66e4c80
+  func 0x14179f430 @0x14179f451: mov rax, qword ptr [rip + 0x4f45828] -> rva 0x66e4c80
+  func 0x14179f430 @0x14179f45d: lock cmpxchg qword ptr [rip + 0x4f4581a], rcx -> rva 0x66e4c80
+  func 0x14179f430 @0x14179f4a9: xchg qword ptr [rip + 0x4f457d0], r9 -> rva 0x66e4c80
+  func 0x1417aaff0 @0x1417ab093: mov byte ptr [rip + 0x4f39f5e], 1 -> rva 0x66e4ff8
+  func 0x1417aaff0 @0x1417ab09a: mov byte ptr [rip + 0x4f39f27], 1 -> rva 0x66e4fc8
+  func 0x1417aaff0 @0x1417ab0a1: mov byte ptr [rip + 0x4f39f80], 1 -> rva 0x66e5028
+  func 0x1417aaff0 @0x1417ab0a8: mov byte ptr [rip + 0x4f39fa9], 1 -> rva 0x66e5058
+  func 0x1417aaff0 @0x1417ab0af: mov byte ptr [rip + 0x4f39fd2], 1 -> rva 0x66e5088
+  func 0x1417aaff0 @0x1417ab0b6: mov byte ptr [rip + 0x4f39ffb], 1 -> rva 0x66e50b8
+  func 0x1417aaff0 @0x1417ab0bd: mov byte ptr [rip + 0x4f3a024], 1 -> rva 0x66e50e8
+  func 0x1417aaff0 @0x1417ab0c4: mov byte ptr [rip + 0x4f3a04d], 1 -> rva 0x66e5118
+  func 0x1417aaff0 @0x1417ab0cb: mov byte ptr [rip + 0x4f3a076], 1 -> rva 0x66e5148
+  func 0x1417aaff0 @0x1417ab0d2: mov byte ptr [rip + 0x4f3a09f], 1 -> rva 0x66e5178

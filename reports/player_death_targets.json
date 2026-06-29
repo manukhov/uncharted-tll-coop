@@ -1,0 +1,22 @@
+{
+  "targets": {
+    "PlayerDeathControllerUpdate": [
+      {
+        "address": "0x142A199B0",
+        "value": "void __cdecl PlayerDeathController::Update(void)"
+      }
+    ],
+    "PlayerDied": [
+      {
+        "address": "0x1429E2980",
+        "value": "player-died"
+      }
+    ],
+    "PlayerFriendDied": [
+      {
+        "address": "0x142937CD0",
+        "value": "player-friend-died"
+      }
+    ]
+  }
+}

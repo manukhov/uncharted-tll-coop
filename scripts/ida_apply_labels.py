@@ -8,6 +8,41 @@ import idc
 
 
 FUNCTIONS = {
+    0x140D79C00: (
+        "PlayerDeathEntry_BE8",
+        "Player vtable +0xBE8. Native death-entry variant; clears/updates the "
+        "HealthSystem and publishes `player-died`. Remote replicas must not "
+        "author this transition while their peer still reports HP > 0.",
+    ),
+    0x140D79950: (
+        "PlayerDeathEntry_BF0",
+        "Player vtable +0xBF0. Native player-died publisher variant.",
+    ),
+    0x140D78EC0: (
+        "PlayerDeathEntry_BF8",
+        "Player vtable +0xBF8. Native death-entry variant; clears/updates the "
+        "HealthSystem and publishes `player-died`.",
+    ),
+    0x140D792D0: (
+        "PlayerDeathEntry_C00",
+        "Player vtable +0xC00. Native player-died publisher variant.",
+    ),
+    0x14042B400: (
+        "CharacterDeathCleanupAndPublishFriendDied",
+        "Shared death cleanup. If character+0x57C bit 1 is set, publishes "
+        "`player-friend-died` to retained player 0. This is a consequence of "
+        "an authored Player death, not the original death trigger.",
+    ),
+    0x141839FB0: (
+        "AddOrUpdateJoypadDisabledCommands",
+        "Adds or updates a disabled-command record in one per-player joypad "
+        "manager. The manager is selected as g_LocalPlayerInputManager +0xDB0 "
+        "+ 0xBF0*joypad_index. Two Player jobs concurrently mutated joypad-2, "
+        "drove free_count at +0x538 to -1/-2, and crashed at 0x14183A090. The "
+        "fixed-array mutation assumes single-Player serialization. Serializing "
+        "calls preserved command behavior and survived a fresh campaign load with "
+        "slot 1 for over two minutes; free_count=6 and active_count=1 remained sane.",
+    ),
     0x140541EF0: (
         "ScriptNpcDieHandler",
         "Campaign npc-die command handler. Performs a native forced death: "
@@ -4851,19 +4886,11 @@ FUNCTIONS = {
         "or promotion hook.",
     ),
     0x1410DE890: (
-        "UpperPlayerRebuildRetainedStateAndPublishPairInto3828",
-        "Real Player vtable slot +0x850. Upper Player rebuild/update path that "
-        "checks action-policy state through +0x1D88, drives sibling Player "
-        "owners such as +0x1E50, first seeds narrow upper context through "
-        "Player slot +0x738, then resolves/attaches the active upper state "
-        "object through Player slot +0x6F0, and only after that builds an "
-        "extended wrapper packet at 0x1417C35A0 / vtable 0x1428D5D60 and "
-        "feeds it into Player slot +0x718. Earlier in the same rebuild it "
-        "also runs the smaller wrapper materialization path through "
-        "0x1417C3790 and writes the resulting retained/live pair back into "
-        "player+0x3828. This makes +0x850 a real upper rebuild path over "
-        "retained state, but still downstream of the main promotion/apply "
-        "seam at 0x1410DE740 -> 0x140CC1450.",
+        "GetPlayerCollisionSettingsRecord",
+        "Player vtable slot +0x850. Lazily resolves the authored "
+        "`player-collision-settings*` record into global 0x1437423D0 and "
+        "returns it. The earlier upper-rebuild/player+0x3828 interpretation "
+        "was incorrect and must not be used as a lifecycle call.",
     ),
     0x141BBA490: (
         "BuildUpperPlayerStateOwnerAt1A0ThenRunPlayerSlot710",

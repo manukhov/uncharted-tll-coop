@@ -1,0 +1,394 @@
+=== 0x141837CD0: sub_141837CD0 [0x141837CD0..0x141837D85] ===
+char __fastcall sub_141837CD0(__int64 a1, __int64 a2, unsigned __int8 a3)
+{
+  unsigned int v4; // ebx
+  int v6; // edi
+  _BYTE *i; // rsi
+  _OWORD *v8; // r8
+  _OWORD v10[5]; // [rsp+20h] [rbp-E8h] BYREF
+  _BYTE v11[104]; // [rsp+78h] [rbp-90h] BYREF
+
+  v11[0] = 0;
+  v11[96] = 0;
+  v4 = a2;
+  sub_14183AE30(a1, a2, v10);
+  v6 = 0;
+  for ( i = v11; ; i += 96 )
+  {
+    if ( *i )
+    {
+      v8 = &v10[6 * v6];
+      if ( v8 )
+      {
+        if ( (unsigned __int8)sub_141838050(a1, v4, v8, a3) )
+          break;
+      }
+    }
+    if ( ++v6 >= 2 )
+      return 0;
+  }
+  return 1;
+}
+
+=== 0x14183ABF0: sub_14183ABF0 [0x14183ABF0..0x14183AE22] ===
+__int64 __fastcall sub_14183ABF0(__int64 a1, unsigned int a2, int a3)
+{
+  __int64 v3; // rbp
+  __int64 *v6; // r11
+  int v7; // r8d
+  int v8; // r10d
+  int v9; // r9d
+  __int64 v10; // rdx
+  unsigned __int64 v11; // r8
+  _DWORD *v12; // rax
+  __int64 result; // rax
+  __int64 v14; // rdx
+  int v15; // r8d
+  __int64 v16; // r9
+  __int64 v17; // rcx
+  int v18; // r10d
+  _QWORD *v19; // r11
+  __int64 v20; // rax
+  __int64 v21; // r14
+  int v22; // r8d
+  int v23; // ecx
+  __int64 v24; // rsi
+  int v25; // eax
+  _QWORD v26[8]; // [rsp+30h] [rbp-58h] BYREF
+
+  v3 = a3;
+  if ( a3 >= 2
+    && (!qword_146B17C08
+     || !(unsigned __int8)qword_146B17C08(
+                            "bindingIndex < kMaxBindsPerCommand",
+                            "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\io\\joypad.cpp",
+                            "Joypad::GetCommand",
+                            "Jun 30 2023 19:05:57",
+                            2423,
+                            0)) )
+  {
+    sub_1422053E0(a1);
+    __debugbreak();
+  }
+  v6 = &qword_1467DDB68[12504 * (unsigned __int8)byte_1467DDB60];
+  if ( v6 )
+  {
+    v7 = *((_DWORD *)v6 + 25004);
+    v8 = 0;
+    while ( v7 > 0 )
+    {
+      v9 = v7 / 2 + v8;
+      if ( *(_DWORD *)(200LL * v9 + v6[12500]) >= a2 )
+      {
+        v7 /= 2;
+      }
+      else
+      {
+        v8 = v9 + 1;
+        v7 += -1 - v7 / 2;
+      }
+    }
+    v10 = v6[12500];
+    v11 = v6[12502];
+    v12 = (_DWORD *)(v10 + 200LL * v8);
+    if ( v8 >= v11 || *v12 != a2 )
+      v12 = (_DWORD *)(v10 + 200 * v11);
+    if ( v12 != (_DWORD *)(v10 + 200 * v11) && LOBYTE(v12[24 * v3 + 24]) )
+      return (__int64)&v12[24 * v3 + 2];
+  }
+  v14 = *(_QWORD *)(a1 + 1800);
+  v15 = 0;
+  v16 = v14 + 16LL * *(unsigned int *)(a1 + 1792);
+  if ( v14 != v16 )
+  {
+    v17 = 0;
+    do
+    {
+      if ( v17 == 8 )
+        break;
+      ++v15;
+      v26[v17] = *(_QWORD *)(v14 + 8);
+      v14 += 16;
+      ++v17;
+    }
+    while ( v14 != v16 );
+  }
+  v18 = v15 - 1;
+  if ( v15 - 1 < 0 )
+    return 0;
+  v19 = &v26[v18];
+  while ( 1 )
+  {
+    v20 = *(_QWORD *)(*v19 + 8LL);
+    if ( v20 )
+    {
+      if ( *(_DWORD *)v20 )
+      {
+        v21 = *(_QWORD *)(v20 + 16);
+        v22 = 0;
+        v23 = *(_DWORD *)v20 - 1;
+        v24 = *(_QWORD *)(v20 + 8);
+        if ( v23 >= 0 )
+          break;
+      }
+    }
+LABEL_33:
+    if ( !*(_BYTE *)*v19 )
+    {
+      --v19;
+      if ( --v18 >= 0 )
+        continue;
+    }
+    return 0;
+  }
+  while ( 1 )
+  {
+    v25 = (v23 + v22) / 2;
+    if ( *(_DWORD *)(v24 + 4LL * v25) >= a2 )
+      break;
+    v22 = v25 + 1;
+LABEL_30:
+    if ( v22 > v23 )
+      goto LABEL_33;
+  }
+  if ( *(_DWORD *)(v24 + 4LL * v25) > a2 )
+  {
+    v23 = v25 - 1;
+    goto LABEL_30;
+  }
+  result = *(_QWORD *)(v21 + 8LL * v25);
+  if ( !result )
+    goto LABEL_33;
+  return result;
+}
+
+=== 0x14183A1C0: sub_14183A1C0 [0x14183A1C0..0x14183A3C5] ===
+// local variable allocation has failed, the output may be wrong!
+void __fastcall sub_14183A1C0(__int64 a1, __int64 a2, double _XMM2_8, _DWORD *a4, int a5, __int64 *a6)
+{
+  __int64 v7; // r15
+  int v12; // esi
+  __int64 v13; // rbp
+  __int64 v14; // rbx
+  _QWORD *Value; // rax
+  __int64 v16; // rdx
+  _QWORD *v17; // rax
+  __int64 v18; // rdx
+  __int64 v19; // rcx
+  __int64 v20; // rdx
+  __int64 v23; // rax
+  __int64 v24; // rcx
+  __int64 v25; // rax
+
+  v7 = a5;
+  __asm { vmovaps xmm6, xmm2 }
+  if ( a5 > 0 )
+  {
+    __asm
+    {
+      vmovaps [rsp+58h+var_38], xmm7
+      vmovss  xmm7, cs:dword_142BE9EC4
+    }
+    do
+    {
+      v12 = 0;
+      v13 = -1;
+      v14 = 0;
+      while ( 1 )
+      {
+        if ( *(_DWORD *)(a1 + 16 * (v14 + 90)) == *a4 )
+        {
+          if ( *((_QWORD *)FlsGetValue(dwFlsIndex) + 18) )
+          {
+            Value = FlsGetValue(dwFlsIndex);
+            v16 = *((_QWORD *)&xmmword_146467200 + 1);
+            if ( Value[19] )
+              v16 = Value[19];
+          }
+          else
+          {
+            v16 = *((_QWORD *)&xmmword_146467200 + 1);
+          }
+          if ( *(_QWORD *)(*(_QWORD *)(v16 + 224) + 16LL) < *(_QWORD *)(a1 + 16 * v14 + 1448) )
+            break;
+        }
+        if ( *((_QWORD *)FlsGetValue(dwFlsIndex) + 18) )
+        {
+          v17 = FlsGetValue(dwFlsIndex);
+          v18 = *((_QWORD *)&xmmword_146467200 + 1);
+          if ( v17[19] )
+            v18 = v17[19];
+        }
+        else
+        {
+          v18 = *((_QWORD *)&xmmword_146467200 + 1);
+        }
+        v19 = *(_QWORD *)(v18 + 224);
+        v20 = v14;
+        if ( *(_QWORD *)(v19 + 16) < *(_QWORD *)(a1 + 16 * v14 + 1448) )
+          v20 = v13;
+        ++v12;
+        ++v14;
+        v13 = v20;
+        if ( v12 >= 22 )
+        {
+          v14 = v20;
+          break;
+        }
+      }
+      if ( v14 >= 0 )
+      {
+        __asm
+        {
+          vmulss  xmm0, xmm6, xmm7
+          vcvttss2si rsi, xmm0
+        }
+        *(_DWORD *)(a1 + 16 * (v14 + 90)) = *a4;
+        if ( a6 )
+        {
+          v23 = *a6;
+        }
+        else
+        {
+          if ( *((_QWORD *)FlsGetValue(dwFlsIndex) + 18) )
+          {
+            v24 = *((_QWORD *)FlsGetValue(dwFlsIndex) + 19);
+            v25 = *((_QWORD *)&xmmword_146467200 + 1);
+            if ( v24 )
+              v25 = v24;
+          }
+          else
+          {
+            v25 = *((_QWORD *)&xmmword_146467200 + 1);
+          }
+          v23 = *(_QWORD *)(*(_QWORD *)(v25 + 224) + 16LL);
+        }
+        *(_QWORD *)(a1 + 16 * v14 + 1448) = _RSI + v23;
+      }
+      ++a4;
+      --v7;
+    }
+    while ( v7 );
+    __asm { vmovaps xmm7, [rsp+58h+var_38] }
+  }
+  __asm { vmovaps xmm6, [rsp+58h+var_28] }
+}
+
+=== 0x141839FB0: AddOrUpdateJoypadDisabledCommands [0x141839FB0..0x14183A1BD] ===
+// Adds or updates a disabled-command record in one per-player joypad manager. The manager is selected as g_LocalPlayerInputManager +0xDB0 + 0xBF0*player_index. A clean passive slot-1 Player reached this path and crashed at 0x14183A090 while writing through a record popped from the slot's free pool. Remote Player must not enter local joypad policy, or the slot-1 command manager must be initialized first.
+__int64 __fastcall sub_141839FB0(__int64 a1, __int64 a2, int a3, int a4, __int64 a5, int a6)
+{
+  char *v8; // rdx
+  __int64 v10; // rcx
+  __int64 result; // rax
+  __int64 v12; // rdx
+  _DWORD *v13; // rbx
+  __int64 v14; // rdx
+  int v15; // eax
+  __int64 v16; // rdi
+  __int64 v17; // rdi
+  char Buffer[64]; // [rsp+30h] [rbp-78h] BYREF
+
+  v8 = "disable-joypad-%i-commands-code";
+  if ( !a4 )
+    v8 = "disable-joypad-%i-commands-script";
+  sub_140141340(Buffer, v8);
+  v10 = *(_QWORD *)(a1 + 1432);
+  result = *(int *)(v10 + 32);
+  v12 = v10 + 8 * result;
+  if ( v10 == v12 )
+  {
+LABEL_7:
+    if ( !*(_DWORD *)(a1 + 1336) )
+      return result;
+    v14 = *(int *)(a1 + 1336);
+    v13 = *(_DWORD **)(a1 + 8 * v14 + 1264);
+    if ( !(_DWORD)v14
+      && (!qword_146B17C08
+       || !(unsigned __int8)qword_146B17C08(
+                              "!empty()",
+                              "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\corelib\\util\\fixed-array.h",
+                              "FixedArray<struct Joypad::sDisabledCommands *,8>::pop_back",
+                              "Jun 30 2023 19:05:57",
+                              109,
+                              0)) )
+    {
+      sub_1422053E0(v10);
+      __debugbreak();
+    }
+    --*(_DWORD *)(a1 + 1336);
+    *v13 = 0;
+    v15 = v13[24];
+    if ( v15 > 0 )
+    {
+      do
+        --v15;
+      while ( v15 > 0 );
+      v13[24] = v15;
+    }
+    v13[1] = a4;
+    *v13 = a3;
+    v16 = *(_QWORD *)(a1 + 1432);
+    if ( *(_DWORD *)(v16 + 32) >= 4u
+      && (!qword_146B17C08
+       || !(unsigned __int8)qword_146B17C08(
+                              "m_count < N",
+                              "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\corelib\\util\\fixed-array.h",
+                              "FixedArray<struct Joypad::sDisabledCommands *,4>::push_back",
+                              "Jun 30 2023 19:05:57",
+                              103,
+                              0)) )
+    {
+      sub_1422053E0(v10);
+      __debugbreak();
+    }
+    result = *(int *)(v16 + 32);
+    *(_QWORD *)(v16 + 8 * result) = v13;
+    ++*(_DWORD *)(v16 + 32);
+  }
+  else
+  {
+    while ( 1 )
+    {
+      v13 = *(_DWORD **)v10;
+      if ( **(_DWORD **)v10 == a3 && v13[1] == a4 )
+        break;
+      v10 += 8;
+      if ( v10 == v12 )
+        goto LABEL_7;
+    }
+  }
+  if ( v13[24] != 22 )
+  {
+    v17 = 0;
+    do
+    {
+      if ( v17 >= a6 )
+        break;
+      if ( *(_DWORD *)(a5 + 4 * v17) )
+      {
+        if ( v13[24] >= 0x16u
+          && (!qword_146B17C08
+           || !(unsigned __int8)qword_146B17C08(
+                                  "m_count < N",
+                                  "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\corelib\\util\\fixed-array.h",
+                                  "FixedArray<class StringId,22>::push_back",
+                                  "Jun 30 2023 19:05:57",
+                                  103,
+                                  0)) )
+        {
+          sub_1422053E0(v10);
+          __debugbreak();
+        }
+        v10 = (int)v13[24];
+        result = *(unsigned int *)(a5 + 4 * v17);
+        v13[v10 + 2] = result;
+        ++v13[24];
+      }
+      ++v17;
+    }
+    while ( v13[24] != 22 );
+  }
+  return result;
+}
+

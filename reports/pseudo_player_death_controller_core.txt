@@ -1,0 +1,124 @@
+=== 0x140D7E710: sub_140D7E710 [0x140D7E710..0x140D7E754] ===
+__int64 __fastcall sub_140D7E710(__int64 a1, char a2)
+{
+  *(_QWORD *)a1 = &PlayerMoveActionController::`vftable';
+  *(_QWORD *)(a1 + 16) = &Memory::Allocator::`vftable';
+  *(_QWORD *)(a1 + 56) = 0;
+  _InterlockedExchange64((volatile __int64 *)(a1 + 32), 0);
+  *(_BYTE *)(a1 + 50) = 0;
+  if ( (a2 & 1) != 0 )
+    sub_1424EAB54(a1, 544);
+  return a1;
+}
+
+=== 0x140D79FB0: sub_140D79FB0 [0x140D79FB0..0x140D7A0E1] ===
+__int64 __fastcall sub_140D79FB0(__int64 a1, __int64 a2, __int64 a3)
+{
+  __int64 v4; // rdx
+  const char *v6; // r8
+  __int64 v8; // r10
+  __int64 v9; // r11
+  char v15; // al
+  _DWORD v18[256]; // [rsp+20h] [rbp-418h] BYREF
+
+  *(_QWORD *)(a1 + 264) = a2;
+  _RAX = v18;
+  v4 = 0;
+  *(_QWORD *)(a1 + 272) = a3;
+  _R9 = a1;
+  *(_DWORD *)(a1 + 256) = -2;
+  v6 = "fall-death";
+  _RCX = qword_142BEA360;
+  v8 = 10;
+  v9 = 8;
+  do
+  {
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [rcx]
+      vmovups xmm1, xmmword ptr [rcx+70h]
+      vmovups ymmword ptr [rax], ymm0
+      vmovups ymm0, ymmword ptr [rcx+20h]
+      vmovups ymmword ptr [rax+20h], ymm0
+      vmovups ymm0, ymmword ptr [rcx+40h]
+      vmovups ymmword ptr [rax+40h], ymm0
+      vmovups xmm0, xmmword ptr [rcx+60h]
+      vmovups xmmword ptr [rax+60h], xmm0
+    }
+    _RAX += 32;
+    _RCX += 16;
+    __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+    --v9;
+  }
+  while ( v9 );
+  do
+  {
+    v15 = *v6;
+    if ( !*v6 )
+      break;
+    ++v6;
+    v4 = (unsigned int)(((_DWORD)v4 << 8) ^ v18[(unsigned __int8)(v15 ^ BYTE3(v4))]);
+    --v8;
+  }
+  while ( v8 );
+  __asm { vxorps  xmm0, xmm0, xmm0 }
+  *(_DWORD *)(_R9 + 288) = v4;
+  *(_WORD *)(_R9 + 308) = 0;
+  *(_WORD *)(_R9 + 528) = 256;
+  *(_QWORD *)(_R9 + 292) = 0;
+  *(_DWORD *)(_R9 + 300) = 0;
+  *(_WORD *)(_R9 + 304) = 0;
+  *(_BYTE *)(_R9 + 306) = 0;
+  __asm
+  {
+    vmovups xmmword ptr [r9+140h], xmm0
+    vzeroupper
+  }
+  return sub_140D74D50(_R9 + 336, v4, v6);
+}
+
+=== 0x140D79F60: sub_140D79F60 [0x140D79F60..0x140D79FA9] ===
+unsigned __int64 __fastcall sub_140D79F60(__int64 a1, __int64 a2, unsigned __int64 a3, unsigned __int64 a4)
+{
+  unsigned __int64 v4; // rax
+  unsigned __int64 result; // rax
+
+  v4 = *(_QWORD *)(a1 + 264);
+  if ( v4 && v4 >= a3 && v4 < a4 )
+    *(_QWORD *)(a1 + 264) = v4 + a2;
+  result = *(_QWORD *)(a1 + 272);
+  if ( result && result >= a3 && result < a4 )
+    *(_QWORD *)(a1 + 272) = result + a2;
+  return result;
+}
+
+=== 0x142053490: nullsub_3787 [0x142053490..0x142053493] ===
+void nullsub_3787()
+{
+  ;
+}
+
+=== 0x140CADD00: nullsub_1387 [0x140CADD00..0x140CADD03] ===
+void nullsub_1387()
+{
+  ;
+}
+
+=== 0x140D7A0F0: sub_140D7A0F0 [0x140D7A0F0..0x140D7A0F7] ===
+void __fastcall sub_140D7A0F0(__int64 a1, char a2)
+{
+  *(_BYTE *)(a1 + 528) = a2;
+}
+
+=== 0x140D7C220: sub_140D7C220 [0x140D7C220..0x140D7C228] ===
+__int64 __fastcall sub_140D7C220(__int64 a1)
+{
+  return *(unsigned __int8 *)(a1 + 309);
+}
+
+=== 0x140D7C390: sub_140D7C390 [0x140D7C390..0x140D7C398] ===
+__int64 __fastcall sub_140D7C390(__int64 a1)
+{
+  return *(unsigned __int8 *)(a1 + 308);
+}
+
