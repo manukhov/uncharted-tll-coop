@@ -370,3 +370,35 @@ velocity, heading via right stick, buttons, both gates), with diagnostics (REMOT
 SLOTSTRUCT, F9 byte-gate spin test, 'P' free-run toggle). apply_puppet_transform_post has a
 g_clone_freerun mode (no position write, snap-only) vs soft-lerp pin. send computes velocity
 from position delta. None of these yet produce a visible animated/moving clone in two-instance.
+
+## STATIC CORRECTION (2026-06-30) — previous SLOTSTRUCT comparison was misaligned
+
+The exact dispatch instructions at `0x14179E7A3..0x14179E807` correct the object layout:
+
+- `rbx = FrameState+0xE88 + slot*0xBF0` is only the loop cursor;
+- the fourth argument passed to `FrameState_PerSlotInputApply` is `rbx-0xD8`;
+- therefore the real per-slot `Joypad` object is
+  `FrameState+0xDB0 + slot*0xBF0`;
+- the input-block selector is cursor `+0x18`, equivalently `Joypad+0xF0`.
+
+This agrees independently with the `Joypad` constructor/reset family
+`0x141836640/0x1418369C0/0x141836BB0` (object size through `+0xBE8`) and the earlier
+confirmed command-pool address `FrameState+0xDB0+0xBF0*index`.
+
+**REJECTED:** the earlier interpretation of differences at apparent
+`slotstruct+0x08/+0x10/+0x54/+0x5C`. Those values came from memory `0xD8` past the
+real object. Consequently the right-stick-as-heading experiment derived from `+0x54`
+has no valid static basis.
+
+**STATIC:** the only global writes unique to the circular-motion gate are
+`BYTE1(dword_143ECEAA4)` and `HIBYTE(dword_143ECEAA4)`. Debug-menu construction at
+`0x140306DE0` identifies those bytes as `Infinite Ammo` and `Infinite Grenades`.
+They are cheats, not slot activation. Enabling both the circular-motion gate and the
+scripted-input branch merely runs `Input_ScaleCopyVirtual` twice and contaminates the
+comparison.
+
+The implementation now keeps the circular-motion gate off during normal replicated
+input, zeroes the unsupported right-stick heading, and captures/diffs all `0xBF0`
+bytes of the correctly addressed slot-1 `Joypad`. The next runtime test must compare
+that result under the two mutually exclusive branches; no field should be promoted to
+an activator until the corrected diff and its writers agree.

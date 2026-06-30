@@ -5447,6 +5447,20 @@ FUNCTIONS = {
         "between the raw input-state and the gameplay player control. Capture "
         "hit at 0x14183B571 (vmovss [rsi+0x10], scaled LX).",
     ),
+    0x141836640: (
+        "JoypadState_Construct",
+        "Constructs the 0xBE9-byte per-slot Joypad state used at "
+        "FrameState+0xDB0+slot*0xBF0, then calls JoypadState_Reset.",
+    ),
+    0x1418369C0: (
+        "JoypadState_Initialize",
+        "Initializes a per-slot Joypad state, including its callback array and "
+        "command tables, then calls JoypadState_Reset.",
+    ),
+    0x141836BB0: (
+        "JoypadState_Reset",
+        "Resets the per-slot Joypad state and installs the joypad-default command.",
+    ),
     0x14179EA90: (
         "Input_ScaleCopyThunk",
         "Thunk: forwards to Input_ScaleCopyVirtual(a4, a3, a5); then optionally "
@@ -5481,7 +5495,8 @@ FUNCTIONS = {
         "(*mgr+0x20)(mgr,*mgr,inputblock,slotstruct,slot). This is the engine's "
         "native PER-PLAYER input distribution (6 slots; slot 0 active in "
         "campaign, slots 1-5 idle). Manager = *(0x143FE1088); slot structs at "
-        "mgr+0xE88 + slot*0xBF0. Per-slot apply = manager vtable+0x20.",
+        "mgr+0xDB0 + slot*0xBF0. The loop cursor is mgr+0xE88 and the input-block "
+        "selector is cursor+0x18 = Joypad+0xF0. Per-slot apply = manager vtable+0x20.",
     ),
     # --- Player fire and native network-animation path (2026-06-29) ---
     0x140E2C730: (
@@ -5589,10 +5604,17 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x143ECEAA4: (
+        "g_DebugCheatFlags_AmmoGrenades",
+        "Built-in debug cheat flags: byte +1 is Infinite Ammo and byte +3 is "
+        "Infinite Grenades. The circular scripted-input branch sets both as "
+        "unrelated side effects, not as input activation.",
+    ),
     0x143FE1088: (
         "g_LocalPlayerInputManager_Ptr",
         "Pointer to the native local-player/input manager. Per-player input "
-        "distribution iterates 6 slots here (slot structs at *+0xE88 + i*0xBF0); "
+        "distribution iterates 6 slots here (Joypad objects at *+0xDB0 + i*0xBF0; "
+        "the internal loop cursor is Joypad+0xD8); "
         "per-slot input apply = its vtable+0x20. Slot 0 = active player; slots "
         "1-5 idle in campaign = the dormant native multiplayer input path.",
     ),

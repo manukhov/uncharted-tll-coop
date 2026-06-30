@@ -1,0 +1,5 @@
+JoypadState_Construct 0x141836640
+JoypadState_Initialize 0x1418369C0
+JoypadState_Reset 0x141836BB0
+g_DebugCheatFlags_AmmoGrenades 0x143ECEAA4
+Input_PerPlayerDispatch_MgrArg 0x14179E6C0

@@ -3559,27 +3559,70 @@ void drive_remote_slot1_actions_tick() {
     if (fs == nullptr || readable_bytes(fs) < 0x7100) {
         return;
     }
-    // DIAGNOSTIC: raw dump of slot-0 (Chloe, moves) vs slot-1 (clone) slotstructs
-    // (mgr+0xE88+slot*0xBF0). Compare slot-1 under byte-gate (F9, clone MOVES) vs under
-    // the struct branch (clone does NOT move) to find the locomotion-activation field.
+    // DIAGNOSTIC: compare the real per-slot Joypad objects. The dispatch cursor is
+    // FrameState+0xE88, but it passes cursor-0xD8 to Input_ScaleCopyVirtual, so the
+    // actual objects begin at FrameState+0xDB0 with a 0xBF0 stride.
     {
         static ULONGLONG last_ss = 0;
+        static ULONGLONG mode_since = 0;
+        static bool previous_f9 = false;
+        static bool have_branch = false;
+        static bool have_spin = false;
+        static bool diff_logged = false;
+        static std::array<std::byte, 0xBF0> branch_snapshot{};
+        static std::array<std::byte, 0xBF0> spin_snapshot{};
         const ULONGLONG ssn = GetTickCount64();
+        const bool f9 = (GetAsyncKeyState(VK_F9) & 0x8000) != 0;
+        if (f9 != previous_f9) {
+            previous_f9 = f9;
+            mode_since = ssn;
+        }
+        if (mode_since == 0) mode_since = ssn;
         if (ssn - last_ss > 700) {
             last_ss = ssn;
-            auto* ss0 = static_cast<std::byte*>(fs) + 0xE88;
-            auto* ss1 = static_cast<std::byte*>(fs) + 0xE88 + 0xBF0;
-            if (readable_bytes(ss0) >= 0x60 && readable_bytes(ss1) >= 0x60) {
+            auto* ss0 = static_cast<std::byte*>(fs) + 0xDB0;
+            auto* ss1 = static_cast<std::byte*>(fs) + 0xDB0 + 0xBF0;
+            if (readable_bytes(ss0) >= 0xBF0 && readable_bytes(ss1) >= 0xBF0) {
                 auto* d0 = reinterpret_cast<const std::uint32_t*>(ss0);
                 auto* d1 = reinterpret_cast<const std::uint32_t*>(ss1);
                 std::ostringstream s;
-                const bool f9 = (GetAsyncKeyState(VK_F9) & 0x8000) != 0;
-                s << "SLOTSTRUCT f9=" << (f9 ? 1 : 0) << " s1[";
-                for (int i = 0; i < 24; ++i) s << std::hex << d1[i] << " ";
+                s << "JOYPAD-SLOT f9=" << (f9 ? 1 : 0) << " s1[";
+                for (int i = 0; i < 32; ++i) s << std::hex << d1[i] << " ";
                 s << "] s0[";
-                for (int i = 0; i < 24; ++i) s << std::hex << d0[i] << " ";
+                for (int i = 0; i < 32; ++i) s << std::hex << d0[i] << " ";
                 s << "]" << std::dec;
                 log_line(s.str().c_str());
+
+                // Let each mode run before sampling so the previous frame has
+                // completed Input_ScaleCopyVirtual and its consumer callbacks.
+                if (ssn - mode_since > 500) {
+                    auto& destination = f9 ? spin_snapshot : branch_snapshot;
+                    std::memcpy(destination.data(), ss1, destination.size());
+                    if (f9) have_spin = true; else have_branch = true;
+                }
+                if (have_branch && have_spin && !diff_logged) {
+                    diff_logged = true;
+                    int differences = 0;
+                    for (std::size_t off = 0; off < 0xBF0; off += 4) {
+                        std::uint32_t branch_value = 0;
+                        std::uint32_t spin_value = 0;
+                        std::memcpy(&branch_value, branch_snapshot.data() + off, 4);
+                        std::memcpy(&spin_value, spin_snapshot.data() + off, 4);
+                        if (branch_value == spin_value) continue;
+                        if (differences < 160) {
+                            std::ostringstream diff;
+                            diff << "JOYPAD-DIFF +0x" << std::hex << off
+                                 << " branch=0x" << branch_value
+                                 << " spin=0x" << spin_value << std::dec;
+                            log_line(diff.str().c_str());
+                        }
+                        ++differences;
+                    }
+                    std::ostringstream summary;
+                    summary << "JOYPAD-DIFF total=" << differences
+                            << " (first 160 logged)";
+                    log_line(summary.str().c_str());
+                }
             }
         }
     }
@@ -3620,13 +3663,11 @@ void drive_remote_slot1_actions_tick() {
     }
     std::memset(branch1, 0, 0x28);
     branch1[0] = std::byte{1};
-    // F9 test proved the BYTE-gate (demo) branch animates the clone but the struct
-    // branch alone does NOT — even though both write block1. The byte-gate branch
-    // sets activation side effects (e.g. dword_143ECEAA4) the struct branch omits.
-    // So set BOTH gates: the byte-gate branch runs first (activation + demo stick),
-    // then the struct branch (sub_1402893D0) runs AFTER and overwrites the spin stick
-    // with our DIRECTIONAL stick -> clone animates in the peer's direction, no spin.
-    *spin_gate = 1;
+    // Keep the synthetic circular-motion branch off. Its only unique global writes
+    // enable the built-in Infinite Ammo / Infinite Grenades cheats; they are not
+    // locomotion activation. Running both branches also applies the Joypad state
+    // twice and contaminates this comparison.
+    *spin_gate = 0;
     // struct+0x0C = duration; the per-slot apply accumulates dt at +0x24 and times
     // out the input when it exceeds +0x0C. The PROVEN drive_slot1_tick keeps this
     // LARGE so the input stays active every frame (0.1 timed out -> clone stood).
@@ -3636,8 +3677,8 @@ void drive_remote_slot1_actions_tick() {
     // locomotion graph plays walk/run. Mirror the proven drive_slot1_tick basis
     // (measured: feed (0,-1) -> world +X, (1,0) -> world +Z), i.e. for a world move
     // dir (wx,wz): stickX = wz, stickY = -wx. Magnitude from speed/run-norm. Right
-    // stick (+0x1C/+0x20) MUST stay 0 (forwarding camera input destabilizes the
-    // slot-1 movement basis -> "on knees"/drift).
+    // stick (+0x1C/+0x20) stays zero: the previous heading experiment was based
+    // on a dump taken 0xD8 past the real Joypad object and was rejected at runtime.
     const float vx = peer.velocity[0];
     const float vz = peer.velocity[2];
     const float speed = std::sqrt(vx * vx + vz * vz);
@@ -3655,15 +3696,8 @@ void drive_remote_slot1_actions_tick() {
     }
     *reinterpret_cast<float*>(branch1 + 0x14) = sx;   // L-stick X
     *reinterpret_cast<float*>(branch1 + 0x18) = sy;   // L-stick Y
-    // The clone's locomotion needs a HEADING reference at slotstruct+0x54. Reversed:
-    // Input_ScaleCopyVirtual writes slotstruct+0x54 = block+0x0C, and sub_1402893D0
-    // writes block+0x0C = struct+0x20 (right-stick Y). The byte-gate fills this
-    // (spinning => clone runs in a circle); zeroing the right stick left it 0 => no
-    // movement. Feed a CONSTANT heading = the peer's movement direction so the clone
-    // runs STRAIGHT in that direction. (heading consistent with the L-stick cos/sin.)
-    const float heading = moving ? std::atan2(sy, sx) : 0.0F;
-    *reinterpret_cast<float*>(branch1 + 0x1C) = 0.5F;     // R-stick X (mimic byte-gate block+0x08)
-    *reinterpret_cast<float*>(branch1 + 0x20) = heading;  // R-stick Y -> slotstruct+0x54 heading
+    *reinterpret_cast<float*>(branch1 + 0x1C) = 0.0F;
+    *reinterpret_cast<float*>(branch1 + 0x20) = 0.0F;
 
     // struct+0x10 (flags) is written to the block buttons VERBATIM by the real
     // branch: leaving it 0 makes locomotion IGNORE a valid stick (clone STANDS). So

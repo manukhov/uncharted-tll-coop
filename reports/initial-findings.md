@@ -21288,3 +21288,32 @@ Each Player embeds `NetAnimCmdGenerator` at `Player+0x1B30`; its receive path us
 apply one local Player animation snapshot to the clone within a single process;
 only then should that self-contained payload be transported between copies.
 Detailed checkpoint: `reports/player_animation_weapon_frontier.md`.
+
+### Correct per-slot Joypad base and rejected false activation fields (2026-06-30)
+
+**STATIC:** `Input_PerPlayerDispatch_MgrArg 0x14179E6C0` uses two related addresses
+that had been conflated:
+
+- `FrameState+0xE88 + slot*0xBF0` is the dispatch loop cursor;
+- `FrameState+0xDB0 + slot*0xBF0` is the real `Joypad` object passed as argument 4
+  to `FrameState_PerSlotInputApply 0x140289150` and then as destination to
+  `Input_ScaleCopyVirtual 0x14183B410`;
+- the block selector read at cursor `+0x18` is therefore `Joypad+0xF0`.
+
+Evidence is independent and convergent: the dispatch instructions explicitly use
+`lea r9,[rbx-0xD8]`; the `Joypad` constructors/resetters
+`0x141836640/0x1418369C0/0x141836BB0` initialize an object through `+0xBE8`; and the
+previously confirmed disabled-command pool is rooted at
+`FrameState+0xDB0+0xBF0*index`.
+
+**REJECTED:** the claimed circular-motion differences at
+`slotstruct+0x08/+0x10/+0x54/+0x5C`. The diagnostic started at the loop cursor and
+was shifted `+0xD8` past the real object, so those offsets and the derived
+right-stick-as-heading theory are invalid.
+
+**STATIC:** the circular-motion gate writes `dword_143ECEAA4` bytes `+1` and `+3`.
+The debug-menu builder `0x140306DE0` binds these exact addresses to `Infinite Ammo`
+and `Infinite Grenades`. They are unrelated cheats, not locomotion activation.
+Normal replicated input must not set both the circular-motion gate and the scripted
+input gate: doing so invokes the same state processor twice with two different
+sources.

@@ -43,6 +43,14 @@ the second copy arrive. Role A renders that object as Nadine; role B keeps it Ch
 State application continues while either process is in the background, and the old
 NPC `MoveTo` network avatar is disabled to avoid duplicate remote actors.
 
+Latest static correction: the real per-slot `Joypad` starts at
+`FrameState+0xDB0+slot*0xBF0`; `+0xE88` is only a dispatch cursor `0xD8` bytes into
+it. The last runtime comparison therefore inspected the wrong memory and its
+heading/activation conclusions are rejected. The circular-motion branch's unique
+global writes are the built-in Infinite Ammo/Grenades flags, not activation. The
+next controlled run compares all `0xBF0` bytes at the corrected address with the
+circular and scripted branches kept mutually exclusive.
+
 In the one-PC two-instance test, both processes were polling the same XInput user 0,
 which coupled their local cameras despite no camera state being applied over the
 network. Loopback mode now neutralizes controller input only in the background
