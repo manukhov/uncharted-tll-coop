@@ -21267,3 +21267,24 @@ longer killed either remote Player. Both processes remained responsive. No
 was reached during the successful run. This isolates the effective fix to holding
 the last confirmed transform (and health) while peer packets are paused; the death
 entry guards remain a safety boundary for other local-only hazards.
+
+### Native player animation and fire frontier (2026-06-29)
+
+Runtime confirmed the campaign fire core at `PlayerFireController::Fire
+0x140E2C730`: `controller+0x108` is the owning Player and R8 is the active weapon.
+The multiplayer `NetEventEmitProjectileBullet` send wrapper `0x140A46D70` remained
+silent and is not the campaign source.
+
+The attempted raw pose chain `Player+0x1A8 -> +0x10 -> owner` was disproven.
+A hardware write breakpoint identified `0x1418BBBB1` in `0x1418BB6D0`; static
+analysis shows its 32-byte entries contain effect ids, pointers and flags, not
+joint transforms. Cross-process pose transport was removed.
+
+The viable native route is `NetEventCharacterMove::FillAnimCmdBitStream
+0x140BC4E60`, which serializes up to 4096 bits of complete animation commands.
+Each Player embeds `NetAnimCmdGenerator` at `Player+0x1B30`; its receive path uses
+`AddSnapshot 0x140A01E50`, `ProcessSnapshot 0x140A02890`, and
+`UpdateFlagsAndWeapons 0x140A07160`. The next test must first generate, parse and
+apply one local Player animation snapshot to the clone within a single process;
+only then should that self-contained payload be transported between copies.
+Detailed checkpoint: `reports/player_animation_weapon_frontier.md`.

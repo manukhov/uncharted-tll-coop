@@ -99,6 +99,7 @@ constexpr bool kEnableLegacyRuntimeDiagnostics = false;
 // capture; it does not start the old diagnostic thread or input/camera probes.
 constexpr bool kEnableSpawnCaptureDiagnostic = true;
 constexpr std::uintptr_t kAddJoypadDisabledCommandsRva = 0x1839FB0;
+constexpr std::uintptr_t kPlayerFireControllerFireRva = 0x0E2C730;
 constexpr std::uint32_t kSlot1ScreenIndex = 1;
 constexpr float kGoalDistance = 3.0F;
 constexpr float kRemoteGoalDistance = 1.25F;
@@ -284,6 +285,11 @@ using NormalizeStickFn = void(__fastcall*)(void*, void*);
 using PerSlotApplyFn = std::int64_t(__fastcall*)(void*, int, void*, void*, std::uint32_t);
 XInputGetStateFn g_real_xinput_get_state = nullptr;
 XInputGetCapabilitiesFn g_real_xinput_get_caps = nullptr;
+using PlayerFireControllerFireFunction = void(__fastcall*)(
+    void*, void*, void*, double);
+PlayerFireControllerFireFunction g_original_player_fire = nullptr;
+void __fastcall hooked_player_fire(
+    void* controller, void* fire_args, void* weapon, double scalar);
 constexpr std::uintptr_t kXInputGetStateIatRva = 0x25D6D60;
 constexpr std::uintptr_t kXInputGetCapsIatRva = 0x25D6D68;
 volatile bool g_xinput_log = false;
@@ -741,6 +747,61 @@ bool install_joypad_disabled_commands_lock() {
     VirtualProtect(target, kPatchSize, old_protection, &ignored);
 
     log_line("joypad disabled-command mutation serialized for multiple Players");
+    return true;
+}
+
+bool install_player_fire_capture() {
+    auto* const target = reinterpret_cast<std::uint8_t*>(
+        g_module + kPlayerFireControllerFireRva);
+    constexpr std::array<std::uint8_t, 20> expected{
+        0x40, 0x55, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41,
+        0x57, 0x48, 0x8D, 0xAC, 0x24, 0xC0, 0xBD, 0xFF, 0xFF,
+    };
+    if (std::memcmp(target, expected.data(), expected.size()) != 0) {
+        log_line("player-fire capture skipped: unexpected function prologue");
+        return false;
+    }
+
+    constexpr std::size_t kPatchSize = expected.size();
+    constexpr std::size_t kJumpSize = 12;
+    auto* const trampoline = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, kPatchSize + kJumpSize, MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr) {
+        log_line("player-fire capture skipped: trampoline allocation failed");
+        return false;
+    }
+    std::memcpy(trampoline, target, kPatchSize);
+    auto* const jump_back = trampoline + kPatchSize;
+    jump_back[0] = 0x48;
+    jump_back[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(jump_back + 2) =
+        reinterpret_cast<std::uintptr_t>(target + kPatchSize);
+    jump_back[10] = 0xFF;
+    jump_back[11] = 0xE0;
+    FlushInstructionCache(GetCurrentProcess(), trampoline, kPatchSize + kJumpSize);
+    g_original_player_fire =
+        reinterpret_cast<PlayerFireControllerFireFunction>(trampoline);
+
+    DWORD old_protection = 0;
+    if (!VirtualProtect(target, kPatchSize, PAGE_EXECUTE_READWRITE,
+                        &old_protection)) {
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        g_original_player_fire = nullptr;
+        log_line("player-fire capture skipped: VirtualProtect failed");
+        return false;
+    }
+    target[0] = 0x48;
+    target[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(target + 2) =
+        reinterpret_cast<std::uintptr_t>(&hooked_player_fire);
+    target[10] = 0xFF;
+    target[11] = 0xE0;
+    std::memset(target + kJumpSize, 0x90, kPatchSize - kJumpSize);
+    FlushInstructionCache(GetCurrentProcess(), target, kPatchSize);
+    DWORD ignored = 0;
+    VirtualProtect(target, kPatchSize, old_protection, &ignored);
+    log_line("PlayerFireController::Fire capture installed");
     return true;
 }
 
@@ -2905,27 +2966,9 @@ void send_local_player_state() {
             }
         }
     }
-    // Capture the engine-resolved local input, not raw keyboard/controller input.
-    // These fields are the common source for movement, camera, aim and actions.
-    static std::uint64_t previous_buttons = 0;
-    auto* blk0 = reinterpret_cast<std::byte*>(g_module + 0x66E4220);
-    if (readable_bytes(blk0) >= 0x528) {
-        const auto* axes = reinterpret_cast<const float*>(blk0);
-        bool valid_axes = true;
-        for (int i = 0; i < 4; ++i) {
-            valid_axes = valid_axes && std::isfinite(axes[i]) && std::fabs(axes[i]) <= 2.0F;
-        }
-        if (valid_axes) {
-            pkt.move_stick[0] = axes[0];
-            pkt.move_stick[1] = axes[1];
-            pkt.look_stick[0] = axes[2];
-            pkt.look_stick[1] = axes[3];
-        }
-        pkt.input_buttons = *reinterpret_cast<const std::uint64_t*>(blk0 + 1304);
-        pkt.buttons_pressed = pkt.input_buttons & ~previous_buttons;
-        pkt.buttons_released = previous_buttons & ~pkt.input_buttons;
-        previous_buttons = pkt.input_buttons;
-    }
+    // The campaign's normal Player input bypasses the dormant per-slot block.
+    // Action fields remain zero until a real action source is recovered. Local
+    // firing is observed separately in PlayerFireController::Fire.
     sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr), sizeof(g_state_net.peer_addr));
 }
@@ -3080,27 +3123,6 @@ void apply_puppet_transform_post(void* puppet) {
         resolved = puppet;
     }
     apply_peer_health_to_slot1(pkt, false);
-    // Persistence diagnostic: read +0x260 BEFORE we overwrite it. If last frame's
-    // written velocity survived (≈ peer speed), the locomotion is NOT overwriting it
-    // (good - anim should see it). If it's ~0, the locomotion recomputes it after
-    // our write -> the decoupled-anim approach can't work via +0x260.
-    if (false) {
-        static ULONGLONG last = 0;
-        const ULONGLONG now = GetTickCount64();
-        if (now - last > 400) {
-            last = now;
-            auto* vr = reinterpret_cast<const float*>(
-                static_cast<std::byte*>(puppet) + kPlayerVelocityOffset);
-            const float vmag = std::sqrt(vr[0] * vr[0] + vr[2] * vr[2]);
-            const float pmag = std::sqrt(pkt.velocity[0] * pkt.velocity[0] +
-                                         pkt.velocity[2] * pkt.velocity[2]);
-            std::ostringstream l;
-            l << "ANIMTEST +0x260 before=(" << vr[0] << "," << vr[2] << ") mag=" << vmag
-              << " peerMag=" << pmag
-              << (vmag > 0.5F && pmag > 0.5F ? " PERSISTED" : " (reset/idle)");
-            log_line(l.str().c_str());
-        }
-    }
     auto* world = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kWorldPositionOffset);
     auto* localp = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerLocalPosOffset);
     auto* quat = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerQuatOffset);
@@ -3182,6 +3204,42 @@ std::size_t readable_bytes(const void* p) {
     }
     const auto end = reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
     return end - reinterpret_cast<std::uintptr_t>(p);
+}
+
+void __fastcall hooked_player_fire(
+    void* controller,
+    void* fire_args,
+    void* weapon,
+    double scalar
+) {
+    static std::atomic<unsigned> captured{0};
+    const unsigned index = captured.fetch_add(1, std::memory_order_relaxed);
+    if (index < 16 && controller != nullptr && fire_args != nullptr &&
+        weapon != nullptr && readable_bytes(controller) >= 0x110 &&
+        readable_bytes(fire_args) >= 0x100 && readable_bytes(weapon) >= 0x220) {
+        void* const player = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(controller) + 0x108);
+        const std::uint32_t weapon_word_218 = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(weapon) + 0x218);
+        std::uint64_t scalar_bits = 0;
+        std::memcpy(&scalar_bits, &scalar, sizeof(scalar_bits));
+        const auto* words = reinterpret_cast<const std::uint32_t*>(fire_args);
+        std::ostringstream line;
+        line << "PLAYER-FIRE #" << index << std::hex
+             << " controller=0x" << reinterpret_cast<std::uintptr_t>(controller)
+             << " player=0x" << reinterpret_cast<std::uintptr_t>(player)
+             << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
+             << " weaponWord218=0x" << weapon_word_218
+             << " args=0x" << reinterpret_cast<std::uintptr_t>(fire_args)
+             << " scalarBits=0x" << scalar_bits
+             << " raw=";
+        for (std::size_t i = 0; i < 0x100 / sizeof(std::uint32_t); ++i) {
+            line << words[i];
+            if (i + 1 != 0x100 / sizeof(std::uint32_t)) line << ',';
+        }
+        log_line(line.str().c_str());
+    }
+    g_original_player_fire(controller, fire_args, weapon, scalar);
 }
 
 void probe_velocity_field() {
@@ -3457,7 +3515,6 @@ void drive_remote_slot1_actions_tick() {
         actions |= 0x500u;  // native "input active" bits required by slot apply
     }
     *reinterpret_cast<std::uint32_t*>(branch1 + 0x10) = actions;
-
     static std::uint32_t previous_actions = 0;
     if (actions != previous_actions) {
         std::ostringstream line;
@@ -7095,6 +7152,7 @@ DWORD WINAPI install_hook(void*) {
     AddVectoredExceptionHandler(0, &crash_observer);
     log_line("crash observer installed (no breakpoints)");
     install_joypad_disabled_commands_lock();
+    install_player_fire_capture();
 
     // VARIANT A (co-op mode gate at init) PROVEN DEAD: setting HIBYTE(dword_143E07470)
     // + byte_143E03568 before save load CRASHES the campaign load — campaign levels

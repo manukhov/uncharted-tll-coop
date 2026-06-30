@@ -2,7 +2,6 @@ import os,sys
 import idautils,ida_name,ida_funcs,ida_pro,ida_bytes
 out=os.environ.get("TLL_IDA_OUTPUT")
 if out: sys.stdout=open(out,"w",encoding="utf-8")
-import capstone
 # 1) functions whose NAME contains these
 keys=["AllocateAnimData","AnimData","ArtItemSkeleton","SetupAnim","AnimControl","SetLook","ArtGroup","BindArt","CharacterLook"]
 print("=== named functions ===")

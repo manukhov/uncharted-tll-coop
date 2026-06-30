@@ -5483,6 +5483,67 @@ FUNCTIONS = {
         "campaign, slots 1-5 idle). Manager = *(0x143FE1088); slot structs at "
         "mgr+0xE88 + slot*0xBF0. Per-slot apply = manager vtable+0x20.",
     ),
+    # --- Player fire and native network-animation path (2026-06-29) ---
+    0x140E2C730: (
+        "PlayerFireController_Fire",
+        "Confirmed live campaign fire core (game/player/player-fire.cpp). "
+        "controller+0x108 is the owning Player; R8 is the active weapon and "
+        "RDX points to FireArgs. Runtime hooks fired for both local roles.",
+    ),
+    0x140A46D70: (
+        "SendNetEventEmitProjectileBullet",
+        "Multiplayer-gated wrapper for NetEventEmitProjectileBullet. It is not "
+        "the campaign fire source and produced no events in campaign runtime.",
+    ),
+    0x140A45520: ("NetEventEmitProjectileBullet_Ctor", "Constructor for the projectile-bullet network event."),
+    0x140A45B40: ("NetEventEmitProjectileBullet_Read", "Deserializes a projectile-bullet network event."),
+    0x140A45C90: ("NetEventEmitProjectileBullet_Write", "Serializes a projectile-bullet network event."),
+    0x140A45E80: ("NetEventEmitProjectileBullet_Execute", "Executes a received projectile-bullet network event."),
+    0x1418BB6D0: (
+        "BuildAnimationEffectEntryList",
+        "Builds 32-byte animation-effect entries containing an id, pointers, "
+        "and flags. The output is not a joint-transform array and must never "
+        "be copied between processes.",
+    ),
+    0x140BC4E60: (
+        "NetEventCharacterMove_FillAnimCmdBitStream",
+        "Serializes the native animation command list into a 4096-bit stream. "
+        "Handles clips, blending, pose/snapshot commands, hierarchy and output "
+        "commands; this is the current source-side synchronization target.",
+    ),
+    0x140BC2970: (
+        "NetEventCharacterMove_FillPlayer",
+        "Fills a CharacterMove event for a Player and invokes "
+        "FillAnimCmdBitStream. Requires a live NetPlayerTracker, so the core "
+        "serializer must be called directly in campaign.",
+    ),
+    0x140BC3760: ("NetEventCharacterMove_FillNpc", "NPC CharacterMove event fill path; also invokes FillAnimCmdBitStream."),
+    0x140BBD9D0: ("NetEventCharacterMove_Dtor", "Destructor for the 0x610-byte NetEventCharacterMove object."),
+    0x140BBE5C0: ("NetEventCharacterMove_Read", "Deserializes NetEventCharacterMove."),
+    0x140BBF000: ("NetEventCharacterMove_Write", "Serializes NetEventCharacterMove."),
+    0x1403D01B0: (
+        "NetAnimCmdGenerator_Ctor",
+        "Initializes the NetAnimCmdGenerator embedded in each Player at +0x1B30.",
+    ),
+    0x140A090A0: ("NetAnimCmdGenerator_Dtor", "Destroys the Player-embedded NetAnimCmdGenerator."),
+    0x140A01E50: (
+        "NetAnimCmdGenerator_AddSnapshot",
+        "Copies a received animation snapshot (up to 0x200 bytes) into the "
+        "Player-embedded generator queue. Snapshot time is at +8 and payload "
+        "pointer at +0x688 in the source wrapper.",
+    ),
+    0x140A02890: ("NetAnimCmdGenerator_ProcessSnapshot", "Consumes one queued native animation snapshot."),
+    0x140A02820: ("NetAnimCmdGenerator_ProcessPendingSnapshots", "Pumps pending snapshots through ProcessSnapshot."),
+    0x140A038B0: ("NetAnimCmdGenerator_GetOldestIceSnapshot", "Returns the oldest queued ICE animation snapshot."),
+    0x140A09340: (
+        "NetAnimCmdGenerator_DualSnapshotNodePool_Allocate",
+        "Allocates a dual-snapshot node used by the native animation generator.",
+    ),
+    0x140A07160: (
+        "NetAnimCmdGenerator_UpdateFlagsAndWeapons",
+        "Applies snapshot flags and weapon state while reconstructing remote "
+        "animation. This may solve visible weapons together with animation.",
+    ),
 }
 
 # Data/global names (set via ida_name on data addresses).
