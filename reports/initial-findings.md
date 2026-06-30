@@ -21317,3 +21317,14 @@ and `Infinite Grenades`. They are unrelated cheats, not locomotion activation.
 Normal replicated input must not set both the circular-motion gate and the scripted
 input gate: doing so invokes the same state processor twice with two different
 sources.
+
+**CONFIRMED:** a corrected runtime capture of the complete slot-1 `Joypad` after
+each mutually exclusive branch produced `JOYPAD-DIFF total=0` in both processes.
+There is no persistent per-branch activation field in that `0xBF0` object. This does
+not exclude transient values consumed and cleared within one frame.
+
+**REJECTED:** mass hardware execution breakpoint at the converged
+`Input_ScaleCopyVirtual` exit `0x14183C9C6`. After arming 63/67 threads, both game
+processes terminated without a capture hit. The diagnostic was removed. The safe
+replacement reads the previous frame's eight `block[1]` floats while the circular
+branch runs; it does not suspend or alter any game thread.

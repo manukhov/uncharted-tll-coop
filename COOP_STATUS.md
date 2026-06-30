@@ -51,6 +51,12 @@ global writes are the built-in Infinite Ammo/Grenades flags, not activation. The
 next controlled run compares all `0xBF0` bytes at the corrected address with the
 circular and scripted branches kept mutually exclusive.
 
+That comparison is now complete: both processes reported `JOYPAD-DIFF total=0`,
+so the persistent-field activation theory is rejected. A mass hardware breakpoint
+on the hot copy routine terminated both processes and has been removed. The safe
+next probe only reads the eight floats left in `block[1]` by the previous circular
+frame; no game threads are suspended or modified.
+
 In the one-PC two-instance test, both processes were polling the same XInput user 0,
 which coupled their local cameras despite no camera state being applied over the
 network. Loopback mode now neutralizes controller input only in the background

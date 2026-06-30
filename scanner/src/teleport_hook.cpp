@@ -3657,7 +3657,20 @@ void drive_remote_slot1_actions_tick() {
         const ULONGLONG spin_now = GetTickCount64();
         if (spin_now - spin_log > 500) {
             spin_log = spin_now;
-            log_line("REMOTE-DRIVE F9 spin-test: byte gate forced, struct OFF");
+            std::ostringstream spin;
+            spin << "REMOTE-DRIVE F9 spin-test: byte gate forced, struct OFF";
+            auto* blk1 = reinterpret_cast<const std::byte*>(
+                g_module + 0x66E4220 + 0x530);
+            if (readable_bytes(blk1) >= 0x528) {
+                const auto* values = reinterpret_cast<const float*>(blk1);
+                spin << " previous-block axes=[" << values[0] << "," << values[1]
+                     << "," << values[2] << "," << values[3] << "; "
+                     << values[4] << "," << values[5] << "," << values[6]
+                     << "," << values[7] << "] buttons=0x" << std::hex
+                     << *reinterpret_cast<const std::uint64_t*>(blk1 + 0x518)
+                     << std::dec;
+            }
+            log_line(spin.str().c_str());
         }
         return;
     }

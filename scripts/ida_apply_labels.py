@@ -1569,10 +1569,10 @@ FUNCTIONS = {
         "0x143682FA1.",
     ),
     0x141837530: (
-        "UpdateSharedCameraSlotStateBlob",
-        "Writes a large per-slot camera-state blob at slot_state+0xBE0. "
-        "Called by retained-camera mode switch and attach/detach paths with "
-        "two observed modes controlled by the third argument.",
+        "JoypadState_UpdateEnabledBinding",
+        "Updates or registers the Joypad-enabled byte at JoypadState+0xBE0. "
+        "The nonzero mode hashes the literal Joypad and binds that byte through "
+        "the property system; it does not write a camera-state blob.",
     ),
     0x141754C10: (
         "SyncObjectBit02ByActiveRetainedCameraSlots",
@@ -5479,8 +5479,10 @@ FUNCTIONS = {
         "is the native per-viewport/per-player path to a real player 2.",
     ),
     0x140289A90: (
-        "FrameState_PerSlotInputApply_Sub",
-        "Helper called by FrameState_PerSlotInputApply (per-slot input math).",
+        "Input_BlendAxisByThresholds",
+        "Pure arithmetic helper used by the circular scripted-input branch. "
+        "Selects or linearly blends bounded axis constants around a threshold; "
+        "it has no state writes and does not activate a player slot.",
     ),
     0x1402893D0: (
         "FrameState_PerSlotInputApply_Branch",

@@ -402,3 +402,25 @@ input, zeroes the unsupported right-stick heading, and captures/diffs all `0xBF0
 bytes of the correctly addressed slot-1 `Joypad`. The next runtime test must compare
 that result under the two mutually exclusive branches; no field should be promoted to
 an activator until the corrected diff and its writers agree.
+
+## RUNTIME CORRECTION (2026-06-30) — no persistent Joypad activator
+
+With both remote Players alive, the corrected full-object capture completed in both
+processes. Each reported `JOYPAD-DIFF total=0`: after allowing either branch to run,
+the sampled `0xBF0`-byte slot-1 `Joypad` contained no persistent difference. This
+does not prove that transient callback-time values are identical, but it falsifies
+the proposed persistent activation-field theory and closes the full-structure poke.
+
+An attempted hardware execution breakpoint at the common
+`Input_ScaleCopyVirtual` exit (`0x14183C9C6`) was **REJECTED**. It was armed across
+63/67 threads, produced no capture record, and both processes then terminated. The
+probe has been completely removed; do not repeat mass debug-register installation
+for this hot function.
+
+Static disassembly also narrows the remaining difference. Both branches call the
+same `Input_ScaleCopyVirtual` with the same block and `Joypad`; helper
+`0x140289A90` is pure bounded blend arithmetic. Apart from the unrelated ammo/grenade
+cheats, the circular branch differs only in the eight source floats and button edge
+fields it writes to `block[1]`. The next safe probe logs those eight floats from the
+previous circular frame without breakpoints, then reproduces their valid ranges in
+the scripted branch.

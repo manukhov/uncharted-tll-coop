@@ -1,0 +1,303 @@
+TARGET 0x140289150: FrameState_PerSlotInputApply start=0x140289150 end=0x1402893D0
+0x140289150: mov     [rsp+arg_18], rbx; Per-slot input/camera apply = FrameState vtable+0x20 (FrameState = *(g_LocalPlayerInputManager_Ptr 0x143FE1088), RTTI FrameState, vtable RVA 0x28FB968). Args (mgr, vtbl, inputblock(rbx), slotstruct(a4), slot(a5)). Processes per-slot camera heading (cos/sin) into the input block and calls Input_ScaleCopyVirtual. PER-SLOT ENABLE GATES: byte at FrameState+0x70B8+slot and struct at FrameState+0x6FC8+0x28*slot; both set for slot 0 (active), 0 for slots 1-5 (idle). Activating slot 1 (gates + player binding + feeding its input block 0x1466E4220[166*1]) is the native per-viewport/per-player path to a real player 2.
+0x140289155: push    rbp
+0x140289156: push    rdi
+0x140289157: push    r14
+0x140289159: sub     rsp, 70h
+0x14028915D: movsxd  rdi, [rsp+88h+arg_20]
+0x140289165: mov     r14, r9
+0x140289168: vmovaps [rsp+88h+var_48], xmm8
+0x14028916E: mov     rbx, r8
+0x140289171: mov     rbp, rcx
+0x140289174: vxorps  xmm8, xmm8, xmm8
+0x140289179: lea     eax, [rdi-2]
+0x14028917C: cmp     eax, 1
+0x14028917F: ja      short loc_1402891C3
+0x140289181: cmp     cs:byte_143E02054, 0
+0x140289188: mov     rcx, cs:qword_143FE1090
+0x14028918F: jnz     short loc_1402891B3
+0x140289191: mov     rax, cs:g_LocalPlayerInputManager_Ptr
+0x140289198: vmovss  xmm0, dword ptr [rax+80h]
+0x1402891A0: vucomiss xmm0, xmm8
+0x1402891A5: jp      short loc_1402891B3
+0x1402891A7: jnz     short loc_1402891B3
+0x1402891A9: cmp     byte ptr [rcx+2Ah], 0
+0x1402891AD: jz      loc_1402893B9
+0x1402891B3: cmp     byte ptr [rcx+27h], 0
+0x1402891B7: jz      short loc_1402891C3
+0x1402891B9: cmp     byte ptr [rcx+2Ah], 0
+0x1402891BD: jz      loc_1402893B9
+0x1402891C3: cmp     byte ptr [rdi+rbp+70B8h], 0
+0x1402891CB: mov     [rsp+88h+arg_0], rsi
+0x1402891D3: jz      loc_140289378
+0x1402891D9: vmovss  xmm5, cs:dword_142BE91F4
+0x1402891E1: vmovss  xmm2, cs:dword_142BEA054
+0x1402891E9: mov     rax, cs:g_EngineClock
+0x1402891F0: mov     [rsp+88h+arg_8], r12
+0x1402891F8: mov     [rsp+88h+arg_10], r15
+0x140289200: vmovaps [rsp+88h+var_28], xmm6
+0x140289206: vmovss  xmm6, cs:flt_142BEA0A8
+0x14028920E: vxorps  xmm0, xmm0, xmm0
+0x140289212: vmovaps [rsp+88h+var_38], xmm7
+0x140289218: vmovss  xmm7, dword ptr cs:xmmword_1466C0360+4
+0x140289220: vcmpltss xmm1, xmm8, xmm7
+0x140289225: vblendvps xmm3, xmm5, xmm6, xmm1
+0x14028922B: vmovss  xmm1, cs:dword_142BE900C
+0x140289233: vcmpltss xmm4, xmm8, xmm7
+0x140289238: vblendvps xmm2, xmm1, xmm2, xmm4
+0x14028923E: vcmpltss xmm1, xmm8, xmm7
+0x140289243: mov     byte ptr cs:g_DebugCheatFlags_AmmoGrenades+1, 1
+0x14028924A: mov     byte ptr cs:g_DebugCheatFlags_AmmoGrenades+3, 1
+0x140289251: vcvtsi2ss xmm0, xmm0, qword ptr [rax+0E0h]
+0x14028925A: vmovaps [rsp+88h+var_58], xmm9
+0x140289260: vmulss  xmm9, xmm0, cs:g_EngineClockToSeconds
+0x140289268: vblendvps xmm1, xmm6, xmm5, xmm1
+0x14028926E: vxorps  xmm0, xmm0, xmm0
+0x140289272: vmovss  [rsp+88h+var_68], xmm7
+0x140289278: call    FrameState_PerSlotInputApply_Sub
+0x14028927D: mov     r15, [r8+518h]
+0x140289284: mov     r12d, [r8+518h]
+0x14028928B: vmovaps xmm7, [rsp+88h+var_38]
+0x140289291: vmovaps xmm6, xmm0
+0x140289295: bt      r15, 0Dh
+0x14028929A: jnb     short loc_1402892AB
+0x14028929C: mov     byte ptr [rdi+rbp+70B8h], 0
+0x1402892A4: mov     r15, [r8+518h]
+0x1402892AB: vmovaps xmm0, xmm9; X
+0x1402892B0: call    cosf
+0x1402892B5: vmovss  dword ptr [rbx+10h], xmm0
+0x1402892BA: vmovss  dword ptr [rbx], xmm0
+0x1402892BE: vmovaps xmm0, xmm9; X
+0x1402892C3: call    sinf
+0x1402892C8: vmovss  dword ptr [rbx+14h], xmm0
+0x1402892CD: vmovss  dword ptr [rbx+4], xmm0
+0x1402892D2: vxorps  xmm0, xmm6, cs:xmmword_142BEE520
+0x1402892DA: mov     rcx, r12
+0x1402892DD: mov     dword ptr [rbx+18h], 3F000000h
+0x1402892E4: or      rcx, 500h
+0x1402892EB: mov     dword ptr [rbx+8], 3F000000h
+0x1402892F2: andn    rax, r15, rcx
+0x1402892F7: mov     [rbx+508h], rax
+0x1402892FE: mov     r8d, edi
+0x140289301: andn    rax, rcx, r15
+0x140289306: mov     [rbx+510h], rax
+0x14028930D: mov     rdx, rbx
+0x140289310: xor     eax, eax
+0x140289312: mov     [rbx+518h], rcx
+0x140289319: mov     rcx, r14
+0x14028931C: mov     [rbx+20h], eax
+0x14028931F: mov     [rbx+28h], rax
+0x140289323: mov     [rbx+4E8h], rax
+0x14028932A: mov     [rbx+4F0h], rax
+0x140289331: mov     [rbx+4F8h], rax
+0x140289338: mov     [rbx+500h], rax
+0x14028933F: vmovss  dword ptr [rbx+1Ch], xmm0
+0x140289344: vmovss  dword ptr [rbx+0Ch], xmm0
+0x140289349: mov     [rbx+520h], r15
+0x140289350: mov     dword ptr [rbx+24h], 0BF800000h
+0x140289357: call    Input_ScaleCopyVirtual
+0x14028935C: vmovaps xmm9, [rsp+88h+var_58]
+0x140289362: vmovaps xmm6, [rsp+88h+var_28]
+0x140289368: mov     r15, [rsp+88h+arg_10]
+0x140289370: mov     r12, [rsp+88h+arg_8]
+0x140289378: mov     rsi, [rsp+88h+arg_0]
+0x140289380: lea     rax, [rdi+rdi*4]
+0x140289384: lea     rcx, [rbp+6FC8h]
+0x14028938B: cmp     byte ptr [rcx+rax*8], 0
+0x14028938F: lea     rcx, [rcx+rax*8]
+0x140289393: jz      short loc_1402893AB
+0x140289395: vmovss  xmm1, dword ptr [rbp+14h]
+0x14028939A: mov     r9, r14
+0x14028939D: mov     [rsp+88h+var_68], edi
+0x1402893A1: mov     r8, rbx
+0x1402893A4: call    FrameState_PerSlotInputApply_Branch
+0x1402893A9: jmp     short loc_1402893B9
+0x1402893AB: mov     r8d, edi
+0x1402893AE: mov     rdx, rbx
+0x1402893B1: mov     rcx, r14
+0x1402893B4: call    Input_ScaleCopyVirtual
+0x1402893B9: mov     rbx, [rsp+88h+arg_18]
+0x1402893C1: vmovaps xmm8, [rsp+88h+var_48]
+0x1402893C7: add     rsp, 70h
+0x1402893CB: pop     r14
+0x1402893CD: pop     rdi
+0x1402893CE: pop     rbp
+0x1402893CF: retn
+
+TARGET 0x140289A90: FrameState_PerSlotInputApply_Sub start=0x140289A90 end=0x140289B6F
+0x140289A90: sub     rsp, 38h; Helper called by FrameState_PerSlotInputApply (per-slot input math).
+0x140289A94: vmovaps xmm5, xmm1
+0x140289A98: vmovaps [rsp+38h+var_18], xmm6
+0x140289A9E: vmovaps xmm6, xmm2
+0x140289AA2: vcmpltss xmm4, xmm5, xmm0
+0x140289AA7: vcmpltss xmm2, xmm5, xmm0
+0x140289AAC: vcmpltss xmm1, xmm5, xmm0
+0x140289AB1: vmovaps [rsp+38h+var_28], xmm7
+0x140289AB7: vblendvps xmm7, xmm5, xmm0, xmm4
+0x140289ABD: vblendvps xmm4, xmm6, xmm3, xmm2
+0x140289AC3: vmovss  xmm2, [rsp+38h+arg_20]
+0x140289AC9: vmovaps [rsp+38h+var_38], xmm8
+0x140289ACE: vblendvps xmm8, xmm0, xmm5, xmm1
+0x140289AD4: vcomiss xmm8, xmm2
+0x140289AD8: vcmpltss xmm1, xmm5, xmm0
+0x140289ADD: vblendvps xmm5, xmm3, xmm6, xmm1
+0x140289AE3: jb      short loc_140289AFF
+0x140289AE5: vmovaps xmm0, xmm4
+0x140289AE9: vmovaps xmm6, [rsp+38h+var_18]
+0x140289AEF: vmovaps xmm7, [rsp+38h+var_28]
+0x140289AF5: vmovaps xmm8, [rsp+38h+var_38]
+0x140289AFA: add     rsp, 38h
+0x140289AFE: retn
+0x140289AFF: vcomiss xmm2, xmm7
+0x140289B03: jb      short loc_140289B1F
+0x140289B05: vmovaps xmm0, xmm5
+0x140289B09: vmovaps xmm6, [rsp+38h+var_18]
+0x140289B0F: vmovaps xmm7, [rsp+38h+var_28]
+0x140289B15: vmovaps xmm8, [rsp+38h+var_38]
+0x140289B1A: add     rsp, 38h
+0x140289B1E: retn
+0x140289B1F: vsubss  xmm1, xmm2, xmm8
+0x140289B24: vmovss  xmm2, cs:dword_142BE91F4
+0x140289B2C: vsubss  xmm0, xmm7, xmm8
+0x140289B31: vdivss  xmm3, xmm1, xmm0
+0x140289B35: vcomiss xmm2, xmm3
+0x140289B39: jb      short loc_140289B45
+0x140289B3B: vxorps  xmm0, xmm0, xmm0
+0x140289B3F: vmaxss  xmm1, xmm3, xmm0
+0x140289B43: jmp     short loc_140289B49
+0x140289B45: vmovaps xmm1, xmm2
+0x140289B49: vmovaps xmm6, [rsp+38h+var_18]
+0x140289B4F: vmovaps xmm7, [rsp+38h+var_28]
+0x140289B55: vmovaps xmm8, [rsp+38h+var_38]
+0x140289B5A: vsubss  xmm0, xmm2, xmm1
+0x140289B5E: vmulss  xmm2, xmm0, xmm4
+0x140289B62: vmulss  xmm1, xmm5, xmm1
+0x140289B66: vaddss  xmm0, xmm2, xmm1
+0x140289B6A: add     rsp, 38h
+0x140289B6E: retn
+
+TARGET 0x141837530: UpdateSharedCameraSlotStateBlob start=0x141837530 end=0x14183775D
+0x141837530: push    rbx; Writes a large per-slot camera-state blob at slot_state+0xBE0. Called by retained-camera mode switch and attach/detach paths with two observed modes controlled by the third argument.
+0x141837532: sub     rsp, 470h
+0x141837539: mov     rax, cs:__security_cookie
+0x141837540: xor     rax, rsp
+0x141837543: mov     [rsp+478h+var_18], rax
+0x14183754B: mov     [rsp+478h+var_428], dl
+0x14183754F: mov     ebx, r8d
+0x141837552: mov     r11, rcx
+0x141837555: test    r8d, r8d
+0x141837558: jnz     short loc_141837579
+0x14183755A: mov     byte ptr [rsp+478h+var_458], r8b
+0x14183755F: lea     r9d, [r8+1]
+0x141837563: lea     r8, [rsp+478h+var_428]
+0x141837568: lea     rdx, [rcx+0BE0h]
+0x14183756F: call    sub_1417D71B0
+0x141837574: jmp     loc_141837744
+0x141837579: cmp     dword ptr [rcx+100h], 1
+0x141837580: jz      loc_141837650
+0x141837586: mov     rax, cs:g_LocalPlayerInputManager_Ptr
+0x14183758D: vxorps  xmm0, xmm0, xmm0
+0x141837591: vmovss  xmm1, dword ptr [rax+0F0h]
+0x141837599: vucomiss xmm1, xmm0
+0x14183759D: jp      loc_141837650
+0x1418375A3: jnz     loc_141837650
+0x1418375A9: xor     edx, edx
+0x1418375AB: lea     r8, aJoypad_0; "Joypad"
+0x1418375B2: lea     rcx, [rsp+478h+var_418]
+0x1418375B7: lea     rax, qword_142BEA360
+0x1418375BE: lea     r9d, [rdx+6]
+0x1418375C2: lea     r10d, [rdx+8]
+0x1418375C6: nop     word ptr [rax+rax+00000000h]
+0x1418375D0: vmovups ymm0, ymmword ptr [rax]
+0x1418375D4: vmovups xmm1, xmmword ptr [rax+70h]
+0x1418375D9: vmovups ymmword ptr [rcx], ymm0
+0x1418375DD: vmovups ymm0, ymmword ptr [rax+20h]
+0x1418375E2: vmovups ymmword ptr [rcx+20h], ymm0
+0x1418375E7: vmovups ymm0, ymmword ptr [rax+40h]
+0x1418375EC: vmovups ymmword ptr [rcx+40h], ymm0
+0x1418375F1: vmovups xmm0, xmmword ptr [rax+60h]
+0x1418375F6: vmovups xmmword ptr [rcx+60h], xmm0
+0x1418375FB: sub     rax, 0FFFFFFFFFFFFFF80h
+0x1418375FF: lea     rcx, [rcx+80h]
+0x141837606: vmovups xmmword ptr [rcx-10h], xmm1
+0x14183760B: sub     r10, 1
+0x14183760F: jnz     short loc_1418375D0
+0x141837611: movzx   eax, byte ptr [r8]
+0x141837615: test    al, al
+0x141837617: jz      short loc_141837639
+0x141837619: mov     ecx, edx
+0x14183761B: inc     r8
+0x14183761E: shr     rcx, 18h
+0x141837622: xor     rcx, rax
+0x141837625: movzx   eax, cl
+0x141837628: mov     ecx, edx
+0x14183762A: shl     ecx, 8
+0x14183762D: mov     edx, [rsp+rax*4+478h+var_418]
+0x141837631: xor     edx, ecx
+0x141837633: sub     r9, 1
+0x141837637: jnz     short loc_141837611
+0x141837639: lea     r8, [r11+0BE0h]
+0x141837640: xor     r9d, r9d
+0x141837643: vzeroupper
+0x141837646: call    sub_1417D5D40
+0x14183764B: jmp     loc_141837744
+0x141837650: xor     edx, edx
+0x141837652: mov     [rsp+478h+arg_18], rdi
+0x14183765A: vcvttss2si rdi, cs:dword_142BE9E84
+0x141837663: lea     r8, aJoypad_0; "Joypad"
+0x14183766A: lea     rcx, [rsp+478h+var_418]
+0x14183766F: lea     r9d, [rdx+6]
+0x141837673: lea     r10d, [rdx+8]
+0x141837677: lea     rax, qword_142BEA360
+0x14183767E: xchg    ax, ax
+0x141837680: vmovups ymm0, ymmword ptr [rax]
+0x141837684: vmovups xmm1, xmmword ptr [rax+70h]
+0x141837689: vmovups ymmword ptr [rcx], ymm0
+0x14183768D: vmovups ymm0, ymmword ptr [rax+20h]
+0x141837692: vmovups ymmword ptr [rcx+20h], ymm0
+0x141837697: vmovups ymm0, ymmword ptr [rax+40h]
+0x14183769C: vmovups ymmword ptr [rcx+40h], ymm0
+0x1418376A1: vmovups xmm0, xmmword ptr [rax+60h]
+0x1418376A6: vmovups xmmword ptr [rcx+60h], xmm0
+0x1418376AB: sub     rax, 0FFFFFFFFFFFFFF80h
+0x1418376AF: lea     rcx, [rcx+80h]
+0x1418376B6: vmovups xmmword ptr [rcx-10h], xmm1
+0x1418376BB: sub     r10, 1
+0x1418376BF: jnz     short loc_141837680
+0x1418376C1: movzx   eax, byte ptr [r8]
+0x1418376C5: test    al, al
+0x1418376C7: jz      short loc_1418376E9
+0x1418376C9: mov     ecx, edx
+0x1418376CB: inc     r8
+0x1418376CE: shr     rcx, 18h
+0x1418376D2: xor     rcx, rax
+0x1418376D5: movzx   eax, cl
+0x1418376D8: mov     ecx, edx
+0x1418376DA: shl     ecx, 8
+0x1418376DD: mov     edx, [rsp+rax*4+478h+var_418]
+0x1418376E1: xor     edx, ecx
+0x1418376E3: sub     r9, 1
+0x1418376E7: jnz     short loc_1418376C1
+0x1418376E9: vmovss  xmm0, cs:dword_142BE91F4
+0x1418376F1: mov     rcx, cs:qword_1466EC688
+0x1418376F8: lea     rax, sub_1417D57D0
+0x1418376FF: vmovss  [rsp+478h+var_438], xmm0
+0x141837705: mov     [rsp+478h+var_440], rax
+0x14183770A: lea     r8, [r11+0BE0h]
+0x141837711: mov     [rsp+478h+var_448], ebx
+0x141837715: lea     rax, [rsp+478h+var_420]
+0x14183771A: add     rcx, rdi
+0x14183771D: mov     [rsp+478h+var_450], rax
+0x141837722: mov     [rsp+478h+var_458], 1
+0x14183772A: lea     r9, [rsp+478h+var_428]
+0x14183772F: mov     [rsp+478h+var_420], rcx
+0x141837734: vzeroupper
+0x141837737: call    sub_1417D73C0
+0x14183773C: mov     rdi, [rsp+478h+arg_18]
+0x141837744: mov     rcx, [rsp+478h+var_18]
+0x14183774C: xor     rcx, rsp; StackCookie
+0x14183774F: call    __security_check_cookie
+0x141837754: add     rsp, 470h
+0x14183775B: pop     rbx
+0x14183775C: retn
+
