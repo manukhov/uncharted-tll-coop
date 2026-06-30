@@ -4786,11 +4786,11 @@ FUNCTIONS = {
         "manager-side AddOrUpdate/Respawn entrypoints for a local runtime patch.",
     ),
     0x140BBFD70: (
-        "NetPlayerTracker_HandleRespawnAndResumeDeferredQueue",
-        "Broader tracker-side consumer above NetPlayerTracker_NetRespawn. "
-        "Calls NetRespawn, then if tracker+0xA00 is set uses tracker+0xA04 "
-        "through 0x140B33CF0, clears the pending byte, and refreshes the live "
-        "tracker object again.",
+        "NetEventCharacterMove_Execute",
+        "Virtual +0x18 of NetEventCharacterMove. Resolves the target tracker "
+        "and Player, converts event animation bytes into a NetSnapshot, then "
+        "publishes that snapshot to the Player. The earlier tracker lifecycle "
+        "label was incorrect.",
     ),
     0x141E994C0: (
         "SharedBasePlayerUpperHandoffIntoDrawControlAndUpperStateBands",
@@ -5518,6 +5518,47 @@ FUNCTIONS = {
         "serializer must be called directly in campaign.",
     ),
     0x140BC3760: ("NetEventCharacterMove_FillNpc", "NPC CharacterMove event fill path; also invokes FillAnimCmdBitStream."),
+    0x140BBD730: (
+        "NetEventCharacterMove_Ctor",
+        "In-place constructor for the 0x610-byte NetEventCharacterMove object; "
+        "initializes its 512-byte animation bit buffer and event fields.",
+    ),
+    0x140B87B00: (
+        "NetSnapshot_Ctor",
+        "In-place constructor for the native NetSnapshot wrapper. Initializes "
+        "fields through +0x710; allocate at least 0x720 bytes.",
+    ),
+    0x140BC11A0: (
+        "NetEventCharacterMove_ToNetSnapshot",
+        "Exact event-to-snapshot converter. Sets snapshot+0x688 to event+0x1C, "
+        "copies the animation byte count/time, flags, weapons and movement "
+        "metadata. This closes the local animation replication chain.",
+    ),
+    0x140BC1660: (
+        "NetEventCharacterMove_PublishSnapshotToCharacter",
+        "Builds a NetSnapshot from a CharacterMove event and publishes it to "
+        "the supplied character through the native state-record path.",
+    ),
+    0x140B87820: (
+        "NetSnapshot_GetAnimArtGroup",
+        "Resolves one of 32 configured player/NPC animation art groups from "
+        "*net-player-anim-art-groups* or *net-npc-anim-art-groups*.",
+    ),
+    0x1410D6530: (
+        "Player_InitializeNetAnimArtGroups",
+        "Clears Player+0x3FC8 and, when the multiplayer mode byte is set, "
+        "allocates a 32-pointer table and fills it through "
+        "NetSnapshot_GetAnimArtGroup. Campaign leaves this field null.",
+    ),
+    0x140A00BB0: (
+        "NetAnimCmdGenerator_Initialize",
+        "Initializes NetAnimCmdGenerator ownership and its own 32-entry "
+        "animation art-group table before resetting snapshot storage.",
+    ),
+    0x140A01970: (
+        "NetAnimCmdGenerator_RefreshAnimArtGroups",
+        "Rebuilds the generator's 32-entry animation art-group table.",
+    ),
     0x140BBD9D0: ("NetEventCharacterMove_Dtor", "Destructor for the 0x610-byte NetEventCharacterMove object."),
     0x140BBE5C0: ("NetEventCharacterMove_Read", "Deserializes NetEventCharacterMove."),
     0x140BBF000: ("NetEventCharacterMove_Write", "Serializes NetEventCharacterMove."),
@@ -5570,6 +5611,17 @@ DATA_NAMES = {
     ),
     0x146B1B55C: ("g_InputFocusConsumerCount", "Count for g_InputFocusConsumerArray."),
     0x146B2C618: ("g_InputFocusCurrent", "Currently-focused UI input consumer (null in gameplay)."),
+    0x1437E0250: (
+        "g_EngineClock",
+        "Pointer to the engine clock. The current 64-bit tick at +0x310, "
+        "multiplied by g_EngineClockToSeconds, is the timestamp used by "
+        "NetEventCharacterMove and NetAnimCmdGenerator.",
+    ),
+    0x142BE8AE8: (
+        "g_EngineClockToSeconds",
+        "Float scale converting g_EngineClock+0x310 ticks to the native "
+        "animation/network timestamp.",
+    ),
 }
 
 

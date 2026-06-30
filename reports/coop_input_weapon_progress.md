@@ -109,3 +109,264 @@ in hand, fire, throw grenades, and animate. NOT committed — working notes.
   (vtable[26], WEAPON local/GIVEWPN), dump_weapon_controller ('[' key, WPN-DUMP),
   g_enable_client_death_publish toggle ('~').
 - Reload guard world_stable()/reset_world_caches_if_player_changed() in net_tick (good).
+
+## CRASH ROOT-CAUSE: native anim serializer hits a campaign data wall (2026-06-30)
+
+The in-process ANIM-MIRROR test (Scroll Lock) CRASHES on the first toggle. Root
+cause found statically (no further runtime needed):
+
+- Crash is INSIDE `SelectSpawnerOrGroupEntryByValue 0x140A40AB0`, called from
+  `FillAnimCmdBitStream` at the return site `0x140BC56E1`. (The "RIP" in
+  `pseudo_anim_mirror_crash.txt` is that return address, not the fault.)
+- `FillAnimCmdBitStream(event,bitstream,Player,artGroups,1,7)`: prologue asserts
+  `Player` (r8) and `artGroups` (r9->r14) non-null (`pArtGroups` assert @0x7e7). It
+  reads the player's live anim from `Player+0x1A0` (0x140BC4F40) and builds the
+  command list itself — so the command list is NOT the problem.
+- Per anim command (`movzx eax,[rsi]`, type 6 branch) it calls
+  `SelectSpawnerOrGroupEntryByValue(out,out,value=*(cmd+0x18),cmd, a5=r14=artGroups)`.
+  Inside, for every NON-null entry `v12` of the 32-pointer art-group table it derefs
+  `v14 = *(QWORD*)(*(QWORD*)(v12+0x48)+0x10)` then `*(DWORD*)v14`. When `a4+56`
+  chain is null, `v9=0`, so EVERY populated entry takes this deref.
+- The art-group entries built in CAMPAIGN by `Player_InitializeNetAnimArtGroups
+  0x1410D6530` (gate byte `0x3E07473` = HIBYTE(dword_143E07470), correct) resolve by
+  id via `NetSnapshot_GetAnimArtGroup 0x140B87820` -> Knowledge Registry, but come
+  back STRUCTURALLY INCOMPLETE in single-player: `entry+0x48` (the spawner/group
+  sub-table) is null/garbage. => deref crash.
+
+CONCLUSION (STATIC, high confidence): the native MP animation serializer cannot run
+in the SP campaign because the `*net-player-anim-art-groups*` art-defs are not loaded
+with their spawner/group sub-tables in single-player. Force-building the table via the
+MP-mode gate produces id-resolvable but incomplete entries. This is a DATA-AVAILABILITY
+wall, not a fixable offset. Using the generator's own table (generator+0x50) instead of
+Player+0x3FC8 does not help — same `GetAnimArtGroup` registry source.
+
+GUARD ADDED (no crash anymore): `mirror_local_animation_snapshot_to_clone` now walks
+the exact chain (`entry`, `entry+0x48`, `*(+0x48)+0x10`) for all 32 entries and bails
+with `ANIM-MIRROR campaign art-group wall: populated=N/32 malformed=M ...` instead of
+calling FillAnimCmdBitStream when any populated entry is malformed. Toggle is OFF by
+default; the build is safe.
+
+IMPLICATION FOR DIRECTION: the native snapshot-replication path (Codex) is blocked by
+MP asset availability. The asset-free alternative is the user's originally chosen
+**Path 1 — drive the clone with the peer's INPUT** so the clone's OWN campaign anim
+graph runs (no MP art-defs needed). See memory coop-architecture-direction
+(camera-owner drive @ +0x36C0 via sub_140238800 makes fed input animate the clone).
+
+## CORRECTION: 0x66E4220 is NOT dead — it was the neutralized BACKGROUND instance (2026-06-30)
+
+Reversed `InputManager_NormalizeStick 0x141A99FD0(pad, dst=module+0x66E4220)` and the
+per-slot apply branch `FrameState_PerSlotInputApply_Branch 0x1402893D0`. Confirmed the
+LIVE slot-0 resolved input block layout at `module+0x66E4220`:
+- +0x10/+0x14 = normalized RAW left stick (LX/LY), /32768 clamped (NormalizeStick writes here)
+- +0x18/+0x1C = normalized RAW right stick (RX/RY)
+- +0x00/+0x04 and +0x08/+0x0C = camera-adjusted L/R pairs (via sub_141A99CE0)
+- +0x518 (1304) = buttons u64, built from pad+0x36 (XINPUT wButtons) with a **base
+  0x8000000000000000** (bit 63 ALWAYS set once written) | per-button bits.
+
+KEY: because +0x518 always has bit 63 set when the writer ran, an "all zeros" reading
+of the whole block is IMPOSSIBLE if NormalizeStick executed. So the earlier
+"0x66E4220 reads ALL ZEROS / dead block" result was NOT a property of the block — it
+was the **background instance** in the one-PC loopback test, whose controller is
+deliberately neutralized (loopback filter) so NormalizeStick never runs for it. In
+real two-PC co-op each instance is foreground on its own PC -> its own 0x66E4220 is
+live. The "dead block" conclusion is RETRACTED; partly also a wrong-offset read
+(scanned +0x00/+0x04, but the raw stick is at +0x10/+0x14).
+
+Per-slot apply (sub_1402893D0) CONFIRMED: input struct rcx +0x10 buttons, +0x14/+0x18
+L-stick, +0x1C/+0x20 R-stick, +0x24 accumulator -> writes output block sticks to BOTH
++0x00..+0x0C AND +0x10..+0x1C, buttons +0x518/+0x508(pressed)/+0x510(released)/+0x520(prev).
+Slot 0 (Chloe) does NOT go through this branch (main input path); activated slot 1 DOES
+(prior breakthrough: setting slot-1 gate made the clone move) -> feeding slot-1 here
+drives the clone's OWN locomotion/anim graph.
+
+IMPLICATION for apply_puppet_transform_post: keep it as the position authority, and
+ADD input-driven animation — feed the slot-1 per-slot input struct from the peer's
+replicated sticks/buttons (read locally from 0x66E4220 at the CORRECT offsets above) so
+the clone animates run/walk/aim via its own graph while ..._post pins world position
+(soft-correct to avoid fighting the input-driven motion).
+
+## CONSUMER SIDE CONFIRMED: slot-1 input -> clone locomotion/anim, pin-compatible (2026-06-30)
+
+Traced the full input->animation chain for a slot-bound Player:
+1. Per-slot input struct @ FrameState+0x6FC8+0x28*slot (buttons +0x10, L-stick +0x14/+0x18,
+   R-stick +0x1C/+0x20, accumulator +0x24).
+2. Input_PerPlayerDispatch_MgrArg 0x14179E6C0 / Input_FocusDispatch 0x14179E310: loop over
+   6 slots, for each call mgr.vtable[4]=sub_140289150(mgr,*mgr,&block[0x530*localIndex],
+   slotstruct,slot). localIndex = slotstruct[+24]; block stride 0x530 (166 qwords).
+3. sub_140289150: if per-slot struct gate (FrameState+0x6FC8+0x28*slot) set ->
+   sub_1402893D0 reads the struct, writes the resolved block @ 0x66E4220+0x530*slot, then
+   Input_ScaleCopyVirtual.
+4. Input_ScaleCopyVirtual 0x14183B410(dst=slotstruct, src=block, scaleSel): writes a
+   SENSITIVITY-SCALED copy of the block into the slotstruct dst (scaled L-stick -> dst+0x10).
+   slotstruct = mgr+0xE88+slot*0xBF0 — this is what the Player reads each frame.
+5. The Player bound to the slot consumes the slotstruct move-intent -> locomotion -> anim
+   graph (run/walk/aim); velocity is the OUTPUT written to Player+0x260 during the LegIk pass.
+
+KEY CONCLUSION: the run/walk anim blend is driven by the STICK move-intent (slotstruct),
+NOT by the actual world position or the +0x260 velocity output. Therefore hard-pinning the
+world transform in apply_puppet_transform_post does NOT block input-driven animation. The
+earlier "no run animation in this mode" was because net mode fed NO slot-1 input
+(g_drive_slot1=false) and zeroed velocity — not an inherent pin/anim conflict.
+RUNTIME CORROBORATION (initial-findings 2026-06-16): setting the slot-1 gate alone made the
+spawned clone RUN in a circle (animated locomotion purely from slot-1 input).
+
+DESIGN (confirmed sound): keep apply_puppet_transform_post as position authority; ADD a
+slot-1 input feed derived from the peer's move direction (stick from peer velocity/heading)
++ slot-1 gates, so the clone's own graph animates run/walk/aim/weapon while ..._post pins
+the authoritative position (soft-lerp so the input-driven local motion doesn't fight it).
+
+## SINK fully specified + spin cause found (2026-06-30, disasm of sub_140289150)
+
+Control flow of the per-slot apply sub_140289150(mgr,vtbl,block,slotstruct,slot):
+- 0x1402891C3 `cmp byte [FrameState+0x70B8+slot],0`; if SET -> DEMO SPIN branch: heading
+  = cos/sin(EngineClock_ticks * g_EngineClockToSeconds) written as the stick, then the
+  gate **clears itself** (0x14028929C `mov byte [..+0x70B8],0`) = ONE-SHOT.
+  => The old "clone runs in a circle" was the DLL RE-SETTING this byte EVERY frame
+     (g_drive_slot1 set the 0x70B8 gate per tick) -> demo spin re-triggered each frame.
+     This byte gate must NOT be used for clean control.
+- 0x140289380 `lea rax,[rdi+rdi*4]` (slot*5); 0x140289384 `lea rcx,[FrameState+0x6FC8]`;
+  0x14028938B `cmp byte [rcx+rax*8],0` = struct[+0x00] enable @ FrameState+0x6FC8+0x28*slot;
+  if non-zero -> sub_1402893D0(struct) reads real input. Else plain Input_ScaleCopyVirtual.
+
+PER-SLOT INPUT STRUCT (write to drive slot 1 = FrameState+0x6FC8+0x28*1 = FrameState+0x6FF0):
+- +0x00 : enable byte = 1  (REQUIRED — gates the real-input branch)
+- +0x0C : float threshold (compared to the +0x24 accumulator)
+- +0x10 : buttons (u32)
+- +0x14 : left stick X   +0x18 : left stick Y (-1 = forward)
+- +0x1C : right stick X  +0x20 : right stick Y
+- +0x24 : accumulator (engine-managed; don't clobber)
+- DO NOT set FrameState+0x70B8+slot (that is the demo-spin one-shot).
+
+For a PINNED clone: facing comes from the quat pin; run animation comes from stick
+MAGNITUDE. Feed left stick = forward with magnitude = peer_speed/max_speed -> clone plays
+forward-run in its pinned facing. Direction refinement (camera-relative stick) is optional
+and can use the clone's camera-owner yaw later; not needed for basic run/walk animation.
+
+NET: every piece to develop apply_puppet_transform_post with animation is now reversed —
+SOURCE (local 0x66E4220 offsets), SINK (FrameState+0x6FF0 struct above), CONSUMER
+(confirmed animates), PIN-COMPAT (anim is stick-driven, not position-driven).
+
+## Fire/weapon from buttons: chain mapped, trigger is virtual-dispatched (2026-06-30)
+
+Fire execution chain (climbed from the confirmed core):
+  PlayerFireController_Fire 0x140E2C730
+   <- sub_140E2BCD0 (execute-shot: effects, camera shake, projectile materialize; gates
+      Fire on v120 = weapon/ammo via *(player+0x108) vtable+0x8C0)
+   <- sub_140E29300 (called ONLY via vtables 0x142DF8E34 / 0x142DF8EC0 / 0x146E384D0 /
+      0x142A23590 -> a virtual method on the fire/weapon controller).
+So the "decide to fire" (read the R2/trigger button) happens in the weapon controller's
+per-frame tick, dispatched VIRTUALLY -> the same indirect-call wall noted for the
+control->player binding. Not statically resolvable past here without runtime.
+
+ARCHITECTURAL CONCLUSION: the clone is a real Player owning its full weapon/fire
+controller. Its own controller tick reads ITS per-slot resolved input (block[localIndex=1]
++0x518 buttons) and fires — the SAME per-slot path that already drives its locomotion
+(proven: slot-1 input made the clone run). Locomotion routing per-slot strongly implies
+actions (fire/aim/jump/reload/grenade) route identically. DEFINITIVE confirmation = runtime
+exec-bp on PlayerFireController_Fire while feeding the slot-1 fire button (R2 bit in
+struct+0x10 -> block+0x518), checking it fires with rcx/owner = the clone (not slot 0).
+This is a runtime check, not static.
+
+## Camera-yaw: NOT needed for the pinned clone; do NOT drive sub_140238800 (2026-06-30)
+
+sub_140238800 (UpdatePlayerAnimatedCameraControlOwnerAndRouteState, owner=player+0x36C0)
+is a HEAVY worker that rebuilds route-child state and MATERIALIZES gameplay camera objects
+under FrameState 0x143FE1088 (CameraAnimationDirector / animated-camera-control). Driving
+it per-frame for the clone spins up a second gameplay camera with side effects (the same
+second-camera coupling that confused the earlier aim-isolation tests). For a PINNED clone
+this is unnecessary and counter-productive: facing comes from the quat pin, and the
+run/walk leg animation comes from stick MAGNITUDE. The camera yaw only affects which
+locomotion blend quadrant (forward vs strafe vs back) is chosen from the stick direction;
+feeding a forward stick gives forward-run, and any quadrant refinement is a runtime tuning
+step, not a static blocker. DECISION: do NOT drive the clone's camera owner; feed
+forward-aligned stick + keep the quat pin.
+
+## REVERSE COMPLETE for apply_puppet_transform_post + animation
+Everything needed is now reversed; remaining unknowns (clone fires from slot-1 button;
+exact blend quadrant) are RUNTIME-only. Implementation spec:
+- SOURCE (local, own instance): read 0x66E4220 left stick +0x10/+0x14, buttons +0x518; or
+  derive run magnitude from peer velocity (already computed from position delta).
+- SINK (per frame, slot 1 = clone): struct @ FrameState+0x6FF0: +0x00=1 (enable),
+  +0x14/+0x18 = left stick (forward = magnitude peer_speed/max), +0x1C/+0x20 = right stick,
+  +0x10 = buttons (fire/aim/grenade/reload from peer). Do NOT set FrameState+0x70B8+1.
+- POSITION: keep apply_puppet_transform_post as authority but SOFT-LERP world/local/quat
+  toward peer (don't zero velocity hard) so input-driven motion doesn't fight the pin;
+  hard-snap on large deltas (teleports/scripts). Keep alt-tab freeze + HP apply.
+- Do NOT drive sub_140238800 (no second camera).
+
+## IMPLEMENTED (2026-06-30, built OK)
+Per the reversed spec, in scanner/src/teleport_hook.cpp:
+- drive_remote_slot1_actions_tick now ALSO writes the L/R sticks into the slot-1 struct
+  (FrameState+0x6FF0): +0x14=0, +0x18=-mag (mag = clamp(|peer horiz velocity|/kCloneRunSpeedNorm,
+  0,1)), +0x1C/+0x20 = peer.look_stick. Enable +0x00=1, buttons +0x10, spin gate 0x70B8 forced 0,
+  slot1_index bound to 1. (Previously only buttons were fed -> clone "stuck".)
+- apply_puppet_transform_post: hard pin + zero-velocity REPLACED by soft lerp (0.35) toward peer
+  pos + hard-snap on >4m delta; quat authoritative; velocity left to the clone's locomotion.
+- aux thread net branch: g_puppet_net_apply=true (enables both the slot-1 feed and the soft
+  position application) when a clone exists and not play-as-clone.
+- kCloneRunSpeedNorm=4.0 (tunable). Run magnitude derives from peer VELOCITY (position-delta),
+  which replicates even under the loopback background-input filter -> locomotion anim testable on one PC.
+
+FALSIFIABLE PREDICTION (two instances): when the peer moves, the remote clone plays
+walk/RUN animation (legs cycle), facing the peer's direction, holding the authoritative
+position smoothly (no freeze, no flicker, no spin). If wrong: clone slides without leg
+animation (stick not consumed), or spins (spin gate leaked), or jitters (lerp vs locomotion
+fight). Buttons (fire/aim) may NOT replicate under one-PC loopback (background input block
+neutralized) but WILL on real two-PC; movement anim works either way (velocity-driven).
+
+## RUNTIME DEBUG SESSION (2026-06-30) — input-drive attempts, findings + open wall
+
+Implemented the reversed input-drive and ran 7 two-instance loopback tests. Results:
+
+CONFIRMED FIXED:
+- StatePacket velocity was always 0: send_local_player_state read Player+0x260 (reads 0 on
+  the retained proxy). Now derived from POSITION DELTA in send -> peer.velocity is correct.
+- The per-slot INPUT pipeline WORKS end to end: writing the slot-1 struct
+  (FrameState+0x6FC8+0x28) is consumed by the engine's per-slot apply and lands in the
+  resolved block[1] (0x66E4220+0x530). Diagnostic readback confirmed block1 sx/sy == fed
+  stick (one frame delayed), btn=0x500. So input reaches the resolved block.
+
+KEY RUNTIME FINDINGS:
+- F9 byte-gate spin test: forcing FrameState+0x70B8+1 (one-shot, re-set each frame) with the
+  struct branch OFF makes the clone RUN IN A CIRCLE = it TRANSLATES + ANIMATES. So the clone
+  DOES consume slot-1 input and can move/animate. The byte-gate path WORKS; the struct path
+  does not, even though both write block1 + call Input_ScaleCopyVirtual.
+- SLOTSTRUCT dump (mgr+0xE88+slot*0xBF0): slot-0 (Chloe) is ALL ZEROS even while she runs ->
+  Chloe uses the MAIN input path, NOT the per-slot slotstruct. The clone (slot-1) DOES use the
+  slotstruct. Comparing slot-1 moving (byte-gate) vs not (struct), the differing fields are:
+  +0x08/+0x10 (a counter, 0x40500->0x50500) and +0x54/+0x5C (0x4389d9f1 ~ an angle/heading).
+- Input_ScaleCopyVirtual writes slotstruct+0x54 = block+0x0C; sub_1402893D0 writes
+  block+0x0C = struct+0x20 (right-stick Y). So the byte-gate fills slotstruct+0x54 (spinning,
+  from engine time) and the struct path left it 0 (right stick zeroed).
+
+REJECTED THIS SESSION:
+- "feed the heading via the right stick (struct+0x20 = atan2(sy,sx), struct+0x1C=0.5)" so
+  slotstruct+0x54 carries a constant heading -> clone runs straight. RESULT: clone JUST STANDS
+  (no movement, no anim). So slotstruct+0x54 alone (right-stick value) is NOT the movement
+  activator, or the convention/units are wrong, or the +0x08/+0x10 counter (a timestamp the
+  byte-gate also writes) is required too. The "struct branch != byte-gate branch" gap is NOT
+  closed.
+- Soft-lerp pin + byte-gate did NOT hold the clone in place (it still ran in a circle); and a
+  pin fundamentally fights locomotion animation (which needs actual translation/rotation). So
+  "pinned + animated run" via apply_puppet_transform_post looks structurally hard: the run
+  blend needs real movement.
+
+OPEN WALL / NEXT (for Codex):
+- WHY does the byte-gate branch drive the clone's locomotion but the struct branch
+  (sub_1402893D0) does not, when both produce a populated block[1] + ScaleCopy to the same
+  slotstruct? Capture slot-1's FULL slotstruct (0xBF0 bytes) under byte-gate vs struct and diff
+  ALL fields (not just first 0x60) — the activator is a field the byte-gate sets that the
+  struct path leaves 0 (candidates: the +0x08/+0x10 timestamp pair, +0x54/+0x5C heading, or a
+  flag past +0x60). Then set that field on the struct path.
+- Alternative: drive the clone's MOVEMENT via the byte-gate mechanism but neutralize the spin
+  by controlling the heading source (FrameState+0xE0 is a shared frame counter -> can't freeze;
+  find a per-slot heading input instead).
+- Reconsider: locomotion animation needs real translation; the position pin
+  (apply_puppet_transform_post) cancels it. A free-run + gentle-correction model (not a hard
+  pin) is likely required for visible run/walk.
+
+Code state (committed): drive_remote_slot1_actions_tick feeds slot-1 struct (sticks from peer
+velocity, heading via right stick, buttons, both gates), with diagnostics (REMOTE-DRIVE,
+SLOTSTRUCT, F9 byte-gate spin test, 'P' free-run toggle). apply_puppet_transform_post has a
+g_clone_freerun mode (no position write, snap-only) vs soft-lerp pin. send computes velocity
+from position delta. None of these yet produce a visible animated/moving clone in two-instance.

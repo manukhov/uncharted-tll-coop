@@ -78,6 +78,10 @@ constexpr std::size_t kPlayerVelocityMirrorOffset = 0x270;
 constexpr std::size_t kReferenceTransformOffset = 0x100;
 constexpr std::size_t kCameraRotationOffset = 0x1B0;
 constexpr std::size_t kLocomotionControllerOffset = 0x15B8;
+// Normalizes the peer's horizontal ground speed (units/s) into a 0..1 left-stick
+// magnitude fed to the clone's slot-1 input so its own locomotion blends walk/run.
+// Tunable at runtime; ~full-run speed.
+constexpr float kCloneRunSpeedNorm = 4.0F;
 constexpr std::size_t kNavigationRadiusOffset = 0x1C8;
 constexpr std::size_t kFacingOffset = 0x24A0;
 constexpr std::size_t kMoveParametersOffset = 0x24B0;
@@ -100,6 +104,14 @@ constexpr bool kEnableLegacyRuntimeDiagnostics = false;
 constexpr bool kEnableSpawnCaptureDiagnostic = true;
 constexpr std::uintptr_t kAddJoypadDisabledCommandsRva = 0x1839FB0;
 constexpr std::uintptr_t kPlayerFireControllerFireRva = 0x0E2C730;
+constexpr std::uintptr_t kNetEventCharacterMoveCtorRva = 0x0BBD730;
+constexpr std::uintptr_t kFillAnimCmdBitStreamRva = 0x0BC4E60;
+constexpr std::uintptr_t kNetSnapshotCtorRva = 0x0B87B00;
+constexpr std::uintptr_t kCharacterMoveToSnapshotRva = 0x0BC11A0;
+constexpr std::uintptr_t kNetAnimAddSnapshotRva = 0x0A01E50;
+constexpr std::uintptr_t kInitializePlayerNetAnimArtGroupsRva = 0x10D6530;
+constexpr std::uintptr_t kEngineClockPointerRva = 0x37E0250;
+constexpr std::uintptr_t kEngineClockScaleRva = 0x2BE8AE8;
 constexpr std::uint32_t kSlot1ScreenIndex = 1;
 constexpr float kGoalDistance = 3.0F;
 constexpr float kRemoteGoalDistance = 1.25F;
@@ -290,6 +302,12 @@ using PlayerFireControllerFireFunction = void(__fastcall*)(
 PlayerFireControllerFireFunction g_original_player_fire = nullptr;
 void __fastcall hooked_player_fire(
     void* controller, void* fire_args, void* weapon, double scalar);
+using InPlaceCtorFunction = void*(__fastcall*)(void*);
+using FillAnimCmdBitStreamFunction = std::uint32_t(__fastcall*)(
+    void*, void*, void*, void*, std::uint32_t, std::uint32_t);
+using CharacterMoveToSnapshotFunction = void(__fastcall*)(void*, void*);
+using NetAnimAddSnapshotFunction = void(__fastcall*)(void*, void*);
+using InitializePlayerNetAnimArtGroupsFunction = void(__fastcall*)(void*);
 constexpr std::uintptr_t kXInputGetStateIatRva = 0x25D6D60;
 constexpr std::uintptr_t kXInputGetCapsIatRva = 0x25D6D68;
 volatile bool g_xinput_log = false;
@@ -305,6 +323,7 @@ bool g_xinput_p0_armed_in_scene = false;
 bool g_slot1_auto_reissue_done = false;
 ULONGLONG g_slot1_autodrive_until = 0;
 bool g_slot1_branch_struct_logged = false;
+bool g_local_animation_mirror_test = false;
 
 // --- Velocity-writer capture via hardware write breakpoint (DR1) ---
 // Arms a 4-byte WRITE breakpoint on slot-0 Player +0x260 (velocity). The
@@ -2937,7 +2956,6 @@ void send_local_player_state() {
     }
     const auto* pos = reinterpret_cast<const float*>(static_cast<std::byte*>(local_obj) + kWorldPositionOffset);
     const auto* quat = reinterpret_cast<const float*>(static_cast<std::byte*>(local_obj) + kPlayerQuatOffset);
-    const auto* vel = reinterpret_cast<const float*>(static_cast<std::byte*>(local_obj) + kPlayerVelocityOffset);
     if (!valid_network_position(pos)) {
         return;
     }
@@ -2947,7 +2965,27 @@ void send_local_player_state() {
     pkt.flags = 1;
     std::memcpy(pkt.pos, pos, sizeof(pkt.pos));
     std::memcpy(pkt.quat, quat, sizeof(pkt.quat));
-    std::memcpy(pkt.velocity, vel, sizeof(pkt.velocity));
+    // Player+0x260 reads 0 through the retained proxy (it is an anim OUTPUT, not a
+    // live field on this object), so derive world velocity from the POSITION DELTA.
+    // This is the signal the remote clone's locomotion uses to blend walk/run.
+    {
+        static float pvx = 0, pvy = 0, pvz = 0;
+        static float cvx = 0, cvy = 0, cvz = 0;
+        static ULONGLONG pvt = 0;
+        const ULONGLONG vnow = GetTickCount64();
+        if (pvt == 0) {
+            pvx = pos[0]; pvy = pos[1]; pvz = pos[2]; pvt = vnow;
+        } else if (vnow - pvt >= 16) {
+            const float dt = static_cast<float>(vnow - pvt) / 1000.0F;
+            if (dt > 0.0F && dt < 0.5F) {
+                cvx = (pos[0] - pvx) / dt;
+                cvy = (pos[1] - pvy) / dt;
+                cvz = (pos[2] - pvz) / dt;
+            }
+            pvx = pos[0]; pvy = pos[1]; pvz = pos[2]; pvt = vnow;
+        }
+        pkt.velocity[0] = cvx; pkt.velocity[1] = cvy; pkt.velocity[2] = cvz;
+    }
     if (readable_bytes(static_cast<std::byte*>(local_obj) +
                        kPlayerHealthSystemOffset + sizeof(void*)) >= sizeof(void*)) {
         auto* health = *reinterpret_cast<std::byte**>(
@@ -2979,6 +3017,11 @@ void send_local_player_state() {
 // When OFF, the puppet is left as a pure second local player (no transform/
 // velocity override) so we can observe its native input-driven locomotion.
 bool g_puppet_net_apply = false;
+// DIAGNOSTIC (toggle 'P'): when true, apply_puppet_transform_post does NOT write the
+// clone's position/facing each frame — the clone runs FREE from its slot-1 input so we
+// can test whether locomotion animation needs actual translation (the soft-lerp pin may
+// be cancelling it). Only a large-divergence snap remains so it can't drift forever.
+volatile bool g_clone_freerun = true;
 volatile bool g_drive_screen1_cam = false;  // NUMPAD6: drive screen-1 cam + fwd input test
 // g_play_as_clone defined earlier (before hooked_resolve_local_player)
 // Single-instance test: when there is no network peer, mirror the LOCAL Chloe
@@ -3126,18 +3169,43 @@ void apply_puppet_transform_post(void* puppet) {
     auto* world = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kWorldPositionOffset);
     auto* localp = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerLocalPosOffset);
     auto* quat = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerQuatOffset);
-    // STABLE puppet: hard-set transform to the peer's + zero velocity so the
-    // (collisionless) integration can't drift it. Clean position+facing tracking,
-    // no flicker. (No run animation in this mode - that is the documented
-    // next-session integration; it fought the position tracking.)
-    // STABLE network avatar (working MVP): hard-set position+facing + zero velocity.
-    std::memcpy(world, pkt.pos, sizeof(pkt.pos));
-    std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
+    // SOFT position authority (2026-06-30): the clone is driven by the peer's
+    // slot-1 input (drive_remote_slot1_actions_tick) so its OWN locomotion graph
+    // animates walk/run. We must NOT hard-pin + zero velocity here (that froze the
+    // animation — the old "no run animation in this mode"). Instead lerp the world
+    // transform toward the authoritative peer position so input-driven motion stays
+    // smooth and convergent; HARD-SNAP on large deltas (teleports / scripted moves /
+    // first apply) since those aren't reproduced by locomotion. Facing (quat) stays
+    // authoritative. Velocity is left to the clone's own locomotion (it is an anim
+    // OUTPUT; zeroing it killed the run blend).
+    constexpr float kPosLerp = 0.35F;
+    constexpr float kSnapDistSq = 4.0F * 4.0F;  // >4m apart => snap, don't lerp
+    const float dx = pkt.pos[0] - world[0];
+    const float dy = pkt.pos[1] - world[1];
+    const float dz = pkt.pos[2] - world[2];
+    const bool too_far = dx * dx + dy * dy + dz * dz > kSnapDistSq;
+    if (g_clone_freerun) {
+        // Free-run test: let the clone's input-driven locomotion own position/facing
+        // entirely (so translation -> run animation isn't cancelled). Only snap back
+        // if it diverges hard, so it can't run away forever.
+        if (too_far) {
+            std::memcpy(world, pkt.pos, sizeof(pkt.pos));
+            std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
+        }
+        return;
+    }
+    if (too_far) {
+        std::memcpy(world, pkt.pos, sizeof(pkt.pos));
+        std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
+    } else {
+        for (int i = 0; i < 3; ++i) {
+            world[i] += (pkt.pos[i] - world[i]) * kPosLerp;
+            localp[i] = world[i];
+        }
+        world[3] = pkt.pos[3];
+        localp[3] = pkt.pos[3];
+    }
     std::memcpy(quat, pkt.quat, sizeof(pkt.quat));
-    auto* v0 = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerVelocityOffset);
-    auto* v1 = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerVelocityMirrorOffset);
-    v0[0] = v0[1] = v0[2] = 0.0F;
-    v1[0] = v1[1] = v1[2] = 0.0F;
 }
 
 using PlayerDeathEntryFunction = std::int64_t(__fastcall*)(void*);
@@ -3152,12 +3220,18 @@ std::int64_t guard_remote_player_death(void* player, int entry) {
         apply_peer_health_to_slot1(peer, false);
         const ULONGLONG received =
             g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
-        std::ostringstream line;
-        line << "REMOTE-DEATH blocked entry=+0x" << std::hex
-             << (0xBE8 + entry * 8) << std::dec << " peer_hp=" << peer.health
-             << " packet_age_ms="
-             << (received != 0 ? GetTickCount64() - received : 0);
-        log_line(line.str().c_str());
+        static std::atomic<ULONGLONG> last_log{0};
+        const ULONGLONG now = GetTickCount64();
+        ULONGLONG previous = last_log.load(std::memory_order_relaxed);
+        if (now - previous >= 1000 &&
+            last_log.compare_exchange_strong(
+                previous, now, std::memory_order_relaxed)) {
+            std::ostringstream line;
+            line << "REMOTE-DEATH blocked entry=+0x" << std::hex
+                 << (0xBE8 + entry * 8) << std::dec << " peer_hp=" << peer.health
+                 << " packet_age_ms=" << (received != 0 ? now - received : 0);
+            log_line(line.str().c_str());
+        }
         return 0;
     }
     auto original = g_original_player_death_entries[entry];
@@ -3485,6 +3559,30 @@ void drive_remote_slot1_actions_tick() {
     if (fs == nullptr || readable_bytes(fs) < 0x7100) {
         return;
     }
+    // DIAGNOSTIC: raw dump of slot-0 (Chloe, moves) vs slot-1 (clone) slotstructs
+    // (mgr+0xE88+slot*0xBF0). Compare slot-1 under byte-gate (F9, clone MOVES) vs under
+    // the struct branch (clone does NOT move) to find the locomotion-activation field.
+    {
+        static ULONGLONG last_ss = 0;
+        const ULONGLONG ssn = GetTickCount64();
+        if (ssn - last_ss > 700) {
+            last_ss = ssn;
+            auto* ss0 = static_cast<std::byte*>(fs) + 0xE88;
+            auto* ss1 = static_cast<std::byte*>(fs) + 0xE88 + 0xBF0;
+            if (readable_bytes(ss0) >= 0x60 && readable_bytes(ss1) >= 0x60) {
+                auto* d0 = reinterpret_cast<const std::uint32_t*>(ss0);
+                auto* d1 = reinterpret_cast<const std::uint32_t*>(ss1);
+                std::ostringstream s;
+                const bool f9 = (GetAsyncKeyState(VK_F9) & 0x8000) != 0;
+                s << "SLOTSTRUCT f9=" << (f9 ? 1 : 0) << " s1[";
+                for (int i = 0; i < 24; ++i) s << std::hex << d1[i] << " ";
+                s << "] s0[";
+                for (int i = 0; i < 24; ++i) s << std::hex << d0[i] << " ";
+                s << "]" << std::dec;
+                log_line(s.str().c_str());
+            }
+        }
+    }
     auto* branch1 = static_cast<std::byte*>(fs) + 0x6FC8 + 0x28;
     auto* spin_gate = static_cast<std::uint8_t*>(fs) + 0x70B8 + 1;
     coop::StatePacket peer{};
@@ -3505,14 +3603,76 @@ void drive_remote_slot1_actions_tick() {
     if (readable_bytes(slot1_index) >= 1) {
         *slot1_index = 1;
     }
+    // DIAGNOSTIC (hold F9): force the byte-gate DEMO SPIN for slot 1 with the struct
+    // branch OFF, to test whether the clone consumes slot-1 input AT ALL. If the clone
+    // spins => binding OK (our struct values are the issue); if it does NOT spin =>
+    // the clone is not bound to slot-1 input (the buried control->player binding).
+    if ((GetAsyncKeyState(VK_F9) & 0x8000) != 0) {
+        std::memset(branch1, 0, 0x28);  // struct branch disabled (enable byte 0)
+        *spin_gate = 1;                 // re-set every frame (the demo gate self-clears)
+        static ULONGLONG spin_log = 0;
+        const ULONGLONG spin_now = GetTickCount64();
+        if (spin_now - spin_log > 500) {
+            spin_log = spin_now;
+            log_line("REMOTE-DRIVE F9 spin-test: byte gate forced, struct OFF");
+        }
+        return;
+    }
     std::memset(branch1, 0, 0x28);
     branch1[0] = std::byte{1};
-    *spin_gate = 0;
-    *reinterpret_cast<float*>(branch1 + 0x0C) = 0.1F;
+    // F9 test proved the BYTE-gate (demo) branch animates the clone but the struct
+    // branch alone does NOT — even though both write block1. The byte-gate branch
+    // sets activation side effects (e.g. dword_143ECEAA4) the struct branch omits.
+    // So set BOTH gates: the byte-gate branch runs first (activation + demo stick),
+    // then the struct branch (sub_1402893D0) runs AFTER and overwrites the spin stick
+    // with our DIRECTIONAL stick -> clone animates in the peer's direction, no spin.
+    *spin_gate = 1;
+    // struct+0x0C = duration; the per-slot apply accumulates dt at +0x24 and times
+    // out the input when it exceeds +0x0C. The PROVEN drive_slot1_tick keeps this
+    // LARGE so the input stays active every frame (0.1 timed out -> clone stood).
+    *reinterpret_cast<float*>(branch1 + 0x0C) = 1.0e9F;
 
+    // Feed the LEFT stick from the peer's horizontal velocity so the clone's OWN
+    // locomotion graph plays walk/run. Mirror the proven drive_slot1_tick basis
+    // (measured: feed (0,-1) -> world +X, (1,0) -> world +Z), i.e. for a world move
+    // dir (wx,wz): stickX = wz, stickY = -wx. Magnitude from speed/run-norm. Right
+    // stick (+0x1C/+0x20) MUST stay 0 (forwarding camera input destabilizes the
+    // slot-1 movement basis -> "on knees"/drift).
+    const float vx = peer.velocity[0];
+    const float vz = peer.velocity[2];
+    const float speed = std::sqrt(vx * vx + vz * vz);
+    float mag = speed / kCloneRunSpeedNorm;
+    if (mag > 1.0F) mag = 1.0F;
+    if (mag < 0.0F) mag = 0.0F;
+    float sx = 0.0F;
+    float sy = 0.0F;
+    const bool moving = speed > 0.05F;
+    if (moving) {
+        const float wx = vx / speed;
+        const float wz = vz / speed;
+        sx = wz * mag;
+        sy = -wx * mag;
+    }
+    *reinterpret_cast<float*>(branch1 + 0x14) = sx;   // L-stick X
+    *reinterpret_cast<float*>(branch1 + 0x18) = sy;   // L-stick Y
+    // The clone's locomotion needs a HEADING reference at slotstruct+0x54. Reversed:
+    // Input_ScaleCopyVirtual writes slotstruct+0x54 = block+0x0C, and sub_1402893D0
+    // writes block+0x0C = struct+0x20 (right-stick Y). The byte-gate fills this
+    // (spinning => clone runs in a circle); zeroing the right stick left it 0 => no
+    // movement. Feed a CONSTANT heading = the peer's movement direction so the clone
+    // runs STRAIGHT in that direction. (heading consistent with the L-stick cos/sin.)
+    const float heading = moving ? std::atan2(sy, sx) : 0.0F;
+    *reinterpret_cast<float*>(branch1 + 0x1C) = 0.5F;     // R-stick X (mimic byte-gate block+0x08)
+    *reinterpret_cast<float*>(branch1 + 0x20) = heading;  // R-stick Y -> slotstruct+0x54 heading
+
+    // struct+0x10 (flags) is written to the block buttons VERBATIM by the real
+    // branch: leaving it 0 makes locomotion IGNORE a valid stick (clone STANDS). So
+    // set the native "input active" bits 0x500 whenever a stick is fed, plus the
+    // peer's resolved buttons (fire/aim/jump/etc).
     std::uint32_t actions = static_cast<std::uint32_t>(peer.input_buttons);
-    if (actions != 0 || peer.buttons_pressed != 0 || peer.buttons_released != 0) {
-        actions |= 0x500u;  // native "input active" bits required by slot apply
+    if (moving || actions != 0 || peer.buttons_pressed != 0 ||
+        peer.buttons_released != 0) {
+        actions |= 0x500u;
     }
     *reinterpret_cast<std::uint32_t*>(branch1 + 0x10) = actions;
     static std::uint32_t previous_actions = 0;
@@ -3525,6 +3685,25 @@ void drive_remote_slot1_actions_tick() {
              << " branch=0x" << actions << std::dec;
         log_line(line.str().c_str());
         previous_actions = actions;
+    }
+    // Rate-limited drive diagnostic: confirm the feed runs, the magnitude, and that
+    // the engine's per-slot apply CONSUMED our struct into slot-1's block[1].
+    static ULONGLONG last_drive_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_drive_log > 500) {
+        last_drive_log = now;
+        std::ostringstream d;
+        d << "REMOTE-DRIVE speed=" << speed << " mag=" << mag
+          << " sx=" << sx << " sy=" << sy << " flags=0x" << std::hex << actions
+          << std::dec;
+        auto* blk1 = reinterpret_cast<std::byte*>(g_module + 0x66E4220 + 0x530);
+        if (readable_bytes(blk1) >= 0x520) {
+            auto* bf = reinterpret_cast<const float*>(blk1);
+            d << " | block1 sx=" << bf[0] << " sy=" << bf[1] << " rawx=" << bf[4]
+              << " rawy=" << bf[5] << " btn=0x" << std::hex
+              << *reinterpret_cast<const std::uint64_t*>(blk1 + 1304) << std::dec;
+        }
+        log_line(d.str().c_str());
     }
 }
 
@@ -4922,6 +5101,153 @@ bool world_stable() {
     return *reinterpret_cast<std::uintptr_t*>(p) == g_module + kPlayerVtableRva;
 }
 
+bool mirror_local_animation_snapshot_to_clone() {
+    void* const source = retained_player_object(0);
+    void* const clone = retained_player_object(1);
+    if (source == nullptr || clone == nullptr ||
+        readable_bytes(source) < 0x3FD0 || readable_bytes(clone) < 0x1B38) {
+        return false;
+    }
+
+    void* anim_source = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(source) + 0x3FC8);
+    if (anim_source == nullptr) {
+        // Player::Init normally calls this builder, but it allocates the cache
+        // only when the multiplayer-mode byte is set. Raise that one byte only
+        // for the synchronous builder call, then restore campaign state.
+        auto* const multiplayer_gate = reinterpret_cast<std::uint8_t*>(
+            g_module + 0x3E07473);
+        const std::uint8_t saved_gate = *multiplayer_gate;
+        *multiplayer_gate = 1;
+        reinterpret_cast<InitializePlayerNetAnimArtGroupsFunction>(
+            g_module + kInitializePlayerNetAnimArtGroupsRva)(source);
+        *multiplayer_gate = saved_gate;
+        anim_source = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(source) + 0x3FC8);
+
+        unsigned populated = 0;
+        if (anim_source != nullptr && readable_bytes(anim_source) >= 0x100) {
+            const auto* groups = static_cast<void* const*>(anim_source);
+            for (unsigned index = 0; index < 32; ++index) {
+                populated += groups[index] != nullptr ? 1u : 0u;
+            }
+        }
+        std::ostringstream line;
+        line << "ANIM-MIRROR art groups built: ptr=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(anim_source) << std::dec
+             << " populated=" << populated << "/32";
+        log_line(line.str().c_str());
+    }
+    void* const engine_clock = *reinterpret_cast<void**>(
+        g_module + kEngineClockPointerRva);
+    // FillAnimCmdBitStream requires the multiplayer-populated pArtGroups cache.
+    // Campaign Players leave +0x3FC8 null; calling the serializer in that state
+    // crashes in SelectSpawnerOrGroupEntryByValue.
+    if (anim_source == nullptr || readable_bytes(anim_source) < 0x100 ||
+        engine_clock == nullptr ||
+        readable_bytes(engine_clock) < 0x318) {
+        return false;
+    }
+
+    // Campaign data wall: FillAnimCmdBitStream -> SelectSpawnerOrGroupEntryByValue
+    // derefs *(*(entry+0x48)+0x10) and then *v14 for every NON-null art-group
+    // entry. The MP net-anim art-defs resolve by id in single-player but come back
+    // structurally incomplete (entry+0x48 sub-table absent). Validate the exact
+    // chain the serializer walks; if any populated entry is malformed, bail with a
+    // diagnostic instead of crashing the game.
+    {
+        const auto* const groups = static_cast<void* const*>(anim_source);
+        unsigned populated = 0;
+        unsigned malformed = 0;
+        for (unsigned index = 0; index < 32; ++index) {
+            void* const entry = groups[index];
+            if (entry == nullptr) continue;
+            ++populated;
+            if (readable_bytes(entry) < 0x50) { ++malformed; continue; }
+            void* const sub = *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(entry) + 0x48);
+            if (sub == nullptr || readable_bytes(sub) < 0x18) {
+                ++malformed;
+                continue;
+            }
+            void* const arr = *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(sub) + 0x10);
+            if (arr == nullptr || readable_bytes(arr) < 0x4) ++malformed;
+        }
+        if (populated == 0 || malformed != 0) {
+            static bool wall_logged = false;
+            if (!wall_logged) {
+                wall_logged = true;
+                std::ostringstream line;
+                line << "ANIM-MIRROR campaign art-group wall: populated="
+                     << populated << "/32 malformed=" << malformed
+                     << " (entry+0x48 sub-table missing in single-player) -> "
+                        "FillAnimCmdBitStream skipped, no crash";
+                log_line(line.str().c_str());
+            }
+            return false;
+        }
+    }
+
+    alignas(32) std::array<std::byte, 0x610> move_event{};
+    reinterpret_cast<InPlaceCtorFunction>(
+        g_module + kNetEventCharacterMoveCtorRva)(move_event.data());
+
+    const auto ticks = *reinterpret_cast<const std::uint64_t*>(
+        static_cast<const std::byte*>(engine_clock) + 0x310);
+    const float scale = *reinterpret_cast<const float*>(
+        g_module + kEngineClockScaleRva);
+    const float engine_time = static_cast<float>(ticks) * scale;
+    *reinterpret_cast<float*>(move_event.data() + 0x18) = engine_time;
+    *reinterpret_cast<std::uint32_t*>(move_event.data() + 0x220) |= 1u;
+
+    struct BitStream {
+        void* data;
+        std::uint32_t bit_position;
+        std::uint32_t bit_capacity;
+        std::uint32_t status;
+        std::uint32_t reserved;
+    } bit_stream{move_event.data() + 0x1C, 0, 4096, 0, 0};
+
+    const std::uint32_t bit_count =
+        reinterpret_cast<FillAnimCmdBitStreamFunction>(
+            g_module + kFillAnimCmdBitStreamRva)(
+                move_event.data(), &bit_stream, source, anim_source, 1, 7);
+    if (bit_count == 0 || bit_count > 4096) {
+        static bool invalid_logged = false;
+        if (!invalid_logged) {
+            invalid_logged = true;
+            std::ostringstream line;
+            line << "ANIM-MIRROR rejected bit count=" << bit_count;
+            log_line(line.str().c_str());
+        }
+        return false;
+    }
+    *reinterpret_cast<std::uint32_t*>(move_event.data() + 0x21C) = bit_count;
+
+    alignas(32) std::array<std::byte, 0x720> snapshot{};
+    reinterpret_cast<InPlaceCtorFunction>(
+        g_module + kNetSnapshotCtorRva)(snapshot.data());
+    reinterpret_cast<CharacterMoveToSnapshotFunction>(
+        g_module + kCharacterMoveToSnapshotRva)(
+            move_event.data(), snapshot.data());
+    reinterpret_cast<NetAnimAddSnapshotFunction>(
+        g_module + kNetAnimAddSnapshotRva)(
+            static_cast<std::byte*>(clone) + 0x1B30, snapshot.data());
+
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log >= 1000) {
+        last_log = now;
+        std::ostringstream line;
+        line << "ANIM-MIRROR native snapshot queued: bits=" << bit_count
+             << " bytes=" << ((bit_count + 7) >> 3)
+             << " time=" << engine_time;
+        log_line(line.str().c_str());
+    }
+    return true;
+}
+
 void net_tick() {
     // Reload guard: do nothing while the local player is being recreated.
     if (!world_stable()) return;
@@ -4929,7 +5255,18 @@ void net_tick() {
     // hooked_update fires for every Player + the buddy each frame; rate-limit by clock.
     static ULONGLONG last_send = 0, last_enemy_send = 0, last_enemy_apply = 0;
     static ULONGLONG last_freeze = 0, last_hp_probe = 0, last_hpsys = 0;
+    static ULONGLONG last_animation_mirror = 0;
     const ULONGLONG now = GetTickCount64();
+    if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
+        g_local_animation_mirror_test = !g_local_animation_mirror_test;
+        log_line(g_local_animation_mirror_test
+                     ? "ANIM-MIRROR ON: local Player -> slot-1 clone"
+                     : "ANIM-MIRROR OFF");
+    }
+    if (g_local_animation_mirror_test && now - last_animation_mirror >= 33) {
+        last_animation_mirror = now;
+        mirror_local_animation_snapshot_to_clone();
+    }
     if (foreground) monitor_hp_kill_selftest(now);
     if (foreground && g_hp_sys_probe && now - last_hpsys >= 150) {
         last_hpsys = now;
@@ -5148,21 +5485,19 @@ DWORD WINAPI aux_input_thread(void*) {
             dumped_inputstate = g_inputstate_addr;
             dump_inputstate_neighborhood();
         }
-        // Drive the remote clone by its OWN locomotion (input) when it exists and
-        // we're not locally controlling it (play-as-clone). The old transform-drag
-        // (teleport-mirror) is REMOVED: it killed animation + collision. Locomotion-
-        // driven = animates + collides + visible from player 1's view. The clone's
-        // input is slot-1 (replicated remote input in real co-op).
+        // Net co-op drive (reversed 2026-06-30): the clone animates from its OWN
+        // locomotion graph fed by the peer's per-slot input (slot 1), while
+        // apply_puppet_transform_post holds the authoritative position via a SOFT
+        // correction (not a hard pin) so the input-driven motion isn't frozen.
+        // g_puppet_net_apply gates BOTH the slot-1 net feed
+        // (drive_remote_slot1_actions_tick) and the position application. The run
+        // animation comes from the fed stick MAGNITUDE; facing comes from the
+        // replicated quaternion. We do NOT drive the clone's camera owner
+        // (sub_140238800) — that materializes a heavy second gameplay camera.
         if (retained_player_object(1) != nullptr && !g_play_as_clone) {
-            g_puppet_net_apply = false;   // no transform drag
-            g_drive_slot1 = false;        // clone idles (no input leak); WASD drives
-                                          // the main player. Control the clone by
-                                          // switching the camera to it (NUMPAD3).
+            g_puppet_net_apply = true;    // soft position + slot-1 input feed
+            g_drive_slot1 = false;        // no manual WASD leak; the net feed drives it
             g_drive_slot_index = 1;
-            // Do not auto-run the slot-1 camera owner. The old "passive clone"
-            // aiming test did this every frame, so it did not isolate retained
-            // Player presence from second-camera side effects. NUMPAD6 remains the
-            // explicit camera diagnostic.
         }
         const bool ins = (GetAsyncKeyState(VK_INSERT) & 0x8000) != 0;
         if (ins && !prev_insert) {
@@ -5172,6 +5507,15 @@ DWORD WINAPI aux_input_thread(void*) {
                          : "Velocity-field probe disabled");
         }
         prev_insert = ins;
+        const bool pin_key = (GetAsyncKeyState('P') & 0x8000) != 0;
+        static bool prev_pin_key = false;
+        if (pin_key && !prev_pin_key) {
+            g_clone_freerun = !g_clone_freerun;
+            log_line(g_clone_freerun
+                         ? "CLONE FREE-RUN ON (no position pin; input-driven only)"
+                         : "CLONE FREE-RUN OFF (soft-lerp position authority)");
+        }
+        prev_pin_key = pin_key;
         const bool sw = (GetAsyncKeyState(VK_MULTIPLY) & 0x8000) != 0;
         if (sw && !prev_swap) {
             swap_local_player_slots();

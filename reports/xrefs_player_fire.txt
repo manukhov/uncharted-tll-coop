@@ -1,0 +1,4 @@
+TARGET 0x140E2C730: func_start=0x140e2c730 name=PlayerFireController_Fire
+  xref=0x140E2C5E3 type=17 func_start=0x140e2bcd0 func_name=sub_140E2BCD0
+  xref=0x146E387B8 type=1 func_start=None func_name=None
+

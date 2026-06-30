@@ -1,0 +1,172 @@
+=== 0x14179E6C0: Input_PerPlayerDispatch_MgrArg [0x14179E6C0..0x14179E82C] ===
+// Sibling of Input_FocusDispatch taking the manager as arg a1. Same body: UI focus loop over consumer array, then a 6-SLOT loop applying each slot's input-state block &qword_1466E4220[166*idx] via (*mgr+0x20)(mgr,*mgr,inputblock,slotstruct,slot). This is the engine's native PER-PLAYER input distribution (6 slots; slot 0 active in campaign, slots 1-5 idle). Manager = *(0x143FE1088); slot structs at mgr+0xE88 + slot*0xBF0. Per-slot apply = manager vtable+0x20.
+__int64 __fastcall sub_14179E6C0(_QWORD *a1)
+{
+  LARGE_INTEGER *v2; // rbx
+  int v3; // ebx
+  __int64 *v4; // rdi
+  __int64 v5; // rsi
+  unsigned int v6; // edi
+  _QWORD *v7; // rbx
+  __int64 v8; // rdx
+  __int64 result; // rax
+  LARGE_INTEGER PerformanceCount; // [rsp+58h] [rbp+10h] BYREF
+
+  _R14 = a1;
+  if ( !byte_14383DE6B || byte_1437EA6BF && byte_1437EA62C && !byte_1437EC6C3 )
+  {
+    v2 = (LARGE_INTEGER *)sub_14160C120();
+    if ( v2 )
+    {
+      QueryPerformanceCounter(&PerformanceCount);
+      v2[13] = PerformanceCount;
+    }
+    v3 = 0;
+    if ( g_InputFocusConsumerCount > 0 )
+    {
+      v4 = g_InputFocusConsumerArray;
+      while ( 1 )
+      {
+        v5 = *v4;
+        if ( (*(unsigned __int8 (__fastcall **)(__int64, __int64 *))(*(_QWORD *)*v4 + 48LL))(*v4, g_InputStateBlocks) )
+          break;
+        ++v3;
+        ++v4;
+        if ( v3 >= g_InputFocusConsumerCount )
+          goto LABEL_16;
+      }
+      if ( g_InputFocusCurrent && g_InputFocusCurrent != v5 )
+        (*(void (**)(void))(*(_QWORD *)g_InputFocusCurrent + 40LL))();
+      g_InputFocusCurrent = v5;
+    }
+LABEL_16:
+    *((_DWORD *)_R14 + 7116) = 1;
+  }
+  v6 = 0;
+  v7 = _R14 + 465;
+  do
+  {
+    *(v7 - 1) = 0;
+    *v7 = 0;
+    v8 = *((unsigned __int8 *)_R14 + 16);
+    if ( (_BYTE)v8 || *(_BYTE *)(qword_143FE1070 + 18189) )
+      UpdateSharedCameraSlotStateBlob(v7 - 27, v8, 6);
+    __asm { vmovss  xmm1, dword ptr [r14+14h] }
+    result = (*(__int64 (__fastcall **)(_QWORD *, _QWORD, __int64 *, _QWORD *, unsigned int))(*_R14 + 32LL))(
+               _R14,
+               *_R14,
+               &g_InputStateBlocks[166 * *((unsigned __int8 *)v7 + 24)],
+               v7 - 27,
+               v6++);
+    v7 += 382;
+  }
+  while ( v6 < 6 );
+  return result;
+}
+
+=== 0x14179E310: Input_FocusDispatch [0x14179E310..0x14179E47C] ===
+// Distributes the input-state (global 0x66E4220) to the consumer array 0x146B2C620 (count 0x146B1B55C). For each consumer calls *(consumer)+0x30(input-state); FIRST that returns true claims focus (stored at 0x146B2C618) and the loop breaks. This is the UI/overlay input-focus stack (null in plain gameplay); gameplay player-control is the downstream default path.
+__int64 sub_14179E310()
+{
+  LARGE_INTEGER *v1; // rbx
+  int v2; // ebx
+  __int64 *v3; // rdi
+  __int64 v4; // rsi
+  unsigned int v5; // edi
+  _QWORD *v6; // rbx
+  __int64 v7; // rdx
+  __int64 result; // rax
+  LARGE_INTEGER PerformanceCount; // [rsp+58h] [rbp+10h] BYREF
+
+  _R14 = (_QWORD *)g_LocalPlayerInputManager_Ptr;
+  if ( !byte_14383DE6B || byte_1437EA6BF && byte_1437EA62C && !byte_1437EC6C3 )
+  {
+    v1 = (LARGE_INTEGER *)sub_14160C120();
+    if ( v1 )
+    {
+      QueryPerformanceCounter(&PerformanceCount);
+      v1[13] = PerformanceCount;
+    }
+    v2 = 0;
+    if ( g_InputFocusConsumerCount > 0 )
+    {
+      v3 = g_InputFocusConsumerArray;
+      while ( 1 )
+      {
+        v4 = *v3;
+        if ( (*(unsigned __int8 (__fastcall **)(__int64, __int64 *))(*(_QWORD *)*v3 + 48LL))(*v3, g_InputStateBlocks) )
+          break;
+        ++v2;
+        ++v3;
+        if ( v2 >= g_InputFocusConsumerCount )
+          goto LABEL_16;
+      }
+      if ( g_InputFocusCurrent && g_InputFocusCurrent != v4 )
+        (*(void (**)(void))(*(_QWORD *)g_InputFocusCurrent + 40LL))();
+      g_InputFocusCurrent = v4;
+    }
+LABEL_16:
+    *((_DWORD *)_R14 + 7116) = 1;
+  }
+  v5 = 0;
+  v6 = _R14 + 465;
+  do
+  {
+    *(v6 - 1) = 0;
+    *v6 = 0;
+    v7 = *((unsigned __int8 *)_R14 + 16);
+    if ( (_BYTE)v7 || *(_BYTE *)(qword_143FE1070 + 18189) )
+      UpdateSharedCameraSlotStateBlob(v6 - 27, v7, 6);
+    __asm { vmovss  xmm1, dword ptr [r14+14h] }
+    result = (*(__int64 (__fastcall **)(_QWORD *, _QWORD, __int64 *, _QWORD *, unsigned int))(*_R14 + 32LL))(
+               _R14,
+               *_R14,
+               &g_InputStateBlocks[166 * *((unsigned __int8 *)v6 + 24)],
+               v6 - 27,
+               v5++);
+    v6 += 382;
+  }
+  while ( v5 < 6 );
+  return result;
+}
+
+=== 0x14179C740: sub_14179C740 [0x14179C740..0x14179C7EA] ===
+__int64 __fastcall sub_14179C740(LARGE_INTEGER a1)
+{
+  LARGE_INTEGER *v1; // rbx
+  int v2; // ebx
+  __int64 *i; // rdi
+  __int64 v4; // rsi
+  LARGE_INTEGER PerformanceCount; // [rsp+30h] [rbp+8h] BYREF
+
+  PerformanceCount = a1;
+  v1 = (LARGE_INTEGER *)sub_14160C120();
+  if ( v1 )
+  {
+    QueryPerformanceCounter(&PerformanceCount);
+    v1[13] = PerformanceCount;
+  }
+  v2 = 0;
+  if ( g_InputFocusConsumerCount > 0 )
+  {
+    for ( i = g_InputFocusConsumerArray; ; ++i )
+    {
+      v4 = *i;
+      if ( (*(unsigned __int8 (__fastcall **)(__int64, __int64 *))(*(_QWORD *)*i + 48LL))(*i, g_InputStateBlocks) )
+        break;
+      if ( ++v2 >= g_InputFocusConsumerCount )
+        return 1;
+    }
+    if ( g_InputFocusCurrent && g_InputFocusCurrent != v4 )
+      (*(void (**)(void))(*(_QWORD *)g_InputFocusCurrent + 40LL))();
+    g_InputFocusCurrent = v4;
+  }
+  return 1;
+}
+
+=== 0x14179D1E0: sub_14179D1E0 [0x14179D1E0..0x14179D1E8] ===
+__int64 *sub_14179D1E0()
+{
+  return g_InputStateBlocks;
+}
+

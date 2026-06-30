@@ -1172,7 +1172,7 @@ LABEL_132:
   {
     vxorps  xmm0, xmm0, xmm0
     vcvtsi2ss xmm0, xmm0, qword ptr [rcx+rax]
-    vmulss  xmm8, xmm0, cs:dword_142BE8AE8
+    vmulss  xmm8, xmm0, cs:g_EngineClockToSeconds
     vmovaps xmm1, xmm8
     vmovss  dword ptr [rsp+3560h+var_3528], xmm8
   }
@@ -1183,7 +1183,7 @@ LABEL_132:
   {
     vxorps  xmm0, xmm0, xmm0
     vcvtsi2ss xmm0, xmm0, qword ptr [rcx+rbx+88h]
-    vmulss  xmm7, xmm0, cs:dword_142BE8AE8
+    vmulss  xmm7, xmm0, cs:g_EngineClockToSeconds
     vcomiss xmm7, xmm9
   }
   if ( (unsigned __int128)(112 * (__int128)*(int *)(_RSI + 256)) >> 64 == 0 && !v211 )

@@ -1,0 +1,29 @@
+TARGET 0x1429FC4D8: func_start=None name=None
+  xref=0x140BBD741 type=1 func_start=0x140bbd730 func_name=sub_140BBD730
+
+TARGET 0x140BC4E60: func_start=0x140bc4e60 name=NetEventCharacterMove_FillAnimCmdBitStream
+  xref=0x140BC2F8B type=17 func_start=0x140bc2970 func_name=NetEventCharacterMove_FillPlayer
+  xref=0x140BC3959 type=17 func_start=0x140bc3760 func_name=NetEventCharacterMove_FillNpc
+  xref=0x142DCF02C type=1 func_start=None func_name=None
+  xref=0x142DCF094 type=1 func_start=None func_name=None
+  xref=0x146E26C50 type=1 func_start=None func_name=None
+
+TARGET 0x140B87B00: func_start=0x140b87b00 name=sub_140B87B00
+  xref=0x1403D0208 type=17 func_start=0x1403d01b0 func_name=NetAnimCmdGenerator_Ctor
+  xref=0x140A00D55 type=17 func_start=0x140a00ce0 func_name=sub_140A00CE0
+  xref=0x140BC05CC type=17 func_start=0x140bbfd70 func_name=NetPlayerTracker_HandleRespawnAndResumeDeferredQueue
+  xref=0x140BC16CA type=17 func_start=0x140bc1660 func_name=sub_140BC1660
+  xref=0x146E246F4 type=1 func_start=None func_name=None
+
+TARGET 0x140A02660: func_start=0x140a02660 name=sub_140A02660
+  xref=0x140A0234A type=17 func_start=0x140a01e50 func_name=NetAnimCmdGenerator_AddSnapshot
+  xref=0x140BC07DB type=17 func_start=0x140bbfd70 func_name=NetPlayerTracker_HandleRespawnAndResumeDeferredQueue
+  xref=0x140BC1376 type=17 func_start=0x140bc11a0 func_name=sub_140BC11A0
+
+TARGET 0x140A01E50: func_start=0x140a01e50 name=NetAnimCmdGenerator_AddSnapshot
+  xref=0x140412118 type=17 func_start=0x140410c50 func_name=sub_140410C50
+  xref=0x140A16942 type=17 func_start=0x140a162c0 func_name=sub_140A162C0
+  xref=0x142DA8594 type=1 func_start=None func_name=None
+  xref=0x142DA85C8 type=1 func_start=None func_name=None
+  xref=0x146E17368 type=1 func_start=None func_name=None
+

@@ -1,0 +1,402 @@
+=== 0x141A99FD0: InputManager_NormalizeStick [0x141A99FD0..0x141A9A3DA] ===
+// Normalizes a pad's XINPUT_STATE into the shared input-state: reads pad+0x28/+0x2A (int16 LX/LY), /32768, clamps, writes normalized LX/LY to dst+0x10/+0x14 (RX/RY follow). dst (rdx) = the input-state GLOBAL at module RVA 0x66E4220.
+unsigned __int64 __fastcall InputManager_NormalizeStick(__int64 a1, __int64 _RDX)
+{
+  int v38; // edx
+  unsigned __int64 v40; // rcx
+  unsigned __int64 v41; // rax
+  unsigned __int64 v42; // rcx
+  unsigned __int64 v43; // rax
+  unsigned __int64 v46; // rcx
+  unsigned __int64 v47; // rax
+  unsigned __int64 v48; // rcx
+  unsigned __int64 v49; // rax
+  unsigned __int64 v50; // rcx
+  __int64 v53; // rax
+  __int64 v54; // rcx
+  __int64 v55; // rax
+  __int64 v57; // rax
+  unsigned __int64 v58; // rcx
+  unsigned __int64 v60; // rcx
+  unsigned __int64 result; // rax
+
+  __asm
+  {
+    vxorps  xmm0, xmm0, xmm0
+    vcvtsi2ss xmm0, xmm0, eax
+  }
+  __asm { vmovss  xmm6, cs:flt_142BEA0A8 }
+  __asm
+  {
+    vmovss  xmm7, cs:dword_142BEA31C
+    vmaxss  xmm0, xmm7, xmm0
+  }
+  _RDI = _RDX;
+  __asm
+  {
+    vmovss  xmm8, cs:dword_142BE9DE8
+    vminss  xmm3, xmm0, xmm8
+    vxorps  xmm0, xmm0, xmm0
+    vcvtsi2ss xmm0, xmm0, eax
+    vmulss  xmm1, xmm0, xmm6
+    vmaxss  xmm0, xmm7, xmm1
+    vminss  xmm2, xmm0, xmm8
+    vdivss  xmm1, xmm2, xmm8
+    vdivss  xmm3, xmm3, xmm8
+    vmovss  dword ptr [rdx+10h], xmm3
+    vmovss  dword ptr [rdx+14h], xmm1
+  }
+  __asm
+  {
+    vxorps  xmm1, xmm1, xmm1
+    vcvtsi2ss xmm1, xmm1, eax
+  }
+  __asm
+  {
+    vxorps  xmm0, xmm0, xmm0
+    vcvtsi2ss xmm0, xmm0, eax
+  }
+  *(double *)&_XMM0 = sub_141A99CE0((int)_RDX + 4, _RDX, 7849, _RDX, _RDX + 4);
+  __asm
+  {
+    vxorps  xmm0, xmm0, xmm0
+    vcvtsi2ss xmm0, xmm0, eax
+  }
+  __asm
+  {
+    vmaxss  xmm0, xmm7, xmm0
+    vminss  xmm2, xmm0, xmm8
+    vxorps  xmm0, xmm0, xmm0
+    vcvtsi2ss xmm0, xmm0, eax
+    vmulss  xmm1, xmm0, xmm6
+    vmaxss  xmm1, xmm7, xmm1
+    vminss  xmm0, xmm1, xmm8
+    vdivss  xmm3, xmm0, xmm8
+    vdivss  xmm2, xmm2, xmm8
+    vmovss  dword ptr [rdi+18h], xmm2
+    vmovss  dword ptr [rdi+1Ch], xmm3
+  }
+  __asm
+  {
+    vxorps  xmm1, xmm1, xmm1
+    vcvtsi2ss xmm1, xmm1, eax
+  }
+  __asm
+  {
+    vxorps  xmm0, xmm0, xmm0
+    vcvtsi2ss xmm0, xmm0, eax
+  }
+  sub_141A99CE0(_RDI + 12, v38, 7849, _RDI + 8, _RDI + 12);
+  *(_BYTE *)(_RDI + 100) = 0;
+  *(_QWORD *)(_RDI + 1304) = 0x8000000000000000uLL;
+  v40 = *(_WORD *)(a1 + 36) & 1 | 0x8000000000000000uLL;
+  *(_QWORD *)(_RDI + 1304) = v40;
+  v41 = v40 | *(_WORD *)(a1 + 36) & 2;
+  *(_QWORD *)(_RDI + 1304) = v41;
+  v42 = v41 | *(_WORD *)(a1 + 36) & 4;
+  *(_QWORD *)(_RDI + 1304) = v42;
+  v43 = v42 | *(_WORD *)(a1 + 36) & 8;
+  *(_QWORD *)(_RDI + 1304) = v43;
+  __asm { vmovss  xmm3, cs:dword_142BE91F4 }
+  _R10D = 0;
+  v46 = v43 | ((unsigned __int64)*(unsigned __int16 *)(a1 + 36) >> 11) & 0x10;
+  *(_QWORD *)(_RDI + 1304) = v46;
+  v47 = v46 | ((unsigned __int64)*(unsigned __int16 *)(a1 + 36) >> 7) & 0x20;
+  *(_QWORD *)(_RDI + 1304) = v47;
+  v48 = v47 | ((unsigned __int64)*(unsigned __int16 *)(a1 + 36) >> 8) & 0x40;
+  *(_QWORD *)(_RDI + 1304) = v48;
+  v49 = v48 | ((unsigned __int64)*(unsigned __int16 *)(a1 + 36) >> 6) & 0x80;
+  *(_QWORD *)(_RDI + 1304) = v49;
+  v50 = v49 | *(_WORD *)(a1 + 36) & 0x100;
+  _RAX = 0;
+  *(_QWORD *)(_RDI + 1304) = v50;
+  __asm { vmovd   xmm1, r10d }
+  if ( *(_BYTE *)(a1 + 38) > 0x1Eu )
+    _RAX = 512;
+  v53 = v50 | _RAX;
+  *(_QWORD *)(_RDI + 1304) = v53;
+  v54 = v53 | (2LL * (*(_WORD *)(a1 + 36) & 0x200));
+  v55 = 0;
+  *(_QWORD *)(_RDI + 1304) = v54;
+  __asm { vxorps  xmm4, xmm4, xmm4 }
+  if ( *(_BYTE *)(a1 + 39) > 0x1Eu )
+    v55 = 2048;
+  v57 = v54 | v55;
+  *(_QWORD *)(_RDI + 1304) = v57;
+  v58 = v57 | ((unsigned __int64)(*(_WORD *)(a1 + 36) & 0x10) << 8);
+  *(_QWORD *)(_RDI + 1304) = v58;
+  _RAX = v58 | ((unsigned __int64)(*(_WORD *)(a1 + 36) & 0x20) << 8);
+  *(_QWORD *)(_RDI + 1304) = _RAX;
+  v60 = _RAX | ((unsigned __int64)(*(_WORD *)(a1 + 36) & 0x40) << 8);
+  *(_QWORD *)(_RDI + 1304) = v60;
+  *(_QWORD *)(_RDI + 1304) = v60 | ((unsigned __int64)(*(_WORD *)(a1 + 36) & 0x80) << 8);
+  LODWORD(_RAX) = *(_WORD *)(a1 + 36) & 0x100;
+  __asm
+  {
+    vmovd   xmm0, eax
+    vpcmpeqd xmm2, xmm0, xmm1
+    vblendvps xmm0, xmm3, xmm4, xmm2
+    vmovss  dword ptr [rdi+4E8h], xmm0
+  }
+  LODWORD(_RAX) = *(_WORD *)(a1 + 36) & 0x200;
+  __asm
+  {
+    vmovd   xmm0, eax
+    vmovd   xmm1, r10d
+    vpcmpeqd xmm2, xmm0, xmm1
+    vblendvps xmm0, xmm3, xmm4, xmm2
+    vmovss  dword ptr [rdi+4ECh], xmm0
+  }
+  __asm
+  {
+    vxorps  xmm1, xmm1, xmm1
+    vmovaps xmm6, [rsp+68h+var_18]
+  }
+  __asm
+  {
+    vmovaps xmm7, [rsp+68h+var_28]
+    vmovaps xmm8, [rsp+68h+var_38]
+    vcvtsi2ss xmm1, xmm1, eax
+    vdivss  xmm0, xmm1, cs:dword_142BE9B58
+    vmovss  dword ptr [rdi+4F0h], xmm0
+  }
+  __asm
+  {
+    vxorps  xmm1, xmm1, xmm1
+    vcvtsi2ss xmm1, xmm1, eax
+    vdivss  xmm0, xmm1, cs:dword_142BE9B58
+    vmovss  dword ptr [rdi+4F4h], xmm0
+  }
+  LODWORD(_RAX) = *(__int16 *)(a1 + 36);
+  __asm
+  {
+    vmovd   xmm1, eax
+    vmovd   xmm0, r10d
+    vpcmpgtd xmm2, xmm0, xmm1
+    vblendvps xmm0, xmm4, xmm3, xmm2
+    vmovss  dword ptr [rdi+4F8h], xmm0
+  }
+  LODWORD(_RAX) = *(_WORD *)(a1 + 36) & 0x2000;
+  __asm
+  {
+    vmovd   xmm0, eax
+    vmovd   xmm1, r10d
+    vpcmpeqd xmm2, xmm0, xmm1
+    vblendvps xmm0, xmm3, xmm4, xmm2
+    vmovss  dword ptr [rdi+4FCh], xmm0
+  }
+  LODWORD(_RAX) = *(_WORD *)(a1 + 36) & 0x1000;
+  __asm
+  {
+    vmovd   xmm0, eax
+    vmovd   xmm1, r10d
+    vpcmpeqd xmm2, xmm0, xmm1
+    vblendvps xmm0, xmm3, xmm4, xmm2
+    vmovss  dword ptr [rdi+500h], xmm0
+  }
+  LOWORD(_RAX) = *(_WORD *)(a1 + 36);
+  __asm { vmovd   xmm1, r10d }
+  *(_QWORD *)(_RDI + 32) = 0;
+  *(_QWORD *)(_RDI + 40) = 0;
+  *(_QWORD *)(_RDI + 48) = 0;
+  *(_DWORD *)(_RDI + 56) = 0;
+  result = _RAX & 0x4000;
+  __asm
+  {
+    vmovd   xmm0, eax
+    vpcmpeqd xmm2, xmm0, xmm1
+    vblendvps xmm0, xmm3, xmm4, xmm2
+    vmovss  dword ptr [rdi+504h], xmm0
+    vmovups xmm1, xmmword ptr [rdi+40h]
+    vmovss  xmm1, xmm1, xmm4
+    vshufps xmm0, xmm4, xmm1, 5
+    vshufps xmm2, xmm0, xmm1, 0E2h
+    vshufps xmm1, xmm4, xmm2, 0FAh
+    vshufps xmm3, xmm2, xmm1, 84h
+    vshufps xmm0, xmm4, xmm3, 0AFh
+    vshufps xmm1, xmm3, xmm0, 24h ; '$'
+    vmovups xmmword ptr [rdi+40h], xmm1
+  }
+  return result;
+}
+
+=== 0x141A99CE0: sub_141A99CE0 [0x141A99CE0..0x141A99EB6] ===
+// local variable allocation has failed, the output may be wrong!
+__int64 __fastcall sub_141A99CE0(__int64 a1, double _XMM1_8, __int16 a3, __int64 _R9, __int64 a5)
+{
+  __int64 result; // rax
+  char v30; // cf
+  char v31; // zf
+
+  _RBX = _R9;
+  __asm
+  {
+    vmovss  xmm2, cs:dword_142BEA31C
+    vmovss  xmm7, cs:dword_142BE9DE8
+    vmovss  xmm14, cs:flt_142BEA0A8
+    vmaxss  xmm0, xmm2, xmm0
+    vmulss  xmm1, xmm1, xmm14
+    vminss  xmm11, xmm0, xmm7
+    vmaxss  xmm0, xmm2, xmm1
+    vminss  xmm12, xmm0, xmm7
+  }
+  if ( a3 )
+  {
+    __asm { vmulss  xmm1, xmm11, xmm11 }
+    __asm
+    {
+      vmovaps [rsp+0B8h+var_58], xmm10
+      vmovaps [rsp+0B8h+var_88], xmm13
+      vmulss  xmm0, xmm12, xmm12
+      vxorps  xmm13, xmm13, xmm13
+      vaddss  xmm0, xmm1, xmm0; X
+      vcvtsi2ss xmm13, xmm13, eax
+    }
+    sqrtf(*(float *)&_XMM0);
+    __asm
+    {
+      vxorps  xmm10, xmm10, xmm10
+      vmaxss  xmm0, xmm10, xmm0
+      vminss  xmm1, xmm0, xmm7
+      vcomiss xmm1, xmm13
+    }
+    if ( v30 | v31 )
+    {
+      result = a5;
+      __asm
+      {
+        vmovss  dword ptr [rbx], xmm10
+        vmovss  dword ptr [rax], xmm10
+      }
+    }
+    else
+    {
+      __asm
+      {
+        vcvtss2sd xmm0, xmm12, xmm12
+        vandpd  xmm0, xmm0, cs:xmmword_142BEE510
+        vcvtsd2ss xmm2, xmm0, xmm0
+        vcvtss2sd xmm0, xmm11, xmm11
+        vandpd  xmm0, xmm0, cs:xmmword_142BEE510
+        vcvtsd2ss xmm0, xmm0, xmm0
+        vmovaps [rsp+0B8h+var_18], xmm6
+        vdivss  xmm0, xmm2, xmm0; X
+        vmovaps [rsp+0B8h+var_38], xmm8
+        vmovaps [rsp+0B8h+var_48], xmm9
+      }
+      *(float *)&_XMM0 = atanf(*(float *)&_XMM0);
+      __asm
+      {
+        vmovaps xmm6, xmm0
+        vsubss  xmm9, xmm7, xmm13
+      }
+      *(float *)&_XMM0 = sinf(*(float *)&_XMM0);
+      __asm
+      {
+        vmovss  xmm8, cs:dword_142BE91F4
+        vmulss  xmm2, xmm0, xmm13
+        vcmpless xmm1, xmm10, xmm12
+        vblendvps xmm1, xmm14, xmm8, xmm1
+        vmulss  xmm2, xmm2, xmm1
+        vsubss  xmm0, xmm12, xmm2
+        vdivss  xmm3, xmm0, xmm9
+        vmaxss  xmm1, xmm14, xmm3
+        vmovaps xmm0, xmm6; X
+        vminss  xmm7, xmm1, xmm8
+      }
+      *(float *)&_XMM0 = cosf(*(float *)&_XMM0);
+      result = a5;
+      __asm
+      {
+        vmulss  xmm1, xmm0, xmm13
+        vcmpless xmm0, xmm10, xmm11
+        vblendvps xmm0, xmm14, xmm8, xmm0
+        vmulss  xmm1, xmm1, xmm0
+        vsubss  xmm2, xmm11, xmm1
+        vdivss  xmm3, xmm2, xmm9
+        vmaxss  xmm0, xmm14, xmm3
+        vminss  xmm1, xmm0, xmm8
+        vmovss  dword ptr [rbx], xmm1
+        vmovss  dword ptr [rax], xmm7
+        vmovaps xmm9, [rsp+0B8h+var_48]
+        vmovaps xmm8, [rsp+0B8h+var_38]
+        vmovaps xmm6, [rsp+0B8h+var_18]
+      }
+    }
+    __asm
+    {
+      vmovaps xmm10, [rsp+0B8h+var_58]
+      vmovaps xmm13, [rsp+0B8h+var_88]
+    }
+  }
+  else
+  {
+    result = a5;
+    __asm
+    {
+      vdivss  xmm0, xmm11, xmm7
+      vdivss  xmm1, xmm12, xmm7
+      vmovss  dword ptr [r9], xmm0
+      vmovss  dword ptr [rax], xmm1
+    }
+  }
+  __asm
+  {
+    vmovaps xmm7, [rsp+0B8h+var_28]
+    vmovaps xmm11, [rsp+0B8h+var_68]
+    vmovaps xmm12, [rsp+0B8h+var_78]
+    vmovaps xmm14, [rsp+0B8h+var_98]
+  }
+  return result;
+}
+
+=== 0x1402893D0: FrameState_PerSlotInputApply_Branch [0x1402893D0..0x140289869] ===
+// Branch of the per-slot apply taken when FrameState+0x6FC8+0x28*slot is set (slot has an active per-slot input struct).
+// local variable allocation has failed, the output may be wrong!
+__int64 __fastcall sub_1402893D0(__int64 _RCX, double _XMM1_8, __int64 a3, __int64 a4, unsigned int a5)
+{
+  __int64 v9; // rdx
+  __int64 v13; // rcx
+
+  __asm { vaddss  xmm0, xmm1, dword ptr [rcx+24h] }
+  __asm
+  {
+    vcomiss xmm0, dword ptr [rcx+0Ch]
+    vmovss  dword ptr [rcx+24h], xmm0
+  }
+  _RBX = a3;
+  _RDI = _RCX;
+  __asm { vmovss  xmm0, dword ptr [rdi+14h] }
+  v9 = *(_QWORD *)(a3 + 1304);
+  __asm
+  {
+    vmovss  dword ptr [rbx+10h], xmm0
+    vmovss  dword ptr [rbx], xmm0
+    vmovss  xmm1, dword ptr [rdi+18h]
+    vmovss  dword ptr [rbx+14h], xmm1
+    vmovss  dword ptr [rbx+4], xmm1
+    vmovss  xmm0, dword ptr [rdi+1Ch]
+    vmovss  dword ptr [rbx+18h], xmm0
+    vmovss  dword ptr [rbx+8], xmm0
+    vmovss  xmm1, dword ptr [rdi+20h]
+  }
+  *(_QWORD *)(a3 + 1312) = v9;
+  __asm
+  {
+    vmovss  dword ptr [rbx+1Ch], xmm1
+    vmovss  dword ptr [rbx+0Ch], xmm1
+  }
+  v13 = *(unsigned int *)(_RCX + 16);
+  *(_QWORD *)(a3 + 1288) = v13 & ~v9;
+  *(_QWORD *)(a3 + 1304) = v13;
+  *(_QWORD *)(a3 + 1296) = v9 & ~v13;
+  *(_DWORD *)(a3 + 32) = 0;
+  *(_DWORD *)(a3 + 36) = -1082130432;
+  *(_QWORD *)(a3 + 40) = 0;
+  *(_QWORD *)(a3 + 1256) = 0;
+  *(_QWORD *)(a3 + 1264) = 0;
+  *(_QWORD *)(a3 + 1272) = 0;
+  *(_QWORD *)(a3 + 1280) = 0;
+  return Input_ScaleCopyVirtual(a4, a3, a5);
+}
+

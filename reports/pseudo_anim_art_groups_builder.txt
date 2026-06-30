@@ -1,0 +1,301 @@
+TARGET 0x140B87820: sub_140B87820 start=0x140B87820 end=0x140B87AFF
+__int64 __fastcall sub_140B87820(__int64 a1, unsigned int a2)
+{
+  __int64 v2; // r14
+  int v3; // edi
+  __int64 v5; // r11
+  const char *v7; // r8
+  __int64 v8; // r10
+  unsigned int v10; // ebx
+  __int64 v11; // r9
+  char v17; // al
+  char v24; // al
+  __int64 *v25; // rax
+  __int64 v26; // rcx
+  __int64 v27; // rdi
+  __int64 (*v28)(const char *, ...); // rsi
+  const char *v29; // rax
+  __int64 (*v30)(const char *, ...); // rbp
+  char *v31; // rbx
+  unsigned int v32; // r9d
+  __int64 v34; // [rsp+20h] [rbp-438h]
+  _DWORD v35[256]; // [rsp+30h] [rbp-428h] BYREF
+
+  v2 = a2;
+  v3 = a1;
+  if ( (unsigned int)a1 >= 2
+    && (!qword_146B17C08
+     || !(unsigned __int8)qword_146B17C08(
+                            "netAnimGroup < DC::kNetAnimGroupNumGroups",
+                            "d:\\perforce\\code\\big4final-tll-release\\big4\\src\\game\\net\\net-snapshot.cpp",
+                            "NetSnapshot::GetAnimArtGroup",
+                            "Jun 30 2023 19:09:36",
+                            35,
+                            0)) )
+  {
+    sub_1422053E0(a1);
+    __debugbreak();
+  }
+  _RDX = qword_142BEA360;
+  v5 = 8;
+  _RCX = qword_142BEA360;
+  v7 = "*net-player-anim-art-groups*";
+  v8 = 8;
+  _RAX = v35;
+  v10 = 0;
+  v11 = 28;
+  do
+  {
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [rcx]
+      vmovups xmm1, xmmword ptr [rcx+70h]
+      vmovups ymmword ptr [rax], ymm0
+      vmovups ymm0, ymmword ptr [rcx+20h]
+      vmovups ymmword ptr [rax+20h], ymm0
+      vmovups ymm0, ymmword ptr [rcx+40h]
+      vmovups ymmword ptr [rax+40h], ymm0
+      vmovups xmm0, xmmword ptr [rcx+60h]
+      vmovups xmmword ptr [rax+60h], xmm0
+    }
+    _RAX += 32;
+    _RCX += 16;
+    __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+    --v8;
+  }
+  while ( v8 );
+  do
+  {
+    v17 = *v7;
+    if ( !*v7 )
+      break;
+    ++v7;
+    v10 = (v10 << 8) ^ v35[(unsigned __int8)(v17 ^ HIBYTE(v10))];
+    --v11;
+  }
+  while ( v11 );
+  if ( v3 == 1 )
+  {
+    v10 = 0;
+    v11 = 25;
+    v7 = "*net-npc-anim-art-groups*";
+    _RAX = v35;
+    do
+    {
+      __asm
+      {
+        vmovups ymm0, ymmword ptr [rdx]
+        vmovups xmm1, xmmword ptr [rdx+70h]
+        vmovups ymmword ptr [rax], ymm0
+        vmovups ymm0, ymmword ptr [rdx+20h]
+        vmovups ymmword ptr [rax+20h], ymm0
+        vmovups ymm0, ymmword ptr [rdx+40h]
+        vmovups ymmword ptr [rax+40h], ymm0
+        vmovups xmm0, xmmword ptr [rdx+60h]
+        vmovups xmmword ptr [rax+60h], xmm0
+      }
+      _RAX += 32;
+      _RDX += 16;
+      __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+      --v5;
+    }
+    while ( v5 );
+    do
+    {
+      v24 = *v7;
+      if ( !*v7 )
+        break;
+      ++v7;
+      v10 = (v10 << 8) ^ v35[(unsigned __int8)(v24 ^ HIBYTE(v10))];
+      --v11;
+    }
+    while ( v11 );
+  }
+  __asm { vzeroupper }
+  v25 = (__int64 *)ResolveKnowledgeRegistryEntryById(v10, _RDX, v7, v11);
+  if ( !v25 )
+    return 0;
+  v27 = *v25;
+  if ( !*v25 )
+    return 0;
+  if ( (unsigned int)v2 >= *(_DWORD *)v27 )
+  {
+    if ( !qword_146B17C08
+      || (LODWORD(v34) = 45,
+          !(unsigned __int8)qword_146B17C08(
+                              "artGroup < pArray->m_count",
+                              "d:\\perforce\\code\\big4final-tll-release\\big4\\src\\game\\net\\net-snapshot.cpp",
+                              "NetSnapshot::GetAnimArtGroup",
+                              "Jun 30 2023 19:09:36",
+                              v34,
+                              0)) )
+    {
+      sub_1422053E0(v26);
+      __debugbreak();
+    }
+  }
+  if ( *(int *)v27 > 32 )
+  {
+    v28 = qword_146B17C08;
+    if ( !qword_146B17C08 )
+      goto LABEL_28;
+    v29 = &byte_1428D4552;
+    v30 = qword_146B17C00;
+    if ( qword_146B17C00 )
+    {
+      if ( v10 )
+      {
+        v32 = v10;
+        v31 = &byte_146B2C640;
+        sub_14014DB00(&byte_146B2C640, 32, "#%08X", v32);
+      }
+      else
+      {
+        v31 = "(INVALID_STRING_ID)";
+      }
+      v29 = (const char *)v30("Array (%s) exceeds max art groups (%d) with %d groups", v31, 32);
+    }
+    if ( !(unsigned __int8)v28(
+                             "pArray->m_count <= NetSnapshot::kNumAnimArtGroups",
+                             "d:\\perforce\\code\\big4final-tll-release\\big4\\src\\game\\net\\net-snapshot.cpp",
+                             "NetSnapshot::GetAnimArtGroup",
+                             "Jun 30 2023 19:09:36",
+                             46,
+                             v29) )
+    {
+LABEL_28:
+      sub_1422053E0(v26);
+      __debugbreak();
+    }
+  }
+  return sub_14162C830(qword_1437E98C8, *(unsigned int *)(*(_QWORD *)(v27 + 8) + 4 * v2));
+}
+
+TARGET 0x140A00BB0: sub_140A00BB0 start=0x140A00BB0 end=0x140A00CD3
+__int64 __fastcall sub_140A00BB0(__int64 a1, __int64 a2, int a3, int a4, int a5, int a6, __int64 a7)
+{
+  double v7; // xmm1_8
+  __int64 v9; // rbp
+  __int64 *v12; // rsi
+  unsigned int i; // ebx
+  __int64 v14; // rax
+  __int64 v15; // rax
+  int v16; // ecx
+  __int64 v17; // rax
+  __int128 v19; // [rsp+20h] [rbp-18h] BYREF
+
+  _RDI = a1;
+  *(_DWORD *)(a1 + 53696) = a5;
+  v9 = 0;
+  *(_DWORD *)(a1 + 53700) = a6;
+  *(_QWORD *)(a1 + 64) = a2;
+  *(_DWORD *)(a1 + 72) = a3;
+  *(_DWORD *)(a1 + 76) = a4;
+  if ( a7 )
+  {
+    *(_QWORD *)&v19 = *(_QWORD *)(a7 + 168);
+    DWORD2(v19) = *(_DWORD *)(a7 + 188);
+  }
+  else
+  {
+    *(_QWORD *)&v19 = 0;
+    DWORD2(v19) = 0;
+  }
+  __asm { vmovups xmm0, [rsp+38h+var_18] }
+  *(_DWORD *)(a1 + 53732) = 0;
+  *(_DWORD *)(a1 + 53736) = -1;
+  __asm { vmovups xmmword ptr [rdi+30h], xmm0 }
+  sub_14014E240(a7 + 256, &v19);
+  __asm { vmovups xmm0, [rsp+38h+var_18] }
+  __asm { vmovups xmmword ptr [rdi+0D1D0h], xmm0 }
+  sub_140A00CE0(_RDI, v7);
+  v12 = (__int64 *)(_RDI + 80);
+  memset((void *)(_RDI + 80), 0, 0x100u);
+  for ( i = 0; i < 0x20; ++i )
+  {
+    v14 = sub_140B87820(*(unsigned int *)(_RDI + 72), i);
+    *v12++ = v14;
+  }
+  v15 = *(_QWORD *)(_RDI + 48);
+  if ( v15 )
+  {
+    v16 = *(_DWORD *)(_RDI + 56);
+    if ( v16 )
+    {
+      v17 = *(_QWORD *)(v15 + 8);
+      if ( v17 )
+      {
+        if ( *(_DWORD *)(v17 + 188) == v16 )
+        {
+          v9 = v17;
+          *(_BYTE *)(v17 + 114) = 1;
+        }
+      }
+    }
+  }
+  return sub_140A08E20(_RDI, *(_QWORD *)(v9 + 424));
+}
+
+TARGET 0x140A01970: sub_140A01970 start=0x140A01970 end=0x140A01A03
+__int64 __fastcall sub_140A01970(__int64 a1)
+{
+  __int64 *v1; // rdi
+  __int64 v3; // rbp
+  unsigned int i; // ebx
+  __int64 v5; // rax
+  __int64 v6; // rax
+  int v7; // ecx
+  __int64 v8; // rax
+
+  v1 = (__int64 *)(a1 + 80);
+  memset((void *)(a1 + 80), 0, 0x100u);
+  v3 = 0;
+  for ( i = 0; i < 0x20; ++i )
+  {
+    v5 = sub_140B87820(*(unsigned int *)(a1 + 72), i);
+    *v1++ = v5;
+  }
+  v6 = *(_QWORD *)(a1 + 48);
+  if ( v6 )
+  {
+    v7 = *(_DWORD *)(a1 + 56);
+    if ( v7 )
+    {
+      v8 = *(_QWORD *)(v6 + 8);
+      if ( v8 )
+      {
+        if ( *(_DWORD *)(v8 + 188) == v7 )
+        {
+          v3 = v8;
+          *(_BYTE *)(v8 + 114) = 1;
+        }
+      }
+    }
+  }
+  return sub_140A08E20(a1, *(_QWORD *)(v3 + 424));
+}
+
+TARGET 0x1410D6530: sub_1410D6530 start=0x1410D6530 end=0x1410D65B0
+void __fastcall sub_1410D6530(__int64 a1)
+{
+  unsigned int v1; // ebx
+  __int64 v3; // rdi
+  __int64 v4; // rax
+
+  v1 = 0;
+  *(_QWORD *)(a1 + 16328) = 0;
+  if ( HIBYTE(dword_143E07470) )
+  {
+    *(_QWORD *)(a1 + 16328) = sub_1415A0E90(256, 16, (unsigned int)"UNKNOWN", 0, (__int64)"UNKNOWN");
+    v3 = 0;
+    do
+    {
+      v4 = sub_140B87820(0, v1);
+      v3 += 8;
+      ++v1;
+      *(_QWORD *)(v3 + *(_QWORD *)(a1 + 16328) - 8) = v4;
+    }
+    while ( v1 < 0x20 );
+  }
+}
+
