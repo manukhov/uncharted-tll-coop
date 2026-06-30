@@ -3593,6 +3593,22 @@ void drive_remote_slot1_actions_tick() {
                 s << "]" << std::dec;
                 log_line(s.str().c_str());
 
+                // Reliable capture of slot-1's resolved block (0x66E4220+0x530): the 8
+                // stick floats + buttons. Compare f9=1 (byte-gate, clone MOVES) vs f9=0
+                // (struct, clone stands) to see exactly which source value differs.
+                auto* blk1 = reinterpret_cast<const std::byte*>(
+                    g_module + 0x66E4220 + 0x530);
+                if (readable_bytes(blk1) >= 0x528) {
+                    auto* bf = reinterpret_cast<const float*>(blk1);
+                    std::ostringstream b;
+                    b << "BLOCK1 f9=" << (f9 ? 1 : 0) << " axes[";
+                    for (int i = 0; i < 8; ++i) b << bf[i] << " ";
+                    b << "] p24=" << bf[9] << " btn=0x" << std::hex
+                      << *reinterpret_cast<const std::uint64_t*>(blk1 + 0x518)
+                      << std::dec;
+                    log_line(b.str().c_str());
+                }
+
                 // Let each mode run before sampling so the previous frame has
                 // completed Input_ScaleCopyVirtual and its consumer callbacks.
                 if (ssn - mode_since > 500) {
@@ -3709,6 +3725,13 @@ void drive_remote_slot1_actions_tick() {
     }
     *reinterpret_cast<float*>(branch1 + 0x14) = sx;   // L-stick X
     *reinterpret_cast<float*>(branch1 + 0x18) = sy;   // L-stick Y
+    // DISPROVEN (2026-06-30): replicating the byte-gate's block right stick
+    // (+0x08=0.5, +0x0C=-0.72) did NOT move the remote clone, even though it matched
+    // the working circular path's block values. Root cause is NOT the input values:
+    // the remote clone is slot-1/screen-1, whose CameraManager(1) is NULL in campaign
+    // (CameraManager::Get supports 0..1 / kNumScreens=2 but only screen 0 is
+    // materialized). Without a screen-1 camera the locomotion has no heading to convert
+    // the stick into world movement -> no translation -> no run anim. Keep right stick 0.
     *reinterpret_cast<float*>(branch1 + 0x1C) = 0.0F;
     *reinterpret_cast<float*>(branch1 + 0x20) = 0.0F;
 
