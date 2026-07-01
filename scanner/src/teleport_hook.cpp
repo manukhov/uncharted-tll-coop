@@ -411,6 +411,8 @@ constexpr std::uintptr_t kLookApplyRva = 0x1804170;
 // body). DR3-probe its entry during the clone reissue spawn to confirm whether the
 // clone gets a composite body at all (vs a ghost spawn missing physics promotion).
 constexpr std::uintptr_t kInitCompositeBodyRva = 0x10CF470;
+constexpr std::uintptr_t kSetCollisionFilterRva = 0x1E584D0;
+constexpr std::uintptr_t kGlobalCollisionFilterRva = 0x6917C38;
 volatile bool g_diag_compbody = false;
 int g_compbody_hits = 0;
 PVOID g_record_swap_veh = nullptr;
@@ -425,6 +427,7 @@ int g_bodyswap_hits = 0;
 void arm_record_swap_breakpoint_current_thread();
 void disarm_record_swap_breakpoint_current_thread();
 void arm_compbody_diag_breakpoint_current_thread();
+void enable_player_pair_collision();
 
 enum class CommandSource : std::uint32_t {
     LocalKeyboard = 0,
@@ -5789,6 +5792,7 @@ void net_tick() {
     static ULONGLONG last_send = 0, last_enemy_send = 0, last_enemy_apply = 0;
     static ULONGLONG last_freeze = 0, last_hp_probe = 0, last_hpsys = 0;
     static ULONGLONG last_animation_mirror = 0;
+    static ULONGLONG last_player_collision_apply = 0;
     const ULONGLONG now = GetTickCount64();
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
         g_local_animation_mirror_test = !g_local_animation_mirror_test;
@@ -5816,6 +5820,10 @@ void net_tick() {
     if (now - last_send >= 16) {  // ~60 Hz local player state
         last_send = now;
         send_local_player_state();
+    }
+    if (now - last_player_collision_apply >= 500) {
+        last_player_collision_apply = now;
+        enable_player_pair_collision();
     }
     if (!g_net_role_b) {
         if (now - last_enemy_send >= 33) {  // ~30 Hz host enemy snapshot
@@ -6144,50 +6152,58 @@ DWORD WINAPI aux_input_thread(void*) {
     }
 }
 
-// COLLISION FIX TEST: the clone's collider entries differ from Chloe's only at
-// byte +0xc4 (havok collision filter info: Chloe 0x2c vs clone 0x22) -> the clone's
-// body is filtered out of world collisions = ghost. Copy Chloe's filter byte onto
-// all of the clone's collider entries (manager+0x238, +0x10=count, +0x48=array of
-// 272-byte entries).
-void fix_clone_collision_filter() {
+// Keep each Player's compound body internally non-colliding (4<->4 and 5<->5),
+// but allow the local campaign Player (layer 4) to collide with the remote Player
+// placed on the engine's native net-character layer 5.
+void enable_player_pair_collision() {
     void* chloe0 = retained_player_object(0);
     void* clone1 = retained_player_object(1);
-    if (chloe0 == nullptr || clone1 == nullptr) {
-        log_line("COLLFIX: need both chloe0 and clone1");
-        return;
-    }
+    if (chloe0 == nullptr || clone1 == nullptr) return;
     auto get_mgr = [](void* o) -> std::byte* {
         if (o == nullptr || readable_bytes(o) < 0x240) return nullptr;
         return *reinterpret_cast<std::byte**>(static_cast<std::byte*>(o) + 0x238);
     };
-    std::byte* cmgr = get_mgr(chloe0);
     std::byte* kmgr = get_mgr(clone1);
-    if (cmgr == nullptr || kmgr == nullptr ||
-        readable_bytes(cmgr) < 0x50 || readable_bytes(kmgr) < 0x50) {
-        log_line("COLLFIX: collision manager unreadable");
-        return;
-    }
-    std::byte* carr = *reinterpret_cast<std::byte**>(cmgr + 0x48);
+    if (kmgr == nullptr || readable_bytes(kmgr) < 0x50) return;
     std::byte* karr = *reinterpret_cast<std::byte**>(kmgr + 0x48);
     std::uint32_t kcount = *reinterpret_cast<std::uint32_t*>(kmgr + 0x10);
-    if (carr == nullptr || karr == nullptr || readable_bytes(carr) < 0xc5) {
-        log_line("COLLFIX: collider arrays unreadable");
-        return;
-    }
-    std::uint8_t cfilter = *reinterpret_cast<std::uint8_t*>(carr + 0xc4);  // Chloe ref
+    if (karr == nullptr || kcount == 0 || readable_bytes(karr) < 0xC9) return;
+
+    bool needs_layer = false;
     int n = static_cast<int>(kcount);
     if (n > 64) n = 64;
-    int changed = 0;
     for (int i = 0; i < n; ++i) {
         std::byte* e = karr + static_cast<std::size_t>(i) * 0x110;
-        if (readable_bytes(e) < 0xc5) break;
-        std::uint8_t* f = reinterpret_cast<std::uint8_t*>(e + 0xc4);
-        if (*f != cfilter) { *f = cfilter; ++changed; }
+        if (readable_bytes(e) < 0xC9) break;
+        const std::uint8_t layer =
+            *reinterpret_cast<const std::uint8_t*>(e + 0xC8);
+        if (layer != 5 && layer != 9) {
+            needs_layer = true;
+            break;
+        }
     }
-    std::ostringstream l;
-    l << "COLLFIX: clone collider +0xc4 set to chloe filter 0x" << std::hex
-      << (int)cfilter << " on " << std::dec << changed << "/" << n << " entries";
-    log_line(l.str().c_str());
+    if (needs_layer) {
+        using SetCollisionFilterFunction = void(__fastcall*)(void*, int);
+        reinterpret_cast<SetCollisionFilterFunction>(
+            g_module + kSetCollisionFilterRva)(kmgr, 5);
+    }
+
+    auto* const group_filter = *reinterpret_cast<std::byte**>(
+        g_module + kGlobalCollisionFilterRva);
+    if (group_filter == nullptr || readable_bytes(group_filter) < 0x70) return;
+    auto* const rows = reinterpret_cast<volatile LONG64*>(group_filter + 0x48);
+    const LONG64 old_row4 = InterlockedOr64(&rows[4], 1LL << 5);
+    const LONG64 old_row5 = InterlockedOr64(&rows[5], 1LL << 4);
+
+    static void* logged_manager = nullptr;
+    if (logged_manager != kmgr ||
+        (old_row4 & (1LL << 5)) == 0 || (old_row5 & (1LL << 4)) == 0) {
+        logged_manager = kmgr;
+        std::ostringstream line;
+        line << "PLAYER-COLLISION clone layer=5, enabled matrix 4<->5 manager=0x"
+             << std::hex << reinterpret_cast<std::uintptr_t>(kmgr) << std::dec;
+        log_line(line.str().c_str());
+    }
 }
 
 void log_joypad_command_slot_state(int slot, const char* phase) {

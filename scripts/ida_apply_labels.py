@@ -4971,6 +4971,26 @@ FUNCTIONS = {
         "calls this with value 4 after tagging every entry as player. The nearby "
         "entry+0xC4 byte is not this filter field.",
     ),
+    0x140A243C0: (
+        "NetPlayer_InitializeCompositeBodyWithCollisionSettings",
+        "Resolves net-player-collision-settings or its ally variant, builds the "
+        "Player composite body, tags each 0x110-byte collider entry at +0x78 as "
+        "netcharacter, sets collision layer 5 through "
+        "CompositeBody_SetCollisionFilter, then switches the body state to 2.",
+    ),
+    0x141EC95E0: (
+        "Physics_InitializeCollisionFilters",
+        "Constructs the 64-layer HavokGamelibFilter matrix and wraps it in "
+        "HavokPairCollisionFilter before installing it on the physics world. "
+        "Its layer-mask calls explicitly disable character pairs 4<->4, "
+        "4<->5, and 5<->5.",
+    ),
+    0x1421F86B0: (
+        "HavokGroupFilter_DisableLayerPairs",
+        "Symmetrically clears collision permissions for every layer selected "
+        "by mask A against every layer selected by mask B in the 64-row matrix "
+        "at filter+0x48.",
+    ),
     0x140CC1450: (
         "ApplyProcessSpawnInfoStateIntoTopLevelPlayerOwner",
         "Top-level Player apply/finalize path reached from 0x1410DE740. "

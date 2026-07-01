@@ -22023,3 +22023,41 @@ are: both Players already receive layer 4 and same-layer player collision is
 suppressed by the global pair table; the clone's body is not registered; or a
 separate pair-ignore relation is installed. Those alternatives must be resolved
 before changing physics state in runtime.
+
+### Player-to-player collision requires distinct layers plus one matrix pair (2026-07-02)
+
+**STATIC:** the global Havok layer matrix deliberately prevents character layers
+4 and 5 from colliding with themselves and each other. A narrow co-op policy can
+preserve each compound body's internal exclusions while enabling only collision
+between the two Players.
+
+Independent evidence:
+
+1. `Player_InitializeCompositeBody 0x1410CF470` tags its `0x110`-byte collider
+   entries as `player` at `+0x78` and calls
+   `CompositeBody_SetCollisionFilter 0x141E584D0` with layer 4.
+2. The native network-player body builder `0x140A243C0` resolves
+   `net-player-collision-settings*` (or the ally variant), tags the same entry
+   field as `netcharacter`, and calls the same filter setter with layer 5.
+3. `Physics_InitializeCollisionFilters 0x141EC95E0` builds the 64-row group
+   matrix and calls `0x1421F86B0` with masks `0x08000070` and `0x228001072`.
+   `0x1421F86B0` symmetrically clears every selected row/column pair. Decoding
+   those masks proves that pairs `4<->4`, `4<->5`, and `5<->5` are all cleared.
+4. The matrix begins at `g_HavokGamelibFilter+0x48`, one 64-bit row per layer.
+   Setting row 4 bit 5 and row 5 bit 4 changes only `4<->5`; the self-pairs stay
+   clear. Both rows otherwise have the same world-collision permissions after
+   initialization.
+
+Competing policies: enabling `4<->4` would also expose colliders belonging to the
+same Player to one another; changing only the clone to layer 5 leaves `4<->5`
+disabled; a manual distance push would bypass the native collision solver. The
+selected implementation assigns layer 5 through the native setter and enables
+only the symmetric matrix pair `4<->5`.
+
+Falsifiable prediction: Chloe and the remote Player must stop passing through each
+other while both retain floor, wall and traversal collision. No limb/self-collision
+instability may appear because `4<->4` and `5<->5` remain disabled. If they still
+pass through with matrix bits present and clone entries at layer 5, a later
+per-pair exclusion or the Player movement probe's own authored filter is the
+remaining gate. Any world fall or violent body instability rejects the layer
+assignment and requires immediate rollback.
