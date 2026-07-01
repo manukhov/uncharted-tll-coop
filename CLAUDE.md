@@ -188,3 +188,36 @@ Codex).** База, забитая `sub_140XXXXXX`, тратит время сл
 - Подтвердить функцию, но оставить её как `sub_XXXX` в IDB.
 - Закончить ход с незакоммиченной работой или несохранённой базой.
 - Переисследовать то, что уже помечено REJECTED.
+---
+
+## MCP «ida-tll»: быстрый доступ к IDA (общий для Claude + Codex)
+
+Поднят общий MCP-сервер **`ida-tll`** — IDA Pro через headless **idalib**, база уже
+загружена в память (быстрее, чем каждый раз запускать `idat.exe`-скрипт с загрузкой
+764 МБ). Оба агента настроены на него. Для точечных запросов по графу используй MCP,
+а не разовый headless-`idat`.
+
+**Работает (ЧТЕНИЕ):** `get_function_by_address` / `get_function_by_name`,
+`get_xrefs_to`, `get_xrefs_to_field`, `get_callers`, `get_callees`,
+`disassemble_function` (аргумент — `start_address`), `list_functions`,
+`list_strings` / `list_strings_filter`, `list_globals`, `get_entry_points`,
+`get_stack_frame_variables`, структуры (`get_defined_structures`,
+`analyze_struct_detailed`, `search_structures` …).
+
+**Декомпиляция:** `decompile_function` пока НЕ работает в headless-idalib (IDA 9.3:
+«Can't import PySide6 / Qt without GUI»). Для псевдокода используй прежний путь —
+`scripts/ida_dump_pseudo_env.py` (headless `idat`), пока не починим.
+
+**⚠ КРИТИЧНО — MCP отдаёт КОПИЮ базы (`ida/tll_mcp.i64`), а не общую `ida/tll.i64`:**
+- MCP — только для **ЧТЕНИЯ**. `rename_function` / `set_comment` через MCP уйдут в
+  КОПИЮ и потеряются — так метки НЕ ставить.
+- Метки (CONFIRMED) — по-прежнему через `scripts/ida_apply_labels.py` на реальную
+  `ida/tll.i64` (как в разделе про IDB).
+- После применения меток — `scripts/ida_mcp_server.sh --refresh` (пересоздаёт копию
+  + рестарт), чтобы MCP увидел новые имена.
+
+**Сервер:** endpoint `http://172.21.144.1:8745/mcp` (streamable-http, только на
+WSL-адаптере). Не отвечает — `scripts/ida_mcp_server.sh` (идемпотентный запуск;
+загрузка БД ~1–2 мин). Скрипты: `scripts/ida_mcp_server.sh`
+(запуск / `--stop` / `--refresh`) и `scripts/ida_mcp_server.py`
+(обёртка, Windows Python 3.12 + idalib).
