@@ -35,11 +35,9 @@ idalib_server.mcp.settings.transport_security = TransportSecuritySettings(
     ],
 )
 
-# mcp-plugin.py wraps every tool in idaapi.execute_sync(fn, MFF_*), which routes
-# through IDA's UI/Qt main loop. Under headless idalib there is no Qt loop, so every
-# IDB-touching tool (decompile, xrefs, ...) fails with "Can't import PySide6. Are you
-# trying to use Qt without GUI?". Headless is single-threaded, so just run the callable
-# inline. (idaapi is available now that `import idapro` initialized idalib.)
+# mcp-plugin.py wraps every tool in idaapi.execute_sync(fn, MFF_*), meant for the GUI
+# plugin's UI thread. Headless idalib is single-threaded, so run the callable inline.
+# (idaapi is available now that `import idapro` initialized idalib.)
 import idaapi  # noqa: E402
 
 
@@ -56,5 +54,17 @@ idaapi.execute_sync = _direct_execute_sync
 # call so we keep all of main()'s DB-open / tool-registration logic.
 _orig_run = idalib_server.mcp.run
 idalib_server.mcp.run = lambda *a, **k: _orig_run(transport="streamable-http")
+
+# THE headless decompile fix: mcp-plugin.decompile_function calls is_window_active(),
+# which does `from PyQt5.QtWidgets import QApplication`. Headless, IDA's PyQt5 shim
+# raises NotImplementedError("Can't import PySide6. Are you trying to use Qt without
+# GUI?"), but is_window_active only catches ImportError, so it propagates and breaks
+# decompile. Force it to False (there is no GUI window headless). Pre-import the plugin
+# (idapro already initialized idalib) so the patch is in place before main() registers
+# tools from the same cached module.
+import importlib  # noqa: E402
+
+_plugin = importlib.import_module("ida_pro_mcp.mcp-plugin")
+_plugin.is_window_active = lambda: False
 
 idalib_server.main()

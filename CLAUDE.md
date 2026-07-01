@@ -201,12 +201,11 @@ Codex).** База, забитая `sub_140XXXXXX`, тратит время сл
 `get_xrefs_to`, `get_xrefs_to_field`, `get_callers`, `get_callees`,
 `disassemble_function` (аргумент — `start_address`), `list_functions`,
 `list_strings` / `list_strings_filter`, `list_globals`, `get_entry_points`,
-`get_stack_frame_variables`, структуры (`get_defined_structures`,
+`decompile_function`, `get_stack_frame_variables`, структуры (`get_defined_structures`,
 `analyze_struct_detailed`, `search_structures` …).
 
-**Декомпиляция:** `decompile_function` пока НЕ работает в headless-idalib (IDA 9.3:
-«Can't import PySide6 / Qt without GUI»). Для псевдокода используй прежний путь —
-`scripts/ida_dump_pseudo_env.py` (headless `idat`), пока не починим.
+**Декомпиляция:** `decompile_function` РАБОТАЕТ (фикс в обёртке: is_window_active
+обходит IDA-шный PyQt5-стаб, который в headless бросал NotImplementedError).
 
 **⚠ КРИТИЧНО — MCP отдаёт КОПИЮ базы (`ida/tll_mcp.i64`), а не общую `ida/tll.i64`:**
 - MCP — только для **ЧТЕНИЯ**. `rename_function` / `set_comment` через MCP уйдут в
