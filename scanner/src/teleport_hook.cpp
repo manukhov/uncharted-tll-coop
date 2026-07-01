@@ -175,8 +175,12 @@ using AddJoypadDisabledCommandsFunction = std::int64_t(__fastcall*)(
 AddJoypadDisabledCommandsFunction g_original_add_joypad_disabled_commands = nullptr;
 using InputScaleCopyFunction = std::int64_t(__fastcall*)(void*, void*, std::uint32_t);
 using GameInfoKeyboardModeFunction = bool(__fastcall*)(void*);
+using EvaluateKeyboardButtonBindingFunction = char(__fastcall*)(
+    void*, void*, std::uint32_t);
 InputScaleCopyFunction g_original_input_scale_copy = nullptr;
 GameInfoKeyboardModeFunction g_original_gameinfo_keyboard_mode = nullptr;
+EvaluateKeyboardButtonBindingFunction g_original_evaluate_keyboard_button_binding =
+    nullptr;
 std::atomic<DWORD> g_force_joypad3_analog_thread{0};
 std::atomic<std::uint64_t> g_force_joypad3_analog_hits{0};
 SRWLOCK g_joypad3_analog_lock = SRWLOCK_INIT;
@@ -729,6 +733,86 @@ bool __fastcall hooked_gameinfo_keyboard_mode(void* game_info) {
         return false;
     }
     return g_original_gameinfo_keyboard_mode(game_info);
+}
+
+char __fastcall hooked_evaluate_keyboard_button_binding(
+    void* joypad, void* descriptor, std::uint32_t command_hash) {
+    // Keyboard masks are global to the process, so without this filter a local
+    // jump/crouch/etc. is accepted for both Player Joypads. Joypad 3 already
+    // receives its peer's normalized per-Joypad masks through source+0x518.
+    if (g_state_net.enabled && joypad != nullptr) {
+        void* const frame_state =
+            *reinterpret_cast<void**>(g_module + 0x3FE1088);
+        if (frame_state != nullptr) {
+            void* const remote_joypad = static_cast<std::byte*>(frame_state) +
+                                        0xDB0 + 0xBF0 * 3;
+            if (joypad == remote_joypad) {
+                return 0;
+            }
+        }
+    }
+    return g_original_evaluate_keyboard_button_binding(
+        joypad, descriptor, command_hash);
+}
+
+bool install_joypad3_keyboard_isolation() {
+    auto* const target = reinterpret_cast<std::uint8_t*>(
+        g_module + 0x1838740);
+    constexpr std::array<std::uint8_t, 15> expected{
+        0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x20, 0x55,
+        0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x57,
+    };
+    if (std::memcmp(target, expected.data(), expected.size()) != 0) {
+        log_line("Joypad3 keyboard isolation skipped: unexpected prologue");
+        return false;
+    }
+
+    constexpr std::size_t kPatchSize = expected.size();
+    constexpr std::size_t kEntryJumpSize = 12;
+    constexpr std::size_t kReturnJumpSize = 14;
+    auto* const trampoline = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, kPatchSize + kReturnJumpSize, MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr) {
+        log_line("Joypad3 keyboard isolation skipped: trampoline allocation failed");
+        return false;
+    }
+    std::memcpy(trampoline, target, kPatchSize);
+    auto* const jump_back = trampoline + kPatchSize;
+    // The copied prologue sets RAX=entry RSP and the original body still uses it
+    // at 0x14183875D. A mov-rax/jmp-rax return corrupts that live value. Use a
+    // RIP-indirect absolute jump, which preserves every register.
+    jump_back[0] = 0xFF;
+    jump_back[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(jump_back + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(jump_back + 6) =
+        reinterpret_cast<std::uintptr_t>(target + kPatchSize);
+    FlushInstructionCache(
+        GetCurrentProcess(), trampoline, kPatchSize + kReturnJumpSize);
+    g_original_evaluate_keyboard_button_binding =
+        reinterpret_cast<EvaluateKeyboardButtonBindingFunction>(trampoline);
+
+    DWORD old_protection = 0;
+    if (!VirtualProtect(target, kPatchSize, PAGE_EXECUTE_READWRITE,
+                        &old_protection)) {
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        g_original_evaluate_keyboard_button_binding = nullptr;
+        log_line("Joypad3 keyboard isolation skipped: VirtualProtect failed");
+        return false;
+    }
+    target[0] = 0x48;
+    target[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(target + 2) =
+        reinterpret_cast<std::uintptr_t>(&hooked_evaluate_keyboard_button_binding);
+    target[10] = 0xFF;
+    target[11] = 0xE0;
+    std::memset(
+        target + kEntryJumpSize, 0x90, kPatchSize - kEntryJumpSize);
+    FlushInstructionCache(GetCurrentProcess(), target, kPatchSize);
+    DWORD ignored = 0;
+    VirtualProtect(target, kPatchSize, old_protection, &ignored);
+    log_line("Joypad3 isolated from process-global keyboard command masks");
+    return true;
 }
 
 std::int64_t __fastcall hooked_input_scale_copy(
@@ -3468,11 +3552,42 @@ void apply_puppet_transform_post(void* puppet) {
         std::memcpy(quat, pkt.quat, sizeof(pkt.quat));
     }
     if (g_clone_freerun) {
-        // Let native locomotion own position. Only snap back if it diverges hard;
-        // facing is still authoritative and was applied above.
+        // Let native locomotion own position. A direction-only correction cannot
+        // close longitudinal lag while both players already run at magnitude 1,
+        // because the corrected vector is normalized back to 1. Add a tiny capped
+        // post-step only while the peer genuinely moves. This remains far below
+        // the rejected 35%-of-error lerp and is disabled at idle, so it cannot
+        // recreate the idle body drag.
         if (too_far) {
             std::memcpy(world, pkt.pos, sizeof(pkt.pos));
             std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
+        } else if (valid_network_movement(pkt) && pkt.move_magnitude > 0.01F) {
+            constexpr float kNudgeDeadband = 0.12F;
+            constexpr float kMaxNudgePerUpdate = 0.015F;
+            const float horizontal_sq = dx * dx + dz * dz;
+            if (horizontal_sq > kNudgeDeadband * kNudgeDeadband) {
+                const float horizontal = std::sqrt(horizontal_sq);
+                const float step = horizontal < kMaxNudgePerUpdate
+                    ? horizontal
+                    : kMaxNudgePerUpdate;
+                const float nx = dx / horizontal * step;
+                const float nz = dz / horizontal * step;
+                world[0] += nx;
+                world[2] += nz;
+                localp[0] += nx;
+                localp[2] += nz;
+            }
+        }
+        static ULONGLONG last_position_log = 0;
+        const ULONGLONG position_now = GetTickCount64();
+        if (position_now - last_position_log >= 500) {
+            last_position_log = position_now;
+            std::ostringstream line;
+            line << "PUPPET-POS horizontal=" << std::sqrt(dx * dx + dz * dz)
+                 << " vertical=" << std::abs(dy)
+                 << " peerMove=" << pkt.move_magnitude
+                 << " hardSnap=" << (too_far ? 1 : 0);
+            log_line(line.str().c_str());
         }
         return;
     }
@@ -7980,6 +8095,7 @@ DWORD WINAPI install_hook(void*) {
     log_line("crash observer installed (no breakpoints)");
     install_joypad_disabled_commands_lock();
     install_joypad3_analog_route();
+    install_joypad3_keyboard_isolation();
     install_player_fire_capture();
 
     // VARIANT A (co-op mode gate at init) PROVEN DEAD: setting HIBYTE(dword_143E07470)

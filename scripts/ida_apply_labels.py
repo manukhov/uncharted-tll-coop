@@ -19,6 +19,12 @@ FUNCTIONS = {
         "Evaluates one authored command descriptor: analog threshold, digital "
         "button state, hold timing, dependencies and temporary command disables.",
     ),
+    0x1418384D0: (
+        "Joypad_GetCommandValue",
+        "Resolves up to two command descriptors, evaluates per-Joypad gamepad "
+        "bindings and process-global keyboard bindings separately, and returns "
+        "the resulting analog/Boolean command value.",
+    ),
     0x141838740: (
         "Joypad_EvaluateKeyboardButtonBinding",
         "Evaluates keyboard/button bindings against four held/pressed/released "

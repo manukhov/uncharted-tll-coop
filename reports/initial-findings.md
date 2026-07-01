@@ -21805,3 +21805,91 @@ Falsifiable prediction: with both local players idle, neither remote Player may
 receive a non-zero correction or movement magnitude, so no idle body drag occurs.
 While the peer moves, bounded correction remains active and position error should
 still shrink. Only an error above four metres may cause a direct snap.
+
+**CONFIRMED (partial):** idle correction became `(0,0)` in both processes and the
+user confirmed that the backward idle drag was materially improved. A small final
+position offset remains after movement stops, as predicted by leaving sub-four-
+metre idle drift stationary.
+
+### Longitudinal lag cannot converge through a normalized move vector (2026-07-01)
+
+**STATIC:** direction-only correction cannot close all position error while the
+peer is already moving at full input magnitude.
+
+Independent evidence:
+
+1. Runtime logs show repeated peer magnitude `1` with correction vectors reaching
+   the configured `0.4` cap, especially in PID 21284; a visible position offset
+   nevertheless remains.
+2. The post-slot-16 hook adds correction to the world movement vector and then
+   explicitly normalizes every result above magnitude `1` back to `1`.
+3. Therefore a replica lagging behind along the peer's movement direction cannot
+   gain speed: both continue at the same capped magnitude. When the peer stops,
+   the confirmed idle-drag fix correctly disables further locomotion correction,
+   preserving the residual offset.
+4. `apply_puppet_transform_post` already owns the validated post-update world and
+   local position boundary. The rejected implementation moved 35% of the entire
+   error every update; its visible animation damage does not establish that a
+   small absolute cap is unsafe.
+
+Competing policies:
+
+1. Increasing the direction correction is ineffective for longitudinal lag due
+   to normalization and can bend movement more aggressively.
+2. Re-enabling correction-only locomotion at idle is runtime-rejected because it
+   translates an idle animation.
+3. **Primary:** while real peer movement is active, add a post-update horizontal
+   nudge capped at `0.015` world units per update, with a `0.12` deadband. Keep it
+   disabled at idle and retain the existing four-metre snap for severe divergence.
+
+Falsifiable prediction: during sustained movement, position error must converge
+instead of remaining at the `0.4` direction-correction cap. The replica must keep
+its native movement animation, with no visible teleport per update. On release,
+the nudge must immediately stop and the idle body must remain stationary. Visible
+micro-teleports reject the `0.015` cap; unchanged longitudinal lag means world/local
+position is overwritten after this post-update point.
+
+### Process-global keyboard commands leak into remote Joypad 3 (2026-07-02)
+
+**CONFIRMED:** a local jump can trigger the remote replica in the same process
+without reaching the other game instance. This is local keyboard-command leakage,
+not network replication.
+
+Independent evidence:
+
+1. During the false remote jump, Joypad 3 source/current/pressed masks remained
+   zero in both process logs. The new per-Joypad network button path therefore did
+   not author the action.
+2. `Joypad_EvaluateKeyboardButtonBinding 0x141838740` ignores Player ownership and
+   reads held/pressed/released masks directly from process-global
+   `LocalPlayerInputManager` groups plus their shared timestamps.
+3. Both `Joypad_EvaluateCommandDescriptor 0x141838050` and
+   `Joypad_GetCommandValue 0x1418384D0` evaluate a descriptor's per-Joypad gamepad
+   binding (`0x141838C90`) and process-global keyboard binding (`0x141838740`)
+   independently. Either one can accept the command.
+4. The observed scope matches exactly: the replica in the active process jumps,
+   while the authoritative player in the peer process does not.
+
+Competing explanations rejected: a transmitted jump would appear in remote Joypad
+3 masks and in the peer process; transform/position correction cannot initiate the
+native jump state while stationary.
+
+**STATIC FIX:** for Joypad 3 only while state networking is active,
+`Joypad_EvaluateKeyboardButtonBinding` returns false. Joypad 2 keeps normal local
+keyboard behavior. Joypad 3 keeps its isolated per-Joypad gamepad path, whose
+normalized masks are populated from the peer packet.
+
+Falsifiable prediction: a local keyboard jump must affect only the local Player in
+that process. The replica may jump only after its peer's normalized Joypad mask is
+received. If local leakage remains with Joypad 3 masks zero, another command path
+bypasses both known descriptor evaluators; if network jump stops working, the
+normalized mask lacks the corresponding gamepad binding bit.
+
+**REJECTED TEST MECHANISM:** the first detour of `0x141838740` crashed both
+processes at exactly `0x14183875D`. The copied 15-byte prologue begins with
+`mov rax, rsp`; the original body later stores XMM state through that live RAX.
+The trampoline's generic `mov rax, return_address; jmp rax` sequence destroyed the
+saved entry stack pointer before returning to `0x14183874F`. This was a trampoline
+register-preservation bug and does not test the keyboard-isolation hypothesis.
+The replacement return sequence is a 14-byte RIP-indirect absolute jump
+`jmp qword ptr [rip+0]`, which preserves RAX and all argument registers.
