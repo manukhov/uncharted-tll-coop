@@ -425,7 +425,7 @@ fields it writes to `block[1]`. The next safe probe logs those eight floats from
 previous circular frame without breakpoints, then reproduces their valid ranges in
 the scripted branch.
 
-## ROOT CAUSE FOUND: remote clone has no screen-1 camera (2026-06-30, continued)
+## Camera-basis blocker reconfirmed; exact consumer still pending (2026-06-30, continued)
 
 User's decisive clue: each player runs+animates fine in ITS OWN window (local, slot-0,
 with its camera), but appears as a TELEPORTING remote clone in the other window
@@ -441,26 +441,29 @@ struct+0x20 = -0.72 (and +0x1C=0.5) to match the byte-gate's block did NOT move 
 clone. So the input VALUES are not the activator (consistent with Codex's JOYPAD-DIFF=0
 on the corrected FrameState+0xDB0 Joypad).
 
-REAL ROOT CAUSE (static): the remote clone is slot-1 / screen-1. Its movement heading
-comes from a CameraManager. CameraManager::Get = ResolveScreenRouteEntityByIndex
-0x141C06420 supports index 0..1 (kNumScreens=2, table xmmword_14697AD50[2]), but in
-single-player campaign only SCREEN 0 is materialized; CameraManager(1) is NULL. Our
-get_camera_axes reads CameraManager(idx)+0x1B0 (rotation quat) to convert stick->world.
-With no screen-1 camera the clone's locomotion cannot resolve a world move direction ->
-no translation -> and locomotion run/walk animation needs real translation -> clone
-just stands / teleports (position snap). This is the dormant split-screen camera system.
+The input-value hypothesis is closed, but the exact locomotion blocker is not yet
+confirmed. The earlier statement that `CameraManager(1)` is null is false: campaign
+runtime already resolved two live route entities through
+`ResolveScreenRouteEntityByIndex 0x141C06420` (see `initial-findings.md`,
+"CameraManager(1) Is Live In Campaign"). What may still be absent is a usable active
+camera child/pose basis for the remote Player, not the route entity itself.
 
-WHY the byte-gate still moved it (circle): TBD — its spinning heading is written into the
-block directly; it may bypass the per-screen camera lookup or fall back to screen 0's
-camera. Worth confirming, but the structural blocker for clean directional movement is the
-missing screen-1 camera.
+Static narrowing: `CoverMoveUpdate::UpdatePostAnim 0x140D12B30` reads the Player's
+screen index at `+0x4010` and passes it to
+`ResolveScreenRoutePoseSeedOrDefault 0x141C077B0`. The gun-movement family at
+`0x140C9C630` also reads `Player+0x4010` and resolves the preferred camera child.
+This proves that concrete movement modes depend on per-screen camera state, but does
+not yet prove which shared consumer turns a missing/default pose into zero movement.
 
-NEXT (static): (a) reverse how the player's locomotion resolves its move heading — does it
-read CameraManager(playerScreenIndex) or a player-local camera owner (Player+0x36C0)? (b)
-determine the minimal way to give slot-1 a screen-1 camera (or a heading field) set to the
-peer's facing, WITHOUT enabling full split-screen rendering. Player+0x36C0 = per-player
-camera-control owner (owner+0x84 = screen index); sub_140238800 materializes screen-1's
-camera (heavy). Candidate: write the clone's camera-owner heading directly = peer yaw.
+WHY the byte-gate still moved it (circle): TBD. It may select a different movement
+branch or force a fallback basis. Do not infer a missing route entity from this result.
+
+NEXT (static): find the shared movement consumer above/below `0x140D12B30` and
+`0x140C9C630`, resolve the exact route-child/pose fields it reads, and prove the
+default/null behavior. Only then choose between feeding route 1's pose and bypassing
+the camera-relative conversion. `Player+0x36C0` remains the per-player camera-control
+owner (owner+0x84 = screen index), but `0x140238800` must not be called merely because
+it appears camera-related.
 - Alternative architecture to weigh: drive the clone's locomotion/anim STATE directly
   (apparent ground speed -> run blend) bypassing the camera+input chain, while pinning
   position. Needs the locomotion blend's speed input field (distinct from the +0x260

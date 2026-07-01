@@ -1,0 +1,1 @@
+ea=0x140D12B30 start=0x140D12B30 name=CoverMoveUpdate_UpdatePostAnim

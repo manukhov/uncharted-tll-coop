@@ -54,8 +54,11 @@ circular and scripted branches kept mutually exclusive.
 That comparison is now complete: both processes reported `JOYPAD-DIFF total=0`,
 so the persistent-field activation theory is rejected. A mass hardware breakpoint
 on the hot copy routine terminated both processes and has been removed. The safe
-next probe only reads the eight floats left in `block[1]` by the previous circular
-frame; no game threads are suspended or modified.
+`block[1]` capture is also complete: matching the circular branch's differing
+right-stick values in the scripted branch still did not move the remote Player.
+A later claim that `CameraManager(1)` is absent was rejected because both screen-route
+entities were already confirmed live in campaign. The current static task is to find
+the movement consumer that combines `Player+0x4010` with the selected route pose.
 
 In the one-PC two-instance test, both processes were polling the same XInput user 0,
 which coupled their local cameras despite no camera state being applied over the

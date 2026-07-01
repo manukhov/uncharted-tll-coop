@@ -21328,3 +21328,33 @@ not exclude transient values consumed and cleared within one frame.
 processes terminated without a capture hit. The diagnostic was removed. The safe
 replacement reads the previous frame's eight `block[1]` floats while the circular
 branch runs; it does not suspend or alter any game thread.
+
+### Slot-1 input values closed; missing-CameraManager claim rejected (2026-07-01)
+
+**CONFIRMED:** the safe `block[1]` capture isolated the resolved values of the two
+mutually exclusive branches. The moving circular branch left
+`[cos,sin,0.5,-0.72]`; the scripted branch left `[sx,sy,0.5,0]`, with the same
+`0x500` button field. Reproducing the circular branch's right-stick values in the
+scripted branch did not move the remote Player. Therefore neither the persistent
+`Joypad` object nor these eight resolved values contain the missing activation.
+
+**REJECTED:** `CameraManager(1) is NULL in campaign`. This contradicts the earlier
+live read of both entries in `0x14697AD50`: route entities 0 and 1 were both present,
+resolvable and structurally paired. `0x141C06420` resolves a screen-route entity;
+its existence must not be conflated with a usable active camera child/pose basis.
+
+**STATIC:** concrete Player movement modes are camera-route dependent:
+
+- exact source signature in `0x140D12B30` identifies
+  `CoverMoveUpdate::UpdatePostAnim(Player&)`; it reads `Player+0x4010` and passes
+  that screen index to `ResolveScreenRoutePoseSeedOrDefault 0x141C077B0`;
+- the gun-movement family `0x140C9C630` reads the same `Player+0x4010`, resolves
+  the route through `0x141C06420`, then selects its preferred camera child through
+  `0x141C0D4B0`;
+- this agrees with the already confirmed role of `Player+0x4010` as the per-player
+  screen index and the two-entry route table.
+
+This narrows the blocker to the usable route-child/pose basis or its movement
+consumer. It does not yet prove which field yields zero movement, so no runtime
+patch is justified. Next: find the shared conversion/consumer used by ordinary
+movement, resolve its virtual calls and trace its fallback path.

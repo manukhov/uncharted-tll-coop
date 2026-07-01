@@ -8,6 +8,14 @@ import idc
 
 
 FUNCTIONS = {
+    0x140D12B30: (
+        "CoverMoveUpdate_UpdatePostAnim",
+        "Exact source signature: void CoverMoveUpdate::UpdatePostAnim(Player&), "
+        "player-cover-actions.cpp. Reads Player+0x4010 screen index and passes "
+        "it to ResolveScreenRoutePoseSeedOrDefault 0x141C077B0 while deriving "
+        "cover-movement orientation. Strong static anchor for the per-screen "
+        "camera-basis movement path.",
+    ),
     0x140D79C00: (
         "PlayerDeathEntry_BE8",
         "Player vtable +0xBE8. Native death-entry variant; clears/updates the "
