@@ -21893,3 +21893,74 @@ saved entry stack pointer before returning to `0x14183874F`. This was a trampoli
 register-preservation bug and does not test the keyboard-isolation hypothesis.
 The replacement return sequence is a 14-byte RIP-indirect absolute jump
 `jmp qword ptr [rip+0]`, which preserves RAX and all argument registers.
+
+**CONFIRMED:** with the register-preserving trampoline, both processes survived
+campaign load and gameplay, and local jumping no longer triggered the remote
+replica in the same process. Per-Joypad network input remained active. This
+confirms both the process-global keyboard leak and the Joypad-3-only filter.
+
+### Measured residual position error after 0.015 post-step (2026-07-02)
+
+**CONFIRMED:** the movement-only post-step avoids idle dragging but its initial
+`0.015` cap is insufficient to converge before the peer stops.
+
+- PID 14756 settled at approximately `0.290 m` horizontal error.
+- PID 12076 briefly reached `1.66..1.69 m`, reduced to about `1.38 m` while peer
+  movement resumed, then remained at `1.346 m` once `peerMove=0`.
+- Both errors remained constant during idle, confirming that no hidden writer or
+  idle correction was moving the replica after `apply_puppet_transform_post`.
+- The decrease from roughly `1.66` to `1.38 m` confirms that the post-step point
+  does affect final position; it simply lacks convergence rate.
+
+Competing policies: restoring idle locomotion is rejected by the confirmed body
+drag; snapping all errors would be visible; direction correction remains capped by
+normalized movement. The next bounded policy keeps movement-only ownership but
+uses 8% of horizontal error per update, capped at `0.05`, with a `0.03` deadband.
+
+Falsifiable prediction: sustained movement must reduce horizontal error below
+`0.10 m` before the peer stops, and idle logs must then remain stable below that
+value. Any visible per-frame teleport rejects the `0.05` cap. Error remaining near
+one metre while `peerMove>0` would show that the observed update frequency is too
+low or that movement divergence exceeds this bounded correction rate.
+
+**CONFIRMED:** the 8%-of-error policy with a `0.05` cap reduced the final measured
+horizontal error to approximately `0.102 m` in PID 30316 and `0.137 m` in PID
+9132. The user independently reported that position synchronization looked better.
+This is a large improvement over `0.29/1.35 m`; remaining centimetre-scale error
+is deferred while rotation quality is addressed.
+
+### Exact network quaternion copy causes stepped turns (2026-07-02)
+
+**STATIC:** the sharp remote turn is caused by replacing the native Player facing
+with each discrete network quaternion after every Player update.
+
+Independent evidence:
+
+1. `apply_puppet_transform_post` currently performs an exact 16-byte copy from the
+   latest packet quaternion to `Player+0x140` after the clone's own update.
+2. The remote Player already receives the authoritative world movement vector and
+   runs its native locomotion update first; that update owns smooth movement-facing
+   transitions, but the post-copy overwrites its result.
+3. Network packets are sampled asynchronously and the same quaternion is held
+   between arrivals, then replaced by the next sample. Exact post-copy therefore
+   exposes packet steps directly as angular steps.
+4. Position reconciliation writes only X/Z and cannot directly produce the
+   reported rotational discontinuity.
+
+Competing policies: removing facing authority entirely risks renewed long-term
+heading drift; exact copy is the observed stepped policy; the primary policy is a
+shortest-arc normalized quaternion blend after native update.
+
+**STATIC FIX:** choose the target quaternion sign by dot product, blend 18% toward
+the target each update, and renormalize. Invalid local orientation still falls back
+to a direct validated target copy. Position and input paths are unchanged.
+
+Falsifiable prediction: turns must become continuous rather than snapping at
+packet boundaries, while the remote actor still converges to peer facing after a
+small delay. `orientationDot` should approach 1 smoothly. Renewed idle spinning
+would show that native facing still consumes a non-zero idle signal; excessive
+heading lag would require increasing the 18% blend factor.
+
+**CONFIRMED (partial):** visual testing showed materially smoother remote turns
+with the 18% shortest-arc blend. No renewed idle spin or crash was reported. Exact
+angular lag remains to be measured during later action testing.

@@ -2180,6 +2180,32 @@ bool valid_network_orientation(const float* quaternion) {
     return norm_sq > 0.90F && norm_sq < 1.10F;
 }
 
+float blend_network_orientation(
+    float* current, const float* target, float alpha) {
+    if (!valid_network_orientation(target)) return 1.0F;
+    if (!valid_network_orientation(current)) {
+        std::memcpy(current, target, 4 * sizeof(float));
+        return 0.0F;
+    }
+
+    float dot = 0.0F;
+    for (int i = 0; i < 4; ++i) dot += current[i] * target[i];
+    const float target_sign = dot < 0.0F ? -1.0F : 1.0F;
+    const float absolute_dot = std::abs(dot);
+    float norm_sq = 0.0F;
+    float blended[4]{};
+    for (int i = 0; i < 4; ++i) {
+        blended[i] = current[i] * (1.0F - alpha) +
+                     target[i] * target_sign * alpha;
+        norm_sq += blended[i] * blended[i];
+    }
+    if (norm_sq > 1.0e-6F && std::isfinite(norm_sq)) {
+        const float inv_norm = 1.0F / std::sqrt(norm_sq);
+        for (int i = 0; i < 4; ++i) current[i] = blended[i] * inv_norm;
+    }
+    return absolute_dot;
+}
+
 bool compute_remote_position_correction(
     const coop::StatePacket& peer, const void* remote_player,
     float& correction_x, float& correction_z) {
@@ -3548,9 +3574,11 @@ void apply_puppet_transform_post(void* puppet) {
     // Facing is independent from position reconciliation. The old free-run branch
     // returned before this copy, leaving the remote Player free to spin from tiny
     // local correction vectors while its peer stood still.
-    if (valid_network_orientation(pkt.quat)) {
-        std::memcpy(quat, pkt.quat, sizeof(pkt.quat));
-    }
+    // Preserve the native locomotion turn and remove packet-step snapping. Exact
+    // memcpy made every newly received quaternion visible as a hard angular step.
+    constexpr float kOrientationBlend = 0.18F;
+    const float orientation_dot =
+        blend_network_orientation(quat, pkt.quat, kOrientationBlend);
     if (g_clone_freerun) {
         // Let native locomotion own position. A direction-only correction cannot
         // close longitudinal lag while both players already run at magnitude 1,
@@ -3562,14 +3590,19 @@ void apply_puppet_transform_post(void* puppet) {
             std::memcpy(world, pkt.pos, sizeof(pkt.pos));
             std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
         } else if (valid_network_movement(pkt) && pkt.move_magnitude > 0.01F) {
-            constexpr float kNudgeDeadband = 0.12F;
-            constexpr float kMaxNudgePerUpdate = 0.015F;
+            constexpr float kNudgeDeadband = 0.03F;
+            constexpr float kNudgeFraction = 0.08F;
+            constexpr float kMaxNudgePerUpdate = 0.05F;
             const float horizontal_sq = dx * dx + dz * dz;
             if (horizontal_sq > kNudgeDeadband * kNudgeDeadband) {
                 const float horizontal = std::sqrt(horizontal_sq);
-                const float step = horizontal < kMaxNudgePerUpdate
-                    ? horizontal
-                    : kMaxNudgePerUpdate;
+                float step = horizontal * kNudgeFraction;
+                if (step > kMaxNudgePerUpdate) {
+                    step = kMaxNudgePerUpdate;
+                }
+                if (step > horizontal) {
+                    step = horizontal;
+                }
                 const float nx = dx / horizontal * step;
                 const float nz = dz / horizontal * step;
                 world[0] += nx;
@@ -3586,7 +3619,8 @@ void apply_puppet_transform_post(void* puppet) {
             line << "PUPPET-POS horizontal=" << std::sqrt(dx * dx + dz * dz)
                  << " vertical=" << std::abs(dy)
                  << " peerMove=" << pkt.move_magnitude
-                 << " hardSnap=" << (too_far ? 1 : 0);
+                 << " hardSnap=" << (too_far ? 1 : 0)
+                 << " orientationDot=" << orientation_dot;
             log_line(line.str().c_str());
         }
         return;
