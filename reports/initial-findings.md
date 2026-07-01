@@ -21964,3 +21964,62 @@ heading lag would require increasing the 18% blend factor.
 **CONFIRMED (partial):** visual testing showed materially smoother remote turns
 with the 18% shortest-arc blend. No renewed idle spin or crash was reported. Exact
 angular lag remains to be measured during later action testing.
+
+### Preserve one-frame remote button edges across state replacement (2026-07-02)
+
+**STATIC:** the transmitted `buttons_pressed` field was not consumed. A short
+action could therefore disappear when a newer state packet replaced its packet
+before the next Joypad 3 conversion.
+
+Independent evidence:
+
+1. The sender samples the local Joypad's native pressed/current/released masks at
+   `+0xD0/+0xE0/+0xD8` approximately every 16 ms and places all three in
+   `StatePacket` v4.
+2. `publish_peer_state_snapshot` retained only the newest packet. It neither
+   rejected an older UDP packet nor accumulated the pressed mask before replacing
+   the previous snapshot.
+3. `hooked_input_scale_copy` fed only `input_buttons` into remote
+   `source+0x518`; `buttons_pressed/buttons_released` were used only for logging.
+4. `Input_ScaleCopyVirtual 0x14183B410` derives Joypad 3 command edges from the
+   held-mask transition. If a press and release have already completed before its
+   next call, no native edge can be reconstructed from the latest held mask alone.
+
+Competing fixes: directly writing Joypad `+0xD0/+0xD8` bypasses its timestamp and
+hold-state updates; mirroring animation states bypasses gameplay actions; merely
+raising the UDP frequency still permits snapshot replacement. The selected fix
+rejects non-increasing state sequence numbers, accumulates accepted pressed masks,
+and exposes each accumulated mask as a one-conversion held pulse through the same
+`source+0x518` boundary.
+
+Falsifiable prediction: a brief jump, crouch toggle or evade press that reaches the
+receiver must produce exactly one native Joypad 3 pressed edge even if a newer
+zero-held packet arrives before conversion. Holding a button must not retrigger it
+each frame. An action missing despite a logged accumulated edge would show a
+binding/state gate above Joypad; repeated actions would show that the pulse is not
+consumed once.
+
+### Reject `collider+0xC4` as the collision-filter byte (2026-07-02)
+
+**REJECTED:** the unused `fix_clone_collision_filter()` claims that byte
+`collider+0xC4` is Havok collision-filter information and copies Chloe's observed
+`0x2C` over the clone's `0x22`. Static data flow contradicts that claim.
+
+Independent evidence:
+
+1. `Player_InitializeCompositeBody 0x1410CF470` iterates the manager at
+   `Player+0x238` in `0x110`-byte entries, tags each entry `+0x78` with the
+   `"player"` hash, then calls `0x141E584D0(manager, 4)`.
+2. `0x141E584D0` iterates those same entries and reads/writes the supplied filter
+   value at entry `+0xC8`, not `+0xC4`.
+3. On change, `0x141E584D0` updates the attached rigid body's low six filter bits
+   at `body+0x4C`, mirrors them into the indexed physics table rooted at
+   `0x1438945A8`, or marks the entry dirty and calls `0x141CF6ED0`.
+4. The general entry state changer `0x141CF1430` also finishes through
+   `0x141CF6ED0`, confirming that this is the physical publication path.
+
+The old helper has no call sites and must remain disabled. Current alternatives
+are: both Players already receive layer 4 and same-layer player collision is
+suppressed by the global pair table; the clone's body is not registered; or a
+separate pair-ignore relation is installed. Those alternatives must be resolved
+before changing physics state in runtime.

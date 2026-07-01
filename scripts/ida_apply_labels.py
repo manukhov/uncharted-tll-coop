@@ -4962,6 +4962,15 @@ FUNCTIONS = {
         "0x1410DC160, builds additional mounted runtime owners, and continues "
         "the upper Player bringup after the early draw/control path.",
     ),
+    0x141E584D0: (
+        "CompositeBody_SetCollisionFilter",
+        "Iterates the manager's 0x110-byte collider entries at manager+0x48, "
+        "writes the requested collision-filter value to entry+0xC8, and "
+        "publishes the low six filter bits to the attached rigid body or queues "
+        "a physics refresh through 0x141CF6ED0. Player_InitializeCompositeBody "
+        "calls this with value 4 after tagging every entry as player. The nearby "
+        "entry+0xC4 byte is not this filter field.",
+    ),
     0x140CC1450: (
         "ApplyProcessSpawnInfoStateIntoTopLevelPlayerOwner",
         "Top-level Player apply/finalize path reached from 0x1410DE740. "

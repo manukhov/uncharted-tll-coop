@@ -498,6 +498,8 @@ struct StateNetState {
     std::atomic<ULONGLONG> peer_state_received_ms = 0;
     SRWLOCK peer_state_lock = SRWLOCK_INIT;
     coop::StatePacket peer_state{};        // latest received peer state
+    std::uint32_t peer_state_sequence = 0;
+    std::atomic<std::uint64_t> pending_button_presses = 0;
     std::atomic<bool> has_peer_enemies = false;
     std::atomic<ULONGLONG> peer_enemies_received_ms = 0;
     SRWLOCK peer_enemies_lock = SRWLOCK_INIT;
@@ -510,7 +512,16 @@ StateNetState g_state_net{};
 
 void publish_peer_state_snapshot(const coop::StatePacket& packet) {
     AcquireSRWLockExclusive(&g_state_net.peer_state_lock);
+    if (g_state_net.has_peer_state.load(std::memory_order_relaxed) &&
+        static_cast<std::int32_t>(packet.sequence -
+                                  g_state_net.peer_state_sequence) <= 0) {
+        ReleaseSRWLockExclusive(&g_state_net.peer_state_lock);
+        return;
+    }
     g_state_net.peer_state = packet;
+    g_state_net.peer_state_sequence = packet.sequence;
+    g_state_net.pending_button_presses.fetch_or(
+        packet.buttons_pressed, std::memory_order_release);
     ReleaseSRWLockExclusive(&g_state_net.peer_state_lock);
     g_state_net.peer_state_received_ms.store(GetTickCount64(), std::memory_order_release);
     g_state_net.has_peer_state.store(true, std::memory_order_release);
@@ -838,12 +849,20 @@ std::int64_t __fastcall hooked_input_scale_copy(
     if (destination_index == 3 && readable_bytes(source) >= 0x520) {
         coop::StatePacket peer{};
         if (copy_peer_state_snapshot(peer) && (peer.flags & 8) != 0) {
+            // A short press can begin and end between two conversions. Received
+            // pressed edges accumulate even when a newer state snapshot replaces
+            // their packet, then become one held pulse for this conversion.
+            // Input_ScaleCopyVirtual derives native pressed/released masks and
+            // command timestamps from that pulse.
+            const std::uint64_t edge_pulse =
+                g_state_net.pending_button_presses.exchange(
+                    0, std::memory_order_acq_rel);
             auto* const source_bytes = static_cast<std::byte*>(source);
             const std::uint64_t synthetic_move_gate =
                 *reinterpret_cast<const std::uint64_t*>(source_bytes + 0x518) &
                 0x500u;
             *reinterpret_cast<std::uint64_t*>(source_bytes + 0x518) =
-                peer.input_buttons | synthetic_move_gate;
+                peer.input_buttons | edge_pulse | synthetic_move_gate;
         }
     }
     const std::int64_t result =
