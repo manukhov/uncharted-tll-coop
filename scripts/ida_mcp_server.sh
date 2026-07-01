@@ -14,13 +14,13 @@
 # Endpoint (both clients point here): http://<wsl-host>:8745/mcp
 set -uo pipefail
 ROOT="/mnt/c/Users/Vladimir/Desktop/TLLCoopResearch"
-WIN_ROOT='C:\Users\Vladimir\Desktop\TLLCoopResearch'
+WIN_ROOT_FWD='C:/Users/Vladimir/Desktop/TLLCoopResearch'
 PORT=8745
 HOST="$(ip route 2>/dev/null | awk '/default/{print $3; exit}')"
 [ -n "$HOST" ] || HOST="172.21.144.1"
 COPY="$ROOT/ida/tll_mcp.i64"
-WIN_COPY="$WIN_ROOT\\ida\\tll_mcp.i64"
-WIN_WRAP="$WIN_ROOT\\scripts\\ida_mcp_server.py"
+WIN_COPY_FWD="$WIN_ROOT_FWD/ida/tll_mcp.i64"
+WIN_WRAP_FWD="$WIN_ROOT_FWD/scripts/ida_mcp_server.py"
 
 port_pid() { netstat.exe -ano 2>/dev/null | tr -d '\r' | awk -v p=":$PORT" '$2 ~ p"$" && $4=="LISTENING"{print $5; exit}'; }
 is_up() { local c; c="$(curl -s -o /dev/null -w '%{http_code}' -m 3 -H "Host: $HOST:$PORT" "http://$HOST:$PORT/mcp" 2>/dev/null)"; [ -n "$c" ] && [ "$c" != "000" ]; }
@@ -38,6 +38,8 @@ if is_up; then echo "IDA MCP already running at http://$HOST:$PORT/mcp"; exit 0;
 [ -f "$COPY" ] || cp "$ROOT/ida/tll.i64" "$COPY"
 
 echo "starting IDA MCP server on http://$HOST:$PORT/mcp (loading IDB, ~1-2 min)..."
-( cd "$ROOT" && cmd.exe /c start "" py.exe -3.12 "$WIN_WRAP" --host "$HOST" --port "$PORT" "$WIN_COPY" ) >/dev/null 2>&1
+powershell.exe -NoProfile -Command \
+  "Start-Process -FilePath 'py.exe' -ArgumentList '-3.12','$WIN_WRAP_FWD','--host','$HOST','--port','$PORT','$WIN_COPY_FWD' -WorkingDirectory '$WIN_ROOT_FWD' -WindowStyle Hidden" \
+  >/dev/null 2>&1
 echo "launched. Poll readiness: scripts/ida_mcp_server.sh (re-run prints 'already running' once ready)."
 echo "endpoint: http://$HOST:$PORT/mcp"

@@ -8,6 +8,49 @@ import idc
 
 
 FUNCTIONS = {
+    0x141837CD0: (
+        "Joypad_IsCommandActive",
+        "Resolves up to two binding descriptors for a named command through "
+        "Joypad_ResolveCommandBindings, then accepts the command when either "
+        "descriptor passes Joypad_EvaluateCommandDescriptor.",
+    ),
+    0x141838050: (
+        "Joypad_EvaluateCommandDescriptor",
+        "Evaluates one authored command descriptor: analog threshold, digital "
+        "button state, hold timing, dependencies and temporary command disables.",
+    ),
+    0x141838740: (
+        "Joypad_EvaluateKeyboardButtonBinding",
+        "Evaluates keyboard/button bindings against four held/pressed/released "
+        "64-bit mask groups and per-button timestamps in LocalPlayerInputManager.",
+    ),
+    0x141838C90: (
+        "Joypad_EvaluateGamepadButtonBinding",
+        "Evaluates gamepad bindings against Joypad pressed/released/current masks "
+        "at +0xD0/+0xD8/+0xE0 and per-button timestamps beginning at +0x10C.",
+    ),
+    0x14183AE30: (
+        "Joypad_ResolveCommandBindings",
+        "Binary-searches the authored command table by hash and copies up to two "
+        "binding descriptors for Joypad_IsCommandActive.",
+    ),
+    0x141E397C0: (
+        "PlayerInputCommandState_DeriveMoveVectors",
+        "Derives two movement magnitudes at state+0x7C and two 16-byte world "
+        "movement vectors at state+0x90 from raw pairs at state+0x28, using the "
+        "resolved runtime Player transform. Called only by "
+        "PlayerInputCommandState_Update.",
+    ),
+    0x141596D60: (
+        "Input_UpdateWindowFocusFlag",
+        "Writes g_InputWindowFocused according to whether the game's HWND is "
+        "GetForegroundWindow(). This global gates per-player input conversion.",
+    ),
+    0x141598080: (
+        "Input_WindowProcFocusEvents",
+        "Window-message handler that sets g_InputWindowFocused for WM_SETFOCUS "
+        "and clears it for WM_KILLFOCUS.",
+    ),
     0x140C9F8B0: (
         "Player_UpdateInputCommandState",
         "Player vtable slot 16 (+0x80). Sole caller of "
@@ -5499,11 +5542,10 @@ FUNCTIONS = {
     ),
     0x14183B410: (
         "Input_ScaleCopyVirtual",
-        "Virtual (vtable-called). sub_14183B410(dst, src, scaleSel): reads the "
-        "input-state global (src) and writes a SENSITIVITY-SCALED copy "
-        "(xmm6 = +/-scale) element-by-element into dst (rsi). A processing stage "
-        "between the raw input-state and the gameplay player control. Capture "
-        "hit at 0x14183B571 (vmovss [rsi+0x10], scaled LX).",
+        "Converts one source input block into a destination Joypad. The direct "
+        "analog copy is gated by g_InputWindowFocused and GameInfo keyboard mode; "
+        "keyboard replacements exist only for destination indexes 0 and 2. "
+        "Destination Joypad 3 therefore needs the narrow background analog route.",
     ),
     0x141836640: (
         "JoypadState_Construct",
@@ -5664,6 +5706,12 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x1437EA62C: (
+        "g_InputWindowFocused",
+        "Global input-focus byte maintained by Input_UpdateWindowFocusFlag and "
+        "WM_SETFOCUS/WM_KILLFOCUS. Both per-player dispatch and "
+        "Input_ScaleCopyVirtual require it before native conversion.",
+    ),
     0x143ECEAA4: (
         "g_DebugCheatFlags_AmmoGrenades",
         "Built-in debug cheat flags: byte +1 is Infinite Ammo and byte +3 is "

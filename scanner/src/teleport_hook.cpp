@@ -746,6 +746,22 @@ std::int64_t __fastcall hooked_input_scale_copy(
         ? g_force_joypad3_analog_thread.exchange(
               GetCurrentThreadId(), std::memory_order_acq_rel)
         : 0;
+
+    // Feed the remote Player through the same normalized button boundary used by
+    // a native local Player. Input_ScaleCopyVirtual derives held/pressed/released
+    // Joypad masks and hold timestamps from source+0x518, so command bindings
+    // (jump, crouch, melee, cover, traversal, etc.) remain engine-owned.
+    if (destination_index == 3 && readable_bytes(source) >= 0x520) {
+        coop::StatePacket peer{};
+        if (copy_peer_state_snapshot(peer) && (peer.flags & 8) != 0) {
+            auto* const source_bytes = static_cast<std::byte*>(source);
+            const std::uint64_t synthetic_move_gate =
+                *reinterpret_cast<const std::uint64_t*>(source_bytes + 0x518) &
+                0x500u;
+            *reinterpret_cast<std::uint64_t*>(source_bytes + 0x518) =
+                peer.input_buttons | synthetic_move_gate;
+        }
+    }
     const std::int64_t result =
         g_original_input_scale_copy(joypad, source, destination_index);
     if (destination_index == 3) {
@@ -757,8 +773,8 @@ std::int64_t __fastcall hooked_input_scale_copy(
     if (destination_index == 3) {
         static thread_local ULONGLONG last_log = 0;
         const ULONGLONG now = GetTickCount64();
-        if (now - last_log >= 500 && readable_bytes(joypad) >= 0x58 &&
-            readable_bytes(source) >= 0x10) {
+        if (now - last_log >= 500 && readable_bytes(joypad) >= 0xE8 &&
+            readable_bytes(source) >= 0x520) {
             last_log = now;
             const auto* src = static_cast<const float*>(source);
             const auto* dst = static_cast<const float*>(joypad);
@@ -768,7 +784,20 @@ std::int64_t __fastcall hooked_input_scale_copy(
                  << dst[0x4C / 4] << ") right=(" << dst[0x50 / 4] << ","
                  << dst[0x54 / 4] << ") modeOverrides="
                  << g_force_joypad3_analog_hits.load(std::memory_order_relaxed)
-                 << " windowFocused=" << static_cast<unsigned>(saved_input_focus);
+                 << " windowFocused=" << static_cast<unsigned>(saved_input_focus)
+                 << " buttons src=0x" << std::hex
+                 << *reinterpret_cast<const std::uint64_t*>(
+                        static_cast<const std::byte*>(source) + 0x518)
+                 << " pressed=0x"
+                 << *reinterpret_cast<const std::uint64_t*>(
+                        static_cast<const std::byte*>(joypad) + 0xD0)
+                 << " released=0x"
+                 << *reinterpret_cast<const std::uint64_t*>(
+                        static_cast<const std::byte*>(joypad) + 0xD8)
+                 << " current=0x"
+                 << *reinterpret_cast<const std::uint64_t*>(
+                        static_cast<const std::byte*>(joypad) + 0xE0)
+                 << std::dec;
             log_line(line.str().c_str());
         }
     }
@@ -2041,6 +2070,72 @@ bool valid_network_position(const float* position) {
            std::abs(position[2]) < kCoordinateLimit;
 }
 
+bool valid_network_movement(const coop::StatePacket& packet) {
+    if ((packet.flags & 4) == 0 || !std::isfinite(packet.move_magnitude) ||
+        packet.move_magnitude < 0.0F || packet.move_magnitude > 1.01F) {
+        return false;
+    }
+    for (float axis : packet.move_stick) {
+        if (!std::isfinite(axis) || std::abs(axis) > 1.01F) return false;
+    }
+    for (float component : packet.move_world) {
+        if (!std::isfinite(component) || std::abs(component) > 1.01F) return false;
+    }
+    return true;
+}
+
+bool valid_network_orientation(const float* quaternion) {
+    if (quaternion == nullptr) return false;
+    float norm_sq = 0.0F;
+    for (int i = 0; i < 4; ++i) {
+        if (!std::isfinite(quaternion[i]) || std::abs(quaternion[i]) > 1.01F) {
+            return false;
+        }
+        norm_sq += quaternion[i] * quaternion[i];
+    }
+    return norm_sq > 0.90F && norm_sq < 1.10F;
+}
+
+bool compute_remote_position_correction(
+    const coop::StatePacket& peer, const void* remote_player,
+    float& correction_x, float& correction_z) {
+    correction_x = 0.0F;
+    correction_z = 0.0F;
+    // A correction-only move is internally inconsistent: the remote Player then
+    // has zero authored input but a non-zero world vector, so its graph stays in
+    // idle while physics drags the body. Reconcile ordinary drift only while the
+    // peer is genuinely moving; the existing >4 m snap still handles teleports.
+    if (!valid_network_movement(peer) || peer.move_magnitude <= 0.01F) {
+        return false;
+    }
+    if (remote_player == nullptr ||
+        readable_bytes(static_cast<const std::byte*>(remote_player) +
+                       kWorldPositionOffset + 3 * sizeof(float)) < sizeof(float)) {
+        return false;
+    }
+    const auto* position = reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(remote_player) + kWorldPositionOffset);
+    const float dx = peer.pos[0] - position[0];
+    const float dz = peer.pos[2] - position[2];
+    const float distance_sq = dx * dx + dz * dz;
+    if (!std::isfinite(distance_sq)) return false;
+
+    constexpr float kDeadband = 0.20F;
+    constexpr float kFullCorrectionDistance = 2.0F;
+    constexpr float kMaxCorrection = 0.40F;
+    if (distance_sq <= kDeadband * kDeadband) return false;
+
+    const float distance = std::sqrt(distance_sq);
+    float strength = (distance - kDeadband) /
+                     (kFullCorrectionDistance - kDeadband) * kMaxCorrection;
+    if (strength > kMaxCorrection) strength = kMaxCorrection;
+    constexpr float kMinCorrection = 0.04F;
+    if (strength < kMinCorrection) return false;
+    correction_x = dx / distance * strength;
+    correction_z = dz / distance * strength;
+    return true;
+}
+
 void drive_nadine_toward_peer(void* object, ObjectControlState& control_state) {
     // This runs synchronously from the NPC's game-thread update. Keeping it behind
     // foreground-window ownership made one-PC two-instance synchronization stop as
@@ -3143,9 +3238,46 @@ void send_local_player_state() {
             }
         }
     }
-    // The campaign's normal Player input bypasses the dormant per-slot block.
-    // Action fields remain zero until a real action source is recovered. Local
-    // firing is observed separately in PlayerFireController::Fire.
+    // Player slot 16 publishes the stable movement result after resolving the
+    // Joypad and camera basis. Send both the raw pair and the resulting world
+    // vector so the receiver does not reinterpret movement through screen 1.
+    if (readable_bytes(static_cast<std::byte*>(local_obj) + 0x3A40) >= 1) {
+        const auto* base = static_cast<const std::byte*>(local_obj);
+        std::memcpy(pkt.move_stick, base + 0x39C8, sizeof(pkt.move_stick));
+        std::memcpy(pkt.move_world, base + 0x3A30, sizeof(pkt.move_world));
+        pkt.move_magnitude = *reinterpret_cast<const float*>(base + 0x3A1C);
+        pkt.flags |= 4;
+        if (!valid_network_movement(pkt)) {
+            pkt.flags &= static_cast<std::uint16_t>(~4u);
+            std::memset(pkt.move_stick, 0, sizeof(pkt.move_stick));
+            std::memset(pkt.move_world, 0, sizeof(pkt.move_world));
+            pkt.move_magnitude = 0.0F;
+        }
+    }
+    // Input_ScaleCopyVirtual normalizes keyboard/gamepad input into the local
+    // Player's Joypad masks at +0xD0/+0xD8/+0xE0. Send that native boundary; the
+    // receiver feeds the held mask back through its own Input_ScaleCopyVirtual so
+    // command edges and hold durations are derived by the engine.
+    if (readable_bytes(static_cast<std::byte*>(local_obj) + 0x39BC) >= 1) {
+        const auto* const base = static_cast<const std::byte*>(local_obj);
+        const int joypad_index =
+            *reinterpret_cast<const std::int32_t*>(base + 0x39B8);
+        void* const frame_state =
+            *reinterpret_cast<void**>(g_module + 0x3FE1088);
+        if (frame_state != nullptr && joypad_index >= 0 && joypad_index < 6) {
+            const auto* const joypad = static_cast<const std::byte*>(frame_state) +
+                                       0xDB0 + 0xBF0 * joypad_index;
+            if (readable_bytes(joypad) >= 0xE8) {
+                pkt.buttons_pressed =
+                    *reinterpret_cast<const std::uint64_t*>(joypad + 0xD0);
+                pkt.buttons_released =
+                    *reinterpret_cast<const std::uint64_t*>(joypad + 0xD8);
+                pkt.input_buttons =
+                    *reinterpret_cast<const std::uint64_t*>(joypad + 0xE0);
+                pkt.flags |= 8;
+            }
+        }
+    }
     sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr), sizeof(g_state_net.peer_addr));
 }
@@ -3223,6 +3355,12 @@ bool latest_peer_state(coop::StatePacket& out, void*& puppet) {
         out.look_stick[0] = axes[2];
         out.look_stick[1] = axes[3];
         out.input_buttons = *reinterpret_cast<const std::uint64_t*>(blk0 + 1304);
+    }
+    if (readable_bytes(base + 0x3A40) >= 1) {
+        std::memcpy(out.move_stick, base + 0x39C8, sizeof(out.move_stick));
+        std::memcpy(out.move_world, base + 0x3A30, sizeof(out.move_world));
+        out.move_magnitude = *reinterpret_cast<const float*>(base + 0x3A1C);
+        out.flags |= 4;
     }
     out.pos[0] += 2.0F;  // visible beside Chloe
     return true;
@@ -3323,10 +3461,15 @@ void apply_puppet_transform_post(void* puppet) {
     const float dy = pkt.pos[1] - world[1];
     const float dz = pkt.pos[2] - world[2];
     const bool too_far = dx * dx + dy * dy + dz * dz > kSnapDistSq;
+    // Facing is independent from position reconciliation. The old free-run branch
+    // returned before this copy, leaving the remote Player free to spin from tiny
+    // local correction vectors while its peer stood still.
+    if (valid_network_orientation(pkt.quat)) {
+        std::memcpy(quat, pkt.quat, sizeof(pkt.quat));
+    }
     if (g_clone_freerun) {
-        // Free-run test: let the clone's input-driven locomotion own position/facing
-        // entirely (so translation -> run animation isn't cancelled). Only snap back
-        // if it diverges hard, so it can't run away forever.
+        // Let native locomotion own position. Only snap back if it diverges hard;
+        // facing is still authoritative and was applied above.
         if (too_far) {
             std::memcpy(world, pkt.pos, sizeof(pkt.pos));
             std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
@@ -3344,7 +3487,6 @@ void apply_puppet_transform_post(void* puppet) {
         world[3] = pkt.pos[3];
         localp[3] = pkt.pos[3];
     }
-    std::memcpy(quat, pkt.quat, sizeof(pkt.quat));
 }
 
 using PlayerDeathEntryFunction = std::int64_t(__fastcall*)(void*);
@@ -3864,37 +4006,18 @@ void drive_remote_slot1_actions_tick() {
     // LARGE so the input stays active every frame (0.1 timed out -> clone stood).
     *reinterpret_cast<float*>(branch1 + 0x0C) = 1.0e9F;
 
-    // Feed the LEFT stick from the peer's horizontal velocity so the clone's OWN
-    // locomotion graph plays walk/run. Mirror the proven drive_slot1_tick basis
-    // (measured: feed (0,-1) -> world +X, (1,0) -> world +Z), i.e. for a world move
-    // dir (wx,wz): stickX = wz, stickY = -wx. Magnitude from speed/run-norm. Right
-    // stick (+0x1C/+0x20) stays zero: the previous heading experiment was based
-    // on a dump taken 0xD8 past the real Joypad object and was rejected at runtime.
-    // CHASE the peer's authoritative position with the clone's OWN locomotion
-    // (closed-loop) instead of replicating the peer's velocity (open-loop). Replicating
-    // velocity drifts and forces a hard position snap (~every 2m). A soft-lerp pin
-    // breaks the anim (external per-frame transform write -> "knees/slide"). Chasing the
-    // authoritative position lets the clone's locomotion converge on its own: it
-    // animates, faces its movement, and needs NO external position write -> no teleport,
-    // no broken anim. Same measured stick basis: world (wx,wz) -> stick (wz, -wx).
-    auto* clonep = reinterpret_cast<const float*>(
-        static_cast<const std::byte*>(remote_player) + kWorldPositionOffset);
-    const float toX = peer.pos[0] - clonep[0];
-    const float toZ = peer.pos[2] - clonep[2];
-    const float dist = std::sqrt(toX * toX + toZ * toZ);
-    constexpr float kArriveDist = 1.5F;  // >= this: full-run stick
-    constexpr float kStopDist = 0.25F;   // <= this: idle (avoid jitter at the target)
-    float sx = 0.0F;
-    float sy = 0.0F;
-    const bool moving = dist > kStopDist;
-    if (moving) {
-        float mag = dist / kArriveDist;
-        if (mag > 1.0F) mag = 1.0F;
-        const float wx = toX / dist;
-        const float wz = toZ / dist;
-        sx = wz * mag;
-        sy = -wx * mag;
-    }
+    // Feed the peer's native raw move pair. The post-slot-16 hook below replaces
+    // the camera-derived result with the peer's native world vector, so screen 1
+    // cannot rotate the intended direction. Position reconciliation is separate.
+    const bool movement_valid = valid_network_movement(peer);
+    float correction_x = 0.0F;
+    float correction_z = 0.0F;
+    const bool correcting = compute_remote_position_correction(
+        peer, remote_player, correction_x, correction_z);
+    float sx = movement_valid ? peer.move_stick[0] : 0.0F;
+    float sy = movement_valid ? peer.move_stick[1] : 0.0F;
+    const float magnitude = movement_valid ? peer.move_magnitude : 0.0F;
+    const bool moving = magnitude > 0.01F || correcting;
     *reinterpret_cast<float*>(branch1 + 0x14) = sx;   // L-stick X
     *reinterpret_cast<float*>(branch1 + 0x18) = sy;   // L-stick Y
     // DISPROVEN (2026-06-30): replicating the byte-gate's block right stick
@@ -3933,8 +4056,9 @@ void drive_remote_slot1_actions_tick() {
     if (now - last_drive_log > 500) {
         last_drive_log = now;
         std::ostringstream d;
-        d << "REMOTE-DRIVE destination=" << joypad_index << " source=1 dist="
-          << dist
+        d << "REMOTE-DRIVE destination=" << joypad_index << " source=1 magnitude="
+          << magnitude
+          << " correction=(" << correction_x << "," << correction_z << ")"
           << " sx=" << sx << " sy=" << sy << " flags=0x" << std::hex << actions
           << std::dec;
         auto* blk1 = reinterpret_cast<std::byte*>(g_module + 0x66E4220 + 0x530);
@@ -6857,6 +6981,34 @@ char __fastcall hooked_player_input_state_update(void* player) {
         return result;
     }
 
+    bool peer_movement_applied = false;
+    float correction_x = 0.0F;
+    float correction_z = 0.0F;
+    if (is_remote) {
+        coop::StatePacket peer{};
+        if (copy_peer_state_snapshot(peer) && valid_network_movement(peer)) {
+            auto* base = static_cast<std::byte*>(player);
+            compute_remote_position_correction(
+                peer, player, correction_x, correction_z);
+            float corrected_world[4]{};
+            std::memcpy(corrected_world, peer.move_world, sizeof(corrected_world));
+            corrected_world[0] += correction_x;
+            corrected_world[2] += correction_z;
+            const float corrected_magnitude = std::sqrt(
+                corrected_world[0] * corrected_world[0] +
+                corrected_world[2] * corrected_world[2]);
+            if (corrected_magnitude > 1.0F) {
+                corrected_world[0] /= corrected_magnitude;
+                corrected_world[2] /= corrected_magnitude;
+            }
+            std::memcpy(base + 0x39C8, peer.move_stick, sizeof(peer.move_stick));
+            *reinterpret_cast<float*>(base + 0x3A1C) =
+                corrected_magnitude > 1.0F ? 1.0F : corrected_magnitude;
+            std::memcpy(base + 0x3A30, corrected_world, sizeof(corrected_world));
+            peer_movement_applied = true;
+        }
+    }
+
     static ULONGLONG last_log[2]{};
     const ULONGLONG now = GetTickCount64();
     if (now - last_log[role] < 500) {
@@ -6875,7 +7027,8 @@ char __fastcall hooked_player_input_state_update(void* player) {
          << after_magnitude << " beforeVec=(" << before_vector[0] << ","
          << before_vector[1] << "," << before_vector[2] << ") afterVec=("
          << after_vector[0] << "," << after_vector[1] << "," << after_vector[2]
-         << ")";
+         << ") peerMove=" << (peer_movement_applied ? 1 : 0)
+         << " correction=(" << correction_x << "," << correction_z << ")";
     void* const fs = *reinterpret_cast<void**>(g_module + 0x3FE1088);
     if (fs != nullptr && joypad_index >= 0 && joypad_index < 6) {
         auto* const joypad = static_cast<std::byte*>(fs) + 0xDB0 +

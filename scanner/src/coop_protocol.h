@@ -24,18 +24,20 @@ struct InputPacket {
 // One-shot gameplay actions need a separate reliable ordered event stream.
 constexpr std::uint16_t kStatePort = 31338;
 constexpr std::uint32_t kStatePacketMagic = 0x53504F43;  // "COPS"
-constexpr std::uint16_t kStatePacketVersion = 3;
+constexpr std::uint16_t kStatePacketVersion = 4;
 
 struct StatePacket {
     std::uint32_t magic = kStatePacketMagic;
     std::uint16_t version = kStatePacketVersion;
-    std::uint16_t flags = 0;          // bit0 = local player valid/present
+    std::uint16_t flags = 0;          // bit0 player, bit1 health, bit2 movement, bit3 buttons
     std::uint32_t sequence = 0;
     std::uint32_t timestamp_ms = 0;
     float pos[4]{};                   // world position block (mirrors Player+0x240)
     float quat[4]{};                  // orientation quaternion (mirrors Player+0x140)
     float velocity[3]{};              // for interpolation/extrapolation
-    float move_stick[2]{};            // resolved slot-0 left stick, block +0x00/+0x04
+    float move_stick[2]{};            // PlayerInputCommandState raw move pair (+0x28)
+    float move_world[4]{};            // native world move vector (+0x90, index 0)
+    float move_magnitude = 0.0F;       // native move magnitude (+0x7C, index 0)
     float look_stick[2]{};            // resolved slot-0 right stick, block +0x08/+0x0C
     std::uint64_t input_buttons = 0;  // complete resolved button field, block +0x518
     std::uint64_t buttons_pressed = 0;

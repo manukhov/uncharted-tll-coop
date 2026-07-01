@@ -13,7 +13,8 @@ PORT=8745
 U="http://$HOST:$PORT/mcp"
 H=(-H "Host: $HOST:$PORT" -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream")
 TOOL="${1:?tool name required}"
-ARGS="${2:-{}}"
+ARGS="${2-}"
+[ -n "$ARGS" ] || ARGS='{}'
 
 SID="$(curl -sS -m 8 -D - -o /dev/null -X POST "$U" "${H[@]}" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"cli","version":"1"}}}' \

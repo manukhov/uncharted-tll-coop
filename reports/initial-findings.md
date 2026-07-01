@@ -21616,3 +21616,192 @@ position correction. The next static task is to identify the minimal stable
 `PlayerInputCommandState` result to transmit and the exact post-update point at
 which to apply it to the remote Player, leaving positional reconciliation as a
 separate bounded correction.
+
+### Native movement replication boundary (2026-07-01)
+
+**STATIC:** the minimal ordinary-movement result is now bounded to three fields in
+the embedded `PlayerInputCommandState`:
+
+- raw move pair at state `+0x28` (`Player+0x39C8`);
+- magnitude index 0 at state `+0x7C` (`Player+0x3A1C`);
+- 16-byte world move vector index 0 at state `+0x90` (`Player+0x3A30`).
+
+Independent evidence:
+
+1. `PlayerInputCommandState_DeriveMoveVectors 0x141E397C0` is the sole derivation
+   helper. It reads the raw pairs, computes both magnitudes at `+0x7C/+0x80`,
+   resolves the corresponding runtime Player through resolver vfunc `+0xA8`, and
+   writes world vectors at `+0x90/+0xA0`.
+2. `PlayerInputCommandState_GetMoveMagnitude 0x141E39D10` and
+   `PlayerInputCommandState_GetMoveVector 0x141E39C80` expose exactly those arrays;
+   index 0 maps to `+0x7C` and `+0x90`.
+3. `PlayerMoveStick_MainUpdate 0x140F03500` reads both index-0 results repeatedly
+   for ordinary movement and traversal decisions.
+4. Player vtable slot 16 calls `PlayerInputCommandState_Update` at `0x140C9FE4F`
+   near its return. Runtime already confirms the later movement pass consumes the
+   values published by this call in the same frame, so a pass-through hook can
+   replace the remote result after the native update without skipping scheduling.
+
+Competing implementations:
+
+1. **Primary:** transmit the local raw pair plus native world vector/magnitude;
+   feed the raw pair through Joypad 3 for command activity, then replace the remote
+   index-0 result after Player slot 16. This preserves native Player movement while
+   removing screen-1 camera rotation from the replicated direction.
+2. Raw-pair-only replication lets the remote screen-1 basis reinterpret direction;
+   prior live logs already showed its world vector differs from the source intent.
+3. Position-error chasing produces movement but is a correction controller, not
+   input replication; it causes circling/overshoot and cannot preserve starts,
+   stops or authored traversal intent.
+
+Falsifiable prediction for packet version 4: while the peer moves, the remote
+slot-16 log must show `peerMove=1`, and its post-hook `Player+0x3A1C/+0x3A30` must
+match the sender's transmitted magnitude/world vector even when the receiving
+window is in the background. The clone must animate and move in the same world
+direction without circling toward the peer position. If fields match but direction
+still differs, a later consumer transforms the vector again; if `peerMove=0`, the
+packet version/freshness/validation path is at fault. No position write is part of
+this test.
+
+**CONFIRMED:** packet version 4 matched the prediction in both processes. The
+remote slot-16 hook reported `peerMove=1`, copied raw pairs and world vectors
+matched the sender across cardinal and diagonal movement, both background and
+foreground copies remained alive, and visual confirmation showed correct animated
+movement without circling.
+
+**REJECTED:** pure free-run as the final position policy. With identical native
+movement replicated, ordinary floating-point, collision and scheduling differences
+still accumulated about two metres of positional error. This is expected for two
+independent physics simulations and proves that input replication alone is not a
+position authority mechanism.
+
+**STATIC:** position reconciliation should use a bounded addition to the already
+confirmed native world movement result, not a per-frame transform write:
+
+- `PlayerMoveStick_MainUpdate` consumes the world vector/magnitude after slot 16,
+  so a small error-directed addition remains inside native locomotion/collision;
+- peer position is already received at approximately 60 Hz and validated at every
+  network boundary;
+- prior per-frame transform pin/lerp was runtime-rejected because it cancelled or
+  visibly damaged locomotion animation;
+- current free-run proves the opposite extreme preserves animation but permits
+  unbounded sub-snap drift.
+
+Competing policies: hard/soft transform writes are rejected for ordinary drift;
+no correction is rejected by the observed two-metre error; the primary policy is
+a horizontal deadband plus capped additive movement correction, retaining a direct
+snap only for large authored teleports.
+
+Falsifiable prediction: with both players idle after moving, an error above the
+deadband must make the remote replica walk natively toward the peer, then stop
+inside the deadband without sliding or teleporting. During movement the correction
+may bend the replica's path slightly but must preserve animation and converge. A
+large scripted displacement must still use the existing snap fallback.
+
+**CONFIRMED (position, partial):** visual testing showed materially smaller
+positional error with native-vector correction. The remaining defect is idle
+rotation, not failure to converge.
+
+**STATIC:** the idle rotation has two independent causes visible in the current
+implementation:
+
+- `apply_puppet_transform_post` resolves the authoritative quaternion at
+  `Player+0x140`, but the `g_clone_freerun` branch returns before the quaternion
+  copy. Thus free-run synchronizes neither idle facing nor movement-facing drift.
+- near the positional deadband, logs show correction magnitudes around
+  `0.001..0.012`; these keep the native move command active while their direction
+  changes around the target, so an otherwise idle replica repeatedly turns.
+
+The `Player+0x140` quaternion remains the strongest facing boundary: it is already
+sent in every state packet, the native move-command builder copies the same field
+as actor facing, and the earlier transform-authority run visually held the clone in
+the peer's direction. Position writes caused the animation regression; a validated
+quaternion-only write did not.
+
+Competing fixes: disabling all correction would reintroduce positional drift;
+deriving facing from the correction vector would preserve the circle; applying the
+peer quaternion independently of position mode and rejecting sub-threshold
+correction commands addresses both observed causes.
+
+Falsifiable prediction: while both players stand still, the remote quaternion must
+remain equal to the peer quaternion and no correction command below the minimum
+strength may be emitted. The clone must stop rotating. During real movement it must
+still face as the peer does; position convergence must remain active for meaningful
+errors.
+
+### Native button-command replication boundary (2026-07-01)
+
+**STATIC:** all ordinary Player action commands can be driven through the normalized
+Joypad button masks rather than by mirroring animation state or individually
+overriding command-query results.
+
+Independent evidence:
+
+1. `Input_ScaleCopyVirtual 0x14183B410` reads the source block's 64-bit current
+   mask at `source+0x518`, stores the resulting Joypad current mask at `+0xE0`,
+   and derives pressed/released masks at `+0xD0/+0xD8` from the previous mask.
+2. The digital command resolver `0x141838C90` reads exactly Joypad `+0xD0`,
+   `+0xD8`, and `+0xE0` according to the binding descriptor type, and also uses
+   per-button timestamps for hold windows.
+3. The wider keyboard/button resolver `0x141838740` performs the same
+   held/pressed/released distinction over four 64-bit mask groups and timestamp
+   tables. `0x141838050` combines these resolvers for every named command.
+4. Campaign Player consumers query authored command hashes through
+   `PlayerInputCommandState_IsCommandActive 0x141E39D50`: `jump`, `crouch`,
+   `melee-triangle`, `drop`, `pull-out-rope`, `horse-mount`, and `taunt` are all
+   visible in `PlayerMoveStick_MainUpdate 0x140F03500`; slot 16 also queries
+   fire, reload, melee and object-throw commands.
+
+Competing implementations:
+
+1. **Primary:** transmit local Joypad 2 `+0xE0` and feed it into remote source
+   `+0x518` before native Joypad 3 conversion. This lets the engine derive edges,
+   hold durations and command results using the remote Player's normal graph.
+2. Mirroring each named command result is incomplete: command queries are
+   state-dependent and the resolver also applies timing, dependency and disable
+   rules that a Boolean map would discard.
+3. Direct animation-state or pose replication remains rejected by the malformed
+   multiplayer art-group data in campaign and the disproven `Player+0x1A8` path.
+
+Falsifiable prediction: pressing jump, crouch or melee must make the local Joypad
+2 current mask appear in the state packet and in remote `source+0x518`; native
+conversion must then produce Joypad 3 pressed/current masks and the corresponding
+remote animation. If the masks match but the command remains inactive, Joypad 3
+uses a different binding table. If the source matches but Joypad 3 does not, the
+post-source conversion still contains a destination-specific gate.
+
+### Reject correction-only locomotion while the peer is idle (2026-07-01)
+
+**CONFIRMED:** the asymmetric idle dragging seen in the player-2 process is caused
+by applying position correction as locomotion while the authoritative peer has no
+movement input.
+
+- PID 9212 repeatedly received peer movement magnitude `0` but generated position
+  corrections up to approximately `(-0.36, -0.17)`; Joypad 3 therefore received
+  synthetic input and published a non-zero movement magnitude.
+- In the same update, the post-slot-16 hook copied the peer's zero raw pair to
+  `Player+0x39C8` while retaining the non-zero corrected world vector at
+  `Player+0x3A30`.
+- The opposite process (PID 31668) had correction `(0,0)` and did not exhibit the
+  defect. Button masks were only the known synthetic `0x500`, excluding the new
+  action replication as the cause.
+
+This combination asks the animation graph to remain idle while the movement
+consumer translates the body. It explains both the apparent backward drag and the
+eventual visible reconciliation. The rejected policy is correction-only native
+movement while `peer.move_magnitude <= 0.01`.
+
+**STATIC FIX:** bounded correction now runs only while the peer has real movement.
+When the peer is idle, sub-four-metre drift is left stationary and will converge
+during the next real movement; the existing direct snap remains only for authored
+or severe displacement above four metres.
+
+Competing explanations rejected by the logs: a role-specific button mapping would
+produce different command masks, but both sides had only `0x0/0x500`; a hard-snap
+loop would require errors above four metres, while the recorded defect occurred
+with the capped `0.04..0.40` correction vector.
+
+Falsifiable prediction: with both local players idle, neither remote Player may
+receive a non-zero correction or movement magnitude, so no idle body drag occurs.
+While the peer moves, bounded correction remains active and position error should
+still shrink. Only an error above four metres may cause a direct snap.
