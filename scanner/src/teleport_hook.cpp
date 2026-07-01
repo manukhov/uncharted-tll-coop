@@ -103,6 +103,8 @@ constexpr bool kEnableLegacyRuntimeDiagnostics = false;
 // capture; it does not start the old diagnostic thread or input/camera probes.
 constexpr bool kEnableSpawnCaptureDiagnostic = true;
 constexpr std::uintptr_t kAddJoypadDisabledCommandsRva = 0x1839FB0;
+constexpr std::uintptr_t kInputScaleCopyRva = 0x183B410;
+constexpr std::uintptr_t kGameInfoVtableRva = 0x29040B8;
 constexpr std::uintptr_t kPlayerFireControllerFireRva = 0x0E2C730;
 constexpr std::uintptr_t kNetEventCharacterMoveCtorRva = 0x0BBD730;
 constexpr std::uintptr_t kFillAnimCmdBitStreamRva = 0x0BC4E60;
@@ -166,9 +168,18 @@ using StringHashFunction = std::uint32_t(__fastcall*)(const char*, std::uint64_t
 using ResolveUpperActorRecordFunction = void*(__fastcall*)(std::uint32_t);
 
 UpdateFunction g_original_update = nullptr;
+using PlayerInputStateUpdateFunction = char(__fastcall*)(void*);
+PlayerInputStateUpdateFunction g_original_player_input_state_update = nullptr;
 using AddJoypadDisabledCommandsFunction = std::int64_t(__fastcall*)(
     void*, std::int64_t, int, int, const std::uint32_t*, int);
 AddJoypadDisabledCommandsFunction g_original_add_joypad_disabled_commands = nullptr;
+using InputScaleCopyFunction = std::int64_t(__fastcall*)(void*, void*, std::uint32_t);
+using GameInfoKeyboardModeFunction = bool(__fastcall*)(void*);
+InputScaleCopyFunction g_original_input_scale_copy = nullptr;
+GameInfoKeyboardModeFunction g_original_gameinfo_keyboard_mode = nullptr;
+std::atomic<DWORD> g_force_joypad3_analog_thread{0};
+std::atomic<std::uint64_t> g_force_joypad3_analog_hits{0};
+SRWLOCK g_joypad3_analog_lock = SRWLOCK_INIT;
 SRWLOCK g_joypad_disabled_commands_lock = SRWLOCK_INIT;
 // DIAGNOSTIC toggle (VK_HOME): INERT = DLL no-op pass-through. Default ACTIVE.
 volatile bool g_dll_inert = false;
@@ -709,6 +720,134 @@ std::int64_t __fastcall hooked_add_joypad_disabled_commands(
         manager, joypad_index, owner_id, from_code, commands, command_count);
     ReleaseSRWLockExclusive(&g_joypad_disabled_commands_lock);
     return result;
+}
+
+bool __fastcall hooked_gameinfo_keyboard_mode(void* game_info) {
+    if (g_force_joypad3_analog_thread.load(std::memory_order_acquire) ==
+        GetCurrentThreadId()) {
+        g_force_joypad3_analog_hits.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+    return g_original_gameinfo_keyboard_mode(game_info);
+}
+
+std::int64_t __fastcall hooked_input_scale_copy(
+    void* joypad, void* source, std::uint32_t destination_index) {
+    // Window focus is a global input gate. Serialize every conversion so only
+    // remote Joypad 3 can temporarily see it enabled in a background process.
+    AcquireSRWLockExclusive(&g_joypad3_analog_lock);
+    auto* const input_focus_gate = reinterpret_cast<std::uint8_t*>(
+        g_module + 0x37EA62C);
+    const std::uint8_t saved_input_focus = *input_focus_gate;
+    if (destination_index == 3) {
+        *input_focus_gate = 1;
+    }
+    const DWORD previous = destination_index == 3
+        ? g_force_joypad3_analog_thread.exchange(
+              GetCurrentThreadId(), std::memory_order_acq_rel)
+        : 0;
+    const std::int64_t result =
+        g_original_input_scale_copy(joypad, source, destination_index);
+    if (destination_index == 3) {
+        g_force_joypad3_analog_thread.store(previous, std::memory_order_release);
+        *input_focus_gate = saved_input_focus;
+    }
+    ReleaseSRWLockExclusive(&g_joypad3_analog_lock);
+
+    if (destination_index == 3) {
+        static thread_local ULONGLONG last_log = 0;
+        const ULONGLONG now = GetTickCount64();
+        if (now - last_log >= 500 && readable_bytes(joypad) >= 0x58 &&
+            readable_bytes(source) >= 0x10) {
+            last_log = now;
+            const auto* src = static_cast<const float*>(source);
+            const auto* dst = static_cast<const float*>(joypad);
+            std::ostringstream line;
+            line << "JOYPAD3-ANALOG source=(" << src[0] << "," << src[1]
+                 << ") processed=(" << dst[0x48 / 4] << ","
+                 << dst[0x4C / 4] << ") right=(" << dst[0x50 / 4] << ","
+                 << dst[0x54 / 4] << ") modeOverrides="
+                 << g_force_joypad3_analog_hits.load(std::memory_order_relaxed)
+                 << " windowFocused=" << static_cast<unsigned>(saved_input_focus);
+            log_line(line.str().c_str());
+        }
+    }
+    return result;
+}
+
+bool install_joypad3_analog_route() {
+    auto* const game_info_vtable = reinterpret_cast<std::uintptr_t*>(
+        g_module + kGameInfoVtableRva);
+    auto* const mode_slot = &game_info_vtable[0x90 / sizeof(void*)];
+    if (*mode_slot != g_module + 0x29AB50) {
+        log_line("Joypad3 analog route skipped: unexpected GameInfo vfunc+0x90");
+        return false;
+    }
+    g_original_gameinfo_keyboard_mode =
+        reinterpret_cast<GameInfoKeyboardModeFunction>(*mode_slot);
+    DWORD old_mode_protection = 0;
+    if (!VirtualProtect(mode_slot, sizeof(*mode_slot), PAGE_READWRITE,
+                        &old_mode_protection)) {
+        log_line("Joypad3 analog route skipped: GameInfo vtable protect failed");
+        return false;
+    }
+    *mode_slot = reinterpret_cast<std::uintptr_t>(&hooked_gameinfo_keyboard_mode);
+    FlushInstructionCache(GetCurrentProcess(), mode_slot, sizeof(*mode_slot));
+    DWORD ignored_mode = 0;
+    VirtualProtect(mode_slot, sizeof(*mode_slot), old_mode_protection, &ignored_mode);
+
+    auto* const target = reinterpret_cast<std::uint8_t*>(
+        g_module + kInputScaleCopyRva);
+    constexpr std::array<std::uint8_t, 15> expected{
+        0x40, 0x55, 0x56, 0x41, 0x54, 0x41, 0x57, 0x48,
+        0x8D, 0xAC, 0x24, 0xB8, 0xCB, 0xFF, 0xFF,
+    };
+    if (std::memcmp(target, expected.data(), expected.size()) != 0) {
+        log_line("Joypad3 analog route skipped: unexpected Input_ScaleCopy prologue");
+        return false;
+    }
+
+    constexpr std::size_t kPatchSize = expected.size();
+    constexpr std::size_t kJumpSize = 12;
+    auto* const trampoline = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, kPatchSize + kJumpSize, MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr) {
+        log_line("Joypad3 analog route skipped: trampoline allocation failed");
+        return false;
+    }
+    std::memcpy(trampoline, target, kPatchSize);
+    auto* const jump_back = trampoline + kPatchSize;
+    jump_back[0] = 0x48;
+    jump_back[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(jump_back + 2) =
+        reinterpret_cast<std::uintptr_t>(target + kPatchSize);
+    jump_back[10] = 0xFF;
+    jump_back[11] = 0xE0;
+    FlushInstructionCache(GetCurrentProcess(), trampoline, kPatchSize + kJumpSize);
+    g_original_input_scale_copy =
+        reinterpret_cast<InputScaleCopyFunction>(trampoline);
+
+    DWORD old_target_protection = 0;
+    if (!VirtualProtect(target, kPatchSize, PAGE_EXECUTE_READWRITE,
+                        &old_target_protection)) {
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        g_original_input_scale_copy = nullptr;
+        log_line("Joypad3 analog route skipped: function protect failed");
+        return false;
+    }
+    target[0] = 0x48;
+    target[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(target + 2) =
+        reinterpret_cast<std::uintptr_t>(&hooked_input_scale_copy);
+    target[10] = 0xFF;
+    target[11] = 0xE0;
+    std::memset(target + kJumpSize, 0x90, kPatchSize - kJumpSize);
+    FlushInstructionCache(GetCurrentProcess(), target, kPatchSize);
+    DWORD ignored_target = 0;
+    VirtualProtect(target, kPatchSize, old_target_protection, &ignored_target);
+    log_line("Joypad3 uses native analog source while keyboard mode remains global");
+    return true;
 }
 
 bool install_joypad_disabled_commands_lock() {
@@ -3552,7 +3691,14 @@ struct SyntheticPadLite {
 // position/facing still come from the authoritative snapshot, while this first
 // stage isolates action delivery from the unresolved slot-1 camera basis.
 void drive_remote_slot1_actions_tick() {
-    if (!g_puppet_net_apply || g_module == 0 || retained_player_object(1) == nullptr) {
+    void* const remote_player = retained_player_object(1);
+    if (!g_puppet_net_apply || g_module == 0 || remote_player == nullptr ||
+        readable_bytes(static_cast<std::byte*>(remote_player) + 0x39BC) < 1) {
+        return;
+    }
+    const int joypad_index = *reinterpret_cast<const std::int32_t*>(
+        static_cast<const std::byte*>(remote_player) + 0x39B8);
+    if (joypad_index < 0 || joypad_index >= 6) {
         return;
     }
     void* fs = *reinterpret_cast<void**>(g_module + 0x3FE1088);
@@ -3580,15 +3726,26 @@ void drive_remote_slot1_actions_tick() {
         if (mode_since == 0) mode_since = ssn;
         if (ssn - last_ss > 700) {
             last_ss = ssn;
-            auto* ss0 = static_cast<std::byte*>(fs) + 0xDB0;
-            auto* ss1 = static_cast<std::byte*>(fs) + 0xDB0 + 0xBF0;
-            if (readable_bytes(ss0) >= 0xBF0 && readable_bytes(ss1) >= 0xBF0) {
+            void* const local_player = retained_player_object(0);
+            const int local_joypad_index =
+                local_player != nullptr &&
+                        readable_bytes(static_cast<std::byte*>(local_player) + 0x39BC) >= 1
+                    ? *reinterpret_cast<const std::int32_t*>(
+                          static_cast<const std::byte*>(local_player) + 0x39B8)
+                    : -1;
+            auto* ss0 = local_joypad_index >= 0 && local_joypad_index < 6
+                ? static_cast<std::byte*>(fs) + 0xDB0 + 0xBF0 * local_joypad_index
+                : nullptr;
+            auto* ss1 = static_cast<std::byte*>(fs) + 0xDB0 + 0xBF0 * joypad_index;
+            if (ss0 != nullptr && readable_bytes(ss0) >= 0xBF0 &&
+                readable_bytes(ss1) >= 0xBF0) {
                 auto* d0 = reinterpret_cast<const std::uint32_t*>(ss0);
                 auto* d1 = reinterpret_cast<const std::uint32_t*>(ss1);
                 std::ostringstream s;
-                s << "JOYPAD-SLOT f9=" << (f9 ? 1 : 0) << " s1[";
+                s << "JOYPAD-SLOT f9=" << (f9 ? 1 : 0)
+                  << " remote=" << joypad_index << "[";
                 for (int i = 0; i < 32; ++i) s << std::hex << d1[i] << " ";
-                s << "] s0[";
+                s << "] local=" << std::dec << local_joypad_index << "[" << std::hex;
                 for (int i = 0; i < 32; ++i) s << std::hex << d0[i] << " ";
                 s << "]" << std::dec;
                 log_line(s.str().c_str());
@@ -3642,8 +3799,8 @@ void drive_remote_slot1_actions_tick() {
             }
         }
     }
-    auto* branch1 = static_cast<std::byte*>(fs) + 0x6FC8 + 0x28;
-    auto* spin_gate = static_cast<std::uint8_t*>(fs) + 0x70B8 + 1;
+    auto* branch1 = static_cast<std::byte*>(fs) + 0x6FC8 + 0x28 * joypad_index;
+    auto* spin_gate = static_cast<std::uint8_t*>(fs) + 0x70B8 + joypad_index;
     coop::StatePacket peer{};
     if (!copy_peer_state_snapshot(peer)) {
         coop::StatePacket last_peer{};
@@ -3658,7 +3815,11 @@ void drive_remote_slot1_actions_tick() {
 
     apply_peer_health_to_slot1(peer, false);
 
-    auto* slot1_index = static_cast<std::uint8_t*>(fs) + 0xE88 + 0xBF0 + 0x18;
+    // The dispatch destination is Player+0x39B8 (Joypad 3 for retained slot 1 in
+    // campaign), not the retained-table index. Keep source block 1 isolated from
+    // Chloe's block 0.
+    auto* slot1_index = static_cast<std::uint8_t*>(fs) + 0xE88 +
+                        0xBF0 * joypad_index + 0x18;
     if (readable_bytes(slot1_index) >= 1) {
         *slot1_index = 1;
     }
@@ -3674,7 +3835,8 @@ void drive_remote_slot1_actions_tick() {
         if (spin_now - spin_log > 500) {
             spin_log = spin_now;
             std::ostringstream spin;
-            spin << "REMOTE-DRIVE F9 spin-test: byte gate forced, struct OFF";
+            spin << "REMOTE-DRIVE F9 spin-test: destination=" << joypad_index
+                 << " source=1 byte gate forced, struct OFF";
             auto* blk1 = reinterpret_cast<const std::byte*>(
                 g_module + 0x66E4220 + 0x530);
             if (readable_bytes(blk1) >= 0x528) {
@@ -3708,30 +3870,38 @@ void drive_remote_slot1_actions_tick() {
     // dir (wx,wz): stickX = wz, stickY = -wx. Magnitude from speed/run-norm. Right
     // stick (+0x1C/+0x20) stays zero: the previous heading experiment was based
     // on a dump taken 0xD8 past the real Joypad object and was rejected at runtime.
-    const float vx = peer.velocity[0];
-    const float vz = peer.velocity[2];
-    const float speed = std::sqrt(vx * vx + vz * vz);
-    float mag = speed / kCloneRunSpeedNorm;
-    if (mag > 1.0F) mag = 1.0F;
-    if (mag < 0.0F) mag = 0.0F;
+    // CHASE the peer's authoritative position with the clone's OWN locomotion
+    // (closed-loop) instead of replicating the peer's velocity (open-loop). Replicating
+    // velocity drifts and forces a hard position snap (~every 2m). A soft-lerp pin
+    // breaks the anim (external per-frame transform write -> "knees/slide"). Chasing the
+    // authoritative position lets the clone's locomotion converge on its own: it
+    // animates, faces its movement, and needs NO external position write -> no teleport,
+    // no broken anim. Same measured stick basis: world (wx,wz) -> stick (wz, -wx).
+    auto* clonep = reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(remote_player) + kWorldPositionOffset);
+    const float toX = peer.pos[0] - clonep[0];
+    const float toZ = peer.pos[2] - clonep[2];
+    const float dist = std::sqrt(toX * toX + toZ * toZ);
+    constexpr float kArriveDist = 1.5F;  // >= this: full-run stick
+    constexpr float kStopDist = 0.25F;   // <= this: idle (avoid jitter at the target)
     float sx = 0.0F;
     float sy = 0.0F;
-    const bool moving = speed > 0.05F;
+    const bool moving = dist > kStopDist;
     if (moving) {
-        const float wx = vx / speed;
-        const float wz = vz / speed;
+        float mag = dist / kArriveDist;
+        if (mag > 1.0F) mag = 1.0F;
+        const float wx = toX / dist;
+        const float wz = toZ / dist;
         sx = wz * mag;
         sy = -wx * mag;
     }
     *reinterpret_cast<float*>(branch1 + 0x14) = sx;   // L-stick X
     *reinterpret_cast<float*>(branch1 + 0x18) = sy;   // L-stick Y
     // DISPROVEN (2026-06-30): replicating the byte-gate's block right stick
-    // (+0x08=0.5, +0x0C=-0.72) did NOT move the remote clone, even though it matched
-    // the working circular path's block values. Root cause is NOT the input values:
-    // the remote clone is slot-1/screen-1, whose CameraManager(1) is NULL in campaign
-    // (CameraManager::Get supports 0..1 / kNumScreens=2 but only screen 0 is
-    // materialized). Without a screen-1 camera the locomotion has no heading to convert
-    // the stick into world movement -> no translation -> no run anim. Keep right stick 0.
+    // (+0x08=0.5, +0x0C=-0.72) did not move the remote clone. The later route read
+    // proved CameraManager(1) exists; this test had targeted Joypad 1 while the clone
+    // consumes Joypad 3. Keep right stick zero so this correction isolates the real
+    // destination index.
     *reinterpret_cast<float*>(branch1 + 0x1C) = 0.0F;
     *reinterpret_cast<float*>(branch1 + 0x20) = 0.0F;
 
@@ -3763,7 +3933,8 @@ void drive_remote_slot1_actions_tick() {
     if (now - last_drive_log > 500) {
         last_drive_log = now;
         std::ostringstream d;
-        d << "REMOTE-DRIVE speed=" << speed << " mag=" << mag
+        d << "REMOTE-DRIVE destination=" << joypad_index << " source=1 dist="
+          << dist
           << " sx=" << sx << " sy=" << sy << " flags=0x" << std::hex << actions
           << std::dec;
         auto* blk1 = reinterpret_cast<std::byte*>(g_module + 0x66E4220 + 0x530);
@@ -5861,6 +6032,23 @@ void reissue_spawn_for_slot1() {
     log_line("reissue spawn idx=1 returned");
     log_joypad_command_slot_state(0, "after-spawn");
     log_joypad_command_slot_state(1, "after-spawn");
+    // Read-only falsification probe for the independent-input binding. PlayerMoveStick
+    // selects Joypad as FrameState+0xDB0+0xBF0*(Player+0x39B8), independently of
+    // Player+0x4010 (screen route). A reissued idx=1 spawn is expected to set both to 1;
+    // if only +0x4010 changes, the clone still reads player 0's Joypad.
+    for (int slot = 0; slot < 2; ++slot) {
+        auto* player = static_cast<std::byte*>(retained_player_object(slot));
+        if (player == nullptr || readable_bytes(player) < 0x4014) continue;
+        std::ostringstream binding;
+        binding << "PLAYER-INPUT-BIND slot=" << slot
+                << " player=0x" << std::hex
+                << reinterpret_cast<std::uintptr_t>(player)
+                << " joypad_index=" << std::dec
+                << *reinterpret_cast<const std::int32_t*>(player + 0x39B8)
+                << " screen_index="
+                << *reinterpret_cast<const std::int32_t*>(player + 0x4010);
+        log_line(binding.str().c_str());
+    }
     // GATING PROBE: did spawning the clone bump any "co-op / num-players" globals?
     // If yes -> a simple "hold them at 1" fix; if no -> the gate is the retained-slot
     // occupancy itself (deeper). Read after the spawn.
@@ -6649,6 +6837,78 @@ void __fastcall hooked_update(void* object) {
     // samples the velocity we wrote in net_tick), then assert the networked
     // transform last so the engine can't fight it into a flicker.
     apply_puppet_transform_post(object);
+}
+
+char __fastcall hooked_player_input_state_update(void* player) {
+    const bool is_local = player != nullptr && player == retained_player_object(0);
+    const bool is_remote = player != nullptr && player == retained_player_object(1);
+    const int role = is_local ? 0 : (is_remote ? 1 : -1);
+    float before_magnitude = 0.0F;
+    float before_vector[4]{};
+    if (role >= 0 && readable_bytes(static_cast<std::byte*>(player) + 0x3A40) >= 1) {
+        before_magnitude = *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(player) + 0x3A1C);
+        std::memcpy(before_vector, static_cast<const std::byte*>(player) + 0x3A30,
+                    sizeof(before_vector));
+    }
+
+    const char result = g_original_player_input_state_update(player);
+    if (role < 0 || readable_bytes(static_cast<std::byte*>(player) + 0x3A40) < 1) {
+        return result;
+    }
+
+    static ULONGLONG last_log[2]{};
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log[role] < 500) {
+        return result;
+    }
+    last_log[role] = now;
+    const auto* base = static_cast<const std::byte*>(player);
+    const int joypad_index = *reinterpret_cast<const std::int32_t*>(base + 0x39B8);
+    const float after_magnitude = *reinterpret_cast<const float*>(base + 0x3A1C);
+    const auto* after_vector = reinterpret_cast<const float*>(base + 0x3A30);
+    const auto* raw_stick = reinterpret_cast<const float*>(base + 0x39C8);
+    std::ostringstream line;
+    line << "PLAYER-INPUT-UPDATE role=" << (role == 0 ? "local" : "remote")
+         << " joypad=" << joypad_index << " raw=(" << raw_stick[0] << ","
+         << raw_stick[1] << ") beforeMag=" << before_magnitude << " afterMag="
+         << after_magnitude << " beforeVec=(" << before_vector[0] << ","
+         << before_vector[1] << "," << before_vector[2] << ") afterVec=("
+         << after_vector[0] << "," << after_vector[1] << "," << after_vector[2]
+         << ")";
+    void* const fs = *reinterpret_cast<void**>(g_module + 0x3FE1088);
+    if (fs != nullptr && joypad_index >= 0 && joypad_index < 6) {
+        auto* const joypad = static_cast<std::byte*>(fs) + 0xDB0 +
+                             0xBF0 * joypad_index;
+        if (readable_bytes(joypad) >= 0xBE9) {
+            const auto hash = reinterpret_cast<StringHashFunction>(
+                g_module + kStringHashRva);
+            const std::uint32_t move_hash = hash("move", 4, 0);
+            using IsCommandDisabledFunction = bool(__fastcall*)(void*, std::uint32_t);
+            using GetCommandFunction = void*(__fastcall*)(void*, std::uint32_t, int);
+            const auto is_disabled = reinterpret_cast<IsCommandDisabledFunction>(
+                g_module + 0x183A3D0);
+            const auto get_command = reinterpret_cast<GetCommandFunction>(
+                g_module + 0x183ABF0);
+            void* const command = get_command(joypad, move_hash, 0);
+            const int binding = command != nullptr && readable_bytes(command) >= 28
+                ? *reinterpret_cast<const std::int32_t*>(
+                      static_cast<const std::byte*>(command) + 24)
+                : -1;
+            const auto* processed0 = reinterpret_cast<const float*>(joypad + 0x48);
+            const auto* processed1 = reinterpret_cast<const float*>(joypad + 0x50);
+            line << " joypadReset=" << static_cast<int>(
+                        *reinterpret_cast<const std::uint8_t*>(joypad + 0xBE0))
+                 << " moveDisabled=" << (is_disabled(joypad, move_hash) ? 1 : 0)
+                 << " moveCommand=0x" << std::hex
+                 << reinterpret_cast<std::uintptr_t>(command) << std::dec
+                 << " binding=" << binding << " processed0=(" << processed0[0]
+                 << "," << processed0[1] << ") processed1=(" << processed1[0]
+                 << "," << processed1[1] << ")";
+        }
+    }
+    log_line(line.str().c_str());
+    return result;
 }
 
 LONG CALLBACK spawn_capture_veh(EXCEPTION_POINTERS* ep) {
@@ -7566,6 +7826,7 @@ DWORD WINAPI install_hook(void*) {
     AddVectoredExceptionHandler(0, &crash_observer);
     log_line("crash observer installed (no breakpoints)");
     install_joypad_disabled_commands_lock();
+    install_joypad3_analog_route();
     install_player_fire_capture();
 
     // VARIANT A (co-op mode gate at init) PROVEN DEAD: setting HIBYTE(dword_143E07470)
@@ -7636,6 +7897,28 @@ DWORD WINAPI install_hook(void*) {
     // anim/locomotion fields each frame. Filtered inside by object == puppet.
     {
         auto* pvt = reinterpret_cast<std::uintptr_t*>(g_module + kPlayerVtableRva);
+        // Read-only scheduling probe. Player vtable[16] is the sole caller of
+        // PlayerInputCommandState_Update (0x141E39FB0); the pass-through hook tells
+        // us whether retained slot 1 reaches that phase and what it publishes.
+        auto* input_update_slot = &pvt[16];
+        if (*input_update_slot == g_module + 0xC9F8B0) {
+            g_original_player_input_state_update =
+                reinterpret_cast<PlayerInputStateUpdateFunction>(*input_update_slot);
+            DWORD old_input_update = 0;
+            if (VirtualProtect(input_update_slot, sizeof(*input_update_slot),
+                               PAGE_READWRITE, &old_input_update)) {
+                *input_update_slot =
+                    reinterpret_cast<std::uintptr_t>(&hooked_player_input_state_update);
+                FlushInstructionCache(GetCurrentProcess(), input_update_slot,
+                                      sizeof(*input_update_slot));
+                DWORD ignored_input_update = 0;
+                VirtualProtect(input_update_slot, sizeof(*input_update_slot),
+                               old_input_update, &ignored_input_update);
+                log_line("Player vtable[16] input-state scheduling probe installed");
+            }
+        } else {
+            log_line("Player vtable[16] unexpected; input-state probe skipped");
+        }
         auto* pslot = &pvt[kUpdateSlot];
         if (*pslot == g_module + 0x1BB8320) {
             DWORD oldp = 0;

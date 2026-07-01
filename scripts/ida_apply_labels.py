@@ -8,6 +8,56 @@ import idc
 
 
 FUNCTIONS = {
+    0x140C9F8B0: (
+        "Player_UpdateInputCommandState",
+        "Player vtable slot 16 (+0x80). Sole caller of "
+        "PlayerInputCommandState_Update 0x141E39FB0, followed by the broader "
+        "Player input/action update.",
+    ),
+    0x141E39FB0: (
+        "PlayerInputCommandState_Update",
+        "Updates the embedded Player+0x39A0 input-command state through its two "
+        "virtual providers, then derives move direction/magnitude. Sole caller is "
+        "Player vtable slot 16 at 0x140C9F8B0.",
+    ),
+    0x141E39C80: (
+        "PlayerInputCommandState_GetMoveVector",
+        "Copies a 16-byte move vector selected by index; index 0 is state+0x90 "
+        "(Player+0x3A30) and is consumed by PlayerMoveStick_MainUpdate.",
+    ),
+    0x141E39D10: (
+        "PlayerInputCommandState_GetMoveMagnitude",
+        "Returns move magnitude selected by index; index 0 is state+0x7C "
+        "(Player+0x3A1C) and is consumed by PlayerMoveStick_MainUpdate.",
+    ),
+    0x14183A1C0: (
+        "Joypad_AddTemporaryDisabledCommands",
+        "Adds command hashes to the Joypad's 22-entry temporary disable table "
+        "with an expiry timestamp. PlayerMoveStick uses it for command 'move'; "
+        "this is not an analog-axis reader.",
+    ),
+    0x14024D7E0: (
+        "Player_GetInputCommandState",
+        "Returns the embedded Player input-command state at Player+0x39A0. "
+        "Its +0x18 field is the Joypad index used independently from the "
+        "Player+0x4010 screen index.",
+    ),
+    0x1402B1890: (
+        "PlayerInputCommandState_GetJoypadIndex",
+        "Returns dword PlayerInputCommandState+0x18 (Player+0x39B8). "
+        "PlayerMoveStick uses it to select FrameState+0xDB0+0xBF0*index.",
+    ),
+    0x141E39D50: (
+        "PlayerInputCommandState_IsCommandActive",
+        "Selects the per-player Joypad through state+0x18, then tail-calls "
+        "0x141837CD0 with the command hash and transition selector.",
+    ),
+    0x140F03500: (
+        "PlayerMoveStick_MainUpdate",
+        "Main StickMoveInterface update (vtable 0x142A30740 +0x60). Reads "
+        "Player+0x4010 for screen routing and Player+0x39B8 independently "
+        "for Joypad selection; drives move/jump/cover/traversal decisions.",
+    ),
     0x140D12B30: (
         "CoverMoveUpdate_UpdatePostAnim",
         "Exact source signature: void CoverMoveUpdate::UpdatePostAnim(Player&), "

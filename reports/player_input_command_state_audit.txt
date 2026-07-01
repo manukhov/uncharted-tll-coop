@@ -1,0 +1,69 @@
+=== functions around PlayerInputCommandState accessors ===
+0x141E397C0..0x141E39BA9 sub_141E397C0
+0x141E39C80..0x141E39C97 PlayerInputCommandState_GetMoveVector
+0x141E39CE0..0x141E39D02 sub_141E39CE0
+0x141E39D10..0x141E39D1A PlayerInputCommandState_GetMoveMagnitude
+0x141E39D20..0x141E39D43 sub_141E39D20
+0x141E39D50..0x141E39D87 PlayerInputCommandState_IsCommandActive
+0x141E39DD0..0x141E39EC6 sub_141E39DD0
+0x141E39F10..0x141E39F30 sub_141E39F10
+0x141E39F30..0x141E39F50 sub_141E39F30
+0x141E39F50..0x141E39F70 sub_141E39F50
+0x141E39FB0..0x141E3A239 PlayerInputCommandState_Update
+
+=== xrefs to 0x141E39C80 ===
+0x140E69AD4 owner=0x140E67F10 sub_140E67F10
+0x140E69B4D owner=0x140E67F10 sub_140E67F10
+0x140F03830 owner=0x140F03500 PlayerMoveStick_MainUpdate
+0x140F03C07 owner=0x140F03500 PlayerMoveStick_MainUpdate
+0x140F28A52 owner=0x140F277F0 sub_140F277F0
+0x14129100F owner=0x1412903A0 sub_1412903A0
+0x141293EF2 owner=0x1412903A0 sub_1412903A0
+0x14129403C owner=0x1412903A0 sub_1412903A0
+0x14129520C owner=0x1412903A0 sub_1412903A0
+0x14133024A owner=0x14132F990 sub_14132F990
+0x141331F10 owner=0x14132F990 sub_14132F990
+
+=== xrefs to 0x141E39D10 ===
+0x140F03815 owner=0x140F03500 PlayerMoveStick_MainUpdate
+0x140F04FD4 owner=0x140F03500 PlayerMoveStick_MainUpdate
+0x140F05033 owner=0x140F03500 PlayerMoveStick_MainUpdate
+0x140F0644F owner=0x140F03500 PlayerMoveStick_MainUpdate
+0x140F06DA8 owner=0x140F03500 PlayerMoveStick_MainUpdate
+0x141290FF0 owner=0x1412903A0 sub_1412903A0
+0x141293EDF owner=0x1412903A0 sub_1412903A0
+0x141293FC6 owner=0x1412903A0 sub_1412903A0
+0x1412951E7 owner=0x1412903A0 sub_1412903A0
+0x141331637 owner=0x14132F990 sub_14132F990
+0x141331D5F owner=0x14132F990 sub_14132F990
+0x141331EAA owner=0x14132F990 sub_14132F990
+
+=== xrefs to 0x141E39FB0 ===
+0x140C9FE4F owner=0x140C9F8B0 Player_UpdateInputCommandState
+
+=== callers of PlayerJoypad initializer 0x141E39BB0 ===
+
+=== direct writes using displacement 0x7C/0x90 in accessor region ===
+0x141E39D13: vmovss  xmm0, dword ptr [rcx+rax*4+7Ch]
+0x141E3A0DC: cmp     qword ptr [rax+90h], 0
+
+=== PlayerJoypad threshold fields +0x74/+0x78 ===
+0x140EBE00A owner=0x140EBD2D0 sub_140EBD2D0: call    qword ptr [rax+78h]
+0x140EC02BD owner=0x140EC0270 sub_140EC0270: mov     [rcx+74h], r8d
+0x140EC02C1 owner=0x140EC0270 sub_140EC0270: mov     qword ptr [rcx+78h], 3F800000h
+0x140EC040F owner=0x140EC0270 sub_140EC0270: mov     [rcx+78h], r8
+0x140EC0425 owner=0x140EC0270 sub_140EC0270: mov     [rcx+78h], rax
+0x140EC055F owner=0x140EC055F <unnamed>: mov     [rdx+78h], r8
+0x140EC0575 owner=0x140EC0575 <unnamed>: mov     [rdx+78h], rax
+0x140EC099A owner=0x140EC099A <unnamed>: mov     [rdx+78h], r8
+0x140EC09B0 owner=0x140EC09B0 <unnamed>: mov     [rdx+78h], rax
+0x141E386FC owner=0x141E38660 sub_141E38660: mov     [rsi+78h], rax
+0x141E38AF0 owner=0x141E38AF0 <unnamed>: mov     [rcx+74h], eax
+0x141E38AF3 owner=0x141E38AF3 <unnamed>: mov     qword ptr [rcx+78h], 3F800000h
+0x141E38D72 owner=0x141E38B40 sub_141E38B40: vmovss  xmm3, dword ptr [r13+78h]
+0x141E38D78 owner=0x141E38B40 sub_141E38B40: vmovss  xmm2, dword ptr [r13+74h]
+0x141E38EB5 owner=0x141E38B40 sub_141E38B40: vmovss  xmm3, dword ptr [r13+78h]
+0x141E38EBB owner=0x141E38B40 sub_141E38B40: vmovss  xmm2, dword ptr [r13+74h]
+0x141E39BB6 owner=0x141E39BB6 <unnamed>: vmovss  dword ptr [rcx+78h], xmm0
+0x141E39BBB owner=0x141E39BBB <unnamed>: vmovss  dword ptr [rcx+74h], xmm3
+0x141E39E20 owner=0x141E39DD0 sub_141E39DD0: mov     [rsp+0F8h+var_80], al

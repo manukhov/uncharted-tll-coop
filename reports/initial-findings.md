@@ -21358,3 +21358,261 @@ This narrows the blocker to the usable route-child/pose basis or its movement
 consumer. It does not yet prove which field yields zero movement, so no runtime
 patch is justified. Next: find the shared conversion/consumer used by ordinary
 movement, resolve its virtual calls and trace its fallback path.
+
+### Player movement uses a separate Joypad index at Player+0x39B8 (2026-07-01)
+
+**STATIC:** the previous camera-only model was incomplete. The real movement layer
+is the MSVC RTTI class `StickMoveInterface`, with vtable `0x142A30740` and main
+update `PlayerMoveStick_MainUpdate 0x140F03500`. Independent evidence converges:
+
+- `0x14024D7E0` returns the embedded input-command state at `Player+0x39A0`;
+- `0x1402B1890` returns `state+0x18`, therefore `Player+0x39B8`;
+- `PlayerMoveStick_MainUpdate` multiplies that value by `0xBF0` and selects
+  `FrameState+0xDB0+0xBF0*index`, while separately reading `Player+0x4010` for
+  screen/camera routing;
+- command query `0x141E39D50` independently repeats the same
+  `state+0x18 -> *0xBF0 -> FrameState+0xDB0` selection before calling the Joypad
+  command lookup `0x141837CD0`;
+- the Player constructor family `0x140B2DF90` zeroes `Player+0x39B8`; the direct
+  member-reference audit found no later direct non-zero write.
+
+This identifies `Player+0x39B8` as the player-to-Joypad binding, distinct from the
+screen index. It is a stronger explanation for the remote clone's missing movement,
+animation and actions than a missing camera object.
+
+Competing hypotheses and falsifiable prediction before runtime:
+
+1. **Primary:** reissuing the spawn with route index 1 sets `Player+0x4010=1` but
+   leaves constructor-default `Player+0x39B8=0`; the clone therefore reads Joypad 0.
+2. The spawn pipeline or an indirect setter later writes `Player+0x39B8=1`; then the
+   binding hypothesis is rejected and the next target is the command-state contents.
+3. Both indexes remain 0; then the reissued route index was not committed into the
+   Player object and the spawn-index model must be corrected.
+
+The read-only post-spawn diagnostic logs both fields for retained slots 0 and 1 as
+`PLAYER-INPUT-BIND`. No field is modified by this test.
+
+### Retained slot is not the Joypad slot: clone reads Joypad 3 (2026-07-01)
+
+**CONFIRMED:** the read-only diagnostic rejected all three numeric predictions
+above. In both game copies the values were stable and identical:
+
+- retained slot 0: `Player+0x39B8=2`, `Player+0x4010=0`;
+- retained slot 1: `Player+0x39B8=3`, `Player+0x4010=1`.
+
+Thus the clone already has a distinct input binding, but the current injector
+targets the wrong destination. It writes the scripted-input structure and gate for
+dispatch slot 1, while the clone's movement and command readers select Joypad 3.
+The distinction is supported independently by:
+
+- `Input_PerPlayerDispatch_MgrArg 0x14179E6C0`, whose loop variable `0..5` selects
+  the destination Joypad object and is passed as argument 5 to the per-slot apply;
+- `FrameState_PerSlotInputApply 0x140289150`, which indexes both gates by that same
+  argument and has a special native condition for exactly slots 2 and 3;
+- `PlayerMoveStick_MainUpdate` and `PlayerInputCommandState_IsCommandActive`, which
+  read the destination Joypad by `Player+0x39B8` and therefore select 2/3, not the
+  retained-table indexes 0/1;
+- live values from two independent processes, proving that retained index 1 maps
+  to Joypad index 3 in the tested campaign state.
+
+The earlier `Joypad` comparison at `FrameState+0xDB0+0xBF0*{0,1}` therefore
+compared two objects not consumed by either active Player. Its `JOYPAD-DIFF total=0`
+result remains true for those objects but cannot diagnose the clone.
+
+Competing hypotheses before the corrective runtime test:
+
+1. **Primary:** feed destination Joypad 3 while keeping its source-block selector
+   at 1. The clone should execute native movement/actions and produce locomotion
+   animation, while Chloe remains on source block 0 through Joypad 2.
+2. If Joypad 3 receives the copied values but the clone remains inert, a later
+   ownership/activity gate exists between Joypad 3 and `StickMoveInterface`.
+3. If Chloe also reacts, source block 1 is not isolated and its selector/lifetime
+   must be recovered before further action injection.
+
+Falsifiable prediction: after targeting the clone's actual `Player+0x39B8`, the
+log must show destination 3/source 1 and the clone must animate from its fed
+movement. It must not move Chloe. A destination read-back without clone animation
+rejects the primary hypothesis and points to a downstream Player activity gate.
+
+### Joypad 3 feed reaches its source block, but Player movement state stays downstream (2026-07-01)
+
+**REJECTED:** targeting dispatch destination Joypad 3 is not sufficient to animate
+the clone. Both processes logged `destination=3 source=1`; source block 1 contained
+the transmitted axes and `0x500` activity bits, while the local Player remained on
+Joypad 2. Nevertheless the remote replica did not locomote. With the existing
+`g_clone_freerun=true` policy it stayed still until its distance exceeded four
+metres and then snapped to the peer position. The visible teleport is therefore
+the explicit `kSnapDistSq=4m` fallback, not a low network rate; player state is
+already sent at approximately 60 Hz.
+
+**STATIC:** `PlayerMoveStick_MainUpdate 0x140F03500` does not consume raw Joypad
+axes directly. It reads the embedded `PlayerInputCommandState`:
+
+- `0x141E39C80(state, out, 0)` copies the 16-byte movement vector at `state+0x90`
+  (`Player+0x3A30`);
+- `0x141E39D10(state, 0)` reads movement magnitude at `state+0x7C`
+  (`Player+0x3A1C`);
+- sole updater `0x141E39FB0` calls two virtual providers on the embedded state,
+  derives direction/magnitude, and publishes the fields above;
+- the updater has one caller, Player virtual slot 16 (`vtable+0x80`) at
+  `0x140C9F8B0`. The existing synchronization hook is instead virtual slot 87
+  (`vtable+0x2B8`) at `0x141BB8320`, whose complete body only updates transform
+  history and never calls slot 16.
+
+Correction to the previous section: `Player+0x39B8` does select the per-player
+Joypad for command queries, but the locomotion vector itself is consumed from the
+embedded command state after the separate slot-16 update. The call to
+`0x14183A1C0` with command `"move"` adds a temporary command-disable entry; it is
+not an analog-axis reader.
+
+Competing hypotheses for the next read-only test:
+
+1. Player slot 16 is not scheduled for retained slot 1. It will log calls for the
+   local Player only.
+2. Slot 16 is called for both Players, but the clone's before/after movement fields
+   remain zero; one of the embedded state's virtual providers rejects Joypad 3.
+3. Slot 16 publishes non-zero clone movement, so the remaining blocker is later in
+   `StickMoveInterface` or locomotion ownership.
+
+The diagnostic hook must call the original slot-16 method unchanged and only log
+`Player+0x39B8`, `+0x3A1C`, and `+0x3A30` before/after. No forced update is allowed
+until this scheduling/provider distinction is observed.
+
+### Player slot 16 runs for clone; raw move provider remains zero (2026-07-01)
+
+**CONFIRMED:** Player virtual slot 16 runs continuously for retained slots 0 and 1
+in both processes. Hypothesis 1 above is rejected. During local movement:
+
+- local Player/Joypad 2 published non-zero `raw`, magnitude 1 and a changing
+  camera-relative move vector;
+- remote Player/Joypad 3 continued to publish `raw=(0,0)`, magnitude 0 and a zero
+  move vector;
+- at the same time the remote feed log showed non-zero axes in source block 1.
+
+The failure is therefore inside the native Joypad-to-Player command resolution,
+not Player scheduling and not the later `StickMoveInterface` consumer.
+
+**STATIC:** the exact raw-move path is:
+
+1. `Player_UpdateInputCommandState 0x140C9F8B0` calls
+   `PlayerInputCommandState_Update 0x141E39FB0`.
+2. The embedded object is RTTI class `PlayerJoypad`, vtable `0x142A2C388`.
+3. Common helper `0x141E38B40` selects the Joypad through state `+0x18`, hashes
+   command `"move"`, checks it through `0x14183A3D0`, resolves its descriptor via
+   `0x14183ABF0`, and calls `0x14183D1F0`.
+4. `0x14183D1F0` reads processed Joypad pairs `+0x48/+0x50`, applies threshold
+   `+0x58/+0x5C`, and writes state `+0x28` (`Player+0x39C8`).
+
+The remaining alternatives are now exhaustive:
+
+1. `Joypad+0xBE0` is set for Joypad 3, causing `Input_ScaleCopyVirtual` to reset it.
+2. Command `"move"` is disabled for Joypad 3 by `0x14183A3D0`.
+3. Joypad 3 lacks a command descriptor from `0x14183ABF0`.
+4. Descriptor exists and is enabled, but processed axes `+0x48/+0x50` remain zero;
+   then the fault is the earlier source-to-Joypad conversion itself.
+
+The next pass-through diagnostic records exactly these four conditions for both
+Players. It must not modify the flags, command tables or axes.
+
+### Joypad 3 is cleared by the global keyboard-input branch (2026-07-01)
+
+**STATIC:** all four earlier alternatives are now separated. Runtime showed
+`Joypad3+0xBE0=0`, command `"move"` enabled, a non-null descriptor, and non-zero
+source block 1, while processed pairs `Joypad3+0x48/+0x50` remained zero.
+Static analysis of `Input_ScaleCopyVirtual 0x14183B410` explains the exact loss:
+
+- `GameInfo` vtable `0x1429040B8`, virtual `+0x90 = 0x14029AB50`, returns true
+  when `GameInfo+0x499C` is non-zero (unless Steam overlay state from virtual
+  `+0x98` is active);
+- when that result is true, `Input_ScaleCopyVirtual` skips the direct source-axis
+  copy and clears the processed pair unless named keyboard-stick commands supplied
+  a replacement;
+- destination indexes 0 and 2 alone enter the `kb-left-stick-*` and
+  `kb-right-stick-*` command branch (`test a3, 0xFFFFFFFD`); destination 3 cannot;
+- the six native Joypads are initialized in pairs by `0x14179D780`: source
+  selectors alternate 0/1, while Joypads 2 and 3 both carry class value 0. Thus
+  Joypad 3 is not misconstructed; it is the second member of the normal gameplay
+  pair but has no keyboard-command replacement.
+
+Competing hypotheses for the narrow runtime test:
+
+1. The global keyboard branch is the sole reason Joypad 3 loses source block 1.
+2. Direct analog copy runs after selecting it, but later swap/scaling logic still
+   clears the pair.
+3. Joypad 3 becomes non-zero but `PlayerJoypad` rejects it later, so locomotion
+   remains zero.
+
+Falsifiable prediction: force virtual `+0x90` to return false only on the thread
+and call depth processing destination 3. Source block 1 must then appear at
+`Joypad3+0x48`, then at `Player+0x39C8/+0x3A1C`, and the remote Player must play
+native locomotion without changing Chloe/Joypad 2. A non-zero Joypad pair with a
+zero Player pair rejects hypothesis 1 in favour of hypothesis 3; a still-zero
+Joypad pair supports hypothesis 2.
+
+**REJECTED TEST MECHANISM:** the first implementation used a C++ `thread_local`
+flag around the detoured `Input_ScaleCopyVirtual`. Source block 1 became non-zero,
+but `Joypad3+0x48` remained zero. Exact disassembly shows this can happen only when
+the saved `GameInfo+0x90` result at stack `var_3530` is still true. External live
+reads proved that the active GameInfo object uses vtable `0x1429040B8` and its
+`+0x90` entry did point into the injected DLL, so the table patch itself was live;
+the dynamic TLS flag did not survive as intended on the game's existing worker
+thread. This run does not distinguish the three hypotheses above. The replacement
+uses an atomic current-thread id plus an explicit override-hit counter.
+
+**REJECTED TEST MECHANISM 2:** the first atomic-thread-id run proved that the
+patched virtual function was reached (`modeOverrides` increased), but the counter
+then froze while non-zero source axes continued arriving and the processed pair
+stayed zero. Concurrent destination-3 calls can interleave their
+`exchange -> original -> restore` windows and leave another thread's id installed.
+This is a test-harness race, consistent with the already confirmed concurrent
+two-Player input work. Destination-3 `Input_ScaleCopyVirtual` calls are now
+serialized around the override window; other destinations remain untouched.
+
+**STATIC:** the earlier counter freeze is caused by an even earlier window-focus
+gate, not by the analog-mode override:
+
+- live background memory was `byte_1437EA6BF=1`, `byte_1437EA62C=0`, and
+  `byte_1437EC6C3=0`, while the Joypad diagnostic independently showed
+  `Joypad3+0xBE0=0`;
+- `0x141596D60` writes `byte_1437EA62C = (hWnd == GetForegroundWindow())`;
+- window procedure `0x141598080` sets it on `WM_SETFOCUS` (`7`) and clears it on
+  `WM_KILLFOCUS` (`8`);
+- `Input_PerPlayerDispatch 0x14179E6C0` and
+  `Input_ScaleCopyVirtual 0x14183B410` both require it before conversion.
+
+This matches the one-PC observation exactly: the foreground instance authors
+movement, but the replica that must consume it is in the background and resets its
+Joypad before conversion. The next test serializes all calls to
+`Input_ScaleCopyVirtual`; only destination 3 temporarily sees the focus byte as 1,
+and the original value is restored before any local destination runs.
+
+Falsifiable prediction: with a non-zero source in a background copy, the override
+counter must continue increasing, `Joypad3+0x48` and `Player+0x39C8/+0x3A1C` must
+become non-zero, and native remote locomotion must play. Joypad 2 must remain
+unchanged. If Joypad 3 is still zero despite an increasing counter, the remaining
+candidate is post-copy clearing inside `Input_ScaleCopyVirtual`.
+
+### Background Joypad 3 reaches native Player movement (2026-07-01)
+
+**CONFIRMED:** the serialized focus/mode override matched the prediction in both
+directions. In the background process, while the saved focus byte remained zero:
+
+- the override counter continued increasing;
+- non-zero source block 1 axes appeared unchanged at `Joypad3+0x48/+0x4C`;
+- Player slot 16 then published the same non-zero raw pair at `Player+0x39C8`,
+  magnitude `1` at `Player+0x3A1C`, and a non-zero world movement vector at
+  `Player+0x3A30`;
+- the local Player remained bound to Joypad 2 with zero remote axes.
+
+This confirms that the window-focus byte `byte_1437EA62C` and the keyboard-mode
+branch in `Input_ScaleCopyVirtual 0x14183B410` were the complete blockers between
+the received source block and native remote locomotion. No downstream Player
+activity gate remains for ordinary movement.
+
+The remaining visible position error is a separate synchronization problem. The
+current network drive does not transmit the local Player's native movement result;
+it synthesizes a stick from the positional error and therefore mixes control with
+position correction. The next static task is to identify the minimal stable
+`PlayerInputCommandState` result to transmit and the exact post-update point at
+which to apply it to the remote Player, leaving positional reconciliation as a
+separate bounded correction.

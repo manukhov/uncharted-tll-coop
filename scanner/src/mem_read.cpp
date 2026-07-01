@@ -22,13 +22,17 @@ struct Handle {
     ~Handle() { if (v && v != INVALID_HANDLE_VALUE) CloseHandle(v); }
 };
 
-std::optional<std::pair<DWORD, std::uintptr_t>> find_tll() {
+std::optional<std::pair<DWORD, std::uintptr_t>> find_tll(DWORD forced_pid) {
     Handle snap; snap.v = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap.v == INVALID_HANDLE_VALUE) return std::nullopt;
     PROCESSENTRY32W pe{}; pe.dwSize = sizeof(pe);
     DWORD pid = 0;
     if (Process32FirstW(snap.v, &pe)) do {
-        if (_wcsicmp(pe.szExeFile, L"tll.exe") == 0) { pid = pe.th32ProcessID; break; }
+        if (_wcsicmp(pe.szExeFile, L"tll.exe") == 0 &&
+            (forced_pid == 0 || forced_pid == pe.th32ProcessID)) {
+            pid = pe.th32ProcessID;
+            break;
+        }
     } while (Process32NextW(snap.v, &pe));
     if (!pid) return std::nullopt;
     Handle ms; ms.v = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
@@ -43,10 +47,18 @@ std::optional<std::pair<DWORD, std::uintptr_t>> find_tll() {
 }  // namespace
 
 int wmain(int argc, wchar_t** argv) {
-    if (argc != 3) { fwprintf(stderr, L"usage: tll_read.exe <addr-hex> <count-hex>\n"); return 1; }
-    const std::uintptr_t input = wcstoull(argv[1], nullptr, 16);
-    const std::size_t n = static_cast<std::size_t>(wcstoull(argv[2], nullptr, 16));
-    auto t = find_tll();
+    int first = 1;
+    DWORD forced_pid = 0;
+    if (argc == 5 && std::wcscmp(argv[1], L"--pid") == 0) {
+        forced_pid = static_cast<DWORD>(std::wcstoul(argv[2], nullptr, 10));
+        first = 3;
+    } else if (argc != 3) {
+        fwprintf(stderr, L"usage: tll_read.exe [--pid N] <addr-hex> <count-hex>\n");
+        return 1;
+    }
+    const std::uintptr_t input = wcstoull(argv[first], nullptr, 16);
+    const std::size_t n = static_cast<std::size_t>(wcstoull(argv[first + 1], nullptr, 16));
+    auto t = find_tll(forced_pid);
     if (!t) { fwprintf(stderr, L"tll.exe not running\n"); return 2; }
     Handle p; p.v = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, t->first);
     if (!p.v) { fwprintf(stderr, L"OpenProcess failed: %lu\n", GetLastError()); return 3; }

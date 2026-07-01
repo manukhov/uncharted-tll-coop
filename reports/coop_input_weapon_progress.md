@@ -468,3 +468,94 @@ it appears camera-related.
   (apparent ground speed -> run blend) bypassing the camera+input chain, while pinning
   position. Needs the locomotion blend's speed input field (distinct from the +0x260
   velocity OUTPUT).
+
+## MCP-driven: "default pose -> zero movement" DISPROVEN (2026-07-01)
+
+Continuing Codex's camera-pose thread with the ida-tll MCP (fast decompile/xref):
+
+- Found the SHARED movement consumer Codex was after: **PlayerMoveStick_MainUpdate
+  0x140F03500** (0x489e). It (and CoverMoveUpdate_UpdatePostAnim 0x140D12B30, the gun-
+  movement family, and ~200 other callers) reads the camera pose via
+  ResolveScreenRoutePoseSeedOrDefault 0x141C077B0.
+- Decompiled ResolveScreenRoutePoseSeedOrDefault: it resolves the screen route by index,
+  and when the route child (+0xB0), gate bytes (+85/+86) or the bitset bit are invalid it
+  falls back to a DEFAULT seed = position(0,0,0) + rotation `xmmword_1428805D0`.
+- Read xmmword_1428805D0 = `00 00 00 00 | 00 00 00 00 | 00 00 00 00 | 00 00 80 3f` =
+  floats (0,0,0,1) = the **IDENTITY quaternion**. So the default pose is a VALID identity
+  basis, not a degenerate/zero one.
+
+CONCLUSION (REJECTED): the "remote clone gets a default/null pose -> zero movement" theory
+is disproven. A default pose yields world-axis movement (identity basis), not standing
+still. This also matches the earlier fact that the byte-gate DID move the same clone with
+the same screen/pose. The camera-pose-default is NOT why the clone stands; de-prioritize
+the per-screen camera thread as the movement blocker.
+
+Open again: byte-gate moves the clone, struct input (matched block values, JOYPAD-DIFF=0)
+does not, and the camera pose is identical/identity in both. The difference is therefore
+neither the resolved Joypad nor the camera pose. Next candidates to check with the MCP:
+(a) does the clone actually run PlayerMoveStick_MainUpdate (vtable slot + is-local-player
+gate), (b) the exact stick-magnitude/threshold read inside it and any early-out that zeros
+translation, (c) whether the byte-gate "circle" is even produced by this function or a
+different (demo/rotation) path.
+
+## MCP: movement input path fully mapped -> the binding is Player+0x39B8 (joypad index) (2026-07-01)
+
+Traced the movement input path with the MCP (fast decompile/callees):
+
+- PlayerMoveStick_MainUpdate 0x140F03500 reads the move vector/magnitude via the Player's
+  embedded input-command state: Player_GetInputCommandState 0x14024D7E0 = `player + 0x39A0`
+  (a PlayerJoypad/NdPlayerJoypad object; ctor sets those vtables).
+- PlayerInputCommandState_GetJoypadIndex 0x1402B1890 = `*(u32*)(state + 0x18)` = **Player+0x39B8**
+  (Codex label: "PlayerMoveStick uses it to select FrameState+0xDB0+0xBF0*index"). Independent
+  from the Player+0x4010 SCREEN index (camera).
+- PlayerInputCommandState_Update 0x141E39FB0: line `state+0xF0 = *(u32*)(mgr+0xE5C + 0xBF0*(*(int)(state+0x18)))`
+  confirms the joypad index selects the Joypad slot; it reads the move vector at state+0x28/+0x2C,
+  normalizes, and has a gate (byte_143898F54[v17]/byte_143898F58[v17], state+0x70, sub_141E39420)
+  that can jump to a RESET path (LABEL_25) — v17 = state+0x14 (a mode index).
+- The joypad index Player+0x39B8 is WRITTEN in InitializeTopLevelPlayerOwnerFromProcessSpawnInfo
+  (`mov [rsi+39B8h], edx` @ 0x1410DC8F5) and by a NetPlayerTracker path (0x140B2EEDB). So the
+  index is assigned at player init/spawn.
+
+NEW ROOT-CAUSE CANDIDATE (differs from camera / block-value theories): the remote clone reads
+its movement input from Joypad[Player+0x39B8]. If the clone's Player+0x39B8 is not the index of
+the Joypad we feed (slot 1), it reads the wrong/no input -> move vector 0 -> STANDS. This is set
+in the spawn-init path; a retained/remote-spawned clone may not get index 1 (or gets 0/default).
+
+DECISIVE NEXT TEST (cheap): at runtime log Player+0x39B8 for the local player (slot 0) vs the
+remote clone (slot 1). If they differ / clone != 1, set the clone's Player+0x39B8 = 1 and re-test
+(should then read our fed slot-1 input and move). Also examine the PlayerInputCommandState_Update
+gate (line ~62 -> LABEL_25) as a secondary zeroing path (byte_143898F54/F58[state+0x14]).
+
+CAVEAT (honest): this still must be reconciled with the byte-gate-moves-clone observation (same
+index in both). Possible: the byte-gate "circle" was mis-attributed, OR the index is correct and
+the zeroing is the ...Update gate. The runtime Player+0x39B8 read resolves it immediately.
+
+## ★SOLVED: clone's joypad index is 3, not 1 -> animation works (2026-07-01, runtime)
+
+Ran Codex's uncommitted build (which reads the clone's actual Player+0x39B8 joypad index
+and feeds FrameState+0x6FC8+0x28*index / Joypad[index] accordingly). RESULT: the remote
+clone's RUN ANIMATION appeared. Log: `JOYPAD-SLOT ... remote=3[...]` with non-zero stick
+values in the clone's joypad -> the retained slot-1 clone's InputCommandState joypad index
+is 3 (campaign), NOT 1. All prior feeds targeted slot/index 1 -> the clone read a different
+Joypad -> no input -> stood. THE ROOT CAUSE was the Player+0x39B8 joypad-index binding, as
+mapped via the MCP (Player_GetInputCommandState/GetJoypadIndex). Codex's fix (dynamic index)
+is correct and is the fix to keep.
+
+REMAINING: with the clone now input-driven+animated, its position diverges from the
+authoritative peer and hard-snaps (~every 2m) in g_clone_freerun mode (kSnapDistSq=4m).
+Fix = smooth position correction (soft-lerp toward peer each frame) instead of free-run+snap
+('P' toggles g_clone_freerun -> soft-lerp path, kPosLerp=0.35). Test then make default.
+
+## Background-focus blocker closed (2026-07-01, runtime)
+
+The final serialized override succeeded with the game copy in the background.
+For destination Joypad 3, source block 1 reached `Joypad+0x48/+0x4C`, then the
+normal Player slot-16 update published a non-zero raw pair, magnitude and movement
+vector at `Player+0x39C8/+0x3A1C/+0x3A30`. Joypad 2 remained untouched. This
+confirms that the focus byte and keyboard-mode branch were the complete blockers
+to native remote movement.
+
+The next issue is no longer input activation. Network movement currently chases
+the peer position with a synthesized stick, which conflates control replication
+and positional correction. Recover and transmit the local Player's native movement
+result, apply it after the remote slot-16 update, and keep reconciliation separate.

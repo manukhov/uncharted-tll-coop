@@ -1,0 +1,81 @@
+{
+  "player-move-stick.cpp": [
+    {
+      "address": "0x142A30B80",
+      "value": "d:\\perforce\\code\\big4final-tll-release\\big4\\src\\game\\player\\player-move-stick.cpp",
+      "xrefs": [
+        {
+          "xref": "0x140F0A9F2",
+          "function": "0x140F0A950",
+          "name": "sub_140F0A950"
+        },
+        {
+          "xref": "0x140F0CE8F",
+          "function": "0x140F0CC50",
+          "name": "sub_140F0CC50"
+        },
+        {
+          "xref": "0x140F0D4F9",
+          "function": "0x140F0CC50",
+          "name": "sub_140F0CC50"
+        },
+        {
+          "xref": "0x140F0DF8A",
+          "function": "0x140F0D820",
+          "name": "sub_140F0D820"
+        }
+      ]
+    }
+  ],
+  "player-disable-move-stick": [
+    {
+      "address": "0x142A1E170",
+      "value": "player-disable-move-stick",
+      "xrefs": [
+        {
+          "xref": "0x140DD17D4",
+          "function": "0x140DCDEA0",
+          "name": "sub_140DCDEA0"
+        }
+      ]
+    }
+  ],
+  "player-force-move-stick-dir": [
+    {
+      "address": "0x142A3AE98",
+      "value": "player-force-move-stick-dir",
+      "xrefs": [
+        {
+          "xref": "0x1400A8347",
+          "function": "0x1400A8340",
+          "name": "sub_1400A8340"
+        },
+        {
+          "xref": "0x140FC07DC",
+          "function": "0x140FC05E0",
+          "name": "sub_140FC05E0"
+        }
+      ]
+    }
+  ],
+  "move-stick-speed": [
+    {
+      "address": "0x142A4B748",
+      "value": "move-stick-speed",
+      "xrefs": [
+        {
+          "xref": "0x1410FAAC7",
+          "function": "0x1410F9F90",
+          "name": "sub_1410F9F90"
+        }
+      ]
+    }
+  ],
+  "StickMoveInterface": [
+    {
+      "address": "0x143766F18",
+      "value": ".?AVStickMoveInterface@@",
+      "xrefs": []
+    }
+  ]
+}
