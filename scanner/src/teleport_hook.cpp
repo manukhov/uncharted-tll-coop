@@ -3700,6 +3700,10 @@ bool start_state_net() {
     return true;
 }
 
+// Records where the last capture threw: 0=ok, 1=fill_weapons threw,
+// 2=to_snapshot threw. Read by the WEAPON-SEND diagnostic.
+volatile int g_weapon_capture_status = 0;
+
 bool capture_local_weapon_snapshot(void* local_player, std::uint8_t* out) {
     if (local_player == nullptr || out == nullptr || g_module == 0) return false;
     alignas(16) std::uint8_t move_event[0x700]{};
@@ -3710,17 +3714,41 @@ bool capture_local_weapon_snapshot(void* local_player, std::uint8_t* out) {
         g_module + kCharacterMoveToSnapshotRva);
     __try {
         fill_weapons(move_event, local_player);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        g_weapon_capture_status = 1;
+        return false;
+    }
+    __try {
         to_snapshot(move_event, net_snapshot);
         std::memcpy(
             out, net_snapshot + 0x3F4, coop::kWeaponSnapshotBytes);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
+        g_weapon_capture_status = 2;
         return false;
     }
+    g_weapon_capture_status = 0;
     const auto* ids = reinterpret_cast<const std::uint32_t*>(out);
     for (int i = 0; i < 8; ++i) {
         if (ids[i] != 0) return true;
     }
     return false;
+}
+
+// Resolve a live local player via the resolver owner (vtbl[0xA8]); SEH-guarded so a
+// transient null/garbage owner cannot fault the caller (which uses C++ unwinding).
+void* resolve_live_player_safe(std::uint32_t index) {
+    if (g_module == 0) return nullptr;
+    auto* owner = reinterpret_cast<void**>(g_module + kLocalPlayerResolverGlobalRva);
+    if (owner == nullptr || *owner == nullptr) return nullptr;
+    auto* vtbl = *reinterpret_cast<void***>(*owner);
+    if (vtbl == nullptr) return nullptr;
+    const auto fn =
+        reinterpret_cast<ResolveLocalPlayerFunction>(vtbl[0xA8 / sizeof(void*)]);
+    __try {
+        return fn(*owner, index);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return nullptr;
+    }
 }
 
 void send_local_player_state() {
@@ -3840,24 +3868,48 @@ void send_local_player_state() {
     static std::uint8_t cached_weapon_snapshot[coop::kWeaponSnapshotBytes]{};
     static bool have_weapon_snapshot = false;
     const ULONGLONG weapon_now = GetTickCount64();
-    if (weapon_now - last_weapon_capture >= 100) {
-        last_weapon_capture = weapon_now;
-        have_weapon_snapshot = capture_local_weapon_snapshot(
-            local_obj, cached_weapon_snapshot);
-        // DIAG: log the 8 captured weapon ids when they change so we can tell
-        // whether the local send side actually sees an armed inventory.
-        static std::uint8_t diag_prev[coop::kWeaponSnapshotBytes]{};
-        if (std::memcmp(diag_prev, cached_weapon_snapshot,
-                        coop::kWeaponSnapshotBytes) != 0) {
-            std::memcpy(diag_prev, cached_weapon_snapshot,
-                        coop::kWeaponSnapshotBytes);
-            const auto* ids =
-                reinterpret_cast<const std::uint32_t*>(cached_weapon_snapshot);
+    // M1 (native NetEventCharacterMove weapon snapshot) is DISABLED: FillWeaponState
+    // throws every frame on the retained player (MP-dormant components, same wall as
+    // the anim serializer). Keep have_weapon_snapshot=false so nothing is published.
+    (void)last_weapon_capture;
+    (void)cached_weapon_snapshot;
+    have_weapon_snapshot = false;
+    // DIAG (rate-limited): compare the RETAINED player (movement source) against the
+    // LIVE local player from the resolver (vtbl[0xA8]). The weapon controller +0x218
+    // is created lazily and may only exist on the LIVE object; if so, read the held
+    // weapon id at controller+0x2C there for replication via give-weapon.
+    {
+        static ULONGLONG diag_last = 0;
+        if (weapon_now - diag_last > 1000) {
+            diag_last = weapon_now;
+            auto rd_ptr = [](void* o, std::size_t off) -> std::uintptr_t {
+                if (o == nullptr) return 0;
+                auto* p = static_cast<std::byte*>(o) + off;
+                if (readable_bytes(p) < sizeof(void*)) return 0;
+                return reinterpret_cast<std::uintptr_t>(*reinterpret_cast<void**>(p));
+            };
+            auto held_id = [](std::uintptr_t ctrl) -> std::uint32_t {
+                if (ctrl == 0) return 0;
+                auto* p = reinterpret_cast<std::byte*>(ctrl) + 0x2C;
+                if (readable_bytes(p) < sizeof(std::uint32_t)) return 0;
+                return *reinterpret_cast<std::uint32_t*>(p);
+            };
+            // Resolve the live local players (0 and 1) via the resolver owner.
+            void* live0 = resolve_live_player_safe(0);
+            void* live1 = resolve_live_player_safe(1);
+            const std::uintptr_t ret_ctrl = rd_ptr(local_obj, 0x218);
+            const std::uintptr_t live0_ctrl = rd_ptr(live0, 0x218);
+            const std::uintptr_t live1_ctrl = rd_ptr(live1, 0x218);
             std::ostringstream w;
-            w << "WEAPON-SEND have=" << (have_weapon_snapshot ? 1 : 0)
-              << " ids=[" << std::hex;
-            for (int i = 0; i < 8; ++i) w << "0x" << ids[i] << (i < 7 ? "," : "");
-            w << std::dec << "]";
+            w << "WEAPON-SEND retained=0x" << std::hex
+              << reinterpret_cast<std::uintptr_t>(local_obj)
+              << " ret_c218=0x" << ret_ctrl
+              << " | live0=0x" << reinterpret_cast<std::uintptr_t>(live0)
+              << " live0_c218=0x" << live0_ctrl
+              << " live0_held=0x" << held_id(live0_ctrl)
+              << " | live1=0x" << reinterpret_cast<std::uintptr_t>(live1)
+              << " live1_c218=0x" << live1_ctrl
+              << " live1_held=0x" << held_id(live1_ctrl) << std::dec;
             log_line(w.str().c_str());
         }
     }
