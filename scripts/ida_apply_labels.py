@@ -8,6 +8,26 @@ import idc
 
 
 FUNCTIONS = {
+    0x141DE8EC0: (
+        "Character_ApplyAnimationRootTransform",
+        "Shared Character post-animation path. Player caller 0x14042FB40 reaches "
+        "it every frame; when virtual +0x5E8 permits the direct branch it derives "
+        "and writes local root position +0x130 and rotation +0x140, then calls "
+        "virtual +0x208/+0x1E8.",
+    ),
+    0x141BC2EF0: (
+        "Player_ShouldSkipDirectRootTransformApply",
+        "Player vtable +0x5E8 predicate used at the start of "
+        "Character_ApplyAnimationRootTransform. Consults the global gameplay "
+        "manager and Player+0x348 m_pNetController; true bypasses the direct "
+        "local-root write branch.",
+    ),
+    0x140CC08F0: (
+        "PlayerBase_SetupNpcAvoidanceCheck",
+        "Source string identifies PlayerBase::SetupNpcAvoidanceCheck. Configures "
+        "the Player+0x1A20 avoidance helper from point/vector/scalar arguments; "
+        "it is not the physical locomotion output.",
+    ),
     0x141BB8320: (
         "Character_UpdateDerivedWorldTransformFromLocalRoot",
         "Common Player/NadineBuddy vtable slot +0x2B8. Derives world transform "

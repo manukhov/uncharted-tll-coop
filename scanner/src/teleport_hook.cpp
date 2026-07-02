@@ -173,6 +173,7 @@ UpdateFunction g_original_update = nullptr;
 using PlayerInputStateUpdateFunction = char(__fastcall*)(void*);
 PlayerInputStateUpdateFunction g_original_player_input_state_update = nullptr;
 using PlayerInputCommandStateUpdateFunction = void(__fastcall*)(void*);
+using CharacterApplyRootMotionFunction = void(__fastcall*)(void*, double, double);
 using AddJoypadDisabledCommandsFunction = std::int64_t(__fastcall*)(
     void*, std::int64_t, int, int, const std::uint32_t*, int);
 AddJoypadDisabledCommandsFunction g_original_add_joypad_disabled_commands = nullptr;
@@ -7720,6 +7721,101 @@ bool install_player_input_pre_consumer_hook() {
     return true;
 }
 
+void __fastcall hooked_character_apply_root_motion(
+    void* character, double arg1, double arg2) {
+    const bool is_local = character != nullptr &&
+                          character == retained_player_object(0);
+    const bool is_remote = character != nullptr &&
+                           character == retained_player_object(1);
+    const int role = is_local ? 0 : (is_remote ? 1 : -1);
+    float before[4]{};
+    bool skip_root = false;
+    void* net_controller = nullptr;
+    if (role >= 0 && readable_bytes(
+            static_cast<std::byte*>(character) + 0x350) >= 1) {
+        auto* const base = static_cast<std::byte*>(character);
+        std::memcpy(before, base + kPlayerLocalPosOffset, sizeof(before));
+        net_controller = *reinterpret_cast<void**>(base + 0x348);
+        auto* const vtable = *reinterpret_cast<std::uintptr_t**>(character);
+        if (vtable != nullptr && vtable[0x5E8 / sizeof(void*)] != 0) {
+            using SkipRootFunction = bool(__fastcall*)(void*);
+            skip_root = reinterpret_cast<SkipRootFunction>(
+                vtable[0x5E8 / sizeof(void*)])(character);
+        }
+    }
+
+    const auto original = reinterpret_cast<CharacterApplyRootMotionFunction>(
+        g_module + 0x1DE8EC0);
+    original(character, arg1, arg2);
+
+    if (role < 0 || readable_bytes(
+            static_cast<std::byte*>(character) + 0x150) < 1) {
+        return;
+    }
+    static ULONGLONG last_log[2]{};
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log[role] < 250) return;
+    last_log[role] = now;
+    const auto* after = reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(character) + kPlayerLocalPosOffset);
+    std::ostringstream line;
+    line << "ROOT-MOTION role=" << (role == 0 ? "local" : "remote")
+         << " skip=" << (skip_root ? 1 : 0)
+         << " netController=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(net_controller) << std::dec
+         << " before=(" << before[0] << "," << before[1] << "," << before[2]
+         << ") after=(" << after[0] << "," << after[1] << "," << after[2]
+         << ") delta=(" << after[0] - before[0] << ","
+         << after[1] - before[1] << "," << after[2] - before[2] << ")";
+    log_line(line.str().c_str());
+}
+
+bool install_character_root_motion_probe() {
+    auto* const call = reinterpret_cast<std::uint8_t*>(g_module + 0x42FBBA);
+    constexpr std::array<std::uint8_t, 5> expected{
+        0xE8, 0x01, 0x93, 0x9B, 0x01,
+    };
+    if (std::memcmp(call, expected.data(), expected.size()) != 0) {
+        log_line("root-motion probe skipped: unexpected call bytes");
+        return false;
+    }
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call, kRelaySize));
+    if (relay == nullptr) {
+        log_line("root-motion probe skipped: no near relay allocation");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(&hooked_character_apply_root_motion);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+    const std::int64_t displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call + expected.size());
+    if (displacement < INT32_MIN || displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        log_line("root-motion probe skipped: relay outside rel32 range");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(call, expected.size(), PAGE_EXECUTE_READWRITE,
+                        &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        log_line("root-motion probe skipped: VirtualProtect failed");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call + 1) =
+        static_cast<std::int32_t>(displacement);
+    FlushInstructionCache(GetCurrentProcess(), call, expected.size());
+    DWORD ignored = 0;
+    VirtualProtect(call, expected.size(), old_protection, &ignored);
+    log_line("read-only Player root-motion probe installed");
+    return true;
+}
+
 LONG CALLBACK spawn_capture_veh(EXCEPTION_POINTERS* ep) {
     if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_SINGLE_STEP &&
         reinterpret_cast<std::uintptr_t>(ep->ExceptionRecord->ExceptionAddress) ==
@@ -8710,6 +8806,7 @@ DWORD WINAPI install_hook(void*) {
     {
         auto* pvt = reinterpret_cast<std::uintptr_t*>(g_module + kPlayerVtableRva);
         install_player_input_pre_consumer_hook();
+        install_character_root_motion_probe();
         // Read-only scheduling probe. Player vtable[16] is the sole caller of
         // PlayerInputCommandState_Update (0x141E39FB0); the pass-through hook tells
         // us whether retained slot 1 reaches that phase and what it publishes.

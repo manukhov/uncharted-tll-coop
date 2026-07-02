@@ -1,0 +1,1175 @@
+FUNCTION 0x14001C650 sub_14001C650
+  0x14001CEB0 member=0x348: mov     [rsp+698h+var_350], 0FFh
+
+FUNCTION 0x1400C5C80 sub_1400C5C80
+  0x1400C5D04 member=0x348: mov     [rax+348h], edx
+
+FUNCTION 0x14011BE10 sub_14011BE10
+  0x14011BF6D member=0x348: mov     [rax+348h], r8
+
+FUNCTION 0x14014A3B0 sub_14014A3B0
+  0x14014B07A member=0x348: mov     eax, [rdx+348h]
+  0x14014B080 member=0x348: mov     [rcx+348h], eax
+
+FUNCTION 0x140155760 sub_140155760
+  0x140155A6E member=0x348: mov     [rbp+5570h+var_5228], r12d
+
+FUNCTION 0x14015FFC0 sub_14015FFC0
+  0x140160419 member=0x348: mov     [rbp+1880h+var_1538], rbx
+
+FUNCTION 0x1401635F0 sub_1401635F0
+  0x1401645AD member=0x348: mov     [rbp+2BE0h+var_2898], r13
+
+FUNCTION 0x140179230 sub_140179230
+  0x1401793A9 member=0x348: mov     dword ptr [rbx+348h], 0BF800000h
+
+FUNCTION 0x140179430 sub_140179430
+  0x140179497 member=0x348: mov     dword ptr [rcx+348h], 0BF800000h
+
+FUNCTION 0x1401C6F20 sub_1401C6F20
+  0x1401C75BC member=0x348: mov     [rsp+12F8h+var_FB0], r13
+
+FUNCTION 0x1401CD060 sub_1401CD060
+  0x1401CD842 member=0x348: mov     [rbp+1790h+var_1448], rax
+  0x1401CD887 member=0x348: cmp     [rbp+1790h+var_1448], 0
+
+FUNCTION 0x1401D2AD0 sub_1401D2AD0
+  0x1401D2DF0 member=0x348: mov     [rax+348h], rdx
+
+FUNCTION 0x1401EBDD0 sub_1401EBDD0
+  0x1401EBE37 member=0x348: mov     dword ptr [rbx+348h], 0BF800000h
+
+FUNCTION 0x1401FD3E0 sub_1401FD3E0
+  0x1401FD57E member=0x348: lea     rax, [rbx+348h]
+
+FUNCTION 0x1401FFA40 sub_1401FFA40
+  0x1401FFDA7 member=0x348: mov     [rbp+0CF0h+var_9A8], rbx
+
+FUNCTION 0x1402051B0 sub_1402051B0
+  0x1402058F5 member=0x348: mov     [rbp+1420h+var_10D8], rdi
+
+FUNCTION 0x1402422D0 sub_1402422D0
+  0x140242310 member=0x348: mov     [rcx+348h], r15d
+
+FUNCTION 0x140243690 sub_140243690
+  0x14024390D member=0x348: mov     ecx, [rdi+348h]
+
+FUNCTION 0x140244720 sub_140244720
+  0x140244FC6 member=0x348: cmp     [rdi+348h], r14d
+
+FUNCTION 0x140246370 sub_140246370
+  0x140246BC8 member=0x348: cmp     dword ptr [rsi+348h], 1
+  0x140246D50 member=0x348: mov     [rsi+348h], r13d
+  0x1402470C2 member=0x348: cmp     dword ptr [rsi+348h], 1
+  0x14024718A member=0x348: mov     [rsi+348h], r13d
+  0x140247327 member=0x348: cmp     dword ptr [rsi+348h], 1
+  0x14024735E member=0x348: cmp     dword ptr [rsi+348h], 1
+
+FUNCTION 0x140247430 sub_140247430
+  0x140247B6C member=0x348: mov     ecx, [rbx+348h]
+
+FUNCTION 0x140248030 sub_140248030
+  0x140248439 member=0x348: vmovd   xmm0, dword ptr [rsi+348h]
+  0x1402488A9 member=0x348: vmovd   xmm0, dword ptr [rsi+348h]
+
+FUNCTION 0x140251510 sub_140251510
+  0x140251C7C member=0x348: mov     [rsp+1678h+var_1330], r12
+
+FUNCTION 0x1402736E0 sub_1402736E0
+  0x1402740B0 member=0x348: call    qword ptr [rax+348h]
+  0x140275FBD member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x1402E0AA0 sub_1402E0AA0
+  0x1402E171C member=0x348: mov     [rsp+1C38h+var_18F0], r12
+
+FUNCTION 0x1402FA260 sub_1402FA260
+  0x1402FB405 member=0x348: mov     [rsp+7AD8h+var_7790], edx
+  0x1402FB415 member=0x348: lea     r8, [rsp+7AD8h+var_7790]
+
+FUNCTION 0x140304100 sub_140304100
+  0x140304149 member=0x348: mov     rax, [rcx+348h]
+
+FUNCTION 0x140397780 sub_140397780
+  0x140397D6C member=0x348: mov     [rsp+1C08h+var_18C0], rsi
+
+FUNCTION 0x1403B4AF0 sub_1403B4AF0
+  0x1403B4CD6 member=0x348: mov     [rax+348h], ecx
+
+FUNCTION 0x1403B8860 sub_1403B8860
+  0x1403B8C77 member=0x348: mov     [rbp+7C0h+var_478], r13d
+
+FUNCTION 0x1403C04E0 sub_1403C04E0
+  0x1403C0D8B member=0x348: mov     [rbp+1E70h+var_1B28], r13
+
+FUNCTION 0x1403E1990 sub_1403E1990
+  0x1403E1B45 member=0x348: mov     [rcx+348h], rdi
+
+FUNCTION 0x1403FA8C0 sub_1403FA8C0
+  0x1403FAC04 member=0x348: mov     eax, [rdx+348h]
+  0x1403FAC0A member=0x348: mov     [rcx+348h], eax
+
+FUNCTION 0x1403FCEA0 sub_1403FCEA0
+  0x1403FCF49 member=0x348: mov     dword ptr [rcx+348h], 0FFFFFFFFh
+
+FUNCTION 0x1403FEBB0 sub_1403FEBB0
+  0x1403FF274 member=0x348: mov     [rbp+0FF0h+var_CA8], r13
+
+FUNCTION 0x140403970 sub_140403970
+  0x140404B97 member=0x348: mov     [rbp+4DA0h+var_4A58], eax
+  0x140404BB3 member=0x348: lea     r8, [rbp+4DA0h+var_4A58]
+
+FUNCTION 0x140418A60 sub_140418A60
+  0x140419A46 member=0x348: mov     [rbp+1EC0h+var_1B78], r13
+
+FUNCTION 0x14042D820 sub_14042D820
+  0x14042D9F0 member=0x348: movzx   eax, byte ptr [r11+348h]
+  0x14042D9F8 member=0x348: mov     [rbx+348h], al
+
+FUNCTION 0x1404A99E0 sub_1404A99E0
+  0x1404A9D21 member=0x348: mov     dword ptr [rax+348h], 3F800000h
+
+FUNCTION 0x1404D9940 sub_1404D9940
+  0x1404DA634 member=0x348: vmovsd  [rsp+0E58h+var_B10], xmm0
+
+FUNCTION 0x1404E47D0 sub_1404E47D0
+  0x1404E4834 member=0x348: mov     qword ptr [rbx+348h], 1
+
+FUNCTION 0x1405026B0 sub_1405026B0
+  0x140502886 member=0x348: mov     qword ptr [r8+348h], 1
+
+FUNCTION 0x140579190 sub_140579190
+  0x14057A266 member=0x348: mov     [rsp+0B18h+var_7D0], rsi
+
+FUNCTION 0x1405A6900 sub_1405A6900
+  0x1405A6C89 member=0x348: mov     [rsp+0CC8h+var_980], r12
+
+FUNCTION 0x1405F06A0 sub_1405F06A0
+  0x1405F0920 member=0x348: mov     [rcx+348h], eax
+
+FUNCTION 0x1405F4960 sub_1405F4960
+  0x1405F531D member=0x348: mov     [rbp+14F0h+var_11A8], edi
+
+FUNCTION 0x1405FC730 sub_1405FC730
+  0x1405FC87E member=0x348: mov     [rsp+378h+var_30], r12
+  0x1405FD7A6 member=0x348: mov     r12, [rsp+378h+var_30]
+
+FUNCTION 0x140601260 sub_140601260
+  0x14060150E member=0x348: mov     [rax+348h], r14
+
+FUNCTION 0x140601F20 sub_140601F20
+  0x140602B97 member=0x348: mov     [rax+348h], r9w
+
+FUNCTION 0x14061ADB0 sub_14061ADB0
+  0x14061BAFE member=0x348: mov     [rbp+850h+var_508], rax
+
+FUNCTION 0x14062D670 sub_14062D670
+  0x14062D79F member=0x348: vmovss  dword ptr [rbx+348h], xmm0
+
+FUNCTION 0x1406849C0 sub_1406849C0
+  0x140684B31 member=0x348: mov     eax, [rdx+348h]
+  0x140684B37 member=0x348: mov     [rcx+348h], eax
+
+FUNCTION 0x140693EB0 sub_140693EB0
+  0x14069497E member=0x348: mov     [rsp+0FA8h+var_C60], rdi
+
+FUNCTION 0x1406DE9B0 sub_1406DE9B0
+  0x1406DEA55 member=0x348: mov     [rcx+348h], eax
+
+FUNCTION 0x1407051C0 sub_1407051C0
+  0x140705480 member=0x348: mov     [rcx+348h], eax
+
+FUNCTION 0x14070C7F0 sub_14070C7F0
+  0x14070C8E8 member=0x348: mov     qword ptr [rdi+348h], 3F800000h
+
+FUNCTION 0x14070C990 sub_14070C990
+  0x14070CA68 member=0x348: mov     [rbx+348h], r8d
+
+FUNCTION 0x14070CFE0 sub_14070CFE0
+  0x14070D5FF member=0x348: vmovss  xmm0, dword ptr [rdi+348h]
+  0x14070D60F member=0x348: vmovss  dword ptr [rdi+348h], xmm1
+
+FUNCTION 0x14070ECB0 sub_14070ECB0
+  0x14070EDA4 member=0x348: mov     [rdi+348h], rcx
+
+FUNCTION 0x14070F360 sub_14070F360
+  0x14070FE83 member=0x348: vmovss  xmm0, dword ptr [r13+348h]
+  0x14070FE9C member=0x348: vmovss  dword ptr [r13+348h], xmm1
+
+FUNCTION 0x1407283A0 sub_1407283A0
+  0x140728538 member=0x348: mov     [r9+348h], r11d
+
+FUNCTION 0x1407296D0 sub_1407296D0
+  0x14072A6DE member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x14072CB40 sub_14072CB40
+  0x14072D9D8 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x14072F5E0 sub_14072F5E0
+  0x14072F682 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140733DF0 sub_140733DF0
+  0x140733E22 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140739E20 sub_140739E20
+  0x140739FE7 member=0x348: mov     [rax+348h], edx
+
+FUNCTION 0x14074DB70 sub_14074DB70
+  0x14074E086 member=0x348: lea     r8, [r15+348h]
+  0x14074E0D4 member=0x348: vmovsd  qword ptr [r15+348h], xmm4
+
+FUNCTION 0x14074E430 sub_14074E430
+  0x14074E4B2 member=0x348: mov     [rbx+348h], rcx
+
+FUNCTION 0x1407615D0 sub_1407615D0
+  0x140761A2A member=0x348: mov     [rbp+0A80h+var_738], al
+
+FUNCTION 0x140773180 sub_140773180
+  0x1407733D4 member=0x348: vmovups ymmword ptr [rax+348h], ymm0
+
+FUNCTION 0x14077CA10 sub_14077CA10
+  0x14077CD25 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x1408281E0 sub_1408281E0
+  0x1408281E4 member=0x348: vmovups xmm0, xmmword ptr [rcx+348h]
+
+FUNCTION 0x140853040 sub_140853040
+  0x14085315F member=0x348: vmovups xmm0, xmmword ptr [rcx+348h]
+
+FUNCTION 0x140857130 sub_140857130
+  0x14085724F member=0x348: vmovups xmm0, xmmword ptr [rcx+348h]
+
+FUNCTION 0x140869060 sub_140869060
+  0x14086917F member=0x348: vmovups xmm0, xmmword ptr [rcx+348h]
+
+FUNCTION 0x14086A680 sub_14086A680
+  0x14086A919 member=0x348: mov     [rbp+780h+var_438], 100h
+
+FUNCTION 0x14086C0D0 sub_14086C0D0
+  0x14086C4BE member=0x348: mov     [rbp+770h+var_428], 100h
+
+FUNCTION 0x1408B6140 sub_1408B6140
+  0x1408B6745 member=0x348: mov     [rsp+0D08h+var_9C0], rax
+  0x1408B6A44 member=0x348: mov     [rsp+0D08h+var_9C0], r11
+
+FUNCTION 0x1408CDDB0 sub_1408CDDB0
+  0x1408CE530 member=0x348: mov     [rbp+17F0h+var_14A8], rbx
+
+FUNCTION 0x1408F5820 sub_1408F5820
+  0x1408F58CC member=0x348: mov     [rsp+380h+var_38], r13
+  0x1408F6235 member=0x348: mov     r13, [rsp+380h+var_38]
+
+FUNCTION 0x1408FF5E0 sub_1408FF5E0
+  0x1408FFBE9 member=0x348: mov     [rbp+15D0h+var_1288], rbx
+
+FUNCTION 0x140966960 sub_140966960
+  0x1409674FB member=0x348: mov     dword ptr [rsp+848h+var_518+18h], r15d
+  0x14096763C member=0x348: mov     dword ptr [rsp+848h+var_518+18h], r15d
+  0x140968020 member=0x348: vaddss  xmm1, xmm13, dword ptr [rsp+848h+var_518+18h]
+  0x14096804D member=0x348: vmovss  dword ptr [rsp+848h+var_518+18h], xmm1
+
+FUNCTION 0x140990700 sub_140990700
+  0x1409909AB member=0x348: mov     [rsp+1178h+var_E30], eax
+
+FUNCTION 0x1409CA300 sub_1409CA300
+  0x1409CAE30 member=0x348: mov     [rsp+3C18h+var_38D0], rdi
+
+FUNCTION 0x1409DD560 sub_1409DD560
+  0x1409DD984 member=0x348: mov     eax, [rdx+348h]
+  0x1409DD98A member=0x348: mov     [rdi+348h], eax
+
+FUNCTION 0x1409DDAC0 sub_1409DDAC0
+  0x1409DDC31 member=0x348: mov     eax, [rdx+348h]
+  0x1409DDC37 member=0x348: mov     [rcx+348h], eax
+
+FUNCTION 0x1409E0220 sub_1409E0220
+  0x1409E0371 member=0x348: mov     eax, [rdx+348h]
+  0x1409E0377 member=0x348: mov     [rcx+348h], eax
+
+FUNCTION 0x1409E0510 sub_1409E0510
+  0x1409E0661 member=0x348: mov     eax, [rdx+348h]
+  0x1409E0667 member=0x348: mov     [rcx+348h], eax
+
+FUNCTION 0x1409E4E70 sub_1409E4E70
+  0x1409E511D member=0x348: mov     [rcx+348h], rax
+
+FUNCTION 0x140A24D40 sub_140A24D40
+  0x140A256D1 member=0x348: mov     [rsp+918h+var_5D0], rsi
+
+FUNCTION 0x140A69660 sub_140A69660
+  0x140A6972B member=0x348: mov     rcx, [rsi+348h]
+
+FUNCTION 0x140A7F760 sub_140A7F760
+  0x140A7FAFC member=0x348: mov     [rcx+348h], al
+
+FUNCTION 0x140A85C60 sub_140A85C60
+  0x140A86CC1 member=0x348: cmp     [rbp+370h+var_28], 0
+
+FUNCTION 0x140A9C930 sub_140A9C930
+  0x140A9CD2A member=0x348: cmp     byte ptr [rdi+348h], 0
+  0x140A9D4C0 member=0x348: mov     byte ptr [rdi+348h], 0
+
+FUNCTION 0x140A9E6C0 sub_140A9E6C0
+  0x140A9EBF3 member=0x348: mov     [rdi+348h], bl
+
+FUNCTION 0x140AB3750 sub_140AB3750
+  0x140AB37F2 member=0x348: mov     [rsp+330h+arg_8], rbx
+  0x140AB39E9 member=0x348: mov     rbx, [rsp+330h+arg_8]
+
+FUNCTION 0x140ABC1E0 sub_140ABC1E0
+  0x140ABC5AF member=0x348: mov     [rbp+560h+var_218], r13
+
+FUNCTION 0x140AD1D50 sub_140AD1D50
+  0x140AD234E member=0x348: movzx   edx, word ptr [rbp+3E0h+var_A0+8]
+  0x140AD23D3 member=0x348: cmp     eax, dword ptr [rbp+3E0h+var_A0+8]
+  0x140AD24AE member=0x348: mov     edx, dword ptr [rbp+3E0h+var_A0+8]
+  0x140AD8939 member=0x348: mov     qword ptr [rbp+3E0h+var_A0+8], rax
+
+FUNCTION 0x140AEE780 sub_140AEE780
+  0x140AEF324 member=0x348: mov     qword ptr [rbp+430h+var_F0+8], rdi
+  0x140AEF479 member=0x348: mov     qword ptr [rbp+430h+var_F0+8], rax
+  0x140AEF48C member=0x348: mov     qword ptr [rbp+430h+var_F0+8], rdi
+
+FUNCTION 0x140AF2140 sub_140AF2140
+  0x140AF2903 member=0x348: mov     [rbp+3B0h+var_68], rax
+  0x140AF2912 member=0x348: mov     [rbp+3B0h+var_68], rdi
+
+FUNCTION 0x140AFCA60 sub_140AFCA60
+  0x140AFD16C member=0x348: mov     qword ptr [rbp+3C0h+var_80+8], rbx
+  0x140AFD2A4 member=0x348: mov     qword ptr [rbp+3C0h+var_80+8], rdx
+
+FUNCTION 0x140B21410 sub_140B21410
+  0x140B214F3 member=0x348: mov     [rsp+380h+var_38], r14
+  0x140B21578 member=0x348: mov     r14, [rsp+380h+var_38]
+
+FUNCTION 0x140B39B10 sub_140B39B10
+  0x140B3A167 member=0x348: mov     rcx, [r14+348h]
+
+FUNCTION 0x140B86190 sub_140B86190
+  0x140B86196 member=0x348: cmp     qword ptr [rcx+348h], 0
+  0x140B861E8 member=0x348: mov     rax, [rbx+348h]
+  0x140B861F5 member=0x348: mov     rax, [rcx+348h]
+
+FUNCTION 0x140BAEEB0 sub_140BAEEB0
+  0x140BAEF5F member=0x348: cmp     [r11+348h], rdi
+
+FUNCTION 0x140BBFD70 NetEventCharacterMove_Execute
+  0x140BC0941 member=0x348: lea     r9, [rsp+2558h+var_2210]
+  0x140BC0A34 member=0x348: lea     r9, [rsp+2558h+var_2210]
+
+FUNCTION 0x140BD23A0 sub_140BD23A0
+  0x140BD25EB member=0x348: movzx   eax, byte ptr [r15+348h]
+
+FUNCTION 0x140BF3A70 sub_140BF3A70
+  0x140BF3E6C member=0x348: mov     [rax+348h], dil
+
+FUNCTION 0x140C38420 sub_140C38420
+  0x140C3864F member=0x348: mov     r8, [rdx+rbx+348h]
+
+FUNCTION 0x140C686B0 sub_140C686B0
+  0x140C68ED8 member=0x348: mov     [rsp+458h+var_110], rax
+
+FUNCTION 0x140C80E00 sub_140C80E00
+  0x140C80F49 member=0x348: mov     [rcx+348h], rdi
+
+FUNCTION 0x140CB57F0 sub_140CB57F0
+  0x140CB58C1 member=0x348: mov     [rcx+348h], rdi
+
+FUNCTION 0x140CB6530 sub_140CB6530
+  0x140CB6F93 member=0x348: vmovss  xmm7, dword ptr [rbx+348h]
+
+FUNCTION 0x140CB8290 sub_140CB8290
+  0x140CB83CF member=0x348: vmovss  [rbp+3B0h+var_68], xmm3
+
+FUNCTION 0x140CDA520 sub_140CDA520
+  0x140CDA55C member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140CE9530 PlayerBumpController_UpdateCrowdAdjustment
+  0x140CEA38D member=0x348: mov     [rsp+0B18h+var_7D0], rax
+
+FUNCTION 0x140D00800 sub_140D00800
+  0x140D00B2F member=0x348: mov     [rbp+14F0h+var_11A8], rsi
+  0x140D00D27 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140D29BC0 sub_140D29BC0
+  0x140D2A417 member=0x348: mov     [rsp+11B8h+var_E70], r10d
+
+FUNCTION 0x140D4BA00 sub_140D4BA00
+  0x140D4BC0F member=0x348: mov     [rbp+5F0h+var_2A8], ebx
+
+FUNCTION 0x140D51510 sub_140D51510
+  0x140D517A1 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140D521A0 sub_140D521A0
+  0x140D52240 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140D54040 sub_140D54040
+  0x140D548F8 member=0x348: call    qword ptr [r8+348h]
+
+FUNCTION 0x140D73100 sub_140D73100
+  0x140D73172 member=0x348: mov     [rbx+348h], rax
+
+FUNCTION 0x140D77700 sub_140D77700
+  0x140D777E6 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140D956C0 sub_140D956C0
+  0x140D95862 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140DCA6D0 sub_140DCA6D0
+  0x140DCA8AB member=0x348: mov     [rbx+348h], rax
+
+FUNCTION 0x140DCDEA0 sub_140DCDEA0
+  0x140DD170D member=0x348: call    qword ptr [rax+348h]
+  0x140DD525A member=0x348: lea     rcx, [rbp+4850h+var_4508]
+
+FUNCTION 0x140DE6930 sub_140DE6930
+  0x140DE6DE4 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140DE78F0 sub_140DE78F0
+  0x140DE791F member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140DFDD70 sub_140DFDD70
+  0x140DFE20D member=0x348: mov     [rsp+13E8h+var_10A0], rbx
+
+FUNCTION 0x140E026A0 sub_140E026A0
+  0x140E02C30 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140E04860 sub_140E04860
+  0x140E04942 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140E09C00 sub_140E09C00
+  0x140E0B6C3 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140E0E6F0 sub_140E0E6F0
+  0x140E0E7E5 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140E33860 sub_140E33860
+  0x140E33D0F member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140E6E1B0 sub_140E6E1B0
+  0x140E6EEB4 member=0x348: mov     eax, [rsp+0E68h+var_B20]
+  0x140E6EF97 member=0x348: mov     eax, [rsp+0E68h+var_B20]
+
+FUNCTION 0x140E72F90 sub_140E72F90
+  0x140E7346E member=0x348: call    qword ptr [r8+348h]
+
+FUNCTION 0x140EC5730 sub_140EC5730
+  0x140EC58CA member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140EC5B80 sub_140EC5B80
+  0x140EC5D4E member=0x348: call    qword ptr [r8+348h]
+
+FUNCTION 0x140EC88D0 sub_140EC88D0
+  0x140EC90EB member=0x348: mov     [rsp+708h+var_3C0], r12
+
+FUNCTION 0x140EEB600 sub_140EEB600
+  0x140EEB711 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140EEB740 sub_140EEB740
+  0x140EEBA1D member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140F00070 sub_140F00070
+  0x140F0015F member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140F49300 ConstructMountedPlayerSubsystem1EB8_Size4B0
+  0x140F493CA member=0x348: mov     [rbx+348h], ecx
+
+FUNCTION 0x140F4EAE0 sub_140F4EAE0
+  0x140F4EB28 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x140F5EEA0 sub_140F5EEA0
+  0x140F5F6BE member=0x348: mov     [rbp+1060h+var_D18], rsi
+
+FUNCTION 0x140F5F980 InitializeMountedPlayerDispatchHub1FB0
+  0x140F5FB11 member=0x348: mov     [rbx+348h], cl
+
+FUNCTION 0x140FC7A90 sub_140FC7A90
+  0x140FC82C1 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x1410252C0 sub_1410252C0
+  0x14102615D member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x141029680 sub_141029680
+  0x14102A779 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x141055590 sub_141055590
+  0x1410555D2 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x1410A08A0 sub_1410A08A0
+  0x1410A0C8D member=0x348: mov     [rbp+1C80h+var_1938], rsi
+  0x1410A0D78 member=0x348: mov     [rbp+1C80h+var_1938], rsi
+  0x1410A100D member=0x348: mov     [rbp+1C80h+var_1938], rsi
+  0x1410A10F8 member=0x348: mov     [rbp+1C80h+var_1938], rsi
+
+FUNCTION 0x1410A28A0 sub_1410A28A0
+  0x1410A3099 member=0x348: call    qword ptr [r8+348h]
+  0x1410A311B member=0x348: call    qword ptr [rax+348h]
+  0x1410A31BA member=0x348: call    qword ptr [rax+348h]
+  0x1410A32CB member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x1410A77E0 sub_1410A77E0
+  0x1410A7825 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x1410A7DC0 sub_1410A7DC0
+  0x1410A7E14 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x1410AAFB0 sub_1410AAFB0
+  0x1410AB184 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x1410AD410 sub_1410AD410
+  0x1410ADCEE member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x1410AF930 sub_1410AF930
+  0x1410AF9BA member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x1410B0380 sub_1410B0380
+  0x1410B0412 member=0x348: jmp     qword ptr [rax+348h]
+
+FUNCTION 0x1410B0430 sub_1410B0430
+  0x1410B046D member=0x348: jmp     qword ptr [rax+348h]
+  0x1410B04E2 member=0x348: jmp     qword ptr [r10+348h]
+
+FUNCTION 0x1410B0520 sub_1410B0520
+  0x1410B052E member=0x348: jmp     qword ptr [rax+348h]
+
+FUNCTION 0x1410B32A0 sub_1410B32A0
+  0x1410B32B5 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x1410B3370 sub_1410B3370
+  0x1410B3398 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x1410C1FA0 sub_1410C1FA0
+  0x1410C2AD2 member=0x348: mov     [rsp+6A8h+var_360], rsi
+  0x1410C3556 member=0x348: mov     [rsp+6A8h+var_360], rsi
+
+FUNCTION 0x1410C7300 sub_1410C7300
+  0x1410C7A1A member=0x348: vmovss  [rsp+898h+var_550], xmm14
+
+FUNCTION 0x1410D8260 sub_1410D8260
+  0x1410D827D member=0x348: jmp     qword ptr [rax+348h]
+
+FUNCTION 0x141109F60 sub_141109F60
+  0x14110A096 member=0x348: mov     [rbx+348h], r11
+
+FUNCTION 0x1411198C0 sub_1411198C0
+  0x141119FF3 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x141145B80 sub_141145B80
+  0x141145BE1 member=0x348: mov     [rbx+348h], r9
+
+FUNCTION 0x14116D0D0 sub_14116D0D0
+  0x14116D353 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x141191240 sub_141191240
+  0x141191E96 member=0x348: mov     [rbx+348h], edi
+  0x141191F4B member=0x348: mov     eax, [rbx+348h]
+  0x141191F7B member=0x348: inc     dword ptr [rbx+348h]
+  0x14119202B member=0x348: mov     eax, [rbx+348h]
+  0x14119205B member=0x348: inc     dword ptr [rbx+348h]
+  0x1411920CA member=0x348: cmp     dword ptr [rbx+348h], 0
+  0x1411920EF member=0x348: imul    eax, [rbx+348h]
+  0x141192123 member=0x348: cmp     [rbx+348h], edi
+  0x141192163 member=0x348: cmp     r15d, [rbx+348h]
+
+FUNCTION 0x141192910 sub_141192910
+  0x141194648 member=0x348: cmp     [rdi+348h], r10d
+  0x1411946C4 member=0x348: cmp     r14d, [rdi+348h]
+
+FUNCTION 0x14119C700 sub_14119C700
+  0x14119C956 member=0x348: mov     [rax+348h], rbx
+
+FUNCTION 0x14119CE80 sub_14119CE80
+  0x14119D0D6 member=0x348: mov     [rax+348h], rbx
+
+FUNCTION 0x1411E00D0 sub_1411E00D0
+  0x1411E01D6 member=0x348: movzx   eax, byte ptr [r8+348h]
+
+FUNCTION 0x1411F5940 sub_1411F5940
+  0x1411F611D member=0x348: mov     byte ptr [rsi+348h], 0
+  0x1411F677F member=0x348: mov     byte ptr [rsi+348h], 0
+
+FUNCTION 0x1411F7370 sub_1411F7370
+  0x1411F851A member=0x348: mov     [r13+348h], al
+
+FUNCTION 0x1411F8C90 sub_1411F8C90
+  0x1411F8E60 member=0x348: movzx   eax, byte ptr [r11+348h]
+  0x1411F8E68 member=0x348: mov     [rbx+348h], al
+
+FUNCTION 0x1411FD230 sub_1411FD230
+  0x1411FD24A member=0x348: mov     [rsp+330h+arg_8], rbx
+  0x1411FD293 member=0x348: mov     rbx, [rsp+330h+arg_8]
+
+FUNCTION 0x141201AB0 sub_141201AB0
+  0x141201CAD member=0x348: mov     [rdx+348h], r8w
+
+FUNCTION 0x141221DB0 sub_141221DB0
+  0x141221DFB member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x14124AFC0 UpdateMeleeObserverKnowledgeAndSettings
+  0x14124B094 member=0x348: movzx   r10d, byte ptr [rbx+348h]
+
+FUNCTION 0x141254C20 sub_141254C20
+  0x141254DB3 member=0x348: mov     [rbx+348h], rdi
+
+FUNCTION 0x1412608C0 sub_1412608C0
+  0x141260A19 member=0x348: movzx   r15d, byte ptr [rdi+348h]
+
+FUNCTION 0x141261870 sub_141261870
+  0x141261956 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x1412678D0 sub_1412678D0
+  0x141267DA8 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x141275ED0 sub_141275ED0
+  0x1412761EC member=0x348: mov     [rbp+4200h+var_3EB8], 0
+
+FUNCTION 0x141279D60 sub_141279D60
+  0x141279D91 member=0x348: mov     byte ptr [rcx+348h], 1
+
+FUNCTION 0x141287900 sub_141287900
+  0x141287FD1 member=0x348: movzx   eax, byte ptr [r15+348h]
+  0x141288805 member=0x348: vmovups [rsp+23C8h+var_2080], xmm1
+  0x141288D28 member=0x348: movzx   r8d, byte ptr [r15+348h]
+  0x141288E29 member=0x348: movzx   r8d, byte ptr [r15+348h]
+
+FUNCTION 0x1412898E0 sub_1412898E0
+  0x141289B87 member=0x348: movzx   eax, byte ptr [r10+348h]
+  0x141289B8F member=0x348: mov     [r11+348h], al
+
+FUNCTION 0x1412B17B0 sub_1412B17B0
+  0x1412B4673 member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x1412BB1E0 sub_1412BB1E0
+  0x1412BB221 member=0x348: mov     eax, [rbx+348h]
+
+FUNCTION 0x1412CBCF0 sub_1412CBCF0
+  0x1412CBE75 member=0x348: mov     eax, [r14+348h]
+
+FUNCTION 0x1412D73E0 sub_1412D73E0
+  0x1412D748B member=0x348: call    qword ptr [rax+348h]
+
+FUNCTION 0x141307E70 sub_141307E70
+  0x141307EA3 member=0x348: mov     dword ptr [rbx+348h], 0
+
+FUNCTION 0x141325390 sub_141325390
+  0x141325691 member=0x348: mov     esi, [r13+348h]
+  0x1413256AF member=0x348: mov     [r13+348h], esi
+
+FUNCTION 0x141353FB0 sub_141353FB0
+  0x141354803 member=0x348: mov     [rax+348h], ebp
+  0x141354B24 member=0x348: mov     [rax+348h], ebp
+
+FUNCTION 0x14137DEB0 sub_14137DEB0
+  0x14137DFFA member=0x348: mov     [rcx+348h], esi
+  0x14137E979 member=0x348: mov     [rdi+348h], ecx
+
+FUNCTION 0x141386A60 sub_141386A60
+  0x141386B64 member=0x348: mov     [rbp+800h+var_4B8], r14b
+
+FUNCTION 0x14138C180 sub_14138C180
+  0x14138C2E6 member=0x348: vmovups ymm0, ymmword ptr [rcx+348h]
+  0x14138C32E member=0x348: vmovups ymmword ptr [rcx+348h], ymm0
+
+FUNCTION 0x1413959A0 sub_1413959A0
+  0x141395A89 member=0x348: mov     [rbx+348h], eax
+
+FUNCTION 0x1413B11A0 sub_1413B11A0
+  0x1413B141C member=0x348: mov     [rcx+348h], eax
+
+FUNCTION 0x1413B4AA0 sub_1413B4AA0
+  0x1413B4D97 member=0x348: mov     [rbx+348h], rcx
+
+FUNCTION 0x1413BE5B0 sub_1413BE5B0
+  0x1413BE7F4 member=0x348: mov     [rax+348h], rcx
+
+FUNCTION 0x1413E3970 sub_1413E3970
+  0x1413E4788 member=0x348: mov     [rbp+0B40h+var_7F8], r11
+  0x1413E49DB member=0x348: mov     [rbp+0B40h+var_7F8], r11
+  0x1413E4C2D member=0x348: mov     [rbp+0B40h+var_7F8], r12
+  0x1413E4DF7 member=0x348: mov     [rbp+0B40h+var_7F8], r12
+  0x1413E4FC3 member=0x348: mov     [rbp+0B40h+var_7F8], r12
+  0x1413E5198 member=0x348: mov     [rbp+0B40h+var_7F8], r12
+
+FUNCTION 0x141419F30 sub_141419F30
+  0x14141AAE3 member=0x348: mov     dword ptr [rbp+1B50h+var_1810+8], eax
+
+FUNCTION 0x14144B370 sub_14144B370
+  0x14144C40E member=0x348: mov     [rsp+2238h+var_1EF0], rdi
+
+FUNCTION 0x14144F340 sub_14144F340
+  0x14144FC79 member=0x348: vmovups [rsp+0C18h+var_8D0], xmm0
+  0x141450583 member=0x348: vmovups [rsp+0C18h+var_8D0], xmm0
+  0x141450CAF member=0x348: vmovups [rsp+0C18h+var_8D0], xmm0
+
+FUNCTION 0x1414B6360 sub_1414B6360
+  0x1414B6579 member=0x348: vmovss  [rsp+438h+var_F0], xmm6
+
+FUNCTION 0x1414DBC30 sub_1414DBC30
+  0x1414DBED1 member=0x348: mov     [rcx+348h], eax
+
+FUNCTION 0x1414EBB70 sub_1414EBB70
+  0x1414EBF3C member=0x348: mov     eax, [rdx+348h]
+  0x1414EBF42 member=0x348: mov     [rcx+348h], eax
+
+FUNCTION 0x1414F1420 CopyDamageInfo
+  0x1414F1840 member=0x348: mov     rax, [r8+r9+348h]
+  0x1414F1848 member=0x348: mov     [r8+348h], rax
+
+FUNCTION 0x1414F5B30 sub_1414F5B30
+  0x1414F5D5B member=0x348: vmovups [rbp+780h+var_438], xmm0
+  0x1414F61C0 member=0x348: vmovups [rbp+780h+var_438], xmm0
+
+FUNCTION 0x141502290 sub_141502290
+  0x14150231D member=0x348: mov     rax, [rbx+348h]
+
+FUNCTION 0x1415026B0 sub_1415026B0
+  0x141502729 member=0x348: mov     rax, [rbx+348h]
+
+FUNCTION 0x141519D30 sub_141519D30
+  0x14151AC5E member=0x348: mov     [rsp+0F08h+var_BC0], rax
+  0x14151B207 member=0x348: mov     [rsp+0F08h+var_BC0], rax
+  0x14151B673 member=0x348: mov     [rsp+0F08h+var_BC0], rax
+
+FUNCTION 0x14151C030 sub_14151C030
+  0x14151C596 member=0x348: mov     [rbp+0A90h+var_748], r15
+  0x14151C7B9 member=0x348: mov     [rbp+0A90h+var_748], r15
+  0x14151CB4A member=0x348: mov     [rbp+0A90h+var_748], r15
+  0x14151CDA3 member=0x348: mov     [rbp+0A90h+var_748], r15
+
+FUNCTION 0x14157D380 sub_14157D380
+  0x14157F18A member=0x348: lea     rcx, [rbp+10C0h+var_D78]
+  0x141581AC5 member=0x348: mov     [rsp+1590h+var_1248], rax
+
+FUNCTION 0x1415E9180 sub_1415E9180
+  0x1415E928D member=0x348: mov     r8d, [rbx+348h]
+
+FUNCTION 0x1415F21B0 sub_1415F21B0
+  0x1415F2A5D member=0x348: lea     rsi, [rbp+2770h+var_2428]
+
+FUNCTION 0x1415F53D0 sub_1415F53D0
+  0x1415F57E8 member=0x348: lea     rax, [rsp+18858h+var_18510]
+
+FUNCTION 0x1415FB0C0 sub_1415FB0C0
+  0x1415FB64D member=0x348: mov     rax, [rdx+348h]
+
+FUNCTION 0x141610870 sub_141610870
+  0x141610AD0 member=0x348: lea     rcx, [rcx+348h]
+  0x141610B60 member=0x348: lea     rax, [rcx+348h]
+
+FUNCTION 0x1416131D0 sub_1416131D0
+  0x1416146E6 member=0x348: mov     rax, [rdi+348h]
+
+FUNCTION 0x141625050 sub_141625050
+  0x14162526B member=0x348: mov     qword ptr [rcx+348h], 0FFFFFFFFFFFFFFFFh
+
+FUNCTION 0x141625910 sub_141625910
+  0x141625D18 member=0x348: mov     [r14+348h], r12
+
+FUNCTION 0x141648C20 sub_141648C20
+  0x141648D9E member=0x348: mov     [rcx+348h], rax
+
+FUNCTION 0x14165CB50 sub_14165CB50
+  0x14165CBDF member=0x348: mov     [rbp+0FE0h+var_C98], rax
+
+FUNCTION 0x141660300 sub_141660300
+  0x14166160B member=0x348: mov     [rdi+348h], rcx
+
+FUNCTION 0x14167D4C0 sub_14167D4C0
+  0x14167D87D member=0x348: lea     rcx, [rbp+348h]
+  0x14167D923 member=0x348: add     rax, [rbp+348h]
+
+FUNCTION 0x14167DA00 sub_14167DA00
+  0x14167DA8C member=0x348: lea     rcx, [rdi+348h]
+
+FUNCTION 0x14167DB90 sub_14167DB90
+  0x14167DC0C member=0x348: lea     rdi, [rbx+348h]
+
+FUNCTION 0x141711EB0 sub_141711EB0
+  0x141712319 member=0x348: mov     [rax+348h], ecx
+
+FUNCTION 0x14171BD10 sub_14171BD10
+  0x14171BF07 member=0x348: mov     r15, [rsp+330h+arg_8]
+
+FUNCTION 0x14172F690 sub_14172F690
+  0x141730738 member=0x348: mov     qword ptr [rbx+348h], 0
+
+FUNCTION 0x14173E1A0 sub_14173E1A0
+  0x14173E514 member=0x348: mov     [rsp+1568h+var_1220], ecx
+
+FUNCTION 0x1417816B0 sub_1417816B0
+  0x141781A1F member=0x348: and     [rbp+348h], rax
+
+FUNCTION 0x1417A4060 sub_1417A4060
+  0x1417A4244 member=0x348: mov     [rbp+0BB0h+var_868], r14
+
+FUNCTION 0x1417A82C0 sub_1417A82C0
+  0x1417A855C member=0x348: mov     rbp, [rsp+368h+var_20]
+
+FUNCTION 0x1417FD5D0 sub_1417FD5D0
+  0x1417FD623 member=0x348: mov     r15, [rsp+308h+arg_38]
+
+FUNCTION 0x1418278C0 sub_1418278C0
+  0x141827A40 member=0x348: vmovss  xmm2, dword ptr [rsi+348h]
+
+FUNCTION 0x141827DD0 sub_141827DD0
+  0x141827FE5 member=0x348: vmovss  xmm2, dword ptr [rsi+348h]
+
+FUNCTION 0x141845AD0 sub_141845AD0
+  0x14184687C member=0x348: vmovss  [rsp+0E98h+var_B50], xmm6
+
+FUNCTION 0x141857610 sub_141857610
+  0x141857E97 member=0x348: lea     rdx, [rbp+0BA0h+var_858]
+
+FUNCTION 0x14185BC50 sub_14185BC50
+  0x14185BC64 member=0x348: mov     [rsp+390h+var_48], 0FFFFFFFFFFFFFFFEh
+
+FUNCTION 0x14185C440 sub_14185C440
+  0x14185C454 member=0x348: mov     [rsp+390h+var_48], 0FFFFFFFFFFFFFFFEh
+
+FUNCTION 0x141865860 sub_141865860
+  0x141865B33 member=0x348: mov     [rbp+880h+var_538], 0FFFFFFFFh
+
+FUNCTION 0x141868C20 sub_141868C20
+  0x14186A5EE member=0x348: mov     qword ptr [rbp+1C60h+var_1920+8], rax
+
+FUNCTION 0x14186C8A0 sub_14186C8A0
+  0x14186CA16 member=0x348: mov     [rbp+12D0h+var_F88], r11
+
+FUNCTION 0x141870720 sub_141870720
+  0x141870812 member=0x348: mov     [rbp+0E0A0h+var_DD58], r15
+
+FUNCTION 0x14189D720 sub_14189D720
+  0x14189D8AC member=0x348: mov     [r14+348h], edx
+
+FUNCTION 0x1418A4FD0 sub_1418A4FD0
+  0x1418A502E member=0x348: mov     [rsp+360h+var_18], rbx
+  0x1418A582F member=0x348: mov     rbx, [rsp+360h+var_18]
+
+FUNCTION 0x1418E8280 sub_1418E8280
+  0x1418E9BC4 member=0x348: mov     [rbp+2820h+var_24D8], r13
+
+FUNCTION 0x1418FFD30 sub_1418FFD30
+  0x1418FFFFA member=0x348: mov     [rax+348h], r10
+
+FUNCTION 0x14196AEC0 sub_14196AEC0
+  0x14196B3AE member=0x348: mov     [rsp+1F58h+var_1C10], rax
+
+FUNCTION 0x14196CBA0 sub_14196CBA0
+  0x14196CE50 member=0x348: mov     [rcx+348h], rax
+
+FUNCTION 0x14198C240 sub_14198C240
+  0x14198C453 member=0x348: vmovups ymmword ptr [rax+348h], ymm0
+
+FUNCTION 0x1419A8FF0 sub_1419A8FF0
+  0x1419A9970 member=0x348: mov     [rbx+348h], rax
+
+FUNCTION 0x1419B3C10 sub_1419B3C10
+  0x1419B3D07 member=0x348: mov     rax, [rbp+r9+0B70h+var_828]
+  0x1419B3DE7 member=0x348: mov     rax, [rbp+r9+0B70h+var_828]
+  0x1419B3EC7 member=0x348: mov     rax, [rbp+r9+0B70h+var_828]
+  0x1419B3FA7 member=0x348: mov     rax, [rbp+r9+0B70h+var_828]
+  0x1419B4087 member=0x348: mov     rax, [rbp+r9+0B70h+var_828]
+  0x1419B4167 member=0x348: mov     rax, [rbp+r9+0B70h+var_828]
+  0x1419B4247 member=0x348: mov     rax, [rbp+r9+0B70h+var_828]
+  0x1419B4318 member=0x348: mov     rax, [rbp+rsi+0B70h+var_828]
+
+FUNCTION 0x1419DC940 sub_1419DC940
+  0x1419DCF5F member=0x348: mov     [rbp+7B0h+var_468], 0FFFFFFFFFFFFFFFFh
+
+FUNCTION 0x1419EC760 sub_1419EC760
+  0x1419EC7E9 member=0x348: mov     r14, [rbp+310h+arg_28]
+
+FUNCTION 0x1419ED8E0 sub_1419ED8E0
+  0x1419ED969 member=0x348: mov     r14, [rbp+310h+arg_28]
+
+FUNCTION 0x1419F6CF0 sub_1419F6CF0
+  0x1419F71AC member=0x348: vmovss  dword ptr [rsp+548h+var_218+18h], xmm0
+
+FUNCTION 0x1419F8180 sub_1419F8180
+  0x1419F9571 member=0x348: mov     qword ptr [rsp+828h+var_4E8+8], rax
+
+FUNCTION 0x1419FA380 sub_1419FA380
+  0x1419FA83C member=0x348: vmovss  dword ptr [rsp+548h+var_218+18h], xmm0
+
+FUNCTION 0x1419FB730 sub_1419FB730
+  0x1419FBEF8 member=0x348: mov     [rsp+518h+var_1D0], eax
+
+FUNCTION 0x141A06BB0 sub_141A06BB0
+  0x141A076B1 member=0x348: mov     dword ptr [rsp+0A68h+var_738+18h], 8
+
+FUNCTION 0x141A19780 sub_141A19780
+  0x141A19B68 member=0x348: mov     [rsp+4E8h+var_1A0], ecx
+
+FUNCTION 0x141A1AF40 sub_141A1AF40
+  0x141A1B328 member=0x348: mov     [rsp+4E8h+var_1A0], ecx
+
+FUNCTION 0x141A22C20 sub_141A22C20
+  0x141A24A80 member=0x348: lea     rcx, [rsp+38h+arg_308]
+
+FUNCTION 0x141A40FF0 sub_141A40FF0
+  0x141A41669 member=0x348: mov     [rbp+3F0h+var_A8], 1
+
+FUNCTION 0x141A42620 sub_141A42620
+  0x141A4620A member=0x348: mov     [rbp+1280h+var_F38], 46h ; 'F'
+  0x141A46E51 member=0x348: mov     [rbp+1280h+var_F38], 29h ; ')'
+  0x141A47D9C member=0x348: mov     [rbp+1280h+var_F38], 0D4h
+  0x141A48819 member=0x348: mov     [rbp+1280h+var_F38], 0CBh
+
+FUNCTION 0x141AEE9C0 sub_141AEE9C0
+  0x141AEF2EC member=0x348: mov     [rbp+770h+var_428], rax
+
+FUNCTION 0x141AF4460 sub_141AF4460
+  0x141AF6246 member=0x348: mov     [rsp+6D8h+var_390], ecx
+
+FUNCTION 0x141AF8080 sub_141AF8080
+  0x141AF92DE member=0x348: mov     dword ptr [rsp+898h+var_560+10h], 0FFFFFFFFh
+
+FUNCTION 0x141AFA380 sub_141AFA380
+  0x141AFB8BA member=0x348: mov     dword ptr [rsp+808h+var_4D0+10h], 0FFFFFFFFh
+
+FUNCTION 0x141B51A70 sub_141B51A70
+  0x141B51D95 member=0x348: mov     [rsp+0A78h+var_730], eax
+
+FUNCTION 0x141B5F400 sub_141B5F400
+  0x141B5F507 member=0x348: mov     [rbp+630h+var_2E8], rax
+
+FUNCTION 0x141B757F0 sub_141B757F0
+  0x141B77F17 member=0x348: vmovsd  [rsp+0B58h+var_810], xmm1
+  0x141B77F63 member=0x348: vmovss  xmm1, dword ptr [rsp+0B58h+var_810]
+  0x141B77F7B member=0x348: vmovss  dword ptr [rsp+0B58h+var_810], xmm0
+
+FUNCTION 0x141BB3330 sub_141BB3330
+  0x141BB34F5 member=0x348: mov     [rbx+348h], rsi
+
+FUNCTION 0x141BB4280 PlayerUpperDrawControlLifecycleAndAmbientOccluderStage
+  0x141BB57E4 member=0x348: mov     [r15+348h], r13
+  0x141BB5826 member=0x348: mov     [r15+348h], rax
+  0x141BB587D member=0x348: mov     rcx, [r15+348h]
+
+FUNCTION 0x141BB6960 sub_141BB6960
+  0x141BB698A member=0x348: mov     rcx, [rcx+348h]
+
+FUNCTION 0x141BB8C30 RelocateCompanionCameraRigOwner
+  0x141BB929E member=0x348: mov     rdx, [rbx+348h]
+  0x141BB92E0 member=0x348: mov     rax, [rbx+348h]
+  0x141BB92FA member=0x348: mov     [rbx+348h], rcx
+
+FUNCTION 0x141BC2E50 sub_141BC2E50
+  0x141BC2E53 member=0x348: mov     rcx, [rcx+348h]
+
+FUNCTION 0x141BC2E70 sub_141BC2E70
+  0x141BC2E73 member=0x348: mov     rcx, [rcx+348h]
+
+FUNCTION 0x141BC2E90 sub_141BC2E90
+  0x141BC2E90 member=0x348: mov     rax, [rcx+348h]
+
+FUNCTION 0x141BC2EB0 sub_141BC2EB0
+  0x141BC2EB6 member=0x348: mov     rbx, [rcx+348h]
+
+FUNCTION 0x141BC2EF0 sub_141BC2EF0
+  0x141BC2F16 member=0x348: mov     rcx, [rbx+348h]
+
+FUNCTION 0x141BC2F60 sub_141BC2F60
+  0x141BC2F60 member=0x348: mov     rax, [rcx+348h]
+
+FUNCTION 0x141BC6890 sub_141BC6890
+  0x141BC6899 member=0x348: mov     rcx, [rcx+348h]
+  0x141BC68C6 member=0x348: mov     rcx, [rbx+348h]
+
+FUNCTION 0x141BEF630 sub_141BEF630
+  0x141BEF7C5 member=0x348: mov     [rcx+348h], eax
+
+FUNCTION 0x141BF1290 sub_141BF1290
+  0x141BF142B member=0x348: mov     [rbx+348h], dil
+
+FUNCTION 0x141BF4540 sub_141BF4540
+  0x141BF4886 member=0x348: mov     [rdx+348h], rax
+  0x141BF4C19 member=0x348: mov     rcx, [rbx+348h]
+  0x141BF4C2E member=0x348: mov     rax, [rbx+348h]
+
+FUNCTION 0x141BF5920 sub_141BF5920
+  0x141BF5960 member=0x348: mov     r10, [r10+348h]
+
+FUNCTION 0x141C052D0 sub_141C052D0
+  0x141C054EB member=0x348: mov     [rdi+348h], esi
+
+FUNCTION 0x141C081B0 sub_141C081B0
+  0x141C082B3 member=0x348: movzx   edx, [rsp+308h+arg_38]
+  0x141C084A0 member=0x348: cmp     [rsp+308h+arg_38], 0
+  0x141C0891C member=0x348: movzx   eax, [rsp+308h+arg_38]
+
+FUNCTION 0x141C0B410 sub_141C0B410
+  0x141C0C936 member=0x348: vmovss  xmm0, [rbp+6D0h+var_388]
+  0x141C0C99A member=0x348: vmovss  xmm0, [rbp+6D0h+var_388]
+
+FUNCTION 0x141C0ECC0 RecomputeRouteStateFromDescriptorAndSelectedChild
+  0x141C0EE83 member=0x348: mov     eax, [r15+348h]
+  0x141C0F3A1 member=0x348: mov     [rsp+0B88h+var_840], eax
+
+FUNCTION 0x141C10A40 sub_141C10A40
+  0x141C10D14 member=0x348: mov     [rax+348h], rcx
+
+FUNCTION 0x141CC4940 sub_141CC4940
+  0x141CC5399 member=0x348: mov     [rbp+900h+var_5B8], r12
+
+FUNCTION 0x141D280F0 sub_141D280F0
+  0x141D28309 member=0x348: mov     [rax+348h], esi
+
+FUNCTION 0x141D2DEB0 sub_141D2DEB0
+  0x141D2DEFB member=0x348: mov     r9, [rax+348h]
+
+FUNCTION 0x141D7CED0 sub_141D7CED0
+  0x141D7D371 member=0x348: mov     [rax+348h], r12
+
+FUNCTION 0x141DB9860 sub_141DB9860
+  0x141DBA10C member=0x348: mov     [rsp+978h+var_630], rcx
+
+FUNCTION 0x141DBF8F0 sub_141DBF8F0
+  0x141DBFB2A member=0x348: mov     [rax+348h], rdx
+
+FUNCTION 0x141DE75F0 sub_141DE75F0
+  0x141DE80CC member=0x348: mov     [rsp+0E58h+var_B10], rdi
+
+FUNCTION 0x141E87FB0 sub_141E87FB0
+  0x141E88229 member=0x348: mov     [rcx+348h], rax
+
+FUNCTION 0x141E8B910 sub_141E8B910
+  0x141E8B9FA member=0x348: mov     [rbx+348h], ecx
+
+FUNCTION 0x141EA8DF0 sub_141EA8DF0
+  0x141EA9138 member=0x348: mov     [rbp+0FA0h+var_C58], ecx
+
+FUNCTION 0x141EAAB10 sub_141EAAB10
+  0x141EAAC97 member=0x348: mov     [rcx+348h], rax
+
+FUNCTION 0x141EB44B0 sub_141EB44B0
+  0x141EB45F5 member=0x348: vmovups xmm0, xmmword ptr [rdi+348h]
+
+FUNCTION 0x141EB61A0 sub_141EB61A0
+  0x141EB620A member=0x348: mov     rcx, [rbx+348h]
+  0x141EB628A member=0x348: mov     rax, [rbx+348h]
+
+FUNCTION 0x141EBEC00 sub_141EBEC00
+  0x141EC019E member=0x348: cmp     qword ptr [r15+348h], 0
+
+FUNCTION 0x141EC1590 sub_141EC1590
+  0x141EC1648 member=0x348: mov     rax, [rbx+348h]
+
+FUNCTION 0x141ED57B0 sub_141ED57B0
+  0x141ED5B42 member=0x348: mov     rcx, [rdi+348h]
+
+FUNCTION 0x141ED5F00 sub_141ED5F00
+  0x141ED5F43 member=0x348: mov     rax, [rbx+348h]
+
+FUNCTION 0x141ED6020 sub_141ED6020
+  0x141ED609B member=0x348: mov     rax, [rbx+348h]
+
+FUNCTION 0x141EDBD40 sub_141EDBD40
+  0x141EDBD8D member=0x348: lea     rax, [rsp+330h+arg_8]
+
+FUNCTION 0x141EDBE40 sub_141EDBE40
+  0x141EDBE7A member=0x348: lea     rax, [rsp+330h+arg_8]
+
+FUNCTION 0x141F2F5E0 sub_141F2F5E0
+  0x141F305B5 member=0x348: mov     dword ptr [rsp+1118h+var_DD4+4], 1
+
+FUNCTION 0x141F45B30 sub_141F45B30
+  0x141F46241 member=0x348: mov     rbx, [rsp+330h+arg_8]
+
+FUNCTION 0x141F779C0 sub_141F779C0
+  0x141F779DC member=0x348: mov     [rbx+348h], rcx
+
+FUNCTION 0x141F78290 sub_141F78290
+  0x141F78CE8 member=0x348: mov     [rbx+348h], rax
+  0x141F78D21 member=0x348: mov     [rbx+348h], rax
+
+FUNCTION 0x141FEEEF0 sub_141FEEEF0
+  0x141FEF2E8 member=0x348: vmovss  xmm9, dword ptr [r13+348h]
+
+FUNCTION 0x141FF3A50 sub_141FF3A50
+  0x141FF40EA member=0x348: lea     r8, [r15+348h]
+
+FUNCTION 0x1420188A0 sub_1420188A0
+  0x142018A3B member=0x348: mov     [rbx+348h], rbp
+
+FUNCTION 0x14201E6C0 sub_14201E6C0
+  0x14201EB39 member=0x348: vmovups xmmword ptr [rdi+348h], xmm0
+
+FUNCTION 0x14201EC60 sub_14201EC60
+  0x14201EC69 member=0x348: mov     rcx, [rcx+348h]
+  0x14201ECBC member=0x348: vmovups xmmword ptr [rbx+348h], xmm0
+
+FUNCTION 0x14201ED10 sub_14201ED10
+  0x14201EDFB member=0x348: mov     rcx, [rbx+348h]
+  0x14201EE49 member=0x348: vmovups xmmword ptr [rbx+348h], xmm0
+
+FUNCTION 0x14201F9A0 sub_14201F9A0
+  0x14201F9E3 member=0x348: mov     rcx, [rbx+348h]
+  0x14201FA69 member=0x348: mov     rax, [rbx+348h]
+
+FUNCTION 0x1420214B0 sub_1420214B0
+  0x1420219F1 member=0x348: lea     rcx, [rdi+348h]
+
+FUNCTION 0x14203FBD0 sub_14203FBD0
+  0x14203FDFE member=0x348: vmovss  xmm11, dword ptr [r14+348h]
+
+FUNCTION 0x142097B50 sub_142097B50
+  0x142097D88 member=0x348: mov     [rcx+348h], rsi
+
+FUNCTION 0x142098230 sub_142098230
+  0x1420983DF member=0x348: mov     [rdi+348h], r14
+
+FUNCTION 0x142098CE0 sub_142098CE0
+  0x142098D67 member=0x348: mov     [rdi+348h], r12
+
+FUNCTION 0x1421D0D80 sub_1421D0D80
+  0x1421D0DAC member=0x348: mov     rcx, [rbp+310h+arg_28]
+
+FUNCTION 0x14221A530 sub_14221A530
+  0x14221ACD7 member=0x348: mov     [rbp+590h+var_248], 0C6C89E28h
+
+FUNCTION 0x142221800 sub_142221800
+  0x142222103 member=0x348: mov     [rbp+760h+var_418], 2Ah ; '*'
+
+FUNCTION 0x14225E8A0 sub_14225E8A0
+  0x14225F040 member=0x348: mov     r12, [rsp+360h+var_18]
+
+FUNCTION 0x142260040 sub_142260040
+  0x142260248 member=0x348: mov     rsi, [rsp+330h+arg_8]
+
+FUNCTION 0x142278030 sub_142278030
+  0x14227808C member=0x348: mov     [rsp+360h+var_18], r12
+  0x142278255 member=0x348: mov     r12, [rsp+360h+var_18]
+
+FUNCTION 0x14227FCB0 sub_14227FCB0
+  0x14227FE20 member=0x348: mov     [rsp+330h+arg_8], rsi
+  0x1422800D4 member=0x348: mov     rsi, [rsp+330h+arg_8]
+
+FUNCTION 0x1422A54E0 sub_1422A54E0
+  0x1422A6295 member=0x348: mov     r14, [rsp+370h+var_28]
+
+FUNCTION 0x1422FD7F0 sub_1422FD7F0
+  0x1422FD8A7 member=0x348: mov     [rsp+380h+var_38], r14
+  0x1422FEC9D member=0x348: mov     r14, [rsp+380h+var_38]
+
+FUNCTION 0x1423B03D0 sub_1423B03D0
+  0x1423B0707 member=0x348: mov     rax, [rbp+300h+arg_38]
+
+FUNCTION 0x1423BF4A0 sub_1423BF4A0
+  0x1423C3C13 member=0x348: mov     [rsp+3DF8h+var_3AB0], eax
+  0x1423C3C54 member=0x348: movd    xmm1, [rsp+3DF8h+var_3AB0]
+
+FUNCTION 0x1424450E0 sub_1424450E0
+  0x1424451DA member=0x348: mov     [rdi+348h], r14
+
+FUNCTION 0x142445DC0 sub_142445DC0
+  0x14244635C member=0x348: mov     [rdi+348h], rax
+
+FUNCTION 0x142476FD0 sub_142476FD0
+  0x142477353 member=0x348: mov     dword ptr [rbx+348h], 7F7FFFFFh
+
+FUNCTION 0x1424A0540 sub_1424A0540
+  0x1424A06F0 member=0x348: cmp     [rsp+2F8h+arg_48], 0
+
+FUNCTION 0x1424CCF70 sub_1424CCF70
+  0x1424CD51D member=0x348: vmovss  xmm0, dword ptr [rax+348h]
+

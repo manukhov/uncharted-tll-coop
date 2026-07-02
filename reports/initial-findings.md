@@ -22399,3 +22399,42 @@ Position error may remain because reconciliation is intentionally disabled. If
 `PRE-CONSUMER-MOVE` reports non-zero fields while the root remains fixed, the
 consumer hypothesis is rejected and the next static pass must trace the later
 reader rather than tune correction coefficients.
+
+### Pre-consumer movement drives animation but not Character root motion (2026-07-02)
+
+**REJECTED:** inserting the peer movement directly after the sole call to
+`PlayerInputCommandState_Update` at `0x140C9FE4F` did not make the remote Player
+translate. Both processes logged non-zero cardinal/diagonal input, magnitude `1`,
+and changing world direction at `PRE-CONSUMER-MOVE`, while the remote
+`Player+0x130` changed only by centimetres and the user observed running in place.
+Therefore neither later timing in Player method 16 nor stronger movement-vector
+values can solve the missing root motion.
+
+**STATIC:** the actual Character root-application boundary is separate from
+`PlayerMoveStick_MainUpdate`:
+
+1. Shared Character caller `0x14042FB40` directly invokes
+   `Character_ApplyAnimationRootTransform 0x141DE8EC0` every frame.
+2. Its direct branch computes a new local transform and writes position to
+   `Character+0x130` at `0x141DE9608` and rotation to `+0x140` at
+   `0x141DE9610`, then calls virtual `+0x208` and `+0x1E8`.
+3. Before that branch, it calls Character virtual `+0x5E8`. Player resolves this
+   slot to `Player_ShouldSkipDirectRootTransformApply 0x141BC2EF0`; a true result
+   bypasses the direct root write. The predicate consults the global gameplay
+   manager and `Player+0x348`, identified by the initialization source string as
+   `m_pNetController`.
+4. `PlayerBase_SetupNpcAvoidanceCheck 0x140CC08F0`, formerly suspected as the
+   final movement output, is rejected by its exact source string and writes only
+   the NPC-avoidance helper at `Player+0x1A20`.
+
+Competing explanations are now: the remote Player alone returns true from virtual
+`+0x5E8`; both pass but the remote animation root source has zero translation; or
+both receive a non-zero root delta and a later collision/ownership stage rolls it
+back. A read-only call-site hook around `0x141DE8EC0` records the predicate,
+`m_pNetController`, and root before/after for retained slots 0 and 1.
+
+Falsifiable prediction: a remote-only `skip=1` identifies the ownership gate. If
+both report `skip=0` but only local has a material root delta, the missing state is
+the animation-root source feeding `0x141DE8EC0`. Equal non-zero deltas followed by
+a stationary remote model instead select a later physics rollback. No field is
+modified by this probe.

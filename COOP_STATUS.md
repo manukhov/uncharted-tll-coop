@@ -18,13 +18,14 @@ look/aim, weapons and firing, melee, interactions, health, death, respawn, and
 campaign lifecycle. Enemy synchronization is explicitly deferred until this is
 complete.
 
-Current blocker: the remote Player runs in place. Exact writes to `+0x130/+0x240`,
-world-only writes to `+0x240`, coefficient correction, and the later position chase
-are rejected. The chase wrote valid movement fields only after Player vtable method
-16 had already called both `PlayerInputCommandState_Update` at `0x140C9FE4F` and its
-consumer at `0x140C9FE76`. The current build intercepts that unique call and inserts
-the peer movement between derivation and consumption. It deliberately performs no
-ordinary position correction, so the test isolates scheduling from reconciliation.
+Current blocker: the remote Player runs in place. Applying peer movement immediately
+after `PlayerInputCommandState_Update 0x141E39FB0`, before the remainder of Player
+method 16, still produced only centimetre-scale root changes. This rejects timing at
+`0x140C9FE4F` as the missing translation stage. The real shared root writer is now
+located: `Character_ApplyAnimationRootTransform 0x141DE8EC0` writes
+`Player+0x130/+0x140`, but its direct branch is gated by Player virtual `+0x5E8`
+(`0x141BC2EF0`). The current build only compares that predicate, `m_pNetController`
+at `Player+0x348`, and root delta between local and remote Player.
 
 The present v2 packet carries position, quaternion, velocity, both stick pairs and
 the complete 64-bit button mask with press/release edges. It is still insufficient:
