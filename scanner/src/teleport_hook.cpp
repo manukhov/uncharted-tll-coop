@@ -2755,7 +2755,7 @@ char __fastcall hooked_player_try_start_bump_action(
         player_distance = std::sqrt(dx * dx + dy * dy + dz * dz);
     }
 
-    if (slot >= 0 && player_distance >= 0.0F && player_distance < 3.0F) {
+    if (slot >= 0) {
         struct LastState {
             ULONGLONG tick = 0;
             void* target = nullptr;
@@ -2765,7 +2765,7 @@ char __fastcall hooked_player_try_start_bump_action(
         const ULONGLONG now = GetTickCount64();
         LastState& state = last[slot];
         if (target_actor != state.target || started != state.started ||
-            now - state.tick >= 250) {
+            now - state.tick >= 500) {
             state.tick = now;
             state.target = target_actor;
             state.started = started;
@@ -3792,16 +3792,23 @@ void apply_puppet_transform_post(void* puppet) {
         if (should_snap) {
             std::memcpy(world, pkt.pos, sizeof(pkt.pos));
             std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
-        } else if (valid_network_movement(pkt) && pkt.move_magnitude > 0.01F) {
-            constexpr float kNudgeDeadband = 0.03F;
-            constexpr float kNudgeFraction = 0.08F;
-            constexpr float kMaxNudgePerUpdate = 0.05F;
+        } else {
+            const bool peer_moving =
+                valid_network_movement(pkt) && pkt.move_magnitude > 0.01F;
+            // Collision can leave the two simulations more than a metre apart
+            // after both players stop. Input-vector correction cannot close that
+            // error at idle because it would manufacture locomotion with no peer
+            // input. Reconcile the transform itself, slowly, while preserving the
+            // engine-owned velocity and animation state.
+            const float nudge_deadband = peer_moving ? 0.03F : 0.15F;
+            const float nudge_fraction = peer_moving ? 0.08F : 0.04F;
+            const float max_nudge_per_update = peer_moving ? 0.05F : 0.015F;
             const float horizontal_sq = dx * dx + dz * dz;
-            if (horizontal_sq > kNudgeDeadband * kNudgeDeadband) {
+            if (horizontal_sq > nudge_deadband * nudge_deadband) {
                 const float horizontal = std::sqrt(horizontal_sq);
-                float step = horizontal * kNudgeFraction;
-                if (step > kMaxNudgePerUpdate) {
-                    step = kMaxNudgePerUpdate;
+                float step = horizontal * nudge_fraction;
+                if (step > max_nudge_per_update) {
+                    step = max_nudge_per_update;
                 }
                 if (step > horizontal) {
                     step = horizontal;

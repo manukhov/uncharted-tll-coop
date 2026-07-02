@@ -22161,3 +22161,38 @@ the candidate; or `PlayerBumpAction` starts but loses to a later Player action.
 A read-only hook at `0x140CE8E10` can distinguish these without forcing state:
 zero target handle selects the first explanation, a valid handle plus false return
 selects the second, and a true return without a gesture selects the third.
+
+### Idle collision divergence is left uncorrected by the current replica policy (2026-07-02)
+
+**CONFIRMED:** the first run after removing distance-only hard snaps did not
+teleport, but retained a large visible positional error after contact.
+
+- process `2244` stabilized at approximately `1.07 m` horizontal error;
+- process `9904` stabilized at approximately `1.28 m` horizontal error;
+- both reported `peerMove=0`, `hardSnap=0`, `explicitTeleport=0` and
+  `correction=(0,0)` while the error remained constant;
+- state roles were correct: A received on `31338`, B on `31339`. The separate
+  legacy input receiver's `31337` bind failure is unrelated to state snapshots.
+
+The cause is explicit in two independent code paths: both
+`compute_remote_position_correction` and the free-run branch of
+`apply_puppet_transform_post` refuse any correction while peer movement is zero.
+This avoided the rejected idle locomotion-vector drag, but also made collision
+divergence permanent.
+
+**STATIC FIX:** retain input-vector correction only for genuine movement. At idle,
+move only the remote transform toward the authoritative position with a `0.15 m`
+deadband, `4%` error fraction and `0.015 m` per-update cap; do not modify velocity,
+input or animation state. Explicit teleports and the `12 m` corruption fallback
+remain unchanged.
+
+Falsifiable prediction: the observed `1.07/1.28 m` idle residuals must decay toward
+`0.15 m` without `hardSnap=1`, without a run animation at zero peer input, and
+without visible metre-scale teleports. Persistent error means the local collision
+solver cancels every post-update step and requires a single-authority collision
+policy rather than a larger correction.
+
+The bump diagnostic itself was **INCONCLUSIVE**: both hooks installed, but the
+initial logger emitted only below a locally computed `3 m` player distance and
+recorded no event. The next build logs both Player slots periodically regardless
+of that distance; this changes observation only, not bump state.
