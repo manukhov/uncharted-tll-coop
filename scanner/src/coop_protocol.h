@@ -29,7 +29,7 @@ constexpr std::uint16_t kStatePacketVersion = 4;
 struct StatePacket {
     std::uint32_t magic = kStatePacketMagic;
     std::uint16_t version = kStatePacketVersion;
-    std::uint16_t flags = 0;          // bit0 player, bit1 health, bit2 movement, bit3 buttons
+    std::uint16_t flags = 0;          // bits 0..3: player/health/movement/buttons; bit4 teleport
     std::uint32_t sequence = 0;
     std::uint32_t timestamp_ms = 0;
     float pos[4]{};                   // world position block (mirrors Player+0x240)

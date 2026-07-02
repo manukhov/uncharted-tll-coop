@@ -503,6 +503,8 @@ struct StateNetState {
     coop::StatePacket peer_state{};        // latest received peer state
     std::uint32_t peer_state_sequence = 0;
     std::atomic<std::uint64_t> pending_button_presses = 0;
+    std::atomic<std::uint64_t> active_button_press_latch = 0;
+    std::atomic<bool> pending_authoritative_teleport = false;
     std::atomic<bool> has_peer_enemies = false;
     std::atomic<ULONGLONG> peer_enemies_received_ms = 0;
     SRWLOCK peer_enemies_lock = SRWLOCK_INIT;
@@ -525,6 +527,10 @@ void publish_peer_state_snapshot(const coop::StatePacket& packet) {
     g_state_net.peer_state_sequence = packet.sequence;
     g_state_net.pending_button_presses.fetch_or(
         packet.buttons_pressed, std::memory_order_release);
+    if ((packet.flags & 16) != 0) {
+        g_state_net.pending_authoritative_teleport.store(
+            true, std::memory_order_release);
+    }
     ReleaseSRWLockExclusive(&g_state_net.peer_state_lock);
     g_state_net.peer_state_received_ms.store(GetTickCount64(), std::memory_order_release);
     g_state_net.has_peer_state.store(true, std::memory_order_release);
@@ -857,9 +863,16 @@ std::int64_t __fastcall hooked_input_scale_copy(
             // their packet, then become one held pulse for this conversion.
             // Input_ScaleCopyVirtual derives native pressed/released masks and
             // command timestamps from that pulse.
-            const std::uint64_t edge_pulse =
+            const std::uint64_t new_edges =
                 g_state_net.pending_button_presses.exchange(
                     0, std::memory_order_acq_rel);
+            if (new_edges != 0) {
+                g_state_net.active_button_press_latch.fetch_or(
+                    new_edges, std::memory_order_release);
+            }
+            const std::uint64_t edge_pulse =
+                g_state_net.active_button_press_latch.load(
+                    std::memory_order_acquire);
             auto* const source_bytes = static_cast<std::byte*>(source);
             const std::uint64_t synthetic_move_gate =
                 *reinterpret_cast<const std::uint64_t*>(source_bytes + 0x518) &
@@ -870,6 +883,16 @@ std::int64_t __fastcall hooked_input_scale_copy(
     }
     const std::int64_t result =
         g_original_input_scale_copy(joypad, source, destination_index);
+    if (destination_index == 3 && readable_bytes(joypad) >= 0xD8) {
+        // Joypad 3 is converted several times before the remote Player consumes
+        // its command state. Keep the native pressed edge visible through those
+        // conversions; hooked_player_input_state_update clears it immediately
+        // after Player slot 16 has consumed it.
+        *reinterpret_cast<std::uint64_t*>(
+            static_cast<std::byte*>(joypad) + 0xD0) |=
+            g_state_net.active_button_press_latch.load(
+                std::memory_order_acquire);
+    }
     if (destination_index == 3) {
         g_force_joypad3_analog_thread.store(previous, std::memory_order_release);
         *input_focus_gate = saved_input_focus;
@@ -3344,9 +3367,21 @@ void send_local_player_state() {
         } else if (vnow - pvt >= 16) {
             const float dt = static_cast<float>(vnow - pvt) / 1000.0F;
             if (dt > 0.0F && dt < 0.5F) {
-                cvx = (pos[0] - pvx) / dt;
-                cvy = (pos[1] - pvy) / dt;
-                cvz = (pos[2] - pvz) / dt;
+                const float sample_dx = pos[0] - pvx;
+                const float sample_dy = pos[1] - pvy;
+                const float sample_dz = pos[2] - pvz;
+                cvx = sample_dx / dt;
+                cvy = sample_dy / dt;
+                cvz = sample_dz / dt;
+                // Normal running cannot cover 2.5 metres in one 16-33 ms
+                // sample. Mark this discontinuity explicitly so replicas snap
+                // only for a real scripted/checkpoint teleport, not because
+                // player collision temporarily blocked local convergence.
+                if (sample_dx * sample_dx + sample_dy * sample_dy +
+                        sample_dz * sample_dz >
+                    2.5F * 2.5F) {
+                    pkt.flags |= 16;
+                }
             }
             pvx = pos[0]; pvy = pos[1]; pvz = pos[2]; pvt = vnow;
         }
@@ -3588,11 +3623,16 @@ void apply_puppet_transform_post(void* puppet) {
     // authoritative. Velocity is left to the clone's own locomotion (it is an anim
     // OUTPUT; zeroing it killed the run blend).
     constexpr float kPosLerp = 0.35F;
-    constexpr float kSnapDistSq = 4.0F * 4.0F;  // >4m apart => snap, don't lerp
+    constexpr float kRecoverySnapDistSq = 12.0F * 12.0F;
     const float dx = pkt.pos[0] - world[0];
     const float dy = pkt.pos[1] - world[1];
     const float dz = pkt.pos[2] - world[2];
-    const bool too_far = dx * dx + dy * dy + dz * dz > kSnapDistSq;
+    const float distance_sq = dx * dx + dy * dy + dz * dz;
+    const bool explicit_teleport =
+        g_state_net.pending_authoritative_teleport.exchange(
+            false, std::memory_order_acq_rel);
+    const bool should_snap =
+        explicit_teleport || distance_sq > kRecoverySnapDistSq;
     // Facing is independent from position reconciliation. The old free-run branch
     // returned before this copy, leaving the remote Player free to spin from tiny
     // local correction vectors while its peer stood still.
@@ -3608,7 +3648,7 @@ void apply_puppet_transform_post(void* puppet) {
         // post-step only while the peer genuinely moves. This remains far below
         // the rejected 35%-of-error lerp and is disabled at idle, so it cannot
         // recreate the idle body drag.
-        if (too_far) {
+        if (should_snap) {
             std::memcpy(world, pkt.pos, sizeof(pkt.pos));
             std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
         } else if (valid_network_movement(pkt) && pkt.move_magnitude > 0.01F) {
@@ -3641,13 +3681,14 @@ void apply_puppet_transform_post(void* puppet) {
             line << "PUPPET-POS horizontal=" << std::sqrt(dx * dx + dz * dz)
                  << " vertical=" << std::abs(dy)
                  << " peerMove=" << pkt.move_magnitude
-                 << " hardSnap=" << (too_far ? 1 : 0)
+                 << " hardSnap=" << (should_snap ? 1 : 0)
+                 << " explicitTeleport=" << (explicit_teleport ? 1 : 0)
                  << " orientationDot=" << orientation_dot;
             log_line(line.str().c_str());
         }
         return;
     }
-    if (too_far) {
+    if (should_snap) {
         std::memcpy(world, pkt.pos, sizeof(pkt.pos));
         std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
     } else {
@@ -7161,6 +7202,21 @@ char __fastcall hooked_player_input_state_update(void* player) {
     }
 
     const char result = g_original_player_input_state_update(player);
+    if (is_remote) {
+        const std::uint64_t consumed_edges =
+            g_state_net.active_button_press_latch.exchange(
+                0, std::memory_order_acq_rel);
+        void* const frame_state =
+            *reinterpret_cast<void**>(g_module + 0x3FE1088);
+        if (consumed_edges != 0 && frame_state != nullptr) {
+            auto* const joypad3 = static_cast<std::byte*>(frame_state) +
+                                  0xDB0 + 0xBF0 * 3;
+            if (readable_bytes(joypad3) >= 0xD8) {
+                *reinterpret_cast<std::uint64_t*>(joypad3 + 0xD0) &=
+                    ~consumed_edges;
+            }
+        }
+    }
     if (role < 0 || readable_bytes(static_cast<std::byte*>(player) + 0x3A40) < 1) {
         return result;
     }

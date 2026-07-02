@@ -4991,6 +4991,25 @@ FUNCTIONS = {
         "by mask A against every layer selected by mask B in the 64-row matrix "
         "at filter+0x48.",
     ),
+    0x140CE7ED0: (
+        "PlayerBumpController_Update",
+        "Campaign Player-bump update. Builds a Crowd::ProbeResult through "
+        "PlayerBumpController_BuildCrowdProbeResult, applies the rejection gate "
+        "at 0x140CE8E10, and forwards accepted results to "
+        "PlayerBumpController_UpdateCrowdMove.",
+    ),
+    0x140CE1E20: (
+        "PlayerBumpController_BuildCrowdProbeResult",
+        "Builds the Player-facing Crowd::ProbeResult from Player transform and "
+        "movement through 0x1406DD350, then updates the bump probe state. This "
+        "path is separate from Havok rigid-body contact filtering.",
+    ),
+    0x140CE9530: (
+        "PlayerBumpController_UpdateCrowdMove",
+        "Consumes Crowd::ProbeResult and owns authored hero-bump, "
+        "dra-*-bump-inside, player-bumped-npc, and no-adjust-to-player state "
+        "publication. Physical Player collision alone does not invoke it.",
+    ),
     0x140CC1450: (
         "ApplyProcessSpawnInfoStateIntoTopLevelPlayerOwner",
         "Top-level Player apply/finalize path reached from 0x1410DE740. "

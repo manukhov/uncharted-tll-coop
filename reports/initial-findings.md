@@ -22061,3 +22061,79 @@ pass through with matrix bits present and clone entries at layer 5, a later
 per-pair exclusion or the Player movement probe's own authored filter is the
 remaining gate. Any world fall or violent body instability rejects the layer
 assignment and requires immediate rollback.
+
+**CONFIRMED (physics only):** both processes logged the clone on layer 5 and the
+enabled `4<->5` matrix pair; the user confirmed that the two Players no longer pass
+through one another. Floor/world collision remained intact. The expected authored
+bump animation did not play, so physical filtering and animation reaction are
+separate systems.
+
+### A one-conversion press pulse is overwritten before Player slot 16 (2026-07-02)
+
+**REJECTED:** exposing a received short press for only the first Joypad 3
+`Input_ScaleCopyVirtual` call does not reliably reach Player commands.
+
+- Runtime logs captured the intended remote masks and, on some calls, native
+  `pressed=0x10500` / `pressed=0x80000`.
+- The same frame then ran additional Joypad 3 conversions, which replaced `+0xD0`
+  with zero before `Player_UpdateInputCommandState 0x140C9F8B0` consumed it.
+- Movement and held masks remained functional, but the user confirmed that jump
+  and evade/roll did not execute.
+
+Competing explanations: a wrong gamepad binding would never produce the matching
+Joypad pressed bit; packet loss is excluded for the logged accepted edge; the
+remaining concrete loss occurs between repeated conversion and Player slot 16.
+
+**STATIC FIX:** accumulate accepted pressed bits, preserve them in Joypad 3
+`+0xD0` across every repeated conversion, and clear them immediately after the
+remote Player returns from `Player_UpdateInputCommandState`. Native conversion
+still owns timestamps and held/released state.
+
+Falsifiable prediction: one remote jump or evade press must remain visible through
+the final Joypad 3 conversion and execute exactly once. Holding the button must not
+repeat the action because the latch is cleared after one Player command update.
+
+### Collision divergence triggers the old four-metre emergency snap (2026-07-02)
+
+**CONFIRMED:** the new physical collision exposed a conflict with distance-only
+replica recovery, causing the reported teleports.
+
+- After player contact, one process retained approximately `3.48 m` position error
+  and the other approximately `2.47 m` while idle.
+- Further contact produced errors of `4.19 m` and `5.72 m`; both logged
+  `hardSnap=1` under the old `>4 m` rule.
+- The state transport remained live and orientation converged, excluding packet
+  loss as the direct cause. Each copy's local collision solver had simply blocked
+  its replica differently.
+
+Distance alone can no longer distinguish a campaign teleport from temporary
+collision divergence. The sender now marks a real positional discontinuity above
+`2.5 m` in one 16-33 ms sample as packet flag bit 4. The receiver latches that flag
+and snaps only for it, retaining a 12 m last-resort corruption bound.
+
+Falsifiable prediction: ordinary player contact at 4-6 m replica error must no
+longer produce `hardSnap=1`; a real checkpoint/script displacement must log
+`explicitTeleport=1` and still snap immediately. Long-lived collision divergence
+may remain and will require authority policy, but it must not appear as a teleport.
+
+### Player bump animation is Crowd-probe driven, not Havok-contact driven (2026-07-02)
+
+**STATIC:** the hands-forward/inside-bump reaction belongs to
+`PlayerBumpController`, and enabling the Havok pair alone cannot start it.
+
+Independent evidence:
+
+1. `PlayerBumpController_Update 0x140CE7ED0` runs in campaign, builds a 64-byte
+   probe result through `0x140CE1E20`, rejects it through `0x140CE8E10`, then calls
+   `PlayerBumpController_UpdateCrowdMove 0x140CE9530`.
+2. `0x140CE1E20` derives the Player transform/movement and calls `0x1406DD350` to
+   produce a `Crowd::ProbeResult`; it does not consume Havok body-contact pairs.
+3. `0x140CE9530` owns the authored `hero-bump-*`,
+   `dra-*-bump-inside-*`, `player-bumped-npc`, and `no-adjust-to-player` families
+   and publishes the selected structured state to the bumped actor.
+4. Runtime confirmed physical `4<->5` collision without this animation, exactly
+   separating the two pipelines.
+
+Next static gate: determine how `0x1406DD350` classifies candidates and either make
+the remote Player appear in the Crowd probe set or construct the same result from
+validated Player contact. Directly forcing an animation name is not yet justified.
