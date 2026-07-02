@@ -3879,37 +3879,43 @@ void send_local_player_state() {
     // is created lazily and may only exist on the LIVE object; if so, read the held
     // weapon id at controller+0x2C there for replication via give-weapon.
     {
+        auto rd_ptr = [](void* o, std::size_t off) -> std::uintptr_t {
+            if (o == nullptr) return 0;
+            auto* p = static_cast<std::byte*>(o) + off;
+            if (readable_bytes(p) < sizeof(void*)) return 0;
+            return reinterpret_cast<std::uintptr_t>(*reinterpret_cast<void**>(p));
+        };
+        auto held_id = [](std::uintptr_t ctrl) -> std::uint32_t {
+            if (ctrl == 0) return 0;
+            auto* p = reinterpret_cast<std::byte*>(ctrl) + 0x2C;
+            if (readable_bytes(p) < sizeof(std::uint32_t)) return 0;
+            return *reinterpret_cast<std::uint32_t*>(p);
+        };
+        // Sample EVERY send frame (~60 Hz): the weapon controller +0x218 may
+        // materialize only in brief windows a 1 s sample misses. Log the moment it
+        // first goes non-null (with held id) and a slow heartbeat otherwise.
+        void* live0 = resolve_live_player_safe(0);
+        void* live1 = resolve_live_player_safe(1);
+        const std::uintptr_t live0_ctrl = rd_ptr(live0, 0x218);
+        const std::uintptr_t live1_ctrl = rd_ptr(live1, 0x218);
+        static bool seen0 = false, seen1 = false;
         static ULONGLONG diag_last = 0;
-        if (weapon_now - diag_last > 1000) {
+        const bool transition = (live0_ctrl != 0 && !seen0) ||
+                                (live1_ctrl != 0 && !seen1);
+        if (live0_ctrl != 0) seen0 = true;
+        if (live1_ctrl != 0) seen1 = true;
+        if (transition || weapon_now - diag_last > 2000) {
             diag_last = weapon_now;
-            auto rd_ptr = [](void* o, std::size_t off) -> std::uintptr_t {
-                if (o == nullptr) return 0;
-                auto* p = static_cast<std::byte*>(o) + off;
-                if (readable_bytes(p) < sizeof(void*)) return 0;
-                return reinterpret_cast<std::uintptr_t>(*reinterpret_cast<void**>(p));
-            };
-            auto held_id = [](std::uintptr_t ctrl) -> std::uint32_t {
-                if (ctrl == 0) return 0;
-                auto* p = reinterpret_cast<std::byte*>(ctrl) + 0x2C;
-                if (readable_bytes(p) < sizeof(std::uint32_t)) return 0;
-                return *reinterpret_cast<std::uint32_t*>(p);
-            };
-            // Resolve the live local players (0 and 1) via the resolver owner.
-            void* live0 = resolve_live_player_safe(0);
-            void* live1 = resolve_live_player_safe(1);
-            const std::uintptr_t ret_ctrl = rd_ptr(local_obj, 0x218);
-            const std::uintptr_t live0_ctrl = rd_ptr(live0, 0x218);
-            const std::uintptr_t live1_ctrl = rd_ptr(live1, 0x218);
             std::ostringstream w;
-            w << "WEAPON-SEND retained=0x" << std::hex
-              << reinterpret_cast<std::uintptr_t>(local_obj)
-              << " ret_c218=0x" << ret_ctrl
-              << " | live0=0x" << reinterpret_cast<std::uintptr_t>(live0)
+            w << "WEAPON-SEND " << (transition ? "**CTRL-MATERIALIZED** " : "")
+              << "live0=0x" << std::hex << reinterpret_cast<std::uintptr_t>(live0)
               << " live0_c218=0x" << live0_ctrl
               << " live0_held=0x" << held_id(live0_ctrl)
               << " | live1=0x" << reinterpret_cast<std::uintptr_t>(live1)
               << " live1_c218=0x" << live1_ctrl
-              << " live1_held=0x" << held_id(live1_ctrl) << std::dec;
+              << " live1_held=0x" << held_id(live1_ctrl)
+              << " everSeen0=" << std::dec << (seen0 ? 1 : 0)
+              << " everSeen1=" << (seen1 ? 1 : 0);
             log_line(w.str().c_str());
         }
     }
