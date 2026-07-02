@@ -22116,7 +22116,7 @@ longer produce `hardSnap=1`; a real checkpoint/script displacement must log
 `explicitTeleport=1` and still snap immediately. Long-lived collision divergence
 may remain and will require authority policy, but it must not appear as a teleport.
 
-### Player bump animation is Crowd-probe driven, not Havok-contact driven (2026-07-02)
+### Player bump action is Crowd-probe driven, not Havok-contact driven (2026-07-02)
 
 **STATIC:** the hands-forward/inside-bump reaction belongs to
 `PlayerBumpController`, and enabling the Havok pair alone cannot start it.
@@ -22124,16 +22124,40 @@ may remain and will require authority policy, but it must not appear as a telepo
 Independent evidence:
 
 1. `PlayerBumpController_Update 0x140CE7ED0` runs in campaign, builds a 64-byte
-   probe result through `0x140CE1E20`, rejects it through `0x140CE8E10`, then calls
-   `PlayerBumpController_UpdateCrowdMove 0x140CE9530`.
+   probe result through `0x140CE1E20`, tries an authored action through
+   `PlayerBumpController_TryStartBumpAction 0x140CE8E10`, then falls back to
+   `PlayerBumpController_UpdateCrowdAdjustment 0x140CE9530`.
 2. `0x140CE1E20` derives the Player transform/movement and calls `0x1406DD350` to
    produce a `Crowd::ProbeResult`; it does not consume Havok body-contact pairs.
-3. `0x140CE9530` owns the authored `hero-bump-*`,
-   `dra-*-bump-inside-*`, `player-bumped-npc`, and `no-adjust-to-player` families
-   and publishes the selected structured state to the bumped actor.
+3. The prior attribution of all bump strings to `0x140CE9530` was wrong.
+   `PlayerBumpController_BuildBumpActionCandidate 0x140CE2520` builds the
+   directional `hero-bump-%s%s%s-a/b/c` hashes. `0x140CE8E10` consumes its flags
+   and starts `PlayerBumpAction` through `0x140CE39E0`. `0x140CE9530` is the
+   fallback crowd-movement adjustment and owns `no-adjust-to-player`.
 4. Runtime confirmed physical `4<->5` collision without this animation, exactly
    separating the two pipelines.
 
-Next static gate: determine how `0x1406DD350` classifies candidates and either make
-the remote Player appear in the Crowd probe set or construct the same result from
-validated Player contact. Directly forcing an animation name is not yet justified.
+**STATIC refinement:** missing registration is rejected as the cause.
+
+1. `Player` spawn method `0x1410D3440` calls
+   `SimpleGridHashManager_RegisterObject 0x141E36910` and stores the returned id at
+   `Player+0x2D8`.
+2. Main Player update `0x1410EC230` calls the source-identified
+   `SimpleGridHashManager_UpdateGridHash 0x141E37080`; if validation fails it
+   registers the Player again. The reissued slot-1 object is a real Player using
+   this same update path, so manually registering it would duplicate native state.
+3. `Crowd_UpdateProbe 0x1406DD350` accepts a prior non-self candidate by a common
+   actor capability or by `SimpleNpc`. The latter is a fallback, not a mandatory
+   class. Its collision-query branch likewise accepts ordinary live actors with
+   the required common bit.
+4. `PlayerBumpController_IsContactEligible 0x140CDCC70` does not require
+   `SimpleNpc`: it checks result distance at `ProbeResult+0x30`, contact geometry,
+   cooldown, and only adds target-relative velocity checks when SimpleNpc data is
+   available.
+
+Competing explanations now left are: the physical layer-5 Player never appears in
+the 64-byte `Crowd::ProbeResult`; it appears but contact geometry/cooldown rejects
+the candidate; or `PlayerBumpAction` starts but loses to a later Player action.
+A read-only hook at `0x140CE8E10` can distinguish these without forcing state:
+zero target handle selects the first explanation, a valid handle plus false return
+selects the second, and a true return without a gesture selects the third.

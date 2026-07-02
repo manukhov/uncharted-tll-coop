@@ -4994,9 +4994,9 @@ FUNCTIONS = {
     0x140CE7ED0: (
         "PlayerBumpController_Update",
         "Campaign Player-bump update. Builds a Crowd::ProbeResult through "
-        "PlayerBumpController_BuildCrowdProbeResult, applies the rejection gate "
-        "at 0x140CE8E10, and forwards accepted results to "
-        "PlayerBumpController_UpdateCrowdMove.",
+        "PlayerBumpController_BuildCrowdProbeResult, tries to start an authored "
+        "bump action through PlayerBumpController_TryStartBumpAction, and falls "
+        "back to PlayerBumpController_UpdateCrowdAdjustment when no action starts.",
     ),
     0x140CE1E20: (
         "PlayerBumpController_BuildCrowdProbeResult",
@@ -5005,10 +5005,45 @@ FUNCTIONS = {
         "path is separate from Havok rigid-body contact filtering.",
     ),
     0x140CE9530: (
-        "PlayerBumpController_UpdateCrowdMove",
-        "Consumes Crowd::ProbeResult and owns authored hero-bump, "
-        "dra-*-bump-inside, player-bumped-npc, and no-adjust-to-player state "
-        "publication. Physical Player collision alone does not invoke it.",
+        "PlayerBumpController_UpdateCrowdAdjustment",
+        "Fallback Crowd::ProbeResult consumer used when no authored bump action "
+        "starts. It adjusts crowd movement and handles no-adjust-to-player; the "
+        "hero-bump action names are built at 0x140CE2520, not here.",
+    ),
+    0x1406DD350: (
+        "Crowd_UpdateProbe",
+        "Crowd::UpdateProbe from crowd-util.cpp. Maintains a 64-byte ProbeResult, "
+        "accepts an existing non-self candidate by actor capability or SimpleNpc "
+        "selector, and otherwise performs the spatial collision query.",
+    ),
+    0x140CE2520: (
+        "PlayerBumpController_BuildBumpActionCandidate",
+        "Builds the 128-byte Player bump-action candidate, including directional "
+        "hero-bump-%s%s%s-a/b/c hashes and movement/contact eligibility flags. "
+        "SimpleNpc is optional target-specific data, not a requirement for Player.",
+    ),
+    0x140CE8E10: (
+        "PlayerBumpController_TryStartBumpAction",
+        "Consumes Crowd::ProbeResult, calls the bump-action candidate builder, and "
+        "starts PlayerBumpAction through 0x140CE39E0 when the candidate flags allow it. "
+        "Returns false to permit crowd movement adjustment.",
+    ),
+    0x140CDCC70: (
+        "PlayerBumpController_IsContactEligible",
+        "Checks ProbeResult distance, contact geometry/relative movement through "
+        "0x140CDC900, bump cooldown, and optional SimpleNpc velocity before allowing "
+        "an authored bump action.",
+    ),
+    0x141E36910: (
+        "SimpleGridHashManager_RegisterObject",
+        "Registers an NdGameObject in the shared simple-grid hash, stores its live "
+        "handle, grid cell, velocity and radii, and returns a SimpleGridHashId.",
+    ),
+    0x141E37080: (
+        "SimpleGridHashManager_UpdateGridHash",
+        "Validated by its embedded source signature. Verifies that a supplied "
+        "SimpleGridHashId still belongs to the same NdGameObject and updates its "
+        "grid cell, transform, velocity and radii.",
     ),
     0x140CC1450: (
         "ApplyProcessSpawnInfoStateIntoTopLevelPlayerOwner",
