@@ -18,13 +18,18 @@ look/aim, weapons and firing, melee, interactions, health, death, respawn, and
 campaign lifecycle. Enemy synchronization is explicitly deferred until this is
 complete.
 
-Current blocker: the remote Player remains at its spawn point in the opposite
-process, including collision. RTTI disproved the previous root-writer assignment:
-`0x141DE8EC0` is the NavCharacter/AiCharacter vtable `+0x400` path, while Player
-uses `Player_PostAnimUpdate 0x1410E9210`. The current build applies peer world
-position as parent-local `Player+0x130` immediately before the shared vtable
-`+0x2B8` method `0x141BB8320`, which then derives `+0x240/+0x250/+0x280` together.
-The next run tests visible movement and collision at the former spawn position.
+Remote movement is now the protected stable baseline. Both copies passed visual
+testing with smooth running and correct facing; final horizontal residuals were
+`0.043 m` and `0.071 m` without a hard snap. Sender world movement plus bounded
+correction is applied immediately after `0x140C9FE4F`, before the real consumer.
+Native locomotion owns position and facing while moving; network quaternion
+blending runs only at idle. Do not replace this with exact `+0x130/+0x240` writes.
+
+Player layer `4<->5` collision, both bump probes, and authoritative root pinning
+are parked because that sequence caused physics divergence and packet-rate jitter.
+The next blocker is full action/state reproduction: traversal, jump/roll, weapons,
+firing effects, melee and interactions. Player collision returns later as an
+isolated task against this movement baseline.
 
 The present v2 packet carries position, quaternion, velocity, both stick pairs and
 the complete 64-bit button mask with press/release edges. It is still insufficient:

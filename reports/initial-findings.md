@@ -22477,3 +22477,125 @@ Player must no longer collide with the old spawn position. If the model moves bu
 collision remains at spawn, `+0x280` is not the collision consumer; if neither
 moves while `+0x130` changes, a later writer overwrites the local root before
 `0x141BB8602`.
+
+### Exact root round-trip diagnostic separates conversion from later mutation (2026-07-02)
+
+**STATIC:** the remaining multi-metre `PUPPET-POS` residual cannot yet be treated
+as packet interpolation error. Three independent code paths agree on the transform
+contract:
+
+1. `Character_UpdateDerivedWorldTransformFromLocalRoot 0x141BB8320` loads
+   `Player+0x130` once at entry, refreshes the parent pair `+0x110/+0x120`, and
+   writes the derived world position directly to `+0x240` at the end. It does not
+   overwrite `+0x130` in between.
+2. `0x14014E240` is the engine's forward transform helper used by that function:
+   it rotates local `+0x30` by parent quaternion `+0x20` and adds parent position
+   `+0x10`.
+3. `RefreshEmbeddedPlayerAuthoredDescriptorFromCompactCarrier 0x1416862B0`
+   contains the inverse operation inline. Its XOR with sign mask
+   `0x142880610 = {-0,-0,-0,+0}` confirms quaternion order `(x,y,z,w)` and
+   conjugation of xyz before rotating `world-parent` into local space.
+
+Competing hypotheses are now: the scalar inverse differs from the engine's exact
+convention; the original method derives a different result after the pre-write; or
+the packet target itself is stale/wrong while both transforms are internally
+consistent. A read-only diagnostic records the packet target, calls the engine's
+own `0x14014E240` after the local write to obtain a round-trip prediction, then
+records actual `Player+0x240` after `0x141BB8320`.
+
+Falsifiable prediction: a large target-to-round-trip error selects the scalar
+inverse as the fault. A near-zero round-trip error followed by a large actual
+error selects mutation inside or after `0x141BB8320`. If both errors are near zero
+while the visible actor remains displaced, the transmitted `Player+0x240` is not
+the common cross-process world coordinate and the packet source must be revised.
+
+**CONFIRMED:** both processes produced exact equality in motion and at rest:
+`target == predicted == actual`, with `roundTripHorizontal=0`,
+`roundTripVertical=0`, and `parentQNormSq=1`. Thus the scalar inverse, engine
+forward transform, and final `0x141BB8320` write are correct. The earlier
+multi-metre residual belonged to the superseded build and is not present in this
+run.
+
+The remaining visible jitter is now isolated above the transform layer. During
+movement the diagnostic sampled only about 10-12 new sequence numbers per 500 ms,
+while `latest_peer_state` returned the newest packet unchanged on every render
+frame. Competing causes were incorrect coordinate conversion, a later root
+overwrite, or discrete packet stepping. The first two are rejected by the exact
+round trip; discrete stepping remains and is also directly visible in the receive
+and apply code.
+
+The next build retains the two latest packets and interpolates position using
+receiver-local arrival times with a 75 ms display delay. Sender timestamps are not
+used because independent PCs do not share `GetTickCount64` epochs. Prediction:
+root round-trip error remains zero, motion advances between packet arrivals rather
+than holding and jumping, and release reaches the final confirmed position within
+75-100 ms. Persistent animation jitter with smooth position would instead isolate
+the animation/input stream as a separate fault.
+
+**REJECTED:** the 75 ms two-packet interpolation did not materially reduce the
+visible running jitter for either Chloe or Nadine. It smoothed the target of the
+exact root pin, but retained the wrong ownership model: packet position still
+replaced native locomotion every update.
+
+Git history isolates the regression boundary. Commit `25637e8` was the last
+runtime-validated smooth state (`0.10/0.14 m` residual): native slot-1 locomotion
+owned position and the network applied at most `0.05 m` correction while moving.
+Commit `a06c79c` then enabled Player layer `4<->5` collision, after which the two
+independent physics simulations diverged. Attempts to repair that divergence ended
+in `21d1958`, which replaced the bounded correction with exact packet position.
+The later `+0x130` pre-write made that exact pin structurally consistent but did
+not remove its packet-rate stepping.
+
+Competing restoration hypotheses are: collision is the primary source of drift;
+the bump probes disturb scheduling; or exact root ownership alone causes jitter.
+The next build returns the complete movement policy to `25637e8` and disables all
+three later additions together: layer `4<->5` collision, both bump probes, and the
+experimental pre-consumer/root hooks. Prediction: ordinary running becomes smooth
+again and residual returns near the earlier decimetre range; player-player
+collision and bump animation will intentionally be absent. Failure would prove a
+later non-collision change also participates and require a narrower commit bisect.
+
+**CONFIRMED:** the control build removed the running jitter, selecting exact root
+ownership as its cause. It also exposed `2.98 m` and `3.42 m` stable idle errors
+and visibly wrong body direction. Collision and bump probes were absent, so they
+are not required for either remaining defect.
+
+The control rollback omitted an important implementation transition. In
+`25637e8`, the slot-16 wrapper replaced `Player+0x39C8/+0x3A1C/+0x3A30` with the
+sender's movement result plus bounded position correction. Later work moved that
+replacement to the call at `0x140C9FE4F`, before the same-frame consumer, and
+reduced the old wrapper to diagnostics. Parking the newer hook therefore did not
+restore the old behaviour: it left the remote Player using its receiver-local
+camera basis again.
+
+Three independent facts select this cause: packet v4 still carries the sender's
+world vector; `0x140C9FE4F` is immediately before its movement consumer; and the
+current remote slot-16 logs show no peer replacement while positional drift grows.
+The next build re-enables the pre-consumer hook, adds the established bounded
+correction there, and lets native locomotion own facing while moving. Quaternion
+blending remains only for idle alignment. Prediction: world direction and visible
+body facing match the sender, moving error converges, and direct-position jitter
+does not return.
+
+**CONFIRMED:** the prediction passed in both processes. The user reported smooth
+running, correct direction and visually excellent synchronization for Chloe and
+Nadine. Final idle diagnostics measured:
+
+- PID `17276`: horizontal `0.0433 m`, vertical `0.0020 m`;
+- PID `11804`: horizontal `0.0712 m`, vertical `0.0041 m`;
+- both: `peerMove=0`, `hardSnap=0`, `orientationDot=1`.
+
+This is the current stable movement baseline and supersedes the exact-root and
+two-packet interpolation branches. Its required ownership rules are:
+
+1. `0x140C9FE4F` pre-consumer replacement supplies sender world movement and the
+   bounded correction before `PlayerMoveStick_MainUpdate` consumes it.
+2. Native remote-Player locomotion owns position and moving body facing.
+3. Post-update position changes are limited to the validated moving-only nudge:
+   `8%` of error, maximum `0.05 m`, deadband `0.03 m`; only errors above `4 m`
+   use the emergency snap.
+4. Network quaternion blending runs only below movement magnitude `0.15`, so it
+   aligns idle facing without fighting locomotion turns.
+5. Player layer `4<->5` collision, bump probes, and authoritative `+0x130` root
+   writes remain parked. Re-enabling any of them requires an isolated prediction
+   and must preserve this baseline as the control case.

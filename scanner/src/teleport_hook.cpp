@@ -3900,7 +3900,6 @@ void apply_puppet_local_root_pre(void* puppet) {
         readable_bytes(static_cast<std::byte*>(puppet) + 0x150) < 1) {
         return;
     }
-
     using RefreshTransformFunction = void*(__fastcall*)(void*, void*);
     const auto refresh_transform = reinterpret_cast<RefreshTransformFunction>(
         g_module + 0x14E240);
@@ -4025,27 +4024,50 @@ void apply_puppet_transform_post(void* puppet) {
     }
     apply_peer_health_to_slot1(pkt, false);
     auto* world = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kWorldPositionOffset);
+    auto* localp = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerLocalPosOffset);
     auto* quat = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerQuatOffset);
-    // 0x141BB8320 proves Player+0x130 is the local root input and +0x240 is its
-    // derived world-space output. Position was applied before that derivation;
-    // this post phase only blends the replicated orientation and logs residuals.
+    // Restore the last validated pre-collision policy from 25637e8: native
+    // locomotion owns the root and the network only closes small moving drift.
+    // Exact packet pinning made a 20-24 Hz receive stream visibly step.
+    constexpr float kPosLerp = 0.35F;
+    constexpr float kSnapDistSq = 4.0F * 4.0F;
     const float dx = pkt.pos[0] - world[0];
     const float dy = pkt.pos[1] - world[1];
     const float dz = pkt.pos[2] - world[2];
-    const bool explicit_teleport =
-        g_state_net.pending_authoritative_teleport.exchange(
-            false, std::memory_order_acq_rel);
+    const bool too_far = dx * dx + dy * dy + dz * dz > kSnapDistSq;
     // Facing is independent from position reconciliation. The old free-run branch
     // returned before this copy, leaving the remote Player free to spin from tiny
     // local correction vectors while its peer stood still.
     // Preserve the native locomotion turn and remove packet-step snapping. Exact
     // memcpy made every newly received quaternion visible as a hard angular step.
-    constexpr float kOrientationBlend = 0.18F;
-    const float orientation_dot =
-        blend_network_orientation(quat, pkt.quat, kOrientationBlend);
+    float orientation_dot = 1.0F;
+    if (pkt.move_magnitude < 0.15F) {
+        constexpr float kOrientationBlend = 0.18F;
+        orientation_dot =
+            blend_network_orientation(quat, pkt.quat, kOrientationBlend);
+    }
     if (g_clone_freerun) {
-        // Position was already applied to +0x130 before the shared transform
-        // derivation. Do not overwrite its +0x240 output after the fact.
+        if (too_far) {
+            std::memcpy(world, pkt.pos, sizeof(pkt.pos));
+            std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
+        } else if (valid_network_movement(pkt) && pkt.move_magnitude > 0.01F) {
+            constexpr float kNudgeDeadband = 0.03F;
+            constexpr float kNudgeFraction = 0.08F;
+            constexpr float kMaxNudgePerUpdate = 0.05F;
+            const float horizontal_sq = dx * dx + dz * dz;
+            if (horizontal_sq > kNudgeDeadband * kNudgeDeadband) {
+                const float horizontal = std::sqrt(horizontal_sq);
+                float step = horizontal * kNudgeFraction;
+                if (step > kMaxNudgePerUpdate) step = kMaxNudgePerUpdate;
+                if (step > horizontal) step = horizontal;
+                const float nx = dx / horizontal * step;
+                const float nz = dz / horizontal * step;
+                world[0] += nx;
+                world[2] += nz;
+                localp[0] += nx;
+                localp[2] += nz;
+            }
+        }
         static ULONGLONG last_position_log = 0;
         const ULONGLONG position_now = GetTickCount64();
         if (position_now - last_position_log >= 500) {
@@ -4054,11 +4076,22 @@ void apply_puppet_transform_post(void* puppet) {
             line << "PUPPET-POS horizontal=" << std::sqrt(dx * dx + dz * dz)
                  << " vertical=" << std::abs(dy)
                  << " peerMove=" << pkt.move_magnitude
-                 << " explicitTeleport=" << (explicit_teleport ? 1 : 0)
+                 << " hardSnap=" << (too_far ? 1 : 0)
                  << " orientationDot=" << orientation_dot;
             log_line(line.str().c_str());
         }
         return;
+    }
+    if (too_far) {
+        std::memcpy(world, pkt.pos, sizeof(pkt.pos));
+        std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
+    } else {
+        for (int i = 0; i < 3; ++i) {
+            world[i] += (pkt.pos[i] - world[i]) * kPosLerp;
+            localp[i] = world[i];
+        }
+        world[3] = pkt.pos[3];
+        localp[3] = pkt.pos[3];
     }
 }
 
@@ -6194,7 +6227,6 @@ void net_tick() {
     static ULONGLONG last_send = 0, last_enemy_send = 0, last_enemy_apply = 0;
     static ULONGLONG last_freeze = 0, last_hp_probe = 0, last_hpsys = 0;
     static ULONGLONG last_animation_mirror = 0;
-    static ULONGLONG last_player_collision_apply = 0;
     const ULONGLONG now = GetTickCount64();
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
         g_local_animation_mirror_test = !g_local_animation_mirror_test;
@@ -6222,10 +6254,6 @@ void net_tick() {
     if (now - last_send >= 16) {  // ~60 Hz local player state
         last_send = now;
         send_local_player_state();
-    }
-    if (now - last_player_collision_apply >= 500) {
-        last_player_collision_apply = now;
-        enable_player_pair_collision();
     }
     if (!g_net_role_b) {
         if (now - last_enemy_send >= 33) {  // ~30 Hz host enemy snapshot
@@ -7535,7 +7563,6 @@ void __fastcall hooked_update(void* object) {
     apply_slot1_perslot_on_game_thread();
     if (object == retained_player_object(1)) {
         apply_puppet_velocity_pre();
-        apply_puppet_local_root_pre(object);
     }
     g_original_update(object);
     // VARIANT B avatar mirror-test: AFTER the NPC's own update wrote its joint cache,
@@ -7654,12 +7681,29 @@ void __fastcall hooked_player_input_command_state_update(void* state) {
         return;
     }
 
-    // This runs after PlayerInputCommandState_Update has derived the native values
-    // and before Player_UpdateInputCommandState calls its action/movement consumer.
-    // Keep this first test open-loop: it isolates scheduling from position repair.
+    // This runs after PlayerInputCommandState_Update derives its camera-relative
+    // values and before Player_UpdateInputCommandState consumes them. Replace that
+    // result with the sender's world-space direction, then add the established
+    // bounded convergence vector while genuine movement is active.
+    float correction_x = 0.0F;
+    float correction_z = 0.0F;
+    compute_remote_position_correction(
+        peer, player, correction_x, correction_z);
+    float corrected_world[4]{};
+    std::memcpy(corrected_world, peer.move_world, sizeof(corrected_world));
+    corrected_world[0] += correction_x;
+    corrected_world[2] += correction_z;
+    float corrected_magnitude = std::sqrt(
+        corrected_world[0] * corrected_world[0] +
+        corrected_world[2] * corrected_world[2]);
+    if (corrected_magnitude > 1.0F) {
+        corrected_world[0] /= corrected_magnitude;
+        corrected_world[2] /= corrected_magnitude;
+        corrected_magnitude = 1.0F;
+    }
     std::memcpy(player + 0x39C8, peer.move_stick, sizeof(peer.move_stick));
-    *reinterpret_cast<float*>(player + 0x3A1C) = peer.move_magnitude;
-    std::memcpy(player + 0x3A30, peer.move_world, sizeof(peer.move_world));
+    *reinterpret_cast<float*>(player + 0x3A1C) = corrected_magnitude;
+    std::memcpy(player + 0x3A30, corrected_world, sizeof(corrected_world));
 
     static thread_local ULONGLONG last_log = 0;
     const ULONGLONG now = GetTickCount64();
@@ -7671,7 +7715,8 @@ void __fastcall hooked_player_input_command_state_update(void* state) {
         line << "PRE-CONSUMER-MOVE raw=(" << peer.move_stick[0] << ","
              << peer.move_stick[1] << ") mag=" << peer.move_magnitude
              << " world=(" << peer.move_world[0] << "," << peer.move_world[1]
-             << "," << peer.move_world[2] << ") root=(" << root[0] << ","
+             << "," << peer.move_world[2] << ") correction=("
+             << correction_x << "," << correction_z << ") root=(" << root[0] << ","
              << root[1] << "," << root[2] << ")";
         log_line(line.str().c_str());
     }
@@ -8777,8 +8822,9 @@ DWORD WINAPI install_hook(void*) {
     install_joypad3_analog_route();
     install_joypad3_keyboard_isolation();
     install_player_fire_capture();
-    install_player_bump_update_probe();
-    install_player_bump_probe();
+    // Player collision/bump probes are intentionally parked. Enabling layer 4<->5
+    // collision made the two independent simulations diverge and triggered the
+    // exact-position regression. Keep the reverse-engineered code for later use.
 
     // VARIANT A (co-op mode gate at init) PROVEN DEAD: setting HIBYTE(dword_143E07470)
     // + byte_143E03568 before save load CRASHES the campaign load — campaign levels
@@ -8849,7 +8895,8 @@ DWORD WINAPI install_hook(void*) {
     {
         auto* pvt = reinterpret_cast<std::uintptr_t*>(g_module + kPlayerVtableRva);
         install_player_input_pre_consumer_hook();
-        install_character_root_motion_probe();
+        // The root-motion call-site probe is also invasive and was absent from
+        // the last smooth build. Its static result is already recorded.
         // Read-only scheduling probe. Player vtable[16] is the sole caller of
         // PlayerInputCommandState_Update (0x141E39FB0); the pass-through hook tells
         // us whether retained slot 1 reaches that phase and what it publishes.
