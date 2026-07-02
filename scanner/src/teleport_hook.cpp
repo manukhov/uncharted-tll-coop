@@ -106,6 +106,7 @@ constexpr std::uintptr_t kAddJoypadDisabledCommandsRva = 0x1839FB0;
 constexpr std::uintptr_t kInputScaleCopyRva = 0x183B410;
 constexpr std::uintptr_t kGameInfoVtableRva = 0x29040B8;
 constexpr std::uintptr_t kPlayerFireControllerFireRva = 0x0E2C730;
+constexpr std::uintptr_t kPlayerTryStartBumpActionRva = 0x0CE8E10;
 constexpr std::uintptr_t kNetEventCharacterMoveCtorRva = 0x0BBD730;
 constexpr std::uintptr_t kFillAnimCmdBitStreamRva = 0x0BC4E60;
 constexpr std::uintptr_t kNetSnapshotCtorRva = 0x0B87B00;
@@ -315,6 +316,8 @@ XInputGetCapabilitiesFn g_real_xinput_get_caps = nullptr;
 using PlayerFireControllerFireFunction = void(__fastcall*)(
     void*, void*, void*, double);
 PlayerFireControllerFireFunction g_original_player_fire = nullptr;
+using PlayerTryStartBumpActionFunction = char(__fastcall*)(void*, void*);
+PlayerTryStartBumpActionFunction g_original_player_try_start_bump_action = nullptr;
 void __fastcall hooked_player_fire(
     void* controller, void* fire_args, void* weapon, double scalar);
 using InPlaceCtorFunction = void*(__fastcall*)(void*);
@@ -2698,6 +2701,144 @@ void* retained_player_object(int index) {
         return nullptr;
     }
     return *reinterpret_cast<void**>(static_cast<std::byte*>(entry_ptr) + 8);
+}
+
+char __fastcall hooked_player_try_start_bump_action(
+    void* player, void* probe_result) {
+    void* target_handle = nullptr;
+    void* target_actor = nullptr;
+    std::uint32_t target_id = 0;
+    float probe_distance = -1.0F;
+    if (probe_result != nullptr && readable_bytes(probe_result) >= 0x34) {
+        const auto* probe = static_cast<const std::byte*>(probe_result);
+        target_handle = *reinterpret_cast<void* const*>(probe);
+        target_id = *reinterpret_cast<const std::uint32_t*>(probe + 0x8);
+        probe_distance = *reinterpret_cast<const float*>(probe + 0x30);
+        if (target_handle != nullptr && target_id != 0 &&
+            readable_bytes(target_handle) >= 0x10) {
+            void* const candidate = *reinterpret_cast<void**>(
+                static_cast<std::byte*>(target_handle) + 0x8);
+            if (candidate != nullptr && readable_bytes(candidate) >= 0xC0 &&
+                *reinterpret_cast<const std::uint32_t*>(
+                    static_cast<const std::byte*>(candidate) + 0xBC) == target_id) {
+                target_actor = candidate;
+            }
+        }
+    }
+
+    const char started = g_original_player_try_start_bump_action(
+        player, probe_result);
+
+    void* const slot0 = retained_player_object(0);
+    void* const slot1 = retained_player_object(1);
+    void* other = nullptr;
+    int slot = -1;
+    if (player == slot0) {
+        slot = 0;
+        other = slot1;
+    } else if (player == slot1) {
+        slot = 1;
+        other = slot0;
+    }
+
+    float player_distance = -1.0F;
+    if (slot >= 0 && other != nullptr &&
+        readable_bytes(static_cast<std::byte*>(player) + kWorldPositionOffset) >= 12 &&
+        readable_bytes(static_cast<std::byte*>(other) + kWorldPositionOffset) >= 12) {
+        const auto* a = reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(player) + kWorldPositionOffset);
+        const auto* b = reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(other) + kWorldPositionOffset);
+        const float dx = a[0] - b[0];
+        const float dy = a[1] - b[1];
+        const float dz = a[2] - b[2];
+        player_distance = std::sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    if (slot >= 0 && player_distance >= 0.0F && player_distance < 3.0F) {
+        struct LastState {
+            ULONGLONG tick = 0;
+            void* target = nullptr;
+            char started = 0;
+        };
+        static thread_local LastState last[2];
+        const ULONGLONG now = GetTickCount64();
+        LastState& state = last[slot];
+        if (target_actor != state.target || started != state.started ||
+            now - state.tick >= 250) {
+            state.tick = now;
+            state.target = target_actor;
+            state.started = started;
+            std::ostringstream line;
+            line << "BUMP-PROBE slot=" << slot
+                 << " playerDistance=" << player_distance
+                 << " targetHandle=0x" << std::hex
+                 << reinterpret_cast<std::uintptr_t>(target_handle)
+                 << " targetId=0x" << target_id
+                 << " targetActor=0x"
+                 << reinterpret_cast<std::uintptr_t>(target_actor)
+                 << std::dec << " probeDistance=" << probe_distance
+                 << " actionStarted=" << static_cast<unsigned>(started);
+            log_line(line.str().c_str());
+        }
+    }
+    return started;
+}
+
+bool install_player_bump_probe() {
+    auto* const target = reinterpret_cast<std::uint8_t*>(
+        g_module + kPlayerTryStartBumpActionRva);
+    constexpr std::array<std::uint8_t, 19> expected{
+        0x48, 0x89, 0x5C, 0x24, 0x18, 0x55, 0x56, 0x57, 0x41, 0x56,
+        0x41, 0x57, 0x48, 0x81, 0xEC, 0xB0, 0x04, 0x00, 0x00,
+    };
+    if (std::memcmp(target, expected.data(), expected.size()) != 0) {
+        log_line("Player bump probe skipped: unexpected function prologue");
+        return false;
+    }
+
+    constexpr std::size_t kPatchSize = expected.size();
+    constexpr std::size_t kEntryJumpSize = 12;
+    constexpr std::size_t kReturnJumpSize = 14;
+    auto* const trampoline = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, kPatchSize + kReturnJumpSize, MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr) {
+        log_line("Player bump probe skipped: trampoline allocation failed");
+        return false;
+    }
+    std::memcpy(trampoline, target, kPatchSize);
+    auto* const jump_back = trampoline + kPatchSize;
+    jump_back[0] = 0xFF;
+    jump_back[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(jump_back + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(jump_back + 6) =
+        reinterpret_cast<std::uintptr_t>(target + kPatchSize);
+    FlushInstructionCache(
+        GetCurrentProcess(), trampoline, kPatchSize + kReturnJumpSize);
+    g_original_player_try_start_bump_action =
+        reinterpret_cast<PlayerTryStartBumpActionFunction>(trampoline);
+
+    DWORD old_protection = 0;
+    if (!VirtualProtect(target, kPatchSize, PAGE_EXECUTE_READWRITE,
+                        &old_protection)) {
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        g_original_player_try_start_bump_action = nullptr;
+        log_line("Player bump probe skipped: VirtualProtect failed");
+        return false;
+    }
+    target[0] = 0x48;
+    target[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(target + 2) =
+        reinterpret_cast<std::uintptr_t>(&hooked_player_try_start_bump_action);
+    target[10] = 0xFF;
+    target[11] = 0xE0;
+    std::memset(target + kEntryJumpSize, 0x90, kPatchSize - kEntryJumpSize);
+    FlushInstructionCache(GetCurrentProcess(), target, kPatchSize);
+    DWORD ignored = 0;
+    VirtualProtect(target, kPatchSize, old_protection, &ignored);
+    log_line("Player bump read-only probe installed at 0x140CE8E10");
+    return true;
 }
 
 // Swap retained-player slots 0 and 1 (each a 16-byte {ptr,id,pad} entry). After
@@ -8222,6 +8363,7 @@ DWORD WINAPI install_hook(void*) {
     install_joypad3_analog_route();
     install_joypad3_keyboard_isolation();
     install_player_fire_capture();
+    install_player_bump_probe();
 
     // VARIANT A (co-op mode gate at init) PROVEN DEAD: setting HIBYTE(dword_143E07470)
     // + byte_143E03568 before save load CRASHES the campaign load — campaign levels
