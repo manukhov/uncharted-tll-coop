@@ -172,6 +172,7 @@ using ResolveUpperActorRecordFunction = void*(__fastcall*)(std::uint32_t);
 UpdateFunction g_original_update = nullptr;
 using PlayerInputStateUpdateFunction = char(__fastcall*)(void*);
 PlayerInputStateUpdateFunction g_original_player_input_state_update = nullptr;
+using PlayerInputCommandStateUpdateFunction = void(__fastcall*)(void*);
 using AddJoypadDisabledCommandsFunction = std::int64_t(__fastcall*)(
     void*, std::int64_t, int, int, const std::uint32_t*, int);
 AddJoypadDisabledCommandsFunction g_original_add_joypad_disabled_commands = nullptr;
@@ -3989,7 +3990,15 @@ void apply_puppet_transform_post(void* puppet) {
     const float orientation_dot =
         blend_network_orientation(quat, pkt.quat, kOrientationBlend);
     if (g_clone_freerun) {
-        std::memcpy(world, pkt.pos, sizeof(pkt.pos));
+        // Ordinary position must come from native locomotion. Only recover from an
+        // explicit teleport or a gross divergence; writing +0x240 every frame was
+        // tested and left the remote Player running in place.
+        if (should_snap) {
+            std::memcpy(world, pkt.pos, sizeof(pkt.pos));
+            auto* root = reinterpret_cast<float*>(
+                static_cast<std::byte*>(puppet) + kPlayerLocalPosOffset);
+            std::memcpy(root, pkt.pos, sizeof(pkt.pos));
+        }
         static ULONGLONG last_position_log = 0;
         const ULONGLONG position_now = GetTickCount64();
         if (position_now - last_position_log >= 500) {
@@ -4005,7 +4014,9 @@ void apply_puppet_transform_post(void* puppet) {
         }
         return;
     }
-    std::memcpy(world, pkt.pos, sizeof(pkt.pos));
+    if (should_snap) {
+        std::memcpy(world, pkt.pos, sizeof(pkt.pos));
+    }
 }
 
 using PlayerDeathEntryFunction = std::int64_t(__fastcall*)(void*);
@@ -7528,34 +7539,6 @@ char __fastcall hooked_player_input_state_update(void* player) {
         return result;
     }
 
-    bool peer_movement_applied = false;
-    float correction_x = 0.0F;
-    float correction_z = 0.0F;
-    if (is_remote) {
-        coop::StatePacket peer{};
-        if (copy_peer_state_snapshot(peer) && valid_network_movement(peer)) {
-            auto* base = static_cast<std::byte*>(player);
-            compute_remote_position_correction(
-                peer, player, correction_x, correction_z);
-            float corrected_world[4]{};
-            std::memcpy(corrected_world, peer.move_world, sizeof(corrected_world));
-            corrected_world[0] += correction_x;
-            corrected_world[2] += correction_z;
-            const float corrected_magnitude = std::sqrt(
-                corrected_world[0] * corrected_world[0] +
-                corrected_world[2] * corrected_world[2]);
-            if (corrected_magnitude > 1.0F) {
-                corrected_world[0] /= corrected_magnitude;
-                corrected_world[2] /= corrected_magnitude;
-            }
-            std::memcpy(base + 0x39C8, peer.move_stick, sizeof(peer.move_stick));
-            *reinterpret_cast<float*>(base + 0x3A1C) =
-                corrected_magnitude > 1.0F ? 1.0F : corrected_magnitude;
-            std::memcpy(base + 0x3A30, corrected_world, sizeof(corrected_world));
-            peer_movement_applied = true;
-        }
-    }
-
     static ULONGLONG last_log[2]{};
     const ULONGLONG now = GetTickCount64();
     if (now - last_log[role] < 500) {
@@ -7574,8 +7557,7 @@ char __fastcall hooked_player_input_state_update(void* player) {
          << after_magnitude << " beforeVec=(" << before_vector[0] << ","
          << before_vector[1] << "," << before_vector[2] << ") afterVec=("
          << after_vector[0] << "," << after_vector[1] << "," << after_vector[2]
-         << ") peerMove=" << (peer_movement_applied ? 1 : 0)
-         << " correction=(" << correction_x << "," << correction_z << ")";
+         << ")";
     void* const fs = *reinterpret_cast<void**>(g_module + 0x3FE1088);
     if (fs != nullptr && joypad_index >= 0 && joypad_index < 6) {
         auto* const joypad = static_cast<std::byte*>(fs) + 0xDB0 +
@@ -7609,6 +7591,133 @@ char __fastcall hooked_player_input_state_update(void* player) {
     }
     log_line(line.str().c_str());
     return result;
+}
+
+void __fastcall hooked_player_input_command_state_update(void* state) {
+    const auto original = reinterpret_cast<PlayerInputCommandStateUpdateFunction>(
+        g_module + 0x1E39FB0);
+    original(state);
+
+    if (state == nullptr) return;
+    auto* const player = static_cast<std::byte*>(state) - 0x39A0;
+    if (player != retained_player_object(1) ||
+        readable_bytes(player + 0x3A40) < 1) {
+        return;
+    }
+
+    coop::StatePacket peer{};
+    if (!copy_peer_state_snapshot(peer) || !valid_network_movement(peer)) {
+        return;
+    }
+
+    // This runs after PlayerInputCommandState_Update has derived the native values
+    // and before Player_UpdateInputCommandState calls its action/movement consumer.
+    // Keep this first test open-loop: it isolates scheduling from position repair.
+    std::memcpy(player + 0x39C8, peer.move_stick, sizeof(peer.move_stick));
+    *reinterpret_cast<float*>(player + 0x3A1C) = peer.move_magnitude;
+    std::memcpy(player + 0x3A30, peer.move_world, sizeof(peer.move_world));
+
+    static thread_local ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log >= 500) {
+        last_log = now;
+        const auto* root = reinterpret_cast<const float*>(
+            player + kPlayerLocalPosOffset);
+        std::ostringstream line;
+        line << "PRE-CONSUMER-MOVE raw=(" << peer.move_stick[0] << ","
+             << peer.move_stick[1] << ") mag=" << peer.move_magnitude
+             << " world=(" << peer.move_world[0] << "," << peer.move_world[1]
+             << "," << peer.move_world[2] << ") root=(" << root[0] << ","
+             << root[1] << "," << root[2] << ")";
+        log_line(line.str().c_str());
+    }
+}
+
+void* allocate_executable_near(const void* target, std::size_t size) {
+    SYSTEM_INFO info{};
+    GetSystemInfo(&info);
+    const std::uintptr_t granularity = info.dwAllocationGranularity;
+    const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(target);
+    constexpr std::uintptr_t kRel32Reach = 0x7FFF0000ULL;
+    const std::uintptr_t lower = address > kRel32Reach
+        ? address - kRel32Reach
+        : granularity;
+    const std::uintptr_t upper = address + kRel32Reach;
+    std::uintptr_t cursor = lower;
+    while (cursor < upper) {
+        MEMORY_BASIC_INFORMATION region{};
+        if (VirtualQuery(reinterpret_cast<const void*>(cursor), &region,
+                         sizeof(region)) == 0) {
+            break;
+        }
+        const std::uintptr_t base = reinterpret_cast<std::uintptr_t>(
+            region.BaseAddress);
+        const std::uintptr_t end = base + region.RegionSize;
+        if (region.State == MEM_FREE) {
+            const std::uintptr_t candidate =
+                (base + granularity - 1) & ~(granularity - 1);
+            if (candidate >= lower && candidate + size <= end &&
+                candidate + size < upper) {
+                if (void* allocation = VirtualAlloc(
+                        reinterpret_cast<void*>(candidate), size,
+                        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)) {
+                    return allocation;
+                }
+            }
+        }
+        const std::uintptr_t next = end > cursor ? end : cursor + granularity;
+        cursor = next;
+    }
+    return nullptr;
+}
+
+bool install_player_input_pre_consumer_hook() {
+    auto* const call = reinterpret_cast<std::uint8_t*>(g_module + 0xC9FE4F);
+    constexpr std::array<std::uint8_t, 5> expected{
+        0xE8, 0x5C, 0xA1, 0x19, 0x01,
+    };
+    if (std::memcmp(call, expected.data(), expected.size()) != 0) {
+        log_line("pre-consumer movement hook skipped: unexpected call bytes");
+        return false;
+    }
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call, kRelaySize));
+    if (relay == nullptr) {
+        log_line("pre-consumer movement hook skipped: no near relay allocation");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_player_input_command_state_update);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call + expected.size());
+    if (displacement < INT32_MIN || displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        log_line("pre-consumer movement hook skipped: relay outside rel32 range");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(call, expected.size(), PAGE_EXECUTE_READWRITE,
+                        &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        log_line("pre-consumer movement hook skipped: VirtualProtect failed");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call + 1) =
+        static_cast<std::int32_t>(displacement);
+    FlushInstructionCache(GetCurrentProcess(), call, expected.size());
+    DWORD ignored = 0;
+    VirtualProtect(call, expected.size(), old_protection, &ignored);
+    log_line("remote movement inserted before Player action consumer");
+    return true;
 }
 
 LONG CALLBACK spawn_capture_veh(EXCEPTION_POINTERS* ep) {
@@ -8600,6 +8709,7 @@ DWORD WINAPI install_hook(void*) {
     // anim/locomotion fields each frame. Filtered inside by object == puppet.
     {
         auto* pvt = reinterpret_cast<std::uintptr_t*>(g_module + kPlayerVtableRva);
+        install_player_input_pre_consumer_hook();
         // Read-only scheduling probe. Player vtable[16] is the sole caller of
         // PlayerInputCommandState_Update (0x141E39FB0); the pass-through hook tells
         // us whether retained slot 1 reaches that phase and what it publishes.

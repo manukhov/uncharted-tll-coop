@@ -22363,3 +22363,39 @@ Player; it does not mutate the capability registry. If the bit is absent in both
 directions, a narrowly scoped temporary capability during the Crowd query becomes
 the next candidate. If present, analysis moves to `0x1406DD290` and the collision
 query client rather than fabricating a `ProbeResult`.
+
+### Remote movement was written after its consumer (2026-07-02)
+
+**REJECTED:** writing only derived world position `Player+0x240` after the Player
+update did not preserve translation. The remote model played its run animation in
+place. A subsequent closed-loop chase also failed: logs showed a full movement
+vector and magnitude while horizontal error remained approximately `4.15-4.56 m`.
+Increasing chase strength therefore cannot fix this result.
+
+**STATIC root cause:** the chase was installed at the return of Player vtable
+method 16, after the relevant values had already been consumed:
+
+1. `Player_UpdateInputCommandState 0x140C9F8B0` makes its sole direct call to
+   `PlayerInputCommandState_Update 0x141E39FB0` at `0x140C9FE4F` with
+   `Player+0x39A0`.
+2. That callee derives raw movement at `Player+0x39C8`, magnitude at `+0x3A1C`,
+   and world direction at `+0x3A30`; their established downstream reader is
+   `PlayerMoveStick_MainUpdate 0x140F03500`.
+3. Before method 16 returns, it calls the broader Player action/input consumer
+   from `0x140C9FE76`. The former vtable wrapper changed the three fields only
+   after this call and could therefore log the intended values without affecting
+   that frame's native movement.
+
+Competing explanations are: the call-order error is sufficient; the call at
+`0x140C9FE76` does not consume movement; or another later stage overwrites the
+result. The new narrow hook replaces only the five-byte direct call at
+`0x140C9FE4F`: it executes the original derivation and then copies the peer's
+native movement fields before control returns to the consumer. No ordinary
+position correction is active in this test.
+
+Falsifiable prediction: moving the peer must make the remote `Player+0x130` and
+`+0x240` advance in the same direction, so the model no longer runs in place.
+Position error may remain because reconciliation is intentionally disabled. If
+`PRE-CONSUMER-MOVE` reports non-zero fields while the root remains fixed, the
+consumer hypothesis is rejected and the next static pass must trace the later
+reader rather than tune correction coefficients.
