@@ -18,13 +18,14 @@ look/aim, weapons and firing, melee, interactions, health, death, respawn, and
 campaign lifecycle. Enemy synchronization is explicitly deferred until this is
 complete.
 
-Current test build addresses three isolated regressions. Moving replica
-reconciliation is strengthened after measured error reached `5.913 m`, while the
-already successful idle `0.15 m` policy is unchanged. Background Joypad 3 input no
-longer writes the global window-focus byte that is also consumed by cursor clipping.
-The missing hands-forward collision reaction is now observed at the upper virtual
-`PlayerBumpController_Update` slot because runtime proved the lower action function
-was never reached.
+Current test build addresses three isolated regressions. Coefficient-based position
+reconciliation is now rejected after it produced a `6.103 m` moving error and a
+visible animationless slide after stop. The replacement applies exact authoritative
+position after the remote Player's native update without clearing its animation/IK
+velocity outputs. Background Joypad 3 input no longer writes the global window-focus
+byte consumed by cursor clipping. For the missing collision reaction, runtime proved
+the upper controller runs with its global gate open; the next probe records its
+owning Player and the internal frame-token comparison that prevents the action probe.
 
 The present v2 packet carries position, quaternion, velocity, both stick pairs and
 the complete 64-bit button mask with press/release edges. It is still insufficient:

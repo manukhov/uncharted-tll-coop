@@ -22252,3 +22252,57 @@ Falsifiable prediction: after switching windows, remote Joypad 3 movement remain
 active but the cursor can leave the background game window. Loss of remote movement
 means the local bypass is not reached; continued cursor confinement means another
 native capture path exists independently of `g_InputWindowFocused`.
+
+### Strong transform nudging produces visible post-stop sliding (2026-07-02)
+
+**REJECTED:** increasing moving reconciliation to `20%`, maximum `0.20 m`, did
+not make two independently simulated Players converge acceptably. The user saw the
+replica stop roughly two metres before the local endpoint and then slide there
+without locomotion animation. Logs agree: this run reached `6.103 m` error while
+peer movement was non-zero and `7.822 m` overall; after `peerMove=0`, the idle
+transform correction visibly consumed the remaining metres.
+
+This rejects coefficient tuning as the position architecture. Input becomes zero
+when the authoritative Player stops, while any later direct transform change has
+no corresponding locomotion action. A larger coefficient can only make that slide
+shorter and sharper; a smaller one makes it longer.
+
+**STATIC replacement:** the former exact-position implementation is split into
+its two independent effects. Exact post-update position previously tracked cleanly;
+it lost run animation because the same block explicitly zeroed
+`Player+0x260/+0x270`. Prior write tracing proved those fields are animation/IK
+outputs, while the now-working Joypad-3 path independently starts the Player
+locomotion graph. The new candidate therefore applies the exact authoritative
+position after native remote-Player update but does not zero velocity, input, or
+animation state.
+
+Competing alternatives are continued coefficient tuning (rejected above), replaying
+movement after the peer has stopped (would invent gameplay and collision), and full
+native network animation/state decoding (still the long-term route). Exact position
+plus native input is the narrow test that separates position authority from
+animation ownership.
+
+Falsifiable prediction: endpoint error must remain below one packet's visible
+distance without post-stop sliding, while run/turn animations continue from the
+native input graph. Frozen animation means exact position itself invalidates root
+motion even without velocity clearing; packet-step jitter means interpolation must
+be inserted before the exact apply.
+
+### Player bump update runs, but its per-frame condition blocks the probe (2026-07-02)
+
+**CONFIRMED:** the upper virtual `PlayerBumpController_Update 0x140CE7ED0` runs in
+both processes and global byte `0x143E07473` remains zero, yet
+`PlayerBumpController_TryStartBumpAction 0x140CE8E10` is never reached. This
+rejects both an unscheduled controller and the global split/co-op gate.
+
+**STATIC:** the hook argument is a `PlayerBumpController`, not a `Player`.
+`controller+0x108` is the owning Player; the same field is used throughout the
+probe builder. Before calling either probe builder, `0x140CE7ED0` reads a current
+token through `Player+0xE0 -> +0x10` and compares it against controller `+0x140`.
+Only the passing branch reaches `0x140CE1E20` and `0x140CE8E10`.
+
+The next read-only build logs owner/retained slot and both token values per
+controller. Prediction: if the remote controller alone reports `tokenPass=0`, its
+construction/reissue path failed to initialize this scheduling token; if both slots
+pass but the lower hook remains absent, the decompiler's compared offset must be
+corrected from exact disassembly before any state change is attempted.

@@ -2782,27 +2782,68 @@ void* retained_player_object(int index) {
 }
 
 void __fastcall hooked_player_bump_controller_update(void* player) {
-    static thread_local ULONGLONG last_log_tick = 0;
+    struct LastControllerLog {
+        void* controller = nullptr;
+        ULONGLONG tick = 0;
+    };
+    static thread_local LastControllerLog last[4];
     const ULONGLONG now = GetTickCount64();
-    if (now - last_log_tick >= 500) {
-        last_log_tick = now;
+    LastControllerLog* state = nullptr;
+    for (auto& candidate : last) {
+        if (candidate.controller == player || candidate.controller == nullptr) {
+            state = &candidate;
+            if (candidate.controller == nullptr) candidate.controller = player;
+            break;
+        }
+    }
+    if (state != nullptr && now - state->tick >= 500) {
+        state->tick = now;
+        void* owner = nullptr;
+        if (player != nullptr && readable_bytes(
+                static_cast<const std::byte*>(player) + 0x108) >= sizeof(void*)) {
+            owner = *reinterpret_cast<void**>(
+                static_cast<std::byte*>(player) + 0x108);
+        }
         void* const slot0 = retained_player_object(0);
         void* const slot1 = retained_player_object(1);
         int slot = -1;
-        if (player == slot0) {
+        if (owner == slot0) {
             slot = 0;
-        } else if (player == slot1) {
+        } else if (owner == slot1) {
             slot = 1;
+        }
+        std::uint64_t current_token = 0;
+        if (owner != nullptr && readable_bytes(
+                static_cast<const std::byte*>(owner) + 0xE0) >= sizeof(void*)) {
+            void* const clock = *reinterpret_cast<void**>(
+                static_cast<std::byte*>(owner) + 0xE0);
+            if (clock != nullptr && readable_bytes(
+                    static_cast<const std::byte*>(clock) + 0x10) >=
+                    sizeof(current_token)) {
+                current_token = *reinterpret_cast<const std::uint64_t*>(
+                    static_cast<const std::byte*>(clock) + 0x10);
+            }
+        }
+        std::uint64_t compared_token = 0;
+        if (player != nullptr && readable_bytes(
+                static_cast<const std::byte*>(player) + 0x140) >=
+                sizeof(compared_token)) {
+            compared_token = *reinterpret_cast<const std::uint64_t*>(
+                static_cast<const std::byte*>(player) + 0x140);
         }
         const auto split_gate = *reinterpret_cast<const std::uint8_t*>(
             g_module + 0x3E07473);
         std::ostringstream line;
         line << "BUMP-UPDATE slot=" << slot
-             << " player=0x" << std::hex
+             << " controller=0x" << std::hex
              << reinterpret_cast<std::uintptr_t>(player)
+             << " owner=0x" << reinterpret_cast<std::uintptr_t>(owner)
              << " slot0=0x" << reinterpret_cast<std::uintptr_t>(slot0)
              << " slot1=0x" << reinterpret_cast<std::uintptr_t>(slot1)
-             << std::dec << " splitGate="
+             << " currentToken=0x" << current_token
+             << " comparedToken=0x" << compared_token
+             << std::dec << " tokenPass=" << (current_token > compared_token ? 1 : 0)
+             << " splitGate="
              << static_cast<unsigned>(split_gate);
         log_line(line.str().c_str());
     }
@@ -2838,7 +2879,7 @@ bool install_player_bump_update_probe() {
 }
 
 char __fastcall hooked_player_try_start_bump_action(
-    void* player, void* probe_result) {
+    void* controller, void* probe_result) {
     void* target_handle = nullptr;
     void* target_actor = nullptr;
     std::uint32_t target_id = 0;
@@ -2861,7 +2902,14 @@ char __fastcall hooked_player_try_start_bump_action(
     }
 
     const char started = g_original_player_try_start_bump_action(
-        player, probe_result);
+        controller, probe_result);
+
+    void* player = nullptr;
+    if (controller != nullptr && readable_bytes(
+            static_cast<const std::byte*>(controller) + 0x108) >= sizeof(void*)) {
+        player = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(controller) + 0x108);
+    }
 
     void* const slot0 = retained_player_object(0);
     void* const slot1 = retained_player_object(1);
@@ -3888,16 +3936,12 @@ void apply_puppet_transform_post(void* puppet) {
     auto* world = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kWorldPositionOffset);
     auto* localp = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerLocalPosOffset);
     auto* quat = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerQuatOffset);
-    // SOFT position authority (2026-06-30): the clone is driven by the peer's
-    // slot-1 input (drive_remote_slot1_actions_tick) so its OWN locomotion graph
-    // animates walk/run. We must NOT hard-pin + zero velocity here (that froze the
-    // animation — the old "no run animation in this mode"). Instead lerp the world
-    // transform toward the authoritative peer position so input-driven motion stays
-    // smooth and convergent; HARD-SNAP on large deltas (teleports / scripted moves /
-    // first apply) since those aren't reproduced by locomotion. Facing (quat) stays
-    // authoritative. Velocity is left to the clone's own locomotion (it is an anim
-    // OUTPUT; zeroing it killed the run blend).
-    constexpr float kPosLerp = 0.35F;
+    // The peer is authoritative for position. The remote Player still runs its own
+    // input/locomotion update so its action graph animates, but two independent
+    // physics simulations cannot integrate to the same endpoint. Apply the exact
+    // peer transform after that update. Unlike the old stable-puppet path, do NOT
+    // zero Player+0x260/+0x270: those are animation/IK outputs, and clearing them
+    // was the reason the exact-position version had no run animation.
     constexpr float kRecoverySnapDistSq = 12.0F * 12.0F;
     const float dx = pkt.pos[0] - world[0];
     const float dy = pkt.pos[1] - world[1];
@@ -3917,44 +3961,8 @@ void apply_puppet_transform_post(void* puppet) {
     const float orientation_dot =
         blend_network_orientation(quat, pkt.quat, kOrientationBlend);
     if (g_clone_freerun) {
-        // Let native locomotion own position. A direction-only correction cannot
-        // close longitudinal lag while both players already run at magnitude 1,
-        // because the corrected vector is normalized back to 1. Add a tiny capped
-        // post-step only while the peer genuinely moves. This remains far below
-        // the rejected 35%-of-error lerp and is disabled at idle, so it cannot
-        // recreate the idle body drag.
-        if (should_snap) {
-            std::memcpy(world, pkt.pos, sizeof(pkt.pos));
-            std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
-        } else {
-            const bool peer_moving =
-                valid_network_movement(pkt) && pkt.move_magnitude > 0.01F;
-            // Collision can leave the two simulations more than a metre apart
-            // after both players stop. Input-vector correction cannot close that
-            // error at idle because it would manufacture locomotion with no peer
-            // input. Reconcile the transform itself, slowly, while preserving the
-            // engine-owned velocity and animation state.
-            const float nudge_deadband = peer_moving ? 0.10F : 0.15F;
-            const float nudge_fraction = peer_moving ? 0.20F : 0.04F;
-            const float max_nudge_per_update = peer_moving ? 0.20F : 0.015F;
-            const float horizontal_sq = dx * dx + dz * dz;
-            if (horizontal_sq > nudge_deadband * nudge_deadband) {
-                const float horizontal = std::sqrt(horizontal_sq);
-                float step = horizontal * nudge_fraction;
-                if (step > max_nudge_per_update) {
-                    step = max_nudge_per_update;
-                }
-                if (step > horizontal) {
-                    step = horizontal;
-                }
-                const float nx = dx / horizontal * step;
-                const float nz = dz / horizontal * step;
-                world[0] += nx;
-                world[2] += nz;
-                localp[0] += nx;
-                localp[2] += nz;
-            }
-        }
+        std::memcpy(world, pkt.pos, sizeof(pkt.pos));
+        std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
         static ULONGLONG last_position_log = 0;
         const ULONGLONG position_now = GetTickCount64();
         if (position_now - last_position_log >= 500) {
@@ -3970,17 +3978,8 @@ void apply_puppet_transform_post(void* puppet) {
         }
         return;
     }
-    if (should_snap) {
-        std::memcpy(world, pkt.pos, sizeof(pkt.pos));
-        std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
-    } else {
-        for (int i = 0; i < 3; ++i) {
-            world[i] += (pkt.pos[i] - world[i]) * kPosLerp;
-            localp[i] = world[i];
-        }
-        world[3] = pkt.pos[3];
-        localp[3] = pkt.pos[3];
-    }
+    std::memcpy(world, pkt.pos, sizeof(pkt.pos));
+    std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
 }
 
 using PlayerDeathEntryFunction = std::int64_t(__fastcall*)(void*);
