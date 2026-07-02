@@ -3844,6 +3844,22 @@ void send_local_player_state() {
         last_weapon_capture = weapon_now;
         have_weapon_snapshot = capture_local_weapon_snapshot(
             local_obj, cached_weapon_snapshot);
+        // DIAG: log the 8 captured weapon ids when they change so we can tell
+        // whether the local send side actually sees an armed inventory.
+        static std::uint8_t diag_prev[coop::kWeaponSnapshotBytes]{};
+        if (std::memcmp(diag_prev, cached_weapon_snapshot,
+                        coop::kWeaponSnapshotBytes) != 0) {
+            std::memcpy(diag_prev, cached_weapon_snapshot,
+                        coop::kWeaponSnapshotBytes);
+            const auto* ids =
+                reinterpret_cast<const std::uint32_t*>(cached_weapon_snapshot);
+            std::ostringstream w;
+            w << "WEAPON-SEND have=" << (have_weapon_snapshot ? 1 : 0)
+              << " ids=[" << std::hex;
+            for (int i = 0; i < 8; ++i) w << "0x" << ids[i] << (i < 7 ? "," : "");
+            w << std::dec << "]";
+            log_line(w.str().c_str());
+        }
     }
     if (have_weapon_snapshot) {
         std::memcpy(
@@ -4075,6 +4091,33 @@ void apply_peer_weapon_state() {
     coop::StatePacket peer{};
     void* puppet = nullptr;
     if (!latest_peer_state(peer, puppet) || (peer.flags & 0x20) == 0) return;
+    // DIAG: does the clone itself have a drawable inventory? FillWeaponState reads
+    // *(player+0x1D88); if the puppet returns nonzero ids, the input-drive path can
+    // make its OWN weapon controller draw/switch/fire (no publish needed).
+    {
+        static ULONGLONG diag_last = 0;
+        const ULONGLONG diag_now = GetTickCount64();
+        if (diag_now - diag_last > 1000) {
+            diag_last = diag_now;
+            std::uint8_t clone_snap[coop::kWeaponSnapshotBytes]{};
+            const bool clone_armed =
+                capture_local_weapon_snapshot(puppet, clone_snap);
+            const auto* ids =
+                reinterpret_cast<const std::uint32_t*>(clone_snap);
+            void* ctrl = nullptr;
+            if (readable_bytes(static_cast<std::byte*>(puppet) + 0x1D88) >=
+                sizeof(void*)) {
+                ctrl = *reinterpret_cast<void**>(
+                    static_cast<std::byte*>(puppet) + 0x1D88);
+            }
+            std::ostringstream w;
+            w << "WEAPON-CLONE armed=" << (clone_armed ? 1 : 0) << " ctrl=0x"
+              << std::hex << reinterpret_cast<std::uintptr_t>(ctrl) << " ids=[";
+            for (int i = 0; i < 8; ++i) w << "0x" << ids[i] << (i < 7 ? "," : "");
+            w << std::dec << "]";
+            log_line(w.str().c_str());
+        }
+    }
     static std::uint8_t last[coop::kWeaponSnapshotBytes]{};
     static void* last_puppet = nullptr;
     static bool have_last = false;
