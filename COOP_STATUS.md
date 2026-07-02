@@ -20,12 +20,14 @@ complete.
 
 Current test build addresses three isolated regressions. Coefficient-based position
 reconciliation is now rejected after it produced a `6.103 m` moving error and a
-visible animationless slide after stop. The replacement applies exact authoritative
-position after the remote Player's native update without clearing its animation/IK
-velocity outputs. Background Joypad 3 input no longer writes the global window-focus
-byte consumed by cursor clipping. For the missing collision reaction, runtime proved
-the upper controller runs with its global gate open; the next probe records its
-owning Player and the internal frame-token comparison that prevents the action probe.
+visible animationless slide after stop. Exact writes to both local root `+0x130` and
+world output `+0x240` are also rejected: position became exact but animation broke.
+Static reverse of `0x141BB8320` proved that only `+0x240` is derived world output;
+the next build writes that field alone and leaves native root motion untouched.
+Background Joypad 3 input no longer writes the global window-focus byte consumed by
+cursor clipping. For the collision reaction, both Player controllers now reach the
+action probe, but Crowd returns no target at `0.85 m`; a read-only diagnostic checks
+the required candidate capability bit before any registry change.
 
 The present v2 packet carries position, quaternion, velocity, both stick pairs and
 the complete 64-bit button mask with press/release edges. It is still insufficient:

@@ -8,6 +8,13 @@ import idc
 
 
 FUNCTIONS = {
+    0x141BB8320: (
+        "Character_UpdateDerivedWorldTransformFromLocalRoot",
+        "Common Player/NadineBuddy vtable slot +0x2B8. Derives world transform "
+        "at +0x240 and root/capsule output at +0x280 from local root +0x130, "
+        "local rotation +0x140, and optional parent transform +0x110/+0x120; "
+        "also mirrors local root to +0x250.",
+    ),
     0x141837CD0: (
         "Joypad_IsCommandActive",
         "Resolves up to two binding descriptors for a named command through "

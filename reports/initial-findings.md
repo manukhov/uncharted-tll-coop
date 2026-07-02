@@ -22306,3 +22306,60 @@ controller. Prediction: if the remote controller alone reports `tokenPass=0`, it
 construction/reissue path failed to initialize this scheduling token; if both slots
 pass but the lower hook remains absent, the decompiler's compared offset must be
 corrected from exact disassembly before any state change is attempted.
+
+### Exact writes to both local and world position destroy root animation (2026-07-02)
+
+**REJECTED:** exact post-update writes to both `Player+0x130` and `Player+0x240`
+kept positional error at millimetre scale (`0.001-0.011 m`) but visibly broke the
+remote Player's animations. Leaving `+0x260/+0x270` untouched was insufficient, so
+the previous theory that velocity clearing alone caused frozen animation is false.
+
+**STATIC root cause:** common Player/NadineBuddy virtual slot `+0x2B8`, now named
+`Character_UpdateDerivedWorldTransformFromLocalRoot 0x141BB8320`, establishes the
+actual ownership boundary:
+
+1. It reads local root position `+0x130` and local rotation `+0x140`.
+2. It combines them with the optional parent transform at `+0x110/+0x120`.
+3. It writes the derived world position to `+0x240`, mirrors the local root to
+   `+0x250`, and writes the root/capsule result to `+0x280`.
+4. Earlier runtime testing independently showed that a one-shot `+0x130` write is
+   not directly presented and is overwritten by native locomotion.
+
+Thus the rejected implementation overwrote both the native root-motion input and
+its derived output every frame. The next candidate leaves `+0x130/+0x250` entirely
+native and applies authoritative network position only to the derived world output
+`+0x240`, after the Player update.
+
+Competing outcomes: preserved animation plus exact display position confirms the
+input/output split; broken animation means later animation code consumes `+0x240`
+too; visible flicker means `+0x240` is rewritten again after the current hook.
+Falsifiable prediction: endpoint error remains below one packet step, while run and
+turn animation remain intact. Collision may still follow the unsynchronized local
+root and is evaluated separately.
+
+### Crowd probe reaches both Players but returns no collision target (2026-07-02)
+
+**CONFIRMED:** after correcting the hook argument from controller to
+`controller+0x108` owner, `PlayerBumpController_TryStartBumpAction 0x140CE8E10`
+was reached for retained slots 0 and 1. At a measured Player distance of
+`0.851872 m`, every call reported null target handle/id, `ProbeResult+0x30 =
+FLT_MAX`, and `actionStarted=0`. Therefore scheduling, the global gate, action
+priority and downstream animation selection are not the current failure. The
+upstream Crowd spatial query omits the other Player.
+
+**STATIC candidate filter:** the new-candidate loop in
+`Crowd_UpdateProbe 0x1406DD350` accepts a collision-query result only when:
+
+- the process handle/id is valid;
+- the candidate has the capability bit whose runtime index is stored at
+  `0x143D0A724`;
+- `0x1406DD290` accepts its process state;
+- it is not the probing actor itself.
+
+The two Players are already registered in `SimpleGridHash` and physically collide,
+so missing capability or the process-state predicate are the remaining concrete
+filters. The next build only logs the relevant capability bit for the opposite
+Player; it does not mutate the capability registry. If the bit is absent in both
+directions, a narrowly scoped temporary capability during the Crowd query becomes
+the next candidate. If present, analysis moves to `0x1406DD290` and the collision
+query client rather than fabricating a `ProbeResult`.

@@ -2937,6 +2937,33 @@ char __fastcall hooked_player_try_start_bump_action(
         player_distance = std::sqrt(dx * dx + dy * dy + dz * dz);
     }
 
+    auto actor_has_capability = [](void* actor, std::uint32_t bit) {
+        if (actor == nullptr || bit >= 0x10000 || readable_bytes(
+                static_cast<const std::byte*>(actor) + 0x30) < sizeof(void*)) {
+            return false;
+        }
+        void* const registry = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(actor) + 0x30);
+        const std::size_t word_offset = 0x20 +
+            static_cast<std::size_t>(bit >> 6) * sizeof(std::uint64_t);
+        if (registry == nullptr || readable_bytes(
+                static_cast<const std::byte*>(registry) + word_offset) <
+                sizeof(std::uint64_t)) {
+            return false;
+        }
+        const auto word = *reinterpret_cast<const std::uint64_t*>(
+            static_cast<const std::byte*>(registry) + word_offset);
+        return (word & (std::uint64_t{1} << (bit & 63))) != 0;
+    };
+    const auto query_capability = *reinterpret_cast<const std::uint32_t*>(
+        g_module + 0x3D0A724);
+    const auto existing_capability = *reinterpret_cast<const std::uint32_t*>(
+        g_module + 0x3D43FA4);
+    const bool other_has_query_capability =
+        actor_has_capability(other, query_capability);
+    const bool other_has_existing_capability =
+        actor_has_capability(other, existing_capability);
+
     if (slot >= 0) {
         struct LastState {
             ULONGLONG tick = 0;
@@ -2960,7 +2987,11 @@ char __fastcall hooked_player_try_start_bump_action(
                  << " targetActor=0x"
                  << reinterpret_cast<std::uintptr_t>(target_actor)
                  << std::dec << " probeDistance=" << probe_distance
-                 << " actionStarted=" << static_cast<unsigned>(started);
+                 << " actionStarted=" << static_cast<unsigned>(started)
+                 << " queryCapability=" << query_capability
+                 << ":" << (other_has_query_capability ? 1 : 0)
+                 << " existingCapability=" << existing_capability
+                 << ":" << (other_has_existing_capability ? 1 : 0);
             log_line(line.str().c_str());
         }
     }
@@ -3934,14 +3965,11 @@ void apply_puppet_transform_post(void* puppet) {
     }
     apply_peer_health_to_slot1(pkt, false);
     auto* world = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kWorldPositionOffset);
-    auto* localp = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerLocalPosOffset);
     auto* quat = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerQuatOffset);
-    // The peer is authoritative for position. The remote Player still runs its own
-    // input/locomotion update so its action graph animates, but two independent
-    // physics simulations cannot integrate to the same endpoint. Apply the exact
-    // peer transform after that update. Unlike the old stable-puppet path, do NOT
-    // zero Player+0x260/+0x270: those are animation/IK outputs, and clearing them
-    // was the reason the exact-position version had no run animation.
+    // 0x141BB8320 proves Player+0x130 is the native root-motion input and +0x240
+    // is its derived world-space output. The rejected exact apply overwrote both,
+    // destroying root animation. Leave +0x130/+0x250 entirely native and replace
+    // only the derived world presentation after the Player update.
     constexpr float kRecoverySnapDistSq = 12.0F * 12.0F;
     const float dx = pkt.pos[0] - world[0];
     const float dy = pkt.pos[1] - world[1];
@@ -3962,7 +3990,6 @@ void apply_puppet_transform_post(void* puppet) {
         blend_network_orientation(quat, pkt.quat, kOrientationBlend);
     if (g_clone_freerun) {
         std::memcpy(world, pkt.pos, sizeof(pkt.pos));
-        std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
         static ULONGLONG last_position_log = 0;
         const ULONGLONG position_now = GetTickCount64();
         if (position_now - last_position_log >= 500) {
@@ -3979,7 +4006,6 @@ void apply_puppet_transform_post(void* puppet) {
         return;
     }
     std::memcpy(world, pkt.pos, sizeof(pkt.pos));
-    std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
 }
 
 using PlayerDeathEntryFunction = std::int64_t(__fastcall*)(void*);
