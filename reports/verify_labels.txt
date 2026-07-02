@@ -1,13 +1,5 @@
-TARGET 0x141A99FD0: func_start=0x141a99fd0 name=InputManager_NormalizeStick
-  xref=0x141A9A87F type=17 func_start=0x141a9a790 func_name=InputManager_PollPads_SingleActivePad
-  xref=0x146E9DB34 type=1 func_start=None func_name=None
-
-TARGET 0x14179E6C0: func_start=0x14179e6c0 name=Input_PerPlayerDispatch_MgrArg
-  xref=0x142EA74A8 type=1 func_start=None func_name=None
-  xref=0x142EA74B8 type=1 func_start=None func_name=None
-  xref=0x146E836BC type=1 func_start=None func_name=None
-
-TARGET 0x141A9A790: func_start=0x141a9a790 name=InputManager_PollPads_SingleActivePad
-  xref=0x142B37E80 type=1 func_start=None func_name=None
-  xref=0x146E9DBB8 type=1 func_start=None func_name=None
-
+NavCharacter_ApplyAnimationRootTransform 0x141DE8EC0
+GameCharacter_PostAnimApplyRootTransform 0x1403D13E0
+Npc_PostAnimApplyRootTransform 0x14042FB40
+Player_PostAnimUpdate 0x1410E9210
+Character_UpdateDerivedWorldTransformFromLocalRoot 0x141BB8320

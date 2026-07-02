@@ -1,0 +1,8 @@
+ref=0x142B83300 vtable=0x142B82F00 slot=+0x400 target=0x141DE8EC0 target_name='Character_ApplyAnimationRootTransform' rtti='.?AVNavCharacter@@'
+ref=0x142BD9108 vtable=0x142BD8D08 slot=+0x400 target=0x141DE8EC0 target_name='Character_ApplyAnimationRootTransform' rtti='.?AVAiCharacter@@'
+ref=0x142F2EE58 unresolved within 0x4000 bytes
+ref=0x142F2EF14 unresolved within 0x4000 bytes
+ref=0x14292F858 vtable=0x14292F458 slot=+0x400 target=0x1403D13E0 target_name='sub_1403D13E0' rtti='.?AVGameCharacter@@'
+ref=0x142934DA0 vtable=0x1429349A0 slot=+0x400 target=0x14042FB40 target_name='sub_14042FB40' rtti='.?AVNpc@@'
+ref=0x142949A38 vtable=0x142949638 slot=+0x400 target=0x14042FB40 target_name='sub_14042FB40' rtti='.?AVNadineBuddy@@'
+ref=0x142A4C3E8 vtable=0x142A4BFE8 slot=+0x400 target=0x1410E9210 target_name='sub_1410E9210' rtti='.?AVPlayer@@'

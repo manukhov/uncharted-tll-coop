@@ -18,14 +18,13 @@ look/aim, weapons and firing, melee, interactions, health, death, respawn, and
 campaign lifecycle. Enemy synchronization is explicitly deferred until this is
 complete.
 
-Current blocker: the remote Player runs in place. Applying peer movement immediately
-after `PlayerInputCommandState_Update 0x141E39FB0`, before the remainder of Player
-method 16, still produced only centimetre-scale root changes. This rejects timing at
-`0x140C9FE4F` as the missing translation stage. The real shared root writer is now
-located: `Character_ApplyAnimationRootTransform 0x141DE8EC0` writes
-`Player+0x130/+0x140`, but its direct branch is gated by Player virtual `+0x5E8`
-(`0x141BC2EF0`). The current build only compares that predicate, `m_pNetController`
-at `Player+0x348`, and root delta between local and remote Player.
+Current blocker: the remote Player remains at its spawn point in the opposite
+process, including collision. RTTI disproved the previous root-writer assignment:
+`0x141DE8EC0` is the NavCharacter/AiCharacter vtable `+0x400` path, while Player
+uses `Player_PostAnimUpdate 0x1410E9210`. The current build applies peer world
+position as parent-local `Player+0x130` immediately before the shared vtable
+`+0x2B8` method `0x141BB8320`, which then derives `+0x240/+0x250/+0x280` together.
+The next run tests visible movement and collision at the former spawn position.
 
 The present v2 packet carries position, quaternion, velocity, both stick pairs and
 the complete 64-bit button mask with press/release edges. It is still insufficient:

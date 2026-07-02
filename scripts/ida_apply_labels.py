@@ -9,16 +9,34 @@ import idc
 
 FUNCTIONS = {
     0x141DE8EC0: (
-        "Character_ApplyAnimationRootTransform",
-        "Shared Character post-animation path. Player caller 0x14042FB40 reaches "
-        "it every frame; when virtual +0x5E8 permits the direct branch it derives "
+        "NavCharacter_ApplyAnimationRootTransform",
+        "NavCharacter/AiCharacter vtable +0x400 post-animation path. Npc override "
+        "0x14042FB40 reaches it; when virtual +0x5E8 permits the direct branch it derives "
         "and writes local root position +0x130 and rotation +0x140, then calls "
-        "virtual +0x208/+0x1E8.",
+        "virtual +0x208/+0x1E8. Player vtable +0x400 instead resolves to 0x1410E9210.",
+    ),
+    0x1403D13E0: (
+        "GameCharacter_PostAnimApplyRootTransform",
+        "GameCharacter vtable +0x400 wrapper. Rejects a below-world transform, "
+        "updates the optional +0x1CA0 owner, then tail-calls the NavCharacter "
+        "animation-root transform path.",
+    ),
+    0x14042FB40: (
+        "Npc_PostAnimApplyRootTransform",
+        "Npc and NadineBuddy vtable +0x400 override. Runs the shared NavCharacter "
+        "root-transform apply and additional NPC post-animation state; this is not "
+        "the Player post-animation method.",
+    ),
+    0x1410E9210: (
+        "Player_PostAnimUpdate",
+        "Player vtable +0x400 post-animation method. RTTI and the embedded "
+        "Player::PostAnimUpdate_Async source assertion distinguish it from the "
+        "Npc/NavCharacter root-application path.",
     ),
     0x141BC2EF0: (
         "Player_ShouldSkipDirectRootTransformApply",
-        "Player vtable +0x5E8 predicate used at the start of "
-        "Character_ApplyAnimationRootTransform. Consults the global gameplay "
+        "Player vtable +0x5E8 predicate structurally corresponding to the one "
+        "called by NavCharacter_ApplyAnimationRootTransform. Consults the global gameplay "
         "manager and Player+0x348 m_pNetController; true bypasses the direct "
         "local-root write branch.",
     ),

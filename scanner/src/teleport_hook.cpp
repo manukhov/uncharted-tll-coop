@@ -3889,6 +3889,64 @@ bool latest_peer_state(coop::StatePacket& out, void*& puppet) {
     return true;
 }
 
+// Player/NadineBuddy vtable slot +0x2B8 (0x141BB8320) derives +0x240 and
+// the collision/root output at +0x280 from the local root at +0x130. Feed the
+// authoritative peer position before that method, expressed in the parent
+// transform's local space, so all derived outputs advance together.
+void apply_puppet_local_root_pre(void* puppet) {
+    coop::StatePacket pkt{};
+    void* resolved = nullptr;
+    if (!latest_peer_state(pkt, resolved) || resolved != puppet ||
+        readable_bytes(static_cast<std::byte*>(puppet) + 0x150) < 1) {
+        return;
+    }
+
+    using RefreshTransformFunction = void*(__fastcall*)(void*, void*);
+    const auto refresh_transform = reinterpret_cast<RefreshTransformFunction>(
+        g_module + 0x14E240);
+    alignas(16) float ignored_world[4]{};
+    refresh_transform(
+        static_cast<std::byte*>(puppet) + kReferenceTransformOffset,
+        ignored_world);
+
+    const auto* parent_pos = reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(puppet) + 0x110);
+    const auto* parent_quat = reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(puppet) + 0x120);
+    auto* local_root = reinterpret_cast<float*>(
+        static_cast<std::byte*>(puppet) + kPlayerLocalPosOffset);
+
+    const float q_norm_sq =
+        parent_quat[0] * parent_quat[0] + parent_quat[1] * parent_quat[1] +
+        parent_quat[2] * parent_quat[2] + parent_quat[3] * parent_quat[3];
+    if (!std::isfinite(q_norm_sq) || q_norm_sq < 0.90F || q_norm_sq > 1.10F) {
+        // The common unparented case uses an identity basis. Preserve a useful
+        // fallback if the parent descriptor is temporarily unavailable at spawn.
+        std::memcpy(local_root, pkt.pos, 3 * sizeof(float));
+        return;
+    }
+
+    const float inv_norm = 1.0F / std::sqrt(q_norm_sq);
+    const float qx = parent_quat[0] * inv_norm;
+    const float qy = parent_quat[1] * inv_norm;
+    const float qz = parent_quat[2] * inv_norm;
+    const float qw = parent_quat[3] * inv_norm;
+    const float vx = pkt.pos[0] - parent_pos[0];
+    const float vy = pkt.pos[1] - parent_pos[1];
+    const float vz = pkt.pos[2] - parent_pos[2];
+    const float dot_uv = qx * vx + qy * vy + qz * vz;
+    const float dot_uu = qx * qx + qy * qy + qz * qz;
+    const float scale_v = qw * qw - dot_uu;
+
+    // inverse(q) * v * q
+    local_root[0] =
+        2.0F * dot_uv * qx + scale_v * vx - 2.0F * qw * (qy * vz - qz * vy);
+    local_root[1] =
+        2.0F * dot_uv * qy + scale_v * vy - 2.0F * qw * (qz * vx - qx * vz);
+    local_root[2] =
+        2.0F * dot_uv * qz + scale_v * vz - 2.0F * qw * (qx * vy - qy * vx);
+}
+
 bool apply_peer_health_to_slot1(const coop::StatePacket& peer, bool log_once) {
     if ((peer.flags & 2) == 0 || peer.health < 0 || peer.max_health <= 0 ||
         peer.health > peer.max_health || peer.max_health > 100000) {
@@ -3968,20 +4026,15 @@ void apply_puppet_transform_post(void* puppet) {
     apply_peer_health_to_slot1(pkt, false);
     auto* world = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kWorldPositionOffset);
     auto* quat = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerQuatOffset);
-    // 0x141BB8320 proves Player+0x130 is the native root-motion input and +0x240
-    // is its derived world-space output. The rejected exact apply overwrote both,
-    // destroying root animation. Leave +0x130/+0x250 entirely native and replace
-    // only the derived world presentation after the Player update.
-    constexpr float kRecoverySnapDistSq = 12.0F * 12.0F;
+    // 0x141BB8320 proves Player+0x130 is the local root input and +0x240 is its
+    // derived world-space output. Position was applied before that derivation;
+    // this post phase only blends the replicated orientation and logs residuals.
     const float dx = pkt.pos[0] - world[0];
     const float dy = pkt.pos[1] - world[1];
     const float dz = pkt.pos[2] - world[2];
-    const float distance_sq = dx * dx + dy * dy + dz * dz;
     const bool explicit_teleport =
         g_state_net.pending_authoritative_teleport.exchange(
             false, std::memory_order_acq_rel);
-    const bool should_snap =
-        explicit_teleport || distance_sq > kRecoverySnapDistSq;
     // Facing is independent from position reconciliation. The old free-run branch
     // returned before this copy, leaving the remote Player free to spin from tiny
     // local correction vectors while its peer stood still.
@@ -3991,15 +4044,8 @@ void apply_puppet_transform_post(void* puppet) {
     const float orientation_dot =
         blend_network_orientation(quat, pkt.quat, kOrientationBlend);
     if (g_clone_freerun) {
-        // Ordinary position must come from native locomotion. Only recover from an
-        // explicit teleport or a gross divergence; writing +0x240 every frame was
-        // tested and left the remote Player running in place.
-        if (should_snap) {
-            std::memcpy(world, pkt.pos, sizeof(pkt.pos));
-            auto* root = reinterpret_cast<float*>(
-                static_cast<std::byte*>(puppet) + kPlayerLocalPosOffset);
-            std::memcpy(root, pkt.pos, sizeof(pkt.pos));
-        }
+        // Position was already applied to +0x130 before the shared transform
+        // derivation. Do not overwrite its +0x240 output after the fact.
         static ULONGLONG last_position_log = 0;
         const ULONGLONG position_now = GetTickCount64();
         if (position_now - last_position_log >= 500) {
@@ -4008,15 +4054,11 @@ void apply_puppet_transform_post(void* puppet) {
             line << "PUPPET-POS horizontal=" << std::sqrt(dx * dx + dz * dz)
                  << " vertical=" << std::abs(dy)
                  << " peerMove=" << pkt.move_magnitude
-                 << " hardSnap=" << (should_snap ? 1 : 0)
                  << " explicitTeleport=" << (explicit_teleport ? 1 : 0)
                  << " orientationDot=" << orientation_dot;
             log_line(line.str().c_str());
         }
         return;
-    }
-    if (should_snap) {
-        std::memcpy(world, pkt.pos, sizeof(pkt.pos));
     }
 }
 
@@ -7493,6 +7535,7 @@ void __fastcall hooked_update(void* object) {
     apply_slot1_perslot_on_game_thread();
     if (object == retained_player_object(1)) {
         apply_puppet_velocity_pre();
+        apply_puppet_local_root_pre(object);
     }
     g_original_update(object);
     // VARIANT B avatar mirror-test: AFTER the NPC's own update wrote its joint cache,

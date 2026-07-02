@@ -22438,3 +22438,42 @@ both report `skip=0` but only local has a material root delta, the missing state
 the animation-root source feeding `0x141DE8EC0`. Equal non-zero deltas followed by
 a stationary remote model instead select a later physics rollback. No field is
 modified by this probe.
+
+### Player uses a separate post-animation path; authoritative root must precede `+0x2B8` (2026-07-02)
+
+**REJECTED:** the read-only call-site probe at `0x14042FBBA` produced no retained
+Player hits while both copies moved. The latest run again left each remote Player
+at its spawn point, including collision, even when the local counterpart had moved
+away before the peer loaded. Therefore `0x14042FB40 -> 0x141DE8EC0` is not the
+active Player scheduler and its virtual `+0x5E8` predicate must not be changed.
+
+**STATIC:** RTTI and exact vtable-slot resolution separate the class paths:
+
+1. `0x141DE8EC0` occupies `NavCharacter` and `AiCharacter` vtable `+0x400`.
+   `Npc`/`NadineBuddy` override that slot with `0x14042FB40`; `GameCharacter`
+   uses wrapper `0x1403D13E0`.
+2. `Player` vtable `0x142A4BFE8 + 0x400` resolves instead to
+   `Player_PostAnimUpdate 0x1410E9210`, which contains the exact source assertion
+   `Player::PostAnimUpdate_Async` and does not call `0x141DE8EC0`.
+3. The shared Player/NadineBuddy vtable `+0x2B8` method
+   `Character_UpdateDerivedWorldTransformFromLocalRoot 0x141BB8320` reads local
+   root `+0x130`, derives world output `+0x240`, mirrors `+0x250`, and writes the
+   collision/root output `+0x280` in one pass.
+4. The current mod writes peer `+0x240` only after this method and, in free-run
+   mode, only performs a root write after a 12 m error. That explains both the
+   visible spawn-point replica and stale collision under ordinary separation.
+
+Competing hypotheses: a missing Player input owner prevents native integration;
+late `+0x240` replacement is overwritten and misses collision; or the peer world
+position must be converted through the parent transform before entering `+0x130`.
+The first remains relevant to fully native locomotion, but cannot explain why an
+authoritative transform mirror should remain at spawn. The implementation now
+refreshes `+0x110/+0x120`, converts peer world position into parent-local space,
+and writes `+0x130` immediately before `0x141BB8320`.
+
+Falsifiable prediction: after both saves load, moving either local Player must move
+its remote representation away from spawn in the other process, and the other
+Player must no longer collide with the old spawn position. If the model moves but
+collision remains at spawn, `+0x280` is not the collision consumer; if neither
+moves while `+0x130` changes, a later writer overwrites the local root before
+`0x141BB8602`.
