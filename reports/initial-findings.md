@@ -22192,7 +22192,63 @@ without visible metre-scale teleports. Persistent error means the local collisio
 solver cancels every post-update step and requires a single-authority collision
 policy rather than a larger correction.
 
-The bump diagnostic itself was **INCONCLUSIVE**: both hooks installed, but the
-initial logger emitted only below a locally computed `3 m` player distance and
-recorded no event. The next build logs both Player slots periodically regardless
-of that distance; this changes observation only, not bump state.
+**CONFIRMED refinement:** the lower bump-action function is not reached. After
+removing the local distance filter, both processes installed the read-only hook at
+`PlayerBumpController_TryStartBumpAction 0x140CE8E10`, but emitted no
+`BUMP-PROBE` entry during repeated Player contact. Therefore the failure occurs
+before candidate classification; target geometry and action priority cannot yet
+be blamed.
+
+`PlayerBumpController_Update 0x140CE7ED0` has no direct code caller. Its only
+relevant reference is the exact function pointer in vtable slot `0x142A0EF08`.
+The update also begins under global byte `0x143E07473`. A read-only replacement of
+that vtable slot now records whether the upper update runs and the gate value,
+then calls the original unchanged. Competing outcomes are: no upper log means the
+virtual update is unscheduled; logs with gate 1 select the global gate; logs with
+gate 0 but no lower probe select an internal frame/controller condition.
+
+### Moving replicas outrun the 0.05 m correction cap (2026-07-02)
+
+**CONFIRMED:** the idle-only correction reduced the former `1.07/1.28 m`
+post-collision residual to approximately `0.146-0.150 m`, matching its deadband.
+It did not solve moving divergence. Across 604 later samples, horizontal error
+averaged `0.490 m`, peaked at `5.913 m`, exceeded `1 m` 75 times and exceeded
+`2 m` 52 times. The error repeatedly rose to `4-6 m` while moving and decayed
+after stopping; `hardSnap=0` and `explicitTeleport=0` throughout.
+
+Competing causes were stale transport, incorrect idle policy, and insufficient
+moving convergence. Fresh movement values continued to arrive and the idle error
+closed exactly to the configured deadband, rejecting the first two for this run.
+The moving branch was capped at only `8%` and `0.05 m` per update. It is changed to
+`20%`, maximum `0.20 m`, with a `0.10 m` deadband; velocity and the animation state
+remain engine-owned.
+
+Falsifiable prediction: ordinary movement must no longer accumulate multi-metre
+error (target peak below `1 m`), idle residual must remain near `0.15 m`, and no
+`hardSnap=1` may appear. New animation jerks with low numeric error would reject
+the stronger cap and require velocity/time-based reconciliation instead.
+
+### Joypad-3 background input must not write window focus (2026-07-02)
+
+**STATIC:** the cursor capture after switching windows was introduced by the mod's
+temporary write of `1` to `g_InputWindowFocused 0x1437EA62C` around every
+destination-3 `Input_ScaleCopyVirtual 0x14183B410` call.
+
+Independent evidence:
+
+1. `Input_ScaleCopyVirtual` reads the byte at `0x14183B467` and exits at
+   `0x14183C9C1` when it is zero; destination index is already live in `r12d`.
+2. The native window-focus message path is the writer of the same byte.
+3. The cursor-update path independently reads the same byte before calling
+   `SetCursorPos` and `ClipCursor`. Thus even a short input-side write changes
+   mouse ownership outside the intended conversion.
+
+The replacement no longer writes the global. An exact-byte patch changes only the
+focus test inside `Input_ScaleCopyVirtual`: destination 3 continues in a background
+copy, while every other destination and the cursor path observe the real native
+focus byte.
+
+Falsifiable prediction: after switching windows, remote Joypad 3 movement remains
+active but the cursor can leave the background game window. Loss of remote movement
+means the local bypass is not reached; continued cursor confinement means another
+native capture path exists independently of `g_InputWindowFocused`.

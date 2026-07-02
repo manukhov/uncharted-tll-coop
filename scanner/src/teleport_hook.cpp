@@ -107,6 +107,7 @@ constexpr std::uintptr_t kInputScaleCopyRva = 0x183B410;
 constexpr std::uintptr_t kGameInfoVtableRva = 0x29040B8;
 constexpr std::uintptr_t kPlayerFireControllerFireRva = 0x0E2C730;
 constexpr std::uintptr_t kPlayerTryStartBumpActionRva = 0x0CE8E10;
+constexpr std::uintptr_t kPlayerBumpControllerUpdateVtableSlotRva = 0x2A0EF08;
 constexpr std::uintptr_t kNetEventCharacterMoveCtorRva = 0x0BBD730;
 constexpr std::uintptr_t kFillAnimCmdBitStreamRva = 0x0BC4E60;
 constexpr std::uintptr_t kNetSnapshotCtorRva = 0x0B87B00;
@@ -318,6 +319,8 @@ using PlayerFireControllerFireFunction = void(__fastcall*)(
 PlayerFireControllerFireFunction g_original_player_fire = nullptr;
 using PlayerTryStartBumpActionFunction = char(__fastcall*)(void*, void*);
 PlayerTryStartBumpActionFunction g_original_player_try_start_bump_action = nullptr;
+using PlayerBumpControllerUpdateFunction = void(__fastcall*)(void*);
+PlayerBumpControllerUpdateFunction g_original_player_bump_controller_update = nullptr;
 void __fastcall hooked_player_fire(
     void* controller, void* fire_args, void* weapon, double scalar);
 using InPlaceCtorFunction = void*(__fastcall*)(void*);
@@ -840,15 +843,14 @@ bool install_joypad3_keyboard_isolation() {
 
 std::int64_t __fastcall hooked_input_scale_copy(
     void* joypad, void* source, std::uint32_t destination_index) {
-    // Window focus is a global input gate. Serialize every conversion so only
-    // remote Joypad 3 can temporarily see it enabled in a background process.
+    // Serialize source mutation and the thread-local destination-3 mode override.
+    // Do not write g_InputWindowFocused here: the window pump reads the same byte
+    // to center and clip the cursor, so a transient background write can recapture
+    // the mouse after Alt-Tab.
     AcquireSRWLockExclusive(&g_joypad3_analog_lock);
-    auto* const input_focus_gate = reinterpret_cast<std::uint8_t*>(
+    const auto* const input_focus_gate = reinterpret_cast<const std::uint8_t*>(
         g_module + 0x37EA62C);
     const std::uint8_t saved_input_focus = *input_focus_gate;
-    if (destination_index == 3) {
-        *input_focus_gate = 1;
-    }
     const DWORD previous = destination_index == 3
         ? g_force_joypad3_analog_thread.exchange(
               GetCurrentThreadId(), std::memory_order_acq_rel)
@@ -898,7 +900,6 @@ std::int64_t __fastcall hooked_input_scale_copy(
     }
     if (destination_index == 3) {
         g_force_joypad3_analog_thread.store(previous, std::memory_order_release);
-        *input_focus_gate = saved_input_focus;
     }
     ReleaseSRWLockExclusive(&g_joypad3_analog_lock);
 
@@ -934,6 +935,82 @@ std::int64_t __fastcall hooked_input_scale_copy(
         }
     }
     return result;
+}
+
+bool install_joypad3_focus_bypass() {
+    // Input_ScaleCopyVirtual reads g_InputWindowFocused at 0x14183B467. Replace
+    // only that 15-byte test: destination 3 may continue while backgrounded;
+    // every other destination still reads the native focus byte. The window pump
+    // and cursor clipping therefore continue to see the real foreground state.
+    auto* const target = reinterpret_cast<std::uint8_t*>(g_module + 0x183B467);
+    constexpr std::array<std::uint8_t, 15> expected{
+        0x0F, 0xB6, 0x05, 0xBE, 0xF1, 0xFA, 0x01, 0x84,
+        0xC0, 0x0F, 0x84, 0x4B, 0x15, 0x00, 0x00,
+    };
+    if (std::memcmp(target, expected.data(), expected.size()) != 0) {
+        log_line("Joypad3 focus bypass skipped: unexpected focus-test bytes");
+        return false;
+    }
+
+    constexpr std::size_t kStubSize = 51;
+    auto* const stub = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, kStubSize, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    if (stub == nullptr) {
+        log_line("Joypad3 focus bypass skipped: stub allocation failed");
+        return false;
+    }
+    std::size_t offset = 0;
+    const std::uint8_t prefix[] = {
+        0x41, 0x83, 0xFC, 0x03,       // cmp r12d, 3
+        0x74, 0x11,                   // je allow
+        0x48, 0xB8,                   // mov rax, focus-byte address
+    };
+    std::memcpy(stub + offset, prefix, sizeof(prefix));
+    offset += sizeof(prefix);
+    *reinterpret_cast<std::uintptr_t*>(stub + offset) = g_module + 0x37EA62C;
+    offset += sizeof(std::uintptr_t);
+    const std::uint8_t test_focus[] = {
+        0x0F, 0xB6, 0x00,             // movzx eax, byte ptr [rax]
+        0x84, 0xC0,                   // test al, al
+        0x74, 0x0E,                   // jz deny
+    };
+    std::memcpy(stub + offset, test_focus, sizeof(test_focus));
+    offset += sizeof(test_focus);
+    auto emit_absolute_jump = [&](std::uintptr_t destination) {
+        stub[offset++] = 0xFF;
+        stub[offset++] = 0x25;
+        *reinterpret_cast<std::uint32_t*>(stub + offset) = 0;
+        offset += sizeof(std::uint32_t);
+        *reinterpret_cast<std::uintptr_t*>(stub + offset) = destination;
+        offset += sizeof(std::uintptr_t);
+    };
+    emit_absolute_jump(g_module + 0x183B476);  // allow
+    emit_absolute_jump(g_module + 0x183C9C1);  // deny
+    if (offset != kStubSize) {
+        VirtualFree(stub, 0, MEM_RELEASE);
+        log_line("Joypad3 focus bypass skipped: internal stub size mismatch");
+        return false;
+    }
+    FlushInstructionCache(GetCurrentProcess(), stub, kStubSize);
+
+    DWORD old_protection = 0;
+    if (!VirtualProtect(target, expected.size(), PAGE_EXECUTE_READWRITE,
+                        &old_protection)) {
+        VirtualFree(stub, 0, MEM_RELEASE);
+        log_line("Joypad3 focus bypass skipped: VirtualProtect failed");
+        return false;
+    }
+    target[0] = 0xFF;
+    target[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(target + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(target + 6) =
+        reinterpret_cast<std::uintptr_t>(stub);
+    target[14] = 0x90;
+    FlushInstructionCache(GetCurrentProcess(), target, expected.size());
+    DWORD ignored = 0;
+    VirtualProtect(target, expected.size(), old_protection, &ignored);
+    log_line("Joypad3 background input bypasses focus test without changing cursor focus");
+    return true;
 }
 
 bool install_joypad3_analog_route() {
@@ -1008,6 +1085,7 @@ bool install_joypad3_analog_route() {
     DWORD ignored_target = 0;
     VirtualProtect(target, kPatchSize, old_target_protection, &ignored_target);
     log_line("Joypad3 uses native analog source while keyboard mode remains global");
+    install_joypad3_focus_bypass();
     return true;
 }
 
@@ -2703,6 +2781,62 @@ void* retained_player_object(int index) {
     return *reinterpret_cast<void**>(static_cast<std::byte*>(entry_ptr) + 8);
 }
 
+void __fastcall hooked_player_bump_controller_update(void* player) {
+    static thread_local ULONGLONG last_log_tick = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log_tick >= 500) {
+        last_log_tick = now;
+        void* const slot0 = retained_player_object(0);
+        void* const slot1 = retained_player_object(1);
+        int slot = -1;
+        if (player == slot0) {
+            slot = 0;
+        } else if (player == slot1) {
+            slot = 1;
+        }
+        const auto split_gate = *reinterpret_cast<const std::uint8_t*>(
+            g_module + 0x3E07473);
+        std::ostringstream line;
+        line << "BUMP-UPDATE slot=" << slot
+             << " player=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(player)
+             << " slot0=0x" << reinterpret_cast<std::uintptr_t>(slot0)
+             << " slot1=0x" << reinterpret_cast<std::uintptr_t>(slot1)
+             << std::dec << " splitGate="
+             << static_cast<unsigned>(split_gate);
+        log_line(line.str().c_str());
+    }
+    g_original_player_bump_controller_update(player);
+}
+
+bool install_player_bump_update_probe() {
+    auto* const slot = reinterpret_cast<std::uintptr_t*>(
+        g_module + kPlayerBumpControllerUpdateVtableSlotRva);
+    const std::uintptr_t expected = g_module + 0x0CE7ED0;
+    if (*slot != expected) {
+        std::ostringstream line;
+        line << "Player bump update probe skipped: vtable slot contains 0x"
+             << std::hex << *slot << ", expected 0x" << expected;
+        log_line(line.str().c_str());
+        return false;
+    }
+
+    DWORD old_protection = 0;
+    if (!VirtualProtect(slot, sizeof(*slot), PAGE_READWRITE, &old_protection)) {
+        log_line("Player bump update probe skipped: VirtualProtect failed");
+        return false;
+    }
+    g_original_player_bump_controller_update =
+        reinterpret_cast<PlayerBumpControllerUpdateFunction>(*slot);
+    *slot = reinterpret_cast<std::uintptr_t>(
+        &hooked_player_bump_controller_update);
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(*slot), old_protection, &ignored);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(*slot));
+    log_line("Player bump update read-only probe installed at vtable 0x142A0EF08");
+    return true;
+}
+
 char __fastcall hooked_player_try_start_bump_action(
     void* player, void* probe_result) {
     void* target_handle = nullptr;
@@ -3800,9 +3934,9 @@ void apply_puppet_transform_post(void* puppet) {
             // error at idle because it would manufacture locomotion with no peer
             // input. Reconcile the transform itself, slowly, while preserving the
             // engine-owned velocity and animation state.
-            const float nudge_deadband = peer_moving ? 0.03F : 0.15F;
-            const float nudge_fraction = peer_moving ? 0.08F : 0.04F;
-            const float max_nudge_per_update = peer_moving ? 0.05F : 0.015F;
+            const float nudge_deadband = peer_moving ? 0.10F : 0.15F;
+            const float nudge_fraction = peer_moving ? 0.20F : 0.04F;
+            const float max_nudge_per_update = peer_moving ? 0.20F : 0.015F;
             const float horizontal_sq = dx * dx + dz * dz;
             if (horizontal_sq > nudge_deadband * nudge_deadband) {
                 const float horizontal = std::sqrt(horizontal_sq);
@@ -8370,6 +8504,7 @@ DWORD WINAPI install_hook(void*) {
     install_joypad3_analog_route();
     install_joypad3_keyboard_isolation();
     install_player_fire_capture();
+    install_player_bump_update_probe();
     install_player_bump_probe();
 
     // VARIANT A (co-op mode gate at init) PROVEN DEAD: setting HIBYTE(dword_143E07470)
