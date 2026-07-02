@@ -5785,6 +5785,12 @@ FUNCTIONS = {
         "copies the animation byte count/time, flags, weapons and movement "
         "metadata. This closes the local animation replication chain.",
     ),
+    0x140BC2240: (
+        "NetEventCharacterMove_FillWeaponState",
+        "Reads eight live WeaponController slots from Player+0x1D88, records "
+        "their compact art ids and states at event+0x3DC/+0x3FC, and fills "
+        "selected weapon, throwable and detailed per-weapon state fields.",
+    ),
     0x140BC1660: (
         "NetEventCharacterMove_PublishSnapshotToCharacter",
         "Builds a NetSnapshot from a CharacterMove event and publishes it to "
@@ -5835,6 +5841,18 @@ FUNCTIONS = {
         "NetAnimCmdGenerator_UpdateFlagsAndWeapons",
         "Applies snapshot flags and weapon state while reconstructing remote "
         "animation. This may solve visible weapons together with animation.",
+    ),
+    0x141BB7960: (
+        "Player_PublishWeaponInventoryEntry",
+        "Player virtual +0xD0 weapon-entry sink. Resolves the weapon controller "
+        "through virtual slot 24 and forwards the structured entry to "
+        "WeaponController_ApplyInventoryEntry; defers while unavailable.",
+    ),
+    0x141E72540: (
+        "WeaponController_ApplyInventoryEntry",
+        "Applies one structured weapon inventory entry through immediate, "
+        "replacement or deferred controller paths. The entry is more than a "
+        "bare held-weapon id.",
     ),
 }
 

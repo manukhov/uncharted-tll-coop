@@ -22599,3 +22599,33 @@ two-packet interpolation branches. Its required ownership rules are:
 5. Player layer `4<->5` collision, bump probes, and authoritative `+0x130` root
    writes remain parked. Re-enabling any of them requires an isolated prediction
    and must preserve this baseline as the control case.
+
+### Native weapon appearance snapshot path (2026-07-02)
+
+**STATIC:** visible weapon state is a structured snapshot, not a single current
+weapon id. Three independent paths agree:
+
+1. `NetEventCharacterMove_FillWeaponState 0x140BC2240` reads eight slots from the
+   live `Player+0x1D88` weapon controller. It writes compact art ids to
+   event `+0x3DC..+0x3F8`, per-slot state to `+0x3FC..+0x403`, selected modes to
+   `+0x404..+0x414`, and four detailed weapon records at `+0x440..+0x4DC`.
+2. `NetEventCharacterMove_ToNetSnapshot 0x140BC11A0` copies those fields into
+   snapshot `+0x3F4..+0x504`; the bit serializer independently confirms eight
+   7-bit ids, eight 8-bit states and the selected/throwable fields.
+3. `NetAnimCmdGenerator_UpdateFlagsAndWeapons 0x140A07160`, specifically
+   `0x140A085AF..0x140A08859`, rebuilds `NetSnapshotWeapons` from exactly those
+   offsets and publishes it through `PublishStructuredStateBlockToActorVirtualD0
+   0x1417F8910`.
+
+Competing explanations were rejected: `weapon+0x218` is not an id; repeatedly
+publishing bare inventory ids through Player virtual `+0xD0` only cycles inventory
+maintenance and never selects a visible held/holstered model; the full animation
+bitstream remains blocked by absent campaign multiplayer art-group tables.
+
+`StatePacket` v5 now transports the contiguous native weapon region
+`NetSnapshot+0x3F4..+0x504`. The receiver reconstructs the exact 0xFD-byte
+`NetSnapshotWeapons` payload and republishes it only when changed. Runtime
+prediction: switching a local weapon makes the remote Player show the same model
+and placement without changing movement. Inventory-only change means the separate
+`NetSnapshotGunHolstered` flag is still required; no change rejects the recovered
+event-parameter descriptor. Runtime status: **HYPOTHESIS**, not yet tested.

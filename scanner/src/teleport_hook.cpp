@@ -329,10 +329,19 @@ using InPlaceCtorFunction = void*(__fastcall*)(void*);
 using FillAnimCmdBitStreamFunction = std::uint32_t(__fastcall*)(
     void*, void*, void*, void*, std::uint32_t, std::uint32_t);
 using CharacterMoveToSnapshotFunction = void(__fastcall*)(void*, void*);
+using FillCharacterMoveWeaponsFunction = void(__fastcall*)(void*, void*);
+using InitializeStructuredEventFunction = void*(__fastcall*)(void*, std::uint32_t, const void*);
+using PushStructuredEventParamFunction = void(__fastcall*)(void*, const void*);
+using PublishStructuredEventFunction = bool(__fastcall*)(void*, void*, std::uint8_t);
 using NetAnimAddSnapshotFunction = void(__fastcall*)(void*, void*);
 using InitializePlayerNetAnimArtGroupsFunction = void(__fastcall*)(void*);
 constexpr std::uintptr_t kXInputGetStateIatRva = 0x25D6D60;
 constexpr std::uintptr_t kXInputGetCapsIatRva = 0x25D6D68;
+constexpr std::uintptr_t kFillCharacterMoveWeaponsRva = 0xBC2240;
+constexpr std::uintptr_t kInitializeStructuredEventRva = 0x1E3750;
+constexpr std::uintptr_t kPushStructuredEventParamRva = 0x1E36A0;
+constexpr std::uintptr_t kPublishStructuredEventRva = 0x17F8910;
+constexpr std::uint32_t kNetSnapshotWeaponsId = 0xCA049840;
 volatile bool g_xinput_log = false;
 volatile bool g_xinput_inject_p0 = false;   // temporary synth pad on index 0 to force controller path
 volatile bool g_xinput_inject_p2 = false;   // synthesize pad on index 1
@@ -3691,6 +3700,29 @@ bool start_state_net() {
     return true;
 }
 
+bool capture_local_weapon_snapshot(void* local_player, std::uint8_t* out) {
+    if (local_player == nullptr || out == nullptr || g_module == 0) return false;
+    alignas(16) std::uint8_t move_event[0x700]{};
+    alignas(16) std::uint8_t net_snapshot[0x700]{};
+    const auto fill_weapons = reinterpret_cast<FillCharacterMoveWeaponsFunction>(
+        g_module + kFillCharacterMoveWeaponsRva);
+    const auto to_snapshot = reinterpret_cast<CharacterMoveToSnapshotFunction>(
+        g_module + kCharacterMoveToSnapshotRva);
+    __try {
+        fill_weapons(move_event, local_player);
+        to_snapshot(move_event, net_snapshot);
+        std::memcpy(
+            out, net_snapshot + 0x3F4, coop::kWeaponSnapshotBytes);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+    const auto* ids = reinterpret_cast<const std::uint32_t*>(out);
+    for (int i = 0; i < 8; ++i) {
+        if (ids[i] != 0) return true;
+    }
+    return false;
+}
+
 void send_local_player_state() {
     if (!g_state_net.enabled || !g_state_net.peer_set) {
         return;
@@ -3800,6 +3832,24 @@ void send_local_player_state() {
                 pkt.flags |= 8;
             }
         }
+    }
+    // The native CharacterMove weapon helper is read-only over the live Player
+    // inventory. Refresh less often than movement; the receiver republishes only
+    // when this block changes.
+    static ULONGLONG last_weapon_capture = 0;
+    static std::uint8_t cached_weapon_snapshot[coop::kWeaponSnapshotBytes]{};
+    static bool have_weapon_snapshot = false;
+    const ULONGLONG weapon_now = GetTickCount64();
+    if (weapon_now - last_weapon_capture >= 100) {
+        last_weapon_capture = weapon_now;
+        have_weapon_snapshot = capture_local_weapon_snapshot(
+            local_obj, cached_weapon_snapshot);
+    }
+    if (have_weapon_snapshot) {
+        std::memcpy(
+            pkt.weapon_snapshot, cached_weapon_snapshot,
+            coop::kWeaponSnapshotBytes);
+        pkt.flags |= 0x20;
     }
     sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr), sizeof(g_state_net.peer_addr));
@@ -3973,6 +4023,73 @@ bool apply_peer_health_to_slot1(const coop::StatePacket& peer, bool log_once) {
         log_line(line.str().c_str());
     }
     return true;
+}
+
+bool publish_peer_weapon_snapshot(const coop::StatePacket& peer, void* puppet) {
+    if ((peer.flags & 0x20) == 0 || puppet == nullptr || g_module == 0) return false;
+
+    // Rebuild the exact NetSnapshotWeapons payload assembled at
+    // 0x140A085C3..0x140A08811. Offsets below are relative to NetSnapshot+0x3F4.
+    alignas(16) std::uint8_t payload[0x100]{};
+    const auto* src = peer.weapon_snapshot;
+    std::memcpy(payload + 0x00, src + 0x000, 0x20);  // eight weapon ids
+    std::memcpy(payload + 0x20, src + 0x020, 0x08);  // per-slot state
+    std::memcpy(payload + 0x28, src + 0x028, 0x0C);  // selected classes/modes
+    std::memcpy(payload + 0x34, src + 0x0E8, 0x0C);
+    std::memcpy(payload + 0x40, src + 0x0FC, 0x10);
+    std::memcpy(payload + 0x50, src + 0x034, 0x04);
+    payload[0x54] = src[0x038];
+    payload[0x55] = src[0x0DD];
+    std::memcpy(payload + 0x58, src + 0x0E0, 0x04);
+    std::memcpy(payload + 0x5C, src + 0x03C, 0x28);
+    std::memcpy(payload + 0x84, src + 0x064, 0x28);
+    std::memcpy(payload + 0xAC, src + 0x08C, 0x28);
+    std::memcpy(payload + 0xD4, src + 0x0B4, 0x28);
+    payload[0xFC] = src[0x0E4];
+
+    struct EventParam {
+        void* data;
+        std::uint32_t reserved;
+        std::int32_t count;
+    };
+    static_assert(sizeof(EventParam) == 16);
+    EventParam param{payload, 0, 8};
+    alignas(16) std::uint8_t event[0x130]{};
+    alignas(16) const std::uint8_t context[16]{};
+    const auto initialize = reinterpret_cast<InitializeStructuredEventFunction>(
+        g_module + kInitializeStructuredEventRva);
+    const auto push_param = reinterpret_cast<PushStructuredEventParamFunction>(
+        g_module + kPushStructuredEventParamRva);
+    const auto publish = reinterpret_cast<PublishStructuredEventFunction>(
+        g_module + kPublishStructuredEventRva);
+    __try {
+        initialize(event, kNetSnapshotWeaponsId, context);
+        push_param(event, &param);
+        return publish(event, puppet, 0);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void apply_peer_weapon_state() {
+    coop::StatePacket peer{};
+    void* puppet = nullptr;
+    if (!latest_peer_state(peer, puppet) || (peer.flags & 0x20) == 0) return;
+    static std::uint8_t last[coop::kWeaponSnapshotBytes]{};
+    static void* last_puppet = nullptr;
+    static bool have_last = false;
+    if (have_last && puppet == last_puppet &&
+        std::memcmp(last, peer.weapon_snapshot, sizeof(last)) == 0) {
+        return;
+    }
+    if (publish_peer_weapon_snapshot(peer, puppet)) {
+        std::memcpy(last, peer.weapon_snapshot, sizeof(last));
+        last_puppet = puppet;
+        have_last = true;
+        log_line("remote NetSnapshotWeapons published");
+    } else {
+        log_line("remote NetSnapshotWeapons publish failed");
+    }
 }
 
 // PRE (before the puppet's own update runs): feed the replicated velocity into
@@ -6226,7 +6343,7 @@ void net_tick() {
     // hooked_update fires for every Player + the buddy each frame; rate-limit by clock.
     static ULONGLONG last_send = 0, last_enemy_send = 0, last_enemy_apply = 0;
     static ULONGLONG last_freeze = 0, last_hp_probe = 0, last_hpsys = 0;
-    static ULONGLONG last_animation_mirror = 0;
+    static ULONGLONG last_animation_mirror = 0, last_weapon_apply = 0;
     const ULONGLONG now = GetTickCount64();
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
         g_local_animation_mirror_test = !g_local_animation_mirror_test;
@@ -6254,6 +6371,10 @@ void net_tick() {
     if (now - last_send >= 16) {  // ~60 Hz local player state
         last_send = now;
         send_local_player_state();
+    }
+    if (now - last_weapon_apply >= 100) {
+        last_weapon_apply = now;
+        apply_peer_weapon_state();
     }
     if (!g_net_role_b) {
         if (now - last_enemy_send >= 33) {  // ~30 Hz host enemy snapshot

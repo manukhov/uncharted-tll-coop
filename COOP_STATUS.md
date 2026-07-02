@@ -31,9 +31,11 @@ The next blocker is full action/state reproduction: traversal, jump/roll, weapon
 firing effects, melee and interactions. Player collision returns later as an
 isolated task against this movement baseline.
 
-The present v2 packet carries position, quaternion, velocity, both stick pairs and
-the complete 64-bit button mask with press/release edges. It is still insufficient:
-one-shot actions need a reliable ordered event stream and authored gameplay state.
+The present `StatePacket` v5 carries position, quaternion, velocity, both stick
+pairs, the complete 64-bit button mask with press/release edges, health, and the
+native `NetSnapshotWeapons` region. Weapon appearance publication is implemented
+but still awaiting its first runtime test. One-shot actions still need a reliable
+ordered event stream and authored gameplay state.
 
 The immediate blocker is the remote actor. `NadineBuddy + MoveTo` cannot represent
 all Player actions. A second retained `Player` has the required graph and mechanics.

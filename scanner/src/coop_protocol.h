@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace coop {
@@ -24,7 +25,12 @@ struct InputPacket {
 // One-shot gameplay actions need a separate reliable ordered event stream.
 constexpr std::uint16_t kStatePort = 31338;
 constexpr std::uint32_t kStatePacketMagic = 0x53504F43;  // "COPS"
-constexpr std::uint16_t kStatePacketVersion = 4;
+constexpr std::uint16_t kStatePacketVersion = 5;
+
+// Contiguous native NetSnapshot weapon region [0x3f4, 0x504). It contains the
+// eight inventory ids, per-slot state, selected weapon classes and the four
+// detailed weapon records used by NetSnapshotWeapons.
+constexpr std::size_t kWeaponSnapshotBytes = 0x110;
 
 struct StatePacket {
     std::uint32_t magic = kStatePacketMagic;
@@ -44,6 +50,7 @@ struct StatePacket {
     std::uint64_t buttons_released = 0;
     std::int32_t health = -1;         // Player HealthSystem current HP
     std::int32_t max_health = -1;
+    std::uint8_t weapon_snapshot[kWeaponSnapshotBytes]{};
 };
 
 // Phase 3 (host-authoritative world sync): the HOST (role A) enumerates the
