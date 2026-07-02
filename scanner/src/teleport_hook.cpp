@@ -3751,6 +3751,81 @@ void* resolve_live_player_safe(std::uint32_t index) {
     }
 }
 
+// Read a bounded, printable inline name at obj+0x8 (ND Process objects store their
+// debug name there). Returns "" if it doesn't look like a name.
+std::string read_inline_name(void* obj) {
+    if (obj == nullptr) return {};
+    auto* p = reinterpret_cast<const char*>(static_cast<std::byte*>(obj) + 0x8);
+    if (readable_bytes(reinterpret_cast<const std::byte*>(p)) < 0x28) return {};
+    char buf[40]{};
+    int n = 0;
+    for (; n < 39; ++n) {
+        const char ch = p[n];
+        if (ch == 0) break;
+        if (ch < 0x20 || ch > 0x7E) return {};
+        buf[n] = ch;
+    }
+    if (n < 3) return {};
+    return std::string(buf, n);
+}
+
+// Scan a player object's pointer fields for named sub-objects (weapon actor lives
+// on the armed local player but is absent on the gun-less clone). Diff the two logs
+// to find the missing weapon-actor pointer offset.
+void scan_named_subobjects(void* player, const char* label) {
+    if (player == nullptr) {
+        log_line((std::string("WEAPON-SCAN ") + label + " (null)").c_str());
+        return;
+    }
+    auto* base = static_cast<std::byte*>(player);
+    std::ostringstream w;
+    w << "WEAPON-SCAN " << label << " obj=0x" << std::hex
+      << reinterpret_cast<std::uintptr_t>(player) << std::dec << ":";
+    int hits = 0;
+    for (std::size_t off = 0x8; off < 0x4000 && hits < 48; off += 8) {
+        if (readable_bytes(base + off) < sizeof(void*)) continue;
+        void* cand = *reinterpret_cast<void**>(base + off);
+        if (cand == nullptr) continue;
+        const std::string nm = read_inline_name(cand);
+        if (nm.empty()) continue;
+        w << " +0x" << std::hex << off << std::dec << "='" << nm << "'";
+        ++hits;
+    }
+    if (hits == 0) w << " (no named sub-objects)";
+    log_line(w.str().c_str());
+}
+
+// Dump the raw weapon-region pointers (Player+0x3500..0x3640, per the
+// KickPlayerDepenetrateWeapons reads at +0x3530/+0x3600/+0x3608) with each target's
+// vtable RVA + inline name, so we can diff the armed local vs the gun-less clone.
+void dump_weapon_region(void* player, const char* label) {
+    if (player == nullptr) {
+        log_line((std::string("WEAPON-REGION ") + label + " (null)").c_str());
+        return;
+    }
+    auto* base = static_cast<std::byte*>(player);
+    std::ostringstream w;
+    w << "WEAPON-REGION " << label << ":";
+    for (std::size_t off = 0x3500; off <= 0x3640; off += 8) {
+        if (readable_bytes(base + off) < sizeof(void*)) continue;
+        const std::uintptr_t v = *reinterpret_cast<std::uintptr_t*>(base + off);
+        if (v == 0) continue;
+        w << " +0x" << std::hex << off << "=0x" << v;
+        auto* t = reinterpret_cast<std::byte*>(v);
+        if (readable_bytes(t) >= sizeof(void*)) {
+            const std::uintptr_t tvt = *reinterpret_cast<std::uintptr_t*>(t);
+            if (tvt > g_module && tvt - g_module < 0x8000000) {
+                w << "(vt=0x" << (tvt - g_module);
+                const std::string nm = read_inline_name(t);
+                if (!nm.empty()) w << ",'" << nm << "'";
+                w << ")";
+            }
+        }
+        w << std::dec;
+    }
+    log_line(w.str().c_str());
+}
+
 void send_local_player_state() {
     if (!g_state_net.enabled || !g_state_net.peer_set) {
         return;
@@ -3896,6 +3971,18 @@ void send_local_player_state() {
         // first goes non-null (with held id) and a slow heartbeat otherwise.
         void* live0 = resolve_live_player_safe(0);
         void* live1 = resolve_live_player_safe(1);
+        // F8: one-shot scan of named sub-objects on the armed local player vs the
+        // gun-less clone, to locate the weapon-actor pointer (rate-limited 1 s).
+        if ((GetAsyncKeyState(VK_F8) & 0x8000) != 0) {
+            static ULONGLONG scan_last = 0;
+            if (weapon_now - scan_last > 1000) {
+                scan_last = weapon_now;
+                scan_named_subobjects(live0, "LOCAL");
+                scan_named_subobjects(live1, "CLONE");
+                dump_weapon_region(live0, "LOCAL");
+                dump_weapon_region(live1, "CLONE");
+            }
+        }
         const std::uintptr_t live0_ctrl = rd_ptr(live0, 0x218);
         const std::uintptr_t live1_ctrl = rd_ptr(live1, 0x218);
         static bool seen0 = false, seen1 = false;
