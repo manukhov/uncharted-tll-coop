@@ -1286,6 +1286,34 @@ void observe_nadine_visual_identity(void* object) {
 // vtable RVAs so we can identify the draw-control/look class statically.
 void* retained_player_object(int index);  // defined below
 
+// The engine's StringId hash (sub_14014D830(str, len)) used by the look builder. Used
+// to resolve candidate Nadine look names to their appearance hash in the SAME domain
+// as the swap constants (chloe 0x3f334972 / nadine 0xd27c074f), so we can try a
+// weapon-capable look (e.g. nadine-buddy) instead of the base nadine look.
+using StringIdHashFunction = std::uint32_t(__fastcall*)(const char*, std::uint64_t);
+constexpr std::uintptr_t kStringIdHashRva = 0x14D830;
+std::uint32_t safe_string_id_hash(const char* name, std::size_t len) {
+    if (g_module == 0 || name == nullptr) return 0;
+    const auto fn = reinterpret_cast<StringIdHashFunction>(g_module + kStringIdHashRva);
+    __try {
+        return fn(name, len);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 0xFFFFFFFFu;
+    }
+}
+void log_candidate_look_hashes() {
+    static const char* const names[] = {
+        "chloe", "nadine", "nadine-buddy", "nadine-base",
+        "nadine-default", "nadine-auction"};
+    std::ostringstream o;
+    o << "LOOK-HASHES";
+    for (const char* n : names) {
+        o << " " << n << "=0x" << std::hex
+          << safe_string_id_hash(n, std::strlen(n)) << std::dec;
+    }
+    log_line(o.str().c_str());
+}
+
 // Hooked Player vtable[92] (appearance-hash getter). VARIANT B step 1: when
 // g_local_make_nadine is on (and we are NOT spawning a 2nd Player clone), force the
 // appearance hash to Nadine for the local Player so the LOCAL player renders as
@@ -1314,6 +1342,7 @@ std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
             t << "LOCAL-NADINE force = "
               << (g_force_local_nadine ? "ON" : "OFF");
             log_line(t.str().c_str());
+            if (g_force_local_nadine) log_candidate_look_hashes();
         }
         prev_f5 = f5;
     }
