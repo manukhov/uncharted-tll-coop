@@ -1367,22 +1367,30 @@ std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
         static bool prev_f4 = false;
         const bool f4 = (GetAsyncKeyState(VK_F4) & 0x8000) != 0;
         if (f4 && !prev_f4) {
-            struct Cand { std::uint32_t hash; const char* name; };
-            static const Cand cands[] = {
-                {0xd27c074fu, "legacy-known-good"},
-                {0x841e7a4fu, "nadine-buddy"},
-                {0x8a419c8eu, "nadine-base"},
-                {0xba17b98bu, "nadine-default"},
-                {0x41b5f560u, "nadine-auction"},
-                {0xc7e2539bu, "nadine-real-BLACKSCREENS"},
+            // Cycle by NAME; resolve each hash via the engine's own StringId hash so
+            // any look name can be tried without hardcoding. Index 0 = the known-good
+            // legacy look (raw hash, no name). Apply then RELOAD the checkpoint for a
+            // full look rebuild (mid-frame swaps only partially apply).
+            static const char* const names[] = {
+                nullptr,            // 0: legacy known-good 0xd27c074f
+                "nadine-dlc-base",  // untested — may be a cleaner look
+                "nadine-base",
+                "nadine-default",
+                "nadine-buddy",
+                "nadine-auction",
+                "nadine",           // real nadine — black-screened before
             };
-            const int n = static_cast<int>(sizeof(cands) / sizeof(cands[0]));
+            const int n = static_cast<int>(sizeof(names) / sizeof(names[0]));
             g_nadine_swap_index = (g_nadine_swap_index + 1) % n;
-            g_nadine_swap_hash = cands[g_nadine_swap_index].hash;
+            const char* nm = names[g_nadine_swap_index];
+            g_nadine_swap_hash = (nm == nullptr)
+                ? 0xd27c074fu
+                : safe_string_id_hash(nm, std::strlen(nm));
             std::ostringstream t;
             t << "NADINE-LOOK now [" << g_nadine_swap_index << "] "
-              << cands[g_nadine_swap_index].name << " = 0x" << std::hex
-              << g_nadine_swap_hash << std::dec;
+              << (nm ? nm : "legacy-known-good") << " = 0x" << std::hex
+              << g_nadine_swap_hash << std::dec
+              << "  (RELOAD checkpoint to fully apply)";
             log_line(t.str().c_str());
         }
         prev_f4 = f4;
