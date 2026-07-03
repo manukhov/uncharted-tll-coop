@@ -1,5 +1,32 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-03, Claude)
+- **Grenade-on-move: FIXED & CONFIRMED.** The peer's clone threw grenades while
+  the peer only ran = synthetic `0x500` gate OR-ed into `branch1+0x10` (the clone
+  joypad HELD mask; press edges derived from it by real-input branch `0x1402893D0`).
+  Locomotion is stick-driven and does not need it. Removed; F7 restores it.
+- **Weapon replication (Codex authored-give): GATED OFF (F6), default baseline.**
+  It spilled weapons (the Nadine clone can't attach given weapons → they drop) and
+  can't switch the held weapon. Publish path gated too. Stable non-spilling co-op is
+  the default now.
+- **Nadine weapon display: root cause CONFIRMED, look-swap fix DISPROVEN.** The
+  appearance-hash swap (`hooked_appearance`, vtable[92]) changes the SKELETON +
+  joint-override + prop-attach via the look builder `0x141BB4280`, not just the mesh,
+  so weapons mis-attach (pistol renders as rifle, empty back, crooked aim). Engine
+  StringId hash confirmed the domain (chloe 0x3f334972 matches) but real
+  nadine=0xc7e2539b BLACK-SCREENS, and every other look variant breaks the skin; only
+  the legacy `0xd27c074f` renders Nadine (with broken weapons). So the fix is NOT a
+  look hash — it must correct the weapon attach ON 0xd27c074f (deep, open).
+- **Repro tooling (single copy, no peer):** F5 = force local player to Nadine
+  (`g_force_local_nadine`); F4 = cycle Nadine look candidates; F8 = WEAPON-REGION/
+  SCAN/GUN-STATE dumps; F6 = authored weapon-give on/off; F7 = legacy move gate.
+- Next decision (asked user, awaiting): deep-fix attach on 0xd27c074f, accept
+  cosmetic imperfection, make player-2 render Chloe (weapons perfect), or first
+  isolate the "pistol renders as rifle" model/holster sub-bug. Details in memory
+  `nadine-weapon-skeleton`, `grenade-on-move-fixed`, `weapon-sync-recon`.
+
+
+
 Goal (north star): a fully-playable **second player as Nadine** in the *Uncharted:
 The Lost Legacy* campaign (`tll.exe`), via runtime DLL injection — eventually a
 two-PC networked co-op.
