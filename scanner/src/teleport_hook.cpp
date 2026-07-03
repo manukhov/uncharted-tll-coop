@@ -4437,7 +4437,7 @@ bool publish_peer_weapon_snapshot(const coop::StatePacket& peer, void* puppet) {
 }
 
 int give_authored_weapons_to_controller(
-    void* controller, const std::uint32_t* raw_ids) {
+    void* controller, const std::uint32_t* raw_ids, void* puppet) {
     if (controller == nullptr || raw_ids == nullptr || g_module == 0 ||
         readable_bytes(controller) < sizeof(void*)) {
         return 0;
@@ -4451,16 +4451,17 @@ int give_authored_weapons_to_controller(
     if (give_weapon == nullptr) return 0;
 
     // IDEMPOTENT give: give_weapon(..., force=true) drops the currently-held weapon,
-    // so re-giving an id the controller already has makes weapons "fall out". The
-    // sender's snapshot slot[1] oscillates between two ids frame-to-frame, which
-    // defeated the caller's snapshot-changed guard and re-gave every update. Cache
-    // the ids already given to this controller and give each at most once, so a
-    // stable inventory is established without repeatedly dropping weapons.
-    static void* cache_controller = nullptr;
+    // so re-giving an id makes weapons "fall out". Two things defeated a naive guard:
+    // the sender snapshot slot[1] oscillates between two ids frame-to-frame, AND the
+    // weapon controller pointer at puppet+0x1D88 is UNSTABLE (a different object
+    // almost every frame in the log). So key the "already given" cache on the STABLE
+    // puppet identity, not the churning controller pointer, and give each id at most
+    // once per puppet — establishing the inventory without repeatedly dropping it.
+    static void* cache_puppet = nullptr;
     static std::uint32_t cached_ids[64]{};
     static int cached_count = 0;
-    if (controller != cache_controller) {
-        cache_controller = controller;
+    if (puppet != cache_puppet) {
+        cache_puppet = puppet;
         cached_count = 0;
     }
     auto already_given = [&](std::uint32_t id) -> bool {
@@ -4540,7 +4541,7 @@ void apply_peer_weapon_state() {
         }
         const auto* raw_ids = reinterpret_cast<const std::uint32_t*>(
             peer.weapon_snapshot);
-        const int given = give_authored_weapons_to_controller(controller, raw_ids);
+        const int given = give_authored_weapons_to_controller(controller, raw_ids, puppet);
         if (given < 0) {
             log_line("remote authored weapon give threw");
             return;
