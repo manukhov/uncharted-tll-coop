@@ -1,5 +1,261 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-03, Cursor — fire dedup + load guards + aim anim restore, HANDOFF)
+
+**Зафиксировано в этом коммите.** Следующий ход: user-test aim pose + crosshair isolation.
+
+### Fire relay (CONFIRMED fixes)
+- **Double-fire crash:** sustained peer `0x800` in `StatePacket` reached Joypad 3 while
+  native `FIRE-RELAY` also fired → `rip=0x0`. Fix: `remote_puppet_actions_from_peer`
+  strips fire from state; fire only via `FirePacket`; `suppress_puppet_fire_buttons(400)`
+  after native success; block `try_start_fire`/`check_shot_readiness` on puppet while
+  suppressed.
+- **Load crash (no shot on copy 2):** `GiveWeapon` vtable `+0x158` null during spawn →
+  `EXCEPTION rip=0x0` art `0x33E29A1B`; native fire too early after `gunOk=1`. Fix:
+  `puppet_weapon_give_vtable_ready`, 5 s puppet warmup, 5 s give-fail backoff,
+  `puppet_native_fire_allowed` (+1 s after confirmed attach) gates native replay.
+
+### Aim animation (restored this commit, needs user test)
+- **Regression cause:** `kRemoteViewportButtonMask` incorrectly stripped aim `0x200`
+  along with scope HUD bits → no sustained aim-press on puppet joypad → no aim pose.
+- **Fix:** split masks — relay aim `0x200` + peer `look_stick` on branch `+0x1C/+0x20`;
+  strip only scope bits (`0x10000..0x80000`); `scrub_local_viewport_aim_hud_leak()`
+  clears aim/scope from **local** joypad when peer aims but local player does not
+  (prevents crosshair duplication without killing puppet anim).
+- **Still gated:** fire `0x800` never sustained from state packet (by design).
+
+### User test checklist
+1. Load both copies, wait ≥10 s after level spawn.
+2. Chloe hold aim (no shot) → remote Chloe aim pose on copy 2; **no** crosshair on
+   Nadine viewport; log `REMOTE-ACTIONS branch` should include `0x200`.
+3. Chloe fire 3–5 pistol shots → copy 2 survives; one `FIRE-RELAY native` per shot.
+4. If crosshair dup returns → tune `scrub_local_viewport_aim_hud_leak` only (do not
+   re-strip `0x200` from puppet).
+
+## Turn note (2026-07-03, Cursor — copy-2 crash on Chloe pistol fire)
+
+- **CONFIRMED (logs PID 24340/9980):** copy 2 (role B) died right after first relayed
+  pistol shot. Last copy-2 lines: `REMOTE-ACTIONS held=0x809` → `FIRE-GATE
+  input/readiness result=1` on remote player `0x10e0e13f80` →
+  `FIRE-RELAY native seq=1 art=0x33e29a1b hands=1`; copy 2 then stops logging while
+  copy 1 continues.
+- **CONFIRMED:** same session had earlier `EXCEPTION rip=0x0` on pistol art
+  `0x33E29A1B` during `HELD-WEAPON-APPLY` / GiveWeapon (SEH survived); final crash
+  correlates with **double delivery** — native `safe_replay_player_fire` plus peer
+  fire button `0x800` still armed on Joypad 3 in the same frame window.
+- **Root cause:** `apply_queued_fire_events` native success still set
+  `g_fire_button_hold_until_ms`, and `drive_remote_slot1_actions_tick` also forwarded
+  peer `input_buttons` fire (`0x809`) → second native `PlayerFireController::Fire`
+  on the remote player → `rip=0x0` AV.
+- **Fix:** on native relay success, call `suppress_puppet_fire_buttons(250)` instead
+  of extending button hold; strip `0x800` in `drive_remote_slot1_actions_tick` and
+  `Input_ScaleCopyVirtual` while suppressed; require `puppet_weapon_sync_ready`;
+  use packet `controller_offset` + weapon-art match before replay; clear suppress on
+  native-fail so button fallback still works.
+- **Runtime:** built `scanner/build/tll_teleport_hook_v2.dll` OK.
+  **User test:** Chloe pistol shot → copy 2 survives; log shows one `FIRE-RELAY native`
+  and **no** `FIRE-GATE` fire-press on remote player in the same 250 ms window.
+
+## Turn note (2026-07-03, Cursor — rifle fire relay drop + aim direction fix)
+
+- **Root cause:** copy 2 (role B / Nadine local) also logged `PLAYER-FIRE` and sent
+  fire packets with rifle art `0x8075397d` while Chloe held pistol — receiver
+  button fallback armed rifle → sniper scope overlay after first pistol shot.
+  Button-only relay ignored `FirePacket.fire_args` aim direction.
+- **Fix:** `send_fire_packet` / `hooked_player_fire` gated to role A + retained slot 0
+  only; `coop_fire_packet_matches_peer_weapon` drops rifle packets when peer holds
+  pistol; rifle give/switch blocked when peer has pistol; `apply_peer_aim_facing_to_player`
+  before button pulse; aim `0x200` armed when peer aims or recent aim + gun out;
+  native pistol replay enabled (`g_native_fire_relay`) with full `0x100` fire_args via
+  `puppet_fire_ready`.
+- **User test:** Chloe pistol first shot → no sniper scope on Nadine; log should show
+  `FIRE-RELAY drop: rifle art but peer holds pistol` for stale rifle packets;
+  `FIRE-RELAY native` for pistol when ready; muzzle direction matches Chloe crosshair.
+
+## Turn note (2026-07-03, Cursor — block+0x518 button send fix)
+
+- **CONFIRMED (logs PID 10040/20400):** `REMOTE-ACTIONS held=0x0` while Chloe aims —
+  sender read Joypad `+0xE0` (layer bits like `0x20000`) instead of resolved block
+  `+0x518` (command descriptors: aim=`0x200`, fire=`0x800`). Receiver synthesized only
+  brief `branch=0x200` from `g_fire_aim_hold_until_ms` (400ms post-fire), not sustained
+  aim-press → **no Nadine aim animation** while Chloe holds aim.
+- **CONFIRMED:** `JOYPAD3-ANALOG right=(0,0)` every frame — mouse look never landed in
+  `look_stick`; `camera_quat` path existed but aim-press never stayed active without
+  correct held mask in the packet.
+- **CONFIRMED:** `capture_held_weapon_art_id` reported rifle `0x8075397d` while pistol
+  drawn in hands (slot 1) → peer sent rifle art intermittently; pistol visual switch lagged.
+- **Fix:** sender now packs `input_buttons` from `joypad_resolved_input_block+0x518`;
+  receiver `Input_ScaleCopyVirtual` (dest=3) sustains aim `0x200` while `peer.gun_state==1`
+  or fire-relay hold; applies peer `look_stick` to source block axes; pistol-in-hands
+  (slot 1) wins over rifle active-weapon query.
+- **Runtime:** built + injected PIDs 11616/21412. **User test:** hold aim on Chloe → log
+  should show `held=0x200` (not `0x0`) on receiver `REMOTE-ACTIONS`; Nadine aim pose;
+  pistol switch → `HELD-WEAPON-SEND art=0x33e29a1b`; shoot direction follows camera.
+
+## Turn note (2026-07-03, Cursor — Nadine aim direction + aim anim sync)
+
+- **CONFIRMED (logs PID 4480/16108):** `JOYPAD3-ANALOG right=(0,0)` on every frame while
+  Chloe fires with `src=0x90000` — aim/fire **buttons** reach Nadine's Joypad 3, but
+  **camera/right-stick look was never relayed**. Nadine used her local CameraManager yaw,
+  so shots and aim pose did not match Chloe's crosshair.
+- **CONFIRMED:** weapon-mismatch gate stripped **both** aim (`0x200`) and fire (`0x800`) when
+  `puppet_can_fire_art` failed (`WEAPON-CLONE armed=0`). That blocked sustained aim-press
+  animation even while Chloe held aim.
+- **Fix (StatePacket v7):** sender now packs `camera_quat[4]` (Chloe CameraManager(0) @+0x1B0,
+  flag `0x100`) plus `look_stick` right-stick pair; receiver applies peer camera in
+  `drive_remote_slot1_actions_tick` and `Input_ScaleCopyVirtual` (dest=3), forwards right
+  stick to branch `+0x1C/+0x20`, relays aim continuously while peer holds `0x200` (fire still
+  gated on weapon match), blends body quat harder while peer aims.
+- **STATIC:** shot direction should follow peer camera quat once both instances run v7 DLL.
+  Aim animation needs sustained `0x200` + gun-out; rifle draw on Nadine may still lag
+  (`HELD-WEAPON-APPLY`) — separate from look relay.
+- **Runtime:** built `scanner/build/tll_teleport_hook_v2.dll`; injected PIDs 10040/20400.
+  **User test:** Chloe aim (hold) → Nadine aim pose; Chloe shoot → Nadine muzzle direction
+  matches; log should show non-zero `right=(…)` on JOYPAD3-ANALOG and peer camera applied.
+
+## Turn note (2026-07-03, Cursor — rifle puppet give/switch unblock)
+
+- **Root cause (prior run):** `puppet_weapon_give_allowed` blocked rifle
+  `0x8075397d`; `puppet_weapon_switch_allowed` blocked `slot<=0` and rifle art.
+  Peer rifle packets showed `HELD-WEAPON-APPLY slot=-1 gave=0 select=0` — puppet had
+  no rifle inventory; fire relay still worked via buttons.
+- **Fix (this build):** allow rifle give/switch (slot 0); `ensure_puppet_has_peer_weapons`
+  pre-gives coop arts from peer raw-id snapshot (flag `0x40`); apply path gives + re-resolves
+  slot when missing; rifle-out forces switch even when `weapon_selected_mode==0`; sender
+  prefers rifle art when pistol hand-attached but active/requested slot is rifle.
+- **Runtime:** build OK (`tll_teleport_hook_v2.dll`); two instances injected (PIDs vary).
+  **Needs user test:** pick up rifle → expect `HELD-WEAPON-APPLY art=0x8075397d slot=0
+  gave=1 select=1` on puppet side; visual should show rifle (Nadine holster overlap may
+  still apply).
+
+## Turn note (2026-07-03, Cursor — weapon display: hand-attached art vs GetActiveWeapon)
+
+- **Likely bug:** `capture_held_weapon_art_id` used `Player_GetActiveWeapon` (+0x8C0)
+  first; it can keep reporting rifle `0x8075397d` while pistol is physically attached
+  (slot 1 / `0x1410A49E0`). Peer then never switches puppet draw to pistol.
+- **Fix:** sender/receiver now prefer `capture_weapon_selected_mode` (hand-attached
+  slot) → `get_weapon_from_slot` → art@+0x860; holster previous attached slot before
+  `SwitchToWeapon` to new slot; holster on `peer_gun==0`.
+- **Still parked:** Nadine look `0xd27c074f` holster prop-attach — holstered rifle
+  mesh may overlap pistol even when logical slot is correct (asset-level).
+
+## Turn note (2026-07-03, Codex — fire button reaches Joypad, internal gates next)
+
+- **CONFIRMED:** the received `0x90000` mask reaches the clone's real Joypad 3:
+  `REMOTE-ACTIONS branch=0x90000` and then
+  `JOYPAD3-ANALOG src/pressed/current=0x90000`. Network delivery and per-slot
+  input application are no longer candidates for the missing shot.
+- **CONFIRMED:** pistol switching completes asynchronously. The first frame logged
+  `requested=1 attached=0`; a later frame logged `requested=1 attached=1` without
+  another peer state change. The old early return therefore left `gunOk=0` after
+  successful attachment. The receiver now keeps checking until the expected slot
+  is physically attached, then arms fire readiness without repeatedly switching.
+- **STATIC:** the remaining chain is
+  `PlayerFireController_UpdateInputAndFire 0x140E28A30` ->
+  `PlayerWeaponController_CanUseWeapon 0x1410B15A0` ->
+  `CheckFireInput 0x140E2ACA0` -> `CheckActionExclusions 0x140E2ADF0` ->
+  `CheckShotReadiness 0x140E2B220` -> native `Fire 0x140E2C730`.
+  Read-only return diagnostics were added to the two final fire-controller gates.
+- **CONFIRMED / REJECTED:** the remote pulse produced no `FIRE-GATE` line at all,
+  while local shots produced `input=1`, `readiness=1`, then native `PLAYER-FIRE`.
+  The break is therefore before the fire controller, not in weapon readiness.
+- **STATIC + live data:** authored command records resolve `aim-press` to mask
+  `0x200/type 4`, and all `fire-hold/press/release` forms to mask `0x800` with
+  types `2/4/8`. The old synthetic masks `0x80000/0x10000` were unrelated.
+  Additionally, `hooked_player_input_state_update` cleared the generic press latch
+  before the separately scheduled fire controller queried Joypad `+0xD0`.
+  Fire now uses `0x800` and remains latched only until `CheckFireInput`; the 400 ms
+  helper hold keeps only aim `0x200`, preventing manufactured repeated shots.
+- **Next prediction:** remote pulse `0xA00` yields Joypad `pressed/current=0xA00`
+  and then `FIRE-GATE input press=1`. Its return and the readiness return identify
+  any remaining native rejection.
+
+## Previous turn note (2026-07-03, Cursor — fire relay PAUSE, button path partial)
+
+**Статус: ПАУЗА.** Краши устранены; визуальная синхронизация выстрела на кукле **ещё нет**.
+
+### Что подтверждено рантаймом (PID 10428/15952, 15028/9984, …)
+- **CONFIRMED:** `FIRE-RELAY button seq=N pulse=0x90000` — UDP-пакет доходит, button
+  fallback срабатывает (ранний `return` для пистолета при `!fire_ready` убран).
+- **CONFIRMED:** `REMOTE-ACTIONS branch=0x90000` на 1–2 кадра — `drive_remote_slot1_actions_tick`
+  получает aim+fire в `branch1+0x10`.
+- **CONFIRMED:** `HELD-WEAPON-APPLY gave=1 select=1 slot=1 gunOk=1 hands=1` после
+  `safe_give_weapon_art_to_puppet` + `SwitchToWeapon` (пистолет `0x33e29a1b`).
+- **CONFIRMED:** кукла slot-1 привязана к **joypad 3** (`PLAYER-INPUT-BIND joypad_index=3`).
+- **CONFIRMED:** `WEAPON-CLONE ids=[0,0,…]` на кукле до give; `GiveWeapon` vtable `+0x158`
+  иногда `rip=0` (SEH ловит, игра не падает).
+- **REJECTED (this path):** `g_native_fire_relay=false` — native `PlayerFireController::Fire`
+  на кукле давал `EXCEPTION rip=0x0` (пистолет) и краш на винтовке.
+
+### Что НЕ работает (блокер)
+- **`block3 btn=0x0`** даже при `branch=0x90000` — кнопки не доходят до resolved input
+  block, который потребляет Player. Диагностика раньше смотрела `0x66E4220+0x530`
+  (block[1]); кукла на joypad 3 → нужен `+0x530*3`. Добавлен `push_joypad_block_buttons`
+  (прямая запись `block+0x518` held / `+0x508` press) — **ещё не дало визуала**
+  (`block3 btn` остаётся 0 в логе).
+- **`puppet_can_fire_art` часто false:** `active=0x0` или `mode=0` при holstered pistol
+  на кукле; винтовка (`0x8075397d`) blocked для `SwitchToWeapon` slot≤0 на кукле.
+
+### Следующий ход (после паузы) — статика перед игрой
+1. **Проверить штатную границу `Input_ScaleCopyVirtual`:** статика подтвердила, что
+   `0x1402893D0` сам переносит DWORD `branch+0x10` в resolved block и затем вызывает
+   `Input_ScaleCopyVirtual`. Прямая запись Cursor в block удалена как перезаписываемая;
+   QWORD-запись в branch исправлена на DWORD (раньше портила stick X по `+0x14`).
+2. Если импульс доходит до Joypad `+0xD0`, проверить запрет команды fire для куклы и
+   наличие активного fire-controller, а не вызывать per-slot apply второй раз.
+3. **Альтернатива:** снова осторожно native fire только при `gunOk=1 hands=1 select=1
+   mode>0 active_art match` (не `hands=20`, не rifle).
+4. **Винтовка** — отдельная задача (slot 0 blocked на кукле).
+
+### Сборка / инжект
+- DLL: `scanner/build/tll_teleport_hook_v2.dll`
+- Запуск: `taskkill /F /IM tll.exe` → две копии → ~18s → `tll_injector.exe --pid PID -- tll_teleport_hook_v2.dll`
+- Peer: `reports/coop_peer.txt` = `127.0.0.1`
+- Лог: `reports/locomotion_hook.log`
+
+## Turn note (2026-07-03, Cursor — fire relay per-character controller offset)
+- **Root cause (prior runtime):** `FIRE-RELAY learned controller offset=0x15cf30` (Chloe) /
+  `0x15adb0` (Nadine) logged on send, but **zero** `FIRE-RELAY applied` — receiver used
+  global `g_player_fire_controller_offset` from local slot-0 only; puppet is the *other*
+  character so `get_player_fire_controller` failed silently.
+- **This turn:** `FirePacket` v2 adds per-shot `controller_offset`; receiver
+  `resolve_fire_controller(player, preferred)` tries packet offset then known
+  `{0x15cf30, 0x15adb0}`; `apply_queued_fire_events` switches weapon by art-id before
+  replay, sanitizes pointer QWORDs in `FireArgs[0x20..]`, logs throttled skip reasons.
+  v1 wire compat preserved (`controller_offset=0` → fallbacks). **Build OK.**
+  **Runtime test pending** — need in-campaign fire with both instances injected.
+
+## Turn note (2026-07-03, Cursor — held weapon draw/select fix)
+- **Runtime CONFIRMED (prior build):** `GiveWeapon` puts weapon on puppet's back;
+  `read_gun_state` / `safe_request_gun_state` always fail (`gun=-1`, `gunOk=0`);
+  `weapon_selected_mode` (manager `vtable+0x78` = controller `+0x130` in-hands slot)
+  changes on peer switch but was never applied on receiver.
+- **This turn:** sender `infer_gun_state()` — fallback when `+0x15C8` throws: aim bit
+  `0x80000` and/or nonzero in-hands slot. Receiver: `find_weapon_slot_by_art_id` +
+  `PlayerWeaponController::SwitchToWeapon` `0x1410A1C10` (vtable `+0x40`) on mode/
+  art/gun change; logs `select=` and `slot=`. **Runtime test pending.**
+
+## Turn note (2026-07-03, Cursor — held weapon sync v6)
+- **Held-weapon path implemented** (`StatePacket` v6, flag `0x80`): sender captures
+  active `Weapon+0x860` via `Player` vtable `+0x8C0` (fallback: selected manager slot)
+  plus `gun_state` from `Player+0x15C8` gun-state controller. Receiver applies ONE
+  `GiveWeapon` per art-id change (not full inventory spam) then requests
+  `GunHolstered`/`GunOut` via `+0x15C8 -> +0x58 -> +0xA0`. Logs:
+  `HELD-WEAPON-SEND` / `HELD-WEAPON-APPLY`. Old F6 authored-give + NetSnapshot
+  publish remain OFF. **Runtime test pending** — Nadine holster attach may still
+  break visuals even if inventory path succeeds.
+
+## Turn note (2026-07-03, Cursor — continues Claude)
+- **Claude last commit:** `Nadine weapon: final root cause = look lacks player holster
+  prop-attach config` — holster issue **PARKED** at asset level; weapon-give and
+  publish remain gated off (F6).
+- **This turn:** added UDP `FirePacket` relay — sender hooks
+  `PlayerFireController::Fire`, learns `Player`→controller offset from first local
+  shot, replays captured `FireArgs` on remote retained `Player` each net tick.
+  Recorded as **HYPOTHESIS** in `initial-findings.md`; runtime test pending.
+- **Still open P0:** jump/roll/melee via button latch (needs in-game verify);
+  anim mirror blocked by campaign art-group wall; Nadine holster display.
+
 ## Turn note (2026-07-03, Claude)
 - **Grenade-on-move: FIXED & CONFIRMED.** The peer's clone threw grenades while
   the peer only ran = synthetic `0x500` gate OR-ed into `branch1+0x10` (the clone

@@ -25,7 +25,11 @@ struct InputPacket {
 // One-shot gameplay actions need a separate reliable ordered event stream.
 constexpr std::uint16_t kStatePort = 31338;
 constexpr std::uint32_t kStatePacketMagic = 0x53504F43;  // "COPS"
-constexpr std::uint16_t kStatePacketVersion = 5;
+constexpr std::uint16_t kStatePacketVersion = 7;
+
+// StatePacket.flags extension bits (v7+):
+// 0x0100 — camera_quat mirrors sender CameraManager(0) @+0x1B0.
+constexpr std::uint16_t kStateFlagPeerCamera = 0x0100;
 
 // Contiguous native NetSnapshot weapon region [0x3f4, 0x504). It contains the
 // eight inventory ids, per-slot state, selected weapon classes and the four
@@ -45,11 +49,20 @@ struct StatePacket {
     float move_world[4]{};            // native world move vector (+0x90, index 0)
     float move_magnitude = 0.0F;       // native move magnitude (+0x7C, index 0)
     float look_stick[2]{};            // resolved slot-0 right stick, block +0x08/+0x0C
+    float camera_quat[4]{};           // sender gameplay camera rotation (v7, flag 0x100)
     std::uint64_t input_buttons = 0;  // complete resolved button field, block +0x518
     std::uint64_t buttons_pressed = 0;
     std::uint64_t buttons_released = 0;
     std::int32_t health = -1;         // Player HealthSystem current HP
     std::int32_t max_health = -1;
+    // Flag 0x80: held_weapon_art_id + gun_state are valid on the sender.
+    // gun_state: 0 = GunHolstered, 1 = GunOut (SkillWaitOnGunState convention).
+    std::uint32_t held_weapon_art_id = 0;
+    std::uint8_t gun_state = 0xFF;
+    // Actual slot attached to rightHand/leftHand on the sender. The field name is
+    // retained for wire compatibility with the unfinished version-6 draft.
+    std::uint8_t weapon_selected_mode = 0;
+    std::uint16_t held_weapon_reserved = 0;
     std::uint8_t weapon_snapshot[kWeaponSnapshotBytes]{};
 };
 
@@ -90,5 +103,29 @@ struct ClientDamagePacket {
     std::uint32_t name_hash = 0;  // FNV-1a of the target enemy actor name
     float damage = 0.0f;
 };
+
+// One-shot fire relay: local PlayerFireController::Fire captured on the sender
+// and replayed on the remote retained Player via the same native entry point.
+constexpr std::uint32_t kFirePacketMagic = 0x45524946;  // "FIRE"
+constexpr std::uint16_t kFirePacketVersion = 2;
+constexpr std::size_t kFireArgsBytes = 0x100;
+
+struct FirePacket {
+    std::uint32_t magic = kFirePacketMagic;
+    std::uint16_t version = kFirePacketVersion;
+    std::uint16_t reserved = 0;
+    std::uint32_t sequence = 0;
+    // Sender Player -> PlayerFireController byte offset at fire time (Chloe 0x15cf30,
+    // Nadine 0x15adb0). Zero on version-1 packets => receiver uses known fallbacks.
+    std::uint32_t controller_offset = 0;
+    std::uint32_t weapon_art_id = 0;  // Weapon+0x860 on the sender
+    double scalar = 0.0;
+    std::uint8_t fire_args[kFireArgsBytes]{};
+};
+
+// Version 1 wire size: no controller_offset field (weapon_art_id immediately after sequence).
+constexpr std::size_t kFirePacketV1Bytes =
+    offsetof(FirePacket, controller_offset) + sizeof(std::uint32_t) +
+    sizeof(double) + kFireArgsBytes;
 
 }  // namespace coop

@@ -5888,6 +5888,65 @@ FUNCTIONS = {
         "Controller vtable slot +0xB0. Bounds slot to 0..22 and resolves the "
         "live weapon process handle; ProcessWeapon authored id is at +0x860.",
     ),
+    0x1410A1C10: (
+        "PlayerWeaponController_SwitchToWeapon",
+        "Controller vtable slot +0x40. Validates the requested inventory slot, "
+        "runs the concrete switch implementation at vtable +0x48, records the "
+        "requested slot at controller+0x130 when the third argument is set, and "
+        "returns success independently of later visual attachment.",
+    ),
+    0x1410A28A0: (
+        "PlayerWeaponController_ApplyWeaponSwitch",
+        "Controller vtable slot +0x48 and the concrete weapon switch state "
+        "machine. Resolves the requested and current weapon objects, applies "
+        "holster/unholster transitions, and rejects invalid controller states.",
+    ),
+    0x1410A49E0: (
+        "PlayerWeaponController_GetHandAttachedWeaponSlot",
+        "Implementation behind controller vtable slot +0x78. Scans inventory "
+        "slots and returns the slot whose attachment resolves to rightHand or "
+        "leftHand and whose attachment owner is this Player; returns -1/20 fallback.",
+    ),
+    0x1410A4CE0: (
+        "PlayerWeaponController_GetRequestedInHandsSlot",
+        "Controller vtable slot +0x90. Returns controller+0x130, which records "
+        "the requested in-hands slot but does not prove visual attachment.",
+    ),
+    0x1410A1FE0: (
+        "PlayerWeaponController_GetCurrentWeapon",
+        "Controller vtable slot +0xB8. Resolves slot 19 when controller+0x120 "
+        "equals 19; otherwise resolves the current slot byte at +0x12C.",
+    ),
+    0x1410D67B0: (
+        "Player_GetActiveWeapon",
+        "Player vtable slot +0x8C0. Resolves the special slot-19 weapon or the "
+        "PlayerWeaponController current weapon, with a screen-route fallback.",
+    ),
+    0x140E28A30: (
+        "PlayerFireController_UpdateInputAndFire",
+        "Per-frame fire controller update. Reads fire-hold/fire-press/fire-release "
+        "from the owner's Joypad and runs the weapon-use, input and shot-readiness gates.",
+    ),
+    0x140E2ACA0: (
+        "PlayerFireController_CheckFireInput",
+        "Resolves Player vtable +0x8C0 active weapon, validates weapon state, "
+        "then consumes controller+0x1E8 hold or +0x1E9 press before action exclusions.",
+    ),
+    0x140E2ADF0: (
+        "PlayerFireController_CheckActionExclusions",
+        "Rejects firing during authored Grenade, Grenade-Add, Grapple, "
+        "Grapple-Add and gun-up-layer action states.",
+    ),
+    0x140E2B220: (
+        "PlayerFireController_CheckShotReadiness",
+        "Final active-weapon readiness check: rejects Drive and incompatible "
+        "player states, then checks weapon type, ammo and shot timing.",
+    ),
+    0x1410B15A0: (
+        "PlayerWeaponController_CanUseWeapon",
+        "Controller vtable slot +0x260. Broad player/action/camera/traversal gate "
+        "called by PlayerFireController_UpdateInputAndFire before a shot.",
+    ),
     0x1401B7600: (
         "WeaponInfo_InitializeDefaults",
         "Initializes the 0xC0-byte WeaponInfo used by the developer give-weapon "

@@ -22783,3 +22783,196 @@ logs three unique authored ids given and the other window gains at least one
 weapon model without changing movement; G2 logs no call; an exception rejects
 the direct call ABI. Raw ids use custom packet flag `0x40`; the rejected compact
 event remains isolated under `0x20`.
+
+### Nadine companion look lacks player weapon-holster prop-attach configs (2026-07-03)
+
+**STATIC:** appearance-hash swap via Player `vtable[92]` (`hooked_appearance`,
+`0x140A1DCC0`) reaches the look builder `0x141BB4280`, which changes skeleton,
+joint overrides and prop-attach — not just the mesh. Runtime look candidates were
+exhausted: engine `StringId` hash confirms the domain (`chloe` `0x3f334972`);
+real `nadine` `0xc7e2539b` black-screens; only legacy `0xd27c074f` renders Nadine
+(with broken weapons). Look-swap is **REJECTED** as a fix.
+
+**STATIC:** holstered weapons pile at the hand because the companion look does not
+define player weapon-holster prop-attach configs. Per-frame attach path:
+`Player_Update` `0x1410EC230` → joint resolver `0x1410B5560` resolves only
+standard humanoid joints (`targSpine`, `targChest`, … — all present on Nadine).
+Holster placement is standard joint + per-weapon offset from the look's
+prop-attach table; missing configs fall back to the hand. Held weapon is correct;
+holstered weapons overlap at the hand.
+
+**PARKED:** asset/config-level fix only. Options: per-weapon draw suppression
+(weapon-draw list still unfound), deep inject of holster prop-attach into Nadine's
+look struct, or player-2 = Chloe. Authored `GiveWeapon` and `NetSnapshotWeapons`
+publish remain gated off on the Nadine clone (weapons spill / cannot switch).
+
+### Fire event UDP relay scaffold (2026-07-03)
+
+**STATIC:** `PlayerFireController::Fire 0x140E2C730` is the campaign fire core;
+`controller+0x108` owns the `Player`; R8 is the active weapon (`Player` vtable
+`+0x8C0`); RDX is `FireArgs` (`0x100` bytes). `NetEventEmitProjectileBullet` is
+not used in campaign. Per-character `Player`→fire-controller offsets: Chloe
+`+0x15cf30`, Nadine `+0x15adb0` (owner at `controller+0x108` must equal `Player`).
+
+**HYPOTHESIS (v2 fix, 2026-07-03):** `FirePacket` v2 carries sender
+`controller_offset`; receiver `resolve_fire_controller` uses it then falls back to
+known offsets so Nadine puppet no longer depends on Chloe-only global. Before replay,
+`find_weapon_slot_by_art_id` + `SwitchToWeapon(in_hands=true)` aligns puppet weapon;
+`FireArgs` pointer QWORDs at `+0x20..` zeroed. Falsifiable prediction: after local
+fire, peer log shows `FIRE-RELAY applied seq=N ctrlOff=0x...` (not only `learned`).
+Prior v1 runtime: learned offsets logged, zero applies (wrong global offset on puppet).
+
+### Held-weapon draw path: SwitchToWeapon + inferred gun state (2026-07-03)
+
+**STATIC:** `Player+0x15C8` gun-state controller (`SkillWaitOnGunState 0x14041C670`)
+is not callable on campaign live players — SEH returns `-1` on both sender and
+puppet. `GiveWeapon` alone only equips inventory/back; visible in-hands requires
+`PlayerWeaponController::SwitchToWeapon 0x1410A1C10` (controller vtable `+0x40`).
+`vtable+0x78` resolves to `0x1410A49E0`: it scans 18 inventory slots and only
+returns one whose attachment joint is `rightHand`/`leftHand` and whose attachment
+owner is this Player. Separately, `vtable+0x90 = 0x1410A4CE0` merely returns
+controller `+0x130`, the slot requested by `SwitchToWeapon`; this does **not** prove
+visual attachment. `find_weapon_slot_by_art_id` reuses manager `vtable+0xB0`.
+
+**STATIC CORRECTION:** Cursor's `hands=1` log read `controller+0x130`, so it only
+proved that the request was recorded. The receiver now accepts draw/fire readiness
+only when `0x1410A49E0` reports the exact expected slot physically attached to a
+hand. The previous early success based on `+0x130` is removed so a stalled request
+can be retried through the native switch state machine.
+
+**HYPOTHESIS:** sender `infer_gun_state` (aim `0x80000` OR in-hands slot > 0) yields
+`gun=0/1` in `HELD-WEAPON-SEND`; receiver `safe_switch_to_weapon(slot, in_hands)`
+after give produces `HELD-WEAPON-APPLY select=1 gunOk=1` and remote puppet shows
+weapon in hands on peer draw/aim. Failure: SwitchToWeapon rejects puppet controller
+(no net tracker / cover gates in `0x1410A1C10`), or slot 0 in-hands ambiguity
+needs aim-bit-only inference.
+
+### Fire relay button path — partial runtime (2026-07-03, PAUSE)
+
+**CONFIRMED:** sender hooks `PlayerFireController::Fire`, queues `FirePacket`, receiver
+logs `FIRE-RELAY button pulse=0x90000` and `REMOTE-ACTIONS branch=0x90000`.
+Early pistol `return` when `!fire_ready` removed; art-mismatch strip relaxed during
+`g_fire_aim_hold_until_ms` (400ms).
+
+**CONFIRMED:** puppet slot-1 uses joypad index **3** (`Player+0x39B8`). Resolved input
+blocks live at `RVA 0x66E4220 + 0x530 * joypad_index` (not `+0x530` = block[1] only).
+Prior `BLOCK1 btn=0x0` diagnostics were reading the wrong block.
+
+**CONFIRMED:** `safe_give_weapon_art_to_puppet` + `SwitchToWeapon` can yield
+`HELD-WEAPON-APPLY gave=1 select=1 gunOk=1 hands=1` for pistol `0x33e29a1b`; puppet
+inventory snapshot (`WEAPON-CLONE ids=`) may still read all zeros (different capture path).
+
+**REJECTED (for now):** `g_native_fire_relay=true` — `PlayerFireController::Fire` replay
+on puppet → `EXCEPTION rip=0x0` (pistol) / crash (rifle). Button-only path kept.
+
+**REJECTED:** button delivery via `branch1+0x10` alone — does not produce non-zero
+`block[N]+0x518` on puppet joypad 3 in runtime (`block3 btn=0x0` after fix attempt
+`push_joypad_block_buttons` direct write to `+0x518/+0x508`).
+
+**STATIC CORRECTION:** direct writes to resolved `block+0x508/+0x518` are invalid at
+this point in the frame. `FrameState_PerSlotInputApply_Branch 0x1402893D0` reads a
+**DWORD** from source `+0x10`, derives pressed/current/released masks, writes them to
+destination `+0x508/+0x518/+0x510`, then immediately calls
+`Input_ScaleCopyVirtual 0x14183B410`. Therefore a pre-apply direct block write is
+overwritten. Cursor's QWORD write to `branch+0x10` was also structurally wrong: it
+overwrote the adjacent left-stick X float at `branch+0x14`. The implementation now
+writes only the native DWORD and leaves edge derivation to the engine.
+
+**HYPOTHESIS (next):** the existing `Input_ScaleCopyVirtual` hook is the last native
+boundary before Joypad command resolution and already preserves received edges in
+Joypad `+0xD0`. If fire still has no visual after the corrected DWORD source write,
+the remaining alternatives are the fire command being disabled for the puppet, or
+the selected weapon lacking a valid active fire controller; direct resolved-block
+patching is no longer a candidate.
+
+### Fire-controller gate isolation (2026-07-03)
+
+**CONFIRMED:** the corrected DWORD source path reaches the clone's actual Joypad 3.
+The same received pulse produces `REMOTE-ACTIONS branch=0x90000` followed by
+`JOYPAD3-ANALOG buttons src=0x90000 pressed=0x90000 current=0x90000`, yet no shot.
+This rejects packet loss, the per-slot input apply, and a wrong Joypad index as the
+current cause.
+
+**CONFIRMED:** `PlayerWeaponController::SwitchToWeapon` completion is asynchronous.
+For pistol `0x33E29A1B`, runtime first showed `requested=1 attached=0`, then later
+`requested=1 attached=1` with no changed peer weapon packet. The receiver's unchanged-
+packet early return prevented the later physical attachment from arming `gunOk`.
+The implementation now continues polling only while attachment/readiness is pending;
+the existing 500 ms switch throttle remains. Rifle `0x8075397D` separately resolves
+to no remote inventory slot and is not part of this pistol test.
+
+**STATIC:** `PlayerFireController_UpdateInputAndFire 0x140E28A30` is referenced by
+the fire-controller table and performs the native per-frame chain. It obtains the
+active weapon through Player vtable `+0x8C0 = Player_GetActiveWeapon 0x1410D67B0`,
+reads the owner's Joypad commands into controller `+0x1E8` (hold), `+0x1E9` (press),
+and `+0x1EA` (release), calls PlayerWeaponController vtable `+0x260 =
+PlayerWeaponController_CanUseWeapon 0x1410B15A0`, then evaluates the input and final
+shot-readiness gates.
+
+**STATIC:** `PlayerFireController_CheckFireInput 0x140E2ACA0` independently resolves
+the active weapon, validates its state, consumes `+0x1E8` or `+0x1E9` according to
+weapon definition, and tail-calls `PlayerFireController_CheckActionExclusions
+0x140E2ADF0`. The latter rejects authored `Grenade`, `Grenade-Add`, `Grapple`,
+`Grapple-Add`, and `gun-up-layer` action states. `PlayerFireController_CheckShotReadiness
+0x140E2B220` again resolves the same active weapon, rejects `Drive` and incompatible
+player/controller states, then branches by weapon type to ammo and shot-delay checks.
+
+Competing hypotheses for the next runtime are now distinguishable: (F1) the pulse
+does not become fire-controller `+0x1E9`; (F2) it does, but input/action validation
+returns false; (F3) input validation succeeds and final weapon readiness returns false;
+(F4) both return true and failure is later than readiness. Read-only detours log
+`FIRE-GATE input/readiness result=... hold=... press=...` without altering decisions.
+**Prediction:** one remote trigger pulse must produce `FIRE-GATE input`; its fields and
+the optional readiness line select exactly one of F1-F4. Status: **HYPOTHESIS** pending
+runtime confirmation.
+
+**CONFIRMED / REJECTED runtime:** the remote process produced no `FIRE-GATE` entry,
+although its Joypad 3 logged the synthetic `pressed/current=0x90000`. In the same run,
+ordinary local shots produced `FIRE-GATE input result=1`, `readiness result=1`, then
+`PLAYER-FIRE`. This selects F1 and rejects weapon/action/readiness gates as the first
+current failure.
+
+**STATIC + live authored data:** `Joypad_IsCommandActive 0x141837CD0` resolves the
+command hash through `Joypad_ResolveCommandBindings 0x14183AE30`, then
+`Joypad_EvaluateCommandDescriptor 0x141838050` dispatches its gamepad list to
+`Joypad_EvaluateGamepadButtonBinding 0x141838C90`. The latter reads Joypad pressed,
+released and current masks at `+0xD0/+0xD8/+0xE0`. Its binding types are concrete:
+type 2 tests current, type 4 tests pressed, and type 8 tests released.
+
+The engine CRC/StringId algorithm was independently checked against known
+`chloe=0x3F334972`, then gave `fire-hold=0x4F2051E6`,
+`fire-press=0x85B15733`, and `fire-release=0x0B511B85`. Binary search through the
+live 243-entry authored command table found all three exact records. Their first
+gamepad descriptors are respectively `{mask=0x800,type=2}`, `{mask=0x800,type=4}`,
+and `{mask=0x800,type=8}`. `aim-press=0x0152AF70` independently resolves to
+`{mask=0x200,type=4}`. Thus the old generated `aim=0x80000/fire=0x10000` masks are
+**REJECTED**; they can exist in Joypad state without satisfying either command.
+
+**STATIC scheduling correction:** `PlayerFireController_UpdateInputAndFire` queries
+`fire-*` after the Player input-state update. The receiver previously exchanged and
+cleared the entire synthetic pressed latch immediately after
+`Player_UpdateInputCommandState`, so even a correct fire bit would lose its `+0xD0`
+edge before the fire controller. Only the `0x800` fire edge is now deferred and
+cleared by `PlayerFireController_CheckFireInput`; all movement/traversal edges retain
+their prior lifetime. The 400 ms helper window holds only aim `0x200`, not fire.
+
+Falsifiable prediction: one relayed shot creates remote Joypad
+`pressed/current=0xA00`, followed by `FIRE-GATE input press=1`. If input returns 1,
+the existing readiness diagnostic must either return 1 and reach native Fire, or
+identify the next weapon gate. Status: **HYPOTHESIS** pending runtime.
+
+### Co-op Aim Animation vs Viewport HUD (STATIC, 2026-07-03)
+
+**STATIC:** Puppet aim pose requires sustained authored aim-press `0x200` on the
+per-slot input branch (`struct+0x10` → resolved block `+0x518`) plus optional right
+stick (`struct+0x1C/+0x20`). Scope/sniper HUD overlay bits (`0x10000..0x80000`) must
+**not** be relayed — they hijack the local viewport on the receiver instance.
+
+**STATIC:** Fire-hold `0x800` must **not** be sustained from `StatePacket.input_buttons`
+when Chloe holds trigger; each shot is delivered only through `FirePacket` native replay
+or a one-shot button pulse. Relaying both caused double `PlayerFireController_Fire` and
+`rip=0x0` on the remote player (`0x140E2C730`).
+
+**Fix strategy (implemented in hook):** relay `0x200` + `look_stick`; strip scope bits;
+`scrub_local_viewport_aim_hud_leak()` on local joypad when peer aims but local player
+does not. Status: **STATIC** (aim anim path); **HYPOTHESIS** (crosshair scrub sufficient).

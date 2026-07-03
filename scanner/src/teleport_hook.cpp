@@ -106,6 +106,8 @@ constexpr std::uintptr_t kAddJoypadDisabledCommandsRva = 0x1839FB0;
 constexpr std::uintptr_t kInputScaleCopyRva = 0x183B410;
 constexpr std::uintptr_t kGameInfoVtableRva = 0x29040B8;
 constexpr std::uintptr_t kPlayerFireControllerFireRva = 0x0E2C730;
+constexpr std::uintptr_t kPlayerFireControllerTryStartFireRva = 0x0E2ACA0;
+constexpr std::uintptr_t kPlayerFireControllerCheckShotReadinessRva = 0x0E2B220;
 constexpr std::uintptr_t kPlayerTryStartBumpActionRva = 0x0CE8E10;
 constexpr std::uintptr_t kPlayerBumpControllerUpdateVtableSlotRva = 0x2A0EF08;
 constexpr std::uintptr_t kNetEventCharacterMoveCtorRva = 0x0BBD730;
@@ -335,12 +337,21 @@ XInputGetCapabilitiesFn g_real_xinput_get_caps = nullptr;
 using PlayerFireControllerFireFunction = void(__fastcall*)(
     void*, void*, void*, double);
 PlayerFireControllerFireFunction g_original_player_fire = nullptr;
+using PlayerFireControllerTryStartFireFunction = char(__fastcall*)(void*);
+using PlayerFireControllerCheckShotReadinessFunction =
+    char(__fastcall*)(void*, void*, double);
+PlayerFireControllerTryStartFireFunction g_original_player_try_start_fire = nullptr;
+PlayerFireControllerCheckShotReadinessFunction
+    g_original_player_check_shot_readiness = nullptr;
 using PlayerTryStartBumpActionFunction = char(__fastcall*)(void*, void*);
 PlayerTryStartBumpActionFunction g_original_player_try_start_bump_action = nullptr;
 using PlayerBumpControllerUpdateFunction = void(__fastcall*)(void*);
 PlayerBumpControllerUpdateFunction g_original_player_bump_controller_update = nullptr;
 void __fastcall hooked_player_fire(
     void* controller, void* fire_args, void* weapon, double scalar);
+char __fastcall hooked_player_try_start_fire(void* controller);
+char __fastcall hooked_player_check_shot_readiness(
+    void* controller, void* context, double time_value);
 using InPlaceCtorFunction = void*(__fastcall*)(void*);
 using FillAnimCmdBitStreamFunction = std::uint32_t(__fastcall*)(
     void*, void*, void*, void*, std::uint32_t, std::uint32_t);
@@ -351,6 +362,7 @@ using PushStructuredEventParamFunction = void(__fastcall*)(void*, const void*);
 using PublishStructuredEventFunction = bool(__fastcall*)(void*, void*, std::uint8_t);
 using InitializeWeaponInfoFunction = void*(__fastcall*)(void*);
 using GiveWeaponFunction = void(__fastcall*)(void*, void*, bool, bool, void*);
+using SwitchToWeaponFunction = char(__fastcall*)(void*, unsigned int, unsigned char);
 using NetAnimAddSnapshotFunction = void(__fastcall*)(void*, void*);
 using InitializePlayerNetAnimArtGroupsFunction = void(__fastcall*)(void*);
 constexpr std::uintptr_t kXInputGetStateIatRva = 0x25D6D60;
@@ -362,6 +374,85 @@ constexpr std::uintptr_t kPublishStructuredEventRva = 0x17F8910;
 constexpr std::uintptr_t kStandardWeaponArtIdTableRva = 0x3E04A00;
 constexpr std::uintptr_t kCachedOnlineWeaponRegistryRva = 0x3742720;
 constexpr std::uintptr_t kInitializeWeaponInfoRva = 0x1B7600;
+constexpr std::uintptr_t kSwitchToWeaponRva = 0x10A1C10;
+// Live authored command descriptors: aim-press = 0x200/type 4;
+// fire-hold/press/release = 0x800/types 2/4/8 respectively.
+constexpr std::uint64_t kJoypadAimButtonMask = 0x200ull;
+constexpr std::uint64_t kJoypadFireButtonMask = 0x800ull;
+// Scope/sniper HUD layer bits — never relay to puppet joypad (viewport overlay leak).
+constexpr std::uint64_t kRemoteScopeHudButtonMask =
+    0x10000ull | 0x20000ull | 0x40000ull | 0x80000ull;
+// Legacy alias: aim 0x200 is relayed for puppet aim-pose; scope bits are stripped.
+constexpr std::uint64_t kRemoteViewportButtonMask = kRemoteScopeHudButtonMask;
+
+std::uint64_t sanitize_remote_puppet_button_mask(std::uint64_t actions) {
+    return actions & ~kRemoteScopeHudButtonMask;
+}
+
+// Sustained peer fire-hold in StatePacket must not reach the puppet joypad — each
+// shot is delivered only via FirePacket (native replay or one-shot button pulse).
+std::uint64_t remote_puppet_actions_from_peer(std::uint64_t peer_actions) {
+    return sanitize_remote_puppet_button_mask(peer_actions) &
+           ~kJoypadFireButtonMask;
+}
+
+bool puppet_fire_buttons_suppressed();
+
+std::uint64_t remote_puppet_fire_pulse(std::uint64_t latch_actions) {
+    std::uint64_t pulse = sanitize_remote_puppet_button_mask(latch_actions) &
+                          kJoypadFireButtonMask;
+    if (puppet_fire_buttons_suppressed()) {
+        pulse = 0;
+    }
+    return pulse;
+}
+// Native Fire: pistol/scoped-pistol only; uses full sender fire_args for aim.
+volatile bool g_native_fire_relay = true;
+static ULONGLONG g_fire_button_hold_until_ms = 0;
+// After native Fire replay, block peer/button fire on the remote player so the
+// same shot is not delivered twice (relay native + Joypad 0x800).
+static ULONGLONG g_suppress_puppet_fire_buttons_until_ms = 0;
+static ULONGLONG g_peer_aim_recent_until_ms = 0;
+// Captured after local Player input-state update when block+0x518 is authoritative.
+static std::atomic<std::uint64_t> g_cached_local_input_buttons{0};
+static void* g_puppet_draw_ok_puppet = nullptr;
+static std::uint32_t g_puppet_draw_ok_art = 0;
+static ULONGLONG g_puppet_draw_ok_until_ms = 0;
+static void* g_puppet_gun_ok_puppet = nullptr;
+static std::uint32_t g_puppet_gun_ok_art = 0;
+static ULONGLONG g_puppet_gun_ok_until_ms = 0;
+static ULONGLONG g_give_weapon_fail_until_ms = 0;
+static ULONGLONG g_puppet_native_fire_allowed_after_ms = 0;
+constexpr std::uint32_t kCoopPistolArtId = 0x33E29A1B;
+constexpr std::uint32_t kCoopRifleArtId = 0x8075397D;
+constexpr std::uint32_t kCoopScopedPistolArtId = 0xC3181EBD;
+
+bool is_coop_relay_fire_art(std::uint32_t art_id) {
+    return art_id == kCoopPistolArtId || art_id == kCoopRifleArtId ||
+           art_id == kCoopScopedPistolArtId;
+}
+
+// Native PlayerFireController::Fire replay is pistol-only until rifle draw works on puppets.
+bool is_coop_native_fire_art(std::uint32_t art_id) {
+    return art_id == kCoopPistolArtId || art_id == kCoopScopedPistolArtId;
+}
+
+// SwitchToWeapon on puppets: rifle slot 0 and pistol slot 1 are SEH-safe.
+bool puppet_weapon_switch_allowed(std::uint32_t art_id, int slot) {
+    if (art_id == kCoopRifleArtId && slot == 0) {
+        return true;
+    }
+    if (slot <= 0) {
+        return false;
+    }
+    return is_coop_relay_fire_art(art_id);
+}
+
+// GiveWeapon on puppets: pistol, scoped pistol, and rifle (SEH-isolated).
+bool puppet_weapon_give_allowed(std::uint32_t art_id) {
+    return art_id == kCoopPistolArtId || art_id == kCoopScopedPistolArtId ||
+           art_id == kCoopRifleArtId;
+}
 constexpr std::uint32_t kNetSnapshotWeaponsId = 0xCA049840;
 volatile bool g_xinput_log = false;
 volatile bool g_xinput_inject_p0 = false;   // temporary synth pad on index 0 to force controller path
@@ -548,10 +639,23 @@ struct StateNetState {
     SRWLOCK peer_enemies_lock = SRWLOCK_INIT;
     coop::EnemyPacket peer_enemies{};      // latest received host enemy snapshot
     std::uint32_t send_seq = 0;
+    std::uint32_t fire_send_seq = 0;
     std::uint32_t enemy_send_seq = 0;
     bool enabled = false;                  // toggled on once peer + puppet ready
 };
 StateNetState g_state_net{};
+
+struct FireEventRing {
+    coop::FirePacket packets[16]{};
+    std::atomic<std::uint32_t> head = 0;
+    std::uint32_t tail = 0;
+};
+FireEventRing g_fire_event_ring{};
+void* g_fire_puppet_tracked = nullptr;
+ULONGLONG g_fire_puppet_ready_after_ms = 0;
+std::ptrdiff_t g_player_fire_controller_offset = -1;
+constexpr std::size_t kPlayerFireControllerOwnerOffset = 0x108;
+constexpr std::size_t kPlayerActiveWeaponVtableOffset = 0x8C0;
 
 void publish_peer_state_snapshot(const coop::StatePacket& packet) {
     AcquireSRWLockExclusive(&g_state_net.peer_state_lock);
@@ -561,10 +665,17 @@ void publish_peer_state_snapshot(const coop::StatePacket& packet) {
         ReleaseSRWLockExclusive(&g_state_net.peer_state_lock);
         return;
     }
-    g_state_net.peer_state = packet;
+    coop::StatePacket sanitized = packet;
+    sanitized.input_buttons =
+        remote_puppet_actions_from_peer(packet.input_buttons);
+    sanitized.buttons_pressed =
+        remote_puppet_actions_from_peer(packet.buttons_pressed);
+    sanitized.buttons_released =
+        remote_puppet_actions_from_peer(packet.buttons_released);
+    g_state_net.peer_state = sanitized;
     g_state_net.peer_state_sequence = packet.sequence;
     g_state_net.pending_button_presses.fetch_or(
-        packet.buttons_pressed, std::memory_order_release);
+        sanitized.buttons_pressed, std::memory_order_release);
     if ((packet.flags & 16) != 0) {
         g_state_net.pending_authoritative_teleport.store(
             true, std::memory_order_release);
@@ -669,7 +780,22 @@ float g_state_loopback_offset_x = 0.0F;
 
 std::size_t readable_bytes(const void* p);
 bool world_stable();
+bool player_object_stable(void* player);
 bool valid_network_position(const float* position);
+bool valid_network_orientation(const float* quaternion);
+void publish_fire_packet(const coop::FirePacket& packet);
+void* get_player_active_weapon(void* player);
+bool latest_peer_state(coop::StatePacket& out, void*& puppet);
+bool plausible_ptr(std::uintptr_t v);
+void* retained_player_object(int index);
+bool capture_gameplay_camera_quat(float out[4]);
+void apply_peer_gameplay_camera(const float quat[4]);
+void apply_peer_gameplay_camera_for_player(void* player, const float quat[4]);
+void derive_look_stick_from_camera(
+    const float body_quat[4], const float cam_quat[4], float out[2]);
+std::byte* joypad_resolved_input_block(int joypad_index);
+bool local_game_window_foreground();
+std::uint32_t peer_effective_held_art(const coop::StatePacket& peer);
 
 void log_line(const char* line) {
     std::ofstream output(
@@ -905,17 +1031,34 @@ std::int64_t __fastcall hooked_input_scale_copy(
                     0, std::memory_order_acq_rel);
             if (new_edges != 0) {
                 g_state_net.active_button_press_latch.fetch_or(
-                    new_edges, std::memory_order_release);
+                    remote_puppet_actions_from_peer(new_edges) |
+                        remote_puppet_fire_pulse(new_edges),
+                    std::memory_order_release);
             }
             const std::uint64_t edge_pulse =
-                g_state_net.active_button_press_latch.load(
-                    std::memory_order_acquire);
+                sanitize_remote_puppet_button_mask(
+                    g_state_net.active_button_press_latch.load(
+                        std::memory_order_acquire));
             auto* const source_bytes = static_cast<std::byte*>(source);
             const std::uint64_t synthetic_move_gate =
                 *reinterpret_cast<const std::uint64_t*>(source_bytes + 0x518) &
                 0x500u;
+            std::uint64_t held_mask = remote_puppet_actions_from_peer(
+                peer.input_buttons) |
+                remote_puppet_fire_pulse(edge_pulse);
+            if (GetTickCount64() < g_fire_button_hold_until_ms &&
+                !puppet_fire_buttons_suppressed()) {
+                held_mask |= kJoypadFireButtonMask;
+            }
+            if (puppet_fire_buttons_suppressed()) {
+                held_mask &= ~kJoypadFireButtonMask;
+            }
+            held_mask = sanitize_remote_puppet_button_mask(held_mask);
             *reinterpret_cast<std::uint64_t*>(source_bytes + 0x518) =
-                peer.input_buttons | edge_pulse | synthetic_move_gate;
+                held_mask | synthetic_move_gate;
+            // Do not relay peer look_stick into the resolved block — it opens the
+            // local viewport aim HUD on the receiver. Body facing uses camera_quat
+            // via apply_peer_aim_facing_to_player instead.
         }
     }
     const std::int64_t result =
@@ -927,8 +1070,9 @@ std::int64_t __fastcall hooked_input_scale_copy(
         // after Player slot 16 has consumed it.
         *reinterpret_cast<std::uint64_t*>(
             static_cast<std::byte*>(joypad) + 0xD0) |=
-            g_state_net.active_button_press_latch.load(
-                std::memory_order_acquire);
+            remote_puppet_fire_pulse(
+                g_state_net.active_button_press_latch.load(
+                    std::memory_order_acquire));
     }
     if (destination_index == 3) {
         g_force_joypad3_analog_thread.store(previous, std::memory_order_release);
@@ -1232,6 +1376,86 @@ bool install_player_fire_capture() {
     VirtualProtect(target, kPatchSize, old_protection, &ignored);
     log_line("PlayerFireController::Fire capture installed");
     return true;
+}
+
+void* install_fire_gate_detour(
+    std::uintptr_t rva,
+    const std::uint8_t* expected,
+    std::size_t patch_size,
+    void* hook,
+    const char* label
+) {
+    auto* const target = reinterpret_cast<std::uint8_t*>(g_module + rva);
+    if (std::memcmp(target, expected, patch_size) != 0) {
+        std::ostringstream line;
+        line << label << " skipped: unexpected function prologue";
+        log_line(line.str().c_str());
+        return nullptr;
+    }
+    constexpr std::size_t kJumpSize = 12;
+    auto* const trampoline = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, patch_size + kJumpSize, MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr) {
+        return nullptr;
+    }
+    std::memcpy(trampoline, target, patch_size);
+    auto* const jump_back = trampoline + patch_size;
+    jump_back[0] = 0x48;
+    jump_back[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(jump_back + 2) =
+        reinterpret_cast<std::uintptr_t>(target + patch_size);
+    jump_back[10] = 0xFF;
+    jump_back[11] = 0xE0;
+    FlushInstructionCache(GetCurrentProcess(), trampoline, patch_size + kJumpSize);
+
+    DWORD old_protection = 0;
+    if (!VirtualProtect(target, patch_size, PAGE_EXECUTE_READWRITE,
+                        &old_protection)) {
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        return nullptr;
+    }
+    target[0] = 0x48;
+    target[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(target + 2) =
+        reinterpret_cast<std::uintptr_t>(hook);
+    target[10] = 0xFF;
+    target[11] = 0xE0;
+    std::memset(target + kJumpSize, 0x90, patch_size - kJumpSize);
+    FlushInstructionCache(GetCurrentProcess(), target, patch_size);
+    DWORD ignored = 0;
+    VirtualProtect(target, patch_size, old_protection, &ignored);
+    return trampoline;
+}
+
+bool install_player_fire_gate_diagnostics() {
+    constexpr std::array<std::uint8_t, 13> kTryStartPrologue{
+        0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48,
+        0x83, 0xEC, 0x20, 0x48, 0x8B, 0xF9,
+    };
+    constexpr std::array<std::uint8_t, 18> kReadinessPrologue{
+        0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x74, 0x24,
+        0x18, 0x57, 0x48, 0x81, 0xEC, 0x30, 0x04, 0x00, 0x00,
+    };
+    g_original_player_try_start_fire =
+        reinterpret_cast<PlayerFireControllerTryStartFireFunction>(
+            install_fire_gate_detour(
+                kPlayerFireControllerTryStartFireRva,
+                kTryStartPrologue.data(), kTryStartPrologue.size(),
+                reinterpret_cast<void*>(&hooked_player_try_start_fire),
+                "fire-input gate diagnostic"));
+    g_original_player_check_shot_readiness =
+        reinterpret_cast<PlayerFireControllerCheckShotReadinessFunction>(
+            install_fire_gate_detour(
+                kPlayerFireControllerCheckShotReadinessRva,
+                kReadinessPrologue.data(), kReadinessPrologue.size(),
+                reinterpret_cast<void*>(&hooked_player_check_shot_readiness),
+                "shot-readiness diagnostic"));
+    const bool installed = g_original_player_try_start_fire != nullptr &&
+                           g_original_player_check_shot_readiness != nullptr;
+    log_line(installed ? "player fire gate diagnostics installed"
+                       : "player fire gate diagnostics incomplete");
+    return installed;
 }
 
 std::uint32_t resolve_upper_actor_record_hash(std::uint32_t id) {
@@ -2026,6 +2250,30 @@ bool get_camera_axes(
     return true;
 }
 
+bool capture_gameplay_camera_quat(float out[4]) {
+    const auto get_camera_manager =
+        reinterpret_cast<GetCameraManagerFunction>(
+            g_module + kGetCameraManagerRva
+        );
+    void* const manager = get_camera_manager(0);
+    if (manager == nullptr ||
+        readable_bytes(static_cast<std::byte*>(manager) + kCameraRotationOffset + 16) <
+            16) {
+        return false;
+    }
+    const auto* rotation = reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(manager) + kCameraRotationOffset);
+    for (int i = 0; i < 4; ++i) {
+        if (!std::isfinite(rotation[i])) {
+            return false;
+        }
+        out[i] = rotation[i];
+    }
+    const float norm_sq =
+        out[0] * out[0] + out[1] * out[1] + out[2] * out[2] + out[3] * out[3];
+    return norm_sq > 0.90F && norm_sq < 1.10F;
+}
+
 InputCommand read_local_keyboard_command() {
     InputCommand command{};
     if (!g_control_enabled) {
@@ -2445,6 +2693,111 @@ float blend_network_orientation(
         for (int i = 0; i < 4; ++i) current[i] = blended[i] * inv_norm;
     }
     return absolute_dot;
+}
+
+float quat_horizontal_yaw(const float q[4]) {
+    const float x = q[0];
+    const float y = q[1];
+    const float z = q[2];
+    const float w = q[3];
+    return std::atan2(2.0F * (w * y + x * z), 1.0F - 2.0F * (y * y + z * z));
+}
+
+void derive_look_stick_from_camera(
+    const float body_quat[4],
+    const float cam_quat[4],
+    float out[2]) {
+    if (!valid_network_orientation(body_quat) ||
+        !valid_network_orientation(cam_quat)) {
+        out[0] = 0.0F;
+        out[1] = 0.0F;
+        return;
+    }
+    float dyaw = quat_horizontal_yaw(cam_quat) - quat_horizontal_yaw(body_quat);
+    while (dyaw > 3.14159265F) {
+        dyaw -= 6.2831853F;
+    }
+    while (dyaw < -3.14159265F) {
+        dyaw += 6.2831853F;
+    }
+    const float pitch =
+        std::asin(std::clamp(
+            2.0F * (cam_quat[3] * cam_quat[1] - cam_quat[0] * cam_quat[2]),
+            -1.0F,
+            1.0F));
+    out[0] = std::clamp(dyaw * 0.55F, -1.0F, 1.0F);
+    out[1] = std::clamp(-pitch * 0.55F, -1.0F, 1.0F);
+}
+
+void camera_forward_horizontal(
+    const float cam_quat[4], float& forward_x, float& forward_z) {
+    const float x = cam_quat[0];
+    const float y = cam_quat[1];
+    const float z = cam_quat[2];
+    const float w = cam_quat[3];
+    forward_x = 2.0F * (x * z + w * y);
+    forward_z = 1.0F - 2.0F * (x * x + y * y);
+    const float len = std::sqrt(forward_x * forward_x + forward_z * forward_z);
+    if (len > 0.001F) {
+        forward_x /= len;
+        forward_z /= len;
+    }
+}
+
+void yaw_quat_from_horizontal_forward(
+    float forward_x, float forward_z, float out[4]) {
+    const float len = std::sqrt(forward_x * forward_x + forward_z * forward_z);
+    if (len < 0.001F) {
+        out[0] = 0.0F;
+        out[1] = 0.0F;
+        out[2] = 0.0F;
+        out[3] = 1.0F;
+        return;
+    }
+    forward_x /= len;
+    forward_z /= len;
+    const float yaw = std::atan2(forward_x, forward_z);
+    const float half = yaw * 0.5F;
+    out[0] = 0.0F;
+    out[1] = std::sin(half);
+    out[2] = 0.0F;
+    out[3] = std::cos(half);
+}
+
+// Aim facing for the remote Player only — never rewrite viewport CameraManager
+// (that hijacks local scope/FOV and made Nadine vanish in a sniper overlay).
+void apply_peer_aim_facing_to_player(
+    void* player, const coop::StatePacket& peer) {
+    if (player == nullptr) {
+        return;
+    }
+    const bool peer_aiming =
+        (peer.flags & 8) != 0 &&
+        (peer.input_buttons & kJoypadAimButtonMask) != 0;
+    const bool have_peer_camera =
+        (peer.flags & coop::kStateFlagPeerCamera) != 0 &&
+        valid_network_orientation(peer.camera_quat);
+    if (!peer_aiming || !have_peer_camera) {
+        return;
+    }
+    auto* quat = reinterpret_cast<float*>(
+        static_cast<std::byte*>(player) + kPlayerQuatOffset);
+    float fwd_x = 0.0F;
+    float fwd_z = 0.0F;
+    camera_forward_horizontal(peer.camera_quat, fwd_x, fwd_z);
+    float yaw_quat[4]{};
+    yaw_quat_from_horizontal_forward(fwd_x, fwd_z, yaw_quat);
+    blend_network_orientation(quat, yaw_quat, 0.88F);
+    if (readable_bytes(static_cast<std::byte*>(player) + 0x3A40) >= 1) {
+        auto* move_world = reinterpret_cast<float*>(
+            static_cast<std::byte*>(player) + 0x3A30);
+        move_world[0] = fwd_x;
+        move_world[1] = 0.0F;
+        move_world[2] = fwd_z;
+        move_world[3] = 0.0F;
+        *reinterpret_cast<float*>(static_cast<std::byte*>(player) + 0x3A1C) =
+            1.0F;
+    }
 }
 
 bool compute_remote_position_correction(
@@ -3701,6 +4054,29 @@ DWORD WINAPI state_recv_thread(void*) {
             std::uint32_t head = g_client_dmg_head.load(std::memory_order_relaxed);
             g_client_dmg_ring[head % 64] = {dp.name_hash, dp.damage};
             g_client_dmg_head.store(head + 1, std::memory_order_release);
+        } else if (magic == coop::kFirePacketMagic) {
+            coop::FirePacket fp{};
+            if (received == static_cast<int>(sizeof(coop::FirePacket))) {
+                std::memcpy(&fp, buf, sizeof(fp));
+                if (fp.version == coop::kFirePacketVersion) {
+                    publish_fire_packet(fp);
+                } else if (fp.version == 1) {
+                    fp.controller_offset = 0;
+                    publish_fire_packet(fp);
+                }
+            } else if (received ==
+                       static_cast<int>(coop::kFirePacketV1Bytes)) {
+                std::memset(&fp, 0, sizeof(fp));
+                std::memcpy(&fp.magic, buf, offsetof(coop::FirePacket, controller_offset));
+                fp.controller_offset = 0;
+                std::memcpy(&fp.weapon_art_id,
+                            buf + offsetof(coop::FirePacket, controller_offset),
+                            static_cast<std::size_t>(received) -
+                                offsetof(coop::FirePacket, controller_offset));
+                if (fp.version == 1) {
+                    publish_fire_packet(fp);
+                }
+            }
         }
     }
     return 0;
@@ -4080,6 +4456,662 @@ int read_gun_state(void* player) {
     }
 }
 
+// SEH-isolated gun-state transition (SkillWaitOnGunState 0x14041C670 path):
+// player+0x15C8 -> vtable+0x58 -> vtable+0xA0(desired).
+bool safe_request_gun_state(void* player, int desired_state) {
+    if (player == nullptr || (desired_state != 0 && desired_state != 1)) {
+        return false;
+    }
+    if (read_gun_state(player) == desired_state) {
+        return true;
+    }
+    __try {
+        auto* pb = static_cast<std::byte*>(player);
+        void* ctrl = *reinterpret_cast<void**>(pb + 0x15C8);
+        if (ctrl == nullptr) return false;
+        void** vt = *reinterpret_cast<void***>(ctrl);
+        if (vt == nullptr) return false;
+        using GetSetterFn = void*(__fastcall*)(void*);
+        auto get_setter = reinterpret_cast<GetSetterFn>(vt[11]);  // +0x58
+        if (get_setter == nullptr) {
+            return false;
+        }
+        void* setter = get_setter(ctrl);
+        if (setter == nullptr) return false;
+        void** svt = *reinterpret_cast<void***>(setter);
+        if (svt == nullptr) return false;
+        using SetGunStateFn = void(__fastcall*)(void*, int);
+        auto set_state = reinterpret_cast<SetGunStateFn>(svt[20]);  // +0xA0
+        if (set_state == nullptr) {
+            return false;
+        }
+        set_state(setter, desired_state);
+        return read_gun_state(player) == desired_state;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+// PlayerWeaponController vtable+0x78 scans the inventory and returns the slot whose
+// weapon is actually attached to rightHand/leftHand. When read_gun_state fails on
+// campaign players, infer draw from aim and/or that physical attachment result.
+int infer_gun_state(void* player, std::uint8_t in_hands_slot, std::uint64_t buttons) {
+    const int direct = read_gun_state(player);
+    if (direct == 0 || direct == 1) {
+        return direct;
+    }
+    if ((buttons & kJoypadAimButtonMask) != 0) {
+        return 1;
+    }
+    if (in_hands_slot > 0) {
+        return 1;
+    }
+    return 0;
+}
+
+using JoypadIsCommandActiveFunction = bool(__fastcall*)(void*, std::uint32_t);
+constexpr std::uintptr_t kJoypadIsCommandActiveRva = 0x1837CD0;
+
+// Merge block+0x518 with Joypad current/pressed and authored command queries.
+std::uint64_t capture_local_joypad_command_mask(void* player) {
+    if (player == nullptr || g_module == 0) {
+        return 0;
+    }
+    const auto* const base = static_cast<const std::byte*>(player);
+    if (readable_bytes(base + 0x39BC) < 1) {
+        return 0;
+    }
+    const int joypad_index =
+        *reinterpret_cast<const std::int32_t*>(base + 0x39B8);
+    std::uint64_t mask = 0;
+    if (std::byte* const blk = joypad_resolved_input_block(joypad_index)) {
+        mask = *reinterpret_cast<const std::uint64_t*>(blk + 0x518);
+    }
+    void* const frame_state =
+        *reinterpret_cast<void**>(g_module + 0x3FE1088);
+    if (frame_state == nullptr || joypad_index < 0 || joypad_index >= 6) {
+        return mask;
+    }
+    auto* const joypad = static_cast<std::byte*>(frame_state) + 0xDB0 +
+                         0xBF0ULL * static_cast<std::uintptr_t>(joypad_index);
+    if (readable_bytes(joypad) < 0xE8) {
+        return mask;
+    }
+    const std::uint64_t joy_current =
+        *reinterpret_cast<const std::uint64_t*>(joypad + 0xE0);
+    const std::uint64_t joy_pressed =
+        *reinterpret_cast<const std::uint64_t*>(joypad + 0xD0);
+    mask |= (joy_current | joy_pressed) &
+            (kJoypadAimButtonMask | kJoypadFireButtonMask);
+    const auto string_hash = reinterpret_cast<StringHashFunction>(
+        g_module + kStringHashRva);
+    const auto is_active = reinterpret_cast<JoypadIsCommandActiveFunction>(
+        g_module + kJoypadIsCommandActiveRva);
+    static const std::uint32_t kAimPressHash =
+        string_hash("aim-press", 9, 0);
+    static const std::uint32_t kFireHoldHash =
+        string_hash("fire-hold", 9, 0);
+    if (is_active(joypad, kAimPressHash)) {
+        mask |= kJoypadAimButtonMask;
+    }
+    if (is_active(joypad, kFireHoldHash)) {
+        mask |= kJoypadFireButtonMask;
+    }
+    // PC mouse is process-global on loopback two-instance play. Only the focused
+    // game window may read RMB/LMB so copy 2 Nadine does not aim when Chloe aims.
+    if (local_game_window_foreground()) {
+        if ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0) {
+            mask |= kJoypadAimButtonMask;
+        }
+        if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0) {
+            mask |= kJoypadFireButtonMask;
+        }
+    }
+    return mask;
+}
+
+// Resolve inventory slot index for an authored weapon id via manager vtable+0xB0.
+int find_weapon_slot_by_art_id(void* player, std::uint32_t art_id) {
+    if (player == nullptr || art_id == 0) return -1;
+    if (readable_bytes(static_cast<std::byte*>(player) + 0x1D90) < sizeof(void*)) {
+        return -1;
+    }
+    void* manager = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(player) + 0x1D88);
+    if (manager == nullptr || readable_bytes(manager) < sizeof(void*)) return -1;
+    auto** manager_vtable = *reinterpret_cast<void***>(manager);
+    if (manager_vtable == nullptr) return -1;
+    using GetWeaponBySlotFunction = void*(__fastcall*)(void*, std::uint32_t);
+    const auto get_weapon = reinterpret_cast<GetWeaponBySlotFunction>(
+        manager_vtable[0xB0 / sizeof(void*)]);
+    if (get_weapon == nullptr) {
+        return -1;
+    }
+    constexpr std::uint32_t slots[8] = {0, 1, 16, 17, 2, 3, 20, 22};
+    __try {
+        for (const std::uint32_t slot : slots) {
+            void* weapon = get_weapon(manager, slot);
+            if (weapon == nullptr || readable_bytes(weapon) < 0x864) continue;
+            const std::uint32_t id = *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(weapon) + 0x860);
+            if (id == art_id) return static_cast<int>(slot);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return -1;
+    }
+    return -1;
+}
+
+void* get_weapon_from_slot(void* player, int slot) {
+    if (player == nullptr || slot < 0) return nullptr;
+    if (readable_bytes(static_cast<std::byte*>(player) + 0x1D90) < sizeof(void*)) {
+        return nullptr;
+    }
+    void* manager = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(player) + 0x1D88);
+    if (manager == nullptr || readable_bytes(manager) < sizeof(void*)) return nullptr;
+    auto** manager_vtable = *reinterpret_cast<void***>(manager);
+    if (manager_vtable == nullptr) return nullptr;
+    using GetWeaponBySlotFunction = void*(__fastcall*)(void*, std::uint32_t);
+    const auto get_weapon = reinterpret_cast<GetWeaponBySlotFunction>(
+        manager_vtable[0xB0 / sizeof(void*)]);
+    if (get_weapon == nullptr) {
+        return nullptr;
+    }
+    __try {
+        return get_weapon(manager, static_cast<std::uint32_t>(slot));
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return nullptr;
+    }
+}
+
+// PlayerWeaponController::SwitchToWeapon 0x1410A1C10 (vtable+0x40): select slot and
+// request in-hands state (third arg). Native draw/holster path after GiveWeapon.
+bool safe_weapon_controller_draw(
+    void* controller, std::uint32_t slot, bool in_hands) {
+    if (controller == nullptr || readable_bytes(controller) < sizeof(void*)) {
+        return false;
+    }
+    auto** vtable = *reinterpret_cast<void***>(controller);
+    if (vtable == nullptr) return false;
+    // SwitchToWeapon 0x1410A1C10 fallback when NetPlayerTracker is null (puppets):
+    // vtable+0x48(controller, slot, 0, 0, in_hands).
+    using InnerDrawFunction = char(__fastcall*)(
+        void*, unsigned int, unsigned int, unsigned int, unsigned char);
+    const auto inner_draw = reinterpret_cast<InnerDrawFunction>(
+        vtable[0x48 / sizeof(void*)]);
+    if (inner_draw == nullptr) return false;
+    __try {
+        return inner_draw(controller, slot, 0, 0, in_hands ? 1 : 0) != 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+int read_weapon_in_hands_slot(void* player) {
+    if (player == nullptr ||
+        readable_bytes(static_cast<std::byte*>(player) + 0x1D90) < sizeof(void*)) {
+        return -2;
+    }
+    void* controller = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(player) + 0x1D88);
+    if (controller == nullptr ||
+        readable_bytes(static_cast<std::byte*>(controller) + 0x134) < sizeof(std::uint32_t)) {
+        return -3;
+    }
+    return static_cast<int>(*reinterpret_cast<const std::uint32_t*>(
+        static_cast<const std::byte*>(controller) + 0x130));
+}
+
+bool safe_switch_to_weapon(void* player, std::uint32_t slot, bool in_hands) {
+    if (player == nullptr || g_module == 0) return false;
+    if (!player_object_stable(player)) {
+        return false;
+    }
+    if (readable_bytes(static_cast<std::byte*>(player) + 0x1D90) < sizeof(void*)) {
+        return false;
+    }
+    void* controller = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(player) + 0x1D88);
+    if (controller == nullptr || readable_bytes(controller) < sizeof(void*)) {
+        return false;
+    }
+    const auto switch_weapon = reinterpret_cast<SwitchToWeaponFunction>(
+        g_module + kSwitchToWeaponRva);
+    __try {
+        return switch_weapon(controller, slot, in_hands ? 1 : 0) != 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+std::uint32_t weapon_art_id_from_object(void* weapon) {
+    if (weapon == nullptr || readable_bytes(weapon) < 0x864) {
+        return 0;
+    }
+    return *reinterpret_cast<const std::uint32_t*>(
+        static_cast<const std::byte*>(weapon) + 0x860);
+}
+
+// Despite the old draft name, vtable+0x78 is not a mode getter. It resolves the
+// inventory slot physically attached to rightHand/leftHand (0x1410A49E0).
+std::uint8_t capture_weapon_selected_mode(void* player) {
+    if (player == nullptr ||
+        readable_bytes(static_cast<std::byte*>(player) + 0x1D90) < sizeof(void*)) {
+        return 0;
+    }
+    void* manager = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(player) + 0x1D88);
+    if (manager == nullptr || readable_bytes(manager) < sizeof(void*)) return 0;
+    auto** manager_vtable = *reinterpret_cast<void***>(manager);
+    if (manager_vtable == nullptr) return 0;
+    using GetHandAttachedSlotFunction = std::int32_t(__fastcall*)(void*);
+    const auto get_hand_attached_slot = reinterpret_cast<GetHandAttachedSlotFunction>(
+        manager_vtable[0x78 / sizeof(void*)]);
+    if (get_hand_attached_slot == nullptr) {
+        return 0;
+    }
+    __try {
+        const std::int32_t slot = get_hand_attached_slot(manager);
+        if (slot < 0 || slot > 255) return 0;
+        return static_cast<std::uint8_t>(slot);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 0;
+    }
+}
+
+// Prefer the slot physically attached to a hand (0x1410A49E0 / vtable+0x78) over
+// Player_GetActiveWeapon (+0x8C0), which can still report the rifle while pistol
+// is drawn.
+std::uint32_t capture_hand_attached_weapon_art_id(void* player) {
+    if (player == nullptr) {
+        return 0;
+    }
+    const std::uint8_t attached_slot = capture_weapon_selected_mode(player);
+    if (attached_slot > 0) {
+        const std::uint32_t art = weapon_art_id_from_object(
+            get_weapon_from_slot(player, static_cast<int>(attached_slot)));
+        if (art != 0) {
+            return art;
+        }
+    }
+    const int requested_slot = read_weapon_in_hands_slot(player);
+    if (requested_slot > 0 && requested_slot != static_cast<int>(attached_slot)) {
+        const std::uint32_t art = weapon_art_id_from_object(
+            get_weapon_from_slot(player, requested_slot));
+        if (art != 0) {
+            return art;
+        }
+    }
+    return 0;
+}
+
+bool local_game_window_foreground() {
+    HWND fg = GetForegroundWindow();
+    if (fg == nullptr) {
+        return false;
+    }
+    DWORD fg_pid = 0;
+    GetWindowThreadProcessId(fg, &fg_pid);
+    return fg_pid == GetCurrentProcessId();
+}
+
+std::uint32_t capture_held_weapon_art_id(void* player) {
+    if (player == nullptr) {
+        return 0;
+    }
+    // Physical in-hands slot wins over GetActiveWeapon (rifle stays "active"
+    // on the back while the pistol is drawn and aimed).
+    const int hands_slot = read_weapon_in_hands_slot(player);
+    if (hands_slot > 0) {
+        const std::uint32_t slot_art = weapon_art_id_from_object(
+            get_weapon_from_slot(player, hands_slot));
+        if (slot_art != 0) {
+            return slot_art;
+        }
+    }
+    const std::uint32_t hand_art = capture_hand_attached_weapon_art_id(player);
+    if (hand_art != 0) {
+        return hand_art;
+    }
+    return weapon_art_id_from_object(get_player_active_weapon(player));
+}
+
+bool puppet_has_weapon_art_id(void* puppet, std::uint32_t art_id) {
+    if (puppet == nullptr || art_id == 0) return false;
+    if (readable_bytes(static_cast<std::byte*>(puppet) + 0x1D90) < sizeof(void*)) {
+        return false;
+    }
+    void* manager = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(puppet) + 0x1D88);
+    if (manager == nullptr || readable_bytes(manager) < sizeof(void*)) return false;
+    auto** manager_vtable = *reinterpret_cast<void***>(manager);
+    if (manager_vtable == nullptr) return false;
+    using GetWeaponBySlotFunction = void*(__fastcall*)(void*, std::uint32_t);
+    const auto get_weapon = reinterpret_cast<GetWeaponBySlotFunction>(
+        manager_vtable[0xB0 / sizeof(void*)]);
+    if (get_weapon == nullptr) {
+        return false;
+    }
+    constexpr std::uint32_t slots[8] = {0, 1, 16, 17, 2, 3, 20, 22};
+    __try {
+        for (const std::uint32_t slot : slots) {
+            void* weapon = get_weapon(manager, slot);
+            if (weapon == nullptr || readable_bytes(weapon) < 0x864) continue;
+            const std::uint32_t id = *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(weapon) + 0x860);
+            if (id == art_id) return true;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+    return false;
+}
+
+// GiveWeapon vtable+0x158 is often null on a freshly spawned puppet; calling through
+// a non-null but not-yet-valid slot still yields rip=0x0 during campaign load.
+bool puppet_weapon_give_vtable_ready(void* puppet) {
+    if (!player_object_stable(puppet)) {
+        return false;
+    }
+    void* const controller = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(puppet) + 0x1D88);
+    if (controller == nullptr || readable_bytes(controller) < sizeof(void*)) {
+        return false;
+    }
+    void** const vtable = *reinterpret_cast<void***>(controller);
+    if (vtable == nullptr) {
+        return false;
+    }
+    void* const give_weapon = vtable[0x158 / sizeof(void*)];
+    if (give_weapon == nullptr) {
+        return false;
+    }
+    const auto addr = reinterpret_cast<std::uintptr_t>(give_weapon);
+    return addr >= g_module && addr < g_module + 0x08000000ULL;
+}
+
+// SEH-isolated GiveWeapon for puppets when vtable+0x158 is populated.
+bool safe_give_weapon_art_to_puppet(void* puppet, std::uint32_t art_id) {
+    if (puppet == nullptr || art_id == 0 || g_module == 0) {
+        return false;
+    }
+    if (GetTickCount64() < g_give_weapon_fail_until_ms) {
+        return false;
+    }
+    if (!puppet_weapon_give_vtable_ready(puppet)) {
+        return false;
+    }
+    if (puppet_has_weapon_art_id(puppet, art_id)) {
+        return true;
+    }
+    if (!puppet_weapon_give_allowed(art_id)) {
+        return false;
+    }
+    if (readable_bytes(static_cast<std::byte*>(puppet) + 0x1D90) < sizeof(void*)) {
+        return false;
+    }
+    void* controller = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(puppet) + 0x1D88);
+    if (controller == nullptr || readable_bytes(controller) < sizeof(void*)) {
+        return false;
+    }
+    auto** vtable = *reinterpret_cast<void***>(controller);
+    if (vtable == nullptr) {
+        return false;
+    }
+    const auto give_weapon = reinterpret_cast<GiveWeaponFunction>(
+        vtable[0x158 / sizeof(void*)]);
+    if (give_weapon == nullptr) {
+        return false;
+    }
+    static void* cache_puppet = nullptr;
+    static std::uint32_t cache_art = 0;
+    static bool cache_ok = false;
+    if (puppet == cache_puppet && cache_art == art_id && cache_ok) {
+        return true;
+    }
+    const auto initialize_info = reinterpret_cast<InitializeWeaponInfoFunction>(
+        g_module + kInitializeWeaponInfoRva);
+    __try {
+        alignas(16) std::uint8_t weapon_info[0xC0]{};
+        initialize_info(weapon_info);
+        std::memcpy(weapon_info + 0x80, &art_id, sizeof(art_id));
+        give_weapon(controller, weapon_info, true, false, nullptr);
+        cache_puppet = puppet;
+        cache_art = art_id;
+        cache_ok = puppet_has_weapon_art_id(puppet, art_id);
+        return cache_ok;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        cache_puppet = puppet;
+        cache_art = art_id;
+        cache_ok = false;
+        g_give_weapon_fail_until_ms = GetTickCount64() + 5000;
+        return false;
+    }
+}
+
+bool give_held_weapon_to_puppet(void* puppet, std::uint32_t art_id) {
+    if (puppet == nullptr || art_id == 0) {
+        return false;
+    }
+    if (puppet_has_weapon_art_id(puppet, art_id)) {
+        return true;
+    }
+    return safe_give_weapon_art_to_puppet(puppet, art_id);
+}
+
+bool puppet_weapon_sync_ready(void* puppet);
+
+// Pre-give coop relay weapons from peer raw-id snapshot (flag 0x40).
+void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer) {
+    if (puppet == nullptr || (peer.flags & 0x40) == 0) {
+        return;
+    }
+    for (std::size_t i = 0; i < 8; ++i) {
+        std::uint32_t raw_id = 0;
+        std::memcpy(
+            &raw_id, peer.weapon_snapshot + i * sizeof(raw_id), sizeof(raw_id));
+        if (raw_id != 0 && is_coop_relay_fire_art(raw_id)) {
+            safe_give_weapon_art_to_puppet(puppet, raw_id);
+        }
+    }
+}
+
+void apply_peer_held_weapon_state() {
+    coop::StatePacket peer{};
+    void* puppet = nullptr;
+    if (!latest_peer_state(peer, puppet) || (peer.flags & 0x80) == 0) return;
+    const std::uint32_t effective_art = peer_effective_held_art(peer);
+    if (effective_art == 0) return;
+    if (!puppet_weapon_sync_ready(puppet)) {
+        return;
+    }
+    ensure_puppet_has_peer_weapons(puppet, peer);
+
+    static ULONGLONG last_held_apply_tick = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now == last_held_apply_tick) {
+        return;
+    }
+    last_held_apply_tick = now;
+
+    static void* last_puppet = nullptr;
+    static std::uint32_t last_art_id = 0;
+    static std::uint8_t last_mode = 0xFF;
+    static int last_peer_gun = -1;
+    static ULONGLONG last_log = 0;
+    static ULONGLONG last_switch_ms = 0;
+    static ULONGLONG last_switch_fail_ms = 0;
+    static std::uint32_t last_switch_art = 0;
+    static bool last_switch_ok = false;
+
+    const bool art_changed =
+        puppet != last_puppet || effective_art != last_art_id;
+    const bool mode_changed = peer.weapon_selected_mode != last_mode;
+    const int peer_gun =
+        (peer.gun_state == 0 || peer.gun_state == 1)
+            ? static_cast<int>(peer.gun_state)
+            : (peer.weapon_selected_mode > 0 ? 1 : 0);
+    const int local_gun = read_gun_state(puppet);
+    const bool gun_changed = peer_gun != last_peer_gun;
+    int use_slot = find_weapon_slot_by_art_id(puppet, effective_art);
+    if (use_slot < 0 && peer.weapon_selected_mode > 0) {
+        use_slot = static_cast<int>(peer.weapon_selected_mode);
+    }
+    if (use_slot < 0 && puppet_weapon_give_allowed(effective_art)) {
+        if (give_held_weapon_to_puppet(puppet, effective_art)) {
+            use_slot = find_weapon_slot_by_art_id(puppet, effective_art);
+        }
+    }
+    if (use_slot < 0 && peer_gun == 1 && effective_art == kCoopRifleArtId) {
+        use_slot = 0;
+    }
+    const bool peer_wants_drawn =
+        peer_gun == 1 || peer.weapon_selected_mode > 0;
+    const bool attachment_pending =
+        peer_wants_drawn && use_slot >= 0 &&
+        capture_weapon_selected_mode(puppet) != use_slot;
+    const bool readiness_pending =
+        peer_gun == 1 && use_slot >= 0 &&
+        (puppet != g_puppet_gun_ok_puppet ||
+         effective_art != g_puppet_gun_ok_art ||
+         now > g_puppet_gun_ok_until_ms);
+
+    if (!art_changed && !mode_changed && !gun_changed &&
+        !attachment_pending && !readiness_pending) {
+        return;
+    }
+
+    bool gave = false;
+    bool select_ok = false;
+    bool gun_ok = false;
+    if (!puppet_has_weapon_art_id(puppet, effective_art) &&
+        puppet_weapon_give_allowed(effective_art) &&
+        peer_gun == 1) {
+        gave = give_held_weapon_to_puppet(puppet, effective_art);
+    }
+    if (art_changed) {
+        if (puppet != last_puppet) {
+            last_switch_ok = false;
+            last_switch_fail_ms = 0;
+            last_switch_art = 0;
+        }
+        if (puppet_has_weapon_art_id(puppet, effective_art)) {
+            gave = true;
+        } else if (puppet_weapon_give_allowed(effective_art)) {
+            gave = give_held_weapon_to_puppet(puppet, effective_art);
+        }
+        last_art_id = effective_art;
+        last_puppet = puppet;
+    }
+    // read_gun_state often fails on puppets (localGun=-1); SwitchToWeapon is SEH-safe.
+    const bool gun_state_writable = local_gun == 0 || local_gun == 1;
+    if (use_slot >= 0) {
+        if (peer_wants_drawn) {
+            const bool want_in_hands = peer_gun == 1;
+            const bool puppet_holstered =
+                capture_weapon_selected_mode(puppet) == 0;
+            const int hands_slot = read_weapon_in_hands_slot(puppet);
+            const bool need_draw_in_hands =
+                want_in_hands && use_slot >= 0 &&
+                hands_slot != use_slot;
+            const bool rifle_out =
+                peer_gun == 1 && effective_art == kCoopRifleArtId;
+            const bool need_switch =
+                art_changed || gun_changed ||
+                (mode_changed && peer.weapon_selected_mode > 0) ||
+                rifle_out ||
+                (peer_wants_drawn && puppet_holstered) || need_draw_in_hands ||
+                (art_changed && effective_art == kCoopPistolArtId &&
+                 capture_weapon_selected_mode(puppet) == 0 && use_slot == 1);
+            const bool switch_cooldown =
+                effective_art == last_switch_art &&
+                now - last_switch_ms < 500;
+            const bool fail_backoff =
+                !last_switch_ok && effective_art == last_switch_art &&
+                now - last_switch_fail_ms < 5000 && !art_changed;
+            if (need_switch && !switch_cooldown && !fail_backoff &&
+                puppet_weapon_switch_allowed(effective_art, use_slot)) {
+                const int attached_slot = capture_weapon_selected_mode(puppet);
+                if (attached_slot > 0 && attached_slot != use_slot) {
+                    safe_switch_to_weapon(
+                        puppet, static_cast<std::uint32_t>(attached_slot), false);
+                }
+                last_switch_ms = now;
+                last_switch_art = effective_art;
+                select_ok = safe_switch_to_weapon(
+                    puppet, static_cast<std::uint32_t>(use_slot), want_in_hands);
+                last_switch_ok = select_ok;
+                if (select_ok) {
+                    g_puppet_draw_ok_puppet = puppet;
+                    g_puppet_draw_ok_art = effective_art;
+                    g_puppet_draw_ok_until_ms = now + 3000;
+                } else {
+                    last_switch_fail_ms = now;
+                }
+            } else if (effective_art == last_switch_art) {
+                select_ok = last_switch_ok;
+            }
+        }
+    }
+    if (peer_gun == 0) {
+        const int attached_slot = capture_weapon_selected_mode(puppet);
+        if (attached_slot > 0) {
+            safe_switch_to_weapon(
+                puppet, static_cast<std::uint32_t>(attached_slot), false);
+        }
+    }
+    const bool attached_now =
+        use_slot >= 0 && capture_weapon_selected_mode(puppet) == use_slot;
+    if (attached_now) {
+        select_ok = true;
+        gun_ok = peer_gun == 1;
+        last_switch_ok = true;
+    } else if (!select_ok && peer_gun == 1 && gun_state_writable) {
+        gun_ok = safe_request_gun_state(puppet, peer_gun);
+    } else if (select_ok) {
+        // controller+0x130 is only the requested slot. Confirm the inventory scan
+        // actually sees this exact weapon attached to a hand before arming fire.
+        gun_ok = capture_weapon_selected_mode(puppet) == use_slot;
+        if (!gun_ok && peer_gun == 1 && gun_state_writable) {
+            gun_ok = safe_request_gun_state(puppet, 1);
+        }
+    }
+    if (gun_ok && select_ok &&
+        use_slot >= 0 &&
+        capture_weapon_selected_mode(puppet) == use_slot) {
+        g_puppet_gun_ok_puppet = puppet;
+        g_puppet_gun_ok_art = effective_art;
+        g_puppet_gun_ok_until_ms = now + 5000;
+        const ULONGLONG native_after = now + 1000;
+        if (g_puppet_native_fire_allowed_after_ms < native_after) {
+            g_puppet_native_fire_allowed_after_ms = native_after;
+        }
+    }
+
+    last_mode = peer.weapon_selected_mode;
+    last_peer_gun = peer_gun;
+
+    if (now - last_log > 250 || art_changed || mode_changed || gun_changed) {
+        last_log = now;
+        std::ostringstream line;
+        line << "HELD-WEAPON-APPLY art=0x" << std::hex << effective_art
+             << " wire=0x" << peer.held_weapon_art_id
+             << " mode=" << std::dec
+             << static_cast<unsigned>(peer.weapon_selected_mode)
+             << " peerGun=" << peer_gun << " localGun=" << local_gun
+             << " requested=" << read_weapon_in_hands_slot(puppet)
+             << " attached="
+             << static_cast<unsigned>(capture_weapon_selected_mode(puppet))
+             << " gave=" << (gave ? 1 : 0)
+             << " select=" << (select_ok ? 1 : 0)
+             << " slot=" << use_slot
+             << " gunOk=" << (gun_ok ? 1 : 0);
+        log_line(line.str().c_str());
+    }
+}
+
 void send_local_player_state() {
     if (!g_state_net.enabled || !g_state_net.peer_set) {
         return;
@@ -4166,16 +5198,37 @@ void send_local_player_state() {
             pkt.move_magnitude = 0.0F;
         }
     }
-    // Input_ScaleCopyVirtual normalizes keyboard/gamepad input into the local
-    // Player's Joypad masks at +0xD0/+0xD8/+0xE0. Send that native boundary; the
-    // receiver feeds the held mask back through its own Input_ScaleCopyVirtual so
-    // command edges and hold durations are derived by the engine.
+    // Send the resolved block's command-descriptor held mask at +0x518 (aim=0x200,
+    // fire-hold=0x800). Joypad +0xE0 carries unrelated high-layer bits (0x20000)
+    // that do not satisfy authored aim-press; the receiver writes this mask back
+    // into remote source+0x518 before Input_ScaleCopyVirtual derives Joypad edges.
     if (readable_bytes(static_cast<std::byte*>(local_obj) + 0x39BC) >= 1) {
         const auto* const base = static_cast<const std::byte*>(local_obj);
         const int joypad_index =
             *reinterpret_cast<const std::int32_t*>(base + 0x39B8);
         void* const frame_state =
             *reinterpret_cast<void**>(g_module + 0x3FE1088);
+        std::uint64_t synth_pressed = 0;
+        std::uint64_t synth_released = 0;
+        if (auto* const blk = joypad_resolved_input_block(joypad_index)) {
+            std::uint64_t held_mask = capture_local_joypad_command_mask(local_obj);
+            if (held_mask == 0) {
+                held_mask =
+                    *reinterpret_cast<const std::uint64_t*>(blk + 0x518);
+            }
+            const std::uint64_t cached =
+                g_cached_local_input_buttons.load(std::memory_order_relaxed);
+            held_mask |= cached & (kJoypadAimButtonMask | kJoypadFireButtonMask);
+            // Strip scope/HUD layer bits from Joypad +0xE0 pollution; keep 0x200
+            // in the packet for apply_peer_aim_facing on the receiver only.
+            held_mask &= ~0x10000ull & ~0x20000ull & ~0x40000ull & ~0x80000ull;
+            pkt.input_buttons = held_mask;
+            static std::uint64_t prev_sent_input_mask = 0;
+            synth_pressed = held_mask & ~prev_sent_input_mask;
+            synth_released = prev_sent_input_mask & ~held_mask;
+            prev_sent_input_mask = held_mask;
+            pkt.flags |= 8;
+        }
         if (frame_state != nullptr && joypad_index >= 0 && joypad_index < 6) {
             const auto* const joypad = static_cast<const std::byte*>(frame_state) +
                                        0xDB0 + 0xBF0 * joypad_index;
@@ -4184,9 +5237,41 @@ void send_local_player_state() {
                     *reinterpret_cast<const std::uint64_t*>(joypad + 0xD0);
                 pkt.buttons_released =
                     *reinterpret_cast<const std::uint64_t*>(joypad + 0xD8);
-                pkt.input_buttons =
-                    *reinterpret_cast<const std::uint64_t*>(joypad + 0xE0);
+                constexpr std::uint64_t kStateSendStripMask =
+                    0x10000ull | 0x20000ull | 0x40000ull | 0x80000ull;
+                pkt.buttons_pressed &= ~kStateSendStripMask;
+                pkt.buttons_released &= ~kStateSendStripMask;
+                pkt.buttons_pressed |= synth_pressed &
+                    (kJoypadAimButtonMask | kJoypadFireButtonMask);
+                pkt.buttons_released |= synth_released &
+                    (kJoypadAimButtonMask | kJoypadFireButtonMask);
                 pkt.flags |= 8;
+            }
+        }
+    }
+    // Relay gameplay camera + right stick so remote Nadine matches Chloe's look.
+    {
+        float cam_quat[4]{};
+        if (capture_gameplay_camera_quat(cam_quat)) {
+            std::memcpy(pkt.camera_quat, cam_quat, sizeof(pkt.camera_quat));
+            pkt.flags |= coop::kStateFlagPeerCamera;
+        }
+        const int joypad_idx =
+            readable_bytes(static_cast<std::byte*>(local_obj) + 0x39BC) >= 1
+                ? *reinterpret_cast<const std::int32_t*>(
+                      static_cast<const std::byte*>(local_obj) + 0x39B8)
+                : 0;
+        if (auto* const blk = joypad_resolved_input_block(joypad_idx)) {
+            const auto* body_quat = reinterpret_cast<const float*>(
+                static_cast<const std::byte*>(local_obj) + kPlayerQuatOffset);
+            if ((pkt.flags & coop::kStateFlagPeerCamera) != 0 &&
+                valid_network_orientation(pkt.camera_quat)) {
+                derive_look_stick_from_camera(
+                    body_quat, pkt.camera_quat, pkt.look_stick);
+            } else {
+                const auto* axes = reinterpret_cast<const float*>(blk);
+                pkt.look_stick[0] = axes[2];
+                pkt.look_stick[1] = axes[3];
             }
         }
     }
@@ -4317,6 +5402,66 @@ void send_local_player_state() {
         have_raw_weapon_ids |= raw_id != 0;
     }
     if (have_raw_weapon_ids) pkt.flags |= 0x40;
+    {
+        void* weapon_src = resolve_live_player_safe(0);
+        if (weapon_src == nullptr) {
+            weapon_src = local_obj;
+        }
+        const int hands_slot = read_weapon_in_hands_slot(weapon_src);
+        std::uint32_t held_art = capture_held_weapon_art_id(weapon_src);
+        std::uint8_t weapon_mode = capture_weapon_selected_mode(weapon_src);
+        if (hands_slot > 0) {
+            weapon_mode = static_cast<std::uint8_t>(hands_slot);
+            const std::uint32_t hands_art = weapon_art_id_from_object(
+                get_weapon_from_slot(weapon_src, hands_slot));
+            if (hands_art != 0) {
+                held_art = hands_art;
+            }
+        }
+        // Rifle on the back must not clobber an aimed/drawn pistol on the wire.
+        if (held_art == kCoopRifleArtId) {
+            const std::uint32_t hand_art = capture_hand_attached_weapon_art_id(weapon_src);
+            if (hand_art == kCoopPistolArtId || hand_art == kCoopScopedPistolArtId) {
+                held_art = hand_art;
+                weapon_mode = 1;
+            } else if (hands_slot == 1) {
+                const std::uint32_t slot1_art = weapon_art_id_from_object(
+                    get_weapon_from_slot(weapon_src, 1));
+                if (slot1_art == kCoopPistolArtId || slot1_art == kCoopScopedPistolArtId) {
+                    held_art = slot1_art;
+                    weapon_mode = 1;
+                }
+            }
+        }
+        std::uint64_t aim_buttons = 0;
+        if ((pkt.flags & 8) != 0) {
+            aim_buttons = pkt.input_buttons;
+        }
+        const int gun = infer_gun_state(weapon_src, weapon_mode, aim_buttons);
+        if (held_art != 0) {
+            pkt.held_weapon_art_id = held_art;
+            pkt.weapon_selected_mode = weapon_mode;
+            if (gun == 0 || gun == 1) {
+                pkt.gun_state = static_cast<std::uint8_t>(gun);
+            }
+            pkt.flags |= 0x80;
+            static std::uint32_t last_sent_art = 0;
+            static int last_sent_gun = -1;
+            static std::uint8_t last_sent_mode = 0xFF;
+            if (held_art != last_sent_art || gun != last_sent_gun ||
+                weapon_mode != last_sent_mode) {
+                last_sent_art = held_art;
+                last_sent_gun = gun;
+                last_sent_mode = weapon_mode;
+                std::ostringstream line;
+                line << "HELD-WEAPON-SEND art=0x" << std::hex << held_art
+                     << " mode=" << std::dec
+                     << static_cast<unsigned>(pkt.weapon_selected_mode)
+                     << " gun=" << gun;
+                log_line(line.str().c_str());
+            }
+        }
+    }
     sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr), sizeof(g_state_net.peer_addr));
 }
@@ -4759,11 +5904,32 @@ void apply_puppet_transform_post(void* puppet) {
     // local correction vectors while its peer stood still.
     // Preserve the native locomotion turn and remove packet-step snapping. Exact
     // memcpy made every newly received quaternion visible as a hard angular step.
+    const bool peer_aiming =
+        (pkt.flags & 8) != 0 &&
+        (pkt.input_buttons & kJoypadAimButtonMask) != 0;
     float orientation_dot = 1.0F;
-    if (pkt.move_magnitude < 0.15F) {
-        constexpr float kOrientationBlend = 0.18F;
-        orientation_dot =
-            blend_network_orientation(quat, pkt.quat, kOrientationBlend);
+    if (peer_aiming) {
+        apply_peer_aim_facing_to_player(puppet, pkt);
+        if (readable_bytes(static_cast<std::byte*>(puppet) + kPlayerQuatOffset + 16) >=
+            16) {
+            float dot = 0.0F;
+            const auto* q = reinterpret_cast<const float*>(
+                static_cast<const std::byte*>(puppet) + kPlayerQuatOffset);
+            if ((pkt.flags & coop::kStateFlagPeerCamera) != 0 &&
+                valid_network_orientation(pkt.camera_quat)) {
+                float yaw_q[4]{};
+                float fwd_x = 0.0F;
+                float fwd_z = 0.0F;
+                camera_forward_horizontal(pkt.camera_quat, fwd_x, fwd_z);
+                yaw_quat_from_horizontal_forward(fwd_x, fwd_z, yaw_q);
+                for (int i = 0; i < 4; ++i) {
+                    dot += q[i] * yaw_q[i];
+                }
+            }
+            orientation_dot = std::abs(dot);
+        }
+    } else if (pkt.move_magnitude < 0.15F) {
+        orientation_dot = blend_network_orientation(quat, pkt.quat, 0.18F);
     }
     if (g_clone_freerun) {
         if (too_far) {
@@ -4886,6 +6052,601 @@ std::size_t readable_bytes(const void* p) {
     return end - reinterpret_cast<std::uintptr_t>(p);
 }
 
+void* get_player_active_weapon(void* player) {
+    if (player == nullptr || readable_bytes(player) < sizeof(void*)) {
+        return nullptr;
+    }
+    auto** const vtable = *reinterpret_cast<void***>(player);
+    if (vtable == nullptr) return nullptr;
+    using GetActiveWeaponFunction = void*(__fastcall*)(void*);
+    const auto get_weapon = reinterpret_cast<GetActiveWeaponFunction>(
+        vtable[kPlayerActiveWeaponVtableOffset / sizeof(void*)]);
+    if (get_weapon == nullptr) return nullptr;
+    __try {
+        return get_weapon(player);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return nullptr;
+    }
+}
+
+void* resolve_fire_controller(void* player, std::ptrdiff_t preferred_offset) {
+    if (player == nullptr) {
+        return nullptr;
+    }
+    auto try_offset = [&](std::ptrdiff_t off) -> void* {
+        if (off <= 0) {
+            return nullptr;
+        }
+        auto* const controller = static_cast<std::byte*>(player) + off;
+        if (readable_bytes(controller) <
+            kPlayerFireControllerOwnerOffset + sizeof(void*)) {
+            return nullptr;
+        }
+        void* const owner = *reinterpret_cast<void**>(
+            controller + kPlayerFireControllerOwnerOffset);
+        return owner == player ? static_cast<void*>(controller) : nullptr;
+    };
+
+    if (preferred_offset > 0) {
+        if (void* const controller = try_offset(preferred_offset)) {
+            return controller;
+        }
+    }
+
+    static constexpr std::ptrdiff_t kKnownOffsets[] = {0x15cf30, 0x15adb0};
+    for (const std::ptrdiff_t off : kKnownOffsets) {
+        if (off == preferred_offset) {
+            continue;
+        }
+        if (void* const controller = try_offset(off)) {
+            return controller;
+        }
+    }
+
+    if (g_player_fire_controller_offset > 0 &&
+        g_player_fire_controller_offset != preferred_offset) {
+        if (void* const controller = try_offset(g_player_fire_controller_offset)) {
+            return controller;
+        }
+    }
+
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log > 2000) {
+        last_log = now;
+        std::ostringstream line;
+        line << "FIRE-RELAY no controller puppet=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(player)
+             << " preferred=0x" << preferred_offset << std::dec;
+        log_line(line.str().c_str());
+    }
+    return nullptr;
+}
+
+void track_puppet_for_fire_relay(void* puppet) {
+    if (puppet == nullptr) {
+        return;
+    }
+    if (puppet != g_fire_puppet_tracked) {
+        g_fire_puppet_tracked = puppet;
+        g_puppet_native_fire_allowed_after_ms = 0;
+        // Fresh slot-1 spawns need GiveWeapon/SwitchToWeapon before native Fire replay.
+        g_fire_puppet_ready_after_ms = GetTickCount64() + 5000;
+    }
+}
+
+bool puppet_weapon_sync_ready(void* puppet) {
+    if (!world_stable() || !player_object_stable(puppet) ||
+        !puppet_weapon_give_vtable_ready(puppet)) {
+        return false;
+    }
+    track_puppet_for_fire_relay(puppet);
+    return GetTickCount64() >= g_fire_puppet_ready_after_ms;
+}
+
+void suppress_puppet_fire_buttons(ULONGLONG duration_ms) {
+    g_suppress_puppet_fire_buttons_until_ms = GetTickCount64() + duration_ms;
+    g_fire_button_hold_until_ms = 0;
+    g_state_net.active_button_press_latch.fetch_and(
+        ~kJoypadFireButtonMask, std::memory_order_release);
+    g_state_net.pending_button_presses.fetch_and(
+        ~kJoypadFireButtonMask, std::memory_order_release);
+}
+
+bool puppet_fire_buttons_suppressed() {
+    return GetTickCount64() < g_suppress_puppet_fire_buttons_until_ms;
+}
+
+std::uint32_t puppet_active_weapon_art_id(void* puppet) {
+    if (puppet == nullptr) {
+        return 0;
+    }
+    const std::uint32_t hand_art = capture_hand_attached_weapon_art_id(puppet);
+    if (hand_art != 0) {
+        return hand_art;
+    }
+    return weapon_art_id_from_object(get_player_active_weapon(puppet));
+}
+
+bool puppet_can_fire_art(void* puppet, std::uint32_t art_id) {
+    if (puppet == nullptr || art_id == 0 || !player_object_stable(puppet)) {
+        return false;
+    }
+    if (GetTickCount64() < g_fire_puppet_ready_after_ms) {
+        return false;
+    }
+    if (!puppet_has_weapon_art_id(puppet, art_id)) {
+        return false;
+    }
+    const int slot = find_weapon_slot_by_art_id(puppet, art_id);
+    if (slot < 0) {
+        return false;
+    }
+    const std::uint8_t attached_slot = capture_weapon_selected_mode(puppet);
+    if (attached_slot != slot) {
+        return false;
+    }
+    return puppet_active_weapon_art_id(puppet) == art_id;
+}
+
+bool coop_fire_art_family_match(std::uint32_t a, std::uint32_t b) {
+    if (a == b) {
+        return true;
+    }
+    const bool a_pistol =
+        a == kCoopPistolArtId || a == kCoopScopedPistolArtId;
+    const bool b_pistol =
+        b == kCoopPistolArtId || b == kCoopScopedPistolArtId;
+    return a_pistol && b_pistol;
+}
+
+bool peer_state_has_rifle(const coop::StatePacket& peer) {
+    if ((peer.flags & 0x80) == 0) {
+        return false;
+    }
+    // Pistol slot in hands overrides a stale rifle art id on the wire.
+    if (peer.weapon_selected_mode == 1) {
+        return false;
+    }
+    return peer.held_weapon_art_id == kCoopRifleArtId;
+}
+
+std::uint32_t peer_effective_held_art(const coop::StatePacket& peer) {
+    if ((peer.flags & 0x80) == 0 || peer.held_weapon_art_id == 0) {
+        return 0;
+    }
+    if (peer.weapon_selected_mode == 1 &&
+        peer.held_weapon_art_id == kCoopRifleArtId) {
+        return kCoopPistolArtId;
+    }
+    return peer.held_weapon_art_id;
+}
+
+// Strict gate: exact art match or pistol-family swap only — never rifle when peer
+// holds a pistol.
+bool coop_fire_packet_matches_peer_weapon(
+    const coop::FirePacket& packet, const coop::StatePacket& peer) {
+    const std::uint32_t peer_art = peer_effective_held_art(peer);
+    if (peer_art == 0) {
+        return packet.weapon_art_id != kCoopRifleArtId &&
+               is_coop_relay_fire_art(packet.weapon_art_id);
+    }
+    if (packet.weapon_art_id == peer_art) {
+        return true;
+    }
+    return coop_fire_art_family_match(packet.weapon_art_id, peer_art);
+}
+
+// Strict gate before native PlayerFireController::Fire replay — mode/active-art
+// alone is insufficient when SwitchToWeapon failed (gun state 0, wrong slot obj).
+bool puppet_fire_ready(void* puppet, std::uint32_t art_id) {
+    if (!puppet_can_fire_art(puppet, art_id)) {
+        return false;
+    }
+    void* const weapon = get_player_active_weapon(puppet);
+    if (weapon == nullptr || readable_bytes(weapon) < 0x864) {
+        return false;
+    }
+    const std::uint32_t active_art =
+        *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(weapon) + 0x860);
+    if (active_art != art_id) {
+        return false;
+    }
+    const int slot = find_weapon_slot_by_art_id(puppet, art_id);
+    if (slot < 0) {
+        return false;
+    }
+    if (get_weapon_from_slot(puppet, slot) != weapon) {
+        return false;
+    }
+    const int attached_slot = capture_weapon_selected_mode(puppet);
+    if (attached_slot == slot) {
+        return resolve_fire_controller(puppet, -1) != nullptr;
+    }
+    const int gun = read_gun_state(puppet);
+    if (gun == 0) {
+        return false;
+    }
+    if (gun == 1) {
+        return resolve_fire_controller(puppet, -1) != nullptr;
+    }
+    const ULONGLONG now = GetTickCount64();
+    if (puppet != g_puppet_gun_ok_puppet || art_id != g_puppet_gun_ok_art ||
+        now > g_puppet_gun_ok_until_ms) {
+        return false;
+    }
+    return resolve_fire_controller(puppet, -1) != nullptr;
+}
+
+bool puppet_native_fire_allowed(void* puppet, std::uint32_t art_id) {
+    if (!g_native_fire_relay || !is_coop_native_fire_art(art_id)) {
+        return false;
+    }
+    const ULONGLONG now = GetTickCount64();
+    if (now < g_puppet_native_fire_allowed_after_ms) {
+        return false;
+    }
+    if (puppet != g_puppet_gun_ok_puppet ||
+        !coop_fire_art_family_match(art_id, g_puppet_gun_ok_art) ||
+        now > g_puppet_gun_ok_until_ms) {
+        return false;
+    }
+    if (!puppet_can_fire_art(puppet, art_id) &&
+        !coop_fire_art_family_match(art_id, puppet_active_weapon_art_id(puppet))) {
+        return false;
+    }
+    const int slot = find_weapon_slot_by_art_id(puppet, art_id);
+    if (slot < 0 || capture_weapon_selected_mode(puppet) != slot) {
+        return false;
+    }
+    if (resolve_fire_controller(puppet, -1) == nullptr) {
+        return false;
+    }
+    void* const weapon = get_player_active_weapon(puppet);
+    if (weapon == nullptr || readable_bytes(weapon) < 0x864) {
+        return false;
+    }
+    return coop_fire_art_family_match(
+        puppet_active_weapon_art_id(puppet), art_id);
+}
+
+bool ensure_puppet_weapon_drawn(void* puppet, std::uint32_t art_id) {
+    if (puppet == nullptr || art_id == 0 || !world_stable()) {
+        return false;
+    }
+    if (GetTickCount64() < g_fire_puppet_ready_after_ms) {
+        return false;
+    }
+    track_puppet_for_fire_relay(puppet);
+    if (!puppet_has_weapon_art_id(puppet, art_id)) {
+        if (!give_held_weapon_to_puppet(puppet, art_id)) {
+            return false;
+        }
+    }
+    const int slot = find_weapon_slot_by_art_id(puppet, art_id);
+    if (slot < 0) {
+        return false;
+    }
+    void* weapon = get_player_active_weapon(puppet);
+    std::uint32_t active_art = 0;
+    if (weapon != nullptr && readable_bytes(weapon) >= 0x864) {
+        active_art = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(weapon) + 0x860);
+    }
+    const std::uint8_t attached_slot = capture_weapon_selected_mode(puppet);
+    if (active_art == art_id && attached_slot == slot) {
+        return true;
+    }
+    if (!safe_switch_to_weapon(puppet, static_cast<std::uint32_t>(slot), true)) {
+        return false;
+    }
+    return capture_weapon_selected_mode(puppet) == slot;
+}
+
+void sanitize_fire_args(std::uint8_t* args) {
+    if (args == nullptr) {
+        return;
+    }
+    for (std::size_t off = 0x08; off + sizeof(std::uint64_t) <= coop::kFireArgsBytes;
+         off += sizeof(std::uint64_t)) {
+        std::uintptr_t value = 0;
+        std::memcpy(&value, args + off, sizeof(value));
+        if (plausible_ptr(value)) {
+            std::memset(args + off, 0, sizeof(std::uint64_t));
+        }
+    }
+}
+
+void publish_fire_packet(const coop::FirePacket& packet) {
+    const std::uint32_t head = g_fire_event_ring.head.load(std::memory_order_relaxed);
+    g_fire_event_ring.packets[head % 16] = packet;
+    g_fire_event_ring.head.store(head + 1, std::memory_order_release);
+}
+
+void send_fire_packet(void* controller, void* fire_args, void* weapon, double scalar) {
+    if (g_net_role_b || !g_state_net.enabled || !g_state_net.peer_set ||
+        controller == nullptr || fire_args == nullptr || weapon == nullptr ||
+        readable_bytes(fire_args) < coop::kFireArgsBytes ||
+        readable_bytes(weapon) < 0x864) {
+        return;
+    }
+    void* const player = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(controller) + kPlayerFireControllerOwnerOffset);
+    if (player != retained_player_object(0)) {
+        return;
+    }
+    coop::FirePacket packet{};
+    packet.sequence = ++g_state_net.fire_send_seq;
+    packet.controller_offset = static_cast<std::uint32_t>(
+        static_cast<std::byte*>(controller) - static_cast<std::byte*>(player));
+    const std::uint32_t weapon_art = *reinterpret_cast<const std::uint32_t*>(
+        static_cast<const std::byte*>(weapon) + 0x860);
+    const std::uint32_t held_art = capture_held_weapon_art_id(player);
+    packet.weapon_art_id =
+        (held_art != 0 &&
+         coop_fire_art_family_match(held_art, weapon_art))
+            ? held_art
+            : (held_art != 0 ? held_art : weapon_art);
+    packet.scalar = scalar;
+    std::memcpy(packet.fire_args, fire_args, coop::kFireArgsBytes);
+    sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&packet),
+           sizeof(packet), 0,
+           reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+           sizeof(g_state_net.peer_addr));
+}
+
+// SEH-isolated replay of PlayerFireController::Fire (no C++ unwinding objects).
+bool safe_replay_player_fire(
+    void* controller,
+    void* fire_args,
+    void* weapon,
+    double scalar
+) {
+    if (g_original_player_fire == nullptr) {
+        return false;
+    }
+    __try {
+        g_original_player_fire(controller, fire_args, weapon, scalar);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void apply_queued_fire_events(void* puppet) {
+    if (puppet == nullptr || !player_object_stable(puppet) ||
+        !puppet_weapon_sync_ready(puppet)) {
+        return;
+    }
+    track_puppet_for_fire_relay(puppet);
+
+    static ULONGLONG last_not_ready = 0;
+    static std::uint32_t last_skip_seq = 0;
+    static int skip_streak = 0;
+
+    if (g_fire_event_ring.tail == g_fire_event_ring.head.load(
+            std::memory_order_acquire)) {
+        return;
+    }
+
+    const coop::FirePacket packet =
+        g_fire_event_ring.packets[g_fire_event_ring.tail % 16];
+
+    if (!is_coop_relay_fire_art(packet.weapon_art_id) &&
+        !puppet_has_weapon_art_id(puppet, packet.weapon_art_id)) {
+        std::ostringstream line;
+        line << "FIRE-RELAY drop: unknown art=0x" << std::hex
+             << packet.weapon_art_id << " seq=" << std::dec << packet.sequence;
+        log_line(line.str().c_str());
+        ++g_fire_event_ring.tail;
+        return;
+    }
+
+    coop::StatePacket peer{};
+    copy_peer_state_snapshot(peer);
+    const ULONGLONG relay_now = GetTickCount64();
+    if ((peer.flags & 8) != 0 &&
+        (peer.input_buttons & kJoypadAimButtonMask) != 0) {
+        g_peer_aim_recent_until_ms = relay_now + 500;
+    }
+
+    if (packet.weapon_art_id == kCoopRifleArtId && !peer_state_has_rifle(peer)) {
+        std::ostringstream line;
+        line << "FIRE-RELAY drop: rifle art but peer holds pistol seq="
+             << packet.sequence << " peerArt=0x" << std::hex
+             << peer.held_weapon_art_id << std::dec;
+        log_line(line.str().c_str());
+        ++g_fire_event_ring.tail;
+        skip_streak = 0;
+        last_skip_seq = 0;
+        return;
+    }
+
+    if (!coop_fire_packet_matches_peer_weapon(packet, peer)) {
+        std::ostringstream line;
+        line << "FIRE-RELAY drop: art mismatch queued=0x" << std::hex
+             << packet.weapon_art_id << " peer=0x" << peer.held_weapon_art_id
+             << " seq=" << std::dec << packet.sequence;
+        log_line(line.str().c_str());
+        ++g_fire_event_ring.tail;
+        skip_streak = 0;
+        last_skip_seq = 0;
+        return;
+    }
+
+    const bool peer_has_pistol =
+        (peer.flags & 0x80) != 0 &&
+        (peer.held_weapon_art_id == kCoopPistolArtId ||
+         peer.held_weapon_art_id == kCoopScopedPistolArtId);
+    const bool packet_is_rifle = packet.weapon_art_id == kCoopRifleArtId;
+
+    if (!puppet_can_fire_art(puppet, packet.weapon_art_id)) {
+        const int local_gun = read_gun_state(puppet);
+        if (local_gun >= 0 && capture_weapon_selected_mode(puppet) == 0 &&
+            puppet_active_weapon_art_id(puppet) == packet.weapon_art_id &&
+            peer.gun_state == 1) {
+            safe_request_gun_state(puppet, 1);
+        }
+    }
+
+    const bool fire_ready = puppet_can_fire_art(puppet, packet.weapon_art_id);
+    if (!fire_ready) {
+        if (packet.sequence == last_skip_seq) {
+            ++skip_streak;
+        } else {
+            last_skip_seq = packet.sequence;
+            skip_streak = 1;
+        }
+        const ULONGLONG now = GetTickCount64();
+        if (now - last_not_ready > 2000) {
+            last_not_ready = now;
+            std::ostringstream line;
+            line << "FIRE-RELAY skip: puppet not ready seq=" << packet.sequence
+                 << " art=0x" << std::hex << packet.weapon_art_id
+                 << " active=0x" << puppet_active_weapon_art_id(puppet)
+                 << " mode=" << std::dec
+                 << static_cast<unsigned>(capture_weapon_selected_mode(puppet));
+            log_line(line.str().c_str());
+        }
+        if (skip_streak >= 120) {
+            std::ostringstream line;
+            line << "FIRE-RELAY drop: stale seq=" << packet.sequence
+                 << " art=0x" << std::hex << packet.weapon_art_id << std::dec;
+            log_line(line.str().c_str());
+            ++g_fire_event_ring.tail;
+            skip_streak = 0;
+            last_skip_seq = 0;
+            return;
+        }
+        // Fall through to button fallback for all weapons when puppet not ready.
+    } else {
+        skip_streak = 0;
+        last_skip_seq = 0;
+    }
+
+    if (fire_ready && peer.gun_state == 1 &&
+        (puppet_can_fire_art(puppet, packet.weapon_art_id) ||
+         coop_fire_art_family_match(packet.weapon_art_id,
+                                    puppet_active_weapon_art_id(puppet)))) {
+        const int hands = read_weapon_in_hands_slot(puppet);
+        if (hands > 0) {
+            g_puppet_gun_ok_puppet = puppet;
+            g_puppet_gun_ok_art = puppet_active_weapon_art_id(puppet);
+            g_puppet_gun_ok_until_ms = GetTickCount64() + 5000;
+        }
+    }
+
+    if (g_native_fire_relay && g_original_player_fire != nullptr &&
+        is_coop_native_fire_art(packet.weapon_art_id) &&
+        puppet_native_fire_allowed(puppet, packet.weapon_art_id)) {
+        static void* last_native_puppet = nullptr;
+        static ULONGLONG last_native_fire_ms = 0;
+        const ULONGLONG now = GetTickCount64();
+        const bool rate_ok =
+            puppet != last_native_puppet || now - last_native_fire_ms >= 100;
+        if (rate_ok) {
+            const std::ptrdiff_t preferred_offset =
+                packet.controller_offset > 0
+                    ? static_cast<std::ptrdiff_t>(packet.controller_offset)
+                    : -1;
+            void* const controller =
+                resolve_fire_controller(puppet, preferred_offset);
+            void* const weapon = get_player_active_weapon(puppet);
+            const std::uint32_t weapon_art =
+                weapon != nullptr && readable_bytes(weapon) >= 0x864
+                    ? *reinterpret_cast<const std::uint32_t*>(
+                          static_cast<const std::byte*>(weapon) + 0x860)
+                    : 0;
+            if (controller != nullptr && weapon != nullptr &&
+                readable_bytes(controller) >= 0x110 &&
+                readable_bytes(weapon) >= 0x864 &&
+                player_object_stable(puppet) &&
+                coop_fire_art_family_match(weapon_art, packet.weapon_art_id)) {
+                suppress_puppet_fire_buttons(400);
+                alignas(16) std::uint8_t args[coop::kFireArgsBytes]{};
+                std::memcpy(args, packet.fire_args, coop::kFireArgsBytes);
+                sanitize_fire_args(args);
+                if (safe_replay_player_fire(
+                        controller, args, weapon, packet.scalar)) {
+                    last_native_puppet = puppet;
+                    last_native_fire_ms = now;
+                    std::ostringstream line;
+                    line << "FIRE-RELAY native seq=" << packet.sequence
+                         << " art=0x" << std::hex << packet.weapon_art_id
+                         << " hands=" << std::dec
+                         << read_weapon_in_hands_slot(puppet);
+                    log_line(line.str().c_str());
+                    ++g_fire_event_ring.tail;
+                    return;
+                }
+                g_suppress_puppet_fire_buttons_until_ms = 0;
+                std::ostringstream fail;
+                fail << "FIRE-RELAY native-fail seq=" << packet.sequence
+                     << " art=0x" << std::hex << packet.weapon_art_id
+                     << std::dec;
+                log_line(fail.str().c_str());
+            }
+        }
+    } else if (g_native_fire_relay && is_coop_native_fire_art(packet.weapon_art_id)) {
+        static ULONGLONG last_native_skip_log = 0;
+        const ULONGLONG now = GetTickCount64();
+        if (now - last_native_skip_log > 2000) {
+            last_native_skip_log = now;
+            const int gun = read_gun_state(puppet);
+            std::ostringstream line;
+            line << "FIRE-RELAY native-skip: not fire-ready gun=" << gun
+                 << " active=0x" << std::hex
+                 << puppet_active_weapon_art_id(puppet)
+                 << " mode=" << std::dec
+                 << static_cast<unsigned>(capture_weapon_selected_mode(puppet));
+            log_line(line.str().c_str());
+        }
+    }
+
+    // Arm inventory/draw before button pulse — never rifle arm when peer holds pistol.
+    if (!peer_has_pistol || !packet_is_rifle) {
+        if (!puppet_has_weapon_art_id(puppet, packet.weapon_art_id)) {
+            safe_give_weapon_art_to_puppet(puppet, packet.weapon_art_id);
+        }
+        if (!puppet_can_fire_art(puppet, packet.weapon_art_id)) {
+            int arm_slot = find_weapon_slot_by_art_id(puppet, packet.weapon_art_id);
+            if (arm_slot < 0 && peer.weapon_selected_mode > 0) {
+                arm_slot = static_cast<int>(peer.weapon_selected_mode);
+            }
+            if (arm_slot > 0 &&
+                puppet_weapon_switch_allowed(packet.weapon_art_id, arm_slot)) {
+                safe_switch_to_weapon(
+                    puppet, static_cast<std::uint32_t>(arm_slot), true);
+            }
+        }
+    }
+
+    // Button fallback when native replay is disabled or fails.
+    // Body facing only — do not latch aim (0x200); that opens crosshair/scope HUD.
+    const bool peer_aim_button =
+        (peer.input_buttons & kJoypadAimButtonMask) != 0;
+    const bool peer_aim_recent = relay_now < g_peer_aim_recent_until_ms;
+    const bool peer_gun_out =
+        (peer.flags & 0x80) != 0 && peer.gun_state == 1;
+    const bool peer_aiming =
+        peer_aim_button || (peer_gun_out && peer_aim_recent);
+    if (peer_aiming) {
+        apply_peer_aim_facing_to_player(puppet, peer);
+    }
+    constexpr std::uint64_t kFireOnlyMask = kJoypadFireButtonMask;
+    const std::uint64_t fire_pulse = kFireOnlyMask;
+    g_state_net.pending_button_presses.fetch_or(fire_pulse, std::memory_order_release);
+    g_state_net.active_button_press_latch.fetch_or(fire_pulse, std::memory_order_release);
+    g_fire_button_hold_until_ms = GetTickCount64() + 150;
+    std::ostringstream line;
+    line << "FIRE-RELAY button seq=" << packet.sequence
+         << " art=0x" << std::hex << packet.weapon_art_id
+         << " pulse=0x" << fire_pulse << std::dec;
+    log_line(line.str().c_str());
+    ++g_fire_event_ring.tail;
+}
+
 void __fastcall hooked_player_fire(
     void* controller,
     void* fire_args,
@@ -4919,7 +6680,132 @@ void __fastcall hooked_player_fire(
         }
         log_line(line.str().c_str());
     }
+    void* const player = (controller != nullptr &&
+                          readable_bytes(controller) >=
+                              kPlayerFireControllerOwnerOffset + sizeof(void*))
+        ? *reinterpret_cast<void**>(
+              static_cast<std::byte*>(controller) + kPlayerFireControllerOwnerOffset)
+        : nullptr;
+    if (!g_net_role_b && player == retained_player_object(0)) {
+        if (g_player_fire_controller_offset < 0) {
+            g_player_fire_controller_offset =
+                static_cast<std::byte*>(controller) - static_cast<std::byte*>(player);
+            std::ostringstream line;
+            line << "FIRE-RELAY learned controller offset=0x" << std::hex
+                 << g_player_fire_controller_offset << std::dec;
+            log_line(line.str().c_str());
+        }
+        send_fire_packet(controller, fire_args, weapon, scalar);
+    }
     g_original_player_fire(controller, fire_args, weapon, scalar);
+}
+
+void log_player_fire_gate(
+    const char* gate,
+    void* controller,
+    bool result
+) {
+    if (controller == nullptr || readable_bytes(controller) < 0x1EA) {
+        return;
+    }
+    const auto* const bytes = static_cast<const std::byte*>(controller);
+    const unsigned hold = static_cast<unsigned>(
+        *reinterpret_cast<const std::uint8_t*>(bytes + 0x1E8));
+    const unsigned press = static_cast<unsigned>(
+        *reinterpret_cast<const std::uint8_t*>(bytes + 0x1E9));
+    if (hold == 0 && press == 0) {
+        return;
+    }
+    void* const player = *reinterpret_cast<void* const*>(bytes + 0x108);
+    void* weapon = get_player_active_weapon(player);
+    std::uint32_t art = 0;
+    if (weapon != nullptr && readable_bytes(weapon) >= 0x864) {
+        art = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(weapon) + 0x860);
+    }
+    int state_120 = -999;
+    int current_slot = -999;
+    int requested_slot = -999;
+    int switch_state = -999;
+    if (player != nullptr && readable_bytes(player) >= 0x1D90) {
+        void* const weapon_controller = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(player) + 0x1D88);
+        if (weapon_controller != nullptr &&
+            readable_bytes(weapon_controller) >= 0x138) {
+            const auto* const wc = static_cast<const std::byte*>(weapon_controller);
+            state_120 = *reinterpret_cast<const int*>(wc + 0x120);
+            current_slot = static_cast<int>(
+                *reinterpret_cast<const std::uint8_t*>(wc + 0x12C));
+            requested_slot = *reinterpret_cast<const int*>(wc + 0x130);
+            switch_state = *reinterpret_cast<const int*>(wc + 0x134);
+        }
+    }
+    std::ostringstream line;
+    line << "FIRE-GATE " << gate
+         << " result=" << (result ? 1 : 0)
+         << " hold=" << hold << " press=" << press
+         << " player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(player)
+         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
+         << " art=0x" << art << std::dec
+         << " state120=" << state_120
+         << " current=" << current_slot
+         << " requested=" << requested_slot
+         << " switchState=" << switch_state
+         << " attached="
+         << static_cast<unsigned>(capture_weapon_selected_mode(player));
+    log_line(line.str().c_str());
+}
+
+char __fastcall hooked_player_try_start_fire(void* controller) {
+    if (controller != nullptr && readable_bytes(controller) >= 0x110) {
+        void* const player = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(controller) + 0x108);
+        if (player == retained_player_object(1) &&
+            puppet_fire_buttons_suppressed()) {
+            return 0;
+        }
+    }
+    const char result = g_original_player_try_start_fire(controller);
+    log_player_fire_gate("input", controller, result != 0);
+    if (controller != nullptr && readable_bytes(controller) >= 0x110) {
+        void* const player = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(controller) + 0x108);
+        if (player == retained_player_object(1)) {
+            g_state_net.active_button_press_latch.fetch_and(
+                ~kJoypadFireButtonMask, std::memory_order_release);
+            void* const frame_state =
+                *reinterpret_cast<void**>(g_module + 0x3FE1088);
+            if (frame_state != nullptr) {
+                auto* const joypad3 = static_cast<std::byte*>(frame_state) +
+                                      0xDB0 + 0xBF0 * 3;
+                if (readable_bytes(joypad3) >= 0xD8) {
+                    *reinterpret_cast<std::uint64_t*>(joypad3 + 0xD0) &=
+                        ~kJoypadFireButtonMask;
+                }
+            }
+        }
+    }
+    return result;
+}
+
+char __fastcall hooked_player_check_shot_readiness(
+    void* controller,
+    void* context,
+    double time_value
+) {
+    if (controller != nullptr && readable_bytes(controller) >= 0x110) {
+        void* const player = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(controller) + 0x108);
+        if (player == retained_player_object(1) &&
+            puppet_fire_buttons_suppressed()) {
+            return 0;
+        }
+    }
+    const char result =
+        g_original_player_check_shot_readiness(controller, context, time_value);
+    log_player_fire_gate("readiness", controller, result != 0);
+    return result;
 }
 
 void probe_velocity_field() {
@@ -5144,6 +7030,18 @@ void sync_screen1_camera_rotation_to_screen0() {
     std::memcpy(c1 + 0x200, c0 + 0x200, 16);
 }
 
+void apply_peer_gameplay_camera_for_player(void* player, const float quat[4]) {
+    (void)player;
+    (void)quat;
+    // Intentionally empty: rewriting CameraManager on the receiver hijacked the
+    // local viewport (sniper scope overlay, Nadine vanishing). Use
+    // apply_peer_aim_facing_to_player for body/aim direction instead.
+}
+
+void apply_peer_gameplay_camera(const float quat[4]) {
+    apply_peer_gameplay_camera_for_player(retained_player_object(1), quat);
+}
+
 // Auto-test: drive the slot-1 clone forward for a window with no manual keys.
 volatile bool g_auto_stick_active = false;
 volatile float g_auto_stick_x = 0.0F;
@@ -5160,14 +7058,63 @@ struct SyntheticPadLite {
     XInputStateLite state{};
 };
 
+// Per-joypad resolved input block: 0x66E4220 + 0x530 * joypad_index (not retained slot).
+std::byte* joypad_resolved_input_block(int joypad_index) {
+    if (g_module == 0 || joypad_index < 0 || joypad_index >= 6) {
+        return nullptr;
+    }
+    auto* const blk = reinterpret_cast<std::byte*>(
+        g_module + 0x66E4220 + 0x530ULL * static_cast<std::uintptr_t>(joypad_index));
+    if (readable_bytes(blk) < 0x520) {
+        return nullptr;
+    }
+    return blk;
+}
+
 // Feed the peer's resolved action state through the engine's native scripted-input
 // structure for retained slot 1. Transform replication alone can move the remote
 // Player but cannot make its weapon graph aim/fire. Keep movement axes zero here:
 // position/facing still come from the authoritative snapshot, while this first
 // stage isolates action delivery from the unresolved slot-1 camera basis.
+void scrub_local_viewport_aim_hud_leak() {
+    void* const local = retained_player_object(0);
+    if (local == nullptr || g_module == 0) {
+        return;
+    }
+    if ((capture_local_joypad_command_mask(local) & kJoypadAimButtonMask) != 0) {
+        return;
+    }
+    coop::StatePacket peer{};
+    if (!copy_peer_state_snapshot(peer) || (peer.flags & 8) == 0) {
+        return;
+    }
+    if ((peer.input_buttons & kJoypadAimButtonMask) == 0) {
+        return;
+    }
+    const int joypad_index = *reinterpret_cast<const std::int32_t*>(
+        static_cast<const std::byte*>(local) + 0x39B8);
+    constexpr std::uint64_t leak_mask =
+        kJoypadAimButtonMask | kRemoteScopeHudButtonMask;
+    if (std::byte* const blk = joypad_resolved_input_block(joypad_index)) {
+        *reinterpret_cast<std::uint64_t*>(blk + 0x518) &= ~leak_mask;
+    }
+    void* const frame_state =
+        *reinterpret_cast<void**>(g_module + 0x3FE1088);
+    if (frame_state == nullptr || joypad_index < 0 || joypad_index >= 6) {
+        return;
+    }
+    auto* const joypad = static_cast<std::byte*>(frame_state) + 0xDB0 +
+                         0xBF0ULL * static_cast<std::uintptr_t>(joypad_index);
+    if (readable_bytes(joypad) >= 0xE8) {
+        *reinterpret_cast<std::uint64_t*>(joypad + 0xD0) &= ~leak_mask;
+        *reinterpret_cast<std::uint64_t*>(joypad + 0xE0) &= ~leak_mask;
+    }
+}
+
 void drive_remote_slot1_actions_tick() {
     void* const remote_player = retained_player_object(1);
     if (!g_puppet_net_apply || g_module == 0 || remote_player == nullptr ||
+        !player_object_stable(remote_player) ||
         readable_bytes(static_cast<std::byte*>(remote_player) + 0x39BC) < 1) {
         return;
     }
@@ -5225,11 +7172,9 @@ void drive_remote_slot1_actions_tick() {
                 s << "]" << std::dec;
                 log_line(s.str().c_str());
 
-                // Reliable capture of slot-1's resolved block (0x66E4220+0x530): the 8
-                // stick floats + buttons. Compare f9=1 (byte-gate, clone MOVES) vs f9=0
-                // (struct, clone stands) to see exactly which source value differs.
+                // Resolved block is keyed by joypad index, not retained slot number.
                 auto* blk1 = reinterpret_cast<const std::byte*>(
-                    g_module + 0x66E4220 + 0x530);
+                    g_module + 0x66E4220 + 0x530ULL * joypad_index);
                 if (readable_bytes(blk1) >= 0x528) {
                     auto* bf = reinterpret_cast<const float*>(blk1);
                     std::ostringstream b;
@@ -5353,13 +7298,18 @@ void drive_remote_slot1_actions_tick() {
     const bool moving = magnitude > 0.01F || correcting;
     *reinterpret_cast<float*>(branch1 + 0x14) = sx;   // L-stick X
     *reinterpret_cast<float*>(branch1 + 0x18) = sy;   // L-stick Y
-    // DISPROVEN (2026-06-30): replicating the byte-gate's block right stick
-    // (+0x08=0.5, +0x0C=-0.72) did not move the remote clone. The later route read
-    // proved CameraManager(1) exists; this test had targeted Joypad 1 while the clone
-    // consumes Joypad 3. Keep right stick zero so this correction isolates the real
-    // destination index.
-    *reinterpret_cast<float*>(branch1 + 0x1C) = 0.0F;
-    *reinterpret_cast<float*>(branch1 + 0x20) = 0.0F;
+    const bool peer_aiming =
+        (peer.flags & 8) != 0 &&
+        (peer.input_buttons & kJoypadAimButtonMask) != 0;
+    if (peer_aiming &&
+        (peer.flags & coop::kStateFlagPeerCamera) != 0 &&
+        (std::fabs(peer.look_stick[0]) > 0.001F ||
+         std::fabs(peer.look_stick[1]) > 0.001F)) {
+        *reinterpret_cast<float*>(branch1 + 0x1C) = peer.look_stick[0];
+        *reinterpret_cast<float*>(branch1 + 0x20) = peer.look_stick[1];
+    }
+    apply_peer_aim_facing_to_player(remote_player, peer);
+    scrub_local_viewport_aim_hud_leak();
 
     // branch1+0x10 becomes the clone joypad HELD button mask (block+0x518) via the
     // FrameState real-input branch 0x1402893D0, which also derives PRESS edges from
@@ -5381,14 +7331,58 @@ void drive_remote_slot1_actions_tick() {
         }
         prev_f7 = f7;
     }
-    std::uint32_t actions = static_cast<std::uint32_t>(peer.input_buttons);
+    std::uint64_t actions = remote_puppet_actions_from_peer(peer.input_buttons);
+    if ((peer.flags & 8) != 0) {
+        actions |= remote_puppet_actions_from_peer(peer.buttons_pressed);
+    }
+    const std::uint64_t pending_fire =
+        g_state_net.pending_button_presses.exchange(
+            0, std::memory_order_acq_rel);
+    if (pending_fire != 0) {
+        g_state_net.active_button_press_latch.fetch_or(
+            remote_puppet_fire_pulse(pending_fire),
+            std::memory_order_release);
+    }
+    actions |= remote_puppet_fire_pulse(
+        g_state_net.active_button_press_latch.load(
+            std::memory_order_acquire));
+    const bool fire_relay_hold = GetTickCount64() < g_fire_button_hold_until_ms;
+    const std::uint64_t latch =
+        g_state_net.active_button_press_latch.load(std::memory_order_acquire);
+    const bool latch_has_fire =
+        (latch & kJoypadFireButtonMask) != 0;
+    if ((peer.flags & 0x80) != 0 && peer.held_weapon_art_id != 0 &&
+        !coop_fire_art_family_match(
+            puppet_active_weapon_art_id(remote_player),
+            peer_effective_held_art(peer)) &&
+        !fire_relay_hold && !latch_has_fire) {
+        // Weapon mismatch: suppress fire only; keep aim held for draw/aim anim.
+        actions &= ~kJoypadFireButtonMask;
+        g_state_net.active_button_press_latch.fetch_and(
+            ~kJoypadFireButtonMask, std::memory_order_release);
+    }
+    if (puppet_fire_buttons_suppressed()) {
+        actions &= ~kJoypadFireButtonMask;
+        g_state_net.active_button_press_latch.fetch_and(
+            ~kJoypadFireButtonMask, std::memory_order_release);
+    } else if (fire_relay_hold) {
+        actions |= kJoypadFireButtonMask;
+    }
+    if (peer_aiming) {
+        actions |= kJoypadAimButtonMask;
+    }
     if (g_feed_legacy_move_gate &&
         (moving || actions != 0 || peer.buttons_pressed != 0 ||
          peer.buttons_released != 0)) {
         actions |= 0x500u;
     }
-    *reinterpret_cast<std::uint32_t*>(branch1 + 0x10) = actions;
-    static std::uint32_t previous_actions = 0;
+    actions = sanitize_remote_puppet_button_mask(actions);
+    // FrameState_PerSlotInputApply_Branch reads a DWORD at source+0x10.
+    // write here corrupts the adjacent left-stick X at +0x14. The engine copies
+    // this DWORD to block+0x518 and derives edges at +0x508/+0x510 itself.
+    *reinterpret_cast<std::uint32_t*>(branch1 + 0x10) =
+        static_cast<std::uint32_t>(actions);
+    static std::uint64_t previous_actions = 0;
     if (actions != previous_actions) {
         std::ostringstream line;
         line << "REMOTE-ACTIONS seq=" << peer.sequence
@@ -5411,12 +7405,12 @@ void drive_remote_slot1_actions_tick() {
           << " correction=(" << correction_x << "," << correction_z << ")"
           << " sx=" << sx << " sy=" << sy << " flags=0x" << std::hex << actions
           << std::dec;
-        auto* blk1 = reinterpret_cast<std::byte*>(g_module + 0x66E4220 + 0x530);
-        if (readable_bytes(blk1) >= 0x520) {
+        auto* blk1 = joypad_resolved_input_block(joypad_index);
+        if (blk1 != nullptr) {
             auto* bf = reinterpret_cast<const float*>(blk1);
-            d << " | block1 sx=" << bf[0] << " sy=" << bf[1] << " rawx=" << bf[4]
-              << " rawy=" << bf[5] << " btn=0x" << std::hex
-              << *reinterpret_cast<const std::uint64_t*>(blk1 + 1304) << std::dec;
+            d << " | block" << joypad_index << " sx=" << bf[0] << " sy=" << bf[1]
+              << " rawx=" << bf[4] << " rawy=" << bf[5] << " btn=0x" << std::hex
+              << *reinterpret_cast<const std::uint64_t*>(blk1 + 0x518) << std::dec;
         }
         log_line(d.str().c_str());
     }
@@ -6811,9 +8805,36 @@ void enemy_hp_probe() {
 // that window (enemy sync, state send, native publish) reads/walks freed memory and
 // crashes. Gate every per-tick world action on this.
 bool world_stable() {
-    void* p = retained_player_object(0);
-    if (p == nullptr || readable_bytes(p) < 0x300) return false;
-    return *reinterpret_cast<std::uintptr_t*>(p) == g_module + kPlayerVtableRva;
+    return player_object_stable(retained_player_object(0));
+}
+
+bool player_object_stable(void* player) {
+    if (player == nullptr || g_module == 0) {
+        return false;
+    }
+    if (readable_bytes(player) < 0x300) {
+        return false;
+    }
+    if (*reinterpret_cast<std::uintptr_t*>(player) != g_module + kPlayerVtableRva) {
+        return false;
+    }
+    if (readable_bytes(static_cast<std::byte*>(player) + 0x1D90) < sizeof(void*)) {
+        return false;
+    }
+    void* const manager = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(player) + 0x1D88);
+    if (manager == nullptr || readable_bytes(manager) < sizeof(void*)) {
+        return false;
+    }
+    void** const manager_vtable = *reinterpret_cast<void***>(manager);
+    if (manager_vtable == nullptr) {
+        return false;
+    }
+    if (manager_vtable[0xB0 / sizeof(void*)] == nullptr ||
+        manager_vtable[0x78 / sizeof(void*)] == nullptr) {
+        return false;
+    }
+    return true;
 }
 
 bool mirror_local_animation_snapshot_to_clone() {
@@ -8268,6 +10289,10 @@ void __fastcall hooked_update(void* object) {
             );
         }
         if (object != g_controlled_object) {
+            if (object == retained_player_object(1)) {
+                apply_peer_held_weapon_state();
+                apply_queued_fire_events(object);
+            }
             drive_remote_slot1_actions_tick();
             drive_slot1_tick();
             apply_slot1_perslot_on_game_thread();
@@ -8306,6 +10331,10 @@ void __fastcall hooked_update(void* object) {
         }
     }
 
+    if (object == retained_player_object(1)) {
+        apply_peer_held_weapon_state();
+        apply_queued_fire_events(object);
+    }
     drive_remote_slot1_actions_tick();
     drive_slot1_tick();
     apply_slot1_perslot_on_game_thread();
@@ -8339,18 +10368,33 @@ char __fastcall hooked_player_input_state_update(void* player) {
     }
 
     const char result = g_original_player_input_state_update(player);
+    if (is_local) {
+        g_cached_local_input_buttons.store(
+            capture_local_joypad_command_mask(player),
+            std::memory_order_relaxed);
+    }
     if (is_remote) {
         const std::uint64_t consumed_edges =
             g_state_net.active_button_press_latch.exchange(
                 0, std::memory_order_acq_rel);
+        // This update precedes PlayerFireController. Retire movement/traversal
+        // edges now, but keep fire-press until CheckFireInput has queried it.
+        const std::uint64_t deferred_fire_edges =
+            consumed_edges & kJoypadFireButtonMask;
+        const std::uint64_t player_consumed_edges =
+            consumed_edges & ~kJoypadFireButtonMask;
+        if (deferred_fire_edges != 0) {
+            g_state_net.active_button_press_latch.fetch_or(
+                deferred_fire_edges, std::memory_order_release);
+        }
         void* const frame_state =
             *reinterpret_cast<void**>(g_module + 0x3FE1088);
-        if (consumed_edges != 0 && frame_state != nullptr) {
+        if (player_consumed_edges != 0 && frame_state != nullptr) {
             auto* const joypad3 = static_cast<std::byte*>(frame_state) +
                                   0xDB0 + 0xBF0 * 3;
             if (readable_bytes(joypad3) >= 0xD8) {
                 *reinterpret_cast<std::uint64_t*>(joypad3 + 0xD0) &=
-                    ~consumed_edges;
+                    ~player_consumed_edges;
             }
         }
     }
@@ -9570,6 +11614,7 @@ DWORD WINAPI install_hook(void*) {
     install_joypad3_analog_route();
     install_joypad3_keyboard_isolation();
     install_player_fire_capture();
+    install_player_fire_gate_diagnostics();
     // Player collision/bump probes are intentionally parked. Enabling layer 4<->5
     // collision made the two independent simulations diverge and triggered the
     // exact-position regression. Keep the reverse-engineered code for later use.
