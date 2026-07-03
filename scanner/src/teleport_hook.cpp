@@ -4918,6 +4918,14 @@ void log_player_slot_positions() {
 volatile bool g_drive_slot1 = false;
 volatile bool g_manual_slot1_apply = false;
 
+// Legacy synthetic "input active" gate (0x500) OR-ed into the clone's held button
+// mask on movement. It is NOT needed for locomotion (the stick at branch1+0x14..
+// drives it; PlayerMoveStick 0x140F03500 ignores bits 0x100/0x400), and once the
+// clone became armed its continuous press edge fired the throw/grenade command
+// while the peer was just running. Default OFF. F7 toggles at runtime for A/B: if
+// the clone ever stops moving with this OFF, flip it back on.
+volatile bool g_feed_legacy_move_gate = false;
+
 // Which retained slot the drive feeds (1 = freshly spawned clone; after a
 // camera slot-swap the clone becomes slot 0, so we drive slot 0 to test whether
 // being "local-player-0" gives it the main-camera movement basis = straight).
@@ -5172,13 +5180,30 @@ void drive_remote_slot1_actions_tick() {
     *reinterpret_cast<float*>(branch1 + 0x1C) = 0.0F;
     *reinterpret_cast<float*>(branch1 + 0x20) = 0.0F;
 
-    // struct+0x10 (flags) is written to the block buttons VERBATIM by the real
-    // branch: leaving it 0 makes locomotion IGNORE a valid stick (clone STANDS). So
-    // set the native "input active" bits 0x500 whenever a stick is fed, plus the
-    // peer's resolved buttons (fire/aim/jump/etc).
+    // branch1+0x10 becomes the clone joypad HELD button mask (block+0x518) via the
+    // FrameState real-input branch 0x1402893D0, which also derives PRESS edges from
+    // it (block+0x508 = mask & ~prev). The stick (branch1+0x14..) is copied to the
+    // block SEPARATELY and is what actually drives locomotion, so this mask does NOT
+    // need the synthetic 0x500 "input active" bits. Once Codex armed the clone, that
+    // continuous 0x500 press edge fired the weapon throw/grenade command every time
+    // movement began -> the peer "threw grenades" while just running. Feed ONLY the
+    // peer's real resolved buttons; F7 restores the legacy gate for A/B if needed.
+    {
+        static bool prev_f7 = false;
+        const bool f7 = (GetAsyncKeyState(VK_F7) & 0x8000) != 0;
+        if (f7 && !prev_f7) {
+            g_feed_legacy_move_gate = !g_feed_legacy_move_gate;
+            std::ostringstream t;
+            t << "REMOTE-GATE legacy 0x500 move-gate = "
+              << (g_feed_legacy_move_gate ? "ON" : "OFF");
+            log_line(t.str().c_str());
+        }
+        prev_f7 = f7;
+    }
     std::uint32_t actions = static_cast<std::uint32_t>(peer.input_buttons);
-    if (moving || actions != 0 || peer.buttons_pressed != 0 ||
-        peer.buttons_released != 0) {
+    if (g_feed_legacy_move_gate &&
+        (moving || actions != 0 || peer.buttons_pressed != 0 ||
+         peer.buttons_released != 0)) {
         actions |= 0x500u;
     }
     *reinterpret_cast<std::uint32_t*>(branch1 + 0x10) = actions;
