@@ -5878,6 +5878,21 @@ FUNCTIONS = {
         "NetGameManager::GetWeaponIdByStatIndex at net-game-manager.cpp:534-535; "
         "indices >=19 resolve through the cached online weapon definition map.",
     ),
+    0x1410A4D40: (
+        "PlayerWeaponController_GiveWeapon",
+        "Exact embedded signature: PlayerWeaponController::GiveWeapon(WeaponInfo*, "
+        "bool, bool, BuffSource const*). Controller vtable slot +0x158.",
+    ),
+    0x1410A1F90: (
+        "PlayerWeaponController_GetWeaponBySlot",
+        "Controller vtable slot +0xB0. Bounds slot to 0..22 and resolves the "
+        "live weapon process handle; ProcessWeapon authored id is at +0x860.",
+    ),
+    0x1401B7600: (
+        "WeaponInfo_InitializeDefaults",
+        "Initializes the 0xC0-byte WeaponInfo used by the developer give-weapon "
+        "path; authored weapon id is subsequently written at +0x80.",
+    ),
 }
 
 # Data/global names (set via ida_name on data addresses).

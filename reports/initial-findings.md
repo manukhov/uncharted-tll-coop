@@ -22756,3 +22756,30 @@ a positive bounded count, a matching bit and a published snapshot; H2 gives
 implausible/changing raw ids; H3 gives stable plausible raw ids with
 `registryCount=-1` and no mapped bits. This distinguishes all three without
 changing gameplay or booting multiplayer state.
+
+**REJECTED / CONFIRMED runtime result:** both campaign instances report the same
+stable authored ids (`8075397D`, `33E29A1B`, `0B8BD6D6`) while the cached dynamic
+map remains absent (`registryCount=-1`, mapped mask zero). Weapon switching does
+not alter this inventory set. This confirms H3 and rejects H1/H2: `Weapon+0x860`
+is valid, but compact `NetSnapshotWeapons` ids cannot be produced in campaign
+through the dormant multiplayer map.
+
+**STATIC replacement path:** `0x1410A4D40` is
+`PlayerWeaponController::GiveWeapon(WeaponInfo*,bool,bool,BuffSource*)`; the exact
+signature and source file are embedded at `0x142A47990`. It is controller vtable
+slot `+0x158` in the table beginning at `0x142A47F90`. The same table's `+0xB0`
+slot is `0x1410A1F90`, which bounds the 23 inventory slots and returns the live
+weapon process whose authored id is `+0x860`. Independently, developer-menu path
+`0x140EDC710` constructs a 0xC0-byte `WeaponInfo` using `0x1401B7600`, writes the
+authored id at `WeaponInfo+0x80`, and publishes campaign event `give-weapon` to
+the Player. This is the native campaign path and does not need compact ids.
+
+Competing outcomes for the first direct-controller probe: (G1) the puppet owns a
+normal PlayerWeaponController and silent `GiveWeapon(info,true,false,null)` adds
+the remote inventory/models; (G2) its controller is absent, producing the
+explicit unavailable log; (G3) its controller exists but lacks campaign art
+registries, so the call returns without a visible weapon. **Prediction:** G1
+logs three unique authored ids given and the other window gains at least one
+weapon model without changing movement; G2 logs no call; an exception rejects
+the direct call ABI. Raw ids use custom packet flag `0x40`; the rejected compact
+event remains isolated under `0x20`.

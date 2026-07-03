@@ -333,6 +333,8 @@ using FillCharacterMoveWeaponsFunction = void(__fastcall*)(void*, void*);
 using InitializeStructuredEventFunction = void*(__fastcall*)(void*, std::uint32_t, const void*);
 using PushStructuredEventParamFunction = void(__fastcall*)(void*, const void*);
 using PublishStructuredEventFunction = bool(__fastcall*)(void*, void*, std::uint8_t);
+using InitializeWeaponInfoFunction = void*(__fastcall*)(void*);
+using GiveWeaponFunction = void(__fastcall*)(void*, void*, bool, bool, void*);
 using NetAnimAddSnapshotFunction = void(__fastcall*)(void*, void*);
 using InitializePlayerNetAnimArtGroupsFunction = void(__fastcall*)(void*);
 constexpr std::uintptr_t kXInputGetStateIatRva = 0x25D6D60;
@@ -343,6 +345,7 @@ constexpr std::uintptr_t kPushStructuredEventParamRva = 0x1E36A0;
 constexpr std::uintptr_t kPublishStructuredEventRva = 0x17F8910;
 constexpr std::uintptr_t kStandardWeaponArtIdTableRva = 0x3E04A00;
 constexpr std::uintptr_t kCachedOnlineWeaponRegistryRva = 0x3742720;
+constexpr std::uintptr_t kInitializeWeaponInfoRva = 0x1B7600;
 constexpr std::uint32_t kNetSnapshotWeaponsId = 0xCA049840;
 volatile bool g_xinput_log = false;
 volatile bool g_xinput_inject_p0 = false;   // temporary synth pad on index 0 to force controller path
@@ -4172,6 +4175,15 @@ void send_local_player_state() {
             coop::kWeaponSnapshotBytes);
         pkt.flags |= 0x20;
     }
+    // Campaign weapon ids do not have the multiplayer compact-index registry.
+    // Carry their authored ids in the first eight dwords under a separate flag.
+    bool have_raw_weapon_ids = false;
+    for (std::size_t i = 0; i < 8; ++i) {
+        const std::uint32_t raw_id = g_weapon_capture_raw_ids[i];
+        std::memcpy(pkt.weapon_snapshot + i * sizeof(raw_id), &raw_id, sizeof(raw_id));
+        have_raw_weapon_ids |= raw_id != 0;
+    }
+    if (have_raw_weapon_ids) pkt.flags |= 0x40;
     sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr), sizeof(g_state_net.peer_addr));
 }
@@ -4392,10 +4404,46 @@ bool publish_peer_weapon_snapshot(const coop::StatePacket& peer, void* puppet) {
     }
 }
 
+int give_authored_weapons_to_controller(
+    void* controller, const std::uint32_t* raw_ids) {
+    if (controller == nullptr || raw_ids == nullptr || g_module == 0 ||
+        readable_bytes(controller) < sizeof(void*)) {
+        return 0;
+    }
+    auto** vtable = *reinterpret_cast<void***>(controller);
+    if (vtable == nullptr) return 0;
+    const auto initialize_info = reinterpret_cast<InitializeWeaponInfoFunction>(
+        g_module + kInitializeWeaponInfoRva);
+    const auto give_weapon = reinterpret_cast<GiveWeaponFunction>(
+        vtable[0x158 / sizeof(void*)]);
+    if (give_weapon == nullptr) return 0;
+
+    int given = 0;
+    __try {
+        for (std::size_t i = 0; i < 8; ++i) {
+            const std::uint32_t raw_id = raw_ids[i];
+            if (raw_id == 0) continue;
+            bool duplicate = false;
+            for (std::size_t prior = 0; prior < i; ++prior) {
+                duplicate |= raw_ids[prior] == raw_id;
+            }
+            if (duplicate) continue;
+            alignas(16) std::uint8_t weapon_info[0xC0]{};
+            initialize_info(weapon_info);
+            std::memcpy(weapon_info + 0x80, &raw_id, sizeof(raw_id));
+            give_weapon(controller, weapon_info, true, false, nullptr);
+            ++given;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return -1;
+    }
+    return given;
+}
+
 void apply_peer_weapon_state() {
     coop::StatePacket peer{};
     void* puppet = nullptr;
-    if (!latest_peer_state(peer, puppet) || (peer.flags & 0x20) == 0) return;
+    if (!latest_peer_state(peer, puppet) || (peer.flags & (0x20 | 0x40)) == 0) return;
     // DIAG: does the clone itself have a drawable inventory? FillWeaponState reads
     // *(player+0x1D88); if the puppet returns nonzero ids, the input-drive path can
     // make its OWN weapon controller draw/switch/fire (no publish needed).
@@ -4428,6 +4476,31 @@ void apply_peer_weapon_state() {
     static bool have_last = false;
     if (have_last && puppet == last_puppet &&
         std::memcmp(last, peer.weapon_snapshot, sizeof(last)) == 0) {
+        return;
+    }
+    if ((peer.flags & 0x40) != 0) {
+        void* controller = nullptr;
+        if (readable_bytes(static_cast<std::byte*>(puppet) + 0x1D88) >= sizeof(void*)) {
+            controller = *reinterpret_cast<void**>(
+                static_cast<std::byte*>(puppet) + 0x1D88);
+        }
+        const auto* raw_ids = reinterpret_cast<const std::uint32_t*>(
+            peer.weapon_snapshot);
+        const int given = give_authored_weapons_to_controller(controller, raw_ids);
+        if (given < 0) {
+            log_line("remote authored weapon give threw");
+            return;
+        }
+        if (given > 0) {
+            std::memcpy(last, peer.weapon_snapshot, sizeof(last));
+            last_puppet = puppet;
+            have_last = true;
+            std::ostringstream w;
+            w << "remote authored weapons given count=" << given;
+            log_line(w.str().c_str());
+        } else {
+            log_line("remote authored weapon give unavailable");
+        }
         return;
     }
     if (publish_peer_weapon_snapshot(peer, puppet)) {
