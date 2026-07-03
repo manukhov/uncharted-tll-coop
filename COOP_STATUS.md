@@ -20,10 +20,19 @@
 - **Repro tooling (single copy, no peer):** F5 = force local player to Nadine
   (`g_force_local_nadine`); F4 = cycle Nadine look candidates; F8 = WEAPON-REGION/
   SCAN/GUN-STATE dumps; F6 = authored weapon-give on/off; F7 = legacy move gate.
-- Next decision (asked user, awaiting): deep-fix attach on 0xd27c074f, accept
-  cosmetic imperfection, make player-2 render Chloe (weapons perfect), or first
-  isolate the "pistol renders as rifle" model/holster sub-bug. Details in memory
-  `nadine-weapon-skeleton`, `grenade-on-move-fixed`, `weapon-sync-recon`.
+- **Nadine weapon — root cause fully nailed, but fix is asset-level (not a quick code
+  hook).** ALL weapons pile at the HAND overlapping (pistol pokes out of the rifle,
+  etc.); the held weapon is correct but HOLSTERED weapons have no valid attach and fall
+  back to the hand. Per-frame update `sub_1410EC230` → joint resolver `sub_1410B5560`
+  resolves only standard humanoid joints (targSpine/targChest/…, all present on Nadine),
+  so it is NOT a missing joint. The holster is "standard joint + per-weapon OFFSET from
+  the look's prop-attach CONFIG", and Nadine's companion look does not define the PLAYER
+  weapon-holster prop-attach configs → fallback to hand. That config is asset data loaded
+  with the look; no clean runtime hook found (apReference fns are anim-spec parsers;
+  player-hide-weapons is script-command indirection). Realistic options: per-weapon draw
+  suppression (weapon-draw list still unfound), inject the holster prop-attach config into
+  Nadine's look (deep asset-struct RE), or player-2 = Chloe. Details in memory
+  `nadine-weapon-skeleton`. Dedicated multi-session effort.
 
 
 
