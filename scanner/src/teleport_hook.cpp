@@ -221,7 +221,11 @@ volatile bool g_force_local_nadine = false;
 // nadine=0xc7e2539b — the long-standing swap constant 0xd27c074f is NOT "nadine", so
 // it was rendering a fallback look with broken weapon attach. F4 cycles candidates so
 // we can find a weapon-capable Nadine look without rebuilds.
-volatile std::uint32_t g_nadine_swap_hash = 0xc7e2539bu;  // real "nadine"
+// Default to the KNOWN-RENDERING look 0xd27c074f. The engine-real nadine=0xc7e2539b
+// BLACK-SCREENS the player render path (its look pulls a full character setup that is
+// not safe here), so only 0xd27c074f is confirmed to render. F4 cycles the rest for
+// cautious experiments (each may black-screen).
+volatile std::uint32_t g_nadine_swap_hash = 0xd27c074fu;  // known-rendering look
 volatile int g_nadine_swap_index = 0;
 // Two-instance role: false = role A (recv :31338, "player 1", local Chloe), true =
 // role B (recv :31339, "player 2", local Nadine). Set in start_state_net().
@@ -1359,12 +1363,12 @@ std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
         if (f4 && !prev_f4) {
             struct Cand { std::uint32_t hash; const char* name; };
             static const Cand cands[] = {
-                {0xc7e2539bu, "nadine"},
+                {0xd27c074fu, "legacy-known-good"},
                 {0x841e7a4fu, "nadine-buddy"},
                 {0x8a419c8eu, "nadine-base"},
                 {0xba17b98bu, "nadine-default"},
                 {0x41b5f560u, "nadine-auction"},
-                {0xd27c074fu, "legacy-0xd27c074f"},
+                {0xc7e2539bu, "nadine-real-BLACKSCREENS"},
             };
             const int n = static_cast<int>(sizeof(cands) / sizeof(cands[0]));
             g_nadine_swap_index = (g_nadine_swap_index + 1) % n;
