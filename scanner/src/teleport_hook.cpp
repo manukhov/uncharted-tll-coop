@@ -1353,7 +1353,13 @@ std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
             t << "LOCAL-NADINE force = "
               << (g_force_local_nadine ? "ON" : "OFF");
             log_line(t.str().c_str());
-            if (g_force_local_nadine) log_candidate_look_hashes();
+            if (g_force_local_nadine) {
+                log_candidate_look_hashes();
+                // Enumerate ALL appearance-getter callers so we can tell whether the
+                // WEAPON model/attach path queries the character appearance (and would
+                // see the swapped Nadine hash) vs only the mesh look builder.
+                g_log_appearance_callers = true;
+            }
         }
         prev_f5 = f5;
         // F4: cycle the local-Nadine appearance hash through the engine-computed
@@ -4016,7 +4022,9 @@ void dump_weapon_region(void* player, const char* label) {
     }
     auto* base = static_cast<std::byte*>(player);
     std::ostringstream w;
-    w << "WEAPON-REGION " << label << ":";
+    w << "WEAPON-REGION " << label
+      << (g_force_local_nadine ? " [NADINE]" : " [CHLOE]")
+      << " look=0x" << std::hex << g_nadine_swap_hash << std::dec << ":";
     for (std::size_t off = 0x3500; off <= 0x3640; off += 8) {
         if (readable_bytes(base + off) < sizeof(void*)) continue;
         const std::uintptr_t v = *reinterpret_cast<std::uintptr_t*>(base + off);
