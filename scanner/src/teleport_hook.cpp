@@ -333,6 +333,7 @@ using FillCharacterMoveWeaponsFunction = void(__fastcall*)(void*, void*);
 using InitializeStructuredEventFunction = void*(__fastcall*)(void*, std::uint32_t, const void*);
 using PushStructuredEventParamFunction = void(__fastcall*)(void*, const void*);
 using PublishStructuredEventFunction = bool(__fastcall*)(void*, void*, std::uint8_t);
+using WeaponArtIdToNetworkIndexFunction = std::uint32_t(__fastcall*)(void*, std::uint32_t);
 using NetAnimAddSnapshotFunction = void(__fastcall*)(void*, void*);
 using InitializePlayerNetAnimArtGroupsFunction = void(__fastcall*)(void*);
 constexpr std::uintptr_t kXInputGetStateIatRva = 0x25D6D60;
@@ -341,6 +342,7 @@ constexpr std::uintptr_t kFillCharacterMoveWeaponsRva = 0xBC2240;
 constexpr std::uintptr_t kInitializeStructuredEventRva = 0x1E3750;
 constexpr std::uintptr_t kPushStructuredEventParamRva = 0x1E36A0;
 constexpr std::uintptr_t kPublishStructuredEventRva = 0x17F8910;
+constexpr std::uintptr_t kWeaponArtIdToNetworkIndexRva = 0xA80E50;
 constexpr std::uint32_t kNetSnapshotWeaponsId = 0xCA049840;
 volatile bool g_xinput_log = false;
 volatile bool g_xinput_inject_p0 = false;   // temporary synth pad on index 0 to force controller path
@@ -3701,7 +3703,7 @@ bool start_state_net() {
 }
 
 // Records where the last capture threw: 0=ok, 1=fill_weapons threw,
-// 2=to_snapshot threw. Read by the WEAPON-SEND diagnostic.
+// 2=to_snapshot threw, 3=minimal campaign capture threw.
 volatile int g_weapon_capture_status = 0;
 
 bool capture_local_weapon_snapshot(void* local_player, std::uint8_t* out) {
@@ -3732,6 +3734,82 @@ bool capture_local_weapon_snapshot(void* local_player, std::uint8_t* out) {
         if (ids[i] != 0) return true;
     }
     return false;
+}
+
+// Campaign-safe prefix of NetEventCharacterMove_FillWeaponState. The original
+// helper reads these fields successfully, then faults in later multiplayer-only
+// components. Reproduce only its live WeaponController reads here.
+bool capture_local_weapon_snapshot_minimal(void* local_player, std::uint8_t* out) {
+    if (local_player == nullptr || out == nullptr || g_module == 0 ||
+        readable_bytes(static_cast<std::byte*>(local_player) + 0x1D90) < 1) {
+        return false;
+    }
+    std::memset(out, 0, coop::kWeaponSnapshotBytes);
+    void* manager = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(local_player) + 0x1D88);
+    if (manager == nullptr || readable_bytes(manager) < sizeof(void*)) return false;
+    auto** manager_vtable = *reinterpret_cast<void***>(manager);
+    if (manager_vtable == nullptr) return false;
+
+    using GetWeaponBySlotFunction = void*(__fastcall*)(void*, std::uint32_t);
+    using GetWeaponStateFunction = std::int32_t(__fastcall*)(void*);
+    using GetManagerModeFunction = std::int32_t(__fastcall*)(void*);
+    const auto get_weapon = reinterpret_cast<GetWeaponBySlotFunction>(
+        manager_vtable[0xB0 / sizeof(void*)]);
+    const auto art_to_network = reinterpret_cast<WeaponArtIdToNetworkIndexFunction>(
+        g_module + kWeaponArtIdToNetworkIndexRva);
+    constexpr std::uint32_t slots[8] = {0, 1, 16, 17, 2, 3, 20, 22};
+    bool any = false;
+
+    __try {
+        for (std::size_t i = 0; i < std::size(slots); ++i) {
+            void* weapon = get_weapon(manager, slots[i]);
+            if (weapon == nullptr || readable_bytes(weapon) < 0x890) continue;
+            auto** weapon_vtable = *reinterpret_cast<void***>(weapon);
+            if (weapon_vtable == nullptr) continue;
+            const std::uint32_t raw_art_id = *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(weapon) + 0x860);
+            const std::uint32_t network_id = art_to_network(nullptr, raw_art_id);
+            const auto get_state = reinterpret_cast<GetWeaponStateFunction>(
+                weapon_vtable[0x840 / sizeof(void*)]);
+            const auto get_detail_state = reinterpret_cast<GetWeaponStateFunction>(
+                weapon_vtable[0x8F0 / sizeof(void*)]);
+            std::memcpy(out + i * sizeof(network_id), &network_id, sizeof(network_id));
+            out[0x20 + i] = static_cast<std::uint8_t>(get_state(weapon));
+
+            // Four 0x28-byte detailed records correspond to slots 0,1,16,17.
+            if (i < 4) {
+                auto* detail = out + 0x3C + i * 0x28;
+                std::memcpy(detail + 0x08,
+                            static_cast<const std::byte*>(weapon) + 0x866, 0x18);
+                std::memcpy(detail + 0x20,
+                            static_cast<const std::byte*>(weapon) + 0x87E, 0x04);
+                detail[0x24] = static_cast<std::uint8_t>(get_detail_state(weapon));
+            }
+            any |= network_id != 0;
+        }
+
+        const auto get_mode = reinterpret_cast<GetManagerModeFunction>(
+            manager_vtable[0x78 / sizeof(void*)]);
+        const int mode = get_mode(manager);
+        std::uint32_t encoded_mode = 0;
+        if (mode == 1) encoded_mode = 1;
+        else if (mode == 16) encoded_mode = 2;
+        else if (mode == 17) encoded_mode = 3;
+        else if (mode == 20) encoded_mode = 6;
+        else if (mode != 0) encoded_mode = 8;
+        std::memcpy(out + 0x28, &encoded_mode, sizeof(encoded_mode));
+
+        const auto get_aux_mode = reinterpret_cast<GetManagerModeFunction>(
+            manager_vtable[0x240 / sizeof(void*)]);
+        const std::uint32_t aux_mode = static_cast<std::uint32_t>(get_aux_mode(manager));
+        std::memcpy(out + 0x30, &aux_mode, sizeof(aux_mode));
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        g_weapon_capture_status = 3;
+        return false;
+    }
+    g_weapon_capture_status = 0;
+    return any;
 }
 
 // Resolve a live local player via the resolver owner (vtbl[0xA8]); SEH-guarded so a
@@ -3943,12 +4021,35 @@ void send_local_player_state() {
     static std::uint8_t cached_weapon_snapshot[coop::kWeaponSnapshotBytes]{};
     static bool have_weapon_snapshot = false;
     const ULONGLONG weapon_now = GetTickCount64();
-    // M1 (native NetEventCharacterMove weapon snapshot) is DISABLED: FillWeaponState
-    // throws every frame on the retained player (MP-dormant components, same wall as
-    // the anim serializer). Keep have_weapon_snapshot=false so nothing is published.
-    (void)last_weapon_capture;
-    (void)cached_weapon_snapshot;
-    have_weapon_snapshot = false;
+    // FillWeaponState throws on the retained-table proxy; capture from the live
+    // resolver player instead (same object FillWeaponState expects: +0x1D88 controller).
+    if (weapon_now - last_weapon_capture >= 100) {
+        last_weapon_capture = weapon_now;
+        void* weapon_src = resolve_live_player_safe(0);
+        if (weapon_src == nullptr) {
+            weapon_src = local_obj;
+        }
+        std::uint8_t fresh_weapon[coop::kWeaponSnapshotBytes]{};
+        if (capture_local_weapon_snapshot_minimal(weapon_src, fresh_weapon)) {
+            if (!have_weapon_snapshot ||
+                std::memcmp(cached_weapon_snapshot, fresh_weapon,
+                            sizeof(fresh_weapon)) != 0) {
+                std::memcpy(cached_weapon_snapshot, fresh_weapon,
+                            sizeof(fresh_weapon));
+                log_line("weapon snapshot captured from live player");
+            }
+            have_weapon_snapshot = true;
+        } else if (!have_weapon_snapshot && g_weapon_capture_status != 0) {
+            static ULONGLONG fail_log_last = 0;
+            if (weapon_now - fail_log_last > 2000) {
+                fail_log_last = weapon_now;
+                std::ostringstream w;
+                w << "weapon snapshot capture failed status="
+                  << g_weapon_capture_status;
+                log_line(w.str().c_str());
+            }
+        }
+    }
     // DIAG (rate-limited): compare the RETAINED player (movement source) against the
     // LIVE local player from the resolver (vtbl[0xA8]). The weapon controller +0x218
     // is created lazily and may only exist on the LIVE object; if so, read the held
@@ -4246,7 +4347,7 @@ void apply_peer_weapon_state() {
             diag_last = diag_now;
             std::uint8_t clone_snap[coop::kWeaponSnapshotBytes]{};
             const bool clone_armed =
-                capture_local_weapon_snapshot(puppet, clone_snap);
+                capture_local_weapon_snapshot_minimal(puppet, clone_snap);
             const auto* ids =
                 reinterpret_cast<const std::uint32_t*>(clone_snap);
             void* ctrl = nullptr;

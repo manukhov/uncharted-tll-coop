@@ -34,8 +34,12 @@ isolated task against this movement baseline.
 The present `StatePacket` v5 carries position, quaternion, velocity, both stick
 pairs, the complete 64-bit button mask with press/release edges, health, and the
 native `NetSnapshotWeapons` region. Weapon appearance publication is implemented
-but still awaiting its first runtime test. One-shot actions still need a reliable
-ordered event stream and authored gameplay state.
+on the receiver; sender capture was hard-disabled because `FillWeaponState` throws
+on the retained-table proxy. Static pass (2026-07-03): capture must use the live
+resolver player (`+0x1D88` manager). The full helper still cannot be called, so
+the sender now reproduces only its campaign-live inventory prefix. The proposed
+attachment bypass at `0x14023AEA0` was rejected statically: that predicate gates
+only an optional refresh, not the transform writes. Runtime test is pending.
 
 The immediate blocker is the remote actor. `NadineBuddy + MoveTo` cannot represent
 all Player actions. A second retained `Player` has the required graph and mechanics.

@@ -22629,3 +22629,94 @@ prediction: switching a local weapon makes the remote Player show the same model
 and placement without changing movement. Inventory-only change means the separate
 `NetSnapshotGunHolstered` flag is still required; no change rejects the recovered
 event-parameter descriptor. Runtime status: **HYPOTHESIS**, not yet tested.
+
+### Weapon attachment region `Player+0x3500..+0x3640` and joypad gate (2026-07-03)
+
+**STATIC:** `Player_KickPlayerDepenetrateWeapons 0x1410EDFB0` is the consumer of
+the wrist-attachment xform block around `Player+0x3500..+0x3640`. It resolves
+skeleton joints (`targRWrist`, `targLWrist`, `rightHand`, `leftHand`), computes
+world-space offsets, and writes results through the embedded object at
+`Player+0x3530` (vfunc `+0x10` with mode args `(1,1,0,7,0,0)`, then vfunc `+0x18`
+into heap buffers at `Player+0x3600/+0x3608`).
+
+It is reached every frame from `sub_1410EC230` when `Player+0x162A` bit 0 is clear
+(the main per-frame Player world-update path that also runs grid-hash registration
+and `Player+0x3680` sibling updates).
+
+**STATIC:** before the optional vfunc `+0x20` refresh on the `+0x3530` object,
+`InputObject_MatchesActiveLocalJoypad 0x14023AEA0` gates updates:
+
+- requires flag bit `0x80000` at `object+0x44`;
+- compares `object+0x50` (joypad index) against
+  `g_LocalPlayerInputManager_Ptr+0x48/+0x50` (active local joypad slots);
+- returns false for non-active joypads.
+
+Competing explanations for the runtime dump from the prior commit:
+
+| Candidate | Evidence against |
+|-----------|------------------|
+| Missing heap pointers at `+0x3598/+0x3600` | REJECTED: pointers present on both local and clone |
+| Copying attachment xforms from peer is enough | REJECTED: float fields are `0x7fbbeeee` on clone while structs exist |
+| `NetSnapshotWeapons` alone equips visible weapon | WEAK: routes to `Player vtable+0xD0` → `WeaponController_ApplyInventoryEntry`, but attachment xforms are a downstream draw pipeline |
+
+**STATIC:** full visible equip also runs `WeaponController_ApplyInventoryEntry
+0x141E72540` → `sub_141EB1E00` → `sub_141E74270` → `sub_141E35600`, which
+materializes runtime weapon state through `SsTrackGroup` /
+`ResolveOrMaterializeRuntimeStateObjectFromSelectorPacket 0x1417C3790` — the same
+machinery `give-weapon 0x140F95850` ends in via
+`PublishStructuredStateBlockToActorVirtualD0 0x1417F8910`.
+
+**Current blocker chain:**
+
+1. Sender had `have_weapon_snapshot=false` hardcoded — weapon flag `0x20` never set.
+   Fix: capture via `resolve_live_player_safe(0)` (retained proxy throws in
+   `FillWeaponState`).
+2. Receiver `publish_peer_weapon_snapshot` may update inventory but attachment
+   xforms stay uninitialized unless the clone passes
+   `InputObject_MatchesActiveLocalJoypad` or the equip/materialize path runs on
+   the clone itself.
+
+Runtime prediction for next test: after re-enabling live-player capture, sender
+logs `weapon snapshot captured from live player` and receiver logs
+`remote NetSnapshotWeapons published`; if the gun still does not appear, next
+static target is bypassing or satisfying `0x14023AEA0` on the slot-1 clone
+(joypad 3 vs manager slots 0/1). Status: **HYPOTHESIS**.
+
+**REJECTED correction:** bypassing `InputObject_MatchesActiveLocalJoypad
+0x14023AEA0` is not the next weapon-visibility fix. Disassembly at
+`0x1410EEA62..0x1410EEBA9` shows that this predicate gates only the optional
+`Player+0x3530 vtable+0x20` refresh. Irrespective of its result, the function
+continues to write both computed wrist transforms through `Player+0x3600/+0x3608`
+and calls `Player+0x3530 vtable+0x18`. The uninitialized clone values therefore
+mean that the producing update or its joint inputs are absent; they do not prove
+that the joypad predicate blocks attachment output.
+
+### Campaign-safe weapon inventory capture (2026-07-03)
+
+**STATIC:** the useful prefix of `NetEventCharacterMove_FillWeaponState
+0x140BC2240` can be reproduced without entering its failing multiplayer tail:
+
+1. Disassembly `0x140BC22F0..0x140BC2646` reads `Player+0x1D88`, calls manager
+   virtual `+0xB0` for slots `[0,1,16,17,2,3,20,22]`, reads each
+   `Weapon+0x860`, maps it through `WeaponArtId_ToNetworkIndex 0x140A80E50`, and
+   reads per-weapon state through virtual `+0x840`.
+2. The campaign fire core `PlayerFireController::Fire 0x140E2C730` receives the
+   active Weapon object directly and independently reads the same `Weapon+0x860`;
+   runtime already confirmed this path for both local roles while `Player+0x218`
+   remained null.
+3. `NetAnimCmdGenerator_UpdateFlagsAndWeapons 0x140A085C3..0x140A08859`
+   consumes the same ordered eight compact ids, eight state bytes, selected mode
+   and four 0x28-byte detailed records when building `NetSnapshotWeapons`.
+
+The sender now reproduces only this campaign-live prefix. It also copies the
+direct weapon record fields `+0x866..+0x881` and virtual `+0x8F0` state for slots
+`0/1/16/17`; it does not call the full failing helper. Competing hypotheses remain:
+the reconstructed message creates the remote inventory and visible models; it
+creates inventory but still needs a separate draw/holster transition; or the
+recovered Event parameter descriptor is wrong and the receiver rejects it.
+
+Falsifiable prediction: both senders log a nonzero captured snapshot, both
+receivers log one successful `NetSnapshotWeapons` publication, and changing the
+selected weapon changes at least the remote inventory/model. A publication with
+no model selects the missing draw/holster transition; no publication despite
+nonzero ids rejects the Event descriptor. Runtime status: **HYPOTHESIS**.

@@ -5854,6 +5854,24 @@ FUNCTIONS = {
         "replacement or deferred controller paths. The entry is more than a "
         "bare held-weapon id.",
     ),
+    0x1410EDFB0: (
+        "Player_KickPlayerDepenetrateWeapons",
+        "Resolves targRWrist/targLWrist/rightHand/leftHand skeleton joints and "
+        "writes wrist weapon-attachment transforms through the embedded object at "
+        "Player+0x3530 into Player+0x3600/+0x3608.",
+    ),
+    0x14023AEA0: (
+        "InputObject_MatchesActiveLocalJoypad",
+        "Returns true when object+0x44 has bit 0x80000 and object+0x50 matches the "
+        "active joypad index from g_LocalPlayerInputManager (+0x48/+0x50). Gates "
+        "weapon-attachment refresh at Player+0x3530.",
+    ),
+    0x140A80E50: (
+        "WeaponArtId_ToNetworkIndex",
+        "Maps Weapon+0x860 authored art id to the compact network inventory "
+        "index. Used independently by projectile events and all eight entries "
+        "in NetEventCharacterMove_FillWeaponState.",
+    ),
 }
 
 # Data/global names (set via ida_name on data addresses).
