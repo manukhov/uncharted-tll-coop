@@ -211,6 +211,11 @@ std::uint32_t g_nadine_appearance_hash = 0;
 // in two-instance play start_state_net() sets it per ROLE (player-2 machine = Nadine
 // local; player-1 machine = Chloe local).
 volatile bool g_local_make_nadine = true;
+// SINGLE-COPY REPRO (F5): force the LOCAL player to render as Nadine regardless of
+// net role, so the Nadine weapon-attachment/skeleton bug can be reproduced and fixed
+// in one instance (no peer). Independent of g_local_make_nadine (which start_state_net
+// ties to role B). Default OFF.
+volatile bool g_force_local_nadine = false;
 // Two-instance role: false = role A (recv :31338, "player 1", local Chloe), true =
 // role B (recv :31339, "player 2", local Nadine). Set in start_state_net().
 volatile bool g_net_role_b = false;
@@ -1297,6 +1302,21 @@ volatile bool g_log_appearance_callers = false;
 // real character (Chloe) so abilities stay intact. => caller-gated swap.
 constexpr std::uintptr_t kLookBuilderAppearCallRva = 0x1bb4ab9;
 std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
+    // F5 edge-toggle: force the local player to render as Nadine in a single copy
+    // (repro of the Nadine weapon bug without a peer). Runs here since the appearance
+    // getter is called every render frame.
+    {
+        static bool prev_f5 = false;
+        const bool f5 = (GetAsyncKeyState(VK_F5) & 0x8000) != 0;
+        if (f5 && !prev_f5) {
+            g_force_local_nadine = !g_force_local_nadine;
+            std::ostringstream t;
+            t << "LOCAL-NADINE force = "
+              << (g_force_local_nadine ? "ON" : "OFF");
+            log_line(t.str().c_str());
+        }
+        prev_f5 = f5;
+    }
     std::uintptr_t ret = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
     std::uintptr_t rva = (g_module != 0 && ret > g_module) ? (ret - g_module) : ret;
     if (g_log_appearance_callers && g_module != 0) {
@@ -1329,7 +1349,8 @@ std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
     if (a2 != nullptr && from_lookbuilder) {
         // Local-player Nadine swap (role B / player-2 machine): ONLY the local player
         // object, so the shared look builder doesn't recolor the buddy or other NPCs.
-        if (g_local_make_nadine && a1 == retained_player_object(0)) {
+        if ((g_local_make_nadine || g_force_local_nadine) &&
+            a1 == retained_player_object(0)) {
             *a2 = 0xd27c074fu;  // hash("nadine")
             return a2;
         }
