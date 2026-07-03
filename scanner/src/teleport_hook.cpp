@@ -3952,6 +3952,33 @@ void dump_weapon_region(void* player, const char* label) {
     log_line(w.str().c_str());
 }
 
+// Read the discrete gun state via the Player+0x15C8 gun-state controller
+// (SkillWaitOnGunState 0x14041C670 pattern): obj = *(player+0x15C8); sub =
+// obj->vtable[10](obj); state = sub->vtable[22](sub). Returns 0=GunHolstered,
+// 1=GunOut, or a negative diagnostic code. All-POD so SEH is allowed.
+int read_gun_state(void* player) {
+    if (player == nullptr || g_module == 0) return -2;
+    __try {
+        auto* pb = static_cast<std::byte*>(player);
+        if (readable_bytes(pb + 0x15C8) < sizeof(void*)) return -3;
+        void* ctrl = *reinterpret_cast<void**>(pb + 0x15C8);
+        if (ctrl == nullptr || readable_bytes(ctrl) < sizeof(void*)) return -4;
+        void** vt = *reinterpret_cast<void***>(ctrl);
+        if (vt == nullptr || readable_bytes(vt) < 23 * sizeof(void*)) return -5;
+        using GetSubFn = void*(__fastcall*)(void*);
+        auto get_sub = reinterpret_cast<GetSubFn>(vt[10]);  // vtable+0x50
+        void* sub = get_sub(ctrl);
+        if (sub == nullptr || readable_bytes(sub) < sizeof(void*)) return -6;
+        void** svt = *reinterpret_cast<void***>(sub);
+        if (svt == nullptr || readable_bytes(svt) < 23 * sizeof(void*)) return -7;
+        using GetStateFn = int(__fastcall*)(void*);
+        auto get_state = reinterpret_cast<GetStateFn>(svt[22]);  // vtable+0xB0
+        return get_state(sub);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return -1;
+    }
+}
+
 void send_local_player_state() {
     if (!g_state_net.enabled || !g_state_net.peer_set) {
         return;
@@ -4144,6 +4171,11 @@ void send_local_player_state() {
                 scan_named_subobjects(live1, "CLONE");
                 dump_weapon_region(live0, "LOCAL");
                 dump_weapon_region(live1, "CLONE");
+                std::ostringstream gs;
+                gs << "GUN-STATE local=" << read_gun_state(live0)
+                   << " clone=" << read_gun_state(live1)
+                   << " (0=Holstered/back,1=GunOut/hands, neg=diag)";
+                log_line(gs.str().c_str());
             }
         }
         const std::uintptr_t live0_ctrl = rd_ptr(live0, 0x218);
