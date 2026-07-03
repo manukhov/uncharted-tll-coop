@@ -4436,6 +4436,15 @@ bool publish_peer_weapon_snapshot(const coop::StatePacket& peer, void* puppet) {
     }
 }
 
+// Authored weapon-give replication (Codex WIP): gives the peer's inventory ids to
+// the clone's weapon controller. On the Nadine-skinned clone the weapons cannot
+// attach to the skeleton and DROP to the ground ("weapons falling out"), and giving
+// inventory does not switch the HELD weapon, so a weapon switch is not reflected.
+// Default OFF for a stable, non-spilling baseline; F6 toggles to experiment. The
+// real held-weapon sync is a separate draw-state redesign (gun-state controller,
+// GunOut=1) — see the gun-state finding.
+volatile bool g_enable_authored_weapon_give = false;
+
 int give_authored_weapons_to_controller(
     void* controller, const std::uint32_t* raw_ids, void* puppet) {
     if (controller == nullptr || raw_ids == nullptr || g_module == 0 ||
@@ -4533,7 +4542,22 @@ void apply_peer_weapon_state() {
         std::memcmp(last, peer.weapon_snapshot, sizeof(last)) == 0) {
         return;
     }
+    {
+        static bool prev_f6 = false;
+        const bool f6 = (GetAsyncKeyState(VK_F6) & 0x8000) != 0;
+        if (f6 && !prev_f6) {
+            g_enable_authored_weapon_give = !g_enable_authored_weapon_give;
+            std::ostringstream t;
+            t << "WEAPON-GIVE authored give = "
+              << (g_enable_authored_weapon_give ? "ON" : "OFF");
+            log_line(t.str().c_str());
+        }
+        prev_f6 = f6;
+    }
     if ((peer.flags & 0x40) != 0) {
+        // Stable baseline: with authored-give OFF, do NOT run the give OR fall through
+        // to publish_peer_weapon_snapshot (both drop weapons on the Nadine clone).
+        if (!g_enable_authored_weapon_give) return;
         void* controller = nullptr;
         if (readable_bytes(static_cast<std::byte*>(puppet) + 0x1D88) >= sizeof(void*)) {
             controller = *reinterpret_cast<void**>(
@@ -4558,6 +4582,7 @@ void apply_peer_weapon_state() {
         }
         return;
     }
+    if (!g_enable_authored_weapon_give) return;
     if (publish_peer_weapon_snapshot(peer, puppet)) {
         std::memcpy(last, peer.weapon_snapshot, sizeof(last));
         last_puppet = puppet;
