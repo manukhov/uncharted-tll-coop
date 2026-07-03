@@ -216,6 +216,13 @@ volatile bool g_local_make_nadine = true;
 // in one instance (no peer). Independent of g_local_make_nadine (which start_state_net
 // ties to role B). Default OFF.
 volatile bool g_force_local_nadine = false;
+// Runtime-tunable Nadine appearance hash for the F5 local-Nadine repro. The engine's
+// own StringId hash (LOOK-HASHES diag) showed chloe=0x3f334972 (matches) but real
+// nadine=0xc7e2539b — the long-standing swap constant 0xd27c074f is NOT "nadine", so
+// it was rendering a fallback look with broken weapon attach. F4 cycles candidates so
+// we can find a weapon-capable Nadine look without rebuilds.
+volatile std::uint32_t g_nadine_swap_hash = 0xc7e2539bu;  // real "nadine"
+volatile int g_nadine_swap_index = 0;
 // Two-instance role: false = role A (recv :31338, "player 1", local Chloe), true =
 // role B (recv :31339, "player 2", local Nadine). Set in start_state_net().
 volatile bool g_net_role_b = false;
@@ -1345,6 +1352,30 @@ std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
             if (g_force_local_nadine) log_candidate_look_hashes();
         }
         prev_f5 = f5;
+        // F4: cycle the local-Nadine appearance hash through the engine-computed
+        // candidates to find a weapon-capable Nadine look.
+        static bool prev_f4 = false;
+        const bool f4 = (GetAsyncKeyState(VK_F4) & 0x8000) != 0;
+        if (f4 && !prev_f4) {
+            struct Cand { std::uint32_t hash; const char* name; };
+            static const Cand cands[] = {
+                {0xc7e2539bu, "nadine"},
+                {0x841e7a4fu, "nadine-buddy"},
+                {0x8a419c8eu, "nadine-base"},
+                {0xba17b98bu, "nadine-default"},
+                {0x41b5f560u, "nadine-auction"},
+                {0xd27c074fu, "legacy-0xd27c074f"},
+            };
+            const int n = static_cast<int>(sizeof(cands) / sizeof(cands[0]));
+            g_nadine_swap_index = (g_nadine_swap_index + 1) % n;
+            g_nadine_swap_hash = cands[g_nadine_swap_index].hash;
+            std::ostringstream t;
+            t << "NADINE-LOOK now [" << g_nadine_swap_index << "] "
+              << cands[g_nadine_swap_index].name << " = 0x" << std::hex
+              << g_nadine_swap_hash << std::dec;
+            log_line(t.str().c_str());
+        }
+        prev_f4 = f4;
     }
     std::uintptr_t ret = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
     std::uintptr_t rva = (g_module != 0 && ret > g_module) ? (ret - g_module) : ret;
@@ -1380,7 +1411,7 @@ std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
         // object, so the shared look builder doesn't recolor the buddy or other NPCs.
         if ((g_local_make_nadine || g_force_local_nadine) &&
             a1 == retained_player_object(0)) {
-            *a2 = 0xd27c074fu;  // hash("nadine")
+            *a2 = g_nadine_swap_hash;  // tunable Nadine look (F4 cycles candidates)
             return a2;
         }
         // Legacy clone-spawn-window swap.
