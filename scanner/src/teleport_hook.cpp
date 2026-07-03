@@ -4450,6 +4450,26 @@ int give_authored_weapons_to_controller(
         vtable[0x158 / sizeof(void*)]);
     if (give_weapon == nullptr) return 0;
 
+    // IDEMPOTENT give: give_weapon(..., force=true) drops the currently-held weapon,
+    // so re-giving an id the controller already has makes weapons "fall out". The
+    // sender's snapshot slot[1] oscillates between two ids frame-to-frame, which
+    // defeated the caller's snapshot-changed guard and re-gave every update. Cache
+    // the ids already given to this controller and give each at most once, so a
+    // stable inventory is established without repeatedly dropping weapons.
+    static void* cache_controller = nullptr;
+    static std::uint32_t cached_ids[64]{};
+    static int cached_count = 0;
+    if (controller != cache_controller) {
+        cache_controller = controller;
+        cached_count = 0;
+    }
+    auto already_given = [&](std::uint32_t id) -> bool {
+        for (int k = 0; k < cached_count; ++k) {
+            if (cached_ids[k] == id) return true;
+        }
+        return false;
+    };
+
     int given = 0;
     __try {
         for (std::size_t i = 0; i < 8; ++i) {
@@ -4460,10 +4480,12 @@ int give_authored_weapons_to_controller(
                 duplicate |= raw_ids[prior] == raw_id;
             }
             if (duplicate) continue;
+            if (already_given(raw_id)) continue;
             alignas(16) std::uint8_t weapon_info[0xC0]{};
             initialize_info(weapon_info);
             std::memcpy(weapon_info + 0x80, &raw_id, sizeof(raw_id));
             give_weapon(controller, weapon_info, true, false, nullptr);
+            if (cached_count < 64) cached_ids[cached_count++] = raw_id;
             ++given;
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
