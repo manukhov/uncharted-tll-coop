@@ -22720,3 +22720,39 @@ receivers log one successful `NetSnapshotWeapons` publication, and changing the
 selected weapon changes at least the remote inventory/model. A publication with
 no model selects the missing draw/holster transition; no publication despite
 nonzero ids rejects the Event descriptor. Runtime status: **HYPOTHESIS**.
+
+**REJECTED runtime result:** directly calling `WeaponArtId_ToNetworkIndex
+0x140A80E50` from the campaign capture fails consistently at stage `20` (slot 0)
+in both processes. The preceding manager `vtable+0xB0` call succeeds and returns a
+readable Weapon, so the failure is isolated to the mapper. Its static body explains
+the difference: after searching the fixed 19-entry table at `0x143E04A00`, an
+unknown id enters a lazily resolved `*weapon-gameplay-defs-online*` registry path.
+That multiplayer-flavoured fallback is not safe to invoke independently here.
+
+The capture now reproduces the mapper's first, self-contained branch directly:
+compare `Weapon+0x860` against the 19 standard ids and use the matching table
+index. Index zero is valid and no longer mistaken for an empty slot; the existence
+of the returned Weapon marks the entry present. Dynamic/online-only weapon ids are
+deliberately deferred. New prediction: ordinary campaign weapons produce a sender
+snapshot without stages `20..27`; failure to map all entries without an exception
+means the current weapon belongs only to the dynamic registry.
+
+**STATIC follow-up:** the inverse routine `0x140A81050` resolves indices `>=19`
+through the same cached object and contains source assertions naming
+`NetGameManager::GetWeaponIdByStatIndex` (`net-game-manager.cpp:534-535`). It
+reads a count at cached-object `+0x0` and an art-id array at `+0x8`, while
+`WeaponArtId_ToNetworkIndex 0x140A80E50` returns the matching dynamic index plus
+19. The cache handle itself is the first qword at `0x143742720`; both routines
+share it. This independently confirms that the fixed 19-entry table is only a
+prefix, not the complete campaign mapping.
+
+Competing explanations for the silent fixed-table test are now explicit:
+(H1) the live campaign weapon id is present in the already materialized dynamic
+registry; (H2) `manager vtable+0xB0` returned an object whose `+0x860` is not a
+valid authored weapon id; (H3) the dynamic cache is absent in campaign. The next
+probe does not call either registry initializer: it records all eight raw ids and
+reads the cached `{count, ids*}` only when already valid. **Prediction:** H1 gives
+a positive bounded count, a matching bit and a published snapshot; H2 gives
+implausible/changing raw ids; H3 gives stable plausible raw ids with
+`registryCount=-1` and no mapped bits. This distinguishes all three without
+changing gameplay or booting multiplayer state.

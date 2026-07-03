@@ -5872,10 +5872,26 @@ FUNCTIONS = {
         "index. Used independently by projectile events and all eight entries "
         "in NetEventCharacterMove_FillWeaponState.",
     ),
+    0x140A81050: (
+        "NetGameManager_GetWeaponIdByStatIndex",
+        "Inverse compact-index mapping. Embedded source assertions identify "
+        "NetGameManager::GetWeaponIdByStatIndex at net-game-manager.cpp:534-535; "
+        "indices >=19 resolve through the cached online weapon definition map.",
+    ),
 }
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x143742720: (
+        "g_CachedOnlineWeaponDefinitionMap",
+        "Cached handle for *weapon-gameplay-defs-online*. First qword resolves "
+        "to a map with count at +0 and authored weapon-id array at +8.",
+    ),
+    0x143E04A00: (
+        "g_StandardWeaponArtIds",
+        "Fixed 19-entry authored weapon-id prefix used by both directions of "
+        "the NetGameManager weapon stat-index mapping.",
+    ),
     0x1437EA62C: (
         "g_InputWindowFocused",
         "Global input-focus byte maintained by Input_UpdateWindowFocusFlag and "

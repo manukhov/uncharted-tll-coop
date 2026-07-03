@@ -333,7 +333,6 @@ using FillCharacterMoveWeaponsFunction = void(__fastcall*)(void*, void*);
 using InitializeStructuredEventFunction = void*(__fastcall*)(void*, std::uint32_t, const void*);
 using PushStructuredEventParamFunction = void(__fastcall*)(void*, const void*);
 using PublishStructuredEventFunction = bool(__fastcall*)(void*, void*, std::uint8_t);
-using WeaponArtIdToNetworkIndexFunction = std::uint32_t(__fastcall*)(void*, std::uint32_t);
 using NetAnimAddSnapshotFunction = void(__fastcall*)(void*, void*);
 using InitializePlayerNetAnimArtGroupsFunction = void(__fastcall*)(void*);
 constexpr std::uintptr_t kXInputGetStateIatRva = 0x25D6D60;
@@ -342,7 +341,8 @@ constexpr std::uintptr_t kFillCharacterMoveWeaponsRva = 0xBC2240;
 constexpr std::uintptr_t kInitializeStructuredEventRva = 0x1E3750;
 constexpr std::uintptr_t kPushStructuredEventParamRva = 0x1E36A0;
 constexpr std::uintptr_t kPublishStructuredEventRva = 0x17F8910;
-constexpr std::uintptr_t kWeaponArtIdToNetworkIndexRva = 0xA80E50;
+constexpr std::uintptr_t kStandardWeaponArtIdTableRva = 0x3E04A00;
+constexpr std::uintptr_t kCachedOnlineWeaponRegistryRva = 0x3742720;
 constexpr std::uint32_t kNetSnapshotWeaponsId = 0xCA049840;
 volatile bool g_xinput_log = false;
 volatile bool g_xinput_inject_p0 = false;   // temporary synth pad on index 0 to force controller path
@@ -3703,8 +3703,11 @@ bool start_state_net() {
 }
 
 // Records where the last capture threw: 0=ok, 1=fill_weapons threw,
-// 2=to_snapshot threw, 3=minimal campaign capture threw.
+// 2=to_snapshot threw. Minimal capture failures use 10..69 by stage.
 volatile int g_weapon_capture_status = 0;
+volatile std::uint32_t g_weapon_capture_raw_ids[8]{};
+volatile std::uint32_t g_weapon_capture_mapped_mask = 0;
+volatile int g_weapon_capture_registry_count = -1;
 
 bool capture_local_weapon_snapshot(void* local_player, std::uint8_t* out) {
     if (local_player == nullptr || out == nullptr || g_module == 0) return false;
@@ -3756,25 +3759,65 @@ bool capture_local_weapon_snapshot_minimal(void* local_player, std::uint8_t* out
     using GetManagerModeFunction = std::int32_t(__fastcall*)(void*);
     const auto get_weapon = reinterpret_cast<GetWeaponBySlotFunction>(
         manager_vtable[0xB0 / sizeof(void*)]);
-    const auto art_to_network = reinterpret_cast<WeaponArtIdToNetworkIndexFunction>(
-        g_module + kWeaponArtIdToNetworkIndexRva);
+    const auto* standard_art_ids = reinterpret_cast<const std::uint32_t*>(
+        g_module + kStandardWeaponArtIdTableRva);
     constexpr std::uint32_t slots[8] = {0, 1, 16, 17, 2, 3, 20, 22};
     bool any = false;
+    g_weapon_capture_mapped_mask = 0;
+    g_weapon_capture_registry_count = -1;
+    for (std::size_t i = 0; i < std::size(slots); ++i) {
+        g_weapon_capture_raw_ids[i] = 0;
+    }
 
     __try {
         for (std::size_t i = 0; i < std::size(slots); ++i) {
+            g_weapon_capture_status = 10 + static_cast<int>(i);
             void* weapon = get_weapon(manager, slots[i]);
             if (weapon == nullptr || readable_bytes(weapon) < 0x890) continue;
             auto** weapon_vtable = *reinterpret_cast<void***>(weapon);
             if (weapon_vtable == nullptr) continue;
             const std::uint32_t raw_art_id = *reinterpret_cast<const std::uint32_t*>(
                 static_cast<const std::byte*>(weapon) + 0x860);
-            const std::uint32_t network_id = art_to_network(nullptr, raw_art_id);
+            g_weapon_capture_raw_ids[i] = raw_art_id;
+            g_weapon_capture_status = 20 + static_cast<int>(i);
+            std::uint32_t network_id = 0;
+            bool mapped = false;
+            for (std::uint32_t candidate = 0; candidate < 19; ++candidate) {
+                if (standard_art_ids[candidate] == raw_art_id) {
+                    network_id = candidate;
+                    mapped = true;
+                    break;
+                }
+            }
+            if (!mapped) {
+                void* registry = *reinterpret_cast<void**>(
+                    g_module + kCachedOnlineWeaponRegistryRva);
+                if (registry != nullptr && readable_bytes(registry) >= 0x10) {
+                    const int count = *reinterpret_cast<const int*>(registry);
+                    const auto* dynamic_art_ids = *reinterpret_cast<const std::uint32_t* const*>(
+                        static_cast<const std::byte*>(registry) + 0x08);
+                    g_weapon_capture_registry_count = count;
+                    if (count > 0 && count <= 109 && dynamic_art_ids != nullptr &&
+                        readable_bytes(dynamic_art_ids) >=
+                            static_cast<std::size_t>(count) * sizeof(std::uint32_t)) {
+                        for (int candidate = 0; candidate < count; ++candidate) {
+                            if (dynamic_art_ids[candidate] == raw_art_id) {
+                                network_id = static_cast<std::uint32_t>(candidate + 19);
+                                mapped = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if (!mapped) continue;
+            g_weapon_capture_mapped_mask |= 1u << i;
             const auto get_state = reinterpret_cast<GetWeaponStateFunction>(
                 weapon_vtable[0x840 / sizeof(void*)]);
             const auto get_detail_state = reinterpret_cast<GetWeaponStateFunction>(
                 weapon_vtable[0x8F0 / sizeof(void*)]);
             std::memcpy(out + i * sizeof(network_id), &network_id, sizeof(network_id));
+            g_weapon_capture_status = 30 + static_cast<int>(i);
             out[0x20 + i] = static_cast<std::uint8_t>(get_state(weapon));
 
             // Four 0x28-byte detailed records correspond to slots 0,1,16,17.
@@ -3784,11 +3827,13 @@ bool capture_local_weapon_snapshot_minimal(void* local_player, std::uint8_t* out
                             static_cast<const std::byte*>(weapon) + 0x866, 0x18);
                 std::memcpy(detail + 0x20,
                             static_cast<const std::byte*>(weapon) + 0x87E, 0x04);
+                g_weapon_capture_status = 40 + static_cast<int>(i);
                 detail[0x24] = static_cast<std::uint8_t>(get_detail_state(weapon));
             }
-            any |= network_id != 0;
+            any = true;
         }
 
+        g_weapon_capture_status = 50;
         const auto get_mode = reinterpret_cast<GetManagerModeFunction>(
             manager_vtable[0x78 / sizeof(void*)]);
         const int mode = get_mode(manager);
@@ -3800,12 +3845,12 @@ bool capture_local_weapon_snapshot_minimal(void* local_player, std::uint8_t* out
         else if (mode != 0) encoded_mode = 8;
         std::memcpy(out + 0x28, &encoded_mode, sizeof(encoded_mode));
 
+        g_weapon_capture_status = 60;
         const auto get_aux_mode = reinterpret_cast<GetManagerModeFunction>(
             manager_vtable[0x240 / sizeof(void*)]);
         const std::uint32_t aux_mode = static_cast<std::uint32_t>(get_aux_mode(manager));
         std::memcpy(out + 0x30, &aux_mode, sizeof(aux_mode));
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        g_weapon_capture_status = 3;
         return false;
     }
     g_weapon_capture_status = 0;
@@ -4046,6 +4091,20 @@ void send_local_player_state() {
                 std::ostringstream w;
                 w << "weapon snapshot capture failed status="
                   << g_weapon_capture_status;
+                log_line(w.str().c_str());
+            }
+        } else if (!have_weapon_snapshot) {
+            static ULONGLONG unmapped_log_last = 0;
+            if (weapon_now - unmapped_log_last > 2000) {
+                unmapped_log_last = weapon_now;
+                std::ostringstream w;
+                w << "weapon snapshot has no mapped slots raw=";
+                for (std::size_t i = 0; i < 8; ++i) {
+                    if (i != 0) w << ',';
+                    w << "0x" << std::hex << g_weapon_capture_raw_ids[i];
+                }
+                w << " mask=0x" << g_weapon_capture_mapped_mask
+                  << std::dec << " registryCount=" << g_weapon_capture_registry_count;
                 log_line(w.str().c_str());
             }
         }
