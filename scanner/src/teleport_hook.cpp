@@ -831,12 +831,45 @@ bool local_game_window_foreground();
 std::uint32_t peer_effective_held_art(const coop::StatePacket& peer);
 std::uint32_t capture_held_weapon_art_id(void* player);
 
+// Master logging switch. The previous log_line opened+closed the log file on the
+// GAME THREAD for EVERY line (std::ofstream ctor/dtor = CreateFile + CloseHandle).
+// Under a Desktop path scanned by Windows Defender each open costs milliseconds, so
+// the dozens of diagnostic lines/sec during active co-op turned into per-frame
+// stalls that worsened as the log grew (587 MB observed). Fix: keep ONE handle open
+// for the process lifetime and only WriteFile (buffered, cheap) under a lock; the
+// expensive open/close is paid once. VK_HOME toggles logging off entirely for a
+// zero-I/O run to confirm logging as the stutter source.
+volatile bool g_logging_enabled = true;
+static SRWLOCK g_log_lock = SRWLOCK_INIT;
+static HANDLE g_log_handle = INVALID_HANDLE_VALUE;
+
 void log_line(const char* line) {
-    std::ofstream output(
-        R"(C:\Users\Vladimir\Desktop\TLLCoopResearch\reports\locomotion_hook.log)",
-        std::ios::app
-    );
-    output << "[pid=" << GetCurrentProcessId() << "] " << line << '\n';
+    if (!g_logging_enabled) {
+        return;
+    }
+    char buffer[1600];
+    const int length = std::snprintf(
+        buffer, sizeof(buffer), "[pid=%lu] %s\n",
+        static_cast<unsigned long>(GetCurrentProcessId()), line);
+    if (length <= 0) {
+        return;
+    }
+    AcquireSRWLockExclusive(&g_log_lock);
+    if (g_log_handle == INVALID_HANDLE_VALUE) {
+        g_log_handle = CreateFileA(
+            R"(C:\Users\Vladimir\Desktop\TLLCoopResearch\reports\locomotion_hook.log)",
+            FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+            OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    }
+    if (g_log_handle != INVALID_HANDLE_VALUE) {
+        DWORD written = 0;
+        WriteFile(g_log_handle, buffer,
+                  static_cast<DWORD>(length > static_cast<int>(sizeof(buffer))
+                                         ? sizeof(buffer)
+                                         : length),
+                  &written, nullptr);
+    }
+    ReleaseSRWLockExclusive(&g_log_lock);
 }
 
 LONG CALLBACK crash_observer(EXCEPTION_POINTERS* exception) {
@@ -9288,6 +9321,15 @@ void net_tick() {
     static ULONGLONG last_freeze = 0, last_hp_probe = 0, last_hpsys = 0;
     static ULONGLONG last_animation_mirror = 0, last_weapon_apply = 0;
     const ULONGLONG now = GetTickCount64();
+    if (foreground && (GetAsyncKeyState(VK_HOME) & 1) != 0) {
+        g_logging_enabled = !g_logging_enabled;
+        // Log the state change itself (bypasses the flag once so the transition is
+        // visible when turning logging back on).
+        const bool was = g_logging_enabled;
+        g_logging_enabled = true;
+        log_line(was ? "LOGGING ON" : "LOGGING OFF (zero file I/O)");
+        g_logging_enabled = was;
+    }
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
         g_local_animation_mirror_test = !g_local_animation_mirror_test;
         log_line(g_local_animation_mirror_test

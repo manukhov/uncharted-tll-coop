@@ -23288,3 +23288,46 @@ separate scope-camera/model-hide path is the likely culprit. Needs RE next turn:
 trace the sniper-ADS → third-person model cull on the puppet (screen-1) and gate
 it, OR relay the sniper as pose-only (no scoped-ADS zoom) so it never enters the
 scope camera. Status: **HYPOTHESIS**.
+
+### Performance: game-thread logging file open/close is the primary stutter source (2026-07-04)
+
+**Investigation of reported severe lag.** Ruled OUT by static review:
+- All heavy per-frame diagnostic probes default OFF: `g_enemy_health_probe`,
+  `g_hp_sys_probe`, `g_enemy_freeze_selftest`, `g_charmgr_dump_periodic`,
+  `g_enemy_sync`, `g_client_damage_relay`, `g_local_animation_mirror_test`,
+  `g_drive_screen1_cam` = all `false`. `send_enemy_states`/`monitor_hp_kill_selftest`
+  early-out when their toggle/watch is unset, so no character enumeration by default.
+- The per-frame update hook `hooked_update` is installed on the **NadineBuddy
+  vtable slot** only (`g_nadine_vtable[kUpdateSlot]`), not a shared Actor/Character
+  vtable, so it fires for ~1-2 objects/frame, not every NPC. `net_tick` is
+  internally clock-gated (send @60Hz, weapon @100ms, etc.).
+- The reticle/scope HUD gate hooks are cheap (one `readable_bytes` + one dword read;
+  logs rate-limited to 1000ms).
+
+**PRIMARY CAUSE (CONFIRMED static, pending live A/B):** `log_line` opened AND closed
+the log file (`std::ofstream` app-mode ctor/dtor = `CreateFile`+`CloseHandle`) on
+the **game thread for every single line**. 381 call sites; during active co-op the
+rate-limited diagnostics (`JOYPAD3-ANALOG`, `REMOTE-ACTIONS`, `REMOTE-DRIVE`,
+`PLAYER-INPUT-UPDATE`, `PRE-CONSUMER-MOVE`, …) still emit dozens of lines/sec across
+two instances. Each open under the Defender-watched Desktop path costs
+milliseconds, and cost grows with file size (587 MB observed) → per-frame hitching
+that gets worse the longer you play. Classic injected-mod stutter.
+
+**Fix (implemented):** persistent single log HANDLE opened once per process, guarded
+by an SRWLOCK, `WriteFile`-append only (no per-line open/close). Master switch
+`g_logging_enabled` (VK_HOME toggle) for a zero-I/O run. This removes the expensive
+open/close syscall + Defender scan from the game thread's hot path.
+
+**SECONDARY suspect (not yet changed — needs care):** `readable_bytes` runs
+`VirtualQuery` (kernel syscall) at 280 call sites, many per-frame guarding pointer
+derefs. At high call counts this is a few ms/frame. Caching is unsafe (it's the
+guard against freed/unmapped memory — a stale cache returning "readable" would
+crash), so any optimization must reduce call COUNT by hoisting repeated checks in
+the hot paths (input_scale_copy dest=3, drive ticks, send_local_player_state), not
+cache results. Left for a targeted follow-up.
+
+**A/B tools for live confirmation:** VK_HOME = logging off (isolates file I/O);
+VK_END = `g_dll_inert` full pass-through (isolates ALL mod per-frame logic). If
+VK_HOME alone restores smoothness, logging was the cause; if only VK_END does,
+the remaining cost is `readable_bytes`/per-frame logic. Status: **STATIC** (cause
++ fix), **HYPOTHESIS** (severity) pending user A/B.
