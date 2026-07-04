@@ -23363,3 +23363,30 @@ aux_input_thread, and the logging toggle I added collided with it.
 log file I/O on the game thread); F11 re-enables when diagnostics are needed;
 persistent log handle retained. Fixed the VK_HOME triple-binding. Status:
 **CONFIRMED** (root cause = RAM paging, measured).
+
+### Performance CONFIRMED (2026-07-04): per-frame VirtualQuery in readable_bytes was the stutter root cause
+
+**Runtime A/B, single instance (PID 6276):** un-injected the game runs at full
+speed; injected with the old build it stuttered badly at LOW CPU (~19%) and
+near-zero game GPU usage (main thread waiting, not computing) with RAM/disk NOT
+saturated. Swapping `readable_bytes` from `VirtualQuery` to the lock-free SEH
+page-probe **eliminated the lag** (user-confirmed "именно оно").
+
+**Mechanism:** `VirtualQuery` acquires the process address-space lock. The game's
+asset-streaming / allocator threads hold that lock continuously, so calling
+`VirtualQuery` from our game-thread pointer guards (280 `readable_bytes` sites,
+dozens+/frame) contended on it and **blocked the main thread** each frame → low
+CPU, stalled frames, smooth-without-mod. Fix: `readable_bytes` fast path touches
+one byte per page under SEH (no syscall, no VAD lock), reporting the readable
+extent up to 0xB000. Toggle `g_readable_bytes_fast` (VK_NEXT) keeps the old
+VirtualQuery path for A/B.
+
+**Corrections to earlier perf notes this session:**
+- The "logging open/close is the primary stutter source" note was WRONG as the
+  *primary* cause — logging was a minor secondary cost. The persistent-handle log
+  fix + default-off logging are still worth keeping, but the dominant per-frame
+  cost was VirtualQuery contention.
+- The "memory exhaustion" note applies ONLY to running TWO 10 GB instances on
+  16 GB RAM (a separate, real constraint for local two-copy testing); it was not
+  the single-instance lag.
+Status: **CONFIRMED**.
