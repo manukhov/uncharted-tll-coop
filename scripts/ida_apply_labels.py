@@ -5952,6 +5952,36 @@ FUNCTIONS = {
         "Initializes the 0xC0-byte WeaponInfo used by the developer give-weapon "
         "path; authored weapon id is subsequently written at +0x80.",
     ),
+    # --- Input block-selector bus + HUD is-aiming publish chain (2026-07-04) ---
+    0x14179D780: (
+        "FrameState_ConstructJoypadSlots",
+        "FrameState/input-manager constructor part that initializes the six "
+        "per-slot Joypad states via JoypadState_Initialize(slot, selector, "
+        "mode): selectors are {0,1,0,1,0,1} and mode is 3 for slots 0-1 (real "
+        "local-player lanes) and 0 for slots 2-5. The selector byte lands at "
+        "Joypad+0xF0 and picks WHICH g_InputStateBlocks entry the slot "
+        "consumes in Input_PerPlayerDispatch: even slots read block 0, odd "
+        "slots read block 1. Slot 3 (co-op puppet joypad) therefore shares "
+        "input block 1 with slot 1 = the engine's local-player-1 lane; "
+        "anything left in block 1 outside slot 3's conversion is read as "
+        "local-player-1 input (co-op crosshair/aim HUD leak root cause).",
+    ),
+    0x140C91970: (
+        "PlayerHud_ScreenStatePublishUpdate",
+        "Per-frame player/HUD state publish driven from the global player "
+        "handle at 0x143EEBE80 (entry stub 0x1401656B0). Reads the screen "
+        "index at a1+0x4010, then runs "
+        "UpdatePlayerHudAimingAndWeaponAccuracyPublishes on the per-screen "
+        "HUD state array 0x143EF1E30 (0x100 stride). Also binds "
+        "g_LocalPlayerInputManager_Ptr+0xE0 into type-512 HUD records.",
+    ),
+    0x1401656B0: (
+        "PlayerHud_GlobalHandleUpdateEntry",
+        "Frame entry that validates the global player handle "
+        "(ptr+id pair at 0x143EEBE80, id checked against object+0xBC), sets "
+        "object+0x72=1 and calls PlayerHud_ScreenStatePublishUpdate. A "
+        "sibling handle at 0x146A8C838 gets vtable+0x1E0 instead.",
+    ),
 }
 
 # Data/global names (set via ida_name on data addresses).
@@ -6011,6 +6041,21 @@ DATA_NAMES = {
         "g_EngineClockToSeconds",
         "Float scale converting g_EngineClock+0x310 ticks to the native "
         "animation/network timestamp.",
+    ),
+    0x143EEBE80: (
+        "g_PlayerHandleForHudPublish",
+        "Global {pointer, id} handle (id at +8, validated against object+0xBC) "
+        "consumed once per frame by PlayerHud_GlobalHandleUpdateEntry to run "
+        "PlayerHud_ScreenStatePublishUpdate. ~830 xrefs across the binary — "
+        "behaves like THE primary local-player handle singleton.",
+    ),
+    0x143EF1E30: (
+        "g_PerScreenPlayerHudState",
+        "Per-screen player/HUD state array (0x100 stride), indexed by the "
+        "screen index at player+0x4010. Target object of "
+        "UpdatePlayerHudAimingAndWeaponAccuracyPublishes: is-aiming, "
+        "weapon-accuracy, reticle-show-time records are committed into "
+        "[screen]+0xF0 block offsets ~+0x3B18/+0x3B30.",
     ),
 }
 

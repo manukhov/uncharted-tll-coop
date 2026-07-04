@@ -1,5 +1,39 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-04, Claude — crosshair dup root cause: shared input block 1, HANDOFF)
+
+**User test result:** прицел всё ещё дублировался на копию-приёмник при прицеливании
+пира → гипотеза «scrub локального джойпада достаточно» **REJECTED**.
+
+### Root cause (STATIC, реестр: "Input Block Selector Bus")
+- `FrameState_ConstructJoypadSlots 0x14179D780` задаёт селекторы блоков
+  (`Joypad+0xF0`) = `{0,1,0,1,0,1}`: **слот 3 (джойпад марионетки) читает блок 1 —
+  тот же, что слот 1 = штатный лэйн локального игрока №2** (mode 3 у слотов 0/1).
+- Все наши записи aim `0x200`/look в branch слота 1 и в source хука ScaleCopy
+  (dest=3) оседали в общем блоке 1 → движок читал их как «локальный игрок 1
+  целится» → strafe-камера/ретикл на локальном вьюпорте приёмника.
+  (`is-aiming` HUD-publish `0x1413571B0` требует камеру `CameraControlStrafe`
+  vtable `0x143054560` на экранном маршруте — см. реестр.)
+
+### Fix (в этом коммите, build OK)
+- `hooked_input_scale_copy` (dest=3): **сэндвич** — сохранить блок-1 `+0x518` и
+  правый стик `+0x08/+0x0C`, записать peer aim/fire + look, вызвать оригинал
+  (джойпад 3 успевает вывести command state), **восстановить** блок. Peer-ввод
+  существует на общей шине только внутри конверсии.
+- `drive_remote_slot1_actions_tick`: look_stick больше не пишется в branch
+  (`+0x1C/+0x20`); aim/fire срезаются из branch-маски `branch1+0x10` (едут только
+  через сэндвич). Движение/gate-биты не тронуты. Скраб локального пэда оставлен.
+
+### User test checklist (next turn)
+1. Обе копии с новой `tll_teleport_hook_v2.dll`, ≥10 c после спавна.
+2. Chloe держит прицел → на копии 2: поза прицеливания у марионетки, лог
+   `JOYPAD3-ANALOG ... current=` содержит `0x200`, и **нет** ретикла/зума у Нэдин.
+3. `REMOTE-ACTIONS branch=` больше не содержит `0x200/0x800` — это норма.
+4. Выстрелы: как раньше (FIRE-RELAY native / пульс) — путь не менялся, но
+   проверить, что пистолетный выстрел доходит (fire теперь только через сэндвич).
+5. Если ретикл вернулся → гипотеза остатка в блоке 1 неверна; следующий кандидат —
+   прямой читатель Joypad-объекта слота 3 в HUD/камере (гейт на стороне читателя).
+
 ## Turn note (2026-07-03, Cursor — fire dedup + load guards + aim anim restore, HANDOFF)
 
 **Зафиксировано в этом коммите.** Следующий ход: user-test aim pose + crosshair isolation.

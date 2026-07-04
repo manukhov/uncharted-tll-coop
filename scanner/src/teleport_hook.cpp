@@ -1018,6 +1018,18 @@ std::int64_t __fastcall hooked_input_scale_copy(
     // a native local Player. Input_ScaleCopyVirtual derives held/pressed/released
     // Joypad masks and hold timestamps from source+0x518, so command bindings
     // (jump, crouch, melee, cover, traversal, etc.) remain engine-owned.
+    //
+    // SHARED BUS: `source` here is NOT a private per-slot block. FrameState ctor
+    // 0x14179D780 initializes the Joypad+0xF0 block selectors as {0,1,0,1,0,1}:
+    // slot 3 (puppet) reads g_InputStateBlocks[1], the SAME block as slot 1 (the
+    // engine's local-player-1 lane) and slot 5. Anything left in block 1 after
+    // this conversion is consumed by the other lanes and by screen-level
+    // HUD/strafe-camera logic -> crosshair/aim leak on the local viewport. So the
+    // peer mask and look stick exist in the block only inside this call:
+    // save before, restore right after the original returns.
+    bool shared_bus_touched = false;
+    std::uint64_t shared_bus_saved_mask = 0;
+    float shared_bus_saved_look[2] = {0.0F, 0.0F};
     if (destination_index == 3 && readable_bytes(source) >= 0x520) {
         coop::StatePacket peer{};
         if (copy_peer_state_snapshot(peer) && (peer.flags & 8) != 0) {
@@ -1040,9 +1052,10 @@ std::int64_t __fastcall hooked_input_scale_copy(
                     g_state_net.active_button_press_latch.load(
                         std::memory_order_acquire));
             auto* const source_bytes = static_cast<std::byte*>(source);
+            shared_bus_saved_mask =
+                *reinterpret_cast<const std::uint64_t*>(source_bytes + 0x518);
             const std::uint64_t synthetic_move_gate =
-                *reinterpret_cast<const std::uint64_t*>(source_bytes + 0x518) &
-                0x500u;
+                shared_bus_saved_mask & 0x500u;
             std::uint64_t held_mask = remote_puppet_actions_from_peer(
                 peer.input_buttons) |
                 remote_puppet_fire_pulse(edge_pulse);
@@ -1056,13 +1069,36 @@ std::int64_t __fastcall hooked_input_scale_copy(
             held_mask = sanitize_remote_puppet_button_mask(held_mask);
             *reinterpret_cast<std::uint64_t*>(source_bytes + 0x518) =
                 held_mask | synthetic_move_gate;
-            // Do not relay peer look_stick into the resolved block — it opens the
-            // local viewport aim HUD on the receiver. Body facing uses camera_quat
-            // via apply_peer_aim_facing_to_player instead.
+            // Peer look_stick may live in the shared block only during this
+            // conversion (restored below). Persisting it opened the local
+            // viewport aim HUD; the sandwich write keeps the puppet's right
+            // stick working without exposing it to the other lanes.
+            auto* const axes = reinterpret_cast<float*>(source_bytes);
+            shared_bus_saved_look[0] = axes[2];
+            shared_bus_saved_look[1] = axes[3];
+            if ((peer.input_buttons & kJoypadAimButtonMask) != 0 &&
+                (peer.flags & coop::kStateFlagPeerCamera) != 0 &&
+                (std::fabs(peer.look_stick[0]) > 0.001F ||
+                 std::fabs(peer.look_stick[1]) > 0.001F)) {
+                axes[2] = peer.look_stick[0];
+                axes[3] = peer.look_stick[1];
+            }
+            shared_bus_touched = true;
         }
     }
     const std::int64_t result =
         g_original_input_scale_copy(joypad, source, destination_index);
+    if (shared_bus_touched) {
+        // Scrub the shared block-1 bus: slot 3 has consumed the peer state into
+        // its own Joypad; slots 1/5 and any screen-level reader must never see
+        // the peer aim/fire bits or look axes.
+        auto* const source_bytes = static_cast<std::byte*>(source);
+        *reinterpret_cast<std::uint64_t*>(source_bytes + 0x518) =
+            shared_bus_saved_mask;
+        auto* const axes = reinterpret_cast<float*>(source_bytes);
+        axes[2] = shared_bus_saved_look[0];
+        axes[3] = shared_bus_saved_look[1];
+    }
     if (destination_index == 3 && readable_bytes(joypad) >= 0xD8) {
         // Joypad 3 is converted several times before the remote Player consumes
         // its command state. Keep the native pressed edge visible through those
@@ -7301,13 +7337,11 @@ void drive_remote_slot1_actions_tick() {
     const bool peer_aiming =
         (peer.flags & 8) != 0 &&
         (peer.input_buttons & kJoypadAimButtonMask) != 0;
-    if (peer_aiming &&
-        (peer.flags & coop::kStateFlagPeerCamera) != 0 &&
-        (std::fabs(peer.look_stick[0]) > 0.001F ||
-         std::fabs(peer.look_stick[1]) > 0.001F)) {
-        *reinterpret_cast<float*>(branch1 + 0x1C) = peer.look_stick[0];
-        *reinterpret_cast<float*>(branch1 + 0x20) = peer.look_stick[1];
-    }
+    // Peer look_stick must NOT ride the slot-1 branch: the branch apply copies it
+    // into shared block 1, where the local-player-1 lane (slot 1) and screen-level
+    // HUD/camera code read it -> aim HUD leak on the local viewport. The right
+    // stick is fed to the puppet inside hooked_input_scale_copy (dest=3) with a
+    // save/restore sandwich instead.
     apply_peer_aim_facing_to_player(remote_player, peer);
     scrub_local_viewport_aim_hud_leak();
 
@@ -7377,6 +7411,13 @@ void drive_remote_slot1_actions_tick() {
         actions |= 0x500u;
     }
     actions = sanitize_remote_puppet_button_mask(actions);
+    // Aim/fire must not persist in shared block 1 via the branch mask: the
+    // branch apply (slot 1) writes block1+0x518 and derives slot-1 Joypad
+    // edges from it, which the engine reads as "local player 1 is aiming"
+    // (crosshair/strafe-camera leak on the local viewport). Both bits are
+    // delivered to the puppet exclusively inside hooked_input_scale_copy
+    // (dest=3) with a save/restore sandwich around the conversion.
+    actions &= ~(kJoypadAimButtonMask | kJoypadFireButtonMask);
     // FrameState_PerSlotInputApply_Branch reads a DWORD at source+0x10.
     // write here corrupts the adjacent left-stick X at +0x14. The engine copies
     // this DWORD to block+0x518 and derives edges at +0x508/+0x510 itself.

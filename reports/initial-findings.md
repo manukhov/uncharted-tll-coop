@@ -22976,3 +22976,72 @@ or a one-shot button pulse. Relaying both caused double `PlayerFireController_Fi
 **Fix strategy (implemented in hook):** relay `0x200` + `look_stick`; strip scope bits;
 `scrub_local_viewport_aim_hud_leak()` on local joypad when peer aims but local player
 does not. Status: **STATIC** (aim anim path); **HYPOTHESIS** (crosshair scrub sufficient).
+
+### Input Block Selector Bus: Slot 3 Shares Block 1 With the Local-Player-1 Lane (STATIC, 2026-07-04)
+
+**REJECTED (runtime, user test 2026-07-04):** "crosshair scrub sufficient" from the
+2026-07-03 entry above. `scrub_local_viewport_aim_hud_leak()` clears the LOCAL
+joypad's resolved block/joypad masks, but the user test still showed the crosshair
+duplicating onto the receiving copy's viewport while the peer aimed. The local pad
+was never the leak path.
+
+**STATIC (root cause):** the per-slot input block binding is NOT slot==block.
+`FrameState_ConstructJoypadSlots` (`0x14179D780`) initializes the six Joypad slots
+via `JoypadState_Initialize(slot, selector, mode)` (`0x1418369C0`, writes the
+selector byte to `Joypad+0xF0`):
+
+- slot 0: selector 0, mode 3
+- slot 1: selector 1, mode 3
+- slot 2: selector 0, mode 0
+- slot 3: selector 1, mode 0
+- slot 4: selector 0, mode 0
+- slot 5: selector 1, mode 0
+
+`Input_PerPlayerDispatch_MgrArg` (`0x14179E6C0`) passes
+`&g_InputStateBlocks[166 * selector]` to each slot's apply. So **slot 3 (the co-op
+puppet joypad) consumes input block 1 — the SAME block as slot 1, the engine's
+local-player-1 lane** (slots 0/1 are the two real player lanes, mode 3). The mod
+itself already forces the driven slot's selector to 1 (`drive_slot1_tick`,
+`fs+0xE88+0xBF0*idx+0x18 = 1`), which is why the slot-1 branch feed reaches
+joypad 3 at all.
+
+**Consequence:** any aim `0x200` / fire `0x800` mask or look-stick axes left in
+block 1 outside slot 3's own `Input_ScaleCopyVirtual` conversion are consumed by
+slot 1 (and slot 5) and by screen-level HUD/camera logic as *local player 1
+aiming* → aim crosshair/strafe-camera state on the receiving copy's viewport.
+Cursor's earlier runtime observation (teleport_hook.cpp comment: writing
+`look_stick` into the "dest=3 source block" opens the local viewport aim HUD) was
+exactly this bus: that source block IS block 1.
+
+**HUD is-aiming publish chain (STATIC, supporting):**
+`PlayerHud_GlobalHandleUpdateEntry` (`0x1401656B0`, reads global player handle
+`g_PlayerHandleForHudPublish` `0x143EEBE80`) → `PlayerHud_ScreenStatePublishUpdate`
+(`0x140C91970`, screen index at `player+0x4010`) →
+`UpdatePlayerHudAimingAndWeaponAccuracyPublishes` (`0x1413571B0`) publishes
+`is-aiming` into `g_PerScreenPlayerHudState` (`0x143EF1E30`, 0x100 stride).
+`is-aiming` requires BOTH a player-state boolean (`player+0x1D88 → vtbl+0x148`)
+AND the screen route's current camera vtable == `off_143054560`
+(= `CameraControlStrafe`, class registration `0x140066690`, factory
+`0x14076E440`, ctor `ConstructLargeCameraControlStrafeBase1FA0`). So the visible
+crosshair implies the strafe/aim camera state machine engaged on the receiving
+screen — consistent with the block-1 leak, impossible from the (scrubbed) local
+pad alone.
+
+**Fix (implemented 2026-07-04, teleport_hook.cpp):**
+1. `hooked_input_scale_copy` (dest==3): save block-1 `+0x518` and right-stick
+   axes (`+0x08/+0x0C`), write peer aim/fire mask + look stick, call the
+   original (joypad 3 derives its command state), then RESTORE the saved
+   values. The peer state exists on the shared bus only inside the conversion.
+2. `drive_remote_slot1_actions_tick`: peer look_stick no longer written into
+   the slot-1 branch (`+0x1C/+0x20`); aim `0x200` / fire `0x800` stripped from
+   the branch mask (`branch1+0x10`) — both now ride exclusively via the
+   ScaleCopy sandwich. Movement axes/gate bits unchanged.
+
+**Falsifiable prediction (next runtime test):** with the new DLL on both copies,
+Chloe holds aim → copy 2 shows puppet aim pose (`JOYPAD3-ANALOG current=0x200+`
+sustained) and **no** crosshair/scope on Nadine's viewport; `REMOTE-ACTIONS
+branch=` masks no longer contain `0x200/0x800`. If the crosshair still appears,
+the block-1 bus hypothesis is wrong for the remaining leak and the next candidate
+is a direct slot-3 Joypad reader in HUD/camera code (would need a consumer-side
+gate instead). Status: **STATIC** (bus + fix), **HYPOTHESIS** (leak fully
+explained by block-1 residue) pending runtime.
