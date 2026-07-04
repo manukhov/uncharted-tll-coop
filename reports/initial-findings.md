@@ -23095,3 +23095,41 @@ CameraManager/route. От этого зависит фикс: гейт мари�
 устранения aim-протечки в слот 0. Реле правого стика (look) — отдельный баг
 направления, чинится независимо (правильное поле правого стика в блоке ввода).
 Status: **REJECTED** (битовая утечка), **HYPOTHESIS** (состояние-марионетки/камера).
+
+### Runtime 2026-07-04 (aim held): scope leak is the GLOBAL sniper-reticle singleton, not local-player handle
+
+**Live reads (PID 8524 receiver, Chloe-puppet aiming a rifle, Nadine local idle):**
+- `g_PlayerHandleForHudPublish 0x143EEBE80` → entry `0x10e0201150` → player
+  `0x10e0a2d180`. Concurrent `WEAPON-SEND live0=0x10e0a2d180` → **the HUD handle
+  equals the LOCAL slot-0 player (Nadine)**, NOT the puppet (`live1=0x10e0ddf600`).
+- `JOYPAD3-ANALOG current=0x209 right=(0.028,0.286)` sustained → the PUPPET (joypad
+  3 / slot 1) is the one in aim-press with a scoped rifle. (Also confirms the look
+  relay DOES reach the puppet during aim; the earlier `right=(0,0)` sample was a
+  non-aim window. Aim direction still wrong = look/facing derivation, separate bug.)
+- `PLAYER-INPUT-BIND slot=0 joypad=2 screen=0` (Nadine), `slot=1 joypad=3 screen=1`
+  (puppet Chloe). Per-screen `is-aiming` publish (`0x1413571B0`) is indexed by
+  `player+0x4010` (screen), so screen-0 is-aiming stays false for idle Nadine.
+
+**Conclusion (refutes prior "aim leaks into local slot 0"):** the local player and
+its per-screen HUD are correct. The sniper scope nevertheless renders on the local
+viewport because the sniper reticle manager is a **process-global singleton**:
+`is-scope-visible?` (`sub_140C177F0`) resolves `ss-hud-sniper-reticle-manager`
+through the global registry `dword_146466FE0` (via `sub_141622BC0`) and reads the
+manager's own state (`mgr+168`, `mgr+188`) — not a per-player/per-screen field.
+Its update `sub_140C193A0` reads the local-player handle only for health strings.
+So when the PUPPET enters scoped-ADS aim with the rifle `0x8075397d`, it flips the
+GLOBAL scope-visible state → the full-screen scope overlay (no vignette, because
+it's the raw manager overlay, not the local player's own composited ADS) appears on
+the receiver's single viewport.
+
+**Falsifiable fix hypothesis (next turn):** the puppet must not drive the global
+scope/ADS state. Two candidate levers, in priority:
+1. Relay aim as POSE only — do not arm the puppet weapon's scoped-ADS/zoom state
+   (the state that toggles the sniper-reticle manager). Predict: puppet still shows
+   aim body pose, receiver viewport shows NO scope. If scope persists, the manager
+   is toggled by aim-press alone, not by weapon ADS → go to (2).
+2. Gate the global sniper-reticle manager / `is-scope-visible?` so a non-primary
+   (puppet, screen != 0) player cannot set scope-visible.
+
+Do NOT re-relay/strip input bits for this — proven irrelevant (block-1 REJECTED).
+Status: **STATIC+RUNTIME** (localization to global singleton), **HYPOTHESIS** (fix).
