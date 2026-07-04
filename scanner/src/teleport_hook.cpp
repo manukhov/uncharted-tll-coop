@@ -837,9 +837,11 @@ std::uint32_t capture_held_weapon_art_id(void* player);
 // the dozens of diagnostic lines/sec during active co-op turned into per-frame
 // stalls that worsened as the log grew (587 MB observed). Fix: keep ONE handle open
 // for the process lifetime and only WriteFile (buffered, cheap) under a lock; the
-// expensive open/close is paid once. VK_HOME toggles logging off entirely for a
-// zero-I/O run to confirm logging as the stutter source.
-volatile bool g_logging_enabled = true;
+// expensive open/close is paid once. Default OFF = zero log file I/O on the game
+// thread (the real lag was memory paging from two 10 GB instances on 16 GB RAM,
+// not the mod; keeping logging off removes the mod's remaining game-thread I/O).
+// F11 toggles logging on when diagnostics are needed.
+volatile bool g_logging_enabled = false;
 static SRWLOCK g_log_lock = SRWLOCK_INIT;
 static HANDLE g_log_handle = INVALID_HANDLE_VALUE;
 
@@ -9321,14 +9323,14 @@ void net_tick() {
     static ULONGLONG last_freeze = 0, last_hp_probe = 0, last_hpsys = 0;
     static ULONGLONG last_animation_mirror = 0, last_weapon_apply = 0;
     const ULONGLONG now = GetTickCount64();
-    if (foreground && (GetAsyncKeyState(VK_HOME) & 1) != 0) {
-        g_logging_enabled = !g_logging_enabled;
-        // Log the state change itself (bypasses the flag once so the transition is
-        // visible when turning logging back on).
+    if (foreground && (GetAsyncKeyState(VK_F11) & 1) != 0) {
+        // F11: toggle diagnostic logging. Default OFF = zero log file I/O on the
+        // game thread. (VK_HOME is already the DLL-inert toggle in aux_input_thread;
+        // do not reuse it.)
         const bool was = g_logging_enabled;
         g_logging_enabled = true;
-        log_line(was ? "LOGGING ON" : "LOGGING OFF (zero file I/O)");
-        g_logging_enabled = was;
+        log_line(was ? "LOGGING OFF (zero file I/O)" : "LOGGING ON");
+        g_logging_enabled = !was;
     }
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
         g_local_animation_mirror_test = !g_local_animation_mirror_test;

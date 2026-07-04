@@ -23331,3 +23331,35 @@ VK_END = `g_dll_inert` full pass-through (isolates ALL mod per-frame logic). If
 VK_HOME alone restores smoothness, logging was the cause; if only VK_END does,
 the remaining cost is `readable_bytes`/per-frame logic. Status: **STATIC** (cause
 + fix), **HYPOTHESIS** (severity) pending user A/B.
+
+### Performance ROOT CAUSE: memory exhaustion (16 GB RAM, two 10 GB instances), not the mod (2026-07-04)
+
+**Measured live (both instances running, PID 26176/22200):**
+- Physical RAM: **15.9 GB total, 0.3 GB free.**
+- Commit charge: **54.9 / 59.5 GB** (~39 GB pushed to the page file / disk).
+- Each `tll.exe`: **~10.6 GB private commit**, but **working set only ~3 GB
+  resident** each (6.1 GB combined resident out of 21 GB committed). The OS has
+  hard-trimmed ~15 GB of the games' memory to disk because there is no physical RAM
+  to keep it. `\Memory\Pages/sec` ~100 at idle (spikes under gameplay).
+- Also resident: `vmmem` (WSL/Debian for the MCP server) ~4 GB commit.
+
+**Conclusion:** the severe stutter is **memory-pressure paging**, not the mod's
+CPU/logging. Two 10 GB AAA instances cannot both stay resident in 16 GB RAM, so
+gameplay constantly hard-faults paged-out memory from disk. Per-process CPU was
+only 17–20% of all 16 threads and no mod thread pegs a core (aux_input_thread
+sleeps 15 ms; recv threads block; heavy probes default off). The earlier VK_HOME/
+VK_END A/B was invalid: **VK_HOME was already the `g_dll_inert` toggle** in
+aux_input_thread, and the logging toggle I added collided with it.
+
+**Remediation (not a code fix):**
+1. Don't run two 10 GB instances on 16 GB — the real deployment is two PCs via
+   Steam Remote Play Together (already the roadmap target).
+2. If testing on one PC: lower each instance's texture/quality/resolution to shrink
+   the working set; close other consumers; free the WSL `vmmem` 4 GB
+   (`wsl --shutdown`, stops the MCP server) while playtesting.
+3. Add RAM (16 → 32 GB) for two-instance local testing.
+
+**Mod-side hygiene done anyway:** `g_logging_enabled` now defaults **false** (zero
+log file I/O on the game thread); F11 re-enables when diagnostics are needed;
+persistent log handle retained. Fixed the VK_HOME triple-binding. Status:
+**CONFIRMED** (root cause = RAM paging, measured).
