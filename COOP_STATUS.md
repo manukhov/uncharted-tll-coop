@@ -1,6 +1,45 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
-## Turn note (2026-07-04, Claude — RUNTIME: block-1 fix REJECTED, корень = состояние марионетки, HANDOFF)
+## Turn note (2026-07-04, Cursor — crosshair dup: ADS-флаг гейт REJECTED, новый гейт по screen index в per-screen HUD паблишерах)
+
+**Тест (PID 21040/4488):** гейты `is-scope-visible?` + reticle-паблишеров, условие
+`remote_player_ads_active()` (`Player+0x1548 != 0`) — прицел всё ещё дублируется, и
+в логе **ноль** строк `SCOPE-VISIBLE gated`/`RETICLE-HUD gated`, при том что
+марионетка держала aim (`JOYPAD3 current=0x209`). → **REJECTED:** `+0x1548` ставится
+только при scoped-RIFLE ADS; при обычном (пистолетном) прицеле он 0. Как общий
+предикат «удалённый целится» НЕ использовать.
+
+**Новая статика (см. initial-findings, запись «Per-screen HUD reticle publishers»):**
+обычное перекрестие спавнится per-screen HUD паблишерами над
+`g_PerScreenPlayerHudState 0x143EF1E30` (stride 0x100), **индекс экрана/слота в
+`state+0xF8`**:
+- `0x14135A650` `PlayerHudScreen_ReticleProcessPublisher` (спавнит `ss-hud-reticle`);
+- `0x14135AF20` `PlayerHudScreen_AmmoReticlePublisher` (тоже спавнит `ss-hud-reticle`,
+  вызывается из `UpdatePlayerHudAimingAndWeaponAccuracyPublishes`);
+- `0x14135C050` — blindfire, жёстко screen-0 (алиасы `0x143EF1F20/0x143EF1F28`).
+Доказательства индекса: `GetRetainedPlayerEntityBySlot(*(a1+248))` + джойпад
+`0xBF0*(slot+2)` (совпадает со slot0→joypad2, slot1→joypad3) + фикс-алиасы screen-0.
+
+**Фикс (teleport_hook.cpp, собрано+заинжекчено):** хуки на `0x14135A650` и
+`0x14135AF20` — скип паблиша, если `*(state+0xF8) != 0`
+(`hud_state_is_non_primary_screen`, лог `RETICLE-HUD gated: screen!=0` /
+`RETICLE-AIM-HUD gated: screen!=0`). Не зависит от оружия/ADS. Гейт
+`is-scope-visible?` (снайперский оверлей) оставлен по remote-ADS `+0x1548` — для
+винтовки флаг работает (диф это показал).
+
+**Прогноз теста:** пир держит прицел (любое оружие) → на приёмнике поза
+прицеливания у марионетки ЕСТЬ, перекрестия НЕТ, в логе `RETICLE-*HUD gated:
+screen!=0`; свой локальный прицел рисуется как обычно. Если перекрестие всё же
+остаётся при наличии gated-строк — есть ещё один HUD-путь (искать соседей
+`0x1413B42E0`/`0x1413B4670` семьи).
+
+**Игра запущена (PID 22372 role A / 11672 role B), новый DLL заинжекчен.**
+IDB размечен (`apply_labels OK: 864 functions`, `save_database returned True`),
+MCP-копия обновляется.
+
+---
+
+## Turn note (2026-07-04, Claude — RUNTIME: block-1 fix REJECTED, корень = состояние марионетки, HANDOFF) [SUPERSEDED выше]
 
 **Тест (PID 14440 отпр. / 8524 приёмн.):** прицел всё ещё дублируется, снайперский
 прицел дублируется **без виньетирования**, «целится/стреляет не в ту сторону».

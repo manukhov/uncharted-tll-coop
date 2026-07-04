@@ -65,6 +65,14 @@ constexpr std::uintptr_t kBuildRespawnTransformBlockRva = 0x1685C30;
 constexpr std::uintptr_t kRespawnSeedDefaultVec4Rva = 0x28805D0;
 constexpr std::uintptr_t kStringHashRva = 0x14D910;
 constexpr std::uintptr_t kResolveUpperActorRecordRva = 0x17CD080;
+constexpr std::uintptr_t kScopeVisibleQueryRva = 0x0C177F0;
+constexpr std::uintptr_t kReticleHudPublisherRva = 0x135A650;
+constexpr std::uintptr_t kReticleAimHudPublisherRva = 0x135AF20;
+constexpr std::uintptr_t kBlindfireReticleHudPublisherRva = 0x135C050;
+// Per-screen HUD state: the screen/slot index lives at state+0xF8 (see
+// GetRetainedPlayerEntityBySlot(*(state+248)) inside the reticle publishers
+// and the fixed screen-0 global 0x143EF1F28 = g_PerScreenPlayerHudState+0xF8).
+constexpr std::size_t kPerScreenHudStateScreenIndexOffset = 0xF8;
 constexpr std::uintptr_t kPlayerVisualLookSeedRva = 0x1BB4B01;
 constexpr std::uintptr_t kPlayerVisualStateSeedRva = 0x1BB4B14;
 constexpr std::size_t kNetPlayerSourceEntrySize = 0x1C0;
@@ -77,6 +85,7 @@ constexpr std::size_t kPlayerVelocityOffset = 0x260;
 constexpr std::size_t kPlayerVelocityMirrorOffset = 0x270;
 constexpr std::size_t kReferenceTransformOffset = 0x100;
 constexpr std::size_t kCameraRotationOffset = 0x1B0;
+constexpr std::size_t kPlayerAdsActiveOffset = 0x1548;
 constexpr std::size_t kLocomotionControllerOffset = 0x15B8;
 // Normalizes the peer's horizontal ground speed (units/s) into a 0..1 left-stick
 // magnitude fed to the clone's slot-1 input so its own locomotion blends walk/run.
@@ -183,9 +192,19 @@ using InputScaleCopyFunction = std::int64_t(__fastcall*)(void*, void*, std::uint
 using GameInfoKeyboardModeFunction = bool(__fastcall*)(void*);
 using EvaluateKeyboardButtonBindingFunction = char(__fastcall*)(
     void*, void*, std::uint32_t);
+using ScopeVisibleQueryFunction = char(__fastcall*)();
+using ReticleHudPublisherFunction = std::int64_t(__fastcall*)(void*);
+using ReticleAimHudPublisherFunction =
+    std::int64_t(__fastcall*)(void*, std::uint32_t, double, std::int64_t);
+using BlindfireReticleHudPublisherFunction = void(__fastcall*)();
 InputScaleCopyFunction g_original_input_scale_copy = nullptr;
 GameInfoKeyboardModeFunction g_original_gameinfo_keyboard_mode = nullptr;
 EvaluateKeyboardButtonBindingFunction g_original_evaluate_keyboard_button_binding =
+    nullptr;
+ScopeVisibleQueryFunction g_original_scope_visible_query = nullptr;
+ReticleHudPublisherFunction g_original_reticle_hud_publisher = nullptr;
+ReticleAimHudPublisherFunction g_original_reticle_aim_hud_publisher = nullptr;
+BlindfireReticleHudPublisherFunction g_original_blindfire_reticle_hud_publisher =
     nullptr;
 std::atomic<DWORD> g_force_joypad3_analog_thread{0};
 std::atomic<std::uint64_t> g_force_joypad3_analog_hits{0};
@@ -412,10 +431,10 @@ volatile bool g_native_fire_relay = true;
 // the puppet enters full weapon ADS — and because ss-hud-sniper-reticle-manager is
 // a PROCESS-GLOBAL singleton (see initial-findings 2026-07-04), a scoped-rifle ADS
 // on the puppet raises the sniper scope overlay on the RECEIVER's own viewport.
-// Default false = pose-only: body facing still tracks the peer (apply_peer_aim_
-// facing_to_player) but the puppet weapon does not scope, so no duplicated overlay.
+// Default true: keep full ADS/aim stance on the remote Player. The duplicated
+// scope is gated on the HUD query side, not by removing aim from the puppet.
 // Toggle live with F8 to A/B the aim stance vs. the scope leak.
-volatile bool g_puppet_relay_aim_press = false;
+volatile bool g_puppet_relay_aim_press = true;
 static ULONGLONG g_fire_button_hold_until_ms = 0;
 // After native Fire replay, block peer/button fire on the remote player so the
 // same shot is not delivered twice (relay native + Joypad 0x800).
@@ -804,6 +823,7 @@ void derive_look_stick_from_camera(
 std::byte* joypad_resolved_input_block(int joypad_index);
 bool local_game_window_foreground();
 std::uint32_t peer_effective_held_art(const coop::StatePacket& peer);
+std::uint32_t capture_held_weapon_art_id(void* player);
 
 void log_line(const char* line) {
     std::ofstream output(
@@ -1476,6 +1496,187 @@ void* install_fire_gate_detour(
     DWORD ignored = 0;
     VirtualProtect(target, patch_size, old_protection, &ignored);
     return trampoline;
+}
+
+bool player_ads_active(void* player) {
+    if (player == nullptr ||
+        readable_bytes(static_cast<std::byte*>(player) + kPlayerAdsActiveOffset) <
+            sizeof(std::uint32_t)) {
+        return false;
+    }
+    return *reinterpret_cast<const std::uint32_t*>(
+               static_cast<const std::byte*>(player) + kPlayerAdsActiveOffset) != 0;
+}
+
+bool local_player_should_show_scope() {
+    void* const local = retained_player_object(0);
+    if (!player_ads_active(local)) {
+        return false;
+    }
+    // The global sniper-reticle manager should be visible only for the local
+    // viewport's own scoped weapon, not for a remote Player's scoped ADS.
+    return capture_held_weapon_art_id(local) == kCoopRifleArtId;
+}
+
+bool local_player_should_show_reticle() {
+    return player_ads_active(retained_player_object(0));
+}
+
+bool remote_player_ads_active() {
+    return player_ads_active(retained_player_object(1));
+}
+
+bool should_gate_remote_hud_reticle() {
+    return g_state_net.enabled && remote_player_ads_active() &&
+           !local_player_should_show_reticle();
+}
+
+char __fastcall hooked_scope_visible_query() {
+    const char result =
+        g_original_scope_visible_query != nullptr
+            ? g_original_scope_visible_query()
+            : 0;
+    if (result == 0 || !g_state_net.enabled) {
+        return result;
+    }
+    if (remote_player_ads_active() && !local_player_should_show_scope()) {
+        static ULONGLONG last_log = 0;
+        const ULONGLONG now = GetTickCount64();
+        if (now - last_log > 1000) {
+            last_log = now;
+            log_line("SCOPE-VISIBLE gated: remote ADS ignored for local viewport");
+        }
+        return 0;
+    }
+    return result;
+}
+
+// The reticle publishers run once per HUD screen state; the screen/slot index
+// lives at state+0xF8 (slot 0 = local viewport, slot 1 = co-op puppet). The
+// campaign has a single physical viewport, so any screen-1 publish spawns its
+// HUD reticle process onto the local screen — gate purely on the screen index.
+bool hud_state_is_non_primary_screen(const void* state) {
+    if (!g_state_net.enabled || state == nullptr ||
+        readable_bytes(static_cast<const std::byte*>(state) +
+                       kPerScreenHudStateScreenIndexOffset) <
+            sizeof(std::uint32_t)) {
+        return false;
+    }
+    return *reinterpret_cast<const std::uint32_t*>(
+               static_cast<const std::byte*>(state) +
+               kPerScreenHudStateScreenIndexOffset) != 0;
+}
+
+std::int64_t __fastcall hooked_reticle_hud_publisher(void* state) {
+    if (hud_state_is_non_primary_screen(state)) {
+        static ULONGLONG last_log = 0;
+        const ULONGLONG now = GetTickCount64();
+        if (now - last_log > 1000) {
+            last_log = now;
+            log_line("RETICLE-HUD gated: screen!=0 publish skipped");
+        }
+        return 0;
+    }
+    return g_original_reticle_hud_publisher != nullptr
+               ? g_original_reticle_hud_publisher(state)
+               : 0;
+}
+
+std::int64_t __fastcall hooked_reticle_aim_hud_publisher(
+    void* state, std::uint32_t weapon_art, double a3, std::int64_t a4) {
+    if (hud_state_is_non_primary_screen(state)) {
+        static ULONGLONG last_log = 0;
+        const ULONGLONG now = GetTickCount64();
+        if (now - last_log > 1000) {
+            last_log = now;
+            log_line("RETICLE-AIM-HUD gated: screen!=0 publish skipped");
+        }
+        return 0;
+    }
+    return g_original_reticle_aim_hud_publisher != nullptr
+               ? g_original_reticle_aim_hud_publisher(state, weapon_art, a3, a4)
+               : 0;
+}
+
+void __fastcall hooked_blindfire_reticle_hud_publisher() {
+    if (should_gate_remote_hud_reticle()) {
+        static ULONGLONG last_log = 0;
+        const ULONGLONG now = GetTickCount64();
+        if (now - last_log > 1000) {
+            last_log = now;
+            log_line("BLINDFIRE-RETICLE-HUD gated: remote ADS ignored");
+        }
+        return;
+    }
+    if (g_original_blindfire_reticle_hud_publisher != nullptr) {
+        g_original_blindfire_reticle_hud_publisher();
+    }
+}
+
+bool install_scope_visible_gate() {
+    constexpr std::array<std::uint8_t, 16> kScopeVisiblePrologue{
+        0x48, 0x89, 0x5C, 0x24, 0x08,
+        0x48, 0x89, 0x74, 0x24, 0x10,
+        0x48, 0x89, 0x7C, 0x24, 0x18,
+        0x55,
+    };
+    g_original_scope_visible_query =
+        reinterpret_cast<ScopeVisibleQueryFunction>(
+            install_fire_gate_detour(
+                kScopeVisibleQueryRva,
+                kScopeVisiblePrologue.data(),
+                kScopeVisiblePrologue.size(),
+                reinterpret_cast<void*>(&hooked_scope_visible_query),
+                "scope-visible HUD gate"));
+    log_line(g_original_scope_visible_query != nullptr
+                 ? "scope-visible HUD gate installed"
+                 : "scope-visible HUD gate skipped");
+    return g_original_scope_visible_query != nullptr;
+}
+
+bool install_reticle_hud_gate() {
+    constexpr std::array<std::uint8_t, 20> kReticlePublisherPrologue{
+        0x4C, 0x8B, 0xDC, 0x55, 0x41, 0x57, 0x49, 0x8D, 0xAB, 0x38,
+        0xFC, 0xFF, 0xFF, 0x48, 0x81, 0xEC, 0xB8, 0x04, 0x00, 0x00,
+    };
+    constexpr std::array<std::uint8_t, 14> kReticleAimPublisherPrologue{
+        0x40, 0x55, 0x53, 0x57, 0x41, 0x56, 0x48,
+        0x8D, 0xAC, 0x24, 0xD8, 0xFB, 0xFF, 0xFF,
+    };
+    constexpr std::array<std::uint8_t, 19> kBlindfirePublisherPrologue{
+        0x4C, 0x8B, 0xDC, 0x55, 0x53, 0x49, 0x8D, 0xAB, 0x38, 0xFC,
+        0xFF, 0xFF, 0x48, 0x81, 0xEC, 0xB8, 0x04, 0x00, 0x00,
+    };
+    g_original_reticle_hud_publisher =
+        reinterpret_cast<ReticleHudPublisherFunction>(
+            install_fire_gate_detour(
+                kReticleHudPublisherRva,
+                kReticlePublisherPrologue.data(),
+                kReticlePublisherPrologue.size(),
+                reinterpret_cast<void*>(&hooked_reticle_hud_publisher),
+                "reticle HUD publisher gate"));
+    g_original_reticle_aim_hud_publisher =
+        reinterpret_cast<ReticleAimHudPublisherFunction>(
+            install_fire_gate_detour(
+                kReticleAimHudPublisherRva,
+                kReticleAimPublisherPrologue.data(),
+                kReticleAimPublisherPrologue.size(),
+                reinterpret_cast<void*>(&hooked_reticle_aim_hud_publisher),
+                "reticle aim HUD publisher gate"));
+    g_original_blindfire_reticle_hud_publisher =
+        reinterpret_cast<BlindfireReticleHudPublisherFunction>(
+            install_fire_gate_detour(
+                kBlindfireReticleHudPublisherRva,
+                kBlindfirePublisherPrologue.data(),
+                kBlindfirePublisherPrologue.size(),
+                reinterpret_cast<void*>(&hooked_blindfire_reticle_hud_publisher),
+                "blindfire reticle HUD publisher gate"));
+    const bool installed = g_original_reticle_hud_publisher != nullptr &&
+                           g_original_reticle_aim_hud_publisher != nullptr &&
+                           g_original_blindfire_reticle_hud_publisher != nullptr;
+    log_line(installed ? "reticle HUD publisher gates installed"
+                       : "reticle HUD publisher gates incomplete");
+    return installed;
 }
 
 bool install_player_fire_gate_diagnostics() {
@@ -11703,6 +11904,8 @@ DWORD WINAPI install_hook(void*) {
     install_joypad3_keyboard_isolation();
     install_player_fire_capture();
     install_player_fire_gate_diagnostics();
+    install_scope_visible_gate();
+    install_reticle_hud_gate();
     // Player collision/bump probes are intentionally parked. Enabling layer 4<->5
     // collision made the two independent simulations diverge and triggered the
     // exact-position regression. Keep the reverse-engineered code for later use.

@@ -23202,3 +23202,51 @@ the local player is not aiming even though the Second player is. Query path:
 fields `mgr+168/+188`); manager update `sub_140C193A0` (reads
 `g_PlayerHandleForHudPublish` = local player). Status: **CONFIRMED** (ADS state
 located; aim==scope coupling), **HYPOTHESIS** (HUD-side gate).
+
+### Runtime 2026-07-04 (PID 21040/4488): ADS-flag HUD gate never fires — Player+0x1548 is NOT a generic aim predicate — REJECTED
+
+**Test:** both copies with the `is-scope-visible?` gate + reticle publisher gates
+conditioned on `remote_player_ads_active()` (`Player+0x1548 != 0`). User held aim;
+crosshair still duplicated. Log: **zero** `SCOPE-VISIBLE gated` / `RETICLE-HUD
+gated` lines across the whole session, while `JOYPAD3-ANALOG current=0x209` was
+sustained on the receiver (the puppet WAS in aim-press).
+
+**REJECTED:** "gate the HUD paths on the remote player's `+0x1548` ADS flag". The
+`+0x1548` 0→1 flip was measured during scoped-RIFLE ADS; during ordinary
+(pistol/regular crosshair) aim the flag stays 0, so any HUD gate conditioned on it
+never triggers. Do not reuse `Player+0x1548` as a general "is aiming" predicate.
+
+### Per-screen HUD reticle publishers: screen index at state+0xF8 — the deterministic gate (STATIC, 2026-07-04)
+
+The ordinary crosshair does NOT go through `is-scope-visible?` at all. It is
+spawned by the per-screen HUD publisher family over `g_PerScreenPlayerHudState`
+(`0x143EF1E30`, 0x100 stride):
+
+- `0x14135A650` — spawns/kills the `ss-hud-reticle` process, publishes
+  `reticle-show-time` / `update-reticle-aspect`. Called from `0x1413B42E0` with
+  `&g_PerScreenPlayerHudState[32 * idx]`.
+- `0x14135AF20` — sibling publisher (also spawns `ss-hud-reticle`, publishes
+  `total-ammo` etc.), called from `UpdatePlayerHudAimingAndWeaponAccuracyPublishes`
+  (`0x1413571B0`).
+- `0x14135C050` — blindfire reticle publisher, hardwired to screen 0 via the
+  fixed aliases `qword_143EF1F20` (= state+0xF0 of screen 0) / `qword_143EF1F28`
+  (= state+0xF8 of screen 0).
+
+**Key field:** the screen/slot index lives at `state+0xF8` (decompiled as
+`*(a1+248)`). Three mutually consistent proofs:
+1. `0x14135A650` calls `GetRetainedPlayerEntityBySlot(*(a1+248))`.
+2. It reads the slot's Joypad as `g_LocalPlayerInputManager_Ptr +
+   0xBF0*(*(a1+248)+2)` — exactly the confirmed slot→joypad mapping
+   (slot 0→joypad 2, slot 1→joypad 3 from `PLAYER-INPUT-BIND`).
+3. The screen-0-only publisher `0x14135C050` uses the fixed `+0xF0/+0xF8`
+   aliases of the first array element.
+
+**Consequence + fix (implemented):** the duplicated crosshair is the SCREEN-1
+(puppet) publisher spawning its `ss-hud-reticle` process onto the single shared
+viewport. Mod gate in `teleport_hook.cpp`: hook `0x14135A650` and `0x14135AF20`,
+skip the publish when `*(state+0xF8) != 0` (`hud_state_is_non_primary_screen`) —
+weapon- and ADS-independent. Falsifiable prediction: peer holds aim (any weapon)
+→ receiver shows puppet aim pose, `RETICLE-HUD gated: screen!=0` /
+`RETICLE-AIM-HUD gated: screen!=0` lines appear, NO crosshair on the local
+viewport; the local player's own crosshair (screen 0) is unaffected. Status:
+**STATIC** (screen-index gate), pending runtime.

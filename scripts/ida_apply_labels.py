@@ -5975,6 +5975,39 @@ FUNCTIONS = {
         "HUD state array 0x143EF1E30 (0x100 stride). Also binds "
         "g_LocalPlayerInputManager_Ptr+0xE0 into type-512 HUD records.",
     ),
+    # --- Per-screen HUD reticle publisher family (2026-07-04) ---
+    0x14135A650: (
+        "PlayerHudScreen_ReticleProcessPublisher",
+        "Per-screen HUD reticle publisher over g_PerScreenPlayerHudState "
+        "(screen/slot index at state+0xF8): spawns/kills the ss-hud-reticle "
+        "process and publishes reticle-show-time / update-reticle-aspect. "
+        "Reads GetRetainedPlayerEntityBySlot(*(state+0xF8)) and the slot's "
+        "Joypad at g_LocalPlayerInputManager_Ptr+0xBF0*(slot+2). A screen-1 "
+        "(co-op puppet) publish spawns the crosshair onto the single shared "
+        "viewport — gated by the co-op mod when *(state+0xF8)!=0.",
+    ),
+    0x14135AF20: (
+        "PlayerHudScreen_AmmoReticlePublisher",
+        "Sibling per-screen HUD publisher (same state+0xF8 screen index): "
+        "publishes total-ammo and also spawns ss-hud-reticle / "
+        "reticle-show-time records. Called from "
+        "UpdatePlayerHudAimingAndWeaponAccuracyPublishes. Gated by the co-op "
+        "mod for screen!=0.",
+    ),
+    0x14135C050: (
+        "PlayerHudScreen0_BlindfireReticlePublisher",
+        "Blindfire reticle publisher hardwired to HUD screen 0 through the "
+        "fixed aliases qword_143EF1F20 (= screen-0 state+0xF0) and "
+        "qword_143EF1F28 (= screen-0 state+0xF8): show-blindfire-reticle, "
+        "ss-hud-blindfire-reticle, blindfire-weapon-accuracy publishes.",
+    ),
+    0x1413B42E0: (
+        "PlayerHudScreen_ReticlePublishCaller",
+        "Fills the per-screen HUD record (flags from the player handle pair "
+        "at g_PlayerHandleForHudPublish[2*idx]) and tail-calls "
+        "PlayerHudScreen_ReticleProcessPublisher with "
+        "&g_PerScreenPlayerHudState[32*idx].",
+    ),
     0x1401656B0: (
         "PlayerHud_GlobalHandleUpdateEntry",
         "Frame entry that validates the global player handle "
