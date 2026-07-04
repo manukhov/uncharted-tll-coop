@@ -408,6 +408,14 @@ std::uint64_t remote_puppet_fire_pulse(std::uint64_t latch_actions) {
 }
 // Native Fire: pistol/scoped-pistol only; uses full sender fire_args for aim.
 volatile bool g_native_fire_relay = true;
+// Relay the peer's sustained aim-press (0x200) into the PUPPET joypad. When true
+// the puppet enters full weapon ADS — and because ss-hud-sniper-reticle-manager is
+// a PROCESS-GLOBAL singleton (see initial-findings 2026-07-04), a scoped-rifle ADS
+// on the puppet raises the sniper scope overlay on the RECEIVER's own viewport.
+// Default false = pose-only: body facing still tracks the peer (apply_peer_aim_
+// facing_to_player) but the puppet weapon does not scope, so no duplicated overlay.
+// Toggle live with F8 to A/B the aim stance vs. the scope leak.
+volatile bool g_puppet_relay_aim_press = false;
 static ULONGLONG g_fire_button_hold_until_ms = 0;
 // After native Fire replay, block peer/button fire on the remote player so the
 // same shot is not delivered twice (relay native + Joypad 0x800).
@@ -1059,6 +1067,12 @@ std::int64_t __fastcall hooked_input_scale_copy(
             std::uint64_t held_mask = remote_puppet_actions_from_peer(
                 peer.input_buttons) |
                 remote_puppet_fire_pulse(edge_pulse);
+            if (!g_puppet_relay_aim_press) {
+                // Pose-only: drop the puppet's ADS aim-press so its scoped weapon
+                // never raises the global sniper-reticle overlay on this viewport.
+                // Body facing is still driven from the peer camera separately.
+                held_mask &= ~kJoypadAimButtonMask;
+            }
             if (GetTickCount64() < g_fire_button_hold_until_ms &&
                 !puppet_fire_buttons_suppressed()) {
                 held_mask |= kJoypadFireButtonMask;
@@ -7364,6 +7378,20 @@ void drive_remote_slot1_actions_tick() {
             log_line(t.str().c_str());
         }
         prev_f7 = f7;
+    }
+    {
+        // F8: toggle puppet aim-press (ADS) relay. OFF = pose-only (no scoped
+        // rifle overlay leak on this viewport); ON = full ADS aim stance.
+        static bool prev_f8 = false;
+        const bool f8 = (GetAsyncKeyState(VK_F8) & 0x8000) != 0;
+        if (f8 && !prev_f8) {
+            g_puppet_relay_aim_press = !g_puppet_relay_aim_press;
+            std::ostringstream t;
+            t << "PUPPET-AIM-PRESS relay (ADS) = "
+              << (g_puppet_relay_aim_press ? "ON" : "OFF (pose-only)");
+            log_line(t.str().c_str());
+        }
+        prev_f8 = f8;
     }
     std::uint64_t actions = remote_puppet_actions_from_peer(peer.input_buttons);
     if ((peer.flags & 8) != 0) {
