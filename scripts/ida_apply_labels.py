@@ -6015,6 +6015,35 @@ FUNCTIONS = {
         "object+0x72=1 and calls PlayerHud_ScreenStatePublishUpdate. A "
         "sibling handle at 0x146A8C838 gets vtable+0x1E0 instead.",
     ),
+    # --- Sniper scope reticle (is-scope-visible) path (2026-07-05) ---
+    0x140C177F0: (
+        "SniperReticleManager_QueryScopeVisible",
+        "Resolves the PROCESS-GLOBAL ss-hud-sniper-reticle-manager (string "
+        "0x142A03110) via the property registry dword_146466FE0, then queries "
+        "its 'is-scope-visible?' property (mgr+168 owner, id mgr+188; property "
+        "vfunc +0x208). Returns bool = full-screen sniper scope reticle should "
+        "draw. Prologue 48 89 5C 24 08 ... 55. ONLY caller = "
+        "ReticleManager_Update. The property is global: it goes true when EITHER "
+        "the local player OR the co-op Second player enters scoped-rifle ADS, so "
+        "on the single physical viewport a Second-player scope leaks here. The "
+        "co-op mod detours this (kScopeVisibleQueryRva 0xC177F0) and forces 0 "
+        "when the LOCAL player is not scoped (Player+0x1548==0).",
+    ),
+    0x140C193A0: (
+        "ReticleManager_Update",
+        "Per-frame reticle/HUD manager update in the main HUD chain "
+        "(HudUpdate_Main 0x140C149A0). Operates on the primary screen: reads "
+        "g_PlayerHandleForHudPublish (local player) and ResolveScreenRouteEntity"
+        "ByIndex(0). Sole caller of SniperReticleManager_QueryScopeVisible "
+        "(0x140c19abc) — the scope reticle draw is gated on that query result.",
+    ),
+    0x140C149A0: (
+        "HudUpdate_Main",
+        "Main per-frame HUD update: evaluates Joypad commands "
+        "(Joypad_IsCommandActive), resolves the strafe/aim camera "
+        "(CameraControlStrafe vtable off_143054560), and calls "
+        "ReticleManager_Update. Reads g_LocalPlayerInputManager_Ptr HUD state.",
+    ),
 }
 
 # Data/global names (set via ida_name on data addresses).

@@ -1523,12 +1523,22 @@ char __fastcall hooked_scope_visible_query() {
     if (result == 0 || !g_state_net.enabled) {
         return result;
     }
-    if (remote_player_ads_active() && !local_player_should_show_scope()) {
+    // is-scope-visible is a PROCESS-GLOBAL property on ss-hud-sniper-reticle-manager;
+    // it becomes true when EITHER the local player OR the co-op Second player enters
+    // scoped-rifle ADS. This query drives the manager's scope reticle on the single
+    // physical (primary) viewport, so it is legitimate ONLY when the LOCAL player is
+    // scoping. Gate purely on the local player's own ADS flag (Player+0x1548, set
+    // for scoped-rifle ADS): if the local player is not scoped but the global says
+    // visible, the truth is coming from the Second player -> suppress. This does not
+    // depend on resolving/reading the Second player object (the old
+    // remote_player_ads_active() path was fragile and produced zero gated frames),
+    // and it cannot suppress the local player's own scope (local ADS -> allowed).
+    if (!player_ads_active(retained_player_object(0))) {
         static ULONGLONG last_log = 0;
         const ULONGLONG now = GetTickCount64();
         if (now - last_log > 1000) {
             last_log = now;
-            log_line("SCOPE-VISIBLE gated: remote ADS ignored for local viewport");
+            log_line("SCOPE-VISIBLE gated: local player not scoped (Second-player leak)");
         }
         return 0;
     }

@@ -23390,3 +23390,43 @@ VirtualQuery path for A/B.
   16 GB RAM (a separate, real constraint for local two-copy testing); it was not
   the single-instance lag.
 Status: **CONFIRMED**.
+
+### Sniper scope leak: is-scope-visible is a process-global; gate on LOCAL ADS (STATIC, 2026-07-05)
+
+**Path fully mapped.** `SniperReticleManager_QueryScopeVisible` (`0x140C177F0`,
+kScopeVisibleQueryRva `0xC177F0`) resolves the **process-global**
+`ss-hud-sniper-reticle-manager` (string `0x142A03110`, the string's ONLY xref) via
+property registry `dword_146466FE0` and queries its `is-scope-visible?` property.
+Returns bool = draw the full-screen sniper scope reticle. Prologue confirmed
+(`48 89 5C 24 08 … 55`) — the co-op mod's detour installs correctly. Sole caller =
+`ReticleManager_Update` (`0x140C193A0`), itself in the main HUD chain
+`HudUpdate_Main` (`0x140C149A0`); it operates on the PRIMARY screen
+(`g_PlayerHandleForHudPublish` = local player, `ResolveScreenRouteEntityByIndex(0)`).
+
+**Why it leaks:** the property is global — it goes true when EITHER the local
+player OR the co-op Second player enters scoped-rifle ADS. On the single physical
+viewport, a Second-player scope therefore draws the sniper reticle on the local
+screen (user: "снайперский прицел дублируется **без виньетирования**" = the flat
+HUD scope reticle, not the full ADS scope-camera composite).
+
+**Why Cursor's gate produced zero gated frames:** the prior condition
+`remote_player_ads_active() && !local_player_should_show_scope()` depended on
+resolving `retained_player_object(1)+0x1548` (the Second player's ADS flag) at the
+exact query frame — fragile; if that object/read didn't line up, the gate never
+fired. The hook itself was installed (prologue matches), so the failure was the
+runtime condition, not the detour.
+
+**Fix (implemented, STATIC):** replace the condition with a robust, Second-player-
+independent one: on the primary viewport the global scope is legitimate ONLY when
+the LOCAL player is scoped, so force the query to 0 when
+`player_ads_active(retained_player_object(0))` is false (local `Player+0x1548==0`).
+This cannot suppress the local player's own scope (local ADS → allowed) and does
+not depend on reading the Second player object. Log: `SCOPE-VISIBLE gated: local
+player not scoped (Second-player leak)`.
+
+**Falsifiable prediction:** copy-1 snipes → on copy-2 (local Nadine not scoped) the
+sniper reticle no longer draws, and the log shows the gate line each ~1 s while
+copy-1 holds scope; copy-2's OWN sniper scope (when its local player scopes) still
+works. If the reticle still draws WITH the gate line present, then is-scope-visible
+is not the sole draw signal and the residual path is the scope CAMERA (Cursor's
+"Chloe vanishes" hypothesis) — next target. Status: **STATIC**.
