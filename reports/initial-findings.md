@@ -23166,3 +23166,39 @@ ADS-zoom field after its update, or a gate on the scope-visible query. The
 pose-only experiment has proven the target; the remaining RE is locating the
 puppet-side ADS/zoom field (player `+0x1D88` aim/weapon controller) to scrub.
 Status: **CONFIRMED** (puppet ADS = scope cause; unaimed native fire = crash).
+
+### Runtime 2026-07-04 (aim-held diff): Second-player ADS state located; aim-pose == ADS == scope share it
+
+**Method:** captured Second-player object + aim controller on both copies while
+idle (baseline) and while the partner held aim, then diffed. User held aim on copy
+1 (Chloe, PID 16220 local); this drove the Second player (Chloe-rep) in copy 2
+(PID 23584) into ADS. (Copy-1 Second player + its aim controller `0x10e0f5bdf0`
+showed NO aim-state change — only idle pos/anim noise — confirming only the aiming
+partner's rep changes.)
+
+**Second-player ADS fields (object base, PID 23584 rep `0x10e0e0de00`), idle→aim:**
+- `+0x1548` dword `0x0 → 0x1` — ADS-active flag (still 1 while held). Primary
+  candidate.
+- `+0x1550` `0xC000000000000000 → live pointer` — ADS target/aim-state block ptr.
+- `+0x1570..+0x1588` `0 → world quats/points` — aim target direction/point vectors.
+- `+0x140/+0x148` small float delta — aim yaw/pitch.
+- (`+0x14a0/+0x15e0` are per-frame counters = noise.)
+
+**Decisive conclusion (changes the fix strategy):** the aim STANCE animation and
+the sniper SCOPE overlay are driven by the SAME per-player ADS state on the Second
+player. Therefore a per-player scrub of `+0x1548` (or of the aim input) merely
+reproduces **pose-only** — it removes the aim animation along with the scope. The
+scope leak CANNOT be fixed on the Second player's ADS/input side without losing the
+pose. The fix must live on the **HUD/scope-render side**: make the global
+sniper-reticle/scope ignore a non-primary player (the Second player, screen_index
+1), so the Second player keeps full ADS + aim stance while its ADS no longer raises
+the local viewport's scope overlay.
+
+**Next concrete step:** locate the global sniper-reticle manager's scope-visible
+field (or the primary-screen scope-render gate) and, mod-side each frame, force
+scope-visible to reflect ONLY the LOCAL/primary player's ADS — i.e. clear it when
+the local player is not aiming even though the Second player is. Query path:
+`is-scope-visible?` `sub_140C177F0` (reads manager via registry `dword_146466FE0`,
+fields `mgr+168/+188`); manager update `sub_140C193A0` (reads
+`g_PlayerHandleForHudPublish` = local player). Status: **CONFIRMED** (ADS state
+located; aim==scope coupling), **HYPOTHESIS** (HUD-side gate).
