@@ -3035,7 +3035,16 @@ void apply_peer_aim_facing_to_player(
     float yaw_quat[4]{};
     yaw_quat_from_horizontal_forward(fwd_x, fwd_z, yaw_quat);
     blend_network_orientation(quat, yaw_quat, 0.88F);
-    if (readable_bytes(static_cast<std::byte*>(player) + 0x3A40) >= 1) {
+    // Do NOT force a full-magnitude move vector while aiming. A stationary aiming
+    // peer would make the puppet "run in place": the locomotion graph is fed
+    // magnitude 1.0 while the body is position-pinned, so the engine blends a full
+    // run against the aim stance every frame and the mesh jitters violently. Only
+    // feed the move-world vector when the peer is genuinely moving, and use the
+    // peer's REAL magnitude; when standing, leave locomotion untouched so the aim
+    // pose holds steady (facing is already handled by the quat blend above).
+    const bool peer_moving =
+        valid_network_movement(peer) && peer.move_magnitude > 0.1F;
+    if (peer_moving && readable_bytes(static_cast<std::byte*>(player) + 0x3A40) >= 1) {
         auto* move_world = reinterpret_cast<float*>(
             static_cast<std::byte*>(player) + 0x3A30);
         move_world[0] = fwd_x;
@@ -3043,7 +3052,7 @@ void apply_peer_aim_facing_to_player(
         move_world[2] = fwd_z;
         move_world[3] = 0.0F;
         *reinterpret_cast<float*>(static_cast<std::byte*>(player) + 0x3A1C) =
-            1.0F;
+            peer.move_magnitude;
     }
 }
 
