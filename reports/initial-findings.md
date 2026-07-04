@@ -23133,3 +23133,36 @@ scope/ADS state. Two candidate levers, in priority:
 
 Do NOT re-relay/strip input bits for this — proven irrelevant (block-1 REJECTED).
 Status: **STATIC+RUNTIME** (localization to global singleton), **HYPOTHESIS** (fix).
+
+### Runtime 2026-07-04 (pose-only): CONFIRMED puppet ADS raises the scope; native fire on unaimed puppet crashes receiver
+
+**Test (PID 8228 sender / 15772 receiver, g_puppet_relay_aim_press=OFF):**
+- **CONFIRMED:** with the puppet's aim-press `0x200` stripped, the sniper scope
+  **stopped duplicating** on the receiver viewport. This confirms the causal
+  chain from the previous entry: the puppet entering scoped-ADS is what raised the
+  process-global `ss-hud-sniper-reticle-manager` overlay. (`JOYPAD3 current=0x9`
+  sustained, never `0x209` — aim never reaches the puppet, and no scope.)
+- **Regression (expected):** puppet aim stance animation is gone (no aim-press →
+  no ADS pose).
+- **CRASH (new):** receiver `15772` died right after `FIRE-RELAY native seq=5
+  art=0x33e29a1b` (native pistol replay) + one more tick, while the sender `8228`
+  kept running. Root: the native replay `safe_replay_player_fire` calls
+  `PlayerFireController_Fire 0x140E2C730` and returns OK under SEH, but firing an
+  **unaimed** puppet leaves the engine's post-fire processing to fault on the game
+  thread the next tick — outside the `__try`, so SEH cannot catch it. In the prior
+  full-aim build the puppet was in ADS when Fire ran, so the state was valid and it
+  did not crash. Rifle **button** relay (`FIRE-RELAY button pulse=0x800`, seq 3/4)
+  survived; only the **native** replay crashed.
+- **Guard added:** `apply_queued_fire_events` now drains fire packets without
+  replaying while `g_puppet_relay_aim_press==false` (`FIRE-RELAY skip: pose-only`).
+  Pose-only is now stable: no scope, no crash, but the puppet does not shoot or
+  play the aim stance.
+
+**Correct fix direction (option 2, next):** keep FULL aim relay (restores aim
+stance + valid native fire) and instead gate the scope specifically — prevent the
+PUPPET (non-primary player, `screen_index != 0`) from contributing to the global
+sniper-reticle/ADS state, e.g. per-frame scrub of the puppet's weapon/aim
+ADS-zoom field after its update, or a gate on the scope-visible query. The
+pose-only experiment has proven the target; the remaining RE is locating the
+puppet-side ADS/zoom field (player `+0x1D88` aim/weapon controller) to scrub.
+Status: **CONFIRMED** (puppet ADS = scope cause; unaimed native fire = crash).
