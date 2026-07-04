@@ -6327,7 +6327,20 @@ bool g_velprobe_enabled = false;
 // protection) in its containing region. 0 if `p` is not readable. Used to clamp
 // scans so the background probe never reads off the end of an object into
 // unmapped memory (which would crash the process).
-std::size_t readable_bytes(const void* p) {
+// PERF: the original readable_bytes called VirtualQuery on EVERY pointer guard
+// (280 call sites, many per frame). VirtualQuery takes the process-wide address-
+// space lock; the game's own asset-streaming/allocator threads take the same lock
+// constantly, so per-frame VirtualQuery from our game-thread hooks CONTENDED on
+// that lock and STALLED the main thread (low CPU, low FPS, smooth without the mod).
+// Fast path replaces the syscall with a lock-free SEH page probe: touch one byte
+// per page (cheap cached reads, no kernel transition, no VAD lock) and report how
+// far from p is readable, up to a cap that still satisfies the largest guard
+// (frame_state needs 0x7100). Semantics preserved: 0 if p is unreadable, else the
+// readable byte count from p. VK_NEXT (Page Down) flips back to the VirtualQuery
+// implementation for a live A/B.
+volatile bool g_readable_bytes_fast = true;
+
+std::size_t readable_bytes_vq(const void* p) {
     MEMORY_BASIC_INFORMATION mbi{};
     if (VirtualQuery(p, &mbi, sizeof(mbi)) == 0 || mbi.State != MEM_COMMIT) {
         return 0;
@@ -6342,6 +6355,31 @@ std::size_t readable_bytes(const void* p) {
     }
     const auto end = reinterpret_cast<std::uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
     return end - reinterpret_cast<std::uintptr_t>(p);
+}
+
+std::size_t readable_bytes(const void* p) {
+    if (p == nullptr) {
+        return 0;
+    }
+    if (!g_readable_bytes_fast) {
+        return readable_bytes_vq(p);
+    }
+    const std::uintptr_t addr = reinterpret_cast<std::uintptr_t>(p);
+    // Cap the probe span so the largest existing guard (0x7100) is satisfiable while
+    // bounding the work to ~11 one-byte reads worst case.
+    constexpr std::uintptr_t kProbeSpan = 0xB000;
+    volatile std::size_t confirmed = 0;
+    __try {
+        for (std::uintptr_t page = addr & ~std::uintptr_t{0xFFF};
+             page < addr + kProbeSpan; page += 0x1000) {
+            (void)*reinterpret_cast<const volatile std::uint8_t*>(page);
+            const std::uintptr_t page_end = page + 0x1000;
+            confirmed = page_end > addr ? page_end - addr : 0;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        // confirmed holds bytes up to the end of the last page that read cleanly.
+    }
+    return confirmed;
 }
 
 void* get_player_active_weapon(void* player) {
@@ -9331,6 +9369,18 @@ void net_tick() {
         g_logging_enabled = true;
         log_line(was ? "LOGGING OFF (zero file I/O)" : "LOGGING ON");
         g_logging_enabled = !was;
+    }
+    if (foreground && (GetAsyncKeyState(VK_NEXT) & 1) != 0) {
+        // Page Down: A/B the readable_bytes implementation. Fast = lock-free SEH
+        // page probe (default); slow = original per-call VirtualQuery (VAD-lock
+        // contention). Force one log line so the transition is visible.
+        g_readable_bytes_fast = !g_readable_bytes_fast;
+        const bool was = g_logging_enabled;
+        g_logging_enabled = true;
+        log_line(g_readable_bytes_fast
+                     ? "readable_bytes = FAST (SEH probe, no VirtualQuery)"
+                     : "readable_bytes = SLOW (VirtualQuery per call)");
+        g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
         g_local_animation_mirror_test = !g_local_animation_mirror_test;
