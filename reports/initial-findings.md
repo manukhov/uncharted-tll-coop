@@ -23249,4 +23249,42 @@ weapon- and ADS-independent. Falsifiable prediction: peer holds aim (any weapon)
 → receiver shows puppet aim pose, `RETICLE-HUD gated: screen!=0` /
 `RETICLE-AIM-HUD gated: screen!=0` lines appear, NO crosshair on the local
 viewport; the local player's own crosshair (screen 0) is unaffected. Status:
-**STATIC** (screen-index gate), pending runtime.
+**CONFIRMED** (runtime 2026-07-04 PID 22372/11672: crosshair no longer
+duplicates; `RETICLE-HUD gated: screen!=0` present).
+
+### Runtime 2026-07-04 (PID 22372/11672): screen-index gate CONFIRMED for crosshair; two new issues — native-fire ProbeKick crash + sniper-scope puppet vanish
+
+**Crosshair dup: CONFIRMED FIXED** by the screen-index gate above.
+
+**Issue A — receiver crash on fire (CONFIRMED cause = native Fire replay):**
+Receiver `11672` took `EXCEPTION code=0xC0000005 rva=0x152CB38 fault=0x108
+rcx=0xAF50064B819E0000` (non-canonical pointer). `0x14152CB38` is inside
+`sub_14152C9B0` = `ProjectileBulletInstant::ProbeKick`
+(`d:\...\projectile-bullet-instant.cpp:402`). The log line immediately before the
+fault is `FIRE-RELAY native seq=3 art=0xc3181ebd hands=1` — the native
+`PlayerFireController::Fire` replay of the scoped pistol on the puppet. The replay
+returns OK inside `safe_replay_player_fire`'s `__try`, but the engine's deferred
+projectile probe (`ProbeKick`) runs the NEXT tick on the game thread — outside the
+SEH — and dereferences a garbage pointer built from the sender's aim vectors in
+`packet.fire_args` (which reference the SENDER's target/world space, invalid for
+the puppet; `sanitize_fire_args` only nulls plausible pointers, not the aim
+vectors). This matches the earlier finding that native replay on an aimed puppet
+still faults post-fire while the button-pulse relay survives.
+**Fix (implemented):** `g_native_fire_relay = false` — all fire now routes through
+the button-pulse path, which runs the game's own fire logic with the puppet's OWN
+valid aim state. Predict: firing any weapon no longer crashes the receiver;
+`FIRE-RELAY button pulse=0x800` lines, no `FIRE-RELAY native`, no ProbeKick fault.
+Aim DIRECTION accuracy is a separate open bug (look/facing derivation), not
+addressed here.
+
+**Issue B — puppet Chloe vanishes on copy 2 when copy 1 aims the SNIPER (HYPOTHESIS, not yet fixed):**
+Only the sniper rifle (`0x8075397d`) triggers it; ordinary aim does not. Candidate
+mechanism: the sniper scope ADS on the puppet activates the first-person scope
+camera / model-cull path, and/or interacts with the global
+`ss-hud-sniper-reticle-manager` (`is-scope-visible?` `sub_140C177F0`, manager
+update `sub_140C193A0`, consumer `sub_140C149A0`). The scope-visible gate only
+suppresses the HUD overlay query; it does not touch model visibility, so a
+separate scope-camera/model-hide path is the likely culprit. Needs RE next turn:
+trace the sniper-ADS → third-person model cull on the puppet (screen-1) and gate
+it, OR relay the sniper as pose-only (no scoped-ADS zoom) so it never enters the
+scope camera. Status: **HYPOTHESIS**.

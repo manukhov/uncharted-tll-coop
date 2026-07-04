@@ -426,7 +426,13 @@ std::uint64_t remote_puppet_fire_pulse(std::uint64_t latch_actions) {
     return pulse;
 }
 // Native Fire: pistol/scoped-pistol only; uses full sender fire_args for aim.
-volatile bool g_native_fire_relay = true;
+// DISABLED by default (2026-07-04): native PlayerFireController::Fire replay on the
+// puppet spawns ProjectileBulletInstant::ProbeKick (sub_14152C9B0) one tick later on
+// the game thread with the sender's aim vectors, which reference the sender's target
+// space and are invalid for the puppet — it dereferences garbage and crashes the
+// receiver OUTSIDE the SEH __try. Button-pulse relay runs the game's own fire logic
+// with the puppet's valid state and is stable.
+volatile bool g_native_fire_relay = false;
 // Relay the peer's sustained aim-press (0x200) into the PUPPET joypad. When true
 // the puppet enters full weapon ADS — and because ss-hud-sniper-reticle-manager is
 // a PROCESS-GLOBAL singleton (see initial-findings 2026-07-04), a scoped-rifle ADS

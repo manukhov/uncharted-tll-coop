@@ -39,6 +39,30 @@ MCP-копия обновляется.
 
 ---
 
+## Turn note (2026-07-04, Cursor — crosshair dup CONFIRMED fixed; native-fire краш → disabled; sniper-scope puppet vanish открыт)
+
+**Результаты рантайма (PID 22372/11672):**
+1. **Дублирование прицела — CONFIRMED FIXED** (screen-index гейт, `RETICLE-HUD
+   gated: screen!=0` в логе).
+2. **Краш приёмника при стрельбе — причина найдена, пофикшено:** `EXCEPTION
+   rva=0x152CB38` = `ProjectileBulletInstant::ProbeKick` (`sub_14152C9B0`), сразу
+   после `FIRE-RELAY native seq=3 art=0xc3181ebd`. Native `PlayerFireController::Fire`
+   replay на кукле возвращает OK внутри SEH, но отложенный projectile-probe на
+   след. тике падает ВНЕ `__try` на мусорном указателе из sender-aim-векторов в
+   `packet.fire_args`. **Фикс:** `g_native_fire_relay = false` — вся стрельба через
+   button-pulse (стабильно, использует собственное состояние куклы).
+3. **Хлоя пропадает на копии 2 при снайперском прицеле копии 1 — ОТКРЫТО
+   (HYPOTHESIS):** только винтовка `0x8075397d`. Вероятно scope-камера/модельный
+   cull при scoped-ADS куклы, отдельно от HUD-гейта. Следующий ход: трейс
+   sniper-ADS → cull модели screen-1, гейт этого пути, ЛИБО pose-only для снайпера.
+
+**Собрано+заинжекчено (PID 19868 role A / 26028 role B).** Прогноз теста:
+стрельба любым оружием больше не крашит приёмник (`FIRE-RELAY button`, нет
+`FIRE-RELAY native`, нет ProbeKick); прицел не дублируется. Снайпер-исчезновение
+Хлои — известный открытый баг.
+
+---
+
 ## Turn note (2026-07-04, Claude — RUNTIME: block-1 fix REJECTED, корень = состояние марионетки, HANDOFF) [SUPERSEDED выше]
 
 **Тест (PID 14440 отпр. / 8524 приёмн.):** прицел всё ещё дублируется, снайперский
