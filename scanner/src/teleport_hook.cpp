@@ -21,7 +21,38 @@
 #include "coop_protocol.h"
 #include "hook_offsets.h"
 
+// ============================================================================
+//  FILE MAP (search "=====  <TITLE>" to jump). Sections in source order:
+//    WEAPON-ART & FIRE PREDICATES
+//    RUNTIME STATE STRUCTS & PEER STATE SNAPSHOT
+//    LOGGING & CRASH OBSERVER (VEH)
+//    INPUT HOOKS: KEYBOARD / JOYPAD-3 ISOLATION & ANALOG ROUTE
+//    HUD: RETICLE & SNIPER-SCOPE GATING (per-screen)
+//    RETAINED PLAYER / OBJECT RESOLUTION
+//    NET-PLAYER TRACKER & GAMEPLAY CAMERA CAPTURE
+//    UDP RECEIVER + REMOTE MOVEMENT / STEERING / ORIENTATION
+//    LOCAL-PLAYER RESOLVER & NADINE CONTROL
+//    BUMP PROBES, CAMERA FOCUS & MEMORY PROBE (readable_bytes)
+//    DIAGNOSTIC DUMPS (focus / character / manager swap)
+//    WEAPON STATE: CAPTURE, GUN-STATE, GIVE/APPLY HELD WEAPON, HEALTH
+//    FIRE RELAY (native replay + button pulse)
+//    PUPPET DRIVE: SLOT-1 INPUT FEED & PER-SLOT APPLY
+//    ENEMY / NPC: HEALTH SYSTEM & DAMAGE RELAY
+//    WORLD STATE & ANIMATION MIRROR
+//    AUX INPUT THREAD & CAMERA RETARGET
+//    XINPUT / IAT PATCH / MAIN UPDATE HOOK
+//    INPUT PRE-CONSUMER HOOK & VEH BREAKPOINT DIAGNOSTICS
+// ============================================================================
+
 namespace {
+
+// ============================================================================
+// =====  HOOK TYPEDEFS, ORIGINAL-FUNCTION POINTERS & CORE STATE GLOBALS
+// ============================================================================
+// Function-pointer typedefs for every hooked/called engine routine, the
+// g_original_* trampolines they save, the runtime toggle globals (g_dll_inert,
+// g_logging_enabled, g_readable_bytes_fast, ...) and small POD helper structs.
+// (Addresses/offsets these use live in hook_offsets.h.)
 
 using UpdateFunction = void(__fastcall*)(void*);
 using BuildNavigationFrameFunction =
@@ -261,6 +292,10 @@ PlayerBumpControllerUpdateFunction g_original_player_bump_controller_update = nu
 void __fastcall hooked_player_fire(
     void* controller, void* fire_args, void* weapon, double scalar);
 char __fastcall hooked_player_try_start_fire(void* controller);
+
+// ============================================================================
+// =====  WEAPON-ART & FIRE PREDICATES
+// ============================================================================
 char __fastcall hooked_player_check_shot_readiness(
     void* controller, void* context, double time_value);
 using InPlaceCtorFunction = void*(__fastcall*)(void*);
@@ -500,6 +535,10 @@ struct InputCommand {
     std::uint8_t input_mask = 0;
 };
 
+
+// ============================================================================
+// =====  RUNTIME STATE STRUCTS & PEER STATE SNAPSHOT
+// ============================================================================
 struct RemoteCommandState {
     coop::InputPacket last_packet{};
     InputCommand command{};
@@ -737,6 +776,10 @@ volatile bool g_logging_enabled = false;
 static SRWLOCK g_log_lock = SRWLOCK_INIT;
 static HANDLE g_log_handle = INVALID_HANDLE_VALUE;
 
+
+// ============================================================================
+// =====  LOGGING & CRASH OBSERVER (VEH)
+// ============================================================================
 void log_line(const char* line) {
     if (!g_logging_enabled) {
         return;
@@ -871,6 +914,10 @@ std::int64_t __fastcall hooked_add_joypad_disabled_commands(
     return result;
 }
 
+
+// ============================================================================
+// =====  INPUT HOOKS: KEYBOARD / JOYPAD-3 ISOLATION & ANALOG ROUTE
+// ============================================================================
 bool __fastcall hooked_gameinfo_keyboard_mode(void* game_info) {
     if (g_force_joypad3_analog_thread.load(std::memory_order_acquire) ==
         GetCurrentThreadId()) {
@@ -1431,6 +1478,10 @@ void* install_fire_gate_detour(
     return trampoline;
 }
 
+
+// ============================================================================
+// =====  HUD: RETICLE & SNIPER-SCOPE GATING (per-screen)
+// ============================================================================
 bool player_ads_active(void* player) {
     if (player == nullptr ||
         readable_bytes(static_cast<std::byte*>(player) + kPlayerAdsActiveOffset) <
@@ -1703,6 +1754,10 @@ void observe_nadine_visual_identity(void* object) {
 // sub-object vtable but Nadine differs (Chloe-type vs Nadine-type) -> that is the
 // field to graft Nadine's pointer onto the clone. Logs candidates with their
 // vtable RVAs so we can identify the draw-control/look class statically.
+
+// ============================================================================
+// =====  RETAINED PLAYER / OBJECT RESOLUTION
+// ============================================================================
 void* retained_player_object(int index);  // defined below
 
 // The engine's StringId hash (sub_14014D830(str, len)) used by the look builder. Used
@@ -2228,6 +2283,10 @@ void log_camera_transform() {
     }
 }
 
+
+// ============================================================================
+// =====  NET-PLAYER TRACKER & GAMEPLAY CAMERA CAPTURE
+// ============================================================================
 void* get_net_game_manager() {
     return reinterpret_cast<void*>(g_module + kNetGameManagerGlobalRva);
 }
@@ -2524,6 +2583,10 @@ InputCommand get_active_command() {
     return read_local_keyboard_command();
 }
 
+
+// ============================================================================
+// =====  UDP RECEIVER + REMOTE MOVEMENT / STEERING / ORIENTATION
+// ============================================================================
 DWORD WINAPI udp_receiver_thread(void*) {
     sockaddr_in source_address{};
     int source_address_length = sizeof(source_address);
@@ -3332,6 +3395,10 @@ void log_local_player_targets(void* nadine_object) {
 }
 
 volatile bool g_play_as_clone = false;  // NUMPAD3: route player-0 (input+camera) to the clone
+
+// ============================================================================
+// =====  LOCAL-PLAYER RESOLVER & NADINE CONTROL
+// ============================================================================
 void* __fastcall hooked_resolve_local_player(void* owner, std::uint32_t index) {
     void* result =
         g_original_resolve_local_player != nullptr
@@ -3502,6 +3569,10 @@ void __fastcall hooked_player_bump_controller_update(void* player) {
     g_original_player_bump_controller_update(player);
 }
 
+
+// ============================================================================
+// =====  BUMP PROBES, CAMERA FOCUS & MEMORY PROBE (readable_bytes)
+// ============================================================================
 bool install_player_bump_update_probe() {
     auto* const slot = reinterpret_cast<std::uintptr_t*>(
         g_module + kPlayerBumpControllerUpdateVtableSlotRva);
@@ -3968,6 +4039,10 @@ constexpr std::uintptr_t kFocusConsumerGlobalRva = 0x6B2C618;
 
 // Dump the focused input consumer: its class vtable RVA (RTTI offline) and any
 // field holding the controlled-player pointer (the control ref to repoint).
+
+// ============================================================================
+// =====  DIAGNOSTIC DUMPS (focus / character / manager swap)
+// ============================================================================
 void dump_focus_consumer() {
     // Per-player input manager vtable + per-slot apply (vtable+0x20) RVA — logged
     // first so it runs even when the focus consumer is null (gameplay).
@@ -4266,6 +4341,10 @@ DWORD WINAPI state_recv_thread(void*) {
     return 0;
 }
 
+
+// ============================================================================
+// =====  WEAPON STATE: CAPTURE, GUN-STATE, GIVE/APPLY HELD WEAPON, HEALTH
+// ============================================================================
 std::string read_peer_ip() {
     std::ifstream in(R"(C:\Users\Vladimir\Desktop\TLLCoopResearch\reports\coop_peer.txt)");
     std::string ip;
@@ -6232,6 +6311,10 @@ bool g_velprobe_enabled = false;
 // implementation for a live A/B.
 volatile bool g_readable_bytes_fast = true;
 
+
+// ============================================================================
+// =====  FIRE RELAY (native replay + button pulse)
+// ============================================================================
 std::size_t readable_bytes_vq(const void* p) {
     MEMORY_BASIC_INFORMATION mbi{};
     if (VirtualQuery(p, &mbi, sizeof(mbi)) == 0 || mbi.State != MEM_COMMIT) {
@@ -7049,6 +7132,10 @@ char __fastcall hooked_player_check_shot_readiness(
     return result;
 }
 
+
+// ============================================================================
+// =====  PUPPET DRIVE: SLOT-1 INPUT FEED & PER-SLOT APPLY
+// ============================================================================
 void probe_velocity_field() {
     static float prev[3]{};
     static bool have_prev = false;
@@ -8047,6 +8134,10 @@ std::uint32_t coop_name_hash(const char* s, std::size_t maxlen) {
 // Iterate valid Character objects in the CharacterManager (global *(base+0x3898630)),
 // invoking fn(obj, name). Heavily readable_bytes-guarded.
 template <class F>
+
+// ============================================================================
+// =====  ENEMY / NPC: HEALTH SYSTEM & DAMAGE RELAY
+// ============================================================================
 void for_each_character(F&& fn) {
     if (g_module == 0) return;
     void* mgr = *reinterpret_cast<void**>(g_module + 0x3898630);
@@ -8993,6 +9084,10 @@ void enemy_health_probe() {
 // HealthSystem (0xe0 bytes) and log any plausible float field that CHANGES (the current
 // HP drops when the player shoots). Low rate => no FPS hit. Default ON for this build.
 volatile bool g_hp_sys_probe = false;  // HP located (enemy+0x4a8 -> HS, HP int@+0x3c); heavy scan off
+
+// ============================================================================
+// =====  WORLD STATE & ANIMATION MIRROR
+// ============================================================================
 bool plausible_ptr(std::uintptr_t v) {
     return v >= 0x10000000ull && v < 0x800000000000ull && (v & 7) == 0;
 }
@@ -9494,6 +9589,10 @@ void materialize_screen1_camera_once() {
     }
 }
 
+
+// ============================================================================
+// =====  AUX INPUT THREAD & CAMERA RETARGET
+// ============================================================================
 DWORD WINAPI aux_input_thread(void*) {
     bool prev_insert = false;
     bool prev_swap = false;
@@ -9995,6 +10094,10 @@ void maybe_disable_p0_xinput_injection() {
     }
 }
 
+
+// ============================================================================
+// =====  XINPUT / IAT PATCH / MAIN UPDATE HOOK
+// ============================================================================
 DWORD WINAPI hooked_xinput_get_state(DWORD user_index, XInputStateLite* state) {
     maybe_disable_p0_xinput_injection();
     if (g_loopback_two_instance && user_index == 0 && state != nullptr &&
@@ -10737,6 +10840,10 @@ char __fastcall hooked_player_input_state_update(void* player) {
     return result;
 }
 
+
+// ============================================================================
+// =====  INPUT PRE-CONSUMER HOOK & VEH BREAKPOINT DIAGNOSTICS
+// ============================================================================
 void __fastcall hooked_player_input_command_state_update(void* state) {
     const auto original = reinterpret_cast<PlayerInputCommandStateUpdateFunction>(
         g_module + 0x1E39FB0);
