@@ -23430,3 +23430,55 @@ copy-1 holds scope; copy-2's OWN sniper scope (when its local player scopes) sti
 works. If the reticle still draws WITH the gate line present, then is-scope-visible
 is not the sole draw signal and the residual path is the scope CAMERA (Cursor's
 "Chloe vanishes" hypothesis) — next target. Status: **STATIC**.
+
+### Co-op wrong aim/shot direction: fire uses the per-screen aim camera, not the body quat (STATIC, 2026-07-05)
+
+**Symptom:** the Second player "aims and shoots in the wrong direction."
+
+**Root cause (static, PlayerFireController_Fire 0x140E2C730):** the shot/aim
+direction is resolved from the FIRING PLAYER's own screen camera, not from its body
+orientation. At 0x140e2d57e the fire core does
+`ResolveScreenRouteEntityByIndex(*(controllerOwner+0x4010))` (0x4010 = the player's
+screen/slot index, same field the per-screen HUD publishers use) then
+`SelectPreferredCameraChildFromRouteEntity(route, 0)` and checks the child vtable ==
+`CameraControlStrafe` (off_143054560 = the aim/strafe camera). So each player fires
+along the aim camera of ITS screen index.
+
+- Local player (screen 0) → screen-0 aim camera = the rendered viewport camera
+  (CameraManager(0), which the sender reads at +0x1B0 = kCameraRotationOffset).
+- Co-op Second player (screen index 1 at Player+0x4010) → screen-1 aim camera,
+  which the mod NEVER drives.
+
+**Why the current mod relay is insufficient:** `apply_peer_aim_facing_to_player`
+relays `peer.camera_quat` but only blends its yaw into the Second player's BODY quat
+(Player+0x140) via `camera_forward_horizontal`/`yaw_quat_from_horizontal_forward`.
+The fire path ignores the body quat and reads the screen-1 aim camera, so the
+Second player shoots wherever its uncontrolled screen-1 camera happens to point.
+The `derive_look_stick_from_camera` path only feeds a RELATIVE right-stick delta,
+which cannot reproduce an absolute aim direction.
+
+**Secondary (convention) note:** `camera_forward_horizontal` uses the +Z basis
+column (2(xz+wy), 1-2(x^2+y^2)); if the engine camera looks down -Z this yaw is
+180-deg inverted, and `quat_horizontal_yaw` mixes pitch into the denominator
+(m00 not m22) so it is only exact for yaw-only quats. Both are moot for the fix
+below (a direct quat copy needs no derivation), but they are latent bugs in the
+body-facing path.
+
+**Fix direction (STATIC hypothesis, needs a runtime linkage check before build):**
+drive the Second player's screen-1 aim camera rotation directly from the peer's
+camera quaternion — copy peer CameraManager(0)+0x1B0 -> receiver
+CameraManager(1)+0x1B0 (or the route-1 preferred-camera child's rotation). A DIRECT
+quat copy is convention-agnostic (same field/frame on both copies) and sidesteps
+the +Z/-Z derivation entirely. This is the previously-disabled "write CameraManager
+on receiver" (apply_peer_gameplay_camera_for_player, left empty because it hijacked
+the local viewport / sniper overlay / Nadine vanish) — BUT that disable was for
+CameraManager(0), the RENDERED screen. CameraManager(1) is screen-1's camera and
+should not hijack the rendered screen-0 viewport.
+
+**Runtime linkage check required first (do not build blind):** while the Second
+player aims, confirm that (a) GetCameraManager(1)+0x1B0 is the same rotation the
+fire's `ResolveScreenRouteEntityByIndex(1)` path reads, and (b) writing
+CameraManager(1)+0x1B0 does NOT alter the rendered screen-0 view. If CameraManager(1)
+is not the route-1 camera, target the route-1 preferred-camera child from
+SelectPreferredCameraChildFromRouteEntity instead. Status: **STATIC** (direction
+source CONFIRMED in disasm; camera-write target is HYPOTHESIS pending runtime).

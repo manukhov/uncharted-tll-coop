@@ -6044,6 +6044,22 @@ FUNCTIONS = {
         "(CameraControlStrafe vtable off_143054560), and calls "
         "ReticleManager_Update. Reads g_LocalPlayerInputManager_Ptr HUD state.",
     ),
+    # --- Co-op aim/shot direction source (2026-07-05) ---
+    0x140E2C730: (
+        "PlayerFireController_Fire",
+        "Confirmed live campaign fire core (game/player/player-fire.cpp). Owner "
+        "controller at arg+0x108; weapon passed separately. AIM/SHOT DIRECTION "
+        "is resolved per the FIRING PLAYER's screen index: "
+        "ResolveScreenRouteEntityByIndex(*(controllerOwner+0x4010)) then "
+        "SelectPreferredCameraChildFromRouteEntity(...,0), checking the child "
+        "vtable == CameraControlStrafe (off_143054560) = the aim/strafe camera "
+        "(e.g. line ~999 unzoomed-sniper-shots branch, and the main direction "
+        "path). So a co-op Second player (screen index 1 at +0x4010) fires along "
+        "its OWN screen-1 aim camera, which the mod does not drive -> wrong "
+        "direction. The mod only blends peer camera yaw into the body quat "
+        "(Player+0x140); it must instead drive the screen-1 aim camera rotation "
+        "(CameraManager(1)/route-1 child +0x1B0) from peer.camera_quat.",
+    ),
 }
 
 # Data/global names (set via ida_name on data addresses).
