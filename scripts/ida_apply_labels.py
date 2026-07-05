@@ -6190,6 +6190,14 @@ FUNCTIONS = {
         "and natively networked in MP. Basis for co-op puzzle-camera spectate: the "
         "same remap resolves object-anchored on both copies.",
     ),
+    0x1408AC710: (
+        "ScriptState_SuppressInteractableSystem",
+        "'suppress-interactable-system' get/set (fact-backed, byte_1437E5A82). "
+        "Gates the whole interactable system. Co-op: set on the FOLLOWER so its "
+        "use/interact button never starts inspections/puzzles/pickups/conversation-"
+        "pieces/treasure — the narrative-trigger disable for the non-driver "
+        "(pairs with the joypad per-command disable for other action triggers).",
+    ),
     0x14006D4D0: (
         "ScriptCmd_InteractableCameraRemapEnable",
         "'interactable-camera-remap-enable' handler (sibling ...-disable): turns "

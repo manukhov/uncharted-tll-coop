@@ -24161,3 +24161,42 @@ follower-suppression extended into a spectate mode, with the camera coming from 
 synced scene (B) or a transform relay (A). The native `*net-camera-remaps*` path
 confirms the engine treats remap replication as normal. Status: **STATIC** (systems
 + two-path design; exact spectate hold + window signal are the build details).
+
+### Follower input policy: disable narrative-trigger commands (Chloe does the actions) (STATIC, 2026-07-05)
+
+**User principle (correct):** on the follower (Nadine) disable the buttons that
+start actions/interactions/cutscenes — the campaign authors those for the driver
+(Chloe). Keep her normal gameplay (move/aim/fire/jump/dodge/reload/weapon-switch)
+so she plays alongside.
+
+**Mechanism = two existing levers, no new machinery:**
+1. **`suppress-interactable-system`** (settable state, handler sub_1408AC710) — the
+   single cleanest lever: gates the follower's whole interactable system, so her
+   use/interact button never starts inspections, puzzles (carry-object/dynamic-tap),
+   pickups, conversation-pieces or treasure. Directly implements "the follower
+   cannot trigger interactions."
+2. **Per-command joypad disable** for non-interactable narrative triggers
+   (context/traversal-action prompts, scripted-action buttons): the engine's joypad
+   disabled-commands API the mod ALREADY hooks
+   (hooked_add_joypad_disabled_commands + JoypadState_UpdateEnabledBinding +
+   sub_14183A3D0 temp-disable + the Joypad+0xBE0 enabled byte). Disable the specific
+   command hashes on Nadine's LOCAL joypad; commands then fail
+   Joypad_EvaluateCommandDescriptor (per the reliable-events chain), so the actions
+   never fire.
+
+**Policy:** DISABLE on follower = interact/use, context-action, cutscene/scripted-
+action triggers. KEEP = move, aim, fire, jump, dodge, crouch, reload, weapon-switch
+(combat + traversal). This is the story-authority role expressed at the input layer:
+the follower fights alongside but does not drive the narrative.
+
+**Granularity options:** (a) always-off for narrative-critical triggers (simplest,
+matches "Chloe does the story"); (b) window-gated — only suppress during the
+driver's scripted/spectate windows (lets the follower use ambient interactions
+otherwise). Recommend (a) for inspect/puzzle/cutscene triggers; (b) is a refinement.
+
+**Ties together the Option-1 design:** follower trigger suppression (this) +
+task-graph command relay (progression) + inspected-flag relay (fine interact state)
++ puzzle-camera spectate + free per-copy dialog = a coherent story-authority co-op,
+all via existing engine levers and the mod's own UDP, no net session. Status:
+**STATIC** (suppression levers CONFIRMED; command-hash list to disable is a small
+enumerate-at-build detail).
