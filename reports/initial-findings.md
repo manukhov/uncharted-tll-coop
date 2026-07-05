@@ -24252,3 +24252,47 @@ sync, relay discrete flags for tier 3 (also targets the weapon-display bug), and
 scope the standalone AnimControl->NetSnapshot capture as the tier-4 stretch. Status:
 **STATIC** (representation + pipeline + capture-gating CONFIRMED; standalone capture
 is the open build problem).
+
+### Tier-4 full-fidelity animation sync IS reachable in campaign — build-ready recipe (STATIC, 2026-07-05)
+
+**Decisive:** the full NetSnapshot animation path can run in campaign without a net
+session. `NetEventCharacterMove_FillPlayer` (0x140BC2970) comment states it
+"Requires a live NetPlayerTracker, so the core serializer must be called DIRECTLY
+in campaign." The core serializer `NetEventCharacterMove_FillAnimCmdBitStream`
+(0x140BC4E60) "Serializes the native animation command list into a 4096-bit
+stream ... the current source-side synchronization target."
+
+**Capture recipe (standalone, campaign):** In FillPlayer the core call is
+`FillAnimCmdBitStream(a1=eventBuf, a2=eventBuf+28 (out stream), a3=Player (_RDI),
+a4=*(Player+0x3FC8) (anim-command source handle), a5=1, a6=7)`. Both Player-sourced
+inputs — the Player object and `*(Player+0x3FC8)` — exist in campaign; the
+NetPlayerTracker is only used for sequence/aux fields (eventBuf+1536 counter,
++540/+548), NOT the serialize. So the mod allocates a small event-like buffer,
+passes the local Player + *(Player+0x3FC8), and gets a 512-byte (4096-bit) anim
+bitstream; the flag word at eventBuf+1056 is derived from Player+0x49C0..0x49C3
+(18880..18883) and should be relayed too.
+
+**Apply recipe (on the puppet):** the NetAnimCmdGenerator is **Player-EMBEDDED**
+(AddSnapshot comment: "Copies a received animation snapshot (up to 0x200 bytes)
+into the Player-embedded generator queue; snapshot time at +8, payload ptr at
++0x688 in the source wrapper"). So: build a wrapper (time@+8, 512-byte payload
+ptr@+0x688), call `NetAnimCmdGenerator_AddSnapshot(puppetGenerator, wrapper)`, then
+`ProcessPendingSnapshots` -> `ProcessSnapshot` + `UpdateFlagsAndWeapons` reconstruct
+the exact remote animation (incl. weapons/ragdoll/IK flags) on the puppet.
+
+**Full end-to-end (tier 4):**
+1. Sender: FillAnimCmdBitStream(local Player) -> 512-byte stream + flag word.
+2. Relay the 512 bytes (+ flags) over the mod UDP (fits a dedicated AnimPacket;
+   ~512B/frame is heavy — send at a reduced rate or delta, or gate to when input-
+   relay is insufficient).
+3. Receiver: AddSnapshot(puppet Player-embedded generator, wrapper) -> Process
+   PendingSnapshots applies it -> puppet mirrors the EXACT animation.
+
+**This makes tier 4 (perfect animation, incl. scripted/IK/ragdoll/weapon states)
+achievable in campaign** — the project's long-stated goal is now a mapped recipe.
+Open runtime pins: the puppet generator offset in the Player (TASK_POOL: ~+0x1B30;
+AddSnapshot gate byte at generator+53728/0xD1E0), the event-buffer init/size for the
+capture, and bandwidth policy. Recommendation: implement tier 4 as an OPT-IN
+high-fidelity mode layered over the input relay (tiers 1-3 remain the low-bandwidth
+default). Status: **STATIC** (capture+apply recipe CONFIRMED reachable; offsets/
+init are runtime).
