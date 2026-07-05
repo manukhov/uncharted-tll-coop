@@ -390,6 +390,11 @@ volatile bool g_puppet_aim_facing_from_camera = false;
 // camera position. Needs narrower gating (fire caller only) before re-enabling.
 // VK_END-adjacent: toggle via VK_APPS (context menu key).
 volatile bool g_puppet_relay_pose_seed = false;
+// Force the puppet's gun to draw (safe_request_gun_state) when the peer's gun is
+// out, ignoring the unreliable read_gun_state gate. Default ON: without the draw
+// the SwitchToWeapon hand-attach never completes on the puppet (attached=0). Toggle
+// VK_SCROLL-adjacent via VK_PAUSE for A/B.
+volatile bool g_puppet_force_gun_draw = true;
 static ULONGLONG g_fire_button_hold_until_ms = 0;
 // After native Fire replay, block peer/button fire on the remote player so the
 // same shot is not delivered twice (relay native + Joypad 0x800).
@@ -5430,17 +5435,35 @@ void apply_peer_held_weapon_state() {
     }
     const bool attached_now =
         use_slot >= 0 && capture_weapon_selected_mode(puppet) == use_slot;
+    // ATTACH FIX (2026-07-05): the puppet's SwitchToWeapon never completes the hand
+    // attach unless its gun is DRAWN, but the old code gated safe_request_gun_state
+    // on gun_state_writable = (read_gun_state==0||1), and read_gun_state ALWAYS
+    // fails on a puppet (-1) -> the gun was never requested drawn -> attached=0
+    // forever. safe_request_gun_state is SEH-safe and its set_state side effect
+    // works even though its return is unreliable on puppets, so drop the gate (a
+    // short cooldown prevents re-issuing the draw every frame). g_puppet_force_gun_
+    // draw toggles the old behavior.
+    static void* last_gun_req_puppet = nullptr;
+    static ULONGLONG last_gun_req_ms = 0;
+    const bool gun_req_cooldown =
+        puppet == last_gun_req_puppet && now - last_gun_req_ms < 300;
+    const bool can_draw =
+        g_puppet_force_gun_draw ? true : gun_state_writable;
     if (attached_now) {
         select_ok = true;
         gun_ok = peer_gun == 1;
         last_switch_ok = true;
-    } else if (!select_ok && peer_gun == 1 && gun_state_writable) {
+    } else if (!select_ok && peer_gun == 1 && can_draw && !gun_req_cooldown) {
+        last_gun_req_puppet = puppet;
+        last_gun_req_ms = now;
         gun_ok = safe_request_gun_state(puppet, peer_gun);
     } else if (select_ok) {
         // controller+0x130 is only the requested slot. Confirm the inventory scan
         // actually sees this exact weapon attached to a hand before arming fire.
         gun_ok = capture_weapon_selected_mode(puppet) == use_slot;
-        if (!gun_ok && peer_gun == 1 && gun_state_writable) {
+        if (!gun_ok && peer_gun == 1 && can_draw && !gun_req_cooldown) {
+            last_gun_req_puppet = puppet;
+            last_gun_req_ms = now;
             gun_ok = safe_request_gun_state(puppet, 1);
         }
     }
