@@ -6181,6 +6181,23 @@ FUNCTIONS = {
         "g_StandardWeaponArtIds prefix + cached online weapon def map for "
         "index>=19. No session singleton deref (campaign-available).",
     ),
+    0x14073E9C0: (
+        "Camera_ResolveRemapByModeAndId",
+        "Resolves a camera-remap entry by StringId from an authored registry "
+        "table, selecting the table by mode: *net-camera-remaps* when net-mode "
+        "(HIBYTE(g_NetModeFlags)), else default / *dlc-camera-remaps* / "
+        "*devmenu-camera-remaps*. Confirms camera remaps are StringId-deterministic "
+        "and natively networked in MP. Basis for co-op puzzle-camera spectate: the "
+        "same remap resolves object-anchored on both copies.",
+    ),
+    0x14006D4D0: (
+        "ScriptCmd_InteractableCameraRemapEnable",
+        "'interactable-camera-remap-enable' handler (sibling ...-disable): turns "
+        "on the interaction/puzzle camera remap (framed *remap-camera-int-* shots) "
+        "for the interactable. The scripted 'puzzle camera'; in co-op the "
+        "spectating follower shows it via the synced scene (object-anchored remap) "
+        "or a screen-0 camera-transform relay during the spectate window.",
+    ),
     0x1400BAB30: (
         "ScriptQuery_CarGetRiderByRole",
         "'car-get-rider-by-role' handler: returns the vehicle's rider actor for a "

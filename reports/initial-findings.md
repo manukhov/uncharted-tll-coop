@@ -24117,3 +24117,47 @@ trigger suppression, the Option-1 narrative-sync design is now fully build-ready
 paper; the remaining unknowns (exact TYPE->verb mapping, +24/+32/+36 semantics) are
 a trivial runtime dump of g_GameTaskGraphCommandList while completing an objective.
 Status: **STATIC** (AddCommand + schema CONFIRMED).
+
+### Puzzle/scripted camera for the spectating follower (Nadine sees Chloe's puzzle) (STATIC, 2026-07-05)
+
+**User idea:** during a puzzle, sync the framed camera so the follower (Nadine)
+sees what the driver (Chloe) is doing. This is a natural Option-1 refinement.
+
+**Systems:** scripted cameras via `EnableScriptedCamera`; the interaction/puzzle
+framing via the CAMERA-REMAP system — `interactable-camera-remap-enable/disable`
+(handler sub_14006D4D0), authored remap shots `*remap-camera-int-medium-full-shot-*`
+resolved by StringId from a registry table. `sub_14073E9C0` selects the remap table
+by mode: `*net-camera-remaps*` when net-mode (HIBYTE(g_NetModeFlags)) else default/
+`*dlc-camera-remaps*` — i.e. the engine ALREADY networks camera remaps in MP, so
+remap replication is a first-class native concept. Remaps are StringId-resolved and
+anchored to the interactable OBJECT (deterministic world position, identical on
+both copies).
+
+**Two paths (recommend B primary, A as guaranteed fallback):**
+- **Path B — comes mostly free with narrative sync.** The puzzle's scripted/remap
+  camera is StringId-resolved and object-anchored. Since Option 1 already syncs the
+  puzzle SsInstance/interact state (task-graph command relay + inspected-flag), the
+  SAME remap resolves and pushes on the follower's copy, framing the same object
+  identically — so the follower sees the puzzle framing NATIVELY. Requirement: put
+  the follower's local player into SPECTATE for the scripted window (suppress input/
+  hold position) so she does not fight the camera — an extension of the Option-1
+  follower-suppression already planned.
+- **Path A — explicit camera-transform relay (guaranteed identical view).** Relay
+  the driver's screen-0 camera transform (g_PerScreenCameraTransformCache[0]+0x350,
+  already mapped) and override the follower's screen-0 camera during the window.
+  This is the previously-disabled CameraManager-override — but now INTENTIONALLY
+  gated to the scripted/puzzle window, which is SAFE precisely because the follower
+  is spectating, not playing (the original hijack problem was overriding her camera
+  DURING gameplay). Guarantees pixel-identical framing regardless of scene details.
+
+**Coordination:** add a "scripted-camera / spectate window enter|exit" signal to the
+mod's relay (detect EnableScriptedCamera / interactable-camera-remap-enable on the
+driver, or piggyback the task-command relay). On enter, the follower suspends local
+control and shows the puzzle camera (Path B native, or Path A override); on exit,
+control resumes. This unifies with the Option-1 follower-suppression.
+
+**Takeaway:** the puzzle-camera sync is not new machinery — it is Option-1
+follower-suppression extended into a spectate mode, with the camera coming from the
+synced scene (B) or a transform relay (A). The native `*net-camera-remaps*` path
+confirms the engine treats remap replication as normal. Status: **STATIC** (systems
++ two-path design; exact spectate hold + window signal are the build details).
