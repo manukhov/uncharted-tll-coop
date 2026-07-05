@@ -24562,3 +24562,28 @@ but nothing currently needs it.
 
 **Conclusion:** sound sync = a property of the animation, action, dialog, and
 narrative pillars already designed — no separate sound channel. Status: **STATIC**.
+
+### RUNTIME CONFIRMED 2026-07-05 (PID 24684 copy1/Chloe): fire-ray pose seed + screen indices
+
+Live reads with a save loaded, both copies injected (copy2 PID 4372). Local player
+(=live0=retained) = 0x10e0a23f00; Second player (live1) = 0x10e0e05300; both share
+the Player vtable (base+0x2A4BFE8) = both are real Players.
+
+- **Second player screen index `+0x4010` = 1**; local player `+0x4010` = 0.
+  CONFIRMS the whole fire/grenade DIRECTION architecture: fire resolves the aim ray
+  by the firing player's screen index, so the Second player fires along screen 1,
+  which the pose-seed hook (override for idx==1) is the correct fix for.
+- **CameraManager table** (base+0x697AD50, i.e. 0x14697AD50) matches findings
+  exactly: slot0 {0x10e0200160, 0x19}, slot1 {0x10e0200188, 0x1a} — BOTH
+  CameraManager(0) and (1) live in campaign.
+- **Pose-seed chain CONFIRMED end-to-end:** mgr0 = *(slot0.ptr+8) = 0x10e0232880;
+  blk = *(mgr0+0xB0) = 0x10e0236970; gates blk+0x55/+0x56 = 01/01 (valid); seed at
+  **blk+0x60 = camera POSITION** (~-753.6, 6.18, 383.8) and **blk+0x70 = unit
+  ORIENTATION quaternion** (0.091,-0.571,0.063,0.814; norm^2~=1.0). This is the fire
+  ray. Fix is build-ready: sender relays these 32 bytes from CameraManager(0);
+  receiver hooks ResolveScreenRoutePoseSeedOrDefault and writes them for idx==1.
+
+- NOTE: `live0_held=0x0` (no weapon drawn during this read), so the ADS flag
+  Player+0x1548 read as debug-fill (0x7fbbeeee) — the 0x1500 weapon/ADS region is
+  only valid with a weapon out. ADS/scope/held-weapon pins need the sniper drawn.
+Status: **CONFIRMED** (direction pin) — aim/fire/grenade direction fix validated.
