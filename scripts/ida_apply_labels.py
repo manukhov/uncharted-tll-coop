@@ -6114,13 +6114,28 @@ FUNCTIONS = {
         "co-op vehicle entry (driver/passenger seat).",
     ),
     0x140B54F30: (
-        "ScriptCmd_NetTaskComplete",
-        "'net-task-complete!' handler. Does the LOCAL task completion "
-        "(sub_140AA84C0 resolve + sub_140A5D3F0 set task state/valve) AND enqueues "
-        "a net event via sub_140A45260(3,&payload) (session send). Co-op Option 1: "
-        "relay task progression over the mod's own UDP and drive the LOCAL half "
-        "here on the follower (skip the session enqueue) to advance task-gated "
-        "scenes/SsInstances in lockstep — no net session needed.",
+        "ScriptCmd_NetTaskComplete_MpOnly",
+        "'net-task-complete!' handler — MP-ONLY: gated on the net-mode flag "
+        "HIBYTE(dword_143E07470); its 'local' helper sub_140A5D3F0 is actually "
+        "SendNetEventStartNetTask. Does NOTHING in campaign. This is the MP "
+        "objective/valve layer, NOT the campaign progression path (see "
+        "GameTaskGraphMgr_Update). Do not use for co-op campaign task sync.",
+    ),
+    0x141CB9820: (
+        "GameTaskGraphMgr_Update",
+        "GameTaskGraphMgr::Update (per-frame): drains and applies the campaign "
+        "task-graph COMMAND list at g_GameTaskGraphCommandList (0x146A514A8, count "
+        "0x146A51568, stride 0x28), advancing active subnodes (objectives). This "
+        "IS the campaign progression backbone (script 'task-complete' issues "
+        "commands via AddCommand). Co-op Option 1 follower-apply target: replay "
+        "the driver's relayed task-graph commands here.",
+    ),
+    0x141CB95B0: (
+        "GameTaskGraphMgr_FindCommandInList",
+        "Searches g_GameTaskGraphCommandList (0x146A514A8, count 0x146A51568, "
+        "stride 0x28) for a matching 40-byte command record (fields +0/+4/+8/+12 "
+        "StringIds, +24 qword, +32 byte, +36 dword). Dedup helper for the task-"
+        "graph AddCommand path.",
     ),
     0x141C8E680: (
         "TaskManager_UpdateAndQuery",
@@ -6258,6 +6273,23 @@ DATA_NAMES = {
         "Global input-focus byte maintained by Input_UpdateWindowFocusFlag and "
         "WM_SETFOCUS/WM_KILLFOCUS. Both per-player dispatch and "
         "Input_ScaleCopyVirtual require it before native conversion.",
+    ),
+    0x146A514A8: (
+        "g_GameTaskGraphCommandList",
+        "Campaign task-graph command list (count g_GameTaskGraphCommandCount "
+        "0x146A51568, stride 0x28 = 40-byte records: +0/+4/+8/+12 StringIds, +24 "
+        "qword, +32 byte, +36 dword). Drained by GameTaskGraphMgr_Update to "
+        "advance objectives. Co-op Option 1 relays these command records.",
+    ),
+    0x146A51568: (
+        "g_GameTaskGraphCommandCount",
+        "Entry count for g_GameTaskGraphCommandList (0x146A514A8).",
+    ),
+    0x143E07470: (
+        "g_NetModeFlags",
+        "Net/game mode flags. HIBYTE gates MP-only paths (e.g. "
+        "ScriptCmd_NetTaskComplete_MpOnly, net-task verbs) — false in campaign. "
+        "Useful to distinguish campaign vs MP session in mod code.",
     ),
     0x1465FDAA0: (
         "g_PerScreenCameraTransformCache",

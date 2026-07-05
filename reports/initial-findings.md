@@ -24051,3 +24051,37 @@ apply, (2) interactable inspected/pickup flag relay, (3) follower trigger
 suppression. All standalone (no net session). Status: **STATIC** (task system is
 the progression backbone CONFIRMED; net verbs are session-bound but local halves
 are reusable; follower-apply target = the local mutation in sub_140B54F30).
+
+### CORRECTION + refinement: campaign progression = GameTaskGraphMgr command graph (net-task verbs are MP-only) (STATIC, 2026-07-05)
+
+**Correcting the prior "Narrative progression = TASK system" entry.** The
+`net-task-complete!` handler (ScriptCmd_NetTaskComplete 0x140B54F30) is gated on the
+NET-MODE flag `HIBYTE(dword_143E07470)` and its "local" helpers are actually net
+SENDs (sub_140A5D3F0 = `SendNetEventStartNetTask`). So the `net-task-*` verbs are
+the MP/co-op-mode objective layer and do NOTHING in campaign — they are NOT the
+campaign progression path. (Prior entry over-credited them; this corrects it.)
+
+**The real campaign backbone is `GameTaskGraphMgr`** (a task GRAPH, campaign — many
+campaign-code callers of the task manager TaskManager_UpdateAndQuery 0x141C8E680,
+and GameTaskGraphMgr::Update runs per-frame). Its API: Update / Reset /
+AddActiveSubnode / RemoveActiveSubnode (active subnodes = current objectives) and
+**AddCommand** — the imperative that advances the graph. Commands are 40-byte
+records in the list at `dword_146A514A8` (count `dword_146A51568`, stride 0x28;
+fields +0/+4/+8/+12 StringIds, +24 qword, +32 byte, +36 dword); sub_141CB95B0
+dedups against this list. Script verbs like `task-complete` issue AddCommand.
+
+**Refined Option-1 follower-apply:** the story driver relays its task-graph
+COMMANDS (the 40-byte command payloads / the StringId of the completed task node);
+the follower replays them via GameTaskGraphMgr::AddCommand (the CAMPAIGN, non-net
+entry) so its graph advances identically and task-gated scenes/SsInstances fire in
+lockstep. This is a clean, campaign-native, session-free relay — the correct
+mechanism, distinct from the MP net-task path.
+
+**Full Option-1 narrative sync (corrected):** (1) GameTaskGraphMgr command relay +
+AddCommand apply on the follower (progression), (2) interactable inspected/pickup
+flag relay (state+0xD0 bit1) for fine interact beats, (3) follower trigger
+suppression (suppress-interactable-system), (4) dialog is free per-copy. All
+standalone. **Next static pin:** the exact AddCommand appender (increments
+dword_146A51568) and the command-record schema, so the follower-apply call is
+build-ready. Status: **STATIC** (campaign backbone = GameTaskGraphMgr CONFIRMED;
+net-task = MP-only CONFIRMED; AddCommand is the apply target).
