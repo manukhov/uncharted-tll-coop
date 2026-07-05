@@ -24481,3 +24481,48 @@ remaining co-op work (anim offsets confirm, vehicle transform/seat, scope-cull
 DrawControl field, task-command type map) is a batch of live-memory reads best done
 in one loaded-save session. Status: **STATIC** (cause narrowed; exact field is a
 runtime pin).
+
+### Asymmetric co-op: player-2 spectates player-1 when Nadine is absent (STATIC, 2026-07-05)
+
+**Problem:** the campaign has periods with NO second character (Nadine) — e.g. the
+prologue. Both copies run the same campaign, so in those periods BOTH copies' local
+player is Chloe (copy 2 has a DUPLICATE Chloe, not a Nadine). Two independent
+Chloes is not co-op. During Nadine-absent periods copy 2 (role B) must SPECTATE
+copy 1's authoritative Chloe instead of controlling its own.
+
+**Detection (mod-own; native signal is unusable):** `net-is-second-player-
+available?` / `net-alive-player-count` / `net-active-player-count` are all
+NET-session-gated (handler sub_14008BD60 etc.; gated like net-task) -> do nothing in
+campaign. Use the mod's own signals instead:
+- Nadine presence: the mod already tracks `g_last_nadine_object` (set from the
+  nadine-buddy vtable hook g_nadine_vtable). No NadineBuddy object => Nadine absent.
+- Robust cross-check on copy 2: the local player's character identity == Chloe
+  (appearance hash 0x3f334972, already read by the mod) i.e. same character as the
+  peer => single-character section.
+
+**Behavior:**
+1. Copy 2 (role B), Nadine absent -> SPECTATE player-1:
+   - Suspend the duplicate local Chloe via the spectate/pause-hold levers
+     (player-disable-move-stick/-transitions + suppress-interactable-system +
+     per-command disable + the already-hooked four death entries + optional
+     transform pin).
+   - Override copy-2's viewport camera with copy-1's relayed camera transform
+     (spectate-camera Path A = the pose-seed / per-screen camera relay, SAFE here
+     because copy 2 is spectating, not playing) so player 2 watches exactly copy-1's
+     Chloe view.
+   - Optionally hide copy-2's local Chloe mesh (DrawControl force-hidden) to avoid a
+     duplicate if the camera ever frames her.
+2. Copy 1 (role A): plays Chloe normally; relays her camera transform + state
+   (transform already relayed; add the camera) for copy 2 to spectate.
+3. TRANSITION when Nadine spawns (co-op section begins): the mod detects a
+   NadineBuddy appears -> copy 2 exits spectate, hands local control to Nadine,
+   normal puppet-drive resumes on both copies; on Nadine despawn, copy 2 re-enters
+   spectate.
+
+**Takeaway:** this generalizes the whole model — co-op is "active" only while Nadine
+exists; otherwise it degrades gracefully to "player-2 spectates player-1." It is a
+COMPOSITION of already-designed pieces (spectate/pause-hold, spectate-camera relay,
+the role system g_net_role_b, and the existing Nadine-presence tracking) plus one
+new small state machine (absent<->present transition + control handover). No new
+engine RE required. Status: **STATIC** (design from existing levers; the
+spawn/despawn transition + camera relay are the build pieces).
