@@ -23527,3 +23527,43 @@ quat offsets) so option 1 can be written precisely; and identify the single
 authoritative writer of `0x1465FDAA0[0x400*idx]` to know whether an option-2
 override survives the frame. Status: **STATIC** (source CONFIRMED; write target
 still HYPOTHESIS).
+
+### Camera transform layout: matrix at cache_entry+0x350; buildable aim fix via GetBlendedCameraTransform hook (STATIC, 2026-07-05)
+
+**Camera transform layout CONFIRMED.** `CameraManager_GetBlendedCameraTransform`
+(`0x141C06650`) copies the chosen transform into its out buffer via
+`sub_14014BDA0` (CameraState_CopyTransformAndParams), which copies a region starting
+at **+0x350**: four xmmwords at +0x350/+0x360/+0x370/+0x380 = a **4x4 camera matrix**
+(orientation 3x3 + translation), followed by camera params (fov etc.) from +0x390
+(matching the earlier `[idx<<10 + 0x1465FDAA0 + 0x390/+0x3A4]` reads). So
+`g_PerScreenCameraTransformCache[0x400*idx] + 0x350` is the screen's camera matrix;
+its upper 3x3 is the aim/shot direction basis the fire consumes.
+
+**Second player fires through its own weapon controller** (native
+PlayerFireController::Fire replay stays DISABLED after the ProbeKick crash; fire is
+delivered by button-pulse on the Second player's joypad), so the shot direction is
+whatever the Second player's screen-1 aim camera yields — which the mod never
+drives. Note a call at PlayerFireController_Fire line ~668 uses
+`CameraManager::Get(0)` (hardcoded index 0); if that transform feeds the projectile
+direction, the Second player would fire along SCREEN 0 (the LOCAL player's camera)
+rather than its own — a candidate for "shoots where the local player looks."
+(Not yet disambiguated from the muzzle/effect use in that 0x1567-byte function.)
+
+**Buildable fix options (refined):**
+1. **Hook `CameraManager_GetBlendedCameraTransform` (0x141C06650)** — when it
+   resolves screen index 1 (Second player) and the peer is aiming, overwrite the
+   out buffer's 3x3 rotation at out+0x350 with a matrix built from
+   `peer.camera_quat`. Single, precise interception at the exact read point;
+   convention-agnostic if we build the matrix in the engine's basis.
+2. Override `g_PerScreenCameraTransformCache[0x400*1] + 0x350` rotation each frame
+   after the camera update, before fire.
+
+**Runtime verification still required before build** (do not guess): confirm
+whether the projectile direction reads (a) the firing player's screen index at
++0x4010, (b) the hardcoded `CameraManager::Get(0)` path, or (c) a player-side aim
+target (Player+0x1570, seen appearing during ADS in the field diff). Probe: while
+the Second player fires wrong, compare its actual shot vector against
+CameraManager(0) matrix, CameraManager(1) matrix, and Player(second)+0x1570 to see
+which the shot follows — that picks options 1/2 vs a simpler player-side write.
+Status: **STATIC** (layout + fix intercept CONFIRMED; direction-source selector is
+HYPOTHESIS pending a runtime probe).

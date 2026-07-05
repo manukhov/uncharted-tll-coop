@@ -6069,7 +6069,17 @@ FUNCTIONS = {
         "active camera child via SelectPreferredCameraChildFromRouteEntity; if a "
         "single camera is active copies g_PerScreenCameraTransformCache "
         "(0x1465FDAA0, stride 0x400 per screen index *(mgr+292)), else builds a "
-        "blend from mgr+0x1A0. Does NOT read CameraManager+0x1B0.",
+        "blend from mgr+0x1A0, then CameraState_CopyTransformAndParams -> out. "
+        "The out camera 4x4 matrix is at out+0x350; params (fov) at out+0x390. "
+        "Co-op aim-fix intercept: for screen index 1 overwrite out+0x350 rotation "
+        "from peer.camera_quat.",
+    ),
+    0x14014BDA0: (
+        "CameraState_CopyTransformAndParams",
+        "Copies a camera state's 4x4 transform matrix (dst+0x350..+0x390, four "
+        "xmmword) plus following params (+0x390 fov, +0x3C0.. and byte flags) "
+        "from src to dst. Used by CameraManager_GetBlendedCameraTransform to emit "
+        "the resolved per-screen camera transform.",
     ),
 }
 
