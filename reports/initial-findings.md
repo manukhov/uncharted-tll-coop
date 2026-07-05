@@ -23652,3 +23652,36 @@ player's joypad through the ScaleCopy sandwich.
    did; if so, gate its per-screen publisher by state+0xF8 the same way.
 Status: **STATIC** (direction source CONFIRMED; trigger path plausible from prior
 runtime evidence; ammo/exclusion/HUD items pending).
+
+### Grenade THROW ANIMATION sync: native-trigger design, no separate anim relay (STATIC, 2026-07-05)
+
+**Question:** does syncing grenades require relaying the throw animation itself?
+
+**Answer (STATIC): no — the animation must come natively, like aim pose and fire
+recoil.** The grenade throw animation (`s_standing-grenade-toss[-ap]`,
+`cover-grenade-toss` family) is an ACTION on the player's own action graph. The
+string users `sub_1405AE8E0`/`sub_1405AEAA0` are script action-name registrars; the
+runtime trigger is the grenade controller committing the toss, which starts the
+action on the throwing player's graph. The Second player is a full Player with its
+own graph: when its OWN grenade controller processes hold→release (button relay)
+it enters `GrenadeMove` (grenade-aim move-set, draw anim), shows the arc, and the
+toss commit plays the throw animation — all natively per copy. This is the same
+principle already proven by aim pose (sustained 0x200 → ADS stance) and fire
+(button pulse → recoil anim): deliver the INPUT, not the animation.
+
+**Cluster corrected/completed:**
+- `0x140E17AC0` = PlayerGrenadeController_ResolveContextSettingsAndPose (settings
+  id per movement context + pose seeds; called with 'Grenade Settings: %s' debug
+  print) — label refined from the earlier UpdateAimArcAndToss guess.
+- `0x140E1B000` = PlayerGrenadeController_SolveTrajectory (ballistic arc solve
+  from settings gravity/speed at +0x18/+0x1C/+0x20; cached at this+0x3D0). Its six
+  callers (0x140E19600, 0x140E1F440, 0x140E1F5B0, 0x140E1FB50, 0x140E23920,
+  0x140E24A00) are the arc-preview and toss-commit paths — the toss commit among
+  them is where the throw action/animation is requested (next static target if the
+  native trigger stalls).
+
+**Implication for the sync plan (unchanged, now covering animation):** grenade
+hold/release button relay + pose-seed hook + grenade ammo on the Second player =
+direction, projectile AND animation together. If runtime shows the toss action
+being swallowed despite the button reaching the joypad, inspect the toss-commit
+callers above and CheckActionExclusions (0x140E2ADF0). Status: **STATIC**.

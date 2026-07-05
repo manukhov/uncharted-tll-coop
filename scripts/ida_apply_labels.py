@@ -6093,14 +6093,25 @@ FUNCTIONS = {
         "(a1[33]), owner link +0x3BD0. Sibling of the fire controller cluster.",
     ),
     0x140E17AC0: (
-        "PlayerGrenadeController_UpdateAimArcAndToss",
-        "Grenade aim-arc + toss update (anchors: GrenadeMove, *aim-grenade*, "
-        "*aim-grenade-move*, *aim-grenade-cassie*, *zipline-grenade*). Fetches "
-        "the camera pose seed TEN times via ResolveScreenRoutePoseSeedOrDefault"
+        "PlayerGrenadeController_ResolveContextSettingsAndPose",
+        "Resolves the grenade-aim settings id (*aim-grenade* / *aim-grenade-move* "
+        "/ *aim-grenade-cassie* / *zipline-grenade* / cover variants) and the "
+        "GrenadeMove move-set for the current movement context, fetching the "
+        "camera pose seed TEN times via ResolveScreenRoutePoseSeedOrDefault"
         "(&seed, *(owner+0x4010)) — the SAME per-screen fire-ray source as "
-        "PlayerFireController_BuildFireArgsAndFire. The co-op pose-seed hook for "
-        "screen index 1 therefore fixes both bullet fire and grenade throw "
-        "direction for the Second player.",
+        "PlayerFireController_BuildFireArgsAndFire. Called by the trajectory "
+        "solver 0x140E1B000 ('Grenade Settings: %s' debug print). The co-op "
+        "pose-seed hook for screen index 1 therefore fixes both bullet fire and "
+        "grenade arc/throw direction for the Second player.",
+    ),
+    0x140E1B000: (
+        "PlayerGrenadeController_SolveTrajectory",
+        "Grenade arc/trajectory solver: resolves settings via 0x140E17AC0, "
+        "broadcasts gravity/speed scalars from settings +0x18/+0x1C/+0x20 into "
+        "SIMD and integrates the arc; cached solver state at this+0x3D0 "
+        "(a1[122]). Six callers = arc preview draw + toss commit paths "
+        "(0x140E19600, 0x140E1F440, 0x140E1F5B0, 0x140E1FB50, 0x140E23920, "
+        "0x140E24A00).",
     ),
     0x141C077B0: (
         "ResolveScreenRoutePoseSeedOrDefault",
