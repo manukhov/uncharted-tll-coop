@@ -6104,6 +6104,23 @@ FUNCTIONS = {
         "pose-seed hook for screen index 1 therefore fixes both bullet fire and "
         "grenade arc/throw direction for the Second player.",
     ),
+    0x141213C40: (
+        "ScriptQuery_GetPlayerMeleeTarget",
+        "'get-player-melee-target' handler. Reads the LOCAL player "
+        "(g_PlayerHandleForHudPublish) -> player+0x1F60 (combat/melee "
+        "controller) -> virtual +0x1C8 -> result+0xD8 = current melee target "
+        "entity id. Target is chosen locally by melee-attack-rater (sub_1411F7370) "
+        "from nearby enemies, not networked. Co-op: the Second player melees via "
+        "its own controller over its local enemy set, so correct melee needs "
+        "enemy position sync, not a melee event channel.",
+    ),
+    0x1411F7370: (
+        "MeleeAttackRater_RateTargets",
+        "melee-attack-rater.cpp core (0x1861). Rates candidate melee targets by "
+        "geometry/angle/distance; shared by player and NPC melee behaviors "
+        "(many callers). Produces the locally-selected melee target stored on the "
+        "combat controller (player+0x1F60 -> +0xD8).",
+    ),
     0x1402E6E10: (
         "ProcessExplosion_Init",
         "ProcessExplosion::Init (game/process-explosion.cpp): initializes the "

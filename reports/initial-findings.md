@@ -23761,3 +23761,31 @@ open-items list.
 Status: **STATIC** — command relay coverage CONFIRMED in disasm; the remaining
 work is entirely the already-scoped weapon/position/enemy phases, not per-event
 channels.
+
+### Melee target is LOCAL (combat controller field), folds into enemy-sync (STATIC, 2026-07-05)
+
+**Melee target selection is not networked per player.** The `get-player-melee-target`
+script handler (`sub_141213C40`) reads it as: local player handle
+`g_PlayerHandleForHudPublish` -> `player+0x1F60` (combat/melee controller) ->
+virtual +0x1C8 -> result `+0xD8` = the current melee TARGET entity id. The target
+is chosen locally by `melee-attack-rater.cpp` (rater `sub_1411F7370`, 0x1861,
+shared by player + NPC melee behaviors) rating nearby enemies by geometry; it is a
+locally-maintained field, not a relayed value.
+
+**Co-op consequence (confirms the reliable-events triage):** the Second player's
+melee button relays for free -> its OWN melee controller selects a target from ITS
+local enemy set -> plays the melee action on it. Correct behavior therefore
+requires the enemies to be POSITION-SYNCED (the enemy-sync phase): with matched
+enemy positions the local rating picks the same target the peer hit. No melee
+event channel is needed for the input/animation.
+
+**Documented fallback (only if enemy-sync proves insufficient for melee):** relay
+the peer's chosen target id (readable at peer `player+0x1F60 -> +0x1C8 -> +0xD8`)
+and, on the receiver, bias the Second player's target to the matching synced enemy.
+Deferred — enemy position sync should make local selection converge on its own.
+
+Note: the `get-player-melee-target` query is hardwired to the LOCAL player handle,
+so it is a HUD/script convenience, NOT the path the Second player's melee execution
+uses (that goes through the Second player's own combat controller directly).
+Status: **STATIC** — melee target locality CONFIRMED; folds into enemy-sync, no new
+channel.
