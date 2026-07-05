@@ -6104,6 +6104,15 @@ FUNCTIONS = {
         "pose-seed hook for screen index 1 therefore fixes both bullet fire and "
         "grenade arc/throw direction for the Second player.",
     ),
+    0x140BC9730: (
+        "NetEventInteractable_ClusterAnchor",
+        "One of the game/net/net-event/net-event-interactable.cpp functions "
+        "(cluster ~0x140BC97xx). The engine's native replicated INTERACTABLE "
+        "net-event type (sibling files: net-event-melee/npc/player/weapon/"
+        "character-move/connection). Candidate transport for co-op inspection/"
+        "interaction sync (story-authority model). Needs a standalone-apply check "
+        "(works without a live net session?) before reuse.",
+    ),
     0x141213C40: (
         "ScriptQuery_GetPlayerMeleeTarget",
         "'get-player-melee-target' handler. Reads the LOCAL player "

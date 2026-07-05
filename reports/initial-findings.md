@@ -23789,3 +23789,59 @@ so it is a HUD/script convenience, NOT the path the Second player's melee execut
 uses (that goes through the Second player's own combat controller directly).
 Status: **STATIC** — melee target locality CONFIRMED; folds into enemy-sync, no new
 channel.
+
+### Scripted narrative sync (inspections/puzzles/set-pieces): architecture analysis (STATIC, 2026-07-05)
+
+**The problem the user raised:** the campaign is authored around ONE protagonist
+(Chloe) doing inspections, puzzles, readables and scripted sequences. With two
+independent game copies each running the full campaign, how do these stay in sync?
+
+**Systems present (static):**
+- **State scripts** — `SsManager` / `SsInstance` (ND state-script engine:
+  cutscenes, scripted sequences, puzzle logic; VisitAllInstances, OnSpawnStateScript,
+  RunTrackGroup, AddEnabledBroadcastEvent). Runs PER COPY.
+- **Region triggers** — `RegionControl` (Process::ProcExecuteRegionControlCallback,
+  region-enter). Fire on LOCAL conditions per copy.
+- **Interactions** — `player-start-inspect` / `player-investigate-*` (inspect
+  camera/hud/readable), `pickup` (WeaponPickup, treasure). Player-driven, local.
+- **Spawner replication** — `SpawnerReplicationManager` (replicated spawners).
+
+**KEY DISCOVERY — the engine already has a typed net-event replication layer**
+(game/net/net-event/*, from the MP/co-op infrastructure):
+`net-event-interactable.cpp` (networked INTERACTABLE events — the exact primitive
+for inspections/interactions), `net-event-melee.cpp`, `net-event-npc.cpp`,
+`net-event-player.cpp`, `net-event-weapon.cpp`, `net-event-character-move.cpp`
+(the CharacterMove the mod already touches), `net-event-connection.cpp`.
+`NetEventInteractable` cluster ~0x140BC97xx. So ND models interactions/melee/weapon
+as replicable net events natively.
+
+**Core tension:** both copies independently run the scripted narrative; region /
+SsInstance triggers fire on each copy's LOCAL player position/progress, so without
+intervention the two copies DESYNC (copy 1's Chloe triggers a cutscene/puzzle that
+copy 2 never sees, or each triggers its own copy at different times).
+
+**Strategic options (for the user to decide):**
+1. **Story-authority model (recommended, matches authoring).** Designate copy 1
+   (Chloe) as the STORY DRIVER: it performs inspections/puzzles/scripted beats. The
+   follower copy (Nadine) does NOT independently trigger narrative content — it is
+   told to advance to the same state (relay region-enter / SsInstance start /
+   puzzle-solved / inspect events; suppress the follower's independent triggers).
+   Fits "Chloe does the inspections, Nadine follows." Needs: (a) relay narrative
+   events (reuse net-event-interactable + a small SsInstance-start relay), (b) gate
+   progression on the driver so the follower never blocks on "inspect X to proceed."
+2. **Reuse the native net-event/SsInstance replication.** Drive the engine's own
+   net-event layer so interactions/scripts replicate natively. Most complete, but
+   requires activating the net-session infrastructure the project has so far avoided
+   (co-op session state CRASHED campaign load — earlier REJECTED note); would need
+   to prove the net-event apply path works WITHOUT a full net session.
+3. **Accept narrative desync (current de-facto).** Sync only avatar + combat; each
+   copy runs its own scripted beats. Simplest; cutscenes/puzzles desync.
+
+**Recommendation:** Option 1. It matches the single-protagonist authoring, avoids
+the crashing net-session path, and reuses net-event-interactable as the transport
+for the discrete interaction events; SsInstance start/stop is the second relay to
+prototype. **Next static step before building:** RE how SsInstance triggers select
+the player and whether a follower-side trigger can be suppressed + an authoritative
+start injected; and whether NetEventInteractable::Apply works standalone (no live
+net connection). Status: **STATIC** (systems + mechanism identified; model choice
+is a design decision pending user direction).
