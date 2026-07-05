@@ -23886,3 +23886,53 @@ Banter correctness reduces to narrative-progress sync (Option 1), plus optionall
 re-enabling buddy-dialog-look on the puppet for the head-turn polish. Status:
 **STATIC** (dialog<->AI separation CONFIRMED; facial-under-override + ambient-banter
 loss are runtime checks).
+
+### Two-copy vehicle co-op: driver drives on their own copy, vehicle transform relays, passenger rides via seat parenting (STATIC, 2026-07-05)
+
+**User goal:** a button to seat Nadine as passenger; ideally either player can drive
+while the other rides passenger.
+
+**Systems (confirmed, prior + this pass):**
+- Seat/role event layer: `set-driver` / `add-passenger` / `passenger-entered`
+  (vehicle-controller family 0x140394B20..0x140395560), passenger-entry state
+  builder `0x14059D740` (hero-passenger-a-enter-front), `VehicleCtrl::Notify
+  PlayerEntering` (0x1414115B0, publishes vehicle-entry-def into the actor via
+  actor->virtual+0xD0), scripted entry `MoveToAndEnterVehicle` / `TeleportInto
+  Vehicle`.
+- Control: `driveable-car-controller.cpp` / `driveable-vehicle-controller.cpp`,
+  `AXIS_STEERING` / throttle, `player-driving` state (sub_140D9C700).
+
+**Key architectural insight (fits the existing puppet model):** in the two-copy
+setup each real driver is LOCAL on their own copy. So "who drives" does NOT require
+hijacking a driver-input path on the puppet — the vehicle is driven NATIVELY on the
+copy where that player is local (real input, real vehicle physics), and the VEHICLE
+OBJECT is relayed to the other copy exactly like the player puppet is. The
+passenger does not need separate position sync: sitting in a seat PARENTS the rider
+to the vehicle transform, so the passenger follows the car for free — only the
+vehicle object (an NdGameObject with the usual world-pos/quat + velocity) is synced.
+
+**Design (consistent, incremental):**
+1. Immediate ask — passenger button: route the Second player into the passenger
+   seat on BOTH copies via the passenger-entry path (0x14059D740 / add-passenger /
+   passenger-entered) or the MoveToAndEnterVehicle/TeleportIntoVehicle skill, with
+   set-driver for the local driver. Bind a hotkey to trigger it.
+2. Vehicle transform relay: add the driven vehicle's pos/quat/velocity to the packet
+   (VehiclePacket or extend StatePacket); the non-driver copy applies it to the
+   vehicle object (reuse the puppet transform-apply). Authoritative on the driver's
+   copy.
+3. Passengers ride via native seat parenting — no extra work once seated.
+4. Role swap ("second player drives, first rides"): reassign the driver via
+   set-driver / vehicle-entry-def and flip which copy owns the vehicle transform.
+   In the two-copy model this is just "the vehicle is authoritative on whichever
+   copy the current driver is local" — no driver-input hijack needed.
+
+**Milestones:** (a) both players seated (driver+passenger) on both copies via the
+entry layer + a button; (b) vehicle transform relay so the passenger's copy sees
+the car move; (c) driver-authority swap. The driver-input path
+(driveable-car-controller) only needs study if we ever want a PUPPET to drive on a
+copy where its player is remote — which the two-copy model avoids.
+
+**Open verification (static next / runtime):** confirm seat parenting attaches the
+rider to the vehicle transform (rider follows car with no separate sync — expected
+in this engine), and the vehicle object's transform/velocity offsets for the relay.
+Status: **STATIC** (entry+control layers mapped; two-copy driver model designed).

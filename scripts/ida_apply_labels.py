@@ -6104,6 +6104,32 @@ FUNCTIONS = {
         "pose-seed hook for screen index 1 therefore fixes both bullet fire and "
         "grenade arc/throw direction for the Second player.",
     ),
+    0x1414115B0: (
+        "VehicleCtrl_NotifyPlayerEntering",
+        "VehicleCtrl::NotifyPlayerEntering(const DC::VehicleEntryDef*): hashes "
+        "'vehicle-entry-def' (0x142926668), resolves controller sub-objects via "
+        "0x14142B890(...,2/3), packages 0x150 records, copies the VehicleEntryDef "
+        "payload (+0xA8/+0xBC), serializes via 0x1417F8B00, and pushes the entry "
+        "record into the live rider actor via actor->virtual+0xD0. The bridge for "
+        "co-op vehicle entry (driver/passenger seat).",
+    ),
+    0x14059D740: (
+        "VehicleCtrl_BuildPassengerEntryState",
+        "Passenger-seat entry state builder: hashes 'hero-passenger-a-enter-front' "
+        "(0x142965D18) into controller state +0xA0, writes role at +0xB0 and an "
+        "entry-state flag bundle at +0x12C, and commits target-actor entry "
+        "transforms around +0x50/+0x70/+0x80. Best hook for seating the co-op "
+        "Second player as passenger (with add-passenger/passenger-entered "
+        "0x140394B20..0x140395560 and set-driver for the driver).",
+    ),
+    0x140D9C700: (
+        "Vehicle_PlayerDrivingStateUpdate",
+        "Publishes/updates the 'player-driving' state (car anim overlay / IGC "
+        "driving flag) for the driving player. Part of driveable-car-controller / "
+        "driveable-vehicle-controller. In two-copy co-op the driver is local on "
+        "its own copy, so this runs natively there; the passenger copy only "
+        "relays the vehicle object transform.",
+    ),
     0x140BC9730: (
         "NetEventInteractable_ClusterAnchor",
         "One of the game/net/net-event/net-event-interactable.cpp functions "
