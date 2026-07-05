@@ -244,6 +244,66 @@
 содержат настоящего локального ввода. Для разовых действий нужен отдельный
 надёжный упорядоченный поток с номерами и подтверждениями.
 
+## P0.5: Build-ready design backlog (STATIC done 2026-07-05; pending runtime pins)
+
+Все пункты ниже разобраны статически end-to-end; детали и адреса — в
+`reports/initial-findings.md`, рантайм-чтения собраны в
+`reports/runtime_pins_checklist.md`. Коммиты указаны для быстрого grep лога.
+
+**Боевые действия / направление:**
+- [~] Направление aim/fire/гранаты: fire-ray = per-screen **pose seed**
+      `CameraManager::GetHandle(idx) -> *(mgr+0xB0)+0x60` (32Б pos+quat), резолвер
+      `ResolveScreenRoutePoseSeedOrDefault 0x141C077B0`. Фикс: relay сида (StatePacket
+      v8, +32Б) + хук резолвера, override при idx==1. Гранаты используют ТОТ ЖЕ сид
+      (`PlayerGrenadeController_...UpdateAimArcAndToss 0x140E17AC0`). (`820d89a`,
+      `425c163`, `4cd55ca`, `d6c4a41`, `a873085`) Runtime-пин #2.
+- [x] Снайпер-скоуп HUD-гейт: по локальному ADS (`Player+0x1548`), `286b6f1`.
+- [~] Снайпер-скоуп «Хлоя пропадает»: DrawControl-скрытие меша куклы при scoped-ADS;
+      форсить видимым. Runtime-пин #6 (`26bb1ad`). Обход: pose-only.
+- [~] Эффекты/взрывы/трассеры/импакты: НЕ отдельный канал — нативные следствия
+      настоящих снарядов в каждой копии (`add9bf2`). Гранаты/анимация броска —
+      нативно из реле кнопки (`ee01be5`, `b698b67`).
+
+**Надёжные события:** карта — все кнопочные действия приходят бесплатно через реле
+маски Joypad (`+0xD0/+0xD8/+0xE0`); мили-цель локальна → фаза врагов (`d934aa8`).
+
+**Нарратив (вариант 1 «Хлоя — драйвер сюжета»), всё без net-сессии:**
+- [~] Прогрессия: релей команд `GameTaskGraphMgr` + apply через
+      `AddCommand 0x141CB95B0` (список `0x146A514A0`, 40Б записи). Runtime-пин #3.
+      (`80d4e18`, `666c7f7`)
+- [~] Осмотры/взаимодействия: релей флага `state+0xD0 бит1`
+      (`ScriptQuery_InteractableHasBeenInspected 0x1408B1350`). Runtime-пин #4.
+      (`f15063b`)
+- [~] Подавление триггеров follower'а: `suppress-interactable-system 0x1408AC710`
+      + per-command joypad disable (`1474ab9`).
+- [x] Диалоги/бантер: бесплатно per-copy (DialogManager — не AI), кукла остаётся
+      объектом с отключённым AI (`b6c2687`).
+- [~] Камера головоломки: follower видит через синхронизированную сцену (Path B)
+      или релей транформа экрана-0 (Path A). (`ad342b1`)
+
+**Spectate / асимметричный кооп:**
+- [~] Spectate/pause-hold локального игрока (move-stick/transitions off + подавление
+      + существующие 4 death-хука `Player+0xBE8..+0xC00` + пин). (`7e67a1a`)
+- [~] Игрок 2 наблюдает за игроком 1 в периоды отсутствия Нэдин (пролог): детект
+      через `g_last_nadine_object` + идентичность локального == Хлоя; spectate +
+      релей камеры копии 1; переход при спавне/деспавне Нэдин. (`e0cd5bc`)
+
+**Машина:**
+- [~] Пассажирское сиденье: `Npc_TeleportIntoVehicleSkill 0x1406B14D0` (кукла — Npc).
+      Двухкопийная модель: водитель ведёт нативно на своей копии, релей транформа
+      машины, пассажир едет через parenting сиденья. Runtime-пин #5.
+      (`aa5f550`, `58fecf2`, `441a3e1`)
+
+**Анимация (полная синхронизация):**
+- [~] Тир 1 (input-driven) — уже работает через реле ввода. Тир 2 (скрипты) — с
+      нарративной синхронизацией. Тир 3 (рагдолл/downed/оружие) — релей флагов
+      NetSnapshot. Тир 4 (полная точность) — ДОСТИЖИМ: capture
+      `FillAnimCmdBitStream 0x140BC4E60` напрямую (512Б) из `Player.AnimControl`,
+      apply через `AddSnapshot`→`ProcessPendingSnapshots` на Player-embedded
+      генераторе `Player+0x1B30`. Runtime-пин #1. (`59d93be`, `b8e564e`, `9017fdc`)
+- [ ] Оружие Нэдин: СТЕНА — asset/skeleton-AP (холстер-точка из дефа оружия требует
+      сустав на скелете look'а). Не code-fixable (`487a3c3`).
+
 ## P1: Enemy Synchronization (DEFERRED)
 
 - [ ] Не продолжать до закрытия P0.
