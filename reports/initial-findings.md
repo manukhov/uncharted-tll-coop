@@ -24587,3 +24587,24 @@ the Player vtable (base+0x2A4BFE8) = both are real Players.
   Player+0x1548 read as debug-fill (0x7fbbeeee) — the 0x1500 weapon/ADS region is
   only valid with a weapon out. ADS/scope/held-weapon pins need the sniper drawn.
 Status: **CONFIRMED** (direction pin) — aim/fire/grenade direction fix validated.
+
+### RUNTIME 2026-07-05 (cont): task-graph schema CONFIRMED; anim +0x3FC8 REJECTED as raw-Player field
+
+- **Task-graph command SCHEMA confirmed** (g_GameTaskGraphCommandList base+0x6A514A0):
+  live record = +0 TYPE **3**, +4 subnode id 0xf26a97ed, +8 graph id 0xed857351,
+  +0xC param 0, +0x10 **0xffffffff** — matches the static schema exactly (+0 type,
+  +4 subnode, +8 graph, +0x10 = -1 for types 2/3). Count (base+0x6A51568) = 0 now:
+  commands are transient (added then drained by GameTaskGraphMgr_Update per frame);
+  the last record persists in the buffer. Progression relay + AddCommand apply is
+  validated; TYPE->verb map (which of 1/2/3 = complete/activate) still needs
+  watching a live objective completion.
+- **Anim capture offset REJECTED:** `Player+0x3FC8` reads 0 on the raw campaign
+  Player (re-read while active). So 0x3FC8 is on the NetPlayer/FillPlayer wrapper
+  (its `_RDI`), NOT the raw Player. Tier-4 standalone capture cannot just read
+  *(Player+0x3FC8); it must go through the Player's AnimControl (GetAnimControl/
+  GetBaseStateLayer) to obtain the anim-command list for FillAnimCmdBitStream. Tier-4
+  remains the hardest path (tiers 1-3 unaffected).
+- This section has NO combat weapon (live0_held=0, everSeen=0, Player+0x1548 =
+  uninitialized 0x7fbbeeee even while "aiming"): ADS/scope/held-weapon/scope-cull
+  pins require a combat section with a (scoped) rifle drawn.
+Status: **CONFIRMED** (task schema), **REJECTED** (0x3FC8 raw-Player anim field).
