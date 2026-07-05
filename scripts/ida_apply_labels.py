@@ -697,13 +697,8 @@ FUNCTIONS = {
         "screen-lane state, and notifies the currently attached actor pair "
         "through virtual +0x208 when still valid.",
     ),
-    0x141C077B0: (
-        "ResolveScreenRoutePoseSeedOrDefault",
-        "Resolves the screen route entity by index through 0x141C06420, then "
-        "extracts the active route-pose seed from the route's +0xB0 child when "
-        "its gate bits are valid; otherwise falls back to a default "
-        "zero-plus-identity seed.",
-    ),
+    # (0x141C077B0 ResolveScreenRoutePoseSeedOrDefault: superseded by the
+    #  detailed 2026-07-05 entry in the fire-ray section below.)
     0x141C06F20: (
         "InsertRouteChildAndRecomputeActiveCameraDescriptor",
         "Core screen-route entity update worker. Inserts or refreshes a route "
@@ -6090,6 +6085,22 @@ FUNCTIONS = {
         "the FireArgs buffer, applies cover/strafe context (sub_1410E2950(idx)), "
         "then calls Fire. THE aim-direction entry point for the co-op Second "
         "player (screen index 1).",
+    ),
+    0x140E16DF0: (
+        "PlayerGrenadeController_Construct",
+        "Player grenade thrower init: resolves *grenade-default-arc-art* and "
+        "*grenade-l1-r1-release-window* settings; owner stored at this+0x108 "
+        "(a1[33]), owner link +0x3BD0. Sibling of the fire controller cluster.",
+    ),
+    0x140E17AC0: (
+        "PlayerGrenadeController_UpdateAimArcAndToss",
+        "Grenade aim-arc + toss update (anchors: GrenadeMove, *aim-grenade*, "
+        "*aim-grenade-move*, *aim-grenade-cassie*, *zipline-grenade*). Fetches "
+        "the camera pose seed TEN times via ResolveScreenRoutePoseSeedOrDefault"
+        "(&seed, *(owner+0x4010)) — the SAME per-screen fire-ray source as "
+        "PlayerFireController_BuildFireArgsAndFire. The co-op pose-seed hook for "
+        "screen index 1 therefore fixes both bullet fire and grenade throw "
+        "direction for the Second player.",
     ),
     0x141C077B0: (
         "ResolveScreenRoutePoseSeedOrDefault",

@@ -23614,3 +23614,41 @@ eye-height offset + camera_quat.)
 where the peer's crosshair points (both copies), including while strafing; without
 peer-aim the resolver behaves natively. Status: **STATIC** (chain CONFIRMED in
 disasm; fix design build-ready, pending implementation + runtime test).
+
+### Grenade sync: grenade arc/toss uses the SAME per-screen pose seed as fire (STATIC, 2026-07-05)
+
+**Grenade throw controller located.** Ctor `sub_140E16DF0` (reads
+`*grenade-default-arc-art*`, `*grenade-l1-r1-release-window*`; owner at a1[33],
+owner+0x3BD0 link). The update/toss is `sub_140E17AC0` (0x1B38 bytes,
+PlayerGrenadeController_UpdateAimArcAndToss): anchors `"GrenadeMove"`,
+`*aim-grenade*` / `*aim-grenade-move*` / `*aim-grenade-cassie*` /
+`*zipline-grenade*` settings family.
+
+**Direction source CONFIRMED identical to fire:** all TEN
+`ResolveScreenRoutePoseSeedOrDefault(&seed, *(owner+0x4010))` calls inside the
+grenade update fetch the pose seed by the throwing player's SCREEN INDEX — exactly
+the fire chain's pattern. Therefore the planned pose-seed relay + resolver hook
+(override out for idx==1 with the peer's relayed 32-byte screen-0 seed) fixes the
+Second player's grenade arc AND throw direction together with bullet fire — one
+interception, both weapons.
+
+**Grenade trigger (button) path — existing knowledge:** the accidental
+grenade-on-move bug proved the grenade/throw command press derives from branch
+mask bits 0x100/0x400 (the old synthetic 0x500 gate press edges fired it). Those
+bits are NOT stripped by the current relay (only scope 0x10000..0x80000 and fire
+0x800 are), so the peer's real grenade press should already pulse the Second
+player's joypad through the ScaleCopy sandwich.
+
+**Open items for a working grenade sync (in order):**
+1. Pose-seed relay + hook (StatePacket v8: +32-byte seed) — shared with fire fix.
+2. Verify the Second player has grenade AMMO/inventory (grenade-basic); pre-give
+   like coop weapon arts if missing (Infinite Grenades debug flag at
+   g_DebugCheatFlags_AmmoGrenades+3 is a stopgap test lever).
+3. Watch CheckActionExclusions (0x140E2ADF0) — it rejects authored
+   `Grenade`/`Grenade-Add` in some states; if the Second player's toss is
+   swallowed, this is the gate to inspect.
+4. HUD: the grenade ARC (`general/hud/grenade-arc:Default`,
+   `point-near-grenade-arc`) may leak onto the local viewport like the reticle
+   did; if so, gate its per-screen publisher by state+0xF8 the same way.
+Status: **STATIC** (direction source CONFIRMED; trigger path plausible from prior
+runtime evidence; ammo/exclusion/HUD items pending).
