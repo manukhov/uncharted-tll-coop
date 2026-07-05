@@ -24376,3 +24376,34 @@ puppet Npc handle; how to invoke sub_1406B14D0 (direct call vs skill request) an
 whether AI must be briefly re-enabled; the a1/a2/a3/a4 sources for
 BuildPassengerEntryState if approach 2 is used. Status: **STATIC** (enter machinery
 + three approaches CONFIRMED; seat AP/handles are a single in-vehicle runtime read).
+
+### Weapon holster-attach: refines (not overturns) the asset-level Nadine conclusion (STATIC, 2026-07-05)
+
+Tracing the weapon-display bug through the holster-point resolver
+`sub_141095BD0` (weapon-holster-point user): the holster ATTACH-POINT NAME is
+resolved from the WEAPON's settings/art-def (`sub_1410F8660(settings,
+"weapon-holster-point", ...)` + CachedWeaponArtDefsHashRegistry /
+LookupRegistryRecordPointerById), plus a weapon-base-layer-mirror normal/mirrored
+variant, then applied to the character via `(*(char+7664)+184)(...)`. So the
+attach point is authored per-WEAPON, but binding it requires the CHARACTER's
+skeleton to actually have that attach point / joint.
+
+**Conclusion:** this REFINES the earlier "Nadine weapon = asset-level" finding
+rather than overturning it. The holster attach is not a generic code attach the
+mod can force; it needs the target look's skeleton to carry the weapon-def's
+holster attach point. The Nadine look 0xd27c074f lacking that AP is exactly why
+holstered weapons mis-attach/fall. UpdateFlagsAndWeapons applies NetSnapshotWeapons
+through this same weapon->skeleton attach, so the net-anim path would hit the SAME
+skeleton-AP gap — it does NOT bypass the asset issue. Net-anim may still improve
+the HELD (in-hand) weapon which uses a common hand AP, but holstered display stays
+asset/skeleton-bound.
+
+**Honest status of remaining STATIC threads (no runtime needed):**
+- Nadine weapon display: **static wall reached** — asset/skeleton-AP, refined
+  above; not code-fixable without changing the look/skeleton (rejected scope).
+- Sniper-scope "Chloe vanishes" model cull: still OPEN, static-investigable (what
+  culls the scoping player's own model during scoped-ADS).
+- Local-player spectate/pause-hold without false death (Player+0xBE8..+0xC00):
+  still OPEN, purely static; needed for cutscene/puzzle-camera.
+Everything else (anim generator offset, vehicle transform/seat AP/handles) is
+runtime-blocked. Status: **STATIC** (weapon thread concluded).
