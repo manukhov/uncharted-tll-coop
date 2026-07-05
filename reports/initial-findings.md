@@ -23685,3 +23685,37 @@ hold/release button relay + pose-seed hook + grenade ammo on the Second player =
 direction, projectile AND animation together. If runtime shows the toss action
 being swallowed despite the button reaching the joypad, inspect the toss-commit
 callers above and CheckActionExclusions (0x140E2ADF0). Status: **STATIC**.
+
+### Effects sync (muzzle/tracers/impacts/explosions): native per-copy consequences, no relay layer needed (STATIC, 2026-07-05)
+
+**Design question:** do bullet tracers/impact decals/muzzle flashes and explosions
+need their own sync channel?
+
+**Answer: no — they are side-effects of REAL native projectiles in each copy.**
+1. **Bullets.** The receiving copy delivers the peer's shot by pulsing the Second
+   player's own fire button → its PlayerFireController fires a REAL
+   `ProjectileBulletInstant`. Runtime evidence already on file: the 2026-07-04
+   receiver crash happened INSIDE `ProjectileBulletInstant::ProbeKick`
+   (`sub_14152C9B0`, rva 0x152CB38) on a relayed shot — proof that relayed shots
+   run the full native projectile pipeline on the receiver, which is exactly the
+   pipeline that draws muzzle flash, tracer and impact/decal effects. Per-weapon
+   toggles exist (`allow-tracer`, `no-tracers`, `ParticleMuzzleFlashTint`,
+   `bullet-impacts`). Once the pose-seed fix lands, those effects follow the
+   CORRECT direction automatically.
+2. **Explosions.** `ProcessExplosion` (game/process-explosion.cpp: `Init`
+   `sub_1402E6E10` 0x90C, `Active::Update`, `ApplyDamageToObject`,
+   `spawn-explosion-effects-locator`) is a process spawned by the detonating
+   projectile — no direct Init callers (virtual process-system spawn). The Second
+   player's natively thrown grenade detonates per copy → native explosion visuals
+   there. Debug lever `Control Grenade Explosions Manually` exists for testing.
+3. **What can diverge (accepted for now):** per-copy RNG spread → impact points
+   differ slightly; grenade trajectories can diverge if local collisions differ →
+   explosion position/timing mismatch. Fallback if runtime shows it matters:
+   relay a compact ExplosionEvent (position + art id) and spawn via the process
+   system — deep, only if needed. Enemy damage consistency is the ENEMY-sync
+   phase's concern (host-authoritative), not an effects problem.
+
+**Conclusion:** the effects "sync" task collapses into the already-planned work:
+(a) pose-seed relay + hook (direction), (b) grenade trigger + ammo (real grenade),
+(c) keep native fire via button pulse. No separate effects channel. Status:
+**STATIC** (bullet pipeline point is backed by prior runtime crash evidence).
