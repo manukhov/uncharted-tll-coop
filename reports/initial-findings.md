@@ -23719,3 +23719,45 @@ need their own sync channel?
 (a) pose-seed relay + hook (direction), (b) grenade trigger + ammo (real grenade),
 (c) keep native fire via button pulse. No separate effects channel. Status:
 **STATIC** (bullet pipeline point is backed by prior runtime crash evidence).
+
+### Reliable-events map: button-driven actions relay for free; only side-effects need work (STATIC, 2026-07-05)
+
+**Command resolution chain CONFIRMED end-to-end.** Authored player commands are
+NOT fixed bits — `Joypad_IsCommandActive(joypad, cmdHash, edge)` (0x141837CD0)
+resolves up to two binding descriptors and evaluates each via
+`Joypad_EvaluateCommandDescriptor` (0x141838050: analog threshold + digital button +
+hold timing + dependencies + temp disables), whose digital path is
+`Joypad_EvaluateGamepadButtonBinding` (0x141838C90) — which reads the **Joypad
+pressed/released/current masks at +0xD0/+0xD8/+0xE0 and per-button timestamps at
++0x10C**. Those are exactly the masks the engine derives (via Input_ScaleCopyVirtual)
+from the resolved input block +0x518 that the co-op mod already relays.
+
+**Consequence:** every button/analog-mapped action resolves from the SAME relayed
+Joypad state, so it fires natively on the Second player's own graph (input, then
+native action + native animation per copy). The mod strips only scope layer bits
+(0x10000..0x80000) and fire (0x800, delivered via FirePacket); everything else in
+block+0x518 passes through the ScaleCopy sandwich.
+
+**Reliable-events triage:**
+- COME FREE (input relay only): jump, dodge/roll, crouch, sprint, cover, vault/
+  interact BUTTON, melee BUTTON, reload BUTTON, weapon-switch BUTTON, grenade
+  hold/release. No per-action code.
+- NEED A CONSISTENT SIDE-EFFECT (already-planned phases, not new channels):
+  * weapon switch / reload: WHICH weapon + ammo — covered by the held-weapon relay
+    (held_weapon_art_id + gun_state) and pre-give; ammo is cosmetic per-copy.
+  * aim/fire/grenade DIRECTION: the pose-seed relay+hook (v8) already planned.
+  * melee / interact / vault: TARGET/CONTEXT-dependent (an enemy, a ledge, a
+    door). Needs the target present at the same spot -> falls under position sync
+    (done for players) + the ENEMY-sync phase (melee target) + scripted-interact
+    context (may no-op on the receiver; accept or relay an InteractEvent later).
+
+**Correction to the 2026-07-05 grenade note:** `PlayerFireController_CheckAction
+Exclusions` (0x140E2ADF0) is a FIRE suppressor — it blocks the GUN from firing
+while an authored Grenade/Grenade-Add/Grapple/Grapple-Add/gun-up-layer action is
+active. It does NOT gate the grenade throw itself, so it is not a grenade-sync
+blocker (it correctly prevents a shot mid-throw). Removed from the grenade
+open-items list.
+
+Status: **STATIC** — command relay coverage CONFIRMED in disasm; the remaining
+work is entirely the already-scoped weapon/position/enemy phases, not per-event
+channels.
