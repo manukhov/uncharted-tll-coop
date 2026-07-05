@@ -24447,3 +24447,37 @@ levers already exist or are already implemented.
 NetAnimCmdGenerator` statically — so the puppet generator offset for the apply path
 (AddSnapshot/ProcessSnapshot) is already known, not a runtime unknown. Status:
 **STATIC** (spectate/pause-hold design CONFIRMED from existing levers).
+
+### Sniper-scope "Chloe vanishes" = DrawControl mesh-hide from puppet scoped-ADS; exact toggle needs runtime (STATIC, 2026-07-05)
+
+Traced the open "Chloe vanishes on the receiver during copy-1 sniper aim" bug.
+The puppet is third-person, and on the receiver the rendered camera is the LOCAL
+player's (screen 0), NOT the puppet's scope camera — so it is not a camera-distance
+near-fade of the rendered view. The vanish is therefore a **DrawControl-level mesh
+hide on the puppet object itself**, triggered when it enters scoped-ADS (the engine
+hides the scoping character's own body for the down-sights/scope presentation). The
+player mesh visibility is owned by IDrawControl (Player_InitializeDrawControl_From
+ProcessSpawnInfoAndResolvedLook; GetDrawControl; IDrawControl::Relink/SetVisible;
+near-fade-start/end are the fade params). No cleanly-named "hide hero in scope"
+script lever surfaced statically.
+
+**Conclusion:** static narrows the cause (puppet scoped-ADS -> its own DrawControl
+hides the mesh) but the EXACT toggle the ADS enter flips (an IDrawControl visibility
+flag vs a near-fade distance vs a draw-mode bit) needs a RUNTIME dump: read the
+puppet's DrawControl state while it is scoping vs not, diff, and force the changed
+field to "visible" each frame on the puppet. This is the same pattern as the
+ADS-flag diff (Player+0x1548).
+
+**Already-known pragmatic fix:** pose-only mode (g_puppet_relay_aim_press OFF)
+suppresses the puppet's scoped-ADS entirely, which removes BOTH the scope-overlay
+leak AND this vanish (confirmed earlier) — at the cost of the ADS aim stance. The
+"keep the aim stance AND stay visible" fix is the DrawControl force-visible above,
+pending the one runtime read.
+
+**Honest close-out of the two remaining static threads:** spectate/pause-hold is
+FULLY designed from existing levers (no runtime needed); scope-cull narrows to a
+single DrawControl runtime pin. Static analysis is now at its useful limit — the
+remaining co-op work (anim offsets confirm, vehicle transform/seat, scope-cull
+DrawControl field, task-command type map) is a batch of live-memory reads best done
+in one loaded-save session. Status: **STATIC** (cause narrowed; exact field is a
+runtime pin).
