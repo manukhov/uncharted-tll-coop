@@ -6131,11 +6131,21 @@ FUNCTIONS = {
         "the driver's relayed task-graph commands here.",
     ),
     0x141CB95B0: (
-        "GameTaskGraphMgr_FindCommandInList",
-        "Searches g_GameTaskGraphCommandList (0x146A514A8, count 0x146A51568, "
-        "stride 0x28) for a matching 40-byte command record (fields +0/+4/+8/+12 "
-        "StringIds, +24 qword, +32 byte, +36 dword). Dedup helper for the task-"
-        "graph AddCommand path.",
+        "GameTaskGraphMgr_AddCommand",
+        "GameTaskGraphMgr::AddCommand (find-or-add). Searches g_GameTaskGraph"
+        "CommandList (base 0x146A514A0, count g_GameTaskGraphCommandCount, stride "
+        "0x28) for a matching 40-byte command; if absent appends it (assert "
+        "'m_numQueuedTaskCommands < kMaxQueuedTaskCommands', kMax=5) copying "
+        "record fields +0..+36. Record schema: +0 TYPE (1/2/3 = kinds; built by "
+        "wrappers 0x141CB9700/9760/97C0), +4 subnode id (*(subnode+8)), +8 graph "
+        "id (*(graph+8)), +12 param, +16 (-1 for types 2/3), +24 qword, +32 byte, "
+        "+36 int. Co-op Option 1 follower-apply: build the driver's relayed "
+        "command record and call this; GameTaskGraphMgr_Update then applies it.",
+    ),
+    0x141CB9700: (
+        "GameTaskGraphMgr_AddCommand_Type1",
+        "Typed AddCommand wrapper: builds a TYPE-1 task-graph command record from "
+        "(graph a2, subnode) with param a4, then calls GameTaskGraphMgr_AddCommand.",
     ),
     0x141C8E680: (
         "TaskManager_UpdateAndQuery",
@@ -6274,12 +6284,14 @@ DATA_NAMES = {
         "WM_SETFOCUS/WM_KILLFOCUS. Both per-player dispatch and "
         "Input_ScaleCopyVirtual require it before native conversion.",
     ),
-    0x146A514A8: (
+    0x146A514A0: (
         "g_GameTaskGraphCommandList",
-        "Campaign task-graph command list (count g_GameTaskGraphCommandCount "
-        "0x146A51568, stride 0x28 = 40-byte records: +0/+4/+8/+12 StringIds, +24 "
-        "qword, +32 byte, +36 dword). Drained by GameTaskGraphMgr_Update to "
-        "advance objectives. Co-op Option 1 relays these command records.",
+        "Campaign task-graph command list, base address (count "
+        "g_GameTaskGraphCommandCount 0x146A51568, kMax 5, stride 0x28 = 40-byte "
+        "records: +0 type(1/2/3), +4 subnode id, +8 graph id, +12 param, +16, +24 "
+        "qword, +32 byte, +36 int). Appended by GameTaskGraphMgr_AddCommand, "
+        "drained by GameTaskGraphMgr_Update to advance objectives. Co-op Option 1 "
+        "relays these command records.",
     ),
     0x146A51568: (
         "g_GameTaskGraphCommandCount",

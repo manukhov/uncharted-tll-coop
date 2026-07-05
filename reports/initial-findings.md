@@ -24085,3 +24085,35 @@ standalone. **Next static pin:** the exact AddCommand appender (increments
 dword_146A51568) and the command-record schema, so the follower-apply call is
 build-ready. Status: **STATIC** (campaign backbone = GameTaskGraphMgr CONFIRMED;
 net-task = MP-only CONFIRMED; AddCommand is the apply target).
+
+### GameTaskGraphMgr::AddCommand pinned — Option-1 progression apply is build-ready (STATIC, 2026-07-05)
+
+**AddCommand located and schema captured.** `GameTaskGraphMgr::AddCommand` =
+sub_141CB95B0 (find-or-add; the "GameTaskGraphMgr::AddCommand" assert
+'m_numQueuedTaskCommands < kMaxQueuedTaskCommands', kMax=5, lives here). It searches
+the command list at base **0x146A514A0** (count g_GameTaskGraphCommandCount
+0x146A51568, stride 0x28) for a matching 40-byte record; if absent, appends it
+(copies fields +0..+36) and the per-frame `GameTaskGraphMgr_Update` (0x141CB9820)
+drains/applies them, advancing objective subnodes.
+
+**Command record schema (40 bytes):**
+- +0  dword  TYPE (1/2/3 = command kind; typed wrappers 0x141CB9700=1, 0x141CB9760=2,
+       0x141CB97C0=3 build these from a (graph, subnode) pair)
+- +4  dword  subnode id  = *(subnode+8)
+- +8  dword  graph id    = *(graph+8)
+- +12 dword  param (subnode index for type 1; 0 for 2/3)
+- +16 dword  (-1 for types 2/3)
+- +24 qword  resolved id/ptr
+- +32 byte   flag
+- +36 dword  extra
+
+**Option-1 follower-apply (build-ready):** the story driver relays the task-graph
+command it issued (the 40-byte record, or the {type, graph id, subnode id, param}
+tuple); the follower resolves its local GameTaskGraphMgr + the matching subnode by
+id and calls GameTaskGraphMgr::AddCommand (or the typed wrapper) — Update then
+advances its graph identically, so task-gated scenes/SsInstances fire in lockstep.
+No net session. Combined with the interactable inspected-flag relay + follower
+trigger suppression, the Option-1 narrative-sync design is now fully build-ready on
+paper; the remaining unknowns (exact TYPE->verb mapping, +24/+32/+36 semantics) are
+a trivial runtime dump of g_GameTaskGraphCommandList while completing an objective.
+Status: **STATIC** (AddCommand + schema CONFIRMED).

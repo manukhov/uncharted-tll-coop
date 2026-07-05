@@ -1,3 +1,3 @@
-apply_labels OK: 884 functions, 17 data names
+apply_labels OK: 885 functions, 17 data names
 idb_path=C:\users\vladimir\desktop\TLLCoopResearch\ida\tll.i64
 save_database returned True
