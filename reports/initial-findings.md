@@ -24674,3 +24674,25 @@ camera (ResolveScreenRoutePoseSeedOrDefault for idx 1). Next: relay the peer's
 screen-0 pose seed (blk+0x60 pos + blk+0x70 quat, 32 bytes) and override it on the
 receiver for idx==1. Status: **jitter CONFIRMED FIXED; wrong-direction = pose-seed
 build.**
+
+### LESSON 2026-07-05: pose-seed direction fix must be fire-caller-specific, not a broad resolver override
+
+The v8 pose-seed override (hook ResolveScreenRoutePoseSeedOrDefault, overwrite for
+idx==1) was architecturally correct but TOO BROAD: the resolver has ~300 callers
+(camera, HUD, per-frame systems), so overriding every idx==1 call FROZE the Second
+player's aim camera and mis-placed the ray from the peer camera POSITION (not just
+orientation). Runtime result: puppet aim frozen + shots wrong. Reverted behind
+g_puppet_relay_pose_seed (default OFF, VK_APPS).
+
+Correct redesign for next attempt:
+- Intercept the FIRE/GRENADE path specifically, not the shared resolver: hook
+  PlayerFireController_BuildFireArgsAndFire (0x140E2BCD0) which calls the resolver,
+  or rewrite the FireArgs aim ray after it is built, gated to the Second player.
+- Prefer overriding only the ORIENTATION (seed+0x10 quat), keeping the puppet's own
+  camera POSITION, so the ray origin stays at the puppet, not the peer camera.
+- Gate to fire/aim moments only, not every frame.
+Also: g_weapon_capture_active_fallback reverted to ON (OFF suppressed pistol
+display on weapon switch). Weapon-spill on pickup is the separate pre-existing
+weapon-give path (ensure_puppet_has_peer_weapons), not caused by these changes.
+Confirmed-good this session: perf (readable_bytes), aim-JITTER single-source fix.
+Status: **reverted to stable baseline; direction fix = fire-caller redesign next.**
