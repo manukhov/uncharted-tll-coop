@@ -368,6 +368,10 @@ volatile bool g_native_fire_relay = false;
 // scope is gated on the HUD query side, not by removing aim from the puppet.
 // Toggle live with F8 to A/B the aim stance vs. the scope leak.
 volatile bool g_puppet_relay_aim_press = true;
+// Feed peer look_stick into the puppet right stick. Default OFF: it is a sustained
+// turn-RATE that spins the puppet's aim camera and fights the body-quat facing
+// blend -> violent aim jitter (2026-07-05 regression). Page Up toggles for A/B.
+volatile bool g_puppet_relay_look_stick = false;
 static ULONGLONG g_fire_button_hold_until_ms = 0;
 // After native Fire replay, block peer/button fire on the remote player so the
 // same shot is not delivered twice (relay native + Joypad 0x800).
@@ -1083,14 +1087,20 @@ std::int64_t __fastcall hooked_input_scale_copy(
             held_mask = sanitize_remote_puppet_button_mask(held_mask);
             *reinterpret_cast<std::uint64_t*>(source_bytes + 0x518) =
                 held_mask | synthetic_move_gate;
-            // Peer look_stick may live in the shared block only during this
-            // conversion (restored below). Persisting it opened the local
-            // viewport aim HUD; the sandwich write keeps the puppet's right
-            // stick working without exposing it to the other lanes.
+            // AIM-JITTER FIX (2026-07-05): do NOT feed peer.look_stick into the
+            // puppet's right stick. The right stick is a turn RATE; look_stick =
+            // (cam_yaw - body_yaw)*0.55 is a SUSTAINED non-zero value while the peer
+            // holds an aim offset, so writing it every frame spins the puppet's aim
+            // camera continuously while apply_peer_aim_facing_to_player snaps the
+            // body back -> violent jerk in all directions. The absolute aim
+            // direction is the separate pose-seed fix; here we keep only the
+            // body-quat facing (stable pose). Gated behind a default-OFF toggle so
+            // the old behavior is still available for A/B (VK_PRIOR / Page Up).
             auto* const axes = reinterpret_cast<float*>(source_bytes);
             shared_bus_saved_look[0] = axes[2];
             shared_bus_saved_look[1] = axes[3];
-            if ((peer.input_buttons & kJoypadAimButtonMask) != 0 &&
+            if (g_puppet_relay_look_stick &&
+                (peer.input_buttons & kJoypadAimButtonMask) != 0 &&
                 (peer.flags & coop::kStateFlagPeerCamera) != 0 &&
                 (std::fabs(peer.look_stick[0]) > 0.001F ||
                  std::fabs(peer.look_stick[1]) > 0.001F)) {
@@ -9386,6 +9396,18 @@ void net_tick() {
         log_line(g_readable_bytes_fast
                      ? "readable_bytes = FAST (SEH probe, no VirtualQuery)"
                      : "readable_bytes = SLOW (VirtualQuery per call)");
+        g_logging_enabled = was;
+    }
+    if (foreground && (GetAsyncKeyState(VK_PRIOR) & 1) != 0) {
+        // Page Up: A/B the look_stick relay. OFF (default) = no puppet aim-jitter
+        // (rely on body-quat facing); ON = feed peer look_stick to the puppet right
+        // stick (the sustained-rate spin regression).
+        g_puppet_relay_look_stick = !g_puppet_relay_look_stick;
+        const bool was = g_logging_enabled;
+        g_logging_enabled = true;
+        log_line(g_puppet_relay_look_stick
+                     ? "PUPPET-LOOK-STICK relay = ON (may jitter)"
+                     : "PUPPET-LOOK-STICK relay = OFF (body-quat facing only)");
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
