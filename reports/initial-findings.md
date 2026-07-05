@@ -24696,3 +24696,24 @@ display on weapon switch). Weapon-spill on pickup is the separate pre-existing
 weapon-give path (ensure_puppet_has_peer_weapons), not caused by these changes.
 Confirmed-good this session: perf (readable_bytes), aim-JITTER single-source fix.
 Status: **reverted to stable baseline; direction fix = fire-caller redesign next.**
+
+### RUNTIME 2026-07-05: weapon-switch bug is on the APPLY/ATTACH side, not capture
+
+User switched pistol/rifle/holster on Chloe (copy1 2012), puppet showed a stale
+weapon. Live diagnosis:
+- SENDER capture WORKS: HELD-WEAPON-SEND art followed the switches (0x8075397d rifle
+  -> 0x3019cbee) — capture_held_weapon_art_id is not the problem.
+- RECEIVER puppet FAILS: copy2 Chloe-rep (0x10e0dfc900) controller+0x130 in-hands
+  slot = 0 (no weapon in hands); prior HELD-WEAPON-APPLY showed attached=0 gunOk=0.
+  So the give/switch/attach chain does not complete on the puppet -> whatever weapon
+  attached once (the pistol mesh) persists while later switches no-op.
+- The weapon-spill on pickup is the ensure_puppet_has_peer_weapons pre-give path.
+
+**Conclusion:** the weapon-switch/display bug is the long-parked PUPPET WEAPON-ATTACH
+problem (apply side), not the relay capture. A real fix must make the puppet's
+give -> SwitchToWeapon -> hand-attach actually complete (attached=1) on a switch,
+and stop the pre-give spill. This is a focused effort on apply_peer_held_weapon_state
+/ the weapon-give path, not a quick toggle. Confirmed-good relay pieces this session:
+capture (sender), perf, aim-jitter single-source. Direction fix = fire-caller
+redesign; weapon-switch = apply/attach rework. Status: **localized; both are
+dedicated next-session tasks.**
