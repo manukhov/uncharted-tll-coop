@@ -6113,6 +6113,14 @@ FUNCTIONS = {
         "record into the live rider actor via actor->virtual+0xD0. The bridge for "
         "co-op vehicle entry (driver/passenger seat).",
     ),
+    0x1400BAB30: (
+        "ScriptQuery_CarGetRiderByRole",
+        "'car-get-rider-by-role' handler: returns the vehicle's rider actor for a "
+        "role (driver/passenger). Confirms the vehicle owns its riders by role; "
+        "riders bind to the seat via apReference + bindSpawner so a seated "
+        "passenger follows the vehicle transform natively (co-op: only the vehicle "
+        "object needs syncing).",
+    ),
     0x14059D740: (
         "VehicleCtrl_BuildPassengerEntryState",
         "Passenger-seat entry state builder: hashes 'hero-passenger-a-enter-front' "
