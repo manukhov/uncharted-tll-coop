@@ -24526,3 +24526,39 @@ the role system g_net_role_b, and the existing Nadine-presence tracking) plus on
 new small state machine (absent<->present transition + control handover). No new
 engine RE required. Status: **STATIC** (design from existing levers; the
 spawn/despawn transition + camera relay are the build pieces).
+
+### Sound sync: folds into animation + native-action + dialog, no separate channel (STATIC, 2026-07-05)
+
+**Question:** do sounds need their own sync? **Answer: no** — like effects, they are
+consequences of native actions/animations per copy, and the anim path even replays
+them explicitly.
+
+**Architecture:**
+- **Anim-driven sounds** (footsteps `footstep-walk/run/sprint`, foley `weapons-foley`
+  / `foley-slides` / `foley-drake`, cloth, weapon handling) are EFF (effect) events
+  embedded in the ANIMATION CLIPS, fired through `EffectControl`
+  (EffectControl::GetSoundForImpact, KillTracker; snd_PlaySoundByName/ByIndex). So
+  when the puppet plays its animation (tier-1 input relay OR tier-4 snapshot), those
+  EFF events fire and emit from the puppet's position. FREE with animation. Notably
+  the tier-4 apply path runs `NetSnapshotEffectParser` (seen in ProcessSnapshot) —
+  it re-parses and re-fires the anim EFF effects (incl. sound) on the receiver, so
+  full anim sync = exact sound replay too.
+- **Action-consequence sounds** (gunshot on fire, reload clicks, explosion) — the
+  puppet fires/reloads/detonates natively (button relay + native projectile/
+  grenade), so the sounds emit natively per copy.
+- **Dialog/vox** — DialogManager, already free per copy (see the dialog finding).
+- **Ambient / music / scripted one-shots** — same level per copy; scripted audio
+  rides the narrative (SsInstance/task) sync. `sound-effect` / `sound-effect-stop`
+  script verbs fire on both copies with the synced scene.
+
+**Spatial correctness:** each copy hears the remote player's sounds from the
+PUPPET's position, which is transform-synced, so 3D localization is correct.
+
+**Residual (same shape as animation tier-4):** a sound that only fires from an exact
+anim state the input relay does not reproduce is covered by the tier-4
+NetSnapshotEffectParser path. A truly non-anim, non-action one-shot the mod wanted
+to force could use a tiny SoundEvent relay (snd_PlaySoundByName by id + position),
+but nothing currently needs it.
+
+**Conclusion:** sound sync = a property of the animation, action, dialog, and
+narrative pillars already designed — no separate sound channel. Status: **STATIC**.
