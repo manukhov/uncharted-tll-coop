@@ -24296,3 +24296,38 @@ capture, and bandwidth policy. Recommendation: implement tier 4 as an OPT-IN
 high-fidelity mode layered over the input relay (tiers 1-3 remain the low-bandwidth
 default). Status: **STATIC** (capture+apply recipe CONFIRMED reachable; offsets/
 init are runtime).
+
+### Tier-4 capture buffer (CharacterMove event) layout + AnimPacket contents (STATIC, 2026-07-05)
+
+Derived statically from NetEventCharacterMove_FillPlayer writes to the event buffer
+(_RBX). Relevant fields for a standalone campaign capture:
+- **+0x1C (28)  = the output anim BITSTREAM** (a2 to FillAnimCmdBitStream; the
+  ~512-byte / 4096-bit serialized anim command list lands here).
+- +0x21C (540) = FillAnimCmdBitStream RESULT (stream bit/size count).
+- +0x220 (544) = feature-flag dword (|= 0x2/0x4/0x8/0x20/0x40/0x80/0x100 — "has
+  anim / has X" presence bits set around the call).
+- +0x224..+0x234 (548..564) = movement/state dwords.
+- +0x2C0..+0x30F (704..783) = the per-state / weapon FLAG BLOCK (the NetSnapshot
+  flags: gun holstered/weapons/ragdoll/downed-IK/vulnerability equivalents).
+- +0x420 (1056) = anim flag word (from Player+0x49C0..0x49C3 / 18880..18883).
+- +0x4E0 (1248), +0x600 (1536) = NetPlayerTracker sequence bytes — SKIPPABLE in the
+  standalone campaign capture (tracker only).
+
+**AnimPacket (what the mod relays for tier 4):** the 512-byte bitstream (eventBuf
++0x1C), the anim flag word (+0x420), and the state/weapon flag block (+0x2C0..). The
+tracker/seq fields are mod-local. On apply, the mod wraps the 512-byte payload
+(wrapper time@+8, payload ptr@+0x688) and calls AddSnapshot(puppet generator,
+wrapper) -> ProcessPendingSnapshots.
+
+**Standalone capture call (build recipe):** zero an event buffer >= ~0x620 bytes;
+`FillAnimCmdBitStream(buf, buf+0x1C, localPlayer, *(localPlayer+0x3FC8), 1, 7)`;
+read the 512-byte stream at buf+0x1C (length from buf+0x21C) and the flag fields;
+relay. No NetPlayerTracker needed for this call.
+
+**Still needs a LIVE PLAYER (loaded location) to finalize — cannot be read at
+menu:** the exact puppet generator offset in the Player (TASK_POOL ~+0x1B30) and its
+AddSnapshot gate byte (+0xD1E0/53728); confirmation that *(Player+0x3FC8) is the
+anim-command source at runtime; the true minimum event-buffer size; and the exact
++0x2C0.. flag-block width. These are a single in-game memory dump once a save is
+loaded. Status: **STATIC** (buffer schema + capture call CONFIRMED from disasm;
+listed offsets need one live-Player read).
