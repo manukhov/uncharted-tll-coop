@@ -23845,3 +23845,44 @@ the player and whether a follower-side trigger can be suppressed + an authoritat
 start injected; and whether NetEventInteractable::Apply works standalone (no live
 net connection). Status: **STATIC** (systems + mechanism identified; model choice
 is a design decision pending user direction).
+
+### Will Nadine still talk when her AI is disabled for puppet control? (STATIC, 2026-07-05)
+
+**Answer: YES for scripted/story banter — dialog is a SEPARATE system from the NPC
+AI.** The Chloe<->Nadine conversation is driven by `DialogManager`
+(shared/common/audio/dialog-manager.cpp: RequestDialog / PlayDialogInternal /
+FinalizeSpeakers / PlayNextDialog + ConversationHandle) and `VoxController`
+(IsConversationActive), NOT by the companion's AI behavior tree. The RequestDialog
+wrapper (sub_1401DAE70) is invoked from a large SCRIPT-command cluster (~0x1405B*)
+= the DC/vox script bindings fired by SsInstance/progress. So disabling the buddy's
+AI (request_disable_ai, which the mod does to drive the puppet) does not remove the
+dialog trigger, the speaker resolution, or the vox/facial playback:
+- Speaker = the character OBJECT (NadineBuddy stays registered/present), resolved by
+  FinalizeSpeakers; her vox + facial (mouth) animation play on the NdGameObject
+  regardless of AI state.
+- Because both copies run the campaign, the SAME banter fires in EACH copy locally
+  (each player hears the full Chloe+Nadine conversation). Banter is therefore NOT a
+  thing to relay — it comes FREE per copy, gated only by narrative progress being in
+  sync (ties directly to the Option-1 story-authority plan; if progress desyncs, the
+  banter beats desync).
+
+**What can be lost / needs attention (flag for runtime):**
+1. AI-proximity AMBIENT banter (companion behavior firing "catch-up" quips) is
+   AI-driven and would stop with AI disabled. Scripted set-piece banter survives.
+2. `buddy-dialog-look` (auto head-turn to the speaker; npc-enable-buddy-dialog-look,
+   xref sub_1400565B0) is an NPC/AI look toggle -> with AI off the automatic
+   look-at may not run: cosmetic (she talks without turning her head). Re-enablable
+   via the toggle or ignore.
+3. Facial/mouth anim under the puppet POSE OVERRIDE: the mod forces Nadine's body
+   pose from the peer each frame. Facial is a separate additive layer and SHOULD
+   survive, but verify at runtime that the pose write does not clobber the face
+   layer.
+4. Voice localizes from Nadine's position; the puppet is position-synced, so
+   spatial audio is correct.
+
+**Design takeaway:** keep the puppet a full NdGameObject with only AI disabled (as
+now) — do NOT delete/replace the character; that preserves speaker + vox + facial.
+Banter correctness reduces to narrative-progress sync (Option 1), plus optionally
+re-enabling buddy-dialog-look on the puppet for the head-turn polish. Status:
+**STATIC** (dialog<->AI separation CONFIRMED; facial-under-override + ambient-banter
+loss are runtime checks).
