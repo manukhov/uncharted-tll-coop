@@ -6104,6 +6104,16 @@ FUNCTIONS = {
         "pose-seed hook for screen index 1 therefore fixes both bullet fire and "
         "grenade arc/throw direction for the Second player.",
     ),
+    0x1402E6E10: (
+        "ProcessExplosion_Init",
+        "ProcessExplosion::Init (game/process-explosion.cpp): initializes the "
+        "explosion process spawned by a detonating projectile/grenade (siblings "
+        "Active::Enter/Update, ApplyDamageToObject, CalculateDamageToApply, "
+        "spawn-explosion-effects-locator). Spawned via the process system (no "
+        "direct callers). In co-op, the Second player's natively thrown grenade "
+        "detonates per copy -> native explosion visuals; no relay layer needed. "
+        "Debug: 'Control Grenade Explosions Manually', 'Spawn Test Explosions'.",
+    ),
     0x140E1B000: (
         "PlayerGrenadeController_SolveTrajectory",
         "Grenade arc/trajectory solver: resolves settings via 0x140E17AC0, "
