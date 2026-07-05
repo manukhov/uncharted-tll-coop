@@ -24407,3 +24407,43 @@ asset/skeleton-bound.
   still OPEN, purely static; needed for cutscene/puzzle-camera.
 Everything else (anim generator offset, vehicle transform/seat AP/handles) is
 runtime-blocked. Status: **STATIC** (weapon thread concluded).
+
+### Local-player spectate/pause-hold: composition of existing levers, no false death (STATIC, 2026-07-05)
+
+**Goal:** during a driver-side scripted/cutscene/puzzle-camera window, suspend the
+FOLLOWER's local player (she spectates) without her walking around and without a
+false death.
+
+**It is not a new problem — it composes proven pieces:**
+1. **Disable locomotion:** native settable states `player-disable-move-stick` +
+   `player-disable-move-transitions` (script commands; parsed in the big player
+   command dispatcher sub_140DCDEA0). Move stick ignored -> she idles in place.
+2. **Disable actions/triggers:** the follower-input policy already designed —
+   `suppress-interactable-system` (ScriptState_SuppressInteractableSystem 0x1408AC710)
+   + per-command joypad disable (hooked_add_joypad_disabled_commands /
+   JoypadState_UpdateEnabledBinding / Joypad+0xBE0). No interactions/cutscene
+   triggers.
+3. **Hold position:** reuse the mod's existing transform pin
+   (apply_puppet_transform_post soft-lerp) on the local player for the window, or
+   simply rely on (1) so she cannot drift.
+4. **No false death — ALREADY SOLVED infra:** the mod already hooks the four native
+   death entries (Player vtable +0xBE8=0x140D79C00, +0xBF0=0x140D79950,
+   +0xBF8=0x140D78EC0, +0xC00=0x140D792D0) via g_original_player_death_entries[4] /
+   guard_remote_player_death and suppresses them while a peer reports HP>0. Extend
+   the SAME guard to the spectating local player during the window so no
+   hazard/physics glitch authors a death while she is suspended.
+
+**Heavier alternative (not recommended first):** the native cinematic-controller
+(cinematic-controller.cpp) full IGC takeover — complete but risks the same
+session/scripted-state complexity; the lightweight composition above is cleaner and
+entirely mod-owned.
+
+**Design close-out:** spectate window enter -> set move-stick/transitions disabled +
+suppress interactions + arm death-guard + (optional) pin transform; exit -> reverse.
+Unifies with the Option-1 follower-suppression and the puzzle-camera spectate. All
+levers already exist or are already implemented.
+
+**Bonus (de-risks tier-4 anim):** the notes confirm `Player+0x1B30 =
+NetAnimCmdGenerator` statically — so the puppet generator offset for the apply path
+(AddSnapshot/ProcessSnapshot) is already known, not a runtime unknown. Status:
+**STATIC** (spectate/pause-hold design CONFIRMED from existing levers).
