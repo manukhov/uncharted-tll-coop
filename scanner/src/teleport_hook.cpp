@@ -120,6 +120,8 @@ using ReticleHudPublisherFunction = std::int64_t(__fastcall*)(void*);
 using ReticleAimHudPublisherFunction =
     std::int64_t(__fastcall*)(void*, std::uint32_t, double, std::int64_t);
 using BlindfireReticleHudPublisherFunction = void(__fastcall*)();
+using PoseSeedResolverFunction = void*(__fastcall*)(void*, unsigned int);
+PoseSeedResolverFunction g_original_pose_seed_resolver = nullptr;
 InputScaleCopyFunction g_original_input_scale_copy = nullptr;
 GameInfoKeyboardModeFunction g_original_gameinfo_keyboard_mode = nullptr;
 EvaluateKeyboardButtonBindingFunction g_original_evaluate_keyboard_button_binding =
@@ -1624,6 +1626,52 @@ void __fastcall hooked_blindfire_reticle_hud_publisher() {
     if (g_original_blindfire_reticle_hud_publisher != nullptr) {
         g_original_blindfire_reticle_hud_publisher();
     }
+}
+
+// Override the Second player's (screen index 1) pose seed with the relayed peer
+// seed, so its fire/aim ray (PlayerFireController + grenade arc) follows the peer's
+// crosshair instead of its own uncontrolled screen-1 camera. The seed is 32 bytes
+// (position float4 + orientation quat float4) the resolver writes to `out`.
+void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
+    void* const result = g_original_pose_seed_resolver != nullptr
+        ? g_original_pose_seed_resolver(out, idx)
+        : out;
+    if (g_state_net.enabled && idx == 1 && out != nullptr) {
+        coop::StatePacket peer{};
+        if (copy_peer_state_snapshot(peer) &&
+            (peer.flags & coop::kStateFlagPoseSeed) != 0 &&
+            valid_network_orientation(peer.pose_seed + 4)) {
+            __try {
+                std::memcpy(out, peer.pose_seed, 32);
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+            }
+        }
+    }
+    return result;
+}
+
+bool install_pose_seed_gate() {
+    // ResolveScreenRoutePoseSeedOrDefault 0x141C077B0 prologue:
+    // mov [rsp+8],rbx; push rdi; sub rsp,0x40; movsxd rdi,edx; mov rbx,rcx
+    constexpr std::array<std::uint8_t, 16> kPoseSeedPrologue{
+        0x48, 0x89, 0x5C, 0x24, 0x08,
+        0x57,
+        0x48, 0x83, 0xEC, 0x40,
+        0x48, 0x63, 0xFA,
+        0x48, 0x8B, 0xD9,
+    };
+    g_original_pose_seed_resolver =
+        reinterpret_cast<PoseSeedResolverFunction>(
+            install_fire_gate_detour(
+                kPoseSeedResolverRva,
+                kPoseSeedPrologue.data(),
+                kPoseSeedPrologue.size(),
+                reinterpret_cast<void*>(&hooked_pose_seed_resolver),
+                "pose-seed aim/fire gate"));
+    log_line(g_original_pose_seed_resolver != nullptr
+                 ? "pose-seed aim/fire gate installed"
+                 : "pose-seed aim/fire gate skipped");
+    return g_original_pose_seed_resolver != nullptr;
 }
 
 bool install_scope_visible_gate() {
@@ -5565,6 +5613,30 @@ void send_local_player_state() {
         if (capture_gameplay_camera_quat(cam_quat)) {
             std::memcpy(pkt.camera_quat, cam_quat, sizeof(pkt.camera_quat));
             pkt.flags |= coop::kStateFlagPeerCamera;
+        }
+        // v8: relay the screen-0 POSE SEED — the actual fire/aim ray source that
+        // ResolveScreenRoutePoseSeedOrDefault feeds to PlayerFireController and the
+        // grenade arc. CameraManager(0) -> *(mgr+0xB0) -> +0x60 = pos[4]+quat[4].
+        {
+            const auto get_camera_manager =
+                reinterpret_cast<GetCameraManagerFunction>(
+                    g_module + kGetCameraManagerRva);
+            void* const mgr = get_camera_manager(0);
+            if (mgr != nullptr &&
+                readable_bytes(static_cast<std::byte*>(mgr) + 0xB0) >=
+                    sizeof(void*)) {
+                void* const blk = *reinterpret_cast<void**>(
+                    static_cast<std::byte*>(mgr) + 0xB0);
+                if (blk != nullptr &&
+                    readable_bytes(static_cast<std::byte*>(blk) + 0x60) >= 32) {
+                    const auto* seed = reinterpret_cast<const float*>(
+                        static_cast<std::byte*>(blk) + 0x60);
+                    if (valid_network_orientation(seed + 4)) {
+                        std::memcpy(pkt.pose_seed, seed, 32);
+                        pkt.flags |= coop::kStateFlagPoseSeed;
+                    }
+                }
+            }
         }
         const int joypad_idx =
             readable_bytes(static_cast<std::byte*>(local_obj) + 0x39BC) >= 1
@@ -12088,6 +12160,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_fire_capture();
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
+    install_pose_seed_gate();
     install_reticle_hud_gate();
     // Player collision/bump probes are intentionally parked. Enabling layer 4<->5
     // collision made the two independent simulations diverge and triggered the

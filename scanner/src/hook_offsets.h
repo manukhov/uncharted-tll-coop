@@ -61,6 +61,7 @@ constexpr std::uintptr_t kRespawnSeedDefaultVec4Rva = 0x28805D0;
 constexpr std::uintptr_t kStringHashRva = 0x14D910;
 constexpr std::uintptr_t kResolveUpperActorRecordRva = 0x17CD080;
 constexpr std::uintptr_t kScopeVisibleQueryRva = 0x0C177F0;
+constexpr std::uintptr_t kPoseSeedResolverRva = 0x1C077B0;  // ResolveScreenRoutePoseSeedOrDefault (fire/aim ray source)
 constexpr std::uintptr_t kReticleHudPublisherRva = 0x135A650;
 constexpr std::uintptr_t kReticleAimHudPublisherRva = 0x135AF20;
 constexpr std::uintptr_t kBlindfireReticleHudPublisherRva = 0x135C050;

@@ -25,11 +25,17 @@ struct InputPacket {
 // One-shot gameplay actions need a separate reliable ordered event stream.
 constexpr std::uint16_t kStatePort = 31338;
 constexpr std::uint32_t kStatePacketMagic = 0x53504F43;  // "COPS"
-constexpr std::uint16_t kStatePacketVersion = 7;
+constexpr std::uint16_t kStatePacketVersion = 8;
 
 // StatePacket.flags extension bits (v7+):
 // 0x0100 — camera_quat mirrors sender CameraManager(0) @+0x1B0.
 constexpr std::uint16_t kStateFlagPeerCamera = 0x0100;
+// 0x0200 (v8) — pose_seed carries the sender's screen-0 camera POSE SEED
+// (CameraManager(0) -> *(mgr+0xB0) -> +0x60): 32 bytes = position float4 +
+// orientation quat float4. This is the FIRE/AIM ray source
+// (ResolveScreenRoutePoseSeedOrDefault); the receiver overrides the Second
+// player's screen-1 seed with it so shots/aim follow the peer's crosshair.
+constexpr std::uint16_t kStateFlagPoseSeed = 0x0200;
 
 // Contiguous native NetSnapshot weapon region [0x3f4, 0x504). It contains the
 // eight inventory ids, per-slot state, selected weapon classes and the four
@@ -50,6 +56,7 @@ struct StatePacket {
     float move_magnitude = 0.0F;       // native move magnitude (+0x7C, index 0)
     float look_stick[2]{};            // resolved slot-0 right stick, block +0x08/+0x0C
     float camera_quat[4]{};           // sender gameplay camera rotation (v7, flag 0x100)
+    float pose_seed[8]{};             // v8 flag 0x200: screen-0 pose seed pos[4]+quat[4]
     std::uint64_t input_buttons = 0;  // complete resolved button field, block +0x518
     std::uint64_t buttons_pressed = 0;
     std::uint64_t buttons_released = 0;
