@@ -1,5 +1,29 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-05, Claude — FIRE RAY источник найден: pose seed CameraManager+0xB0→+0x60, фикс build-ready)
+
+**Статика замкнула цепочку «стреляет не в ту сторону» до конца** (реестр: "FIRE RAY
+SOURCE FOUND"). Оба камера-резолва ВНУТРИ Fire — посторонние (шум выстрела для NPC
+и стат `unzoomed-sniper-shots`). Реальный луч: единственный вызывающий Fire —
+`PlayerFireController_BuildFireArgsAndFire 0x140E2BCD0` — сидит луч через
+`ResolveScreenRoutePoseSeedOrDefault(&seed, *(player+0x4010))` `0x141C077B0` =
+`CameraManager::GetHandle(idx)`: `blk=*(mgr+0xB0)`, гейты `blk+85/+86` + бит
+`dword_14697AE34`, **сид = 32 байта `blk+0x60` = [pos float4][quat float4]**;
+при провале гейтов — **pos(0,0,0)+identity** → ровно наблюдаемое «не туда».
+
+**Фикс к следующему ходу (build-ready):**
+1. Sender: читать свой сид целиком (`*(CameraManager(0)+0xB0)+0x60`, 32 байта) и
+   слать в StatePacket (нужно новое поле — camera POSITION в сиде есть, в текущем
+   пакете нет).
+2. Receiver: хук `ResolveScreenRoutePoseSeedOrDefault` — при `idx==1` и peer-aim
+   писать эти 32 байта в out и return (движковое состояние не трогаем, гейты не
+   нужны).
+Прогноз: выстрелы Второго игрока ложатся по прицелу пира в обеих копиях.
+
+**IDB:** +PlayerFireController_BuildFireArgsAndFire, +ResolveScreenRoutePoseSeed
+OrDefault (детальный комментарий), 870 функций, save True; MCP обновлён.
+Параллельно ранее: снайпер-скоуп гейт (`286b6f1`), см. прошлые заметки.
+
 ## Turn note (2026-07-04, Claude — LAG root cause = per-frame VirtualQuery, CONFIRMED FIXED)
 
 **Причина сильных лагов найдена и устранена (подтверждено пользователем).** Без мода

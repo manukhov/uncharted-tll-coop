@@ -23567,3 +23567,50 @@ CameraManager(0) matrix, CameraManager(1) matrix, and Player(second)+0x1570 to s
 which the shot follows — that picks options 1/2 vs a simpler player-side write.
 Status: **STATIC** (layout + fix intercept CONFIRMED; direction-source selector is
 HYPOTHESIS pending a runtime probe).
+
+### FIRE RAY SOURCE FOUND: per-screen camera pose seed at CameraManager+0xB0 -> +0x60 (STATIC, 2026-07-05)
+
+**The fire direction chain is now closed end-to-end.**
+
+1. `PlayerFireController_Fire(FireArgs&)` receives the aim ray inside FireArgs —
+   both camera resolves INSIDE Fire are unrelated (line ~667 `Get(0)` = the shot
+   NOISE/NPC-alert broadcast: faction bytes +496, distance vrsqrt; line ~999
+   strafe-camera check = the `unzoomed-sniper-shots` stat counter).
+2. FireArgs are built by the sole Fire caller `sub_140E2BCD0`
+   (PlayerFireController_BuildFireArgsAndFire): it seeds the aim ray via
+   `ResolveScreenRoutePoseSeedOrDefault(&seed, *(controllerOwner+0x4010))`
+   (line 213) and cooks it through `sub_140CADD60` into FireArgs (v135) →
+   `PlayerFireController_Fire`.
+3. `ResolveScreenRoutePoseSeedOrDefault` (`0x141C077B0`) is
+   `CameraManager::GetHandle(idx)` semantics: mgr = `0x14697AD50[idx]`;
+   `blk = *(mgr+0xB0)`; requires gate bytes `blk+85` && `blk+86` and a bit test of
+   `dword_14697AE34` inside the bitset at `*(blk+8)+32`; then the **pose seed =
+   32 bytes at `blk+0x60` = [position float4][orientation quat float4]**.
+   On any gate failure it returns the default **pos(0,0,0) + identity quat
+   (xmmword_1428805D0 = 0,0,0,1)**.
+
+**Root cause of "Second player shoots the wrong way": CONFIRMED (static).** The
+Second player's screen-1 camera block either fails the gates (→ fires along the
+IDENTITY direction from origin-ish seed) or holds an unmanaged stale pose. The mod
+never writes screen-1's pose seed.
+
+**Build-ready fix (two options, pick 1 first):**
+1. **Hook `ResolveScreenRoutePoseSeedOrDefault` (0x141C077B0):** when `a2 == 1`
+   (Second player screen) and the peer is aiming, write the out buffer directly:
+   `out[0..15] = peer camera position, out[16..31] = peer.camera_quat`, return.
+   No engine state touched, no gate hassle, single interception exactly where the
+   fire ray is born.
+2. Write `*(CameraManager(1)+0xB0)+0x60` each frame + satisfy gates +85/+86 and
+   the `dword_14697AE34` bitset — heavier, engine-state-dependent.
+
+**Protocol addition needed:** StatePacket carries `camera_quat` but NOT the camera
+POSITION (the seed's first 16 bytes = ray origin). Cleanest: the SENDER reads its
+own screen-0 seed verbatim (`*(CameraManager(0)+0xB0)+0x60`, 32 bytes) and relays
+it; the receiver feeds those exact 32 bytes for screen 1. Same format both sides,
+zero conversion, convention-proof. (Fallback if seed unreadable: player position +
+eye-height offset + camera_quat.)
+
+**Falsifiable prediction:** with the relay + hook, the Second player's shots land
+where the peer's crosshair points (both copies), including while strafing; without
+peer-aim the resolver behaves natively. Status: **STATIC** (chain CONFIRMED in
+disasm; fix design build-ready, pending implementation + runtime test).

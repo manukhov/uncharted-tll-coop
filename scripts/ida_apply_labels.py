@@ -6081,6 +6081,29 @@ FUNCTIONS = {
         "from src to dst. Used by CameraManager_GetBlendedCameraTransform to emit "
         "the resolved per-screen camera transform.",
     ),
+    # --- Fire ray source chain (2026-07-05) ---
+    0x140E2BCD0: (
+        "PlayerFireController_BuildFireArgsAndFire",
+        "Sole caller of PlayerFireController_Fire. Builds FireArgs: seeds the aim "
+        "ray via ResolveScreenRoutePoseSeedOrDefault(&seed, *(owner+0x4010)) "
+        "(the firing player's screen index), cooks it through sub_140CADD60 into "
+        "the FireArgs buffer, applies cover/strafe context (sub_1410E2950(idx)), "
+        "then calls Fire. THE aim-direction entry point for the co-op Second "
+        "player (screen index 1).",
+    ),
+    0x141C077B0: (
+        "ResolveScreenRoutePoseSeedOrDefault",
+        "CameraManager::GetHandle(idx) semantics (assert string, table "
+        "0x14697AD50). blk = *(mgr+0xB0); requires gate bytes blk+85 && blk+86 "
+        "and a dword_14697AE34 bit inside the bitset at *(blk+8)+32; then copies "
+        "the 32-byte POSE SEED at blk+0x60 = [position float4][orientation quat "
+        "float4] to out. Gate failure -> default pos(0,0,0) + identity quat "
+        "(xmmword_1428805D0). This seed is the FIRE RAY origin+direction consumed "
+        "by PlayerFireController_BuildFireArgsAndFire — the co-op Second player's "
+        "screen-1 seed is never driven by the mod (wrong-direction shots). Co-op "
+        "fix: hook here and override out for idx==1 from the peer's relayed "
+        "screen-0 seed.",
+    ),
 }
 
 # Data/global names (set via ida_name on data addresses).
