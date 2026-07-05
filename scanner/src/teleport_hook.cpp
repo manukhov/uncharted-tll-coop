@@ -372,6 +372,10 @@ volatile bool g_puppet_relay_aim_press = true;
 // turn-RATE that spins the puppet's aim camera and fights the body-quat facing
 // blend -> violent aim jitter (2026-07-05 regression). Page Up toggles for A/B.
 volatile bool g_puppet_relay_look_stick = false;
+// Fall back to GetActiveWeapon when no weapon is in-hands/hand-attached. Default OFF:
+// that fallback returns the LAST weapon even while holstered (stale) -> phantom
+// aim + aim-press flicker. Page Up + Shift not needed; toggle via VK_INSERT.
+volatile bool g_weapon_capture_active_fallback = false;
 static ULONGLONG g_fire_button_hold_until_ms = 0;
 // After native Fire replay, block peer/button fire on the remote player so the
 // same shot is not delivered twice (relay native + Joypad 0x800).
@@ -5066,7 +5070,16 @@ std::uint32_t capture_held_weapon_art_id(void* player) {
     if (hand_art != 0) {
         return hand_art;
     }
-    return weapon_art_id_from_object(get_player_active_weapon(player));
+    // HOLSTER FIX (2026-07-05): when neither the in-hands slot nor a hand-attached
+    // weapon is present, the weapon is holstered -> report NO held weapon. The old
+    // get_player_active_weapon fallback keeps returning the LAST weapon even while
+    // holstered (stale), so the peer's puppet phantom-aims a holstered pistol and
+    // the weapon-mismatch gate flickers the aim-press = the jitter. Gated behind a
+    // default-OFF toggle in case some drawn-weapon case relied on the fallback.
+    if (g_weapon_capture_active_fallback) {
+        return weapon_art_id_from_object(get_player_active_weapon(player));
+    }
+    return 0;
 }
 
 bool puppet_has_weapon_art_id(void* puppet, std::uint32_t art_id) {
@@ -9408,6 +9421,17 @@ void net_tick() {
         log_line(g_puppet_relay_look_stick
                      ? "PUPPET-LOOK-STICK relay = ON (may jitter)"
                      : "PUPPET-LOOK-STICK relay = OFF (body-quat facing only)");
+        g_logging_enabled = was;
+    }
+    if (foreground && (GetAsyncKeyState(VK_INSERT) & 1) != 0) {
+        // Insert: A/B the holstered-weapon fallback. OFF (default) = holster reports
+        // no weapon (fixes phantom aim); ON = old GetActiveWeapon stale fallback.
+        g_weapon_capture_active_fallback = !g_weapon_capture_active_fallback;
+        const bool was = g_logging_enabled;
+        g_logging_enabled = true;
+        log_line(g_weapon_capture_active_fallback
+                     ? "WEAPON-CAPTURE fallback = ON (stale GetActiveWeapon)"
+                     : "WEAPON-CAPTURE fallback = OFF (holster = no weapon)");
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
