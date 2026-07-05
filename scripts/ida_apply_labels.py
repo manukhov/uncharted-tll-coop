@@ -6113,6 +6113,23 @@ FUNCTIONS = {
         "record into the live rider actor via actor->virtual+0xD0. The bridge for "
         "co-op vehicle entry (driver/passenger seat).",
     ),
+    0x140B54F30: (
+        "ScriptCmd_NetTaskComplete",
+        "'net-task-complete!' handler. Does the LOCAL task completion "
+        "(sub_140AA84C0 resolve + sub_140A5D3F0 set task state/valve) AND enqueues "
+        "a net event via sub_140A45260(3,&payload) (session send). Co-op Option 1: "
+        "relay task progression over the mod's own UDP and drive the LOCAL half "
+        "here on the follower (skip the session enqueue) to advance task-gated "
+        "scenes/SsInstances in lockstep — no net session needed.",
+    ),
+    0x141C8E680: (
+        "TaskManager_UpdateAndQuery",
+        "Large task/objective manager (0xF29) over the global task state at "
+        "dword_146DAE7F0 (task-play-time / task-complete records dword_146DAE7F8"
+        "..+0x14). Campaign progression backbone: scripted scenes and SsInstances "
+        "gate on task state, so syncing tasks advances co-op narrative at the "
+        "right level.",
+    ),
     0x1408B1350: (
         "ScriptQuery_InteractableHasBeenInspected",
         "'interactable-has-been-inspected?' query core. Resolves the interactable "

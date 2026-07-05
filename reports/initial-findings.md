@@ -24013,3 +24013,41 @@ state-flag relay above.
 (inspected/pickup/SsInstance-progress), avoiding the crashing net-session path
 entirely. Status: **STATIC** (inspected-flag location CONFIRMED; StringId
 determinism makes cross-copy targeting trivial).
+
+### Narrative progression sync backbone = the TASK/objective system, driven locally on the follower (STATIC, 2026-07-05)
+
+**Better lever than SsInstance surgery.** Campaign progression is the TASK
+(objective) system: global task state around `dword_146DAE7F0` (task-play-time /
+task-complete records; big task manager sub_141C8E680, 0xF29). Scripted scenes and
+SsInstances gate on task state, so syncing TASKS advances both copies' narrative
+together at the right abstraction level — no per-SsInstance kill/start surgery.
+
+**The engine already has a NET task layer, but it is session-bound:**
+`net-task-complete!` (handler sub_140B54F30) does the LOCAL completion
+(sub_140AA84C0 resolve + sub_140A5D3F0 set state/valve) AND THEN enqueues a net
+event via sub_140A45260(3, &payload) (the session send). Siblings:
+net-set-task-valve, net-reset-task, net-task-complete?. So the `net-` verbs need a
+live session for their SEND, but the LOCAL mutation half is standalone.
+
+**Option-1 mechanism (no net session):** the story driver (Chloe copy) relays
+task-progression events over the mod's OWN UDP channel; the follower applies them by
+driving the LOCAL task mutation (the completion/valve logic that precedes the net
+enqueue in sub_140B54F30) — i.e. reuse the standalone half, skip the session send.
+This advances the follower's task state, so its task-gated scenes/SsInstances fire
+in lockstep with the driver. Combined with the interactable inspected-flag relay
+(state+0xD0 bit1) for the finer inspect/interact beats, this is the full narrative
+sync WITHOUT the crashing net session.
+
+**Coverage / edges:** most narrative scenes are task-gated (covered by task sync);
+purely region/position-triggered scenes that key on the follower's OWN local player
+position are the residual edge — handled by suppressing follower-side independent
+triggers (suppress-interactable-system for interactions; for region scenes, either
+accept minor divergence or gate them on the synced task state). SsInstance direct
+control (RunTrackGroup/KillAllTrackGroups/InitScript) remains available as a
+last-resort per-scene lever but is NOT the primary mechanism.
+
+**Design close-out for Option 1:** narrative sync = (1) task-state relay + local
+apply, (2) interactable inspected/pickup flag relay, (3) follower trigger
+suppression. All standalone (no net session). Status: **STATIC** (task system is
+the progression backbone CONFIRMED; net verbs are session-bound but local halves
+are reusable; follower-apply target = the local mutation in sub_140B54F30).
