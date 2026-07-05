@@ -6216,6 +6216,22 @@ FUNCTIONS = {
         "spectating follower shows it via the synced scene (object-anchored remap) "
         "or a screen-0 camera-transform relay during the spectate window.",
     ),
+    0x1406B14D0: (
+        "Npc_TeleportIntoVehicleSkill",
+        "Npc TeleportIntoVehicle skill ('TeleportIntoVehicle: Teleporting %s into "
+        "the car'; checks '%s is sitting in the car'). Teleports an Npc straight "
+        "into a vehicle seat (no pathing) and runs the native enter (seat AP bind "
+        "+ enter anim + role). RECOMMENDED path for a co-op passenger button since "
+        "the puppet is an Npc — resolves the seat AP and does bind/anim/role for "
+        "us; may need the puppet skill/behavior system momentarily active.",
+    ),
+    0x1403946D0: (
+        "VehicleCtrl_BuildAddPassengerEvent",
+        "Builds the 'add-passenger' event (vehicle-controller family "
+        "0x140394B20..0x140395560): assigns the passenger role to a rider on the "
+        "vehicle controller. set-driver is the driver counterpart; passenger-"
+        "entered fires on completion.",
+    ),
     0x1400BAB30: (
         "ScriptQuery_CarGetRiderByRole",
         "'car-get-rider-by-role' handler: returns the vehicle's rider actor for a "

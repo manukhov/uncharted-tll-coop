@@ -24331,3 +24331,48 @@ anim-command source at runtime; the true minimum event-buffer size; and the exac
 +0x2C0.. flag-block width. These are a single in-game memory dump once a save is
 loaded. Status: **STATIC** (buffer schema + capture call CONFIRMED from disasm;
 listed offsets need one live-Player read).
+
+### Passenger-seat entry recipe: three approaches, Npc TeleportIntoVehicle recommended (STATIC, 2026-07-05)
+
+**Goal:** a button that seats the co-op Second player (the driven NadineBuddy Npc)
+in the passenger seat.
+
+**Enter machinery mapped:**
+- `Npc TeleportIntoVehicle skill` = **sub_1406B14D0** ("TeleportIntoVehicle:
+  Teleporting %s into the car"; checks "%s is sitting in the car"). Teleports an Npc
+  straight into a seat (no pathing) and runs the native enter (bind + anim + role).
+- `VehicleCtrl_BuildPassengerEntryState` = sub_14059D6C0 (a1=vehicle ctx (car at
+  a1+8), a2=AP/entry transform, a3=rider actor, a4=entry-state slot): writes the
+  enter-anim hash 'hero-passenger-a-enter-front' @a4+0xA0, role @+0xB0, entry flags
+  @+0x12C; the VehicleCtrl update (sub_14140F720) then plays the anim, binds the
+  rider to the seat (apReference), and publishes vehicle-entry-def via
+  VehicleCtrl_NotifyPlayerEntering.
+- `add-passenger` role assignment = sub_1403946D0 (builds the add-passenger event,
+  vehicle-controller family 0x140394B20..0x140395560); set-driver is the driver
+  counterpart.
+
+**Three mod approaches (tradeoffs):**
+1. **Npc TeleportIntoVehicle (sub_1406B14D0) — RECOMMENDED for the button.** The
+   puppet IS an Npc, so this native skill resolves the passenger seat AP, plays the
+   enter anim, binds, and assigns the role for us. Tension: it is an AI skill, so it
+   may need the puppet's behavior/skill system momentarily active (the mod disables
+   AI for the drive); either invoke the skill directly or briefly re-enable AI to
+   run it, then resume the puppet drive once seated.
+2. **Direct BuildPassengerEntryState (sub_14059D6C0) + controller update.** Lowest
+   level, no AI needed, but requires resolving 4 args (vehicle ctx, seat AP transform,
+   rider, entry-state slot) and passing internal state guards (a3+96 hash check) —
+   fragile.
+3. **Event layer (add-passenger / passenger-entered / set-driver).** Issue the
+   authored events; relies on the controller processing them.
+
+**Recommendation:** try approach 1 first (native, complete). Fall back to 2 if the
+skill conflicts with the puppet drive. Pairs with the earlier two-copy vehicle
+design (seat both players on both copies, relay the vehicle transform, passenger
+rides via seat parenting).
+
+**Runtime pins (need a loaded location WITH a vehicle — cannot be read at menu):**
+the vehicle object + its VehicleCtrl pointer; the passenger seat AP/index; the
+puppet Npc handle; how to invoke sub_1406B14D0 (direct call vs skill request) and
+whether AI must be briefly re-enabled; the a1/a2/a3/a4 sources for
+BuildPassengerEntryState if approach 2 is used. Status: **STATIC** (enter machinery
++ three approaches CONFIRMED; seat AP/handles are a single in-vehicle runtime read).
