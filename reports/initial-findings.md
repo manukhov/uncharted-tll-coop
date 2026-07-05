@@ -24200,3 +24200,55 @@ task-graph command relay (progression) + inspected-flag relay (fine interact sta
 all via existing engine levers and the mod's own UDP, no net session. Status:
 **STATIC** (suppression levers CONFIRMED; command-hash list to disable is a small
 enumerate-at-build detail).
+
+### Animation sync: full map — NetSnapshot is the complete representation, but native capture is NetCharacter-bound (STATIC, 2026-07-05)
+
+**The complete animation representation is `NetSnapshot`** — a fixed
+kNetSnapshotBytes buffer (m_netBuffer[kNetSnapshotBytes*bufferIndex],
+DualSnapshotNodePool) holding the ICE animation snapshot (full anim-graph/pose
+state) PLUS typed flags: NetSnapshotGunHolstered, NetSnapshotWeapons,
+NetSnapshotAllowMelee, NetSnapshotRagdollPhysical, NetSnapshotRagdollBlended,
+NetSnapshotDownedIkEnabled, NetSnapshotVulnerability, plus camera (GetCamera).
+Relaying NetSnapshots = syncing ALL animation (locomotion, combat, scripted,
+IK, ragdoll, weapons) at full fidelity.
+
+**Native replication pipeline (all labeled):**
+- Capture: `NetAnimCmdGenerator_AddSnapshot` (0x1429d4db8 str) — but its callers are
+  `NetCharacter::EventHandler` (sub_140A162C0) etc.: capture is bound to
+  **NetCharacter**, a NET-SESSION object. In campaign the local player is a Player
+  (not a NetCharacter), so NO snapshots are generated natively.
+- Apply: `NetAnimCmdGenerator_ProcessPendingSnapshots` (0x140a02820) ->
+  `NetAnimCmdGenerator_ProcessSnapshot` (0x140a02890, "consumes one queued native
+  animation snapshot", NetSnapshotEffectParser) -> `NetAnimCmdGenerator_
+  UpdateFlagsAndWeapons` (0x140a07160, "Applies snapshot flags and weapon state
+  while reconstructing remote animation. This may solve visible weapons together
+  with animation"). Reconstructs the exact remote animation on an NdGameObject.
+
+**Consequence — the full NetSnapshot path is session-bound on the CAPTURE side.**
+Using it in campaign requires building a standalone snapshot capture against the
+local Player's AnimControl (GetAnimControl/GetBaseStateLayer; TASK_POOL's
+"4096-bit anim command stream via 0x140BC4E60" is this lower-level ICE anim-cmd
+capture) — not just reading a ready buffer. The APPLY side operates on a plain
+NdGameObject and is the more reusable half.
+
+**Animation-sync strategy (tiers):**
+1. INPUT-DRIVEN anims (the bulk: locomotion + every reliable-event —
+   aim/fire/grenade/melee/jump/dodge/reload/weapon-switch): already synced by the
+   mod's INPUT RELAY (the puppet's own anim graph plays them natively per copy).
+   No snapshot needed. This is why the current approach works without a net session.
+2. SCRIPTED anims (cutscene gestures, puzzle animations): come with the Option-1
+   narrative sync (the SsInstance runs on both copies), not from input.
+3. NON-INPUT STATE anims (ragdoll death, downed IK, holster/weapon visibility):
+   the NetSnapshot FLAGS are the native representation — relay the specific bits
+   (Ragdoll*/DownedIk/GunHolstered/Weapons) and apply via UpdateFlagsAndWeapons-
+   style writes. Notably UpdateFlagsAndWeapons is flagged as possibly solving the
+   long-open Nadine weapon-display problem TOGETHER with animation.
+4. FULL FIDELITY ceiling: the complete NetSnapshot relay (all anims incl. subtle
+   IK/blends) — requires solving the standalone campaign snapshot CAPTURE against
+   the Player AnimControl (the residual hard problem; the apply half is ready).
+
+**Recommendation:** keep input-relay for tier 1 (done), fold tier 2 into narrative
+sync, relay discrete flags for tier 3 (also targets the weapon-display bug), and
+scope the standalone AnimControl->NetSnapshot capture as the tier-4 stretch. Status:
+**STATIC** (representation + pipeline + capture-gating CONFIRMED; standalone capture
+is the open build problem).

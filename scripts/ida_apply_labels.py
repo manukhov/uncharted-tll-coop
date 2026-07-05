@@ -6190,6 +6190,16 @@ FUNCTIONS = {
         "and natively networked in MP. Basis for co-op puzzle-camera spectate: the "
         "same remap resolves object-anchored on both copies.",
     ),
+    0x140A162C0: (
+        "NetCharacter_EventHandler",
+        "NetCharacter::EventHandler — dispatches NetCharacterSsAnimateEventContext "
+        "and calls NetAnimCmdGenerator_AddSnapshot. Confirms the native animation "
+        "snapshot CAPTURE is bound to NetCharacter (a net-session object): in "
+        "campaign the local Player is not a NetCharacter, so no snapshots are "
+        "generated natively — full NetSnapshot animation sync needs a standalone "
+        "capture against the Player's AnimControl. The APPLY half "
+        "(ProcessSnapshot/UpdateFlagsAndWeapons) runs on a plain NdGameObject.",
+    ),
     0x1408AC710: (
         "ScriptState_SuppressInteractableSystem",
         "'suppress-interactable-system' get/set (fact-backed, byte_1437E5A82). "
