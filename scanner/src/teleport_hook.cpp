@@ -376,6 +376,11 @@ volatile bool g_puppet_relay_look_stick = false;
 // that fallback returns the LAST weapon even while holstered (stale) -> phantom
 // aim + aim-press flicker. Page Up + Shift not needed; toggle via VK_INSERT.
 volatile bool g_weapon_capture_active_fallback = false;
+// Puppet aim orientation source. false (default) = smoothly blend the root quat
+// toward the peer's relayed body quat (single writer, no jerk). true = old
+// camera-yaw derivation (apply_peer_aim_facing) that conflicted with the native
+// update = the aim jitter. VK_DELETE toggles for A/B.
+volatile bool g_puppet_aim_facing_from_camera = false;
 static ULONGLONG g_fire_button_hold_until_ms = 0;
 // After native Fire replay, block peer/button fire on the remote player so the
 // same shot is not delivered twice (relay native + Joypad 0x800).
@@ -6214,24 +6219,19 @@ void apply_puppet_transform_post(void* puppet) {
         (pkt.input_buttons & kJoypadAimButtonMask) != 0;
     float orientation_dot = 1.0F;
     if (peer_aiming) {
-        apply_peer_aim_facing_to_player(puppet, pkt);
-        if (readable_bytes(static_cast<std::byte*>(puppet) + kPlayerQuatOffset + 16) >=
-            16) {
-            float dot = 0.0F;
-            const auto* q = reinterpret_cast<const float*>(
-                static_cast<const std::byte*>(puppet) + kPlayerQuatOffset);
-            if ((pkt.flags & coop::kStateFlagPeerCamera) != 0 &&
-                valid_network_orientation(pkt.camera_quat)) {
-                float yaw_q[4]{};
-                float fwd_x = 0.0F;
-                float fwd_z = 0.0F;
-                camera_forward_horizontal(pkt.camera_quat, fwd_x, fwd_z);
-                yaw_quat_from_horizontal_forward(fwd_x, fwd_z, yaw_q);
-                for (int i = 0; i < 4; ++i) {
-                    dot += q[i] * yaw_q[i];
-                }
-            }
-            orientation_dot = std::abs(dot);
+        // AIM-JITTER ROOT FIX (2026-07-05): the orientation was written by THREE
+        // sources per frame — apply_peer_aim_facing (camera-yaw) before the native
+        // update, the native anim/aim update (g_original_update, from the puppet's
+        // own uncontrolled aim), and apply_peer_aim_facing again after. They diverge
+        // while aiming -> violent jerk ("multiple sources write the aim direction").
+        // Fix: ONE source. The peer's relayed body quat (pkt.quat) already reflects
+        // the aimed body orientation; blend toward it here (LAST writer, after the
+        // native update) and drop the camera-yaw derivation. Toggle VK_HELP/old
+        // behavior via g_puppet_aim_facing_from_camera for A/B.
+        if (g_puppet_aim_facing_from_camera) {
+            apply_peer_aim_facing_to_player(puppet, pkt);
+        } else if (valid_network_orientation(pkt.quat)) {
+            orientation_dot = blend_network_orientation(quat, pkt.quat, 0.35F);
         }
     } else if (pkt.move_magnitude < 0.15F) {
         orientation_dot = blend_network_orientation(quat, pkt.quat, 0.18F);
@@ -7676,7 +7676,14 @@ void drive_remote_slot1_actions_tick() {
     // HUD/camera code read it -> aim HUD leak on the local viewport. The right
     // stick is fed to the puppet inside hooked_input_scale_copy (dest=3) with a
     // save/restore sandwich instead.
-    apply_peer_aim_facing_to_player(remote_player, peer);
+    // This pre-native-update facing write is overwritten by g_original_update and
+    // then re-applied in apply_puppet_transform_post; running it here only adds a
+    // third conflicting orientation write per frame. Keep it only in the old
+    // camera-facing A/B mode; the default single-source path handles facing in
+    // apply_puppet_transform_post (blend toward peer body quat, applied last).
+    if (g_puppet_aim_facing_from_camera) {
+        apply_peer_aim_facing_to_player(remote_player, peer);
+    }
     scrub_local_viewport_aim_hud_leak();
 
     // branch1+0x10 becomes the clone joypad HELD button mask (block+0x518) via the
@@ -9432,6 +9439,18 @@ void net_tick() {
         log_line(g_weapon_capture_active_fallback
                      ? "WEAPON-CAPTURE fallback = ON (stale GetActiveWeapon)"
                      : "WEAPON-CAPTURE fallback = OFF (holster = no weapon)");
+        g_logging_enabled = was;
+    }
+    if (foreground && (GetAsyncKeyState(VK_DELETE) & 1) != 0) {
+        // Delete: A/B the puppet aim orientation source. OFF (default) = single
+        // source, blend toward peer body quat (no jerk); ON = old camera-yaw
+        // derivation that conflicted with the native update (the jitter).
+        g_puppet_aim_facing_from_camera = !g_puppet_aim_facing_from_camera;
+        const bool was = g_logging_enabled;
+        g_logging_enabled = true;
+        log_line(g_puppet_aim_facing_from_camera
+                     ? "PUPPET-AIM-FACING = camera-yaw (old, may jitter)"
+                     : "PUPPET-AIM-FACING = peer body quat blend (single source)");
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
