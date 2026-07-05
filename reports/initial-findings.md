@@ -23482,3 +23482,48 @@ CameraManager(1)+0x1B0 does NOT alter the rendered screen-0 view. If CameraManag
 is not the route-1 camera, target the route-1 preferred-camera child from
 SelectPreferredCameraChildFromRouteEntity instead. Status: **STATIC** (direction
 source CONFIRMED in disasm; camera-write target is HYPOTHESIS pending runtime).
+
+### Co-op aim direction, refined: fire reads a per-screen camera transform, NOT CameraManager+0x1B0 (STATIC, 2026-07-05)
+
+Deeper trace of the direction source (correcting the prior turn's fix hypothesis).
+
+**CONFIRMED — screen index == CameraManager index.** `ResolveScreenRouteEntityBy
+Index` (`0x141C06420`) IS `CameraManager::Get(index)`: its own asserts read
+`"index >= 0 && index < kNumScreens"` / `"CameraManager::Get"` / `"pMgr != NULL"`,
+it indexes the two-entry table `0x14697AD50` (the camera-manager table:
+slot0=(0x10E0200160,0x19), slot1=(0x10E0200188,0x1A)) and returns
+`*(handle+8)` = the CameraManager for that screen. So the fire's
+`CameraManager::Get(*(controllerOwner+0x4010))` picks the firing player's own
+screen CameraManager (Second player screen index 1 -> CameraManager(1)).
+
+**CONFIRMED — the fire's direction transform is a per-screen cache, not +0x1B0.**
+The camera transform is produced by `sub_141C06650(cameraMgr, out)`
+(CameraManager_GetBlendedCameraTransform): it selects the active camera child
+(`SelectPreferredCameraChildFromRouteEntity` `0x141C0D4B0`, child list at mgr+0x100,
+child mode at child+0x1B0=432 with strafe/aim = 3..4) and copies the transform from
+either the per-screen cache `g_PerScreenCameraTransformCache` (`0x1465FDAA0`,
+stride 0x400 = 64 xmmword per screen index `*(mgr+292)`) when a single camera is
+active, or a blend built from `mgr+0x1A0`. It does NOT read `CameraManager+0x1B0`.
+
+**REJECTED (refines the 2026-07-05 "wrong aim" entry):** the proposed fix "copy
+peer CameraManager(0)+0x1B0 -> receiver CameraManager(1)+0x1B0" will NOT steer the
+Second player's shot. `+0x1B0` on the manager is the sender-side readable current
+rotation (what `capture_gameplay_camera_quat` samples and what drives the body-quat
+relay), but the FIRE reads the per-screen transform cache `0x1465FDAA0[0x400*idx]` /
+the blended child transform — a different field fed FROM the active camera child.
+
+**Next lever candidates (for a build-ready fix):**
+1. The active aim camera CHILD for screen 1 (the CameraControlStrafe object returned
+   by SelectPreferredCameraChildFromRouteEntity on CameraManager(1)) — drive its
+   own yaw/pitch orientation state from the peer camera each frame. Cleanest
+   (authoritative, input-integrated), but needs the child's yaw/pitch offsets.
+2. `g_PerScreenCameraTransformCache 0x1465FDAA0 + 0x400*1` (screen-1 entry) — write
+   the peer transform here each frame AFTER the camera update. Simpler target but
+   it is a cache refreshed from the child, so timing (post-update override) matters
+   and it has many writers/readers.
+
+Next static step: RE the CameraControlStrafe child orientation state (yaw/pitch or
+quat offsets) so option 1 can be written precisely; and identify the single
+authoritative writer of `0x1465FDAA0[0x400*idx]` to know whether an option-2
+override survives the frame. Status: **STATIC** (source CONFIRMED; write target
+still HYPOTHESIS).

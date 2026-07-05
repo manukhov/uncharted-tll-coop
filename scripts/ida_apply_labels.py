@@ -6056,9 +6056,20 @@ FUNCTIONS = {
         "(e.g. line ~999 unzoomed-sniper-shots branch, and the main direction "
         "path). So a co-op Second player (screen index 1 at +0x4010) fires along "
         "its OWN screen-1 aim camera, which the mod does not drive -> wrong "
-        "direction. The mod only blends peer camera yaw into the body quat "
-        "(Player+0x140); it must instead drive the screen-1 aim camera rotation "
-        "(CameraManager(1)/route-1 child +0x1B0) from peer.camera_quat.",
+        "direction. The transform is read via CameraManager_GetBlendedCamera"
+        "Transform from g_PerScreenCameraTransformCache[0x400*idx] / a blended "
+        "child transform (NOT CameraManager+0x1B0). The mod only blends peer "
+        "camera yaw into the body quat (Player+0x140); the real fix must drive the "
+        "screen-1 aim camera CHILD (CameraControlStrafe) orientation.",
+    ),
+    0x141C06650: (
+        "CameraManager_GetBlendedCameraTransform",
+        "Extracts a screen's current camera transform into the out buffer for "
+        "consumers (e.g. PlayerFireController_Fire aim direction). Picks the "
+        "active camera child via SelectPreferredCameraChildFromRouteEntity; if a "
+        "single camera is active copies g_PerScreenCameraTransformCache "
+        "(0x1465FDAA0, stride 0x400 per screen index *(mgr+292)), else builds a "
+        "blend from mgr+0x1A0. Does NOT read CameraManager+0x1B0.",
     ),
 }
 
@@ -6079,6 +6090,15 @@ DATA_NAMES = {
         "Global input-focus byte maintained by Input_UpdateWindowFocusFlag and "
         "WM_SETFOCUS/WM_KILLFOCUS. Both per-player dispatch and "
         "Input_ScaleCopyVirtual require it before native conversion.",
+    ),
+    0x1465FDAA0: (
+        "g_PerScreenCameraTransformCache",
+        "Per-screen camera transform cache, stride 0x400 (64 xmmword) per screen "
+        "index. CameraManager_GetBlendedCameraTransform copies entry "
+        "[0x400*idx] as the screen's current camera transform when a single "
+        "camera child is active. This (not CameraManager+0x1B0) is what "
+        "PlayerFireController_Fire reads for aim/shot direction, so the co-op "
+        "Second player's screen-1 entry governs where it shoots.",
     ),
     0x143ECEAA4: (
         "g_DebugCheatFlags_AmmoGrenades",
