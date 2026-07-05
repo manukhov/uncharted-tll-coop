@@ -6113,6 +6113,32 @@ FUNCTIONS = {
         "record into the live rider actor via actor->virtual+0xD0. The bridge for "
         "co-op vehicle entry (driver/passenger seat).",
     ),
+    0x1408B1350: (
+        "ScriptQuery_InteractableHasBeenInspected",
+        "'interactable-has-been-inspected?' query core. Resolves the interactable "
+        "by StringId, calls vtbl+0x248 to get its state object, returns "
+        "state+0xD0 bit 1 = inspected flag. Co-op (story-authority Option 1): "
+        "inspect/interact sync = relay {interactable StringId, kind} and set this "
+        "flag on the follower's matching object (StringId is deterministic across "
+        "copies) — no net session / NetEventInteractable needed.",
+    ),
+    0x140A45E80: (
+        "NetEventEmitProjectileBullet_Execute",
+        "Applies a received emit-projectile-bullet net event: reads campaign-valid "
+        "globals (g_LocalPlayerInputManager_Ptr, g_PlayerHandleForHudPublish, "
+        "g_PerScreenPlayerHudState), maps the weapon via "
+        "NetGameManager_GetWeaponIdByStatIndex (static cached table, not a session "
+        "singleton), spawns the real ProjectileBulletInstant + net-fire-effect. "
+        "Not inherently session-locked except shooter resolution; documents the "
+        "native bullet-replication primitive.",
+    ),
+    0x140A81050: (
+        "NetGameManager_GetWeaponIdByStatIndex",
+        "net-game-manager.cpp:534 inverse compact stat-index -> weapon-id map. "
+        "Pure static lookup: GetCachedWeaponDryFireEventRegistry + "
+        "g_StandardWeaponArtIds prefix + cached online weapon def map for "
+        "index>=19. No session singleton deref (campaign-available).",
+    ),
     0x1400BAB30: (
         "ScriptQuery_CarGetRiderByRole",
         "'car-get-rider-by-role' handler: returns the vehicle's rider actor for a "

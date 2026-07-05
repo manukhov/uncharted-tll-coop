@@ -23975,3 +23975,41 @@ offsets; that the passenger-copy vehicle can be made kinematic (physics off) whi
 relayed without desyncing the seated rider; and that seat entry can be triggered
 for the Second player on demand (button). Status: **STATIC** (seat parenting +
 relay model CONFIRMED; offsets are a runtime read).
+
+### Interact/inspect sync is a simple STATE FLAG, not the session-bound net-event (STATIC, 2026-07-05)
+
+**Decisive for Option 1 (story-authority).** The scripted-narrative sync does NOT
+need the session-bound NetEvent layer for interactions. The inspected state is a
+plain per-object flag:
+- `interactable-has-been-inspected?` handler (real fn sub_1408B1350,
+  ScriptQuery_InteractableHasBeenInspected): resolves the interactable object by
+  StringId, calls its vtbl+0x248 to get the interactable STATE object, and reads
+  **state+0xD0 bit 1** = "has been inspected".
+- The object is resolved by StringId/spawner name, which is DETERMINISTIC across
+  both copies (same level, same authored ids).
+
+So co-op inspect/interact sync (Option 1) = relay a tiny event
+`{interactable StringId, kind: inspected|picked-up|used}` from the story driver
+and set state+0xD0 bit 1 (or the equivalent) on the follower's matching object.
+No net session, no NetCharacter. `suppress-interactable-system` can additionally
+stop the follower from independently prompting/triggering. Interactable families
+present: interactable.cpp (base), conversation-piece.cpp (inspectable
+comment pieces = the "examine" beats), carry-object.cpp, dynamic-tap.cpp,
+hidden-treasure.cpp, medal-boost-pickup.cpp.
+
+**Net-event layer (context, de-risked but not required here):** the engine's
+NetEvent Execute paths (NetEventEmitProjectileBullet_Execute 0x140A45E80, melee/
+explosion/carry-object) read the SAME campaign-valid globals the mod already uses
+(g_LocalPlayerInputManager_Ptr, g_PlayerHandleForHudPublish,
+g_PerScreenPlayerHudState) and the weapon stat mapping
+(NetGameManager_GetWeaponIdByStatIndex 0x140A81050) is a STATIC cached-table lookup
+(GetCachedWeaponDryFireEventRegistry + g_StandardWeaponArtIds + online def map) —
+NOT a session singleton deref. So the net-event *data* paths are not inherently
+session-locked; the open risk if ever reused is shooter/actor resolution via
+net-player-index (NetCharacter). For interactions we bypass all that with the
+state-flag relay above.
+
+**Conclusion:** Option 1 is implementable with lightweight discrete state relays
+(inspected/pickup/SsInstance-progress), avoiding the crashing net-session path
+entirely. Status: **STATIC** (inspected-flag location CONFIRMED; StringId
+determinism makes cross-copy targeting trivial).
