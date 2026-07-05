@@ -24633,3 +24633,30 @@ the body-quat facing blend so the puppet holds a stable aim pose toward the peer
 direction. Gate/remove the sandwich look_stick write. Verify at a combat section
 (current section is weaponless). Status: **diagnosed; fix pending build+combat
 test.**
+
+### RUNTIME 2026-07-05: aim-jitter/weapon-desync cluster = stale weapon capture + facing-vs-aimpress conflict
+
+Live reads (copy1 Chloe 0x10e0a23880 sniping/aiming; copy2 Chloe-rep 0x10e0e0e480).
+- **Weapon capture is STALE:** live0_held = pistol art 0x33e29a1b even after the user
+  holstered the pistol -> the mod keeps relaying the holstered weapon as "held" (the
+  capture_held_weapon_art_id / GetActiveWeapon-keeps-last problem, apparently
+  reintroduced). This is the "aiming a holstered pistol" symptom.
+- **Puppet joypad aim not set:** copy2 Chloe-rep joypad3 current = 0x9 (NO aim 0x200)
+  while the user aims. So aim-press is NOT reaching the puppet — most likely the
+  weapon-mismatch gate strips aim/fire because the relayed (stale) weapon doesn't
+  match the puppet's actual weapon.
+- **But facing IS forced:** apply_peer_aim_facing_to_player still blends the body
+  quat toward the peer camera yaw every frame. Root quat (+0x140) and move
+  (+0x3A1C/+0x3A30) read STABLE, so the visible "jerk" is the ANIM GRAPH getting
+  contradictory signals: facing says "aiming" but no aim-press (0x200) says "not
+  ADS", so the aim-partial/upper-body layer blends in and out = the jitter.
+
+**Diagnosis:** all three symptoms (skin jerk, holstered-weapon phantom aim, sniper
+vanish) share one root — the weapon-state relay is stale/mismatched, so the
+weapon-mismatch gate inconsistently strips aim-press while the facing blend forces
+an aim pose. Fix direction (code pass, compare against pre-crosshair git state):
+(1) make capture_held_weapon_art_id report NO weapon when holstered (prefer the
+hand-attached slot, not GetActiveWeapon's last); (2) gate apply_peer_aim_facing on
+the SAME condition as the puppet aim-press (don't force facing when aim-press is
+stripped) so facing and ADS agree; (3) only then the sniper scope-cull can be
+isolated. Status: **diagnosed from runtime; needs a focused weapon/aim relay fix.**
