@@ -374,15 +374,22 @@ volatile bool g_puppet_relay_aim_press = true;
 // turn-RATE that spins the puppet's aim camera and fights the body-quat facing
 // blend -> violent aim jitter (2026-07-05 regression). Page Up toggles for A/B.
 volatile bool g_puppet_relay_look_stick = false;
-// Fall back to GetActiveWeapon when no weapon is in-hands/hand-attached. Default OFF:
-// that fallback returns the LAST weapon even while holstered (stale) -> phantom
-// aim + aim-press flicker. Page Up + Shift not needed; toggle via VK_INSERT.
-volatile bool g_weapon_capture_active_fallback = false;
+// Fall back to GetActiveWeapon when no weapon is in-hands/hand-attached. Default ON
+// (reverted 2026-07-05): OFF suppressed the pistol on weapon switch (in-hands/hand-
+// attached did not detect it) = pistol never displayed, which is worse than the
+// stale-holster phantom. VK_INSERT toggles for A/B.
+volatile bool g_weapon_capture_active_fallback = true;
 // Puppet aim orientation source. false (default) = smoothly blend the root quat
 // toward the peer's relayed body quat (single writer, no jerk). true = old
 // camera-yaw derivation (apply_peer_aim_facing) that conflicted with the native
 // update = the aim jitter. VK_DELETE toggles for A/B.
 volatile bool g_puppet_aim_facing_from_camera = false;
+// Override the Second player's screen-1 pose seed with the relayed peer seed (fire/
+// aim ray). Default OFF (2026-07-05): the broad idx==1 override froze the puppet's
+// aim camera (resolver has ~300 callers) and mis-placed the ray from the peer
+// camera position. Needs narrower gating (fire caller only) before re-enabling.
+// VK_END-adjacent: toggle via VK_APPS (context menu key).
+volatile bool g_puppet_relay_pose_seed = false;
 static ULONGLONG g_fire_button_hold_until_ms = 0;
 // After native Fire replay, block peer/button fire on the remote player so the
 // same shot is not delivered twice (relay native + Joypad 0x800).
@@ -1636,7 +1643,8 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     void* const result = g_original_pose_seed_resolver != nullptr
         ? g_original_pose_seed_resolver(out, idx)
         : out;
-    if (g_state_net.enabled && idx == 1 && out != nullptr) {
+    if (g_puppet_relay_pose_seed && g_state_net.enabled && idx == 1 &&
+        out != nullptr) {
         coop::StatePacket peer{};
         if (copy_peer_state_snapshot(peer) &&
             (peer.flags & coop::kStateFlagPoseSeed) != 0 &&
