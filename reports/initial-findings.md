@@ -24608,3 +24608,28 @@ Status: **CONFIRMED** (direction pin) — aim/fire/grenade direction fix validat
   uninitialized 0x7fbbeeee even while "aiming"): ADS/scope/held-weapon/scope-cull
   pins require a combat section with a (scoped) rifle drawn.
 Status: **CONFIRMED** (task schema), **REJECTED** (0x3FC8 raw-Player anim field).
+
+### REGRESSION diagnosed 2026-07-05: aim-jitter = look_stick fed as a sustained right-stick RATE
+
+**Symptom (user):** since the crosshair-dedup work, when a player aims the OTHER
+copy's puppet jerks violently in all directions.
+
+**Root cause (code):** two orientation drivers conflict while the peer aims.
+1. `apply_peer_aim_facing_to_player` blends the puppet BODY quat (kPlayerQuatOffset)
+   toward the peer camera yaw each frame (absolute orientation).
+2. The ScaleCopy sandwich (hooked_input_scale_copy dest=3) writes `peer.look_stick`
+   into the puppet block's RIGHT-STICK axes each frame.
+The right stick is a turn RATE, not a position. `derive_look_stick_from_camera`
+returns `look_stick = (cam_yaw - body_yaw) * 0.55`, which is a SUSTAINED non-zero
+value while the peer holds an aim offset -> the puppet's aim camera rotates
+continuously, while the body-quat blend snaps the body back each frame ->
+oscillation = the violent jerk. Fires even in pose-only (the look_stick write is not
+gated by g_puppet_relay_aim_press). Introduced when the look_stick relay moved into
+the sandwich during the block-1 crosshair fix.
+
+**Fix:** stop feeding look_stick as a sustained right-stick rate (it also cannot
+reproduce absolute aim direction — that is the separate pose-seed fix). Keep only
+the body-quat facing blend so the puppet holds a stable aim pose toward the peer's
+direction. Gate/remove the sandwich look_stick write. Verify at a combat section
+(current section is weaponless). Status: **diagnosed; fix pending build+combat
+test.**
