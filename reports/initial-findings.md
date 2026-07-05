@@ -24660,3 +24660,17 @@ hand-attached slot, not GetActiveWeapon's last); (2) gate apply_peer_aim_facing 
 the SAME condition as the puppet aim-press (don't force facing when aim-press is
 stripped) so facing and ADS agree; (3) only then the sniper scope-cull can be
 isolated. Status: **diagnosed from runtime; needs a focused weapon/aim relay fix.**
+
+### RUNTIME CONFIRMED 2026-07-05: aim-jitter FIXED (single orientation source); wrong-direction remains (pose-seed)
+
+User A/B confirmed: default (blend root quat toward peer body quat, single writer in
+apply_puppet_transform_post) = NO jitter; VK_DELETE (old camera-yaw
+apply_peer_aim_facing) = jitter returns. So the jerk root cause was the 3-writer
+orientation conflict (facing before native update + native update + facing after),
+now fixed. Commit 2483bd7. The remaining "aims in the wrong direction" is the
+separate, already-confirmed pose-seed fix: the puppet BODY now faces the peer body
+quat, but the shot/aim ray still comes from the puppet's uncontrolled screen-1 aim
+camera (ResolveScreenRoutePoseSeedOrDefault for idx 1). Next: relay the peer's
+screen-0 pose seed (blk+0x60 pos + blk+0x70 quat, 32 bytes) and override it on the
+receiver for idx==1. Status: **jitter CONFIRMED FIXED; wrong-direction = pose-seed
+build.**
