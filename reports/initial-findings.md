@@ -23936,3 +23936,42 @@ copy where its player is remote — which the two-copy model avoids.
 rider to the vehicle transform (rider follows car with no separate sync — expected
 in this engine), and the vehicle object's transform/velocity offsets for the relay.
 Status: **STATIC** (entry+control layers mapped; two-copy driver model designed).
+
+### Vehicle seat parenting CONFIRMED; relay = vehicle NdGameObject transform (kinematic on passenger copy) (STATIC, 2026-07-05)
+
+**Seat parenting confirmed.** The vehicle owns its riders BY ROLE
+(`car-get-rider-by-role` handler sub_1400BAB30) and a rider is attached to the
+vehicle through the seat `apReference` attach point + `bindSpawner`/parent binding
+(m_bindSpawner). `VehicleCtrl_NotifyPlayerEntering` pushes the entry-def into the
+rider actor via actor->vtbl+0xD0 (two call sites, 0x1414119de / 0x141411d06 =
+driver/passenger). Consequence: once seated, a rider's world locator is derived
+from the vehicle transform + seat AP, so the PASSENGER follows the car with no
+separate position sync — only the vehicle object must be synced.
+
+**Relay design (reuses existing machinery):** the vehicle is an NdGameObject, so
+its world locator lives at the same base offsets the mod already reads for enemy/
+player transforms (kWorldPositionOffset / kPlayerQuatOffset) — confirm the exact
+vehicle offset at runtime, but the base-object layout is shared. Plan:
+- Driver's copy (authoritative): read the vehicle locator + velocity, relay
+  (VehiclePacket or StatePacket extension).
+- Passenger's copy: apply the relayed transform to the vehicle object KINEMATICALLY
+  — the same "pin the object to the networked transform each frame" the mod already
+  does for the player puppet (apply_puppet_transform_post). The passenger copy must
+  NOT run local vehicle physics for that car (no local driver input there), else it
+  fights the relay — set it pose-driven/kinematic while remote-driven, exactly like
+  the puppet.
+- Both riders seated on both copies via the entry layer; seat parenting then makes
+  each rider follow its (synced) vehicle locally.
+
+**Net result — the whole vehicle feature reduces to the puppet pattern applied to
+one more object:** (1) button -> seat both players (driver+passenger) via the entry
+layer on both copies; (2) relay the vehicle locator+velocity, driver-copy
+authoritative; (3) passenger-copy vehicle is kinematic-follow; (4) role swap =
+flip authority + set-driver. No driver-input hijack, no per-passenger position
+channel.
+
+**Runtime checks before/at build:** exact vehicle-object transform+velocity
+offsets; that the passenger-copy vehicle can be made kinematic (physics off) while
+relayed without desyncing the seated rider; and that seat entry can be triggered
+for the Second player on demand (button). Status: **STATIC** (seat parenting +
+relay model CONFIRMED; offsets are a runtime read).
