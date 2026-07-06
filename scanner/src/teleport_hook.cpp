@@ -6000,15 +6000,26 @@ bool safe_give_weapon_art_to_puppet(void* puppet, std::uint32_t art_id) {
     // Relayed arts give with their captured REAL block (synthetic init+art was
     // proven insufficient for non-whitelist arts: engine spawned-then-dropped).
     const RelayedWeaponBlock* stored = relayed_weapon_store_find(art_id);
-    if (stored != nullptr) {
-        // Block-gives can evict other weapons (exclusive-loadout flags in the
-        // real block); rate-limit so any residual fight with the synthetic
-        // re-gives settles instead of raining weapon props.
-        static ULONGLONG last_block_give_ms = 0;
-        if (give_now - last_block_give_ms < 2000) {
-            return false;
+    // GIVE-ONCE EXPERIMENT (2026-07-07, only when g_relayed_block_give): the
+    // fountain is mutual eviction between two RE-GIVEN weapons (M-30 slot0 <->
+    // pistol slot1). Prediction test: give each (puppet,art) exactly ONCE and
+    // never re-give. If both weapons then persist, the fountain was purely the
+    // re-give fight (give-once is the fix). If they vanish after a few seconds,
+    // the puppet's weapon controller is genuinely rebuilt and needs a rebuild
+    // hook. Permanent per-(puppet,art) memo, no expiry.
+    if (g_relayed_block_give) {
+        struct GivenOnce {
+            void* puppet;
+            std::uint32_t art;
+        };
+        static GivenOnce given_once[16]{};
+        static std::size_t given_once_next = 0;
+        for (const GivenOnce& g : given_once) {
+            if (g.puppet == puppet && g.art == art_id) {
+                return false;  // already attempted once; do not re-give
+            }
         }
-        last_block_give_ms = give_now;
+        given_once[given_once_next++ % 16] = {puppet, art_id};
     }
     __try {
         alignas(16) std::uint8_t weapon_info[0xC0]{};
