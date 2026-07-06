@@ -8,6 +8,50 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-07: weapon give / slot placement (pickup display root) ---
+    0x1410A4D40: (
+        "PlayerWeaponController_GiveWeapon",
+        "vtable +0x158. WeaponInfo fields it reads: +0x80 art id, +0x84 ammo "
+        "(-1=random), +0x96 flags word, +0x9C..0xB3 net drop-transform copied to "
+        "weapon+0x866 in net mode. If art already owned (weapon+0x860 match) the "
+        "path is idempotent (updates ammo/flags); otherwise it calls the create "
+        "slot at vtable+0x130. Pickup/scripted give reaches it via sub_140DCDEA0 "
+        "(ret_rva 0xDD4208).",
+    ),
+    0x1410A8920: (
+        "PlayerWeaponController_CreateAndAddWeapon",
+        "vtable +0x130. Creates the weapon object and inserts it into a manager "
+        "SLOT. Resolves the WeaponArtDef by art (GetCachedWeaponArtDefsHashRegistry "
+        "+ LookupRegistryRecordPointerById); returns 0 (no create) if the def is "
+        "absent. The destination slot/class comes from the def record (*v16 class "
+        "hash, compared vs rightHand/ProcessShield/rocket-launcher/... branches). "
+        "ROOT of the pickup-display fountain: a relayed rifle (M-30 0x3019CBEE) "
+        "lands in manager slot 1 (secondary), colliding with the pistol - needs "
+        "a remove/swap, not an additive give.",
+    ),
+    0x1410A8670: (
+        "PlayerWeaponController_KillWeaponsInClasses_1_17",
+        "vtable +0x168. ProcessKillTree(GetWeaponByClass(ctrl,1)) then class 17 - "
+        "the REMOVE primitive. GetWeaponByClass = ctrl vtable +0x188; ProcessKillTree "
+        "destroys the weapon object. Building block for a pickup SWAP (kill the "
+        "puppet's conflicting-class weapon, then GiveWeapon the relayed art).",
+    ),
+    0x1410A8750: (
+        "PlayerWeaponController_KillAllWeapons",
+        "vtable +0x170. ProcessKillTree over every weapon class (remove-all).",
+    ),
+    0x1413B49B0: (
+        "PlayerWeaponController_EnqueuePickupEvent",
+        "Appends {art, ammo, ...} to the per-controller pickup-event list at "
+        "*(a1+800)+6288 (32-byte stride, count at +6448, cap 5 -> 'Too many pickup "
+        "events in the event list!'). Not slot placement.",
+    ),
+    0x140DCDEA0: (
+        "Player_ScriptWeaponEventHandler",
+        "Player script-event handler (switch on event name-hash). Hash 0xFB1091A3 "
+        "branch = give-weapon: builds WeaponInfo and calls GiveWeapon (vt+0x158). "
+        "The real ground-pickup give path (ret addr 0x140DD4208).",
+    ),
     # --- 2026-07-06: weapon pickup sync design (see initial-findings) ---
     0x14157AA70: (
         "WeaponPickupInteractControl_OnInteract",

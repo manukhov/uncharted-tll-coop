@@ -25004,3 +25004,33 @@ block-give ON — на стабильную ветку не влияет.
 **СЛЕДУЮЩИЙ ШАГ:** декомпил find_weapon_slot_by_art_id + чтение живьём, в каком AP
 реально сидит M-30 на кукле; затем понять слот-класс-резолв в [slotMgr vtable+0x130].
 block-give по-прежнему default OFF (стабильно).
+
+### 2026-07-07: слот-резолв разобран + REMOVE-примитив найден (план swap готов)
+
+PlayerWeaponController vtable (base 0x142A47F90):
+- +0x130 `CreateAndAddWeapon` 0x1410A8920 — создаёт объект, резолвит WeaponArtDef по
+  art (GetCachedWeaponArtDefsHashRegistry + LookupRegistryRecordPointerById);
+  **возвращает 0 если def нет** (значит для M-30 def ЕСТЬ на копии 2 — гипотеза
+  «не стримнут» опровергнута). Слот/класс — из class-hash def-записи (*v16).
+- +0x158 `GiveWeapon` 0x1410A4D40.
+- +0x168 `KillWeaponsInClasses_1_17` 0x1410A8670 = **REMOVE-примитив**:
+  `ProcessKillTree(GetWeaponByClass(ctrl, N))`.
+- +0x170 `KillAllWeapons` 0x1410A8750.
+- +0x188 `GetWeaponByClass(ctrl, classIdx)` (используется в kill-функциях).
+- +0xB0 `GetWeaponBySlot(mgr, slot)` (наш scan).
+
+**Корень фонтана окончательно:** релейнутый M-30 (rifle 0x3019CBEE) через
+GiveWeapon садится в manager-слот 1, где уже пистолет 0x33E29A1B (у обоих
+find_weapon_slot_by_art_id=1). Аддитивный give их сталкивает → взаимное вытеснение.
+
+**ПЛАН СЛЕДУЮЩЕГО ХОДА (реализация, не гадание — примитивы найдены):**
+Заменить аддитивный give на КЛАСС-SWAP, зеркалящий пир:
+1. По raw-снапшоту пира знать его оружие по классам (long-gun / pistol / …).
+2. Для класса, где у пира новое оружие (M-30) а у куклы старое (Mazur): вызвать
+   remove (ProcessKillTree на GetWeaponByClass) для этого класса, ЗАТЕМ GiveWeapon
+   релейнутым блоком — новое оружие займёт освободившийся класс, пистолет (другой
+   класс) не тронут.
+3. Убрать пер-тик пере-give для не-held оружия (swap идёт по СМЕНЕ снапшота, не
+   каждый кадр) — это и убьёт фонтан.
+СНАЧАЛА: подтвердить class-индексы (0=?/1=?/16/17) — прочитать GetWeaponByClass
+0x1410A... и сопоставить с реальным расположением Mazur/M-30/пистолета живьём.
