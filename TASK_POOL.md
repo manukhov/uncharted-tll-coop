@@ -865,3 +865,29 @@ Do not reopen these as the first move:
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
+
+## P2 — Weapon pickup sync (добавлено 2026-07-06, после закрытия weapon-display кластера)
+
+**Контекст:** оружейный кластер (смена/holster/спавн) решён и user-verified (commit
+b3549d8). Подобранное с земли оружие пока показывается приближённо (свой длинноствол
+по слоту): точный арт требует полного weapon-info блока — give с одним art@0x80 для
+не-whitelisted артов НЕ прилипает (движок спавнит-и-роняет; см. REJECTED-фонтан в
+initial-findings 2026-07-06).
+
+**Задача A — точный арт подобранного оружия.** Реверсить схему weapon-info блока
+(0xC0 байт, initialize_info 0x14... в hook_offsets kInitializeWeaponInfoRva):
+какие поля кроме art@0x80 обязаны быть валидны, чтобы give прилип для произвольного
+арта. Кандидат: скопировать блок из реального пикапа сендера (hook на give котроллера
+локального игрока), а не синтезировать.
+
+**Задача B — анимация подбирания на кукле.** ВАЖНО: Player_TryStartBumpAction
+0x140CE8E10 — это CROWD-bump (толкание NPC), НЕ подбор (проверено декомпилом
+2026-07-06). Реальные якоря подбора:
+- `PickUpController` строка 0x142953600, ref 0x1404C132D (фабрика/ctor контроллера —
+  он крутит анимацию подбора у игрока);
+- `WeaponPickup` строка 0x1429118D0, refs в sub_1400C5560 (класс объекта-пикапа
+  на земле; там же "'%s' is NULL or not a WeaponPickup");
+- `ProcessPickup` 0x1429397C0, `instant-pickup`/`disable-pickup` скрипт-флаги.
+План: sender ловит старт своего PickUpController → шлёт событие с идентификацией
+пикапа (name-hash/позиция) → receiver находит зеркальный WeaponPickup и запускает
+PickUpController куклы. Сначала квота статических доказательств (CLAUDE.md).
