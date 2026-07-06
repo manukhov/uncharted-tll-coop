@@ -8,6 +8,67 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-06: weapon pickup sync design (see initial-findings) ---
+    0x14157AA70: (
+        "WeaponPickupInteractControl_OnInteract",
+        "Named by its own assert (weapon-pickup.cpp). vtable +0x10 of "
+        "WeaponPickupInteractControl (0x142AA6E90). Executes the local weapon "
+        "pickup: give-weapon, pickup-ammo-count, art registry lookups. SENDER "
+        "hook point for the co-op pickup relay.",
+    ),
+    0x14157B690: (
+        "WeaponPickupInteractControl_GetHudAmmoCount",
+        "Named by its own assert (weapon-pickup.cpp).",
+    ),
+    0x140BCDFC0: (
+        "NetEventSyncWeaponPickups_Ctor",
+        "Writes vftable 0x1429FCF90, type id 0x0101006A at +8, count u32 at +24; "
+        "entries at +28 = {u32 gameobject runtime id, float ammo} pairs.",
+    ),
+    0x140BCE0B0: (
+        "NetEventSyncWeaponPickups_Serialize",
+        "Bit-stream write: count 7 bits, then id:32 + float:32 per entry.",
+    ),
+    0x140BCE440: (
+        "NetEventSyncWeaponPickups_Apply",
+        "Consumes the entry list: resolves each id via the game-object handle "
+        "registry (ResolveGameObjectHandleById) and drives the native "
+        "net-pick-up-other-client flow (removes ground pickup, processes remote "
+        "client pickup). RECEIVER entry for the co-op pickup relay: stack-construct "
+        "the event and call this directly.",
+    ),
+    0x140A989C0: (
+        "ResolveGameObjectHandleById",
+        "Generic game-object handle lookup: returns {ptr,id} handle validated by "
+        "*(obj+0xBC)==id (same pattern as the retained-player slot table).",
+    ),
+    0x141579150: (
+        "WeaponPickup_Factory",
+        "Registered for class name WeaponPickup (registration sub_1400C5560); "
+        "object size 1376, vftable 0x142AA66C0.",
+    ),
+    0x140C85D20: (
+        "Player_InteractDispatcher",
+        "Generic player interact scan/dispatch (player-pressed-interact-nearby, "
+        "player-interact-hold-*). Checks commands against the PER-SCREEN dynamic "
+        "command list (input block +0x590) via InputScreenBlock_IsCommandActive - "
+        "NOT the +0x518 bitmask; relayed puppet buttons never trigger interacts.",
+    ),
+    0x140C7FF40: (
+        "Player_ResolveWeaponPickupInteractAnim",
+        "Resolves weapon-pickup-swap / weapon-pickup-when-no-weapon anim ids and "
+        "the interact command id (out a6) from the pickup art def.",
+    ),
+    0x14183A3D0: (
+        "InputScreenBlock_IsCommandActive",
+        "Scans the dynamic command-id list at block+0x590 (entries {ptr,count}); "
+        "per-screen block = g_LocalPlayerInputManager + 3504 + 3056*screen.",
+    ),
+    0x1410A3EA0: (
+        "PlayerWeaponController_StartHolsterTransition",
+        "Called by ApplyWeaponSwitch (vt+0x48) slot==-1 branch on the current "
+        "weapon: the native holster-everything transition.",
+    ),
     0x141DE8EC0: (
         "NavCharacter_ApplyAnimationRootTransform",
         "NavCharacter/AiCharacter vtable +0x400 post-animation path. Npc override "

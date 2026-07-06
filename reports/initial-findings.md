@@ -24845,3 +24845,16 @@ mode. Evidence quota: 2/3 собрано (vftable+ctor+serializer согласо
 резолв id по известному handle-паттерну; строка net-pick-up-other-client в apply).
 Остались 2 неизвестных до рантайма: sender-хук момента подбора (метод
 WeaponPickup/Active-перехода) и гейтинг apply на g_NetModeFlags.
+
+**Финал ночного захода: sender-хук найден и назван.**
+`sub_14157AA70` = **WeaponPickupInteractControl::OnInteract** (названа собственным
+assert'ом в weapon-pickup.cpp — жёсткое доказательство идентичности). Сидит в
+vtable +0x10 WeaponPickupInteractControl (0x142AA6E90), вызывается виртуально из
+интеракт-диспетчера. Внутри: give-weapon, pickup-ammo-count, hint-out-of-ammo,
+реестры WeaponArtDefs, attach-точки leftHand/r_wrist. Хук на эту КОНКРЕТНУЮ
+реализацию (RVA 0x157AA70) ловит только подбор оружия — другие интеракции не
+задеваются. Дизайн pickup-релея закрыт статически на 100%:
+sender hook OnInteract -> wire {identity, ammo} -> receiver: резолв зеркального
+пикапа, свой runtime id, стек-событие NetEventSyncWeaponPickups, вызов Apply
+0x140BCE440. 11 новых функций размечено в IDB (apply_labels 902 fn,
+save_database True). Реализация релея = следующий ход.
