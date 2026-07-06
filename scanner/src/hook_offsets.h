@@ -144,6 +144,11 @@ constexpr std::uintptr_t kWeaponPickupOnInteractRva = 0x157AA70;
 // PlayerWeaponController::GiveWeapon 0x1410A4D40 (vt+0x158) + 9: diagnostic hook
 // point past the entry `test rdx,rdx; jz rel32` (which is not relocatable).
 constexpr std::uintptr_t kGiveWeaponTailRva = 0x10A4D49;
+// Return address (RVA) inside Player script-event handler sub_140DCDEA0 right
+// after its `call [vt+0x158]` GiveWeapon call = the ground-pickup / scripted
+// give-weapon event path (hash 0xFB1091A3 branch). Runtime-confirmed 2026-07-06:
+// a real ground pickup logs exactly this ret_rva.
+constexpr std::uintptr_t kPickupGiveRetRva = 0xDD4208;
 constexpr std::uintptr_t kNetEventSyncWeaponPickupsApplyRva = 0xBCE440;
 constexpr std::uintptr_t kNetEventSyncWeaponPickupsVftableRva = 0x29FCF90;
 constexpr std::uintptr_t kWeaponPickupVftableRva = 0x2AA66C0;

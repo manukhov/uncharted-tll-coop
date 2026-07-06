@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <iomanip>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -461,11 +462,63 @@ bool puppet_weapon_switch_allowed(std::uint32_t art_id, int slot) {
 }
 
 // GiveWeapon on puppets: known relay/pickup arts that stick in puppet inventory.
+// Store of relayed REAL WeaponInfo blocks (WeaponGivePacket "COPG"). Written on
+// the game thread in apply_peer_weapon_give, read on the game thread by the
+// held-weapon give path. Needed because the puppet's weapon controller gets
+// RECREATED by the engine (three different player+0x1D88 pointers observed in
+// one session) and every give dies with its controller: whitelisted arts
+// survived only because the state loop re-gives them, so relayed arts must be
+// re-givable from the same loop with their captured block.
+struct RelayedWeaponBlock {
+    std::uint32_t art = 0;
+    std::uint8_t info[coop::kWeaponInfoBytes]{};
+};
+RelayedWeaponBlock g_relayed_weapon_store[4]{};
+
+RelayedWeaponBlock* relayed_weapon_store_find(std::uint32_t art_id) {
+    if (art_id == 0) return nullptr;
+    for (RelayedWeaponBlock& e : g_relayed_weapon_store) {
+        if (e.art == art_id) return &e;
+    }
+    return nullptr;
+}
+
+// Master switch for the relayed block-give path. Default OFF (2026-07-07):
+// fountain #5 - the block give and the synthetic pistol give EVICT each other
+// (ping-pong, one dropped prop per cycle) and every give on the puppet appears
+// to REBUILD its weapon controller (3 pointers per minute). Static work needed
+// on GiveWeapon's WeaponInfo parsing (exclusive-loadout flags) and the
+// controller-rebuild trigger before this can go back on. Numpad - toggles.
+volatile bool g_relayed_block_give = false;
+
+void relayed_weapon_store_put(std::uint32_t art_id, const void* info) {
+    if (!g_relayed_block_give) return;
+    if (art_id == 0 || info == nullptr) return;
+    // Whitelist arts keep the proven ADDITIVE synthetic give; storing their real
+    // block would switch them to block-gives, and block-gives EVICT each other
+    // (2026-07-06 night fountain #4: M-30 <-> pistol ping-pong, one drop per
+    // cycle - the real script block appears to carry exclusive-loadout flags).
+    // For the same reason only ONE relayed art is kept: the peer's newest
+    // non-whitelist weapon. Older entries are cleared so at most one weapon on
+    // the puppet ever uses the block path.
+    if (art_id == kCoopPistolArtId || art_id == kCoopScopedPistolArtId ||
+        art_id == kCoopRifleArtId) {
+        return;
+    }
+    for (RelayedWeaponBlock& e : g_relayed_weapon_store) {
+        e = {};
+    }
+    g_relayed_weapon_store[0].art = art_id;
+    std::memcpy(g_relayed_weapon_store[0].info, info, coop::kWeaponInfoBytes);
+}
+
 bool puppet_weapon_give_allowed(std::uint32_t art_id) {
-    // STRICT whitelist. Opening it for arbitrary picked-up arts (tried 2026-07-06)
-    // spilled rifles out of the puppet. Ground-pickup display sync is parked.
+    // STRICT whitelist (synthetic give works for these three), plus any art whose
+    // REAL WeaponInfo block arrived over the give relay - those give with full
+    // fidelity and go through the same fail-memo/cooldown machinery.
     return art_id == kCoopPistolArtId || art_id == kCoopScopedPistolArtId ||
-           art_id == kCoopRifleArtId;
+           art_id == kCoopRifleArtId ||
+           relayed_weapon_store_find(art_id) != nullptr;
 }
 constexpr std::uint32_t kNetSnapshotWeaponsId = 0xCA049840;
 volatile bool g_xinput_log = false;
@@ -679,6 +732,18 @@ std::atomic<float> g_pending_pickup_ammo{0.0F};
 std::atomic<std::uint32_t> g_last_applied_pickup_seq{0};
 std::atomic<std::uint32_t> g_pending_pickup_seq{0};
 std::atomic<bool> g_pending_pickup_flag{false};
+// Picked-up-weapon give relay (WeaponGivePacket "COPG"): pending slot written by
+// the recv thread, consumed once on the game thread. The info bytes are only
+// read after the flag acquire and the flag is cleared before the give, so the
+// single pending slot cannot double-apply.
+std::atomic<std::uint32_t> g_weapon_give_send_seq{0};
+std::atomic<std::uint32_t> g_last_applied_weapon_give_seq{0};
+std::atomic<std::uint32_t> g_pending_weapon_give_seq{0};
+std::atomic<std::uint8_t> g_pending_weapon_give_draw{0};
+std::atomic<std::uint32_t> g_pending_weapon_give_art{0};
+std::uint8_t g_pending_weapon_give_info[coop::kWeaponInfoBytes]{};
+std::atomic<bool> g_pending_weapon_give_flag{false};
+void* resolve_live_player_safe(std::uint32_t index);
 void* g_fire_puppet_tracked = nullptr;
 ULONGLONG g_fire_puppet_ready_after_ms = 0;
 std::ptrdiff_t g_player_fire_controller_offset = -1;
@@ -2175,8 +2240,64 @@ void __fastcall hooked_give_weapon_tail(
         line << "GIVEWEAPON-CALL art=0x" << std::hex << art
              << " ctrl=0x" << reinterpret_cast<std::uintptr_t>(controller)
              << " ret_rva=0x" << (ret - g_module)
-             << std::dec << " a3=" << a3 << " a4=" << a4;
+             << std::dec << " a3=" << a3 << " a4=" << a4 << " a5=" << a5;
         force_log_line(line.str().c_str());
+        // Full 0xC0 WeaponInfo hex (24 qwords): needed to learn the real block
+        // schema (which fields are pointers vs POD) before any cross-process
+        // relay of picked-up weapons. Compare a real pickup's block against our
+        // synthetic initialize_info+art one for the same art.
+        if (weapon_info != nullptr &&
+            readable_bytes(static_cast<std::byte*>(weapon_info)) >= 0xC0) {
+            const auto* q = static_cast<const std::uint64_t*>(weapon_info);
+            for (int row = 0; row < 3; ++row) {
+                std::ostringstream dump;
+                dump << "GIVEWEAPON-INFO+" << std::hex << (row * 0x40) << ":";
+                for (int i = 0; i < 8; ++i) {
+                    dump << " " << std::setw(16) << std::setfill('0')
+                         << q[row * 8 + i];
+                }
+                force_log_line(dump.str().c_str());
+            }
+        }
+    }
+    // PICKED-UP WEAPON RELAY (sender): the script-event give path (ret_rva
+    // kPickupGiveRetRva) on the LOCAL player's controller = the peer just picked
+    // up / was script-given a weapon. Relay the raw POD WeaponInfo block once.
+    if (g_state_net.enabled && g_state_net.peer_set && weapon_info != nullptr) {
+        const std::uintptr_t ret =
+            reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+        if (ret - g_module == kPickupGiveRetRva) {
+            void* local_player = resolve_live_player_safe(0);
+            void* local_ctrl = nullptr;
+            if (local_player != nullptr &&
+                readable_bytes(static_cast<std::byte*>(local_player) + 0x1D90) >=
+                    sizeof(void*)) {
+                local_ctrl = *reinterpret_cast<void**>(
+                    static_cast<std::byte*>(local_player) + 0x1D88);
+            }
+            if (controller == local_ctrl && local_ctrl != nullptr &&
+                readable_bytes(static_cast<std::byte*>(weapon_info)) >=
+                    coop::kWeaponInfoBytes) {
+                coop::WeaponGivePacket pkt{};
+                pkt.sequence = g_weapon_give_send_seq.fetch_add(1) + 1;
+                pkt.draw_flag = static_cast<std::uint8_t>(a3 & 0xFF);
+                std::memcpy(&pkt.weapon_art_id,
+                            static_cast<std::byte*>(weapon_info) + 0x80,
+                            sizeof(pkt.weapon_art_id));
+                std::memcpy(pkt.weapon_info, weapon_info,
+                            coop::kWeaponInfoBytes);
+                sendto(g_state_net.send_socket,
+                       reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
+                       reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+                       sizeof(g_state_net.peer_addr));
+                std::ostringstream line;
+                line << "GIVEWEAPON-RELAY-SEND art=0x" << std::hex
+                     << pkt.weapon_art_id << std::dec
+                     << " seq=" << pkt.sequence
+                     << " draw=" << static_cast<int>(pkt.draw_flag);
+                force_log_line(line.str().c_str());
+            }
+        }
     }
     if (g_original_give_weapon_tail != nullptr) {
         g_original_give_weapon_tail(controller, weapon_info, a3, a4, a5);
@@ -4922,6 +5043,26 @@ DWORD WINAPI state_recv_thread(void*) {
                 g_pending_pickup_seq.store(pp.sequence, std::memory_order_relaxed);
                 g_pending_pickup_flag.store(true, std::memory_order_release);
             }
+        } else if (magic == coop::kWeaponGiveMagic &&
+                   received == static_cast<int>(sizeof(coop::WeaponGivePacket))) {
+            coop::WeaponGivePacket gp{};
+            std::memcpy(&gp, buf, sizeof(gp));
+            if (gp.version == coop::kWeaponGiveVersion &&
+                gp.weapon_art_id != 0 &&
+                gp.sequence != g_last_applied_weapon_give_seq.load(
+                                   std::memory_order_relaxed) &&
+                !g_pending_weapon_give_flag.load(std::memory_order_acquire)) {
+                std::memcpy(g_pending_weapon_give_info, gp.weapon_info,
+                            coop::kWeaponInfoBytes);
+                g_pending_weapon_give_seq.store(gp.sequence,
+                                                std::memory_order_relaxed);
+                g_pending_weapon_give_draw.store(gp.draw_flag,
+                                                 std::memory_order_relaxed);
+                g_pending_weapon_give_art.store(gp.weapon_art_id,
+                                                std::memory_order_relaxed);
+                g_pending_weapon_give_flag.store(true,
+                                                 std::memory_order_release);
+            }
         } else if (magic == coop::kFirePacketMagic) {
             coop::FirePacket fp{};
             if (received == static_cast<int>(sizeof(coop::FirePacket))) {
@@ -5856,11 +5997,28 @@ bool safe_give_weapon_art_to_puppet(void* puppet, std::uint32_t art_id) {
     };
     const auto initialize_info = reinterpret_cast<InitializeWeaponInfoFunction>(
         g_module + kInitializeWeaponInfoRva);
+    // Relayed arts give with their captured REAL block (synthetic init+art was
+    // proven insufficient for non-whitelist arts: engine spawned-then-dropped).
+    const RelayedWeaponBlock* stored = relayed_weapon_store_find(art_id);
+    if (stored != nullptr) {
+        // Block-gives can evict other weapons (exclusive-loadout flags in the
+        // real block); rate-limit so any residual fight with the synthetic
+        // re-gives settles instead of raining weapon props.
+        static ULONGLONG last_block_give_ms = 0;
+        if (give_now - last_block_give_ms < 2000) {
+            return false;
+        }
+        last_block_give_ms = give_now;
+    }
     __try {
         alignas(16) std::uint8_t weapon_info[0xC0]{};
-        initialize_info(weapon_info);
-        std::memcpy(weapon_info + 0x80, &art_id, sizeof(art_id));
-        give_weapon(controller, weapon_info, true, false, nullptr);
+        if (stored != nullptr) {
+            std::memcpy(weapon_info, stored->info, coop::kWeaponInfoBytes);
+        } else {
+            initialize_info(weapon_info);
+            std::memcpy(weapon_info + 0x80, &art_id, sizeof(art_id));
+        }
+        give_weapon(controller, weapon_info, stored == nullptr, false, nullptr);
         cache_puppet = puppet;
         cache_art = art_id;
         cache_ok = puppet_has_weapon_art_id(puppet, art_id);
@@ -7406,6 +7564,84 @@ void apply_peer_weapon_pickup() {
     force_log_line(line.str().c_str());
 }
 
+bool puppet_weapon_sync_ready(void* puppet);
+int find_weapon_slot_by_art_id(void* player, std::uint32_t art_id);
+
+bool seh_call_give_weapon(
+    void* controller, void* weapon_info, int draw_flag) {
+    __try {
+        void** vt = *reinterpret_cast<void***>(controller);
+        if (vt == nullptr) return false;
+        using GiveWeaponFn = void(__fastcall*)(
+            void*, void*, std::int64_t, std::int64_t, std::int64_t);
+        auto give = reinterpret_cast<GiveWeaponFn>(vt[0x158 / 8]);
+        if (give == nullptr) return false;
+        give(controller, weapon_info, draw_flag, 0, 0);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+// Runs on the game thread. ONE native GiveWeapon on the puppet per relayed
+// pickup event, using the sender's captured POD WeaponInfo block. Deliberately
+// no retry and no verification loop: every prior fountain came from re-giving.
+void apply_peer_weapon_give() {
+    if (!g_pending_weapon_give_flag.load(std::memory_order_acquire)) {
+        return;
+    }
+    const std::uint32_t seq =
+        g_pending_weapon_give_seq.load(std::memory_order_relaxed);
+    const std::uint32_t art =
+        g_pending_weapon_give_art.load(std::memory_order_relaxed);
+    const int draw = g_pending_weapon_give_draw.load(std::memory_order_relaxed);
+    alignas(16) std::uint8_t info[coop::kWeaponInfoBytes];
+    std::memcpy(info, g_pending_weapon_give_info, coop::kWeaponInfoBytes);
+    g_pending_weapon_give_flag.store(false, std::memory_order_release);
+    // Persist the real block: the puppet's weapon controller gets recreated by
+    // the engine and every give dies with it; the held-weapon state loop re-gives
+    // from this store (same path that keeps the whitelist arts alive).
+    relayed_weapon_store_put(art, info);
+    if (!world_stable()) {
+        return;
+    }
+    void* puppet = resolve_live_player_safe(1);
+    if (puppet == nullptr || !puppet_weapon_sync_ready(puppet)) {
+        // Drop, do not queue: a give replayed later (e.g. after a checkpoint
+        // reload) would desync inventory worse than a missed cosmetic give.
+        return;
+    }
+    void* ctrl = nullptr;
+    if (readable_bytes(static_cast<std::byte*>(puppet) + 0x1D90) >=
+        sizeof(void*)) {
+        ctrl = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(puppet) + 0x1D88);
+    }
+    bool ok = false;
+    if (ctrl != nullptr) {
+        g_last_applied_weapon_give_seq.store(seq, std::memory_order_relaxed);
+        ok = seh_call_give_weapon(ctrl, info, draw);
+    }
+    const int slot_after = find_weapon_slot_by_art_id(puppet, art);
+    bool holster_switch = false;
+    if (ok && slot_after >= 0 && draw == 0) {
+        // The give lands in inventory but the puppet's CURRENT weapon (and its
+        // back/hip display) stays on the old one until a switch. The peer's swap
+        // made the new weapon current-but-holstered, so mirror that: one switch
+        // to the new slot with in_hands=false (the confirmed holster-display
+        // path). If the peer instead has it drawn, the held-weapon state sync
+        // will pull it into the hands on the next ticks anyway.
+        holster_switch = safe_switch_to_weapon(
+            puppet, static_cast<std::uint32_t>(slot_after), false);
+    }
+    std::ostringstream line;
+    line << "GIVEWEAPON-RELAY-APPLY art=0x" << std::hex << art << std::dec
+         << " seq=" << seq << " draw=" << draw << " ok=" << (ok ? 1 : 0)
+         << " slotAfter=" << slot_after
+         << " holsterSwitch=" << (holster_switch ? 1 : 0);
+    force_log_line(line.str().c_str());
+}
+
 void suppress_puppet_fire_buttons(ULONGLONG duration_ms) {
     g_suppress_puppet_fire_buttons_until_ms = GetTickCount64() + duration_ms;
     g_fire_button_hold_until_ms = 0;
@@ -8804,8 +9040,12 @@ void drive_remote_slot1_actions_tick() {
     }
     {
         // VK_APPS: toggle fire-caller pose-seed orientation relay (quat only).
+        // Foreground-gated: GetAsyncKeyState is keyboard-global, so without the
+        // gate one press toggles BOTH game processes at once (untracked state).
         static bool prev_apps = false;
-        const bool apps = (GetAsyncKeyState(VK_APPS) & 0x8000) != 0;
+        const bool apps =
+            local_game_window_foreground() &&
+            (GetAsyncKeyState(VK_APPS) & 0x8000) != 0;
         if (apps && !prev_apps) {
             g_puppet_relay_pose_seed = !g_puppet_relay_pose_seed;
             std::ostringstream t;
@@ -10548,6 +10788,21 @@ void net_tick() {
                      : "PUPPET-POSE-SEED fire-ray relay (quat only) = OFF");
         g_logging_enabled = was;
     }
+    if (foreground && (GetAsyncKeyState(VK_SUBTRACT) & 1) != 0) {
+        // Numpad -: A/B the relayed block-give (picked-up weapon display).
+        g_relayed_block_give = !g_relayed_block_give;
+        const bool was = g_logging_enabled;
+        g_logging_enabled = true;
+        log_line(g_relayed_block_give
+                     ? "RELAYED-BLOCK-GIVE = ON (picked-up arts, may fountain)"
+                     : "RELAYED-BLOCK-GIVE = OFF (stable whitelist only)");
+        g_logging_enabled = was;
+        if (!g_relayed_block_give) {
+            for (RelayedWeaponBlock& e : g_relayed_weapon_store) {
+                e = {};
+            }
+        }
+    }
     if (foreground && (GetAsyncKeyState(VK_MULTIPLY) & 1) != 0) {
         // Numpad *: A/B the holstered-weapon pre-give. ON (default) = give the puppet
         // its weapons even while the peer's are holstered (fills back/hip AP at spawn);
@@ -11846,6 +12101,7 @@ void __fastcall hooked_update(void* object) {
             if (object == retained_player_object(1)) {
                 apply_peer_held_weapon_state();
                 apply_peer_weapon_pickup();
+                apply_peer_weapon_give();
                 apply_queued_fire_events(object);
             }
             drive_remote_slot1_actions_tick();
@@ -11889,6 +12145,7 @@ void __fastcall hooked_update(void* object) {
     if (object == retained_player_object(1)) {
         apply_peer_held_weapon_state();
         apply_peer_weapon_pickup();
+        apply_peer_weapon_give();
         apply_queued_fire_events(object);
     }
     drive_remote_slot1_actions_tick();

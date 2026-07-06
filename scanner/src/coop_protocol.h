@@ -129,6 +129,28 @@ struct PickupPacket {
     float ammo = 0.0F;                   // serializer float (ammo?); 0 for v1
 };
 
+// One-shot picked-up-weapon give relay (EVENT semantics, 2026-07-06 night).
+// Sender: GiveWeapon+9 diagnostic detour observes the script-event give
+// (ret_rva 0xDD4208, local player controller) and captures the REAL 0xC0
+// WeaponInfo block. Runtime dump proved the block is pure POD (world-space drop
+// transform at +0x00..0x1F, def/name hashes, ammo counts at +0x62/+0x84, byte
+// flags) - no pointers, so a raw cross-process copy is valid. Receiver gives it
+// to the puppet ONCE via controller vt+0x158 (seq-deduped, no retry loop - the
+// retry loops were the "weapon fountain" root in all three prior attempts).
+constexpr std::uint32_t kWeaponGiveMagic = 0x47504F43;  // "COPG"
+constexpr std::uint16_t kWeaponGiveVersion = 1;
+constexpr std::size_t kWeaponInfoBytes = 0xC0;
+
+struct WeaponGivePacket {
+    std::uint32_t magic = kWeaponGiveMagic;
+    std::uint16_t version = kWeaponGiveVersion;
+    std::uint8_t draw_flag = 0;  // GiveWeapon a3 as observed on the sender
+    std::uint8_t reserved = 0;
+    std::uint32_t sequence = 0;
+    std::uint32_t weapon_art_id = 0;  // info+0x80, for logging/sanity
+    std::uint8_t weapon_info[kWeaponInfoBytes]{};
+};
+
 // One-shot fire relay: local PlayerFireController::Fire captured on the sender
 // and replayed on the remote retained Player via the same native entry point.
 constexpr std::uint32_t kFirePacketMagic = 0x45524946;  // "FIRE"
