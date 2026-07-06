@@ -1,5 +1,34 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-07, Cursor — продолжение Codex: class-slot swap в relay give, build `t`)
+
+**Продолжено с места остановки Codex** (коммиты `3d7d52e`…`7aabc23`):
+статика нашла корень фонтана = M-30 садится в manager-слот 1 (коллизия с пистолетом),
+план = REMOVE старого оружия в peer-слоте перед GiveWeapon.
+
+**Реализовано (build `2026-07-07t`):**
+1. `seh_remove_weapon_in_slot` — **исправлен** примитив: `GetWeaponBySlot` (vt+0xB0) +
+   `ProcessKillTree`, не vt+0x188 (это `GetWeaponByClass`, class-index ≠ slot-index).
+2. `apply_peer_weapon_give` — перед one-shot relay give: `peer_slot_of_art(art)` из
+   raw snapshot (слоты 0/1/16/17/2/3/20/22) → remove чужой art в том же слоте → give.
+3. Диагностика: `GIVEWEAPON-RELAY-APPLY target= removed= removedArt= slotAfter=`.
+
+**Стабильная ветка сохранена:** `g_relayed_block_give` default OFF (Numpad -);
+one-shot pickup relay через `WeaponGivePacket` "COPG" + sender hook GiveWeapon+9
+(`ret_rva=0xDD4208`) работает без пер-тик re-give из store.
+
+**Фальсифицируемый прогноз теста:**
+- Подобрать M-30 на copy 1 → `GIVEWEAPON-RELAY-SEND` / на copy 2
+  `GIVEWEAPON-RELAY-APPLY target=16 removed=16 removedArt=0x8075397d slotAfter=16`
+  (net-режим: long-gun класс 16 → слот 16, не 1).
+- Фонтан из Надин **не** должен появиться; пистолет остаётся в слоте 17/1.
+- Если `target=-1` (snapshot отстаёт) — remove пропускается; тогда возможен
+  частичный регресс → нужен fallback по def-классу.
+
+**Следующий ход:** runtime confirm; при успехе — включить `g_relayed_block_give` с
+give-once memo; при `target=-1` — fallback remove по WeaponArtDef+8 через
+`sub_141094420` net remap.
+
 ## Turn note (2026-07-06, Cursor — стабилизация build `s`, fountain откат)
 
 **Зафиксировано по запросу пользователя** после регрессии «фонтан оружия» на билдах

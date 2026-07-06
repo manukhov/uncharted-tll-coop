@@ -149,6 +149,12 @@ constexpr std::uintptr_t kGiveWeaponTailRva = 0x10A4D49;
 // give-weapon event path (hash 0xFB1091A3 branch). Runtime-confirmed 2026-07-06:
 // a real ground pickup logs exactly this ret_rva.
 constexpr std::uintptr_t kPickupGiveRetRva = 0xDD4208;
+// ProcessKillTree 0x1416A5C20: destroys a weapon process object. Used with
+// GetWeaponBySlot (controller vtable +0xB0) to free a manager slot before a
+// relayed pickup give — otherwise the new long gun spills into the next slot and
+// collides with the pistol (confirmed fountain root 2026-07-07).
+constexpr std::uintptr_t kProcessKillTreeRva = 0x16A5C20;
+constexpr std::size_t kWeaponControllerGetWeaponBySlotVtOffset = 0xB0;
 constexpr std::uintptr_t kNetEventSyncWeaponPickupsApplyRva = 0xBCE440;
 constexpr std::uintptr_t kNetEventSyncWeaponPickupsVftableRva = 0x29FCF90;
 constexpr std::uintptr_t kWeaponPickupVftableRva = 0x2AA66C0;

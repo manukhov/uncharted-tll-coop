@@ -138,14 +138,14 @@ struct PickupPacket {
 // to the puppet ONCE via controller vt+0x158 (seq-deduped, no retry loop - the
 // retry loops were the "weapon fountain" root in all three prior attempts).
 constexpr std::uint32_t kWeaponGiveMagic = 0x47504F43;  // "COPG"
-constexpr std::uint16_t kWeaponGiveVersion = 1;
+constexpr std::uint16_t kWeaponGiveVersion = 2;
 constexpr std::size_t kWeaponInfoBytes = 0xC0;
 
 struct WeaponGivePacket {
     std::uint32_t magic = kWeaponGiveMagic;
     std::uint16_t version = kWeaponGiveVersion;
     std::uint8_t draw_flag = 0;  // GiveWeapon a3 as observed on the sender
-    std::uint8_t reserved = 0;
+    std::int8_t manager_slot = -1;  // sender find_weapon_slot_by_art_id at capture
     std::uint32_t sequence = 0;
     std::uint32_t weapon_art_id = 0;  // info+0x80, for logging/sanity
     std::uint8_t weapon_info[kWeaponInfoBytes]{};

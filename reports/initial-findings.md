@@ -25065,3 +25065,17 @@ give-им/скан-им в сжатом пространстве, пока дв�
 3. Если подтвердится net-расширенное хранилище — swap делать по расширенному классу
    (kill GetWeaponByClass(ctrl, realClass) + give), и капчу/скан привести к тем же
    индексам.
+
+### STATIC 2026-07-07: class-slot swap реализован в relay give (build `t`)
+
+**Реализация (продолжение Codex):** `apply_peer_weapon_give` перед one-shot
+`GiveWeapon` вызывает `peer_slot_of_art` (raw snapshot слоты
+{0,1,16,17,2,3,20,22}) и `seh_remove_weapon_in_slot`:
+`get_weapon_from_slot` (controller vt+0xB0) → `ProcessKillTree` (0x1416A5C20).
+
+**Поправка к черновику Codex:** vt+0x188 = `GetWeaponByClass(classIdx)`, не
+detach-by-slot; для remove-by-manager-slot нужен vt+0xB0, не +0x188.
+
+**Статус:** HYPOTHESIS до рантайма. Прогноз: `GIVEWEAPON-RELAY-APPLY target=16
+removedArt=0x8075397d slotAfter=16`, фонтан отсутствует. `g_relayed_block_give`
+остаётся OFF; re-give из store не активен.
