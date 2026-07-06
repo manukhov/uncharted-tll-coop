@@ -141,6 +141,9 @@ constexpr std::uintptr_t kPlayerTryStartBumpActionRva = 0x0CE8E10;
 // Weapon-pickup relay (2026-07-06, see initial-findings). OnInteract named by its
 // own assert in weapon-pickup.cpp; the Apply drives net-pick-up-other-client.
 constexpr std::uintptr_t kWeaponPickupOnInteractRva = 0x157AA70;
+// PlayerWeaponController::GiveWeapon 0x1410A4D40 (vt+0x158) + 9: diagnostic hook
+// point past the entry `test rdx,rdx; jz rel32` (which is not relocatable).
+constexpr std::uintptr_t kGiveWeaponTailRva = 0x10A4D49;
 constexpr std::uintptr_t kNetEventSyncWeaponPickupsApplyRva = 0xBCE440;
 constexpr std::uintptr_t kNetEventSyncWeaponPickupsVftableRva = 0x29FCF90;
 constexpr std::uintptr_t kWeaponPickupVftableRva = 0x2AA66C0;

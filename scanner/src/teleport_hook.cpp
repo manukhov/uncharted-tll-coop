@@ -2146,6 +2146,64 @@ bool install_weapon_pickup_gate() {
     return g_original_weapon_pickup_on_interact != nullptr;
 }
 
+// DIAGNOSTIC (2026-07-06): log every PlayerWeaponController::GiveWeapon call with
+// the art id and the RETURN ADDRESS RVA. Purpose: the OnInteract pickup hook is
+// installed but SILENT on real ground pickups (runtime-disproved twice), so the
+// true pickup->give caller is unknown. GiveWeapon is vtable +0x158 (virtual, no
+// static xrefs); one logged pickup names the real path. Hooked at +9 because the
+// function opens with `test rdx,rdx; jz rel32` (relative, not relocatable); at +9
+// the next 17 bytes are position-independent pushes/lea and RAX is dead.
+using GiveWeaponTailFunction = void(__fastcall*)(
+    void*, void*, std::int64_t, std::int64_t, std::int64_t);
+GiveWeaponTailFunction g_original_give_weapon_tail = nullptr;
+
+void __fastcall hooked_give_weapon_tail(
+    void* controller, void* weapon_info, std::int64_t a3, std::int64_t a4,
+    std::int64_t a5) {
+    static std::atomic<int> logged{0};
+    if (logged.fetch_add(1) < 400) {
+        std::uint32_t art = 0;
+        if (weapon_info != nullptr &&
+            readable_bytes(static_cast<std::byte*>(weapon_info) + 0x80) >=
+                sizeof(art)) {
+            std::memcpy(
+                &art, static_cast<std::byte*>(weapon_info) + 0x80, sizeof(art));
+        }
+        const std::uintptr_t ret =
+            reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+        std::ostringstream line;
+        line << "GIVEWEAPON-CALL art=0x" << std::hex << art
+             << " ctrl=0x" << reinterpret_cast<std::uintptr_t>(controller)
+             << " ret_rva=0x" << (ret - g_module)
+             << std::dec << " a3=" << a3 << " a4=" << a4;
+        force_log_line(line.str().c_str());
+    }
+    if (g_original_give_weapon_tail != nullptr) {
+        g_original_give_weapon_tail(controller, weapon_info, a3, a4, a5);
+    }
+}
+
+bool install_give_weapon_diagnostic() {
+    // PlayerWeaponController::GiveWeapon 0x1410A4D40 + 9 (skip test rdx/jz):
+    // mov r11,rsp; push rbp; push r13; push r14; push r15; lea rbp,[r11-0x868].
+    constexpr std::array<std::uint8_t, 17> kGiveWeaponTailPrologue{
+        0x4C, 0x8B, 0xDC, 0x55, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
+        0x49, 0x8D, 0xAB, 0x98, 0xF7, 0xFF, 0xFF,
+    };
+    g_original_give_weapon_tail =
+        reinterpret_cast<GiveWeaponTailFunction>(
+            install_fire_gate_detour(
+                kGiveWeaponTailRva,
+                kGiveWeaponTailPrologue.data(),
+                kGiveWeaponTailPrologue.size(),
+                reinterpret_cast<void*>(&hooked_give_weapon_tail),
+                "GiveWeapon caller diagnostic"));
+    boot_log_line(g_original_give_weapon_tail != nullptr
+                      ? "GiveWeapon caller diagnostic installed"
+                      : "GiveWeapon caller diagnostic SKIPPED");
+    return g_original_give_weapon_tail != nullptr;
+}
+
 bool install_reticle_hud_gate() {
     constexpr std::array<std::uint8_t, 20> kReticlePublisherPrologue{
         0x4C, 0x8B, 0xDC, 0x55, 0x41, 0x57, 0x49, 0x8D, 0xAB, 0x38,
@@ -13121,6 +13179,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
     install_weapon_pickup_gate();
+    install_give_weapon_diagnostic();
     install_build_fire_args_gate();
     install_pose_seed_gate();
     install_get_blended_camera_gate();

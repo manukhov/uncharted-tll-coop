@@ -24872,3 +24872,21 @@ sender hook OnInteract -> wire {identity, ammo} -> receiver: резолв зер
 пикапа, свой runtime id, стек-событие NetEventSyncWeaponPickups, вызов Apply
 0x140BCE440. 11 новых функций размечено в IDB (apply_labels 902 fn,
 save_database True). Реализация релея = следующий ход.
+
+### CONFIRMED 2026-07-06 (ночь): настоящий путь give при подборе с земли
+
+Диагностический детур на PlayerWeaponController::GiveWeapon+9 (0x1410A4D49; +9,
+т.к. вход начинается с нерелоцируемого `test rdx,rdx; jz rel32`) поймал реальный
+подбор (art=0x3019cbee, полуавтомат):
+- **ret_rva=0xDD4208** → вызывающий = `sub_140DCDEA0` (35КБ) — обработчик
+  СКРИПТОВЫХ СОБЫТИЙ игрока (свитч по хешам event-id).
+- Ветка хеша **0xFB1091A3** = give-weapon-событие: `sub_140DD9DA0` строит полный
+  WeaponInfo из аргументов события (event+0x28), затем call [vt+0x158] GiveWeapon
+  (ctrl=player+0x1D88, info, draw_flag из sub_1401D5200, 0, r14).
+- **REJECTED (окончательно): WeaponPickupInteractControl::OnInteract как sender-хук
+  подбора** — детур стоял и force-логировал, два реальных подбора прошли мимо.
+  Подбор доставляется скриптовым событием, не интеракт-контролом.
+- Sender-детект подбора = хук GiveWeapon с фильтром (локальный контроллер,
+  ret_rva=0xDD4208). Приёмнику нужен native REPLACE слота (remove+give), иначе
+  give не-whitelisted арта в занятый слот дропается движком (фонтан, проверено
+  трижды: наш give, Cursor WeaponInfo-релей, повторный give).
