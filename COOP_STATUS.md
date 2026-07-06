@@ -1,5 +1,58 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-06, Cursor — стабилизация build `s`, fountain откат)
+
+**Зафиксировано по запросу пользователя** после регрессии «фонтан оружия» на билдах
+`o`/`p`/`q`.
+
+**Откат (build `2026-07-06s`):**
+- Убран **WeaponInfo relay** — хук `PlayerWeaponController::GiveWeapon`, пакет
+  `WeaponInfoPacket`, `apply_peer_weapon_info`.
+- `puppet_weapon_give_allowed` снова **строгий whitelist** (3 art: pistol / rifle /
+  scoped pistol). Подобранное с земли оружие **не синхронизируется в руках** — это
+  осознанный trade-off ради стабильности.
+- **Оставлено:** pickup relay (`OnInteract` → `PickupPacket` → native Apply),
+  `force_log_line` для `PICKUP-*` / `HELD-WEAPON-*`, verified give memo, pose-seed
+  fire path (native fire OFF), held-weapon slot sync для whitelist arts.
+
+**Следующий ход (когда продолжат):** статически понять, почему `GiveWeapon` с полным
+`WeaponInfo` для pickup arts (`0x3019cbee` и др.) снова вызывает fountain на puppet;
+возможные пути — relay только через `NetEventSyncWeaponPickups` без повторного
+`GiveWeapon`, или отдельный draw path без inventory mutation.
+
+## Turn note (2026-07-06, Cursor — продолжение Claude: fire-caller pose-seed + pickup relay, build OK)
+
+**Собрано и заинжекчено** (PID 25372 / 16372, `tll_teleport_hook.dll`). Логи по
+умолчанию OFF (F11).
+
+**Сделано поверх незакоммиченного WIP Claude:**
+1. **StatePacket v8** — sender шлёт `pose_seed` (32 байта, flag `0x0200`) из
+   `CameraManager(0)→*(+0xB0)+0x60` (уже было в WIP).
+2. **Weapon pickup relay** — sender хук `WeaponPickupInteractControl::OnInteract`
+   `0x14157AA70` → UDP `PickupPacket`; receiver `NetEventSyncWeaponPickups_Apply`
+   `0x140BCE440` на игровом потоке (WIP Claude, **ещё не runtime-проверено**).
+3. **Fire direction (redesign по LESSON 2026-07-05):** широкий override resolver
+   заменён на **fire-caller gate**:
+   - хук `PlayerFireController_BuildFireArgsAndFire` `0x140E2BCD0` выставляет
+     `thread_local g_pose_seed_fire_only_override` только когда owner == puppet
+     (slot 1);
+   - хук `ResolveScreenRoutePoseSeedOrDefault` при этом guard подменяет **только
+     quat** (`seed+0x10`), позицию луча оставляет от puppet resolver;
+   - `g_puppet_relay_pose_seed` default **OFF**, toggle **VK_APPS** (context menu).
+
+**Прогноз теста (pose-seed):** VK_APPS ON → puppet стреляет по направлению прицела
+пира, aim camera **не** замирает (в отличие от broad override 2026-07-05).
+
+**Прогноз теста (pickup):** поднять оружие на copy A → в логе (F11) `PICKUP-SEND` /
+на copy B `PICKUP-APPLY`; pickup исчезает у второй копии. Если object id не
+совпадают между инстансами — нужен name-hash fallback.
+
+**Открыто:** Chloe vanish при ADS снайпера на copy 2; weapon attach `attached=0`;
+grenade arc — тот же pose seed, но отдельный caller (пока не захукан).
+
+**Следующий ход:** runtime confirm pose-seed (VK_APPS) + pickup; при успехе —
+grenade caller; sniper vanish — статика scope camera / model cull screen-1.
+
 ## Turn note (2026-07-05, Claude — FIRE RAY источник найден: pose seed CameraManager+0xB0→+0x60, фикс build-ready)
 
 **Статика замкнула цепочку «стреляет не в ту сторону» до конца** (реестр: "FIRE RAY

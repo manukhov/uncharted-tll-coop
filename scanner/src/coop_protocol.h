@@ -111,6 +111,24 @@ struct ClientDamagePacket {
     float damage = 0.0f;
 };
 
+// One-shot weapon-pickup relay: the sender's WeaponPickupInteractControl::OnInteract
+// hook (0x14157AA70) captures the picked-up WeaponPickup's runtime object id
+// (obj+0xBC); the receiver stack-constructs a NetEventSyncWeaponPickups and calls
+// its Apply (0x140BCE440), which drives the native net-pick-up-other-client flow
+// (removes the ground pickup / processes the remote pickup). v1 assumes runtime ids
+// match across copies (same save); if they diverge, switch to name-hash matching.
+constexpr std::uint32_t kPickupPacketMagic = 0x4B434950;  // "PICK"
+constexpr std::uint16_t kPickupPacketVersion = 1;
+
+struct PickupPacket {
+    std::uint32_t magic = kPickupPacketMagic;
+    std::uint16_t version = kPickupPacketVersion;
+    std::uint16_t reserved = 0;
+    std::uint32_t sequence = 0;
+    std::uint32_t pickup_object_id = 0;  // WeaponPickup NdGameObject runtime id
+    float ammo = 0.0F;                   // serializer float (ammo?); 0 for v1
+};
+
 // One-shot fire relay: local PlayerFireController::Fire captured on the sender
 // and replayed on the remote retained Player via the same native entry point.
 constexpr std::uint32_t kFirePacketMagic = 0x45524946;  // "FIRE"

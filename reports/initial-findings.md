@@ -24697,6 +24697,20 @@ weapon-give path (ensure_puppet_has_peer_weapons), not caused by these changes.
 Confirmed-good this session: perf (readable_bytes), aim-JITTER single-source fix.
 Status: **reverted to stable baseline; direction fix = fire-caller redesign next.**
 
+### HYPOTHESIS 2026-07-06: fire-caller pose-seed relay (quat-only, thread_local guard)
+
+Implemented in `teleport_hook.cpp` (build OK, runtime pending):
+- Hook `PlayerFireController_BuildFireArgsAndFire` `0x140E2BCD0` arms
+  `g_pose_seed_fire_only_override` only when `controller+0x108` owner ==
+  retained slot-1 puppet.
+- Existing hook `ResolveScreenRoutePoseSeedOrDefault` `0x141C077B0` replaces
+  **orientation only** (`out+0x10`, 16 bytes) from peer `StatePacket.pose_seed`
+  (flag `0x0200`) when guard is armed and `idx==1`; position left from native
+  resolver.
+- Toggle `g_puppet_relay_pose_seed` default OFF, **VK_APPS**.
+- Falsifiable prediction: with VK_APPS ON, puppet shots align to peer crosshair
+  without freezing aim camera (broad override regression must NOT recur).
+
 ### RUNTIME 2026-07-05: weapon-switch bug is on the APPLY/ATTACH side, not capture
 
 User switched pistol/rifle/holster on Chloe (copy1 2012), puppet showed a stale

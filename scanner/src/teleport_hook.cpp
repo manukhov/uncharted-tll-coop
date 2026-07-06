@@ -122,6 +122,8 @@ using ReticleAimHudPublisherFunction =
 using BlindfireReticleHudPublisherFunction = void(__fastcall*)();
 using PoseSeedResolverFunction = void*(__fastcall*)(void*, unsigned int);
 PoseSeedResolverFunction g_original_pose_seed_resolver = nullptr;
+using GetBlendedCameraTransformFunction = std::int64_t(__fastcall*)(void*, void*);
+GetBlendedCameraTransformFunction g_original_get_blended_camera_transform = nullptr;
 InputScaleCopyFunction g_original_input_scale_copy = nullptr;
 GameInfoKeyboardModeFunction g_original_gameinfo_keyboard_mode = nullptr;
 EvaluateKeyboardButtonBindingFunction g_original_evaluate_keyboard_button_binding =
@@ -281,6 +283,9 @@ XInputGetCapabilitiesFn g_real_xinput_get_caps = nullptr;
 using PlayerFireControllerFireFunction = void(__fastcall*)(
     void*, void*, void*, double);
 PlayerFireControllerFireFunction g_original_player_fire = nullptr;
+using BuildFireArgsAndFireFunction = void(__fastcall*)(
+    void*, void*, void*, double);
+BuildFireArgsAndFireFunction g_original_build_fire_args = nullptr;
 using PlayerFireControllerTryStartFireFunction = char(__fastcall*)(void*);
 using PlayerFireControllerCheckShotReadinessFunction =
     char(__fastcall*)(void*, void*, double);
@@ -357,10 +362,10 @@ std::uint64_t remote_puppet_fire_pulse(std::uint64_t latch_actions) {
 // Native Fire: pistol/scoped-pistol only; uses full sender fire_args for aim.
 // DISABLED by default (2026-07-04): native PlayerFireController::Fire replay on the
 // puppet spawns ProjectileBulletInstant::ProbeKick (sub_14152C9B0) one tick later on
-// the game thread with the sender's aim vectors, which reference the sender's target
-// space and are invalid for the puppet — it dereferences garbage and crashes the
-// receiver OUTSIDE the SEH __try. Button-pulse relay runs the game's own fire logic
-// with the puppet's valid state and is stable.
+// Replay sender FireArgs on the puppet (after sanitize + world-origin retarget).
+// Default OFF after 2026-07-06f: relaxing this path crashed the receiver on a
+// remote pistol shot. Keep button relay active while pose-seed/camera hooks are
+// validated separately.
 volatile bool g_native_fire_relay = false;
 // Relay the peer's sustained aim-press (0x200) into the PUPPET joypad. When true
 // the puppet enters full weapon ADS — and because ss-hud-sniper-reticle-manager is
@@ -369,7 +374,16 @@ volatile bool g_native_fire_relay = false;
 // Default true: keep full ADS/aim stance on the remote Player. The duplicated
 // scope is gated on the HUD query side, not by removing aim from the puppet.
 // Toggle live with F8 to A/B the aim stance vs. the scope leak.
+// Relay peer aim-press (ADS) for pistol/shotgun; rifle uses pose-only ADS by default
+// (see g_puppet_rifle_pose_only_ads) so the puppet mesh stays visible.
 volatile bool g_puppet_relay_aim_press = true;
+// Sniper/rifle: relay aim direction but NOT scoped-ADS on the puppet (prevents the
+// DrawControl mesh-hide that makes Chloe vanish on the receiver). F8 still toggles
+// full ADS relay for A/B.
+volatile bool g_puppet_rifle_pose_only_ads = true;
+// Set for the current game-thread frame while the peer is aiming — widens the
+// fire-only pose/camera overrides to sustained ADS, not just the fire instant.
+volatile bool g_puppet_aim_override_frame = false;
 // Feed peer look_stick into the puppet right stick. Default OFF: it is a sustained
 // turn-RATE that spins the puppet's aim camera and fights the body-quat facing
 // blend -> violent aim jitter (2026-07-05 regression). Page Up toggles for A/B.
@@ -384,12 +398,12 @@ volatile bool g_weapon_capture_active_fallback = true;
 // camera-yaw derivation (apply_peer_aim_facing) that conflicted with the native
 // update = the aim jitter. VK_DELETE toggles for A/B.
 volatile bool g_puppet_aim_facing_from_camera = false;
-// Override the Second player's screen-1 pose seed with the relayed peer seed (fire/
-// aim ray). Default OFF (2026-07-05): the broad idx==1 override froze the puppet's
-// aim camera (resolver has ~300 callers) and mis-placed the ray from the peer
-// camera position. Needs narrower gating (fire caller only) before re-enabling.
-// VK_END-adjacent: toggle via VK_APPS (context menu key).
-volatile bool g_puppet_relay_pose_seed = false;
+// Relay peer aim orientation into the puppet fire/aim ray. Default ON: gated to
+// puppet fire/build paths via thread_local g_puppet_aim_ray_override (not a broad
+// per-frame resolver override). VK_APPS toggles for A/B.
+volatile bool g_puppet_relay_pose_seed = true;
+thread_local bool g_pose_seed_fire_only_override = false;
+thread_local bool g_puppet_aim_ray_override = false;
 // Force the puppet's gun to draw (safe_request_gun_state) when the peer's gun is
 // out, ignoring the unreliable read_gun_state gate. Default ON: without the draw
 // the SwitchToWeapon hand-attach never completes on the puppet (attached=0). Toggle
@@ -430,9 +444,12 @@ bool is_coop_relay_fire_art(std::uint32_t art_id) {
            art_id == kCoopScopedPistolArtId;
 }
 
-// Native PlayerFireController::Fire replay is pistol-only until rifle draw works on puppets.
+// Native PlayerFireController::Fire replay is parked until the receiver crash is
+// statically explained. Button fallback still goes through hooked_player_fire,
+// where the pose-seed guard can override aim during the native fire call.
 bool is_coop_native_fire_art(std::uint32_t art_id) {
-    return art_id == kCoopPistolArtId || art_id == kCoopScopedPistolArtId;
+    (void)art_id;
+    return false;
 }
 
 // SwitchToWeapon on puppets. Was a 3-art whitelist; opened 2026-07-06 for
@@ -443,14 +460,10 @@ bool puppet_weapon_switch_allowed(std::uint32_t art_id, int slot) {
     return art_id != 0 && slot >= 0 && slot < 18;
 }
 
-// GiveWeapon on puppets: pistol, scoped pistol, and rifle (SEH-isolated).
+// GiveWeapon on puppets: known relay/pickup arts that stick in puppet inventory.
 bool puppet_weapon_give_allowed(std::uint32_t art_id) {
     // STRICT whitelist. Opening it for arbitrary picked-up arts (tried 2026-07-06)
-    // spilled rifles out of the puppet: the initialize_info+art@0x80 give recipe
-    // only STICKS for these three arts - for others the engine spawns the weapon
-    // and immediately drops it, the inventory scan never finds it, and the give
-    // retries every tick = an endless weapon fountain. Pickup sync needs a proper
-    // weapon-info block (ammo/def fields), not just the art id.
+    // spilled rifles out of the puppet. Ground-pickup display sync is parked.
     return art_id == kCoopPistolArtId || art_id == kCoopScopedPistolArtId ||
            art_id == kCoopRifleArtId;
 }
@@ -656,6 +669,16 @@ struct FireEventRing {
     std::uint32_t tail = 0;
 };
 FireEventRing g_fire_event_ring{};
+// ---- Weapon-pickup relay (2026-07-06, design in initial-findings) ----
+// Sender: OnInteract hook captures the WeaponPickup runtime id; receiver applies
+// a stack-built NetEventSyncWeaponPickups (native net-pick-up-other-client flow).
+volatile bool g_pickup_relay = true;
+std::atomic<std::uint32_t> g_pickup_send_seq{0};
+std::atomic<std::uint32_t> g_pending_pickup_id{0};
+std::atomic<float> g_pending_pickup_ammo{0.0F};
+std::atomic<std::uint32_t> g_last_applied_pickup_seq{0};
+std::atomic<std::uint32_t> g_pending_pickup_seq{0};
+std::atomic<bool> g_pending_pickup_flag{false};
 void* g_fire_puppet_tracked = nullptr;
 ULONGLONG g_fire_puppet_ready_after_ms = 0;
 std::ptrdiff_t g_player_fire_controller_offset = -1;
@@ -801,6 +824,7 @@ void derive_look_stick_from_camera(
 std::byte* joypad_resolved_input_block(int joypad_index);
 bool local_game_window_foreground();
 std::uint32_t peer_effective_held_art(const coop::StatePacket& peer);
+bool peer_holds_scoped_rifle(const coop::StatePacket& peer);
 std::uint32_t capture_held_weapon_art_id(void* player);
 
 // Master logging switch. The previous log_line opened+closed the log file on the
@@ -812,7 +836,7 @@ std::uint32_t capture_held_weapon_art_id(void* player);
 // expensive open/close is paid once. Default OFF = zero log file I/O on the game
 // thread (the real lag was memory paging from two 10 GB instances on 16 GB RAM,
 // not the mod; keeping logging off removes the mod's remaining game-thread I/O).
-// F11 toggles logging on when diagnostics are needed.
+// Keep global logging off by default; targeted diagnostics use force_log_line().
 volatile bool g_logging_enabled = false;
 static SRWLOCK g_log_lock = SRWLOCK_INIT;
 static HANDLE g_log_handle = INVALID_HANDLE_VALUE;
@@ -848,6 +872,17 @@ void log_line(const char* line) {
                   &written, nullptr);
     }
     ReleaseSRWLockExclusive(&g_log_lock);
+}
+
+void boot_log_line(const char* line) {
+    const bool was = g_logging_enabled;
+    g_logging_enabled = true;
+    log_line(line);
+    g_logging_enabled = was;
+}
+
+void force_log_line(const char* line) {
+    boot_log_line(line);
 }
 
 LONG CALLBACK crash_observer(EXCEPTION_POINTERS* exception) {
@@ -1114,6 +1149,9 @@ std::int64_t __fastcall hooked_input_scale_copy(
                 // Body facing is still driven from the peer camera separately.
                 held_mask &= ~kJoypadAimButtonMask;
             }
+            // Rifle scoped mesh-hide is handled by scrub_puppet_scoped_ads_flag
+            // (+0x1548) — do NOT strip aim-press here or the puppet never enters
+            // the aim stance and shots use the wrong camera branch.
             if (GetTickCount64() < g_fire_button_hold_until_ms &&
                 !puppet_fire_buttons_suppressed()) {
                 held_mask |= kJoypadFireButtonMask;
@@ -1654,27 +1692,259 @@ void __fastcall hooked_blindfire_reticle_hud_publisher() {
     }
 }
 
-// Override the Second player's (screen index 1) pose seed with the relayed peer
-// seed, so its fire/aim ray (PlayerFireController + grenade arc) follows the peer's
-// crosshair instead of its own uncontrolled screen-1 camera. The seed is 32 bytes
-// (position float4 + orientation quat float4) the resolver writes to `out`.
+bool copy_peer_aim_orientation_quat(float out[4]) {
+    coop::StatePacket peer{};
+    if (!g_state_net.enabled || !copy_peer_state_snapshot(peer)) {
+        return false;
+    }
+    if ((peer.flags & coop::kStateFlagPoseSeed) != 0 &&
+        valid_network_orientation(peer.pose_seed + 4)) {
+        std::memcpy(out, peer.pose_seed + 4, 4 * sizeof(float));
+        return true;
+    }
+    if ((peer.flags & coop::kStateFlagPeerCamera) != 0 &&
+        valid_network_orientation(peer.camera_quat)) {
+        std::memcpy(out, peer.camera_quat, 4 * sizeof(float));
+        return true;
+    }
+    return false;
+}
+
+void write_camera_matrix_rotation_from_quat(void* out_buffer, const float quat[4]) {
+    if (out_buffer == nullptr || quat == nullptr ||
+        readable_bytes(out_buffer) <
+            kCameraOutMatrixOffset + 12 * sizeof(float)) {
+        return;
+    }
+    auto* rows = reinterpret_cast<float*>(
+        static_cast<std::byte*>(out_buffer) + kCameraOutMatrixOffset);
+    const float x = quat[0];
+    const float y = quat[1];
+    const float z = quat[2];
+    const float w = quat[3];
+    const float xx = x * x;
+    const float yy = y * y;
+    const float zz = z * z;
+    const float xy = x * y;
+    const float xz = x * z;
+    const float yz = y * z;
+    const float wx = w * x;
+    const float wy = w * y;
+    const float wz = w * z;
+    rows[0] = 1.0F - 2.0F * (yy + zz);
+    rows[1] = 2.0F * (xy + wz);
+    rows[2] = 2.0F * (xz - wy);
+    rows[4] = 2.0F * (xy - wz);
+    rows[5] = 1.0F - 2.0F * (xx + zz);
+    rows[6] = 2.0F * (yz + wx);
+    rows[8] = 2.0F * (xz + wy);
+    rows[9] = 2.0F * (yz - wx);
+    rows[10] = 1.0F - 2.0F * (xx + yy);
+}
+
+bool copy_peer_pose_seed_32(std::uint8_t out[32]) {
+    coop::StatePacket peer{};
+    if (!g_state_net.enabled || !copy_peer_state_snapshot(peer) ||
+        (peer.flags & coop::kStateFlagPoseSeed) == 0 ||
+        !valid_network_orientation(peer.pose_seed + 4)) {
+        return false;
+    }
+    std::memcpy(out, peer.pose_seed, 32);
+    return true;
+}
+
+void apply_peer_pose_seed_to_player_aim_fields(void* player) {
+    if (player == nullptr) {
+        return;
+    }
+    std::uint8_t seed[32]{};
+    if (!copy_peer_pose_seed_32(seed)) {
+        return;
+    }
+    if (readable_bytes(static_cast<std::byte*>(player) + kPlayerAimTargetAuxOffset) <
+        32) {
+        return;
+    }
+    __try {
+        std::memcpy(
+            static_cast<std::byte*>(player) + kPlayerAimTargetOffset, seed, 16);
+        std::memcpy(
+            static_cast<std::byte*>(player) + kPlayerAimTargetAuxOffset,
+            seed + 16, 16);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
+
+void apply_peer_quat_to_fire_args(void* fire_args) {
+    if (fire_args == nullptr ||
+        readable_bytes(fire_args) < coop::kFireArgsBytes) {
+        return;
+    }
+    std::uint8_t seed[32]{};
+    if (!copy_peer_pose_seed_32(seed)) {
+        float quat[4]{};
+        if (!copy_peer_aim_orientation_quat(quat)) {
+            return;
+        }
+        std::memcpy(seed + 16, quat, 16);
+    }
+    __try {
+        if (kFireArgsAimQuatOffset + 16 <= coop::kFireArgsBytes) {
+            std::memcpy(
+                static_cast<std::byte*>(fire_args) + kFireArgsAimQuatOffset,
+                seed + 16, 16);
+        }
+        if (kFireArgsPoseSeedOffset + 32 <= coop::kFireArgsBytes) {
+            std::memcpy(
+                static_cast<std::byte*>(fire_args) + kFireArgsPoseSeedOffset,
+                seed, 32);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
+
+std::int64_t __fastcall hooked_get_blended_camera_transform(
+    void* route_entity, void* out_buffer) {
+    const std::int64_t result =
+        g_original_get_blended_camera_transform != nullptr
+            ? g_original_get_blended_camera_transform(route_entity, out_buffer)
+            : reinterpret_cast<std::int64_t>(out_buffer);
+    if (!g_puppet_relay_pose_seed || !g_state_net.enabled ||
+        !(g_puppet_aim_ray_override || g_puppet_aim_override_frame) ||
+        out_buffer == nullptr) {
+        return result;
+    }
+    // PlayerFireController_Fire sometimes calls this with
+    // ResolveScreenRouteEntityByIndex(0) even for the Second player — the route
+    // entity's +0x124 screen index is then 0 and our old gate never fired.
+    // During puppet fire (g_puppet_aim_ray_override) override regardless of idx.
+    if (!g_puppet_aim_ray_override) {
+        if (route_entity == nullptr ||
+            readable_bytes(static_cast<std::byte*>(route_entity) +
+                           kRouteEntityScreenIndexOffset) <
+                kRouteEntityScreenIndexOffset + sizeof(std::uint32_t)) {
+            return result;
+        }
+        const std::uint32_t screen_idx = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(route_entity) +
+            kRouteEntityScreenIndexOffset);
+        if (screen_idx != kSlot1ScreenIndex) {
+            return result;
+        }
+    }
+    float quat[4]{};
+    if (!copy_peer_aim_orientation_quat(quat)) {
+        return result;
+    }
+    __try {
+        write_camera_matrix_rotation_from_quat(out_buffer, quat);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    return result;
+}
+
+bool install_get_blended_camera_gate() {
+    constexpr std::array<std::uint8_t, 15> kGetBlendedPrologue{
+        0x48, 0x89, 0x5C, 0x24, 0x18,
+        0x55,
+        0x56,
+        0x57,
+        0x48, 0x81, 0xEC, 0xA0, 0x04, 0x00, 0x00,
+    };
+    g_original_get_blended_camera_transform =
+        reinterpret_cast<GetBlendedCameraTransformFunction>(
+            install_fire_gate_detour(
+                kGetBlendedCameraTransformRva,
+                kGetBlendedPrologue.data(),
+                kGetBlendedPrologue.size(),
+                reinterpret_cast<void*>(&hooked_get_blended_camera_transform),
+                "get-blended-camera aim gate"));
+    boot_log_line(g_original_get_blended_camera_transform != nullptr
+                      ? "get-blended-camera aim gate installed"
+                      : "get-blended-camera aim gate SKIPPED");
+    return g_original_get_blended_camera_transform != nullptr;
+}
+
+// Pose-seed resolver hook: when fire-only guard is active (BuildFireArgs on the
+// puppet), replace only the orientation quat (seed+0x10); keep the puppet's own
+// ray origin position from the native resolver.
 void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     void* const result = g_original_pose_seed_resolver != nullptr
         ? g_original_pose_seed_resolver(out, idx)
         : out;
-    if (g_puppet_relay_pose_seed && g_state_net.enabled && idx == 1 &&
-        out != nullptr) {
-        coop::StatePacket peer{};
-        if (copy_peer_state_snapshot(peer) &&
-            (peer.flags & coop::kStateFlagPoseSeed) != 0 &&
-            valid_network_orientation(peer.pose_seed + 4)) {
-            __try {
-                std::memcpy(out, peer.pose_seed, 32);
-            } __except (EXCEPTION_EXECUTE_HANDLER) {
-            }
+    const bool fire_path_override =
+        g_pose_seed_fire_only_override || g_puppet_aim_ray_override;
+    const bool sustained_slot1_override =
+        g_puppet_aim_override_frame && idx == kSlot1ScreenIndex;
+    if (!g_puppet_relay_pose_seed || !g_state_net.enabled || out == nullptr ||
+        !(fire_path_override || sustained_slot1_override)) {
+        return result;
+    }
+    coop::StatePacket peer{};
+    if (!copy_peer_state_snapshot(peer) ||
+        (peer.flags & coop::kStateFlagPoseSeed) == 0 ||
+        !valid_network_orientation(peer.pose_seed + 4)) {
+        return result;
+    }
+    __try {
+        std::memcpy(static_cast<std::byte*>(out) + 16, peer.pose_seed + 4, 16);
+        void* const puppet = retained_player_object(1);
+        if (puppet != nullptr &&
+            readable_bytes(static_cast<std::byte*>(puppet) + kWorldPositionOffset) >=
+                16) {
+            std::memcpy(out, static_cast<std::byte*>(puppet) + kWorldPositionOffset,
+                        16);
         }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
     return result;
+}
+
+void __fastcall hooked_build_fire_args(
+    void* controller, void* a2, void* a3, double scalar) {
+    bool armed = false;
+    if (g_puppet_relay_pose_seed && g_state_net.enabled && controller != nullptr &&
+        readable_bytes(
+            static_cast<std::byte*>(controller) + kPlayerFireControllerOwnerOffset) >=
+            sizeof(void*)) {
+        void* const owner = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(controller) + kPlayerFireControllerOwnerOffset);
+        if (owner != nullptr && owner == retained_player_object(1)) {
+            g_pose_seed_fire_only_override = true;
+            g_puppet_aim_ray_override = true;
+            armed = true;
+        }
+    }
+    if (g_original_build_fire_args != nullptr) {
+        g_original_build_fire_args(controller, a2, a3, scalar);
+    }
+    if (armed) {
+        g_pose_seed_fire_only_override = false;
+        g_puppet_aim_ray_override = false;
+    }
+}
+
+bool install_build_fire_args_gate() {
+    // PlayerFireController_BuildFireArgsAndFire 0x140E2BCD0 prologue (18 bytes,
+    // before the RIP-relative security-cookie load).
+    constexpr std::array<std::uint8_t, 18> kBuildFireArgsPrologue{
+        0x40, 0x55,
+        0x57,
+        0x48, 0x8D, 0xAC, 0x24, 0x48, 0xFB, 0xFF, 0xFF,
+        0x48, 0x81, 0xEC, 0xB8, 0x05, 0x00, 0x00,
+    };
+    g_original_build_fire_args =
+        reinterpret_cast<BuildFireArgsAndFireFunction>(
+            install_fire_gate_detour(
+                kBuildFireArgsAndFireRva,
+                kBuildFireArgsPrologue.data(),
+                kBuildFireArgsPrologue.size(),
+                reinterpret_cast<void*>(&hooked_build_fire_args),
+                "build-fire-args aim gate"));
+    boot_log_line(g_original_build_fire_args != nullptr
+                      ? "build-fire-args aim gate installed"
+                      : "build-fire-args aim gate SKIPPED");
+    return g_original_build_fire_args != nullptr;
 }
 
 bool install_pose_seed_gate() {
@@ -1695,9 +1965,9 @@ bool install_pose_seed_gate() {
                 kPoseSeedPrologue.size(),
                 reinterpret_cast<void*>(&hooked_pose_seed_resolver),
                 "pose-seed aim/fire gate"));
-    log_line(g_original_pose_seed_resolver != nullptr
-                 ? "pose-seed aim/fire gate installed"
-                 : "pose-seed aim/fire gate skipped");
+    boot_log_line(g_original_pose_seed_resolver != nullptr
+                      ? "pose-seed aim/fire gate installed"
+                      : "pose-seed aim/fire gate SKIPPED");
     return g_original_pose_seed_resolver != nullptr;
 }
 
@@ -1720,6 +1990,160 @@ bool install_scope_visible_gate() {
                  ? "scope-visible HUD gate installed"
                  : "scope-visible HUD gate skipped");
     return g_original_scope_visible_query != nullptr;
+}
+
+// ---------------- Weapon-pickup relay: sender side ----------------
+using WeaponPickupOnInteractFunction = std::int64_t(__fastcall*)(
+    std::uint64_t, std::int64_t, std::int64_t, std::int64_t);
+WeaponPickupOnInteractFunction g_original_weapon_pickup_on_interact = nullptr;
+
+// SEH leaf readers: one guarded read each, so a bad candidate pointer aborts only
+// that probe, not the whole scan.
+bool seh_read_qword(const void* addr, std::uint64_t& out) {
+    __try {
+        out = *reinterpret_cast<const volatile std::uint64_t*>(addr);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+bool seh_read_dword(const void* addr, std::uint32_t& out) {
+    __try {
+        out = *reinterpret_cast<const volatile std::uint32_t*>(addr);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+// The interact control's owner WeaponPickup pointer offset is unknown; identify it
+// deterministically by scanning the control's first 0x100 bytes for a pointer whose
+// vftable == WeaponPickup::`vftable' (0x142AA66C0), then read its runtime object id
+// (obj+0xBC, the id the game-object handle registry validates against).
+std::uint32_t read_weapon_pickup_runtime_id(std::uint64_t pickup_obj) {
+    if (pickup_obj == 0 || g_module == 0) {
+        return 0;
+    }
+    const std::uint64_t pickup_vft = g_module + kWeaponPickupVftableRva;
+    std::uint64_t vft = 0;
+    if (!seh_read_qword(reinterpret_cast<const void*>(pickup_obj), vft) ||
+        vft != pickup_vft) {
+        return 0;
+    }
+    std::uint32_t id = 0;
+    if (seh_read_dword(
+            reinterpret_cast<const void*>(pickup_obj +
+                                          kGameObjectRuntimeIdOffset),
+            id)) {
+        return id;
+    }
+    return 0;
+}
+
+std::uint32_t read_weapon_pickup_art_id(std::uint64_t pickup_obj) {
+    if (pickup_obj == 0 || g_module == 0) {
+        return 0;
+    }
+    std::uint32_t art_id = 0;
+    seh_read_dword(reinterpret_cast<const void*>(pickup_obj + 0x520), art_id);
+    return art_id;
+}
+
+float read_weapon_pickup_ammo(std::uint64_t pickup_obj) {
+    if (pickup_obj == 0 || g_module == 0) {
+        return 0.0F;
+    }
+    std::uint32_t ammo_count = 0;
+    if (!seh_read_dword(reinterpret_cast<const void*>(pickup_obj + 0x528),
+                        ammo_count)) {
+        return 0.0F;
+    }
+    return static_cast<float>(ammo_count);
+}
+
+std::uint32_t capture_weapon_pickup_object_id(std::uint64_t ctrl) {
+    if (ctrl == 0 || g_module == 0) {
+        return 0;
+    }
+    const auto* base = reinterpret_cast<const std::uint8_t*>(ctrl);
+    std::uint64_t direct = 0;
+    if (seh_read_qword(base + kWeaponPickupInteractPickupPtrOffset, direct)) {
+        const std::uint32_t direct_id = read_weapon_pickup_runtime_id(direct);
+        if (direct_id != 0) {
+            return direct_id;
+        }
+    }
+    for (std::size_t off = 0; off <= 0x100; off += 8) {
+        std::uint64_t candidate = 0;
+        if (!seh_read_qword(base + off, candidate) || candidate == 0) {
+            continue;
+        }
+        const std::uint32_t scanned_id = read_weapon_pickup_runtime_id(candidate);
+        if (scanned_id != 0) {
+            return scanned_id;
+        }
+    }
+    return 0;
+}
+
+std::int64_t __fastcall hooked_weapon_pickup_on_interact(
+    std::uint64_t a1, std::int64_t a2, std::int64_t a3, std::int64_t a4) {
+    if (g_pickup_relay) {
+        // Decompile shows a2 is the WeaponPickup ("pSelf"); a1 is the interact
+        // control. Use a1 scanning only as a fallback for older hypotheses.
+        std::uint32_t id = read_weapon_pickup_runtime_id(
+            static_cast<std::uint64_t>(a2));
+        if (id == 0) {
+            id = capture_weapon_pickup_object_id(a1);
+        }
+        const std::uint32_t art_id = read_weapon_pickup_art_id(
+            static_cast<std::uint64_t>(a2));
+        const float ammo = read_weapon_pickup_ammo(
+            static_cast<std::uint64_t>(a2));
+        const bool sent = id != 0 && g_state_net.enabled && g_state_net.peer_set;
+        if (sent) {
+            coop::PickupPacket pkt{};
+            pkt.sequence = g_pickup_send_seq.fetch_add(1) + 1;
+            pkt.pickup_object_id = id;
+            pkt.ammo = ammo;
+            sendto(g_state_net.send_socket,
+                   reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
+                   reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+                   sizeof(g_state_net.peer_addr));
+        }
+        std::ostringstream pickup_log;
+        pickup_log << "PICKUP-SEND id=0x" << std::hex << id << std::dec
+                   << " art=0x" << std::hex << art_id << std::dec
+                   << " ammo=" << ammo
+                   << " sent=" << (sent ? 1 : 0);
+        force_log_line(pickup_log.str().c_str());
+    }
+    return g_original_weapon_pickup_on_interact != nullptr
+               ? g_original_weapon_pickup_on_interact(a1, a2, a3, a4)
+               : 0;
+}
+
+bool install_weapon_pickup_gate() {
+    // WeaponPickupInteractControl::OnInteract 0x14157AA70 prologue:
+    // mov rax,rsp; push rbp; push rsi; push rdi; push r12..r15 (14 bytes, all
+    // position-independent).
+    constexpr std::array<std::uint8_t, 14> kOnInteractPrologue{
+        0x48, 0x8B, 0xC4,
+        0x55, 0x56, 0x57,
+        0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
+    };
+    g_original_weapon_pickup_on_interact =
+        reinterpret_cast<WeaponPickupOnInteractFunction>(
+            install_fire_gate_detour(
+                kWeaponPickupOnInteractRva,
+                kOnInteractPrologue.data(),
+                kOnInteractPrologue.size(),
+                reinterpret_cast<void*>(&hooked_weapon_pickup_on_interact),
+                "weapon-pickup OnInteract relay"));
+    boot_log_line(g_original_weapon_pickup_on_interact != nullptr
+                      ? "weapon-pickup OnInteract relay installed"
+                      : "weapon-pickup OnInteract relay SKIPPED");
+    return g_original_weapon_pickup_on_interact != nullptr;
 }
 
 bool install_reticle_hud_gate() {
@@ -4426,6 +4850,20 @@ DWORD WINAPI state_recv_thread(void*) {
             std::uint32_t head = g_client_dmg_head.load(std::memory_order_relaxed);
             g_client_dmg_ring[head % 64] = {dp.name_hash, dp.damage};
             g_client_dmg_head.store(head + 1, std::memory_order_release);
+        } else if (magic == coop::kPickupPacketMagic &&
+                   received == static_cast<int>(sizeof(coop::PickupPacket))) {
+            coop::PickupPacket pp{};
+            std::memcpy(&pp, buf, sizeof(pp));
+            if (pp.version == coop::kPickupPacketVersion &&
+                pp.pickup_object_id != 0 &&
+                pp.sequence !=
+                    g_last_applied_pickup_seq.load(std::memory_order_relaxed)) {
+                g_pending_pickup_id.store(pp.pickup_object_id,
+                                          std::memory_order_relaxed);
+                g_pending_pickup_ammo.store(pp.ammo, std::memory_order_relaxed);
+                g_pending_pickup_seq.store(pp.sequence, std::memory_order_relaxed);
+                g_pending_pickup_flag.store(true, std::memory_order_release);
+            }
         } else if (magic == coop::kFirePacketMagic) {
             coop::FirePacket fp{};
             if (received == static_cast<int>(sizeof(coop::FirePacket))) {
@@ -4963,9 +5401,16 @@ int find_weapon_slot_by_art_id(void* player, std::uint32_t art_id) {
     if (get_weapon == nullptr) {
         return -1;
     }
-    constexpr std::uint32_t slots[8] = {0, 1, 16, 17, 2, 3, 20, 22};
     __try {
-        for (const std::uint32_t slot : slots) {
+        for (std::uint32_t slot = 0; slot < 18; ++slot) {
+            void* weapon = get_weapon(manager, slot);
+            if (weapon == nullptr || readable_bytes(weapon) < 0x864) continue;
+            const std::uint32_t id = *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(weapon) + 0x860);
+            if (id == art_id) return static_cast<int>(slot);
+        }
+        constexpr std::uint32_t extra_slots[2] = {20, 22};
+        for (const std::uint32_t slot : extra_slots) {
             void* weapon = get_weapon(manager, slot);
             if (weapon == nullptr || readable_bytes(weapon) < 0x864) continue;
             const std::uint32_t id = *reinterpret_cast<const std::uint32_t*>(
@@ -5206,9 +5651,16 @@ bool puppet_has_weapon_art_id(void* puppet, std::uint32_t art_id) {
     if (get_weapon == nullptr) {
         return false;
     }
-    constexpr std::uint32_t slots[8] = {0, 1, 16, 17, 2, 3, 20, 22};
     __try {
-        for (const std::uint32_t slot : slots) {
+        for (std::uint32_t slot = 0; slot < 18; ++slot) {
+            void* weapon = get_weapon(manager, slot);
+            if (weapon == nullptr || readable_bytes(weapon) < 0x864) continue;
+            const std::uint32_t id = *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(weapon) + 0x860);
+            if (id == art_id) return true;
+        }
+        constexpr std::uint32_t extra_slots[2] = {20, 22};
+        for (const std::uint32_t slot : extra_slots) {
             void* weapon = get_weapon(manager, slot);
             if (weapon == nullptr || readable_bytes(weapon) < 0x864) continue;
             const std::uint32_t id = *reinterpret_cast<const std::uint32_t*>(
@@ -5281,19 +5733,69 @@ bool safe_give_weapon_art_to_puppet(void* puppet, std::uint32_t art_id) {
     static void* cache_puppet = nullptr;
     static std::uint32_t cache_art = 0;
     static bool cache_ok = false;
-    static ULONGLONG cache_fail_until_ms = 0;
-    if (puppet == cache_puppet && cache_art == art_id) {
-        if (cache_ok) {
+    if (puppet == cache_puppet && cache_art == art_id && cache_ok) {
+        if (puppet_has_weapon_art_id(puppet, art_id)) {
             return true;
         }
-        // NEGATIVE backoff (2026-07-06): a give that did not stick (weapon spawned
-        // then dropped by the engine) must NOT retry every tick - that is the
-        // "weapons pouring out of the puppet" fountain. 2.5s is enough: give is
-        // whitelist-only now, so failures are transient spawn-time ones.
-        if (GetTickCount64() < cache_fail_until_ms) {
+        cache_ok = false;
+    }
+    struct GiveSuccess {
+        void* puppet;
+        std::uint32_t art;
+        ULONGLONG last_seen_ms;
+    };
+    static GiveSuccess success_memo[8]{};
+    const ULONGLONG give_now = GetTickCount64();
+    for (GiveSuccess& memo : success_memo) {
+        if (memo.puppet == puppet && memo.art == art_id) {
+            if (puppet_has_weapon_art_id(puppet, art_id)) {
+                memo.last_seen_ms = give_now;
+                return true;
+            }
+            memo = {};
+            break;
+        }
+    }
+    const auto record_success = [&]() {
+        std::size_t victim = 0;
+        ULONGLONG oldest = ~0ULL;
+        for (std::size_t i = 0; i < 8; ++i) {
+            if (success_memo[i].last_seen_ms < oldest) {
+                oldest = success_memo[i].last_seen_ms;
+                victim = i;
+            }
+        }
+        success_memo[victim] = {puppet, art_id, give_now};
+    };
+    // PER-ART failure memo (2026-07-06, fountain root #2): a give whose weapon
+    // cannot stick (its inventory slot is occupied by a DIFFERENT art - e.g. the
+    // puppet has the pistol while the peer picked the scoped pistol) fails FOREVER:
+    // the engine spawns the weapon and drops it on the ground each attempt. The old
+    // single-slot 2.5s backoff made that a pistol raining every 2.5s. Remember
+    // failures per (puppet, art) with a long backoff instead.
+    struct GiveFail {
+        void* puppet;
+        std::uint32_t art;
+        ULONGLONG until_ms;
+    };
+    static GiveFail fail_memo[8]{};
+    for (const GiveFail& memo : fail_memo) {
+        if (memo.puppet == puppet && memo.art == art_id &&
+            give_now < memo.until_ms) {
             return false;
         }
     }
+    const auto record_fail = [&]() {
+        std::size_t victim = 0;
+        ULONGLONG oldest = ~0ULL;
+        for (std::size_t i = 0; i < 8; ++i) {
+            if (fail_memo[i].until_ms < oldest) {
+                oldest = fail_memo[i].until_ms;
+                victim = i;
+            }
+        }
+        fail_memo[victim] = {puppet, art_id, give_now + 60000};
+    };
     const auto initialize_info = reinterpret_cast<InitializeWeaponInfoFunction>(
         g_module + kInitializeWeaponInfoRva);
     __try {
@@ -5305,7 +5807,9 @@ bool safe_give_weapon_art_to_puppet(void* puppet, std::uint32_t art_id) {
         cache_art = art_id;
         cache_ok = puppet_has_weapon_art_id(puppet, art_id);
         if (!cache_ok) {
-            cache_fail_until_ms = GetTickCount64() + 2500;
+            record_fail();
+        } else {
+            record_success();
         }
         return cache_ok;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -5412,20 +5916,22 @@ void apply_peer_held_weapon_state() {
             : (peer.weapon_selected_mode > 0 ? 1 : 0);
     const int local_gun = read_gun_state(puppet);
     const bool gun_changed = peer_gun != last_peer_gun;
+    const bool has_effective_art_before =
+        puppet_has_weapon_art_id(puppet, effective_art);
+    const bool give_allowed = puppet_weapon_give_allowed(effective_art);
     int use_slot = find_weapon_slot_by_art_id(puppet, effective_art);
-    if (use_slot < 0 && peer.weapon_selected_mode > 0) {
-        use_slot = static_cast<int>(peer.weapon_selected_mode);
-    }
-    if (use_slot < 0 && puppet_weapon_give_allowed(effective_art)) {
+    if (use_slot < 0 && give_allowed && peer_gun == 1) {
         if (give_held_weapon_to_puppet(puppet, effective_art)) {
             use_slot = find_weapon_slot_by_art_id(puppet, effective_art);
         }
     }
+    // Do not trust the sender's numeric slot for arts the puppet does not own.
+    // Picked-up weapons need a real pickup/weapon-info sync; selecting the same
+    // slot number on the receiver just re-selects a stale local weapon.
     if (use_slot < 0 && peer_gun == 1 && effective_art == kCoopRifleArtId) {
         use_slot = 0;
     }
-    const bool peer_wants_drawn =
-        peer_gun == 1 || peer.weapon_selected_mode > 0;
+    const bool peer_wants_drawn = peer_gun == 1;
     const bool attachment_pending =
         peer_wants_drawn && use_slot >= 0 &&
         capture_weapon_selected_mode(puppet) != use_slot;
@@ -5452,10 +5958,14 @@ void apply_peer_held_weapon_state() {
     bool gave = false;
     bool select_ok = false;
     bool gun_ok = false;
-    if (!puppet_has_weapon_art_id(puppet, effective_art) &&
+    if (use_slot < 0 &&
+        !puppet_has_weapon_art_id(puppet, effective_art) &&
         puppet_weapon_give_allowed(effective_art) &&
         peer_gun == 1) {
         gave = give_held_weapon_to_puppet(puppet, effective_art);
+        if (gave) {
+            use_slot = find_weapon_slot_by_art_id(puppet, effective_art);
+        }
     }
     if (art_changed) {
         if (puppet != last_puppet) {
@@ -5463,10 +5973,13 @@ void apply_peer_held_weapon_state() {
             last_switch_fail_ms = 0;
             last_switch_art = 0;
         }
-        if (puppet_has_weapon_art_id(puppet, effective_art)) {
+        if (use_slot >= 0 || puppet_has_weapon_art_id(puppet, effective_art)) {
             gave = true;
-        } else if (puppet_weapon_give_allowed(effective_art)) {
+        } else if (peer_gun == 1 && puppet_weapon_give_allowed(effective_art)) {
             gave = give_held_weapon_to_puppet(puppet, effective_art);
+            if (gave) {
+                use_slot = find_weapon_slot_by_art_id(puppet, effective_art);
+            }
         }
         last_art_id = effective_art;
         last_puppet = puppet;
@@ -5493,10 +6006,10 @@ void apply_peer_held_weapon_state() {
                  capture_weapon_selected_mode(puppet) == 0 && use_slot == 1);
             const bool switch_cooldown =
                 effective_art == last_switch_art &&
-                now - last_switch_ms < 500;
+                now - last_switch_ms < (art_changed ? 150 : 500);
             const bool fail_backoff =
                 !last_switch_ok && effective_art == last_switch_art &&
-                now - last_switch_fail_ms < 5000 && !art_changed;
+                now - last_switch_fail_ms < 2000 && !art_changed && !gave;
             if (need_switch && !switch_cooldown && !fail_backoff &&
                 puppet_weapon_switch_allowed(effective_art, use_slot)) {
                 const int attached_slot = capture_weapon_selected_mode(puppet);
@@ -5603,6 +6116,10 @@ void apply_peer_held_weapon_state() {
 
     if (now - last_log > 250 || art_changed || mode_changed || gun_changed) {
         last_log = now;
+        int draw_slot_log = -1;
+        std::uint32_t draw_state_log = 0;
+        const bool have_draw_state =
+            read_weapon_draw_state(puppet, draw_slot_log, draw_state_log);
         std::ostringstream line;
         line << "HELD-WEAPON-APPLY art=0x" << std::hex << effective_art
              << " wire=0x" << peer.held_weapon_art_id
@@ -5615,8 +6132,12 @@ void apply_peer_held_weapon_state() {
              << " gave=" << (gave ? 1 : 0)
              << " select=" << (select_ok ? 1 : 0)
              << " slot=" << use_slot
-             << " gunOk=" << (gun_ok ? 1 : 0);
-        log_line(line.str().c_str());
+             << " gunOk=" << (gun_ok ? 1 : 0)
+             << " has=" << (has_effective_art_before ? 1 : 0)
+             << " giveAllowed=" << (give_allowed ? 1 : 0)
+             << " drawSlot=" << (have_draw_state ? draw_slot_log : -99)
+             << " drawState=" << (have_draw_state ? draw_state_log : 0);
+        force_log_line(line.str().c_str());
     }
 }
 
@@ -5977,9 +6498,12 @@ void send_local_player_state() {
         // art with a flapping gun bit -> puppet flicker + never holstered to the
         // back). draw 2/4 = weapon from the CURRENT slot with gun=1; draw 0 =
         // holstered: keep whatever art the chain found (back display) but force
-        // gun=0. Transitions 1/5: leave the inferred values alone.
+        // gun=0. Transitions 1/5 are deliberately not published: fallback art is
+        // stale during pickup/switch animation, so sending it makes the puppet show
+        // the previous weapon.
         int draw_slot = -1;
         std::uint32_t draw_state = 0;
+        bool suppress_held_weapon_wire = false;
         if (read_weapon_draw_state(weapon_src, draw_slot, draw_state)) {
             if ((draw_state == 2 || draw_state == 4) && draw_slot >= 0 &&
                 draw_slot < 18) {
@@ -6007,9 +6531,11 @@ void send_local_player_state() {
                         }
                     }
                 }
+            } else if (draw_state == 1 || draw_state == 5) {
+                suppress_held_weapon_wire = true;
             }
         }
-        if (held_art != 0) {
+        if (held_art != 0 && !suppress_held_weapon_wire) {
             pkt.held_weapon_art_id = held_art;
             pkt.weapon_selected_mode = weapon_mode;
             if (gun == 0 || gun == 1) {
@@ -6030,7 +6556,7 @@ void send_local_player_state() {
                      << static_cast<unsigned>(pkt.weapon_selected_mode)
                      << " gun=" << gun << " ds=" << draw_state
                      << " cs=" << draw_slot;
-                log_line(line.str().c_str());
+                force_log_line(line.str().c_str());
             }
         }
     }
@@ -6492,6 +7018,17 @@ void apply_puppet_transform_post(void* puppet) {
         // behavior via g_puppet_aim_facing_from_camera for A/B.
         if (g_puppet_aim_facing_from_camera) {
             apply_peer_aim_facing_to_player(puppet, pkt);
+        } else if ((pkt.flags & coop::kStateFlagPoseSeed) != 0 &&
+                   valid_network_orientation(pkt.pose_seed + 4)) {
+            orientation_dot =
+                blend_network_orientation(quat, pkt.pose_seed + 4, 0.55F);
+        } else if (valid_network_orientation(pkt.camera_quat)) {
+            float fwd_x = 0.0F;
+            float fwd_z = 0.0F;
+            camera_forward_horizontal(pkt.camera_quat, fwd_x, fwd_z);
+            float yaw_quat[4]{};
+            yaw_quat_from_horizontal_forward(fwd_x, fwd_z, yaw_quat);
+            orientation_dot = blend_network_orientation(quat, yaw_quat, 0.55F);
         } else if (valid_network_orientation(pkt.quat)) {
             orientation_dot = blend_network_orientation(quat, pkt.quat, 0.35F);
         }
@@ -6756,6 +7293,61 @@ bool puppet_weapon_sync_ready(void* puppet) {
     return GetTickCount64() >= g_fire_puppet_ready_after_ms;
 }
 
+// ---------------- Weapon-pickup relay: receiver side ----------------
+// SEH leaf: the actual native Apply call, isolated so the C++ caller can log.
+bool seh_call_pickup_apply(void* event) {
+    using ApplyFn = void(__fastcall*)(void*);
+    const auto apply = reinterpret_cast<ApplyFn>(
+        g_module + kNetEventSyncWeaponPickupsApplyRva);
+    __try {
+        apply(event);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+// Runs on the game thread (drive tick). Stack-constructs NetEventSyncWeaponPickups
+// (layout from ctor 0x140BCDFC0 + serializer: +0 vft, +8 type id 0x0101006A,
+// +24 count, +28 {u32 id, float ammo}) and calls its Apply, which resolves the id
+// via the game-object handle registry and drives net-pick-up-other-client.
+void apply_peer_weapon_pickup() {
+    if (!g_pending_pickup_flag.load(std::memory_order_acquire)) {
+        return;
+    }
+    const std::uint32_t id = g_pending_pickup_id.load(std::memory_order_relaxed);
+    const float ammo = g_pending_pickup_ammo.load(std::memory_order_relaxed);
+    const std::uint32_t seq =
+        g_pending_pickup_seq.load(std::memory_order_relaxed);
+    g_pending_pickup_flag.store(false, std::memory_order_release);
+    if (g_module == 0 || id == 0 || !world_stable()) {
+        return;
+    }
+    g_last_applied_pickup_seq.store(seq, std::memory_order_relaxed);
+    // Apply reads its manager from the global manager table (slot 22, optionally
+    // remapped); pre-check the direct slot so an uninitialized table is a logged
+    // skip instead of a crash inside the native call.
+    std::uint64_t mgr22 = 0;
+    seh_read_qword(
+        reinterpret_cast<const void*>(g_module + kGlobalManagerTableRva + 22 * 8),
+        mgr22);
+    bool ok = false;
+    if (mgr22 != 0) {
+        alignas(16) std::uint8_t event[0x40]{};
+        *reinterpret_cast<std::uint64_t*>(event) =
+            g_module + kNetEventSyncWeaponPickupsVftableRva;
+        *reinterpret_cast<std::uint32_t*>(event + 8) = 0x0101006AU;
+        *reinterpret_cast<std::uint32_t*>(event + 24) = 1;
+        *reinterpret_cast<std::uint32_t*>(event + 28) = id;
+        *reinterpret_cast<float*>(event + 32) = ammo;
+        ok = seh_call_pickup_apply(event);
+    }
+    std::ostringstream line;
+    line << "PICKUP-APPLY id=0x" << std::hex << id << " mgr22=0x" << mgr22
+         << std::dec << " seq=" << seq << " ok=" << (ok ? 1 : 0);
+    force_log_line(line.str().c_str());
+}
+
 void suppress_puppet_fire_buttons(ULONGLONG duration_ms) {
     g_suppress_puppet_fire_buttons_until_ms = GetTickCount64() + duration_ms;
     g_fire_button_hold_until_ms = 0;
@@ -6891,6 +7483,34 @@ bool puppet_fire_ready(void* puppet, std::uint32_t art_id) {
     return resolve_fire_controller(puppet, -1) != nullptr;
 }
 
+bool puppet_native_fire_relay_ready(void* puppet, std::uint32_t art_id) {
+    if (!g_native_fire_relay || !is_coop_native_fire_art(art_id) ||
+        puppet == nullptr || art_id == 0 || !g_state_net.enabled) {
+        return false;
+    }
+    if (!player_object_stable(puppet) || !puppet_weapon_sync_ready(puppet)) {
+        return false;
+    }
+    if (GetTickCount64() < g_puppet_native_fire_allowed_after_ms) {
+        return false;
+    }
+    if (!puppet_has_weapon_art_id(puppet, art_id)) {
+        return false;
+    }
+    if (resolve_fire_controller(puppet, -1) == nullptr) {
+        return false;
+    }
+    void* weapon = get_player_active_weapon(puppet);
+    if (weapon == nullptr) {
+        const int slot = find_weapon_slot_by_art_id(puppet, art_id);
+        if (slot >= 0) {
+            weapon = get_weapon_from_slot(puppet, slot);
+        }
+    }
+    return weapon != nullptr && readable_bytes(weapon) >= 0x864 &&
+           coop_fire_art_family_match(weapon_art_id_from_object(weapon), art_id);
+}
+
 bool puppet_native_fire_allowed(void* puppet, std::uint32_t art_id) {
     if (!g_native_fire_relay || !is_coop_native_fire_art(art_id)) {
         return false;
@@ -6966,6 +7586,35 @@ void sanitize_fire_args(std::uint8_t* args) {
         std::memcpy(&value, args + off, sizeof(value));
         if (plausible_ptr(value)) {
             std::memset(args + off, 0, sizeof(std::uint64_t));
+        }
+    }
+}
+
+// Sender FireArgs carry the peer's built aim ray; keep direction, rebase origin to
+// the puppet's world position, then overlay peer pose_seed quat on the aim block.
+void prepare_puppet_fire_args_from_sender(
+    void* puppet, const std::uint8_t* sender_args, std::uint8_t* out_args) {
+    if (sender_args == nullptr || out_args == nullptr) {
+        return;
+    }
+    std::memcpy(out_args, sender_args, coop::kFireArgsBytes);
+    sanitize_fire_args(out_args);
+    if (puppet != nullptr &&
+        readable_bytes(static_cast<std::byte*>(puppet) + kWorldPositionOffset) >=
+            16) {
+        __try {
+            std::memcpy(
+                out_args,
+                static_cast<std::byte*>(puppet) + kWorldPositionOffset, 16);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+        }
+    }
+    std::uint8_t seed[32]{};
+    if (copy_peer_pose_seed_32(seed) &&
+        kFireArgsAimQuatOffset + 16 <= coop::kFireArgsBytes) {
+        __try {
+            std::memcpy(out_args + kFireArgsAimQuatOffset, seed + 16, 16);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
         }
     }
 }
@@ -7170,7 +7819,7 @@ void apply_queued_fire_events(void* puppet) {
 
     if (g_native_fire_relay && g_original_player_fire != nullptr &&
         is_coop_native_fire_art(packet.weapon_art_id) &&
-        puppet_native_fire_allowed(puppet, packet.weapon_art_id)) {
+        puppet_native_fire_relay_ready(puppet, packet.weapon_art_id)) {
         static void* last_native_puppet = nullptr;
         static ULONGLONG last_native_fire_ms = 0;
         const ULONGLONG now = GetTickCount64();
@@ -7183,11 +7832,17 @@ void apply_queued_fire_events(void* puppet) {
                     : -1;
             void* const controller =
                 resolve_fire_controller(puppet, preferred_offset);
-            void* const weapon = get_player_active_weapon(puppet);
+            void* weapon = get_player_active_weapon(puppet);
+            if (weapon == nullptr) {
+                const int slot = find_weapon_slot_by_art_id(
+                    puppet, packet.weapon_art_id);
+                if (slot >= 0) {
+                    weapon = get_weapon_from_slot(puppet, slot);
+                }
+            }
             const std::uint32_t weapon_art =
                 weapon != nullptr && readable_bytes(weapon) >= 0x864
-                    ? *reinterpret_cast<const std::uint32_t*>(
-                          static_cast<const std::byte*>(weapon) + 0x860)
+                    ? weapon_art_id_from_object(weapon)
                     : 0;
             if (controller != nullptr && weapon != nullptr &&
                 readable_bytes(controller) >= 0x110 &&
@@ -7196,10 +7851,15 @@ void apply_queued_fire_events(void* puppet) {
                 coop_fire_art_family_match(weapon_art, packet.weapon_art_id)) {
                 suppress_puppet_fire_buttons(400);
                 alignas(16) std::uint8_t args[coop::kFireArgsBytes]{};
-                std::memcpy(args, packet.fire_args, coop::kFireArgsBytes);
-                sanitize_fire_args(args);
-                if (safe_replay_player_fire(
-                        controller, args, weapon, packet.scalar)) {
+                prepare_puppet_fire_args_from_sender(
+                    puppet, packet.fire_args, args);
+                g_puppet_aim_ray_override = true;
+                g_pose_seed_fire_only_override = true;
+                const bool fired = safe_replay_player_fire(
+                    controller, args, weapon, packet.scalar);
+                g_pose_seed_fire_only_override = false;
+                g_puppet_aim_ray_override = false;
+                if (fired) {
                     last_native_puppet = puppet;
                     last_native_fire_ms = now;
                     std::ostringstream line;
@@ -7328,7 +7988,21 @@ void __fastcall hooked_player_fire(
         }
         send_fire_packet(controller, fire_args, weapon, scalar);
     }
+    const bool puppet_fire =
+        g_puppet_relay_pose_seed && g_state_net.enabled &&
+        player == retained_player_object(1);
+    if (puppet_fire) {
+        g_puppet_aim_ray_override = true;
+        g_pose_seed_fire_only_override = true;
+        prepare_puppet_fire_args_from_sender(player, nullptr, nullptr);
+        apply_peer_quat_to_fire_args(fire_args);
+        apply_peer_pose_seed_to_player_aim_fields(player);
+    }
     g_original_player_fire(controller, fire_args, weapon, scalar);
+    if (puppet_fire) {
+        g_puppet_aim_ray_override = false;
+        g_pose_seed_fire_only_override = false;
+    }
 }
 
 void log_player_fire_gate(
@@ -7645,6 +8319,81 @@ volatile float g_desired_world_x = 0.0F;
 volatile float g_desired_world_z = 0.0F;
 volatile bool g_have_desired_world = false;
 
+void sync_puppet_aim_camera_from_peer(const coop::StatePacket& peer) {
+    if (!g_puppet_relay_pose_seed || !g_state_net.enabled || g_module == 0) {
+        return;
+    }
+    const bool peer_aiming =
+        (peer.flags & 8) != 0 &&
+        (peer.input_buttons & kJoypadAimButtonMask) != 0;
+    if (!peer_aiming) {
+        return;
+    }
+    float quat[4]{};
+    if (!copy_peer_aim_orientation_quat(quat)) {
+        return;
+    }
+    auto* const cache_base = reinterpret_cast<std::uint8_t*>(
+        g_module + kPerScreenCameraTransformCacheRva);
+    auto* const screen1_entry =
+        cache_base + kPerScreenCameraCacheStride * kSlot1ScreenIndex;
+    if (readable_bytes(screen1_entry) >=
+        kCameraOutMatrixOffset + 12 * sizeof(float)) {
+        __try {
+            write_camera_matrix_rotation_from_quat(screen1_entry, quat);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+        }
+    }
+    const auto get_camera_manager =
+        reinterpret_cast<GetCameraManagerFunction>(
+            g_module + kGetCameraManagerRva);
+    void* const mgr = get_camera_manager(kSlot1ScreenIndex);
+    if (mgr != nullptr &&
+        readable_bytes(static_cast<std::byte*>(mgr) + 0xB0) >= sizeof(void*)) {
+        void* const blk = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(mgr) + 0xB0);
+        if (blk != nullptr &&
+            readable_bytes(static_cast<std::byte*>(blk) + 0x60) >= 32) {
+            __try {
+                std::uint8_t seed[32]{};
+                if (copy_peer_pose_seed_32(seed)) {
+                    std::memcpy(static_cast<std::byte*>(blk) + 0x60, seed, 32);
+                } else {
+                    std::memcpy(static_cast<std::byte*>(blk) + 0x70, quat, 16);
+                }
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+            }
+        }
+        if (readable_bytes(static_cast<std::byte*>(mgr) + kCameraRotationOffset) >=
+            16) {
+            __try {
+                std::memcpy(
+                    static_cast<std::byte*>(mgr) + kCameraRotationOffset, quat,
+                    16);
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+            }
+        }
+    }
+}
+
+void scrub_puppet_scoped_ads_flag(void* puppet) {
+    if (puppet == nullptr ||
+        readable_bytes(static_cast<std::byte*>(puppet) + kPlayerAdsActiveOffset) <
+            sizeof(std::uint32_t)) {
+        return;
+    }
+    __try {
+        *reinterpret_cast<std::uint32_t*>(
+            static_cast<std::byte*>(puppet) + kPlayerAdsActiveOffset) = 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
+
+bool peer_holds_scoped_rifle(const coop::StatePacket& peer) {
+    const std::uint32_t art = peer_effective_held_art(peer);
+    return art == kCoopRifleArtId;
+}
+
 void sync_screen1_camera_rotation_to_screen0() {
     const auto get_camera_manager =
         reinterpret_cast<GetCameraManagerFunction>(
@@ -7949,6 +8698,16 @@ void drive_remote_slot1_actions_tick() {
     if (g_puppet_aim_facing_from_camera) {
         apply_peer_aim_facing_to_player(remote_player, peer);
     }
+    g_puppet_aim_override_frame =
+        peer_aiming && g_puppet_relay_pose_seed && g_state_net.enabled;
+    if (g_puppet_aim_override_frame) {
+        sync_puppet_aim_camera_from_peer(peer);
+        apply_peer_pose_seed_to_player_aim_fields(remote_player);
+    }
+    if (g_puppet_rifle_pose_only_ads && peer_holds_scoped_rifle(peer) &&
+        peer_aiming) {
+        scrub_puppet_scoped_ads_flag(remote_player);
+    }
     scrub_local_viewport_aim_hud_leak();
 
     // branch1+0x10 becomes the clone joypad HELD button mask (block+0x518) via the
@@ -7984,6 +8743,19 @@ void drive_remote_slot1_actions_tick() {
             log_line(t.str().c_str());
         }
         prev_f8 = f8;
+    }
+    {
+        // VK_APPS: toggle fire-caller pose-seed orientation relay (quat only).
+        static bool prev_apps = false;
+        const bool apps = (GetAsyncKeyState(VK_APPS) & 0x8000) != 0;
+        if (apps && !prev_apps) {
+            g_puppet_relay_pose_seed = !g_puppet_relay_pose_seed;
+            std::ostringstream t;
+            t << "PUPPET-POSE-SEED fire-ray relay (quat only) = "
+              << (g_puppet_relay_pose_seed ? "ON" : "OFF");
+            log_line(t.str().c_str());
+        }
+        prev_apps = apps;
     }
     std::uint64_t actions = remote_puppet_actions_from_peer(peer.input_buttons);
     if ((peer.flags & 8) != 0) {
@@ -9662,15 +10434,6 @@ void net_tick() {
     static ULONGLONG last_freeze = 0, last_hp_probe = 0, last_hpsys = 0;
     static ULONGLONG last_animation_mirror = 0, last_weapon_apply = 0;
     const ULONGLONG now = GetTickCount64();
-    if (foreground && (GetAsyncKeyState(VK_F11) & 1) != 0) {
-        // F11: toggle diagnostic logging. Default OFF = zero log file I/O on the
-        // game thread. (VK_HOME is already the DLL-inert toggle in aux_input_thread;
-        // do not reuse it.)
-        const bool was = g_logging_enabled;
-        g_logging_enabled = true;
-        log_line(was ? "LOGGING OFF (zero file I/O)" : "LOGGING ON");
-        g_logging_enabled = !was;
-    }
     if (foreground && (GetAsyncKeyState(VK_NEXT) & 1) != 0) {
         // Page Down: A/B the readable_bytes implementation. Fast = lock-free SEH
         // page probe (default); slow = original per-call VirtualQuery (VAD-lock
@@ -9716,6 +10479,15 @@ void net_tick() {
         log_line(g_puppet_aim_facing_from_camera
                      ? "PUPPET-AIM-FACING = camera-yaw (old, may jitter)"
                      : "PUPPET-AIM-FACING = peer body quat blend (single source)");
+        g_logging_enabled = was;
+    }
+    if (foreground && (GetAsyncKeyState(VK_APPS) & 1) != 0) {
+        g_puppet_relay_pose_seed = !g_puppet_relay_pose_seed;
+        const bool was = g_logging_enabled;
+        g_logging_enabled = true;
+        log_line(g_puppet_relay_pose_seed
+                     ? "PUPPET-POSE-SEED fire-ray relay (quat only) = ON"
+                     : "PUPPET-POSE-SEED fire-ray relay (quat only) = OFF");
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_MULTIPLY) & 1) != 0) {
@@ -11012,30 +11784,10 @@ void __fastcall hooked_update(void* object) {
                     : "Command source: remote client"
             );
         }
-        if ((GetAsyncKeyState(VK_F11) & 1) != 0) {
-            if (g_motion_backend == MotionBackend::Type2MoveTo) {
-                g_motion_backend = MotionBackend::Type4Command;
-            } else if (g_motion_backend == MotionBackend::Type4Command) {
-                g_motion_backend = MotionBackend::Type7Steering;
-            } else {
-                g_motion_backend = MotionBackend::Type2MoveTo;
-            }
-            for (auto& [ignored, state] : g_object_states) {
-                state.was_moving = false;
-                state.last_input_mask = 0;
-                state.last_command_time = 0;
-            }
-            log_line(
-                g_motion_backend == MotionBackend::Type2MoveTo
-                    ? "Motion backend: Type2MoveTo"
-                    : (g_motion_backend == MotionBackend::Type4Command
-                           ? "Motion backend: Type4Command"
-                           : "Motion backend: Type7Steering")
-            );
-        }
         if (object != g_controlled_object) {
             if (object == retained_player_object(1)) {
                 apply_peer_held_weapon_state();
+                apply_peer_weapon_pickup();
                 apply_queued_fire_events(object);
             }
             drive_remote_slot1_actions_tick();
@@ -11078,6 +11830,7 @@ void __fastcall hooked_update(void* object) {
 
     if (object == retained_player_object(1)) {
         apply_peer_held_weapon_state();
+        apply_peer_weapon_pickup();
         apply_queued_fire_events(object);
     }
     drive_remote_slot1_actions_tick();
@@ -12357,15 +13110,20 @@ DWORD WINAPI install_hook(void*) {
         log_line("tll.exe module not found");
         return 1;
     }
+    boot_log_line("TLL hook DLL init 2026-07-06s (early init marker)");
     AddVectoredExceptionHandler(0, &crash_observer);
-    log_line("crash observer installed (no breakpoints)");
+    boot_log_line("TLL hook DLL init 2026-07-06s (stable: no WeaponInfo relay, strict give whitelist)");
+    boot_log_line("crash observer installed (no breakpoints)");
     install_joypad_disabled_commands_lock();
     install_joypad3_analog_route();
     install_joypad3_keyboard_isolation();
     install_player_fire_capture();
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
+    install_weapon_pickup_gate();
+    install_build_fire_args_gate();
     install_pose_seed_gate();
+    install_get_blended_camera_gate();
     install_reticle_hud_gate();
     // Player collision/bump probes are intentionally parked. Enabling layer 4<->5
     // collision made the two independent simulations diverge and triggered the
@@ -12618,7 +13376,6 @@ DWORD WINAPI install_hook(void*) {
     log_line("Press F7 to test split-screen login chain");
     log_line("Press F8 to toggle manual control");
     log_line("Press F10 to toggle main camera between Chloe and clone");
-    log_line("Press F11 to toggle motion backend");
     return 0;
 }
 
