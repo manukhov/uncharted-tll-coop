@@ -435,19 +435,22 @@ bool is_coop_native_fire_art(std::uint32_t art_id) {
     return art_id == kCoopPistolArtId || art_id == kCoopScopedPistolArtId;
 }
 
-// SwitchToWeapon on puppets: rifle slot 0 and pistol slot 1 are SEH-safe.
+// SwitchToWeapon on puppets. Was a 3-art whitelist; opened 2026-07-06 for
+// picked-up weapons (any art the peer actually holds). ApplyWeaponSwitch is
+// slot-driven and SEH-isolated; valid inventory slots are 0..17 (the vt+0x78
+// resolver scans 18 slots).
 bool puppet_weapon_switch_allowed(std::uint32_t art_id, int slot) {
-    if (art_id == kCoopRifleArtId && slot == 0) {
-        return true;
-    }
-    if (slot <= 0) {
-        return false;
-    }
-    return is_coop_relay_fire_art(art_id);
+    return art_id != 0 && slot >= 0 && slot < 18;
 }
 
 // GiveWeapon on puppets: pistol, scoped pistol, and rifle (SEH-isolated).
 bool puppet_weapon_give_allowed(std::uint32_t art_id) {
+    // STRICT whitelist. Opening it for arbitrary picked-up arts (tried 2026-07-06)
+    // spilled rifles out of the puppet: the initialize_info+art@0x80 give recipe
+    // only STICKS for these three arts - for others the engine spawns the weapon
+    // and immediately drops it, the inventory scan never finds it, and the give
+    // retries every tick = an endless weapon fountain. Pickup sync needs a proper
+    // weapon-info block (ammo/def fields), not just the art id.
     return art_id == kCoopPistolArtId || art_id == kCoopScopedPistolArtId ||
            art_id == kCoopRifleArtId;
 }
@@ -5036,6 +5039,34 @@ int read_weapon_in_hands_slot(void* player) {
         static_cast<const std::byte*>(controller) + 0x130));
 }
 
+// Authoritative draw state (runtime-pinned 2026-07-06, see hook_offsets.h):
+// controller+0x120 = current slot (-1 none), +0x134 = draw state machine
+// (0 holstered, 2 drawn no-ADS, 4 ADS, 1/5 transitions). This is what the old
+// detection chain missed: a drawn-but-not-aimed weapon is NOT attached to
+// rightHand/leftHand yet (vt+0x78 blind) and +0x130 is only the requested slot.
+bool read_weapon_draw_state(void* player, int& slot, std::uint32_t& state) {
+    slot = -1;
+    state = 0;
+    if (player == nullptr ||
+        readable_bytes(static_cast<std::byte*>(player) + 0x1D90) < sizeof(void*)) {
+        return false;
+    }
+    void* controller = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(player) + 0x1D88);
+    if (controller == nullptr ||
+        readable_bytes(static_cast<std::byte*>(controller) +
+                       kWeaponCtrlCurrentSlotOffset) <
+            kWeaponCtrlDrawStateOffset - kWeaponCtrlCurrentSlotOffset +
+                sizeof(std::uint32_t)) {
+        return false;
+    }
+    slot = *reinterpret_cast<const std::int32_t*>(
+        static_cast<const std::byte*>(controller) + kWeaponCtrlCurrentSlotOffset);
+    state = *reinterpret_cast<const std::uint32_t*>(
+        static_cast<const std::byte*>(controller) + kWeaponCtrlDrawStateOffset);
+    return true;
+}
+
 bool safe_switch_to_weapon(void* player, std::uint32_t slot, bool in_hands) {
     if (player == nullptr || g_module == 0) return false;
     if (!player_object_stable(player)) {
@@ -5250,8 +5281,18 @@ bool safe_give_weapon_art_to_puppet(void* puppet, std::uint32_t art_id) {
     static void* cache_puppet = nullptr;
     static std::uint32_t cache_art = 0;
     static bool cache_ok = false;
-    if (puppet == cache_puppet && cache_art == art_id && cache_ok) {
-        return true;
+    static ULONGLONG cache_fail_until_ms = 0;
+    if (puppet == cache_puppet && cache_art == art_id) {
+        if (cache_ok) {
+            return true;
+        }
+        // NEGATIVE backoff (2026-07-06): a give that did not stick (weapon spawned
+        // then dropped by the engine) must NOT retry every tick - that is the
+        // "weapons pouring out of the puppet" fountain. 2.5s is enough: give is
+        // whitelist-only now, so failures are transient spawn-time ones.
+        if (GetTickCount64() < cache_fail_until_ms) {
+            return false;
+        }
     }
     const auto initialize_info = reinterpret_cast<InitializeWeaponInfoFunction>(
         g_module + kInitializeWeaponInfoRva);
@@ -5263,6 +5304,9 @@ bool safe_give_weapon_art_to_puppet(void* puppet, std::uint32_t art_id) {
         cache_puppet = puppet;
         cache_art = art_id;
         cache_ok = puppet_has_weapon_art_id(puppet, art_id);
+        if (!cache_ok) {
+            cache_fail_until_ms = GetTickCount64() + 2500;
+        }
         return cache_ok;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         cache_puppet = puppet;
@@ -5390,9 +5434,18 @@ void apply_peer_held_weapon_state() {
         (puppet != g_puppet_gun_ok_puppet ||
          effective_art != g_puppet_gun_ok_art ||
          now > g_puppet_gun_ok_until_ms);
+    // Peer is holstered but the puppet still has a weapon OUT (its own draw state
+    // +0x134 in {2,4}; e.g. right after the initial give, whose visible effects
+    // land ticks LATER than the art_changed tick) -> keep ticking so the
+    // peer_gun==0 branch can run the -1 holster. Self-clears once holstered (0).
+    int hp_slot = -1;
+    std::uint32_t hp_state = 0;
+    const bool holster_pending =
+        peer_gun == 0 && read_weapon_draw_state(puppet, hp_slot, hp_state) &&
+        (hp_state == 2 || hp_state == 4);
 
     if (!art_changed && !mode_changed && !gun_changed &&
-        !attachment_pending && !readiness_pending) {
+        !attachment_pending && !readiness_pending && !holster_pending) {
         return;
     }
 
@@ -5469,10 +5522,34 @@ void apply_peer_held_weapon_state() {
         }
     }
     if (peer_gun == 0) {
-        const int attached_slot = capture_weapon_selected_mode(puppet);
-        if (attached_slot > 0) {
-            safe_switch_to_weapon(
-                puppet, static_cast<std::uint32_t>(attached_slot), false);
+        // HOLSTER FIX (2026-07-06): SwitchToWeapon (vt+0x40) EARLY-RETURNS when the
+        // requested slot equals the current slot (+0x120) -> re-selecting the
+        // attached slot with in_hands=false was a no-op and the weapon stayed in
+        // hands. The concrete state machine ApplyWeaponSwitch 0x1410A28A0 (vt+0x48)
+        // has a dedicated slot==-1 branch that runs the holster transition
+        // (sub_1410A3EA0) on the current weapon - the native "put everything away".
+        // Gate on the PUPPET's own draw state (+0x134 in {2,4} = something is out),
+        // which also sidesteps the slot-0 ambiguity of the vt+0x78 resolver.
+        int puppet_slot = -1;
+        std::uint32_t puppet_draw = 0;
+        if (read_weapon_draw_state(puppet, puppet_slot, puppet_draw) &&
+            (puppet_draw == 2 || puppet_draw == 4)) {
+            // holster_pending can drive this every tick; rate-limit so the holster
+            // anim is not restarted while it is already playing.
+            static void* last_holster_puppet = nullptr;
+            static ULONGLONG last_holster_req_ms = 0;
+            if (puppet != last_holster_puppet ||
+                now - last_holster_req_ms > 800) {
+                last_holster_puppet = puppet;
+                last_holster_req_ms = now;
+                safe_request_gun_state(puppet, 0);
+                if (readable_bytes(static_cast<std::byte*>(puppet) + 0x1D90) >=
+                    sizeof(void*)) {
+                    void* ctrl = *reinterpret_cast<void**>(
+                        static_cast<std::byte*>(puppet) + 0x1D88);
+                    safe_weapon_controller_draw(ctrl, 0xFFFFFFFFu, false);
+                }
+            }
         }
     }
     const bool attached_now =
@@ -5892,7 +5969,46 @@ void send_local_player_state() {
         if ((pkt.flags & 8) != 0) {
             aim_buttons = pkt.input_buttons;
         }
-        const int gun = infer_gun_state(weapon_src, weapon_mode, aim_buttons);
+        int gun = infer_gun_state(weapon_src, weapon_mode, aim_buttons);
+        // AUTHORITATIVE OVERRIDE (2026-07-06): controller+0x120/+0x134 draw state.
+        // Fixes the two capture blind spots at once: (a) a drawn-but-not-aimed
+        // weapon (old chain saw nothing / stale GetActiveWeapon art -> "pistol only
+        // shows when aiming"); (b) holstered (old fallback kept sending the stale
+        // art with a flapping gun bit -> puppet flicker + never holstered to the
+        // back). draw 2/4 = weapon from the CURRENT slot with gun=1; draw 0 =
+        // holstered: keep whatever art the chain found (back display) but force
+        // gun=0. Transitions 1/5: leave the inferred values alone.
+        int draw_slot = -1;
+        std::uint32_t draw_state = 0;
+        if (read_weapon_draw_state(weapon_src, draw_slot, draw_state)) {
+            if ((draw_state == 2 || draw_state == 4) && draw_slot >= 0 &&
+                draw_slot < 18) {
+                const std::uint32_t cur_art = weapon_art_id_from_object(
+                    get_weapon_from_slot(weapon_src, draw_slot));
+                if (cur_art != 0) {
+                    held_art = cur_art;
+                    weapon_mode = static_cast<std::uint8_t>(draw_slot);
+                }
+                gun = 1;
+            } else if (draw_state == 0) {
+                gun = 0;
+                weapon_mode = 0;
+                // Spawn case: GetActiveWeapon is null until the FIRST draw of the
+                // session, so the old chain yields no art and flag 0x80 never sets
+                // -> the puppet spawns with an empty back. Fall back to the first
+                // coop-relay art from the raw inventory snapshot (populated from
+                // spawn) so the receiver can give+holster the back weapon.
+                if (held_art == 0) {
+                    for (std::size_t i = 0; i < 8; ++i) {
+                        const std::uint32_t raw = g_weapon_capture_raw_ids[i];
+                        if (raw != 0 && is_coop_relay_fire_art(raw)) {
+                            held_art = raw;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         if (held_art != 0) {
             pkt.held_weapon_art_id = held_art;
             pkt.weapon_selected_mode = weapon_mode;
@@ -5912,7 +6028,8 @@ void send_local_player_state() {
                 line << "HELD-WEAPON-SEND art=0x" << std::hex << held_art
                      << " mode=" << std::dec
                      << static_cast<unsigned>(pkt.weapon_selected_mode)
-                     << " gun=" << gun;
+                     << " gun=" << gun << " ds=" << draw_state
+                     << " cs=" << draw_slot;
                 log_line(line.str().c_str());
             }
         }
@@ -6622,8 +6739,11 @@ void track_puppet_for_fire_relay(void* puppet) {
     if (puppet != g_fire_puppet_tracked) {
         g_fire_puppet_tracked = puppet;
         g_puppet_native_fire_allowed_after_ms = 0;
-        // Fresh slot-1 spawns need GiveWeapon/SwitchToWeapon before native Fire replay.
-        g_fire_puppet_ready_after_ms = GetTickCount64() + 5000;
+        // Fresh slot-1 spawns need GiveWeapon/SwitchToWeapon before native Fire
+        // replay. 2s (was 5s: with the give-fail backoff on top the puppet showed
+        // no weapons for ~10-15s after spawn; native fire has its own +1000ms
+        // gate after gunOk anyway).
+        g_fire_puppet_ready_after_ms = GetTickCount64() + 2000;
     }
 }
 
@@ -6707,10 +6827,10 @@ std::uint32_t peer_effective_held_art(const coop::StatePacket& peer) {
     if ((peer.flags & 0x80) == 0 || peer.held_weapon_art_id == 0) {
         return 0;
     }
-    if (peer.weapon_selected_mode == 1 &&
-        peer.held_weapon_art_id == kCoopRifleArtId) {
-        return kCoopPistolArtId;
-    }
+    // (2026-07-06) Removed the old mode==1 rifle->pistol remap: it patched the BLIND
+    // capture (mode forced to 1 by the requested-slot heuristic while the stale art
+    // said rifle). The draw-state capture is authoritative now, and mode==1 can be
+    // an honest current slot holding the rifle - remapping would corrupt it.
     return peer.held_weapon_art_id;
 }
 

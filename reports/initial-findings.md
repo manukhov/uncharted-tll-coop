@@ -24754,3 +24754,48 @@ single-source, gun-draw hand-attach (aca61ef, rifle switch works).
 APs" at spawn; drive only that with hysteresis, not a competing per-frame holster.
 Status: **empty-back root FOUND (0x80-gated give); holster mechanic FOUND
 (SwitchToWeapon false); safe apply layer = open static task.**
+
+### CONFIRMED 2026-07-06: weapon-display cluster SOLVED (draw-state capture + native holster)
+
+**PlayerWeaponController (player+0x1D88) fields — CONFIRMED by 500ms live watch over
+holster/draw/ADS cycles + SwitchToWeapon decompile:**
+- `+0x108` owner Player pointer (validated live: matched retained player).
+- `+0x120` int32 CURRENT slot (-1 = none). SwitchToWeapon (vt+0x40, 0x1410A1C10)
+  early-returns when the requested slot equals this — re-selecting the same slot
+  with in_hands=false was therefore a NO-OP (why the first holster attempt failed).
+- `+0x12C` / `+0x130` written at the end of ApplyWeaponSwitch (+75/+76 dwords):
+  +0x130 is only the REQUESTED slot (as long suspected).
+- `+0x134` uint32 DRAW STATE machine: 0 = holstered/idle, 2 = drawn (no ADS),
+  4 = ADS, 1/5 = draw/holster transitions. THE authoritative "weapon out" signal;
+  vt+0x78 (GetHandAttachedWeaponSlot 0x1410A49E0) is blind for drawn-not-aimed
+  weapons (checks physical rightHand/leftHand attach only) and GetActiveWeapon is
+  stale (last-drawn; null before the session's first draw).
+
+**ApplyWeaponSwitch (vt+0x48, 0x1410A28A0 'PlayerWeaponController_ApplyWeaponSwitch'):
+slot == -1 is the NATIVE "put everything away"** — dedicated branch runs the holster
+transition (sub_1410A3EA0) on the current weapon. CONFIRMED at runtime: calling
+vt+0x48(ctrl, -1, 0, 0, 0) on the puppet holsters rifle AND pistol to their APs
+(user-verified), where switch(same-slot,false) and gun-state=0 alone did nothing.
+
+**Sender capture rework (user-verified fixes):** draw state 2/4 -> art from CURRENT
+slot, gun=1 (fixes "pistol only shows when aiming"); draw 0 -> gun=0 + art kept for
+back display, with raw-inventory fallback pre-first-draw (fixes empty back at spawn);
+transitions 1/5 leave inferred values. Receiver holster_pending keeps ticking while
+the puppet has a weapon out (its own +0x134 in {2,4}) so the -1 holster lands after
+the initial give.
+
+**REJECTED (again, new mechanism): opening puppet_weapon_give_allowed to arbitrary
+picked-up arts.** The initialize_info+art@0x80 give recipe only STICKS for the three
+whitelisted arts; for others the engine spawns-then-drops the weapon, the inventory
+scan never finds it, the give retried every tick -> "weapon fountain" out of the
+puppet + hand flicker. Fixed by restoring the whitelist + a 2.5s negative backoff in
+safe_give_weapon_art_to_puppet. puppet_weapon_switch_allowed stays OPEN (any art,
+slot 0..17) — switching among existing slots is safe.
+
+**Timing:** puppet weapon warmup 5s -> 2s (g_fire_puppet_ready_after_ms); spawn
+weapons now appear in ~2-4s (was 10-15s with the old warmup + 10s backoff).
+
+**Open next steps:** (1) exact-art sync for PICKED-UP weapons needs a full
+weapon-info block (ammo/def fields), not just art@0x80; (2) pickup ANIMATION sync —
+candidate path: bump-action relay (Player_TryStartBumpAction 0x140CE8E10 already
+pinned in hook_offsets.h), needs the static hypothesis workup first.

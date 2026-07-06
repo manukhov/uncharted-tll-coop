@@ -83,6 +83,13 @@ constexpr std::size_t kReferenceTransformOffset = 0x100;
 constexpr std::size_t kCameraRotationOffset = 0x1B0;
 constexpr std::size_t kPlayerAdsActiveOffset = 0x1548;
 constexpr std::size_t kLocomotionControllerOffset = 0x15B8;
+// PlayerWeaponController (player+0x1D88) fields. Runtime-pinned 2026-07-06 by a
+// 500ms live watch across holster/draw/ADS cycles (+ SwitchToWeapon 0x1410A1C10
+// decompile: compares the requested slot against +0x120, owner Player at +0x108).
+constexpr std::size_t kWeaponCtrlCurrentSlotOffset = 0x120;  // int32; -1 = none
+// Draw state machine: 0 = holstered/idle, 2 = drawn (no ADS), 4 = ADS,
+// 1/5 = draw/holster transitions.
+constexpr std::size_t kWeaponCtrlDrawStateOffset = 0x134;
 // Normalizes the peer's horizontal ground speed (units/s) into a 0..1 left-stick
 // magnitude fed to the clone's slot-1 input so its own locomotion blends walk/run.
 // Tunable at runtime; ~full-run speed.
