@@ -773,6 +773,8 @@ std::atomic<bool> g_pending_weapon_give_flag{false};
 void* resolve_live_player_safe(std::uint32_t index);
 int find_weapon_slot_by_art_id(void* player, std::uint32_t art_id);
 int resolve_give_target_slot(std::uint32_t art, int packet_slot);
+void dump_player_weapon_slots(const char* tag, void* player);
+void seh_remove_weapon_in_slot(void* puppet, int slot);
 void* g_fire_puppet_tracked = nullptr;
 ULONGLONG g_fire_puppet_ready_after_ms = 0;
 std::ptrdiff_t g_player_fire_controller_offset = -1;
@@ -2358,6 +2360,14 @@ void __fastcall hooked_give_weapon_tail(
              << " slot=" << static_cast<int>(relay_pkt.manager_slot);
         force_log_line(line.str().c_str());
         pickup_relay_mark_sent(relay_pkt.weapon_art_id);
+        // Compare placements: local (sender) slot layout right after the pickup
+        // give vs the puppet's PUPPET-AFTER-GIVE dump on the receiver.
+        {
+            void* sender_player = resolve_live_player_safe(0);
+            if (sender_player != nullptr) {
+                dump_player_weapon_slots("SENDER-AFTER-PICKUP", sender_player);
+            }
+        }
         // Script-event pickup (0xDD4208) bypasses OnInteract — consume the world
         // pickup locally and mirror to peer so the interact prompt does not linger.
         std::uint32_t pickup_id = 0;
@@ -6031,9 +6041,10 @@ bool safe_give_weapon_art_to_puppet(
     if (GetTickCount64() < g_give_weapon_fail_until_ms) {
         return false;
     }
-    // Pickup relay arts: one-shot give only (apply_peer_weapon_give). Re-giving
-    // the stored block from held/pregive loops ping-pongs with whitelist gives.
-    if (relayed_weapon_store_find(art_id) != nullptr) {
+    // Pickup relay arts: background loops may not re-give the stored block (it
+    // ping-pongs with whitelist gives); the slot MIRROR and held-sync paths pass
+    // held_sync=true and are allowed - they act on art-change only.
+    if (!held_sync && relayed_weapon_store_find(art_id) != nullptr) {
         return puppet_has_weapon_art_id(puppet, art_id);
     }
     // While a relayed pickup (e.g. M-30) occupies the puppet, skip background
@@ -6199,55 +6210,100 @@ bool give_held_weapon_to_puppet(void* puppet, std::uint32_t art_id) {
 bool puppet_weapon_sync_ready(void* puppet);
 
 // Pre-give coop relay weapons from peer raw-id snapshot (flag 0x40).
+// SLOT MIRRORING (2026-07-07, replaces the gated whitelist pregive). The slot
+// dumps finally showed there is NO placement anomaly: the sender's own pickup
+// put the M-30 in slot 1 (replacing the PISTOL - that is where the pistol went),
+// and the relay give placed it in the puppet's slot 1 identically. The fountain
+// was us re-giving arts the peer no longer owns, and the "empty puppet" was the
+// anti-fountain gates suppressing spawn pregives. So mirror the peer's actual
+// slot layout instead: per slot, if the puppet's art differs - remove the wrong
+// weapon, give the right one. Acts only on art CHANGES (per-slot memo) with a
+// per-slot cooldown, so it cannot ping-pong.
 void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer) {
     if (puppet == nullptr || (peer.flags & 0x40) == 0) {
         return;
     }
-    const std::uint32_t peer_held = peer_effective_held_art(peer);
-    // While peer holds a picked-up weapon, skip all whitelist pre-gives. Giving
-    // pistol/rifle from the snapshot while held-sync drives M-30 caused the
-    // puppet-side give ping-pong and visible weapon drops.
-    if (peer_held != 0 && is_pickup_relay_art(peer_held)) {
-        return;
+    // DEBOUNCE (2026-07-07): the sender's raw slot ids FLAP during draw/holster
+    // transitions (slot-1 alternated pistol<->scoped every capture for a while
+    // after a pickup), and mirroring each flip made the puppet's hands flicker
+    // old/new. Only mirror a layout that has been stable for a full second.
+    {
+        static std::uint8_t last_raw[coop::kWeaponSnapshotBytes]{};
+        static ULONGLONG stable_since = 0;
+        const ULONGLONG dnow = GetTickCount64();
+        if (std::memcmp(last_raw, peer.weapon_snapshot, 32) != 0) {
+            std::memcpy(last_raw, peer.weapon_snapshot, 32);
+            stable_since = dnow;
+        }
+        if (dnow - stable_since < 1000) {
+            // INITIAL FILL exception: when the puppet owns nothing in the
+            // mirrored slots there is nothing to flicker against - skip the
+            // stability wait so spawn weapons appear as early as possible.
+            bool puppet_empty = true;
+            for (int s = 0; s <= 3 && puppet_empty; ++s) {
+                puppet_empty =
+                    weapon_art_id_from_object(get_weapon_from_slot(puppet, s)) ==
+                    0;
+            }
+            if (!puppet_empty) {
+                return;
+            }
+        }
     }
-    // While the puppet still carries a relayed pickup, inventory comes from
-    // held-sync / relay give only — snapshot pregive of pistol/rifle evicts M-30.
-    if (puppet_carries_pickup_relay_weapon(puppet)) {
-        return;
-    }
-    struct PregiveTried {
+    // Raw-id capture order (see capture: slots {0,1,16,17,2,3,20,22}). Mirror the
+    // primary carry slots 0..3; grenade/gadget slots are not givable anyway.
+    static const int kSlotOfIndex[8] = {0, 1, 16, 17, 2, 3, 20, 22};
+    struct SlotMemo {
         void* puppet = nullptr;
-        std::uint32_t art = 0;
+        std::uint32_t applied_art = 0;
+        ULONGLONG last_ms = 0;
     };
-    static PregiveTried pregive_tried[24]{};
+    static SlotMemo memo[4]{};  // slots 0..3
+    const ULONGLONG now = GetTickCount64();
     for (std::size_t i = 0; i < 8; ++i) {
-        std::uint32_t raw_id = 0;
+        const int slot = kSlotOfIndex[i];
+        if (slot < 0 || slot > 3) continue;
+        std::uint32_t peer_art = 0;
         std::memcpy(
-            &raw_id, peer.weapon_snapshot + i * sizeof(raw_id), sizeof(raw_id));
-        if (raw_id == 0 || !is_coop_relay_fire_art(raw_id)) {
+            &peer_art, peer.weapon_snapshot + i * sizeof(peer_art),
+            sizeof(peer_art));
+        const std::uint32_t cur_art =
+            weapon_art_id_from_object(get_weapon_from_slot(puppet, slot));
+        if (peer_art == cur_art) {
+            memo[slot] = {puppet, peer_art, memo[slot].last_ms};
             continue;
         }
-        if (puppet_has_weapon_art_id(puppet, raw_id)) {
+        // Only act when the DESIRED art for this slot changed since our last
+        // action, or the puppet/slot cooled down - never re-fight the engine
+        // every tick (that was every fountain so far).
+        SlotMemo& m = memo[slot];
+        if (m.puppet == puppet && m.applied_art == peer_art &&
+            now - m.last_ms < 5000) {
             continue;
         }
-        bool already = false;
-        for (const PregiveTried& t : pregive_tried) {
-            if (t.puppet == puppet && t.art == raw_id) {
-                already = true;
-                break;
-            }
-        }
-        if (already) {
+        const bool givable =
+            peer_art != 0 &&
+            (is_coop_relay_fire_art(peer_art) ||
+             relayed_weapon_store_find(peer_art) != nullptr);
+        if (peer_art != 0 && !givable) {
+            // Peer owns something we cannot recreate (no block relayed yet).
+            // Leave the puppet's current weapon alone rather than stripping it.
             continue;
         }
-        for (PregiveTried& slot : pregive_tried) {
-            if (slot.puppet == nullptr) {
-                slot.puppet = puppet;
-                slot.art = raw_id;
-                break;
-            }
+        m = {puppet, peer_art, now};
+        if (cur_art != 0) {
+            seh_remove_weapon_in_slot(puppet, slot);
         }
-        safe_give_weapon_art_to_puppet(puppet, raw_id);
+        bool gave = false;
+        if (givable) {
+            gave = safe_give_weapon_art_to_puppet(
+                puppet, peer_art, /*held_sync=*/true);
+        }
+        std::ostringstream line;
+        line << "SLOT-MIRROR slot=" << slot << " peerArt=0x" << std::hex
+             << peer_art << " was=0x" << cur_art << std::dec
+             << " gave=" << (gave ? 1 : 0);
+        force_log_line(line.str().c_str());
     }
 }
 
@@ -6255,13 +6311,13 @@ void apply_peer_held_weapon_state() {
     coop::StatePacket peer{};
     void* puppet = nullptr;
     if (!latest_peer_state(peer, puppet)) return;
-    // Pre-give holstered weapons up front (see g_puppet_pregive_holstered). This must
-    // run BEFORE the 0x80 held-weapon early return, otherwise the puppet gets no
-    // inventory while the peer's weapons are holstered and its back/hip AP stays empty
-    // until the peer first draws. Guarded by sync-ready; give_weapon is SEH-safe and
-    // cached per (puppet,art) so repeating it every tick is cheap.
-    if (g_puppet_pregive_holstered && puppet != nullptr &&
-        puppet_weapon_sync_ready(puppet)) {
+    // Slot MIRROR up front, unconditionally (2026-07-07): this was gated behind
+    // g_puppet_pregive_holstered (parked OFF since the 07-06 flicker regression),
+    // which silently disabled the whole reconciliation - puppet spawned with no
+    // weapons at all. The mirror acts only on per-slot art CHANGES with a 5s
+    // cooldown, so the old every-tick flicker cannot recur; run it whenever the
+    // puppet is sync-ready, before the 0x80 early return.
+    if (puppet != nullptr && puppet_weapon_sync_ready(puppet)) {
         ensure_puppet_has_peer_weapons(puppet, peer);
         // give_weapon draws the weapon into the puppet's HANDS (its default gun-out
         // equip state), but the peer is holstered here (flag 0x80 clear). On the puppet
@@ -6270,17 +6326,38 @@ void apply_peer_held_weapon_state() {
         // is SwitchToWeapon with in_hands=false, which the engine uses to attach the
         // previous weapon to its holster AP. Mirror the peer_gun==0 branch: holster the
         // currently in-hands slot. Per-puppet cooldown to avoid re-triggering the anim.
-        if ((peer.flags & 0x80) == 0) {
-            static void* last_holster_puppet = nullptr;
-            static ULONGLONG last_holster_ms = 0;
+        // EDGE-TRIGGERED holster only (2026-07-07): the previous 1s-periodic
+        // retry ran forever whenever the puppet's draw state stuck at 2 with the
+        // peer holstered, restarting the holster transition every second - the
+        // constant upper-body transitions broke the locomotion pose (the puppet
+        // "crawled" instead of running). Fire on the drawn->holstered EDGE of
+        // the peer state, with a small bounded retry, then stop for good.
+        {
+            static void* hp = nullptr;
+            static bool prev_holstered = false;
+            static int attempts_left = 0;
+            static ULONGLONG last_try_ms = 0;
+            const bool holstered_now = (peer.flags & 0x80) == 0;
             const ULONGLONG hnow = GetTickCount64();
-            if (puppet != last_holster_puppet || hnow - last_holster_ms > 1000) {
+            if (puppet != hp) {
+                hp = puppet;
+                prev_holstered = false;
+                attempts_left = 0;
+            }
+            if (holstered_now && !prev_holstered) {
+                attempts_left = 3;  // fresh drawn->holstered edge
+            }
+            prev_holstered = holstered_now;
+            if (holstered_now && attempts_left > 0 &&
+                hnow - last_try_ms > 1200) {
                 const int attached = capture_hand_attached_slot_int(puppet);
                 if (attached >= 0) {
-                    last_holster_puppet = puppet;
-                    last_holster_ms = hnow;
+                    --attempts_left;
+                    last_try_ms = hnow;
                     safe_switch_to_weapon(
                         puppet, static_cast<std::uint32_t>(attached), false);
+                } else {
+                    attempts_left = 0;  // nothing in hands, done
                 }
             }
         }
@@ -6866,6 +6943,25 @@ void send_local_player_state() {
         have_raw_weapon_ids |= raw_id != 0;
     }
     if (have_raw_weapon_ids) pkt.flags |= 0x40;
+    {
+        // Diagnose raw-id capture instability (receiver saw slot-1 alternate
+        // pistol<->scoped after a pickup): log every CHANGE of the raw id set.
+        static std::uint32_t last_logged_raw[8]{};
+        if (std::memcmp(last_logged_raw, const_cast<const std::uint32_t*>(
+                                              g_weapon_capture_raw_ids),
+                        sizeof(last_logged_raw)) != 0) {
+            std::memcpy(last_logged_raw,
+                        const_cast<const std::uint32_t*>(g_weapon_capture_raw_ids),
+                        sizeof(last_logged_raw));
+            std::ostringstream line;
+            line << "RAW-IDS";
+            for (std::size_t i = 0; i < 8; ++i) {
+                line << " [" << i << "]=0x" << std::hex << last_logged_raw[i]
+                     << std::dec;
+            }
+            force_log_line(line.str().c_str());
+        }
+    }
     {
         void* weapon_src = resolve_live_player_safe(0);
         if (weapon_src == nullptr) {
@@ -7716,6 +7812,24 @@ bool puppet_weapon_sync_ready(void* puppet) {
     return GetTickCount64() >= g_fire_puppet_ready_after_ms;
 }
 
+// DIAGNOSTIC: one force-logged line with every occupied weapon slot (art per
+// slot 0..22). Distinguishes "M-30 placed in slot 1" from "slot 1 is an ALIAS
+// of the same weapon also present at 16" - the ascending find_weapon_slot scan
+// cannot tell those apart, which is exactly where the swap investigation stuck.
+void dump_player_weapon_slots(const char* tag, void* player) {
+    if (player == nullptr) return;
+    std::ostringstream line;
+    line << tag << " slots:";
+    for (int slot = 0; slot <= 22; ++slot) {
+        const std::uint32_t a =
+            weapon_art_id_from_object(get_weapon_from_slot(player, slot));
+        if (a != 0) {
+            line << " s" << slot << "=0x" << std::hex << a << std::dec;
+        }
+    }
+    force_log_line(line.str().c_str());
+}
+
 // ---------------- Weapon-pickup relay: receiver side ----------------
 // SEH leaf: the actual native Apply call, isolated so the C++ caller can log.
 bool seh_call_pickup_apply(void* event) {
@@ -7995,6 +8109,7 @@ void apply_peer_weapon_give() {
          << " slotAfter=" << slot_after
          << " holsterSwitch=" << (holster_switch ? 1 : 0);
     force_log_line(line.str().c_str());
+    dump_player_weapon_slots("PUPPET-AFTER-GIVE", puppet);
 }
 
 void suppress_puppet_fire_buttons(ULONGLONG duration_ms) {
