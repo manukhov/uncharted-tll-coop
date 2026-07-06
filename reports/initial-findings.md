@@ -24799,3 +24799,36 @@ weapons now appear in ~2-4s (was 10-15s with the old warmup + 10s backoff).
 weapon-info block (ammo/def fields), not just art@0x80; (2) pickup ANIMATION sync —
 candidate path: bump-action relay (Player_TryStartBumpAction 0x140CE8E10 already
 pinned in hook_offsets.h), needs the static hypothesis workup first.
+
+### STATIC 2026-07-06: NATIVE weapon-pickup sync machinery = NetEventSyncWeaponPickups
+
+The game ships MP machinery that syncs weapon pickups across clients — the exact
+mechanism our pickup relay needs:
+
+- **NetEventSyncWeaponPickups vftable = 0x1429FCF90** (RTTI-named in DB).
+  Ctor 0x140BCDFC0: +0 vftable, +8 type id 0x0101006A (16842858), +12 word 0,
+  +24 count u32; entries at +28: {u32 pickup_id, float (ammo?)} pairs.
+- **Slot 2 (0x140BCE0B0) = bit-stream serializer**: count in 7 bits, then per
+  entry id:32 + float:32.
+- **Slot 3 (0x140BCE440) = APPLY**: consumes the entry list and drives the native
+  "net-pick-up-other-client" flow — the engine itself removes the ground pickup /
+  processes the remote client's pickup. Apply reads the DESERIALIZED fields off the
+  event object -> we can stack-construct the event and call slot-3 apply directly
+  on the receiver, no serialization needed.
+- Related classes (RTTI): WeaponPickup::vftable 0x142AA66C0 (factory 0x141579150,
+  object size 1376, art-relevant fields +1336/+1344/+1348),
+  Active@WeaponPickup 0x142AA6688 (state), WeaponPickupInteractControl 0x142AA6E90
+  (GetHudAmmoCount = sub_14157B690; module funcs also 0x14157AA70, 0x14157B770 via
+  weapon-pickup.cpp path string 0x142AA6520).
+- Interact path context (why input relay alone can't trigger pickups): the player
+  interact dispatcher sub_140C85D20 checks commands against the PER-SCREEN dynamic
+  command LIST (input block +0x590, checker sub_14183A3D0), which our +0x518
+  bitmask relay does not populate — puppet never interacts (also why it never
+  triggers cutscenes; preserve this).
+
+**Open before runtime:** (1) semantics of the 32-bit pickup_id (net registry id vs
+name hash) — read slot-3 apply middle where it resolves the pickup; (2) sender-side
+capture hook = WeaponPickup consume / Active-state transition (which method fires on
+local pickup); (3) apply gating on g_NetModeFlags — может требовать поднятый net
+mode. Evidence quota: 2/3 собрано (vftable+ctor+serializer согласованы; apply
+строка "net-pick-up-other-client"); нужно доразобрать resolve pickup_id.
