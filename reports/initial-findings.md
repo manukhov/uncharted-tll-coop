@@ -24832,3 +24832,16 @@ capture hook = WeaponPickup consume / Active-state transition (which method fire
 local pickup); (3) apply gating on g_NetModeFlags — может требовать поднятый net
 mode. Evidence quota: 2/3 собрано (vftable+ctor+serializer согласованы; apply
 строка "net-pick-up-other-client"); нужно доразобрать resolve pickup_id.
+
+**Дополнение (той же ночью): pickup_id = runtime id NdGameObject.** Слот-3 apply
+резолвит каждый 32-битный id через generic реестр хендлов игровых объектов:
+`sub_140A989C0(mgr, id)` -> handle {ptr, id} с валидацией `*(obj+0xBC) == id` — тот
+же handle-паттерн, что и retained-player slot table (структурная согласованность с
+подтверждённой находкой). mgr берётся в начале apply через виртуальный вызов
+(vt+56). Следствие для релея: runtime id между копиями НЕ обязан совпадать —
+идентифицировать пикап кросс-копийно надо по name-hash/позиции, локально резолвить
+СВОЙ id на приёмнике, класть его в стек-собранное событие и звать слот-3 apply.
+Квота статических доказательств дизайна: 3/3 (сериализатор+ctor+layout;
+резолв id по известному handle-паттерну; строка net-pick-up-other-client в apply).
+Остались 2 неизвестных до рантайма: sender-хук момента подбора (метод
+WeaponPickup/Active-перехода) и гейтинг apply на g_NetModeFlags.
