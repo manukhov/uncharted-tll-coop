@@ -395,6 +395,17 @@ volatile bool g_puppet_relay_pose_seed = false;
 // the SwitchToWeapon hand-attach never completes on the puppet (attached=0). Toggle
 // VK_SCROLL-adjacent via VK_PAUSE for A/B.
 volatile bool g_puppet_force_gun_draw = true;
+// Pre-give the puppet its HOLSTERED weapons (flag 0x40 raw ids) even when the peer
+// has nothing drawn (flag 0x80 clear). Root of "empty back at spawn": the only
+// ensure_puppet_has_peer_weapons call was gated behind the 0x80 held-weapon early
+// return, so the puppet got no inventory until the peer first drew a weapon. Default
+// Default OFF (2026-07-06): the pre-give+holster experiment REGRESSED stability —
+// give_weapon draws to hands (not holster), gun-state=0 does not holster the puppet
+// (skill anim off with AI disabled), and switch(slot,false) holstering fights an
+// external re-draw path (+ flickering flag 0x80 from flaky held-capture) => the
+// puppet randomly draws/holsters. Needs a static map of ALL puppet weapon-equip
+// writers before re-enabling. Numpad * toggles for A/B experimentation.
+volatile bool g_puppet_pregive_holstered = false;
 static ULONGLONG g_fire_button_hold_until_ms = 0;
 // After native Fire replay, block peer/button fire on the remote player so the
 // same shot is not delivered twice (relay native + Joypad 0x800).
@@ -5292,7 +5303,38 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
 void apply_peer_held_weapon_state() {
     coop::StatePacket peer{};
     void* puppet = nullptr;
-    if (!latest_peer_state(peer, puppet) || (peer.flags & 0x80) == 0) return;
+    if (!latest_peer_state(peer, puppet)) return;
+    // Pre-give holstered weapons up front (see g_puppet_pregive_holstered). This must
+    // run BEFORE the 0x80 held-weapon early return, otherwise the puppet gets no
+    // inventory while the peer's weapons are holstered and its back/hip AP stays empty
+    // until the peer first draws. Guarded by sync-ready; give_weapon is SEH-safe and
+    // cached per (puppet,art) so repeating it every tick is cheap.
+    if (g_puppet_pregive_holstered && puppet != nullptr &&
+        puppet_weapon_sync_ready(puppet)) {
+        ensure_puppet_has_peer_weapons(puppet, peer);
+        // give_weapon draws the weapon into the puppet's HANDS (its default gun-out
+        // equip state), but the peer is holstered here (flag 0x80 clear). On the puppet
+        // (AI off) the gun-state holster SKILL does not animate, so safe_request_gun_
+        // state(0) does NOT move the weapon to the back. What DOES work (user-confirmed)
+        // is SwitchToWeapon with in_hands=false, which the engine uses to attach the
+        // previous weapon to its holster AP. Mirror the peer_gun==0 branch: holster the
+        // currently in-hands slot. Per-puppet cooldown to avoid re-triggering the anim.
+        if ((peer.flags & 0x80) == 0) {
+            static void* last_holster_puppet = nullptr;
+            static ULONGLONG last_holster_ms = 0;
+            const ULONGLONG hnow = GetTickCount64();
+            if (puppet != last_holster_puppet || hnow - last_holster_ms > 1000) {
+                const int attached = capture_weapon_selected_mode(puppet);
+                if (attached > 0) {
+                    last_holster_puppet = puppet;
+                    last_holster_ms = hnow;
+                    safe_switch_to_weapon(
+                        puppet, static_cast<std::uint32_t>(attached), false);
+                }
+            }
+        }
+    }
+    if ((peer.flags & 0x80) == 0) return;
     const std::uint32_t effective_art = peer_effective_held_art(peer);
     if (effective_art == 0) return;
     if (!puppet_weapon_sync_ready(puppet)) {
@@ -9554,6 +9596,18 @@ void net_tick() {
         log_line(g_puppet_aim_facing_from_camera
                      ? "PUPPET-AIM-FACING = camera-yaw (old, may jitter)"
                      : "PUPPET-AIM-FACING = peer body quat blend (single source)");
+        g_logging_enabled = was;
+    }
+    if (foreground && (GetAsyncKeyState(VK_MULTIPLY) & 1) != 0) {
+        // Numpad *: A/B the holstered-weapon pre-give. ON (default) = give the puppet
+        // its weapons even while the peer's are holstered (fills back/hip AP at spawn);
+        // OFF = old behavior (inventory only after the peer first draws = empty back).
+        g_puppet_pregive_holstered = !g_puppet_pregive_holstered;
+        const bool was = g_logging_enabled;
+        g_logging_enabled = true;
+        log_line(g_puppet_pregive_holstered
+                     ? "PUPPET-PREGIVE holstered = ON (weapons given up front)"
+                     : "PUPPET-PREGIVE holstered = OFF (only after peer draws)");
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {

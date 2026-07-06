@@ -24717,3 +24717,40 @@ and stop the pre-give spill. This is a focused effort on apply_peer_held_weapon_
 capture (sender), perf, aim-jitter single-source. Direction fix = fire-caller
 redesign; weapon-switch = apply/attach rework. Status: **localized; both are
 dedicated next-session tasks.**
+
+### RUNTIME 2026-07-06: puppet weapon EQUIP-STATE mechanics (holster/draw writers)
+
+Attacked the "no weapon on puppet's back at spawn + pistol only switches on aim"
+pair. Root of the empty-back proven STATICALLY (3 kinds): ensure_puppet_has_peer_
+weapons has exactly ONE caller (apply_peer_held_weapon_state line ~5301) gated behind
+the `(peer.flags & 0x80)==0 -> return` at ~5295, so while the peer's weapons are
+holstered (0x80 clear) the puppet gets NO inventory -> empty back until the peer first
+draws. User confirmed: "appears only after I draw and holster once."
+
+Live-tested three drive mechanics on the puppet (Chloe-rep). RESULTS:
+- **give_weapon draws to HANDS, not holster.** After pre-giving before the 0x80 gate,
+  the puppet spawned with the rifle IN HANDS (not on the back). So give's arg3=true is
+  not "holster-attach"; it equips gun-out.
+- **gun-state setter = 0 does NOT holster the puppet.** safe_request_gun_state(puppet,
+  0) had no visible effect — the holster SKILL/anim does not run with AI disabled, so
+  the flag flips but the weapon prop stays in hand.
+- **SwitchToWeapon(slot, in_hands=false) DOES holster to the AP** (user-confirmed: the
+  weapon only moves to the back when switching between weapons). BUT adding it to the
+  0x80-clear path made the puppet RANDOMLY draw/holster (flicker) with no input:
+  it fights an external re-draw path AND the sender's flag 0x80 flickers (flaky
+  held-capture), so apply oscillates between the draw path (0x80 set) and the pre-give
+  holster (0x80 clear).
+
+**Conclusion / REJECTED approach:** pre-give + per-frame holster in apply_peer_held_
+weapon_state is the WRONG layer — too many competing weapon-equip writers (give,
+SwitchToWeapon, gun-state skill, fire-relay give @~7079, weapon-clone snapshot). It
+regressed stability, so reverted behind g_puppet_pregive_holstered (default OFF,
+numpad *). Confirmed-good baseline preserved: perf (readable_bytes), aim-jitter
+single-source, gun-draw hand-attach (aca61ef, rifle switch works).
+
+**Next (STATIC first):** enumerate EVERY writer of the puppet's weapon-equip state
+(in-hands slot controller+0x130, capture_weapon_selected_mode vt+0x78, gun-state
++0x15C8) and identify the single engine entry the game uses for "gun away, weapons on
+APs" at spawn; drive only that with hysteresis, not a competing per-frame holster.
+Status: **empty-back root FOUND (0x80-gated give); holster mechanic FOUND
+(SwitchToWeapon false); safe apply layer = open static task.**
