@@ -524,6 +524,15 @@ RelayedWeaponBlock* relayed_weapon_store_find(std::uint32_t art_id) {
 // on GiveWeapon's WeaponInfo parsing (exclusive-loadout flags) and the
 // controller-rebuild trigger before this can go back on. Numpad - toggles.
 volatile bool g_relayed_block_give = false;
+// AIM-POSE experiment (2026-07-07): drive the puppet's SCREEN-1 aim camera from
+// the peer while the peer aims - write the peer camera quat into
+// CameraManager(1)+0x1B0 and the peer pose-seed quat into *(mgr+0xB0)+0x70 every
+// puppet tick (positions untouched). Hypothesis: the puppet's upper-body aim IK
+// follows its own aim camera, so steering the SOURCE makes the visible aim
+// (incl. pitch) track the peer crosshair with no per-caller hooks. Falsifier:
+// if the camera system recomputes these each frame, our writes will fight it ->
+// visible jitter. Default OFF; Numpad / toggles for A/B.
+volatile bool g_puppet_camera_drive = false;
 
 void relayed_weapon_store_put(std::uint32_t art_id, const void* info) {
     if (art_id == 0 || info == nullptr || !is_pickup_relay_art(art_id)) {
@@ -7525,6 +7534,32 @@ void apply_puppet_transform_post(void* puppet) {
         (pkt.flags & 8) != 0 &&
         (pkt.input_buttons & kJoypadAimButtonMask) != 0;
     float orientation_dot = 1.0F;
+    if (peer_aiming && g_puppet_camera_drive) {
+        // Steer the puppet's screen-1 aim camera source (see toggle decl).
+        const auto get_camera_manager = reinterpret_cast<GetCameraManagerFunction>(
+            g_module + kGetCameraManagerRva);
+        void* const mgr = get_camera_manager(1);
+        if (mgr != nullptr) {
+            if ((pkt.flags & coop::kStateFlagPoseSeed) != 0 &&
+                valid_network_orientation(pkt.pose_seed + 4) &&
+                readable_bytes(static_cast<std::byte*>(mgr) + 0xB0) >=
+                    sizeof(void*)) {
+                void* const blk = *reinterpret_cast<void**>(
+                    static_cast<std::byte*>(mgr) + 0xB0);
+                if (blk != nullptr &&
+                    readable_bytes(static_cast<std::byte*>(blk) + 0x60) >= 32) {
+                    std::memcpy(static_cast<std::byte*>(blk) + 0x70,
+                                pkt.pose_seed + 4, 16);
+                }
+            }
+            if (valid_network_orientation(pkt.camera_quat) &&
+                readable_bytes(static_cast<std::byte*>(mgr) +
+                               kCameraRotationOffset) >= 16) {
+                std::memcpy(static_cast<std::byte*>(mgr) + kCameraRotationOffset,
+                            pkt.camera_quat, 16);
+            }
+        }
+    }
     if (peer_aiming) {
         // AIM-JITTER ROOT FIX (2026-07-05): the orientation was written by THREE
         // sources per frame — apply_peer_aim_facing (camera-yaw) before the native
@@ -11256,6 +11291,16 @@ void net_tick() {
         log_line(g_puppet_relay_pose_seed
                      ? "PUPPET-POSE-SEED fire-ray relay (quat only) = ON"
                      : "PUPPET-POSE-SEED fire-ray relay (quat only) = OFF");
+        g_logging_enabled = was;
+    }
+    if (foreground && (GetAsyncKeyState(VK_DIVIDE) & 1) != 0) {
+        // Numpad /: A/B the puppet aim-camera drive (visual aim direction).
+        g_puppet_camera_drive = !g_puppet_camera_drive;
+        const bool was = g_logging_enabled;
+        g_logging_enabled = true;
+        log_line(g_puppet_camera_drive
+                     ? "PUPPET-CAMERA-DRIVE = ON (steer screen-1 aim camera)"
+                     : "PUPPET-CAMERA-DRIVE = OFF");
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_SUBTRACT) & 1) != 0) {
