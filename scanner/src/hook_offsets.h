@@ -161,6 +161,11 @@ constexpr std::uintptr_t kProcessKillTreeRva = 0x16A5C20;
 // resolver's quat-only override around this call (owner==puppet) should make the
 // puppet's visible aim follow the peer crosshair (same recipe as the fire caller).
 constexpr std::uintptr_t kAimTargetFromReticleRva = 0xCB1720;
+// Exact return site of the ResolveScreenRoutePoseSeedOrDefault call INSIDE
+// GetTargetPointFromReticle (from the idx==1 caller histogram). Used to scope the
+// resolver's pose-seed override to just the aim-target derivation - no trampoline,
+// no sustained camera override.
+constexpr std::uintptr_t kAimTargetReticleCallSiteRva = 0xCB17D6;
 constexpr std::size_t kWeaponControllerGetWeaponBySlotVtOffset = 0xB0;
 constexpr std::uintptr_t kNetEventSyncWeaponPickupsApplyRva = 0xBCE440;
 constexpr std::uintptr_t kNetEventSyncWeaponPickupsVftableRva = 0x29FCF90;

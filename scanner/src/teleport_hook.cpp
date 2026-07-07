@@ -533,6 +533,12 @@ volatile bool g_relayed_block_give = false;
 // if the camera system recomputes these each frame, our writes will fight it ->
 // visible jitter. Default OFF; Numpad / toggles for A/B.
 volatile bool g_puppet_camera_drive = false;
+// Reticle-scoped aim-pose override + approach-3 aim-target write. Default OFF
+// (2026-07-07): neither moved the visible aim pose - Player+0x1570 does NOT drive
+// it (apply_peer_pose_seed_to_player_aim_fields already writes the raw seed there
+// every frame with no effect either). The visible aim pose is fed by a separate
+// aim-angle anim-graph param, still to be reversed. Numpad / toggles for A/B.
+volatile bool g_puppet_aim_reticle_relay = false;
 
 void relayed_weapon_store_put(std::uint32_t art_id, const void* info) {
     if (art_id == 0 || info == nullptr || !is_pickup_relay_art(art_id)) {
@@ -2022,16 +2028,27 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     // pose path (the 07-05 broad override froze the puppet's aim), but which of
     // its ~300 callers drives the visible ADS pose is unknown. Collect return
     // addresses for idx==1 calls (helper: __try here forbids C++ objects).
+    const std::uintptr_t caller_rva =
+        reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - g_module;
     if (idx == kSlot1ScreenIndex) {
-        record_pose_seed_caller(
-            reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - g_module);
+        record_pose_seed_caller(caller_rva);
     }
     const bool fire_path_override =
         g_pose_seed_fire_only_override || g_puppet_aim_ray_override;
     const bool sustained_slot1_override =
         g_puppet_aim_override_frame && idx == kSlot1ScreenIndex;
+    // RETICLE-SCOPED override (2026-07-07): apply the peer pose-seed ONLY when the
+    // caller is the aim-target derivation inside PlayerAimController::GetTarget
+    // PointFromReticle (return site 0x140CB17D6). This drives the visible aim pose
+    // without a trampoline of that hot function (which crashed) and without the
+    // sustained idx==1 override (which froze the aim camera on 07-05, because it
+    // hit the camera's own resolver calls too). Scoped to the single reticle call
+    // site => only the target-point derivation is redirected.
+    const bool reticle_override =
+        g_puppet_aim_reticle_relay && idx == kSlot1ScreenIndex &&
+        caller_rva == kAimTargetReticleCallSiteRva;
     if (!g_puppet_relay_pose_seed || !g_state_net.enabled || out == nullptr ||
-        !(fire_path_override || sustained_slot1_override)) {
+        !(fire_path_override || sustained_slot1_override || reticle_override)) {
         return result;
     }
     coop::StatePacket peer{};
@@ -7624,47 +7641,53 @@ void apply_puppet_transform_post(void* puppet) {
         (pkt.flags & 8) != 0 &&
         (pkt.input_buttons & kJoypadAimButtonMask) != 0;
     float orientation_dot = 1.0F;
-    if (peer_aiming && g_puppet_camera_drive) {
-        // Steer the puppet's screen-1 aim camera source (see toggle decl).
-        const auto get_camera_manager = reinterpret_cast<GetCameraManagerFunction>(
-            g_module + kGetCameraManagerRva);
-        void* const mgr = get_camera_manager(1);
-        bool wrote_seed = false;
-        bool wrote_cam = false;
-        void* blk = nullptr;
-        if (mgr != nullptr) {
-            if ((pkt.flags & coop::kStateFlagPoseSeed) != 0 &&
-                valid_network_orientation(pkt.pose_seed + 4) &&
-                readable_bytes(static_cast<std::byte*>(mgr) + 0xB0) >=
-                    sizeof(void*)) {
-                blk = *reinterpret_cast<void**>(
-                    static_cast<std::byte*>(mgr) + 0xB0);
-                if (blk != nullptr &&
-                    readable_bytes(static_cast<std::byte*>(blk) + 0x60) >= 32) {
-                    std::memcpy(static_cast<std::byte*>(blk) + 0x70,
-                                pkt.pose_seed + 4, 16);
-                    wrote_seed = true;
-                }
+    // APPROACH 3 (2026-07-07): write the peer's aim TARGET POINT into the puppet's
+    // Player+0x1570 (and aux +0x1580) AFTER the native update. The aim controller
+    // writes its resolved target here each frame; overwriting it as the last writer
+    // makes the upper-body aim IK point where the peer aims. Target = peer pose-seed
+    // camera position + full 3D forward (incl. pitch) * 20m. Safe data write (no
+    // hook/trampoline). Toggle: g_puppet_aim_reticle_relay (Numpad /).
+    if (peer_aiming && g_puppet_aim_reticle_relay &&
+        (pkt.flags & coop::kStateFlagPoseSeed) != 0 &&
+        valid_network_orientation(pkt.pose_seed + 4)) {
+        const float* cam_pos = pkt.pose_seed;       // pos[4]
+        const float* q = pkt.pose_seed + 4;         // quat[4] (x,y,z,w)
+        // forward = quat * (0,0,-1): the camera/aim looks down -Z in this engine.
+        const float x = q[0], y = q[1], z = q[2], w = q[3];
+        float fx = -2.0F * (x * z + w * y);
+        float fy = -2.0F * (y * z - w * x);
+        float fz = -(1.0F - 2.0F * (x * x + y * y));
+        const float len = std::sqrt(fx * fx + fy * fy + fz * fz);
+        if (len > 1e-3F) {
+            fx /= len; fy /= len; fz /= len;
+            constexpr float kAimDist = 20.0F;
+            float target[4] = {
+                cam_pos[0] + fx * kAimDist,
+                cam_pos[1] + fy * kAimDist,
+                cam_pos[2] + fz * kAimDist,
+                1.0F,
+            };
+            if (readable_bytes(static_cast<std::byte*>(puppet) +
+                               kPlayerAimTargetOffset) >= 16) {
+                std::memcpy(static_cast<std::byte*>(puppet) + kPlayerAimTargetOffset,
+                            target, 16);
             }
-            if (valid_network_orientation(pkt.camera_quat) &&
-                readable_bytes(static_cast<std::byte*>(mgr) +
-                               kCameraRotationOffset) >= 16) {
-                std::memcpy(static_cast<std::byte*>(mgr) + kCameraRotationOffset,
-                            pkt.camera_quat, 16);
-                wrote_cam = true;
+            if (readable_bytes(static_cast<std::byte*>(puppet) +
+                               kPlayerAimTargetAuxOffset) >= 16) {
+                std::memcpy(
+                    static_cast<std::byte*>(puppet) + kPlayerAimTargetAuxOffset,
+                    target, 16);
             }
-        }
-        static ULONGLONG last_drive_log = 0;
-        const ULONGLONG dlnow = GetTickCount64();
-        if (dlnow - last_drive_log > 1000) {
-            last_drive_log = dlnow;
-            std::ostringstream dl;
-            dl << "CAMERA-DRIVE mgr=0x" << std::hex
-               << reinterpret_cast<std::uintptr_t>(mgr) << " blk=0x"
-               << reinterpret_cast<std::uintptr_t>(blk) << std::dec
-               << " seed=" << (wrote_seed ? 1 : 0)
-               << " cam=" << (wrote_cam ? 1 : 0);
-            force_log_line(dl.str().c_str());
+            static ULONGLONG last_aim_log = 0;
+            const ULONGLONG alnow = GetTickCount64();
+            if (alnow - last_aim_log > 1000) {
+                last_aim_log = alnow;
+                std::ostringstream al;
+                al << "AIM-TARGET-WRITE fwd=(" << fx << "," << fy << "," << fz
+                   << ") tgt=(" << target[0] << "," << target[1] << ","
+                   << target[2] << ")";
+                force_log_line(al.str().c_str());
+            }
         }
     }
     if (peer_aiming) {
@@ -11401,13 +11424,13 @@ void net_tick() {
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_DIVIDE) & 1) != 0) {
-        // Numpad /: A/B the puppet aim-camera drive (visual aim direction).
-        g_puppet_camera_drive = !g_puppet_camera_drive;
+        // Numpad /: A/B the reticle-scoped aim-pose relay (visual aim direction).
+        g_puppet_aim_reticle_relay = !g_puppet_aim_reticle_relay;
         const bool was = g_logging_enabled;
         g_logging_enabled = true;
-        log_line(g_puppet_camera_drive
-                     ? "PUPPET-CAMERA-DRIVE = ON (steer screen-1 aim camera)"
-                     : "PUPPET-CAMERA-DRIVE = OFF");
+        log_line(g_puppet_aim_reticle_relay
+                     ? "PUPPET-AIM-RETICLE relay = ON (aim pose follows peer)"
+                     : "PUPPET-AIM-RETICLE relay = OFF");
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_SUBTRACT) & 1) != 0) {
