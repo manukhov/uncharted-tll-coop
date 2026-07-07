@@ -372,12 +372,9 @@ volatile bool g_native_fire_relay = false;
 // the puppet enters full weapon ADS — and because ss-hud-sniper-reticle-manager is
 // a PROCESS-GLOBAL singleton (see initial-findings 2026-07-04), a scoped-rifle ADS
 // on the puppet raises the sniper scope overlay on the RECEIVER's own viewport.
-// Default true: keep full ADS/aim stance on the remote Player. The duplicated
-// scope is gated on the HUD query side, not by removing aim from the puppet.
-// Toggle live with F8 to A/B the aim stance vs. the scope leak.
-// Relay peer aim-press (ADS) for pistol/shotgun; rifle uses pose-only ADS by default
-// (see g_puppet_rifle_pose_only_ads) so the puppet mesh stays visible.
-volatile bool g_puppet_relay_aim_press = true;
+// Default OFF: opt-in with F8 on the foreground window only. When ON globally it
+// injected aim-press into the shared joypad bus and broke locomotion on both copies.
+volatile bool g_puppet_relay_aim_press = false;
 // Sniper/rifle: relay aim direction but NOT scoped-ADS on the puppet (prevents the
 // DrawControl mesh-hide that makes Chloe vanish on the receiver). F8 still toggles
 // full ADS relay for A/B.
@@ -581,6 +578,7 @@ bool g_local_animation_mirror_test = false;
 // trapping RIP is the instruction that writes velocity; that function reads the
 // player's move-input, so it leads us to the input application path.
 volatile bool g_velwriter_capturing = false;
+volatile bool g_velwriter_aimquat_mode = false;
 std::uintptr_t g_velwriter_addr = 0;
 std::uintptr_t g_velwriter_rips[8]{};
 volatile int g_velwriter_count = 0;
@@ -785,6 +783,16 @@ std::atomic<std::int32_t> g_pending_weapon_give_slot{-1};
 std::uint8_t g_pending_weapon_give_info[coop::kWeaponInfoBytes]{};
 std::atomic<bool> g_pending_weapon_give_flag{false};
 void* resolve_live_player_safe(std::uint32_t index);
+bool local_player_ads_active();
+std::uint64_t capture_local_joypad_command_mask(void* player);
+bool local_player_aim_input_active();
+bool local_player_strict_aim_active(void* player);
+bool peer_packet_aim_active(const coop::StatePacket& peer);
+bool peer_snapshot_aim_active();
+bool puppet_aim_press_relay_enabled();
+void apply_puppet_sustained_aim_input(void* puppet);
+void force_puppet_ads_flag(void* puppet, bool active);
+bool safe_request_gun_state(void* player, int desired_state);
 int find_weapon_slot_by_art_id(void* player, std::uint32_t art_id);
 int resolve_give_target_slot(std::uint32_t art, int packet_slot);
 void dump_player_weapon_slots(const char* tag, void* player);
@@ -1231,7 +1239,12 @@ std::int64_t __fastcall hooked_input_scale_copy(
     float shared_bus_saved_look[2] = {0.0F, 0.0F};
     if (destination_index == 3 && readable_bytes(source) >= 0x520) {
         coop::StatePacket peer{};
-        if (copy_peer_state_snapshot(peer) && (peer.flags & 8) != 0) {
+        const bool have_peer_input =
+            copy_peer_state_snapshot(peer) && (peer.flags & 8) != 0;
+        const bool peer_aiming =
+            have_peer_input && peer_packet_aim_active(peer);
+        const bool puppet_wants_aim = peer_aiming;
+        if (have_peer_input && puppet_aim_press_relay_enabled()) {
             // A short press can begin and end between two conversions. Received
             // pressed edges accumulate even when a newer state snapshot replaces
             // their packet, then become one held pulse for this conversion.
@@ -1255,14 +1268,12 @@ std::int64_t __fastcall hooked_input_scale_copy(
                 *reinterpret_cast<const std::uint64_t*>(source_bytes + 0x518);
             const std::uint64_t synthetic_move_gate =
                 shared_bus_saved_mask & 0x500u;
-            std::uint64_t held_mask = remote_puppet_actions_from_peer(
-                peer.input_buttons) |
+            std::uint64_t held_mask =
+                remote_puppet_actions_from_peer(peer.input_buttons) |
                 remote_puppet_fire_pulse(edge_pulse);
-            if (!g_puppet_relay_aim_press) {
-                // Pose-only: drop the puppet's ADS aim-press so its scoped weapon
-                // never raises the global sniper-reticle overlay on this viewport.
-                // Body facing is still driven from the peer camera separately.
-                held_mask &= ~kJoypadAimButtonMask;
+            held_mask &= ~kJoypadAimButtonMask;
+            if (puppet_wants_aim) {
+                held_mask |= kJoypadAimButtonMask;
             }
             // Rifle scoped mesh-hide is handled by scrub_puppet_scoped_ads_flag
             // (+0x1548) — do NOT strip aim-press here or the puppet never enters
@@ -1290,7 +1301,7 @@ std::int64_t __fastcall hooked_input_scale_copy(
             shared_bus_saved_look[0] = axes[2];
             shared_bus_saved_look[1] = axes[3];
             if (g_puppet_relay_look_stick &&
-                (peer.input_buttons & kJoypadAimButtonMask) != 0 &&
+                have_peer_input && peer_packet_aim_active(peer) &&
                 (peer.flags & coop::kStateFlagPeerCamera) != 0 &&
                 (std::fabs(peer.look_stick[0]) > 0.001F ||
                  std::fabs(peer.look_stick[1]) > 0.001F)) {
@@ -1710,6 +1721,134 @@ bool remote_player_ads_active() {
     return player_ads_active(retained_player_object(1));
 }
 
+bool local_player_ads_active() {
+    return player_ads_active(retained_player_object(0));
+}
+
+// +0x1548 only flips for scoped-rifle ADS; ordinary pistol aim is RMB on PC.
+// Do NOT use block+0x518 / aim-press command alone — weapon draw sets those
+// without the player actually aiming (breaks run anim + false peer relay).
+bool local_player_strict_aim_active(void* player) {
+    if (player == nullptr) {
+        return false;
+    }
+    if (player_ads_active(player)) {
+        return true;
+    }
+    if (local_game_window_foreground() &&
+        (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0) {
+        return true;
+    }
+    return false;
+}
+
+bool local_player_aim_input_active() {
+    void* local = resolve_live_player_safe(0);
+    if (local == nullptr) {
+        local = retained_player_object(0);
+    }
+    return local_player_strict_aim_active(local);
+}
+
+bool peer_packet_aim_active(const coop::StatePacket& peer) {
+    // Require pose_seed in the packet: publish only attaches it under strict RMB,
+    // so draw/holster cannot be mistaken for ADS on the receiver.
+    return (peer.flags & 8) != 0 &&
+           (peer.input_buttons & kJoypadAimButtonMask) != 0 &&
+           (peer.flags & coop::kStateFlagPoseSeed) != 0;
+}
+
+bool peer_snapshot_aim_active() {
+    if (!g_state_net.has_peer_state.load(std::memory_order_acquire)) {
+        return false;
+    }
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    if (received == 0 || GetTickCount64() - received > 250) {
+        return false;
+    }
+    coop::StatePacket peer{};
+    return copy_peer_state_snapshot(peer) && peer_packet_aim_active(peer);
+}
+
+// F8 = relay peer aim-press (0x200) to puppet. Numpad / = optional peer aim-pose
+// visuals only; neither mirrors the local player on this screen.
+bool puppet_aim_press_relay_enabled() {
+    return g_puppet_relay_aim_press;
+}
+
+// Peer-aim via network packet reaches the puppet joypad; local-lead (Chloe ADS on
+// copy 1 -> Nadine puppet) did not survive Input_ScaleCopyVirtual's block-1 sandwich.
+// Write the puppet's own resolved block + joypad held masks here, immediately before
+// PlayerFireController consumes input on the remote Player update.
+void apply_puppet_sustained_aim_input(void* puppet) {
+    if (puppet == nullptr || g_module == 0) {
+        return;
+    }
+    coop::StatePacket peer{};
+    const bool want_aim =
+        g_puppet_relay_aim_press && peer_snapshot_aim_active();
+    static bool prev_want_aim = false;
+    if (readable_bytes(static_cast<std::byte*>(puppet) + 0x39BC) < 1) {
+        return;
+    }
+    const int joypad_index =
+        *reinterpret_cast<const std::int32_t*>(
+            static_cast<const std::byte*>(puppet) + 0x39B8);
+    if (joypad_index < 0 || joypad_index >= 6) {
+        return;
+    }
+    void* const frame_state =
+        *reinterpret_cast<void**>(g_module + 0x3FE1088);
+    if (frame_state == nullptr) {
+        return;
+    }
+    auto* const joypad = static_cast<std::byte*>(frame_state) + 0xDB0 +
+                         0xBF0ULL * static_cast<std::uintptr_t>(joypad_index);
+    std::byte* const blk = joypad_resolved_input_block(joypad_index);
+    if (!want_aim) {
+        if (blk != nullptr && readable_bytes(blk + 0x520) >= 8) {
+            *reinterpret_cast<std::uint64_t*>(blk + 0x518) &= ~kJoypadAimButtonMask;
+        }
+        if (readable_bytes(joypad) >= 0xE0) {
+            if (prev_want_aim) {
+                *reinterpret_cast<std::uint64_t*>(joypad + 0xD8) |=
+                    kJoypadAimButtonMask;
+            }
+            *reinterpret_cast<std::uint64_t*>(joypad + 0xE0) &= ~kJoypadAimButtonMask;
+            *reinterpret_cast<std::uint64_t*>(joypad + 0xD0) &= ~kJoypadAimButtonMask;
+        }
+        force_puppet_ads_flag(puppet, false);
+        prev_want_aim = false;
+        return;
+    }
+    if (blk != nullptr && readable_bytes(blk + 0x520) >= 8) {
+        *reinterpret_cast<std::uint64_t*>(blk + 0x518) |= kJoypadAimButtonMask;
+    }
+    if (readable_bytes(joypad) >= 0xE8) {
+        if (!prev_want_aim) {
+            *reinterpret_cast<std::uint64_t*>(joypad + 0xD0) |= kJoypadAimButtonMask;
+        }
+        *reinterpret_cast<std::uint64_t*>(joypad + 0xE0) |= kJoypadAimButtonMask;
+        *reinterpret_cast<std::uint64_t*>(joypad + 0xD8) &= ~kJoypadAimButtonMask;
+    }
+    prev_want_aim = true;
+}
+
+void force_puppet_ads_flag(void* puppet, bool active) {
+    if (puppet == nullptr ||
+        readable_bytes(static_cast<std::byte*>(puppet) + kPlayerAdsActiveOffset) <
+            sizeof(std::uint32_t)) {
+        return;
+    }
+    __try {
+        *reinterpret_cast<std::uint32_t*>(
+            static_cast<std::byte*>(puppet) + kPlayerAdsActiveOffset) =
+            active ? 1u : 0u;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
+
 bool should_gate_remote_hud_reticle() {
     return g_state_net.enabled && remote_player_ads_active() &&
            !local_player_should_show_reticle();
@@ -1868,6 +2007,50 @@ bool copy_peer_pose_seed_32(std::uint8_t out[32]) {
     return true;
 }
 
+// Screen-0 pose seed (CameraManager(0)->+0xB0->+0x60): same source the sender
+// packs into StatePacket for fire/aim ray relay.
+bool copy_local_pose_seed_32(std::uint8_t out[32]) {
+    if (g_module == 0) {
+        return false;
+    }
+    const auto get_camera_manager =
+        reinterpret_cast<GetCameraManagerFunction>(g_module + kGetCameraManagerRva);
+    void* const mgr = get_camera_manager(0);
+    if (mgr == nullptr ||
+        readable_bytes(static_cast<std::byte*>(mgr) + 0xB0) < sizeof(void*)) {
+        return false;
+    }
+    void* const blk = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(mgr) + 0xB0);
+    if (blk == nullptr || readable_bytes(static_cast<std::byte*>(blk) + 0x60) < 32) {
+        return false;
+    }
+    const auto* seed = reinterpret_cast<const float*>(static_cast<std::byte*>(blk) + 0x60);
+    if (!valid_network_orientation(seed + 4)) {
+        return false;
+    }
+    std::memcpy(out, seed, 32);
+    return true;
+}
+
+// Puppet aim pose comes ONLY from the networked peer (other tll.exe copy). The
+// local player's camera/RMB on this screen must not drive the partner puppet.
+bool copy_peer_aim_pose_seed_32(std::uint8_t out[32]) {
+    coop::StatePacket peer{};
+    if (!copy_peer_state_snapshot(peer) ||
+        !peer_packet_aim_active(peer) ||
+        (peer.flags & coop::kStateFlagPoseSeed) == 0 ||
+        !valid_network_orientation(peer.pose_seed + 4)) {
+        return false;
+    }
+    std::memcpy(out, peer.pose_seed, 32);
+    return true;
+}
+
+bool copy_lead_aim_pose_seed_32(std::uint8_t out[32]) {
+    return copy_peer_aim_pose_seed_32(out);
+}
+
 // Write the peer aim pose (pos+quat from the relayed pose seed) into the puppet's
 // AIM POSE fields Player+0x1720/+0x1730 (found 2026-07-07). Default ON; Numpad /
 // A/B via g_puppet_aim_reticle_relay. Call POST native update so it is not clobbered.
@@ -1875,8 +2058,11 @@ void apply_peer_aim_pose_quat(void* player) {
     if (!g_puppet_aim_reticle_relay || player == nullptr) {
         return;
     }
+    if (!peer_snapshot_aim_active()) {
+        return;
+    }
     std::uint8_t seed[32]{};
-    if (!copy_peer_pose_seed_32(seed)) {
+    if (!copy_lead_aim_pose_seed_32(seed)) {
         return;
     }
     if (!valid_network_orientation(reinterpret_cast<const float*>(seed + 16))) {
@@ -1900,7 +2086,7 @@ void apply_peer_pose_seed_to_player_aim_fields(void* player) {
         return;
     }
     std::uint8_t seed[32]{};
-    if (!copy_peer_pose_seed_32(seed)) {
+    if (!copy_lead_aim_pose_seed_32(seed)) {
         return;
     }
     if (readable_bytes(static_cast<std::byte*>(player) + kPlayerAimTargetAuxOffset) <
@@ -2046,6 +2232,25 @@ void record_pose_seed_caller(std::uintptr_t rva) {
     }
 }
 
+void apply_pose_seed_override_out(
+    void* out, const std::uint8_t seed[32], std::uintptr_t caller_rva) {
+    __try {
+        if (caller_rva == kPlayerAimPoseSeedCallSiteRva) {
+            std::memcpy(out, seed, 32);
+        } else {
+            std::memcpy(static_cast<std::byte*>(out) + 16, seed + 16, 16);
+            void* const puppet = retained_player_object(1);
+            if (puppet != nullptr &&
+                readable_bytes(static_cast<std::byte*>(puppet) + kWorldPositionOffset) >=
+                    16) {
+                std::memcpy(out, static_cast<std::byte*>(puppet) + kWorldPositionOffset,
+                            16);
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
+
 void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     void* const result = g_original_pose_seed_resolver != nullptr
         ? g_original_pose_seed_resolver(out, idx)
@@ -2063,37 +2268,38 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
         g_pose_seed_fire_only_override || g_puppet_aim_ray_override;
     const bool sustained_slot1_override =
         g_puppet_aim_override_frame && idx == kSlot1ScreenIndex;
-    // RETICLE-SCOPED override (2026-07-07): apply the peer pose-seed ONLY when the
-    // caller is the aim-target derivation inside PlayerAimController::GetTarget
-    // PointFromReticle (return site 0x140CB17D6). This drives the visible aim pose
-    // without a trampoline of that hot function (which crashed) and without the
-    // sustained idx==1 override (which froze the aim camera on 07-05, because it
-    // hit the camera's own resolver calls too). Scoped to the single reticle call
-    // site => only the target-point derivation is redirected.
-    const bool reticle_override =
+    // AIM-POSE-SCOPED override (2026-07-07): peer pose-seed ONLY when the caller is
+    // (a) GetTargetPointFromReticle's internal resolver call (0xCB17D6), or
+    // (b) sub_1410E9210's per-frame copy into Player+0x1720/+0x1730 (0x10E934B).
+    // (b) is the confirmed writer chain: resolver -> vmovups [player+1720/1730].
+    // Avoids sustained idx==1 override (froze aim 07-05) and reticle trampoline crash.
+    const bool aim_pose_seed_override =
         g_puppet_aim_reticle_relay && idx == kSlot1ScreenIndex &&
-        caller_rva == kAimTargetReticleCallSiteRva;
+        peer_snapshot_aim_active() &&
+        (caller_rva == kAimTargetReticleCallSiteRva ||
+         caller_rva == kPlayerAimPoseSeedCallSiteRva);
     if (!g_puppet_relay_pose_seed || !g_state_net.enabled || out == nullptr ||
-        !(fire_path_override || sustained_slot1_override || reticle_override)) {
+        !(fire_path_override || sustained_slot1_override || aim_pose_seed_override)) {
         return result;
     }
     coop::StatePacket peer{};
+    std::uint8_t seed[32]{};
     if (!copy_peer_state_snapshot(peer) ||
         (peer.flags & coop::kStateFlagPoseSeed) == 0 ||
         !valid_network_orientation(peer.pose_seed + 4)) {
         return result;
     }
-    __try {
-        std::memcpy(static_cast<std::byte*>(out) + 16, peer.pose_seed + 4, 16);
-        void* const puppet = retained_player_object(1);
-        if (puppet != nullptr &&
-            readable_bytes(static_cast<std::byte*>(puppet) + kWorldPositionOffset) >=
-                16) {
-            std::memcpy(out, static_cast<std::byte*>(puppet) + kWorldPositionOffset,
-                        16);
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    std::memcpy(seed, peer.pose_seed, 32);
+    static ULONGLONG last_override_log = 0;
+    const ULONGLONG onow = GetTickCount64();
+    if (onow - last_override_log > 2000) {
+        last_override_log = onow;
+        std::ostringstream oline;
+        oline << "AIM-POSE-OVERRIDE site=0x" << std::hex << caller_rva << std::dec
+              << " src=peer";
+        log_line(oline.str().c_str());
     }
+    apply_pose_seed_override_out(out, seed, caller_rva);
     return result;
 }
 
@@ -3953,9 +4159,7 @@ void apply_peer_aim_facing_to_player(
     if (player == nullptr) {
         return;
     }
-    const bool peer_aiming =
-        (peer.flags & 8) != 0 &&
-        (peer.input_buttons & kJoypadAimButtonMask) != 0;
+    const bool peer_aiming = peer_packet_aim_active(peer);
     const bool have_peer_camera =
         (peer.flags & coop::kStateFlagPeerCamera) != 0 &&
         valid_network_orientation(peer.camera_quat);
@@ -6923,10 +7127,20 @@ void send_local_player_state() {
             }
             const std::uint64_t cached =
                 g_cached_local_input_buttons.load(std::memory_order_relaxed);
-            held_mask |= cached & (kJoypadAimButtonMask | kJoypadFireButtonMask);
+            // Never resurrect a released aim bit from cache — that caused copy-2
+            // Chloe puppet to stay in ADS after copy-1 Chloe released RMB.
+            held_mask |= cached & kJoypadFireButtonMask;
+            if ((held_mask & kJoypadAimButtonMask) == 0) {
+                held_mask &= ~kJoypadAimButtonMask;
+            }
             // Strip scope/HUD layer bits from Joypad +0xE0 pollution; keep 0x200
             // in the packet for apply_peer_aim_facing on the receiver only.
             held_mask &= ~0x10000ull & ~0x20000ull & ~0x40000ull & ~0x80000ull;
+            if (!local_player_strict_aim_active(local_obj)) {
+                held_mask &= ~kJoypadAimButtonMask;
+            } else {
+                held_mask |= kJoypadAimButtonMask;
+            }
             pkt.input_buttons = held_mask;
             static std::uint64_t prev_sent_input_mask = 0;
             synth_pressed = held_mask & ~prev_sent_input_mask;
@@ -6954,16 +7168,14 @@ void send_local_player_state() {
             }
         }
     }
-    // Relay gameplay camera + right stick so remote Nadine matches Chloe's look.
-    {
+    // Relay gameplay camera + pose seed ONLY while strict aim (RMB/ADS) is held.
+    // Unconditional camera relay made the puppet track peer look while running.
+    if (local_player_strict_aim_active(local_obj)) {
         float cam_quat[4]{};
         if (capture_gameplay_camera_quat(cam_quat)) {
             std::memcpy(pkt.camera_quat, cam_quat, sizeof(pkt.camera_quat));
             pkt.flags |= coop::kStateFlagPeerCamera;
         }
-        // v8: relay the screen-0 POSE SEED — the actual fire/aim ray source that
-        // ResolveScreenRoutePoseSeedOrDefault feeds to PlayerFireController and the
-        // grenade arc. CameraManager(0) -> *(mgr+0xB0) -> +0x60 = pos[4]+quat[4].
         {
             const auto get_camera_manager =
                 reinterpret_cast<GetCameraManagerFunction>(
@@ -7003,6 +7215,12 @@ void send_local_player_state() {
                 pkt.look_stick[1] = axes[3];
             }
         }
+    } else {
+        pkt.flags &= static_cast<std::uint16_t>(
+            ~(coop::kStateFlagPoseSeed | coop::kStateFlagPeerCamera));
+        std::memset(pkt.pose_seed, 0, sizeof(pkt.pose_seed));
+        std::memset(pkt.camera_quat, 0, sizeof(pkt.camera_quat));
+        std::memset(pkt.look_stick, 0, sizeof(pkt.look_stick));
     }
     // The native CharacterMove weapon helper is read-only over the live Player
     // inventory. Refresh less often than movement; the receiver republishes only
@@ -7709,21 +7927,26 @@ void apply_puppet_transform_post(void* puppet) {
     // local correction vectors while its peer stood still.
     // Preserve the native locomotion turn and remove packet-step snapping. Exact
     // memcpy made every newly received quaternion visible as a hard angular step.
+    const ULONGLONG peer_received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    const bool peer_fresh =
+        peer_received != 0 && GetTickCount64() - peer_received <= 250;
     const bool peer_aiming =
-        (pkt.flags & 8) != 0 &&
-        (pkt.input_buttons & kJoypadAimButtonMask) != 0;
+        peer_fresh && (pkt.flags & 8) != 0 && peer_packet_aim_active(pkt);
+    const bool puppet_aiming_now = peer_aiming;
+    static bool puppet_was_aiming = false;
     float orientation_dot = 1.0F;
-    // APPROACH 3 (2026-07-07): write the peer's aim TARGET POINT into the puppet's
-    // Player+0x1570 (and aux +0x1580) AFTER the native update. The aim controller
-    // writes its resolved target here each frame; overwriting it as the last writer
-    // makes the upper-body aim IK point where the peer aims. Target = peer pose-seed
-    // camera position + full 3D forward (incl. pitch) * 20m. Safe data write (no
-    // hook/trampoline). Toggle: g_puppet_aim_reticle_relay (Numpad /).
-    if (peer_aiming && g_puppet_aim_reticle_relay &&
-        (pkt.flags & coop::kStateFlagPoseSeed) != 0 &&
-        valid_network_orientation(pkt.pose_seed + 4)) {
-        const float* cam_pos = pkt.pose_seed;       // pos[4]
-        const float* q = pkt.pose_seed + 4;         // quat[4] (x,y,z,w)
+    // Peer-only aim relay: partner puppet reflects the OTHER copy's aim, never the
+    // local player's camera on this screen.
+    if (g_puppet_aim_reticle_relay && peer_aiming) {
+        const float* cam_pos = nullptr;
+        const float* q = nullptr;
+        if ((pkt.flags & coop::kStateFlagPoseSeed) != 0 &&
+            valid_network_orientation(pkt.pose_seed + 4)) {
+            cam_pos = pkt.pose_seed;
+            q = pkt.pose_seed + 4;
+        }
+        if (cam_pos != nullptr && q != nullptr) {
         // forward = quat * (0,0,-1): the camera/aim looks down -Z in this engine.
         const float x = q[0], y = q[1], z = q[2], w = q[3];
         float fx = -2.0F * (x * z + w * y);
@@ -7761,39 +7984,26 @@ void apply_puppet_transform_post(void* puppet) {
                 force_log_line(al.str().c_str());
             }
         }
+        }
     }
     if (peer_aiming) {
-        // AIM-JITTER ROOT FIX (2026-07-05): the orientation was written by THREE
-        // sources per frame — apply_peer_aim_facing (camera-yaw) before the native
-        // update, the native anim/aim update (g_original_update, from the puppet's
-        // own uncontrolled aim), and apply_peer_aim_facing again after. They diverge
-        // while aiming -> violent jerk ("multiple sources write the aim direction").
-        // Fix: ONE source. The peer's relayed body quat (pkt.quat) already reflects
-        // the aimed body orientation; blend toward it here (LAST writer, after the
-        // native update) and drop the camera-yaw derivation. Toggle VK_HELP/old
-        // behavior via g_puppet_aim_facing_from_camera for A/B.
         if (g_puppet_aim_facing_from_camera) {
             apply_peer_aim_facing_to_player(puppet, pkt);
-        } else if ((pkt.flags & coop::kStateFlagPoseSeed) != 0 &&
+        } else if (g_puppet_aim_reticle_relay &&
+                   (pkt.flags & coop::kStateFlagPoseSeed) != 0 &&
                    valid_network_orientation(pkt.pose_seed + 4)) {
             orientation_dot =
                 blend_network_orientation(quat, pkt.pose_seed + 4, 0.55F);
-        } else if (valid_network_orientation(pkt.camera_quat)) {
-            float fwd_x = 0.0F;
-            float fwd_z = 0.0F;
-            camera_forward_horizontal(pkt.camera_quat, fwd_x, fwd_z);
-            float yaw_quat[4]{};
-            yaw_quat_from_horizontal_forward(fwd_x, fwd_z, yaw_quat);
-            orientation_dot = blend_network_orientation(quat, yaw_quat, 0.55F);
         } else if (valid_network_orientation(pkt.quat)) {
             orientation_dot = blend_network_orientation(quat, pkt.quat, 0.35F);
         }
-        // NEW (2026-07-07): drive the visible aim pose via the found aim-orientation
-        // quat at puppet+0x1730 (pos +0x1720). Last writer, after native update.
         apply_peer_aim_pose_quat(puppet);
+    } else if (puppet_was_aiming) {
+        force_puppet_ads_flag(puppet, false);
     } else if (pkt.move_magnitude < 0.15F) {
         orientation_dot = blend_network_orientation(quat, pkt.quat, 0.18F);
     }
+    puppet_was_aiming = puppet_aiming_now;
     if (g_clone_freerun) {
         if (too_far) {
             std::memcpy(world, pkt.pos, sizeof(pkt.pos));
@@ -8711,8 +8921,7 @@ void apply_queued_fire_events(void* puppet) {
     coop::StatePacket peer{};
     copy_peer_state_snapshot(peer);
     const ULONGLONG relay_now = GetTickCount64();
-    if ((peer.flags & 8) != 0 &&
-        (peer.input_buttons & kJoypadAimButtonMask) != 0) {
+    if (peer_packet_aim_active(peer)) {
         g_peer_aim_recent_until_ms = relay_now + 500;
     }
 
@@ -8919,8 +9128,7 @@ void apply_queued_fire_events(void* puppet) {
 
     // Button fallback when native replay is disabled or fails.
     // Body facing only — do not latch aim (0x200); that opens crosshair/scope HUD.
-    const bool peer_aim_button =
-        (peer.input_buttons & kJoypadAimButtonMask) != 0;
+    const bool peer_aim_button = peer_packet_aim_active(peer);
     const bool peer_aim_recent = relay_now < g_peer_aim_recent_until_ms;
     const bool peer_gun_out =
         (peer.flags & 0x80) != 0 && peer.gun_state == 1;
@@ -9327,9 +9535,7 @@ void sync_puppet_aim_camera_from_peer(const coop::StatePacket& peer) {
     if (!g_puppet_relay_pose_seed || !g_state_net.enabled || g_module == 0) {
         return;
     }
-    const bool peer_aiming =
-        (peer.flags & 8) != 0 &&
-        (peer.input_buttons & kJoypadAimButtonMask) != 0;
+    const bool peer_aiming = peer_packet_aim_active(peer);
     if (!peer_aiming) {
         return;
     }
@@ -9469,14 +9675,10 @@ void scrub_local_viewport_aim_hud_leak() {
     if (local == nullptr || g_module == 0) {
         return;
     }
-    if ((capture_local_joypad_command_mask(local) & kJoypadAimButtonMask) != 0) {
-        return;
-    }
-    coop::StatePacket peer{};
-    if (!copy_peer_state_snapshot(peer) || (peer.flags & 8) == 0) {
-        return;
-    }
-    if ((peer.input_buttons & kJoypadAimButtonMask) == 0) {
+    // Shared joypad block 1 (puppet dest=3) can bleed aim-press into the local lane.
+    // Scrub whenever the LOCAL player is not strictly aiming (RMB/ADS), regardless
+    // of what the peer packet says — draw/holster must not leave 0x200 on slot 0.
+    if (local_player_strict_aim_active(local)) {
         return;
     }
     const int joypad_index = *reinterpret_cast<const std::int32_t*>(
@@ -9686,9 +9888,13 @@ void drive_remote_slot1_actions_tick() {
     const bool moving = magnitude > 0.01F || correcting;
     *reinterpret_cast<float*>(branch1 + 0x14) = sx;   // L-stick X
     *reinterpret_cast<float*>(branch1 + 0x18) = sy;   // L-stick Y
-    const bool peer_aiming =
-        (peer.flags & 8) != 0 &&
-        (peer.input_buttons & kJoypadAimButtonMask) != 0;
+    const bool peer_aiming = peer_packet_aim_active(peer);
+    const bool puppet_should_aim =
+        puppet_aim_press_relay_enabled() && peer_aiming;
+    if (!peer_aiming) {
+        g_state_net.active_button_press_latch.fetch_and(
+            ~kJoypadAimButtonMask, std::memory_order_release);
+    }
     // Peer look_stick must NOT ride the slot-1 branch: the branch apply copies it
     // into shared block 1, where the local-player-1 lane (slot 1) and screen-level
     // HUD/camera code read it -> aim HUD leak on the local viewport. The right
@@ -9703,13 +9909,13 @@ void drive_remote_slot1_actions_tick() {
         apply_peer_aim_facing_to_player(remote_player, peer);
     }
     g_puppet_aim_override_frame =
-        peer_aiming && g_puppet_relay_pose_seed && g_state_net.enabled;
+        puppet_should_aim && g_puppet_relay_pose_seed && g_state_net.enabled;
     if (g_puppet_aim_override_frame) {
         sync_puppet_aim_camera_from_peer(peer);
         apply_peer_pose_seed_to_player_aim_fields(remote_player);
     }
     if (g_puppet_rifle_pose_only_ads && peer_holds_scoped_rifle(peer) &&
-        peer_aiming) {
+        peer_aiming && !g_puppet_aim_reticle_relay) {
         scrub_puppet_scoped_ads_flag(remote_player);
     }
     scrub_local_viewport_aim_hud_leak();
@@ -9735,10 +9941,12 @@ void drive_remote_slot1_actions_tick() {
         prev_f7 = f7;
     }
     {
-        // F8: toggle puppet aim-press (ADS) relay. OFF = pose-only (no scoped
-        // rifle overlay leak on this viewport); ON = full ADS aim stance.
+        // F8: toggle puppet aim-press (ADS) relay — foreground window only so the
+        // other tll.exe copy does not flip at the same time.
         static bool prev_f8 = false;
-        const bool f8 = (GetAsyncKeyState(VK_F8) & 0x8000) != 0;
+        const bool f8 =
+            local_game_window_foreground() &&
+            (GetAsyncKeyState(VK_F8) & 0x8000) != 0;
         if (f8 && !prev_f8) {
             g_puppet_relay_aim_press = !g_puppet_relay_aim_press;
             std::ostringstream t;
@@ -12250,6 +12458,7 @@ void attach_main_camera_to_clone() {
 }
 
 void arm_velwriter_breakpoint_all_threads();  // defined below
+void arm_aimquat_writer_breakpoint_all_threads();  // defined below
 void arm_inputstate_breakpoint_all_threads();  // defined below
 void arm_stickread_breakpoint_all_threads();  // defined below
 void arm_inputwrite_breakpoint_all_threads();  // defined below
@@ -12646,7 +12855,12 @@ void __fastcall hooked_update(void* object) {
                          : "Puppet net-apply OFF (puppet = pure local-input player)");
         }
         if ((GetAsyncKeyState(VK_PRIOR) & 1) != 0) {
-            arm_velwriter_breakpoint_all_threads();
+            // Page Up = velocity writer bp; Shift+Page Up = aim quat +0x1730 writer bp.
+            if ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) {
+                arm_aimquat_writer_breakpoint_all_threads();
+            } else {
+                arm_velwriter_breakpoint_all_threads();
+            }
         }
         if ((GetAsyncKeyState(VK_NUMPAD0) & 1) != 0) {
             arm_inputstate_breakpoint_all_threads();  // capture sub_1402893D0 rcx (real input struct)
@@ -12797,7 +13011,7 @@ void __fastcall hooked_update(void* object) {
                          ? "CLIENT-DEATH-PUBLISH ON (mirror host kills on puppet)"
                          : "CLIENT-DEATH-PUBLISH OFF (host-dead enemy left frozen)");
         }
-        if ((GetAsyncKeyState(VK_F8) & 1) != 0) {
+        if ((GetAsyncKeyState(VK_F8) & 1) != 0 && !g_state_net.enabled) {
             g_control_enabled = !g_control_enabled;
             if (g_control_enabled) {
                 g_controlled_object = object;
@@ -12929,13 +13143,21 @@ char __fastcall hooked_player_input_state_update(void* player) {
         void* const frame_state =
             *reinterpret_cast<void**>(g_module + 0x3FE1088);
         if (player_consumed_edges != 0 && frame_state != nullptr) {
-            auto* const joypad3 = static_cast<std::byte*>(frame_state) +
-                                  0xDB0 + 0xBF0 * 3;
-            if (readable_bytes(joypad3) >= 0xD8) {
-                *reinterpret_cast<std::uint64_t*>(joypad3 + 0xD0) &=
-                    ~player_consumed_edges;
+            const int puppet_joypad =
+                readable_bytes(static_cast<std::byte*>(player) + 0x39BC) >= 1
+                    ? *reinterpret_cast<const std::int32_t*>(
+                          static_cast<const std::byte*>(player) + 0x39B8)
+                    : 3;
+            if (puppet_joypad >= 0 && puppet_joypad < 6) {
+                auto* const joypad_obj = static_cast<std::byte*>(frame_state) +
+                                         0xDB0 + 0xBF0 * puppet_joypad;
+                if (readable_bytes(joypad_obj) >= 0xD8) {
+                    *reinterpret_cast<std::uint64_t*>(joypad_obj + 0xD0) &=
+                        ~player_consumed_edges;
+                }
             }
         }
+        apply_puppet_sustained_aim_input(player);
     }
     if (role < 0 || readable_bytes(static_cast<std::byte*>(player) + 0x3A40) < 1) {
         return result;
@@ -13474,7 +13696,8 @@ LONG CALLBACK velwriter_capture_veh(EXCEPTION_POINTERS* ep) {
             if (!known && g_velwriter_count < 8) {
                 g_velwriter_rips[g_velwriter_count++] = rip;
                 std::ostringstream line;
-                line << "VEL writer RIP=0x" << std::hex << rip
+                line << (g_velwriter_aimquat_mode ? "AIMQUAT writer" : "VEL writer")
+                     << " RIP=0x" << std::hex << rip
                      << " (rva=0x" << (rip - g_module) << ")" << std::dec;
                 log_line(line.str().c_str());
                 // Walk the stack: log return addresses in .text (the call chain
@@ -13500,7 +13723,9 @@ LONG CALLBACK velwriter_capture_veh(EXCEPTION_POINTERS* ep) {
                 c->Dr1 = 0;
                 c->Dr7 = c->Dr7 & ~static_cast<DWORD64>(0x4);
                 g_velwriter_capturing = false;
-                log_line("VEL writer capture complete (disarming)");
+                log_line(g_velwriter_aimquat_mode
+                             ? "AIMQUAT writer capture complete (disarming)"
+                             : "VEL writer capture complete (disarming)");
             }
             return EXCEPTION_CONTINUE_EXECUTION;
         }
@@ -14019,6 +14244,7 @@ void arm_velwriter_breakpoint_all_threads() {
         reinterpret_cast<std::uintptr_t>(slot0) + kPlayerVelocityOffset;
     g_velwriter_addr = addr;
     g_velwriter_count = 0;
+    g_velwriter_aimquat_mode = false;
     g_velwriter_capturing = true;
     const DWORD pid = GetCurrentProcessId();
     const DWORD self = GetCurrentThreadId();
@@ -14068,6 +14294,70 @@ void arm_velwriter_breakpoint_all_threads() {
     std::ostringstream line;
     line << "vel-writer write-bp armed on " << armed << " threads @0x"
          << std::hex << addr << std::dec;
+    log_line(line.str().c_str());
+}
+
+// Write-breakpoint on the LIVE player's aim quat Player+0x1730 (found 2026-07-07)
+// to capture the aim-controller writer's RIP + stack. Reuses velwriter_capture_veh
+// (DR1, g_velwriter_capturing). LEN=8 to watch the quat's first 8 bytes (x,y).
+void arm_aimquat_writer_breakpoint_all_threads() {
+    void* player = resolve_live_player_safe(0);
+    if (player == nullptr) {
+        log_line("arm aimquat bp: live player null");
+        return;
+    }
+    const std::uintptr_t addr =
+        reinterpret_cast<std::uintptr_t>(player) + kPlayerAimPoseQuatOffset;
+    g_velwriter_addr = addr;
+    g_velwriter_count = 0;
+    g_velwriter_aimquat_mode = true;
+    g_velwriter_capturing = true;
+    const DWORD pid = GetCurrentProcessId();
+    const DWORD self = GetCurrentThreadId();
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snap == INVALID_HANDLE_VALUE) {
+        log_line("arm aimquat bp: snapshot failed");
+        return;
+    }
+    THREADENTRY32 te{};
+    te.dwSize = sizeof(te);
+    int armed = 0;
+    // DR1 write 8-byte: L1=bit2; R/W1=01 (write) bits 20-21; LEN1=10 (8) bits 22-23.
+    const DWORD64 dr7_bits =
+        static_cast<DWORD64>(0x4) |
+        (static_cast<DWORD64>(0x1) << 20) |
+        (static_cast<DWORD64>(0x2) << 22);
+    const DWORD64 dr7_mask =
+        ~((static_cast<DWORD64>(0x4)) |
+          (static_cast<DWORD64>(0x3) << 20) |
+          (static_cast<DWORD64>(0x3) << 22));
+    if (Thread32First(snap, &te)) {
+        do {
+            if (te.th32OwnerProcessID != pid || te.th32ThreadID == self) {
+                continue;
+            }
+            HANDLE th = OpenThread(THREAD_GET_CONTEXT | THREAD_SET_CONTEXT |
+                                       THREAD_SUSPEND_RESUME,
+                                   FALSE, te.th32ThreadID);
+            if (!th) continue;
+            CONTEXT ctx{};
+            ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+            SuspendThread(th);
+            if (GetThreadContext(th, &ctx)) {
+                ctx.Dr1 = addr;
+                ctx.Dr7 = (ctx.Dr7 & dr7_mask) | dr7_bits;
+                ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+                if (SetThreadContext(th, &ctx)) ++armed;
+            }
+            ResumeThread(th);
+            CloseHandle(th);
+        } while (Thread32Next(snap, &te));
+    }
+    CloseHandle(snap);
+    g_logging_enabled = true;  // keep ON so the VEH's RIP/stack lines are written
+    std::ostringstream line;
+    line << "aimquat write-bp armed on " << armed << " threads @0x" << std::hex
+         << addr << " (player+0x1730)" << std::dec;
     log_line(line.str().c_str());
 }
 
@@ -14154,7 +14444,7 @@ DWORD WINAPI install_hook(void*) {
     boot_log_line("TLL hook DLL init 2026-07-07ad (early init marker)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
-        "TLL hook DLL init 2026-07-07ad (stop pregive fountain, give on art change)");
+        "TLL hook DLL init 2026-07-07ar (pose_seed gate on all aim paths; F8 coop-only)");
     boot_log_line("crash observer installed (no breakpoints)");
     install_joypad_disabled_commands_lock();
     install_joypad3_analog_route();

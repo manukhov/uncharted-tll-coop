@@ -1,5 +1,32 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-07, Cursor — aim-поза: writer chain + build `af`)
+
+**Продолжено с остановки Claude/Codex на aim-pose** (коммиты `c3825a2`…`d69a7ad`):
+live-дифф нашёл `Player+0x1720/+0x1730`, пост-запись инертна, POSESEED-CALLERS
+гистограмма собиралась.
+
+**STATIC (квота выполнена):**
+1. `sub_1410E9210` (`Player_PostAnimUpdate`) вызывает resolver **ret_rva=0x10E934B**,
+   затем `vmovups` в `+0x1720/+0x1730` — это и есть писатель aim-позы.
+2. Тот же `0x10E934B` — доминирующий hit в POSESEED-CALLERS при ADS куклы.
+3. Согласовано с `pseudo_camowner.txt` и xref `*(owner+0x4010)` screen index.
+
+**Реализовано (build `2026-07-07af`):**
+1. Resolver override расширен: call-site `0x10E934B` → полный peer pose-seed 32B;
+   `0xCB17D6` (reticle) — quat+puppet origin. Тоггл **Numpad /** =
+   `g_puppet_aim_reticle_relay`.
+2. **Shift+Page Up** — write-bp на live `Player+0x1730` (верификация writer RIP).
+3. Скрипт `scripts/ida_find_player_1730_writers.py`.
+
+**Фальсифицируемый прогноз:** Numpad `/` ON, Chloe ADS двигает прицел → Nadine верх
+корпуса следует; локальный aim Chloe **не** замирает; fire ray без регрессии.
+
+**Параллельно (оружие, build `ad` в working tree):** fountain-fix не подтверждён
+user-test — отдельная ветка.
+
+---
+
 ## Turn note (2026-07-07, Cursor — продолжение Codex: class-slot swap в relay give, build `t`)
 
 **Продолжено с места остановки Codex** (коммиты `3d7d52e`…`7aabc23`):

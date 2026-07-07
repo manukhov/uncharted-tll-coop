@@ -25215,3 +25215,19 @@ aim-контроллер куклы пере-считывает каждый к�
 
 baseline чист: g_puppet_aim_reticle_relay default OFF (запись инертна), fire ray
 работает, оружие работает.
+
+### STATIC 2026-07-07: ПИСАТЕЛЬ Player+0x1730 = sub_1410E9210 (Player_PostAnimUpdate) через resolver
+
+Статика `pseudo_camowner.txt` + дизасм `sub_1410E9210`:
+- `call ResolveScreenRoutePoseSeedOrDefault` **ret_rva=0x10E934B** (топ POSESEED-CALLERS
+  ~150/кадр при ADS куклы).
+- Сразу после: `vmovups [player+0x1720], xmm0` / `[player+0x1730], xmm1` — полный
+  32-байтный pose-seed копируется на Player как aim-поза.
+- Пост-запись в +0x1730 инертна потому что этот путь перезаписывает каждый кадр.
+
+**Хук (build `af`):** resolver override при `idx==1` + `g_puppet_aim_reticle_relay` +
+return site `0x10E934B` подставляет **полный** peer pose-seed (32 байта), не только
+quat. Второй site `0xCB17D6` (GetTargetPointFromReticle) — quat+puppet origin.
+
+**Рантайм-прогноз:** Numpad `/` ON → кукла при ADS поворачивает верх корпуса как пир;
+fire ray без изменений; aim camera локального игрока не замирает (нет broad idx==1).

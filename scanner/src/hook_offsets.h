@@ -171,6 +171,10 @@ constexpr std::uintptr_t kAimTargetFromReticleRva = 0xCB1720;
 // resolver's pose-seed override to just the aim-target derivation - no trampoline,
 // no sustained camera override.
 constexpr std::uintptr_t kAimTargetReticleCallSiteRva = 0xCB17D6;
+// Return site of ResolveScreenRoutePoseSeedOrDefault inside sub_1410E9210
+// (Player per-frame update): native code vmovups resolver result into Player+0x1720
+// and +0x1730 (aim pose). Top POSESEED-CALLERS hit ~150/frame during puppet ADS.
+constexpr std::uintptr_t kPlayerAimPoseSeedCallSiteRva = 0x10E934B;
 constexpr std::size_t kWeaponControllerGetWeaponBySlotVtOffset = 0xB0;
 constexpr std::uintptr_t kNetEventSyncWeaponPickupsApplyRva = 0xBCE440;
 constexpr std::uintptr_t kNetEventSyncWeaponPickupsVftableRva = 0x29FCF90;
