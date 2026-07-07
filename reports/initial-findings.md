@@ -25259,3 +25259,25 @@ Up/down/straight live-дифф блока NetAnimCmdGenerator (player+0x1B30+off
    ранее давал jitter — нужно rate, не absolute).
 
 Дампер dump_live_player_aim_fields (Numpad +) оставлен для будущих diff'ов.
+
+### 2026-07-07: sync_puppet_aim_camera_from_peer писала НЕ ТУ цепочку (почему камера инертна)
+
+Декомпил ResolveScreenRoutePoseSeedOrDefault (0x141C077B0) — точная цепочка чтения
+pose-seed для screen idx:
+```
+handle = *(g_module+0x697AD50 + 16*idx)   // table_14697AD50[2*idx], {ptr,id}[]
+v8     = *(handle + 8)
+blk    = *(v8 + 176)                       // 0xB0
+if (blk+85 && blk+86 && bitset gate) seed = *(blk + 0x60)  // 32B pos+quat
+else default (0,0,0)+identity
+```
+sync_puppet_aim_camera_from_peer писала в `GetCameraManager(1) → *(mgr+0xB0) → +0x60`
+= ДРУГАЯ цепочка (GetCameraManager != table_14697AD50[2*idx]; +0xB0 vs +8→+176).
+Поэтому запись камеры была инертна — писали не тот объект.
+
+Точный источник для screen-1 = `*(*(table_14697AD50[2]+8)+176)+0x60`. Диагностика
+log_screen_camera_state отмечала «screen 1 camera never materialized» → возможно
+handle=table[2] или blk нулевые. ТЕСТ (build ниже): писать peer 32B seed прямо в
+blk+0x60 источника + форсить gate-байты blk+85/86; лог валидности handle/v8/blk.
+Если blk валиден и aim пойдёт (yaw+pitch) — это чистый родной фикс; если blk=null —
+screen-1 камера не материализована, нужен путь материализации.
