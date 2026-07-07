@@ -5576,6 +5576,52 @@ void* resolve_live_player_safe(std::uint32_t index) {
     }
 }
 
+// AIM-FIELD LOCATOR (2026-07-07): force-log every float in the LIVE local player
+// (resolve_live_player_safe, not the retained wrapper whose +0x140 is a pointer)
+// over a wide range, tagged so two captures (aim up vs down) can be diffed offline
+// to find the aim pitch/yaw anim param. Read-only. Triggered by Numpad 0.
+// SEH-only helper (no C++ objects): copy 8 floats at p+off into out; false on fault.
+bool seh_read_8_floats(const std::byte* p, float* out) {
+    __try {
+        std::memcpy(out, p, 8 * sizeof(float));
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void dump_live_player_aim_fields(const char* tag) {
+    void* player = resolve_live_player_safe(0);
+    if (player == nullptr) {
+        force_log_line((std::string("AIMDUMP ") + tag + " player=null").c_str());
+        return;
+    }
+    auto* p = static_cast<std::byte*>(player);
+    {
+        std::ostringstream o;
+        o << "AIMDUMP " << tag << " obj=0x" << std::hex
+          << reinterpret_cast<std::uintptr_t>(player);
+        force_log_line(o.str().c_str());
+    }
+    for (std::size_t off = 0x100; off < 0x2600; off += 0x20) {
+        if (readable_bytes(p + off) < 0x20) continue;
+        float f[8];
+        if (!seh_read_8_floats(p + off, f)) continue;
+        std::ostringstream row;
+        row << "AIMROW " << tag << " +0x" << std::hex << off << ":";
+        bool any = false;
+        for (int i = 0; i < 8; ++i) {
+            const float v = f[i];
+            if (v == v && v != 0.0F && std::fabs(v) > 1e-4F &&
+                std::fabs(v) < 1e4F) {
+                row << " [" << i << "]" << v;
+                any = true;
+            }
+        }
+        if (any) force_log_line(row.str().c_str());
+    }
+}
+
 // Read a bounded, printable inline name at obj+0x8 (ND Process objects store their
 // debug name there). Returns "" if it doesn't look like a name.
 std::string read_inline_name(void* obj) {
@@ -11459,6 +11505,12 @@ void net_tick() {
                      ? "PUPPET-PREGIVE holstered = ON (weapons given up front)"
                      : "PUPPET-PREGIVE holstered = OFF (only after peer draws)");
         g_logging_enabled = was;
+    }
+    if (foreground && (GetAsyncKeyState(VK_ADD) & 1) != 0) {
+        // Numpad +: dump the LIVE local player's float fields for the aim-angle
+        // hunt. Press once aiming UP, once aiming DOWN; diff AIMROW lines offline.
+        static int shot = 0;
+        dump_live_player_aim_fields((shot++ % 2 == 0) ? "UP" : "DOWN");
     }
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
         g_local_animation_mirror_test = !g_local_animation_mirror_test;
