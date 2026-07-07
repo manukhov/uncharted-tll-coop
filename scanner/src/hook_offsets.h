@@ -101,6 +101,11 @@ constexpr std::size_t kPlayerAimTargetOffset = 0x1570;
 // pitch). Candidate input to the visible aim pose (upper-body point).
 constexpr std::size_t kPlayerAimPosePosOffset = 0x1720;
 constexpr std::size_t kPlayerAimPoseQuatOffset = 0x1730;
+// Duplicated world aim-at point (biggest movers in the 2026-07-07 up/down live
+// diff, delta ~14.5 on pure pitch). Candidate IK aim-at input for the upper-body
+// pitch bend (build af: yaw follows via the +0x1730 writer, pitch does not).
+constexpr std::size_t kPlayerAimAtPointOffset = 0x21F0;
+constexpr std::size_t kPlayerAimAtPointAuxOffset = 0x2240;
 constexpr std::size_t kPlayerAimTargetAuxOffset = 0x1580;
 constexpr std::size_t kLocomotionControllerOffset = 0x15B8;
 // PlayerWeaponController (player+0x1D88) fields. Runtime-pinned 2026-07-06 by a

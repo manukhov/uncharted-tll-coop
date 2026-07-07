@@ -5850,6 +5850,35 @@ void dump_live_player_aim_fields(const char* tag) {
         }
         if (any) force_log_line(row.str().c_str());
     }
+    // Also dump the anim-cmd generator block (*(player+0x1B30)): every Player-side
+    // aim field is write-inert (outputs), so the aim ANGLE consumed by the anim
+    // graph likely lives here. Ranges: header 0x0..0x1000 and the gate/state area
+    // 0xD000..0xE000 (AddSnapshot gate byte at +0xD1E0).
+    // The NetAnimCmdGenerator is INLINE at player+0x1B30 (the confirmed gate byte
+    // is at player+0x1B30+0xD1E0, i.e. it is a sub-object, not a pointer). Dump the
+    // whole inline block; AIMROW above already covers player+0x100..0x2600, so this
+    // extends the scan across the generator body (aim anim params live somewhere
+    // in here if not on the Player fields, which are all write-inert).
+    {
+        auto* g = p + 0x1B30;
+        for (std::size_t off = 0x0; off < 0xE800; off += 0x20) {
+            if (readable_bytes(g + off) < 0x20) continue;
+            float f[8];
+            if (!seh_read_8_floats(g + off, f)) continue;
+            std::ostringstream row;
+            row << "GENROW " << tag << " +0x" << std::hex << off << ":";
+            bool any = false;
+            for (int i = 0; i < 8; ++i) {
+                const float v = f[i];
+                if (v == v && v != 0.0F && std::fabs(v) > 1e-4F &&
+                    std::fabs(v) < 1e4F) {
+                    row << " [" << i << "]" << v;
+                    any = true;
+                }
+            }
+            if (any) force_log_line(row.str().c_str());
+        }
+    }
 }
 
 // Read a bounded, printable inline name at obj+0x8 (ND Process objects store their
@@ -7971,6 +8000,24 @@ void apply_puppet_transform_post(void* puppet) {
                                kPlayerAimTargetAuxOffset) >= 16) {
                 std::memcpy(
                     static_cast<std::byte*>(puppet) + kPlayerAimTargetAuxOffset,
+                    target, 16);
+            }
+            // PITCH candidate (2026-07-07 build ag): the up/down live diff's
+            // LARGEST deltas were the duplicated world aim-at point at +0x21F0
+            // and +0x2240 (delta ~14.5 on a pure pitch change) - semantically the
+            // IK aim-at point the spine bend consumes. Build af proved yaw follows
+            // (resolver override at the +0x1730 writer) but pitch does not; write
+            // the peer target into both fields as the pitch input candidate.
+            if (readable_bytes(static_cast<std::byte*>(puppet) +
+                               kPlayerAimAtPointOffset) >= 16) {
+                std::memcpy(
+                    static_cast<std::byte*>(puppet) + kPlayerAimAtPointOffset,
+                    target, 16);
+            }
+            if (readable_bytes(static_cast<std::byte*>(puppet) +
+                               kPlayerAimAtPointAuxOffset) >= 16) {
+                std::memcpy(
+                    static_cast<std::byte*>(puppet) + kPlayerAimAtPointAuxOffset,
                     target, 16);
             }
             static ULONGLONG last_aim_log = 0;
