@@ -25281,3 +25281,22 @@ handle=table[2] или blk нулевые. ТЕСТ (build ниже): писат
 blk+0x60 источника + форсить gate-байты blk+85/86; лог валидности handle/v8/blk.
 Если blk валиден и aim пойдёт (yaw+pitch) — это чистый родной фикс; если blk=null —
 screen-1 камера не материализована, нужен путь материализации.
+
+### 2026-07-07 (REJECTED runtime): screen-1 pose-seed override freezes LOCOMOTION facing
+
+Билд с записью peer-seed в источник резолвера screen-1 (+ прочие reticle-writes под
+g_puppet_aim_reticle_relay): user-test — кукла бежит только ВПЕРЁД, развернуться/бежать
+спиной не может (facing зафризен вперёд), прицеливание не работает. Причём
+SCREEN1-SEED-SRC в лог НЕ попал (puppet_should_aim был false во время бега) → ломает
+не сам source-write, а тот факт, что **screen-1 pose seed общий для aim И для
+LOCOMOTION-камеры куклы**: любой override screen-1 сида/резолвера замораживает поворот.
+
+Вывод: гнать aim через screen-1 pose seed нельзя — он же управляет facing локомоции.
+Значит нужен вход, специфичный ТОЛЬКО для aim-additive (не общий screen seed). Либо
+aim-поза принципиально должна идти через РОДНОЙ aim-контроллер куклы, а он не крутится
+(AI off / screen-1 камера не материализована). Горизонт остаётся через body-facing
+blend (работает, локомоция цела). g_puppet_aim_reticle_relay parked OFF.
+
+Стабильный baseline: aim по горизонтали через facing; вертикальный питч НЕ решён и,
+по этим данным, требует либо материализации screen-1 aim-камеры куклы, либо отдельного
+aim-additive входа (не screen pose seed).

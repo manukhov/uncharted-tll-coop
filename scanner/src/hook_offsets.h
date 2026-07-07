@@ -106,6 +106,16 @@ constexpr std::size_t kPlayerAimPoseQuatOffset = 0x1730;
 // pitch bend (build af: yaw follows via the +0x1730 writer, pitch does not).
 constexpr std::size_t kPlayerAimAtPointOffset = 0x21F0;
 constexpr std::size_t kPlayerAimAtPointAuxOffset = 0x2240;
+// Per-screen camera handle table (2 entries, {ptr,id} 16B each). The resolver
+// ResolveScreenRoutePoseSeedOrDefault reads screen idx's pose seed from
+// *(*(table[2*idx]+8)+176)+0x60. Writing the peer seed to that exact source for
+// idx=1 drives the puppet's aim natively (found 2026-07-07).
+constexpr std::uintptr_t kScreenCameraHandleTableRva = 0x697AD50;
+constexpr std::size_t kCameraHandleInnerOffset = 0x8;    // handle -> +8
+constexpr std::size_t kCameraBlockOffset = 0xB0;         // (+8) -> +176 = blk
+constexpr std::size_t kCameraPoseSeedOffset = 0x60;      // blk -> +0x60 (32B seed)
+constexpr std::size_t kCameraGateByteAOffset = 85;
+constexpr std::size_t kCameraGateByteBOffset = 86;
 constexpr std::size_t kPlayerAimTargetAuxOffset = 0x1580;
 constexpr std::size_t kLocomotionControllerOffset = 0x15B8;
 // PlayerWeaponController (player+0x1D88) fields. Runtime-pinned 2026-07-06 by a

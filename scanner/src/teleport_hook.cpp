@@ -531,9 +531,12 @@ volatile bool g_relayed_block_give = false;
 // visible jitter. Default OFF; Numpad / toggles for A/B.
 volatile bool g_puppet_camera_drive = false;
 // Gated AIM-POSE quat write to puppet+0x1730. Default OFF (2026-07-07): the write
-// is INERT — +0x1730 is an OUTPUT the puppet's aim controller recomputes each frame
-// from its (frozen) camera, so a post-update write is clobbered before the pose is
-// baked. Root is upstream (aim controller input), not this field. Numpad / toggles.
+// Default OFF (2026-07-07): every aim-experiment it gates is net-negative. The
+// resolver-source write (screen-1 pose seed) never even ran in the last test
+// (no SCREEN1-SEED-SRC log) yet locomotion FACING FROZE forward - the screen-1
+// pose seed is shared by the puppet's LOCOMOTION camera, so any override of it
+// freezes turning. Horizontal aim already reads from the body-facing blend;
+// keep this OFF. Numpad / toggles for A/B experiments only.
 volatile bool g_puppet_aim_reticle_relay = false;
 
 void relayed_weapon_store_put(std::uint32_t art_id, const void* info) {
@@ -2054,6 +2057,66 @@ bool copy_lead_aim_pose_seed_32(std::uint8_t out[32]) {
 // Write the peer aim pose (pos+quat from the relayed pose seed) into the puppet's
 // AIM POSE fields Player+0x1720/+0x1730 (found 2026-07-07). Default ON; Numpad /
 // A/B via g_puppet_aim_reticle_relay. Call POST native update so it is not clobbered.
+// Write the peer's 32-byte pose seed into the EXACT source that
+// ResolveScreenRoutePoseSeedOrDefault reads for screen 1:
+// *(*(table_14697AD50[2]+8)+176)+0x60. This drives the puppet's aim (yaw+pitch)
+// AND fire ray natively - every resolver consumer for screen 1 reads it. Prior
+// sync wrote GetCameraManager(1)+0xB0 (a different chain) = inert. Logs the chain
+// validity once/sec so a null blk (screen-1 camera not materialized) is visible.
+// SEH-only (no C++ objects): walk table_14697AD50[2]->+8->+176 and write the 32B
+// seed to blk+0x60, forcing the two gate bytes. Returns blk (or a small sentinel:
+// 1=bad handle, 2=bad inner, 3=fault, 0x10>=x means bad) for logging.
+std::uintptr_t seh_write_screen1_seed(const std::uint8_t* seed) {
+    __try {
+        auto* table = reinterpret_cast<std::uint64_t*>(
+            g_module + kScreenCameraHandleTableRva);
+        const std::uintptr_t handle = table[2];
+        if (handle == 0 || readable_bytes(reinterpret_cast<void*>(handle)) <
+                               kCameraHandleInnerOffset + sizeof(void*)) {
+            return 1;
+        }
+        const std::uintptr_t v8 = *reinterpret_cast<std::uintptr_t*>(
+            handle + kCameraHandleInnerOffset);
+        if (v8 == 0 || readable_bytes(reinterpret_cast<void*>(v8)) <
+                           kCameraBlockOffset + sizeof(void*)) {
+            return 2;
+        }
+        const std::uintptr_t blk =
+            *reinterpret_cast<std::uintptr_t*>(v8 + kCameraBlockOffset);
+        if (blk > 0x10 && readable_bytes(reinterpret_cast<void*>(
+                              blk + kCameraPoseSeedOffset)) >= 32) {
+            std::memcpy(reinterpret_cast<void*>(blk + kCameraPoseSeedOffset), seed,
+                        32);
+            *reinterpret_cast<std::uint8_t*>(blk + kCameraGateByteAOffset) = 1;
+            *reinterpret_cast<std::uint8_t*>(blk + kCameraGateByteBOffset) = 1;
+        }
+        return blk;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 3;
+    }
+}
+
+void write_peer_seed_to_screen1_resolver_source() {
+    if (!g_puppet_aim_reticle_relay || g_module == 0) {
+        return;
+    }
+    std::uint8_t seed[32]{};
+    if (!copy_peer_pose_seed_32(seed) ||
+        !valid_network_orientation(reinterpret_cast<const float*>(seed + 16))) {
+        return;
+    }
+    const std::uintptr_t blk = seh_write_screen1_seed(seed);
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log > 1000) {
+        last_log = now;
+        std::ostringstream l;
+        l << "SCREEN1-SEED-SRC blk=0x" << std::hex << blk << std::dec
+          << (blk > 0x10 ? " WROTE" : " (bad chain)");
+        force_log_line(l.str().c_str());
+    }
+}
+
 void apply_peer_aim_pose_quat(void* player) {
     if (!g_puppet_aim_reticle_relay || player == nullptr) {
         return;
@@ -9960,6 +10023,12 @@ void drive_remote_slot1_actions_tick() {
     if (g_puppet_aim_override_frame) {
         sync_puppet_aim_camera_from_peer(peer);
         apply_peer_pose_seed_to_player_aim_fields(remote_player);
+    }
+    // Drive the puppet's aim at the RESOLVER SOURCE (screen-1 pose seed block), the
+    // exact chain ResolveScreenRoutePoseSeedOrDefault reads - so the native aim
+    // controller/fire path use the peer direction. Pre-native-update.
+    if (puppet_should_aim) {
+        write_peer_seed_to_screen1_resolver_source();
     }
     if (g_puppet_rifle_pose_only_ads && peer_holds_scoped_rifle(peer) &&
         peer_aiming && !g_puppet_aim_reticle_relay) {
