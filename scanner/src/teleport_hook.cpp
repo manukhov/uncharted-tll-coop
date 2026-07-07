@@ -533,11 +533,10 @@ volatile bool g_relayed_block_give = false;
 // if the camera system recomputes these each frame, our writes will fight it ->
 // visible jitter. Default OFF; Numpad / toggles for A/B.
 volatile bool g_puppet_camera_drive = false;
-// Reticle-scoped aim-pose override + approach-3 aim-target write. Default OFF
-// (2026-07-07): neither moved the visible aim pose - Player+0x1570 does NOT drive
-// it (apply_peer_pose_seed_to_player_aim_fields already writes the raw seed there
-// every frame with no effect either). The visible aim pose is fed by a separate
-// aim-angle anim-graph param, still to be reversed. Numpad / toggles for A/B.
+// Gated AIM-POSE quat write to puppet+0x1730. Default OFF (2026-07-07): the write
+// is INERT — +0x1730 is an OUTPUT the puppet's aim controller recomputes each frame
+// from its (frozen) camera, so a post-update write is clobbered before the pose is
+// baked. Root is upstream (aim controller input), not this field. Numpad / toggles.
 volatile bool g_puppet_aim_reticle_relay = false;
 
 void relayed_weapon_store_put(std::uint32_t art_id, const void* info) {
@@ -1867,6 +1866,33 @@ bool copy_peer_pose_seed_32(std::uint8_t out[32]) {
     }
     std::memcpy(out, peer.pose_seed, 32);
     return true;
+}
+
+// Write the peer aim pose (pos+quat from the relayed pose seed) into the puppet's
+// AIM POSE fields Player+0x1720/+0x1730 (found 2026-07-07). Default ON; Numpad /
+// A/B via g_puppet_aim_reticle_relay. Call POST native update so it is not clobbered.
+void apply_peer_aim_pose_quat(void* player) {
+    if (!g_puppet_aim_reticle_relay || player == nullptr) {
+        return;
+    }
+    std::uint8_t seed[32]{};
+    if (!copy_peer_pose_seed_32(seed)) {
+        return;
+    }
+    if (!valid_network_orientation(reinterpret_cast<const float*>(seed + 16))) {
+        return;
+    }
+    if (readable_bytes(static_cast<std::byte*>(player) + kPlayerAimPoseQuatOffset) <
+        16) {
+        return;
+    }
+    __try {
+        std::memcpy(static_cast<std::byte*>(player) + kPlayerAimPoseQuatOffset,
+                    seed + 16, 16);
+        std::memcpy(static_cast<std::byte*>(player) + kPlayerAimPosePosOffset,
+                    seed, 16);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
 }
 
 void apply_peer_pose_seed_to_player_aim_fields(void* player) {
@@ -7762,6 +7788,9 @@ void apply_puppet_transform_post(void* puppet) {
         } else if (valid_network_orientation(pkt.quat)) {
             orientation_dot = blend_network_orientation(quat, pkt.quat, 0.35F);
         }
+        // NEW (2026-07-07): drive the visible aim pose via the found aim-orientation
+        // quat at puppet+0x1730 (pos +0x1720). Last writer, after native update.
+        apply_peer_aim_pose_quat(puppet);
     } else if (pkt.move_magnitude < 0.15F) {
         orientation_dot = blend_network_orientation(quat, pkt.quat, 0.18F);
     }

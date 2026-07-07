@@ -96,6 +96,11 @@ constexpr std::size_t kPlayerAdsActiveOffset = 0x1548;
 // PlayerFireController_Fire writes FireArgs-derived aim vectors here during fire;
 // also populated during ADS (initial-findings field diff +0x1570..+0x1588).
 constexpr std::size_t kPlayerAimTargetOffset = 0x1570;
+// AIM POSE on the live Player (found 2026-07-07 by up/down live diff): +0x1720 =
+// aim origin pos (vec4), +0x1730 = aim orientation UNIT QUATERNION (x,z flip with
+// pitch). Candidate input to the visible aim pose (upper-body point).
+constexpr std::size_t kPlayerAimPosePosOffset = 0x1720;
+constexpr std::size_t kPlayerAimPoseQuatOffset = 0x1730;
 constexpr std::size_t kPlayerAimTargetAuxOffset = 0x1580;
 constexpr std::size_t kLocomotionControllerOffset = 0x15B8;
 // PlayerWeaponController (player+0x1D88) fields. Runtime-pinned 2026-07-06 by a
