@@ -154,6 +154,13 @@ constexpr std::uintptr_t kPickupGiveRetRva = 0xDD4208;
 // relayed pickup give — otherwise the new long gun spills into the next slot and
 // collides with the pistol (confirmed fountain root 2026-07-07).
 constexpr std::uintptr_t kProcessKillTreeRva = 0x16A5C20;
+// PlayerAimController::GetTargetPointFromReticle 0x140CB1720 (self-named by assert
+// player-aim.cpp). Confirmed the dominant per-frame idx==1 caller of the pose-seed
+// resolver during puppet ADS (122/frame). It reads the screen pose seed and returns
+// the aim TARGET POINT that drives the visible upper-body aim pose. Arming the
+// resolver's quat-only override around this call (owner==puppet) should make the
+// puppet's visible aim follow the peer crosshair (same recipe as the fire caller).
+constexpr std::uintptr_t kAimTargetFromReticleRva = 0xCB1720;
 constexpr std::size_t kWeaponControllerGetWeaponBySlotVtOffset = 0xB0;
 constexpr std::uintptr_t kNetEventSyncWeaponPickupsApplyRva = 0xBCE440;
 constexpr std::uintptr_t kNetEventSyncWeaponPickupsVftableRva = 0x29FCF90;

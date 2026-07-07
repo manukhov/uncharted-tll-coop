@@ -1978,10 +1978,54 @@ bool install_get_blended_camera_gate() {
 // Pose-seed resolver hook: when fire-only guard is active (BuildFireArgs on the
 // puppet), replace only the orientation quat (seed+0x10); keep the puppet's own
 // ray origin position from the native resolver.
+// Aim-pose caller histogram (see comment inside hooked_pose_seed_resolver). The
+// top per-frame idx==1 caller during puppet ADS is the aim-pose feeder to arm
+// the quat-only guard in - same recipe that found the real pickup give path.
+// Dumps every 2s; counts reset per dump.
+void record_pose_seed_caller(std::uintptr_t rva) {
+    struct RetCount {
+        std::uintptr_t rva;
+        std::uint32_t count;
+    };
+    static RetCount table[16]{};
+    static ULONGLONG last_dump = 0;
+    for (RetCount& e : table) {
+        if (e.rva == rva) {
+            ++e.count;
+            break;
+        }
+        if (e.rva == 0) {
+            e = {rva, 1};
+            break;
+        }
+    }
+    const ULONGLONG hnow = GetTickCount64();
+    if (hnow - last_dump > 2000) {
+        last_dump = hnow;
+        std::ostringstream line;
+        line << "POSESEED-CALLERS";
+        for (RetCount& e : table) {
+            if (e.rva != 0 && e.count > 0) {
+                line << " 0x" << std::hex << e.rva << std::dec << ":" << e.count;
+                e.count = 0;
+            }
+        }
+        force_log_line(line.str().c_str());
+    }
+}
+
 void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     void* const result = g_original_pose_seed_resolver != nullptr
         ? g_original_pose_seed_resolver(out, idx)
         : out;
+    // CALLER HISTOGRAM (2026-07-07): the resolver is confirmed to be ON the aim-
+    // pose path (the 07-05 broad override froze the puppet's aim), but which of
+    // its ~300 callers drives the visible ADS pose is unknown. Collect return
+    // addresses for idx==1 calls (helper: __try here forbids C++ objects).
+    if (idx == kSlot1ScreenIndex) {
+        record_pose_seed_caller(
+            reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - g_module);
+    }
     const bool fire_path_override =
         g_pose_seed_fire_only_override || g_puppet_aim_ray_override;
     const bool sustained_slot1_override =
@@ -2032,6 +2076,52 @@ void __fastcall hooked_build_fire_args(
         g_pose_seed_fire_only_override = false;
         g_puppet_aim_ray_override = false;
     }
+}
+
+using AimTargetFromReticleFunction = void*(__fastcall*)(void*, void*, void*);
+AimTargetFromReticleFunction g_original_aim_target = nullptr;
+
+// PlayerAimController::GetTargetPointFromReticle feeds the visible ADS aim pose.
+// Arm the resolver's pose-seed override around it; the resolver's own idx==1 gate
+// scopes the substitution to the puppet's screen, so the puppet's upper-body aim
+// tracks the peer crosshair. (Camera/seed field WRITES had no effect - REJECTED
+// 2026-07-07 - because THIS reader re-derives the target from the resolver each
+// frame; overriding the resolver's output is the input that actually moves it.)
+void* __fastcall hooked_aim_target_from_reticle(void* a1, void* a2, void* a3) {
+    const bool arm = g_puppet_relay_pose_seed && g_state_net.enabled;
+    if (arm) {
+        g_pose_seed_fire_only_override = true;
+        g_puppet_aim_ray_override = true;
+    }
+    void* const r = g_original_aim_target != nullptr
+                        ? g_original_aim_target(a1, a2, a3)
+                        : a3;
+    if (arm) {
+        g_pose_seed_fire_only_override = false;
+        g_puppet_aim_ray_override = false;
+    }
+    return r;
+}
+
+bool install_aim_target_gate() {
+    // GetTargetPointFromReticle 0x140CB1720 prologue (13 bytes, position-independent):
+    // mov rax,rsp; push rbp/rbx/rsi/rdi/r14; lea rbp,[rax-0x78].
+    constexpr std::array<std::uint8_t, 13> kAimTargetPrologue{
+        0x48, 0x8B, 0xC4, 0x55, 0x53, 0x56, 0x57, 0x41, 0x56,
+        0x48, 0x8D, 0x68, 0x88,
+    };
+    g_original_aim_target =
+        reinterpret_cast<AimTargetFromReticleFunction>(
+            install_fire_gate_detour(
+                kAimTargetFromReticleRva,
+                kAimTargetPrologue.data(),
+                kAimTargetPrologue.size(),
+                reinterpret_cast<void*>(&hooked_aim_target_from_reticle),
+                "aim-target reticle gate"));
+    boot_log_line(g_original_aim_target != nullptr
+                      ? "aim-target reticle gate installed"
+                      : "aim-target reticle gate SKIPPED");
+    return g_original_aim_target != nullptr;
 }
 
 bool install_build_fire_args_gate() {
@@ -7539,17 +7629,21 @@ void apply_puppet_transform_post(void* puppet) {
         const auto get_camera_manager = reinterpret_cast<GetCameraManagerFunction>(
             g_module + kGetCameraManagerRva);
         void* const mgr = get_camera_manager(1);
+        bool wrote_seed = false;
+        bool wrote_cam = false;
+        void* blk = nullptr;
         if (mgr != nullptr) {
             if ((pkt.flags & coop::kStateFlagPoseSeed) != 0 &&
                 valid_network_orientation(pkt.pose_seed + 4) &&
                 readable_bytes(static_cast<std::byte*>(mgr) + 0xB0) >=
                     sizeof(void*)) {
-                void* const blk = *reinterpret_cast<void**>(
+                blk = *reinterpret_cast<void**>(
                     static_cast<std::byte*>(mgr) + 0xB0);
                 if (blk != nullptr &&
                     readable_bytes(static_cast<std::byte*>(blk) + 0x60) >= 32) {
                     std::memcpy(static_cast<std::byte*>(blk) + 0x70,
                                 pkt.pose_seed + 4, 16);
+                    wrote_seed = true;
                 }
             }
             if (valid_network_orientation(pkt.camera_quat) &&
@@ -7557,7 +7651,20 @@ void apply_puppet_transform_post(void* puppet) {
                                kCameraRotationOffset) >= 16) {
                 std::memcpy(static_cast<std::byte*>(mgr) + kCameraRotationOffset,
                             pkt.camera_quat, 16);
+                wrote_cam = true;
             }
+        }
+        static ULONGLONG last_drive_log = 0;
+        const ULONGLONG dlnow = GetTickCount64();
+        if (dlnow - last_drive_log > 1000) {
+            last_drive_log = dlnow;
+            std::ostringstream dl;
+            dl << "CAMERA-DRIVE mgr=0x" << std::hex
+               << reinterpret_cast<std::uintptr_t>(mgr) << " blk=0x"
+               << reinterpret_cast<std::uintptr_t>(blk) << std::dec
+               << " seed=" << (wrote_seed ? 1 : 0)
+               << " cam=" << (wrote_cam ? 1 : 0);
+            force_log_line(dl.str().c_str());
         }
     }
     if (peer_aiming) {
@@ -13954,6 +14061,9 @@ DWORD WINAPI install_hook(void*) {
     install_weapon_pickup_gate();
     install_give_weapon_diagnostic();
     install_build_fire_args_gate();
+    // install_aim_target_gate();  // REVERTED: GetTargetPointFromReticle builds
+    // its frame from entry rsp (mov rax,rsp; lea rbp,[rax-0x78]); a call-based
+    // trampoline shifts rsp by 8 -> frame misaligned -> instant crash on ADS.
     install_pose_seed_gate();
     install_get_blended_camera_gate();
     install_reticle_hud_gate();
