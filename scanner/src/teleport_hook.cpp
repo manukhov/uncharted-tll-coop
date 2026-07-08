@@ -363,6 +363,21 @@ constexpr std::uint64_t kJoypadFaceAButtonMask = 0x20ull;
 constexpr std::uint64_t kJoypadFaceBButtonMask = 0x80ull;
 constexpr std::uint64_t kJoypadFaceXButtonMask = 0x40ull;
 constexpr std::uint64_t kJoypadTraversalRelayMask = kJoypadTraversalIntentMask;
+// Puppet cover command force bits (StatePacket flag 0x0800 + IsCommandActive hook).
+constexpr std::uint8_t kPuppetCoverEnterActive = 0x01;
+constexpr std::uint8_t kPuppetCoverExitPulse = 0x02;
+constexpr std::uint8_t kPuppetTryEnterCoverActive = 0x04;
+constexpr std::uint8_t kPuppetCoverEnterPulse = 0x08;
+// Player+0x1510 bit0 backs the authored "is-in-cover?" fact (sub_140403970).
+constexpr std::uintptr_t kPlayerIsInCoverFlagOffset = 0x1510;
+
+bool player_cover_state_field(void* player);
+bool player_cover_command_active(void* player, std::uint32_t hash);
+bool local_player_in_cover_sustained(void* player);
+bool local_player_cover_enter_command_edge(void* player, bool* rising_edge);
+bool local_player_cover_exit_pressed(void* player);
+std::uint8_t cover_force_from_peer_state(
+    bool peer_in_cover, bool was_in_cover, bool peer_enter_pulse);
 // Scope/sniper HUD layer bits — never relay to puppet joypad (viewport overlay leak).
 constexpr std::uint64_t kRemoteScopeHudButtonMask =
     0x10000ull | 0x20000ull | 0x40000ull | 0x80000ull;
@@ -795,6 +810,8 @@ struct StateNetState {
     // IsCommandActive hook returns true for jump/evade/crouch while these are set
     // — required when bindings are keyboard-only (isolation zeros keyboard path).
     std::atomic<std::uint64_t> puppet_traversal_force = 0;
+    // cover-enter / try-enter-cover / one-shot cover-exit on Joypad 3.
+    std::atomic<std::uint8_t> puppet_cover_force = 0;
     std::atomic<std::uint64_t> active_button_press_latch = 0;
     std::atomic<bool> pending_authoritative_teleport = false;
     std::atomic<bool> has_peer_enemies = false;
@@ -1297,8 +1314,17 @@ char __fastcall hooked_joypad_is_command_active(
                     string_hash("evade-start", 11, 0);
                 static const std::uint32_t kCrouchHash =
                     string_hash("crouch", 6, 0);
+                static const std::uint32_t kCoverEnterHash =
+                    string_hash("cover-enter", 11, 0);
+                static const std::uint32_t kCoverExitHash =
+                    string_hash("cover-exit", 10, 0);
+                static const std::uint32_t kTryEnterCoverHash =
+                    string_hash("try-enter-cover", 15, 0);
                 const std::uint64_t force =
                     g_state_net.puppet_traversal_force.load(
+                        std::memory_order_acquire);
+                const std::uint8_t cover_force =
+                    g_state_net.puppet_cover_force.load(
                         std::memory_order_acquire);
                 // INTENT-only cues. Face A(=0x20) is BOTH jump pad AND ScaleCopy's
                 // evade-bleed source — matching on face pads made jump animate as
@@ -1314,6 +1340,15 @@ char __fastcall hooked_joypad_is_command_active(
                 }
                 if (hash == kCrouchHash &&
                     (force & kJoypadCrouchButtonMask) != 0) {
+                    return 1;
+                }
+                if ((hash == kCoverEnterHash &&
+                     ((cover_force & kPuppetCoverEnterActive) != 0 ||
+                      (cover_force & kPuppetCoverEnterPulse) != 0))) {
+                    return 1;
+                }
+                if (hash == kCoverExitHash &&
+                    (cover_force & kPuppetCoverExitPulse) != 0) {
                     return 1;
                 }
             }
@@ -1379,7 +1414,7 @@ bool install_joypad3_is_command_active_force() {
     FlushInstructionCache(GetCurrentProcess(), target, kStolen);
     DWORD ignored = 0;
     VirtualProtect(target, kStolen, old_protection, &ignored);
-    force_log_line("Joypad3 IsCommandActive force-hook installed (jump/evade/crouch)");
+    force_log_line("Joypad3 IsCommandActive force-hook installed (jump/evade/crouch/cover)");
     return true;
 }
 
@@ -6799,6 +6834,100 @@ std::uint64_t capture_local_joypad_command_mask(void* player) {
     return mask;
 }
 
+// Sustained in-cover = Player+0x1510 bit0 only. try-enter-cover is approach
+// probe near walls and must NOT set the sustained relay flag.
+bool player_cover_state_field(void* player) {
+    if (player == nullptr) {
+        return false;
+    }
+    const auto* const base = static_cast<const std::byte*>(player);
+    if (readable_bytes(base + kPlayerIsInCoverFlagOffset + 1) < 1) {
+        return false;
+    }
+    return (*reinterpret_cast<const std::uint8_t*>(base +
+                                                    kPlayerIsInCoverFlagOffset) &
+            1u) != 0;
+}
+
+bool player_cover_command_active(void* player, std::uint32_t hash) {
+    if (player == nullptr || g_module == 0) {
+        return false;
+    }
+    const auto* const base = static_cast<const std::byte*>(player);
+    if (readable_bytes(base + 0x39BC) < 1) {
+        return false;
+    }
+    const int joypad_index =
+        *reinterpret_cast<const std::int32_t*>(base + 0x39B8);
+    void* const frame_state =
+        *reinterpret_cast<void**>(g_module + 0x3FE1088);
+    if (frame_state == nullptr || joypad_index < 0 || joypad_index >= 6) {
+        return false;
+    }
+    auto* const joypad = static_cast<std::byte*>(frame_state) + 0xDB0 +
+                         0xBF0ULL * static_cast<std::uintptr_t>(joypad_index);
+    if (readable_bytes(joypad) < 0xE8) {
+        return false;
+    }
+    const auto is_active = reinterpret_cast<JoypadIsCommandActiveFunction>(
+        g_module + kJoypadIsCommandActiveRva);
+    return is_active(joypad, hash, 1) != 0 || is_active(joypad, hash, 0) != 0;
+}
+
+bool local_player_in_cover_sustained(void* player) {
+    return player_cover_state_field(player);
+}
+
+bool local_player_cover_enter_command_edge(void* player, bool* rising_edge) {
+    if (rising_edge != nullptr) {
+        *rising_edge = false;
+    }
+    if (player == nullptr || g_module == 0) {
+        return false;
+    }
+    const auto string_hash = reinterpret_cast<StringHashFunction>(
+        g_module + kStringHashRva);
+    static const std::uint32_t kCoverEnterHash =
+        string_hash("cover-enter", 11, 0);
+    static bool prev_cover_enter = false;
+    const bool enter_now =
+        player_cover_command_active(player, kCoverEnterHash);
+    const bool rose = enter_now && !prev_cover_enter;
+    prev_cover_enter = enter_now;
+    if (rising_edge != nullptr) {
+        *rising_edge = rose;
+    }
+    return enter_now;
+}
+
+bool local_player_cover_exit_pressed(void* player) {
+    if (player == nullptr || g_module == 0) {
+        return false;
+    }
+    const auto string_hash = reinterpret_cast<StringHashFunction>(
+        g_module + kStringHashRva);
+    static const std::uint32_t kCoverExitHash =
+        string_hash("cover-exit", 10, 0);
+    return player_cover_command_active(player, kCoverExitHash);
+}
+
+std::uint8_t cover_force_from_peer_state(
+    bool peer_in_cover, bool was_in_cover, bool peer_enter_pulse) {
+    std::uint8_t force = 0;
+    if (peer_enter_pulse) {
+        force |= kPuppetCoverEnterPulse;
+    }
+    if (peer_in_cover) {
+        force |= kPuppetCoverEnterActive;
+        if (!was_in_cover) {
+            force |= kPuppetCoverEnterPulse;
+        }
+    } else if (was_in_cover) {
+        force |= kPuppetCoverExitPulse;
+    }
+    return force;
+}
+
 // Full resolved block+0x518 for locomotion/traversal relay (jump, roll, crouch…).
 // Never replace with aim|fire-only capture — that dropped jump while RMB held.
 std::uint64_t capture_peer_send_button_mask(void* player) {
@@ -7937,6 +8066,30 @@ void send_local_player_state() {
                 pkt.buttons_pressed |= native_pressed;
                 pkt.buttons_released |= native_released;
                 pkt.flags |= 8;
+            }
+        }
+    }
+    {
+        if (local_player_in_cover_sustained(local_obj)) {
+            pkt.flags |= coop::kStateFlagPeerInCover;
+        }
+        bool cover_enter_edge = false;
+        (void)local_player_cover_enter_command_edge(local_obj, &cover_enter_edge);
+        if (cover_enter_edge) {
+            pkt.flags |= coop::kStateFlagPeerCoverEnterPulse;
+        }
+        if ((pkt.flags & (coop::kStateFlagPeerInCover |
+                          coop::kStateFlagPeerCoverEnterPulse)) != 0) {
+            static std::uint64_t prev_cover_send_log = 0;
+            const std::uint64_t now = GetTickCount64();
+            if (now - prev_cover_send_log > 500) {
+                prev_cover_send_log = now;
+                std::ostringstream cover;
+                cover << "COVER-SEND field="
+                      << (player_cover_state_field(local_obj) ? 1 : 0)
+                      << " enterEdge=" << (cover_enter_edge ? 1 : 0)
+                      << " flags=0x" << std::hex << pkt.flags << std::dec;
+                force_log_line(cover.str().c_str());
             }
         }
     }
@@ -10789,6 +10942,50 @@ void drive_remote_slot1_actions_tick() {
     g_state_net.puppet_traversal_force.store(
         (peer.input_buttons | peer.buttons_pressed) & kJoypadTraversalRelayMask,
         std::memory_order_release);
+    {
+        static bool prev_peer_effective_in_cover = false;
+        static int peer_not_in_cover_streak = 0;
+        const bool peer_in_cover =
+            (peer.flags & coop::kStateFlagPeerInCover) != 0;
+        const bool peer_enter_pulse =
+            (peer.flags & coop::kStateFlagPeerCoverEnterPulse) != 0;
+        if (peer_in_cover) {
+            peer_not_in_cover_streak = 0;
+        } else if (peer_not_in_cover_streak < 8) {
+            ++peer_not_in_cover_streak;
+        }
+        const bool peer_effective_in_cover =
+            peer_in_cover ||
+            (prev_peer_effective_in_cover && peer_not_in_cover_streak < 3);
+        const std::uint8_t cover_force = cover_force_from_peer_state(
+            peer_effective_in_cover, prev_peer_effective_in_cover,
+            peer_enter_pulse);
+        if ((cover_force & kPuppetCoverEnterPulse) != 0) {
+            static std::uint64_t prev_cover_enter_log = 0;
+            const std::uint64_t now = GetTickCount64();
+            if (now - prev_cover_enter_log > 500) {
+                prev_cover_enter_log = now;
+                force_log_line("COVER-RELAY enter pulse on puppet Joypad3");
+            }
+        } else if ((cover_force & kPuppetCoverExitPulse) != 0) {
+            static std::uint64_t prev_cover_exit_log = 0;
+            const std::uint64_t now = GetTickCount64();
+            if (now - prev_cover_exit_log > 500) {
+                prev_cover_exit_log = now;
+                force_log_line("COVER-RELAY exit pulse on puppet Joypad3");
+            }
+        } else if (peer_effective_in_cover) {
+            static std::uint64_t prev_cover_hold_log = 0;
+            const std::uint64_t now = GetTickCount64();
+            if (now - prev_cover_hold_log > 2000) {
+                prev_cover_hold_log = now;
+                force_log_line("COVER-RELAY hold active on puppet Joypad3");
+            }
+        }
+        g_state_net.puppet_cover_force.store(
+            cover_force, std::memory_order_release);
+        prev_peer_effective_in_cover = peer_effective_in_cover;
+    }
     std::uint64_t actions = remote_puppet_actions_from_peer(peer.input_buttons);
     if ((peer.flags & 8) != 0) {
         actions |= remote_puppet_actions_from_peer(peer.buttons_pressed);
@@ -15290,7 +15487,7 @@ DWORD WINAPI install_hook(void*) {
     boot_log_line("TLL hook DLL init 2026-07-07ad (early init marker)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
-        "TLL hook DLL init 2026-07-08bh (jump: INTENT-only force, no face bleed)");
+        "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
     boot_log_line("crash observer installed (no breakpoints)");
     install_joypad_disabled_commands_lock();
     install_joypad3_analog_route();

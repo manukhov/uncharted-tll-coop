@@ -31,6 +31,8 @@ F8/pose-seed до отдельного запроса.
 
 **Fix `bh`:** protocol + force-hook use ScaleCopy INTENT bits only (`jump=0x4000000`, `evade=0x800000`, `crouch=0x400000`). Face pads stripped on send and receive. Init `2026-07-08bh`. Predict: trav=0x4000000 for jump, trav=0x800000 for roll; standing jump+roll work; run+jump is jump not roll.
 
+**Cover relay (2026-07-08bi→bj→bk):** `bj` stuck puppet near walls: `try-enter-cover` (approach probe) was latched as in-cover. **Fix `bk`:** sustained `0x0800` = `Player+0x1510` bit0 only; one-shot `0x1000` = `cover-enter` command edge (not try-enter). No try-enter on puppet force-hook. Init `2026-07-08bk`.
+
 
 ---
 

@@ -25344,6 +25344,40 @@ copy B пуппет поворачивает голову ~45°, корпус о
   `+0x330` per-slot weight. String anchor `*player-ik-look-point*` in setup
   `0x140ED95F0`.
 
+### Cover animation relay path (STATIC, 2026-07-08)
+
+**Hypothesis:** peer cover enter/idle anim on the puppet copy is driven by named
+input commands `cover-enter` / `try-enter-cover` (not ScaleCopy face pads), same
+pattern as jump/roll `bh`.
+
+**Static evidence (3 kinds):**
+1. **Call graph / decompile:** `sub_14129A530` (cover probe near player-cover.cpp)
+   hashes `"cover-enter"` and calls `Joypad_IsCommandActive(joypad[slot], hash, 0)`
+   before invoking cover controller virtuals on `player+0x1F60`.
+2. **String xrefs / commit path:** `sub_140D66BD0` calls
+   `TaskManager_UpdateAndQuery(..., "cover-enter", ..., "cover", ...)` and publishes
+   `vox-event-player-enter-cover` — the actual cover-enter commit.
+3. **Binding remap:** `FrameState_PerSlotInputApply` (`0x140287DE0`) when global
+   command hash `685555802` (`try-enter-cover`) is active remaps joypad bindings to
+   `"cover-enter"` / `"cover-exit"` via `Joypad_ResolveCommandBindings`.
+
+**Competing hypotheses rejected for v1:**
+- ScaleCopy intent bits `0x1000000/0x10000000/0x20000000` — tied to jump/crouch
+  stick paths in `Input_ScaleCopyVirtual`, not cover strings.
+- Relaying cover animation graph state directly — grenade precedent: deliver INPUT,
+  animation is native per copy.
+
+**Relay design (`bi`→`bk`):** `StatePacket.flags` `0x0800` (`kStateFlagPeerInCover`) =
+`Player+0x1510` bit0 only (sustained in-cover fact); `0x1000`
+(`kStateFlagPeerCoverEnterPulse`) = one-shot `cover-enter` command edge. **Not**
+`try-enter-cover` (approach probe — caused wall-stick in `bj`). Receiver
+`puppet_cover_force` + Joypad3 force-hook for `cover-enter`/`cover-exit`.
+
+**Runtime (2026-07-08bk):** user confirmed cover relay works; wall-approach false
+positive fixed by dropping try-enter from sustain path.
+
+Status: **CONFIRMED** (`2026-07-08bk`).
+
 **Co-op receiver hypothesis:** `peer.pos + fwd(camera_quat)*dist` → SetLookPoint on
 puppet `*(player+0x1E38)`; sender flag `0x0400` + `camera_quat` when
 `|yaw_cam-yaw_body|>0.15` without RMB.

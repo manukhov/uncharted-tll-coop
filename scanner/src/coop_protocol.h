@@ -39,6 +39,10 @@ constexpr std::uint16_t kStateFlagPoseSeed = 0x0200;
 // 0x0400 — free-look head sync: camera_quat valid while sender orbits camera
 // without ADS (|yaw_cam - yaw_body| > threshold). Distinct from 0x0100 (ADS aim).
 constexpr std::uint16_t kStateFlagPeerFreeLook = 0x0400;
+// 0x0800 (v8+) — peer is genuinely in cover (Player+0x1510 bit0 / is-in-cover?).
+constexpr std::uint16_t kStateFlagPeerInCover = 0x0800;
+// 0x1000 — one-shot cover-enter command edge (not try-enter-cover approach).
+constexpr std::uint16_t kStateFlagPeerCoverEnterPulse = 0x1000;
 
 // Contiguous native NetSnapshot weapon region [0x3f4, 0x504). It contains the
 // eight inventory ids, per-slot state, selected weapon classes and the four
