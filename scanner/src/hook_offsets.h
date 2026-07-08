@@ -106,6 +106,19 @@ constexpr std::size_t kPlayerAimPoseQuatOffset = 0x1730;
 // pitch bend (build af: yaw follows via the +0x1730 writer, pitch does not).
 constexpr std::size_t kPlayerAimAtPointOffset = 0x21F0;
 constexpr std::size_t kPlayerAimAtPointAuxOffset = 0x2240;
+// PlayerLookAtIkController heap object; Player+0x1E38 is the POINTER (AssembleGraph
+// 0x1410CBBC4 stores alloc result at a1+7736). Do NOT treat +0x1E38 as embedded.
+constexpr std::size_t kPlayerLookAtIkPtrOffset = 0x1E38;
+constexpr std::size_t kPlayerLookAtIkOffset = 0x1E38;  // alias: pointer slot
+constexpr std::size_t kPlayerLookAtIkEnabledByteOffset = 0x420;   // from IK this
+constexpr std::size_t kPlayerLookAtIkModeOffset = 0x3E0;          // 1=point @+0x3F0
+constexpr std::size_t kPlayerLookAtIkWorldPointOffset = 0x3F0;
+constexpr std::size_t kPlayerLookAtIkSlotWeightOffset = 0x330;
+constexpr std::size_t kPlayerLookAtIkSlot0ModeFlagOffset = 0x340; // (slot+13)<<6, slot0
+constexpr std::size_t kPlayerLookAtIkSlot0DataOffset = 0x350;     // SetLookPoint slot0
+constexpr std::size_t kPlayerLookAtIkSlotTableOffset = 0x390;     // UpdateIk slot0 copy src
+constexpr std::uintptr_t kPlayerLookAtSetPointRva = 0xEDA5F0;     // vtable+0x28
+constexpr std::uintptr_t kPlayerLookAtUpdateIkRva = 0xEDA680;     // vtable+0x38
 // Per-screen camera handle table (2 entries, {ptr,id} 16B each). The resolver
 // ResolveScreenRoutePoseSeedOrDefault reads screen idx's pose seed from
 // *(*(table[2*idx]+8)+176)+0x60. Writing the peer seed to that exact source for

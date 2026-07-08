@@ -36,6 +36,9 @@ constexpr std::uint16_t kStateFlagPeerCamera = 0x0100;
 // (ResolveScreenRoutePoseSeedOrDefault); the receiver overrides the Second
 // player's screen-1 seed with it so shots/aim follow the peer's crosshair.
 constexpr std::uint16_t kStateFlagPoseSeed = 0x0200;
+// 0x0400 — free-look head sync: camera_quat valid while sender orbits camera
+// without ADS (|yaw_cam - yaw_body| > threshold). Distinct from 0x0100 (ADS aim).
+constexpr std::uint16_t kStateFlagPeerFreeLook = 0x0400;
 
 // Contiguous native NetSnapshot weapon region [0x3f4, 0x504). It contains the
 // eight inventory ids, per-slot state, selected weapon classes and the four

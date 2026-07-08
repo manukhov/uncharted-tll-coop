@@ -34,9 +34,10 @@
 - [~] **Fire relay (v7):** native `PlayerFireController_Fire` replay on puppet when
       `puppet_native_fire_allowed`; sustained `0x800` never from StatePacket (FirePacket
       only). Load guards: GiveWeapon vtable `+0x158` + 5 s warmup.
-- [~] **Aim anim relay:** puppet gets sustained aim `0x200` + peer `look_stick` on
-      branch `+0x1C/+0x20`; scope HUD bits stripped; local viewport scrub when peer
-      aims alone. **Needs user test** after 2026-07-03 handoff commit.
+- [~] **Aim anim relay:** **PAUSED** (2026-07-07 user). Puppet ADS нестабилен;
+      не развивать до отдельного запроса. Билд `as` в working tree.
+- [ ] **Head / camera look sync (NEW P0):** STATIC done (`reports/lookat_field_map.md`).
+      Next: implement sender flag `0x0400` + receiver SetLookPoint on `Player+0x1E38`.
 - [~] Положение, поворот, скорость и здоровье уже передаются. Сырые данные по
       цепочке `Player+0x1A8 -> +0x10` проверены и отвергнуты: это 32-байтовые
       записи эффектов с межпроцессными указателями, не кости персонажа.

@@ -25300,3 +25300,50 @@ blend (работает, локомоция цела). g_puppet_aim_reticle_rela
 Стабильный baseline: aim по горизонтали через facing; вертикальный питч НЕ решён и,
 по этим данным, требует либо материализации screen-1 aim-камеры куклы, либо отдельного
 aim-additive входа (не screen pose seed).
+
+### 2026-07-07: Head look sync (HYPOTHESIS) — free-look camera vs body on remote puppet
+
+**Запрос:** при повороте камеры локальный персонаж смотрит в сторону взгляда; на второй
+копии это должно быть видно у удалённого игрока (голова/верх корпуса).
+
+**STATIC (уже в реестре):**
+- `StatePacket.quat` = `Player+0x140` (корпус) — шлётся всегда; не несёт head-only
+  offset при orbit-камере.
+- `camera_quat` (`kStateFlagPeerCamera` `0x0100`) сейчас публикуется только при
+  `local_player_strict_aim_active` — free-look не релеится.
+- Нативный look-at: `player-look-at-ik.cpp`; mounted objects **`Player+0x1E38`**
+  (vtable `0x142A2D550`, primary) и **`Player+0x1DD0`** (ctor `0x14024A090`).
+  **`Player+0x1E48` = perch, НЕ look-at** (vtable `0x142A32C08`, `player-perch.cpp`).
+  `LookAtController` — только имя в metadata blob, не field map.
+- REJECT для приёмника: полный blend `+0x140` к `peer.camera_quat` при беге; запись
+  screen-1 pose seed — замораживает facing локомоции (`93d1420`).
+
+**HYPOTHESIS (следующий статический шаг):**
+1. Расшифровать поля `*(player+0x1E38)` / `*(player+0x1DD0)` (look-at IK): target
+   direction / yaw-pitch. Decompile: ctor `0x14024A090`, vtable `0x142A2D550`.
+2. Sender: при `|quat_horizontal_yaw(cam)-quat_horizontal_yaw(body)| > ~0.15 rad` без
+   RMB — `flags|=0x0400` (новый bit, отдельно от ADS) + `camera_quat`.
+3. Receiver: писать target в look-at IK пуппета; при `move_magnitude > 0.5` ослаблять
+   или отключать (только голова, корпус = `peer.quat`).
+
+**Фальсифицируемый прогноз:** стоишь на copy A, крутишь камеру влево 45° без RMB → на
+copy B пуппет поворачивает голову ~45°, корпус остаётся; при спринте + камера вбок —
+корпус бежит вперёд, голова доглядывает в сторону камеры.
+
+### 2026-07-07: PlayerLookAtIkController field map CONFIRMED (STATIC)
+
+Декомпил + vtable `0x142A2D550` + ctor `0x140ED94B0`. Полная карта:
+`reports/lookat_field_map.md`.
+
+**CONFIRMED:**
+- `Player+0x1E38` = `PlayerLookAtIkController` (0x460 B), **не** `+0x1E48` (perch).
+- `Player+0x1DD0` = `CharacterWallHandIK` (ctor `0x14024A090`), **не** look-at.
+- Virtual API: **SetLookPoint** `0x140EDA5F0` (vtable+0x28), **SetLookLine**
+  `0x140EDA630` (+0x30), **UpdateIk** `0x140EDA680` (+0x38).
+- Runtime targets: `+0x3F0` world look point, `+0x3E0` mode, `+0x420` enable byte,
+  `+0x330` per-slot weight. String anchor `*player-ik-look-point*` in setup
+  `0x140ED95F0`.
+
+**Co-op receiver hypothesis:** `peer.pos + fwd(camera_quat)*dist` → SetLookPoint on
+puppet `*(player+0x1E38)`; sender flag `0x0400` + `camera_quat` when
+`|yaw_cam-yaw_body|>0.15` without RMB.

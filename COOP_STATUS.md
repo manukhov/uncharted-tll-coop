@@ -1,5 +1,68 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-07, Cursor — PAUSE aim relay; новый P0 = синхронизация поворота головы)
+
+**Aim/ADS relay — на паузе** (билд `as`, user-test не дал стабильного ADS). Не трогать
+F8/pose-seed до отдельного запроса.
+
+**Новая задача (user):** когда на своей копии крутишь камеру и персонаж смотрит в
+сторону взгляда — на второй копии это тоже должно быть **видно** (голова/верх корпуса,
+не обязательно полный ADS).
+
+**Что уже есть в протоколе:**
+- `StatePacket.quat` @ `Player+0x140` — **корпус**, всегда шлётся; пуппет блендит его.
+- `camera_quat` + flag `0x0100` — ориентация `CameraManager(0)+0x1B0`, сейчас **только
+  при strict RMB/ADS** (иначе пуппет крутился при беге).
+- `look_stick` — относительный дельта yaw/pitch камеры vs корпус; на приёмнике **не
+  кормится** в right stick (jitter, 2026-07-05).
+
+**Почему сейчас не работает «голова следует за камерой»:** при free-look камера
+отъезжает от `quat`, а в пакет уходит только корпус. Нативный путь —
+`PlayerLookAtIkController` на **`Player+0x1E38`** (vtable `0x142A2D550`).
+
+**STATIC (2026-07-07, готово):** `reports/lookat_field_map.md` — поля `+0x3F0`
+(look point), `+0x420` (enable), virtual **SetLookPoint** `0x140EDA5F0`,
+**UpdateIk** `0x140EDA680`. `+0x1DD0` = wall-hand IK, `+0x1E48` = perch.
+
+**Head look sync — PARKED (2026-07-07, user revert):** `g_puppet_head_look_sync=false`
+(buil `bc`). IK path worked but puppet spine twist unacceptable.
+
+**Jump/roll relay (2026-07-08bh):** `bg` user-rejected: standing jump silent; standing roll silent; run+jump showed as roll. Root cause CONFIRMED in logs: `TRAVERSAL-PAD-MASKS jump=0x20 evade=0x80` (authored face pads). Sender ORd those into the packet (`LOCOMOTION-SEND trav=0x20`), and the Joypad3 force-hook matched `0x20` as evade / `0x80` as crouch -> jump->roll bleed.
+
+**Fix `bh`:** protocol + force-hook use ScaleCopy INTENT bits only (`jump=0x4000000`, `evade=0x800000`, `crouch=0x400000`). Face pads stripped on send and receive. Init `2026-07-08bh`. Predict: trav=0x4000000 for jump, trav=0x800000 for roll; standing jump+roll work; run+jump is jump not roll.
+
+
+---
+
+## Turn note (2026-07-07, Cursor — peer-only puppet aim, build `as`)
+
+**Продолжено с остановки Claude/Codex** на aim-relay (user: F8 даёт ложную анимацию
+прицела с пистолетом; в настоящий ADS/прицел не входит; направление не то).
+
+**REJECTED (повторно зафиксировано в коде):** per-frame
+`write_peer_seed_to_screen1_resolver_source` (blk+0x60) + `g_puppet_aim_override_frame`
+→ замораживает facing локомоции куклы (коммит `93d1420`).
+
+**Билд `2026-07-07as`:**
+1. Все пути «peer целится» = `peer_packet_aim_active` (`0x200` + `pose_seed` + свежий
+   пакет <250 ms) — убирает ложный aim при пистолете в руках без RMB пира.
+2. Убран REJECT-путь screen-1 seed write из `drive_remote_slot1_actions_tick`.
+3. F8 + peer RMB → scoped resolver override на `0x10E934B` / `0xCB17D6` (как Numpad
+   `/`, но без ручного тоггла) + `apply_puppet_sustained_aim_input` (joypad `0x200`).
+4. На входе в peer-aim — one-shot `materialize_screen1_camera_once` (0x238800).
+5. F8 в коопе не переключает legacy WASD-NPC.
+
+**Модель (user-approved):** пуппет на копии 1 целится **только** когда пир реально
+жмёт RMB на другой копии. Локальный RMB на этой копии пуппета не крутит.
+
+**Тест:** copy1 F8 ON → copy2 Nadine RMB (пистолет) → на copy1 Nadine входит в
+stance + смотрит на peer; copy1 Chloe RMB → Nadine **не** целится; F8 без RMB нигде
+→ нет aim-анимации. Лог: `2026-07-07as`, `AIM-POSE-OVERRIDE site=0x10E934B`.
+
+**Открыто:** вертикальный pitch / reticle HUD; снайпер scope vanish; weapon fountain.
+
+---
+
 ## Turn note (2026-07-07, Cursor — aim-поза: writer chain + build `af`)
 
 **Продолжено с остановки Claude/Codex на aim-pose** (коммиты `c3825a2`…`d69a7ad`):

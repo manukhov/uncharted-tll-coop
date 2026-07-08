@@ -129,6 +129,10 @@ InputScaleCopyFunction g_original_input_scale_copy = nullptr;
 GameInfoKeyboardModeFunction g_original_gameinfo_keyboard_mode = nullptr;
 EvaluateKeyboardButtonBindingFunction g_original_evaluate_keyboard_button_binding =
     nullptr;
+using JoypadIsCommandActiveFunction =
+    char(__fastcall*)(void*, std::uint32_t, std::uint8_t);
+JoypadIsCommandActiveFunction g_original_joypad_is_command_active = nullptr;
+constexpr std::uintptr_t kJoypadIsCommandActiveRva = 0x1837CD0;
 ScopeVisibleQueryFunction g_original_scope_visible_query = nullptr;
 ReticleHudPublisherFunction g_original_reticle_hud_publisher = nullptr;
 ReticleAimHudPublisherFunction g_original_reticle_aim_hud_publisher = nullptr;
@@ -333,6 +337,32 @@ constexpr std::uintptr_t kSwitchToWeaponRva = 0x10A1C10;
 // fire-hold/press/release = 0x800/types 2/4/8 respectively.
 constexpr std::uint64_t kJoypadAimButtonMask = 0x200ull;
 constexpr std::uint64_t kJoypadFireButtonMask = 0x800ull;
+// Resolved input block +0x518 always carries this sentinel once the writer ran.
+constexpr std::uint64_t kInputBlockButtonBaseMask = 0x8000000000000000ull;
+// ScaleCopy-derived locomotion OR flags written into Joypad+0xE0 AFTER the
+// padded source+0x518 mask is ingested (Input_ScaleCopyVirtual 0x14183B410).
+// These are INTENT markers for our protocol — NOT authored gamepad masks that
+// Joypad_EvaluateGamepadButtonBinding matches. Confirmed REJECTED as pad masks
+// in 2026-07-08bf (JOYPAD3 current=0x8000009, zero jump anim).
+constexpr std::uint64_t kJoypadCrouchButtonMask = 0x400000ull;
+constexpr std::uint64_t kJoypadEvadeRollButtonMask = 0x800000ull;
+constexpr std::uint64_t kJoypadJumpPressButtonMask = 0x4000000ull;
+constexpr std::uint64_t kJoypadJumpHoldButtonMask = 0x8000000ull;
+constexpr std::uint64_t kJoypadTraversalIntentMask =
+    kJoypadCrouchButtonMask | kJoypadEvadeRollButtonMask |
+    kJoypadJumpPressButtonMask | kJoypadJumpHoldButtonMask | 0x1000000ull |
+    0x10000000ull | 0x20000000ull;
+// NormalizeStick face buttons (engine space, CONFIRMED 0x141A99FD0):
+//   A -> 0x20, X -> 0x40, B -> 0x80. Authored jump descriptor = A (0x20),
+//   evade = B (0x80) (TRAVERSAL-PAD-MASKS 2026-07-08bg). ScaleCopy ALSO
+//   bleeds face 0x20 into evade-intent 0x800000, so raw face pads are
+//   ambiguous and MUST NOT be the co-op protocol. Cue with ScaleCopy
+//   INTENT bits only: jump 0x4000000 / jump-hold 0x8000000 /
+//   evade 0x800000 / crouch 0x400000.
+constexpr std::uint64_t kJoypadFaceAButtonMask = 0x20ull;
+constexpr std::uint64_t kJoypadFaceBButtonMask = 0x80ull;
+constexpr std::uint64_t kJoypadFaceXButtonMask = 0x40ull;
+constexpr std::uint64_t kJoypadTraversalRelayMask = kJoypadTraversalIntentMask;
 // Scope/sniper HUD layer bits — never relay to puppet joypad (viewport overlay leak).
 constexpr std::uint64_t kRemoteScopeHudButtonMask =
     0x10000ull | 0x20000ull | 0x40000ull | 0x80000ull;
@@ -347,7 +377,13 @@ std::uint64_t sanitize_remote_puppet_button_mask(std::uint64_t actions) {
 // shot is delivered only via FirePacket (native replay or one-shot button pulse).
 std::uint64_t remote_puppet_actions_from_peer(std::uint64_t peer_actions) {
     return sanitize_remote_puppet_button_mask(peer_actions) &
-           ~kJoypadFireButtonMask;
+           ~kJoypadFireButtonMask &
+           ~(kJoypadFaceAButtonMask | kJoypadFaceBButtonMask |
+             kJoypadFaceXButtonMask);
+}
+
+std::uint64_t sanitize_peer_locomotion_button_mask(std::uint64_t actions) {
+    return actions & ~kRemoteScopeHudButtonMask & ~kJoypadFireButtonMask;
 }
 
 bool puppet_fire_buttons_suppressed();
@@ -538,6 +574,17 @@ volatile bool g_puppet_camera_drive = false;
 // freezes turning. Horizontal aim already reads from the body-facing blend;
 // keep this OFF. Numpad / toggles for A/B experiments only.
 volatile bool g_puppet_aim_reticle_relay = false;
+// Free-look head IK sync via PlayerLookAtIkController @ player+0x1E38 (SetLookPoint).
+// OFF (2026-07-07): user reverted — puppet spine twist unacceptable even after
+// weight/pitch tuning (bb). Code kept; flag gates send + receive.
+volatile bool g_puppet_head_look_sync = false;
+// PATH #1 (user-approved 2026-07-07): materialize the puppet's screen-1 aim camera
+// each frame by calling UpdatePlayerAnimatedCameraControlOwnerAndRouteState on its
+// camera-control owner (player+0x36C0). The puppet HAS the owner (screen idx 1) but
+// the update never runs for it (AI off) so the camera stays null and there is no
+// aim basis. Default OFF (risks the transform/locomotion baseline); toggle Numpad .
+// (VK_DECIMAL). Build 1: materialize + observe; build 2 will orient it to the peer.
+volatile bool g_puppet_materialize_screen1_cam = false;
 
 void relayed_weapon_store_put(std::uint32_t art_id, const void* info) {
     if (art_id == 0 || info == nullptr || !is_pickup_relay_art(art_id)) {
@@ -744,6 +791,10 @@ struct StateNetState {
     coop::StatePacket peer_state{};        // latest received peer state
     std::uint32_t peer_state_sequence = 0;
     std::atomic<std::uint64_t> pending_button_presses = 0;
+    // Peer traversal INTENT (ScaleCopy-derived OR resolved face pads). Joypad 3
+    // IsCommandActive hook returns true for jump/evade/crouch while these are set
+    // — required when bindings are keyboard-only (isolation zeros keyboard path).
+    std::atomic<std::uint64_t> puppet_traversal_force = 0;
     std::atomic<std::uint64_t> active_button_press_latch = 0;
     std::atomic<bool> pending_authoritative_teleport = false;
     std::atomic<bool> has_peer_enemies = false;
@@ -790,7 +841,11 @@ bool local_player_ads_active();
 std::uint64_t capture_local_joypad_command_mask(void* player);
 bool local_player_aim_input_active();
 bool local_player_strict_aim_active(void* player);
+bool head_look_send_allowed(void* player);
+void publish_peer_head_look_packet_fields(
+    void* local_obj, coop::StatePacket& pkt);
 bool peer_packet_aim_active(const coop::StatePacket& peer);
+bool peer_packet_free_look_active(const coop::StatePacket& peer);
 bool peer_snapshot_aim_active();
 bool puppet_aim_press_relay_enabled();
 void apply_puppet_sustained_aim_input(void* puppet);
@@ -799,6 +854,7 @@ bool safe_request_gun_state(void* player, int desired_state);
 int find_weapon_slot_by_art_id(void* player, std::uint32_t art_id);
 int resolve_give_target_slot(std::uint32_t art, int packet_slot);
 void dump_player_weapon_slots(const char* tag, void* player);
+void materialize_screen1_camera_once();
 void seh_remove_weapon_in_slot(void* puppet, int slot);
 void* g_fire_puppet_tracked = nullptr;
 ULONGLONG g_fire_puppet_ready_after_ms = 0;
@@ -825,6 +881,10 @@ void publish_peer_state_snapshot(const coop::StatePacket& packet) {
     g_state_net.peer_state_sequence = packet.sequence;
     g_state_net.pending_button_presses.fetch_or(
         sanitized.buttons_pressed, std::memory_order_release);
+    g_state_net.puppet_traversal_force.store(
+        (sanitized.input_buttons | sanitized.buttons_pressed) &
+            kJoypadTraversalRelayMask,
+        std::memory_order_release);
     if ((packet.flags & 16) != 0) {
         g_state_net.pending_authoritative_teleport.store(
             true, std::memory_order_release);
@@ -938,6 +998,7 @@ bool latest_peer_state(coop::StatePacket& out, void*& puppet);
 bool plausible_ptr(std::uintptr_t v);
 void* retained_player_object(int index);
 bool capture_gameplay_camera_quat(float out[4]);
+bool copy_valid_camera_quat(const float* src, float out[4]);
 void apply_peer_gameplay_camera(const float quat[4]);
 void apply_peer_gameplay_camera_for_player(void* player, const float quat[4]);
 void derive_look_stick_from_camera(
@@ -1205,7 +1266,120 @@ bool install_joypad3_keyboard_isolation() {
     FlushInstructionCache(GetCurrentProcess(), target, kPatchSize);
     DWORD ignored = 0;
     VirtualProtect(target, kPatchSize, old_protection, &ignored);
-    log_line("Joypad3 isolated from process-global keyboard command masks");
+    force_log_line("Joypad3 isolated from process-global keyboard command masks");
+    return true;
+}
+
+// Force named traversal commands active on Joypad 3 while peer intent is latched.
+// PC jump/evade often bind keyboard-only; our keyboard isolation returns 0 for
+// Joypad 3, so EvaluateGamepadButtonBinding never sees a match even when face
+// pads are present. IsCommandActive is the engine's authoritative gate for
+// PlayerMoveStick jump/roll consumers — short-circuit it for the puppet only.
+char __fastcall hooked_joypad_is_command_active(
+    void* joypad, std::uint32_t hash, std::uint8_t edge) {
+    (void)edge;
+    if (g_state_net.enabled && joypad != nullptr && g_module != 0 &&
+        g_original_joypad_is_command_active != nullptr) {
+        void* const frame_state =
+            *reinterpret_cast<void**>(g_module + 0x3FE1088);
+        if (frame_state != nullptr) {
+            void* const remote_joypad = static_cast<std::byte*>(frame_state) +
+                                        0xDB0 + 0xBF0 * 3;
+            if (joypad == remote_joypad) {
+                const auto string_hash = reinterpret_cast<StringHashFunction>(
+                    g_module + kStringHashRva);
+                static const std::uint32_t kJumpHash = string_hash("jump", 4, 0);
+                static const std::uint32_t kJumpHoldHash =
+                    string_hash("jump-hold", 9, 0);
+                static const std::uint32_t kEvadeRollHash =
+                    string_hash("evade-roll", 10, 0);
+                static const std::uint32_t kEvadeStartHash =
+                    string_hash("evade-start", 11, 0);
+                static const std::uint32_t kCrouchHash =
+                    string_hash("crouch", 6, 0);
+                const std::uint64_t force =
+                    g_state_net.puppet_traversal_force.load(
+                        std::memory_order_acquire);
+                // INTENT-only cues. Face A(=0x20) is BOTH jump pad AND ScaleCopy's
+                // evade-bleed source — matching on face pads made jump animate as
+                // roll and evade collide with crouch (2026-07-08bg user report).
+                if ((hash == kJumpHash || hash == kJumpHoldHash) &&
+                    (force & (kJoypadJumpPressButtonMask |
+                              kJoypadJumpHoldButtonMask)) != 0) {
+                    return 1;
+                }
+                if ((hash == kEvadeRollHash || hash == kEvadeStartHash) &&
+                    (force & kJoypadEvadeRollButtonMask) != 0) {
+                    return 1;
+                }
+                if (hash == kCrouchHash &&
+                    (force & kJoypadCrouchButtonMask) != 0) {
+                    return 1;
+                }
+            }
+        }
+    }
+    return g_original_joypad_is_command_active(joypad, hash, edge);
+}
+
+bool install_joypad3_is_command_active_force() {
+    auto* const target = reinterpret_cast<std::uint8_t*>(
+        g_module + kJoypadIsCommandActiveRva);
+    // First 14 bytes: mov [rsp+10],rbx; mov [rsp+18],rbp; push rsi; push rdi; push r14
+    constexpr std::array<std::uint8_t, 14> expected14{
+        0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18,
+        0x56, 0x57, 0x41, 0x56,
+    };
+    if (std::memcmp(target, expected14.data(), expected14.size()) != 0) {
+        std::ostringstream line;
+        line << "Joypad3 IsCommandActive force skipped: prologue bytes";
+        for (int i = 0; i < 16; ++i) {
+            line << ' ' << std::hex << static_cast<unsigned>(target[i]);
+        }
+        force_log_line(line.str().c_str());
+        return false;
+    }
+    constexpr std::size_t kStolen = 14;
+    constexpr std::size_t kReturnJumpSize = 14;
+    auto* const trampoline = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, kStolen + kReturnJumpSize, MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr) {
+        force_log_line("Joypad3 IsCommandActive force skipped: trampoline alloc failed");
+        return false;
+    }
+    std::memcpy(trampoline, target, kStolen);
+    auto* const jump_back = trampoline + kStolen;
+    jump_back[0] = 0xFF;
+    jump_back[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(jump_back + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(jump_back + 6) =
+        reinterpret_cast<std::uintptr_t>(target + kStolen);
+    FlushInstructionCache(
+        GetCurrentProcess(), trampoline, kStolen + kReturnJumpSize);
+    g_original_joypad_is_command_active =
+        reinterpret_cast<JoypadIsCommandActiveFunction>(trampoline);
+
+    DWORD old_protection = 0;
+    if (!VirtualProtect(target, kStolen, PAGE_EXECUTE_READWRITE,
+                        &old_protection)) {
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        g_original_joypad_is_command_active = nullptr;
+        force_log_line("Joypad3 IsCommandActive force skipped: VirtualProtect failed");
+        return false;
+    }
+    // 12-byte absolute jmp via rax (same pattern as keyboard isolation).
+    target[0] = 0x48;
+    target[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(target + 2) =
+        reinterpret_cast<std::uintptr_t>(&hooked_joypad_is_command_active);
+    target[10] = 0xFF;
+    target[11] = 0xE0;
+    std::memset(target + 12, 0x90, 2);  // pad stolen=14
+    FlushInstructionCache(GetCurrentProcess(), target, kStolen);
+    DWORD ignored = 0;
+    VirtualProtect(target, kStolen, old_protection, &ignored);
+    force_log_line("Joypad3 IsCommandActive force-hook installed (jump/evade/crouch)");
     return true;
 }
 
@@ -1247,7 +1421,7 @@ std::int64_t __fastcall hooked_input_scale_copy(
         const bool peer_aiming =
             have_peer_input && peer_packet_aim_active(peer);
         const bool puppet_wants_aim = peer_aiming;
-        if (have_peer_input && puppet_aim_press_relay_enabled()) {
+        if (have_peer_input) {
             // A short press can begin and end between two conversions. Received
             // pressed edges accumulate even when a newer state snapshot replaces
             // their packet, then become one held pulse for this conversion.
@@ -1272,23 +1446,22 @@ std::int64_t __fastcall hooked_input_scale_copy(
             const std::uint64_t synthetic_move_gate =
                 shared_bus_saved_mask & 0x500u;
             std::uint64_t held_mask =
-                remote_puppet_actions_from_peer(peer.input_buttons) |
-                remote_puppet_fire_pulse(edge_pulse);
-            held_mask &= ~kJoypadAimButtonMask;
-            if (puppet_wants_aim) {
-                held_mask |= kJoypadAimButtonMask;
-            }
-            // Rifle scoped mesh-hide is handled by scrub_puppet_scoped_ads_flag
-            // (+0x1548) — do NOT strip aim-press here or the puppet never enters
-            // the aim stance and shots use the wrong camera branch.
-            if (GetTickCount64() < g_fire_button_hold_until_ms &&
-                !puppet_fire_buttons_suppressed()) {
-                held_mask |= kJoypadFireButtonMask;
-            }
-            if (puppet_fire_buttons_suppressed()) {
-                held_mask &= ~kJoypadFireButtonMask;
+                remote_puppet_actions_from_peer(peer.input_buttons) | edge_pulse;
+            held_mask &= ~(kJoypadAimButtonMask | kJoypadFireButtonMask);
+            if (puppet_aim_press_relay_enabled()) {
+                if (puppet_wants_aim) {
+                    held_mask |= kJoypadAimButtonMask;
+                }
+                if (GetTickCount64() < g_fire_button_hold_until_ms &&
+                    !puppet_fire_buttons_suppressed()) {
+                    held_mask |= kJoypadFireButtonMask;
+                }
+                if (puppet_fire_buttons_suppressed()) {
+                    held_mask &= ~kJoypadFireButtonMask;
+                }
             }
             held_mask = sanitize_remote_puppet_button_mask(held_mask);
+            held_mask |= shared_bus_saved_mask & kInputBlockButtonBaseMask;
             *reinterpret_cast<std::uint64_t*>(source_bytes + 0x518) =
                 held_mask | synthetic_move_gate;
             // AIM-JITTER FIX (2026-07-05): do NOT feed peer.look_stick into the
@@ -1303,8 +1476,8 @@ std::int64_t __fastcall hooked_input_scale_copy(
             auto* const axes = reinterpret_cast<float*>(source_bytes);
             shared_bus_saved_look[0] = axes[2];
             shared_bus_saved_look[1] = axes[3];
-            if (g_puppet_relay_look_stick &&
-                have_peer_input && peer_packet_aim_active(peer) &&
+            if (puppet_aim_press_relay_enabled() && g_puppet_relay_look_stick &&
+                peer_packet_aim_active(peer) &&
                 (peer.flags & coop::kStateFlagPeerCamera) != 0 &&
                 (std::fabs(peer.look_stick[0]) > 0.001F ||
                  std::fabs(peer.look_stick[1]) > 0.001F)) {
@@ -1329,12 +1502,12 @@ std::int64_t __fastcall hooked_input_scale_copy(
     }
     if (destination_index == 3 && readable_bytes(joypad) >= 0xD8) {
         // Joypad 3 is converted several times before the remote Player consumes
-        // its command state. Keep the native pressed edge visible through those
-        // conversions; hooked_player_input_state_update clears it immediately
-        // after Player slot 16 has consumed it.
+        // its command state. Keep accumulated traversal edges (jump/roll/crouch)
+        // visible through those conversions; hooked_player_input_state_update
+        // clears them after Player slot 16 consumes them (fire edge deferred).
         *reinterpret_cast<std::uint64_t*>(
             static_cast<std::byte*>(joypad) + 0xD0) |=
-            remote_puppet_fire_pulse(
+            remote_puppet_actions_from_peer(
                 g_state_net.active_button_press_latch.load(
                     std::memory_order_acquire));
     }
@@ -1745,6 +1918,115 @@ bool local_player_strict_aim_active(void* player) {
     return false;
 }
 
+bool head_look_send_allowed(void* player) {
+    void* live = resolve_live_player_safe(0);
+    if (live != nullptr) {
+        player = live;
+    }
+    if (player == nullptr) {
+        return false;
+    }
+    if (local_game_window_foreground() &&
+        (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0) {
+        return false;
+    }
+    return true;
+}
+
+void publish_peer_head_look_packet_fields(
+    void* local_obj, coop::StatePacket& pkt) {
+    pkt.flags &= static_cast<std::uint16_t>(~coop::kStateFlagPeerFreeLook);
+    if (!g_puppet_head_look_sync) {
+        return;
+    }
+    if (!head_look_send_allowed(local_obj)) {
+        pkt.flags &= static_cast<std::uint16_t>(~coop::kStateFlagPeerFreeLook);
+        static ULONGLONG last_block_log = 0;
+        const ULONGLONG block_now = GetTickCount64();
+        if (block_now - last_block_log > 2000) {
+            last_block_log = block_now;
+            void* live = resolve_live_player_safe(0);
+            if (live == nullptr) {
+                live = local_obj;
+            }
+            const bool fg = local_game_window_foreground();
+            const bool rmb =
+                fg && (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+            const bool ads =
+                live != nullptr && player_ads_active(live) &&
+                capture_held_weapon_art_id(live) == kCoopRifleArtId;
+            std::ostringstream gate;
+            gate << "HEAD-LOOK-BLOCK fg=" << (fg ? 1 : 0) << " rmb=" << (rmb ? 1 : 0)
+                 << " scopedAds=" << (ads ? 1 : 0);
+            force_log_line(gate.str().c_str());
+        }
+        return;
+    }
+    float cam_quat[4]{};
+    int cam_src = 0;
+    bool cam_ok = capture_gameplay_camera_quat(cam_quat);
+    if (cam_ok) {
+        cam_src = 1;
+    } else {
+        void* facing_src = resolve_live_player_safe(0);
+        if (facing_src == nullptr) {
+            facing_src = local_obj;
+        }
+        if (facing_src != nullptr &&
+            readable_bytes(static_cast<std::byte*>(facing_src) + kFacingOffset +
+                           4 * sizeof(float)) >= 4 * sizeof(float)) {
+            const auto* facing = reinterpret_cast<const float*>(
+                static_cast<const std::byte*>(facing_src) + kFacingOffset);
+            if (copy_valid_camera_quat(facing, cam_quat)) {
+                cam_ok = true;
+                cam_src = 2;
+            }
+        }
+    }
+    if (!cam_ok) {
+        pkt.flags &= static_cast<std::uint16_t>(~coop::kStateFlagPeerFreeLook);
+        static ULONGLONG last_nocam_log = 0;
+        const ULONGLONG nocam_now = GetTickCount64();
+        if (nocam_now - last_nocam_log > 2000) {
+            last_nocam_log = nocam_now;
+            force_log_line("HEAD-LOOK-NOCAM (pose-seed + facing both failed)");
+        }
+        return;
+    }
+    std::memcpy(pkt.camera_quat, cam_quat, sizeof(pkt.camera_quat));
+    pkt.flags |= coop::kStateFlagPeerFreeLook;
+    // Strip ADS semantics from free-look frames. Otherwise pose_seed (0x200) +
+    // joypad 0x200 make peer_packet_aim_active() true on the receiver and head
+    // IK is skipped (flags=0x70f observed in log).
+    pkt.flags &= static_cast<std::uint16_t>(
+        ~(coop::kStateFlagPoseSeed | coop::kStateFlagPeerCamera));
+    std::memset(pkt.pose_seed, 0, sizeof(pkt.pose_seed));
+    pkt.input_buttons &= ~kJoypadAimButtonMask;
+    void* body_src = resolve_live_player_safe(0);
+    if (body_src == nullptr) {
+        body_src = local_obj;
+    }
+    if (body_src != nullptr &&
+        readable_bytes(static_cast<std::byte*>(body_src) + kPlayerQuatOffset) >=
+            4 * sizeof(float)) {
+        const auto* body_quat = reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(body_src) + kPlayerQuatOffset);
+        if (valid_network_orientation(body_quat)) {
+            derive_look_stick_from_camera(body_quat, cam_quat, pkt.look_stick);
+        }
+    }
+    static ULONGLONG last_send_log = 0;
+    const ULONGLONG send_now = GetTickCount64();
+    if (send_now - last_send_log > 500) {
+        last_send_log = send_now;
+        std::ostringstream line;
+        line << "HEAD-LOOK-SEND src=" << cam_src << " stick=(" << pkt.look_stick[0]
+             << "," << pkt.look_stick[1] << ") flags=0x" << std::hex << pkt.flags
+             << std::dec;
+        force_log_line(line.str().c_str());
+    }
+}
+
 bool local_player_aim_input_active() {
     void* local = resolve_live_player_safe(0);
     if (local == nullptr) {
@@ -1759,6 +2041,11 @@ bool peer_packet_aim_active(const coop::StatePacket& peer) {
     return (peer.flags & 8) != 0 &&
            (peer.input_buttons & kJoypadAimButtonMask) != 0 &&
            (peer.flags & coop::kStateFlagPoseSeed) != 0;
+}
+
+bool peer_packet_free_look_active(const coop::StatePacket& peer) {
+    return (peer.flags & coop::kStateFlagPeerFreeLook) != 0 &&
+           valid_network_orientation(peer.camera_quat);
 }
 
 bool peer_snapshot_aim_active() {
@@ -2118,7 +2405,10 @@ void write_peer_seed_to_screen1_resolver_source() {
 }
 
 void apply_peer_aim_pose_quat(void* player) {
-    if (!g_puppet_aim_reticle_relay || player == nullptr) {
+    if (player == nullptr) {
+        return;
+    }
+    if (!g_puppet_aim_reticle_relay && !puppet_aim_press_relay_enabled()) {
         return;
     }
     if (!peer_snapshot_aim_active()) {
@@ -2331,14 +2621,17 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
         g_pose_seed_fire_only_override || g_puppet_aim_ray_override;
     const bool sustained_slot1_override =
         g_puppet_aim_override_frame && idx == kSlot1ScreenIndex;
+    const bool relay_aim_pose =
+        puppet_aim_press_relay_enabled() && peer_snapshot_aim_active();
     // AIM-POSE-SCOPED override (2026-07-07): peer pose-seed ONLY when the caller is
     // (a) GetTargetPointFromReticle's internal resolver call (0xCB17D6), or
     // (b) sub_1410E9210's per-frame copy into Player+0x1720/+0x1730 (0x10E934B).
     // (b) is the confirmed writer chain: resolver -> vmovups [player+1720/1730].
-    // Avoids sustained idx==1 override (froze aim 07-05) and reticle trampoline crash.
+    // Avoids sustained idx==1 override (froze locomotion 2026-07-07) and reticle
+    // trampoline crash. F8+peer RMB enables the same path as Numpad / experiment.
     const bool aim_pose_seed_override =
-        g_puppet_aim_reticle_relay && idx == kSlot1ScreenIndex &&
-        peer_snapshot_aim_active() &&
+        (g_puppet_aim_reticle_relay || relay_aim_pose) &&
+        idx == kSlot1ScreenIndex && peer_snapshot_aim_active() &&
         (caller_rva == kAimTargetReticleCallSiteRva ||
          caller_rva == kPlayerAimPoseSeedCallSiteRva);
     if (!g_puppet_relay_pose_seed || !g_state_net.enabled || out == nullptr ||
@@ -2400,7 +2693,9 @@ AimTargetFromReticleFunction g_original_aim_target = nullptr;
 // 2026-07-07 - because THIS reader re-derives the target from the resolver each
 // frame; overriding the resolver's output is the input that actually moves it.)
 void* __fastcall hooked_aim_target_from_reticle(void* a1, void* a2, void* a3) {
-    const bool arm = g_puppet_relay_pose_seed && g_state_net.enabled;
+    const bool arm =
+        g_puppet_relay_pose_seed && g_state_net.enabled &&
+        puppet_aim_press_relay_enabled() && peer_snapshot_aim_active();
     if (arm) {
         g_pose_seed_fire_only_override = true;
         g_puppet_aim_ray_override = true;
@@ -3697,28 +3992,64 @@ bool get_camera_axes(
     return true;
 }
 
-bool capture_gameplay_camera_quat(float out[4]) {
-    const auto get_camera_manager =
-        reinterpret_cast<GetCameraManagerFunction>(
-            g_module + kGetCameraManagerRva
-        );
-    void* const manager = get_camera_manager(0);
-    if (manager == nullptr ||
-        readable_bytes(static_cast<std::byte*>(manager) + kCameraRotationOffset + 16) <
-            16) {
+bool copy_valid_camera_quat(const float* src, float out[4]) {
+    if (src == nullptr || !valid_network_orientation(src)) {
         return false;
     }
-    const auto* rotation = reinterpret_cast<const float*>(
-        static_cast<const std::byte*>(manager) + kCameraRotationOffset);
+    std::memcpy(out, src, 4 * sizeof(float));
+    return true;
+}
+
+bool capture_gameplay_camera_quat_from_manager(void* manager, float out[4]) {
+    if (manager == nullptr) {
+        return false;
+    }
+    auto* const mgr_bytes = static_cast<std::byte*>(manager);
+    // Primary: blended gameplay pose seed (same source as fire/aim ray and
+    // copy_local_pose_seed_32). CameraManager+0x1B0 is often stale during
+    // free-look and made HEAD-LOOK-SEND never fire in builds at..av.
+    if (readable_bytes(mgr_bytes + kCameraBlockOffset) >= sizeof(void*)) {
+        void* const blk = *reinterpret_cast<void**>(mgr_bytes + kCameraBlockOffset);
+        if (blk != nullptr) {
+            auto* const blk_bytes = static_cast<std::byte*>(blk);
+            if (readable_bytes(blk_bytes + kCameraPoseSeedOffset + 32) >= 32) {
+                const auto* seed = reinterpret_cast<const float*>(
+                    blk_bytes + kCameraPoseSeedOffset);
+                if (copy_valid_camera_quat(seed + 4, out)) {
+                    return true;
+                }
+            }
+            if (readable_bytes(blk_bytes + 0x70 + 16) >= 16) {
+                const auto* alt = reinterpret_cast<const float*>(blk_bytes + 0x70);
+                if (copy_valid_camera_quat(alt, out)) {
+                    return true;
+                }
+            }
+        }
+    }
+    if (readable_bytes(mgr_bytes + kCameraRotationOffset + 16) < 16) {
+        return false;
+    }
+    const auto* rotation = reinterpret_cast<const float*>(mgr_bytes + kCameraRotationOffset);
     for (int i = 0; i < 4; ++i) {
         if (!std::isfinite(rotation[i])) {
             return false;
         }
         out[i] = rotation[i];
     }
-    const float norm_sq =
-        out[0] * out[0] + out[1] * out[1] + out[2] * out[2] + out[3] * out[3];
-    return norm_sq > 0.90F && norm_sq < 1.10F;
+    return valid_network_orientation(out);
+}
+
+bool capture_gameplay_camera_quat(float out[4]) {
+    if (g_module == 0) {
+        return false;
+    }
+    const auto get_camera_manager =
+        reinterpret_cast<GetCameraManagerFunction>(
+            g_module + kGetCameraManagerRva
+        );
+    void* const manager = get_camera_manager(0);
+    return capture_gameplay_camera_quat_from_manager(manager, out);
 }
 
 InputCommand read_local_keyboard_command() {
@@ -4192,6 +4523,193 @@ void camera_forward_horizontal(
     if (len > 0.001F) {
         forward_x /= len;
         forward_z /= len;
+    }
+}
+
+void quat_forward_neg_z(const float q[4], float& fx, float& fy, float& fz) {
+    const float x = q[0];
+    const float y = q[1];
+    const float z = q[2];
+    const float w = q[3];
+    fx = -2.0F * (x * z + w * y);
+    fy = -2.0F * (y * z - w * x);
+    fz = -(1.0F - 2.0F * (x * x + y * y));
+    const float len = std::sqrt(fx * fx + fy * fy + fz * fz);
+    if (len > 1e-3F) {
+        fx /= len;
+        fy /= len;
+        fz /= len;
+    }
+}
+
+using PlayerLookAtSetPointFn = void(__fastcall*)(
+    void* self, unsigned int slot, int param, const float* pos, float weight);
+using PlayerLookAtUpdateIkFn = void(__fastcall*)(void* self, void* owner);
+
+void* player_look_at_ik_controller(void* player) {
+    if (player == nullptr) {
+        return nullptr;
+    }
+    auto* const slot = static_cast<std::byte*>(player) + kPlayerLookAtIkPtrOffset;
+    if (readable_bytes(slot) < sizeof(void*)) {
+        return nullptr;
+    }
+    void* const ik = *reinterpret_cast<void* const*>(slot);
+    if (ik == nullptr || readable_bytes(ik) < sizeof(void*)) {
+        return nullptr;
+    }
+    void* const vtable = *reinterpret_cast<void* const*>(ik);
+    if (vtable == nullptr) {
+        return nullptr;
+    }
+    return ik;
+}
+
+static bool seh_call_set_look_point(
+    PlayerLookAtSetPointFn set_look, void* ik,
+    const float target[4], float weight) {
+    __try {
+        set_look(ik, 0, 0, target, weight);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+static float g_head_look_smoothed_target[3]{};
+static bool g_head_look_smoothed_valid = false;
+
+void reset_peer_head_look_smooth_state() {
+    g_head_look_smoothed_valid = false;
+}
+
+void clear_peer_head_look_on_puppet(void* puppet) {
+    reset_peer_head_look_smooth_state();
+    void* const ik = player_look_at_ik_controller(puppet);
+    if (ik == nullptr) {
+        return;
+    }
+    void** const vtable = *reinterpret_cast<void***>(ik);
+    if (vtable != nullptr &&
+        readable_bytes(vtable) >= 8 * sizeof(void*)) {
+        auto* const set_look = reinterpret_cast<PlayerLookAtSetPointFn>(vtable[5]);
+        if (set_look != nullptr) {
+            const float zero[4] = {0.0F, 0.0F, 0.0F, 0.0F};
+            seh_call_set_look_point(set_look, ik, zero, 0.0F);
+        }
+    }
+}
+
+void apply_peer_head_look_to_puppet(
+    void* puppet, const coop::StatePacket& peer) {
+    if (puppet == nullptr || !g_puppet_head_look_sync ||
+        !peer_packet_free_look_active(peer)) {
+        return;
+    }
+    static ULONGLONG s_last_head_apply_tick = 0;
+    const ULONGLONG frame_tick = GetTickCount64();
+    if (frame_tick == s_last_head_apply_tick) {
+        return;
+    }
+    s_last_head_apply_tick = frame_tick;
+    void* const ik = player_look_at_ik_controller(puppet);
+    if (ik == nullptr) {
+        if (readable_bytes(static_cast<std::byte*>(puppet) + kFacingOffset +
+                           4 * sizeof(float)) >= 4 * sizeof(float)) {
+            std::memcpy(static_cast<std::byte*>(puppet) + kFacingOffset,
+                        peer.camera_quat, 4 * sizeof(float));
+        }
+        static ULONGLONG last_null_log = 0;
+        const ULONGLONG null_now = GetTickCount64();
+        if (null_now - last_null_log > 2000) {
+            last_null_log = null_now;
+            force_log_line(
+                "HEAD-LOOK-SKIP ik=null (Player+0x1E38 ptr); wrote +0x24A0 facing");
+        }
+        return;
+    }
+    const float* const q = peer.camera_quat;
+    float fx = 0.0F;
+    float fy = 0.0F;
+    float fz = 0.0F;
+    quat_forward_neg_z(q, fx, fy, fz);
+    // Full 3D forward at weight~1 twists the whole spine chain on the puppet.
+    // Match static plan: horizontal bearing + capped pitch only.
+    const float horiz_len = std::sqrt(fx * fx + fz * fz);
+    if (horiz_len > 0.001F) {
+        fx /= horiz_len;
+        fz /= horiz_len;
+    } else {
+        fx = 0.0F;
+        fz = -1.0F;
+    }
+    constexpr float kMaxPitchComponent = 0.35F;
+    fy = std::clamp(fy, -kMaxPitchComponent, kMaxPitchComponent);
+    constexpr float kHeadLookDist = 8.0F;
+    const float raw_target[3] = {
+        peer.pos[0] + fx * kHeadLookDist,
+        peer.pos[1] + fy * kHeadLookDist,
+        peer.pos[2] + fz * kHeadLookDist,
+    };
+    if (!g_head_look_smoothed_valid) {
+        g_head_look_smoothed_target[0] = raw_target[0];
+        g_head_look_smoothed_target[1] = raw_target[1];
+        g_head_look_smoothed_target[2] = raw_target[2];
+        g_head_look_smoothed_valid = true;
+    } else {
+        constexpr float kTargetLerp = 0.22F;
+        for (int i = 0; i < 3; ++i) {
+            g_head_look_smoothed_target[i] +=
+                (raw_target[i] - g_head_look_smoothed_target[i]) * kTargetLerp;
+        }
+    }
+    const float target[4] = {
+        g_head_look_smoothed_target[0],
+        g_head_look_smoothed_target[1],
+        g_head_look_smoothed_target[2],
+        1.0F,
+    };
+    constexpr float kIkWeightMax = 0.40F;
+    constexpr float kIkWeightMin = 0.16F;
+    float weight = kIkWeightMax;
+    if (peer.move_magnitude > 0.35F) {
+        weight = std::clamp(
+            kIkWeightMax - 0.45F * (peer.move_magnitude - 0.35F),
+            kIkWeightMin, kIkWeightMax);
+    }
+    void** const vtable = *reinterpret_cast<void***>(ik);
+    if (vtable == nullptr ||
+        readable_bytes(vtable) < 8 * sizeof(void*)) {
+        return;
+    }
+    auto* const set_look = reinterpret_cast<PlayerLookAtSetPointFn>(vtable[5]);
+    if (set_look == nullptr) {
+        return;
+    }
+    if (!seh_call_set_look_point(set_look, ik, target, weight)) {
+        static ULONGLONG last_seh_log = 0;
+        const ULONGLONG seh_now = GetTickCount64();
+        if (seh_now - last_seh_log > 2000) {
+            last_seh_log = seh_now;
+            force_log_line("HEAD-LOOK-SEH SetLookPoint fault");
+        }
+        return;
+    }
+    // SetLookPoint alone stages slot0; native UpdateIk in the upcoming Player tick
+    // copies from the slot table (+0x390 stride 88B) and solves. Never memcpy into
+    // +0x390/+0x3F0 manually — that corrupts joint indices and bends the puppet.
+    static ULONGLONG last_head_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_head_log > 500) {
+        last_head_log = now;
+        std::ostringstream line;
+        line << "HEAD-LOOK tgt=(" << target[0] << "," << target[1] << ","
+             << target[2] << ") w=" << weight
+             << " pitch=" << fy
+             << " move=" << peer.move_magnitude
+             << " ik=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(ik) << std::dec;
+        force_log_line(line.str().c_str());
     }
 }
 
@@ -6101,10 +6619,129 @@ int infer_gun_state(void* player, std::uint8_t in_hands_slot, std::uint64_t butt
     return 0;
 }
 
-using JoypadIsCommandActiveFunction = bool(__fastcall*)(void*, std::uint32_t);
-constexpr std::uintptr_t kJoypadIsCommandActiveRva = 0x1837CD0;
+// Joypad_ResolveCommandBindings(joypad, hash, out_192B) @ 0x14183AE30.
+using JoypadResolveCommandBindingsFunction =
+    void*(__fastcall*)(void*, std::uint32_t, void*);
+constexpr std::uintptr_t kJoypadResolveCommandBindingsRva = 0x183AE30;
 
-// Merge block+0x518 with Joypad current/pressed and authored command queries.
+// Walk authored gamepad binding list for a command hash. Returns OR of all
+// gamepad button masks from the first resolved descriptor (types 1/2/4/8).
+// Returns 0 when the command is keyboard-only or the table lookup fails.
+std::uint64_t resolve_command_gamepad_mask(void* joypad, std::uint32_t hash) {
+    if (joypad == nullptr || g_module == 0 || hash == 0) {
+        return 0;
+    }
+    alignas(32) std::uint8_t out[192]{};
+    const auto resolve = reinterpret_cast<JoypadResolveCommandBindingsFunction>(
+        g_module + kJoypadResolveCommandBindingsRva);
+    __try {
+        resolve(joypad, hash, out);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 0;
+    }
+    // Descriptor 0 lives at out+0; gamepad list pointer at +0. The secondary
+    // descriptor starts at +96. EvaluateCommandDescriptor reads *(*list)+8 for
+    // the {mask,u64 type,u32 float} array (findings 2026-07-03 fire mask dump).
+    std::uint64_t mask = 0;
+    for (int desc = 0; desc < 2; ++desc) {
+        auto* const base = out + 96 * desc;
+        // Active flag at desc+88 from ResolveCommandBindings.
+        if (base[88] == 0 && desc == 1) {
+            continue;
+        }
+        auto* const list_hdr = *reinterpret_cast<std::uint8_t**>(base);
+        if (list_hdr == nullptr || readable_bytes(list_hdr) < 16) {
+            continue;
+        }
+        const int count = *reinterpret_cast<const int*>(list_hdr);
+        auto* const entries =
+            *reinterpret_cast<const std::uint8_t**>(list_hdr + 8);
+        if (count <= 0 || count > 16 || entries == nullptr ||
+            readable_bytes(entries) < static_cast<std::size_t>(count) * 16) {
+            continue;
+        }
+        for (int i = 0; i < count; ++i) {
+            const auto* const e = entries + 16 * i;
+            mask |= *reinterpret_cast<const std::uint64_t*>(e);
+        }
+        if (mask != 0) {
+            break;
+        }
+    }
+    return mask;
+}
+
+// Jump/roll on PC often fire via keyboard binding. Joypad 3 has keyboard
+// isolation ON, so the puppet only accepts GAMEPAD masks in +0xD0/+0xE0.
+// Pseudo_scalecopy bits 0x4000000/0x8000000 are internal ScaleCopy OR flags,
+// NOT authored gamepad masks — using them was REJECTED by JOYPAD3 reaching
+// current=0x8000009 with zero native jump anim (2026-07-08bf logs).
+std::uint64_t merge_authored_traversal_button_mask(
+    void* joypad, std::uint64_t mask) {
+    if (joypad == nullptr || g_module == 0) {
+        return mask;
+    }
+    const auto string_hash = reinterpret_cast<StringHashFunction>(
+        g_module + kStringHashRva);
+    const auto is_active = reinterpret_cast<JoypadIsCommandActiveFunction>(
+        g_module + kJoypadIsCommandActiveRva);
+    static const std::uint32_t kJumpHash = string_hash("jump", 4, 0);
+    static const std::uint32_t kJumpHoldHash = string_hash("jump-hold", 9, 0);
+    static const std::uint32_t kEvadeRollHash = string_hash("evade-roll", 10, 0);
+    static const std::uint32_t kEvadeStartHash = string_hash("evade-start", 11, 0);
+    static const std::uint32_t kCrouchHash = string_hash("crouch", 6, 0);
+    static std::uint64_t jump_pad = 0;
+    static std::uint64_t jump_hold_pad = 0;
+    static std::uint64_t evade_pad = 0;
+    static std::uint64_t crouch_pad = 0;
+    static bool resolved = false;
+    if (!resolved) {
+        jump_pad = resolve_command_gamepad_mask(joypad, kJumpHash);
+        jump_hold_pad = resolve_command_gamepad_mask(joypad, kJumpHoldHash);
+        evade_pad = resolve_command_gamepad_mask(joypad, kEvadeRollHash);
+        if (evade_pad == 0) {
+            evade_pad = resolve_command_gamepad_mask(joypad, kEvadeStartHash);
+        }
+        crouch_pad = resolve_command_gamepad_mask(joypad, kCrouchHash);
+        resolved = true;
+        std::ostringstream init;
+        init << "TRAVERSAL-PAD-MASKS jump=0x" << std::hex << jump_pad
+             << " jumpHold=0x" << jump_hold_pad
+             << " evade=0x" << evade_pad
+             << " crouch=0x" << crouch_pad << std::dec
+             << " hashes jump=0x" << std::hex << kJumpHash
+             << " evade=0x" << kEvadeRollHash << std::dec;
+        force_log_line(init.str().c_str());
+        // Protocol maps IsCommandActive -> ScaleCopy INTENT bits (not face pads).
+        // Table face values (jump=0x20/evade=0x80) are kept for diagnostics only —
+        // OR'ing them into the packet made the receiver force-hook confuse jump
+        // with evade (A pad == eveade face bleed source).
+        (void)jump_pad;
+        (void)jump_hold_pad;
+        (void)evade_pad;
+        (void)crouch_pad;
+    }
+    // a3=1 => edged path used by move consumers; a3=0 is held path used by
+    // PlayerMoveStick_MainUpdate (jump query). OR either.
+    if (is_active(joypad, kJumpHash, 1) || is_active(joypad, kJumpHash, 0)) {
+        mask |= kJoypadJumpPressButtonMask;
+    }
+    if (is_active(joypad, kJumpHoldHash, 1) ||
+        is_active(joypad, kJumpHoldHash, 0)) {
+        mask |= kJoypadJumpHoldButtonMask;
+    }
+    if (is_active(joypad, kEvadeRollHash, 1) ||
+        is_active(joypad, kEvadeRollHash, 0) ||
+        is_active(joypad, kEvadeStartHash, 1) ||
+        is_active(joypad, kEvadeStartHash, 0)) {
+        mask |= kJoypadEvadeRollButtonMask;
+    }
+    if (is_active(joypad, kCrouchHash, 1) || is_active(joypad, kCrouchHash, 0)) {
+        mask |= kJoypadCrouchButtonMask;
+    }
+    return mask;
+}
+
 std::uint64_t capture_local_joypad_command_mask(void* player) {
     if (player == nullptr || g_module == 0) {
         return 0;
@@ -6143,10 +6780,10 @@ std::uint64_t capture_local_joypad_command_mask(void* player) {
         string_hash("aim-press", 9, 0);
     static const std::uint32_t kFireHoldHash =
         string_hash("fire-hold", 9, 0);
-    if (is_active(joypad, kAimPressHash)) {
+    if (is_active(joypad, kAimPressHash, 1)) {
         mask |= kJoypadAimButtonMask;
     }
-    if (is_active(joypad, kFireHoldHash)) {
+    if (is_active(joypad, kFireHoldHash, 1)) {
         mask |= kJoypadFireButtonMask;
     }
     // PC mouse is process-global on loopback two-instance play. Only the focused
@@ -6159,6 +6796,49 @@ std::uint64_t capture_local_joypad_command_mask(void* player) {
             mask |= kJoypadFireButtonMask;
         }
     }
+    return mask;
+}
+
+// Full resolved block+0x518 for locomotion/traversal relay (jump, roll, crouch…).
+// Never replace with aim|fire-only capture — that dropped jump while RMB held.
+std::uint64_t capture_peer_send_button_mask(void* player) {
+    if (player == nullptr || g_module == 0) {
+        return 0;
+    }
+    const auto* const base = static_cast<const std::byte*>(player);
+    if (readable_bytes(base + 0x39BC) < 1) {
+        return 0;
+    }
+    const int joypad_index =
+        *reinterpret_cast<const std::int32_t*>(base + 0x39B8);
+    std::uint64_t mask = 0;
+    if (std::byte* const blk = joypad_resolved_input_block(joypad_index)) {
+        mask = *reinterpret_cast<const std::uint64_t*>(blk + 0x518);
+    }
+    void* const frame_state =
+        *reinterpret_cast<void**>(g_module + 0x3FE1088);
+    if (frame_state != nullptr && joypad_index >= 0 && joypad_index < 6) {
+        auto* const joypad_obj = static_cast<std::byte*>(frame_state) + 0xDB0 +
+                                 0xBF0ULL * static_cast<std::uintptr_t>(
+                                                   joypad_index);
+        if (readable_bytes(joypad_obj) >= 0xE8) {
+            mask |= *reinterpret_cast<const std::uint64_t*>(joypad_obj + 0xD0);
+            mask |= *reinterpret_cast<const std::uint64_t*>(joypad_obj + 0xE0);
+            mask = merge_authored_traversal_button_mask(joypad_obj, mask);
+        }
+    }
+    mask = sanitize_peer_locomotion_button_mask(mask);
+    // Never relay authored face pads: jump A (0x20) bleeds into evade via
+    // ScaleCopy. Locomotion protocol is INTENT bits only.
+    mask &= ~(kJoypadFaceAButtonMask | kJoypadFaceBButtonMask |
+              kJoypadFaceXButtonMask);
+    mask &= ~kJoypadAimButtonMask;
+    if (local_player_strict_aim_active(player)) {
+        mask |= kJoypadAimButtonMask;
+    }
+    const std::uint64_t cached =
+        g_cached_local_input_buttons.load(std::memory_order_relaxed);
+    mask |= cached & kJoypadFireButtonMask;
     return mask;
 }
 
@@ -7211,51 +7891,51 @@ void send_local_player_state() {
             *reinterpret_cast<void**>(g_module + 0x3FE1088);
         std::uint64_t synth_pressed = 0;
         std::uint64_t synth_released = 0;
-        if (auto* const blk = joypad_resolved_input_block(joypad_index)) {
-            std::uint64_t held_mask = capture_local_joypad_command_mask(local_obj);
-            if (held_mask == 0) {
-                held_mask =
-                    *reinterpret_cast<const std::uint64_t*>(blk + 0x518);
-            }
-            const std::uint64_t cached =
-                g_cached_local_input_buttons.load(std::memory_order_relaxed);
-            // Never resurrect a released aim bit from cache — that caused copy-2
-            // Chloe puppet to stay in ADS after copy-1 Chloe released RMB.
-            held_mask |= cached & kJoypadFireButtonMask;
-            if ((held_mask & kJoypadAimButtonMask) == 0) {
-                held_mask &= ~kJoypadAimButtonMask;
-            }
-            // Strip scope/HUD layer bits from Joypad +0xE0 pollution; keep 0x200
-            // in the packet for apply_peer_aim_facing on the receiver only.
-            held_mask &= ~0x10000ull & ~0x20000ull & ~0x40000ull & ~0x80000ull;
-            if (!local_player_strict_aim_active(local_obj)) {
-                held_mask &= ~kJoypadAimButtonMask;
-            } else {
-                held_mask |= kJoypadAimButtonMask;
-            }
+        {
+            std::uint64_t held_mask = capture_peer_send_button_mask(local_obj);
             pkt.input_buttons = held_mask;
             static std::uint64_t prev_sent_input_mask = 0;
+            static std::uint64_t prev_loco_send_log = 0;
             synth_pressed = held_mask & ~prev_sent_input_mask;
             synth_released = prev_sent_input_mask & ~held_mask;
             prev_sent_input_mask = held_mask;
+            const std::uint64_t trav =
+                held_mask & kJoypadTraversalRelayMask;
+            if (trav != 0 && trav != prev_loco_send_log) {
+                prev_loco_send_log = trav;
+                std::ostringstream loco;
+                loco << "LOCOMOTION-SEND held=0x" << std::hex << held_mask
+                     << " pressed=0x" << synth_pressed
+                     << " pktPressed=0x"
+                     << (sanitize_peer_locomotion_button_mask(synth_pressed))
+                     << " trav=0x" << trav << std::dec;
+                force_log_line(loco.str().c_str());
+            } else if (trav == 0) {
+                prev_loco_send_log = 0;
+            }
             pkt.flags |= 8;
         }
+        // Always publish synthetic rising edges into buttons_pressed, even when
+        // the native Joypad +0xD0 snapshot is empty/unavailable — IsCommandActive
+        // edges are synthesis-only and would otherwise be dropped.
+        pkt.buttons_pressed |= sanitize_peer_locomotion_button_mask(synth_pressed);
+        pkt.buttons_released |= sanitize_peer_locomotion_button_mask(synth_released);
         if (frame_state != nullptr && joypad_index >= 0 && joypad_index < 6) {
             const auto* const joypad = static_cast<const std::byte*>(frame_state) +
                                        0xDB0 + 0xBF0 * joypad_index;
             if (readable_bytes(joypad) >= 0xE8) {
-                pkt.buttons_pressed =
+                std::uint64_t native_pressed =
                     *reinterpret_cast<const std::uint64_t*>(joypad + 0xD0);
-                pkt.buttons_released =
+                std::uint64_t native_released =
                     *reinterpret_cast<const std::uint64_t*>(joypad + 0xD8);
                 constexpr std::uint64_t kStateSendStripMask =
                     0x10000ull | 0x20000ull | 0x40000ull | 0x80000ull;
-                pkt.buttons_pressed &= ~kStateSendStripMask;
-                pkt.buttons_released &= ~kStateSendStripMask;
-                pkt.buttons_pressed |= synth_pressed &
-                    (kJoypadAimButtonMask | kJoypadFireButtonMask);
-                pkt.buttons_released |= synth_released &
-                    (kJoypadAimButtonMask | kJoypadFireButtonMask);
+                native_pressed =
+                    sanitize_peer_locomotion_button_mask(native_pressed) &
+                    ~kJoypadAimButtonMask;
+                native_released &= ~kStateSendStripMask;
+                pkt.buttons_pressed |= native_pressed;
+                pkt.buttons_released |= native_released;
                 pkt.flags |= 8;
             }
         }
@@ -7309,11 +7989,13 @@ void send_local_player_state() {
         }
     } else {
         pkt.flags &= static_cast<std::uint16_t>(
-            ~(coop::kStateFlagPoseSeed | coop::kStateFlagPeerCamera));
+            ~(coop::kStateFlagPoseSeed | coop::kStateFlagPeerCamera |
+              coop::kStateFlagPeerFreeLook));
         std::memset(pkt.pose_seed, 0, sizeof(pkt.pose_seed));
         std::memset(pkt.camera_quat, 0, sizeof(pkt.camera_quat));
         std::memset(pkt.look_stick, 0, sizeof(pkt.look_stick));
     }
+    publish_peer_head_look_packet_fields(local_obj, pkt);
     // The native CharacterMove weapon helper is read-only over the live Player
     // inventory. Refresh less often than movement; the receiver republishes only
     // when this block changes.
@@ -7969,37 +8651,49 @@ void apply_puppet_velocity_pre() {
     std::memcpy(vel_mirror, pkt.velocity, sizeof(pkt.velocity));
 }
 
-// POST (after the puppet's own update runs): assert the networked transform last
-// so the engine's own integration can't fight it (was causing flicker).
-void apply_puppet_transform_post(void* puppet) {
+// BEFORE the puppet's native update: stage look-at so UpdateIk in the same tick
+// can consume SetLookPoint output. Post-tick field pokes corrupted +0x390.
+void apply_puppet_head_look_pre() {
+    void* const puppet = retained_player_object(1);
+    if (puppet == nullptr || !g_puppet_net_apply || !g_puppet_head_look_sync) {
+        return;
+    }
     coop::StatePacket pkt{};
     void* resolved = nullptr;
-    // Diagnostic (rate-limited): why isn't the puppet being driven?
-    if (false) {
-        static ULONGLONG last = 0;
-        const ULONGLONG now = GetTickCount64();
-        if (now - last > 1000) {
-            last = now;
-            void* p1 = retained_player_object(1);
-            std::ostringstream d;
-            d << "PUPPETDBG obj=0x" << std::hex
-              << reinterpret_cast<std::uintptr_t>(puppet) << " slot1=0x"
-              << reinterpret_cast<std::uintptr_t>(p1) << std::dec
-              << " apply=" << (g_puppet_net_apply ? 1 : 0)
-              << " netEn=" << (g_state_net.enabled ? 1 : 0)
-              << " hasPeer=" << (g_state_net.has_peer_state.load() ? 1 : 0);
-            log_line(d.str().c_str());
-        }
-    }
-    if (!latest_peer_state(pkt, resolved) || resolved != puppet) {
-        // A background instance can stop ticking for several seconds. Freeze its
-        // avatar at the last confirmed transform instead of releasing it to local
-        // physics, which can produce a false fall/death transition.
-        if (puppet != retained_player_object(1) ||
-            !copy_last_peer_state_snapshot(pkt) || (pkt.flags & 1) == 0) {
+    if (!latest_peer_state(pkt, resolved)) {
+        if (!copy_last_peer_state_snapshot(pkt) || (pkt.flags & 1) == 0) {
             return;
         }
-        resolved = puppet;
+    }
+    const ULONGLONG peer_received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    const bool peer_fresh =
+        peer_received != 0 && GetTickCount64() - peer_received <= 250;
+    if (!peer_fresh) {
+        return;
+    }
+    const bool peer_aiming =
+        (pkt.flags & 8) != 0 && peer_packet_aim_active(pkt);
+    if (peer_packet_free_look_active(pkt)) {
+        apply_peer_head_look_to_puppet(puppet, pkt);
+    } else if (!peer_aiming) {
+        clear_peer_head_look_on_puppet(puppet);
+    }
+}
+
+// POST (after the puppet's own update runs): assert the networked transform last
+// so the engine's own integration can't fight it (was causing flicker).
+void apply_puppet_transform_post(void* /*update_object*/) {
+    void* puppet = retained_player_object(1);
+    if (puppet == nullptr || !g_puppet_net_apply) {
+        return;
+    }
+    coop::StatePacket pkt{};
+    void* resolved = nullptr;
+    if (!latest_peer_state(pkt, resolved)) {
+        if (!copy_last_peer_state_snapshot(pkt) || (pkt.flags & 1) == 0) {
+            return;
+        }
     }
     apply_peer_health_to_slot1(pkt, false);
     auto* world = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kWorldPositionOffset);
@@ -8099,7 +8793,7 @@ void apply_puppet_transform_post(void* puppet) {
     if (peer_aiming) {
         if (g_puppet_aim_facing_from_camera) {
             apply_peer_aim_facing_to_player(puppet, pkt);
-        } else if (g_puppet_aim_reticle_relay &&
+        } else if ((g_puppet_aim_reticle_relay || puppet_aim_press_relay_enabled()) &&
                    (pkt.flags & coop::kStateFlagPoseSeed) != 0 &&
                    valid_network_orientation(pkt.pose_seed + 4)) {
             orientation_dot =
@@ -8107,7 +8801,9 @@ void apply_puppet_transform_post(void* puppet) {
         } else if (valid_network_orientation(pkt.quat)) {
             orientation_dot = blend_network_orientation(quat, pkt.quat, 0.35F);
         }
-        apply_peer_aim_pose_quat(puppet);
+        if (g_puppet_aim_reticle_relay || puppet_aim_press_relay_enabled()) {
+            apply_peer_aim_pose_quat(puppet);
+        }
     } else if (puppet_was_aiming) {
         force_puppet_ads_flag(puppet, false);
     } else if (pkt.move_magnitude < 0.15F) {
@@ -9823,6 +10519,10 @@ void drive_remote_slot1_actions_tick() {
     if (joypad_index < 0 || joypad_index >= 6) {
         return;
     }
+    // PATH #1: materialize the puppet's screen-1 aim camera each frame (gated).
+    if (g_puppet_materialize_screen1_cam) {
+        materialize_screen1_camera_once();
+    }
     void* fs = *reinterpret_cast<void**>(g_module + 0x3FE1088);
     if (fs == nullptr || readable_bytes(fs) < 0x7100) {
         return;
@@ -10018,18 +10718,15 @@ void drive_remote_slot1_actions_tick() {
     if (g_puppet_aim_facing_from_camera) {
         apply_peer_aim_facing_to_player(remote_player, peer);
     }
-    g_puppet_aim_override_frame =
-        puppet_should_aim && g_puppet_relay_pose_seed && g_state_net.enabled;
-    if (g_puppet_aim_override_frame) {
-        sync_puppet_aim_camera_from_peer(peer);
-        apply_peer_pose_seed_to_player_aim_fields(remote_player);
+    // REJECTED 2026-07-07: per-frame screen-1 blk+0x60 write and sustained idx==1
+    // resolver override freeze locomotion facing. Scoped override at 0x10E934B /
+    // 0xCB17D6 (hooked_pose_seed_resolver) + joypad 0x200 relay is the safe path.
+    g_puppet_aim_override_frame = false;
+    static bool prev_puppet_should_aim = false;
+    if (puppet_should_aim && !prev_puppet_should_aim) {
+        materialize_screen1_camera_once();
     }
-    // Drive the puppet's aim at the RESOLVER SOURCE (screen-1 pose seed block), the
-    // exact chain ResolveScreenRoutePoseSeedOrDefault reads - so the native aim
-    // controller/fire path use the peer direction. Pre-native-update.
-    if (puppet_should_aim) {
-        write_peer_seed_to_screen1_resolver_source();
-    }
+    prev_puppet_should_aim = puppet_should_aim;
     if (g_puppet_rifle_pose_only_ads && peer_holds_scoped_rifle(peer) &&
         peer_aiming && !g_puppet_aim_reticle_relay) {
         scrub_puppet_scoped_ads_flag(remote_player);
@@ -10089,18 +10786,25 @@ void drive_remote_slot1_actions_tick() {
         }
         prev_apps = apps;
     }
+    g_state_net.puppet_traversal_force.store(
+        (peer.input_buttons | peer.buttons_pressed) & kJoypadTraversalRelayMask,
+        std::memory_order_release);
     std::uint64_t actions = remote_puppet_actions_from_peer(peer.input_buttons);
     if ((peer.flags & 8) != 0) {
         actions |= remote_puppet_actions_from_peer(peer.buttons_pressed);
     }
-    const std::uint64_t pending_fire =
+    const std::uint64_t pending_edges =
         g_state_net.pending_button_presses.exchange(
             0, std::memory_order_acq_rel);
-    if (pending_fire != 0) {
+    if (pending_edges != 0) {
         g_state_net.active_button_press_latch.fetch_or(
-            remote_puppet_fire_pulse(pending_fire),
+            remote_puppet_actions_from_peer(pending_edges) |
+                remote_puppet_fire_pulse(pending_edges),
             std::memory_order_release);
     }
+    actions |= remote_puppet_actions_from_peer(
+        g_state_net.active_button_press_latch.load(
+            std::memory_order_acquire));
     actions |= remote_puppet_fire_pulse(
         g_state_net.active_button_press_latch.load(
             std::memory_order_acquire));
@@ -10155,7 +10859,14 @@ void drive_remote_slot1_actions_tick() {
              << " pressed=0x" << peer.buttons_pressed
              << " released=0x" << peer.buttons_released
              << " branch=0x" << actions << std::dec;
-        log_line(line.str().c_str());
+        // Force-log locomotion so it is visible with g_logging_enabled=false.
+        if ((actions & kJoypadTraversalRelayMask) != 0 ||
+            (peer.buttons_pressed & kJoypadTraversalRelayMask) != 0 ||
+            (peer.input_buttons & kJoypadTraversalRelayMask) != 0) {
+            force_log_line(line.str().c_str());
+        } else {
+            log_line(line.str().c_str());
+        }
         previous_actions = actions;
     }
     // Rate-limited drive diagnostic: confirm the feed runs, the magnitude, and that
@@ -11865,6 +12576,16 @@ void net_tick() {
         static int shot = 0;
         dump_live_player_aim_fields((shot++ % 2 == 0) ? "UP" : "DOWN");
     }
+    if (foreground && (GetAsyncKeyState(VK_DECIMAL) & 1) != 0) {
+        // Numpad . : PATH #1 A/B - materialize the puppet's screen-1 aim camera.
+        g_puppet_materialize_screen1_cam = !g_puppet_materialize_screen1_cam;
+        const bool was = g_logging_enabled;
+        g_logging_enabled = true;
+        log_line(g_puppet_materialize_screen1_cam
+                     ? "SCREEN1-CAM materialize = ON (watch locomotion/transform!)"
+                     : "SCREEN1-CAM materialize = OFF");
+        g_logging_enabled = was;
+    }
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
         g_local_animation_mirror_test = !g_local_animation_mirror_test;
         log_line(g_local_animation_mirror_test
@@ -11891,6 +12612,9 @@ void net_tick() {
     if (now - last_send >= 16) {  // ~60 Hz local player state
         last_send = now;
         send_local_player_state();
+    }
+    if (g_puppet_net_apply && retained_player_object(1) != nullptr) {
+        drive_remote_slot1_actions_tick();
     }
     if (now - last_weapon_apply >= 100) {
         last_weapon_apply = now;
@@ -13159,11 +13883,15 @@ void __fastcall hooked_update(void* object) {
                 apply_peer_weapon_pickup();
                 apply_peer_weapon_give();
                 apply_queued_fire_events(object);
+                apply_puppet_velocity_pre();
             }
             drive_remote_slot1_actions_tick();
             drive_slot1_tick();
             apply_slot1_perslot_on_game_thread();
             g_original_update(object);
+            if (object == retained_player_object(1)) {
+                apply_puppet_transform_post(object);
+            }
             return;
         }
 
@@ -13220,7 +13948,9 @@ void __fastcall hooked_update(void* object) {
     // Puppet (slot-1 Player): let its own update run above (so the anim graph
     // samples the velocity we wrote in net_tick), then assert the networked
     // transform last so the engine can't fight it into a flicker.
-    apply_puppet_transform_post(object);
+    if (object == retained_player_object(1)) {
+        apply_puppet_transform_post(object);
+    }
 }
 
 char __fastcall hooked_player_input_state_update(void* player) {
@@ -14560,11 +15290,12 @@ DWORD WINAPI install_hook(void*) {
     boot_log_line("TLL hook DLL init 2026-07-07ad (early init marker)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
-        "TLL hook DLL init 2026-07-07ar (pose_seed gate on all aim paths; F8 coop-only)");
+        "TLL hook DLL init 2026-07-08bh (jump: INTENT-only force, no face bleed)");
     boot_log_line("crash observer installed (no breakpoints)");
     install_joypad_disabled_commands_lock();
     install_joypad3_analog_route();
     install_joypad3_keyboard_isolation();
+    install_joypad3_is_command_active_force();
     install_player_fire_capture();
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
