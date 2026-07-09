@@ -9967,26 +9967,11 @@ void apply_queued_fire_events(void* puppet) {
         }
     }
 
-    // Pose-only: the puppet is never in aim/ADS, so replaying a shot on it drives
-    // PlayerFireController::Fire in an unaimed state — the native replay returned
-    // OK but the engine's post-fire processing crashed the receiver one tick later
-    // (SEH cannot catch that deferred game-thread fault). Drain the fire packet
-    // without firing until aim-press relay (F8) is re-enabled.
-    if (!g_puppet_relay_aim_press) {
-        static ULONGLONG last_pose_only_skip = 0;
-        const ULONGLONG now = GetTickCount64();
-        if (now - last_pose_only_skip > 2000) {
-            last_pose_only_skip = now;
-            std::ostringstream line;
-            line << "FIRE-RELAY skip: pose-only (no puppet ADS) seq="
-                 << packet.sequence;
-            log_line(line.str().c_str());
-        }
-        ++g_fire_event_ring.tail;
-        return;
-    }
-
-    if (g_native_fire_relay && g_original_player_fire != nullptr &&
+    // Pose-only may still use the one-shot button fallback below. Native
+    // PlayerFireController::Fire replay stays behind full puppet ADS (F8) because
+    // the unaimed native replay previously crashed one tick later.
+    if (g_native_fire_relay && g_puppet_relay_aim_press &&
+        g_original_player_fire != nullptr &&
         is_coop_native_fire_art(packet.weapon_art_id) &&
         puppet_native_fire_relay_ready(puppet, packet.weapon_art_id)) {
         static void* last_native_puppet = nullptr;
@@ -10048,7 +10033,8 @@ void apply_queued_fire_events(void* puppet) {
                 log_line(fail.str().c_str());
             }
         }
-    } else if (g_native_fire_relay && is_coop_native_fire_art(packet.weapon_art_id)) {
+    } else if (g_native_fire_relay && g_puppet_relay_aim_press &&
+               is_coop_native_fire_art(packet.weapon_art_id)) {
         static ULONGLONG last_native_skip_log = 0;
         const ULONGLONG now = GetTickCount64();
         if (now - last_native_skip_log > 2000) {

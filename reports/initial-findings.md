@@ -25423,3 +25423,18 @@ repeated `0xC0000005` exceptions in both processes after those writes.
 **Action:** reverted the code path. Do not re-enable direct `Player+0xF130` /
 `Player+0x1D59 bit 0x04` writes as a default-on aim relay. If revisited, it needs a
 native publisher/snapshot-owner lifetime proof, not raw owner-field pokes.
+
+### 2026-07-09: pose-only FirePacket button fallback restored after aim-writer rejection
+
+After the `SecondAimAtPos` crash, the crash log order separated two changes from
+`26fc4e8`: both copies logged `SECOND-AIM-AT-POS ...` before any
+`FIRE-RELAY button ...`, so the aim writer was the failing path. The FirePacket
+button fallback is restored independently: pose-only no longer drains packets with
+`FIRE-RELAY skip: pose-only`; it falls through to the existing one-shot
+`kJoypadFireButtonMask` path. Native `PlayerFireController::Fire` replay remains
+gated by full puppet ADS (`g_puppet_relay_aim_press` / F8) because unaimed native
+replay previously crashed one tick later.
+
+Runtime prediction for this narrower fix: peer shots should log `FIRE-RELAY button`
+again, while no `SECOND-AIM-AT-POS` writer exists in code and no `AIM-TARGET-WRITE`
+path is enabled by default.
