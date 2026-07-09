@@ -1923,7 +1923,7 @@ bool local_player_should_show_scope() {
     }
     // The global sniper-reticle manager should be visible only for the local
     // viewport's own scoped weapon, not for a remote Player's scoped ADS.
-    return capture_held_weapon_art_id(local) == kCoopRifleArtId;
+    return is_long_gun_relay_art(capture_held_weapon_art_id(local));
 }
 
 bool local_player_should_show_reticle() {
@@ -1991,7 +1991,7 @@ void publish_peer_head_look_packet_fields(
                 fg && (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
             const bool ads =
                 live != nullptr && player_ads_active(live) &&
-                capture_held_weapon_art_id(live) == kCoopRifleArtId;
+                is_long_gun_relay_art(capture_held_weapon_art_id(live));
             std::ostringstream gate;
             gate << "HEAD-LOOK-BLOCK fg=" << (fg ? 1 : 0) << " rmb=" << (rmb ? 1 : 0)
                  << " scopedAds=" << (ads ? 1 : 0);
@@ -10634,7 +10634,7 @@ void scrub_puppet_scoped_ads_flag(void* puppet) {
 
 bool peer_holds_scoped_rifle(const coop::StatePacket& peer) {
     const std::uint32_t art = peer_effective_held_art(peer);
-    return art == kCoopRifleArtId;
+    return is_long_gun_relay_art(art);
 }
 
 void sync_screen1_camera_rotation_to_screen0() {
@@ -10957,6 +10957,15 @@ void drive_remote_slot1_actions_tick() {
     if (g_puppet_rifle_pose_only_ads && peer_holds_scoped_rifle(peer) &&
         peer_aiming && !g_puppet_relay_aim_press) {
         scrub_puppet_scoped_ads_flag(remote_player);
+        static ULONGLONG last_scope_scrub_log = 0;
+        const ULONGLONG scrub_now = GetTickCount64();
+        if (scrub_now - last_scope_scrub_log > 1000) {
+            last_scope_scrub_log = scrub_now;
+            std::ostringstream line;
+            line << "SCOPED-ADS-SCRUB art=0x" << std::hex
+                 << peer_effective_held_art(peer) << std::dec;
+            force_log_line(line.str().c_str());
+        }
     }
     scrub_local_viewport_aim_hud_leak();
 

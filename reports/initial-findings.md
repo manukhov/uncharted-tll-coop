@@ -25499,3 +25499,17 @@ for rifle aim too. Split the gates: ADS press still uses the scoped-rifle guard,
 pose-seed/camera-basis relay uses `puppet_aim_pose_relay_enabled_for_peer`, which is
 caller-scoped and does not inject `0x200`. `AIM-POSE-OVERRIDE` is force-logged so the
 runtime test can distinguish "seed sent" from "receiver actually substituted it".
+
+### 2026-07-09: sniper vanish remained for pickup sniper art 0x3019CBEE
+
+**Runtime symptom:** aiming the sniper still made the second player disappear on the
+second copy. Logs around the vanish showed `HELD-WEAPON-APPLY art=0x3019cbee ...
+drawState=7/4`, while the scoped-ADS guard only classified `0x8075397d` as the rifle
+that must stay pose-only.
+
+**Fix:** the guard now treats every `is_long_gun_relay_art` weapon (`0x8075397d` and
+`0x3019cbee`) as scoped/long-gun for puppet ADS purposes. This prevents automatic
+`0x200` ADS relay for the pickup sniper too, keeps pose-seed direction relay active,
+and force-logs `SCOPED-ADS-SCRUB art=0x...` while scrubbing the puppet scoped-ADS
+flag. The local scope-visible allow check was widened to the same long-gun set so
+the local player's own sniper scope is not suppressed.
