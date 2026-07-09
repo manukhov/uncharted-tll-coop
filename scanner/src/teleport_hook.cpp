@@ -12728,13 +12728,13 @@ void net_tick() {
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_DIVIDE) & 1) != 0) {
-        // Numpad /: A/B the reticle-scoped aim-pose relay (visual aim direction).
-        g_puppet_aim_reticle_relay = !g_puppet_aim_reticle_relay;
+        // Numpad /: formerly A/B'd the reticle-scoped aim-pose relay. Runtime
+        // rejected: accidental ON reintroduces AIM-TARGET-WRITE every frame and
+        // visible turn/run jitter, so keep it hard-off in stable test builds.
+        g_puppet_aim_reticle_relay = false;
         const bool was = g_logging_enabled;
         g_logging_enabled = true;
-        log_line(g_puppet_aim_reticle_relay
-                     ? "PUPPET-AIM-RETICLE relay = ON (aim pose follows peer)"
-                     : "PUPPET-AIM-RETICLE relay = OFF");
+        log_line("PUPPET-AIM-RETICLE relay = DISABLED (runtime-rejected jitter)");
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_SUBTRACT) & 1) != 0) {

@@ -10,9 +10,9 @@
 **Runtime rejection:** default-ON `g_puppet_aim_reticle_relay=true` produced strong
 running jitter. Logs showed continuous `AIM-TARGET-WRITE` / `POSESEED-CALLERS` on
 both processes while the user observed the run jerk. Restored
-`g_puppet_aim_reticle_relay=false` by default; Numpad `/` remains the manual A/B
-toggle for this path. Full puppet ADS input remains **OFF** by default and is still
-an explicit `F8` A/B toggle.
+`g_puppet_aim_reticle_relay=false` by default; Numpad `/` is now hard-disabled for
+this path so accidental retests cannot reintroduce the jitter mid-run. Full puppet
+ADS input remains **OFF** by default and is still an explicit `F8` A/B toggle.
 
 **Safety:** this does **not** re-enable the REJECTED screen-1 broad pose-seed/source
 write. `g_puppet_aim_override_frame` stays false, and the old
@@ -21,7 +21,7 @@ remote aim now scrubs puppet scoped ADS unless full ADS relay is explicitly enab
 
 **Next:** aim sync needs a narrower aim-additive input or movement-aware gating before
 it can be default-on. Stable locomotion has priority; leave the pose-only visual relay
-OFF unless explicitly testing Numpad `/`.
+OFF unless explicitly reworking it in code.
 
 ## Turn note (2026-07-07, Cursor — PAUSE aim relay; новый P0 = синхронизация поворота головы)
 
