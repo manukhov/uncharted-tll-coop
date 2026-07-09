@@ -25483,3 +25483,19 @@ for both and no rejected `SECOND-AIM-AT-POS` / broad `AIM-TARGET-WRITE` path in 
 idle tail. The falsifiable runtime signal for the actual fix is
 `POSE-SEED-SEND route0 q=(...)` while the local player holds strict aim/RMB, followed
 by peer aim/fire direction tracking camera turns instead of a static point.
+
+### 2026-07-09: rifle/static aim follow-up — split pose relay from ADS press
+
+**Runtime symptom:** after switching to the route-table sender seed, packets showed
+changing `POSE-SEED-SEND route0 q=(...)`, but the receiver still aimed/fired at a
+wrong/static direction. Rifle aim could also make the puppet disappear for a couple
+of seconds.
+
+**Static/code correction:** `puppet_aim_press_relay_enabled_for_peer` intentionally
+returns false for rifle/scoped peer aim unless F8 is enabled, because relaying puppet
+ADS/`0x200` is the path that leaks scoped HUD/DrawControl state. Reusing that helper
+for caller-scoped pose-seed override accidentally disabled the safe direction relay
+for rifle aim too. Split the gates: ADS press still uses the scoped-rifle guard, but
+pose-seed/camera-basis relay uses `puppet_aim_pose_relay_enabled_for_peer`, which is
+caller-scoped and does not inject `0x200`. `AIM-POSE-OVERRIDE` is force-logged so the
+runtime test can distinguish "seed sent" from "receiver actually substituted it".

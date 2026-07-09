@@ -2123,6 +2123,28 @@ bool puppet_aim_press_relay_enabled_for_peer(const coop::StatePacket& peer) {
            vx * vx + vz * vz < 0.35F * 0.35F;
 }
 
+bool puppet_aim_pose_relay_enabled_for_peer(const coop::StatePacket& peer) {
+    if (!peer_packet_aim_active(peer)) {
+        return false;
+    }
+    // Pose-seed relay is caller-scoped and does not inject puppet ADS/0x200 by
+    // itself. Keep it independent from the scoped-rifle ADS guard so rifle aim/fire
+    // can use the peer camera without triggering the DrawControl hide path.
+    if (g_puppet_relay_aim_press) {
+        return true;
+    }
+    if (!g_puppet_auto_stationary_aim_press) {
+        return false;
+    }
+    if (valid_network_movement(peer) && peer.move_magnitude > 0.08F) {
+        return false;
+    }
+    const float vx = peer.velocity[0];
+    const float vz = peer.velocity[2];
+    return std::isfinite(vx) && std::isfinite(vz) &&
+           vx * vx + vz * vz < 0.35F * 0.35F;
+}
+
 // Peer-aim via network packet reaches the puppet joypad; local-lead (Chloe ADS on
 // copy 1 -> Nadine puppet) did not survive Input_ScaleCopyVirtual's block-1 sandwich.
 // Write the puppet's own resolved block + joypad held masks here, immediately before
@@ -2496,7 +2518,7 @@ void apply_peer_aim_pose_quat(void* player) {
     }
     const bool pose_relay_for_peer =
         g_puppet_aim_reticle_relay ||
-        puppet_aim_press_relay_enabled_for_peer(peer);
+        puppet_aim_pose_relay_enabled_for_peer(peer);
     if (!pose_relay_for_peer) {
         return;
     }
@@ -2710,7 +2732,7 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     coop::StatePacket peer{};
     const bool have_peer = copy_peer_state_snapshot(peer);
     const bool relay_aim_pose =
-        have_peer && puppet_aim_press_relay_enabled_for_peer(peer);
+        have_peer && puppet_aim_pose_relay_enabled_for_peer(peer);
     // AIM-POSE-SCOPED override (2026-07-07): peer pose-seed ONLY when the caller is
     // (a) GetTargetPointFromReticle's internal resolver call (0xCB17D6), or
     // (b) sub_1410E9210's per-frame copy into Player+0x1720/+0x1730 (0x10E934B).
@@ -2739,7 +2761,7 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
         std::ostringstream oline;
         oline << "AIM-POSE-OVERRIDE site=0x" << std::hex << caller_rva << std::dec
               << " src=peer";
-        log_line(oline.str().c_str());
+        force_log_line(oline.str().c_str());
     }
     apply_pose_seed_override_out(out, seed, caller_rva);
     return result;
@@ -8926,7 +8948,7 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     const bool peer_aiming =
         peer_fresh && (pkt.flags & 8) != 0 && peer_packet_aim_active(pkt);
     const bool pose_relay_for_peer =
-        peer_aiming && puppet_aim_press_relay_enabled_for_peer(pkt);
+        peer_aiming && puppet_aim_pose_relay_enabled_for_peer(pkt);
     const bool puppet_aiming_now = peer_aiming;
     static bool puppet_was_aiming = false;
     float orientation_dot = 1.0F;
