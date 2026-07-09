@@ -491,6 +491,7 @@ static ULONGLONG g_puppet_native_fire_allowed_after_ms = 0;
 constexpr std::uint32_t kCoopPistolArtId = 0x33E29A1B;
 constexpr std::uint32_t kCoopRifleArtId = 0x8075397D;
 constexpr std::uint32_t kCoopScopedPistolArtId = 0xC3181EBD;
+constexpr std::uint32_t kCoopType97ArtId = 0x27617D0D;
 
 bool is_coop_relay_fire_art(std::uint32_t art_id) {
     return art_id == kCoopPistolArtId || art_id == kCoopRifleArtId ||
@@ -506,6 +507,12 @@ bool is_pickup_relay_art(std::uint32_t art_id) {
 
 bool is_long_gun_relay_art(std::uint32_t art_id) {
     return art_id == kCoopRifleArtId || art_id == 0x3019CBEE;
+}
+
+bool is_pickup_give_relay_safe_art(std::uint32_t art_id) {
+    // Runtime 2026-07-09: direct receiver GiveWeapon for Type-97 froze the game
+    // after GIVEWEAPON-RELAY-RECV, before the apply tail completed.
+    return art_id != kCoopType97ArtId;
 }
 
 // Native PlayerFireController::Fire replay is parked until the receiver crash is
@@ -835,11 +842,10 @@ FireEventRing g_fire_event_ring{};
 // ---- Weapon-pickup relay (2026-07-06, design in initial-findings) ----
 // Sender: OnInteract hook captures the WeaponPickup runtime id; receiver applies
 // a stack-built NetEventSyncWeaponPickups (native net-pick-up-other-client flow).
-// Weapon pickup/GiveWeapon relay is parked after Type-97 (0x27617d0d) froze the
-// receiver in the native GiveWeapon apply path. Held-weapon display for known
-// loadout arts remains active; pickup inventory mirroring needs a safer native
-// NetEventSyncWeaponPickups path before this can come back on.
-volatile bool g_pickup_relay = false;
+// Weapon pickup/GiveWeapon relay stays enabled for known-safe pickup arts so the
+// puppet can display picked-up weapons. Individual unsafe arts are filtered before
+// send/apply; Type-97 (0x27617d0d) froze the receiver in native GiveWeapon.
+volatile bool g_pickup_relay = true;
 std::atomic<std::uint32_t> g_pickup_send_seq{0};
 std::atomic<std::uint32_t> g_pending_pickup_id{0};
 std::atomic<float> g_pending_pickup_ammo{0.0F};
@@ -3141,6 +3147,11 @@ void __fastcall hooked_give_weapon_tail(
                             sizeof(relay_art));
                 if (!is_pickup_relay_art(relay_art)) {
                     // Spawn/loadout whitelist arts: held-weapon sync only.
+                } else if (!is_pickup_give_relay_safe_art(relay_art)) {
+                    std::ostringstream skip;
+                    skip << "GIVEWEAPON-RELAY-SEND-SKIP unsafe art=0x"
+                         << std::hex << relay_art << std::dec;
+                    force_log_line(skip.str().c_str());
                 } else {
                 relay_pickup_after_give = true;
                 relay_local_player = local_player;
@@ -6181,6 +6192,7 @@ DWORD WINAPI state_recv_thread(void*) {
             if (g_pickup_relay &&
                 gp.version == coop::kWeaponGiveVersion &&
                 gp.weapon_art_id != 0 &&
+                is_pickup_give_relay_safe_art(gp.weapon_art_id) &&
                 gp.sequence != g_last_applied_weapon_give_seq.load(
                                    std::memory_order_relaxed) &&
                 !g_pending_weapon_give_flag.load(std::memory_order_acquire)) {
@@ -9536,6 +9548,14 @@ void apply_peer_weapon_give() {
     const int draw = g_pending_weapon_give_draw.load(std::memory_order_relaxed);
     const int packet_slot = static_cast<int>(
         g_pending_weapon_give_slot.load(std::memory_order_relaxed));
+    if (!is_pickup_give_relay_safe_art(art)) {
+        g_pending_weapon_give_flag.store(false, std::memory_order_release);
+        std::ostringstream skip;
+        skip << "GIVEWEAPON-RELAY-SKIP unsafe art=0x" << std::hex << art
+             << std::dec << " seq=" << seq;
+        force_log_line(skip.str().c_str());
+        return;
+    }
     alignas(16) std::uint8_t info[coop::kWeaponInfoBytes];
     std::memcpy(info, g_pending_weapon_give_info, coop::kWeaponInfoBytes);
     void* puppet = resolve_live_player_safe(1);

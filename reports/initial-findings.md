@@ -25527,3 +25527,17 @@ not complete cleanly.
 native pickup can proceed without forcing a cross-process GiveWeapon on the puppet.
 Held-weapon/loadout sync remains separate. Status: REJECTED for direct GiveWeapon
 pickup relay until a safer native `NetEventSyncWeaponPickups` apply path is proven.
+
+### 2026-07-09: pickup relay cannot be globally parked - filter unsafe Type-97 only
+
+**Runtime regression:** parking `WeaponGivePacket` pickup mirroring fixed the Type-97
+freeze risk but broke weapon switching/display for picked-up weapons, because the
+held-weapon sync path intentionally does not synthesize pickup arts without a real
+captured `WeaponInfo` block.
+
+**Correction:** pickup relay is enabled again for safe pickup arts so their real
+`WeaponInfo` blocks reach the receiver and the puppet can display them. Type-97
+(`0x27617d0d`) is filtered before send/apply with `GIVEWEAPON-RELAY-SEND-SKIP
+unsafe art=0x27617d0d`; it remains REJECTED for direct receiver `GiveWeapon` after
+the freeze. This restores known pickup display while avoiding the observed Type-97
+hang path.
