@@ -25324,6 +25324,49 @@ pose-only relay is also rejected as default-on. Aim sync still needs either a tr
 aim-additive input separate from locomotion, or movement-aware gating that does not
 fight the run/facing baseline.
 
+### 2026-07-09: STATIC SecondAimAtPos aim-additive sink + pose-only shot fallback
+
+IDA MCP static pass found a narrower aim-additive path than the rejected reticle /
+screen-1 pose-seed writes:
+
+1. `NetAnimCmdGenerator_UpdateFlagsAndWeapons 0x140A07160` has prototype shape
+   `UpdateFlagsAndWeapons(generator, owner)`: the prologue sets `r15 = rdx`
+   (owner/player), then if both snapshots have `snapshot+0x5C0 bit0`, it
+   interpolates `snapshot+0x5A0` and writes the resulting world target to
+   `owner+0xF130`; it sets `owner+0x1D59 bit 0x04`. If the bit is absent, it clears
+   only that same owner bit.
+2. If `snapshot+0x5C0 bit1` is also present and an anim interface exists, the same
+   function reads the runtime anim parameter named `"SecondAimAtPos"` through vfunc
+   `+0x2D8`; otherwise the interpolated `snapshot+0x5A0` target is used. This
+   confirms `+0xF130` is a world aim target, not a quaternion or locomotion camera.
+3. The reverse direction in `FillAnimCmdBitStream` serializes
+   `(*Player+0x1D59 & 4) != 0` to snapshot byte `+0x307` and copies
+   `Player+0xF130` to snapshot `+0x430`, matching the apply-side sink.
+
+**Implementation:** `scanner/src/hook_offsets.h` now names
+`kPlayerSecondAimAtPosOffset=0xF130`, `kPlayerNetAnimFlagsOffset=0x1D59`, and
+`kPlayerNetAnimSecondAimAtPosBit=0x04`. `teleport_hook.cpp` adds default-ON
+`g_puppet_second_aim_at_pos_relay`: while the peer is strict-RMB aiming and the
+packet has v8 `pose_seed`, the receiver computes
+`target = peer.pose_seed.pos + (pose_seed.quat * -Z) * 20m`, writes it to the
+puppet `Player+0xF130`, and sets only `+0x1D59 bit 4`; when the peer stops aiming it
+clears only that bit. It does **not** touch screen-1 pose seed, the rejected
+`AIM-TARGET-WRITE` fields, or sustained puppet ADS input.
+
+**Shot sync change:** the prior pose-only guard drained `FirePacket`s before any
+fallback (`FIRE-RELAY skip: pose-only`). That guard is removed for button fallback;
+native `PlayerFireController::Fire` replay remains gated behind full puppet ADS
+(`g_puppet_relay_aim_press`) because the unaimed native path previously crashed one
+tick later. Stable default should now produce `FIRE-RELAY button ...` events without
+reintroducing sustained `0x200` ADS.
+
+**Runtime prediction:** with the new build loaded, peer RMB should produce
+`SECOND-AIM-AT-POS ...` in the receiver log and should **not** produce
+`AIM-TARGET-WRITE`. Peer fire should produce `FIRE-RELAY button ...` and should **not**
+produce `FIRE-RELAY skip: pose-only`. Initial two-copy launch/inject loaded the DLL in
+PIDs 15660/4252 and showed no rejected `AIM-TARGET-WRITE` or pose-only skips before
+manual aim/fire input.
+
 ### 2026-07-07: Head look sync (HYPOTHESIS) — free-look camera vs body on remote puppet
 
 **Запрос:** при повороте камеры локальный персонаж смотрит в сторону взгляда; на второй

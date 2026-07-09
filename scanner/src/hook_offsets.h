@@ -106,6 +106,12 @@ constexpr std::size_t kPlayerAimPoseQuatOffset = 0x1730;
 // pitch bend (build af: yaw follows via the +0x1730 writer, pitch does not).
 constexpr std::size_t kPlayerAimAtPointOffset = 0x21F0;
 constexpr std::size_t kPlayerAimAtPointAuxOffset = 0x2240;
+// NetAnimCmdGenerator::UpdateFlagsAndWeapons publishes snapshot SecondAimAtPos
+// into Player+0xF130 and marks Player+0x1D59 bit 0x04. FillAnimCmdBitStream
+// serializes exactly this pair back into NetSnapshot+0x430/+0x307.
+constexpr std::size_t kPlayerSecondAimAtPosOffset = 0xF130;
+constexpr std::size_t kPlayerNetAnimFlagsOffset = 0x1D59;
+constexpr std::uint8_t kPlayerNetAnimSecondAimAtPosBit = 0x04;
 // PlayerLookAtIkController heap object; Player+0x1E38 is the POINTER (AssembleGraph
 // 0x1410CBBC4 stores alloc result at a1+7736). Do NOT treat +0x1E38 as embedded.
 constexpr std::size_t kPlayerLookAtIkPtrOffset = 0x1E38;

@@ -586,6 +586,11 @@ volatile bool g_puppet_camera_drive = false;
 // jitter. Keep this as a manual Numpad / A/B path until the aim-additive input is
 // isolated from locomotion.
 volatile bool g_puppet_aim_reticle_relay = false;
+// Peer aim additive via the native net-anim parameter SecondAimAtPos
+// (Player+0xF130 + Player+0x1D59 bit 0x04). Default ON: unlike the rejected
+// reticle/source-seed writes, this feeds only the anim snapshot aim target and
+// never touches the puppet joypad, screen-1 pose seed, or locomotion camera.
+volatile bool g_puppet_second_aim_at_pos_relay = true;
 // Free-look head IK sync via PlayerLookAtIkController @ player+0x1E38 (SetLookPoint).
 // OFF (2026-07-07): user reverted — puppet spine twist unacceptable even after
 // weight/pitch tuning (bb). Code kept; flag gates send + receive.
@@ -862,6 +867,7 @@ bool peer_packet_aim_active(const coop::StatePacket& peer);
 bool peer_packet_free_look_active(const coop::StatePacket& peer);
 bool peer_snapshot_aim_active();
 bool puppet_aim_press_relay_enabled();
+bool apply_peer_second_aim_at_pos(void* puppet, const coop::StatePacket& peer);
 void apply_puppet_sustained_aim_input(void* puppet);
 void force_puppet_ads_flag(void* puppet, bool active);
 bool safe_request_gun_state(void* player, int desired_state);
@@ -4572,6 +4578,86 @@ void quat_forward_neg_z(const float q[4], float& fx, float& fy, float& fz) {
         fy /= len;
         fz /= len;
     }
+}
+
+bool seh_clear_second_aim_at_pos_flag(std::byte* base) {
+    __try {
+        *reinterpret_cast<std::uint8_t*>(base + kPlayerNetAnimFlagsOffset) &=
+            static_cast<std::uint8_t>(~kPlayerNetAnimSecondAimAtPosBit);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_write_second_aim_at_pos(std::byte* base, const float target[4]) {
+    __try {
+        std::memcpy(base + kPlayerSecondAimAtPosOffset, target, 16);
+        *reinterpret_cast<std::uint8_t*>(base + kPlayerNetAnimFlagsOffset) |=
+            kPlayerNetAnimSecondAimAtPosBit;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool apply_peer_second_aim_at_pos(void* puppet, const coop::StatePacket& peer) {
+    if (!g_puppet_second_aim_at_pos_relay || puppet == nullptr) {
+        return false;
+    }
+    auto* const base = static_cast<std::byte*>(puppet);
+    if (readable_bytes(base + kPlayerNetAnimFlagsOffset) < 1) {
+        return false;
+    }
+
+    const bool peer_aiming = peer_packet_aim_active(peer) &&
+                             (peer.flags & coop::kStateFlagPoseSeed) != 0 &&
+                             valid_network_orientation(peer.pose_seed + 4);
+    if (!peer_aiming) {
+        seh_clear_second_aim_at_pos_flag(base);
+        return false;
+    }
+
+    if (readable_bytes(base + kPlayerSecondAimAtPosOffset) < 16) {
+        return false;
+    }
+
+    float fx = 0.0F;
+    float fy = 0.0F;
+    float fz = -1.0F;
+    quat_forward_neg_z(peer.pose_seed + 4, fx, fy, fz);
+    if (!std::isfinite(fx) || !std::isfinite(fy) || !std::isfinite(fz)) {
+        return false;
+    }
+
+    constexpr float kSecondAimDistance = 20.0F;
+    alignas(16) float target[4] = {
+        peer.pose_seed[0] + fx * kSecondAimDistance,
+        peer.pose_seed[1] + fy * kSecondAimDistance,
+        peer.pose_seed[2] + fz * kSecondAimDistance,
+        1.0F,
+    };
+    for (float v : target) {
+        if (!std::isfinite(v)) {
+            return false;
+        }
+    }
+
+    if (!seh_write_second_aim_at_pos(base, target)) {
+        return false;
+    }
+
+    static ULONGLONG last_second_aim_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_second_aim_log > 1000) {
+        last_second_aim_log = now;
+        std::ostringstream line;
+        line << "SECOND-AIM-AT-POS target=(" << target[0] << "," << target[1]
+             << "," << target[2] << ") fwd=(" << fx << "," << fy << "," << fz
+             << ")";
+        force_log_line(line.str().c_str());
+    }
+    return true;
 }
 
 using PlayerLookAtSetPointFn = void(__fastcall*)(
@@ -8872,6 +8958,7 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     const bool puppet_aiming_now = peer_aiming;
     static bool puppet_was_aiming = false;
     float orientation_dot = 1.0F;
+    apply_peer_second_aim_at_pos(puppet, pkt);
     // Peer-only aim relay: partner puppet reflects the OTHER copy's aim, never the
     // local player's camera on this screen.
     if (g_puppet_aim_reticle_relay && peer_aiming) {
@@ -9967,26 +10054,10 @@ void apply_queued_fire_events(void* puppet) {
         }
     }
 
-    // Pose-only: the puppet is never in aim/ADS, so replaying a shot on it drives
-    // PlayerFireController::Fire in an unaimed state — the native replay returned
-    // OK but the engine's post-fire processing crashed the receiver one tick later
-    // (SEH cannot catch that deferred game-thread fault). Drain the fire packet
-    // without firing until aim-press relay (F8) is re-enabled.
-    if (!g_puppet_relay_aim_press) {
-        static ULONGLONG last_pose_only_skip = 0;
-        const ULONGLONG now = GetTickCount64();
-        if (now - last_pose_only_skip > 2000) {
-            last_pose_only_skip = now;
-            std::ostringstream line;
-            line << "FIRE-RELAY skip: pose-only (no puppet ADS) seq="
-                 << packet.sequence;
-            log_line(line.str().c_str());
-        }
-        ++g_fire_event_ring.tail;
-        return;
-    }
-
-    if (g_native_fire_relay && g_original_player_fire != nullptr &&
+    // Pose-only can still use the button fallback below. Native Fire replay stays
+    // behind full puppet ADS because the unaimed native path crashed one tick later.
+    if (g_native_fire_relay && g_puppet_relay_aim_press &&
+        g_original_player_fire != nullptr &&
         is_coop_native_fire_art(packet.weapon_art_id) &&
         puppet_native_fire_relay_ready(puppet, packet.weapon_art_id)) {
         static void* last_native_puppet = nullptr;
@@ -10048,7 +10119,8 @@ void apply_queued_fire_events(void* puppet) {
                 log_line(fail.str().c_str());
             }
         }
-    } else if (g_native_fire_relay && is_coop_native_fire_art(packet.weapon_art_id)) {
+    } else if (g_native_fire_relay && g_puppet_relay_aim_press &&
+               is_coop_native_fire_art(packet.weapon_art_id)) {
         static ULONGLONG last_native_skip_log = 0;
         const ULONGLONG now = GetTickCount64();
         if (now - last_native_skip_log > 2000) {
@@ -10091,6 +10163,7 @@ void apply_queued_fire_events(void* puppet) {
     const bool peer_aiming =
         peer_aim_button || (peer_gun_out && peer_aim_recent);
     if (peer_aiming) {
+        apply_peer_second_aim_at_pos(puppet, peer);
         apply_peer_aim_facing_to_player(puppet, peer);
     }
     constexpr std::uint64_t kFireOnlyMask = kJoypadFireButtonMask;
