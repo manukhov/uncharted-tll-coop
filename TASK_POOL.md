@@ -39,8 +39,7 @@
       OFF by default; Numpad `/` is hard-disabled after accidental ON reproduced
       the turn/run jitter. Puppet full ADS remains OFF / manual `F8`. Do not
       re-enable broad screen-1 pose-seed/source writes; that path
-      freezes locomotion facing. New v1: non-scoped peer ADS auto-relays only the
-      aim button for native weapon-raise animation; scoped rifle still needs `F8`.
+      freezes locomotion facing.
 - [ ] **Head / camera look sync (NEW P0):** STATIC done (`reports/lookat_field_map.md`).
       Next: implement sender flag `0x0400` + receiver SetLookPoint on `Player+0x1E38`.
 - [~] Положение, поворот, скорость и здоровье уже передаются. Сырые данные по

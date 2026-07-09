@@ -23,11 +23,6 @@ remote aim now scrubs puppet scoped ADS unless full ADS relay is explicitly enab
 it can be default-on. Stable locomotion has priority; leave the pose-only visual relay
 OFF unless explicitly reworking it in code.
 
-**Follow-up build:** added default-on non-scoped puppet aim-button relay for native
-weapon-raise/aim animation. This does not re-enable `AIM-TARGET-WRITE`, broad
-screen-1 seed writes, or scoped-rifle ADS; scoped full ADS still requires manual
-`F8`.
-
 ## Turn note (2026-07-07, Cursor — PAUSE aim relay; новый P0 = синхронизация поворота головы)
 
 **Aim/ADS relay — на паузе** (билд `as`, user-test не дал стабильного ADS). Не трогать

@@ -426,10 +426,6 @@ volatile bool g_native_fire_relay = false;
 // Default OFF: opt-in with F8 on the foreground window only. When ON globally it
 // injected aim-press into the shared joypad bus and broke locomotion on both copies.
 volatile bool g_puppet_relay_aim_press = false;
-// Safer default aim animation: relay sustained ADS only when the peer is NOT using
-// the scoped rifle. Scoped ADS still needs manual F8 because it can trip global HUD
-// / mesh-hide paths; non-scoped aim stays inside the puppet's saved/restored input.
-volatile bool g_puppet_auto_non_scoped_aim_press = true;
 // Sniper/rifle: relay aim direction but NOT scoped-ADS on the puppet (prevents the
 // DrawControl mesh-hide that makes Chloe vanish on the receiver). F8 still toggles
 // full ADS relay for A/B.
@@ -587,7 +583,8 @@ volatile bool g_relayed_block_give = false;
 volatile bool g_puppet_camera_drive = false;
 // Peer-only visual aim relay. Default OFF (2026-07-09 runtime): default-ON made
 // AIM-TARGET-WRITE run every frame during aim-run and produced visible running
-// jitter. Numpad / now hard-disables this path in stable test builds.
+// jitter. Keep this as a manual Numpad / A/B path until the aim-additive input is
+// isolated from locomotion.
 volatile bool g_puppet_aim_reticle_relay = false;
 // Free-look head IK sync via PlayerLookAtIkController @ player+0x1E38 (SetLookPoint).
 // OFF (2026-07-07): user reverted — puppet spine twist unacceptable even after
@@ -865,7 +862,6 @@ bool peer_packet_aim_active(const coop::StatePacket& peer);
 bool peer_packet_free_look_active(const coop::StatePacket& peer);
 bool peer_snapshot_aim_active();
 bool puppet_aim_press_relay_enabled();
-bool puppet_aim_press_relay_enabled_for_peer(const coop::StatePacket& peer);
 void apply_puppet_sustained_aim_input(void* puppet);
 void force_puppet_ads_flag(void* puppet, bool active);
 bool safe_request_gun_state(void* player, int desired_state);
@@ -1484,7 +1480,7 @@ std::int64_t __fastcall hooked_input_scale_copy(
             std::uint64_t held_mask =
                 remote_puppet_actions_from_peer(peer.input_buttons) | edge_pulse;
             held_mask &= ~(kJoypadAimButtonMask | kJoypadFireButtonMask);
-            if (puppet_aim_press_relay_enabled_for_peer(peer)) {
+            if (puppet_aim_press_relay_enabled()) {
                 if (puppet_wants_aim) {
                     held_mask |= kJoypadAimButtonMask;
                 }
@@ -1512,7 +1508,7 @@ std::int64_t __fastcall hooked_input_scale_copy(
             auto* const axes = reinterpret_cast<float*>(source_bytes);
             shared_bus_saved_look[0] = axes[2];
             shared_bus_saved_look[1] = axes[3];
-            if (puppet_aim_press_relay_enabled_for_peer(peer) && g_puppet_relay_look_stick &&
+            if (puppet_aim_press_relay_enabled() && g_puppet_relay_look_stick &&
                 peer_packet_aim_active(peer) &&
                 (peer.flags & coop::kStateFlagPeerCamera) != 0 &&
                 (std::fabs(peer.look_stick[0]) > 0.001F ||
@@ -2097,20 +2093,10 @@ bool peer_snapshot_aim_active() {
     return copy_peer_state_snapshot(peer) && peer_packet_aim_active(peer);
 }
 
-// F8 = force full peer aim-press (0x200) to puppet. By default, only non-scoped
-// aim auto-relays for native weapon-raise animation.
+// F8 = relay peer aim-press (0x200) to puppet. Numpad / = optional peer aim-pose
+// visuals only; neither mirrors the local player on this screen.
 bool puppet_aim_press_relay_enabled() {
     return g_puppet_relay_aim_press;
-}
-
-bool puppet_aim_press_relay_enabled_for_peer(const coop::StatePacket& peer) {
-    if (!peer_packet_aim_active(peer)) {
-        return false;
-    }
-    if (g_puppet_relay_aim_press) {
-        return true;
-    }
-    return g_puppet_auto_non_scoped_aim_press && !peer_holds_scoped_rifle(peer);
 }
 
 // Peer-aim via network packet reaches the puppet joypad; local-lead (Chloe ADS on
@@ -2122,13 +2108,8 @@ void apply_puppet_sustained_aim_input(void* puppet) {
         return;
     }
     coop::StatePacket peer{};
-    const ULONGLONG received =
-        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
-    const bool peer_fresh =
-        received != 0 && GetTickCount64() - received <= 250;
-    const bool have_peer = peer_fresh && copy_peer_state_snapshot(peer);
     const bool want_aim =
-        have_peer && puppet_aim_press_relay_enabled_for_peer(peer);
+        g_puppet_relay_aim_press && peer_snapshot_aim_active();
     static bool prev_want_aim = false;
     if (readable_bytes(static_cast<std::byte*>(puppet) + 0x39BC) < 1) {
         return;
@@ -9990,8 +9971,8 @@ void apply_queued_fire_events(void* puppet) {
     // PlayerFireController::Fire in an unaimed state — the native replay returned
     // OK but the engine's post-fire processing crashed the receiver one tick later
     // (SEH cannot catch that deferred game-thread fault). Drain the fire packet
-    // without firing until aim-press relay is active for this peer/weapon.
-    if (!puppet_aim_press_relay_enabled_for_peer(peer)) {
+    // without firing until aim-press relay (F8) is re-enabled.
+    if (!g_puppet_relay_aim_press) {
         static ULONGLONG last_pose_only_skip = 0;
         const ULONGLONG now = GetTickCount64();
         if (now - last_pose_only_skip > 2000) {
@@ -10869,7 +10850,7 @@ void drive_remote_slot1_actions_tick() {
     *reinterpret_cast<float*>(branch1 + 0x18) = sy;   // L-stick Y
     const bool peer_aiming = peer_packet_aim_active(peer);
     const bool puppet_should_aim =
-        peer_aiming && puppet_aim_press_relay_enabled_for_peer(peer);
+        puppet_aim_press_relay_enabled() && peer_aiming;
     if (!peer_aiming) {
         g_state_net.active_button_press_latch.fetch_and(
             ~kJoypadAimButtonMask, std::memory_order_release);
@@ -10897,7 +10878,7 @@ void drive_remote_slot1_actions_tick() {
     }
     prev_puppet_should_aim = puppet_should_aim;
     if (g_puppet_rifle_pose_only_ads && peer_holds_scoped_rifle(peer) &&
-        peer_aiming && !g_puppet_relay_aim_press) {
+        peer_aiming && !puppet_aim_press_relay_enabled()) {
         scrub_puppet_scoped_ads_flag(remote_player);
     }
     scrub_local_viewport_aim_hud_leak();
