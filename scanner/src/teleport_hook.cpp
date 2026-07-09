@@ -2358,30 +2358,51 @@ bool copy_peer_pose_seed_32(std::uint8_t out[32]) {
     return true;
 }
 
-// Screen-0 pose seed (CameraManager(0)->+0xB0->+0x60): same source the sender
-// packs into StatePacket for fire/aim ray relay.
+bool copy_screen_route_pose_seed_32(unsigned int screen_idx, std::uint8_t out[32]) {
+    if (g_module == 0 || out == nullptr || screen_idx > 1) {
+        return false;
+    }
+    __try {
+        auto* table = reinterpret_cast<std::uint64_t*>(
+            g_module + kScreenCameraHandleTableRva);
+        const std::uintptr_t handle = table[2 * screen_idx];
+        if (handle == 0 || readable_bytes(reinterpret_cast<void*>(handle)) <
+                               kCameraHandleInnerOffset + sizeof(void*)) {
+            return false;
+        }
+        const std::uintptr_t v8 = *reinterpret_cast<std::uintptr_t*>(
+            handle + kCameraHandleInnerOffset);
+        if (v8 == 0 || readable_bytes(reinterpret_cast<void*>(v8)) <
+                           kCameraBlockOffset + sizeof(void*)) {
+            return false;
+        }
+        const std::uintptr_t blk =
+            *reinterpret_cast<std::uintptr_t*>(v8 + kCameraBlockOffset);
+        if (blk <= 0x10 ||
+            readable_bytes(reinterpret_cast<void*>(
+                blk + kCameraPoseSeedOffset)) < 32) {
+            return false;
+        }
+        const auto* seed = reinterpret_cast<const float*>(
+            blk + kCameraPoseSeedOffset);
+        if (!valid_network_orientation(seed + 4)) {
+            return false;
+        }
+        std::memcpy(out, reinterpret_cast<const void*>(
+                          blk + kCameraPoseSeedOffset), 32);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+// Screen-0 pose seed from the route-table source used by
+// ResolveScreenRoutePoseSeedOrDefault: same source the sender packs into
+// StatePacket for fire/aim ray relay.
 bool copy_local_pose_seed_32(std::uint8_t out[32]) {
-    if (g_module == 0) {
-        return false;
-    }
-    const auto get_camera_manager =
-        reinterpret_cast<GetCameraManagerFunction>(g_module + kGetCameraManagerRva);
-    void* const mgr = get_camera_manager(0);
-    if (mgr == nullptr ||
-        readable_bytes(static_cast<std::byte*>(mgr) + 0xB0) < sizeof(void*)) {
-        return false;
-    }
-    void* const blk = *reinterpret_cast<void**>(
-        static_cast<std::byte*>(mgr) + 0xB0);
-    if (blk == nullptr || readable_bytes(static_cast<std::byte*>(blk) + 0x60) < 32) {
-        return false;
-    }
-    const auto* seed = reinterpret_cast<const float*>(static_cast<std::byte*>(blk) + 0x60);
-    if (!valid_network_orientation(seed + 4)) {
-        return false;
-    }
-    std::memcpy(out, seed, 32);
-    return true;
+    // Use the exact source ResolveScreenRoutePoseSeedOrDefault reads for idx 0.
+    // GetCameraManager(0)+0xB0 is a different chain and can be stale/static.
+    return copy_screen_route_pose_seed_32(0, out);
 }
 
 // Puppet aim pose comes ONLY from the networked peer (other tll.exe copy). The
@@ -2469,10 +2490,14 @@ void apply_peer_aim_pose_quat(void* player) {
     if (player == nullptr) {
         return;
     }
-    if (!g_puppet_aim_reticle_relay && !puppet_aim_press_relay_enabled()) {
+    coop::StatePacket peer{};
+    if (!copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer)) {
         return;
     }
-    if (!peer_snapshot_aim_active()) {
+    const bool pose_relay_for_peer =
+        g_puppet_aim_reticle_relay ||
+        puppet_aim_press_relay_enabled_for_peer(peer);
+    if (!pose_relay_for_peer) {
         return;
     }
     std::uint8_t seed[32]{};
@@ -2682,8 +2707,10 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
         g_pose_seed_fire_only_override || g_puppet_aim_ray_override;
     const bool sustained_slot1_override =
         g_puppet_aim_override_frame && idx == kSlot1ScreenIndex;
+    coop::StatePacket peer{};
+    const bool have_peer = copy_peer_state_snapshot(peer);
     const bool relay_aim_pose =
-        puppet_aim_press_relay_enabled() && peer_snapshot_aim_active();
+        have_peer && puppet_aim_press_relay_enabled_for_peer(peer);
     // AIM-POSE-SCOPED override (2026-07-07): peer pose-seed ONLY when the caller is
     // (a) GetTargetPointFromReticle's internal resolver call (0xCB17D6), or
     // (b) sub_1410E9210's per-frame copy into Player+0x1720/+0x1730 (0x10E934B).
@@ -2692,17 +2719,15 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     // trampoline crash. F8+peer RMB enables the same path as Numpad / experiment.
     const bool aim_pose_seed_override =
         (g_puppet_aim_reticle_relay || relay_aim_pose) &&
-        idx == kSlot1ScreenIndex && peer_snapshot_aim_active() &&
+        idx == kSlot1ScreenIndex && have_peer && peer_packet_aim_active(peer) &&
         (caller_rva == kAimTargetReticleCallSiteRva ||
          caller_rva == kPlayerAimPoseSeedCallSiteRva);
     if (!g_puppet_relay_pose_seed || !g_state_net.enabled || out == nullptr ||
         !(fire_path_override || sustained_slot1_override || aim_pose_seed_override)) {
         return result;
     }
-    coop::StatePacket peer{};
     std::uint8_t seed[32]{};
-    if (!copy_peer_state_snapshot(peer) ||
-        (peer.flags & coop::kStateFlagPoseSeed) == 0 ||
+    if ((peer.flags & coop::kStateFlagPoseSeed) == 0 ||
         !valid_network_orientation(peer.pose_seed + 4)) {
         return result;
     }
@@ -4104,6 +4129,11 @@ bool capture_gameplay_camera_quat_from_manager(void* manager, float out[4]) {
 bool capture_gameplay_camera_quat(float out[4]) {
     if (g_module == 0) {
         return false;
+    }
+    std::uint8_t seed[32]{};
+    if (copy_local_pose_seed_32(seed)) {
+        std::memcpy(out, seed + 16, 16);
+        return true;
     }
     const auto get_camera_manager =
         reinterpret_cast<GetCameraManagerFunction>(
@@ -8122,31 +8152,28 @@ void send_local_player_state() {
     // Relay gameplay camera + pose seed ONLY while strict aim (RMB/ADS) is held.
     // Unconditional camera relay made the puppet track peer look while running.
     if (local_player_strict_aim_active(local_obj)) {
+        std::uint8_t route_seed[32]{};
+        const bool route_seed_ok = copy_local_pose_seed_32(route_seed);
         float cam_quat[4]{};
-        if (capture_gameplay_camera_quat(cam_quat)) {
+        if (route_seed_ok) {
+            std::memcpy(pkt.pose_seed, route_seed, sizeof(pkt.pose_seed));
+            pkt.flags |= coop::kStateFlagPoseSeed;
+            std::memcpy(cam_quat, route_seed + 16, sizeof(cam_quat));
             std::memcpy(pkt.camera_quat, cam_quat, sizeof(pkt.camera_quat));
             pkt.flags |= coop::kStateFlagPeerCamera;
-        }
-        {
-            const auto get_camera_manager =
-                reinterpret_cast<GetCameraManagerFunction>(
-                    g_module + kGetCameraManagerRva);
-            void* const mgr = get_camera_manager(0);
-            if (mgr != nullptr &&
-                readable_bytes(static_cast<std::byte*>(mgr) + 0xB0) >=
-                    sizeof(void*)) {
-                void* const blk = *reinterpret_cast<void**>(
-                    static_cast<std::byte*>(mgr) + 0xB0);
-                if (blk != nullptr &&
-                    readable_bytes(static_cast<std::byte*>(blk) + 0x60) >= 32) {
-                    const auto* seed = reinterpret_cast<const float*>(
-                        static_cast<std::byte*>(blk) + 0x60);
-                    if (valid_network_orientation(seed + 4)) {
-                        std::memcpy(pkt.pose_seed, seed, 32);
-                        pkt.flags |= coop::kStateFlagPoseSeed;
-                    }
-                }
+            static ULONGLONG last_pose_send_log = 0;
+            const ULONGLONG pose_now = GetTickCount64();
+            if (pose_now - last_pose_send_log > 1000) {
+                last_pose_send_log = pose_now;
+                const auto* q = reinterpret_cast<const float*>(route_seed + 16);
+                std::ostringstream line;
+                line << "POSE-SEED-SEND route0 q=(" << q[0] << "," << q[1]
+                     << "," << q[2] << "," << q[3] << ")";
+                force_log_line(line.str().c_str());
             }
+        } else if (capture_gameplay_camera_quat(cam_quat)) {
+            std::memcpy(pkt.camera_quat, cam_quat, sizeof(pkt.camera_quat));
+            pkt.flags |= coop::kStateFlagPeerCamera;
         }
         const int joypad_idx =
             readable_bytes(static_cast<std::byte*>(local_obj) + 0x39BC) >= 1
@@ -8898,6 +8925,8 @@ void apply_puppet_transform_post(void* /*update_object*/) {
         peer_received != 0 && GetTickCount64() - peer_received <= 250;
     const bool peer_aiming =
         peer_fresh && (pkt.flags & 8) != 0 && peer_packet_aim_active(pkt);
+    const bool pose_relay_for_peer =
+        peer_aiming && puppet_aim_press_relay_enabled_for_peer(pkt);
     const bool puppet_aiming_now = peer_aiming;
     static bool puppet_was_aiming = false;
     float orientation_dot = 1.0F;
@@ -8972,7 +9001,7 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     if (peer_aiming) {
         if (g_puppet_aim_facing_from_camera) {
             apply_peer_aim_facing_to_player(puppet, pkt);
-        } else if ((g_puppet_aim_reticle_relay || puppet_aim_press_relay_enabled()) &&
+        } else if ((g_puppet_aim_reticle_relay || pose_relay_for_peer) &&
                    (pkt.flags & coop::kStateFlagPoseSeed) != 0 &&
                    valid_network_orientation(pkt.pose_seed + 4)) {
             orientation_dot =
@@ -8980,7 +9009,7 @@ void apply_puppet_transform_post(void* /*update_object*/) {
         } else if (valid_network_orientation(pkt.quat)) {
             orientation_dot = blend_network_orientation(quat, pkt.quat, 0.35F);
         }
-        if (g_puppet_aim_reticle_relay || puppet_aim_press_relay_enabled()) {
+        if (g_puppet_aim_reticle_relay || pose_relay_for_peer) {
             apply_peer_aim_pose_quat(puppet);
         }
     } else if (puppet_was_aiming) {

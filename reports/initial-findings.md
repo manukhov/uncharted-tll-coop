@@ -25456,3 +25456,30 @@ running/turning. The replacement default is narrower: auto `0x200` only for
 non-scoped peer aim while the peer is almost stationary (`move_magnitude <= 0.08`
 and low horizontal velocity). Scoped ADS and moving aim still require explicit F8
 or a future native aim-additive path.
+
+### 2026-07-09: wrong/static aim direction traced to sender seed source + stale F8 gate
+
+**Runtime symptom:** shots now relay, but both shots and visible aim point in the
+wrong direction; rotating the local camera leaves the remote puppet aiming at a
+static point.
+
+**Static/code root cause:** the sender still packed `pose_seed` through
+`GetCameraManager(0)+0xB0+0x60`, while the confirmed resolver source is the
+route-table chain `table_14697AD50[0] -> +8 -> +0xB0 -> +0x60`. Prior findings
+already showed `GetCameraManager` and the route table are different chains. Also,
+the new stationary auto-aim press enabled Joypad `0x200`, but the caller-scoped
+pose-seed override (`0x10E934B` / `0xCB17D6`) was still gated by manual F8 only,
+so visible aim could keep using the puppet's stale native screen-1 camera.
+
+**Fix:** `copy_local_pose_seed_32` now reads the route-table idx-0 source, sender
+uses that same 32-byte seed for both `StatePacket.pose_seed` and `camera_quat`, and
+the caller-scoped receiver override is enabled by the movement-aware
+`puppet_aim_press_relay_enabled_for_peer` helper. This does not re-enable the broad
+screen-1 source write.
+
+**Build/runtime harness:** release build passed; two copies were injected
+(PID 20748 / 4040). Startup logs show `PlayerFireController::Fire capture installed`
+for both and no rejected `SECOND-AIM-AT-POS` / broad `AIM-TARGET-WRITE` path in the
+idle tail. The falsifiable runtime signal for the actual fix is
+`POSE-SEED-SEND route0 q=(...)` while the local player holds strict aim/RMB, followed
+by peer aim/fire direction tracking camera turns instead of a static point.
