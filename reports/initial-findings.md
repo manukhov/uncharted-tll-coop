@@ -25438,3 +25438,21 @@ replay previously crashed one tick later.
 Runtime prediction for this narrower fix: peer shots should log `FIRE-RELAY button`
 again, while no `SECOND-AIM-AT-POS` writer exists in code and no `AIM-TARGET-WRITE`
 path is enabled by default.
+
+### 2026-07-09: FirePacket fallback was still gated by F8 inside Input_ScaleCopy
+
+**CONFIRMED by code inspection after user runtime:** restoring the FirePacket queue
+was insufficient because the actual Joypad3 feed in `hooked_input_scale_copy`
+only ORed `kJoypadFireButtonMask` into `source+0x518` inside
+`if (g_puppet_relay_aim_press)`. Since F8/full puppet ADS is OFF by default, the
+button fallback could be queued but never reach the puppet input conversion.
+
+**Fix:** fire pulse `0x800` is now independent of aim-press relay. Aim `0x200`
+remains gated separately. FirePacket sending is also symmetric now; role B no
+longer returns before `sendto`, so either copy can publish shots.
+
+**Aim animation guard:** the old default-on aim relay is still rejected for
+running/turning. The replacement default is narrower: auto `0x200` only for
+non-scoped peer aim while the peer is almost stationary (`move_magnitude <= 0.08`
+and low horizontal velocity). Scoped ADS and moving aim still require explicit F8
+or a future native aim-additive path.

@@ -426,6 +426,10 @@ volatile bool g_native_fire_relay = false;
 // Default OFF: opt-in with F8 on the foreground window only. When ON globally it
 // injected aim-press into the shared joypad bus and broke locomotion on both copies.
 volatile bool g_puppet_relay_aim_press = false;
+// Default aim animation without full ADS: relay 0x200 only for non-scoped peer aim
+// while the peer is almost stationary. This avoids the rejected run/turn jitter from
+// continuous aim-press during locomotion, while still raising the weapon on hold-aim.
+volatile bool g_puppet_auto_stationary_aim_press = true;
 // Sniper/rifle: relay aim direction but NOT scoped-ADS on the puppet (prevents the
 // DrawControl mesh-hide that makes Chloe vanish on the receiver). F8 still toggles
 // full ADS relay for A/B.
@@ -861,7 +865,9 @@ void publish_peer_head_look_packet_fields(
 bool peer_packet_aim_active(const coop::StatePacket& peer);
 bool peer_packet_free_look_active(const coop::StatePacket& peer);
 bool peer_snapshot_aim_active();
+bool valid_network_movement(const coop::StatePacket& packet);
 bool puppet_aim_press_relay_enabled();
+bool puppet_aim_press_relay_enabled_for_peer(const coop::StatePacket& peer);
 void apply_puppet_sustained_aim_input(void* puppet);
 void force_puppet_ads_flag(void* puppet, bool active);
 bool safe_request_gun_state(void* player, int desired_state);
@@ -1480,17 +1486,15 @@ std::int64_t __fastcall hooked_input_scale_copy(
             std::uint64_t held_mask =
                 remote_puppet_actions_from_peer(peer.input_buttons) | edge_pulse;
             held_mask &= ~(kJoypadAimButtonMask | kJoypadFireButtonMask);
-            if (puppet_aim_press_relay_enabled()) {
-                if (puppet_wants_aim) {
-                    held_mask |= kJoypadAimButtonMask;
-                }
-                if (GetTickCount64() < g_fire_button_hold_until_ms &&
-                    !puppet_fire_buttons_suppressed()) {
-                    held_mask |= kJoypadFireButtonMask;
-                }
-                if (puppet_fire_buttons_suppressed()) {
-                    held_mask &= ~kJoypadFireButtonMask;
-                }
+            if (puppet_aim_press_relay_enabled_for_peer(peer) && puppet_wants_aim) {
+                held_mask |= kJoypadAimButtonMask;
+            }
+            if (GetTickCount64() < g_fire_button_hold_until_ms &&
+                !puppet_fire_buttons_suppressed()) {
+                held_mask |= kJoypadFireButtonMask;
+            }
+            if (puppet_fire_buttons_suppressed()) {
+                held_mask &= ~kJoypadFireButtonMask;
             }
             held_mask = sanitize_remote_puppet_button_mask(held_mask);
             held_mask |= shared_bus_saved_mask & kInputBlockButtonBaseMask;
@@ -1508,7 +1512,8 @@ std::int64_t __fastcall hooked_input_scale_copy(
             auto* const axes = reinterpret_cast<float*>(source_bytes);
             shared_bus_saved_look[0] = axes[2];
             shared_bus_saved_look[1] = axes[3];
-            if (puppet_aim_press_relay_enabled() && g_puppet_relay_look_stick &&
+            if (puppet_aim_press_relay_enabled_for_peer(peer) &&
+                g_puppet_relay_look_stick &&
                 peer_packet_aim_active(peer) &&
                 (peer.flags & coop::kStateFlagPeerCamera) != 0 &&
                 (std::fabs(peer.look_stick[0]) > 0.001F ||
@@ -1800,7 +1805,7 @@ bool install_player_fire_capture() {
         0x57, 0x48, 0x8D, 0xAC, 0x24, 0xC0, 0xBD, 0xFF, 0xFF,
     };
     if (std::memcmp(target, expected.data(), expected.size()) != 0) {
-        log_line("player-fire capture skipped: unexpected function prologue");
+        force_log_line("player-fire capture skipped: unexpected function prologue");
         return false;
     }
 
@@ -1810,7 +1815,7 @@ bool install_player_fire_capture() {
         nullptr, kPatchSize + kJumpSize, MEM_COMMIT | MEM_RESERVE,
         PAGE_EXECUTE_READWRITE));
     if (trampoline == nullptr) {
-        log_line("player-fire capture skipped: trampoline allocation failed");
+        force_log_line("player-fire capture skipped: trampoline allocation failed");
         return false;
     }
     std::memcpy(trampoline, target, kPatchSize);
@@ -1830,7 +1835,7 @@ bool install_player_fire_capture() {
                         &old_protection)) {
         VirtualFree(trampoline, 0, MEM_RELEASE);
         g_original_player_fire = nullptr;
-        log_line("player-fire capture skipped: VirtualProtect failed");
+        force_log_line("player-fire capture skipped: VirtualProtect failed");
         return false;
     }
     target[0] = 0x48;
@@ -1843,7 +1848,7 @@ bool install_player_fire_capture() {
     FlushInstructionCache(GetCurrentProcess(), target, kPatchSize);
     DWORD ignored = 0;
     VirtualProtect(target, kPatchSize, old_protection, &ignored);
-    log_line("PlayerFireController::Fire capture installed");
+    force_log_line("PlayerFireController::Fire capture installed");
     return true;
 }
 
@@ -2099,6 +2104,25 @@ bool puppet_aim_press_relay_enabled() {
     return g_puppet_relay_aim_press;
 }
 
+bool puppet_aim_press_relay_enabled_for_peer(const coop::StatePacket& peer) {
+    if (!peer_packet_aim_active(peer)) {
+        return false;
+    }
+    if (g_puppet_relay_aim_press) {
+        return true;
+    }
+    if (!g_puppet_auto_stationary_aim_press || peer_holds_scoped_rifle(peer)) {
+        return false;
+    }
+    if (valid_network_movement(peer) && peer.move_magnitude > 0.08F) {
+        return false;
+    }
+    const float vx = peer.velocity[0];
+    const float vz = peer.velocity[2];
+    return std::isfinite(vx) && std::isfinite(vz) &&
+           vx * vx + vz * vz < 0.35F * 0.35F;
+}
+
 // Peer-aim via network packet reaches the puppet joypad; local-lead (Chloe ADS on
 // copy 1 -> Nadine puppet) did not survive Input_ScaleCopyVirtual's block-1 sandwich.
 // Write the puppet's own resolved block + joypad held masks here, immediately before
@@ -2108,8 +2132,13 @@ void apply_puppet_sustained_aim_input(void* puppet) {
         return;
     }
     coop::StatePacket peer{};
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    const bool peer_fresh =
+        received != 0 && GetTickCount64() - received <= 250;
+    const bool have_peer = peer_fresh && copy_peer_state_snapshot(peer);
     const bool want_aim =
-        g_puppet_relay_aim_press && peer_snapshot_aim_active();
+        have_peer && puppet_aim_press_relay_enabled_for_peer(peer);
     static bool prev_want_aim = false;
     if (readable_bytes(static_cast<std::byte*>(puppet) + 0x39BC) < 1) {
         return;
@@ -9793,10 +9822,15 @@ void publish_fire_packet(const coop::FirePacket& packet) {
     const std::uint32_t head = g_fire_event_ring.head.load(std::memory_order_relaxed);
     g_fire_event_ring.packets[head % 16] = packet;
     g_fire_event_ring.head.store(head + 1, std::memory_order_release);
+    std::ostringstream line;
+    line << "FIRE-RELAY recv seq=" << packet.sequence
+         << " art=0x" << std::hex << packet.weapon_art_id
+         << " ctrlOff=0x" << packet.controller_offset << std::dec;
+    force_log_line(line.str().c_str());
 }
 
 void send_fire_packet(void* controller, void* fire_args, void* weapon, double scalar) {
-    if (g_net_role_b || !g_state_net.enabled || !g_state_net.peer_set ||
+    if (!g_state_net.enabled || !g_state_net.peer_set ||
         controller == nullptr || fire_args == nullptr || weapon == nullptr ||
         readable_bytes(fire_args) < coop::kFireArgsBytes ||
         readable_bytes(weapon) < 0x864) {
@@ -9825,6 +9859,12 @@ void send_fire_packet(void* controller, void* fire_args, void* weapon, double sc
            sizeof(packet), 0,
            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
            sizeof(g_state_net.peer_addr));
+    std::ostringstream line;
+    line << "FIRE-RELAY send seq=" << packet.sequence
+         << " art=0x" << std::hex << packet.weapon_art_id
+         << " ctrlOff=0x" << packet.controller_offset
+         << " roleB=" << std::dec << (g_net_role_b ? 1 : 0);
+    force_log_line(line.str().c_str());
 }
 
 // SEH-isolated replay of PlayerFireController::Fire (no C++ unwinding objects).
@@ -10088,7 +10128,7 @@ void apply_queued_fire_events(void* puppet) {
     line << "FIRE-RELAY button seq=" << packet.sequence
          << " art=0x" << std::hex << packet.weapon_art_id
          << " pulse=0x" << fire_pulse << std::dec;
-    log_line(line.str().c_str());
+    force_log_line(line.str().c_str());
     ++g_fire_event_ring.tail;
 }
 
@@ -10836,7 +10876,7 @@ void drive_remote_slot1_actions_tick() {
     *reinterpret_cast<float*>(branch1 + 0x18) = sy;   // L-stick Y
     const bool peer_aiming = peer_packet_aim_active(peer);
     const bool puppet_should_aim =
-        puppet_aim_press_relay_enabled() && peer_aiming;
+        puppet_aim_press_relay_enabled_for_peer(peer);
     if (!peer_aiming) {
         g_state_net.active_button_press_latch.fetch_and(
             ~kJoypadAimButtonMask, std::memory_order_release);
@@ -10864,7 +10904,7 @@ void drive_remote_slot1_actions_tick() {
     }
     prev_puppet_should_aim = puppet_should_aim;
     if (g_puppet_rifle_pose_only_ads && peer_holds_scoped_rifle(peer) &&
-        peer_aiming && !puppet_aim_press_relay_enabled()) {
+        peer_aiming && !g_puppet_relay_aim_press) {
         scrub_puppet_scoped_ads_flag(remote_player);
     }
     scrub_local_viewport_aim_hud_leak();
