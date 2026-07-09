@@ -581,11 +581,11 @@ volatile bool g_relayed_block_give = false;
 // if the camera system recomputes these each frame, our writes will fight it ->
 // visible jitter. Default OFF; Numpad / toggles for A/B.
 volatile bool g_puppet_camera_drive = false;
-// Peer-only visual aim relay. Default ON (2026-07-09): use only the scoped
-// resolver override at 0x10E934B / 0xCB17D6 plus aim-target fields, never the
-// rejected broad screen-1 pose-seed write that froze locomotion facing. Full ADS
-// input remains a separate F8 A/B toggle.
-volatile bool g_puppet_aim_reticle_relay = true;
+// Peer-only visual aim relay. Default OFF (2026-07-09 runtime): default-ON made
+// AIM-TARGET-WRITE run every frame during aim-run and produced visible running
+// jitter. Keep this as a manual Numpad / A/B path until the aim-additive input is
+// isolated from locomotion.
+volatile bool g_puppet_aim_reticle_relay = false;
 // Free-look head IK sync via PlayerLookAtIkController @ player+0x1E38 (SetLookPoint).
 // OFF (2026-07-07): user reverted — puppet spine twist unacceptable even after
 // weight/pitch tuning (bb). Code kept; flag gates send + receive.

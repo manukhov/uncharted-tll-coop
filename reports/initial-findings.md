@@ -25301,7 +25301,7 @@ blend (работает, локомоция цела). g_puppet_aim_reticle_rela
 по этим данным, требует либо материализации screen-1 aim-камеры куклы, либо отдельного
 aim-additive входа (не screen pose seed).
 
-### 2026-07-09: AIM sync resumed as pose-only default (caller-scoped, not broad seed)
+### 2026-07-09: AIM sync default-ON pose-only REJECTED (run jitter)
 
 IDA MCP was used to re-check the aim chain before changing runtime defaults:
 - `PlayerAimController::GetTargetPointFromReticle` `0x140CB1720` calls
@@ -25311,18 +25311,18 @@ IDA MCP was used to re-check the aim chain before changing runtime defaults:
 - The REJECTED screen-1 source write remains rejected: screen pose seed is shared
   with locomotion facing and must not be broadly overridden.
 
-Runtime change: `g_puppet_aim_reticle_relay` is now default ON, but it only enables
-the already-scoped ret-site override (`0x10E934B` / `0xCB17D6`) and aim-target
-staging when `peer_packet_aim_active()` is true (`0x200` + fresh peer pose seed).
-Full puppet ADS input (`g_puppet_relay_aim_press`) remains OFF by default and is
-still a manual `F8` A/B toggle. Scoped-rifle pose-only now scrubs puppet
-`Player+0x1548` unless full ADS relay is explicitly enabled, preventing receiver
-scope/HUD leakage.
+Tested runtime default-ON `g_puppet_aim_reticle_relay=true`. User observed strong
+running jitter. Log on the launched PIDs showed continuous `AIM-TARGET-WRITE` and
+high-rate `POSESEED-CALLERS` while moving/aiming, i.e. the scoped path is still too
+active to be the default locomotion baseline. Restored
+`g_puppet_aim_reticle_relay=false`; Numpad `/` remains manual A/B only. Full puppet
+ADS input (`g_puppet_relay_aim_press`) remains OFF by default and is still manual
+`F8`.
 
-Prediction: peer RMB should make the puppet visibly follow peer aim in pose-only
-mode and log `AIM-POSE-OVERRIDE site=0x10E934B`; local RMB on the receiver should
-not affect the puppet; scoped rifle should not raise the receiver scope unless
-`F8` full ADS relay is ON.
+Conclusion: the broad screen-1 source write is rejected, and the caller-scoped
+pose-only relay is also rejected as default-on. Aim sync still needs either a true
+aim-additive input separate from locomotion, or movement-aware gating that does not
+fight the run/facing baseline.
 
 ### 2026-07-07: Head look sync (HYPOTHESIS) — free-look camera vs body on remote puppet
 
