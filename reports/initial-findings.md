@@ -25556,3 +25556,19 @@ give, slot lookup, switch, draw-ok, and gun-ok checks use the display art. This 
 not exact Type-97 mirroring; it is a stability guard that restores a visible
 long-gun class match without re-entering the rejected direct Type-97 `GiveWeapon`
 path.
+
+### 2026-07-09: REJECT rifle proxy - Type-97 needs real block for SLOT-MIRROR
+
+**Runtime result:** the rifle-proxy build still did not show the picked Type-97.
+Logs explained why: sender still logged `GIVEWEAPON-RELAY-SEND-SKIP unsafe
+art=0x27617d0d`; receiver then used `display=0x8075397d`, which selected the old
+slot-0 rifle (`slot=0`) instead of materializing peer slot 1 where Type-97 lives.
+This bypassed the user-verified pickup display architecture from 2026-07-07.
+
+**Correction:** Type-97 packets are sent and received again so the real 0xC0
+`WeaponInfo` block reaches the receiver. The unsafe path is narrowed to the
+immediate `apply_peer_weapon_give` native apply only: for Type-97 it now stores the
+block with `GIVEWEAPON-RELAY-STORE-ONLY unsafe art=0x27617d0d` and returns. The
+existing `SLOT-MIRROR` then has `relayed_weapon_store_find(0x27617d0d)` available
+and can reconcile the stable raw snapshot slot 1 through the normal pickup display
+path.

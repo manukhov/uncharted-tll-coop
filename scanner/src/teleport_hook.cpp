@@ -510,19 +510,11 @@ bool is_long_gun_relay_art(std::uint32_t art_id) {
 }
 
 bool is_pickup_give_relay_safe_art(std::uint32_t art_id) {
-    // Runtime 2026-07-09: direct receiver GiveWeapon for Type-97 froze the game
-    // after GIVEWEAPON-RELAY-RECV, before the apply tail completed.
+    // Runtime 2026-07-09: immediate receiver GiveWeapon for Type-97 froze the
+    // game after GIVEWEAPON-RELAY-RECV, before the apply tail completed. The
+    // packet is still useful: store its real WeaponInfo and let SLOT-MIRROR
+    // perform the normal inventory reconciliation from the stable raw snapshot.
     return art_id != kCoopType97ArtId;
-}
-
-std::uint32_t puppet_display_art_for_peer_art(std::uint32_t art_id) {
-    // Type-97's exact receiver GiveWeapon path is unsafe, but a hidden weapon is
-    // worse than a visible class match. Use the known-safe rifle as a puppet-only
-    // visual proxy until the native pickup apply path is proven.
-    if (art_id == kCoopType97ArtId) {
-        return kCoopRifleArtId;
-    }
-    return art_id;
 }
 
 // Native PlayerFireController::Fire replay is parked until the receiver crash is
@@ -3157,21 +3149,16 @@ void __fastcall hooked_give_weapon_tail(
                             sizeof(relay_art));
                 if (!is_pickup_relay_art(relay_art)) {
                     // Spawn/loadout whitelist arts: held-weapon sync only.
-                } else if (!is_pickup_give_relay_safe_art(relay_art)) {
-                    std::ostringstream skip;
-                    skip << "GIVEWEAPON-RELAY-SEND-SKIP unsafe art=0x"
-                         << std::hex << relay_art << std::dec;
-                    force_log_line(skip.str().c_str());
                 } else {
-                relay_pickup_after_give = true;
-                relay_local_player = local_player;
-                relay_pkt.sequence = g_weapon_give_send_seq.fetch_add(1) + 1;
-                relay_pkt.draw_flag = static_cast<std::uint8_t>(a3 & 0xFF);
-                std::memcpy(&relay_pkt.weapon_art_id,
-                            static_cast<std::byte*>(weapon_info) + 0x80,
-                            sizeof(relay_pkt.weapon_art_id));
-                std::memcpy(relay_pkt.weapon_info, weapon_info,
-                            coop::kWeaponInfoBytes);
+                    relay_pickup_after_give = true;
+                    relay_local_player = local_player;
+                    relay_pkt.sequence = g_weapon_give_send_seq.fetch_add(1) + 1;
+                    relay_pkt.draw_flag = static_cast<std::uint8_t>(a3 & 0xFF);
+                    std::memcpy(&relay_pkt.weapon_art_id,
+                                static_cast<std::byte*>(weapon_info) + 0x80,
+                                sizeof(relay_pkt.weapon_art_id));
+                    std::memcpy(relay_pkt.weapon_info, weapon_info,
+                                coop::kWeaponInfoBytes);
                 }
             }
         }
@@ -6202,7 +6189,6 @@ DWORD WINAPI state_recv_thread(void*) {
             if (g_pickup_relay &&
                 gp.version == coop::kWeaponGiveVersion &&
                 gp.weapon_art_id != 0 &&
-                is_pickup_give_relay_safe_art(gp.weapon_art_id) &&
                 gp.sequence != g_last_applied_weapon_give_seq.load(
                                    std::memory_order_relaxed) &&
                 !g_pending_weapon_give_flag.load(std::memory_order_acquire)) {
@@ -7764,8 +7750,7 @@ void apply_peer_held_weapon_state() {
     if ((peer.flags & 0x80) == 0) return;
     const std::uint32_t effective_art = peer_effective_held_art(peer);
     if (effective_art == 0) return;
-    const std::uint32_t display_art =
-        puppet_display_art_for_peer_art(effective_art);
+    const std::uint32_t display_art = effective_art;
     if (!puppet_weapon_sync_ready(puppet)) {
         return;
     }
@@ -9561,16 +9546,18 @@ void apply_peer_weapon_give() {
     const int draw = g_pending_weapon_give_draw.load(std::memory_order_relaxed);
     const int packet_slot = static_cast<int>(
         g_pending_weapon_give_slot.load(std::memory_order_relaxed));
+    alignas(16) std::uint8_t info[coop::kWeaponInfoBytes];
+    std::memcpy(info, g_pending_weapon_give_info, coop::kWeaponInfoBytes);
     if (!is_pickup_give_relay_safe_art(art)) {
+        relayed_weapon_store_put(art, info);
+        g_last_applied_weapon_give_seq.store(seq, std::memory_order_relaxed);
         g_pending_weapon_give_flag.store(false, std::memory_order_release);
         std::ostringstream skip;
-        skip << "GIVEWEAPON-RELAY-SKIP unsafe art=0x" << std::hex << art
-             << std::dec << " seq=" << seq;
+        skip << "GIVEWEAPON-RELAY-STORE-ONLY unsafe art=0x" << std::hex
+             << art << std::dec << " seq=" << seq;
         force_log_line(skip.str().c_str());
         return;
     }
-    alignas(16) std::uint8_t info[coop::kWeaponInfoBytes];
-    std::memcpy(info, g_pending_weapon_give_info, coop::kWeaponInfoBytes);
     void* puppet = resolve_live_player_safe(1);
     if (!puppet_relay_give_ready(puppet)) {
         std::ostringstream skip;
