@@ -34,8 +34,10 @@
 - [~] **Fire relay (v7):** native `PlayerFireController_Fire` replay on puppet when
       `puppet_native_fire_allowed`; sustained `0x800` never from StatePacket (FirePacket
       only). Load guards: GiveWeapon vtable `+0x158` + 5 s warmup.
-- [~] **Aim anim relay:** **PAUSED** (2026-07-07 user). Puppet ADS нестабилен;
-      не развивать до отдельного запроса. Билд `as` в working tree.
+- [~] **Aim sync:** resumed 2026-07-09 as pose-only by default. Puppet full ADS
+      remains OFF / manual `F8`; visual aim uses only scoped resolver override
+      ret-sites `0x10E934B` / `0xCB17D6` plus aim-target staging. Do not re-enable
+      broad screen-1 pose-seed/source writes; that path freezes locomotion facing.
 - [ ] **Head / camera look sync (NEW P0):** STATIC done (`reports/lookat_field_map.md`).
       Next: implement sender flag `0x0400` + receiver SetLookPoint on `Player+0x1E38`.
 - [~] Положение, поворот, скорость и здоровье уже передаются. Сырые данные по

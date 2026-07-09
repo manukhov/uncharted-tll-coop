@@ -25301,6 +25301,29 @@ blend (работает, локомоция цела). g_puppet_aim_reticle_rela
 по этим данным, требует либо материализации screen-1 aim-камеры куклы, либо отдельного
 aim-additive входа (не screen pose seed).
 
+### 2026-07-09: AIM sync resumed as pose-only default (caller-scoped, not broad seed)
+
+IDA MCP was used to re-check the aim chain before changing runtime defaults:
+- `PlayerAimController::GetTargetPointFromReticle` `0x140CB1720` calls
+  `ResolveScreenRoutePoseSeedOrDefault` at return site `0xCB17D6`.
+- `Player_PostAnimUpdate` `0x1410E9210` calls the same resolver at return site
+  `0x10E934B`, then copies the 32-byte seed into `Player+0x1720/+0x1730`.
+- The REJECTED screen-1 source write remains rejected: screen pose seed is shared
+  with locomotion facing and must not be broadly overridden.
+
+Runtime change: `g_puppet_aim_reticle_relay` is now default ON, but it only enables
+the already-scoped ret-site override (`0x10E934B` / `0xCB17D6`) and aim-target
+staging when `peer_packet_aim_active()` is true (`0x200` + fresh peer pose seed).
+Full puppet ADS input (`g_puppet_relay_aim_press`) remains OFF by default and is
+still a manual `F8` A/B toggle. Scoped-rifle pose-only now scrubs puppet
+`Player+0x1548` unless full ADS relay is explicitly enabled, preventing receiver
+scope/HUD leakage.
+
+Prediction: peer RMB should make the puppet visibly follow peer aim in pose-only
+mode and log `AIM-POSE-OVERRIDE site=0x10E934B`; local RMB on the receiver should
+not affect the puppet; scoped rifle should not raise the receiver scope unless
+`F8` full ADS relay is ON.
+
 ### 2026-07-07: Head look sync (HYPOTHESIS) — free-look camera vs body on remote puppet
 
 **Запрос:** при повороте камеры локальный персонаж смотрит в сторону взгляда; на второй

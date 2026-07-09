@@ -1,5 +1,28 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-09, Codex — aim sync resumes, pose-only default)
+
+**Aim sync resumed.** IDA MCP is reachable at `http://172.21.144.1:8745/mcp`; verified
+`decompile_function` for `PlayerAimController::GetTargetPointFromReticle`
+`0x140CB1720`, `Player_PostAnimUpdate` `0x1410E9210`, and
+`ResolveScreenRoutePoseSeedOrDefault` `0x141C077B0`.
+
+**Change:** `g_puppet_aim_reticle_relay=true` by default. This enables the already
+scoped peer-only visual aim path when the peer really holds RMB (`0x200` +
+fresh `pose_seed`): resolver override only at ret sites `0x10E934B` and `0xCB17D6`,
+plus aim-target field staging. Full puppet ADS input remains **OFF** by default and
+is still an explicit `F8` A/B toggle.
+
+**Safety:** this does **not** re-enable the REJECTED screen-1 broad pose-seed/source
+write. `g_puppet_aim_override_frame` stays false, and the old
+`write_peer_seed_to_screen1_resolver_source()` path is not called. Scoped-rifle
+remote aim now scrubs puppet scoped ADS unless full ADS relay is explicitly enabled.
+
+**Runtime prediction:** copy2 peer RMB -> copy1 puppet should enter/hold visible
+pose-only aim direction and log `AIM-POSE-OVERRIDE site=0x10E934B`; copy1 local RMB
+alone must not aim the puppet; scoped rifle should not leak receiver scope/HUD unless
+`F8` full ADS relay is toggled on.
+
 ## Turn note (2026-07-07, Cursor — PAUSE aim relay; новый P0 = синхронизация поворота головы)
 
 **Aim/ADS relay — на паузе** (билд `as`, user-test не дал стабильного ADS). Не трогать

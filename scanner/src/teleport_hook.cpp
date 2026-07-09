@@ -581,14 +581,11 @@ volatile bool g_relayed_block_give = false;
 // if the camera system recomputes these each frame, our writes will fight it ->
 // visible jitter. Default OFF; Numpad / toggles for A/B.
 volatile bool g_puppet_camera_drive = false;
-// Gated AIM-POSE quat write to puppet+0x1730. Default OFF (2026-07-07): the write
-// Default OFF (2026-07-07): every aim-experiment it gates is net-negative. The
-// resolver-source write (screen-1 pose seed) never even ran in the last test
-// (no SCREEN1-SEED-SRC log) yet locomotion FACING FROZE forward - the screen-1
-// pose seed is shared by the puppet's LOCOMOTION camera, so any override of it
-// freezes turning. Horizontal aim already reads from the body-facing blend;
-// keep this OFF. Numpad / toggles for A/B experiments only.
-volatile bool g_puppet_aim_reticle_relay = false;
+// Peer-only visual aim relay. Default ON (2026-07-09): use only the scoped
+// resolver override at 0x10E934B / 0xCB17D6 plus aim-target fields, never the
+// rejected broad screen-1 pose-seed write that froze locomotion facing. Full ADS
+// input remains a separate F8 A/B toggle.
+volatile bool g_puppet_aim_reticle_relay = true;
 // Free-look head IK sync via PlayerLookAtIkController @ player+0x1E38 (SetLookPoint).
 // OFF (2026-07-07): user reverted — puppet spine twist unacceptable even after
 // weight/pitch tuning (bb). Code kept; flag gates send + receive.
@@ -10881,7 +10878,7 @@ void drive_remote_slot1_actions_tick() {
     }
     prev_puppet_should_aim = puppet_should_aim;
     if (g_puppet_rifle_pose_only_ads && peer_holds_scoped_rifle(peer) &&
-        peer_aiming && !g_puppet_aim_reticle_relay) {
+        peer_aiming && !puppet_aim_press_relay_enabled()) {
         scrub_puppet_scoped_ads_flag(remote_player);
     }
     scrub_local_viewport_aim_hud_leak();
