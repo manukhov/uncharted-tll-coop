@@ -25541,3 +25541,18 @@ captured `WeaponInfo` block.
 unsafe art=0x27617d0d`; it remains REJECTED for direct receiver `GiveWeapon` after
 the freeze. This restores known pickup display while avoiding the observed Type-97
 hang path.
+
+### 2026-07-09: Type-97 exact give remains unsafe - display as rifle proxy
+
+**Runtime regression:** after filtering Type-97 out of the pickup give relay, the
+receiver no longer froze, but the puppet had no materialized weapon for
+`art=0x27617d0d`: logs showed `HELD-WEAPON-APPLY ... gave=0 select=0 slot=-1
+has=0 giveAllowed=0`, so the weapon was invisible both in hands and on the back.
+
+**Correction:** `apply_peer_held_weapon_state` now maps unsafe peer Type-97
+(`0x27617d0d`) to the known-safe rifle art (`0x8075397d`) for puppet-only display
+operations. The wire/effective art remains logged as Type-97, while inventory
+give, slot lookup, switch, draw-ok, and gun-ok checks use the display art. This is
+not exact Type-97 mirroring; it is a stability guard that restores a visible
+long-gun class match without re-entering the rejected direct Type-97 `GiveWeapon`
+path.

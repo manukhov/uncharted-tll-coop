@@ -515,6 +515,16 @@ bool is_pickup_give_relay_safe_art(std::uint32_t art_id) {
     return art_id != kCoopType97ArtId;
 }
 
+std::uint32_t puppet_display_art_for_peer_art(std::uint32_t art_id) {
+    // Type-97's exact receiver GiveWeapon path is unsafe, but a hidden weapon is
+    // worse than a visible class match. Use the known-safe rifle as a puppet-only
+    // visual proxy until the native pickup apply path is proven.
+    if (art_id == kCoopType97ArtId) {
+        return kCoopRifleArtId;
+    }
+    return art_id;
+}
+
 // Native PlayerFireController::Fire replay is parked until the receiver crash is
 // statically explained. Button fallback still goes through hooked_player_fire,
 // where the pose-seed guard can override aim during the native fire call.
@@ -7754,6 +7764,8 @@ void apply_peer_held_weapon_state() {
     if ((peer.flags & 0x80) == 0) return;
     const std::uint32_t effective_art = peer_effective_held_art(peer);
     if (effective_art == 0) return;
+    const std::uint32_t display_art =
+        puppet_display_art_for_peer_art(effective_art);
     if (!puppet_weapon_sync_ready(puppet)) {
         return;
     }
@@ -7785,23 +7797,23 @@ void apply_peer_held_weapon_state() {
     const int local_gun = read_gun_state(puppet);
     const bool gun_changed = peer_gun != last_peer_gun;
     const bool has_effective_art_before =
-        puppet_has_weapon_art_id(puppet, effective_art);
-    const bool give_allowed = puppet_weapon_give_allowed(effective_art);
-    const bool pickup_held = is_pickup_relay_art(effective_art);
-    int use_slot = find_weapon_slot_by_art_id(puppet, effective_art);
+        puppet_has_weapon_art_id(puppet, display_art);
+    const bool give_allowed = puppet_weapon_give_allowed(display_art);
+    const bool pickup_held = is_pickup_relay_art(display_art);
+    int use_slot = find_weapon_slot_by_art_id(puppet, display_art);
     // Do not trust the sender's numeric slot for arts the puppet does not own.
     // Picked-up weapons need a real pickup/weapon-info sync; selecting the same
     // slot number on the receiver just re-selects a stale local weapon.
-    if (use_slot < 0 && peer_gun == 1 && effective_art == kCoopRifleArtId) {
-        use_slot = peer_slot_of_art(kCoopRifleArtId);
+    if (use_slot < 0 && peer_gun == 1 && display_art == kCoopRifleArtId) {
+        use_slot = peer_slot_of_art(display_art);
         if (use_slot < 0) {
             use_slot = 16;
         }
     }
     if (use_slot < 0 && peer_gun == 1 &&
-        (effective_art == kCoopPistolArtId ||
-         effective_art == kCoopScopedPistolArtId)) {
-        use_slot = peer_slot_of_art(effective_art);
+        (display_art == kCoopPistolArtId ||
+         display_art == kCoopScopedPistolArtId)) {
+        use_slot = peer_slot_of_art(display_art);
         if (use_slot < 0) {
             use_slot = 17;
         }
@@ -7813,7 +7825,7 @@ void apply_peer_held_weapon_state() {
     const bool readiness_pending =
         peer_gun == 1 && use_slot >= 0 &&
         (puppet != g_puppet_gun_ok_puppet ||
-         effective_art != g_puppet_gun_ok_art ||
+         display_art != g_puppet_gun_ok_art ||
          now > g_puppet_gun_ok_until_ms);
     // Peer is holstered but the puppet still has a weapon OUT (its own draw state
     // +0x134 in {2,4}; e.g. right after the initial give, whose visible effects
@@ -7834,15 +7846,15 @@ void apply_peer_held_weapon_state() {
     bool select_ok = false;
     bool gun_ok = false;
     if (art_changed && use_slot < 0 &&
-        !puppet_has_weapon_art_id(puppet, effective_art) &&
-        puppet_weapon_give_allowed(effective_art) &&
+        !puppet_has_weapon_art_id(puppet, display_art) &&
+        puppet_weapon_give_allowed(display_art) &&
         peer_gun == 1 && !pickup_held) {
-        if (effective_art == kCoopRifleArtId) {
-            remove_relayed_long_gun_for_whitelist(puppet, effective_art);
+        if (display_art == kCoopRifleArtId) {
+            remove_relayed_long_gun_for_whitelist(puppet, display_art);
         }
-        gave = give_held_weapon_to_puppet(puppet, effective_art);
+        gave = give_held_weapon_to_puppet(puppet, display_art);
         if (gave) {
-            use_slot = find_weapon_slot_by_art_id(puppet, effective_art);
+            use_slot = find_weapon_slot_by_art_id(puppet, display_art);
         }
     }
     if (art_changed) {
@@ -7851,7 +7863,7 @@ void apply_peer_held_weapon_state() {
             last_switch_fail_ms = 0;
             last_switch_art = 0;
         }
-        if (use_slot >= 0 || puppet_has_weapon_art_id(puppet, effective_art)) {
+        if (use_slot >= 0 || puppet_has_weapon_art_id(puppet, display_art)) {
             gave = true;
         }
         last_art_id = effective_art;
@@ -7872,41 +7884,41 @@ void apply_peer_held_weapon_state() {
                 want_in_hands && use_slot >= 0 &&
                 hands_slot != use_slot;
             const bool rifle_out =
-                peer_gun == 1 && effective_art == kCoopRifleArtId;
+                peer_gun == 1 && display_art == kCoopRifleArtId;
             const bool need_switch =
                 art_changed || gun_changed ||
                 (mode_changed &&
-                 (peer.weapon_selected_mode > 0 || effective_art == kCoopRifleArtId)) ||
+                 (peer.weapon_selected_mode > 0 || display_art == kCoopRifleArtId)) ||
                 rifle_out ||
                 (peer_wants_drawn && puppet_holstered) || need_draw_in_hands ||
-                (art_changed && effective_art == kCoopPistolArtId &&
+                (art_changed && display_art == kCoopPistolArtId &&
                  hp_state_chk == 0 && use_slot == 1);
             const bool switch_cooldown =
-                effective_art == last_switch_art &&
+                display_art == last_switch_art &&
                 now - last_switch_ms < (art_changed ? 150 : 500);
             const bool fail_backoff =
-                !last_switch_ok && effective_art == last_switch_art &&
+                !last_switch_ok && display_art == last_switch_art &&
                 now - last_switch_fail_ms < 2000 && !art_changed && !gave;
             if (need_switch && !switch_cooldown && !fail_backoff &&
-                puppet_weapon_switch_allowed(effective_art, use_slot)) {
+                puppet_weapon_switch_allowed(display_art, use_slot)) {
                 const int attached_slot = capture_hand_attached_slot_int(puppet);
                 if (attached_slot >= 0 && attached_slot != use_slot) {
                     safe_switch_to_weapon(
                         puppet, static_cast<std::uint32_t>(attached_slot), false);
                 }
                 last_switch_ms = now;
-                last_switch_art = effective_art;
+                last_switch_art = display_art;
                 select_ok = safe_switch_to_weapon(
                     puppet, static_cast<std::uint32_t>(use_slot), want_in_hands);
                 last_switch_ok = select_ok;
                 if (select_ok) {
                     g_puppet_draw_ok_puppet = puppet;
-                    g_puppet_draw_ok_art = effective_art;
+                    g_puppet_draw_ok_art = display_art;
                     g_puppet_draw_ok_until_ms = now + 3000;
                 } else {
                     last_switch_fail_ms = now;
                 }
-            } else if (effective_art == last_switch_art) {
+            } else if (display_art == last_switch_art) {
                 select_ok = last_switch_ok;
             }
         }
@@ -7980,7 +7992,7 @@ void apply_peer_held_weapon_state() {
         use_slot >= 0 &&
         capture_weapon_selected_mode(puppet) == use_slot) {
         g_puppet_gun_ok_puppet = puppet;
-        g_puppet_gun_ok_art = effective_art;
+        g_puppet_gun_ok_art = display_art;
         g_puppet_gun_ok_until_ms = now + 5000;
         const ULONGLONG native_after = now + 1000;
         if (g_puppet_native_fire_allowed_after_ms < native_after) {
@@ -7999,6 +8011,7 @@ void apply_peer_held_weapon_state() {
             read_weapon_draw_state(puppet, draw_slot_log, draw_state_log);
         std::ostringstream line;
         line << "HELD-WEAPON-APPLY art=0x" << std::hex << effective_art
+             << " display=0x" << display_art
              << " wire=0x" << peer.held_weapon_art_id
              << " mode=" << std::dec
              << static_cast<unsigned>(peer.weapon_selected_mode)
