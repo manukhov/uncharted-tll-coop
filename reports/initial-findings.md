@@ -25513,3 +25513,17 @@ that must stay pose-only.
 and force-logs `SCOPED-ADS-SCRUB art=0x...` while scrubbing the puppet scoped-ADS
 flag. The local scope-visible allow check was widened to the same long-gun set so
 the local player's own sniper scope is not suppressed.
+
+### 2026-07-09: Type-97 pickup freezes receiver - park GiveWeapon pickup relay
+
+**Runtime symptom:** after the previous aim/scope changes, the old aim problems
+remained and picking up Type-97 froze the game. Logs identify Type-97 as
+`art=0x27617d0d`: sender logged `GIVEWEAPON-RELAY-SEND art=0x27617d0d`, receiver
+logged `GIVEWEAPON-RELAY-RECV art=0x27617d0d`, and then the expected apply tail did
+not complete cleanly.
+
+**Conclusion / fix:** `WeaponGivePacket` pickup mirroring is parked by default.
+`g_pickup_relay=false` now gates sender, receiver, and pending apply paths, so local
+native pickup can proceed without forcing a cross-process GiveWeapon on the puppet.
+Held-weapon/loadout sync remains separate. Status: REJECTED for direct GiveWeapon
+pickup relay until a safer native `NetEventSyncWeaponPickups` apply path is proven.

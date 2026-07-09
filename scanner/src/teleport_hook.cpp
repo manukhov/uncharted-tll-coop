@@ -835,7 +835,11 @@ FireEventRing g_fire_event_ring{};
 // ---- Weapon-pickup relay (2026-07-06, design in initial-findings) ----
 // Sender: OnInteract hook captures the WeaponPickup runtime id; receiver applies
 // a stack-built NetEventSyncWeaponPickups (native net-pick-up-other-client flow).
-volatile bool g_pickup_relay = true;
+// Weapon pickup/GiveWeapon relay is parked after Type-97 (0x27617d0d) froze the
+// receiver in the native GiveWeapon apply path. Held-weapon display for known
+// loadout arts remains active; pickup inventory mirroring needs a safer native
+// NetEventSyncWeaponPickups path before this can come back on.
+volatile bool g_pickup_relay = false;
 std::atomic<std::uint32_t> g_pickup_send_seq{0};
 std::atomic<std::uint32_t> g_pending_pickup_id{0};
 std::atomic<float> g_pending_pickup_ammo{0.0F};
@@ -3115,7 +3119,8 @@ void __fastcall hooked_give_weapon_tail(
     bool relay_pickup_after_give = false;
     coop::WeaponGivePacket relay_pkt{};
     void* relay_local_player = nullptr;
-    if (g_state_net.enabled && g_state_net.peer_set && weapon_info != nullptr) {
+    if (g_pickup_relay && g_state_net.enabled && g_state_net.peer_set &&
+        weapon_info != nullptr) {
         const std::uintptr_t ret =
             reinterpret_cast<std::uintptr_t>(_ReturnAddress());
         if (ret - g_module == kPickupGiveRetRva) {
@@ -6173,7 +6178,8 @@ DWORD WINAPI state_recv_thread(void*) {
                    received == static_cast<int>(sizeof(coop::WeaponGivePacket))) {
             coop::WeaponGivePacket gp{};
             std::memcpy(&gp, buf, sizeof(gp));
-            if (gp.version == coop::kWeaponGiveVersion &&
+            if (g_pickup_relay &&
+                gp.version == coop::kWeaponGiveVersion &&
                 gp.weapon_art_id != 0 &&
                 gp.sequence != g_last_applied_weapon_give_seq.load(
                                    std::memory_order_relaxed) &&
@@ -9389,6 +9395,10 @@ bool sync_weapon_pickup_consume(
 // +24 count, +28 {u32 id, float ammo}) and calls its Apply, which resolves the id
 // via the game-object handle registry and drives net-pick-up-other-client.
 void apply_peer_weapon_pickup() {
+    if (!g_pickup_relay) {
+        g_pending_pickup_flag.store(false, std::memory_order_release);
+        return;
+    }
     if (!g_pending_pickup_flag.load(std::memory_order_acquire)) {
         return;
     }
@@ -9512,6 +9522,10 @@ bool puppet_relay_give_ready(void* puppet) {
 // pickup event, using the sender's captured POD WeaponInfo block. Deliberately
 // no retry and no verification loop: every prior fountain came from re-giving.
 void apply_peer_weapon_give() {
+    if (!g_pickup_relay) {
+        g_pending_weapon_give_flag.store(false, std::memory_order_release);
+        return;
+    }
     if (!g_pending_weapon_give_flag.load(std::memory_order_acquire)) {
         return;
     }
