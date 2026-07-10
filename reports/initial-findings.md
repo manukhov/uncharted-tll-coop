@@ -26374,3 +26374,29 @@ the relayed launch state, or spawn a ProjectileGrenade and set pos/vel/quat dire
 then let native physics fly+explode it. Then explosion double-damage policy. The
 throw ANIMATION on the puppet stays walled (cosmetic); the grenade itself is
 fully syncable. Probe code (GRENADE-INIT/TRACK) retained.
+
+### 2026-07-11 GRENADE SYNC — receiver spawn is the hard sub-problem (ABI is throw-math-derived)
+
+EmitGrenadeProjectile `0x14154B3B0` has ONE caller, the throw action `sub_14040CEF0`
+(0xbac). Its 7 args are computed by heavy per-throw vector math from the thrower's
+pose/velocity/aim (`BuildWorldBasisVectorFromRuntimeTransform(_R14+32,...)`, a launch
+transform `&v235`, aux struct `&v233`, flag/id ints `v230/v110/v74/v200`, `_R14` =
+thrower). DIRECT ARG CONSTRUCTION IS NOT VIABLE - reproducing the args = reproducing
+sub_14040CEF0. (Saves the next agent from trying.)
+
+**Two viable receiver-spawn paths (both non-trivial):**
+1. Call-site capture-replay: patch the `call EmitGrenadeProjectile` at 0x14040D852
+   to a thunk that snapshots the 7 args (deref the &v233/&v235 stack structs to bytes)
+   and relays them; receiver calls sub_14154B3B0 with the relayed bytes + local
+   thrower=puppet. Pro: args are VALID (from a real throw). Con: needs a raw
+   machine-code thunk (MSVC x64 has no __declspec(naked)) - fragile, crash-prone.
+2. Explosion-only sync (recommended v1): SKIP the flying-grenade visual; relay only
+   the DETONATION. Sender detects grenade destroy/fuse-end -> relay explosion
+   position; receiver triggers explosion effect+damage there (process-explosion.cpp,
+   GameArmor::ComputeExplosionDamage 0x140294610, explosion AttackInfo). Delivers the
+   gameplay-critical part (damage/shake/effect); loses only the cosmetic arc. Still
+   needs an explosion-trigger ABI but that path is already partly reversed (AttackInfo).
+
+**Confirmed working today:** flight capture (pos@0x240, vel@0x260, quat@0x140 one
+frame after Init hook). The blocker is purely the native spawn/detonate call ABI.
+Throw ANIM stays walled. Probe (GRENADE-INIT/TRACK) retained; baseline stable.
