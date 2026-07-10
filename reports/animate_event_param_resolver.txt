@@ -1,0 +1,7 @@
+=== 0x14043DEB0: sub_14043DEB0 [0x14043DEB0..0x14043DEB5] ===
+// attributes: thunk
+__int64 __fastcall sub_14043DEB0(_DWORD *a1)
+{
+  return sub_141831310(a1);
+}
+

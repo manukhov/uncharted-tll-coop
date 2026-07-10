@@ -1,0 +1,4 @@
+0xFB1091A3 0x1428EBE38 'give-weapon'
+0x09A3F435 0x1428EC868 'play-animation'
+0xC1F3F991 0x142B3D988 'play-simple-gesture'
+matches=3

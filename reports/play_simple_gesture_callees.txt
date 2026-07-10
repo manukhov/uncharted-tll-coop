@@ -1,0 +1,528 @@
+=== 0x141BB9960: sub_141BB9960 [0x141BB9960..0x141BB9968] ===
+__int64 __fastcall sub_141BB9960(__int64 a1)
+{
+  return *(_QWORD *)(a1 + 416);
+}
+
+=== 0x141729FB0: sub_141729FB0 [0x141729FB0..0x14172A063] ===
+__int64 __fastcall sub_141729FB0(__int64 a1, unsigned int a2)
+{
+  unsigned int **v2; // rdi
+  unsigned __int64 v3; // r8
+  unsigned int v5; // ebx
+  unsigned int v6; // eax
+  unsigned int *v7; // rdi
+  __int64 v9; // r9
+  unsigned __int64 v11; // [rsp+20h] [rbp-18h] BYREF
+  unsigned int v12; // [rsp+28h] [rbp-10h]
+  unsigned int v13; // [rsp+48h] [rbp+10h] BYREF
+
+  v2 = *(unsigned int ***)(a1 + 96);
+  v3 = a2;
+  if ( v2 )
+  {
+    v5 = 0;
+    v11 = 0;
+    v6 = 0;
+    if ( a2 )
+    {
+      v5 = a2;
+      LODWORD(v11) = a2;
+      HIDWORD(v11) = a2;
+    }
+    v7 = *v2;
+    if ( !byte_143682FE8 || *v7 )
+    {
+      sub_1417F9F00(v7, &v13, v5, 0);
+      v6 = *v7;
+      v11 = __PAIR64__(v13, v5);
+    }
+    __asm { vmovsd  xmm0, [rsp+38h+var_18] }
+    __asm { vmovsd  [rsp+38h+var_18], xmm0 }
+    v3 = HIDWORD(v11);
+    v12 = v6;
+  }
+  sub_1417CA2E0(a1 + 120, &v11, v3);
+  LOBYTE(v9) = 1;
+  return sub_1417C8E20(HIDWORD(v11), v12, (unsigned int)v11, v9);
+}
+
+=== 0x1401E3750: sub_1401E3750 [0x1401E3750..0x1401E381F] ===
+__int64 __fastcall sub_1401E3750(__int64 _RCX, int a2, __int64 _R8)
+{
+  *(_DWORD *)_RCX = a2;
+  __asm
+  {
+    vmovups xmm0, xmmword ptr [r8]
+    vmovups xmmword ptr [rcx+8], xmm0
+    vmovups xmm1, cs:xmmword_1467071D8
+    vmovups xmmword ptr [rcx+18h], xmm1
+  }
+  *(_DWORD *)(_RCX + 52) = 0;
+  *(_QWORD *)(_RCX + 40) = 0;
+  *(_DWORD *)(_RCX + 68) = 0;
+  *(_QWORD *)(_RCX + 56) = 0;
+  *(_DWORD *)(_RCX + 84) = 0;
+  *(_QWORD *)(_RCX + 72) = 0;
+  *(_DWORD *)(_RCX + 100) = 0;
+  *(_QWORD *)(_RCX + 88) = 0;
+  *(_DWORD *)(_RCX + 116) = 0;
+  *(_QWORD *)(_RCX + 104) = 0;
+  *(_DWORD *)(_RCX + 132) = 0;
+  *(_QWORD *)(_RCX + 120) = 0;
+  *(_DWORD *)(_RCX + 148) = 0;
+  *(_QWORD *)(_RCX + 136) = 0;
+  *(_DWORD *)(_RCX + 164) = 0;
+  *(_QWORD *)(_RCX + 152) = 0;
+  *(_DWORD *)(_RCX + 180) = 0;
+  *(_QWORD *)(_RCX + 168) = 0;
+  *(_DWORD *)(_RCX + 196) = 0;
+  *(_QWORD *)(_RCX + 184) = 0;
+  *(_DWORD *)(_RCX + 212) = 0;
+  *(_QWORD *)(_RCX + 200) = 0;
+  *(_DWORD *)(_RCX + 228) = 0;
+  *(_QWORD *)(_RCX + 216) = 0;
+  *(_DWORD *)(_RCX + 244) = 0;
+  *(_QWORD *)(_RCX + 232) = 0;
+  *(_DWORD *)(_RCX + 260) = 0;
+  *(_QWORD *)(_RCX + 248) = 0;
+  *(_DWORD *)(_RCX + 276) = 0;
+  *(_QWORD *)(_RCX + 264) = 0;
+  *(_QWORD *)(_RCX + 292) = 0;
+  *(_QWORD *)(_RCX + 280) = 0;
+  return _RCX;
+}
+
+=== 0x1401D5220: sub_1401D5220 [0x1401D5220..0x1401D522B] ===
+__int64 __fastcall sub_1401D5220(__int64 a1, __int64 a2, int a3)
+{
+  *(_DWORD *)(a1 + 12) = a3;
+  *(_QWORD *)a1 = a2;
+  return a1;
+}
+
+=== 0x1401E36A0: sub_1401E36A0 [0x1401E36A0..0x1401E3750] ===
+__int64 __fastcall sub_1401E36A0(__int64 a1, __int64 a2)
+{
+  __int64 (*v4)(const char *, ...); // rdi
+  const char *v5; // rcx
+  __int64 result; // rax
+
+  _RSI = a2;
+  _RBX = a1;
+  if ( *(__int16 *)(a1 + 296) >= 16 )
+  {
+    v4 = qword_146B17C08;
+    if ( !qword_146B17C08 )
+      goto LABEL_6;
+    v5 = &byte_1428D4552;
+    if ( qword_146B17C00 )
+      v5 = (const char *)qword_146B17C00("Ran out of Event params -- we need to bump kMaxFixedParams beyond %u", 16);
+    if ( !(unsigned __int8)v4(
+                             "m_numParams < kMaxFixedParams",
+                             "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\process\\event.h",
+                             "Event::PushParam",
+                             "Jun 30 2023 19:08:04",
+                             192,
+                             v5) )
+    {
+LABEL_6:
+      sub_1422053E0(a1);
+      __debugbreak();
+    }
+  }
+  __asm { vmovups xmm0, xmmword ptr [rsi] }
+  result = 2LL * *(__int16 *)(_RBX + 296);
+  __asm { vmovups xmmword ptr [rbx+rax*8+28h], xmm0 }
+  ++*(_WORD *)(_RBX + 296);
+  return result;
+}
+
+=== 0x141E4FDD0: sub_141E4FDD0 [0x141E4FDD0..0x141E50478] ===
+__int64 __fastcall sub_141E4FDD0(__int64 _RCX, __int64 a2)
+{
+  unsigned __int8 v4; // r12
+  __int64 v6; // rcx
+  __int128 *v7; // rcx
+  _DWORD *v8; // rsi
+  __int64 v9; // rax
+  __int64 v10; // rcx
+  __int64 *v11; // rax
+  __int64 v13; // r9
+  int v14; // eax
+  int v15; // ebp
+  unsigned int v17; // ebx
+  __int64 v18; // rax
+  __int64 *v19; // rdi
+  __int64 v21; // r9
+  __int64 v22; // rax
+  __int64 v23; // rax
+  __int64 v24; // rax
+  __int64 v25; // rax
+  __int64 v26; // rax
+  __int64 v27; // rax
+  __int64 v28; // rax
+  __int64 v29; // rax
+  __int64 v30; // rax
+  __int64 v31; // rax
+  __int64 v32; // rax
+  __int64 v33; // rax
+  __int64 v34; // rax
+  __int64 v35; // rax
+  __int64 v36; // rax
+  __int64 v37; // rax
+  __int64 v38; // rax
+  __int64 v39; // rax
+  __int64 v40; // rax
+  __int64 v41; // rax
+  int v42; // r9d
+  const char *v43; // rbx
+  const char *v44; // rbp
+  const char *v45; // rax
+  char *v46; // rbx
+  __int64 v47; // rax
+  const char *v48; // rax
+  __int64 v50; // [rsp+20h] [rbp-68h]
+  __int128 v51; // [rsp+30h] [rbp-58h] BYREF
+  _DWORD v52[3]; // [rsp+40h] [rbp-48h] BYREF
+  int v53; // [rsp+4Ch] [rbp-3Ch]
+  int v54; // [rsp+50h] [rbp-38h]
+
+  HIDWORD(v51) = 1;
+  _R15 = _RCX;
+  *(_QWORD *)&v51 = 0;
+  v4 = 0;
+  __asm
+  {
+    vmovups xmm0, [rsp+88h+var_58]
+    vmovups xmmword ptr [rcx+18h], xmm0
+  }
+  (*(void (__fastcall **)(__int64, _DWORD *))(*(_QWORD *)a2 + 16LL))(a2, v52);
+  if ( *(_WORD *)(_R15 + 296) != 1
+    && (!qword_146B17C08
+     || !(unsigned __int8)qword_146B17C08(
+                            "event.GetNumParams() == 1",
+                            "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\gamelib\\state-script\\ss-animate.cpp",
+                            "SsAnimateController::HandleEventAnimate",
+                            "Jun 30 2023 19:07:26",
+                            2926,
+                            0)) )
+  {
+    sub_1422053E0(v6);
+    __debugbreak();
+  }
+  v7 = (__int128 *)(_R15 + 40);
+  if ( *(__int16 *)(_R15 + 296) <= 0 )
+    v7 = &xmmword_1467071D8;
+  v8 = (_DWORD *)sub_141831310(v7);
+  v9 = (*(__int64 (__fastcall **)(__int64))(*(_QWORD *)a2 + 8LL))(a2);
+  if ( v9 )
+  {
+    v10 = *(_QWORD *)(v9 + 424);
+    *(_DWORD *)(v10 + 724) = 0;
+  }
+  if ( !v8 )
+  {
+    if ( !qword_146B17C08
+      || (LODWORD(v50) = 2936,
+          !(unsigned __int8)qword_146B17C08(
+                              "pParams",
+                              "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\gamelib\\state-script\\ss-animate.cpp",
+                              "SsAnimateController::HandleEventAnimate",
+                              "Jun 30 2023 19:07:26",
+                              v50,
+                              0)) )
+    {
+      sub_1422053E0(v10);
+      __debugbreak();
+    }
+    goto LABEL_18;
+  }
+  if ( v8[2] )
+  {
+    v11 = (__int64 *)(*(__int64 (__fastcall **)(__int64, _QWORD))(*(_QWORD *)a2 + 32LL))(a2, (unsigned int)v8[2]);
+LABEL_15:
+    if ( !v11 )
+    {
+LABEL_18:
+      HIDWORD(v51) = 1;
+      *(_QWORD *)&v51 = 1;
+      __asm
+      {
+        vmovups xmm0, [rsp+88h+var_58]
+        vmovups xmmword ptr [r15+18h], xmm0
+      }
+      return v4;
+    }
+    __asm { vmovups xmm0, xmmword ptr [r15+8] }
+    v13 = *v11;
+    __asm { vmovups [rsp+88h+var_58], xmm0 }
+    v14 = (*(__int64 (__fastcall **)(__int64 *, _DWORD *, __int128 *))(v13 + 16))(v11, v8, &v51);
+    goto LABEL_17;
+  }
+  if ( !v8[1] )
+  {
+    v11 = (__int64 *)(*(__int64 (__fastcall **)(__int64, _QWORD))(*(_QWORD *)a2 + 24LL))(a2, v52[0]);
+    goto LABEL_15;
+  }
+  v17 = v53;
+  v15 = 8;
+  if ( v53 >= v54 )
+    goto LABEL_26;
+  while ( 1 )
+  {
+    v18 = (*(__int64 (__fastcall **)(__int64, _QWORD))(*(_QWORD *)a2 + 24LL))(a2, v17);
+    v19 = (__int64 *)v18;
+    if ( v18 )
+    {
+      if ( !(*(unsigned __int8 (__fastcall **)(__int64))(*(_QWORD *)v18 + 8LL))(v18) )
+      {
+        __asm { vmovups xmm0, xmmword ptr [r15+8] }
+        v21 = *v19;
+        __asm { vmovups [rsp+88h+var_58], xmm0 }
+        v14 = (*(__int64 (__fastcall **)(__int64 *, _DWORD *, __int128 *))(v21 + 16))(v19, v8, &v51);
+        if ( v14 != 6 )
+          break;
+      }
+    }
+    if ( (int)++v17 >= v54 )
+      goto LABEL_26;
+  }
+LABEL_17:
+  v15 = v14;
+  v4 = 1;
+  if ( !v14 )
+    goto LABEL_18;
+LABEL_26:
+  switch ( v15 )
+  {
+    case 1:
+      if ( *v8 )
+      {
+        sub_14014DB00(&byte_146B2C640, 32, "#%08X", *v8);
+        v25 = sub_141E4FAA0(a2);
+        sub_141CA13B0(
+          "ERROR: [%s]: Anim '%s': Object cannot animate because it is a dead process (null).\n",
+          v25,
+          &byte_146B2C640);
+      }
+      else
+      {
+        v24 = sub_141E4FAA0(a2);
+        sub_141CA13B0(
+          "ERROR: [%s]: Anim '%s': Object cannot animate because it is a dead process (null).\n",
+          v24,
+          "(INVALID_STRING_ID)");
+      }
+      break;
+    case 2:
+      if ( *v8 )
+      {
+        sub_14014DB00(&byte_146B2C640, 32, "#%08X", *v8);
+        v27 = sub_141E4FAA0(a2);
+        sub_141CA13B0("ERROR: [%s]: Anim '%s': Object has no AnimControl.\n", v27, &byte_146B2C640);
+      }
+      else
+      {
+        v26 = sub_141E4FAA0(a2);
+        sub_141CA13B0("ERROR: [%s]: Anim '%s': Object has no AnimControl.\n", v26, "(INVALID_STRING_ID)");
+      }
+      break;
+    case 3:
+      if ( *v8 )
+      {
+        sub_14014DB00(&byte_146B2C640, 32, "#%08X", *v8);
+        v29 = sub_141E4FAA0(a2);
+        sub_141CA13B0("ERROR: [%s]: Animation or state '%s' NOT FOUND.\n", v29, &byte_146B2C640);
+      }
+      else
+      {
+        v28 = sub_141E4FAA0(a2);
+        sub_141CA13B0("ERROR: [%s]: Animation or state '%s' NOT FOUND.\n", v28, "(INVALID_STRING_ID)");
+      }
+      break;
+    case 4:
+      if ( *v8 )
+      {
+        sub_14014DB00(&byte_146B2C640, 32, "#%08X", *v8);
+        v31 = sub_141E4FAA0(a2);
+        sub_141CA13B0("ERROR: [%s]: Anim '%s' has no clip data!\n", v31, &byte_146B2C640);
+      }
+      else
+      {
+        v30 = sub_141E4FAA0(a2);
+        sub_141CA13B0("ERROR: [%s]: Anim '%s' has no clip data!\n", v30, "(INVALID_STRING_ID)");
+      }
+      break;
+    case 5:
+      if ( *v8 )
+      {
+        sub_14014DB00(&byte_146B2C640, 32, "#%08X", *v8);
+        v33 = sub_141E4FAA0(a2);
+        sub_141CA13B0("ERROR: [%s]: State '%s' was found,\nbut its phase anim was NOT FOUND.\n", v33, &byte_146B2C640);
+      }
+      else
+      {
+        v32 = sub_141E4FAA0(a2);
+        sub_141CA13B0(
+          "ERROR: [%s]: State '%s' was found,\nbut its phase anim was NOT FOUND.\n",
+          v32,
+          "(INVALID_STRING_ID)");
+      }
+      break;
+    case 6:
+      if ( *v8 )
+      {
+        sub_14014DB00(&byte_146B2C640, 32, "#%08X", *v8);
+        v35 = sub_141E4FAA0(a2);
+        sub_141CA13B0(
+          "WARNING: [%s]: Attempt to play ADDITIVE or PARTIAL animation '%s' on the base layer.\n",
+          v35,
+          &byte_146B2C640);
+      }
+      else
+      {
+        v34 = sub_141E4FAA0(a2);
+        sub_141CA13B0(
+          "WARNING: [%s]: Attempt to play ADDITIVE or PARTIAL animation '%s' on the base layer.\n",
+          v34,
+          "(INVALID_STRING_ID)");
+      }
+      break;
+    case 7:
+      if ( *v8 )
+      {
+        sub_14014DB00(&byte_146B2C640, 32, "#%08X", *v8);
+        v39 = sub_141E4FAA0(a2);
+        sub_141CA13B0(
+          "[%s]: Animation/state '%s' FAILED\n    - NPC does not have the 'scripted-animation' skill.\n",
+          v39,
+          &byte_146B2C640);
+      }
+      else
+      {
+        v38 = sub_141E4FAA0(a2);
+        sub_141CA13B0(
+          "[%s]: Animation/state '%s' FAILED\n    - NPC does not have the 'scripted-animation' skill.\n",
+          v38,
+          "(INVALID_STRING_ID)");
+      }
+      break;
+    case 8:
+      if ( *v8 )
+      {
+        sub_14014DB00(&byte_146B2C640, 32, "#%08X", *v8);
+        v37 = sub_141E4FAA0(a2);
+        sub_141CA13B0(
+          "[%s]: Animation/state '%s' FAILED\n"
+          "    - no more gesture layers available. Add num-layers-needed = # to tags\n",
+          v37,
+          &byte_146B2C640);
+      }
+      else
+      {
+        v36 = sub_141E4FAA0(a2);
+        sub_141CA13B0(
+          "[%s]: Animation/state '%s' FAILED\n"
+          "    - no more gesture layers available. Add num-layers-needed = # to tags\n",
+          v36,
+          "(INVALID_STRING_ID)");
+      }
+      break;
+    case 10:
+      if ( *v8 )
+      {
+        sub_14014DB00(&byte_146B2C640, 32, "#%08X", *v8);
+        v41 = sub_141E4FAA0(a2);
+        sub_141CA13B0(
+          "[%s]: Animation/state '%s' FAILED\n    - disallowed (e.g. tried to animate a dead character).\n",
+          v41,
+          &byte_146B2C640);
+      }
+      else
+      {
+        v40 = sub_141E4FAA0(a2);
+        sub_141CA13B0(
+          "[%s]: Animation/state '%s' FAILED\n    - disallowed (e.g. tried to animate a dead character).\n",
+          v40,
+          "(INVALID_STRING_ID)");
+      }
+      break;
+    case 11:
+      v42 = v8[32];
+      v43 = "(INVALID_STRING_ID)";
+      if ( v42 )
+      {
+        sub_14014DB00(&byte_146B2C640, 32, "#%08X", v42);
+        v44 = &byte_146B2C640;
+      }
+      else
+      {
+        v44 = "(INVALID_STRING_ID)";
+      }
+      if ( *v8 )
+      {
+        sub_14014DB00(&byte_146B2C640, 32, "#%08X", *v8);
+        v43 = &byte_146B2C640;
+      }
+      v45 = (const char *)sub_141E4FAA0(a2);
+      sub_141CA13B0("ERROR: [%s]: Animation/state '%s': Custom apReference channel '%s' NOT FOUND.\n", v45, v43, v44);
+      break;
+    case 12:
+      if ( *v8 )
+      {
+        sub_14014DB00(&byte_146B2C640, 32, "#%08X", *v8);
+        v23 = sub_141E4FAA0(a2);
+        sub_141CA13B0(
+          "ERROR: [%s]: Cinematic anim '%s': Cinematic process not spawned (race condition?)\n",
+          v23,
+          &byte_146B2C640);
+      }
+      else
+      {
+        v22 = sub_141E4FAA0(a2);
+        sub_141CA13B0(
+          "ERROR: [%s]: Cinematic anim '%s': Cinematic process not spawned (race condition?)\n",
+          v22,
+          "(INVALID_STRING_ID)");
+      }
+      break;
+    default:
+      if ( *v8 )
+      {
+        sub_14014DB00(&byte_146B2C640, 32, "#%08X", *v8);
+        v46 = &byte_146B2C640;
+      }
+      else
+      {
+        v46 = "(INVALID_STRING_ID)";
+      }
+      v47 = (*(__int64 (__fastcall **)(__int64))(*(_QWORD *)a2 + 8LL))(a2);
+      if ( v47 )
+        v48 = (const char *)(*(__int64 (__fastcall **)(__int64))(*(_QWORD *)v47 + 40LL))(v47);
+      else
+        v48 = "<null owner>";
+      sub_141CA13B0(
+        "[%s]: Animation/state '%s' FAILED\n    - ask programmers to add an error message for this case!\n",
+        v48,
+        v46);
+      break;
+  }
+  return v4;
+}
+
+=== 0x140DCDC50: sub_140DCDC50 [0x140DCDC50..0x140DCDC62] ===
+_QWORD *__fastcall sub_140DCDC50(_QWORD *a1, __int64 a2)
+{
+  a1[1] = a2;
+  *a1 = &PlayerSsAnimateEventContext::`vftable';
+  return a1;
+}
+
+=== 0x140DCDCA0: sub_140DCDCA0 [0x140DCDCA0..0x140DCDCAB] ===
+void **__fastcall sub_140DCDCA0(_QWORD *a1)
+{
+  *a1 = &ISsAnimateEventContext::`vftable';
+  return &ISsAnimateEventContext::`vftable';
+}
+

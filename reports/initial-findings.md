@@ -25807,3 +25807,28 @@ output, camera block) = ВЫХОД, пересчитывается каждый 
 контроллеры куклы: aim-стейт и interact-стейт-машина). Забанкать рабочее (оружие,
 огонь, горизонт-aim, локомоция, транспорт, здоровье) и переключиться на фичи вне
 этой стены. Диагностика (Numpad+ CAMROW/AIMROW) оставлена для будущих заходов.
+### 2026-07-10 (RUNTIME REJECT): pickup bend is neither play-simple-gesture nor direct play-animation
+
+Static analysis mapped the two reusable authored Player animation paths in
+`Player_ScriptWeaponEventHandler 0x140DCDEA0`:
+
+- CRC `0xC1F3F991` is `play-simple-gesture`. It resolves `<gesture>--part` and
+  `<gesture>--add` against `Player+0x1A0` and calls
+  `SsAnimateController::HandleEventAnimate 0x141E4FDD0`.
+- CRC `0x09A3F435` is direct `play-animation`. Its single Event parameter is a
+  pointer-backed, type-18, 264-byte `AnimateParams`; `0x14043DEB0 -> 0x141831310`
+  resolves the pointer. `InitializeAnimateParams 0x141E45980` proves the payload
+  is scalar/StringId/matrix POD; the actor handle is rebuilt separately.
+- The retail handler prologue is trampoline-safe and begins with hidden neutral
+  REX byte `0x40` before the seven pushes; runtime bytes matched the final 20-byte
+  signature and the detour installed in both copies.
+
+Two runtime builds then observed repeated real M-30 pickups. Every pickup logged
+`GiveWeapon ret_rva=0xDD4208`, sent/received the weapon block, and completed
+SLOT-MIRROR, but logged no `play-simple-gesture` and no `play-animation` on the
+sender. Thus the visible local bend is generated outside both authored Player
+event paths; relaying these events is **REJECTED** as a pickup-animation solution.
+All experimental runtime code was removed after the falsifier. The evidence now
+supports the foundational path: identify and activate the stock local-player-1
+controller scheduler/ownership for the retained slot-1 Player instead of adding
+another per-feature animation replay.

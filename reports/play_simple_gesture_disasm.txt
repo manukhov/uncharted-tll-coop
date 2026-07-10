@@ -1,0 +1,134 @@
+0x140DD2FB3: lea     rcx, [rbp+4850h+var_2890]
+0x140DD2FBA: call    sub_141E45980
+0x140DD2FBF: mov     [rbp+4850h+var_288C], esi
+0x140DD2FC5: vmovss  [rbp+4850h+var_287C], xmm10
+0x140DD2FCD: vmovss  [rbp+4850h+var_2870], xmm10
+0x140DD2FD5: mov     rdx, r12
+0x140DD2FD8: lea     rcx, [rbp+4850h+var_4420]
+0x140DD2FDF: call    sub_140DCDC50
+0x140DD2FE4: nop
+0x140DD2FE5: cmp     r14w, [r13+128h]
+0x140DD2FED: lea     rcx, [r13+28h]
+0x140DD2FF1: jl      short loc_140DD2FF6
+0x140DD2FF3: mov     rcx, r15
+0x140DD2FF6: lea     rdx, [rbp+4850h+var_4880]
+0x140DD2FFA: call    sub_1401D5260
+0x140DD2FFF: mov     r9b, 1
+0x140DD3002: lea     r8, aPart; "--part"
+0x140DD3009: mov     edx, [rbp+4850h+var_4880]
+0x140DD300C: lea     rcx, [rbp+4850h+var_4858]
+0x140DD3010: call    sub_1417AA7F0
+0x140DD3015: mov     r9b, 1
+0x140DD3018: lea     r8, aAdd_0; "--add"
+0x140DD301F: mov     edx, [rbp+4850h+var_4880]
+0x140DD3022: lea     rcx, [rbp+4850h+var_4854]
+0x140DD3026: call    sub_1417AA7F0
+0x140DD302B: mov     rcx, r12
+0x140DD302E: call    sub_141BB9960
+0x140DD3033: mov     rcx, rax
+0x140DD3036: mov     edx, [rbp+4850h+var_4858]
+0x140DD3039: call    sub_141729FB0
+0x140DD303E: mov     rdi, rax
+0x140DD3041: mov     rcx, r12
+0x140DD3044: call    sub_141BB9960
+0x140DD3049: mov     rcx, rax
+0x140DD304C: mov     edx, [rbp+4850h+var_4854]
+0x140DD304F: call    sub_141729FB0
+0x140DD3054: mov     rbx, rax
+0x140DD3057: test    rdi, rdi
+0x140DD305A: jz      loc_140DD3105
+0x140DD3060: mov     ecx, [rbp+4850h+var_4858]
+0x140DD3063: mov     [rbp+4850h+var_2890], ecx
+0x140DD3069: lea     rcx, [r13+8]
+0x140DD306D: call    sub_14014DCE0
+0x140DD3072: mov     rdx, rax
+0x140DD3075: lea     rcx, [rbp+4850h+var_3890]
+0x140DD307C: call    sub_14014DDC0
+0x140DD3081: vmovups xmm0, xmmword ptr [rax]
+0x140DD3085: vmovups [rbp+4850h+var_48C0], xmm0
+0x140DD308A: mov     edx, 0Eh
+0x140DD308F: lea     rcx, aPlayAnimation; "play-animation"
+0x140DD3096: call    sub_14014D910
+0x140DD309B: mov     rdx, rax
+0x140DD309E: lea     rcx, [rbp+4850h+var_45B0]
+0x140DD30A5: call    sub_14014E690
+0x140DD30AA: lea     r8, [rbp+4850h+var_48C0]
+0x140DD30AE: mov     edx, [rax]
+0x140DD30B0: lea     rcx, [rbp+4850h+var_25B0]
+0x140DD30B7: call    sub_1401E3750
+0x140DD30BC: nop
+0x140DD30BD: mov     r8d, 12h
+0x140DD30C3: lea     rdx, [rbp+4850h+var_2890]
+0x140DD30CA: lea     rcx, [rbp+4850h+var_38A0]
+0x140DD30D1: call    sub_1401D5220
+0x140DD30D6: mov     rdx, rax
+0x140DD30D9: lea     rcx, [rbp+4850h+var_25B0]
+0x140DD30E0: call    sub_1401E36A0
+0x140DD30E5: lea     rdx, [rbp+4850h+var_4420]
+0x140DD30EC: lea     rcx, [rbp+4850h+var_25B0]
+0x140DD30F3: call    sub_141E4FDD0
+0x140DD30F8: nop
+0x140DD30F9: lea     rcx, [rbp+4850h+var_25B0]
+0x140DD3100: call    nullsub_48
+0x140DD3105: test    rbx, rbx
+0x140DD3108: jz      loc_140DD31B3
+0x140DD310E: mov     eax, [rbp+4850h+var_4854]
+0x140DD3111: mov     [rbp+4850h+var_2890], eax
+0x140DD3117: lea     rcx, [r13+8]
+0x140DD311B: call    sub_14014DCE0
+0x140DD3120: mov     rdx, rax
+0x140DD3123: lea     rcx, [rbp+4850h+var_38C0]
+0x140DD312A: call    sub_14014DDC0
+0x140DD312F: vmovups xmm0, xmmword ptr [rax]
+0x140DD3133: vmovups [rbp+4850h+var_48C0], xmm0
+0x140DD3138: mov     edx, 0Eh
+0x140DD313D: lea     rcx, aPlayAnimation; "play-animation"
+0x140DD3144: call    sub_14014D910
+0x140DD3149: mov     rdx, rax
+0x140DD314C: lea     rcx, [rbp+4850h+var_45AC]
+0x140DD3153: call    sub_14014E690
+0x140DD3158: lea     r8, [rbp+4850h+var_48C0]
+0x140DD315C: mov     edx, [rax]
+0x140DD315E: lea     rcx, [rbp+4850h+var_2480]
+0x140DD3165: call    sub_1401E3750
+0x140DD316A: nop
+0x140DD316B: mov     r8d, 12h
+0x140DD3171: lea     rdx, [rbp+4850h+var_2890]
+0x140DD3178: lea     rcx, [rbp+4850h+var_38D0]
+0x140DD317F: call    sub_1401D5220
+0x140DD3184: mov     rdx, rax
+0x140DD3187: lea     rcx, [rbp+4850h+var_2480]
+0x140DD318E: call    sub_1401E36A0
+0x140DD3193: lea     rdx, [rbp+4850h+var_4420]
+0x140DD319A: lea     rcx, [rbp+4850h+var_2480]
+0x140DD31A1: call    sub_141E4FDD0
+0x140DD31A6: nop
+0x140DD31A7: lea     rcx, [rbp+4850h+var_2480]
+0x140DD31AE: call    nullsub_48
+0x140DD31B3: test    rdi, rdi
+0x140DD31B6: jnz     short loc_140DD31E5
+0x140DD31B8: test    rbx, rbx
+0x140DD31BB: jnz     short loc_140DD31E5
+0x140DD31BD: mov     rax, [r12]
+0x140DD31C1: mov     rcx, r12
+0x140DD31C4: call    qword ptr [rax+28h]
+0x140DD31C7: mov     rbx, rax
+0x140DD31CA: mov     ecx, [rbp+4850h+var_4880]
+0x140DD31CD: call    sub_1417AA880
+0x140DD31D2: mov     rdx, rax
+0x140DD31D5: mov     r8, rbx
+0x140DD31D8: lea     rcx, aGestureSNotFou; "Gesture '%s' not found for '%s'\n"
+0x140DD31DF: call    sub_141CA13B0
+0x140DD31E4: nop
+0x140DD31E5: lea     rcx, [rbp+4850h+var_4420]
+0x140DD31EC: call    sub_140DCDCA0
+0x140DD31F1: jmp     loc_140DD42D8
+0x140DD31F6: cmp     [r13+128h], si
+0x140DD31FE: jl      loc_140DD42D8
+0x140DD3204: lea     rcx, [r13+28h]
+0x140DD3208: call    sub_140DD9D90
+0x140DD320D: mov     rbx, rax
+0x140DD3210: cmp     si, [r13+128h]
+0x140DD3218: lea     rcx, [r13+38h]
+0x140DD321C: jl      short loc_140DD3221
+0x140DD321E: mov     rcx, r15

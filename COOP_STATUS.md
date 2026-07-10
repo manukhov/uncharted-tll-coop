@@ -1,5 +1,22 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-10, Codex — direct authored pickup-animation relay REJECTED; full slot-1 controller model opened)
+
+**Runtime result:** two instrumented builds hooked the local Player script-event
+handler (`0x140DCDEA0`) and relayed both `play-simple-gesture` (`0xC1F3F991`) and
+direct `play-animation` (`0x09A3F435`). Across repeated real M-30 pickups,
+`GiveWeapon ret_rva=0xDD4208` and `WeaponGivePacket + SLOT-MIRROR` fired, but neither
+animation event appeared on the sender. Therefore the visible bend is not carried
+by either authored Player event and this direct relay cannot synchronize it.
+
+The experimental packet/hook/apply code was removed; the stable gameplay path is
+unchanged. Reusable IDA tools were added for CRC preimages and narrow disassembly
+ranges. **New direction requested by user:** materialize the puppet as the stock
+local-player-1 controller model, identifying the scheduler/ownership difference
+between the already-full retained slot-1 `Player` (`screen=1`, Joypad 3) and the
+engine's dormant local second-player path. Pickup/aim should then be consequences
+of the same ticking per-player controllers rather than per-feature replay.
+
 ## Turn note (2026-07-10, Claude — pickup-anim + aim-pitch мапнуты до архитектурной стены; забанкали рабочее)
 
 **Итог хода.** Диагностировал застревание Codex по анимации подбора и размотал

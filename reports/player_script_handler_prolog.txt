@@ -1,0 +1,34 @@
+0x140DCDEA0: push    rbp; Player script-event handler (switch on event name-hash). Hash 0xFB1091A3 branch = give-weapon: builds WeaponInfo and calls GiveWeapon (vt+0x158). The real ground-pickup give path (ret addr 0x140DD4208).
+0x140DCDEA2: push    rsi
+0x140DCDEA3: push    rdi
+0x140DCDEA4: push    r12
+0x140DCDEA6: push    r13
+0x140DCDEA8: push    r14
+0x140DCDEAA: push    r15
+0x140DCDEAC: lea     rbp, [rsp-4820h]
+0x140DCDEB4: mov     eax, 4920h
+0x140DCDEB9: call    _alloca_probe
+0x140DCDEBE: sub     rsp, rax
+0x140DCDEC1: mov     [rbp+4850h+var_4228], 0FFFFFFFFFFFFFFFEh
+0x140DCDECC: mov     [rsp+4950h+arg_10], rbx
+0x140DCDED4: vmovaps [rsp+4950h+var_40], xmm6
+0x140DCDEDD: vmovaps [rsp+4950h+var_50], xmm7
+0x140DCDEE6: vmovaps [rsp+4950h+var_60], xmm8
+0x140DCDEEF: vmovaps [rsp+4950h+var_70], xmm9
+0x140DCDEF8: vmovaps [rsp+4950h+var_80], xmm10
+0x140DCDF01: vmovaps [rsp+4950h+var_90], xmm11
+0x140DCDF0A: vmovaps [rsp+4950h+var_A0], xmm12
+0x140DCDF13: vmovaps [rsp+4950h+var_B0], xmm13
+0x140DCDF1C: mov     rax, cs:__security_cookie
+0x140DCDF23: xor     rax, rsp
+0x140DCDF26: mov     [rbp+4850h+var_C0], rax
+0x140DCDF2D: mov     r13, rdx
+0x140DCDF30: mov     r12, rcx
+0x140DCDF33: mov     rcx, [rcx+3FD8h]
+0x140DCDF3A: test    rcx, rcx
+0x140DCDF3D: jz      short loc_140DCDFAA
+0x140DCDF3F: mov     rax, [rcx]
+0x140DCDF42: mov     r8, rdx
+0x140DCDF45: lea     rdx, [rbp+4850h+var_47C8]
+0x140DCDF4C: call    qword ptr [rax+40h]
+0x140DCDF4F: cmp     [rbp+4850h+var_47C8], 0
