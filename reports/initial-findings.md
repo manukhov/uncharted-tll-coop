@@ -26209,3 +26209,31 @@ list). **PARKED** until slot-1 controller materialization track opens.
 Code retained in `scanner/src/teleport_hook.cpp` (`g_pickup_relay` default ON; gesture
 arms only after mirror). Do not spend more runtime on command/dispatcher relay without
 static proof of interact SM tick on puppet.
+
+### 2026-07-10 REFRAME (decisive): the bit1/42FCF0 wall is the NPC path, NOT the Player puppet
+
+Decompile header of `Player_Update 0x1410EC230` states it plainly: it is **Player**
+class vtable+0x410 (vtable 0x142A4BFE8), and is **"Distinct from Npc/Buddy/Human
++0x410 at 0x14042FCF0."**
+
+Consequences (corrects many prior turns, both agents):
+- `sub_14042FCF0` (42FCF0) -> `sub_140421150` -> `Player_SyncControlHostEntityRoot
+  OnNetSkip 0x140422760`, gated by `player+0x15A9 bit1`, is the **Npc/Buddy/Human**
+  +0x410 update. The co-op puppet is a **Player** class object, so this chain does
+  NOT run for it and is NOT its promotion path. Forcing `+0x15A9 bit1` CRASHED
+  precisely because it forced the NPC hub chain onto a Player object mid-frame.
+- The puppet's real per-frame update is `Player_Update 0x1410EC230`, reached via the
+  anim manager (vtable+0x410, Exp4 CONFIRMED the puppet ticks it). So the puppet IS
+  updated as a Player; the missing interact/aim/decision-node behavior is gated
+  INSIDE Player_Update's callees, not by an absent tick and not by NPC bit1.
+
+**New target (Exp 5, static-first):** find the per-player gate inside Player_Update
+(0x1410EC230) / its interact+decision callees that promotes slot-0 but skips the
+puppet - almost certainly a "locally-controlled / has active input-controller / is
+active spot" check the puppet fails (its input is relayed, it has a joypad index but
+maybe no real InputManager/controller binding). That gate, flipped in-context, is the
+promotion lever - unlike the NPC bit1 which crashes. Do NOT chase 42FCF0/bit1/421150
+further for the puppet: wrong class path.
+
+Both pickup-anim and aim-pitch depend on this same Player_Update-internal interact/
+decision gate. Baseline stable, all experiments key-gated OFF.
