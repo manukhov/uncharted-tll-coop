@@ -25588,3 +25588,20 @@ For the two-instance PC path, strict aim now means physical RMB while this proce
 game window is foreground. Sender logs `STRICT-AIM-SEND ON/OFF` on transitions.
 This makes packet `0x200`, peer camera, and pose seed clear immediately on RMB
 release instead of latching phantom ADS.
+
+### 2026-07-10: Type-97 delayed SLOT-MIRROR GiveWeapon also hangs
+
+**Runtime sequence:** M30 (`0x3019CBEE`) completed
+`GIVEWEAPON-RELAY-APPLY ... ok=1`. Type-97 then completed sender pickup and receiver
+`GIVEWEAPON-RELAY-STORE-ONLY unsafe art=0x27617d0d`, after which logging stopped
+before a `SLOT-MIRROR` completion line and the game froze. This falsifies the
+hypothesis that only immediate packet apply was unsafe: the next game-thread tick
+removed/replaced slot 1 and entered the same puppet `GiveWeapon` through delayed
+slot mirroring.
+
+**Correction:** Type-97 is now rejected by the central puppet-give allow check,
+hard-blocked inside `safe_give_weapon_art_to_puppet`, and marked ungivable by
+`SLOT-MIRROR` before the current slot is removed. Its real `WeaponInfo` packet is
+still stored for static analysis. M30 and all previously safe pickup arts retain
+their existing relay path; when the peer replaces M30 with Type-97, the receiver
+keeps M30 visible rather than entering the known hang.

@@ -509,11 +509,10 @@ bool is_long_gun_relay_art(std::uint32_t art_id) {
     return art_id == kCoopRifleArtId || art_id == 0x3019CBEE;
 }
 
-bool is_pickup_give_relay_safe_art(std::uint32_t art_id) {
-    // Runtime 2026-07-09: immediate receiver GiveWeapon for Type-97 froze the
-    // game after GIVEWEAPON-RELAY-RECV, before the apply tail completed. The
-    // packet is still useful: store its real WeaponInfo and let SLOT-MIRROR
-    // perform the normal inventory reconciliation from the stable raw snapshot.
+bool is_puppet_give_safe_art(std::uint32_t art_id) {
+    // Runtime 2026-07-09/10: every puppet GiveWeapon route tested for Type-97
+    // hangs: both immediate packet apply and delayed SLOT-MIRROR materialization.
+    // Keep receiving its real block for analysis, but never call puppet GiveWeapon.
     return art_id != kCoopType97ArtId;
 }
 
@@ -625,6 +624,9 @@ void relayed_weapon_store_put(std::uint32_t art_id, const void* info) {
 }
 
 bool puppet_weapon_give_allowed(std::uint32_t art_id) {
+    if (!is_puppet_give_safe_art(art_id)) {
+        return false;
+    }
     // STRICT whitelist (synthetic give works for these three), plus any art whose
     // REAL WeaponInfo block arrived over the give relay - those give with full
     // fidelity and go through the same fail-memo/cooldown machinery.
@@ -7418,6 +7420,17 @@ bool safe_give_weapon_art_to_puppet(
     if (puppet == nullptr || art_id == 0 || g_module == 0) {
         return false;
     }
+    if (!is_puppet_give_safe_art(art_id)) {
+        static ULONGLONG last_unsafe_log = 0;
+        const ULONGLONG now = GetTickCount64();
+        if (now - last_unsafe_log > 2000) {
+            last_unsafe_log = now;
+            char line[96]{};
+            sprintf_s(line, "GIVEWEAPON-SKIP unsafe puppet art=0x%08x", art_id);
+            force_log_line(line);
+        }
+        return puppet_has_weapon_art_id(puppet, art_id);
+    }
     if (GetTickCount64() < g_give_weapon_fail_until_ms) {
         return false;
     }
@@ -7662,12 +7675,17 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
             continue;
         }
         const bool givable =
-            peer_art != 0 &&
+            peer_art != 0 && is_puppet_give_safe_art(peer_art) &&
             (is_coop_relay_fire_art(peer_art) ||
              relayed_weapon_store_find(peer_art) != nullptr);
         if (peer_art != 0 && !givable) {
             // Peer owns something we cannot recreate (no block relayed yet).
             // Leave the puppet's current weapon alone rather than stripping it.
+            m = {puppet, peer_art, now};
+            std::ostringstream line;
+            line << "SLOT-MIRROR-SKIP slot=" << slot << " unsafe/ungivable art=0x"
+                 << std::hex << peer_art << " keep=0x" << cur_art << std::dec;
+            force_log_line(line.str().c_str());
             continue;
         }
         m = {puppet, peer_art, now};
@@ -9552,7 +9570,7 @@ void apply_peer_weapon_give() {
         g_pending_weapon_give_slot.load(std::memory_order_relaxed));
     alignas(16) std::uint8_t info[coop::kWeaponInfoBytes];
     std::memcpy(info, g_pending_weapon_give_info, coop::kWeaponInfoBytes);
-    if (!is_pickup_give_relay_safe_art(art)) {
+    if (!is_puppet_give_safe_art(art)) {
         relayed_weapon_store_put(art, info);
         g_last_applied_weapon_give_seq.store(seq, std::memory_order_relaxed);
         g_pending_weapon_give_flag.store(false, std::memory_order_release);
