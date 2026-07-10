@@ -26287,3 +26287,29 @@ per-frame path. This tells us whether interact dispatch runs for the puppet.
 
 The vtable-swap probe code is retained (harmless: the swapped slot is never
 dispatched) but should be repointed or removed next turn. Baseline stable.
+
+### 2026-07-10 Exp 5b/c note: the ENTIRE interact path is frame-from-entry-rsp (un-trampolinable)
+
+`Player_BuildInteractDispatchState 0x140C805A0` prologue (live): `4C 8B DC
+(mov r11,rsp); push rbx/rsi/r15; 81 EC 60 04 00 00 (sub rsp,0x460)` - captures entry
+rsp in r11, same un-trampolinable class as Player_InteractDispatcher (mov rax,rsp)
+and GetTargetPointFromReticle. The whole authored interact pipeline uses this frame
+convention, so NONE of it can be entry-detoured.
+
+**Instrumentation options that remain (both escalations):**
+1. Call-site patch: rewrite each `call Player_InteractDispatcher` (E8 rel32) at its
+   callers to a naked thunk that preserves rcx/rdx/r8/r9 + shadow space, logs the
+   player, then tail-jmps to the real target (enters with correct caller rsp).
+2. Live state-diff: find a field the dispatcher/publish writes each processed frame
+   (e.g. via Player_PublishRequestedInteract 0x140C87D70 target state) and read it on
+   slot0 vs puppet with tll_read - no hook.
+
+**Strategic call (2026-07-10):** the real-2P interact sub-thread has hit a tooling
+wall where even MEASURING "does interact run for the puppet" needs a fragile
+escalation, and the project as a whole is a large multi-session reverse of the
+engine's controlled-player pipeline with uncertain payoff. Parking the interact
+micro-thread here with the exact next techniques recorded. The confirmed wins
+(weapon display, fire direction, horizontal aim, locomotion, vehicle, health) are
+the shipped value; native-controller features (pickup anim, aim pitch) remain gated
+behind full real-second-player materialization. Baseline stable, all experiments
+key-gated OFF, probe code inert.
