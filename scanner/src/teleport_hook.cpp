@@ -13299,24 +13299,37 @@ void log_screen_camera_state() {
 // (the update isn't called for the puppet). Call
 // UpdatePlayerAnimatedCameraControlOwnerAndRouteState(owner) manually to
 // materialize screen 1's camera -> give the puppet's locomotion a real yaw.
+// SEH-only: call UpdatePlayerAnimatedCameraControlOwnerAndRouteState(owner).
+int seh_update_puppet_cam_owner(void* owner) {
+    __try {
+        const auto fn = reinterpret_cast<char(__fastcall*)(void*)>(
+            g_module + 0x238800);
+        return static_cast<int>(fn(owner));
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return -128;
+    }
+}
+
 void materialize_screen1_camera_once() {
     void* puppet = retained_player_object(1);
-    if (puppet == nullptr) { log_line("screen1cam: no puppet"); return; }
+    if (puppet == nullptr || g_module == 0 || !world_stable()) return;
     if (readable_bytes(static_cast<std::byte*>(puppet) + 0x36C8) < 8) return;
     void* owner = *reinterpret_cast<void**>(static_cast<std::byte*>(puppet) + 0x36C0);
-    if (owner == nullptr) { log_line("screen1cam: no owner"); return; }
-    using Fn = char(__fastcall*)(void*);
-    const auto fn = reinterpret_cast<Fn>(g_module + 0x238800);
-    const char r = fn(owner);
+    if (owner == nullptr || readable_bytes(owner) < 0x90) return;
+    const int r = seh_update_puppet_cam_owner(owner);
     static ULONGLONG last = 0;
     const ULONGLONG now = GetTickCount64();
     if (now - last > 1000) {  // rate-limit when driven continuously
         last = now;
+        auto* table = reinterpret_cast<std::uint64_t*>(g_module + 0x697AD50);
+        std::uint64_t e1 = 0;
+        seh_read_qword(reinterpret_cast<const void*>(
+                           reinterpret_cast<std::uintptr_t>(table) + 16), e1);
         std::ostringstream l;
-        l << "screen1cam: UpdatePlayerAnimCamCtrl(owner=0x" << std::hex
-          << reinterpret_cast<std::uintptr_t>(owner) << ") ret=" << std::dec
-          << static_cast<int>(r);
-        log_line(l.str().c_str());
+        l << "screen1cam: UpdateAnimCamCtrl(owner=0x" << std::hex
+          << reinterpret_cast<std::uintptr_t>(owner) << ") ret=" << std::dec << r
+          << " screen1CamPtr=0x" << std::hex << e1 << std::dec;
+        force_log_line(l.str().c_str());
     }
 }
 
