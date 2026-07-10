@@ -592,6 +592,18 @@ volatile bool g_puppet_head_look_sync = false;
 // aim basis. Default OFF (risks the transform/locomotion baseline); toggle Numpad .
 // (VK_DECIMAL). Build 1: materialize + observe; build 2 will orient it to the peer.
 volatile bool g_puppet_materialize_screen1_cam = false;
+// DECISION-NODE WALL TEST (2026-07-10, Cursor gate): set player+0x15A9 bit1 (&2) on
+// the puppet each frame. That bit gates the alive-path hub sync 0x140421150 ->
+// 0x140422760 (sets control-host entity+0x6E bit0) that TickDecisionNode needs; the
+// puppet has it clear, so its interact/anim/aim decision node never runs. If setting
+// it makes the puppet's native controllers come alive (pickup bend / aim pitch),
+// this is the wall's root. Default OFF (may make the engine treat the puppet as
+// locally controlled -> conflict with transform-pin); Numpad 1 toggles for rollback.
+// CONFIRMED 2026-07-10: setting this bit DOES run the alive-path chain (421150->
+// 422760) - it CRASHED copy 2, proving the bit gates the chain but the puppet lacks
+// the hub-entity/anim-instance state the chain dereferences. Default OFF; the fix
+// must build those structures, not just set the bit.
+volatile bool g_puppet_promote_control_bit = false;
 
 void relayed_weapon_store_put(std::uint32_t art_id, const void* info) {
     if (art_id == 0 || info == nullptr || !is_pickup_relay_art(art_id)) {
@@ -11168,6 +11180,26 @@ void drive_remote_slot1_actions_tick() {
     if (g_puppet_materialize_screen1_cam) {
         materialize_screen1_camera_once();
     }
+    // DECISION-NODE WALL TEST: set player+0x15A9 bit1 so the alive-path hub sync
+    // (0x140421150 -> 0x140422760) runs and promotes the control-host entity for
+    // TickDecisionNode. Log the byte before/after once/sec.
+    if (g_puppet_promote_control_bit &&
+        readable_bytes(static_cast<std::byte*>(remote_player) + 0x15A9) >= 1) {
+        auto* flag = reinterpret_cast<std::uint8_t*>(
+            static_cast<std::byte*>(remote_player) + 0x15A9);
+        const std::uint8_t before = *flag;
+        *flag = static_cast<std::uint8_t>(before | 0x2);
+        static ULONGLONG last = 0;
+        const ULONGLONG now = GetTickCount64();
+        if (now - last > 1000) {
+            last = now;
+            std::ostringstream l;
+            l << "PROMOTE-CTRL player+0x15A9 " << std::hex
+              << static_cast<int>(before) << "->" << static_cast<int>(*flag)
+              << std::dec;
+            force_log_line(l.str().c_str());
+        }
+    }
     // Held pickup gesture: re-activate the interact command while armed.
     apply_puppet_pickup_gesture(remote_player);
     void* fs = *reinterpret_cast<void**>(g_module + 0x3FE1088);
@@ -13296,6 +13328,16 @@ void net_tick() {
         log_line(g_puppet_pickup_gesture
                      ? "PICKUP-GESTURE = ON (activate weapon-pickup-swap cmd)"
                      : "PICKUP-GESTURE = OFF");
+        g_logging_enabled = was;
+    }
+    if (foreground && (GetAsyncKeyState(VK_NUMPAD1) & 1) != 0) {
+        // Numpad 1 : decision-node wall test - set puppet player+0x15A9 bit1.
+        g_puppet_promote_control_bit = !g_puppet_promote_control_bit;
+        const bool was = g_logging_enabled;
+        g_logging_enabled = true;
+        log_line(g_puppet_promote_control_bit
+                     ? "PROMOTE-CTRL = ON (set puppet +0x15A9 bit1)"
+                     : "PROMOTE-CTRL = OFF");
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {

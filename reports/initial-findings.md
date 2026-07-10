@@ -25947,3 +25947,30 @@ Per-frame decision/interact path for local player:
 7. **`InputObject_MatchesActiveLocalJoypad`** — secondary `dispatch=0` wall.
 
 Status: **STATIC** (next: `+5545` bit1 writer; hub entity alias; runtime per slot).
+
+### CONFIRMED 2026-07-10: player+0x15A9 bit1 gates the decision-node chain, but setting it CORRUPTS the puppet (not viable)
+
+Runtime test (build with `*(puppet+0x15A9) |= 2` each frame, default ON): **copy 2
+CRASHED**. This CONFIRMS Cursor's gate — the bit does run the alive-path chain
+`sub_140421150 -> Player_SyncControlHostEntityRootOnNetSkip 0x140422760` that
+TickDecisionNode needs. But the crash rva=0x16E64E3 = `sub_1416E6480`, a GFSDK_
+Aftermath GRAPHICS-RESOURCE cleanup with a garbage `rcx=0xBA3C6194...` — i.e. the bit
+does not merely deref a missing struct, it **corrupts the puppet's state**, surfacing
+as a crash in unrelated render cleanup. The puppet lacks the entire controlled-player
+support state (control-host hub entity, anim instance player+0x1A0, etc.) that the
+chain mutates, so forcing the chain writes through invalid/absent pointers.
+
+**Verdict (decisive):** the interact/anim/aim "wall" is now fully explained AND
+proven un-shortcuttable. The puppet is a transform-pinned, AI-disabled object; its
+native per-player controllers (interact/anim decision node, aim-state, camera) are
+gated behind player+0x15A9 bit1, and that gate cannot be flipped safely because the
+puppet has none of the downstream state the promoted path requires. The ONLY real
+fix is to give the puppet a full real-second-player controlled state (materialize
+hub entity + anim instance + screen camera + decision node), i.e. replace the
+transform-pin model with a genuine second local player. That is a large, separate
+architecture project, not an increment. Pickup-gesture, aim-pitch, and any
+native-controller feature share this single root.
+
+**Banked working (unaffected):** weapon switch/holster/pickup-display (WeaponGive
+Packet + SLOT-MIRROR), fire direction, horizontal aim via facing, locomotion incl.
+turns, vehicle, health. All wall-features parked OFF; baseline stable.
