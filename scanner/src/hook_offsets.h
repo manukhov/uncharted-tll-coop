@@ -145,6 +145,10 @@ constexpr std::uintptr_t kPlayerLookAtUpdateIkRva = 0xEDA680;     // vtable+0x38
 // interact command id in the per-screen block's +0x590 list, bypassing the +0x518
 // button routing that never reaches the puppet. Per-screen block =
 // *(g_module+0x3FE1088) + 0xDB0 + 0xBF0*joypadIdx (joypadIdx = player+0x39B8).
+// Exp 5b: vtable slot (in .rdata) holding PlayerInteractController update
+// sub_140EC6C10. Swap it to probe whether the interact update runs for the puppet.
+constexpr std::uintptr_t kInteractControllerUpdateVtableSlotRva = 0x2A2CB70;
+constexpr std::uintptr_t kInteractControllerUpdateRva = 0xEC6C10;
 constexpr std::uintptr_t kInputScreenBlockActivateCommandRva = 0x183A650;
 constexpr std::uintptr_t kFrameStateGlobalRva = 0x3FE1088;
 constexpr std::size_t kFrameStateScreenBlockBaseOffset = 0xDB0;

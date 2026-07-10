@@ -26261,3 +26261,29 @@ Update; NPC bit1 path is irrelevant). Wall is now precisely "the vtable-dispatch
 interact/decision update either does not run or fails an eligibility gate on the
 puppet." Confirming which needs runtime instrumentation, not more decompiles.
 Baseline stable, all experiments key-gated OFF.
+
+### 2026-07-10 Exp 5b (runtime, negative): interact path resists our hook techniques
+
+Vtable-slot swap of `sub_140EC6C10` (thought to be PlayerInteractController update)
+installed cleanly on both copies but logged ZERO `INTERACT-UPD-RUN` for slot0 OR
+slot1 -> that vtable slot is never dispatched in campaign; it is the wrong entry.
+The live player's interact clearly runs (pickups work), so it goes through a
+different path.
+
+`Player_InteractDispatcher 0x140C85D20` (the convergence chokepoint, direct-called
+from 4 sites) CANNOT be trampoline-hooked: live prologue is
+`48 8B C4 (mov rax,rsp); push rbp/rsi/rdi/r12-15; 48 8D A8 C8 F2 FF FF
+(lea rbp,[rax-0xD38])` = frame built from ENTRY rsp, the exact pattern that crashed
+the GetTargetPointFromReticle trampoline (a call-detour shifts rsp by 8 ->
+rbp misaligned -> crash). It is not virtual, so no vtable slot to swap either.
+
+**Viable next technique (Exp 5c):** hook the CALL SITES, not the function entry.
+Patch the `call Player_InteractDispatcher` instruction at each of its 4 callers
+(0x140C8829B built-state, 0x140CD4526 scripted, 0x140D74893, 0x140EC7CBA revive)
+to call a thunk that logs the player arg (rcx/r8 per site) then jumps to the real
+target - entering with the caller's correct rsp, so no frame issue. Alternatively
+find a trampoline-SAFE (push-based prologue) function uniquely on the interact
+per-frame path. This tells us whether interact dispatch runs for the puppet.
+
+The vtable-swap probe code is retained (harmless: the swapped slot is never
+dispatched) but should be repointed or removed next turn. Baseline stable.

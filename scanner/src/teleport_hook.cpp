@@ -3220,6 +3220,64 @@ bool install_pickup_request_interact_gate() {
     return g_original_pickup_request_interact != nullptr;
 }
 
+// Exp 5b: probe whether PlayerInteractController update sub_140EC6C10 runs for the
+// puppet. Vtable-slot swap (no prologue patch). Logs, once/sec per player-class,
+// whether the ticked interact controller belongs to slot-0 (live) or slot-1 (puppet).
+using InteractUpdateFn = std::int64_t(__fastcall*)(std::uint64_t);
+InteractUpdateFn g_original_interact_update = nullptr;
+
+void* seh_read_ptr(std::uint64_t addr) {
+    __try {
+        return *reinterpret_cast<void**>(addr);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return nullptr;
+    }
+}
+
+std::int64_t __fastcall hooked_interact_update(std::uint64_t a1) {
+    // a1 = interact controller; player = *(a1+8).
+    void* const player = seh_read_ptr(a1 + 8);
+    void* const slot0 = retained_player_object(0);
+    void* const slot1 = retained_player_object(1);
+    const int which = player == slot1 ? 1 : (player == slot0 ? 0 : -1);
+    static ULONGLONG last[3] = {0, 0, 0};
+    const ULONGLONG now = GetTickCount64();
+    const int idx = which + 1;  // -1->0, 0->1, 1->2
+    if (now - last[idx] > 1000) {
+        last[idx] = now;
+        std::ostringstream l;
+        l << "INTERACT-UPD-RUN which=" << which << " player=0x" << std::hex
+          << reinterpret_cast<std::uintptr_t>(player) << " slot1=0x"
+          << reinterpret_cast<std::uintptr_t>(slot1) << std::dec;
+        force_log_line(l.str().c_str());
+    }
+    return g_original_interact_update != nullptr
+               ? g_original_interact_update(a1)
+               : 0;
+}
+
+bool install_interact_update_probe() {
+    auto* const slot = reinterpret_cast<void**>(
+        g_module + kInteractControllerUpdateVtableSlotRva);
+    // Sanity: the slot must currently hold sub_140EC6C10.
+    if (*slot != reinterpret_cast<void*>(g_module + kInteractControllerUpdateRva)) {
+        boot_log_line("interact-update probe SKIPPED (vtable slot mismatch)");
+        return false;
+    }
+    g_original_interact_update =
+        reinterpret_cast<InteractUpdateFn>(*slot);
+    DWORD old = 0;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+        boot_log_line("interact-update probe SKIPPED (VirtualProtect failed)");
+        return false;
+    }
+    *slot = reinterpret_cast<void*>(&hooked_interact_update);
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(void*), old, &ignored);
+    boot_log_line("interact-update probe installed (vtable slot swap)");
+    return true;
+}
+
 bool install_weapon_pickup_gate() {
     // WeaponPickupInteractControl::OnInteract 0x14157AA70 prologue:
     // mov rax,rsp; push rbp; push rsi; push rdi; push r12..r15 (14 bytes, all
@@ -16598,6 +16656,7 @@ DWORD WINAPI install_hook(void*) {
     install_scope_visible_gate();
     install_pickup_request_interact_gate();
     install_weapon_pickup_gate();
+    install_interact_update_probe();
     install_give_weapon_diagnostic();
     install_build_fire_args_gate();
     // install_aim_target_gate();  // REVERTED: GetTargetPointFromReticle builds
