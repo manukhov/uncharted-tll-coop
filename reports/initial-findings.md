@@ -26028,3 +26028,30 @@ from the resolver table. Pin that gate before any further runtime drive.
 
 Baseline: real-2P experiments (Numpad 7/4) key-gated, default OFF; stable build
 otherwise unchanged.
+
+### 2026-07-10 Exp 3 (static): per-player update is vtable-dispatched; enumerator gated by local-player count
+
+`sub_1404901B0(player, dt)` (the fn that calls 42FCF0 at its top) is a VIRTUAL slot
+in a Character/Player-family vtable (0x142942848 region; neighbours 0x14042FB40 =
+Npc anim-root override, etc.), NOT the Player class vtable 0x142A4BFE8. So the native
+per-player update is dispatched through the character vtable by a higher enumerator
+that iterates the active players/characters. The puppet is registered as
+local-player-1 (resolve(1)==puppet) yet is never ticked -> the enumerator's active
+set excludes it.
+
+**Precise remaining gate:** the enumerator iterates by a local-player COUNT / active
+list (findings pinned `logicalPlayerID < g_maxLocalPlayers` compares at 0x142469076
+/ 0x142490AB4 / 0x142499068, and `i < m_numPlayers`). max_local is 2 after split-
+login, but the ACTIVE count (m_numPlayers) or the enumerated player array likely
+still holds only slot 0.
+
+**Next (Exp 3b, runtime READ - safe):** locate the active local-player list/count in
+the resolver owner (*(g_module+0x3FE1070)) and read it live after split-login: is the
+count 1 or 2, and is the puppet's entry present-but-flagged-inactive? That single
+read tells us whether to (a) raise the active count / add the puppet to the enumerated
+list, or (b) set a per-player active-screen flag. Then a narrowly gated runtime probe.
+
+STATUS: real-2P project across 3 experiments has narrowed the wall from "puppet lacks
+state" -> "puppet is local-player-1 with hub+anim but not promoted" -> "native update
+faults standalone" -> "character/player enumerator does not tick the puppet (count/
+active-list gate)". Baseline stable, all experiments key-gated OFF.
