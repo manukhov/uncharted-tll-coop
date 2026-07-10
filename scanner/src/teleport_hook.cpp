@@ -492,6 +492,7 @@ constexpr std::uint32_t kCoopPistolArtId = 0x33E29A1B;
 constexpr std::uint32_t kCoopRifleArtId = 0x8075397D;
 constexpr std::uint32_t kCoopScopedPistolArtId = 0xC3181EBD;
 constexpr std::uint32_t kCoopType97ArtId = 0x27617D0D;
+std::atomic<bool> g_type97_normalized_block_ready{false};
 
 bool is_coop_relay_fire_art(std::uint32_t art_id) {
     return art_id == kCoopPistolArtId || art_id == kCoopRifleArtId ||
@@ -510,10 +511,11 @@ bool is_long_gun_relay_art(std::uint32_t art_id) {
 }
 
 bool is_puppet_give_safe_art(std::uint32_t art_id) {
-    // Runtime 2026-07-09/10: every puppet GiveWeapon route tested for Type-97
-    // hangs: both immediate packet apply and delayed SLOT-MIRROR materialization.
-    // Keep receiving its real block for analysis, but never call puppet GiveWeapon.
-    return art_id != kCoopType97ArtId;
+    // Type-97 is allowed only after its relayed block has been normalized. Its
+    // native pickup sends ammo=-1, which selects a separate GiveWeapon path that
+    // hung on the puppet; relayed_weapon_store_put replaces it with finite ammo.
+    return art_id != kCoopType97ArtId ||
+           g_type97_normalized_block_ready.load(std::memory_order_acquire);
 }
 
 // Native PlayerFireController::Fire replay is parked until the receiver crash is
@@ -616,11 +618,22 @@ void relayed_weapon_store_put(std::uint32_t art_id, const void* info) {
     }
     // Pickup relay blocks are always stored so held-weapon can switch to them.
     // Whitelist arts never enter this store (synthetic give path).
+    g_type97_normalized_block_ready.store(false, std::memory_order_release);
     for (RelayedWeaponBlock& e : g_relayed_weapon_store) {
         e = {};
     }
     g_relayed_weapon_store[0].art = art_id;
     std::memcpy(g_relayed_weapon_store[0].info, info, coop::kWeaponInfoBytes);
+    if (art_id == kCoopType97ArtId) {
+        std::int32_t ammo = 0;
+        std::memcpy(&ammo, g_relayed_weapon_store[0].info + 0x84, sizeof(ammo));
+        if (ammo < 0) {
+            constexpr std::int32_t kSafeDisplayAmmo = 1;
+            std::memcpy(g_relayed_weapon_store[0].info + 0x84,
+                        &kSafeDisplayAmmo, sizeof(kSafeDisplayAmmo));
+        }
+        g_type97_normalized_block_ready.store(true, std::memory_order_release);
+    }
 }
 
 bool puppet_weapon_give_allowed(std::uint32_t art_id) {
@@ -9550,9 +9563,10 @@ bool puppet_relay_give_ready(void* puppet) {
            puppet_weapon_give_vtable_ready(puppet);
 }
 
-// Runs on the game thread. ONE native GiveWeapon on the puppet per relayed
-// pickup event, using the sender's captured POD WeaponInfo block. Deliberately
-// no retry and no verification loop: every prior fountain came from re-giving.
+// Runs on the game thread. The packet only publishes the real WeaponInfo block
+// into the relay store. SLOT-MIRROR is the sole owner of remove+give after the
+// peer raw-slot snapshot has been stable for one second. Immediate apply raced
+// the older StatePacket and removed a just-given M-30 again in the next tick.
 void apply_peer_weapon_give() {
     if (!g_pickup_relay) {
         g_pending_weapon_give_flag.store(false, std::memory_order_release);
@@ -9565,11 +9579,24 @@ void apply_peer_weapon_give() {
         g_pending_weapon_give_seq.load(std::memory_order_relaxed);
     const std::uint32_t art =
         g_pending_weapon_give_art.load(std::memory_order_relaxed);
+    alignas(16) std::uint8_t info[coop::kWeaponInfoBytes];
+    std::memcpy(info, g_pending_weapon_give_info, coop::kWeaponInfoBytes);
+    relayed_weapon_store_put(art, info);
+    if (art == kCoopType97ArtId) {
+        force_log_line("TYPE97-INFO-NORMALIZE ammo=-1->1");
+    }
+    g_last_applied_weapon_give_seq.store(seq, std::memory_order_relaxed);
+    g_pending_weapon_give_flag.store(false, std::memory_order_release);
+    std::ostringstream stored;
+    stored << "GIVEWEAPON-RELAY-STORED art=0x" << std::hex << art << std::dec
+           << " seq=" << seq << " wait=stable-slot-mirror";
+    force_log_line(stored.str().c_str());
+    return;
+
+#if 0  // Rejected immediate-apply architecture retained for reverse reference.
     const int draw = g_pending_weapon_give_draw.load(std::memory_order_relaxed);
     const int packet_slot = static_cast<int>(
         g_pending_weapon_give_slot.load(std::memory_order_relaxed));
-    alignas(16) std::uint8_t info[coop::kWeaponInfoBytes];
-    std::memcpy(info, g_pending_weapon_give_info, coop::kWeaponInfoBytes);
     if (!is_puppet_give_safe_art(art)) {
         relayed_weapon_store_put(art, info);
         g_last_applied_weapon_give_seq.store(seq, std::memory_order_relaxed);
@@ -9652,6 +9679,7 @@ void apply_peer_weapon_give() {
          << " holsterSwitch=" << (holster_switch ? 1 : 0);
     force_log_line(line.str().c_str());
     dump_player_weapon_slots("PUPPET-AFTER-GIVE", puppet);
+#endif
 }
 
 void suppress_puppet_fire_buttons(ULONGLONG duration_ms) {

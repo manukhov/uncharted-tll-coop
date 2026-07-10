@@ -25605,3 +25605,22 @@ hard-blocked inside `safe_give_weapon_art_to_puppet`, and marked ungivable by
 still stored for static analysis. M30 and all previously safe pickup arts retain
 their existing relay path; when the peer replaces M30 with Type-97, the receiver
 keeps M30 visible rather than entering the known hang.
+
+### 2026-07-10: pickup immediate-apply race confirmed; Type-97 ammo=-1 hypothesis
+
+**M30 freeze sequence:** receiver logged `GIVEWEAPON-RELAY-APPLY ... ok=1` and
+`PUPPET-AFTER-GIVE ... s1=0x3019cbee`, proving M30 was created successfully. In the
+same game-thread pass, `SLOT-MIRROR` still consumed the older peer snapshot with
+pistol in slot 1, removed M30, and re-gave the pistol. This mixes two inventory
+owners and explains the freeze/fight when replacing Nadine's sniper. Correction:
+all `WeaponGivePacket`s now store the real block only; debounced `SLOT-MIRROR` is
+the sole remove+give owner.
+
+**Type-97 static difference:** among fields actually consumed by decompiled
+`PlayerWeaponController::GiveWeapon`, Type-97 carries `WeaponInfo+0x84 = -1`, while
+working M30 carries `37`. The `-1` value enters a separate default/random-ammo path
+through the online weapon definition. The two observed Type-97 hangs both used the
+raw `-1` block. New falsifiable hypothesis: retain the exact Type-97 art/model but
+normalize only the stored puppet copy's ammo to finite value `1`, then let stable
+slot mirroring perform the one swap. `TYPE97-INFO-NORMALIZE` distinguishes this
+path in the runtime log.
