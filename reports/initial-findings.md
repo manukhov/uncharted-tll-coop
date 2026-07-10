@@ -25832,3 +25832,41 @@ All experimental runtime code was removed after the falsifier. The evidence now
 supports the foundational path: identify and activate the stock local-player-1
 controller scheduler/ownership for the retained slot-1 Player instead of adding
 another per-feature animation replay.
+
+### 2026-07-10 (STATIC/RUNTIME): restore the real screen-1 interact tick; direct action pending
+
+The `PlayerWeaponController_GiveWeapon -> 0x1413B49B0` path initially looked like
+the missing pickup-animation queue. It is not. `0x1413B2340` constructs a 0x368-byte
+`Hud` per screen, binds `Hud+0x320` to a static 0x19A0-byte state block, and
+`0x1413B2730` initializes both screen 0 and screen 1. The list at nested `+0x1890`
+(count `+0x1930`, cap 5) is therefore a HUD pickup-notification list. The stock
+`0x1413538B0` frame wrapper updates only screen 0 through `0x1413B2950`, but adding
+the missing screen-1 Hud tick cannot own the character's bend and was removed from
+the active source.
+
+The actual Player interaction boundary requires more than activating a command:
+
+- `Player_BuildInteractDispatchState` `0x140C805A0` builds 0x15C bytes from
+  `(screenIndex, player transform)`, resolves `g_PlayerHandleForHudPublish[index]`,
+  copies `*interact-command-list*`, and snapshots per-screen `+0x590` command state.
+- `Player_InteractDispatcher` `0x140C85D20` consumes that state and the indexed
+  dispatcher at `0x143EC4EE0 + 0x35C0*screenIndex`.
+- Its pickup branch obtains the pickup's interact control, activates the resolved
+  command, builds a 16-byte retained Player handle from `Player+0xA8/+0xBC`, and
+  calls `Player_StartInteractAction` `0x141C9A360`.
+- `Player_StartInteractAction` immediately calls interact-control vtable `+0x8`
+  with `(control, interactable, playerHandle)`; a return of `-1` rejects the action.
+
+Runtime after restoring `BuildInteractDispatchState -> Player_InteractDispatcher`
+for screen 1 showed `PICKUP-GESTURE ... ok=1 dispatch=0` on the relayed M-30 event.
+Thus the previous no-animation result was not only a missing tick: the full native
+dispatcher still selected no eligible nearby interaction.
+
+**HYPOTHESIS, current build:** while the 700 ms gesture window is armed, inspect the
+screen-1 dispatcher's already-native nearby list for a `WeaponPickup` whose art
+matches the relayed `WeaponGivePacket`, then call `Player_StartInteractAction` once.
+The existing 2.5 s suppression prevents receiver-side `OnInteract` and scripted
+GiveWeapon completion from mutating inventory; SLOT-MIRROR remains authoritative.
+Prediction: `PICKUP-GESTURE direct-start ... result!=-1` and a visible puppet bend.
+No matching nearby object, `result=-1`, or an accepted action without a bend will
+separately falsify object selection, action acceptance, or downstream animation.

@@ -185,6 +185,13 @@ constexpr std::uintptr_t kPlayerTryStartBumpActionRva = 0x0CE8E10;
 constexpr std::uintptr_t kPickupRequestInteractRva = 0x08C8A40;
 constexpr std::uintptr_t kWeaponPickupOnInteractRva = 0x157AA70;
 constexpr std::uintptr_t kPlayerRequestedInteractRva = 0x0C87D70;
+// Builds the 0x15C-byte command/pose block consumed by Player_InteractDispatcher.
+// The builder resolves the indexed Player and snapshots the per-screen +0x590
+// command list; invoking the dispatcher without this block is not equivalent to
+// a stock per-player interact tick.
+constexpr std::uintptr_t kPlayerBuildInteractDispatchStateRva = 0x0C805A0;
+constexpr std::uintptr_t kPlayerInteractDispatcherRva = 0x0C85D20;
+constexpr std::uintptr_t kPlayerStartInteractActionRva = 0x1C9A360;
 constexpr std::uintptr_t kResolveGameObjectHandleByIdRva = 0x0A989C0;
 constexpr std::uintptr_t kPlayerInteractDispatcherBaseRva = 0x3EC4EE0;
 constexpr std::size_t kPlayerInteractDispatcherStride = 13760;
@@ -219,6 +226,7 @@ constexpr std::uintptr_t kAimTargetReticleCallSiteRva = 0xCB17D6;
 constexpr std::uintptr_t kPlayerAimPoseSeedCallSiteRva = 0x10E934B;
 constexpr std::size_t kWeaponControllerGetWeaponBySlotVtOffset = 0xB0;
 constexpr std::uintptr_t kWeaponPickupVftableRva = 0x2AA66C0;
+constexpr std::size_t kWeaponPickupGetInteractControlVtableOffset = 0x248;
 // WeaponPickupInteractControl::OnInteract resolves the pickup at ctrl+0x10
 // (sub_141C977A0); the +0x80 block is the lazily-filled interactable cache.
 constexpr std::size_t kWeaponPickupInteractPickupPtrOffset = 0x10;

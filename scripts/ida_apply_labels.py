@@ -20,8 +20,21 @@ FUNCTIONS = {
     0x141C9A360: (
         "Player_StartInteractAction",
         "Called by Player_InteractDispatcher right after activating the pickup "
-        "interact command; starts the interact action/animation on the player "
-        "(interactControl, player, &stackStruct, 0).",
+        "interact command. Calls interactControl vtable+0x8 with the interactable "
+        "object and a 16-byte retained Player handle {player+0xA8, player+0xBC}; "
+        "return -1 rejects the action.",
+    ),
+    0x140C805A0: (
+        "Player_BuildInteractDispatchState",
+        "Builds the 0x15C-byte state consumed by Player_InteractDispatcher. "
+        "Resolves the indexed Player, copies the supplied transform, snapshots "
+        "the per-screen *interact-command-list*, and queries +0x590 command state.",
+    ),
+    0x140C88220: (
+        "Player_TickInteractDispatcherForScreen",
+        "Resolves g_PlayerHandleForHudPublish[*state], then calls "
+        "Player_InteractDispatcher on the matching per-screen dispatcher. The "
+        "input must already be populated by Player_BuildInteractDispatchState.",
     ),
     0x140DCDEA0: (
         "Player_ScriptWeaponEventHandler",
@@ -63,10 +76,36 @@ FUNCTIONS = {
         "vtable +0x170. ProcessKillTree over every weapon class (remove-all).",
     ),
     0x1413B49B0: (
-        "PlayerWeaponController_EnqueuePickupEvent",
-        "Appends {art, ammo, ...} to the per-controller pickup-event list at "
-        "*(a1+800)+6288 (32-byte stride, count at +6448, cap 5 -> 'Too many pickup "
-        "events in the event list!'). Not slot placement.",
+        "Hud_EnqueuePickupNotification",
+        "Appends {art, ammo, ...} to the indexed Hud object's notification list "
+        "at *(hud+0x320)+0x1890 (32-byte stride, count at +0x1930, cap 5). "
+        "PlayerWeaponController::GiveWeapon selects Hud by owner Player+0x4010; "
+        "this is HUD state, not the character pickup-action state machine.",
+    ),
+    0x1413B2340: (
+        "Hud_ConstructForScreen",
+        "Constructs one 0x368-byte Hud object for the supplied screen index and "
+        "binds its 0x320 state pointer to the matching 0x19A0-byte static block.",
+    ),
+    0x1413B2730: (
+        "Hud_Init",
+        "Initializes the indexed Hud object, command observers, weapon tables, "
+        "and sets Hud+0x21 ready. Called for both screen 0 and screen 1.",
+    ),
+    0x1413B2950: (
+        "Hud_UpdateForScreen",
+        "Updates one Hud object, publishes reticle offsets, sets the current-Hud "
+        "globals, and runs Hud_UpdateChildren.",
+    ),
+    0x14184DE90: (
+        "Hud_UpdateChildren",
+        "Updates registered Hud child controllers when Hud+0x21 and Hud+0x14 are "
+        "active, then calls the Hud vtable +0x80 finalizer.",
+    ),
+    0x1413538B0: (
+        "Hud_UpdateScreen0Frame",
+        "Stock frame wrapper: prerequisite, Hud_UpdateForScreen(screen 0), then "
+        "the HUD frame finalizer. It does not update the screen-1 Hud object.",
     ),
     0x140DCDEA0: (
         "Player_ScriptWeaponEventHandler",

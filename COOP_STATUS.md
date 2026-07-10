@@ -1,5 +1,34 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-10, Codex - screen-1 interact tick and direct pickup action)
+
+Static analysis corrected the apparent shared-controller root. The event list at
+`Hud+0x320 -> +0x1930` is a **HUD pickup-notification queue**, not the character
+interaction state machine. Both 0x368-byte Hud objects are constructed and
+initialized, while the stock frame wrapper updates only screen 0; ticking screen 1
+was implemented once, then removed from the active source because it does not own
+the visible pickup bend.
+
+The real interaction path is now mapped one level deeper:
+
+- `Player_BuildInteractDispatchState` (`0x140C805A0`) builds the required 0x15C-byte
+  command/pose block and snapshots the indexed screen's `+0x590` command list.
+- `Player_InteractDispatcher` (`0x140C85D20`) consumes that block and, for a weapon
+  pickup, calls `Player_StartInteractAction` (`0x141C9A360`).
+- Runtime with the missing builder+dispatcher call restored for screen 1 produced
+  `PICKUP-GESTURE ... ok=1 dispatch=0`: the command is active, but the dispatcher
+  does not select an eligible nearby interaction. This rejects the claim that the
+  absent dispatcher tick alone was the wall.
+
+Current build adds a narrowly gated fallback while a relayed pickup gesture is
+armed: find the same-art `WeaponPickup` in the screen-1 dispatcher's native nearby
+list and call its stock `Player_StartInteractAction` once using the retained puppet
+handle. Duplicate `OnInteract`/GiveWeapon completion remains suppressed; inventory
+is still owned by `WeaponGivePacket + SLOT-MIRROR`. Build passed; two injected copies
+(PIDs 28488/328 at handoff) are waiting for an in-save pickup. Prediction: log
+`PICKUP-GESTURE direct-start ... result!=-1`, followed by a visible bend. No match,
+`result=-1`, or no bend falsifies progressively lower parts of this fallback.
+
 ## Turn note (2026-07-10, Codex — direct authored pickup-animation relay REJECTED; full slot-1 controller model opened)
 
 **Runtime result:** two instrumented builds hooked the local Player script-event

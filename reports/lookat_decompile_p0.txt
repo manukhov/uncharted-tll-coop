@@ -1,0 +1,145 @@
+=== 0x14024A090: sub_14024A090 [0x14024A090..0x14024A32D] ===
+// local variable allocation has failed, the output may be wrong!
+// Hidden C++ exception states: #wind=1
+_QWORD *__fastcall sub_14024A090(_QWORD *a1, double _XMM1_8)
+{
+  _RBX = a1;
+  *a1 = &CharacterWallHandIK::`vftable';
+  sub_1424EBA4C(a1 + 2, 80, 2, sub_1418F0920, sub_14023AE80);
+  sub_141EC4600(_RBX + 22);
+  __asm { vxorps  xmm1, xmm1, xmm1 }
+  *((_DWORD *)_RBX + 104) = 2144128204;
+  *(_QWORD *)((char *)_RBX + 420) = 2144128204;
+  *((_DWORD *)_RBX + 107) = 0;
+  __asm
+  {
+    vmovups xmmword ptr [rbx+1B0h], xmm1
+    vmovups xmm0, cs:xmmword_1428805D0
+    vmovups xmmword ptr [rbx+1C0h], xmm0
+    vmovups xmmword ptr [rbx+1D0h], xmm1
+    vmovups xmm0, cs:xmmword_1428805D0
+    vmovups xmmword ptr [rbx+1E0h], xmm0
+  }
+  *((_DWORD *)_RBX + 124) = 2144128204;
+  *(_QWORD *)((char *)_RBX + 500) = 2144128204;
+  *((_DWORD *)_RBX + 127) = 0;
+  __asm
+  {
+    vmovups xmmword ptr [rbx+200h], xmm1
+    vmovups xmm0, cs:xmmword_1428805D0
+    vmovups xmmword ptr [rbx+210h], xmm0
+    vmovups xmmword ptr [rbx+220h], xmm1
+    vmovups xmm0, cs:xmmword_1428805D0
+    vmovups xmmword ptr [rbx+230h], xmm0
+  }
+  _RBX[76] = 0;
+  *((_DWORD *)_RBX + 156) = 2144128204;
+  *(_QWORD *)((char *)_RBX + 628) = 2144128204;
+  *((_DWORD *)_RBX + 159) = 0;
+  __asm
+  {
+    vmovups xmmword ptr [rbx+280h], xmm1
+    vmovups xmm0, cs:xmmword_1428805D0
+    vmovups xmmword ptr [rbx+290h], xmm0
+    vmovups xmmword ptr [rbx+2A0h], xmm1
+    vmovups xmm0, cs:xmmword_1428805D0
+    vmovups xmmword ptr [rbx+2B0h], xmm0
+  }
+  *((_DWORD *)_RBX + 176) = 2144128204;
+  *(_QWORD *)((char *)_RBX + 708) = 2144128204;
+  *((_DWORD *)_RBX + 179) = 0;
+  __asm
+  {
+    vmovups xmmword ptr [rbx+2D0h], xmm1
+    vmovups xmm0, cs:xmmword_1428805D0
+    vmovups xmmword ptr [rbx+2E0h], xmm0
+    vmovups xmmword ptr [rbx+2F0h], xmm1
+    vmovups xmm0, cs:xmmword_1428805D0
+    vmovups xmmword ptr [rbx+300h], xmm0
+  }
+  _RBX[100] = 0;
+  _RBX[101] = 0;
+  _RBX[102] = 0;
+  _RBX[103] = 0;
+  _RBX[104] = 0;
+  *(_QWORD *)((char *)_RBX + 844) = -1;
+  _RBX[107] = 0;
+  _RBX[110] = -1;
+  _RBX[116] = -1;
+  *((_BYTE *)_RBX + 1008) = 0;
+  *((_BYTE *)_RBX + 1040) = 0;
+  *((_BYTE *)_RBX + 1072) = 0;
+  *((_BYTE *)_RBX + 1104) = 0;
+  *((_BYTE *)_RBX + 1136) = 0;
+  *((_DWORD *)_RBX + 288) = 0;
+  _RBX[146] = 0;
+  _RBX[147] = 0;
+  _RBX[148] = 0;
+  _RBX[149] = 0;
+  _RBX[150] = 0;
+  _RBX[151] = 0;
+  _RBX[152] = 0;
+  _RBX[153] = 0;
+  _RBX[154] = 0;
+  _RBX[155] = 0;
+  _RBX[156] = 0;
+  _RBX[157] = 0;
+  _RBX[158] = 0;
+  _RBX[159] = 0;
+  _RBX[160] = 0;
+  _RBX[161] = 0;
+  *((_DWORD *)_RBX + 327) = -1;
+  _RBX[164] = 0;
+  *((_DWORD *)_RBX + 330) = -1;
+  *(_QWORD *)((char *)_RBX + 1324) = 0;
+  _RBX[167] = 0;
+  return _RBX;
+}
+
+=== 0x140EDBD70: sub_140EDBD70 [0x140EDBD70..0x140EDBDB4] ===
+__int64 __fastcall sub_140EDBD70(__int64 a1, char a2)
+{
+  *(_QWORD *)a1 = &PlayerMoveActionController::`vftable';
+  *(_QWORD *)(a1 + 16) = &Memory::Allocator::`vftable';
+  *(_QWORD *)(a1 + 56) = 0;
+  _InterlockedExchange64((volatile __int64 *)(a1 + 32), 0);
+  *(_BYTE *)(a1 + 50) = 0;
+  if ( (a2 & 1) != 0 )
+    sub_1424EAB54(a1, 288);
+  return a1;
+}
+
+=== 0x140EDBC90: sub_140EDBC90 [0x140EDBC90..0x140EDBCD4] ===
+__int64 __fastcall sub_140EDBC90(__int64 a1, char a2)
+{
+  *(_QWORD *)a1 = &PlayerMoveActionController::`vftable';
+  *(_QWORD *)(a1 + 16) = &Memory::Allocator::`vftable';
+  *(_QWORD *)(a1 + 56) = 0;
+  _InterlockedExchange64((volatile __int64 *)(a1 + 32), 0);
+  *(_BYTE *)(a1 + 50) = 0;
+  if ( (a2 & 1) != 0 )
+    sub_1424EAB54(a1, 288);
+  return a1;
+}
+
+=== 0x140EDBBA0: sub_140EDBBA0 [0x140EDBBA0..0x140EDBBE9] ===
+unsigned __int64 __fastcall sub_140EDBBA0(__int64 a1, __int64 a2, unsigned __int64 a3, unsigned __int64 a4)
+{
+  unsigned __int64 v4; // rax
+  unsigned __int64 result; // rax
+
+  v4 = *(_QWORD *)(a1 + 264);
+  if ( v4 && v4 >= a3 && v4 < a4 )
+    *(_QWORD *)(a1 + 264) = v4 + a2;
+  result = *(_QWORD *)(a1 + 272);
+  if ( result && result >= a3 && result < a4 )
+    *(_QWORD *)(a1 + 272) = result + a2;
+  return result;
+}
+
+=== 0x140EDBC20: sub_140EDBC20 [0x140EDBC20..0x140EDBC23] ===
+char sub_140EDBC20()
+{
+  return 0;
+}
+
