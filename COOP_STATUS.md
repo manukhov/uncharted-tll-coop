@@ -1,5 +1,35 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-10, Claude — pickup-anim + aim-pitch мапнуты до архитектурной стены; забанкали рабочее)
+
+**Итог хода.** Диагностировал застревание Codex по анимации подбора и размотал
+питч-прицеливание до конца. ОБЕ фичи упираются в одну стену: у transform-pinned
+куклы с выключенным AI её per-player контроллеры (interact-стейт-машина, aim-стейт/
+камера) либо не крутятся, либо конфликтуют с локомоцией.
+
+**Анимация подбора:** триггер Codex (RequestInteract 0x1408C8A40) НЕ вызывается при
+наземном подборе (идёт через скрипт give-weapon 0x140DD4208). Нашёл настоящий рецепт:
+`Player_ResolveWeaponPickupInteractAnim → cmdId` + `InputScreenBlock_ActivateCommand`
+(0x14183A650) активирует interact-команду в +0x590, обходя блокер кнопок. Технически
+`ok=1`, но кукла не анимируется — interact-стейт-машина не обрабатывает (AI off). Даже
+удержание команды 700мс не помогло. `g_puppet_pickup_gesture` OFF.
+
+**Питч-прицеливание:** цепочка `стик→aim-углы→camera pose-seed(blk+0x60)→player+0x1720/
++0x1730→рендер`. Все уровни (player+0x1570/+0x1730, camera seed, resolver output,
+camera-блок +0x60/+0x230/+0x240) = ВЫХОДЫ, пересчитываются каждый кадр. Чистого
+driveable pitch-входа нет; писать общий screen-1 seed = freeze локомоции. Материализация
+screen-1 камеры (0x238800) безопасна, но инертна. Все aim-тоглы OFF.
+
+**Забанкано и работает:** смена/holster/подбор-дисплей оружия (WeaponGivePacket +
+SLOT-MIRROR), направление огня, горизонтальный aim (через facing-blend), локомоция с
+разворотами, транспорт, здоровье. Baseline чистый, 3 экспериментальных тогла OFF,
+диагностика Numpad+ (AIMROW/CAMROW) оставлена.
+
+**Следующий ход (вне стены):** взять ко-оп фичу, не завязанную на per-player
+контроллеры куклы (см. TASK_POOL.md). Питч/жест возвращать ТОЛЬКО при
+фундаментальной смене модели куклы (реальный второй-игрок aim-стейт вместо
+transform-pin) — это большой отдельный проект, не инкремент.
+
 ## Turn note (2026-07-09, Codex — aim sync default-ON REJECTED, stable OFF restored)
 
 **Aim sync resumed.** IDA MCP is reachable at `http://172.21.144.1:8745/mcp`; verified
