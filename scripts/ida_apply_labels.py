@@ -8,6 +8,28 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-10: pickup-gesture recipe (interact command activation) ---
+    0x14183A650: (
+        "InputScreenBlock_ActivateCommand",
+        "Activates a command id in the per-screen dynamic command list at "
+        "block+0x590 (block = g_LocalPlayerInputManager + 3504 + 3056*screenIdx). "
+        "Sibling of InputScreenBlock_IsCommandActive (0x14183A3D0). KEY to the "
+        "co-op pickup gesture: activating the weapon-pickup interact command here "
+        "directly bypasses the +0x518 button routing that never reaches the puppet.",
+    ),
+    0x141C9A360: (
+        "Player_StartInteractAction",
+        "Called by Player_InteractDispatcher right after activating the pickup "
+        "interact command; starts the interact action/animation on the player "
+        "(interactControl, player, &stackStruct, 0).",
+    ),
+    0x140DCDEA0: (
+        "Player_ScriptWeaponEventHandler",
+        "Giant script weapon-event handler (0x8b2d). The ground-pickup give-weapon "
+        "branch (hash 0xFB1091A3) returns to 0x140DD4208 - this is the path a real "
+        "ground pickup takes, NOT WeaponPickupInteractControl::RequestInteract "
+        "(runtime-proven 2026-07-10: RequestInteract hook installed but never fires).",
+    ),
     # --- 2026-07-07: weapon give / slot placement (pickup display root) ---
     0x1410A4D40: (
         "PlayerWeaponController_GiveWeapon",
