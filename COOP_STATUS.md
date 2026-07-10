@@ -1,5 +1,177 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-10, Cursor — 421150 = real 422760 caller; +5545 bit1 gate)
+
+**CORRECTION:** `Player_PreAnimHubAndAnchorSync` `0x140422BB0` **не** вызывает `422760`
+(только sniper aim-pos). Реальная цепочка:
+
+`sub_14042FCF0` → `sub_140421150` → `Player_SyncControlHostEntityRootOnNetSkip` `0x140422760`.
+
+**Новый gate (STATIC):** для **живого** игрока `421150` зовёт `422760` **только** если
+`player+0x15A9` (+5545) **bit1** (`& 2`). Иначе bit0 на hub entity не ставится →
+утренний `144610` сбрасывает bit4 → `TickDecisionNode` не проходит.
+
+Доп. gate: весь `421150` — no-op если `player+0x1A0` (+416) null (anim-instance).
+
+**Открыто:** кто пишет `+5545` bit1; алиасит ли `*(player+1FB0+16)` entity с записью в
+`worldMgr+0x5A0` hub (единственный живой `144610` для Player).
+
+Детали: `reports/player_421150_entity6e_gate.txt`.
+
+**Следующий шаг:** xref-writer на `player+0x15A9` bit1; сравнение slot0 vs puppet при
+spawn; runtime `5545` + `entity+0x6E` на `421150`/`4223F0`.
+
+
+## Turn note (2026-07-10, Cursor — player+0x1FF0 = Skill; 422760 clear REJECTED)
+
+**Статика:** `player+0x1FF0` = **текущий Skill*** (AI skill think:
+`RefreshOrSelectCurrentStateObject_1FF0` `0x14041F1A0`, строки `"Entering skill"` /
+`"THINK! desired skill"`).
+
+**REJECTED:** гипотеза что `422760` сбрасывает bit0x4 через `Skill+vtable+96`:
+`Skill::vtable+96` → `Skill_IsAuthorityForRootTransform` `0x140664690` **всегда
+return 1** (проверено Skill/ScriptSkill/IdleSkill/NetSkill). Clear-ветка
+`422760` **не достижима** для стандартных Skill.
+
+**Уточнённая стена bit0x4:**
+
+- Единственный writer `|= 4` на hub entity: `ControlHostHub_RefreshEntity6EProbeFlags`
+  `0x142144610` (нужен bit0).
+- Per-player вызов на `player+0x1FB0` из `0x1403E59D0` **загейтован**
+  `Player::vtable+4256` `0x1401D4F10` → **всегда 0** → цикл по игрокам не
+  вызывает `144610` на `+1FB0` hub для класса Player.
+- `422760` else-путь ставит только **bit0**, не bit4; `TickDecisionNode` в том же
+  кадре требует bit4 → **frame-order** или отсутствие promotion на puppet hub.
+
+**Следующий шаг:** откуда slot 0 получает bit4 на `*(player+1FB0+16)`; runtime
+`entity+0x6E` slot0 vs puppet на входе `4223F0`.
+
+Детали: `reports/player_1ff0_skill_entity6e_revision.txt`.
+
+## Turn note (2026-07-10, Cursor — entity+0x6E gate mapped)
+
+**Статика:** кто выставляет/сбрасывает `entity+0x6E` на control-host
+`*(player+0x1FB0+16)` — **найдено**.
+
+**Setter (global tick):** `GameplayWorld_RefreshControlHostEntity6EFlags`
+`0x1403E59D0` ← `sub_1403E4AF0` (world frame tick) → для каждого Player с
+vtable+4256: `ControlHostHub_RefreshEntity6EProbeFlags` `0x142144610` на
+`player+0x1FB0`. Требует `entry+0x6E bit0` и `entry+108 >= 0`, затем `|= 4`
+и условно `|= 8`.
+
+**Clearer (per-player anim-phase, до decision-node tick):**
+`Player_PreAnimHubAndAnchorSync` `0x140422BB0` →
+`Player_SyncControlHostEntityRootOnNetSkip` `0x140422760`: когда
+`player+0x1FF0` (gameplay-state selector) существует, его `vtable+96` false, и
+`Player_ShouldSkipDirectRootTransformApply` true → **`entity+0x6E &= 0xFA`**
+(сбрасывает bit0x4). Сразу после этого в том же `AnimPhaseOwnerUpdate`
+`Player_TickDecisionNodeFromControlHost` требует bit0x4 → **puppet на net-skip
+пути не тикает `+0x1808`**.
+
+**Вторичная стена:** `InputObject_MatchesActiveLocalJoypad` `0x14023AEA0` —
+`object+0x50` vs `g_LocalPlayerInputManager+0x48/+0x50` (смещения +72/+80 в
+деcompile); блокирует `entry+24` на nearby-list.
+
+**Метки IDB:** +5 функций (`422760`, `422BB0`, `3E59D0`, `142144610`, `1B7500`);
+939 total, `save_database OK`.
+
+**Следующий шаг (статика):** что за объект `player+0x1FF0` на puppet vs slot 0
+(`RefreshOrSelectCurrentStateObject_1FF0` `0x14041F1D0`); порядок global tick vs
+anim-phase в кадре; joypad indices в co-op.
+
+**Рантайм-прогноз (квота почти набрана):** hook `0x1404227B0` — puppet каждый
+кадр; slot 0 нет. На входе `0x1404223F0` у puppet `entity+0x6E & 4 == 0`.
+
+Детали: `reports/player_decision_node_controllers.md`,
+`reports/entity_6e_*.txt`. Метки: `ida_apply_labels.py`.
+
+## Turn note (2026-07-10, Cursor — vtable+1512 + Active decision node)
+
+**Статика:** `player->vtable+1512` = `Player_ShouldSkipDirectRootTransformApply`
+`0x141BC2EF0` (тот же слот `+0x5E8`, что и root-transform). **Не** жёсткий
+off-switch: обе ветки `Player_AnimPhaseOwnerUpdate` вызывают
+`Player_TickDecisionNodeFromControlHost`. Net-путь: `NetController_ShouldSkipAnimPhaseDirectPath`
+`0x1419136E0` (child `vtable+24`).
+
+- Locomotion decision node: `PlayerActiveDecisionNode_Tick` `0x14126B830`
+  (vtable `0x142E47BC0`) → `BuildInteractDispatchState` + dispatch.
+- `player+0x1808`: clear `0x141DE181A`, store `0x141DE2604` via `vtable+0xDE8`;
+  leaf impl `0x14126C6A0` void — откуда берётся указатель, **открыто**.
+- **Стена puppet (уточнено):** скорее `entity+0x6E` control-host (bit0x4/0x8) и
+  joypad-gate на nearby probes, не vtable+1512.
+
+**Следующий шаг:** кто выставляет `entity+0x6E` bits для slot 1; joypad indices
+`g_LocalPlayerInputManager+0x48/+0x50`.
+
+Детали: `reports/player_decision_node_controllers.md`. Метки: `ida_apply_labels.py`.
+
+## Turn note (2026-07-10, Cursor — decision-node scheduler mapped)
+
+**Статика:** scheduler decision-node найден.
+
+- `Player_AnimPhaseOwnerUpdate` `0x14042D120` → `Player_TickDecisionNodeFromControlHost`
+  `0x1404223F0` → `(*(player+0x1808))->vtable+0` (активный decision node).
+- `Player_DecisionNodePublishGate` `0x140CD3760` → `PublishRuntimeStateFromDecisionNodeLikeObject`
+  (= `Player::Active::Update`) после проверки `player+0x1FC8` vtable+168.
+- Offsets: `+0x1808` decision node, `+0x1FB0` (8112) dispatch hub, `+0x1FC8` (8136)
+  scripted interact, `+0x1F28` (7976) interact sub-controller.
+- **Стена puppet:** scheduler не тикает (vtable+1512 / control-host flags), хотя
+  global nearby-list tick (`0x1401611F0`) работает → `ok=1 dispatch=0`.
+
+**Следующий шаг:** идентифицировать `player->vtable+1512` и что пишет `player+0x1808`
+для slot 1.
+
+Детали: `reports/player_decision_node_controllers.md`.
+
+## Turn note (2026-07-10, Cursor — nearby-list writer + joypad gate)
+
+**Статика завершена:** писатель nearby-list найден.
+
+- `InteractDispatcher_RebuildNearbyList` `0x140C837F0` — сбрасывает count@+0,
+  собирает кандидатов (`0x141C94340` + sphere-cast пути), пишет 32-байт entries@+8
+  через `InteractDispatcher_AppendNearbyEntry` `0x140C817F0`.
+- Глобальный тик: `InteractDispatcher_TickAllScreenBlobs` `0x1401611F0` →
+  `InteractDispatcher_TickNearbyList` `0x140C87FB0` на `0x143EC4EE0` (screen 0) и
+  `0x143EC84A0` (screen 1 в co-op). `sub_140C858F0` — только prune, не writer.
+- `Player_InteractDispatcher` ставит `dispatcher+0x3570=1` в эпилоге → rebuild на
+  следующем кадре.
+- **Ведущая гипотеза `dispatch=0`:** `InputObject_MatchesActiveLocalJoypad`
+  `0x14023AEA0` блокирует sphere-cast на entry → `entry+24` не выставляется для
+  joypad 3 / screen 1 puppet.
+
+**Следующий шаг:** scheduler decision-node (`player+0x1F28` / `+0x1FB0`); runtime
+подтверждение joypad-индексов на `g_LocalPlayerInputManager+0x48/+0x50` только после
+квоты (или как часть materialize-puppet-controller теста).
+
+Детали: `reports/player_decision_node_controllers.md`. Метки в `ida_apply_labels.py`.
+
+## Turn note (2026-07-10, Cursor — продолжение Codex/Claude: карта decision-node контроллеров)
+
+**Где остановились агенты (2026-07-10):**
+- **Codex:** direct-start pickup fallback в билде, runtime не подтверждён; направление =
+  materialize puppet как stock local-player-1 controller.
+- **Claude:** pickup-anim + aim-pitch = одна стена (per-player контроллеры куклы);
+  baseline чистый, 3 экспериментальных тогла OFF.
+- **Работает:** локомоция, cover `bk`, jump/roll `bh`, weapon give/display,
+  fire direction (pose-seed), health, transport.
+
+**STATIC (этот ход):** разобрана цепочка interact decision-node → dispatch.
+9 функций (`reports/player_decision_node_controllers.md`, дамп
+`reports/full_slot1_controller_decompile.txt`) вызывают
+`Player_BuildInteractDispatchState` + `Player_InteractDispatcher` из vtable-ticked
+decision-node объектов (`player+0x1F28` и др.). Ключевые:
+`PlayerInteractController_UpdateReviveAndDispatch` `0x140EC75D0`,
+`PlayerScriptedInteractController_UpdateAndDispatch` `0x140CD3C00`.
+Все гейтятся `!BYTE2(dword_143073DA8)`.
+
+**Почему `dispatch=0` на кукле:** команда активируется (`ok=1`), но dispatcher не
+находит eligible nearby — список на `0x143EC4EE0+0x35C0*screen` вероятно не
+заполняется для transform-pinned puppet. Direct-start обходит это, ища `WeaponPickup`
+вручную.
+
+**Следующий статический шаг:** найти писателя nearby-list диспетчера и scheduler
+decision-node тиков для screen 1 (не ещё один runtime pickup тест).
+
 ## Turn note (2026-07-10, Codex - screen-1 interact tick and direct pickup action)
 
 Static analysis corrected the apparent shared-controller root. The event list at

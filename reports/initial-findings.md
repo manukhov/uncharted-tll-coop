@@ -25870,3 +25870,80 @@ GiveWeapon completion from mutating inventory; SLOT-MIRROR remains authoritative
 Prediction: `PICKUP-GESTURE direct-start ... result!=-1` and a visible puppet bend.
 No matching nearby object, `result=-1`, or an accepted action without a bend will
 separately falsify object selection, action acceptance, or downstream animation.
+
+### Player decision-node controllers → interact dispatch (STATIC, 2026-07-10)
+
+Nine vtable-ticked decision-node updaters call
+`Player_BuildInteractDispatchState` (`0x140C805A0`) then
+`Player_InteractDispatcher` (`0x140C85D20`) for the owner's `player+0x4010`
+screen index. Primary entries:
+`PlayerInteractController_UpdateReviveAndDispatch` (`0x140EC75D0`),
+`PlayerScriptedInteractController_UpdateAndDispatch` (`0x140CD3C00`),
+`Player_InteractDispatchFromBuiltState` (`0x140C88220`). All gate on
+`!BYTE2(dword_143073DA8)`. Per-screen dispatcher blob:
+`0x143EC4EE0 + 0x35C0*screenIndex`.
+
+**Why puppet `dispatch=0`:** `ActivateCommand` succeeds but nearby interactable
+scan does not select an entry. Nearby-list writer is now mapped (see below);
+leading cause is `InputObject_MatchesActiveLocalJoypad` gating sphere-cast probes
+on appended entries. Details: `reports/player_decision_node_controllers.md`.
+
+Status: **STATIC** (next: decision-node scheduler + joypad-index runtime confirm).
+
+### Interact dispatcher nearby-list writer (STATIC, 2026-07-10)
+
+Per-screen blob `0x143EC4EE0 + 0x35C0*screenIndex`: count@+0, 32-byte entries@+8,
+input-object table@+0x610 (stride 240), rebuild flag@+0x3570.
+
+- `InteractDispatcher_TickAllScreenBlobs` `0x1401611F0` — global frame tick on
+  screen-0 blob and (net co-op) screen-1 blob `0x143EC84A0`.
+- `InteractDispatcher_TickNearbyList` `0x140C87FB0` — prune, optional rebuild,
+  per-entry probe refresh.
+- `InteractDispatcher_RebuildNearbyList` `0x140C837F0` — **list writer**: clears
+  count, gathers via `InteractDispatcher_GatherNearbyPlayerObjects` `0x141C94340`,
+  appends via `InteractDispatcher_AppendNearbyEntry` `0x140C817F0` (max 48).
+- `InteractDispatcher_PruneNearbyList` `0x140C858F0` — compacts stale entries only
+  (not the initial writer).
+- `Player_InteractDispatcher` sets `dispatcher+0x3570=1` at epilog to request rebuild
+  on the next global tick.
+- `InputObject_MatchesActiveLocalJoypad` `0x14023AEA0` gates
+  `AppendNearbyEntry` probe refresh, `NearbyObject_KickProbes` `0x140C82310`, and
+  `InteractDispatcher_UpdateNearbyEntryProbe` `0x140C828B0` — entries without a
+  matching active local joypad never get `entry+24` probe-hit set.
+
+### Decision-node scheduler (STATIC, 2026-07-10, updated)
+
+Per-frame decision/interact path for local player:
+
+- `Player_AnimPhaseOwnerUpdate` `0x14042D120` — anim-phase entry;
+  `Player_ShouldSkipDirectRootTransformApply` (`player->vtable+1512` / `+0x5E8`
+  `0x141BC2EF0`) splits branches; **both** call
+  `Player_TickDecisionNodeFromControlHost` `0x1404223F0`. Skip=1 path may also
+  call `(*(player+0x1808))->vtable+0` when control-host `entity+0x6E` has `0x4|0x8`.
+- `NetController_ShouldSkipAnimPhaseDirectPath` `0x1419136E0` — when
+  `Player+0x348 m_pNetController` exists: net child `vtable+24` true → skip=1.
+- `Player_TickDecisionNodeFromControlHost` — syncs from `player+0x1FB0` hub;
+  calls `+0x1808 vtable+0` when `entity+0x6E bit0x4` and latch `player+0x1D52` clear.
+- `PlayerActiveDecisionNode_Tick` `0x14126B830` — locomotion decision node
+  (vtable `0x142E47BC0`); directly calls `BuildInteractDispatchState` +
+  `Player_InteractDispatchFromBuiltState` using `player+0x4010`.
+- `player+0x1808` cleared at `ConstructOwnerRuntimeClass` `0x141DE181A`; store at
+  `SetupOwnerRuntimeClassOwnedObject_1728` `0x141DE2604` via `vtable+0xDE8`
+  (`Player_ApplyDrawControlUpperHandoffGate` `0x14126C6A0` is void — runtime
+  pointer source still open).
+
+**Puppet wall (revised, 2026-07-10):**
+
+1. **`422760` clear via `Skill+vtable+96` — REJECTED.** `Skill_IsAuthorityForRootTransform`
+   `0x140664690` (vtable+96) always returns 1; clear branch unreachable for standard skills.
+2. **`ControlHostHub_RefreshEntity6EProbeFlags`** is the only `|=4` writer; per-player call on
+   `player+0x1FB0` from `0x1403E59D0` gated by `Player::vtable+4256` `0x1401D4F10` (always 0).
+3. **Real `422760` caller:** `sub_140421150` via `sub_14042FCF0` — **not** `422BB0`.
+4. **Alive-path gate:** `421150` calls `422760` only when `player+0x15A9` (+5545) bit1 set;
+   else hub entity bit0 never latched → morning `144610` clears bit4.
+5. **Frame-order:** `422760` else sets bit0 only; `TickDecisionNode` needs prior-frame bit4
+   (via `worldMgr+0x5A0` hub `144610`; entity alias TBD).
+6. **`player+0x1FF0`** = current `Skill*` (skill think selector `0x14041F1A0`).
+7. **`InputObject_MatchesActiveLocalJoypad`** — secondary `dispatch=0` wall.
+
+Status: **STATIC** (next: `+5545` bit1 writer; hub entity alias; runtime per slot).

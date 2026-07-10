@@ -177,6 +177,90 @@ FUNCTIONS = {
         "command list (input block +0x590) via InputScreenBlock_IsCommandActive - "
         "NOT the +0x518 bitmask; relayed puppet buttons never trigger interacts.",
     ),
+    0x140C805A0: (
+        "Player_BuildInteractDispatchState",
+        "Builds 0x15C-byte interact command/pose block from screenIndex + player "
+        "transform; snapshots g_PlayerHandleForHudPublish[screen] and per-screen "
+        "+0x590 command active flags from the player's joypad index (+0x39B8).",
+    ),
+    0x140EC75D0: (
+        "PlayerInteractController_UpdateReviveAndDispatch",
+        "Decision-node tick: revive + weapon-pickup disabled commands, then "
+        "BuildInteractDispatchState -> Player_InteractDispatcher for owner screen.",
+    ),
+    0x140CD3C00: (
+        "PlayerScriptedInteractController_UpdateAndDispatch",
+        "Decision-node tick: script/interact/boat-stand paths; ends in "
+        "BuildInteractDispatchState -> InteractDispatcher (camera route hardcoded 0).",
+    ),
+    0x140C88220: (
+        "Player_InteractDispatchFromBuiltState",
+        "Thin wrapper: validate g_PlayerHandleForHudPublish[screen] then call "
+        "Player_InteractDispatcher on the per-screen dispatcher blob.",
+    ),
+    0x140C837F0: (
+        "InteractDispatcher_RebuildNearbyList",
+        "Clears dispatcher+0 count, gathers nearby interactables (sub_141C94340 "
+        "Player-class pass + sphere-cast path), appends up to 48 x 32-byte entries "
+        "at dispatcher+8 via InteractDispatcher_AppendNearbyEntry.",
+    ),
+    0x140C87FB0: (
+        "InteractDispatcher_TickNearbyList",
+        "Per-frame nearby-list maintainer: prune stale entries, rebuild when "
+        "dispatcher+0x3570 flag set, refresh per-entry Havok probes. Called from "
+        "InteractDispatcher_TickAllScreenBlobs on each per-screen blob.",
+    ),
+    0x140C817F0: (
+        "InteractDispatcher_AppendNearbyEntry",
+        "Writes one 32-byte nearby entry {handle,id}@+0, interact index@+16, "
+        "probe-hit byte@+24; links input object at dispatcher+0x610+240*index. "
+        "Skips KickProbes when InputObject joypad != active local joypad.",
+    ),
+    0x140C858F0: (
+        "InteractDispatcher_PruneNearbyList",
+        "Compacts dispatcher nearby list: drops entries whose object fails the "
+        "dword_146920B54 visibility/active bit test.",
+    ),
+    0x140C828B0: (
+        "InteractDispatcher_UpdateNearbyEntryProbe",
+        "Per-entry sphere-cast probe refresh inside Player_InteractDispatcher; "
+        "gated by InputObject_MatchesActiveLocalJoypad on the linked input slot.",
+    ),
+    0x140C82310: (
+        "NearbyObject_KickProbes",
+        "Builds CheckNearbyGameObjectsParams and kicks Havok sphere casts "
+        "(nearby-object-searcher.cpp NearbyObject::KickProbes). Gated by "
+        "InputObject_MatchesActiveLocalJoypad.",
+    ),
+    0x1401611F0: (
+        "InteractDispatcher_TickAllScreenBlobs",
+        "Global frame tick: InteractDispatcher_TickNearbyList on qword_143EC4EE0 "
+        "(screen 0) and, in net co-op, qword_143EC84A0 (screen 1).",
+    ),
+    0x141C94340: (
+        "InteractDispatcher_GatherNearbyPlayerObjects",
+        "Spatial gather of Player-class interactables near the query object; "
+        "returns count and fills an output pointer array (max 48).",
+    ),
+    0x14042D120: (
+        "Player_AnimPhaseOwnerUpdate",
+        "Anim-phase owner update on player (*(wrapper+8)). Player_ShouldSkipDirect"
+        "RootTransformApply (vtable+1512) splits branches; both call "
+        "Player_TickDecisionNodeFromControlHost. Skip=1 path may also call "
+        "(*(player+0x1808))->vtable+0 when control-host entity+0x6E has 0x4|0x8.",
+    ),
+    0x1404223F0: (
+        "Player_TickDecisionNodeFromControlHost",
+        "Syncs player transform from control-host at player+0x1FB0; when host "
+        "entity+0x6E bit0x4 set, first-latch (*(player+0x1808))->vtable+0(player) "
+        "(player+0x1D52 bit0x4 latch).",
+    ),
+    0x140CD3760: (
+        "Player_DecisionNodePublishGate",
+        "Gate before PublishRuntimeState: validates player+0x1FC8 vtable+168, "
+        "calls vtable+96 on that object, player vtable+408, then "
+        "PublishRuntimeStateFromDecisionNodeLikeObject.",
+    ),
     0x140C7FF40: (
         "Player_ResolveWeaponPickupInteractAnim",
         "Resolves weapon-pickup-swap / weapon-pickup-when-no-weapon anim ids and "
@@ -219,10 +303,62 @@ FUNCTIONS = {
     ),
     0x141BC2EF0: (
         "Player_ShouldSkipDirectRootTransformApply",
-        "Player vtable +0x5E8 predicate structurally corresponding to the one "
-        "called by NavCharacter_ApplyAnimationRootTransform. Consults the global gameplay "
-        "manager and Player+0x348 m_pNetController; true bypasses the direct "
-        "local-root write branch.",
+        "Player vtable +0x5E8 (+1512 dec). Also gates Player_AnimPhaseOwnerUpdate: "
+        "return 0 -> net-anim short branch; return 1 -> control-host / decision-node "
+        "continuation. Consults gameplay manager and Player+0x348 m_pNetController "
+        "via NetController_ShouldSkipAnimPhaseDirectPath.",
+    ),
+    0x1419136E0: (
+        "NetController_ShouldSkipAnimPhaseDirectPath",
+        "Player+0x348 net-controller helper. Resolves child via net-controller "
+        "vtable+8(net, player); returns 1 (skip anim-phase direct path) when child "
+        "vtable+24 is true or child is null.",
+    ),
+    0x14126B830: (
+        "PlayerActiveDecisionNode_Tick",
+        "Decision-node vtable+0 (vtable data ~0x142E47BC0). Owner at node+8 -> "
+        "Player. Calls Player_BuildInteractDispatchState + "
+        "Player_InteractDispatchFromBuiltState using player+0x4010 screen index; "
+        "tail is PublishRuntimeStateFromDecisionNodeLikeObject (Player::Active::Update).",
+    ),
+    0x140422BB0: (
+        "Player_PreAnimHubAndAnchorSync",
+        "Sniper/aim-position sync only (size 0x304). Does NOT call "
+        "Player_SyncControlHostEntityRootOnNetSkip. Real 422760 path: "
+        "Player_EarlyUpdateHubAndRetainedRefs -> Player_SyncControlHostHubAndAnchors.",
+    ),
+    0x140421150: (
+        "Player_SyncControlHostHubAndAnchors",
+        "Called from Player_EarlyUpdateHubAndRetainedRefs. Requires player+0x1A0. "
+        "Alive: calls Player_SyncControlHostEntityRootOnNetSkip only when player+5545&2. "
+        "Not-alive: chest/neck aim anchors + always 422760 at epilog.",
+    ),
+    0x14042FCF0: (
+        "Player_EarlyUpdateHubAndRetainedRefs",
+        "Early per-player update: calls Player_SyncControlHostHubAndAnchors, "
+        "retained-ref screen marking, weapon-art cache, companion sync.",
+    ),
+    0x140422760: (
+        "Player_SyncControlHostEntityRootOnNetSkip",
+        "When player+0x1FF0 exists, its vtable+96 is false, and "
+        "Player_ShouldSkipDirectRootTransformApply is true: clears "
+        "control-host entity+0x6E bit0x4 (&=0xFA) at *(player+0x1FB0+16). "
+        "Else writes root transform via 0x142143F60/0x142144030 and sets bit0.",
+    ),
+    0x1403E59D0: (
+        "GameplayWorld_RefreshControlHostEntity6EFlags",
+        "Global world tick: joypad-filtered buffer refresh, per-actor loop with "
+        "ControlHostHub_RefreshEntity6EProbeFlags on actor+0x1FB0 (gated; Player "
+        "vtable+4256 always 0), then always 144610 on worldMgr+0x5A0 hub.",
+    ),
+    0x142144610: (
+        "ControlHostHub_RefreshEntity6EProbeFlags",
+        "Walks 112-byte entries at hub+16; when entry+0x6E bit0 set and entry+108 "
+        ">=0, sets bit0x4 and conditionally bit0x8 from resolver vtable+104/+120.",
+    ),
+    0x1401B7500: (
+        "Entity6E_MergeFlagByte",
+        "Atomic helper: entity+0x6E &= ~1; entity+0x6E |= arg flag byte.",
     ),
     0x140CC08F0: (
         "PlayerBase_SetupNpcAvoidanceCheck",
@@ -2553,12 +2689,26 @@ FUNCTIONS = {
         "its local state id at +0x10, clears +0x28/+0x38, and continues into "
         "the deeper actor-bound runtime setup path.",
     ),
-    0x14041F1D0: (
+    0x14041F1A0: (
         "RefreshOrSelectCurrentStateObject_1FF0",
-        "Large owner-side selector over the current gameplay-state object at "
-        "owner+0x1FF0. Can scan candidate objects, compare descriptor/hash "
-        "state, install a new current object, and dispatch virtual +0x20/+0x30/"
-        "+0x40 on that selected object.",
+        "Npc/Player skill think selector. Scans skill candidates; installs current "
+        "Skill* at owner+0x1FF0; logs Entering/Exiting skill; calls Clear on failure.",
+    ),
+    0x140664690: (
+        "Skill_IsAuthorityForRootTransform",
+        "Skill vtable +96. Always returns 1 (base/Script/Idle/NetSkill). Negated in "
+        "Player_SyncControlHostEntityRootOnNetSkip clear-path — clear branch dead for "
+        "standard skills.",
+    ),
+    0x1401D4F10: (
+        "Player_Vtable4256_ReturnFalse",
+        "Player vtable +4256 (0x10A0). Always returns 0; gates per-player "
+        "ControlHostHub_RefreshEntity6EProbeFlags in GameplayWorld_RefreshControlHostEntity6EFlags.",
+    ),
+    0x140CC1DA0: (
+        "Player_IsAliveForSkillAndDispatch",
+        "Player vtable +2144 (0x860). Health/alive predicate; used in skill exit and "
+        "3E59D0 entity6E refresh gate with player+5545 bit1.",
     ),
     0x140416AB0: (
         "GetCurrentStateObject_1FF0",

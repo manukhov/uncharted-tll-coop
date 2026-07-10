@@ -1,0 +1,416 @@
+entity+0x6E byte accesses: 138 hits
+
+0x1400CA10A [write?] (sub_1400CA030@0x1400CA030)
+  mov     [rbx+6Eh], rsi
+
+0x1401B7500 [write?] (sub_1401B7500@0x1401B7500)
+  and     byte ptr [rcx+6Eh], 0FEh
+
+0x1401B7504 [write?] (sub_1401B7500@0x1401B7500)
+  or      [rcx+6Eh], dl
+
+0x1401B7530 [access] (no_func)
+  movzx   eax, byte ptr [rcx+6Eh]
+
+0x1401B7540 [access] (no_func)
+  movzx   eax, byte ptr [rcx+6Eh]
+
+0x1401C474B [access] (sub_1401C4200@0x1401C4200)
+  movzx   eax, byte ptr [rcx+6Eh]
+
+0x1401CA3D7 [write?] (sub_1401CA3B0@0x1401CA3B0)
+  and     byte ptr [rbp+6Eh], 0FEh
+
+0x1401CA615 [write?] (sub_1401CA3B0@0x1401CA3B0)
+  or      byte ptr [rbp+6Eh], 1
+
+0x1401CA6E6 [read?] (sub_1401CA640@0x1401CA640)
+  test    byte ptr [rdx+6Eh], 4
+
+0x1401CA703 [read?] (sub_1401CA640@0x1401CA640)
+  test    byte ptr [rdx+6Eh], 8
+
+0x1403BC460 [access] (no_func)
+  movzx   eax, byte ptr [rcx+6Eh]
+
+0x1403BC470 [write?] (sub_1403BC470@0x1403BC470)
+  and     byte ptr [rcx+6Eh], 0FBh
+
+0x1403DB260 [access] (no_func)
+  movzx   eax, byte ptr [rcx+6Eh]
+
+0x1403DBE74 [access] (sub_1403DBE50@0x1403DBE50)
+  movzx   esi, byte ptr [rcx+6Eh]
+
+0x1403FB6B0 [write?] (no_func)
+  or      byte ptr [rcx+6Eh], 2
+
+0x1403FB6C0 [write?] (sub_1403FB6C0@0x1403FB6C0)
+  and     byte ptr [rcx+6Eh], 0FDh
+
+0x1404211FC [write?] (sub_140421150@0x140421150)
+  and     byte ptr [r14+6Eh], 0FEh
+
+0x140421385 [write?] (sub_140421150@0x140421150)
+  or      byte ptr [r14+6Eh], 1
+
+0x140421401 [access] (sub_140421150@0x140421150)
+  movzx   eax, byte ptr [r15+6Eh]
+
+0x14042170D [write?] (sub_140421150@0x140421150)
+  or      byte ptr [r15+6Eh], 1
+
+0x140422471 [read?] (Player_TickDecisionNodeFromControlHost@0x1404223F0)
+  test    byte ptr [rdi+6Eh], 4
+
+0x14042248E [read?] (Player_TickDecisionNodeFromControlHost@0x1404223F0)
+  test    byte ptr [rdi+6Eh], 8
+
+0x1404227B0 [write?] (sub_140422760@0x140422760)
+  and     byte ptr [rdi+6Eh], 0FAh
+
+0x140422A23 [write?] (sub_140422760@0x140422760)
+  or      byte ptr [rdi+6Eh], 1
+
+0x140422D6B [access] (sub_140422BB0@0x140422BB0)
+  movzx   eax, byte ptr [rsi+6Eh]
+
+0x140423106 [write?] (sub_140422F20@0x140422F20)
+  or      byte ptr [rbx+6Eh], 1
+
+0x14042D339 [access] (Player_AnimPhaseOwnerUpdate@0x14042D120)
+  movzx   eax, byte ptr [rsi+6Eh]
+
+0x1404340F3 [write?] (sub_1404340C0@0x1404340C0)
+  and     byte ptr [rbx+6Eh], 0FEh
+
+0x1404340FE [write?] (sub_1404340C0@0x1404340C0)
+  and     byte ptr [rdi+6Eh], 0FEh
+
+0x140434180 [write?] (sub_1404340C0@0x1404340C0)
+  or      byte ptr [rbx+6Eh], 1
+
+0x14043419E [write?] (sub_1404340C0@0x1404340C0)
+  or      byte ptr [rdi+6Eh], 1
+
+0x14043428A [write?] (sub_1404340C0@0x1404340C0)
+  or      byte ptr [rbx+6Eh], 2
+
+0x140434295 [write?] (sub_1404340C0@0x1404340C0)
+  or      byte ptr [rdi+6Eh], 2
+
+0x1404342C4 [write?] (sub_1404340C0@0x1404340C0)
+  and     byte ptr [rbx+6Eh], 0FDh
+
+0x1404342C8 [write?] (sub_1404340C0@0x1404340C0)
+  and     byte ptr [rdi+6Eh], 0FDh
+
+0x140436F92 [access] (SyncHostAnchors620_690FromCurrentActorAndStateVector@0x140436F20)
+  movzx   eax, byte ptr [rsi+6Eh]
+
+0x140436FA7 [access] (SyncHostAnchors620_690FromCurrentActorAndStateVector@0x140436F20)
+  movzx   eax, byte ptr [rdi+6Eh]
+
+0x140437012 [write?] (SyncHostAnchors620_690FromCurrentActorAndStateVector@0x140436F20)
+  or      byte ptr [rsi+6Eh], 1
+
+0x140437032 [write?] (SyncHostAnchors620_690FromCurrentActorAndStateVector@0x140436F20)
+  and     byte ptr [rsi+6Eh], 0FEh
+
+0x140437050 [write?] (SyncHostAnchors620_690FromCurrentActorAndStateVector@0x140436F20)
+  or      byte ptr [rdi+6Eh], 1
+
+0x140437077 [write?] (SyncHostAnchors620_690FromCurrentActorAndStateVector@0x140436F20)
+  and     byte ptr [rsi+6Eh], 0FEh
+
+0x14043707B [write?] (SyncHostAnchors620_690FromCurrentActorAndStateVector@0x140436F20)
+  and     byte ptr [rdi+6Eh], 0FEh
+
+0x1404371A3 [write?] (RunHelper1FC0HostAnchorPostPass@0x1404370C0)
+  or      byte ptr [rbx+6Eh], 1
+
+0x140437240 [access] (RunHelper1FC0HostAnchorPostPass@0x1404370C0)
+  movzx   ecx, byte ptr [rbx+6Eh]
+
+0x1404372AF [write?] (RunHelper1FC0HostAnchorPostPass@0x1404370C0)
+  and     byte ptr [rbx+6Eh], 0FEh
+
+0x1404496E0 [access] (no_func)
+  movzx   eax, byte ptr [rcx+6Eh]
+
+0x1405C4533 [write?] (sub_1405C4430@0x1405C4430)
+  and     byte ptr [rbx+6Eh], 0FEh
+
+0x1405C4555 [write?] (sub_1405C4430@0x1405C4430)
+  or      byte ptr [rbx+6Eh], 1
+
+0x1405C4573 [access] (sub_1405C4430@0x1405C4430)
+  movzx   eax, byte ptr [rbx+6Eh]
+
+0x1405C457D [write?] (sub_1405C4430@0x1405C4430)
+  mov     [rbx+6Eh], al
+
+0x1405C5AFF [write?] (sub_1405C5AB0@0x1405C5AB0)
+  and     byte ptr [rbx+6Eh], 0FEh
+
+0x1405C5B21 [write?] (sub_1405C5AB0@0x1405C5AB0)
+  or      byte ptr [rbx+6Eh], 1
+
+0x1405C5B3F [access] (sub_1405C5AB0@0x1405C5AB0)
+  movzx   eax, byte ptr [rbx+6Eh]
+
+0x1405C5B49 [write?] (sub_1405C5AB0@0x1405C5AB0)
+  mov     [rbx+6Eh], al
+
+0x1405EABEE [read?] (sub_1405EAB90@0x1405EAB90)
+  test    byte ptr [rdx+6Eh], 4
+
+0x1405EAD17 [read?] (sub_1405EAB90@0x1405EAB90)
+  test    byte ptr [rbx+6Eh], 8
+
+0x1405EBD66 [write?] (sub_1405EBC60@0x1405EBC60)
+  or      byte ptr [rax+6Eh], 1
+
+0x1405EBDF9 [access] (sub_1405EBDA0@0x1405EBDA0)
+  movzx   eax, byte ptr [rax+6Eh]
+
+0x1405EBFA5 [write?] (sub_1405EBDA0@0x1405EBDA0)
+  and     byte ptr [rax+6Eh], 0FBh
+
+0x1405EBFA9 [write?] (sub_1405EBDA0@0x1405EBDA0)
+  or      byte ptr [rax+6Eh], 1
+
+0x1405EBFBF [write?] (sub_1405EBDA0@0x1405EBDA0)
+  or      byte ptr [rbx+6Eh], 2
+
+0x1405EC177 [read?] (sub_1405EC130@0x1405EC130)
+  test    byte ptr [rax+6Eh], 4
+
+0x1405EF980 [access] (sub_1405EF980@0x1405EF980)
+  movzx   eax, byte ptr [rdx+6Eh]
+
+0x14060D42A [access] (sub_14060D280@0x14060D280)
+  lea     r8d, [rdi+6Eh]
+
+0x14063DC70 [write?] (RefreshHelper1FC0HostAnchorsFromPreferredCandidate@0x14063D800)
+  or      byte ptr [r14+6Eh], 1
+
+0x14063DCB0 [write?] (RefreshHelper1FC0HostAnchorsFromPreferredCandidate@0x14063D800)
+  or      byte ptr [r15+6Eh], 1
+
+0x14063DD53 [write?] (RefreshHelper1FC0HostAnchorsFromPreferredCandidate@0x14063D800)
+  or      byte ptr [rbx+6Eh], 1
+
+0x14063DD91 [write?] (RefreshHelper1FC0HostAnchorsFromPreferredCandidate@0x14063D800)
+  or      byte ptr [rdi+6Eh], 1
+
+0x14063DDCE [write?] (RefreshHelper1FC0HostAnchorsFromPreferredCandidate@0x14063D800)
+  and     byte ptr [rbx+6Eh], 0FEh
+
+0x14063DDD2 [write?] (RefreshHelper1FC0HostAnchorsFromPreferredCandidate@0x14063D800)
+  and     byte ptr [rdi+6Eh], 0FEh
+
+0x14063DED6 [write?] (RefreshHelper1FC0HostAnchorsFromPreferredCandidate@0x14063D800)
+  and     byte ptr [r14+6Eh], 0FEh
+
+0x14063DEDB [write?] (RefreshHelper1FC0HostAnchorsFromPreferredCandidate@0x14063D800)
+  and     byte ptr [r15+6Eh], 0FEh
+
+0x14063DEE0 [write?] (RefreshHelper1FC0HostAnchorsFromPreferredCandidate@0x14063D800)
+  and     byte ptr [rbx+6Eh], 0FEh
+
+0x14063DEE4 [write?] (RefreshHelper1FC0HostAnchorsFromPreferredCandidate@0x14063D800)
+  and     byte ptr [rdi+6Eh], 0FEh
+
+0x14064DB51 [access] (sub_14064D900@0x14064D900)
+  movzx   eax, byte ptr [rbp+6Eh]
+
+0x14064DBBA [access] (sub_14064D900@0x14064D900)
+  movzx   eax, byte ptr [rbp+6Eh]
+
+0x14064DD48 [write?] (sub_14064D900@0x14064D900)
+  or      byte ptr [rbp+6Eh], 3
+
+0x1407280C0 [access] (sub_140727FE0@0x140727FE0)
+  movzx   eax, byte ptr [rdx+6Eh]
+
+0x1407280C4 [write?] (sub_140727FE0@0x140727FE0)
+  mov     [rcx+6Eh], al
+
+0x140BCC93D [access] (sub_140BCC4B0@0x140BCC4B0)
+  vmovsd  qword ptr [rbx+6Eh], xmm1
+
+0x140BCCB94 [access] (sub_140BCC9D0@0x140BCC9D0)
+  vmovsd  qword ptr [rbx+6Eh], xmm1
+
+0x140BCD5C8 [access] (sub_140BCD0F0@0x140BCD0F0)
+  vmovsd  xmm1, qword ptr [rsi+6Eh]
+
+0x140C74BF2 [read?] (sub_140C74BF0@0x140C74BF0)
+  test    byte ptr [rcx+6Eh], 8
+
+0x140C77357 [access] (sub_140C77330@0x140C77330)
+  movzx   eax, byte ptr [r8+6Eh]
+
+0x140C77565 [access] (sub_140C77440@0x140C77440)
+  movzx   eax, byte ptr [rdi+6Eh]
+
+0x14104C1A6 [write?] (sub_14104BCC0@0x14104BCC0)
+  mov     [rdi+r9+6Eh], al
+
+0x14104C394 [access] (no_func)
+  movzx   eax, byte ptr [rdx+6Eh]
+
+0x14104C398 [write?] (no_func)
+  mov     [rcx+6Eh], al
+
+0x141665CFF [read?] (sub_141665B40@0x141665B40)
+  cmp     [rcx+6Eh], r12b
+
+0x141678E1C [write?] (sub_141678D40@0x141678D40)
+  mov     [rbx+6Eh], rsi
+
+0x141743D71 [access] (sub_141743A50@0x141743A50)
+  lea     r15d, [rax+6Eh]
+
+0x1417C0534 [access] (sub_1417C0320@0x1417C0320)
+  movzx   eax, byte ptr [rdx+6Eh]
+
+0x1417C0538 [write?] (sub_1417C0320@0x1417C0320)
+  mov     [rcx+6Eh], al
+
+0x1417C0894 [access] (sub_1417C0680@0x1417C0680)
+  movzx   eax, byte ptr [rdx+6Eh]
+
+0x1417C0898 [write?] (sub_1417C0680@0x1417C0680)
+  mov     [rcx+6Eh], al
+
+0x1417C0BF4 [access] (sub_1417C09E0@0x1417C09E0)
+  movzx   eax, byte ptr [rdx+6Eh]
+
+0x1417C0BF8 [write?] (sub_1417C09E0@0x1417C09E0)
+  mov     [rcx+6Eh], al
+
+0x1417C0FD4 [access] (sub_1417C0DC0@0x1417C0DC0)
+  movzx   eax, byte ptr [rdx+6Eh]
+
+0x1417C0FD8 [write?] (sub_1417C0DC0@0x1417C0DC0)
+  mov     [rcx+6Eh], al
+
+0x141853497 [access] (sub_141853210@0x141853210)
+  lea     r10d, [rdx+6Eh]
+
+0x141853717 [access] (sub_141853210@0x141853210)
+  lea     r10d, [rdx+6Eh]
+
+0x1418537A8 [access] (sub_141853210@0x141853210)
+  lea     r10d, [rdx+6Eh]
+
+0x1419690D3 [read?] (sub_141968BE0@0x141968BE0)
+  cmp     [rax+6Eh], dil
+
+0x1419690DF [write?] (sub_141968BE0@0x141968BE0)
+  mov     [rax+6Eh], edi
+
+0x14196A402 [read?] (sub_14196A360@0x14196A360)
+  cmp     [rcx+6Eh], dl
+
+0x14196A425 [write?] (sub_14196A360@0x14196A360)
+  mov     [rcx+6Eh], edx
+
+0x141A8E890 [access] (sub_141A8E590@0x141A8E590)
+  movzx   eax, byte ptr [rdx+6Eh]
+
+0x141A8E894 [write?] (sub_141A8E590@0x141A8E590)
+  mov     [rcx+6Eh], al
+
+0x141B4AFE0 [access] (sub_141B4AA90@0x141B4AA90)
+  movzx   eax, word ptr [rdi+6Eh]
+
+0x141BDD7BB [write?] (ConstructParticleRootOwnerRuntimeSubobject30AndSeedLinkedStateBlocks@0x141BDD400)
+  mov     [rdx+6Eh], al
+
+0x141BDDAD6 [access] (no_func)
+  movzx   eax, byte ptr [rdx+6Eh]
+
+0x141BDDADA [write?] (no_func)
+  mov     [rcx+6Eh], al
+
+0x141E58B5A [write?] (sub_141E58A40@0x141E58A40)
+  mov     word ptr [rsi+6Eh], 100h
+
+0x141E804C5 [write?] (sub_141E803E0@0x141E803E0)
+  mov     word ptr [rbx+6Eh], 100h
+
+0x141E80E4E [write?] (sub_141E80930@0x141E80930)
+  mov     word ptr [rbx+6Eh], 100h
+
+0x141E80E78 [read?] (sub_141E80930@0x141E80930)
+  cmp     [rbx+6Eh], r14b
+
+0x141E80F08 [write?] (sub_141E80930@0x141E80930)
+  mov     [rbx+6Eh], al
+
+0x141F336D6 [access] (sub_141F33550@0x141F33550)
+  movzx   eax, word ptr [rdi+6Eh]
+
+0x141F336DA [write?] (sub_141F33550@0x141F33550)
+  mov     [rbx+6Eh], ax
+
+0x141F33A34 [access] (sub_141F33920@0x141F33920)
+  movzx   eax, word ptr [rdx+6Eh]
+
+0x141F33A38 [write?] (sub_141F33920@0x141F33920)
+  mov     [rcx+6Eh], ax
+
+0x142144389 [write?] (sub_142144290@0x142144290)
+  and     byte ptr [r15+rax+6Eh], 0FCh
+
+0x1421443A8 [write?] (sub_142144290@0x142144290)
+  and     byte ptr [rdi+6Eh], 0F3h
+
+0x1421444BA [access] (sub_142144460@0x142144460)
+  movzx   eax, byte ptr [rbx+6Eh]
+
+0x14214466B [access] (sub_142144610@0x142144610)
+  movzx   eax, byte ptr [rdi+rsi+6Eh]
+
+0x14214468E [write?] (sub_142144610@0x142144610)
+  mov     [rdi+rsi+6Eh], al
+
+0x1421446C8 [write?] (sub_142144610@0x142144610)
+  and     byte ptr [rdi+rsi+6Eh], 0F7h
+
+0x1421446D2 [write?] (sub_142144610@0x142144610)
+  or      [rdi+rsi+6Eh], al
+
+0x142144716 [access] (sub_142144610@0x142144610)
+  movzx   ecx, byte ptr [rdi+rsi+6Eh]
+
+0x142144736 [access] (sub_142144610@0x142144610)
+  movzx   ecx, byte ptr [rdi+rsi+6Eh]
+
+0x142144750 [write?] (sub_142144610@0x142144610)
+  mov     [rdi+rsi+6Eh], cl
+
+0x14214482F [write?] (sub_142144610@0x142144610)
+  mov     [rdi+rsi+6Eh], al
+
+0x14238021F [access] (sub_14237FFE0@0x14237FFE0)
+  movzx   edx, byte ptr [rbx+6Eh]
+
+0x1423806B2 [access] (sub_142380550@0x142380550)
+  movzx   edx, byte ptr [rbx+6Eh]
+
+0x14239687E [access] (sub_142396790@0x142396790)
+  movzx   eax, byte ptr [rdi+6Eh]
+
+0x1423AA115 [write?] (sub_1423A98E0@0x1423A98E0)
+  mov     [rsi+6Eh], dil
+
+0x1423AA55F [write?] (sub_1423A98E0@0x1423A98E0)
+  mov     [rsi+6Eh], dil
+
+0x1423B7B36 [write?] (sub_1423B7A70@0x1423B7A70)
+  mov     byte ptr [rcx+6Eh], 0
+

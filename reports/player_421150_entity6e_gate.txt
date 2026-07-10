@@ -1,0 +1,85 @@
+# Player hub sync chain and entity+0x6E bit0 gate (STATIC, 2026-07-10)
+
+## Call chain (corrected)
+
+`Player_PreAnimHubAndAnchorSync` `0x140422BB0` does **NOT** call `422760` (sniper/aim-pos
+sync only; size `0x304`, ends `0x140422EB3`).
+
+Real path:
+
+```
+sub_14042FCF0` (player early update)
+  → sub_140421150` (hub + anchor sync)
+      → Player_SyncControlHostEntityRootOnNetSkip` `0x140422760` (conditional)
+```
+
+`42FCF0` is invoked from multiple player update schedulers (`0x1404901B0`, `0x140497890`,
+`0x140499B80`, …).
+
+## sub_140421150 logic
+
+**Outer gate:** `player+0x1A0` (+416) non-null — anim-instance path
+(`sub_14172B7F0(*(player+416))` used elsewhere). If null, entire function is a no-op
+(no `422760`, no anchor sync).
+
+**Alive branch** (`Player::vtable+2144` `0x140CC1DA0` = true):
+
+```c
+if (player+5545 & 2)
+    Player_SyncControlHostEntityRootOnNetSkip(player);  // sets entity+0x6E bit0
+```
+
+**Not-alive branch** (`vtable+2144` false):
+
+- Optional chest/neck aim anchor copy from `GetRetainedPlayerEntityBySlot(0)` when
+  `player+0x1D50` (+7504) bit2 clear.
+- **Always** calls `422760` at epilog (`0x140421780`).
+- Also `sub_14064D900(player+0x1DF0, player)`.
+
+**Implication:** for a visually alive puppet, `422760` runs **only** when
+`player+0x15A9` (+5545) **bit1** is set. If bit1 is clear, hub entity never gets
+bit0 from this path → morning `144610` clears bit4 → `TickDecisionNode` gated off.
+
+## player+0x15A9 (+5545) flag byte (partial)
+
+| Bit | Known role |
+|-----|------------|
+| `0x1` | Gates alive-path `422760` in `421150`; same bit in `3E59D0` per-player gate (with `!alive \|\| bit1`) |
+| `0x2` | — |
+| `0x4` | Set from `sub_1401E3B30` (joypad/screen match via `vtable+2232`) in death handler |
+| `0x8` | Copied from `(player+0x15A8 >> 2) & 8` in death handler |
+| `0x10` | Anim-process path (`\|= 0x10` when snapshot conditions fail) |
+
+**Open:** no static writer for **bit1** found yet (only death-handler merge for bits 4/8).
+Adjacent `player+0x15A8` (+5544) is touched by `vtable+0x58` setup (`0x141DE2180`) and
+`NavCharacter::Update` gate.
+
+## Frame order (unchanged)
+
+1. `GameplayWorld_RefreshControlHostEntity6EFlags` `0x1403E59D0` early in `0x1403E4AF0`:
+   - per-player `144610(player+0x1FB0)` **dead** for `Player` (`vtable+4256` → 0).
+   - epilog: `144610(worldMgr+0x5A0)` always.
+2. Per-player `42FCF0` → `421150` → `422760` (if gates pass): sets **bit0** on
+   `*(player+0x1FB0+16)+0x6E`.
+3. `Player_TickDecisionNodeFromControlHost`: needs **bit4** (from prior-frame
+   `144610` promotion when bit0 was set).
+
+**Open:** confirm `*(player+0x1FB0+16)` entity pointer is also an entry in
+`worldMgr+0x5A0` hub (alias) — required if per-player `144610` is dead but slot 0
+still gets bit4.
+
+## Runtime falsifiers (revised)
+
+| Probe | Slot 0 | Puppet (joypad 3) |
+|-------|--------|-------------------|
+| `player+416` at `421150` entry | non-null | ? |
+| `player+5545 & 2` at `421150` alive branch | **1** | **0**? |
+| `422760` hit rate (alive gameplay) | every frame if bit1 set | **never** if bit1 clear |
+| `entity+0x6E` at `4223F0` | bit0+bit4 | bit0 clear → bit4 cleared next morning |
+
+## Suggested labels
+
+| Address | Name |
+|---------|------|
+| `0x140421150` | `Player_SyncControlHostHubAndAnchors` |
+| `0x14042FCF0` | `Player_EarlyUpdateHubAndRetainedRefs` |

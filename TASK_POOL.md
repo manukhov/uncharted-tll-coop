@@ -40,8 +40,14 @@
       the turn/run jitter. Puppet full ADS remains OFF / manual `F8`. Do not
       re-enable broad screen-1 pose-seed/source writes; that path
       freezes locomotion facing.
-- [ ] **Head / camera look sync (NEW P0):** STATIC done (`reports/lookat_field_map.md`).
-      Next: implement sender flag `0x0400` + receiver SetLookPoint on `Player+0x1E38`.
+- [ ] **Head / camera look sync:** STATIC done (`reports/lookat_field_map.md`).
+      PARKED — spine twist unacceptable (`g_puppet_head_look_sync=false`).
+- [ ] **Puppet controller model (NEW):** STATIC map in
+      `reports/player_decision_node_controllers.md`. Nearby-list writer DONE;
+      decision-node scheduler DONE (`0x14042D120` / `0x1404223F0` / `0x140CD3760`).
+      Next: `player->vtable+1512` + `player+0x1808` selection per slot +
+      decision-node scheduler for screen 1. Unblocks pickup gesture / aim-pitch /
+      interact SM — not per-feature replay.
 - [~] Положение, поворот, скорость и здоровье уже передаются. Сырые данные по
       цепочке `Player+0x1A8 -> +0x10` проверены и отвергнуты: это 32-байтовые
       записи эффектов с межпроцессными указателями, не кости персонажа.

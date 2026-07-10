@@ -9529,7 +9529,7 @@ bool seh_publish_puppet_pickup_action(void* dispatcher, void* pickup) {
 // puppet's per-player interact/anim state machine does not run (AI off), so nothing
 // consumes the activated command. Same root as the un-materialized screen-1 camera.
 // Numpad 9 toggles for further experiments.
-volatile bool g_puppet_pickup_gesture = true;
+volatile bool g_puppet_pickup_gesture = false;
 
 bool seh_activate_puppet_command(void* block, std::uint32_t cmd_id) {
     __try {
