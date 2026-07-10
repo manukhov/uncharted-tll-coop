@@ -1,0 +1,371 @@
+=== 0x14043B830: sub_14043B830 [0x14043B830..0x14043BBE4] ===
+// Hidden C++ exception states: #wind=4
+_UNKNOWN **__fastcall sub_14043B830(__int64 a1)
+{
+  _UNKNOWN **result; // rax
+  __int64 v3; // rcx
+  __int64 v5; // rbx
+  __int64 v10; // rbx
+  __int64 v14; // rax
+  __int64 v15; // rax
+  __int64 v18; // rdx
+  __int64 v19; // r9
+  const char *v20; // r8
+  __int64 v23; // r10
+  __int64 v29; // rcx
+  char v30; // dl
+  char v31; // al
+  __int64 v32; // [rsp+38h] [rbp-D0h] BYREF
+  __int128 v33; // [rsp+40h] [rbp-C8h]
+  __int128 v34; // [rsp+58h] [rbp-B0h]
+  __int64 v35; // [rsp+68h] [rbp-A0h]
+  const char *v36; // [rsp+70h] [rbp-98h]
+  const char *v37; // [rsp+78h] [rbp-90h]
+  int v38; // [rsp+80h] [rbp-88h]
+  __int64 v39; // [rsp+88h] [rbp-80h]
+  __int64 *v40; // [rsp+90h] [rbp-78h]
+  __int64 *v41; // [rsp+98h] [rbp-70h]
+  __int128 v42; // [rsp+A8h] [rbp-60h] BYREF
+  _QWORD v43[2]; // [rsp+B8h] [rbp-50h] BYREF
+  int v44; // [rsp+C8h] [rbp-40h]
+  _BYTE v46[48]; // [rsp+E8h] [rbp-20h] BYREF
+  _BYTE v47[112]; // [rsp+118h] [rbp+10h] BYREF
+  char v49; // [rsp+18Ch] [rbp+84h]
+  _BYTE v52[976]; // [rsp+488h] [rbp+380h] BYREF
+  char v53; // [rsp+858h] [rbp+750h] BYREF
+  _DWORD v54[256]; // [rsp+AA8h] [rbp+9A0h] BYREF
+  _UNKNOWN *retaddr; // [rsp+EE0h] [rbp+DD8h] BYREF
+
+  result = &retaddr;
+  v39 = -2;
+  if ( *(_WORD *)(a1 + 59656) != 0xFFFF )
+  {
+    sub_141D70030(&qword_146A636B0, &v32, a1 + 59656);
+    if ( v32 > *(_QWORD *)(a1 + 8912) )
+    {
+      v35 = a1 + 59632;
+      v36 = "d:\\perforce\\code\\big4final-tll-release\\big4\\src\\game\\ai\\agent\\npc.cpp";
+      v38 = 17310;
+      v37 = "void __cdecl Npc::UpdatePathSearch(void)";
+      while ( _InterlockedCompareExchange64((volatile signed __int64 *)(a1 + 59632), 0x8000000000000000uLL, 0) )
+        ;
+      v3 = *(_QWORD *)(a1 + 59648);
+      _R12 = &dword_143D3C0D0;
+      if ( v3 )
+      {
+        v40 = &qword_143D41E50;
+        while ( qword_143D41E50 || _InterlockedCompareExchange64(&qword_143D41E50, -1, 0) )
+          _mm_pause();
+        v5 = (int)((v3 - *((_QWORD *)&xmmword_143D41DF0 + 1)) / (__int64)xmmword_143D41E30);
+        if ( (*((_WORD *)&dword_143D3C0D0 + v5 + 11984))-- == 1 )
+        {
+          sub_1415C6510((char *)&xmmword_143D41DF0 + 8, v3);
+          *(_QWORD *)&v33 = 0;
+          DWORD2(v33) = 0;
+          _RBX = 2 * v5;
+          __asm
+          {
+            vmovups xmm0, [rsp+0ED0h+var_EA0+8]
+            vmovups xmmword ptr [r12+rbx*8+5E00h], xmm0
+          }
+        }
+        _InterlockedExchange64(&qword_143D41E50, 0);
+      }
+      *(_QWORD *)&v34 = *(_QWORD *)(a1 + 168);
+      DWORD2(v34) = *(_DWORD *)(a1 + 188);
+      __asm
+      {
+        vmovups xmm0, [rsp+0ED0h+var_E88+8]
+        vmovdqa [rbp+0DD0h+var_E30], xmm0
+      }
+      *(_QWORD *)(a1 + 59648) = sub_1403E3A30(&dword_143D3C0D0, &v42);
+      *(_QWORD *)(a1 + 8912) = v32;
+      sub_1415BF990(v35);
+    }
+    v41 = &qword_1469834B0;
+    sub_141C832A0(&qword_1469834B0);
+    v10 = *(_QWORD *)(a1 + 5560);
+    v43[0] = 0;
+    *(_QWORD *)&v33 = 0;
+    v43[1] = 0;
+    v44 = 0;
+    __asm
+    {
+      vmovups xmm1, cs:xmmword_142BEE4D0
+      vunpckhps xmm0, xmm1, xmm1
+      vunpckhps xmm1, xmm0, xmm1
+      vmovups [rbp+0DD0h+var_E00], xmm1
+    }
+    v14 = (*(__int64 (__fastcall **)(__int64, _BYTE *))(*(_QWORD *)a1 + 456LL))(a1, v46);
+    sub_141E11730(v10, v52, v14, v43);
+    v15 = sub_141E11AC0(v10, (unsigned int)&v53, a1, (int)a1 + 256, (__int64)sub_141E124A0, 0);
+    sub_1409DDD50(v52, v15);
+    sub_1403FA8C0(v47, v52);
+    __asm
+    {
+      vmovss  xmm0, cs:flt_142BEA0A8
+      vmovss  [rbp+0DD0h+var_A7C], xmm0
+    }
+    *(double *)&_XMM0 = (*(double (__fastcall **)(__int64))(*(_QWORD *)a1 + 4360LL))(a1);
+    __asm { vmovss  [rbp+0DD0h+var_A78], xmm0 }
+    v49 = 0;
+    __asm
+    {
+      vxorps  xmm0, xmm0, xmm0
+      vmovss  [rbp+0DD0h+var_D50], xmm0
+    }
+    sub_141D706D0(&qword_146A636B0, a1 + 59656, v47);
+    v18 = 0;
+    v19 = 17;
+    v20 = "NavMeshGlobalLock";
+    _RAX = v54;
+    _RCX = qword_142BEA360;
+    v23 = 8;
+    do
+    {
+      __asm
+      {
+        vmovups ymm0, ymmword ptr [rcx]
+        vmovups ymmword ptr [rax], ymm0
+        vmovups ymm0, ymmword ptr [rcx+20h]
+        vmovups ymmword ptr [rax+20h], ymm0
+        vmovups ymm0, ymmword ptr [rcx+40h]
+        vmovups ymmword ptr [rax+40h], ymm0
+        vmovups xmm0, xmmword ptr [rcx+60h]
+        vmovups xmmword ptr [rax+60h], xmm0
+      }
+      _RAX += 32;
+      __asm
+      {
+        vmovups xmm1, xmmword ptr [rcx+70h]
+        vmovups xmmword ptr [rax-10h], xmm1
+      }
+      _RCX += 16;
+      --v23;
+    }
+    while ( v23 );
+    do
+    {
+      if ( !*v20 )
+        break;
+      v18 = (unsigned int)(((_DWORD)v18 << 8) ^ v54[(unsigned __int8)(*v20++ ^ BYTE3(v18))]);
+      --v19;
+    }
+    while ( v19 );
+    __asm { vzeroupper }
+    result = (_UNKNOWN **)sub_1415BF4E0(13, v18);
+    if ( !(_BYTE)result )
+    {
+      v29 = qword_1469834B0;
+      v30 = 0;
+      while ( 1 )
+      {
+        if ( !*(_QWORD *)(v29 + 32) )
+        {
+          result = (_UNKNOWN **)_InterlockedCompareExchange64((volatile signed __int64 *)(v29 + 32), -1, 0);
+          if ( !result )
+            break;
+        }
+        v31 = v30;
+        if ( !v30 )
+          v31 = 1;
+        v30 = v31;
+        _mm_pause();
+      }
+      --*(_QWORD *)(v29 + 48);
+      _InterlockedExchange64((volatile __int64 *)(v29 + 32), 0);
+    }
+  }
+  return result;
+}
+
+=== 0x14042F780: sub_14042F780 [0x14042F780..0x14042F7C8] ===
+__int64 __fastcall sub_14042F780(_BYTE *a1)
+{
+  __int64 result; // rax
+
+  sub_14043B830((__int64)a1);
+  result = (*(__int64 (__fastcall **)(_BYTE *))(*(_QWORD *)a1 + 1512LL))(a1);
+  a1[61772] = (_BYTE)result || (result = (*(__int64 (__fastcall **)(_BYTE *))(*(_QWORD *)a1 + 2480LL))(a1)) != 0;
+  return result;
+}
+
+=== 0x14063A610: sub_14063A610 [0x14063A610..0x14063A8F6] ===
+// local variable allocation has failed, the output may be wrong!
+// Hidden C++ exception states: #wind=2
+__int64 __fastcall sub_14063A610(__int64 a1, double _XMM1_8)
+{
+  _QWORD *v3; // rax
+  signed __int64 v4; // rtt
+  __int64 v10; // rcx
+  __int64 v12; // rbx
+  __int64 v13; // r14
+  unsigned __int64 v14; // rcx
+  _QWORD *v15; // rsi
+  __int64 v16; // rax
+  __int64 v19; // rcx
+  __int64 result; // rax
+  __int64 v29; // rdx
+  __int64 (*v30)(const char *, ...); // rbx
+  const char *v31; // rcx
+  __int64 v32; // [rsp+28h] [rbp-89h]
+  __m256 v33; // [rsp+38h] [rbp-79h]
+  __m256 v34; // [rsp+38h] [rbp-79h]
+  volatile signed __int64 *v35; // [rsp+58h] [rbp-59h]
+  __m256 v36; // [rsp+78h] [rbp-39h] BYREF
+  _QWORD *v37; // [rsp+98h] [rbp-19h]
+  __int64 v38; // [rsp+A0h] [rbp-11h]
+  __m256 v39; // [rsp+A8h] [rbp-9h] BYREF
+  __int64 v40; // [rsp+C8h] [rbp+17h]
+  __m256 v41; // [rsp+D0h] [rbp+1Fh]
+
+  v38 = -2;
+  *(_DWORD *)(a1 + 64) = 0;
+  v3 = (_QWORD *)(a1 + 80);
+  v35 = (volatile signed __int64 *)(a1 + 80);
+  while ( 1 )
+  {
+    v4 = *v3 & 0x7FFFFFFFFFFFFFFFLL;
+    if ( v4 == _InterlockedCompareExchange64(v35, v4 + 1, v4) )
+      break;
+    v3 = (_QWORD *)(a1 + 80);
+  }
+  v37 = (_QWORD *)(a1 + 96);
+  *(_QWORD *)v33.m256_f32 = a1 + 112;
+  *(_OWORD *)&v33.m256_f32[4] = *(unsigned int *)(a1 + 120);
+  *(_QWORD *)&v33.m256_f32[2] = *(_QWORD *)(a1 + 128);
+  __asm
+  {
+    vmovups ymm0, [rbp+57h+var_D0]
+    vmovups [rbp+57h+var_90], ymm0
+  }
+  __asm { vzeroupper }
+  sub_14060CC50(&v36);
+  v40 = a1 + 96;
+  *(_QWORD *)v33.m256_f32 = a1 + 112;
+  *(_OWORD *)&v33.m256_f32[4] = *(unsigned int *)(a1 + 120);
+  *(_QWORD *)&v33.m256_f32[2] = *(_QWORD *)(a1 + 128);
+  __asm
+  {
+    vmovups ymm0, [rbp+57h+var_D0]
+    vmovups [rbp+57h+var_60], ymm0
+  }
+  __asm { vzeroupper }
+  sub_14060CC50(&v39);
+  __asm
+  {
+    vmovups ymm1, [rbp+57h+var_60]
+    vmovsd  xmm0, [rbp+57h+var_40]
+    vmovsd  [rbp+57h+var_18], xmm0
+    vmovups [rbp+57h+var_D0], ymm1
+    vmovq   rax, xmm1
+  }
+  v10 = *(_QWORD *)(_RAX + 16);
+  *(_QWORD *)&v34.m256_f32[2] = v10;
+  __asm
+  {
+    vmovups ymm0, [rbp+57h+var_D0]
+    vmovups [rbp+57h+var_38], ymm0
+  }
+  v12 = *(_QWORD *)&v36.m256_f32[2];
+  if ( *(_QWORD *)&v36.m256_f32[2] != v10 )
+  {
+    v13 = *(_QWORD *)&v41.m256_f32[2];
+    do
+    {
+      v14 = (unsigned __int64)(int)v12 >> 6;
+      v15 = v37;
+      v16 = *(_QWORD *)(v37[2] + 8 * v14);
+      if ( !_bittest64(&v16, v12 & 0x3F) )
+      {
+        if ( !qword_146B17C08 )
+        {
+          __asm { vzeroupper }
+LABEL_11:
+          sub_1422053E0(v14);
+          __debugbreak();
+        }
+        LODWORD(v32) = 178;
+        __asm { vzeroupper }
+        if ( !(unsigned __int8)qword_146B17C08(
+                                 "m_pHeap->IsElementUsed(current)",
+                                 "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\corelib\\containers\\fixedsizeheap.h",
+                                 "FixedSizeHeap::TypedIterator<class AiEntity>::operator *",
+                                 "Jun 30 2023 19:08:04",
+                                 v32,
+                                 0) )
+          goto LABEL_11;
+      }
+      _RAX = *v15 + v12 * v15[7];
+      _R8 = *(_QWORD *)(a1 + 56) + ((unsigned __int64)*(unsigned int *)(a1 + 64) << 10);
+      v19 = 8;
+      do
+      {
+        __asm
+        {
+          vmovups xmm0, xmmword ptr [rax]
+          vmovups xmmword ptr [r8], xmm0
+          vmovups xmm1, xmmword ptr [rax+10h]
+          vmovups xmmword ptr [r8+10h], xmm1
+          vmovups xmm0, xmmword ptr [rax+20h]
+          vmovups xmmword ptr [r8+20h], xmm0
+          vmovups xmm1, xmmword ptr [rax+30h]
+          vmovups xmmword ptr [r8+30h], xmm1
+          vmovups xmm0, xmmword ptr [rax+40h]
+          vmovups xmmword ptr [r8+40h], xmm0
+          vmovups xmm1, xmmword ptr [rax+50h]
+          vmovups xmmword ptr [r8+50h], xmm1
+          vmovups xmm0, xmmword ptr [rax+60h]
+          vmovups xmmword ptr [r8+60h], xmm0
+        }
+        _R8 += 128LL;
+        __asm
+        {
+          vmovups xmm1, xmmword ptr [rax+70h]
+          vmovups xmmword ptr [r8-10h], xmm1
+        }
+        _RAX += 128;
+        --v19;
+      }
+      while ( v19 );
+      ++*(_DWORD *)(a1 + 64);
+      __asm { vzeroupper }
+      sub_1404498B0(&v36);
+      v12 = *(_QWORD *)&v36.m256_f32[2];
+    }
+    while ( *(_QWORD *)&v36.m256_f32[2] != v13 );
+  }
+  result = (__int64)v35;
+  v29 = _InterlockedExchangeAdd64(v35, 0xFFFFFFFFFFFFFFFFuLL);
+  if ( v29 <= 0 )
+  {
+    v30 = qword_146B17C08;
+    if ( !qword_146B17C08 )
+    {
+      __asm { vzeroupper }
+      goto LABEL_22;
+    }
+    v31 = &byte_1428D4552;
+    if ( qword_146B17C00 )
+    {
+      __asm { vzeroupper }
+      v31 = (const char *)qword_146B17C00("Releasing read lock with unexpected prev val: %d\n", v29);
+    }
+    __asm { vzeroupper }
+    result = v30(
+               "prevVal > 0",
+               "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\corelib\\system\\read-write-atomic-lock.cpp",
+               "NdRwAtomicLock64Base::ReleaseReadLock",
+               "Jun 30 2023 19:05:44",
+               171,
+               v31);
+    if ( !(_BYTE)result )
+    {
+LABEL_22:
+      sub_1422053E0(v10);
+      __debugbreak();
+    }
+  }
+  __asm { vzeroupper }
+  return result;
+}

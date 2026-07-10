@@ -20,6 +20,7 @@ __pycache__/
 # Generated reports / scratch
 reports/_tmp_*
 reports/*.log
+reports/*.log.prev_*
 reports/*runtime_objects.json
 reports/probe_addrs.txt
 scanner/_build*.cmd

@@ -209,19 +209,10 @@ bool g_control_enabled = false;
 // player avatar) via animated NPC move-intent instead of local WASD.
 bool g_net_drive_nadine = false;
 bool g_local_player1_bind_enabled = false;
-// REAL-SECOND-PLAYER Experiment 1 (2026-07-10): activate split-login + bind
-// local-player-1 resolver to the retained Player puppet, then observe whether the
-// engine natively promotes it (sets player+0x15A9 bit1 and builds the hub/anim
-// state that forcing the bit alone could not). Off until the activation key.
+// REAL-SECOND-PLAYER read-only diagnostics: activate split-login, bind
+// local-player-1 resolver to the retained Player puppet, and compare registration
+// state. Off until the activation key.
 volatile bool g_realsecond_experiment = false;
-// Exp 2: drive the native per-player early update sub_14042FCF0(puppet, dt) each
-// frame (the scheduler tick that promotes the hub / sets +0x15A9 bit1). Key-gated,
-// default OFF, SEH-wrapped - if the scheduler context is required it crashes and we
-// pivot to fixing the scheduler enumeration instead.
-// REJECTED 2026-07-10: calling 42FCF0 standalone FAULTS and crashes the copy - the
-// native update needs the scheduler's ordered context. Default OFF permanently;
-// the real fix is getting the native scheduler to enumerate+tick the puppet.
-volatile bool g_realsecond_drive_update = false;
 bool g_force_split_render_enabled = false;  // OFF: split-render mode broke main-player aiming
 bool g_split_render_applied = false;
 bool g_split_login_done = false;
@@ -605,19 +596,6 @@ volatile bool g_puppet_head_look_sync = false;
 // aim basis. Default OFF (risks the transform/locomotion baseline); toggle Numpad .
 // (VK_DECIMAL). Build 1: materialize + observe; build 2 will orient it to the peer.
 volatile bool g_puppet_materialize_screen1_cam = false;
-// DECISION-NODE WALL TEST (2026-07-10, Cursor gate): set player+0x15A9 bit1 (&2) on
-// the puppet each frame. That bit gates the alive-path hub sync 0x140421150 ->
-// 0x140422760 (sets control-host entity+0x6E bit0) that TickDecisionNode needs; the
-// puppet has it clear, so its interact/anim/aim decision node never runs. If setting
-// it makes the puppet's native controllers come alive (pickup bend / aim pitch),
-// this is the wall's root. Default OFF (may make the engine treat the puppet as
-// locally controlled -> conflict with transform-pin); Numpad 1 toggles for rollback.
-// CONFIRMED 2026-07-10: setting this bit DOES run the alive-path chain (421150->
-// 422760) - it CRASHED copy 2, proving the bit gates the chain but the puppet lacks
-// the hub-entity/anim-instance state the chain dereferences. Default OFF; the fix
-// must build those structures, not just set the bit.
-volatile bool g_puppet_promote_control_bit = false;
-
 void relayed_weapon_store_put(std::uint32_t art_id, const void* info) {
     if (art_id == 0 || info == nullptr || !is_pickup_relay_art(art_id)) {
         return;
@@ -11195,18 +11173,94 @@ void scrub_local_viewport_aim_hud_leak() {
     }
 }
 
-// SEH-only helper (no C++ objects): call the native per-player early update on the
-// puppet. Returns true on success, false if it faulted.
-bool seh_call_player_early_update(void* player) {
-    __try {
-        const auto early_update =
-            reinterpret_cast<char(__fastcall*)(void*, double)>(
-                g_module + kPlayerEarlyUpdateRva);
-        early_update(player, 0.0166);
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
+// Rate-limited read-only REALSECOND observe + NPC spot-list probe. The list is
+// useful spawn diagnostics, but it does not schedule Player::Update.
+void log_realsecond_observe_and_npc_spot_list(void* remote_player) {
+    if (!g_realsecond_experiment || remote_player == nullptr ||
+        readable_bytes(static_cast<std::byte*>(remote_player) + 0x1FB8) < 8) {
+        return;
     }
+    static ULONGLONG last = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last <= 1000) {
+        return;
+    }
+    last = now;
+    const void* hub = *reinterpret_cast<void* const*>(
+        static_cast<const std::byte*>(remote_player) + 0x1FB0);
+    const void* upper_state_owner = *reinterpret_cast<void* const*>(
+        static_cast<const std::byte*>(remote_player) + 0x1A0);
+    std::ostringstream l;
+    l << "REALSECOND-OBSERVE hub(+0x1FB0)=0x" << std::hex
+      << reinterpret_cast<std::uintptr_t>(hub) << " upper_state(+0x1A0)=0x"
+      << reinterpret_cast<std::uintptr_t>(upper_state_owner) << std::dec;
+    force_log_line(l.str().c_str());
+
+    auto* const npc_manager =
+        reinterpret_cast<const std::byte*>(g_module + kNpcManagerRva);
+    if (readable_bytes(npc_manager) < kNpcManagerSpotActorListOffset + 32) {
+        return;
+    }
+    const std::uint32_t spot_count = *reinterpret_cast<const std::uint32_t*>(
+        npc_manager + kNpcManagerSpotActorCountOffset);
+    const std::uint32_t max_local = *reinterpret_cast<const std::uint32_t*>(
+        g_module + kMaxLocalPlayersRva);
+    std::uint32_t resolver_active = 0;
+    auto* const resolver =
+        *reinterpret_cast<void* const*>(g_module + kLocalPlayerResolverGlobalRva);
+    if (resolver != nullptr &&
+        readable_bytes(
+            static_cast<const std::byte*>(resolver) +
+                kLocalPlayerResolverActiveCountOffset) >= 4) {
+        resolver_active = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(resolver) +
+            kLocalPlayerResolverActiveCountOffset);
+    }
+    std::uint32_t screen_mask = 0;
+    if (readable_bytes(npc_manager + kNpcManagerSpotMaskOffset) >= 4) {
+        screen_mask = *reinterpret_cast<const std::uint32_t*>(
+            npc_manager + kNpcManagerSpotMaskOffset);
+    }
+    std::ostringstream g;
+    g << "REALSECOND-EXP3B spot_count=" << spot_count << " max_local=" << max_local
+      << " resolver_active=" << resolver_active << " screen_mask=0x" << std::hex
+      << screen_mask << std::dec;
+    const unsigned n = spot_count < 4u ? spot_count : 4u;
+    bool puppet_in_list = false;
+    for (unsigned i = 0; i < n; ++i) {
+        const auto* const entry =
+            npc_manager + kNpcManagerSpotActorListOffset +
+            static_cast<std::size_t>(i) * 16;
+        if (readable_bytes(entry) < 16) {
+            break;
+        }
+        const void* const handle = *reinterpret_cast<const void* const*>(entry);
+        const std::int32_t meta_screen =
+            *reinterpret_cast<const std::int32_t*>(entry + 8);
+        const void* player = nullptr;
+        std::int32_t runtime_id = -1;
+        if (handle != nullptr &&
+            readable_bytes(static_cast<const std::byte*>(handle) + 16) >= 8) {
+            player = *reinterpret_cast<const void* const*>(
+                static_cast<const std::byte*>(handle) + 8);
+            if (player != nullptr &&
+                readable_bytes(
+                    static_cast<const std::byte*>(player) +
+                        kGameObjectRuntimeIdOffset) >= 4) {
+                runtime_id = *reinterpret_cast<const std::int32_t*>(
+                    static_cast<const std::byte*>(player) +
+                    kGameObjectRuntimeIdOffset);
+            }
+        }
+        if (player == remote_player) {
+            puppet_in_list = true;
+        }
+        g << " [" << i << ":meta=" << meta_screen << " ptr=0x" << std::hex
+          << reinterpret_cast<std::uintptr_t>(player) << " runtime_id=" << std::dec
+          << runtime_id << "]";
+    }
+    g << " puppet_in_list=" << (puppet_in_list ? 1 : 0);
+    force_log_line(g.str().c_str());
 }
 
 void drive_remote_slot1_actions_tick() {
@@ -11225,62 +11279,7 @@ void drive_remote_slot1_actions_tick() {
     if (g_puppet_materialize_screen1_cam) {
         materialize_screen1_camera_once();
     }
-    // REAL-SECOND-PLAYER Exp 2: drive the native per-player early update on the
-    // puppet each frame (the scheduler tick that promotes it). SEH in a helper.
-    if (g_realsecond_drive_update) {
-        static ULONGLONG last_log = 0;
-        const bool faulted = !seh_call_player_early_update(remote_player);
-        const ULONGLONG now = GetTickCount64();
-        if (faulted || now - last_log > 1000) {
-            last_log = now;
-            force_log_line(faulted ? "REALSECOND-DRIVE early_update FAULTED"
-                                   : "REALSECOND-DRIVE early_update called");
-        }
-    }
-    // REAL-SECOND-PLAYER Exp 1: OBSERVE (read-only) whether the engine natively
-    // promotes the puppet after split-login + resolver bind - is +0x15A9 bit1 now
-    // set by the engine, and does the control-host hub (player+0x1FB0) come alive?
-    if (g_realsecond_experiment &&
-        readable_bytes(static_cast<std::byte*>(remote_player) + 0x1FB8) >= 8) {
-        static ULONGLONG last = 0;
-        const ULONGLONG now = GetTickCount64();
-        if (now - last > 1000) {
-            last = now;
-            const std::uint8_t flag = *reinterpret_cast<const std::uint8_t*>(
-                static_cast<const std::byte*>(remote_player) + 0x15A9);
-            const void* hub = *reinterpret_cast<void* const*>(
-                static_cast<const std::byte*>(remote_player) + 0x1FB0);
-            const void* anim = *reinterpret_cast<void* const*>(
-                static_cast<const std::byte*>(remote_player) + 0x1A0);
-            std::ostringstream l;
-            l << "REALSECOND-OBSERVE +0x15A9=0x" << std::hex
-              << static_cast<int>(flag) << " bit1=" << ((flag & 2) ? 1 : 0)
-              << " hub(+0x1FB0)=0x" << reinterpret_cast<std::uintptr_t>(hub)
-              << " anim(+0x1A0)=0x" << reinterpret_cast<std::uintptr_t>(anim)
-              << std::dec;
-            force_log_line(l.str().c_str());
-        }
-    }
-    // DECISION-NODE WALL TEST: set player+0x15A9 bit1 so the alive-path hub sync
-    // (0x140421150 -> 0x140422760) runs and promotes the control-host entity for
-    // TickDecisionNode. Log the byte before/after once/sec.
-    if (g_puppet_promote_control_bit &&
-        readable_bytes(static_cast<std::byte*>(remote_player) + 0x15A9) >= 1) {
-        auto* flag = reinterpret_cast<std::uint8_t*>(
-            static_cast<std::byte*>(remote_player) + 0x15A9);
-        const std::uint8_t before = *flag;
-        *flag = static_cast<std::uint8_t>(before | 0x2);
-        static ULONGLONG last = 0;
-        const ULONGLONG now = GetTickCount64();
-        if (now - last > 1000) {
-            last = now;
-            std::ostringstream l;
-            l << "PROMOTE-CTRL player+0x15A9 " << std::hex
-              << static_cast<int>(before) << "->" << static_cast<int>(*flag)
-              << std::dec;
-            force_log_line(l.str().c_str());
-        }
-    }
+    log_realsecond_observe_and_npc_spot_list(remote_player);
     // Held pickup gesture: re-activate the interact command while armed.
     apply_puppet_pickup_gesture(remote_player);
     void* fs = *reinterpret_cast<void**>(g_module + 0x3FE1088);
@@ -13412,37 +13411,27 @@ void net_tick() {
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_NUMPAD1) & 1) != 0) {
-        // Numpad 1 : decision-node wall test - set puppet player+0x15A9 bit1.
-        g_puppet_promote_control_bit = !g_puppet_promote_control_bit;
         const bool was = g_logging_enabled;
         g_logging_enabled = true;
-        log_line(g_puppet_promote_control_bit
-                     ? "PROMOTE-CTRL = ON (set puppet +0x15A9 bit1)"
-                     : "PROMOTE-CTRL = OFF");
+        log_line("PROMOTE-CTRL disabled: +0x15A9 belongs to the rejected NPC path");
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_NUMPAD7) & 1) != 0) {
-        // Numpad 7 : REAL-SECOND-PLAYER Exp 1 - split-login + bind local-player-1 to
-        // the puppet, then observe native promotion (does the engine set +0x15A9 bit1
-        // and build hub/anim state without a crash?).
+        // Numpad 7: split-login + bind local-player-1 to the puppet, then run the
+        // read-only registration diagnostics.
         g_logging_enabled = true;
         if (!g_realsecond_experiment) {
             split_login_persistent();
             g_realsecond_experiment = true;
-            log_line("REALSECOND Exp1 = ON (split-login + bind puppet as local-player-1)");
+            log_line("REALSECOND diagnostics = ON (split-login + bind local-player-1)");
         } else {
             g_realsecond_experiment = false;
-            log_line("REALSECOND Exp1 = OFF");
+            log_line("REALSECOND diagnostics = OFF");
         }
     }
     if (foreground && (GetAsyncKeyState(VK_NUMPAD4) & 1) != 0) {
-        // Numpad 4 : REAL-SECOND-PLAYER Exp 2 - drive the native per-player early
-        // update on the puppet each frame (activate Exp 1 first for split-login).
-        g_realsecond_drive_update = !g_realsecond_drive_update;
         g_logging_enabled = true;
-        log_line(g_realsecond_drive_update
-                     ? "REALSECOND-DRIVE = ON (call 42FCF0 on puppet each frame)"
-                     : "REALSECOND-DRIVE = OFF");
+        log_line("REALSECOND-DRIVE disabled: 42FCF0 is Npc vtable+0x410");
     }
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
         g_local_animation_mirror_test = !g_local_animation_mirror_test;
@@ -13470,6 +13459,12 @@ void net_tick() {
     if (now - last_send >= 16) {  // ~60 Hz local player state
         last_send = now;
         send_local_player_state();
+    }
+    if (g_realsecond_experiment) {
+        void* const puppet = retained_player_object(1);
+        if (puppet != nullptr && player_object_stable(puppet)) {
+            log_realsecond_observe_and_npc_spot_list(puppet);
+        }
     }
     if (g_puppet_net_apply && retained_player_object(1) != nullptr) {
         drive_remote_slot1_actions_tick();

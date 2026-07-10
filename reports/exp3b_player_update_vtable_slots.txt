@@ -1,0 +1,6 @@
+ref=0x142942848 vtable=0x142942438 slot=+0x410 target=0x1404901B0 target_name='sub_1404901B0' rtti='.?AVAlcazar@@'
+ref=0x142944F58 vtable=0x142944B48 slot=+0x410 target=0x140497890 target_name='sub_140497890' rtti='.?AVCutter@@'
+ref=0x1429461F0 vtable=0x142945DE0 slot=+0x410 target=0x140499B80 target_name='sub_140499B80' rtti='.?AVDrake@@'
+ref=0x142934DB0 vtable=0x1429349A0 slot=+0x410 target=0x14042FCF0 target_name='sub_14042FCF0' rtti='.?AVNpc@@'
+ref=0x142943D40 vtable=0x142943930 slot=+0x410 target=0x14042FCF0 target_name='sub_14042FCF0' rtti='.?AVBuddy@@'
+ref=0x1429487B0 vtable=0x1429483A0 slot=+0x410 target=0x14042FCF0 target_name='sub_14042FCF0' rtti='.?AVHuman@@'

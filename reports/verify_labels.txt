@@ -1,5 +1,75 @@
-NavCharacter_ApplyAnimationRootTransform 0x141DE8EC0
-GameCharacter_PostAnimApplyRootTransform 0x1403D13E0
-Npc_PostAnimApplyRootTransform 0x14042FB40
-Player_PostAnimUpdate 0x1410E9210
-Character_UpdateDerivedWorldTransformFromLocalRoot 0x141BB8320
+TARGET 0x14042FCF0: func_start=0x14042fcf0 name=Npc_EarlyUpdateHubAndRetainedRefs
+  xref=0x14049020C type=17 func_start=0x1404901b0 func_name=sub_1404901B0
+  xref=0x1404978EC type=17 func_start=0x140497890 func_name=sub_140497890
+  xref=0x140499BCA type=17 func_start=0x140499b80 func_name=sub_140499B80
+  xref=0x14049C1FF type=17 func_start=0x14049c1b0 func_name=sub_14049C1B0
+  xref=0x1404A153C type=17 func_start=0x1404a14c0 func_name=sub_1404A14C0
+  xref=0x1404A654A type=17 func_start=0x1404a6500 func_name=sub_1404A6500
+  xref=0x1404AA0DA type=17 func_start=0x1404aa090 func_name=sub_1404AA090
+  xref=0x1404B199C type=17 func_start=0x1404b1940 func_name=sub_1404B1940
+  xref=0x1404B331F type=17 func_start=0x1404b32d0 func_name=sub_1404B32D0
+  xref=0x1404B57EF type=17 func_start=0x1404b57a0 func_name=sub_1404B57A0
+  xref=0x142934DB0 type=1 func_start=None func_name=None
+  xref=0x142943D40 type=1 func_start=None func_name=None
+  xref=0x1429487B0 type=1 func_start=None func_name=None
+  xref=0x142D33030 type=1 func_start=None func_name=None
+  xref=0x142D3307C type=1 func_start=None func_name=None
+  xref=0x142D3308C type=1 func_start=None func_name=None
+  xref=0x146DE57A8 type=1 func_start=None func_name=None
+
+TARGET 0x140421150: func_start=0x140421150 name=Npc_SyncControlHostHubAndAnchors
+  xref=0x14042FD1E type=17 func_start=0x14042fcf0 func_name=Npc_EarlyUpdateHubAndRetainedRefs
+  xref=0x142D320C8 type=1 func_start=None func_name=None
+  xref=0x142D32114 type=1 func_start=None func_name=None
+  xref=0x146DE4F8C type=1 func_start=None func_name=None
+
+TARGET 0x140422760: func_start=0x140422760 name=Npc_SyncControlHostEntityRootOnNetSkip
+  xref=0x1404211A1 type=17 func_start=0x140421150 func_name=Npc_SyncControlHostHubAndAnchors
+  xref=0x140421780 type=17 func_start=0x140421150 func_name=Npc_SyncControlHostHubAndAnchors
+  xref=0x142D322D4 type=1 func_start=None func_name=None
+  xref=0x142D32300 type=1 func_start=None func_name=None
+  xref=0x142D32310 type=1 func_start=None func_name=None
+  xref=0x146DE50AC type=1 func_start=None func_name=None
+
+TARGET 0x14042D120: func_start=0x14042d120 name=NpcActive_AnimPhaseOwnerUpdate
+  xref=0x1404A067E type=19 func_start=0x1404a0660 func_name=sub_1404A0660
+  xref=0x1429348A8 type=1 func_start=None func_name=None
+  xref=0x142D32D30 type=1 func_start=None func_name=None
+  xref=0x142D32D48 type=1 func_start=None func_name=None
+  xref=0x142D32D5C type=1 func_start=None func_name=None
+  xref=0x142D32D6C type=1 func_start=None func_name=None
+  xref=0x146DE55D4 type=1 func_start=None func_name=None
+
+TARGET 0x1410EC230: func_start=0x1410ec230 name=Player_Update
+  xref=0x142A4C3F8 type=1 func_start=None func_name=None
+  xref=0x142E2B3EC type=1 func_start=None func_name=None
+  xref=0x142E2B474 type=1 func_start=None func_name=None
+  xref=0x142E2B484 type=1 func_start=None func_name=None
+  xref=0x146E4CB58 type=1 func_start=None func_name=None
+
+TARGET 0x141A92A00: func_start=0x141a92a00 name=AnimManager_AsyncObjectUpdateJointBlendJob
+  xref=0x141782B3A type=19 func_start=0x141782b30 func_name=sub_141782B30
+  xref=0x1417815B7 type=1 func_start=0x141781390 func_name=sub_141781390
+  xref=0x143714A18 type=1 func_start=None func_name=None
+  xref=0x146E9D7E0 type=1 func_start=None func_name=None
+
+TARGET 0x141A8F9D0: func_start=0x141a8f9d0 name=AnimManager_DispatchRetainedOwnerPhase
+  xref=0x141A913E5 type=17 func_start=0x141a911a0 func_name=sub_141A911A0
+  xref=0x141A913F9 type=17 func_start=0x141a911a0 func_name=sub_141A911A0
+  xref=0x141A929C1 type=17 func_start=0x141a928f0 func_name=sub_141A928F0
+  xref=0x142EDE6AC type=1 func_start=None func_name=None
+  xref=0x142EDE6BC type=1 func_start=None func_name=None
+  xref=0x146E9D5D0 type=1 func_start=None func_name=None
+
+TARGET 0x1403E3E30: func_start=0x1403e3e30 name=NpcManager_UpdateSpotActors
+  xref=0x14015E396 type=17 func_start=0x14015d7d0 func_name=sub_14015D7D0
+  xref=0x146DE375C type=1 func_start=None func_name=None
+
+TARGET 0x1403E84F0: func_start=0x1403e84f0 name=NpcManager_RegisterSpotActor
+  xref=0x140400451 type=17 func_start=0x1403ff740 func_name=sub_1403FF740
+  xref=0x146DE3990 type=1 func_start=None func_name=None
+
+TARGET 0x14043B830: func_start=0x14043b830 name=Npc_UpdatePathSearch
+  xref=0x1403E4102 type=17 func_start=0x1403e3e30 func_name=NpcManager_UpdateSpotActors
+  xref=0x14042F789 type=17 func_start=0x14042f780 func_name=sub_14042F780
+  xref=0x146DE61D4 type=1 func_start=None func_name=None

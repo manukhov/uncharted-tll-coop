@@ -1,0 +1,5 @@
+ref=0x1429348A8 vtable=0x142934888 slot=+0x20 target=0x14042D120 target_name='Player_AnimPhaseOwnerUpdate' rtti='.?AVActive@Npc@@'
+ref=0x142D32D30 unresolved within 0x4000 bytes
+ref=0x142D32D48 unresolved within 0x4000 bytes
+ref=0x142D32D5C unresolved within 0x4000 bytes
+ref=0x142D32D6C unresolved within 0x4000 bytes

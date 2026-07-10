@@ -1,0 +1,93 @@
+# Exp 3b - NPC spot list is not the Player update scheduler
+
+Date: 2026-07-10
+Status: REJECTED as a Player-scheduler hypothesis; runtime observation retained
+
+## Original hypothesis
+
+The list at `dword_143D3C0D0` was proposed as the active-player enumerator that
+dispatches the missing slot-1 Player update. The proposed repair was to register
+the puppet in that list.
+
+## Runtime observation (CONFIRMED, scope narrowed)
+
+Two-instance loopback, split login enabled, retained slot 1 resolved to puppet:
+
+```
+spot_count=1 max_local=2 resolver_active=0 screen_mask=0x0
+[0:meta=1237 ptr=slot0 runtime_id=1237] puppet_in_list=0
+resolve(1)==puppet
+```
+
+This proves only that the retained Player puppet is absent from the NPC spot list.
+It does not prove that the list schedules Player updates.
+
+## Static falsification
+
+### Evidence 1: writer ownership and source identity
+
+`0x1403E84F0` is the sole append writer for the list. It carries the
+`npc-manager.cpp` source string, accepts an NPC entity, deduplicates by
+`entity+0xD8`, stores `{handle, entity+0xBC runtime id}`, and caps the list at 16.
+The value at `entity+0xBC` is a runtime handle id, not a logical screen index.
+
+### Evidence 2: consumer behavior
+
+`0x1403E3E30` iterates the list and calls `0x14043B830` for each member.
+`0x14043B830` contains the source identity `Npc::UpdatePathSearch(void)` and
+performs navigation/path-search work. There is no call to `0x1404901B0`,
+`0x14042FCF0`, or the Player update implementation.
+
+### Evidence 3: vtable identity
+
+The previously proposed update chain was classified incorrectly:
+
+| Class RTTI | vtable slot | implementation |
+|------------|-------------|----------------|
+| `Npc` / `Buddy` / `Human` | `+0x410` | `0x14042FCF0` |
+| `Alcazar` | `+0x410` | `0x1404901B0` -> NPC base path |
+| `Player` (`0x142A4BFE8`) | `+0x410` | `0x1410EC230` |
+
+`0x14042D120`, previously named as a Player animation-phase callback, is likewise
+`Active@Npc` vtable `+0x20` (RTTI vtable `0x142934888`). Therefore the Exp2 crash
+is explained by invoking an NPC virtual implementation on a Player object; it is
+not evidence that a Player scheduler context was merely missing.
+
+### Evidence 4: actual Player dispatch context
+
+`AnimManager_AsyncObjectUpdateJointBlendJob` `0x141A92A00` is source-identified by
+`anim-mgr-jobs.cpp`. When its job flags contain `0x20`, it resolves the retained
+owner from the animation job record and dispatches owner vtable `+0x410`, followed
+by `+0x418`. For a real Player this reaches `Player_Update` `0x1410EC230`.
+
+The related dispatcher `0x141A8F9D0` selects owner phases by bits:
+
+```
+0x08 -> vtable+0x400
+0x10 -> vtable+0x408
+0x20 -> vtable+0x410, then +0x418
+```
+
+This is the first statically supported scheduler path for the real Player method.
+
+## Additional correction: `Player+0x1A0`
+
+Exp1 called this pointer an animation instance. Existing static work already maps
+it as the upper Player state owner built/published through Player vtable
+`+0x700/+0x710`. A non-null `Player+0x1A0` therefore does not prove that an
+animation-manager job exists or has phase bit `0x20` enabled.
+
+## Competing hypotheses left
+
+1. The puppet has no animation-manager job/retained-owner record.
+2. It has a job, but the job flags omit phase bit `0x20`.
+3. The job and bit are present, but its retained pair resolves a different owner.
+4. `Player_Update` runs, while the pickup gesture is rejected later in the upper
+   Player action/overlay pipeline.
+
+## Next static step
+
+Trace creation and flag writers for the animation job object consumed by
+`0x141A92A00`, then map that object back to Player construction. Only after the
+slot-0/slot-1 job fields are identified should a read-only runtime comparison be
+added. Registering the puppet in `NpcManager_RegisterSpotActor` is rejected.

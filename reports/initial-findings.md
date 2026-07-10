@@ -26055,3 +26055,108 @@ STATUS: real-2P project across 3 experiments has narrowed the wall from "puppet 
 state" -> "puppet is local-player-1 with hub+anim but not promoted" -> "native update
 faults standalone" -> "character/player enumerator does not tick the puppet (count/
 active-list gate)". Baseline stable, all experiments key-gated OFF.
+
+### 2026-07-10 Exp 3b (static): spot-player enumerator at dword_143D3C0D0
+
+**STATIC:** the canonical active-player list is the GameplayWorld manager global
+`dword_143D3C0D0` (RVA `0x3D3C0D0`), not the resolver table alone.
+
+| Field | Offset | Role |
+|-------|--------|------|
+| `m_spotPlayerCount` | `+0` | Loop bound (`v < dword_143D3C0D0`) in world tick `sub_1403E3E30`, attack/pickup/camera consumers |
+| Handle pairs | `+0x10` | 16-byte `{handle*, screen_meta}`; requires `*(player+0xBC)==meta` |
+| Screen bitmask | `+0x5D08` | `\|= 1<<screen` via `sub_1403EB4A0` |
+
+Secondary gate candidate: `*(qword_143FE1070+0x495C)` (+18780) used in input-focus
+path (may mirror active count).
+
+**Runtime READ probe:** `REALSECOND-EXP3B` log in teleport_hook (Numpad 7 observe,
+1/sec): `spot_count`, `max_local`, `resolver_active`, `screen_mask`, list entries,
+`puppet_in_list`.
+
+**Prediction:** after split-login+bind, `spot_count=1`, `max_local=2`,
+`puppet_in_list=0` → fix path is register puppet in spot-player list (or raise count),
+not resolver alias alone.
+
+Report: `reports/real2p_exp3b_active_player_gate.txt`. STATUS: HYPOTHESIS pending
+runtime READ.
+
+### 2026-07-10 Exp 3b CONFIRMED (runtime READ): spot_count=1 while max_local=2
+
+Two-instance loopback test (PID 27992 host + 15688 client, inject
+`tll_teleport_hook_v2.dll`, Numpad 7 REALSECOND Exp1 ON, peer connected,
+puppet spawned on host):
+
+```
+split login PERSISTENT: max_local_players=2 avail=1 login_state=3
+remote Player auto-spawned for live peer
+REALSECOND-OBSERVE +0x15A9=0x49 bit1=0 hub(+0x1FB0)=0x10e0fdfbb0 anim(+0x1A0)=0x10e0eb00b0
+REALSECOND-EXP3B spot_count=1 max_local=2 resolver_active=0 screen_mask=0x0
+  [0:meta=1237 ptr=0x10e0d13000 scr=1237] puppet_in_list=0
+REALSECOND resolve(1): original=0x10e0e24280 -> puppet=0x10e0e24280
+```
+
+**Confirmed:** H1 — `*(gw+0)==1` after split-login while `g_maxLocalPlayers==2`;
+puppet (`0x10e0e24280`) **not** in spot-player list (`0x10e0d13000` is sole entry);
+`+0x15A9 bit1` stays 0; hub+anim non-null. `resolver_active` at `FE1070+0x495C` read 0;
+`screen_mask` at `gw+0x5D08` read 0.
+
+**Note:** list entry `meta`/`scr` values are `player+0xBC` (+188) handle-meta ids
+(e.g. 1237), not logical screen 0/1 — probe decode is correct; `puppet_in_list`
+pointer compare is authoritative.
+
+### 2026-07-10 Exp 3b follow-up (STATIC): spot-player list writer
+
+**STATIC:** `NpcManager_RegisterSpotPlayer` @ `0x1403E84F0` is the sole writer of
+`m_spotPlayerCount` (`*(dword_143D3C0D0+0)`) and the 16-byte handle pairs at
+`+0x10`. Append path: read `entity+0xA8`/`+0xBC`, `vmovups [gw+0x10+2*count*8]`,
+`inc dword ptr [gw]`. Dedupe by `entity+0xD8` (+216). Max 16 entries.
+
+**Call site:** `NpcSpawn_FinishSetup` `sub_1403FF740` @ `0x140400451`, gated by
+`cmp dword ptr [[entity+0x1F70]+0x58], 0` @ `0x140400435` (abort spawn error if zero).
+
+**Not writers:** `HandleNetLoginSplitScreen` `0x140C02220` (no gw write);
+`sub_1403EB4A0` (only `gw+0x5D08` bitmask); `sub_1403E3380` (clears `gw+8`, not `+0`).
+Parallel `CharacterManager_AddCharacter` `0x141D63472` → `0x143898630` (puppet already
+here per mod spawn; separate from spot enumerator).
+
+**Next:** trace why net-spawned slot-1 puppet skips `0x140400451` or fails gate.
+
+### 2026-07-10 CORRECTION: Exp 2/3 Player-scheduler classification is REJECTED
+
+The runtime observation `spot_count=1` is valid, but its proposed connection to
+the missing Player update is false.
+
+1. `0x1403E84F0` is `NpcManager_RegisterSpotActor`; `0x1403E3E30` consumes that
+   list through source-identified `Npc::UpdatePathSearch(void)` `0x14043B830`.
+   The list is an NPC spot/path-search list, not the canonical local Player list.
+2. RTTI resolves `0x14042FCF0` as vtable `+0x410` for `Npc`, `Buddy`, and `Human`.
+   `0x1404901B0` is the Alcazar override of that same slot. Player vtable
+   `0x142A4BFE8 + 0x410` instead points to `Player_Update` `0x1410EC230`.
+3. RTTI resolves `0x14042D120`, previously named `Player_AnimPhaseOwnerUpdate`, as
+   `Active@Npc` vtable `+0x20` (`0x142934888`). The related `421150 -> 422760`
+   control-host chain is therefore NPC-side and must not be promoted on a Player.
+4. Exp2's `42FCF0(puppet)` fault is explained by calling the wrong class virtual
+   implementation on a Player object. It does not prove missing scheduler TLS or
+   frame ordering. Both that drive and the forced `player+0x15A9 bit1` write are
+   removed from the hook after their REJECTED results.
+5. `Player+0x1A0` is not established as an anim instance. Existing static work
+   maps it as the upper Player state owner built/published through Player vtable
+   `+0x700/+0x710`; non-null `+0x1A0` cannot prove animation-job registration.
+
+### Player vtable+0x410 is dispatched by the animation manager (STATIC)
+
+`AnimManager_AsyncObjectUpdateJointBlendJob` `0x141A92A00` carries the source
+path/function identity from `anim-mgr-jobs.cpp`. It resolves a retained owner from
+the job record at `+0x1A8/+0x1B0`; when job flags contain `0x20`, it calls owner
+vtable `+0x410`, then `+0x418`. The companion dispatcher `0x141A8F9D0` maps phase
+bits `8/0x10/0x20` to vtable `+0x400/+0x408/+0x410` respectively.
+
+For Player RTTI this reaches `Player_Update` `0x1410EC230`. This is the first
+statically supported scheduling path relevant to the missing pickup animation.
+The remaining alternatives are: no animation job for the puppet; a job without
+phase bit `0x20`; a retained pair resolving another owner; or a later rejection in
+the upper Player action/overlay pipeline. Next work must trace animation-job
+creation and flag writers before adding a read-only slot0/puppet comparison.
+
+Full correction: `reports/real2p_exp3b_active_player_gate.txt`.

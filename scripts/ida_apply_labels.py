@@ -243,11 +243,9 @@ FUNCTIONS = {
         "returns count and fills an output pointer array (max 48).",
     ),
     0x14042D120: (
-        "Player_AnimPhaseOwnerUpdate",
-        "Anim-phase owner update on player (*(wrapper+8)). Player_ShouldSkipDirect"
-        "RootTransformApply (vtable+1512) splits branches; both call "
-        "Player_TickDecisionNodeFromControlHost. Skip=1 path may also call "
-        "(*(player+0x1808))->vtable+0 when control-host entity+0x6E has 0x4|0x8.",
+        "NpcActive_AnimPhaseOwnerUpdate",
+        "Active@Npc vtable+0x20 (RTTI vtable 0x142934888). Runs the NPC "
+        "anim-phase owner path; this is not a Player::Active callback.",
     ),
     0x1404223F0: (
         "Player_TickDecisionNodeFromControlHost",
@@ -303,7 +301,8 @@ FUNCTIONS = {
     ),
     0x141BC2EF0: (
         "Player_ShouldSkipDirectRootTransformApply",
-        "Player vtable +0x5E8 (+1512 dec). Also gates Player_AnimPhaseOwnerUpdate: "
+        "Player vtable +0x5E8 (+1512 dec). Reached virtually from the inherited "
+        "NpcActive_AnimPhaseOwnerUpdate callback: "
         "return 0 -> net-anim short branch; return 1 -> control-host / decision-node "
         "continuation. Consults gameplay manager and Player+0x348 m_pNetController "
         "via NetController_ShouldSkipAnimPhaseDirectPath.",
@@ -324,26 +323,57 @@ FUNCTIONS = {
     0x140422BB0: (
         "Player_PreAnimHubAndAnchorSync",
         "Sniper/aim-position sync only (size 0x304). Does NOT call "
-        "Player_SyncControlHostEntityRootOnNetSkip. Real 422760 path: "
-        "Player_EarlyUpdateHubAndRetainedRefs -> Player_SyncControlHostHubAndAnchors.",
+        "Npc_SyncControlHostEntityRootOnNetSkip. Real 422760 path: "
+        "Npc_EarlyUpdateHubAndRetainedRefs -> Npc_SyncControlHostHubAndAnchors.",
     ),
     0x140421150: (
-        "Player_SyncControlHostHubAndAnchors",
-        "Called from Player_EarlyUpdateHubAndRetainedRefs. Requires player+0x1A0. "
-        "Alive: calls Player_SyncControlHostEntityRootOnNetSkip only when player+5545&2. "
+        "Npc_SyncControlHostHubAndAnchors",
+        "Called from Npc_EarlyUpdateHubAndRetainedRefs. Requires actor+0x1A0. "
+        "Alive: calls Npc_SyncControlHostEntityRootOnNetSkip only when actor+5545&2. "
         "Not-alive: chest/neck aim anchors + always 422760 at epilog.",
     ),
     0x14042FCF0: (
-        "Player_EarlyUpdateHubAndRetainedRefs",
-        "Early per-player update: calls Player_SyncControlHostHubAndAnchors, "
-        "retained-ref screen marking, weapon-art cache, companion sync.",
+        "Npc_EarlyUpdateHubAndRetainedRefs",
+        "Npc/Buddy/Human vtable+0x410 implementation. Calls the NPC hub/anchor "
+        "path; Player vtable+0x410 is 0x1410EC230.",
     ),
     0x140422760: (
-        "Player_SyncControlHostEntityRootOnNetSkip",
-        "When player+0x1FF0 exists, its vtable+96 is false, and "
+        "Npc_SyncControlHostEntityRootOnNetSkip",
+        "When actor+0x1FF0 exists, its vtable+96 is false, and "
         "Player_ShouldSkipDirectRootTransformApply is true: clears "
-        "control-host entity+0x6E bit0x4 (&=0xFA) at *(player+0x1FB0+16). "
+        "control-host entity+0x6E bit0x4 (&=0xFA) at *(actor+0x1FB0+16). "
         "Else writes root transform via 0x142143F60/0x142144030 and sets bit0.",
+    ),
+    0x1410EC230: (
+        "Player_Update",
+        "Player vtable+0x410 implementation (vtable 0x142A4BFE8). Distinct from "
+        "Npc/Buddy/Human +0x410 at 0x14042FCF0.",
+    ),
+    0x141A92A00: (
+        "AnimManager_AsyncObjectUpdateJointBlendJob",
+        "Source-identified anim-mgr-jobs.cpp AsyncObjectUpdate_JointBlend_Job. "
+        "When job flags contain 0x20, resolves retained owner at +0x1A8/+0x1B0 "
+        "and dispatches owner vtable+0x410 then +0x418.",
+    ),
+    0x141A8F9D0: (
+        "AnimManager_DispatchRetainedOwnerPhase",
+        "Resolves the animation job's retained owner and dispatches vtable phases "
+        "+0x400/+0x408/+0x410/+0x418 according to phase bits 8/0x10/0x20.",
+    ),
+    0x1403E3E30: (
+        "NpcManager_UpdateSpotActors",
+        "Iterates NpcManager's spot-actor list and calls Npc_UpdatePathSearch; "
+        "does not dispatch Player vtable+0x410.",
+    ),
+    0x1403E84F0: (
+        "NpcManager_RegisterSpotActor",
+        "Sole append writer for the 16-entry spot-actor handle list at "
+        "dword_143D3C0D0+0x10; source string npc-manager.cpp.",
+    ),
+    0x14043B830: (
+        "Npc_UpdatePathSearch",
+        "Source-identified Npc::UpdatePathSearch(void), called from the NPC "
+        "spot-list tick.",
     ),
     0x1403E59D0: (
         "GameplayWorld_RefreshControlHostEntity6EFlags",
@@ -2697,7 +2727,7 @@ FUNCTIONS = {
     0x140664690: (
         "Skill_IsAuthorityForRootTransform",
         "Skill vtable +96. Always returns 1 (base/Script/Idle/NetSkill). Negated in "
-        "Player_SyncControlHostEntityRootOnNetSkip clear-path — clear branch dead for "
+        "Npc_SyncControlHostEntityRootOnNetSkip clear-path — clear branch dead for "
         "standard skills.",
     ),
     0x1401D4F10: (

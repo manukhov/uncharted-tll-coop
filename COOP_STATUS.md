@@ -1,5 +1,65 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-10, Codex - Exp 2/3 scheduler correction)
+
+**REJECTED:** the latest Cursor/Claude direction treated `dword_143D3C0D0` as the
+active Player scheduler list and `0x14042FCF0` as a Player update. Static RTTI and
+call-graph checks disprove both links:
+
+- `dword_143D3C0D0` is an `NpcManager` spot/path-search list; its tick reaches
+  source-identified `Npc::UpdatePathSearch` `0x14043B830`.
+- `0x14042FCF0` is `Npc/Buddy/Human` vtable `+0x410`; `0x1404901B0` is Alcazar's
+  override. Real `Player` vtable `+0x410` is `Player_Update` `0x1410EC230`.
+- `0x14042D120` is `Active@Npc` vtable `+0x20`, not a Player animation callback.
+- `Player+0x1A0` is the upper Player state owner (`+0x700/+0x710` pipeline), not
+  proven animation-instance/job state.
+
+The factual runtime read remains useful: puppet is absent from the NPC spot list.
+It does not justify registering the puppet there. The two crash-prone rejected
+writes (direct `42FCF0(puppet)` and forced `+0x15A9 bit1`) are disabled in code.
+
+**STATIC next path:** `AnimManager_AsyncObjectUpdateJointBlendJob` `0x141A92A00`
+resolves a retained owner and, under job flag `0x20`, dispatches owner vtable
+`+0x410/+0x418`. Trace creation/flag writers for that job and map it to slot0 vs
+puppet before a read-only runtime comparison. This is the supported route toward
+the missing pickup animation.
+
+Details: `reports/real2p_exp3b_active_player_gate.txt`.
+
+## Turn note (2026-07-10, Cursor — Exp 3b spot-player enumerator pinned)
+
+**Статика:** канонический **spot-player enumerator** — глобал `dword_143D3C0D0`
+(RVA `0x3D3C0D0`). `*(gw+0)` = `m_spotPlayerCount` (loop bound во всех
+`i < m_numPlayers` потребителях). Список handle-пар @ `gw+0x10` (stride 16);
+каждая запись требует `*(player+0xBC) == meta_screen`.
+
+**Связь с Exp1–3:** `resolve(1)==puppet` не добавляет puppet в этот список.
+Per-player early update (`vtable+0x70` → `0x1404901B0` → `42FCF0`) диспатчится
+виртуально из enumerator-контекста; `sub_1403E3E30` тикает тот же список в
+world frame (не прямой caller `4901B0`, но тот же набор игроков).
+
+**Runtime READ (безопасный):** в REALSECOND observe (Numpad 7) добавлен лог
+`REALSECOND-EXP3B`: `spot_count`, `max_local`, `resolver_active` (`FE1070+0x495C`),
+`screen_mask` (`gw+0x5D08`), entries, `puppet_in_list`.
+
+**Прогноз:** после split-login `spot_count=1`, `puppet_in_list=0`, `max_local=2`.
+
+**RUNTIME CONFIRMED (2026-07-10):** две копии loopback, inject v2, Numpad 7.
+Host PID 27992 после spawn puppet: `spot_count=1 max_local=2 puppet_in_list=0
+bit1=0 hub+anim OK resolve(1)==puppet`. H1 подтверждена.
+
+Детали: `reports/real2p_exp3b_active_player_gate.txt`, `locomotion_hook.log`.
+
+**Writer (STATIC):** `NpcManager_RegisterSpotPlayer` `0x1403E84F0` — единственный
+writer `*(gw+0)++` + pair @ `gw+0x10`. Вызывается из `NpcSpawn_FinishSetup`
+`0x1403FF740` @ `0x140400451` (gate `[entity+0x1F70]+0x58!=0` @ `0x140400435`).
+Split-login `0x140C02220` **не** пишет в spot-list. Puppet в CharacterManager
+(`0x143898630`), но не проходит Register → `spot_count=1`.
+
+**Следующий шаг:** почему net-spawn puppet не доходит до `0x140400451` или падает
+на gate `+0x1F70/+0x58`; runtime hook на `3E84F0` для slot-1 spawn.
+
+
 ## Turn note (2026-07-10, Cursor — 421150 = real 422760 caller; +5545 bit1 gate)
 
 **CORRECTION:** `Player_PreAnimHubAndAnchorSync` `0x140422BB0` **не** вызывает `422760`
