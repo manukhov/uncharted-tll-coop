@@ -1950,21 +1950,16 @@ bool local_player_ads_active() {
     return player_ads_active(retained_player_object(0));
 }
 
-// +0x1548 only flips for scoped-rifle ADS; ordinary pistol aim is RMB on PC.
-// Do NOT use block+0x518 / aim-press command alone — weapon draw sets those
-// without the player actually aiming (breaks run anim + false peer relay).
+// ADS is an input intent, not an animation/weapon-state output. Player+0x1548 and
+// block+0x518 both remain asserted during draw/transition states, so accepting
+// either one here makes an idle peer start aiming by itself. In the current PC
+// loopback setup only the focused game window owns the physical RMB.
 bool local_player_strict_aim_active(void* player) {
     if (player == nullptr) {
         return false;
     }
-    if (player_ads_active(player)) {
-        return true;
-    }
-    if (local_game_window_foreground() &&
-        (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0) {
-        return true;
-    }
-    return false;
+    return local_game_window_foreground() &&
+           (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
 }
 
 bool head_look_send_allowed(void* player) {
@@ -8187,9 +8182,18 @@ void send_local_player_state() {
             }
         }
     }
-    // Relay gameplay camera + pose seed ONLY while strict aim (RMB/ADS) is held.
+    // Relay gameplay camera + pose seed ONLY while strict aim (RMB) is held.
     // Unconditional camera relay made the puppet track peer look while running.
-    if (local_player_strict_aim_active(local_obj)) {
+    const bool strict_aim = local_player_strict_aim_active(local_obj);
+    {
+        static bool previous_strict_aim = false;
+        if (strict_aim != previous_strict_aim) {
+            force_log_line(strict_aim ? "STRICT-AIM-SEND ON (foreground RMB)"
+                                      : "STRICT-AIM-SEND OFF");
+            previous_strict_aim = strict_aim;
+        }
+    }
+    if (strict_aim) {
         std::uint8_t route_seed[32]{};
         const bool route_seed_ok = copy_local_pose_seed_32(route_seed);
         float cam_quat[4]{};

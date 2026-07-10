@@ -25572,3 +25572,19 @@ block with `GIVEWEAPON-RELAY-STORE-ONLY unsafe art=0x27617d0d` and returns. The
 existing `SLOT-MIRROR` then has `relayed_weapon_store_find(0x27617d0d)` available
 and can reconcile the stable raw snapshot slot 1 through the normal pickup display
 path.
+
+### 2026-07-10: phantom ADS source confirmed - Player ADS field is not strict input
+
+**Runtime evidence:** while neither copy was being aimed, both PIDs continuously
+logged `POSE-SEED-SEND` and the receiver continuously logged
+`AIM-POSE-OVERRIDE`. At the same time the remote drive log showed `btn=0x0` for
+almost every frame. Therefore the sender's `local_player_strict_aim_active` gate
+was true without a physical aim command.
+
+**Cause / correction:** the gate accepted `player_ads_active(player)` before
+checking RMB. That field is an animation/weapon-state output and can remain true
+during weapon draw or transition states; it is not proof of current player intent.
+For the two-instance PC path, strict aim now means physical RMB while this process's
+game window is foreground. Sender logs `STRICT-AIM-SEND ON/OFF` on transitions.
+This makes packet `0x200`, peer camera, and pose seed clear immediately on RMB
+release instead of latching phantom ADS.
