@@ -26237,3 +26237,27 @@ further for the puppet: wrong class path.
 
 Both pickup-anim and aim-pitch depend on this same Player_Update-internal interact/
 decision gate. Baseline stable, all experiments key-gated OFF.
+
+### 2026-07-10 Exp 5 (static): interact path is vtable-dispatched per-controller; next signal must be runtime
+
+`PlayerInteractController` update `sub_140EC6C10(a1)` (a1=interact controller,
+player=*(a1+8)) is a VIRTUAL method (dispatched via vtable 0x142A2CB70), and it
+reaches `Player_InteractDispatcher 0x140C85D20` through further indirect/virtual
+calls (no raw xref inside the decompile). Its callers are vtable slots too. So the
+"why is the puppet skipped" gate is NOT a simple caller-level branch reachable by
+static climbing - it is either (a) the puppet's interact-controller instance/state
+differs from slot0, or (b) an eligibility flag deep in the dispatch.
+
+**Static is now diminishing-returns here.** The decisive unknown is runtime:
+1. Does `sub_140EC6C10` even RUN for the puppet each frame (vs only slot0)? -
+   instrument with a light hook logging `player=*(a1+8)` and compare puppet vs slot0.
+2. If it runs, dump the interact controller state (a1+24 written to 1 at entry, a1+8
+   player, the +0x1EE0 sub-object vtable+456 call) for puppet vs slot0 to find the
+   eligibility flag that diverges.
+This read/compare is the real Exp 5b; it replaces further blind static descent.
+
+STATE OF REAL-2P PROJECT: reframe stands (puppet is a Player, ticked via Player_
+Update; NPC bit1 path is irrelevant). Wall is now precisely "the vtable-dispatched
+interact/decision update either does not run or fails an eligibility gate on the
+puppet." Confirming which needs runtime instrumentation, not more decompiles.
+Baseline stable, all experiments key-gated OFF.
