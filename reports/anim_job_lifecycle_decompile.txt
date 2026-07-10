@@ -1,0 +1,1293 @@
+=== 0x1417816B0: sub_1417816B0 [0x1417816B0..0x141782A96] ===
+// local variable allocation has failed, the output may be wrong!
+// Hidden C++ exception states: #wind=1
+__int64 __fastcall sub_1417816B0(double _XMM0_8, unsigned int a2, char a3, __int64 a4)
+{
+  __int64 v8; // rdi
+  __int64 v9; // rbx
+  __int64 v10; // rcx
+  char v16; // cf
+  char v17; // zf
+  unsigned int v18; // r15d
+  __int64 result; // rax
+  _QWORD *v20; // rsi
+  __int64 v21; // r12
+  int v22; // eax
+  int v23; // eax
+  int v24; // eax
+  unsigned __int64 v25; // rbx
+  int v26; // eax
+  __int64 v27; // rax
+  __int64 v28; // rcx
+  __int64 v30; // r8
+  char v31; // r10
+  __int64 v36; // rcx
+  __int64 v37; // rdx
+  unsigned int v38; // esi
+  __int64 v39; // r14
+  unsigned __int64 v40; // r12
+  int v41; // ebx
+  __int64 v42; // rsi
+  __int64 v43; // rax
+  __int64 v55; // r14
+  int v60; // r8d
+  int v61; // r9d
+  __int64 v62; // rsi
+  __int64 v63; // rdx
+  __int64 v64; // r15
+  __int64 v65; // r14
+  __int64 v66; // rax
+  __int64 v67; // rax
+  __int64 v68; // rcx
+  unsigned int v69; // r8d
+  __int64 v70; // r9
+  unsigned int v72; // ebx
+  int v73; // r14d
+  _DWORD *v74; // r11
+  __int64 v75; // rax
+  __int64 v76; // rdx
+  __int64 v77; // rax
+  unsigned __int64 v78; // rcx
+  unsigned __int64 v79; // rcx
+  void *v80; // rsp
+  void *v81; // rsp
+  __int64 v82; // r14
+  __int64 v84; // rdx
+  __int64 v89; // r8
+  __int64 v90; // rdx
+  __int64 v91; // rcx
+  __int64 v92; // rax
+  int v93; // r12d
+  unsigned __int64 v94; // rax
+  __int64 v95; // rcx
+  unsigned __int64 v96; // rcx
+  void *v97; // rsp
+  void *v98; // rsp
+  __int64 v99; // rbx
+  __int64 v100; // r12
+  __int64 v101; // r8
+  __int64 v103; // rdx
+  __int64 v108; // rdx
+  char v109; // bl
+  __int64 v110; // r12
+  unsigned int v111; // edi
+  __int64 v112; // rcx
+  __int64 v113; // rcx
+  __int64 v114; // rcx
+  _QWORD *v115; // r14
+  __int64 v118; // [rsp+20h] [rbp-778h]
+  const char *v119; // [rsp+28h] [rbp-770h]
+  _BYTE v120[63]; // [rsp+30h] [rbp-768h] BYREF
+  _BYTE v121[65]; // [rsp+6Fh] [rbp-729h] BYREF
+  _BYTE v122[1672]; // [rsp+B0h] [rbp-6E8h] BYREF
+  __int64 v123; // [rsp+738h] [rbp-60h]
+
+  _R13 = v120;
+  v123 = -2;
+  __asm
+  {
+    vmovaps xmmword ptr [r13+720h], xmm6
+    vmovaps xmmword ptr [r13+710h], xmm7
+  }
+  _RBP = (unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL;
+  *(_QWORD *)(_RBP + 1664) = (unsigned __int64)v120 ^ _security_cookie;
+  *(_QWORD *)(_RBP + 288) = a4;
+  *(_BYTE *)_RBP = a3;
+  v8 = a2;
+  *(_DWORD *)(_RBP + 4) = a2;
+  v9 = (unsigned int)dword_143F2EBC8
+     + 5115LL * dword_143F2EBB8
+     + 2111111111LL * unk_143F2EBC4
+     + 1492LL * HIDWORD(qword_143F2EBBC)
+     + 1776LL * (unsigned int)qword_143F2EBBC;
+  *(__int64 *)((char *)&qword_143F2EBBC + 4) = qword_143F2EBBC;
+  LODWORD(qword_143F2EBBC) = dword_143F2EBB8;
+  dword_143F2EBC8 = HIDWORD(v9);
+  dword_143F2EBB8 = v9;
+  off_142FFAFD8();
+  dword_143683000 = dword_143F2EBB8;
+  __asm
+  {
+    vxorps  xmm0, xmm0, xmm0
+    vcvtsi2ss xmm0, xmm0, qword ptr [rax+28h]
+    vmulss  xmm1, xmm0, cs:g_EngineClockToSeconds
+    vmulss  xmm6, xmm1, cs:dword_143682F78
+    vxorps  xmm7, xmm7, xmm7
+    vcomiss xmm6, xmm7
+  }
+  if ( !(v16 | v17) )
+  {
+    __asm
+    {
+      vaddss  xmm0, xmm6, cs:dword_146B3D9EC
+      vmaxss  xmm6, xmm0, xmm7
+    }
+  }
+  if ( (unsigned int)v8 >= 9 )
+  {
+    if ( !qword_146B17C08
+      || (v119 = 0,
+          !(unsigned __int8)qword_146B17C08(
+                              "bucket < kNumBuckets",
+                              "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+                              "AnimMgr::AsyncUpdate",
+                              "Jun 30 2023 19:05:51",
+                              868)) )
+    {
+      sub_1422053E0(v10);
+      __debugbreak();
+    }
+  }
+  memset((void *)(_RBP + 1152), 0, 0x200u);
+  sub_140167FA0(_RBP + 1152, &qword_1466CF000[64 * v8], qword_1466CE200);
+  sub_140167FA0(_RBP + 1152, _RBP + 1152, &qword_1466CE800);
+  sub_140167FA0(_RBP + 1152, _RBP + 1152, qword_1466CEA00);
+  memset((void *)(_RBP + 640), 0, 0x200u);
+  sub_140167FA0(_RBP + 640, &qword_1466CF000[64 * v8], qword_1466CE200);
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x280) &= qword_1466CE800;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x288) &= qword_1466CE808;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x290) &= qword_1466CE810;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x298) &= qword_1466CE818;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x2A0) &= qword_1466CE820;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x2A8) &= qword_1466CE828;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x2B0) &= qword_1466CE830;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x2B8) &= qword_1466CE838;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x2C0) &= qword_1466CE840;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x2C8) &= qword_1466CE848;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x2D0) &= qword_1466CE850;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x2D8) &= qword_1466CE858;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x2E0) &= qword_1466CE860;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x2E8) &= qword_1466CE868;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x2F0) &= qword_1466CE870;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x2F8) &= qword_1466CE878;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x300) &= qword_1466CE880;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x308) &= qword_1466CE888;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x310) &= qword_1466CE890;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x318) &= qword_1466CE898;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x320) &= qword_1466CE8A0;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x328) &= qword_1466CE8A8;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x330) &= qword_1466CE8B0;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x338) &= qword_1466CE8B8;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x340) &= qword_1466CE8C0;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x348) &= qword_1466CE8C8;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x350) &= qword_1466CE8D0;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x358) &= qword_1466CE8D8;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x360) &= qword_1466CE8E0;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x368) &= qword_1466CE8E8;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x370) &= qword_1466CE8F0;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x378) &= qword_1466CE8F8;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x380) &= qword_1466CE900;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x388) &= qword_1466CE908;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x390) &= qword_1466CE910;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x398) &= qword_1466CE918;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x3A0) &= qword_1466CE920;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x3A8) &= qword_1466CE928;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x3B0) &= qword_1466CE930;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x3B8) &= qword_1466CE938;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x3C0) &= qword_1466CE940;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x3C8) &= qword_1466CE948;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x3D0) &= qword_1466CE950;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x3D8) &= qword_1466CE958;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x3E0) &= qword_1466CE960;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x3E8) &= qword_1466CE968;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x3F0) &= qword_1466CE970;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x3F8) &= qword_1466CE978;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x400) &= qword_1466CE980;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x408) &= qword_1466CE988;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x410) &= qword_1466CE990;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x418) &= qword_1466CE998;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x420) &= qword_1466CE9A0;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x428) &= qword_1466CE9A8;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x430) &= qword_1466CE9B0;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x438) &= qword_1466CE9B8;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x440) &= qword_1466CE9C0;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x448) &= qword_1466CE9C8;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x450) &= qword_1466CE9D0;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x458) &= qword_1466CE9D8;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x460) &= qword_1466CE9E0;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x468) &= qword_1466CE9E8;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x470) &= qword_1466CE9F0;
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x478) &= qword_1466CE9F8;
+  sub_140167FA0(_RBP + 640, _RBP + 640, qword_1466CEA00);
+  v18 = sub_141783E90(_RBP + 1152);
+  result = sub_141783E90(_RBP + 640);
+  *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xC8) = result;
+  if ( v18 || (_DWORD)result )
+  {
+    sub_1415B86A0(
+      _RBP + 456,
+      "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+      884,
+      "void __cdecl AnimMgr::AsyncUpdate(unsigned int,bool,class ndjob::Counter **)");
+    *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xD8) = sub_1415B4090(
+                                                                             (unsigned int)"d:\\perforce\\code\\big4final"
+                                                                                           "-tll-release\\shared\\src\\nd"
+                                                                                           "lib\\anim\\anim-mgr.cpp",
+                                                                             887,
+                                                                             (unsigned int)"void __cdecl AnimMgr::AsyncUp"
+                                                                                           "date(unsigned int,bool,class "
+                                                                                           "ndjob::Counter **)",
+                                                                             1,
+                                                                             1);
+    *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xE0) = sub_1415B4090(
+                                                                             (unsigned int)"d:\\perforce\\code\\big4final"
+                                                                                           "-tll-release\\shared\\src\\nd"
+                                                                                           "lib\\anim\\anim-mgr.cpp",
+                                                                             888,
+                                                                             (unsigned int)"void __cdecl AnimMgr::AsyncUp"
+                                                                                           "date(unsigned int,bool,class "
+                                                                                           "ndjob::Counter **)",
+                                                                             1,
+                                                                             1);
+    memset((void *)(_RBP + 304), 0, 0x60u);
+    v20 = (_QWORD *)(_RBP + 312);
+    v21 = 2;
+    do
+    {
+      if ( v18 )
+      {
+        v22 = v18 << 7;
+        if ( !is_mul_ok(v18, 0x80u) )
+          v22 = -1;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x190) = 64;
+        *(v20 - 1) = sub_1415A0E90(v22, 64, (unsigned int)"UNKNOWN", 0, (__int64)"UNKNOWN");
+        v23 = v18 << 7;
+        if ( !is_mul_ok(v18, 0x80u) )
+          v23 = -1;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x198) = 64;
+        *v20 = sub_1415A0E90(v23, 64, (unsigned int)"UNKNOWN", 0, (__int64)"UNKNOWN");
+        v24 = v18 << 7;
+        if ( !is_mul_ok(v18, 0x80u) )
+          v24 = -1;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x1A0) = 64;
+        v20[1] = sub_1415A0E90(v24, 64, (unsigned int)"UNKNOWN", 0, (__int64)"UNKNOWN");
+      }
+      v20[2] = sub_1415B4090(
+                 (unsigned int)"d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+                 902,
+                 (unsigned int)"void __cdecl AnimMgr::AsyncUpdate(unsigned int,bool,class ndjob::Counter **)",
+                 v18 != 0,
+                 1);
+      v20[3] = sub_1415B4090(
+                 (unsigned int)"d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+                 903,
+                 (unsigned int)"void __cdecl AnimMgr::AsyncUpdate(unsigned int,bool,class ndjob::Counter **)",
+                 v18 != 0,
+                 1);
+      v20[4] = sub_1415B4090(
+                 (unsigned int)"d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+                 904,
+                 (unsigned int)"void __cdecl AnimMgr::AsyncUpdate(unsigned int,bool,class ndjob::Counter **)",
+                 v18 != 0,
+                 1);
+      v20 += 6;
+      --v21;
+    }
+    while ( v21 );
+    v25 = v18;
+    *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xD0) = v18;
+    v26 = 56 * v18;
+    if ( !is_mul_ok(v18, 0x38u) )
+      v26 = -1;
+    *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x1A8) = 128;
+    v27 = sub_1415A0E90(v26, 128, (unsigned int)"UNKNOWN", 0, (__int64)"UNKNOWN");
+    if ( v18 )
+    {
+      _RDX = v27 + 20;
+      v30 = v18;
+      v31 = *(_BYTE *)_RBP;
+      do
+      {
+        __asm { vmovss  dword ptr [rdx-4], xmm6 }
+        *(_BYTE *)_RDX = v31;
+        *(_QWORD *)(_RDX + 4) = qword_1466D0C50;
+        v28 = qword_1466D0C58;
+        *(_QWORD *)(_RDX + 12) = qword_1466D0C58;
+        *(_QWORD *)(_RDX + 20) = qword_1466D0C60;
+        _RDX += 56;
+        --v30;
+      }
+      while ( v30 );
+    }
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [rbp+130h]
+      vmovups ymmword ptr [rbp+1E0h], ymm0
+      vmovups xmm1, xmmword ptr [rbp+150h]
+      vmovups xmmword ptr [rbp+200h], xmm1
+      vmovups ymm0, ymmword ptr [rbp+160h]
+      vmovups ymmword ptr [rbp+210h], ymm0
+      vmovups xmm1, xmmword ptr [rbp+180h]
+      vmovups xmmword ptr [rbp+230h], xmm1
+    }
+    *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x248) = v27;
+    __asm { vzeroupper }
+    sub_141783380(v28, _RBP + 1152, sub_141781390, _RBP + 480);
+    v37 = *(unsigned int *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 4);
+    dword_1466D0C1C = *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 4);
+    if ( HIDWORD(qword_1466D0C08) )
+      sub_141783660(v36, v37, 1);
+    if ( v18 )
+    {
+      v38 = 0;
+      *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 8) = 0;
+      v39 = 0;
+      *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x10) = 0;
+      do
+      {
+        v40 = (__int64)(*(_QWORD *)(_RBP + v39 + 480) - *(_QWORD *)(_RBP + v39 + 304)) >> 7;
+        if ( v40 > v25 )
+        {
+          if ( !qword_146B17C08
+            || (LODWORD(v118) = 954,
+                !(unsigned __int8)qword_146B17C08(
+                                    "numJobs <= numAnimDataToUpdate",
+                                    "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+                                    "AnimMgr::AsyncUpdate",
+                                    "Jun 30 2023 19:05:51",
+                                    v118,
+                                    0)) )
+          {
+            sub_1422053E0(v36);
+            __debugbreak();
+          }
+        }
+        v41 = (v38 != 0) + 2;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x1B0) = 64;
+        v42 = sub_1415A0E90(96, 64, (unsigned int)"UNKNOWN", 0, (__int64)"UNKNOWN");
+        *(_QWORD *)(v42 + 16) = 8;
+        *(_QWORD *)v42 = *(_QWORD *)(_RBP + v39 + 304);
+        *(_QWORD *)(v42 + 8) = v40;
+        *(_DWORD *)(v42 + 24) = v41;
+        *(_QWORD *)(v42 + 48) = 8;
+        v43 = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x10);
+        *(_QWORD *)(v42 + 32) = *(_QWORD *)(_RBP + v43 + 312);
+        *(_QWORD *)(v42 + 40) = v40;
+        *(_DWORD *)(v42 + 56) = v41;
+        *(_QWORD *)(v42 + 80) = 8;
+        *(_QWORD *)(v42 + 64) = *(_QWORD *)(_RBP + v43 + 320);
+        *(_QWORD *)(v42 + 72) = v40;
+        *(_DWORD *)(v42 + 88) = v41;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x1B8) = 64;
+        _RBX = (_QWORD *)sub_1415A0E90(384, 64, (unsigned int)"UNKNOWN", 0, (__int64)"UNKNOWN");
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x40) = sub_1415C51E0;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x48) = v42;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x50) = 0;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x58) = 0;
+        __asm
+        {
+          vpxor   xmm0, xmm0, xmm0
+          vmovdqu xmmword ptr [rbp+60h], xmm0
+        }
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x70) = 0;
+        *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x78) &= 0xFFFFFFF0;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x80) &= 0xF000000000000000uLL;
+        __asm
+        {
+          vmovups ymm0, ymmword ptr [rbp+40h]
+          vmovups ymmword ptr [rax], ymm0
+          vmovups ymm1, ymmword ptr [rbp+60h]
+          vmovups ymmword ptr [rax+20h], ymm1
+          vmovups ymm0, ymmword ptr [rbp+80h]
+          vmovups ymmword ptr [rax+40h], ymm0
+          vmovups ymm1, ymmword ptr [rbp+0A0h]
+          vmovups ymmword ptr [rax+60h], ymm1
+        }
+        _RBX[2] = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL)
+                            + *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x10)
+                            + 328);
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x40) = sub_1415C51E0;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x48) = v42 + 32;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x50) = 0;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x58) = 0;
+        __asm
+        {
+          vpxor   xmm0, xmm0, xmm0
+          vmovdqu xmmword ptr [rbp+60h], xmm0
+        }
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x70) = 0;
+        *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x78) &= 0xFFFFFFF0;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x80) &= 0xF000000000000000uLL;
+        __asm
+        {
+          vmovups ymm0, ymmword ptr [rbp+40h]
+          vmovups ymmword ptr [rbx+80h], ymm0
+          vmovups ymm1, ymmword ptr [rbp+60h]
+          vmovups ymmword ptr [rbx+0A0h], ymm1
+          vmovups ymm0, ymmword ptr [rbp+80h]
+          vmovups ymmword ptr [rbx+0C0h], ymm0
+          vmovups ymm1, ymmword ptr [rbp+0A0h]
+          vmovups ymmword ptr [rbx+0E0h], ymm1
+        }
+        _RBX[19] = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xD8);
+        _RBX[21] = 0;
+        v55 = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x10);
+        _RBX[18] = *(_QWORD *)(_RBP + v55 + 336);
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x40) = sub_1415C51E0;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x48) = v42 + 64;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x50) = 0;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x58) = 0;
+        __asm
+        {
+          vpxor   xmm0, xmm0, xmm0
+          vmovdqu xmmword ptr [rbp+60h], xmm0
+        }
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x70) = 0;
+        *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x78) &= 0xFFFFFFF0;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x80) &= 0xF000000000000000uLL;
+        __asm
+        {
+          vmovups ymm0, ymmword ptr [rbp+40h]
+          vmovups ymmword ptr [rbx+100h], ymm0
+          vmovups ymm1, ymmword ptr [rbp+60h]
+          vmovups ymmword ptr [rbx+120h], ymm1
+          vmovups ymm0, ymmword ptr [rbp+80h]
+          vmovups ymmword ptr [rbx+140h], ymm0
+          vmovups ymm1, ymmword ptr [rbp+0A0h]
+          vmovups ymmword ptr [rbx+160h], ymm1
+        }
+        _RBX[35] = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xE0);
+        _RBX[37] = 0;
+        _RBX[34] = *(_QWORD *)(_RBP + v55 + 344);
+        __asm { vzeroupper }
+        v62 = NdjobAllocWorkBatch(3, 0, v60, v61, 3, 0xFFFFFF);
+        NdjobCopyJobRecords(v62, _RBX, 3);
+        if ( *(_DWORD *)(v62 + 8) )
+        {
+          if ( *(_QWORD *)(v62 + 56) == 0xFFFFFF )
+            *(_QWORD *)(v62 + 56) = (0xFFFFFFFFFFFFFFFFuLL >> (64 - *(_BYTE *)(qword_1437E9700 + 2880))) & 0xFFFFFF;
+          *(_BYTE *)(v62 + 72) = 0;
+          QueryPerformanceCounter((LARGE_INTEGER *)(_RBP + 232));
+          *(_QWORD *)(v62 + 80) = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xE8);
+          *(_BYTE *)(v62 + 88) = sub_142207E90();
+          LOBYTE(v63) = 1;
+          NdjobEnqueueToLane(v62, v63);
+        }
+        else
+        {
+          sub_1415CF780(v62);
+        }
+        v38 = *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 8) + 1;
+        *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 8) = v38;
+        v39 = v55 + 48;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x10) = v39;
+        v25 = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xD0);
+      }
+      while ( v38 < 2 );
+    }
+    v64 = 0;
+    if ( *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xC8) )
+    {
+      v65 = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x120);
+      if ( v65 )
+      {
+        *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 8) = 14;
+        v66 = sub_1415A1D70(_RBP + 8);
+        v119 = "UNKNOWN";
+        LODWORD(v118) = 0;
+        v67 = (*(__int64 (__fastcall **)(__int64, __int64, __int64, const char *))(*(_QWORD *)v66 + 56LL))(
+                v66,
+                12288,
+                16,
+                "UNKNOWN");
+      }
+      else
+      {
+        v67 = sub_1415A0E90(12288, 16, (unsigned int)"UNKNOWN", 0, (__int64)"UNKNOWN");
+      }
+      *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xF0) = v67;
+      *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xF8) = 0;
+      _InterlockedExchange64((volatile __int64 *)(_RBP + 256), 0);
+      __asm
+      {
+        vmovss  dword ptr [rbp+110h], xmm6
+        vmovss  dword ptr [rbp+114h], xmm7
+      }
+      sub_141783380(v68, _RBP + 640, sub_1417816A0, _RBP + 240);
+      _RSI = 0;
+      v72 = *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xF8);
+      if ( v65 )
+      {
+        v69 = 0;
+        v73 = 0;
+        if ( v72 )
+        {
+          v70 = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xF0);
+          do
+          {
+            v74 = *(_DWORD **)(v70 + 8LL * v69);
+            if ( (*v74 & 0xC00) == 0xC00 )
+            {
+              v75 = v72 - 1;
+              v76 = *(_QWORD *)(v70 + 8 * v75);
+              *(_QWORD *)(v70 + 8 * v75) = v74;
+              *(_QWORD *)(*(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xF0) + 8LL * v69) = v76;
+              v72 = *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xF8) - 1;
+              *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xF8) = v72;
+              ++v73;
+              v70 = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xF0);
+            }
+            else
+            {
+              ++v69;
+            }
+          }
+          while ( v69 < v72 );
+          if ( v73 )
+          {
+            *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x20) = 14;
+            v77 = sub_1415A1D70(_RBP + 32);
+            v119 = "UNKNOWN";
+            LODWORD(v118) = 0;
+            _RSI = (*(__int64 (__fastcall **)(__int64, __int64, __int64, const char *))(*(_QWORD *)v77 + 56LL))(
+                     v77,
+                     48,
+                     16,
+                     "UNKNOWN");
+            *(_QWORD *)_RSI = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xF0)
+                            + 8LL * *(unsigned int *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xF8);
+            *(_DWORD *)(_RSI + 8) = v73;
+            _InterlockedExchange64((volatile __int64 *)(_RSI + 16), 0);
+            __asm { vmovss  dword ptr [rax+20h], xmm6 }
+            *(_DWORD *)(_RSI + 36) = 944879383;
+            v72 = *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xF8);
+          }
+        }
+      }
+      if ( v72 )
+      {
+        if ( (unsigned int)*(_QWORD *)(qword_1437E9700 + 48) < v72 )
+          v72 = *(_QWORD *)(qword_1437E9700 + 48);
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xE8) = v72;
+        v78 = ((unsigned __int64)v72 << 7) + 79;
+        if ( v78 < ((unsigned __int64)v72 << 7) + 64 )
+          v78 = 0xFFFFFFFFFFFFFF0LL;
+        v79 = v78 & 0xFFFFFFFFFFFFFFF0uLL;
+        v80 = alloca(v79);
+        v81 = alloca(v79);
+        v82 = NdjobAllocWorkBatch(v72, 0, v69, v70, 3, 0xFFFFFF);
+        v64 = sub_1415B4090(
+                (unsigned int)"d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+                1051,
+                (unsigned int)"void __cdecl AnimMgr::AsyncUpdate(unsigned int,bool,class ndjob::Counter **)",
+                v72,
+                1);
+        if ( v72 )
+        {
+          _RCX = (unsigned __int64)v121 & 0xFFFFFFFFFFFFFFC0uLL;
+          v84 = v72;
+          do
+          {
+            *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x40) = sub_141A93EA0;
+            *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x48) = ((unsigned __int64)v122
+                                                                                  & 0xFFFFFFFFFFFFFF80uLL)
+                                                                                 + 240;
+            *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x50) = 0;
+            *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x58) = 0;
+            __asm
+            {
+              vpxor   xmm0, xmm0, xmm0
+              vmovdqu xmmword ptr [rbp+60h], xmm0
+            }
+            *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x70) = 0;
+            *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x78) &= 0xFFFFFFF0;
+            *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x80) &= 0xF000000000000000uLL;
+            __asm
+            {
+              vmovups ymm0, ymmword ptr [rbp+40h]
+              vmovups ymmword ptr [rcx], ymm0
+              vmovups ymm1, ymmword ptr [rbp+60h]
+              vmovups ymmword ptr [rcx+20h], ymm1
+              vmovups ymm0, ymmword ptr [rbp+80h]
+              vmovups ymmword ptr [rcx+40h], ymm0
+              vmovups ymm1, ymmword ptr [rbp+0A0h]
+              vmovups ymmword ptr [rcx+60h], ymm1
+            }
+            *(_QWORD *)(_RCX + 16) = v64;
+            _RCX += 128LL;
+            --v84;
+          }
+          while ( v84 );
+          v89 = v72;
+        }
+        else
+        {
+          v89 = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xE8);
+        }
+        __asm { vzeroupper }
+        NdjobCopyJobRecords(v82, (unsigned __int64)v121 & 0xFFFFFFFFFFFFFFC0uLL, v89);
+        if ( *(_DWORD *)(v82 + 8) )
+        {
+          if ( *(_QWORD *)(v82 + 56) == 0xFFFFFF )
+            *(_QWORD *)(v82 + 56) = (0xFFFFFFFFFFFFFFFFuLL >> (64 - *(_BYTE *)(qword_1437E9700 + 2880))) & 0xFFFFFF;
+          *(_BYTE *)(v82 + 72) = 0;
+          QueryPerformanceCounter((LARGE_INTEGER *)(_RBP + 296));
+          *(_QWORD *)(v82 + 80) = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x128);
+          *(_BYTE *)(v82 + 88) = sub_142207E90();
+          LOBYTE(v90) = 1;
+          NdjobEnqueueToLane(v82, v90);
+        }
+        else
+        {
+          sub_1415CF780(v82);
+        }
+      }
+      if ( _RSI )
+      {
+        byte_1466D0C28 = 1;
+        v91 = *(_QWORD *)(qword_1437E9700 + 48);
+        v92 = *(unsigned int *)(_RSI + 8);
+        if ( (unsigned int)v91 < (unsigned int)v92 )
+          v92 = (unsigned int)v91;
+        *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x20) = v92;
+        v93 = v92;
+        *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x10) = (unsigned int)v92;
+        v94 = (v92 << 7) + 64;
+        v95 = v94 + 15;
+        if ( v94 + 15 < v94 )
+          v95 = 0xFFFFFFFFFFFFFF0LL;
+        v96 = v95 & 0xFFFFFFFFFFFFFFF0uLL;
+        v97 = alloca(v96);
+        v98 = alloca(v96);
+        v99 = NdjobAllocWorkBatch(v93, 0, v69, v70, 5, 0xFFFFFF);
+        v100 = sub_1415B4090(
+                 (unsigned int)"d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+                 1071,
+                 (unsigned int)"void __cdecl AnimMgr::AsyncUpdate(unsigned int,bool,class ndjob::Counter **)",
+                 v93,
+                 1);
+        v101 = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x10);
+        if ( *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x20) )
+        {
+          _RCX = (unsigned __int64)v121 & 0xFFFFFFFFFFFFFFC0uLL;
+          v103 = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x10);
+          do
+          {
+            *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x40) = sub_141A93EA0;
+            *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x48) = _RSI;
+            *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x50) = 0;
+            *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x58) = 0;
+            __asm
+            {
+              vpxor   xmm0, xmm0, xmm0
+              vmovdqu xmmword ptr [rbp+60h], xmm0
+            }
+            *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x70) = 0;
+            *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x78) &= 0xFFFFFFF0;
+            *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x80) &= 0xF000000000000000uLL;
+            __asm
+            {
+              vmovups ymm0, ymmword ptr [rbp+40h]
+              vmovups ymmword ptr [rcx], ymm0
+              vmovups ymm1, ymmword ptr [rbp+60h]
+              vmovups ymmword ptr [rcx+20h], ymm1
+              vmovups ymm0, ymmword ptr [rbp+80h]
+              vmovups ymmword ptr [rcx+40h], ymm0
+              vmovups ymm1, ymmword ptr [rbp+0A0h]
+              vmovups ymmword ptr [rcx+60h], ymm1
+            }
+            *(_QWORD *)(_RCX + 16) = v100;
+            _RCX += 128LL;
+            --v103;
+          }
+          while ( v103 );
+        }
+        __asm { vzeroupper }
+        NdjobCopyJobRecords(v99, (unsigned __int64)v121 & 0xFFFFFFFFFFFFFFC0uLL, v101);
+        if ( *(_DWORD *)(v99 + 8) )
+        {
+          if ( *(_QWORD *)(v99 + 56) == 0xFFFFFF )
+            *(_QWORD *)(v99 + 56) = (0xFFFFFFFFFFFFFFFFuLL >> (64 - *(_BYTE *)(qword_1437E9700 + 2880))) & 0xFFFFFF;
+          *(_BYTE *)(v99 + 72) = 0;
+          QueryPerformanceCounter((LARGE_INTEGER *)(_RBP + 24));
+          *(_QWORD *)(v99 + 80) = *(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x18);
+          *(_BYTE *)(v99 + 88) = sub_142207E90();
+          LOBYTE(v108) = 1;
+          NdjobEnqueueToLane(v99, v108);
+        }
+        else
+        {
+          sub_1415CF780(v99);
+        }
+        **(_QWORD **)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x120) = v100;
+      }
+    }
+    v109 = *(_BYTE *)_RBP;
+    if ( !(_DWORD)qword_1466D0C10 || v109 )
+    {
+      v111 = *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 4);
+      v110 = 2;
+    }
+    else
+    {
+      sub_1415B5300(*(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x148), 0, 0);
+      sub_1415B5300(*(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x178), 0, 0);
+      *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xC0) = 0;
+      sub_1415A15F0(
+        _RBP + 192,
+        "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+        1091,
+        "void __cdecl AnimMgr::AsyncUpdate(unsigned int,bool,class ndjob::Counter **)",
+        v118,
+        v119);
+      v110 = 2;
+      v111 = *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 4);
+      sub_141783660(v112, v111, 2);
+      sub_1415A1B80();
+    }
+    sub_14015A850(*(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xD8), -1);
+    if ( HIDWORD(qword_1466D0C10) && !v109 )
+    {
+      sub_1415B5300(*(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x150), 0, 0);
+      sub_1415B5300(*(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x180), 0, 0);
+      *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xC8) = 0;
+      sub_1415A15F0(
+        _RBP + 200,
+        "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+        1106,
+        "void __cdecl AnimMgr::AsyncUpdate(unsigned int,bool,class ndjob::Counter **)",
+        v118,
+        v119);
+      sub_141783660(v113, v111, 3);
+      sub_1415A1B80();
+    }
+    sub_14015A850(*(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xE0), -1);
+    if ( dword_1466D0C18 && !v109 )
+    {
+      sub_1415B5300(*(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x158), 0, 0);
+      sub_1415B5300(*(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0x188), 0, 0);
+      *(_DWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xD0) = 0;
+      sub_1415A15F0(
+        _RBP + 208,
+        "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+        1121,
+        "void __cdecl AnimMgr::AsyncUpdate(unsigned int,bool,class ndjob::Counter **)",
+        v118,
+        v119);
+      sub_141783660(v114, v111, 4);
+      sub_1415A1B80();
+    }
+    v115 = (_QWORD *)(_RBP + 336);
+    do
+    {
+      sub_1415B5300(*(v115 - 1), 0, 0);
+      sub_1415B5300(*v115, 0, 0);
+      sub_1415B5300(v115[1], 0, 0);
+      sub_1415B4200(*(v115 - 1));
+      sub_1415B4200(*v115);
+      sub_1415B4200(v115[1]);
+      v115 += 6;
+      --v110;
+    }
+    while ( v110 );
+    if ( v64 )
+    {
+      sub_1415B5300(v64, 0, 0);
+      sub_1415B4200(v64);
+    }
+    dword_1466D0C1C = -1;
+    sub_1415B4200(*(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xD8));
+    sub_1415B4200(*(_QWORD *)(((unsigned __int64)v122 & 0xFFFFFFFFFFFFFF80uLL) + 0xE0));
+    qword_1466D0C08 = 0;
+    qword_1466D0C10 = 0;
+    dword_1466D0C18 = 0;
+    result = sub_1415B8CA0(_RBP + 456);
+  }
+  __asm
+  {
+    vmovaps xmm6, xmmword ptr [r13+720h]
+    vmovaps xmm7, xmmword ptr [r13+710h]
+  }
+  return result;
+}
+
+=== 0x141782B40: sub_141782B40 [0x141782B40..0x141783376] ===
+// local variable allocation has failed, the output may be wrong!
+// Hidden C++ exception states: #wind=1
+__int64 __fastcall sub_141782B40(double _XMM0_8, unsigned int a2, char a3)
+{
+  __int64 v6; // rsi
+  __int64 v7; // rbx
+  __int64 v8; // rcx
+  char v14; // cf
+  char v15; // zf
+  __int64 v17; // rbx
+  __int64 result; // rax
+  int v19; // r15d
+  int v20; // eax
+  __int64 v21; // rax
+  __int64 v22; // rcx
+  __int64 v23; // r14
+  __int64 v25; // rcx
+  __int64 v26; // rcx
+  __int64 v27; // rcx
+  __int64 v28; // rcx
+  __int64 v29; // rcx
+  __int64 v30; // rcx
+  __int64 v33; // [rsp+4C0h] [rbp+4C0h]
+  __int64 v34; // [rsp+4C8h] [rbp+4C8h]
+  _QWORD v35[148]; // [rsp+550h] [rbp+550h] BYREF
+  char v36; // [rsp+9F0h] [rbp+9F0h] BYREF
+
+  v35[145] = -2;
+  _RBP = (unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL;
+  v6 = a2;
+  v7 = (unsigned int)dword_143F2EBC8
+     + 2111111111LL * unk_143F2EBC4
+     + 1492LL * HIDWORD(qword_143F2EBBC)
+     + 1776LL * (unsigned int)qword_143F2EBBC
+     + 5115LL * dword_143F2EBB8;
+  *(__int64 *)((char *)&qword_143F2EBBC + 4) = qword_143F2EBBC;
+  LODWORD(qword_143F2EBBC) = dword_143F2EBB8;
+  dword_143F2EBC8 = HIDWORD(v7);
+  dword_143F2EBB8 = v7;
+  off_142FFAFD8();
+  dword_143683000 = dword_143F2EBB8;
+  __asm
+  {
+    vxorps  xmm0, xmm0, xmm0
+    vcvtsi2ss xmm0, xmm0, qword ptr [rax+28h]
+    vmulss  xmm1, xmm0, cs:g_EngineClockToSeconds
+    vmulss  xmm6, xmm1, cs:dword_143682F78
+    vxorps  xmm2, xmm2, xmm2
+    vcomiss xmm6, xmm2
+  }
+  if ( !(v14 | v15) )
+  {
+    __asm
+    {
+      vaddss  xmm0, xmm6, cs:dword_146B3D9EC
+      vmaxss  xmm6, xmm0, xmm2
+    }
+  }
+  if ( (unsigned int)v6 >= 9 )
+  {
+    if ( !qword_146B17C08
+      || (v34 = 0,
+          !(unsigned __int8)qword_146B17C08(
+                              "bucket < kNumBuckets",
+                              "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+                              "AnimMgr::SyncUpdate",
+                              "Jun 30 2023 19:05:51",
+                              1218)) )
+    {
+      sub_1422053E0(v8);
+      __debugbreak();
+    }
+  }
+  memset((void *)(_RBP + 640), 0, 0x200u);
+  sub_140167FA0(_RBP + 640, &qword_1466CF000[64 * v6], qword_1466CE200);
+  sub_140167FA0(_RBP + 640, _RBP + 640, &qword_1466CE800);
+  sub_140167FA0(_RBP + 640, _RBP + 640, qword_1466CEA00);
+  memset((void *)(_RBP + 128), 0, 0x200u);
+  sub_140167FA0(_RBP + 128, &qword_1466CF000[64 * v6], qword_1466CE200);
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x80) &= qword_1466CE800;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x88) &= qword_1466CE808;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x90) &= qword_1466CE810;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x98) &= qword_1466CE818;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0xA0) &= qword_1466CE820;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0xA8) &= qword_1466CE828;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0xB0) &= qword_1466CE830;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0xB8) &= qword_1466CE838;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0xC0) &= qword_1466CE840;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0xC8) &= qword_1466CE848;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0xD0) &= qword_1466CE850;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0xD8) &= qword_1466CE858;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0xE0) &= qword_1466CE860;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0xE8) &= qword_1466CE868;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0xF0) &= qword_1466CE870;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0xF8) &= qword_1466CE878;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x100) &= qword_1466CE880;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x108) &= qword_1466CE888;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x110) &= qword_1466CE890;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x118) &= qword_1466CE898;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x120) &= qword_1466CE8A0;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x128) &= qword_1466CE8A8;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x130) &= qword_1466CE8B0;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x138) &= qword_1466CE8B8;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x140) &= qword_1466CE8C0;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x148) &= qword_1466CE8C8;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x150) &= qword_1466CE8D0;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x158) &= qword_1466CE8D8;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x160) &= qword_1466CE8E0;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x168) &= qword_1466CE8E8;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x170) &= qword_1466CE8F0;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x178) &= qword_1466CE8F8;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x180) &= qword_1466CE900;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x188) &= qword_1466CE908;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x190) &= qword_1466CE910;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x198) &= qword_1466CE918;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x1A0) &= qword_1466CE920;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x1A8) &= qword_1466CE928;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x1B0) &= qword_1466CE930;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x1B8) &= qword_1466CE938;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x1C0) &= qword_1466CE940;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x1C8) &= qword_1466CE948;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x1D0) &= qword_1466CE950;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x1D8) &= qword_1466CE958;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x1E0) &= qword_1466CE960;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x1E8) &= qword_1466CE968;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x1F0) &= qword_1466CE970;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x1F8) &= qword_1466CE978;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x200) &= qword_1466CE980;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x208) &= qword_1466CE988;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x210) &= qword_1466CE990;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x218) &= qword_1466CE998;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x220) &= qword_1466CE9A0;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x228) &= qword_1466CE9A8;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x230) &= qword_1466CE9B0;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x238) &= qword_1466CE9B8;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x240) &= qword_1466CE9C0;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x248) &= qword_1466CE9C8;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x250) &= qword_1466CE9D0;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x258) &= qword_1466CE9D8;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x260) &= qword_1466CE9E0;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x268) &= qword_1466CE9E8;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x270) &= qword_1466CE9F0;
+  *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x278) &= qword_1466CE9F8;
+  sub_140167FA0(_RBP + 128, _RBP + 128, qword_1466CEA00);
+  LODWORD(v17) = sub_141783E90(_RBP + 640);
+  result = sub_141783E90(_RBP + 128);
+  v19 = result;
+  if ( (_DWORD)v17 || (_DWORD)result )
+  {
+    sub_1415B86A0(
+      _RBP + 80,
+      "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+      1234,
+      "void __cdecl AnimMgr::SyncUpdate(unsigned int,bool)");
+    v17 = (unsigned int)v17;
+    v20 = 56 * v17;
+    if ( !is_mul_ok((unsigned int)v17, 0x38u) )
+      v20 = -1;
+    v21 = sub_1415A0E90(v20, 128, (unsigned int)"UNKNOWN", 0, (__int64)"UNKNOWN");
+    v23 = v21;
+    if ( (_DWORD)v17 )
+    {
+      _RDX = v21 + 20;
+      do
+      {
+        __asm { vmovss  dword ptr [rdx-4], xmm6 }
+        *(_BYTE *)_RDX = a3;
+        *(_QWORD *)(_RDX + 4) = qword_1466D0C50;
+        v22 = qword_1466D0C58;
+        *(_QWORD *)(_RDX + 12) = qword_1466D0C58;
+        *(_QWORD *)(_RDX + 20) = qword_1466D0C60;
+        _RDX += 56;
+        --v17;
+      }
+      while ( v17 );
+    }
+    dword_1466D0C1C = v6;
+    if ( HIDWORD(qword_1466D0C08) )
+      sub_141783660(v22, (unsigned int)v6, 1);
+    *(_QWORD *)_RBP = v23;
+    sub_141783380(v22, _RBP + 640, sub_141782AF0, (unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL);
+    if ( (_DWORD)qword_1466D0C10 && !a3 )
+    {
+      *(_DWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 8) = 0;
+      sub_1415A15F0(
+        _RBP + 8,
+        "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+        1265,
+        "void __cdecl AnimMgr::SyncUpdate(unsigned int,bool)",
+        v33,
+        v34);
+      sub_141783660(v26, (unsigned int)v6, 2);
+      sub_1415A1B80();
+    }
+    *(_QWORD *)_RBP = v23;
+    sub_141783380(v25, _RBP + 640, sub_141782B20, (unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL);
+    if ( HIDWORD(qword_1466D0C10) && !a3 )
+    {
+      *(_DWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0xC) = 0;
+      sub_1415A15F0(
+        _RBP + 12,
+        "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+        1277,
+        "void __cdecl AnimMgr::SyncUpdate(unsigned int,bool)",
+        v33,
+        v34);
+      sub_141783660(v28, (unsigned int)v6, 3);
+      sub_1415A1B80();
+    }
+    *(_QWORD *)_RBP = v23;
+    sub_141783380(v27, _RBP + 640, sub_141782B30, (unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL);
+    if ( dword_1466D0C18 && !a3 )
+    {
+      *(_DWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x10) = 0;
+      sub_1415A15F0(
+        _RBP + 16,
+        "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr.cpp",
+        1289,
+        "void __cdecl AnimMgr::SyncUpdate(unsigned int,bool)",
+        v33,
+        v34);
+      sub_141783660(v29, (unsigned int)v6, 4);
+      sub_1415A1B80();
+    }
+    if ( v19 )
+    {
+      *(_QWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x20) = sub_1415A0E90(
+                                                                              12288,
+                                                                              16,
+                                                                              (unsigned int)"UNKNOWN",
+                                                                              0,
+                                                                              (__int64)"UNKNOWN");
+      *(_DWORD *)(((unsigned __int64)v35 & 0xFFFFFFFFFFFFFF80uLL) + 0x28) = 0;
+      _InterlockedExchange64((volatile __int64 *)(_RBP + 48), 0);
+      __asm { vmovss  [rbp+0A10h+var_9D0], xmm6 }
+      sub_141783380(v30, _RBP + 128, sub_1417816A0, _RBP + 32);
+      sub_141A93EA0(_RBP + 32);
+    }
+    dword_1466D0C1C = -1;
+    qword_1466D0C08 = 0;
+    qword_1466D0C10 = 0;
+    dword_1466D0C18 = 0;
+    result = sub_1415B8CA0(_RBP + 80);
+  }
+  _R11 = &v36;
+  __asm { vmovaps xmm6, xmmword ptr [r11-10h] }
+  return result;
+}
+
+=== 0x14177FC20: sub_14177FC20 [0x14177FC20..0x14177FCB2] ===
+__int64 __fastcall sub_14177FC20(__int64 a1, __int64 a2, __int64 a3)
+{
+  __int64 v3; // rcx
+  __int64 result; // rax
+
+  if ( a2 )
+  {
+    while ( qword_1466D0C30 || _InterlockedCompareExchange64(&qword_1466D0C30, -1, 0) )
+      _mm_pause();
+    v3 = a2 - qword_1466D0200;
+    *(_DWORD *)a2 |= 0x400u;
+    *(_QWORD *)(a2 + 664) = a3;
+    qword_1466CE200[((unsigned __int64)(v3 / 896) >> 6) + 192] |= 1LL << ((v3 / 896) & 0x3F);
+    return _InterlockedExchange64(&qword_1466D0C30, 0);
+  }
+  return result;
+}
+
+=== 0x141BB7DD0: sub_141BB7DD0 [0x141BB7DD0..0x141BB8212] ===
+__int64 __fastcall sub_141BB7DD0(__int64 a1)
+{
+  __int64 result; // rax
+  bool v11; // zf
+  __int64 v12; // rdx
+  __int64 v13; // rdi
+  char v14; // al
+  __int64 v15; // rcx
+  char v16; // cl
+  char v17; // al
+  __int64 v18; // rcx
+  bool v19; // dl
+  __int64 v64; // rcx
+  __int64 v66; // rcx
+  unsigned __int16 v67; // dx
+  unsigned int v68; // r14d
+  int v69; // eax
+  __int64 v71; // rbp
+  __int64 v73; // rdi
+  __int64 v74; // rsi
+  __int64 v76; // [rsp+20h] [rbp-F8h]
+  _DWORD v77[4]; // [rsp+30h] [rbp-E8h] BYREF
+  _UNKNOWN *retaddr; // [rsp+118h] [rbp+0h] BYREF
+
+  _R11 = &retaddr;
+  result = *(_QWORD *)(a1 + 424);
+  _RBX = a1;
+  if ( result && *(_QWORD *)(result + 560) )
+  {
+    v11 = *(_BYTE *)(result + 296) == 0;
+    __asm
+    {
+      vmovaps xmmword ptr [r11-38h], xmm6
+      vmovaps xmmword ptr [r11-48h], xmm7
+      vmovaps xmmword ptr [r11-58h], xmm8
+      vmovaps xmmword ptr [r11-68h], xmm9
+      vmovaps xmmword ptr [r11-78h], xmm10
+      vmovaps xmmword ptr [r11-88h], xmm11
+      vmovaps xmmword ptr [r11-98h], xmm12
+    }
+    *(_BYTE *)(result + 4) = 0;
+    if ( v11 )
+      *(_DWORD *)result |= 0x200000u;
+    else
+      sub_1418C5230(result);
+    v12 = *(_QWORD *)(_RBX + 568);
+    if ( v12 )
+    {
+      a1 = *(_QWORD *)(*(_QWORD *)(v12 + 8) + 424LL);
+      if ( *(_BYTE *)(a1 + 4) == 2 )
+      {
+        if ( *(_DWORD *)(v12 + 96) )
+        {
+          v11 = *(_BYTE *)(a1 + 296) == 0;
+          *(_BYTE *)(a1 + 4) = 3;
+          if ( v11 )
+            *(_DWORD *)a1 |= 0x200000u;
+          else
+            sub_1418C5230(a1);
+        }
+      }
+    }
+    sub_14177FC20(a1, *(_QWORD *)(_RBX + 424), (__int64)sub_141BCA880);
+    **(_DWORD **)(_RBX + 424) &= 0xFFFFFFC7;
+    v13 = *(_QWORD *)(_RBX + 568);
+    if ( v13 )
+    {
+      *(_BYTE *)v13 &= ~2u;
+      sub_141E5D590(v13);
+      if ( (*(_BYTE *)v13 & 6) != 0
+        && (v14 = *(_BYTE *)(v13 + 2), (v14 & 2) == 0)
+        && ((*(_BYTE *)v13 & 0x40) != 0 || (v15 = *(_QWORD *)(v13 + 280)) != 0 && *(_BYTE *)(v15 + 44)) )
+      {
+        v16 = 4;
+      }
+      else
+      {
+        v14 = *(_BYTE *)(v13 + 2);
+        v16 = 0;
+      }
+      v17 = v16 | v14 & 0xFB;
+      *(_BYTE *)(v13 + 2) = v17;
+      if ( (v17 & 4) != 0 )
+        sub_141E5BA90(v13);
+    }
+    v18 = qword_14386FD00[*(unsigned int *)(_RBX + 264)];
+    v19 = v18 && *(_DWORD *)(v18 + 80) == *(_DWORD *)(_RBX + 268);
+    result = 0;
+    if ( v19 )
+      result = qword_14386FD00[*(unsigned int *)(_RBX + 264)];
+    if ( result )
+    {
+      __asm
+      {
+        vmovups ymm0, ymmword ptr [rax]
+        vmovups ymmword ptr [rbx+110h], ymm0
+      }
+    }
+    __asm
+    {
+      vmovups xmm10, xmmword ptr [rbx+120h]
+      vmovups xmm11, xmmword ptr [rbx+140h]
+      vmovups xmm6, xmmword ptr [rbx+130h]
+      vmovaps xmm8, [rsp+118h+var_58]
+      vshufps xmm5, xmm10, xmm10, 9
+      vmulps  xmm1, xmm6, xmm5
+      vxorps  xmm12, xmm12, xmm12
+      vsubps  xmm7, xmm12, xmm10
+      vshufps xmm0, xmm10, xmm7, 93h
+      vshufps xmm9, xmm0, xmm0, 93h
+      vshufps xmm0, xmm6, xmm6, 9
+      vmulps  xmm2, xmm0, xmm10
+      vsubps  xmm3, xmm2, xmm1
+      vshufps xmm4, xmm3, xmm3, 9
+      vshufps xmm0, xmm3, xmm3, 52h ; 'R'
+      vmulps  xmm2, xmm0, xmm10
+      vmulps  xmm1, xmm4, xmm5
+      vsubps  xmm3, xmm2, xmm1
+      vshufps xmm1, xmm3, xmm3, 9
+      vshufps xmm0, xmm10, xmm10, 0FFh
+      vmulps  xmm2, xmm0, xmm4
+      vaddps  xmm3, xmm2, xmm1
+      vmulps  xmm2, xmm3, cs:xmmword_142BED700
+      vaddps  xmm1, xmm2, xmm6
+      vaddps  xmm6, xmm1, xmmword ptr [rbx+110h]
+      vmovups xmmword ptr [rbx+420h], xmm6
+      vmovaps xmm6, [rsp+118h+var_38]
+      vshufps xmm2, xmm10, xmm7, 1Bh
+      vshufps xmm0, xmm11, xmm11, 0FFh
+      vmulps  xmm3, xmm0, xmm10
+      vshufps xmm0, xmm11, xmm11, 0
+      vmulps  xmm1, xmm2, xmm0
+      vshufps xmm2, xmm11, xmm11, 55h ; 'U'
+      vmulps  xmm0, xmm2, xmm9
+      vmovaps xmm9, [rsp+118h+var_68]
+      vaddps  xmm3, xmm3, xmm1
+      vshufps xmm5, xmm10, xmm7, 8Dh
+      vmovaps xmm7, [rsp+118h+var_48]
+      vaddps  xmm4, xmm3, xmm0
+      vshufps xmm3, xmm11, xmm11, 0AAh
+      vmovaps xmm11, [rsp+118h+var_88]
+      vshufps xmm1, xmm5, xmm5, 0D8h
+      vmulps  xmm0, xmm3, xmm1
+      vaddps  xmm2, xmm4, xmm0
+      vmovups xmmword ptr [rbx+430h], xmm2
+    }
+    v64 = *(_QWORD *)(_RBX + 424);
+    *(_BYTE *)(_RBX + 1088) = 1;
+    __asm
+    {
+      vmovups [rsp+118h+var_D8], xmm10
+      vmovaps xmm10, [rsp+118h+var_78]
+    }
+    if ( *(_QWORD *)(v64 + 560) )
+    {
+      *(_BYTE *)(_RBX + 363) &= ~2u;
+      v66 = *(_QWORD *)(v64 + 248);
+      if ( *(_BYTE *)(v66 + 22) )
+        v67 = *(_WORD *)(*(unsigned int *)(v66 + 44) + v66 + 16);
+      else
+        v67 = 0;
+      v68 = v67;
+      __asm { vzeroupper }
+      v69 = (*(__int64 (__fastcall **)(__int64, _DWORD *))(*(_QWORD *)_RBX + 992LL))(_RBX, v77);
+      if ( v69 > 0 )
+      {
+        _RCX = *(_QWORD *)(_RBX + 424);
+        v71 = v69;
+        _R15 = *(_QWORD *)(_RCX + 560);
+        *(_BYTE *)(_RBX + 363) |= 2u;
+        v73 = 0;
+        do
+        {
+          v74 = (int)v77[v73];
+          if ( (int)v74 < 0 || (unsigned int)v74 >= v68 )
+          {
+            if ( !qword_146B17C08
+              || (LODWORD(v76) = 1838,
+                  !(unsigned __int8)qword_146B17C08(
+                                      "hiddenIndex >= 0 && hiddenIndex < numJoints",
+                                      "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\gamelib\\gameplay\\nd-game-object.cpp",
+                                      "NdGameObject::DisableAnimation",
+                                      "Jun 30 2023 19:07:05",
+                                      v76,
+                                      0)) )
+            {
+              sub_1422053E0(_RCX);
+              __debugbreak();
+            }
+          }
+          ++v73;
+          _RCX = 6 * v74;
+          __asm
+          {
+            vmovups xmmword ptr [r15+rcx*8], xmm12
+            vmovups xmmword ptr [r15+rcx*8+10h], xmm12
+            vmovups xmmword ptr [r15+rcx*8+20h], xmm12
+          }
+        }
+        while ( v73 < v71 );
+      }
+      if ( byte_146905801
+        || (*(_BYTE *)(_RBX + 363) & 2) != 0
+        || !(*(unsigned __int8 (__fastcall **)(__int64))(*(_QWORD *)_RBX + 1000LL))(_RBX) )
+      {
+        result = *(_QWORD *)(_RBX + 424);
+        *(_DWORD *)result &= ~0x100u;
+      }
+      else
+      {
+        result = *(_QWORD *)(_RBX + 424);
+        *(_DWORD *)result |= 0x100u;
+      }
+    }
+    __asm { vmovaps xmm12, [rsp+118h+var_98] }
+  }
+  __asm { vzeroupper }
+  return result;
+}
+

@@ -1,0 +1,4 @@
+ref=0x142A4D7D0 vtable=0x142A4D520 slot=+0x2B0 target=0x141BB8220 target_name='sub_141BB8220' rtti='.?AVProcessMountedWeapon@@'
+ref=0x142934C50 vtable=0x1429349A0 slot=+0x2B0 target=0x141BB8220 target_name='sub_141BB8220' rtti='.?AVNpc@@'
+ref=0x1428DF020 vtable=0x1428DED70 slot=+0x2B0 target=0x141BB8220 target_name='sub_141BB8220' rtti='.?AVSimpleNpc@@'
+ref=0x1428FBE10 vtable=0x1428FBB60 slot=+0x2B0 target=0x141F155E0 target_name='sub_141F155E0' rtti='.?AVProcessPhysRope@@'

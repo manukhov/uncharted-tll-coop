@@ -1,0 +1,106 @@
+# Exp 4 - FgAnimData registration and async phase probe
+
+Date: 2026-07-10
+Status: H4 CONFIRMED by two-instance read-only runtime probe; pickup fix pending visual check
+
+## Precise hypothesis
+
+The retained slot-1 Player has either no `FgAnimData`, lacks async phase bit
+`0x20`, or has a stale retained-owner pair. Any of these prevents
+`AnimManager_AsyncObjectUpdateJointBlendJob` `0x141A92A00` from dispatching real
+Player vtable `+0x410` (`Player_Update` `0x1410EC230`).
+
+## Competing hypotheses
+
+| ID | Claim | Distinguishing observation |
+|----|-------|----------------------------|
+| H1 | Puppet never allocated `FgAnimData` | `*(puppet+0x1A8)==0` |
+| H2 | Puppet animation is disabled / phase not armed | Fg exists but `flags&0x20==0`, while slot 0 has it |
+| H3 | Puppet Fg retained pair is stale or points elsewhere | phase has `0x20`, but retained owner/id do not match puppet |
+| H4 | Fg registration is healthy; failure is later | both players have matching `0x38`, owner/id, payload, and upper-state link |
+
+## Independent static evidence
+
+### 1. Source identity and scheduler call graph
+
+`0x141781390` is source-identified as
+`CreateAsyncUpdateJobFunctor(struct FgAnimData *, unsigned __int64)` in
+`anim-mgr.cpp`. It creates the worker functor whose joint-blend callback is
+`0x141A92A00`. That callback resolves the owner from `FgAnimData+0x1A8/+0x1B0`.
+
+`0x141A8F9D0` and `0x141A92A00` dispatch owner phases as follows:
+
+```
+FgAnimData flags bit 0x08 -> owner vtable+0x400
+FgAnimData flags bit 0x10 -> owner vtable+0x408
+FgAnimData flags bit 0x20 -> owner vtable+0x410, then +0x418
+```
+
+### 2. Allocation and retained-pair data flow
+
+`AllocateGlobalRuntimeStateSlot380AndSeedRetainedPair` `0x14177F7F0` claims a
+0x380-byte slot from pool `0x1466D0200`, resets it, and copies
+`owner+0xA8/owner+0xBC` into slot `+0x1A8/+0x1B0`.
+
+`PlayerUpperDrawControlLifecycleAndAmbientOccluderStage` `0x141BB4280` calls
+Player slot `+0x6F0`, receives that slot, and stores it at `Player+0x1A8`.
+Player slot `+0x700` later stores the upper state owner both at `Player+0x1A0`
+and `FgAnimData+0x10`.
+
+### 3. RTTI/vtable identity and flag writers
+
+Player vtable `0x142A4BFE8` resolves:
+
+| Slot | Function | Effect |
+|------|----------|--------|
+| `+0x2A8` | `0x141BB7DD0` | disable path; clears Fg flags `0x38` |
+| `+0x2B0` | `0x141BB8220` | enable path; sets Fg flags `0x38` |
+| `+0x2C8` | `0x141BB88A0` | ensures `+0x2B0` runs when Fg state byte `+4` is zero |
+| `+0x410` | `0x1410EC230` | real `Player_Update` |
+
+This separates the Player path from the rejected NPC `0x14042FCF0` path.
+
+## Falsifiable prediction before runtime
+
+After two-instance split login and puppet spawn, the once-per-second
+`REALSECOND-FGANIM` line compares slot 0 and puppet:
+
+- H1: puppet `fg=0`.
+- H2: puppet `phase` lacks `0x20`; slot 0 has it.
+- H3: puppet has `phase&0x20`, but `owner_match=0`.
+- H4: both show `phase=0x38`, `owner_match=1`, `upper_match=1`, and non-null
+  runtime payload. In that case registration is falsified as the pickup-animation
+  wall and analysis moves to Player action/overlay state after `Player_Update`.
+
+The probe performs reads only. It does not call animation methods or mutate flags.
+
+## Runtime result - H4 CONFIRMED on both processes
+
+Two copies, PIDs 23248 and 29064, fresh DLL injection. Both directions produced
+the same result over repeated one-second samples:
+
+```
+slot0  phase=0x38 state=3 owner_match=1 upper_match=1 payload!=0
+puppet phase=0x38 state=3 owner_match=1 upper_match=1 payload!=0
+```
+
+Full flags varied together through normal transient values (`0x78`, `0xF8`,
+`0x2078`), but phase bits stayed `0x38` for both Player objects. Therefore H1,
+H2, and H3 are rejected. The puppet already participates in the async animation
+job and reaches real Player vtable `+0x410`; registration is not the pickup wall.
+
+## Immediate downstream correction
+
+Static review of the existing direct pickup fallback found a separate concrete
+bug. `0x141C9A360` had been named and called as `Player_StartInteractAction`, but
+it only calls interact-control vtable `+0x8` and returns availability. In the stock
+dispatcher, `availability==1` is followed by:
+
+1. `WeaponPickupInteractControl vtable+0x28` (`RequestInteract`), then
+2. `Player_PublishRequestedInteract` `0x140C87D70`.
+
+The fallback previously skipped step 1 and treated any non-`-1` availability as
+an action start. The corrected path requires availability `1`, calls
+`RequestInteract(control, pickup, puppet)`, and only then publishes requested
+interact. Existing OnInteract suppression remains armed so inventory mutation is
+still owned by WeaponGivePacket/SLOT-MIRROR.

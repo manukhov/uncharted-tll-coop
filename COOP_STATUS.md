@@ -246,20 +246,19 @@ The real interaction path is now mapped one level deeper:
 - `Player_BuildInteractDispatchState` (`0x140C805A0`) builds the required 0x15C-byte
   command/pose block and snapshots the indexed screen's `+0x590` command list.
 - `Player_InteractDispatcher` (`0x140C85D20`) consumes that block and, for a weapon
-  pickup, calls `Player_StartInteractAction` (`0x141C9A360`).
+  pickup, queries `InteractControl_GetAvailabilityForPlayer` (`0x141C9A360`), then
+  calls control vtable `+0x28` `RequestInteract` and publishes the request.
 - Runtime with the missing builder+dispatcher call restored for screen 1 produced
   `PICKUP-GESTURE ... ok=1 dispatch=0`: the command is active, but the dispatcher
   does not select an eligible nearby interaction. This rejects the claim that the
   absent dispatcher tick alone was the wall.
 
-Current build adds a narrowly gated fallback while a relayed pickup gesture is
-armed: find the same-art `WeaponPickup` in the screen-1 dispatcher's native nearby
-list and call its stock `Player_StartInteractAction` once using the retained puppet
-handle. Duplicate `OnInteract`/GiveWeapon completion remains suppressed; inventory
-is still owned by `WeaponGivePacket + SLOT-MIRROR`. Build passed; two injected copies
-(PIDs 28488/328 at handoff) are waiting for an in-save pickup. Prediction: log
-`PICKUP-GESTURE direct-start ... result!=-1`, followed by a visible bend. No match,
-`result=-1`, or no bend falsifies progressively lower parts of this fallback.
+The original fallback found the same-art `WeaponPickup`, but stopped after the
+availability query and therefore never submitted the action. The corrected relay
+now calls `RequestInteract` and publishes the request. Duplicate `OnInteract` /
+GiveWeapon completion remains suppressed; inventory is still owned by
+`WeaponGivePacket + SLOT-MIRROR`. The distinguishing log is now
+`availability=1 requested=1 published=1`; visual confirmation is pending.
 
 ## Turn note (2026-07-10, Codex — direct authored pickup-animation relay REJECTED; full slot-1 controller model opened)
 
@@ -1294,3 +1293,21 @@ clone locomotion), which structurally avoids the local input/FPS artifacts above
 - Tooling: `scripts/launch_inject.sh` (direct `tll.exe`, no Steam launcher; Steam
   blocks 2 instances on one PC). IDA decompile via `scripts/ida_dump_pseudo_env.py`
   with `TLL_IDA_TARGETS`/`TLL_IDA_OUTPUT`.
+## 2026-07-10: puppet animation tick confirmed; pickup request sequence fixed
+
+**CONFIRMED (two-instance read-only Exp4):** both slot 0 and the network puppet
+have live `Player+0x1A8` `FgAnimData` objects. Their retained owner pairs resolve
+back to the expected Player, `FgAnimData+0x10 == Player+0x1A0`, runtime payload
+`+0x230` is non-null, and phase bits `flags & 0x38` are all set. Thus the animation
+manager does schedule the puppet and dispatches Player vtable `+0x410` to
+`Player_Update` `0x1410EC230`. The old "second Player does not tick" explanation
+is rejected.
+
+**Pickup correction:** the prior fallback mislabeled `0x141C9A360` as
+`Player_StartInteractAction`. It only queries availability through control vtable
+`+0x8`; it never submitted the interaction. The relay now matches stock dispatch:
+availability `== 1` -> `WeaponPickupInteractControl::RequestInteract` vtable
+`+0x28` (`0x1408C8A40`) -> `Player_PublishRequestedInteract` (`0x140C87D70`). The
+existing puppet-side `OnInteract` inventory suppression remains active so this
+authors the animation without applying the weapon twice. Visual confirmation of
+the pickup bend is the next runtime check.

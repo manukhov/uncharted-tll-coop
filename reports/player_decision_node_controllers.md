@@ -1,5 +1,21 @@
 # Player decision-node controllers → interact dispatch (STATIC, 2026-07-10)
 
+## 2026-07-10 correction: the puppet is ticked; direct-start was incomplete
+
+The earlier working theory that the slot-1 puppet's decision/animation owner does
+not tick is **REJECTED**. A two-instance read-only comparison found a valid
+`Player+0x1A8` `FgAnimData` on both the local player and puppet, matching retained
+owner pairs and upper-state owners, with a non-null runtime payload and phase mask
+`flags & 0x38 == 0x38`. Therefore the animation manager schedules the puppet through
+Player vtable `+0x410` (`Player_Update` `0x1410EC230`).
+
+The old `direct-start` experiment was also malformed: `0x141C9A360` only queries
+availability through interact-control vtable `+0x8`. Stock dispatch requires
+availability `== 1`, then calls `WeaponPickupInteractControl::RequestInteract`
+vtable `+0x28` (`0x1408C8A40`), and finally
+`Player_PublishRequestedInteract` (`0x140C87D70`). The relay now reproduces all
+three steps. See `reports/real2p_exp4_fganimdata_probe.txt`.
+
 ## Context
 
 Pickup gesture, aim-pitch, and interact animations on the puppet all hit the same
@@ -27,7 +43,9 @@ Codex mapped the real interact boundary deeper than the HUD pickup queue
      `0x143EC4EE0 + 0x35C0*screenIndex` (13760-byte stride).
    - Scans `player-pressed-interact-nearby` / hold variants against the built command
      table via `sub_140C88130` (not `+0x518` bitmask).
-   - Pickup branch → `Player_StartInteractAction` `0x141C9A360`.
+   - Pickup branch first queries `InteractControl_GetAvailabilityForPlayer`
+     `0x141C9A360`, then calls control vtable `+0x28` `RequestInteract`, then
+     `Player_PublishRequestedInteract` `0x140C87D70`.
 
 3. **Global gate:** all paths check `!BYTE2(dword_143073DA8)` before dispatch.
 

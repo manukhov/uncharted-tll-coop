@@ -1,0 +1,154 @@
+FUNCTION 0x14001B970 sub_14001B970
+  0x14001BAD7: mov     dword ptr [rdi], 20h ; ' '
+  0x14001BB1D: mov     dword ptr [rdi], 20h ; ' '
+
+FUNCTION 0x1402942A0 GameArmorComputeDamage
+  0x140294590: cmp     dword ptr [rbx], 20h ; ' '
+
+FUNCTION 0x140294610 GameArmorComputeExplosionDamage
+  0x140294B6A: cmp     dword ptr [r14], 20h ; ' '
+
+FUNCTION 0x14041B630 sub_14041B630
+  0x14041B915: test    byte ptr [rcx], 20h
+
+FUNCTION 0x140425CF0 sub_140425CF0
+  0x140425D05: test    byte ptr [rax], 20h
+
+FUNCTION 0x140627CC0 sub_140627CC0
+  0x140627CC0: or      dword ptr [rcx], 20h
+
+FUNCTION 0x140627CD0 sub_140627CD0
+  0x140627CD0: and     dword ptr [rcx], 0FFFFFFDFh
+
+FUNCTION 0x1406285F0 sub_1406285F0
+  0x14062863B: or      dword ptr [rcx], 20h
+
+FUNCTION 0x140628650 sub_140628650
+  0x14062869B: and     dword ptr [rcx], 0FFFFFFDFh
+
+FUNCTION 0x14099F730 sub_14099F730
+  0x14099FA41: mov     dword ptr [rdi], 20h ; ' '
+
+FUNCTION 0x140A6B960 sub_140A6B960
+  0x140A6BA20: or      byte ptr [rdi], 20h
+
+FUNCTION 0x140B8BF50 sub_140B8BF50
+  0x140B8C508: cmp     byte ptr [rax], 20h ; ' '
+
+FUNCTION 0x140B8CC80 sub_140B8CC80
+  0x140B8CDA8: cmp     byte ptr [rax], 20h ; ' '
+
+FUNCTION 0x1410C1FA0 sub_1410C1FA0
+  0x1410C32CA: test    byte ptr [rax], 20h
+  0x1410C339A: or      byte ptr [rdi], 20h
+
+FUNCTION 0x14136ABD0 sub_14136ABD0
+  0x14136AE57: mov     byte ptr [rax], 20h ; ' '
+  0x14136B34A: mov     byte ptr [rax], 20h ; ' '
+
+FUNCTION 0x14136BA60 sub_14136BA60
+  0x14136BBBB: mov     byte ptr [rax], 20h ; ' '
+
+FUNCTION 0x1413D87D0 sub_1413D87D0
+  0x1413D8938: cmp     dword ptr [rax], 20h ; ' '
+
+FUNCTION 0x1413D9B00 sub_1413D9B00
+  0x1413D9DE3: cmp     dword ptr [rax], 20h ; ' '
+
+FUNCTION 0x141728930 sub_141728930
+  0x141728989: and     dword ptr [rax], 0FFFFFFC7h
+  0x141728996: and     dword ptr [rax], 0FFFFFFC7h
+
+FUNCTION 0x141782AF0 sub_141782AF0
+  0x141782B01: add     qword ptr [rdx], 38h ; '8'
+
+FUNCTION 0x141793600 sub_141793600
+  0x141793EA5: or      dword ptr [r15], 20h
+
+FUNCTION 0x1417ECFC0 sub_1417ECFC0
+  0x1417ED130: cmp     byte ptr [rcx], 20h ; ' '
+  0x1417ED148: cmp     byte ptr [rcx], 20h ; ' '
+
+FUNCTION 0x1417ED7B0 sub_1417ED7B0
+  0x1417ED8D7: cmp     byte ptr [rcx], 20h ; ' '
+  0x1417ED8E8: cmp     byte ptr [rcx], 20h ; ' '
+
+FUNCTION 0x1417EE6D0 sub_1417EE6D0
+  0x1417EEA2D: cmp     byte ptr [rcx], 20h ; ' '
+  0x1417EEA3A: cmp     byte ptr [rcx], 20h ; ' '
+
+FUNCTION 0x141888C40 sub_141888C40
+  0x141888C44: mov     qword ptr [rcx], 20h ; ' '
+
+FUNCTION 0x1418CAE10 sub_1418CAE10
+  0x1418CAEBF: mov     dword ptr [r10], 20h ; ' '; jumptable 00000001418CAE99 cases 44,48,104
+
+FUNCTION 0x141934A50 sub_141934A50
+  0x141934ABF: mov     byte ptr [rax], 20h ; ' '
+
+FUNCTION 0x1419A4330 sub_1419A4330
+  0x1419A451E: or      word ptr [rdi], 20h
+
+FUNCTION 0x1419A48E0 sub_1419A48E0
+  0x1419A4BBB: or      word ptr [rbx], 20h
+
+FUNCTION 0x141A41F50 sub_141A41F50
+  0x141A42253: mov     [rbp+30h+var_30], 20h ; ' '
+
+FUNCTION 0x141A835F0 sub_141A835F0
+  0x141A835F3: or      byte ptr [rcx], 20h
+
+FUNCTION 0x141A92A00 AnimManager_AsyncObjectUpdateJointBlendJob
+  0x141A93457: test    byte ptr [rsi], 20h
+
+FUNCTION 0x141BB7AC0 sub_141BB7AC0
+  0x141BB7B21: and     dword ptr [rax], 0FFFFFFC7h
+
+FUNCTION 0x141BB7DD0 sub_141BB7DD0
+  0x141BB7EB7: and     dword ptr [r8], 0FFFFFFC7h
+
+FUNCTION 0x141BB8220 sub_141BB8220
+  0x141BB8291: or      dword ptr [rax], 38h
+
+FUNCTION 0x141C6FEB0 sub_141C6FEB0
+  0x141C70110: cmp     byte ptr [rsi+rbx], 20h ; ' '
+
+FUNCTION 0x141C8E680 TaskManager_UpdateAndQuery
+  0x141C8F24B: mov     byte ptr [rcx], 20h ; ' '
+
+FUNCTION 0x141CA4980 sub_141CA4980
+  0x141CA49B9: cmp     dword ptr [r8], 20h ; ' '
+
+FUNCTION 0x141CABBA0 sub_141CABBA0
+  0x141CABBEA: mov     byte ptr [rbx], 20h ; ' '
+
+FUNCTION 0x141CAC0D0 sub_141CAC0D0
+  0x141CAC797: mov     byte ptr [rbx], 20h ; ' '
+
+FUNCTION 0x141D17D90 sub_141D17D90
+  0x141D17D90: or      byte ptr [rcx], 20h
+
+FUNCTION 0x141E5BF60 sub_141E5BF60
+  0x141E5C42F: test    byte ptr [rsi], 20h
+
+FUNCTION 0x141ED9250 sub_141ED9250
+  0x141ED92D8: cmp     byte ptr [rdx], 20h ; ' '
+
+FUNCTION 0x141F155E0 sub_141F155E0
+  0x141F15655: or      dword ptr [rax], 38h
+
+FUNCTION 0x14202F960 sub_14202F960
+  0x14202FB6B: cmp     dword ptr [rax], 20h ; ' '
+
+FUNCTION 0x1421ADF10 sub_1421ADF10
+  0x1421ADF93: cmp     qword ptr [r11], 38h ; '8'
+
+FUNCTION 0x1421ADFE0 sub_1421ADFE0
+  0x1421AE08B: cmp     qword ptr [r10], 38h ; '8'
+
+FUNCTION 0x14220D660 sub_14220D660
+  0x14220D6DF: test    byte ptr [rcx], 20h
+
+FUNCTION 0x14220E4B0 sub_14220E4B0
+  0x14220E508: mov     word ptr [rbx], 20h ; ' '
+

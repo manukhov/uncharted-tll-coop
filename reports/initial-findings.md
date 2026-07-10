@@ -26160,3 +26160,26 @@ the upper Player action/overlay pipeline. Next work must trace animation-job
 creation and flag writers before adding a read-only slot0/puppet comparison.
 
 Full correction: `reports/real2p_exp3b_active_player_gate.txt`.
+### 2026-07-10 CONFIRMED: puppet FgAnimData ticks; pickup direct-start sequence corrected
+
+Two-instance read-only probe `REALSECOND-FGANIM` compared the local Player and
+network puppet. Both have a live `FgAnimData*` at `Player+0x1A8`, matching retained
+owner pair at `FgAnimData+0x1A8/+0x1B0`, matching upper owner
+`FgAnimData+0x10 == Player+0x1A0`, non-null runtime payload at `+0x230`, and all
+async phase bits set (`flags & 0x38 == 0x38`). **CONFIRMED:** the puppet is
+registered in the animation manager and reaches Player vtable `+0x410`,
+`Player_Update` `0x1410EC230`. Missing pickup animation is not caused by an absent
+second-player tick.
+
+Static call-order correction: `0x141C9A360` is
+`InteractControl_GetAvailabilityForPlayer`, not `Player_StartInteractAction`. The
+successful stock branch requires return value 1, calls control vtable `+0x28`
+(`WeaponPickupInteractControl_RequestInteract` `0x1408C8A40`), then calls
+`Player_PublishRequestedInteract` `0x140C87D70`. The old relay stopped after the
+availability query and therefore could not author the pickup action. The runtime
+relay now performs the complete sequence while suppressing puppet-side duplicate
+inventory mutation in `WeaponPickupInteractControl_OnInteract` `0x14157AA70`.
+
+Evidence and falsifiers: `reports/real2p_exp4_fganimdata_probe.txt`,
+`reports/pickup_publish_vs_start.txt`, and
+`reports/player_fganimdata_lifecycle.txt`.

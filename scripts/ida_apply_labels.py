@@ -8,6 +8,26 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-10: Player FgAnimData async lifecycle ---
+    0x141781390: (
+        "AnimManager_CreateAsyncUpdateJobFunctor",
+        "Creates the async animation-manager job for an FgAnimData object. The "
+        "job callback is AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00.",
+    ),
+    0x141BB7DD0: (
+        "NdGameObject_DisableAnimationAsyncPhases",
+        "Source-identified nd-game-object animation disable path. Clears FgAnimData "
+        "phase bits 0x08/0x10/0x20 (mask 0x38).",
+    ),
+    0x141BB8220: (
+        "NdGameObject_EnableAnimationAsyncPhases",
+        "Source-identified nd-game-object animation enable path. Sets FgAnimData "
+        "phase bits 0x08/0x10/0x20 (mask 0x38).",
+    ),
+    0x141BB88A0: (
+        "NdGameObject_EnsureAnimationEnabled",
+        "Ensures the owning FgAnimData is enabled when its state field at +4 is zero.",
+    ),
     # --- 2026-07-10: pickup-gesture recipe (interact command activation) ---
     0x14183A650: (
         "InputScreenBlock_ActivateCommand",
@@ -18,11 +38,11 @@ FUNCTIONS = {
         "directly bypasses the +0x518 button routing that never reaches the puppet.",
     ),
     0x141C9A360: (
-        "Player_StartInteractAction",
-        "Called by Player_InteractDispatcher right after activating the pickup "
-        "interact command. Calls interactControl vtable+0x8 with the interactable "
-        "object and a 16-byte retained Player handle {player+0xA8, player+0xBC}; "
-        "return -1 rejects the action.",
+        "InteractControl_GetAvailabilityForPlayer",
+        "Called by Player_InteractDispatcher before action submission. Calls "
+        "interactControl vtable+0x8 with the interactable object and a retained "
+        "Player handle {player+0xA8, player+0xBC}; return 1 permits the later "
+        "vtable+0x28 RequestInteract call. It does not start an action itself.",
     ),
     0x140C805A0: (
         "Player_BuildInteractDispatchState",
@@ -126,7 +146,7 @@ FUNCTIONS = {
         "Named by its own assert (weapon-pickup.cpp).",
     ),
     0x1408C8A40: (
-        "PickupInteractControl_RequestInteract",
+        "WeaponPickupInteractControl_RequestInteract",
         "WeaponPickupInteractControl vtable +0x28. Identity is confirmed by its "
         "PickupInteractControl::RequestInteract assert in process-pickup.cpp. "
         "Publishes interact-with-me to the pickup at action start.",

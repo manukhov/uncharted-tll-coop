@@ -9546,10 +9546,10 @@ bool seh_publish_puppet_pickup_action(void* dispatcher, void* pickup) {
 // recipe found from Player_InteractDispatcher and bypasses the +0x518 button routing
 // that never reaches the puppet. Gated by g_puppet_pickup_gesture; called once per
 // applied pickup give. Does NOT touch inventory (weapon already given). Default OFF
-// (2026-07-10): ActivateCommand returns ok=1 but NO gesture, even held 700ms - the
-// puppet's per-player interact/anim state machine does not run (AI off), so nothing
-// consumes the activated command. Same root as the un-materialized screen-1 camera.
-// Numpad 9 toggles for further experiments.
+// (2026-07-10): ActivateCommand alone returns ok=1 but does not submit an action.
+// Exp4 later confirmed the puppet's FgAnimData phases and Player_Update are live;
+// the direct fallback must perform availability + RequestInteract + publish.
+// Numpad 9 retains the command-driven path for further experiments.
 volatile bool g_puppet_pickup_gesture = false;
 
 bool seh_activate_puppet_command(void* block, std::uint32_t cmd_id) {
@@ -9637,10 +9637,16 @@ void* seh_find_nearby_weapon_pickup(void* dispatcher, std::uint32_t art) {
     return nullptr;
 }
 
-std::int64_t seh_start_puppet_pickup_action(
+struct PickupActionRequestResult {
+    std::int64_t availability{-1};
+    bool requested{false};
+};
+
+PickupActionRequestResult seh_request_puppet_pickup_action(
     void* puppet, void* pickup) {
+    PickupActionRequestResult result{};
     if (puppet == nullptr || pickup == nullptr) {
-        return -1;
+        return result;
     }
     struct alignas(16) PlayerHandle {
         std::uint64_t pointer;
@@ -9654,20 +9660,33 @@ std::int64_t seh_start_puppet_pickup_action(
             vtable[kWeaponPickupGetInteractControlVtableOffset / sizeof(void*)]);
         void* const control = get_control(pickup);
         if (control == nullptr) {
-            return -1;
+            return result;
         }
         player_handle.pointer = *reinterpret_cast<const std::uint64_t*>(
             static_cast<const std::byte*>(puppet) + 168);
         player_handle.id = *reinterpret_cast<const std::uint32_t*>(
             static_cast<const std::byte*>(puppet) + 188);
-        using StartInteractActionFn = std::int64_t(__fastcall*)(
+        using GetAvailabilityFn = std::int64_t(__fastcall*)(
             void*, void*, const void*, std::uint64_t);
-        const auto start = reinterpret_cast<StartInteractActionFn>(
-            g_module + kPlayerStartInteractActionRva);
-        return start(control, pickup, &player_handle, 0);
+        const auto get_availability = reinterpret_cast<GetAvailabilityFn>(
+            g_module + kInteractControlGetAvailabilityRva);
+        result.availability = get_availability(
+            control, pickup, &player_handle, 0);
+        if (result.availability != 1) {
+            return result;
+        }
+
+        auto** const control_vtable = *reinterpret_cast<void***>(control);
+        using RequestInteractFn = std::int64_t(__fastcall*)(
+            void*, void*, void*);
+        const auto request_interact = reinterpret_cast<RequestInteractFn>(
+            control_vtable[0x28 / sizeof(void*)]);
+        request_interact(control, pickup, puppet);
+        result.requested = true;
+        return result;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        force_log_line("PICKUP-GESTURE StartInteractAction raised an exception");
-        return -1;
+        force_log_line("PICKUP-GESTURE RequestInteract raised an exception");
+        return result;
     }
 }
 
@@ -9704,7 +9723,8 @@ void apply_puppet_pickup_gesture(void* puppet) {
     }
     const bool ok = seh_activate_puppet_command(block, swap_hash);
     bool dispatched = false;
-    std::int64_t start_result = -2;
+    PickupActionRequestResult request_result{};
+    bool direct_published = false;
     if (ok) {
         // The dispatcher can reach the native pickup completion path. Inventory
         // remains owned by WeaponGivePacket/SLOT-MIRROR, so suppress that duplicate
@@ -9732,15 +9752,21 @@ void apply_puppet_pickup_gesture(void* puppet) {
                           std::memory_order_acquire))
                 : nullptr;
             if (pickup != nullptr) {
-                start_result = seh_start_puppet_pickup_action(puppet, pickup);
-                if (start_result != -1) {
+                request_result = seh_request_puppet_pickup_action(puppet, pickup);
+                if (request_result.requested) {
+                    direct_published = seh_publish_puppet_pickup_action(
+                        dispatcher, pickup);
+                }
+                if (request_result.requested && direct_published) {
                     g_puppet_pickup_action_started.store(
                         true, std::memory_order_release);
                 }
                 std::ostringstream direct;
-                direct << "PICKUP-GESTURE direct-start pickup=0x" << std::hex
+                direct << "PICKUP-GESTURE direct-request pickup=0x" << std::hex
                        << reinterpret_cast<std::uintptr_t>(pickup) << std::dec
-                       << " result=" << start_result;
+                       << " availability=" << request_result.availability
+                       << " requested=" << (request_result.requested ? 1 : 0)
+                       << " published=" << (direct_published ? 1 : 0);
                 force_log_line(direct.str().c_str());
             }
         }
@@ -9787,14 +9813,18 @@ void apply_peer_pickup_animation(void* puppet) {
     void* const pickup = resolve_weapon_pickup_by_runtime_id(id, art);
     const std::uint32_t player_index = *reinterpret_cast<const std::uint32_t*>(
         static_cast<const std::byte*>(puppet) + 0x4010);
-    bool ok = false;
+    PickupActionRequestResult request_result{};
+    bool published = false;
     if (pickup != nullptr && player_index < 6) {
         void* const dispatcher = reinterpret_cast<void*>(
             g_module + kPlayerInteractDispatcherBaseRva +
             kPlayerInteractDispatcherStride * player_index);
         g_puppet_pickup_anim_suppress_until_ms.store(
             GetTickCount64() + 2500, std::memory_order_release);
-        ok = seh_publish_puppet_pickup_action(dispatcher, pickup);
+        request_result = seh_request_puppet_pickup_action(puppet, pickup);
+        if (request_result.requested) {
+            published = seh_publish_puppet_pickup_action(dispatcher, pickup);
+        }
     }
     g_pending_pickup_flag.store(false, std::memory_order_release);
     g_last_applied_pickup_seq.store(seq, std::memory_order_relaxed);
@@ -9803,7 +9833,9 @@ void apply_peer_pickup_animation(void* puppet) {
          << " art=0x" << art << std::dec << " seq=" << seq
          << " playerIndex=" << player_index
          << " resolved=" << (pickup != nullptr ? 1 : 0)
-         << " ok=" << (ok ? 1 : 0);
+         << " availability=" << request_result.availability
+         << " requested=" << (request_result.requested ? 1 : 0)
+         << " published=" << (published ? 1 : 0);
     force_log_line(line.str().c_str());
 }
 
@@ -11173,6 +11205,67 @@ void scrub_local_viewport_aim_hud_leak() {
     }
 }
 
+void append_fganim_probe(std::ostringstream& out, const char* tag, void* player) {
+    out << " " << tag << "={player=0x" << std::hex
+        << reinterpret_cast<std::uintptr_t>(player);
+    if (player == nullptr ||
+        readable_bytes(player) < kPlayerFgAnimDataOffset + sizeof(void*)) {
+        out << " unreadable}";
+        return;
+    }
+
+    const auto* const player_bytes = static_cast<const std::byte*>(player);
+    const void* const upper_state = *reinterpret_cast<void* const*>(
+        player_bytes + kPlayerUpperStateOwnerOffset);
+    const void* const fg = *reinterpret_cast<void* const*>(
+        player_bytes + kPlayerFgAnimDataOffset);
+    out << " fg=0x" << reinterpret_cast<std::uintptr_t>(fg)
+        << " upper=0x" << reinterpret_cast<std::uintptr_t>(upper_state);
+    if (fg == nullptr ||
+        readable_bytes(fg) < kFgAnimDataRuntimePayloadOffset + sizeof(void*)) {
+        out << "}";
+        return;
+    }
+
+    const auto* const fg_bytes = static_cast<const std::byte*>(fg);
+    const std::uint32_t flags = *reinterpret_cast<const std::uint32_t*>(
+        fg_bytes + kFgAnimDataFlagsOffset);
+    const std::uint8_t state = *reinterpret_cast<const std::uint8_t*>(
+        fg_bytes + kFgAnimDataStateOffset);
+    const void* const fg_upper = *reinterpret_cast<void* const*>(
+        fg_bytes + kFgAnimDataUpperStateOwnerOffset);
+    const void* const retained_handle = *reinterpret_cast<void* const*>(
+        fg_bytes + kFgAnimDataRetainedHandleOffset);
+    const std::uint32_t retained_id = *reinterpret_cast<const std::uint32_t*>(
+        fg_bytes + kFgAnimDataRetainedIdOffset);
+    const void* const runtime_payload = *reinterpret_cast<void* const*>(
+        fg_bytes + kFgAnimDataRuntimePayloadOffset);
+
+    const void* retained_owner = nullptr;
+    std::uint32_t owner_id = 0;
+    if (retained_handle != nullptr && readable_bytes(retained_handle) >= 16) {
+        retained_owner = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(retained_handle) + 8);
+        if (retained_owner != nullptr &&
+            readable_bytes(retained_owner) >= kGameObjectRuntimeIdOffset + 4) {
+            owner_id = *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(retained_owner) +
+                kGameObjectRuntimeIdOffset);
+        }
+    }
+
+    out << " flags=0x" << flags << " phase=0x" << (flags & 0x38u)
+        << " state=" << std::dec << static_cast<unsigned>(state) << std::hex
+        << " fg_upper=0x" << reinterpret_cast<std::uintptr_t>(fg_upper)
+        << " payload=0x" << reinterpret_cast<std::uintptr_t>(runtime_payload)
+        << " retained=0x" << reinterpret_cast<std::uintptr_t>(retained_owner)
+        << ":" << std::dec << retained_id
+        << " owner_id=" << owner_id
+        << " owner_match="
+        << ((retained_owner == player && retained_id == owner_id) ? 1 : 0)
+        << " upper_match=" << ((fg_upper == upper_state) ? 1 : 0) << "}";
+}
+
 // Rate-limited read-only REALSECOND observe + NPC spot-list probe. The list is
 // useful spawn diagnostics, but it does not schedule Player::Update.
 void log_realsecond_observe_and_npc_spot_list(void* remote_player) {
@@ -11195,6 +11288,12 @@ void log_realsecond_observe_and_npc_spot_list(void* remote_player) {
       << reinterpret_cast<std::uintptr_t>(hub) << " upper_state(+0x1A0)=0x"
       << reinterpret_cast<std::uintptr_t>(upper_state_owner) << std::dec;
     force_log_line(l.str().c_str());
+
+    std::ostringstream anim;
+    anim << "REALSECOND-FGANIM";
+    append_fganim_probe(anim, "slot0", retained_player_object(0));
+    append_fganim_probe(anim, "puppet", remote_player);
+    force_log_line(anim.str().c_str());
 
     auto* const npc_manager =
         reinterpret_cast<const std::byte*>(g_module + kNpcManagerRva);

@@ -54,6 +54,16 @@ constexpr std::uintptr_t kRetainedSlotTableRva = 0x3EEBE80;   // g_RetainedPlaye
 constexpr std::uintptr_t kPlayerVtableRva = 0x2A4BFE8;        // Player class vtable
 constexpr std::size_t kPlayerQuatOffset = 0x140;              // orientation quaternion
 constexpr std::size_t kPlayerLocalPosOffset = 0x130;          // local position vec4
+// Player animation runtime. Player+0x1A8 is FgAnimData*; async phase bits in the
+// first DWORD select owner vtable +0x400/+0x408/+0x410 for bits 8/0x10/0x20.
+constexpr std::size_t kPlayerFgAnimDataOffset = 0x1A8;
+constexpr std::size_t kPlayerUpperStateOwnerOffset = 0x1A0;
+constexpr std::size_t kFgAnimDataFlagsOffset = 0;
+constexpr std::size_t kFgAnimDataStateOffset = 4;
+constexpr std::size_t kFgAnimDataUpperStateOwnerOffset = 0x10;
+constexpr std::size_t kFgAnimDataRetainedHandleOffset = 0x1A8;
+constexpr std::size_t kFgAnimDataRetainedIdOffset = 0x1B0;
+constexpr std::size_t kFgAnimDataRuntimePayloadOffset = 0x230;
 constexpr std::size_t kPlayerHealthSystemOffset = 0x4A8;
 constexpr std::size_t kPlayerCurrentHealthOffset = 0x38;
 constexpr std::size_t kPlayerMaxHealthOffset = 0x44;
@@ -199,7 +209,9 @@ constexpr std::uintptr_t kPlayerRequestedInteractRva = 0x0C87D70;
 // a stock per-player interact tick.
 constexpr std::uintptr_t kPlayerBuildInteractDispatchStateRva = 0x0C805A0;
 constexpr std::uintptr_t kPlayerInteractDispatcherRva = 0x0C85D20;
-constexpr std::uintptr_t kPlayerStartInteractActionRva = 0x1C9A360;
+// Availability wrapper: calls NdInteractControl vtable+0x8. It does not start the
+// interaction; the accepted path must still call control vtable+0x28 RequestInteract.
+constexpr std::uintptr_t kInteractControlGetAvailabilityRva = 0x1C9A360;
 constexpr std::uintptr_t kResolveGameObjectHandleByIdRva = 0x0A989C0;
 constexpr std::uintptr_t kPlayerInteractDispatcherBaseRva = 0x3EC4EE0;
 constexpr std::size_t kPlayerInteractDispatcherStride = 13760;

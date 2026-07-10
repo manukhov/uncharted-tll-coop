@@ -1,0 +1,39 @@
+TARGET 0x141781390: func_start=0x141781390 name=sub_141781390
+  xref=0x141781F51 type=1 func_start=0x1417816b0 func_name=sub_1417816B0
+  xref=0x146E82648 type=1 func_start=None func_name=None
+
+TARGET 0x141782B30: func_start=0x141782b30 name=sub_141782B30
+  xref=0x14178326F type=1 func_start=0x141782b40 func_name=sub_141782B40
+
+TARGET 0x14177FC20: func_start=0x14177fc20 name=sub_14177FC20
+  xref=0x1401C528B type=17 func_start=0x1401c51c0 func_name=sub_1401C51C0
+  xref=0x14088A981 type=19 func_start=0x14088a960 func_name=sub_14088A960
+  xref=0x14088B3D1 type=19 func_start=0x14088b3b0 func_name=sub_14088B3B0
+  xref=0x1414CABC5 type=19 func_start=0x1414caba0 func_name=sub_1414CABA0
+  xref=0x14150C8EC type=17 func_start=0x14150c8d0 func_name=sub_14150C8D0
+  xref=0x14150C904 type=19 func_start=0x14150c8d0 func_name=sub_14150C8D0
+  xref=0x141516DF6 type=19 func_start=0x141516dd0 func_name=sub_141516DD0
+  xref=0x141BB7EAB type=17 func_start=0x141bb7dd0 func_name=sub_141BB7DD0
+  xref=0x141D99F81 type=19 func_start=0x141d99f60 func_name=sub_141D99F60
+  xref=0x141F18F61 type=19 func_start=0x141f18f40 func_name=sub_141F18F40
+
+TARGET 0x141751BB0: func_start=0x141751bb0 name=sub_141751BB0
+  xref=0x1408F9AEB type=17 func_start=0x1408f99b0 func_name=sub_1408F99B0
+  xref=0x141BB4C6A type=17 func_start=0x141bb4280 func_name=PlayerUpperDrawControlLifecycleAndAmbientOccluderStage
+  xref=0x146E80818 type=1 func_start=None func_name=None
+
+TARGET 0x141728690: func_start=0x141728690 name=InitializeUpperPlayerStateOwner2B0
+  xref=0x1408F973D type=17 func_start=0x1408f96e0 func_name=sub_1408F96E0
+  xref=0x1409C836D type=17 func_start=0x1409c8080 func_name=sub_1409C8080
+  xref=0x1409C84C4 type=17 func_start=0x1409c8080 func_name=sub_1409C8080
+  xref=0x141BBA4D2 type=17 func_start=0x141bba490 func_name=BuildUpperPlayerStateOwnerAt1A0ThenRunPlayerSlot710
+  xref=0x146E7F738 type=1 func_start=None func_name=None
+
+TARGET 0x141728720: func_start=0x141728720 name=PopulateUpperPlayerStateOwnerFromActiveStateAndClassifier
+  xref=0x1408F9785 type=17 func_start=0x1408f96e0 func_name=sub_1408F96E0
+  xref=0x1409C83B1 type=17 func_start=0x1409c8080 func_name=sub_1409C8080
+  xref=0x1409C8531 type=17 func_start=0x1409c8080 func_name=sub_1409C8080
+  xref=0x141BBA53D type=17 func_start=0x141bba490 func_name=BuildUpperPlayerStateOwnerAt1A0ThenRunPlayerSlot710
+  xref=0x146E7F738 type=1 func_start=None func_name=None
+  xref=0x146E7F744 type=1 func_start=None func_name=None
+
