@@ -25717,3 +25717,29 @@ Player_ResolveWeaponPickupInteractAnim (0x140C7FF40, резолвит weapon-pic
 залогировать, вызывается ли он вообще при подборе + какую ветку берёт; ЛИБО искать
 play-animation команду рядом со скриптовым give (0x140DD4208 caller frame). До этого
 pickup-анимация не реализуема — триггер не найден.
+
+### 2026-07-10 (STATIC, ПРОРЫВ): рецепт pickup-жеста + обход блокера +0x518
+
+Два решающих факта убивают «естественный» путь для куклы:
+1. Player_InteractDispatcher (0x140C85D20) пролог = `mov rax,rsp; ...; lea rbp,[rax-0xD38]`
+   (frame-from-entry-rsp) → call-трамплайн крашит (как reticle-функция).
+2. Диспетчер проверяет команды по PER-SCREEN списку block+0x590 (InputScreenBlock_
+   IsCommandActive 0x14183A3D0), НЕ по +0x518 → релеенные кнопки куклы НЕ триггерят
+   интеракт (подтверждает, почему кукла не подбирает сама).
+
+РЕЦЕПТ из диспетчера (ветка старта pickup-анимации, decompile line ~1651):
+- `Player_ResolveWeaponPickupInteractAnim(player, pickup, &a3, &a4, a5, &cmdId)`
+  (0x140C7FF40) → выдаёт cmdId (a6) для weapon-pickup-swap/when-no-weapon.
+- `sub_140C88130(player_side, cmdId, ...)` — publish.
+- **`sub_14183A650(g_LocalPlayerInputManager+3504+3056*screenIdx, cmdId)`
+  (0x14183A650, 0x314)** — АКТИВИРУЕТ команду в per-screen списке +0x590. Это
+  парная к IsCommandActive и КЛЮЧ: активировать интеракт-команду НАПРЯМУЮ, минуя
+  роутинг кнопок → родная anim-система куклы отыграет жест.
+- `sub_141C9A360(interactControl, player, &stackStruct, 0)` (0x141C9A360, 0x159) —
+  старт interact-действия.
+
+per-screen block = `*(g_module+0x3FE1088=g_LocalPlayerInputManager) + 3504 +
+3056*screenIdx`; screenIdx куклы = player+0x4010 (=1). ПЛАН: на кукле per-player
+апдейте резолвить cmdId + вызвать sub_14183A650(puppetBlock, cmdId); если жеста нет
+— добавить sub_141C9A360. Инвентарь НЕ трогать (give уже идёт через WeaponGivePacket);
+следить, чтобы активация команды не запускала повторную выдачу.
