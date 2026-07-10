@@ -123,6 +123,15 @@ constexpr std::uintptr_t kPlayerLookAtUpdateIkRva = 0xEDA680;     // vtable+0x38
 // ResolveScreenRoutePoseSeedOrDefault reads screen idx's pose seed from
 // *(*(table[2*idx]+8)+176)+0x60. Writing the peer seed to that exact source for
 // idx=1 drives the puppet's aim natively (found 2026-07-07).
+// Pickup gesture (2026-07-10): InputScreenBlock_ActivateCommand activates an
+// interact command id in the per-screen block's +0x590 list, bypassing the +0x518
+// button routing that never reaches the puppet. Per-screen block =
+// *(g_module+0x3FE1088) + 0xDB0 + 0xBF0*joypadIdx (joypadIdx = player+0x39B8).
+constexpr std::uintptr_t kInputScreenBlockActivateCommandRva = 0x183A650;
+constexpr std::uintptr_t kFrameStateGlobalRva = 0x3FE1088;
+constexpr std::size_t kFrameStateScreenBlockBaseOffset = 0xDB0;
+constexpr std::size_t kFrameStateScreenBlockStride = 0xBF0;
+constexpr std::size_t kPlayerJoypadIndexOffset = 0x39B8;
 constexpr std::uintptr_t kScreenCameraHandleTableRva = 0x697AD50;
 constexpr std::size_t kCameraHandleInnerOffset = 0x8;    // handle -> +8
 constexpr std::size_t kCameraBlockOffset = 0xB0;         // (+8) -> +176 = blk

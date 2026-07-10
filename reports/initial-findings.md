@@ -25743,3 +25743,25 @@ per-screen block = `*(g_module+0x3FE1088=g_LocalPlayerInputManager) + 3504 +
 апдейте резолвить cmdId + вызвать sub_14183A650(puppetBlock, cmdId); если жеста нет
 — добавить sub_141C9A360. Инвентарь НЕ трогать (give уже идёт через WeaponGivePacket);
 следить, чтобы активация команды не запускала повторную выдачу.
+
+### 2026-07-10 (RUNTIME): pickup-жест — command активируется (ok=1), но кукла НЕ анимируется; корень общий с aim-камерой
+
+Рецепт реализован и технически работает: подбор долетает (GIVEWEAPON-RELAY-STORED),
+`InputScreenBlock_ActivateCommand(puppetBlock, hash("weapon-pickup-swap")=0xE3FF29F9)`
+возвращает **ok=1**. Но видимого жеста НЕТ — ни при однокадровой активации, ни при
+удержании команды активной ~700мс (per-frame re-activate).
+
+**ВЫВОД (объединяющий):** активировать команду недостаточно — её должен ОБРАБОТАТЬ
+per-player interact/anim стейт-машина куклы, а она **не крутится** (AI off). Это тот
+же корень, что у aim-питча: у куклы не материализованы/не апдейтятся per-player
+контроллеры (screen-1 камера, interact-стейт-машина). Всё, что этими стейт-машинами
+управляется (aim-камера, pickup-жест), нельзя завести подачей входов/команд —
+нужен либо запуск этих апдейтов (как materialize_screen1_camera_once, рискованно для
+transform/локомоции), либо прямой low-level вызов проигрывания анимации в обход
+стейт-машины (нужно найти такой API).
+
+Оставшийся путь для жеста: Player_StartInteractAction (0x141C9A360) требует
+interact-control (player.vtable+0x248) + 16-байт struct — высокий риск краша, отдача
+неясна. Pickup-жест ПАРКНУТ (g_puppet_pickup_gesture OFF); отображение подобранного
+оружия работает (WeaponGivePacket + SLOT-MIRROR). Рецепт и адреса сохранены для
+будущего (materialize interact update ИЛИ direct anim-play API).

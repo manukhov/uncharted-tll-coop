@@ -9474,6 +9474,76 @@ bool seh_publish_puppet_pickup_action(void* dispatcher, void* pickup) {
     }
 }
 
+// PICKUP GESTURE (2026-07-10): activate the weapon-pickup interact command in the
+// puppet's per-screen +0x590 list via InputScreenBlock_ActivateCommand. This is the
+// recipe found from Player_InteractDispatcher and bypasses the +0x518 button routing
+// that never reaches the puppet. Gated by g_puppet_pickup_gesture; called once per
+// applied pickup give. Does NOT touch inventory (weapon already given). Default OFF
+// (2026-07-10): ActivateCommand returns ok=1 but NO gesture, even held 700ms - the
+// puppet's per-player interact/anim state machine does not run (AI off), so nothing
+// consumes the activated command. Same root as the un-materialized screen-1 camera.
+// Numpad 9 toggles for further experiments.
+volatile bool g_puppet_pickup_gesture = false;
+
+bool seh_activate_puppet_command(void* block, std::uint32_t cmd_id) {
+    __try {
+        const auto activate = reinterpret_cast<char(__fastcall*)(void*, std::uint32_t)>(
+            g_module + kInputScreenBlockActivateCommandRva);
+        activate(block, cmd_id);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+// Set by apply_peer_weapon_give on a pickup; the gesture command is re-activated
+// every puppet drive tick until this expires (a single-frame activation did not
+// trigger the anim - the interact state machine likely needs it held).
+std::atomic<ULONGLONG> g_puppet_pickup_gesture_until_ms{0};
+
+void apply_puppet_pickup_gesture(void* puppet) {
+    if (!g_puppet_pickup_gesture || puppet == nullptr || g_module == 0 ||
+        !world_stable() ||
+        GetTickCount64() >= g_puppet_pickup_gesture_until_ms.load(
+                                std::memory_order_acquire)) {
+        return;
+    }
+    if (readable_bytes(static_cast<std::byte*>(puppet) +
+                       kPlayerJoypadIndexOffset) < sizeof(std::int32_t)) {
+        return;
+    }
+    const std::int32_t joypad = *reinterpret_cast<const std::int32_t*>(
+        static_cast<const std::byte*>(puppet) + kPlayerJoypadIndexOffset);
+    if (joypad < 0 || joypad >= 6) {
+        return;
+    }
+    void* fs = *reinterpret_cast<void**>(g_module + kFrameStateGlobalRva);
+    if (fs == nullptr ||
+        readable_bytes(fs) < kFrameStateScreenBlockBaseOffset +
+                                 kFrameStateScreenBlockStride * 6) {
+        return;
+    }
+    void* block = static_cast<std::byte*>(fs) +
+                  kFrameStateScreenBlockBaseOffset +
+                  kFrameStateScreenBlockStride * static_cast<std::size_t>(joypad);
+    const auto string_hash = reinterpret_cast<StringHashFunction>(
+        g_module + kStringHashRva);
+    static std::uint32_t swap_hash = 0;
+    if (swap_hash == 0) {
+        swap_hash = string_hash("weapon-pickup-swap", 18, 0);
+    }
+    const bool ok = seh_activate_puppet_command(block, swap_hash);
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log > 400) {  // held over multiple frames; do not flood
+        last_log = now;
+        std::ostringstream l;
+        l << "PICKUP-GESTURE joypad=" << joypad << " cmd=0x" << std::hex
+          << swap_hash << std::dec << " ok=" << (ok ? 1 : 0) << " (held)";
+        force_log_line(l.str().c_str());
+    }
+}
+
 // Consume only from the puppet's per-player update. Player_PublishRequestedInteract
 // resolves its target actor from thread-local state, so calling it from the global
 // drive tick could animate the local player instead.
@@ -9651,6 +9721,11 @@ void apply_peer_weapon_give() {
     stored << "GIVEWEAPON-RELAY-STORED art=0x" << std::hex << art << std::dec
            << " seq=" << seq << " wait=stable-slot-mirror";
     force_log_line(stored.str().c_str());
+    // Arm the pickup gesture: the puppet drive tick re-activates the interact
+    // command for ~700ms (a single-frame activation did not animate). Inventory is
+    // handled by SLOT-MIRROR; this only animates.
+    g_puppet_pickup_gesture_until_ms.store(GetTickCount64() + 700,
+                                           std::memory_order_release);
     return;
 
 #if 0  // Rejected immediate-apply architecture retained for reverse reference.
@@ -10894,6 +10969,8 @@ void drive_remote_slot1_actions_tick() {
     if (g_puppet_materialize_screen1_cam) {
         materialize_screen1_camera_once();
     }
+    // Held pickup gesture: re-activate the interact command while armed.
+    apply_puppet_pickup_gesture(remote_player);
     void* fs = *reinterpret_cast<void**>(g_module + 0x3FE1088);
     if (fs == nullptr || readable_bytes(fs) < 0x7100) {
         return;
@@ -13008,6 +13085,16 @@ void net_tick() {
         log_line(g_puppet_materialize_screen1_cam
                      ? "SCREEN1-CAM materialize = ON (watch locomotion/transform!)"
                      : "SCREEN1-CAM materialize = OFF");
+        g_logging_enabled = was;
+    }
+    if (foreground && (GetAsyncKeyState(VK_NUMPAD9) & 1) != 0) {
+        // Numpad 9 : A/B the puppet pickup gesture (InputScreenBlock command).
+        g_puppet_pickup_gesture = !g_puppet_pickup_gesture;
+        const bool was = g_logging_enabled;
+        g_logging_enabled = true;
+        log_line(g_puppet_pickup_gesture
+                     ? "PICKUP-GESTURE = ON (activate weapon-pickup-swap cmd)"
+                     : "PICKUP-GESTURE = OFF");
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
