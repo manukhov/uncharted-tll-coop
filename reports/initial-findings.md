@@ -26002,3 +26002,29 @@ per-player update schedulers 0x1404901B0 / 0x140497890 / 0x140499B80 that invoke
 42FCF0; or the camera-control-owner update UpdatePlayerAnimatedCameraControlOwner
 AndRouteState 0x140238800. Drive that tick for the puppet under split-login and
 re-observe bit1 + hub promotion.
+
+### 2026-07-10 Exp 2 REJECTED: direct sub_14042FCF0(puppet, dt) call kills the process
+
+
+### 2026-07-10 Exp 2 REJECTED: 42FCF0 cannot be called standalone (faults, crashes copy)
+
+Runtime (Numpad 7 split-login+bind, then Numpad 4 drive): `REALSECOND-DRIVE
+early_update FAULTED` — sub_14042FCF0(puppet, dt) called per-frame from our hook
+faults inside SEH, and the copy crashed a frame later (corrupted engine state).
++0x15A9 bit1 stayed 0 throughout. The observe path confirmed again: puppet is
+local-player-1 (resolve original==puppet), hub+anim non-null, bit1=0.
+
+**Conclusion:** the native per-player update requires the scheduler's ordered
+context (thread-locals, frame phase, player-list iteration) - it cannot be invoked
+a la carte on the puppet. The real-2P blocker is therefore NOT "call the update" but
+"make the native local-player scheduler ENUMERATE the puppet as an active screen-1
+player so it ticks it in-context."
+
+**Next (Exp 3, static-first):** find where the per-player update scheduler
+(0x1404901B0 / 0x140497890 / 0x140499B80) builds its local-player list and why the
+puppet (resolve(1)==puppet, max_local=2) is not enumerated/ticked. Likely a
+separate active-count (m_numPlayers) or a per-player "is active screen" flag distinct
+from the resolver table. Pin that gate before any further runtime drive.
+
+Baseline: real-2P experiments (Numpad 7/4) key-gated, default OFF; stable build
+otherwise unchanged.

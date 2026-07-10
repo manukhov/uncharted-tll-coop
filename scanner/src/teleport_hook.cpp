@@ -214,6 +214,14 @@ bool g_local_player1_bind_enabled = false;
 // engine natively promotes it (sets player+0x15A9 bit1 and builds the hub/anim
 // state that forcing the bit alone could not). Off until the activation key.
 volatile bool g_realsecond_experiment = false;
+// Exp 2: drive the native per-player early update sub_14042FCF0(puppet, dt) each
+// frame (the scheduler tick that promotes the hub / sets +0x15A9 bit1). Key-gated,
+// default OFF, SEH-wrapped - if the scheduler context is required it crashes and we
+// pivot to fixing the scheduler enumeration instead.
+// REJECTED 2026-07-10: calling 42FCF0 standalone FAULTS and crashes the copy - the
+// native update needs the scheduler's ordered context. Default OFF permanently;
+// the real fix is getting the native scheduler to enumerate+tick the puppet.
+volatile bool g_realsecond_drive_update = false;
 bool g_force_split_render_enabled = false;  // OFF: split-render mode broke main-player aiming
 bool g_split_render_applied = false;
 bool g_split_login_done = false;
@@ -11187,6 +11195,20 @@ void scrub_local_viewport_aim_hud_leak() {
     }
 }
 
+// SEH-only helper (no C++ objects): call the native per-player early update on the
+// puppet. Returns true on success, false if it faulted.
+bool seh_call_player_early_update(void* player) {
+    __try {
+        const auto early_update =
+            reinterpret_cast<char(__fastcall*)(void*, double)>(
+                g_module + kPlayerEarlyUpdateRva);
+        early_update(player, 0.0166);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 void drive_remote_slot1_actions_tick() {
     void* const remote_player = retained_player_object(1);
     if (!g_puppet_net_apply || g_module == 0 || remote_player == nullptr ||
@@ -11202,6 +11224,18 @@ void drive_remote_slot1_actions_tick() {
     // PATH #1: materialize the puppet's screen-1 aim camera each frame (gated).
     if (g_puppet_materialize_screen1_cam) {
         materialize_screen1_camera_once();
+    }
+    // REAL-SECOND-PLAYER Exp 2: drive the native per-player early update on the
+    // puppet each frame (the scheduler tick that promotes it). SEH in a helper.
+    if (g_realsecond_drive_update) {
+        static ULONGLONG last_log = 0;
+        const bool faulted = !seh_call_player_early_update(remote_player);
+        const ULONGLONG now = GetTickCount64();
+        if (faulted || now - last_log > 1000) {
+            last_log = now;
+            force_log_line(faulted ? "REALSECOND-DRIVE early_update FAULTED"
+                                   : "REALSECOND-DRIVE early_update called");
+        }
     }
     // REAL-SECOND-PLAYER Exp 1: OBSERVE (read-only) whether the engine natively
     // promotes the puppet after split-login + resolver bind - is +0x15A9 bit1 now
@@ -13400,6 +13434,15 @@ void net_tick() {
             g_realsecond_experiment = false;
             log_line("REALSECOND Exp1 = OFF");
         }
+    }
+    if (foreground && (GetAsyncKeyState(VK_NUMPAD4) & 1) != 0) {
+        // Numpad 4 : REAL-SECOND-PLAYER Exp 2 - drive the native per-player early
+        // update on the puppet each frame (activate Exp 1 first for split-login).
+        g_realsecond_drive_update = !g_realsecond_drive_update;
+        g_logging_enabled = true;
+        log_line(g_realsecond_drive_update
+                     ? "REALSECOND-DRIVE = ON (call 42FCF0 on puppet each frame)"
+                     : "REALSECOND-DRIVE = OFF");
     }
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
         g_local_animation_mirror_test = !g_local_animation_mirror_test;

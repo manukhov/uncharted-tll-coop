@@ -127,6 +127,9 @@ constexpr std::uintptr_t kPlayerLookAtUpdateIkRva = 0xEDA680;     // vtable+0x38
 // interact command id in the per-screen block's +0x590 list, bypassing the +0x518
 // button routing that never reaches the puppet. Per-screen block =
 // *(g_module+0x3FE1088) + 0xDB0 + 0xBF0*joypadIdx (joypadIdx = player+0x39B8).
+// Per-player early update (real-2P Exp 2): sub_14042FCF0(player, double dt); the
+// native scheduler tick that reaches 421150 -> 422760 and promotes the hub.
+constexpr std::uintptr_t kPlayerEarlyUpdateRva = 0x42FCF0;
 constexpr std::uintptr_t kInputScreenBlockActivateCommandRva = 0x183A650;
 constexpr std::uintptr_t kFrameStateGlobalRva = 0x3FE1088;
 constexpr std::size_t kFrameStateScreenBlockBaseOffset = 0xDB0;
