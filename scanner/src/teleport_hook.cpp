@@ -6595,6 +6595,52 @@ bool seh_read_8_floats(const std::byte* p, float* out) {
     }
 }
 
+// SEH-only: resolve the camera block for screen idx via the resolver chain
+// table_14697AD50[2*idx] -> +8 -> +176. Returns 0 on any bad pointer.
+std::uintptr_t seh_resolve_camera_block(unsigned idx) {
+    __try {
+        auto* table = reinterpret_cast<std::uint64_t*>(g_module + 0x697AD50);
+        const std::uintptr_t handle = table[2 * idx];
+        if (handle == 0) return 0;
+        const std::uintptr_t v8 = *reinterpret_cast<std::uintptr_t*>(handle + 8);
+        if (v8 == 0) return 0;
+        return *reinterpret_cast<std::uintptr_t*>(v8 + 176);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 0;
+    }
+}
+
+// Dump the LOCAL screen-0 camera block (blk = *(*(table_14697AD50[0]+8)+176)) over
+// a range so aim-up vs aim-down captures can be diffed to find the camera's aim
+// pitch INPUT field (the real player's screen-0 camera aims correctly). CAMROW tag.
+void dump_screen0_camera_block(const char* tag) {
+    const std::uintptr_t blk = seh_resolve_camera_block(0);
+    if (blk <= 0x10) return;
+    {
+        std::ostringstream o;
+        o << "CAMDUMP " << tag << " blk=0x" << std::hex << blk;
+        force_log_line(o.str().c_str());
+    }
+    auto* p = reinterpret_cast<std::byte*>(blk);
+    for (std::size_t off = 0x0; off < 0x400; off += 0x20) {
+        if (readable_bytes(p + off) < 0x20) continue;
+        float f[8];
+        if (!seh_read_8_floats(p + off, f)) continue;
+        std::ostringstream row;
+        row << "CAMROW " << tag << " +0x" << std::hex << off << ":";
+        bool any = false;
+        for (int i = 0; i < 8; ++i) {
+            const float v = f[i];
+            if (v == v && v != 0.0F && std::fabs(v) > 1e-4F &&
+                std::fabs(v) < 1e4F) {
+                row << " [" << i << "]" << v;
+                any = true;
+            }
+        }
+        if (any) force_log_line(row.str().c_str());
+    }
+}
+
 void dump_live_player_aim_fields(const char* tag) {
     void* player = resolve_live_player_safe(0);
     if (player == nullptr) {
@@ -13075,7 +13121,9 @@ void net_tick() {
         // Numpad +: dump the LIVE local player's float fields for the aim-angle
         // hunt. Press once aiming UP, once aiming DOWN; diff AIMROW lines offline.
         static int shot = 0;
-        dump_live_player_aim_fields((shot++ % 2 == 0) ? "UP" : "DOWN");
+        const char* tag = (shot++ % 2 == 0) ? "UP" : "DOWN";
+        dump_live_player_aim_fields(tag);
+        dump_screen0_camera_block(tag);
     }
     if (foreground && (GetAsyncKeyState(VK_DECIMAL) & 1) != 0) {
         // Numpad . : PATH #1 A/B - materialize the puppet's screen-1 aim camera.
