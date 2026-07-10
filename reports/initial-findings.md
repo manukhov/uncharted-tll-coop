@@ -25624,3 +25624,21 @@ raw `-1` block. New falsifiable hypothesis: retain the exact Type-97 art/model b
 normalize only the stored puppet copy's ammo to finite value `1`, then let stable
 slot mirroring perform the one swap. `TYPE97-INFO-NORMALIZE` distinguishes this
 path in the runtime log.
+
+### 2026-07-10: sender-side M30 freeze = false pickup-id self-apply
+
+**Runtime proof:** exact Type-97 display succeeded with normalized ammo:
+`TYPE97-INFO-NORMALIZE`, then `SLOT-MIRROR ... art=0x27617d0d ... gave=1`. On the
+same local copy, the subsequent M30 pickup completed native `GiveWeapon`, sent the
+relay packet, and logged `SENDER-AFTER-PICKUP ... s1=0x3019cbee`; the receiver also
+logged `GIVEWEAPON-RELAY-STORED`. The sender then stopped before its expected
+`PICKUP-APPLY` tail and spun, proving the hang was after successful local pickup and
+outside receiver inventory mirroring.
+
+**Cause / correction:** `weapon_info_pickup_consume_fields` treated
+`WeaponInfo+0x58` as a runtime pickup id and called `NetEventSyncWeaponPickups::Apply`
+again on the sender. Both Type-97 and M30 carried the identical value `0xE446A2CE`,
+so it cannot identify their distinct world objects. Type-97 happened to return
+`ok=0`; M30 entered a non-returning native path. The GiveWeapon-tail no longer
+self-applies or transmits a `PickupPacket` derived from this false id. Exact weapon
+display remains owned by `WeaponGivePacket` plus stable `SLOT-MIRROR`.

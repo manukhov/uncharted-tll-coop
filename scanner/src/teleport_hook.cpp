@@ -1055,8 +1055,6 @@ bool local_game_window_foreground();
 std::uint32_t peer_effective_held_art(const coop::StatePacket& peer);
 bool peer_holds_scoped_rifle(const coop::StatePacket& peer);
 std::uint32_t capture_held_weapon_art_id(void* player);
-bool weapon_info_pickup_consume_fields(
-    const void* info, std::uint32_t* pickup_id, float* ammo);
 bool sync_weapon_pickup_consume(std::uint32_t id, float ammo, std::uint32_t seq);
 void remove_relayed_long_gun_for_whitelist(void* puppet, std::uint32_t whitelist_art);
 int peer_slot_of_art(std::uint32_t art);
@@ -3205,25 +3203,11 @@ void __fastcall hooked_give_weapon_tail(
                 dump_player_weapon_slots("SENDER-AFTER-PICKUP", sender_player);
             }
         }
-        // Script-event pickup (0xDD4208) bypasses OnInteract — consume the world
-        // pickup locally and mirror to peer so the interact prompt does not linger.
-        std::uint32_t pickup_id = 0;
-        float pickup_ammo = 0.0F;
-        if (weapon_info_pickup_consume_fields(weapon_info, &pickup_id,
-                                             &pickup_ammo) &&
-            pickup_id != 0) {
-            sync_weapon_pickup_consume(pickup_id, pickup_ammo, relay_pkt.sequence);
-            if (g_state_net.enabled && g_state_net.peer_set) {
-                coop::PickupPacket pp{};
-                pp.sequence = g_pickup_send_seq.fetch_add(1) + 1;
-                pp.pickup_object_id = pickup_id;
-                pp.ammo = pickup_ammo;
-                sendto(g_state_net.send_socket,
-                       reinterpret_cast<const char*>(&pp), sizeof(pp), 0,
-                       reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
-                       sizeof(g_state_net.peer_addr));
-            }
-        }
+        // Do not synthesize NetEventSyncWeaponPickups from WeaponInfo here.
+        // +0x58 was misidentified as a pickup runtime id: it is the same
+        // 0xe446a2ce for different pickups. Applying it locally hung the sender
+        // after M-30 GiveWeapon. Weapon display/loadout sync is fully carried by
+        // WeaponGivePacket + the peer raw-slot snapshot.
     }
 }
 
@@ -9379,33 +9363,6 @@ bool seh_call_pickup_apply(void* event) {
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
     }
-}
-
-// WeaponInfo fields from script-event pickup give (ret_rva=0xDD4208): runtime
-// pickup id and ammo live in the POD block, not via OnInteract.
-bool weapon_info_pickup_consume_fields(
-    const void* info, std::uint32_t* pickup_id, float* ammo) {
-    if (info == nullptr || pickup_id == nullptr || ammo == nullptr ||
-        readable_bytes(static_cast<const std::byte*>(info) + 0x88) <
-            sizeof(std::uint32_t)) {
-        return false;
-    }
-    std::uint32_t id = 0;
-    std::memcpy(&id, static_cast<const std::byte*>(info) + 0x58, sizeof(id));
-    if (id == 0 &&
-        readable_bytes(static_cast<const std::byte*>(info) + 0x50) >=
-            sizeof(id)) {
-        std::memcpy(&id, static_cast<const std::byte*>(info) + 0x4C, sizeof(id));
-    }
-    if (id == 0) {
-        return false;
-    }
-    std::int32_t ammo_i = 0;
-    std::memcpy(&ammo_i, static_cast<const std::byte*>(info) + 0x84,
-                sizeof(ammo_i));
-    *pickup_id = id;
-    *ammo = static_cast<float>(ammo_i);
-    return true;
 }
 
 bool sync_weapon_pickup_consume(
