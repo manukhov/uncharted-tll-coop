@@ -26313,3 +26313,37 @@ micro-thread here with the exact next techniques recorded. The confirmed wins
 the shipped value; native-controller features (pickup anim, aim pitch) remain gated
 behind full real-second-player materialization. Baseline stable, all experiments
 key-gated OFF, probe code inert.
+
+### 2026-07-10 GRENADE SYNC — native path mapped (feature outside the puppet-controller wall)
+
+Grenades are a WORLD-OBJECT (ProjectileGrenade NdGameObject), not a puppet-controller
+action - so throw/flight/explosion sync is feasible like enemy/fire relay (the throw
+ANIMATION on the puppet remains the same authored-action wall; cosmetic).
+
+Native functions (net-event-weapon.cpp / projectile-grenade):
+- `ProjectileGrenade::Init` = `sub_141533560(grenade, a2, a3)` - fires on every grenade
+  spawn/throw. Throw-path callers: `sub_14153FB90`, `sub_141540D60`.
+- `EmitGrenadeProjectile` = `sub_14154B3B0(int,int,transform*,int,char,int,char,+stackf)`
+  - the native SPAWN: reads a3=transform (position+dir), builds orientation via cross
+  products. RECEIVER entry: call this with relayed params to spawn a real grenade
+  that flies+explodes natively.
+- `SendNetEventEmitGrenade` = `sub_140BE7000(ProjectileGrenade*, StringId, bool)` -
+  MP send wrapper, gated by HIBYTE(g_NetModeFlags); its receive counterpart is the
+  NetEventEmitGrenade class (vtable 0x1429DCCE0, RTTI 0x143761BC0).
+- `SendNetEventGrenadeStartFuse(ProjectileGrenade*, float, StringId, float)` - fuse
+  start relay (for detonation timing sync).
+- Explosion: process-explosion.cpp; `GameArmor::ComputeExplosionDamage 0x140294610`;
+  `suppress-grenade-explosions` / `Control Grenade Explosions Manually` script gates.
+
+**Design (mirrors pickup relay that worked):**
+1. SENDER: hook `ProjectileGrenade::Init 0x141533560` (fires on local throw) ->
+   capture grenade type (StringId), spawn world transform (pos+dir), initial velocity,
+   fuse -> relay UDP (new GrenadePacket).
+2. RECEIVER: call `EmitGrenadeProjectile 0x14154B3B0` (or Init) on the game thread with
+   reconstructed args -> spawns a matching grenade; native physics fly+explode it.
+3. Double-damage: apply explosion damage on ONE side only (authoritative thrower), or
+   spawn the peer grenade as cosmetic (suppress its damage) - decide after step 1.
+
+**First build step (probe):** hook Init, log + dump the grenade object's transform/
+velocity/type fields on a real campaign throw, to confirm the path fires and pin the
+capture offsets. Then build the relay. Feature is wall-free (world object).
