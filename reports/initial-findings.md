@@ -26183,3 +26183,29 @@ inventory mutation in `WeaponPickupInteractControl_OnInteract` `0x14157AA70`.
 Evidence and falsifiers: `reports/real2p_exp4_fganimdata_probe.txt`,
 `reports/pickup_publish_vs_start.txt`, and
 `reports/player_fganimdata_lifecycle.txt`.
+
+### 2026-07-10 (RUNTIME REJECTED): full pickup native recipe + SLOT-MIRROR timing fix — bend still absent
+
+Host PID 24424 / peer PID 27880, loopback inject `tll_teleport_hook_v2.dll`, M-30
+ground pickup (`ret_rva=0xdd4208`). Inventory relay **works** (`GIVEWEAPON-RELAY-SEND`,
+`SLOT-MIRROR slot=1 gave=1`, `puppet_has_art=1` at `PICKUP-GESTURE-ARM`). Animation
+**does not**: `PICKUP-ANIM-APPLY resolved_cmd=0 ok=1 dispatch=0 pickup=0
+pickup_id=0x0`; no `PICKUP-ID-CAPTURE pre-give` on sender.
+
+**What was tried (this session):** `seh_run_puppet_pickup_recipe` =
+`Player_ResolveWeaponPickupInteractAnim` `0x140C7FF40` →
+`InputScreenBlock_ActivateCommand` `0x14183A650` → optional `sub_141C937D0` +
+`InteractControl_GetAvailability` `0x141C9A360` → `Player_InteractDispatcher`
+`0x140C85D20` → `RequestInteract` `0x1408C8A40` + `Player_PublishRequestedInteract`
+`0x140C87D70`; gesture deferred until `SLOT-MIRROR gave=1`; pre-give pickup-id
+scan (6 screens + interact-control `+0x10/+0x80`).
+
+**Rejects falsifiers:** timing race (ARM now follows mirror with `puppet_has_art=1`);
+missing FgAnimData (Exp4 CONFIRMED); hardcoded cmd only (C7FF40 still returns 0 on
+puppet). **Root cause unchanged:** puppet interact/decision-node SM not driven like
+stock local player — same wall as aim-pitch (`player+0x15A9` bit1=0, not in spot
+list). **PARKED** until slot-1 controller materialization track opens.
+
+Code retained in `scanner/src/teleport_hook.cpp` (`g_pickup_relay` default ON; gesture
+arms only after mirror). Do not spend more runtime on command/dispatcher relay without
+static proof of interact SM tick on puppet.

@@ -26,6 +26,42 @@ the missing pickup animation.
 
 Details: `reports/real2p_exp3b_active_player_gate.txt`.
 
+## Turn note (2026-07-10, Cursor — full pickup native recipe in hook)
+
+**Сделано в `teleport_hook.cpp` / `hook_offsets.h`:**
+
+- `seh_run_puppet_pickup_recipe`: `Player_ResolveWeaponPickupInteractAnim`
+  (`0x140C7FF40`) → `InputScreenBlock_ActivateCommand` → optional
+  `sub_141C937D0` radius prep + `InteractControl_GetAvailability` (`0x141C9A360`)
+  when nearby `WeaponPickup` resolves → `Player_InteractDispatcher` tick → fallback
+  `RequestInteract` + `Player_PublishRequestedInteract`.
+- **Timing fix (2026-07-10 runtime):** gesture больше не армится при `STORED`;
+  `queue_relay_pickup_gesture_after_mirror` ждёт `SLOT-MIRROR gave=1`, затем
+  `PICKUP-GESTURE-ARM puppet_has_art=1`. `apply_puppet_pickup_gesture` /
+  `apply_peer_pickup_animation` пропускают кадры пока art не на кукле.
+- Sender: `capture_weapon_pickup_for_relay` **до** `GiveWeapon` (все 6 screen
+  dispatchers + interact-control +0x10/+0x80) → лог `PICKUP-ID-CAPTURE pre-give`.
+- Исправлен баг: `GetAvailability` вызывался с `pickup` вместо `puppet` как arg2.
+- Gesture window: 700ms → 1200ms per-frame re-activate.
+
+**Билд:** `scanner/build/tll_teleport_hook_v2.dll` OK. Inject в PID 14224/18988 —
+boot lines в `locomotion_hook.log`.
+
+**Прогноз in-game теста:** подбор M-30 на host → `GIVEWEAPON-RELAY-STORED` затем
+`SLOT-MIRROR ... gave=1` → `PICKUP-GESTURE-ARM puppet_has_art=1` →
+`PICKUP-ANIM-APPLY resolved_cmd=1` (если C7FF40 резолвит после give на кукле).
+
+**RUNTIME REJECTED (2026-07-10, PID 24424/27880):** timing fix сработал
+(`PICKUP-GESTURE-ARM puppet_has_art=1` после `SLOT-MIRROR gave=1`), но bend нет:
+`resolved_cmd=0 dispatch=0 pickup=0 pickup_id=0x0` — `C7FF40` на кукле не резолвит
+cmdId даже с M-30 в слоте; nearby `WeaponPickup` на peer отсутствует; interact SM
+куклы не крутится (та же стена, что aim-pitch). **PICKUP-ANIM ПАРКНУТ** — инвентарь
+через `WeaponGivePacket`+`SLOT-MIRROR` работает; дальнейшие попытки через command/
+dispatcher требуют materialize slot-1 interact controller (отдельный трек).
+
+**Не переоткрывать:** play-simple-gesture, play-animation relay, force `+0x15A9` bit1,
+direct `42FCF0(puppet)`, RegisterSpotPlayer для puppet.
+
 ## Turn note (2026-07-10, Cursor — Exp 3b spot-player enumerator pinned)
 
 **Статика:** канонический **spot-player enumerator** — глобал `dword_143D3C0D0`

@@ -212,6 +212,17 @@ constexpr std::uintptr_t kPlayerInteractDispatcherRva = 0x0C85D20;
 // Availability wrapper: calls NdInteractControl vtable+0x8. It does not start the
 // interaction; the accepted path must still call control vtable+0x28 RequestInteract.
 constexpr std::uintptr_t kInteractControlGetAvailabilityRva = 0x1C9A360;
+// Player_ResolveWeaponPickupInteractAnim: resolves weapon-pickup-swap / when-no-weapon
+// command id from the pickup art def (or the player's active weapon when pickup=null).
+constexpr std::uintptr_t kPlayerResolveWeaponPickupInteractAnimRva = 0x0C7FF40;
+// NdInteractControl::IsWithinInteractionRadius — radius/angle prep before interact start.
+constexpr std::uintptr_t kInteractWithinRadiusRva = 0x1C937D0;
+// Player-side dispatcher command gate: checks pressed/hold byte in the dispatch-state
+// command table before RequestInteract / publish (NOT Player_PublishRequestedInteract).
+constexpr std::uintptr_t kInteractDispatcherCommandGateRva = 0x0C88130;
+// Player vtable +0x248 returns the per-player interact-control object used by the
+// pickup dispatcher branch (sub_141C937D0 / InteractControl_GetAvailability).
+constexpr std::size_t kPlayerGetInteractControlVtableOffset = 0x248;
 constexpr std::uintptr_t kResolveGameObjectHandleByIdRva = 0x0A989C0;
 constexpr std::uintptr_t kPlayerInteractDispatcherBaseRva = 0x3EC4EE0;
 constexpr std::size_t kPlayerInteractDispatcherStride = 13760;

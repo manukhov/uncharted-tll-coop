@@ -861,7 +861,22 @@ std::atomic<std::uint32_t> g_pending_pickup_art{0};
 std::atomic<std::uint32_t> g_last_applied_pickup_seq{0};
 std::atomic<std::uint32_t> g_pending_pickup_seq{0};
 std::atomic<bool> g_pending_pickup_flag{false};
+// Last WeaponPickup runtime id observed on the sender interact path (cleared on read).
+std::atomic<std::uint32_t> g_sender_pickup_object_id{0};
+// Receiver: defer pickup gesture until SLOT-MIRROR actually gives the relay art.
+std::atomic<bool> g_relay_pickup_wait_mirror{false};
+std::atomic<std::uint32_t> g_relay_pickup_wait_art{0};
+std::atomic<std::uint32_t> g_relay_pickup_wait_seq{0};
+std::atomic<std::uint32_t> g_relay_pickup_wait_id{0};
+std::atomic<ULONGLONG> g_relay_pickup_wait_since_ms{0};
 std::atomic<ULONGLONG> g_puppet_pickup_anim_suppress_until_ms{0};
+std::atomic<ULONGLONG> g_puppet_pickup_gesture_until_ms{0};
+std::atomic<std::uint32_t> g_puppet_pickup_gesture_art{0};
+std::atomic<bool> g_puppet_pickup_action_started{false};
+void* seh_get_player_interact_control(void* player);
+void arm_puppet_pickup_gesture_for_relay(
+    void* puppet, std::uint32_t art, std::uint32_t seq, std::uint32_t pickup_id);
+void queue_relay_pickup_gesture_after_mirror(std::uint32_t art, std::uint32_t seq);
 // Picked-up-weapon give relay (WeaponGivePacket "COPG"): pending slot written by
 // the recv thread, consumed once on the game thread. The info bytes are only
 // read after the flag acquire and the flag is cleared before the give, so the
@@ -2979,6 +2994,81 @@ std::uint32_t read_weapon_pickup_art_id(std::uint64_t pickup_obj) {
     return art_id;
 }
 
+std::uint32_t normalize_relay_weapon_art(std::uint32_t art_id) {
+    return art_id & 0x0FFFFFFF;
+}
+
+bool relay_weapon_art_matches(std::uint32_t lhs, std::uint32_t rhs) {
+    return normalize_relay_weapon_art(lhs) == normalize_relay_weapon_art(rhs);
+}
+
+std::uint32_t capture_pickup_id_from_weapon_info(const void* weapon_info) {
+    if (weapon_info == nullptr || g_module == 0) {
+        return 0;
+    }
+    const auto* bytes = static_cast<const std::uint8_t*>(weapon_info);
+    for (std::size_t off = 0; off < coop::kWeaponInfoBytes; off += 8) {
+        std::uint64_t candidate = 0;
+        if (!seh_read_qword(bytes + off, candidate) || candidate == 0) {
+            continue;
+        }
+        const std::uint32_t id = read_weapon_pickup_runtime_id(candidate);
+        if (id != 0) {
+            return id;
+        }
+    }
+    return 0;
+}
+
+void* seh_find_nearby_weapon_pickup(void* dispatcher, std::uint32_t art);
+std::uint32_t capture_weapon_pickup_object_id(std::uint64_t ctrl);
+
+std::uint32_t capture_weapon_pickup_for_relay(
+    void* player, void* weapon_controller, std::uint32_t art) {
+    if (g_module == 0 || art == 0) {
+        return 0;
+    }
+    if (weapon_controller != nullptr) {
+        const std::uint32_t from_ctrl = capture_weapon_pickup_object_id(
+            reinterpret_cast<std::uint64_t>(weapon_controller));
+        if (from_ctrl != 0) {
+            return from_ctrl;
+        }
+    }
+    if (player != nullptr) {
+        void* const control = seh_get_player_interact_control(player);
+        if (control != nullptr) {
+            for (const std::size_t off : {0x10ull, 0x80ull}) {
+                std::uint64_t candidate = 0;
+                if (!seh_read_qword(
+                        static_cast<const std::byte*>(control) + off, candidate) ||
+                    candidate == 0) {
+                    continue;
+                }
+                const std::uint32_t id = read_weapon_pickup_runtime_id(candidate);
+                if (id != 0) {
+                    return id;
+                }
+            }
+        }
+        for (int screen = 0; screen < 6; ++screen) {
+            void* const dispatcher = reinterpret_cast<void*>(
+                g_module + kPlayerInteractDispatcherBaseRva +
+                kPlayerInteractDispatcherStride *
+                    static_cast<std::size_t>(screen));
+            void* const nearby = seh_find_nearby_weapon_pickup(dispatcher, art);
+            if (nearby != nullptr) {
+                const std::uint32_t id = read_weapon_pickup_runtime_id(
+                    reinterpret_cast<std::uint64_t>(nearby));
+                if (id != 0) {
+                    return id;
+                }
+            }
+        }
+    }
+    return g_sender_pickup_object_id.load(std::memory_order_acquire);
+}
+
 float read_weapon_pickup_ammo(std::uint64_t pickup_obj) {
     if (pickup_obj == 0 || g_module == 0) {
         return 0.0F;
@@ -3036,6 +3126,9 @@ std::int64_t __fastcall hooked_pickup_request_interact(
             reinterpret_cast<std::byte*>(player) + 0x4010);
     }
     const bool local_weapon_pickup = id != 0 && art != 0 && screen_idx == 0;
+    if (local_weapon_pickup) {
+        g_sender_pickup_object_id.store(id, std::memory_order_release);
+    }
 
     const std::int64_t result = g_original_pickup_request_interact != nullptr
         ? g_original_pickup_request_interact(control, pickup, player)
@@ -3085,6 +3178,14 @@ std::int64_t __fastcall hooked_pickup_request_interact(
 
 std::int64_t __fastcall hooked_weapon_pickup_on_interact(
     std::uint64_t a1, std::int64_t a2, std::int64_t a3, std::int64_t a4) {
+    const std::uint32_t captured_id = capture_weapon_pickup_object_id(a1);
+    if (captured_id != 0 && a3 != 0 &&
+        readable_bytes(reinterpret_cast<std::byte*>(a3) + 0x4010) >=
+            sizeof(std::uint32_t) &&
+        *reinterpret_cast<const std::uint32_t*>(
+            reinterpret_cast<const std::byte*>(a3) + 0x4010) == 0) {
+        g_sender_pickup_object_id.store(captured_id, std::memory_order_release);
+    }
     void* const puppet = retained_player_object(1);
     if (reinterpret_cast<void*>(a3) == puppet &&
         GetTickCount64() <
@@ -3194,6 +3295,7 @@ void __fastcall hooked_give_weapon_tail(
     // PICKED-UP WEAPON RELAY (sender): capture after native GiveWeapon completes so
     // find_weapon_slot_by_art_id sees the new inventory entry.
     bool relay_pickup_after_give = false;
+    std::uint32_t relay_pickup_object_id = 0;
     coop::WeaponGivePacket relay_pkt{};
     void* relay_local_player = nullptr;
     if (g_pickup_relay && g_state_net.enabled && g_state_net.peer_set &&
@@ -3217,6 +3319,21 @@ void __fastcall hooked_give_weapon_tail(
                 if (!is_pickup_relay_art(relay_art)) {
                     // Spawn/loadout whitelist arts: held-weapon sync only.
                 } else {
+                    // Capture while the pickup is still in the world / interact
+                    // control — after GiveWeapon the nearby list is usually empty.
+                    relay_pickup_object_id = capture_weapon_pickup_for_relay(
+                        local_player, local_ctrl, relay_art);
+                    if (relay_pickup_object_id == 0) {
+                        relay_pickup_object_id =
+                            capture_pickup_id_from_weapon_info(weapon_info);
+                    }
+                    if (relay_pickup_object_id != 0) {
+                        std::ostringstream cap;
+                        cap << "PICKUP-ID-CAPTURE pre-give id=0x" << std::hex
+                            << relay_pickup_object_id << " art=0x" << relay_art
+                            << std::dec;
+                        force_log_line(cap.str().c_str());
+                    }
                     relay_pickup_after_give = true;
                     relay_local_player = local_player;
                     relay_pkt.sequence = g_weapon_give_send_seq.fetch_add(1) + 1;
@@ -3268,8 +3385,26 @@ void __fastcall hooked_give_weapon_tail(
              << relay_pkt.weapon_art_id << std::dec
              << " seq=" << relay_pkt.sequence
              << " draw=" << static_cast<int>(relay_pkt.draw_flag)
-             << " slot=" << static_cast<int>(relay_pkt.manager_slot);
+             << " slot=" << static_cast<int>(relay_pkt.manager_slot)
+             << " pickup_id=0x" << std::hex << relay_pickup_object_id
+             << std::dec;
         force_log_line(line.str().c_str());
+        if (relay_pickup_object_id != 0) {
+            coop::PickupPacket anim_pkt{};
+            anim_pkt.sequence = g_pickup_send_seq.fetch_add(1) + 1;
+            anim_pkt.pickup_object_id = relay_pickup_object_id;
+            anim_pkt.weapon_art_id = relay_pkt.weapon_art_id;
+            sendto(g_state_net.send_socket,
+                   reinterpret_cast<const char*>(&anim_pkt), sizeof(anim_pkt), 0,
+                   reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+                   sizeof(g_state_net.peer_addr));
+            std::ostringstream anim_line;
+            anim_line << "PICKUP-ANIM-SEND id=0x" << std::hex
+                      << relay_pickup_object_id << " art=0x"
+                      << relay_pkt.weapon_art_id << std::dec
+                      << " seq=" << anim_pkt.sequence << " via=give-relay";
+            force_log_line(anim_line.str().c_str());
+        }
         // Compare placements: local (sender) slot layout right after the pickup
         // give vs the puppet's PUPPET-AFTER-GIVE dump on the receiver.
         {
@@ -6260,15 +6395,25 @@ DWORD WINAPI state_recv_thread(void*) {
             coop::PickupPacket pp{};
             std::memcpy(&pp, buf, sizeof(pp));
             if (pp.version == coop::kPickupPacketVersion &&
-                pp.pickup_object_id != 0 &&
-                pp.sequence !=
+                pp.pickup_object_id != 0) {
+                g_relay_pickup_wait_id.store(pp.pickup_object_id,
+                                             std::memory_order_relaxed);
+                if (pp.sequence !=
                     g_last_applied_pickup_seq.load(std::memory_order_relaxed)) {
-                g_pending_pickup_id.store(pp.pickup_object_id,
-                                          std::memory_order_relaxed);
-                g_pending_pickup_art.store(pp.weapon_art_id,
-                                           std::memory_order_relaxed);
-                g_pending_pickup_seq.store(pp.sequence, std::memory_order_relaxed);
-                g_pending_pickup_flag.store(true, std::memory_order_release);
+                    g_pending_pickup_id.store(pp.pickup_object_id,
+                                              std::memory_order_relaxed);
+                    g_pending_pickup_art.store(pp.weapon_art_id,
+                                               std::memory_order_relaxed);
+                    g_pending_pickup_seq.store(pp.sequence,
+                                               std::memory_order_relaxed);
+                    // Defer apply_peer_pickup_animation until SLOT-MIRROR gives
+                    // the relay art onto the puppet (see queue/arm helpers).
+                    if (!g_relay_pickup_wait_mirror.load(
+                            std::memory_order_acquire)) {
+                        g_pending_pickup_flag.store(true,
+                                                    std::memory_order_release);
+                    }
+                }
             }
         } else if (magic == coop::kWeaponGiveMagic &&
                    received == static_cast<int>(sizeof(coop::WeaponGivePacket))) {
@@ -7739,6 +7884,39 @@ bool give_held_weapon_to_puppet(void* puppet, std::uint32_t art_id) {
 
 bool puppet_weapon_sync_ready(void* puppet);
 
+void queue_relay_pickup_gesture_after_mirror(
+    std::uint32_t art, std::uint32_t seq) {
+    if (!g_pickup_relay || !is_pickup_relay_art(art)) {
+        return;
+    }
+    g_relay_pickup_wait_art.store(art, std::memory_order_relaxed);
+    g_relay_pickup_wait_seq.store(seq, std::memory_order_relaxed);
+    g_relay_pickup_wait_since_ms.store(GetTickCount64(),
+                                       std::memory_order_relaxed);
+    g_relay_pickup_wait_mirror.store(true, std::memory_order_release);
+}
+
+void arm_puppet_pickup_gesture_for_relay(
+    void* puppet, std::uint32_t art, std::uint32_t seq, std::uint32_t pickup_id) {
+    if (!g_pickup_relay || puppet == nullptr || art == 0) {
+        return;
+    }
+    g_puppet_pickup_gesture_until_ms.store(GetTickCount64() + 1500,
+                                           std::memory_order_release);
+    g_puppet_pickup_gesture_art.store(art, std::memory_order_release);
+    g_puppet_pickup_action_started.store(false, std::memory_order_release);
+    g_pending_pickup_id.store(pickup_id, std::memory_order_relaxed);
+    g_pending_pickup_art.store(art, std::memory_order_relaxed);
+    g_pending_pickup_seq.store(seq, std::memory_order_relaxed);
+    g_pending_pickup_flag.store(true, std::memory_order_release);
+    std::ostringstream line;
+    line << "PICKUP-GESTURE-ARM art=0x" << std::hex << art << std::dec
+         << " seq=" << seq << " pickup_id=0x" << std::hex << pickup_id
+         << std::dec << " puppet_has_art="
+         << (puppet_has_weapon_art_id(puppet, art) ? 1 : 0);
+    force_log_line(line.str().c_str());
+}
+
 // Pre-give coop relay weapons from peer raw-id snapshot (flag 0x40).
 // SLOT MIRRORING (2026-07-07, replaces the gated whitelist pregive). The slot
 // dumps finally showed there is NO placement anomaly: the sender's own pickup
@@ -7774,6 +7952,14 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
     };
     static SlotStability stability[4]{};
     const ULONGLONG now = GetTickCount64();
+    if (g_relay_pickup_wait_mirror.load(std::memory_order_acquire)) {
+        const ULONGLONG since = g_relay_pickup_wait_since_ms.load(
+            std::memory_order_relaxed);
+        if (since != 0 && now - since > 8000) {
+            g_relay_pickup_wait_mirror.store(false, std::memory_order_release);
+            force_log_line("PICKUP-GESTURE-ARM timeout waiting for SLOT-MIRROR");
+        }
+    }
     for (std::size_t i = 0; i < 8; ++i) {
         const int slot = kSlotOfIndex[i];
         if (slot < 0 || slot > 3) continue;
@@ -7840,6 +8026,20 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
              << peer_art << " was=0x" << cur_art << std::dec
              << " gave=" << (gave ? 1 : 0);
         force_log_line(line.str().c_str());
+        if (gave && g_relay_pickup_wait_mirror.load(std::memory_order_acquire)) {
+            const std::uint32_t wait_art =
+                g_relay_pickup_wait_art.load(std::memory_order_relaxed);
+            if (relay_weapon_art_matches(peer_art, wait_art)) {
+                const std::uint32_t wait_seq =
+                    g_relay_pickup_wait_seq.load(std::memory_order_relaxed);
+                const std::uint32_t wait_id =
+                    g_relay_pickup_wait_id.load(std::memory_order_relaxed);
+                g_relay_pickup_wait_mirror.store(false,
+                                                 std::memory_order_release);
+                arm_puppet_pickup_gesture_for_relay(
+                    puppet, wait_art, wait_seq, wait_id);
+            }
+        }
     }
 }
 
@@ -9544,12 +9744,8 @@ bool seh_publish_puppet_pickup_action(void* dispatcher, void* pickup) {
 // PICKUP GESTURE (2026-07-10): activate the weapon-pickup interact command in the
 // puppet's per-screen +0x590 list via InputScreenBlock_ActivateCommand. This is the
 // recipe found from Player_InteractDispatcher and bypasses the +0x518 button routing
-// that never reaches the puppet. Gated by g_puppet_pickup_gesture; called once per
-// applied pickup give. Does NOT touch inventory (weapon already given). Default OFF
-// (2026-07-10): ActivateCommand alone returns ok=1 but does not submit an action.
-// Exp4 later confirmed the puppet's FgAnimData phases and Player_Update are live;
-// the direct fallback must perform availability + RequestInteract + publish.
-// Numpad 9 retains the command-driven path for further experiments.
+// Gated by g_puppet_pickup_gesture (Numpad 9 manual) OR relay_armed until_ms from
+// apply_peer_weapon_give. Called every puppet drive tick while armed.
 volatile bool g_puppet_pickup_gesture = false;
 
 bool seh_activate_puppet_command(void* block, std::uint32_t cmd_id) {
@@ -9594,13 +9790,6 @@ bool seh_tick_puppet_interact_dispatcher(void* puppet) {
     }
 }
 
-// Set by apply_peer_weapon_give on a pickup; the gesture command is re-activated
-// every puppet drive tick until this expires (a single-frame activation did not
-// trigger the anim - the interact state machine likely needs it held).
-std::atomic<ULONGLONG> g_puppet_pickup_gesture_until_ms{0};
-std::atomic<std::uint32_t> g_puppet_pickup_gesture_art{0};
-std::atomic<bool> g_puppet_pickup_action_started{false};
-
 void* seh_find_nearby_weapon_pickup(void* dispatcher, std::uint32_t art) {
     if (dispatcher == nullptr || art == 0) {
         return nullptr;
@@ -9626,8 +9815,10 @@ void* seh_find_nearby_weapon_pickup(void* dispatcher, std::uint32_t art) {
                     kGameObjectRuntimeIdOffset) != id ||
                 *reinterpret_cast<const std::uintptr_t*>(object) !=
                     g_module + kWeaponPickupVftableRva ||
-                *reinterpret_cast<const std::uint32_t*>(
-                    static_cast<const std::byte*>(object) + 0x520) != art) {
+                !relay_weapon_art_matches(
+                    *reinterpret_cast<const std::uint32_t*>(
+                        static_cast<const std::byte*>(object) + 0x520),
+                    art)) {
                 continue;
             }
             return object;
@@ -9641,6 +9832,181 @@ struct PickupActionRequestResult {
     std::int64_t availability{-1};
     bool requested{false};
 };
+
+PickupActionRequestResult seh_request_puppet_pickup_action(
+    void* puppet, void* pickup);
+
+struct PuppetPickupRecipeResult {
+    std::uint32_t cmd_id{0};
+    bool resolved_cmd{false};
+    bool activated{false};
+    bool within_radius{false};
+    std::int64_t availability{-1};
+    bool dispatched{false};
+    bool requested{false};
+    bool published{false};
+};
+
+void* seh_get_player_interact_control(void* player) {
+    if (player == nullptr) {
+        return nullptr;
+    }
+    __try {
+        auto** const vtable = *reinterpret_cast<void***>(player);
+        if (vtable == nullptr) {
+            return nullptr;
+        }
+        using GetControlFn = void*(__fastcall*)(void*);
+        const auto get_control = reinterpret_cast<GetControlFn>(
+            vtable[kPlayerGetInteractControlVtableOffset / sizeof(void*)]);
+        return get_control != nullptr ? get_control(player) : nullptr;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return nullptr;
+    }
+}
+
+bool seh_resolve_weapon_pickup_cmd_id(
+    void* player, void* pickup, std::uint32_t* cmd_out) {
+    if (player == nullptr || cmd_out == nullptr || g_module == 0) {
+        return false;
+    }
+    __try {
+        char ammo_pickup = 0;
+        char has_swap_anim = 0;
+        std::uint32_t cmd_id = 0;
+        using ResolveFn = std::int64_t(__fastcall*)(
+            void*, void*, char*, char*, int, std::uint32_t*);
+        const auto resolve = reinterpret_cast<ResolveFn>(
+            g_module + kPlayerResolveWeaponPickupInteractAnimRva);
+        resolve(player, pickup, &ammo_pickup, &has_swap_anim, 0, &cmd_id);
+        *cmd_out = cmd_id;
+        return cmd_id != 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_interact_within_radius(
+    void* control, void* player, void* pickup, const void* pose_ref) {
+    if (control == nullptr || player == nullptr || pickup == nullptr ||
+        pose_ref == nullptr || g_module == 0) {
+        return false;
+    }
+    __try {
+        using RadiusFn = char(__fastcall*)(void*, void*, void*, const void*);
+        const auto within = reinterpret_cast<RadiusFn>(
+            g_module + kInteractWithinRadiusRva);
+        return within(control, player, pickup, pose_ref) != 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+std::int64_t seh_query_interact_availability(
+    void* control, void* player, const void* player_handle) {
+    if (control == nullptr || player == nullptr || player_handle == nullptr ||
+        g_module == 0) {
+        return -1;
+    }
+    __try {
+        using GetAvailabilityFn = std::int64_t(__fastcall*)(
+            void*, void*, const void*, std::uint64_t);
+        const auto get_availability = reinterpret_cast<GetAvailabilityFn>(
+            g_module + kInteractControlGetAvailabilityRva);
+        return get_availability(control, player, player_handle, 0);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return -1;
+    }
+}
+
+PuppetPickupRecipeResult seh_run_puppet_pickup_recipe(
+    void* puppet, void* pickup) {
+    PuppetPickupRecipeResult result{};
+    if (puppet == nullptr || g_module == 0 || !world_stable()) {
+        return result;
+    }
+    if (readable_bytes(static_cast<std::byte*>(puppet) +
+                       kPlayerJoypadIndexOffset) < sizeof(std::int32_t)) {
+        return result;
+    }
+    const std::int32_t joypad = *reinterpret_cast<const std::int32_t*>(
+        static_cast<const std::byte*>(puppet) + kPlayerJoypadIndexOffset);
+    if (joypad < 0 || joypad >= 6) {
+        return result;
+    }
+    void* fs = *reinterpret_cast<void**>(g_module + kFrameStateGlobalRva);
+    if (fs == nullptr ||
+        readable_bytes(fs) < kFrameStateScreenBlockBaseOffset +
+                                 kFrameStateScreenBlockStride * 6) {
+        return result;
+    }
+    void* const block = static_cast<std::byte*>(fs) +
+                        kFrameStateScreenBlockBaseOffset +
+                        kFrameStateScreenBlockStride *
+                            static_cast<std::size_t>(joypad);
+
+    result.resolved_cmd =
+        seh_resolve_weapon_pickup_cmd_id(puppet, pickup, &result.cmd_id);
+    if (!result.resolved_cmd) {
+        const auto string_hash = reinterpret_cast<StringHashFunction>(
+            g_module + kStringHashRva);
+        static std::uint32_t swap_hash = 0;
+        if (swap_hash == 0) {
+            swap_hash = string_hash("weapon-pickup-swap", 18, 0);
+        }
+        result.cmd_id = swap_hash;
+    }
+
+    result.activated = seh_activate_puppet_command(block, result.cmd_id);
+    if (!result.activated) {
+        return result;
+    }
+
+    g_puppet_pickup_anim_suppress_until_ms.store(
+        GetTickCount64() + 2500, std::memory_order_release);
+
+    void* const control = seh_get_player_interact_control(puppet);
+    if (pickup != nullptr && control != nullptr &&
+        readable_bytes(static_cast<std::byte*>(puppet) +
+                       kReferenceTransformOffset) >= 16) {
+        result.within_radius = seh_interact_within_radius(
+            control, puppet, pickup,
+            static_cast<const std::byte*>(puppet) + kReferenceTransformOffset);
+        struct alignas(16) PlayerHandle {
+            std::uint64_t pointer;
+            std::uint32_t id;
+            std::uint32_t reserved;
+        } player_handle{};
+        player_handle.pointer = *reinterpret_cast<const std::uint64_t*>(
+            static_cast<const std::byte*>(puppet) + 168);
+        player_handle.id = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(puppet) + 188);
+        result.availability = seh_query_interact_availability(
+            control, puppet, &player_handle);
+    }
+
+    result.dispatched = seh_tick_puppet_interact_dispatcher(puppet);
+    if (!result.dispatched && pickup != nullptr) {
+        const std::int32_t screen_index =
+            *reinterpret_cast<const std::int32_t*>(
+                static_cast<const std::byte*>(puppet) + 0x4010);
+        void* const dispatcher = screen_index >= 0 && screen_index < 6
+            ? reinterpret_cast<void*>(
+                  g_module + kPlayerInteractDispatcherBaseRva +
+                  kPlayerInteractDispatcherStride *
+                      static_cast<std::size_t>(screen_index))
+            : nullptr;
+        PickupActionRequestResult request_result =
+            seh_request_puppet_pickup_action(puppet, pickup);
+        result.requested = request_result.requested;
+        result.availability = request_result.availability;
+        if (request_result.requested && dispatcher != nullptr) {
+            result.published =
+                seh_publish_puppet_pickup_action(dispatcher, pickup);
+        }
+    }
+    return result;
+}
 
 PickupActionRequestResult seh_request_puppet_pickup_action(
     void* puppet, void* pickup) {
@@ -9671,7 +10037,7 @@ PickupActionRequestResult seh_request_puppet_pickup_action(
         const auto get_availability = reinterpret_cast<GetAvailabilityFn>(
             g_module + kInteractControlGetAvailabilityRva);
         result.availability = get_availability(
-            control, pickup, &player_handle, 0);
+            control, puppet, &player_handle, 0);
         if (result.availability != 1) {
             return result;
         }
@@ -9691,94 +10057,57 @@ PickupActionRequestResult seh_request_puppet_pickup_action(
 }
 
 void apply_puppet_pickup_gesture(void* puppet) {
-    if (!g_puppet_pickup_gesture || puppet == nullptr || g_module == 0 ||
-        !world_stable() ||
-        GetTickCount64() >= g_puppet_pickup_gesture_until_ms.load(
-                                std::memory_order_acquire)) {
+    const ULONGLONG until = g_puppet_pickup_gesture_until_ms.load(
+        std::memory_order_acquire);
+    const ULONGLONG now = GetTickCount64();
+    const bool relay_armed = until > now;
+    // apply_peer_weapon_give arms until_ms for ~1500ms after SLOT-MIRROR; Numpad 9
+    // is manual override.
+    if ((!g_puppet_pickup_gesture && !relay_armed) || puppet == nullptr ||
+        g_module == 0 || !world_stable()) {
         return;
     }
-    if (readable_bytes(static_cast<std::byte*>(puppet) +
-                       kPlayerJoypadIndexOffset) < sizeof(std::int32_t)) {
+    const std::uint32_t gesture_art =
+        g_puppet_pickup_gesture_art.load(std::memory_order_acquire);
+    if (gesture_art != 0 && relay_armed &&
+        !puppet_has_weapon_art_id(puppet, gesture_art)) {
         return;
     }
-    const std::int32_t joypad = *reinterpret_cast<const std::int32_t*>(
-        static_cast<const std::byte*>(puppet) + kPlayerJoypadIndexOffset);
-    if (joypad < 0 || joypad >= 6) {
-        return;
-    }
-    void* fs = *reinterpret_cast<void**>(g_module + kFrameStateGlobalRva);
-    if (fs == nullptr ||
-        readable_bytes(fs) < kFrameStateScreenBlockBaseOffset +
-                                 kFrameStateScreenBlockStride * 6) {
-        return;
-    }
-    void* block = static_cast<std::byte*>(fs) +
-                  kFrameStateScreenBlockBaseOffset +
-                  kFrameStateScreenBlockStride * static_cast<std::size_t>(joypad);
-    const auto string_hash = reinterpret_cast<StringHashFunction>(
-        g_module + kStringHashRva);
-    static std::uint32_t swap_hash = 0;
-    if (swap_hash == 0) {
-        swap_hash = string_hash("weapon-pickup-swap", 18, 0);
-    }
-    const bool ok = seh_activate_puppet_command(block, swap_hash);
-    bool dispatched = false;
-    PickupActionRequestResult request_result{};
-    bool direct_published = false;
-    if (ok) {
-        // The dispatcher can reach the native pickup completion path. Inventory
-        // remains owned by WeaponGivePacket/SLOT-MIRROR, so suppress that duplicate
-        // completion while still allowing StartInteractAction to author the pose.
-        g_puppet_pickup_anim_suppress_until_ms.store(
-            GetTickCount64() + 2500, std::memory_order_release);
-        dispatched = seh_tick_puppet_interact_dispatcher(puppet);
-        if (dispatched) {
-            g_puppet_pickup_action_started.store(true, std::memory_order_release);
-        } else if (!g_puppet_pickup_action_started.load(
-                       std::memory_order_acquire)) {
-            const std::int32_t screen_index =
-                *reinterpret_cast<const std::int32_t*>(
-                    static_cast<const std::byte*>(puppet) + 0x4010);
-            void* const dispatcher = screen_index >= 0 && screen_index < 6
-                ? reinterpret_cast<void*>(
-                      g_module + kPlayerInteractDispatcherBaseRva +
-                      kPlayerInteractDispatcherStride *
-                          static_cast<std::size_t>(screen_index))
-                : nullptr;
-            void* const pickup = dispatcher != nullptr
-                ? seh_find_nearby_weapon_pickup(
-                      dispatcher,
-                      g_puppet_pickup_gesture_art.load(
-                          std::memory_order_acquire))
-                : nullptr;
-            if (pickup != nullptr) {
-                request_result = seh_request_puppet_pickup_action(puppet, pickup);
-                if (request_result.requested) {
-                    direct_published = seh_publish_puppet_pickup_action(
-                        dispatcher, pickup);
-                }
-                if (request_result.requested && direct_published) {
-                    g_puppet_pickup_action_started.store(
-                        true, std::memory_order_release);
-                }
-                std::ostringstream direct;
-                direct << "PICKUP-GESTURE direct-request pickup=0x" << std::hex
-                       << reinterpret_cast<std::uintptr_t>(pickup) << std::dec
-                       << " availability=" << request_result.availability
-                       << " requested=" << (request_result.requested ? 1 : 0)
-                       << " published=" << (direct_published ? 1 : 0);
-                force_log_line(direct.str().c_str());
-            }
-        }
+    const std::int32_t screen_index =
+        readable_bytes(static_cast<std::byte*>(puppet) + 0x4010) >=
+                sizeof(std::int32_t)
+            ? *reinterpret_cast<const std::int32_t*>(
+                  static_cast<const std::byte*>(puppet) + 0x4010)
+            : -1;
+    void* const dispatcher = screen_index >= 0 && screen_index < 6
+        ? reinterpret_cast<void*>(
+              g_module + kPlayerInteractDispatcherBaseRva +
+              kPlayerInteractDispatcherStride *
+                  static_cast<std::size_t>(screen_index))
+        : nullptr;
+    const std::uint32_t art =
+        g_puppet_pickup_gesture_art.load(std::memory_order_acquire);
+    void* pickup = dispatcher != nullptr && art != 0
+        ? seh_find_nearby_weapon_pickup(dispatcher, art)
+        : nullptr;
+    const PuppetPickupRecipeResult recipe =
+        seh_run_puppet_pickup_recipe(puppet, pickup);
+    if (recipe.dispatched || recipe.published) {
+        g_puppet_pickup_action_started.store(true, std::memory_order_release);
     }
     static ULONGLONG last_log = 0;
-    const ULONGLONG now = GetTickCount64();
-    if (now - last_log > 400) {  // held over multiple frames; do not flood
+    if (now - last_log > 400) {
         last_log = now;
         std::ostringstream l;
-        l << "PICKUP-GESTURE joypad=" << joypad << " cmd=0x" << std::hex
-          << swap_hash << std::dec << " ok=" << (ok ? 1 : 0)
-          << " dispatch=" << (dispatched ? 1 : 0)
+        l << "PICKUP-GESTURE cmd=0x" << std::hex << recipe.cmd_id << std::dec
+          << " resolved=" << (recipe.resolved_cmd ? 1 : 0)
+          << " ok=" << (recipe.activated ? 1 : 0)
+          << " radius=" << (recipe.within_radius ? 1 : 0)
+          << " dispatch=" << (recipe.dispatched ? 1 : 0)
+          << " availability=" << recipe.availability
+          << " requested=" << (recipe.requested ? 1 : 0)
+          << " published=" << (recipe.published ? 1 : 0)
+          << " pickup=" << (pickup != nullptr ? 1 : 0)
           << " started="
           << (g_puppet_pickup_action_started.load(std::memory_order_acquire)
                   ? 1
@@ -9804,27 +10133,30 @@ void apply_peer_pickup_animation(void* puppet) {
         g_pending_pickup_art.load(std::memory_order_relaxed);
     const std::uint32_t seq =
         g_pending_pickup_seq.load(std::memory_order_relaxed);
-    if (g_module == 0 || id == 0 || puppet == nullptr || !world_stable() ||
+    if (g_module == 0 || puppet == nullptr || !world_stable() ||
         readable_bytes(static_cast<std::byte*>(puppet) + 0x4010) <
             sizeof(std::uint32_t)) {
         return;
     }
+    if (art != 0 && !puppet_has_weapon_art_id(puppet, art)) {
+        return;
+    }
 
-    void* const pickup = resolve_weapon_pickup_by_runtime_id(id, art);
     const std::uint32_t player_index = *reinterpret_cast<const std::uint32_t*>(
         static_cast<const std::byte*>(puppet) + 0x4010);
-    PickupActionRequestResult request_result{};
-    bool published = false;
-    if (pickup != nullptr && player_index < 6) {
-        void* const dispatcher = reinterpret_cast<void*>(
-            g_module + kPlayerInteractDispatcherBaseRva +
-            kPlayerInteractDispatcherStride * player_index);
-        g_puppet_pickup_anim_suppress_until_ms.store(
-            GetTickCount64() + 2500, std::memory_order_release);
-        request_result = seh_request_puppet_pickup_action(puppet, pickup);
-        if (request_result.requested) {
-            published = seh_publish_puppet_pickup_action(dispatcher, pickup);
-        }
+    void* const dispatcher = player_index < 6
+        ? reinterpret_cast<void*>(
+              g_module + kPlayerInteractDispatcherBaseRva +
+              kPlayerInteractDispatcherStride * player_index)
+        : nullptr;
+    void* pickup = resolve_weapon_pickup_by_runtime_id(id, art);
+    if (pickup == nullptr && dispatcher != nullptr && art != 0) {
+        pickup = seh_find_nearby_weapon_pickup(dispatcher, art);
+    }
+    const PuppetPickupRecipeResult recipe =
+        seh_run_puppet_pickup_recipe(puppet, pickup);
+    if (recipe.dispatched || recipe.published) {
+        g_puppet_pickup_action_started.store(true, std::memory_order_release);
     }
     g_pending_pickup_flag.store(false, std::memory_order_release);
     g_last_applied_pickup_seq.store(seq, std::memory_order_relaxed);
@@ -9833,9 +10165,14 @@ void apply_peer_pickup_animation(void* puppet) {
          << " art=0x" << art << std::dec << " seq=" << seq
          << " playerIndex=" << player_index
          << " resolved=" << (pickup != nullptr ? 1 : 0)
-         << " availability=" << request_result.availability
-         << " requested=" << (request_result.requested ? 1 : 0)
-         << " published=" << (published ? 1 : 0);
+         << " cmd=0x" << std::hex << recipe.cmd_id << std::dec
+         << " resolved_cmd=" << (recipe.resolved_cmd ? 1 : 0)
+         << " ok=" << (recipe.activated ? 1 : 0)
+         << " radius=" << (recipe.within_radius ? 1 : 0)
+         << " dispatch=" << (recipe.dispatched ? 1 : 0)
+         << " availability=" << recipe.availability
+         << " requested=" << (recipe.requested ? 1 : 0)
+         << " published=" << (recipe.published ? 1 : 0);
     force_log_line(line.str().c_str());
 }
 
@@ -9971,16 +10308,10 @@ void apply_peer_weapon_give() {
     stored << "GIVEWEAPON-RELAY-STORED art=0x" << std::hex << art << std::dec
            << " seq=" << seq << " wait=stable-slot-mirror";
     force_log_line(stored.str().c_str());
-    // Arm the pickup gesture: the puppet drive tick re-activates the interact
-    // command for ~700ms (a single-frame activation did not animate). Inventory is
-    // handled by SLOT-MIRROR; this only animates.
-    g_puppet_pickup_gesture_until_ms.store(GetTickCount64() + 700,
-                                           std::memory_order_release);
-    g_puppet_pickup_gesture_art.store(art, std::memory_order_release);
-    g_puppet_pickup_action_started.store(false, std::memory_order_release);
+    queue_relay_pickup_gesture_after_mirror(art, seq);
     return;
 
-#if 0  // Rejected immediate-apply architecture retained for reverse reference.
+#if 0  // legacy: armed gesture at STORE (raced SLOT-MIRROR give)
     const int draw = g_pending_weapon_give_draw.load(std::memory_order_relaxed);
     const int packet_slot = static_cast<int>(
         g_pending_weapon_give_slot.load(std::memory_order_relaxed));
