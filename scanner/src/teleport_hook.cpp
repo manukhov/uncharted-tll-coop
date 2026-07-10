@@ -209,6 +209,11 @@ bool g_control_enabled = false;
 // player avatar) via animated NPC move-intent instead of local WASD.
 bool g_net_drive_nadine = false;
 bool g_local_player1_bind_enabled = false;
+// REAL-SECOND-PLAYER Experiment 1 (2026-07-10): activate split-login + bind
+// local-player-1 resolver to the retained Player puppet, then observe whether the
+// engine natively promotes it (sets player+0x15A9 bit1 and builds the hub/anim
+// state that forcing the bit alone could not). Off until the activation key.
+volatile bool g_realsecond_experiment = false;
 bool g_force_split_render_enabled = false;  // OFF: split-render mode broke main-player aiming
 bool g_split_render_applied = false;
 bool g_split_login_done = false;
@@ -5338,6 +5343,24 @@ void* __fastcall hooked_resolve_local_player(void* owner, std::uint32_t index) {
             ? g_original_resolve_local_player(owner, index)
             : nullptr;
 
+    // Exp 1: bind local-player-1 to the retained Player puppet (a real Player-class
+    // object, better than NadineBuddy for the compatibility layer). Rate-limited log.
+    if (g_realsecond_experiment && index == 1) {
+        void* const puppet = retained_player_object(1);
+        if (puppet != nullptr) {
+            static ULONGLONG last = 0;
+            const ULONGLONG now = GetTickCount64();
+            if (now - last > 1000) {
+                last = now;
+                std::ostringstream line;
+                line << "REALSECOND resolve(1): original=0x" << std::hex
+                     << reinterpret_cast<std::uintptr_t>(result) << " -> puppet=0x"
+                     << reinterpret_cast<std::uintptr_t>(puppet) << std::dec;
+                force_log_line(line.str().c_str());
+            }
+            return puppet;
+        }
+    }
     if (g_local_player1_bind_enabled && index == 1 && g_last_nadine_object != nullptr) {
         std::ostringstream line;
         line << "resolve_local_player(1): original=0x" << std::hex
@@ -11180,6 +11203,30 @@ void drive_remote_slot1_actions_tick() {
     if (g_puppet_materialize_screen1_cam) {
         materialize_screen1_camera_once();
     }
+    // REAL-SECOND-PLAYER Exp 1: OBSERVE (read-only) whether the engine natively
+    // promotes the puppet after split-login + resolver bind - is +0x15A9 bit1 now
+    // set by the engine, and does the control-host hub (player+0x1FB0) come alive?
+    if (g_realsecond_experiment &&
+        readable_bytes(static_cast<std::byte*>(remote_player) + 0x1FB8) >= 8) {
+        static ULONGLONG last = 0;
+        const ULONGLONG now = GetTickCount64();
+        if (now - last > 1000) {
+            last = now;
+            const std::uint8_t flag = *reinterpret_cast<const std::uint8_t*>(
+                static_cast<const std::byte*>(remote_player) + 0x15A9);
+            const void* hub = *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(remote_player) + 0x1FB0);
+            const void* anim = *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(remote_player) + 0x1A0);
+            std::ostringstream l;
+            l << "REALSECOND-OBSERVE +0x15A9=0x" << std::hex
+              << static_cast<int>(flag) << " bit1=" << ((flag & 2) ? 1 : 0)
+              << " hub(+0x1FB0)=0x" << reinterpret_cast<std::uintptr_t>(hub)
+              << " anim(+0x1A0)=0x" << reinterpret_cast<std::uintptr_t>(anim)
+              << std::dec;
+            force_log_line(l.str().c_str());
+        }
+    }
     // DECISION-NODE WALL TEST: set player+0x15A9 bit1 so the alive-path hub sync
     // (0x140421150 -> 0x140422760) runs and promotes the control-host entity for
     // TickDecisionNode. Log the byte before/after once/sec.
@@ -13339,6 +13386,20 @@ void net_tick() {
                      ? "PROMOTE-CTRL = ON (set puppet +0x15A9 bit1)"
                      : "PROMOTE-CTRL = OFF");
         g_logging_enabled = was;
+    }
+    if (foreground && (GetAsyncKeyState(VK_NUMPAD7) & 1) != 0) {
+        // Numpad 7 : REAL-SECOND-PLAYER Exp 1 - split-login + bind local-player-1 to
+        // the puppet, then observe native promotion (does the engine set +0x15A9 bit1
+        // and build hub/anim state without a crash?).
+        g_logging_enabled = true;
+        if (!g_realsecond_experiment) {
+            split_login_persistent();
+            g_realsecond_experiment = true;
+            log_line("REALSECOND Exp1 = ON (split-login + bind puppet as local-player-1)");
+        } else {
+            g_realsecond_experiment = false;
+            log_line("REALSECOND Exp1 = OFF");
+        }
     }
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
         g_local_animation_mirror_test = !g_local_animation_mirror_test;

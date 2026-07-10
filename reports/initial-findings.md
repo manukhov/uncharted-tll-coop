@@ -25974,3 +25974,31 @@ native-controller feature share this single root.
 **Banked working (unaffected):** weapon switch/holster/pickup-display (WeaponGive
 Packet + SLOT-MIRROR), fire direction, horizontal aim via facing, locomotion incl.
 turns, vehicle, health. All wall-features parked OFF; baseline stable.
+
+### 2026-07-10 Exp 1 (real-second-player litmus): puppet IS local-player-1 with hub+anim, but its per-player UPDATE tick never runs
+
+Runtime (Numpad 7: split_login_persistent + bind local-player-1 -> retained puppet;
+read-only observe). Result — no crash, no second viewport:
+- split-login OK: login_state 0->3, max_local=2, avail=1.
+- `REALSECOND resolve(1): original=0x10e0df5b80 == puppet` — the engine's OWN
+  resolver ALREADY returns our retained puppet for index 1. The puppet is already
+  registered as local-player-1; our bind is a no-op.
+- `REALSECOND-OBSERVE +0x15A9=0x49 bit1=0 hub(+0x1FB0)=0x10e0fb4600
+  anim(+0x1A0)=0x10e0e819b0` — bit1 stays CLEAR; hub and anim-instance pointers are
+  NON-NULL and stable.
+
+**Reframe of the wall (major narrowing):** the puppet is NOT missing its
+local-player-1 identity, control-host hub, or anim instance — it HAS all three.
+The single missing thing is that the engine never runs the **screen-1 / local-
+player-1 UPDATE tick** on the puppet (the scheduler that calls sub_14042FCF0 ->
+421150 -> 422760 and sets +0x15A9 bit1 / promotes the hub). Our mod drives the
+puppet through its own hook, not the native per-local-player update loop, so the
+promotion path never executes. Forcing bit1 by hand crashed (2026-07-10) because
+it ran 422760 out of the scheduler's ordered context.
+
+**Next (Exp 2):** find/activate the native local-player-1 update scheduler entry so
+the engine ticks the puppet as screen-1. Candidates (from player_421150 report):
+per-player update schedulers 0x1404901B0 / 0x140497890 / 0x140499B80 that invoke
+42FCF0; or the camera-control-owner update UpdatePlayerAnimatedCameraControlOwner
+AndRouteState 0x140238800. Drive that tick for the puppet under split-login and
+re-observe bit1 + hub promotion.
