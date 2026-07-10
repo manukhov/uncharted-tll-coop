@@ -3278,6 +3278,107 @@ bool install_interact_update_probe() {
     return true;
 }
 
+// GRENADE SYNC probe: log + dump every ProjectileGrenade::Init to confirm the throw
+// path fires in campaign and pin the capture fields (world transform, type, velocity).
+using GrenadeInitFn = void*(__fastcall*)(void*, void*, std::int64_t);
+GrenadeInitFn g_original_grenade_init = nullptr;
+
+struct GrenadeDump {
+    float pos[4];
+    float quat[4];
+    float vel[4];
+    std::uint32_t art;
+};
+
+bool seh_read_grenade_object(void* g, GrenadeDump* out) {
+    __try {
+        auto* b = static_cast<std::byte*>(g);
+        std::memcpy(out->pos, b + kWorldPositionOffset, 16);
+        std::memcpy(out->quat, b + kPlayerQuatOffset, 16);
+        std::memcpy(out->vel, b + 0x260, 16);
+        std::memcpy(&out->art, b + 0x860, 4);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void seh_dump_grenade_object(void* g) {
+    GrenadeDump d{};
+    const bool ok = g != nullptr &&
+                    readable_bytes(static_cast<std::byte*>(g) + 0x864) >= 4 &&
+                    seh_read_grenade_object(g, &d);
+    std::ostringstream l;
+    l << "GRENADE-INIT obj=0x" << std::hex << reinterpret_cast<std::uintptr_t>(g)
+      << std::dec;
+    if (ok) {
+        l << " art=0x" << std::hex << d.art << std::dec
+          << " pos=(" << d.pos[0] << "," << d.pos[1] << "," << d.pos[2] << ")"
+          << " vel=(" << d.vel[0] << "," << d.vel[1] << "," << d.vel[2] << ")"
+          << " quat=(" << d.quat[0] << "," << d.quat[1] << "," << d.quat[2]
+          << "," << d.quat[3] << ")";
+    } else {
+        l << " (read failed)";
+    }
+    force_log_line(l.str().c_str());
+}
+
+std::atomic<void*> g_last_grenade{nullptr};
+std::atomic<ULONGLONG> g_last_grenade_ms{0};
+
+void* __fastcall hooked_grenade_init(void* a1, void* a2, std::int64_t a3) {
+    void* const r = g_original_grenade_init != nullptr
+                        ? g_original_grenade_init(a1, a2, a3)
+                        : nullptr;
+    seh_dump_grenade_object(a1);
+    // Init runs BEFORE the grenade is placed/launched (pos=FLT_MAX, vel=0). Remember
+    // it so the per-frame tick can re-dump pos/vel once the engine populates them.
+    g_last_grenade.store(a1, std::memory_order_release);
+    g_last_grenade_ms.store(GetTickCount64(), std::memory_order_release);
+    return r;
+}
+
+// Called each frame (sender path). Re-dumps the last-thrown grenade for ~1s to find
+// where/when pos+velocity populate (tagged GRENADE-TRACK).
+void track_thrown_grenade() {
+    void* g = g_last_grenade.load(std::memory_order_acquire);
+    if (g == nullptr) return;
+    const ULONGLONG t0 = g_last_grenade_ms.load(std::memory_order_acquire);
+    const ULONGLONG now = GetTickCount64();
+    if (now - t0 > 1200) {
+        g_last_grenade.store(nullptr, std::memory_order_release);
+        return;
+    }
+    static ULONGLONG last = 0;
+    if (now - last < 60) return;  // ~16/s
+    last = now;
+    GrenadeDump d{};
+    if (readable_bytes(static_cast<std::byte*>(g) + 0x864) >= 4 &&
+        seh_read_grenade_object(g, &d)) {
+        std::ostringstream l;
+        l << "GRENADE-TRACK dt=" << (now - t0) << " pos=(" << d.pos[0] << ","
+          << d.pos[1] << "," << d.pos[2] << ") vel=(" << d.vel[0] << ","
+          << d.vel[1] << "," << d.vel[2] << ")";
+        force_log_line(l.str().c_str());
+    }
+}
+
+bool install_grenade_init_probe() {
+    constexpr std::array<std::uint8_t, 12> kGrenadeInitPrologue{
+        0x40, 0x53, 0x56, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
+    };
+    g_original_grenade_init = reinterpret_cast<GrenadeInitFn>(
+        install_fire_gate_detour(kProjectileGrenadeInitRva,
+                                 kGrenadeInitPrologue.data(),
+                                 kGrenadeInitPrologue.size(),
+                                 reinterpret_cast<void*>(&hooked_grenade_init),
+                                 "grenade Init probe"));
+    boot_log_line(g_original_grenade_init != nullptr
+                      ? "grenade Init probe installed"
+                      : "grenade Init probe SKIPPED");
+    return g_original_grenade_init != nullptr;
+}
+
 bool install_weapon_pickup_gate() {
     // WeaponPickupInteractControl::OnInteract 0x14157AA70 prologue:
     // mov rax,rsp; push rbp; push rsi; push rdi; push r12..r15 (14 bytes, all
@@ -8426,6 +8527,7 @@ void apply_peer_held_weapon_state() {
 }
 
 void send_local_player_state() {
+    track_thrown_grenade();  // grenade pos/vel probe (independent of net gate)
     if (!g_state_net.enabled || !g_state_net.peer_set) {
         return;
     }
@@ -16656,7 +16758,8 @@ DWORD WINAPI install_hook(void*) {
     install_scope_visible_gate();
     install_pickup_request_interact_gate();
     install_weapon_pickup_gate();
-    install_interact_update_probe();
+    install_grenade_init_probe();
+    // install_interact_update_probe();  // Exp5b: wrong vtable slot, never dispatched
     install_give_weapon_diagnostic();
     install_build_fire_args_gate();
     // install_aim_target_gate();  // REVERTED: GetTargetPointFromReticle builds

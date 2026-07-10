@@ -26347,3 +26347,30 @@ Native functions (net-event-weapon.cpp / projectile-grenade):
 **First build step (probe):** hook Init, log + dump the grenade object's transform/
 velocity/type fields on a real campaign throw, to confirm the path fires and pin the
 capture offsets. Then build the relay. Feature is wall-free (world object).
+
+### 2026-07-11 GRENADE SYNC — capture CONFIRMED (Init hook fires; pos/vel/quat pinned)
+
+Runtime: `ProjectileGrenade::Init 0x141533560` trampoline hook (push prologue
+40 53 56 57 41 54 41 55 41 56 41 57, 12B) FIRES on every campaign throw. At Init the
+object is not yet placed (pos@+0x240 = FLT_MAX, vel@+0x260 = 0), but one frame later
+the engine populates full flight state. GRENADE-TRACK samples (real throw):
+- dt=375ms pos=(-761.6,5.30,387.7) vel=(2.65,-2.11,11.84)  [launched forward+up]
+- arc down, lands ~dt=750, at rest ~dt=1000.
+
+**Confirmed capture offsets on the ProjectileGrenade object:**
+- world pos = obj+0x240 (vec3), velocity = obj+0x260 (vec3), orientation quat =
+  obj+0x140. Valid from the first frame AFTER Init.
+- type/art is NOT at +0x860 (grenades aren't weapons); v1 relay can default to the
+  standard frag type and refine type detection later.
+
+**Capture recipe (ready to build):** hook Init -> store grenade ptr; on the first
+per-frame tick where pos != FLT_MAX, read {pos@0x240, vel@0x260, quat@0x140} = the
+launch state -> send GrenadePacket{seq,pos,vel,quat}. This is fully working today via
+the GRENADE-TRACK probe.
+
+**Remaining build:** receiver spawn. Call EmitGrenadeProjectile `0x14154B3B0`
+(int,int,transform*,int,char,int,char,+stackf; a3=transform) on the game thread with
+the relayed launch state, or spawn a ProjectileGrenade and set pos/vel/quat directly,
+then let native physics fly+explode it. Then explosion double-damage policy. The
+throw ANIMATION on the puppet stays walled (cosmetic); the grenade itself is
+fully syncable. Probe code (GRENADE-INIT/TRACK) retained.

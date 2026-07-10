@@ -147,6 +147,10 @@ constexpr std::uintptr_t kPlayerLookAtUpdateIkRva = 0xEDA680;     // vtable+0x38
 // *(g_module+0x3FE1088) + 0xDB0 + 0xBF0*joypadIdx (joypadIdx = player+0x39B8).
 // Exp 5b: vtable slot (in .rdata) holding PlayerInteractController update
 // sub_140EC6C10. Swap it to probe whether the interact update runs for the puppet.
+// ProjectileGrenade::Init 0x141533560 - fires on every grenade throw/spawn. Push-
+// based prologue (trampoline-safe): 40 53 56 57 41 54 41 55 41 56 41 57 (12 bytes).
+constexpr std::uintptr_t kProjectileGrenadeInitRva = 0x1533560;
+constexpr std::uintptr_t kEmitGrenadeProjectileRva = 0x154B3B0;
 constexpr std::uintptr_t kInteractControllerUpdateVtableSlotRva = 0x2A2CB70;
 constexpr std::uintptr_t kInteractControllerUpdateRva = 0xEC6C10;
 constexpr std::uintptr_t kInputScreenBlockActivateCommandRva = 0x183A650;
