@@ -3020,12 +3020,44 @@ std::int64_t __fastcall hooked_pickup_request_interact(
     const std::uint32_t art = read_weapon_pickup_art_id(
         static_cast<std::uint64_t>(pickup));
     void* const local_player = resolve_live_player_safe(0);
-    const bool local_weapon_pickup =
-        id != 0 && art != 0 && reinterpret_cast<void*>(player) == local_player;
+    // Gate on the picking-up player's SCREEN INDEX (player+0x4010==0 = local),
+    // not pointer identity with resolve_live_player_safe(0): that resolver can
+    // return a different object instance than the dispatcher's player arg, so the
+    // old ptr-equality never matched and PICKUP-ANIM-SEND never fired. The puppet
+    // (screen 1) must NOT send. rdi is confirmed the Player (has +0x39B8 joypad).
+    std::uint32_t screen_idx = 0xFFFFFFFF;
+    if (player != 0 &&
+        readable_bytes(reinterpret_cast<std::byte*>(player) + 0x4010) >=
+            sizeof(std::uint32_t)) {
+        screen_idx = *reinterpret_cast<std::uint32_t*>(
+            reinterpret_cast<std::byte*>(player) + 0x4010);
+    }
+    const bool local_weapon_pickup = id != 0 && art != 0 && screen_idx == 0;
 
     const std::int64_t result = g_original_pickup_request_interact != nullptr
         ? g_original_pickup_request_interact(control, pickup, player)
         : 0;
+
+    // TRULY unconditional diagnostic: log EVERY call to this hook (first 200) so we
+    // can tell "hook never called" from "pickup arg is not a WeaponPickup" (id/art
+    // read 0). Also dump the raw pickup/control vtables to identify the objects.
+    {
+        static std::atomic<int> req_dbg{0};
+        if (req_dbg.fetch_add(1) < 200) {
+            std::uint64_t pk_vt = 0, ctrl_vt = 0;
+            seh_read_qword(reinterpret_cast<const void*>(pickup), pk_vt);
+            seh_read_qword(reinterpret_cast<const void*>(control), ctrl_vt);
+            std::ostringstream d;
+            d << "PICKUP-REQ id=0x" << std::hex << id << " art=0x" << art
+              << " pickup=0x" << static_cast<std::uint64_t>(pickup)
+              << " pkVt=0x" << (pk_vt ? pk_vt - g_module : 0)
+              << " player=0x" << static_cast<std::uint64_t>(player)
+              << " local=0x" << reinterpret_cast<std::uintptr_t>(local_player)
+              << std::dec << " screenIdx=" << static_cast<int>(screen_idx)
+              << " gate=" << (local_weapon_pickup ? 1 : 0);
+            force_log_line(d.str().c_str());
+        }
+    }
 
     if (g_pickup_relay && local_weapon_pickup) {
         const bool sent = g_state_net.enabled && g_state_net.peer_set;

@@ -25696,3 +25696,24 @@ The remaining weapon display debounce is changed independently from one second o
 the full 32-byte snapshot to 500 ms per mirrored slot. Unrelated holster/gadget
 slot changes can no longer restart the picked weapon's timer; empty initial slots
 still fill immediately.
+
+### 2026-07-10 (RUNTIME REJECT): RequestInteract НЕ вызывается при наземном подборе — триггер анимации Codex неверен
+
+Билд с хуком WeaponPickupInteractControl::RequestInteract (0x1408C8A40, vt+0x28) +
+безусловный диаг `PICKUP-REQ`. User-test: подбор M30 на копии-отправителе дал
+`GIVEWEAPON-CALL art=0x3019cbee ret_rva=0xdd4208` (скриптовый give-weapon путь), но
+**ни одной строки PICKUP-REQ** — хук установлен (boot: "pickup RequestInteract
+animation relay installed" на обеих копиях), но НЕ вызывается. Значит наземный подбор
+игрока НЕ проходит через RequestInteract/Player_InteractDispatcher, а идёт через
+скрипт-команду give-weapon (hash 0xFB1091A3, возврат 0x140DD4208).
+
+Player_ResolveWeaponPickupInteractAnim (0x140C7FF40, резолвит weapon-pickup-swap)
+зовётся ТОЛЬКО из Player_InteractDispatcher (0x140C86E94/0x140C87953) — тот же
+диспетчер-путь, что не сработал. Т.е. анимация подбора, которую видит игрок, при
+скриптовом give либо (а) идёт отдельной скрипт-командой play-animation на Хлое, либо
+(б) это equip/draw-анимация нового оружия (её мы уже частично гоним через give+switch).
+
+**СЛЕДУЮЩИЙ ШАГ:** захукать Player_InteractDispatcher (0x140C85D20) на входе и
+залогировать, вызывается ли он вообще при подборе + какую ветку берёт; ЛИБО искать
+play-animation команду рядом со скриптовым give (0x140DD4208 caller frame). До этого
+pickup-анимация не реализуема — триггер не найден.
