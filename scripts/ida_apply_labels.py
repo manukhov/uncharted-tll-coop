@@ -64,6 +64,24 @@ FUNCTIONS = {
         "WeaponPickupInteractControl_GetHudAmmoCount",
         "Named by its own assert (weapon-pickup.cpp).",
     ),
+    0x1408C8A40: (
+        "PickupInteractControl_RequestInteract",
+        "WeaponPickupInteractControl vtable +0x28. Identity is confirmed by its "
+        "PickupInteractControl::RequestInteract assert in process-pickup.cpp. "
+        "Publishes interact-with-me to the pickup at action start.",
+    ),
+    0x140C87D70: (
+        "Player_PublishRequestedInteract",
+        "Called immediately after PickupInteractControl::RequestInteract by the "
+        "player interact dispatcher. Publishes player-requested-interact with the "
+        "interactable class/name ids; target actor comes from current thread-local "
+        "player state.",
+    ),
+    0x140C88130: (
+        "PlayerInteractCommandTable_IsTriggered",
+        "Checks the dispatcher command table's pressed byte or hold duration for "
+        "one command id. This is the final input gate before pickup RequestInteract.",
+    ),
     0x140BCDFC0: (
         "NetEventSyncWeaponPickups_Ctor",
         "Writes vftable 0x1429FCF90, type id 0x0101006A at +8, count u32 at +24; "

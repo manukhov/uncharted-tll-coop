@@ -171,9 +171,14 @@ constexpr std::uintptr_t kBuildFireArgsAndFireRva = 0x0E2BCD0;
 constexpr std::uintptr_t kPlayerFireControllerTryStartFireRva = 0x0E2ACA0;
 constexpr std::uintptr_t kPlayerFireControllerCheckShotReadinessRva = 0x0E2B220;
 constexpr std::uintptr_t kPlayerTryStartBumpActionRva = 0x0CE8E10;
-// Weapon-pickup relay (2026-07-06, see initial-findings). OnInteract named by its
-// own assert in weapon-pickup.cpp; the Apply drives net-pick-up-other-client.
+// Weapon pickup animation relay. RequestInteract is the pickup-action start;
+// OnInteract is retained only as a safety gate for replay completion.
+constexpr std::uintptr_t kPickupRequestInteractRva = 0x08C8A40;
 constexpr std::uintptr_t kWeaponPickupOnInteractRva = 0x157AA70;
+constexpr std::uintptr_t kPlayerRequestedInteractRva = 0x0C87D70;
+constexpr std::uintptr_t kResolveGameObjectHandleByIdRva = 0x0A989C0;
+constexpr std::uintptr_t kPlayerInteractDispatcherBaseRva = 0x3EC4EE0;
+constexpr std::size_t kPlayerInteractDispatcherStride = 13760;
 // PlayerWeaponController::GiveWeapon 0x1410A4D40 (vt+0x158) + 9: diagnostic hook
 // point past the entry `test rdx,rdx; jz rel32` (which is not relocatable).
 constexpr std::uintptr_t kGiveWeaponTailRva = 0x10A4D49;
@@ -204,15 +209,12 @@ constexpr std::uintptr_t kAimTargetReticleCallSiteRva = 0xCB17D6;
 // and +0x1730 (aim pose). Top POSESEED-CALLERS hit ~150/frame during puppet ADS.
 constexpr std::uintptr_t kPlayerAimPoseSeedCallSiteRva = 0x10E934B;
 constexpr std::size_t kWeaponControllerGetWeaponBySlotVtOffset = 0xB0;
-constexpr std::uintptr_t kNetEventSyncWeaponPickupsApplyRva = 0xBCE440;
-constexpr std::uintptr_t kNetEventSyncWeaponPickupsVftableRva = 0x29FCF90;
 constexpr std::uintptr_t kWeaponPickupVftableRva = 0x2AA66C0;
 // WeaponPickupInteractControl::OnInteract resolves the pickup at ctrl+0x10
 // (sub_141C977A0); the +0x80 block is the lazily-filled interactable cache.
 constexpr std::size_t kWeaponPickupInteractPickupPtrOffset = 0x10;
-// Global manager table used by NetEventSyncWeaponPickups_Apply: managers indexed
-// by type; slot 22 = the game-object handle registry consumer. Pre-check non-null
-// before calling Apply (single-player init state unknown).
+// Global manager table slot 22 owns the game-object handle registry used by
+// ResolveGameObjectHandleById.
 constexpr std::uintptr_t kGlobalManagerTableRva = 0x6B17D20;
 constexpr std::size_t kGameObjectRuntimeIdOffset = 0xBC;
 constexpr std::uintptr_t kPlayerBumpControllerUpdateVtableSlotRva = 0x2A0EF08;

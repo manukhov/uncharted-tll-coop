@@ -25663,3 +25663,36 @@ block, the receiver retains up to eight distinct pickup blocks (refreshing by ar
 and replacing round-robin only when full), and an ungivable raw slot no longer
 starts the five-second cooldown. The existing one-second stable-snapshot debounce
 remains the sole intentional delay before a non-empty puppet inventory swap.
+
+### STATIC 2026-07-10: pickup animation starts at RequestInteract, before inventory give
+
+The player interaction graph closes the pickup-action boundary:
+
+- `WeaponPickup` vtable `+0x248` (`0x1408A9AA0`) returns the object's interact
+  control at `WeaponPickup+0x510`.
+- `WeaponPickupInteractControl` vtable `+0x28` is `0x1408C8A40`, confirmed by its
+  own `PickupInteractControl::RequestInteract` assert in `process-pickup.cpp`. It
+  publishes `interact-with-me` for the pickup and player.
+- `Player_InteractDispatcher` calls that virtual at `0x140C875B3`, then immediately
+  calls `0x140C87D70`, which publishes the separate player-side
+  `player-requested-interact` state. The authored command ids
+  `weapon-pickup-swap` / `weapon-pickup-when-no-weapon` are selected upstream by
+  `Player_ResolveWeaponPickupInteractAnim` (`0x140C7FF40`).
+- The eventual inventory mutation is separate: local ground pickup later reaches
+  the script `give-weapon` branch (`0xFB1091A3`, return `0x140DD4208`). Therefore a
+  receiver can reproduce only `player-requested-interact` and leave inventory to
+  the already stable `WeaponGivePacket + SLOT-MIRROR` path.
+
+`Player_PublishRequestedInteract` resolves its target actor from thread-local
+state (`FlsGetValue(...)[19]`), not from an explicit player argument. The replay
+must therefore run inside the retained puppet's per-player update; calling it from
+the global drive tick risks animating Chloe. Runtime prediction: a local weapon
+pickup logs `PICKUP-ANIM-SEND`, the peer resolves the same `WeaponPickup` runtime
+id/art and logs `PICKUP-ANIM-APPLY ... resolved=1 ok=1` before the later
+`GIVEWEAPON-RELAY-STORED`. The puppet should bend once, while any replay-generated
+`OnInteract` or `give-weapon` completion is suppressed and cannot mutate inventory.
+
+The remaining weapon display debounce is changed independently from one second on
+the full 32-byte snapshot to 500 ms per mirrored slot. Unrelated holster/gadget
+slot changes can no longer restart the picked weapon's timer; empty initial slots
+still fill immediately.

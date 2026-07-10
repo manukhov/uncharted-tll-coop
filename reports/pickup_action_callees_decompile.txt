@@ -1,0 +1,1042 @@
+TARGET 0x1408C8A40: sub_1408C8A40 start=0x1408C8A40 end=0x1408C8EEC
+__int64 __fastcall sub_1408C8A40(unsigned __int64 a1, __int64 *a2, __int64 a3)
+{
+  __int64 v12; // rax
+  __int64 result; // rax
+  __int64 v14; // rax
+  __int64 v15; // rcx
+  bool v16; // dl
+  __int64 v22; // rax
+  __int64 v58; // rax
+  __int64 v68; // rsi
+  int v69; // r11d
+  const char *v70; // r8
+  __int64 v72; // r9
+  __int64 v73; // rdx
+  __int64 v75; // r10
+  __int64 v84; // rdi
+  __int64 v85; // rbx
+  __int128 v86; // [rsp+30h] [rbp-D0h]
+  __int128 v87; // [rsp+40h] [rbp-C0h]
+  _OWORD v88[2]; // [rsp+50h] [rbp-B0h] BYREF
+  __int128 v89; // [rsp+70h] [rbp-90h] BYREF
+  _DWORD v90[2]; // [rsp+80h] [rbp-80h] BYREF
+  __int64 v94; // [rsp+B8h] [rbp-48h]
+  int v95; // [rsp+C4h] [rbp-3Ch]
+  __int64 v96; // [rsp+C8h] [rbp-38h]
+  int v97; // [rsp+D4h] [rbp-2Ch]
+  __int64 v98; // [rsp+D8h] [rbp-28h]
+  int v99; // [rsp+E4h] [rbp-1Ch]
+  __int64 v100; // [rsp+E8h] [rbp-18h]
+  int v101; // [rsp+F4h] [rbp-Ch]
+  __int64 v102; // [rsp+F8h] [rbp-8h]
+  int v103; // [rsp+104h] [rbp+4h]
+  __int64 v104; // [rsp+108h] [rbp+8h]
+  int v105; // [rsp+114h] [rbp+14h]
+  __int64 v106; // [rsp+118h] [rbp+18h]
+  int v107; // [rsp+124h] [rbp+24h]
+  __int64 v108; // [rsp+128h] [rbp+28h]
+  int v109; // [rsp+134h] [rbp+34h]
+  __int64 v110; // [rsp+138h] [rbp+38h]
+  int v111; // [rsp+144h] [rbp+44h]
+  __int64 v112; // [rsp+148h] [rbp+48h]
+  int v113; // [rsp+154h] [rbp+54h]
+  __int64 v114; // [rsp+158h] [rbp+58h]
+  int v115; // [rsp+164h] [rbp+64h]
+  __int64 v116; // [rsp+168h] [rbp+68h]
+  int v117; // [rsp+174h] [rbp+74h]
+  __int64 v118; // [rsp+178h] [rbp+78h]
+  int v119; // [rsp+184h] [rbp+84h]
+  __int64 v120; // [rsp+188h] [rbp+88h]
+  int v121; // [rsp+194h] [rbp+94h]
+  __int64 v122; // [rsp+198h] [rbp+98h]
+  int v123; // [rsp+1A4h] [rbp+A4h]
+  int v124; // [rsp+1A8h] [rbp+A8h]
+
+  ++*(_DWORD *)(a1 + 120);
+  _RBX = 0;
+  if ( a2
+    && (a1 = (unsigned __int64)(unsigned int)dword_143DC73E4 >> 6,
+        v12 = *(_QWORD *)(a2[6] + 8 * a1 + 32),
+        _bittest64(&v12, dword_143DC73E4 & 0x3F)) )
+  {
+    _RBX = a2;
+  }
+  else if ( !qword_146B17C08
+         || !(unsigned __int8)qword_146B17C08(
+                                "pSelf",
+                                "d:\\perforce\\code\\big4final-tll-release\\big4\\src\\game\\interactable\\process-pickup.cpp",
+                                "PickupInteractControl::RequestInteract",
+                                "Jun 30 2023 19:09:22",
+                                225,
+                                0) )
+  {
+    sub_1422053E0(a1);
+    __debugbreak();
+  }
+  result = (*(__int64 (__fastcall **)(__int64 *, __int64))(*_RBX + 1960))(_RBX, a3);
+  if ( (_BYTE)result )
+  {
+    if ( !HIBYTE(g_NetModeFlags) || *((_BYTE *)_RBX + 1276) )
+    {
+      v14 = *((unsigned int *)_RBX + 66);
+      __asm
+      {
+        vmovaps [rsp+520h+var_30], xmm6
+        vmovaps [rsp+520h+var_40], xmm7
+      }
+      v15 = qword_14386FD00[v14];
+      __asm
+      {
+        vmovaps [rsp+520h+var_50], xmm8
+        vmovaps [rsp+520h+var_60], xmm9
+        vmovaps [rsp+520h+var_70], xmm10
+        vmovaps [rsp+520h+var_80], xmm11
+        vmovaps [rsp+520h+var_90], xmm12
+      }
+      v16 = v15 && *(_DWORD *)(v15 + 80) == *((_DWORD *)_RBX + 67);
+      _RAX = 0;
+      if ( v16 )
+        _RAX = v15;
+      if ( _RAX )
+      {
+        __asm
+        {
+          vmovups ymm0, ymmword ptr [rax]
+          vmovups ymmword ptr [rbx+110h], ymm0
+        }
+      }
+      __asm
+      {
+        vmovups xmm11, xmmword ptr [rbx+120h]
+        vmovups xmm6, xmmword ptr [rbx+130h]
+        vmovups xmm12, xmmword ptr [rbx+140h]
+      }
+      v22 = *_RBX;
+      __asm
+      {
+        vshufps xmm5, xmm11, xmm11, 9
+        vmulps  xmm1, xmm5, xmm6
+        vxorps  xmm9, xmm9, xmm9
+        vsubps  xmm8, xmm9, xmm11
+        vshufps xmm0, xmm11, xmm8, 93h
+        vshufps xmm10, xmm0, xmm0, 93h
+        vshufps xmm0, xmm6, xmm6, 9
+        vmulps  xmm2, xmm0, xmm11
+        vsubps  xmm3, xmm2, xmm1
+        vshufps xmm4, xmm3, xmm3, 9
+        vshufps xmm0, xmm3, xmm3, 52h ; 'R'
+        vmulps  xmm2, xmm0, xmm11
+        vmulps  xmm1, xmm5, xmm4
+        vsubps  xmm3, xmm2, xmm1
+        vshufps xmm1, xmm3, xmm3, 9
+        vshufps xmm0, xmm11, xmm11, 0FFh
+        vmulps  xmm2, xmm0, xmm4
+        vaddps  xmm3, xmm2, xmm1
+        vmulps  xmm2, xmm3, cs:xmmword_142BED700
+        vaddps  xmm1, xmm2, xmm6
+        vaddps  xmm6, xmm1, xmmword ptr [rbx+110h]
+        vshufps xmm0, xmm12, xmm12, 0FFh
+        vmulps  xmm3, xmm0, xmm11
+        vshufps xmm2, xmm11, xmm8, 1Bh
+        vshufps xmm0, xmm12, xmm12, 0
+        vmulps  xmm1, xmm2, xmm0
+        vaddps  xmm3, xmm3, xmm1
+        vshufps xmm2, xmm12, xmm12, 55h ; 'U'
+        vmulps  xmm0, xmm2, xmm10
+        vaddps  xmm4, xmm3, xmm0
+        vshufps xmm5, xmm11, xmm8, 8Dh
+        vshufps xmm3, xmm5, xmm5, 0D8h
+        vshufps xmm1, xmm12, xmm12, 0AAh
+        vmulps  xmm0, xmm3, xmm1
+        vaddps  xmm2, xmm4, xmm0
+        vmovups [rsp+520h+var_4C0], xmm2
+        vmovups [rsp+520h+var_4D0], xmm6
+        vzeroupper
+      }
+      v58 = (*(__int64 (__fastcall **)(__int64 *))(v22 + 584))(_RBX);
+      (*(void (__fastcall **)(__int64, __int128 *, __int64 *))(*(_QWORD *)v58 + 168LL))(v58, &v89, _RBX);
+      __asm { vmovaps xmm12, [rsp+520h+var_90] }
+      __asm
+      {
+        vmovaps xmm11, [rsp+520h+var_80]
+        vmovaps xmm10, [rsp+520h+var_70]
+        vmovaps xmm9, [rsp+520h+var_60]
+        vmovaps xmm8, [rsp+520h+var_50]
+        vmovaps xmm7, [rsp+520h+var_40]
+        vmovaps xmm6, [rsp+520h+var_30]
+      }
+      HIDWORD(v87) = 12;
+      *(_QWORD *)&v87 = v88;
+      __asm
+      {
+        vmovups xmm0, [rsp+520h+var_4D0]
+        vaddps  xmm1, xmm0, [rsp+520h+var_4B0]
+        vmovups [rsp+520h+var_4D0], xmm1
+      }
+      if ( a3 )
+      {
+        v68 = *(_QWORD *)(a3 + 168);
+        v69 = *(_DWORD *)(a3 + 188);
+      }
+      else
+      {
+        v68 = 0;
+        v69 = 0;
+      }
+      v70 = "interact-with-me";
+      *(_QWORD *)&v86 = _RBX[21];
+      _RCX = (unsigned __int64)qword_142BEA360;
+      v72 = 16;
+      DWORD2(v86) = *((_DWORD *)_RBX + 47);
+      v73 = 0;
+      _RAX = v90;
+      v75 = 8;
+      do
+      {
+        __asm
+        {
+          vmovups ymm0, ymmword ptr [rcx]
+          vmovups xmm1, xmmword ptr [rcx+70h]
+          vmovups ymmword ptr [rax], ymm0
+          vmovups ymm0, ymmword ptr [rcx+20h]
+          vmovups ymmword ptr [rax+20h], ymm0
+          vmovups ymm0, ymmword ptr [rcx+40h]
+          vmovups ymmword ptr [rax+40h], ymm0
+          vmovups xmm0, xmmword ptr [rcx+60h]
+          vmovups xmmword ptr [rax+60h], xmm0
+        }
+        _RAX += 32;
+        _RCX += 128LL;
+        __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+        --v75;
+      }
+      while ( v75 );
+      do
+      {
+        result = *(unsigned __int8 *)v70;
+        if ( !(_BYTE)result )
+          break;
+        ++v70;
+        result = (unsigned __int8)(result ^ BYTE3(v73));
+        _RCX = (unsigned int)((_DWORD)v73 << 8);
+        v73 = (unsigned int)_RCX ^ v90[result];
+        --v72;
+      }
+      while ( v72 );
+      v90[0] = v73;
+      v95 = 0;
+      v94 = 0;
+      v97 = 0;
+      v96 = 0;
+      v99 = 0;
+      v98 = 0;
+      v101 = 0;
+      v100 = 0;
+      v103 = 0;
+      v102 = 0;
+      v105 = 0;
+      v104 = 0;
+      v107 = 0;
+      v106 = 0;
+      v109 = 0;
+      v108 = 0;
+      v111 = 0;
+      v110 = 0;
+      v113 = 0;
+      v112 = 0;
+      v115 = 0;
+      v114 = 0;
+      v117 = 0;
+      v116 = 0;
+      v119 = 0;
+      v118 = 0;
+      v121 = 0;
+      v120 = 0;
+      v123 = 0;
+      v122 = 0;
+      v124 = 1;
+      __asm
+      {
+        vmovups xmm0, [rsp+520h+var_4F0]
+        vmovups xmm1, cs:xmmword_1467071D8
+        vmovups [rbp+420h+var_498], xmm0
+        vmovups xmm0, [rsp+520h+var_4E0]
+        vmovups [rbp+420h+var_478], xmm0
+        vmovups [rbp+420h+var_488], xmm1
+      }
+      if ( v68 )
+      {
+        if ( v69 )
+        {
+          v84 = *(_QWORD *)(v68 + 8);
+          if ( v84 )
+          {
+            if ( *(_DWORD *)(v84 + 188) == v69 )
+            {
+              *(_BYTE *)(v84 + 114) = 1;
+              if ( (*(_BYTE *)(v84 + 64) & 1) == 0 )
+              {
+                __asm { vzeroupper }
+                v85 = sub_1416A2E80(_RCX, v73, v70);
+                sub_1416A2ED0(v84);
+                (*(void (__fastcall **)(__int64, _DWORD *, _QWORD))(*(_QWORD *)v84 + 208LL))(v84, v90, 0);
+                result = sub_1416A2ED0(v85);
+              }
+            }
+          }
+        }
+      }
+    }
+    else
+    {
+      result = sub_140BCA380(a3, *((unsigned int *)_RBX + 54));
+    }
+  }
+  __asm { vzeroupper }
+  return result;
+}
+
+TARGET 0x140C87D70: sub_140C87D70 start=0x140C87D70 end=0x140C87FA4
+__int64 __fastcall sub_140C87D70(__int64 a1, __int64 a2)
+{
+  const char *v4; // rdx
+  __int64 v6; // r8
+  int v7; // ebx
+  __int64 v8; // r9
+  char v14; // al
+  __int64 v15; // rcx
+  _QWORD *Value; // rax
+  __int64 v17; // rdx
+  __int64 result; // rax
+  __int128 v23; // [rsp+20h] [rbp-E0h]
+  __int128 v24; // [rsp+30h] [rbp-D0h]
+  __int128 v25; // [rsp+40h] [rbp-C0h]
+  _DWORD v26[2]; // [rsp+50h] [rbp-B0h] BYREF
+  __int64 v31; // [rsp+98h] [rbp-68h]
+  int v32; // [rsp+A4h] [rbp-5Ch]
+  __int64 v33; // [rsp+A8h] [rbp-58h]
+  int v34; // [rsp+B4h] [rbp-4Ch]
+  __int64 v35; // [rsp+B8h] [rbp-48h]
+  int v36; // [rsp+C4h] [rbp-3Ch]
+  __int64 v37; // [rsp+C8h] [rbp-38h]
+  int v38; // [rsp+D4h] [rbp-2Ch]
+  __int64 v39; // [rsp+D8h] [rbp-28h]
+  int v40; // [rsp+E4h] [rbp-1Ch]
+  __int64 v41; // [rsp+E8h] [rbp-18h]
+  int v42; // [rsp+F4h] [rbp-Ch]
+  __int64 v43; // [rsp+F8h] [rbp-8h]
+  int v44; // [rsp+104h] [rbp+4h]
+  __int64 v45; // [rsp+108h] [rbp+8h]
+  int v46; // [rsp+114h] [rbp+14h]
+  __int64 v47; // [rsp+118h] [rbp+18h]
+  int v48; // [rsp+124h] [rbp+24h]
+  __int64 v49; // [rsp+128h] [rbp+28h]
+  int v50; // [rsp+134h] [rbp+34h]
+  __int64 v51; // [rsp+138h] [rbp+38h]
+  int v52; // [rsp+144h] [rbp+44h]
+  __int64 v53; // [rsp+148h] [rbp+48h]
+  int v54; // [rsp+154h] [rbp+54h]
+  __int64 v55; // [rsp+158h] [rbp+58h]
+  int v56; // [rsp+164h] [rbp+64h]
+  __int64 v57; // [rsp+168h] [rbp+68h]
+  int v58; // [rsp+174h] [rbp+74h]
+  int v59; // [rsp+178h] [rbp+78h]
+
+  *(_QWORD *)&v25 = *(unsigned int *)(a2 + 56);
+  _RCX = qword_142BEA360;
+  *(_QWORD *)&v24 = *(unsigned int *)(a2 + 216);
+  v4 = "player-requested-interact";
+  _RAX = v26;
+  HIDWORD(v25) = 3;
+  HIDWORD(v24) = 3;
+  v6 = 25;
+  v7 = 0;
+  v8 = 8;
+  do
+  {
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [rcx]
+      vmovups xmm1, xmmword ptr [rcx+70h]
+      vmovups ymmword ptr [rax], ymm0
+      vmovups ymm0, ymmword ptr [rcx+20h]
+      vmovups ymmword ptr [rax+20h], ymm0
+      vmovups ymm0, ymmword ptr [rcx+40h]
+      vmovups ymmword ptr [rax+40h], ymm0
+      vmovups xmm0, xmmword ptr [rcx+60h]
+      vmovups xmmword ptr [rax+60h], xmm0
+    }
+    _RAX += 32;
+    _RCX += 16;
+    __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+    --v8;
+  }
+  while ( v8 );
+  do
+  {
+    v14 = *v4;
+    if ( !*v4 )
+      break;
+    ++v4;
+    v7 = (v7 << 8) ^ v26[(unsigned __int8)(v14 ^ HIBYTE(v7))];
+    --v6;
+  }
+  while ( v6 );
+  __asm { vzeroupper }
+  if ( *((_QWORD *)FlsGetValue(dwFlsIndex) + 18) )
+  {
+    Value = FlsGetValue(dwFlsIndex);
+    v17 = *((_QWORD *)&xmmword_146467200 + 1);
+    v15 = Value[19];
+    if ( v15 )
+      v17 = Value[19];
+  }
+  else
+  {
+    v17 = *((_QWORD *)&xmmword_146467200 + 1);
+  }
+  if ( v17 )
+  {
+    *(_QWORD *)&v23 = *(_QWORD *)(v17 + 168);
+    DWORD2(v23) = *(_DWORD *)(v17 + 188);
+  }
+  else
+  {
+    *(_QWORD *)&v23 = 0;
+    DWORD2(v23) = 0;
+  }
+  __asm
+  {
+    vmovups xmm0, [rsp+460h+var_440]
+    vmovups xmm1, cs:xmmword_1467071D8
+    vmovups [rsp+460h+var_408], xmm0
+    vmovups xmm0, [rsp+460h+var_430]
+    vmovups [rsp+460h+var_3F8], xmm1
+    vmovups xmm1, [rsp+460h+var_420]
+  }
+  v26[0] = v7;
+  v32 = 0;
+  __asm
+  {
+    vmovups [rsp+460h+var_3E8], xmm0
+    vmovups [rbp+360h+var_3D8], xmm1
+  }
+  v31 = 0;
+  v34 = 0;
+  v33 = 0;
+  v36 = 0;
+  v35 = 0;
+  v38 = 0;
+  v37 = 0;
+  v40 = 0;
+  v39 = 0;
+  v42 = 0;
+  v41 = 0;
+  v44 = 0;
+  v43 = 0;
+  v46 = 0;
+  v45 = 0;
+  v48 = 0;
+  v47 = 0;
+  v50 = 0;
+  v49 = 0;
+  v52 = 0;
+  v51 = 0;
+  v54 = 0;
+  v53 = 0;
+  v56 = 0;
+  v55 = 0;
+  v58 = 0;
+  v57 = 0;
+  v59 = 2;
+  DispatchOrResolveActorStateDescriptorIntoRuntimeSlot(v15, 0, v26);
+  result = g_LocalPlayerInputManager_Ptr;
+  *(_QWORD *)(a1 + 13744) = *(_QWORD *)(g_LocalPlayerInputManager_Ptr + 80);
+  return result;
+}
+
+TARGET 0x140C88370: sub_140C88370 start=0x140C88370 end=0x140C88782
+char __fastcall sub_140C88370(__int64 a1, __int64 a2)
+{
+  __int64 v5; // rbp
+  const char *v6; // r9
+  unsigned int v7; // r8d
+  __int64 v10; // rcx
+  __int64 v11; // r10
+  char v17; // al
+  char v18; // r15
+  char *v19; // r9
+  __int64 v20; // r8
+  __int64 v22; // r10
+  __int64 v24; // r11
+  char v30; // al
+  int v31; // eax
+  unsigned int v32; // ebx
+  unsigned __int64 v33; // rdx
+  __int64 v34; // rax
+  __int64 v35; // rax
+  __int64 v36; // rax
+  __int64 v37; // rax
+  __int64 v38; // rax
+  __int64 v39; // rcx
+  __int64 v40; // rdx
+  const char *v41; // r8
+  __int64 v42; // r9
+  char v49; // al
+  __int64 v50; // rax
+  __int64 v51; // rcx
+  __int64 v52; // rdx
+  const char *v53; // r8
+  __int64 v54; // r9
+  char v61; // al
+  char result; // al
+  _DWORD v63[256]; // [rsp+20h] [rbp-438h] BYREF
+
+  if ( !a1 )
+    goto LABEL_39;
+  _RDI = qword_142BEA360;
+  v5 = 8;
+  v6 = "ProcessWeapon";
+  v7 = 0;
+  _RAX = v63;
+  _RDX = qword_142BEA360;
+  v10 = 8;
+  v11 = 13;
+  do
+  {
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [rdx]
+      vmovups xmm1, xmmword ptr [rdx+70h]
+      vmovups ymmword ptr [rax], ymm0
+      vmovups ymm0, ymmword ptr [rdx+20h]
+      vmovups ymmword ptr [rax+20h], ymm0
+      vmovups ymm0, ymmword ptr [rdx+40h]
+      vmovups ymmword ptr [rax+40h], ymm0
+      vmovups xmm0, xmmword ptr [rdx+60h]
+      vmovups xmmword ptr [rax+60h], xmm0
+    }
+    _RAX += 32;
+    _RDX += 16;
+    __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+    --v10;
+  }
+  while ( v10 );
+  do
+  {
+    v17 = *v6;
+    if ( !*v6 )
+      break;
+    ++v6;
+    v7 = (v7 << 8) ^ v63[(unsigned __int8)(v17 ^ HIBYTE(v7))];
+    --v11;
+  }
+  while ( v11 );
+  __asm { vzeroupper }
+  v18 = CheckSelectorHashEnabledInBitsetRegistry(*(_QWORD *)(a1 + 48), v7);
+  v19 = "WeaponPickup";
+  v20 = 0;
+  _RCX = v63;
+  v22 = 12;
+  _RDX = qword_142BEA360;
+  v24 = 8;
+  do
+  {
+    _RCX += 32;
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [rdx]
+      vmovups xmm1, xmmword ptr [rdx+70h]
+    }
+    _RDX += 16;
+    __asm
+    {
+      vmovups ymmword ptr [rcx-80h], ymm0
+      vmovups ymm0, ymmword ptr [rdx-60h]
+      vmovups ymmword ptr [rcx-60h], ymm0
+      vmovups ymm0, ymmword ptr [rdx-40h]
+      vmovups ymmword ptr [rcx-40h], ymm0
+      vmovups xmm0, xmmword ptr [rdx-20h]
+      vmovups xmmword ptr [rcx-20h], xmm0
+      vmovups xmmword ptr [rcx-10h], xmm1
+    }
+    --v24;
+  }
+  while ( v24 );
+  do
+  {
+    v30 = *v19;
+    if ( !*v19 )
+      break;
+    ++v19;
+    v20 = (unsigned int)(((_DWORD)v20 << 8) ^ v63[(unsigned __int8)(v30 ^ BYTE3(v20))]);
+    --v22;
+  }
+  while ( v22 );
+  v31 = *(_DWORD *)(a1 + 56);
+  LOBYTE(v19) = (_DWORD)v20 == v31;
+  if ( (_DWORD)v20 == v31 )
+  {
+    v19 = (char *)*(unsigned __int8 *)(a1 + 1352);
+    LOBYTE(v19) = ((unsigned __int8)v19 & 4) == 0;
+  }
+  v32 = 0;
+  if ( !a2 )
+    goto LABEL_39;
+  v33 = dword_143EEBF14 & 0x3F;
+  v34 = *(_QWORD *)(*(_QWORD *)(a2 + 48) + 8 * ((unsigned __int64)(unsigned int)dword_143EEBF14 >> 6) + 32);
+  if ( !_bittest64(&v34, v33) )
+    goto LABEL_39;
+  if ( v18 )
+  {
+    __asm { vzeroupper }
+    v35 = (*(__int64 (__fastcall **)(__int64, unsigned __int64, __int64, char *))(*(_QWORD *)a1 + 584LL))(
+            a1,
+            v33,
+            v20,
+            v19);
+    if ( v35 )
+    {
+      v36 = sub_141C977A0(v35);
+      v37 = sub_1408ACDC0(v36);
+      if ( v37 )
+      {
+        if ( *(_BYTE *)(v37 + 280) )
+          goto LABEL_39;
+      }
+    }
+    v32 = *(_DWORD *)(a1 + 2144);
+    v38 = (*(__int64 (__fastcall **)(_QWORD, _QWORD))(**(_QWORD **)(a2 + 7560) + 200LL))(*(_QWORD *)(a2 + 7560), v32);
+    if ( v38 )
+    {
+      v39 = *(unsigned __int16 *)(v38 + 2148);
+      if ( (*(unsigned __int16 *)(a1 + 2148) & ~(_DWORD)v39) != 0 )
+      {
+        v40 = 0;
+        v41 = "scavenger";
+        v42 = 9;
+        _RAX = v63;
+        do
+        {
+          __asm
+          {
+            vmovups ymm0, ymmword ptr [rdi]
+            vmovups xmm1, xmmword ptr [rdi+70h]
+            vmovups ymmword ptr [rax], ymm0
+            vmovups ymm0, ymmword ptr [rdi+20h]
+            vmovups ymmword ptr [rax+20h], ymm0
+            vmovups ymm0, ymmword ptr [rdi+40h]
+            vmovups ymmword ptr [rax+40h], ymm0
+            vmovups xmm0, xmmword ptr [rdi+60h]
+            vmovups xmmword ptr [rax+60h], xmm0
+          }
+          _RAX += 32;
+          _RDI += 16;
+          __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+          --v5;
+        }
+        while ( v5 );
+        do
+        {
+          v49 = *v41;
+          if ( !*v41 )
+            break;
+          ++v41;
+          v39 = (unsigned int)((_DWORD)v40 << 8);
+          v40 = (unsigned int)v39 ^ v63[(unsigned __int8)(v49 ^ BYTE3(v40))];
+          --v42;
+        }
+        while ( v42 );
+        __asm { vzeroupper }
+        if ( !(unsigned __int8)sub_140A0E930(v39, v40, a2, 0) )
+          v32 = 0;
+      }
+    }
+  }
+  else if ( (_BYTE)v19 )
+  {
+    v32 = *(_DWORD *)(a1 + 1312);
+    __asm { vzeroupper }
+    v50 = (*(__int64 (__fastcall **)(_QWORD, _QWORD))(**(_QWORD **)(a2 + 7560) + 200LL))(*(_QWORD *)(a2 + 7560), v32);
+    if ( v50 )
+    {
+      v51 = *(unsigned __int16 *)(v50 + 2148);
+      if ( (*(unsigned __int16 *)(a1 + 1316) & ~(_DWORD)v51) != 0 )
+      {
+        v52 = 0;
+        v53 = "scavenger";
+        v54 = 9;
+        _RAX = v63;
+        do
+        {
+          __asm
+          {
+            vmovups ymm0, ymmword ptr [rdi]
+            vmovups xmm1, xmmword ptr [rdi+70h]
+            vmovups ymmword ptr [rax], ymm0
+            vmovups ymm0, ymmword ptr [rdi+20h]
+            vmovups ymmword ptr [rax+20h], ymm0
+            vmovups ymm0, ymmword ptr [rdi+40h]
+            vmovups ymmword ptr [rax+40h], ymm0
+            vmovups xmm0, xmmword ptr [rdi+60h]
+            vmovups xmmword ptr [rax+60h], xmm0
+          }
+          _RAX += 32;
+          _RDI += 16;
+          __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+          --v5;
+        }
+        while ( v5 );
+        do
+        {
+          v61 = *v53;
+          if ( !*v53 )
+            break;
+          ++v53;
+          v51 = (unsigned int)((_DWORD)v52 << 8);
+          v52 = (unsigned int)v51 ^ v63[(unsigned __int8)(v61 ^ BYTE3(v52))];
+          --v54;
+        }
+        while ( v54 );
+        __asm { vzeroupper }
+        if ( !(unsigned __int8)sub_140A0E930(v51, v52, a2, 0) )
+          v32 = 0;
+      }
+    }
+  }
+  __asm { vzeroupper }
+  sub_140C88310(v32);
+  if ( !byte_143ECEE18
+    || !v32
+    || !(*(__int64 (__fastcall **)(_QWORD, _QWORD))(**(_QWORD **)(a2 + 7560) + 200LL))(*(_QWORD *)(a2 + 7560), v32) )
+  {
+LABEL_39:
+    result = 0;
+    goto LABEL_40;
+  }
+  result = 1;
+LABEL_40:
+  __asm { vzeroupper }
+  return result;
+}
+
+TARGET 0x1408A9AA0: sub_1408A9AA0 start=0x1408A9AA0 end=0x1408A9AA8
+__int64 __fastcall sub_1408A9AA0(__int64 a1)
+{
+  return *(_QWORD *)(a1 + 1296);
+}
+
+TARGET 0x141C9A360: sub_141C9A360 start=0x141C9A360 end=0x141C9A4B9
+__int64 __fastcall sub_141C9A360(__int64 *a1, __int64 a2, __int64 _R8)
+{
+  __int64 v4; // rax
+  __int64 v6; // rcx
+  unsigned int v7; // ebx
+  char v8; // al
+  unsigned __int64 v10; // rdx
+  __int64 (*v17)(const char *, ...); // rdi
+  const char *v18; // rcx
+  __int128 v19; // [rsp+30h] [rbp-18h] BYREF
+
+  __asm { vmovups xmm0, xmmword ptr [r8] }
+  v4 = *a1;
+  __asm { vmovdqa [rsp+48h+var_18], xmm0 }
+  v7 = (*(__int64 (__fastcall **)(__int64 *, __int64, __int128 *))(v4 + 8))(a1, a2, &v19);
+  v8 = *((_BYTE *)a1 + 56);
+  if ( (v8 & 5) == 1 && (v8 & 8) == 0 )
+  {
+    if ( v7 == 1 )
+    {
+      if ( !byte_146A41044 && (v8 & 0x10) != 0 )
+      {
+        v7 = 0;
+LABEL_8:
+        if ( sub_141C977A0(a1) )
+        {
+          v10 = a1[6];
+          if ( v10 != qword_143F36BE8 )
+          {
+            __asm
+            {
+              vmovss  xmm2, dword ptr [rax+0E0h]
+              vxorps  xmm0, xmm0, xmm0
+              vcomiss xmm2, xmm0
+            }
+            if ( v10 > qword_143F36BE8 )
+            {
+              __asm { vxorps  xmm0, xmm0, xmm0 }
+              __asm
+              {
+                vcvtsi2ss xmm0, xmm0, rcx
+                vmulss  xmm1, xmm0, cs:g_EngineClockToSeconds
+                vcomiss xmm1, xmm2
+              }
+              if ( *(_QWORD *)(g_LocalPlayerInputManager_Ptr + 224) > v10 )
+                return 0xFFFFFFFFLL;
+            }
+          }
+        }
+      }
+    }
+    else
+    {
+      if ( !v7 )
+        goto LABEL_8;
+      if ( v7 + 1 > 2 )
+      {
+        v17 = qword_146B17C08;
+        if ( !qword_146B17C08 )
+          goto LABEL_18;
+        v18 = &byte_1428D4552;
+        if ( qword_146B17C00 )
+          v18 = (const char *)qword_146B17C00("NdInteractControl::GetAvailability(): Invalid availability value");
+        if ( !(unsigned __int8)v17(
+                                 "avail >= kInteractableInvalid && avail <= kInteractableAvailable",
+                                 "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\gamelib\\gameplay\\nd-interactable.cpp",
+                                 "NdInteractControl::GetAvailability",
+                                 "Jun 30 2023 19:07:05",
+                                 2080,
+                                 v18) )
+        {
+LABEL_18:
+          sub_1422053E0(v6);
+          __debugbreak();
+        }
+      }
+    }
+    return v7;
+  }
+  return 0xFFFFFFFFLL;
+}
+
+TARGET 0x141C937D0: sub_141C937D0 start=0x141C937D0 end=0x141C93BCA
+char __fastcall sub_141C937D0(_DWORD *a1, __int64 a2, __int64 a3, __int64 a4)
+{
+  __int64 v15; // rax
+  int v16; // r8d
+  char v19; // al
+  bool v20; // zf
+  bool v21; // cc
+  char result; // al
+  char v27; // cf
+  char v28; // zf
+  bool v53; // al
+  __int64 v56; // rax
+  unsigned int v59; // eax
+  int v63; // eax
+  int v64; // r9d
+  char v65; // al
+  __int64 v67; // rax
+  __int64 v69; // rax
+  int v96; // [rsp+20h] [rbp-A9h]
+  int v97; // [rsp+20h] [rbp-A9h]
+  _OWORD v98[2]; // [rsp+40h] [rbp-89h] BYREF
+  __int128 v99; // [rsp+60h] [rbp-69h] BYREF
+  int v100; // [rsp+70h] [rbp-59h] BYREF
+  int v102; // [rsp+88h] [rbp-41h]
+  _OWORD v103[9]; // [rsp+90h] [rbp-39h] BYREF
+
+  _R15 = a4;
+  if ( !a2 || (_DWORD *)(*(__int64 (__fastcall **)(__int64))(*(_QWORD *)a2 + 584LL))(a2) != a1 )
+  {
+    if ( !qword_146B17C08
+      || (v96 = 459,
+          !(unsigned __int8)qword_146B17C08(
+                              "pInteractable && pInteractable->GetInteractControl() == this",
+                              "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\gamelib\\gameplay\\nd-interactable.cpp",
+                              "NdInteractControl::IsWithinInteractionRadius",
+                              "Jun 30 2023 19:07:05")) )
+    {
+      sub_1422053E0(a1);
+      __debugbreak();
+    }
+  }
+  if ( !sub_141C977A0(a1) )
+    goto LABEL_10;
+  __asm { vxorps  xmm6, xmm6, xmm6 }
+  if ( a1[21] )
+  {
+    __asm
+    {
+      vpxor   xmm0, xmm0, xmm0
+      vmovdqu [rbp+57h+var_A8], xmm0
+    }
+    v100 = 0;
+    v102 = -1;
+    sub_141D0EDD0(&v100);
+    v15 = sub_141D0EEB0(&v100);
+    if ( !v15 )
+      goto LABEL_10;
+    __asm { vmovups xmm0, xmmword ptr [r15] }
+    __asm { vxorps  xmm2, xmm2, xmm2 }
+    __asm { vmovups [rsp+120h+var_E0], xmm0 }
+    v19 = sub_141D0E030(v15, (unsigned int)v98, v16, 0, v96, 0, 0);
+    v20 = v19 == 0;
+    v21 = v19 == 0;
+    if ( !v19 )
+      goto LABEL_10;
+  }
+  else
+  {
+    sub_141C92A90(a1, v98, a2, a3);
+    __asm
+    {
+      vmovups xmm0, [rsp+120h+var_E0]
+      vsubps  xmm1, xmm0, xmmword ptr [r15]
+      vshufps xmm7, xmm0, xmm0, 0FFh
+      vmovups xmm0, cs:xmmword_142880540
+      vshufps xmm8, xmm1, xmm1, 55h ; 'U'
+      vandnps xmm1, xmm0, xmm1
+      vmulps  xmm3, xmm1, xmm1
+      vshufps xmm1, xmm3, xmm3, 55h ; 'U'
+      vshufps xmm0, xmm3, xmm3, 0
+      vaddps  xmm2, xmm1, xmm0
+      vshufps xmm1, xmm3, xmm3, 0AAh
+      vaddps  xmm5, xmm2, xmm1
+      vrsqrtps xmm3, xmm5
+      vmulps  xmm1, xmm3, cs:xmmword_142BEC910
+      vrcpps  xmm4, xmm3
+      vmulps  xmm0, xmm4, xmm4
+      vsubps  xmm2, xmm0, xmm5
+      vmulps  xmm0, xmm2, xmm1
+      vmovups xmm2, cs:xmmword_14287FA30
+      vcmpleps xmm1, xmm2, xmm5
+      vsubps  xmm3, xmm4, xmm0
+      vandps  xmm0, xmm3, xmm1
+      vucomiss xmm0, xmm7
+      vxorps  xmm9, xmm9, xmm9
+    }
+    if ( !(v27 | v28) )
+      goto LABEL_10;
+    __asm
+    {
+      vsubps  xmm0, xmm9, xmm7
+      vucomiss xmm0, xmm8
+    }
+    __asm { vucomiss xmm8, xmm7 }
+    v53 = !(v27 | v28);
+    v20 = !v53;
+    v21 = !v53;
+    if ( v53 )
+      goto LABEL_10;
+  }
+  __asm
+  {
+    vmovss  xmm0, dword ptr [rdi+0Ch]
+    vcomiss xmm0, xmm6
+  }
+  if ( v20 )
+    goto LABEL_25;
+  __asm
+  {
+    vmovss  xmm0, dword ptr [rdi+10h]
+    vcomiss xmm0, xmm6
+  }
+  v56 = *(_QWORD *)a1;
+  *(_QWORD *)&v98[0] = 0;
+  DWORD2(v98[0]) = 0;
+  __asm { vmovups xmm0, [rsp+120h+var_E0] }
+  LOBYTE(v96) = 0;
+  __asm { vmovdqa [rsp+120h+var_E0], xmm0 }
+  (*(void (__fastcall **)(_DWORD *, __int128 *, __int64, _OWORD *, int))(v56 + 128))(a1, &v99, a2, v98, v96);
+  if ( a3 )
+  {
+    *(_QWORD *)&v98[0] = *(_QWORD *)(a3 + 168);
+    DWORD2(v98[0]) = *(_DWORD *)(a3 + 188);
+  }
+  else
+  {
+    *(_QWORD *)&v98[0] = 0;
+    DWORD2(v98[0]) = 0;
+  }
+  __asm
+  {
+    vmovups xmm0, [rsp+120h+var_E0]
+    vmovdqa [rsp+120h+var_E0], xmm0
+  }
+  v59 = (*(__int64 (__fastcall **)(__int64, _OWORD *))(*(_QWORD *)qword_143FE1070 + 208LL))(qword_143FE1070, v98);
+  v21 = v59 <= 1;
+  if ( v59 > 1 )
+    goto LABEL_25;
+  __asm { vmovups xmm0, xmmword ptr [r15] }
+  __asm { vmovups [rsp+120h+var_E0], xmm0 }
+  ResolveScreenRoutePoseSeedOrDefault(&v100, v59);
+  __asm
+  {
+    vmovss  xmm0, dword ptr [rdi+10h]
+    vmovss  xmm3, dword ptr [rdi+0Ch]
+  }
+  __asm { vmovss  [rsp+120h+var_100], xmm0 }
+  v65 = sub_141C93160(v63, (unsigned int)&v99, (unsigned int)v98, v64, v97);
+  v21 = v65 == 0;
+  if ( v65 )
+  {
+LABEL_25:
+    __asm
+    {
+      vmovss  xmm0, dword ptr [rdi+18h]
+      vcomiss xmm0, xmm6
+    }
+    if ( v21 )
+      goto LABEL_22;
+    v67 = *(_QWORD *)a1;
+    *(_QWORD *)&v98[0] = 0;
+    DWORD2(v98[0]) = 0;
+    __asm { vmovups xmm0, [rsp+120h+var_E0] }
+    LOBYTE(v96) = 0;
+    __asm { vmovdqa [rbp+57h+var_C0], xmm0 }
+    (*(void (__fastcall **)(_DWORD *, _OWORD *, __int64, __int128 *, int))(v67 + 128))(a1, v103, a2, &v99, v96);
+    v69 = (*(__int64 (__fastcall **)(_DWORD *, int *, __int64))(*(_QWORD *)a1 + 88LL))(a1, &v100, a2);
+    sub_14014D9F0(&v99, v69);
+    __asm
+    {
+      vmovups xmm0, xmmword ptr [r15]
+      vsubps  xmm6, xmm0, [rbp+57h+var_90]
+      vmulps  xmm3, xmm6, xmm6
+      vshufps xmm1, xmm3, xmm3, 55h ; 'U'
+      vshufps xmm0, xmm3, xmm3, 0
+      vaddps  xmm2, xmm1, xmm0
+      vmovups xmm0, cs:xmmword_142BEB080
+      vshufps xmm1, xmm3, xmm3, 0AAh
+      vaddps  xmm4, xmm2, xmm1
+      vmulps  xmm1, xmm4, cs:xmmword_142BEF790
+      vrsqrtps xmm5, xmm4
+      vcmpltps xmm0, xmm0, xmm4
+      vmulps  xmm3, xmm1, xmm5
+      vmulps  xmm1, xmm5, cs:xmmword_142BED5B0
+      vmulps  xmm2, xmm5, xmm5
+      vmulps  xmm4, xmm3, xmm2
+      vaddps  xmm2, xmm4, xmm1
+      vmulps  xmm5, xmm2, xmm6
+      vxorps  xmm3, xmm3, xmm3
+      vblendvps xmm1, xmm3, xmm5, xmm0
+      vmulps  xmm4, xmm1, [rbp+57h+var_C0]
+      vhaddps xmm0, xmm4, xmm4
+      vshufps xmm2, xmm4, xmm4, 0AAh
+      vaddps  xmm6, xmm2, xmm0
+      vmovss  xmm0, dword ptr [rdi+18h]
+      vmulss  xmm0, xmm0, cs:dword_142BE8C0C; X
+    }
+    *(float *)&_XMM0 = cosf(*(float *)&_XMM0);
+    __asm { vcomiss xmm6, xmm0 }
+    if ( v27 | v20 )
+    {
+LABEL_22:
+      result = 1;
+      goto LABEL_11;
+    }
+  }
+LABEL_10:
+  result = 0;
+LABEL_11:
+  __asm
+  {
+    vmovaps xmm9, [rsp+120h+var_70]
+    vmovaps xmm8, [rsp+120h+var_60]
+    vmovaps xmm7, [rsp+120h+var_50]
+    vmovaps xmm6, [rsp+120h+var_40]
+  }
+  return result;
+}
+
