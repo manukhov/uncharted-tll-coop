@@ -25642,3 +25642,24 @@ so it cannot identify their distinct world objects. Type-97 happened to return
 `ok=0`; M30 entered a non-returning native path. The GiveWeapon-tail no longer
 self-applies or transmits a `PickupPacket` derived from this false id. Exact weapon
 display remains owned by `WeaponGivePacket` plus stable `SLOT-MIRROR`.
+
+### 2026-07-10: repeated pickup display lag/staleness = lifetime dedup plus destructive store
+
+**Runtime proof:** after M30/AUG/Type-97 switching, the second local Type-97 pickup
+completed `GIVEWEAPON-CALL art=0x27617d0d` and the raw snapshot changed to Type-97,
+but there was no second `GIVEWEAPON-RELAY-SEND`. The receiver therefore logged
+`SLOT-MIRROR-SKIP ... art=0x27617d0d keep=0xc3181ebd` and retained the previous
+weapon. This matches the sender's session-lifetime art dedup: each pickup art was
+transmitted only once per injected process.
+
+**Additional delay causes:** every received pickup block cleared the whole
+four-entry relay store before writing element zero, so only the newest art was
+re-givable. When a raw `StatePacket` arrived before its matching give packet, the
+ungivable branch also wrote the normal five-second apply memo, delaying use of the
+block even after it arrived.
+
+**Correction:** every native pickup `GiveWeapon` event now sends its captured
+block, the receiver retains up to eight distinct pickup blocks (refreshing by art
+and replacing round-robin only when full), and an ungivable raw slot no longer
+starts the five-second cooldown. The existing one-second stable-snapshot debounce
+remains the sole intentional delay before a non-empty puppet inventory swap.

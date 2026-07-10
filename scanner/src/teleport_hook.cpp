@@ -549,27 +549,8 @@ struct RelayedWeaponBlock {
     std::uint32_t art = 0;
     std::uint8_t info[coop::kWeaponInfoBytes]{};
 };
-RelayedWeaponBlock g_relayed_weapon_store[4]{};
-std::uint32_t g_pickup_relay_sent_arts[4]{};
-std::size_t g_pickup_relay_sent_count = 0;
-
-bool pickup_relay_already_sent(std::uint32_t art_id) {
-    for (std::size_t i = 0; i < g_pickup_relay_sent_count; ++i) {
-        if (g_pickup_relay_sent_arts[i] == art_id) {
-            return true;
-        }
-    }
-    return false;
-}
-
-void pickup_relay_mark_sent(std::uint32_t art_id) {
-    if (art_id == 0 || pickup_relay_already_sent(art_id)) {
-        return;
-    }
-    if (g_pickup_relay_sent_count < std::size(g_pickup_relay_sent_arts)) {
-        g_pickup_relay_sent_arts[g_pickup_relay_sent_count++] = art_id;
-    }
-}
+RelayedWeaponBlock g_relayed_weapon_store[8]{};
+std::size_t g_relayed_weapon_store_replace_index = 0;
 
 RelayedWeaponBlock* relayed_weapon_store_find(std::uint32_t art_id) {
     if (art_id == 0) return nullptr;
@@ -616,21 +597,31 @@ void relayed_weapon_store_put(std::uint32_t art_id, const void* info) {
     if (art_id == 0 || info == nullptr || !is_pickup_relay_art(art_id)) {
         return;
     }
-    // Pickup relay blocks are always stored so held-weapon can switch to them.
-    // Whitelist arts never enter this store (synthetic give path).
-    g_type97_normalized_block_ready.store(false, std::memory_order_release);
-    for (RelayedWeaponBlock& e : g_relayed_weapon_store) {
-        e = {};
+    // Keep blocks for multiple pickup arts: the peer can switch back to an older
+    // pickup without triggering another native GiveWeapon event immediately.
+    RelayedWeaponBlock* target = relayed_weapon_store_find(art_id);
+    if (target == nullptr) {
+        for (RelayedWeaponBlock& e : g_relayed_weapon_store) {
+            if (e.art == 0) {
+                target = &e;
+                break;
+            }
+        }
     }
-    g_relayed_weapon_store[0].art = art_id;
-    std::memcpy(g_relayed_weapon_store[0].info, info, coop::kWeaponInfoBytes);
+    if (target == nullptr) {
+        target = &g_relayed_weapon_store[
+            g_relayed_weapon_store_replace_index++ %
+            std::size(g_relayed_weapon_store)];
+    }
+    target->art = art_id;
+    std::memcpy(target->info, info, coop::kWeaponInfoBytes);
     if (art_id == kCoopType97ArtId) {
         std::int32_t ammo = 0;
-        std::memcpy(&ammo, g_relayed_weapon_store[0].info + 0x84, sizeof(ammo));
+        std::memcpy(&ammo, target->info + 0x84, sizeof(ammo));
         if (ammo < 0) {
             constexpr std::int32_t kSafeDisplayAmmo = 1;
-            std::memcpy(g_relayed_weapon_store[0].info + 0x84,
-                        &kSafeDisplayAmmo, sizeof(kSafeDisplayAmmo));
+            std::memcpy(target->info + 0x84, &kSafeDisplayAmmo,
+                        sizeof(kSafeDisplayAmmo));
         }
         g_type97_normalized_block_ready.store(true, std::memory_order_release);
     }
@@ -3174,8 +3165,7 @@ void __fastcall hooked_give_weapon_tail(
     if (g_original_give_weapon_tail != nullptr) {
         g_original_give_weapon_tail(controller, weapon_info, a3, a4, a5);
     }
-    if (relay_pickup_after_give &&
-        !pickup_relay_already_sent(relay_pkt.weapon_art_id)) {
+    if (relay_pickup_after_give) {
         if (relay_local_player != nullptr) {
             const int found_slot = find_weapon_slot_by_art_id(
                 relay_local_player, relay_pkt.weapon_art_id);
@@ -3194,7 +3184,6 @@ void __fastcall hooked_give_weapon_tail(
              << " draw=" << static_cast<int>(relay_pkt.draw_flag)
              << " slot=" << static_cast<int>(relay_pkt.manager_slot);
         force_log_line(line.str().c_str());
-        pickup_relay_mark_sent(relay_pkt.weapon_art_id);
         // Compare placements: local (sender) slot layout right after the pickup
         // give vs the puppet's PUPPET-AFTER-GIVE dump on the receiver.
         {
@@ -7649,6 +7638,11 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
         ULONGLONG last_ms = 0;
     };
     static SlotMemo memo[4]{};  // slots 0..3
+    struct UngivableMemo {
+        void* puppet = nullptr;
+        std::uint32_t art = 0;
+    };
+    static UngivableMemo ungivable_memo[4]{};
     const ULONGLONG now = GetTickCount64();
     for (std::size_t i = 0; i < 8; ++i) {
         const int slot = kSlotOfIndex[i];
@@ -7661,6 +7655,7 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
             weapon_art_id_from_object(get_weapon_from_slot(puppet, slot));
         if (peer_art == cur_art) {
             memo[slot] = {puppet, peer_art, memo[slot].last_ms};
+            ungivable_memo[slot] = {};
             continue;
         }
         // Only act when the DESIRED art for this slot changed since our last
@@ -7677,14 +7672,20 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
              relayed_weapon_store_find(peer_art) != nullptr);
         if (peer_art != 0 && !givable) {
             // Peer owns something we cannot recreate (no block relayed yet).
-            // Leave the puppet's current weapon alone rather than stripping it.
-            m = {puppet, peer_art, now};
-            std::ostringstream line;
-            line << "SLOT-MIRROR-SKIP slot=" << slot << " unsafe/ungivable art=0x"
-                 << std::hex << peer_art << " keep=0x" << cur_art << std::dec;
-            force_log_line(line.str().c_str());
+            // Do not start the five-second apply cooldown: the matching UDP
+            // WeaponGivePacket can arrive on the next tick.
+            UngivableMemo& u = ungivable_memo[slot];
+            if (u.puppet != puppet || u.art != peer_art) {
+                u = {puppet, peer_art};
+                std::ostringstream line;
+                line << "SLOT-MIRROR-SKIP slot=" << slot
+                     << " unsafe/ungivable art=0x" << std::hex << peer_art
+                     << " keep=0x" << cur_art << std::dec;
+                force_log_line(line.str().c_str());
+            }
             continue;
         }
+        ungivable_memo[slot] = {};
         m = {puppet, peer_art, now};
         if (cur_art != 0) {
             seh_remove_weapon_in_slot(puppet, slot);
