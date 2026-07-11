@@ -1,0 +1,254 @@
+{
+  "input": "C:\\users\\vladimir\\desktop\\TLLCoopResearch\\ida\\tll_fresh.exe",
+  "image_base": "0x140000000",
+  "targets": {
+    "idrawcontrol::setvisible": [],
+    "setvisible": [
+      {
+        "address": "0x1429D5190",
+        "value": "NetCharacter::SetVisibleEnemyNpcId",
+        "xrefs": [
+          {
+            "xref": "0x1409FFA88",
+            "function": "0x1409FFA50",
+            "function_name": "sub_1409FFA50"
+          },
+          {
+            "xref": "0x140A08401",
+            "function": "0x140A07160",
+            "function_name": "NetAnimCmdGenerator_UpdateFlagsAndWeapons"
+          }
+        ]
+      },
+      {
+        "address": "0x1429D51E8",
+        "value": "NetCharacter::SetVisibleEnemyPlayerNetTrackerId",
+        "xrefs": [
+          {
+            "xref": "0x1409FF9E8",
+            "function": "0x1409FF9B0",
+            "function_name": "sub_1409FF9B0"
+          },
+          {
+            "xref": "0x140A08370",
+            "function": "0x140A07160",
+            "function_name": "NetAnimCmdGenerator_UpdateFlagsAndWeapons"
+          }
+        ]
+      },
+      {
+        "address": "0x142AEA4D0",
+        "value": "void __cdecl AnimMgr::SetVisible(struct FgAnimData *,bool)",
+        "xrefs": []
+      },
+      {
+        "address": "0x142B36A68",
+        "value": "FlashMovie::SetVisible",
+        "xrefs": [
+          {
+            "xref": "0x1413B01E4",
+            "function": "0x1413B0100",
+            "function_name": "sub_1413B0100"
+          },
+          {
+            "xref": "0x1419470F4",
+            "function": "0x141947010",
+            "function_name": "sub_141947010"
+          },
+          {
+            "xref": "0x141A8CD1C",
+            "function": "0x141A8CCD0",
+            "function_name": "sub_141A8CCD0"
+          }
+        ]
+      },
+      {
+        "address": "0x142B36A80",
+        "value": "bool __cdecl FlashMovie::SetVisible(bool)",
+        "xrefs": []
+      }
+    ],
+    "near-fade": [
+      {
+        "address": "0x142B138B8",
+        "value": "near-fade-start",
+        "xrefs": [
+          {
+            "xref": "0x14190CCCB",
+            "function": "0x14190C910",
+            "function_name": "sub_14190C910"
+          }
+        ]
+      },
+      {
+        "address": "0x142B138C8",
+        "value": "near-fade-end",
+        "xrefs": [
+          {
+            "xref": "0x14190CD7C",
+            "function": "0x14190C910",
+            "function_name": "sub_14190C910"
+          }
+        ]
+      }
+    ],
+    "draw-control.cpp": [
+      {
+        "address": "0x142AE5500",
+        "value": "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\render\\draw-control.cpp",
+        "xrefs": [
+          {
+            "xref": "0x1406F3BCB",
+            "function": "0x1406F3A30",
+            "function_name": "sub_1406F3A30"
+          },
+          {
+            "xref": "0x1406F3C55",
+            "function": "0x1406F3A30",
+            "function_name": "sub_1406F3A30"
+          },
+          {
+            "xref": "0x140CC5AC7",
+            "function": "0x140CC5890",
+            "function_name": "sub_140CC5890"
+          },
+          {
+            "xref": "0x141751D87",
+            "function": "0x141751BB0",
+            "function_name": "sub_141751BB0"
+          },
+          {
+            "xref": "0x141752163",
+            "function": "0x141751E30",
+            "function_name": "sub_141751E30"
+          },
+          {
+            "xref": "0x14175221B",
+            "function": "0x141751E30",
+            "function_name": "sub_141751E30"
+          },
+          {
+            "xref": "0x1417525C4",
+            "function": "0x141751E30",
+            "function_name": "sub_141751E30"
+          },
+          {
+            "xref": "0x141752C6B",
+            "function": "0x141752BE0",
+            "function_name": "sub_141752BE0"
+          },
+          {
+            "xref": "0x141752E87",
+            "function": "0x141752E10",
+            "function_name": "sub_141752E10"
+          },
+          {
+            "xref": "0x141753047",
+            "function": "0x141752FB0",
+            "function_name": "sub_141752FB0"
+          },
+          {
+            "xref": "0x141753277",
+            "function": "0x141753200",
+            "function_name": "sub_141753200"
+          },
+          {
+            "xref": "0x1417532F1",
+            "function": "0x141753200",
+            "function_name": "sub_141753200"
+          },
+          {
+            "xref": "0x14175361C",
+            "function": "0x141753560",
+            "function_name": "sub_141753560"
+          },
+          {
+            "xref": "0x141753664",
+            "function": "0x141753560",
+            "function_name": "sub_141753560"
+          },
+          {
+            "xref": "0x1417537D3",
+            "function": "0x141753560",
+            "function_name": "sub_141753560"
+          },
+          {
+            "xref": "0x14175454F",
+            "function": "0x141754510",
+            "function_name": "sub_141754510"
+          },
+          {
+            "xref": "0x141754632",
+            "function": "0x1417545F0",
+            "function_name": "sub_1417545F0"
+          },
+          {
+            "xref": "0x141754A6F",
+            "function": "0x141754A30",
+            "function_name": "sub_141754A30"
+          },
+          {
+            "xref": "0x141754B52",
+            "function": "0x141754B10",
+            "function_name": "sub_141754B10"
+          },
+          {
+            "xref": "0x141755A14",
+            "function": "0x1417559C0",
+            "function_name": "sub_1417559C0"
+          },
+          {
+            "xref": "0x141755B47",
+            "function": "0x141755B10",
+            "function_name": "sub_141755B10"
+          },
+          {
+            "xref": "0x141755C65",
+            "function": "0x141755BE0",
+            "function_name": "sub_141755BE0"
+          },
+          {
+            "xref": "0x141755DD4",
+            "function": "0x141755D40",
+            "function_name": "sub_141755D40"
+          },
+          {
+            "xref": "0x141755F6E",
+            "function": "0x141755D40",
+            "function_name": "sub_141755D40"
+          },
+          {
+            "xref": "0x141756155",
+            "function": "0x141755D40",
+            "function_name": "sub_141755D40"
+          },
+          {
+            "xref": "0x1417565F5",
+            "function": "0x141756570",
+            "function_name": "sub_141756570"
+          },
+          {
+            "xref": "0x1417566B4",
+            "function": "0x141756570",
+            "function_name": "sub_141756570"
+          },
+          {
+            "xref": "0x14175684C",
+            "function": "0x1417567C0",
+            "function_name": "sub_1417567C0"
+          },
+          {
+            "xref": "0x141756AD0",
+            "function": "0x1417567C0",
+            "function_name": "sub_1417567C0"
+          },
+          {
+            "xref": "0x141BCD745",
+            "function": "0x141BCD340",
+            "function_name": "ResolvePlayerAmbientOccluderSelectionAndRefreshDrawControlMeshes"
+          }
+        ]
+      }
+    ]
+  }
+}

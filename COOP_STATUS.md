@@ -1598,3 +1598,20 @@ SKIPPED (mismatch logged only when `g_logging_enabled`). See
   OFF and permits auto aim only while stationary, excluding scoped rifles. F8 was
   toggled ON in current PIDs 3744/5860. Test ordinary weapon aim while moving,
   then scoped rifle separately for the old DrawControl disappearance.
+
+## 2026-07-11: aim yaw + scoped mesh visibility build awaiting runtime
+
+- User confirmed full ADS reaches the puppet, but camera yaw does not rotate its
+  body and scoped-rifle ADS makes Chloe disappear on the receiver.
+- Root orientation fix: post-update now converts peer camera `-Z` forward to a
+  horizontal body-yaw quaternion and applies it once. It no longer blends the full
+  camera quaternion into the root or relies on sender body yaw.
+- Scoped fix uses exact DrawControl inverses: ShowMesh `0x141754A30` and
+  EnableMeshInMainView `0x141754B10` after detecting HideMesh state byte `+579`
+  or per-instance main-view flag `0x40`.
+- Runtime identity confirmed: `*(Player+0x198)+0 == *(Player+0x1A8)` FgAnimData;
+  mesh array/count are DrawControl `+0x8/+0x14`.
+- Release build succeeds. Full puppet ADS is test-default ON (F8 remains an
+  emergency A/B toggle). Fresh injected PIDs `13372/7112` wait in menus; enter
+  save and test ordinary aim turn plus scoped ADS. Expected log:
+  `SCOPED-MESH-VISIBLE restored=N` only when the engine attempted a hide.

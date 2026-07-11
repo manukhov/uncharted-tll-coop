@@ -26602,4 +26602,42 @@ Its automatic fallback rejects moving peers and all scoped rifles, despite
 the controlled runtime experiment: ordinary weapons must enter stock aim while
 moving if command delivery is the remaining gate; scoped disappearance is tested
 separately as a DrawControl/visibility problem.
+
+### 2026-07-11 STATIC + runtime layout: camera-yaw root fix and scoped DrawControl inverse
+
+User runtime with full F8 ADS established two independent failures: the puppet
+enters aim but does not follow camera yaw, and scoped-rifle ADS hides the puppet
+mesh on the receiver.
+
+**Yaw root cause (STATIC, runtime input confirmed):** sender logs show changing
+`POSE-SEED-SEND` camera quaternions and receiver `AIM-POSE-OVERRIDE`, while the
+post-update root writer either blended `peer body quat` or copied the complete
+camera quaternion into the character root. Free-look camera yaw is not sender body
+yaw, and camera pitch/roll are not valid character-root orientation. The fix now
+derives the camera's engine `-Z` view vector, projects it horizontally, converts it
+to a `+Z` body-yaw quaternion, and blends it once in `apply_puppet_transform_post`
+after native update. It does not re-enable the rejected sustained right-stick or
+the old three-writer camera-facing path.
+
+**Scoped visibility path (three evidence types):**
+
+1. Decompile/source assertions identify exact inverse APIs:
+   `IDrawControl_HideMesh 0x141754510` / `ShowMesh 0x141754A30`, and
+   `IDrawControl_DisableMeshFromMainView 0x1417545F0` /
+   `EnableMeshInMainView 0x141754B10`.
+2. Hide/Show write mesh entry byte `+579` to `0/0xFF`; Disable/Enable set/clear
+   render-instance flag `0x40` at instance `+0x18` for bound mesh children.
+3. Live memory in PIDs 3744/5860 confirms `Player+0x198` is the IDrawControl used
+   here: `drawControl+0 == Player+0x1A8` FgAnimData, mesh array at `+0x8`, and
+   plausible mesh counts at `+0x14` (5 and 2 in the sampled puppets).
+
+The scoped pin validates that identity, then after puppet update invokes Show and
+Enable only for meshes currently hidden/disabled, only while a fresh scoped peer
+aim packet and full puppet ADS are active. Prediction: turning the peer camera
+rotates the puppet body; scoped ADS may log `SCOPED-MESH-VISIBLE restored=N`, and
+the puppet remains rendered. Absence of a restore log with continued disappearance
+would falsify mesh visibility as the remaining cull and point to a later camera-
+mask writer. Full puppet ADS is test-default ON so both directions execute the
+same path without hotkey ambiguity. Build succeeds; fresh PIDs 13372/7112 are
+injected and await save load.
 Relay chain untested end-to-end — hook sites may not cover actual fence break path.

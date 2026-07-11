@@ -8,6 +8,27 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-11: scoped puppet DrawControl visibility ---
+    0x141754510: (
+        "IDrawControl_HideMesh",
+        "Validates meshIndex, writes mesh[meshIndex].visible byte at +0x243 "
+        "(entry+579) to 0, then refreshes DrawControl state.",
+    ),
+    0x1417545F0: (
+        "IDrawControl_DisableMeshFromMainView",
+        "For every bound child of the selected mesh, sets render-instance flag "
+        "0x40 at instance+0x18.",
+    ),
+    0x141754A30: (
+        "IDrawControl_ShowMesh",
+        "Inverse of IDrawControl_HideMesh: writes mesh entry +579 to 0xFF and "
+        "refreshes DrawControl state.",
+    ),
+    0x141754B10: (
+        "IDrawControl_EnableMeshInMainView",
+        "Inverse of DisableMeshFromMainView: clears render-instance flag 0x40 "
+        "for every bound child of the selected mesh.",
+    ),
     # --- 2026-07-11: native grenade network-event receive path ---
     0x140BE5C80: (
         "NetEventEmitGrenade_DefaultCtor",

@@ -427,9 +427,9 @@ volatile bool g_native_fire_relay = false;
 // the puppet enters full weapon ADS — and because ss-hud-sniper-reticle-manager is
 // a PROCESS-GLOBAL singleton (see initial-findings 2026-07-04), a scoped-rifle ADS
 // on the puppet raises the sniper scope overlay on the RECEIVER's own viewport.
-// Default OFF: opt-in with F8 on the foreground window only. When ON globally it
-// injected aim-press into the shared joypad bus and broke locomotion on both copies.
-volatile bool g_puppet_relay_aim_press = false;
+// Test default ON after isolating aim delivery to the puppet's Joypad and adding
+// scoped DrawControl visibility restoration. F8 remains an emergency A/B toggle.
+volatile bool g_puppet_relay_aim_press = true;
 // Default aim animation without full ADS: relay 0x200 only for non-scoped peer aim
 // while the peer is almost stationary. This avoids the rejected run/turn jitter from
 // continuous aim-press during locomotion, while still raising the weapon on hold-aim.
@@ -1062,6 +1062,8 @@ std::byte* joypad_resolved_input_block(int joypad_index);
 bool local_game_window_foreground();
 std::uint32_t peer_effective_held_art(const coop::StatePacket& peer);
 bool peer_holds_scoped_rifle(const coop::StatePacket& peer);
+void keep_puppet_scoped_mesh_visible(
+    void* puppet, const coop::StatePacket& peer);
 std::uint32_t capture_held_weapon_art_id(void* player);
 void remove_relayed_long_gun_for_whitelist(void* puppet, std::uint32_t whitelist_art);
 int peer_slot_of_art(std::uint32_t art);
@@ -11244,11 +11246,20 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     if (peer_aiming) {
         if (g_puppet_aim_facing_from_camera) {
             apply_peer_aim_facing_to_player(puppet, pkt);
-        } else if ((g_puppet_aim_reticle_relay || pose_relay_for_peer) &&
-                   (pkt.flags & coop::kStateFlagPoseSeed) != 0 &&
+        } else if ((pkt.flags & coop::kStateFlagPoseSeed) != 0 &&
                    valid_network_orientation(pkt.pose_seed + 4)) {
-            orientation_dot =
-                blend_network_orientation(quat, pkt.pose_seed + 4, 0.55F);
+            // A camera quaternion is not a character-root quaternion. Convert
+            // the camera's -Z viewing direction to a horizontal +Z body yaw,
+            // then apply it once here after the native Player update. The old
+            // full-quaternion blend preserved the sender's free-look mismatch:
+            // the camera turned while the remote character kept its body yaw.
+            float aim_x = 0.0F;
+            float aim_y = 0.0F;
+            float aim_z = 0.0F;
+            quat_forward_neg_z(pkt.pose_seed + 4, aim_x, aim_y, aim_z);
+            float aim_yaw[4]{};
+            yaw_quat_from_horizontal_forward(aim_x, aim_z, aim_yaw);
+            orientation_dot = blend_network_orientation(quat, aim_yaw, 0.55F);
         } else if (valid_network_orientation(pkt.quat)) {
             orientation_dot = blend_network_orientation(quat, pkt.quat, 0.35F);
         }
@@ -11260,6 +11271,7 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     } else if (pkt.move_magnitude < 0.15F) {
         orientation_dot = blend_network_orientation(quat, pkt.quat, 0.18F);
     }
+    keep_puppet_scoped_mesh_visible(puppet, pkt);
     puppet_was_aiming = puppet_aiming_now;
     if (g_clone_freerun) {
         if (too_far) {
@@ -13276,6 +13288,94 @@ void scrub_puppet_scoped_ads_flag(void* puppet) {
         *reinterpret_cast<std::uint32_t*>(
             static_cast<std::byte*>(puppet) + kPlayerAdsActiveOffset) = 0;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
+
+bool seh_restore_draw_control_mesh(
+    void* draw_control, unsigned int mesh_index,
+    bool hidden, bool disabled_in_main_view) {
+    using ShowMeshFn = std::int64_t(__fastcall*)(void*, unsigned int);
+    using EnableMeshInMainViewFn = void(__fastcall*)(void*, unsigned int);
+    __try {
+        if (hidden) {
+            reinterpret_cast<ShowMeshFn>(g_module + 0x1754A30)(
+                draw_control, mesh_index);
+        }
+        if (disabled_in_main_view) {
+            reinterpret_cast<EnableMeshInMainViewFn>(g_module + 0x1754B10)(
+                draw_control, mesh_index);
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void keep_puppet_scoped_mesh_visible(
+    void* puppet, const coop::StatePacket& peer) {
+    if (puppet == nullptr || !g_puppet_relay_aim_press ||
+        !peer_packet_aim_active(peer) || !peer_holds_scoped_rifle(peer) ||
+        readable_bytes(static_cast<std::byte*>(puppet) + 0x1B0) < 1) {
+        return;
+    }
+
+    auto* const player_bytes = static_cast<std::byte*>(puppet);
+    void* const draw_control = *reinterpret_cast<void**>(player_bytes + 0x198);
+    void* const fg_anim = *reinterpret_cast<void**>(player_bytes + 0x1A8);
+    if (draw_control == nullptr || fg_anim == nullptr ||
+        readable_bytes(draw_control) < 0x20 ||
+        *reinterpret_cast<void**>(draw_control) != fg_anim) {
+        return;
+    }
+
+    auto* const dc = static_cast<std::byte*>(draw_control);
+    auto* const meshes = *reinterpret_cast<std::byte**>(dc + 0x8);
+    const std::uint32_t mesh_count =
+        *reinterpret_cast<const std::uint32_t*>(dc + 0x14);
+    if (meshes == nullptr || mesh_count == 0 || mesh_count > 128 ||
+        readable_bytes(meshes) < 592) {
+        return;
+    }
+
+    unsigned restored = 0;
+    for (std::uint32_t mesh_index = 0; mesh_index < mesh_count; ++mesh_index) {
+        auto* const mesh = meshes + 592ULL * mesh_index;
+        if (readable_bytes(mesh) < 592) break;
+
+        const bool hidden =
+            *reinterpret_cast<const std::uint8_t*>(mesh + 579) != 0xFF;
+        bool disabled_in_main_view = false;
+        const std::uint8_t child_count =
+            *reinterpret_cast<const std::uint8_t*>(mesh + 578);
+        for (std::uint8_t child = 0; child < child_count; ++child) {
+            auto* const slot = mesh + 32ULL * child;
+            void* const instance = *reinterpret_cast<void**>(slot);
+            void* const main_view_binding = *reinterpret_cast<void**>(slot + 16);
+            if (instance != nullptr && main_view_binding != nullptr &&
+                readable_bytes(static_cast<std::byte*>(instance) + 28) >= 1 &&
+                (*reinterpret_cast<const std::uint32_t*>(
+                     static_cast<std::byte*>(instance) + 24) & 0x40u) != 0) {
+                disabled_in_main_view = true;
+                break;
+            }
+        }
+        if ((hidden || disabled_in_main_view) &&
+            !seh_restore_draw_control_mesh(
+                draw_control, mesh_index, hidden, disabled_in_main_view)) {
+            return;
+        }
+        if (hidden || disabled_in_main_view) ++restored;
+    }
+    if (restored != 0) {
+        static ULONGLONG last_log = 0;
+        const ULONGLONG now = GetTickCount64();
+        if (now - last_log > 500) {
+            last_log = now;
+            std::ostringstream line;
+            line << "SCOPED-MESH-VISIBLE restored=" << restored
+                 << " meshes=" << mesh_count;
+            force_log_line(line.str().c_str());
+        }
     }
 }
 
