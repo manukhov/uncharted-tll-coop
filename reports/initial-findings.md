@@ -26400,3 +26400,28 @@ sub_14040CEF0. (Saves the next agent from trying.)
 **Confirmed working today:** flight capture (pos@0x240, vel@0x260, quat@0x140 one
 frame after Init hook). The blocker is purely the native spawn/detonate call ABI.
 Throw ANIM stays walled. Probe (GRENADE-INIT/TRACK) retained; baseline stable.
+
+### 2026-07-11 GRENADE/EXPLOSION SYNC — both blocked by the descriptor/process spawn system (honest ceiling)
+
+`ProcessExplosion_Init 0x1402E7xxx` (game/process-explosion.cpp) is "Spawned via the
+process system (no direct callers)" - explosions are instantiated by the process/
+descriptor spawner with an explosion descriptor, not by a callable "explode at XYZ"
+API. Same as EmitGrenadeProjectile: **every native world object (grenade projectile,
+explosion process) is created through the descriptor/process spawn system with
+per-object descriptors derived from complex state.** There is no cheap spawn API.
+
+Consequence: grenade sync in ANY form (flight OR explosion-only) requires driving the
+native descriptor/process spawner cross-process - the SAME hard sub-problem class as
+materializing a real second player. It is a sub-project, not a quick win. The
+`Spawn Test Explosions` debug menu exists but its item is in a menu data table (no
+direct code xref to the string), so it did not yield a simple callable entry.
+
+**Confirmed working (kept):** grenade FLIGHT CAPTURE on the sender (Init hook +
+per-frame track: pos@0x240, vel@0x260, quat@0x140). The unsolved blocker is purely
+the native SPAWN/DETONATE descriptor ABI on the receiver.
+
+**Strategic note:** co-op features that REUSE/relay existing native state (enemy
+transform match by name-hash, damage relay, existing-object sync) are tractable;
+features that require SPAWNING new native world objects (grenades, explosions, real
+2nd player) all hit the descriptor/process spawn wall. Prioritize the former.
+Baseline + grenade probe stable, git clean.
