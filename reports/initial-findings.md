@@ -26678,3 +26678,15 @@ depend on capture timing.
 **Action for next turn:** REMOVE the +0x260 write / reapply_peer_grenade_arc dead-end;
 implement path (b) - construct event+0x30 transform from the relayed vel + event+0x40
 speed scalar, verify against Execute's exact basis convention. This is the real arc fix.
+
+### 2026-07-11 GRENADE wall/ground clipping = the manual per-frame position teleport (confirms the redirect)
+
+User report: peer grenade "falls through walls/ground constantly." Root: reapply_
+peer_grenade_arc runs a MANUAL ballistic sim each frame (g_peer_arc_pos += vel*dt;
+vel.y += kGrenadeGravityY) and FORCE-WRITES position via seh_write_grenade_launch_
+state(..., set_position=true). Teleporting the object's transform every frame
+bypasses collision -> clips through geometry; the manual gravity != engine gravity;
+native physics/collision never run. This confirms the redirect: the mod must NOT
+puppeteer the grenade frame-by-frame. Spawn ONCE with correct velocity seeded into
+the process descriptor (event transform basis, path b) and let native physics fly +
+collide it. REMOVE reapply_peer_grenade_arc + the set_position forcing entirely.
