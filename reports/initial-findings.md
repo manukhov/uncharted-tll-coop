@@ -26641,3 +26641,40 @@ mask writer. Full puppet ADS is test-default ON so both directions execute the
 same path without hotkey ambiguity. Build succeeds; fresh PIDs 13372/7112 are
 injected and await save load.
 Relay chain untested end-to-end — hook sites may not cover actual fence break path.
+
+### 2026-07-11 GRENADE ARC ROOT CAUSE: velocity is DERIVED from the event transform basis, not a writable field
+
+Full static trace of the grenade spawn velocity path:
+- EmitGrenadeProjectile `0x14154B3B0` computes projectileVelocity (`&v62`) from the
+  launch transform via cross-product/basis math, passes it as arg4 (r9) to the spawn
+  worker `sub_14154AAE0` ("IsFinite(projectileVelocity)", projectile-process.cpp),
+  which bakes it into the ProcessSpawnInfo/descriptor.
+- NetEventEmitGrenade::Execute `0x140BE63A0` ("Builds ProcessSpawnInfo, invokes the
+  native descriptor materializer") RE-DERIVES the same velocity from the EVENT
+  TRANSFORM (reads xmm11=[rax], xmm10=[rax+0x10] = the event+0x30 transform rows,
+  cross-product math lines 223-257) plus a scalar at event+0x40 (=g+0x6F4). It then
+  builds ProcessSpawnInfo (line 594) and spawns.
+
+**Therefore the grenade's launch velocity is a SPAWN-DESCRIPTOR value derived from the
+event transform basis - NOT a writable object field.** The current receiver machinery
+(seh_write_grenade_launch_state writing +0x260/+0x270 + reapply_peer_grenade_arc
+re-applying per frame + activation bytes) CANNOT create the arc: +0x260 is the
+physics velocity OUTPUT (on the sender it only becomes valid at dt=63, one frame after
+Init); the projectile integrates from its process/rigid-body state seeded at spawn,
+which we never set. arcForced=1/fuse ok=1 report success but the grenade drops+detonates
+at the spawn point because its spawn-seeded velocity is ~0.
+
+**Correct fix (redirect):** make the EVENT carry the correct launch basis so Execute
+derives the right velocity. The event transform (event+0x30, from Codex's
+refresh_transform(g+0x100)) is captured at dt=63 = the FLIGHT transform, not the
+throw-time launch basis. Either (a) capture the transform+scalar at throw time
+(before the first physics frame consumes/changes them - hook the throw action
+sub_14040CEF0 right after EmitGrenadeProjectile, or Init+the very next fields), or
+(b) synthesize the event transform basis from the relayed launch velocity vector
+(build an orthonormal basis whose forward = normalized velocity, scaled by |vel|) so
+Execute's cross-product math reproduces it. Path (b) is self-contained and does not
+depend on capture timing.
+
+**Action for next turn:** REMOVE the +0x260 write / reapply_peer_grenade_arc dead-end;
+implement path (b) - construct event+0x30 transform from the relayed vel + event+0x40
+speed scalar, verify against Execute's exact basis convention. This is the real arc fix.
