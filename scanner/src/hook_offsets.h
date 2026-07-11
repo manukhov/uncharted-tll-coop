@@ -12,6 +12,7 @@
 #ifndef TLL_HOOK_OFFSETS_H
 #define TLL_HOOK_OFFSETS_H
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
@@ -223,6 +224,9 @@ constexpr std::uintptr_t kPlayerRequestedInteractRva = 0x0C87D70;
 // a stock per-player interact tick.
 constexpr std::uintptr_t kPlayerBuildInteractDispatchStateRva = 0x0C805A0;
 constexpr std::uintptr_t kPlayerInteractDispatcherRva = 0x0C85D20;
+constexpr std::array<std::uintptr_t, 4> kPlayerInteractDispatcherCallsiteRvas{
+    0x0C8829B, 0x0CD4526, 0x0D74893, 0x0EC7CBA,
+};
 // Availability wrapper: calls NdInteractControl vtable+0x8. It does not start the
 // interaction; the accepted path must still call control vtable+0x28 RequestInteract.
 constexpr std::uintptr_t kInteractControlGetAvailabilityRva = 0x1C9A360;

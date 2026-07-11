@@ -17,6 +17,14 @@
       `0x140BE6260/0x140BE6140`, receiver spawn `Execute 0x140BE63A0`. UDP payload
       relay is built and injected; next runtime discriminator is owner-resolver vs
       sender-ctor failure (`GRENADE-EVENT-SEND owner=... built=...`).
+      Update: capture/send/receive now pass; peer Execute faults at stage 4. Current
+      build records exact fault RVA and exception code.
+
+- [~] **Puppet interact promotion Exp5c:** the four direct dispatcher transitions
+      are patched through a near relay + ordinary ABI wrapper. This preserves the
+      frame-from-entry-rsp function and logs dispatcher screen index. Next runtime
+      result: screen 1 means the gate is inside dispatcher state; screen 0 only
+      means the puppet's owning decision controller is skipped above it.
 
 - [ ] Получить устойчивый объект удалённого игрока в обеих копиях:
       Nadine на стороне Chloe и Chloe на стороне Nadine.

@@ -188,6 +188,7 @@ struct GrenadeEventPacket {
     std::uint16_t version = kGrenadeEventVersion;
     std::uint16_t reserved = 0;
     std::uint32_t sequence = 0;
+    std::uint32_t grenade_art_id = 0;
     std::uint8_t event_payload[kGrenadeEventPayloadBytes]{};
 };
 

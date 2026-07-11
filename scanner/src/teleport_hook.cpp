@@ -3329,6 +3329,7 @@ std::atomic<bool> g_last_grenade_event_sent{false};
 std::atomic<bool> g_applying_peer_grenade{false};
 std::atomic<std::uint32_t> g_grenade_event_send_seq{0};
 std::atomic<std::uint32_t> g_pending_grenade_event_seq{0};
+std::atomic<std::uint32_t> g_pending_grenade_event_art{0};
 std::atomic<std::uint32_t> g_last_applied_grenade_event_seq{0};
 std::atomic<bool> g_pending_grenade_event{false};
 alignas(16) std::uint8_t
@@ -3348,14 +3349,37 @@ void* seh_resolve_grenade_owner(void* grenade) {
 }
 
 bool seh_build_grenade_event_payload(
-    void* grenade, void* owner, std::uint8_t* payload) {
+    void* grenade, std::uint8_t* payload, std::uint32_t* art_id) {
     if (grenade == nullptr || payload == nullptr) return false;
     alignas(16) std::uint8_t event[0xC0]{};
-    using BuildEventFn = void*(__fastcall*)(void*, void*, void*, std::uint32_t);
-    const auto build_event = reinterpret_cast<BuildEventFn>(
-        g_module + kNetEventEmitGrenadeBuildFromProjectileRva);
+    using DefaultCtorFn = void*(__fastcall*)(void*);
+    using RefreshTransformFn = void*(__fastcall*)(void*, void*);
+    const auto default_ctor = reinterpret_cast<DefaultCtorFn>(
+        g_module + kNetEventEmitGrenadeDefaultCtorRva);
+    const auto refresh_transform = reinterpret_cast<RefreshTransformFn>(
+        g_module + 0x14E240);
     __try {
-        build_event(event, owner, grenade, 0);
+        auto* const g = static_cast<std::uint8_t*>(grenade);
+        default_ctor(event);
+        // Reproduce NetEventEmitGrenade_BuildFromProjectile except its rejected
+        // campaign-unsafe WeaponArtId_ToNetworkIndex dynamic-registry call.
+        event[0x18] = 0;  // no cross-process NetCharacter owner id
+        event[0x19] = (g[0x1521] & 0x20) != 0;
+        event[0x1A] = (g[0x1522] & 0x04) != 0;
+        event[0x1B] = (g[0x1522] & 0x08) != 0;
+        std::memcpy(event + 0x20, g + 0xD8, 4);
+        std::memset(event + 0x24, 0, 4);
+        refresh_transform(g + 0x100, event + 0x30);
+        std::memcpy(event + 0x40, g + 0x6F4, 4);
+        std::memset(event + 0x44, 0, 4);
+        event[0x48] = 1;
+        *reinterpret_cast<std::uint32_t*>(event + 0x4C) = 18;
+        std::memcpy(event + 0x50, g + 0x4E0, 4);
+        std::memcpy(event + 0x60, g + 0x4F0, 0x50);
+        std::memcpy(event + 0xB0, g + 0x540, 6);
+        if (art_id != nullptr) {
+            std::memcpy(art_id, g + 0x820, 4);
+        }
         std::memcpy(payload,
                     event + coop::kGrenadeEventPayloadOffset,
                     coop::kGrenadeEventPayloadBytes);
@@ -3375,7 +3399,7 @@ void send_grenade_event_payload(void* grenade) {
                           1, std::memory_order_relaxed) + 1;
     void* const owner = seh_resolve_grenade_owner(grenade);
     const bool built = seh_build_grenade_event_payload(
-        grenade, owner, packet.event_payload);
+        grenade, packet.event_payload, &packet.grenade_art_id);
     int sent = SOCKET_ERROR;
     if (built) {
         sent = sendto(
@@ -3388,6 +3412,7 @@ void send_grenade_event_payload(void* grenade) {
     line << "GRENADE-EVENT-SEND seq=" << packet.sequence
          << " owner=0x" << std::hex
          << reinterpret_cast<std::uintptr_t>(owner) << std::dec
+         << " art=0x" << std::hex << packet.grenade_art_id << std::dec
          << " built=" << (built ? 1 : 0)
          << " sent=" << (sent == sizeof(packet) ? 1 : 0);
     force_log_line(line.str().c_str());
@@ -3396,9 +3421,29 @@ void send_grenade_event_payload(void* grenade) {
     }
 }
 
+LONG capture_grenade_event_exception(
+    EXCEPTION_POINTERS* info, std::uintptr_t* fault_rva, DWORD* fault_code) {
+    if (info != nullptr && info->ExceptionRecord != nullptr) {
+        if (fault_rva != nullptr) {
+            const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(
+                info->ExceptionRecord->ExceptionAddress);
+            *fault_rva = address >= g_module ? address - g_module : address;
+        }
+        if (fault_code != nullptr) {
+            *fault_code = info->ExceptionRecord->ExceptionCode;
+        }
+    }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 bool seh_execute_grenade_event_payload(
-    const std::uint8_t* payload, std::int64_t* result) {
-    if (payload == nullptr || result == nullptr) return false;
+    const std::uint8_t* payload, std::uint32_t grenade_art_id,
+    std::int64_t* result, int* stage, std::uintptr_t* fault_rva,
+    DWORD* fault_code) {
+    if (payload == nullptr || grenade_art_id == 0 || result == nullptr ||
+        stage == nullptr) {
+        return false;
+    }
     alignas(16) std::uint8_t event[0xC0]{};
     using DefaultCtorFn = void*(__fastcall*)(void*);
     using ExecuteFn = std::int64_t(__fastcall*)(void*);
@@ -3406,17 +3451,41 @@ bool seh_execute_grenade_event_payload(
         g_module + kNetEventEmitGrenadeDefaultCtorRva);
     const auto execute = reinterpret_cast<ExecuteFn>(
         g_module + kNetEventEmitGrenadeExecuteRva);
+    auto* const art_slot = reinterpret_cast<std::uint32_t*>(
+        g_module + kStandardWeaponArtIdTableRva + 18 * sizeof(std::uint32_t));
+    std::uint32_t original_art = 0;
+    DWORD old_protection = 0;
+    if (fault_rva != nullptr) *fault_rva = 0;
+    if (fault_code != nullptr) *fault_code = 0;
+    *stage = 1;
+    if (!VirtualProtect(art_slot, sizeof(*art_slot), PAGE_READWRITE,
+                        &old_protection)) {
+        return false;
+    }
     __try {
+        *stage = 2;
         default_ctor(event);
         std::memcpy(event + coop::kGrenadeEventPayloadOffset,
                     payload,
                     coop::kGrenadeEventPayloadBytes);
+        *stage = 3;
+        original_art = *art_slot;
+        *art_slot = grenade_art_id;
         g_applying_peer_grenade.store(true, std::memory_order_release);
+        *stage = 4;
         *result = execute(event);
         g_applying_peer_grenade.store(false, std::memory_order_release);
+        *stage = 5;
+        *art_slot = original_art;
+        DWORD ignored = 0;
+        VirtualProtect(art_slot, sizeof(*art_slot), old_protection, &ignored);
         return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    } __except (capture_grenade_event_exception(
+        GetExceptionInformation(), fault_rva, fault_code)) {
         g_applying_peer_grenade.store(false, std::memory_order_release);
+        if (original_art != 0) *art_slot = original_art;
+        DWORD ignored = 0;
+        VirtualProtect(art_slot, sizeof(*art_slot), old_protection, &ignored);
         return false;
     }
 }
@@ -3434,13 +3503,21 @@ void apply_pending_peer_grenade_event() {
     }
 
     std::int64_t result = 0;
+    int stage = 0;
+    std::uintptr_t fault_rva = 0;
+    DWORD fault_code = 0;
     const bool ok = seh_execute_grenade_event_payload(
-        g_pending_grenade_event_payload, &result);
+        g_pending_grenade_event_payload,
+        g_pending_grenade_event_art.load(std::memory_order_relaxed),
+        &result, &stage, &fault_rva, &fault_code);
     g_last_applied_grenade_event_seq.store(seq, std::memory_order_relaxed);
     std::ostringstream line;
     line << "GRENADE-EVENT-EXEC seq=" << seq
          << " ok=" << (ok ? 1 : 0)
-         << " result=0x" << std::hex << result;
+         << " stage=" << stage
+         << " result=0x" << std::hex << result
+         << " faultRva=0x" << fault_rva
+         << " faultCode=0x" << fault_code;
     force_log_line(line.str().c_str());
 }
 
@@ -6770,6 +6847,8 @@ DWORD WINAPI state_recv_thread(void*) {
                             coop::kGrenadeEventPayloadBytes);
                 g_pending_grenade_event_seq.store(
                     gp.sequence, std::memory_order_relaxed);
+                g_pending_grenade_event_art.store(
+                    gp.grenade_art_id, std::memory_order_relaxed);
                 g_pending_grenade_event.store(true, std::memory_order_release);
                 std::ostringstream line;
                 line << "GRENADE-EVENT-RECV seq=" << gp.sequence;
@@ -15769,6 +15848,116 @@ void* allocate_executable_near(const void* target, std::size_t size) {
     return nullptr;
 }
 
+using PlayerInteractDispatcherFn = bool(__fastcall*)(void*, int*);
+
+bool __fastcall hooked_player_interact_dispatch_callsite(
+    void* dispatcher, int* state) {
+    const std::uintptr_t base = g_module + kPlayerInteractDispatcherBaseRva;
+    const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(dispatcher);
+    int screen = -1;
+    if (address >= base) {
+        const std::uintptr_t delta = address - base;
+        if (delta % kPlayerInteractDispatcherStride == 0) {
+            const std::uintptr_t index = delta / kPlayerInteractDispatcherStride;
+            if (index < 6) screen = static_cast<int>(index);
+        }
+    }
+    int state_screen = -1;
+    if (state != nullptr && readable_bytes(state) >= sizeof(int)) {
+        state_screen = *state;
+    }
+    static std::atomic<std::uint64_t> calls[7]{};
+    const int counter_index = screen >= 0 && screen < 6 ? screen + 1 : 0;
+    const std::uint64_t count = calls[counter_index].fetch_add(
+                                    1, std::memory_order_relaxed) + 1;
+    static ULONGLONG last_log[7]{};
+    const ULONGLONG now = GetTickCount64();
+    if (count <= 4 || now - last_log[counter_index] >= 1000) {
+        last_log[counter_index] = now;
+        std::ostringstream line;
+        line << "INTERACT-CALLSITE screen=" << screen
+             << " stateScreen=" << state_screen
+             << " count=" << count
+             << " slot0=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(retained_player_object(0))
+             << " slot1=0x"
+             << reinterpret_cast<std::uintptr_t>(retained_player_object(1));
+        force_log_line(line.str().c_str());
+    }
+    const auto original = reinterpret_cast<PlayerInteractDispatcherFn>(
+        g_module + kPlayerInteractDispatcherRva);
+    return original(dispatcher, state);
+}
+
+bool install_player_interact_dispatch_callsite_probe() {
+    struct Site {
+        std::uint8_t* address;
+        std::uint8_t opcode;
+    };
+    std::array<Site, kPlayerInteractDispatcherCallsiteRvas.size()> sites{};
+    const std::uintptr_t original = g_module + kPlayerInteractDispatcherRva;
+    for (std::size_t i = 0; i < sites.size(); ++i) {
+        auto* const address = reinterpret_cast<std::uint8_t*>(
+            g_module + kPlayerInteractDispatcherCallsiteRvas[i]);
+        const std::uint8_t expected_opcode = i == 0 ? 0xE9 : 0xE8;
+        std::int32_t current_displacement = 0;
+        std::memcpy(&current_displacement, address + 1,
+                    sizeof(current_displacement));
+        const std::uintptr_t current_target =
+            reinterpret_cast<std::uintptr_t>(address + 5) +
+            current_displacement;
+        if (address[0] != expected_opcode || current_target != original) {
+            boot_log_line("interact callsite probe SKIPPED (site mismatch)");
+            return false;
+        }
+        sites[i] = {address, expected_opcode};
+    }
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(sites[0].address, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("interact callsite probe SKIPPED (no near relay)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_player_interact_dispatch_callsite);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    for (const Site& site : sites) {
+        const std::int64_t displacement =
+            reinterpret_cast<std::intptr_t>(relay) -
+            reinterpret_cast<std::intptr_t>(site.address + 5);
+        if (displacement < INT32_MIN || displacement > INT32_MAX) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            boot_log_line("interact callsite probe SKIPPED (relay range)");
+            return false;
+        }
+    }
+    for (const Site& site : sites) {
+        DWORD old_protection = 0;
+        if (!VirtualProtect(site.address, 5, PAGE_EXECUTE_READWRITE,
+                            &old_protection)) {
+            boot_log_line("interact callsite probe PARTIAL (protect failed)");
+            return false;
+        }
+        const std::int64_t displacement =
+            reinterpret_cast<std::intptr_t>(relay) -
+            reinterpret_cast<std::intptr_t>(site.address + 5);
+        *reinterpret_cast<std::int32_t*>(site.address + 1) =
+            static_cast<std::int32_t>(displacement);
+        FlushInstructionCache(GetCurrentProcess(), site.address, 5);
+        DWORD ignored = 0;
+        VirtualProtect(site.address, 5, old_protection, &ignored);
+    }
+    boot_log_line("interact dispatcher callsite probe installed (4 sites)");
+    return true;
+}
+
 bool install_player_input_pre_consumer_hook() {
     auto* const call = reinterpret_cast<std::uint8_t*>(g_module + 0xC9FE4F);
     constexpr std::array<std::uint8_t, 5> expected{
@@ -16908,7 +17097,9 @@ DWORD WINAPI install_hook(void*) {
     install_pickup_request_interact_gate();
     install_weapon_pickup_gate();
     install_grenade_init_probe();
-    // install_interact_update_probe();  // Exp5b: wrong vtable slot, never dispatched
+    // Exp5c: callsite relay preserves Player_InteractDispatcher's frame-from-rsp
+    // entry while observing whether stock dispatch runs for screen 0 and screen 1.
+    install_player_interact_dispatch_callsite_probe();
     install_give_weapon_diagnostic();
     install_build_fire_args_gate();
     // install_aim_target_gate();  // REVERTED: GetTargetPointFromReticle builds

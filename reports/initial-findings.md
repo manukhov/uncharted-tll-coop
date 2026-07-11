@@ -26448,3 +26448,31 @@ game thread. Success is `GRENADE-EVENT-EXEC ok=1` followed synchronously by
 `GRENADE-INIT peer event spawn`; execute without Init means rejection before
 materialization, while Init followed by immediate disappearance isolates owner/id
 remapping rather than spawn ABI. Sender echo is suppressed during peer Execute.
+
+**Runtime refinement:** first constructor-based attempt resolved the owner but
+failed before send because `WeaponArtId_ToNetworkIndex 0x140A80E50` enters the
+known campaign-unsafe dynamic registry for grenade art `0x0B8BD6D6`. Reproducing
+the constructor's direct POD copies and relaying raw art fixed capture:
+`built=1 sent=1`, followed by peer `RECV`. The first peer Execute raised before
+`ProjectileGrenade::Init`; the next build protects the temporary fixed-art table
+slot with `VirtualProtect` and logs stages 1..5. Stage 4 isolates a fault inside
+descriptor materialization; stage <=3 isolates event/table setup.
+### 2026-07-11 Exp 5c STATIC: Player_InteractDispatcher is callsite-instrumentable without a naked thunk
+
+The prior statement that callsite instrumentation requires a raw naked thunk is
+too strong. The four convergence sites are one tail `jmp` (`0x140C8829B`) and
+three ordinary `call` instructions (`0x140CD4526`, `0x140D74893`,
+`0x140EC7CBA`). At every site, `RCX` is the dispatcher address
+`0x143EC4EE0 + 0x35C0*screen`, while `RDX` is the built state block.
+
+A near relay can absolute-jump to an ordinary C++ ABI wrapper. For the three call
+sites the original return address remains on the stack; for the tail-jmp site the
+wrapper inherits the caller's return address. The wrapper then makes a fresh normal
+call to `Player_InteractDispatcher 0x140C85D20`, so its `mov rax,rsp` prologue sees
+a valid entry frame. No entry trampoline or shifted partial prologue is involved.
+
+Runtime prediction: recurring `INTERACT-CALLSITE screen=1` proves stock interact
+dispatch reaches the puppet and moves the missing pickup/aim gate inside dispatcher
+state; screen 0 without screen 1 proves the owning decision controller is skipped
+above the convergence point. No screen-0 samples during a real local interaction
+would reject the four-site coverage or wrapper installation.

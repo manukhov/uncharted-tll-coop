@@ -1365,3 +1365,20 @@ packet send. The next build separates `ProjectileGrenade_ResolveOwner` from the
 event constructor and logs the owner pointer, distinguishing resolver failure from
 constructor ABI/state failure. Two copies (PIDs 26696/7396 at handoff) are injected
 and waiting for one in-save grenade throw.
+## 2026-07-11: grenade Execute fault isolated; interact callsite probe installed
+
+**Descriptor/process wall:** native `NetEventEmitGrenade` POD relay now reaches
+`built=1 sent=1` and peer `RECV`. Campaign-unsafe
+`WeaponArtId_ToNetworkIndex` was removed from capture; raw grenade art
+`0x0B8BD6D6` is transported separately and temporarily mapped through fixed index
+18 during receive. Setup stages 1..3 pass; runtime stopped at `EXEC stage=4`, before
+peer `ProjectileGrenade::Init`, proving the remaining exception is inside
+`NetEventEmitGrenade_Execute 0x140BE63A0`. Current build logs exact exception RVA.
+
+**Puppet-controller wall:** four stock transitions to
+`Player_InteractDispatcher 0x140C85D20` were mapped: tail-jmp `0x140C8829B` and
+calls `0x140CD4526`, `0x140D74893`, `0x140EC7CBA`. All encode screen index in
+`RCX = 0x143EC4EE0 + 0x35C0*screen`. A near relay now forwards them through an
+ordinary ABI wrapper and calls the original entry normally, avoiding the broken
+partial-prologue trampoline class. Current injected PIDs 29520/30660 report the
+four-site probe installed; runtime screen 0/1 samples await save load.
