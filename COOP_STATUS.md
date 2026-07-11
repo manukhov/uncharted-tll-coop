@@ -1347,3 +1347,21 @@ availability `== 1` -> `WeaponPickupInteractControl::RequestInteract` vtable
 existing puppet-side `OnInteract` inventory suppression remains active so this
 authors the animation without applying the weapon twice. Visual confirmation of
 the pickup bend is the next runtime check.
+## 2026-07-11: NetEventEmitGrenade receiver path found; relay build ready
+
+The last grenade "descriptor/spawn ceiling" is superseded. `0x1429DCCE0` was the
+class-name string, not a vtable. RTTI resolves `NetEventEmitGrenade` vtable
+`0x1429FF448`; its `Execute` method `0x140BE63A0` already performs the complete
+`ProcessSpawnInfo` + descriptor materialization required on the receiver.
+
+The sender constructor `0x140BE5D30` and symmetric serializer/deserializer
+`0x140BE6260/0x140BE6140` prove that event bytes `+0x18..+0xB5` are the portable
+POD recipe. A versioned UDP `GrenadeEventPacket` now relays those bytes, rebuilds
+the event with default ctor `0x140BE5C80`, and executes it on the game thread.
+Peer-spawned `ProjectileGrenade::Init` is echo-suppressed.
+
+First runtime attempt reached a real local throw but logged `built=0`, before any
+packet send. The next build separates `ProjectileGrenade_ResolveOwner` from the
+event constructor and logs the owner pointer, distinguishing resolver failure from
+constructor ABI/state failure. Two copies (PIDs 26696/7396 at handoff) are injected
+and waiting for one in-save grenade throw.

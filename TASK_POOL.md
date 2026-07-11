@@ -11,6 +11,13 @@
 
 ## P0: Full Player Synchronization (CURRENT)
 
+- [~] **Grenade world-object relay (2026-07-11):** the earlier manual descriptor
+      ceiling is superseded by the native `NetEventEmitGrenade` receive path.
+      Vtable `0x1429FF448`, sender ctor `0x140BE5D30`, POD serialize/deserialize
+      `0x140BE6260/0x140BE6140`, receiver spawn `Execute 0x140BE63A0`. UDP payload
+      relay is built and injected; next runtime discriminator is owner-resolver vs
+      sender-ctor failure (`GRENADE-EVENT-SEND owner=... built=...`).
+
 - [ ] Получить устойчивый объект удалённого игрока в обеих копиях:
       Nadine на стороне Chloe и Chloe на стороне Nadine.
 - [x] Чисто проверить второй retained `Player` без ввода слота 1, второй камеры и

@@ -3325,16 +3325,139 @@ void seh_dump_grenade_object(void* g) {
 
 std::atomic<void*> g_last_grenade{nullptr};
 std::atomic<ULONGLONG> g_last_grenade_ms{0};
+std::atomic<bool> g_last_grenade_event_sent{false};
+std::atomic<bool> g_applying_peer_grenade{false};
+std::atomic<std::uint32_t> g_grenade_event_send_seq{0};
+std::atomic<std::uint32_t> g_pending_grenade_event_seq{0};
+std::atomic<std::uint32_t> g_last_applied_grenade_event_seq{0};
+std::atomic<bool> g_pending_grenade_event{false};
+alignas(16) std::uint8_t
+    g_pending_grenade_event_payload[coop::kGrenadeEventPayloadBytes]{};
+volatile bool g_grenade_event_relay = true;
+
+void* seh_resolve_grenade_owner(void* grenade) {
+    if (grenade == nullptr) return nullptr;
+    using ResolveOwnerFn = void*(__fastcall*)(void*);
+    const auto resolve_owner = reinterpret_cast<ResolveOwnerFn>(
+        g_module + kProjectileGrenadeResolveOwnerRva);
+    __try {
+        return resolve_owner(grenade);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return nullptr;
+    }
+}
+
+bool seh_build_grenade_event_payload(
+    void* grenade, void* owner, std::uint8_t* payload) {
+    if (grenade == nullptr || payload == nullptr) return false;
+    alignas(16) std::uint8_t event[0xC0]{};
+    using BuildEventFn = void*(__fastcall*)(void*, void*, void*, std::uint32_t);
+    const auto build_event = reinterpret_cast<BuildEventFn>(
+        g_module + kNetEventEmitGrenadeBuildFromProjectileRva);
+    __try {
+        build_event(event, owner, grenade, 0);
+        std::memcpy(payload,
+                    event + coop::kGrenadeEventPayloadOffset,
+                    coop::kGrenadeEventPayloadBytes);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void send_grenade_event_payload(void* grenade) {
+    if (!g_grenade_event_relay || !g_state_net.enabled ||
+        !g_state_net.peer_set || grenade == nullptr) {
+        return;
+    }
+    coop::GrenadeEventPacket packet{};
+    packet.sequence = g_grenade_event_send_seq.fetch_add(
+                          1, std::memory_order_relaxed) + 1;
+    void* const owner = seh_resolve_grenade_owner(grenade);
+    const bool built = seh_build_grenade_event_payload(
+        grenade, owner, packet.event_payload);
+    int sent = SOCKET_ERROR;
+    if (built) {
+        sent = sendto(
+            g_state_net.send_socket,
+            reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
+            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+            sizeof(g_state_net.peer_addr));
+    }
+    std::ostringstream line;
+    line << "GRENADE-EVENT-SEND seq=" << packet.sequence
+         << " owner=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(owner) << std::dec
+         << " built=" << (built ? 1 : 0)
+         << " sent=" << (sent == sizeof(packet) ? 1 : 0);
+    force_log_line(line.str().c_str());
+    if (built && sent == sizeof(packet)) {
+        g_last_grenade_event_sent.store(true, std::memory_order_release);
+    }
+}
+
+bool seh_execute_grenade_event_payload(
+    const std::uint8_t* payload, std::int64_t* result) {
+    if (payload == nullptr || result == nullptr) return false;
+    alignas(16) std::uint8_t event[0xC0]{};
+    using DefaultCtorFn = void*(__fastcall*)(void*);
+    using ExecuteFn = std::int64_t(__fastcall*)(void*);
+    const auto default_ctor = reinterpret_cast<DefaultCtorFn>(
+        g_module + kNetEventEmitGrenadeDefaultCtorRva);
+    const auto execute = reinterpret_cast<ExecuteFn>(
+        g_module + kNetEventEmitGrenadeExecuteRva);
+    __try {
+        default_ctor(event);
+        std::memcpy(event + coop::kGrenadeEventPayloadOffset,
+                    payload,
+                    coop::kGrenadeEventPayloadBytes);
+        g_applying_peer_grenade.store(true, std::memory_order_release);
+        *result = execute(event);
+        g_applying_peer_grenade.store(false, std::memory_order_release);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        g_applying_peer_grenade.store(false, std::memory_order_release);
+        return false;
+    }
+}
+
+void apply_pending_peer_grenade_event() {
+    if (!g_grenade_event_relay ||
+        !g_pending_grenade_event.exchange(false, std::memory_order_acq_rel)) {
+        return;
+    }
+    const std::uint32_t seq = g_pending_grenade_event_seq.load(
+        std::memory_order_relaxed);
+    if (seq == 0 || seq == g_last_applied_grenade_event_seq.load(
+                               std::memory_order_relaxed)) {
+        return;
+    }
+
+    std::int64_t result = 0;
+    const bool ok = seh_execute_grenade_event_payload(
+        g_pending_grenade_event_payload, &result);
+    g_last_applied_grenade_event_seq.store(seq, std::memory_order_relaxed);
+    std::ostringstream line;
+    line << "GRENADE-EVENT-EXEC seq=" << seq
+         << " ok=" << (ok ? 1 : 0)
+         << " result=0x" << std::hex << result;
+    force_log_line(line.str().c_str());
+}
 
 void* __fastcall hooked_grenade_init(void* a1, void* a2, std::int64_t a3) {
     void* const r = g_original_grenade_init != nullptr
                         ? g_original_grenade_init(a1, a2, a3)
                         : nullptr;
     seh_dump_grenade_object(a1);
+    if (g_applying_peer_grenade.load(std::memory_order_acquire)) {
+        force_log_line("GRENADE-INIT peer event spawn (sender re-arm suppressed)");
+        return r;
+    }
     // Init runs BEFORE the grenade is placed/launched (pos=FLT_MAX, vel=0). Remember
     // it so the per-frame tick can re-dump pos/vel once the engine populates them.
     g_last_grenade.store(a1, std::memory_order_release);
     g_last_grenade_ms.store(GetTickCount64(), std::memory_order_release);
+    g_last_grenade_event_sent.store(false, std::memory_order_release);
     return r;
 }
 
@@ -3360,6 +3483,12 @@ void track_thrown_grenade() {
           << d.pos[1] << "," << d.pos[2] << ") vel=(" << d.vel[0] << ","
           << d.vel[1] << "," << d.vel[2] << ")";
         force_log_line(l.str().c_str());
+        if (!g_last_grenade_event_sent.load(std::memory_order_acquire) &&
+            valid_network_position(d.pos) &&
+            std::isfinite(d.vel[0]) && std::isfinite(d.vel[1]) &&
+            std::isfinite(d.vel[2])) {
+            send_grenade_event_payload(g);
+        }
     }
 }
 
@@ -6627,6 +6756,25 @@ DWORD WINAPI state_recv_thread(void*) {
                     publish_fire_packet(fp);
                 }
             }
+        } else if (magic == coop::kGrenadeEventMagic &&
+                   received == static_cast<int>(
+                                   sizeof(coop::GrenadeEventPacket))) {
+            coop::GrenadeEventPacket gp{};
+            std::memcpy(&gp, buf, sizeof(gp));
+            if (gp.version == coop::kGrenadeEventVersion &&
+                gp.sequence != g_last_applied_grenade_event_seq.load(
+                                   std::memory_order_relaxed) &&
+                !g_pending_grenade_event.load(std::memory_order_acquire)) {
+                std::memcpy(g_pending_grenade_event_payload,
+                            gp.event_payload,
+                            coop::kGrenadeEventPayloadBytes);
+                g_pending_grenade_event_seq.store(
+                    gp.sequence, std::memory_order_relaxed);
+                g_pending_grenade_event.store(true, std::memory_order_release);
+                std::ostringstream line;
+                line << "GRENADE-EVENT-RECV seq=" << gp.sequence;
+                force_log_line(line.str().c_str());
+            }
         }
     }
     return 0;
@@ -8527,6 +8675,7 @@ void apply_peer_held_weapon_state() {
 }
 
 void send_local_player_state() {
+    apply_pending_peer_grenade_event();
     track_thrown_grenade();  // grenade pos/vel probe (independent of net gate)
     if (!g_state_net.enabled || !g_state_net.peer_set) {
         return;

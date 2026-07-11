@@ -1,0 +1,62 @@
+=== 0x141544CD0: sub_141544CD0 [0x141544CD0..0x141544D59] ===
+__int64 __fastcall sub_141544CD0(__int64 a1)
+{
+  __int64 v1; // rax
+  __int64 v2; // r8
+  __int64 result; // rax
+  int v4; // edx
+  __int64 v5; // rcx
+  __int64 v10; // rcx
+  __int128 v11; // [rsp+0h] [rbp-18h]
+
+  v1 = *(int *)(a1 + 1376);
+  if ( (int)v1 >= 0 )
+  {
+    _RAX = 2 * v1;
+    _RCX = &g_PlayerHandleForHudPublish;
+    __asm
+    {
+      vmovups xmm0, xmmword ptr [rcx+rax*8]
+      vmovq   rcx, xmm0
+    }
+    result = 0;
+    __asm { vmovups [rsp+18h+var_18], xmm0 }
+    if ( _RCX )
+    {
+      if ( DWORD2(v11) )
+      {
+        v10 = *(_QWORD *)(_RCX + 8);
+        if ( v10 )
+        {
+          if ( *(_DWORD *)(v10 + 188) == DWORD2(v11) )
+          {
+            *(_BYTE *)(v10 + 114) = 1;
+            return v10;
+          }
+        }
+      }
+    }
+  }
+  else
+  {
+    v2 = *(_QWORD *)(a1 + 1360);
+    result = 0;
+    if ( v2 )
+    {
+      v4 = *(_DWORD *)(a1 + 1368);
+      if ( v4 )
+      {
+        v5 = *(_QWORD *)(v2 + 8);
+        if ( v5 )
+        {
+          if ( *(_DWORD *)(v5 + 188) == v4 )
+          {
+            *(_BYTE *)(v5 + 114) = 1;
+            return v5;
+          }
+        }
+      }
+    }
+  }
+  return result;
+}

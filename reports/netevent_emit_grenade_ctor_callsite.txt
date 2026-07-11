@@ -1,0 +1,24 @@
+0x140BE71D0: lea     rcx, [rsp+0B8h+var_88]
+0x140BE71D2: call    sub_1415A15F0
+0x140BE71D7: nop
+0x140BE71D8: mov     [rsp+0B8h+var_88], 25h ; '%'
+0x140BE71E0: lea     rax, [rsp+0B8h+var_88]
+0x140BE71E5: mov     [rsp+0B8h+var_78], rax
+0x140BE71EA: mov     r8d, 10h
+0x140BE71F0: lea     rdx, [rsp+0B8h+var_88]
+0x140BE71F5: mov     ecx, 0C0h
+0x140BE71FA: call    sub_14159FBF0
+0x140BE71FF: mov     [rsp+0B8h+var_70], rax
+0x140BE7204: test    rax, rax
+0x140BE7207: jz      short loc_140BE721D
+0x140BE7209: mov     r9d, edi
+0x140BE720C: mov     r8, rsi
+0x140BE720F: mov     rdx, r14
+0x140BE7212: mov     rcx, rax
+0x140BE7215: call    sub_140BE5D30
+0x140BE721A: mov     rbp, rax
+0x140BE721D: mov     byte ptr [rbp+0Dh], 0
+0x140BE7221: mov     r9b, 1
+0x140BE7224: mov     r8d, 0FFFFFFFFh
+0x140BE722A: mov     rdx, rbp
+0x140BE722D: lea     rcx, qword_143DD70C0

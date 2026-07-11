@@ -26425,3 +26425,26 @@ transform match by name-hash, damage relay, existing-object sync) are tractable;
 features that require SPAWNING new native world objects (grenades, explosions, real
 2nd player) all hit the descriptor/process spawn wall. Prioritize the former.
 Baseline + grenade probe stable, git clean.
+### 2026-07-11 STATIC: NetEventEmitGrenade Execute bypasses the manual descriptor ABI
+
+The prior grenade "honest ceiling" is **REJECTED** in one specific respect:
+`0x1429DCCE0` is the `NetEventEmitGrenade` name string, not its vtable. MSVC RTTI
+resolves the actual vtable to `0x1429FF448` (type descriptor RVA `0x3761BB0`).
+
+Three independent static evidence types establish a complete receiver recipe:
+
+1. Sender constructor `0x140BE5D30` copies the live `ProjectileGrenade` state into
+   a 0xC0-byte `NetEventEmitGrenade` object.
+2. Vtable `+0x8/+0x10`, `0x140BE6140/0x140BE6260`, are symmetric deserialize /
+   serialize methods covering event fields `+0x18..+0xB5`; the payload is POD.
+3. Vtable `+0x18`, `NetEventEmitGrenade_Execute` `0x140BE63A0`, constructs
+   `ProcessSpawnInfo`, calls `ResolveOrMaterializeRuntimeStateObjectFromSelectorPacket`,
+   and binds the resulting grenade. It therefore owns the descriptor/process-spawn
+   ABI that the earlier direct `EmitGrenadeProjectile` approach was missing.
+
+Runtime experiment prediction: relay the serialized event payload over the existing
+UDP channel, reconstruct with default constructor `0x140BE5C80`, and execute on the
+game thread. Success is `GRENADE-EVENT-EXEC ok=1` followed synchronously by
+`GRENADE-INIT peer event spawn`; execute without Init means rejection before
+materialization, while Init followed by immediate disappearance isolates owner/id
+remapping rather than spawn ABI. Sender echo is suppressed during peer Execute.

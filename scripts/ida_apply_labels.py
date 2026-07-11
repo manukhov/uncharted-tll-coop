@@ -8,6 +8,39 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-11: native grenade network-event receive path ---
+    0x140BE5C80: (
+        "NetEventEmitGrenade_DefaultCtor",
+        "Initializes the 0xC0-byte receive event and its vtable. Used before "
+        "deserializing the POD payload.",
+    ),
+    0x140BE5D30: (
+        "NetEventEmitGrenade_BuildFromProjectile",
+        "Sender constructor. Copies owner identity, transform, weapon/type, and "
+        "the grenade descriptor block from a live ProjectileGrenade.",
+    ),
+    0x140BE6140: (
+        "NetEventEmitGrenade_Deserialize",
+        "Vtable +0x8. Reads the complete wire payload into event fields +0x18..+0xB5.",
+    ),
+    0x140BE6260: (
+        "NetEventEmitGrenade_Serialize",
+        "Vtable +0x10. Symmetric writer for the POD event payload.",
+    ),
+    0x140BE63A0: (
+        "NetEventEmitGrenade_Execute",
+        "Vtable +0x18 receiver apply. Builds ProcessSpawnInfo, invokes the native "
+        "descriptor materializer, and binds the spawned grenade network id.",
+    ),
+    0x140BE7000: (
+        "SendNetEventEmitGrenade",
+        "Source-identified sender wrapper in net-event-weapon.cpp. Builds a "
+        "NetEventEmitGrenade from a live ProjectileGrenade and queues it.",
+    ),
+    0x141544CD0: (
+        "ProjectileGrenade_ResolveOwner",
+        "Resolves the grenade owner from its screen index or retained owner pair.",
+    ),
     # --- 2026-07-10: Player FgAnimData async lifecycle ---
     0x141781390: (
         "AnimManager_CreateAsyncUpdateJobFunctor",

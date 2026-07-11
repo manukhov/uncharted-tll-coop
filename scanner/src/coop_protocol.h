@@ -175,6 +175,22 @@ struct FirePacket {
     std::uint8_t fire_args[kFireArgsBytes]{};
 };
 
+// Native NetEventEmitGrenade payload relay. The stock event serializer covers
+// bytes +0x18..+0xB5 of the 0xC0-byte event; these fields are POD and its Execute
+// method owns the complete ProcessSpawnInfo/descriptor materialization path.
+constexpr std::uint32_t kGrenadeEventMagic = 0x454E5247;  // "GRNE"
+constexpr std::uint16_t kGrenadeEventVersion = 1;
+constexpr std::size_t kGrenadeEventPayloadOffset = 0x18;
+constexpr std::size_t kGrenadeEventPayloadBytes = 0x9E;
+
+struct GrenadeEventPacket {
+    std::uint32_t magic = kGrenadeEventMagic;
+    std::uint16_t version = kGrenadeEventVersion;
+    std::uint16_t reserved = 0;
+    std::uint32_t sequence = 0;
+    std::uint8_t event_payload[kGrenadeEventPayloadBytes]{};
+};
+
 // Version 1 wire size: no controller_offset field (weapon_art_id immediately after sequence).
 constexpr std::size_t kFirePacketV1Bytes =
     offsetof(FirePacket, controller_offset) + sizeof(std::uint32_t) +
