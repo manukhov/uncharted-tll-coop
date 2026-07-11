@@ -4253,7 +4253,9 @@ std::atomic<std::uint32_t> g_last_applied_breakable_seq{0};
 std::atomic<std::uint8_t> g_pending_breakable_kind{0};
 std::atomic<bool> g_pending_breakable_event{false};
 alignas(16) std::uint8_t g_pending_breakable_blob[coop::kBreakableExplosionEventBytes]{};
-volatile bool g_breakable_event_relay = true;
+// Parked after BRKS runtime rejection. Keep the reverse/probe code, but do not
+// install its broad hook set while testing Player controller promotion.
+volatile bool g_breakable_event_relay = false;
 
 bool capture_breakable_event_for_relay(void* event) {
     BreakableEventClass cls{};
@@ -18558,7 +18560,11 @@ DWORD WINAPI install_hook(void*) {
     install_pickup_request_interact_gate();
     install_weapon_pickup_gate();
     install_grenade_init_probe();
-    install_breakable_event_probe();
+    if (g_breakable_event_relay) {
+        install_breakable_event_probe();
+    } else {
+        boot_log_line("breakable relay parked (hooks not installed)");
+    }
     // Exp5c: callsite relay preserves Player_InteractDispatcher's frame-from-rsp
     // entry while observing whether stock dispatch runs for screen 0 and screen 1.
     install_player_interact_dispatch_callsite_probe();

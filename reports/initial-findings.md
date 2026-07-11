@@ -26564,4 +26564,42 @@ not `+0x28`. Mismatch caused silent hook SKIPPED until fixed 2026-07-11.
 
 **Runtime rejection:** after all breakable hooks report installed, host grenade test
 still leaves peer fence intact; no `BRK-*` lines captured in `locomotion_hook.log`.
+
+### 2026-07-11 STATIC/CONFIRMED: live interact caller is Player::GunMoveShield; controller-promotion wall rejected
+
+The recurring interact callsite return `RVA 0xE84C93` belongs to
+`PlayerGunMoveShield_UpdateAndDispatch 0x140E84440`, not to the previously sampled
+BoatDriving/ReviveCharacter controllers and not to an unclassified scheduler.
+
+Independent evidence:
+
+1. The only executable-image qword reference to `0x140E84440` is at
+   `0x142A277A0`. The preceding MSVC CompleteObjectLocator identifies vtable
+   `0x142A27658` as `.?AVGunMoveShield@Player@@`; the function is slot `+0x148`.
+2. The decompile reads the owning `Player*` from action object `+0x8`, uses
+   `Player+0x39B8` as the joypad index, and contains the `aim-in-vault`, fire,
+   grenade, weapon-move, and interact decision branches expected from
+   `Player::GunMoveShield`.
+3. Runtime callsite instrumentation reaches `Player_InteractDispatchFromBuiltState`
+   from `0x140E84C8E` and logs return `0xE84C93`. Across completed two-instance
+   runs both screen 0 and screen 1 samples exist, so the earlier short window with
+   zero screen-1 calls did not establish a permanent puppet skip.
+
+**CONFIRMED correction:** the puppet is already materialized as a Player, reaches
+`Player_Update`, and can run the stock `GunMoveShield` action path. The old
+"promote the puppet into a full controller" wall is rejected as the explanation
+for missing aim/pickup animation.
+
+**REJECTED candidate:** `Player+0x3BD8` is not the main action controller.
+`Player_Update 0x1410EC230` calls its vtable `+0x80`, but runtime resolves the
+object to `PlayerCollision` vtable `0x142A112B8` and target `0x141DBDA30`; ctor
+`0x140D116D0` also installs `PlayerCollision::vftable`. No promotion or owner fix
+belongs at this field.
+
+Current aim discriminator: the mod defaults `g_puppet_relay_aim_press=false`.
+Its automatic fallback rejects moving peers and all scoped rifles, despite
+`GunMoveShield` reading the correct remote joypad index. Full F8 aim relay is now
+the controlled runtime experiment: ordinary weapons must enter stock aim while
+moving if command delivery is the remaining gate; scoped disappearance is tested
+separately as a DrawControl/visibility problem.
 Relay chain untested end-to-end — hook sites may not cover actual fence break path.

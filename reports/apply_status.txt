@@ -1,3 +1,6 @@
-apply_labels OK: 963 functions, 17 data names
+apply_labels OK: 964 functions, 18 data names
 idb_path=C:\Users\Vladimir\Desktop\TLLCoopResearch\ida\tll.i64
 save_database returned True
+
+Flushing buffers, please wait...ok
+Unloading IDP module C:\Program Files\IDA Professional 9.3\procs\pc.dll...

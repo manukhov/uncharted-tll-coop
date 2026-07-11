@@ -1578,3 +1578,23 @@ SKIPPED (mismatch logged only when `g_logging_enabled`). See
 3. If `BRKS-SEND` but `BRK-EXEC ok=0`: dump peer `scene_hash`/`world_pos` match radius;
    try direct `PublishAttackEventToTarget` / destruction-table apply instead of Execute.
 4. Add breakable symbols to `ida_apply_labels.py` once a path is CONFIRMED.
+
+## 2026-07-11: animation/aim work resumed; breakables parked
+
+- `g_breakable_event_relay=false`; broad breakable hooks are not installed while
+  Player action-state work is active. The rejected implementation remains intact.
+- Live interact return `0xE84C93` resolves to
+  `PlayerGunMoveShield_UpdateAndDispatch 0x140E84440`, RTTI
+  `Player::GunMoveShield`, vtable `0x142A27658`, slot `+0x148`. It owns the Player
+  through action `+0x8`, reads `Player+0x39B8` joypad, and contains aim/fire/
+  interact state publication.
+- Completed logs contain both screen 0 and screen 1 dispatch from this action.
+  Therefore the old puppet-controller promotion wall is rejected; the short
+  screen-0-only sample was not a permanent scheduler gate.
+- `Player+0x3BD8` was tested and rejected as an action owner: it is
+  `PlayerCollision` (vtable `0x142A112B8`, update `0x141DBDA30`, ctor
+  `0x140D116D0`). The temporary probe was removed after classification.
+- Current aim test uses the existing F8 full `0x200` relay. Default code has it
+  OFF and permits auto aim only while stationary, excluding scoped rifles. F8 was
+  toggled ON in current PIDs 3744/5860. Test ordinary weapon aim while moving,
+  then scoped rifle separately for the old DrawControl disappearance.

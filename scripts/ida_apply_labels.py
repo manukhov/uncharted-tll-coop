@@ -383,6 +383,13 @@ FUNCTIONS = {
         "Player_InteractDispatchFromBuiltState using player+0x4010 screen index; "
         "tail is PublishRuntimeStateFromDecisionNodeLikeObject (Player::Active::Update).",
     ),
+    0x140E84440: (
+        "PlayerGunMoveShield_UpdateAndDispatch",
+        "Player::GunMoveShield vtable 0x142A27658 slot +0x148. Owner Player is "
+        "stored at action+0x8. Reads the owner's joypad index at Player+0x39B8, "
+        "handles aim/fire/grenade and calls Player_InteractDispatchFromBuiltState "
+        "before PublishRuntimeStateFromDecisionNodeLikeObject.",
+    ),
     0x140422BB0: (
         "Player_PreAnimHubAndAnchorSync",
         "Sniper/aim-position sync only (size 0x304). Does NOT call "
@@ -6746,6 +6753,11 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142A27658: (
+        "PlayerGunMoveShield_Vtable",
+        "MSVC RTTI .?AVGunMoveShield@Player@@; UpdateAndDispatch is slot +0x148 "
+        "at 0x140E84440.",
+    ),
     0x143742720: (
         "g_CachedOnlineWeaponDefinitionMap",
         "Cached handle for *weapon-gameplay-defs-online*. First qword resolves "
