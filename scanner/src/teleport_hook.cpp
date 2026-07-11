@@ -1895,7 +1895,11 @@ void* install_fire_gate_detour(
     if (std::memcmp(target, expected, patch_size) != 0) {
         std::ostringstream line;
         line << label << " skipped: unexpected function prologue";
-        log_line(line.str().c_str());
+        for (std::size_t i = 0; i < patch_size && i < 20; ++i) {
+            line << " b" << i << "=0x" << std::hex
+                 << static_cast<unsigned>(target[i]) << std::dec;
+        }
+        boot_log_line(line.str().c_str());
         return nullptr;
     }
     constexpr std::size_t kJumpSize = 12;
@@ -3334,7 +3338,100 @@ std::atomic<std::uint32_t> g_last_applied_grenade_event_seq{0};
 std::atomic<bool> g_pending_grenade_event{false};
 alignas(16) std::uint8_t
     g_pending_grenade_event_payload[coop::kGrenadeEventPayloadBytes]{};
+// v2 arc fix: relayed flight transform + the grenade object the peer Execute spawns
+// (captured in the Init hook while g_applying_peer_grenade), so we can force the
+// velocity onto it after Execute and it flies the arc instead of exploding at spawn.
+float g_pending_grenade_pos[4]{};
+float g_pending_grenade_vel[4]{};
+float g_pending_grenade_quat[4]{};
+std::atomic<void*> g_peer_spawned_grenade{nullptr};
+// Per-frame arc re-apply: one-shot vel write after Execute is often overwritten by
+// native physics on the next tick; keep forcing pos/vel for ~1.2s on the peer object.
+std::atomic<void*> g_peer_arc_grenade{nullptr};
+std::atomic<ULONGLONG> g_peer_arc_until_ms{0};
+float g_peer_arc_pos[4]{};
+float g_peer_arc_vel[4]{};
+float g_peer_arc_quat[4]{0.0F, 0.0F, 0.0F, 1.0F};
+ULONGLONG g_peer_arc_last_ms = 0;
+std::atomic<std::uint32_t> g_active_grenade_throw_seq{0};
+constexpr float kGrenadeGravityY = -9.8F;
+constexpr float kGrenadeFuseDurationSec = 3.0F;
 volatile bool g_grenade_event_relay = true;
+
+bool grenade_has_launch_velocity(const float* vel) {
+    if (vel == nullptr) return false;
+    const float vx = vel[0];
+    const float vy = vel[1];
+    const float vz = vel[2];
+    if (!std::isfinite(vx) || !std::isfinite(vy) || !std::isfinite(vz)) {
+        return false;
+    }
+    return (vx * vx + vy * vy + vz * vz) > 0.25F;
+}
+
+void arm_peer_grenade_arc(void* grenade, const float* pos, const float* vel,
+                          const float* quat) {
+    if (grenade == nullptr || !grenade_has_launch_velocity(vel)) return;
+    std::memcpy(g_peer_arc_pos, pos, sizeof(g_peer_arc_pos));
+    std::memcpy(g_peer_arc_vel, vel, sizeof(g_peer_arc_vel));
+    if (quat != nullptr) {
+        std::memcpy(g_peer_arc_quat, quat, sizeof(g_peer_arc_quat));
+    }
+    g_peer_arc_last_ms = GetTickCount64();
+    g_peer_arc_grenade.store(grenade, std::memory_order_release);
+    g_peer_arc_until_ms.store(GetTickCount64() + 1200, std::memory_order_release);
+}
+
+float get_engine_time_seconds() {
+    __try {
+        void* const engine_clock = *reinterpret_cast<void**>(
+            g_module + kEngineClockPointerRva);
+        if (engine_clock == nullptr ||
+            readable_bytes(engine_clock) < 0x318) {
+            return 0.0F;
+        }
+        const auto ticks = *reinterpret_cast<const std::uint64_t*>(
+            static_cast<const std::byte*>(engine_clock) + 0x310);
+        const float scale = *reinterpret_cast<const float*>(
+            g_module + kEngineClockScaleRva);
+        return static_cast<float>(ticks) * scale;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 0.0F;
+    }
+}
+
+float read_grenade_fuse_timestamp(void* grenade) {
+    if (grenade == nullptr) return 0.0F;
+    __try {
+        const auto* g = static_cast<const std::byte*>(grenade);
+        if (readable_bytes(g + 0x3FA) < sizeof(std::int64_t)) return 0.0F;
+        const auto tick = *reinterpret_cast<const std::int64_t*>(g + 0x3F2);
+        const float scale = *reinterpret_cast<const float*>(
+            g_module + kEngineClockScaleRva);
+        return static_cast<float>(tick) * scale;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 0.0F;
+    }
+}
+
+// NetEventEmitGrenade_Execute builds ProcessSpawnInfo from event+0x30 (payload+0x18).
+// The sender's refresh_transform(+0x100) encodes throw-origin, not flight world pos —
+// peer spawns at the throw point and pops. Rewrite spawn transform + fuse/flags before
+// Execute so materialization uses the relayed in-flight state.
+void patch_peer_grenade_event_payload(std::uint8_t* payload, const float* pos,
+                                      const float* quat, float peer_fuse_time) {
+    if (payload == nullptr || !valid_network_position(pos)) return;
+    payload[0] = 1;   // NetCharacter-owner branch (safe ownerless fallback)
+    payload[1] = 0;   // clear mid-flight flags copied from sender snapshot
+    payload[2] = 0;
+    payload[3] = 0;
+    if (peer_fuse_time > 0.0F) {
+        *reinterpret_cast<float*>(payload + 0xC) = peer_fuse_time;
+    }
+    std::memcpy(payload + 0x18, pos, 12);
+    const float w = (quat != nullptr && std::isfinite(quat[3])) ? quat[3] : 1.0F;
+    std::memcpy(payload + 0x18 + 12, &w, sizeof(w));
+}
 
 void* seh_resolve_grenade_owner(void* grenade) {
     if (grenade == nullptr) return nullptr;
@@ -3367,12 +3464,26 @@ bool seh_build_grenade_event_payload(
         // falls through to ownerless spawn; the alternative branch calls
         // sub_140A97380 against an empty campaign registry and divides by zero.
         event[0x18] = 1;
-        event[0x19] = (g[0x1521] & 0x20) != 0;
-        event[0x1A] = (g[0x1522] & 0x04) != 0;
-        event[0x1B] = (g[0x1522] & 0x08) != 0;
+        // Do not relay mid-flight fuse/land flags; peer Execute needs a fresh launch.
+        event[0x19] = 0;
+        event[0x1A] = 0;
+        event[0x1B] = 0;
         std::memcpy(event + 0x20, g + 0xD8, 4);
-        std::memset(event + 0x24, 0, 4);
-        refresh_transform(g + 0x100, event + 0x30);
+        // Native NetEventEmitGrenade_BuildFromProjectile stores fuse/spawn time at
+        // event+0x24 from grenade+0x3F2 * g_EngineClockToSeconds. Zeroing this made
+        // peer Execute treat the fuse as already elapsed (instant detonation).
+        *reinterpret_cast<float*>(event + 0x24) =
+            read_grenade_fuse_timestamp(grenade);
+        // Use live world position for spawn transform, not hierarchy-local +0x100.
+        GrenadeDump gd{};
+        if (seh_read_grenade_object(grenade, &gd) &&
+            valid_network_position(gd.pos)) {
+            std::memcpy(event + 0x30, gd.pos, 12);
+            const float w = std::isfinite(gd.quat[3]) ? gd.quat[3] : 1.0F;
+            std::memcpy(event + 0x3C, &w, sizeof(w));
+        } else {
+            refresh_transform(g + 0x100, event + 0x30);
+        }
         std::memcpy(event + 0x40, g + 0x6F4, 4);
         std::memset(event + 0x44, 0, 4);
         event[0x48] = 1;
@@ -3403,6 +3514,14 @@ void send_grenade_event_payload(void* grenade) {
     void* const owner = seh_resolve_grenade_owner(grenade);
     const bool built = seh_build_grenade_event_payload(
         grenade, packet.event_payload, &packet.grenade_art_id);
+    // v2: capture the live flight transform so the receiver can force the arc.
+    GrenadeDump gd{};
+    if (readable_bytes(static_cast<std::byte*>(grenade) + 0x864) >= 4 &&
+        seh_read_grenade_object(grenade, &gd)) {
+        std::memcpy(packet.pos, gd.pos, sizeof(packet.pos));
+        std::memcpy(packet.vel, gd.vel, sizeof(packet.vel));
+        std::memcpy(packet.quat, gd.quat, sizeof(packet.quat));
+    }
     int sent = SOCKET_ERROR;
     if (built) {
         sent = sendto(
@@ -3417,10 +3536,74 @@ void send_grenade_event_payload(void* grenade) {
          << reinterpret_cast<std::uintptr_t>(owner) << std::dec
          << " art=0x" << std::hex << packet.grenade_art_id << std::dec
          << " built=" << (built ? 1 : 0)
-         << " sent=" << (sent == sizeof(packet) ? 1 : 0);
+         << " sent=" << (sent == sizeof(packet) ? 1 : 0)
+         << " pos=(" << packet.pos[0] << "," << packet.pos[1] << ","
+         << packet.pos[2] << ")"
+         << " vel=(" << packet.vel[0] << "," << packet.vel[1] << ","
+         << packet.vel[2] << ")";
     force_log_line(line.str().c_str());
     if (built && sent == sizeof(packet)) {
         g_last_grenade_event_sent.store(true, std::memory_order_release);
+        g_active_grenade_throw_seq.store(packet.sequence,
+                                         std::memory_order_release);
+    }
+}
+
+void send_grenade_kinematics_update(const GrenadeDump& gd) {
+    if (!g_grenade_event_relay || !g_state_net.enabled ||
+        !g_state_net.peer_set) {
+        return;
+    }
+    const std::uint32_t seq = g_active_grenade_throw_seq.load(
+        std::memory_order_relaxed);
+    if (seq == 0 || !valid_network_position(gd.pos) ||
+        !grenade_has_launch_velocity(gd.vel)) {
+        return;
+    }
+    coop::GrenadeKinematicsPacket packet{};
+    packet.sequence = seq;
+    std::memcpy(packet.pos, gd.pos, sizeof(packet.pos));
+    std::memcpy(packet.vel, gd.vel, sizeof(packet.vel));
+    const int sent = sendto(
+        g_state_net.send_socket,
+        reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
+        reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+        sizeof(g_state_net.peer_addr));
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (sent == sizeof(packet) && (now - last_log) >= 200) {
+        last_log = now;
+        std::ostringstream line;
+        line << "GRENADE-KIN-SEND seq=" << seq
+             << " pos=(" << gd.pos[0] << "," << gd.pos[1] << ","
+             << gd.pos[2] << ")"
+             << " vel=(" << gd.vel[0] << "," << gd.vel[1] << ","
+             << gd.vel[2] << ")";
+        force_log_line(line.str().c_str());
+    }
+}
+
+bool seh_start_peer_grenade_fuse(void* grenade) {
+    if (grenade == nullptr) return false;
+    using LaunchSetupFn = void(__fastcall*)(void*, void*);
+    using StartFuseFn = void(__fastcall*)(void*, float, int, float);
+    const auto launch_setup = reinterpret_cast<LaunchSetupFn>(
+        g_module + kProjectileGrenadeLaunchSetupRva);
+    const auto start_fuse = reinterpret_cast<StartFuseFn>(
+        g_module + kSendNetEventGrenadeStartFuseRva);
+    __try {
+        auto* b = static_cast<std::byte*>(grenade);
+        if (readable_bytes(b + 0x1214) < 8) return false;
+        launch_setup(b + 0x1210, grenade);
+        const float now = get_engine_time_seconds();
+        if (now <= 0.0F) return false;
+        // SendNetEventGrenadeStartFuse first float is fuse END time, not start.
+        // Passing `now` made the peer grenade detonate instantly at spawn.
+        const float fuse_end = now + kGrenadeFuseDurationSec;
+        start_fuse(grenade, fuse_end, 0, 0.0F);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
     }
 }
 
@@ -3471,6 +3654,12 @@ bool seh_execute_grenade_event_payload(
         std::memcpy(event + coop::kGrenadeEventPayloadOffset,
                     payload,
                     coop::kGrenadeEventPayloadBytes);
+        // Re-stamp fuse time to the peer's current engine clock so Execute does not
+        // inherit a stale/zero sender timestamp and pop the grenade immediately.
+        const float peer_now = get_engine_time_seconds();
+        if (peer_now > 0.0F) {
+            *reinterpret_cast<float*>(event + 0x24) = peer_now;
+        }
         *stage = 3;
         original_art = *art_slot;
         *art_slot = grenade_art_id;
@@ -3493,6 +3682,90 @@ bool seh_execute_grenade_event_payload(
     }
 }
 
+bool seh_refresh_grenade_derived_transform(void* grenade) {
+    if (grenade == nullptr) return false;
+    using RefreshFn = std::int64_t(__fastcall*)(void*);
+    const auto refresh = reinterpret_cast<RefreshFn>(
+        g_module + kNdGameObjectRefreshWorldTransformRva);
+    __try {
+        refresh(grenade);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_write_grenade_launch_state(void* grenade, const float* pos,
+                                    const float* vel, const float* quat,
+                                    bool set_position) {
+    __try {
+        auto* b = static_cast<std::byte*>(grenade);
+        std::memcpy(b + kPlayerVelocityOffset, vel, 12);
+        if (readable_bytes(b + kPlayerVelocityMirrorOffset) >= 12) {
+            std::memcpy(b + kPlayerVelocityMirrorOffset, vel, 12);
+        }
+        if (set_position && pos != nullptr && valid_network_position(pos)) {
+            std::memcpy(b + kPlayerLocalPosOffset, pos, 12);
+            std::memcpy(b + kWorldPositionOffset, pos, 12);
+            if (readable_bytes(b + kPlayerLocalRootMirrorOffset + 12) >= 12) {
+                std::memcpy(b + kPlayerLocalRootMirrorOffset, pos, 12);
+            }
+            if (readable_bytes(b + kPlayerCollisionRootOffset + 12) >= 12) {
+                std::memcpy(b + kPlayerCollisionRootOffset, pos, 12);
+            }
+        }
+        if (quat != nullptr && std::isfinite(quat[0]) && std::isfinite(quat[3])) {
+            std::memcpy(b + kPlayerQuatOffset, quat, 16);
+        }
+        // ProjectileGrenade_ActiveUpdate expects these activation bytes before physics.
+        if (readable_bytes(b + 0x1523) >= 1) {
+            b[0x672] = std::byte{1};
+            b[0x675] = std::byte{1};
+            b[0x1522] = std::byte{static_cast<std::uint8_t>(
+                std::to_integer<std::uint8_t>(b[0x1522]) | 0x04)};
+            // Suppress premature landed/det flags on peer-spawned grenades.
+            if (set_position) {
+                b[0x1522] = std::byte{static_cast<std::uint8_t>(
+                    std::to_integer<std::uint8_t>(b[0x1522]) & ~0x0A)};
+                b[0x1523] = std::byte{static_cast<std::uint8_t>(
+                    std::to_integer<std::uint8_t>(b[0x1523]) & ~0x02)};
+            }
+        }
+        seh_refresh_grenade_derived_transform(grenade);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void apply_grenade_kinematics_update(const coop::GrenadeKinematicsPacket& kp) {
+    if (kp.sequence == 0 ||
+        kp.sequence != g_active_grenade_throw_seq.load(
+                            std::memory_order_relaxed)) {
+        return;
+    }
+    void* g = g_peer_arc_grenade.load(std::memory_order_acquire);
+    if (g == nullptr) return;
+    std::memcpy(g_peer_arc_pos, kp.pos, sizeof(g_peer_arc_pos));
+    std::memcpy(g_peer_arc_vel, kp.vel, sizeof(g_peer_arc_vel));
+    g_peer_arc_last_ms = GetTickCount64();
+    if (seh_write_grenade_launch_state(
+            g, g_peer_arc_pos, g_peer_arc_vel, g_peer_arc_quat, true)) {
+        static ULONGLONG last_log = 0;
+        const ULONGLONG now = GetTickCount64();
+        if ((now - last_log) >= 200) {
+            last_log = now;
+            std::ostringstream line;
+            line << "GRENADE-KIN-RECV seq=" << kp.sequence
+                 << " pos=(" << kp.pos[0] << "," << kp.pos[1] << ","
+                 << kp.pos[2] << ")"
+                 << " vel=(" << kp.vel[0] << "," << kp.vel[1] << ","
+                 << kp.vel[2] << ")";
+            force_log_line(line.str().c_str());
+        }
+    }
+}
+
 void apply_pending_peer_grenade_event() {
     if (!g_grenade_event_relay ||
         !g_pending_grenade_event.exchange(false, std::memory_order_acq_rel)) {
@@ -3509,19 +3782,100 @@ void apply_pending_peer_grenade_event() {
     int stage = 0;
     std::uintptr_t fault_rva = 0;
     DWORD fault_code = 0;
+    g_peer_spawned_grenade.store(nullptr, std::memory_order_release);
+    patch_peer_grenade_event_payload(
+        g_pending_grenade_event_payload,
+        g_pending_grenade_pos,
+        g_pending_grenade_quat,
+        get_engine_time_seconds());
+    {
+        std::ostringstream pl;
+        pl << "GRENADE-EVENT-PATCH pos=(" << g_pending_grenade_pos[0] << ","
+           << g_pending_grenade_pos[1] << "," << g_pending_grenade_pos[2]
+           << ") fuse=" << get_engine_time_seconds();
+        force_log_line(pl.str().c_str());
+    }
     const bool ok = seh_execute_grenade_event_payload(
         g_pending_grenade_event_payload,
         g_pending_grenade_event_art.load(std::memory_order_relaxed),
         &result, &stage, &fault_rva, &fault_code);
     g_last_applied_grenade_event_seq.store(seq, std::memory_order_relaxed);
+    // ARC FIX (v2): force the relayed live velocity (and position) onto the grenade
+    // Execute just spawned, so native physics flies the arc instead of dropping it.
+    void* const spawned = g_peer_spawned_grenade.exchange(
+        nullptr, std::memory_order_acq_rel);
+    bool arc_forced = false;
+    if (ok && spawned != nullptr &&
+        grenade_has_launch_velocity(g_pending_grenade_vel)) {
+        arc_forced = seh_write_grenade_launch_state(
+            spawned, g_pending_grenade_pos, g_pending_grenade_vel,
+            g_pending_grenade_quat, true);
+        if (arc_forced) {
+            arm_peer_grenade_arc(
+                spawned, g_pending_grenade_pos, g_pending_grenade_vel,
+                g_pending_grenade_quat);
+            g_active_grenade_throw_seq.store(seq, std::memory_order_release);
+            const bool fuse_started = seh_start_peer_grenade_fuse(spawned);
+            std::ostringstream fl;
+            fl << "GRENADE-FUSE-START ok=" << (fuse_started ? 1 : 0);
+            force_log_line(fl.str().c_str());
+        }
+    }
     std::ostringstream line;
     line << "GRENADE-EVENT-EXEC seq=" << seq
          << " ok=" << (ok ? 1 : 0)
          << " stage=" << stage
+         << " spawned=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(spawned) << std::dec
+         << " arcForced=" << (arc_forced ? 1 : 0)
          << " result=0x" << std::hex << result
          << " faultRva=0x" << fault_rva
          << " faultCode=0x" << fault_code;
     force_log_line(line.str().c_str());
+}
+
+void reapply_peer_grenade_arc() {
+    void* g = g_peer_arc_grenade.load(std::memory_order_acquire);
+    if (g == nullptr) return;
+    const ULONGLONG until = g_peer_arc_until_ms.load(std::memory_order_acquire);
+    const ULONGLONG now = GetTickCount64();
+    if (now > until) {
+        g_peer_arc_grenade.store(nullptr, std::memory_order_release);
+        return;
+    }
+    if (readable_bytes(static_cast<std::byte*>(g) + 0x864) < 4) {
+        g_peer_arc_grenade.store(nullptr, std::memory_order_release);
+        return;
+    }
+    static ULONGLONG last_log = 0;
+    const bool log_now = (now - last_log) >= 200;
+    if (g_peer_arc_last_ms > 0) {
+        const float dt = static_cast<float>(now - g_peer_arc_last_ms) * 0.001F;
+        if (dt > 0.0F && dt < 0.15F) {
+            g_peer_arc_pos[0] += g_peer_arc_vel[0] * dt;
+            g_peer_arc_pos[1] += g_peer_arc_vel[1] * dt;
+            g_peer_arc_pos[2] += g_peer_arc_vel[2] * dt;
+            g_peer_arc_vel[1] += kGrenadeGravityY * dt;
+        }
+    }
+    g_peer_arc_last_ms = now;
+    if (seh_write_grenade_launch_state(
+            g, g_peer_arc_pos, g_peer_arc_vel, g_peer_arc_quat, true)) {
+        if (log_now) {
+            last_log = now;
+            GrenadeDump d{};
+            if (seh_read_grenade_object(g, &d)) {
+                std::ostringstream l;
+                l << "GRENADE-PEER-TRACK dt=" << (until - now)
+                  << " pos=(" << d.pos[0] << "," << d.pos[1] << ","
+                  << d.pos[2] << ") vel=(" << d.vel[0] << "," << d.vel[1]
+                  << "," << d.vel[2] << ")";
+                force_log_line(l.str().c_str());
+            }
+        }
+    } else {
+        g_peer_arc_grenade.store(nullptr, std::memory_order_release);
+    }
 }
 
 void* __fastcall hooked_grenade_init(void* a1, void* a2, std::int64_t a3) {
@@ -3530,6 +3884,9 @@ void* __fastcall hooked_grenade_init(void* a1, void* a2, std::int64_t a3) {
                         : nullptr;
     seh_dump_grenade_object(a1);
     if (g_applying_peer_grenade.load(std::memory_order_acquire)) {
+        // This is the grenade the peer's Execute is spawning - remember it so the
+        // apply path can force the relayed velocity onto it (arc fix).
+        g_peer_spawned_grenade.store(a1, std::memory_order_release);
         force_log_line("GRENADE-INIT peer event spawn (sender re-arm suppressed)");
         return r;
     }
@@ -3564,10 +3921,10 @@ void track_thrown_grenade() {
           << d.vel[1] << "," << d.vel[2] << ")";
         force_log_line(l.str().c_str());
         if (!g_last_grenade_event_sent.load(std::memory_order_acquire) &&
-            valid_network_position(d.pos) &&
-            std::isfinite(d.vel[0]) && std::isfinite(d.vel[1]) &&
-            std::isfinite(d.vel[2])) {
+            valid_network_position(d.pos) && grenade_has_launch_velocity(d.vel)) {
             send_grenade_event_payload(g);
+        } else if (g_last_grenade_event_sent.load(std::memory_order_acquire)) {
+            send_grenade_kinematics_update(d);
         }
     }
 }
@@ -3586,6 +3943,989 @@ bool install_grenade_init_probe() {
                       ? "grenade Init probe installed"
                       : "grenade Init probe SKIPPED");
     return g_original_grenade_init != nullptr;
+}
+
+// ============================================================================
+// BREAKABLE / WALL SYNC — capture NetEventBreakableAttack*WithResults dispatch
+// ============================================================================
+void* allocate_executable_near(const void* target, std::size_t size);
+
+using NetGameManagerSendNetEventMaskFn = __int64(__fastcall*)(
+    void* mgr, void* event, int mask, char flag);
+NetGameManagerSendNetEventMaskFn g_original_net_event_send_mask = nullptr;
+
+using BreakableExplosionWithResultsExecuteFn = void(__fastcall*)(
+    void* event, __int64 screen_ctx, __int64 resolver_ctx);
+using BreakableProjectileWithResultsExecuteFn = void(__fastcall*)(
+    void* event, __int64 screen_ctx, __int64 resolver_ctx);
+using BreakableExplosionExecuteFn = char(__fastcall*)(
+    void* event, __int64 screen_ctx, __int64 resolver_ctx);
+using BreakableProjectileExecuteFn = __int64(__fastcall*)(
+    void* event, __int64 screen_ctx, __int64 resolver_ctx);
+using BreakableSyncExecuteFn = void(__fastcall*)(
+    void* event, __int64 screen_ctx, __int64 resolver_ctx);
+using NetGameManagerMulticastFn = void(__fastcall*)(
+    void* mgr, void* event, int mask, char flag);
+using SendNetEventSyncBreakableFn = void(__fastcall*)(int, void*);
+using SimpleBreakableExplosionDamageFn = void(__fastcall*)(
+    void* simple_breakable, double damage_scale_x, double damage_scale_y,
+    void* attack_context, int attack_component, int attack_field, int attack_index,
+    void* attack_owner);
+using NetObjectResolveByIdFn = __int64(__fastcall*)(void* table, std::uint32_t net_id,
+                                                   __int64 a3);
+using NetObjectTableEntryToObjectFn = __int64(__fastcall*)(void* entry);
+
+NetObjectResolveByIdFn g_original_net_object_resolve = nullptr;
+SendNetEventSyncBreakableFn g_original_send_sync_breakable = nullptr;
+SimpleBreakableExplosionDamageFn g_original_explosion_damage_fn = nullptr;
+
+std::atomic<std::uint32_t> g_last_breakable_sync_net_id{0};
+std::atomic<ULONGLONG> g_last_breakable_sync_tick{0};
+std::atomic<void*> g_deferred_breakable_sync_sb{nullptr};
+std::atomic<ULONGLONG> g_deferred_breakable_sync_when{0};
+alignas(4) float g_breakable_sync_world_pos[3]{};
+alignas(4) float g_pending_breakable_world_pos[3]{};
+std::atomic<std::uint32_t> g_breakable_sync_scene_hash{0};
+std::atomic<std::uint32_t> g_pending_breakable_scene_hash{0};
+std::atomic<std::uint32_t> g_breakable_resolver_override_id{0};
+std::atomic<void*> g_breakable_resolver_override_obj{nullptr};
+
+void log_breakable_line(const std::ostringstream& line) {
+    const std::string text = line.str();
+    force_log_line(text.c_str());
+}
+
+bool read_simple_breakable_world_pos(const void* simple_breakable, float out[3]) {
+    if (simple_breakable == nullptr || out == nullptr) {
+        return false;
+    }
+    void* mutable_sb = const_cast<void*>(simple_breakable);
+    seh_refresh_grenade_derived_transform(mutable_sb);
+    auto* bytes = static_cast<const std::byte*>(simple_breakable);
+    if (readable_bytes(bytes + kWorldPositionOffset + 12) < 12) {
+        return false;
+    }
+    std::memcpy(out, bytes + kWorldPositionOffset, 12);
+    return valid_network_position(out);
+}
+
+bool simple_breakable_candidate(const void* obj) {
+    if (obj == nullptr) {
+        return false;
+    }
+    auto* bytes = static_cast<const std::byte*>(obj);
+    if (readable_bytes(bytes + 0x240) < 8) {
+        return false;
+    }
+    void* destruction = nullptr;
+    std::memcpy(&destruction, bytes + 0x238, sizeof(destruction));
+    return destruction != nullptr;
+}
+
+template <typename Visitor>
+void foreach_net_registry_object(const Visitor& visitor) {
+    if (g_module == 0) {
+        return;
+    }
+    auto* table = reinterpret_cast<std::uint8_t*>(g_module + kNetObjectResolverTableRva);
+    if (readable_bytes(table + 200) < 200) {
+        return;
+    }
+    std::uint32_t bucket_count = 0;
+    std::memcpy(&bucket_count, table + 192, sizeof(bucket_count));
+    if (bucket_count == 0) {
+        return;
+    }
+    void* bucket_base = nullptr;
+    std::memcpy(&bucket_base, table + 48, sizeof(bucket_base));
+    if (bucket_base == nullptr) {
+        return;
+    }
+    auto* buckets = static_cast<std::byte*>(bucket_base);
+    void* sentinel = nullptr;
+    std::memcpy(&sentinel, buckets + 8ULL * bucket_count, sizeof(sentinel));
+    const auto to_object = reinterpret_cast<NetObjectTableEntryToObjectFn>(
+        g_module + kNetObjectTableEntryToObjectRva);
+    for (std::uint32_t bucket = 0; bucket < bucket_count; ++bucket) {
+        void* entry = nullptr;
+        std::memcpy(&entry, buckets + 8ULL * bucket, sizeof(entry));
+        while (entry != nullptr && entry != sentinel) {
+            void* obj = reinterpret_cast<void*>(to_object(entry));
+            if (obj != nullptr) {
+                visitor(obj);
+            }
+            void* next = nullptr;
+            std::memcpy(&next, entry, sizeof(next));
+            entry = next;
+        }
+    }
+}
+
+void* find_simple_breakable_by_scene_hash(std::uint32_t scene_hash) {
+    if (scene_hash == 0) {
+        return nullptr;
+    }
+    void* found = nullptr;
+    foreach_net_registry_object([&](void* obj) {
+        if (found != nullptr || !simple_breakable_candidate(obj)) {
+            return;
+        }
+        std::uint32_t candidate_hash = 0;
+        if (readable_bytes(static_cast<std::byte*>(obj) + 0x3C) < 4) {
+            return;
+        }
+        std::memcpy(&candidate_hash, static_cast<std::byte*>(obj) + 0x38,
+                    sizeof(candidate_hash));
+        if (candidate_hash == scene_hash) {
+            found = obj;
+        }
+    });
+    return found;
+}
+
+void* peek_net_object_from_table(std::uint32_t net_id) {
+    if (net_id == 0 || g_module == 0) {
+        return nullptr;
+    }
+    auto* table = reinterpret_cast<std::uint8_t*>(g_module + kNetObjectResolverTableRva);
+    if (readable_bytes(table + 200) < 200) {
+        return nullptr;
+    }
+    std::uint32_t bucket_count = 0;
+    std::memcpy(&bucket_count, table + 192, sizeof(bucket_count));
+    if (bucket_count == 0) {
+        return nullptr;
+    }
+    void* bucket_base = nullptr;
+    std::memcpy(&bucket_base, table + 48, sizeof(bucket_base));
+    if (bucket_base == nullptr) {
+        return nullptr;
+    }
+    auto* buckets = static_cast<std::byte*>(bucket_base);
+    void* sentinel = nullptr;
+    std::memcpy(&sentinel, buckets + 8ULL * bucket_count, sizeof(sentinel));
+    void* entry = nullptr;
+    std::memcpy(&entry, buckets + 8ULL * (net_id % bucket_count), sizeof(entry));
+    const auto to_object = reinterpret_cast<NetObjectTableEntryToObjectFn>(
+        g_module + kNetObjectTableEntryToObjectRva);
+    while (entry != nullptr && entry != sentinel) {
+        std::uint32_t entry_id = 0;
+        std::memcpy(&entry_id, static_cast<std::byte*>(entry) + 16, sizeof(entry_id));
+        if (entry_id == net_id) {
+            return reinterpret_cast<void*>(to_object(entry));
+        }
+        void* next = nullptr;
+        std::memcpy(&next, entry, sizeof(next));
+        entry = next;
+    }
+    return nullptr;
+}
+
+void* find_simple_breakable_near_position(const float target[3], float max_dist_sq) {
+    if (target == nullptr || max_dist_sq <= 0.0f) {
+        return nullptr;
+    }
+    void* best = nullptr;
+    float best_dist_sq = max_dist_sq;
+    foreach_net_registry_object([&](void* obj) {
+        if (!simple_breakable_candidate(obj)) {
+            return;
+        }
+        float pos[3]{};
+        if (!read_simple_breakable_world_pos(obj, pos)) {
+            return;
+        }
+        const float dx = pos[0] - target[0];
+        const float dy = pos[1] - target[1];
+        const float dz = pos[2] - target[2];
+        const float dist_sq = dx * dx + dy * dy + dz * dz;
+        if (dist_sq <= best_dist_sq) {
+            best_dist_sq = dist_sq;
+            best = obj;
+        }
+    });
+    return best;
+}
+
+__int64 __fastcall hooked_net_object_resolve(void* table, std::uint32_t net_id,
+                                             __int64 a3) {
+    const auto override_id =
+        g_breakable_resolver_override_id.load(std::memory_order_relaxed);
+    void* override_obj =
+        g_breakable_resolver_override_obj.load(std::memory_order_relaxed);
+    if (override_id != 0 && net_id == override_id && override_obj != nullptr) {
+        return reinterpret_cast<__int64>(override_obj);
+    }
+    if (g_original_net_object_resolve == nullptr) {
+        return 0;
+    }
+    return g_original_net_object_resolve(table, net_id, a3);
+}
+
+bool install_breakable_resolver_override_hook() {
+    constexpr std::array<std::uint8_t, 15> kResolvePrologue{
+        0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C, 0x24, 0x10,
+        0x48, 0x89, 0x74, 0x24, 0x18,
+    };
+    g_original_net_object_resolve = reinterpret_cast<NetObjectResolveByIdFn>(
+        install_fire_gate_detour(
+            kNetObjectResolveByIdRva,
+            kResolvePrologue.data(),
+            kResolvePrologue.size(),
+            reinterpret_cast<void*>(&hooked_net_object_resolve),
+            "breakable net-object resolve override"));
+    boot_log_line(g_original_net_object_resolve != nullptr
+                      ? "breakable net-object resolve override installed"
+                      : "breakable net-object resolve override SKIPPED");
+    return g_original_net_object_resolve != nullptr;
+}
+
+struct BreakableEventClass {
+    std::uint8_t kind = 0;
+    std::size_t blob_size = 0;
+    bool projectile_packet = false;
+};
+
+std::size_t breakable_blob_size_for_kind(std::uint8_t kind) {
+    switch (kind) {
+        case coop::kBreakableNetEventTypeSync:
+            return coop::kBreakableSyncEventBytes;
+        case coop::kBreakableNetEventTypeProjectileWithResults:
+            return coop::kBreakableProjectileEventBytes;
+        case coop::kBreakableNetEventTypeProjectilePlain:
+            return coop::kBreakableProjectilePlainEventBytes;
+        case coop::kBreakableNetEventTypeExplosionPlain:
+            return coop::kBreakableExplosionPlainEventBytes;
+        case coop::kBreakableNetEventTypeExplosionWithResults:
+        default:
+            return coop::kBreakableExplosionEventBytes;
+    }
+}
+
+bool classify_breakable_net_event(const void* event, BreakableEventClass* out) {
+    if (event == nullptr || out == nullptr) return false;
+    auto* e = static_cast<const std::byte*>(event);
+    if (readable_bytes(e + 12) < 4) return false;
+    std::uint32_t tag = 0;
+    std::memcpy(&tag, e + 8, sizeof(tag));
+    const auto low = static_cast<std::uint8_t>(tag & 0xFFu);
+    if (tag == coop::kBreakableNetEventTagSync &&
+        readable_bytes(e + coop::kBreakableSyncEventBytes) >=
+            coop::kBreakableSyncEventBytes) {
+        *out = {coop::kBreakableNetEventTypeSync, coop::kBreakableSyncEventBytes,
+                false};
+        return true;
+    }
+    if (low == coop::kBreakableNetEventTypeExplosionWithResults &&
+        readable_bytes(e + coop::kBreakableExplosionEventBytes) >=
+            coop::kBreakableExplosionEventBytes) {
+        *out = {coop::kBreakableNetEventTypeExplosionWithResults,
+                coop::kBreakableExplosionEventBytes, false};
+        return true;
+    }
+    if (low == coop::kBreakableNetEventTypeProjectileWithResults &&
+        readable_bytes(e + coop::kBreakableProjectileEventBytes) >=
+            coop::kBreakableProjectileEventBytes) {
+        *out = {coop::kBreakableNetEventTypeProjectileWithResults,
+                coop::kBreakableProjectileEventBytes, true};
+        return true;
+    }
+    if (tag == coop::kBreakableNetEventTagExplosionPlain &&
+        readable_bytes(e + coop::kBreakableExplosionPlainEventBytes) >=
+            coop::kBreakableExplosionPlainEventBytes) {
+        *out = {coop::kBreakableNetEventTypeExplosionPlain,
+                coop::kBreakableExplosionPlainEventBytes, false};
+        return true;
+    }
+    if (tag == coop::kBreakableNetEventTagProjectilePlain &&
+        readable_bytes(e + coop::kBreakableProjectilePlainEventBytes) >=
+            coop::kBreakableProjectilePlainEventBytes) {
+        *out = {coop::kBreakableNetEventTypeProjectilePlain,
+                coop::kBreakableProjectilePlainEventBytes, true};
+        return true;
+    }
+    return false;
+}
+
+std::atomic<std::uint32_t> g_breakable_event_send_seq{0};
+std::atomic<std::uint32_t> g_pending_breakable_seq{0};
+std::atomic<std::uint32_t> g_last_applied_breakable_seq{0};
+std::atomic<std::uint8_t> g_pending_breakable_kind{0};
+std::atomic<bool> g_pending_breakable_event{false};
+alignas(16) std::uint8_t g_pending_breakable_blob[coop::kBreakableExplosionEventBytes]{};
+volatile bool g_breakable_event_relay = true;
+
+bool capture_breakable_event_for_relay(void* event) {
+    BreakableEventClass cls{};
+    if (!classify_breakable_net_event(event, &cls)) {
+        return false;
+    }
+    if (!g_breakable_event_relay || !g_state_net.enabled ||
+        !g_state_net.peer_set || event == nullptr) {
+        return false;
+    }
+    auto* e = static_cast<const std::byte*>(event);
+    std::uint32_t net_id = 0;
+    if (readable_bytes(e + 28) >= 4) {
+        std::memcpy(&net_id, e + 24, sizeof(net_id));
+    }
+    const std::uint32_t seq =
+        g_breakable_event_send_seq.fetch_add(1, std::memory_order_relaxed) + 1;
+    int sent = SOCKET_ERROR;
+    if (cls.kind == coop::kBreakableNetEventTypeSync) {
+        coop::BreakableSyncPacket packet{};
+        packet.sequence = seq;
+        packet.event_kind = cls.kind;
+        packet.net_object_id = net_id;
+        packet.scene_hash =
+            g_breakable_sync_scene_hash.load(std::memory_order_relaxed);
+        std::memcpy(packet.event_blob, event, cls.blob_size);
+        std::memcpy(packet.world_pos, g_breakable_sync_world_pos,
+                    sizeof(packet.world_pos));
+        sent = sendto(
+            g_state_net.send_socket,
+            reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
+            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+            sizeof(g_state_net.peer_addr));
+        std::ostringstream line;
+        line << "BRKS-SEND seq=" << packet.sequence
+             << " netId=" << net_id
+             << " hash=0x" << std::hex << packet.scene_hash << std::dec
+             << " pos=(" << packet.world_pos[0] << "," << packet.world_pos[1]
+             << "," << packet.world_pos[2] << ")"
+             << " sent=" << (sent == static_cast<int>(sizeof(packet)) ? 1 : 0);
+        log_breakable_line(line);
+        return sent != SOCKET_ERROR;
+    }
+    if (cls.projectile_packet) {
+        coop::BreakableProjectilePacket packet{};
+        packet.sequence = seq;
+        packet.event_kind = cls.kind;
+        packet.net_object_id = net_id;
+        std::memcpy(packet.event_blob, event, cls.blob_size);
+        sent = sendto(
+            g_state_net.send_socket,
+            reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
+            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+            sizeof(g_state_net.peer_addr));
+        std::ostringstream line;
+        line << "BRKP-SEND seq=" << packet.sequence
+             << " kind=0x" << std::hex << static_cast<unsigned>(cls.kind)
+             << std::dec << " netId=" << net_id
+             << " bytes=" << cls.blob_size
+             << " sent=" << (sent == static_cast<int>(sizeof(packet)) ? 1 : 0);
+        force_log_line(line.str().c_str());
+    } else {
+        coop::BreakableExplosionPacket packet{};
+        packet.sequence = seq;
+        packet.event_kind = cls.kind;
+        packet.net_object_id = net_id;
+        std::memcpy(packet.event_blob, event, cls.blob_size);
+        sent = sendto(
+            g_state_net.send_socket,
+            reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
+            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+            sizeof(g_state_net.peer_addr));
+        std::ostringstream line;
+        line << "BRKW-SEND seq=" << packet.sequence
+             << " kind=0x" << std::hex << static_cast<unsigned>(cls.kind)
+             << std::dec << " netId=" << net_id
+             << " bytes=" << cls.blob_size
+             << " sent=" << (sent == static_cast<int>(sizeof(packet)) ? 1 : 0);
+        if (cls.kind == coop::kBreakableNetEventTypeExplosionWithResults &&
+            readable_bytes(e + 52) >= 4) {
+            std::uint32_t pts = 0;
+            std::memcpy(&pts, e + 48, sizeof(pts));
+            line << " dmgPts=" << pts;
+        }
+        force_log_line(line.str().c_str());
+    }
+    return sent != SOCKET_ERROR;
+}
+
+__int64 __fastcall hooked_net_event_send_mask(
+    void* mgr, void* event, int mask, char flag) {
+    BreakableEventClass cls{};
+    if (classify_breakable_net_event(event, &cls)) {
+        if (!capture_breakable_event_for_relay(event)) {
+            static ULONGLONG last_probe = 0;
+            const ULONGLONG now = GetTickCount64();
+            if ((now - last_probe) >= 250) {
+                last_probe = now;
+                std::ostringstream line;
+                line << "BRK-MASK kind=0x" << std::hex
+                     << static_cast<unsigned>(cls.kind) << std::dec
+                     << " relay=" << (g_breakable_event_relay ? 1 : 0)
+                     << " net=" << (g_state_net.enabled ? 1 : 0)
+                     << " peer=" << (g_state_net.peer_set ? 1 : 0);
+                force_log_line(line.str().c_str());
+            }
+        }
+    }
+    return g_original_net_event_send_mask(mgr, event, mask, flag);
+}
+
+void __fastcall hooked_breakable_sync_multicast_callsite(
+    void* mgr, void* event, int mask, char flag) {
+    capture_breakable_event_for_relay(event);
+    const auto multicast = reinterpret_cast<NetGameManagerMulticastFn>(
+        g_module + kNetGameManagerMulticastNetEventRva);
+    multicast(mgr, event, mask, flag);
+}
+
+void notify_local_breakable_damage(void* simple_breakable) {
+    if (simple_breakable == nullptr) {
+        return;
+    }
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log >= 200) {
+        last_log = now;
+        std::ostringstream line;
+        line << "BRK-LOCAL-APPLY sb=" << simple_breakable;
+        log_breakable_line(line);
+    }
+    g_deferred_breakable_sync_sb.store(simple_breakable,
+                                       std::memory_order_relaxed);
+    g_deferred_breakable_sync_when.store(now + 250,
+                                         std::memory_order_relaxed);
+}
+
+void __fastcall hooked_send_sync_breakable(int ctx, void* simple_breakable) {
+    if (g_original_send_sync_breakable != nullptr) {
+        g_original_send_sync_breakable(ctx, simple_breakable);
+    }
+    notify_local_breakable_damage(simple_breakable);
+}
+
+void __fastcall hooked_simple_breakable_explosion_damage(
+    void* simple_breakable, double damage_scale_x, double damage_scale_y,
+    void* attack_context, int attack_component, int attack_field, int attack_index,
+    void* attack_owner) {
+    if (g_original_explosion_damage_fn != nullptr) {
+        g_original_explosion_damage_fn(
+            simple_breakable, damage_scale_x, damage_scale_y, attack_context,
+            attack_component, attack_field, attack_index, attack_owner);
+    }
+    notify_local_breakable_damage(simple_breakable);
+}
+
+bool install_send_sync_breakable_hook() {
+    // tll.exe 1.4.21058: REX.W push rsi + mov [rsp+30h],-2 before saves.
+    constexpr std::array<std::uint8_t, 18> kSendSyncPrologue{
+        0x40, 0x56, 0x57, 0x41, 0x56, 0x48, 0x83, 0xEC, 0x40,
+        0x48, 0xC7, 0x44, 0x24, 0x30, 0xFE, 0xFF, 0xFF, 0xFF,
+    };
+    g_original_send_sync_breakable = reinterpret_cast<SendNetEventSyncBreakableFn>(
+        install_fire_gate_detour(
+            kSendNetEventSyncBreakableRva,
+            kSendSyncPrologue.data(),
+            kSendSyncPrologue.size(),
+            reinterpret_cast<void*>(&hooked_send_sync_breakable),
+            "breakable SendNetEventSyncBreakable hook"));
+    boot_log_line(g_original_send_sync_breakable != nullptr
+                      ? "breakable SendNetEventSyncBreakable hook installed"
+                      : "breakable SendNetEventSyncBreakable hook SKIPPED");
+    return g_original_send_sync_breakable != nullptr;
+}
+
+bool install_simple_breakable_explosion_damage_hook() {
+    // tll.exe 1.4.21058: REX.W push rbp before stack frame setup.
+    constexpr std::array<std::uint8_t, 19> kExplosionDamagePrologue{
+        0x40, 0x55, 0x41, 0x56, 0x48, 0x8D, 0xAC, 0x24, 0x18, 0xFC, 0xFF, 0xFF,
+        0x48, 0x81, 0xEC, 0xE8, 0x04, 0x00, 0x00,
+    };
+    g_original_explosion_damage_fn =
+        reinterpret_cast<SimpleBreakableExplosionDamageFn>(
+            install_fire_gate_detour(
+                kSimpleBreakableExplosionDamageFnRva,
+                kExplosionDamagePrologue.data(),
+                kExplosionDamagePrologue.size(),
+                reinterpret_cast<void*>(&hooked_simple_breakable_explosion_damage),
+                "breakable explosion-damage fn hook"));
+    boot_log_line(g_original_explosion_damage_fn != nullptr
+                      ? "breakable explosion-damage fn hook installed"
+                      : "breakable explosion-damage fn hook SKIPPED");
+    return g_original_explosion_damage_fn != nullptr;
+}
+
+void pump_deferred_breakable_sync() {
+    void* sb = g_deferred_breakable_sync_sb.load(std::memory_order_relaxed);
+    if (sb == nullptr) {
+        return;
+    }
+    const ULONGLONG when =
+        g_deferred_breakable_sync_when.load(std::memory_order_relaxed);
+    if (GetTickCount64() < when) {
+        return;
+    }
+    g_deferred_breakable_sync_sb.store(nullptr, std::memory_order_relaxed);
+    if (!g_breakable_event_relay || !g_state_net.enabled ||
+        !g_state_net.peer_set) {
+        return;
+    }
+    auto* bytes = static_cast<const std::byte*>(sb);
+    if (readable_bytes(bytes + 0xD8 + 4) < 4) {
+        return;
+    }
+    std::uint32_t net_id = 0;
+    std::memcpy(&net_id, bytes + 0xD8, sizeof(net_id));
+    std::uint32_t scene_hash = 0;
+    if (readable_bytes(bytes + 0x3C) >= 4) {
+        std::memcpy(&scene_hash, bytes + 0x38, sizeof(scene_hash));
+    }
+    g_breakable_sync_scene_hash.store(scene_hash, std::memory_order_relaxed);
+    float world_pos[3]{};
+    if (!read_simple_breakable_world_pos(sb, world_pos)) {
+        world_pos[0] = world_pos[1] = world_pos[2] = 0.0f;
+    }
+    std::memcpy(g_breakable_sync_world_pos, world_pos, sizeof(world_pos));
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG last =
+        g_last_breakable_sync_tick.load(std::memory_order_relaxed);
+    if (net_id != 0 &&
+        net_id == g_last_breakable_sync_net_id.load(std::memory_order_relaxed) &&
+        now >= last && now - last < 250) {
+        return;
+    }
+    g_last_breakable_sync_net_id.store(net_id, std::memory_order_relaxed);
+    g_last_breakable_sync_tick.store(now, std::memory_order_relaxed);
+    const auto send_sync = reinterpret_cast<SendNetEventSyncBreakableFn>(
+        g_module + kSendNetEventSyncBreakableRva);
+    send_sync(0, sb);
+    std::ostringstream line;
+    line << "BRK-SYNC-TRIGGER netId=" << net_id
+         << " hash=0x" << std::hex << scene_hash << std::dec
+         << " pos=(" << world_pos[0] << "," << world_pos[1] << ","
+         << world_pos[2] << ")";
+    log_breakable_line(line);
+}
+
+bool install_breakable_sync_multicast_callsite_hook() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kSendNetEventSyncBreakableMulticastCallRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line("breakable sync multicast callsite SKIPPED (not E8)");
+        return false;
+    }
+    std::int32_t displacement = 0;
+    std::memcpy(&displacement, call_site + 1, sizeof(displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(displacement);
+    const std::uintptr_t expected =
+        g_module + kNetGameManagerMulticastNetEventRva;
+    if (target != expected) {
+        boot_log_line("breakable sync multicast callsite SKIPPED (target)");
+        return false;
+    }
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(allocate_executable_near(
+        call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("breakable sync multicast callsite SKIPPED (relay)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_breakable_sync_multicast_callsite);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_disp =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_disp < INT32_MIN || new_disp > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("breakable sync multicast callsite SKIPPED (range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("breakable sync multicast callsite SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_disp);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line("breakable sync multicast callsite installed");
+    return true;
+}
+
+std::atomic<bool> g_breakable_local_apply_hook_installed{false};
+
+bool install_simple_breakable_local_apply_hook();
+bool install_simple_breakable_local_apply_hook_alt();
+
+bool install_simple_breakable_local_apply_hook() {
+    auto* const site = reinterpret_cast<std::uint8_t*>(
+        g_module + kBreakableLocalApplyPostRva);
+    constexpr std::array<std::uint8_t, 6> kExpectedPrefix{
+        0x83, 0x7E, 0x1C, 0x00, 0x0F, 0x85,
+    };
+    if (std::memcmp(site, kExpectedPrefix.data(), kExpectedPrefix.size()) !=
+        0) {
+        std::ostringstream line;
+        line << "breakable local-apply hook SKIPPED (prologue)";
+        for (std::size_t i = 0; i < 10; ++i) {
+            line << " b" << i << "=0x" << std::hex
+                 << static_cast<unsigned>(site[i]) << std::dec;
+        }
+        boot_log_line(line.str().c_str());
+        return false;
+    }
+    std::int32_t jnz_disp = 0;
+    std::memcpy(&jnz_disp, site + 6, sizeof(jnz_disp));
+    const std::uintptr_t jnz_target =
+        reinterpret_cast<std::uintptr_t>(site + 10) +
+        static_cast<std::intptr_t>(jnz_disp);
+    auto* const cmp_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kBreakableLocalApplyPostRva + 10);
+    std::array<std::uint8_t, 8> cmp_bytes{};
+    std::memcpy(cmp_bytes.data(), cmp_site, cmp_bytes.size());
+    const auto resume = g_module + kBreakableLocalApplyResumeRva;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(site, 128));
+    if (relay == nullptr) {
+        boot_log_line("breakable local-apply hook SKIPPED (relay)");
+        return false;
+    }
+    const auto notify_addr =
+        reinterpret_cast<std::uintptr_t>(&notify_local_breakable_damage);
+    std::size_t o = 0;
+    const auto emit = [&](std::initializer_list<std::uint8_t> bytes) {
+        for (std::uint8_t b : bytes) {
+            relay[o++] = b;
+        }
+    };
+    emit({0x41, 0x56});                         // push r14
+    emit({0x49, 0x8B, 0xCE});                   // mov rcx, r14
+    emit({0x48, 0x83, 0xEC, 0x28});             // sub rsp, 0x28
+    emit({0x48, 0xB8});
+    std::memcpy(relay + o, &notify_addr, sizeof(notify_addr));
+    o += sizeof(notify_addr);
+    emit({0xFF, 0xD0});                         // call rax
+    emit({0x48, 0x83, 0xC4, 0x28});             // add rsp, 0x28
+    emit({0x41, 0x5E});                         // pop r14
+    emit({0x83, 0x7E, 0x1C, 0x00});             // cmp dword ptr [rsi+1Ch], 0
+    emit({0x0F, 0x85});
+    const std::int32_t relay_jnz_disp = static_cast<std::int32_t>(
+        jnz_target - (reinterpret_cast<std::uintptr_t>(relay + o + 4)));
+    std::memcpy(relay + o, &relay_jnz_disp, sizeof(relay_jnz_disp));
+    o += sizeof(relay_jnz_disp);
+    for (std::uint8_t b : cmp_bytes) {
+        relay[o++] = b;
+    }
+    emit({0x48, 0xB8});
+    std::memcpy(relay + o, &resume, sizeof(resume));
+    o += sizeof(resume);
+    emit({0xFF, 0xE0});                         // jmp rax
+    FlushInstructionCache(GetCurrentProcess(), relay, o);
+
+    DWORD old_protection = 0;
+    if (!VirtualProtect(site, 12, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        boot_log_line("breakable local-apply hook SKIPPED (protect)");
+        return false;
+    }
+    site[0] = 0x48;
+    site[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(site + 2) =
+        reinterpret_cast<std::uintptr_t>(relay);
+    site[10] = 0xFF;
+    site[11] = 0xE0;
+    FlushInstructionCache(GetCurrentProcess(), site, 12);
+    DWORD ignored = 0;
+    VirtualProtect(site, 12, old_protection, &ignored);
+    boot_log_line("breakable local-apply hook installed");
+    return true;
+}
+
+bool install_simple_breakable_local_apply_hook_alt() {
+    auto* const site = reinterpret_cast<std::uint8_t*>(
+        g_module + kBreakableLocalApplyAltPostRva);
+    if (site[0] != 0x90) {
+        return false;
+    }
+    const auto resume = g_module + kBreakableLocalApplyAltResumeRva;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(site, 64));
+    if (relay == nullptr) {
+        return false;
+    }
+    const auto notify_addr =
+        reinterpret_cast<std::uintptr_t>(&notify_local_breakable_damage);
+    std::size_t o = 0;
+    const auto emit = [&](std::initializer_list<std::uint8_t> bytes) {
+        for (std::uint8_t b : bytes) {
+            relay[o++] = b;
+        }
+    };
+    emit({0x41, 0x56});
+    emit({0x49, 0x8B, 0xCE});
+    emit({0x48, 0x83, 0xEC, 0x28});
+    emit({0x48, 0xB8});
+    std::memcpy(relay + o, &notify_addr, sizeof(notify_addr));
+    o += sizeof(notify_addr);
+    emit({0xFF, 0xD0});
+    emit({0x48, 0x83, 0xC4, 0x28});
+    emit({0x41, 0x5E});
+    emit({0x48, 0xB8});
+    std::memcpy(relay + o, &resume, sizeof(resume));
+    o += sizeof(resume);
+    emit({0xFF, 0xE0});
+    FlushInstructionCache(GetCurrentProcess(), relay, o);
+
+    DWORD old_protection = 0;
+    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        return false;
+    }
+    site[0] = 0xE9;
+    const std::int32_t disp = static_cast<std::int32_t>(
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(site + 5));
+    std::memcpy(site + 1, &disp, sizeof(disp));
+    FlushInstructionCache(GetCurrentProcess(), site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(site, 5, old_protection, &ignored);
+    boot_log_line("breakable local-apply alt hook installed");
+    return true;
+}
+
+bool install_breakable_explosion_damage_post_hook() {
+    auto* const site = reinterpret_cast<std::uint8_t*>(
+        g_module + kBreakableExplosionDamagePostRva);
+    if (site[0] != 0xE9) {
+        std::ostringstream line;
+        line << "breakable explosion-damage post hook SKIPPED (not E9)";
+        for (std::size_t i = 0; i < 6; ++i) {
+            line << " b" << i << "=0x" << std::hex
+                 << static_cast<unsigned>(site[i]) << std::dec;
+        }
+        boot_log_line(line.str().c_str());
+        return false;
+    }
+    const auto resume = g_module + kBreakableExplosionDamageResumeRva;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(site, 64));
+    if (relay == nullptr) {
+        boot_log_line("breakable explosion-damage post hook SKIPPED (relay)");
+        return false;
+    }
+    const auto notify_addr =
+        reinterpret_cast<std::uintptr_t>(&notify_local_breakable_damage);
+    std::size_t o = 0;
+    const auto emit = [&](std::initializer_list<std::uint8_t> bytes) {
+        for (std::uint8_t b : bytes) {
+            relay[o++] = b;
+        }
+    };
+    emit({0x49, 0x8B, 0xCE});                   // mov rcx, r14
+    emit({0x48, 0x83, 0xEC, 0x28});             // sub rsp, 0x28
+    emit({0x48, 0xB8});
+    std::memcpy(relay + o, &notify_addr, sizeof(notify_addr));
+    o += sizeof(notify_addr);
+    emit({0xFF, 0xD0});                         // call rax
+    emit({0x48, 0x83, 0xC4, 0x28});             // add rsp, 0x28
+    emit({0x48, 0xB8});
+    std::memcpy(relay + o, &resume, sizeof(resume));
+    o += sizeof(resume);
+    emit({0xFF, 0xE0});                         // jmp rax
+    FlushInstructionCache(GetCurrentProcess(), relay, o);
+
+    DWORD old_protection = 0;
+    if (!VirtualProtect(site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        boot_log_line("breakable explosion-damage post hook SKIPPED (protect)");
+        return false;
+    }
+    site[0] = 0xE9;
+    const std::int32_t disp = static_cast<std::int32_t>(
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(site + 5));
+    std::memcpy(site + 1, &disp, sizeof(disp));
+    FlushInstructionCache(GetCurrentProcess(), site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(site, 5, old_protection, &ignored);
+    boot_log_line("breakable explosion-damage post hook installed");
+    return true;
+}
+
+bool install_breakable_event_probe() {
+    constexpr std::array<std::uint8_t, 16> kSendMaskPrologue{
+        0x48, 0x89, 0x5C, 0x24, 0x18, 0x55, 0x56, 0x57,
+        0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
+    };
+    g_original_net_event_send_mask =
+        reinterpret_cast<NetGameManagerSendNetEventMaskFn>(
+            install_fire_gate_detour(
+                kNetGameManagerSendNetEventMaskRva,
+                kSendMaskPrologue.data(),
+                kSendMaskPrologue.size(),
+                reinterpret_cast<void*>(&hooked_net_event_send_mask),
+                "breakable NetEvent send-mask probe"));
+    boot_log_line(g_original_net_event_send_mask != nullptr
+                      ? "breakable NetEvent send-mask probe installed"
+                      : "breakable NetEvent send-mask probe SKIPPED");
+
+    install_breakable_sync_multicast_callsite_hook();
+    install_breakable_resolver_override_hook();
+    install_send_sync_breakable_hook();
+    install_simple_breakable_explosion_damage_hook();
+
+    if (install_simple_breakable_local_apply_hook()) {
+        g_breakable_local_apply_hook_installed.store(
+            true, std::memory_order_release);
+    } else if (install_simple_breakable_local_apply_hook_alt()) {
+        g_breakable_local_apply_hook_installed.store(
+            true, std::memory_order_release);
+    }
+    install_breakable_explosion_damage_post_hook();
+
+    return g_original_net_event_send_mask != nullptr;
+}
+
+bool seh_execute_breakable_event_blob(
+    std::uint8_t kind, const std::uint8_t* blob, std::size_t blob_size,
+    std::uintptr_t* fault_rva, DWORD* fault_code) {
+    if (blob == nullptr || blob_size == 0) return false;
+    if (fault_rva != nullptr) *fault_rva = 0;
+    if (fault_code != nullptr) *fault_code = 0;
+    const auto resolver_ctx =
+        static_cast<__int64>(g_module + kNetObjectResolverTableRva);
+    __try {
+        if (kind == coop::kBreakableNetEventTypeExplosionWithResults &&
+            blob_size >= coop::kBreakableExplosionEventBytes) {
+            alignas(16) std::uint8_t event[coop::kBreakableExplosionEventBytes]{};
+            std::memcpy(event, blob, coop::kBreakableExplosionEventBytes);
+            const auto execute =
+                reinterpret_cast<BreakableExplosionWithResultsExecuteFn>(
+                    g_module +
+                    kNetEventBreakableAttackExplosionWithResultsExecuteRva);
+            execute(event, 0, resolver_ctx);
+            return true;
+        }
+        if (kind == coop::kBreakableNetEventTypeExplosionPlain &&
+            blob_size >= coop::kBreakableExplosionPlainEventBytes) {
+            alignas(16) std::uint8_t event[coop::kBreakableExplosionPlainEventBytes]{};
+            std::memcpy(event, blob, coop::kBreakableExplosionPlainEventBytes);
+            const auto execute = reinterpret_cast<BreakableExplosionExecuteFn>(
+                g_module + kNetEventBreakableAttackExplosionExecuteRva);
+            execute(event, 0, resolver_ctx);
+            return true;
+        }
+        if (kind == coop::kBreakableNetEventTypeProjectileWithResults &&
+            blob_size >= coop::kBreakableProjectileEventBytes) {
+            alignas(16) std::uint8_t event[coop::kBreakableProjectileEventBytes]{};
+            std::memcpy(event, blob, coop::kBreakableProjectileEventBytes);
+            const auto execute =
+                reinterpret_cast<BreakableProjectileWithResultsExecuteFn>(
+                    g_module +
+                    kNetEventBreakableAttackProjectileWithResultsExecuteRva);
+            execute(event, 0, resolver_ctx);
+            return true;
+        }
+        if (kind == coop::kBreakableNetEventTypeProjectilePlain &&
+            blob_size >= coop::kBreakableProjectilePlainEventBytes) {
+            alignas(16) std::uint8_t event[coop::kBreakableProjectilePlainEventBytes]{};
+            std::memcpy(event, blob, coop::kBreakableProjectilePlainEventBytes);
+            const auto execute = reinterpret_cast<BreakableProjectileExecuteFn>(
+                g_module + kNetEventBreakableAttackProjectileExecuteRva);
+            execute(event, 0, resolver_ctx);
+            return true;
+        }
+        if (kind == coop::kBreakableNetEventTypeSync &&
+            blob_size >= coop::kBreakableSyncEventBytes) {
+            alignas(16) std::uint8_t event[coop::kBreakableSyncEventBytes]{};
+            std::memcpy(event, blob, coop::kBreakableSyncEventBytes);
+            const auto execute = reinterpret_cast<BreakableSyncExecuteFn>(
+                g_module + kNetEventSyncBreakableExecuteRva);
+            execute(event, 0, resolver_ctx);
+            return true;
+        }
+    } __except (capture_grenade_event_exception(
+        GetExceptionInformation(), fault_rva, fault_code)) {
+        return false;
+    }
+    return false;
+}
+
+void apply_pending_peer_breakable_event() {
+    if (!g_breakable_event_relay ||
+        !g_pending_breakable_event.exchange(false, std::memory_order_acq_rel)) {
+        return;
+    }
+    const std::uint32_t seq = g_pending_breakable_seq.load(
+        std::memory_order_relaxed);
+    if (seq == 0 || seq == g_last_applied_breakable_seq.load(
+                               std::memory_order_relaxed)) {
+        return;
+    }
+    const auto kind = g_pending_breakable_kind.load(std::memory_order_relaxed);
+    const std::size_t blob_size = breakable_blob_size_for_kind(kind);
+    std::uint32_t net_id = 0;
+    if (readable_bytes(g_pending_breakable_blob + 28) >= 4) {
+        std::memcpy(&net_id, g_pending_breakable_blob + 24, sizeof(net_id));
+    }
+    void* resolved = nullptr;
+    if (kind == coop::kBreakableNetEventTypeSync) {
+        resolved = peek_net_object_from_table(net_id);
+        if (resolved == nullptr) {
+            const std::uint32_t scene_hash =
+                g_pending_breakable_scene_hash.load(std::memory_order_relaxed);
+            if (scene_hash != 0) {
+                resolved = find_simple_breakable_by_scene_hash(scene_hash);
+            }
+        }
+        if (resolved == nullptr &&
+            valid_network_position(g_pending_breakable_world_pos)) {
+            resolved = find_simple_breakable_near_position(
+                g_pending_breakable_world_pos, 16.0f * 16.0f);
+        }
+        if (resolved != nullptr) {
+            std::uint32_t override_id = net_id;
+            if (override_id == 0 &&
+                readable_bytes(static_cast<std::byte*>(resolved) + 0xDC) >= 4) {
+                std::memcpy(&override_id, static_cast<std::byte*>(resolved) + 0xD8,
+                            sizeof(override_id));
+                if (override_id != 0) {
+                    std::memcpy(g_pending_breakable_blob + 24, &override_id,
+                                sizeof(override_id));
+                }
+            }
+            if (override_id != 0) {
+                g_breakable_resolver_override_id.store(
+                    override_id, std::memory_order_relaxed);
+                g_breakable_resolver_override_obj.store(
+                    resolved, std::memory_order_relaxed);
+            }
+        }
+    }
+    std::uintptr_t fault_rva = 0;
+    DWORD fault_code = 0;
+    const bool ok = seh_execute_breakable_event_blob(
+        kind, g_pending_breakable_blob, blob_size, &fault_rva, &fault_code);
+    g_breakable_resolver_override_id.store(0, std::memory_order_relaxed);
+    g_breakable_resolver_override_obj.store(nullptr, std::memory_order_relaxed);
+    g_last_applied_breakable_seq.store(seq, std::memory_order_relaxed);
+    std::ostringstream line;
+    line << "BRK-EXEC seq=" << seq
+         << " kind=0x" << std::hex << static_cast<unsigned>(kind) << std::dec
+         << " netId=" << net_id
+         << " hash=0x" << std::hex
+         << g_pending_breakable_scene_hash.load(std::memory_order_relaxed)
+         << std::dec
+         << " resolved=" << resolved
+         << " pos=(" << g_pending_breakable_world_pos[0] << ","
+         << g_pending_breakable_world_pos[1] << ","
+         << g_pending_breakable_world_pos[2] << ")"
+         << " ok=" << (ok ? 1 : 0)
+         << " faultRva=0x" << std::hex << fault_rva
+         << " faultCode=0x" << fault_code << std::dec;
+    log_breakable_line(line);
 }
 
 bool install_weapon_pickup_gate() {
@@ -6852,10 +8192,119 @@ DWORD WINAPI state_recv_thread(void*) {
                     gp.sequence, std::memory_order_relaxed);
                 g_pending_grenade_event_art.store(
                     gp.grenade_art_id, std::memory_order_relaxed);
+                std::memcpy(g_pending_grenade_pos, gp.pos, sizeof(gp.pos));
+                std::memcpy(g_pending_grenade_vel, gp.vel, sizeof(gp.vel));
+                std::memcpy(g_pending_grenade_quat, gp.quat, sizeof(gp.quat));
                 g_pending_grenade_event.store(true, std::memory_order_release);
                 std::ostringstream line;
-                line << "GRENADE-EVENT-RECV seq=" << gp.sequence;
+                line << "GRENADE-EVENT-RECV seq=" << gp.sequence
+                     << " pos=(" << gp.pos[0] << "," << gp.pos[1] << ","
+                     << gp.pos[2] << ")"
+                     << " vel=(" << gp.vel[0] << "," << gp.vel[1] << ","
+                     << gp.vel[2] << ")";
                 force_log_line(line.str().c_str());
+            }
+        } else if (magic == coop::kGrenadeKinematicsMagic &&
+                   received == static_cast<int>(
+                                   sizeof(coop::GrenadeKinematicsPacket))) {
+            coop::GrenadeKinematicsPacket kp{};
+            std::memcpy(&kp, buf, sizeof(kp));
+            apply_grenade_kinematics_update(kp);
+        } else if (magic == coop::kBreakableExplosionMagic &&
+                   received == static_cast<int>(
+                                   sizeof(coop::BreakableExplosionPacket))) {
+            coop::BreakableExplosionPacket bp{};
+            std::memcpy(&bp, buf, sizeof(bp));
+            if (bp.version == coop::kBreakableEventPacketVersion &&
+                bp.sequence != g_last_applied_breakable_seq.load(
+                                   std::memory_order_relaxed) &&
+                !g_pending_breakable_event.load(std::memory_order_acquire)) {
+                const std::uint8_t kind =
+                    bp.event_kind != 0
+                        ? bp.event_kind
+                        : coop::kBreakableNetEventTypeExplosionWithResults;
+                std::memcpy(g_pending_breakable_blob,
+                            bp.event_blob,
+                            breakable_blob_size_for_kind(kind));
+                g_pending_breakable_seq.store(
+                    bp.sequence, std::memory_order_relaxed);
+                g_pending_breakable_kind.store(kind, std::memory_order_relaxed);
+                g_pending_breakable_event.store(true, std::memory_order_release);
+                std::ostringstream line;
+                line << "BRKW-RECV seq=" << bp.sequence
+                     << " kind=0x" << std::hex << static_cast<unsigned>(kind)
+                     << std::dec << " netId=" << bp.net_object_id;
+                force_log_line(line.str().c_str());
+            }
+        } else if (magic == coop::kBreakableProjectileMagic &&
+                   received == static_cast<int>(
+                                   sizeof(coop::BreakableProjectilePacket))) {
+            coop::BreakableProjectilePacket bp{};
+            std::memcpy(&bp, buf, sizeof(bp));
+            if (bp.version == coop::kBreakableEventPacketVersion &&
+                bp.sequence != g_last_applied_breakable_seq.load(
+                                   std::memory_order_relaxed) &&
+                !g_pending_breakable_event.load(std::memory_order_acquire)) {
+                const std::uint8_t kind =
+                    bp.event_kind != 0
+                        ? bp.event_kind
+                        : coop::kBreakableNetEventTypeProjectileWithResults;
+                std::memcpy(g_pending_breakable_blob,
+                            bp.event_blob,
+                            breakable_blob_size_for_kind(kind));
+                g_pending_breakable_seq.store(
+                    bp.sequence, std::memory_order_relaxed);
+                g_pending_breakable_kind.store(kind, std::memory_order_relaxed);
+                g_pending_breakable_event.store(true, std::memory_order_release);
+                std::ostringstream line;
+                line << "BRKP-RECV seq=" << bp.sequence
+                     << " kind=0x" << std::hex << static_cast<unsigned>(kind)
+                     << std::dec << " netId=" << bp.net_object_id;
+                force_log_line(line.str().c_str());
+            }
+        } else if (magic == coop::kBreakableSyncMagic) {
+            constexpr int kSyncPacketV1Size =
+                static_cast<int>(offsetof(coop::BreakableSyncPacket, world_pos));
+            constexpr int kSyncPacketV2Size =
+                static_cast<int>(sizeof(coop::BreakableSyncPacket));
+            if (received < kSyncPacketV1Size) {
+                continue;
+            }
+            coop::BreakableSyncPacket bp{};
+            const int copy_size = (std::min)(received, kSyncPacketV2Size);
+            std::memcpy(&bp, buf, static_cast<std::size_t>(copy_size));
+            if (bp.version >= 1 &&
+                bp.version <= coop::kBreakableEventPacketVersion &&
+                bp.sequence != g_last_applied_breakable_seq.load(
+                                   std::memory_order_relaxed) &&
+                !g_pending_breakable_event.load(std::memory_order_acquire)) {
+                const std::uint8_t kind = coop::kBreakableNetEventTypeSync;
+                std::memcpy(g_pending_breakable_blob, bp.event_blob,
+                            coop::kBreakableSyncEventBytes);
+                if (bp.version >= 2 && received >= kSyncPacketV2Size) {
+                    g_pending_breakable_scene_hash.store(
+                        bp.scene_hash, std::memory_order_relaxed);
+                    std::memcpy(g_pending_breakable_world_pos, bp.world_pos,
+                                sizeof(g_pending_breakable_world_pos));
+                } else {
+                    g_pending_breakable_scene_hash.store(
+                        0, std::memory_order_relaxed);
+                    g_pending_breakable_world_pos[0] = 0.0f;
+                    g_pending_breakable_world_pos[1] = 0.0f;
+                    g_pending_breakable_world_pos[2] = 0.0f;
+                }
+                g_pending_breakable_seq.store(
+                    bp.sequence, std::memory_order_relaxed);
+                g_pending_breakable_kind.store(kind, std::memory_order_relaxed);
+                g_pending_breakable_event.store(true, std::memory_order_release);
+                std::ostringstream line;
+                line << "BRKS-RECV seq=" << bp.sequence
+                     << " netId=" << bp.net_object_id
+                     << " hash=0x" << std::hex << bp.scene_hash << std::dec
+                     << " pos=(" << g_pending_breakable_world_pos[0] << ","
+                     << g_pending_breakable_world_pos[1] << ","
+                     << g_pending_breakable_world_pos[2] << ")";
+                log_breakable_line(line);
             }
         }
     }
@@ -8758,6 +10207,9 @@ void apply_peer_held_weapon_state() {
 
 void send_local_player_state() {
     apply_pending_peer_grenade_event();
+    apply_pending_peer_breakable_event();
+    pump_deferred_breakable_sync();
+    reapply_peer_grenade_arc();
     track_thrown_grenade();  // grenade pos/vel probe (independent of net gate)
     if (!g_state_net.enabled || !g_state_net.peer_set) {
         return;
@@ -17106,6 +18558,7 @@ DWORD WINAPI install_hook(void*) {
     install_pickup_request_interact_gate();
     install_weapon_pickup_gate();
     install_grenade_init_probe();
+    install_breakable_event_probe();
     // Exp5c: callsite relay preserves Player_InteractDispatcher's frame-from-rsp
     // entry while observing whether stock dispatch runs for screen 0 and screen 1.
     install_player_interact_dispatch_callsite_probe();

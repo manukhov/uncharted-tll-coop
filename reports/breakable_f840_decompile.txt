@@ -1,0 +1,49 @@
+=== 0x14088F840: sub_14088F840 [0x14088F840..0x14088F92A] ===
+__int64 __fastcall sub_14088F840(__int64 a1, __int64 a2, _BYTE *a3)
+{
+  __int64 result; // rax
+  __int64 v7; // rdi
+  __int64 v8; // rcx
+  int v9; // ebx
+  __int64 v10; // rsi
+
+  result = *(unsigned int *)(a1 + 104);
+  if ( (_DWORD)result )
+  {
+    v9 = 0;
+    if ( (int)result > 0 )
+    {
+      v10 = 0;
+      do
+      {
+        result = sub_14088F840(*(_QWORD *)(*(_QWORD *)(a1 + 96) + v10 + 32), a2, a3);
+        ++v9;
+        v10 += 64;
+      }
+      while ( v9 < *(_DWORD *)(a1 + 104) );
+    }
+  }
+  else if ( *(_BYTE *)(a1 + 35) != 1 )
+  {
+    v7 = *(_QWORD *)(a1 + 112);
+    if ( (!v7 || *(_DWORD *)(v7 + 32) != 1 || **(int **)(v7 + 24) >= 256)
+      && (!qword_146B17C08
+       || !(unsigned __int8)qword_146B17C08(
+                              "pGShape && pGShape->m_jointData.getSize() == 1 && pGShape->m_jointData[0].m_joint < 256",
+                              "d:\\perforce\\code\\big4final-tll-release\\big4\\src\\game\\gamephys\\simple-breakable.cpp",
+                              "GetJointsFromBreakableHierarchy",
+                              "Jun 30 2023 19:09:19",
+                              854,
+                              0)) )
+    {
+      sub_1422053E0(a1);
+      __debugbreak();
+    }
+    v8 = (unsigned __int8)*a3;
+    result = **(unsigned __int8 **)(v7 + 24);
+    *(_BYTE *)(v8 + a2) = result;
+    *a3 = v8 + 1;
+  }
+  return result;
+}
+

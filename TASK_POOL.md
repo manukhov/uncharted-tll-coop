@@ -11,14 +11,18 @@
 
 ## P0: Full Player Synchronization (CURRENT)
 
-- [~] **Grenade world-object relay (2026-07-11):** the earlier manual descriptor
-      ceiling is superseded by the native `NetEventEmitGrenade` receive path.
-      Vtable `0x1429FF448`, sender ctor `0x140BE5D30`, POD serialize/deserialize
-      `0x140BE6260/0x140BE6140`, receiver spawn `Execute 0x140BE63A0`. UDP payload
-      relay is built and injected; next runtime discriminator is owner-resolver vs
-      sender-ctor failure (`GRENADE-EVENT-SEND owner=... built=...`).
-      Update: capture/send/receive now pass; peer Execute faults at stage 4. Current
-      build records exact fault RVA and exception code.
+- [x] **Grenade world-object relay (2026-07-11):** CONFIRMED v6 — `GRNE` Execute
+      spawn + `GRNK` kinematics stream + derived transform write + `fuse_end=now+3s`.
+      Peer sees correct arc and landing explosion.
+
+- [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
+      Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /
+      post-site `0x88DC83`, not MP `SendNetEventBreakableAttack*` (no `BRK-MASK` in
+      campaign). Relay: deferred `SendNetEventSyncBreakable` → `BRKS` v2
+      (`scene_hash`, `world_pos`) → peer `NetEventSyncBreakable::Execute` `0xA65160`
+      + resolver override. **REJECTED runtime:** all hooks install after REX prologue
+      fix, but zero `BRK-*` log lines and peer wall stays intact. Next: confirm hook
+      fire in-game or pivot to `sub_140A657A0` / Havok break path.
 
 - [~] **Puppet interact promotion Exp5c:** the four direct dispatcher transitions
       are patched through a near relay + ordinary ABI wrapper. This preserves the

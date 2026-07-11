@@ -26501,3 +26501,67 @@ registry using event owner id `+0x1C`. The NetCharacter-owner branch (`+0x18=1`)
 searches a bounded ten-entry list and safely continues ownerless when unmatched.
 The next build selects that branch with id zero, preserving descriptor spawn while
 avoiding the empty-registry division.
+
+### 2026-07-11 GRENADE FLIGHT SYNC — CONFIRMED (peer arc + landing explosion)
+
+**Status:** CONFIRMED (user runtime, v6 build).
+
+Peer sees the host-thrown grenade fly the correct arc and detonate at the landing
+point. Throw animation on the puppet remains unsynced (cosmetic); the world
+projectile is syncable.
+
+**Working wire path:**
+- `GRNE` (`GrenadeEventPacket` v3): one-shot `NetEventEmitGrenade_Execute`
+  `0x140BE63A0` on peer; payload spawn transform patched to relayed world pos
+  (`event+0x30` / `grenade+0x240`, not hierarchy `+0x100`).
+- `GRNK` (`GrenadeKinematicsPacket`): host streams live `pos@+0x240` /
+  `vel@+0x260` ~16 Hz for ~1.2s after spawn.
+- Peer sustain: `seh_write_grenade_launch_state` writes
+  `+0x130/+0x240/+0x250/+0x280` (+`+0x260/+0x270` vel), then
+  `NdGameObject` refresh vtable `+0x2B8` `0x141BB8320`. Writing only `+0x240`
+  moved logged pos but left mesh/collision at throw origin.
+- Fuse: `SendNetEventGrenadeStartFuse` `0x140BE9380` first float is fuse **end**
+  time (event `+0x1C`). Passing `get_engine_time_seconds()` (= now) caused instant
+  peer detonation; `fuse_end = now + 3.0s` fixes it. Post-spawn also calls
+  `ProjectileGrenade_LaunchSetup` `0x141532010`.
+
+**Log tags:** `GRENADE-EVENT-SEND/RECV`, `GRENADE-EVENT-PATCH`, `GRENADE-EVENT-EXEC`,
+`GRENADE-KIN-SEND/RECV`, `GRENADE-PEER-TRACK`, `GRENADE-FUSE-START`.
+
+### 2026-07-11 BREAKABLE / DESTRUCTIBLE ENV — STATIC map + relay v1 REJECTED
+
+**Status:** STATIC (paths/fields/hooks); runtime **REJECTED** (peer fence intact).
+
+**Campaign local break path (grenade → stone fence):**
+- `SimpleBreakable::EventHandler` `0x14088D960` routes event `0x32330453` to
+  `SimpleBreakable_ExplosionDamage` `0x14088E6F0` (not the shoot/attack branch at
+  `0x14088E044`).
+- Post-return notify site: `0x14088DC83` → resume `0x14088D9DE`.
+- Native MP senders `SendNetEventBreakableAttackExplosionWithResults` `0x140A56CF0` /
+  send-mask path are **not** exercised in campaign (zero `BRK-MASK` in runtime logs).
+
+**Post-break net snapshot:**
+- `SendNetEventSyncBreakable` `0x140A655C0` builds 96-byte event tag `0x0101006B`;
+  net object id from `SimpleBreakable+0xD8`; multicast via call @ `0x140A65771`.
+- `NetEventSyncBreakable::Execute` `0x140A65160` resolves id via `sub_141622BC0`
+  `0x1622BC0` + table `0x6466FE0`; applies via NdGameObject vtable `+0xD0`
+  (`"net-breakable-sync"`).
+- `sub_140A657A0` `0x140A657A0`: auto-sync when shape type `+198==4` and not broken
+  (alternate hook candidate).
+
+**Key fields:**
+- `SimpleBreakable+0x38` scene hash (v2 peer lookup).
+- `SimpleBreakable+0xD8` net object id.
+- `SimpleBreakable+0x238` destruction table.
+- World anchor: NdGameObject `+0x240` (refresh `0x141BB8320`).
+
+**Live `tll.exe` prologue note (1.4.21058):** hook patches must include leading
+`REX.W` (`0x40`) on entry `push` and `SendNetEventSyncBreakable` stack slot `+0x30`
+not `+0x28`. Mismatch caused silent hook SKIPPED until fixed 2026-07-11.
+
+**Mod wire (`coop_protocol.h` v2):** `BRKW`/`BRKP`/`BRKS`; `BreakableSyncPacket` adds
+`scene_hash` + `world_pos[3]` for peer resolver fallback (16 m radius).
+
+**Runtime rejection:** after all breakable hooks report installed, host grenade test
+still leaves peer fence intact; no `BRK-*` lines captured in `locomotion_hook.log`.
+Relay chain untested end-to-end — hook sites may not cover actual fence break path.

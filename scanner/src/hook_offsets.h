@@ -55,6 +55,10 @@ constexpr std::uintptr_t kRetainedSlotTableRva = 0x3EEBE80;   // g_RetainedPlaye
 constexpr std::uintptr_t kPlayerVtableRva = 0x2A4BFE8;        // Player class vtable
 constexpr std::size_t kPlayerQuatOffset = 0x140;              // orientation quaternion
 constexpr std::size_t kPlayerLocalPosOffset = 0x130;          // local position vec4
+constexpr std::size_t kPlayerLocalRootMirrorOffset = 0x250;   // local/world mirror
+constexpr std::size_t kPlayerCollisionRootOffset = 0x280;     // capsule / collision root
+// NdGameObject vtable +0x2B8: derives +0x240/+0x250/+0x280 from +0x130/+0x140.
+constexpr std::uintptr_t kNdGameObjectRefreshWorldTransformRva = 0x1BB8320;
 // Player animation runtime. Player+0x1A8 is FgAnimData*; async phase bits in the
 // first DWORD select owner vtable +0x400/+0x408/+0x410 for bits 8/0x10/0x20.
 constexpr std::size_t kPlayerFgAnimDataOffset = 0x1A8;
@@ -158,6 +162,35 @@ constexpr std::uintptr_t kNetEventEmitGrenadeDefaultCtorRva = 0xBE5C80;
 constexpr std::uintptr_t kNetEventEmitGrenadeBuildFromProjectileRva = 0xBE5D30;
 constexpr std::uintptr_t kNetEventEmitGrenadeExecuteRva = 0xBE63A0;
 constexpr std::uintptr_t kProjectileGrenadeResolveOwnerRva = 0x1544CD0;
+constexpr std::uintptr_t kProjectileGrenadeLaunchSetupRva = 0x1532010;
+constexpr std::uintptr_t kSendNetEventGrenadeStartFuseRva = 0xBE9380;
+// SimpleBreakable / destructible env NetEvent relay (net-event.cpp).
+constexpr std::uintptr_t kNetGameManagerSendNetEventMaskRva = 0xA962F0;
+constexpr std::uintptr_t kSendNetEventBreakableAttackExplosionWithResultsRva =
+    0xA56CF0;
+constexpr std::uintptr_t kNetEventBreakableAttackExplosionWithResultsExecuteRva =
+    0xA56910;
+constexpr std::uintptr_t kNetEventBreakableAttackProjectileWithResultsExecuteRva =
+    0xA55580;
+constexpr std::uintptr_t kNetEventBreakableAttackExplosionExecuteRva = 0xA56290;
+constexpr std::uintptr_t kNetEventBreakableAttackProjectileExecuteRva = 0xA54F90;
+constexpr std::uintptr_t kNetEventSyncBreakableExecuteRva = 0xA65160;
+constexpr std::uintptr_t kSendNetEventSyncBreakableRva = 0xA655C0;
+constexpr std::uintptr_t kBreakableLocalApplyPostRva = 0x88E044;
+constexpr std::uintptr_t kBreakableLocalApplyJnzTargetRva = 0x88E1AE;
+constexpr std::uintptr_t kBreakableLocalApplyResumeRva = 0x88E056;
+constexpr std::uintptr_t kBreakableLocalApplyAltPostRva = 0x88E32E;
+constexpr std::uintptr_t kBreakableLocalApplyAltResumeRva = 0x88E32F;
+// SimpleBreakable::EventHandler explosion-damage event (0x32330453) -> sub_14088E6F0.
+constexpr std::uintptr_t kBreakableExplosionDamagePostRva = 0x88DC83;
+constexpr std::uintptr_t kBreakableExplosionDamageResumeRva = 0x88D9DE;
+constexpr std::uintptr_t kSimpleBreakableExplosionDamageFnRva = 0x88E6F0;
+constexpr std::uintptr_t kSendNetEventSyncBreakableMulticastCallRva = 0xA65771;
+constexpr std::uintptr_t kNetGameManagerMulticastNetEventRva = 0xA96830;
+constexpr std::uintptr_t kSimpleBreakableEventHandlerRva = 0x88D960;
+constexpr std::uintptr_t kNetObjectResolverTableRva = 0x6466FE0;
+constexpr std::uintptr_t kNetObjectResolveByIdRva = 0x1622BC0;
+constexpr std::uintptr_t kNetObjectTableEntryToObjectRva = 0x14DCE0;
 constexpr std::uintptr_t kInteractControllerUpdateVtableSlotRva = 0x2A2CB70;
 constexpr std::uintptr_t kInteractControllerUpdateRva = 0xEC6C10;
 constexpr std::uintptr_t kInputScreenBlockActivateCommandRva = 0x183A650;

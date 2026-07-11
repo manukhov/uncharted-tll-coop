@@ -1,0 +1,611 @@
+TARGET 0x14088E6F0: sub_14088E6F0 start=0x14088E6F0 end=0x14088F3E6
+0x14088E6F0: push    rbp
+0x14088E6F2: push    r14
+0x14088E6F4: lea     rbp, [rsp-3E8h]
+0x14088E6FC: sub     rsp, 4E8h
+0x14088E703: mov     rax, cs:__security_cookie
+0x14088E70A: xor     rax, rsp
+0x14088E70D: mov     [rbp+3F0h+var_C0], rax
+0x14088E714: mov     r14, r9
+0x14088E717: xor     edx, edx
+0x14088E719: mov     r9, [rcx+238h]
+0x14088E720: mov     r10, rcx
+0x14088E723: vmovss  [rsp+4F0h+var_4A8], xmm2
+0x14088E729: vmovss  [rsp+4F0h+var_4A4], xmm1
+0x14088E72F: mov     r11d, [r9+10h]
+0x14088E733: test    r11d, r11d
+0x14088E736: jz      loc_14088F3CC
+0x14088E73C: mov     r9, [r9+48h]
+0x14088E740: mov     [rsp+4F0h+arg_18], rdi
+0x14088E748: nop     dword ptr [rax+rax+00000000h]
+0x14088E750: mov     eax, edx
+0x14088E752: imul    rdi, rax, 110h
+0x14088E759: add     rdi, r9
+0x14088E75C: mov     rax, [rdi+40h]
+0x14088E760: test    rax, rax
+0x14088E763: jz      short loc_14088E7A9
+0x14088E765: cmp     byte ptr [rdi+0C6h], 4
+0x14088E76C: jnz     short loc_14088E7A9
+0x14088E76E: cmp     qword ptr [rdi+0B0h], 0
+0x14088E776: jnz     short loc_14088E7B5
+0x14088E778: mov     r8, [rax+0E8h]
+0x14088E77F: mov     rcx, [r8+18h]
+0x14088E783: cmp     dword ptr [rcx+68h], 0
+0x14088E787: jnz     short loc_14088E7B5
+0x14088E789: movzx   eax, byte ptr [rax+160h]
+0x14088E790: sub     al, 4
+0x14088E792: cmp     al, 1
+0x14088E794: ja      short loc_14088E7A9
+0x14088E796: cmp     byte ptr [rcx+23h], 1
+0x14088E79A: jz      short loc_14088E7A9
+0x14088E79C: test    byte ptr [rcx+20h], 10h
+0x14088E7A0: jnz     short loc_14088E7A9
+0x14088E7A2: cmp     qword ptr [r8+60h], 0
+0x14088E7A7: jnz     short loc_14088E7B5
+0x14088E7A9: inc     edx
+0x14088E7AB: cmp     edx, r11d
+0x14088E7AE: jb      short loc_14088E750
+0x14088E7B0: jmp     loc_14088F3C4
+0x14088E7B5: test    rdi, rdi
+0x14088E7B8: jz      loc_14088F3C4
+0x14088E7BE: mov     eax, [r10+108h]
+0x14088E7C5: lea     rcx, qword_14386FD00
+0x14088E7CC: mov     [rsp+4F0h+arg_8], rbx
+0x14088E7D4: mov     [rsp+4F0h+arg_10], rsi
+0x14088E7DC: mov     [rsp+4F0h+var_10], r15
+0x14088E7E4: mov     rcx, [rcx+rax*8]
+0x14088E7E8: vmovaps [rsp+4F0h+var_20], xmm6
+0x14088E7F1: vmovaps [rsp+4F0h+var_30], xmm7
+0x14088E7FA: vmovaps [rsp+4F0h+var_40], xmm8
+0x14088E803: vmovaps [rsp+4F0h+var_50], xmm9
+0x14088E80C: vmovaps [rsp+4F0h+var_60], xmm10
+0x14088E815: vmovaps [rsp+4F0h+var_70], xmm11
+0x14088E81E: vmovaps [rsp+4F0h+var_80], xmm12
+0x14088E827: vmovaps [rsp+4F0h+var_90], xmm13
+0x14088E830: vmovaps [rsp+4F0h+var_A0], xmm14
+0x14088E839: vmovaps [rsp+4F0h+var_B0], xmm15
+0x14088E842: test    rcx, rcx
+0x14088E845: jz      short loc_14088E857
+0x14088E847: mov     eax, [r10+10Ch]
+0x14088E84E: cmp     [rcx+50h], eax
+0x14088E851: jnz     short loc_14088E857
+0x14088E853: mov     dl, 1
+0x14088E855: jmp     short loc_14088E859
+0x14088E857: xor     dl, dl
+0x14088E859: xor     eax, eax
+0x14088E85B: test    dl, dl
+0x14088E85D: cmovnz  rax, rcx
+0x14088E861: test    rax, rax
+0x14088E864: jz      short loc_14088E891
+0x14088E866: vmovups xmm1, xmmword ptr [rax]
+0x14088E86A: vmovups xmm0, xmmword ptr [rax+10h]
+0x14088E86F: vmovups xmmword ptr [r10+110h], xmm1
+0x14088E878: vmovups xmmword ptr [r10+120h], xmm0
+0x14088E881: vmovups [rbp+3F0h+var_350], xmm1
+0x14088E889: vmovups [rbp+3F0h+var_340], xmm0
+0x14088E891: vmovups xmm10, xmmword ptr [r10+120h]
+0x14088E89A: vmovups xmm6, xmmword ptr [r10+130h]
+0x14088E8A3: vmovups xmm11, xmmword ptr [r10+140h]
+0x14088E8AC: vmovups xmm7, xmmword ptr [r10+110h]
+0x14088E8B5: vmovups xmm13, cs:xmmword_142BED700
+0x14088E8BD: mov     rbx, [rdi+40h]
+0x14088E8C1: lea     rdx, [rbp+3F0h+var_270]
+0x14088E8C8: vshufps xmm5, xmm10, xmm10, 9
+0x14088E8CE: vmulps  xmm1, xmm6, xmm5
+0x14088E8D2: vxorps  xmm12, xmm12, xmm12
+0x14088E8D7: vsubps  xmm8, xmm12, xmm10
+0x14088E8DC: vshufps xmm0, xmm10, xmm8, 93h
+0x14088E8E2: vshufps xmm9, xmm0, xmm0, 93h
+0x14088E8E7: vshufps xmm0, xmm6, xmm6, 9
+0x14088E8EC: vmulps  xmm2, xmm0, xmm10
+0x14088E8F1: vsubps  xmm3, xmm2, xmm1
+0x14088E8F5: vshufps xmm4, xmm3, xmm3, 9
+0x14088E8FA: vshufps xmm0, xmm3, xmm3, 52h ; 'R'
+0x14088E8FF: vmulps  xmm2, xmm0, xmm10
+0x14088E904: vmulps  xmm1, xmm4, xmm5
+0x14088E908: vsubps  xmm3, xmm2, xmm1
+0x14088E90C: vshufps xmm1, xmm3, xmm3, 9
+0x14088E911: vshufps xmm0, xmm10, xmm10, 0FFh
+0x14088E917: vmulps  xmm2, xmm0, xmm4
+0x14088E91B: vaddps  xmm2, xmm2, xmm1
+0x14088E91F: vmulps  xmm0, xmm2, xmm13
+0x14088E924: vaddps  xmm3, xmm0, xmm6
+0x14088E928: vaddps  xmm15, xmm3, xmm7
+0x14088E92C: vshufps xmm2, xmm10, xmm8, 1Bh
+0x14088E932: vshufps xmm5, xmm10, xmm8, 8Dh
+0x14088E938: vshufps xmm0, xmm11, xmm11, 0FFh
+0x14088E93E: vmulps  xmm3, xmm0, xmm10
+0x14088E943: vshufps xmm0, xmm11, xmm11, 0
+0x14088E949: vmulps  xmm1, xmm2, xmm0
+0x14088E94D: vaddps  xmm3, xmm3, xmm1
+0x14088E951: vshufps xmm2, xmm11, xmm11, 55h ; 'U'
+0x14088E957: vmulps  xmm0, xmm2, xmm9
+0x14088E95C: vaddps  xmm4, xmm3, xmm0
+0x14088E960: vshufps xmm3, xmm5, xmm5, 0D8h
+0x14088E965: vshufps xmm1, xmm11, xmm11, 0AAh
+0x14088E96B: vmulps  xmm0, xmm3, xmm1
+0x14088E96F: vaddps  xmm10, xmm4, xmm0
+0x14088E973: vsubps  xmm6, xmm12, xmm15
+0x14088E978: vshufps xmm0, xmm6, xmm6, 9
+0x14088E97D: vmovups [rbp+3F0h+var_330], xmm7
+0x14088E985: vxorps  xmm7, xmm10, cs:xmmword_142880610
+0x14088E98D: vmulps  xmm2, xmm0, xmm7
+0x14088E991: vshufps xmm5, xmm7, xmm7, 9
+0x14088E996: vmulps  xmm1, xmm6, xmm5
+0x14088E99A: vsubps  xmm3, xmm2, xmm1
+0x14088E99E: vshufps xmm4, xmm3, xmm3, 9
+0x14088E9A3: vshufps xmm0, xmm3, xmm3, 52h ; 'R'
+0x14088E9A8: vmulps  xmm2, xmm0, xmm7
+0x14088E9AC: vmulps  xmm1, xmm4, xmm5
+0x14088E9B0: vsubps  xmm3, xmm2, xmm1
+0x14088E9B4: vshufps xmm0, xmm7, xmm7, 0FFh
+0x14088E9B9: vshufps xmm1, xmm3, xmm3, 9
+0x14088E9BE: vmulps  xmm2, xmm0, xmm4
+0x14088E9C2: vaddps  xmm2, xmm2, xmm1
+0x14088E9C6: vmulps  xmm0, xmm2, xmm13
+0x14088E9CB: vaddps  xmm3, xmm0, xmm6
+0x14088E9CF: lea     rcx, [rbp+3F0h+var_180]
+0x14088E9D6: vmovups [rbp+3F0h+var_310], xmm3
+0x14088E9DE: vmovups [rbp+3F0h+var_150], xmm3
+0x14088E9E6: vmovups [rbp+3F0h+var_360], xmm9
+0x14088E9EE: vmovups [rbp+3F0h+var_2B0], xmm15
+0x14088E9F6: vmovups [rbp+3F0h+var_2A0], xmm10
+0x14088E9FE: vmovups [rbp+3F0h+var_270], xmm7
+0x14088EA06: call    sub_142229D50
+0x14088EA0B: mov     r15, [rbp+3F0h+arg_38]
+0x14088EA12: vmovups xmm6, xmmword ptr [r15]
+0x14088EA17: vmovups xmm7, xmmword ptr [r15+10h]
+0x14088EA1D: vmovups [rbp+3F0h+var_400], xmm6
+0x14088EA22: vmovups [rbp+3F0h+var_3F0], xmm7
+0x14088EA27: call    sub_141B40880
+0x14088EA2C: vmovups xmm14, xmmword ptr [rbx+1C0h]
+0x14088EA34: lea     r9, [rsp+4F0h+var_488]
+0x14088EA39: mov     rcx, rbx
+0x14088EA3C: lea     r8, [rbp+3F0h+var_180]
+0x14088EA43: lea     rdx, [rbp+3F0h+var_400]
+0x14088EA47: call    sub_14088E380
+0x14088EA4C: movzx   esi, al
+0x14088EA4F: vmovss  xmm11, cs:dword_142BE9E48
+0x14088EA57: test    al, al
+0x14088EA59: jz      loc_14088EE37
+0x14088EA5F: mov     rbx, [rsp+4F0h+var_488]
+0x14088EA64: lea     r9, [rbp+3F0h+var_290]
+0x14088EA6B: vxorps  xmm2, xmm2, xmm2
+0x14088EA6F: lea     rdx, [rbp+3F0h+var_180]
+0x14088EA76: mov     rcx, [rbx+10h]
+0x14088EA7A: mov     rax, [rcx]
+0x14088EA7D: call    qword ptr [rax+20h]
+0x14088EA80: vmovups xmm0, [rbp+3F0h+var_290]
+0x14088EA88: mov     r10d, cs:dword_143F2EBB8
+0x14088EA8F: mov     r9d, dword ptr cs:qword_143F2EBBC
+0x14088EA96: mov     r8d, dword ptr cs:qword_143F2EBBC+4
+0x14088EA9D: mov     eax, dword ptr cs:unk_143F2EBC4
+0x14088EAA3: imul    rdx, rax, 7DD4FFC7h
+0x14088EAAA: imul    rcx, r9, 6F0h
+0x14088EAB1: imul    r11, r10, 13FBh
+0x14088EAB8: mov     eax, cs:dword_143F2EBC8
+0x14088EABE: vcmpltps xmm2, xmm0, xmm6
+0x14088EAC3: vandnps xmm1, xmm2, xmm0
+0x14088EAC7: vandps  xmm0, xmm2, xmm6
+0x14088EACB: vcmpltps xmm2, xmm7, [rbp+3F0h+var_280]
+0x14088EAD4: add     r11, rcx
+0x14088EAD7: mov     dword ptr cs:unk_143F2EBC4, r8d
+0x14088EADE: vorps   xmm9, xmm1, xmm0
+0x14088EAE2: vandnps xmm1, xmm2, [rbp+3F0h+var_280]
+0x14088EAEA: imul    rcx, r8, 5D4h
+0x14088EAF1: vandps  xmm0, xmm2, xmm7
+0x14088EAF5: add     r11, rcx
+0x14088EAF8: mov     dword ptr cs:qword_143F2EBBC+4, r9d
+0x14088EAFF: vorps   xmm3, xmm1, xmm0
+0x14088EB03: add     r11, rdx
+0x14088EB06: mov     dword ptr cs:qword_143F2EBBC, r10d
+0x14088EB0D: add     r11, rax
+0x14088EB10: mov     rax, r11
+0x14088EB13: mov     cs:dword_143F2EBB8, r11d
+0x14088EB1A: shr     rax, 20h
+0x14088EB1E: mov     ecx, r11d
+0x14088EB21: mov     cs:dword_143F2EBC8, eax
+0x14088EB27: vmovups [rbp+3F0h+var_290], xmm9
+0x14088EB2F: vmovups [rbp+3F0h+var_280], xmm3
+0x14088EB37: vsubps  xmm8, xmm3, xmm9
+0x14088EB3C: call    cs:off_142FFAFD8
+0x14088EB42: mov     r10d, cs:dword_143F2EBB8
+0x14088EB49: mov     r9d, dword ptr cs:qword_143F2EBBC
+0x14088EB50: mov     r8d, dword ptr cs:qword_143F2EBBC+4
+0x14088EB57: mov     eax, dword ptr cs:unk_143F2EBC4
+0x14088EB5D: imul    rdx, rax, 7DD4FFC7h
+0x14088EB64: imul    rcx, r9, 6F0h
+0x14088EB6B: imul    r11, r10, 13FBh
+0x14088EB72: mov     eax, cs:dword_143F2EBC8
+0x14088EB78: vxorps  xmm0, xmm0, xmm0
+0x14088EB7C: vcvtsi2ss xmm0, xmm0, r10
+0x14088EB81: vdivss  xmm7, xmm0, xmm11
+0x14088EB86: mov     dword ptr cs:unk_143F2EBC4, r8d
+0x14088EB8D: add     r11, rcx
+0x14088EB90: mov     dword ptr cs:qword_143F2EBBC+4, r9d
+0x14088EB97: imul    rcx, r8, 5D4h
+0x14088EB9E: mov     dword ptr cs:qword_143F2EBBC, r10d
+0x14088EBA5: add     r11, rcx
+0x14088EBA8: add     r11, rdx
+0x14088EBAB: add     r11, rax
+0x14088EBAE: mov     rax, r11
+0x14088EBB1: mov     cs:dword_143F2EBB8, r11d
+0x14088EBB8: shr     rax, 20h
+0x14088EBBC: mov     ecx, r11d
+0x14088EBBF: mov     cs:dword_143F2EBC8, eax
+0x14088EBC5: call    cs:off_142FFAFD8
+0x14088EBCB: mov     r10d, cs:dword_143F2EBB8
+0x14088EBD2: mov     eax, dword ptr cs:unk_143F2EBC4
+0x14088EBD8: mov     r9d, dword ptr cs:qword_143F2EBBC
+0x14088EBDF: mov     r8d, dword ptr cs:qword_143F2EBBC+4
+0x14088EBE6: imul    rcx, r9, 6F0h
+0x14088EBED: imul    r11, r10, 13FBh
+0x14088EBF4: imul    rdx, rax, 7DD4FFC7h
+0x14088EBFB: mov     eax, cs:dword_143F2EBC8
+0x14088EC01: add     r11, rcx
+0x14088EC04: imul    rcx, r8, 5D4h
+0x14088EC0B: vxorps  xmm0, xmm0, xmm0
+0x14088EC0F: add     r11, rcx
+0x14088EC12: vcvtsi2ss xmm0, xmm0, r10
+0x14088EC17: add     r11, rdx
+0x14088EC1A: vdivss  xmm6, xmm0, xmm11
+0x14088EC1F: add     r11, rax
+0x14088EC22: mov     dword ptr cs:unk_143F2EBC4, r8d
+0x14088EC29: mov     rax, r11
+0x14088EC2C: mov     dword ptr cs:qword_143F2EBBC+4, r9d
+0x14088EC33: shr     rax, 20h
+0x14088EC37: mov     ecx, r11d
+0x14088EC3A: mov     cs:dword_143F2EBC8, eax
+0x14088EC40: mov     dword ptr cs:qword_143F2EBBC, r10d
+0x14088EC47: mov     cs:dword_143F2EBB8, r11d
+0x14088EC4E: call    cs:off_142FFAFD8
+0x14088EC54: mov     eax, cs:dword_143F2EBB8
+0x14088EC5A: lea     r8, [rbp+3F0h+var_420]
+0x14088EC5E: vmovss  xmm3, cs:dword_142BE9DBC
+0x14088EC66: mov     rcx, [rbx+10h]
+0x14088EC6A: lea     rdx, [rbp+3F0h+var_180]
+0x14088EC71: vxorps  xmm2, xmm2, xmm2
+0x14088EC75: vxorps  xmm0, xmm0, xmm0
+0x14088EC79: vcvtsi2ss xmm0, xmm0, rax
+0x14088EC7E: vdivss  xmm1, xmm0, xmm11
+0x14088EC83: vinsertps xmm2, xmm2, xmm1, 0
+0x14088EC89: vinsertps xmm2, xmm2, xmm6, 10h
+0x14088EC8F: vinsertps xmm2, xmm2, xmm7, 20h ; ' '
+0x14088EC95: vmulps  xmm0, xmm2, xmm8
+0x14088EC9A: vaddps  xmm1, xmm0, xmm9
+0x14088EC9F: lea     rax, [rbp+3F0h+var_2F0]
+0x14088ECA6: vmovups [rbp+3F0h+var_420], xmm1
+0x14088ECAB: mov     [rsp+4F0h+var_4D0], rax
+0x14088ECB0: call    sub_141EBAB60
+0x14088ECB5: movzx   r9d, [rsp+4F0h+var_4C0]
+0x14088ECBB: lea     r8, [rbp+3F0h+var_2B0]
+0x14088ECC2: vmovups xmm7, [rbp+3F0h+var_280]
+0x14088ECCA: vmovups xmm6, [rbp+3F0h+var_290]
+0x14088ECD2: movzx   esi, al
+0x14088ECD5: mov     [rsp+4F0h+var_4BC], 0FFFF0000h
+0x14088ECDD: vcvttss2si rax, cs:dword_142BE9EC4
+0x14088ECE6: and     r9b, 0F7h
+0x14088ECEA: mov     [rsp+4F0h+var_480], 1
+0x14088ECEF: lea     rdx, [rbp+3F0h+var_2A0]
+0x14088ECF6: mov     [rsp+4F0h+var_478], rax
+0x14088ECFB: lea     rcx, [rbp+3F0h+var_140]
+0x14088ED02: or      r9b, 7
+0x14088ED06: call    sub_14019A270
+0x14088ED0B: vmovups xmm4, [rbp+3F0h+var_140]
+0x14088ED13: vmovups xmm3, [rbp+3F0h+var_130]
+0x14088ED1B: vmovups xmm8, [rbp+3F0h+var_120]
+0x14088ED23: mov     eax, [rsp+4F0h+var_4BC]
+0x14088ED27: lea     r8, [rsp+4F0h+var_480]
+0x14088ED2C: vaddps  xmm1, xmm6, xmm7
+0x14088ED30: vmulps  xmm2, xmm1, cs:xmmword_142BEC910
+0x14088ED38: vsubps  xmm0, xmm7, xmm6
+0x14088ED3C: vmovups xmm6, cs:xmmword_142BED260
+0x14088ED44: vmovups [rbp+3F0h+var_200], xmm0
+0x14088ED4C: vshufps xmm0, xmm6, xmm2, 0AFh
+0x14088ED51: vshufps xmm5, xmm2, xmm0, 24h ; '$'
+0x14088ED56: vshufps xmm1, xmm5, xmm5, 55h ; 'U'
+0x14088ED5B: vmovups [rbp+3F0h+var_230], xmm3
+0x14088ED63: vmulps  xmm3, xmm1, xmm3
+0x14088ED67: vshufps xmm0, xmm5, xmm5, 0
+0x14088ED6C: vmulps  xmm2, xmm0, xmm4
+0x14088ED70: vshufps xmm1, xmm5, xmm5, 0AAh
+0x14088ED75: vmulps  xmm0, xmm1, xmm8
+0x14088ED7A: vmovups [rbp+3F0h+var_240], xmm4
+0x14088ED82: vaddps  xmm4, xmm3, xmm2
+0x14088ED86: vaddps  xmm2, xmm4, xmm0
+0x14088ED8A: vaddps  xmm3, xmm2, [rbp+3F0h+var_110]
+0x14088ED92: mov     [rbp+3F0h+var_1F0], eax
+0x14088ED98: lea     rdx, [rbp+3F0h+var_240]
+0x14088ED9F: mov     rax, cs:qword_143FDF520
+0x14088EDA6: lea     rcx, qword_143FDF520
+0x14088EDAD: vshufps xmm0, xmm6, xmm3, 0AFh
+0x14088EDB2: vshufps xmm1, xmm3, xmm0, 24h ; '$'
+0x14088EDB7: mov     [rbp+3F0h+var_1EC], r9b
+0x14088EDBE: xor     r9d, r9d
+0x14088EDC1: vmovups [rbp+3F0h+var_210], xmm1
+0x14088EDC9: vmovups [rbp+3F0h+var_220], xmm8
+0x14088EDD1: call    qword ptr [rax+0C0h]
+0x14088EDD7: vmovups xmm6, [rbp+3F0h+var_2F0]
+0x14088EDDF: vshufps xmm0, xmm6, xmm6, 9
+0x14088EDE4: vshufps xmm5, xmm10, xmm10, 9
+0x14088EDEA: vmulps  xmm2, xmm0, xmm10
+0x14088EDEF: vmulps  xmm1, xmm6, xmm5
+0x14088EDF3: vsubps  xmm3, xmm2, xmm1
+0x14088EDF7: vshufps xmm4, xmm3, xmm3, 9
+0x14088EDFC: vshufps xmm0, xmm3, xmm3, 52h ; 'R'
+0x14088EE01: vmulps  xmm2, xmm0, xmm10
+0x14088EE06: vmulps  xmm1, xmm4, xmm5
+0x14088EE0A: vsubps  xmm3, xmm2, xmm1
+0x14088EE0E: vshufps xmm0, xmm10, xmm10, 0FFh
+0x14088EE14: vshufps xmm1, xmm3, xmm3, 9
+0x14088EE19: vmulps  xmm2, xmm0, xmm4
+0x14088EE1D: vaddps  xmm2, xmm2, xmm1
+0x14088EE21: vmulps  xmm0, xmm2, xmm13
+0x14088EE26: vaddps  xmm3, xmm0, xmm6
+0x14088EE2A: vaddps  xmm11, xmm3, xmm15
+0x14088EE2F: vmovups [rsp+4F0h+var_4A0], xmm11
+0x14088EE35: jmp     short loc_14088EE3D
+0x14088EE37: vmovups xmm11, [rsp+4F0h+var_4A0]
+0x14088EE3D: cmp     qword ptr cs:xmmword_146917C20, 0
+0x14088EE45: vmovaps xmm15, [rsp+4F0h+var_B0]
+0x14088EE4E: jz      short loc_14088EEA9
+0x14088EE50: mov     rbx, cs:qword_146917BC0
+0x14088EE57: mov     ecx, cs:dwFlsIndex; dwFlsIndex
+0x14088EE5D: call    cs:__imp_FlsGetValue
+0x14088EE63: cmp     rbx, [rax+8]
+0x14088EE67: jz      short loc_14088EE9B
+0x14088EE69: mov     rcx, cs:qword_146917BB0
+0x14088EE70: mov     edx, 1
+0x14088EE75: call    sub_14015A850
+0x14088EE7A: mov     rcx, qword ptr cs:xmmword_146917C20
+0x14088EE81: test    rcx, rcx
+0x14088EE84: jz      short loc_14088EE8B
+0x14088EE86: call    nullsub_131
+0x14088EE8B: mov     rax, 0FFFFFFFFFFFFFFFFh
+0x14088EE92: lock xadd cs:qword_146917BD0, rax
+0x14088EE9B: vmovups xmm11, [rsp+4F0h+var_4A0]
+0x14088EEA1: vmovups xmm10, [rbp+3F0h+var_2A0]
+0x14088EEA9: test    sil, sil
+0x14088EEAC: mov     rsi, [rsp+4F0h+arg_10]
+0x14088EEB4: jz      loc_14088F363
+0x14088EEBA: vmovups xmm6, xmmword ptr [r14]
+0x14088EEBF: vcmpeqps xmm0, xmm6, xmm12
+0x14088EEC5: vmovmskps eax, xmm0
+0x14088EEC9: and     eax, 7
+0x14088EECC: cmp     al, 7
+0x14088EECE: jnz     short loc_14088EED7
+0x14088EED0: vsubps  xmm1, xmm11, xmm14
+0x14088EED5: jmp     short loc_14088EF22
+0x14088EED7: vshufps xmm5, xmm10, xmm10, 9
+0x14088EEDD: vshufps xmm0, xmm6, xmm6, 9
+0x14088EEE2: vmulps  xmm2, xmm0, xmm10
+0x14088EEE7: vmulps  xmm1, xmm6, xmm5
+0x14088EEEB: vsubps  xmm3, xmm2, xmm1
+0x14088EEEF: vshufps xmm4, xmm3, xmm3, 9
+0x14088EEF4: vshufps xmm0, xmm3, xmm3, 52h ; 'R'
+0x14088EEF9: vmulps  xmm2, xmm0, xmm10
+0x14088EEFE: vmulps  xmm1, xmm4, xmm5
+0x14088EF02: vsubps  xmm3, xmm2, xmm1
+0x14088EF06: vshufps xmm0, xmm10, xmm10, 0FFh
+0x14088EF0C: vshufps xmm1, xmm3, xmm3, 9
+0x14088EF11: vmulps  xmm2, xmm0, xmm4
+0x14088EF15: vaddps  xmm2, xmm2, xmm1
+0x14088EF19: vmulps  xmm0, xmm2, xmm13
+0x14088EF1E: vaddps  xmm1, xmm0, xmm6
+0x14088EF22: mov     r10d, cs:dword_143F2EBB8
+0x14088EF29: mov     r9d, dword ptr cs:qword_143F2EBBC
+0x14088EF30: mov     r8d, dword ptr cs:qword_143F2EBBC+4
+0x14088EF37: mov     eax, dword ptr cs:unk_143F2EBC4
+0x14088EF3D: imul    rdx, rax, 7DD4FFC7h
+0x14088EF44: imul    rcx, r9, 6F0h
+0x14088EF4B: imul    r11, r10, 13FBh
+0x14088EF52: mov     eax, cs:dword_143F2EBC8
+0x14088EF58: vxorps  xmm10, xmm10, xmm10
+0x14088EF5D: vshufps xmm0, xmm10, xmm1, 5
+0x14088EF62: vshufps xmm9, xmm0, xmm1, 0E2h
+0x14088EF67: vshufps xmm8, xmm9, xmm9, 0AAh
+0x14088EF6D: add     r11, rcx
+0x14088EF70: mov     dword ptr cs:unk_143F2EBC4, r8d
+0x14088EF77: imul    rcx, r8, 5D4h
+0x14088EF7E: mov     dword ptr cs:qword_143F2EBBC+4, r9d
+0x14088EF85: add     r11, rcx
+0x14088EF88: mov     dword ptr cs:qword_143F2EBBC, r10d
+0x14088EF8F: add     r11, rdx
+0x14088EF92: add     r11, rax
+0x14088EF95: mov     rax, r11
+0x14088EF98: mov     cs:dword_143F2EBB8, r11d
+0x14088EF9F: shr     rax, 20h
+0x14088EFA3: mov     ecx, r11d
+0x14088EFA6: mov     cs:dword_143F2EBC8, eax
+0x14088EFAC: call    cs:off_142FFAFD8
+0x14088EFB2: mov     ebx, cs:dword_143F2EBB8
+0x14088EFB8: vxorps  xmm0, xmm0, xmm0
+0x14088EFBC: vcvtsi2ss xmm0, xmm0, rbx
+0x14088EFC1: vdivss  xmm6, xmm0, cs:dword_142BE9E48
+0x14088EFC9: vmovaps xmm0, xmm8; Y
+0x14088EFCE: vmovaps xmm1, xmm9; X
+0x14088EFD3: call    atan2f
+0x14088EFD8: vmovss  xmm8, cs:dword_142BE91F4
+0x14088EFE0: vaddss  xmm1, xmm6, xmm6
+0x14088EFE4: vsubss  xmm1, xmm1, xmm8
+0x14088EFE9: vmulss  xmm2, xmm1, [rbp+3F0h+arg_28]
+0x14088EFF1: vmulss  xmm2, xmm2, cs:X
+0x14088EFF9: vaddss  xmm7, xmm0, xmm2
+0x14088EFFD: vmovaps xmm0, xmm7; X
+0x14088F001: call    cosf
+0x14088F006: mov     r9d, dword ptr cs:qword_143F2EBBC
+0x14088F00D: mov     r8d, dword ptr cs:qword_143F2EBBC+4
+0x14088F014: mov     eax, dword ptr cs:unk_143F2EBC4
+0x14088F01A: imul    rdx, rax, 7DD4FFC7h
+0x14088F021: imul    rcx, r9, 6F0h
+0x14088F028: imul    r10, rbx, 13FBh
+0x14088F02F: mov     eax, cs:dword_143F2EBC8
+0x14088F035: vbroadcastss xmm0, xmm0
+0x14088F03A: vmovss  xmm9, xmm9, xmm0
+0x14088F03E: mov     dword ptr cs:unk_143F2EBC4, r8d
+0x14088F045: mov     dword ptr cs:qword_143F2EBBC+4, r9d
+0x14088F04C: add     r10, rcx
+0x14088F04F: mov     dword ptr cs:qword_143F2EBBC, ebx
+0x14088F055: imul    rcx, r8, 5D4h
+0x14088F05C: add     r10, rcx
+0x14088F05F: add     r10, rdx
+0x14088F062: add     r10, rax
+0x14088F065: mov     rax, r10
+0x14088F068: mov     cs:dword_143F2EBB8, r10d
+0x14088F06F: shr     rax, 20h
+0x14088F073: mov     ecx, r10d
+0x14088F076: mov     cs:dword_143F2EBC8, eax
+0x14088F07C: call    cs:off_142FFAFD8
+0x14088F082: vmovss  xmm0, [rbp+3F0h+arg_20]; X
+0x14088F08A: call    asinf
+0x14088F08F: mov     eax, cs:dword_143F2EBB8
+0x14088F095: vxorps  xmm1, xmm1, xmm1
+0x14088F099: vcvtsi2ss xmm1, xmm1, rax
+0x14088F09E: vdivss  xmm2, xmm1, cs:dword_142BE9E48
+0x14088F0A6: vsubss  xmm3, xmm2, cs:dword_142BE8FC4
+0x14088F0AE: vmulss  xmm4, xmm3, [rbp+3F0h+arg_30]
+0x14088F0B6: vmulss  xmm1, xmm4, cs:X
+0x14088F0BE: vaddss  xmm0, xmm0, xmm1; X
+0x14088F0C2: call    sinf
+0x14088F0C7: vmovaps xmm6, xmm0
+0x14088F0CB: vmovaps xmm0, xmm7; X
+0x14088F0CF: call    sinf
+0x14088F0D4: vbroadcastss xmm0, xmm0
+0x14088F0D9: vshufps xmm1, xmm0, xmm9, 0FAh
+0x14088F0DF: vshufps xmm3, xmm9, xmm1, 84h
+0x14088F0E4: vcvttss2si rbx, cs:dword_142BE9EC4
+0x14088F0ED: vmulss  xmm2, xmm6, xmm6
+0x14088F0F1: vsubss  xmm1, xmm8, xmm2
+0x14088F0F5: vmovups xmm8, cs:xmmword_142BEBAD0
+0x14088F0FD: vbroadcastss xmm1, xmm1
+0x14088F102: vmulps  xmm4, xmm3, xmm1
+0x14088F106: vshufps xmm1, xmm14, xmm14, 0
+0x14088F10C: vmovaps xmm0, xmm6
+0x14088F110: vbroadcastss xmm0, xmm0
+0x14088F115: vshufps xmm0, xmm0, xmm4, 5
+0x14088F11A: vshufps xmm9, xmm0, xmm4, 0E2h
+0x14088F11F: vshufps xmm0, xmm14, xmm14, 0AAh
+0x14088F125: vunpckhps xmm3, xmm1, xmm0
+0x14088F129: vshufps xmm1, xmm14, xmm14, 55h ; 'U'
+0x14088F12F: vunpckhps xmm2, xmm1, xmm8
+0x14088F134: vunpckhps xmm0, xmm3, xmm2
+0x14088F138: mov     [rsp+4F0h+var_4B8], 0FFFF0000h
+0x14088F140: lea     r8, [rbp+3F0h+var_470]
+0x14088F144: mov     eax, [rsp+4F0h+var_4B8]
+0x14088F148: lea     rdx, [rbp+3F0h+var_260]
+0x14088F14F: mov     [rbp+3F0h+var_250], eax
+0x14088F155: lea     rcx, qword_143FDF520
+0x14088F15C: movzx   eax, [rsp+4F0h+var_4C0]
+0x14088F161: xor     r9d, r9d
+0x14088F164: and     al, 0F7h
+0x14088F166: mov     [rbp+3F0h+var_470], 1
+0x14088F16A: or      al, 7
+0x14088F16C: mov     [rbp+3F0h+var_468], rbx
+0x14088F170: mov     [rbp+3F0h+var_24C], al
+0x14088F176: mov     rax, cs:qword_143FDF520
+0x14088F17D: vmovups [rbp+3F0h+var_260], xmm0
+0x14088F185: call    qword ptr [rax+0B8h]
+0x14088F18B: movzx   r9d, [rsp+4F0h+var_4C0]
+0x14088F191: lea     r8, [rbp+3F0h+var_2B0]
+0x14088F198: and     r9b, 0F7h
+0x14088F19C: mov     [rsp+4F0h+var_4B4], 0FF00FF00h
+0x14088F1A4: lea     rdx, [rbp+3F0h+var_2A0]
+0x14088F1AB: mov     [rbp+3F0h+var_460], 1
+0x14088F1AF: lea     rcx, [rbp+3F0h+var_100]
+0x14088F1B6: mov     [rbp+3F0h+var_458], rbx
+0x14088F1BA: or      r9b, 7
+0x14088F1BE: call    sub_14019A270
+0x14088F1C3: vmovups xmm4, [rbp+3F0h+var_100]
+0x14088F1CB: vmovups xmm1, xmmword ptr [r15+10h]
+0x14088F1D1: vsubps  xmm0, xmm1, xmmword ptr [r15]
+0x14088F1D6: vaddps  xmm1, xmm1, xmmword ptr [r15]
+0x14088F1DB: vmulps  xmm2, xmm1, cs:xmmword_142BEC910
+0x14088F1E3: vmovups xmm3, [rbp+3F0h+var_F0]
+0x14088F1EB: vmovups xmm6, cs:xmmword_142BED260
+0x14088F1F3: vmovups xmm7, [rbp+3F0h+var_E0]
+0x14088F1FB: mov     eax, [rsp+4F0h+var_4B4]
+0x14088F1FF: lea     r8, [rbp+3F0h+var_460]
+0x14088F203: vmovups [rbp+3F0h+var_1A0], xmm0
+0x14088F20B: vshufps xmm0, xmm6, xmm2, 0AFh
+0x14088F210: vshufps xmm5, xmm2, xmm0, 24h ; '$'
+0x14088F215: vshufps xmm1, xmm5, xmm5, 55h ; 'U'
+0x14088F21A: vmovups [rbp+3F0h+var_1D0], xmm3
+0x14088F222: vmulps  xmm3, xmm1, xmm3
+0x14088F226: vshufps xmm0, xmm5, xmm5, 0
+0x14088F22B: vmulps  xmm2, xmm0, xmm4
+0x14088F22F: vshufps xmm1, xmm5, xmm5, 0AAh
+0x14088F234: vmulps  xmm0, xmm1, xmm7
+0x14088F238: vmovups [rbp+3F0h+var_1E0], xmm4
+0x14088F240: vaddps  xmm4, xmm3, xmm2
+0x14088F244: vaddps  xmm2, xmm4, xmm0
+0x14088F248: vaddps  xmm3, xmm2, [rbp+3F0h+var_D0]
+0x14088F250: mov     [rbp+3F0h+var_190], eax
+0x14088F256: lea     rdx, [rbp+3F0h+var_1E0]
+0x14088F25D: mov     rax, cs:qword_143FDF520
+0x14088F264: lea     rcx, qword_143FDF520
+0x14088F26B: vshufps xmm0, xmm6, xmm3, 0AFh
+0x14088F270: vshufps xmm1, xmm3, xmm0, 24h ; '$'
+0x14088F275: mov     [rbp+3F0h+var_18C], r9b
+0x14088F27C: xor     r9d, r9d
+0x14088F27F: vmovups [rbp+3F0h+var_1B0], xmm1
+0x14088F287: vmovups [rbp+3F0h+var_1C0], xmm7
+0x14088F28F: call    qword ptr [rax+0C0h]
+0x14088F295: vmovups [rbp+3F0h+var_410], xmm8
+0x14088F29A: mov     [rbp+3F0h+var_450], 1
+0x14088F29E: mov     [rbp+3F0h+var_448], rbx
+0x14088F2A2: mov     [rsp+4F0h+var_4B0], 0FF0000FFh
+0x14088F2AA: mov     r8d, [rsp+4F0h+var_4B0]
+0x14088F2AF: lea     r9, [rbp+3F0h+var_450]
+0x14088F2B3: lea     rdx, [rbp+3F0h+var_410]
+0x14088F2B7: mov     [rsp+4F0h+var_4D0], 0
+0x14088F2C0: lea     rcx, [rsp+4F0h+var_4A0]
+0x14088F2C5: call    sub_14023E220
+0x14088F2CA: movzx   eax, [rsp+4F0h+var_4C0]
+0x14088F2CF: lea     r9, [rbp+3F0h+var_440]
+0x14088F2D3: and     al, 0F3h
+0x14088F2D5: mov     [rsp+4F0h+var_4AC], 0FF0000FFh
+0x14088F2DD: mov     r8d, [rsp+4F0h+var_4AC]
+0x14088F2E2: lea     rdx, [rbp+3F0h+var_430]
+0x14088F2E6: or      al, 3
+0x14088F2E8: mov     [rbp+3F0h+var_440], 1
+0x14088F2EC: vaddps  xmm0, xmm9, xmm11
+0x14088F2F1: mov     [rsp+4F0h+var_4C8], al
+0x14088F2F5: lea     rcx, [rsp+4F0h+var_4A0]
+0x14088F2FA: mov     [rsp+4F0h+var_4D0], 0
+0x14088F303: mov     [rbp+3F0h+var_438], rbx
+0x14088F307: vmovups [rbp+3F0h+var_430], xmm0
+0x14088F30C: call    sub_14023E010
+0x14088F311: vbroadcastss xmm0, [rsp+4F0h+var_4A8]
+0x14088F318: vmovups [rbp+3F0h+var_3C0], xmm0
+0x14088F31D: vbroadcastss xmm0, [rsp+4F0h+var_4A4]
+0x14088F324: lea     rdx, [rbp+3F0h+var_3E0]
+0x14088F328: mov     [rbp+3F0h+var_368], 0
+0x14088F333: mov     rcx, rdi
+0x14088F336: mov     [rbp+3F0h+var_370], 8
+0x14088F340: vmovups [rbp+3F0h+var_3B0], xmm0
+0x14088F345: vmovups [rbp+3F0h+var_3E0], xmm11
+0x14088F34A: vmovups [rbp+3F0h+var_3D0], xmm9
+0x14088F34F: vmovups [rbp+3F0h+var_3A0], xmm10
+0x14088F354: vmovups [rbp+3F0h+var_390], xmm10
+0x14088F359: vmovups [rbp+3F0h+var_380], xmm10
+0x14088F35E: call    sub_141EBD210
+0x14088F363: vmovaps xmm13, [rsp+4F0h+var_90]
+0x14088F36C: vmovaps xmm12, [rsp+4F0h+var_80]
+0x14088F375: vmovaps xmm11, [rsp+4F0h+var_70]
+0x14088F37E: vmovaps xmm10, [rsp+4F0h+var_60]
+0x14088F387: vmovaps xmm9, [rsp+4F0h+var_50]
+0x14088F390: vmovaps xmm8, [rsp+4F0h+var_40]
+0x14088F399: vmovaps xmm7, [rsp+4F0h+var_30]
+0x14088F3A2: vmovaps xmm6, [rsp+4F0h+var_20]
+0x14088F3AB: mov     r15, [rsp+4F0h+var_10]
+0x14088F3B3: mov     rbx, [rsp+4F0h+arg_8]
+0x14088F3BB: vmovaps xmm14, [rsp+4F0h+var_A0]
+0x14088F3C4: mov     rdi, [rsp+4F0h+arg_18]
+0x14088F3CC: mov     rcx, [rbp+3F0h+var_C0]
+0x14088F3D3: xor     rcx, rsp; StackCookie
+0x14088F3D6: call    __security_check_cookie
+0x14088F3DB: add     rsp, 4E8h
+0x14088F3E2: pop     r14
+0x14088F3E4: pop     rbp
+0x14088F3E5: retn
+

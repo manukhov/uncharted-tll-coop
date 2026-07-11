@@ -179,7 +179,7 @@ struct FirePacket {
 // bytes +0x18..+0xB5 of the 0xC0-byte event; these fields are POD and its Execute
 // method owns the complete ProcessSpawnInfo/descriptor materialization path.
 constexpr std::uint32_t kGrenadeEventMagic = 0x454E5247;  // "GRNE"
-constexpr std::uint16_t kGrenadeEventVersion = 1;
+constexpr std::uint16_t kGrenadeEventVersion = 3;
 constexpr std::size_t kGrenadeEventPayloadOffset = 0x18;
 constexpr std::size_t kGrenadeEventPayloadBytes = 0x9E;
 
@@ -190,6 +190,76 @@ struct GrenadeEventPacket {
     std::uint32_t sequence = 0;
     std::uint32_t grenade_art_id = 0;
     std::uint8_t event_payload[kGrenadeEventPayloadBytes]{};
+    // v2: the flying grenade's live NdGameObject transform captured at send time
+    // (pos @+0x240, velocity @+0x260). The receiver force-writes velocity onto the
+    // spawned grenade after Execute so it flies the arc instead of dropping+detonating
+    // at the spawn point (the serialized event alone did not carry usable velocity).
+    float pos[4]{};
+    float vel[4]{};
+    // v3: orientation captured at send time (quat @+0x140 on ProjectileGrenade).
+    float quat[4]{};
+};
+
+// In-flight kinematics stream: host authoritative pos/vel samples (~16 Hz) after the
+// initial GRNE spawn event. Peer physics does not integrate relayed velocity alone.
+constexpr std::uint32_t kGrenadeKinematicsMagic = 0x4B4E5247;  // "GRNK"
+
+struct GrenadeKinematicsPacket {
+    std::uint32_t magic = kGrenadeKinematicsMagic;
+    std::uint32_t sequence = 0;
+    float pos[4]{};
+    float vel[4]{};
+};
+
+// SimpleBreakable wall/env break relay (native NetEventBreakableAttack*WithResults POD).
+constexpr std::uint32_t kBreakableExplosionMagic = 0x574B5242;   // "BRKW"
+constexpr std::uint32_t kBreakableProjectileMagic = 0x504B5242;  // "BRKP"
+constexpr std::uint16_t kBreakableEventPacketVersion = 2;
+constexpr std::size_t kBreakableExplosionEventBytes = 0x130;     // 304
+constexpr std::size_t kBreakableProjectileEventBytes = 0xB0;     // 176
+constexpr std::size_t kBreakableExplosionPlainEventBytes = 0xE0; // 224
+constexpr std::size_t kBreakableProjectilePlainEventBytes = 0x60; // 96
+constexpr std::uint8_t kBreakableNetEventTypeExplosionWithResults = 0x3F;
+constexpr std::uint8_t kBreakableNetEventTypeProjectileWithResults = 0x3D;
+constexpr std::uint8_t kBreakableNetEventTypeExplosionPlain = 0xFE;
+constexpr std::uint8_t kBreakableNetEventTypeProjectilePlain = 0xFC;
+constexpr std::uint32_t kBreakableNetEventTagExplosionPlain = 16842814u;
+constexpr std::uint32_t kBreakableNetEventTagProjectilePlain = 16842812u;
+constexpr std::size_t kBreakableSyncEventBytes = 0x60;             // 96
+constexpr std::uint8_t kBreakableNetEventTypeSync = 0x6B;
+constexpr std::uint32_t kBreakableNetEventTagSync = 0x0101006Bu;
+constexpr std::uint32_t kBreakableSyncMagic = 0x534B5242;        // "BRKS"
+
+struct BreakableSyncPacket {
+    std::uint32_t magic = kBreakableSyncMagic;
+    std::uint16_t version = kBreakableEventPacketVersion;
+    std::uint8_t event_kind = kBreakableNetEventTypeSync;
+    std::uint8_t reserved = 0;
+    std::uint32_t sequence = 0;
+    std::uint32_t net_object_id = 0;
+    std::uint32_t scene_hash = 0;  // v2: SimpleBreakable+0x38 stable scene id
+    std::uint8_t event_blob[kBreakableSyncEventBytes]{};
+    float world_pos[3]{};  // v2: host SimpleBreakable world anchor for peer lookup
+};
+
+struct BreakableExplosionPacket {
+    std::uint32_t magic = kBreakableExplosionMagic;
+    std::uint16_t version = kBreakableEventPacketVersion;
+    std::uint8_t event_kind = 0;
+    std::uint8_t reserved = 0;
+    std::uint32_t sequence = 0;
+    std::uint32_t net_object_id = 0;
+    std::uint8_t event_blob[kBreakableExplosionEventBytes]{};
+};
+
+struct BreakableProjectilePacket {
+    std::uint32_t magic = kBreakableProjectileMagic;
+    std::uint16_t version = kBreakableEventPacketVersion;
+    std::uint8_t event_kind = 0;
+    std::uint8_t reserved = 0;
+    std::uint32_t sequence = 0;
+    std::uint32_t net_object_id = 0;
+    std::uint8_t event_blob[kBreakableProjectileEventBytes]{};
 };
 
 // Version 1 wire size: no controller_offset field (weapon_art_id immediately after sequence).

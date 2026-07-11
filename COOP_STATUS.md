@@ -1391,3 +1391,190 @@ Grenade peer Execute fault was captured at RVA `0xA97393`, exception
 `0xC0000094`, in the empty-registry ownerless lookup `sub_140A97380`. The synthetic
 event now selects the bounded NetCharacter-owner branch with an unmatched id; that
 branch safely continues to descriptor materialization without the division.
+
+## 2026-07-11: grenade v2 arc fix — relay pos/vel + per-frame peer re-apply (build OK, runtime pending)
+
+**Symptom:** peer spawns grenade but it detonates instantly (no visible arc). Root cause:
+serialized `NetEventEmitGrenade` POD carries spawn transform but not live launch velocity.
+
+**v2 fix (uncommitted, built):**
+- `GrenadeEventPacket` v2 adds `pos[4]` + `vel[4]` (`kGrenadeEventVersion = 2`).
+- Sender waits for `|vel|² > 0.25` before `GRENADE-EVENT-SEND` (avoids zero-vel packet).
+- Receiver after successful `EXEC`: one-shot `seh_force_grenade_velocity` on peer-spawned
+  object (`g_peer_spawned_grenade` from Init hook during `g_applying_peer_grenade`).
+- **New:** `reapply_peer_grenade_arc()` forces pos/vel each frame for ~1.2s (physics was
+  overwriting the one-shot write).
+
+**Log tags:** `GRENADE-EVENT-SEND/RECV` (with pos/vel), `GRENADE-EVENT-EXEC` (`arcForced`,
+`spawned`), `GRENADE-ARC-FORCE`, `GRENADE-TRACK`.
+
+**Runtime test (injected PIDs 20068 / 9300):** load same campaign save on both → throw one
+grenade on host → peer should show `GRENADE-ARC-FORCE` + changing `GRENADE-TRACK` pos over
+~750ms. Success = visible arc on peer; failure = still instant pop → next step is fuse sync
+(`SendNetEventGrenadeStartFuse`) or hook physics integrator.
+
+## 2026-07-11: grenade v2 arc fix — root cause from logs (position pin + zero fuse time)
+
+**Runtime log (PIDs 20068/9300) proved relay path works:** `built=1 sent=1`, peer `EXEC
+ok=1 arcForced=1`, but `GRENADE-ARC-FORCE` showed **frozen pos** at spawn every frame while
+host `GRENADE-TRACK` advanced. Cause: `reapply_peer_grenade_arc` rewrote `pos@+0x240` to the
+initial relayed coords each tick, pinning the object in place (instant ground hit / pop).
+
+**Second bug:** manual payload build did `memset(event+0x24,0)`; native
+`NetEventEmitGrenade_BuildFromProjectile` stores fuse/spawn time there from `grenade+0x3F2 *
+g_EngineClockToSeconds`. Zero/stale timestamp likely made Execute treat fuse as elapsed.
+
+**v3 fix (built):**
+- Bootstrap once: `pos+vel`; per-frame sustain: **vel only** (`seh_write_grenade_launch_state`).
+- Sender: copy fuse timestamp from `grenade+0x3F2`; receiver: re-stamp `event+0x24` to peer
+  engine clock before Execute.
+- Peer diagnostics renamed to `GRENADE-PEER-TRACK` (pos should now change).
+
+## 2026-07-11: grenade v4 — spawn transform patch (user: still pops at throw origin)
+
+**User retest after v3:** peer grenade still explodes where it was thrown (no arc).
+
+**Static root cause (confirmed via `NetEventEmitGrenade_Execute` @ `0x140BE63A0`):**
+Execute materializes `ProcessSpawnInfo` from **`event+0x30`** (`vmovups [r14+30h]`).
+Native sender `BuildFromProjectile` fills that from `refresh_transform(grenade+0x100)` —
+hierarchy/local throw origin, **not** in-flight world pos `+0x240`. Post-spawn vel write
+cannot fix wrong spawn point.
+
+**v4 fix (built, runtime pending):**
+- Sender build: write world pos `+0x240` into `event+0x30`; clear mid-flight flags
+  `+0x19..0x1B`; relay `quat@+0x140` in packet v3.
+- Peer `apply_pending`: `patch_peer_grenade_event_payload()` rewrites payload `+0x18`
+  (= `event+0x30`) with relayed world pos + fresh fuse before Execute.
+- Post-spawn bootstrap: pos+vel+quat once; per-frame vel sustain; set activation bytes
+  `+0x672/+0x675/+0x1522|=4`.
+- New log: `GRENADE-EVENT-PATCH` (spawn pos stamped into payload).
+
+**Success criterion:** peer `GRENADE-PEER-TRACK` shows **changing pos**; grenade visible
+in flight, explodes at landing point not throw origin.
+
+**If still instant pop:** call `SendNetEventGrenadeStartFuse` Execute on peer post-spawn.
+
+## 2026-07-11: grenade v5 — kinematics stream (logs: peer pos frozen, vel live)
+
+**Runtime log proof:** `GRENADE-PEER-TRACK` pos stuck at send coords while host `GRENADE-TRACK`
+advances; vel writes succeed but native physics never integrates on peer-spawned object.
+
+**v5 fix (built):**
+- New `GRNK` packet: host streams pos/vel ~16 Hz during flight after initial `GRNE` spawn.
+- Peer applies kinematics directly to `g_peer_arc_grenade`; dead-reckon + gravity between samples.
+- Post-spawn: `ProjectileGrenade_LaunchSetup` (`0x141532010`) + `SendNetEventGrenadeStartFuse`.
+- Logs: `GRENADE-KIN-SEND/RECV`, `GRENADE-FUSE-START`.
+
+## 2026-07-11: grenade v6 — fuse end time + derived transform sync
+
+**Runtime log (v5):** `GRENADE-KIN-RECV` pos tracks host in memory, but user still sees
+explosion at throw point. Two bugs:
+
+1. **StartFuse fuse param is END time** (`SendNetEventGrenadeStartFuse` stores it at
+   event+0x1C). We passed `get_engine_time_seconds()` (= now) → instant detonation.
+2. **Visual/collision use derived transforms** (`NdGameObject` vtable +0x2B8 @
+   `0x141BB8320` writes +0x240/+0x250/+0x280 from +0x130). Writing only +0x240 left
+   mesh/capsule at spawn while logged pos moved.
+
+**v6 fix (built):**
+- `seh_write_grenade_launch_state`: write pos/vel to +0x130/+0x240/+0x250/+0x280
+  (+0x270 vel mirror); call `kNdGameObjectRefreshWorldTransformRva`; clear premature
+  landed flags on bootstrap.
+- `seh_start_peer_grenade_fuse`: `fuse_end = now + 3.0s` (not `now`).
+
+## 2026-07-11: grenade flight sync — **CONFIRMED** (user runtime)
+
+User confirmed v6: peer grenade flies the correct arc and explodes at the landing
+point (not throw origin). Working recipe = `GRNE` spawn via
+`NetEventEmitGrenade_Execute` + `GRNK` kinematics stream + derived-transform write
+(`+0x130/+0x240/+0x250/+0x280`, refresh `0x141BB8320`) + `fuse_end = now + 3s`.
+
+## 2026-07-11: destructible / breakable env sync — STATIC map (next P0 candidate)
+
+Native MP already has full breakable paths in `net-event.cpp` (campaign sender
+likely gated like grenades — relay + peer Execute expected).
+
+**Wall / SimpleBreakable damage (shooting, grenades, explosions):**
+| Symbol | RVA | Role |
+|--------|-----|------|
+| `SimpleBreakable::EventHandler` | `0x14088D960` | gameplay origin — builds attack, calls send on host |
+| `SendNetEventBreakableAttackExplosion` | `0x140A56430` | sender (224 B), host-gated `!IsHost()` |
+| `SendNetEventBreakableAttackExplosionWithResults` | `0x140A56CF0` | sender (304 B) + `BreakableSyncData`, host-gated `IsHost()` |
+| `NetEventBreakableAttackExplosion::Execute` | `0x140A56290` | peer: resolve net id `+24`, `PublishAttackEventToTarget` |
+| `NetEventBreakableAttackExplosionWithResults::Execute` | `0x140A56910` | peer: + `BreakableSyncData` @event+`0xE0`, `"net-attack-with-results"` |
+| `SendNetEventBreakableAttackProjectileWithResults` | `0x140A55960` | bullets (176 B), event type `0x3D` |
+| `NetEventBreakableAttackProjectileWithResults::Execute` | `0x140A55580` | peer: sync data @event+`0x60` |
+
+**Post-break state sync (already-broken / late join):**
+| Symbol | RVA | Role |
+|--------|-----|------|
+| `SendNetEventSyncBreakable` | `0x140A655C0` | `SimpleBreakable*` → 96 B `NetEventSyncBreakable` |
+| `NetEventSyncBreakable::Execute` | `0x140A65160` | applies `"net-breakable-sync"` via NdGameObject vtable `+0xD0` |
+| `sub_140A657A0` | `0x140A657A0` | auto-send sync when shape type `+198==4` and not yet broken |
+
+**Key fields:** `NdGameObject` net id `@+0xD8`; event net id `@+24`; `SimpleBreakable`
+destruction table `@+0x238`; Havok layer under `hkdBreakableBody`.
+
+**Related env sync (separate tasks):**
+- `SendNetEventSyncChests` — opened chests
+- `NetEventPropulsedAttack` — explosive props (`0x140A56EE0` ctor region)
+- `SendNetEventAttackExplosion` — generic NPC explosions
+- Cvar `enable-destruct-env`
+
+**Planned approach (mirror grenade GRNE):**
+1. Probe hook `SendNetEventBreakableAttackExplosionWithResults` `0x140A56CF0` — log
+   full 304-byte POD `{netId, attack, BreakableSyncData}` when host breaks wall/grenade.
+2. UDP `BRKW` relay (explosion WithResults) + `BRKP` (projectile WithResults, 176 B).
+3. Peer game-thread `Execute` `0x140A56910` / `0x140A55580` (not bare `0x140A56290`).
+4. Fallback: `NetEventSyncBreakable` Execute `0x140A65160` for snapshot-only path.
+
+**Next step:** probe hook + one host wall-break / grenade-wall runtime log before relay code.
+
+## 2026-07-11 (eve): breakable relay v1 — hooks installed, runtime REJECTED
+
+**Hypothesis:** campaign stone-fence breaks are local-only; force
+`SendNetEventSyncBreakable` `0x140A655C0` after host damage and relay the captured
+96-byte `NetEventSyncBreakable` blob (`BRKS`) to peer `Execute` `0x140A65160` with
+resolver override + `scene_hash`/`world_pos` fallback lookup.
+
+**Campaign damage path (STATIC, disasm):**
+| Step | RVA | Note |
+|------|-----|------|
+| `SimpleBreakable::EventHandler` | `0x88D960` | dispatches by event id |
+| Grenade/explosion event `0x32330453` | — | **not** the shoot attack branch @ `0x88E044` |
+| `SimpleBreakable_ExplosionDamage` (was `sub_14088E6F0`) | `0x88E6F0` | applies destruction table `+0x238` |
+| Post-call notify site | `0x88DC83` | jmp after E6F0 returns |
+| Local apply gate | `0x88E044` | `cmp [rsi+1Ch],0` / jnz — alternate path |
+| `SendNetEventSyncBreakable` multicast call | `0xA65771` | builds tag `0x0101006B`, net id from `+0xD8` |
+| Net resolver | `sub_141622BC0` `0x1622BC0` | table `0x6466FE0`; campaign peer often empty |
+
+**Mod implementation (`teleport_hook.cpp`, `coop_protocol.h` v2):**
+- UDP `BRKW`/`BRKP`/`BRKS` (`BreakableSyncPacket` adds `scene_hash@+0x38`, `world_pos`).
+- Hooks: send-mask observe; sync-multicast callsite `0xA65771` → `BRKS-SEND`; resolver
+  override `0x1622BC0`; local-apply relay `0x88E044`; explosion-damage fn `0x88E6F0`;
+  post-site `0x88DC83`; `SendNetEventSyncBreakable` entry `0xA655C0`.
+- Deferred sync: `notify_local_breakable_damage` → 250 ms → direct
+  `SendNetEventSyncBreakable(0,sb)` → multicast capture → UDP.
+- Peer: `BRKS-RECV` → `NetEventSyncBreakable::Execute` with override + hash/pos scan.
+
+**Prologue trap (fixed):** live `tll.exe` 1.4.21058 prologues include leading `REX.W`
+(`0x40`) on `push rsi`/`push rbp` and `SendNetEventSyncBreakable` uses
+`mov [rsp+30h],-2` not `[rsp+28h]`. Wrong bytes → `install_fire_gate_detour` silently
+SKIPPED (mismatch logged only when `g_logging_enabled`). See
+`reports/breakable_hook_prologues.txt` vs on-disk bytes.
+
+**Runtime (REJECTED, user test after REX fix):**
+- Boot log: all breakable hooks **installed** (both PIDs).
+- Grenade kinematics relay still works (`GRENADE-*`).
+- **Zero `BRK-*` lines** in `locomotion_hook.log` — notify/capture path never fired in
+  logged session OR fence used a path we still miss.
+- User: host may break fence locally; **peer wall stays intact** ("неа").
+
+**Next concrete step (for Codex / next turn):**
+1. In-game grenade-at-fence with logging forced on; grep `BRK-LOCAL-APPLY`, `BRKS-SEND`,
+   `BRKS-RECV`, `BRK-EXEC`.
+2. If still zero `BRK-*`: hook `sub_140A657A0` `0xA657A0` (auto-sync on shape break) or
+   `sub_14088F840` / Havok `hkdBreakableBody` path; static xref from `0x32330453`.
+3. If `BRKS-SEND` but `BRK-EXEC ok=0`: dump peer `scene_hash`/`world_pos` match radius;
+   try direct `PublishAttackEventToTarget` / destruction-table apply instead of Execute.
+4. Add breakable symbols to `ida_apply_labels.py` once a path is CONFIRMED.

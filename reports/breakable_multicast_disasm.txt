@@ -1,0 +1,61 @@
+TARGET 0x140A96830: sub_140A96830 start=0x140A96830 end=0x140A96900
+0x140A96830: mov     [rsp+arg_10], rbp
+0x140A96835: push    rsi
+0x140A96836: push    r14
+0x140A96838: push    r15
+0x140A9683A: sub     rsp, 20h
+0x140A9683E: movzx   r14d, r9b
+0x140A96842: mov     ebp, r8d
+0x140A96845: mov     r15, rdx
+0x140A96848: mov     rsi, rcx
+0x140A9684B: cmp     r8d, 0FFFFFFFFh
+0x140A9684F: jnz     short loc_140A96864
+0x140A96851: mov     rbp, [rsp+38h+arg_10]
+0x140A96856: add     rsp, 20h
+0x140A9685A: pop     r15
+0x140A9685C: pop     r14
+0x140A9685E: pop     rsi
+0x140A9685F: jmp     sub_140A962F0
+0x140A96864: mov     [rsp+38h+arg_0], rbx
+0x140A96869: lea     rbx, [rcx+3C0h]
+0x140A96870: mov     [rsp+38h+arg_8], rdi
+0x140A96875: xor     edi, edi
+0x140A96877: cmp     byte ptr [rbx+0D9h], 0
+0x140A9687E: jz      short loc_140A96895
+0x140A96880: cmp     byte ptr [rbx+7ECh], 0
+0x140A96887: jnz     short loc_140A96895
+0x140A96889: mov     rax, [rbx]
+0x140A9688C: mov     rcx, rbx
+0x140A9688F: call    qword ptr [rax]
+0x140A96891: cmp     eax, ebp
+0x140A96893: jz      short loc_140A968A5
+0x140A96895: inc     edi
+0x140A96897: add     rbx, 43D0h
+0x140A9689E: cmp     edi, 0Ah
+0x140A968A1: jb      short loc_140A96877
+0x140A968A3: jmp     short loc_140A968E7
+0x140A968A5: cmp     rbx, [rsi+3A0h]
+0x140A968AC: jz      short loc_140A968D2
+0x140A968AE: cmp     rbx, [rsi+3A8h]
+0x140A968B5: jz      short loc_140A968D2
+0x140A968B7: mov     eax, 1
+0x140A968BC: movzx   r9d, r14b
+0x140A968C0: shlx    r8d, eax, edi
+0x140A968C5: mov     rdx, r15
+0x140A968C8: mov     rcx, rsi
+0x140A968CB: call    sub_140A962F0
+0x140A968D0: jmp     short loc_140A968E7
+0x140A968D2: test    r14b, r14b
+0x140A968D5: jz      short loc_140A968E7
+0x140A968D7: vmovss  xmm1, cs:dword_142BE9FBC
+0x140A968DF: mov     rcx, r15
+0x140A968E2: call    sub_140BAE400
+0x140A968E7: mov     rbx, [rsp+38h+arg_0]
+0x140A968EC: mov     rdi, [rsp+38h+arg_8]
+0x140A968F1: mov     rbp, [rsp+38h+arg_10]
+0x140A968F6: add     rsp, 20h
+0x140A968FA: pop     r15
+0x140A968FC: pop     r14
+0x140A968FE: pop     rsi
+0x140A968FF: retn
+
