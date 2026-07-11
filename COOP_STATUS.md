@@ -1382,3 +1382,12 @@ calls `0x140CD4526`, `0x140D74893`, `0x140EC7CBA`. All encode screen index in
 ordinary ABI wrapper and calls the original entry normally, avoiding the broken
 partial-prologue trampoline class. Current injected PIDs 29520/30660 report the
 four-site probe installed; runtime screen 0/1 samples await save load.
+
+**Runtime result:** screen 0 dispatched repeatedly; screen 1 never did. The puppet
+is conclusively skipped above `Player_InteractDispatcher`, so the next target is
+the common decision-controller scheduler, not dispatcher internals.
+
+Grenade peer Execute fault was captured at RVA `0xA97393`, exception
+`0xC0000094`, in the empty-registry ownerless lookup `sub_140A97380`. The synthetic
+event now selects the bounded NetCharacter-owner branch with an unmatched id; that
+branch safely continues to descriptor materialization without the division.

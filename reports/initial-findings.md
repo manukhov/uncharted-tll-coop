@@ -26476,3 +26476,28 @@ dispatch reaches the puppet and moves the missing pickup/aim gate inside dispatc
 state; screen 0 without screen 1 proves the owning decision controller is skipped
 above the convergence point. No screen-0 samples during a real local interaction
 would reject the four-site coverage or wrapper installation.
+
+**CONFIRMED runtime:** the installed four-site relay logged recurring screen 0
+dispatch (including 88 calls in the first sample window) and zero screen 1 calls
+while both retained Players were live. Therefore the puppet is skipped above
+`Player_InteractDispatcher`; dispatcher-local nearby/availability state is not the
+root gate. The next climb is the common scheduler/owner of the three live controller
+callers, with per-callsite identity added if needed.
+
+RTTI/factory correction: the prior Exp5b vtable swap at `0x142A2CB70` targeted
+`Player::ReviveCharacter` vtable `+0x10`, not its live update. The dispatcher
+caller `0x140EC75D0` is at vtable `0x142A2CB60 +0x20`. Likewise
+`PlayerScriptedInteractController_UpdateAndDispatch 0x140CD3C00` is
+`Player::BoatDriving` vtable `0x142A0DBF0 +0x20`. Their factories
+`0x140EC8160/0x140CD4750` allocate 384/40-byte controller objects and store the
+owning Player at `controller+0x10`. The working callsite wrapper now logs return
+RVA to identify which authored controller supplies each screen-0 dispatch without
+another vtable mutation.
+
+**Grenade runtime discriminator:** peer Execute faulted at RVA `0xA97393` with
+`0xC0000094` (integer divide by zero), inside `sub_140A97380`. This is exactly the
+ownerless branch selected by synthetic event `+0x18=0`; it queries an empty campaign
+registry using event owner id `+0x1C`. The NetCharacter-owner branch (`+0x18=1`)
+searches a bounded ten-entry list and safely continues ownerless when unmatched.
+The next build selects that branch with id zero, preserving descriptor spawn while
+avoiding the empty-registry division.

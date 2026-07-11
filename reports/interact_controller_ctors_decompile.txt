@@ -1,0 +1,165 @@
+=== 0x140CD4750: sub_140CD4750 [0x140CD4750..0x140CD47A6] ===
+__int64 __fastcall sub_140CD4750(__int64 a1)
+{
+  __int64 result; // rax
+
+  result = sub_1415A0E90(40, 16, (unsigned int)"UNKNOWN", 0, (__int64)"UNKNOWN");
+  if ( result )
+  {
+    *(_WORD *)(result + 24) = 0;
+    *(_QWORD *)result = &Player::BoatDriving::`vftable';
+    *(_QWORD *)(result + 16) = a1;
+  }
+  else
+  {
+    MEMORY[0x10] = a1;
+  }
+  return result;
+}
+
+=== 0x140CD47B0: sub_140CD47B0 [0x140CD47B0..0x140CD47C4] ===
+__int64 __fastcall sub_140CD47B0(__int64 a1)
+{
+  *(_WORD *)(a1 + 24) = 0;
+  *(_QWORD *)a1 = &Player::BoatDriving::`vftable';
+  return a1;
+}
+
+=== 0x140EC8160: sub_140EC8160 [0x140EC8160..0x140EC82DD] ===
+__int64 __fastcall sub_140EC8160(__int64 a1)
+{
+  __int64 v2; // rax
+  __int64 v3; // r9
+  _QWORD *v4; // rcx
+  const char *v5; // r10
+  __int64 v7; // rbx
+  __int64 v8; // rdx
+  int v9; // r8d
+  char v16; // al
+  __int64 result; // rax
+  _DWORD v18[256]; // [rsp+40h] [rbp-418h] BYREF
+
+  v2 = sub_1415A0E90(384, 16, (unsigned int)"UNKNOWN", 0, (__int64)"UNKNOWN");
+  if ( v2 )
+  {
+    *(_WORD *)(v2 + 24) = 0;
+    *(_QWORD *)v2 = &Player::ReviveCharacter::`vftable';
+    *(_QWORD *)(v2 + 32) = &MoveInterface::`vftable';
+    sub_140F0CAF0(v2 + 48);
+    *(_QWORD *)(v3 + 32) = &KnockedDownMoveStickInterface::`vftable';
+    *v4 = &KnockedDownMoveStickInterface::`vftable';
+    v5 = "dra-reviver-reach-gesture";
+    *(_QWORD *)(v3 + 324) = 0;
+    _RAX = v18;
+    v7 = 25;
+    *(_QWORD *)(v3 + 344) = 0;
+    v8 = 8;
+    v9 = 0;
+    _RCX = qword_142BEA360;
+    do
+    {
+      __asm
+      {
+        vmovups ymm0, ymmword ptr [rcx]
+        vmovups xmm1, xmmword ptr [rcx+70h]
+        vmovups ymmword ptr [rax], ymm0
+        vmovups ymm0, ymmword ptr [rcx+20h]
+        vmovups ymmword ptr [rax+20h], ymm0
+        vmovups ymm0, ymmword ptr [rcx+40h]
+        vmovups ymmword ptr [rax+40h], ymm0
+        vmovups xmm0, xmmword ptr [rcx+60h]
+        vmovups xmmword ptr [rax+60h], xmm0
+      }
+      _RAX += 32;
+      _RCX += 16;
+      __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+      --v8;
+    }
+    while ( v8 );
+    do
+    {
+      v16 = *v5;
+      if ( !*v5 )
+        break;
+      ++v5;
+      v9 = (v9 << 8) ^ v18[(unsigned __int8)(v16 ^ HIBYTE(v9))];
+      --v7;
+    }
+    while ( v7 );
+    result = v3;
+    *(_DWORD *)(v3 + 356) = v9;
+    *(_QWORD *)(v3 + 368) = 0;
+    *(_DWORD *)(v3 + 376) = 0;
+    *(_QWORD *)(v3 + 16) = a1;
+  }
+  else
+  {
+    result = 0;
+    MEMORY[0x10] = a1;
+  }
+  __asm { vzeroupper }
+  return result;
+}
+
+=== 0x140EC82E0: sub_140EC82E0 [0x140EC82E0..0x140EC8415] ===
+__int64 __fastcall sub_140EC82E0(__int64 a1)
+{
+  __int64 v1; // r10
+  _QWORD *v2; // rcx
+  const char *v3; // r9
+  __int64 v5; // r11
+  __int64 v6; // rdx
+  int v7; // r8d
+  char v14; // al
+  _DWORD v16[256]; // [rsp+20h] [rbp-418h] BYREF
+
+  *(_WORD *)(a1 + 24) = 0;
+  *(_QWORD *)a1 = &Player::ReviveCharacter::`vftable';
+  *(_QWORD *)(a1 + 32) = &MoveInterface::`vftable';
+  sub_140F0CAF0(a1 + 48);
+  *(_QWORD *)(v1 + 32) = &KnockedDownMoveStickInterface::`vftable';
+  *v2 = &KnockedDownMoveStickInterface::`vftable';
+  v3 = "dra-reviver-reach-gesture";
+  *(_QWORD *)(v1 + 324) = 0;
+  _RAX = v16;
+  v5 = 25;
+  *(_QWORD *)(v1 + 344) = 0;
+  v6 = 8;
+  v7 = 0;
+  _RCX = qword_142BEA360;
+  do
+  {
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [rcx]
+      vmovups xmm1, xmmword ptr [rcx+70h]
+      vmovups ymmword ptr [rax], ymm0
+      vmovups ymm0, ymmword ptr [rcx+20h]
+      vmovups ymmword ptr [rax+20h], ymm0
+      vmovups ymm0, ymmword ptr [rcx+40h]
+      vmovups ymmword ptr [rax+40h], ymm0
+      vmovups xmm0, xmmword ptr [rcx+60h]
+      vmovups xmmword ptr [rax+60h], xmm0
+    }
+    _RAX += 32;
+    _RCX += 16;
+    __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+    --v6;
+  }
+  while ( v6 );
+  do
+  {
+    v14 = *v3;
+    if ( !*v3 )
+      break;
+    ++v3;
+    v7 = (v7 << 8) ^ v16[(unsigned __int8)(v14 ^ HIBYTE(v7))];
+    --v5;
+  }
+  while ( v5 );
+  *(_DWORD *)(v1 + 356) = v7;
+  *(_QWORD *)(v1 + 368) = 0;
+  *(_DWORD *)(v1 + 376) = 0;
+  __asm { vzeroupper }
+  return v1;
+}

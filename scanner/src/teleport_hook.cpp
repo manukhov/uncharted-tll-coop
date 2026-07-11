@@ -3363,7 +3363,10 @@ bool seh_build_grenade_event_payload(
         default_ctor(event);
         // Reproduce NetEventEmitGrenade_BuildFromProjectile except its rejected
         // campaign-unsafe WeaponArtId_ToNetworkIndex dynamic-registry call.
-        event[0x18] = 0;  // no cross-process NetCharacter owner id
+        // Force the NetCharacter-owner branch. A zero/unmatched owner id safely
+        // falls through to ownerless spawn; the alternative branch calls
+        // sub_140A97380 against an empty campaign registry and divides by zero.
+        event[0x18] = 1;
         event[0x19] = (g[0x1521] & 0x20) != 0;
         event[0x1A] = (g[0x1522] & 0x04) != 0;
         event[0x1B] = (g[0x1522] & 0x08) != 0;
@@ -15852,6 +15855,11 @@ using PlayerInteractDispatcherFn = bool(__fastcall*)(void*, int*);
 
 bool __fastcall hooked_player_interact_dispatch_callsite(
     void* dispatcher, int* state) {
+    const std::uintptr_t return_address = reinterpret_cast<std::uintptr_t>(
+        _ReturnAddress());
+    const std::uintptr_t return_rva = return_address >= g_module
+        ? return_address - g_module
+        : return_address;
     const std::uintptr_t base = g_module + kPlayerInteractDispatcherBaseRva;
     const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(dispatcher);
     int screen = -1;
@@ -15878,6 +15886,7 @@ bool __fastcall hooked_player_interact_dispatch_callsite(
         line << "INTERACT-CALLSITE screen=" << screen
              << " stateScreen=" << state_screen
              << " count=" << count
+             << " retRva=0x" << std::hex << return_rva
              << " slot0=0x" << std::hex
              << reinterpret_cast<std::uintptr_t>(retained_player_object(0))
              << " slot1=0x"

@@ -1,0 +1,7 @@
+0x142A2CB58: dq offset ??_R4ReviveCharacter@Player@@6B@
+0x142A2CB60: dq offset sub_140EC8420
+0x142A2CB68: dq offset sub_140EC8100
+0x142A2CB70: dq offset sub_140EC6C10
+0x142A2CB78: dq offset sub_140EC74B0
+0x142A2CB80: dq offset PlayerInteractController_UpdateReviveAndDispatch
+0x142A2CB88: dq offset sub_140EC6A00

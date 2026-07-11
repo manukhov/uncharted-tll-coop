@@ -1,84 +1,19 @@
-TARGET 0x140BE5C80: func_start=0x140be5c80 name=NetEventEmitGrenade_DefaultCtor
-  xref=0x140A7658E type=17 func_start=0x140a761f0 func_name=sub_140A761F0
+TARGET 0x140CD3C00: func_start=0x140cd3c00 name=PlayerBoatDriving_UpdateAndDispatch
+  xref=0x142A0DC10 type=1 func_start=None func_name=None
+  xref=0x142DE2CE0 type=1 func_start=None func_name=None
+  xref=0x142DE2CF0 type=1 func_start=None func_name=None
+  xref=0x146E2F0F8 type=1 func_start=None func_name=None
 
-TARGET 0x140BE5D30: func_start=0x140be5d30 name=NetEventEmitGrenade_BuildFromProjectile
-  xref=0x140BE7215 type=17 func_start=0x140be7000 func_name=SendNetEventEmitGrenade
-  xref=0x146E28324 type=1 func_start=None func_name=None
+TARGET 0x140EC75D0: func_start=0x140ec75d0 name=PlayerReviveCharacter_UpdateAndDispatch
+  xref=0x142A2CB80 type=1 func_start=None func_name=None
+  xref=0x146E3CCA0 type=1 func_start=None func_name=None
 
-TARGET 0x140BE6140: func_start=0x140be6140 name=NetEventEmitGrenade_Deserialize
-  xref=0x1429FF450 type=1 func_start=None func_name=None
-  xref=0x146E28330 type=1 func_start=None func_name=None
+TARGET 0x140CD4750: func_start=0x140cd4750 name=PlayerBoatDrivingController_Create
+  xref=0x140090F40 type=1 func_start=0x140090f10 func_name=sub_140090F10
+  xref=0x146E2F140 type=1 func_start=None func_name=None
 
-TARGET 0x140BE6260: func_start=0x140be6260 name=NetEventEmitGrenade_Serialize
-  xref=0x1429FF458 type=1 func_start=None func_name=None
-  xref=0x146E2833C type=1 func_start=None func_name=None
-
-TARGET 0x140BE63A0: func_start=0x140be63a0 name=NetEventEmitGrenade_Execute
-  xref=0x1429FF460 type=1 func_start=None func_name=None
-  xref=0x146E28348 type=1 func_start=None func_name=None
-
-TARGET 0x140BE7000: func_start=0x140be7000 name=SendNetEventEmitGrenade
-  xref=0x1402E76A6 type=17 func_start=0x1402e6e10 func_name=ProcessExplosion_Init
-  xref=0x140D76EE4 type=17 func_start=0x140d761b0 func_name=sub_140D761B0
-  xref=0x140E1D49E type=17 func_start=0x140e1c3a0 func_name=sub_140E1C3A0
-  xref=0x14151B24A type=17 func_start=0x141519d30 func_name=sub_141519D30
-  xref=0x14154AE8D type=17 func_start=0x14154aae0 func_name=sub_14154AAE0
-  xref=0x146E28354 type=1 func_start=None func_name=None
-
-TARGET 0x141544CD0: func_start=0x141544cd0 name=ProjectileGrenade_ResolveOwner
-  xref=0x1405D8E31 type=17 func_start=0x1405d8e00 func_name=sub_1405D8E00
-  xref=0x1405D9708 type=17 func_start=0x1405d96b0 func_name=sub_1405D96B0
-  xref=0x1406AAB0B type=17 func_start=0x1406aaa40 func_name=sub_1406AAA40
-  xref=0x140A47E41 type=17 func_start=0x140a47df0 func_name=sub_140A47DF0
-  xref=0x140B7F478 type=17 func_start=0x140b7f440 func_name=sub_140B7F440
-  xref=0x140BA4D78 type=17 func_start=0x140ba4810 func_name=sub_140BA4810
-  xref=0x140BE70A0 type=17 func_start=0x140be7000 func_name=SendNetEventEmitGrenade
-  xref=0x140BE8C75 type=17 func_start=0x140be8c00 func_name=sub_140BE8C00
-  xref=0x140DD26A9 type=17 func_start=0x140dcdea0 func_name=Player_ScriptWeaponEventHandler
-  xref=0x1415338EC type=17 func_start=0x141533560 func_name=sub_141533560
-  xref=0x14153490C type=17 func_start=0x141533560 func_name=sub_141533560
-  xref=0x1415361C7 type=17 func_start=0x141535b00 func_name=sub_141535B00
-  xref=0x141536207 type=17 func_start=0x141535b00 func_name=sub_141535B00
-  xref=0x1415362A9 type=17 func_start=0x141535b00 func_name=sub_141535B00
-  xref=0x1415362B6 type=17 func_start=0x141535b00 func_name=sub_141535B00
-  xref=0x141536853 type=17 func_start=0x141535b00 func_name=sub_141535B00
-  xref=0x141536896 type=17 func_start=0x141535b00 func_name=sub_141535B00
-  xref=0x141536BAE type=17 func_start=0x1415369a0 func_name=sub_1415369A0
-  xref=0x141536C51 type=17 func_start=0x1415369a0 func_name=sub_1415369A0
-  xref=0x1415376C7 type=17 func_start=0x141537640 func_name=sub_141537640
-  xref=0x1415376D4 type=17 func_start=0x141537640 func_name=sub_141537640
-  xref=0x141537C32 type=17 func_start=0x1415377c0 func_name=sub_1415377C0
-  xref=0x14153A650 type=17 func_start=0x14153a230 func_name=sub_14153A230
-  xref=0x14153AB2E type=17 func_start=0x14153a230 func_name=sub_14153A230
-  xref=0x14153B082 type=17 func_start=0x14153a230 func_name=sub_14153A230
-  xref=0x14153C1BB type=17 func_start=0x14153a230 func_name=sub_14153A230
-  xref=0x14153C1E9 type=17 func_start=0x14153a230 func_name=sub_14153A230
-  xref=0x14153C37A type=17 func_start=0x14153a230 func_name=sub_14153A230
-  xref=0x14153C781 type=17 func_start=0x14153a230 func_name=sub_14153A230
-  xref=0x14153D210 type=17 func_start=0x14153d130 func_name=sub_14153D130
-  xref=0x14153DD0B type=17 func_start=0x14153dc00 func_name=sub_14153DC00
-  xref=0x14153DE4B type=17 func_start=0x14153dc00 func_name=sub_14153DC00
-  xref=0x14153E214 type=17 func_start=0x14153e1b0 func_name=sub_14153E1B0
-  xref=0x14153F277 type=17 func_start=0x14153ec70 func_name=sub_14153EC70
-  xref=0x14153F47E type=17 func_start=0x14153ec70 func_name=sub_14153EC70
-  xref=0x14153F48B type=17 func_start=0x14153ec70 func_name=sub_14153EC70
-  xref=0x141540551 type=17 func_start=0x141540480 func_name=sub_141540480
-  xref=0x141541E6A type=17 func_start=0x141541ad0 func_name=sub_141541AD0
-  xref=0x141543AD0 type=17 func_start=0x141543660 func_name=sub_141543660
-  xref=0x141543B73 type=17 func_start=0x141543660 func_name=sub_141543660
-  xref=0x141543B8B type=17 func_start=0x141543660 func_name=sub_141543660
-  xref=0x1415442B3 type=17 func_start=0x141543660 func_name=sub_141543660
-  xref=0x141546FF1 type=17 func_start=0x141546130 func_name=sub_141546130
-  xref=0x141549832 type=17 func_start=0x1415497b0 func_name=sub_1415497B0
-  xref=0x14154F182 type=17 func_start=0x14154f100 func_name=sub_14154F100
-  xref=0x14154FCE8 type=17 func_start=0x14154f980 func_name=sub_14154F980
-  xref=0x14154FD67 type=17 func_start=0x14154f980 func_name=sub_14154F980
-  xref=0x14154FFAC type=17 func_start=0x14154fe20 func_name=sub_14154FE20
-  xref=0x14155035B type=17 func_start=0x14154fe20 func_name=sub_14154FE20
-  xref=0x141550451 type=17 func_start=0x14154fe20 func_name=sub_14154FE20
-  xref=0x141550510 type=17 func_start=0x1415504b0 func_name=sub_1415504B0
-  xref=0x14155058C type=17 func_start=0x1415504b0 func_name=sub_1415504B0
-  xref=0x141551C5D type=17 func_start=0x141551710 func_name=sub_141551710
-  xref=0x1415551E4 type=17 func_start=0x1415551a0 func_name=sub_1415551A0
-  xref=0x141556648 type=17 func_start=0x141555fc0 func_name=sub_141555FC0
-  xref=0x146E6D564 type=1 func_start=None func_name=None
+TARGET 0x140EC8160: func_start=0x140ec8160 name=PlayerReviveCharacterController_Create
+  xref=0x140098500 type=1 func_start=0x1400984d0 func_name=sub_1400984D0
+  xref=0x142E02FA8 type=1 func_start=None func_name=None
+  xref=0x142E02FB8 type=1 func_start=None func_name=None
+  xref=0x146E3CCDC type=1 func_start=None func_name=None

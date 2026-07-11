@@ -1,0 +1,13 @@
+TARGET 0x140CD3C00: func_start=0x140cd3c00 name=PlayerScriptedInteractController_UpdateAndDispatch
+  xref=0x142A0DC10 type=1 func_start=None func_name=None
+  xref=0x142DE2CE0 type=1 func_start=None func_name=None
+  xref=0x142DE2CF0 type=1 func_start=None func_name=None
+  xref=0x146E2F0F8 type=1 func_start=None func_name=None
+
+TARGET 0x140D74670: func_start=0x140d74670 name=sub_140D74670
+  xref=0x140D740E6 type=17 func_start=0x140d73690 func_name=sub_140D73690
+  xref=0x146E335A4 type=1 func_start=None func_name=None
+
+TARGET 0x140EC75D0: func_start=0x140ec75d0 name=PlayerInteractController_UpdateReviveAndDispatch
+  xref=0x142A2CB80 type=1 func_start=None func_name=None
+  xref=0x146E3CCA0 type=1 func_start=None func_name=None

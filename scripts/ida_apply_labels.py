@@ -237,14 +237,24 @@ FUNCTIONS = {
         "+0x590 command active flags from the player's joypad index (+0x39B8).",
     ),
     0x140EC75D0: (
-        "PlayerInteractController_UpdateReviveAndDispatch",
-        "Decision-node tick: revive + weapon-pickup disabled commands, then "
+        "PlayerReviveCharacter_UpdateAndDispatch",
+        "Player::ReviveCharacter vtable +0x20: revive + weapon-pickup commands, then "
         "BuildInteractDispatchState -> Player_InteractDispatcher for owner screen.",
     ),
     0x140CD3C00: (
-        "PlayerScriptedInteractController_UpdateAndDispatch",
-        "Decision-node tick: script/interact/boat-stand paths; ends in "
+        "PlayerBoatDriving_UpdateAndDispatch",
+        "Player::BoatDriving vtable +0x20: script/interact/boat-stand paths; ends in "
         "BuildInteractDispatchState -> InteractDispatcher (camera route hardcoded 0).",
+    ),
+    0x140CD4750: (
+        "PlayerBoatDrivingController_Create",
+        "Allocates the 40-byte Player::BoatDriving action controller and stores "
+        "its owning Player at controller+0x10.",
+    ),
+    0x140EC8160: (
+        "PlayerReviveCharacterController_Create",
+        "Allocates the 384-byte Player::ReviveCharacter action controller, "
+        "initializes move interfaces, and stores owner at controller+0x10.",
     ),
     0x140C88220: (
         "Player_InteractDispatchFromBuiltState",

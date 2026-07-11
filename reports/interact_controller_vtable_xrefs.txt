@@ -1,0 +1,7 @@
+TARGET 0x142A0DBF0: func_start=None name=None
+  xref=0x140CD4782 type=1 func_start=0x140cd4750 func_name=sub_140CD4750
+  xref=0x140CD47B0 type=1 func_start=0x140cd47b0 func_name=sub_140CD47B0
+
+TARGET 0x142A2CB60: func_start=None name=None
+  xref=0x140EC81B9 type=1 func_start=0x140ec8160 func_name=sub_140EC8160
+  xref=0x140EC8301 type=1 func_start=0x140ec82e0 func_name=sub_140EC82E0
