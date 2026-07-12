@@ -1,5 +1,24 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-12, Codex - pickup sender capture rejected; lag measured)
+
+**RUNTIME REJECTED (sender capture):** Type-97 ground pickup reached the confirmed
+scripted give path (`GiveWeapon ret_rva=0xDD4208`) and inventory synchronized, but
+the sender emitted `pickup_id=0x0`. The receiver consequently logged
+`PICKUP-ANIM-APPLY ... class=0 name=0 ctxReplay=1 published=0`. No
+`PICKUP-REQ`/`PICKUP-ID-CAPTURE` occurred. The scripted `give-weapon` event carries
+the WeaponInfo payload, not a live `WeaponPickup`; scanning the interact control and
+six dispatcher nearby lists is therefore not a valid sender source for this path.
+The context-replay hypothesis itself was not exercised because its required ids
+never reached the receiver.
+
+**Performance:** no asymmetric process leak was observed. Each game used about
+`12.7 GB` private memory. Two copies on `15.9 GB` physical RAM left about `1.5 GB`
+available and produced roughly `25,700 Memory Pages Input/sec`; the multi-second
+stalls are system paging. Current mod log traffic measured only about `0.03 MiB/min`.
+The completed pose-seed caller histogram is nevertheless disabled in stable builds
+to remove hot-resolver bookkeeping and periodic diagnostic I/O.
+
 ## Turn note (2026-07-12, Codex - kneeling-slide locomotion regression)
 
 **RUNTIME REJECTED:** commit `0459634` changed

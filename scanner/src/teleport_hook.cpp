@@ -2697,7 +2697,9 @@ bool install_get_blended_camera_gate() {
 // Aim-pose caller histogram (see comment inside hooked_pose_seed_resolver). The
 // top per-frame idx==1 caller during puppet ADS is the aim-pose feeder to arm
 // the quat-only guard in - same recipe that found the real pickup give path.
-// Dumps every 2s; counts reset per dump.
+// Static/runtime mapping is complete. Keep this off in the stable build: the
+// resolver is hot and the histogram adds per-call bookkeeping plus periodic I/O.
+constexpr bool kEnablePoseSeedCallerHistogram = false;
 void record_pose_seed_caller(std::uintptr_t rva) {
     struct RetCount {
         std::uintptr_t rva;
@@ -2759,8 +2761,10 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     // addresses for idx==1 calls (helper: __try here forbids C++ objects).
     const std::uintptr_t caller_rva =
         reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - g_module;
-    if (idx == kSlot1ScreenIndex) {
-        record_pose_seed_caller(caller_rva);
+    if constexpr (kEnablePoseSeedCallerHistogram) {
+        if (idx == kSlot1ScreenIndex) {
+            record_pose_seed_caller(caller_rva);
+        }
     }
     const bool fire_path_override =
         g_pose_seed_fire_only_override || g_puppet_aim_ray_override;

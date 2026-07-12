@@ -26937,3 +26937,23 @@ while movement input continues. This confirms that sustained puppet Joypad actio
 `0x200` still conflicts with the locomotion graph; scoped mesh restoration does not
 make full ADS safe during movement. Stable default restored to `false`; F8 remains
 the explicit foreground-only experiment toggle.
+
+### 2026-07-12 (RUNTIME REJECTED): scripted pickup cannot supply context-replay ids
+
+A real Type-97 ground pickup entered `Player_ScriptWeaponEventHandler`'s
+`give-weapon` branch (`GiveWeapon` return `0x140DD4208`). Weapon inventory relay
+completed, but sender capture returned `pickup_id=0`; no RequestInteract or
+WeaponPickup OnInteract hook fired and all six dispatcher nearby lists plus the
+Player interact-control scan were empty. Receiver result was
+`PICKUP-ANIM-APPLY ... class=0 name=0 ctxReplay=1 published=0`, with no visual bend.
+
+This rejects the current sender strategy, not the descriptor sink: the scripted
+event contains WeaponInfo but provides no proven live WeaponPickup from which to
+read `+0x38/+0xD8`. Do not repeat another context-replay runtime test until a static
+sender source for those two ids is established (or the actual scripted pickup
+animation producer is found).
+
+Performance sampling during the same run showed two symmetric `12.7 GB` private
+game processes on a `15.9 GB` RAM system, about `1.5 GB` available memory and
+approximately `25,700 Pages Input/sec`. The observed pauses are paging, not a
+one-sided mod allocation leak. Log growth at the time was only about `0.03 MiB/min`.
