@@ -1,5 +1,33 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-12, Codex - context-scoped pickup descriptor replay)
+
+**STATIC candidate:** the receiver no longer needs to resolve a mirrored live
+`WeaponPickup` to publish the Player-side pickup action. `Player_PublishRequestedInteract`
+`0x140C87D70` reads only two dwords from its interactable argument (`+0x38/+0xD8`).
+Relay those ids and provide a minimal surrogate object.
+
+The target context is now exact: `ThreadContext_GetCurrentProcess 0x1416A2E80`
+reads TLS `ContextProcess` at `+0x90/+0x98`; `ThreadContext_SetCurrentProcess
+0x1416A2ED0` writes the tag and object. Stock publishers use a balanced
+save/set/dispatch/restore scope. Independent producer
+`Player_PublishZiplineRequestedInteract 0x1410BCDF0` emits the same
+`player-requested-interact` descriptor without `Player_InteractDispatcher`,
+rejecting the dispatcher as the only valid producer.
+
+Build boundary when runtime/code changes are allowed: sender relays pickup
+`+0x38/+0xD8`; receiver sets ContextProcess to the retained puppet, calls the
+publisher with a zeroed 0xDC-byte surrogate, then restores context on every exit.
+Inventory remains exclusively `WeaponGivePacket + SLOT-MIRROR`. Alternatives still
+to distinguish: Player-side descriptor alone, paired `interact-with-me`, or a later
+nearby/command-state dependency. No game or injection was run.
+
+Details: `reports/pickup_context_replay_static_20260712.md`.
+
+**Status correction:** the older `STATIC next path` below is complete and rejected
+as the wall. Exp4 proved both slot0 and puppet have live FgAnimData, phase `0x38`,
+matching retained owners, and reach real `Player_Update`.
+
 ## Turn note (2026-07-10, Codex - Exp 2/3 scheduler correction)
 
 **REJECTED:** the latest Cursor/Claude direction treated `dword_143D3C0D0` as the

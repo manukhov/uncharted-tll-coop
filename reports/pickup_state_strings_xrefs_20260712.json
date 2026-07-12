@@ -1,0 +1,189 @@
+{
+  "input": "C:\\users\\vladimir\\desktop\\TLLCoopResearch\\ida\\tll_fresh.exe",
+  "image_base": "0x140000000",
+  "targets": {
+    "player-requested-interact": [
+      {
+        "address": "0x142A08F38",
+        "value": "player-requested-interact",
+        "xrefs": [
+          {
+            "xref": "0x140C87DBF",
+            "function": "0x140C87D70",
+            "function_name": "Player_PublishRequestedInteract"
+          },
+          {
+            "xref": "0x1410BD05A",
+            "function": "0x1410BCDF0",
+            "function_name": "sub_1410BCDF0"
+          }
+        ]
+      },
+      {
+        "address": "0x142A091B8",
+        "value": "player-requested-interact-disabled",
+        "xrefs": [
+          {
+            "xref": "0x140C87634",
+            "function": "0x140C85D20",
+            "function_name": "Player_InteractDispatcher"
+          }
+        ]
+      }
+    ],
+    "interact-with-me": [
+      {
+        "address": "0x1429B65B8",
+        "value": "interact-with-me",
+        "xrefs": [
+          {
+            "xref": "0x14089C520",
+            "function": "0x14089C440",
+            "function_name": "sub_14089C440"
+          },
+          {
+            "xref": "0x14089CAB3",
+            "function": "0x14089C910",
+            "function_name": "sub_14089C910"
+          },
+          {
+            "xref": "0x1408A4E08",
+            "function": "0x1408A4BD0",
+            "function_name": "sub_1408A4BD0"
+          },
+          {
+            "xref": "0x1408B8F8F",
+            "function": "0x1408B8D20",
+            "function_name": "sub_1408B8D20"
+          },
+          {
+            "xref": "0x1408BDA17",
+            "function": "0x1408BD800",
+            "function_name": "sub_1408BD800"
+          },
+          {
+            "xref": "0x1408C8D21",
+            "function": "0x1408C8A40",
+            "function_name": "WeaponPickupInteractControl_RequestInteract"
+          },
+          {
+            "xref": "0x1408C9146",
+            "function": "0x1408C8EF0",
+            "function_name": "sub_1408C8EF0"
+          },
+          {
+            "xref": "0x1408CAEE3",
+            "function": "0x1408CACA0",
+            "function_name": "sub_1408CACA0"
+          },
+          {
+            "xref": "0x1408CBA5E",
+            "function": "0x1408CB5A0",
+            "function_name": "sub_1408CB5A0"
+          },
+          {
+            "xref": "0x1408CFD27",
+            "function": "0x1408CFB10",
+            "function_name": "sub_1408CFB10"
+          },
+          {
+            "xref": "0x1408E5370",
+            "function": "0x1408E5160",
+            "function_name": "sub_1408E5160"
+          },
+          {
+            "xref": "0x1408E56F5",
+            "function": "0x1408E5530",
+            "function_name": "sub_1408E5530"
+          },
+          {
+            "xref": "0x1408F3407",
+            "function": "0x1408F31F0",
+            "function_name": "sub_1408F31F0"
+          },
+          {
+            "xref": "0x140DCCF3E",
+            "function": "0x140DCCF10",
+            "function_name": "sub_140DCCF10"
+          },
+          {
+            "xref": "0x140F10981",
+            "function": "0x140F10950",
+            "function_name": "sub_140F10950"
+          },
+          {
+            "xref": "0x140FCA3BE",
+            "function": "0x140FCA390",
+            "function_name": "sub_140FCA390"
+          },
+          {
+            "xref": "0x1414FCCB4",
+            "function": "0x1414FBE10",
+            "function_name": "sub_1414FBE10"
+          },
+          {
+            "xref": "0x1415059C5",
+            "function": "0x141505650",
+            "function_name": "sub_141505650"
+          },
+          {
+            "xref": "0x14153511D",
+            "function": "0x141534EF0",
+            "function_name": "sub_141534EF0"
+          },
+          {
+            "xref": "0x141538C25",
+            "function": "0x1415388F0",
+            "function_name": "sub_1415388F0"
+          }
+        ]
+      }
+    ],
+    "weapon-pickup-swap": [
+      {
+        "address": "0x142A08D10",
+        "value": "weapon-pickup-swap",
+        "xrefs": [
+          {
+            "xref": "0x140C80060",
+            "function": "0x140C7FF40",
+            "function_name": "Player_ResolveWeaponPickupInteractAnim"
+          },
+          {
+            "xref": "0x140C80130",
+            "function": "0x140C7FF40",
+            "function_name": "Player_ResolveWeaponPickupInteractAnim"
+          },
+          {
+            "xref": "0x140EC7747",
+            "function": "0x140EC75D0",
+            "function_name": "PlayerReviveCharacter_UpdateAndDispatch"
+          }
+        ]
+      }
+    ],
+    "weapon-pickup-when-no-weapon": [
+      {
+        "address": "0x142A08D50",
+        "value": "weapon-pickup-when-no-weapon",
+        "xrefs": [
+          {
+            "xref": "0x140C801D3",
+            "function": "0x140C7FF40",
+            "function_name": "Player_ResolveWeaponPickupInteractAnim"
+          },
+          {
+            "xref": "0x140C80273",
+            "function": "0x140C7FF40",
+            "function_name": "Player_ResolveWeaponPickupInteractAnim"
+          },
+          {
+            "xref": "0x140EC77D9",
+            "function": "0x140EC75D0",
+            "function_name": "PlayerReviveCharacter_UpdateAndDispatch"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -26826,3 +26826,36 @@ peer ADS pose seed. It should pass a hook-local target float4 rather than overwr
 the caller stack. All body-forward, mode, and limit arguments remain native. The
 repository DLL has no `DLL_PROCESS_DETACH` restoration path, so install once and keep
 the global slot swap for process lifetime.
+
+### 2026-07-12 STATIC: pickup Player descriptor can be targeted without a live receiver pickup
+
+`Player_PublishRequestedInteract 0x140C87D70` was re-audited at its actual data
+boundary. Its interactable argument contributes exactly two dwords, `+0x38` and
+`+0xD8`; no other interactable field is read before the function packages
+`player-requested-interact`. This makes a minimal surrogate descriptor possible
+when the corresponding ground `WeaponPickup` no longer exists on the receiver.
+
+The target is controlled through the engine's scoped actor context:
+
+- `ThreadContext_GetCurrentProcess 0x1416A2E80` returns the TLS process object from
+  `FlsGetValue(...)+0x98` when the tag at `+0x90` is present;
+- `ThreadContext_SetCurrentProcess 0x1416A2ED0` writes the `ContextProcess` CRC at
+  `+0x90` and the supplied object at `+0x98`;
+- stock event paths use `old=get; set(target); target->virtual+0xD0(event);
+  set(old)`, proving the context is designed for balanced temporary replacement.
+
+The string-xref set supplies an independent producer:
+`Player_PublishZiplineRequestedInteract 0x1410BCDF0` constructs the same
+`player-requested-interact` descriptor from two `zipline` ids and publishes it
+without calling `Player_InteractDispatcher`. Therefore the generic dispatcher and
+a receiver-side nearby scan are not mandatory for descriptor construction.
+
+**STATIC candidate:** relay sender pickup fields `+0x38/+0xD8`, set ContextProcess
+to the retained puppet, call `Player_PublishRequestedInteract` with a zeroed
+0xDC-byte surrogate containing those fields, and restore the old context on every
+exit. This avoids the absent cross-copy pickup object and the rejected multiplayer
+animation-snapshot art-group path. Competing hypotheses remain: the Player-side
+descriptor is sufficient; it must be paired with `interact-with-me`; or a later
+nearby/command-state dependency still rejects it. No runtime test was run.
+
+Evidence and prediction: `reports/pickup_context_replay_static_20260712.md`.

@@ -8,6 +8,24 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-12: actor thread context and context-free interact publish ---
+    0x1416A2E80: (
+        "ThreadContext_GetCurrentProcess",
+        "Returns TLS ContextProcess at Fls block +0x98 when the +0x90 tag is set, "
+        "otherwise returns the global fallback process context.",
+    ),
+    0x1416A2ED0: (
+        "ThreadContext_SetCurrentProcess",
+        "Writes the ContextProcess CRC to the current Fls block +0x90 and the "
+        "supplied process object to +0x98. Stock event publishers save, set, "
+        "dispatch virtual +0xD0, then restore through this helper.",
+    ),
+    0x1410BCDF0: (
+        "Player_PublishZiplineRequestedInteract",
+        "Independent producer of player-requested-interact for a retained zipline "
+        "target. Builds the same two-id descriptor as the generic Player interact "
+        "publisher without calling Player_InteractDispatcher.",
+    ),
     # --- 2026-07-12: Player aim-additive animation pipeline ---
     0x140CAFA20: (
         "PlayerAimController_UpdateBlendState",
