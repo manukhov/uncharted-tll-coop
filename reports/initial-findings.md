@@ -26883,3 +26883,26 @@ mirrored WeaponPickup. This is the same class of mechanism as the aim-pose slot.
 only decidable by the runtime test of the context-replay publish. The static quota
 for implementing the candidate is now met (sink identified + puppet slot reachable +
 puppet Update confirmed running).
+
+### 2026-07-12 (static): pickup descriptor is a STATE-SCRIPT EVENT broadcast to the target actor-Process (strongly favors hyp1)
+
+DispatchOrResolveActorStateDescriptorIntoRuntimeSlot 0x141C9ED50 routes the
+descriptor either through the fast built-in path
+`PublishStructuredStateBlockToActorVirtualD0(descId, descriptor, 0)` (actor vtable
++0xD0) or through `SsManager::BroadcastEvent(Process*, Event&)` (ss-manager.cpp).
+Both target a PROCESS/actor. So `player-requested-interact` is delivered as a
+per-actor STATE-SCRIPT EVENT / state-block to the target actor (= TLS ContextProcess),
+NOT a global field or a dispatcher-only structure.
+
+**Implication for the context-replay implementation (committed c6e2a81):** setting
+ContextProcess=puppet makes the event target the PUPPET; its own state-script/anim
+(which runs during the puppet's confirmed-live Update, Exp4) consumes it. This is a
+per-actor, dispatcher-independent delivery - the mechanism is sound and self-
+contained. The implementation explicitly SETS ContextProcess (does not rely on
+ambient TLS), so it is robust to the call site.
+
+**Remaining runtime-only unknown (unchanged):** whether the puppet's state-script is
+in a state that ACCEPTS the interact event and its anim graph has the pickup-swap
+node keyed on it (hyp1), or whether the world-side `interact-with-me` event is also
+required (hyp2). This is decided only by the pending runtime test (pick up on copy 1,
+watch the copy-2 puppet + PICKUP-CTXREPLAY published=1). Static quota fully met.
