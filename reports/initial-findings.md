@@ -26971,3 +26971,20 @@ nearest live object with matching art `+0x520`. It then reads runtime id `+0xBC`
 descriptor ids `+0x38/+0xD8`. This is **STATIC**, not confirmed: a scripted pickup
 may have no WeaponPickup process or may destroy it before GiveWeapon. Distinguishing
 runtime log is `PICKUP-ID-CAPTURE ... source=factory-cache`.
+
+**RUNTIME REJECTED:** M-30 test with factory cache installed before save load still
+emitted `pickup_id=0`; no factory-cache match existed at scripted GiveWeapon time.
+
+### 2026-07-13 STATIC: PlayerPickupController is the native bend producer
+
+The `interact-with-me` script branch (`0x4825A9F1`) reaches decision state `Pickup`
+and calls `Player+0x1EB8` vtable `+0x38` at `0x140DD0A3C`. The slot points to
+`PlayerPickupController_StartOrQueue 0x140F49CA0` (`0x142A34190`). It copies its
+third argument as a 32-byte POD into a 16-entry queue (`+0x130`, stride `0x30`,
+count `+0x430`) and selects native `dra-pickup-*` gesture hashes at `+0x434`.
+
+The downstream animation identity is independently pinned: `0x140F4B150` starts
+the gesture and handles `signal-pickup`; `0x140F4CD20` contains the exact
+`PlayerPickupController::PostAnimBlending` assertion (`player-pickup.cpp:897`);
+`0x140F4D0E0` publishes `player-pickup` and clears the queue. This is the actual
+bend producer and is separate from later `give-weapon 0x140DD4208`.

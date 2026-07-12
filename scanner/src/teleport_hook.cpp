@@ -861,6 +861,9 @@ std::atomic<std::uint32_t> g_pending_pickup_id{0};
 std::atomic<std::uint32_t> g_pending_pickup_art{0};
 std::atomic<std::uint32_t> g_pending_pickup_class_id{0};
 std::atomic<std::uint32_t> g_pending_pickup_name_id{0};
+alignas(16) std::uint8_t g_pending_pickup_controller_start_args[32]{};
+std::atomic<bool> g_pending_pickup_controller_start{false};
+std::atomic<ULONGLONG> g_controller_pickup_recent_until_ms{0};
 volatile bool g_pickup_context_replay = true;  // Numpad 3 toggles
 std::atomic<std::uint32_t> g_last_applied_pickup_seq{0};
 std::atomic<std::uint32_t> g_pending_pickup_seq{0};
@@ -2955,11 +2958,8 @@ WeaponPickupOnInteractFunction g_original_weapon_pickup_on_interact = nullptr;
 using PickupRequestInteractFunction = std::int64_t(__fastcall*)(
     std::uint64_t, std::int64_t, std::int64_t);
 PickupRequestInteractFunction g_original_pickup_request_interact = nullptr;
-using WeaponPickupFactoryFunction = void*(__fastcall*)(void*, void*);
-WeaponPickupFactoryFunction g_original_weapon_pickup_factory = nullptr;
-constexpr std::size_t kWeaponPickupCacheCapacity = 2048;
-std::atomic<void*> g_weapon_pickup_cache[kWeaponPickupCacheCapacity]{};
-std::atomic<std::size_t> g_weapon_pickup_cache_count{0};
+using PlayerPickupStartFunction = char(__fastcall*)(void*, void*, const void*);
+PlayerPickupStartFunction g_original_player_pickup_start = nullptr;
 
 // SEH leaf readers: one guarded read each, so a bad candidate pointer aborts only
 // that probe, not the whole scan.
@@ -3013,85 +3013,75 @@ std::uint32_t read_weapon_pickup_art_id(std::uint64_t pickup_obj) {
     return art_id;
 }
 
-bool relay_weapon_art_matches(std::uint32_t lhs, std::uint32_t rhs);
-
-void cache_weapon_pickup(void* pickup) {
-    if (pickup == nullptr) {
-        return;
-    }
-    const std::size_t index =
-        g_weapon_pickup_cache_count.fetch_add(1, std::memory_order_relaxed);
-    if (index < kWeaponPickupCacheCapacity) {
-        g_weapon_pickup_cache[index].store(pickup, std::memory_order_release);
-    }
-}
-
-void* __fastcall hooked_weapon_pickup_factory(void* registry, void* storage) {
-    void* const pickup = g_original_weapon_pickup_factory != nullptr
-        ? g_original_weapon_pickup_factory(registry, storage)
-        : nullptr;
-    cache_weapon_pickup(pickup);
-    return pickup;
-}
-
-void* find_cached_weapon_pickup_by_art(void* player, std::uint32_t art) {
-    if (player == nullptr || art == 0 || g_module == 0 ||
-        readable_bytes(static_cast<std::byte*>(player) + kWorldPositionOffset) < 12) {
-        return nullptr;
-    }
-    const auto* const player_pos = reinterpret_cast<const float*>(
-        static_cast<const std::byte*>(player) + kWorldPositionOffset);
-    if (!valid_network_position(player_pos)) {
-        return nullptr;
-    }
-
-    void* best = nullptr;
-    float best_distance_sq = 25.0F;  // pickup interaction is necessarily nearby
-    const std::size_t count = (std::min)(
-        g_weapon_pickup_cache_count.load(std::memory_order_acquire),
-        kWeaponPickupCacheCapacity);
-    for (std::size_t i = 0; i < count; ++i) {
-        void* const candidate =
-            g_weapon_pickup_cache[i].load(std::memory_order_acquire);
-        if (candidate == nullptr ||
-            readable_bytes(static_cast<std::byte*>(candidate) + 0x524) < 4) {
-            continue;
-        }
-        __try {
-            const auto* const bytes = static_cast<const std::byte*>(candidate);
-            if (*reinterpret_cast<const std::uintptr_t*>(bytes) !=
-                    g_module + kWeaponPickupVftableRva ||
-                !relay_weapon_art_matches(
-                    *reinterpret_cast<const std::uint32_t*>(bytes + 0x520), art) ||
-                *reinterpret_cast<const std::uint32_t*>(
-                    bytes + kGameObjectRuntimeIdOffset) == 0) {
-                continue;
-            }
-            const auto* const pos = reinterpret_cast<const float*>(
-                bytes + kWorldPositionOffset);
-            if (!valid_network_position(pos)) {
-                continue;
-            }
-            const float dx = pos[0] - player_pos[0];
-            const float dy = pos[1] - player_pos[1];
-            const float dz = pos[2] - player_pos[2];
-            const float distance_sq = dx * dx + dy * dy + dz * dz;
-            if (std::isfinite(distance_sq) && distance_sq < best_distance_sq) {
-                best_distance_sq = distance_sq;
-                best = candidate;
-            }
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-        }
-    }
-    return best;
-}
-
 std::uint32_t normalize_relay_weapon_art(std::uint32_t art_id) {
     return art_id & 0x0FFFFFFF;
 }
 
 bool relay_weapon_art_matches(std::uint32_t lhs, std::uint32_t rhs) {
     return normalize_relay_weapon_art(lhs) == normalize_relay_weapon_art(rhs);
+}
+
+char __fastcall hooked_player_pickup_start(
+    void* controller, void* object, const void* start_args) {
+    const char result = g_original_player_pickup_start != nullptr
+        ? g_original_player_pickup_start(controller, object, start_args)
+        : 0;
+    if (!result || controller == nullptr || start_args == nullptr ||
+        !g_pickup_relay || !g_state_net.enabled || !g_state_net.peer_set ||
+        readable_bytes(static_cast<std::byte*>(controller) + 0x110) <
+            sizeof(void*) || readable_bytes(start_args) < 32) {
+        return result;
+    }
+    void* const owner = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(controller) + 0x108);
+    if (owner == nullptr || owner != retained_player_object(0)) {
+        return result;
+    }
+
+    coop::PickupPacket packet{};
+    packet.flags = coop::kPickupFlagControllerStartArgs;
+    packet.sequence = g_pickup_send_seq.fetch_add(1) + 1;
+    if (object != nullptr) {
+        packet.pickup_object_id = read_weapon_pickup_runtime_id(
+            reinterpret_cast<std::uint64_t>(object));
+        packet.weapon_art_id = read_weapon_pickup_art_id(
+            reinterpret_cast<std::uint64_t>(object));
+    }
+    std::memcpy(packet.controller_start_args, start_args,
+                sizeof(packet.controller_start_args));
+    sendto(g_state_net.send_socket,
+           reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
+           reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+           sizeof(g_state_net.peer_addr));
+    std::ostringstream line;
+    line << "PICKUP-CONTROLLER-SEND seq=" << packet.sequence
+         << " object=" << (object != nullptr ? 1 : 0)
+         << " id=0x" << std::hex << packet.pickup_object_id
+         << " art=0x" << packet.weapon_art_id << std::dec;
+    force_log_line(line.str().c_str());
+    return result;
+}
+
+bool install_player_pickup_start_relay() {
+    auto* const slot = reinterpret_cast<void**>(
+        g_module + kPlayerPickupStartVtableSlotRva);
+    if (*slot != reinterpret_cast<void*>(g_module + kPlayerPickupStartRva)) {
+        boot_log_line("PlayerPickupController Start relay SKIPPED (slot mismatch)");
+        return false;
+    }
+    g_original_player_pickup_start =
+        reinterpret_cast<PlayerPickupStartFunction>(*slot);
+    DWORD old = 0;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+        boot_log_line("PlayerPickupController Start relay SKIPPED (protect)");
+        return false;
+    }
+    *slot = reinterpret_cast<void*>(&hooked_player_pickup_start);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(void*), old, &ignored);
+    boot_log_line("PlayerPickupController Start relay installed");
+    return true;
 }
 
 std::uint32_t capture_pickup_id_from_weapon_info(const void* weapon_info) {
@@ -3320,27 +3310,6 @@ bool install_pickup_request_interact_gate() {
                       ? "pickup RequestInteract animation relay installed"
                       : "pickup RequestInteract animation relay SKIPPED");
     return g_original_pickup_request_interact != nullptr;
-}
-
-bool install_weapon_pickup_factory_cache() {
-    constexpr std::array<std::uint8_t, 21> kFactoryPrologue{
-        0x40, 0x53,
-        0x48, 0x83, 0xEC, 0x40,
-        0x48, 0xC7, 0x44, 0x24, 0x30, 0xFE, 0xFF, 0xFF, 0xFF,
-        0x48, 0x8B, 0xDA,
-        0x48, 0x85, 0xD2,
-    };
-    g_original_weapon_pickup_factory =
-        reinterpret_cast<WeaponPickupFactoryFunction>(
-            install_fire_gate_detour(
-                kWeaponPickupFactoryRva,
-                kFactoryPrologue.data(), kFactoryPrologue.size(),
-                reinterpret_cast<void*>(&hooked_weapon_pickup_factory),
-                "WeaponPickup factory cache"));
-    boot_log_line(g_original_weapon_pickup_factory != nullptr
-                      ? "WeaponPickup factory cache installed"
-                      : "WeaponPickup factory cache SKIPPED");
-    return g_original_weapon_pickup_factory != nullptr;
 }
 
 // Exp 5b: probe whether PlayerInteractController update sub_140EC6C10 runs for the
@@ -5131,7 +5100,6 @@ void __fastcall hooked_give_weapon_tail(
     std::uint32_t relay_pickup_object_id = 0;
     std::uint32_t relay_pickup_class_id = 0;
     std::uint32_t relay_pickup_name_id = 0;
-    bool relay_pickup_from_factory = false;
     coop::WeaponGivePacket relay_pkt{};
     void* relay_local_player = nullptr;
     if (g_pickup_relay && g_state_net.enabled && g_state_net.peer_set &&
@@ -5157,26 +5125,15 @@ void __fastcall hooked_give_weapon_tail(
                 } else {
                     // Capture while the pickup is still in the world / interact
                     // control — after GiveWeapon the nearby list is usually empty.
-                    void* relay_pickup =
-                        find_cached_weapon_pickup_by_art(local_player, relay_art);
-                    if (relay_pickup != nullptr) {
-                        relay_pickup_from_factory = true;
-                        relay_pickup_object_id = read_weapon_pickup_runtime_id(
-                            reinterpret_cast<std::uint64_t>(relay_pickup));
-                    }
-                    if (relay_pickup_object_id == 0) {
-                        relay_pickup_object_id = capture_weapon_pickup_for_relay(
-                            local_player, local_ctrl, relay_art);
-                    }
+                    relay_pickup_object_id = capture_weapon_pickup_for_relay(
+                        local_player, local_ctrl, relay_art);
                     if (relay_pickup_object_id == 0) {
                         relay_pickup_object_id =
                             capture_pickup_id_from_weapon_info(weapon_info);
                     }
                     if (relay_pickup_object_id != 0) {
-                        void* const pickup = relay_pickup != nullptr
-                            ? relay_pickup
-                            : resolve_weapon_pickup_by_runtime_id(
-                                  relay_pickup_object_id, relay_art);
+                        void* const pickup = resolve_weapon_pickup_by_runtime_id(
+                            relay_pickup_object_id, relay_art);
                         if (pickup != nullptr) {
                             seh_read_dword(
                                 static_cast<const std::byte*>(pickup) + 0x38,
@@ -5190,9 +5147,6 @@ void __fastcall hooked_give_weapon_tail(
                             << relay_pickup_object_id << " art=0x" << relay_art
                             << " class=0x" << relay_pickup_class_id
                             << " name=0x" << relay_pickup_name_id
-                            << " source="
-                            << (relay_pickup_from_factory ? "factory-cache"
-                                                         : "legacy-scan")
                             << std::dec;
                         force_log_line(cap.str().c_str());
                     }
@@ -8260,10 +8214,14 @@ DWORD WINAPI state_recv_thread(void*) {
                    received == static_cast<int>(sizeof(coop::PickupPacket))) {
             coop::PickupPacket pp{};
             std::memcpy(&pp, buf, sizeof(pp));
+            const bool controller_start =
+                (pp.flags & coop::kPickupFlagControllerStartArgs) != 0;
             if (pp.version == coop::kPickupPacketVersion &&
-                pp.pickup_object_id != 0) {
-                g_relay_pickup_wait_id.store(pp.pickup_object_id,
-                                             std::memory_order_relaxed);
+                (pp.pickup_object_id != 0 || controller_start)) {
+                if (pp.pickup_object_id != 0) {
+                    g_relay_pickup_wait_id.store(pp.pickup_object_id,
+                                                 std::memory_order_relaxed);
+                }
                 if (pp.sequence !=
                     g_last_applied_pickup_seq.load(std::memory_order_relaxed)) {
                     g_pending_pickup_id.store(pp.pickup_object_id,
@@ -8274,11 +8232,22 @@ DWORD WINAPI state_recv_thread(void*) {
                                                     std::memory_order_relaxed);
                     g_pending_pickup_name_id.store(pp.interact_name_id,
                                                    std::memory_order_relaxed);
+                    if (controller_start) {
+                        std::memcpy(g_pending_pickup_controller_start_args,
+                                    pp.controller_start_args,
+                                    sizeof(pp.controller_start_args));
+                        g_controller_pickup_recent_until_ms.store(
+                            GetTickCount64() + 3000,
+                            std::memory_order_relaxed);
+                    }
+                    g_pending_pickup_controller_start.store(
+                        controller_start, std::memory_order_relaxed);
                     g_pending_pickup_seq.store(pp.sequence,
                                                std::memory_order_relaxed);
                     // Defer apply_peer_pickup_animation until SLOT-MIRROR gives
                     // the relay art onto the puppet (see queue/arm helpers).
-                    if (!g_relay_pickup_wait_mirror.load(
+                    if (controller_start ||
+                        !g_relay_pickup_wait_mirror.load(
                             std::memory_order_acquire)) {
                         g_pending_pickup_flag.store(true,
                                                     std::memory_order_release);
@@ -9887,6 +9856,10 @@ bool puppet_weapon_sync_ready(void* puppet);
 void queue_relay_pickup_gesture_after_mirror(
     std::uint32_t art, std::uint32_t seq) {
     if (!g_pickup_relay || !is_pickup_relay_art(art)) {
+        return;
+    }
+    if (GetTickCount64() < g_controller_pickup_recent_until_ms.load(
+                               std::memory_order_acquire)) {
         return;
     }
     g_relay_pickup_wait_art.store(art, std::memory_order_relaxed);
@@ -12175,6 +12148,33 @@ bool seh_context_replay_publish(void* puppet, void* dispatcher,
 // Consume only from the puppet's per-player update. Player_PublishRequestedInteract
 // resolves its target actor from thread-local state, so calling it from the global
 // drive tick could animate the local player instead.
+bool seh_queue_puppet_pickup_controller_start(
+    void* puppet, const std::uint8_t start_args[32]) {
+    if (puppet == nullptr || start_args == nullptr ||
+        g_original_player_pickup_start == nullptr ||
+        readable_bytes(static_cast<std::byte*>(puppet) + 0x1EC0) <
+            sizeof(void*)) {
+        return false;
+    }
+    void* const controller = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(puppet) + 0x1EB8);
+    if (controller == nullptr ||
+        readable_bytes(static_cast<std::byte*>(controller) + 0x110) <
+            sizeof(void*)) {
+        return false;
+    }
+    __try {
+        if (*reinterpret_cast<void**>(
+                static_cast<std::byte*>(controller) + 0x108) != puppet) {
+            return false;
+        }
+        return g_original_player_pickup_start(
+                   controller, nullptr, start_args) != 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 void apply_peer_pickup_animation(void* puppet) {
     if (!g_pickup_relay) {
         g_pending_pickup_flag.store(false, std::memory_order_release);
@@ -12188,12 +12188,39 @@ void apply_peer_pickup_animation(void* puppet) {
         g_pending_pickup_art.load(std::memory_order_relaxed);
     const std::uint32_t seq =
         g_pending_pickup_seq.load(std::memory_order_relaxed);
+    const bool controller_start =
+        g_pending_pickup_controller_start.load(std::memory_order_relaxed);
     if (g_module == 0 || puppet == nullptr || !world_stable() ||
         readable_bytes(static_cast<std::byte*>(puppet) + 0x4010) <
             sizeof(std::uint32_t)) {
         return;
     }
-    if (art != 0 && !puppet_has_weapon_art_id(puppet, art)) {
+    if (!controller_start && art != 0 && !puppet_has_weapon_art_id(puppet, art)) {
+        return;
+    }
+
+    if (controller_start) {
+        alignas(16) std::uint8_t start_args[32]{};
+        std::memcpy(start_args, g_pending_pickup_controller_start_args,
+                    sizeof(start_args));
+        const bool queued =
+            seh_queue_puppet_pickup_controller_start(puppet, start_args);
+        if (!queued) {
+            static ULONGLONG last_queue_fail_log = 0;
+            const ULONGLONG now = GetTickCount64();
+            if (now - last_queue_fail_log > 500) {
+                last_queue_fail_log = now;
+                force_log_line("PICKUP-CONTROLLER-APPLY queued=0");
+            }
+            return;
+        }
+        g_pending_pickup_controller_start.store(false,
+                                                 std::memory_order_relaxed);
+        g_pending_pickup_flag.store(false, std::memory_order_release);
+        g_last_applied_pickup_seq.store(seq, std::memory_order_relaxed);
+        g_puppet_pickup_gesture_until_ms.store(0, std::memory_order_release);
+        g_puppet_pickup_action_started.store(true, std::memory_order_release);
+        force_log_line("PICKUP-CONTROLLER-APPLY queued=1");
         return;
     }
 
@@ -18878,7 +18905,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_fire_capture();
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
-    install_weapon_pickup_factory_cache();
+    install_player_pickup_start_relay();
     install_pickup_request_interact_gate();
     install_weapon_pickup_gate();
     install_grenade_init_probe();

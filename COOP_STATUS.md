@@ -1,5 +1,22 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-13, Codex - native PlayerPickupController relay)
+
+**RUNTIME REJECTED:** factory-cache test with M-30 (PIDs 5084/21076) still emitted
+`pickup_id=0`; no matching live WeaponPickup exists at scripted GiveWeapon time.
+
+**STATIC replacement (quota met):** the actual bend producer is
+`PlayerPickupController` at `Player+0x1EB8`. The `interact-with-me`/`Pickup` script
+branch calls vtable `+0x38` (`PlayerPickupController_StartOrQueue 0x140F49CA0`) at
+`0x140DD0A3C`. It queues a 32-byte POD arg3, selects `dra-pickup-*`, starts through
+`0x140F4B150`/`signal-pickup`, post-blends at self-identified `0x140F4CD20`, and
+publishes `player-pickup` on completion `0x140F4D0E0`.
+
+PickupPacket v4 now relays that exact 32-byte arg. Receiver calls the original on
+`puppet+0x1EB8` with object=null, supported by the native function. Prediction:
+`PICKUP-CONTROLLER-SEND` -> `PICKUP-CONTROLLER-APPLY queued=1` -> one visible bend.
+Details: `reports/player_pickup_controller_static_20260713.md`.
+
 ## Turn note (2026-07-13, Codex - WeaponPickup factory-cache sender candidate)
 
 **STATIC candidate:** `WeaponPickup_Factory 0x141579150` is the registered class

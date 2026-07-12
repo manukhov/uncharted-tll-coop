@@ -8,6 +8,40 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-13: native pickup gesture controller ---
+    0x140F49300: (
+        "PlayerPickupController_Construct",
+        "Constructs the mounted Player+0x1EB8 pickup controller, including the "
+        "16-entry queue at +0x130 (stride 0x30), queue count +0x430, selected "
+        "dra-pickup-* gesture hash +0x434, timing and joint-state fields.",
+    ),
+    0x140F49CA0: (
+        "PlayerPickupController_StartOrQueue",
+        "Vtable +0x38. Called by the interact-with-me/Pickup script branch at "
+        "0x140DD0A3C. Queues one pickup record and selects the native "
+        "dra-pickup-* gesture. Explicitly supports a null object argument; arg3 "
+        "is a 32-byte POD copied into the queue record.",
+    ),
+    0x140F4B150: (
+        "PlayerPickupController_TryStartGesture",
+        "Resolves and starts the queued dra-pickup-* gesture and waits for the "
+        "signal-pickup marker through the controller's native animation state.",
+    ),
+    0x140F4BF70: (
+        "PlayerPickupController_Update",
+        "Per-frame pickup-controller update reached through its vtable +0x28; "
+        "advances queued pickup records and starts/completes the gesture.",
+    ),
+    0x140F4CD20: (
+        "PlayerPickupController_PostAnimBlending",
+        "Confirmed by player-pickup.cpp:897 assertion. Applies pickup gesture "
+        "post-blend/joint state while the native pickup action is active.",
+    ),
+    0x140F4D0E0: (
+        "PlayerPickupController_CompleteAndPublish",
+        "Completes queued pickup records and publishes the player-pickup actor "
+        "state through DispatchOrResolveActorStateDescriptorIntoRuntimeSlot.",
+    ),
     # --- 2026-07-12: actor thread context and context-free interact publish ---
     0x1416A2E80: (
         "ThreadContext_GetCurrentProcess",
@@ -4365,12 +4399,6 @@ FUNCTIONS = {
         "player-cover-actions.cpp, player-cover-states.cpp, player-evade.cpp, "
         "use-surface-type-probe, monkey-base, and frags-event-dodging-rolling.",
     ),
-    0x140F49300: (
-        "ConstructMountedPlayerSubsystem1EB8_Size4A0",
-        "Constructor for the mounted outer_owner+0x1EB8 Player subsystem. "
-        "Semantic role is still unresolved, but the real Player assembly pass "
-        "mounts it directly as a peer beside 1EB0/1E98/1EE0.",
-    ),
     0x140CEDCA0: (
         "ConstructMountedPlayerSubsystem1EE0_Size320",
         "Constructor for the mounted outer_owner+0x1EE0 Player subsystem. "
@@ -6118,12 +6146,6 @@ FUNCTIONS = {
         "BuildMountedPlayerSubsystem1DE8",
         "Direct builder for outer_owner+0x1DE8 in the main Player::Init "
         "assembly pass. This is another formal mounted Player subsystem.",
-    ),
-    0x140F49300: (
-        "ConstructMountedPlayerSubsystem1EB8_Size4B0",
-        "Constructor for mounted outer_owner+0x1EB8. Seeds a formal runtime "
-        "class with repeated paired state slots across roughly +0x130..+0x408, "
-        "so this is clearly a real Player subsystem rather than a tiny cache.",
     ),
     0x140F61490: (
         "DispatchMountedPlayerCallbackIntoOuter1FB0ReadyPath",

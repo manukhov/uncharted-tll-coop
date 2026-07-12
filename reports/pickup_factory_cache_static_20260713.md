@@ -1,6 +1,11 @@
 # Pickup sender source: WeaponPickup factory cache (2026-07-13)
 
-Status: **STATIC candidate**. Runtime test not yet run.
+Status: **RUNTIME REJECTED**.
+
+Runtime M-30 test (PIDs 5084/21076): factory hook installed before save load, but
+the confirmed scripted give still emitted `pickup_id=0` and no
+`source=factory-cache` capture. The scripted pickup has no matching live
+WeaponPickup available at the GiveWeapon boundary. Do not retry this source.
 
 ## Hypothesis
 
