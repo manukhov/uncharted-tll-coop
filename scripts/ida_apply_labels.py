@@ -31,11 +31,39 @@ FUNCTIONS = {
         "PlayerAimController vtable slot +0x60. Builds the remaining body basis "
         "through slot +0xE8, then dispatches slot +0x58.",
     ),
+    0x140CAFD90: (
+        "PlayerAimController_GetAimOriginPoint",
+        "PlayerAimController vtable slot +0x80. Chooses targHead or targPelvis "
+        "from weapon state, resolves that Player skeleton joint, and returns its "
+        "world point. Slot +0x58 uses it as the origin for target-origin direction.",
+    ),
     0x140CB41F0: (
         "PlayerAimController_PublishDirectionalAimWeights",
         "Publishes aim-add-left/right/down/up to the Player animation graph. "
         "The four weights are scaled by ADS blend this+0x8EC; Aim0..Aim7 CRCs "
         "are initialized by the PlayerAimController constructor 0x140CAE670.",
+    ),
+    0x140CB32B0: (
+        "PlayerAimController_ComputeDirectionalAimWeights",
+        "Normalizes targetPoint-originPoint, measures signed horizontal/vertical "
+        "angles against the Player body basis, clamps them by the supplied limits, "
+        "then calls PlayerAimController_PublishDirectionalAimWeights.",
+    ),
+    0x140CB1720: (
+        "PlayerAimController_GetTargetPointFromReticle",
+        "PlayerAimController vtable slot +0xF8. Source assertion supplies the exact "
+        "method name. Builds cameraOrigin + cameraForward * ray distance from the "
+        "owner Player+0x4010 screen-route pose seed, with targetable collision adjustment.",
+    ),
+    0x140E84350: (
+        "GunMoveShield_CopyAimTargetPoint",
+        "Player::GunMoveShield vtable 0x142A27658 slot +0xF0. Copies the 16-byte "
+        "target point unchanged before the ground ADS path passes it to the aim controller.",
+    ),
+    0x14014D9F0: (
+        "Quaternion_RotatePositiveZ",
+        "Returns q*(0,0,1)*inverse(q): x=2(xz+wy), y=2(yz-wx), "
+        "z=1-2(x*x+y*y). GunMoveShield uses it to derive the body forward vector.",
     ),
     0x1410E3670: (
         "Player_CheckAimActionEligibility",

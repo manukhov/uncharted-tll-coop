@@ -1,0 +1,36 @@
+=== 0x140E84310: sub_140E84310 [0x140E84310..0x140E8433C] ===
+__m128 sub_140E84310()
+{
+  __m128 result; // xmm0
+
+  __asm { vmovss  xmm2, cs:dword_142BE8EA4 }
+  _EAX = 0;
+  __asm { vmovd   xmm1, eax }
+  _EAX = HIBYTE(g_NetModeFlags);
+  __asm
+  {
+    vmovd   xmm0, eax
+    vpcmpeqd xmm3, xmm0, xmm1
+    vmovss  xmm1, cs:dword_142BE8FC4
+    vblendvps xmm0, xmm1, xmm2, xmm3
+  }
+  return result;
+}
+
+=== 0x140E84340: sub_140E84340 [0x140E84340..0x140E84343] ===
+char sub_140E84340()
+{
+  return 1;
+}
+
+=== 0x140E84350: sub_140E84350 [0x140E84350..0x140E8435D] ===
+__int64 __fastcall sub_140E84350(__int64 a1, __int64 _RDX, __int64 _R8)
+{
+  __asm
+  {
+    vmovups xmm0, xmmword ptr [r8]
+    vmovups xmmword ptr [rdx], xmm0
+  }
+  return _RDX;
+}
+

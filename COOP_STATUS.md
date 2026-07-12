@@ -1672,3 +1672,73 @@ SKIPPED (mismatch logged only when `g_logging_enabled`). See
   `Player_CheckAimActionEligibility` for a buddy puppet. A build should call/feed
   this native aim-additive interface, not write downstream Player pose quaternions
   or route-camera cache fields.
+
+## 2026-07-12: STATIC - build-ready aim-target interception surface
+
+- The normal ground ADS calls at `0x140E858CE` (heavy weapon) and `0x140E85925`
+  (ordinary weapon) both dispatch `PlayerAimController` vtable slot `+0x58`
+  (`0x140CAF110`). Win64 arguments are:
+  `rcx=PlayerAimController`, `rdx=targetPoint`, `r8=bodyForward`, `r9b=1`, followed
+  by four directional angle limits and a single-screen mode byte.
+- The first argument is closed end-to-end. GunMoveShield calls controller slot
+  `+0xF8` (`PlayerAimController_GetTargetPointFromReticle 0x140CB1720`) at
+  `0x140E853E3`; its own slot `+0xF0`
+  (`GunMoveShield_CopyAimTargetPoint 0x140E84350`) copies the resulting float4
+  unchanged into the `rdx` local later passed at both ADS call sites.
+- `GetTargetPointFromReticle` resolves the owner screen at `Player+0x4010`, reads
+  the route pose seed, rotates camera `-Z`, and constructs
+  `cameraOrigin + cameraForward * rayDistance` (with a targetable/raycast adjustment).
+  This is why the puppet aim pose remains fixed when its screen-1 target is stale.
+- Slot `+0x58` obtains the origin internally through controller slot `+0x80`
+  (`PlayerAimController_GetAimOriginPoint 0x140CAFD90`), which resolves the Player
+  skeleton's `targHead` or `targPelvis` joint. It then forwards origin, target, and
+  the incoming body-forward vector to `0x140CB32B0`.
+- `PlayerAimController_ComputeDirectionalAimWeights 0x140CB32B0` computes
+  `normalize(targetPoint-internalAimOrigin)`. Absolute target distance is immaterial;
+  it measures signed angles against body-forward, then publishes left/right/up/down.
+- Ordinary-weapon limits are the active aim-camera descriptor object's
+  `+0x74/+0x78` values plus two 60-degree defaults (`0x142BE99FC = 60.0f`). The
+  heavy-weapon special case changes one limit to `-7.0f` (`0x142BEA1D8`). These
+  limits are independent of target direction and should remain native.
+- **Minimal implementation surface (STATIC, not yet run):** swap only
+  `PlayerAimController` vtable slot `+0x58` at `0x142A0B250`. In the hook, when
+  `*(controller+0x108)` is the slot-1 puppet and peer ADS/pose-seed is valid, replace
+  the caller-owned target float4 with
+  `peerPosePosition + normalize(peerPoseQuat * -Z) * 180`; forward body-forward and
+  every native limit, then
+  call the original `0x140CAF110`. This drives the authored anim graph without
+  overriding the shared route pose seed, root quaternion, or downstream pose caches.
+- Competing approaches rejected statically: writing Player aim output fields is
+  overwritten downstream; broad pose-seed override also affects locomotion; hooking
+  `GetTargetPointFromReticle` entry repeats the frame-from-entry-rsp crash surface.
+  Slot `+0x58` swap is class-scoped and preserves both original ground call sites.
+
+No game process was started. Slot `+0x58`'s ABI is
+`int64(controller, targetPoint*, bodyForward*, byte, float, float, byte, float, float)`;
+the existing vtable-swap helper already provides the required guarded
+`VirtualProtect` pattern. The DLL has no detach/uninstall path, so this global class
+slot must be installed once and live until process exit. The complete guard contract
+is recorded below for the later runtime edit.
+
+### Slot +0x58 hook contract (STATIC)
+
+1. Install only if `*(module+0x2A0B250) == module+0xCAF110`; store that pointer as
+   the original and use the existing `VirtualProtect(PAGE_READWRITE)` plus
+   `FlushInstructionCache` pattern. Refuse a second/different install.
+2. Hook signature must preserve all nine ABI arguments exactly:
+   `int64(void*, const float*, const float*, uint8, float, float, uint8, float, float)`.
+   The four stack scalars are floats (proved by `vmovss` at `0x140CAF268..2A7`),
+   despite Hex-Rays typing them as ints.
+3. Pass through unless controller, target, and body-forward are readable; owner
+   `*(controller+0x108)` equals `retained_player_object(1)`; owner screen index
+   `+0x4010 == 1`; the peer snapshot is fresh; ADS bit and pose-seed flag are set;
+   and the peer pose quaternion is normalized/valid.
+4. Do not mutate the caller's stack local. Build a hook-local target float4 from
+   peer pose position plus normalized quaternion `-Z` times 180, then call the
+   original with `&localTarget`, the untouched body-forward pointer, mode bytes,
+   and all four native limits.
+5. On any failed guard call the original byte-for-byte. Do not invoke route-camera
+   helpers, write Player fields, or alter ADS state in this hook.
+
+This contract is ready for a later code edit, but no runtime or injection is allowed
+under the current static-only instruction.

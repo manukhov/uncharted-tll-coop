@@ -1,0 +1,91 @@
+=== 0x1401781E0: BuildWorldBasisVectorFromRuntimeTransform [0x1401781E0..0x1401782A0] ===
+// Resolves a runtime object through the retained/runtime table at 0x14386FD00, copies its cached transform at +0x10 when valid, and emits a world-space basis vector from the object's orientation and translation.
+// local variable allocation has failed, the output may be wrong!
+__int64 __fastcall BuildWorldBasisVectorFromRuntimeTransform(__int64 _RCX, __int64 a2, __int64 a3, double _XMM3_8)
+{
+  __int64 v5; // r8
+  bool v6; // dl
+
+  _R9 = a2;
+  v5 = qword_14386FD00[*(unsigned int *)(_RCX + 8)];
+  v6 = v5 && *(_DWORD *)(v5 + 80) == *(_DWORD *)(_RCX + 12);
+  _RAX = 0;
+  if ( v6 )
+    _RAX = qword_14386FD00[*(unsigned int *)(_RCX + 8)];
+  if ( _RAX )
+  {
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [rax]
+      vmovups ymmword ptr [rcx+10h], ymm0
+    }
+  }
+  __asm
+  {
+    vmovups xmm6, xmmword ptr [rcx+20h]
+    vmovups xmm7, xmmword ptr [rcx+40h]
+    vxorps  xmm3, xmm3, xmm3
+    vsubps  xmm2, xmm3, xmm6
+    vshufps xmm0, xmm6, xmm2, 93h
+    vshufps xmm4, xmm0, xmm0, 93h
+    vshufps xmm5, xmm6, xmm2, 8Dh
+    vshufps xmm2, xmm6, xmm2, 1Bh
+    vshufps xmm0, xmm7, xmm7, 0FFh
+    vmulps  xmm3, xmm0, xmm6
+    vshufps xmm0, xmm7, xmm7, 0
+    vmulps  xmm1, xmm2, xmm0
+    vaddps  xmm3, xmm3, xmm1
+    vshufps xmm2, xmm7, xmm7, 55h ; 'U'
+    vmulps  xmm0, xmm2, xmm4
+    vaddps  xmm4, xmm3, xmm0
+    vshufps xmm3, xmm7, xmm7, 0AAh
+    vshufps xmm1, xmm5, xmm5, 0D8h
+    vmulps  xmm0, xmm3, xmm1
+    vaddps  xmm2, xmm4, xmm0
+    vmovups xmmword ptr [r9], xmm2
+  }
+  __asm
+  {
+    vzeroupper
+    vmovaps xmm6, [rsp+28h+var_18]
+    vmovaps xmm7, [rsp+28h+var_28]
+  }
+  return _R9;
+}
+
+=== 0x14014D9F0: sub_14014D9F0 [0x14014D9F0..0x14014DA81] ===
+__int64 __fastcall sub_14014D9F0(__int64 _RCX, __int64 _RDX)
+{
+  __asm { vmovups xmm0, xmmword ptr [rdx] }
+  __asm { vshufps xmm6, xmm0, xmm0, 0AAh }
+  __asm
+  {
+    vshufps xmm7, xmm0, xmm0, 55h ; 'U'
+    vshufps xmm5, xmm0, xmm0, 0FFh
+  }
+  __asm
+  {
+    vshufps xmm8, xmm0, xmm0, 0
+    vmulps  xmm1, xmm6, xmm8
+    vmulps  xmm0, xmm5, xmm7
+    vaddps  xmm4, xmm1, xmm0
+    vmulps  xmm1, xmm7, xmm7
+    vmulps  xmm2, xmm8, xmm8
+    vaddps  xmm3, xmm2, xmm1
+    vxorps  xmm0, xmm0, xmm0
+    vsubps  xmm2, xmm0, xmm3
+    vmulps  xmm0, xmm6, xmm7
+    vmovaps xmm6, [rsp+38h+var_18]
+    vmovaps xmm7, [rsp+38h+var_28]
+    vmulps  xmm1, xmm5, xmm8
+    vmovaps xmm8, [rsp+38h+var_38]
+    vsubps  xmm1, xmm0, xmm1
+    vunpckhps xmm4, xmm4, xmm2
+    vunpckhps xmm3, xmm4, xmm1
+    vmulps  xmm0, xmm3, cs:xmmword_142BED700
+    vaddps  xmm1, xmm0, cs:xmmword_14287F9F0
+    vmovups xmmword ptr [rcx], xmm1
+  }
+  return _RCX;
+}
+

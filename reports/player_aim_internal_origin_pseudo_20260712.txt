@@ -1,0 +1,110 @@
+=== 0x140CAFD90: sub_140CAFD90 [0x140CAFD90..0x140CAFF51] ===
+__int64 __fastcall sub_140CAFD90(__int64 a1, __int64 a2)
+{
+  __int64 v2; // rsi
+  const char *v5; // r8
+  __int64 v6; // r9
+  __int64 v9; // r10
+  unsigned int v11; // ebx
+  char v17; // al
+  const char *v18; // rdx
+  __int64 v20; // r8
+  char v26; // al
+  __int64 v27; // r9
+  _BYTE v31[16]; // [rsp+20h] [rbp-458h] BYREF
+  _BYTE v32[32]; // [rsp+30h] [rbp-448h] BYREF
+  _DWORD v33[256]; // [rsp+50h] [rbp-428h] BYREF
+
+  v2 = 8;
+  _RDI = qword_142BEA360;
+  _R14 = a2;
+  v5 = "targHead";
+  v6 = 8;
+  _RAX = v33;
+  _RDX = qword_142BEA360;
+  v9 = 8;
+  v11 = 0;
+  do
+  {
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [rdx]
+      vmovups xmm1, xmmword ptr [rdx+70h]
+      vmovups ymmword ptr [rax], ymm0
+      vmovups ymm0, ymmword ptr [rdx+20h]
+      vmovups ymmword ptr [rax+20h], ymm0
+      vmovups ymm0, ymmword ptr [rdx+40h]
+      vmovups ymmword ptr [rax+40h], ymm0
+      vmovups xmm0, xmmword ptr [rdx+60h]
+      vmovups xmmword ptr [rax+60h], xmm0
+    }
+    _RAX += 32;
+    _RDX += 16;
+    __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+    --v9;
+  }
+  while ( v9 );
+  do
+  {
+    v17 = *v5;
+    if ( !*v5 )
+      break;
+    ++v5;
+    v11 = (v11 << 8) ^ v33[(unsigned __int8)(v17 ^ HIBYTE(v11))];
+    --v6;
+  }
+  while ( v6 );
+  __asm { vzeroupper }
+  if ( (*(__int64 (__fastcall **)(_QWORD, __int64, const char *, __int64))(**(_QWORD **)(*(_QWORD *)(a1 + 264) + 7560LL)
+                                                                         + 176LL))(
+         *(_QWORD *)(*(_QWORD *)(a1 + 264) + 7560LL),
+         20,
+         v5,
+         v6) )
+  {
+    v11 = 0;
+    v18 = "targPelvis";
+    _RAX = v33;
+    v20 = 10;
+    do
+    {
+      __asm
+      {
+        vmovups ymm0, ymmword ptr [rdi]
+        vmovups xmm1, xmmword ptr [rdi+70h]
+        vmovups ymmword ptr [rax], ymm0
+        vmovups ymm0, ymmword ptr [rdi+20h]
+        vmovups ymmword ptr [rax+20h], ymm0
+        vmovups ymm0, ymmword ptr [rdi+40h]
+        vmovups ymmword ptr [rax+40h], ymm0
+        vmovups xmm0, xmmword ptr [rdi+60h]
+        vmovups xmmword ptr [rax+60h], xmm0
+      }
+      _RAX += 32;
+      _RDI += 16;
+      __asm { vmovups xmmword ptr [rax-10h], xmm1 }
+      --v2;
+    }
+    while ( v2 );
+    do
+    {
+      v26 = *v18;
+      if ( !*v18 )
+        break;
+      ++v18;
+      v11 = (v11 << 8) ^ v33[(unsigned __int8)(v26 ^ HIBYTE(v11))];
+      --v20;
+    }
+    while ( v20 );
+  }
+  __asm { vzeroupper }
+  sub_141BBE7A0(*(_QWORD *)(a1 + 264), v31, v11);
+  _RAX = sub_1418B7060(*(_QWORD *)(*(_QWORD *)(a1 + 264) + 480LL), v32, v31[0], v27);
+  __asm
+  {
+    vmovups xmm0, xmmword ptr [rax]
+    vmovups xmmword ptr [r14], xmm0
+  }
+  return _R14;
+}
+

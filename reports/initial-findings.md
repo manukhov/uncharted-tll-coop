@@ -26764,3 +26764,65 @@ The next discriminator is the ground GunMoveShield argument/gate path at
 `0x140E858CE/0x140E85925`, especially which branch of `0x1410E3670` differs for a
 buddy puppet. The implementation target is this native aim-additive interface,
 not downstream Player pose or camera-cache writes.
+
+### 2026-07-12 STATIC: exact native aim-target hook surface is vtable slot +0x58
+
+The two ground `PlayerGunMoveShield_UpdateAndDispatch` ADS calls were resolved from
+raw disassembly, avoiding Hex-Rays stack-argument ambiguity:
+
+- heavy weapon: `0x140E858CE`, `call [PlayerAimController.vtable+0x58]`;
+- ordinary weapon: `0x140E85925`, same slot;
+- `rcx=PlayerAimController`, `rdx=targetPoint float4`, `r8=bodyForward float4`,
+  `r9b=1`; stack arguments are native directional limits and a mode byte.
+
+The target dataflow is complete:
+
+1. At `0x140E853E3`, GunMoveShield calls PlayerAimController slot `+0xF8`, exact
+   source-named method `PlayerAimController::GetTargetPointFromReticle
+   0x140CB1720`.
+2. At `0x140E853FF`, GunMoveShield slot `+0xF0` resolves to
+   `GunMoveShield_CopyAimTargetPoint 0x140E84350`; the entire implementation is a
+   16-byte copy, so no hidden conversion occurs.
+3. At `0x140E858CE/0x140E85925`, that copied point is passed as slot `+0x58`'s
+   first vector. The second vector is Player body-forward, derived from root
+   orientation through `Quaternion_RotatePositiveZ 0x14014D9F0`.
+4. Slot `+0x58` (`PlayerAimController_ApplyWorldAimBasis 0x140CAF110`) canonicalizes
+   the two float4 vectors and calls slot `+0x50`.
+5. Slot `+0x58` first calls controller slot `+0x80`,
+   `PlayerAimController_GetAimOriginPoint 0x140CAFD90`. It selects `targHead` or
+   `targPelvis` and resolves that skeleton joint's world position.
+6. `PlayerAimController_ComputeDirectionalAimWeights 0x140CB32B0` begins with
+   `normalize(targetPoint-internalAimOrigin)`, computes signed yaw/pitch relative to the
+   Player body basis, clamps by directional limits, then calls
+   `PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0`.
+
+`GetTargetPointFromReticle` itself resolves `Player+0x4010` through the screen-route
+pose seed and constructs camera-origin plus camera-forward times ray distance. Thus
+the static root cause of a fixed remote pose is the stale screen-1 target point, not
+an inert anim graph. Since the downstream calculation normalizes target-origin, a
+receiver hook can substitute `peerPosePosition + peerCameraForward*distance`; exact
+distance is immaterial as long as it is finite and nonzero. Using the relayed pose
+seed position mirrors the sender's native construction and avoids inventing a body
+origin from the slot `+0x58` arguments.
+
+The native limits should be preserved. Ordinary ADS supplies camera descriptor
+fields `+0x74/+0x78` and two `60.0f` defaults (`0x142BE99FC`); the heavy-weapon
+branch changes one limit to `-7.0f` (`0x142BEA1D8`). The single-screen byte is
+`dword_143F051C8 <= 1` for ordinary ADS.
+
+**Build-ready STATIC design:** vtable slot address `0x142A0B250` currently contains
+`0x140CAF110`. Swap that slot, condition on owner `*(controller+0x108)` being the
+slot-1 puppet plus a valid peer ADS pose seed, replace only the caller-owned target
+float4 using peer quaternion `-Z`, and invoke the original with all native limits.
+This avoids the rejected broad pose-seed, root-quaternion, downstream-field, and
+frame-from-entry-rsp detour paths. No runtime test was performed.
+
+**ABI/install guards (STATIC):** expected slot pointer is
+`*(module+0x2A0B250) == module+0xCAF110`. Use a typed nine-argument function pointer;
+raw disassembly proves stack arguments 5, 6, 8, and 9 are floats (`vmovss`), while
+arguments 4 and 7 are bytes. The hook must pass through unless owner
+`*(controller+0x108)` is retained Player slot 1 with `Player+0x4010 == 1` and a fresh
+peer ADS pose seed. It should pass a hook-local target float4 rather than overwrite
+the caller stack. All body-forward, mode, and limit arguments remain native. The
+repository DLL has no `DLL_PROCESS_DETACH` restoration path, so install once and keep
+the global slot swap for process lifetime.

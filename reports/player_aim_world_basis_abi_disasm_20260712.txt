@@ -1,0 +1,77 @@
+0x140CAF160: vmovss  xmm7, dword ptr [rax+4]
+0x140CAF163: mov     rax, [rbx+108h]
+0x140CAF16A: lea     rdx, [rsp+0D8h+var_48]
+0x140CAF172: mov     ecx, [rax+4010h]
+0x140CAF178: imul    rax, rcx, 368h
+0x140CAF17F: lea     rcx, qword_143F041F0
+0x140CAF186: mov     rcx, [rax+rcx]
+0x140CAF18A: vmovss  dword ptr [rcx+38h], xmm6
+0x140CAF18F: vmovss  dword ptr [rcx+3Ch], xmm7
+0x140CAF194: vmovups xmm0, xmmword ptr [rdi]
+0x140CAF198: vmovups xmm3, xmmword ptr [rsi]
+0x140CAF19C: mov     rax, [rbx]
+0x140CAF19F: mov     rcx, rbx
+0x140CAF1A2: vshufps xmm1, xmm0, xmm0, 0AAh
+0x140CAF1A7: vshufps xmm4, xmm0, xmm0, 55h ; 'U'
+0x140CAF1AC: vmovaps xmm2, xmm0
+0x140CAF1B0: vmovaps xmm0, xmm1
+0x140CAF1B4: vbroadcastss xmm0, xmm0
+0x140CAF1B9: vbroadcastss xmm2, xmm2
+0x140CAF1BE: vunpckhps xmm2, xmm2, xmm0
+0x140CAF1C2: vmovaps xmm1, xmm4
+0x140CAF1C6: vbroadcastss xmm1, xmm1
+0x140CAF1CB: vunpckhps xmm0, xmm2, xmm1
+0x140CAF1CF: vshufps xmm1, xmm3, xmm3, 0AAh
+0x140CAF1D4: vmovups [rsp+0D8h+var_78], xmm0
+0x140CAF1DA: vmovaps xmm0, xmm1
+0x140CAF1DE: vbroadcastss xmm0, xmm0
+0x140CAF1E3: vshufps xmm5, xmm3, xmm3, 55h ; 'U'
+0x140CAF1E8: vmovaps xmm2, xmm3
+0x140CAF1EC: vbroadcastss xmm2, xmm2
+0x140CAF1F1: vmovaps xmm1, xmm5
+0x140CAF1F5: vunpckhps xmm2, xmm2, xmm0
+0x140CAF1F9: vbroadcastss xmm1, xmm1
+0x140CAF1FE: vunpckhps xmm0, xmm2, xmm1
+0x140CAF202: vmovups [rsp+0D8h+var_68], xmm0
+0x140CAF208: call    qword ptr [rax+80h]
+0x140CAF20E: mov     r10, [rbx]
+0x140CAF211: lea     r9, [rsp+0D8h+var_78]
+0x140CAF216: lea     r8, [rsp+0D8h+var_68]
+0x140CAF21B: mov     rcx, rbx
+0x140CAF21E: lea     rdx, [rsp+0D8h+var_58]
+0x140CAF226: vmovups xmm0, xmmword ptr [rax]
+0x140CAF22A: movzx   eax, [rsp+0D8h+arg_30]
+0x140CAF232: vshufps xmm1, xmm0, xmm0, 0AAh
+0x140CAF237: vshufps xmm4, xmm0, xmm0, 55h ; 'U'
+0x140CAF23C: vmovaps xmm2, xmm0
+0x140CAF240: vmovaps xmm0, xmm1
+0x140CAF244: mov     [rsp+0D8h+var_90], al
+0x140CAF248: vbroadcastss xmm0, xmm0
+0x140CAF24D: mov     [rsp+0D8h+var_98], 1
+0x140CAF252: vbroadcastss xmm2, xmm2
+0x140CAF257: vunpckhps xmm2, xmm2, xmm0
+0x140CAF25B: vmovaps xmm1, xmm4
+0x140CAF25F: vbroadcastss xmm1, xmm1
+0x140CAF264: vunpckhps xmm0, xmm2, xmm1
+0x140CAF268: vmovss  xmm1, [rsp+0D8h+arg_20]
+0x140CAF271: vmovups [rsp+0D8h+var_58], xmm0
+0x140CAF27A: vmovss  xmm0, [rsp+0D8h+arg_28]
+0x140CAF283: vmovss  [rsp+0D8h+var_A0], xmm0
+0x140CAF289: vmovss  xmm0, [rsp+0D8h+arg_40]
+0x140CAF292: vmovss  [rsp+0D8h+var_A8], xmm1
+0x140CAF298: vmovss  xmm1, [rsp+0D8h+arg_38]
+0x140CAF2A1: vmovss  [rsp+0D8h+var_B0], xmm0
+0x140CAF2A7: vmovss  [rsp+0D8h+var_B8], xmm1
+0x140CAF2AD: call    qword ptr [r10+50h]
+0x140CAF2B1: mov     rcx, [rsp+0D8h+var_38]
+0x140CAF2B9: xor     rcx, rsp; StackCookie
+0x140CAF2BC: call    __security_check_cookie
+0x140CAF2C1: lea     r11, [rsp+0D8h+var_8]
+0x140CAF2C9: mov     rbx, [r11+18h]
+0x140CAF2CD: mov     rsi, [r11+20h]
+0x140CAF2D1: vmovaps xmm6, xmmword ptr [r11-10h]
+0x140CAF2D7: vmovaps xmm7, xmmword ptr [r11-20h]
+0x140CAF2DD: mov     rsp, r11
+0x140CAF2E0: pop     rdi
+0x140CAF2E1: retn
+0x140CAF2E2: align 10h

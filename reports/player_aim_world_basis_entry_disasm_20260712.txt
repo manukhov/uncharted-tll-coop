@@ -1,0 +1,22 @@
+0x140CAF110: mov     rax, rsp; PlayerAimController vtable slot +0x58. Converts world basis vectors, then dispatches slot +0x50 to compute the directional aim-additive weights.
+0x140CAF113: mov     [rax+10h], rbx
+0x140CAF117: mov     [rax+18h], rsi
+0x140CAF11B: push    rdi
+0x140CAF11C: sub     rsp, 0D0h
+0x140CAF123: vmovaps xmmword ptr [rax-18h], xmm6
+0x140CAF128: vmovaps xmmword ptr [rax-28h], xmm7
+0x140CAF12D: mov     rax, cs:__security_cookie
+0x140CAF134: xor     rax, rsp
+0x140CAF137: mov     [rsp+0D8h+var_38], rax
+0x140CAF13F: mov     rdi, r8
+0x140CAF142: mov     rsi, rdx
+0x140CAF145: mov     rbx, rcx
+0x140CAF148: vxorps  xmm6, xmm6, xmm6
+0x140CAF14C: vxorps  xmm7, xmm7, xmm7
+0x140CAF150: call    sub_141504D50
+0x140CAF155: test    rax, rax
+0x140CAF158: jz      short loc_140CAF163
+0x140CAF15A: vmovss  xmm6, dword ptr [rax]
+0x140CAF15E: vmovss  xmm7, dword ptr [rax+4]
+0x140CAF163: mov     rax, [rbx+108h]
+0x140CAF16A: lea     rdx, [rsp+0D8h+var_48]
