@@ -26690,3 +26690,77 @@ native physics/collision never run. This confirms the redirect: the mod must NOT
 puppeteer the grenade frame-by-frame. Spawn ONCE with correct velocity seeded into
 the process descriptor (event transform basis, path b) and let native physics fly +
 collide it. REMOVE reapply_peer_grenade_arc + the set_position forcing entirely.
+
+### 2026-07-12 STATIC: scoped aim direction is route-camera owned; direct DrawControl hide path not found
+
+`PlayerAimController_KickTargetPointJob 0x140CB0200` is confirmed statically:
+
+1. Its only class-table code reference is `PlayerAimController` vtable
+   `0x142A0B1F8`, slot `+0xE0`.
+2. Its own assertion names `PlayerAimController::KickTargetPointJob` and
+   `player-aim.cpp` lines 793/872.
+3. In the `"sniper"` branch it reads the owning Player's screen index at
+   `Player+0x4010`, calls `ResolveScreenRouteEntityByIndex`, then
+   `SelectPreferredCameraChildFromRouteEntity`, validates the aim/strafe camera
+   descriptor, and calls camera virtual slot `+0x230`.
+
+This rejects root-only yaw as a complete aim-direction fix: the mod currently
+derives peer camera yaw and writes `Player+0x140`, but the visible sniper aim
+controller consumes the selected screen-route camera child instead. Root yaw may
+turn locomotion/body facing; it cannot by itself change this aim input.
+
+The scoped disappearance mechanism is also less certain than the 2026-07-11 note
+claimed. Xrefs to the exact inverse APIs show:
+
+- `IDrawControl_HideMesh 0x141754510` and `ShowMesh 0x141754A30` have one direct
+  game caller, `0x140252A70`; its source assertion identifies
+  `CrashBandicoot::UpdateSpinning`, unrelated to Player ADS.
+- `IDrawControl_DisableMeshFromMainView 0x1417545F0` and
+  `EnableMeshInMainView 0x141754B10` have no direct executable caller.
+- Apparent references at `0x146E80A10/1C/58/64` are reflection metadata records
+  containing 32-bit function/name RVAs, not a callable IDrawControl vtable.
+
+Therefore the mesh inverse pin is still **HYPOTHESIS**. It could work only if ADS
+changes the same mesh bytes through a virtual or direct-state path; alternatives
+remain an upper FgAnim visibility gate or a later route-camera render-mask cull.
+The next static discriminator is the concrete preferred camera child and its
+virtual slot `+0x230`, followed in both directions to orientation and cull writers.
+
+### 2026-07-12 STATIC: visible ADS pose is the PlayerAimController aim-additive pipeline
+
+The previous camera-child interpretation is corrected before any runtime test:
+
+1. **REJECTED:** `off_143054560` is not a vtable. Callers compare it with the
+   selected camera child's descriptor at `child+0x1A8`. The real object vtable is
+   at `child+0`; its slot `+0x230` is a boolean zoom-state query, as independently
+   shown by `PlayerFireController_Fire` using the same call solely for the
+   `"unzoomed-sniper-shots"` counter. It does not drive aim orientation or culling.
+2. `Player+0x1D90` is the `PlayerAimController` allocated by
+   `AssembleLargePlayerOwnerSubsystemGraph 0x1410CA720`. Its RTTI vtable is
+   `0x142A0B1F8`. `0x140C9F420` dispatches controller slot `+0x30`, while
+   `Player_PostAnimUpdate 0x1410E9210` dispatches slot `+0xE0`. This disproves the
+   blanket hypothesis that the mounted puppet aim controller is never ticked.
+3. The visible directional animation is fed by this exact chain:
+   `PlayerGunMoveShield_UpdateAndDispatch 0x140E84440` ->
+   `Player_CheckAimActionEligibility 0x1410E3670` -> controller slot `+0x58`
+   (`PlayerAimController_ApplyWorldAimBasis 0x140CAF110`) -> slot `+0x50`
+   (`PlayerAimController_ComputeAndPublishAimAdditives 0x140CAECB0`) ->
+   `0x140CB32B0` -> `PlayerAimController_PublishDirectionalAimWeights
+   0x140CB41F0`.
+4. `0x140CB41F0` hashes and publishes `aim-add-left`, `aim-add-right`,
+   `aim-add-down`, and `aim-add-up`; the constructor `0x140CAE670` hashes the
+   corresponding `Aim0..Aim7` channels. It also writes the four raw values to the
+   active IK/animation state at `+0x188..+0x194`. The values are multiplied by
+   controller ADS blend `+0x8EC`; current directional state occupies
+   `PlayerAimController+0x8B4..+0x8C4`.
+5. Independent gameplay implementations converge on the same contract:
+   `Player::ZeroG` vtable `0x142A48EF8` slot `+0x20` and `Player::Zipline` vtable
+   `0x142A496F0` slot `+0x20` both call controller slot `+0x58/+0x60`.
+
+Evidence types are independent: PlayerAimController RTTI/vtable identity, concrete
+disassembly field and virtual-slot flow, animation parameter strings/CRC setup,
+and multiple gameplay-state callers. Status: **STATIC**. No runtime test was run.
+The next discriminator is the ground GunMoveShield argument/gate path at
+`0x140E858CE/0x140E85925`, especially which branch of `0x1410E3670` differs for a
+buddy puppet. The implementation target is this native aim-additive interface,
+not downstream Player pose or camera-cache writes.

@@ -1,0 +1,52 @@
+TARGET 0x140CAFA20: func_start=0x140cafa20 name=PlayerAimController_UpdateBlendState
+  xref=0x142A0B228 type=1 func_start=None func_name=None
+  xref=0x142DE0590 type=1 func_start=None func_name=None
+  xref=0x142DE05CC type=1 func_start=None func_name=None
+  xref=0x142DE05E0 type=1 func_start=None func_name=None
+  xref=0x142DE05F0 type=1 func_start=None func_name=None
+  xref=0x146E2DEE0 type=1 func_start=None func_name=None
+
+TARGET 0x140CAECB0: func_start=0x140caecb0 name=PlayerAimController_ComputeAndPublishAimAdditives
+  xref=0x142A0B248 type=1 func_start=None func_name=None
+  xref=0x146E2DE80 type=1 func_start=None func_name=None
+
+TARGET 0x140CAF110: func_start=0x140caf110 name=PlayerAimController_ApplyWorldAimBasis
+  xref=0x142A0B250 type=1 func_start=None func_name=None
+  xref=0x146E2DE98 type=1 func_start=None func_name=None
+
+TARGET 0x140CAF040: func_start=0x140caf040 name=PlayerAimController_ApplyBodyBasisAim
+  xref=0x142A0B258 type=1 func_start=None func_name=None
+  xref=0x146E2DE8C type=1 func_start=None func_name=None
+
+TARGET 0x140CB41F0: func_start=0x140cb41f0 name=PlayerAimController_PublishDirectionalAimWeights
+  xref=0x140CAF36D type=17 func_start=0x140caf2f0 func_name=sub_140CAF2F0
+  xref=0x140CAF764 type=17 func_start=0x140caf6d0 func_name=sub_140CAF6D0
+  xref=0x140CAF7A8 type=17 func_start=0x140caf770 func_name=sub_140CAF770
+  xref=0x140CAFD80 type=17 func_start=0x140cafd60 func_name=sub_140CAFD60
+  xref=0x140CB3468 type=17 func_start=0x140cb32b0 func_name=sub_140CB32B0
+  xref=0x140CB4176 type=17 func_start=0x140cb32b0 func_name=sub_140CB32B0
+  xref=0x140CB491A type=19 func_start=0x140cb47a0 func_name=sub_140CB47A0
+  xref=0x142DE0A24 type=1 func_start=None func_name=None
+  xref=0x142DE0A58 type=1 func_start=None func_name=None
+  xref=0x146E2E108 type=1 func_start=None func_name=None
+
+TARGET 0x1410E3670: func_start=0x1410e3670 name=Player_CheckAimActionEligibility
+  xref=0x140D6ACEE type=17 func_start=0x140d69f90 func_name=sub_140D69F90
+  xref=0x140E8573C type=17 func_start=0x140e84440 func_name=PlayerGunMoveShield_UpdateAndDispatch
+  xref=0x140E8B609 type=17 func_start=0x140e8aae0 func_name=sub_140E8AAE0
+  xref=0x140EE5BFF type=17 func_start=0x140ee5be0 func_name=sub_140EE5BE0
+  xref=0x140EE9552 type=17 func_start=0x140ee9530 func_name=sub_140EE9530
+  xref=0x140EEBC46 type=17 func_start=0x140eeb740 func_name=sub_140EEB740
+  xref=0x140EFD611 type=17 func_start=0x140efd5d0 func_name=sub_140EFD5D0
+  xref=0x140F072B2 type=17 func_start=0x140f03500 func_name=PlayerMoveStick_MainUpdate
+  xref=0x140F0F723 type=17 func_start=0x140f0f710 func_name=sub_140F0F710
+  xref=0x140F0FD44 type=17 func_start=0x140f0f740 func_name=sub_140F0F740
+  xref=0x140FC9B3C type=17 func_start=0x140fc92b0 func_name=sub_140FC92B0
+  xref=0x140FDB147 type=17 func_start=0x140fdae20 func_name=sub_140FDAE20
+  xref=0x140FDC9B3 type=17 func_start=0x140fdc9a0 func_name=sub_140FDC9A0
+  xref=0x141005584 type=17 func_start=0x141004c30 func_name=sub_141004C30
+  xref=0x1410B9FD0 type=17 func_start=0x1410b9b30 func_name=sub_1410B9B30
+  xref=0x141266C9C type=17 func_start=0x141266c40 func_name=sub_141266C40
+  xref=0x14129AA7B type=17 func_start=0x14129a530 func_name=sub_14129A530
+  xref=0x146E4C7C8 type=1 func_start=None func_name=None
+

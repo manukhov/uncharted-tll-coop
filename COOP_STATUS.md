@@ -1615,3 +1615,60 @@ SKIPPED (mismatch logged only when `g_logging_enabled`). See
   emergency A/B toggle). Fresh injected PIDs `13372/7112` wait in menus; enter
   save and test ordinary aim turn plus scoped ADS. Expected log:
   `SCOPED-MESH-VISIBLE restored=N` only when the engine attempted a hide.
+
+## 2026-07-12: STATIC correction - aim yaw is route-camera owned; mesh-hide pin is unproven
+
+- `PlayerAimController_KickTargetPointJob 0x140CB0200` is identified by three
+  independent static signals: RTTI `PlayerAimController`, vtable
+  `0x142A0B1F8` slot `+0xE0`, and the source assertion naming
+  `PlayerAimController::KickTargetPointJob` in `player-aim.cpp`.
+- Its `"sniper"` branch resolves the owning Player's `+0x4010` screen index via
+  `ResolveScreenRouteEntityByIndex`, selects the preferred camera child, checks
+  the strafe/aim camera descriptor, and calls its virtual slot `+0x230`.
+  Therefore writing camera yaw only to the puppet root quaternion at
+  `Player+0x140` does not drive the aim controller's direction input.
+- Direct executable xrefs do not connect scoped ADS to the four DrawControl APIs.
+  `HideMesh/ShowMesh` are called directly only by `0x140252A70`, whose source
+  assertion identifies `CrashBandicoot::UpdateSpinning`; `DisableMeshFromMainView`
+  and its inverse have no direct executable callers. The `0x146E80Axx` references
+  are 32-bit reflection metadata records, not an IDrawControl vtable.
+- The current `ShowMesh + EnableMeshInMainView` scoped pin remains a HYPOTHESIS,
+  not a static fix. Competing causes still open: a direct DrawControl state writer,
+  an upper FgAnim visibility gate, or a late camera/render-mask exclusion.
+- Next static step: identify the preferred aim-camera child concrete RTTI/vtable,
+  resolve virtual slot `+0x230`, and trace both its orientation source and any
+  player-cull publication. Do not run the game until that graph distinguishes the
+  visibility candidates.
+
+## 2026-07-12: STATIC correction - visible aim pose uses PlayerAimController aim-additives
+
+- **REJECTED:** `off_143054560` is not a camera vtable. It is the descriptor stored
+  at selected camera child `+0x1A8`. The call at `PlayerAimController_KickTargetPointJob`
+  uses the selected object's real vtable slot `+0x230`; comparison with the fire
+  path's `"unzoomed-sniper-shots"` counter proves that slot is only a zoom-status
+  query. It is not an orientation or model-cull method.
+- `Player+0x1D90` is the constructed `PlayerAimController` (RTTI vtable
+  `0x142A0B1F8`). Common Player phase `0x140C9F420` calls its slot `+0x30`
+  (`PlayerAimController_UpdateBlendState 0x140CAFA20`), and
+  `Player_PostAnimUpdate 0x1410E9210` calls slot `+0xE0`
+  (`KickTargetPointJob`). The controller is therefore mounted and ticked; the old
+  blanket "Player_Update never reaches aim" wall is too broad.
+- The visible directional pose has a separate, now closed pipeline:
+  `PlayerGunMoveShield_UpdateAndDispatch 0x140E84440` ->
+  `Player_CheckAimActionEligibility 0x1410E3670` -> aim-controller slot `+0x58`
+  (`0x140CAF110`) -> slot `+0x50` (`0x140CAECB0`) -> `0x140CB32B0` ->
+  `PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0`.
+- `0x140CB41F0` publishes the exact animation parameters `aim-add-left`,
+  `aim-add-right`, `aim-add-down`, and `aim-add-up`. Constructor `0x140CAE670`
+  initializes their `Aim0..Aim7` channel CRCs. ADS blend is
+  `PlayerAimController+0x8EC`; the current directional weights/state are in the
+  neighboring `+0x8B4..+0x8C4` block.
+- Independent Player state implementations (`Player::ZeroG` vtable
+  `0x142A48EF8` slot `+0x20`, and `Player::Zipline` vtable `0x142A496F0` slot
+  `+0x20`) call the same `+0x58/+0x60` interface. This is a general Player aim
+  animation contract, not a sniper, HUD, or camera-render special case.
+- Next static step: classify the ground GunMoveShield call's arguments at
+  `0x140E858CE/0x140E85925` and the exact failing branch of
+  `Player_CheckAimActionEligibility` for a buddy puppet. A build should call/feed
+  this native aim-additive interface, not write downstream Player pose quaternions
+  or route-camera cache fields.

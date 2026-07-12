@@ -8,6 +8,50 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-12: Player aim-additive animation pipeline ---
+    0x140CAFA20: (
+        "PlayerAimController_UpdateBlendState",
+        "PlayerAimController vtable slot +0x30. Called from the common Player "
+        "controller phase at 0x140C9F420; advances ADS blend at this+0x8EC and "
+        "resets/publishes Aim0..Aim7 animation channels.",
+    ),
+    0x140CAECB0: (
+        "PlayerAimController_ComputeAndPublishAimAdditives",
+        "PlayerAimController vtable slot +0x50. Receives aim/body bases and "
+        "directional limits, calls 0x140CB32B0, and emits the looking-down-sights "
+        "event. Reached by the ground GunMoveShield path through slot +0x58.",
+    ),
+    0x140CAF110: (
+        "PlayerAimController_ApplyWorldAimBasis",
+        "PlayerAimController vtable slot +0x58. Converts world basis vectors, "
+        "then dispatches slot +0x50 to compute the directional aim-additive weights.",
+    ),
+    0x140CAF040: (
+        "PlayerAimController_ApplyBodyBasisAim",
+        "PlayerAimController vtable slot +0x60. Builds the remaining body basis "
+        "through slot +0xE8, then dispatches slot +0x58.",
+    ),
+    0x140CB41F0: (
+        "PlayerAimController_PublishDirectionalAimWeights",
+        "Publishes aim-add-left/right/down/up to the Player animation graph. "
+        "The four weights are scaled by ADS blend this+0x8EC; Aim0..Aim7 CRCs "
+        "are initialized by the PlayerAimController constructor 0x140CAE670.",
+    ),
+    0x1410E3670: (
+        "Player_CheckAimActionEligibility",
+        "Shared Player gameplay-state gate used immediately before native aim "
+        "dispatch by PlayerGunMoveShield_UpdateAndDispatch and Player::ZeroG. "
+        "Checks camera/look suppression and weapon/action controller state.",
+    ),
+    # --- 2026-07-12: scoped aim route-camera owner ---
+    0x140CB0200: (
+        "PlayerAimController_KickTargetPointJob",
+        "PlayerAimController vtable 0x142A0B1F8 slot +0xE0. Source assert names "
+        "KickTargetPointJob; the sniper branch resolves Player+0x4010 through "
+        "ResolveScreenRouteEntityByIndex and SelectPreferredCameraChildFromRouteEntity. "
+        "The selected child +0x1A8 is a camera descriptor, not a vtable; virtual "
+        "slot +0x230 is only the unzoomed-sniper status query.",
+    ),
     # --- 2026-07-11: scoped puppet DrawControl visibility ---
     0x141754510: (
         "IDrawControl_HideMesh",
@@ -6502,7 +6546,7 @@ FUNCTIONS = {
         "is resolved per the FIRING PLAYER's screen index: "
         "ResolveScreenRouteEntityByIndex(*(controllerOwner+0x4010)) then "
         "SelectPreferredCameraChildFromRouteEntity(...,0), checking the child "
-        "vtable == CameraControlStrafe (off_143054560) = the aim/strafe camera "
+        "descriptor at +0x1A8 against off_143054560 (aim/strafe camera kind) "
         "(e.g. line ~999 unzoomed-sniper-shots branch, and the main direction "
         "path). So a co-op Second player (screen index 1 at +0x4010) fires along "
         "its OWN screen-1 aim camera, which the mod does not drive -> wrong "

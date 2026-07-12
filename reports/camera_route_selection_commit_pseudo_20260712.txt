@@ -1,0 +1,290 @@
+=== 0x141C0D4B0: SelectPreferredCameraChildFromRouteEntity [0x141C0D4B0..0x141C0D602] ===
+// Scans a route entity's child list at +0x100, validates live children, and returns the preferred camera child while filtering on child mode stored at +0x1B0. The caller-provided byte flag relaxes the default mode filtering.
+// Hidden C++ exception states: #wind=3
+__int64 __fastcall SelectPreferredCameraChildFromRouteEntity(__int64 a1, char a2)
+{
+  _QWORD *v3; // rax
+  signed __int64 v4; // rtt
+  __int64 v5; // rdx
+  __int64 v6; // rax
+  __int64 v7; // rbx
+  int v8; // ecx
+  __int64 v9; // rbx
+  int v10; // ecx
+  __int64 v11; // rdx
+  unsigned __int8 (__fastcall *v12)(const char *, const char *, const char *, const char *, int, const char *, __int64); // rdi
+  const char *v13; // rcx
+  volatile signed __int64 *v15; // [rsp+38h] [rbp-30h]
+
+  v3 = (_QWORD *)(a1 + 736);
+  v15 = (volatile signed __int64 *)(a1 + 736);
+  while ( 1 )
+  {
+    v4 = *v3 & 0x7FFFFFFFFFFFFFFFLL;
+    if ( v4 == _InterlockedCompareExchange64(v15, v4 + 1, v4) )
+      break;
+    v3 = (_QWORD *)(a1 + 736);
+  }
+  v5 = *(_QWORD *)(a1 + 256);
+  v6 = *(_QWORD *)(v5 + 8);
+  if ( v6 == v5 )
+  {
+LABEL_14:
+    v9 = 0;
+  }
+  else
+  {
+    while ( 1 )
+    {
+      v7 = *(_QWORD *)(v6 + 16);
+      if ( v7 )
+      {
+        if ( !*(_BYTE *)(v7 + 36) )
+        {
+          v8 = *(_DWORD *)(v6 + 24);
+          if ( v8 )
+          {
+            v9 = *(_QWORD *)(v7 + 8);
+            if ( v9 )
+            {
+              if ( *(_DWORD *)(v9 + 188) == v8 )
+              {
+                *(_BYTE *)(v9 + 114) = 1;
+                v10 = *(_DWORD *)(v9 + 432);
+                if ( v10 != 1 && (a2 || (unsigned int)(v10 - 3) > 1) )
+                  break;
+              }
+            }
+          }
+        }
+      }
+      v6 = *(_QWORD *)(v6 + 8);
+      if ( v6 == v5 )
+        goto LABEL_14;
+    }
+  }
+  v11 = _InterlockedExchangeAdd64(v15, 0xFFFFFFFFFFFFFFFFuLL);
+  if ( v11 <= 0 )
+  {
+    v12 = (unsigned __int8 (__fastcall *)(const char *, const char *, const char *, const char *, int, const char *, __int64))qword_146B17C08;
+    if ( !qword_146B17C08 )
+      goto LABEL_20;
+    v13 = &byte_1428D4552;
+    if ( qword_146B17C00 )
+      v13 = (const char *)qword_146B17C00("Releasing read lock with unexpected prev val: %d\n", v11);
+    if ( !v12(
+            "prevVal > 0",
+            "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\corelib\\system\\read-write-atomic-lock.cpp",
+            "NdRwAtomicLock64Base::ReleaseReadLock",
+            "Jun 30 2023 19:05:44",
+            171,
+            v13,
+            -2) )
+    {
+LABEL_20:
+      sub_1422053E0();
+      __debugbreak();
+    }
+  }
+  return v9;
+}
+
+=== 0x141C0DFD0: ResolveScreenRouteTargetAndCommitDescriptor [0x141C0DFD0..0x141C0E174] ===
+// Builds and commits a camera target descriptor into a screen-route owner. Uses the lock at route+0x2C0, resolves the actor through (*(qword*)0x143FE1070)->virtual +0xA8(route+0x124 screen_index), writes through route+0x2F0 via ApplyCameraTargetStateFromDescriptorAndActorOverride, and then notifies an external observer. The wide direct-call fanout shows this is a generic gameplay camera-route worker, not just a manual camera debug stub.
+// Hidden C++ exception states: #wind=1
+__int64 __fastcall ResolveScreenRouteTargetAndCommitDescriptor(__int64 a1, void ***a2, __int64 a3, void *a4)
+{
+  volatile signed __int64 *v8; // rbx
+  __int64 v9; // rax
+  __int64 v16; // [rsp+30h] [rbp-A8h] BYREF
+  char v19; // [rsp+40h] [rbp-98h]
+  __int64 v20; // [rsp+48h] [rbp-90h]
+  int v21; // [rsp+50h] [rbp-88h]
+  __int16 v24; // [rsp+60h] [rbp-78h]
+  int v25; // [rsp+68h] [rbp-70h]
+  __int64 v26; // [rsp+70h] [rbp-68h]
+  int v27[2]; // [rsp+78h] [rbp-60h] BYREF
+  char v30; // [rsp+88h] [rbp-50h]
+  int v32; // [rsp+B0h] [rbp-28h]
+  void **v33; // [rsp+E0h] [rbp+8h] BYREF
+  __int64 v34; // [rsp+E8h] [rbp+10h]
+
+  v26 = -2;
+  _R14 = a3;
+  v8 = (volatile signed __int64 *)(a1 + 704);
+  v34 = a1 + 704;
+  while ( *v8 || _InterlockedCompareExchange64(v8, -1, 0) )
+    _mm_pause();
+  sub_141C0B1A0(a1, 0);
+  if ( (_BYTE)dword_143673330 && &off_143054040 == *a2 )
+    *a2 = &off_1430535E0;
+  v9 = (*(__int64 (__fastcall **)(__int64, _QWORD))(*(_QWORD *)qword_143FE1070 + 168LL))(
+         qword_143FE1070,
+         *(unsigned int *)(a1 + 292));
+  *(_QWORD *)v27 = *(_QWORD *)_R14;
+  __asm
+  {
+    vmovss  xmm0, dword ptr [r14+8]
+    vmovss  [rsp+0D8h+var_58], xmm0
+    vmovss  xmm1, dword ptr [r14+0Ch]
+    vmovss  [rsp+0D8h+var_54], xmm1
+  }
+  v30 = *(_BYTE *)(_R14 + 16);
+  __asm
+  {
+    vmovups ymm0, ymmword ptr [r14+18h]
+    vmovups [rsp+0D8h+var_48], ymm0
+  }
+  v32 = *(_DWORD *)(_R14 + 56);
+  v33 = *a2;
+  __asm { vzeroupper }
+  ApplyCameraTargetStateFromDescriptorAndActorOverride(a1 + 752, (int)&v33, 0, (int)v27, a4, v9);
+  if ( qword_1438929B8 )
+    (*(void (__fastcall **)(__int64, __int64, __int64, _QWORD))(*(_QWORD *)qword_1438929B8 + 48LL))(
+      qword_1438929B8,
+      a1,
+      a1 + 752,
+      0);
+  _InterlockedExchange64(v8, 0);
+  __asm
+  {
+    vxorps  xmm0, xmm0, xmm0
+    vcvttss2si rax, xmm0
+  }
+  v16 = _RAX;
+  __asm
+  {
+    vmovss  [rsp+0D8h+var_A0], xmm0
+    vmovss  [rsp+0D8h+var_9C], xmm0
+  }
+  v19 = 0;
+  v20 = 0;
+  v21 = 0;
+  __asm
+  {
+    vmovss  [rsp+0D8h+var_80], xmm0
+    vmovss  [rsp+0D8h+var_7C], xmm0
+  }
+  v24 = 0;
+  v25 = 0;
+  return RecomputeRouteStateFromDescriptorAndSelectedChild(a1, &v16);
+}
+
+=== 0x141C06650: CameraManager_GetBlendedCameraTransform [0x141C06650..0x141C06750] ===
+// Extracts a screen's current camera transform into the out buffer for consumers (e.g. PlayerFireController_Fire aim direction). Picks the active camera child via SelectPreferredCameraChildFromRouteEntity; if a single camera is active copies g_PerScreenCameraTransformCache (0x1465FDAA0, stride 0x400 per screen index *(mgr+292)), else builds a blend from mgr+0x1A0, then CameraState_CopyTransformAndParams -> out. The out camera 4x4 matrix is at out+0x350; params (fov) at out+0x390. Co-op aim-fix intercept: for screen index 1 overwrite out+0x350 rotation from peer.camera_quat.
+__int64 __fastcall CameraManager_GetBlendedCameraTransform(__int64 a1, __int64 a2)
+{
+  __int64 v2; // rbp
+  __int64 v5; // rbx
+  __int64 v6; // rax
+  int v14; // r8d
+  int v15; // r9d
+  __int128 *v16; // rdx
+  int v18; // [rsp+20h] [rbp-498h]
+  int v19; // [rsp+28h] [rbp-490h]
+  int v20; // [rsp+38h] [rbp-480h]
+  char v21; // [rsp+40h] [rbp-478h] BYREF
+  _BYTE v22[1040]; // [rsp+80h] [rbp-438h] BYREF
+
+  v2 = *(unsigned int *)(a1 + 292);
+  v5 = SelectPreferredCameraChildFromRouteEntity(a1, 0);
+  v6 = SelectPreferredCameraChildFromRouteEntity(a1, 1);
+  if ( !v5 || v5 == v6 )
+  {
+    v16 = &g_PerScreenCameraTransformCache[64 * v2];
+  }
+  else
+  {
+    _RBX = (unsigned __int64)(unsigned int)v2 << 10;
+    sub_14015B4A0(v22);
+    __asm
+    {
+      vmovss  xmm0, cs:flt_142BEA0A8
+      vmovss  xmm1, cs:dword_143FE0698
+      vmovss  [rsp+4B8h+var_480], xmm0
+      vmovss  xmm0, cs:dword_143FE026C
+    }
+    _RCX = g_PerScreenCameraTransformCache;
+    __asm
+    {
+      vmovss  xmm3, dword ptr [rbx+rcx+3A4h]
+      vmovss  xmm2, dword ptr [rbx+rcx+390h]
+      vmovss  [rsp+4B8h+var_490], xmm1
+    }
+    __asm { vmovss  [rsp+4B8h+var_498], xmm0 }
+    sub_141727D50((unsigned int)&v21, a1 + 416, v14, v15, v18, v19, 0, v20);
+    v16 = (__int128 *)v22;
+  }
+  CameraState_CopyTransformAndParams(a2, v16);
+  return a2;
+}
+
+=== 0x141C077B0: ResolveScreenRoutePoseSeedOrDefault [0x141C077B0..0x141C078C4] ===
+// CameraManager::GetHandle(idx) semantics (assert string, table 0x14697AD50). blk = *(mgr+0xB0); requires gate bytes blk+85 && blk+86 and a dword_14697AE34 bit inside the bitset at *(blk+8)+32; then copies the 32-byte POSE SEED at blk+0x60 = [position float4][orientation quat float4] to out. Gate failure -> default pos(0,0,0) + identity quat (xmmword_1428805D0). This seed is the FIRE RAY origin+direction consumed by PlayerFireController_BuildFireArgsAndFire — the co-op Second player's screen-1 seed is never driven by the mod (wrong-direction shots). Co-op fix: hook here and override out for idx==1 from the peer's relayed screen-0 seed.
+__int64 __fastcall ResolveScreenRoutePoseSeedOrDefault(__int64 a1, unsigned int a2)
+{
+  __int64 v2; // rdi
+  __int64 v8; // r8
+  __int64 v10; // rax
+  __int64 result; // rax
+  __int128 v15; // [rsp+30h] [rbp-18h]
+
+  v2 = (int)a2;
+  _RBX = a1;
+  if ( a2 > 1
+    && (!qword_146B17C08
+     || !(unsigned __int8)qword_146B17C08(
+                            "index >= 0 && index < kNumScreens",
+                            "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\gamelib\\camera\\camera-manager.cpp",
+                            "CameraManager::GetHandle",
+                            "Jun 30 2023 19:06:59",
+                            413,
+                            0)) )
+  {
+    sub_1422053E0(a1);
+    __debugbreak();
+  }
+  _RCX = xmmword_14697AD50;
+  _RAX = 2 * v2;
+  __asm
+  {
+    vmovups xmm0, xmmword ptr [rcx+rax*8]
+    vmovq   r8, xmm0
+    vmovups [rsp+48h+var_18], xmm0
+  }
+  if ( !_R8
+    || !DWORD2(v15)
+    || (v8 = *(_QWORD *)(_R8 + 8)) == 0
+    || *(_DWORD *)(v8 + 188) != DWORD2(v15)
+    || (_R8 = *(_QWORD *)(v8 + 176)) == 0
+    || !*(_BYTE *)(_R8 + 85)
+    || !*(_BYTE *)(_R8 + 86)
+    || (v10 = *(_QWORD *)(*(_QWORD *)(_R8 + 8) + 8 * ((unsigned __int64)(unsigned int)dword_14697AE34 >> 6) + 32),
+        !_bittest64(&v10, dword_14697AE34 & 0x3F)) )
+  {
+    _R8 = 0;
+  }
+  result = _RBX;
+  if ( _R8 )
+  {
+    __asm
+    {
+      vmovups ymm0, ymmword ptr [r8+60h]
+      vmovups ymmword ptr [rbx], ymm0
+      vzeroupper
+    }
+  }
+  else
+  {
+    __asm
+    {
+      vxorps  xmm0, xmm0, xmm0
+      vmovups xmmword ptr [rbx], xmm0
+      vmovups xmm1, cs:xmmword_1428805D0
+      vmovups xmmword ptr [rbx+10h], xmm1
+      vzeroupper
+    }
+  }
+  return result;
+}
+
