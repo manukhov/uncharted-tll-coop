@@ -26906,3 +26906,25 @@ in a state that ACCEPTS the interact event and its anim graph has the pickup-swa
 node keyed on it (hyp1), or whether the world-side `interact-with-me` event is also
 required (hyp2). This is decided only by the pending runtime test (pick up on copy 1,
 watch the copy-2 puppet + PICKUP-CTXREPLAY published=1). Static quota fully met.
+
+### 2026-07-12 (static): aim path is DISTINCT from pickup - two separate mechanisms, two separate candidates
+
+Confirmed the aim-pitch and pickup-anim use DIFFERENT publish mechanisms (they are
+NOT unified behind one context-replay fix):
+- PICKUP: `player-requested-interact` is a per-actor STATE-SCRIPT EVENT (DispatchOr
+  Resolve -> SsManager/virtual+0xD0). Context-replay (ContextProcess=puppet) drives
+  it. IMPLEMENTED (c6e2a81).
+- AIM: `PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0` writes
+  directional weights DIRECTLY into an anim-param array via sub_140CAF470 (target
+  controller+0x8E8 region, channels 0..3). No state-script event, no TLS actor
+  targeting. The weights are recomputed each frame from the reticle target point
+  (GetTargetPointFromReticle), whose screen-1 value is STALE for the puppet (frozen
+  aim camera). So the aim fix is NOT context-replay; it is Codex's build-ready design:
+  swap vtable slot 0x142A0B250 (ApplyWorldAimBasis 0x140CAF110, slot +0x58), and when
+  owner *(controller+0x108) is the slot-1 puppet + fresh peer ADS pose seed, pass a
+  hook-local target float4 = peerPosePosition + peerCameraForward*dist (native limits
+  preserved). Not yet implemented.
+
+TWO independent build-ready candidates now exist: pickup context-replay (implemented,
+runtime-pending) and aim target-point substitution (designed, unimplemented). Both
+are dispatcher-independent and avoid the rejected broad-override/frame-from-rsp paths.
