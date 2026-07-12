@@ -2955,6 +2955,11 @@ WeaponPickupOnInteractFunction g_original_weapon_pickup_on_interact = nullptr;
 using PickupRequestInteractFunction = std::int64_t(__fastcall*)(
     std::uint64_t, std::int64_t, std::int64_t);
 PickupRequestInteractFunction g_original_pickup_request_interact = nullptr;
+using WeaponPickupFactoryFunction = void*(__fastcall*)(void*, void*);
+WeaponPickupFactoryFunction g_original_weapon_pickup_factory = nullptr;
+constexpr std::size_t kWeaponPickupCacheCapacity = 2048;
+std::atomic<void*> g_weapon_pickup_cache[kWeaponPickupCacheCapacity]{};
+std::atomic<std::size_t> g_weapon_pickup_cache_count{0};
 
 // SEH leaf readers: one guarded read each, so a bad candidate pointer aborts only
 // that probe, not the whole scan.
@@ -3006,6 +3011,79 @@ std::uint32_t read_weapon_pickup_art_id(std::uint64_t pickup_obj) {
     std::uint32_t art_id = 0;
     seh_read_dword(reinterpret_cast<const void*>(pickup_obj + 0x520), art_id);
     return art_id;
+}
+
+bool relay_weapon_art_matches(std::uint32_t lhs, std::uint32_t rhs);
+
+void cache_weapon_pickup(void* pickup) {
+    if (pickup == nullptr) {
+        return;
+    }
+    const std::size_t index =
+        g_weapon_pickup_cache_count.fetch_add(1, std::memory_order_relaxed);
+    if (index < kWeaponPickupCacheCapacity) {
+        g_weapon_pickup_cache[index].store(pickup, std::memory_order_release);
+    }
+}
+
+void* __fastcall hooked_weapon_pickup_factory(void* registry, void* storage) {
+    void* const pickup = g_original_weapon_pickup_factory != nullptr
+        ? g_original_weapon_pickup_factory(registry, storage)
+        : nullptr;
+    cache_weapon_pickup(pickup);
+    return pickup;
+}
+
+void* find_cached_weapon_pickup_by_art(void* player, std::uint32_t art) {
+    if (player == nullptr || art == 0 || g_module == 0 ||
+        readable_bytes(static_cast<std::byte*>(player) + kWorldPositionOffset) < 12) {
+        return nullptr;
+    }
+    const auto* const player_pos = reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(player) + kWorldPositionOffset);
+    if (!valid_network_position(player_pos)) {
+        return nullptr;
+    }
+
+    void* best = nullptr;
+    float best_distance_sq = 25.0F;  // pickup interaction is necessarily nearby
+    const std::size_t count = (std::min)(
+        g_weapon_pickup_cache_count.load(std::memory_order_acquire),
+        kWeaponPickupCacheCapacity);
+    for (std::size_t i = 0; i < count; ++i) {
+        void* const candidate =
+            g_weapon_pickup_cache[i].load(std::memory_order_acquire);
+        if (candidate == nullptr ||
+            readable_bytes(static_cast<std::byte*>(candidate) + 0x524) < 4) {
+            continue;
+        }
+        __try {
+            const auto* const bytes = static_cast<const std::byte*>(candidate);
+            if (*reinterpret_cast<const std::uintptr_t*>(bytes) !=
+                    g_module + kWeaponPickupVftableRva ||
+                !relay_weapon_art_matches(
+                    *reinterpret_cast<const std::uint32_t*>(bytes + 0x520), art) ||
+                *reinterpret_cast<const std::uint32_t*>(
+                    bytes + kGameObjectRuntimeIdOffset) == 0) {
+                continue;
+            }
+            const auto* const pos = reinterpret_cast<const float*>(
+                bytes + kWorldPositionOffset);
+            if (!valid_network_position(pos)) {
+                continue;
+            }
+            const float dx = pos[0] - player_pos[0];
+            const float dy = pos[1] - player_pos[1];
+            const float dz = pos[2] - player_pos[2];
+            const float distance_sq = dx * dx + dy * dy + dz * dz;
+            if (std::isfinite(distance_sq) && distance_sq < best_distance_sq) {
+                best_distance_sq = distance_sq;
+                best = candidate;
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+        }
+    }
+    return best;
 }
 
 std::uint32_t normalize_relay_weapon_art(std::uint32_t art_id) {
@@ -3242,6 +3320,27 @@ bool install_pickup_request_interact_gate() {
                       ? "pickup RequestInteract animation relay installed"
                       : "pickup RequestInteract animation relay SKIPPED");
     return g_original_pickup_request_interact != nullptr;
+}
+
+bool install_weapon_pickup_factory_cache() {
+    constexpr std::array<std::uint8_t, 21> kFactoryPrologue{
+        0x40, 0x53,
+        0x48, 0x83, 0xEC, 0x40,
+        0x48, 0xC7, 0x44, 0x24, 0x30, 0xFE, 0xFF, 0xFF, 0xFF,
+        0x48, 0x8B, 0xDA,
+        0x48, 0x85, 0xD2,
+    };
+    g_original_weapon_pickup_factory =
+        reinterpret_cast<WeaponPickupFactoryFunction>(
+            install_fire_gate_detour(
+                kWeaponPickupFactoryRva,
+                kFactoryPrologue.data(), kFactoryPrologue.size(),
+                reinterpret_cast<void*>(&hooked_weapon_pickup_factory),
+                "WeaponPickup factory cache"));
+    boot_log_line(g_original_weapon_pickup_factory != nullptr
+                      ? "WeaponPickup factory cache installed"
+                      : "WeaponPickup factory cache SKIPPED");
+    return g_original_weapon_pickup_factory != nullptr;
 }
 
 // Exp 5b: probe whether PlayerInteractController update sub_140EC6C10 runs for the
@@ -5032,6 +5131,7 @@ void __fastcall hooked_give_weapon_tail(
     std::uint32_t relay_pickup_object_id = 0;
     std::uint32_t relay_pickup_class_id = 0;
     std::uint32_t relay_pickup_name_id = 0;
+    bool relay_pickup_from_factory = false;
     coop::WeaponGivePacket relay_pkt{};
     void* relay_local_player = nullptr;
     if (g_pickup_relay && g_state_net.enabled && g_state_net.peer_set &&
@@ -5057,15 +5157,26 @@ void __fastcall hooked_give_weapon_tail(
                 } else {
                     // Capture while the pickup is still in the world / interact
                     // control — after GiveWeapon the nearby list is usually empty.
-                    relay_pickup_object_id = capture_weapon_pickup_for_relay(
-                        local_player, local_ctrl, relay_art);
+                    void* relay_pickup =
+                        find_cached_weapon_pickup_by_art(local_player, relay_art);
+                    if (relay_pickup != nullptr) {
+                        relay_pickup_from_factory = true;
+                        relay_pickup_object_id = read_weapon_pickup_runtime_id(
+                            reinterpret_cast<std::uint64_t>(relay_pickup));
+                    }
+                    if (relay_pickup_object_id == 0) {
+                        relay_pickup_object_id = capture_weapon_pickup_for_relay(
+                            local_player, local_ctrl, relay_art);
+                    }
                     if (relay_pickup_object_id == 0) {
                         relay_pickup_object_id =
                             capture_pickup_id_from_weapon_info(weapon_info);
                     }
                     if (relay_pickup_object_id != 0) {
-                        void* const pickup = resolve_weapon_pickup_by_runtime_id(
-                            relay_pickup_object_id, relay_art);
+                        void* const pickup = relay_pickup != nullptr
+                            ? relay_pickup
+                            : resolve_weapon_pickup_by_runtime_id(
+                                  relay_pickup_object_id, relay_art);
                         if (pickup != nullptr) {
                             seh_read_dword(
                                 static_cast<const std::byte*>(pickup) + 0x38,
@@ -5079,6 +5190,9 @@ void __fastcall hooked_give_weapon_tail(
                             << relay_pickup_object_id << " art=0x" << relay_art
                             << " class=0x" << relay_pickup_class_id
                             << " name=0x" << relay_pickup_name_id
+                            << " source="
+                            << (relay_pickup_from_factory ? "factory-cache"
+                                                         : "legacy-scan")
                             << std::dec;
                         force_log_line(cap.str().c_str());
                     }
@@ -18764,6 +18878,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_fire_capture();
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
+    install_weapon_pickup_factory_cache();
     install_pickup_request_interact_gate();
     install_weapon_pickup_gate();
     install_grenade_init_probe();

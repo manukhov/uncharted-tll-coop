@@ -1,5 +1,20 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-13, Codex - WeaponPickup factory-cache sender candidate)
+
+**STATIC candidate:** `WeaponPickup_Factory 0x141579150` is the registered class
+factory (size `0x560`, vtable `0x142AA66C0`) and has a safe 21-byte pre-branch
+prologue. The DLL now caches objects returned while the campaign loads. At the
+confirmed scripted `GiveWeapon` boundary `0x140DD4208`, it selects the nearest live
+matching art (`WeaponPickup+0x520`), then captures runtime id `+0xBC` and descriptor
+ids `+0x38/+0xD8`. This replaces the runtime-rejected dispatcher/control source.
+
+Prediction: sender logs `PICKUP-ID-CAPTURE ... source=factory-cache` with nonzero
+ids, then receiver logs `PICKUP-CTXREPLAY published=1`. No cache match rejects the
+assumption that scripted pickups have a live WeaponPickup; nonzero id with zero
+class/name rejects the descriptor field assumption for this path. Details:
+`reports/pickup_factory_cache_static_20260713.md`.
+
 ## Turn note (2026-07-12, Codex - pickup sender capture rejected; lag measured)
 
 **RUNTIME REJECTED (sender capture):** Type-97 ground pickup reached the confirmed

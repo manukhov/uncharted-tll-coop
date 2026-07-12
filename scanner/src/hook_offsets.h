@@ -250,6 +250,10 @@ constexpr std::uintptr_t kPlayerTryStartBumpActionRva = 0x0CE8E10;
 // OnInteract is retained only as a safety gate for replay completion.
 constexpr std::uintptr_t kPickupRequestInteractRva = 0x08C8A40;
 constexpr std::uintptr_t kWeaponPickupOnInteractRva = 0x157AA70;
+// Registered WeaponPickup class factory. Injection precedes campaign load, so
+// caching its returned objects gives the sender a live pickup source even when
+// the scripted give path bypasses the interact dispatcher.
+constexpr std::uintptr_t kWeaponPickupFactoryRva = 0x1579150;
 constexpr std::uintptr_t kPlayerRequestedInteractRva = 0x0C87D70;
 // Builds the 0x15C-byte command/pose block consumed by Player_InteractDispatcher.
 // The builder resolves the indexed Player and snapshots the per-screen +0x590

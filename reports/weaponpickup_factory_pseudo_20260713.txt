@@ -1,0 +1,84 @@
+=== 0x141579150: WeaponPickup_Factory [0x141579150..0x141579201] ===
+// Registered for class name WeaponPickup (registration sub_1400C5560); object size 1376, vftable 0x142AA66C0.
+// Hidden C++ exception states: #wind=1
+__int64 __fastcall WeaponPickup_Factory(__int64 a1, __int64 a2)
+{
+  __int64 v4; // rax
+  __int64 v5; // rbx
+
+  if ( a2 )
+  {
+    sub_1408ABEB0(a2);
+    *(_QWORD *)a2 = &WeaponPickup::`vftable';
+    *(_QWORD *)(a2 + 1336) = 0;
+    *(_DWORD *)(a2 + 1344) = 0;
+    *(_DWORD *)(a2 + 1348) = 1;
+    return a2;
+  }
+  else
+  {
+    v4 = sub_1415A0E90(1376, 16, (unsigned int)"UNKNOWN", 0, (__int64)"UNKNOWN");
+    v5 = v4;
+    if ( !v4 )
+      return 0;
+    sub_1408ABEB0(v4);
+    *(_QWORD *)v5 = &WeaponPickup::`vftable';
+    *(_QWORD *)(v5 + 1336) = 0;
+    *(_DWORD *)(v5 + 1344) = 0;
+    *(_DWORD *)(v5 + 1348) = 1;
+    return v5;
+  }
+}
+
+=== 0x141579210: sub_141579210 [0x141579210..0x14157924A] ===
+__int64 __fastcall sub_141579210(__int64 a1)
+{
+  sub_1408ABEB0(a1);
+  *(_QWORD *)a1 = &WeaponPickup::`vftable';
+  *(_QWORD *)(a1 + 1336) = 0;
+  *(_DWORD *)(a1 + 1344) = 0;
+  *(_DWORD *)(a1 + 1348) = 1;
+  return a1;
+}
+
+=== 0x141578F90: sub_141578F90 [0x141578F90..0x14157905C] ===
+// local variable allocation has failed, the output may be wrong!
+__int64 __fastcall sub_141578F90(double _XMM0_8)
+{
+  __int64 v1; // rax
+  __int64 v2; // rcx
+
+  v1 = sub_1415A0E90(216, 16, (unsigned int)"UNKNOWN", 0, (__int64)"UNKNOWN");
+  v2 = v1;
+  if ( !v1 )
+    return 0;
+  *(_DWORD *)(v1 + 8) = 0;
+  *(_QWORD *)(v1 + 16) = 0;
+  *(_DWORD *)(v1 + 24) = -1;
+  *(_DWORD *)(v1 + 28) = 0;
+  *(_QWORD *)(v1 + 32) = -1;
+  *(_QWORD *)(v1 + 40) = -1;
+  *(_QWORD *)(v1 + 48) = 0;
+  *(_BYTE *)(v1 + 57) &= 0xC0u;
+  *(_BYTE *)(v1 + 56) = 0x80;
+  __asm
+  {
+    vxorps  xmm0, xmm0, xmm0
+    vcvttss2si rax, xmm0
+  }
+  *(_QWORD *)(v2 + 64) = _RAX;
+  *(_QWORD *)(v2 + 72) = 0;
+  *(_QWORD *)(v2 + 128) = 0;
+  *(_QWORD *)(v2 + 136) = 0;
+  *(_DWORD *)(v2 + 144) = -1;
+  *(_DWORD *)(v2 + 148) = 0;
+  *(_BYTE *)(v2 + 152) = 0;
+  *(_QWORD *)(v2 + 88) = 0;
+  *(_QWORD *)(v2 + 96) = 0;
+  *(_QWORD *)(v2 + 104) = 0;
+  *(_QWORD *)(v2 + 112) = 0;
+  *(_QWORD *)(v2 + 200) = 0;
+  *(_QWORD *)v2 = &WeaponPickupInteractControl::`vftable';
+  return v2;
+}
+

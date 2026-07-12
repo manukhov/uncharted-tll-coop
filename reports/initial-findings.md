@@ -26957,3 +26957,17 @@ Performance sampling during the same run showed two symmetric `12.7 GB` private
 game processes on a `15.9 GB` RAM system, about `1.5 GB` available memory and
 approximately `25,700 Pages Input/sec`. The observed pauses are paging, not a
 one-sided mod allocation leak. Log growth at the time was only about `0.03 MiB/min`.
+
+### 2026-07-13 STATIC: registered WeaponPickup factory provides a bounded sender source
+
+`WeaponPickup_Factory 0x141579150` is referenced by the `WeaponPickup` class
+registration at `0x1400C5560`. It allocates `0x560` bytes, runs the base constructor,
+and writes vtable `0x142AA66C0`. Its first 21 bytes end immediately before a relative
+branch and are safe for the existing trampoline detour.
+
+Candidate implementation caches returned objects during campaign load and, only at
+the confirmed scripted pickup GiveWeapon boundary (`ret=0x140DD4208`), chooses the
+nearest live object with matching art `+0x520`. It then reads runtime id `+0xBC` and
+descriptor ids `+0x38/+0xD8`. This is **STATIC**, not confirmed: a scripted pickup
+may have no WeaponPickup process or may destroy it before GiveWeapon. Distinguishing
+runtime log is `PICKUP-ID-CAPTURE ... source=factory-cache`.

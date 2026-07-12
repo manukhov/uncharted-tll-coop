@@ -1,0 +1,43 @@
+0x141579150: push    rbx; Registered for class name WeaponPickup (registration sub_1400C5560); object size 1376, vftable 0x142AA66C0.
+0x141579152: sub     rsp, 40h
+0x141579156: mov     [rsp+48h+var_18], 0FFFFFFFFFFFFFFFEh
+0x14157915F: mov     rbx, rdx
+0x141579162: test    rdx, rdx
+0x141579165: jz      short loc_14157919B
+0x141579167: mov     rcx, rdx
+0x14157916A: call    sub_1408ABEB0
+0x14157916F: lea     rax, ??_7WeaponPickup@@6B@; const WeaponPickup::`vftable'
+0x141579176: mov     [rbx], rax
+0x141579179: xor     eax, eax
+0x14157917B: mov     [rbx+538h], rax
+0x141579182: mov     [rbx+540h], eax
+0x141579188: mov     dword ptr [rbx+544h], 1
+0x141579192: mov     rax, rbx
+0x141579195: add     rsp, 40h
+0x141579199: pop     rbx
+0x14157919A: retn
+0x14157919B: lea     r8, aUnknown; "UNKNOWN"
+0x1415791A2: mov     [rsp+48h+var_28], r8
+0x1415791A7: xor     r9d, r9d
+0x1415791AA: mov     rdx, cs:qword_1428CBB38
+0x1415791B1: mov     ecx, 560h
+0x1415791B6: call    sub_1415A0E90
+0x1415791BB: mov     rbx, rax
+0x1415791BE: mov     [rsp+48h+arg_8], rax
+0x1415791C3: test    rax, rax
+0x1415791C6: jz      short loc_1415791F5
+0x1415791C8: mov     rcx, rax
+0x1415791CB: call    sub_1408ABEB0
+0x1415791D0: lea     rax, ??_7WeaponPickup@@6B@; const WeaponPickup::`vftable'
+0x1415791D7: mov     [rbx], rax
+0x1415791DA: xor     eax, eax
+0x1415791DC: mov     [rbx+538h], rax
+0x1415791E3: mov     [rbx+540h], eax
+0x1415791E9: mov     dword ptr [rbx+544h], 1
+0x1415791F3: jmp     short loc_1415791F8
+0x1415791F5: mov     rbx, rax
+0x1415791F8: mov     rax, rbx
+0x1415791FB: add     rsp, 40h
+0x1415791FF: pop     rbx
+0x141579200: retn
+0x141579201: align 10h
