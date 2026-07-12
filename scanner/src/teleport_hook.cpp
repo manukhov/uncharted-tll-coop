@@ -427,9 +427,10 @@ volatile bool g_native_fire_relay = false;
 // the puppet enters full weapon ADS — and because ss-hud-sniper-reticle-manager is
 // a PROCESS-GLOBAL singleton (see initial-findings 2026-07-04), a scoped-rifle ADS
 // on the puppet raises the sniper scope overlay on the RECEIVER's own viewport.
-// Test default ON after isolating aim delivery to the puppet's Joypad and adding
-// scoped DrawControl visibility restoration. F8 remains an emergency A/B toggle.
-volatile bool g_puppet_relay_aim_press = true;
+// Default OFF: continuous puppet ADS still corrupts locomotion while moving
+// (runtime: the remote player slides back and forth in a kneeling pose). Keep F8
+// as an explicit foreground-only A/B toggle until aim is isolated from gait.
+volatile bool g_puppet_relay_aim_press = false;
 // Default aim animation without full ADS: relay 0x200 only for non-scoped peer aim
 // while the peer is almost stationary. This avoids the rejected run/turn jitter from
 // continuous aim-press during locomotion, while still raising the weapon on hold-aim.
@@ -3031,6 +3032,8 @@ std::uint32_t capture_pickup_id_from_weapon_info(const void* weapon_info) {
 
 void* seh_find_nearby_weapon_pickup(void* dispatcher, std::uint32_t art);
 std::uint32_t capture_weapon_pickup_object_id(std::uint64_t ctrl);
+void* resolve_weapon_pickup_by_runtime_id(
+    std::uint32_t id, std::uint32_t expected_art);
 
 std::uint32_t capture_weapon_pickup_for_relay(
     void* player, void* weapon_controller, std::uint32_t art) {
@@ -3172,13 +3175,10 @@ std::int64_t __fastcall hooked_pickup_request_interact(
         pkt.weapon_art_id = art;
         // Capture the interactable ids the descriptor publisher reads (pickup+0x38
         // class id, pickup+0xD8 name id) for the receiver context-replay.
-        std::uint64_t cls = 0, nm = 0;
-        if (seh_read_qword(reinterpret_cast<const void*>(pickup + 0x38), cls)) {
-            pkt.interact_class_id = static_cast<std::uint32_t>(cls);
-        }
-        if (seh_read_qword(reinterpret_cast<const void*>(pickup + 0xD8), nm)) {
-            pkt.interact_name_id = static_cast<std::uint32_t>(nm);
-        }
+        seh_read_dword(reinterpret_cast<const void*>(pickup + 0x38),
+                       pkt.interact_class_id);
+        seh_read_dword(reinterpret_cast<const void*>(pickup + 0xD8),
+                       pkt.interact_name_id);
         if (sent) {
             sendto(g_state_net.send_socket,
                    reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
@@ -3187,7 +3187,9 @@ std::int64_t __fastcall hooked_pickup_request_interact(
         }
         std::ostringstream line;
         line << "PICKUP-ANIM-SEND id=0x" << std::hex << id
-             << " art=0x" << art << std::dec << " seq=" << pkt.sequence
+             << " art=0x" << art << " class=0x" << pkt.interact_class_id
+             << " name=0x" << pkt.interact_name_id << std::dec
+             << " seq=" << pkt.sequence
              << " sent=" << (sent ? 1 : 0);
         force_log_line(line.str().c_str());
     }
@@ -5024,6 +5026,8 @@ void __fastcall hooked_give_weapon_tail(
     // find_weapon_slot_by_art_id sees the new inventory entry.
     bool relay_pickup_after_give = false;
     std::uint32_t relay_pickup_object_id = 0;
+    std::uint32_t relay_pickup_class_id = 0;
+    std::uint32_t relay_pickup_name_id = 0;
     coop::WeaponGivePacket relay_pkt{};
     void* relay_local_player = nullptr;
     if (g_pickup_relay && g_state_net.enabled && g_state_net.peer_set &&
@@ -5056,9 +5060,21 @@ void __fastcall hooked_give_weapon_tail(
                             capture_pickup_id_from_weapon_info(weapon_info);
                     }
                     if (relay_pickup_object_id != 0) {
+                        void* const pickup = resolve_weapon_pickup_by_runtime_id(
+                            relay_pickup_object_id, relay_art);
+                        if (pickup != nullptr) {
+                            seh_read_dword(
+                                static_cast<const std::byte*>(pickup) + 0x38,
+                                relay_pickup_class_id);
+                            seh_read_dword(
+                                static_cast<const std::byte*>(pickup) + 0xD8,
+                                relay_pickup_name_id);
+                        }
                         std::ostringstream cap;
                         cap << "PICKUP-ID-CAPTURE pre-give id=0x" << std::hex
                             << relay_pickup_object_id << " art=0x" << relay_art
+                            << " class=0x" << relay_pickup_class_id
+                            << " name=0x" << relay_pickup_name_id
                             << std::dec;
                         force_log_line(cap.str().c_str());
                     }
@@ -5122,6 +5138,8 @@ void __fastcall hooked_give_weapon_tail(
             anim_pkt.sequence = g_pickup_send_seq.fetch_add(1) + 1;
             anim_pkt.pickup_object_id = relay_pickup_object_id;
             anim_pkt.weapon_art_id = relay_pkt.weapon_art_id;
+            anim_pkt.interact_class_id = relay_pickup_class_id;
+            anim_pkt.interact_name_id = relay_pickup_name_id;
             sendto(g_state_net.send_socket,
                    reinterpret_cast<const char*>(&anim_pkt), sizeof(anim_pkt), 0,
                    reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
@@ -5129,7 +5147,9 @@ void __fastcall hooked_give_weapon_tail(
             std::ostringstream anim_line;
             anim_line << "PICKUP-ANIM-SEND id=0x" << std::hex
                       << relay_pickup_object_id << " art=0x"
-                      << relay_pkt.weapon_art_id << std::dec
+                      << relay_pkt.weapon_art_id << " class=0x"
+                      << anim_pkt.interact_class_id << " name=0x"
+                      << anim_pkt.interact_name_id << std::dec
                       << " seq=" << anim_pkt.sequence << " via=give-relay";
             force_log_line(anim_line.str().c_str());
         }

@@ -26928,3 +26928,12 @@ NOT unified behind one context-replay fix):
 TWO independent build-ready candidates now exist: pickup context-replay (implemented,
 runtime-pending) and aim target-point substitution (designed, unimplemented). Both
 are dispatcher-independent and avoid the rejected broad-override/frame-from-rsp paths.
+
+### 2026-07-12 (RUNTIME REJECTED): default-on puppet ADS breaks locomotion
+
+Commit `0459634` changed `g_puppet_relay_aim_press` from `false` to `true` for an
+aim experiment. Runtime symptom: Nadine slides forward/backward in a kneeling pose
+while movement input continues. This confirms that sustained puppet Joypad action
+`0x200` still conflicts with the locomotion graph; scoped mesh restoration does not
+make full ADS safe during movement. Stable default restored to `false`; F8 remains
+the explicit foreground-only experiment toggle.

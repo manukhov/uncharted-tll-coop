@@ -1,5 +1,17 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-12, Codex - kneeling-slide locomotion regression)
+
+**RUNTIME REJECTED:** commit `0459634` changed
+`g_puppet_relay_aim_press` from the stable default `false` to test-default `true`.
+With continuous puppet ADS (`Joypad` action `0x200`) active during movement, Nadine
+slides forward/backward in a kneeling pose instead of running. This reproduces the
+earlier documented locomotion conflict from global aim-press relay.
+
+**Fix:** restore `g_puppet_relay_aim_press=false`. Keep F8 as a foreground-only A/B
+toggle. The scoped mesh-visibility helpers and camera-yaw-to-body-yaw conversion
+from `0459634` remain available, but no longer force full ADS by default.
+
 ## Turn note (2026-07-12, Codex - context-scoped pickup descriptor replay)
 
 **STATIC candidate:** the receiver no longer needs to resolve a mirrored live
