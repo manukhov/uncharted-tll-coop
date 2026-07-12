@@ -1,6 +1,6 @@
 # Native pickup gesture producer: PlayerPickupController (2026-07-13)
 
-Status: **STATIC, implementation build-ready**.
+Status: **RUNTIME CONFIRMED**.
 
 ## Precise hypothesis
 
@@ -51,3 +51,15 @@ Start/Queue accepts the action, it sends the POD. Receiver calls the original on
 
 Inventory remains entirely WeaponGivePacket + SLOT-MIRROR. The old descriptor and
 dispatcher recipes are bypassed for v4 controller packets.
+
+## Runtime result
+
+Two-copy loopback test, PIDs 1748 and 9036, with commit `6c8072b`:
+
+- sender emitted four consecutive `PICKUP-CONTROLLER-SEND` packets (`seq=1..4`);
+- receiver emitted `PICKUP-CONTROLLER-APPLY queued=1` for every packet;
+- the user confirmed the remote character visibly performs the pickup bend.
+
+The successful null-object replay also rejects competing hypotheses 2 and 3: the
+puppet does tick this controller, and the relayed POD is sufficient to select and
+display its native gesture without a live WeaponPickup object.

@@ -5,7 +5,7 @@
 **RUNTIME REJECTED:** factory-cache test with M-30 (PIDs 5084/21076) still emitted
 `pickup_id=0`; no matching live WeaponPickup exists at scripted GiveWeapon time.
 
-**STATIC replacement (quota met):** the actual bend producer is
+**RUNTIME CONFIRMED:** the actual bend producer is
 `PlayerPickupController` at `Player+0x1EB8`. The `interact-with-me`/`Pickup` script
 branch calls vtable `+0x38` (`PlayerPickupController_StartOrQueue 0x140F49CA0`) at
 `0x140DD0A3C`. It queues a 32-byte POD arg3, selects `dra-pickup-*`, starts through
@@ -13,8 +13,10 @@ branch calls vtable `+0x38` (`PlayerPickupController_StartOrQueue 0x140F49CA0`) 
 publishes `player-pickup` on completion `0x140F4D0E0`.
 
 PickupPacket v4 now relays that exact 32-byte arg. Receiver calls the original on
-`puppet+0x1EB8` with object=null, supported by the native function. Prediction:
-`PICKUP-CONTROLLER-SEND` -> `PICKUP-CONTROLLER-APPLY queued=1` -> one visible bend.
+`puppet+0x1EB8` with object=null, supported by the native function. Runtime PIDs
+1748/9036 produced four consecutive `PICKUP-CONTROLLER-SEND` packets (`seq=1..4`),
+four `PICKUP-CONTROLLER-APPLY queued=1` results, and the user confirmed the remote
+pickup bend is visible.
 Details: `reports/player_pickup_controller_static_20260713.md`.
 
 ## Turn note (2026-07-13, Codex - WeaponPickup factory-cache sender candidate)

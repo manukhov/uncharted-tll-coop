@@ -26975,7 +26975,7 @@ runtime log is `PICKUP-ID-CAPTURE ... source=factory-cache`.
 **RUNTIME REJECTED:** M-30 test with factory cache installed before save load still
 emitted `pickup_id=0`; no factory-cache match existed at scripted GiveWeapon time.
 
-### 2026-07-13 STATIC: PlayerPickupController is the native bend producer
+### 2026-07-13 CONFIRMED: PlayerPickupController is the native bend producer
 
 The `interact-with-me` script branch (`0x4825A9F1`) reaches decision state `Pickup`
 and calls `Player+0x1EB8` vtable `+0x38` at `0x140DD0A3C`. The slot points to
@@ -26988,3 +26988,9 @@ the gesture and handles `signal-pickup`; `0x140F4CD20` contains the exact
 `PlayerPickupController::PostAnimBlending` assertion (`player-pickup.cpp:897`);
 `0x140F4D0E0` publishes `player-pickup` and clears the queue. This is the actual
 bend producer and is separate from later `give-weapon 0x140DD4208`.
+
+Runtime loopback test (PIDs 1748/9036, commit `6c8072b`) relayed the exact 32-byte
+arg3 in PickupPacket v4. Four successive local starts (`seq=1..4`) each produced
+`PICKUP-CONTROLLER-APPLY queued=1` remotely, and the user confirmed the visible
+pickup bend. Calling the original controller on `puppet+0x1EB8` with object=null
+is therefore sufficient; no live WeaponPickup descriptor is required.
