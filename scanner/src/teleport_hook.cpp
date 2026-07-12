@@ -858,6 +858,9 @@ volatile bool g_pickup_relay = true;
 std::atomic<std::uint32_t> g_pickup_send_seq{0};
 std::atomic<std::uint32_t> g_pending_pickup_id{0};
 std::atomic<std::uint32_t> g_pending_pickup_art{0};
+std::atomic<std::uint32_t> g_pending_pickup_class_id{0};
+std::atomic<std::uint32_t> g_pending_pickup_name_id{0};
+volatile bool g_pickup_context_replay = true;  // Numpad 3 toggles
 std::atomic<std::uint32_t> g_last_applied_pickup_seq{0};
 std::atomic<std::uint32_t> g_pending_pickup_seq{0};
 std::atomic<bool> g_pending_pickup_flag{false};
@@ -3167,6 +3170,15 @@ std::int64_t __fastcall hooked_pickup_request_interact(
         pkt.sequence = g_pickup_send_seq.fetch_add(1) + 1;
         pkt.pickup_object_id = id;
         pkt.weapon_art_id = art;
+        // Capture the interactable ids the descriptor publisher reads (pickup+0x38
+        // class id, pickup+0xD8 name id) for the receiver context-replay.
+        std::uint64_t cls = 0, nm = 0;
+        if (seh_read_qword(reinterpret_cast<const void*>(pickup + 0x38), cls)) {
+            pkt.interact_class_id = static_cast<std::uint32_t>(cls);
+        }
+        if (seh_read_qword(reinterpret_cast<const void*>(pickup + 0xD8), nm)) {
+            pkt.interact_name_id = static_cast<std::uint32_t>(nm);
+        }
         if (sent) {
             sendto(g_state_net.send_socket,
                    reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
@@ -8120,6 +8132,10 @@ DWORD WINAPI state_recv_thread(void*) {
                                               std::memory_order_relaxed);
                     g_pending_pickup_art.store(pp.weapon_art_id,
                                                std::memory_order_relaxed);
+                    g_pending_pickup_class_id.store(pp.interact_class_id,
+                                                    std::memory_order_relaxed);
+                    g_pending_pickup_name_id.store(pp.interact_name_id,
+                                                   std::memory_order_relaxed);
                     g_pending_pickup_seq.store(pp.sequence,
                                                std::memory_order_relaxed);
                     // Defer apply_peer_pickup_animation until SLOT-MIRROR gives
@@ -11979,6 +11995,45 @@ void apply_puppet_pickup_gesture(void* puppet) {
     }
 }
 
+// CONTEXT-REPLAY publish (2026-07-12): author the player-requested-interact
+// descriptor directly onto the puppet's actor state slot, bypassing the interact
+// dispatcher (which never runs for the puppet). Balanced TLS ContextProcess scope:
+// save -> set puppet -> publish(dispatcher, two-id surrogate) -> restore. The
+// surrogate carries only the two dwords the publisher reads (class @+0x38, name
+// @+0xD8). Returns true if the publish ran without faulting.
+bool seh_context_replay_publish(void* puppet, void* dispatcher,
+                                std::uint32_t class_id, std::uint32_t name_id) {
+    if (puppet == nullptr || dispatcher == nullptr) return false;
+    using GetCtxFn = void*(__fastcall*)();
+    using SetCtxFn = void*(__fastcall*)(void*);
+    using PublishFn = void*(__fastcall*)(void*, void*);
+    const auto get_ctx =
+        reinterpret_cast<GetCtxFn>(g_module + kThreadContextGetCurrentRva);
+    const auto set_ctx =
+        reinterpret_cast<SetCtxFn>(g_module + kThreadContextSetCurrentRva);
+    const auto publish =
+        reinterpret_cast<PublishFn>(g_module + kPublishRequestedInteractRva);
+    alignas(16) std::uint8_t surrogate[0x100]{};
+    *reinterpret_cast<std::uint32_t*>(surrogate + 0x38) = class_id;
+    *reinterpret_cast<std::uint32_t*>(surrogate + 0xD8) = name_id;
+    void* saved = nullptr;
+    bool ran = false;
+    __try {
+        saved = get_ctx();
+        set_ctx(puppet);
+        publish(dispatcher, surrogate);
+        ran = true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        ran = false;
+    }
+    // Restore context on every path (separate __try so a publish fault still restores).
+    __try {
+        set_ctx(saved);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    return ran;
+}
+
 // Consume only from the puppet's per-player update. Player_PublishRequestedInteract
 // resolves its target actor from thread-local state, so calling it from the global
 // drive tick could animate the local player instead.
@@ -12011,30 +12066,43 @@ void apply_peer_pickup_animation(void* puppet) {
               g_module + kPlayerInteractDispatcherBaseRva +
               kPlayerInteractDispatcherStride * player_index)
         : nullptr;
-    void* pickup = resolve_weapon_pickup_by_runtime_id(id, art);
-    if (pickup == nullptr && dispatcher != nullptr && art != 0) {
-        pickup = seh_find_nearby_weapon_pickup(dispatcher, art);
+    // CONTEXT-REPLAY path (primary, 2026-07-12): publish directly with the two
+    // relayed interactable ids, no mirrored WeaponPickup needed. Falls back to the
+    // old resolve+recipe path when the ids are absent or the toggle is off.
+    const std::uint32_t class_id =
+        g_pending_pickup_class_id.load(std::memory_order_relaxed);
+    const std::uint32_t name_id =
+        g_pending_pickup_name_id.load(std::memory_order_relaxed);
+    bool published = false;
+    bool dispatched = false;
+    if (g_pickup_context_replay && dispatcher != nullptr &&
+        (class_id != 0 || name_id != 0)) {
+        published = seh_context_replay_publish(puppet, dispatcher, class_id,
+                                               name_id);
+        force_log_line(published ? "PICKUP-CTXREPLAY published=1"
+                                 : "PICKUP-CTXREPLAY published=0 (faulted)");
+    } else {
+        void* pickup = resolve_weapon_pickup_by_runtime_id(id, art);
+        if (pickup == nullptr && dispatcher != nullptr && art != 0) {
+            pickup = seh_find_nearby_weapon_pickup(dispatcher, art);
+        }
+        const PuppetPickupRecipeResult recipe =
+            seh_run_puppet_pickup_recipe(puppet, pickup);
+        published = recipe.published;
+        dispatched = recipe.dispatched;
     }
-    const PuppetPickupRecipeResult recipe =
-        seh_run_puppet_pickup_recipe(puppet, pickup);
-    if (recipe.dispatched || recipe.published) {
+    if (dispatched || published) {
         g_puppet_pickup_action_started.store(true, std::memory_order_release);
     }
     g_pending_pickup_flag.store(false, std::memory_order_release);
     g_last_applied_pickup_seq.store(seq, std::memory_order_relaxed);
     std::ostringstream line;
     line << "PICKUP-ANIM-APPLY id=0x" << std::hex << id
-         << " art=0x" << art << std::dec << " seq=" << seq
-         << " playerIndex=" << player_index
-         << " resolved=" << (pickup != nullptr ? 1 : 0)
-         << " cmd=0x" << std::hex << recipe.cmd_id << std::dec
-         << " resolved_cmd=" << (recipe.resolved_cmd ? 1 : 0)
-         << " ok=" << (recipe.activated ? 1 : 0)
-         << " radius=" << (recipe.within_radius ? 1 : 0)
-         << " dispatch=" << (recipe.dispatched ? 1 : 0)
-         << " availability=" << recipe.availability
-         << " requested=" << (recipe.requested ? 1 : 0)
-         << " published=" << (recipe.published ? 1 : 0);
+         << " art=0x" << art << " class=0x" << class_id << " name=0x" << name_id
+         << std::dec << " seq=" << seq << " playerIndex=" << player_index
+         << " ctxReplay=" << (g_pickup_context_replay ? 1 : 0)
+         << " published=" << (published ? 1 : 0)
+         << " dispatch=" << (dispatched ? 1 : 0);
     force_log_line(line.str().c_str());
 }
 
@@ -15794,6 +15862,16 @@ void net_tick() {
         const bool was = g_logging_enabled;
         g_logging_enabled = true;
         log_line("PROMOTE-CTRL disabled: +0x15A9 belongs to the rejected NPC path");
+        g_logging_enabled = was;
+    }
+    if (foreground && (GetAsyncKeyState(VK_NUMPAD3) & 1) != 0) {
+        // Numpad 3: A/B the pickup context-replay publish (vs old recipe path).
+        g_pickup_context_replay = !g_pickup_context_replay;
+        const bool was = g_logging_enabled;
+        g_logging_enabled = true;
+        log_line(g_pickup_context_replay
+                     ? "PICKUP-CTXREPLAY = ON (publish descriptor to puppet slot)"
+                     : "PICKUP-CTXREPLAY = OFF (old recipe path)");
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_NUMPAD7) & 1) != 0) {

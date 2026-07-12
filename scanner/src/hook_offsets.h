@@ -277,6 +277,12 @@ constexpr std::size_t kPlayerGetInteractControlVtableOffset = 0x248;
 constexpr std::uintptr_t kResolveGameObjectHandleByIdRva = 0x0A989C0;
 constexpr std::uintptr_t kPlayerInteractDispatcherBaseRva = 0x3EC4EE0;
 constexpr std::size_t kPlayerInteractDispatcherStride = 13760;
+// Context-replay pickup animation (2026-07-12). Publisher writes the player-
+// requested-interact descriptor into the TLS-ContextProcess actor's runtime state
+// slot; the actor's anim graph reads it. Drive the puppet by switching context.
+constexpr std::uintptr_t kPublishRequestedInteractRva = 0xC87D70;
+constexpr std::uintptr_t kThreadContextGetCurrentRva = 0x16A2E80;  // no args -> proc
+constexpr std::uintptr_t kThreadContextSetCurrentRva = 0x16A2ED0;  // (proc)
 // PlayerWeaponController::GiveWeapon 0x1410A4D40 (vt+0x158) + 9: diagnostic hook
 // point past the entry `test rdx,rdx; jz rel32` (which is not relocatable).
 constexpr std::uintptr_t kGiveWeaponTailRva = 0x10A4D49;

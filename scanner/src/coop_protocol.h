@@ -123,7 +123,7 @@ struct ClientDamagePacket {
 // WeaponPickup and publishes only player-requested-interact for the puppet; world
 // pickup consumption and weapon inventory remain owned by WeaponGivePacket.
 constexpr std::uint32_t kPickupPacketMagic = 0x4B434950;  // "PICK"
-constexpr std::uint16_t kPickupPacketVersion = 2;
+constexpr std::uint16_t kPickupPacketVersion = 3;
 
 struct PickupPacket {
     std::uint32_t magic = kPickupPacketMagic;
@@ -132,6 +132,13 @@ struct PickupPacket {
     std::uint32_t sequence = 0;
     std::uint32_t pickup_object_id = 0;  // WeaponPickup NdGameObject runtime id
     std::uint32_t weapon_art_id = 0;     // validates the same object cross-copy
+    // Context-replay pickup animation (2026-07-12): the two ids Player_Publish
+    // RequestedInteract 0x140C87D70 reads from its interactable arg (pickup+0x38
+    // class id, pickup+0xD8 name id). The receiver publishes the player-requested-
+    // interact descriptor into the puppet's actor slot with these, under a
+    // ContextProcess=puppet TLS scope, so the puppet's own anim graph bends it.
+    std::uint32_t interact_class_id = 0;
+    std::uint32_t interact_name_id = 0;
 };
 
 // One-shot picked-up-weapon give relay (EVENT semantics, 2026-07-06 night).
