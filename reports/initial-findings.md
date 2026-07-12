@@ -26859,3 +26859,27 @@ descriptor is sufficient; it must be paired with `interact-with-me`; or a later
 nearby/command-state dependency still rejects it. No runtime test was run.
 
 Evidence and prediction: `reports/pickup_context_replay_static_20260712.md`.
+
+### 2026-07-12 (static continuation): pickup-anim descriptor sink = the ACTOR's runtime state slot (validates context-replay)
+
+Traced Player_PublishRequestedInteract 0x140C87D70 to its publish call:
+`DispatchOrResolveActorStateDescriptorIntoRuntimeSlot(actor, 0, descriptor)`. The
+`player-requested-interact` descriptor (class id from interactable+0x38, name id
+from +0xD8, target actor from TLS ContextProcess) is dispatched into the target
+ACTOR's per-actor runtime state slot - NOT a global HUD sink or a dispatcher-only
+structure. It then sets a1+0x35B0 from g_LocalPlayerInputManager+80.
+
+**Why this strengthens Codex's context-replay candidate (competing hyp 1 favored):**
+the anim graph consumes actor runtime state slots during that actor's Update, and
+the puppet's Player_Update DOES run (Exp4 CONFIRMED FgAnimData ticks). So publishing
+the descriptor with ContextProcess switched to the retained slot-1 puppet lands the
+descriptor in the PUPPET's own state slot, which its own (running) anim graph reads
+-> should bend the puppet for the pickup, without needing dispatcher promotion or a
+mirrored WeaponPickup. This is the same class of mechanism as the aim-pose slot.
+
+**Remaining runtime-only unknown:** whether the pickup-bend anim node keys on the
+`player-requested-interact` slot ALONE (hyp 1) or also requires the world-side
+`interact-with-me` event (hyp 2). The anim graph is data-driven; this last bit is
+only decidable by the runtime test of the context-replay publish. The static quota
+for implementing the candidate is now met (sink identified + puppet slot reachable +
+puppet Update confirmed running).
