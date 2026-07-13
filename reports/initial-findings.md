@@ -27191,3 +27191,18 @@ HYPOTHESIS for the two remaining mechanisms**.
   `AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00` invokes Player vtable
   `+0x410 -> Player_Update 0x1410EC230`. Runtime must still distinguish whether
   the refreshed derived root is sufficient for the visible skeleton.
+
+### 2026-07-13 runtime rejection: PRE camera-root yaw breaks locomotion
+
+- Reintroducing camera-derived `Player+0x140` immediately before
+  `Character_UpdateDerivedWorldTransformFromLocalRoot 0x141BB8320` caused the
+  remote Chloe to slide forward/backward in a kneeling pose after location reload.
+- This independently reproduces the already recorded 2026-07-07 rejection beside
+  `drive_remote_slot1_actions_tick`: pre-update camera facing conflicts with the
+  native locomotion orientation owner. **REJECTED** as an aiming fix; keep root
+  camera facing post-transform only.
+- The same restart made both retained peers bald without any scoped-only
+  `PUPPET-MAIN-VIEW-HIDE` hit. The `Player+0x1618` false request therefore also
+  occurs during Player/attachment reconstruction. Slot 1 is a shared-main-view
+  actor on this copy, so its false request must be consumed for the full remote
+  lifecycle, not only during scoped ADS. Status: **HYPOTHESIS ready for runtime**.

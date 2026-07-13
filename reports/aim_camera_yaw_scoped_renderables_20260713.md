@@ -125,6 +125,15 @@ that the asynchronous joint-blend phase samples after this hook: real
 `+0x410`. Therefore the ordering fix is **STATIC**, not CONFIRMED as a complete
 visual fix.
 
+### Runtime correction after location restart
+
+The PRE-root experiment is **REJECTED**. After a location restart the remote Chloe
+slid back and forth in a kneeling locomotion pose. This matches the pre-existing
+2026-07-07 rejection recorded directly beside the slot-1 drive: a pre-update
+camera-root write makes native locomotion fight a second orientation source. The
+PRE helper and both calls are removed; post-transform camera facing is again the
+only root owner.
+
 ### Scoped visibility
 
 1. **Leading:** scoped ADS writes Player `+0x1618 = 0`; the per-frame transition
@@ -154,6 +163,15 @@ Evidence quota for hypothesis 1 is met independently:
 The relay changes only a fresh remote scoped-rifle request from false to true at
 the entry of `0x140C990A0`. The rejected `0x1403343D3` hook is no longer installed,
 and the rejected per-frame `+0x243` mesh restoration is no longer called.
+
+The first runtime session also exposed a broader lifecycle case: after every
+location restart both copies saw the other retained Player without hair, while
+`PUPPET-MAIN-VIEW-HIDE` never logged under the scoped-only condition. Therefore a
+false `+0x1618` request is not scoped-specific; reconstruction can issue it before
+fresh peer ADS exists. The remote retained Player must always belong to this
+copy's shared main view, so the relay now consumes false requests for slot 1
+throughout its lifecycle. The exact authored event path remains the same; runtime
+must now show the suppression at restart.
 
 ## Falsifiable prediction
 

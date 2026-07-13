@@ -1979,3 +1979,15 @@ under the current static-only instruction.
   remains. Full Player joint-blend ordering is still an explicit alternative.
 - Old scoped DrawControl callsite installation and per-frame mesh scan are parked,
   removing rejected hot-path work. Release DLLs build successfully.
+
+### Location-restart regression correction
+
+- **REJECTED:** PRE camera-root yaw. User runtime after location restart reproduced
+  kneeling forward/backward sliding, matching the old 2026-07-07 two-orientation
+  conflict. PRE helper/calls removed; post transform is again the sole root owner.
+- Both copies saw the remote Player become bald on every restart, and the old
+  scoped-only relay emitted no suppression. `0x140C990A0` now consumes slot-1
+  `Player+0x1618 == 0` for the full retained-player lifecycle so reconstruction
+  cannot leave hair/weapon attachables in authored `DisableMainView` state.
+- Prediction: restart logs `PUPPET-MAIN-VIEW-HIDE suppressed`, both remote players
+  retain hair, and ordinary locomotion no longer uses the kneeling slide pose.

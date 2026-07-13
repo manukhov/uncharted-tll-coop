@@ -11462,24 +11462,6 @@ void apply_puppet_velocity_pre() {
     std::memcpy(vel_mirror, pkt.velocity, sizeof(pkt.velocity));
 }
 
-// Root yaw must exist before Character_UpdateDerivedWorldTransformFromLocalRoot
-// samples Player+0x140 into the world/root outputs. The post-transform write
-// remains as network authority, but by itself is one derived-transform pass late.
-void apply_puppet_aim_facing_pre() {
-    coop::StatePacket pkt{};
-    void* puppet = nullptr;
-    if (!latest_peer_state(pkt, puppet)) {
-        return;
-    }
-    const ULONGLONG received =
-        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
-    if (received == 0 || GetTickCount64() - received > 250 ||
-        !peer_packet_aim_active(pkt)) {
-        return;
-    }
-    apply_peer_aim_facing_to_player(puppet, pkt);
-}
-
 // BEFORE the puppet's native update: stage look-at so UpdateIk in the same tick
 // can consume SetLookPoint output. Post-tick field pokes corrupted +0x390.
 void apply_puppet_head_look_pre() {
@@ -13936,20 +13918,14 @@ bool seh_force_remote_player_main_view_visible(
 char __fastcall hooked_player_main_view_visibility_update(void* player) {
     bool suppressed_remote_hide = false;
     std::uint8_t previous_request = 0;
-    if (player != nullptr && player == retained_player_object(1)) {
-        const ULONGLONG received =
-            g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
-        coop::StatePacket peer{};
-        if (received != 0 && GetTickCount64() - received <= 250 &&
-            copy_peer_state_snapshot(peer) && peer_packet_aim_active(peer) &&
-            peer_holds_scoped_rifle(peer) &&
-            readable_bytes(static_cast<std::byte*>(player) + 0x161A) >= 1) {
-            // Consume the local-camera hide request before the stock function can
-            // publish DisableMainView. Its tail advances previous state and leaves
-            // current visible, so no persistent field spoof is required.
-            suppressed_remote_hide = seh_force_remote_player_main_view_visible(
-                player, &previous_request);
-        }
+    if (player != nullptr && player == retained_player_object(1) &&
+        readable_bytes(static_cast<std::byte*>(player) + 0x161A) >= 1) {
+        // A retained peer is always rendered in this copy's shared main view.
+        // During checkpoint/location reconstruction stock lifecycle code can
+        // submit the same false request used to hide the local first-person actor;
+        // consuming it here prevents permanent hair/weapon DisableMainView state.
+        suppressed_remote_hide = seh_force_remote_player_main_view_visible(
+            player, &previous_request);
     }
 
     const char result = g_original_player_main_view_visibility_update != nullptr
@@ -13983,6 +13959,9 @@ bool install_player_main_view_visibility_relay() {
                 reinterpret_cast<void*>(
                     &hooked_player_main_view_visibility_update),
                 "Player main-view visibility relay"));
+    boot_log_line(g_original_player_main_view_visibility_update != nullptr
+                      ? "Player main-view visibility relay installed"
+                      : "Player main-view visibility relay SKIPPED");
     return g_original_player_main_view_visibility_update != nullptr;
 }
 
@@ -17735,9 +17714,6 @@ void __fastcall hooked_update(void* object) {
             drive_remote_slot1_actions_tick();
             drive_slot1_tick();
             apply_slot1_perslot_on_game_thread();
-            if (object == retained_player_object(1)) {
-                apply_puppet_aim_facing_pre();
-            }
             g_original_update(object);
             if (object == retained_player_object(1)) {
                 apply_puppet_transform_post(object);
@@ -17786,7 +17762,6 @@ void __fastcall hooked_update(void* object) {
     apply_slot1_perslot_on_game_thread();
     if (object == retained_player_object(1)) {
         apply_puppet_velocity_pre();
-        apply_puppet_aim_facing_pre();
     }
     g_original_update(object);
     // VARIANT B avatar mirror-test: AFTER the NPC's own update wrote its joint cache,
