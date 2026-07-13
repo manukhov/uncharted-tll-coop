@@ -27009,3 +27009,19 @@ This preserves the proven downstream chain into
 `PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0`. Release build
 succeeds. Runtime prediction and competing hypotheses are recorded in
 `reports/player_aim_world_basis_relay_20260713.md`.
+
+### 2026-07-13 STATIC implementation: scoped ADS main-view exclusion flag
+
+The registered script command `set-instance-flag-draw-in-main-view` resolves to
+handler `0x1403342C0`. It obtains the current Player DrawControl from
+`Player+0x198`; false calls `0x141754EF0(draw, 0x40)` and true calls the exact
+inverse `0x141754FF0(draw, 0x40)`. Both functions walk DrawControl meshes at
+`+0x8/+0x14` (stride `0x250`) and child render instances (stride `0x20`), setting
+or clearing `instance+0x18 bit 0x40`.
+
+Independent DisableMeshFromMainView/EnableMeshInMainView APIs use the same flag,
+while the scope-visible query only feeds the HUD reticle manager. The scoped
+visibility candidate is therefore implemented as a single post-update
+`DrawControl_ClearChildInstanceFlagsByMask(draw, 0x40)` call, replacing the old
+speculative ShowMesh loop. Runtime confirmation is pending; see
+`reports/scoped_ads_main_view_flag_20260713.md`.

@@ -1,5 +1,20 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-13, Codex - scoped ADS main-view flag)
+
+**STATIC implementation:** registered command
+`set-instance-flag-draw-in-main-view` uses handler `0x1403342C0`. False sets mask
+`0x40` on every `Player+0x198` DrawControl child render instance through
+`0x141754EF0`; true calls the exact inverse `0x141754FF0`. Independent
+Disable/EnableMeshInMainView APIs use the same `instance+0x18 bit 0x40`.
+
+The old speculative ShowMesh loop is replaced with one post-native-update call to
+`DrawControl_ClearChildInstanceFlagsByMask 0x141754FF0(draw, 0x40)`, gated to the
+puppet's full scoped ADS. Object compilation succeeds; final v2 link waits for the
+currently running aim-test processes to release the DLL. Runtime prediction:
+`SCOPED-MAIN-VIEW cleared instance flag 0x40` and Chloe stays visible. Details:
+`reports/scoped_ads_main_view_flag_20260713.md`.
+
 ## Turn note (2026-07-13, Codex - PlayerAimController world-basis relay)
 
 Implemented the previously build-ready narrow aim fix: vtable slot `+0x58` at

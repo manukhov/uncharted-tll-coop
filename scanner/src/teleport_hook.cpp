@@ -13640,20 +13640,13 @@ void scrub_puppet_scoped_ads_flag(void* puppet) {
     }
 }
 
-bool seh_restore_draw_control_mesh(
-    void* draw_control, unsigned int mesh_index,
-    bool hidden, bool disabled_in_main_view) {
-    using ShowMeshFn = std::int64_t(__fastcall*)(void*, unsigned int);
-    using EnableMeshInMainViewFn = void(__fastcall*)(void*, unsigned int);
+bool seh_clear_draw_control_child_flags(
+    void* draw_control, std::uint32_t mask) {
+    using ClearChildFlagsFn = void(__fastcall*)(void*, std::uint32_t);
     __try {
-        if (hidden) {
-            reinterpret_cast<ShowMeshFn>(g_module + 0x1754A30)(
-                draw_control, mesh_index);
-        }
-        if (disabled_in_main_view) {
-            reinterpret_cast<EnableMeshInMainViewFn>(g_module + 0x1754B10)(
-                draw_control, mesh_index);
-        }
+        reinterpret_cast<ClearChildFlagsFn>(
+            g_module + kDrawControlClearChildFlagsByMaskRva)(
+                draw_control, mask);
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
@@ -13677,54 +13670,17 @@ void keep_puppet_scoped_mesh_visible(
         return;
     }
 
-    auto* const dc = static_cast<std::byte*>(draw_control);
-    auto* const meshes = *reinterpret_cast<std::byte**>(dc + 0x8);
-    const std::uint32_t mesh_count =
-        *reinterpret_cast<const std::uint32_t*>(dc + 0x14);
-    if (meshes == nullptr || mesh_count == 0 || mesh_count > 128 ||
-        readable_bytes(meshes) < 592) {
+    constexpr std::uint32_t kExcludedFromMainView = 0x40;
+    if (!seh_clear_draw_control_child_flags(
+            draw_control, kExcludedFromMainView)) {
         return;
     }
 
-    unsigned restored = 0;
-    for (std::uint32_t mesh_index = 0; mesh_index < mesh_count; ++mesh_index) {
-        auto* const mesh = meshes + 592ULL * mesh_index;
-        if (readable_bytes(mesh) < 592) break;
-
-        const bool hidden =
-            *reinterpret_cast<const std::uint8_t*>(mesh + 579) != 0xFF;
-        bool disabled_in_main_view = false;
-        const std::uint8_t child_count =
-            *reinterpret_cast<const std::uint8_t*>(mesh + 578);
-        for (std::uint8_t child = 0; child < child_count; ++child) {
-            auto* const slot = mesh + 32ULL * child;
-            void* const instance = *reinterpret_cast<void**>(slot);
-            void* const main_view_binding = *reinterpret_cast<void**>(slot + 16);
-            if (instance != nullptr && main_view_binding != nullptr &&
-                readable_bytes(static_cast<std::byte*>(instance) + 28) >= 1 &&
-                (*reinterpret_cast<const std::uint32_t*>(
-                     static_cast<std::byte*>(instance) + 24) & 0x40u) != 0) {
-                disabled_in_main_view = true;
-                break;
-            }
-        }
-        if ((hidden || disabled_in_main_view) &&
-            !seh_restore_draw_control_mesh(
-                draw_control, mesh_index, hidden, disabled_in_main_view)) {
-            return;
-        }
-        if (hidden || disabled_in_main_view) ++restored;
-    }
-    if (restored != 0) {
-        static ULONGLONG last_log = 0;
-        const ULONGLONG now = GetTickCount64();
-        if (now - last_log > 500) {
-            last_log = now;
-            std::ostringstream line;
-            line << "SCOPED-MESH-VISIBLE restored=" << restored
-                 << " meshes=" << mesh_count;
-            force_log_line(line.str().c_str());
-        }
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log > 500) {
+        last_log = now;
+        force_log_line("SCOPED-MAIN-VIEW cleared instance flag 0x40");
     }
 }
 

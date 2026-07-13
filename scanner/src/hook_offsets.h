@@ -321,6 +321,9 @@ constexpr std::uintptr_t kPlayerAimPoseSeedCallSiteRva = 0x10E934B;
 // body-forward, mode bytes, and four authored angular limits.
 constexpr std::uintptr_t kPlayerAimWorldBasisVtableSlotRva = 0x2A0B250;
 constexpr std::uintptr_t kPlayerAimWorldBasisRva = 0x0CAF110;
+// Exact inverse used by script command set-instance-flag-draw-in-main-view:
+// clears a mask from instance+0x18 for every DrawControl mesh child.
+constexpr std::uintptr_t kDrawControlClearChildFlagsByMaskRva = 0x1754FF0;
 constexpr std::size_t kWeaponControllerGetWeaponBySlotVtOffset = 0xB0;
 constexpr std::uintptr_t kWeaponPickupVftableRva = 0x2AA66C0;
 constexpr std::size_t kWeaponPickupGetInteractControlVtableOffset = 0x248;

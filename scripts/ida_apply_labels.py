@@ -2308,10 +2308,22 @@ FUNCTIONS = {
         "0x80 into each linked child node's +0x18 flags.",
     ),
     0x141754EF0: (
-        "OrFlockingChildFlagsByCompanionMask",
-        "Iterates all flocking/player entries owned by the companion object "
-        "and ORs the requested bitmask into each linked child node's +0x18 "
-        "flags.",
+        "DrawControl_SetChildInstanceFlagsByMask",
+        "Iterates DrawControl+0x8/+0x14 meshes (stride 0x250) and ORs the "
+        "requested mask into every child render instance +0x18 flags. Mask "
+        "0x40 excludes the Player model from the main view.",
+    ),
+    0x141754FF0: (
+        "DrawControl_ClearChildInstanceFlagsByMask",
+        "Exact inverse of 0x141754EF0: iterates every DrawControl child render "
+        "instance and clears the requested mask from instance+0x18. Used with "
+        "mask 0x40 by set-instance-flag-draw-in-main-view(true).",
+    ),
+    0x1403342C0: (
+        "Script_SetInstanceFlagDrawInMainView",
+        "Handler registered for set-instance-flag-draw-in-main-view. Resolves "
+        "the current Player DrawControl at owner+0x198; true clears child "
+        "instance flag 0x40, false sets it.",
     ),
     0x141BBACC0: (
         "BindUpperWrapperIntoPlayerCompanionBehaviorAndDrawControlState",
