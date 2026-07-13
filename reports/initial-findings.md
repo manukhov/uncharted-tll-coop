@@ -27042,3 +27042,27 @@ body-forward and weapon limits, and reaches slot `+0x58` at `0x140E858CE` or
 only a false slot-1 result during fresh strict peer ADS. Status is STATIC pending
 runtime; full evidence and prediction are in
 `reports/player_aim_eligibility_callsite_relay_20260713.md`.
+
+### 2026-07-13 STATIC: current-state permission gates the visible aim blend
+
+Runtime PIDs 14320/14884 reached
+`PlayerAimController_ApplyWorldAimBasis 0x140CAF110` with changing relayed camera
+yaw/pitch, yet no visible aim pose appeared. The target relay is therefore live;
+the remaining suppression is downstream.
+
+`PlayerAimController_ComputeDirectionalAimWeights 0x140CB32B0` calls
+`PlayerAimController_IsAimAdditiveAllowedForCurrentState 0x140CADF40` at
+`0x140CB348A` and writes request byte `controller+0x8A0` only on true. Common tick
+`PlayerAimController_UpdateBlendState 0x140CAFA20` moves `+0x8EC` toward the
+authored target from `0x140CAE480` only while requested. Finally,
+`PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0` multiplies each
+`aim-add-left/right/down/up` value by `+0x8EC`.
+
+The permission function selects authored flags from the active Player animation
+state and movement mode; independent callers are controller initialization
+`0x140CAE030`, vtable `+0x68` reset/prime `0x140CAF2F0`, and the directional compute
+path. A callsite-only relay now preserves true and changes false only for fresh
+slot-1 peer ADS. The incorrect root facing was independently traced to the mod's
+post-update camera-yaw writer; default ADS now keeps the network body quaternion.
+Runtime confirmation is pending; see
+`reports/player_aim_additive_permission_relay_20260713.md`.

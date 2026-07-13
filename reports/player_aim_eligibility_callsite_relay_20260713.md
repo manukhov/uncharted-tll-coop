@@ -1,6 +1,6 @@
 # Player aim eligibility callsite relay (2026-07-13)
 
-Status: **STATIC implementation, runtime pending**.
+Status: **RUNTIME reached downstream; visual blend remains blocked**.
 
 ## Runtime discriminator from the downstream test
 
@@ -73,3 +73,11 @@ Slot 0 and every non-ADS frame are byte-for-byte original behavior.
 - the remote upper body follows the aim while local movement/HUD remain intact.
 - Eligibility lines without world-basis lines select competing hypothesis 2.
 - Both lines without visual motion select competing hypothesis 3.
+
+## Runtime result
+
+PIDs 14320/14884 reached `AIM-WORLD-BASIS relay` repeatedly with changing peer
+camera vectors, but emitted no `AIM-ELIGIBILITY ... forced=1` lines during the
+observed interval. The original eligibility result was therefore already true in
+that test. The user still saw no aim animation, selecting competing hypothesis 3:
+the remaining blocker is downstream of slot `+0x58`.

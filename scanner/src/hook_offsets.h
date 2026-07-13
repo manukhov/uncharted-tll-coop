@@ -326,6 +326,10 @@ constexpr std::uintptr_t kPlayerAimWorldBasisRva = 0x0CAF110;
 // original function and all downstream weapon-specific aim arguments.
 constexpr std::uintptr_t kPlayerAimEligibilityCallsiteRva = 0x0E8573C;
 constexpr std::uintptr_t kPlayerAimEligibilityRva = 0x10E3670;
+// PlayerAimController_ComputeDirectionalAimWeights calls the current-state
+// additive permission query immediately before setting controller+0x8A0.
+constexpr std::uintptr_t kPlayerAimAdditivePermissionCallsiteRva = 0x0CB348A;
+constexpr std::uintptr_t kPlayerAimAdditivePermissionRva = 0x0CADF40;
 // Exact inverse used by script command set-instance-flag-draw-in-main-view:
 // clears a mask from instance+0x18 for every DrawControl mesh child.
 constexpr std::uintptr_t kDrawControlClearChildFlagsByMaskRva = 0x1754FF0;

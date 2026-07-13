@@ -67,6 +67,23 @@ FUNCTIONS = {
         "controller phase at 0x140C9F420; advances ADS blend at this+0x8EC and "
         "resets/publishes Aim0..Aim7 animation channels.",
     ),
+    0x140CADF40: (
+        "PlayerAimController_IsAimAdditiveAllowedForCurrentState",
+        "Selects the active Player animation-state descriptor and movement mode, "
+        "then returns the authored permission for directional aim additives. "
+        "ComputeDirectionalAimWeights sets controller+0x8A0 only when this is true.",
+    ),
+    0x140CAE480: (
+        "PlayerAimController_GetAuthoredAimBlendTarget",
+        "Returns the authored target value consumed by UpdateBlendState for "
+        "controller+0x8EC, based on the active base animation state.",
+    ),
+    0x140CAF2F0: (
+        "PlayerAimController_ResetAndPrimeAimAdditives",
+        "PlayerAimController vtable slot +0x68. Resets published directional "
+        "weights and primes controller+0x8A0 when the current Player state "
+        "allows aim additives; called from independent Player state entries.",
+    ),
     0x140CAECB0: (
         "PlayerAimController_ComputeAndPublishAimAdditives",
         "PlayerAimController vtable slot +0x50. Receives aim/body bases and "

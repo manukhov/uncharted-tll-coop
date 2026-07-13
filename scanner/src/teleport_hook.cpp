@@ -11489,21 +11489,11 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     if (peer_aiming) {
         if (g_puppet_aim_facing_from_camera) {
             apply_peer_aim_facing_to_player(puppet, pkt);
-        } else if ((pkt.flags & coop::kStateFlagPoseSeed) != 0 &&
-                   valid_network_orientation(pkt.pose_seed + 4)) {
-            // A camera quaternion is not a character-root quaternion. Convert
-            // the camera's -Z viewing direction to a horizontal +Z body yaw,
-            // then apply it once here after the native Player update. The old
-            // full-quaternion blend preserved the sender's free-look mismatch:
-            // the camera turned while the remote character kept its body yaw.
-            float aim_x = 0.0F;
-            float aim_y = 0.0F;
-            float aim_z = 0.0F;
-            quat_forward_neg_z(pkt.pose_seed + 4, aim_x, aim_y, aim_z);
-            float aim_yaw[4]{};
-            yaw_quat_from_horizontal_forward(aim_x, aim_z, aim_yaw);
-            orientation_dot = blend_network_orientation(quat, aim_yaw, 0.55F);
         } else if (valid_network_orientation(pkt.quat)) {
+            // Keep body-forward independent from the camera ray. Slot +0x58
+            // computes signed aim additives between these two bases; replacing
+            // the root with camera yaw collapses that angle and can reverse the
+            // visible character when camera and body conventions differ.
             orientation_dot = blend_network_orientation(quat, pkt.quat, 0.35F);
         }
         if (g_puppet_aim_reticle_relay || pose_relay_for_peer) {
@@ -17816,6 +17806,104 @@ bool install_player_aim_eligibility_callsite_relay() {
     return true;
 }
 
+using PlayerAimAdditivePermissionFunction = char(__fastcall*)(
+    void*, void*, void*, void*);
+PlayerAimAdditivePermissionFunction g_original_player_aim_additive_permission =
+    nullptr;
+
+char __fastcall hooked_player_aim_additive_permission_callsite(
+    void* player, void* arg2, void* arg3, void* arg4) {
+    const char original = g_original_player_aim_additive_permission != nullptr
+        ? g_original_player_aim_additive_permission(player, arg2, arg3, arg4)
+        : 0;
+    if (original || player == nullptr || player != retained_player_object(1) ||
+        readable_bytes(static_cast<std::byte*>(player) + 0x4014) <
+            sizeof(std::uint32_t) ||
+        *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(player) + 0x4010) !=
+            kSlot1ScreenIndex) {
+        return original;
+    }
+
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    coop::StatePacket peer{};
+    if (received == 0 || GetTickCount64() - received > 250 ||
+        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer) ||
+        !valid_network_position(peer.pose_seed) ||
+        !valid_network_orientation(peer.pose_seed + 4)) {
+        return original;
+    }
+
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log > 1000) {
+        last_log = now;
+        force_log_line("AIM-ADDITIVE-PERMISSION original=0 forced=1");
+    }
+    return 1;
+}
+
+bool install_player_aim_additive_permission_callsite_relay() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kPlayerAimAdditivePermissionCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line("Player aim additive permission relay SKIPPED (not E8)");
+        return false;
+    }
+    std::int32_t displacement = 0;
+    std::memcpy(&displacement, call_site + 1, sizeof(displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(displacement);
+    const std::uintptr_t expected =
+        g_module + kPlayerAimAdditivePermissionRva;
+    if (target != expected) {
+        boot_log_line("Player aim additive permission relay SKIPPED (target)");
+        return false;
+    }
+    g_original_player_aim_additive_permission =
+        reinterpret_cast<PlayerAimAdditivePermissionFunction>(expected);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("Player aim additive permission relay SKIPPED (relay)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_player_aim_additive_permission_callsite);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("Player aim additive permission relay SKIPPED (range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("Player aim additive permission relay SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line("Player aim additive permission callsite relay installed");
+    return true;
+}
+
 using PlayerInteractDispatcherFn = bool(__fastcall*)(void*, int*);
 
 bool __fastcall hooked_player_interact_dispatch_callsite(
@@ -19069,6 +19157,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
     install_player_aim_eligibility_callsite_relay();
+    install_player_aim_additive_permission_callsite_relay();
     install_player_aim_world_basis_relay();
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();

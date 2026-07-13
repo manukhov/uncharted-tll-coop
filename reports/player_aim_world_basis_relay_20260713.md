@@ -1,6 +1,6 @@
 # PlayerAimController world-basis relay (2026-07-13)
 
-Status: **STATIC implementation; runtime reachability blocked upstream**.
+Status: **RUNTIME reached; target relay works, visible blend remains blocked**.
 
 ## Hypothesis
 
@@ -73,3 +73,15 @@ repeatedly applied the caller-scoped pose seed, but produced zero
 This confirms competing hypothesis 2: the puppet fails the upstream ground
 `Player_CheckAimActionEligibility` path. Follow-up implementation is documented
 in `reports/player_aim_eligibility_callsite_relay_20260713.md`.
+
+## Second runtime result
+
+Two-copy test (PIDs 14320/14884, commit `6e32b91`) reached the slot repeatedly.
+`AIM-WORLD-BASIS relay` changed with peer yaw and pitch, including forward vectors
+from `(0.288,0.132,-0.948)` through `(0.316,0.247,-0.916)`. The user still saw no
+aim animation and reported an incorrect root facing direction.
+
+This rejects hypothesis 1 and selects hypothesis 3. The target data is live, but
+the downstream directional weights are visually suppressed. The root-facing
+symptom is separate: post-update code was replacing the peer body quaternion with
+a camera-derived yaw while ADS was held.

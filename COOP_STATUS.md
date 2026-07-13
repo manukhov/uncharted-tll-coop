@@ -1,5 +1,24 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-13, Codex - aim additive state permission)
+
+Runtime PIDs 14320/14884 reached `PlayerAimController` slot `+0x58`; relayed
+forward vectors changed with peer yaw and pitch, but the user saw no aim animation
+and the puppet root faced the wrong direction. This rejects stale target data and
+selects downstream blend suppression.
+
+Static data flow is now closed: `0x140CB32B0` sets request byte `+0x8A0` only when
+`PlayerAimController_IsAimAdditiveAllowedForCurrentState 0x140CADF40` returns true;
+common tick `0x140CAFA20` then raises blend `+0x8EC`; publisher `0x140CB41F0`
+multiplies all four `aim-add-*` values by that blend. A narrow relay at callsite
+`0x140CB348A` preserves the original result and forces only false slot-1 results
+during fresh strict peer ADS.
+
+The wrong root direction was a separate post-update writer that converted camera
+`-Z` into body yaw. Default ADS now preserves the sender's network body quaternion;
+camera yaw remains only behind the explicit A/B toggle. Runtime prediction and
+competitors: `reports/player_aim_additive_permission_relay_20260713.md`.
+
 ## Turn note (2026-07-13, Codex - aim eligibility callsite relay)
 
 Runtime PIDs 16212/1692 with `a2d8cf4`: sender emitted
