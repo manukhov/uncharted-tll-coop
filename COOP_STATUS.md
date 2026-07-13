@@ -1,5 +1,21 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-13, Codex - aim eligibility callsite relay)
+
+Runtime PIDs 16212/1692 with `a2d8cf4`: sender emitted
+`STRICT-AIM-SEND ON`, receiver repeatedly emitted caller-scoped
+`AIM-POSE-OVERRIDE`, but slot `+0x58` emitted zero `AIM-WORLD-BASIS` lines. The
+target hook was never reached; this confirms the upstream eligibility alternative.
+
+**STATIC implementation:** patch only the `E8` call at `0x140E8573C` after
+verifying its target is `Player_CheckAimActionEligibility 0x1410E3670`. The relay
+calls the original first and changes false to true only for retained slot 1,
+screen 1, fresh strict peer ADS, and valid pose seed. Stock GunMoveShield then
+retains exact target/body vectors, weapon-specific limits, blend, and follow-up
+updates. Prediction: `AIM-ELIGIBILITY ... forced=1` followed by
+`AIM-WORLD-BASIS relay` and visible yaw/pitch. Details:
+`reports/player_aim_eligibility_callsite_relay_20260713.md`.
+
 ## Turn note (2026-07-13, Codex - scoped ADS main-view flag)
 
 **STATIC implementation:** registered command

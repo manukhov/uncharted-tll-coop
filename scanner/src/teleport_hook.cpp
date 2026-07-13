@@ -17720,6 +17720,102 @@ void* allocate_executable_near(const void* target, std::size_t size) {
     return nullptr;
 }
 
+using PlayerAimEligibilityFunction = char(__fastcall*)(void*, char);
+PlayerAimEligibilityFunction g_original_player_aim_eligibility = nullptr;
+
+char __fastcall hooked_player_aim_eligibility_callsite(
+    void* player, char mode) {
+    const char original = g_original_player_aim_eligibility != nullptr
+        ? g_original_player_aim_eligibility(player, mode)
+        : 0;
+    if (original || player == nullptr || player != retained_player_object(1) ||
+        readable_bytes(static_cast<std::byte*>(player) + 0x4014) <
+            sizeof(std::uint32_t) ||
+        *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(player) + 0x4010) !=
+            kSlot1ScreenIndex) {
+        return original;
+    }
+
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    coop::StatePacket peer{};
+    if (received == 0 || GetTickCount64() - received > 250 ||
+        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer) ||
+        !valid_network_position(peer.pose_seed) ||
+        !valid_network_orientation(peer.pose_seed + 4)) {
+        return original;
+    }
+
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log > 1000) {
+        last_log = now;
+        force_log_line("AIM-ELIGIBILITY relay original=0 forced=1");
+    }
+    return 1;
+}
+
+bool install_player_aim_eligibility_callsite_relay() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kPlayerAimEligibilityCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line("Player aim eligibility relay SKIPPED (not E8)");
+        return false;
+    }
+    std::int32_t displacement = 0;
+    std::memcpy(&displacement, call_site + 1, sizeof(displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(displacement);
+    const std::uintptr_t expected =
+        g_module + kPlayerAimEligibilityRva;
+    if (target != expected) {
+        boot_log_line("Player aim eligibility relay SKIPPED (target)");
+        return false;
+    }
+    g_original_player_aim_eligibility =
+        reinterpret_cast<PlayerAimEligibilityFunction>(expected);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("Player aim eligibility relay SKIPPED (relay)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_player_aim_eligibility_callsite);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("Player aim eligibility relay SKIPPED (range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("Player aim eligibility relay SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line("Player aim eligibility callsite relay installed");
+    return true;
+}
+
 using PlayerInteractDispatcherFn = bool(__fastcall*)(void*, int*);
 
 bool __fastcall hooked_player_interact_dispatch_callsite(
@@ -18972,6 +19068,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_fire_capture();
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
+    install_player_aim_eligibility_callsite_relay();
     install_player_aim_world_basis_relay();
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();

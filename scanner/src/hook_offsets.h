@@ -321,6 +321,11 @@ constexpr std::uintptr_t kPlayerAimPoseSeedCallSiteRva = 0x10E934B;
 // body-forward, mode bytes, and four authored angular limits.
 constexpr std::uintptr_t kPlayerAimWorldBasisVtableSlotRva = 0x2A0B250;
 constexpr std::uintptr_t kPlayerAimWorldBasisRva = 0x0CAF110;
+// Ground GunMoveShield call to Player_CheckAimActionEligibility. A callsite
+// relay can conditionally admit only the slot-1 puppet while preserving the
+// original function and all downstream weapon-specific aim arguments.
+constexpr std::uintptr_t kPlayerAimEligibilityCallsiteRva = 0x0E8573C;
+constexpr std::uintptr_t kPlayerAimEligibilityRva = 0x10E3670;
 // Exact inverse used by script command set-instance-flag-draw-in-main-view:
 // clears a mask from instance+0x18 for every DrawControl mesh child.
 constexpr std::uintptr_t kDrawControlClearChildFlagsByMaskRva = 0x1754FF0;

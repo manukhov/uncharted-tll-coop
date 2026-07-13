@@ -27025,3 +27025,20 @@ visibility candidate is therefore implemented as a single post-update
 `DrawControl_ClearChildInstanceFlagsByMask(draw, 0x40)` call, replacing the old
 speculative ShowMesh loop. Runtime confirmation is pending; see
 `reports/scoped_ads_main_view_flag_20260713.md`.
+
+### 2026-07-13 runtime discriminator + STATIC aim eligibility relay
+
+In the PIDs 16212/1692 test of commit `a2d8cf4`, strict peer ADS and repeated
+caller-scoped pose-seed overrides were present, but
+`PlayerAimController_ApplyWorldAimBasis 0x140CAF110` was never called for the
+puppet. The downstream target substitution was therefore not reached; the result
+confirms the upstream eligibility-blocker hypothesis.
+
+Raw GunMoveShield disassembly places
+`Player_CheckAimActionEligibility 0x1410E3670` at callsite `0x140E8573C`. False
+branches away at `0x140E85749`; true continues at `0x140E857F1`, builds the stock
+body-forward and weapon limits, and reaches slot `+0x58` at `0x140E858CE` or
+`0x140E85925`. A callsite relay now invokes the original and conditionally changes
+only a false slot-1 result during fresh strict peer ADS. Status is STATIC pending
+runtime; full evidence and prediction are in
+`reports/player_aim_eligibility_callsite_relay_20260713.md`.

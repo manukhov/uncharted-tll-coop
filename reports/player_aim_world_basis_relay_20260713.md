@@ -1,6 +1,6 @@
 # PlayerAimController world-basis relay (2026-07-13)
 
-Status: **STATIC implementation, runtime pending**.
+Status: **STATIC implementation; runtime reachability blocked upstream**.
 
 ## Hypothesis
 
@@ -64,3 +64,12 @@ native float limits to the original function. It never mutates caller memory.
   remains fixed.
 - Local-player aim, locomotion, and HUD must remain unchanged because the owner
   and screen guards pass through for slot 0.
+
+## First runtime result
+
+Two-copy test (PIDs 16212/1692, commit `a2d8cf4`) delivered strict peer ADS and
+repeatedly applied the caller-scoped pose seed, but produced zero
+`AIM-WORLD-BASIS relay` calls. The target substitution itself was not reached.
+This confirms competing hypothesis 2: the puppet fails the upstream ground
+`Player_CheckAimActionEligibility` path. Follow-up implementation is documented
+in `reports/player_aim_eligibility_callsite_relay_20260713.md`.
