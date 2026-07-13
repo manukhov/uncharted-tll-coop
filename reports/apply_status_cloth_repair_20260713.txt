@@ -1,0 +1,3 @@
+apply_labels OK: 1012 functions, 18 data names
+idb_path=C:\Users\Vladimir\Desktop\TLLCoopResearch\ida\tll.i64
+save_database returned True

@@ -218,6 +218,14 @@ bool g_split_render_applied = false;
 bool g_split_login_done = false;
 void* g_last_nadine_object = nullptr;
 
+// ProcessCharCloth is a separate child process from the Player DrawControl.
+// The async attachment hook only publishes observations; the Nadine/main-game
+// thread consumes them and queues any repair through Player's native deferred
+// ChangeLookId field at +0x3D10.
+std::atomic<std::uintptr_t> g_remote_cloth_player{0};
+std::atomic<std::uintptr_t> g_remote_cloth_parent_draw{0};
+std::atomic<ULONGLONG> g_remote_cloth_seen_ms{0};
+
 // --- Spawn-arg capture via hardware breakpoint (no code modification) ---
 volatile bool g_spawn_captured = false;
 std::uint8_t g_spawn_desc[0x200]{};
@@ -17631,6 +17639,81 @@ void dump_character_manager() {
     log_line(d.str().c_str());
 }
 
+void maybe_queue_remote_cloth_rebuild() {
+    void* const puppet = retained_player_object(1);
+    if (!g_state_net.enabled || puppet == nullptr ||
+        !player_is_remote_screen_slot(puppet) ||
+        readable_bytes(puppet) < 0x3D14) {
+        return;
+    }
+
+    auto* const bytes = static_cast<std::byte*>(puppet);
+    void* const current_draw =
+        *reinterpret_cast<void**>(bytes + 0x198);
+    const std::uint32_t current_look =
+        *reinterpret_cast<const std::uint32_t*>(bytes + 0x170);
+    if (current_draw == nullptr || current_look == 0 ||
+        readable_bytes(current_draw) < 0x20) {
+        return;
+    }
+
+    static std::uintptr_t tracked_player = 0;
+    static std::uintptr_t tracked_draw = 0;
+    static std::uintptr_t healthy_draw = 0;
+    static ULONGLONG draw_stable_since_ms = 0;
+    static bool repair_attempted_since_healthy = false;
+
+    const auto player_value = reinterpret_cast<std::uintptr_t>(puppet);
+    const auto draw_value = reinterpret_cast<std::uintptr_t>(current_draw);
+    const ULONGLONG now = GetTickCount64();
+    if (tracked_player != player_value) {
+        tracked_player = player_value;
+        tracked_draw = draw_value;
+        healthy_draw = 0;
+        draw_stable_since_ms = now;
+        repair_attempted_since_healthy = false;
+    } else if (tracked_draw != draw_value) {
+        tracked_draw = draw_value;
+        draw_stable_since_ms = now;
+    }
+
+    const auto observed_player =
+        g_remote_cloth_player.load(std::memory_order_relaxed);
+    const auto observed_draw =
+        g_remote_cloth_parent_draw.load(std::memory_order_relaxed);
+    const ULONGLONG observed_ms =
+        g_remote_cloth_seen_ms.load(std::memory_order_acquire);
+    if (observed_player == player_value && observed_draw == draw_value &&
+        now - observed_ms < 500) {
+        healthy_draw = draw_value;
+        repair_attempted_since_healthy = false;
+        return;
+    }
+
+    // A normal spawn proves this Player owns cloth first. Only a later stable
+    // parent without cloth is repaired, so initial streaming cannot trigger a
+    // premature full look rebuild. Player+0x3D10 is consumed and cleared by the
+    // engine's own six-player PreFrame loop before it calls ChangeLookId.
+    if (healthy_draw == 0 || repair_attempted_since_healthy ||
+        now - draw_stable_since_ms < 1500 || now - observed_ms < 750) {
+        return;
+    }
+
+    auto* const deferred_look =
+        reinterpret_cast<std::uint32_t*>(bytes + 0x3D10);
+    if (*deferred_look != 0) {
+        return;
+    }
+    *deferred_look = current_look;
+    repair_attempted_since_healthy = true;
+
+    std::ostringstream line;
+    line << "PUPPET-CLOTH queued native ChangeLookId look=0x" << std::hex
+         << current_look << " oldHealthyDraw=0x" << healthy_draw
+         << " missingDraw=0x" << draw_value;
+    force_log_line(line.str().c_str());
+}
+
 void __fastcall hooked_update(void* object) {
     // DIAGNOSTIC: when inert, the DLL does NOTHING but pass the update through (no
     // clone spawn, no drives, no per-frame logic) - used to isolate whether our
@@ -17673,6 +17756,7 @@ void __fastcall hooked_update(void* object) {
         observe_nadine_visual_identity(object);
         g_last_nadine_object = object;  // set EARLY so the clone auto-spawn (below)
                                         // can read Nadine's look2 for the body swap.
+        maybe_queue_remote_cloth_rebuild();
         // Deep body/joint inspection remains manual (Insert) only. Running that
         // large pointer walk automatically in both instances raced scene teardown.
         // (Removed: a leftover diagnostic auto-injected ly=22000 on controller 0
@@ -18640,7 +18724,7 @@ char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
                 std::atomic<std::uintptr_t> object{0};
                 std::atomic<std::uint64_t> signature{0};
             };
-            static std::array<ClothLogSlot, 16> cloth_log_slots{};
+            static std::array<ClothLogSlot, 128> cloth_log_slots{};
             ClothLogSlot* log_slot = nullptr;
             const std::uintptr_t object_value =
                 reinterpret_cast<std::uintptr_t>(attachable);
@@ -18695,6 +18779,14 @@ char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
                 }
                 force_log_line(cloth_line.str().c_str());
             }
+            g_remote_cloth_player.store(
+                reinterpret_cast<std::uintptr_t>(puppet),
+                std::memory_order_relaxed);
+            g_remote_cloth_parent_draw.store(
+                reinterpret_cast<std::uintptr_t>(parent_draw),
+                std::memory_order_relaxed);
+            g_remote_cloth_seen_ms.store(
+                GetTickCount64(), std::memory_order_release);
         }
     }
 

@@ -27246,7 +27246,7 @@ HYPOTHESIS for the two remaining mechanisms**.
   **STATIC discriminator ready**; prediction and competitors are recorded in
   `reports/player_hat_lifecycle_reload_20260713.md`.
 
-### 2026-07-13 ProcessCharCloth owns the separate reload-hair lifecycle (STATIC)
+### 2026-07-13 ProcessCharCloth reload children disappear; deferred look queue repairs them (CONFIRMED)
 
 - Fresh location-reload snapshots kept Nadine's complete five-mesh parent
   DrawControl and Chloe's complete two-mesh parent DrawControl, with all mesh and
@@ -27271,5 +27271,19 @@ HYPOTHESIS for the two remaining mechanisms**.
 - Initial runtime control on PID 14696 found three distinct remote-Chloe
   `ProcessCharCloth` objects. Every object had the same valid parent, a non-null
   cloth body, `initialized=1`, one of one child meshes, gates `255/255`, and 4/4
-  active instances. This confirms the discriminator and healthy baseline;
-  post-reload comparison is pending.
+  active instances. This confirms the discriminator and healthy baseline.
+- PIDs 7480/13620 selected the absent-child hypothesis after reload. Intermediate
+  DrawControl generations had healthy cloth, but the final complete Nadine parent
+  `0x10e034a4c0` and Chloe parent `0x10e0348e40` had no matching cloth object.
+  **CONFIRMED:** final reload destroys `ProcessCharCloth` children without
+  recreating them; parent look/mesh visibility remains intact.
+- Exact-source `Player_ChangeLookId 0x1410FE840` performs the full DrawControl and
+  composite-body reconstruction, builds `ProcessSpawnInfo`, and calls
+  `NdPropControl_Init 0x141E61010`. That exact-source init builds authored prop
+  records through `NdPropControl_BuildPropSpawnList 0x141E61860`; its follow-up
+  reaches exact-source `NdPropControl_SpawnPropFromDefinition 0x141E63D70`.
+- The independent stock PreFrame loop `0x14015CE1C..0x14015CE7D` validates six
+  Player handles, calls `Player_ChangeLookId` from any nonzero `Player+0x3D10`,
+  then clears that deferred field. The repair therefore queues current
+  `Player+0x170` through `+0x3D10` only after the final parent is stable and cloth
+  is absent, instead of invoking the rebuild re-entrantly from object Update.

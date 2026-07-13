@@ -2,7 +2,7 @@
 
 ## Status
 
-`STATIC` diagnostic boundary; runtime prediction not yet executed.
+`CONFIRMED` lifecycle failure; native deferred repair is ready for runtime test.
 
 ## Observation
 
@@ -75,5 +75,68 @@ DrawControl; each had a non-null cloth body, `initialized=1`, child mesh count
 
 This validates the exact-vtable discriminator and establishes the healthy
 baseline. The logger uses a fixed per-object atomic cache so alternating cloth
-objects do not create per-frame output. The post-reload half of the prediction
-is still pending.
+objects do not create per-frame output.
+
+## Post-reload result
+
+The runtime prediction selected hypothesis 1. In PID 7480, healthy cloth was
+attached to parent DrawControl `0x10e13eb940`; the final remote-Nadine parent was
+`0x10e034a4c0` with all five parent meshes active, but no `CHAR-CLOTH` object
+ever matched it. In PID 13620, three healthy remote-Chloe cloth children followed
+several intermediate parent generations; the final complete two-mesh parent
+`0x10e0348e40` again had no matching cloth child.
+
+Therefore the final location-reload phase destroys the `ProcessCharCloth`
+children and fails to recreate them. The parent look, meshes, gates, and render
+instances survive. Hypotheses 2-4 are rejected for this reproduction.
+
+## Repair candidates
+
+1. Queue the current look id through native `Player+0x3D10`, allowing the engine's
+   PreFrame path to call `Player::ChangeLookId` after the final parent stabilizes.
+2. Call `Player::ChangeLookId 0x1410FE840` directly from a Player/Nadine update.
+3. Call `NdPropControl::Init` or `ProcessCharCloth_Factory` directly with a
+   reconstructed descriptor.
+4. Preserve old cloth children across reload and retarget their parent handles.
+
+Candidate 1 is selected. Candidate 2 invokes a large teardown/rebuild in the
+middle of object update and is unnecessarily re-entrant. Candidate 3 lacks the
+authored `ProcessSpawnInfo`/prop definitions. Candidate 4 retains stale cloth
+bodies and ownership across a lifecycle that intentionally destroys them.
+
+## Independent static evidence for the repair
+
+1. Exact source and ABI: `Player_ChangeLookId 0x1410FE840` is named by the source
+   assertion `void __cdecl Player::ChangeLookId(class StringId)` and consumes the
+   nonzero look id in EDX.
+2. Full lifecycle data flow: it tears down the old DrawControl and prop owner,
+   constructs a `ProcessSpawnInfo` at `0x1410FEBC8`, invokes Player vtable slot
+   `+0x718`, and rebuilds the composite body at `0x1410FF199`.
+3. Child-process materialization: after the body rebuild it calls
+   `NdPropControl_Init 0x141E61010`, whose exact source assertion identifies
+   `NdPropControl::Init`; that builds a prop spawn list through
+   `NdPropControl_BuildPropSpawnList 0x141E61860`, and the follow-up at
+   `0x141E61A40` reaches exact-source
+   `NdPropControl_SpawnPropFromDefinition 0x141E63D70`.
+4. Independent stock scheduling path: the engine PreFrame loop at
+   `0x14015CE1C..0x14015CE7D` validates each of six global Player handles. For any
+   nonzero `Player+0x3D10`, it calls `Player_ChangeLookId` with that exact dword at
+   `0x14015CE69` and immediately clears the field. This is the native deferred
+   context for a look rebuild.
+
+## Repair gate and falsifiable prediction
+
+The attachment relay publishes the last exact-vtable cloth owner, parent
+DrawControl, and timestamp atomically. On the Nadine/main-game thread, the repair
+requires all of the following: the same remote Player previously had healthy
+cloth; its current parent DrawControl has been stable for 1.5 seconds; no cloth
+has matched that parent for at least 0.75 seconds; and no deferred look is already
+queued. It then writes the current `Player+0x170` look id to `Player+0x3D10` once.
+
+If the selected repair is correct, after one location reload the log contains
+exactly one `PUPPET-CLOTH queued native ChangeLookId`, the engine replaces or
+refreshes the final parent, and healthy `CHAR-CLOTH` lines reappear for that final
+generation within a few seconds. Hair returns on both remote avatars. It must not
+produce repeated queue lines, a second remote Player, kneeling locomotion, or a
+missing held weapon. If the queue line occurs but no cloth is recreated, the full
+look rebuild is rejected and analysis moves to the lower `NdPropControl` boundary.

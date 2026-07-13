@@ -1,5 +1,23 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-13, Codex - native deferred cloth repair)
+
+Runtime on PIDs 7480/13620 confirmed the reload failure: each final remote Player
+kept a complete active parent DrawControl, but no `ProcessCharCloth` child matched
+the final parent generation. Intermediate parent generations did have healthy
+cloth. This selects the absent-child hypothesis and rejects stale cloth state or
+hidden cloth meshes for this reproduction.
+
+Static analysis found the stock non-reentrant repair boundary. The six-player
+PreFrame loop at `0x14015CE1C..0x14015CE7D` consumes `Player+0x3D10`, calls
+`Player_ChangeLookId 0x1410FE840`, then clears the field. `ChangeLookId` performs
+the full DrawControl/composite-body rebuild and drives `NdPropControl::Init` into
+the native prop/process spawn path. The runtime hook now queues the current
+`Player+0x170` look only after the same remote Player previously had cloth, its
+new parent is stable for 1.5 seconds, and matching cloth has been absent for 0.75
+seconds. Prediction and competitors are recorded in
+`reports/process_char_cloth_reload_20260713.md`.
+
 ## Turn note (2026-07-13, Codex - reload hair is ProcessCharCloth)
 
 Fresh reload snapshots on PIDs 20348/21444 retained the complete parent

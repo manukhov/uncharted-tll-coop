@@ -5888,6 +5888,32 @@ FUNCTIONS = {
         "Callers include Player initialization, ChangeLookId, and direct "
         "hat-id setters.",
     ),
+    0x1410FE840: (
+        "Player_ChangeLookId",
+        "Exact source assertion names Player::ChangeLookId(StringId). It tears "
+        "down and reconstructs the Player DrawControl/composite body, builds a "
+        "ProcessSpawnInfo, then reinitializes the owner's prop/process control. "
+        "The stock PreFrame loop at 0x14015CE1C consumes Player+0x3D10 to call "
+        "this function outside object Update.",
+    ),
+    0x141E61010: (
+        "NdPropControl_Init",
+        "Exact source assertion names NdPropControl::Init. It resolves look2 and "
+        "prop records from ProcessSpawnInfo/owner state and builds the pending "
+        "native prop-process list through NdPropControl_BuildPropSpawnList.",
+    ),
+    0x141E61860: (
+        "NdPropControl_BuildPropSpawnList",
+        "Exact source assertion names NdPropControl::BuildPropSpawnList. It maps "
+        "resolved prop ids to authored definitions and appends pending spawn "
+        "records consumed by the follow-up materialization pass.",
+    ),
+    0x141E63D70: (
+        "NdPropControl_SpawnPropFromDefinition",
+        "Exact source assertion names NdPropControl::SpawnPropFromDefinition. It "
+        "builds native spawn state from an authored prop definition, invokes the "
+        "owner's virtual process creator, and attaches the spawned process.",
+    ),
     0x1401186C0: (
         "RegisterProcessCharClothFactory",
         "Registers the exact ProcessCharCloth type string with the generic "
