@@ -5888,6 +5888,38 @@ FUNCTIONS = {
         "Callers include Player initialization, ChangeLookId, and direct "
         "hat-id setters.",
     ),
+    0x1401186C0: (
+        "RegisterProcessCharClothFactory",
+        "Registers the exact ProcessCharCloth type string with the generic "
+        "process registry and creator ProcessCharCloth_Factory at 0x141F41470.",
+    ),
+    0x141F3DEE0: (
+        "ProcessCharCloth_Constructor",
+        "RTTI-backed constructor: installs ??_7ProcessCharCloth@@6B@ and "
+        "initializes the class-specific 0x880..0x960 tail.",
+    ),
+    0x141F3E060: (
+        "ProcessCharCloth_Init",
+        "Exact source assertions name ProcessCharCloth::Init. It consumes the "
+        "spawn descriptor, resolves the attach joint and parent handle at "
+        "+0x4E0/+0x4E8, builds cloth render/physics state, and marks +0x870 "
+        "initialized.",
+    ),
+    0x141F3E6E0: (
+        "ProcessCharCloth_UpdateRoot",
+        "Exact source assertions name ProcessCharCloth::UpdateRoot. It resolves "
+        "the parent Player handle and updates cloth root transforms/wind data.",
+    ),
+    0x141F3F7A0: (
+        "ProcessCharCloth_EventHandler",
+        "Exact source assertions name ProcessCharCloth::EventHandler; it applies "
+        "cloth simulation and visibility/event parameters to the owned bodies.",
+    ),
+    0x141F41470: (
+        "ProcessCharCloth_Factory",
+        "Factory registered for ProcessCharCloth: allocates 0x980 bytes and "
+        "runs ProcessCharCloth_Constructor, or constructs into supplied storage.",
+    ),
     0x141308220: (
         "UpperPlayerVerbStage_EdgeAimReload_And_IdleReach0",
         "Containing upper Player verb stage around the block at 0x141308680. "

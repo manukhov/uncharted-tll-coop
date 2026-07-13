@@ -1,5 +1,22 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-13, Codex - reload hair is ProcessCharCloth)
+
+Fresh reload snapshots on PIDs 20348/21444 retained the complete parent
+DrawControls: Nadine remained 5/5 meshes and Chloe 2/2, with all gates active.
+Both hat ids and the 16 tracked hat process/mesh slots were zero. **REJECTED:**
+missing base-look meshes and `PlayerBase_RebuildHatAttachmentsFromIds` as the
+direct cause of this baldness.
+
+Static analysis identifies the independent lifecycle:
+`RegisterProcessCharClothFactory 0x1401186C0` registers factory `0x141F41470`;
+constructor `0x141F3DEE0` installs vtable `0x142BAF780`; exact-source
+`ProcessCharCloth_Init 0x141F3E060` resolves parent handle `+0x4E0/+0x4E8`,
+builds cloth state, and marks `+0x870`; `ProcessCharCloth_UpdateRoot
+0x141F3E6E0` consumes that parent. The read-only `0x141ED63F7` relay now passes
+the preserved RBX attachable and logs exact-vtable `CHAR-CLOTH` state. Runtime
+prediction and competitors are in `reports/process_char_cloth_reload_20260713.md`.
+
 ## Turn note (2026-07-13, Codex - parent hat lifecycle discriminator)
 
 PIDs 18080/19668 reproduced bald remote players after reload. Valid look ids

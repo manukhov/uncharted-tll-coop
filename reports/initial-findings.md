@@ -27245,3 +27245,26 @@ HYPOTHESIS for the two remaining mechanisms**.
   of the parent mesh ids/gates/instances plus both tracked tables. Status:
   **STATIC discriminator ready**; prediction and competitors are recorded in
   `reports/player_hat_lifecycle_reload_20260713.md`.
+
+### 2026-07-13 ProcessCharCloth owns the separate reload-hair lifecycle (STATIC)
+
+- Fresh location-reload snapshots kept Nadine's complete five-mesh parent
+  DrawControl and Chloe's complete two-mesh parent DrawControl, with all mesh and
+  instance gates active. Both `Player+0x15AC/+0x15B0` and all tracked hat slots
+  were zero. **REJECTED:** a dropped base-look mesh or the optional hat rebuild
+  as the direct cause of this baldness.
+- `RegisterProcessCharClothFactory 0x1401186C0` registers the exact
+  `ProcessCharCloth` string with `ProcessCharCloth_Factory 0x141F41470`.
+  The factory allocates 0x980 bytes and calls `ProcessCharCloth_Constructor
+  0x141F3DEE0`, which installs RTTI vtable `0x142BAF780`.
+- Exact source assertions identify `ProcessCharCloth_Init 0x141F3E060`,
+  `ProcessCharCloth_UpdateRoot 0x141F3E6E0`, and
+  `ProcessCharCloth_EventHandler 0x141F3F7A0`. Init resolves the parent handle
+  at process `+0x4E0/+0x4E8`, creates cloth/render state reachable through
+  `+0x238`, and marks `+0x870`; UpdateRoot resolves the same parent.
+- `NdAttachableObject_PostJointUpdate_Async 0x141ED62D0` independently hashes
+  `ProcessCharCloth`, resolves its parent, and synchronizes the child/parent
+  DrawControls at callsite `0x141ED63F7`. The read-only relay now forwards the
+  preserved RBX object and emits exact-vtable `CHAR-CLOTH` snapshots. Status:
+  **STATIC discriminator ready**; see
+  `reports/process_char_cloth_reload_20260713.md`.

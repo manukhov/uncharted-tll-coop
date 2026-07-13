@@ -1,0 +1,33 @@
+TARGET 0x1401186C0: func_start=0x1401186c0 name=RegisterProcessCharClothFactory
+  xref=0x1425E97F0 type=1 func_start=None func_name=None
+  xref=0x146DC8BE8 type=1 func_start=None func_name=None
+
+TARGET 0x141F3DEE0: func_start=0x141f3dee0 name=ProcessCharCloth_Constructor
+  xref=0x140296866 type=17 func_start=0x1402961d0 func_name=sub_1402961D0
+  xref=0x1402971B9 type=17 func_start=0x1402971b0 func_name=sub_1402971B0
+  xref=0x141F41489 type=19 func_start=0x141f41470 func_name=ProcessCharCloth_Factory
+  xref=0x141F414BB type=17 func_start=0x141f41470 func_name=ProcessCharCloth_Factory
+  xref=0x141F5CFCA type=17 func_start=0x141f5cfb0 func_name=sub_141F5CFB0
+  xref=0x141F5D027 type=17 func_start=0x141f5cfb0 func_name=sub_141F5CFB0
+  xref=0x146EC76CC type=1 func_start=None func_name=None
+
+TARGET 0x141F3E060: func_start=0x141f3e060 name=ProcessCharCloth_Init
+  xref=0x141F5D0A2 type=17 func_start=0x141f5d060 func_name=sub_141F5D060
+  xref=0x142BAF7D8 type=1 func_start=None func_name=None
+  xref=0x146EC76F0 type=1 func_start=None func_name=None
+
+TARGET 0x141F3E6E0: func_start=0x141f3e6e0 name=ProcessCharCloth_UpdateRoot
+  xref=0x142BAFF38 type=1 func_start=None func_name=None
+  xref=0x146EC7708 type=1 func_start=None func_name=None
+
+TARGET 0x141F3F7A0: func_start=0x141f3f7a0 name=ProcessCharCloth_EventHandler
+  xref=0x141F5E0F6 type=19 func_start=0x141f5e0f0 func_name=sub_141F5E0F0
+  xref=0x142BAF7F0 type=1 func_start=None func_name=None
+  xref=0x142F52720 type=1 func_start=None func_name=None
+  xref=0x142F52730 type=1 func_start=None func_name=None
+  xref=0x146EC77C8 type=1 func_start=None func_name=None
+
+TARGET 0x141F41470: func_start=0x141f41470 name=ProcessCharCloth_Factory
+  xref=0x1401186FA type=1 func_start=0x1401186c0 func_name=RegisterProcessCharClothFactory
+  xref=0x146EC7828 type=1 func_start=None func_name=None
+

@@ -356,6 +356,9 @@ constexpr std::uintptr_t kDrawControlClearChildFlagsByMaskRva = 0x1754FF0;
 constexpr std::uintptr_t kNdAttachableSyncParentVisibilityCallsiteRva =
     0x1ED63F7;
 constexpr std::uintptr_t kDrawControlSyncParentVisibilityRva = 0x1754DA0;
+// RTTI-backed ProcessCharCloth vtable. At the callsite above RBX still owns the
+// NdAttachableObject, so the relay can distinguish cloth from other attachments.
+constexpr std::uintptr_t kProcessCharClothVtableRva = 0x2BAF780;
 constexpr std::size_t kWeaponControllerGetWeaponBySlotVtOffset = 0xB0;
 constexpr std::uintptr_t kWeaponPickupVftableRva = 0x2AA66C0;
 constexpr std::size_t kWeaponPickupGetInteractControlVtableOffset = 0x248;

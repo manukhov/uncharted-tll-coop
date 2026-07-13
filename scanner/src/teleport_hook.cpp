@@ -18584,7 +18584,7 @@ std::uint64_t player_draw_snapshot_signature(
 }
 
 char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
-    void* child_draw, void* parent_draw) {
+    void* child_draw, void* parent_draw, void* attachable) {
     char result = g_original_draw_control_sync_parent_visibility != nullptr
         ? g_original_draw_control_sync_parent_visibility(child_draw, parent_draw)
         : 0;
@@ -18603,6 +18603,74 @@ char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
         static_cast<std::byte*>(puppet) + 0x198);
     if (parent_draw != puppet_draw) {
         return result;
+    }
+
+    // 0x141ED63F7 is inside NdAttachableObject_PostJointUpdate_Async and keeps
+    // the current attachable in RBX. The tiny relay passes it here as R8. A
+    // ProcessCharCloth owns the rendered hair in its child DrawControl, so this
+    // separates an absent cloth process from an intact-but-hidden child.
+    if (attachable != nullptr && readable_bytes(attachable) >= 0x8C1 &&
+        *reinterpret_cast<const std::uintptr_t*>(attachable) ==
+            g_module + kProcessCharClothVtableRva) {
+        AttachmentDrawSnapshot cloth_draw{};
+        if (seh_capture_attachment_draw_snapshot(child_draw, cloth_draw)) {
+            auto* const bytes = static_cast<const std::byte*>(attachable);
+            const std::uint32_t type_hash =
+                *reinterpret_cast<const std::uint32_t*>(bytes + 0x38);
+            const void* const parent_handle =
+                *reinterpret_cast<void* const*>(bytes + 0x4E0);
+            const std::uint32_t parent_id =
+                *reinterpret_cast<const std::uint32_t*>(bytes + 0x4E8);
+            const void* const cloth_body =
+                *reinterpret_cast<void* const*>(bytes + 0x238);
+            const std::uint8_t initialized =
+                *reinterpret_cast<const std::uint8_t*>(bytes + 0x870);
+
+            std::uint64_t signature = attachment_draw_snapshot_signature(
+                cloth_draw, type_hash, parent_id);
+            signature ^= reinterpret_cast<std::uintptr_t>(attachable);
+            signature *= 1099511628211ULL;
+            signature ^= reinterpret_cast<std::uintptr_t>(parent_draw);
+            signature *= 1099511628211ULL;
+            signature ^= reinterpret_cast<std::uintptr_t>(cloth_body);
+            signature *= 1099511628211ULL;
+            signature ^= initialized;
+
+            static std::atomic<std::uint64_t> last_cloth_signature{0};
+            if (last_cloth_signature.exchange(
+                    signature, std::memory_order_relaxed) != signature) {
+                std::ostringstream cloth_line;
+                cloth_line << "CHAR-CLOTH object=0x" << std::hex
+                           << reinterpret_cast<std::uintptr_t>(attachable)
+                           << " type=0x" << type_hash
+                           << " parentHandle=0x"
+                           << reinterpret_cast<std::uintptr_t>(parent_handle)
+                           << "/0x" << parent_id
+                           << " clothBody=0x"
+                           << reinterpret_cast<std::uintptr_t>(cloth_body)
+                           << " parentDraw=0x"
+                           << reinterpret_cast<std::uintptr_t>(parent_draw)
+                           << " childDraw=0x"
+                           << reinterpret_cast<std::uintptr_t>(child_draw)
+                           << " flags=0x" << cloth_draw.flags << std::dec
+                           << " initialized="
+                           << static_cast<unsigned>(initialized)
+                           << " gate="
+                           << static_cast<unsigned>(cloth_draw.own_gate) << "/"
+                           << static_cast<unsigned>(cloth_draw.inherited_gate)
+                           << " meshes=" << cloth_draw.readable_meshes << "/"
+                           << cloth_draw.mesh_count
+                           << " instances=" << cloth_draw.instances
+                           << " active=" << cloth_draw.active_instances
+                           << " drawIds=";
+                for (std::uint32_t mesh_index = 0;
+                     mesh_index < cloth_draw.readable_meshes; ++mesh_index) {
+                    cloth_line << "0x" << std::hex
+                               << cloth_draw.mesh_ids[mesh_index] << ",";
+                }
+                force_log_line(cloth_line.str().c_str());
+            }
+        }
     }
 
     static std::atomic<std::uintptr_t> last_parent_draw{0};
@@ -18696,17 +18764,22 @@ bool install_nd_attachable_parent_visibility_relay() {
     g_original_draw_control_sync_parent_visibility =
         reinterpret_cast<DrawControlSyncParentVisibilityFunction>(expected);
 
-    constexpr std::size_t kRelaySize = 14;
+    constexpr std::size_t kRelaySize = 17;
     auto* const relay = static_cast<std::uint8_t*>(
         allocate_executable_near(call_site, kRelaySize));
     if (relay == nullptr) {
         boot_log_line("NdAttachable parent visibility relay SKIPPED (relay)");
         return false;
     }
-    relay[0] = 0xFF;
-    relay[1] = 0x25;
-    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
-    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+    // mov r8, rbx; jmp qword ptr [rip+0]. The original E8 return address stays
+    // on the stack, so the hook returns directly to 0x141ED63FC.
+    relay[0] = 0x49;
+    relay[1] = 0x89;
+    relay[2] = 0xD8;
+    relay[3] = 0xFF;
+    relay[4] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 5) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 9) =
         reinterpret_cast<std::uintptr_t>(
             &hooked_nd_attachable_sync_parent_visibility_callsite);
     FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
