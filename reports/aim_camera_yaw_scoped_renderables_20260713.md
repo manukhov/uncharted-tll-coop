@@ -1,6 +1,6 @@
 # Aim camera yaw and scoped renderables (2026-07-13)
 
-Status: **STATIC implementation, runtime pending**.
+Status: **RUNTIME REJECTED as sufficient**.
 
 ## Runtime discriminator
 
@@ -65,3 +65,28 @@ direction, not backward, while the pistol aim animation remains. Scoped ADS emit
 `PUPPET-ADS-VISIBILITY ...`; hair and the rifle stay visible. Calls only for the
 Player select a later propagation writer. No suppressed attachment calls and zero
 hidden meshes with continued loss select another attachment-local render flag.
+
+## Runtime result (PIDs 14868/18564)
+
+The discriminator selected the last branch, not either implemented visibility
+barrier. During the scoped disappearance interval:
+
+- `PUPPET-ADS-VISIBILITY playerMeshes=0 weaponMeshes=0 weaponControls=1` repeated;
+- `SCOPED-DRAW-FLAG suppressed` never appeared;
+- `HELD-WEAPON-APPLY` continued to report the sniper logically attached;
+- the body and authored scoped pose remained visible while the hair attachable and
+  rifle disappeared.
+
+Therefore the scoped path does **not** reach the registered script writer at
+`0x1403343D3`, and neither Player nor Weapon mesh byte `DrawControl entry+0x243`
+is being hidden. The `instance+0x18 bit 0x40` and mesh-visible-byte hypotheses are
+**REJECTED** as the cause of this symptom. The remaining candidates are an
+attachable owner/view-route exclusion, a camera/category render cull, or another
+attachment-local instance state outside the tested DrawControl fields.
+
+The aim data path itself was live: `AIM-WORLD-BASIS` followed the relayed camera
+`-Z`, `AIM-ADDITIVE-PERMISSION original=0 forced=1` appeared, and sender
+`POSE-SEED-SEND` quaternions changed while the camera turned. The user nevertheless
+saw no corresponding body turn. This rejects stale/static camera data and moves
+the yaw investigation to the consumption timing of the post-update
+`Player+0x140` write versus the animation/render transform used for the frame.

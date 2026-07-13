@@ -1946,5 +1946,23 @@ is recorded below for the later runtime edit.
 5. On any failed guard call the original byte-for-byte. Do not invoke route-camera
    helpers, write Player fields, or alter ADS state in this hook.
 
+## 2026-07-13: runtime rejects scoped DrawControl and mesh-byte causes
+
+- PIDs 14868/18564 reproduced the unchanged failures after `1412840`: camera yaw
+  does not visibly turn the remote body, and scoped ADS hides Chloe's hair and
+  rifle while preserving the body pose.
+- No `SCOPED-DRAW-FLAG suppressed` event occurred, so scoped ADS does not call the
+  registered `set-instance-flag-draw-in-main-view` writer at `0x1403343D3`.
+- `PUPPET-ADS-VISIBILITY playerMeshes=0 weaponMeshes=0 weaponControls=1` repeated;
+  neither Player nor Weapon mesh `+0x243` became hidden. `HELD-WEAPON-APPLY`
+  continued to show the rifle attached.
+- **REJECTED:** `instance+0x18 bit 0x40` and mesh visible byte `+0x243` as causes
+  of the hair/rifle disappearance. Continue statically through
+  `NdAttachableObject` owner/view/camera culling.
+- `POSE-SEED-SEND` and `AIM-WORLD-BASIS` changed with sender camera yaw, so stale
+  camera data is also rejected. Trace whether the post-update `Player+0x140`
+  write is sampled by the visible render skeleton or misses the native animation
+  consumption window.
+
 This contract is ready for a later code edit, but no runtime or injection is allowed
 under the current static-only instruction.

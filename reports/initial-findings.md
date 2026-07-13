@@ -27135,3 +27135,26 @@ render visibility. A source callsite relay now suppresses `0x40` for puppet-owne
 renderables. The independent mesh fallback restores entry `+0x243` through
 `IDrawControl_ShowMesh 0x141754A30`. Runtime pending; full evidence and prediction
 are in `reports/aim_camera_yaw_scoped_renderables_20260713.md`.
+
+### 2026-07-13 RUNTIME: scoped DrawControl/mesh barriers do not see the disappearance — REJECTED
+
+PIDs 14868/18564 reproduced the same result after commit `1412840`: pistol/scoped
+aim data reached the native aim pipeline, but camera rotation still did not visibly
+turn the puppet; scoped-rifle ADS retained the body pose while removing Chloe's
+hair and rifle.
+
+The visibility discriminator is decisive. The scoped source-call relay at
+`0x1403343D3` emitted no `SCOPED-DRAW-FLAG suppressed` event, while the post-update
+probe repeatedly reported `playerMeshes=0 weaponMeshes=0 weaponControls=1`.
+The weapon remained logically attached according to `HELD-WEAPON-APPLY`.
+Consequently neither `instance+0x18 bit 0x40` nor DrawControl mesh byte `+0x243`
+causes this scoped disappearance. Both hypotheses are **REJECTED**; the next
+static pass must trace the independent `NdAttachableObject` owner/view/camera
+render gate.
+
+For yaw, changing sender `POSE-SEED-SEND` and receiver `AIM-WORLD-BASIS` values
+prove the camera `-Z` arrives and is consumed by the aim controller. The remaining
+failure is downstream of that data source: either the post-update `Player+0x140`
+write misses the animation/render sampling window or the visible skeleton consumes
+a different cached transform. Status: **RUNTIME rejection of current fixes;
+HYPOTHESIS for the two remaining mechanisms**.
