@@ -18413,6 +18413,7 @@ struct AttachmentDrawSnapshot {
     std::uint32_t category_suppressed_instances = 0;
     std::uint8_t own_gate = 0;
     std::uint8_t inherited_gate = 0;
+    std::array<std::uint32_t, 32> mesh_ids{};
 };
 
 bool seh_capture_attachment_draw_snapshot(
@@ -18443,6 +18444,8 @@ bool seh_capture_attachment_draw_snapshot(
                 break;
             }
             ++out.readable_meshes;
+            out.mesh_ids[mesh_index] =
+                *reinterpret_cast<const std::uint32_t*>(mesh + 0x18);
             out.primary_gate_meshes +=
                 *reinterpret_cast<const std::uint8_t*>(mesh + 0x243) != 0;
             out.secondary_gate_meshes +=
@@ -18505,6 +18508,78 @@ std::uint64_t attachment_draw_snapshot_signature(
     mix(snapshot.category_suppressed_instances);
     mix(snapshot.own_gate);
     mix(snapshot.inherited_gate);
+    for (std::uint32_t mesh_index = 0;
+         mesh_index < snapshot.readable_meshes; ++mesh_index) {
+        mix(snapshot.mesh_ids[mesh_index]);
+    }
+    return signature;
+}
+
+struct PlayerLookSnapshot {
+    std::uint32_t look_id = 0;
+    std::uint32_t state_id = 0;
+    std::uint32_t appearance_id = 0;
+    std::uint32_t hat_id_1 = 0;
+    std::uint32_t hat_id_2 = 0;
+    std::uint32_t tracked_processes = 0;
+    std::uint32_t tracked_meshes = 0;
+    std::array<std::uint32_t, 16> tracked_mesh_ids{};
+};
+
+bool seh_capture_player_look_snapshot(
+    void* player, PlayerLookSnapshot& out) {
+    __try {
+        if (player == nullptr || readable_bytes(player) < 0x1898) {
+            return false;
+        }
+        auto* const bytes = static_cast<std::byte*>(player);
+        out.look_id = *reinterpret_cast<const std::uint32_t*>(bytes + 0x170);
+        out.state_id = *reinterpret_cast<const std::uint32_t*>(bytes + 0x190);
+        out.appearance_id =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x15A4);
+        out.hat_id_1 =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x15AC);
+        out.hat_id_2 =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x15B0);
+
+        constexpr std::size_t kHatProcessSlotsOffset = 0x1758;
+        constexpr std::size_t kHatProcessSlotStride = 0x10;
+        constexpr std::size_t kHatMeshSlotsOffset = 0x1858;
+        for (std::size_t index = 0; index < 16; ++index) {
+            out.tracked_processes +=
+                *reinterpret_cast<void* const*>(
+                    bytes + kHatProcessSlotsOffset +
+                    index * kHatProcessSlotStride) != nullptr;
+            const std::uint32_t mesh_id =
+                *reinterpret_cast<const std::uint32_t*>(
+                    bytes + kHatMeshSlotsOffset +
+                    index * sizeof(std::uint32_t));
+            out.tracked_mesh_ids[index] = mesh_id;
+            out.tracked_meshes += mesh_id != 0;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+std::uint64_t player_draw_snapshot_signature(
+    const AttachmentDrawSnapshot& draw,
+    const PlayerLookSnapshot& look) {
+    std::uint64_t signature = attachment_draw_snapshot_signature(
+        draw, look.look_id, look.state_id);
+    const auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(look.appearance_id);
+    mix(look.hat_id_1);
+    mix(look.hat_id_2);
+    mix(look.tracked_processes);
+    mix(look.tracked_meshes);
+    for (const std::uint32_t mesh_id : look.tracked_mesh_ids) {
+        mix(mesh_id);
+    }
     return signature;
 }
 
@@ -18530,62 +18605,73 @@ char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
         return result;
     }
 
+    static std::atomic<std::uintptr_t> last_parent_draw{0};
+    static std::atomic<ULONGLONG> last_sample_ms{0};
+    const std::uintptr_t parent_value =
+        reinterpret_cast<std::uintptr_t>(parent_draw);
+    const bool parent_changed =
+        last_parent_draw.exchange(parent_value, std::memory_order_relaxed) !=
+        parent_value;
+    const ULONGLONG now = GetTickCount64();
+    if (!parent_changed) {
+        ULONGLONG previous = last_sample_ms.load(std::memory_order_relaxed);
+        if (now - previous < 250 ||
+            !last_sample_ms.compare_exchange_strong(
+                previous, now, std::memory_order_relaxed)) {
+            return result;
+        }
+    } else {
+        last_sample_ms.store(now, std::memory_order_relaxed);
+    }
+
     AttachmentDrawSnapshot snapshot{};
-    if (!seh_capture_attachment_draw_snapshot(child_draw, snapshot) ||
-        readable_bytes(static_cast<std::byte*>(puppet) + 0x170) <
-            sizeof(std::uint32_t) ||
-        readable_bytes(static_cast<std::byte*>(puppet) + 0x190) <
-            sizeof(std::uint32_t)) {
+    PlayerLookSnapshot look{};
+    if (!seh_capture_attachment_draw_snapshot(parent_draw, snapshot) ||
+        !seh_capture_player_look_snapshot(puppet, look)) {
         return result;
     }
-    const std::uint32_t look_id = *reinterpret_cast<const std::uint32_t*>(
-        static_cast<const std::byte*>(puppet) + 0x170);
-    const std::uint32_t state_id = *reinterpret_cast<const std::uint32_t*>(
-        static_cast<const std::byte*>(puppet) + 0x190);
-    const std::uint64_t signature = attachment_draw_snapshot_signature(
-        snapshot, look_id, state_id);
+    const std::uint64_t signature =
+        player_draw_snapshot_signature(snapshot, look);
+    static std::atomic<std::uint64_t> last_signature{0};
+    if (!parent_changed &&
+        last_signature.exchange(signature, std::memory_order_relaxed) ==
+            signature) {
+        return result;
+    }
+    last_signature.store(signature, std::memory_order_relaxed);
 
-    struct TraceState {
-        void* child = nullptr;
-        std::uint64_t signature = 0;
-    };
-    thread_local std::array<TraceState, 32> trace_states{};
-    thread_local std::size_t replacement_index = 0;
-    TraceState* state = nullptr;
-    for (auto& candidate : trace_states) {
-        if (candidate.child == child_draw) {
-            state = &candidate;
-            break;
+    std::ostringstream line;
+    line << "PLAYER-DRAW parent=0x" << std::hex << parent_value
+         << " look=0x" << look.look_id << " state=0x" << look.state_id
+         << " appearance=0x" << look.appearance_id
+         << " hats=0x" << look.hat_id_1 << "/0x" << look.hat_id_2
+         << " flags=0x" << snapshot.flags << std::dec
+         << " tracked=" << look.tracked_processes << "/"
+         << look.tracked_meshes
+         << " gate=" << static_cast<unsigned>(snapshot.own_gate) << "/"
+         << static_cast<unsigned>(snapshot.inherited_gate)
+         << " meshes=" << snapshot.readable_meshes << "/"
+         << snapshot.mesh_count
+         << " meshGate=" << snapshot.primary_gate_meshes << "/"
+         << snapshot.secondary_gate_meshes
+         << " instances=" << snapshot.instances
+         << " active=" << snapshot.active_instances
+         << " mainViewExcluded="
+         << snapshot.main_view_excluded_instances
+         << " categorySuppressed="
+         << snapshot.category_suppressed_instances
+         << " trackedIds=";
+    for (const std::uint32_t mesh_id : look.tracked_mesh_ids) {
+        if (mesh_id != 0) {
+            line << "0x" << std::hex << mesh_id << ",";
         }
-        if (state == nullptr && candidate.child == nullptr) {
-            state = &candidate;
-        }
     }
-    if (state == nullptr) {
-        state = &trace_states[replacement_index++ % trace_states.size()];
+    line << " drawIds=";
+    for (std::uint32_t mesh_index = 0;
+         mesh_index < snapshot.readable_meshes; ++mesh_index) {
+        line << "0x" << std::hex << snapshot.mesh_ids[mesh_index] << ",";
     }
-    if (state->child != child_draw || state->signature != signature) {
-        state->child = child_draw;
-        state->signature = signature;
-        std::ostringstream line;
-        line << "ATTACH-DRAW child=0x" << std::hex
-             << reinterpret_cast<std::uintptr_t>(child_draw)
-             << " look=0x" << look_id << " state=0x" << state_id
-             << " flags=0x" << snapshot.flags << std::dec
-             << " gate=" << static_cast<unsigned>(snapshot.own_gate) << "/"
-             << static_cast<unsigned>(snapshot.inherited_gate)
-             << " meshes=" << snapshot.readable_meshes << "/"
-             << snapshot.mesh_count
-             << " meshGate=" << snapshot.primary_gate_meshes << "/"
-             << snapshot.secondary_gate_meshes
-             << " instances=" << snapshot.instances
-             << " active=" << snapshot.active_instances
-             << " mainViewExcluded="
-             << snapshot.main_view_excluded_instances
-             << " categorySuppressed="
-             << snapshot.category_suppressed_instances;
-        force_log_line(line.str().c_str());
-    }
+    force_log_line(line.str().c_str());
     return result;
 }
 

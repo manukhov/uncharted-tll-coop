@@ -27222,3 +27222,26 @@ HYPOTHESIS for the two remaining mechanisms**.
   runtime visual-swap evidence establishes `+0x170` as the hair/look selector.
   A read-only state-change probe now distinguishes missing look/meshes from a
   present-but-suppressed render instance. Status: **STATIC discriminator ready**.
+
+### 2026-07-13 PlayerBase hat/hair lifecycle: parent DrawControl and tracked tables (STATIC)
+
+- PIDs 18080/19668 reproduced bald remote players after location reload while
+  resolved look ids remained valid. All sampled child DrawControls retained
+  enabled mesh gates and active instances. **REJECTED:** child DrawControl
+  visibility/activity as the missing-hair cause.
+- Exact source assertions identify `PlayerBase_SpawnHatWithIdFromMap
+  0x140CC4BF0`. It writes spawned process entries at `0x140CC4F9D` to
+  Player `+0x1758 + 0x10*i` and parent DrawControl mesh ids at `0x140CC556B`
+  to Player `+0x1858 + 4*i`.
+- `PlayerBase_RebuildHatAttachmentsFromIds 0x140CC5890` walks the same 16
+  process/mesh slots, kills processes, removes matching meshes from
+  Player `+0x198`, clears the tables, resolves Player `+0x15AC/+0x15B0`, and
+  invokes `0x140CC4BF0` for selected entries.
+- Independent callers include Player initialization, `Player::ChangeLookId
+  0x1410FE840`, and direct setters that write `+0x15AC/+0x15B0` immediately
+  before calling the rebuild. This establishes the parent Player DrawControl as
+  the correct hair/hat ownership surface.
+- The read-only `0x141ED63F7` relay now emits throttled `PLAYER-DRAW` snapshots
+  of the parent mesh ids/gates/instances plus both tracked tables. Status:
+  **STATIC discriminator ready**; prediction and competitors are recorded in
+  `reports/player_hat_lifecycle_reload_20260713.md`.

@@ -93,3 +93,17 @@ Falsifiable prediction:
   instance category path;
 - zero `look`, mesh count, or instance count after reload selects look
   reconstruction rather than visibility.
+
+## Runtime result (PIDs 18080/19668)
+
+The remote players became bald again after location reload, but their resolved
+look ids stayed valid. Every child captured at `0x141ED63F7` had gates `255/255`,
+mesh gates enabled, all render instances active, and zero main-view/category
+suppression. **REJECTED:** the child DrawControl branch, including all four
+final activity layers above.
+
+Static follow-up found that `PlayerBase_RebuildHatAttachmentsFromIds
+0x140CC5890` removes and adds hat/hair meshes on the parent `Player+0x198`
+DrawControl while tracking them in Player `+0x1758/+0x1858`. The relay now
+samples that parent state as `PLAYER-DRAW`; see
+`reports/player_hat_lifecycle_reload_20260713.md`.

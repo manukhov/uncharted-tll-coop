@@ -5869,6 +5869,25 @@ FUNCTIONS = {
         "This pins +0x740 as a draw-control/ambient-classification stage, "
         "not an ownership or verb-dispatch seam.",
     ),
+    0x140CC4BF0: (
+        "PlayerBase_SpawnHatWithIdFromMap",
+        "Exact source assertion names PlayerBase::SpawnHatWithIdFromMap. It "
+        "resolves the selected authored look, creates tracked prop processes "
+        "in Player+0x1758 (16-byte entries), adds resolved meshes to the "
+        "Player+0x198 DrawControl, records their ids in Player+0x1858, and "
+        "materializes optional look VFX. This is the per-hat worker called by "
+        "0x140CC5890.",
+    ),
+    0x140CC5890: (
+        "PlayerBase_RebuildHatAttachmentsFromIds",
+        "Rebuilds Player hat/hair attachments from Player+0x15AC/+0x15B0. "
+        "It kills up to 16 old tracked processes at Player+0x1758, removes "
+        "their mesh ids at Player+0x1858 from the parent Player+0x198 "
+        "DrawControl, clears both tables, resolves both authored hat ids, and "
+        "calls PlayerBase_SpawnHatWithIdFromMap for the selected entries. "
+        "Callers include Player initialization, ChangeLookId, and direct "
+        "hat-id setters.",
+    ),
     0x141308220: (
         "UpperPlayerVerbStage_EdgeAimReload_And_IdleReach0",
         "Containing upper Player verb stage around the block at 0x141308680. "

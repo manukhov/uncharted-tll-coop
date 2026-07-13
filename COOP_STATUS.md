@@ -1,5 +1,26 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-13, Codex - parent hat lifecycle discriminator)
+
+PIDs 18080/19668 reproduced bald remote players after reload. Valid look ids
+survived, while every child DrawControl observed at `0x141ED63F7` retained both
+mesh gates and fully active instances. **REJECTED:** child DrawControl
+visibility/activity as the cause.
+
+Static analysis now pins the actual parent lifecycle. Exact-source
+`PlayerBase_SpawnHatWithIdFromMap 0x140CC4BF0` writes process handles to
+Player `+0x1758` and added parent DrawControl mesh ids to `+0x1858`.
+`PlayerBase_RebuildHatAttachmentsFromIds 0x140CC5890` kills/removes those same
+entries from Player `+0x198`, then respawns `+0x15AC/+0x15B0`; Player init,
+`ChangeLookId`, and direct hat-id setters independently call it.
+
+The read-only relay now emits throttled `PLAYER-DRAW` state changes for the
+parent DrawControl plus both tracking tables. Prediction and competing
+hypotheses: `reports/player_hat_lifecycle_reload_20260713.md`. Next runtime:
+capture one line before and after a single location reload. Do not call the
+rebuild from the async attachment hook; if the tables drop, schedule the stock
+rebuild from the Player update/main-thread path.
+
 ## Turn note (2026-07-13, Codex - bald reload parent gate rejected)
 
 User runtime on PIDs 13996/4476 still showed both remote Chloes bald after a
