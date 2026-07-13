@@ -2772,23 +2772,30 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
         g_pose_seed_fire_only_override || g_puppet_aim_ray_override;
     const bool sustained_slot1_override =
         g_puppet_aim_override_frame && idx == kSlot1ScreenIndex;
+    // AIM-POSE-SCOPED override (2026-07-07): peer pose-seed ONLY when the caller is
+    // (a) GetTargetPointFromReticle's internal resolver call (0xCB17D6), or
+    // (b) sub_1410E9210's per-frame copy into Player+0x1720/+0x1730 (0x10E934B).
+    const bool caller_is_aim_site =
+        idx == kSlot1ScreenIndex &&
+        (caller_rva == kAimTargetReticleCallSiteRva ||
+         caller_rva == kPlayerAimPoseSeedCallSiteRva);
+    // PERF (2026-07-13): this resolver runs ~150-300x/frame (fire + every-frame
+    // PostAnimUpdate pose write). The old code did copy_peer_state_snapshot (SRW
+    // lock + ~460B copy, contending the net thread) UNCONDITIONALLY on every call =
+    // a major lag source. Gate on the CHEAP conditions first; only snapshot when
+    // this call is actually an override candidate.
+    if (!g_puppet_relay_pose_seed || !g_state_net.enabled || out == nullptr ||
+        !(fire_path_override || sustained_slot1_override || caller_is_aim_site)) {
+        return result;
+    }
     coop::StatePacket peer{};
     const bool have_peer = copy_peer_state_snapshot(peer);
     const bool relay_aim_pose =
         have_peer && puppet_aim_pose_relay_enabled_for_peer(peer);
-    // AIM-POSE-SCOPED override (2026-07-07): peer pose-seed ONLY when the caller is
-    // (a) GetTargetPointFromReticle's internal resolver call (0xCB17D6), or
-    // (b) sub_1410E9210's per-frame copy into Player+0x1720/+0x1730 (0x10E934B).
-    // (b) is the confirmed writer chain: resolver -> vmovups [player+1720/1730].
-    // Avoids sustained idx==1 override (froze locomotion 2026-07-07) and reticle
-    // trampoline crash. F8+peer RMB enables the same path as Numpad / experiment.
     const bool aim_pose_seed_override =
-        (g_puppet_aim_reticle_relay || relay_aim_pose) &&
-        idx == kSlot1ScreenIndex && have_peer && peer_packet_aim_active(peer) &&
-        (caller_rva == kAimTargetReticleCallSiteRva ||
-         caller_rva == kPlayerAimPoseSeedCallSiteRva);
-    if (!g_puppet_relay_pose_seed || !g_state_net.enabled || out == nullptr ||
-        !(fire_path_override || sustained_slot1_override || aim_pose_seed_override)) {
+        (g_puppet_aim_reticle_relay || relay_aim_pose) && caller_is_aim_site &&
+        have_peer && peer_packet_aim_active(peer);
+    if (!(fire_path_override || sustained_slot1_override || aim_pose_seed_override)) {
         return result;
     }
     std::uint8_t seed[32]{};
