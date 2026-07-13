@@ -18,6 +18,20 @@ new parent is stable for 1.5 seconds, and matching cloth has been absent for 0.7
 seconds. Prediction and competitors are recorded in
 `reports/process_char_cloth_reload_20260713.md`.
 
+First repair runtime was asymmetric: deferred `ChangeLookId` recreated healthy
+cloth for Nadine, proving the stock repair boundary, but Chloe's retained Player
+pointer changed and the old gate discarded healthy evidence before the final
+missing-cloth test. The gate now preserves slot-level evidence across Player
+replacement and separately rejects a timeout on the same healthy Player/parent.
+
+The same run exposed respawn transform desync. `StatePacket` already carries bit
+4 as teleport, and receive stored it in `pending_authoritative_teleport`, but no
+consumer existed. In free-run mode a stationary displacement below four metres
+also receives no correction. The fix now detects Player replacement and reload
+gaps on send, consumes the one-shot marker post-update, and forces one snap.
+Static evidence, competitors, and prediction are in
+`reports/respawn_transform_sync_20260714.md`.
+
 ## Turn note (2026-07-13, Codex - reload hair is ProcessCharCloth)
 
 Fresh reload snapshots on PIDs 20348/21444 retained the complete parent

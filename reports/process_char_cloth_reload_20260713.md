@@ -140,3 +140,21 @@ generation within a few seconds. Hair returns on both remote avatars. It must no
 produce repeated queue lines, a second remote Player, kneeling locomotion, or a
 missing held weapon. If the queue line occurs but no cloth is recreated, the full
 look rebuild is rejected and analysis moves to the lower `NdPropControl` boundary.
+
+## First repair runtime and gate correction
+
+The first two-copy run partially confirmed the selected native boundary. PID 316
+queued `look=0xd27c074f`; `ChangeLookId` returned normally and fresh healthy
+`ProcessCharCloth` objects appeared through the subsequent DrawControl
+generations. Nadine retained hair and no crash, kneeling locomotion, or missing
+weapon was observed. This confirms that deferred `ChangeLookId` can recreate the
+cloth lifecycle.
+
+PID 6840 ended with bald Chloe and no queue line. Its healthy cloth belonged to
+the prior remote Player generation; the repair state reset `healthy_draw` when
+the retained Player pointer changed, so the new generation could never satisfy
+the "previously healthy" gate. The gate now preserves healthy slot evidence
+across Player replacement while recording `healthy_player` separately. It also
+requires either Player or DrawControl generation to differ from the healthy one,
+preventing the transient same-parent timeout that unnecessarily queued PID 316
+before its original cloth resumed.

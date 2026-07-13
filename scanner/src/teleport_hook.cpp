@@ -10866,31 +10866,53 @@ void send_local_player_state() {
         static float pvx = 0, pvy = 0, pvz = 0;
         static float cvx = 0, cvy = 0, cvz = 0;
         static ULONGLONG pvt = 0;
+        static void* previous_local_obj = nullptr;
         const ULONGLONG vnow = GetTickCount64();
-        if (pvt == 0) {
+        const bool object_changed =
+            previous_local_obj != nullptr && previous_local_obj != local_obj;
+        previous_local_obj = local_obj;
+        bool stale_discontinuity = false;
+        float discontinuity_sq = 0.0F;
+        if (pvt == 0 || object_changed) {
+            if (object_changed) {
+                pkt.flags |= 16;
+            }
             pvx = pos[0]; pvy = pos[1]; pvz = pos[2]; pvt = vnow;
+            cvx = 0.0F; cvy = 0.0F; cvz = 0.0F;
         } else if (vnow - pvt >= 16) {
             const float dt = static_cast<float>(vnow - pvt) / 1000.0F;
+            const float sample_dx = pos[0] - pvx;
+            const float sample_dy = pos[1] - pvy;
+            const float sample_dz = pos[2] - pvz;
+            discontinuity_sq = sample_dx * sample_dx +
+                               sample_dy * sample_dy +
+                               sample_dz * sample_dz;
+            stale_discontinuity = dt >= 0.5F &&
+                                  discontinuity_sq > 0.25F * 0.25F;
+            if (discontinuity_sq > 2.5F * 2.5F || stale_discontinuity) {
+                pkt.flags |= 16;
+                cvx = 0.0F; cvy = 0.0F; cvz = 0.0F;
+            }
             if (dt > 0.0F && dt < 0.5F) {
-                const float sample_dx = pos[0] - pvx;
-                const float sample_dy = pos[1] - pvy;
-                const float sample_dz = pos[2] - pvz;
-                cvx = sample_dx / dt;
-                cvy = sample_dy / dt;
-                cvz = sample_dz / dt;
-                // Normal running cannot cover 2.5 metres in one 16-33 ms
-                // sample. Mark this discontinuity explicitly so replicas snap
-                // only for a real scripted/checkpoint teleport, not because
-                // player collision temporarily blocked local convergence.
-                if (sample_dx * sample_dx + sample_dy * sample_dy +
-                        sample_dz * sample_dz >
-                    2.5F * 2.5F) {
-                    pkt.flags |= 16;
+                if ((pkt.flags & 16) == 0) {
+                    cvx = sample_dx / dt;
+                    cvy = sample_dy / dt;
+                    cvz = sample_dz / dt;
                 }
             }
             pvx = pos[0]; pvy = pos[1]; pvz = pos[2]; pvt = vnow;
         }
         pkt.velocity[0] = cvx; pkt.velocity[1] = cvy; pkt.velocity[2] = cvz;
+        if ((pkt.flags & 16) != 0) {
+            std::ostringstream line;
+            line << "LOCAL-RESPAWN-TELEPORT seq=" << pkt.sequence
+                 << " objectChanged=" << (object_changed ? 1 : 0)
+                 << " staleGap=" << (stale_discontinuity ? 1 : 0)
+                 << " distance=" << std::sqrt(discontinuity_sq)
+                 << " pos=(" << pkt.pos[0] << "," << pkt.pos[1] << ","
+                 << pkt.pos[2] << ")";
+            force_log_line(line.str().c_str());
+        }
     }
     if (readable_bytes(static_cast<std::byte*>(local_obj) +
                        kPlayerHealthSystemOffset + sizeof(void*)) >= sizeof(void*)) {
@@ -11822,7 +11844,19 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     const float dx = pkt.pos[0] - world[0];
     const float dy = pkt.pos[1] - world[1];
     const float dz = pkt.pos[2] - world[2];
-    const bool too_far = dx * dx + dy * dy + dz * dz > kSnapDistSq;
+    const bool authoritative_teleport =
+        g_state_net.pending_authoritative_teleport.exchange(
+            false, std::memory_order_acq_rel);
+    const bool too_far = authoritative_teleport ||
+                         dx * dx + dy * dy + dz * dz > kSnapDistSq;
+    if (authoritative_teleport) {
+        std::ostringstream line;
+        line << "PUPPET-RESPAWN-SNAP seq=" << pkt.sequence
+             << " from=(" << world[0] << "," << world[1] << "," << world[2]
+             << ") to=(" << pkt.pos[0] << "," << pkt.pos[1] << ","
+             << pkt.pos[2] << ")";
+        force_log_line(line.str().c_str());
+    }
     // Facing is independent from position reconciliation. The old free-run branch
     // returned before this copy, leaving the remote Player free to spin from tiny
     // local correction vectors while its peer stood still.
@@ -17659,6 +17693,7 @@ void maybe_queue_remote_cloth_rebuild() {
 
     static std::uintptr_t tracked_player = 0;
     static std::uintptr_t tracked_draw = 0;
+    static std::uintptr_t healthy_player = 0;
     static std::uintptr_t healthy_draw = 0;
     static ULONGLONG draw_stable_since_ms = 0;
     static bool repair_attempted_since_healthy = false;
@@ -17669,7 +17704,6 @@ void maybe_queue_remote_cloth_rebuild() {
     if (tracked_player != player_value) {
         tracked_player = player_value;
         tracked_draw = draw_value;
-        healthy_draw = 0;
         draw_stable_since_ms = now;
         repair_attempted_since_healthy = false;
     } else if (tracked_draw != draw_value) {
@@ -17685,6 +17719,7 @@ void maybe_queue_remote_cloth_rebuild() {
         g_remote_cloth_seen_ms.load(std::memory_order_acquire);
     if (observed_player == player_value && observed_draw == draw_value &&
         now - observed_ms < 500) {
+        healthy_player = player_value;
         healthy_draw = draw_value;
         repair_attempted_since_healthy = false;
         return;
@@ -17694,7 +17729,9 @@ void maybe_queue_remote_cloth_rebuild() {
     // parent without cloth is repaired, so initial streaming cannot trigger a
     // premature full look rebuild. Player+0x3D10 is consumed and cleared by the
     // engine's own six-player PreFrame loop before it calls ChangeLookId.
-    if (healthy_draw == 0 || repair_attempted_since_healthy ||
+    if (healthy_draw == 0 ||
+        (healthy_player == player_value && healthy_draw == draw_value) ||
+        repair_attempted_since_healthy ||
         now - draw_stable_since_ms < 1500 || now - observed_ms < 750) {
         return;
     }
