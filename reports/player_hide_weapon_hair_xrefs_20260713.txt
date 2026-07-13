@@ -1,0 +1,19 @@
+TARGET 0x140FA9770: func_start=0x140fa9770 name=sub_140FA9770
+  xref=0x1400A3F81 type=1 func_start=0x1400a3f60 func_name=sub_1400A3F60
+  xref=0x146E435B8 type=1 func_start=None func_name=None
+  xref=0x146E435C4 type=1 func_start=None func_name=None
+
+TARGET 0x140F9F510: func_start=0x140f9f510 name=sub_140F9F510
+  xref=0x1400A24E1 type=1 func_start=0x1400a24c0 func_name=sub_1400A24C0
+  xref=0x146E4327C type=1 func_start=None func_name=None
+
+TARGET 0x141D3C010: func_start=0x141d3c010 name=sub_141D3C010
+  xref=0x141D3BD26 type=17 func_start=0x141d3b720 func_name=sub_141D3B720
+  xref=0x146EB31D0 type=1 func_start=None func_name=None
+  xref=0x146EB31DC type=1 func_start=None func_name=None
+
+TARGET 0x141D3D8D0: func_start=0x141d3d8d0 name=sub_141D3D8D0
+  xref=0x141D3D757 type=17 func_start=0x141d3c010 func_name=sub_141D3C010
+  xref=0x141D3D7FB type=17 func_start=0x141d3c010 func_name=sub_141D3C010
+  xref=0x146EB31E8 type=1 func_start=None func_name=None
+

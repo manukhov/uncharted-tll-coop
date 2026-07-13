@@ -90,3 +90,78 @@ The aim data path itself was live: `AIM-WORLD-BASIS` followed the relayed camera
 saw no corresponding body turn. This rejects stale/static camera data and moves
 the yaw investigation to the consumption timing of the post-update
 `Player+0x140` write versus the animation/render transform used for the frame.
+
+## Replacement static hypotheses (build after `f3bc85e`)
+
+### Yaw
+
+1. **Leading:** root yaw is correct but written after
+   `Character_UpdateDerivedWorldTransformFromLocalRoot 0x141BB8320`, while
+   `PlayerAimController::ApplyWorldAimBasis 0x140CAF110` is simultaneously told
+   that body-forward already equals camera-forward. The current transform pass
+   therefore receives neither derived root rotation nor directional yaw.
+2. The rendered skeleton uses an independent root that never consumes
+   `Player+0x140`.
+3. The packet camera quaternion is stale or uses the wrong axis.
+
+Evidence quota for hypothesis 1 is met by three independent kinds:
+
+- vtable identity and disassembly pin `g_original_update` to common slot `+0x2B8`,
+  `Character_UpdateDerivedWorldTransformFromLocalRoot 0x141BB8320`; its
+  `0x141BB83E0` read of `Player+0x140` precedes the old post-transform yaw write;
+- the already confirmed locomotion path requires `Player+0x250/+0x270` velocity
+  before the same update so the graph can sample it that frame, establishing the
+  scheduling rule independently;
+- runtime `AIM-WORLD-BASIS` logs showed the substituted horizontal body basis
+  equal to changing camera `-Z`, rejecting stale data and proving that the
+  additive path was deliberately receiving approximately zero yaw delta.
+
+The narrow change writes the same validated camera `-Z` yaw immediately before
+the remote Player's `0x141BB8320` derived-transform pass and keeps the post write
+as authority. It introduces no second orientation source. This is not yet proof
+that the asynchronous joint-blend phase samples after this hook: real
+`Player_Update 0x1410EC230` is dispatched independently by
+`AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00` through Player vtable
+`+0x410`. Therefore the ordering fix is **STATIC**, not CONFIRMED as a complete
+visual fix.
+
+### Scoped visibility
+
+1. **Leading:** scoped ADS writes Player `+0x1618 = 0`; the per-frame transition
+   function `0x140C990A0` mistakes the retained remote Player for the local
+   first-person actor and publishes authored `DisableMainView` events.
+2. NdAttachableObject camera/category propagation at `0x141ED62D0` hides hair and
+   the weapon without authored events.
+3. A separate mesh/category byte (`+0x245` or DrawControl `+0x18/+0x1D`) is the
+   final cull source.
+
+Evidence quota for hypothesis 1 is met independently:
+
+- dataflow: `0x140C990A0` reads current `Player+0x1618` and previous `+0x1619`,
+  emits `DisableMainView` on the false branch and `EnableMainView` on the true
+  transition, then copies current to previous and resets current to one;
+- graph/strings: the function is called directly from `Player::Active::Update`
+  after screen camera-state update and contains four xrefs each to the exact
+  authored `DisableMainView` and `EnableMainView` strings;
+- vtable identity: its `Player+0x1D88` target is the confirmed
+  PlayerWeaponController; slot `+0x370 -> 0x1410A01F0` loops all weapon slots and
+  publishes `DisableMainView`/`DisableCastShadows`, while `+0x378 -> 0x1410A08A0`
+  owns the inverse visibility update;
+- structural agreement: the same function iterates Player `+0x1B10` attachables
+  and publishes the corresponding main-view events, explaining simultaneous hair
+  and rifle loss while body pose and logical weapon attachment remain intact.
+
+The relay changes only a fresh remote scoped-rifle request from false to true at
+the entry of `0x140C990A0`. The rejected `0x1403343D3` hook is no longer installed,
+and the rejected per-frame `+0x243` mesh restoration is no longer called.
+
+## Falsifiable prediction
+
+During remote scoped-rifle ADS the receiver must log
+`PUPPET-MAIN-VIEW-HIDE suppressed`; hair and the held rifle remain visible. No
+such log with continued disappearance rejects hypothesis 1 and selects the
+NdAttachableObject category path, whose next discriminator is callsite
+`0x141ED640A`. Turning a stationary ADS camera should now turn the rendered body
+through the refreshed derived transform. A changing pre-root with a static body
+selects the independent `Player_Update`/joint-blend ordering or another
+render-root consumer, rather than packet or handedness errors.

@@ -27158,3 +27158,36 @@ failure is downstream of that data source: either the post-update `Player+0x140`
 write misses the animation/render sampling window or the visible skeleton consumes
 a different cached transform. Status: **RUNTIME rejection of current fixes;
 HYPOTHESIS for the two remaining mechanisms**.
+## 2026-07-13: remote scoped visibility authored-event path (STATIC)
+
+- `Player_UpdateMainViewVisibilityForAttachmentsAndWeapons 0x140C990A0` is called
+  from `Player::Active::Update` after screen camera-state refresh. It consumes
+  current/previous visibility bytes at Player `+0x1618/+0x1619`; the false path
+  publishes `DisableMainView` to retained body attachments and the true transition
+  publishes inverse events. Its tail copies current to previous and resets current
+  to one.
+- The same function dispatches PlayerWeaponController vtable `+0x370` or `+0x378`
+  through Player `+0x1D88`. Those slots resolve to
+  `PlayerWeaponController_DisableWeaponsInMainView 0x1410A01F0` and
+  `PlayerWeaponController_UpdateWeaponMainViewVisibility 0x1410A08A0`.
+  `0x1410A01F0` iterates weapon slots and publishes authored
+  `DisableMainView`/`DisableCastShadows`, explaining a logically attached rifle
+  disappearing independently of DrawControl mesh byte `+0x243`.
+- Competing camera/category propagation remains at
+  `NdAttachableObject_PostJointUpdate_Async 0x141ED28E0` -> `0x141ED62D0` ->
+  callsite `0x141ED640A`, but it is secondary until runtime disproves the exact
+  Player visibility transition.
+
+## 2026-07-13: camera yaw must precede derived-root refresh (STATIC)
+
+- The mod's `g_original_update` in the shared Player/Nadine vtable hook is
+  `Character_UpdateDerivedWorldTransformFromLocalRoot 0x141BB8320`, not full
+  `Player_Update 0x1410EC230`. It reads Player local yaw `+0x140` at
+  `0x141BB83E0` and derives `+0x240/+0x250/+0x280` before returning.
+- The previous camera-yaw write occurred only in `apply_puppet_transform_post`,
+  after that read. Feeding the same validated camera `-Z` yaw immediately before
+  `0x141BB8320` removes this proven one-pass ordering error.
+- This does not establish ordering against the independent joint-blend dispatch:
+  `AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00` invokes Player vtable
+  `+0x410 -> Player_Update 0x1410EC230`. Runtime must still distinguish whether
+  the refreshed derived root is sufficient for the visible skeleton.

@@ -334,6 +334,11 @@ constexpr std::uintptr_t kPlayerAimEligibilityRva = 0x10E3670;
 // additive permission query immediately before setting controller+0x8A0.
 constexpr std::uintptr_t kPlayerAimAdditivePermissionCallsiteRva = 0x0CB348A;
 constexpr std::uintptr_t kPlayerAimAdditivePermissionRva = 0x0CADF40;
+// Player::Active main-view visibility transition. Player+0x1618 is the current
+// visible request and +0x1619 is the previous request. A false request publishes
+// DisableMainView to body attachments and all weapons, which is correct for the
+// local scoped camera but not for the remote retained Player.
+constexpr std::uintptr_t kPlayerMainViewVisibilityUpdateRva = 0x0C990A0;
 // Exact inverse of IDrawControl_HideMesh: writes mesh entry +0x243 to 0xFF.
 constexpr std::uintptr_t kDrawControlShowMeshRva = 0x1754A30;
 // False branch of Script_SetInstanceFlagDrawInMainView. RDI still carries the

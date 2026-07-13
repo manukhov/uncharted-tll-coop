@@ -581,6 +581,28 @@ FUNCTIONS = {
         "Player vtable+0x410 implementation (vtable 0x142A4BFE8). Distinct from "
         "Npc/Buddy/Human +0x410 at 0x14042FCF0.",
     ),
+    0x140C990A0: (
+        "Player_UpdateMainViewVisibilityForAttachmentsAndWeapons",
+        "Called from Player::Active::Update after screen camera-state refresh. "
+        "Consumes current/previous visibility bytes Player+0x1618/+0x1619, "
+        "publishes DisableMainView or EnableMainView to retained body attachments, "
+        "and dispatches the matching PlayerWeaponController visibility slot.",
+    ),
+    0x1410A01F0: (
+        "PlayerWeaponController_DisableWeaponsInMainView",
+        "PlayerWeaponController vtable+0x370. Iterates weapon slots and publishes "
+        "DisableMainView plus DisableCastShadows to eligible weapon actors.",
+    ),
+    0x1410A08A0: (
+        "PlayerWeaponController_UpdateWeaponMainViewVisibility",
+        "PlayerWeaponController vtable+0x378. Applies authored per-weapon main-view "
+        "visibility, including EnableMainView/EnableCastShadows inverse events.",
+    ),
+    0x141ED28E0: (
+        "NdAttachableObject_PostJointUpdate_Async",
+        "NdAttachableObject vtable+0x410. Updates attachment transforms and "
+        "propagates owner DrawControl camera/category state after joint update.",
+    ),
     0x141A92A00: (
         "AnimManager_AsyncObjectUpdateJointBlendJob",
         "Source-identified anim-mgr-jobs.cpp AsyncObjectUpdate_JointBlend_Job. "

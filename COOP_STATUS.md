@@ -1966,3 +1966,16 @@ is recorded below for the later runtime edit.
 
 This contract is ready for a later code edit, but no runtime or injection is allowed
 under the current static-only instruction.
+## 2026-07-13 scoped visibility + pre-derived-root yaw (STATIC, runtime pending)
+
+- Replaced the rejected scoped DrawControl `0x40`/mesh `+0x243` barriers with a
+  relay at `Player_UpdateMainViewVisibilityForAttachmentsAndWeapons 0x140C990A0`.
+  During fresh remote scoped-rifle ADS it consumes only the puppet's false
+  `Player+0x1618` request before stock code can publish `DisableMainView` to hair
+  attachments and weapons. Expected log: `PUPPET-MAIN-VIEW-HIDE suppressed`.
+- Camera `-Z` yaw is now applied before
+  `Character_UpdateDerivedWorldTransformFromLocalRoot 0x141BB8320`, which reads
+  Player `+0x140` and refreshes `+0x240/+0x250/+0x280`; post-transform authority
+  remains. Full Player joint-blend ordering is still an explicit alternative.
+- Old scoped DrawControl callsite installation and per-frame mesh scan are parked,
+  removing rejected hot-path work. Release DLLs build successfully.

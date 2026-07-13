@@ -11462,6 +11462,24 @@ void apply_puppet_velocity_pre() {
     std::memcpy(vel_mirror, pkt.velocity, sizeof(pkt.velocity));
 }
 
+// Root yaw must exist before Character_UpdateDerivedWorldTransformFromLocalRoot
+// samples Player+0x140 into the world/root outputs. The post-transform write
+// remains as network authority, but by itself is one derived-transform pass late.
+void apply_puppet_aim_facing_pre() {
+    coop::StatePacket pkt{};
+    void* puppet = nullptr;
+    if (!latest_peer_state(pkt, puppet)) {
+        return;
+    }
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    if (received == 0 || GetTickCount64() - received > 250 ||
+        !peer_packet_aim_active(pkt)) {
+        return;
+    }
+    apply_peer_aim_facing_to_player(puppet, pkt);
+}
+
 // BEFORE the puppet's native update: stage look-at so UpdateIk in the same tick
 // can consume SetLookPoint output. Post-tick field pokes corrupted +0x390.
 void apply_puppet_head_look_pre() {
@@ -11621,7 +11639,6 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     } else if (pkt.move_magnitude < 0.15F) {
         orientation_dot = blend_network_orientation(quat, pkt.quat, 0.18F);
     }
-    keep_puppet_scoped_mesh_visible(puppet, pkt);
     puppet_was_aiming = puppet_aiming_now;
     if (g_clone_freerun) {
         if (too_far) {
@@ -13896,6 +13913,77 @@ void keep_puppet_scoped_mesh_visible(
 bool peer_holds_scoped_rifle(const coop::StatePacket& peer) {
     const std::uint32_t art = peer_effective_held_art(peer);
     return is_long_gun_relay_art(art);
+}
+
+using PlayerMainViewVisibilityUpdateFunction = char(__fastcall*)(void*);
+PlayerMainViewVisibilityUpdateFunction
+    g_original_player_main_view_visibility_update = nullptr;
+
+bool seh_force_remote_player_main_view_visible(
+    void* player, std::uint8_t* previous_request) {
+    __try {
+        auto* const current = reinterpret_cast<std::uint8_t*>(
+            static_cast<std::byte*>(player) + 0x1618);
+        *previous_request = current[1];
+        const bool suppressed = current[0] == 0;
+        current[0] = 1;
+        return suppressed;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+char __fastcall hooked_player_main_view_visibility_update(void* player) {
+    bool suppressed_remote_hide = false;
+    std::uint8_t previous_request = 0;
+    if (player != nullptr && player == retained_player_object(1)) {
+        const ULONGLONG received =
+            g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+        coop::StatePacket peer{};
+        if (received != 0 && GetTickCount64() - received <= 250 &&
+            copy_peer_state_snapshot(peer) && peer_packet_aim_active(peer) &&
+            peer_holds_scoped_rifle(peer) &&
+            readable_bytes(static_cast<std::byte*>(player) + 0x161A) >= 1) {
+            // Consume the local-camera hide request before the stock function can
+            // publish DisableMainView. Its tail advances previous state and leaves
+            // current visible, so no persistent field spoof is required.
+            suppressed_remote_hide = seh_force_remote_player_main_view_visible(
+                player, &previous_request);
+        }
+    }
+
+    const char result = g_original_player_main_view_visibility_update != nullptr
+        ? g_original_player_main_view_visibility_update(player)
+        : 0;
+    if (suppressed_remote_hide) {
+        static ULONGLONG last_log = 0;
+        const ULONGLONG now = GetTickCount64();
+        if (now - last_log > 500) {
+            last_log = now;
+            std::ostringstream line;
+            line << "PUPPET-MAIN-VIEW-HIDE suppressed previous="
+                 << static_cast<unsigned>(previous_request);
+            force_log_line(line.str().c_str());
+        }
+    }
+    return result;
+}
+
+bool install_player_main_view_visibility_relay() {
+    constexpr std::array<std::uint8_t, 15> expected{
+        0x48, 0x89, 0x5C, 0x24, 0x10,
+        0x48, 0x89, 0x74, 0x24, 0x18,
+        0x48, 0x89, 0x7C, 0x24, 0x20,
+    };
+    g_original_player_main_view_visibility_update =
+        reinterpret_cast<PlayerMainViewVisibilityUpdateFunction>(
+            install_fire_gate_detour(
+                kPlayerMainViewVisibilityUpdateRva,
+                expected.data(), expected.size(),
+                reinterpret_cast<void*>(
+                    &hooked_player_main_view_visibility_update),
+                "Player main-view visibility relay"));
+    return g_original_player_main_view_visibility_update != nullptr;
 }
 
 void sync_screen1_camera_rotation_to_screen0() {
@@ -17647,6 +17735,9 @@ void __fastcall hooked_update(void* object) {
             drive_remote_slot1_actions_tick();
             drive_slot1_tick();
             apply_slot1_perslot_on_game_thread();
+            if (object == retained_player_object(1)) {
+                apply_puppet_aim_facing_pre();
+            }
             g_original_update(object);
             if (object == retained_player_object(1)) {
                 apply_puppet_transform_post(object);
@@ -17695,6 +17786,7 @@ void __fastcall hooked_update(void* object) {
     apply_slot1_perslot_on_game_thread();
     if (object == retained_player_object(1)) {
         apply_puppet_velocity_pre();
+        apply_puppet_aim_facing_pre();
     }
     g_original_update(object);
     // VARIANT B avatar mirror-test: AFTER the NPC's own update wrote its joint cache,
@@ -19608,7 +19700,10 @@ DWORD WINAPI install_hook(void*) {
     install_player_fire_capture();
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
-    install_scoped_draw_flag_callsite_relay();
+    install_player_main_view_visibility_relay();
+    // The scoped DrawControl 0x40 relay and post mesh scan were rejected by the
+    // 2026-07-13 runtime discriminator; leave the dormant code available for
+    // reference without installing another hot-path hook.
     install_player_aim_eligibility_callsite_relay();
     install_player_aim_additive_permission_callsite_relay();
     install_player_aim_blend_target_callsite_relay();
