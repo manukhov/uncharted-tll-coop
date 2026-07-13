@@ -6704,6 +6704,60 @@ using PlayerAimWorldBasisFunction = std::int64_t(__fastcall*)(
     float vertical_limit_b);
 PlayerAimWorldBasisFunction g_original_player_aim_world_basis = nullptr;
 
+using PlayerAimBlendTickFunction = void(__fastcall*)(void*);
+PlayerAimBlendTickFunction g_original_player_aim_blend_tick = nullptr;
+
+void __fastcall hooked_player_aim_blend_tick(void* controller) {
+    std::uint8_t request_before = 0;
+    float blend_before = 0.0F;
+    const bool readable = controller != nullptr &&
+        readable_bytes(static_cast<std::byte*>(controller) + 0x8F0) >= 1;
+    if (readable) {
+        request_before = *reinterpret_cast<const std::uint8_t*>(
+            static_cast<const std::byte*>(controller) + 0x8A0);
+        blend_before = *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(controller) + 0x8EC);
+    }
+    if (g_original_player_aim_blend_tick != nullptr) {
+        g_original_player_aim_blend_tick(controller);
+    }
+    if (!readable) {
+        return;
+    }
+
+    void* owner = nullptr;
+    if (readable_bytes(static_cast<std::byte*>(controller) + 0x110) >=
+        sizeof(void*)) {
+        owner = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(controller) + 0x108);
+    }
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    coop::StatePacket peer{};
+    if (owner == nullptr || owner != retained_player_object(1) ||
+        received == 0 || GetTickCount64() - received > 250 ||
+        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer)) {
+        return;
+    }
+
+    const std::uint8_t request_after =
+        *reinterpret_cast<const std::uint8_t*>(
+            static_cast<const std::byte*>(controller) + 0x8A0);
+    const float blend_after = *reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(controller) + 0x8EC);
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log > 500) {
+        last_log = now;
+        std::ostringstream line;
+        line << "AIM-BLEND-TICK request="
+             << static_cast<unsigned>(request_before) << "->"
+             << static_cast<unsigned>(request_after) << " blend="
+             << blend_before << "->" << blend_after;
+        force_log_line(line.str().c_str());
+    }
+}
+
 std::int64_t __fastcall hooked_player_aim_world_basis(
     void* controller,
     const float* target_point,
@@ -6800,6 +6854,31 @@ bool install_player_aim_world_basis_relay() {
     DWORD ignored = 0;
     VirtualProtect(slot, sizeof(void*), old, &ignored);
     boot_log_line("PlayerAimController world-basis relay installed");
+    return true;
+}
+
+bool install_player_aim_blend_tick_probe() {
+    auto* const slot = reinterpret_cast<void**>(
+        g_module + kPlayerAimBlendTickVtableSlotRva);
+    void* const expected =
+        reinterpret_cast<void*>(g_module + kPlayerAimBlendTickRva);
+    if (*slot != expected) {
+        boot_log_line("PlayerAimController blend tick probe SKIPPED (slot mismatch)");
+        return false;
+    }
+    g_original_player_aim_blend_tick =
+        reinterpret_cast<PlayerAimBlendTickFunction>(*slot);
+    DWORD old = 0;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+        boot_log_line("PlayerAimController blend tick probe SKIPPED (protect)");
+        g_original_player_aim_blend_tick = nullptr;
+        return false;
+    }
+    *slot = reinterpret_cast<void*>(&hooked_player_aim_blend_tick);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(void*), old, &ignored);
+    boot_log_line("PlayerAimController blend tick probe installed");
     return true;
 }
 
@@ -19158,6 +19237,7 @@ DWORD WINAPI install_hook(void*) {
     install_scope_visible_gate();
     install_player_aim_eligibility_callsite_relay();
     install_player_aim_additive_permission_callsite_relay();
+    install_player_aim_blend_tick_probe();
     install_player_aim_world_basis_relay();
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();

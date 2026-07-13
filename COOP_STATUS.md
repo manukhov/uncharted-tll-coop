@@ -19,6 +19,13 @@ The wrong root direction was a separate post-update writer that converted camera
 camera yaw remains only behind the explicit A/B toggle. Runtime prediction and
 competitors: `reports/player_aim_additive_permission_relay_20260713.md`.
 
+Runtime PIDs 4412/17588 selected the remaining competitor: receiver logged both
+`AIM-WORLD-BASIS` and `AIM-ADDITIVE-PERMISSION original=0 forced=1`; root facing
+is now correct, but the user still saw no aim animation. Permission was a real
+gate but not sufficient. A behavior-neutral vtable `+0x30` probe now records
+`+0x8A0/+0x8EC` around the native blend tick; predictions are in
+`reports/player_aim_blend_tick_probe_20260713.md`.
+
 ## Turn note (2026-07-13, Codex - aim eligibility callsite relay)
 
 Runtime PIDs 16212/1692 with `a2d8cf4`: sender emitted

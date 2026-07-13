@@ -1,6 +1,6 @@
 # Player aim additive permission relay (2026-07-13)
 
-Status: **STATIC implementation, runtime pending**.
+Status: **RUNTIME REJECTED as sufficient; permission is real but not final blocker**.
 
 ## Hypothesis
 
@@ -70,3 +70,16 @@ written directly.
   was already permitted and the root correction was sufficient.
 - Permission and world-basis lines without visible animation select hypothesis 2
   or 3; the next discriminator is logging `+0x8A0/+0x8EC` around slot `+0x30`.
+
+## Runtime result
+
+PIDs 4412/17588 emitted both
+`AIM-WORLD-BASIS relay target=(-848.573,49.107,539.231)` and
+`AIM-ADDITIVE-PERMISSION original=0 forced=1`. The user confirmed that root
+facing now looks correct, validating the separate body-quaternion correction, but
+the aim animation is still absent.
+
+This proves the current-state permission was false and the relay changed it, but
+rejects hypothesis 1 as sufficient. Hypotheses 2/3 remain. The next diagnostic
+hooks the already-mounted blend tick without changing behavior and records
+`+0x8A0/+0x8EC` before and after the original call.

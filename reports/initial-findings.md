@@ -27066,3 +27066,12 @@ slot-1 peer ADS. The incorrect root facing was independently traced to the mod's
 post-update camera-yaw writer; default ADS now keeps the network body quaternion.
 Runtime confirmation is pending; see
 `reports/player_aim_additive_permission_relay_20260713.md`.
+
+**RUNTIME REJECTED as sufficient:** PIDs 4412/17588 logged both a changing
+`AIM-WORLD-BASIS` target and
+`AIM-ADDITIVE-PERMISSION original=0 forced=1`, but the user still saw no aim
+animation. The separate root-facing correction is validated: the puppet now turns
+in the correct direction. Permission is a confirmed gate, but the remaining
+blocker is either zero `+0x8EC` blend or downstream Aim0..Aim7 consumption. A
+behavior-neutral slot `+0x30` probe is documented in
+`reports/player_aim_blend_tick_probe_20260713.md`.

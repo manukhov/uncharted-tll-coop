@@ -321,6 +321,8 @@ constexpr std::uintptr_t kPlayerAimPoseSeedCallSiteRva = 0x10E934B;
 // body-forward, mode bytes, and four authored angular limits.
 constexpr std::uintptr_t kPlayerAimWorldBasisVtableSlotRva = 0x2A0B250;
 constexpr std::uintptr_t kPlayerAimWorldBasisRva = 0x0CAF110;
+constexpr std::uintptr_t kPlayerAimBlendTickVtableSlotRva = 0x2A0B228;
+constexpr std::uintptr_t kPlayerAimBlendTickRva = 0x0CAFA20;
 // Ground GunMoveShield call to Player_CheckAimActionEligibility. A callsite
 // relay can conditionally admit only the slot-1 puppet while preserving the
 // original function and all downstream weapon-specific aim arguments.
