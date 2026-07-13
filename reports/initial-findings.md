@@ -27075,3 +27075,18 @@ in the correct direction. Permission is a confirmed gate, but the remaining
 blocker is either zero `+0x8EC` blend or downstream Aim0..Aim7 consumption. A
 behavior-neutral slot `+0x30` probe is documented in
 `reports/player_aim_blend_tick_probe_20260713.md`.
+
+### 2026-07-13 RUNTIME: scoped guard prevents the native aim producer
+
+PIDs 18500/17476 kept the common PlayerAimController tick alive throughout peer
+ADS, but every sample was `request=0->0 blend=0->0`; no world-basis, eligibility,
+or permission call occurred. Active art was scoped rifle `0x8075397D`, and the
+receiver repeatedly logged `SCOPED-ADS-SCRUB`.
+
+This is fully explained by the mod's receive path: the automatic stationary
+aim-button predicate explicitly rejected every scoped rifle, then the post-update
+branch cleared puppet ADS. The blend was not being reset after compute; compute was
+never entered. The scoped exclusion is removed only from the existing stationary
+predicate, while movement and velocity gates remain. The exact DrawControl
+main-view `0x40` inverse is now active for this stationary scoped interval. Runtime
+prediction: `reports/stationary_scoped_ads_relay_20260713.md`.

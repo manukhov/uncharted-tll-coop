@@ -26,6 +26,14 @@ gate but not sufficient. A behavior-neutral vtable `+0x30` probe now records
 `+0x8A0/+0x8EC` around the native blend tick; predictions are in
 `reports/player_aim_blend_tick_probe_20260713.md`.
 
+The follow-up PIDs 18500/17476 showed `request=0->0 blend=0->0` throughout scoped
+rifle ADS, with no slot `+0x58` call. This is explained by the mod itself:
+`puppet_aim_press_relay_enabled_for_peer` rejected all scoped rifles and
+`SCOPED-ADS-SCRUB art=0x8075397d` cleared ADS every frame. The next build admits
+scoped `0x200` only through the existing stationary movement/velocity gates and
+applies the proven DrawControl main-view `0x40` clear to that interval. Details:
+`reports/stationary_scoped_ads_relay_20260713.md`.
+
 ## Turn note (2026-07-13, Codex - aim eligibility callsite relay)
 
 Runtime PIDs 16212/1692 with `a2d8cf4`: sender emitted

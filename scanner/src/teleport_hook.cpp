@@ -435,10 +435,10 @@ volatile bool g_puppet_relay_aim_press = false;
 // while the peer is almost stationary. This avoids the rejected run/turn jitter from
 // continuous aim-press during locomotion, while still raising the weapon on hold-aim.
 volatile bool g_puppet_auto_stationary_aim_press = true;
-// Sniper/rifle: relay aim direction but NOT scoped-ADS on the puppet (prevents the
-// DrawControl mesh-hide that makes Chloe vanish on the receiver). F8 still toggles
-// full ADS relay for A/B.
-volatile bool g_puppet_rifle_pose_only_ads = true;
+// Legacy scoped-rifle pose-only fallback. Default OFF now that stationary scoped
+// ADS is paired with the proven DrawControl main-view flag clear. Moving ADS is
+// still rejected by puppet_aim_press_relay_enabled_for_peer.
+volatile bool g_puppet_rifle_pose_only_ads = false;
 // Set for the current game-thread frame while the peer is aiming — widens the
 // fire-only pose/camera overrides to sustained ADS, not just the fire instant.
 volatile bool g_puppet_aim_override_frame = false;
@@ -2151,7 +2151,7 @@ bool puppet_aim_press_relay_enabled_for_peer(const coop::StatePacket& peer) {
     if (g_puppet_relay_aim_press) {
         return true;
     }
-    if (!g_puppet_auto_stationary_aim_press || peer_holds_scoped_rifle(peer)) {
+    if (!g_puppet_auto_stationary_aim_press) {
         return false;
     }
     if (valid_network_movement(peer) && peer.move_magnitude > 0.08F) {
@@ -13724,7 +13724,7 @@ bool seh_clear_draw_control_child_flags(
 
 void keep_puppet_scoped_mesh_visible(
     void* puppet, const coop::StatePacket& peer) {
-    if (puppet == nullptr || !g_puppet_relay_aim_press ||
+    if (puppet == nullptr || !puppet_aim_press_relay_enabled_for_peer(peer) ||
         !peer_packet_aim_active(peer) || !peer_holds_scoped_rifle(peer) ||
         readable_bytes(static_cast<std::byte*>(puppet) + 0x1B0) < 1) {
         return;

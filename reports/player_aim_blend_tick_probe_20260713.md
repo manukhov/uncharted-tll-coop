@@ -1,6 +1,6 @@
 # Player aim blend tick probe (2026-07-13)
 
-Status: **STATIC diagnostic, runtime pending**.
+Status: **RUNTIME: scoped ADS producer is absent; blend tick itself is healthy**.
 
 ## Question
 
@@ -38,3 +38,16 @@ is modified by the wrapper.
 - `request=0->0` on every tick despite repeated permission lines: the request is
   cleared between compute and common tick or compute is not sustained; resolve the
   exact scheduler order before another behavioral change.
+
+## Runtime result
+
+PIDs 18500/17476 logged a sustained sequence of
+`AIM-BLEND-TICK request=0->0 blend=0->0`. The same interval had fresh strict peer
+ADS and repeated pose-seed overrides, but no `AIM-WORLD-BASIS`, permission, or
+eligibility calls. This is not an inter-phase request clear: directional compute
+never ran.
+
+The active art was scoped rifle `0x8075397D`. The receive path explicitly returned
+false from `puppet_aim_press_relay_enabled_for_peer` for every scoped rifle and
+then emitted `SCOPED-ADS-SCRUB art=0x8075397d`, clearing the puppet ADS field every
+frame. The missing request is therefore explained upstream by our own scoped guard.
