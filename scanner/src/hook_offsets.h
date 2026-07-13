@@ -334,6 +334,12 @@ constexpr std::uintptr_t kPlayerAimEligibilityRva = 0x10E3670;
 // additive permission query immediately before setting controller+0x8A0.
 constexpr std::uintptr_t kPlayerAimAdditivePermissionCallsiteRva = 0x0CB348A;
 constexpr std::uintptr_t kPlayerAimAdditivePermissionRva = 0x0CADF40;
+// Exact inverse of IDrawControl_HideMesh: writes mesh entry +0x243 to 0xFF.
+constexpr std::uintptr_t kDrawControlShowMeshRva = 0x1754A30;
+// False branch of Script_SetInstanceFlagDrawInMainView. RDI still carries the
+// explicit target object while RCX is target+0x198 DrawControl.
+constexpr std::uintptr_t kDrawControlSetChildFlagsCallsiteRva = 0x03343D3;
+constexpr std::uintptr_t kDrawControlSetChildFlagsByMaskRva = 0x1754EF0;
 // Exact inverse used by script command set-instance-flag-draw-in-main-view:
 // clears a mask from instance+0x18 for every DrawControl mesh child.
 constexpr std::uintptr_t kDrawControlClearChildFlagsByMaskRva = 0x1754FF0;

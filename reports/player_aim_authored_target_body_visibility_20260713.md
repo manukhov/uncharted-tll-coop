@@ -1,6 +1,6 @@
 # Puppet aim authored target, body basis, and visibility (2026-07-13)
 
-Status: **STATIC implementation, runtime pending**.
+Status: **RUNTIME PARTIAL; authored blend confirmed, direction/visibility superseded**.
 
 ## Exact hypotheses
 
@@ -63,3 +63,17 @@ both pistol and rifle ADS, and the puppet remains visible. If blend is positive 
 pose is absent/wrong, the remaining blocker is downstream graph consumption or
 camera-quaternion convention; if clear logs appear while the mesh disappears, the
 remaining writer is later than this post-update phase or uses another flag.
+
+## Runtime result
+
+The user confirmed visible pistol aim and a retained sniper aim pose, establishing
+that the zero authored-target relay exposes the animation. Root yaw still did not
+follow the camera because the post writer continued to use `StatePacket::quat`
+(sender body), not the independently relayed camera quaternion.
+
+The generic main-view clear was only partially sufficient: the scoped body and
+animation remained, but hair and the held rifle disappeared. This rejects a single
+whole-Player `0x40` cull as the complete mechanism. The next static implementation
+intercepts the per-object flag writer and restores distinct per-mesh visibility on
+validated Player/Weapon DrawControls; see
+`reports/aim_camera_yaw_scoped_renderables_20260713.md`.

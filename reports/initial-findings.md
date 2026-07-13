@@ -27110,3 +27110,28 @@ scoped-art-only visibility correction never ran. The generic DrawControl
 main-view-bit inverse is now applied during every automatic puppet ADS interval.
 Evidence and falsifiable predictions are in
 `reports/player_aim_authored_target_body_visibility_20260713.md`.
+
+### 2026-07-13 RUNTIME/STATIC: authored aim works; root yaw and scoped attachables remain
+
+Runtime of `0d45c6e` confirms the authored blend-target correction: pistol ADS has
+a visible aim animation and sniper ADS retains its authored pose. The remaining
+root and visibility failures are separate.
+
+**Root yaw (STATIC implementation):** `StatePacket::quat` is sender Player root,
+not route-camera yaw. The camera quaternion is independently relayed at
+`pose_seed+4`; its confirmed view axis is local `-Z`, while GunMoveShield derives
+Player body forward with `Quaternion_RotatePositiveZ 0x14014D9F0`. The old helper
+used camera `+Z`, explaining the rejected backward-facing result exactly. The new
+single post-update writer maps horizontal camera `-Z` to Player `+Z`, and slot
+`+0x58` receives that same basis so additive yaw is not doubled.
+
+**Scoped renderables (STATIC implementation):** clearing the Player child-instance
+mask `0x40` keeps the body visible but does not preserve hair or the held rifle.
+`Script_SetInstanceFlagDrawInMainView 0x1403342C0` resolves an arbitrary target
+object and calls the set helper at `0x1403343D3` for only that object's
+`+0x198` DrawControl. `NdAttachableObject` has an independent DrawControl and an
+owner pair at `+0x4E0/+0x4E8`; attached weapon state therefore does not imply
+render visibility. A source callsite relay now suppresses `0x40` for puppet-owned
+renderables. The independent mesh fallback restores entry `+0x243` through
+`IDrawControl_ShowMesh 0x141754A30`. Runtime pending; full evidence and prediction
+are in `reports/aim_camera_yaw_scoped_renderables_20260713.md`.

@@ -451,11 +451,10 @@ volatile bool g_puppet_relay_look_stick = false;
 // attached did not detect it) = pistol never displayed, which is worse than the
 // stale-holster phantom. VK_INSERT toggles for A/B.
 volatile bool g_weapon_capture_active_fallback = true;
-// Puppet aim orientation source. false (default) = smoothly blend the root quat
-// toward the peer's relayed body quat (single writer, no jerk). true = old
-// camera-yaw derivation (apply_peer_aim_facing) that conflicted with the native
-// update = the aim jitter. VK_DELETE toggles for A/B.
-volatile bool g_puppet_aim_facing_from_camera = false;
+// Puppet aim orientation source. The camera path is now a single post-update
+// writer and converts the camera's -Z view axis into the Player's +Z body axis.
+// VK_DELETE retains the body-quaternion fallback for A/B diagnostics.
+volatile bool g_puppet_aim_facing_from_camera = true;
 // Relay peer aim orientation into the puppet fire/aim ray. Default ON: gated to
 // puppet fire/build paths via thread_local g_puppet_aim_ray_override (not a broad
 // per-frame resolver override). VK_APPS toggles for A/B.
@@ -6667,8 +6666,10 @@ void camera_forward_horizontal(
     const float y = cam_quat[1];
     const float z = cam_quat[2];
     const float w = cam_quat[3];
-    forward_x = 2.0F * (x * z + w * y);
-    forward_z = 1.0F - 2.0F * (x * x + y * y);
+    // Gameplay cameras look down local -Z. The old +Z conversion pointed the
+    // puppet exactly away from the reticle when camera-facing ADS was enabled.
+    forward_x = -2.0F * (x * z + w * y);
+    forward_z = -(1.0F - 2.0F * (x * x + y * y));
     const float len = std::sqrt(forward_x * forward_x + forward_z * forward_z);
     if (len > 0.001F) {
         forward_x /= len;
@@ -6833,10 +6834,15 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
     };
     const float* relayed_body_forward = body_forward;
     alignas(16) float local_body_forward[4]{};
-    if (valid_network_orientation(peer.quat)) {
-        quat_forward_positive_z(
-            peer.quat, local_body_forward[0], local_body_forward[1],
-            local_body_forward[2]);
+    const float horizontal_length = std::sqrt(
+        forward_x * forward_x + forward_z * forward_z);
+    if (horizontal_length > 0.001F) {
+        // The post-update root writer turns Player +Z onto the horizontal camera
+        // -Z ray. Feed the same basis here so yaw is not applied twice by the
+        // directional additive graph; pitch remains in local_target.
+        local_body_forward[0] = forward_x / horizontal_length;
+        local_body_forward[1] = 0.0F;
+        local_body_forward[2] = forward_z / horizontal_length;
         local_body_forward[3] = 0.0F;
         relayed_body_forward = local_body_forward;
     }
@@ -7108,20 +7114,25 @@ void apply_peer_aim_facing_to_player(
         return;
     }
     const bool peer_aiming = peer_packet_aim_active(peer);
-    const bool have_peer_camera =
-        (peer.flags & coop::kStateFlagPeerCamera) != 0 &&
-        valid_network_orientation(peer.camera_quat);
-    if (!peer_aiming || !have_peer_camera) {
+    const float* camera_quat = nullptr;
+    if ((peer.flags & coop::kStateFlagPoseSeed) != 0 &&
+        valid_network_orientation(peer.pose_seed + 4)) {
+        camera_quat = peer.pose_seed + 4;
+    } else if ((peer.flags & coop::kStateFlagPeerCamera) != 0 &&
+               valid_network_orientation(peer.camera_quat)) {
+        camera_quat = peer.camera_quat;
+    }
+    if (!peer_aiming || camera_quat == nullptr) {
         return;
     }
     auto* quat = reinterpret_cast<float*>(
         static_cast<std::byte*>(player) + kPlayerQuatOffset);
     float fwd_x = 0.0F;
     float fwd_z = 0.0F;
-    camera_forward_horizontal(peer.camera_quat, fwd_x, fwd_z);
+    camera_forward_horizontal(camera_quat, fwd_x, fwd_z);
     float yaw_quat[4]{};
     yaw_quat_from_horizontal_forward(fwd_x, fwd_z, yaw_quat);
-    blend_network_orientation(quat, yaw_quat, 0.88F);
+    blend_network_orientation(quat, yaw_quat, 0.55F);
     // Do NOT force a full-magnitude move vector while aiming. A stationary aiming
     // peer would make the puppet "run in place": the locomotion graph is fed
     // magnitude 1.0 while the body is position-pinned, so the engine blends a full
@@ -13749,6 +13760,66 @@ bool seh_clear_draw_control_child_flags(
     }
 }
 
+void* draw_control_from_renderable_object(void* object) {
+    if (object == nullptr ||
+        readable_bytes(static_cast<std::byte*>(object) + 0x1B0) < 1) {
+        return nullptr;
+    }
+    auto* const bytes = static_cast<std::byte*>(object);
+    void* const draw_control = *reinterpret_cast<void**>(bytes + 0x198);
+    void* const fg_anim = *reinterpret_cast<void**>(bytes + 0x1A8);
+    if (draw_control == nullptr || fg_anim == nullptr ||
+        readable_bytes(draw_control) < 0x20 ||
+        *reinterpret_cast<void**>(draw_control) != fg_anim) {
+        return nullptr;
+    }
+    return draw_control;
+}
+
+bool seh_show_draw_control_mesh(void* draw_control, std::uint32_t mesh_index) {
+    using ShowMeshFn = std::int64_t(__fastcall*)(void*, std::uint32_t);
+    __try {
+        reinterpret_cast<ShowMeshFn>(
+            g_module + kDrawControlShowMeshRva)(draw_control, mesh_index);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+unsigned restore_hidden_draw_control_meshes(void* draw_control) {
+    if (draw_control == nullptr || readable_bytes(draw_control) < 0x20) {
+        return 0;
+    }
+    auto* const dc = static_cast<std::byte*>(draw_control);
+    auto* const meshes = *reinterpret_cast<std::byte**>(dc + 0x8);
+    const std::uint32_t mesh_count =
+        *reinterpret_cast<const std::uint32_t*>(dc + 0x14);
+    constexpr std::size_t kDrawControlMeshStride = 0x250;
+    constexpr std::size_t kMeshVisibleByteOffset = 0x243;
+    if (meshes == nullptr || mesh_count == 0 || mesh_count > 128 ||
+        readable_bytes(meshes) < kDrawControlMeshStride) {
+        return 0;
+    }
+
+    unsigned restored = 0;
+    for (std::uint32_t mesh_index = 0; mesh_index < mesh_count; ++mesh_index) {
+        auto* const mesh = meshes + kDrawControlMeshStride * mesh_index;
+        if (readable_bytes(mesh) < kDrawControlMeshStride) {
+            break;
+        }
+        if (*reinterpret_cast<const std::uint8_t*>(
+                mesh + kMeshVisibleByteOffset) == 0xFF) {
+            continue;
+        }
+        if (!seh_show_draw_control_mesh(draw_control, mesh_index)) {
+            break;
+        }
+        ++restored;
+    }
+    return restored;
+}
+
 void keep_puppet_scoped_mesh_visible(
     void* puppet, const coop::StatePacket& peer) {
     if (puppet == nullptr || !puppet_aim_press_relay_enabled_for_peer(peer) ||
@@ -13757,26 +13828,68 @@ void keep_puppet_scoped_mesh_visible(
         return;
     }
 
-    auto* const player_bytes = static_cast<std::byte*>(puppet);
-    void* const draw_control = *reinterpret_cast<void**>(player_bytes + 0x198);
-    void* const fg_anim = *reinterpret_cast<void**>(player_bytes + 0x1A8);
-    if (draw_control == nullptr || fg_anim == nullptr ||
-        readable_bytes(draw_control) < 0x20 ||
-        *reinterpret_cast<void**>(draw_control) != fg_anim) {
+    void* const player_draw = draw_control_from_renderable_object(puppet);
+    if (player_draw == nullptr) {
         return;
     }
 
     constexpr std::uint32_t kExcludedFromMainView = 0x40;
-    if (!seh_clear_draw_control_child_flags(
-            draw_control, kExcludedFromMainView)) {
+    if (!seh_clear_draw_control_child_flags(player_draw, kExcludedFromMainView)) {
         return;
+    }
+
+    unsigned restored_player_meshes = 0;
+    unsigned restored_weapon_meshes = 0;
+    unsigned restored_weapon_controls = 0;
+    if (peer_holds_scoped_rifle(peer)) {
+        // Scoped ADS separately hides Player meshes (including hair) and the held
+        // weapon renderable. Restore only validated DrawControls while ADS is live.
+        restored_player_meshes = restore_hidden_draw_control_meshes(player_draw);
+        std::array<void*, 3> weapon_candidates{
+            get_player_active_weapon(puppet), nullptr, nullptr};
+        const int in_hands_slot = read_weapon_in_hands_slot(puppet);
+        const int attached_slot = capture_hand_attached_slot_int(puppet);
+        if (in_hands_slot >= 0) {
+            weapon_candidates[1] = get_weapon_from_slot(puppet, in_hands_slot);
+        }
+        if (attached_slot >= 0) {
+            weapon_candidates[2] = get_weapon_from_slot(puppet, attached_slot);
+        }
+        for (std::size_t i = 0; i < weapon_candidates.size(); ++i) {
+            void* const weapon = weapon_candidates[i];
+            if (weapon == nullptr) {
+                continue;
+            }
+            bool duplicate = false;
+            for (std::size_t previous = 0; previous < i; ++previous) {
+                duplicate = duplicate || weapon_candidates[previous] == weapon;
+            }
+            if (duplicate) {
+                continue;
+            }
+            void* const weapon_draw =
+                draw_control_from_renderable_object(weapon);
+            if (weapon_draw == nullptr ||
+                !seh_clear_draw_control_child_flags(
+                    weapon_draw, kExcludedFromMainView)) {
+                continue;
+            }
+            ++restored_weapon_controls;
+            restored_weapon_meshes +=
+                restore_hidden_draw_control_meshes(weapon_draw);
+        }
     }
 
     static ULONGLONG last_log = 0;
     const ULONGLONG now = GetTickCount64();
     if (now - last_log > 500) {
         last_log = now;
-        force_log_line("PUPPET-ADS-MAIN-VIEW cleared instance flag 0x40");
+        std::ostringstream line;
+        line << "PUPPET-ADS-VISIBILITY playerMeshes="
+             << restored_player_meshes
+             << " weaponMeshes=" << restored_weapon_meshes
+             << " weaponControls=" << restored_weapon_controls;
+        force_log_line(line.str().c_str());
     }
 }
 
@@ -14245,14 +14358,9 @@ void drive_remote_slot1_actions_tick() {
     // HUD/camera code read it -> aim HUD leak on the local viewport. The right
     // stick is fed to the puppet inside hooked_input_scale_copy (dest=3) with a
     // save/restore sandwich instead.
-    // This pre-native-update facing write is overwritten by g_original_update and
-    // then re-applied in apply_puppet_transform_post; running it here only adds a
-    // third conflicting orientation write per frame. Keep it only in the old
-    // camera-facing A/B mode; the default single-source path handles facing in
-    // apply_puppet_transform_post (blend toward peer body quat, applied last).
-    if (g_puppet_aim_facing_from_camera) {
-        apply_peer_aim_facing_to_player(remote_player, peer);
-    }
+    // Aim facing has one owner: apply_puppet_transform_post after native update.
+    // A pre-update camera write is overwritten and makes native locomotion fight
+    // a second orientation source.
     // REJECTED 2026-07-07: per-frame screen-1 blk+0x60 write and sustained idx==1
     // resolver override freeze locomotion facing. Scoped override at 0x10E934B /
     // 0xCB17D6 (hooked_pose_seed_resolver) + joypad 0x200 relay is the safe path.
@@ -17816,6 +17924,147 @@ void* allocate_executable_near(const void* target, std::size_t size) {
     return nullptr;
 }
 
+using DrawControlSetChildFlagsFunction = void(__fastcall*)(
+    void*, std::uint32_t);
+DrawControlSetChildFlagsFunction g_original_draw_control_set_child_flags = nullptr;
+
+bool scoped_renderable_belongs_to_puppet(void* object, void* puppet) {
+    if (object == nullptr || puppet == nullptr) {
+        return false;
+    }
+    if (object == puppet) {
+        return true;
+    }
+
+    std::array<void*, 3> weapon_candidates{
+        get_player_active_weapon(puppet), nullptr, nullptr};
+    const int in_hands_slot = read_weapon_in_hands_slot(puppet);
+    const int attached_slot = capture_hand_attached_slot_int(puppet);
+    if (in_hands_slot >= 0) {
+        weapon_candidates[1] = get_weapon_from_slot(puppet, in_hands_slot);
+    }
+    if (attached_slot >= 0) {
+        weapon_candidates[2] = get_weapon_from_slot(puppet, attached_slot);
+    }
+    for (void* const weapon : weapon_candidates) {
+        if (weapon != nullptr && object == weapon) {
+            return true;
+        }
+    }
+
+    // NdAttachableObject owns an independent DrawControl and carries its parent
+    // attachment pair at +0x4E0/+0x4E8. Hair is an attachable look item; weapons
+    // use the same owner topology. Accept only a direct pointer back to puppet.
+    if (readable_bytes(static_cast<std::byte*>(object) + 0x4F0) >= 1) {
+        void* const owner_a = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(object) + 0x4E0);
+        void* const owner_b = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(object) + 0x4E8);
+        if (owner_a == puppet || owner_b == puppet) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void __fastcall hooked_draw_control_set_child_flags_callsite(
+    void* draw_control, std::uint32_t mask, void* target_object) {
+    void* const puppet = retained_player_object(1);
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    coop::StatePacket peer{};
+    const bool preserve = mask == 0x40 && puppet != nullptr && received != 0 &&
+        GetTickCount64() - received <= 250 && copy_peer_state_snapshot(peer) &&
+        peer_packet_aim_active(peer) && peer_holds_scoped_rifle(peer) &&
+        scoped_renderable_belongs_to_puppet(target_object, puppet);
+    if (!preserve) {
+        if (g_original_draw_control_set_child_flags != nullptr) {
+            g_original_draw_control_set_child_flags(draw_control, mask);
+        }
+        return;
+    }
+
+    seh_clear_draw_control_child_flags(draw_control, mask);
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log > 500) {
+        last_log = now;
+        std::ostringstream line;
+        line << "SCOPED-DRAW-FLAG suppressed target=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(target_object)
+             << " draw=0x" << reinterpret_cast<std::uintptr_t>(draw_control)
+             << std::dec;
+        force_log_line(line.str().c_str());
+    }
+}
+
+bool install_scoped_draw_flag_callsite_relay() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kDrawControlSetChildFlagsCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line("scoped DrawControl flag relay SKIPPED (not E8)");
+        return false;
+    }
+    std::int32_t displacement = 0;
+    std::memcpy(&displacement, call_site + 1, sizeof(displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(displacement);
+    const std::uintptr_t expected =
+        g_module + kDrawControlSetChildFlagsByMaskRva;
+    if (target != expected) {
+        boot_log_line("scoped DrawControl flag relay SKIPPED (target)");
+        return false;
+    }
+    g_original_draw_control_set_child_flags =
+        reinterpret_cast<DrawControlSetChildFlagsFunction>(expected);
+
+    // The script handler still holds its resolved target object in RDI at the
+    // callsite. Tail-jump through a near relay after copying RDI into arg3 (R8).
+    constexpr std::size_t kRelaySize = 16;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("scoped DrawControl flag relay SKIPPED (relay)");
+        return false;
+    }
+    relay[0] = 0x4C;
+    relay[1] = 0x8B;
+    relay[2] = 0xC7;  // mov r8,rdi
+    relay[3] = 0x48;
+    relay[4] = 0xB8;  // mov rax,imm64
+    *reinterpret_cast<std::uintptr_t*>(relay + 5) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_draw_control_set_child_flags_callsite);
+    relay[13] = 0xFF;
+    relay[14] = 0xE0;  // jmp rax
+    relay[15] = 0x90;
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("scoped DrawControl flag relay SKIPPED (range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("scoped DrawControl flag relay SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line("scoped DrawControl flag callsite relay installed");
+    return true;
+}
+
 using PlayerAimEligibilityFunction = char(__fastcall*)(void*, char);
 PlayerAimEligibilityFunction g_original_player_aim_eligibility = nullptr;
 
@@ -19359,6 +19608,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_fire_capture();
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
+    install_scoped_draw_flag_callsite_relay();
     install_player_aim_eligibility_callsite_relay();
     install_player_aim_additive_permission_callsite_relay();
     install_player_aim_blend_target_callsite_relay();

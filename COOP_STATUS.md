@@ -1,5 +1,28 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-13, Codex - camera yaw and scoped renderables)
+
+Runtime of `0d45c6e` confirms the authored aim target relay: pistol aim animation
+is visible, and sniper ADS retains the aim pose. It also separates the remaining
+defects. Root facing still follows sender `StatePacket::quat`, so free camera yaw
+cannot turn it. The DrawControl `0x40` clear preserves the scoped body, but hair
+and the held rifle still disappear despite attached weapon state.
+
+Static correction uses three independent facts: route cameras aim down local
+`-Z`; Player body forward is local `+Z` through
+`Quaternion_RotatePositiveZ 0x14014D9F0`; and post-transform runs after native
+Player update. The old camera helper used `+Z` and therefore had an exact
+180-degree error. Default ADS now has one post-update writer derived from
+`pose_seed+4 * -Z`, and slot `+0x58` receives the matching horizontal body basis.
+
+Visibility now covers per-attachment ownership. Script handler `0x1403342C0`
+resolves an arbitrary target object; its false branch calls the `0x40` writer at
+`0x1403343D3` only for that target's `+0x198` DrawControl. A callsite relay now
+preserves Player/weapon/hair attachables owned by the puppet, while the post pin
+also restores independent mesh byte `+0x243` via
+`IDrawControl_ShowMesh 0x141754A30`. Build succeeds; runtime prediction and
+competitors: `reports/aim_camera_yaw_scoped_renderables_20260713.md`.
+
 ## Turn note (2026-07-13, Codex - aim additive state permission)
 
 Runtime PIDs 14320/14884 reached `PlayerAimController` slot `+0x58`; relayed

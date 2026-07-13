@@ -2328,7 +2328,7 @@ FUNCTIONS = {
         "DrawControl_SetChildInstanceFlagsByMask",
         "Iterates DrawControl+0x8/+0x14 meshes (stride 0x250) and ORs the "
         "requested mask into every child render instance +0x18 flags. Mask "
-        "0x40 excludes the Player model from the main view.",
+        "0x40 excludes the target renderable from the main view.",
     ),
     0x141754FF0: (
         "DrawControl_ClearChildInstanceFlagsByMask",
@@ -2339,8 +2339,15 @@ FUNCTIONS = {
     0x1403342C0: (
         "Script_SetInstanceFlagDrawInMainView",
         "Handler registered for set-instance-flag-draw-in-main-view. Resolves "
-        "the current Player DrawControl at owner+0x198; true clears child "
-        "instance flag 0x40, false sets it.",
+        "an arbitrary script target object and its DrawControl at object+0x198; "
+        "true clears child instance flag 0x40, false sets it. RDI retains the "
+        "target object at the false-branch callsite 0x1403343D3.",
+    ),
+    0x141ECEFE0: (
+        "NdAttachableObject_Init",
+        "NdAttachableObject initialization path. Owns an independent DrawControl "
+        "at object+0x198 and establishes attachment parent state around "
+        "+0x4E0/+0x4E8; used by hair/look items and weapon renderables.",
     ),
     0x141BBACC0: (
         "BindUpperWrapperIntoPlayerCompanionBehaviorAndDrawControlState",
