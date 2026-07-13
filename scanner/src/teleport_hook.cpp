@@ -11745,6 +11745,9 @@ bool g_velprobe_enabled = false;
 // readable byte count from p. VK_NEXT (Page Down) flips back to the VirtualQuery
 // implementation for a live A/B.
 volatile bool g_readable_bytes_fast = true;
+// LAG A/B: when false, the recent aim callsite relays + interact dispatch probe are
+// NOT installed at boot (isolate a freeze that VK_END doesn't fix).
+constexpr bool g_enable_recent_aim_hooks = false;
 
 
 // ============================================================================
@@ -19686,11 +19689,16 @@ DWORD WINAPI install_hook(void*) {
     // The scoped DrawControl 0x40 relay and post mesh scan were rejected by the
     // 2026-07-13 runtime discriminator; leave the dormant code available for
     // reference without installing another hot-path hook.
-    install_player_aim_eligibility_callsite_relay();
-    install_player_aim_additive_permission_callsite_relay();
-    install_player_aim_blend_target_callsite_relay();
-    install_player_aim_blend_tick_probe();
-    install_player_aim_world_basis_relay();
+    // LAG A/B (2026-07-13): batch-disable the recent aim callsite relays + probes to
+    // isolate a freeze that persists with VK_END (so it is in the installed detours,
+    // not the drive logic). Re-enable individually once the culprit is found.
+    if (g_enable_recent_aim_hooks) {
+        install_player_aim_eligibility_callsite_relay();
+        install_player_aim_additive_permission_callsite_relay();
+        install_player_aim_blend_target_callsite_relay();
+        install_player_aim_blend_tick_probe();
+        install_player_aim_world_basis_relay();
+    }
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();
     install_weapon_pickup_gate();
@@ -19702,7 +19710,9 @@ DWORD WINAPI install_hook(void*) {
     }
     // Exp5c: callsite relay preserves Player_InteractDispatcher's frame-from-rsp
     // entry while observing whether stock dispatch runs for screen 0 and screen 1.
-    install_player_interact_dispatch_callsite_probe();
+    if (g_enable_recent_aim_hooks) {
+        install_player_interact_dispatch_callsite_probe();
+    }
     install_give_weapon_diagnostic();
     install_build_fire_args_gate();
     // install_aim_target_gate();  // REVERTED: GetTargetPointFromReticle builds
