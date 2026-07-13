@@ -1,0 +1,140 @@
+TARGET 0x141ED62D0: sub_141ED62D0 start=0x141ED62D0 end=0x141ED64D6
+0x141ED62D0: mov     r11, rsp
+0x141ED62D3: push    rbx
+0x141ED62D4: sub     rsp, 440h
+0x141ED62DB: mov     rax, cs:__security_cookie
+0x141ED62E2: xor     rax, rsp
+0x141ED62E5: mov     [rsp+448h+var_18], rax
+0x141ED62ED: test    byte ptr [rcx+691h], 20h
+0x141ED62F4: mov     rbx, rcx
+0x141ED62F7: jnz     loc_141ED64BA
+0x141ED62FD: mov     [r11+10h], rbp
+0x141ED6301: lea     r8, aProcesscharclo; "ProcessCharCloth"
+0x141ED6308: mov     rbp, [rcx+198h]
+0x141ED630F: lea     rax, [rsp+448h+var_418]
+0x141ED6314: mov     [r11+18h], rsi
+0x141ED6318: lea     rcx, qword_142BEA360
+0x141ED631F: xor     esi, esi
+0x141ED6321: mov     [r11+20h], rdi
+0x141ED6325: mov     edx, esi
+0x141ED6327: lea     r9d, [rsi+10h]
+0x141ED632B: lea     r10d, [rsi+8]
+0x141ED632F: nop
+0x141ED6330: vmovups ymm0, ymmword ptr [rcx]
+0x141ED6334: vmovups xmm1, xmmword ptr [rcx+70h]
+0x141ED6339: vmovups ymmword ptr [rax], ymm0
+0x141ED633D: vmovups ymm0, ymmword ptr [rcx+20h]
+0x141ED6342: vmovups ymmword ptr [rax+20h], ymm0
+0x141ED6347: vmovups ymm0, ymmword ptr [rcx+40h]
+0x141ED634C: vmovups ymmword ptr [rax+40h], ymm0
+0x141ED6351: vmovups xmm0, xmmword ptr [rcx+60h]
+0x141ED6356: vmovups xmmword ptr [rax+60h], xmm0
+0x141ED635B: sub     rax, 0FFFFFFFFFFFFFF80h
+0x141ED635F: lea     rcx, [rcx+80h]
+0x141ED6366: vmovups xmmword ptr [rax-10h], xmm1
+0x141ED636B: sub     r10, 1
+0x141ED636F: jnz     short loc_141ED6330
+0x141ED6371: movzx   eax, byte ptr [r8]
+0x141ED6375: test    al, al
+0x141ED6377: jz      short loc_141ED6399
+0x141ED6379: mov     ecx, edx
+0x141ED637B: inc     r8
+0x141ED637E: shr     rcx, 18h
+0x141ED6382: xor     rcx, rax
+0x141ED6385: movzx   eax, cl
+0x141ED6388: mov     ecx, edx
+0x141ED638A: shl     ecx, 8
+0x141ED638D: mov     edx, [rsp+rax*4+448h+var_418]
+0x141ED6391: xor     edx, ecx
+0x141ED6393: sub     r9, 1
+0x141ED6397: jnz     short loc_141ED6371
+0x141ED6399: cmp     edx, [rbx+38h]
+0x141ED639C: jz      short loc_141ED63AC
+0x141ED639E: test    byte ptr [rbx+690h], 3
+0x141ED63A5: jnz     short loc_141ED63AC
+0x141ED63A7: mov     rdi, rsi
+0x141ED63AA: jmp     short loc_141ED63E9
+0x141ED63AC: mov     rax, [rbx+4E0h]
+0x141ED63B3: mov     rdi, rsi
+0x141ED63B6: test    rax, rax
+0x141ED63B9: jz      short loc_141ED63DD
+0x141ED63BB: mov     ecx, [rbx+4E8h]
+0x141ED63C1: test    ecx, ecx
+0x141ED63C3: jz      short loc_141ED63DD
+0x141ED63C5: mov     rax, [rax+8]
+0x141ED63C9: test    rax, rax
+0x141ED63CC: jz      short loc_141ED63DD
+0x141ED63CE: cmp     [rax+0BCh], ecx
+0x141ED63D4: jnz     short loc_141ED63DD
+0x141ED63D6: mov     rdi, rax
+0x141ED63D9: mov     byte ptr [rax+72h], 1
+0x141ED63DD: test    rdi, rdi
+0x141ED63E0: jz      short loc_141ED63E9
+0x141ED63E2: mov     rsi, [rdi+198h]
+0x141ED63E9: test    rbp, rbp
+0x141ED63EC: jz      short loc_141ED6448
+0x141ED63EE: mov     rdx, rsi
+0x141ED63F1: mov     rcx, rbp
+0x141ED63F4: vzeroupper
+0x141ED63F7: call    sub_141754DA0
+0x141ED63FC: test    rsi, rsi
+0x141ED63FF: jz      short loc_141ED6411
+0x141ED6401: test    byte ptr [rsi+18h], 2
+0x141ED6405: jz      short loc_141ED6411
+0x141ED6407: mov     rcx, rbp
+0x141ED640A: call    SyncObjectBit02ByActiveRetainedCameraSlots
+0x141ED640F: jmp     short loc_141ED642B
+0x141ED6411: mov     eax, [rbp+18h]
+0x141ED6414: test    al, 2
+0x141ED6416: jz      short loc_141ED6425
+0x141ED6418: xor     edx, edx
+0x141ED641A: mov     rcx, rbp
+0x141ED641D: call    sub_141753DB0
+0x141ED6422: mov     eax, [rbp+18h]
+0x141ED6425: and     eax, 0FFFFFFFDh
+0x141ED6428: mov     [rbp+18h], eax
+0x141ED642B: test    rsi, rsi
+0x141ED642E: jz      short loc_141ED6440
+0x141ED6430: test    byte ptr [rsi+18h], 1
+0x141ED6434: jz      short loc_141ED6440
+0x141ED6436: mov     rcx, rbp
+0x141ED6439: call    sub_141754340
+0x141ED643E: jmp     short loc_141ED6448
+0x141ED6440: mov     rcx, rbp
+0x141ED6443: call    ClearFlockingFlag0x40AndCompanionBit0
+0x141ED6448: mov     rbp, [rsp+448h+arg_8]
+0x141ED6450: test    rdi, rdi
+0x141ED6453: jz      short loc_141ED64AA
+0x141ED6455: mov     rax, [rbx]
+0x141ED6458: mov     rcx, rbx
+0x141ED645B: vzeroupper
+0x141ED645E: call    qword ptr [rax+680h]
+0x141ED6464: mov     rdx, [rdi]
+0x141ED6467: mov     rcx, rdi
+0x141ED646A: movzx   esi, al
+0x141ED646D: call    qword ptr [rdx+680h]
+0x141ED6473: test    al, al
+0x141ED6475: jz      short loc_141ED648A
+0x141ED6477: test    sil, sil
+0x141ED647A: jnz     short loc_141ED648F
+0x141ED647C: mov     rax, [rbx]
+0x141ED647F: mov     rcx, rbx
+0x141ED6482: call    qword ptr [rax+688h]
+0x141ED6488: jmp     short loc_141ED648F
+0x141ED648A: test    sil, sil
+0x141ED648D: jz      short loc_141ED64AA
+0x141ED648F: vmovups xmm0, xmmword ptr [rdi+410h]
+0x141ED6497: lea     rdx, [rsp+448h+var_428]
+0x141ED649C: mov     rcx, rbx
+0x141ED649F: vmovups [rsp+448h+var_428], xmm0
+0x141ED64A5: call    sub_141BCF860
+0x141ED64AA: mov     rsi, [rsp+448h+arg_10]
+0x141ED64B2: mov     rdi, [rsp+448h+arg_18]
+0x141ED64BA: vzeroupper
+0x141ED64BD: mov     rcx, [rsp+448h+var_18]
+0x141ED64C5: xor     rcx, rsp; StackCookie
+0x141ED64C8: call    __security_check_cookie
+0x141ED64CD: add     rsp, 440h
+0x141ED64D4: pop     rbx
+0x141ED64D5: retn
+

@@ -603,6 +603,19 @@ FUNCTIONS = {
         "NdAttachableObject vtable+0x410. Updates attachment transforms and "
         "propagates owner DrawControl camera/category state after joint update.",
     ),
+    0x141ED62D0: (
+        "NdAttachableObject_SyncParentDrawVisibilityAndCameraFlags",
+        "Called only by NdAttachableObject_PostJointUpdate_Async. Resolves the "
+        "attachment parent through +0x4E0/+0x4E8, synchronizes the child "
+        "DrawControl inherited visibility through 0x141754DA0, then propagates "
+        "the parent's retained-camera and main-view flag state.",
+    ),
+    0x141754DA0: (
+        "DrawControl_SyncParentVisibilityAndRecomputeInstances",
+        "Writes child DrawControl+0x1D from parent +0x1C/+0x1D (or 0xFF for "
+        "no parent), combines it with child +0x1C and mesh +0x243/+0x245, and "
+        "publishes the resulting active byte to each render instance +0x1A0.",
+    ),
     0x141A92A00: (
         "AnimManager_AsyncObjectUpdateJointBlendJob",
         "Source-identified anim-mgr-jobs.cpp AsyncObjectUpdate_JointBlend_Job. "

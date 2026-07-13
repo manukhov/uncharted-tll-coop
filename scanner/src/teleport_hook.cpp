@@ -454,7 +454,7 @@ volatile bool g_weapon_capture_active_fallback = true;
 // Puppet aim orientation source. The camera path is now a single post-update
 // writer and converts the camera's -Z view axis into the Player's +Z body axis.
 // VK_DELETE retains the body-quaternion fallback for A/B diagnostics.
-volatile bool g_puppet_aim_facing_from_camera = true;
+volatile bool g_puppet_aim_facing_from_camera = false;
 // Relay peer aim orientation into the puppet fire/aim ray. Default ON: gated to
 // puppet fire/build paths via thread_local g_puppet_aim_ray_override (not a broad
 // per-frame resolver override). VK_APPS toggles for A/B.
@@ -900,6 +900,9 @@ bool local_player_ads_active();
 std::uint64_t capture_local_joypad_command_mask(void* player);
 bool local_player_aim_input_active();
 bool local_player_strict_aim_active(void* player);
+bool seh_read_aim_origin_point(void* controller, float out[4]);
+void quat_forward_neg_z(const float q[4], float& fx, float& fy, float& fz);
+void quat_forward_positive_z(const float q[4], float& fx, float& fy, float& fz);
 bool head_look_send_allowed(void* player);
 void publish_peer_head_look_packet_fields(
     void* local_obj, coop::StatePacket& pkt);
@@ -2601,6 +2604,98 @@ void apply_peer_pose_seed_to_player_aim_fields(void* player) {
             seed + 16, 16);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
+}
+
+bool seh_write_player_float4(std::byte* base, std::size_t offset, const float src[4]) {
+    __try {
+        if (readable_bytes(base + offset) < 16) {
+            return false;
+        }
+        std::memcpy(base + offset, src, 16);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void apply_peer_aim_ik_world_points(
+    void* player, const coop::StatePacket& peer) {
+    if (player == nullptr ||
+        !peer_packet_aim_active(peer) ||
+        (peer.flags & coop::kStateFlagPoseSeed) == 0 ||
+        !valid_network_orientation(peer.pose_seed + 4)) {
+        return;
+    }
+    void* controller = nullptr;
+    if (readable_bytes(static_cast<std::byte*>(player) + 0x1D98) >= sizeof(void*)) {
+        controller = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(player) + 0x1D90);
+    }
+    alignas(16) float origin[4]{};
+    const float* origin_pos = peer.pose_seed;
+    if (controller != nullptr && seh_read_aim_origin_point(controller, origin)) {
+        origin_pos = origin;
+    }
+    float fx = 0.0F;
+    float fy = 0.0F;
+    float fz = 0.0F;
+    quat_forward_neg_z(peer.pose_seed + 4, fx, fy, fz);
+    constexpr float kAimTargetDistance = 180.0F;
+    alignas(16) float target[4]{
+        origin_pos[0] + fx * kAimTargetDistance,
+        origin_pos[1] + fy * kAimTargetDistance,
+        origin_pos[2] + fz * kAimTargetDistance,
+        1.0F,
+    };
+    auto* bytes = static_cast<std::byte*>(player);
+    seh_write_player_float4(bytes, kPlayerAimAtPointOffset, target);
+    seh_write_player_float4(bytes, kPlayerAimAtPointAuxOffset, target);
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log > 1000) {
+        last_log = now;
+        std::ostringstream line;
+        line << "AIM-IK-POINT tgt=(" << target[0] << "," << target[1] << ","
+             << target[2] << ") fwd=(" << fx << "," << fy << "," << fz << ")";
+        force_log_line(line.str().c_str());
+    }
+}
+
+void write_peer_aim_world_targets_from_pose_seed(
+    void* player, const coop::StatePacket& peer) {
+    if (player == nullptr ||
+        (peer.flags & coop::kStateFlagPoseSeed) == 0 ||
+        !valid_network_orientation(peer.pose_seed + 4)) {
+        return;
+    }
+    const float* const cam_pos = peer.pose_seed;
+    const float* const q = peer.pose_seed + 4;
+    const float x = q[0];
+    const float y = q[1];
+    const float z = q[2];
+    const float w = q[3];
+    float fx = -2.0F * (x * z + w * y);
+    float fy = -2.0F * (y * z - w * x);
+    float fz = -(1.0F - 2.0F * (x * x + y * y));
+    const float len = std::sqrt(fx * fx + fy * fy + fz * fz);
+    if (len <= 1e-3F) {
+        return;
+    }
+    fx /= len;
+    fy /= len;
+    fz /= len;
+    constexpr float kAimDist = 180.0F;
+    alignas(16) float target[4]{
+        cam_pos[0] + fx * kAimDist,
+        cam_pos[1] + fy * kAimDist,
+        cam_pos[2] + fz * kAimDist,
+        1.0F,
+    };
+    auto* const bytes = static_cast<std::byte*>(player);
+    seh_write_player_float4(bytes, kPlayerAimTargetOffset, target);
+    seh_write_player_float4(bytes, kPlayerAimTargetAuxOffset, target);
+    seh_write_player_float4(bytes, kPlayerAimAtPointOffset, target);
+    seh_write_player_float4(bytes, kPlayerAimAtPointAuxOffset, target);
 }
 
 void apply_peer_quat_to_fire_args(void* fire_args) {
@@ -6728,6 +6823,80 @@ using PlayerAimWorldBasisFunction = std::int64_t(__fastcall*)(
     float vertical_limit_b);
 PlayerAimWorldBasisFunction g_original_player_aim_world_basis = nullptr;
 
+bool seh_read_aim_origin_point(void* controller, float out[4]) {
+    if (controller == nullptr || out == nullptr || g_module == 0) {
+        return false;
+    }
+    using GetAimOriginFn = std::int64_t(__fastcall*)(void*, float*);
+    const auto get_origin = reinterpret_cast<GetAimOriginFn>(
+        g_module + kPlayerAimOriginPointRva);
+    __try {
+        get_origin(controller, out);
+        return valid_network_position(out);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void* player_aim_controller_from_player(void* player) {
+    if (player == nullptr ||
+        readable_bytes(static_cast<std::byte*>(player) + 0x1D98) <
+            sizeof(void*)) {
+        return nullptr;
+    }
+    return *reinterpret_cast<void**>(
+        static_cast<std::byte*>(player) + 0x1D90);
+}
+
+bool peer_puppet_aim_controller_fixup_wanted(
+    void* controller, coop::StatePacket* out_peer) {
+    if (controller == nullptr ||
+        readable_bytes(static_cast<std::byte*>(controller) + 0x110) <
+            sizeof(void*)) {
+        return false;
+    }
+    void* const owner = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(controller) + 0x108);
+    if (owner == nullptr || owner != retained_player_object(1) ||
+        readable_bytes(static_cast<std::byte*>(owner) + 0x4014) <
+            sizeof(std::uint32_t) ||
+        *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(owner) + 0x4010) !=
+            kSlot1ScreenIndex) {
+        return false;
+    }
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    coop::StatePacket peer{};
+    if (received == 0 || GetTickCount64() - received > 250 ||
+        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer)) {
+        return false;
+    }
+    if (out_peer != nullptr) {
+        *out_peer = peer;
+    }
+    return true;
+}
+
+void force_peer_puppet_aim_blend_state(void* controller) {
+    if (controller == nullptr) {
+        return;
+    }
+    auto* const bytes = static_cast<std::byte*>(controller);
+    __try {
+        if (readable_bytes(bytes + 0x8F0) >= 1) {
+            *reinterpret_cast<std::uint8_t*>(bytes + 0x8A0) = 1;
+        }
+        if (readable_bytes(bytes + 0x8F0) >= 0xED) {
+            float& blend = *reinterpret_cast<float*>(bytes + 0x8EC);
+            if (!std::isfinite(blend) || blend < 0.99F) {
+                blend = 1.0F;
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
+
 using PlayerAimBlendTickFunction = void(__fastcall*)(void*);
 PlayerAimBlendTickFunction g_original_player_aim_blend_tick = nullptr;
 
@@ -6749,20 +6918,10 @@ void __fastcall hooked_player_aim_blend_tick(void* controller) {
         return;
     }
 
-    void* owner = nullptr;
-    if (readable_bytes(static_cast<std::byte*>(controller) + 0x110) >=
-        sizeof(void*)) {
-        owner = *reinterpret_cast<void**>(
-            static_cast<std::byte*>(controller) + 0x108);
-    }
-    const ULONGLONG received =
-        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
-    coop::StatePacket peer{};
-    if (owner == nullptr || owner != retained_player_object(1) ||
-        received == 0 || GetTickCount64() - received > 250 ||
-        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer)) {
+    if (!peer_puppet_aim_controller_fixup_wanted(controller, nullptr)) {
         return;
     }
+    force_peer_puppet_aim_blend_state(controller);
 
     const std::uint8_t request_after =
         *reinterpret_cast<const std::uint8_t*>(
@@ -6832,44 +6991,134 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
     float forward_z = 0.0F;
     quat_forward_neg_z(
         peer.pose_seed + 4, forward_x, forward_y, forward_z);
+
+    // ComputeDirectionalAimWeights does normalize(target - skeletonOrigin).
+    // Building the point from pose_seed camera pos makes aimDir disagree with
+    // camera -Z whenever |pose_seed - skeleton| is large (common on the puppet).
+    alignas(16) float origin[4]{};
+    const bool have_origin = seh_read_aim_origin_point(controller, origin);
     constexpr float kAimTargetDistance = 180.0F;
+    const float* origin_pos = have_origin ? origin : peer.pose_seed;
     alignas(16) float local_target[4]{
-        peer.pose_seed[0] + forward_x * kAimTargetDistance,
-        peer.pose_seed[1] + forward_y * kAimTargetDistance,
-        peer.pose_seed[2] + forward_z * kAimTargetDistance,
-        std::isfinite(peer.pose_seed[3]) ? peer.pose_seed[3] : 1.0F,
+        origin_pos[0] + forward_x * kAimTargetDistance,
+        origin_pos[1] + forward_y * kAimTargetDistance,
+        origin_pos[2] + forward_z * kAimTargetDistance,
+        1.0F,
     };
-    const float* relayed_body_forward = body_forward;
+
+    // Body-forward must match the puppet's live root (+0x140), not the packet
+    // quat. Packet vs rendered root divergence produced yawPre≈±180 and wrong aim.
     alignas(16) float local_body_forward[4]{};
-    const float horizontal_length = std::sqrt(
-        forward_x * forward_x + forward_z * forward_z);
-    if (horizontal_length > 0.001F) {
-        // The post-update root writer turns Player +Z onto the horizontal camera
-        // -Z ray. Feed the same basis here so yaw is not applied twice by the
-        // directional additive graph; pitch remains in local_target.
-        local_body_forward[0] = forward_x / horizontal_length;
-        local_body_forward[1] = 0.0F;
-        local_body_forward[2] = forward_z / horizontal_length;
-        local_body_forward[3] = 0.0F;
-        relayed_body_forward = local_body_forward;
+    const float* relayed_body_forward = body_forward;
+    if (owner != nullptr &&
+        readable_bytes(static_cast<std::byte*>(owner) + kPlayerQuatOffset + 16) >=
+            16) {
+        const float* body_quat = reinterpret_cast<const float*>(
+            static_cast<std::byte*>(owner) + kPlayerQuatOffset);
+        float body_x = 0.0F;
+        float body_y = 0.0F;
+        float body_z = 0.0F;
+        quat_forward_positive_z(body_quat, body_x, body_y, body_z);
+        const float horizontal = std::sqrt(body_x * body_x + body_z * body_z);
+        if (horizontal > 0.001F) {
+            local_body_forward[0] = body_x / horizontal;
+            local_body_forward[1] = 0.0F;
+            local_body_forward[2] = body_z / horizontal;
+            local_body_forward[3] = 0.0F;
+            relayed_body_forward = local_body_forward;
+        }
+    }
+
+    // Native camera-zoom limits are often zero on screen-1; 60deg clamps scoped
+    // free-look (yawPre can exceed 120deg). Use generous authored clamps.
+    float lim_h_a = horizontal_limit_a;
+    float lim_h_b = horizontal_limit_b;
+    float lim_v_a = vertical_limit_a;
+    float lim_v_b = vertical_limit_b;
+    constexpr float kDefaultHorizLimit = 120.0F;
+    constexpr float kDefaultVertLimit = 75.0F;
+    const bool limits_dead =
+        (!std::isfinite(lim_h_a) || std::fabs(lim_h_a) < 0.01F) &&
+        (!std::isfinite(lim_h_b) || std::fabs(lim_h_b) < 0.01F);
+    if (limits_dead || std::fabs(lim_h_a) < 30.0F || std::fabs(lim_h_b) < 30.0F) {
+        lim_h_a = kDefaultHorizLimit;
+        lim_h_b = kDefaultHorizLimit;
+    }
+    if (!std::isfinite(lim_v_a) || std::fabs(lim_v_a) < 0.01F) {
+        lim_v_a = kDefaultVertLimit;
+    }
+    if (!std::isfinite(lim_v_b) || std::fabs(lim_v_b) < 0.01F) {
+        lim_v_b = kDefaultVertLimit;
     }
 
     static ULONGLONG last_log = 0;
     const ULONGLONG now = GetTickCount64();
     if (now - last_log > 1000) {
         last_log = now;
+        const float dx = origin_pos[0] - peer.pose_seed[0];
+        const float dy = origin_pos[1] - peer.pose_seed[1];
+        const float dz = origin_pos[2] - peer.pose_seed[2];
+        const float origin_delta =
+            std::sqrt(dx * dx + dy * dy + dz * dz);
+        const float bx = relayed_body_forward[0];
+        const float bz = relayed_body_forward[2];
+        const float bl = std::sqrt(bx * bx + bz * bz);
+        const float fl = std::sqrt(forward_x * forward_x + forward_z * forward_z);
+        float yaw_pre = 0.0F;
+        if (bl > 0.001F && fl > 0.001F) {
+            const float dot = std::clamp(
+                (bx / bl) * (forward_x / fl) + (bz / bl) * (forward_z / fl),
+                -1.0F, 1.0F);
+            const float cross = (bx / bl) * (forward_z / fl) -
+                                (bz / bl) * (forward_x / fl);
+            yaw_pre = std::acos(dot) * (180.0F / 3.14159265F);
+            if (cross < 0.0F) {
+                yaw_pre = -yaw_pre;
+            }
+        }
+        const float pitch_pre =
+            std::asin(std::clamp(forward_y, -1.0F, 1.0F)) *
+            (180.0F / 3.14159265F);
         std::ostringstream line;
-        line << "AIM-WORLD-BASIS relay target=(" << local_target[0] << ","
-             << local_target[1] << "," << local_target[2] << ") fwd=("
-             << forward_x << "," << forward_y << "," << forward_z << ") body=("
-             << relayed_body_forward[0] << "," << relayed_body_forward[1] << ","
-             << relayed_body_forward[2] << ")";
+        line << "AIM-WORLD-BASIS relay origin=(" << origin_pos[0] << ","
+             << origin_pos[1] << "," << origin_pos[2] << ") dSeed="
+             << origin_delta << " fwd=(" << forward_x << "," << forward_y
+             << "," << forward_z << ") body=(" << relayed_body_forward[0]
+             << "," << relayed_body_forward[1] << ","
+             << relayed_body_forward[2] << ") yawPre=" << yaw_pre
+             << " pitchPre=" << pitch_pre << " limH=(" << lim_h_a << ","
+             << lim_h_b << ") limV=(" << lim_v_a << "," << lim_v_b
+             << ") limFix=" << (limits_dead ? 1 : 0);
         force_log_line(line.str().c_str());
     }
-    return g_original_player_aim_world_basis(
+    force_peer_puppet_aim_blend_state(controller);
+    const std::int64_t result = g_original_player_aim_world_basis(
         controller, local_target, relayed_body_forward, active,
-        horizontal_limit_a, horizontal_limit_b, single_screen,
-        vertical_limit_a, vertical_limit_b);
+        lim_h_a, lim_h_b, single_screen, lim_v_a, lim_v_b);
+    if (controller != nullptr &&
+        readable_bytes(static_cast<std::byte*>(controller) + 0x8D0) >= 0x20) {
+        // Contiguous directional state at +0x8B4..+0x8C0 (not stride-8).
+        const float w0 = *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(controller) + 0x8B4);
+        const float w1 = *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(controller) + 0x8B8);
+        const float w2 = *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(controller) + 0x8BC);
+        const float w3 = *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(controller) + 0x8C0);
+        const float blend = *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(controller) + 0x8EC);
+        static ULONGLONG last_w = 0;
+        const ULONGLONG wnow = GetTickCount64();
+        if (wnow - last_w > 1000) {
+            last_w = wnow;
+            std::ostringstream wline;
+            wline << "AIM-WEIGHTS-POST L=" << w0 << " R=" << w1 << " D=" << w2
+                  << " U=" << w3 << " blend=" << blend;
+            force_log_line(wline.str().c_str());
+        }
+    }
+    return result;
 }
 
 bool install_player_aim_world_basis_relay() {
@@ -6918,7 +7167,7 @@ bool install_player_aim_blend_tick_probe() {
     FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
     DWORD ignored = 0;
     VirtualProtect(slot, sizeof(void*), old, &ignored);
-    boot_log_line("PlayerAimController blend tick probe installed");
+    boot_log_line("PlayerAimController blend tick relay installed");
     return true;
 }
 
@@ -7139,6 +7388,8 @@ void apply_peer_aim_facing_to_player(
     camera_forward_horizontal(camera_quat, fwd_x, fwd_z);
     float yaw_quat[4]{};
     yaw_quat_from_horizontal_forward(fwd_x, fwd_z, yaw_quat);
+    // Root snap + derived-transform refresh was runtime-rejected: after a
+    // location reload the puppet could slide on its knees. Keep this soft.
     blend_network_orientation(quat, yaw_quat, 0.55F);
     // Do NOT force a full-magnitude move vector while aiming. A stationary aiming
     // peer would make the puppet "run in place": the locomotion graph is fed
@@ -11469,6 +11720,44 @@ void apply_puppet_velocity_pre() {
     std::memcpy(vel_mirror, pkt.velocity, sizeof(pkt.velocity));
 }
 
+// BEFORE native Player update: stage peer camera aim so GunMoveShield / aim IK
+// consume fresh targets in the same tick (post-only writes were one frame late).
+void apply_puppet_aim_pre(void* puppet) {
+    if (puppet == nullptr || !g_puppet_net_apply) {
+        return;
+    }
+    coop::StatePacket pkt{};
+    void* resolved = nullptr;
+    if (!latest_peer_state(pkt, resolved)) {
+        if (!copy_last_peer_state_snapshot(pkt) || (pkt.flags & 1) == 0) {
+            return;
+        }
+    }
+    const ULONGLONG peer_received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    const bool peer_fresh =
+        peer_received != 0 && GetTickCount64() - peer_received <= 250;
+    if (!peer_fresh) {
+        return;
+    }
+    const bool peer_aiming =
+        (pkt.flags & 8) != 0 && peer_packet_aim_active(pkt);
+    const bool pose_relay_for_peer =
+        peer_aiming && puppet_aim_pose_relay_enabled_for_peer(pkt);
+    if (!pose_relay_for_peer) {
+        return;
+    }
+    apply_peer_aim_facing_to_player(puppet, pkt);
+    apply_peer_aim_pose_quat(puppet);
+    apply_peer_aim_ik_world_points(puppet, pkt);
+    write_peer_aim_world_targets_from_pose_seed(puppet, pkt);
+    force_puppet_ads_flag(puppet, true);
+    if (void* const aim_ctrl = player_aim_controller_from_player(puppet);
+        aim_ctrl != nullptr) {
+        force_peer_puppet_aim_blend_state(aim_ctrl);
+    }
+}
+
 // BEFORE the puppet's native update: stage look-at so UpdateIk in the same tick
 // can consume SetLookPoint output. Post-tick field pokes corrupted +0x390.
 void apply_puppet_head_look_pre() {
@@ -11545,83 +11834,33 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     // Peer-only aim relay: partner puppet reflects the OTHER copy's aim, never the
     // local player's camera on this screen.
     if (g_puppet_aim_reticle_relay && peer_aiming) {
-        const float* cam_pos = nullptr;
-        const float* q = nullptr;
-        if ((pkt.flags & coop::kStateFlagPoseSeed) != 0 &&
-            valid_network_orientation(pkt.pose_seed + 4)) {
-            cam_pos = pkt.pose_seed;
-            q = pkt.pose_seed + 4;
-        }
-        if (cam_pos != nullptr && q != nullptr) {
-        // forward = quat * (0,0,-1): the camera/aim looks down -Z in this engine.
-        const float x = q[0], y = q[1], z = q[2], w = q[3];
-        float fx = -2.0F * (x * z + w * y);
-        float fy = -2.0F * (y * z - w * x);
-        float fz = -(1.0F - 2.0F * (x * x + y * y));
-        const float len = std::sqrt(fx * fx + fy * fy + fz * fz);
-        if (len > 1e-3F) {
-            fx /= len; fy /= len; fz /= len;
-            constexpr float kAimDist = 20.0F;
-            float target[4] = {
-                cam_pos[0] + fx * kAimDist,
-                cam_pos[1] + fy * kAimDist,
-                cam_pos[2] + fz * kAimDist,
-                1.0F,
-            };
-            if (readable_bytes(static_cast<std::byte*>(puppet) +
-                               kPlayerAimTargetOffset) >= 16) {
-                std::memcpy(static_cast<std::byte*>(puppet) + kPlayerAimTargetOffset,
-                            target, 16);
-            }
-            if (readable_bytes(static_cast<std::byte*>(puppet) +
-                               kPlayerAimTargetAuxOffset) >= 16) {
-                std::memcpy(
-                    static_cast<std::byte*>(puppet) + kPlayerAimTargetAuxOffset,
-                    target, 16);
-            }
-            // PITCH candidate (2026-07-07 build ag): the up/down live diff's
-            // LARGEST deltas were the duplicated world aim-at point at +0x21F0
-            // and +0x2240 (delta ~14.5 on a pure pitch change) - semantically the
-            // IK aim-at point the spine bend consumes. Build af proved yaw follows
-            // (resolver override at the +0x1730 writer) but pitch does not; write
-            // the peer target into both fields as the pitch input candidate.
-            if (readable_bytes(static_cast<std::byte*>(puppet) +
-                               kPlayerAimAtPointOffset) >= 16) {
-                std::memcpy(
-                    static_cast<std::byte*>(puppet) + kPlayerAimAtPointOffset,
-                    target, 16);
-            }
-            if (readable_bytes(static_cast<std::byte*>(puppet) +
-                               kPlayerAimAtPointAuxOffset) >= 16) {
-                std::memcpy(
-                    static_cast<std::byte*>(puppet) + kPlayerAimAtPointAuxOffset,
-                    target, 16);
-            }
-            static ULONGLONG last_aim_log = 0;
-            const ULONGLONG alnow = GetTickCount64();
-            if (alnow - last_aim_log > 1000) {
-                last_aim_log = alnow;
-                std::ostringstream al;
-                al << "AIM-TARGET-WRITE fwd=(" << fx << "," << fy << "," << fz
-                   << ") tgt=(" << target[0] << "," << target[1] << ","
-                   << target[2] << ")";
-                force_log_line(al.str().c_str());
-            }
-        }
-        }
+        write_peer_aim_world_targets_from_pose_seed(puppet, pkt);
     }
     if (peer_aiming) {
-        if (g_puppet_aim_facing_from_camera) {
+        // Camera yaw from pose_seed owns the root during ADS pose relay. Blending
+        // to StatePacket::quat (sender body) fights free-look and pins aim to one
+        // world point. Pre-update staging in apply_puppet_aim_pre feeds native
+        // GunMoveShield; post pass reinforces after integration.
+        if (g_puppet_aim_facing_from_camera || pose_relay_for_peer) {
+            // RUNTIME REJECTED 2026-07-13: POST snap + 0x141BB8320 refresh
+            // eventually leaves the puppet sliding on its knees after a location
+            // reload. Keep only the soft root blend; aim additives own camera
+            // yaw/pitch until a non-root animation solution is proven.
             apply_peer_aim_facing_to_player(puppet, pkt);
         } else if (valid_network_orientation(pkt.quat)) {
-            // Keep body-forward independent from the camera ray. Slot +0x58
-            // computes signed aim additives between these two bases; replacing
-            // the root with camera yaw collapses that angle and can reverse the
-            // visible character when camera and body conventions differ.
             orientation_dot = blend_network_orientation(quat, pkt.quat, 0.35F);
         }
         if (g_puppet_aim_reticle_relay || pose_relay_for_peer) {
             apply_peer_aim_pose_quat(puppet);
+        }
+        if (pose_relay_for_peer) {
+            apply_peer_aim_ik_world_points(puppet, pkt);
+            write_peer_aim_world_targets_from_pose_seed(puppet, pkt);
+            force_puppet_ads_flag(puppet, true);
+            if (void* const aim_ctrl = player_aim_controller_from_player(puppet);
+                aim_ctrl != nullptr) {
+                force_peer_puppet_aim_blend_state(aim_ctrl);
+            }
         }
     } else if (puppet_was_aiming) {
         force_puppet_ads_flag(puppet, false);
@@ -11745,9 +11984,11 @@ bool g_velprobe_enabled = false;
 // readable byte count from p. VK_NEXT (Page Down) flips back to the VirtualQuery
 // implementation for a live A/B.
 volatile bool g_readable_bytes_fast = true;
-// LAG A/B: when false, the recent aim callsite relays + interact dispatch probe are
-// NOT installed at boot (isolate a freeze that VK_END doesn't fix).
-constexpr bool g_enable_recent_aim_hooks = false;
+// LAG A/B (2026-07-13): batch-disabled while diagnosing a freeze that VK_END did
+// not clear. Pose-seed snapshot is now gated (e305fec); re-enable the proven aim
+// animation path. Keep diagnostic probes off — they are hot-path noise only.
+constexpr bool g_enable_aim_animation_relays = true;
+constexpr bool g_enable_aim_diagnostic_probes = false;
 
 
 // ============================================================================
@@ -13911,6 +14152,17 @@ using PlayerMainViewVisibilityUpdateFunction = char(__fastcall*)(void*);
 PlayerMainViewVisibilityUpdateFunction
     g_original_player_main_view_visibility_update = nullptr;
 
+bool player_is_remote_screen_slot(const void* player) {
+    if (player == nullptr ||
+        readable_bytes(static_cast<const std::byte*>(player) + 0x4014) <
+            sizeof(std::uint32_t)) {
+        return false;
+    }
+    return *reinterpret_cast<const std::uint32_t*>(
+               static_cast<const std::byte*>(player) + 0x4010) ==
+           kSlot1ScreenIndex;
+}
+
 bool seh_force_remote_player_main_view_visible(
     void* player, std::uint8_t* previous_request) {
     __try {
@@ -13928,12 +14180,12 @@ bool seh_force_remote_player_main_view_visible(
 char __fastcall hooked_player_main_view_visibility_update(void* player) {
     bool suppressed_remote_hide = false;
     std::uint8_t previous_request = 0;
-    if (player != nullptr && player == retained_player_object(1) &&
+    if (player_is_remote_screen_slot(player) &&
         readable_bytes(static_cast<std::byte*>(player) + 0x161A) >= 1) {
-        // A retained peer is always rendered in this copy's shared main view.
-        // During checkpoint/location reconstruction stock lifecycle code can
-        // submit the same false request used to hide the local first-person actor;
-        // consuming it here prevents permanent hair/weapon DisableMainView state.
+        // Identify by authored screen index, not retained pointer. During a
+        // location rebuild this function can run on the new Player before the
+        // retained-slot table points at it; the old pointer gate missed that hide
+        // and both copies subsequently saw a bald remote Chloe.
         suppressed_remote_hide = seh_force_remote_player_main_view_visible(
             player, &previous_request);
     }
@@ -17720,6 +17972,7 @@ void __fastcall hooked_update(void* object) {
                 apply_peer_weapon_give();
                 apply_queued_fire_events(object);
                 apply_puppet_velocity_pre();
+                apply_puppet_aim_pre(object);
             }
             drive_remote_slot1_actions_tick();
             drive_slot1_tick();
@@ -17772,6 +18025,7 @@ void __fastcall hooked_update(void* object) {
     apply_slot1_perslot_on_game_thread();
     if (object == retained_player_object(1)) {
         apply_puppet_velocity_pre();
+        apply_puppet_aim_pre(object);
     }
     g_original_update(object);
     // VARIANT B avatar mirror-test: AFTER the NPC's own update wrote its joint cache,
@@ -18142,6 +18396,259 @@ bool install_scoped_draw_flag_callsite_relay() {
     return true;
 }
 
+using DrawControlSyncParentVisibilityFunction =
+    char(__fastcall*)(void*, void*);
+DrawControlSyncParentVisibilityFunction
+    g_original_draw_control_sync_parent_visibility = nullptr;
+
+struct AttachmentDrawSnapshot {
+    std::uint32_t flags = 0;
+    std::uint32_t mesh_count = 0;
+    std::uint32_t readable_meshes = 0;
+    std::uint32_t primary_gate_meshes = 0;
+    std::uint32_t secondary_gate_meshes = 0;
+    std::uint32_t instances = 0;
+    std::uint32_t active_instances = 0;
+    std::uint32_t main_view_excluded_instances = 0;
+    std::uint32_t category_suppressed_instances = 0;
+    std::uint8_t own_gate = 0;
+    std::uint8_t inherited_gate = 0;
+};
+
+bool seh_capture_attachment_draw_snapshot(
+    void* draw_control, AttachmentDrawSnapshot& out) {
+    __try {
+        if (draw_control == nullptr || readable_bytes(draw_control) < 0x20) {
+            return false;
+        }
+        auto* const draw = static_cast<std::byte*>(draw_control);
+        out.flags = *reinterpret_cast<const std::uint32_t*>(draw + 0x18);
+        out.own_gate = *reinterpret_cast<const std::uint8_t*>(draw + 0x1C);
+        out.inherited_gate =
+            *reinterpret_cast<const std::uint8_t*>(draw + 0x1D);
+        auto* const meshes = *reinterpret_cast<std::byte**>(draw + 0x8);
+        out.mesh_count =
+            *reinterpret_cast<const std::uint32_t*>(draw + 0x14);
+        if (meshes == nullptr || out.mesh_count > 128) {
+            return true;
+        }
+
+        constexpr std::size_t kMeshStride = 0x250;
+        const std::uint32_t inspected_meshes =
+            std::min<std::uint32_t>(out.mesh_count, 32);
+        for (std::uint32_t mesh_index = 0;
+             mesh_index < inspected_meshes; ++mesh_index) {
+            auto* const mesh = meshes + kMeshStride * mesh_index;
+            if (readable_bytes(mesh) < kMeshStride) {
+                break;
+            }
+            ++out.readable_meshes;
+            out.primary_gate_meshes +=
+                *reinterpret_cast<const std::uint8_t*>(mesh + 0x243) != 0;
+            out.secondary_gate_meshes +=
+                *reinterpret_cast<const std::uint8_t*>(mesh + 0x245) != 0;
+
+            const std::uint32_t entry_count = std::min<std::uint32_t>(
+                *reinterpret_cast<const std::uint8_t*>(mesh + 0x242), 16);
+            for (std::uint32_t entry_index = 0;
+                 entry_index < entry_count; ++entry_index) {
+                auto* const entry = mesh + 0x20 * entry_index;
+                if (readable_bytes(entry) < 0x18) {
+                    break;
+                }
+                void* const instance = *reinterpret_cast<void**>(entry);
+                void* const retained = *reinterpret_cast<void**>(entry + 0x10);
+                if (instance == nullptr || retained == nullptr ||
+                    readable_bytes(instance) < 0x1A5) {
+                    continue;
+                }
+                auto* const instance_bytes = static_cast<std::byte*>(instance);
+                const std::uint32_t instance_flags =
+                    *reinterpret_cast<const std::uint32_t*>(
+                        instance_bytes + 0x18);
+                ++out.instances;
+                out.active_instances +=
+                    *reinterpret_cast<const std::uint8_t*>(
+                        instance_bytes + 0x1A0) != 0;
+                out.main_view_excluded_instances +=
+                    (instance_flags & 0x40u) != 0;
+                out.category_suppressed_instances +=
+                    (*reinterpret_cast<const std::uint8_t*>(
+                         instance_bytes + 0x1A4) &
+                     8u) != 0;
+            }
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+std::uint64_t attachment_draw_snapshot_signature(
+    const AttachmentDrawSnapshot& snapshot, std::uint32_t look_id,
+    std::uint32_t state_id) {
+    std::uint64_t signature = 1469598103934665603ULL;
+    const auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(look_id);
+    mix(state_id);
+    mix(snapshot.flags);
+    mix(snapshot.mesh_count);
+    mix(snapshot.readable_meshes);
+    mix(snapshot.primary_gate_meshes);
+    mix(snapshot.secondary_gate_meshes);
+    mix(snapshot.instances);
+    mix(snapshot.active_instances);
+    mix(snapshot.main_view_excluded_instances);
+    mix(snapshot.category_suppressed_instances);
+    mix(snapshot.own_gate);
+    mix(snapshot.inherited_gate);
+    return signature;
+}
+
+char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
+    void* child_draw, void* parent_draw) {
+    char result = g_original_draw_control_sync_parent_visibility != nullptr
+        ? g_original_draw_control_sync_parent_visibility(child_draw, parent_draw)
+        : 0;
+
+    void* const puppet = retained_player_object(1);
+    if (!g_state_net.enabled || puppet == nullptr ||
+        !player_is_remote_screen_slot(puppet) ||
+        readable_bytes(static_cast<std::byte*>(puppet) + 0x198) <
+            sizeof(void*) ||
+        child_draw == nullptr || parent_draw == nullptr ||
+        readable_bytes(static_cast<std::byte*>(child_draw) + 0x18) < 6 ||
+        readable_bytes(static_cast<std::byte*>(parent_draw) + 0x18) < 6) {
+        return result;
+    }
+    void* const puppet_draw = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(puppet) + 0x198);
+    if (parent_draw != puppet_draw) {
+        return result;
+    }
+
+    AttachmentDrawSnapshot snapshot{};
+    if (!seh_capture_attachment_draw_snapshot(child_draw, snapshot) ||
+        readable_bytes(static_cast<std::byte*>(puppet) + 0x170) <
+            sizeof(std::uint32_t) ||
+        readable_bytes(static_cast<std::byte*>(puppet) + 0x190) <
+            sizeof(std::uint32_t)) {
+        return result;
+    }
+    const std::uint32_t look_id = *reinterpret_cast<const std::uint32_t*>(
+        static_cast<const std::byte*>(puppet) + 0x170);
+    const std::uint32_t state_id = *reinterpret_cast<const std::uint32_t*>(
+        static_cast<const std::byte*>(puppet) + 0x190);
+    const std::uint64_t signature = attachment_draw_snapshot_signature(
+        snapshot, look_id, state_id);
+
+    struct TraceState {
+        void* child = nullptr;
+        std::uint64_t signature = 0;
+    };
+    thread_local std::array<TraceState, 32> trace_states{};
+    thread_local std::size_t replacement_index = 0;
+    TraceState* state = nullptr;
+    for (auto& candidate : trace_states) {
+        if (candidate.child == child_draw) {
+            state = &candidate;
+            break;
+        }
+        if (state == nullptr && candidate.child == nullptr) {
+            state = &candidate;
+        }
+    }
+    if (state == nullptr) {
+        state = &trace_states[replacement_index++ % trace_states.size()];
+    }
+    if (state->child != child_draw || state->signature != signature) {
+        state->child = child_draw;
+        state->signature = signature;
+        std::ostringstream line;
+        line << "ATTACH-DRAW child=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(child_draw)
+             << " look=0x" << look_id << " state=0x" << state_id
+             << " flags=0x" << snapshot.flags << std::dec
+             << " gate=" << static_cast<unsigned>(snapshot.own_gate) << "/"
+             << static_cast<unsigned>(snapshot.inherited_gate)
+             << " meshes=" << snapshot.readable_meshes << "/"
+             << snapshot.mesh_count
+             << " meshGate=" << snapshot.primary_gate_meshes << "/"
+             << snapshot.secondary_gate_meshes
+             << " instances=" << snapshot.instances
+             << " active=" << snapshot.active_instances
+             << " mainViewExcluded="
+             << snapshot.main_view_excluded_instances
+             << " categorySuppressed="
+             << snapshot.category_suppressed_instances;
+        force_log_line(line.str().c_str());
+    }
+    return result;
+}
+
+bool install_nd_attachable_parent_visibility_relay() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kNdAttachableSyncParentVisibilityCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line("NdAttachable parent visibility relay SKIPPED (not E8)");
+        return false;
+    }
+    std::int32_t displacement = 0;
+    std::memcpy(&displacement, call_site + 1, sizeof(displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(displacement);
+    const std::uintptr_t expected =
+        g_module + kDrawControlSyncParentVisibilityRva;
+    if (target != expected) {
+        boot_log_line("NdAttachable parent visibility relay SKIPPED (target)");
+        return false;
+    }
+    g_original_draw_control_sync_parent_visibility =
+        reinterpret_cast<DrawControlSyncParentVisibilityFunction>(expected);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("NdAttachable parent visibility relay SKIPPED (relay)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_nd_attachable_sync_parent_visibility_callsite);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("NdAttachable parent visibility relay SKIPPED (range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("NdAttachable parent visibility relay SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line("NdAttachable parent visibility callsite relay installed");
+    return true;
+}
+
 using PlayerAimEligibilityFunction = char(__fastcall*)(void*, char);
 PlayerAimEligibilityFunction g_original_player_aim_eligibility = nullptr;
 
@@ -18358,20 +18865,23 @@ float __fastcall hooked_player_aim_blend_target_callsite(
         g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
     coop::StatePacket peer{};
     if (received == 0 || GetTickCount64() - received > 250 ||
-        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer) ||
-        (std::isfinite(original) && original > 0.001F)) {
+        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer)) {
         return original;
     }
 
+    const float forced =
+        (std::isfinite(original) && original > 0.001F) ? original : 1.0F;
+    const float result = std::max(forced, 1.0F);
     static ULONGLONG last_log = 0;
     const ULONGLONG now = GetTickCount64();
     if (now - last_log > 500) {
         last_log = now;
         std::ostringstream line;
-        line << "AIM-BLEND-TARGET original=" << original << " forced=1";
+        line << "AIM-BLEND-TARGET original=" << original << " forced="
+             << result;
         force_log_line(line.str().c_str());
     }
-    return 1.0F;
+    return result;
 }
 
 bool install_player_aim_blend_target_callsite_relay() {
@@ -19686,18 +20196,18 @@ DWORD WINAPI install_hook(void*) {
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
     install_player_main_view_visibility_relay();
+    install_nd_attachable_parent_visibility_relay();
     // The scoped DrawControl 0x40 relay and post mesh scan were rejected by the
     // 2026-07-13 runtime discriminator; leave the dormant code available for
     // reference without installing another hot-path hook.
-    // LAG A/B (2026-07-13): batch-disable the recent aim callsite relays + probes to
-    // isolate a freeze that persists with VK_END (so it is in the installed detours,
-    // not the drive logic). Re-enable individually once the culprit is found.
-    if (g_enable_recent_aim_hooks) {
+    // Aim animation path (CONFIRMED visible for pistol ADS when enabled). Pose-seed
+    // snapshot lag is gated separately; leave diagnostic probes off.
+    if (g_enable_aim_animation_relays) {
         install_player_aim_eligibility_callsite_relay();
         install_player_aim_additive_permission_callsite_relay();
         install_player_aim_blend_target_callsite_relay();
-        install_player_aim_blend_tick_probe();
         install_player_aim_world_basis_relay();
+        install_player_aim_blend_tick_probe();
     }
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();
@@ -19710,7 +20220,7 @@ DWORD WINAPI install_hook(void*) {
     }
     // Exp5c: callsite relay preserves Player_InteractDispatcher's frame-from-rsp
     // entry while observing whether stock dispatch runs for screen 0 and screen 1.
-    if (g_enable_recent_aim_hooks) {
+    if (g_enable_aim_diagnostic_probes) {
         install_player_interact_dispatch_callsite_probe();
     }
     install_give_weapon_diagnostic();

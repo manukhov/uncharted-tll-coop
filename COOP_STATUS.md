@@ -1,5 +1,153 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-13, Codex - bald reload parent gate rejected)
+
+User runtime on PIDs 13996/4476 still showed both remote Chloes bald after a
+location reload. The installed `0x141ED63F7` relay repeatedly observed
+`parentFlags=0`, parent/child gates `255/255`, and never selected its repair.
+**REJECTED:** `DrawControl+0x1D` parent inheritance as the reload hair cause.
+
+The relay is now read-only and logs state changes as `ATTACH-DRAW`: Player visual
+ids `+0x170/+0x190`, child mesh counts, mesh gates `+0x243/+0x245`, render-instance
+counts, final active byte `+0x1A0`, main-view `0x40`, and category suppression
+`+0x1A4 bit 3`. Prediction and static evidence are recorded in
+`reports/nd_attachable_parent_visibility_relay_20260713.md`. Next runtime must
+compare the initial snapshot with the first snapshot after reload; do not add
+another visibility write until that discriminator selects a writer.
+
+## Turn note (2026-07-13, Cursor - reload kneeling + bald lifecycle)
+
+**Runtime REJECTED:** POST camera-yaw snap plus
+`Character_UpdateDerivedWorldTransformFromLocalRoot 0x141BB8320` emitted
+`AIM-FACING-REFRESH ok`, but after a location reload the puppet slid forward/back
+on its knees. This reproduces the earlier root-refresh locomotion failure. Removed;
+ADS root facing is soft-blend only again.
+
+**Bald remote after location reload:** the main-view relay identified slot 1 by
+`retained_player_object(1)`. During reconstruction, `PlayerMainViewVisibilityUpdate
+0x140C990A0` can run on the new Player before the retained table updates, so the
+false `+0x1618` request escaped and permanently applied `DisableMainView` to hair
+and attachments. Fix under test:
+
+1. identify remote Player by authored `Player+0x4010 == 1`;
+2. after slot-1 update, if `+0x1618/+0x1619` are not both visible, submit one Show
+   transition through the original function;
+3. expect `PUPPET-MAIN-VIEW restored after lifecycle` after reload.
+
+**Runtime rejection (PIDs 4620/5512):** loading a checkpoint still made both
+remote Chloes bald and produced no `PUPPET-MAIN-VIEW` line. Thus the checkpoint
+does not leave `+0x1618/+0x1619` false; it creates hidden attachments after the
+Player has already reached visible/visible, so no natural edge is emitted.
+
+**Replacement under test:** watch `Player+0x1B10` attachment collection identity
+and count. After it stabilizes for 750 ms, replay an explicit
+`+0x1619=0, +0x1618=1` transition through the stock function up to three times.
+Static disassembly proves that true transition calls weapon-controller slot
+`+0x378` and iterates `+0x1B10` publishing Show events. Expected log:
+`PUPPET-MAIN-VIEW lifecycle replay attempt=N attachments=M`.
+
+**Runtime REJECTED (PIDs 17832/20784):** all three stock Show replays ran on
+both copies (`attachments=1/5`), but the remote hair remained invisible. The
+authored `DisableMainView/EnableMainView` event path is not the final hair gate.
+
+**Next static path / build under test:** `NdAttachableObject_PostJointUpdate_Async
+0x141ED28E0` resolves parent `+0x4E0/+0x4E8` and at `0x141ED63F7` calls
+`DrawControl_SyncParentVisibility 0x141754DA0(child,parent)`. That helper copies
+`parent DrawControl+0x1C & +0x1D` into child `+0x1D` and recomputes each child
+instance active byte `+0x1A0`. The new verified callsite relay logs
+`ATTACH-VIS`; only when slot-1 parent has own gate nonzero, inherited gate zero,
+main-view bit clear, and child own gate nonzero does it use the native null-parent
+case (`child+0x1D=0xFF`). See
+`reports/nd_attachable_parent_visibility_relay_20260713.md`.
+
+## Turn note (2026-07-13, Cursor - runtime aim log + facing refresh)
+
+**Built + injected** (latest): snap camera yaw POST + `0x141BB8320` refresh.
+
+**Prior session runtime (PIDs 12852 host / 17036 recv):**
+- Pipeline CONFIRMED live: `AIM-BLEND blend=1`, changing `AIM-IK`/`AIM-WORLD-BASIS`
+  `fwd`, pose-seed override, eligibility/permission forced.
+- Still no visible sync: `+0x140` body tracked camera in logs, but mesh stayed
+  pinned — derived transform not refreshed (matches earlier diagnosis).
+- Weight probe had wrong stride (`U=1e21`); fixed to contiguous `+0x8B4..+0x8C0`.
+
+**New build under test:** POST snap (`apply_peer_aim_facing(..., true)`) +
+`seh_refresh_player_derived_world_transform`; PRE keeps soft blend only.
+Log marker: `AIM-FACING-REFRESH ok`.
+
+## Turn note (2026-07-13, Cursor - all-weapon aim sync)
+
+**Symptom (user):** not scoped-only — any weapon ADS: puppet initially aims the
+wrong way, then stays pinned to one world point while the host moves the reticle.
+
+**Root cause:** camera direction rides in `pose_seed`, but the puppet root was
+blended to `StatePacket::quat` (body). Aim IK/target fields were written only
+POST native update, so GunMoveShield consumed stale data the same frame.
+
+**Fix under test (`teleport_hook.cpp`):**
+1. `apply_puppet_aim_pre` before native Player update — camera facing, pose quat,
+   IK points, `+0x1570/+0x21F0` targets, ADS flag, blend state.
+2. POST pass reinforces the same (no body-quat blend while pose relay active).
+3. Blend tick + world-basis sustain `+0x8A0/+0x8EC` (prior commit).
+
+**Prediction:** pistol and rifle ADS track peer reticle yaw/pitch live; initial
+bearing matches host camera within one soft-blend frame.
+
+## Turn note (2026-07-13, Cursor - scoped free-look rotation)
+
+**Pickup:** CONFIRMED — do not touch.
+
+**Symptom:** receiver puppet stays aimed at one world point while host free-looks
+with scoped sniper ADS. Main-view relay CONFIRMED (hair/rifle visible).
+
+**Runtime evidence:** `AIM-WORLD-BASIS` fires with changing `fwd`/`yawPre`, but
+`AIM-WEIGHTS-POST` often shows `blend=0` (published aim-add weights zeroed).
+
+**Fix under test (uncommitted `teleport_hook.cpp`):**
+1. `force_peer_puppet_aim_blend_state` — sustain `controller+0x8A0=1` and
+   `+0x8EC=1` on blend tick, world-basis hook, and post-update for slot-1 puppet.
+2. Blend-target relay always returns `max(original, 1.0)` during peer ADS (not
+   only when native target is zero).
+3. Scoped rifle: soft camera-yaw root blend (`apply_peer_aim_facing`, 0.85) +
+   `force_puppet_ads_flag` while pose relay active (no snap / no `0x141BB8320`).
+
+**Prediction:** scope free-look rotates puppet upper body via aim-add and root
+yaw via soft blend; pistol ADS unchanged. Log `AIM-BLEND-TARGET` and
+`blend=1` in `AIM-WEIGHTS-POST`.
+
+**Rebuild:** `scanner/build/tll_teleport_hook_v2.dll` — inject and retest.
+
+## Turn note (2026-07-13, Cursor - resume aim after Codex handoff)
+
+**Pickup:** CONFIRMED via `PlayerPickupController_StartOrQueue 0x140F49CA0`
+(`d696139`) — leave alone.
+
+**Where Codex stopped on aim:**
+- Pistol aim animation was visible with the PlayerAimController relay chain;
+  sniper ADS kept pose. Remaining defects: free-look yaw on the root, and
+  scoped hair/rifle disappearing.
+- Lag isolation (`14249a3`) set `g_enable_recent_aim_hooks=false`, so the proven
+  aim animation path was off at handoff. Pose-seed snapshot lag was already
+  gated in `e305fec`. Pre-root yaw REJECTED (`9a039a7`, kneeling slide).
+  Main-view relay `0x140C990A0` still installed, runtime pending.
+
+**Runtime (PIDs 9200/18928):** main-view CONFIRMED — sniper no longer disappears
+(`PUPPET-MAIN-VIEW-HIDE suppressed`). Aim direction REJECTED as sufficient:
+`AIM-WORLD-BASIS`/`POSE-SEED-SEND` tracked camera `fwd`, but the puppet kept
+aiming at one world point. Soft-blend to `StatePacket::quat` owned the root;
+post-write of camera yaw never refreshed `0x141BB8320` the same frame.
+
+**Fix under test (PIDs 4516/19608):**
+1. During peer ADS, always snap `Player+0x140` to camera horizontal `-Z` and call
+   `Character_UpdateDerivedWorldTransformFromLocalRoot 0x141BB8320` post-update
+   (not pre — kneeling still REJECTED).
+2. AimController body-forward matches that same horizontal camera basis; target
+   keeps full camera ray (pitch in additives, yaw from root).
+
+**Prediction:** turning the scope turns the puppet root the same way; pitch still
+tracks. Kneeling/slide during ADS rejects the post+refresh pairing and selects
+joint-blend ordering instead.
+
 ## Turn note (2026-07-13, Codex - camera yaw and scoped renderables)
 
 Runtime of `0d45c6e` confirms the authored aim target relay: pistol aim animation

@@ -321,6 +321,8 @@ constexpr std::uintptr_t kPlayerAimPoseSeedCallSiteRva = 0x10E934B;
 // body-forward, mode bytes, and four authored angular limits.
 constexpr std::uintptr_t kPlayerAimWorldBasisVtableSlotRva = 0x2A0B250;
 constexpr std::uintptr_t kPlayerAimWorldBasisRva = 0x0CAF110;
+// PlayerAimController vtable +0x80 — skeleton aim origin (targHead/targPelvis).
+constexpr std::uintptr_t kPlayerAimOriginPointRva = 0x0CAFD90;
 constexpr std::uintptr_t kPlayerAimBlendTickVtableSlotRva = 0x2A0B228;
 constexpr std::uintptr_t kPlayerAimBlendTickRva = 0x0CAFA20;
 constexpr std::uintptr_t kPlayerAimBlendTargetCallsiteRva = 0x0CAFB7C;
@@ -348,6 +350,12 @@ constexpr std::uintptr_t kDrawControlSetChildFlagsByMaskRva = 0x1754EF0;
 // Exact inverse used by script command set-instance-flag-draw-in-main-view:
 // clears a mask from instance+0x18 for every DrawControl mesh child.
 constexpr std::uintptr_t kDrawControlClearChildFlagsByMaskRva = 0x1754FF0;
+// NdAttachableObject_PostJointUpdate_Async child/parent DrawControl visibility
+// inheritance. The callsite passes child DrawControl in RCX and its resolved
+// attachment-parent DrawControl in RDX.
+constexpr std::uintptr_t kNdAttachableSyncParentVisibilityCallsiteRva =
+    0x1ED63F7;
+constexpr std::uintptr_t kDrawControlSyncParentVisibilityRva = 0x1754DA0;
 constexpr std::size_t kWeaponControllerGetWeaponBySlotVtOffset = 0xB0;
 constexpr std::uintptr_t kWeaponPickupVftableRva = 0x2AA66C0;
 constexpr std::size_t kWeaponPickupGetInteractControlVtableOffset = 0x248;

@@ -27206,3 +27206,19 @@ HYPOTHESIS for the two remaining mechanisms**.
   occurs during Player/attachment reconstruction. Slot 1 is a shared-main-view
   actor on this copy, so its false request must be consumed for the full remote
   lifecycle, not only during scoped ADS. Status: **HYPOTHESIS ready for runtime**.
+
+### 2026-07-13 runtime: attachment parent visibility is not the reload hair gate
+
+- PIDs 13996/4476 kept both remote Chloes bald after location reload while the
+  exact `NdAttachableObject` callsite `0x141ED63F7` reported parent flags zero and
+  parent/child DrawControl gates `255/255` throughout.
+- The null-parent repair never selected. **REJECTED:** inherited
+  `DrawControl+0x1D` as the cause of reload baldness.
+- Static dataflow in `DrawControl_SyncParentVisibility 0x141754DA0` leaves the
+  independently testable mesh gates `+0x243/+0x245`, final instance-active byte
+  `+0x1A0`, instance main-view flags `+0x18`, and category byte `+0x1A4`.
+- `PlayerUpperDrawControlLifecycleAndAmbientOccluderStage 0x141BB4280` writes the
+  visual pair `Player+0x170/+0x190` and passes it to `0x141756F10`; previous
+  runtime visual-swap evidence establishes `+0x170` as the hair/look selector.
+  A read-only state-change probe now distinguishes missing look/meshes from a
+  present-but-suppressed render instance. Status: **STATIC discriminator ready**.
