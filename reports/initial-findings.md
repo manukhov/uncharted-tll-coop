@@ -27090,3 +27090,23 @@ never entered. The scoped exclusion is removed only from the existing stationary
 predicate, while movement and velocity gates remain. The exact DrawControl
 main-view `0x40` inverse is now active for this stationary scoped interval. Runtime
 prediction: `reports/stationary_scoped_ads_relay_20260713.md`.
+
+### 2026-07-13 RUNTIME/STATIC: zero authored target kills the admitted aim blend
+
+PIDs 5092/7028 reached world-basis computation and the forced current-state
+permission, but native `PlayerAimController_UpdateBlendState 0x140CAFA20` changed
+samples such as `request=1->0 blend=0.595298->0`. Since its sole target producer is
+`PlayerAimController_GetAuthoredAimBlendTarget 0x140CAE480` at `0x140CAFB7C`, the
+puppet's active base state supplies a zero authored target. A callsite relay now
+preserves every positive result and substitutes `1.0` only for fresh slot-1 ADS.
+
+The same runtime still showed wrong direction. GunMoveShield's stock body basis is
+Player root positive-Z (`Quaternion_RotatePositiveZ 0x14014D9F0`), but the mod only
+corrects puppet root after native update. Slot `+0x58` now receives positive-Z from
+the sender's relayed root quaternion, while the target remains sender camera `-Z`.
+
+Finally, the disappearance interval used sender pistol `0x33E29A1B`; the old
+scoped-art-only visibility correction never ran. The generic DrawControl
+main-view-bit inverse is now applied during every automatic puppet ADS interval.
+Evidence and falsifiable predictions are in
+`reports/player_aim_authored_target_body_visibility_20260713.md`.

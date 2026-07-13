@@ -1,6 +1,6 @@
 # Stationary scoped ADS relay (2026-07-13)
 
-Status: **STATIC implementation, runtime pending**.
+Status: **RUNTIME REJECTED as sufficient**.
 
 ## Hypothesis
 
@@ -55,3 +55,17 @@ Stationary scoped aim emits `AIM-WORLD-BASIS`,
 `SCOPED-MAIN-VIEW cleared instance flag 0x40`, not `SCOPED-ADS-SCRUB`. Chloe stays
 visible and raises/follows the rifle. Beginning to move drops automatic `0x200`,
 so the blend returns toward zero without the old kneeling slide.
+
+## Runtime result
+
+PIDs 5092/7028 reached the complete native path: `AIM-WORLD-BASIS` and
+`AIM-ADDITIVE-PERMISSION original=0 forced=1` appeared repeatedly. The blend-tick
+probe then showed the decisive transition, for example
+`request=1->0 blend=0.595298->0`. The authored blend target is therefore zero for
+the puppet's active base state; admission alone cannot keep the pose weighted.
+
+The sender art in the disappearing interval was pistol `0x33E29A1B`, so the
+scoped-art-only DrawControl clear did not run at all. The user observed both wrong
+direction and disappearance. This rejects hypotheses 1 and 3's narrow scoped-art
+assumption and motivates three independent corrections documented in
+`reports/player_aim_authored_target_body_visibility_20260713.md`.

@@ -34,6 +34,16 @@ scoped `0x200` only through the existing stationary movement/velocity gates and
 applies the proven DrawControl main-view `0x40` clear to that interval. Details:
 `reports/stationary_scoped_ads_relay_20260713.md`.
 
+PIDs 5092/7028 admitted stationary ADS and selected the next exact blocker:
+`request=1->0 blend=0.595298->0`. The only authored target source in the tick is
+`0x140CAE480` at `0x140CAFB7C`, so the next relay preserves positive native values
+and substitutes `1.0` only for zero slot-1 peer ADS. Wrong direction is addressed
+separately by supplying GunMoveShield's stock positive-Z body basis from the sender
+root quaternion. The disappearance occurred with sender pistol `0x33E29A1B`,
+proving the scoped-art visibility gate was too narrow; DrawControl mask `0x40` is
+now cleared for every automatic puppet ADS interval. Details:
+`reports/player_aim_authored_target_body_visibility_20260713.md`.
+
 ## Turn note (2026-07-13, Codex - aim eligibility callsite relay)
 
 Runtime PIDs 16212/1692 with `a2d8cf4`: sender emitted

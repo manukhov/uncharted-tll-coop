@@ -6692,6 +6692,22 @@ void quat_forward_neg_z(const float q[4], float& fx, float& fy, float& fz) {
     }
 }
 
+void quat_forward_positive_z(const float q[4], float& fx, float& fy, float& fz) {
+    const float x = q[0];
+    const float y = q[1];
+    const float z = q[2];
+    const float w = q[3];
+    fx = 2.0F * (x * z + w * y);
+    fy = 2.0F * (y * z - w * x);
+    fz = 1.0F - 2.0F * (x * x + y * y);
+    const float len = std::sqrt(fx * fx + fy * fy + fz * fz);
+    if (len > 1e-3F) {
+        fx /= len;
+        fy /= len;
+        fz /= len;
+    }
+}
+
 using PlayerAimWorldBasisFunction = std::int64_t(__fastcall*)(
     void* controller,
     const float* target_point,
@@ -6815,6 +6831,15 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
         peer.pose_seed[2] + forward_z * kAimTargetDistance,
         std::isfinite(peer.pose_seed[3]) ? peer.pose_seed[3] : 1.0F,
     };
+    const float* relayed_body_forward = body_forward;
+    alignas(16) float local_body_forward[4]{};
+    if (valid_network_orientation(peer.quat)) {
+        quat_forward_positive_z(
+            peer.quat, local_body_forward[0], local_body_forward[1],
+            local_body_forward[2]);
+        local_body_forward[3] = 0.0F;
+        relayed_body_forward = local_body_forward;
+    }
 
     static ULONGLONG last_log = 0;
     const ULONGLONG now = GetTickCount64();
@@ -6823,11 +6848,13 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
         std::ostringstream line;
         line << "AIM-WORLD-BASIS relay target=(" << local_target[0] << ","
              << local_target[1] << "," << local_target[2] << ") fwd=("
-             << forward_x << "," << forward_y << "," << forward_z << ")";
+             << forward_x << "," << forward_y << "," << forward_z << ") body=("
+             << relayed_body_forward[0] << "," << relayed_body_forward[1] << ","
+             << relayed_body_forward[2] << ")";
         force_log_line(line.str().c_str());
     }
     return g_original_player_aim_world_basis(
-        controller, local_target, body_forward, active,
+        controller, local_target, relayed_body_forward, active,
         horizontal_limit_a, horizontal_limit_b, single_screen,
         vertical_limit_a, vertical_limit_b);
 }
@@ -13725,7 +13752,7 @@ bool seh_clear_draw_control_child_flags(
 void keep_puppet_scoped_mesh_visible(
     void* puppet, const coop::StatePacket& peer) {
     if (puppet == nullptr || !puppet_aim_press_relay_enabled_for_peer(peer) ||
-        !peer_packet_aim_active(peer) || !peer_holds_scoped_rifle(peer) ||
+        !peer_packet_aim_active(peer) ||
         readable_bytes(static_cast<std::byte*>(puppet) + 0x1B0) < 1) {
         return;
     }
@@ -13749,7 +13776,7 @@ void keep_puppet_scoped_mesh_visible(
     const ULONGLONG now = GetTickCount64();
     if (now - last_log > 500) {
         last_log = now;
-        force_log_line("SCOPED-MAIN-VIEW cleared instance flag 0x40");
+        force_log_line("PUPPET-ADS-MAIN-VIEW cleared instance flag 0x40");
     }
 }
 
@@ -17983,6 +18010,103 @@ bool install_player_aim_additive_permission_callsite_relay() {
     return true;
 }
 
+using PlayerAimBlendTargetFunction = float(__fastcall*)(
+    void*, void*, void*, void*);
+PlayerAimBlendTargetFunction g_original_player_aim_blend_target = nullptr;
+
+float __fastcall hooked_player_aim_blend_target_callsite(
+    void* player, void* arg2, void* arg3, void* arg4) {
+    const float original = g_original_player_aim_blend_target != nullptr
+        ? g_original_player_aim_blend_target(player, arg2, arg3, arg4)
+        : 0.0F;
+    if (player == nullptr || player != retained_player_object(1) ||
+        readable_bytes(static_cast<std::byte*>(player) + 0x4014) <
+            sizeof(std::uint32_t) ||
+        *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(player) + 0x4010) !=
+            kSlot1ScreenIndex) {
+        return original;
+    }
+
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    coop::StatePacket peer{};
+    if (received == 0 || GetTickCount64() - received > 250 ||
+        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer) ||
+        (std::isfinite(original) && original > 0.001F)) {
+        return original;
+    }
+
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log > 500) {
+        last_log = now;
+        std::ostringstream line;
+        line << "AIM-BLEND-TARGET original=" << original << " forced=1";
+        force_log_line(line.str().c_str());
+    }
+    return 1.0F;
+}
+
+bool install_player_aim_blend_target_callsite_relay() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kPlayerAimBlendTargetCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line("Player aim blend target relay SKIPPED (not E8)");
+        return false;
+    }
+    std::int32_t displacement = 0;
+    std::memcpy(&displacement, call_site + 1, sizeof(displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(displacement);
+    const std::uintptr_t expected = g_module + kPlayerAimBlendTargetRva;
+    if (target != expected) {
+        boot_log_line("Player aim blend target relay SKIPPED (target)");
+        return false;
+    }
+    g_original_player_aim_blend_target =
+        reinterpret_cast<PlayerAimBlendTargetFunction>(expected);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("Player aim blend target relay SKIPPED (relay)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_player_aim_blend_target_callsite);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("Player aim blend target relay SKIPPED (range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("Player aim blend target relay SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line("Player aim blend target callsite relay installed");
+    return true;
+}
+
 using PlayerInteractDispatcherFn = bool(__fastcall*)(void*, int*);
 
 bool __fastcall hooked_player_interact_dispatch_callsite(
@@ -19237,6 +19361,7 @@ DWORD WINAPI install_hook(void*) {
     install_scope_visible_gate();
     install_player_aim_eligibility_callsite_relay();
     install_player_aim_additive_permission_callsite_relay();
+    install_player_aim_blend_target_callsite_relay();
     install_player_aim_blend_tick_probe();
     install_player_aim_world_basis_relay();
     install_player_pickup_start_relay();
