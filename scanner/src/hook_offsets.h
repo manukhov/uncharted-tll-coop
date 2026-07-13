@@ -316,6 +316,11 @@ constexpr std::uintptr_t kAimTargetReticleCallSiteRva = 0xCB17D6;
 // (Player per-frame update): native code vmovups resolver result into Player+0x1720
 // and +0x1730 (aim pose). Top POSESEED-CALLERS hit ~150/frame during puppet ADS.
 constexpr std::uintptr_t kPlayerAimPoseSeedCallSiteRva = 0x10E934B;
+// PlayerAimController vtable +0x58 -> ApplyWorldAimBasis 0x140CAF110. This is
+// the narrow native input to directional aim-additive weights: target point,
+// body-forward, mode bytes, and four authored angular limits.
+constexpr std::uintptr_t kPlayerAimWorldBasisVtableSlotRva = 0x2A0B250;
+constexpr std::uintptr_t kPlayerAimWorldBasisRva = 0x0CAF110;
 constexpr std::size_t kWeaponControllerGetWeaponBySlotVtOffset = 0xB0;
 constexpr std::uintptr_t kWeaponPickupVftableRva = 0x2AA66C0;
 constexpr std::size_t kWeaponPickupGetInteractControlVtableOffset = 0x248;

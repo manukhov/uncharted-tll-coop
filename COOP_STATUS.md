@@ -1,5 +1,20 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-13, Codex - PlayerAimController world-basis relay)
+
+Implemented the previously build-ready narrow aim fix: vtable slot `+0x58` at
+`0x142A0B250` (`PlayerAimController_ApplyWorldAimBasis 0x140CAF110`) is swapped
+after exact pointer verification. For retained slot 1, screen 1, fresh peer ADS,
+and a valid pose seed, only the target float4 is replaced with the peer camera ray.
+Body-forward, mode bytes, and all four authored angular limits remain native.
+
+Static quota is met by the GunMoveShield callsites, exact target-copy data flow,
+the internal skeleton-origin resolver, and the downstream
+`aim-add-left/right/down/up` publisher. Build succeeds; runtime pending. Prediction:
+changing peer camera yaw/pitch changes `AIM-WORLD-BASIS relay ... fwd=...` and the
+remote upper body follows. Details:
+`reports/player_aim_world_basis_relay_20260713.md`.
+
 ## Turn note (2026-07-13, Codex - native PlayerPickupController relay)
 
 **RUNTIME REJECTED:** factory-cache test with M-30 (PIDs 5084/21076) still emitted

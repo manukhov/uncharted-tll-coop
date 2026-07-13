@@ -6692,6 +6692,117 @@ void quat_forward_neg_z(const float q[4], float& fx, float& fy, float& fz) {
     }
 }
 
+using PlayerAimWorldBasisFunction = std::int64_t(__fastcall*)(
+    void* controller,
+    const float* target_point,
+    const float* body_forward,
+    std::uint8_t active,
+    float horizontal_limit_a,
+    float horizontal_limit_b,
+    std::uint8_t single_screen,
+    float vertical_limit_a,
+    float vertical_limit_b);
+PlayerAimWorldBasisFunction g_original_player_aim_world_basis = nullptr;
+
+std::int64_t __fastcall hooked_player_aim_world_basis(
+    void* controller,
+    const float* target_point,
+    const float* body_forward,
+    std::uint8_t active,
+    float horizontal_limit_a,
+    float horizontal_limit_b,
+    std::uint8_t single_screen,
+    float vertical_limit_a,
+    float vertical_limit_b) {
+    if (g_original_player_aim_world_basis == nullptr) {
+        return 0;
+    }
+
+    bool substitute = false;
+    coop::StatePacket peer{};
+    void* owner = nullptr;
+    if (controller != nullptr && target_point != nullptr && body_forward != nullptr &&
+        readable_bytes(static_cast<std::byte*>(controller) + 0x110) >=
+            sizeof(void*) &&
+        readable_bytes(target_point) >= 4 * sizeof(float) &&
+        readable_bytes(body_forward) >= 4 * sizeof(float)) {
+        owner = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(controller) + 0x108);
+        const ULONGLONG received =
+            g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+        substitute = owner != nullptr && owner == retained_player_object(1) &&
+            readable_bytes(static_cast<std::byte*>(owner) + 0x4014) >=
+                sizeof(std::uint32_t) &&
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(owner) + 0x4010) ==
+                kSlot1ScreenIndex &&
+            received != 0 && GetTickCount64() - received <= 250 &&
+            copy_peer_state_snapshot(peer) && peer_packet_aim_active(peer) &&
+            valid_network_position(peer.pose_seed) &&
+            valid_network_orientation(peer.pose_seed + 4);
+    }
+
+    if (!substitute) {
+        return g_original_player_aim_world_basis(
+            controller, target_point, body_forward, active,
+            horizontal_limit_a, horizontal_limit_b, single_screen,
+            vertical_limit_a, vertical_limit_b);
+    }
+
+    float forward_x = 0.0F;
+    float forward_y = 0.0F;
+    float forward_z = 0.0F;
+    quat_forward_neg_z(
+        peer.pose_seed + 4, forward_x, forward_y, forward_z);
+    constexpr float kAimTargetDistance = 180.0F;
+    alignas(16) float local_target[4]{
+        peer.pose_seed[0] + forward_x * kAimTargetDistance,
+        peer.pose_seed[1] + forward_y * kAimTargetDistance,
+        peer.pose_seed[2] + forward_z * kAimTargetDistance,
+        std::isfinite(peer.pose_seed[3]) ? peer.pose_seed[3] : 1.0F,
+    };
+
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log > 1000) {
+        last_log = now;
+        std::ostringstream line;
+        line << "AIM-WORLD-BASIS relay target=(" << local_target[0] << ","
+             << local_target[1] << "," << local_target[2] << ") fwd=("
+             << forward_x << "," << forward_y << "," << forward_z << ")";
+        force_log_line(line.str().c_str());
+    }
+    return g_original_player_aim_world_basis(
+        controller, local_target, body_forward, active,
+        horizontal_limit_a, horizontal_limit_b, single_screen,
+        vertical_limit_a, vertical_limit_b);
+}
+
+bool install_player_aim_world_basis_relay() {
+    auto* const slot = reinterpret_cast<void**>(
+        g_module + kPlayerAimWorldBasisVtableSlotRva);
+    void* const expected =
+        reinterpret_cast<void*>(g_module + kPlayerAimWorldBasisRva);
+    if (*slot != expected) {
+        boot_log_line("PlayerAimController world-basis relay SKIPPED (slot mismatch)");
+        return false;
+    }
+    g_original_player_aim_world_basis =
+        reinterpret_cast<PlayerAimWorldBasisFunction>(*slot);
+    DWORD old = 0;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+        boot_log_line("PlayerAimController world-basis relay SKIPPED (protect)");
+        g_original_player_aim_world_basis = nullptr;
+        return false;
+    }
+    *slot = reinterpret_cast<void*>(&hooked_player_aim_world_basis);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(void*), old, &ignored);
+    boot_log_line("PlayerAimController world-basis relay installed");
+    return true;
+}
+
 using PlayerLookAtSetPointFn = void(__fastcall*)(
     void* self, unsigned int slot, int param, const float* pos, float weight);
 using PlayerLookAtUpdateIkFn = void(__fastcall*)(void* self, void* owner);
@@ -18905,6 +19016,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_fire_capture();
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
+    install_player_aim_world_basis_relay();
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();
     install_weapon_pickup_gate();

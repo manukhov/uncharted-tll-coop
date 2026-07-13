@@ -26994,3 +26994,18 @@ arg3 in PickupPacket v4. Four successive local starts (`seq=1..4`) each produced
 `PICKUP-CONTROLLER-APPLY queued=1` remotely, and the user confirmed the visible
 pickup bend. Calling the original controller on `puppet+0x1EB8` with object=null
 is therefore sufficient; no live WeaponPickup descriptor is required.
+
+### 2026-07-13 STATIC implementation: narrow PlayerAimController target relay
+
+The build-ready aim design is now implemented at PlayerAimController vtable slot
+`+0x58` (`0x142A0B250` -> `PlayerAimController_ApplyWorldAimBasis 0x140CAF110`).
+The hook verifies owner `controller+0x108` is retained slot 1 with screen index 1,
+requires a fresh strict-ADS peer pose seed, then substitutes only a hook-local
+target float4 built from peer camera origin and quaternion `-Z`. It forwards the
+body-forward vector, both mode bytes, and all four native limits unchanged.
+
+This preserves the proven downstream chain into
+`PlayerAimController_ComputeDirectionalAimWeights 0x140CB32B0` and
+`PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0`. Release build
+succeeds. Runtime prediction and competing hypotheses are recorded in
+`reports/player_aim_world_basis_relay_20260713.md`.
