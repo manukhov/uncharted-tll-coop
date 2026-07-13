@@ -64,3 +64,16 @@ emits `CHAR-CLOTH` only when the object vtable is exactly `0x142BAF780`.
   three hypotheses are rejected and analysis moves to cloth output scheduling.
 
 No process spawn/rebuild is called by this diagnostic.
+
+## Initial runtime control
+
+Before reload, PID 14696 emitted three distinct `ProcessCharCloth` objects for
+the remote Chloe. All three resolved the same live parent handle and parent
+DrawControl; each had a non-null cloth body, `initialized=1`, child mesh count
+`1/1`, gates `255/255`, and four of four active instances. Their mesh ids were
+`0x42f16666`, `0x3280a3b4`, and `0x05f33116`.
+
+This validates the exact-vtable discriminator and establishes the healthy
+baseline. The logger uses a fixed per-object atomic cache so alternating cloth
+objects do not create per-frame output. The post-reload half of the prediction
+is still pending.

@@ -27268,3 +27268,8 @@ HYPOTHESIS for the two remaining mechanisms**.
   preserved RBX object and emits exact-vtable `CHAR-CLOTH` snapshots. Status:
   **STATIC discriminator ready**; see
   `reports/process_char_cloth_reload_20260713.md`.
+- Initial runtime control on PID 14696 found three distinct remote-Chloe
+  `ProcessCharCloth` objects. Every object had the same valid parent, a non-null
+  cloth body, `initialized=1`, one of one child meshes, gates `255/255`, and 4/4
+  active instances. This confirms the discriminator and healthy baseline;
+  post-reload comparison is pending.

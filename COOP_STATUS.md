@@ -16,6 +16,9 @@ builds cloth state, and marks `+0x870`; `ProcessCharCloth_UpdateRoot
 0x141F3E6E0` consumes that parent. The read-only `0x141ED63F7` relay now passes
 the preserved RBX attachable and logs exact-vtable `CHAR-CLOTH` state. Runtime
 prediction and competitors are in `reports/process_char_cloth_reload_20260713.md`.
+Initial runtime on PID 14696 found three healthy remote-Chloe cloth children,
+each initialized with a live parent/body, one mesh, and 4/4 active instances.
+The post-reload comparison remains pending.
 
 ## Turn note (2026-07-13, Codex - parent hat lifecycle discriminator)
 

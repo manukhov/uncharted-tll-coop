@@ -18636,8 +18636,33 @@ char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
             signature *= 1099511628211ULL;
             signature ^= initialized;
 
-            static std::atomic<std::uint64_t> last_cloth_signature{0};
-            if (last_cloth_signature.exchange(
+            struct ClothLogSlot {
+                std::atomic<std::uintptr_t> object{0};
+                std::atomic<std::uint64_t> signature{0};
+            };
+            static std::array<ClothLogSlot, 16> cloth_log_slots{};
+            ClothLogSlot* log_slot = nullptr;
+            const std::uintptr_t object_value =
+                reinterpret_cast<std::uintptr_t>(attachable);
+            for (auto& candidate : cloth_log_slots) {
+                std::uintptr_t current =
+                    candidate.object.load(std::memory_order_relaxed);
+                if (current == object_value) {
+                    log_slot = &candidate;
+                    break;
+                }
+                if (current == 0 && candidate.object.compare_exchange_strong(
+                        current, object_value, std::memory_order_relaxed)) {
+                    log_slot = &candidate;
+                    break;
+                }
+            }
+            if (log_slot == nullptr) {
+                log_slot = &cloth_log_slots[(object_value >> 4) %
+                                            cloth_log_slots.size()];
+                log_slot->object.store(object_value, std::memory_order_relaxed);
+            }
+            if (log_slot->signature.exchange(
                     signature, std::memory_order_relaxed) != signature) {
                 std::ostringstream cloth_line;
                 cloth_line << "CHAR-CLOTH object=0x" << std::hex
