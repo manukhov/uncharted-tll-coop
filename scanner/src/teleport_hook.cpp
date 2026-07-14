@@ -6902,6 +6902,8 @@ bool peer_puppet_aim_controller_fixup_wanted(
     return true;
 }
 
+bool mirror_puppet_aim_add_to_fganim(void* player);
+
 void force_peer_puppet_aim_blend_state(void* controller) {
     if (controller == nullptr) {
         return;
@@ -7118,6 +7120,7 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
     const std::int64_t result = g_original_player_aim_world_basis(
         controller, local_target, relayed_body_forward, active,
         lim_h_a, lim_h_b, single_screen, lim_v_a, lim_v_b);
+    mirror_puppet_aim_add_to_fganim(owner);
     if (controller != nullptr &&
         readable_bytes(static_cast<std::byte*>(controller) + 0x8D0) >= 0x20) {
         // PublishDirectionalAimWeights writes exactly +0x8B8..+0x8C4.
@@ -12008,6 +12011,11 @@ void apply_puppet_head_look_pre() {
 }
 
 constexpr bool g_enable_aim_palette_probe = true;
+// Runtime 2026-07-14: publish_state ([[Player+0x1A0]+0x58]+0x10) receives live
+// aim-add floats while Player+0x1A8 FgAnimData keeps stale +0x188..+0x194 (fgAdd
+// stuck at 0.2,0,0,1). Mirror publish fields into FgAnimData so
+// ProcessAnimCmdListSegment evaluates peer camera on the render-bound object.
+constexpr bool g_enable_puppet_fganim_aim_add_mirror = true;
 
 float horizontal_yaw_degrees(float forward_x, float forward_z) {
     return std::atan2(forward_x, forward_z) * (180.0F / 3.14159265F);
@@ -12046,6 +12054,96 @@ void* aim_publish_active_state_from_player(void* player) {
     }
     return *reinterpret_cast<void* const*>(
         static_cast<const std::byte*>(child) + kPlayerAnimActiveStateOffset);
+}
+
+void* player_fganim_from_player(void* player) {
+    if (player == nullptr ||
+        readable_bytes(player) < kPlayerFgAnimDataOffset + sizeof(void*)) {
+        return nullptr;
+    }
+    return *reinterpret_cast<void* const*>(
+        static_cast<const std::byte*>(player) + kPlayerFgAnimDataOffset);
+}
+
+bool read_fganim_buffer_ptrs(
+    void* object, const void** palette, const void** skinning) {
+    if (palette != nullptr) {
+        *palette = nullptr;
+    }
+    if (skinning != nullptr) {
+        *skinning = nullptr;
+    }
+    if (object == nullptr ||
+        readable_bytes(object) <
+            kFgAnimDataCurrentSkinningMatsOffset + sizeof(void*)) {
+        return false;
+    }
+    const auto* const bytes = static_cast<const std::byte*>(object);
+    if (palette != nullptr) {
+        *palette = *reinterpret_cast<const void* const*>(
+            bytes + kFgAnimDataRuntimePayloadOffset);
+    }
+    if (skinning != nullptr) {
+        *skinning = *reinterpret_cast<const void* const*>(
+            bytes + kFgAnimDataCurrentSkinningMatsOffset);
+    }
+    return true;
+}
+
+bool pointer_looks_like_heap(const void* ptr) {
+    const auto value = reinterpret_cast<std::uintptr_t>(ptr);
+    return value >= 0x10000ULL;
+}
+
+bool mirror_puppet_aim_add_to_fganim(void* player) {
+    if (!g_enable_puppet_fganim_aim_add_mirror || player == nullptr) {
+        return false;
+    }
+    void* const publish_state = aim_publish_active_state_from_player(player);
+    void* const fg = player_fganim_from_player(player);
+    if (publish_state == nullptr || fg == nullptr || publish_state == fg) {
+        return false;
+    }
+    constexpr std::size_t kAimAddSpan =
+        kAnimStateAimAddRightOffset + sizeof(float) - kAnimStateAimAddDownOffset;
+    if (readable_bytes(publish_state) < kAnimStateAimAddDownOffset + kAimAddSpan ||
+        readable_bytes(fg) < kAnimStateAimAddDownOffset + kAimAddSpan) {
+        return false;
+    }
+    auto* const pub_bytes = static_cast<std::byte*>(publish_state);
+    auto* const fg_bytes = static_cast<std::byte*>(fg);
+    float before[4]{};
+    float after[4]{};
+    read_aim_additive_lrdu(fg, kAnimStateAimAddDownOffset, before);
+    std::memcpy(
+        fg_bytes + kAnimStateAimAddDownOffset,
+        pub_bytes + kAnimStateAimAddDownOffset,
+        kAimAddSpan);
+    read_aim_additive_lrdu(fg, kAnimStateAimAddDownOffset, after);
+    const float delta = std::fabs(before[0] - after[0]) +
+                        std::fabs(before[1] - after[1]) +
+                        std::fabs(before[2] - after[2]) +
+                        std::fabs(before[3] - after[3]);
+    if (delta < 0.001F) {
+        return false;
+    }
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log >= 400) {
+        last_log = now;
+        float pub[4]{};
+        read_aim_additive_lrdu(publish_state, kAnimStateAimAddDownOffset, pub);
+        std::ostringstream line;
+        line << "AIM-FGANIM-MIRROR fgBefore=(" << before[2] << "," << before[3]
+             << "," << before[0] << "," << before[1] << ") fgAfter=("
+             << after[2] << "," << after[3] << "," << after[0] << ","
+             << after[1] << ") pub=(" << pub[2] << "," << pub[3] << ","
+             << pub[0] << "," << pub[1] << ") pubObj=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(publish_state) << " fg=0x"
+             << reinterpret_cast<std::uintptr_t>(fg) << std::dec;
+        force_log_line(line.str().c_str());
+    }
+    return true;
 }
 
 void log_puppet_aim_render_discriminator(
@@ -12378,7 +12476,7 @@ void log_puppet_fganim_split_discriminator(
 
     float pub_weights[4]{};
     float fg_weights[4]{};
-    if (pub_ok) {
+    if (pub_object != nullptr) {
         float raw[4]{};
         if (read_aim_additive_lrdu(pub_object, kAnimStateAimAddDownOffset, raw)) {
             pub_weights[0] = raw[2];
@@ -12387,7 +12485,7 @@ void log_puppet_fganim_split_discriminator(
             pub_weights[3] = raw[1];
         }
     }
-    if (fg_ok) {
+    if (fg_object != nullptr) {
         float raw[4]{};
         if (read_aim_additive_lrdu(fg_object, kAnimStateAimAddDownOffset, raw)) {
             fg_weights[0] = raw[2];
@@ -12397,12 +12495,50 @@ void log_puppet_fganim_split_discriminator(
         }
     }
 
+    float fg_pal_total = 0.0F;
+    RankedJoint fg_pal_motion[3]{};
+    if (fg_ok && fg.palette != nullptr) {
+        static std::array<float, kMaxJoints * kJointFloatCount> fg_pal_baseline{};
+        static void* fg_pal_owner = nullptr;
+        static std::uint32_t fg_pal_joint_count = 0;
+        const bool reset_fg_pal = fg_object != fg_pal_owner ||
+                                  joint_count != fg_pal_joint_count;
+        if (reset_fg_pal) {
+            if (readable_bytes(fg.palette) >= buffer_bytes) {
+                std::memcpy(fg_pal_baseline.data(), fg.palette, buffer_bytes);
+            }
+            fg_pal_owner = fg_object;
+            fg_pal_joint_count = joint_count;
+        } else {
+            for (std::uint32_t joint = 0; joint < joint_count; ++joint) {
+                const float motion = joint_matrix_delta(
+                    fg.palette, fg_pal_baseline.data(), joint_count, joint);
+                if (motion > 0.0F) {
+                    rank_joint(fg_pal_motion, joint, motion);
+                    fg_pal_total += motion;
+                }
+            }
+            if (readable_bytes(fg.palette) >= buffer_bytes) {
+                std::memcpy(fg_pal_baseline.data(), fg.palette, buffer_bytes);
+            }
+        }
+    }
+
+    const bool fg_skin_valid = pointer_looks_like_heap(fg.skinning);
+    const bool pub_skin_valid = pointer_looks_like_heap(pub.skinning);
+
     std::ostringstream line;
     line << "AIM-FGANIM-DISC seq=" << peer.sequence << " peerYaw=" << peer_yaw
          << " pubAdd=(" << pub_weights[0] << "," << pub_weights[1] << ","
          << pub_weights[2] << "," << pub_weights[3] << ") fgAdd=("
          << fg_weights[0] << "," << fg_weights[1] << "," << fg_weights[2]
-         << "," << fg_weights[3] << ") samePal="
+         << "," << fg_weights[3] << ") pubOk=" << (pub_ok ? 1 : 0)
+         << " fgOk=" << (fg_ok ? 1 : 0) << " pubPalValid="
+         << (pointer_looks_like_heap(pub.palette) ? 1 : 0)
+         << " fgPalValid=" << (pointer_looks_like_heap(fg.palette) ? 1 : 0)
+         << " pubSkinValid=" << (pub_skin_valid ? 1 : 0)
+         << " fgSkinValid=" << (fg_skin_valid ? 1 : 0)
+         << " samePal="
          << ((pub_ok && fg_ok && pub.palette == fg.palette) ? 1 : 0)
          << " sameSkin="
          << ((pub_ok && fg_ok && pub.skinning == fg.skinning) ? 1 : 0)
@@ -12410,10 +12546,12 @@ void log_puppet_fganim_split_discriminator(
          << "," << cross_pal[1].index << ":" << cross_pal[1].value
          << " crossSkin=" << cross_skin[0].index << ":" << cross_skin[0].value
          << "," << cross_skin[1].index << ":" << cross_skin[1].value
-         << " pubSkinTot=" << pub_skin_total << " fgSkinTot=" << fg_skin_total
-         << " pubSkinTop=" << pub_skin_motion[0].index << ":"
-         << pub_skin_motion[0].value << " fgSkinTop=" << fg_skin_motion[0].index
-         << ":" << fg_skin_motion[0].value << " finite=" << finite_joints;
+         << " fgPalTot=" << fg_pal_total << " pubSkinTot=" << pub_skin_total
+         << " fgSkinTot=" << fg_skin_total << " pubSkinTop="
+         << pub_skin_motion[0].index << ":" << pub_skin_motion[0].value
+         << " fgSkinTop=" << fg_skin_motion[0].index << ":"
+         << fg_skin_motion[0].value << " fgPalTop=" << fg_pal_motion[0].index
+         << ":" << fg_pal_motion[0].value << " finite=" << finite_joints;
     force_log_line(line.str().c_str());
 
     if (pub_ok && pub.skinning != nullptr &&
@@ -12766,6 +12904,9 @@ void apply_puppet_transform_post(void* /*update_object*/) {
         orientation_dot = blend_network_orientation(quat, pkt.quat, 0.18F);
     }
     log_puppet_action_state(puppet, pkt);
+    if (peer_aiming) {
+        mirror_puppet_aim_add_to_fganim(puppet);
+    }
     if (g_enable_aim_palette_probe) {
         log_puppet_aim_render_discriminator(puppet, pkt);
         log_puppet_fganim_split_discriminator(puppet, pkt);
@@ -21551,7 +21692,8 @@ DWORD WINAPI install_hook(void*) {
         log_line("tll.exe module not found");
         return 1;
     }
-    boot_log_line("TLL hook DLL init 2026-07-14bq (AIM-FGANIM-DISC pub vs fg skinning)");
+    boot_log_line(
+        "TLL hook DLL init 2026-07-14br (AIM-FGANIM-MIRROR publish->FgAnimData aim-add)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");

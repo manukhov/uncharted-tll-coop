@@ -27590,3 +27590,11 @@ HYPOTHESIS for the two remaining mechanisms**.
   0x141BB8320` (runtime root snap REJECTED). `Player+0x740` is AO mesh refresh only.
   Preferred fix surface: align publish-state `pubState` skinning (`+0x560`) with render,
   not more root yaw. Report: `reports/player_aim_palette_render_chain_20260714.md`.
+- **RUNTIME 2026-07-14 (PIDs 12996/20040): CONFIRMED** publish vs FgAnimData aim-add
+  split. Receiver PID 20040: `pubAdd==ctrlAdd` tracks peer camera on every
+  `AIM-RENDER-DISC` sample; `fgAdd` on `Player+0x1A8` stuck `(0.2,0,0,1)` with
+  `samePtr=0`. `AIM-FGANIM-DISC baseline`: `pubPal=0` (publish object is anim active
+  state `0x10E0F30230`, not FgAnimData); `fgPal` valid; `fgSkinValid=0` (`+0x560` not
+  heap). `AIM-PALETTE` shows `fg` palette joint motion; `fgSkinTot=0` always. Fix
+  attempt: mirror publish-state `+0x188..+0x194` → `FgAnimData+0x188..+0x194`
+  (`AIM-FGANIM-MIRROR`, build `2026-07-14br`).

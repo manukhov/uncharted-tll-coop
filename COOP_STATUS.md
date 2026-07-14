@@ -2518,4 +2518,20 @@ under the current static-only instruction.
   `reports/player_aim_palette_render_chain_20260714.md`.
 - **Build 2026-07-14bq:** read-only `AIM-FGANIM-DISC` compares `pubObject` vs
   `fgObject` palette `+0x230` and skinning `+0x560` with cross-joint deltas and
-  per-object skinning motion. Boot marker `2026-07-14bq`. Runtime pending.
+  per-object skinning motion. Boot marker `2026-07-14bq`.
+
+## 2026-07-14 AIM-FGANIM-DISC runtime (PIDs 12996/20040)
+
+- **CONFIRMED split:** `pubAdd==ctrlAdd` tracks peer; `fgAdd` stuck `(0.2,0,0,1)` on
+  `Player+0x1A8` while `samePtr=0`. `pubPal=0` (publish object is anim active state,
+  not full FgAnimData); `fgPal` valid and `AIM-PALETTE` shows joint motion.
+- **CONFIRMED:** `fgSkinValid=0` — `FgAnimData+0x560` is not a heap pointer on puppet;
+  `fgSkinTot=0` every sample. Palette moves; skinning path never publishes.
+- **Root cause candidate:** `ProcessAnimCmdListSegment` reads aim-add from
+  `Player+0x1A8` (`fgAdd` stale), not from publish-state where controller writes.
+- **Fix build 2026-07-14br:** `mirror_puppet_aim_add_to_fganim` copies publish-state
+  `+0x188..+0x194` → `FgAnimData+0x188..+0x194` after world-basis publish and in
+  `apply_puppet_transform_post`. Logs `AIM-FGANIM-MIRROR` when delta > 0.001.
+- **Prediction:** after mirror, `fgAdd` tracks `pubAdd`; visible puppet ADS follows
+  sender camera. If still fixed with matching `fgAdd`, next surface is palette→skinning
+  publish (`AnimateDisabledObjectJob`) or render-owner object split.
