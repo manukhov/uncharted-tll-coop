@@ -2316,3 +2316,13 @@ under the current static-only instruction.
   any `AIM-TURN-DIR` line. Thus the direction override was not exercised. Reject
   the hook's hot-path retained-table lookup; v2 classifies controller `+0x108`
   owner directly by `Player+0x4010 == 1`.
+- Second runtime PIDs 10600/12916 proved the internal route: staged target
+  `(-0.803093,-0.595853)` reached native body basis
+  `(-0.803219,-0.595684)` with `yawPre=0`. User visual result still failed and a
+  location/progress transition reproduced Chloe's kneeling slide, so the build is
+  REJECTED as a complete fix.
+- STATIC conflict found in mod order: `apply_puppet_transform_post` runs after
+  `g_original_update` and blended `Player+0x140` back toward camera-independent
+  `StatePacket::quat` on every ADS frame. That cancelled the proven native turn
+  before render while leaving `aim-idle-rotate` looping. Next build skips only
+  this post-ADS root blend while the native GunMoveController relay is installed.

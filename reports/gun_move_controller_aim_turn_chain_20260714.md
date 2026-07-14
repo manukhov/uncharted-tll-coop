@@ -86,3 +86,44 @@ the retained table was transitioning. That hot-path lookup is **REJECTED**. The
 next build identifies the already-resolved owner at controller `+0x108` by its
 own confirmed `Player+0x4010 == 1` screen index and does not touch the retained
 table. The direction hypothesis remains STATIC and untested.
+
+### Second runtime attempt: internal turn passed, visual result rejected
+
+PIDs 10600/12916 survived gameplay entry and ADS. Receiver PID 10600 logged a
+changing staged direction while PID 12916 rotated its camera, ending at
+`peerPosZ=(-0.803093,-0.595853)`. Inside the native update, GunMoveShield later
+reported body basis `(-0.803219,0,-0.595684)` and `yawPre=0`. The stock screen-1
+result stayed almost fixed around `(0.075,-0.997)`, so the `+0x150` cause and
+native `0x140E8FD00` root turn are internally **CONFIRMED**.
+
+The user nevertheless saw no visual aim progress, and after a location/progress
+transition Chloe resumed the kneeling forward/back slide. Therefore the first
+complete `+0x150` build is **REJECTED as a visual fix**.
+
+## STATIC correction: remove the post-native ADS root cancellation
+
+The failure has a second exact owner in mod source:
+
+1. `hooked_update` calls `g_original_update(object)` and only afterwards calls
+   `apply_puppet_transform_post(object)` for retained slot 1.
+2. During fresh peer ADS, `apply_puppet_transform_post` takes its default branch
+   and blends `Player+0x140` toward `StatePacket::quat` by 0.35 every frame.
+3. `StatePacket::quat` is the sender's local body root, not its route-camera yaw.
+   Thus this post writer cancels the native camera turn that had already produced
+   the matching body basis inside `g_original_update`.
+4. The resulting state-machine/root disagreement predicts both observations: the
+   renderer receives the cancelled root, while `aim-idle-rotate` keeps trying to
+   complete and corrupts locomotion across a lifecycle transition.
+
+Competing explanations are now separable. "Native turn never ran" is rejected by
+the matching internal body basis. "Relayed axis is wrong" is rejected by the same
+match. The remaining alternative is that render ignores the final Player root
+even after the post cancellation is removed.
+
+The next build leaves the installed GunMoveController relay in ownership of ADS
+root yaw and skips only the post-ADS `pkt.quat` blend while that relay is installed.
+Position reconciliation, respawn snaps, non-ADS orientation and every non-slot-1
+controller remain unchanged. Prediction: visible aim follows camera, native turn
+finishes instead of looping, and location change does not reproduce kneeling-slide.
+If internal body still aligns but the visible model does not, trace the final
+post-anim/render skeleton owner; do not add another Player root writer.

@@ -27445,3 +27445,14 @@ HYPOTHESIS for the two remaining mechanisms**.
   `+0x150` direction hypothesis. The replacement guard uses controller owner
   `+0x108` and the owner's own `Player+0x4010 == 1` field, with no retained-table
   lookup.
+- **RUNTIME PARTIAL / VISUAL REJECTED:** PIDs 10600/12916 showed relayed
+  controller `+0x150=(-0.803093,-0.595853)` converge to native composed body basis
+  `(-0.803219,-0.595684)` and `yawPre=0`, confirming the GunMoveController route.
+  The user still saw no aim progress and Chloe entered the kneeling-slide state
+  after a location/progress transition.
+- **STATIC correction:** the mod called `apply_puppet_transform_post` after
+  `g_original_update` and, during ADS, blended `Player+0x140` toward
+  camera-independent `StatePacket::quat` by 0.35. This cancelled the just-proven
+  native camera turn before render while `aim-idle-rotate` remained active. The
+  next discriminator removes only that post-ADS packet-root blend when the native
+  GunMoveController turn relay is installed.

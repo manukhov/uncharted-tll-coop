@@ -6840,6 +6840,7 @@ using GunMoveControllerApplyCameraYawFunction = char(__fastcall*)(
     void* controller, const float* input_direction);
 GunMoveControllerApplyCameraYawFunction
     g_original_gun_move_apply_camera_yaw = nullptr;
+bool g_gun_move_camera_turn_relay_installed = false;
 
 bool seh_read_aim_origin_point(void* controller, float out[4]) {
     if (controller == nullptr || out == nullptr || g_module == 0) {
@@ -7257,6 +7258,7 @@ bool install_gun_move_camera_turn_relay() {
     FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
     DWORD ignored = 0;
     VirtualProtect(slot, sizeof(void*), old, &ignored);
+    g_gun_move_camera_turn_relay_installed = true;
     boot_log_line("GunMoveController camera-turn relay installed");
     return true;
 }
@@ -11979,15 +11981,17 @@ void apply_puppet_transform_post(void* /*update_object*/) {
         write_peer_aim_world_targets_from_pose_seed(puppet, pkt);
     }
     if (peer_aiming) {
-        // Directional aim-additives own ordinary ADS. The camera-root path remains
-        // only as a manual A/B because pre/post root writes were runtime-rejected.
+        // The native GunMoveController turn relay owns ADS root yaw. Blending the
+        // sender's body-root packet here runs AFTER g_original_update and cancels
+        // its camera turn before render, leaving aim-idle-rotate active forever.
         if (g_puppet_aim_facing_from_camera) {
             // RUNTIME REJECTED 2026-07-13: POST snap + 0x141BB8320 refresh
             // eventually leaves the puppet sliding on its knees after a location
             // reload. Keep only the soft root blend; aim additives own camera
             // yaw/pitch until a non-root animation solution is proven.
             apply_peer_aim_facing_to_player(puppet, pkt);
-        } else if (valid_network_orientation(pkt.quat)) {
+        } else if (!g_gun_move_camera_turn_relay_installed &&
+                   valid_network_orientation(pkt.quat)) {
             orientation_dot = blend_network_orientation(quat, pkt.quat, 0.35F);
         }
         if (g_puppet_aim_reticle_relay || pose_relay_for_peer) {
