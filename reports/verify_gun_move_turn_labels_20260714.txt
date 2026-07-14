@@ -1,0 +1,4 @@
+GunMoveController_ApplyCameraYawToMoveDirection 0x140E8F990
+GunMoveController_SelectAimIdleTurnState 0x140E8F720
+GunMoveController_UpdateTurnYawFromDirection 0x140E8FD00
+GunMoveController_UpdateActionState 0x140E90590

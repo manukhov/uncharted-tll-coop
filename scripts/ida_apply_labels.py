@@ -7030,6 +7030,30 @@ FUNCTIONS = {
         "fix: hook here and override out for idx==1 from the peer's relayed "
         "screen-0 seed.",
     ),
+    0x140E8F990: (
+        "GunMoveController_ApplyCameraYawToMoveDirection",
+        "GunMoveController vtable +0x38. Resolves the owner's screen-route camera, "
+        "rotates the supplied direction by camera yaw, normalizes it, and writes "
+        "the world-space result to GunMoveController+0x150.",
+    ),
+    0x140E8F720: (
+        "GunMoveController_SelectAimIdleTurnState",
+        "Consumes GunMoveController+0x140/+0x150/+0x160 and the current action id. "
+        "Returns idle/move states 0/1, aim-idle state 2, or turn-in-place states "
+        "3/4 according to the body-versus-target direction.",
+    ),
+    0x140E8FD00: (
+        "GunMoveController_UpdateTurnYawFromDirection",
+        "Reads GunMoveController+0x150, computes and smooths target yaw against the "
+        "owner Player runtime world basis, writes the yaw quaternion through the "
+        "Player+0x100 transform helper, then commits via runtime vtable +0x208.",
+    ),
+    0x140E90590: (
+        "GunMoveController_UpdateActionState",
+        "GunMoveController vtable +0x50. Calls the turn-yaw writer for active turn "
+        "states, selects the next state via 0x140E8F720, and builds the authored "
+        "aim-idle/aim-idle-rotate action graph via 0x140E8D140.",
+    ),
 }
 
 # Data/global names (set via ida_name on data addresses).

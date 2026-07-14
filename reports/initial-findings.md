@@ -27420,3 +27420,22 @@ HYPOTHESIS for the two remaining mechanisms**.
   when the parent is identity. Native composed `r8` remains the correct body
   reference; continue through the actual turn-in-place/sector input. Evidence:
   `reports/player_aim_sender_body_basis_20260714.md`.
+
+### 2026-07-14 STATIC: GunMoveController owns authored ADS body turn
+
+- `GunMoveController::vftable 0x142A280A8` slot `+0x38` resolves to
+  `GunMoveController_ApplyCameraYawToMoveDirection 0x140E8F990`. Called by
+  `PlayerGunMoveShield_UpdateAndDispatch` at `0x140E85388`, it resolves the owner
+  screen-route camera and writes normalized world direction to controller `+0x150`.
+- Slot `+0x50`, `GunMoveController_UpdateActionState 0x140E90590`, is called at
+  `0x140E85BB2`. `GunMoveController_SelectAimIdleTurnState 0x140E8F720` compares
+  controller `+0x150` with `+0x140` and selects state 2/3/4. Builder `0x140E8D140`
+  maps those states to `aim-idle`, `aim-idle-rotate`, and `aim-idle-rotate-cc`.
+- `GunMoveController_UpdateTurnYawFromDirection 0x140E8FD00` is the exact root
+  writer: it consumes `+0x150`, smooths target yaw, applies a quaternion to the
+  owner runtime transform at `Player+0x100` through `0x1416861E0`, then commits via
+  vtable `+0x208`. Its sole code caller is `0x140E90590` at `0x140E90605`.
+- Status is **STATIC**. The narrow runtime candidate is a post-`0x140E8F990`
+  override of slot-1 `+0x150` from fresh relayed pose positive-Z, leaving stock
+  state selection, root writer and authored animation in ownership. Evidence and
+  falsifier: `reports/gun_move_controller_aim_turn_chain_20260714.md`.

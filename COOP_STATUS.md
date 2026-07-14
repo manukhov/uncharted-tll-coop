@@ -2296,3 +2296,17 @@ under the current static-only instruction.
   root positive-Z. Preserve native body-forward and continue through the actual
   ground turn-in-place/sector owner. Full rejection:
   `reports/player_aim_sender_body_basis_20260714.md`.
+
+## 2026-07-14 GunMoveController aim-turn chain (STATIC)
+
+- `PlayerGunMoveShield_UpdateAndDispatch 0x140E84440` calls
+  `GunMoveController::vtable+0x38` (`0x140E8F990`) before its aim work and later
+  calls `vtable+0x50` (`0x140E90590`). The first method writes camera-relative
+  world direction to controller `+0x150`.
+- `0x140E8F720` compares `+0x150` against body direction and selects state 2
+  (`aim-idle`) or 3/4 (`aim-idle-rotate` / `aim-idle-rotate-cc`).
+- Exact native root writer `0x140E8FD00` consumes `+0x150`, smooths yaw, writes the
+  owner runtime transform through `0x1416861E0`, and commits via slot `+0x208`.
+- Next build overrides only the return-side `+0x150` result of `0x140E8F990` for
+  fresh remote ADS using relayed pose positive-Z. Full evidence, alternatives and
+  runtime discriminator: `reports/gun_move_controller_aim_turn_chain_20260714.md`.
