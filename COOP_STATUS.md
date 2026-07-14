@@ -2500,3 +2500,19 @@ under the current static-only instruction.
   closed (+0x150 relay pos/neg-Z, post snap). Root snap parked in source.
 - **Next:** static trace palette → render skeleton (`0x141AB97C0`, DrawControl).
   Report: `reports/player_aim_body_turn_runtime_20260714.md`.
+
+## 2026-07-14 palette→render static trace (Cursor)
+
+- **STATIC chain closed:** `PlayerAimController_PublishDirectionalAimWeights
+  0x140CB41F0` → anim-graph `aim-add-*` strings → `ProcessAnimCmdListSegment
+  0x141AB97C0` (palette `FgAnimData+0x230`) + `pNextFrameSkinningBoneMats` at
+  `+0x560` → `CharacterSkeletonRender_Update 0x141B61530` → per-joint
+  `CharacterSkeletonEval_PerJoint 0x141B757F0` (Ndjob entry `0x141B5CE90`).
+- **REJECTED (reconfirmed):** `Character_UpdateDerivedWorldTransformFromLocalRoot
+  0x141BB8320` and `Player+0x740` DrawControl AO refresh as visible ADS aim owners.
+- **Preferred hypothesis:** publish-state FgAnimData (`[[Player+0x1A0]+0x58]+0x10`,
+  runtime `pubState`) diverges from `Player+0x1A8` probed by `AIM-PALETTE`; render
+  may skin from stale `+0x560` while `pubAdd` tracks peer camera.
+- **Next:** read-only `pubState` vs `Player+0x1A8` palette/skinning discriminator;
+  no further `Player+0x140` writers. Labels in `ida_apply_labels.py`; report:
+  `reports/player_aim_palette_render_chain_20260714.md`.

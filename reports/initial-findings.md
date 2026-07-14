@@ -27581,3 +27581,12 @@ HYPOTHESIS for the two remaining mechanisms**.
   in ADS. `rootYaw` stuck ~15–35° while `peerYaw` sweeps >80° (yawDelta to -97°).
   Status: body heading owner, not publish/palette. Next: GunMoveController turn or
   peer-yaw root sync.
+- **STATIC 2026-07-14:** Palette→render chain traced. `ProcessAnimCmdListSegment
+  0x141AB97C0` (anim-commands.cpp:822) evaluates aim-add graph parameters into
+  `FgAnimData+0x230`; separate skinning buffer at `+0x560`. Render consumes via
+  `CharacterSkeletonRender_Update 0x141B61530` → `CharacterSkeletonEval_PerJoint
+  0x141B757F0` (Ndjob `CharacterSkeletonRenderJob_Entry 0x141B5CE90`). Visible
+  ADS aim is **not** `Player+0x140` / `Character_UpdateDerivedWorldTransformFromLocalRoot
+  0x141BB8320` (runtime root snap REJECTED). `Player+0x740` is AO mesh refresh only.
+  Preferred fix surface: align publish-state `pubState` skinning (`+0x560`) with render,
+  not more root yaw. Report: `reports/player_aim_palette_render_chain_20260714.md`.

@@ -537,6 +537,31 @@ FUNCTIONS = {
         "+0x230 into previous buffer +0x238; fallback allocates and publishes "
         "identity matrices with the same layout.",
     ),
+    0x141AB97C0: (
+        "ProcessAnimCmdListSegment",
+        "Exact ProcessAnimCmdListSegment source assertion in anim-commands.cpp:822. "
+        "Per-layer animation-command evaluator reached from PerformAnimBlend and the "
+        "normal joint-blend producers; consumes AnimCmdContext and drives palette "
+        "output including aim-add-* parameter lookup.",
+    ),
+    0x141B5CE90: (
+        "CharacterSkeletonRenderJob_Entry",
+        "Ndjob render callback scheduled from AudioManager::RunRenderJob. When "
+        "owner+0x81 is clear, calls CharacterSkeletonRender_Update then the "
+        "post-pass at 0x141B65C50.",
+    ),
+    0x141B61530: (
+        "CharacterSkeletonRender_Update",
+        "Per-frame skeleton render prep on the logged-in SkelTable owner. Iterates "
+        "joint workspaces at owner+0x14B8 and calls CharacterSkeletonEval_PerJoint "
+        "for each active joint index.",
+    ),
+    0x141B757F0: (
+        "CharacterSkeletonEval_PerJoint",
+        "Per-joint world/skinning-matrix evaluator. Reads owner+0x230 palette rows "
+        "and owner+0x2B0 timing state; reached from CharacterSkeletonRender_Update "
+        "at 0x141B63CE6 with rcx=owner and rdx=joint workspace.",
+    ),
     0x141BC2EF0: (
         "Player_ShouldSkipDirectRootTransformApply",
         "Player vtable +0x5E8 (+1512 dec). Reached virtually from the inherited "
