@@ -77,6 +77,13 @@ constexpr std::size_t kFgAnimDataUpperStateOwnerOffset = 0x10;
 constexpr std::size_t kFgAnimDataRetainedHandleOffset = 0x1A8;
 constexpr std::size_t kFgAnimDataRetainedIdOffset = 0x1B0;
 constexpr std::size_t kFgAnimDataRuntimePayloadOffset = 0x230;
+constexpr std::size_t kFgAnimDataPreviousPaletteOffset = 0x238;
+// AnimateDisabledObjectJob publishes pNextFrameSkinningBoneMats at +0x560 with
+// the previous buffer at +0x568 (48 bytes per joint, same row layout as palette).
+constexpr std::size_t kFgAnimDataCurrentSkinningMatsOffset = 0x560;
+constexpr std::size_t kFgAnimDataPreviousSkinningMatsOffset = 0x568;
+constexpr std::size_t kFgAnimDataSkeletonOffset = 0x18;
+constexpr std::size_t kSkeletonJointCountOffset = 0x34;
 constexpr std::size_t kPlayerHealthSystemOffset = 0x4A8;
 constexpr std::size_t kPlayerCurrentHealthOffset = 0x38;
 constexpr std::size_t kPlayerMaxHealthOffset = 0x44;

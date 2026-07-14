@@ -129,3 +129,16 @@ During slot-1 puppet ADS with active `pubAdd`:
 | `0x141B757F0` | `CharacterSkeletonEval_PerJoint` |
 
 Apply to `ida/tll.i64` via headless `ida_apply_labels.py`; refresh MCP copy after save.
+
+## Read-only runtime probe (2026-07-14bq)
+
+`log_puppet_fganim_split_discriminator` emits `AIM-FGANIM-DISC` at 400 ms when peer
+yaw changes ≥2° and controller weights/blend are active:
+
+- Resolves `pubObject = [[Player+0x1A0]+0x58]+0x10` and `fgObject = Player+0x1A8`.
+- Compares palette pointers `+0x230` and skinning pointers `+0x560`.
+- Reports cross-object palette/skinning joint deltas plus per-object skinning motion
+  vs private baseline (`pubSkinTot`, `fgSkinTot`, `crossSkin`, `crossPal`).
+- No game-memory writes.
+
+Boot marker: `2026-07-14bq (AIM-FGANIM-DISC pub vs fg skinning)`.

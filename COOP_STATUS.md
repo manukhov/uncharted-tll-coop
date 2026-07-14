@@ -2516,3 +2516,6 @@ under the current static-only instruction.
 - **Next:** read-only `pubState` vs `Player+0x1A8` palette/skinning discriminator;
   no further `Player+0x140` writers. Labels in `ida_apply_labels.py`; report:
   `reports/player_aim_palette_render_chain_20260714.md`.
+- **Build 2026-07-14bq:** read-only `AIM-FGANIM-DISC` compares `pubObject` vs
+  `fgObject` palette `+0x230` and skinning `+0x560` with cross-joint deltas and
+  per-object skinning motion. Boot marker `2026-07-14bq`. Runtime pending.
