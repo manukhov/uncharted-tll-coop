@@ -66,8 +66,9 @@
       fixed despite `copiedPal=1`). **REJECTED 2026-07-14by:** pubState inject at
       render hook — visual fixed + receiver lag. **REJECTED bz:** lag from per-frame
       skinning memcpy in world-basis hook + palette probe. **Build 2026-07-14ca:**
-      strip memcpy/probe; mirror only. **cb LANDED:** PerJoint workspace+0x558 inject
-      @ 0x141B63CE6; boot 2026-07-14cb. Await user test + AIM-WS-INJECT logs.
+      strip memcpy/probe; mirror only. **cb/cc REJECTED:** PerJoint asm relay crash
+      @ 0x1B63CEB. **cd LANDED:** C++ PerJoint callsite hook (FF25); boot 2026-07-14cd.
+      Await user co-op test + AIM-WS-INJECT logs.
       Reports: `player_aim_palette_render_chain_20260714.md`,
       `player_aim_bt_runtime_20260714.md`.
 - [ ] **Head / camera look sync:** STATIC done (`reports/lookat_field_map.md`).
