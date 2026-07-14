@@ -1,0 +1,485 @@
+=== 0x141A92260: sub_141A92260 [0x141A92260..0x141A928E4] ===
+// Hidden C++ exception states: #wind=1
+__int64 __fastcall sub_141A92260(__int64 *a1)
+{
+  __int64 v2; // rdi
+  int v3; // eax
+  __int64 v4; // rcx
+  char v5; // r12
+  char v6; // r13
+  unsigned int v7; // esi
+  bool v8; // r15
+  int v9; // ebx
+  void (__fastcall *v10)(__int64); // rax
+  int v12; // r15d
+  unsigned __int64 v13; // r8
+  char v14; // cl
+  unsigned __int64 v15; // rbx
+  unsigned int v16; // esi
+  __int64 v17; // r13
+  __int64 v18; // rcx
+  unsigned __int16 v19; // dx
+  __int64 v20; // rdx
+  __int64 v21; // r14
+  unsigned __int64 v22; // rcx
+  __int64 v23; // rcx
+  __int64 v24; // rdx
+  unsigned __int64 v25; // rbx
+  __int64 v26; // r12
+  __int64 *v28; // rdi
+  unsigned int v29; // eax
+  unsigned __int64 v30; // r15
+  __int64 v31; // r13
+  __int64 v33; // rbx
+  __int64 v34; // rsi
+  __int64 v35; // rax
+  __int64 v36; // rcx
+  __int64 result; // rax
+  int v44; // [rsp+20h] [rbp-198h]
+  __int64 v45; // [rsp+70h] [rbp-148h]
+  char v46; // [rsp+90h] [rbp-128h]
+  __int16 v47; // [rsp+92h] [rbp-126h]
+  char v48; // [rsp+92h] [rbp-126h]
+  char v49; // [rsp+94h] [rbp-124h]
+  char v50; // [rsp+95h] [rbp-123h]
+  int v51; // [rsp+98h] [rbp-120h] BYREF
+  __int64 v52; // [rsp+A0h] [rbp-118h] BYREF
+  float v53; // [rsp+A8h] [rbp-110h]
+  __int64 v54; // [rsp+B0h] [rbp-108h] BYREF
+  __int64 v55; // [rsp+B8h] [rbp-100h]
+  unsigned __int64 v56; // [rsp+C0h] [rbp-F8h] BYREF
+  unsigned __int64 v57; // [rsp+C8h] [rbp-F0h]
+  __int64 *v58; // [rsp+D0h] [rbp-E8h]
+  __int64 v59; // [rsp+D8h] [rbp-E0h]
+  __m256 v60; // [rsp+E0h] [rbp-D8h]
+  __int64 v61; // [rsp+100h] [rbp-B8h]
+  __int64 v62; // [rsp+108h] [rbp-B0h] BYREF
+  __int64 v63; // [rsp+110h] [rbp-A8h]
+  __int64 v64; // [rsp+120h] [rbp-98h]
+  _BYTE v65[24]; // [rsp+128h] [rbp-90h] BYREF
+  __m256 v66; // [rsp+140h] [rbp-78h] BYREF
+  unsigned __int64 v68; // [rsp+170h] [rbp-48h] BYREF
+  char v69; // [rsp+190h] [rbp-28h] BYREF
+
+  v64 = -2;
+  _R14 = a1;
+  v58 = a1;
+  v52 = *a1;
+  v2 = a1[1];
+  v59 = v2;
+  v3 = *(_DWORD *)v2;
+  if ( byte_143682F49 || (v46 = 0, (v3 & 2) != 0) )
+    v46 = 1;
+  v4 = *(_QWORD *)(v2 + 24);
+  if ( *(_QWORD *)(v2 + 416) != v4 || (v49 = 0, byte_143682F4B) )
+    v49 = 1;
+  if ( !*((_BYTE *)_R14 + 20) && (v3 & 0x200000) != 0 )
+  {
+    sub_1418C5230(v2);
+    *(_DWORD *)v2 &= ~0x200000u;
+    v4 = *(_QWORD *)(v2 + 24);
+  }
+  v5 = *(_BYTE *)(v2 + 5);
+  v6 = *(_BYTE *)(v2 + 7);
+  v50 = v6;
+  v47 = *(_WORD *)(*(_QWORD *)(v4 + 64) + 30LL);
+  v7 = *(_DWORD *)(v4 + 48);
+  sub_1415B86A0(
+    v65,
+    "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr-jobs.cpp",
+    1134,
+    "void __cdecl PerformAnimBlend(const struct AsyncUpdateJobData *)");
+  v8 = (!*((_BYTE *)_R14 + 20) || (v6 & 8) != 0) && v5;
+  v9 = *(_DWORD *)v2 & 0x20000;
+  if ( !BYTE2(dword_143682FF5) || !*(_BYTE *)(v2 + 721) && v47 || v7 <= 1 || (v6 & 8) == 0 || (v48 = 1, v9) )
+    v48 = 0;
+  sub_1418C4FB0(v2);
+  if ( v8 )
+  {
+    v10 = *(void (__fastcall **)(__int64))(v2 + 664);
+    if ( v10 )
+    {
+      __asm { vmovss  xmm1, dword ptr [r14+10h] }
+      v10(v2);
+    }
+    else if ( v52 )
+    {
+      if ( (v6 & 8) == 0 && !v9 )
+        v7 = 1;
+      v12 = v7;
+      if ( v48 )
+        v12 = 1;
+      v51 = v12;
+      v13 = (unsigned __int64)((int)v7 - 1LL) >> 6;
+      v14 = 63 - ((v7 - 1) & 0x3F);
+      if ( v13 )
+      {
+        v68 = -1;
+        *(&v68 + v13) |= 0xFFFFFFFFFFFFFFFFuLL >> v14;
+        v15 = v68;
+      }
+      else
+      {
+        v15 = 0xFFFFFFFFFFFFFFFFuLL >> v14;
+        v68 = 0xFFFFFFFFFFFFFFFFuLL >> v14;
+      }
+      v16 = 0;
+      v52 = 0;
+      v54 = 0;
+      sub_141A90E70(v2, *(_QWORD *)(v2 + 24), (unsigned int)&v52, (unsigned int)&v54, v48);
+      if ( v49 )
+      {
+        v68 = 0;
+        sub_141A91AA0(*(_QWORD *)(v2 + 416), *(_QWORD *)(v2 + 24), &v68);
+        v68 &= v15;
+        sub_141A91D20((_QWORD *)v2, &v68, _R14, v5, v44, v46, v54);
+        v15 &= ~v68;
+        v68 = v15;
+      }
+      v57 = *(_QWORD *)(v2 + 280);
+      v56 = *(_QWORD *)(v2 + 288);
+      v17 = *(_QWORD *)(v2 + 256);
+      v18 = *(_QWORD *)(v2 + 248);
+      if ( *(_BYTE *)(v18 + 22) )
+        v19 = *(_WORD *)(*(unsigned int *)(v18 + 44) + v18 + 18);
+      else
+        v19 = 0;
+      LODWORD(v53) = v19;
+      v20 = sub_1416878F0(v2 + 48, v2 + 448);
+      if ( v46 && v17 )
+        v5 = 2;
+      v21 = *(_QWORD *)(v2 + 24);
+      v55 = v21;
+      v22 = v56;
+      if ( v48 )
+        v22 = 0;
+      sub_141A91490(
+        (__int64)&v62,
+        (__int64)&v68,
+        (_QWORD *)v2,
+        v21,
+        v5,
+        v50,
+        v57,
+        v22,
+        v17,
+        v53,
+        v17,
+        v53,
+        v20,
+        0,
+        v45,
+        v52,
+        v54);
+      *(_QWORD *)v60.m256_f32 = 0;
+      *(_QWORD *)&v60.m256_f32[6] = 0;
+      LODWORD(v61) = 0;
+      if ( v21 )
+      {
+        *(_QWORD *)v60.m256_f32 = v21;
+        *(_QWORD *)&v60.m256_f32[6] = v63;
+        v23 = *(unsigned __int16 *)(*(_QWORD *)(v21 + 64) + 26LL);
+        if ( (_WORD)v23 )
+        {
+          if ( !v63 )
+            *(_QWORD *)&v60.m256_f32[6] = sub_1415A0E90(
+                                            (unsigned __int16)v23,
+                                            128,
+                                            (unsigned int)"UNKNOWN",
+                                            0,
+                                            (__int64)"UNKNOWN");
+        }
+      }
+      *(_QWORD *)&v60.m256_f32[2] = *(_QWORD *)(v2 + 704);
+      *(_QWORD *)&v60.m256_f32[4] = v2 + 448;
+      v24 = v62;
+      if ( v12 )
+      {
+        v25 = 0;
+        v26 = v62;
+        __asm { vmovsd  xmm6, [rsp+1B8h+var_B8] }
+        v28 = v58;
+        v29 = v12;
+        do
+        {
+          v30 = v25 & 0x3F;
+          v31 = *(&v68 + (v25 >> 6));
+          if ( _bittest64(&v31, v30) )
+          {
+            __asm
+            {
+              vmovups ymm0, [rsp+1B8h+var_D8]
+              vmovups [rsp+1B8h+var_78], ymm0
+              vmovsd  [rsp+1B8h+var_58], xmm6
+            }
+            __asm { vzeroupper }
+            sub_141AB97C0(
+              *(_QWORD *)v26,
+              *(_DWORD *)(v26 + 12),
+              (unsigned __int8 *)&v66,
+              v16,
+              (void (__fastcall *)(__int64, _OWORD *, _QWORD **, unsigned __int8 *))v28[3],
+              (void (__fastcall *)(__int64, _OWORD *, unsigned __int8 *, _QWORD))v28[4],
+              (unsigned __int8 (__fastcall *)(unsigned __int8 *, _OWORD *, __int64, __int64))v28[5]);
+            *(&v68 + (v25 >> 6)) = v31 & ~(1LL << v30);
+            v29 = v51;
+          }
+          ++v16;
+          ++v25;
+          v26 += 32;
+        }
+        while ( v16 < v29 );
+        v15 = v68;
+        v2 = v59;
+        v21 = v55;
+        v24 = v62;
+      }
+      if ( v48 && v15 )
+        sub_14177FEB0(v23, (_QWORD *)v2, v24, v63, v21, (__int64)&v68);
+    }
+    else
+    {
+      v33 = *(unsigned int *)(*(_QWORD *)(v2 + 24) + 52LL);
+      v34 = v33;
+      v51 = 82;
+      v35 = 48 * v33;
+      if ( !is_mul_ok(3 * v33, 0x10u) )
+        v35 = -1;
+      v36 = sub_14159FC40(v35, &v51, 16);
+      v55 = v36;
+      v52 = v36;
+      if ( (_DWORD)v33 )
+      {
+        _RAX = &v56;
+        __asm
+        {
+          vmovups xmm0, cs:xmmword_142880690
+          vmovups xmm1, cs:xmmword_1428806D0
+          vmovups xmm2, cs:xmmword_1428806A0
+        }
+        do
+        {
+          __asm
+          {
+            vmovups xmmword ptr [rax-20h], xmm0
+            vmovups xmmword ptr [rax-10h], xmm1
+            vmovups xmmword ptr [rax], xmm2
+          }
+          _RAX += 6;
+          --v34;
+        }
+        while ( v34 );
+        v36 = v52;
+      }
+      *(_QWORD *)(v2 + 568) = *(_QWORD *)(v2 + 560);
+      *(_QWORD *)(v2 + 560) = v36;
+      *(_QWORD *)(v2 + 624) = 0;
+      *(_DWORD *)(v2 + 632) = 0;
+    }
+  }
+  result = sub_1415B8CA0(v65);
+  _R11 = &v69;
+  __asm { vmovaps xmm6, xmmword ptr [r11-10h] }
+  return result;
+}
+
+=== 0x141A93EA0: sub_141A93EA0 [0x141A93EA0..0x141A941F0] ===
+// local variable allocation has failed, the output may be wrong!
+signed __int64 __fastcall sub_141A93EA0(__int64 a1, double _XMM1_8)
+{
+  LARGE_INTEGER v5; // r15
+  signed __int64 v6; // rbx
+  signed __int64 result; // rax
+  bool v8; // cc
+  __int64 v10; // r8
+  signed __int64 v13; // rax
+  void (__fastcall *v24)(__int64, _QWORD, __int64); // rdx
+  __int64 v25; // rcx
+  __int64 v26; // rax
+  __int64 v27; // rcx
+  __int64 v28; // rax
+  __int64 v29; // rbp
+  __int64 v30; // rsi
+  unsigned int v31; // ebx
+  __int64 v32; // rax
+  __int64 v33; // rcx
+  __int64 v34; // rbx
+  __int64 v40; // [rsp+20h] [rbp-98h]
+  _DWORD v41[3]; // [rsp+3Ch] [rbp-7Ch] BYREF
+  LARGE_INTEGER PerformanceCount; // [rsp+48h] [rbp-70h] BYREF
+  LARGE_INTEGER v43; // [rsp+50h] [rbp-68h] BYREF
+  LARGE_INTEGER v44; // [rsp+58h] [rbp-60h] BYREF
+  __int64 v45; // [rsp+60h] [rbp-58h]
+
+  _R14 = a1;
+  QueryPerformanceCounter(&PerformanceCount);
+  v5 = PerformanceCount;
+  v6 = _InterlockedExchangeAdd64((volatile signed __int64 *)(_R14 + 16), 1u);
+  result = *(unsigned int *)(_R14 + 8);
+  if ( v6 < result )
+  {
+    v8 = 1;
+    __asm
+    {
+      vmovaps [rsp+0B8h+var_38], xmm6
+      vmovss  xmm6, cs:dword_142BE9F50
+      vmovaps [rsp+0B8h+var_48], xmm7
+    }
+    v10 = -1;
+    __asm { vxorps  xmm7, xmm7, xmm7 }
+    do
+    {
+      __asm
+      {
+        vmovss  xmm0, dword ptr [r14+24h]
+        vcomiss xmm0, xmm7
+      }
+      if ( !v8 )
+      {
+        QueryPerformanceCounter(&v43);
+        v13 = (v43.QuadPart - v5.QuadPart) / (unsigned __int64)qword_143077520;
+        __asm { vxorps  xmm1, xmm1, xmm1 }
+        __asm { vcvtsi2ss xmm1, xmm1, r8 }
+        if ( (((v43.QuadPart - v5.QuadPart) % (unsigned __int64)qword_143077520) & 0x8000000000000000uLL) != 0LL )
+          __asm { vaddss  xmm1, xmm1, xmm6 }
+        __asm
+        {
+          vxorps  xmm0, xmm0, xmm0
+          vcvtsi2ss xmm0, xmm0, r9
+        }
+        if ( qword_143077520 < 0 )
+          __asm { vaddss  xmm0, xmm0, xmm6 }
+        __asm
+        {
+          vdivss  xmm2, xmm1, xmm0
+          vxorps  xmm0, xmm0, xmm0
+          vcvtsi2ss xmm0, xmm0, rax
+        }
+        if ( v13 < 0 )
+          __asm { vaddss  xmm0, xmm0, xmm6 }
+        __asm
+        {
+          vaddss  xmm0, xmm2, xmm0
+          vcomiss xmm0, dword ptr [r14+24h]
+        }
+        if ( v13 )
+        {
+          sub_1415B54E0();
+          QueryPerformanceCounter(&v44);
+          v5 = v44;
+        }
+        v10 = -1;
+      }
+      _RDI = *(_QWORD *)(*(_QWORD *)_R14 + 8 * v6);
+      if ( (*(_DWORD *)_RDI & 0x10000) != 0 )
+      {
+        __asm
+        {
+          vmovss  xmm0, dword ptr [r14+20h]
+          vaddss  xmm1, xmm0, dword ptr [rdi+2D4h]
+          vmovss  dword ptr [rdi+2D4h], xmm1
+        }
+      }
+      v24 = *(void (__fastcall **)(__int64, _QWORD, __int64))(_RDI + 664);
+      if ( v24 )
+      {
+        v25 = *(_QWORD *)(_RDI + 424);
+        v26 = 0;
+        if ( v25 )
+        {
+          v10 = *(unsigned int *)(_RDI + 432);
+          if ( (_DWORD)v10 )
+          {
+            v27 = *(_QWORD *)(v25 + 8);
+            if ( v27 )
+            {
+              if ( *(_DWORD *)(v27 + 188) == (_DWORD)v10 )
+                v26 = v27;
+            }
+          }
+        }
+        if ( v26 )
+        {
+          *(_BYTE *)(v26 + 114) = 1;
+          v24 = *(void (__fastcall **)(__int64, _QWORD, __int64))(_RDI + 664);
+        }
+        __asm { vmovss  xmm1, dword ptr [r14+20h] }
+        v24(_RDI, v24, v10);
+      }
+      else
+      {
+        v28 = *(_QWORD *)(_RDI + 24);
+        v45 = 16;
+        v41[1] = 82;
+        v29 = *(unsigned int *)(v28 + 52);
+        v30 = (unsigned int)v29;
+        v41[0] = 82;
+        v31 = 48 * v29;
+        if ( !is_mul_ok(3 * v29, 0x10u) )
+          v31 = -1;
+        v32 = sub_1415A1D70(v41);
+        v34 = (*(__int64 (__fastcall **)(__int64, _QWORD, __int64, const char *, _DWORD, const char *))(*(_QWORD *)v32 + 56LL))(
+                v32,
+                v31,
+                16,
+                "UNKNOWN",
+                0,
+                "UNKNOWN");
+        if ( !v34 )
+        {
+          if ( !qword_146B17C08
+            || (LODWORD(v40) = 1775,
+                !(unsigned __int8)qword_146B17C08(
+                                    "pNextFrameSkinningBoneMats",
+                                    "d:\\perforce\\code\\big4final-tll-release\\shared\\src\\ndlib\\anim\\anim-mgr-jobs.cpp",
+                                    "AnimateDisabledObjectJob",
+                                    "Jun 30 2023 19:05:51",
+                                    v40,
+                                    0)) )
+          {
+            sub_1422053E0(v33);
+            __debugbreak();
+          }
+        }
+        if ( (_DWORD)v29 )
+        {
+          __asm
+          {
+            vmovups xmm0, cs:xmmword_142880690
+            vmovups xmm1, cs:xmmword_1428806D0
+            vmovups xmm2, cs:xmmword_1428806A0
+          }
+          _RAX = &v43;
+          do
+          {
+            __asm
+            {
+              vmovups xmmword ptr [rax-20h], xmm0
+              vmovups xmmword ptr [rax-10h], xmm1
+              vmovups xmmword ptr [rax], xmm2
+            }
+            _RAX += 6;
+            --v30;
+          }
+          while ( v30 );
+        }
+        *(_QWORD *)(_RDI + 568) = *(_QWORD *)(_RDI + 560);
+        *(_QWORD *)(_RDI + 560) = v34;
+        *(_QWORD *)(_RDI + 624) = 0;
+        *(_DWORD *)(_RDI + 632) = 0;
+      }
+      v6 = _InterlockedExchangeAdd64((volatile signed __int64 *)(_R14 + 16), 1u);
+      result = *(unsigned int *)(_R14 + 8);
+      v10 = -1;
+      v8 = v6 <= (unsigned __int64)result;
+    }
+    while ( v6 < result );
+    __asm
+    {
+      vmovaps xmm7, [rsp+0B8h+var_48]
+      vmovaps xmm6, [rsp+0B8h+var_38]
+    }
+  }
+  return result;
+}
+

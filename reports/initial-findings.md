@@ -27463,3 +27463,30 @@ HYPOTHESIS for the two remaining mechanisms**.
   `GunMoveController+0x150/0x140E8FD00` are valid native turn internals but are
   rejected as the retained-puppet visual fix; a later animation/post-anim/render
   owner wins and the relay is no longer installed by default.
+
+### 2026-07-14 STATIC: final FgAnimData joint-palette boundary
+
+- Player vtable `+0x408` resolves to `Player_PostAnimBlending_Async
+  0x1410EB6A0`, identified by its exact source assertion. Its central
+  `Player+0x1DC0` object is constructed by `0x141F9D610` with
+  `CharacterLegIkController::vftable`; this phase is leg/post-blend IK and not a
+  substitute for the missing ADS body turn.
+- `AnimManager_PerformAnimBlend 0x141A92260` has the exact
+  `PerformAnimBlend(const AsyncUpdateJobData *)` source assertion. Its fallback
+  allocates `48 * skeleton_joint_count` bytes, writes three `float4` identity rows
+  per joint, moves current `FgAnimData+0x230` to previous `+0x238`, publishes the
+  new buffer at `+0x230`, and clears `+0x270/+0x278`.
+- The normal path independently threads `FgAnimData+0x230` through
+  `0x141A91490`, `0x141A91660`, and `0x141A91D20` into per-layer command execution
+  `0x141AB97C0`, then uses the same current/previous palette contract. This is the
+  first concrete final skeleton buffer downstream of the proven `aim-add-*`
+  publication.
+- `PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0` writes its raw
+  directional values to the active state reached by
+  `[[Player+0x1A0]+0x58]+0x10` at `+0x188..+0x194`. Existing Player `+0x6F8`
+  analysis independently identifies the same `Player+0x1A8` FgAnimData active
+  state and the same field band; runtime already confirms the puppet's phase bits
+  `0x38` and retained owner.
+- Status: **STATIC**. Exact hypothesis, competitors, evidence quota, and a
+  read-only palette prediction are recorded in
+  `reports/player_aim_final_joint_palette_20260714.md`.

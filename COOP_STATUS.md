@@ -2331,3 +2331,25 @@ under the current static-only instruction.
   near `(0.30,0,0.954)` while target changed and `yawPre` reached 110.9 degrees.
   A later animation/post-anim/render owner wins. GunMoveController relay is now
   parked (not installed by default); trace the visible joint palette only.
+
+## 2026-07-14 final joint-palette boundary (STATIC)
+
+- Player vtable `+0x408` is exact-source `Player_PostAnimBlending_Async
+  0x1410EB6A0`. Its `Player+0x1DC0` object is a
+  `CharacterLegIkController` constructed by `0x141F9D610`; this is downstream IK,
+  not the missing ADS yaw owner.
+- Exact-source `AnimManager_PerformAnimBlend 0x141A92260` and the normal
+  joint-blend path use `FgAnimData+0x230` as the current matrix palette and
+  `+0x238` as the previous palette. The fallback independently allocates
+  `48 * joint_count`, fills three `float4` rows per joint, then performs the same
+  current/previous swap and clears `+0x270/+0x278`.
+- `PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0` reaches this same
+  live `FgAnimData` through `[[Player+0x1A0]+0x58]+0x10` and writes directional
+  fields `+0x188..+0x194`; prior runtime confirms the puppet's animation phases
+  are active. The remaining discriminator is therefore palette evaluation versus
+  later world/render consumption, not another Player root write.
+- Next runtime is read-only: while the puppet stands in ADS, compare current and
+  previous joint matrices as camera yaw changes. Changing upper-joint matrices
+  with a static rendered pose select a later world/DrawControl owner; no correlated
+  palette change selects stale animation-command evaluation. Evidence and exact
+  competitors: `reports/player_aim_final_joint_palette_20260714.md`.

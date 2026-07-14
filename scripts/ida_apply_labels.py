@@ -524,6 +524,19 @@ FUNCTIONS = {
         "Player::PostAnimUpdate_Async source assertion distinguish it from the "
         "Npc/NavCharacter root-application path.",
     ),
+    0x1410EB6A0: (
+        "Player_PostAnimBlending_Async",
+        "Player vtable +0x408. Exact Player::PostAnimBlending_Async source "
+        "assertion. Runs CharacterLegIkController and other post-blend IK "
+        "controllers after the animation manager's phase-0x10 dispatch.",
+    ),
+    0x141A92260: (
+        "AnimManager_PerformAnimBlend",
+        "Exact PerformAnimBlend source assertion in anim-mgr-jobs.cpp. Builds "
+        "the current 48-byte-per-joint matrix palette and swaps FgAnimData "
+        "+0x230 into previous buffer +0x238; fallback allocates and publishes "
+        "identity matrices with the same layout.",
+    ),
     0x141BC2EF0: (
         "Player_ShouldSkipDirectRootTransformApply",
         "Player vtable +0x5E8 (+1512 dec). Reached virtually from the inherited "
