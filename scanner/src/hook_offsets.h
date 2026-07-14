@@ -84,6 +84,9 @@ constexpr std::size_t kFgAnimDataCurrentSkinningMatsOffset = 0x560;
 constexpr std::size_t kFgAnimDataPreviousSkinningMatsOffset = 0x568;
 constexpr std::size_t kFgAnimDataSkeletonOffset = 0x18;
 constexpr std::size_t kSkeletonJointCountOffset = 0x34;
+// Combat/melee command-queue owner mounted at Player init (ConstructMeleeCommandQueueOwner).
+constexpr std::size_t kPlayerCombatControllerOffset = 0x1F60;
+constexpr std::size_t kMeleeTargetResultEntityIdOffset = 0xD8;
 constexpr std::size_t kPlayerHealthSystemOffset = 0x4A8;
 constexpr std::size_t kPlayerCurrentHealthOffset = 0x38;
 constexpr std::size_t kPlayerMaxHealthOffset = 0x44;

@@ -59,13 +59,12 @@
       the turn/run jitter. Puppet full ADS remains OFF / manual `F8`. Do not
       re-enable broad screen-1 pose-seed/source writes; that path
       freezes locomotion facing.
-- [ ] **Puppet melee sync (2026-07-14, ACTIVE):** peer fist/punch/melee visible on
-      slot-1 puppet. Static: melee button relays via Joypad masks (Reliable-events);
-      target local at `player+0x1F60 → +0x1C8 → +0xD8` (rater `0x1411F7370`). Step 1:
-      log puppet `melee-triangle` + combat controller state when peer melees (two-instance
-      loopback). Step 2: if input OK but no anim — trace `ConstructMeleeCommandQueueOwner`
-      `0x141274470` mount @ `+0x1F60` / dispatcher `0x141271D20`. Step 3: wrong target
-      → enemy-sync phase or relay peer target id. Use `launch_two_inject.ps1`.
+- [~] **Puppet melee sync (2026-07-14, ACTIVE):** build **cf** wires `melee-triangle`
+      relay (`0x100000000` intent + Joypad3 force-hook) and logs `MELEE-SEND` /
+      `MELEE-RECV` with `+0x1F60` target id. **Runtime pending:** two-instance test via
+      `launch_two_inject.ps1`. Next: if `cmdActive=1` but no anim — trace
+      `ConstructMeleeCommandQueueOwner` `0x141274470` / dispatcher `0x141271D20`; if
+      wrong target → enemy-sync or relay peer target id.
 - [~] **Puppet ADS visual aim (PARKED 2026-07-14):** Upstream CONFIRMED; downstream
       eval/render gap. **REJECTED:** palette/skinning/pubState/PerJoint workspace paths.
       **cd:** stable hook, user visual unchanged. Inject OFF in `ce`.

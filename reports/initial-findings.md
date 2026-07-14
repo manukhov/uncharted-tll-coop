@@ -27637,3 +27637,12 @@ HYPOTHESIS for the two remaining mechanisms**.
   hook + FF25 relay (render-hook pattern); stable (no PerJoint crash). **REJECTED (user,
   cd two-instance):** puppet ADS aim still not visible. **PARKED** — workspace inject
   disabled (`2026-07-14ce`); pivot to melee sync.
+- **STATIC/HYPOTHESIS (build 2026-07-14cf):** puppet melee button relay v1.
+  `melee-triangle` wired like jump/evade: `merge_authored_traversal_button_mask`
+  sets protocol bit `0x100000000`; Joypad3 `IsCommandActive` force-hook returns
+  true while `puppet_traversal_force` carries that bit. Diagnostics:
+  `MELEE-SEND` / `MELEE-RECV` log `player+0x1F60` controller and target entity id
+  (`vtable+0x1C8 → +0xD8`). Runtime prediction: peer punch → receiver logs
+  `MELEE-RECV cmdActive=1`; puppet plays native melee if local target rater agrees.
+  If `cmdActive=1` but no anim → `ConstructMeleeCommandQueueOwner` gate on slot-1;
+  if wrong target → enemy position sync. Status: **HYPOTHESIS** (runtime pending).

@@ -2612,11 +2612,11 @@ under the current static-only instruction.
   `locomotion_hook.log`.
 - **REJECTED (user, cd two-instance):** build cd stable (no PerJoint crash) but puppet
   ADS aim **still not visible**. Workspace inject **PARKED** (`g_enable_puppet_workspace_palette_inject=false`, boot `2026-07-14ce`).
-- **Next focus: melee sync (2026-07-14):** puppet fist/melee animations when peer
-  punches. Static baseline (`initial-findings.md` Reliable-events + melee-target):
-  melee **button** should relay free via Joypad `+0xD0/+0xD8/+0xE0` → `source+0x518`;
-  execution goes through puppet `Player+0x1F60` combat controller; target is **local**
-  (`+0x1C8 → +0xD8` entity id, rater `sub_1411F7370`). First step: runtime log whether
-  puppet sees `melee-triangle` active + whether `+0x1F60` queue fires when peer melees;
-  if button OK but no anim → controller/gate on slot-1 puppet; if wrong target → enemy
-  position sync or deferred target-id bias.
+- **Melee sync v1 (2026-07-14, build cf):** ADS workspace inject remains PARKED.
+  Wired `melee-triangle` like jump/evade: protocol bit `0x100000000` in
+  `merge_authored_traversal_button_mask` + Joypad3 `IsCommandActive` force-hook.
+  Logs `MELEE-SEND` / `MELEE-RECV` with `player+0x1F60` controller ptr and target
+  entity id (`vtable+0x1C8 → +0xD8`). **Runtime pending:** two-instance loopback
+  (`launch_two_inject.ps1`) — peer punches, check `MELEE-RECV cmdActive=1` and puppet
+  anim. If button OK but no anim → trace `ConstructMeleeCommandQueueOwner` gate on
+  slot-1 puppet; if wrong target → enemy position sync.
