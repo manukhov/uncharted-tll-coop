@@ -27439,3 +27439,9 @@ HYPOTHESIS for the two remaining mechanisms**.
   override of slot-1 `+0x150` from fresh relayed pose positive-Z, leaving stock
   state selection, root writer and authored animation in ownership. Evidence and
   falsifier: `reports/gun_move_controller_aim_turn_chain_20260714.md`.
+- **REJECTED runtime scaffolding:** PIDs 18480/14436 exited before any
+  `AIM-TURN-DIR` event when the hook called `retained_player_object(1)` from the
+  GunMoveController hot path during gameplay entry. This did not test the
+  `+0x150` direction hypothesis. The replacement guard uses controller owner
+  `+0x108` and the owner's own `Player+0x4010 == 1` field, with no retained-table
+  lookup.

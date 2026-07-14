@@ -7181,7 +7181,12 @@ char __fastcall hooked_gun_move_apply_camera_yaw(
     void* const owner = *reinterpret_cast<void* const*>(
         static_cast<const std::byte*>(controller) +
         kGunMoveControllerOwnerOffset);
-    if (owner == nullptr || owner != retained_player_object(1)) {
+    if (owner == nullptr ||
+        readable_bytes(static_cast<const std::byte*>(owner) + 0x4010) <
+            sizeof(std::uint32_t) ||
+        *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(owner) + 0x4010) !=
+            kSlot1ScreenIndex) {
         return result;
     }
 

@@ -2312,3 +2312,7 @@ under the current static-only instruction.
   runtime discriminator: `reports/gun_move_controller_aim_turn_chain_20260714.md`.
 - Build complete: the vtable hook calls stock first and changes only the validated
   slot-1 result. Release compilation succeeds; runtime prediction is now earned.
+- First runtime PIDs 18480/14436 exited as the second copy entered gameplay, before
+  any `AIM-TURN-DIR` line. Thus the direction override was not exercised. Reject
+  the hook's hot-path retained-table lookup; v2 classifies controller `+0x108`
+  owner directly by `Player+0x4010 == 1`.

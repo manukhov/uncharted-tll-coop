@@ -75,3 +75,14 @@ fresh packet age <= 250 ms, strict peer ADS and a valid pose quaternion, then
 replaces controller `+0x150` with normalized horizontal pose positive-Z. Every
 other call returns the stock result unchanged. The release DLL builds successfully;
 the only compiler diagnostic is the pre-existing C4456 at lines 5878/5911.
+
+### First runtime attempt: hook scaffolding rejected before ADS
+
+PIDs 18480/14436 both exited when the second copy entered gameplay. Neither PID
+emitted `AIM-TURN-DIR`, so the `+0x150` substitution and its body-turn prediction
+were not exercised. The first hook build performed an unnecessary
+`retained_player_object(1)` table lookup from every GunMoveController call while
+the retained table was transitioning. That hot-path lookup is **REJECTED**. The
+next build identifies the already-resolved owner at controller `+0x108` by its
+own confirmed `Player+0x4010 == 1` screen index and does not touch the retained
+table. The direction hypothesis remains STATIC and untested.
