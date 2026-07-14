@@ -27510,3 +27510,27 @@ HYPOTHESIS for the two remaining mechanisms**.
   mask because finite counts varied from 497 to 651 and inactive entries reached
   implausible magnitudes. Continue statically from the action selector and early
   branches of `PlayerGunMoveShield_UpdateAndDispatch 0x140E84440`.
+
+### 2026-07-14 STATIC: current Player action hash is the next aim discriminator
+
+- `Player_IsCurrentActionStateHash 0x1416A5790` reads `Player+0xC0`, resolves the
+  active record through two pointer levels, and compares the authored hash at
+  `[record+0x10]+0x18`. This is the exact non-mutating identity surface for the
+  current high-level Player state.
+- `PlayerGunMoveShield_UpdateAndDispatch 0x140E84440` uses that predicate with
+  `GunMoveShield` before its late aim section. Independent builder `0x140E8D140`
+  uses the same predicate for `MoveShield`, `GunMoveShield`, `GunMoveGrapple`,
+  and `GrenadeMove`, then selects the matching authored strafe/action set.
+- RTTI resolves distinct update wrappers for `Player::GunMoveShield`,
+  `GunMoveHeavyWeapon`, `GunMoveCarry`, and `GunMoveCarryNpc`; each can exit
+  before the common dispatch path. Therefore missing world-basis alone cannot
+  distinguish a deselected gun-move state from an early wrapper/dispatcher exit.
+- **REJECTED alternative:** `ScreenPlayer_IsShieldDrawn 0x140EFB750` is not a
+  generic screen-active or weapon-clone readiness gate. It resolves the screen's
+  Player and calls `PlayerWeaponController_IsShieldDrawn 0x1410B2480` at vtable
+  `+0xE0`, which specifically checks the `ProcessShield` weapon class or its
+  network cached shield byte. Neighboring methods set/clear that byte while
+  publishing `shield-drawn-tweaks`.
+- Status: **STATIC**. The next earned runtime discriminator is read-only active
+  state plus exact wrapper/common-dispatch boundaries. Full competitors and
+  prediction: `reports/player_aim_action_state_gate_20260714.md`.

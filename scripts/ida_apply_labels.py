@@ -7067,6 +7067,24 @@ FUNCTIONS = {
         "states, selects the next state via 0x140E8F720, and builds the authored "
         "aim-idle/aim-idle-rotate action graph via 0x140E8D140.",
     ),
+    0x1416A5790: (
+        "Player_IsCurrentActionStateHash",
+        "Reads Player+0xC0, resolves the active state record through two pointer "
+        "levels, and compares the authored state hash at [record+0x10]+0x18. "
+        "GunMoveShield and its action-set builder use it for exact state names.",
+    ),
+    0x1410B2480: (
+        "PlayerWeaponController_IsShieldDrawn",
+        "PlayerWeaponController vtable +0xE0. In network mode returns the cached "
+        "controller+0x13C byte; in campaign requires selected slot 1 and a live "
+        "weapon whose class hash is ProcessShield.",
+    ),
+    0x140EFB750: (
+        "ScreenPlayer_IsShieldDrawn",
+        "Resolves the Player from g_PlayerHandleForHudPublish[screen] and calls "
+        "PlayerWeaponController vtable +0xE0. This is a shield-specific query, "
+        "not a generic screen-active or weapon-ready predicate.",
+    ),
 }
 
 # Data/global names (set via ida_name on data addresses).

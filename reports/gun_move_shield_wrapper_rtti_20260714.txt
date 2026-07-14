@@ -1,0 +1,6 @@
+ref=0x142A27678 vtable=0x142A27658 slot=+0x20 target=0x140E86930 target_name='sub_140E86930' rtti='.?AVGunMoveShield@Player@@'
+ref=0x142A279F0 vtable=0x142A279D0 slot=+0x20 target=0x140E879C0 target_name='sub_140E879C0' rtti='.?AVGunMoveHeavyWeapon@Player@@'
+ref=0x142A278C8 vtable=0x142A278A8 slot=+0x20 target=0x140E88650 target_name='sub_140E88650' rtti='.?AVGunMoveCarry@Player@@'
+ref=0x142A27C40 vtable=0x142A27C20 slot=+0x20 target=0x140E89060 target_name='sub_140E89060' rtti='.?AVGunMoveCarryNpc@Player@@'
+ref=0x142A280D0 vtable=0x142A280A8 slot=+0x28 target=0x140E8E830 target_name='sub_140E8E830' rtti='.?AUGunMoveController@@'
+ref=0x142A280F8 vtable=0x142A280A8 slot=+0x50 target=0x140E90590 target_name='GunMoveController_UpdateActionState' rtti='.?AUGunMoveController@@'

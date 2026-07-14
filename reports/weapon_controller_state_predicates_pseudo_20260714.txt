@@ -1,0 +1,145 @@
+=== 0x1410B2480: sub_1410B2480 [0x1410B2480..0x1410B259F] ===
+char __fastcall sub_1410B2480(__int64 a1)
+{
+  char result; // al
+  __int64 v2; // rbx
+  int v3; // r8d
+  const char *v4; // r9
+  __int64 v7; // r10
+  __int64 v8; // r11
+  char v14; // al
+  _DWORD v15[256]; // [rsp+20h] [rbp-418h] BYREF
+
+  if ( HIBYTE(g_NetModeFlags) )
+  {
+    result = *(_BYTE *)(a1 + 316);
+  }
+  else if ( *(_DWORD *)(a1 + 288) == 1
+         && (v2 = (*(__int64 (__fastcall **)(__int64, __int64))(*(_QWORD *)a1 + 176LL))(a1, 1)) != 0 )
+  {
+    v3 = 0;
+    v4 = "ProcessShield";
+    _RCX = v15;
+    _RDX = qword_142BEA360;
+    v7 = 13;
+    v8 = 8;
+    do
+    {
+      _RCX += 32;
+      __asm
+      {
+        vmovups ymm0, ymmword ptr [rdx]
+        vmovups xmm1, xmmword ptr [rdx+70h]
+      }
+      _RDX += 16;
+      __asm
+      {
+        vmovups ymmword ptr [rcx-80h], ymm0
+        vmovups ymm0, ymmword ptr [rdx-60h]
+        vmovups ymmword ptr [rcx-60h], ymm0
+        vmovups ymm0, ymmword ptr [rdx-40h]
+        vmovups ymmword ptr [rcx-40h], ymm0
+        vmovups xmm0, xmmword ptr [rdx-20h]
+        vmovups xmmword ptr [rcx-20h], xmm0
+        vmovups xmmword ptr [rcx-10h], xmm1
+      }
+      --v8;
+    }
+    while ( v8 );
+    do
+    {
+      v14 = *v4;
+      if ( !*v4 )
+        break;
+      ++v4;
+      v3 = (v3 << 8) ^ v15[(unsigned __int8)(v14 ^ HIBYTE(v3))];
+      --v7;
+    }
+    while ( v7 );
+    result = v3 == *(_DWORD *)(v2 + 56);
+  }
+  else
+  {
+    result = 0;
+  }
+  __asm { vzeroupper }
+  return result;
+}
+
+=== 0x1410B2370: sub_1410B2370 [0x1410B2370..0x1410B23EB] ===
+__int64 __fastcall sub_1410B2370(__int64 a1)
+{
+  __int64 v2; // rdi
+  unsigned int *v3; // rax
+  __int64 v4; // rdx
+  __int64 v5; // r8
+  __int64 v6; // r9
+  _QWORD *v7; // rax
+  __int64 result; // rax
+  char v9; // [rsp+30h] [rbp+8h] BYREF
+
+  v2 = *(_QWORD *)(*(_QWORD *)(*(_QWORD *)(a1 + 264) + 416LL) + 96LL);
+  v3 = (unsigned int *)sub_1410F8660(&v9, "shield-drawn-tweaks", "holstered");
+  v7 = (_QWORD *)ResolveKnowledgeRegistryEntryById(*v3, v4, v5, v6);
+  if ( v7 && *v7 )
+    CommitResolvedKnowledgeRecordIntoSinkSlot(v2);
+  result = sub_1410A9D10(a1, 22);
+  if ( HIBYTE(g_NetModeFlags) )
+    *(_BYTE *)(a1 + 316) = 0;
+  return result;
+}
+
+=== 0x1410B23F0: sub_1410B23F0 [0x1410B23F0..0x1410B2472] ===
+__int64 __fastcall sub_1410B23F0(__int64 a1)
+{
+  __int64 v2; // rdi
+  unsigned int *v3; // rax
+  __int64 v4; // rdx
+  __int64 v5; // r8
+  __int64 v6; // r9
+  _QWORD *v7; // rax
+  __int64 v8; // r8
+  __int64 result; // rax
+  char v10; // [rsp+30h] [rbp+8h] BYREF
+
+  v2 = *(_QWORD *)(*(_QWORD *)(*(_QWORD *)(a1 + 264) + 416LL) + 96LL);
+  v3 = (unsigned int *)sub_1410F8660(&v10, "shield-drawn-tweaks", "holstered");
+  v7 = (_QWORD *)ResolveKnowledgeRegistryEntryById(*v3, v4, v5, v6);
+  if ( v7 && *v7 )
+    CommitResolvedKnowledgeRecordIntoSinkSlot(v2);
+  LOBYTE(v8) = 1;
+  result = (*(__int64 (__fastcall **)(__int64, __int64, __int64))(*(_QWORD *)a1 + 416LL))(a1, 22, v8);
+  if ( HIBYTE(g_NetModeFlags) )
+    *(_BYTE *)(a1 + 316) = 0;
+  return result;
+}
+
+=== 0x1410B22F0: sub_1410B22F0 [0x1410B22F0..0x1410B236D] ===
+__int64 __fastcall sub_1410B22F0(__int64 a1)
+{
+  __int64 v2; // rdi
+  unsigned int *v3; // rax
+  __int64 v4; // rdx
+  __int64 v5; // r8
+  __int64 v6; // r9
+  _QWORD *v7; // rax
+  __int64 result; // rax
+  char v9; // [rsp+30h] [rbp+8h] BYREF
+
+  v2 = *(_QWORD *)(*(_QWORD *)(*(_QWORD *)(a1 + 264) + 416LL) + 96LL);
+  v3 = (unsigned int *)sub_1410F8660(&v9, "shield-drawn-tweaks", "equipped");
+  v7 = (_QWORD *)ResolveKnowledgeRegistryEntryById(*v3, v4, v5, v6);
+  if ( v7 && *v7 )
+    CommitResolvedKnowledgeRecordIntoSinkSlot(v2);
+  result = sub_1410A9DD0(a1, 22);
+  if ( HIBYTE(g_NetModeFlags) )
+    *(_BYTE *)(a1 + 316) = 1;
+  return result;
+}
+
+=== 0x1410B2190: sub_1410B2190 [0x1410B2190..0x1410B21AE] ===
+__int64 __fastcall sub_1410B2190(__int64 a1)
+{
+  return (*(__int64 (__fastcall **)(__int64, __int64, _QWORD))(*(_QWORD *)a1 + 72LL))(a1, 0xFFFFFFFFLL, 0);
+}
+

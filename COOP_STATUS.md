@@ -2372,3 +2372,16 @@ under the current static-only instruction.
   whether `Player::GunMoveShield` is deselected or takes an early non-aim exit.
   Full runtime result and competitors:
   `reports/player_aim_final_joint_palette_20260714.md`.
+
+## 2026-07-14 aim action-state gate (STATIC)
+
+- `Player_IsCurrentActionStateHash 0x1416A5790` is an exact read-only active-state
+  surface: `Player+0xC0 -> active -> record+0x10 -> hash+0x18`.
+- Both `PlayerGunMoveShield_UpdateAndDispatch` and builder `0x140E8D140` use it
+  for authored gun-move names. RTTI also resolves four distinct gun-move wrapper
+  classes with separate pre-dispatch exits, so the latest absence of world-basis
+  does not yet distinguish state deselection from a wrapper/common early exit.
+- The apparent screen predicate `0x140EFB750` is REJECTED as the lifecycle cause:
+  it calls `PlayerWeaponController_IsShieldDrawn 0x1410B2480`, an exact
+  `ProcessShield` query. Next build may only add read-only state/dispatch markers.
+  Evidence and prediction: `reports/player_aim_action_state_gate_20260714.md`.
