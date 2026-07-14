@@ -2491,3 +2491,12 @@ under the current static-only instruction.
 - **REJECTED** post-native `+0x150` patch as root driver for slot-1 puppet.
 - **v3 bo:** turn relay parked; post-ADS full `Player+0x140` yaw snap from peer
   camera -Z. Watch knee-slide competitor from prior runs.
+
+## 2026-07-14 root yaw snap REJECTED (PIDs 2084/7800)
+
+- User: puppet still one fixed direction in ADS.
+- Log seq=1051: `peerYaw≈rootYaw` (0.5°) with live `pubAdd`; visual unchanged.
+- **CONFIRMED:** visible aim is not `Player+0x140` root. All body-turn branches
+  closed (+0x150 relay pos/neg-Z, post snap). Root snap parked in source.
+- **Next:** static trace palette → render skeleton (`0x141AB97C0`, DrawControl).
+  Report: `reports/player_aim_body_turn_runtime_20260714.md`.

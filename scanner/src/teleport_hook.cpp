@@ -6844,7 +6844,8 @@ bool g_gun_move_camera_turn_relay_installed = false;
 // GunMoveController +0x150 relay REJECTED: +0x150 changes but Player+0x140 stays
 // ~30deg (0x140E8FD00 does not consume for slot-1 puppet). Direct post snap only.
 constexpr bool g_enable_gun_move_body_turn = false;
-constexpr bool g_enable_puppet_ads_root_yaw_snap = true;
+// REJECTED 2026-07-14 PIDs 2084/7800: root snap does not change visible ADS aim.
+constexpr bool g_enable_puppet_ads_root_yaw_snap = false;
 
 bool seh_read_aim_origin_point(void* controller, float out[4]) {
     if (controller == nullptr || out == nullptr || g_module == 0) {
@@ -21268,7 +21269,7 @@ DWORD WINAPI install_hook(void*) {
         log_line("tll.exe module not found");
         return 1;
     }
-    boot_log_line("TLL hook DLL init 2026-07-14bo (ADS root yaw snap camera -Z)");
+    boot_log_line("TLL hook DLL init 2026-07-14bp (root snap parked; render trace)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");

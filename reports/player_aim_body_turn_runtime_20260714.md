@@ -39,9 +39,17 @@ User: same as before — fixed wrong aim, no tracking.
 - Conclusion: patching `+0x150` after `0x140E8F990` does not rotate the puppet
   root; `0x140E8FD00` path inactive or overridden for slot-1 puppet.
 
-### v3 build (bo)
+### v3 build (bo) — REJECTED
 
-- GunMoveController relay **parked**.
-- Post-update **full root yaw snap** from peer camera -Z on `Player+0x140` during
-  ADS (`AIM-ROOT-YAW-SNAP`). Prediction: `rootYaw` tracks `peerYaw` in
-  `AIM-RENDER-DISC`; visible aim follows or selects downstream skeleton owner.
+PIDs 2084/7800. User: still one fixed direction.
+
+- `AIM-ROOT-YAW-SNAP` fires every ADS frame (`dot=0` full memcpy).
+- `AIM-RENDER-DISC` seq=1051: `peerYaw=37.3` `rootYaw=37.8` `yawDelta=-0.5°` with
+  live `pubAdd` — **root aligned, visual still fixed**.
+- Many samples show `yawDelta=±180°` because RENDER-DISC measures `peerFwd` with
+  pose +Z while snap uses camera -Z; metric artifact only.
+- `AIM-WORLD-BASIS` body gains Y tilt after snap (`body.y != 0`).
+
+**CONFIRMED:** visible ADS aim is **not** owned by `Player+0x140` root yaw. Branch
+closed for all root writers (GunMove `+0x150`, post snap). Continue at
+post-anim/render skeleton consumption (`0x141AB97C0` eval → DrawControl).

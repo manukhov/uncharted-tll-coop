@@ -27566,6 +27566,9 @@ HYPOTHESIS for the two remaining mechanisms**.
   `[[Player+0x1A0]+0x58]+0x10`); corrected probe adds `pubAdd`. Gated palette
   shows partial upper-joint motion. Report:
   `reports/player_aim_render_discriminator_runtime_20260714.md`.
+- **RUNTIME 2026-07-14 (PIDs 2084/7800): REJECTED** post-ADS `Player+0x140` yaw snap.
+  seq=1051 root aligned with peer (0.5deg) but user visual still fixed. Visible ADS
+  aim is not root-owned; close body-turn branch. Next: render skeleton path.
 - **RUNTIME 2026-07-14 (PIDs 13400/21384): REJECTED** neg-Z `+0x150` relay; rootYaw
   stuck ~30deg while peerNegZ sweeps. Post-native patch does not drive slot-1 root.
   v3: direct post-ADS `Player+0x140` yaw snap (build bo).
