@@ -379,6 +379,25 @@ constexpr std::uint64_t kJoypadFaceAButtonMask = 0x20ull;
 constexpr std::uint64_t kJoypadFaceBButtonMask = 0x80ull;
 constexpr std::uint64_t kJoypadFaceXButtonMask = 0x40ull;
 constexpr std::uint64_t kJoypadTraversalRelayMask = kJoypadTraversalIntentMask;
+
+struct MeleeRelayHashes {
+    std::uint32_t triangle = 0;
+    std::uint32_t triangle_hold = 0;
+    std::uint32_t lmouse_press = 0;
+    std::uint32_t lmouse_hold = 0;
+    std::uint32_t r1 = 0;
+    std::uint32_t r1_hold = 0;
+    std::uint32_t square = 0;
+    std::uint32_t square_hold = 0;
+    bool init = false;
+};
+MeleeRelayHashes& melee_relay_hashes();
+bool melee_relay_hash_is_puppet_force_target(std::uint32_t hash);
+bool joypad_any_melee_button_active(
+    void* joypad, JoypadIsCommandActiveFunction is_active,
+    std::uint32_t* active_hash_out);
+bool player_input_command_active(void* player, std::uint32_t hash);
+bool player_any_melee_button_active(void* player, std::uint32_t* active_hash_out);
 // Puppet cover command force bits (StatePacket flag 0x0800 + IsCommandActive hook).
 constexpr std::uint8_t kPuppetCoverEnterActive = 0x01;
 constexpr std::uint8_t kPuppetCoverExitPulse = 0x02;
@@ -1402,8 +1421,9 @@ char __fastcall hooked_joypad_is_command_active(
                     (force & kJoypadCrouchButtonMask) != 0) {
                     return 1;
                 }
-                if (hash == kMeleeTriangleHash &&
-                    (force & kJoypadMeleeTriangleButtonMask) != 0) {
+                if ((force & kJoypadMeleeTriangleButtonMask) != 0 &&
+                    (hash == kMeleeTriangleHash ||
+                     melee_relay_hash_is_puppet_force_target(hash))) {
                     return 1;
                 }
                 if ((hash == kCoverEnterHash &&
@@ -9778,8 +9798,6 @@ std::uint64_t merge_authored_traversal_button_mask(
     static const std::uint32_t kEvadeRollHash = string_hash("evade-roll", 10, 0);
     static const std::uint32_t kEvadeStartHash = string_hash("evade-start", 11, 0);
     static const std::uint32_t kCrouchHash = string_hash("crouch", 6, 0);
-    static const std::uint32_t kMeleeTriangleHash =
-        string_hash("melee-triangle", 14, 0);
     static std::uint64_t jump_pad = 0;
     static std::uint64_t jump_hold_pad = 0;
     static std::uint64_t evade_pad = 0;
@@ -9829,11 +9847,117 @@ std::uint64_t merge_authored_traversal_button_mask(
     if (is_active(joypad, kCrouchHash, 1) || is_active(joypad, kCrouchHash, 0)) {
         mask |= kJoypadCrouchButtonMask;
     }
-    if (is_active(joypad, kMeleeTriangleHash, 1) ||
-        is_active(joypad, kMeleeTriangleHash, 0)) {
+    if (joypad_any_melee_button_active(joypad, is_active, nullptr)) {
         mask |= kJoypadMeleeTriangleButtonMask;
     }
     return mask;
+}
+
+MeleeRelayHashes& melee_relay_hashes() {
+    static MeleeRelayHashes hashes;
+    if (!hashes.init && g_module != 0) {
+        const auto string_hash = reinterpret_cast<StringHashFunction>(
+            g_module + kStringHashRva);
+        hashes.triangle = string_hash("melee-triangle", 14, 0);
+        hashes.triangle_hold = string_hash("melee-triangle-hold", 19, 0);
+        hashes.lmouse_press = string_hash("melee-lmouse-press", 18, 0);
+        hashes.lmouse_hold = string_hash("melee-lmouse-hold", 17, 0);
+        hashes.r1 = string_hash("melee-r1", 8, 0);
+        hashes.r1_hold = string_hash("melee-r1-hold", 13, 0);
+        hashes.square = string_hash("melee-square", 12, 0);
+        hashes.square_hold = string_hash("melee-square-hold", 17, 0);
+        hashes.init = true;
+        std::ostringstream line;
+        line << "MELEE-HASHES tri=0x" << std::hex << hashes.triangle
+             << " lmouse=0x" << hashes.lmouse_press << " r1=0x" << hashes.r1
+             << " sq=0x" << hashes.square << std::dec;
+        force_log_line(line.str().c_str());
+    }
+    return hashes;
+}
+
+bool melee_relay_hash_is_puppet_force_target(std::uint32_t hash) {
+    if (hash == 0) {
+        return false;
+    }
+    const auto& h = melee_relay_hashes();
+    if (!h.init) {
+        return false;
+    }
+    return hash == h.triangle || hash == h.triangle_hold ||
+           hash == h.lmouse_press || hash == h.lmouse_hold ||
+           hash == h.r1 || hash == h.r1_hold || hash == h.square ||
+           hash == h.square_hold;
+}
+
+bool joypad_any_melee_button_active(
+    void* joypad, JoypadIsCommandActiveFunction is_active,
+    std::uint32_t* active_hash_out) {
+    if (joypad == nullptr || is_active == nullptr || g_module == 0) {
+        return false;
+    }
+    const auto& h = melee_relay_hashes();
+    if (!h.init) {
+        return false;
+    }
+    const std::uint32_t candidates[] = {
+        h.lmouse_press, h.lmouse_hold, h.r1, h.r1_hold,
+        h.square, h.square_hold, h.triangle, h.triangle_hold,
+    };
+    for (const std::uint32_t hash : candidates) {
+        if (hash == 0) {
+            continue;
+        }
+        if (is_active(joypad, hash, 1) != 0 || is_active(joypad, hash, 0) != 0) {
+            if (active_hash_out != nullptr) {
+                *active_hash_out = hash;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+bool player_input_command_active(void* player, std::uint32_t hash) {
+    if (player == nullptr || g_module == 0 || hash == 0) {
+        return false;
+    }
+    auto* const state = static_cast<std::byte*>(player) +
+                        kPlayerInputCommandStateOffset;
+    if (!readable_bytes(state + 0x28)) {
+        return false;
+    }
+    using PlayerInputIsCommandActiveFunction =
+        char(__fastcall*)(void*, std::uint32_t, std::uint8_t);
+    const auto is_active = reinterpret_cast<PlayerInputIsCommandActiveFunction>(
+        g_module + kPlayerInputCommandStateIsCommandActiveRva);
+    return is_active(state, hash, 1) != 0 || is_active(state, hash, 0) != 0;
+}
+
+bool player_any_melee_button_active(void* player, std::uint32_t* active_hash_out) {
+    if (player == nullptr || g_module == 0) {
+        return false;
+    }
+    const auto& h = melee_relay_hashes();
+    if (!h.init) {
+        return false;
+    }
+    const std::uint32_t candidates[] = {
+        h.lmouse_press, h.lmouse_hold, h.r1, h.r1_hold,
+        h.square, h.square_hold, h.triangle, h.triangle_hold,
+    };
+    for (const std::uint32_t hash : candidates) {
+        if (hash == 0) {
+            continue;
+        }
+        if (player_input_command_active(player, hash)) {
+            if (active_hash_out != nullptr) {
+                *active_hash_out = hash;
+            }
+            return true;
+        }
+    }
+    return false;
 }
 
 std::uint32_t read_player_melee_target_entity_id(void* player) {
@@ -9880,14 +10004,12 @@ bool joypad_melee_triangle_command_active(void* joypad) {
     if (joypad == nullptr || g_module == 0) {
         return false;
     }
-    const auto string_hash = reinterpret_cast<StringHashFunction>(
-        g_module + kStringHashRva);
     const auto is_active = reinterpret_cast<JoypadIsCommandActiveFunction>(
         g_module + kJoypadIsCommandActiveRva);
-    static const std::uint32_t kMeleeTriangleHash =
-        string_hash("melee-triangle", 14, 0);
-    return is_active(joypad, kMeleeTriangleHash, 1) != 0 ||
-           is_active(joypad, kMeleeTriangleHash, 0) != 0;
+    const auto& h = melee_relay_hashes();
+    return is_active(joypad, h.triangle, 1) != 0 ||
+           is_active(joypad, h.triangle, 0) != 0 ||
+           joypad_any_melee_button_active(joypad, is_active, nullptr);
 }
 
 void log_melee_relay_event(const char* tag, void* player, std::uint64_t mask) {
@@ -10095,6 +10217,9 @@ std::uint64_t capture_peer_send_button_mask(void* player) {
     const std::uint64_t cached =
         g_cached_local_input_buttons.load(std::memory_order_relaxed);
     mask |= cached & kJoypadFireButtonMask;
+    if (player_any_melee_button_active(player, nullptr)) {
+        mask |= kJoypadMeleeTriangleButtonMask;
+    }
     return mask;
 }
 
@@ -20028,6 +20153,24 @@ char __fastcall hooked_player_input_state_update(void* player) {
         g_cached_local_input_buttons.store(
             capture_local_joypad_command_mask(player),
             std::memory_order_relaxed);
+        std::uint32_t active_hash = 0;
+        if (player_any_melee_button_active(player, &active_hash)) {
+            static std::uint32_t prev_probe_hash = 0;
+            if (active_hash != prev_probe_hash) {
+                prev_probe_hash = active_hash;
+                log_melee_relay_event("MELEE-PROBE", player,
+                                      kJoypadMeleeTriangleButtonMask);
+                std::ostringstream probe;
+                probe << "MELEE-PROBE hash=0x" << std::hex << active_hash
+                      << " triActive="
+                      << (player_input_command_active(
+                              player, melee_relay_hashes().triangle)
+                              ? 1
+                              : 0)
+                      << std::dec;
+                force_log_line(probe.str().c_str());
+            }
+        }
     }
     if (is_remote) {
         const std::uint64_t consumed_edges =
@@ -22575,7 +22718,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14cf (melee-triangle relay v1)");
+        "TLL hook DLL init 2026-07-14cg (melee button names + PlayerInputState)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");

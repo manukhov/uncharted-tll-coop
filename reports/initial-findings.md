@@ -27646,3 +27646,7 @@ HYPOTHESIS for the two remaining mechanisms**.
   `MELEE-RECV cmdActive=1`; puppet plays native melee if local target rater agrees.
   If `cmdActive=1` but no anim → `ConstructMeleeCommandQueueOwner` gate on slot-1;
   if wrong target → enemy position sync. Status: **HYPOTHESIS** (runtime pending).
+- **REJECTED (user, cf):** zero `MELEE-SEND`/`MELEE-RECV` — only `melee-triangle`
+  in merge was too narrow; PC press uses `melee-lmouse-press` / pad `melee-r1` /
+  `melee-square`. **cg:** all button-level melee hashes + `PlayerInputCommandState`
+  @ `Player+0x39A0` (`0x141E39D50`); `MELEE-PROBE` on local input update.
