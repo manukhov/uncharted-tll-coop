@@ -2326,3 +2326,8 @@ under the current static-only instruction.
   `StatePacket::quat` on every ADS frame. That cancelled the proven native turn
   before render while leaving `aim-idle-rotate` looping. Next build skips only
   this post-ADS root blend while the native GunMoveController relay is installed.
+- Third runtime PIDs 20736/17048 rejected that correction: user still saw aim at
+  one static point. Even without the mod post blend, body basis repeatedly returned
+  near `(0.30,0,0.954)` while target changed and `yawPre` reached 110.9 degrees.
+  A later animation/post-anim/render owner wins. GunMoveController relay is now
+  parked (not installed by default); trace the visible joint palette only.

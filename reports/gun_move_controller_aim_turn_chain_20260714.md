@@ -127,3 +127,21 @@ controller remain unchanged. Prediction: visible aim follows camera, native turn
 finishes instead of looping, and location change does not reproduce kneeling-slide.
 If internal body still aligns but the visible model does not, trace the final
 post-anim/render skeleton owner; do not add another Player root writer.
+
+### Third runtime attempt: post-root cancellation hypothesis rejected
+
+PIDs 20736/17048 tested the paired build with the post-ADS packet-root blend
+disabled. The user again observed a completely static visible aim point. Logs
+showed why the earlier internal convergence was not stable: staged `peerPosZ`
+continued changing, but the body basis repeatedly returned near
+`(0.30,0,0.954)`, with `yawPre` rising through 64, 72 and 110.9 degrees. At other
+moments the native body briefly approached the target. Therefore removing the
+mod's post blend is **REJECTED as a complete correction**; another later
+animation/post-anim/render owner restores the visible/static basis.
+
+Final verdict for this branch: `GunMoveController+0x150` and `0x140E8FD00` are
+confirmed native turn inputs/writers, but driving them on the retained puppet is
+**REJECTED as a visual co-op fix** and can corrupt locomotion lifecycle into the
+kneeling slide. The vtable hook remains in source only as dormant reference and is
+not installed by default. Continue at the post-anim joint-palette/render-skeleton
+boundary; do not add another Player root writer.

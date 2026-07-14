@@ -20632,7 +20632,10 @@ DWORD WINAPI install_hook(void*) {
     // Aim animation path (CONFIRMED visible for pistol ADS when enabled). Pose-seed
     // snapshot lag is gated separately; leave diagnostic probes off.
     if (g_enable_aim_animation_relays) {
-        install_gun_move_camera_turn_relay();
+        // REJECTED 2026-07-14: +0x150 reaches the native root writer, but a later
+        // animation/render owner restores a static visible facing and lifecycle
+        // changes can leave the puppet sliding in aim-idle-rotate on its knees.
+        // Keep the isolated hook for reference; do not install it by default.
         install_player_aim_eligibility_callsite_relay();
         install_player_aim_additive_permission_callsite_relay();
         install_player_aim_blend_target_callsite_relay();

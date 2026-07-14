@@ -27456,3 +27456,10 @@ HYPOTHESIS for the two remaining mechanisms**.
   native camera turn before render while `aim-idle-rotate` remained active. The
   next discriminator removes only that post-ADS packet-root blend when the native
   GunMoveController turn relay is installed.
+- **REJECTED runtime:** PIDs 20736/17048 removed that post-ADS packet-root blend,
+  but the user still saw a static aim point. Native body basis intermittently
+  approached the relayed direction, then repeatedly returned near
+  `(0.30,0,0.954)` while target changed and `yawPre` reached 110.9 degrees. Thus
+  `GunMoveController+0x150/0x140E8FD00` are valid native turn internals but are
+  rejected as the retained-puppet visual fix; a later animation/post-anim/render
+  owner wins and the relay is no longer installed by default.
