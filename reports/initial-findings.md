@@ -27549,3 +27549,9 @@ HYPOTHESIS for the two remaining mechanisms**.
   `Player_CheckAimActionEligibility 0x140E8573C`. Pistol puppet ADS therefore
   predicts `AIM-WRAPPER shieldDrawn=0 dispatch=0` and no `AIM-DISPATCH-ENTRY`.
   Status: **STATIC**. Implemented read-only wrapper probe + hash-name decoding.
+- **RUNTIME 2026-07-14 (PIDs 13148/21228): REJECTED** shield-wrapper gate as the
+  live pistol blocker. Puppet ADS uses `GunMove 0x12D842C0`; no `AIM-WRAPPER`
+  lines; `AIM-DISPATCH-ENTRY`, native eligibility, `AIM-WORLD-BASIS`, and
+  non-zero `AIM-WEIGHTS-POST` all fire after blend ramps. Additive permission
+  still requires relay (`original=0 forced=1`). Full log analysis:
+  `reports/player_aim_action_state_runtime_20260714.md`.

@@ -2409,3 +2409,19 @@ under the current static-only instruction.
   plus hash-name decoding on the existing action/dispatch markers. Runtime
   prediction: pistol puppet logs `shieldDrawn=0 dispatch=0` with a gun-move hash,
   while `AIM-DISPATCH-ENTRY` stays absent; shield/sniper should log `1/1`.
+
+## 2026-07-14 aim action-state runtime (PIDs 13148/21228)
+
+- **REJECTED shield-wrapper theory:** zero `AIM-WRAPPER` lines; puppet never used
+  `Player::GunMoveShield` wrapper `0x140E86930`. Stable ADS state is `GunMove
+  0x12D842C0`, not `GunMoveShield`.
+- **REJECTED dispatch/eligibility block:** `AIM-DISPATCH-ENTRY` and
+  `AIM-ELIGIBILITY original=1 forced=0` on every ADS sample.
+- **CONFIRMED full upstream chain in this run:** `AIM-WORLD-BASIS`,
+  `AIM-ADDITIVE-PERMISSION original=0 forced=1`, and `AIM-WEIGHTS-POST` with
+  non-zero R/U once `AIM-BLEND-TICK` reaches 1. Brief entry hash `0xE1939F43`
+  precedes `GunMove`.
+- Contrast: PIDs 200/13948 had zero weights/no world-basis; this run differs by
+  permission/blend relays and stable `GunMove`. Visual aim on receiver still
+  needs user confirmation. Report:
+  `reports/player_aim_action_state_runtime_20260714.md`.
