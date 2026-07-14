@@ -11928,7 +11928,7 @@ void log_puppet_joint_palette_motion(
     constexpr std::size_t kSkeletonJointCountOffset = 0x34;
     constexpr std::size_t kJointFloatCount = 12;
     constexpr std::size_t kJointStride = kJointFloatCount * sizeof(float);
-    constexpr std::size_t kMaxJoints = 512;
+    constexpr std::size_t kMaxJoints = 1024;
 
     static std::array<float, kMaxJoints * kJointFloatCount> last_palette{};
     static void* last_fg = nullptr;

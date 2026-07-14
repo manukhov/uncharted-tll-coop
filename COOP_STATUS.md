@@ -2360,3 +2360,7 @@ under the current static-only instruction.
   directional weights changed, but no palette sample passed all layout guards.
   A throttled read-only `AIM-PALETTE-STATUS` guard report is now built to identify
   the exact rejected pointer/count assumption.
+- PIDs 16828/17052 resolved the guard: live Chloe has 651 skeleton joints, so the
+  probe's private 512-joint sanity buffer was too small. Fg/skeleton/current and
+  previous palette pointers were valid. The private limit is now 1024; no game
+  memory is written.

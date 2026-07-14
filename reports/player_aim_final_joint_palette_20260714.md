@@ -80,3 +80,11 @@ stimulus was valid while at least one palette-layout guard rejected the sample.
 This does not select any behavioral hypothesis. The next read-only build adds a
 once-per-second `AIM-PALETTE-STATUS` line naming the failed guard and reporting
 only pointer addresses, joint count, and readable span.
+
+### Guard result
+
+PIDs 16828/17052 identified the sole rejection as `stage=joint-count`:
+the live Chloe skeleton has 651 joints, above the probe's conservative 512-joint
+private-buffer limit. `FgAnimData`, skeleton, current palette, and previous palette
+were all non-null and stable in role across changing allocations. The probe limit
+is raised to 1024; no game-memory layout or behavior changes.

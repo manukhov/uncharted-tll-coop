@@ -27494,3 +27494,7 @@ HYPOTHESIS for the two remaining mechanisms**.
   world basis, and directional weights, but emitted no palette sample. One of the
   read-only layout guards failed; this run does not distinguish palette evaluation
   from later render ownership. The refined probe reports the failed guard only.
+- **GUARD RESOLVED:** PIDs 16828/17052 reported a valid FgAnimData/skeleton/palette
+  chain and `joint_count=651`; only the probe's private 512-joint limit rejected
+  the sample. Raising that diagnostic-only limit to 1024 preserves the hypothesis
+  and all game state unchanged.
