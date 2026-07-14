@@ -59,14 +59,17 @@
       the turn/run jitter. Puppet full ADS remains OFF / manual `F8`. Do not
       re-enable broad screen-1 pose-seed/source writes; that path
       freezes locomotion facing.
-- [~] **Puppet ADS visual aim (2026-07-14 PAUSE):** Upstream CONFIRMED on PID 8300
-      (build bt): `pubAdd==ctrlAdd==fgAdd`, `AIM-FGANIM-SKIN-ALLOC/COPY`, GunMove
-      path live. **REJECTED:** `FgAnimData+0x560` skinning + root quat writers.
-      User visual still fixed. **Next only:** PRE-render hook
-      `CharacterSkeletonRenderJob_Entry 0x141B5CE90` → inject puppet palette into
-      SkelTable (`qword_146919C40`) before `CharacterSkeletonEval_PerJoint
-      0x141B757F0`. Reports: `player_aim_palette_render_chain_20260714.md`,
-      `player_aim_bt_runtime_20260714.md`. Code: commit `9ca0354`.
+- [~] **Puppet ADS visual aim (2026-07-14):** Upstream CONFIRMED (build bt):
+      `pubAdd==ctrlAdd==fgAdd`, `AIM-FGANIM-SKIN-ALLOC/COPY`, GunMove path live.
+      **REJECTED:** `FgAnimData+0x560` skinning + root quat writers (visual fixed).
+      **Build 2026-07-14bu (LANDED):** PRE-render hook
+      `CharacterSkeletonRenderJob_Entry 0x141B5CE90` copies puppet `Player+0x1A8`
+      palette `+0x230` (and `+0x560` when valid) into SkelTable owner
+      (`qword_146919C40`) before `CharacterSkeletonRender_Update`. Logs
+      `AIM-SKEL-INJECT`. **Runtime pending:** user ADS test on receiver; if still
+      fixed → DrawControl/post-eval or `0x141B5CD90` main-view channel gating.
+      Reports: `player_aim_palette_render_chain_20260714.md`,
+      `player_aim_bt_runtime_20260714.md`.
 - [ ] **Head / camera look sync:** STATIC done (`reports/lookat_field_map.md`).
       PARKED — spine twist unacceptable (`g_puppet_head_look_sync=false`).
 - [ ] **Puppet controller model (NEW):** STATIC map in

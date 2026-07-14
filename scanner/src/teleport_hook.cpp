@@ -6841,6 +6841,10 @@ using GunMoveControllerApplyCameraYawFunction = char(__fastcall*)(
 GunMoveControllerApplyCameraYawFunction
     g_original_gun_move_apply_camera_yaw = nullptr;
 bool g_gun_move_camera_turn_relay_installed = false;
+using CharacterSkeletonRenderJobEntryFunction =
+    std::int64_t(__fastcall*)(void* skel_owner);
+CharacterSkeletonRenderJobEntryFunction
+    g_original_character_skeleton_render_job_entry = nullptr;
 // GunMoveController +0x150 relay REJECTED: +0x150 changes but Player+0x140 stays
 // ~30deg (0x140E8FD00 does not consume for slot-1 puppet). Direct post snap only.
 constexpr bool g_enable_gun_move_body_turn = false;
@@ -12023,6 +12027,9 @@ constexpr bool g_enable_puppet_fganim_aim_add_mirror = true;
 // CharacterSkeletonEval may bind skinning at +0x560; mirror palette rows there
 // when the async publish job never runs for slot-1.
 constexpr bool g_enable_puppet_fganim_palette_to_skinning = true;
+// Runtime 2026-07-14bt REJECTED FgAnimData+0x560 as visible owner. Next: inject
+// puppet palette into SkelTable (qword_146919C40) before CharacterSkeletonEval.
+constexpr bool g_enable_puppet_skel_palette_inject = true;
 
 float horizontal_yaw_degrees(float forward_x, float forward_z) {
     return std::atan2(forward_x, forward_z) * (180.0F / 3.14159265F);
@@ -12468,6 +12475,139 @@ bool sync_puppet_fganim_palette_to_skinning(void* player) {
              << " bytes=" << buffer_bytes;
         force_log_line(line.str().c_str());
     }
+    return true;
+}
+
+bool copy_palette_bytes_to_owner_ptr_field(
+    void* owner,
+    std::size_t ptr_field_offset,
+    const void* src_palette,
+    std::size_t buffer_bytes) {
+    if (owner == nullptr || src_palette == nullptr || buffer_bytes == 0 ||
+        readable_bytes(owner) < ptr_field_offset + sizeof(void*)) {
+        return false;
+    }
+    void* const dest = *reinterpret_cast<void* const*>(
+        static_cast<const std::byte*>(owner) + ptr_field_offset);
+    if (!pointer_looks_like_heap(dest) ||
+        readable_bytes(dest) < buffer_bytes) {
+        return false;
+    }
+    std::memcpy(dest, src_palette, buffer_bytes);
+    return true;
+}
+
+bool puppet_skel_palette_inject_wanted() {
+    if (!g_enable_puppet_skel_palette_inject || !g_puppet_net_apply ||
+        g_module == 0) {
+        return false;
+    }
+    void* const puppet = retained_player_object(1);
+    if (puppet == nullptr || !player_ads_active(puppet)) {
+        return false;
+    }
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    if (received == 0 || GetTickCount64() - received > 250) {
+        return false;
+    }
+    coop::StatePacket peer{};
+    return copy_peer_state_snapshot(peer) && peer_packet_aim_active(peer);
+}
+
+bool inject_puppet_palette_into_skel_owner(void* skel_owner) {
+    if (!puppet_skel_palette_inject_wanted() || skel_owner == nullptr) {
+        return false;
+    }
+    if (readable_bytes(skel_owner) < kSkelTableSkipRenderFlagOffset + 1) {
+        return false;
+    }
+    const auto* const owner_bytes = static_cast<const std::byte*>(skel_owner);
+    if (static_cast<std::uint8_t>(owner_bytes[kSkelTableSkipRenderFlagOffset]) != 0) {
+        return false;
+    }
+
+    void* const puppet = retained_player_object(1);
+    if (puppet == nullptr) {
+        return false;
+    }
+    mirror_puppet_aim_add_to_fganim(puppet);
+    sync_puppet_fganim_palette_to_skinning(puppet);
+
+    FgAnimJointBuffers puppet_buffers{};
+    const char* stage = "ok";
+    void* const fg = player_fganim_from_player(puppet);
+    if (!resolve_fganim_joint_buffers(fg, puppet_buffers, &stage) ||
+        !pointer_looks_like_heap(puppet_buffers.palette) ||
+        puppet_buffers.joint_count == 0) {
+        return false;
+    }
+    constexpr std::size_t kJointFloatCount = 12;
+    const std::size_t buffer_bytes =
+        static_cast<std::size_t>(puppet_buffers.joint_count) * kJointFloatCount *
+        sizeof(float);
+    if (readable_bytes(puppet_buffers.palette) < buffer_bytes) {
+        return false;
+    }
+
+    const bool copied_palette = copy_palette_bytes_to_owner_ptr_field(
+        skel_owner, kSkelTablePalettePtrOffset, puppet_buffers.palette,
+        buffer_bytes);
+    const bool copied_skinning = copy_palette_bytes_to_owner_ptr_field(
+        skel_owner, kSkelTableSkinningPtrOffset, puppet_buffers.palette,
+        buffer_bytes);
+    if (!copied_palette && !copied_skinning) {
+        return false;
+    }
+
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log >= 400) {
+        last_log = now;
+        const void* skel_palette = nullptr;
+        const void* skel_skinning = nullptr;
+        read_fganim_buffer_ptrs(
+            skel_owner, &skel_palette, &skel_skinning);
+        std::ostringstream line;
+        line << "AIM-SKEL-INJECT joints=" << puppet_buffers.joint_count
+             << " fgPal=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(puppet_buffers.palette)
+             << " skelPal=0x"
+             << reinterpret_cast<std::uintptr_t>(skel_palette) << " skelSkin=0x"
+             << reinterpret_cast<std::uintptr_t>(skel_skinning) << std::dec
+             << " copiedPal=" << (copied_palette ? 1 : 0)
+             << " copiedSkin=" << (copied_skinning ? 1 : 0)
+             << " owner=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(skel_owner) << std::dec;
+        force_log_line(line.str().c_str());
+    }
+    return true;
+}
+
+std::int64_t __fastcall hooked_character_skeleton_render_job_entry(
+    void* skel_owner) {
+    inject_puppet_palette_into_skel_owner(skel_owner);
+    return g_original_character_skeleton_render_job_entry != nullptr
+        ? g_original_character_skeleton_render_job_entry(skel_owner)
+        : 0;
+}
+
+bool install_character_skeleton_render_job_entry_hook() {
+    static const std::uint8_t kExpectedPrologue[] = {
+        0x48, 0x85, 0xC9, 0x0F, 0x84, 0x1F, 0x00, 0x00, 0x00, 0x53, 0x48, 0x83,
+    };
+    void* const trampoline = install_fire_gate_detour(
+        kCharacterSkeletonRenderJobEntryRva,
+        kExpectedPrologue,
+        sizeof(kExpectedPrologue),
+        reinterpret_cast<void*>(hooked_character_skeleton_render_job_entry),
+        "CharacterSkeletonRenderJob_Entry");
+    if (trampoline == nullptr) {
+        return false;
+    }
+    g_original_character_skeleton_render_job_entry =
+        reinterpret_cast<CharacterSkeletonRenderJobEntryFunction>(trampoline);
+    boot_log_line("CharacterSkeletonRenderJob_Entry skel inject installed");
     return true;
 }
 
@@ -21843,7 +21983,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14bt (AIM no-root-blend + skinning alloc)");
+        "TLL hook DLL init 2026-07-14bu (AIM SkelTable pre-render inject)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
@@ -21873,6 +22013,7 @@ DWORD WINAPI install_hook(void*) {
         if (g_enable_gun_move_body_turn) {
             install_gun_move_camera_turn_relay();
         }
+        install_character_skeleton_render_job_entry_hook();
     }
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();

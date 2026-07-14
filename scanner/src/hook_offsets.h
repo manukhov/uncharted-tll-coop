@@ -409,6 +409,17 @@ constexpr std::uintptr_t kNetAnimAddSnapshotRva = 0x0A01E50;
 constexpr std::uintptr_t kInitializePlayerNetAnimArtGroupsRva = 0x10D6530;
 constexpr std::uintptr_t kEngineClockPointerRva = 0x37E0250;
 constexpr std::uintptr_t kEngineClockScaleRva = 0x2BE8AE8;
+// SkelTable global (qword_146919C40). AudioManager::RunRenderJob schedules
+// CharacterSkeletonRenderJob_Entry with &qword_146919C40 as the Ndjob owner ptr.
+constexpr std::uintptr_t kSkelTableGlobalRva = 0x6919C40;
+constexpr std::uintptr_t kCharacterSkeletonRenderJobEntryRva = 0x1B5CE90;
+constexpr std::size_t kSkelTableSkipRenderFlagOffset = 0x81;
+// CharacterSkeletonEval_PerJoint reads palette rows via owner+0x230 (same
+// semantic offset as FgAnimData::pPaletteBoneMats).
+constexpr std::size_t kSkelTablePalettePtrOffset = 0x230;
+constexpr std::size_t kSkelTableSkinningPtrOffset = 0x560;
+constexpr std::size_t kSkelTableJointWorkspaceBaseOffset = 0x14B8;
+constexpr std::size_t kSkelTableJointWorkspaceStride = 0x6C0;
 constexpr std::uint32_t kSlot1ScreenIndex = 1;
 constexpr float kGoalDistance = 3.0F;
 constexpr float kRemoteGoalDistance = 1.25F;

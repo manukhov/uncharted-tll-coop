@@ -2563,3 +2563,17 @@ under the current static-only instruction.
   palette into SkelTable workspace before `CharacterSkeletonEval_PerJoint 0x141B757F0`.
   Report: `reports/player_aim_bt_runtime_20260714.md`.
 - **Code landed:** commit `9ca0354` (bt). Boot marker `2026-07-14bt`.
+
+## 2026-07-14 build bu — SkelTable pre-render inject (Cursor)
+
+- **LANDED:** `install_character_skeleton_render_job_entry_hook` on
+  `CharacterSkeletonRenderJob_Entry 0x141B5CE90`. Before native
+  `CharacterSkeletonRender_Update`, when slot-1 puppet ADS is active, copies
+  puppet `FgAnimData+0x230` palette (post mirror+skinning refresh) into SkelTable
+  owner `+0x230` and `+0x560` when heap pointers validate. Logs `AIM-SKEL-INJECT`.
+- RVAs in `hook_offsets.h`: `kSkelTableGlobalRva=0x6919C40`,
+  `kCharacterSkeletonRenderJobEntryRva=0x1B5CE90`, workspace `+0x14B8` stride `0x6C0`.
+- Boot marker `2026-07-14bu`. **Runtime pending** — launch blocked in agent env;
+  user test: grep `AIM-SKEL-INJECT` + visual ADS on receiver during peer yaw sweep.
+- If visual still fixed with `copiedPal=1`: next trace DrawControl mesh instance
+  transform after `CharacterSkeletonEval_PerJoint` or `0x141B5CD90` channel gating.
