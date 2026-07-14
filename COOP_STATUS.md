@@ -2422,6 +2422,22 @@ under the current static-only instruction.
   non-zero R/U once `AIM-BLEND-TICK` reaches 1. Brief entry hash `0xE1939F43`
   precedes `GunMove`.
 - Contrast: PIDs 200/13948 had zero weights/no world-basis; this run differs by
-  permission/blend relays and stable `GunMove`. Visual aim on receiver still
-  needs user confirmation. Report:
+  permission/blend relays and stable `GunMove`.
+- **CONFIRMED visual failure (user):** receiver puppet still aimed at one fixed
+  point during ADS while `AIM-WORLD-BASIS` fwd/yawPre changed and
+  `AIM-WEIGHTS-POST` reached non-zero. Break is **downstream of published weights**,
+  not action dispatch. Report:
   `reports/player_aim_action_state_runtime_20260714.md`.
+
+## 2026-07-14 aim render/palette discriminator build (Cursor)
+
+- Read-only `AIM-RENDER-DISC` compares peer camera forward vs `Player+0x140` root
+  forward, controller `+0x8B8..+0x8C4` vs `FgAnimData+0x188..+0x194`, only when
+  peer yaw changes ≥2° and weights/blend are active.
+- `AIM-PALETTE` re-enabled with the same weight gate (palette was disabled during
+  action-state pass). Release build succeeds; injected PIDs 21396/19260.
+- Prediction: if `peerYaw` tracks camera but `rootYaw`/`fgAdd` stay static → later
+  root/render owner; if `fgAdd` tracks controller but palette joints static →
+  `0x141AB97C0` eval failure; if palette upper joints move but visual fixed →
+  DrawControl/world transform. Evidence:
+  `reports/player_aim_render_discriminator_20260714.md`.

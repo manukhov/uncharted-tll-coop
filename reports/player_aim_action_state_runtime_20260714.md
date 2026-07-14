@@ -49,9 +49,19 @@ This run differs by installed permission/blend relays and stable `GunMove` state
 The remaining visual gap (if any) is downstream of published weights, not action
 dispatch selection.
 
+## Visual confirmation (user, 2026-07-14)
+
+**CONFIRMED:** receiver puppet still aimed at **one fixed point** during ADS while
+this log shows healthy upstream markers. Representative `AIM-WORLD-BASIS` samples
+show changing `fwd` and `yawPre` (e.g. yawPre -12 → 21 → 15 → 32 → 8 degrees)
+with non-zero `AIM-WEIGHTS-POST` once blend=1.
+
+Conclusion: the visible break is **downstream of published directional weights**,
+not `GunMoveShield` wrapper, dispatch, or eligibility.
+
 ## Next static/runtime step
 
-Trace why `0xE1939F43` transition appears at ADS entry and whether visual aim
-still fails on receiver despite non-zero `AIM-WEIGHTS-POST`. If visual fails,
-resume palette/render consumption trace from `AnimManager_PerformAnimBlend`
-with weights confirmed non-zero.
+Read-only `AIM-RENDER-DISC` + gated `AIM-PALETTE` on a fresh inject. Compare
+`peerYaw` vs `rootYaw` (`Player+0x140`), controller additives vs `FgAnimData
++0x188`, and upper-joint palette deltas. See
+`reports/player_aim_render_discriminator_20260714.md`.

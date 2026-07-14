@@ -11920,7 +11920,84 @@ void apply_puppet_head_look_pre() {
     }
 }
 
-constexpr bool g_enable_aim_palette_probe = false;
+constexpr bool g_enable_aim_palette_probe = true;
+
+float horizontal_yaw_degrees(float forward_x, float forward_z) {
+    return std::atan2(forward_x, forward_z) * (180.0F / 3.14159265F);
+}
+
+void log_puppet_aim_render_discriminator(
+    void* puppet, const coop::StatePacket& peer) {
+    if (!peer_packet_aim_active(peer) || puppet == nullptr) {
+        return;
+    }
+    static ULONGLONG last_log = 0;
+    static float last_peer_yaw = 0.0F;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log < 400) {
+        return;
+    }
+
+    float peer_fx = 0.0F;
+    float peer_fy = 0.0F;
+    float peer_fz = 0.0F;
+    quat_forward_pos_z(peer.pose_seed + 4, peer_fx, peer_fy, peer_fz);
+    const float peer_yaw = horizontal_yaw_degrees(peer_fx, peer_fz);
+    if (last_log != 0 && std::fabs(peer_yaw - last_peer_yaw) < 2.0F) {
+        return;
+    }
+    last_log = now;
+    last_peer_yaw = peer_yaw;
+
+    float root_fx = 0.0F;
+    float root_fy = 0.0F;
+    float root_fz = 0.0F;
+    float root_yaw = 0.0F;
+    if (readable_bytes(static_cast<std::byte*>(puppet) + kPlayerQuatOffset) >=
+        16) {
+        const float* const root_quat = reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(puppet) + kPlayerQuatOffset);
+        quat_forward_pos_z(root_quat, root_fx, root_fy, root_fz);
+        root_yaw = horizontal_yaw_degrees(root_fx, root_fz);
+    }
+
+    float ctrl_weights[4]{};
+    float ctrl_blend = 0.0F;
+    if (void* const aim = player_aim_controller_from_player(puppet);
+        aim != nullptr && readable_bytes(aim) >= 0x8F0) {
+        const auto* const aim_bytes = static_cast<const std::byte*>(aim);
+        std::memcpy(ctrl_weights, aim_bytes + 0x8B8, sizeof(ctrl_weights));
+        ctrl_blend = *reinterpret_cast<const float*>(aim_bytes + 0x8EC);
+    }
+    const float ctrl_sum = std::fabs(ctrl_weights[0]) + std::fabs(ctrl_weights[1]) +
+                           std::fabs(ctrl_weights[2]) + std::fabs(ctrl_weights[3]);
+    if (ctrl_sum < 0.01F && ctrl_blend < 0.5F) {
+        return;
+    }
+
+    float fg_weights[4]{};
+    if (readable_bytes(static_cast<std::byte*>(puppet) + kPlayerFgAnimDataOffset) >=
+        sizeof(void*)) {
+        void* const fg = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(puppet) + kPlayerFgAnimDataOffset);
+        if (fg != nullptr && readable_bytes(fg) >= 0x198) {
+            const auto* const fg_bytes = static_cast<const std::byte*>(fg);
+            std::memcpy(fg_weights, fg_bytes + 0x188, sizeof(fg_weights));
+        }
+    }
+
+    std::ostringstream line;
+    line << "AIM-RENDER-DISC peerFwd=(" << peer_fx << "," << peer_fz
+         << ") rootFwd=(" << root_fx << "," << root_fz << ") peerYaw="
+         << peer_yaw << " rootYaw=" << root_yaw
+         << " yawDelta=" << (peer_yaw - root_yaw)
+         << " ctrlAdd=(" << ctrl_weights[0] << "," << ctrl_weights[1] << ","
+         << ctrl_weights[2] << "," << ctrl_weights[3] << ") blend="
+         << ctrl_blend << " fgAdd=(" << fg_weights[0] << "," << fg_weights[1]
+         << "," << fg_weights[2] << "," << fg_weights[3] << ") seq="
+         << peer.sequence;
+    force_log_line(line.str().c_str());
+}
 
 void log_puppet_joint_palette_motion(
     void* puppet, const coop::StatePacket& peer) {
@@ -12073,6 +12150,11 @@ void log_puppet_joint_palette_motion(
         const auto* const aim_bytes = static_cast<const std::byte*>(aim);
         std::memcpy(weights, aim_bytes + 0x8B8, 4 * sizeof(float));
         weights[4] = *reinterpret_cast<const float*>(aim_bytes + 0x8EC);
+    }
+    const float weight_sum = std::fabs(weights[0]) + std::fabs(weights[1]) +
+                             std::fabs(weights[2]) + std::fabs(weights[3]);
+    if (weight_sum < 0.01F && weights[4] < 0.5F) {
+        return;
     }
     std::ostringstream line;
     line << "AIM-PALETTE seq=" << peer.sequence << " joints=" << joint_count
@@ -12255,6 +12337,7 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     }
     log_puppet_action_state(puppet, pkt);
     if (g_enable_aim_palette_probe) {
+        log_puppet_aim_render_discriminator(puppet, pkt);
         log_puppet_joint_palette_motion(puppet, pkt);
     }
     puppet_was_aiming = puppet_aiming_now;

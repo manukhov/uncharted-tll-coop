@@ -27555,3 +27555,8 @@ HYPOTHESIS for the two remaining mechanisms**.
   non-zero `AIM-WEIGHTS-POST` all fire after blend ramps. Additive permission
   still requires relay (`original=0 forced=1`). Full log analysis:
   `reports/player_aim_action_state_runtime_20260714.md`.
+- **CONFIRMED visual 2026-07-14:** user reports receiver puppet still aimed at one
+  fixed point during ADS in that run. `AIM-WORLD-BASIS` fwd and yawPre changed
+  across samples; weights reached blend=1. Status: break is downstream of
+  `PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0`, not upstream
+  dispatch. Next discriminator: `AIM-RENDER-DISC` + gated `AIM-PALETTE`.
