@@ -27498,3 +27498,15 @@ HYPOTHESIS for the two remaining mechanisms**.
   chain and `joint_count=651`; only the probe's private 512-joint limit rejected
   the sample. Raising that diagnostic-only limit to 1024 preserves the hypothesis
   and all game state unchanged.
+- **RUNTIME INCONCLUSIVE / UPSTREAM SELECTED:** PIDs 200/13948 passed the
+  651-joint palette guards under fresh strict ADS. Palette allocations and
+  matrices changed, but `PlayerAimController+0x8B8..+0x8C4` remained
+  `(0,0,0,0)` and neither `AIM-WORLD-BASIS` nor `AIM-WEIGHTS-POST` fired. Generic
+  ADS blend still reached one and peer IK targets changed. The user simultaneously
+  observed Chloe's kneeling-slide regression. Since this probe performs no game
+  writes, it does not cause that state; the run instead selects an upstream
+  GunMoveShield/action-selection failure over a final palette/render failure.
+  Full-palette deltas are additionally unsafe to interpret without a valid-joint
+  mask because finite counts varied from 497 to 651 and inactive entries reached
+  implausible magnitudes. Continue statically from the action selector and early
+  branches of `PlayerGunMoveShield_UpdateAndDispatch 0x140E84440`.

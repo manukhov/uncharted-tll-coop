@@ -1,6 +1,6 @@
 # Player aim final joint-palette boundary (2026-07-14)
 
-Status: **STATIC; read-only runtime discriminator pending**.
+Status: **RUNTIME INCONCLUSIVE; latest run selected an upstream dispatch failure**.
 
 ## Exact hypothesis
 
@@ -88,3 +88,39 @@ the live Chloe skeleton has 651 joints, above the probe's conservative 512-joint
 private-buffer limit. `FgAnimData`, skeleton, current palette, and previous palette
 were all non-null and stable in role across changing allocations. The probe limit
 is raised to 1024; no game-memory layout or behavior changes.
+
+### 651-joint runtime result: palette branch not reached cleanly
+
+PIDs 200/13948 passed every layout guard and emitted repeated `AIM-PALETTE`
+samples while the sender camera seed and receiver `AIM-IK-POINT` changed. The
+receiver's four directional fields nevertheless remained exactly
+`weights=(0,0,0,0)`, and this PID pair emitted neither `AIM-WORLD-BASIS` nor
+`AIM-WEIGHTS-POST`. `AIM-BLEND-TICK` was active and commonly reached one, so
+packet ADS and the generic blend controller were alive while the directional
+GunMoveShield chain was absent.
+
+The full-palette difference is not a valid aim discriminator in this run. Of 651
+entries, the finite count varied between 497 and 651; changing palette
+allocations exposed entries with implausible magnitudes up to `1.0e19`, while
+other frames produced ordinary aggregate deltas. A valid-joint/active-layer mask
+would be required before assigning those indices to rendered bones. More
+importantly, the upstream zero weights make that refinement premature.
+
+The user simultaneously observed Chloe sliding in a kneeling pose. This probe is
+strictly read-only, so it cannot be the direct writer of that state. Current
+competing hypotheses are:
+
+1. the automatic stationary `aim-press` relay admits ADS during a native
+   movement/correction transition, switches the puppet to a kneeling action set,
+   and the action selector no longer dispatches `Player::GunMoveShield`;
+2. `Player::GunMoveShield` still dispatches, but an early action/movement gate
+   bypasses the `PlayerAimController+0x58` calls;
+3. a location/progress lifecycle leaves another gun-move action active and the
+   released synthetic ADS command does not restore the normal state.
+
+Packet dropout is weakened: the palette logger itself requires a fresh strict
+peer-ADS packet, and it sampled continuously. A final-render owner is not selected
+by this run because no directional command reached the palette producer. The next
+step is static tracing of the action selector and early exits around
+`PlayerGunMoveShield_UpdateAndDispatch 0x140E84440`; no further runtime test is
+earned yet.

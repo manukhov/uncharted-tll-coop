@@ -2364,3 +2364,11 @@ under the current static-only instruction.
   probe's private 512-joint sanity buffer was too small. Fg/skeleton/current and
   previous palette pointers were valid. The private limit is now 1024; no game
   memory is written.
+- PIDs 200/13948 passed the 651-joint guard and changed palette buffers during
+  fresh ADS, but all four directional fields stayed zero and the run emitted no
+  `AIM-WORLD-BASIS`/`AIM-WEIGHTS-POST`. Generic blend and peer IK markers remained
+  active. The user also observed Chloe sliding on her knees. Because the palette
+  probe is read-only, the current branch is upstream action dispatch: determine
+  whether `Player::GunMoveShield` is deselected or takes an early non-aim exit.
+  Full runtime result and competitors:
+  `reports/player_aim_final_joint_palette_20260714.md`.
