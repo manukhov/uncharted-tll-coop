@@ -27617,4 +27617,7 @@ HYPOTHESIS for the two remaining mechanisms**.
   **bx:** `AIM-SKEL-INJECT copiedPal=1` but visual unchanged; `skelPal=0x760000` →
   **REJECTED** SkelTable `+0x230` as heap pointer (inline matrix rows in PerJoint).
   **by:** inject publish-state `pubState` palette `+0x230`/`+0x560` from puppet fg;
-  logs `AIM-PUB-INJECT`.
+  logs `AIM-PUB-INJECT`. **REJECTED (by runtime):** `copiedPubPal=1` but visual
+  fixed; per-frame inject caused severe receiver lag during peer ADS.
+  **bz:** render inject disabled; pubState sync moved to `apply_puppet_transform_post`
+  once per net tick; logs `AIM-PUB-SYNC`.

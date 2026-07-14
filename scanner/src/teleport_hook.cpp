@@ -6907,6 +6907,7 @@ bool peer_puppet_aim_controller_fixup_wanted(
 
 bool mirror_puppet_aim_add_to_fganim(void* player);
 bool sync_puppet_fganim_palette_to_skinning(void* player);
+bool sync_puppet_pubstate_palette_from_fganim(void* player);
 
 void force_peer_puppet_aim_blend_state(void* controller) {
     if (controller == nullptr) {
@@ -12026,9 +12027,11 @@ constexpr bool g_enable_puppet_fganim_aim_add_mirror = true;
 // CharacterSkeletonEval may bind skinning at +0x560; mirror palette rows there
 // when the async publish job never runs for slot-1.
 constexpr bool g_enable_puppet_fganim_palette_to_skinning = true;
-// Runtime 2026-07-14bt REJECTED FgAnimData+0x560 as visible owner. Next: inject
-// puppet palette into SkelTable (qword_146919C40) before CharacterSkeletonEval.
-constexpr bool g_enable_puppet_skel_palette_inject = true;
+// Runtime 2026-07-14by REJECTED pubState inject at render hook: copiedPubPal=1 but
+// visual fixed; per-call 31KB memcpy + VirtualQuery caused severe receiver lag during
+// peer ADS. pubState sync moved to apply_puppet_transform_post (once per net tick).
+constexpr bool g_enable_puppet_skel_palette_inject = false;
+constexpr bool g_enable_puppet_pubstate_palette_sync = true;
 
 float horizontal_yaw_degrees(float forward_x, float forward_z) {
     return std::atan2(forward_x, forward_z) * (180.0F / 3.14159265F);
@@ -12678,6 +12681,60 @@ void log_puppet_skel_inject_gate_status() {
     force_log_line(line.str().c_str());
 }
 
+bool sync_puppet_pubstate_palette_from_fganim(void* player) {
+    if (player == nullptr) {
+        return false;
+    }
+    FgAnimJointBuffers puppet_buffers{};
+    const char* stage = "ok";
+    void* const fg = player_fganim_from_player(player);
+    if (!resolve_fganim_joint_buffers(fg, puppet_buffers, &stage) ||
+        !pointer_looks_like_heap(puppet_buffers.palette) ||
+        puppet_buffers.joint_count == 0) {
+        return false;
+    }
+    constexpr std::size_t kJointFloatCount = 12;
+    const std::size_t buffer_bytes =
+        static_cast<std::size_t>(puppet_buffers.joint_count) * kJointFloatCount *
+        sizeof(float);
+    if (readable_bytes(puppet_buffers.palette) < buffer_bytes) {
+        return false;
+    }
+    void* const pub_state = aim_publish_active_state_from_player(player);
+    if (pub_state == nullptr || pub_state == fg) {
+        return false;
+    }
+    const bool copied_pub_palette = copy_palette_to_fganim_object(
+        pub_state, kFgAnimDataRuntimePayloadOffset, puppet_buffers.palette,
+        buffer_bytes);
+    const bool copied_pub_skinning = copy_palette_to_fganim_object(
+        pub_state, kFgAnimDataCurrentSkinningMatsOffset, puppet_buffers.palette,
+        buffer_bytes);
+    if (!copied_pub_palette && !copied_pub_skinning) {
+        return false;
+    }
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log >= 400) {
+        last_log = now;
+        const void* pub_palette = nullptr;
+        const void* pub_skinning = nullptr;
+        read_fganim_buffer_ptrs(pub_state, &pub_palette, &pub_skinning);
+        std::ostringstream line;
+        line << "AIM-PUB-SYNC joints=" << puppet_buffers.joint_count
+             << " fgPal=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(puppet_buffers.palette)
+             << " pub=0x"
+             << reinterpret_cast<std::uintptr_t>(pub_state) << " pubPal=0x"
+             << reinterpret_cast<std::uintptr_t>(pub_palette) << " pubSkin=0x"
+             << reinterpret_cast<std::uintptr_t>(pub_skinning) << std::dec
+             << " copiedPubPal=" << (copied_pub_palette ? 1 : 0)
+             << " copiedPubSkin=" << (copied_pub_skinning ? 1 : 0);
+        force_log_line(line.str().c_str());
+    }
+    return true;
+}
+
 bool puppet_skel_palette_inject_wanted() {
     if (!g_enable_puppet_skel_palette_inject || !g_puppet_net_apply ||
         g_module == 0) {
@@ -12778,8 +12835,10 @@ bool inject_puppet_palette_into_skel_owner(void* skel_owner) {
 }
 
 void __fastcall hooked_character_skeleton_render_update_callsite(void* skel_owner) {
-    log_puppet_skel_inject_gate_status();
-    inject_puppet_palette_into_skel_owner(skel_owner);
+    if (g_enable_puppet_skel_palette_inject) {
+        log_puppet_skel_inject_gate_status();
+        inject_puppet_palette_into_skel_owner(skel_owner);
+    }
     if (g_original_character_skeleton_render_update != nullptr) {
         g_original_character_skeleton_render_update(skel_owner);
     }
@@ -13428,6 +13487,9 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     if (peer_aiming) {
         mirror_puppet_aim_add_to_fganim(puppet);
         sync_puppet_fganim_palette_to_skinning(puppet);
+        if (g_enable_puppet_pubstate_palette_sync) {
+            sync_puppet_pubstate_palette_from_fganim(puppet);
+        }
     }
     if (g_enable_aim_palette_probe) {
         log_puppet_aim_render_discriminator(puppet, pkt);
@@ -22215,7 +22277,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14by (AIM pubState palette inject)");
+        "TLL hook DLL init 2026-07-14bz (pubState sync per-tick, render inject off)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");

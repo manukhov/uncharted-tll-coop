@@ -2586,6 +2586,13 @@ under the current static-only instruction.
   palette into **publish-state** `[[Player+0x1A0]+0x58]+0x10` (`pubPal` was null in
   `AIM-FGANIM-DISC`). Logs `AIM-PUB-INJECT`. `pointer_looks_like_heap` now uses
   VirtualQuery.
-- **ADS runtime pending** — need `AIM-PUB-INJECT copiedPubPal=1` + user visual verdict.
-- If visual still fixed with `copiedPal=1`: next trace DrawControl/post-eval or
-  `0x141B5CD90` main-view channel gating.
+- **REJECTED (by runtime, PIDs 18620/8712):** pubState palette inject at render hook —
+  `AIM-PUB-INJECT copiedPubPal=1 copiedPubSkin=1` but user visual **unchanged**;
+  receiver **severe lag** during peer ADS (per-call ~31 KB memcpy + VirtualQuery on
+  every `CharacterSkeletonRender_Update`).
+- **Build 2026-07-14bz (LANDED):** disable render-hook inject (`g_enable_puppet_skel_palette_inject=false`);
+  move pubState palette copy to `apply_puppet_transform_post` once per net tick
+  (`AIM-PUB-SYNC`). Boot marker `2026-07-14bz`.
+- **ADS runtime pending** — lag should be gone; visual verdict still open. If still
+  fixed with `AIM-PUB-SYNC`: next trace per-joint workspace `owner+0x14B8` stride
+  `0x6C0`, DrawControl/post-eval, or `0x141B5CD90` main-view channel.
