@@ -12477,6 +12477,78 @@ bool sync_puppet_fganim_palette_to_skinning(void* player) {
     return true;
 }
 
+struct SkelOwnerAllocatedBuffer {
+    void* memory = nullptr;
+    std::size_t bytes = 0;
+};
+
+std::unordered_map<std::uint64_t, SkelOwnerAllocatedBuffer>
+    g_skel_owner_buffer_allocs;
+
+std::uint64_t skel_owner_buffer_alloc_key(
+    void* owner, std::size_t ptr_field_offset) {
+    return (reinterpret_cast<std::uint64_t>(owner) << 16) ^
+           static_cast<std::uint64_t>(ptr_field_offset);
+}
+
+bool ensure_owner_ptr_buffer(
+    void* owner, std::size_t ptr_field_offset, std::size_t buffer_bytes) {
+    if (owner == nullptr || buffer_bytes == 0 ||
+        readable_bytes(owner) < ptr_field_offset + sizeof(void*)) {
+        return false;
+    }
+    void* const current = *reinterpret_cast<void* const*>(
+        static_cast<const std::byte*>(owner) + ptr_field_offset);
+    if (pointer_looks_like_heap(current) &&
+        readable_bytes(current) >= buffer_bytes) {
+        return true;
+    }
+    auto& slot = g_skel_owner_buffer_allocs[skel_owner_buffer_alloc_key(
+        owner, ptr_field_offset)];
+    if (slot.memory == nullptr || slot.bytes < buffer_bytes) {
+        if (slot.memory != nullptr) {
+            VirtualFree(slot.memory, 0, MEM_RELEASE);
+            slot.memory = nullptr;
+            slot.bytes = 0;
+        }
+        slot.memory = VirtualAlloc(
+            nullptr, buffer_bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        slot.bytes = buffer_bytes;
+    }
+    if (slot.memory == nullptr) {
+        return false;
+    }
+    *reinterpret_cast<void**>(
+        static_cast<std::byte*>(owner) + ptr_field_offset) = slot.memory;
+    return true;
+}
+
+void log_puppet_skel_inject_skip(void* skel_owner, const char* reason) {
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log < 400) {
+        return;
+    }
+    last_log = now;
+    const void* skel_palette = nullptr;
+    const void* skel_skinning = nullptr;
+    read_fganim_buffer_ptrs(skel_owner, &skel_palette, &skel_skinning);
+    void* skel_global = nullptr;
+    if (g_module != 0) {
+        skel_global = *reinterpret_cast<void* const*>(
+            reinterpret_cast<const std::byte*>(g_module) + kSkelTableGlobalRva);
+    }
+    std::ostringstream line;
+    line << "AIM-SKEL-SKIP reason=" << reason << " owner=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(skel_owner) << " global=0x"
+         << reinterpret_cast<std::uintptr_t>(skel_global) << " skelPal=0x"
+         << reinterpret_cast<std::uintptr_t>(skel_palette) << " skelSkin=0x"
+         << reinterpret_cast<std::uintptr_t>(skel_skinning) << std::dec
+         << " palValid=" << (pointer_looks_like_heap(skel_palette) ? 1 : 0)
+         << " skinValid=" << (pointer_looks_like_heap(skel_skinning) ? 1 : 0);
+    force_log_line(line.str().c_str());
+}
+
 bool copy_palette_bytes_to_owner_ptr_field(
     void* owner,
     std::size_t ptr_field_offset,
@@ -12484,6 +12556,9 @@ bool copy_palette_bytes_to_owner_ptr_field(
     std::size_t buffer_bytes) {
     if (owner == nullptr || src_palette == nullptr || buffer_bytes == 0 ||
         readable_bytes(owner) < ptr_field_offset + sizeof(void*)) {
+        return false;
+    }
+    if (!ensure_owner_ptr_buffer(owner, ptr_field_offset, buffer_bytes)) {
         return false;
     }
     void* const dest = *reinterpret_cast<void* const*>(
@@ -12515,19 +12590,45 @@ bool puppet_skel_palette_inject_wanted() {
 }
 
 bool inject_puppet_palette_into_skel_owner(void* skel_owner) {
-    if (!puppet_skel_palette_inject_wanted() || skel_owner == nullptr) {
+    const bool wanted = puppet_skel_palette_inject_wanted();
+    if (!wanted) {
+        return false;
+    }
+    if (skel_owner == nullptr) {
+        log_puppet_skel_inject_skip(nullptr, "null-owner");
         return false;
     }
     if (readable_bytes(skel_owner) < kSkelTableSkipRenderFlagOffset + 1) {
+        log_puppet_skel_inject_skip(skel_owner, "owner-unreadable");
         return false;
     }
     const auto* const owner_bytes = static_cast<const std::byte*>(skel_owner);
     if (static_cast<std::uint8_t>(owner_bytes[kSkelTableSkipRenderFlagOffset]) != 0) {
+        log_puppet_skel_inject_skip(skel_owner, "skip-flag");
         return false;
+    }
+    if (g_module != 0) {
+        void* const skel_global = *reinterpret_cast<void* const*>(
+            reinterpret_cast<const std::byte*>(g_module) + kSkelTableGlobalRva);
+        if (skel_global != nullptr && skel_owner != skel_global) {
+            static ULONGLONG last_mismatch = 0;
+            const ULONGLONG now = GetTickCount64();
+            if (now - last_mismatch >= 1000) {
+                last_mismatch = now;
+                std::ostringstream line;
+                line << "AIM-SKEL-OWNER-MISMATCH owner=0x" << std::hex
+                     << reinterpret_cast<std::uintptr_t>(skel_owner)
+                     << " globalObj=0x"
+                     << reinterpret_cast<std::uintptr_t>(skel_global)
+                     << std::dec << " (inject continues)";
+                force_log_line(line.str().c_str());
+            }
+        }
     }
 
     void* const puppet = retained_player_object(1);
     if (puppet == nullptr) {
+        log_puppet_skel_inject_skip(skel_owner, "no-puppet");
         return false;
     }
     mirror_puppet_aim_add_to_fganim(puppet);
@@ -12539,6 +12640,7 @@ bool inject_puppet_palette_into_skel_owner(void* skel_owner) {
     if (!resolve_fganim_joint_buffers(fg, puppet_buffers, &stage) ||
         !pointer_looks_like_heap(puppet_buffers.palette) ||
         puppet_buffers.joint_count == 0) {
+        log_puppet_skel_inject_skip(skel_owner, stage);
         return false;
     }
     constexpr std::size_t kJointFloatCount = 12;
@@ -12546,6 +12648,7 @@ bool inject_puppet_palette_into_skel_owner(void* skel_owner) {
         static_cast<std::size_t>(puppet_buffers.joint_count) * kJointFloatCount *
         sizeof(float);
     if (readable_bytes(puppet_buffers.palette) < buffer_bytes) {
+        log_puppet_skel_inject_skip(skel_owner, "palette-bytes");
         return false;
     }
 
@@ -12556,6 +12659,7 @@ bool inject_puppet_palette_into_skel_owner(void* skel_owner) {
         skel_owner, kSkelTableSkinningPtrOffset, puppet_buffers.palette,
         buffer_bytes);
     if (!copied_palette && !copied_skinning) {
+        log_puppet_skel_inject_skip(skel_owner, "copy-fail");
         return false;
     }
 
@@ -22020,7 +22124,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14bv (AIM SkelTable callsite inject fix)");
+        "TLL hook DLL init 2026-07-14bw (AIM SkelTable inject diag+alloc)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");

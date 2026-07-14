@@ -2572,7 +2572,11 @@ under the current static-only instruction.
   `sub rsp,20h` mid-instruction → immediate AV `rip=0x5F0016` on first render job.
 - **Fix build 2026-07-14bv:** E8 callsite relay at `0x141B5CEA6` (pre-Update call)
   instead of entry detour. PIDs 21224/2640: hook installs, **no post-install AV**.
-- Boot marker `2026-07-14bv`. **ADS runtime pending** — need `AIM-SKEL-INJECT` during
+- Boot marker `2026-07-14bv`. PIDs 21224/2640: install OK, no post-install AV.
+- **Build 2026-07-14bw (LANDED):** `AIM-SKEL-SKIP` discriminator + auto-alloc heap
+  buffers at SkelTable `+0x230/+0x560` when native pointers invalid (fixes silent
+  `copy-fail`). Owner mismatch logs as `AIM-SKEL-OWNER-MISMATCH` but inject continues.
+- **ADS runtime pending** — need `AIM-SKEL-INJECT` or `AIM-SKEL-SKIP reason=*` during
   peer yaw sweep + user visual verdict.
 - If visual still fixed with `copiedPal=1`: next trace DrawControl/post-eval or
   `0x141B5CD90` main-view channel gating.
