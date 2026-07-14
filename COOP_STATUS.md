@@ -2356,3 +2356,7 @@ under the current static-only instruction.
 - Read-only `AIM-PALETTE` sampling is implemented at a 400 ms cadence and the
   release DLL builds successfully. It keeps a private baseline and performs no
   game-memory writes; runtime is ready under the prediction above.
+- First runtime PIDs 16724/1964 was inconclusive: pose seed, world basis, and
+  directional weights changed, but no palette sample passed all layout guards.
+  A throttled read-only `AIM-PALETTE-STATUS` guard report is now built to identify
+  the exact rejected pointer/count assumption.

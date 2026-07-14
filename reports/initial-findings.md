@@ -27490,3 +27490,7 @@ HYPOTHESIS for the two remaining mechanisms**.
 - Status: **STATIC**. Exact hypothesis, competitors, evidence quota, and a
   read-only palette prediction are recorded in
   `reports/player_aim_final_joint_palette_20260714.md`.
+- **RUNTIME INCONCLUSIVE:** PIDs 16724/1964 exercised changing ADS camera seeds,
+  world basis, and directional weights, but emitted no palette sample. One of the
+  read-only layout guards failed; this run does not distinguish palette evaluation
+  from later render ownership. The refined probe reports the failed guard only.

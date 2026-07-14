@@ -71,3 +71,12 @@ baseline, reports the six joint indices with the largest 12-float matrix delta,
 the root row, peer sequence, raw directional weights, and blend. It never writes
 the palette, FgAnimData, Player, DrawControl, or animation parameters. Release
 build succeeds; only the pre-existing C4456 diagnostics remain.
+
+### First runtime: inconclusive guard failure
+
+PIDs 16724/1964 produced changing sender pose seeds, receiver world-basis values,
+and directional weights, but no `AIM-PALETTE` line. Therefore the camera/ADS
+stimulus was valid while at least one palette-layout guard rejected the sample.
+This does not select any behavioral hypothesis. The next read-only build adds a
+once-per-second `AIM-PALETTE-STATUS` line naming the failed guard and reporting
+only pointer addresses, joint count, and readable span.

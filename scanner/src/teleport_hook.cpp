@@ -11935,6 +11935,7 @@ void log_puppet_joint_palette_motion(
     static std::uint32_t last_joint_count = 0;
     static ULONGLONG last_sample_ms = 0;
     static ULONGLONG last_seen_ms = 0;
+    static ULONGLONG last_status_ms = 0;
 
     const ULONGLONG now = GetTickCount64();
     if (!peer_packet_aim_active(peer)) {
@@ -11948,8 +11949,29 @@ void log_puppet_joint_palette_motion(
     }
     last_sample_ms = now;
 
+    auto log_status = [&](const char* stage, const void* fg, const void* skeleton,
+                          const void* current, const void* previous,
+                          std::uint32_t joint_count, std::size_t readable) {
+        if (now - last_status_ms < 1000) {
+            return;
+        }
+        last_status_ms = now;
+        std::ostringstream line;
+        line << "AIM-PALETTE-STATUS stage=" << stage << " seq=" << peer.sequence
+             << " puppet=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(puppet) << " fg=0x"
+             << reinterpret_cast<std::uintptr_t>(fg) << " skel=0x"
+             << reinterpret_cast<std::uintptr_t>(skeleton) << " cur=0x"
+             << reinterpret_cast<std::uintptr_t>(current) << " prev=0x"
+             << reinterpret_cast<std::uintptr_t>(previous) << std::dec
+             << " joints=" << joint_count << " readable=" << readable;
+        force_log_line(line.str().c_str());
+    };
+
     if (puppet == nullptr ||
         readable_bytes(puppet) < kPlayerFgAnimDataOffset + sizeof(void*)) {
+        log_status("puppet", nullptr, nullptr, nullptr, nullptr, 0,
+                   readable_bytes(puppet));
         return;
     }
     auto* const player_bytes = static_cast<std::byte*>(puppet);
@@ -11957,6 +11979,7 @@ void log_puppet_joint_palette_motion(
         player_bytes + kPlayerFgAnimDataOffset);
     if (fg == nullptr ||
         readable_bytes(fg) < kFgPreviousPaletteOffset + sizeof(void*)) {
+        log_status("fg", fg, nullptr, nullptr, nullptr, 0, readable_bytes(fg));
         return;
     }
     auto* const fg_bytes = static_cast<std::byte*>(fg);
@@ -11968,16 +11991,22 @@ void log_puppet_joint_palette_motion(
     if (skeleton == nullptr ||
         readable_bytes(skeleton) < kSkeletonJointCountOffset + sizeof(std::uint32_t) ||
         current == nullptr) {
+        log_status("skeleton", fg, skeleton, current, previous, 0,
+                   readable_bytes(skeleton));
         return;
     }
     const std::uint32_t joint_count = *reinterpret_cast<const std::uint32_t*>(
         static_cast<const std::byte*>(skeleton) + kSkeletonJointCountOffset);
     if (joint_count == 0 || joint_count > kMaxJoints) {
+        log_status("joint-count", fg, skeleton, current, previous, joint_count,
+                   readable_bytes(skeleton));
         return;
     }
     const std::size_t palette_bytes =
         static_cast<std::size_t>(joint_count) * kJointStride;
     if (readable_bytes(current) < palette_bytes) {
+        log_status("current-buffer", fg, skeleton, current, previous, joint_count,
+                   readable_bytes(current));
         return;
     }
 
