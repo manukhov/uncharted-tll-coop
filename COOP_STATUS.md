@@ -2125,7 +2125,7 @@ SKIPPED (mismatch logged only when `g_logging_enabled`). See
   (`GunMoveShield_CopyAimTargetPoint 0x140E84350`) copies the resulting float4
   unchanged into the `rdx` local later passed at both ADS call sites.
 - `GetTargetPointFromReticle` resolves the owner screen at `Player+0x4010`, reads
-  the route pose seed, rotates camera `-Z`, and constructs
+  the route pose seed, rotates pose local `+Z`, and constructs
   `cameraOrigin + cameraForward * rayDistance` (with a targetable/raycast adjustment).
   This is why the puppet aim pose remains fixed when its screen-1 target is stale.
 - Slot `+0x58` obtains the origin internally through controller slot `+0x80`
@@ -2143,7 +2143,7 @@ SKIPPED (mismatch logged only when `g_logging_enabled`). See
   `PlayerAimController` vtable slot `+0x58` at `0x142A0B250`. In the hook, when
   `*(controller+0x108)` is the slot-1 puppet and peer ADS/pose-seed is valid, replace
   the caller-owned target float4 with
-  `peerPosePosition + normalize(peerPoseQuat * -Z) * 180`; forward body-forward and
+  `peerPosePosition + normalize(peerPoseQuat * +Z) * 180`; forward body-forward and
   every native limit, then
   call the original `0x140CAF110`. This drives the authored anim graph without
   overriding the shared route pose seed, root quaternion, or downstream pose caches.
@@ -2283,3 +2283,16 @@ under the current static-only instruction.
   at `R=1` as `yawPre` exceeded the 60-degree arc. Continue statically from the
   body/sector turn owner before the clamp, then the downstream turn-in-place graph.
 - Scoped hair/weapon visibility was not exercised in this run.
+
+## 2026-07-14 sender root-only body basis rejected statically
+
+- `StatePacket::quat` does copy sender `Player+0x140`, but this field is only the
+  local root quaternion relative to optional parent rotation `Player+0x120`.
+- `BuildWorldBasisVectorFromRuntimeTransform` at `0x140E8582F` composes parent
+  `+0x120` with local root `+0x140` before `Quaternion_RotatePositiveZ
+  0x14014D9F0`. Therefore `peer.quat * +Z` is not the exact stock world basis and
+  would discard parent/sector rotation.
+- **REJECTED before runtime:** replacing GunMoveShield's native `r8` with packet
+  root positive-Z. Preserve native body-forward and continue through the actual
+  ground turn-in-place/sector owner. Full rejection:
+  `reports/player_aim_sender_body_basis_20260714.md`.

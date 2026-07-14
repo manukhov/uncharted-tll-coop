@@ -7035,8 +7035,8 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
         1.0F,
     };
 
-    // Preserve GunMoveShield's body basis from the already-derived runtime
-    // transform. A later Player+0x140 soft write may not match the visible skeleton.
+    // Preserve GunMoveShield's composed world body basis. StatePacket::quat only
+    // carries local root +0x140 and omits the optional parent rotation +0x120.
     const float* relayed_body_forward = body_forward;
 
     // Native camera-zoom limits are often zero on screen-1; 60deg clamps scoped

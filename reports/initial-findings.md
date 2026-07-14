@@ -26813,7 +26813,7 @@ branch changes one limit to `-7.0f` (`0x142BEA1D8`). The single-screen byte is
 **Build-ready STATIC design:** vtable slot address `0x142A0B250` currently contains
 `0x140CAF110`. Swap that slot, condition on owner `*(controller+0x108)` being the
 slot-1 puppet plus a valid peer ADS pose seed, replace only the caller-owned target
-float4 using peer quaternion `-Z`, and invoke the original with all native limits.
+float4 using peer quaternion `+Z`, and invoke the original with all native limits.
 This avoids the rejected broad pose-seed, root-quaternion, downstream-field, and
 frame-from-entry-rsp detour paths. No runtime test was performed.
 
@@ -27404,3 +27404,19 @@ HYPOTHESIS for the two remaining mechanisms**.
   positive-Z plus blend is **REJECTED as a complete tracking fix**. Trace the
   camera-relative body/sector turn owner before directional clamping, then the
   downstream turn-in-place graph input. Scoped visibility remains untested here.
+
+### 2026-07-14 STATIC REJECTION: packet root is not full GunMoveShield body basis
+
+- The packet producer copies `StatePacket::quat` directly from sender
+  `Player+0x140`, but that is a local root quaternion relative to optional parent
+  quaternion `Player+0x120`, not a complete world body basis.
+- At `0x140E8582F`, stock `PlayerGunMoveShield_UpdateAndDispatch 0x140E84440`
+  passes `Player+0x100` to `BuildWorldBasisVectorFromRuntimeTransform`. The helper
+  composes parent `+0x120` with local root `+0x140`; only then does
+  `Quaternion_RotatePositiveZ 0x14014D9F0` produce the body-forward argument for
+  both slot `+0x58` ADS calls.
+- **REJECTED before runtime:** reconstructing body-forward from
+  `StatePacket::quat * +Z`. It omits parent/sector rotation and is equivalent only
+  when the parent is identity. Native composed `r8` remains the correct body
+  reference; continue through the actual turn-in-place/sector input. Evidence:
+  `reports/player_aim_sender_body_basis_20260714.md`.
