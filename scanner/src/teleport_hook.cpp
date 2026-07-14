@@ -7125,9 +7125,7 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
     const std::int64_t result = g_original_player_aim_world_basis(
         controller, local_target, relayed_body_forward, active,
         lim_h_a, lim_h_b, single_screen, lim_v_a, lim_v_b);
-    if (mirror_puppet_aim_add_to_fganim(owner)) {
-        sync_puppet_fganim_palette_to_skinning(owner);
-    }
+    mirror_puppet_aim_add_to_fganim(owner);
     if (controller != nullptr &&
         readable_bytes(static_cast<std::byte*>(controller) + 0x8D0) >= 0x20) {
         // PublishDirectionalAimWeights writes exactly +0x8B8..+0x8C4.
@@ -12017,21 +12015,21 @@ void apply_puppet_head_look_pre() {
     }
 }
 
-constexpr bool g_enable_aim_palette_probe = true;
+// 651-joint palette scans + disk logging per puppet update caused receiver stutter
+// during peer ADS even after render-hook inject was disabled (bz).
+constexpr bool g_enable_aim_palette_probe = false;
 // Runtime 2026-07-14: publish_state ([[Player+0x1A0]+0x58]+0x10) receives live
 // aim-add floats while Player+0x1A8 FgAnimData keeps stale +0x188..+0x194 (fgAdd
 // stuck at 0.2,0,0,1). Mirror publish fields into FgAnimData so
 // ProcessAnimCmdListSegment evaluates peer camera on the render-bound object.
 constexpr bool g_enable_puppet_fganim_aim_add_mirror = true;
-// Runtime 2026-07-14br: fgPalTot moves but fgSkinTot stays 0 on puppet ADS.
-// CharacterSkeletonEval may bind skinning at +0x560; mirror palette rows there
-// when the async publish job never runs for slot-1.
-constexpr bool g_enable_puppet_fganim_palette_to_skinning = true;
-// Runtime 2026-07-14by REJECTED pubState inject at render hook: copiedPubPal=1 but
-// visual fixed; per-call 31KB memcpy + VirtualQuery caused severe receiver lag during
-// peer ADS. pubState sync moved to apply_puppet_transform_post (once per net tick).
+// REJECTED (bt/bz runtime): palette→skinning copy does not fix visible ADS aim.
+// hooked_player_aim_world_basis + apply_puppet_transform_post each did 31KB memcpy
+// per frame during peer ADS → receiver lag persisted after bz.
+constexpr bool g_enable_puppet_fganim_palette_to_skinning = false;
+// REJECTED (by/bz): pubState palette inject/sync — visual fixed, lag from memcpy.
 constexpr bool g_enable_puppet_skel_palette_inject = false;
-constexpr bool g_enable_puppet_pubstate_palette_sync = true;
+constexpr bool g_enable_puppet_pubstate_palette_sync = false;
 
 float horizontal_yaw_degrees(float forward_x, float forward_z) {
     return std::atan2(forward_x, forward_z) * (180.0F / 3.14159265F);
@@ -13486,10 +13484,6 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     log_puppet_action_state(puppet, pkt);
     if (peer_aiming) {
         mirror_puppet_aim_add_to_fganim(puppet);
-        sync_puppet_fganim_palette_to_skinning(puppet);
-        if (g_enable_puppet_pubstate_palette_sync) {
-            sync_puppet_pubstate_palette_from_fganim(puppet);
-        }
     }
     if (g_enable_aim_palette_probe) {
         log_puppet_aim_render_discriminator(puppet, pkt);
@@ -22277,7 +22271,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14bz (pubState sync per-tick, render inject off)");
+        "TLL hook DLL init 2026-07-14ca (strip ADS memcpy+probe lag, mirror only)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
@@ -22307,7 +22301,9 @@ DWORD WINAPI install_hook(void*) {
         if (g_enable_gun_move_body_turn) {
             install_gun_move_camera_turn_relay();
         }
-        install_character_skeleton_render_update_callsite_hook();
+        if (g_enable_puppet_skel_palette_inject) {
+            install_character_skeleton_render_update_callsite_hook();
+        }
     }
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();

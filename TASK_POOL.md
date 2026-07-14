@@ -64,9 +64,9 @@
       **REJECTED:** `FgAnimData+0x560` skinning + root quat writers (visual fixed).
       **REJECTED:** SkelTable `+0x230` pointer inject (bx: `skelPal=0x760000`, visual
       fixed despite `copiedPal=1`). **REJECTED 2026-07-14by:** pubState inject at
-      render hook — visual fixed + receiver lag. **Build 2026-07-14bz:** render inject
-      OFF; pubState sync once per net tick (`AIM-PUB-SYNC`). If still fixed →
-      per-joint workspace `owner+0x14B8` or DrawControl post-eval.
+      render hook — visual fixed + receiver lag. **REJECTED bz:** lag from per-frame
+      skinning memcpy in world-basis hook + palette probe. **Build 2026-07-14ca:**
+      strip memcpy/probe; mirror only. Next: workspace `owner+0x14B8` stride `0x6C0`.
       Reports: `player_aim_palette_render_chain_20260714.md`,
       `player_aim_bt_runtime_20260714.md`.
 - [ ] **Head / camera look sync:** STATIC done (`reports/lookat_field_map.md`).

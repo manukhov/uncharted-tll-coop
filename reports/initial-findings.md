@@ -27619,5 +27619,8 @@ HYPOTHESIS for the two remaining mechanisms**.
   **by:** inject publish-state `pubState` palette `+0x230`/`+0x560` from puppet fg;
   logs `AIM-PUB-INJECT`. **REJECTED (by runtime):** `copiedPubPal=1` but visual
   fixed; per-frame inject caused severe receiver lag during peer ADS.
-  **bz:** render inject disabled; pubState sync moved to `apply_puppet_transform_post`
-  once per net tick; logs `AIM-PUB-SYNC`.
+  **bz:** render inject disabled; pubState sync per net tick. **REJECTED:** lag
+  persisted — per-frame skinning memcpy in `hooked_player_aim_world_basis` +
+  `apply_puppet_transform_post` and 651-joint palette probe.
+  **ca:** disable skinning/pubState memcpy + palette probe; mirror aim-add only;
+  skip render-hook install.

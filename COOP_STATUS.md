@@ -2590,9 +2590,12 @@ under the current static-only instruction.
   `AIM-PUB-INJECT copiedPubPal=1 copiedPubSkin=1` but user visual **unchanged**;
   receiver **severe lag** during peer ADS (per-call ~31 KB memcpy + VirtualQuery on
   every `CharacterSkeletonRender_Update`).
-- **Build 2026-07-14bz (LANDED):** disable render-hook inject (`g_enable_puppet_skel_palette_inject=false`);
-  move pubState palette copy to `apply_puppet_transform_post` once per net tick
-  (`AIM-PUB-SYNC`). Boot marker `2026-07-14bz`.
-- **ADS runtime pending** — lag should be gone; visual verdict still open. If still
-  fixed with `AIM-PUB-SYNC`: next trace per-joint workspace `owner+0x14B8` stride
-  `0x6C0`, DrawControl/post-eval, or `0x141B5CD90` main-view channel.
+- **REJECTED (bz user test):** lag persisted + visual still fixed. Root cause: per-frame
+  31KB `sync_puppet_fganim_palette_to_skinning` in **both** `hooked_player_aim_world_basis`
+  (every ADS eval) and `apply_puppet_transform_post` (~60 Hz), plus `g_enable_aim_palette_probe`
+  scanning 651 joints. Render-hook passthrough still installed in bz.
+- **Build 2026-07-14ca (LANDED):** disable skinning/pubState memcpy paths and palette
+  probe; mirror aim-add only; skip render-hook install when inject off. Boot `2026-07-14ca`.
+- **ADS runtime pending** — lag should clear on ca. Visual still open: next static target
+  per-joint workspace `owner+0x14B8` stride `0x6C0` (CharacterSkeletonEval input), not
+  FgAnimData heap copies.
