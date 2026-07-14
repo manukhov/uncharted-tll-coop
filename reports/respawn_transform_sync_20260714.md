@@ -2,8 +2,7 @@
 
 ## Status
 
-`REJECTED` one-shot-only repair; revised continuous reconciliation is ready for
-the second runtime prediction below.
+`CONFIRMED` revised continuous reconciliation (runtime 2026-07-14).
 
 ## Exact hypothesis
 
@@ -97,3 +96,12 @@ must be no repeated same-position `LOCAL-RESPAWN-TELEPORT` lines and no recurrin
 four-metre hard snaps. If error still oscillates, the retained table is selecting
 multiple live Player instances and reconciliation must be keyed to the exact
 `update_object` rather than a fresh retained lookup.
+
+## Revised runtime result
+
+PIDs 20712/19956 each emitted a measured `LOCAL-RESPAWN-TELEPORT` and matching
+`PUPPET-RESPAWN-SNAP`. The stationary receiver error converged to about `0.028`
+metres and remained there without the previous recurring four-metre drift/snap
+cycle. The user confirmed the result visually. The revised reconciliation is
+therefore **CONFIRMED**; the one-shot-only variant and pointer-identity sender
+discriminator remain **REJECTED**.

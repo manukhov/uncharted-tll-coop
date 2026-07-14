@@ -2,7 +2,7 @@
 
 ## Status
 
-`CONFIRMED` lifecycle failure; native deferred repair is ready for runtime test.
+`CONFIRMED` lifecycle failure and deferred native repair (runtime 2026-07-14).
 
 ## Observation
 
@@ -175,3 +175,13 @@ may not restart. The next read-only snapshot records resolved parent object/id,
 whether it equals the current puppet, and the previously omitted
 `mainViewExcluded/categorySuppressed` instance counts. No further rebuild or
 visibility write is added until that discriminator selects a writer.
+
+## Final runtime result: deferred repair confirmed visually
+
+PIDs 20712/19956 resolved every recreated cloth parent to the current retained
+puppet (`currentPuppet=1`). Cloth bodies were non-null, initialization and mesh
+gates were active, and both `mainViewExcluded` and `categorySuppressed` were zero.
+After the final location reload the user confirmed that the remote appearance was
+correct. The generation-aware deferred `Player+0x3D10 -> Player_ChangeLookId`
+repair is therefore **CONFIRMED** for the observed reload hair loss. The earlier
+same-generation and one-sided gate variants remain **REJECTED**.

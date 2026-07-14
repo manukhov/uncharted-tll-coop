@@ -910,7 +910,6 @@ bool local_player_aim_input_active();
 bool local_player_strict_aim_active(void* player);
 bool seh_read_aim_origin_point(void* controller, float out[4]);
 void quat_forward_neg_z(const float q[4], float& fx, float& fy, float& fz);
-void quat_forward_positive_z(const float q[4], float& fx, float& fy, float& fz);
 bool head_look_send_allowed(void* player);
 void publish_peer_head_look_packet_fields(
     void* local_obj, coop::StatePacket& pkt);
@@ -2840,7 +2839,8 @@ void record_pose_seed_caller(std::uintptr_t rva) {
 void apply_pose_seed_override_out(
     void* out, const std::uint8_t seed[32], std::uintptr_t caller_rva) {
     __try {
-        if (caller_rva == kPlayerAimPoseSeedCallSiteRva) {
+        if (caller_rva == kPlayerAimPoseSeedCallSiteRva ||
+            caller_rva == kPlayerAimKickTargetJobPoseSeedCallSiteRva) {
             std::memcpy(out, seed, 32);
         } else {
             std::memcpy(static_cast<std::byte*>(out) + 16, seed + 16, 16);
@@ -2876,12 +2876,14 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     const bool sustained_slot1_override =
         g_puppet_aim_override_frame && idx == kSlot1ScreenIndex;
     // AIM-POSE-SCOPED override (2026-07-07): peer pose-seed ONLY when the caller is
-    // (a) GetTargetPointFromReticle's internal resolver call (0xCB17D6), or
-    // (b) sub_1410E9210's per-frame copy into Player+0x1720/+0x1730 (0x10E934B).
+    // (a) GetTargetPointFromReticle's internal resolver call (0xCB17D6),
+    // (b) Player_PostAnimUpdate's copy into Player+0x1720/+0x1730 (0x10E934B), or
+    // (c) its later KickTargetPointJob seed read (0xCB0300).
     const bool caller_is_aim_site =
         idx == kSlot1ScreenIndex &&
         (caller_rva == kAimTargetReticleCallSiteRva ||
-         caller_rva == kPlayerAimPoseSeedCallSiteRva);
+         caller_rva == kPlayerAimPoseSeedCallSiteRva ||
+         caller_rva == kPlayerAimKickTargetJobPoseSeedCallSiteRva);
     // PERF (2026-07-13): this resolver runs ~150-300x/frame (fire + every-frame
     // PostAnimUpdate pose write). The old code did copy_peer_state_snapshot (SRW
     // lock + ~460B copy, contending the net thread) UNCONDITIONALLY on every call =
@@ -6803,22 +6805,6 @@ void quat_forward_neg_z(const float q[4], float& fx, float& fy, float& fz) {
     }
 }
 
-void quat_forward_positive_z(const float q[4], float& fx, float& fy, float& fz) {
-    const float x = q[0];
-    const float y = q[1];
-    const float z = q[2];
-    const float w = q[3];
-    fx = 2.0F * (x * z + w * y);
-    fy = 2.0F * (y * z - w * x);
-    fz = 1.0F - 2.0F * (x * x + y * y);
-    const float len = std::sqrt(fx * fx + fy * fy + fz * fz);
-    if (len > 1e-3F) {
-        fx /= len;
-        fy /= len;
-        fz /= len;
-    }
-}
-
 using PlayerAimWorldBasisFunction = std::int64_t(__fastcall*)(
     void* controller,
     const float* target_point,
@@ -7014,28 +7000,9 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
         1.0F,
     };
 
-    // Body-forward must match the puppet's live root (+0x140), not the packet
-    // quat. Packet vs rendered root divergence produced yawPre≈±180 and wrong aim.
-    alignas(16) float local_body_forward[4]{};
+    // Preserve GunMoveShield's body basis from the already-derived runtime
+    // transform. A later Player+0x140 soft write may not match the visible skeleton.
     const float* relayed_body_forward = body_forward;
-    if (owner != nullptr &&
-        readable_bytes(static_cast<std::byte*>(owner) + kPlayerQuatOffset + 16) >=
-            16) {
-        const float* body_quat = reinterpret_cast<const float*>(
-            static_cast<std::byte*>(owner) + kPlayerQuatOffset);
-        float body_x = 0.0F;
-        float body_y = 0.0F;
-        float body_z = 0.0F;
-        quat_forward_positive_z(body_quat, body_x, body_y, body_z);
-        const float horizontal = std::sqrt(body_x * body_x + body_z * body_z);
-        if (horizontal > 0.001F) {
-            local_body_forward[0] = body_x / horizontal;
-            local_body_forward[1] = 0.0F;
-            local_body_forward[2] = body_z / horizontal;
-            local_body_forward[3] = 0.0F;
-            relayed_body_forward = local_body_forward;
-        }
-    }
 
     // Native camera-zoom limits are often zero on screen-1; 60deg clamps scoped
     // free-look (yawPre can exceed 120deg). Use generous authored clamps.
@@ -7105,15 +7072,15 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
         lim_h_a, lim_h_b, single_screen, lim_v_a, lim_v_b);
     if (controller != nullptr &&
         readable_bytes(static_cast<std::byte*>(controller) + 0x8D0) >= 0x20) {
-        // Contiguous directional state at +0x8B4..+0x8C0 (not stride-8).
-        const float w0 = *reinterpret_cast<const float*>(
-            static_cast<const std::byte*>(controller) + 0x8B4);
-        const float w1 = *reinterpret_cast<const float*>(
+        // PublishDirectionalAimWeights writes exactly +0x8B8..+0x8C4.
+        const float left = *reinterpret_cast<const float*>(
             static_cast<const std::byte*>(controller) + 0x8B8);
-        const float w2 = *reinterpret_cast<const float*>(
+        const float right = *reinterpret_cast<const float*>(
             static_cast<const std::byte*>(controller) + 0x8BC);
-        const float w3 = *reinterpret_cast<const float*>(
+        const float down = *reinterpret_cast<const float*>(
             static_cast<const std::byte*>(controller) + 0x8C0);
+        const float up = *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(controller) + 0x8C4);
         const float blend = *reinterpret_cast<const float*>(
             static_cast<const std::byte*>(controller) + 0x8EC);
         static ULONGLONG last_w = 0;
@@ -7121,8 +7088,8 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
         if (wnow - last_w > 1000) {
             last_w = wnow;
             std::ostringstream wline;
-            wline << "AIM-WEIGHTS-POST L=" << w0 << " R=" << w1 << " D=" << w2
-                  << " U=" << w3 << " blend=" << blend;
+            wline << "AIM-WEIGHTS-POST L=" << left << " R=" << right
+                  << " D=" << down << " U=" << up << " blend=" << blend;
             force_log_line(wline.str().c_str());
         }
     }
@@ -11769,7 +11736,6 @@ void apply_puppet_aim_pre(void* puppet) {
     if (!pose_relay_for_peer) {
         return;
     }
-    apply_peer_aim_facing_to_player(puppet, pkt);
     apply_peer_aim_pose_quat(puppet);
     apply_peer_aim_ik_world_points(puppet, pkt);
     write_peer_aim_world_targets_from_pose_seed(puppet, pkt);
@@ -11871,11 +11837,9 @@ void apply_puppet_transform_post(void* /*update_object*/) {
         write_peer_aim_world_targets_from_pose_seed(puppet, pkt);
     }
     if (peer_aiming) {
-        // Camera yaw from pose_seed owns the root during ADS pose relay. Blending
-        // to StatePacket::quat (sender body) fights free-look and pins aim to one
-        // world point. Pre-update staging in apply_puppet_aim_pre feeds native
-        // GunMoveShield; post pass reinforces after integration.
-        if (g_puppet_aim_facing_from_camera || pose_relay_for_peer) {
+        // Directional aim-additives own ordinary ADS. The camera-root path remains
+        // only as a manual A/B because pre/post root writes were runtime-rejected.
+        if (g_puppet_aim_facing_from_camera) {
             // RUNTIME REJECTED 2026-07-13: POST snap + 0x141BB8320 refresh
             // eventually leaves the puppet sliding on its knees after a location
             // reload. Keep only the soft root blend; aim additives own camera
@@ -13561,17 +13525,8 @@ void apply_queued_fire_events(void* puppet) {
         }
     }
 
-    // Button fallback when native replay is disabled or fails.
-    // Body facing only — do not latch aim (0x200); that opens crosshair/scope HUD.
-    const bool peer_aim_button = peer_packet_aim_active(peer);
-    const bool peer_aim_recent = relay_now < g_peer_aim_recent_until_ms;
-    const bool peer_gun_out =
-        (peer.flags & 0x80) != 0 && peer.gun_state == 1;
-    const bool peer_aiming =
-        peer_aim_button || (peer_gun_out && peer_aim_recent);
-    if (peer_aiming) {
-        apply_peer_aim_facing_to_player(puppet, peer);
-    }
+    // Button fallback when native replay is disabled or fails. Direction comes
+    // from the caller-scoped pose-seed relay; do not mutate root facing here.
     constexpr std::uint64_t kFireOnlyMask = kJoypadFireButtonMask;
     const std::uint64_t fire_pulse = kFireOnlyMask;
     g_state_net.pending_button_presses.fetch_or(fire_pulse, std::memory_order_release);

@@ -27308,3 +27308,42 @@ HYPOTHESIS for the two remaining mechanisms**.
   branch made the observed post-respawn drift permanent below four metres. The
   same bounded correction now runs while stationary. Revised runtime prediction:
   `reports/respawn_transform_sync_20260714.md`.
+
+### 2026-07-14 RUNTIME: reload cloth repair and continuous respawn reconciliation confirmed
+
+- PIDs 20712/19956 recreated final-generation `ProcessCharCloth` objects through
+  the deferred `Player+0x3D10 -> Player_ChangeLookId 0x1410FE840` stock PreFrame
+  path. Every child resolved to the current retained puppet, with non-null cloth
+  body, active gates/instances, and zero main-view/category suppression. The user
+  confirmed the remote appearance visually. The generation-aware deferred repair
+  is **CONFIRMED**; its earlier same-generation and one-sided gates are rejected.
+- Measured respawn discontinuities produced matching sender
+  `LOCAL-RESPAWN-TELEPORT` and receiver `PUPPET-RESPAWN-SNAP` events. Continuous
+  stationary reconciliation then converged to about 2.8 cm and stayed there,
+  instead of resuming the old four-metre drift cycle. The user confirmed the
+  result visually. The revised position repair is **CONFIRMED**; pointer identity
+  and one-shot-only snapping remain rejected.
+
+### 2026-07-14 STATIC: late KickTargetPointJob seed and invisible root basis pin static aim
+
+- Runtime PIDs 20712/19956 rejected stale sender data and disabled aim relays:
+  sender pose quaternions changed, slot `+0x58` logged changing camera forward,
+  current-state permission was admitted, and blend stayed at one while the user
+  still saw the puppet aim at one point.
+- `PlayerGunMoveShield_UpdateAndDispatch 0x140E84440` builds body-forward from
+  the already-derived Player runtime transform at `0x140E8582F` and
+  `Quaternion_RotatePositiveZ 0x140E85841`. The mod discarded that argument and
+  rebuilt it from `Player+0x140`, which its own late soft camera-root writer had
+  changed without refreshing the visible derived transform. Logs showed the
+  resulting relative yaw collapse to roughly `+5/-3` degrees.
+- `Player_PostAnimUpdate 0x1410E9210` later calls PlayerAimController vtable
+  `+0xE0` at `0x1410E9F11`, resolving to
+  `PlayerAimController_KickTargetPointJob 0x140CB0200`. Its pose-seed resolver at
+  `0x140CB02FB` returns to `0x140CB0300` and feeds the final target job buffers;
+  this late caller was absent from the existing two-site override allowlist.
+- The narrow STATIC correction preserves GunMoveShield's native body basis,
+  removes automatic ADS camera-root soft writes, and relays the complete peer
+  pose seed at `0x140CB0300` under the existing slot-1/fresh-ADS guards. The
+  diagnostic now reads the true directional fields at controller
+  `+0x8B8/+0x8BC/+0x8C0/+0x8C4`. Runtime prediction is recorded in
+  `reports/player_aim_render_basis_relay_20260714.md`.

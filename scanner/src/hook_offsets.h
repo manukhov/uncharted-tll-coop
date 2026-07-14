@@ -316,6 +316,10 @@ constexpr std::uintptr_t kAimTargetReticleCallSiteRva = 0xCB17D6;
 // (Player per-frame update): native code vmovups resolver result into Player+0x1720
 // and +0x1730 (aim pose). Top POSESEED-CALLERS hit ~150/frame during puppet ADS.
 constexpr std::uintptr_t kPlayerAimPoseSeedCallSiteRva = 0x10E934B;
+// Late Player_PostAnimUpdate target-point job reads the route seed again after
+// the early aim pose/world-basis path. This return site must receive the complete
+// peer camera seed or the final job keeps the puppet's stale screen-1 target.
+constexpr std::uintptr_t kPlayerAimKickTargetJobPoseSeedCallSiteRva = 0xCB0300;
 // PlayerAimController vtable +0x58 -> ApplyWorldAimBasis 0x140CAF110. This is
 // the narrow native input to directional aim-additive weights: target point,
 // body-forward, mode bytes, and four authored angular limits.

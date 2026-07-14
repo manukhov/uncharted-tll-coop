@@ -2224,3 +2224,21 @@ under the current static-only instruction.
   cannot leave hair/weapon attachables in authored `DisableMainView` state.
 - Prediction: restart logs `PUPPET-MAIN-VIEW-HIDE suppressed`, both remote players
   retain hair, and ordinary locomotion no longer uses the kneeling slide pose.
+
+## 2026-07-14 reload/respawn confirmed; aim direction build ready
+
+- User runtime confirms the generation-aware deferred
+  `Player+0x3D10 -> Player_ChangeLookId` repair restores final reload cloth/hair.
+  Final children resolve to the current puppet with healthy bodies, gates, and
+  render categories.
+- Revised respawn sync is confirmed: measured discontinuity snaps once, then the
+  stationary bounded nudge converges to about 2.8 cm without recurring drift.
+- Current aim failure is now split from packet/blend admission. The late
+  `PlayerAimController_KickTargetPointJob 0x140CB0200` resolver return
+  `0x140CB0300` was not in the override allowlist, and the slot `+0x58` hook
+  discarded GunMoveShield's visible-transform body basis in favor of an invisible
+  late `Player+0x140` soft write.
+- STATIC correction: relay the complete peer seed at `0x140CB0300`, preserve the
+  native body-forward argument, remove automatic ADS camera-root soft writes, and
+  read actual weights at `+0x8B8..+0x8C4`. Build/runtime prediction:
+  `reports/player_aim_render_basis_relay_20260714.md`.
