@@ -2484,3 +2484,10 @@ under the current static-only instruction.
   for body turn (camera -Z in native `0x140E8F990`).
 - **v2 bn:** relay uses `camera_forward_horizontal` (-Z); post root sync parked.
   Report: `reports/player_aim_body_turn_runtime_20260714.md`.
+
+## 2026-07-14 neg-Z turn relay REJECTED (PIDs 13400/21384)
+
+- User: unchanged visual. `peerNegZ` overrides `+0x150` but `rootYaw` stuck ~30deg.
+- **REJECTED** post-native `+0x150` patch as root driver for slot-1 puppet.
+- **v3 bo:** turn relay parked; post-ADS full `Player+0x140` yaw snap from peer
+  camera -Z. Watch knee-slide competitor from prior runs.

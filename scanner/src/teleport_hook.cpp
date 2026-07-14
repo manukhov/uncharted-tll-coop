@@ -6841,8 +6841,10 @@ using GunMoveControllerApplyCameraYawFunction = char(__fastcall*)(
 GunMoveControllerApplyCameraYawFunction
     g_original_gun_move_apply_camera_yaw = nullptr;
 bool g_gun_move_camera_turn_relay_installed = false;
-// Post root yaw sync parked after pos-Z regression; turn relay uses camera -Z.
-constexpr bool g_enable_gun_move_body_turn_post_sync = false;
+// GunMoveController +0x150 relay REJECTED: +0x150 changes but Player+0x140 stays
+// ~30deg (0x140E8FD00 does not consume for slot-1 puppet). Direct post snap only.
+constexpr bool g_enable_gun_move_body_turn = false;
+constexpr bool g_enable_puppet_ads_root_yaw_snap = true;
 
 bool seh_read_aim_origin_point(void* controller, float out[4]) {
     if (controller == nullptr || out == nullptr || g_module == 0) {
@@ -7529,11 +7531,17 @@ void sync_puppet_root_yaw_from_peer_camera(
 
     float yaw_quat[4]{};
     yaw_quat_from_horizontal_forward(peer_fx, peer_fz, yaw_quat);
-    const float abs_delta = std::fabs(yaw_delta);
-    const float alpha = abs_delta > 20.0F ? 0.72F
-                      : abs_delta > 8.0F ? 0.58F
-                      : 0.42F;
-    const float dot = blend_network_orientation(quat, yaw_quat, alpha);
+    float dot = 1.0F;
+    if (g_enable_puppet_ads_root_yaw_snap) {
+        std::memcpy(quat, yaw_quat, 4 * sizeof(float));
+        dot = 0.0F;
+    } else {
+        const float abs_delta = std::fabs(yaw_delta);
+        const float alpha = abs_delta > 20.0F ? 0.72F
+                          : abs_delta > 8.0F ? 0.58F
+                          : 0.42F;
+        dot = blend_network_orientation(quat, yaw_quat, alpha);
+    }
 
     static ULONGLONG last_log = 0;
     static float last_peer_yaw = 0.0F;
@@ -7548,9 +7556,10 @@ void sync_puppet_root_yaw_from_peer_camera(
         const float after_yaw =
             std::atan2(after_fx, after_fz) * (180.0F / 3.14159265F);
         std::ostringstream line;
-        line << "AIM-ROOT-YAW-SYNC peerYaw=" << peer_yaw
-             << " before=" << root_yaw << " after=" << after_yaw
-             << " delta=" << yaw_delta << " alpha=" << alpha
+        line << (g_enable_puppet_ads_root_yaw_snap ? "AIM-ROOT-YAW-SNAP "
+                                                   : "AIM-ROOT-YAW-SYNC ")
+             << "peerYaw=" << peer_yaw << " before=" << root_yaw
+             << " after=" << after_yaw << " delta=" << yaw_delta
              << " dot=" << dot << " seq=" << peer.sequence;
         force_log_line(line.str().c_str());
     }
@@ -12453,7 +12462,7 @@ void apply_puppet_transform_post(void* /*update_object*/) {
                    valid_network_orientation(pkt.quat)) {
             orientation_dot = blend_network_orientation(quat, pkt.quat, 0.35F);
         }
-        if (g_enable_gun_move_body_turn_post_sync &&
+        if (g_enable_puppet_ads_root_yaw_snap ||
             g_gun_move_camera_turn_relay_installed) {
             sync_puppet_root_yaw_from_peer_camera(puppet, pkt);
         }
@@ -12603,10 +12612,7 @@ volatile bool g_readable_bytes_fast = true;
 // not clear. Pose-seed snapshot is now gated (e305fec); re-enable the proven aim
 // animation path. Keep diagnostic probes off — they are hot-path noise only.
 constexpr bool g_enable_aim_animation_relays = true;
-// Re-enabled 2026-07-14: pubAdd runtime proved publish works but Player+0x140 root
-// yaw stays decoupled from peer camera during ADS. Pos-Z turn was REJECTED same
-// day (wrong reticle direction); use camera -Z for +0x150 only.
-constexpr bool g_enable_gun_move_body_turn = true;
+
 constexpr bool g_enable_aim_diagnostic_probes = false;
 
 
@@ -21262,7 +21268,7 @@ DWORD WINAPI install_hook(void*) {
         log_line("tll.exe module not found");
         return 1;
     }
-    boot_log_line("TLL hook DLL init 2026-07-14bn (body-turn relay camera -Z)");
+    boot_log_line("TLL hook DLL init 2026-07-14bo (ADS root yaw snap camera -Z)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");

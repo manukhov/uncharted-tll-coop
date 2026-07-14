@@ -27,3 +27,21 @@ class axis error.
 
 Puppet ADS horizontal aim aligns with peer reticle; no "random wrong compass"
 regression. If still fixed, competitor is downstream additive/render, not axis.
+
+## PIDs 13400/21384 — neg-Z relay REJECTED
+
+User: same as before — fixed wrong aim, no tracking.
+
+- `AIM-TURN-DIR` peerNegZ changes every sweep; stock native `+0x150` stays
+  `~(-0.306,0.952)` (receiver-local).
+- `Player+0x140` rootYaw **stuck ~29.8deg** across peerYaw -151..+83 in
+  `AIM-RENDER-DISC` while `+0x150` is overridden post-native.
+- Conclusion: patching `+0x150` after `0x140E8F990` does not rotate the puppet
+  root; `0x140E8FD00` path inactive or overridden for slot-1 puppet.
+
+### v3 build (bo)
+
+- GunMoveController relay **parked**.
+- Post-update **full root yaw snap** from peer camera -Z on `Player+0x140` during
+  ADS (`AIM-ROOT-YAW-SNAP`). Prediction: `rootYaw` tracks `peerYaw` in
+  `AIM-RENDER-DISC`; visible aim follows or selects downstream skeleton owner.
