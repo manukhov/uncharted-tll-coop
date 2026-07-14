@@ -6844,6 +6844,10 @@ bool g_gun_move_camera_turn_relay_installed = false;
 using CharacterSkeletonRenderUpdateFunction = void(__fastcall*)(void* skel_owner);
 CharacterSkeletonRenderUpdateFunction g_original_character_skeleton_render_update =
     nullptr;
+using CharacterSkeletonEvalPerJointFunction = void(__fastcall*)(
+    void* skel_owner, unsigned int* workspace, double xmm2, double xmm3);
+CharacterSkeletonEvalPerJointFunction g_original_character_skeleton_eval_per_joint =
+    nullptr;
 // GunMoveController +0x150 relay REJECTED: +0x150 changes but Player+0x140 stays
 // ~30deg (0x140E8FD00 does not consume for slot-1 puppet). Direct post snap only.
 constexpr bool g_enable_gun_move_body_turn = false;
@@ -12030,6 +12034,10 @@ constexpr bool g_enable_puppet_fganim_palette_to_skinning = false;
 // REJECTED (by/bz): pubState palette inject/sync — visual fixed, lag from memcpy.
 constexpr bool g_enable_puppet_skel_palette_inject = false;
 constexpr bool g_enable_puppet_pubstate_palette_sync = false;
+// Build cb: PerJoint reads joint matrices from workspace+0x558 (not FgAnimData heap
+// or SkelTable owner+0x40B8 timing counters). Inject puppet palette rows for puppet-
+// owned workspace slots only — 48 B/joint, no 651-joint scan.
+constexpr bool g_enable_puppet_workspace_palette_inject = true;
 
 float horizontal_yaw_degrees(float forward_x, float forward_z) {
     return std::atan2(forward_x, forward_z) * (180.0F / 3.14159265F);
@@ -12734,8 +12742,9 @@ bool sync_puppet_pubstate_palette_from_fganim(void* player) {
 }
 
 bool puppet_skel_palette_inject_wanted() {
-    if (!g_enable_puppet_skel_palette_inject || !g_puppet_net_apply ||
-        g_module == 0) {
+    if ((!g_enable_puppet_skel_palette_inject &&
+         !g_enable_puppet_workspace_palette_inject) ||
+        !g_puppet_net_apply || g_module == 0) {
         return false;
     }
     void* const puppet = retained_player_object(1);
@@ -12897,6 +12906,181 @@ bool install_character_skeleton_render_update_callsite_hook() {
     DWORD ignored = 0;
     VirtualProtect(call_site, 5, old_protection, &ignored);
     boot_log_line("SkelTable render inject installed (Update callsite 0x1B5CEA6)");
+    return true;
+}
+
+bool workspace_instance_belongs_to_puppet(void* workspace, void* puppet) {
+    if (workspace == nullptr || puppet == nullptr ||
+        readable_bytes(workspace) <
+            kSkelJointWorkspaceInstancePtrOffset + sizeof(void*)) {
+        return false;
+    }
+    void* const instance = *reinterpret_cast<void* const*>(
+        static_cast<const std::byte*>(workspace) +
+        kSkelJointWorkspaceInstancePtrOffset);
+    if (instance == nullptr) {
+        return false;
+    }
+    if (instance == puppet) {
+        return true;
+    }
+    void* const puppet_draw = readable_bytes(
+        static_cast<std::byte*>(puppet) + kPlayerDrawControlOffset) >=
+            sizeof(void*)
+        ? *reinterpret_cast<void* const*>(
+              static_cast<const std::byte*>(puppet) + kPlayerDrawControlOffset)
+        : nullptr;
+    void* const puppet_fg = player_fganim_from_player(puppet);
+    if (instance == puppet_draw || instance == puppet_fg) {
+        return true;
+    }
+    if (readable_bytes(instance) < 0x80) {
+        return false;
+    }
+    const auto* const bytes = static_cast<const std::byte*>(instance);
+    for (std::size_t offset = 0; offset <= 0x70; offset += sizeof(void*)) {
+        void* const candidate = *reinterpret_cast<void* const*>(bytes + offset);
+        if (candidate == puppet || candidate == puppet_draw ||
+            candidate == puppet_fg) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool inject_puppet_palette_into_joint_workspace(void* owner, void* workspace) {
+    if (!g_enable_puppet_workspace_palette_inject || owner == nullptr ||
+        workspace == nullptr) {
+        return false;
+    }
+    if (!puppet_skel_palette_inject_wanted()) {
+        return false;
+    }
+    void* const puppet = retained_player_object(1);
+    if (puppet == nullptr || !workspace_instance_belongs_to_puppet(workspace, puppet)) {
+        return false;
+    }
+    mirror_puppet_aim_add_to_fganim(puppet);
+
+    if (readable_bytes(workspace) <
+        kSkelJointWorkspaceMatrixBaseOffset + 48) {
+        return false;
+    }
+    const std::uint32_t joint_id = *reinterpret_cast<const std::uint32_t*>(
+        static_cast<const std::byte*>(workspace) +
+        kSkelJointWorkspaceJointIdOffset);
+
+    FgAnimJointBuffers buffers{};
+    const char* stage = "ok";
+    void* const fg = player_fganim_from_player(puppet);
+    if (!resolve_fganim_joint_buffers(fg, buffers, &stage) ||
+        !pointer_looks_like_heap(buffers.palette) || buffers.joint_count == 0 ||
+        joint_id >= buffers.joint_count) {
+        return false;
+    }
+    constexpr std::size_t kJointFloatCount = 12;
+    constexpr std::size_t kJointBytes = kJointFloatCount * sizeof(float);
+    const std::size_t palette_bytes =
+        static_cast<std::size_t>(buffers.joint_count) * kJointBytes;
+    if (readable_bytes(buffers.palette) < palette_bytes) {
+        return false;
+    }
+    const std::size_t joint_offset =
+        static_cast<std::size_t>(joint_id) * kJointBytes;
+    auto* const workspace_bytes = static_cast<std::byte*>(workspace);
+    std::memcpy(
+        workspace_bytes + kSkelJointWorkspaceMatrixBaseOffset,
+        buffers.palette + (joint_offset / sizeof(float)), kJointBytes);
+
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log >= 400) {
+        last_log = now;
+        std::ostringstream line;
+        line << "AIM-WS-INJECT joint=" << joint_id
+             << " owner=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(owner) << " ws=0x"
+             << reinterpret_cast<std::uintptr_t>(workspace) << " pal=0x"
+             << reinterpret_cast<std::uintptr_t>(buffers.palette) << std::dec;
+        force_log_line(line.str().c_str());
+    }
+    return true;
+}
+
+extern "C" void inject_puppet_joint_workspace_thunk(void* owner, void* workspace) {
+    inject_puppet_palette_into_joint_workspace(owner, workspace);
+}
+
+bool install_character_skeleton_eval_per_joint_callsite_hook() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kCharacterSkeletonEvalPerJointCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line("SkelTable PerJoint inject SKIPPED (callsite not E8)");
+        return false;
+    }
+    std::int32_t displacement = 0;
+    std::memcpy(&displacement, call_site + 1, sizeof(displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(displacement);
+    const std::uintptr_t expected = g_module + kCharacterSkeletonEvalPerJointRva;
+    if (target != expected) {
+        boot_log_line("SkelTable PerJoint inject SKIPPED (target mismatch)");
+        return false;
+    }
+    g_original_character_skeleton_eval_per_joint =
+        reinterpret_cast<CharacterSkeletonEvalPerJointFunction>(expected);
+
+    constexpr std::size_t kRelaySize = 64;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("SkelTable PerJoint inject SKIPPED (relay alloc)");
+        return false;
+    }
+    std::size_t offset = 0;
+    auto emit = [&](std::initializer_list<std::uint8_t> bytes) {
+        for (std::uint8_t byte : bytes) {
+            relay[offset++] = byte;
+        }
+    };
+    emit({0x48, 0x83, 0xEC, 0x30});              // sub rsp, 30h
+    emit({0x0F, 0x29, 0x54, 0x24, 0x10});        // movaps [rsp+10h], xmm2
+    emit({0x0F, 0x29, 0x5C, 0x24, 0x20});        // movaps [rsp+20h], xmm3
+    emit({0x48, 0xB8});                           // mov rax, imm64
+    *reinterpret_cast<std::uintptr_t*>(relay + offset) =
+        reinterpret_cast<std::uintptr_t>(&inject_puppet_joint_workspace_thunk);
+    offset += sizeof(std::uintptr_t);
+    emit({0xFF, 0xD0});                           // call rax
+    emit({0x0F, 0x28, 0x54, 0x24, 0x10});        // movaps xmm2, [rsp+10h]
+    emit({0x0F, 0x28, 0x5C, 0x24, 0x20});        // movaps xmm3, [rsp+20h]
+    emit({0x48, 0x83, 0xC4, 0x30});              // add rsp, 30h
+    emit({0x48, 0xB8});                           // mov rax, imm64
+    *reinterpret_cast<std::uintptr_t*>(relay + offset) = expected;
+    offset += sizeof(std::uintptr_t);
+    emit({0xFF, 0xE0});                           // jmp rax
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("SkelTable PerJoint inject SKIPPED (relay range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("SkelTable PerJoint inject SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line("SkelTable PerJoint inject installed (callsite 0x1B63CE6)");
     return true;
 }
 
@@ -22271,7 +22455,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14ca (strip ADS memcpy+probe lag, mirror only)");
+        "TLL hook DLL init 2026-07-14cb (PerJoint workspace+0x558 inject)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
@@ -22303,6 +22487,9 @@ DWORD WINAPI install_hook(void*) {
         }
         if (g_enable_puppet_skel_palette_inject) {
             install_character_skeleton_render_update_callsite_hook();
+        }
+        if (g_enable_puppet_workspace_palette_inject) {
+            install_character_skeleton_eval_per_joint_callsite_hook();
         }
     }
     install_player_pickup_start_relay();

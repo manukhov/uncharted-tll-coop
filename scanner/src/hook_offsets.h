@@ -423,6 +423,14 @@ constexpr std::size_t kSkelTablePalettePtrOffset = 0x230;
 constexpr std::size_t kSkelTableSkinningPtrOffset = 0x560;
 constexpr std::size_t kSkelTableJointWorkspaceBaseOffset = 0x14B8;
 constexpr std::size_t kSkelTableJointWorkspaceStride = 0x6C0;
+// Per-joint workspace fields used by CharacterSkeletonEval_PerJoint 0x141B757F0.
+constexpr std::size_t kSkelJointWorkspaceJointIdOffset = 0x0;
+constexpr std::size_t kSkelJointWorkspaceInstancePtrOffset = 0xB8;
+constexpr std::size_t kSkelJointWorkspaceMatrixBaseOffset = 0x558;
+constexpr std::uintptr_t kCharacterSkeletonEvalPerJointRva = 0x1B757F0;
+constexpr std::uintptr_t kCharacterSkeletonEvalPerJointCallsiteRva = 0x1B63CE6;
+// PlayerUpper body draw path (look builder): object+0x198 = IDrawControl.
+constexpr std::size_t kPlayerDrawControlOffset = 0x198;
 constexpr std::uint32_t kSlot1ScreenIndex = 1;
 constexpr float kGoalDistance = 3.0F;
 constexpr float kRemoteGoalDistance = 1.25F;

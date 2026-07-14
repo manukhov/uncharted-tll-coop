@@ -27625,3 +27625,10 @@ HYPOTHESIS for the two remaining mechanisms**.
   **ca:** disable skinning/pubState memcpy + palette probe; mirror aim-add only;
   skip render-hook install. **CONFIRMED (user):** receiver ADS lag mostly gone.
   **REJECTED (user):** visible aim still fixed — downstream eval/render gap remains.
+- **STATIC 2026-07-14 (build cb):** `CharacterSkeletonEval_PerJoint 0x141B757F0`
+  reads joint matrix rows from per-joint **workspace** at `+0x558` (pool
+  `*([owner+0x14B8])`, stride `0x6C0`, instance ptr `workspace+0xB8`). `owner+0x40B8`
+  is **not** palette — `sub_141B59230` stores engine-clock counter; delta → `owner+0x40C0`.
+  Build cb: pre-PerJoint hook `0x141B63CE6` injects puppet `FgAnimData+0x230` 48 B row
+  into puppet-owned workspace; log `AIM-WS-INJECT`. Report:
+  `reports/player_aim_workspace_static_20260714.md`.

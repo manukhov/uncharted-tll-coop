@@ -2602,6 +2602,9 @@ under the current static-only instruction.
   failure is downstream — `ProcessAnimCmdListSegment` eval and/or
   `CharacterSkeletonEval_PerJoint` workspace (`owner+0x14B8`, stride `0x6C0`) / DrawControl
   post-eval. FgAnimData heap copies are closed.
-- **Next build cb:** static map workspace joint matrix fields, then lightweight pre-Update
-  inject (no per-frame 651-joint scan); alternative branch if workspace static fails:
-  force puppet anim-cmd eval tick.
+- **Build 2026-07-14cb (LANDED):** static map: PerJoint reads `workspace+0x558` matrix
+  rows; `owner+0x40B8` is engine-clock counter (not palette). Pre-PerJoint hook @
+  `0x141B63CE6` copies puppet `FgAnimData+0x230` row into puppet-owned workspace when
+  peer ADS active (`AIM-WS-INJECT`). No memcpy/probe lag path. Boot `2026-07-14cb`.
+- **Awaiting user test cb:** visual tracks peer + `AIM-WS-INJECT` lines; if logs but
+  fixed → PerJoint overwrites workspace or DrawControl post-pass.
