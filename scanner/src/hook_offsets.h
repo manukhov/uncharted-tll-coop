@@ -327,6 +327,14 @@ constexpr std::uintptr_t kPlayerAimBlendTickVtableSlotRva = 0x2A0B228;
 constexpr std::uintptr_t kPlayerAimBlendTickRva = 0x0CAFA20;
 constexpr std::uintptr_t kPlayerAimBlendTargetCallsiteRva = 0x0CAFB7C;
 constexpr std::uintptr_t kPlayerAimBlendTargetRva = 0x0CAE480;
+// GunMoveController (Player+0x1DA8) vtable +0x38. Stock code resolves the
+// owner's route camera and writes its camera-relative world direction to
+// controller+0x150 before aim-idle turn-state selection.
+constexpr std::uintptr_t kGunMoveControllerVtableRva = 0x2A280A8;
+constexpr std::size_t kGunMoveControllerApplyCameraYawSlotOffset = 0x38;
+constexpr std::uintptr_t kGunMoveControllerApplyCameraYawRva = 0x0E8F990;
+constexpr std::size_t kGunMoveControllerOwnerOffset = 0x108;
+constexpr std::size_t kGunMoveControllerTurnDirectionOffset = 0x150;
 // Ground GunMoveShield call to Player_CheckAimActionEligibility. A callsite
 // relay can conditionally admit only the slot-1 puppet while preserving the
 // original function and all downstream weapon-specific aim arguments.

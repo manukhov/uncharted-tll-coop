@@ -66,3 +66,12 @@ With a narrow `0x140E8F990` post-call override enabled only when
 If `+0x150` changes but the body does not, competitor 3 wins: the puppet is not
 executing the `+0x50 -> 0x140E90590 -> 0x140E8FD00` downstream phase and the next
 step is a guarded native dispatch, not another root-field write.
+
+## Build under test
+
+The runtime candidate patches only `GunMoveController::vtable+0x38`. Its hook
+calls stock `0x140E8F990` first, validates controller owner == retained slot 1,
+fresh packet age <= 250 ms, strict peer ADS and a valid pose quaternion, then
+replaces controller `+0x150` with normalized horizontal pose positive-Z. Every
+other call returns the stock result unchanged. The release DLL builds successfully;
+the only compiler diagnostic is the pre-existing C4456 at lines 5878/5911.

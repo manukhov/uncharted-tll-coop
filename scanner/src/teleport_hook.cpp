@@ -6836,6 +6836,10 @@ using PlayerAimWorldBasisFunction = std::int64_t(__fastcall*)(
     float vertical_limit_a,
     float vertical_limit_b);
 PlayerAimWorldBasisFunction g_original_player_aim_world_basis = nullptr;
+using GunMoveControllerApplyCameraYawFunction = char(__fastcall*)(
+    void* controller, const float* input_direction);
+GunMoveControllerApplyCameraYawFunction
+    g_original_gun_move_apply_camera_yaw = nullptr;
 
 bool seh_read_aim_origin_point(void* controller, float out[4]) {
     if (controller == nullptr || out == nullptr || g_module == 0) {
@@ -7156,6 +7160,99 @@ bool install_player_aim_world_basis_relay() {
     DWORD ignored = 0;
     VirtualProtect(slot, sizeof(void*), old, &ignored);
     boot_log_line("PlayerAimController world-basis relay installed");
+    return true;
+}
+
+char __fastcall hooked_gun_move_apply_camera_yaw(
+    void* controller, const float* input_direction) {
+    if (g_original_gun_move_apply_camera_yaw == nullptr) {
+        return 0;
+    }
+    const char result =
+        g_original_gun_move_apply_camera_yaw(controller, input_direction);
+    if (g_dll_inert || controller == nullptr || !g_state_net.enabled ||
+        readable_bytes(static_cast<std::byte*>(controller) +
+                       kGunMoveControllerOwnerOffset) < sizeof(void*) ||
+        readable_bytes(static_cast<std::byte*>(controller) +
+                       kGunMoveControllerTurnDirectionOffset) < 16) {
+        return result;
+    }
+
+    void* const owner = *reinterpret_cast<void* const*>(
+        static_cast<const std::byte*>(controller) +
+        kGunMoveControllerOwnerOffset);
+    if (owner == nullptr || owner != retained_player_object(1)) {
+        return result;
+    }
+
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    coop::StatePacket peer{};
+    if (received == 0 || GetTickCount64() - received > 250 ||
+        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer) ||
+        !valid_network_orientation(peer.pose_seed + 4)) {
+        return result;
+    }
+
+    float forward_x = 0.0F;
+    float forward_y = 0.0F;
+    float forward_z = 0.0F;
+    quat_forward_pos_z(
+        peer.pose_seed + 4, forward_x, forward_y, forward_z);
+    const float horizontal =
+        std::sqrt(forward_x * forward_x + forward_z * forward_z);
+    if (!std::isfinite(horizontal) || horizontal < 0.001F) {
+        return result;
+    }
+    forward_x /= horizontal;
+    forward_z /= horizontal;
+
+    auto* const turn_direction = reinterpret_cast<float*>(
+        static_cast<std::byte*>(controller) +
+        kGunMoveControllerTurnDirectionOffset);
+    const float stock_x = turn_direction[0];
+    const float stock_z = turn_direction[2];
+    turn_direction[0] = forward_x;
+    turn_direction[1] = 0.0F;
+    turn_direction[2] = forward_z;
+    turn_direction[3] = 0.0F;
+
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log > 250) {
+        last_log = now;
+        std::ostringstream line;
+        line << "AIM-TURN-DIR seq=" << peer.sequence << " stock=("
+             << stock_x << "," << stock_z << ") peerPosZ=("
+             << forward_x << "," << forward_z << ")";
+        force_log_line(line.str().c_str());
+    }
+    return result;
+}
+
+bool install_gun_move_camera_turn_relay() {
+    auto* const slot = reinterpret_cast<void**>(
+        g_module + kGunMoveControllerVtableRva +
+        kGunMoveControllerApplyCameraYawSlotOffset);
+    void* const expected =
+        reinterpret_cast<void*>(g_module + kGunMoveControllerApplyCameraYawRva);
+    if (*slot != expected) {
+        boot_log_line("GunMoveController camera-turn relay SKIPPED (slot mismatch)");
+        return false;
+    }
+    g_original_gun_move_apply_camera_yaw =
+        reinterpret_cast<GunMoveControllerApplyCameraYawFunction>(*slot);
+    DWORD old = 0;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+        boot_log_line("GunMoveController camera-turn relay SKIPPED (protect)");
+        g_original_gun_move_apply_camera_yaw = nullptr;
+        return false;
+    }
+    *slot = reinterpret_cast<void*>(&hooked_gun_move_apply_camera_yaw);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(void*), old, &ignored);
+    boot_log_line("GunMoveController camera-turn relay installed");
     return true;
 }
 
@@ -20526,6 +20623,7 @@ DWORD WINAPI install_hook(void*) {
     // Aim animation path (CONFIRMED visible for pistol ADS when enabled). Pose-seed
     // snapshot lag is gated separately; leave diagnostic probes off.
     if (g_enable_aim_animation_relays) {
+        install_gun_move_camera_turn_relay();
         install_player_aim_eligibility_callsite_relay();
         install_player_aim_additive_permission_callsite_relay();
         install_player_aim_blend_target_callsite_relay();

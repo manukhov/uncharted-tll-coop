@@ -2310,3 +2310,5 @@ under the current static-only instruction.
 - Next build overrides only the return-side `+0x150` result of `0x140E8F990` for
   fresh remote ADS using relayed pose positive-Z. Full evidence, alternatives and
   runtime discriminator: `reports/gun_move_controller_aim_turn_chain_20260714.md`.
+- Build complete: the vtable hook calls stock first and changes only the validated
+  slot-1 result. Release compilation succeeds; runtime prediction is now earned.
