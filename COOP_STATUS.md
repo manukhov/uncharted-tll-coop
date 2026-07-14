@@ -2272,3 +2272,14 @@ under the current static-only instruction.
   pose-seed aim consumers and applies a 180 ms monotonic blend at the two exact
   call boundaries. Evidence and prediction:
   `reports/player_aim_pose_positive_z_blend_ramp_20260714.md`.
+
+### Runtime result
+
+- PIDs 13036/17280 confirmed the narrow corrections: first-entry `yawPre`
+  dropped from near 180 to 59.1 degrees and the 180 ms blend rose monotonically
+  through multiple logged samples to one.
+- Visual camera tracking is still **REJECTED** by the user. Relayed quaternion,
+  target and forward vectors changed, but directional output frequently saturated
+  at `R=1` as `yawPre` exceeded the 60-degree arc. Continue statically from the
+  body/sector turn owner before the clamp, then the downstream turn-in-place graph.
+- Scoped hair/weapon visibility was not exercised in this run.

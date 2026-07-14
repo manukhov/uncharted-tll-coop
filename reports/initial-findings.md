@@ -27388,3 +27388,19 @@ HYPOTHESIS for the two remaining mechanisms**.
   The two exact hook boundaries now publish a mod-owned 180 ms monotonic ramp.
   Status: **STATIC**, with prediction in
   `reports/player_aim_pose_positive_z_blend_ramp_20260714.md`.
+
+### 2026-07-14 RUNTIME PARTIAL: positive-Z and stable blend work; tracking still fails
+
+- PIDs 13036/17280 confirmed positive-Z at the internal discriminator. The first
+  relayed aim entered at `yawPre=59.1` rather than the previous near-180-degree
+  opposition; subsequent sender pose changes produced changing forwards and
+  world targets. Positive-Z reconstruction is **CONFIRMED**.
+- The mod-owned ramp produced monotonic sequences from zero through approximately
+  `0.26, 0.43, 0.61, 0.78, 0.96` to one and did not reset during held ADS. Stable
+  puppet blend ownership at the two hook boundaries is **CONFIRMED**.
+- The user nevertheless observed no remote aim movement while rotating the
+  camera. Logs showed the output repeatedly saturated at `R=1` once relative yaw
+  exceeded the stock 60-degree arc, including values above 90 degrees. Therefore
+  positive-Z plus blend is **REJECTED as a complete tracking fix**. Trace the
+  camera-relative body/sector turn owner before directional clamping, then the
+  downstream turn-in-place graph input. Scoped visibility remains untested here.

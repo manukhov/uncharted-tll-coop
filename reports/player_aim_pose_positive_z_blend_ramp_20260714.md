@@ -1,6 +1,6 @@
 # Player aim pose +Z and stable blend ramp (2026-07-14)
 
-Status: **STATIC, runtime pending**.
+Status: **RUNTIME PARTIAL: axis/blend confirmed, visual tracking rejected**.
 
 ## Exact hypotheses
 
@@ -62,3 +62,24 @@ multiple samples and then stay at one, without returning to zero while ADS is
 held. A still-near-180 yaw rejects the positive-Z hypothesis; monotonic logs with
 a broken entry select a downstream graph state; non-monotonic post-hook logs
 reject the call-boundary ownership hypothesis.
+
+## Runtime result
+
+PIDs 13036/17280 matched both internal discriminators:
+
+- the first positive-Z `AIM-WORLD-BASIS` entered at `yawPre=59.1` instead of the
+  old near-180-degree opposition, and relayed pose quaternion changes produced
+  substantially different forward vectors and target points;
+- each ADS entry produced a monotonic post-hook sequence such as
+  `0 -> 0.261 -> 0.433 -> 0.606 -> 0.783 -> 0.956 -> 1`, with no reset while
+  ADS remained held.
+
+The visible prediction still failed: the user rotated the camera and reported
+that the remote aim did not move. The output explains why this test cannot be
+called complete: as camera yaw crossed the stock arc, the downstream weights
+mostly saturated at `R=1` while `yawPre` ranged beyond 60 degrees (up to roughly
+122 degrees in this run). Positive-Z reconstruction and stable blend are
+**CONFIRMED**, but they are insufficient. The remaining candidate is ownership
+of camera-relative body/sector turn before directional weights are clamped, or a
+downstream turn-in-place graph input. Scoped hair/weapon visibility was not
+tested in this run.
