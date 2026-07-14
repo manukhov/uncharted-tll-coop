@@ -141,6 +141,7 @@ using PlayerMeleeTryAnimFunction =
     char(__fastcall*)(void**, void*, double);
 PlayerMeleeTryAnimFunction g_original_player_melee_try_anim = nullptr;
 std::atomic<bool> g_puppet_melee_try_anim_bypass{false};
+constexpr bool g_enable_puppet_melee_exec_relay = false;
 ScopeVisibleQueryFunction g_original_scope_visible_query = nullptr;
 ReticleHudPublisherFunction g_original_reticle_hud_publisher = nullptr;
 ReticleAimHudPublisherFunction g_original_reticle_aim_hud_publisher = nullptr;
@@ -10270,8 +10271,9 @@ bool seh_puppet_melee_exec_path(void* puppet, std::uint32_t command_hash) {
 }
 
 void apply_peer_melee_animation(void* puppet) {
-    if (!g_state_net.enabled || puppet == nullptr ||
-        puppet != retained_player_object(1) || g_module == 0) {
+    if (!g_enable_puppet_melee_exec_relay || !g_state_net.enabled ||
+        puppet == nullptr || puppet != retained_player_object(1) ||
+        g_module == 0) {
         return;
     }
     const std::uint64_t force =
@@ -22995,7 +22997,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14ch (melee exec relay + TryAnim bypass)");
+        "TLL hook DLL init 2026-07-14ci (melee button relay only; exec parked)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
@@ -23005,7 +23007,11 @@ DWORD WINAPI install_hook(void*) {
     install_joypad3_keyboard_isolation();
     install_joypad3_is_command_active_force();
     install_player_input_is_command_active_force();
-    install_player_melee_try_anim_bypass();
+    if (g_enable_puppet_melee_exec_relay) {
+        install_player_melee_try_anim_bypass();
+    } else {
+        boot_log_line("PlayerMeleeTryAnim bypass parked (ch crash on instance 2)");
+    }
     install_player_fire_capture();
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();

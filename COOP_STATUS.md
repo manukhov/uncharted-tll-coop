@@ -1,5 +1,18 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-15, Cursor - melee ch crash, ci stable path)
+
+**REJECTED (build 2026-07-14ch):** two-instance test PIDs 19116/3452 — second copy
+crashed during boot after DLL init (`get-blended-camera aim gate installed`); log
+stopped at 8 `EXCEPTION` probes, never `MELEE-HASHES` or net. First instance kept
+playing. Suspects: `install_player_melee_try_anim_bypass` on `0x1410FC9F0` and
+`apply_peer_melee_animation` direct vtable `+0xC78/+0xC80`.
+
+**ci fix:** `g_enable_puppet_melee_exec_relay=false` — TryAnim bypass parked; keep
+**cg** button relay (`PlayerInputCommandState` @ `+0x39A0`, Joypad3 force,
+`MELEE-SEND`/`MELEE-RECV`). Boot string `2026-07-14ci`. Next: stable two-instance
+boot, then incremental anim (net-gate bypass only, edge-triggered, no vtable spam).
+
 ## Turn note (2026-07-13, Codex - native deferred cloth repair)
 
 Runtime on PIDs 7480/13620 confirmed the reload failure: each final remote Player

@@ -59,12 +59,12 @@
       the turn/run jitter. Puppet full ADS remains OFF / manual `F8`. Do not
       re-enable broad screen-1 pose-seed/source writes; that path
       freezes locomotion facing.
-- [~] **Puppet melee sync (2026-07-14, ACTIVE):** build **cf** wires `melee-triangle`
-      relay (`0x100000000` intent + Joypad3 force-hook) and logs `MELEE-SEND` /
-      `MELEE-RECV` with `+0x1F60` target id. **Runtime pending:** two-instance test via
-      `launch_two_inject.ps1`. Next: if `cmdActive=1` but no anim — trace
-      `ConstructMeleeCommandQueueOwner` `0x141274470` / dispatcher `0x141271D20`; if
-      wrong target → enemy-sync or relay peer target id.
+- [~] **Puppet melee sync (2026-07-14, ACTIVE):** **cg** CONFIRMED button relay
+      (`MELEE-SEND`/`MELEE-RECV cmdActive=1`); no puppet anim. **ch REJECTED:**
+      instance 2 crash on boot (TryAnim bypass + exec relay). **ci:** exec parked;
+      button layer only (`PlayerInputCommandState` @ `+0x39A0`). Next stable
+      two-instance boot, then incremental anim path (net-gate bypass only, edge-
+      triggered exec, no direct vtable `+0xC78` spam).
 - [~] **Puppet ADS visual aim (PARKED 2026-07-14):** Upstream CONFIRMED; downstream
       eval/render gap. **REJECTED:** palette/skinning/pubState/PerJoint workspace paths.
       **cd:** stable hook, user visual unchanged. Inject OFF in `ce`.

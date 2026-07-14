@@ -27658,3 +27658,10 @@ HYPOTHESIS for the two remaining mechanisms**.
   `PlayerInputCommandState_IsCommandActive` force for puppet `+0x39A0`, and
   `MELEE-EXEC` log. Runtime prediction: peer punch → `MELEE-EXEC ok=1` and puppet
   plays native melee anim without enemy target.
+- **REJECTED (build 2026-07-14ch, PIDs 19116/3452):** second instance (PID 3452)
+  crashed during boot right after hook DLL init (`get-blended-camera aim gate
+  installed`); log stopped at 8 `EXCEPTION` probes (`rva=0x85F4D5F6F`), never reached
+  `MELEE-HASHES` or net. First instance survived. Suspects:
+  `install_player_melee_try_anim_bypass` (17-byte steal on `0x1410FC9F0`) and/or
+  `apply_peer_melee_animation` vtable `+0xC78/+0xC80` spam. **ci:** exec relay
+  parked (`g_enable_puppet_melee_exec_relay=false`); keep **cg** button layer only.
