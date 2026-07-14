@@ -2610,5 +2610,13 @@ under the current static-only instruction.
   pattern as render-hook). Preserves `rcx/rdx/xmm2/xmm3` via function signature. Boot
   `2026-07-14cd`. Local smoke: PID 22304 hook installed, no EXCEPTION in
   `locomotion_hook.log`.
-- **Awaiting user test cd:** peer ADS visual + `AIM-WS-INJECT` lines; if logs but fixed
-  → PerJoint overwrites workspace internally or DrawControl post-pass.
+- **REJECTED (user, cd two-instance):** build cd stable (no PerJoint crash) but puppet
+  ADS aim **still not visible**. Workspace inject **PARKED** (`g_enable_puppet_workspace_palette_inject=false`, boot `2026-07-14ce`).
+- **Next focus: melee sync (2026-07-14):** puppet fist/melee animations when peer
+  punches. Static baseline (`initial-findings.md` Reliable-events + melee-target):
+  melee **button** should relay free via Joypad `+0xD0/+0xD8/+0xE0` → `source+0x518`;
+  execution goes through puppet `Player+0x1F60` combat controller; target is **local**
+  (`+0x1C8 → +0xD8` entity id, rater `sub_1411F7370`). First step: runtime log whether
+  puppet sees `melee-triangle` active + whether `+0x1F60` queue fires when peer melees;
+  if button OK but no anim → controller/gate on slot-1 puppet; if wrong target → enemy
+  position sync or deferred target-id bias.

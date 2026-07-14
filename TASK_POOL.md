@@ -59,18 +59,18 @@
       the turn/run jitter. Puppet full ADS remains OFF / manual `F8`. Do not
       re-enable broad screen-1 pose-seed/source writes; that path
       freezes locomotion facing.
-- [~] **Puppet ADS visual aim (2026-07-14):** Upstream CONFIRMED (build bt):
-      `pubAdd==ctrlAdd==fgAdd`, `AIM-FGANIM-SKIN-ALLOC/COPY`, GunMove path live.
-      **REJECTED:** `FgAnimData+0x560` skinning + root quat writers (visual fixed).
-      **REJECTED:** SkelTable `+0x230` pointer inject (bx: `skelPal=0x760000`, visual
-      fixed despite `copiedPal=1`). **REJECTED 2026-07-14by:** pubState inject at
-      render hook — visual fixed + receiver lag. **REJECTED bz:** lag from per-frame
-      skinning memcpy in world-basis hook + palette probe. **Build 2026-07-14ca:**
-      strip memcpy/probe; mirror only. **cb/cc REJECTED:** PerJoint asm relay crash
-      @ 0x1B63CEB. **cd LANDED:** C++ PerJoint callsite hook (FF25); boot 2026-07-14cd.
-      Await user co-op test + AIM-WS-INJECT logs.
+- [ ] **Puppet melee sync (2026-07-14, ACTIVE):** peer fist/punch/melee visible on
+      slot-1 puppet. Static: melee button relays via Joypad masks (Reliable-events);
+      target local at `player+0x1F60 → +0x1C8 → +0xD8` (rater `0x1411F7370`). Step 1:
+      log puppet `melee-triangle` + combat controller state when peer melees (two-instance
+      loopback). Step 2: if input OK but no anim — trace `ConstructMeleeCommandQueueOwner`
+      `0x141274470` mount @ `+0x1F60` / dispatcher `0x141271D20`. Step 3: wrong target
+      → enemy-sync phase or relay peer target id. Use `launch_two_inject.ps1`.
+- [~] **Puppet ADS visual aim (PARKED 2026-07-14):** Upstream CONFIRMED; downstream
+      eval/render gap. **REJECTED:** palette/skinning/pubState/PerJoint workspace paths.
+      **cd:** stable hook, user visual unchanged. Inject OFF in `ce`.
       Reports: `player_aim_palette_render_chain_20260714.md`,
-      `player_aim_bt_runtime_20260714.md`.
+      `player_aim_workspace_static_20260714.md`.
 - [ ] **Head / camera look sync:** STATIC done (`reports/lookat_field_map.md`).
       PARKED — spine twist unacceptable (`g_puppet_head_look_sync=false`).
 - [ ] **Puppet controller model (NEW):** STATIC map in

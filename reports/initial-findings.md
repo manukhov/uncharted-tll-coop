@@ -27634,4 +27634,6 @@ HYPOTHESIS for the two remaining mechanisms**.
   `reports/player_aim_workspace_static_20260714.md`.
   **REJECTED (cb/cc runtime):** inline-asm relay @ `0x141B63CE6` → `EXCEPTION 0xC0000005`
   return @ `0x1B63CEB` (stack misalign / incomplete callee-save). **cd:** C++ callsite
-  hook + FF25 relay (render-hook pattern); local smoke PID 22304 installed, no crash.
+  hook + FF25 relay (render-hook pattern); stable (no PerJoint crash). **REJECTED (user,
+  cd two-instance):** puppet ADS aim still not visible. **PARKED** — workspace inject
+  disabled (`2026-07-14ce`); pivot to melee sync.

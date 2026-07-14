@@ -12037,7 +12037,8 @@ constexpr bool g_enable_puppet_pubstate_palette_sync = false;
 // Build cb: PerJoint reads joint matrices from workspace+0x558 (not FgAnimData heap
 // or SkelTable owner+0x40B8 timing counters). Inject puppet palette rows for puppet-
 // owned workspace slots only — 48 B/joint, no 651-joint scan.
-constexpr bool g_enable_puppet_workspace_palette_inject = true;
+// PARKED 2026-07-14: puppet ADS visual aim — cd stable but visual still fixed.
+constexpr bool g_enable_puppet_workspace_palette_inject = false;
 
 float horizontal_yaw_degrees(float forward_x, float forward_z) {
     return std::atan2(forward_x, forward_z) * (180.0F / 3.14159265F);
@@ -22445,7 +22446,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14cd (PerJoint C++ callsite hook)");
+        "TLL hook DLL init 2026-07-14ce (ADS inject off; melee pivot)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
