@@ -63,3 +63,11 @@ largest finite current-versus-previous matrix delta.
   parameter lookup/evaluation inside `0x141AB97C0`.
 - No palette or Player field is written by this discriminator.
 
+## Read-only build under test
+
+`log_puppet_joint_palette_motion` samples only a validated slot-1
+`FgAnimData+0x230` palette during fresh peer ADS. It keeps one private 400 ms
+baseline, reports the six joint indices with the largest 12-float matrix delta,
+the root row, peer sequence, raw directional weights, and blend. It never writes
+the palette, FgAnimData, Player, DrawControl, or animation parameters. Release
+build succeeds; only the pre-existing C4456 diagnostics remain.

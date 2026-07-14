@@ -2353,3 +2353,6 @@ under the current static-only instruction.
   with a static rendered pose select a later world/DrawControl owner; no correlated
   palette change selects stale animation-command evaluation. Evidence and exact
   competitors: `reports/player_aim_final_joint_palette_20260714.md`.
+- Read-only `AIM-PALETTE` sampling is implemented at a 400 ms cadence and the
+  release DLL builds successfully. It keeps a private baseline and performs no
+  game-memory writes; runtime is ready under the prediction above.

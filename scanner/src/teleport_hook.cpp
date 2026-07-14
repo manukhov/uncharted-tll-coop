@@ -11920,6 +11920,143 @@ void apply_puppet_head_look_pre() {
     }
 }
 
+void log_puppet_joint_palette_motion(
+    void* puppet, const coop::StatePacket& peer) {
+    constexpr std::size_t kFgCurrentPaletteOffset = 0x230;
+    constexpr std::size_t kFgPreviousPaletteOffset = 0x238;
+    constexpr std::size_t kFgSkeletonOffset = 0x18;
+    constexpr std::size_t kSkeletonJointCountOffset = 0x34;
+    constexpr std::size_t kJointFloatCount = 12;
+    constexpr std::size_t kJointStride = kJointFloatCount * sizeof(float);
+    constexpr std::size_t kMaxJoints = 512;
+
+    static std::array<float, kMaxJoints * kJointFloatCount> last_palette{};
+    static void* last_fg = nullptr;
+    static std::uint32_t last_joint_count = 0;
+    static ULONGLONG last_sample_ms = 0;
+    static ULONGLONG last_seen_ms = 0;
+
+    const ULONGLONG now = GetTickCount64();
+    if (!peer_packet_aim_active(peer)) {
+        last_seen_ms = 0;
+        return;
+    }
+    const bool stale_baseline = last_seen_ms == 0 || now - last_seen_ms > 1000;
+    last_seen_ms = now;
+    if (!stale_baseline && now - last_sample_ms < 400) {
+        return;
+    }
+    last_sample_ms = now;
+
+    if (puppet == nullptr ||
+        readable_bytes(puppet) < kPlayerFgAnimDataOffset + sizeof(void*)) {
+        return;
+    }
+    auto* const player_bytes = static_cast<std::byte*>(puppet);
+    void* const fg = *reinterpret_cast<void**>(
+        player_bytes + kPlayerFgAnimDataOffset);
+    if (fg == nullptr ||
+        readable_bytes(fg) < kFgPreviousPaletteOffset + sizeof(void*)) {
+        return;
+    }
+    auto* const fg_bytes = static_cast<std::byte*>(fg);
+    void* const skeleton = *reinterpret_cast<void**>(fg_bytes + kFgSkeletonOffset);
+    const float* const current = *reinterpret_cast<float**>(
+        fg_bytes + kFgCurrentPaletteOffset);
+    const float* const previous = *reinterpret_cast<float**>(
+        fg_bytes + kFgPreviousPaletteOffset);
+    if (skeleton == nullptr ||
+        readable_bytes(skeleton) < kSkeletonJointCountOffset + sizeof(std::uint32_t) ||
+        current == nullptr) {
+        return;
+    }
+    const std::uint32_t joint_count = *reinterpret_cast<const std::uint32_t*>(
+        static_cast<const std::byte*>(skeleton) + kSkeletonJointCountOffset);
+    if (joint_count == 0 || joint_count > kMaxJoints) {
+        return;
+    }
+    const std::size_t palette_bytes =
+        static_cast<std::size_t>(joint_count) * kJointStride;
+    if (readable_bytes(current) < palette_bytes) {
+        return;
+    }
+
+    const bool reset = stale_baseline || fg != last_fg ||
+                       joint_count != last_joint_count;
+    if (reset) {
+        std::memcpy(last_palette.data(), current, palette_bytes);
+        last_fg = fg;
+        last_joint_count = joint_count;
+        std::ostringstream line;
+        line << "AIM-PALETTE baseline seq=" << peer.sequence
+             << " joints=" << joint_count << " fg=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(fg) << " cur=0x"
+             << reinterpret_cast<std::uintptr_t>(current) << " prev=0x"
+             << reinterpret_cast<std::uintptr_t>(previous) << std::dec;
+        force_log_line(line.str().c_str());
+        return;
+    }
+
+    struct JointDelta {
+        std::uint32_t index = 0;
+        float value = 0.0F;
+    };
+    std::array<JointDelta, 6> top{};
+    float total_delta = 0.0F;
+    std::uint32_t finite_joints = 0;
+    for (std::uint32_t joint = 0; joint < joint_count; ++joint) {
+        const std::size_t base =
+            static_cast<std::size_t>(joint) * kJointFloatCount;
+        float sum_sq = 0.0F;
+        bool finite = true;
+        for (std::size_t component = 0; component < kJointFloatCount; ++component) {
+            const float a = current[base + component];
+            const float b = last_palette[base + component];
+            if (!std::isfinite(a) || !std::isfinite(b)) {
+                finite = false;
+                break;
+            }
+            const float delta = a - b;
+            sum_sq += delta * delta;
+        }
+        if (!finite || !std::isfinite(sum_sq)) {
+            continue;
+        }
+        const float delta = std::sqrt(sum_sq);
+        total_delta += delta;
+        ++finite_joints;
+        for (std::size_t rank = 0; rank < top.size(); ++rank) {
+            if (delta > top[rank].value) {
+                for (std::size_t shift = top.size() - 1; shift > rank; --shift) {
+                    top[shift] = top[shift - 1];
+                }
+                top[rank] = {joint, delta};
+                break;
+            }
+        }
+    }
+
+    float weights[5]{};
+    if (void* const aim = player_aim_controller_from_player(puppet);
+        aim != nullptr && readable_bytes(aim) >= 0x8F0) {
+        const auto* const aim_bytes = static_cast<const std::byte*>(aim);
+        std::memcpy(weights, aim_bytes + 0x8B8, 4 * sizeof(float));
+        weights[4] = *reinterpret_cast<const float*>(aim_bytes + 0x8EC);
+    }
+    std::ostringstream line;
+    line << "AIM-PALETTE seq=" << peer.sequence << " joints=" << joint_count
+         << " finite=" << finite_joints << " total=" << total_delta
+         << " weights=(" << weights[0] << "," << weights[1] << ","
+         << weights[2] << "," << weights[3] << ") blend=" << weights[4]
+         << " root0=(" << current[0] << "," << current[1] << ","
+         << current[2] << "," << current[3] << ") top=";
+    for (const JointDelta& entry : top) {
+        line << entry.index << ":" << entry.value << ",";
+    }
+    force_log_line(line.str().c_str());
+    std::memcpy(last_palette.data(), current, palette_bytes);
+}
+
 // POST (after the puppet's own update runs): assert the networked transform last
 // so the engine's own integration can't fight it (was causing flicker).
 void apply_puppet_transform_post(void* /*update_object*/) {
@@ -12011,6 +12148,7 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     } else if (pkt.move_magnitude < 0.15F) {
         orientation_dot = blend_network_orientation(quat, pkt.quat, 0.18F);
     }
+    log_puppet_joint_palette_motion(puppet, pkt);
     puppet_was_aiming = puppet_aiming_now;
     if (g_clone_freerun) {
         if (too_far) {
