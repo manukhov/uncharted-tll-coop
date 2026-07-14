@@ -2573,10 +2573,14 @@ under the current static-only instruction.
 - **Fix build 2026-07-14bv:** E8 callsite relay at `0x141B5CEA6` (pre-Update call)
   instead of entry detour. PIDs 21224/2640: hook installs, **no post-install AV**.
 - Boot marker `2026-07-14bv`. PIDs 21224/2640: install OK, no post-install AV.
-- **Build 2026-07-14bw (LANDED):** `AIM-SKEL-SKIP` discriminator + auto-alloc heap
-  buffers at SkelTable `+0x230/+0x560` when native pointers invalid (fixes silent
-  `copy-fail`). Owner mismatch logs as `AIM-SKEL-OWNER-MISMATCH` but inject continues.
-- **ADS runtime pending** — need `AIM-SKEL-INJECT` or `AIM-SKEL-SKIP reason=*` during
-  peer yaw sweep + user visual verdict.
+- **Build 2026-07-14bw (LANDED):** `AIM-SKEL-SKIP` + SkelTable buffer auto-alloc.
+  User visual test: **unchanged**. Log post-boot had **zero** `AIM-SKEL-*` lines —
+  inject gate never opened (suspected `player_ads_active(puppet)` false while peer
+  packet aim active).
+- **Build 2026-07-14bx (LANDED):** gate uses `peer_packet_aim_active` only (same as
+  `apply_puppet_transform_post`); adds `AIM-SKEL-GATE` force_log during peer ADS.
+  SkelTable `+0x230` hypothesis still **untested** until `AIM-SKEL-INJECT` appears.
+- **ADS runtime pending** — peer ADS on sender → receiver log must show
+  `AIM-SKEL-GATE wanted=1` then `AIM-SKEL-INJECT` or `AIM-SKEL-SKIP`.
 - If visual still fixed with `copiedPal=1`: next trace DrawControl/post-eval or
   `0x141B5CD90` main-view channel gating.

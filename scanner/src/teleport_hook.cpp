@@ -12571,13 +12571,43 @@ bool copy_palette_bytes_to_owner_ptr_field(
     return true;
 }
 
+bool puppet_skel_palette_inject_wanted();
+
+void log_puppet_skel_inject_gate_status() {
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log < 500) {
+        return;
+    }
+    coop::StatePacket peer{};
+    if (!copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer)) {
+        return;
+    }
+    last_log = now;
+    void* const puppet = retained_player_object(1);
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    const bool peer_fresh =
+        received != 0 && now - received <= 250;
+    const bool wanted = puppet_skel_palette_inject_wanted();
+    std::ostringstream line;
+    line << "AIM-SKEL-GATE wanted=" << (wanted ? 1 : 0)
+         << " netApply=" << (g_puppet_net_apply ? 1 : 0)
+         << " puppet=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(puppet) << std::dec
+         << " puppetAds=" << (puppet != nullptr && player_ads_active(puppet) ? 1 : 0)
+         << " peerFresh=" << (peer_fresh ? 1 : 0)
+         << " peerAim=1 seq=" << peer.sequence;
+    force_log_line(line.str().c_str());
+}
+
 bool puppet_skel_palette_inject_wanted() {
     if (!g_enable_puppet_skel_palette_inject || !g_puppet_net_apply ||
         g_module == 0) {
         return false;
     }
     void* const puppet = retained_player_object(1);
-    if (puppet == nullptr || !player_ads_active(puppet)) {
+    if (puppet == nullptr) {
         return false;
     }
     const ULONGLONG received =
@@ -12586,6 +12616,8 @@ bool puppet_skel_palette_inject_wanted() {
         return false;
     }
     coop::StatePacket peer{};
+    // Peer packet aim is authoritative for puppet ADS relay. Player+0x1548 on the
+    // puppet can lag force_puppet_ads_flag by a frame and blocked all bw injects.
     return copy_peer_state_snapshot(peer) && peer_packet_aim_active(peer);
 }
 
@@ -12688,6 +12720,7 @@ bool inject_puppet_palette_into_skel_owner(void* skel_owner) {
 }
 
 void __fastcall hooked_character_skeleton_render_update_callsite(void* skel_owner) {
+    log_puppet_skel_inject_gate_status();
     inject_puppet_palette_into_skel_owner(skel_owner);
     if (g_original_character_skeleton_render_update != nullptr) {
         g_original_character_skeleton_render_update(skel_owner);
@@ -22124,7 +22157,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14bw (AIM SkelTable inject diag+alloc)");
+        "TLL hook DLL init 2026-07-14bx (AIM SkelTable peer-aim gate fix)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");

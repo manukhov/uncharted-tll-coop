@@ -27613,3 +27613,6 @@ HYPOTHESIS for the two remaining mechanisms**.
   0x141B61530`. **REJECTED:** 12-byte entry detour on `0x141B5CE90` (AV on PID 6420).
   **bw:** auto-alloc SkelTable `+0x230/+0x560` heap buffers when invalid; logs
   `AIM-SKEL-SKIP reason=*` on failure, `AIM-SKEL-INJECT copiedPal/copiedSkin` on success.
+  **Runtime (bw):** user visual unchanged; zero `AIM-SKEL-*` log lines — inject gate
+  never opened (`player_ads_active(puppet)` too strict vs `peer_packet_aim_active`).
+  **bx:** gate aligned to peer packet aim; logs `AIM-SKEL-GATE wanted=…` during peer ADS.

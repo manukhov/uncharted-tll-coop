@@ -62,11 +62,11 @@
 - [~] **Puppet ADS visual aim (2026-07-14):** Upstream CONFIRMED (build bt):
       `pubAdd==ctrlAdd==fgAdd`, `AIM-FGANIM-SKIN-ALLOC/COPY`, GunMove path live.
       **REJECTED:** `FgAnimData+0x560` skinning + root quat writers (visual fixed).
-      **Build 2026-07-14bv (LANDED):** E8 callsite relay at `0x141B5CEA6` (entry
-      detour REJECTED — AV). **Build 2026-07-14bw:** adds `AIM-SKEL-SKIP` reason
-      logging + auto-alloc SkelTable palette/skinning heap buffers before memcpy.
-      Logs `AIM-SKEL-INJECT` on success. **Runtime pending:** user ADS visual test;
-      grep `AIM-SKEL-SKIP` / `AIM-SKEL-INJECT` in `locomotion_hook.log`.
+      **Build 2026-07-14bv/bw:** callsite relay + SkelTable buffer alloc. User test:
+      visual unchanged; **no `AIM-SKEL-*` in log** — gate blocked on puppet ADS flag.
+      **Build 2026-07-14bx:** peer-packet aim gate + `AIM-SKEL-GATE` diagnostic.
+      Next: `AIM-SKEL-INJECT copiedPal=1` during peer ADS; if visual still fixed
+      with inject firing → per-joint workspace `owner+0x14B8` or DrawControl post-eval.
       Reports: `player_aim_palette_render_chain_20260714.md`,
       `player_aim_bt_runtime_20260714.md`.
 - [ ] **Head / camera look sync:** STATIC done (`reports/lookat_field_map.md`).
