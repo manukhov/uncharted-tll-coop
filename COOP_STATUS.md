@@ -2255,3 +2255,20 @@ under the current static-only instruction.
 - Next runtime discriminator is explicit: `AIM-TURN-SEND` -> matching
   `AIM-TURN-RELAY processed`; then observe whether `yawPre` converges. Full matrix:
   `reports/player_aim_native_turn_rate_20260714.md`.
+
+## 2026-07-14 aim pose-axis and stable-blend build
+
+- Runtime rejected resolved block-0 `+0x08/+0x0C` as the mouse turn stream: both
+  copies received strict ADS but emitted no `AIM-TURN-SEND` or
+  `AIM-TURN-RELAY`. The destination-3 experiment is OFF by default.
+- Static re-reading of `PlayerAimController_GetTargetPointFromReticle
+  0x140CB1720` corrects the earlier route-axis claim. This exact aim-target
+  producer expands pose quaternion **positive Z**, with the same formula as
+  independently confirmed `Quaternion_RotatePositiveZ 0x14014D9F0`. The mod's
+  negative-Z aim target explains the logged near-180-degree opposition exactly.
+- The same rejected run showed native puppet `controller+0x8EC` oscillating
+  between zero, approximately one half and one. Native authored-state ownership
+  is rejected for the retained Player. The next build uses positive Z only in
+  pose-seed aim consumers and applies a 180 ms monotonic blend at the two exact
+  call boundaries. Evidence and prediction:
+  `reports/player_aim_pose_positive_z_blend_ramp_20260714.md`.

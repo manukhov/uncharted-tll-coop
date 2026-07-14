@@ -27366,3 +27366,25 @@ HYPOTHESIS for the two remaining mechanisms**.
   sandwich, leaves `PlayerAimController_UpdateBlendState 0x140CAFA20` in sole
   ownership of gradual `+0x8EC`, and uses the stock 60-degree ordinary-ADS arc.
   Evidence and prediction: `reports/player_aim_native_turn_rate_20260714.md`.
+
+### 2026-07-14 RUNTIME REJECTION + STATIC: pose positive-Z and stable puppet blend
+
+- Both copies received strict ADS while mouse motion produced no
+  `AIM-TURN-SEND` and no `AIM-TURN-RELAY`. **REJECTED:** resolved block-0
+  `+0x08/+0x0C` as the mouse camera-turn stream. The destination-3 experiment is
+  retained only for a later physical-gamepad A/B and is OFF by default.
+- `PlayerAimController_GetTargetPointFromReticle 0x140CB1720` explicitly expands
+  its route pose quaternion as `q*(0,0,+1)*inverse(q)`: `2*(xz+wy)`,
+  `2*(yz-wx)`, `1-2*(x*x+y*y)`. This matches independently confirmed
+  `Quaternion_RotatePositiveZ 0x14014D9F0` and rejects the report's earlier
+  negative-Z interpretation for this exact aim-target producer.
+- Runtime independently logged the mod's negative-Z target almost exactly
+  opposite GunMoveShield's native positive-Z body basis, commonly near 180
+  degrees. The relay now uses positive Z only in pose-seed aim-target, IK-target
+  and world-basis consumers; head-look and optional root-facing remain separate.
+- The same run showed `PlayerAimController+0x8EC` repeatedly oscillate among
+  zero, approximately one half and one during sustained remote ADS.
+  **REJECTED:** retained-Player authored-state ownership as a stable blend source.
+  The two exact hook boundaries now publish a mod-owned 180 ms monotonic ramp.
+  Status: **STATIC**, with prediction in
+  `reports/player_aim_pose_positive_z_blend_ramp_20260714.md`.

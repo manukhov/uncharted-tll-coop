@@ -1,6 +1,6 @@
 # Player aim native turn-rate relay (2026-07-14)
 
-Status: **STATIC, runtime pending**.
+Status: **REJECTED for mouse input**.
 
 ## Exact hypothesis
 
@@ -64,3 +64,15 @@ entry blend rises over multiple ticks rather than `0->1`. If sender axes remain
 zero, candidate 1 wins and camera-quaternion delta is the next source. If processed
 axes are non-zero but yaw/root does not move, candidates 2 or 3 win. If root moves
 but aim direction remains inverted, candidate 4 wins.
+
+## Runtime result
+
+The prediction failed on both copies. Strict ADS packets were present, but neither
+copy emitted `AIM-TURN-SEND` or `AIM-TURN-RELAY` while the user moved the mouse.
+Therefore resolved block-0 `+0x08/+0x0C` does not carry mouse camera motion and
+candidate 1 wins. The destination-3 relay remains available behind Page Up for a
+future physical-gamepad test, but is OFF by default.
+
+The same run separated the transition problem: `AIM-BLEND-TICK` repeatedly moved
+between zero, approximately one half and one instead of converging. Letting the
+retained Player's authored state own `controller+0x8EC` is therefore also rejected.

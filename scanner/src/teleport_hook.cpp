@@ -450,11 +450,10 @@ volatile bool g_puppet_rifle_pose_only_ads = false;
 // Set for the current game-thread frame while the peer is aiming — widens the
 // fire-only pose/camera overrides to sustained ADS, not just the fire instant.
 volatile bool g_puppet_aim_override_frame = false;
-// Feed the sender's resolved right-stick rate into the puppet right stick. The
-// old camera-minus-body error was a position error masquerading as a sustained
-// rate and spun forever; StatePacket::look_stick now carries the native transient
-// block-0 axes instead. Page Up remains an A/B kill switch.
-volatile bool g_puppet_relay_look_stick = true;
+// Mouse camera motion does not reach the resolved block-0 right-stick fields, so
+// this native-rate experiment is OFF by default. Page Up retains it for a later
+// physical-gamepad A/B without feeding a synthetic position error as a rate.
+volatile bool g_puppet_relay_look_stick = false;
 // Fall back to GetActiveWeapon when no weapon is in-hands/hand-attached. Default ON
 // (reverted 2026-07-05): OFF suppressed the pistol on weapon switch (in-hands/hand-
 // attached did not detect it) = pistol never displayed, which is worse than the
@@ -911,6 +910,7 @@ bool local_player_aim_input_active();
 bool local_player_strict_aim_active(void* player);
 bool seh_read_aim_origin_point(void* controller, float out[4]);
 void quat_forward_neg_z(const float q[4], float& fx, float& fy, float& fz);
+void quat_forward_pos_z(const float q[4], float& fx, float& fy, float& fz);
 bool head_look_send_allowed(void* player);
 void publish_peer_head_look_packet_fields(
     void* local_obj, coop::StatePacket& pkt);
@@ -2660,7 +2660,7 @@ void apply_peer_aim_ik_world_points(
     float fx = 0.0F;
     float fy = 0.0F;
     float fz = 0.0F;
-    quat_forward_neg_z(peer.pose_seed + 4, fx, fy, fz);
+    quat_forward_pos_z(peer.pose_seed + 4, fx, fy, fz);
     constexpr float kAimTargetDistance = 180.0F;
     alignas(16) float target[4]{
         origin_pos[0] + fx * kAimTargetDistance,
@@ -2690,21 +2690,10 @@ void write_peer_aim_world_targets_from_pose_seed(
         return;
     }
     const float* const cam_pos = peer.pose_seed;
-    const float* const q = peer.pose_seed + 4;
-    const float x = q[0];
-    const float y = q[1];
-    const float z = q[2];
-    const float w = q[3];
-    float fx = -2.0F * (x * z + w * y);
-    float fy = -2.0F * (y * z - w * x);
-    float fz = -(1.0F - 2.0F * (x * x + y * y));
-    const float len = std::sqrt(fx * fx + fy * fy + fz * fz);
-    if (len <= 1e-3F) {
-        return;
-    }
-    fx /= len;
-    fy /= len;
-    fz /= len;
+    float fx = 0.0F;
+    float fy = 0.0F;
+    float fz = 0.0F;
+    quat_forward_pos_z(peer.pose_seed + 4, fx, fy, fz);
     constexpr float kAimDist = 180.0F;
     alignas(16) float target[4]{
         cam_pos[0] + fx * kAimDist,
@@ -6818,6 +6807,24 @@ void quat_forward_neg_z(const float q[4], float& fx, float& fy, float& fz) {
     }
 }
 
+void quat_forward_pos_z(const float q[4], float& fx, float& fy, float& fz) {
+    const float x = q[0];
+    const float y = q[1];
+    const float z = q[2];
+    const float w = q[3];
+    // PlayerAimController_GetTargetPointFromReticle 0x140CB1720 expands this
+    // exact q*(0,0,+1)*inverse(q) basis from its route pose quaternion.
+    fx = 2.0F * (x * z + w * y);
+    fy = 2.0F * (y * z - w * x);
+    fz = 1.0F - 2.0F * (x * x + y * y);
+    const float len = std::sqrt(fx * fx + fy * fy + fz * fz);
+    if (len > 1e-3F) {
+        fx /= len;
+        fy /= len;
+        fz /= len;
+    }
+}
+
 using PlayerAimWorldBasisFunction = std::int64_t(__fastcall*)(
     void* controller,
     const float* target_point,
@@ -6890,9 +6897,29 @@ void force_peer_puppet_aim_blend_state(void* controller) {
         return;
     }
     auto* const bytes = static_cast<std::byte*>(controller);
+    const ULONGLONG now = GetTickCount64();
+    constexpr ULONGLONG kRampDurationMs = 180;
+    constexpr ULONGLONG kNewAimGapMs = 250;
+    static void* ramp_controller = nullptr;
+    static ULONGLONG ramp_started_ms = 0;
+    static ULONGLONG last_force_ms = 0;
+    if (ramp_controller != controller || ramp_started_ms == 0 ||
+        now - last_force_ms > kNewAimGapMs) {
+        ramp_controller = controller;
+        ramp_started_ms = now;
+    }
+    last_force_ms = now;
+    const float ramp = std::clamp(
+        static_cast<float>(now - ramp_started_ms) /
+            static_cast<float>(kRampDurationMs),
+        0.0F,
+        1.0F);
     __try {
         if (readable_bytes(bytes + 0x8F0) >= 1) {
             *reinterpret_cast<std::uint8_t*>(bytes + 0x8A0) = 1;
+            // The retained Player's authored state repeatedly resets +0x8EC.
+            // PublishDirectionalAimWeights samples this field synchronously.
+            *reinterpret_cast<float*>(bytes + 0x8EC) = ramp;
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
@@ -6931,7 +6958,8 @@ void __fastcall hooked_player_aim_blend_tick(void* controller) {
         static_cast<const std::byte*>(controller) + 0x8EC);
     static ULONGLONG last_log = 0;
     const ULONGLONG now = GetTickCount64();
-    if (now - last_log > 500) {
+    const ULONGLONG log_interval = blend_after < 0.999F ? 30 : 500;
+    if (now - last_log > log_interval) {
         last_log = now;
         std::ostringstream line;
         line << "AIM-BLEND-TICK request="
@@ -6990,12 +7018,12 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
     float forward_x = 0.0F;
     float forward_y = 0.0F;
     float forward_z = 0.0F;
-    quat_forward_neg_z(
+    quat_forward_pos_z(
         peer.pose_seed + 4, forward_x, forward_y, forward_z);
 
     // ComputeDirectionalAimWeights does normalize(target - skeletonOrigin).
     // Building the point from pose_seed camera pos makes aimDir disagree with
-    // camera -Z whenever |pose_seed - skeleton| is large (common on the puppet).
+    // camera +Z whenever |pose_seed - skeleton| is large (common on the puppet).
     alignas(16) float origin[4]{};
     const bool have_origin = seh_read_aim_origin_point(controller, origin);
     constexpr float kAimTargetDistance = 180.0F;
