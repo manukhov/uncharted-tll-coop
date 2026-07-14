@@ -2577,10 +2577,15 @@ under the current static-only instruction.
   User visual test: **unchanged**. Log post-boot had **zero** `AIM-SKEL-*` lines —
   inject gate never opened (suspected `player_ads_active(puppet)` false while peer
   packet aim active).
-- **Build 2026-07-14bx (LANDED):** gate uses `peer_packet_aim_active` only (same as
-  `apply_puppet_transform_post`); adds `AIM-SKEL-GATE` force_log during peer ADS.
-  SkelTable `+0x230` hypothesis still **untested** until `AIM-SKEL-INJECT` appears.
-- **ADS runtime pending** — peer ADS on sender → receiver log must show
-  `AIM-SKEL-GATE wanted=1` then `AIM-SKEL-INJECT` or `AIM-SKEL-SKIP`.
+- **Build 2026-07-14bx:** gate fix; `AIM-SKEL-GATE wanted=1` + `AIM-SKEL-INJECT
+  copiedPal=1` on PID 17544 during peer ADS. User visual **unchanged**.
+- **REJECTED (bx runtime):** SkelTable `qword_146919C40` `+0x230/+0x560` as FgAnimData
+  heap pointers — `skelPal=0x760000` (inline xmm rows, VirtualQuery invalid); false
+  `copiedPal=1`.
+- **Build 2026-07-14by (LANDED):** pre-render inject copies puppet `Player+0x1A8`
+  palette into **publish-state** `[[Player+0x1A0]+0x58]+0x10` (`pubPal` was null in
+  `AIM-FGANIM-DISC`). Logs `AIM-PUB-INJECT`. `pointer_looks_like_heap` now uses
+  VirtualQuery.
+- **ADS runtime pending** — need `AIM-PUB-INJECT copiedPubPal=1` + user visual verdict.
 - If visual still fixed with `copiedPal=1`: next trace DrawControl/post-eval or
   `0x141B5CD90` main-view channel gating.
