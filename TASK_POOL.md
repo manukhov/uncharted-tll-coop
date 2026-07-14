@@ -59,12 +59,11 @@
       the turn/run jitter. Puppet full ADS remains OFF / manual `F8`. Do not
       re-enable broad screen-1 pose-seed/source writes; that path
       freezes locomotion facing.
-- [~] **Puppet melee sync (2026-07-14, ACTIVE):** **cg** CONFIRMED button relay
-      (`MELEE-SEND`/`MELEE-RECV cmdActive=1`); no puppet anim. **ch REJECTED:**
-      instance 2 crash on boot (TryAnim bypass + exec relay). **ci:** exec parked;
-      button layer only (`PlayerInputCommandState` @ `+0x39A0`). Next stable
-      two-instance boot, then incremental anim path (net-gate bypass only, edge-
-      triggered exec, no direct vtable `+0xC78` spam).
+- [~] **Puppet melee sync (2026-07-14, ACTIVE):** **cg** button relay CONFIRMED;
+      anim gap = `sub_1410FC9F0` net gate. **ch REJECTED** (instance-2 boot crash).
+      **cj (current):** inline puppet-only net-gate bypass + edge `MELEE-EXEC`;
+      no global TryAnim hook. Runtime: peer punch → `MELEE-EXEC ok=1` + visible
+      anim; if `ok=0` trace validate `+0x1F60/+0x210` or `+0x1DE0/+0x30`.
 - [~] **Puppet ADS visual aim (PARKED 2026-07-14):** Upstream CONFIRMED; downstream
       eval/render gap. **REJECTED:** palette/skinning/pubState/PerJoint workspace paths.
       **cd:** stable hook, user visual unchanged. Inject OFF in `ce`.

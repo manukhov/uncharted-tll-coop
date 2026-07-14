@@ -1,5 +1,15 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-15, Cursor - melee cj inline net-gate bypass)
+
+**ci:** button relay CONFIRMED (`MELEE-RECV cmdActive=1`) but puppet anim still
+invisible — gap is `sub_1410FC9F0` early-out on `g_NetModeFlags+3`, not Joypad.
+
+**cj:** no global TryAnim hook (avoids ch instance-2 crash). On `MELEE-RECV` press
+edge, `trigger_peer_melee_animation` validates command on `+0x1F60` then runs
+inline TryAnim body skipping net gate via `Player+0x1DE0` action controller →
+Player vtable `+0xDE8/+0xC78`. Logs `MELEE-EXEC ok=0/1` per punch.
+
 ## Turn note (2026-07-15, Cursor - melee ch crash, ci stable path)
 
 **REJECTED (build 2026-07-14ch):** two-instance test PIDs 19116/3452 — second copy

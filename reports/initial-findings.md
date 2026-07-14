@@ -27665,3 +27665,9 @@ HYPOTHESIS for the two remaining mechanisms**.
   `install_player_melee_try_anim_bypass` (17-byte steal on `0x1410FC9F0`) and/or
   `apply_peer_melee_animation` vtable `+0xC78/+0xC80` spam. **ci:** exec relay
   parked (`g_enable_puppet_melee_exec_relay=false`); keep **cg** button layer only.
+- **STATIC (build 2026-07-14cj):** anim gate is `sub_1410FC9F0` @ `0x1410FC9F0`:
+  `byte_143ECF31A` then `g_NetModeFlags+3` (`0x143E07473`) early-out before
+  `Player+0x1DE0` vtable `+0x30/+0x1C8` and Player vtable `+0xDE8/+0xC78`.
+  **cj:** puppet-only inline bypass (no global hook); edge-triggered
+  `MELEE-EXEC` on press. Runtime prediction: `MELEE-EXEC ok=1` + visible air
+  punch on peer puppet.

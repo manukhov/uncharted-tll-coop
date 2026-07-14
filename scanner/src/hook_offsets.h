@@ -89,6 +89,18 @@ constexpr std::size_t kPlayerInputCommandStateOffset = 0x39A0;
 constexpr std::uintptr_t kPlayerInputCommandStateIsCommandActiveRva = 0x1E39D50;
 // MoveStick air-melee anim gate (sub_1410FC9F0); net-mode early-out blocks puppet.
 constexpr std::uintptr_t kPlayerMeleeTryAnimRva = 0x10FC9F0;
+constexpr std::uintptr_t kMeleeTryAnimEnabledGlobalRva = 0x3ECF31A;
+constexpr std::uintptr_t kNetModeFlagsGlobalRva = 0x3E07470;
+// Large mounted action controller used by TryAnim (not the +0x1F60 queue owner).
+constexpr std::size_t kPlayerMeleeActionControllerOffset = 0x1DE0;
+constexpr std::size_t kPlayerMeleeSiblingControllerOffset = 0x1D88;
+constexpr std::size_t kPlayerMeleeActionGetObjectVtableOffset = 0x280;
+constexpr std::size_t kPlayerMeleeActionValidateMoveVtableOffset = 0x30;
+constexpr std::size_t kPlayerMeleeActionBranchCheckVtableOffset = 0x1C8;
+constexpr std::size_t kPlayerMeleeActionAltCheckVtableOffset = 0x158;
+constexpr std::size_t kPlayerMeleeSiblingDispatchVtableOffset = 0x200;
+constexpr std::size_t kPlayerMeleePrimaryAnimVtableOffset = 0xDE8;
+constexpr std::size_t kPlayerMeleeActionGateByteOffset = 0x8C1;
 // Zeroes/init melee command descriptor before PlayerMeleeController vtable+528/+504.
 constexpr std::uintptr_t kInitMeleeCommandDescRva = 0xE416A0;
 // Player vtable offsets used by the TryAnim success path in MoveStick LABEL_491.
