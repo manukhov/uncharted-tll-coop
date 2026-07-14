@@ -2390,3 +2390,22 @@ under the current static-only instruction.
   `AIM-ELIGIBILITY reached` identifies the later gate. The completed 651-joint
   palette scanner is disabled to remove unnecessary per-frame diagnostic work.
   Release build succeeds; runtime discriminator is earned but not yet run.
+
+## 2026-07-14 aim wrapper shield gate (STATIC, Cursor)
+
+- `Player::GunMoveShield` vtable `0x142A27658` slot `+0x20` is exact-source
+  `0x140E86930`. It calls `PlayerGunMoveShield_UpdateAndDispatch 0x140E84440`
+  only when `0x140EFB750(screen_index)` succeeds; otherwise it calls
+  `Player::vtable+0xBD0` and publishes runtime state without entering dispatch.
+- `0x140EFB750` resolves the per-screen retained Player and queries
+  `PlayerWeaponController_IsShieldDrawn 0x1410B2480` (`ProcessShield` only).
+  This is therefore a weapon-class gate, not a generic screen-readiness check.
+- Inside dispatch, the inverse guard at `0x140E8561E` skips the early publish
+  when shield is **not** drawn and continues to `Player_CheckAimActionEligibility`
+  at `0x140E8573C`. The missing world-basis on pistol ADS is therefore more
+  consistent with never reaching dispatch via wrapper `+0x20` than with a late
+  palette/render owner.
+- Next build adds `AIM-WRAPPER shieldDrawn= dispatch=` on wrapper `0x140E86930`
+  plus hash-name decoding on the existing action/dispatch markers. Runtime
+  prediction: pistol puppet logs `shieldDrawn=0 dispatch=0` with a gun-move hash,
+  while `AIM-DISPATCH-ENTRY` stays absent; shield/sniper should log `1/1`.

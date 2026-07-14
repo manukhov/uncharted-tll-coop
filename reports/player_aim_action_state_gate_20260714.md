@@ -68,15 +68,29 @@ active hash and the entry/exit boundary of the gun-move wrapper/common dispatche
 
 ## Read-only build ready
 
-The build now emits three ordered markers:
+The build now emits four ordered markers:
 
 - `AIM-ACTION-STATE` reads only the proven `Player+0xC0` chain every 350 ms;
+- `AIM-WRAPPER shieldDrawn= dispatch=` logs the `Player::GunMoveShield` vtable
+  `+0x20` wrapper at `0x140E86930` for slot-1 fresh ADS;
 - `AIM-DISPATCH-ENTRY` relays the existing `E8` call at `0x140E84483`, calls
   stock `0x140E91C00` first, and records entry into the common dispatcher;
 - `AIM-ELIGIBILITY reached` records every fresh slot-1 ADS arrival at the exact
   `0x140E8573C` boundary, including the original and existing forced result.
 
+Hash lines now decode known gun-move names (`GunMoveShield=0xF52B3E61`,
+`GunMove=0x12D842C0`, etc.).
+
+### Static addendum (2026-07-14, Cursor)
+
+`0x140E86930` is not a generic gun-move entry. It reaches
+`PlayerGunMoveShield_UpdateAndDispatch` only when `0x140EFB750` reports a drawn
+`ProcessShield` weapon for that screen. Pistol ADS therefore predicts
+`shieldDrawn=0 dispatch=0` with no `AIM-DISPATCH-ENTRY`, even if
+`Player+0xC0` still resolves a gun-move hash. Inside dispatch, the guard at
+`0x140E8561E` is the inverse: non-shield weapons continue to aim eligibility.
+
 The completed full-palette scanner is disabled, removing its 651-matrix compare
 and log work from normal frames. Release compilation succeeds with only the two
-pre-existing C4456 diagnostics. No runtime test has yet been launched from this
-build; the prediction above is now earned.
+pre-existing C4456 diagnostics. Runtime relaunch is in progress under the
+prediction above.

@@ -12088,6 +12088,27 @@ void log_puppet_joint_palette_motion(
     std::memcpy(last_palette.data(), current, palette_bytes);
 }
 
+const char* action_state_hash_label(std::uint32_t hash) {
+    switch (hash) {
+    case 0xF52B3E61u:
+        return "GunMoveShield";
+    case 0x12D842C0u:
+        return "GunMove";
+    case 0x009C0AB7u:
+        return "GunMoveGrapple";
+    case 0xA4E760F7u:
+        return "GunMoveCarry";
+    case 0xF34DD4BEu:
+        return "GunMoveCarryNpc";
+    case 0xD6D6FD81u:
+        return "GunMoveHeavyWeapon";
+    case 0x48C615D8u:
+        return "Cover";
+    default:
+        return "unknown";
+    }
+}
+
 bool read_player_current_action_hash(
     void* player, std::uint32_t& hash, void*& active_state) {
     hash = 0;
@@ -12133,9 +12154,10 @@ void log_puppet_action_state(
     std::uint32_t hash = 0;
     void* active_state = nullptr;
     std::ostringstream line;
-    line << "AIM-ACTION-STATE ok="
-         << (read_player_current_action_hash(puppet, hash, active_state) ? 1 : 0)
+    const bool ok = read_player_current_action_hash(puppet, hash, active_state);
+    line << "AIM-ACTION-STATE ok=" << (ok ? 1 : 0)
          << " hash=0x" << std::hex << hash << std::dec
+         << " name=" << (ok ? action_state_hash_label(hash) : "n/a")
          << " active=" << active_state << " seq=" << peer.sequence;
     force_log_line(line.str().c_str());
 }
@@ -19331,10 +19353,11 @@ void* __fastcall hooked_player_gun_move_shield_entry_callsite(void* player) {
         std::uint32_t hash = 0;
         void* active_state = nullptr;
         std::ostringstream line;
-        line << "AIM-DISPATCH-ENTRY actionOk="
-             << (read_player_current_action_hash(
-                     player, hash, active_state) ? 1 : 0)
-             << " hash=0x" << std::hex << hash << std::dec;
+        const bool ok = read_player_current_action_hash(
+            player, hash, active_state);
+        line << "AIM-DISPATCH-ENTRY actionOk=" << (ok ? 1 : 0)
+             << " hash=0x" << std::hex << hash << std::dec
+             << " name=" << (ok ? action_state_hash_label(hash) : "n/a");
         force_log_line(line.str().c_str());
     }
     return result;
@@ -19397,6 +19420,80 @@ bool install_player_gun_move_shield_entry_probe() {
     DWORD ignored = 0;
     VirtualProtect(call_site, 5, old_protection, &ignored);
     boot_log_line("Player GunMoveShield entry probe installed");
+    return true;
+}
+
+using ScreenPlayerShieldDrawnPredicateFunction = char(__fastcall*)(int);
+ScreenPlayerShieldDrawnPredicateFunction
+    g_original_screen_player_shield_drawn_predicate = nullptr;
+
+using PlayerGunMoveShieldWrapperFunction = __int64(__fastcall*)(void*);
+PlayerGunMoveShieldWrapperFunction g_original_player_gun_move_shield_wrapper =
+    nullptr;
+
+__int64 __fastcall hooked_player_gun_move_shield_wrapper(void* action) {
+    void* player = nullptr;
+    if (action != nullptr &&
+        readable_bytes(static_cast<std::byte*>(action) + 0x8) >= sizeof(void*)) {
+        player = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(action) + 0x8);
+    }
+
+    if (player != nullptr &&
+        readable_bytes(static_cast<std::byte*>(player) + 0x4014) >=
+            sizeof(std::uint32_t) &&
+        *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(player) + 0x4010) ==
+            kSlot1ScreenIndex &&
+        peer_snapshot_aim_active()) {
+        static ULONGLONG last_log = 0;
+        const ULONGLONG now = GetTickCount64();
+        if (now - last_log > 350) {
+            last_log = now;
+            const int screen_index = static_cast<int>(
+                *reinterpret_cast<const std::uint32_t*>(
+                    static_cast<const std::byte*>(player) + 0x4010));
+            const bool shield_drawn =
+                g_original_screen_player_shield_drawn_predicate != nullptr &&
+                g_original_screen_player_shield_drawn_predicate(screen_index) !=
+                    0;
+            std::uint32_t hash = 0;
+            void* active_state = nullptr;
+            const bool ok =
+                read_player_current_action_hash(player, hash, active_state);
+            std::ostringstream line;
+            line << "AIM-WRAPPER shieldDrawn=" << (shield_drawn ? 1 : 0)
+                 << " dispatch=" << (shield_drawn ? 1 : 0)
+                 << " actionOk=" << (ok ? 1 : 0)
+                 << " hash=0x" << std::hex << hash << std::dec
+                 << " name=" << (ok ? action_state_hash_label(hash) : "n/a");
+            force_log_line(line.str().c_str());
+        }
+    }
+
+    return g_original_player_gun_move_shield_wrapper != nullptr
+        ? g_original_player_gun_move_shield_wrapper(action)
+        : 0;
+}
+
+bool install_player_gun_move_shield_wrapper_probe() {
+    g_original_screen_player_shield_drawn_predicate =
+        reinterpret_cast<ScreenPlayerShieldDrawnPredicateFunction>(
+            g_module + kScreenPlayerShieldDrawnPredicateRva);
+    static const std::uint8_t kExpectedPrologue[] = {
+        0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B};
+    void* const trampoline = install_fire_gate_detour(
+        kPlayerGunMoveShieldWrapperRva,
+        kExpectedPrologue,
+        sizeof(kExpectedPrologue),
+        reinterpret_cast<void*>(hooked_player_gun_move_shield_wrapper),
+        "Player GunMoveShield wrapper probe");
+    if (trampoline == nullptr) {
+        return false;
+    }
+    g_original_player_gun_move_shield_wrapper =
+        reinterpret_cast<PlayerGunMoveShieldWrapperFunction>(trampoline);
+    boot_log_line("Player GunMoveShield wrapper probe installed");
     return true;
 }
 
@@ -20964,6 +21061,7 @@ DWORD WINAPI install_hook(void*) {
         // changes can leave the puppet sliding in aim-idle-rotate on its knees.
         // Keep the isolated hook for reference; do not install it by default.
         install_player_gun_move_shield_entry_probe();
+        install_player_gun_move_shield_wrapper_probe();
         install_player_aim_eligibility_callsite_relay();
         install_player_aim_additive_permission_callsite_relay();
         install_player_aim_blend_target_callsite_relay();

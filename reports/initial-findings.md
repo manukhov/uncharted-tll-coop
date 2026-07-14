@@ -27539,3 +27539,13 @@ HYPOTHESIS for the two remaining mechanisms**.
   dispatcher entry, and reports arrival at exact eligibility callsite
   `0x140E8573C`. The stock functions remain authoritative. The completed palette
   scanner is disabled; release compilation succeeds. Runtime is pending.
+- **STATIC wrapper gate (2026-07-14):** `Player::GunMoveShield` vtable
+  `0x142A27658` slot `+0x20 = 0x140E86930` calls
+  `PlayerGunMoveShield_UpdateAndDispatch 0x140E84440` only when
+  `0x140EFB750(screen_index)` succeeds via `PlayerWeaponController_IsShieldDrawn
+  0x1410B2480` (`ProcessShield`). Otherwise it calls `Player::vtable+0xBD0` and
+  publishes runtime state without entering dispatch. Inside dispatch, the guard at
+  `0x140E8561E` is the inverse for non-shield weapons and continues to
+  `Player_CheckAimActionEligibility 0x140E8573C`. Pistol puppet ADS therefore
+  predicts `AIM-WRAPPER shieldDrawn=0 dispatch=0` and no `AIM-DISPATCH-ENTRY`.
+  Status: **STATIC**. Implemented read-only wrapper probe + hash-name decoding.

@@ -344,6 +344,10 @@ constexpr std::uintptr_t kPlayerAimEligibilityRva = 0x10E3670;
 // stock aim-balance refresh and is a safe boundary for read-only dispatch logging.
 constexpr std::uintptr_t kPlayerGunMoveShieldEntryCallsiteRva = 0x0E84483;
 constexpr std::uintptr_t kPlayerGunMoveShieldAimBalanceRefreshRva = 0x0E91C00;
+// Player::GunMoveShield vtable +0x20 update wrapper. It calls the common
+// dispatch only when the per-screen shield-drawn predicate succeeds.
+constexpr std::uintptr_t kPlayerGunMoveShieldWrapperRva = 0x0E86930;
+constexpr std::uintptr_t kScreenPlayerShieldDrawnPredicateRva = 0x0EFB750;
 // PlayerAimController_ComputeDirectionalAimWeights calls the current-state
 // additive permission query immediately before setting controller+0x8A0.
 constexpr std::uintptr_t kPlayerAimAdditivePermissionCallsiteRva = 0x0CB348A;
