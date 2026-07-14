@@ -27606,8 +27606,9 @@ HYPOTHESIS for the two remaining mechanisms**.
   **REJECTED:** `FgAnimData+0x560` skinning is not what the renderer skins from.
   Next owner: `CharacterSkeletonRenderJob_Entry 0x141B5CE90` / global SkelTable
   `qword_146919C40`. Report: `reports/player_aim_bt_runtime_20260714.md`.
-- **HYPOTHESIS (build 2026-07-14bu):** visible puppet ADS consumes SkelTable owner
-  palette at `+0x230` (not `FgAnimData+0x560`). PRE-render hook on
-  `CharacterSkeletonRenderJob_Entry 0x141B5CE90` mirrors puppet `Player+0x1A8`
-  palette into `qword_146919C40` before `CharacterSkeletonRender_Update
-  0x141B61530`. Runtime probe: `AIM-SKEL-INJECT copiedPal/copiedSkin` during peer ADS.
+- **HYPOTHESIS (build 2026-07-14bv):** visible puppet ADS consumes SkelTable owner
+  palette at `+0x230` (not `FgAnimData+0x560`). E8 callsite relay at `0x141B5CEA6`
+  (inside `CharacterSkeletonRenderJob_Entry 0x141B5CE90`) injects puppet
+  `Player+0x1A8` palette into `qword_146919C40` before `CharacterSkeletonRender_Update
+  0x141B61530`. **REJECTED:** 12-byte entry detour on `0x141B5CE90` (AV on PID 6420).
+  Runtime probe: `AIM-SKEL-INJECT copiedPal/copiedSkin` during peer ADS.

@@ -62,12 +62,10 @@
 - [~] **Puppet ADS visual aim (2026-07-14):** Upstream CONFIRMED (build bt):
       `pubAdd==ctrlAdd==fgAdd`, `AIM-FGANIM-SKIN-ALLOC/COPY`, GunMove path live.
       **REJECTED:** `FgAnimData+0x560` skinning + root quat writers (visual fixed).
-      **Build 2026-07-14bu (LANDED):** PRE-render hook
-      `CharacterSkeletonRenderJob_Entry 0x141B5CE90` copies puppet `Player+0x1A8`
-      palette `+0x230` (and `+0x560` when valid) into SkelTable owner
-      (`qword_146919C40`) before `CharacterSkeletonRender_Update`. Logs
-      `AIM-SKEL-INJECT`. **Runtime pending:** user ADS test on receiver; if still
-      fixed → DrawControl/post-eval or `0x141B5CD90` main-view channel gating.
+      **Build 2026-07-14bv (LANDED):** E8 callsite relay at `0x141B5CEA6` injects
+      puppet palette into SkelTable before `CharacterSkeletonRender_Update` (entry
+      detour REJECTED — AV). Logs `AIM-SKEL-INJECT`. PIDs 21224/2640: install OK,
+      no crash. **Runtime pending:** user ADS visual test on receiver.
       Reports: `player_aim_palette_render_chain_20260714.md`,
       `player_aim_bt_runtime_20260714.md`.
 - [ ] **Head / camera look sync:** STATIC done (`reports/lookat_field_map.md`).

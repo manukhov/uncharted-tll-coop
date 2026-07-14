@@ -413,6 +413,9 @@ constexpr std::uintptr_t kEngineClockScaleRva = 0x2BE8AE8;
 // CharacterSkeletonRenderJob_Entry with &qword_146919C40 as the Ndjob owner ptr.
 constexpr std::uintptr_t kSkelTableGlobalRva = 0x6919C40;
 constexpr std::uintptr_t kCharacterSkeletonRenderJobEntryRva = 0x1B5CE90;
+constexpr std::uintptr_t kCharacterSkeletonRenderUpdateRva = 0x1B61530;
+// E8 call inside CharacterSkeletonRenderJob_Entry immediately before Update.
+constexpr std::uintptr_t kCharacterSkeletonRenderUpdateCallsiteRva = 0x1B5CEA6;
 constexpr std::size_t kSkelTableSkipRenderFlagOffset = 0x81;
 // CharacterSkeletonEval_PerJoint reads palette rows via owner+0x230 (same
 // semantic offset as FgAnimData::pPaletteBoneMats).

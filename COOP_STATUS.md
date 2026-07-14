@@ -2566,14 +2566,13 @@ under the current static-only instruction.
 
 ## 2026-07-14 build bu — SkelTable pre-render inject (Cursor)
 
-- **LANDED:** `install_character_skeleton_render_job_entry_hook` on
-  `CharacterSkeletonRenderJob_Entry 0x141B5CE90`. Before native
-  `CharacterSkeletonRender_Update`, when slot-1 puppet ADS is active, copies
-  puppet `FgAnimData+0x230` palette (post mirror+skinning refresh) into SkelTable
-  owner `+0x230` and `+0x560` when heap pointers validate. Logs `AIM-SKEL-INJECT`.
-- RVAs in `hook_offsets.h`: `kSkelTableGlobalRva=0x6919C40`,
-  `kCharacterSkeletonRenderJobEntryRva=0x1B5CE90`, workspace `+0x14B8` stride `0x6C0`.
-- Boot marker `2026-07-14bu`. **Runtime pending** — launch blocked in agent env;
-  user test: grep `AIM-SKEL-INJECT` + visual ADS on receiver during peer yaw sweep.
-- If visual still fixed with `copiedPal=1`: next trace DrawControl mesh instance
-  transform after `CharacterSkeletonEval_PerJoint` or `0x141B5CD90` channel gating.
+- **LANDED:** palette inject before `CharacterSkeletonRender_Update` when slot-1
+  puppet ADS active; logs `AIM-SKEL-INJECT`.
+- **REJECTED (PID 6420):** 12-byte entry detour on `0x141B5CE90` split
+  `sub rsp,20h` mid-instruction → immediate AV `rip=0x5F0016` on first render job.
+- **Fix build 2026-07-14bv:** E8 callsite relay at `0x141B5CEA6` (pre-Update call)
+  instead of entry detour. PIDs 21224/2640: hook installs, **no post-install AV**.
+- Boot marker `2026-07-14bv`. **ADS runtime pending** — need `AIM-SKEL-INJECT` during
+  peer yaw sweep + user visual verdict.
+- If visual still fixed with `copiedPal=1`: next trace DrawControl/post-eval or
+  `0x141B5CD90` main-view channel gating.

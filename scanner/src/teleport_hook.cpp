@@ -6841,10 +6841,9 @@ using GunMoveControllerApplyCameraYawFunction = char(__fastcall*)(
 GunMoveControllerApplyCameraYawFunction
     g_original_gun_move_apply_camera_yaw = nullptr;
 bool g_gun_move_camera_turn_relay_installed = false;
-using CharacterSkeletonRenderJobEntryFunction =
-    std::int64_t(__fastcall*)(void* skel_owner);
-CharacterSkeletonRenderJobEntryFunction
-    g_original_character_skeleton_render_job_entry = nullptr;
+using CharacterSkeletonRenderUpdateFunction = void(__fastcall*)(void* skel_owner);
+CharacterSkeletonRenderUpdateFunction g_original_character_skeleton_render_update =
+    nullptr;
 // GunMoveController +0x150 relay REJECTED: +0x150 changes but Player+0x140 stays
 // ~30deg (0x140E8FD00 does not consume for slot-1 puppet). Direct post snap only.
 constexpr bool g_enable_gun_move_body_turn = false;
@@ -12584,30 +12583,68 @@ bool inject_puppet_palette_into_skel_owner(void* skel_owner) {
     return true;
 }
 
-std::int64_t __fastcall hooked_character_skeleton_render_job_entry(
-    void* skel_owner) {
+void __fastcall hooked_character_skeleton_render_update_callsite(void* skel_owner) {
     inject_puppet_palette_into_skel_owner(skel_owner);
-    return g_original_character_skeleton_render_job_entry != nullptr
-        ? g_original_character_skeleton_render_job_entry(skel_owner)
-        : 0;
+    if (g_original_character_skeleton_render_update != nullptr) {
+        g_original_character_skeleton_render_update(skel_owner);
+    }
 }
 
-bool install_character_skeleton_render_job_entry_hook() {
-    static const std::uint8_t kExpectedPrologue[] = {
-        0x48, 0x85, 0xC9, 0x0F, 0x84, 0x1F, 0x00, 0x00, 0x00, 0x53, 0x48, 0x83,
-    };
-    void* const trampoline = install_fire_gate_detour(
-        kCharacterSkeletonRenderJobEntryRva,
-        kExpectedPrologue,
-        sizeof(kExpectedPrologue),
-        reinterpret_cast<void*>(hooked_character_skeleton_render_job_entry),
-        "CharacterSkeletonRenderJob_Entry");
-    if (trampoline == nullptr) {
+bool install_character_skeleton_render_update_callsite_hook() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kCharacterSkeletonRenderUpdateCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line("SkelTable render inject SKIPPED (callsite not E8)");
         return false;
     }
-    g_original_character_skeleton_render_job_entry =
-        reinterpret_cast<CharacterSkeletonRenderJobEntryFunction>(trampoline);
-    boot_log_line("CharacterSkeletonRenderJob_Entry skel inject installed");
+    std::int32_t displacement = 0;
+    std::memcpy(&displacement, call_site + 1, sizeof(displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(displacement);
+    const std::uintptr_t expected = g_module + kCharacterSkeletonRenderUpdateRva;
+    if (target != expected) {
+        boot_log_line("SkelTable render inject SKIPPED (Update target mismatch)");
+        return false;
+    }
+    g_original_character_skeleton_render_update =
+        reinterpret_cast<CharacterSkeletonRenderUpdateFunction>(expected);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("SkelTable render inject SKIPPED (relay alloc)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_character_skeleton_render_update_callsite);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("SkelTable render inject SKIPPED (relay range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("SkelTable render inject SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line("SkelTable render inject installed (Update callsite 0x1B5CEA6)");
     return true;
 }
 
@@ -21983,7 +22020,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14bu (AIM SkelTable pre-render inject)");
+        "TLL hook DLL init 2026-07-14bv (AIM SkelTable callsite inject fix)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
@@ -22013,7 +22050,7 @@ DWORD WINAPI install_hook(void*) {
         if (g_enable_gun_move_body_turn) {
             install_gun_move_camera_turn_relay();
         }
-        install_character_skeleton_render_job_entry_hook();
+        install_character_skeleton_render_update_callsite_hook();
     }
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();
