@@ -11926,6 +11926,41 @@ float horizontal_yaw_degrees(float forward_x, float forward_z) {
     return std::atan2(forward_x, forward_z) * (180.0F / 3.14159265F);
 }
 
+bool read_aim_additive_lrdu(
+    const void* base, std::size_t left_offset, float out[4]) {
+    if (base == nullptr || readable_bytes(base) < left_offset + 8) {
+        return false;
+    }
+    const auto* const bytes = static_cast<const std::byte*>(base);
+    out[0] = *reinterpret_cast<const float*>(bytes + left_offset);
+    out[1] = *reinterpret_cast<const float*>(bytes + left_offset + 4);
+    out[2] = *reinterpret_cast<const float*>(bytes + left_offset + 8);
+    out[3] = *reinterpret_cast<const float*>(bytes + left_offset + 12);
+    return true;
+}
+
+void* aim_publish_active_state_from_player(void* player) {
+    if (player == nullptr ||
+        readable_bytes(player) < kPlayerUpperStateOwnerOffset + sizeof(void*)) {
+        return nullptr;
+    }
+    const auto* const player_bytes = static_cast<const std::byte*>(player);
+    void* const hub = *reinterpret_cast<void* const*>(
+        player_bytes + kPlayerUpperStateOwnerOffset);
+    if (hub == nullptr ||
+        readable_bytes(hub) < kPlayerAnimHubChildOffset + sizeof(void*)) {
+        return nullptr;
+    }
+    void* const child = *reinterpret_cast<void* const*>(
+        static_cast<const std::byte*>(hub) + kPlayerAnimHubChildOffset);
+    if (child == nullptr ||
+        readable_bytes(child) < kPlayerAnimActiveStateOffset + sizeof(void*)) {
+        return nullptr;
+    }
+    return *reinterpret_cast<void* const*>(
+        static_cast<const std::byte*>(child) + kPlayerAnimActiveStateOffset);
+}
+
 void log_puppet_aim_render_discriminator(
     void* puppet, const coop::StatePacket& peer) {
     if (!peer_packet_aim_active(peer) || puppet == nullptr) {
@@ -11976,13 +12011,31 @@ void log_puppet_aim_render_discriminator(
     }
 
     float fg_weights[4]{};
-    if (readable_bytes(static_cast<std::byte*>(puppet) + kPlayerFgAnimDataOffset) >=
-        sizeof(void*)) {
-        void* const fg = *reinterpret_cast<void* const*>(
-            static_cast<const std::byte*>(puppet) + kPlayerFgAnimDataOffset);
-        if (fg != nullptr && readable_bytes(fg) >= 0x198) {
-            const auto* const fg_bytes = static_cast<const std::byte*>(fg);
-            std::memcpy(fg_weights, fg_bytes + 0x188, sizeof(fg_weights));
+    float pub_weights[4]{};
+    void* const fg = readable_bytes(
+        static_cast<std::byte*>(puppet) + kPlayerFgAnimDataOffset) >= sizeof(void*)
+        ? *reinterpret_cast<void* const*>(
+              static_cast<const std::byte*>(puppet) + kPlayerFgAnimDataOffset)
+        : nullptr;
+    if (fg != nullptr) {
+        float raw[4]{};
+        if (read_aim_additive_lrdu(
+                fg, kAnimStateAimAddDownOffset, raw)) {
+            fg_weights[0] = raw[2];
+            fg_weights[1] = raw[3];
+            fg_weights[2] = raw[0];
+            fg_weights[3] = raw[1];
+        }
+    }
+    void* const publish_state = aim_publish_active_state_from_player(puppet);
+    if (publish_state != nullptr) {
+        float raw[4]{};
+        if (read_aim_additive_lrdu(
+                publish_state, kAnimStateAimAddDownOffset, raw)) {
+            pub_weights[0] = raw[2];
+            pub_weights[1] = raw[3];
+            pub_weights[2] = raw[0];
+            pub_weights[3] = raw[1];
         }
     }
 
@@ -11994,7 +12047,12 @@ void log_puppet_aim_render_discriminator(
          << " ctrlAdd=(" << ctrl_weights[0] << "," << ctrl_weights[1] << ","
          << ctrl_weights[2] << "," << ctrl_weights[3] << ") blend="
          << ctrl_blend << " fgAdd=(" << fg_weights[0] << "," << fg_weights[1]
-         << "," << fg_weights[2] << "," << fg_weights[3] << ") seq="
+         << "," << fg_weights[2] << "," << fg_weights[3] << ") pubAdd=("
+         << pub_weights[0] << "," << pub_weights[1] << "," << pub_weights[2]
+         << "," << pub_weights[3] << ") pubState=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(publish_state) << " fg=0x"
+         << reinterpret_cast<std::uintptr_t>(fg) << std::dec
+         << " samePtr=" << ((publish_state == fg) ? 1 : 0) << " seq="
          << peer.sequence;
     force_log_line(line.str().c_str());
 }

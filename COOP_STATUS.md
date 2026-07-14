@@ -2441,3 +2441,17 @@ under the current static-only instruction.
   `0x141AB97C0` eval failure; if palette upper joints move but visual fixed →
   DrawControl/world transform. Evidence:
   `reports/player_aim_render_discriminator_20260714.md`.
+
+## 2026-07-14 aim render discriminator runtime (PIDs 21396/19260)
+
+- **CONFIRMED peer/root decoupling:** `AIM-RENDER-DISC` shows peerYaw swings
+  (-113°..+16°) while `Player+0x140` rootYaw stays ~14–40° (`yawDelta` -35..-134).
+  User visual still fixed point. Body aim cannot follow peer camera without root
+  turn or successful additive eval on top of this heading.
+- **CONFIRMED controller alive:** `ctrlAdd` R/D track camera with `blend=1`.
+- **PROBE BUG:** first `fgAdd` read used `Player+0x1A8+0x188` contiguous; publish
+  actually writes `[[Player+0x1A0]+0x58]+0x10` with D/U/L/R field layout. Rebuilt
+  probe logs `pubAdd` + `samePtr`.
+- **PARTIAL palette motion:** gated `AIM-PALETTE` shows sane 2–4 unit deltas on
+  upper joint indices during sweeps; garbage on inactive joints still present.
+  Report: `reports/player_aim_render_discriminator_runtime_20260714.md`.

@@ -63,6 +63,14 @@ constexpr std::uintptr_t kNdGameObjectRefreshWorldTransformRva = 0x1BB8320;
 // first DWORD select owner vtable +0x400/+0x408/+0x410 for bits 8/0x10/0x20.
 constexpr std::size_t kPlayerFgAnimDataOffset = 0x1A8;
 constexpr std::size_t kPlayerUpperStateOwnerOffset = 0x1A0;
+// PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0 writes directional
+// fields to [[Player+0x1A0]+0x58]+0x10 at +0x188..+0x194 (D/U/L/R layout).
+constexpr std::size_t kPlayerAnimHubChildOffset = 0x58;
+constexpr std::size_t kPlayerAnimActiveStateOffset = 0x10;
+constexpr std::size_t kAnimStateAimAddLeftOffset = 0x190;
+constexpr std::size_t kAnimStateAimAddRightOffset = 0x194;
+constexpr std::size_t kAnimStateAimAddDownOffset = 0x188;
+constexpr std::size_t kAnimStateAimAddUpOffset = 0x18C;
 constexpr std::size_t kFgAnimDataFlagsOffset = 0;
 constexpr std::size_t kFgAnimDataStateOffset = 4;
 constexpr std::size_t kFgAnimDataUpperStateOwnerOffset = 0x10;

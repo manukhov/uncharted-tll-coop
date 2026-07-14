@@ -27560,3 +27560,9 @@ HYPOTHESIS for the two remaining mechanisms**.
   across samples; weights reached blend=1. Status: break is downstream of
   `PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0`, not upstream
   dispatch. Next discriminator: `AIM-RENDER-DISC` + gated `AIM-PALETTE`.
+- **RUNTIME 2026-07-14 (PIDs 21396/19260):** `AIM-RENDER-DISC` confirms
+  peer/root yaw decoupling (yawDelta -35..-134°) while `ctrlAdd` tracks camera.
+  First-build `fgAdd` probe read wrong object (`Player+0x1A8` vs publish target
+  `[[Player+0x1A0]+0x58]+0x10`); corrected probe adds `pubAdd`. Gated palette
+  shows partial upper-joint motion. Report:
+  `reports/player_aim_render_discriminator_runtime_20260714.md`.
