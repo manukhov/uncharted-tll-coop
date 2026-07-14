@@ -27650,3 +27650,11 @@ HYPOTHESIS for the two remaining mechanisms**.
   in merge was too narrow; PC press uses `melee-lmouse-press` / pad `melee-r1` /
   `melee-square`. **cg:** all button-level melee hashes + `PlayerInputCommandState`
   @ `Player+0x39A0` (`0x141E39D50`); `MELEE-PROBE` on local input update.
+- **STATIC (build 2026-07-14ch):** puppet melee anim gap is below Joypad
+  `cmdActive=1`. MoveStick air-melee uses `PlayerMeleeController` vtable `+0x210`
+  (`0x141279F10` → `+0x1F8` queue) then `sub_1410FC9F0` (`0x1410FC9F0`), which
+  early-outs on `g_NetModeFlags+3` before Player vtable `+0xC78`. **ch** adds
+  `apply_peer_melee_animation` (direct `+0x210` validate + TryAnim bypass),
+  `PlayerInputCommandState_IsCommandActive` force for puppet `+0x39A0`, and
+  `MELEE-EXEC` log. Runtime prediction: peer punch → `MELEE-EXEC ok=1` and puppet
+  plays native melee anim without enemy target.

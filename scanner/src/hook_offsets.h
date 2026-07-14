@@ -87,8 +87,16 @@ constexpr std::size_t kSkeletonJointCountOffset = 0x34;
 // Embedded PlayerInputCommandState (sub_14024D7E0 returns Player+0x39A0).
 constexpr std::size_t kPlayerInputCommandStateOffset = 0x39A0;
 constexpr std::uintptr_t kPlayerInputCommandStateIsCommandActiveRva = 0x1E39D50;
+// MoveStick air-melee anim gate (sub_1410FC9F0); net-mode early-out blocks puppet.
+constexpr std::uintptr_t kPlayerMeleeTryAnimRva = 0x10FC9F0;
+// Zeroes/init melee command descriptor before PlayerMeleeController vtable+528/+504.
+constexpr std::uintptr_t kInitMeleeCommandDescRva = 0xE416A0;
+// Player vtable offsets used by the TryAnim success path in MoveStick LABEL_491.
+constexpr std::size_t kPlayerMeleeAnimDecisionVtableOffset = 0xC78;
+constexpr std::size_t kPlayerMeleePublishVtableOffset = 0xC80;
 // Combat/melee command-queue owner mounted at Player init (ConstructMeleeCommandQueueOwner).
 constexpr std::size_t kPlayerCombatControllerOffset = 0x1F60;
+constexpr std::size_t kPlayerMeleeControllerValidateCommandVtableOffset = 0x210;
 constexpr std::size_t kMeleeTargetResultEntityIdOffset = 0xD8;
 constexpr std::size_t kPlayerHealthSystemOffset = 0x4A8;
 constexpr std::size_t kPlayerCurrentHealthOffset = 0x38;

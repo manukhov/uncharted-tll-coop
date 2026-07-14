@@ -133,6 +133,14 @@ using JoypadIsCommandActiveFunction =
     char(__fastcall*)(void*, std::uint32_t, std::uint8_t);
 JoypadIsCommandActiveFunction g_original_joypad_is_command_active = nullptr;
 constexpr std::uintptr_t kJoypadIsCommandActiveRva = 0x1837CD0;
+using PlayerInputIsCommandActiveFunction =
+    char(__fastcall*)(void*, std::uint32_t, std::uint8_t);
+PlayerInputIsCommandActiveFunction
+    g_original_player_input_is_command_active = nullptr;
+using PlayerMeleeTryAnimFunction =
+    char(__fastcall*)(void**, void*, double);
+PlayerMeleeTryAnimFunction g_original_player_melee_try_anim = nullptr;
+std::atomic<bool> g_puppet_melee_try_anim_bypass{false};
 ScopeVisibleQueryFunction g_original_scope_visible_query = nullptr;
 ReticleHudPublisherFunction g_original_reticle_hud_publisher = nullptr;
 ReticleAimHudPublisherFunction g_original_reticle_aim_hud_publisher = nullptr;
@@ -398,6 +406,7 @@ bool joypad_any_melee_button_active(
     std::uint32_t* active_hash_out);
 bool player_input_command_active(void* player, std::uint32_t hash);
 bool player_any_melee_button_active(void* player, std::uint32_t* active_hash_out);
+void apply_peer_melee_animation(void* puppet);
 // Puppet cover command force bits (StatePacket flag 0x0800 + IsCommandActive hook).
 constexpr std::uint8_t kPuppetCoverEnterActive = 0x01;
 constexpr std::uint8_t kPuppetCoverExitPulse = 0x02;
@@ -1500,6 +1509,163 @@ bool install_joypad3_is_command_active_force() {
     VirtualProtect(target, kStolen, old_protection, &ignored);
     force_log_line(
         "Joypad3 IsCommandActive force-hook installed (jump/evade/crouch/melee/cover)");
+    return true;
+}
+
+char __fastcall hooked_player_input_is_command_active(
+    void* state, std::uint32_t hash, std::uint8_t edge) {
+    if (g_state_net.enabled && state != nullptr &&
+        g_original_player_input_is_command_active != nullptr) {
+        auto* const player =
+            static_cast<std::byte*>(state) - kPlayerInputCommandStateOffset;
+        if (player == static_cast<std::byte*>(retained_player_object(1))) {
+            const std::uint64_t force =
+                g_state_net.puppet_traversal_force.load(
+                    std::memory_order_acquire);
+            if ((force & kJoypadMeleeTriangleButtonMask) != 0 &&
+                melee_relay_hash_is_puppet_force_target(hash)) {
+                (void)edge;
+                return 1;
+            }
+        }
+    }
+    return g_original_player_input_is_command_active(state, hash, edge);
+}
+
+bool install_player_input_is_command_active_force() {
+    auto* const target = reinterpret_cast<std::uint8_t*>(
+        g_module + kPlayerInputCommandStateIsCommandActiveRva);
+    constexpr std::array<std::uint8_t, 16> expected16{
+        0xC5, 0xFA, 0x10, 0x05, 0x40, 0x1B, 0xD0, 0x04,
+        0xC5, 0xF8, 0x2E, 0x05, 0x94, 0xF4, 0xDA, 0x00,
+    };
+    if (std::memcmp(target, expected16.data(), expected16.size()) != 0) {
+        force_log_line(
+            "PlayerInputCommandState IsCommandActive force skipped: prologue");
+        return false;
+    }
+    constexpr std::size_t kStolen = 16;
+    constexpr std::size_t kReturnJumpSize = 14;
+    auto* const trampoline = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, kStolen + kReturnJumpSize, MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr) {
+        force_log_line(
+            "PlayerInputCommandState IsCommandActive force skipped: alloc failed");
+        return false;
+    }
+    std::memcpy(trampoline, target, kStolen);
+    auto* const jump_back = trampoline + kStolen;
+    jump_back[0] = 0xFF;
+    jump_back[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(jump_back + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(jump_back + 6) =
+        reinterpret_cast<std::uintptr_t>(target + kStolen);
+    FlushInstructionCache(
+        GetCurrentProcess(), trampoline, kStolen + kReturnJumpSize);
+    g_original_player_input_is_command_active =
+        reinterpret_cast<PlayerInputIsCommandActiveFunction>(trampoline);
+
+    DWORD old_protection = 0;
+    if (!VirtualProtect(target, kStolen, PAGE_EXECUTE_READWRITE,
+                        &old_protection)) {
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        g_original_player_input_is_command_active = nullptr;
+        force_log_line(
+            "PlayerInputCommandState IsCommandActive force skipped: protect");
+        return false;
+    }
+    target[0] = 0x48;
+    target[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(target + 2) =
+        reinterpret_cast<std::uintptr_t>(&hooked_player_input_is_command_active);
+    target[10] = 0xFF;
+    target[11] = 0xE0;
+    std::memset(target + 12, 0x90, 4);
+    FlushInstructionCache(GetCurrentProcess(), target, kStolen);
+    DWORD ignored = 0;
+    VirtualProtect(target, kStolen, old_protection, &ignored);
+    force_log_line(
+        "PlayerInputCommandState IsCommandActive force-hook installed (melee)");
+    return true;
+}
+
+char __fastcall hooked_player_melee_try_anim(
+    void** player, void* move_vec, double move_mag) {
+    if (g_puppet_melee_try_anim_bypass.load(std::memory_order_acquire) &&
+        player != nullptr &&
+        reinterpret_cast<void*>(player) == retained_player_object(1)) {
+        void** const vtable = reinterpret_cast<void**>(*player);
+        if (vtable != nullptr) {
+            using MeleeAnimDecisionFunction = void(__fastcall*)(void*);
+            const auto decision = reinterpret_cast<MeleeAnimDecisionFunction>(
+                vtable[kPlayerMeleeAnimDecisionVtableOffset / sizeof(void*)]);
+            if (decision != nullptr) {
+                __try {
+                    decision(reinterpret_cast<void*>(player));
+                    return 1;
+                } __except (EXCEPTION_EXECUTE_HANDLER) {
+                }
+            }
+        }
+    }
+    if (g_original_player_melee_try_anim == nullptr) {
+        return 0;
+    }
+    return g_original_player_melee_try_anim(player, move_vec, move_mag);
+}
+
+bool install_player_melee_try_anim_bypass() {
+    auto* const target = reinterpret_cast<std::uint8_t*>(
+        g_module + kPlayerMeleeTryAnimRva);
+    constexpr std::array<std::uint8_t, 17> expected17{
+        0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x40,
+        0x80, 0x3D, 0x19, 0x29, 0xDD, 0x02, 0x00,
+    };
+    if (std::memcmp(target, expected17.data(), expected17.size()) != 0) {
+        force_log_line("PlayerMeleeTryAnim bypass skipped: prologue bytes");
+        return false;
+    }
+    constexpr std::size_t kStolen = 17;
+    constexpr std::size_t kReturnJumpSize = 14;
+    auto* const trampoline = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, kStolen + kReturnJumpSize, MEM_COMMIT | MEM_RESERVE,
+        PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr) {
+        force_log_line("PlayerMeleeTryAnim bypass skipped: alloc failed");
+        return false;
+    }
+    std::memcpy(trampoline, target, kStolen);
+    auto* const jump_back = trampoline + kStolen;
+    jump_back[0] = 0xFF;
+    jump_back[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(jump_back + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(jump_back + 6) =
+        reinterpret_cast<std::uintptr_t>(target + kStolen);
+    FlushInstructionCache(
+        GetCurrentProcess(), trampoline, kStolen + kReturnJumpSize);
+    g_original_player_melee_try_anim =
+        reinterpret_cast<PlayerMeleeTryAnimFunction>(trampoline);
+
+    DWORD old_protection = 0;
+    if (!VirtualProtect(target, kStolen, PAGE_EXECUTE_READWRITE,
+                        &old_protection)) {
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        g_original_player_melee_try_anim = nullptr;
+        force_log_line("PlayerMeleeTryAnim bypass skipped: protect failed");
+        return false;
+    }
+    target[0] = 0x48;
+    target[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(target + 2) =
+        reinterpret_cast<std::uintptr_t>(&hooked_player_melee_try_anim);
+    target[10] = 0xFF;
+    target[11] = 0xE0;
+    std::memset(target + 12, 0x90, 5);
+    FlushInstructionCache(GetCurrentProcess(), target, kStolen);
+    DWORD ignored = 0;
+    VirtualProtect(target, kStolen, old_protection, &ignored);
+    force_log_line("PlayerMeleeTryAnim bypass-hook installed (puppet melee)");
     return true;
 }
 
@@ -10024,6 +10190,116 @@ void log_melee_relay_event(const char* tag, void* player, std::uint64_t mask) {
          << " ctrl=0x" << std::hex << reinterpret_cast<std::uintptr_t>(controller)
          << std::dec << " targetId=0x" << std::hex << target_id << std::dec;
     force_log_line(line.str().c_str());
+}
+
+bool seh_puppet_melee_exec_path(void* puppet, std::uint32_t command_hash) {
+    if (puppet == nullptr || g_module == 0 || command_hash == 0) {
+        return false;
+    }
+    __try {
+        void* const controller = seh_read_ptr(
+            reinterpret_cast<std::uint64_t>(
+                static_cast<std::byte*>(puppet) + kPlayerCombatControllerOffset));
+        if (controller == nullptr || !readable_bytes(controller)) {
+            return false;
+        }
+        void** const controller_vtable =
+            *reinterpret_cast<void***>(controller);
+        if (controller_vtable == nullptr) {
+            return false;
+        }
+        using InitMeleeCommandDescFunction =
+            void*(__fastcall*)(void*, std::uint32_t);
+        const auto init_command =
+            reinterpret_cast<InitMeleeCommandDescFunction>(
+                g_module + kInitMeleeCommandDescRva);
+        alignas(16) std::uint8_t command[128]{};
+        init_command(command, command_hash);
+
+        using ValidateMeleeCommandFunction =
+            char(__fastcall*)(void*, void*);
+        const auto validate_command =
+            reinterpret_cast<ValidateMeleeCommandFunction>(
+                controller_vtable
+                    [kPlayerMeleeControllerValidateCommandVtableOffset /
+                     sizeof(void*)]);
+        if (validate_command == nullptr ||
+            validate_command(controller, command) == 0) {
+            return false;
+        }
+
+        alignas(16) float move_block[4]{};
+        const auto* const input_base =
+            static_cast<const std::byte*>(puppet) +
+            kPlayerInputCommandStateOffset;
+        if (readable_bytes(input_base + 0xA0) >= sizeof(move_block)) {
+            std::memcpy(move_block, input_base + 0x90, sizeof(move_block));
+        }
+        const float move_mag =
+            readable_bytes(input_base + 0x80) >= sizeof(float)
+                ? *reinterpret_cast<const float*>(input_base + 0x7C)
+                : 0.0F;
+
+        g_puppet_melee_try_anim_bypass.store(true, std::memory_order_release);
+        char anim_ok = 0;
+        if (g_original_player_melee_try_anim != nullptr) {
+            anim_ok = g_original_player_melee_try_anim(
+                reinterpret_cast<void**>(puppet), move_block,
+                static_cast<double>(move_mag));
+        }
+        g_puppet_melee_try_anim_bypass.store(false, std::memory_order_release);
+        if (anim_ok != 0) {
+            void** const player_vtable =
+                *reinterpret_cast<void***>(puppet);
+            if (player_vtable != nullptr) {
+                using PublishMeleeFunction = void(__fastcall*)(void*);
+                const auto publish = reinterpret_cast<PublishMeleeFunction>(
+                    player_vtable[kPlayerMeleePublishVtableOffset /
+                                  sizeof(void*)]);
+                if (publish != nullptr) {
+                    publish(puppet);
+                }
+            }
+            return true;
+        }
+        return false;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        g_puppet_melee_try_anim_bypass.store(false, std::memory_order_release);
+        return false;
+    }
+}
+
+void apply_peer_melee_animation(void* puppet) {
+    if (!g_state_net.enabled || puppet == nullptr ||
+        puppet != retained_player_object(1) || g_module == 0) {
+        return;
+    }
+    const std::uint64_t force =
+        g_state_net.puppet_traversal_force.load(std::memory_order_acquire);
+    if ((force & kJoypadMeleeTriangleButtonMask) == 0) {
+        return;
+    }
+    static ULONGLONG last_exec_ms = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_exec_ms < 90) {
+        return;
+    }
+    last_exec_ms = now;
+
+    const auto& hashes = melee_relay_hashes();
+    std::uint32_t command_hash = hashes.square;
+    if (command_hash == 0) {
+        command_hash = hashes.triangle;
+    }
+    const bool executed = seh_puppet_melee_exec_path(puppet, command_hash);
+    static bool prev_logged = false;
+    if (executed != prev_logged) {
+        prev_logged = executed;
+        std::ostringstream line;
+        line << "MELEE-EXEC hash=0x" << std::hex << command_hash
+             << " ok=" << (executed ? 1 : 0) << std::dec;
+        force_log_line(line.str().c_str());
+    }
 }
 
 std::uint64_t capture_local_joypad_command_mask(void* player) {
@@ -20147,6 +20423,7 @@ char __fastcall hooked_player_input_state_update(void* player) {
 
     if (is_remote) {
         apply_peer_pickup_animation(player);
+        apply_peer_melee_animation(player);
     }
     const char result = g_original_player_input_state_update(player);
     if (is_local) {
@@ -22718,7 +22995,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14cg (melee button names + PlayerInputState)");
+        "TLL hook DLL init 2026-07-14ch (melee exec relay + TryAnim bypass)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
@@ -22727,6 +23004,8 @@ DWORD WINAPI install_hook(void*) {
     install_joypad3_analog_route();
     install_joypad3_keyboard_isolation();
     install_joypad3_is_command_active_force();
+    install_player_input_is_command_active_force();
+    install_player_melee_try_anim_bypass();
     install_player_fire_capture();
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
