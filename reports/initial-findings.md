@@ -27566,3 +27566,8 @@ HYPOTHESIS for the two remaining mechanisms**.
   `[[Player+0x1A0]+0x58]+0x10`); corrected probe adds `pubAdd`. Gated palette
   shows partial upper-joint motion. Report:
   `reports/player_aim_render_discriminator_runtime_20260714.md`.
+- **RUNTIME 2026-07-14 (PIDs 11208/21416): CONFIRMED** `pubAdd==ctrlAdd` on every
+  sample; `samePtr=0` (publish state ≠ `Player+0x1A8`). User visual still fixed
+  in ADS. `rootYaw` stuck ~15–35° while `peerYaw` sweeps >80° (yawDelta to -97°).
+  Status: body heading owner, not publish/palette. Next: GunMoveController turn or
+  peer-yaw root sync.

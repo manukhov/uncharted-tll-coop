@@ -1,8 +1,9 @@
 # Player aim render discriminator runtime (2026-07-14)
 
-Status: **RUNTIME — peer/root decoupling CONFIRMED; fgAdd read site wrong**.
+Status: **RUNTIME — publish CONFIRMED; peer/root decoupling CONFIRMED; visual fixed**.
 
-PIDs: receiver **19260**, sender **21396**. Log: `reports/locomotion_hook.log`.
+PIDs: receiver **21416**, sender **11208** (pubAdd build). Prior: **19260/21396**.
+Log: `reports/locomotion_hook.log`.
 
 ## User visual
 
@@ -49,10 +50,41 @@ Puppet still aimed at one fixed point during ADS (same as prior PIDs 13148/21228
 | Palette eval never runs | **Weakened** — some joints do move |
 | Post-blend IK overwrite | Still open |
 
+## PubAdd build result (PIDs 11208/21416)
+
+User visual: puppet still fixed in ADS, does not rotate with peer camera.
+
+**CONFIRMED publish path:** `pubAdd` matches `ctrlAdd` on every sample (e.g.
+seq=827 `ctrlAdd=(0,0.966,0.640,0)` `pubAdd=(0,0.966,0.640,0)`). Publish target
+`pubState=0x10e0e67930` is **not** `Player+0x1A8` FgAnimData (`samePtr=0`,
+`fg=0x1118b17400`). `fgAdd=(0.2,0,0,1)` on FgAnimData is a stale template.
+
+**CONFIRMED peer/root decoupling (primary visual cause):**
+
+| seq | peerYaw | rootYaw | yawDelta |
+|-----|---------|---------|----------|
+| 1107 | -101.4 | -4.0 | **-97.4** |
+| 1139 | -89.5 | 3.2 | **-92.7** |
+| 1251 | -71.0 | 17.2 | **-88.2** |
+| 827 | -43.7 | 17.5 | **-61.3** |
+
+Brief alignments exist (seq=935 yawDelta=0.7; seq=1752 yawDelta=0.08) but most
+ADS sweeps keep `rootYaw` in a ~15–35° band while peer moves >80°.
+
+**PARTIAL palette motion:** sane joint deltas 2–3.5 on indices 272–625 during
+same run; does not rescue visual when root heading is wrong.
+
+## Conclusions after pubAdd build
+
+1. **REJECTED** controller→publish copy failure.
+2. **REJECTED** reading `Player+0x1A8+0x188` as publish surface.
+3. **CONFIRMED** `Player+0x140` root yaw does not track peer camera during ADS.
+4. **CONFIRMED** user visual fixed point matches root decoupling, not upstream
+   weight starvation.
+
 ## Next step
 
-Rebuild with corrected `pubAdd`/`samePtr` logging. If `pubAdd` tracks `ctrlAdd`
-but root stays decoupled, re-open GunMoveController body-turn relay or explicit
-root-yaw sync from peer pose seed. If `pubAdd` stays static while `ctrlAdd`
-moves, trace `PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0` write
-target vs `Player+0x1A8`.
+Re-open body-yaw ownership: `GunMoveController` turn relay `0x140E8F990` →
+`+0x150` → `0x140E8FD00`, with post-ADS `apply_puppet_transform_post` root blend
+skipped. Prior knee-slide rejection remains; try with current publish chain proven
+healthy, or explicit `Player+0x140` yaw snap from peer pose seed during ADS only.

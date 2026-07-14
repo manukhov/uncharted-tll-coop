@@ -2455,3 +2455,14 @@ under the current static-only instruction.
 - **PARTIAL palette motion:** gated `AIM-PALETTE` shows sane 2–4 unit deltas on
   upper joint indices during sweeps; garbage on inactive joints still present.
   Report: `reports/player_aim_render_discriminator_runtime_20260714.md`.
+
+## 2026-07-14 pubAdd runtime (PIDs 11208/21416)
+
+- **CONFIRMED publish:** `pubAdd` matches `ctrlAdd` every sample;
+  `pubState=0x10e0e67930` ≠ `Player+0x1A8` (`samePtr=0`). `fgAdd` on FgAnimData is
+  stale template `(0.2,0,0,1)`.
+- **CONFIRMED visual + root decoupling:** user reports fixed ADS aim. `peerYaw`
+  swings >80° while `rootYaw` stays ~15–35° (`yawDelta` to -97°). Break is body
+  heading, not weight publication.
+- **Next:** re-open `GunMoveController` turn relay or explicit peer-yaw root sync
+  during ADS; palette-only branch insufficient.
