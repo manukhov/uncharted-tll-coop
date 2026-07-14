@@ -13031,7 +13031,9 @@ bool install_character_skeleton_eval_per_joint_callsite_hook() {
     g_original_character_skeleton_eval_per_joint =
         reinterpret_cast<CharacterSkeletonEvalPerJointFunction>(expected);
 
-    constexpr std::size_t kRelaySize = 64;
+    // After the game's E8, RSP%16==8. sub 0x58 aligns RSP for the MSVC call, saves
+    // rcx/rdx/xmm2/xmm3 (cb relay used 0x30 and crashed with 0xC0000005 @ 0x1B63CEB).
+    constexpr std::size_t kRelaySize = 96;
     auto* const relay = static_cast<std::uint8_t*>(
         allocate_executable_near(call_site, kRelaySize));
     if (relay == nullptr) {
@@ -13044,22 +13046,26 @@ bool install_character_skeleton_eval_per_joint_callsite_hook() {
             relay[offset++] = byte;
         }
     };
-    emit({0x48, 0x83, 0xEC, 0x30});              // sub rsp, 30h
-    emit({0x0F, 0x29, 0x54, 0x24, 0x10});        // movaps [rsp+10h], xmm2
-    emit({0x0F, 0x29, 0x5C, 0x24, 0x20});        // movaps [rsp+20h], xmm3
+    emit({0x48, 0x83, 0xEC, 0x58});              // sub rsp, 58h
+    emit({0x0F, 0x29, 0x54, 0x24, 0x20});        // movaps [rsp+20h], xmm2
+    emit({0x0F, 0x29, 0x5C, 0x24, 0x30});        // movaps [rsp+30h], xmm3
+    emit({0x48, 0x89, 0x4C, 0x24, 0x40});        // mov [rsp+40h], rcx
+    emit({0x48, 0x89, 0x54, 0x24, 0x48});        // mov [rsp+48h], rdx
     emit({0x48, 0xB8});                           // mov rax, imm64
     *reinterpret_cast<std::uintptr_t*>(relay + offset) =
         reinterpret_cast<std::uintptr_t>(&inject_puppet_joint_workspace_thunk);
     offset += sizeof(std::uintptr_t);
     emit({0xFF, 0xD0});                           // call rax
-    emit({0x0F, 0x28, 0x54, 0x24, 0x10});        // movaps xmm2, [rsp+10h]
-    emit({0x0F, 0x28, 0x5C, 0x24, 0x20});        // movaps xmm3, [rsp+20h]
-    emit({0x48, 0x83, 0xC4, 0x30});              // add rsp, 30h
+    emit({0x0F, 0x28, 0x54, 0x24, 0x20});        // movaps xmm2, [rsp+20h]
+    emit({0x0F, 0x28, 0x5C, 0x24, 0x30});        // movaps xmm3, [rsp+30h]
+    emit({0x48, 0x8B, 0x4C, 0x24, 0x40});        // mov rcx, [rsp+40h]
+    emit({0x48, 0x8B, 0x54, 0x24, 0x48});        // mov rdx, [rsp+48h]
+    emit({0x48, 0x83, 0xC4, 0x58});              // add rsp, 58h
     emit({0x48, 0xB8});                           // mov rax, imm64
     *reinterpret_cast<std::uintptr_t*>(relay + offset) = expected;
     offset += sizeof(std::uintptr_t);
     emit({0xFF, 0xE0});                           // jmp rax
-    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+    FlushInstructionCache(GetCurrentProcess(), relay, offset);
 
     const std::int64_t new_displacement =
         reinterpret_cast<std::intptr_t>(relay) -
@@ -22455,7 +22461,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14cb (PerJoint workspace+0x558 inject)");
+        "TLL hook DLL init 2026-07-14cc (PerJoint relay stack-align fix)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
