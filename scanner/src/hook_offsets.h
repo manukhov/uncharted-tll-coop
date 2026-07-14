@@ -340,6 +340,10 @@ constexpr std::size_t kGunMoveControllerTurnDirectionOffset = 0x150;
 // original function and all downstream weapon-specific aim arguments.
 constexpr std::uintptr_t kPlayerAimEligibilityCallsiteRva = 0x0E8573C;
 constexpr std::uintptr_t kPlayerAimEligibilityRva = 0x10E3670;
+// First call in PlayerGunMoveShield_UpdateAndDispatch. The callsite invokes the
+// stock aim-balance refresh and is a safe boundary for read-only dispatch logging.
+constexpr std::uintptr_t kPlayerGunMoveShieldEntryCallsiteRva = 0x0E84483;
+constexpr std::uintptr_t kPlayerGunMoveShieldAimBalanceRefreshRva = 0x0E91C00;
 // PlayerAimController_ComputeDirectionalAimWeights calls the current-state
 // additive permission query immediately before setting controller+0x8A0.
 constexpr std::uintptr_t kPlayerAimAdditivePermissionCallsiteRva = 0x0CB348A;

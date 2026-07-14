@@ -11920,6 +11920,8 @@ void apply_puppet_head_look_pre() {
     }
 }
 
+constexpr bool g_enable_aim_palette_probe = false;
+
 void log_puppet_joint_palette_motion(
     void* puppet, const coop::StatePacket& peer) {
     constexpr std::size_t kFgCurrentPaletteOffset = 0x230;
@@ -12086,6 +12088,58 @@ void log_puppet_joint_palette_motion(
     std::memcpy(last_palette.data(), current, palette_bytes);
 }
 
+bool read_player_current_action_hash(
+    void* player, std::uint32_t& hash, void*& active_state) {
+    hash = 0;
+    active_state = nullptr;
+    if (player == nullptr ||
+        readable_bytes(static_cast<std::byte*>(player) + 0xC0) < sizeof(void*)) {
+        return false;
+    }
+    void* const state_slot = *reinterpret_cast<void* const*>(
+        static_cast<const std::byte*>(player) + 0xC0);
+    if (state_slot == nullptr || readable_bytes(state_slot) < sizeof(void*)) {
+        return false;
+    }
+    active_state = *reinterpret_cast<void* const*>(state_slot);
+    if (active_state == nullptr ||
+        readable_bytes(static_cast<std::byte*>(active_state) + 0x10) <
+            sizeof(void*)) {
+        return false;
+    }
+    void* const metadata = *reinterpret_cast<void* const*>(
+        static_cast<const std::byte*>(active_state) + 0x10);
+    if (metadata == nullptr ||
+        readable_bytes(static_cast<std::byte*>(metadata) + 0x18) <
+            sizeof(std::uint32_t)) {
+        return false;
+    }
+    hash = *reinterpret_cast<const std::uint32_t*>(
+        static_cast<const std::byte*>(metadata) + 0x18);
+    return true;
+}
+
+void log_puppet_action_state(
+    void* puppet, const coop::StatePacket& peer) {
+    if (!peer_packet_aim_active(peer)) {
+        return;
+    }
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log < 350) {
+        return;
+    }
+    last_log = now;
+    std::uint32_t hash = 0;
+    void* active_state = nullptr;
+    std::ostringstream line;
+    line << "AIM-ACTION-STATE ok="
+         << (read_player_current_action_hash(puppet, hash, active_state) ? 1 : 0)
+         << " hash=0x" << std::hex << hash << std::dec
+         << " active=" << active_state << " seq=" << peer.sequence;
+    force_log_line(line.str().c_str());
+}
+
 // POST (after the puppet's own update runs): assert the networked transform last
 // so the engine's own integration can't fight it (was causing flicker).
 void apply_puppet_transform_post(void* /*update_object*/) {
@@ -12177,7 +12231,10 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     } else if (pkt.move_magnitude < 0.15F) {
         orientation_dot = blend_network_orientation(quat, pkt.quat, 0.18F);
     }
-    log_puppet_joint_palette_motion(puppet, pkt);
+    log_puppet_action_state(puppet, pkt);
+    if (g_enable_aim_palette_probe) {
+        log_puppet_joint_palette_motion(puppet, pkt);
+    }
     puppet_was_aiming = puppet_aiming_now;
     if (g_clone_freerun) {
         if (too_far) {
@@ -19248,12 +19305,107 @@ bool install_nd_attachable_parent_visibility_relay() {
 using PlayerAimEligibilityFunction = char(__fastcall*)(void*, char);
 PlayerAimEligibilityFunction g_original_player_aim_eligibility = nullptr;
 
+using PlayerGunMoveShieldAimBalanceRefreshFunction = void*(__fastcall*)(void*);
+PlayerGunMoveShieldAimBalanceRefreshFunction
+    g_original_player_gun_move_shield_aim_balance_refresh = nullptr;
+
+void* __fastcall hooked_player_gun_move_shield_entry_callsite(void* player) {
+    void* const result =
+        g_original_player_gun_move_shield_aim_balance_refresh != nullptr
+        ? g_original_player_gun_move_shield_aim_balance_refresh(player)
+        : nullptr;
+    if (player == nullptr ||
+        readable_bytes(static_cast<std::byte*>(player) + 0x4014) <
+            sizeof(std::uint32_t) ||
+        *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(player) + 0x4010) !=
+            kSlot1ScreenIndex ||
+        !peer_snapshot_aim_active()) {
+        return result;
+    }
+
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log > 350) {
+        last_log = now;
+        std::uint32_t hash = 0;
+        void* active_state = nullptr;
+        std::ostringstream line;
+        line << "AIM-DISPATCH-ENTRY actionOk="
+             << (read_player_current_action_hash(
+                     player, hash, active_state) ? 1 : 0)
+             << " hash=0x" << std::hex << hash << std::dec;
+        force_log_line(line.str().c_str());
+    }
+    return result;
+}
+
+bool install_player_gun_move_shield_entry_probe() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kPlayerGunMoveShieldEntryCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line("Player GunMoveShield entry probe SKIPPED (not E8)");
+        return false;
+    }
+    std::int32_t displacement = 0;
+    std::memcpy(&displacement, call_site + 1, sizeof(displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(displacement);
+    const std::uintptr_t expected =
+        g_module + kPlayerGunMoveShieldAimBalanceRefreshRva;
+    if (target != expected) {
+        boot_log_line("Player GunMoveShield entry probe SKIPPED (target)");
+        return false;
+    }
+    g_original_player_gun_move_shield_aim_balance_refresh =
+        reinterpret_cast<PlayerGunMoveShieldAimBalanceRefreshFunction>(expected);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("Player GunMoveShield entry probe SKIPPED (relay)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_player_gun_move_shield_entry_callsite);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("Player GunMoveShield entry probe SKIPPED (range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("Player GunMoveShield entry probe SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line("Player GunMoveShield entry probe installed");
+    return true;
+}
+
 char __fastcall hooked_player_aim_eligibility_callsite(
     void* player, char mode) {
     const char original = g_original_player_aim_eligibility != nullptr
         ? g_original_player_aim_eligibility(player, mode)
         : 0;
-    if (original || player == nullptr || player != retained_player_object(1) ||
+    if (player == nullptr ||
         readable_bytes(static_cast<std::byte*>(player) + 0x4014) <
             sizeof(std::uint32_t) ||
         *reinterpret_cast<const std::uint32_t*>(
@@ -19276,7 +19428,15 @@ char __fastcall hooked_player_aim_eligibility_callsite(
     const ULONGLONG now = GetTickCount64();
     if (now - last_log > 1000) {
         last_log = now;
-        force_log_line("AIM-ELIGIBILITY relay original=0 forced=1");
+        std::ostringstream line;
+        line << "AIM-ELIGIBILITY reached original="
+             << static_cast<int>(original)
+             << " forced="
+             << ((!original && player == retained_player_object(1)) ? 1 : 0);
+        force_log_line(line.str().c_str());
+    }
+    if (original || player != retained_player_object(1)) {
+        return original;
     }
     return 1;
 }
@@ -20803,6 +20963,7 @@ DWORD WINAPI install_hook(void*) {
         // animation/render owner restores a static visible facing and lifecycle
         // changes can leave the puppet sliding in aim-idle-rotate on its knees.
         // Keep the isolated hook for reference; do not install it by default.
+        install_player_gun_move_shield_entry_probe();
         install_player_aim_eligibility_callsite_relay();
         install_player_aim_additive_permission_callsite_relay();
         install_player_aim_blend_target_callsite_relay();

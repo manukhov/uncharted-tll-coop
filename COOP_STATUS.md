@@ -2385,3 +2385,8 @@ under the current static-only instruction.
   it calls `PlayerWeaponController_IsShieldDrawn 0x1410B2480`, an exact
   `ProcessShield` query. Next build may only add read-only state/dispatch markers.
   Evidence and prediction: `reports/player_aim_action_state_gate_20260714.md`.
+- Read-only build ready: `AIM-ACTION-STATE` samples the exact hash chain,
+  `AIM-DISPATCH-ENTRY` patches only the stock call at `0x140E84483`, and
+  `AIM-ELIGIBILITY reached` identifies the later gate. The completed 651-joint
+  palette scanner is disabled to remove unnecessary per-frame diagnostic work.
+  Release build succeeds; runtime discriminator is earned but not yet run.

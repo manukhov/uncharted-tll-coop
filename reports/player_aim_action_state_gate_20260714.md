@@ -66,6 +66,17 @@ active hash and the entry/exit boundary of the gun-move wrapper/common dispatche
   hypothesis 3 must be refined inside the post-eligibility branch.
 - The discriminator must not write Player state, input, animation, or palette.
 
-No runtime test is launched from this report. The next implementation step is a
-throttled read-only action-state/dispatch marker using the proven field and exact
-function boundaries.
+## Read-only build ready
+
+The build now emits three ordered markers:
+
+- `AIM-ACTION-STATE` reads only the proven `Player+0xC0` chain every 350 ms;
+- `AIM-DISPATCH-ENTRY` relays the existing `E8` call at `0x140E84483`, calls
+  stock `0x140E91C00` first, and records entry into the common dispatcher;
+- `AIM-ELIGIBILITY reached` records every fresh slot-1 ADS arrival at the exact
+  `0x140E8573C` boundary, including the original and existing forced result.
+
+The completed full-palette scanner is disabled, removing its 651-matrix compare
+and log work from normal frames. Release compilation succeeds with only the two
+pre-existing C4456 diagnostics. No runtime test has yet been launched from this
+build; the prediction above is now earned.

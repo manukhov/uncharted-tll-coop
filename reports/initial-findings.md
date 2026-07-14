@@ -27534,3 +27534,8 @@ HYPOTHESIS for the two remaining mechanisms**.
 - Status: **STATIC**. The next earned runtime discriminator is read-only active
   state plus exact wrapper/common-dispatch boundaries. Full competitors and
   prediction: `reports/player_aim_action_state_gate_20260714.md`.
+- **IMPLEMENTED READ-ONLY:** the build logs the active hash at 350 ms cadence,
+  relays only the existing `0x140E84483 -> 0x140E91C00` call to mark common
+  dispatcher entry, and reports arrival at exact eligibility callsite
+  `0x140E8573C`. The stock functions remain authoritative. The completed palette
+  scanner is disabled; release compilation succeeds. Runtime is pending.
