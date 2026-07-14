@@ -6903,6 +6903,7 @@ bool peer_puppet_aim_controller_fixup_wanted(
 }
 
 bool mirror_puppet_aim_add_to_fganim(void* player);
+bool sync_puppet_fganim_palette_to_skinning(void* player);
 
 void force_peer_puppet_aim_blend_state(void* controller) {
     if (controller == nullptr) {
@@ -7120,7 +7121,9 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
     const std::int64_t result = g_original_player_aim_world_basis(
         controller, local_target, relayed_body_forward, active,
         lim_h_a, lim_h_b, single_screen, lim_v_a, lim_v_b);
-    mirror_puppet_aim_add_to_fganim(owner);
+    if (mirror_puppet_aim_add_to_fganim(owner)) {
+        sync_puppet_fganim_palette_to_skinning(owner);
+    }
     if (controller != nullptr &&
         readable_bytes(static_cast<std::byte*>(controller) + 0x8D0) >= 0x20) {
         // PublishDirectionalAimWeights writes exactly +0x8B8..+0x8C4.
@@ -12016,6 +12019,10 @@ constexpr bool g_enable_aim_palette_probe = true;
 // stuck at 0.2,0,0,1). Mirror publish fields into FgAnimData so
 // ProcessAnimCmdListSegment evaluates peer camera on the render-bound object.
 constexpr bool g_enable_puppet_fganim_aim_add_mirror = true;
+// Runtime 2026-07-14br: fgPalTot moves but fgSkinTot stays 0 on puppet ADS.
+// CharacterSkeletonEval may bind skinning at +0x560; mirror palette rows there
+// when the async publish job never runs for slot-1.
+constexpr bool g_enable_puppet_fganim_palette_to_skinning = true;
 
 float horizontal_yaw_degrees(float forward_x, float forward_z) {
     return std::atan2(forward_x, forward_z) * (180.0F / 3.14159265F);
@@ -12095,30 +12102,74 @@ bool pointer_looks_like_heap(const void* ptr) {
     return value >= 0x10000ULL;
 }
 
+bool write_fganim_aim_add_lrdu(void* fg, float left, float right, float up, float down) {
+    if (fg == nullptr ||
+        readable_bytes(fg) < kAnimStateAimAddRightOffset + sizeof(float)) {
+        return false;
+    }
+    auto* const fg_bytes = static_cast<std::byte*>(fg);
+    *reinterpret_cast<float*>(fg_bytes + kAnimStateAimAddDownOffset) = down;
+    *reinterpret_cast<float*>(fg_bytes + kAnimStateAimAddUpOffset) = up;
+    *reinterpret_cast<float*>(fg_bytes + kAnimStateAimAddLeftOffset) = left;
+    *reinterpret_cast<float*>(fg_bytes + kAnimStateAimAddRightOffset) = right;
+    return true;
+}
+
 bool mirror_puppet_aim_add_to_fganim(void* player) {
     if (!g_enable_puppet_fganim_aim_add_mirror || player == nullptr) {
         return false;
     }
-    void* const publish_state = aim_publish_active_state_from_player(player);
     void* const fg = player_fganim_from_player(player);
-    if (publish_state == nullptr || fg == nullptr || publish_state == fg) {
+    if (fg == nullptr) {
         return false;
     }
     constexpr std::size_t kAimAddSpan =
         kAnimStateAimAddRightOffset + sizeof(float) - kAnimStateAimAddDownOffset;
-    if (readable_bytes(publish_state) < kAnimStateAimAddDownOffset + kAimAddSpan ||
-        readable_bytes(fg) < kAnimStateAimAddDownOffset + kAimAddSpan) {
+    if (readable_bytes(fg) < kAnimStateAimAddDownOffset + kAimAddSpan) {
         return false;
     }
-    auto* const pub_bytes = static_cast<std::byte*>(publish_state);
-    auto* const fg_bytes = static_cast<std::byte*>(fg);
+
     float before[4]{};
-    float after[4]{};
     read_aim_additive_lrdu(fg, kAnimStateAimAddDownOffset, before);
-    std::memcpy(
-        fg_bytes + kAnimStateAimAddDownOffset,
-        pub_bytes + kAnimStateAimAddDownOffset,
-        kAimAddSpan);
+
+    float left = 0.0F;
+    float right = 0.0F;
+    float up = 0.0F;
+    float down = 0.0F;
+    bool have_source = false;
+    if (void* const aim = player_aim_controller_from_player(player);
+        aim != nullptr && readable_bytes(aim) >= 0x8F0) {
+        const auto* const aim_bytes = static_cast<const std::byte*>(aim);
+        left = *reinterpret_cast<const float*>(aim_bytes + 0x8B8);
+        right = *reinterpret_cast<const float*>(aim_bytes + 0x8BC);
+        up = *reinterpret_cast<const float*>(aim_bytes + 0x8C0);
+        down = *reinterpret_cast<const float*>(aim_bytes + 0x8C4);
+        const float ctrl_sum = std::fabs(left) + std::fabs(right) +
+                               std::fabs(up) + std::fabs(down);
+        have_source = ctrl_sum >= 0.01F;
+    }
+    void* const publish_state = aim_publish_active_state_from_player(player);
+    if (!have_source && publish_state != nullptr && publish_state != fg &&
+        readable_bytes(publish_state) >= kAnimStateAimAddDownOffset + kAimAddSpan) {
+        float pub_raw[4]{};
+        if (read_aim_additive_lrdu(publish_state, kAnimStateAimAddDownOffset, pub_raw)) {
+            down = pub_raw[0];
+            up = pub_raw[1];
+            left = pub_raw[2];
+            right = pub_raw[3];
+            const float pub_sum = std::fabs(left) + std::fabs(right) +
+                                  std::fabs(up) + std::fabs(down);
+            have_source = pub_sum >= 0.01F;
+        }
+    }
+    if (!have_source) {
+        return false;
+    }
+    if (!write_fganim_aim_add_lrdu(fg, left, right, up, down)) {
+        return false;
+    }
+
+    float after[4]{};
     read_aim_additive_lrdu(fg, kAnimStateAimAddDownOffset, after);
     const float delta = std::fabs(before[0] - after[0]) +
                         std::fabs(before[1] - after[1]) +
@@ -12131,14 +12182,12 @@ bool mirror_puppet_aim_add_to_fganim(void* player) {
     const ULONGLONG now = GetTickCount64();
     if (now - last_log >= 400) {
         last_log = now;
-        float pub[4]{};
-        read_aim_additive_lrdu(publish_state, kAnimStateAimAddDownOffset, pub);
         std::ostringstream line;
         line << "AIM-FGANIM-MIRROR fgBefore=(" << before[2] << "," << before[3]
              << "," << before[0] << "," << before[1] << ") fgAfter=("
              << after[2] << "," << after[3] << "," << after[0] << ","
-             << after[1] << ") pub=(" << pub[2] << "," << pub[3] << ","
-             << pub[0] << "," << pub[1] << ") pubObj=0x" << std::hex
+             << after[1] << ") src=(" << left << "," << right << "," << up
+             << "," << down << ") pubObj=0x" << std::hex
              << reinterpret_cast<std::uintptr_t>(publish_state) << " fg=0x"
              << reinterpret_cast<std::uintptr_t>(fg) << std::dec;
         force_log_line(line.str().c_str());
@@ -12313,6 +12362,46 @@ float joint_matrix_delta(
         sum_sq += delta * delta;
     }
     return std::sqrt(sum_sq);
+}
+
+bool sync_puppet_fganim_palette_to_skinning(void* player) {
+    if (!g_enable_puppet_fganim_palette_to_skinning || player == nullptr) {
+        return false;
+    }
+    void* const fg = player_fganim_from_player(player);
+    FgAnimJointBuffers buffers{};
+    const char* stage = "ok";
+    if (!resolve_fganim_joint_buffers(fg, buffers, &stage)) {
+        return false;
+    }
+    if (!pointer_looks_like_heap(buffers.palette) ||
+        !pointer_looks_like_heap(buffers.skinning) ||
+        buffers.joint_count == 0) {
+        return false;
+    }
+    constexpr std::size_t kJointFloatCount = 12;
+    const std::size_t buffer_bytes =
+        static_cast<std::size_t>(buffers.joint_count) * kJointFloatCount *
+        sizeof(float);
+    if (readable_bytes(buffers.palette) < buffer_bytes ||
+        readable_bytes(buffers.skinning) < buffer_bytes) {
+        return false;
+    }
+    std::memcpy(
+        const_cast<float*>(buffers.skinning), buffers.palette, buffer_bytes);
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log >= 1000) {
+        last_log = now;
+        std::ostringstream line;
+        line << "AIM-FGANIM-SKIN-COPY joints=" << buffers.joint_count
+             << " pal=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(buffers.palette) << " skin=0x"
+             << reinterpret_cast<std::uintptr_t>(buffers.skinning) << std::dec
+             << " bytes=" << buffer_bytes;
+        force_log_line(line.str().c_str());
+    }
+    return true;
 }
 
 void log_puppet_fganim_split_discriminator(
@@ -12905,7 +12994,7 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     }
     log_puppet_action_state(puppet, pkt);
     if (peer_aiming) {
-        mirror_puppet_aim_add_to_fganim(puppet);
+        sync_puppet_fganim_palette_to_skinning(puppet);
     }
     if (g_enable_aim_palette_probe) {
         log_puppet_aim_render_discriminator(puppet, pkt);
@@ -21693,7 +21782,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14br (AIM-FGANIM-MIRROR publish->FgAnimData aim-add)");
+        "TLL hook DLL init 2026-07-14bs (AIM-FGANIM ctrl->fg + palette->skinning)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");

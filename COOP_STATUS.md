@@ -2532,6 +2532,8 @@ under the current static-only instruction.
 - **Fix build 2026-07-14br:** `mirror_puppet_aim_add_to_fganim` copies publish-state
   `+0x188..+0x194` → `FgAnimData+0x188..+0x194` after world-basis publish and in
   `apply_puppet_transform_post`. Logs `AIM-FGANIM-MIRROR` when delta > 0.001.
-- **Prediction:** after mirror, `fgAdd` tracks `pubAdd`; visible puppet ADS follows
-  sender camera. If still fixed with matching `fgAdd`, next surface is palette→skinning
-  publish (`AnimateDisabledObjectJob`) or render-owner object split.
+- **CONFIRMED (PIDs 10980/4508, build br):** `fgAdd` now tracks `pubAdd==ctrlAdd`
+  after mirror; was `(0.2,0,0,1)`. `fgPalTot` moves; `fgSkinTot=0` still.
+- **Build 2026-07-14bs:** mirror sources controller `+0x8B8..+0x8C4` (skip zero pub);
+  post-update `sync_puppet_fganim_palette_to_skinning` copies `+0x230`→`+0x560`.
+  Boot marker `2026-07-14bs`. Re-test ADS visual on receiver.
