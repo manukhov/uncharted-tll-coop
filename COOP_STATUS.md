@@ -2476,3 +2476,11 @@ under the current static-only instruction.
 - Prediction: `yawDelta` in `AIM-RENDER-DISC` collapses toward 0 while peer sweeps;
   user sees puppet ADS aim track peer camera. Knee-slide on reload remains a
   competitor to watch. Prior partial relay rejection noted in turn-chain section.
+
+## 2026-07-14 body-turn pos-Z runtime REJECTED (PIDs 21060/10864)
+
+- User: still fixed in ADS; **worse** — aims nowhere near even initial reticle.
+- `AIM-TURN-DIR`/`AIM-ROOT-YAW-SYNC` ran; pos-Z `+0x150` override is wrong axis
+  for body turn (camera -Z in native `0x140E8F990`).
+- **v2 bn:** relay uses `camera_forward_horizontal` (-Z); post root sync parked.
+  Report: `reports/player_aim_body_turn_runtime_20260714.md`.

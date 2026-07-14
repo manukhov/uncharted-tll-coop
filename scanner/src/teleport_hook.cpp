@@ -6841,6 +6841,8 @@ using GunMoveControllerApplyCameraYawFunction = char(__fastcall*)(
 GunMoveControllerApplyCameraYawFunction
     g_original_gun_move_apply_camera_yaw = nullptr;
 bool g_gun_move_camera_turn_relay_installed = false;
+// Post root yaw sync parked after pos-Z regression; turn relay uses camera -Z.
+constexpr bool g_enable_gun_move_body_turn_post_sync = false;
 
 bool seh_read_aim_origin_point(void* controller, float out[4]) {
     if (controller == nullptr || out == nullptr || g_module == 0) {
@@ -7201,10 +7203,11 @@ char __fastcall hooked_gun_move_apply_camera_yaw(
     }
 
     float forward_x = 0.0F;
-    float forward_y = 0.0F;
     float forward_z = 0.0F;
-    quat_forward_pos_z(
-        peer.pose_seed + 4, forward_x, forward_y, forward_z);
+    // GunMoveController+0x150 is built from the screen camera look vector (-Z), not
+    // the aim-target positive-Z expansion. Pos-Z body turn was REJECTED 2026-07-14:
+    // puppet aimed nowhere near the peer reticle.
+    camera_forward_horizontal(peer.pose_seed + 4, forward_x, forward_z);
     const float horizontal =
         std::sqrt(forward_x * forward_x + forward_z * forward_z);
     if (!std::isfinite(horizontal) || horizontal < 0.001F) {
@@ -7212,6 +7215,11 @@ char __fastcall hooked_gun_move_apply_camera_yaw(
     }
     forward_x /= horizontal;
     forward_z /= horizontal;
+
+    float pos_x = 0.0F;
+    float pos_y = 0.0F;
+    float pos_z = 0.0F;
+    quat_forward_pos_z(peer.pose_seed + 4, pos_x, pos_y, pos_z);
 
     auto* const turn_direction = reinterpret_cast<float*>(
         static_cast<std::byte*>(controller) +
@@ -7229,8 +7237,9 @@ char __fastcall hooked_gun_move_apply_camera_yaw(
         last_log = now;
         std::ostringstream line;
         line << "AIM-TURN-DIR seq=" << peer.sequence << " stock=("
-             << stock_x << "," << stock_z << ") peerPosZ=("
-             << forward_x << "," << forward_z << ")";
+             << stock_x << "," << stock_z << ") peerNegZ=("
+             << forward_x << "," << forward_z << ") peerPosZ=("
+             << pos_x << "," << pos_z << ")";
         force_log_line(line.str().c_str());
     }
     return result;
@@ -7488,9 +7497,8 @@ void sync_puppet_root_yaw_from_peer_camera(
     }
 
     float peer_fx = 0.0F;
-    float peer_fy = 0.0F;
     float peer_fz = 0.0F;
-    quat_forward_pos_z(peer.pose_seed + 4, peer_fx, peer_fy, peer_fz);
+    camera_forward_horizontal(peer.pose_seed + 4, peer_fx, peer_fz);
     const float peer_horiz =
         std::sqrt(peer_fx * peer_fx + peer_fz * peer_fz);
     if (!std::isfinite(peer_horiz) || peer_horiz < 0.001F) {
@@ -7502,9 +7510,8 @@ void sync_puppet_root_yaw_from_peer_camera(
     auto* const quat = reinterpret_cast<float*>(
         static_cast<std::byte*>(player) + kPlayerQuatOffset);
     float root_fx = 0.0F;
-    float root_fy = 0.0F;
     float root_fz = 0.0F;
-    quat_forward_pos_z(quat, root_fx, root_fy, root_fz);
+    camera_forward_horizontal(quat, root_fx, root_fz);
     const float peer_yaw =
         std::atan2(peer_fx, peer_fz) * (180.0F / 3.14159265F);
     const float root_yaw =
@@ -7523,9 +7530,9 @@ void sync_puppet_root_yaw_from_peer_camera(
     float yaw_quat[4]{};
     yaw_quat_from_horizontal_forward(peer_fx, peer_fz, yaw_quat);
     const float abs_delta = std::fabs(yaw_delta);
-    const float alpha = abs_delta > 20.0F ? 0.92F
-                      : abs_delta > 8.0F ? 0.82F
-                      : 0.65F;
+    const float alpha = abs_delta > 20.0F ? 0.72F
+                      : abs_delta > 8.0F ? 0.58F
+                      : 0.42F;
     const float dot = blend_network_orientation(quat, yaw_quat, alpha);
 
     static ULONGLONG last_log = 0;
@@ -7536,9 +7543,8 @@ void sync_puppet_root_yaw_from_peer_camera(
         last_log = now;
         last_peer_yaw = peer_yaw;
         float after_fx = 0.0F;
-        float after_fy = 0.0F;
         float after_fz = 0.0F;
-        quat_forward_pos_z(quat, after_fx, after_fy, after_fz);
+        camera_forward_horizontal(quat, after_fx, after_fz);
         const float after_yaw =
             std::atan2(after_fx, after_fz) * (180.0F / 3.14159265F);
         std::ostringstream line;
@@ -12447,7 +12453,8 @@ void apply_puppet_transform_post(void* /*update_object*/) {
                    valid_network_orientation(pkt.quat)) {
             orientation_dot = blend_network_orientation(quat, pkt.quat, 0.35F);
         }
-        if (g_gun_move_camera_turn_relay_installed) {
+        if (g_enable_gun_move_body_turn_post_sync &&
+            g_gun_move_camera_turn_relay_installed) {
             sync_puppet_root_yaw_from_peer_camera(puppet, pkt);
         }
         if (g_puppet_aim_reticle_relay || pose_relay_for_peer) {
@@ -12597,8 +12604,8 @@ volatile bool g_readable_bytes_fast = true;
 // animation path. Keep diagnostic probes off — they are hot-path noise only.
 constexpr bool g_enable_aim_animation_relays = true;
 // Re-enabled 2026-07-14: pubAdd runtime proved publish works but Player+0x140 root
-// yaw stays decoupled from peer camera during ADS. Native +0x150 relay plus a
-// post-update yaw sync are the earned next experiment.
+// yaw stays decoupled from peer camera during ADS. Pos-Z turn was REJECTED same
+// day (wrong reticle direction); use camera -Z for +0x150 only.
 constexpr bool g_enable_gun_move_body_turn = true;
 constexpr bool g_enable_aim_diagnostic_probes = false;
 
@@ -21255,7 +21262,7 @@ DWORD WINAPI install_hook(void*) {
         log_line("tll.exe module not found");
         return 1;
     }
-    boot_log_line("TLL hook DLL init 2026-07-14bm (body-turn relay + root yaw sync)");
+    boot_log_line("TLL hook DLL init 2026-07-14bn (body-turn relay camera -Z)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
