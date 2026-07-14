@@ -27598,3 +27598,11 @@ HYPOTHESIS for the two remaining mechanisms**.
   heap). `AIM-PALETTE` shows `fg` palette joint motion; `fgSkinTot=0` always. Fix
   attempt: mirror publish-state `+0x188..+0x194` → `FgAnimData+0x188..+0x194`
   (`AIM-FGANIM-MIRROR`, build `2026-07-14br`).
+- **RUNTIME 2026-07-14 (PIDs 4164/8300, build bt): CONFIRMED** FgAnimData fix path
+  executes on receiver puppet: `AIM-FGANIM-SKIN-ALLOC` (`buf=0x6F0000`, 31248 B),
+  repeated `AIM-FGANIM-SKIN-COPY`, `fgAdd==pubAdd` after mirror. **REJECTED** as
+  visible ADS fix — user reports puppet aim still fixed. `rootYaw≈47.6°` while
+  `peerYaw` sweeps >80° (`yawDelta` to -182°); post root quat blend already off.
+  **REJECTED:** `FgAnimData+0x560` skinning is not what the renderer skins from.
+  Next owner: `CharacterSkeletonRenderJob_Entry 0x141B5CE90` / global SkelTable
+  `qword_146919C40`. Report: `reports/player_aim_bt_runtime_20260714.md`.

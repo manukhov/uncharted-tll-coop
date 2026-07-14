@@ -2546,3 +2546,20 @@ under the current static-only instruction.
     `pNextFrameSkinningBoneMats`; logs `AIM-FGANIM-SKIN-ALLOC`.
   - Post-update mirror+skinning copy retained. Boot marker `2026-07-14bt`.
   - Watch log: `AIM-FGANIM-SKIN-ALLOC`, `AIM-FGANIM-SKIN-COPY`, no root yaw drift.
+
+## 2026-07-14 build bt runtime REJECTED (PIDs 4164/8300) — PAUSE
+
+- User: **visual still no** («всё ещё нет») after bt.
+- **CONFIRMED on receiver PID 8300:** `AIM-FGANIM-SKIN-ALLOC`, `AIM-FGANIM-SKIN-COPY`,
+  `fgAdd==pubAdd`, GunMove dispatch, world-basis/weights live.
+- **REJECTED:** mirroring aim-add + allocating/copying palette→`FgAnimData+0x560`
+  does not change visible puppet ADS aim.
+- **REJECTED (again):** `Player+0x140` — `rootYaw` stuck ~47.6° with sweeping peer;
+  post packet-quat blend already removed in bt.
+- **Closed paths this sprint:** body-turn `+0x150` pos/neg-Z, post root snap, fgAdd
+  mirror alone, fg skinning alloc/copy alone.
+- **Next (do not re-run without new code):** PRE-render hook
+  `CharacterSkeletonRenderJob_Entry 0x141B5CE90` — copy puppet `Player+0x1A8`
+  palette into SkelTable workspace before `CharacterSkeletonEval_PerJoint 0x141B757F0`.
+  Report: `reports/player_aim_bt_runtime_20260714.md`.
+- **Code landed:** commit `9ca0354` (bt). Boot marker `2026-07-14bt`.
