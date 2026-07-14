@@ -12099,7 +12099,64 @@ bool read_fganim_buffer_ptrs(
 
 bool pointer_looks_like_heap(const void* ptr) {
     const auto value = reinterpret_cast<std::uintptr_t>(ptr);
-    return value >= 0x10000ULL;
+    // Reject float bit-patterns (e.g. fgSkin=0x3e4613fa) mistaken for pointers.
+    if (value < 0x10000ULL || value >= 0x00007FFFFFFFFFFFULL) {
+        return false;
+    }
+    return readable_bytes(ptr) >= 0x10;
+}
+
+struct PuppetAllocatedSkinningBuffer {
+    void* memory = nullptr;
+    std::size_t bytes = 0;
+};
+
+std::unordered_map<void*, PuppetAllocatedSkinningBuffer> g_puppet_skinning_allocs;
+
+bool ensure_fganim_skinning_buffer(
+    void* fg, void* current_skinning, std::size_t buffer_bytes) {
+    if (fg == nullptr || buffer_bytes == 0) {
+        return false;
+    }
+    if (pointer_looks_like_heap(current_skinning) &&
+        readable_bytes(current_skinning) >= buffer_bytes) {
+        return true;
+    }
+    auto& slot = g_puppet_skinning_allocs[fg];
+    if (slot.memory == nullptr || slot.bytes < buffer_bytes) {
+        if (slot.memory != nullptr) {
+            VirtualFree(slot.memory, 0, MEM_RELEASE);
+            slot.memory = nullptr;
+            slot.bytes = 0;
+        }
+        slot.memory = VirtualAlloc(
+            nullptr, buffer_bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        slot.bytes = buffer_bytes;
+        if (slot.memory != nullptr) {
+            static ULONGLONG last_log = 0;
+            const ULONGLONG now = GetTickCount64();
+            if (now - last_log >= 1000) {
+                last_log = now;
+                std::ostringstream line;
+                line << "AIM-FGANIM-SKIN-ALLOC fg=0x" << std::hex
+                     << reinterpret_cast<std::uintptr_t>(fg) << " buf=0x"
+                     << reinterpret_cast<std::uintptr_t>(slot.memory) << std::dec
+                     << " bytes=" << buffer_bytes;
+                force_log_line(line.str().c_str());
+            }
+        }
+    }
+    if (slot.memory == nullptr) {
+        return false;
+    }
+    if (readable_bytes(fg) <
+        kFgAnimDataCurrentSkinningMatsOffset + sizeof(void*)) {
+        return false;
+    }
+    *reinterpret_cast<void**>(
+        static_cast<std::byte*>(fg) + kFgAnimDataCurrentSkinningMatsOffset) =
+        slot.memory;
+    return true;
 }
 
 bool write_fganim_aim_add_lrdu(void* fg, float left, float right, float up, float down) {
@@ -12374,19 +12431,29 @@ bool sync_puppet_fganim_palette_to_skinning(void* player) {
     if (!resolve_fganim_joint_buffers(fg, buffers, &stage)) {
         return false;
     }
-    if (!pointer_looks_like_heap(buffers.palette) ||
-        !pointer_looks_like_heap(buffers.skinning) ||
-        buffers.joint_count == 0) {
+    if (!pointer_looks_like_heap(buffers.palette) || buffers.joint_count == 0) {
         return false;
     }
     constexpr std::size_t kJointFloatCount = 12;
     const std::size_t buffer_bytes =
         static_cast<std::size_t>(buffers.joint_count) * kJointFloatCount *
         sizeof(float);
-    if (readable_bytes(buffers.palette) < buffer_bytes ||
-        readable_bytes(buffers.skinning) < buffer_bytes) {
+    if (readable_bytes(buffers.palette) < buffer_bytes) {
         return false;
     }
+    if (!ensure_fganim_skinning_buffer(
+            fg, const_cast<void*>(static_cast<const void*>(buffers.skinning)),
+            buffer_bytes)) {
+        return false;
+    }
+    FgAnimJointBuffers refreshed{};
+    const char* refresh_stage = "ok";
+    if (!resolve_fganim_joint_buffers(fg, refreshed, &refresh_stage) ||
+        !pointer_looks_like_heap(refreshed.skinning) ||
+        readable_bytes(refreshed.skinning) < buffer_bytes) {
+        return false;
+    }
+    buffers.skinning = refreshed.skinning;
     std::memcpy(
         const_cast<float*>(buffers.skinning), buffers.palette, buffer_bytes);
     static ULONGLONG last_log = 0;
@@ -12958,18 +13025,11 @@ void apply_puppet_transform_post(void* /*update_object*/) {
         write_peer_aim_world_targets_from_pose_seed(puppet, pkt);
     }
     if (peer_aiming) {
-        // The native GunMoveController turn relay owns ADS root yaw. Blending the
-        // sender's body-root packet here runs AFTER g_original_update and cancels
-        // its camera turn before render, leaving aim-idle-rotate active forever.
+        // Native aim world-basis + GunMove own ADS root yaw. POST packet-quat
+        // blend runs after g_original_update and cancels camera turn (confirmed
+        // runtime: rootYaw diverges, visual fixed). No root writes during ADS.
         if (g_puppet_aim_facing_from_camera) {
-            // RUNTIME REJECTED 2026-07-13: POST snap + 0x141BB8320 refresh
-            // eventually leaves the puppet sliding on its knees after a location
-            // reload. Keep only the soft root blend; aim additives own camera
-            // yaw/pitch until a non-root animation solution is proven.
             apply_peer_aim_facing_to_player(puppet, pkt);
-        } else if (!g_gun_move_camera_turn_relay_installed &&
-                   valid_network_orientation(pkt.quat)) {
-            orientation_dot = blend_network_orientation(quat, pkt.quat, 0.35F);
         }
         if (g_enable_puppet_ads_root_yaw_snap ||
             g_gun_move_camera_turn_relay_installed) {
@@ -12994,6 +13054,7 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     }
     log_puppet_action_state(puppet, pkt);
     if (peer_aiming) {
+        mirror_puppet_aim_add_to_fganim(puppet);
         sync_puppet_fganim_palette_to_skinning(puppet);
     }
     if (g_enable_aim_palette_probe) {
@@ -21782,7 +21843,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14bs (AIM-FGANIM ctrl->fg + palette->skinning)");
+        "TLL hook DLL init 2026-07-14bt (AIM no-root-blend + skinning alloc)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");

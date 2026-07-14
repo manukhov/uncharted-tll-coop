@@ -2536,4 +2536,13 @@ under the current static-only instruction.
   after mirror; was `(0.2,0,0,1)`. `fgPalTot` moves; `fgSkinTot=0` still.
 - **Build 2026-07-14bs:** mirror sources controller `+0x8B8..+0x8C4` (skip zero pub);
   post-update `sync_puppet_fganim_palette_to_skinning` copies `+0x230`→`+0x560`.
-  Boot marker `2026-07-14bs`. Re-test ADS visual on receiver.
+  Boot marker `2026-07-14bs`. User still on `br` in last log — no `SKIN-COPY` lines.
+- **Build 2026-07-14bt (next test):**
+  - POST-ADS `blend_network_orientation(quat, pkt.quat, 0.35)` **removed** during
+    `peer_aiming` (was canceling native camera turn after update).
+  - `pointer_looks_like_heap` tightened (rejects float bit-patterns like
+    `fgSkin=0x3e4613fa`; requires readable heap).
+  - `ensure_fganim_skinning_buffer`: allocates `+0x560` when puppet never got
+    `pNextFrameSkinningBoneMats`; logs `AIM-FGANIM-SKIN-ALLOC`.
+  - Post-update mirror+skinning copy retained. Boot marker `2026-07-14bt`.
+  - Watch log: `AIM-FGANIM-SKIN-ALLOC`, `AIM-FGANIM-SKIN-COPY`, no root yaw drift.
