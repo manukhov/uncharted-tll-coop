@@ -1,6 +1,6 @@
 # Player aim rendered-body basis relay (2026-07-14)
 
-Status: **STATIC, runtime pending**.
+Status: **RUNTIME REJECTED as sufficient; late 0xCB0300 full-seed theory rejected**.
 
 ## Exact hypothesis
 
@@ -42,11 +42,13 @@ direction.
    0x140CB41F0` writes left/right/down/up to controller
    `+0x8B8/+0x8BC/+0x8C0/+0x8C4`. The old diagnostic started at `+0x8B4`, so its
    labels were shifted.
-5. **Late target owner:** `Player_PostAnimUpdate 0x1410E9210` calls controller
+5. **Late target owner (refined after runtime):** `Player_PostAnimUpdate 0x1410E9210` calls controller
    vtable `+0xE0` at `0x1410E9F11`. The slot resolves to
    `PlayerAimController_KickTargetPointJob 0x140CB0200`, whose resolver call at
    `0x140CB02FB` returns to `0x140CB0300` and feeds controller-owned target job
-   buffers. That return site was absent from the mod's two-site allowlist.
+   buffers. Instruction-level follow-up shows `0x140CB0319` consumes only the
+   first 16-byte route position before the stack local is repurposed; the
+   quaternion half is not a yaw owner.
 
 ## Narrow change
 
@@ -71,3 +73,13 @@ body follows the camera. If corrected weights change but the pose remains fixed,
 downstream reset/animation-channel consumption wins candidate 4. If yaw still
 collapses, GunMoveShield's runtime-transform basis is itself being changed before
 the slot call.
+
+## Runtime result
+
+PIDs 20312/5656 reached the native body-basis path with fresh peer data, forced
+permission, and blend one. Camera forward changed, but horizontal error frequently
+entered at `150..179` degrees and the user saw no directional tracking plus a
+broken upper-body transition. The late site did not repair direction. This rejects
+the complete-seed `0xCB0300` override and preserving the native body basis as a
+complete fix. The large relative angle also explains why a full-strength additive
+can visibly fold while the root remains static.

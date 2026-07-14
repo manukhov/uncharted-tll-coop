@@ -2242,3 +2242,16 @@ under the current static-only instruction.
   native body-forward argument, remove automatic ADS camera-root soft writes, and
   read actual weights at `+0x8B8..+0x8C4`. Build/runtime prediction:
   `reports/player_aim_render_basis_relay_20260714.md`.
+
+## 2026-07-14 aim native turn-rate build
+
+- Runtime rejected the late `0x140CB0300` complete pose-seed relay: the job reads
+  only the first 16-byte position there, and the visual direction remained fixed.
+- Preserving native body-forward exposed `150..179` degree relative aim on entry;
+  forcing additive blend directly to one made the transition visibly broken.
+- Build-ready correction sends actual local block-0 right-stick rates, consumes
+  them through the already isolated Joypad3 ScaleCopy sandwich, restores native
+  aim-blend easing, and limits fallback horizontal additive to stock 60 degrees.
+- Next runtime discriminator is explicit: `AIM-TURN-SEND` -> matching
+  `AIM-TURN-RELAY processed`; then observe whether `yawPre` converges. Full matrix:
+  `reports/player_aim_native_turn_rate_20260714.md`.

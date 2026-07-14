@@ -450,10 +450,11 @@ volatile bool g_puppet_rifle_pose_only_ads = false;
 // Set for the current game-thread frame while the peer is aiming — widens the
 // fire-only pose/camera overrides to sustained ADS, not just the fire instant.
 volatile bool g_puppet_aim_override_frame = false;
-// Feed peer look_stick into the puppet right stick. Default OFF: it is a sustained
-// turn-RATE that spins the puppet's aim camera and fights the body-quat facing
-// blend -> violent aim jitter (2026-07-05 regression). Page Up toggles for A/B.
-volatile bool g_puppet_relay_look_stick = false;
+// Feed the sender's resolved right-stick rate into the puppet right stick. The
+// old camera-minus-body error was a position error masquerading as a sustained
+// rate and spun forever; StatePacket::look_stick now carries the native transient
+// block-0 axes instead. Page Up remains an A/B kill switch.
+volatile bool g_puppet_relay_look_stick = true;
 // Fall back to GetActiveWeapon when no weapon is in-hands/hand-attached. Default ON
 // (reverted 2026-07-05): OFF suppressed the pistol on weapon switch (in-hands/hand-
 // attached did not detect it) = pistol never displayed, which is worse than the
@@ -1500,8 +1501,11 @@ std::int64_t __fastcall hooked_input_scale_copy(
     // peer mask and look stick exist in the block only inside this call:
     // save before, restore right after the original returns.
     bool shared_bus_touched = false;
+    bool peer_look_injected = false;
     std::uint64_t shared_bus_saved_mask = 0;
     float shared_bus_saved_look[2] = {0.0F, 0.0F};
+    float peer_look[2] = {0.0F, 0.0F};
+    std::uint32_t peer_sequence = 0;
     if (destination_index == 3 && readable_bytes(source) >= 0x520) {
         coop::StatePacket peer{};
         const bool have_peer_input =
@@ -1550,15 +1554,10 @@ std::int64_t __fastcall hooked_input_scale_copy(
             held_mask |= shared_bus_saved_mask & kInputBlockButtonBaseMask;
             *reinterpret_cast<std::uint64_t*>(source_bytes + 0x518) =
                 held_mask | synthetic_move_gate;
-            // AIM-JITTER FIX (2026-07-05): do NOT feed peer.look_stick into the
-            // puppet's right stick. The right stick is a turn RATE; look_stick =
-            // (cam_yaw - body_yaw)*0.55 is a SUSTAINED non-zero value while the peer
-            // holds an aim offset, so writing it every frame spins the puppet's aim
-            // camera continuously while apply_peer_aim_facing_to_player snaps the
-            // body back -> violent jerk in all directions. The absolute aim
-            // direction is the separate pose-seed fix; here we keep only the
-            // body-quat facing (stable pose). Gated behind a default-OFF toggle so
-            // the old behavior is still available for A/B (VK_PRIOR / Page Up).
+            // Feed only the sender's native transient right-stick rate. The old
+            // derived camera-minus-body error stayed non-zero after mouse motion
+            // stopped and therefore spun continuously. The shared-bus sandwich
+            // still keeps these axes private to puppet Joypad 3.
             auto* const axes = reinterpret_cast<float*>(source_bytes);
             shared_bus_saved_look[0] = axes[2];
             shared_bus_saved_look[1] = axes[3];
@@ -1570,6 +1569,10 @@ std::int64_t __fastcall hooked_input_scale_copy(
                  std::fabs(peer.look_stick[1]) > 0.001F)) {
                 axes[2] = peer.look_stick[0];
                 axes[3] = peer.look_stick[1];
+                peer_look[0] = peer.look_stick[0];
+                peer_look[1] = peer.look_stick[1];
+                peer_sequence = peer.sequence;
+                peer_look_injected = true;
             }
             shared_bus_touched = true;
         }
@@ -1632,6 +1635,17 @@ std::int64_t __fastcall hooked_input_scale_copy(
                         static_cast<const std::byte*>(joypad) + 0xE0)
                  << std::dec;
             log_line(line.str().c_str());
+        }
+        static thread_local ULONGLONG last_turn_log = 0;
+        if (peer_look_injected && now - last_turn_log >= 250 &&
+            readable_bytes(joypad) >= 0x58) {
+            last_turn_log = now;
+            const auto* dst = static_cast<const float*>(joypad);
+            std::ostringstream line;
+            line << "AIM-TURN-RELAY seq=" << peer_sequence << " source=("
+                 << peer_look[0] << "," << peer_look[1] << ") processed=("
+                 << dst[0x50 / 4] << "," << dst[0x54 / 4] << ")";
+            force_log_line(line.str().c_str());
         }
     }
     return result;
@@ -2839,8 +2853,7 @@ void record_pose_seed_caller(std::uintptr_t rva) {
 void apply_pose_seed_override_out(
     void* out, const std::uint8_t seed[32], std::uintptr_t caller_rva) {
     __try {
-        if (caller_rva == kPlayerAimPoseSeedCallSiteRva ||
-            caller_rva == kPlayerAimKickTargetJobPoseSeedCallSiteRva) {
+        if (caller_rva == kPlayerAimPoseSeedCallSiteRva) {
             std::memcpy(out, seed, 32);
         } else {
             std::memcpy(static_cast<std::byte*>(out) + 16, seed + 16, 16);
@@ -2876,14 +2889,14 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     const bool sustained_slot1_override =
         g_puppet_aim_override_frame && idx == kSlot1ScreenIndex;
     // AIM-POSE-SCOPED override (2026-07-07): peer pose-seed ONLY when the caller is
-    // (a) GetTargetPointFromReticle's internal resolver call (0xCB17D6),
-    // (b) Player_PostAnimUpdate's copy into Player+0x1720/+0x1730 (0x10E934B), or
-    // (c) its later KickTargetPointJob seed read (0xCB0300).
+    // (a) GetTargetPointFromReticle's internal resolver call (0xCB17D6), or
+    // (b) Player_PostAnimUpdate's copy into Player+0x1720/+0x1730 (0x10E934B).
+    // REJECTED: KickTargetPointJob return 0xCB0300 consumes only the first 16-byte
+    // position before reusing the stack local; a full seed override cannot steer yaw.
     const bool caller_is_aim_site =
         idx == kSlot1ScreenIndex &&
         (caller_rva == kAimTargetReticleCallSiteRva ||
-         caller_rva == kPlayerAimPoseSeedCallSiteRva ||
-         caller_rva == kPlayerAimKickTargetJobPoseSeedCallSiteRva);
+         caller_rva == kPlayerAimPoseSeedCallSiteRva);
     // PERF (2026-07-13): this resolver runs ~150-300x/frame (fire + every-frame
     // PostAnimUpdate pose write). The old code did copy_peer_state_snapshot (SRW
     // lock + ~460B copy, contending the net thread) UNCONDITIONALLY on every call =
@@ -6881,12 +6894,6 @@ void force_peer_puppet_aim_blend_state(void* controller) {
         if (readable_bytes(bytes + 0x8F0) >= 1) {
             *reinterpret_cast<std::uint8_t*>(bytes + 0x8A0) = 1;
         }
-        if (readable_bytes(bytes + 0x8F0) >= 0xED) {
-            float& blend = *reinterpret_cast<float*>(bytes + 0x8EC);
-            if (!std::isfinite(blend) || blend < 0.99F) {
-                blend = 1.0F;
-            }
-        }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
 }
@@ -7010,7 +7017,10 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
     float lim_h_b = horizontal_limit_b;
     float lim_v_a = vertical_limit_a;
     float lim_v_b = vertical_limit_b;
-    constexpr float kDefaultHorizLimit = 120.0F;
+    // Ordinary stock ADS uses 60-degree defaults. Keeping that native-sized arc
+    // prevents the upper-body additive from folding toward a 150-180 degree
+    // target while the right-stick path turns the camera/body root.
+    constexpr float kDefaultHorizLimit = 60.0F;
     constexpr float kDefaultVertLimit = 75.0F;
     const bool limits_dead =
         (!std::isfinite(lim_h_a) || std::fabs(lim_h_a) < 0.01F) &&
@@ -7077,9 +7087,9 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
             static_cast<const std::byte*>(controller) + 0x8B8);
         const float right = *reinterpret_cast<const float*>(
             static_cast<const std::byte*>(controller) + 0x8BC);
-        const float down = *reinterpret_cast<const float*>(
-            static_cast<const std::byte*>(controller) + 0x8C0);
         const float up = *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(controller) + 0x8C0);
+        const float down = *reinterpret_cast<const float*>(
             static_cast<const std::byte*>(controller) + 0x8C4);
         const float blend = *reinterpret_cast<const float*>(
             static_cast<const std::byte*>(controller) + 0x8EC);
@@ -11027,22 +11037,24 @@ void send_local_player_state() {
             std::memcpy(pkt.camera_quat, cam_quat, sizeof(pkt.camera_quat));
             pkt.flags |= coop::kStateFlagPeerCamera;
         }
-        const int joypad_idx =
-            readable_bytes(static_cast<std::byte*>(local_obj) + 0x39BC) >= 1
-                ? *reinterpret_cast<const std::int32_t*>(
-                      static_cast<const std::byte*>(local_obj) + 0x39B8)
-                : 0;
-        if (auto* const blk = joypad_resolved_input_block(joypad_idx)) {
-            const auto* body_quat = reinterpret_cast<const float*>(
-                static_cast<const std::byte*>(local_obj) + kPlayerQuatOffset);
-            if ((pkt.flags & coop::kStateFlagPeerCamera) != 0 &&
-                valid_network_orientation(pkt.camera_quat)) {
-                derive_look_stick_from_camera(
-                    body_quat, pkt.camera_quat, pkt.look_stick);
-            } else {
-                const auto* axes = reinterpret_cast<const float*>(blk);
-                pkt.look_stick[0] = axes[2];
-                pkt.look_stick[1] = axes[3];
+        // The local Player uses Joypad 2, whose selector is block 0. Do not pass
+        // the Joypad index to joypad_resolved_input_block: that would sample dead
+        // block 2. These are the native transient camera turn-rate axes, not the
+        // old sustained camera-minus-body error.
+        if (auto* const blk = joypad_resolved_input_block(0)) {
+            const auto* axes = reinterpret_cast<const float*>(blk);
+            pkt.look_stick[0] = axes[2];
+            pkt.look_stick[1] = axes[3];
+            static ULONGLONG last_turn_send_log = 0;
+            const ULONGLONG turn_now = GetTickCount64();
+            if ((std::fabs(pkt.look_stick[0]) > 0.001F ||
+                 std::fabs(pkt.look_stick[1]) > 0.001F) &&
+                turn_now - last_turn_send_log > 250) {
+                last_turn_send_log = turn_now;
+                std::ostringstream line;
+                line << "AIM-TURN-SEND seq=" << pkt.sequence << " axes=("
+                     << pkt.look_stick[0] << "," << pkt.look_stick[1] << ")";
+                force_log_line(line.str().c_str());
             }
         }
     } else {
@@ -16507,15 +16519,13 @@ void net_tick() {
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_PRIOR) & 1) != 0) {
-        // Page Up: A/B the look_stick relay. OFF (default) = no puppet aim-jitter
-        // (rely on body-quat facing); ON = feed peer look_stick to the puppet right
-        // stick (the sustained-rate spin regression).
+        // Page Up: A/B the native transient right-stick-rate relay.
         g_puppet_relay_look_stick = !g_puppet_relay_look_stick;
         const bool was = g_logging_enabled;
         g_logging_enabled = true;
         log_line(g_puppet_relay_look_stick
-                     ? "PUPPET-LOOK-STICK relay = ON (may jitter)"
-                     : "PUPPET-LOOK-STICK relay = OFF (body-quat facing only)");
+                     ? "PUPPET-LOOK-STICK native rate relay = ON"
+                     : "PUPPET-LOOK-STICK native rate relay = OFF");
         g_logging_enabled = was;
     }
     if (foreground && (GetAsyncKeyState(VK_INSERT) & 1) != 0) {

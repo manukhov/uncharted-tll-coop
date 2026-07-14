@@ -27347,3 +27347,22 @@ HYPOTHESIS for the two remaining mechanisms**.
   diagnostic now reads the true directional fields at controller
   `+0x8B8/+0x8BC/+0x8C0/+0x8C4`. Runtime prediction is recorded in
   `reports/player_aim_render_basis_relay_20260714.md`.
+
+### 2026-07-14 RUNTIME REJECTION + STATIC: use native transient turn rate
+
+- PIDs 20312/5656 rejected the late `0x140CB0300` full-seed override and native
+  body-basis preservation as a complete direction fix. Fresh camera forward and
+  blend one reached slot `+0x58`, but relative yaw frequently entered at
+  `150..179` degrees; the user saw no tracking and a broken aim-entry pose.
+- `KickTargetPointJob 0x140CB0200` consumes only the position half after resolver
+  return `0x140CB0300`; its quaternion half is not a yaw owner. The full-seed
+  allowlist entry is **REJECTED** and removed.
+- **STATIC:** sender resolved block-0 `+0x08/+0x0C` is the actual transient camera
+  turn-rate stream. `Input_ScaleCopyVirtual 0x14183B410` copies it into raw Joypad
+  fields and publishes processed right stick at `Joypad+0x50/+0x54` through
+  `0x14183C19E..0x14183C1AD`. This is distinct from the rejected sustained
+  `(cameraYaw-bodyYaw)*0.55` position error.
+- The next build relays those native axes only inside the destination-3 bus
+  sandwich, leaves `PlayerAimController_UpdateBlendState 0x140CAFA20` in sole
+  ownership of gradual `+0x8EC`, and uses the stock 60-degree ordinary-ADS arc.
+  Evidence and prediction: `reports/player_aim_native_turn_rate_20260714.md`.
