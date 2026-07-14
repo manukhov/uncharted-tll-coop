@@ -2596,6 +2596,12 @@ under the current static-only instruction.
   scanning 651 joints. Render-hook passthrough still installed in bz.
 - **Build 2026-07-14ca (LANDED):** disable skinning/pubState memcpy paths and palette
   probe; mirror aim-add only; skip render-hook install when inject off. Boot `2026-07-14ca`.
-- **ADS runtime pending** — lag should clear on ca. Visual still open: next static target
-  per-joint workspace `owner+0x14B8` stride `0x6C0` (CharacterSkeletonEval input), not
-  FgAnimData heap copies.
+- **CONFIRMED (user, ca):** severe receiver lag during peer ADS **mostly gone**.
+- **REJECTED (user, ca):** visible puppet ADS aim **still fixed**.
+- **Diagnosis:** upstream publish path is live (`pubAdd==ctrlAdd`, mirror, world-basis);
+  failure is downstream — `ProcessAnimCmdListSegment` eval and/or
+  `CharacterSkeletonEval_PerJoint` workspace (`owner+0x14B8`, stride `0x6C0`) / DrawControl
+  post-eval. FgAnimData heap copies are closed.
+- **Next build cb:** static map workspace joint matrix fields, then lightweight pre-Update
+  inject (no per-frame 651-joint scan); alternative branch if workspace static fails:
+  force puppet anim-cmd eval tick.

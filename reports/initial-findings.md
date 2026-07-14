@@ -27623,4 +27623,5 @@ HYPOTHESIS for the two remaining mechanisms**.
   persisted — per-frame skinning memcpy in `hooked_player_aim_world_basis` +
   `apply_puppet_transform_post` and 651-joint palette probe.
   **ca:** disable skinning/pubState memcpy + palette probe; mirror aim-add only;
-  skip render-hook install.
+  skip render-hook install. **CONFIRMED (user):** receiver ADS lag mostly gone.
+  **REJECTED (user):** visible aim still fixed — downstream eval/render gap remains.
