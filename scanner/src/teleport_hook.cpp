@@ -10866,17 +10866,10 @@ void send_local_player_state() {
         static float pvx = 0, pvy = 0, pvz = 0;
         static float cvx = 0, cvy = 0, cvz = 0;
         static ULONGLONG pvt = 0;
-        static void* previous_local_obj = nullptr;
         const ULONGLONG vnow = GetTickCount64();
-        const bool object_changed =
-            previous_local_obj != nullptr && previous_local_obj != local_obj;
-        previous_local_obj = local_obj;
         bool stale_discontinuity = false;
         float discontinuity_sq = 0.0F;
-        if (pvt == 0 || object_changed) {
-            if (object_changed) {
-                pkt.flags |= 16;
-            }
+        if (pvt == 0) {
             pvx = pos[0]; pvy = pos[1]; pvz = pos[2]; pvt = vnow;
             cvx = 0.0F; cvy = 0.0F; cvz = 0.0F;
         } else if (vnow - pvt >= 16) {
@@ -10906,7 +10899,6 @@ void send_local_player_state() {
         if ((pkt.flags & 16) != 0) {
             std::ostringstream line;
             line << "LOCAL-RESPAWN-TELEPORT seq=" << pkt.sequence
-                 << " objectChanged=" << (object_changed ? 1 : 0)
                  << " staleGap=" << (stale_discontinuity ? 1 : 0)
                  << " distance=" << std::sqrt(discontinuity_sq)
                  << " pos=(" << pkt.pos[0] << "," << pkt.pos[1] << ","
@@ -11914,7 +11906,10 @@ void apply_puppet_transform_post(void* /*update_object*/) {
         if (too_far) {
             std::memcpy(world, pkt.pos, sizeof(pkt.pos));
             std::memcpy(localp, pkt.pos, sizeof(pkt.pos));
-        } else if (valid_network_movement(pkt) && pkt.move_magnitude > 0.01F) {
+        } else {
+            // Native locomotion can keep integrating an old pre-respawn target
+            // even after the authoritative snap. Reconcile stationary peers too;
+            // otherwise free-run leaves every sub-four-metre displacement frozen.
             constexpr float kNudgeDeadband = 0.03F;
             constexpr float kNudgeFraction = 0.08F;
             constexpr float kMaxNudgePerUpdate = 0.05F;
@@ -18742,6 +18737,17 @@ char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
                 *reinterpret_cast<void* const*>(bytes + 0x4E0);
             const std::uint32_t parent_id =
                 *reinterpret_cast<const std::uint32_t*>(bytes + 0x4E8);
+            const void* resolved_parent = nullptr;
+            std::uint32_t resolved_parent_id = 0;
+            if (parent_handle != nullptr && readable_bytes(parent_handle) >= 0x10) {
+                resolved_parent = *reinterpret_cast<void* const*>(
+                    static_cast<const std::byte*>(parent_handle) + 0x8);
+                if (resolved_parent != nullptr && readable_bytes(
+                        static_cast<const std::byte*>(resolved_parent) + 0xC0) >= 1) {
+                    resolved_parent_id = *reinterpret_cast<const std::uint32_t*>(
+                        static_cast<const std::byte*>(resolved_parent) + 0xBC);
+                }
+            }
             const void* const cloth_body =
                 *reinterpret_cast<void* const*>(bytes + 0x238);
             const std::uint8_t initialized =
@@ -18754,6 +18760,8 @@ char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
             signature ^= reinterpret_cast<std::uintptr_t>(parent_draw);
             signature *= 1099511628211ULL;
             signature ^= reinterpret_cast<std::uintptr_t>(cloth_body);
+            signature *= 1099511628211ULL;
+            signature ^= reinterpret_cast<std::uintptr_t>(resolved_parent);
             signature *= 1099511628211ULL;
             signature ^= initialized;
 
@@ -18792,6 +18800,11 @@ char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
                            << " parentHandle=0x"
                            << reinterpret_cast<std::uintptr_t>(parent_handle)
                            << "/0x" << parent_id
+                           << " resolvedParent=0x"
+                           << reinterpret_cast<std::uintptr_t>(resolved_parent)
+                           << "/0x" << resolved_parent_id
+                           << " currentPuppet="
+                           << (resolved_parent == puppet ? 1 : 0)
                            << " clothBody=0x"
                            << reinterpret_cast<std::uintptr_t>(cloth_body)
                            << " parentDraw=0x"
@@ -18808,6 +18821,10 @@ char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
                            << cloth_draw.mesh_count
                            << " instances=" << cloth_draw.instances
                            << " active=" << cloth_draw.active_instances
+                           << " mainViewExcluded="
+                           << cloth_draw.main_view_excluded_instances
+                           << " categorySuppressed="
+                           << cloth_draw.category_suppressed_instances
                            << " drawIds=";
                 for (std::uint32_t mesh_index = 0;
                      mesh_index < cloth_draw.readable_meshes; ++mesh_index) {

@@ -32,6 +32,18 @@ gaps on send, consumes the one-shot marker post-update, and forces one snap.
 Static evidence, competitors, and prediction are in
 `reports/respawn_transform_sync_20260714.md`.
 
+Second runtime refined both results. Both final Players queued deferred
+`ChangeLookId`, and Chloe recreated all three expected cloth mesh processes, but
+the user still saw her bald: full look rebuild is not sufficient. `CHAR-CLOTH`
+now records the resolved parent object/current-puppet match plus omitted
+main-view/category instance suppression before any further write.
+
+Respawn send/snap events also fired, but `PUPPET-POS` proved native locomotion
+then grew stationary error back to four metres and repeated the cycle. Pointer
+replacement was noisy false evidence during reload, so the sender now keys only
+spatial discontinuity; the bounded free-run correction now also converges a
+stationary peer after the snap. Revised prediction is in the same report.
+
 ## Turn note (2026-07-13, Codex - reload hair is ProcessCharCloth)
 
 Fresh reload snapshots on PIDs 20348/21444 retained the complete parent

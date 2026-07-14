@@ -2,7 +2,8 @@
 
 ## Status
 
-`STATIC` fix ready for the written runtime prediction below.
+`REJECTED` one-shot-only repair; revised continuous reconciliation is ready for
+the second runtime prediction below.
 
 ## Exact hypothesis
 
@@ -66,3 +67,33 @@ If the sender line contains the new checkpoint position but the visual puppet
 returns to the old one after the post-update snap, candidate 4 wins and the next
 step is a later transform owner. If no sender line appears, local lifecycle
 identity/position capture must move below the respawn finalization point.
+
+## First runtime result: one-shot snap is insufficient
+
+Both processes emitted sender and receiver events, so the wire marker and
+post-update consumer are confirmed. The receiver snapped to the checkpoint
+coordinates, but the user still saw the remote actor at its old position.
+`PUPPET-POS` then showed the exact failure: with `peerMove=0`, horizontal error
+grew repeatedly from roughly one metre to four metres, triggered the old distance
+snap, and began growing again. Thus candidate 4 wins in a continuous form: native
+locomotion resumes integrating its old target after each one-shot write.
+
+The sender's Player-pointer discriminator is also **REJECTED**. The retained
+resolver changes object pointers repeatedly during reload while positions remain
+identical, producing many false `objectChanged=1` teleports and resetting the
+position history. Position discontinuity remains the stable signal.
+
+## Revised fix and prediction
+
+The sender no longer treats pointer replacement itself as a teleport. It retains
+position history across those replacements and marks only a measured spatial
+discontinuity or a displaced sample after a long load gap. On the receiver, the
+existing bounded free-run nudge now runs for stationary peers as well as moving
+ones; this closes later native drift without frame-by-frame hard pinning.
+
+After reload, one authoritative snap may occur, then `PUPPET-POS horizontal`
+must converge below the 3 cm deadband and stay there while `peerMove=0`. There
+must be no repeated same-position `LOCAL-RESPAWN-TELEPORT` lines and no recurring
+four-metre hard snaps. If error still oscillates, the retained table is selecting
+multiple live Player instances and reconciliation must be keyed to the exact
+`update_object` rather than a fresh retained lookup.

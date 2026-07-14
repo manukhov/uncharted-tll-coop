@@ -27287,3 +27287,24 @@ HYPOTHESIS for the two remaining mechanisms**.
   then clears that deferred field. The repair therefore queues current
   `Player+0x170` through `+0x3D10` only after the final parent is stable and cloth
   is absent, instead of invoking the rebuild re-entrantly from object Update.
+- Runtime on PIDs 4196/3412 queued both final parents and recreated Nadine's cloth
+  plus all three Chloe cloth mesh ids. Chloe remained visually bald despite
+  non-null bodies, `initialized=1`, active gates, and 4/4 active instances.
+  **REJECTED:** full `ChangeLookId`/process recreation as a sufficient visual
+  repair. Remaining ownership, instance-suppression, and cloth-output candidates
+  are separated by the expanded read-only snapshot.
+
+### 2026-07-14 respawn transform: one-shot snap is consumed but native drift resumes (CONFIRMED)
+
+- `StatePacket.flags bit 4` was produced and received; the newly added consumer
+  performed `PUPPET-RESPAWN-SNAP` to the checkpoint coordinates on both copies.
+- The user still observed the old remote position. Subsequent `PUPPET-POS` lines
+  showed stationary horizontal error growing repeatedly to four metres before
+  each legacy distance snap. **REJECTED:** one post-update snap as sufficient.
+- The sender's retained Player pointer changed repeatedly at identical positions,
+  generating false pointer-based teleport events. **REJECTED:** pointer identity
+  as a respawn discriminator; measured position discontinuity is retained.
+- The free-run branch previously nudged only when `peerMove>0`; its stationary
+  branch made the observed post-respawn drift permanent below four metres. The
+  same bounded correction now runs while stationary. Revised runtime prediction:
+  `reports/respawn_transform_sync_20260714.md`.

@@ -158,3 +158,20 @@ across Player replacement while recording `healthy_player` separately. It also
 requires either Player or DrawControl generation to differ from the healthy one,
 preventing the transient same-parent timeout that unnecessarily queued PID 316
 before its original cloth resumed.
+
+## Second repair runtime: process recreation is not sufficient
+
+The corrected gate queued both final parents. PID 4196 recreated Nadine cloth;
+PID 3412 recreated all three Chloe cloth mesh ids on final parent
+`0x10e0348e40`. Every recreated process reported a non-null body,
+`initialized=1`, active mesh gates, and 4/4 active instances. The user still saw
+Chloe bald. Therefore deferred `ChangeLookId` is confirmed as a process
+re-materializer but **REJECTED as a complete visual repair**.
+
+Remaining competitors are now narrow: the recreated cloth handle may resolve to
+a stale Player rather than the current retained puppet; instance main-view or
+category suppression may remain set; or cloth simulation/output-joint scheduling
+may not restart. The next read-only snapshot records resolved parent object/id,
+whether it equals the current puppet, and the previously omitted
+`mainViewExcluded/categorySuppressed` instance counts. No further rebuild or
+visibility write is added until that discriminator selects a writer.
