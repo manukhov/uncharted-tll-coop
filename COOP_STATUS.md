@@ -2466,3 +2466,13 @@ under the current static-only instruction.
   heading, not weight publication.
 - **Next:** re-open `GunMoveController` turn relay or explicit peer-yaw root sync
   during ADS; palette-only branch insufficient.
+
+## 2026-07-14 body-turn build (Cursor)
+
+- Re-enabled `GunMoveController` vtable `+0x38` relay (`0x140E8F990` → `+0x150`
+  peer pose positive-Z) and post-ADS `sync_puppet_root_yaw_from_peer_camera` on
+  slot-1 puppet. Post hook skips packet-quat blend while relay is installed.
+- Logs: `AIM-TURN-DIR`, `AIM-ROOT-YAW-SYNC`, existing `AIM-RENDER-DISC`.
+- Prediction: `yawDelta` in `AIM-RENDER-DISC` collapses toward 0 while peer sweeps;
+  user sees puppet ADS aim track peer camera. Knee-slide on reload remains a
+  competitor to watch. Prior partial relay rejection noted in turn-chain section.

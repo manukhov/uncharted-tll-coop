@@ -7479,6 +7479,77 @@ void yaw_quat_from_horizontal_forward(
     out[3] = std::cos(half);
 }
 
+void sync_puppet_root_yaw_from_peer_camera(
+    void* player, const coop::StatePacket& peer) {
+    if (player == nullptr || !peer_packet_aim_active(peer) ||
+        (peer.flags & coop::kStateFlagPoseSeed) == 0 ||
+        !valid_network_orientation(peer.pose_seed + 4)) {
+        return;
+    }
+
+    float peer_fx = 0.0F;
+    float peer_fy = 0.0F;
+    float peer_fz = 0.0F;
+    quat_forward_pos_z(peer.pose_seed + 4, peer_fx, peer_fy, peer_fz);
+    const float peer_horiz =
+        std::sqrt(peer_fx * peer_fx + peer_fz * peer_fz);
+    if (!std::isfinite(peer_horiz) || peer_horiz < 0.001F) {
+        return;
+    }
+    peer_fx /= peer_horiz;
+    peer_fz /= peer_horiz;
+
+    auto* const quat = reinterpret_cast<float*>(
+        static_cast<std::byte*>(player) + kPlayerQuatOffset);
+    float root_fx = 0.0F;
+    float root_fy = 0.0F;
+    float root_fz = 0.0F;
+    quat_forward_pos_z(quat, root_fx, root_fy, root_fz);
+    const float peer_yaw =
+        std::atan2(peer_fx, peer_fz) * (180.0F / 3.14159265F);
+    const float root_yaw =
+        std::atan2(root_fx, root_fz) * (180.0F / 3.14159265F);
+    float yaw_delta = peer_yaw - root_yaw;
+    while (yaw_delta > 180.0F) {
+        yaw_delta -= 360.0F;
+    }
+    while (yaw_delta < -180.0F) {
+        yaw_delta += 360.0F;
+    }
+    if (std::fabs(yaw_delta) < 0.5F) {
+        return;
+    }
+
+    float yaw_quat[4]{};
+    yaw_quat_from_horizontal_forward(peer_fx, peer_fz, yaw_quat);
+    const float abs_delta = std::fabs(yaw_delta);
+    const float alpha = abs_delta > 20.0F ? 0.92F
+                      : abs_delta > 8.0F ? 0.82F
+                      : 0.65F;
+    const float dot = blend_network_orientation(quat, yaw_quat, alpha);
+
+    static ULONGLONG last_log = 0;
+    static float last_peer_yaw = 0.0F;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log > 400 &&
+        std::fabs(peer_yaw - last_peer_yaw) > 2.0F) {
+        last_log = now;
+        last_peer_yaw = peer_yaw;
+        float after_fx = 0.0F;
+        float after_fy = 0.0F;
+        float after_fz = 0.0F;
+        quat_forward_pos_z(quat, after_fx, after_fy, after_fz);
+        const float after_yaw =
+            std::atan2(after_fx, after_fz) * (180.0F / 3.14159265F);
+        std::ostringstream line;
+        line << "AIM-ROOT-YAW-SYNC peerYaw=" << peer_yaw
+             << " before=" << root_yaw << " after=" << after_yaw
+             << " delta=" << yaw_delta << " alpha=" << alpha
+             << " dot=" << dot << " seq=" << peer.sequence;
+        force_log_line(line.str().c_str());
+    }
+}
+
 // Aim facing for the remote Player only — never rewrite viewport CameraManager
 // (that hijacks local scope/FOV and made Nadine vanish in a sniper overlay).
 void apply_peer_aim_facing_to_player(
@@ -12376,6 +12447,9 @@ void apply_puppet_transform_post(void* /*update_object*/) {
                    valid_network_orientation(pkt.quat)) {
             orientation_dot = blend_network_orientation(quat, pkt.quat, 0.35F);
         }
+        if (g_gun_move_camera_turn_relay_installed) {
+            sync_puppet_root_yaw_from_peer_camera(puppet, pkt);
+        }
         if (g_puppet_aim_reticle_relay || pose_relay_for_peer) {
             apply_peer_aim_pose_quat(puppet);
         }
@@ -12522,6 +12596,10 @@ volatile bool g_readable_bytes_fast = true;
 // not clear. Pose-seed snapshot is now gated (e305fec); re-enable the proven aim
 // animation path. Keep diagnostic probes off — they are hot-path noise only.
 constexpr bool g_enable_aim_animation_relays = true;
+// Re-enabled 2026-07-14: pubAdd runtime proved publish works but Player+0x140 root
+// yaw stays decoupled from peer camera during ADS. Native +0x150 relay plus a
+// post-update yaw sync are the earned next experiment.
+constexpr bool g_enable_gun_move_body_turn = true;
 constexpr bool g_enable_aim_diagnostic_probes = false;
 
 
@@ -21177,7 +21255,7 @@ DWORD WINAPI install_hook(void*) {
         log_line("tll.exe module not found");
         return 1;
     }
-    boot_log_line("TLL hook DLL init 2026-07-07ad (early init marker)");
+    boot_log_line("TLL hook DLL init 2026-07-14bm (body-turn relay + root yaw sync)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
@@ -21197,10 +21275,6 @@ DWORD WINAPI install_hook(void*) {
     // Aim animation path (CONFIRMED visible for pistol ADS when enabled). Pose-seed
     // snapshot lag is gated separately; leave diagnostic probes off.
     if (g_enable_aim_animation_relays) {
-        // REJECTED 2026-07-14: +0x150 reaches the native root writer, but a later
-        // animation/render owner restores a static visible facing and lifecycle
-        // changes can leave the puppet sliding in aim-idle-rotate on its knees.
-        // Keep the isolated hook for reference; do not install it by default.
         install_player_gun_move_shield_entry_probe();
         install_player_gun_move_shield_wrapper_probe();
         install_player_aim_eligibility_callsite_relay();
@@ -21208,6 +21282,9 @@ DWORD WINAPI install_hook(void*) {
         install_player_aim_blend_target_callsite_relay();
         install_player_aim_world_basis_relay();
         install_player_aim_blend_tick_probe();
+        if (g_enable_gun_move_body_turn) {
+            install_gun_move_camera_turn_relay();
+        }
     }
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();
