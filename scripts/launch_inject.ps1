@@ -16,7 +16,7 @@ if (-not (Test-Path -LiteralPath $injectorPath -PathType Leaf)) {
     throw "Injector not found: $injectorPath"
 }
 
-$gameDirectory = Split-Path -LiteralPath $GamePath -Parent
+$gameDirectory = [IO.Path]::GetDirectoryName($GamePath)
 $processes = @()
 for ($instance = 1; $instance -le $Count; $instance++) {
     Write-Host "== launching instance $instance =="
