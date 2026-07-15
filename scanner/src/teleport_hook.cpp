@@ -1138,7 +1138,10 @@ int peer_slot_of_art(std::uint32_t art);
 // expensive open/close is paid once. Default OFF = zero log file I/O on the game
 // thread (the real lag was memory paging from two 10 GB instances on 16 GB RAM,
 // not the mod; keeping logging off removes the mod's remaining game-thread I/O).
-// Keep global logging off by default; targeted diagnostics use force_log_line().
+// Production co-op keeps runtime diagnostics completely off. Boot/install lines
+// still go through boot_log_line(), while force_log_line() is compiled to a no-op.
+// Flip this only for a bounded experiment with a written prediction.
+constexpr bool kEnableRuntimeDiagnosticLogging = false;
 volatile bool g_logging_enabled = false;
 static SRWLOCK g_log_lock = SRWLOCK_INIT;
 static HANDLE g_log_handle = INVALID_HANDLE_VALUE;
@@ -1147,10 +1150,7 @@ static HANDLE g_log_handle = INVALID_HANDLE_VALUE;
 // ============================================================================
 // =====  LOGGING & CRASH OBSERVER (VEH)
 // ============================================================================
-void log_line(const char* line) {
-    if (!g_logging_enabled) {
-        return;
-    }
+void write_log_line(const char* line) {
     char buffer[1600];
     const int length = std::snprintf(
         buffer, sizeof(buffer), "[pid=%lu] %s\n",
@@ -1176,15 +1176,22 @@ void log_line(const char* line) {
     ReleaseSRWLockExclusive(&g_log_lock);
 }
 
+void log_line(const char* line) {
+    if (g_logging_enabled) {
+        write_log_line(line);
+    }
+}
+
 void boot_log_line(const char* line) {
-    const bool was = g_logging_enabled;
-    g_logging_enabled = true;
-    log_line(line);
-    g_logging_enabled = was;
+    write_log_line(line);
 }
 
 void force_log_line(const char* line) {
-    boot_log_line(line);
+    if constexpr (kEnableRuntimeDiagnosticLogging) {
+        write_log_line(line);
+    } else {
+        (void)line;
+    }
 }
 
 bool try_rate_limited_log(std::atomic<ULONGLONG>& last_tick,
@@ -1704,9 +1711,6 @@ std::int64_t __fastcall hooked_input_scale_copy(
     // to center and clip the cursor, so a transient background write can recapture
     // the mouse after Alt-Tab.
     AcquireSRWLockExclusive(&g_joypad3_analog_lock);
-    const auto* const input_focus_gate = reinterpret_cast<const std::uint8_t*>(
-        g_module + 0x37EA62C);
-    const std::uint8_t saved_input_focus = *input_focus_gate;
     const DWORD previous = destination_index == 3
         ? g_force_joypad3_analog_thread.exchange(
               GetCurrentThreadId(), std::memory_order_acq_rel)
@@ -1726,11 +1730,8 @@ std::int64_t __fastcall hooked_input_scale_copy(
     // peer mask and look stick exist in the block only inside this call:
     // save before, restore right after the original returns.
     bool shared_bus_touched = false;
-    bool peer_look_injected = false;
     std::uint64_t shared_bus_saved_mask = 0;
     float shared_bus_saved_look[2] = {0.0F, 0.0F};
-    float peer_look[2] = {0.0F, 0.0F};
-    std::uint32_t peer_sequence = 0;
     if (destination_index == 3 && readable_bytes(source) >= 0x520) {
         coop::StatePacket peer{};
         const bool have_peer_input =
@@ -1794,10 +1795,6 @@ std::int64_t __fastcall hooked_input_scale_copy(
                  std::fabs(peer.look_stick[1]) > 0.001F)) {
                 axes[2] = peer.look_stick[0];
                 axes[3] = peer.look_stick[1];
-                peer_look[0] = peer.look_stick[0];
-                peer_look[1] = peer.look_stick[1];
-                peer_sequence = peer.sequence;
-                peer_look_injected = true;
             }
             shared_bus_touched = true;
         }
@@ -1831,49 +1828,6 @@ std::int64_t __fastcall hooked_input_scale_copy(
     }
     ReleaseSRWLockExclusive(&g_joypad3_analog_lock);
 
-    if (destination_index == 3) {
-        static std::atomic<ULONGLONG> last_analog_log{0};
-        const ULONGLONG now = GetTickCount64();
-        if (readable_bytes(joypad) >= 0xE8 && readable_bytes(source) >= 0x520) {
-            const auto* src = static_cast<const float*>(source);
-            const auto* dst = static_cast<const float*>(joypad);
-            char line[512]{};
-            std::snprintf(
-                line, sizeof(line),
-                "JOYPAD3-ANALOG source=(%g,%g) processed=(%g,%g) right=(%g,%g) "
-                "modeOverrides=%llu windowFocused=%u buttons src=0x%llx "
-                "pressed=0x%llx released=0x%llx current=0x%llx",
-                src[0], src[1], dst[0x48 / 4], dst[0x4C / 4], dst[0x50 / 4],
-                dst[0x54 / 4],
-                static_cast<unsigned long long>(
-                    g_force_joypad3_analog_hits.load(std::memory_order_relaxed)),
-                static_cast<unsigned>(saved_input_focus),
-                static_cast<unsigned long long>(
-                    *reinterpret_cast<const std::uint64_t*>(
-                        static_cast<const std::byte*>(source) + 0x518)),
-                static_cast<unsigned long long>(
-                    *reinterpret_cast<const std::uint64_t*>(
-                        static_cast<const std::byte*>(joypad) + 0xD0)),
-                static_cast<unsigned long long>(
-                    *reinterpret_cast<const std::uint64_t*>(
-                        static_cast<const std::byte*>(joypad) + 0xD8)),
-                static_cast<unsigned long long>(
-                    *reinterpret_cast<const std::uint64_t*>(
-                        static_cast<const std::byte*>(joypad) + 0xE0)));
-            try_rate_limited_log(last_analog_log, 2000, line);
-        }
-        static thread_local ULONGLONG last_turn_log = 0;
-        if (peer_look_injected && now - last_turn_log >= 250 &&
-            readable_bytes(joypad) >= 0x58) {
-            last_turn_log = now;
-            const auto* dst = static_cast<const float*>(joypad);
-            std::ostringstream line;
-            line << "AIM-TURN-RELAY seq=" << peer_sequence << " source=("
-                 << peer_look[0] << "," << peer_look[1] << ") processed=("
-                 << dst[0x50 / 4] << "," << dst[0x54 / 4] << ")";
-            force_log_line(line.str().c_str());
-        }
-    }
     return result;
 }
 
@@ -7176,16 +7130,8 @@ using PlayerAimBlendTickFunction = void(__fastcall*)(void*);
 PlayerAimBlendTickFunction g_original_player_aim_blend_tick = nullptr;
 
 void __fastcall hooked_player_aim_blend_tick(void* controller) {
-    std::uint8_t request_before = 0;
-    float blend_before = 0.0F;
     const bool readable = controller != nullptr &&
         readable_bytes(static_cast<std::byte*>(controller) + 0x8F0) >= 1;
-    if (readable) {
-        request_before = *reinterpret_cast<const std::uint8_t*>(
-            static_cast<const std::byte*>(controller) + 0x8A0);
-        blend_before = *reinterpret_cast<const float*>(
-            static_cast<const std::byte*>(controller) + 0x8EC);
-    }
     if (g_original_player_aim_blend_tick != nullptr) {
         g_original_player_aim_blend_tick(controller);
     }
@@ -7197,24 +7143,6 @@ void __fastcall hooked_player_aim_blend_tick(void* controller) {
         return;
     }
     force_peer_puppet_aim_blend_state(controller);
-
-    const std::uint8_t request_after =
-        *reinterpret_cast<const std::uint8_t*>(
-            static_cast<const std::byte*>(controller) + 0x8A0);
-    const float blend_after = *reinterpret_cast<const float*>(
-        static_cast<const std::byte*>(controller) + 0x8EC);
-    static ULONGLONG last_log = 0;
-    const ULONGLONG now = GetTickCount64();
-    const ULONGLONG log_interval = blend_after < 0.999F ? 30 : 500;
-    if (now - last_log > log_interval) {
-        last_log = now;
-        std::ostringstream line;
-        line << "AIM-BLEND-TICK request="
-             << static_cast<unsigned>(request_before) << "->"
-             << static_cast<unsigned>(request_after) << " blend="
-             << blend_before << "->" << blend_after;
-        force_log_line(line.str().c_str());
-    }
 }
 
 std::int64_t __fastcall hooked_player_aim_world_basis(
@@ -11504,7 +11432,6 @@ void apply_peer_held_weapon_state() {
     static std::uint32_t last_art_id = 0;
     static std::uint8_t last_mode = 0xFF;
     static int last_peer_gun = -1;
-    static ULONGLONG last_log = 0;
     static ULONGLONG last_switch_ms = 0;
     static ULONGLONG last_switch_fail_ms = 0;
     static std::uint32_t last_switch_art = 0;
@@ -11519,9 +11446,6 @@ void apply_peer_held_weapon_state() {
             : (peer.weapon_selected_mode > 0 ? 1 : 0);
     const int local_gun = read_gun_state(puppet);
     const bool gun_changed = peer_gun != last_peer_gun;
-    const bool has_effective_art_before =
-        puppet_has_weapon_art_id(puppet, display_art);
-    const bool give_allowed = puppet_weapon_give_allowed(display_art);
     const bool pickup_held = is_pickup_relay_art(display_art);
     int use_slot = find_weapon_slot_by_art_id(puppet, display_art);
     // Do not trust the sender's numeric slot for arts the puppet does not own.
@@ -11726,32 +11650,6 @@ void apply_peer_held_weapon_state() {
     last_mode = peer.weapon_selected_mode;
     last_peer_gun = peer_gun;
 
-    if (now - last_log > 250 || art_changed || mode_changed || gun_changed) {
-        last_log = now;
-        int draw_slot_log = -1;
-        std::uint32_t draw_state_log = 0;
-        const bool have_draw_state =
-            read_weapon_draw_state(puppet, draw_slot_log, draw_state_log);
-        std::ostringstream line;
-        line << "HELD-WEAPON-APPLY art=0x" << std::hex << effective_art
-             << " display=0x" << display_art
-             << " wire=0x" << peer.held_weapon_art_id
-             << " mode=" << std::dec
-             << static_cast<unsigned>(peer.weapon_selected_mode)
-             << " peerGun=" << peer_gun << " localGun=" << local_gun
-             << " requested=" << read_weapon_in_hands_slot(puppet)
-             << " attached="
-             << static_cast<unsigned>(capture_weapon_selected_mode(puppet))
-             << " gave=" << (gave ? 1 : 0)
-             << " select=" << (select_ok ? 1 : 0)
-             << " slot=" << use_slot
-             << " gunOk=" << (gun_ok ? 1 : 0)
-             << " has=" << (has_effective_art_before ? 1 : 0)
-             << " giveAllowed=" << (give_allowed ? 1 : 0)
-             << " drawSlot=" << (have_draw_state ? draw_slot_log : -99)
-             << " drawState=" << (have_draw_state ? draw_state_log : 0);
-        force_log_line(line.str().c_str());
-    }
 }
 
 void send_local_player_state() {
@@ -12045,91 +11943,6 @@ void send_local_player_state() {
                 log_line("weapon snapshot captured from live player");
             }
             have_weapon_snapshot = true;
-        } else if (!have_weapon_snapshot && g_weapon_capture_status != 0) {
-            static ULONGLONG fail_log_last = 0;
-            if (weapon_now - fail_log_last > 2000) {
-                fail_log_last = weapon_now;
-                std::ostringstream w;
-                w << "weapon snapshot capture failed status="
-                  << g_weapon_capture_status;
-                log_line(w.str().c_str());
-            }
-        } else if (!have_weapon_snapshot) {
-            static ULONGLONG unmapped_log_last = 0;
-            if (weapon_now - unmapped_log_last > 2000) {
-                unmapped_log_last = weapon_now;
-                std::ostringstream w;
-                w << "weapon snapshot has no mapped slots raw=";
-                for (std::size_t i = 0; i < 8; ++i) {
-                    if (i != 0) w << ',';
-                    w << "0x" << std::hex << g_weapon_capture_raw_ids[i];
-                }
-                w << " mask=0x" << g_weapon_capture_mapped_mask
-                  << std::dec << " registryCount=" << g_weapon_capture_registry_count;
-                log_line(w.str().c_str());
-            }
-        }
-    }
-    // DIAG (rate-limited): compare the RETAINED player (movement source) against the
-    // LIVE local player from the resolver (vtbl[0xA8]). The weapon controller +0x218
-    // is created lazily and may only exist on the LIVE object; if so, read the held
-    // weapon id at controller+0x2C there for replication via give-weapon.
-    {
-        auto rd_ptr = [](void* o, std::size_t off) -> std::uintptr_t {
-            if (o == nullptr) return 0;
-            auto* p = static_cast<std::byte*>(o) + off;
-            if (readable_bytes(p) < sizeof(void*)) return 0;
-            return reinterpret_cast<std::uintptr_t>(*reinterpret_cast<void**>(p));
-        };
-        auto held_id = [](std::uintptr_t ctrl) -> std::uint32_t {
-            if (ctrl == 0) return 0;
-            auto* p = reinterpret_cast<std::byte*>(ctrl) + 0x2C;
-            if (readable_bytes(p) < sizeof(std::uint32_t)) return 0;
-            return *reinterpret_cast<std::uint32_t*>(p);
-        };
-        // Sample EVERY send frame (~60 Hz): the weapon controller +0x218 may
-        // materialize only in brief windows a 1 s sample misses. Log the moment it
-        // first goes non-null (with held id) and a slow heartbeat otherwise.
-        void* live0 = resolve_live_player_safe(0);
-        void* live1 = resolve_live_player_safe(1);
-        // F8: one-shot scan of named sub-objects on the armed local player vs the
-        // gun-less clone, to locate the weapon-actor pointer (rate-limited 1 s).
-        if ((GetAsyncKeyState(VK_F8) & 0x8000) != 0) {
-            static ULONGLONG scan_last = 0;
-            if (weapon_now - scan_last > 1000) {
-                scan_last = weapon_now;
-                scan_named_subobjects(live0, "LOCAL");
-                scan_named_subobjects(live1, "CLONE");
-                dump_weapon_region(live0, "LOCAL");
-                dump_weapon_region(live1, "CLONE");
-                std::ostringstream gs;
-                gs << "GUN-STATE local=" << read_gun_state(live0)
-                   << " clone=" << read_gun_state(live1)
-                   << " (0=Holstered/back,1=GunOut/hands, neg=diag)";
-                log_line(gs.str().c_str());
-            }
-        }
-        const std::uintptr_t live0_ctrl = rd_ptr(live0, 0x218);
-        const std::uintptr_t live1_ctrl = rd_ptr(live1, 0x218);
-        static bool seen0 = false, seen1 = false;
-        static ULONGLONG diag_last = 0;
-        const bool transition = (live0_ctrl != 0 && !seen0) ||
-                                (live1_ctrl != 0 && !seen1);
-        if (live0_ctrl != 0) seen0 = true;
-        if (live1_ctrl != 0) seen1 = true;
-        if (transition || weapon_now - diag_last > 2000) {
-            diag_last = weapon_now;
-            std::ostringstream w;
-            w << "WEAPON-SEND " << (transition ? "**CTRL-MATERIALIZED** " : "")
-              << "live0=0x" << std::hex << reinterpret_cast<std::uintptr_t>(live0)
-              << " live0_c218=0x" << live0_ctrl
-              << " live0_held=0x" << held_id(live0_ctrl)
-              << " | live1=0x" << reinterpret_cast<std::uintptr_t>(live1)
-              << " live1_c218=0x" << live1_ctrl
-              << " live1_held=0x" << held_id(live1_ctrl)
-              << " everSeen0=" << std::dec << (seen0 ? 1 : 0)
-              << " everSeen1=" << (seen1 ? 1 : 0);
-            log_line(w.str().c_str());
         }
     }
     if (have_weapon_snapshot) {
@@ -12147,25 +11960,6 @@ void send_local_player_state() {
         have_raw_weapon_ids |= raw_id != 0;
     }
     if (have_raw_weapon_ids) pkt.flags |= 0x40;
-    {
-        // Diagnose raw-id capture instability (receiver saw slot-1 alternate
-        // pistol<->scoped after a pickup): log every CHANGE of the raw id set.
-        static std::uint32_t last_logged_raw[8]{};
-        if (std::memcmp(last_logged_raw, const_cast<const std::uint32_t*>(
-                                              g_weapon_capture_raw_ids),
-                        sizeof(last_logged_raw)) != 0) {
-            std::memcpy(last_logged_raw,
-                        const_cast<const std::uint32_t*>(g_weapon_capture_raw_ids),
-                        sizeof(last_logged_raw));
-            std::ostringstream line;
-            line << "RAW-IDS";
-            for (std::size_t i = 0; i < 8; ++i) {
-                line << " [" << i << "]=0x" << std::hex << last_logged_raw[i]
-                     << std::dec;
-            }
-            force_log_line(line.str().c_str());
-        }
-    }
     {
         void* weapon_src = resolve_live_player_safe(0);
         if (weapon_src == nullptr) {
@@ -12575,33 +12369,6 @@ void apply_peer_weapon_state() {
     coop::StatePacket peer{};
     void* puppet = nullptr;
     if (!latest_peer_state(peer, puppet) || (peer.flags & (0x20 | 0x40)) == 0) return;
-    // DIAG: does the clone itself have a drawable inventory? FillWeaponState reads
-    // *(player+0x1D88); if the puppet returns nonzero ids, the input-drive path can
-    // make its OWN weapon controller draw/switch/fire (no publish needed).
-    {
-        static ULONGLONG diag_last = 0;
-        const ULONGLONG diag_now = GetTickCount64();
-        if (diag_now - diag_last > 1000) {
-            diag_last = diag_now;
-            std::uint8_t clone_snap[coop::kWeaponSnapshotBytes]{};
-            const bool clone_armed =
-                capture_local_weapon_snapshot_minimal(puppet, clone_snap);
-            const auto* ids =
-                reinterpret_cast<const std::uint32_t*>(clone_snap);
-            void* ctrl = nullptr;
-            if (readable_bytes(static_cast<std::byte*>(puppet) + 0x1D88) >=
-                sizeof(void*)) {
-                ctrl = *reinterpret_cast<void**>(
-                    static_cast<std::byte*>(puppet) + 0x1D88);
-            }
-            std::ostringstream w;
-            w << "WEAPON-CLONE armed=" << (clone_armed ? 1 : 0) << " ctrl=0x"
-              << std::hex << reinterpret_cast<std::uintptr_t>(ctrl) << " ids=[";
-            for (int i = 0; i < 8; ++i) w << "0x" << ids[i] << (i < 7 ? "," : "");
-            w << std::dec << "]";
-            log_line(w.str().c_str());
-        }
-    }
     static std::uint8_t last[coop::kWeaponSnapshotBytes]{};
     static void* last_puppet = nullptr;
     static bool have_last = false;
@@ -14379,7 +14146,6 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     } else if (pkt.move_magnitude < 0.15F) {
         orientation_dot = blend_network_orientation(quat, pkt.quat, 0.18F);
     }
-    log_puppet_action_state(puppet, pkt);
     if (peer_aiming) {
         mirror_puppet_aim_add_to_fganim(puppet);
     }
@@ -14413,18 +14179,6 @@ void apply_puppet_transform_post(void* /*update_object*/) {
                 localp[0] += nx;
                 localp[2] += nz;
             }
-        }
-        static ULONGLONG last_position_log = 0;
-        const ULONGLONG position_now = GetTickCount64();
-        if (position_now - last_position_log >= 500) {
-            last_position_log = position_now;
-            std::ostringstream line;
-            line << "PUPPET-POS horizontal=" << std::sqrt(dx * dx + dz * dz)
-                 << " vertical=" << std::abs(dy)
-                 << " peerMove=" << pkt.move_magnitude
-                 << " hardSnap=" << (too_far ? 1 : 0)
-                 << " orientationDot=" << orientation_dot;
-            log_line(line.str().c_str());
         }
         return;
     }
@@ -16198,7 +15952,6 @@ char __fastcall hooked_player_try_start_fire(void* controller) {
         }
     }
     const char result = g_original_player_try_start_fire(controller);
-    log_player_fire_gate("input", controller, result != 0);
     if (controller != nullptr && readable_bytes(controller) >= 0x110) {
         void* const player = *reinterpret_cast<void* const*>(
             static_cast<const std::byte*>(controller) + 0x108);
@@ -16235,7 +15988,6 @@ char __fastcall hooked_player_check_shot_readiness(
     }
     const char result =
         g_original_player_check_shot_readiness(controller, context, time_value);
-    log_player_fire_gate("readiness", controller, result != 0);
     return result;
 }
 
@@ -17013,7 +16765,9 @@ void drive_remote_slot1_actions_tick() {
     if (g_puppet_materialize_screen1_cam) {
         materialize_screen1_camera_once();
     }
-    log_realsecond_observe_and_npc_spot_list(remote_player);
+    if constexpr (kEnableLegacyRuntimeDiagnostics) {
+        log_realsecond_observe_and_npc_spot_list(remote_player);
+    }
     // Held pickup gesture: re-activate the interact command while armed.
     apply_puppet_pickup_gesture(remote_player);
     void* fs = *reinterpret_cast<void**>(g_module + 0x3FE1088);
@@ -17023,7 +16777,7 @@ void drive_remote_slot1_actions_tick() {
     // DIAGNOSTIC: compare the real per-slot Joypad objects. The dispatch cursor is
     // FrameState+0xE88, but it passes cursor-0xD8 to Input_ScaleCopyVirtual, so the
     // actual objects begin at FrameState+0xDB0 with a 0xBF0 stride.
-    {
+    if constexpr (kEnableLegacyRuntimeDiagnostics) {
         static ULONGLONG last_ss = 0;
         static ULONGLONG mode_since = 0;
         static bool previous_f9 = false;
@@ -17140,30 +16894,33 @@ void drive_remote_slot1_actions_tick() {
     // branch OFF, to test whether the clone consumes slot-1 input AT ALL. If the clone
     // spins => binding OK (our struct values are the issue); if it does NOT spin =>
     // the clone is not bound to slot-1 input (the buried control->player binding).
-    if ((GetAsyncKeyState(VK_F9) & 0x8000) != 0) {
-        std::memset(branch1, 0, 0x28);  // struct branch disabled (enable byte 0)
-        *spin_gate = 1;                 // re-set every frame (the demo gate self-clears)
-        static ULONGLONG spin_log = 0;
-        const ULONGLONG spin_now = GetTickCount64();
-        if (spin_now - spin_log > 500) {
-            spin_log = spin_now;
-            std::ostringstream spin;
-            spin << "REMOTE-DRIVE F9 spin-test: destination=" << joypad_index
-                 << " source=1 byte gate forced, struct OFF";
-            auto* blk1 = reinterpret_cast<const std::byte*>(
-                g_module + 0x66E4220 + 0x530);
-            if (readable_bytes(blk1) >= 0x528) {
-                const auto* values = reinterpret_cast<const float*>(blk1);
-                spin << " previous-block axes=[" << values[0] << "," << values[1]
-                     << "," << values[2] << "," << values[3] << "; "
-                     << values[4] << "," << values[5] << "," << values[6]
-                     << "," << values[7] << "] buttons=0x" << std::hex
-                     << *reinterpret_cast<const std::uint64_t*>(blk1 + 0x518)
-                     << std::dec;
+    if constexpr (kEnableLegacyRuntimeDiagnostics) {
+        if ((GetAsyncKeyState(VK_F9) & 0x8000) != 0) {
+            std::memset(branch1, 0, 0x28);
+            *spin_gate = 1;
+            static ULONGLONG spin_log = 0;
+            const ULONGLONG spin_now = GetTickCount64();
+            if (spin_now - spin_log > 500) {
+                spin_log = spin_now;
+                std::ostringstream spin;
+                spin << "REMOTE-DRIVE F9 spin-test: destination=" << joypad_index
+                     << " source=1 byte gate forced, struct OFF";
+                auto* blk1 = reinterpret_cast<const std::byte*>(
+                    g_module + 0x66E4220 + 0x530);
+                if (readable_bytes(blk1) >= 0x528) {
+                    const auto* values = reinterpret_cast<const float*>(blk1);
+                    spin << " previous-block axes=[" << values[0] << ","
+                         << values[1] << "," << values[2] << "," << values[3]
+                         << "; " << values[4] << "," << values[5] << ","
+                         << values[6] << "," << values[7] << "] buttons=0x"
+                         << std::hex
+                         << *reinterpret_cast<const std::uint64_t*>(blk1 + 0x518)
+                         << std::dec;
+                }
+                log_line(spin.str().c_str());
             }
-            log_line(spin.str().c_str());
+            return;
         }
-        return;
     }
     std::memset(branch1, 0, 0x28);
     branch1[0] = std::byte{1};
@@ -17392,44 +17149,30 @@ void drive_remote_slot1_actions_tick() {
     // this DWORD to block+0x518 and derives edges at +0x508/+0x510 itself.
     *reinterpret_cast<std::uint32_t*>(branch1 + 0x10) =
         static_cast<std::uint32_t>(actions);
-    static std::uint64_t previous_actions = 0;
-    if (actions != previous_actions) {
-        std::ostringstream line;
-        line << "REMOTE-ACTIONS seq=" << peer.sequence
-             << " held=0x" << std::hex << peer.input_buttons
-             << " pressed=0x" << peer.buttons_pressed
-             << " released=0x" << peer.buttons_released
-             << " branch=0x" << actions << std::dec;
-        // Force-log locomotion so it is visible with g_logging_enabled=false.
-        if ((actions & kJoypadTraversalRelayMask) != 0 ||
-            (peer.buttons_pressed & kJoypadTraversalRelayMask) != 0 ||
-            (peer.input_buttons & kJoypadTraversalRelayMask) != 0) {
-            force_log_line(line.str().c_str());
-        } else {
+    if constexpr (kEnableLegacyRuntimeDiagnostics) {
+        static std::uint64_t previous_actions = 0;
+        if (actions != previous_actions) {
+            std::ostringstream line;
+            line << "REMOTE-ACTIONS seq=" << peer.sequence
+                 << " held=0x" << std::hex << peer.input_buttons
+                 << " pressed=0x" << peer.buttons_pressed
+                 << " released=0x" << peer.buttons_released
+                 << " branch=0x" << actions << std::dec;
             log_line(line.str().c_str());
+            previous_actions = actions;
         }
-        previous_actions = actions;
-    }
-    // Rate-limited drive diagnostic: confirm the feed runs, the magnitude, and that
-    // the engine's per-slot apply CONSUMED our struct into slot-1's block[1].
-    static ULONGLONG last_drive_log = 0;
-    const ULONGLONG now = GetTickCount64();
-    if (now - last_drive_log > 500) {
-        last_drive_log = now;
-        std::ostringstream d;
-        d << "REMOTE-DRIVE destination=" << joypad_index << " source=1 magnitude="
-          << magnitude
-          << " correction=(" << correction_x << "," << correction_z << ")"
-          << " sx=" << sx << " sy=" << sy << " flags=0x" << std::hex << actions
-          << std::dec;
-        auto* blk1 = joypad_resolved_input_block(joypad_index);
-        if (blk1 != nullptr) {
-            auto* bf = reinterpret_cast<const float*>(blk1);
-            d << " | block" << joypad_index << " sx=" << bf[0] << " sy=" << bf[1]
-              << " rawx=" << bf[4] << " rawy=" << bf[5] << " btn=0x" << std::hex
-              << *reinterpret_cast<const std::uint64_t*>(blk1 + 0x518) << std::dec;
+        static ULONGLONG last_drive_log = 0;
+        const ULONGLONG now = GetTickCount64();
+        if (now - last_drive_log > 500) {
+            last_drive_log = now;
+            std::ostringstream d;
+            d << "REMOTE-DRIVE destination=" << joypad_index
+              << " source=1 magnitude=" << magnitude
+              << " correction=(" << correction_x << "," << correction_z << ")"
+              << " sx=" << sx << " sy=" << sy << " flags=0x" << std::hex
+              << actions << std::dec;
+            log_line(d.str().c_str());
         }
-        log_line(d.str().c_str());
     }
 }
 
@@ -19156,19 +18899,19 @@ void net_tick() {
     if (foreground && (GetAsyncKeyState(VK_NUMPAD7) & 1) != 0) {
         // Numpad 7: split-login + bind local-player-1 to the puppet, then run the
         // read-only registration diagnostics.
-        g_logging_enabled = true;
         if (!g_realsecond_experiment) {
             split_login_persistent();
             g_realsecond_experiment = true;
-            log_line("REALSECOND diagnostics = ON (split-login + bind local-player-1)");
+            boot_log_line(
+                "REALSECOND diagnostics = ON (split-login + bind local-player-1)");
         } else {
             g_realsecond_experiment = false;
-            log_line("REALSECOND diagnostics = OFF");
+            boot_log_line("REALSECOND diagnostics = OFF");
         }
     }
     if (foreground && (GetAsyncKeyState(VK_NUMPAD4) & 1) != 0) {
-        g_logging_enabled = true;
-        log_line("REALSECOND-DRIVE disabled: 42FCF0 is Npc vtable+0x410");
+        boot_log_line(
+            "REALSECOND-DRIVE disabled: 42FCF0 is Npc vtable+0x410");
     }
     if (foreground && (GetAsyncKeyState(VK_SCROLL) & 1) != 0) {
         g_local_animation_mirror_test = !g_local_animation_mirror_test;
@@ -20638,15 +20381,6 @@ void __fastcall hooked_update(void* object) {
 char __fastcall hooked_player_input_state_update(void* player) {
     const bool is_local = player != nullptr && player == retained_player_object(0);
     const bool is_remote = player != nullptr && player == retained_player_object(1);
-    const int role = is_local ? 0 : (is_remote ? 1 : -1);
-    float before_magnitude = 0.0F;
-    float before_vector[4]{};
-    if (role >= 0 && readable_bytes(static_cast<std::byte*>(player) + 0x3A40) >= 1) {
-        before_magnitude = *reinterpret_cast<const float*>(
-            static_cast<const std::byte*>(player) + 0x3A1C);
-        std::memcpy(before_vector, static_cast<const std::byte*>(player) + 0x3A30,
-                    sizeof(before_vector));
-    }
 
     if (is_remote) {
         apply_peer_pickup_animation(player);
@@ -20657,10 +20391,10 @@ char __fastcall hooked_player_input_state_update(void* player) {
             capture_local_joypad_command_mask(player),
             std::memory_order_relaxed);
         std::uint32_t active_hash = 0;
-        if (player_any_melee_button_active(player, &active_hash)) {
+        if (g_enable_puppet_melee_button_relay &&
+            player_any_melee_button_active(player, &active_hash)) {
             static std::uint32_t prev_probe_hash = 0;
-            if (g_enable_puppet_melee_button_relay &&
-                active_hash != prev_probe_hash) {
+            if (active_hash != prev_probe_hash) {
                 prev_probe_hash = active_hash;
                 log_melee_relay_event("MELEE-PROBE", player,
                                       kJoypadMeleeTriangleButtonMask);
@@ -20783,61 +20517,6 @@ char __fastcall hooked_player_input_state_update(void* player) {
         }
         apply_puppet_sustained_aim_input(player);
     }
-    if (role < 0 || readable_bytes(static_cast<std::byte*>(player) + 0x3A40) < 1) {
-        return result;
-    }
-
-    static ULONGLONG last_log[2]{};
-    const ULONGLONG now = GetTickCount64();
-    if (now - last_log[role] < 500) {
-        return result;
-    }
-    last_log[role] = now;
-    const auto* base = static_cast<const std::byte*>(player);
-    const int joypad_index = *reinterpret_cast<const std::int32_t*>(base + 0x39B8);
-    const float after_magnitude = *reinterpret_cast<const float*>(base + 0x3A1C);
-    const auto* after_vector = reinterpret_cast<const float*>(base + 0x3A30);
-    const auto* raw_stick = reinterpret_cast<const float*>(base + 0x39C8);
-    std::ostringstream line;
-    line << "PLAYER-INPUT-UPDATE role=" << (role == 0 ? "local" : "remote")
-         << " joypad=" << joypad_index << " raw=(" << raw_stick[0] << ","
-         << raw_stick[1] << ") beforeMag=" << before_magnitude << " afterMag="
-         << after_magnitude << " beforeVec=(" << before_vector[0] << ","
-         << before_vector[1] << "," << before_vector[2] << ") afterVec=("
-         << after_vector[0] << "," << after_vector[1] << "," << after_vector[2]
-         << ")";
-    void* const fs = *reinterpret_cast<void**>(g_module + 0x3FE1088);
-    if (fs != nullptr && joypad_index >= 0 && joypad_index < 6) {
-        auto* const joypad = static_cast<std::byte*>(fs) + 0xDB0 +
-                             0xBF0 * joypad_index;
-        if (readable_bytes(joypad) >= 0xBE9) {
-            const auto hash = reinterpret_cast<StringHashFunction>(
-                g_module + kStringHashRva);
-            const std::uint32_t move_hash = hash("move", 4, 0);
-            using IsCommandDisabledFunction = bool(__fastcall*)(void*, std::uint32_t);
-            using GetCommandFunction = void*(__fastcall*)(void*, std::uint32_t, int);
-            const auto is_disabled = reinterpret_cast<IsCommandDisabledFunction>(
-                g_module + 0x183A3D0);
-            const auto get_command = reinterpret_cast<GetCommandFunction>(
-                g_module + 0x183ABF0);
-            void* const command = get_command(joypad, move_hash, 0);
-            const int binding = command != nullptr && readable_bytes(command) >= 28
-                ? *reinterpret_cast<const std::int32_t*>(
-                      static_cast<const std::byte*>(command) + 24)
-                : -1;
-            const auto* processed0 = reinterpret_cast<const float*>(joypad + 0x48);
-            const auto* processed1 = reinterpret_cast<const float*>(joypad + 0x50);
-            line << " joypadReset=" << static_cast<int>(
-                        *reinterpret_cast<const std::uint8_t*>(joypad + 0xBE0))
-                 << " moveDisabled=" << (is_disabled(joypad, move_hash) ? 1 : 0)
-                 << " moveCommand=0x" << std::hex
-                 << reinterpret_cast<std::uintptr_t>(command) << std::dec
-                 << " binding=" << binding << " processed0=(" << processed0[0]
-                 << "," << processed0[1] << ") processed1=(" << processed1[0]
-                 << "," << processed1[1] << ")";
-        }
-    }
-    log_line(line.str().c_str());
     return result;
 }
 
@@ -20885,19 +20564,6 @@ void __fastcall hooked_player_input_command_state_update(void* state) {
     std::memcpy(player + 0x39C8, peer.move_stick, sizeof(peer.move_stick));
     *reinterpret_cast<float*>(player + 0x3A1C) = corrected_magnitude;
     std::memcpy(player + 0x3A30, corrected_world, sizeof(corrected_world));
-
-    static std::atomic<ULONGLONG> last_move_log{0};
-    const auto* root = reinterpret_cast<const float*>(
-        player + kPlayerLocalPosOffset);
-    char line[384]{};
-    std::snprintf(
-        line, sizeof(line),
-        "PRE-CONSUMER-MOVE raw=(%g,%g) mag=%g world=(%g,%g,%g) correction=(%g,%g) "
-        "root=(%g,%g,%g)",
-        peer.move_stick[0], peer.move_stick[1], peer.move_magnitude,
-        peer.move_world[0], peer.move_world[1], peer.move_world[2],
-        correction_x, correction_z, root[0], root[1], root[2]);
-    try_rate_limited_log(last_move_log, 2000, line);
 }
 
 void* allocate_executable_near(const void* target, std::size_t size) {
@@ -21285,6 +20951,25 @@ char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
     void* const puppet_draw = *reinterpret_cast<void**>(
         static_cast<std::byte*>(puppet) + 0x198);
     if (parent_draw != puppet_draw) {
+        return result;
+    }
+
+    if constexpr (!kEnableLegacyRuntimeDiagnostics) {
+        // Cloth repair only needs a recent proof that this puppet still owns a
+        // ProcessCharCloth child. Avoid the old full DrawControl/mesh/instance
+        // snapshot on this per-attachable render callsite.
+        if (attachable != nullptr && readable_bytes(attachable) >= 0x8C1 &&
+            *reinterpret_cast<const std::uintptr_t*>(attachable) ==
+                g_module + kProcessCharClothVtableRva) {
+            g_remote_cloth_player.store(
+                reinterpret_cast<std::uintptr_t>(puppet),
+                std::memory_order_relaxed);
+            g_remote_cloth_parent_draw.store(
+                reinterpret_cast<std::uintptr_t>(parent_draw),
+                std::memory_order_relaxed);
+            g_remote_cloth_seen_ms.store(
+                GetTickCount64(), std::memory_order_release);
+        }
         return result;
     }
 
@@ -23259,7 +22944,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14co (melee relay removed, log throttle)");
+        "TLL hook DLL init 2026-07-15cp (production diagnostics disabled)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
@@ -23285,10 +22970,9 @@ DWORD WINAPI install_hook(void*) {
     // 2026-07-13 runtime discriminator; leave the dormant code available for
     // reference without installing another hot-path hook.
     // Aim animation path (CONFIRMED visible for pistol ADS when enabled). Pose-seed
-    // snapshot lag is gated separately; leave diagnostic probes off.
+    // snapshot lag is gated separately. The GunMoveShield entry/wrapper hooks were
+    // pass-through diagnostics, so production does not patch those hot paths.
     if (g_enable_aim_animation_relays) {
-        install_player_gun_move_shield_entry_probe();
-        install_player_gun_move_shield_wrapper_probe();
         install_player_aim_eligibility_callsite_relay();
         install_player_aim_additive_permission_callsite_relay();
         install_player_aim_blend_target_callsite_relay();

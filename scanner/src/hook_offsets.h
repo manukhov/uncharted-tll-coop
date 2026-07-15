@@ -287,10 +287,9 @@ constexpr bool kEnableBuiltInSlot1NetPlayerScaffold = false;
 // breakpoints, and poll game objects from a separate thread. They are incompatible
 // with a stable two-instance runtime and are never needed by the current co-op path.
 constexpr bool kEnableLegacyRuntimeDiagnostics = false;
-// Clean remote-Player feasibility test: capture only the normal slot-0 spawn
-// arguments. This installs one execute breakpoint that disarms itself after the
-// capture; it does not start the old diagnostic thread or input/camera probes.
-constexpr bool kEnableSpawnCaptureDiagnostic = true;
+// The remote-Player feasibility capture is complete. Do not suspend every game
+// thread and arm a hardware breakpoint in the production co-op baseline.
+constexpr bool kEnableSpawnCaptureDiagnostic = false;
 constexpr std::uintptr_t kAddJoypadDisabledCommandsRva = 0x1839FB0;
 constexpr std::uintptr_t kInputScaleCopyRva = 0x183B410;
 constexpr std::uintptr_t kGameInfoVtableRva = 0x29040B8;

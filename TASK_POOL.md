@@ -66,6 +66,12 @@
       cm/ck/ch REJECTED (crash/hang). Do not re-enable without alternative to
       global `0x183ABF0` patch. Static anchors kept: queue `0x141273FA0` @
       `controller+0x150`, TryAnim `0x1410FC9F0`, net gate `g_NetModeFlags+3`.
+- [~] **Production performance baseline (build cp, runtime pending):** fixed the
+      Numpad7 permanent logging enable; compile-time parked force logs, hot
+      input/Joypad/weapon diagnostics, spawn DR0 capture, and pass-through
+      GunMoveShield probes. Cloth repair retains a cheap vtable/parent heartbeat
+      without DrawControl mesh scans. Test two fresh copies before reopening
+      melee; see `reports/runtime_hot_path_audit_20260715.md`.
 - [~] **Puppet ADS visual aim (PARKED 2026-07-14):** Upstream CONFIRMED; downstream
       eval/render gap. **REJECTED:** palette/skinning/pubState/PerJoint workspace paths.
       **cd:** stable hook, user visual unchanged. Inject OFF in `ce`.

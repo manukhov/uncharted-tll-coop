@@ -27703,3 +27703,24 @@ HYPOTHESIS for the two remaining mechanisms**.
   native `PlayerInputCommandState::IsCommandActive` @ `0x183ABF0`) — breaks
   native GiveWeapon path while `gunOk=1 giveAllowed=1`. **Stable baseline:** both
   melee flags false; boot string `2026-07-14co`. Melee anim sync PARKED.
+
+### 2026-07-15 STATIC: production diagnostics caused avoidable hot-path load
+
+The latest co session (PIDs 10800/2480) proved that Numpad7's unbalanced
+`g_logging_enabled=true` left ordinary runtime logging active. In roughly the
+interval represented by 242 half-second `PLAYER-INPUT-UPDATE` samples, the log
+also accumulated sustained Joypad, movement, weapon, position, and cloth
+telemetry; the shared file reached 17,149,302 bytes.
+
+Source audit independently found per-conversion formatting in
+`hooked_input_scale_copy`, diagnostic `GetCommand 0x14183ABF0` calls in the
+Player input vtable hook, full DrawControl mesh/instance scans at the
+NdAttachable post-joint callsite `0x141ED63F7`, and the completed spawn
+experiment still arming DR0 on every game thread.
+
+Build `2026-07-15cp` keeps functional relay ownership but compile-time parks
+runtime logs and legacy Joypad probes, disables spawn DR0 capture, removes pure
+GunMoveShield pass-through probes, and reduces cloth observation to a vtable and
+parent identity heartbeat. Release build succeeds. Status: **STATIC /
+HYPOTHESIS ready for runtime**, with prediction and competitors in
+`reports/runtime_hot_path_audit_20260715.md`.

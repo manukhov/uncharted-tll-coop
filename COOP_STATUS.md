@@ -1,5 +1,25 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## 2026-07-15 production hot-path cleanup — build **cp**
+
+**STATIC / runtime pending:** Composer's melee work ended at the confirmed stable
+`co` baseline with both melee flags false. Before reopening melee, build `cp`
+removes production-unneeded diagnostics that were still loading both instances:
+
+- Numpad7 no longer leaves `g_logging_enabled=true`;
+- runtime force logging, hot input/joypad/weapon snapshots, and the completed
+  spawn hardware breakpoint are disabled;
+- sender live-controller comparison and fire-gate state dumps are removed while
+  their functional weapon capture/fire suppression remain;
+- the NdAttachable cloth hook keeps only the cheap ProcessCharCloth identity
+  signal required by the working native `ChangeLookId` repair;
+- pass-through GunMoveShield entry/wrapper probes are no longer installed.
+
+Release build succeeds. Functional pickup, weapon, transform, cloth, and aim relay
+owners remain installed. Runtime prediction and evidence:
+`reports/runtime_hot_path_audit_20260715.md`. Do not call this CONFIRMED until a
+fresh two-instance run shows boot-only log growth and unchanged co-op behavior.
+
 ## Stable baseline (2026-07-15) — build **co** `2026-07-14co`
 
 **CONFIRMED (user):** puppet weapon give/retrieve works again on dual-instance
