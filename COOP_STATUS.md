@@ -2938,6 +2938,21 @@ run-to-ADS enters cleanly after the short dwell; stationary horizontal facing st
 correct. Vertical remains the next static task below native channel publication.
 Report: `reports/player_aim_fganim_axis_residual_pitch_20260715.md`.
 
+### Build dd partial runtime; build de adds established-ADS locomotion
+
+The user confirmed dd no longer retains a stale aim direction during movement, but
+it also drops ADS completely and shows ordinary running. The stationary check must
+gate ADS entry, not the lifetime of an already established GunMove session.
+
+Build de uses a two-phase state machine: 250 ms stationary dwell opens ADS; the
+existing 180 ms controller ramp must then reach 0.95 before a moving-ADS session is
+latched. Once established, movement keeps all ADS owners active until RMB release.
+Run-first ADS remains blocked; a 500 ms evaluation gap or retained Player pointer
+change resets the latch across loads. Prediction: stand/aim briefly, then move ->
+authored aim-walk remains; start running before aim -> no folded ADS admission until
+stopping. Vertical is unchanged and remains the next downstream static task. Full record:
+`reports/player_aim_fganim_axis_residual_pitch_20260715.md`.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

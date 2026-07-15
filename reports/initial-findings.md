@@ -27969,3 +27969,24 @@ while retaining confirmed stationary horizontal facing. Vertical pitch is expect
 to remain absent pending static tracing below the published aim channels. Full
 evidence and competing hypotheses are in
 `reports/player_aim_fganim_axis_residual_pitch_20260715.md`.
+
+### 2026-07-15 build dd runtime: STATIC latched aim-walk for build de
+
+- **PARTIAL CONFIRMATION:** dd removed the stale fixed aim point during movement,
+  confirming that all mod-owned ADS hooks must share one ownership decision.
+- **REJECTED as complete:** its decision was level-sensitive, so any movement
+  closed ADS and the puppet returned to ordinary running while RMB stayed held.
+- **STATIC:** `GunMoveController` builder `0x140E8D140` selects authored
+  `*player-ap-strafe-*-set*` graphs for GunMove-family states, while common
+  dispatcher `0x140E84440` consumes `speed-gunmove`. Movement is therefore valid
+  inside an established GunMove session; the dangerous case is admission from
+  active locomotion, not movement after settled ADS.
+- **STATIC:** build de retains dd's 250 ms stationary admission, then latches the
+  session only when the existing 180 ms controller ramp reaches 0.95. Movement
+  preserves the complete ADS chain only after that point. RMB release, a packet
+  gap over 500 ms, retained Player replacement, disabled auto relay, or manual F8
+  mode resets/isolates the latch.
+
+Prediction: settled stationary ADS transitions into authored aim-walk instead of
+plain running; run-first ADS remains deferred until stationary and does not restore
+the folded/kneeling entry. Vertical remains below native aim-channel publication.

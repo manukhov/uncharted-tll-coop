@@ -176,3 +176,48 @@ holding ADS no longer retains the old aim point and native gait owns the complet
 pose; stationary horizontal direction remains correct. Vertical pitch should stay
 absent, which would preserve the now-confirmed boundary below native aim-channel
 publication rather than falsify this transition fix.
+
+## Build dd runtime and build de aim-session latch
+
+**PARTIAL CONFIRMATION:** the stale fixed aim point is gone while moving, proving
+that the split controller ownership identified after dc was real. **REJECTED as a
+complete gait fix:** dd closes the level-sensitive stationary gate as soon as
+movement begins, so the puppet exits ADS and runs normally even though the sender
+continues holding RMB.
+
+This distinguishes two operations that dd incorrectly combined:
+
+1. Admission into ADS must remain stationary and delayed, because run-to-ADS is the
+   folded transition and broad moving `0x200` previously produced kneeling slide.
+2. An already completed ADS session must remain admitted during movement, because
+   `GunMoveController` explicitly selects authored `*player-ap-strafe-*-set*`
+   graphs and consumes movement speed (`speed-gunmove`) inside the same GunMove
+   dispatcher.
+
+The old default-on `0x200` rejection did not distinguish these phases: it injected
+ADS globally while locomotion was already active. It therefore does not reject
+movement after a clean stationary GunMove transition.
+
+### Competing hypotheses
+
+- Restore all moving ADS immediately: rejected because it recreates the old
+  run-to-ADS admission path.
+- Keep dd's stationary level gate: rejected by the user's no-aim running result.
+- Latch at the first admitted frame: weakened because the controller/action blend
+  is still at entry and can reproduce the folded pose.
+- Latch only after the stationary controller blend completes: selected.
+
+Build de keeps the 250 ms stationary admission dwell. The existing 180 ms
+`force_peer_puppet_aim_blend_state` ramp sets a session latch only at blend at least
+0.95. Once latched, the complete ADS chain remains enabled through movement until
+RMB release. A gap longer than 500 ms resets both dwell and latch; the latch is
+also bound to the retained Player pointer and resets when that object disappears or
+changes, so a location transition cannot inherit the previous ADS session. Manual
+F8 remains isolated and cannot seed the automatic latch.
+
+**Prediction:** after holding ADS while stationary for roughly half a second, the
+puppet continues aiming when movement starts and uses its GunMove locomotion rather
+than plain running. Run-first-then-aim remains blocked until the sender stops, so
+the folded entry and historical kneeling-slide admission path do not return. RMB
+release exits ADS normally; location reload cannot retain the latch. Vertical aim
+remains unchanged and downstream.

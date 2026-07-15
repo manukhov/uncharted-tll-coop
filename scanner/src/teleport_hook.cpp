@@ -113,6 +113,9 @@ std::atomic<bool> g_puppet_fganim_world_turn_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_blended_seen{false};
 std::atomic<ULONGLONG> g_puppet_stationary_aim_since_ms{0};
+std::atomic<ULONGLONG> g_puppet_aim_gate_last_eval_ms{0};
+std::atomic<bool> g_puppet_aim_session_latched{false};
+std::atomic<void*> g_puppet_aim_session_owner{nullptr};
 using PlayerInputStateUpdateFunction = char(__fastcall*)(void*);
 PlayerInputStateUpdateFunction g_original_player_input_state_update = nullptr;
 using PlayerInputCommandStateUpdateFunction = void(__fastcall*)(void*);
@@ -2436,17 +2439,36 @@ bool puppet_aim_press_relay_enabled() {
     return g_puppet_relay_aim_press;
 }
 
+void reset_puppet_auto_aim_admission() {
+    g_puppet_stationary_aim_since_ms.store(0, std::memory_order_release);
+    g_puppet_aim_session_latched.store(false, std::memory_order_release);
+}
+
 bool puppet_stationary_aim_ready_for_peer(const coop::StatePacket& peer) {
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG previous_eval = g_puppet_aim_gate_last_eval_ms.exchange(
+        now, std::memory_order_acq_rel);
+    if (previous_eval != 0 && now - previous_eval > 500) {
+        reset_puppet_auto_aim_admission();
+    }
     if (!peer_packet_aim_active(peer)) {
-        g_puppet_stationary_aim_since_ms.store(0, std::memory_order_release);
+        reset_puppet_auto_aim_admission();
         return false;
     }
     if (g_puppet_relay_aim_press) {
+        // F8 is an independent broad A/B mode; do not let it seed the automatic
+        // moving-ADS latch when the toggle is later disabled.
+        reset_puppet_auto_aim_admission();
         return true;
     }
     if (!g_puppet_auto_stationary_aim_press) {
-        g_puppet_stationary_aim_since_ms.store(0, std::memory_order_release);
+        reset_puppet_auto_aim_admission();
         return false;
+    }
+    // Once the stationary entry ramp completed, keep the authored GunMove ADS
+    // session alive through locomotion until RMB release or a packet/lifecycle gap.
+    if (g_puppet_aim_session_latched.load(std::memory_order_acquire)) {
+        return true;
     }
     if (valid_network_movement(peer) && peer.move_magnitude > 0.08F) {
         g_puppet_stationary_aim_since_ms.store(0, std::memory_order_release);
@@ -2463,7 +2485,6 @@ bool puppet_stationary_aim_ready_for_peer(const coop::StatePacket& peer) {
     // A low-speed network sample arrives before the native run-to-idle graph has
     // settled. Let locomotion finish before admitting every ADS controller hook.
     constexpr ULONGLONG kStationaryAimDwellMs = 250;
-    const ULONGLONG now = GetTickCount64();
     ULONGLONG since = g_puppet_stationary_aim_since_ms.load(
         std::memory_order_acquire);
     if (since == 0) {
@@ -7226,6 +7247,13 @@ void force_peer_puppet_aim_blend_state(void* controller) {
             *reinterpret_cast<float*>(bytes + 0x8EC) = ramp;
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    // The stationary gate starts ADS, but moving ownership is granted only after
+    // the same forced blend has completed. This distinguishes clean GunMove
+    // locomotion from the rejected experiment that injected 0x200 while running.
+    if (!g_puppet_relay_aim_press && g_puppet_auto_stationary_aim_press &&
+        ramp >= 0.95F) {
+        g_puppet_aim_session_latched.store(true, std::memory_order_release);
     }
 }
 
@@ -14362,10 +14390,17 @@ void log_puppet_action_state(
 void apply_puppet_transform_post(void* /*update_object*/) {
     void* puppet = retained_player_object(1);
     if (puppet == nullptr || !g_puppet_net_apply) {
+        g_puppet_aim_session_owner.store(nullptr, std::memory_order_release);
+        reset_puppet_auto_aim_admission();
         if (puppet == nullptr) {
             g_puppet_fganim_data.store(nullptr, std::memory_order_release);
         }
         return;
+    }
+    void* const previous_aim_owner = g_puppet_aim_session_owner.exchange(
+        puppet, std::memory_order_acq_rel);
+    if (previous_aim_owner != puppet) {
+        reset_puppet_auto_aim_admission();
     }
     void* fg = nullptr;
     if (readable_bytes(
@@ -23377,7 +23412,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15dd (settled ADS transition gate)");
+        "TLL hook DLL init 2026-07-15de (latched aim-walk after settled ADS)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
