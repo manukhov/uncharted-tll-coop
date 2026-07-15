@@ -27697,3 +27697,9 @@ HYPOTHESIS for the two remaining mechanisms**.
   regressed (`HELD-WEAPON-APPLY gave=0`). **co:** entire melee button relay off;
   `PlayerInputCommandState IsCommandActive` hook not installed; joypad force keeps
   traversal/cover only.
+- **CONFIRMED (build 2026-07-14co, user 2026-07-15):** puppet weapon give/retrieve
+  restored on dual-instance coop after removing melee relay. Root cause of cn
+  regression: `install_player_input_is_command_active_force` (16-byte steal on
+  native `PlayerInputCommandState::IsCommandActive` @ `0x183ABF0`) — breaks
+  native GiveWeapon path while `gunOk=1 giveAllowed=1`. **Stable baseline:** both
+  melee flags false; boot string `2026-07-14co`. Melee anim sync PARKED.

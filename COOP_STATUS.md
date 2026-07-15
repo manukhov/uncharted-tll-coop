@@ -1,5 +1,28 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Stable baseline (2026-07-15) — build **co** `2026-07-14co`
+
+**CONFIRMED (user):** puppet weapon give/retrieve works again on dual-instance
+coop. **FIXED:** do not install `PlayerInputCommandState IsCommandActive`
+melee force-hook (`install_player_input_is_command_active_force`); that 16-byte
+patch on the native `0x183ABF0` path broke `GiveWeapon` / `HELD-WEAPON-APPLY`
+(`gave=0` while `gunOk=1 giveAllowed=1`).
+
+**Active flags (do not re-enable without new static quota + runtime plan):**
+- `g_enable_puppet_melee_button_relay = false` — no MELEE-SEND/RECV, no melee
+  puppet force in joypad hook
+- `g_enable_puppet_melee_exec_relay = false` — no queue push / TryAnim / publish
+- Joypad3 force-hook: jump / evade / crouch / cover only (melee branches gated off)
+- Log throttle: global 2 s on `JOYPAD3-ANALOG` / `PRE-CONSUMER-MOVE`
+
+**Melee anim sync:** PARKED until a design avoids patching
+`PlayerInputCommandState IsCommandActive` globally. Prior cg/cj/cm paths REJECTED
+(crash, hang, weapon regression). Static queue path (`0x141273FA0`,
+`controller+0x150`) retained in code but unreachable while flags false.
+
+**Next agent:** stay on **co** for locomotion / weapon / cover / cloth work. Melee
+is out of scope until explicitly re-opened.
+
 ## Turn note (2026-07-15, Cursor - melee removed co)
 
 **REJECTED (cn, user):** melee still non-functional; weapon give broke on puppet.
@@ -10,8 +33,7 @@
 **co:** `g_enable_puppet_melee_button_relay=false` — no MELEE-SEND/RECV, no
 puppet melee force, **do not install** PlayerInputCommandState force-hook;
 joypad hook keeps jump/evade/crouch/cover only. Exec path stays parked. Boot
-`2026-07-14co`. Next: verify weapon give + stable dual boot before any new anim
-work.
+`2026-07-14co`. **CONFIRMED (user):** weapon give restored.
 
 ## Turn note (2026-07-15, Cursor - melee cm crash, cn stable)
 
