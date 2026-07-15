@@ -154,6 +154,7 @@ constexpr bool g_enable_puppet_melee_exec_relay = false;
 // this patches only two press queries inside the stock melee dispatcher.
 constexpr bool g_enable_puppet_melee_callsite_relay = true;
 std::atomic<ULONGLONG> g_local_melee_press_until_ms{0};
+std::atomic<bool> g_melee_local_square_logged{false};
 std::atomic<std::uint32_t> g_melee_probe_stage{0};
 std::atomic<ULONGLONG> g_melee_square_injected_ms{0};
 std::atomic<bool> g_melee_square_false_logged{false};
@@ -1554,7 +1555,37 @@ char __fastcall hooked_joypad_is_command_active(
             }
         }
     }
-    return g_original_joypad_is_command_active(joypad, hash, edge);
+    const char original =
+        g_original_joypad_is_command_active(joypad, hash, edge);
+    if (original && g_enable_puppet_melee_callsite_relay && joypad != nullptr &&
+        g_module != 0 && hash == melee_relay_hashes().square) {
+        void* const local_player = retained_player_object(0);
+        void* const frame_state =
+            *reinterpret_cast<void**>(g_module + kFrameStateGlobalRva);
+        if (local_player != nullptr && frame_state != nullptr &&
+            readable_bytes(static_cast<std::byte*>(local_player) +
+                           kPlayerJoypadIndexOffset) >= sizeof(std::int32_t)) {
+            const auto joypad_index = *reinterpret_cast<const std::int32_t*>(
+                static_cast<const std::byte*>(local_player) +
+                kPlayerJoypadIndexOffset);
+            if (joypad_index >= 0 && joypad_index < 6) {
+                void* const local_joypad =
+                    static_cast<std::byte*>(frame_state) +
+                    kFrameStateScreenBlockBaseOffset +
+                    kFrameStateScreenBlockStride *
+                        static_cast<std::uintptr_t>(joypad_index);
+                if (joypad == local_joypad) {
+                    g_local_melee_press_until_ms.store(
+                        GetTickCount64() + 150, std::memory_order_release);
+                    if (!g_melee_local_square_logged.exchange(
+                            true, std::memory_order_acq_rel)) {
+                        boot_log_line("MELEE-STAGE local-square-captured");
+                    }
+                }
+            }
+        }
+    }
+    return original;
 }
 
 bool install_joypad3_is_command_active_force() {
@@ -23303,7 +23334,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15cw (melee square stage probes)");
+        "TLL hook DLL init 2026-07-15cx (local square capture + stage probes)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

@@ -39,6 +39,13 @@
       remote consumption to the independent square path. Global PlayerInput
       detour and manual dispatcher/queue/anim paths remain parked.
 
+- [~] **Melee square sender/consumer stages (build cv-cx, 2026-07-15):** cv was
+      stable but invisible. cw then proved one free attack never reached even the
+      receiver square-force stage, rejecting lmouse/R1-only local capture. cx
+      captures original-true `melee-square` on retained slot 0's live Joypad from
+      `Player+0x39B8`; next tap must log sender `local-square-captured`, receiver
+      `square-query-forced`, then classify queue `+0x210` and TryAnim.
+
 - [x] **Grenade world-object relay (2026-07-11):** CONFIRMED v6 — `GRNE` Execute
       spawn + `GRNK` kinematics stream + derived transform write + `fuse_end=now+3s`.
       Peer sees correct arc and landing explosion.

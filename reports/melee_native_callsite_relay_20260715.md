@@ -207,3 +207,35 @@ querying the controller. A delayed zero identifies queue insertion/resolution;
 queue one without TryAnim identifies the intervening movement gates; TryAnim zero
 identifies the helper gates; TryAnim one with no visible animation moves the bug
 strictly downstream into animation publication/evaluation.
+
+## 2026-07-15 build cw result and cx local-square capture
+
+**REJECTED at the sender boundary:** the fresh cw run connected both peers and
+materialized both remote Players, but one user melee tap produced none of the
+stage lines. In particular, the receiver never logged `square-query-forced`.
+This falsifies the assumption that the two local PlayerInput callsites cover a
+free PC melee tap; the queue and TryAnim hypotheses were not exercised.
+
+The corrected sender hypothesis is that a free melee tap is observed at the
+dispatcher-owned Joypad query itself. Three independent observations select it:
+
+1. dispatcher disassembly passes literal `melee-square` to
+   `Joypad_IsCommandActive` at `0x141272B99` and immediately builds the native
+   queue payload on success;
+2. `PlayerInputCommandState_GetJoypadIndex 0x1402B1890` and the confirmed
+   `Player+0x39B8` binding select the actual local Joypad (runtime slot 0 = 2),
+   distinct from the PlayerInput lmouse/R1 query surface;
+3. the earlier cg runtime probe observed a real local active hash
+   `0xd338e42f`, exactly the hash of `melee-square`, while cw proved that the
+   lmouse/R1-only sender pulse remained absent for the same visible action.
+
+Build cx therefore captures only an original-true `melee-square` result on the
+Joypad selected by retained slot 0's live `Player+0x39B8`. It keeps the existing
+R1/lmouse callsites as context-specific fallbacks, sets the same bounded 150 ms
+wire pulse, and adds only one sender marker, `local-square-captured`.
+
+Falsifiable prediction: one free melee tap logs `local-square-captured` on the
+sender and `square-query-forced` on the peer. Absence of the sender line rejects
+the Joypad ownership/query hypothesis. Sender presence without receiver force
+selects packet edge transport. Once receiver force appears, the existing queue
+and TryAnim stage outcomes retain their prior meanings.

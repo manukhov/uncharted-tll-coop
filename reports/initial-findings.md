@@ -27827,3 +27827,27 @@ Build cv retains exact local R1/lmouse capture but consumes the remote pulse onl
 at the stock Joypad `melee-square` query. Manual queue/animation calls remain
 parked. Runtime prediction and competing failure outcomes are in
 `reports/melee_native_callsite_relay_20260715.md`.
+
+### 2026-07-15 REJECTED/STATIC: free melee was not captured by lmouse/R1 callsites
+
+Fresh build cw connected and spawned both peers, but one user melee tap produced
+none of the receiver stage markers. Because even `square-query-forced` was absent,
+the queue `+0x210` and TryAnim paths were not exercised. This rejects the sender
+assumption that the two PlayerInput lmouse/R1 callsites cover the visible free
+melee action.
+
+The corrected capture surface is **STATIC** with three independent anchors:
+
+- dispatcher `0x141272A50` passes literal `melee-square` to
+  `Joypad_IsCommandActive` at `0x141272B99` and immediately prepares the native
+  queue insert on success;
+- `PlayerInputCommandState_GetJoypadIndex 0x1402B1890` returns
+  `Player+0x39B8`, whose confirmed runtime values bind retained slot 0 to Joypad 2
+  and slot 1 to Joypad 3;
+- the earlier cg runtime probe observed active local hash `0xd338e42f`, the exact
+  `melee-square` hash, whereas cw observed no pulse from lmouse/R1 for the tested
+  free attack.
+
+Build cx captures only original-true `melee-square` on the Joypad selected by
+retained slot 0's live `Player+0x39B8`, then publishes the existing bounded melee
+pulse. Manual dispatcher, queue push, TryAnim, and publish calls remain parked.

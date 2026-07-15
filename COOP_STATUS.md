@@ -2837,3 +2837,17 @@ vtable `+0x210`, and the sole TryAnim callsite `0x140F07A0A`. It does not bypass
 or manually invoke any action. The next user tap will classify the failure as
 pending-command, queue-consumer, intermediate MoveStick gate, TryAnim gate, or
 downstream pose publication.
+
+**cw runtime result:** both peers connected and spawned, but one visible local
+melee tap emitted no stage line, including no receiver `square-query-forced`.
+The failure is therefore before queue insertion: local capture listened only to
+the sibling PlayerInput lmouse/R1 callsites, while the actual free attack is the
+Joypad `melee-square` query already observed by cg.
+
+## 2026-07-15 build cx: capture the actual local square query
+
+cx captures an original-true `melee-square` result in the existing global Joypad
+hook only when the Joypad equals the one selected by retained slot 0's live
+`Player+0x39B8`. It emits one `local-square-captured` marker, retains the 150 ms
+edge pulse, and leaves all manual melee execution paths parked. The receiver's
+cw queue/TryAnim stage probes remain active for the next tap.
