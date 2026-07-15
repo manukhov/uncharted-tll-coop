@@ -27867,3 +27867,20 @@ visible. This confirms the minimal production route:
 The diagnostic TryAnim callsite returned zero while the hit was visible, so its
 boolean return is **REJECTED** as an end-to-end animation-success indicator.
 Build cy removes the temporary queue-vtable and TryAnim probes plus stage logs.
+
+### 2026-07-15 STATIC/REJECTED: correct the false skeleton-render map
+
+- **REJECTED:** `0x141B5CE90`, `0x141B61530`, and `0x141B757F0` are not a
+  character skeleton render chain. Exact `gamelib/audio/arm.cpp`,
+  `AudioManager::RunRenderJob`, and `AudioManager::Render` strings plus the NCA
+  sampler/submix/effects diagnostics identify the whole path as AudioManager ARM.
+  The cb/cd workspace experiments therefore did not test character skinning.
+- **STATIC:** Hex-Rays decimal `+560/+568` in the animation jobs means hex
+  `+0x230/+0x238`. Assembly at `0x141A93410..0x141A93430` confirms the real
+  current/previous `pNextFrameSkinningBoneMats` pair at FgAnimData
+  `+0x230/+0x238`; there is no proven separate FgAnimData skinning pointer at
+  hex `+0x560`.
+- **STATIC timing:** `AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00`
+  publishes `+0x230` before dispatching retained-owner vtable `+0x410/+0x418`.
+  Full alternatives, evidence quota, and the next falsifiable prediction:
+  `reports/player_aim_audio_path_correction_20260715.md`.

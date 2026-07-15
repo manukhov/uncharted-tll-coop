@@ -1,0 +1,34 @@
+TARGET 0x141B5CE90: func_start=0x141b5ce90 name=AudioManager_RenderJobEntry
+  xref=0x141B5D347 type=1 func_start=0x141b5d240 func_name=AudioManager_RunRenderJob
+  xref=0x143716288 type=1 func_start=None func_name=None
+  xref=0x146EA4080 type=1 func_start=None func_name=None
+
+TARGET 0x141B5D240: func_start=0x141b5d240 name=AudioManager_RunRenderJob
+  xref=0x14016624D type=17 func_start=0x140165b50 func_name=sub_140165B50
+  xref=0x146EA4098 type=1 func_start=None func_name=None
+
+TARGET 0x141B61530: func_start=0x141b61530 name=AudioManager_Render
+  xref=0x141B5CEA6 type=17 func_start=0x141b5ce90 func_name=AudioManager_RenderJobEntry
+  xref=0x141B5D612 type=17 func_start=0x141b5d600 func_name=sub_141B5D600
+  xref=0x146EA4128 type=1 func_start=None func_name=None
+
+TARGET 0x141B65C50: func_start=0x141b65c50 name=AudioManager_ReportNcaStats
+  xref=0x141B5CEAE type=17 func_start=0x141b5ce90 func_name=AudioManager_RenderJobEntry
+  xref=0x141B5D61F type=19 func_start=0x141b5d600 func_name=sub_141B5D600
+  xref=0x142EEDE30 type=1 func_start=None func_name=None
+  xref=0x142EEDE40 type=1 func_start=None func_name=None
+  xref=0x146EA4134 type=1 func_start=None func_name=None
+
+TARGET 0x141B757F0: func_start=0x141b757f0 name=AudioManager_RenderArmEntry
+  xref=0x141B63CE6 type=17 func_start=0x141b61530 func_name=AudioManager_Render
+  xref=0x142EEF874 type=1 func_start=None func_name=None
+  xref=0x142EEF8A8 type=1 func_start=None func_name=None
+  xref=0x142EEF8F4 type=1 func_start=None func_name=None
+  xref=0x146EA49A4 type=1 func_start=None func_name=None
+
+TARGET 0x141A92A00: func_start=0x141a92a00 name=AnimManager_AsyncObjectUpdateJointBlendJob
+  xref=0x141782B3A type=19 func_start=0x141782b30 func_name=sub_141782B30
+  xref=0x1417815B7 type=1 func_start=0x141781390 func_name=AnimManager_CreateAsyncUpdateJobFunctor
+  xref=0x143714A18 type=1 func_start=None func_name=None
+  xref=0x146E9D7E0 type=1 func_start=None func_name=None
+

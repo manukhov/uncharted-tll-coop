@@ -78,10 +78,10 @@ constexpr std::size_t kFgAnimDataRetainedHandleOffset = 0x1A8;
 constexpr std::size_t kFgAnimDataRetainedIdOffset = 0x1B0;
 constexpr std::size_t kFgAnimDataRuntimePayloadOffset = 0x230;
 constexpr std::size_t kFgAnimDataPreviousPaletteOffset = 0x238;
-// AnimateDisabledObjectJob publishes pNextFrameSkinningBoneMats at +0x560 with
-// the previous buffer at +0x568 (48 bytes per joint, same row layout as palette).
-constexpr std::size_t kFgAnimDataCurrentSkinningMatsOffset = 0x560;
-constexpr std::size_t kFgAnimDataPreviousSkinningMatsOffset = 0x568;
+// Hex-Rays prints structure offsets in decimal: its +560/+568 are +0x230/+0x238.
+// These are the current/previous pNextFrameSkinningBoneMats buffers (48 B/joint).
+constexpr std::size_t kFgAnimDataCurrentSkinningMatsOffset = 0x230;
+constexpr std::size_t kFgAnimDataPreviousSkinningMatsOffset = 0x238;
 constexpr std::size_t kFgAnimDataSkeletonOffset = 0x18;
 constexpr std::size_t kSkeletonJointCountOffset = 0x34;
 // Embedded PlayerInputCommandState (sub_14024D7E0 returns Player+0x39A0).
@@ -449,21 +449,21 @@ constexpr std::uintptr_t kNetAnimAddSnapshotRva = 0x0A01E50;
 constexpr std::uintptr_t kInitializePlayerNetAnimArtGroupsRva = 0x10D6530;
 constexpr std::uintptr_t kEngineClockPointerRva = 0x37E0250;
 constexpr std::uintptr_t kEngineClockScaleRva = 0x2BE8AE8;
-// SkelTable global (qword_146919C40). AudioManager::RunRenderJob schedules
-// CharacterSkeletonRenderJob_Entry with &qword_146919C40 as the Ndjob owner ptr.
+// REJECTED 2026-07-15: this entire path is AudioManager (gamelib/audio/arm.cpp),
+// not a character skeleton renderer. Constants remain only for disabled historical
+// probes and must not be used as an aiming/skinning surface.
 constexpr std::uintptr_t kSkelTableGlobalRva = 0x6919C40;
 constexpr std::uintptr_t kCharacterSkeletonRenderJobEntryRva = 0x1B5CE90;
 constexpr std::uintptr_t kCharacterSkeletonRenderUpdateRva = 0x1B61530;
-// E8 call inside CharacterSkeletonRenderJob_Entry immediately before Update.
+// E8 call inside AudioManager_RenderJobEntry immediately before AudioManager_Render.
 constexpr std::uintptr_t kCharacterSkeletonRenderUpdateCallsiteRva = 0x1B5CEA6;
 constexpr std::size_t kSkelTableSkipRenderFlagOffset = 0x81;
-// CharacterSkeletonEval_PerJoint reads palette rows via owner+0x230 (same
-// semantic offset as FgAnimData::pPaletteBoneMats).
+// These offsets belong to AudioManager/ARM state, not FgAnimData matrices.
 constexpr std::size_t kSkelTablePalettePtrOffset = 0x230;
 constexpr std::size_t kSkelTableSkinningPtrOffset = 0x560;
 constexpr std::size_t kSkelTableJointWorkspaceBaseOffset = 0x14B8;
 constexpr std::size_t kSkelTableJointWorkspaceStride = 0x6C0;
-// Per-joint workspace fields used by CharacterSkeletonEval_PerJoint 0x141B757F0.
+// Historical audio-entry probe offsets, retained while the rejected code is parked.
 constexpr std::size_t kSkelJointWorkspaceJointIdOffset = 0x0;
 constexpr std::size_t kSkelJointWorkspaceInstancePtrOffset = 0xB8;
 constexpr std::size_t kSkelJointWorkspaceMatrixBaseOffset = 0x558;

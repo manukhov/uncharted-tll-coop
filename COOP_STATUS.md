@@ -2857,3 +2857,18 @@ square capture; the receiver forced square and retrieved it from queue `+0x210`.
 Although the observed TryAnim call returned zero, the animation was visible, so
 that return is not the whole path's success flag. cy removes every stage probe and
 keeps only the working square relay.
+
+## 2026-07-15 aim static correction after confirmed melee
+
+- Melee square relay is user-confirmed and committed in `fe94dfe`.
+- **REJECTED:** the old `CharacterSkeletonRenderJob_Entry 0x141B5CE90` ->
+  `CharacterSkeletonRender_Update 0x141B61530` ->
+  `CharacterSkeletonEval_PerJoint 0x141B757F0` map is AudioManager ARM, proven by
+  exact source/function strings, its scheduler graph, and NCA audio diagnostics.
+- **STATIC:** the actual current/previous final matrix buffers are
+  `FgAnimData+0x230/+0x238`. Prior `+0x560/+0x568` interpretation confused
+  Hex-Rays decimal offsets with hexadecimal offsets.
+- Do not restore the parked audio workspace hooks. Next static step is to resolve
+  the true consumer and 3x4 matrix convention for `FgAnimData+0x230`, then write
+  a discriminating read-only prediction before launching two instances.
+- Report: `reports/player_aim_audio_path_correction_20260715.md`.

@@ -945,6 +945,20 @@ Do not reopen these as the first move:
       Chloe-like control input to `NadineBuddy` for the first playable switch
       demo
 
+## P0 - ADS body turn after melee confirmation (2026-07-15)
+
+- [x] Reject the false skeleton-render path at `0x141B5CE90/0x141B61530/
+      0x141B757F0`; it is AudioManager ARM.
+- [x] Correct the decimal/hex offset error: final FgAnimData matrices are current
+      `+0x230`, previous `+0x238`, not hex `+0x560/+0x568`.
+- [ ] Resolve every typed consumer of `FgAnimData+0x230` after
+      `AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00` and identify the
+      real render-owner generation.
+- [ ] Establish the 3x4 matrix convention and whether body yaw belongs in a root
+      row, all rows, or a pre-blend Player transform.
+- [ ] Only after the evidence quota, run a read-only two-instance discriminator
+      that separates missing palette yaw from wrong render-owner consumption.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

@@ -545,22 +545,29 @@ FUNCTIONS = {
         "output including aim-add-* parameter lookup.",
     ),
     0x141B5CE90: (
-        "CharacterSkeletonRenderJob_Entry",
-        "Ndjob render callback scheduled from AudioManager::RunRenderJob. When "
-        "owner+0x81 is clear, calls CharacterSkeletonRender_Update then the "
-        "post-pass at 0x141B65C50.",
+        "AudioManager_RenderJobEntry",
+        "Ndjob callback scheduled by AudioManager_RunRenderJob. When owner+0x81 "
+        "is clear, calls AudioManager_Render then AudioManager_ReportNcaStats.",
+    ),
+    0x141B5D240: (
+        "AudioManager_RunRenderJob",
+        "Exact AudioManager::RunRenderJob source assertions in gamelib/audio/arm.cpp. "
+        "Schedules AudioManager_RenderJobEntry through the Ndjob work batch.",
     ),
     0x141B61530: (
-        "CharacterSkeletonRender_Update",
-        "Per-frame skeleton render prep on the logged-in SkelTable owner. Iterates "
-        "joint workspaces at owner+0x14B8 and calls CharacterSkeletonEval_PerJoint "
-        "for each active joint index.",
+        "AudioManager_Render",
+        "Exact void AudioManager::Render(void) source strings in gamelib/audio/arm.cpp. "
+        "The owner+0x14B8, stride-0x6C0 table belongs to audio ARM entries, not joints.",
+    ),
+    0x141B65C50: (
+        "AudioManager_ReportNcaStats",
+        "Audio-only diagnostics including the exact NCA System, Samplers, Submixing, "
+        "Effects, Premastering, and Mastering report strings.",
     ),
     0x141B757F0: (
-        "CharacterSkeletonEval_PerJoint",
-        "Per-joint world/skinning-matrix evaluator. Reads owner+0x230 palette rows "
-        "and owner+0x2B0 timing state; reached from CharacterSkeletonRender_Update "
-        "at 0x141B63CE6 with rcx=owner and rdx=joint workspace.",
+        "AudioManager_RenderArmEntry",
+        "Audio ARM entry helper called at 0x141B63CE6 from AudioManager_Render. Its "
+        "owner-relative fields and 0x6C0 entry layout are unrelated to skeleton palettes.",
     ),
     0x141BC2EF0: (
         "Player_ShouldSkipDirectRootTransformApply",
