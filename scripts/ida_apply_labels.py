@@ -7182,6 +7182,14 @@ FUNCTIONS = {
         "the active GunMove configuration and reduces it by shield stoppage. "
         "Player+0x3328 is not a live gait-speed output.",
     ),
+    0x140E8EE90: (
+        "GunMoveController_UpdateAimMovementDirection",
+        "Normalizes the supplied GunMove movement vector, stores its adjusted "
+        "form at controller+0x130, normalized direction at +0x140 and magnitude "
+        "at +0x160. The later +0x38 camera-yaw method writes +0x150; "
+        "GunMoveController_SelectAimIdleTurnState compares +0x140/+0x150 to "
+        "select aim-idle versus authored turn states 3/4.",
+    ),
     0x140E8F720: (
         "GunMoveController_SelectAimIdleTurnState",
         "Consumes GunMoveController+0x140/+0x150/+0x160 and the current action id. "

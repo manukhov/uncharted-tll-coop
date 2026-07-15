@@ -114,6 +114,7 @@ std::atomic<bool> g_puppet_aim_vertical_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_blended_seen{false};
 std::atomic<ULONGLONG> g_puppet_aim_press_since_ms{0};
 std::atomic<ULONGLONG> g_puppet_gun_move_aim_since_ms{0};
+std::atomic<bool> g_puppet_render_aim_yaw_ready{false};
 std::atomic<ULONGLONG> g_puppet_aim_gate_last_eval_ms{0};
 std::atomic<bool> g_puppet_aim_session_latched{false};
 std::atomic<void*> g_puppet_aim_session_owner{nullptr};
@@ -984,6 +985,8 @@ bool valid_network_movement(const coop::StatePacket& packet);
 bool puppet_aim_press_relay_enabled();
 bool puppet_aim_press_relay_enabled_for_peer(const coop::StatePacket& peer);
 bool puppet_aim_controller_relay_enabled_for_peer(
+    const coop::StatePacket& peer);
+bool puppet_aim_action_relay_enabled_for_peer(
     const coop::StatePacket& peer);
 bool read_player_current_action_hash(
     void* player, std::uint32_t& hash, void*& active_state);
@@ -2445,6 +2448,7 @@ bool puppet_aim_press_relay_enabled() {
 void reset_puppet_auto_aim_admission() {
     g_puppet_aim_press_since_ms.store(0, std::memory_order_release);
     g_puppet_gun_move_aim_since_ms.store(0, std::memory_order_release);
+    g_puppet_render_aim_yaw_ready.store(false, std::memory_order_release);
     g_puppet_aim_session_latched.store(false, std::memory_order_release);
 }
 
@@ -2495,9 +2499,11 @@ bool puppet_aim_controller_relay_enabled_for_peer(
     return puppet_aim_press_relay_enabled_for_peer(peer);
 }
 
-bool puppet_aim_pose_relay_enabled_for_peer(const coop::StatePacket& peer) {
+bool puppet_aim_action_relay_enabled_for_peer(
+    const coop::StatePacket& peer) {
     if (!puppet_aim_controller_relay_enabled_for_peer(peer)) {
         g_puppet_gun_move_aim_since_ms.store(0, std::memory_order_release);
+        g_puppet_render_aim_yaw_ready.store(false, std::memory_order_release);
         return false;
     }
     if (g_puppet_relay_aim_press ||
@@ -2519,6 +2525,7 @@ bool puppet_aim_pose_relay_enabled_for_peer(const coop::StatePacket& peer) {
          action_hash == 0xD6D6FD81u);   // GunMoveHeavyWeapon
     if (!gun_move_action) {
         g_puppet_gun_move_aim_since_ms.store(0, std::memory_order_release);
+        g_puppet_render_aim_yaw_ready.store(false, std::memory_order_release);
         return false;
     }
 
@@ -2535,6 +2542,19 @@ bool puppet_aim_pose_relay_enabled_for_peer(const coop::StatePacket& peer) {
         }
     }
     return now - since >= kGunMovePoseDwellMs;
+}
+
+bool puppet_aim_pose_relay_enabled_for_peer(const coop::StatePacket& peer) {
+    if (!puppet_aim_action_relay_enabled_for_peer(peer)) {
+        return false;
+    }
+    if (g_puppet_relay_aim_press ||
+        g_puppet_aim_session_latched.load(std::memory_order_acquire)) {
+        return true;
+    }
+    // Raise the weapon only after the late render owner has nearly reached the
+    // peer camera. This prevents one frame of aiming in the old/opposite heading.
+    return g_puppet_render_aim_yaw_ready.load(std::memory_order_acquire);
 }
 
 // Peer-aim via network packet reaches the puppet joypad; local-lead (Chloe ADS on
@@ -7576,11 +7596,14 @@ char __fastcall hooked_gun_move_apply_camera_yaw(
     }
 
     float forward_x = 0.0F;
+    float forward_y = 0.0F;
     float forward_z = 0.0F;
-    // GunMoveController+0x150 is built from the screen camera look vector (-Z), not
-    // the aim-target positive-Z expansion. Pos-Z body turn was REJECTED 2026-07-14:
-    // puppet aimed nowhere near the peer reticle.
-    camera_forward_horizontal(peer.pose_seed + 4, forward_x, forward_z);
+    // dg proved the native -Z value does not select foot turning: historical logs
+    // show it converges with controller+0x140 while the visible FgAnim owner uses
+    // the opposite axis. Feed the selector the same +Z seen by rendering. This is
+    // not reused as a direct/root visual owner.
+    quat_forward_pos_z(
+        peer.pose_seed + 4, forward_x, forward_y, forward_z);
     const float horizontal =
         std::sqrt(forward_x * forward_x + forward_z * forward_z);
     if (!std::isfinite(horizontal) || horizontal < 0.001F) {
@@ -7588,11 +7611,6 @@ char __fastcall hooked_gun_move_apply_camera_yaw(
     }
     forward_x /= horizontal;
     forward_z /= horizontal;
-
-    float pos_x = 0.0F;
-    float pos_y = 0.0F;
-    float pos_z = 0.0F;
-    quat_forward_pos_z(peer.pose_seed + 4, pos_x, pos_y, pos_z);
 
     auto* const turn_direction = reinterpret_cast<float*>(
         static_cast<std::byte*>(controller) +
@@ -7609,9 +7627,8 @@ char __fastcall hooked_gun_move_apply_camera_yaw(
         last_log = now;
         std::ostringstream line;
         line << "AIM-TURN-DIR seq=" << peer.sequence << " stock=("
-             << stock_x << "," << stock_z << ") peerNegZ=("
-             << forward_x << "," << forward_z << ") peerPosZ=("
-             << pos_x << "," << pos_z << ")";
+             << stock_x << "," << stock_z << ") peerRenderPosZ=("
+             << forward_x << "," << forward_z << ")";
         force_log_line(line.str().c_str());
     }
     return result;
@@ -7892,7 +7909,7 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
                 camera_quat = peer.camera_quat;
             }
             if (camera_quat != nullptr &&
-                puppet_aim_pose_relay_enabled_for_peer(peer)) {
+                puppet_aim_action_relay_enabled_for_peer(peer)) {
                 float forward_x = 0.0F;
                 float forward_z = 0.0F;
                 camera_forward_horizontal(camera_quat, forward_x, forward_z);
@@ -7940,6 +7957,15 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
                         kMaxAimTurnRadiansPerSecond * dt;
                     smoothed_yaw += std::clamp(delta, -max_step, max_step);
                     smoothed_yaw_ms = now;
+                    const float remaining = std::atan2(
+                        std::sin(target_yaw - smoothed_yaw),
+                        std::cos(target_yaw - smoothed_yaw));
+                    constexpr float kAimPoseReadyRadians =
+                        12.0F * (3.14159265F / 180.0F);
+                    if (std::fabs(remaining) <= kAimPoseReadyRadians) {
+                        g_puppet_render_aim_yaw_ready.store(
+                            true, std::memory_order_release);
+                    }
                     yaw_quat_from_horizontal_forward(
                         std::sin(smoothed_yaw),
                         std::cos(smoothed_yaw),
@@ -7959,6 +7985,7 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
         smoothed_fg = nullptr;
         smoothed_yaw_valid = false;
         smoothed_yaw_ms = 0;
+        g_puppet_render_aim_yaw_ready.store(false, std::memory_order_release);
     }
     return native(fg, selected_transform, publish_current);
 }
@@ -14608,7 +14635,7 @@ void apply_puppet_transform_post(void* /*update_object*/) {
             // running nudge visibly translates the ADS body faster than its foot
             // cycle; retain convergence but cap that unanimated component lower.
             const float max_nudge_per_update =
-                pose_relay_for_peer ? 0.015F : 0.05F;
+                pose_relay_for_peer ? 0.0F : 0.05F;
             const float horizontal_sq = dx * dx + dz * dz;
             if (horizontal_sq > kNudgeDeadband * kNudgeDeadband) {
                 const float horizontal = std::sqrt(horizontal_sq);
@@ -23507,7 +23534,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15dg (smooth render yaw plus native foot turn)");
+        "TLL hook DLL init 2026-07-15dh (pre-turn aim pose and align strafe basis)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

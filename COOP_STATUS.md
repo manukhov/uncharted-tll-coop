@@ -2985,6 +2985,22 @@ does not re-enable the rejected post-root sync and performs no retained-table lo
 inside the GunMove hot path. Prediction and historical competitors are recorded in
 `reports/player_aim_fganim_axis_residual_pitch_20260715.md`.
 
+### Build dg runtime; build dh pre-turns before weapon pose
+
+dg is runtime-rejected as a complete foot fix: the puppet still rotates with
+planted feet, slides strongly in moving ADS, and briefly aims in the old/wrong
+heading before render yaw catches up. Static re-open of `0x140E8EE90` shows why:
+controller `+0x140` is normalized movement direction, while historical native
+negative-Z `+0x150` converged with it and suppressed the 3/4 turn states. The final
+FgAnim owner visibly uses the opposite positive-Z axis.
+
+Build dh feeds that render-positive-Z only to the native animation selector,
+pre-turns the smoothed FgAnim body after stable GunMove, and withholds weapon pose
+until yaw is within 12 degrees. It also disables the ADS post-transform nudge while
+retaining pre-consumer native-vector correction. This is a discriminator for
+turn/strafe graph ownership versus unanimated position correction; detailed
+competitors and prediction are in the aim report.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

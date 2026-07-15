@@ -318,3 +318,52 @@ pre-GunMove transition frames and lifecycle reload remain untouched. A return of
 the kneeling slide rejects the narrowed native selector. Smooth body yaw with
 unchanged feet would reject `+0x150` as an animation-state owner and leave the
 remaining fault inside the strafe graph's movement-direction parameters.
+
+## Build dg runtime and build dh render-basis discriminator
+
+**PARTIAL CONFIRMATION:** rate limiting prevents the former malformed transition,
+but the user still sees plain body rotation without foot stepping and strong slide
+during aim-walk. Entry now exposes the exact ordering defect: the weapon first aims
+in the old/wrong heading and the body immediately turns to the correct camera
+heading. The native negative-Z `+0x150` relay therefore did not align the foot
+graph with the final render owner.
+
+The result resolves the axis ambiguity left by the older body-turn experiments:
+
+1. `GunMoveController_UpdateAimMovement 0x140E8EE90` stores the normalized input
+   direction at controller `+0x140` and its magnitude at `+0x160`.
+2. `GunMoveController_SelectAimIdleTurnState 0x140E8F720` compares `+0x140` with
+   `+0x150`; historical negative-Z runtime made the two converge and reported
+   `yawPre=0`, which explicitly suppresses states 3/4 and foot turning.
+3. The confirmed visible FgAnim boundary requires the opposite camera axis
+   (positive Z). dg therefore left the graph at zero relative turn while rendering
+   a different heading after animation evaluation.
+
+### Build dh changes and competitors
+
+- The `+0x150` selector now receives normalized peer camera positive-Z, matching
+  the final rendered heading. This revisits the historically rejected axis only
+  as an animation selector: it is not used for post-root sync or direct visible
+  ownership.
+- Render yaw begins after stable GunMove but before ADS pose publication. A new
+  readiness latch opens blend/world-basis/weapon pose only when the smoothed body
+  is within 12 degrees of the target, preventing the weapon from aiming backward
+  during pre-turn.
+- The remaining `0.015 m` post-transform ADS nudge is disabled completely. The
+  already confirmed pre-consumer correction inside `Player+0x3A30` remains, so
+  this distinguishes foot/root ownership from unanimated positional convergence.
+
+Competing outcomes are explicit. If feet step on the spot but moving gait still
+slides, turn-state selection is fixed and the remaining owner is strafe movement
+parameters. If neither improves, `+0x150` is rejected as any visible foot-state
+owner. If position drift grows while gait improves, the post nudge is confirmed as
+the gait/convergence tradeoff. Kneeling slide or wrong compass direction rejects
+the positive-Z selector despite the staged lifecycle guard.
+
+### Build dh prediction
+
+On a large initial camera offset, the body turns first and the weapon raises only
+near the final heading; no backward aim frame is visible. Stationary rotation enters
+authored foot turning instead of rotating planted feet. Moving ADS loses the extra
+post-transform translation and should show materially less slide, at the cost of
+possibly larger replica position drift. Vertical pitch remains unchanged.

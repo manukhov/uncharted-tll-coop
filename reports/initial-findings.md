@@ -28035,3 +28035,21 @@ unchanged pending the downstream FgAnim/palette consumer trace.
 Prediction: ADS entry no longer snaps/full-spins, stationary turns step the feet,
 and moving strafe steps align more closely with rendered heading without restoring
 the kneeling-slide lifecycle regression. Vertical remains unchanged.
+
+### 2026-07-15 build dg runtime: STATIC render-positive-Z selector for build dh
+
+- **REJECTED as foot fix:** dg still rotates with planted feet, slides strongly in
+  aim-walk, and briefly raises the weapon in the old/wrong heading before turning.
+- **STATIC:** `GunMoveController_UpdateAimMovement 0x140E8EE90` stores normalized
+  input at `+0x140` and magnitude at `+0x160`; `0x140E8F720` compares `+0x140`
+  against `+0x150` to select states 3/4.
+- **STATIC:** the prior negative-Z relay made `+0x150` converge with `+0x140` and
+  `yawPre=0`, suppressing turn animation, while the confirmed final FgAnim heading
+  uses the opposite positive-Z axis.
+- **STATIC:** build dh supplies render-positive-Z only to the native action
+  selector, pre-turns the body before opening weapon pose at a 12-degree threshold,
+  and disables post-transform ADS nudge while retaining native-vector correction.
+
+Prediction: no backward aim frame at entry, stationary turns step the feet, and
+moving aim-walk loses the extra unanimated slide. Increased position drift is an
+accepted discriminator; kneeling slide or wrong direction rejects this selector.
