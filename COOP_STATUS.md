@@ -2762,3 +2762,17 @@ under the current static-only instruction.
 - **Next runtime exam:** two fresh copies, one tap and one hold, then weapon
   pickup/switch. Expect one peer melee attempt per tap, no frame-repeat punches,
   no GiveWeapon regression, and cp-level frame pacing.
+
+## 2026-07-15 build cr: network handshake discriminator
+
+- cq processes did bind the expected complementary loopback ports: PID 24420 on
+  UDP 31338 and PID 10204 on UDP 31339. Valid `StatePacket` exchange was not
+  observable because production `log_line` is disabled.
+- cr emits one-shot boot records for role/ports, first send, and first accepted
+  receive. It also records once if sending is waiting for a retained local Player
+  or valid position. No recurring network telemetry was added.
+- The unconditional crash observer was parked. It captured only eight
+  first-chance exceptions per process, so this removes possible transition
+  hitches but is not claimed as the cause of sustained low FPS.
+- Release build succeeds. Runtime exam: fresh two-copy launch; both sides must
+  report first send and first receive before visual puppet behavior is debugged.

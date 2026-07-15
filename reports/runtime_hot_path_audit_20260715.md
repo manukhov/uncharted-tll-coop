@@ -78,3 +78,31 @@ eligibility/additive/blend/world-basis aim relays.
 
 Release build succeeds. Runtime status: **HYPOTHESIS ready for test**, not yet
 confirmed.
+
+## 2026-07-15 runtime follow-up: exception observer and network discriminator
+
+The cq two-instance run opened complementary UDP receive ports as designed:
+PID 24420 owned 31338 and PID 10204 owned 31339. This proves role selection and
+socket binding, but it does not prove that either process has sent or accepted a
+valid `StatePacket`.
+
+After the location loaded, the always-installed `crash_observer` captured eight
+first-chance access violations per process. For every captured exception it read
+12 stack words, formatted a 1536-byte record, opened the shared log, wrote it,
+and closed it. This is bounded startup/location-transition overhead, not a valid
+explanation for sustained low FPS. The two roughly 13 GB game processes and
+their paging pressure remain the strongest competitor for sustained slowdown.
+
+Build cr makes two production changes:
+
+- compile-time parks `crash_observer`;
+- records only one-shot state-network milestones: selected role/ports, first
+  unavailable local Player or invalid position, first send result, and first
+  accepted receive.
+
+Falsifiable prediction for a fresh two-instance run: after both local Players
+exist, both logs must contain a successful first send and a first receive. If
+send appears on both but receive does not, the failure is transport/protocol. If
+both receive milestones appear, UDP connection is working and the visual failure
+belongs downstream in peer snapshot or puppet application. No build-cr
+`EXCEPTION` records should be emitted by this DLL.

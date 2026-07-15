@@ -27753,3 +27753,16 @@ direct queue push, and direct animation calls remain disabled. Release build
 succeeds. Status: **STATIC / HYPOTHESIS ready for runtime**; full evidence,
 competitors, and prediction are in
 `reports/melee_native_callsite_relay_20260715.md`.
+
+### 2026-07-15 CONFIRMED: state UDP ports bind, packet exchange still unproven
+
+In the cq two-instance run, PID 24420 bound UDP 31338 and PID 10204 bound UDP
+31339. This confirms the loopback auto-role socket branch, but the production log
+had no packet milestones because `start_state_net` used disabled runtime logging.
+It therefore does not confirm a valid state send or receive.
+
+The same run confirmed that the unconditional `crash_observer` performs stack
+reads, formatting, and file open/write/close for up to eight engine-handled
+first-chance exceptions per process after location load. Build `2026-07-15cr`
+parks that bounded observer and adds one-shot send/receive discriminators. Its
+runtime prediction is recorded in `reports/runtime_hot_path_audit_20260715.md`.

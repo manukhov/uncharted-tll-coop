@@ -1170,6 +1170,7 @@ int peer_slot_of_art(std::uint32_t art);
 // still go through boot_log_line(), while force_log_line() is compiled to a no-op.
 // Flip this only for a bounded experiment with a written prediction.
 constexpr bool kEnableRuntimeDiagnosticLogging = false;
+constexpr bool kEnableCrashObserver = false;
 volatile bool g_logging_enabled = false;
 static SRWLOCK g_log_lock = SRWLOCK_INIT;
 static HANDLE g_log_handle = INVALID_HANDLE_VALUE;
@@ -9076,6 +9077,15 @@ DWORD WINAPI state_recv_thread(void*) {
             std::memcpy(&packet, buf, sizeof(packet));
             if (packet.version == coop::kStatePacketVersion &&
                 valid_network_position(packet.pos)) {
+                static std::atomic<bool> first_state_receive_logged{false};
+                if (!first_state_receive_logged.exchange(
+                        true, std::memory_order_relaxed)) {
+                    std::ostringstream line;
+                    line << "state net first receive: seq=" << packet.sequence
+                         << " pos=(" << packet.pos[0] << "," << packet.pos[1]
+                         << "," << packet.pos[2] << ")";
+                    boot_log_line(line.str().c_str());
+                }
                 publish_peer_state_snapshot(packet);
             }
         } else if (magic == coop::kEnemyPacketMagic &&
@@ -9349,7 +9359,7 @@ bool start_state_net() {
     g_state_net.recv_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     g_state_net.send_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (g_state_net.recv_socket == INVALID_SOCKET || g_state_net.send_socket == INVALID_SOCKET) {
-        log_line("state net: socket creation failed");
+        boot_log_line("state net: socket creation failed");
         return false;
     }
     // Auto-role for TWO INSTANCES ON ONE PC: first instance binds kStatePort
@@ -9369,7 +9379,7 @@ bool start_state_net() {
         if (!loopback) {
             std::ostringstream line;
             line << "state net: bind failed " << WSAGetLastError();
-            log_line(line.str().c_str());
+            boot_log_line(line.str().c_str());
             return false;
         }
         // Loopback second instance: 31338 taken -> become the "B" peer.
@@ -9380,7 +9390,7 @@ bool start_state_net() {
                  sizeof(bind_addr)) == SOCKET_ERROR) {
             std::ostringstream line;
             line << "state net: bind failed (both ports) " << WSAGetLastError();
-            log_line(line.str().c_str());
+            boot_log_line(line.str().c_str());
             return false;
         }
     } else if (loopback) {
@@ -9411,7 +9421,7 @@ bool start_state_net() {
         std::ostringstream rl;
         rl << "co-op role = " << (g_net_role_b ? "B (player 2, local Nadine)"
                                                : "A (player 1, local Chloe)");
-        log_line(rl.str().c_str());
+        boot_log_line(rl.str().c_str());
     }
     g_state_net.peer_addr.sin_family = AF_INET;
     g_state_net.peer_addr.sin_port = htons(peer_port);
@@ -9424,7 +9434,7 @@ bool start_state_net() {
     std::ostringstream line;
     line << "state net started: recv :" << my_port << " -> peer " << peer_ip
          << ":" << peer_port << (g_state_net.peer_set ? "" : " (invalid peer ip)");
-    log_line(line.str().c_str());
+    boot_log_line(line.str().c_str());
     return true;
 }
 
@@ -11693,11 +11703,19 @@ void send_local_player_state() {
     }
     void* local_obj = retained_player_object(0);
     if (local_obj == nullptr) {
+        static std::atomic<bool> waiting_for_local_logged{false};
+        if (!waiting_for_local_logged.exchange(true, std::memory_order_relaxed)) {
+            boot_log_line("state net waiting: retained local player unavailable");
+        }
         return;
     }
     const auto* pos = reinterpret_cast<const float*>(static_cast<std::byte*>(local_obj) + kWorldPositionOffset);
     const auto* quat = reinterpret_cast<const float*>(static_cast<std::byte*>(local_obj) + kPlayerQuatOffset);
     if (!valid_network_position(pos)) {
+        static std::atomic<bool> invalid_local_position_logged{false};
+        if (!invalid_local_position_logged.exchange(true, std::memory_order_relaxed)) {
+            boot_log_line("state net waiting: local player position invalid");
+        }
         return;
     }
     coop::StatePacket pkt{};
@@ -12106,8 +12124,19 @@ void send_local_player_state() {
             }
         }
     }
-    sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
-           reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr), sizeof(g_state_net.peer_addr));
+    const int sent = sendto(
+        g_state_net.send_socket, reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
+        reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+        sizeof(g_state_net.peer_addr));
+    static std::atomic<bool> first_state_send_logged{false};
+    if (!first_state_send_logged.exchange(true, std::memory_order_relaxed)) {
+        std::ostringstream line;
+        line << "state net first send: seq=" << pkt.sequence << " bytes=" << sent;
+        if (sent == SOCKET_ERROR) {
+            line << " wsa=" << WSAGetLastError();
+        }
+        boot_log_line(line.str().c_str());
+    }
 }
 
 // Returns the latest peer state with the loopback offset applied, or false if
@@ -23100,11 +23129,13 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15cq (native melee callsite relay)");
-    AddVectoredExceptionHandler(0, &crash_observer);
-    boot_log_line(
-        "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
-    boot_log_line("crash observer installed (no breakpoints)");
+        "TLL hook DLL init 2026-07-15cr (network handshake probe; crash observer parked)");
+    if constexpr (kEnableCrashObserver) {
+        AddVectoredExceptionHandler(0, &crash_observer);
+        boot_log_line("crash observer installed (no breakpoints)");
+    } else {
+        boot_log_line("crash observer disabled in production");
+    }
     install_joypad_disabled_commands_lock();
     install_joypad3_analog_route();
     install_joypad3_keyboard_isolation();
