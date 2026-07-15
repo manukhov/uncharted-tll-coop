@@ -393,6 +393,8 @@ constexpr std::uintptr_t kPlayerAimBlendTargetRva = 0x0CAE480;
 constexpr std::uintptr_t kGunMoveControllerVtableRva = 0x2A280A8;
 constexpr std::size_t kGunMoveControllerApplyCameraYawSlotOffset = 0x38;
 constexpr std::uintptr_t kGunMoveControllerApplyCameraYawRva = 0x0E8F990;
+constexpr std::uintptr_t kGunMoveControllerBuildActionStateRva = 0x0E8D140;
+constexpr std::uintptr_t kGunMoveControllerBuildActionStateCallsiteRva = 0x0E9063B;
 constexpr std::size_t kGunMoveControllerOwnerOffset = 0x108;
 constexpr std::size_t kGunMoveControllerTurnDirectionOffset = 0x150;
 // Ground GunMoveShield call to Player_CheckAimActionEligibility. A callsite

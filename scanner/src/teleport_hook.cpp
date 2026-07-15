@@ -7192,6 +7192,10 @@ using GunMoveControllerApplyCameraYawFunction = char(__fastcall*)(
     void* controller, const float* input_direction);
 GunMoveControllerApplyCameraYawFunction
     g_original_gun_move_apply_camera_yaw = nullptr;
+using GunMoveControllerBuildActionStateFunction = std::int64_t(__fastcall*)(
+    void* controller, int child_state);
+GunMoveControllerBuildActionStateFunction
+    g_gun_move_build_action_state = nullptr;
 using CharacterSkeletonRenderUpdateFunction = void(__fastcall*)(void* skel_owner);
 CharacterSkeletonRenderUpdateFunction g_original_character_skeleton_render_update =
     nullptr;
@@ -7203,6 +7207,10 @@ CharacterSkeletonEvalPerJointFunction g_original_character_skeleton_eval_per_joi
 // lets this native path select authored turn-in-place/strafe states without owning
 // final render yaw. Never pair it with the rejected post-root synchronizer.
 constexpr bool g_enable_gun_move_body_turn = true;
+// STATIC 2026-07-15: the strafe builder snapshots Player+0x100..+0x14F before
+// the late FgAnim world-yaw publication. Stage only Player+0x140 during action
+// construction and restore it immediately; this is not sustained root ownership.
+constexpr bool g_enable_gun_move_action_basis_snapshot = true;
 // REJECTED 2026-07-14 PIDs 2084/7800: root snap does not change visible ADS aim.
 constexpr bool g_enable_puppet_ads_root_yaw_snap = false;
 // STATIC 2026-07-15: phase 0x40 publishes FgAnimData+0x1C0, which the draw
@@ -7874,6 +7882,179 @@ void yaw_quat_from_horizontal_forward(
     out[1] = std::sin(half);
     out[2] = 0.0F;
     out[3] = std::cos(half);
+}
+
+bool world_quat_to_player_local_root(
+    const void* player, const float world_quat[4], float out[4]) {
+    if (player == nullptr || world_quat == nullptr || out == nullptr ||
+        readable_bytes(static_cast<const std::byte*>(player) + 0x120) <
+            4 * sizeof(float)) {
+        return false;
+    }
+    const auto* const parent = reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(player) + 0x120);
+    const float norm_sq = parent[0] * parent[0] + parent[1] * parent[1] +
+                          parent[2] * parent[2] + parent[3] * parent[3];
+    if (!std::isfinite(norm_sq) || norm_sq < 0.90F || norm_sq > 1.10F) {
+        std::memcpy(out, world_quat, 4 * sizeof(float));
+        return true;
+    }
+
+    const float inv_norm = 1.0F / std::sqrt(norm_sq);
+    const float ax = -parent[0] * inv_norm;
+    const float ay = -parent[1] * inv_norm;
+    const float az = -parent[2] * inv_norm;
+    const float aw = parent[3] * inv_norm;
+    const float bx = world_quat[0];
+    const float by = world_quat[1];
+    const float bz = world_quat[2];
+    const float bw = world_quat[3];
+    out[0] = aw * bx + ax * bw + ay * bz - az * by;
+    out[1] = aw * by - ax * bz + ay * bw + az * bx;
+    out[2] = aw * bz + ax * by - ay * bx + az * bw;
+    out[3] = aw * bw - ax * bx - ay * by - az * bz;
+    const float out_norm_sq = out[0] * out[0] + out[1] * out[1] +
+                              out[2] * out[2] + out[3] * out[3];
+    if (!std::isfinite(out_norm_sq) || out_norm_sq < 0.90F ||
+        out_norm_sq > 1.10F) {
+        return false;
+    }
+    const float out_inv_norm = 1.0F / std::sqrt(out_norm_sq);
+    for (int i = 0; i < 4; ++i) {
+        out[i] *= out_inv_norm;
+    }
+    return true;
+}
+
+std::int64_t __fastcall hooked_gun_move_build_action_state(
+    void* controller, int child_state) {
+    const auto native = g_gun_move_build_action_state;
+    if (native == nullptr) {
+        return 0;
+    }
+
+    void* owner = nullptr;
+    float saved_root_quat[4]{};
+    bool staged_snapshot = false;
+    coop::StatePacket peer{};
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    if (!g_dll_inert && controller != nullptr && g_state_net.enabled &&
+        received != 0 && now - received <= 250 &&
+        readable_bytes(static_cast<std::byte*>(controller) +
+                       kGunMoveControllerOwnerOffset) >= sizeof(void*) &&
+        copy_peer_state_snapshot(peer) && peer_packet_aim_active(peer) &&
+        valid_network_orientation(peer.pose_seed + 4) &&
+        puppet_aim_controller_relay_enabled_for_peer(peer)) {
+        owner = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(controller) +
+            kGunMoveControllerOwnerOffset);
+        if (owner != nullptr &&
+            readable_bytes(static_cast<std::byte*>(owner) + 0x4010) >=
+                sizeof(std::uint32_t) &&
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(owner) + 0x4010) ==
+                kSlot1ScreenIndex &&
+            readable_bytes(static_cast<std::byte*>(owner) + kPlayerQuatOffset) >=
+                4 * sizeof(float)) {
+            float forward_x = 0.0F;
+            float forward_z = 0.0F;
+            camera_forward_horizontal(
+                peer.pose_seed + 4, forward_x, forward_z);
+            float target_world_quat[4]{};
+            yaw_quat_from_horizontal_forward(
+                forward_x, forward_z, target_world_quat);
+            float target_local_quat[4]{};
+            if (world_quat_to_player_local_root(
+                    owner, target_world_quat, target_local_quat)) {
+                auto* const root_quat = reinterpret_cast<float*>(
+                    static_cast<std::byte*>(owner) + kPlayerQuatOffset);
+                std::memcpy(
+                    saved_root_quat, root_quat, sizeof(saved_root_quat));
+                std::memcpy(
+                    root_quat, target_local_quat, sizeof(target_local_quat));
+                staged_snapshot = true;
+            }
+        }
+    }
+
+    const std::int64_t result = native(controller, child_state);
+    if (staged_snapshot && owner != nullptr &&
+        readable_bytes(static_cast<std::byte*>(owner) + kPlayerQuatOffset) >=
+            sizeof(saved_root_quat)) {
+        std::memcpy(
+            static_cast<std::byte*>(owner) + kPlayerQuatOffset,
+            saved_root_quat,
+            sizeof(saved_root_quat));
+        static ULONGLONG last_log = 0;
+        if (now - last_log > 1000) {
+            last_log = now;
+            force_log_line("AIM-ACTION-BASIS staged Player+0x140 snapshot");
+        }
+    }
+    return result;
+}
+
+bool install_gun_move_action_basis_snapshot_callsite() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kGunMoveControllerBuildActionStateCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line(
+            "GunMove action-basis snapshot SKIPPED (callsite is not E8)");
+        return false;
+    }
+    std::int32_t displacement = 0;
+    std::memcpy(&displacement, call_site + 1, sizeof(displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(displacement);
+    const std::uintptr_t expected =
+        g_module + kGunMoveControllerBuildActionStateRva;
+    if (target != expected) {
+        boot_log_line(
+            "GunMove action-basis snapshot SKIPPED (unexpected target)");
+        return false;
+    }
+    g_gun_move_build_action_state =
+        reinterpret_cast<GunMoveControllerBuildActionStateFunction>(expected);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line(
+            "GunMove action-basis snapshot SKIPPED (relay allocation)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(&hooked_gun_move_build_action_state);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("GunMove action-basis snapshot SKIPPED (rel32 range)");
+        return false;
+    }
+    DWORD old = 0;
+    if (!VirtualProtect(call_site, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("GunMove action-basis snapshot SKIPPED (VirtualProtect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old, &ignored);
+    boot_log_line("GunMove action-basis snapshot installed");
+    return true;
 }
 
 std::int64_t __fastcall hooked_fganim_publish_world_transform(
@@ -23534,7 +23715,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15dh (pre-turn aim pose and align strafe basis)");
+        "TLL hook DLL init 2026-07-15di (snapshot Player root into GunMove action)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -23578,6 +23759,9 @@ DWORD WINAPI install_hook(void*) {
         }
         if (g_enable_gun_move_body_turn) {
             install_gun_move_camera_turn_relay();
+        }
+        if (g_enable_gun_move_action_basis_snapshot) {
+            install_gun_move_action_basis_snapshot_callsite();
         }
         if (g_enable_puppet_skel_palette_inject) {
             install_character_skeleton_render_update_callsite_hook();

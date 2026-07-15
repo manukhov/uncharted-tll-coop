@@ -28024,9 +28024,10 @@ unchanged pending the downstream FgAnim/palette consumer trace.
 - **STATIC:** the final FgAnim hook currently replaces yaw absolutely after the
   native action graph has evaluated. It has no shortest-arc/rate limit and cannot
   select a foot animation.
-- **STATIC:** `0x140E8F720` selects turn states 3/4 from GunMoveController
-  `+0x140/+0x150`; `0x140E8D140` maps them to authored `aim-idle-rotate` and
-  `aim-idle-rotate-cc` actions.
+- **STATIC:** at zero movement, `0x140E8F720` can select turn states 3/4 from
+  GunMoveController `+0x150` and Player world basis only behind authored move
+  settings and active yaw-rate hysteresis; `0x140E8D140` maps them to
+  `aim-idle-rotate` and `aim-idle-rotate-cc` actions.
 - **STATIC:** build dg smooths final render yaw along the shortest arc at 240
   degrees/second and admits the native `+0x150` selector only after stable GunMove.
   The rejected post-root synchronizer stays disabled and the hot hook avoids the
@@ -28063,14 +28064,41 @@ accepted discriminator; kneeling slide or wrong direction rejects this selector.
   nudge to zero did not change the slide.
 - **REJECTED `+0x150` as moving strafe input:** changing only
   `GunMoveController+0x150` to render positive-Z did not change the gait. Static
-  re-open confirms the moving GunMove builder `0x140E8D140` copies only controller
-  `+0x100..+0x14F` into `player-ap-strafe-*`; `+0x150` is outside that payload.
+  re-open confirms the moving GunMove builder `0x140E8D140` loads the owner from
+  controller `+0x108` and copies **Player** `+0x100..+0x14F` into
+  `player-ap-strafe-*`; controller `+0x150` is outside that payload.
 - **STATIC stationary gate:** `GunMoveController_SelectAimIdleTurnState
   0x140E8F720` can return turn states 3/4 only when `+0x160 == 0`, move-settings
-  byte `+0xF4` is enabled, and Player runtime field `+0xD4` passes. Any moving
-  sample returns only states 0/1.
+  byte `+0xF4` is enabled, and active `FgAnimData+0xD4` exceeds `0.1`. Writer
+  `0x140E8FD00` proves `+0xD4` is absolute yaw rate; `0x140E90590` suppresses that
+  writer in child state 2, favoring continuation hysteresis over cold initiation.
+- **STATIC moving basis:** copied `Player+0x140` is the local-root quaternion. The
+  late phase-0x40 FgAnim yaw changes visible heading after action evaluation and
+  leaves this authored snapshot stale.
 
-The two remaining hypotheses are therefore separate: trace the stationary
-settings/runtime gates for planted-foot turning, and trace controller
-`+0x100..+0x140` for the authored moving strafe basis. Full evidence and
-competitors: `reports/gun_move_controller_foot_state_gates_20260715.md`.
+The next narrow discriminator temporarily supplies relayed yaw only while
+`0x140E90590 -> 0x140E8D140` snapshots `Player+0x140`, then restores the native
+root. This is not the rejected sustained root writer. Stationary turn initiation
+remains a separate task. Full evidence and competitors:
+`reports/gun_move_controller_foot_state_gates_20260715.md`.
+
+### 2026-07-15 STATIC: temporary Player root snapshot for build di
+
+- `GunMoveController_BuildActionState 0x140E8D140` is now labeled in the IDB.
+  Its strafe branches load owner Player at `0x140E8D18D` and copy
+  `Player+0x100..+0x14F` at `0x140E8E46B..0x140E8E49C` (alternate
+  `0x140E8E672..0x140E8E6A3`).
+- `PlayerMovementSettings_ResolveCurrentMoveEntry 0x140EF7890` is now labeled as
+  the `move` channel resolver whose 440-byte authored entry supplies selector byte
+  `+0xF4`.
+- Build di hooks only the `0x140E9063B` direct builder call inside GunMoveController
+  vtable `+0x50`. After controller admission, it converts peer camera world yaw
+  through parent quaternion `Player+0x120`, temporarily stages local-root
+  `Player+0x140` for `0x140E8D140`, and restores it before returning to the
+  selector/update function.
+
+Prediction: ADS entry no longer raises the weapon in the old heading and moving
+aim-walk foot direction improves, while stationary planted-foot turning remains.
+An `AIM-ACTION-BASIS` marker with unchanged entry/gait rejects the stale action
+snapshot; kneeling/root drift after location lifecycle rejects the temporary
+boundary itself.

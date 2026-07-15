@@ -3009,12 +3009,25 @@ moderate amount. This rejects the ADS post-transform nudge as the primary slide
 cause and rejects `GunMoveController+0x150` as a moving strafe parameter.
 
 Static re-open shows why. `0x140E8F720` can choose stationary turn states 3/4
-only at zero movement and behind move-settings `+0xF4` plus Player-runtime
-`+0xD4`. Moving state construction at `0x140E8D140` instead copies controller
-`+0x100..+0x14F` into the authored `player-ap-strafe-*` graph and never consumes
-`+0x150`. Current static work is tracing the two stationary gates separately from
-the moving strafe basis. No new runtime is earned yet. Detailed record:
+only at zero movement and behind authored settings plus active yaw-rate
+hysteresis. Its `FgAnimData+0xD4` writer is suppressed in child state 2, so this
+is turn continuation rather than a proven cold-idle initiator.
+
+Moving construction at `0x140E8D140` loads controller owner `+0x108` and copies
+**Player** `+0x100..+0x14F`, including local-root quaternion `Player+0x140`, into
+the authored strafe graph. The late FgAnim yaw does not update that earlier
+snapshot. The next narrow discriminator will substitute yaw only around action
+construction and immediately restore the native root; it will not re-enable the
+rejected sustained pre/post root ownership. Detailed record:
 `reports/gun_move_controller_foot_state_gates_20260715.md`.
+
+Build di implements that boundary only at the `0x140E9063B` direct builder call
+inside GunMoveController vtable `+0x50`. It converts relayed world yaw to
+Player-local yaw through parent quaternion `+0x120`, stages `Player+0x140` only
+while `0x140E8D140` copies the action snapshot, then restores it before the native
+update resumes. Prediction: wrong-side ADS entry and moving gait improve, while
+stationary planted-foot turning remains for the separate cold-state initiator
+pass. A lifecycle kneeling regression rejects the snapshot boundary.
 
 ### Build db partial confirmation; build dc transition/gait correction
 

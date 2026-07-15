@@ -7182,31 +7182,49 @@ FUNCTIONS = {
         "the active GunMove configuration and reduces it by shield stoppage. "
         "Player+0x3328 is not a live gait-speed output.",
     ),
+    0x140E8D140: (
+        "GunMoveController_BuildActionState",
+        "Builds the authored GunMove child action for selector states 0..4/103. "
+        "The strafe-family branches load the owner Player from controller+0x108 "
+        "and snapshot Player+0x100..+0x14F, including local-root quaternion "
+        "Player+0x140, into player-ap-strafe-* action arguments.",
+    ),
     0x140E8EE90: (
         "GunMoveController_UpdateAimMovementDirection",
         "Normalizes the supplied GunMove movement vector, stores its adjusted "
         "form at controller+0x130, normalized direction at +0x140 and magnitude "
-        "at +0x160. The later +0x38 camera-yaw method writes +0x150; "
-        "GunMoveController_SelectAimIdleTurnState compares +0x140/+0x150 to "
-        "select aim-idle versus authored turn states 3/4.",
+        "at +0x160. The later +0x38 camera-yaw method writes +0x150. Non-zero "
+        "movement selects moving child states 0/1 from +0x140/+0x150; stationary "
+        "turn states 3/4 are a separate yaw-rate-gated branch.",
     ),
     0x140E8F720: (
         "GunMoveController_SelectAimIdleTurnState",
-        "Consumes GunMoveController+0x140/+0x150/+0x160 and the current action id. "
-        "Returns idle/move states 0/1, aim-idle state 2, or turn-in-place states "
-        "3/4 according to the body-versus-target direction.",
+        "Consumes GunMoveController+0x140/+0x150/+0x160 and current child state. "
+        "Non-zero movement returns states 0/1. At zero movement, authored move "
+        "settings+0xF4 and active FgAnimData yaw-rate +0xD4 > 0.1 gate turn "
+        "continuation states 3/4; otherwise it returns aim-idle state 2.",
     ),
     0x140E8FD00: (
         "GunMoveController_UpdateTurnYawFromDirection",
         "Reads GunMoveController+0x150, computes and smooths target yaw against the "
         "owner Player runtime world basis, writes the yaw quaternion through the "
-        "Player+0x100 transform helper, then commits via runtime vtable +0x208.",
+        "Player+0x100 transform helper, commits via runtime vtable +0x208, and "
+        "publishes absolute normalized yaw rate to active FgAnimData+0xD4.",
     ),
     0x140E90590: (
         "GunMoveController_UpdateActionState",
         "GunMoveController vtable +0x50. Calls the turn-yaw writer for active turn "
-        "states, selects the next state via 0x140E8F720, and builds the authored "
-        "aim-idle/aim-idle-rotate action graph via 0x140E8D140.",
+        "states except 2/103, selects the next state via 0x140E8F720, and builds "
+        "the authored child action via GunMoveController_BuildActionState. The "
+        "writer-before-selector order makes FgAnimData+0xD4 turn hysteresis, not "
+        "a proven cold aim-idle initiator.",
+    ),
+    0x140EF7890: (
+        "PlayerMovementSettings_ResolveCurrentMoveEntry",
+        "Hashes the move channel, resolves the owner Player's current movement "
+        "setting id, and returns its 440-byte entry from the normal or Chloe "
+        "player-movement-anim-list. GunMove stationary selection reads authored "
+        "turn-enable byte +0xF4 from this entry.",
     ),
     0x1416A5790: (
         "Player_IsCurrentActionStateHash",
