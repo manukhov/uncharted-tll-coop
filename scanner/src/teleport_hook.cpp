@@ -137,6 +137,8 @@ using PlayerInputIsCommandActiveFunction =
     char(__fastcall*)(void*, std::uint32_t, std::uint8_t);
 PlayerInputIsCommandActiveFunction
     g_original_player_input_is_command_active = nullptr;
+PlayerInputIsCommandActiveFunction
+    g_original_player_melee_callsite_is_command_active = nullptr;
 using PlayerMeleeTryAnimFunction =
     char(__fastcall*)(void**, void*, double);
 PlayerMeleeTryAnimFunction g_original_player_melee_try_anim = nullptr;
@@ -145,6 +147,10 @@ std::atomic<bool> g_puppet_melee_try_anim_bypass{false};
 // locomotion/weapon/cover only.
 constexpr bool g_enable_puppet_melee_button_relay = false;
 constexpr bool g_enable_puppet_melee_exec_relay = false;
+// Narrow native-context relay. Unlike the rejected global PlayerInput detour,
+// this patches only two press queries inside the stock melee dispatcher.
+constexpr bool g_enable_puppet_melee_callsite_relay = true;
+std::atomic<ULONGLONG> g_local_melee_press_until_ms{0};
 // Full 0x141272A50 dispatcher from the input hook REJECTED ck: PID 11188 hung
 // after MELEE-RECV, zero MELEE-EXEC (Joypad_IsCommandActive recursion / heavy path).
 constexpr bool g_enable_puppet_melee_full_dispatch = false;
@@ -884,6 +890,9 @@ struct StateNetState {
     std::atomic<std::uint64_t> active_button_press_latch = 0;
     // Deferred puppet melee exec (set on MELEE-RECV edge, drained next remote tick).
     std::atomic<std::uint32_t> pending_puppet_melee_hash = 0;
+    // One-shot native-context press consumed only by the melee-r1 dispatcher
+    // callsite. Saturated by the receive thread so bursts cannot wrap.
+    std::atomic<std::uint32_t> pending_puppet_melee_presses = 0;
     std::atomic<bool> pending_authoritative_teleport = false;
     std::atomic<bool> has_peer_enemies = false;
     std::atomic<ULONGLONG> peer_enemies_received_ms = 0;
@@ -993,8 +1002,27 @@ void publish_peer_state_snapshot(const coop::StatePacket& packet) {
         remote_puppet_actions_from_peer(packet.buttons_pressed);
     sanitized.buttons_released =
         remote_puppet_actions_from_peer(packet.buttons_released);
+    const bool previous_melee_held =
+        g_state_net.has_peer_state.load(std::memory_order_relaxed) &&
+        (g_state_net.peer_state.input_buttons &
+         kJoypadMeleeTriangleButtonMask) != 0;
+    const bool incoming_melee_held =
+        (sanitized.input_buttons & kJoypadMeleeTriangleButtonMask) != 0;
+    const bool incoming_melee_press =
+        (sanitized.buttons_pressed & kJoypadMeleeTriangleButtonMask) != 0 ||
+        (incoming_melee_held && !previous_melee_held);
     g_state_net.peer_state = sanitized;
     g_state_net.peer_state_sequence = packet.sequence;
+    if (g_enable_puppet_melee_callsite_relay && incoming_melee_press) {
+        std::uint32_t pending =
+            g_state_net.pending_puppet_melee_presses.load(
+                std::memory_order_relaxed);
+        while (pending < 4 &&
+               !g_state_net.pending_puppet_melee_presses.compare_exchange_weak(
+                   pending, pending + 1, std::memory_order_release,
+                   std::memory_order_relaxed)) {
+        }
+    }
     g_state_net.pending_button_presses.fetch_or(
         sanitized.buttons_pressed, std::memory_order_release);
     g_state_net.puppet_traversal_force.store(
@@ -10646,8 +10674,9 @@ std::uint64_t capture_peer_send_button_mask(void* player) {
     const std::uint64_t cached =
         g_cached_local_input_buttons.load(std::memory_order_relaxed);
     mask |= cached & kJoypadFireButtonMask;
-    if (g_enable_puppet_melee_button_relay &&
-        player_any_melee_button_active(player, nullptr)) {
+    if (g_enable_puppet_melee_callsite_relay &&
+        GetTickCount64() <
+            g_local_melee_press_until_ms.load(std::memory_order_acquire)) {
         mask |= kJoypadMeleeTriangleButtonMask;
     }
     return mask;
@@ -20604,6 +20633,133 @@ void* allocate_executable_near(const void* target, std::size_t size) {
     return nullptr;
 }
 
+char __fastcall hooked_player_melee_press_callsite(
+    void* state, std::uint32_t hash, std::uint8_t edge) {
+    const char original =
+        g_original_player_melee_callsite_is_command_active != nullptr
+            ? g_original_player_melee_callsite_is_command_active(
+                  state, hash, edge)
+            : 0;
+    if (!g_enable_puppet_melee_callsite_relay || state == nullptr ||
+        g_module == 0) {
+        return original;
+    }
+
+    auto* const player =
+        static_cast<std::byte*>(state) - kPlayerInputCommandStateOffset;
+    const auto& hashes = melee_relay_hashes();
+    if (!hashes.init) {
+        return original;
+    }
+
+    if (player == static_cast<std::byte*>(retained_player_object(0))) {
+        if (original &&
+            (hash == hashes.lmouse_press || hash == hashes.r1)) {
+            // Keep the protocol bit visible for several state packets. The
+            // receiver converts its rising edge into exactly one queue command.
+            g_local_melee_press_until_ms.store(
+                GetTickCount64() + 150, std::memory_order_release);
+        }
+        return original;
+    }
+    if (original || hash != hashes.r1 ||
+        player != static_cast<std::byte*>(retained_player_object(1)) ||
+        !g_state_net.enabled) {
+        return original;
+    }
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    if (received == 0 || GetTickCount64() - received > 500) {
+        return original;
+    }
+
+    std::uint32_t pending =
+        g_state_net.pending_puppet_melee_presses.load(
+            std::memory_order_acquire);
+    while (pending != 0) {
+        if (g_state_net.pending_puppet_melee_presses.compare_exchange_weak(
+                pending, pending - 1, std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+            return 1;
+        }
+    }
+    return original;
+}
+
+bool install_player_melee_press_callsite_relay() {
+    const std::array<std::uintptr_t, 2> callsite_rvas{
+        kMeleeR1IsCommandActiveCallsiteRva,
+        kMeleeLmousePressIsCommandActiveCallsiteRva,
+    };
+    std::array<std::uint8_t*, 2> callsites{};
+    const std::uintptr_t expected_target =
+        g_module + kPlayerInputCommandStateIsCommandActiveRva;
+    for (std::size_t i = 0; i < callsites.size(); ++i) {
+        callsites[i] = reinterpret_cast<std::uint8_t*>(
+            g_module + callsite_rvas[i]);
+        if (callsites[i][0] != 0xE8) {
+            boot_log_line("Player melee press relay SKIPPED (not E8)");
+            return false;
+        }
+        std::int32_t displacement = 0;
+        std::memcpy(&displacement, callsites[i] + 1, sizeof(displacement));
+        const std::uintptr_t target =
+            reinterpret_cast<std::uintptr_t>(callsites[i] + 5) +
+            static_cast<std::intptr_t>(displacement);
+        if (target != expected_target) {
+            boot_log_line("Player melee press relay SKIPPED (target)");
+            return false;
+        }
+    }
+    g_original_player_melee_callsite_is_command_active =
+        reinterpret_cast<PlayerInputIsCommandActiveFunction>(expected_target);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(callsites[0], kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("Player melee press relay SKIPPED (relay)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(&hooked_player_melee_press_callsite);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    std::array<std::int32_t, 2> displacements{};
+    for (std::size_t i = 0; i < callsites.size(); ++i) {
+        const std::int64_t displacement =
+            reinterpret_cast<std::intptr_t>(relay) -
+            reinterpret_cast<std::intptr_t>(callsites[i] + 5);
+        if (displacement < INT32_MIN || displacement > INT32_MAX) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            boot_log_line("Player melee press relay SKIPPED (range)");
+            return false;
+        }
+        displacements[i] = static_cast<std::int32_t>(displacement);
+    }
+
+    const std::size_t patch_span = static_cast<std::size_t>(
+        callsites.back() + 5 - callsites.front());
+    DWORD old_protection = 0;
+    if (!VirtualProtect(callsites.front(), patch_span,
+                        PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("Player melee press relay SKIPPED (protect)");
+        return false;
+    }
+    for (std::size_t i = 0; i < callsites.size(); ++i) {
+        *reinterpret_cast<std::int32_t*>(callsites[i] + 1) = displacements[i];
+    }
+    FlushInstructionCache(GetCurrentProcess(), callsites.front(), patch_span);
+    DWORD ignored = 0;
+    VirtualProtect(callsites.front(), patch_span, old_protection, &ignored);
+    boot_log_line("Player melee press callsite relay installed (r1/lmouse)");
+    return true;
+}
+
 using DrawControlSetChildFlagsFunction = void(__fastcall*)(
     void*, std::uint32_t);
 DrawControlSetChildFlagsFunction g_original_draw_control_set_child_flags = nullptr;
@@ -22944,7 +23100,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15cp (production diagnostics disabled)");
+        "TLL hook DLL init 2026-07-15cq (native melee callsite relay)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
@@ -22957,7 +23113,10 @@ DWORD WINAPI install_hook(void*) {
         install_player_input_is_command_active_force();
     } else {
         boot_log_line(
-            "PlayerInputCommandState IsCommandActive force-hook parked (melee off)");
+            "PlayerInputCommandState global force-hook parked (callsite relay only)");
+    }
+    if (g_enable_puppet_melee_callsite_relay) {
+        install_player_melee_press_callsite_relay();
     }
     boot_log_line(
         "PlayerMeleeTryAnim global hook parked (cj uses inline puppet-only bypass)");

@@ -2742,3 +2742,23 @@ under the current static-only instruction.
   puppet force + `sub_1410FC9F0` bypass → Player vtable `+0xC78`; log `MELEE-EXEC`.
   **Runtime pending:** two-instance punch air → expect `MELEE-EXEC ok=1` + visible
   puppet melee anim.
+
+## 2026-07-15 melee cq: native dispatcher callsite relay
+
+- Composer's global `PlayerInputCommandState_IsCommandActive` detour remains
+  rejected because it broke GiveWeapon; manual dispatcher/queue/anim calls remain
+  rejected by hangs, crashes, and invalid descriptors.
+- Static chain is now complete: stock tick `0x141279DF0` calls dispatcher
+  `0x141272A50`; `melee-r1` callsite `0x141273AE2` immediately feeds native queue
+  insert `0x141273FA0`; vtable `+0x220` independently queries literal `melee-r1`
+  through queue resolver `+0x1F8`.
+- `0x14183E2D0` proves the lmouse subtree is gated by `Joypad+0xBE1` PC-input
+  mode, so remote injection uses the unconditional R1 subtree. Local lmouse
+  callsite `0x141273D3B` is capture-only.
+- Build `2026-07-15cq` patches those two E8 calls only, relays a 150 ms state bit,
+  and consumes one atomic press in retained slot 1's natural dispatcher tick.
+- Production diagnostics remain disabled; no melee hash scan, queue call, log,
+  allocation, or memory walk was added to the hot path.
+- **Next runtime exam:** two fresh copies, one tap and one hold, then weapon
+  pickup/switch. Expect one peer melee attempt per tap, no frame-repeat punches,
+  no GiveWeapon regression, and cp-level frame pacing.

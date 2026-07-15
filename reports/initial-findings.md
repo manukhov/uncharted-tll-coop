@@ -27724,3 +27724,32 @@ GunMoveShield pass-through probes, and reduces cloth observation to a vtable and
 parent identity heartbeat. Release build succeeds. Status: **STATIC /
 HYPOTHESIS ready for runtime**, with prediction and competitors in
 `reports/runtime_hot_path_audit_20260715.md`.
+
+### 2026-07-15 STATIC: melee belongs at two native dispatcher callsites
+
+The retained Player's queue owner is naturally scheduled: vtable
+`0x142A6C2E8 +0x1E8` is
+`PlayerMeleeController_DispatchQueuedButtonCommandsTick 0x141279DF0`, which reads
+Player at owner `+0x108`, queue at `+0x150`, and calls
+`DispatchPlayerMeleeButtonHoldReleaseAndGrappleReactionCommands 0x141272A50` once
+per engine-clock stamp. Inside that dispatcher, the exact `melee-r1`
+`PlayerInputCommandState_IsCommandActive 0x141E39D50` call is `0x141273AE2`; a
+true result immediately builds the native payload and calls
+`PushOrRotateMeleeCommandQueueEntry 0x141273FA0`.
+
+The independent consumer side agrees: vtable `+0x220` is `0x14127A250`, which
+hashes literal `melee-r1` and calls vtable `+0x1F8` (`0x141279E50`) to resolve the
+command against the same queue and Player. The PC mouse branch is not suitable
+for puppet injection because `Joypad_IsKeyboardMouseInputModeActive 0x14183E2D0`
+gates it on `Joypad+0xBE1`, a field maintained by native input polling. The mouse
+press call `0x141273D3B` remains useful only for capturing the local PC player's
+original-true press.
+
+Build `2026-07-15cq` therefore patches only `0x141273AE2` and `0x141273D3B` with
+one nearby FF25 relay. It captures local mouse/R1 press into a 150 ms protocol
+pulse and consumes one receiver-side atomic press only from retained slot 1's
+`melee-r1` query. The rejected global PlayerInput detour, manual dispatcher,
+direct queue push, and direct animation calls remain disabled. Release build
+succeeds. Status: **STATIC / HYPOTHESIS ready for runtime**; full evidence,
+competitors, and prediction are in
+`reports/melee_native_callsite_relay_20260715.md`.

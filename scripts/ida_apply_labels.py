@@ -4392,6 +4392,16 @@ FUNCTIONS = {
         "at +0x108, compares +0x400 clock stamp, then calls 0x141272A50 on the "
         "queue base at controller+0x150.",
     ),
+    0x141279E50: (
+        "MeleeCommandQueue_ResolveCommandAgainstPlayer",
+        "Vtable +0x1F8 queue resolver. Forwards owner+0x150 queue state, the "
+        "requested command descriptor, and owner+0x108 Player to 0x1412712D0.",
+    ),
+    0x14127A250: (
+        "MeleeCommandQueue_QueryMeleeR1",
+        "Vtable +0x220 query: hashes literal `melee-r1`, stores the command id "
+        "through its int* argument, then invokes the queue resolver at +0x1F8.",
+    ),
     0x141273FA0: (
         "PushOrRotateMeleeCommandQueueEntry",
         "Maintains a 16-slot queue of 0x40-byte melee/action command entries. "
@@ -4405,6 +4415,12 @@ FUNCTIONS = {
         "Walks the same 16-slot melee command queue as 0x141273FA0, finds a "
         "matching command id, and updates only the secondary scalar at "
         "slot+0x34.",
+    ),
+    0x14183E2D0: (
+        "Joypad_IsKeyboardMouseInputModeActive",
+        "Returns false when the global input manager suppresses PC input; "
+        "otherwise returns Joypad+0xBE1, maintained by the native input poll "
+        "from keyboard/mouse versus gamepad activity.",
     ),
     0x141274470: (
         "ConstructMeleeCommandQueueOwner",
@@ -7237,6 +7253,9 @@ def ensure_function(ea):
 
 
 def apply_labels():
+    # A previous melee pass accidentally put the dispatcher function name on an
+    # interior instruction, forcing IDA to suffix the real entry with `_0`.
+    ida_name.set_name(0x141273B20, "", ida_name.SN_NOWARN)
     for ea, (name, comment) in FUNCTIONS.items():
         ensure_function(ea)
         ida_name.set_name(

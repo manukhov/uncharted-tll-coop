@@ -87,6 +87,11 @@ constexpr std::size_t kSkeletonJointCountOffset = 0x34;
 // Embedded PlayerInputCommandState (sub_14024D7E0 returns Player+0x39A0).
 constexpr std::size_t kPlayerInputCommandStateOffset = 0x39A0;
 constexpr std::uintptr_t kPlayerInputCommandStateIsCommandActiveRva = 0x1E39D50;
+// Exact press-query callsites inside the naturally scheduled melee dispatcher.
+// Both are E8 calls to PlayerInputCommandState_IsCommandActive. The mouse site
+// captures local PC melee; the R1 site also consumes one remote melee pulse.
+constexpr std::uintptr_t kMeleeR1IsCommandActiveCallsiteRva = 0x1273AE2;
+constexpr std::uintptr_t kMeleeLmousePressIsCommandActiveCallsiteRva = 0x1273D3B;
 // MoveStick air-melee anim gate (sub_1410FC9F0); net-mode early-out blocks puppet.
 constexpr std::uintptr_t kPlayerMeleeTryAnimRva = 0x10FC9F0;
 constexpr std::uintptr_t kMeleeTryAnimEnabledGlobalRva = 0x3ECF31A;

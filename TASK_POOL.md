@@ -11,6 +11,15 @@
 
 ## P0: Full Player Synchronization (CURRENT)
 
+- [~] **Melee native callsite relay (build cq, 2026-07-15):** static quota met.
+      Natural owner tick `0x141279DF0` calls dispatcher `0x141272A50`; exact
+      `melee-r1` E8 `0x141273AE2` feeds native queue insert `0x141273FA0`, and
+      vtable `+0x220` independently queries literal `melee-r1` through `+0x1F8`.
+      Build cq patches only R1/lmouse press callsites, sends a 150 ms pulse, and
+      consumes one atomic press in slot 1. Global PlayerInput detour and manual
+      dispatcher/queue/anim paths remain parked. Next: two-copy tap/hold plus
+      GiveWeapon regression and frame-pacing exam.
+
 - [x] **Grenade world-object relay (2026-07-11):** CONFIRMED v6 — `GRNE` Execute
       spawn + `GRNK` kinematics stream + derived transform write + `fuse_end=now+3s`.
       Peer sees correct arc and landing explosion.
