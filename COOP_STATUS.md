@@ -2801,3 +2801,8 @@ exchange while no visible peer could ever be created. Build ct restores this
 one-shot functional capture, leaves cq melee parked, and removes the capture
 handler's heavy descriptor/hash scan in production. Prediction and alternatives
 are recorded in `reports/runtime_hot_path_audit_20260715.md`.
+
+**Runtime CONFIRMED (user):** visible two-way peer representation returned on ct.
+Root cause was cp disabling the sole `g_spawn_captured` producer. The capture
+toggle is removed; production now always registers/arms the required one-shot
+descriptor capture. Its heavy diagnostic scan remains off.

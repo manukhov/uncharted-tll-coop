@@ -146,3 +146,12 @@ must report descriptor reissue and remote synchronization enabled, and the user
 must see the peer. If reissue is logged but no retained Player appears, the
 descriptor lifetime/spawn result becomes the next candidate. Melee remains parked
 throughout this test.
+
+### Runtime result: CONFIRMED
+
+The user confirmed both visible peers returned on ct. Since ct retained the cp
+cleanup and kept cq melee parked while changing only descriptor capture, the
+missing-peer regression is assigned to the disabled `g_spawn_captured` producer.
+The capture enable flag has been removed: registration and one-shot arming are
+now unconditional production ownership. The expensive descriptor/hash scan
+remains compile-time absent.

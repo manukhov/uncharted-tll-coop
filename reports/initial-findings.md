@@ -27784,3 +27784,10 @@ UDP state exchange healthy but makes visible connection impossible because no
 retained slot-1 Player can be created. Build ct restores the one-shot functional
 capture and compile-time parks only its descriptor/hash scan. Runtime confirmation
 is pending.
+
+Build ct is now **CONFIRMED** by the user: both visible peers returned immediately
+after restoring descriptor capture, with cq melee still parked. This rejects UDP,
+snapshot publication, and the melee relay as causes of the missing-peer regression
+and confirms the disabled spawn gate as the root cause. The enable flag was then
+removed entirely; production always registers and arms this required one-shot
+capture. Do not classify it as diagnostics again.

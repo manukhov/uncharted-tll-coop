@@ -11,11 +11,12 @@
 
 ## P0: Full Player Synchronization (CURRENT)
 
-- [~] **Restore remote Player creation (build ct, 2026-07-15):** cp wrongly
+- [x] **Restore remote Player creation (build ct, 2026-07-15):** cp wrongly
       disabled the sole descriptor capture that writes `g_spawn_captured`; the
       live-peer slot-1 spawn gate therefore could never open despite healthy UDP.
-      ct restores the one-shot capture with heavy descriptor scanning off. Runtime
-      exam: expect descriptor reissue, retained Player sync enable, visible peer.
+      ct restored the one-shot capture with heavy descriptor scanning off; user
+      confirmed both visible peers returned. The optional flag is now removed so
+      production cannot disable this functional prerequisite again.
 
 - [x] **Build cr network discriminator (2026-07-15):** fresh PIDs 15996/14588
       selected A:31338/B:31339, both sent 456-byte sequence-1 packets, and both

@@ -23404,9 +23404,9 @@ DWORD WINAPI install_hook(void*) {
     }
     install_xinput_hook();
     g_velprobe_enabled = false;
-    if constexpr (kEnableRemotePlayerSpawnDescriptorCapture) {
-        g_spawn_veh = AddVectoredExceptionHandler(1, &spawn_capture_veh);
-    }
+    // FUNCTIONAL: remote slot-1 creation consumes the captured slot-0 descriptor.
+    // This is not an optional diagnostic; without it UDP works but no peer spawns.
+    g_spawn_veh = AddVectoredExceptionHandler(1, &spawn_capture_veh);
     if constexpr (kEnableLegacyRuntimeDiagnostics) {
         CreateThread(nullptr, 0, &aux_input_thread, nullptr, 0, nullptr);
         g_velwriter_veh = AddVectoredExceptionHandler(0, &velwriter_capture_veh);
@@ -23432,17 +23432,13 @@ DWORD WINAPI install_hook(void*) {
           << " target(coop-drake)=0x" << g_inject_look_hash << std::dec;
         log_line(l.str().c_str());
     }
-    if constexpr (kEnableRemotePlayerSpawnDescriptorCapture) {
-        arm_spawn_breakpoint_all_threads();
-    }
+    arm_spawn_breakpoint_all_threads();
     // DIAGNOSTIC input-capture HW breakpoints (perslot / inputstate / inputwrite /
     // stick) are NO LONGER auto-armed: they hook stick/input processing and BREAK
     // AIMING (right stick) for the main player on inject. They were only needed for
     // the original input RE; the clone drive writes FrameState directly without them.
     // Re-arm manually via the Numpad/PageUp hotkeys if input RE is needed again.
-    boot_log_line(kEnableRemotePlayerSpawnDescriptorCapture
-                      ? "remote Player descriptor capture armed"
-                      : "remote Player descriptor capture disabled");
+    boot_log_line("remote Player descriptor capture armed (required)");
     log_line("input-capture breakpoints NOT auto-armed (they broke aiming); spawn only");
     log_line("velprobe disabled on load (press Insert to enable)");
     log_line("Press PageUp to capture the velocity-writer RIP (run, then read log)");
