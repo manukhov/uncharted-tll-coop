@@ -2889,3 +2889,12 @@ keeps only the working square relay.
   snapshot. Do not rotate/copy the full 651-joint palette for body yaw.
 - Evidence, alternatives and runtime prediction:
   `reports/player_aim_fganim_world_transform_20260715.md`.
+
+### Build cz ready for runtime exam
+
+`0x141A8FC00` now calls a near relay that gates by the cached remote
+`Player+0x1A8` FgAnimData and a fresh peer ADS packet. It replaces only the
+quaternion in the native phase-`0x40` transform block, preserves translation and
+the publish flag, then calls untouched `FgAnimData_PublishWorldTransform`.
+Non-puppet and non-ADS publications are pass-through. Release build succeeds;
+runtime prediction remains the one recorded in the report above.

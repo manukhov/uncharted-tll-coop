@@ -76,12 +76,17 @@ constexpr std::size_t kFgAnimDataStateOffset = 4;
 constexpr std::size_t kFgAnimDataUpperStateOwnerOffset = 0x10;
 constexpr std::size_t kFgAnimDataRetainedHandleOffset = 0x1A8;
 constexpr std::size_t kFgAnimDataRetainedIdOffset = 0x1B0;
+constexpr std::size_t kFgAnimDataRenderWorldMatrixOffset = 0x1C0;
 constexpr std::size_t kFgAnimDataRuntimePayloadOffset = 0x230;
 constexpr std::size_t kFgAnimDataPreviousPaletteOffset = 0x238;
 // Hex-Rays prints structure offsets in decimal: its +560/+568 are +0x230/+0x238.
 // These are the current/previous pNextFrameSkinningBoneMats buffers (48 B/joint).
 constexpr std::size_t kFgAnimDataCurrentSkinningMatsOffset = 0x230;
 constexpr std::size_t kFgAnimDataPreviousSkinningMatsOffset = 0x238;
+constexpr std::size_t kFgAnimDataCurrentUploadSkinningMatsOffset = 0x240;
+constexpr std::size_t kFgAnimDataPreviousUploadSkinningMatsOffset = 0x248;
+constexpr std::uintptr_t kFgAnimDataPublishWorldTransformRva = 0x18C55D0;
+constexpr std::uintptr_t kAnimManagerPublishWorldTransformCallsiteRva = 0x1A8FC00;
 constexpr std::size_t kFgAnimDataSkeletonOffset = 0x18;
 constexpr std::size_t kSkeletonJointCountOffset = 0x34;
 // Embedded PlayerInputCommandState (sub_14024D7E0 returns Player+0x39A0).

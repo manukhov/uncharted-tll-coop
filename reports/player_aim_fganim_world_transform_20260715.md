@@ -58,3 +58,15 @@ next target is render-instance generation rather than joints. A crash before the
 first matched publication indicates callsite/ABI failure. Kneeling slide, hair or
 weapon disappearance would indicate that the correction escaped the world matrix
 and touched pose/visibility state, which this design must not do.
+
+## Build cz implementation
+
+Build `2026-07-15cz` patches only the direct `E8` at `0x141A8FC00` through a
+near relay. The wrapper first compares `rcx` with the current remote Player's
+cached `FgAnimData`; every non-matching object calls the untouched native
+`0x1418C55D0` immediately. A matching object is modified only for a peer ADS
+packet no older than 250 ms. The wrapper copies the native 32-byte transform,
+replaces its quaternion with horizontal peer-camera yaw, preserves translation
+and `r8b`, then invokes the original function. It records only counters/yaw in
+the animation phase; the Player thread emits at most one diagnostic line per
+second.

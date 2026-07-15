@@ -56,6 +56,8 @@ namespace {
 // (Addresses/offsets these use live in hook_offsets.h.)
 
 using UpdateFunction = void(__fastcall*)(void*);
+using FgAnimDataPublishWorldTransformFunction = std::int64_t(__fastcall*)(
+    void*, const float*, std::uint8_t);
 using BuildNavigationFrameFunction =
     void(__fastcall*)(void*, const void*, std::uint32_t, float);
 using MoveToFunction = void(__fastcall*)(
@@ -105,6 +107,10 @@ using StringHashFunction = std::uint32_t(__fastcall*)(const char*, std::uint64_t
 using ResolveUpperActorRecordFunction = void*(__fastcall*)(std::uint32_t);
 
 UpdateFunction g_original_update = nullptr;
+FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
+std::atomic<void*> g_puppet_fganim_data{nullptr};
+std::atomic<std::uint64_t> g_puppet_fganim_world_turn_hits{0};
+std::atomic<int> g_puppet_fganim_world_turn_yaw_mdeg{0};
 using PlayerInputStateUpdateFunction = char(__fastcall*)(void*);
 PlayerInputStateUpdateFunction g_original_player_input_state_update = nullptr;
 using PlayerInputCommandStateUpdateFunction = void(__fastcall*)(void*);
@@ -7114,6 +7120,10 @@ CharacterSkeletonEvalPerJointFunction g_original_character_skeleton_eval_per_joi
 constexpr bool g_enable_gun_move_body_turn = false;
 // REJECTED 2026-07-14 PIDs 2084/7800: root snap does not change visible ADS aim.
 constexpr bool g_enable_puppet_ads_root_yaw_snap = false;
+// STATIC 2026-07-15: phase 0x40 publishes FgAnimData+0x1C0, which the draw
+// manager copies into each render instance. Override only that stock publication
+// for the remote FgAnimData while peer ADS is fresh.
+constexpr bool g_enable_puppet_fganim_world_aim_turn = true;
 
 bool seh_read_aim_origin_point(void* controller, float out[4]) {
     if (controller == nullptr || out == nullptr || g_module == 0) {
@@ -7736,6 +7746,120 @@ void yaw_quat_from_horizontal_forward(
     out[1] = std::sin(half);
     out[2] = 0.0F;
     out[3] = std::cos(half);
+}
+
+std::int64_t __fastcall hooked_fganim_publish_world_transform(
+    void* fg, const float* transform, std::uint8_t publish_current) {
+    const auto native = g_fganim_publish_world_transform;
+    if (native == nullptr) {
+        return 0;
+    }
+
+    const float* selected_transform = transform;
+    alignas(16) float relayed_transform[8]{};
+    const void* const puppet_fg =
+        g_puppet_fganim_data.load(std::memory_order_acquire);
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    const ULONGLONG now = GetTickCount64();
+    if (g_enable_puppet_fganim_world_aim_turn && fg != nullptr &&
+        fg == puppet_fg && transform != nullptr && received != 0 &&
+        now - received <= 250) {
+        coop::StatePacket peer{};
+        if (copy_peer_state_snapshot(peer) && peer_packet_aim_active(peer)) {
+            const float* camera_quat = nullptr;
+            if ((peer.flags & coop::kStateFlagPoseSeed) != 0 &&
+                valid_network_orientation(peer.pose_seed + 4)) {
+                camera_quat = peer.pose_seed + 4;
+            } else if ((peer.flags & coop::kStateFlagPeerCamera) != 0 &&
+                       valid_network_orientation(peer.camera_quat)) {
+                camera_quat = peer.camera_quat;
+            }
+            if (camera_quat != nullptr) {
+                float forward_x = 0.0F;
+                float forward_z = 0.0F;
+                camera_forward_horizontal(camera_quat, forward_x, forward_z);
+                const float horizontal = std::sqrt(
+                    forward_x * forward_x + forward_z * forward_z);
+                if (std::isfinite(horizontal) && horizontal > 0.001F) {
+                    std::memcpy(
+                        relayed_transform, transform, sizeof(relayed_transform));
+                    yaw_quat_from_horizontal_forward(
+                        forward_x, forward_z, relayed_transform);
+                    selected_transform = relayed_transform;
+                    const float yaw_degrees =
+                        std::atan2(forward_x, forward_z) *
+                        (180.0F / 3.14159265F);
+                    g_puppet_fganim_world_turn_yaw_mdeg.store(
+                        static_cast<int>(yaw_degrees * 1000.0F),
+                        std::memory_order_relaxed);
+                    g_puppet_fganim_world_turn_hits.fetch_add(
+                        1, std::memory_order_relaxed);
+                }
+            }
+        }
+    }
+    return native(fg, selected_transform, publish_current);
+}
+
+bool install_fganim_world_aim_turn_callsite_relay() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kAnimManagerPublishWorldTransformCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line("FgAnim world-aim relay SKIPPED (callsite is not E8)");
+        return false;
+    }
+    std::int32_t displacement = 0;
+    std::memcpy(&displacement, call_site + 1, sizeof(displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(displacement);
+    const std::uintptr_t expected =
+        g_module + kFgAnimDataPublishWorldTransformRva;
+    if (target != expected) {
+        boot_log_line("FgAnim world-aim relay SKIPPED (unexpected target)");
+        return false;
+    }
+    g_fganim_publish_world_transform =
+        reinterpret_cast<FgAnimDataPublishWorldTransformFunction>(expected);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("FgAnim world-aim relay SKIPPED (relay allocation)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_fganim_publish_world_transform);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("FgAnim world-aim relay SKIPPED (rel32 range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("FgAnim world-aim relay SKIPPED (VirtualProtect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line("FgAnim phase-0x40 world-aim relay installed");
+    return true;
 }
 
 void sync_puppet_root_yaw_from_peer_camera(
@@ -14173,8 +14297,19 @@ void log_puppet_action_state(
 void apply_puppet_transform_post(void* /*update_object*/) {
     void* puppet = retained_player_object(1);
     if (puppet == nullptr || !g_puppet_net_apply) {
+        if (puppet == nullptr) {
+            g_puppet_fganim_data.store(nullptr, std::memory_order_release);
+        }
         return;
     }
+    void* fg = nullptr;
+    if (readable_bytes(
+            static_cast<std::byte*>(puppet) + kPlayerFgAnimDataOffset) >=
+        sizeof(void*)) {
+        fg = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(puppet) + kPlayerFgAnimDataOffset);
+    }
+    g_puppet_fganim_data.store(fg, std::memory_order_release);
     coop::StatePacket pkt{};
     void* resolved = nullptr;
     if (!latest_peer_state(pkt, resolved)) {
@@ -14258,6 +14393,24 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     }
     if (peer_aiming) {
         mirror_puppet_aim_add_to_fganim(puppet);
+        static ULONGLONG last_world_turn_log = 0;
+        static std::uint64_t last_world_turn_hits = 0;
+        const std::uint64_t world_turn_hits =
+            g_puppet_fganim_world_turn_hits.load(std::memory_order_relaxed);
+        const ULONGLONG world_turn_now = GetTickCount64();
+        if (world_turn_hits != last_world_turn_hits &&
+            world_turn_now - last_world_turn_log >= 1000) {
+            last_world_turn_log = world_turn_now;
+            last_world_turn_hits = world_turn_hits;
+            std::ostringstream line;
+            line << "AIM-FGANIM-WORLD-TURN hits=" << world_turn_hits
+                 << " yaw="
+                 << (g_puppet_fganim_world_turn_yaw_mdeg.load(
+                         std::memory_order_relaxed) /
+                     1000.0F)
+                 << " fg=" << fg << " seq=" << pkt.sequence;
+            force_log_line(line.str().c_str());
+        }
     }
     if (g_enable_aim_palette_probe) {
         log_puppet_aim_render_discriminator(puppet, pkt);
@@ -23169,7 +23322,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15cy (confirmed melee square relay)");
+        "TLL hook DLL init 2026-07-15cz (FgAnim world aim turn)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -23208,6 +23361,9 @@ DWORD WINAPI install_hook(void*) {
         install_player_aim_blend_target_callsite_relay();
         install_player_aim_world_basis_relay();
         install_player_aim_blend_tick_probe();
+        if (g_enable_puppet_fganim_world_aim_turn) {
+            install_fganim_world_aim_turn_callsite_relay();
+        }
         if (g_enable_gun_move_body_turn) {
             install_gun_move_camera_turn_relay();
         }
