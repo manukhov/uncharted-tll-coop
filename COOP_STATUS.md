@@ -1,5 +1,14 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-15, Cursor - melee cm deferred queue-only)
+
+**REJECTED (cl, PID 22608):** second instance died at boot — log stops after DLL
+init + 8 `EXCEPTION` probes, never `MELEE-HASHES` (no punch, exec not reached).
+Intermittent dual-instance failure; same class as ch instance-2 boot death.
+
+**cm:** MELEE-RECV only sets `pending_puppet_melee_hash`; drain next remote
+`PLAYER-INPUT-UPDATE` tick. Queue push only; try_anim + publish parked.
+
 ## Turn note (2026-07-15, Cursor - melee ck hang, cl queue-only)
 
 **REJECTED (ck runtime, PIDs 11188/23352):** user punched → both instances froze;

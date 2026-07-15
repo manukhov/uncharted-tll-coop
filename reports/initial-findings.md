@@ -27685,3 +27685,6 @@ HYPOTHESIS for the two remaining mechanisms**.
   11188 logged `MELEE-RECV cmdActive=1` then stopped (no `MELEE-EXEC`); silent
   exit. Suspect sync `0x141272A50` from input hook. **cl:** dispatch parked,
   direct queue push only.
+- **REJECTED (build 2026-07-14cl, PID 22608):** instance 2 boot crash before
+  `MELEE-HASHES`; exec never ran. **cm:** defer exec to next remote input tick;
+  queue push only, anim/publish parked.

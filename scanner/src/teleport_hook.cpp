@@ -145,6 +145,9 @@ constexpr bool g_enable_puppet_melee_exec_relay = true;
 // Full 0x141272A50 dispatcher from the input hook REJECTED ck: PID 11188 hung
 // after MELEE-RECV, zero MELEE-EXEC (Joypad_IsCommandActive recursion / heavy path).
 constexpr bool g_enable_puppet_melee_full_dispatch = false;
+// Direct vtable anim/publish from exec REJECTED ch: instance-2 boot crash suspects.
+constexpr bool g_enable_puppet_melee_try_anim_exec = false;
+constexpr bool g_enable_puppet_melee_publish_exec = false;
 ScopeVisibleQueryFunction g_original_scope_visible_query = nullptr;
 ReticleHudPublisherFunction g_original_reticle_hud_publisher = nullptr;
 ReticleAimHudPublisherFunction g_original_reticle_aim_hud_publisher = nullptr;
@@ -876,6 +879,8 @@ struct StateNetState {
     // cover-enter / try-enter-cover / one-shot cover-exit on Joypad 3.
     std::atomic<std::uint8_t> puppet_cover_force = 0;
     std::atomic<std::uint64_t> active_button_press_latch = 0;
+    // Deferred puppet melee exec (set on MELEE-RECV edge, drained next remote tick).
+    std::atomic<std::uint32_t> pending_puppet_melee_hash = 0;
     std::atomic<bool> pending_authoritative_teleport = false;
     std::atomic<bool> has_peer_enemies = false;
     std::atomic<ULONGLONG> peer_enemies_received_ms = 0;
@@ -10404,16 +10409,21 @@ PuppetMeleeExecSteps seh_puppet_melee_exec_path(void* puppet,
         }
 
         const bool queue_ready = steps.dispatch_ok || steps.queue_push_ok;
-        steps.try_anim_ok = seh_puppet_try_anim_skip_net_gate(
-            reinterpret_cast<void**>(puppet), move_block, queue_ready);
-        void** const player_vtable = *reinterpret_cast<void***>(puppet);
-        if (player_vtable != nullptr) {
-            using PublishMeleeFunction = void(__fastcall*)(void*);
-            const auto publish = reinterpret_cast<PublishMeleeFunction>(
-                player_vtable[kPlayerMeleePublishVtableOffset / sizeof(void*)]);
-            if (publish != nullptr) {
-                publish(puppet);
-                steps.publish_ok = true;
+        if (g_enable_puppet_melee_try_anim_exec) {
+            steps.try_anim_ok = seh_puppet_try_anim_skip_net_gate(
+                reinterpret_cast<void**>(puppet), move_block, queue_ready);
+        }
+        if (g_enable_puppet_melee_publish_exec) {
+            void** const player_vtable = *reinterpret_cast<void***>(puppet);
+            if (player_vtable != nullptr) {
+                using PublishMeleeFunction = void(__fastcall*)(void*);
+                const auto publish = reinterpret_cast<PublishMeleeFunction>(
+                    player_vtable[kPlayerMeleePublishVtableOffset /
+                                  sizeof(void*)]);
+                if (publish != nullptr) {
+                    publish(puppet);
+                    steps.publish_ok = true;
+                }
             }
         }
         return steps;
@@ -10447,7 +10457,7 @@ void trigger_peer_melee_animation(void* puppet) {
         seh_puppet_melee_exec_path(puppet, command_hash);
     const bool ok = steps.controller_ok &&
                     (steps.dispatch_ok || steps.queue_push_ok) &&
-                    steps.try_anim_ok;
+                    (!g_enable_puppet_melee_try_anim_exec || steps.try_anim_ok);
     std::ostringstream line;
     line << "MELEE-EXEC hash=0x" << std::hex << command_hash << std::dec
          << " ok=" << (ok ? 1 : 0) << " ctrl=" << (steps.controller_ok ? 1 : 0)
@@ -20605,6 +20615,34 @@ char __fastcall hooked_player_input_state_update(void* player) {
         }
     }
     if (is_remote) {
+        if (g_enable_puppet_melee_exec_relay && g_state_net.enabled) {
+            const std::uint32_t pending_hash =
+                g_state_net.pending_puppet_melee_hash.exchange(
+                    0, std::memory_order_acq_rel);
+            if (pending_hash != 0 && player == retained_player_object(1)) {
+                force_log_line("MELEE-EXEC drain");
+                const auto& hashes = melee_relay_hashes();
+                std::uint32_t command_hash = pending_hash;
+                if (command_hash == 1) {
+                    command_hash = hashes.lmouse_press;
+                }
+                const PuppetMeleeExecSteps steps =
+                    seh_puppet_melee_exec_path(player, command_hash);
+                const bool ok = steps.controller_ok &&
+                                (steps.dispatch_ok || steps.queue_push_ok) &&
+                                (!g_enable_puppet_melee_try_anim_exec ||
+                                 steps.try_anim_ok);
+                std::ostringstream line;
+                line << "MELEE-EXEC hash=0x" << std::hex << command_hash
+                     << std::dec << " ok=" << (ok ? 1 : 0)
+                     << " ctrl=" << (steps.controller_ok ? 1 : 0)
+                     << " dispatch=" << (steps.dispatch_ok ? 1 : 0)
+                     << " queue=" << (steps.queue_push_ok ? 1 : 0)
+                     << " anim=" << (steps.try_anim_ok ? 1 : 0)
+                     << " publish=" << (steps.publish_ok ? 1 : 0);
+                force_log_line(line.str().c_str());
+            }
+        }
         const std::uint64_t consumed_edges =
             g_state_net.active_button_press_latch.exchange(
                 0, std::memory_order_acq_rel);
@@ -20670,7 +20708,14 @@ char __fastcall hooked_player_input_state_update(void* player) {
             }
         }
         if ((player_consumed_edges & kJoypadMeleeTriangleButtonMask) != 0) {
-            trigger_peer_melee_animation(player);
+            std::uint32_t relay_hash = 1;
+            player_any_melee_button_active(player, &relay_hash);
+            if (relay_hash == 0) {
+                relay_hash = 1;
+            }
+            g_state_net.pending_puppet_melee_hash.store(
+                relay_hash, std::memory_order_release);
+            force_log_line("MELEE-EXEC deferred");
         }
         apply_puppet_sustained_aim_input(player);
     }
@@ -23153,7 +23198,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14cl (melee queue push only, dispatch parked)");
+        "TLL hook DLL init 2026-07-14cm (melee deferred queue push, anim parked)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
