@@ -7210,7 +7210,7 @@ constexpr bool g_enable_gun_move_body_turn = true;
 // STATIC 2026-07-15: the strafe builder snapshots Player+0x100..+0x14F before
 // the late FgAnim world-yaw publication. Stage only Player+0x140 during action
 // construction and restore it immediately; this is not sustained root ownership.
-constexpr bool g_enable_gun_move_action_basis_snapshot = true;
+constexpr bool g_enable_gun_move_action_basis_snapshot = false;
 // REJECTED 2026-07-14 PIDs 2084/7800: root snap does not change visible ADS aim.
 constexpr bool g_enable_puppet_ads_root_yaw_snap = false;
 // STATIC 2026-07-15: phase 0x40 publishes FgAnimData+0x1C0, which the draw
@@ -8150,18 +8150,12 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
                         std::atan2(-forward_x, -forward_z);
                     if (!smoothed_yaw_valid || smoothed_fg != fg ||
                         smoothed_yaw_ms == 0 || now - smoothed_yaw_ms > 500) {
-                        float current_x = 0.0F;
-                        float current_y = 0.0F;
-                        float current_z = 0.0F;
-                        quat_forward_pos_z(
-                            transform + 4, current_x, current_y, current_z);
-                        const float current_horizontal = std::sqrt(
-                            current_x * current_x + current_z * current_z);
-                        smoothed_yaw =
-                            std::isfinite(current_horizontal) &&
-                                    current_horizontal > 0.001F
-                                ? std::atan2(current_x, current_z)
-                                : target_yaw;
+                        // dk proved the initial authored action snapshot can be
+                        // almost 180 degrees stale without affecting rendering.
+                        // Do not expose that old heading for the 0.75s required by
+                        // the 240 deg/s limiter. Start ADS at the peer target; keep
+                        // shortest-arc smoothing only for later camera movement.
+                        smoothed_yaw = target_yaw;
                         smoothed_fg = fg;
                         smoothed_yaw_valid = true;
                         smoothed_yaw_ms = now;
@@ -23756,7 +23750,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15dk (snapshot initial GunMove child action)");
+        "TLL hook DLL init 2026-07-15dl (snap initial FgAnim ADS heading)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

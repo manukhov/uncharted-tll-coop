@@ -28130,3 +28130,21 @@ boundary itself.
   snapshot wrapper. Prediction: first ADS emits child 0/103 and a root dot. A
   non-unit dot with no visual change rejects stale `Player+0x140`; improvement
   confirms the initial snapshot timing. Lifecycle kneeling rejects the boundary.
+
+### 2026-07-15 build dk runtime: reject action snapshot; snap initial FgAnim yaw
+
+- **CONFIRMED delivery:** initial builder marker was
+  `child=103 move=nan rootDot=0.0152348`. The staged and native root snapshots
+  differed by almost 180 degrees.
+- **REJECTED visible owner:** despite that large corrected snapshot, the user saw
+  no progress. `Player+0x140` is stale but does not own the visible wrong-side ADS
+  entry or gait. Build dl parks both snapshot callsite hooks again.
+- **STATIC exact delay:** new FgAnim sessions initialize `smoothed_yaw` from the
+  old published transform and turn at at most 240 degrees/second. A 180-degree
+  mismatch takes 0.75 seconds, matching the reported roughly one-second correction
+  after admission.
+- Build dl initializes only a new ADS session at target yaw and retains shortest-
+  arc limiting for subsequent camera motion. Prediction: first visible ADS heading
+  is immediately correct; continued camera turning stays smooth. If the old
+  heading still appears, earlier native pose admission, not final FgAnim yaw, owns
+  the entry frame.

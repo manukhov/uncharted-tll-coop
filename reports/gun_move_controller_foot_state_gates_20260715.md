@@ -145,3 +145,27 @@ snapshot is confirmed. If they remain unchanged despite that marker, the snapsho
 hypothesis is rejected and child-action advancement becomes leading. No marker
 rejects the assumed initial call path; any lifecycle kneeling/root drift rejects
 the temporary substitution boundary.
+
+## Build dk runtime and build dl prediction
+
+**REJECTED as the visible entry/gait owner:** dk reached the initial builder and
+logged `child=103`, `rootDot=0.0152348`; native and relayed action snapshots were
+nearly 180 degrees apart. The user nevertheless saw no improvement. Therefore
+`Player+0x140` is genuinely stale but is not the visible wrong-side ADS owner.
+The runtime snapshot hook is disabled again in build dl.
+
+The reported roughly one-second correction instead matches the mod's final FgAnim
+policy exactly. On a new ADS session, `hooked_fganim_publish_world_transform`
+initializes `smoothed_yaw` from the old transform, then limits the shortest arc to
+240 degrees/second. A near-180-degree mismatch therefore remains visible for about
+0.75 seconds, plus action admission time.
+
+Build dl initializes a new ADS FgAnim session directly at `target_yaw`; the same
+240-degree/second shortest-arc limiter remains for subsequent live camera turns.
+Prediction: the puppet appears in the correct horizontal aim direction on the
+first visible ADS frame instead of aiming backward and correcting for a second.
+Later camera motion remains smooth. An initial wrong-side frame despite the
+existing FgAnim publication marker rejects final-world yaw as the weapon-entry
+owner and selects earlier ADS pose admission as the next target. Instant correct
+facing with planted/sliding feet confirms yaw timing while leaving locomotion for
+the separate child-state task.

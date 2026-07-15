@@ -3044,6 +3044,18 @@ both exact builder callsites through the temporary snapshot. Its one-shot marker
 must now appear on ADS entry; a non-unit root dot with unchanged visuals rejects
 the stale-snapshot hypothesis.
 
+Build dk delivered the initial snapshot (`child=103`, `rootDot=0.0152348`, nearly
+180 degrees different) but produced no visual progress. This rejects the action
+snapshot as the visible entry/gait owner and the callsite hooks are parked again.
+The user's roughly one-second wrong-side correction instead matches the final
+FgAnim limiter: a new session starts from old transform yaw and needs 0.75 seconds
+to cover 180 degrees at 240 degrees/second, plus admission time.
+
+Build dl starts a new FgAnim ADS session directly at peer target yaw and retains
+shortest-arc rate limiting only for subsequent camera motion. Prediction: the first
+visible ADS frame faces correctly; later turning remains smooth. Planted/sliding
+feet are expected to remain as a separate lower-priority child-state issue.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three
