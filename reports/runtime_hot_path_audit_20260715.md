@@ -120,3 +120,29 @@ the prediction. No build-cr exception-observer record was produced.
 Any remaining visual non-connection is downstream of
 `publish_peer_state_snapshot`, in snapshot freshness, retained puppet creation,
 or puppet apply. UDP role selection must not be changed for that symptom.
+
+## 2026-07-15 STATIC correction: spawn capture is functional, not diagnostic
+
+The cp cleanup incorrectly disabled `kEnableSpawnCaptureDiagnostic`. Static
+dataflow now proves this capture is a production prerequisite:
+
+1. `spawn_capture_veh` is the only writer of `g_spawn_captured`, the copied
+   `g_spawn_desc`, and its context arguments.
+2. The live-peer auto-spawn condition requires `g_spawn_captured` before calling
+   `reissue_spawn_for_slot1`; that function consumes the captured descriptor and
+   context to invoke the native descriptor spawner for index 1.
+3. Runtime independently proved bidirectional peer snapshots while the user saw
+   no remote Player, exactly distinguishing transport success from a blocked
+   slot-1 creation gate. The pre-cp co build had this capture enabled.
+
+Competing causes are the cq melee callsite relay and a later puppet-apply failure.
+Build cs parks cq but cannot create a puppet while the descriptor gate remains
+false. Build ct therefore restores the capture as functional ownership while
+keeping its expensive descriptor/hash scan compile-time disabled.
+
+Falsifiable prediction: on two fresh ct processes, boot must report descriptor
+capture armed; after local Player creation and the first peer packet, each side
+must report descriptor reissue and remote synchronization enabled, and the user
+must see the peer. If reissue is logged but no retained Player appears, the
+descriptor lifetime/spawn result becomes the next candidate. Melee remains parked
+throughout this test.

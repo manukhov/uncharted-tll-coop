@@ -27772,3 +27772,15 @@ sequence 1 to PID 14588, PID 14588 accepted it, and the reverse direction did th
 same. Both decoded positions agreed near `(-762.71, 4.07, 382.592)`. Therefore a
 future visually absent peer with these milestones is not a UDP connection or
 auto-role failure; investigation starts after `publish_peer_state_snapshot`.
+
+### 2026-07-15 STATIC: `g_spawn_captured` is a required remote-Player gate
+
+The cp classification of spawn capture as production-unneeded diagnostics is
+**REJECTED**. `spawn_capture_veh` is the sole writer of `g_spawn_captured` and
+the descriptor/context consumed by `reissue_spawn_for_slot1`. The live-peer
+auto-spawn condition at the Nadine update path explicitly requires that flag
+before issuing native descriptor spawn for index 1. Disabling the capture leaves
+UDP state exchange healthy but makes visible connection impossible because no
+retained slot-1 Player can be created. Build ct restores the one-shot functional
+capture and compile-time parks only its descriptor/hash scan. Runtime confirmation
+is pending.

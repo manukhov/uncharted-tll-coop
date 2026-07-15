@@ -20096,6 +20096,8 @@ void __fastcall hooked_update(void* object) {
             !g_slot1_auto_reissue_done &&
             (!g_want_nadine_body || g_nadine_visual_identity_valid)) {
             g_slot1_auto_reissue_done = true;
+            boot_log_line(
+                "remote Player spawn: captured descriptor -> reissue slot 1");
             reissue_spawn_for_slot1();
             log_line(peer_is_fresh
                          ? "remote Player auto-spawned for live peer"
@@ -20116,7 +20118,7 @@ void __fastcall hooked_update(void* object) {
                 std::ostringstream line;
                 line << "remote Player synchronization enabled, first peer seq="
                      << fresh_peer.sequence;
-                log_line(line.str().c_str());
+                boot_log_line(line.str().c_str());
             } else {
                 log_line("clone spawned passive (drive OFF; use NUMPAD3 to control it)");
             }
@@ -22161,18 +22163,20 @@ LONG CALLBACK spawn_capture_veh(EXCEPTION_POINTERS* ep) {
             g_spawn_flag = *reinterpret_cast<std::uint64_t*>(c->Rsp + 0x28);
             g_spawn_out = *reinterpret_cast<void**>(c->Rsp + 0x30);
             g_spawn_captured = true;
-            std::ostringstream line;
-            line << "SPAWN captured: desc=0x" << std::hex << c->Rcx
-                 << " idx=" << std::dec << g_spawn_idx
-                 << " ctx=0x" << std::hex << c->R8
-                 << " a4=0x" << c->R9
-                 << " flag=0x" << g_spawn_flag
-                 << " out=0x" << reinterpret_cast<std::uintptr_t>(g_spawn_out)
-                 << std::dec;
-            log_line(line.str().c_str());
-            log_spawn_look_source_probe(c->Rcx, c->R8, c->R9,
-                                        reinterpret_cast<std::uintptr_t>(g_spawn_out),
-                                        c->Rsp);
+            if constexpr (kEnableRuntimeDiagnosticLogging) {
+                std::ostringstream line;
+                line << "SPAWN captured: desc=0x" << std::hex << c->Rcx
+                     << " idx=" << std::dec << g_spawn_idx
+                     << " ctx=0x" << std::hex << c->R8
+                     << " a4=0x" << c->R9
+                     << " flag=0x" << g_spawn_flag
+                     << " out=0x" << reinterpret_cast<std::uintptr_t>(g_spawn_out)
+                     << std::dec;
+                force_log_line(line.str().c_str());
+                log_spawn_look_source_probe(
+                    c->Rcx, c->R8, c->R9,
+                    reinterpret_cast<std::uintptr_t>(g_spawn_out), c->Rsp);
+            }
         }
         // Disarm on this thread now that we captured, and set Resume Flag so the
         // instruction is not re-trapped in an infinite loop.
@@ -23129,7 +23133,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15cs (melee callsite relay parked)");
+        "TLL hook DLL init 2026-07-15ct (restore functional spawn capture)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -23400,7 +23404,7 @@ DWORD WINAPI install_hook(void*) {
     }
     install_xinput_hook();
     g_velprobe_enabled = false;
-    if constexpr (kEnableSpawnCaptureDiagnostic) {
+    if constexpr (kEnableRemotePlayerSpawnDescriptorCapture) {
         g_spawn_veh = AddVectoredExceptionHandler(1, &spawn_capture_veh);
     }
     if constexpr (kEnableLegacyRuntimeDiagnostics) {
@@ -23428,7 +23432,7 @@ DWORD WINAPI install_hook(void*) {
           << " target(coop-drake)=0x" << g_inject_look_hash << std::dec;
         log_line(l.str().c_str());
     }
-    if constexpr (kEnableSpawnCaptureDiagnostic) {
+    if constexpr (kEnableRemotePlayerSpawnDescriptorCapture) {
         arm_spawn_breakpoint_all_threads();
     }
     // DIAGNOSTIC input-capture HW breakpoints (perslot / inputstate / inputwrite /
@@ -23436,9 +23440,9 @@ DWORD WINAPI install_hook(void*) {
     // AIMING (right stick) for the main player on inject. They were only needed for
     // the original input RE; the clone drive writes FrameState directly without them.
     // Re-arm manually via the Numpad/PageUp hotkeys if input RE is needed again.
-    log_line(kEnableSpawnCaptureDiagnostic
-                 ? "Spawn-arg capture armed (trigger a checkpoint/respawn to capture)"
-                 : "Spawn-arg capture disabled in stable co-op build");
+    boot_log_line(kEnableRemotePlayerSpawnDescriptorCapture
+                      ? "remote Player descriptor capture armed"
+                      : "remote Player descriptor capture disabled");
     log_line("input-capture breakpoints NOT auto-armed (they broke aiming); spawn only");
     log_line("velprobe disabled on load (press Insert to enable)");
     log_line("Press PageUp to capture the velocity-writer RIP (run, then read log)");

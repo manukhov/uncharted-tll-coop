@@ -2791,3 +2791,13 @@ Player creation. Build cs disables only the cq E8/FF25 melee callsite relay whil
 retaining cp cleanup and one-shot network milestones. Prediction: stable visible
 peer means cq caused the regression; absent peer means roll back cp next. Melee
 sync is parked for this test.
+
+## 2026-07-15 build ct: restore required remote Player descriptor capture
+
+Static root cause found before the cs runtime exam: cp disabled the sole writer
+of `g_spawn_captured/g_spawn_desc`, but remote auto-spawn requires that flag and
+passes those captured arguments to `reissue_spawn_for_slot1`. Thus packets could
+exchange while no visible peer could ever be created. Build ct restores this
+one-shot functional capture, leaves cq melee parked, and removes the capture
+handler's heavy descriptor/hash scan in production. Prediction and alternatives
+are recorded in `reports/runtime_hot_path_audit_20260715.md`.
