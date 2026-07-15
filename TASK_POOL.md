@@ -11,11 +11,11 @@
 
 ## P0: Full Player Synchronization (CURRENT)
 
-- [ ] **Build cr network discriminator (2026-07-15):** run two fresh copies and
-      classify the connection failure from one-shot role/ports, first state send,
-      and first state receive milestones. If both receives succeed, trace peer
-      snapshot freshness and puppet apply without changing UDP role selection.
-      The bounded production crash observer is parked.
+- [x] **Build cr network discriminator (2026-07-15):** fresh PIDs 15996/14588
+      selected A:31338/B:31339, both sent 456-byte sequence-1 packets, and both
+      accepted the peer packet at the same position. UDP and snapshot publication
+      are confirmed. If the peer is visually missing, trace snapshot freshness
+      and puppet apply without changing role selection. Crash observer is parked.
 
 - [~] **Melee native callsite relay (build cq, 2026-07-15):** static quota met.
       Natural owner tick `0x141279DF0` calls dispatcher `0x141272A50`; exact

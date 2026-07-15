@@ -106,3 +106,17 @@ send appears on both but receive does not, the failure is transport/protocol. If
 both receive milestones appear, UDP connection is working and the visual failure
 belongs downstream in peer snapshot or puppet application. No build-cr
 `EXCEPTION` records should be emitted by this DLL.
+
+### Runtime result: CONFIRMED
+
+Fresh build-cr processes PID 15996 (role A, receive 31338) and PID 14588
+(role B, receive 31339) initially reported an invalid local position while the
+location was becoming playable. They then both sent exactly 456 bytes at
+sequence 1 and both accepted the peer sequence 1 at approximately
+`(-762.71, 4.07, 382.592)`. Thus socket roles, protocol size/version,
+position validation, receive dispatch, and peer snapshot publication all passed
+the prediction. No build-cr exception-observer record was produced.
+
+Any remaining visual non-connection is downstream of
+`publish_peer_state_snapshot`, in snapshot freshness, retained puppet creation,
+or puppet apply. UDP role selection must not be changed for that symptom.

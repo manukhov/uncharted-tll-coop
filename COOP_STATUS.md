@@ -2776,3 +2776,9 @@ under the current static-only instruction.
   hitches but is not claimed as the cause of sustained low FPS.
 - Release build succeeds. Runtime exam: fresh two-copy launch; both sides must
   report first send and first receive before visual puppet behavior is debugged.
+
+**Runtime CONFIRMED:** fresh PIDs 15996/14588 selected A:31338/B:31339, each sent
+a 456-byte sequence-1 state packet, and each accepted the other's packet at the
+same world position. The apparent initial non-connection was the interval before
+each local Player published a valid position. Transport and snapshot publication
+are healthy; a remaining missing puppet belongs to the downstream apply path.

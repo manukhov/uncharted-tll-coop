@@ -27766,3 +27766,9 @@ reads, formatting, and file open/write/close for up to eight engine-handled
 first-chance exceptions per process after location load. Build `2026-07-15cr`
 parks that bounded observer and adds one-shot send/receive discriminators. Its
 runtime prediction is recorded in `reports/runtime_hot_path_audit_20260715.md`.
+
+Build cr then **CONFIRMED bidirectional state exchange**: PID 15996 sent 456-byte
+sequence 1 to PID 14588, PID 14588 accepted it, and the reverse direction did the
+same. Both decoded positions agreed near `(-762.71, 4.07, 382.592)`. Therefore a
+future visually absent peer with these milestones is not a UDP connection or
+auto-role failure; investigation starts after `publish_peer_state_snapshot`.
