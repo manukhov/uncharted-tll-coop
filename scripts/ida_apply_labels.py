@@ -4378,12 +4378,19 @@ FUNCTIONS = {
         "`============== Melee Command Queue ==============` and "
         "`*melee-button-names*`, then iterates/prints structured queue state.",
     ),
-    0x141273B20: (
+    0x141272A50: (
         "DispatchPlayerMeleeButtonHoldReleaseAndGrappleReactionCommands",
         "Live gameplay-facing dispatcher over the melee command queue family. "
         "Probes active button/transition hashes through 0x141E39D50 and, on "
         "match, either inserts queued command entries through 0x141273FA0 or "
-        "updates existing entry scalar state through 0x1412743F0.",
+        "updates existing entry scalar state through 0x1412743F0. Entry from "
+        "PlayerMeleeController tick 0x141279DF0 with (controller+0x150, player).",
+    ),
+    0x141279DF0: (
+        "PlayerMeleeController_DispatchQueuedButtonCommandsTick",
+        "Once per engine-clock tick on PlayerMeleeController: reads player backref "
+        "at +0x108, compares +0x400 clock stamp, then calls 0x141272A50 on the "
+        "queue base at controller+0x150.",
     ),
     0x141273FA0: (
         "PushOrRotateMeleeCommandQueueEntry",

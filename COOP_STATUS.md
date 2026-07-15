@@ -1,14 +1,23 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
-## Turn note (2026-07-15, Cursor - melee cj inline net-gate bypass)
+## Turn note (2026-07-15, Cursor - melee ck queue dispatch fix)
 
-**ci:** button relay CONFIRMED (`MELEE-RECV cmdActive=1`) but puppet anim still
-invisible — gap is `sub_1410FC9F0` early-out on `g_NetModeFlags+3`, not Joypad.
+**REJECTED (cj, user):** `MELEE-EXEC hash=0xd338e42f ok=0` every punch — button
+relay works, no puppet anim. Root cause: exec called vtable `+0x210` (`0x141279F10`)
+as validate-with-128-byte-buffer; static proof shows `+0x210` is string→hash resolver
+that forwards to validate at `+0x1F8` with `int*`, not `init_command` blob.
 
-**cj:** no global TryAnim hook (avoids ch instance-2 crash). On `MELEE-RECV` press
-edge, `trigger_peer_melee_animation` validates command on `+0x1F60` then runs
-inline TryAnim body skipping net gate via `Player+0x1DE0` action controller →
-Player vtable `+0xDE8/+0xC78`. Logs `MELEE-EXEC ok=0/1` per punch.
+**ck:** replace wrong validate with native queue path:
+`DispatchPlayerMeleeButtonHoldReleaseAndGrappleReactionCommands` (`0x141272A50`)
+on `PlayerMeleeController+0x150` queue base, fallback
+`PushOrRotateMeleeCommandQueueEntry` (`0x141273FA0`) with relayed hash
+(`melee-lmouse-press` not hardcoded square). Then inline TryAnim bypass; skip
+`validate_move` when queue push succeeded (air punch zero stick). Step log:
+`MELEE-EXEC … ctrl/dispatch/queue/anim/publish=`. Boot `2026-07-14ck`.
+
+**Runtime pending:** two-instance air punch → `dispatch=1` or `queue=1`, `anim=1`,
+visible peer puppet melee. If `dispatch=0 queue=1 anim=0` → branch_check gate on
+`Player+0x1DE0`; if `anim=1` no visual → FgAnim publish path.
 
 ## Turn note (2026-07-15, Cursor - melee ch crash, ci stable path)
 

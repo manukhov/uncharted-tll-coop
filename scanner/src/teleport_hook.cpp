@@ -10193,7 +10193,67 @@ void log_melee_relay_event(const char* tag, void* player, std::uint64_t mask) {
     force_log_line(line.str().c_str());
 }
 
-bool seh_puppet_try_anim_skip_net_gate(void** player, const float* move_vec) {
+bool seh_puppet_try_anim_play_path(void* player, void* action_controller,
+                                    void** action_vtable) {
+    if (player == nullptr || action_controller == nullptr ||
+        action_vtable == nullptr) {
+        return false;
+    }
+    void** const player_vtable = *reinterpret_cast<void***>(player);
+    if (player_vtable == nullptr) {
+        return false;
+    }
+    using MeleeAnimFunction = void(__fastcall*)(void*);
+    using MeleeBranchCheckFunction = char(__fastcall*)(void*);
+    const auto branch_check = reinterpret_cast<MeleeBranchCheckFunction>(
+        action_vtable[kPlayerMeleeActionBranchCheckVtableOffset /
+                      sizeof(void*)]);
+    if (branch_check != nullptr && branch_check(action_controller) != 0) {
+        const auto primary_anim = reinterpret_cast<MeleeAnimFunction>(
+            player_vtable[kPlayerMeleePrimaryAnimVtableOffset /
+                          sizeof(void*)]);
+        if (primary_anim != nullptr) {
+            primary_anim(player);
+            return true;
+        }
+        return false;
+    }
+
+    const auto alt_check = reinterpret_cast<MeleeBranchCheckFunction>(
+        action_vtable[kPlayerMeleeActionAltCheckVtableOffset /
+                      sizeof(void*)]);
+    if (alt_check != nullptr && alt_check(action_controller) != 0) {
+        void* const sibling_controller = seh_read_ptr(
+            reinterpret_cast<std::uint64_t>(
+                static_cast<std::byte*>(player) +
+                kPlayerMeleeSiblingControllerOffset));
+        if (sibling_controller != nullptr &&
+            readable_bytes(sibling_controller)) {
+            void** const sibling_vtable =
+                *reinterpret_cast<void***>(sibling_controller);
+            if (sibling_vtable != nullptr) {
+                using SiblingDispatchFunction = void(__fastcall*)(void*, void*);
+                const auto sibling_dispatch =
+                    reinterpret_cast<SiblingDispatchFunction>(
+                        sibling_vtable[kPlayerMeleeSiblingDispatchVtableOffset /
+                                       sizeof(void*)]);
+                if (sibling_dispatch != nullptr) {
+                    sibling_dispatch(sibling_controller, nullptr);
+                }
+            }
+        }
+    }
+    const auto fallback_anim = reinterpret_cast<MeleeAnimFunction>(
+        player_vtable[kPlayerMeleeAnimDecisionVtableOffset / sizeof(void*)]);
+    if (fallback_anim != nullptr) {
+        fallback_anim(player);
+        return true;
+    }
+    return false;
+}
+
+bool seh_puppet_try_anim_skip_net_gate(void** player, const float* move_vec,
+                                       bool skip_move_validate) {
     if (player == nullptr || g_module == 0) {
         return false;
     }
@@ -10234,112 +10294,99 @@ bool seh_puppet_try_anim_skip_net_gate(void** player, const float* move_vec) {
             }
         }
 
-        alignas(16) std::uint8_t move_block[16]{};
-        if (move_vec != nullptr) {
-            std::memcpy(move_block, move_vec, sizeof(move_block));
-        }
-        using ValidateMeleeMoveFunction = char(__fastcall*)(void*, void*);
-        const auto validate_move = reinterpret_cast<ValidateMeleeMoveFunction>(
-            action_vtable[kPlayerMeleeActionValidateMoveVtableOffset /
-                          sizeof(void*)]);
-        if (validate_move == nullptr ||
-            validate_move(action_controller, move_block) == 0) {
-            return false;
-        }
-
-        void** const player_vtable = reinterpret_cast<void**>(*player);
-        if (player_vtable == nullptr) {
-            return false;
-        }
-        using MeleeAnimFunction = void(__fastcall*)(void*);
-        using MeleeBranchCheckFunction = char(__fastcall*)(void*);
-        const auto branch_check = reinterpret_cast<MeleeBranchCheckFunction>(
-            action_vtable[kPlayerMeleeActionBranchCheckVtableOffset /
-                          sizeof(void*)]);
-        if (branch_check != nullptr && branch_check(action_controller) != 0) {
-            const auto primary_anim = reinterpret_cast<MeleeAnimFunction>(
-                player_vtable[kPlayerMeleePrimaryAnimVtableOffset /
-                              sizeof(void*)]);
-            if (primary_anim != nullptr) {
-                primary_anim(reinterpret_cast<void*>(player));
-                return true;
+        if (!skip_move_validate) {
+            alignas(16) std::uint8_t move_block[16]{};
+            if (move_vec != nullptr) {
+                std::memcpy(move_block, move_vec, sizeof(move_block));
             }
-            return false;
-        }
-
-        const auto alt_check = reinterpret_cast<MeleeBranchCheckFunction>(
-            action_vtable[kPlayerMeleeActionAltCheckVtableOffset /
-                          sizeof(void*)]);
-        if (alt_check != nullptr && alt_check(action_controller) != 0) {
-            void* const sibling_controller = seh_read_ptr(
-                reinterpret_cast<std::uint64_t>(
-                    reinterpret_cast<std::byte*>(player) +
-                    kPlayerMeleeSiblingControllerOffset));
-            if (sibling_controller != nullptr &&
-                readable_bytes(sibling_controller)) {
-                void** const sibling_vtable =
-                    *reinterpret_cast<void***>(sibling_controller);
-                if (sibling_vtable != nullptr) {
-                    using SiblingDispatchFunction =
-                        void(__fastcall*)(void*, void*);
-                    const auto sibling_dispatch =
-                        reinterpret_cast<SiblingDispatchFunction>(
-                            sibling_vtable
-                                [kPlayerMeleeSiblingDispatchVtableOffset /
-                                 sizeof(void*)]);
-                    if (sibling_dispatch != nullptr) {
-                        sibling_dispatch(sibling_controller, nullptr);
-                    }
-                }
+            using ValidateMeleeMoveFunction = char(__fastcall*)(void*, void*);
+            const auto validate_move =
+                reinterpret_cast<ValidateMeleeMoveFunction>(
+                    action_vtable[kPlayerMeleeActionValidateMoveVtableOffset /
+                                  sizeof(void*)]);
+            if (validate_move == nullptr ||
+                validate_move(action_controller, move_block) == 0) {
+                return false;
             }
         }
-        const auto fallback_anim = reinterpret_cast<MeleeAnimFunction>(
-            player_vtable[kPlayerMeleeAnimDecisionVtableOffset /
-                          sizeof(void*)]);
-        if (fallback_anim != nullptr) {
-            fallback_anim(reinterpret_cast<void*>(player));
-            return true;
-        }
-        return false;
+
+        return seh_puppet_try_anim_play_path(reinterpret_cast<void*>(player),
+                                             action_controller, action_vtable);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
     }
 }
 
-bool seh_puppet_melee_exec_path(void* puppet, std::uint32_t command_hash) {
-    if (puppet == nullptr || g_module == 0 || command_hash == 0) {
+struct PuppetMeleeExecSteps {
+    bool controller_ok = false;
+    bool dispatch_ok = false;
+    bool queue_push_ok = false;
+    bool try_anim_ok = false;
+    bool publish_ok = false;
+};
+
+bool seh_push_melee_queue_entry(void* queue_base, std::uint32_t command_hash,
+                                bool hold) {
+    if (queue_base == nullptr || g_module == 0 || command_hash == 0) {
         return false;
+    }
+    __try {
+        alignas(16) std::uint8_t slot_payload[40]{};
+        slot_payload[0] = hold ? 1 : 0;
+        using PushMeleeQueueEntryFunction = std::uint64_t(__fastcall*)(
+            void*, std::uint32_t, void*, void*, float, std::uint8_t);
+        const auto push_entry = reinterpret_cast<PushMeleeQueueEntryFunction>(
+            g_module + kPushOrRotateMeleeCommandQueueEntryRva);
+        push_entry(queue_base, command_hash, slot_payload + 24,
+                   slot_payload + 8, 0.0f, slot_payload[0]);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_dispatch_player_melee_commands(void* controller, void* player) {
+    if (controller == nullptr || player == nullptr || g_module == 0) {
+        return false;
+    }
+    __try {
+        void* const queue_base = static_cast<std::byte*>(controller) +
+                                 kPlayerMeleeControllerQueueBaseOffset;
+        using DispatchMeleeCommandsFunction = char(__fastcall*)(void*, void*);
+        const auto dispatch = reinterpret_cast<DispatchMeleeCommandsFunction>(
+            g_module + kDispatchPlayerMeleeCommandsRva);
+        return dispatch(queue_base, player) != 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+PuppetMeleeExecSteps seh_puppet_melee_exec_path(void* puppet,
+                                                std::uint32_t command_hash) {
+    PuppetMeleeExecSteps steps;
+    if (puppet == nullptr || g_module == 0) {
+        return steps;
     }
     __try {
         void* const controller = seh_read_ptr(
             reinterpret_cast<std::uint64_t>(
                 static_cast<std::byte*>(puppet) + kPlayerCombatControllerOffset));
         if (controller == nullptr || !readable_bytes(controller)) {
-            return false;
+            return steps;
         }
-        void** const controller_vtable =
-            *reinterpret_cast<void***>(controller);
-        if (controller_vtable == nullptr) {
-            return false;
-        }
-        using InitMeleeCommandDescFunction =
-            void*(__fastcall*)(void*, std::uint32_t);
-        const auto init_command =
-            reinterpret_cast<InitMeleeCommandDescFunction>(
-                g_module + kInitMeleeCommandDescRva);
-        alignas(16) std::uint8_t command[128]{};
-        init_command(command, command_hash);
+        steps.controller_ok = true;
 
-        using ValidateMeleeCommandFunction =
-            char(__fastcall*)(void*, void*);
-        const auto validate_command =
-            reinterpret_cast<ValidateMeleeCommandFunction>(
-                controller_vtable
-                    [kPlayerMeleeControllerValidateCommandVtableOffset /
-                     sizeof(void*)]);
-        if (validate_command == nullptr ||
-            validate_command(controller, command) == 0) {
-            return false;
+        steps.dispatch_ok = seh_dispatch_player_melee_commands(controller, puppet);
+        if (!steps.dispatch_ok && command_hash != 0) {
+            void* const queue_base = static_cast<std::byte*>(controller) +
+                                     kPlayerMeleeControllerQueueBaseOffset;
+            const bool hold =
+                command_hash == melee_relay_hashes().lmouse_hold ||
+                command_hash == melee_relay_hashes().r1_hold ||
+                command_hash == melee_relay_hashes().square_hold ||
+                command_hash == melee_relay_hashes().triangle_hold;
+            steps.queue_push_ok =
+                seh_push_melee_queue_entry(queue_base, command_hash, hold);
         }
 
         alignas(16) float move_block[4]{};
@@ -10350,10 +10397,9 @@ bool seh_puppet_melee_exec_path(void* puppet, std::uint32_t command_hash) {
             std::memcpy(move_block, input_base + 0x90, sizeof(move_block));
         }
 
-        if (!seh_puppet_try_anim_skip_net_gate(
-                reinterpret_cast<void**>(puppet), move_block)) {
-            return false;
-        }
+        const bool queue_ready = steps.dispatch_ok || steps.queue_push_ok;
+        steps.try_anim_ok = seh_puppet_try_anim_skip_net_gate(
+            reinterpret_cast<void**>(puppet), move_block, queue_ready);
         void** const player_vtable = *reinterpret_cast<void***>(puppet);
         if (player_vtable != nullptr) {
             using PublishMeleeFunction = void(__fastcall*)(void*);
@@ -10361,11 +10407,12 @@ bool seh_puppet_melee_exec_path(void* puppet, std::uint32_t command_hash) {
                 player_vtable[kPlayerMeleePublishVtableOffset / sizeof(void*)]);
             if (publish != nullptr) {
                 publish(puppet);
+                steps.publish_ok = true;
             }
         }
-        return true;
+        return steps;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
+        return steps;
     }
 }
 
@@ -10376,17 +10423,31 @@ void trigger_peer_melee_animation(void* puppet) {
         return;
     }
     const auto& hashes = melee_relay_hashes();
-    std::uint32_t command_hash = hashes.square;
-    if (command_hash == 0) {
+    std::uint32_t command_hash = 0;
+    if (!player_any_melee_button_active(puppet, &command_hash)) {
         command_hash = hashes.lmouse_press;
+        if (command_hash == 0) {
+            command_hash = hashes.r1;
+        }
+        if (command_hash == 0) {
+            command_hash = hashes.square;
+        }
+        if (command_hash == 0) {
+            command_hash = hashes.triangle;
+        }
     }
-    if (command_hash == 0) {
-        command_hash = hashes.triangle;
-    }
-    const bool executed = seh_puppet_melee_exec_path(puppet, command_hash);
+    const PuppetMeleeExecSteps steps =
+        seh_puppet_melee_exec_path(puppet, command_hash);
+    const bool ok = steps.controller_ok &&
+                    (steps.dispatch_ok || steps.queue_push_ok) &&
+                    steps.try_anim_ok;
     std::ostringstream line;
-    line << "MELEE-EXEC hash=0x" << std::hex << command_hash
-         << " ok=" << (executed ? 1 : 0) << std::dec;
+    line << "MELEE-EXEC hash=0x" << std::hex << command_hash << std::dec
+         << " ok=" << (ok ? 1 : 0) << " ctrl=" << (steps.controller_ok ? 1 : 0)
+         << " dispatch=" << (steps.dispatch_ok ? 1 : 0)
+         << " queue=" << (steps.queue_push_ok ? 1 : 0)
+         << " anim=" << (steps.try_anim_ok ? 1 : 0)
+         << " publish=" << (steps.publish_ok ? 1 : 0);
     force_log_line(line.str().c_str());
 }
 
@@ -23085,7 +23146,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14cj (melee inline net-gate bypass, edge exec)");
+        "TLL hook DLL init 2026-07-14ck (melee queue dispatch 0x272A50, step log)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");

@@ -27671,3 +27671,13 @@ HYPOTHESIS for the two remaining mechanisms**.
   **cj:** puppet-only inline bypass (no global hook); edge-triggered
   `MELEE-EXEC` on press. Runtime prediction: `MELEE-EXEC ok=1` + visible air
   punch on peer puppet.
+- **REJECTED (build 2026-07-14cj, user):** `MELEE-EXEC hash=0xd338e42f ok=0`
+  always — exec used vtable `+0x210` with 128-byte `init_command` buffer; IDA
+  shows `0x141279F10` resolves hash strings then calls `+0x1F8` with `int*`, not
+  validate-with-descriptor. Button relay (`MELEE-RECV cmdActive=1`) still OK.
+- **STATIC (build 2026-07-14ck):** correct queue path is
+  `DispatchPlayerMeleeButtonHoldReleaseAndGrappleReactionCommands` @ `0x141272A50`
+  (`controller+0x150`, `player`); queue mem @ `ConstructMeleeCommandQueueOwner+0x150`.
+  Fallback direct `PushOrRotateMeleeCommandQueueEntry` @ `0x141273FA0`. Hash from
+  relayed `melee-lmouse-press` (`0x1dbe780f`), not square. Step log per punch.
+  Runtime prediction: `dispatch=1 queue=0 anim=1` or `queue=1` on fallback.

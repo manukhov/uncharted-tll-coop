@@ -101,14 +101,25 @@ constexpr std::size_t kPlayerMeleeActionAltCheckVtableOffset = 0x158;
 constexpr std::size_t kPlayerMeleeSiblingDispatchVtableOffset = 0x200;
 constexpr std::size_t kPlayerMeleePrimaryAnimVtableOffset = 0xDE8;
 constexpr std::size_t kPlayerMeleeActionGateByteOffset = 0x8C1;
-// Zeroes/init melee command descriptor before PlayerMeleeController vtable+528/+504.
+// Live melee button dispatcher: probes Joypad_IsCommandActive then pushes the
+// 16-slot queue via PushOrRotateMeleeCommandQueueEntry. Called from
+// PlayerMeleeController vtable tick with (controller+0x150, player).
+constexpr std::uintptr_t kDispatchPlayerMeleeCommandsRva = 0x272A50;
+constexpr std::uintptr_t kPushOrRotateMeleeCommandQueueEntryRva = 0x273FA0;
+constexpr std::uintptr_t kPlayerMeleeControllerTickDispatchRva = 0x279DF0;
+// Zeroes/init melee command descriptor before PlayerMeleeController vtable+504.
 constexpr std::uintptr_t kInitMeleeCommandDescRva = 0xE416A0;
 // Player vtable offsets used by the TryAnim success path in MoveStick LABEL_491.
 constexpr std::size_t kPlayerMeleeAnimDecisionVtableOffset = 0xC78;
 constexpr std::size_t kPlayerMeleePublishVtableOffset = 0xC80;
 // Combat/melee command-queue owner mounted at Player init (ConstructMeleeCommandQueueOwner).
 constexpr std::size_t kPlayerCombatControllerOffset = 0x1F60;
+constexpr std::size_t kPlayerMeleeControllerPlayerBackrefOffset = 0x108;
+constexpr std::size_t kPlayerMeleeControllerQueueBaseOffset = 0x150;
+// vtable+0x210 (0x141279F10) resolves string→hash then calls validate at +0x1F8;
+// it is NOT a validate-with-128-byte-buffer entry point.
 constexpr std::size_t kPlayerMeleeControllerValidateCommandVtableOffset = 0x210;
+constexpr std::size_t kPlayerMeleeControllerQueueValidateVtableOffset = 0x1F8;
 constexpr std::size_t kMeleeTargetResultEntityIdOffset = 0xD8;
 constexpr std::size_t kPlayerHealthSystemOffset = 0x4A8;
 constexpr std::size_t kPlayerCurrentHealthOffset = 0x38;
