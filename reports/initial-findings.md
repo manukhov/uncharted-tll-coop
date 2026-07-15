@@ -27681,3 +27681,7 @@ HYPOTHESIS for the two remaining mechanisms**.
   Fallback direct `PushOrRotateMeleeCommandQueueEntry` @ `0x141273FA0`. Hash from
   relayed `melee-lmouse-press` (`0x1dbe780f`), not square. Step log per punch.
   Runtime prediction: `dispatch=1 queue=0 anim=1` or `queue=1` on fallback.
+- **REJECTED (build 2026-07-14ck, PIDs 11188/23352):** punch → both hung; PID
+  11188 logged `MELEE-RECV cmdActive=1` then stopped (no `MELEE-EXEC`); silent
+  exit. Suspect sync `0x141272A50` from input hook. **cl:** dispatch parked,
+  direct queue push only.

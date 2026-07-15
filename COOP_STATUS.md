@@ -1,5 +1,16 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-15, Cursor - melee ck hang, cl queue-only)
+
+**REJECTED (ck runtime, PIDs 11188/23352):** user punched → both instances froze;
+first copy (11188) closed silently. Log: `MELEE-RECV cmdActive=1` on 11188 then
+**zero further lines** from that PID (no `MELEE-EXEC`). 23352 kept logging.
+Suspect: synchronous `0x141272A50` full dispatcher from input hook (heavy
+Joypad_IsCommandActive loop / hook recursion).
+
+**cl:** park `g_enable_puppet_melee_full_dispatch`; exec uses direct
+`PushOrRotateMeleeCommandQueueEntry` only + step log + `MELEE-EXEC begin` marker.
+
 ## Turn note (2026-07-15, Cursor - melee ck queue dispatch fix)
 
 **REJECTED (cj, user):** `MELEE-EXEC hash=0xd338e42f ok=0` every punch — button

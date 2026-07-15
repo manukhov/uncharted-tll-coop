@@ -142,6 +142,9 @@ using PlayerMeleeTryAnimFunction =
 PlayerMeleeTryAnimFunction g_original_player_melee_try_anim = nullptr;
 std::atomic<bool> g_puppet_melee_try_anim_bypass{false};
 constexpr bool g_enable_puppet_melee_exec_relay = true;
+// Full 0x141272A50 dispatcher from the input hook REJECTED ck: PID 11188 hung
+// after MELEE-RECV, zero MELEE-EXEC (Joypad_IsCommandActive recursion / heavy path).
+constexpr bool g_enable_puppet_melee_full_dispatch = false;
 ScopeVisibleQueryFunction g_original_scope_visible_query = nullptr;
 ReticleHudPublisherFunction g_original_reticle_hud_publisher = nullptr;
 ReticleAimHudPublisherFunction g_original_reticle_aim_hud_publisher = nullptr;
@@ -10376,7 +10379,10 @@ PuppetMeleeExecSteps seh_puppet_melee_exec_path(void* puppet,
         }
         steps.controller_ok = true;
 
-        steps.dispatch_ok = seh_dispatch_player_melee_commands(controller, puppet);
+        if (g_enable_puppet_melee_full_dispatch) {
+            steps.dispatch_ok =
+                seh_dispatch_player_melee_commands(controller, puppet);
+        }
         if (!steps.dispatch_ok && command_hash != 0) {
             void* const queue_base = static_cast<std::byte*>(controller) +
                                      kPlayerMeleeControllerQueueBaseOffset;
@@ -10422,6 +10428,7 @@ void trigger_peer_melee_animation(void* puppet) {
         g_module == 0) {
         return;
     }
+    force_log_line("MELEE-EXEC begin");
     const auto& hashes = melee_relay_hashes();
     std::uint32_t command_hash = 0;
     if (!player_any_melee_button_active(puppet, &command_hash)) {
@@ -23146,7 +23153,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14ck (melee queue dispatch 0x272A50, step log)");
+        "TLL hook DLL init 2026-07-14cl (melee queue push only, dispatch parked)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
