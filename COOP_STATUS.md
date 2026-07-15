@@ -2904,3 +2904,18 @@ assembly proves `+0x00` is translation and `+0x10` is quaternion. Build da write
 only `transform[4..7]`, preserving native translation. Periodic diagnostics are
 removed; a single first-match line is retained. The corrected runtime prediction
 remains the one recorded in the report above.
+
+### Build da runtime: yaw reached rendering; build db fixes axis and pitch basis
+
+The user confirmed build da now turns the visible remote during ADS. The result is
+precise but partial: facing is exactly 180 degrees inverted, vertical camera motion
+does not affect the pose, and ADS entry can occasionally fold.
+
+Build db negates the horizontal axis only at the late FgAnim quaternion publish.
+Because that publication now owns visible yaw, PlayerAimController slot `+0x58`
+receives the normalized horizontal camera `+Z` as its logical body-forward while
+the full target retains camera Y for up/down additive weights. Calls that directly
+write output `Player+0x1720/+0x1730` are removed from both pre/post phases; the
+native `Player_PostAnimUpdate 0x1410E9210` remains their sole writer. Evidence,
+competitors and runtime prediction:
+`reports/player_aim_fganim_axis_residual_pitch_20260715.md`.

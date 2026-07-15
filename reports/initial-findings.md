@@ -27909,3 +27909,25 @@ is translation and `+0x10` is quaternion: `0x1418C55F8` passes `+0x10` into the
 quaternion-to-matrix math while original `+0x00` supplies the translation row,
 and the phase caller stores position/orientation to those same adjacent slots.
 Build da preserves `+0x00` and replaces only quaternion `float[4..7]`.
+
+### 2026-07-15 RUNTIME + STATIC: FgAnim yaw axis and residual pitch basis
+
+Build da confirms the phase-`0x40` FgAnim publication reaches the visible remote
+model: camera motion now turns it, but the user observed an exact 180-degree facing
+error, no vertical motion, and an occasional folded ADS-entry pose. The exact
+opposition selects a sign/axis error at the new render boundary; it is no longer a
+stale-packet or missing-consumer failure.
+
+The vertical and transition failures are split statically. Slot `+0x58` feeds
+`PlayerAimController_ComputeDirectionalAimWeights 0x140CB32B0`, which compares
+the full target direction against body-forward. Since late FgAnim publication now
+owns visible yaw, slot `+0x58` must receive the normalized horizontal projection of
+the same camera `+Z`, leaving camera Y as the up/down additive residual. Separately,
+`Player_PostAnimUpdate 0x1410E9210` is the exact every-frame writer of output
+fields `Player+0x1720/+0x1730`; the mod's pre/post writes to those fields are
+parked again because prior runtime already found them inert and they can race the
+transition pose.
+
+Build `2026-07-15db` implements those narrow corrections. Status is STATIC pending
+the explicit visual prediction in
+`reports/player_aim_fganim_axis_residual_pitch_20260715.md`.

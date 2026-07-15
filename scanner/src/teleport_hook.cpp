@@ -110,6 +110,7 @@ UpdateFunction g_original_update = nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
 std::atomic<void*> g_puppet_fganim_data{nullptr};
 std::atomic<bool> g_puppet_fganim_world_turn_seen{false};
+std::atomic<bool> g_puppet_aim_vertical_seen{false};
 using PlayerInputStateUpdateFunction = char(__fastcall*)(void*);
 PlayerInputStateUpdateFunction g_original_player_input_state_update = nullptr;
 using PlayerInputCommandStateUpdateFunction = void(__fastcall*)(void*);
@@ -2838,6 +2839,9 @@ void write_peer_seed_to_screen1_resolver_source() {
 }
 
 void apply_peer_aim_pose_quat(void* player) {
+    // REJECTED: Player_PostAnimUpdate writes +0x1720/+0x1730 from the aim
+    // controller every frame. Treat these as outputs; external pre/post writes
+    // race animation evaluation and can expose a folded transition pose.
     if (player == nullptr) {
         return;
     }
@@ -7300,9 +7304,18 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
         1.0F,
     };
 
-    // Preserve GunMoveShield's composed world body basis. StatePacket::quat only
-    // carries local root +0x140 and omits the optional parent rotation +0x120.
+    // The late FgAnim publication owns camera-relative body yaw. Give the aim
+    // controller the matching horizontal +Z basis so its directional additive
+    // contains only the residual camera pitch instead of saturating at 180deg.
+    const float horizontal_len = std::sqrt(
+        forward_x * forward_x + forward_z * forward_z);
+    alignas(16) float horizontal_body_forward[4]{};
     const float* relayed_body_forward = body_forward;
+    if (std::isfinite(horizontal_len) && horizontal_len > 0.001F) {
+        horizontal_body_forward[0] = forward_x / horizontal_len;
+        horizontal_body_forward[2] = forward_z / horizontal_len;
+        relayed_body_forward = horizontal_body_forward;
+    }
 
     // Native camera-zoom limits are often zero on screen-1; 60deg clamps scoped
     // free-look (yawPre can exceed 120deg). Use generous authored clamps.
@@ -7387,6 +7400,16 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
             static_cast<const std::byte*>(controller) + 0x8C4);
         const float blend = *reinterpret_cast<const float*>(
             static_cast<const std::byte*>(controller) + 0x8EC);
+        if (std::fabs(forward_y) >= 0.10F &&
+            !g_puppet_aim_vertical_seen.exchange(
+                true, std::memory_order_relaxed)) {
+            std::ostringstream marker;
+            marker << "Aim residual-pitch first sample y=" << forward_y
+                   << " up=" << up << " down=" << down
+                   << " left=" << left << " right=" << right
+                   << " blend=" << blend;
+            boot_log_line(marker.str().c_str());
+        }
         static ULONGLONG last_w = 0;
         const ULONGLONG wnow = GetTickCount64();
         if (wnow - last_w > 1000) {
@@ -7786,8 +7809,11 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
                     // Native layout is translation vec4 followed by quaternion
                     // vec4. 0x1418C55F8 passes transform+0x10 to the quaternion
                     // input of 0x14019A270 and transform+0x00 as translation.
+                    // The prior publication was visibly 180 degrees opposite.
+                    // FgAnim's world quaternion must use the opposite horizontal
+                    // axis from the camera -Z helper at this render boundary.
                     yaw_quat_from_horizontal_forward(
-                        forward_x, forward_z, relayed_transform + 4);
+                        -forward_x, -forward_z, relayed_transform + 4);
                     selected_transform = relayed_transform;
                     if (!g_puppet_fganim_world_turn_seen.exchange(
                             true, std::memory_order_relaxed)) {
@@ -12702,7 +12728,6 @@ void apply_puppet_aim_pre(void* puppet) {
     if (!pose_relay_for_peer) {
         return;
     }
-    apply_peer_aim_pose_quat(puppet);
     apply_peer_aim_ik_world_points(puppet, pkt);
     write_peer_aim_world_targets_from_pose_seed(puppet, pkt);
     force_puppet_ads_flag(puppet, true);
@@ -14372,9 +14397,6 @@ void apply_puppet_transform_post(void* /*update_object*/) {
         if (g_enable_puppet_ads_root_yaw_snap ||
             g_gun_move_camera_turn_relay_installed) {
             sync_puppet_root_yaw_from_peer_camera(puppet, pkt);
-        }
-        if (g_puppet_aim_reticle_relay || pose_relay_for_peer) {
-            apply_peer_aim_pose_quat(puppet);
         }
         if (pose_relay_for_peer) {
             apply_peer_aim_ik_world_points(puppet, pkt);
@@ -23303,7 +23325,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15da (FgAnim translation+quaternion fix)");
+        "TLL hook DLL init 2026-07-15db (ADS axis + residual pitch basis)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

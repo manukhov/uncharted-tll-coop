@@ -578,7 +578,9 @@ FUNCTIONS = {
         "Converts a translation-then-quaternion input block to a matrix, applies "
         "FgAnimData scale, and calls FgAnimData_PublishWorldMatrix. ABI is "
         "rcx=FgAnimData, rdx={translation vec4, quaternion vec4}, "
-        "r8b=publish-current flag.",
+        "r8b=publish-current flag. The stock animation-manager phase-0x40 "
+        "callsite is 0x141A8FC00; runtime confirms this publication owns the "
+        "visible retained-player body yaw.",
     ),
     0x141AB97C0: (
         "ProcessAnimCmdListSegment",
