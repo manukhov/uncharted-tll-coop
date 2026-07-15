@@ -3234,10 +3234,14 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     // (b) Player_PostAnimUpdate's copy into Player+0x1720/+0x1730 (0x10E934B).
     // REJECTED: KickTargetPointJob return 0xCB0300 consumes only the first 16-byte
     // position before reusing the stack local; a full seed override cannot steer yaw.
-    const bool caller_is_aim_site =
+    const bool caller_is_early_target_site =
         idx == kSlot1ScreenIndex &&
-        (caller_rva == kAimTargetReticleCallSiteRva ||
-         caller_rva == kPlayerAimPoseSeedCallSiteRva);
+        caller_rva == kAimTargetReticleCallSiteRva;
+    const bool caller_is_late_pose_site =
+        idx == kSlot1ScreenIndex &&
+        caller_rva == kPlayerAimPoseSeedCallSiteRva;
+    const bool caller_is_aim_site =
+        caller_is_early_target_site || caller_is_late_pose_site;
     // PERF (2026-07-13): this resolver runs ~150-300x/frame (fire + every-frame
     // PostAnimUpdate pose write). The old code did copy_peer_state_snapshot (SRW
     // lock + ~460B copy, contending the net thread) UNCONDITIONALLY on every call =
@@ -3251,9 +3255,18 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     const bool have_peer = copy_peer_state_snapshot(peer);
     const bool relay_aim_pose =
         have_peer && puppet_aim_pose_relay_enabled_for_peer(peer);
-    const bool aim_pose_seed_override =
-        (g_puppet_aim_reticle_relay || relay_aim_pose) && caller_is_aim_site &&
+    // The reticle target is an input to native ADS/fire and must be correct before
+    // the staged animation gate opens. Keep the full PostAnim pose copy late: that
+    // site can expose transition output while Run is still leaving its graph.
+    const bool peer_aim_seed_ready =
         have_peer && peer_packet_aim_active(peer);
+    const bool early_target_seed_override =
+        peer_aim_seed_ready && caller_is_early_target_site;
+    const bool late_pose_seed_override =
+        peer_aim_seed_ready && caller_is_late_pose_site &&
+        (g_puppet_aim_reticle_relay || relay_aim_pose);
+    const bool aim_pose_seed_override =
+        early_target_seed_override || late_pose_seed_override;
     if (!(fire_path_override || sustained_slot1_override || aim_pose_seed_override)) {
         return result;
     }
@@ -3263,6 +3276,37 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
         return result;
     }
     std::memcpy(seed, peer.pose_seed, 32);
+    const auto stock_peer_quat_dot = [&]() {
+        if (readable_bytes(out) < 32) {
+            return -1.0F;
+        }
+        const auto* const stock =
+            reinterpret_cast<const float*>(
+                static_cast<const std::byte*>(out) + 16);
+        const auto* const relayed =
+            reinterpret_cast<const float*>(seed + 16);
+        return std::fabs(stock[0] * relayed[0] + stock[1] * relayed[1] +
+                         stock[2] * relayed[2] + stock[3] * relayed[3]);
+    };
+    static std::atomic<bool> early_target_logged{false};
+    if (early_target_seed_override &&
+        !early_target_logged.exchange(true, std::memory_order_acq_rel)) {
+        std::ostringstream line;
+        line << "AIM-TARGET-EARLY idx=" << idx << " site=0x" << std::hex
+             << caller_rva << std::dec << " stockPeerDot="
+             << stock_peer_quat_dot() << " poseReady="
+             << (relay_aim_pose ? 1 : 0);
+        boot_log_line(line.str().c_str());
+    }
+    static std::atomic<bool> fire_seed_logged{false};
+    if (fire_path_override &&
+        !fire_seed_logged.exchange(true, std::memory_order_acq_rel)) {
+        std::ostringstream line;
+        line << "AIM-FIRE-SEED idx=" << idx << " site=0x" << std::hex
+             << caller_rva << std::dec << " stockPeerDot="
+             << stock_peer_quat_dot();
+        boot_log_line(line.str().c_str());
+    }
     static ULONGLONG last_override_log = 0;
     const ULONGLONG onow = GetTickCount64();
     if (onow - last_override_log > 2000) {
@@ -23750,7 +23794,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15dl (snap initial FgAnim ADS heading)");
+        "TLL hook DLL init 2026-07-15dm (open reticle target before pose gate)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

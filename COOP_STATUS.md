@@ -3056,6 +3056,19 @@ shortest-arc rate limiting only for subsequent camera motion. Prediction: the fi
 visible ADS frame faces correctly; later turning remains smooth. Planted/sliding
 feet are expected to remain as a separate lower-priority child-state issue.
 
+Build dl is runtime-rejected as the initial aim-ray fix. The weapon still begins
+on the old point, an immediate shot goes to that same point, and the character only
+turns afterward. This rejects final FgAnim yaw timing as the ray owner and selects
+the earlier caller-scoped screen-1 target path.
+
+Build dm opens the peer pose seed immediately only at
+`GetTargetPointFromReticle`'s resolver return site `0x140CB17D6`. The full
+`Player_PostAnimUpdate` seed copy at `0x1410E934B` remains behind staged GunMove
+and render-yaw admission, and broad screen-1 resolver ownership remains disabled.
+Bounded boot markers distinguish early target delivery from the native puppet fire
+resolver path. Evidence, competitors and prediction:
+`reports/player_aim_initial_ray_latch_20260715.md`.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

@@ -28148,3 +28148,20 @@ boundary itself.
   is immediately correct; continued camera turning stays smooth. If the old
   heading still appears, earlier native pose admission, not final FgAnim yaw, owns
   the entry frame.
+
+### 2026-07-15 build dl runtime: initial screen target precedes FgAnim yaw
+
+- **REJECTED:** snapping a new FgAnim ADS session directly to peer target yaw made
+  no visible improvement. The puppet still aims first at the old point.
+- **RUNTIME discriminator:** a shot during that interval goes to the same old
+  point, then the body/weapon turns toward the current reticle. Final FgAnim yaw
+  and the previously rejected Player root/action snapshot cannot own that ray.
+- **STATIC timing bug:** peer screen-0 pose seed is published on every strict-RMB
+  packet, but the caller-scoped resolver substitution at `0x140CB17D6` waits for
+  `puppet_aim_pose_relay_enabled_for_peer`: 250 ms input dwell, stable GunMove and
+  render-yaw readiness. Native `GetTargetPointFromReticle 0x140CB1720` therefore
+  consumes stale screen-1 input before the safe scoped override opens.
+- Build dm opens only the `0x140CB17D6` target substitution immediately from a
+  strict peer ADS packet. The full pose-output site `0x1410E934B` retains staged
+  admission; the broad idx-1 override remains parked. Full alternatives and
+  prediction: `reports/player_aim_initial_ray_latch_20260715.md`.
