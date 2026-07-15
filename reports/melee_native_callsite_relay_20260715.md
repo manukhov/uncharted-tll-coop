@@ -85,3 +85,33 @@ that a correctly queued `melee-r1` command is sufficient for the retained Player
 the next static target is the downstream action eligibility/target decision after
 `0x1412712D0`, not another input or queue bypass. If weapon give regresses, the
 two-callsite isolation assumption is falsified.
+
+## 2026-07-15 regression discriminator (build cs)
+
+After build cq was introduced, the user reported that visually the two copies no
+longer connected. Build cr proved that both processes exchange and accept their
+first 456-byte state packet, but both processes then disappeared shortly after
+the local Players became valid. The cq relay is the only newly installed code
+patch after cp: it redirects two calls in the naturally scheduled melee
+dispatcher through an indirect FF25 relay.
+
+Competing hypotheses:
+
+1. The cq callsite relay destabilizes the natural Player melee tick after Player
+   creation, preventing the downstream puppet path or terminating the process.
+2. The earlier cp diagnostics cleanup removed a functional side effect despite
+   its source paths being diagnostic.
+3. Both processes were manually closed and the visual failure is independently
+   in puppet spawn/apply timing.
+
+Evidence for isolating candidate 1 first: the vtable graph proves the dispatcher
+is naturally scheduled; disassembly proves both patched E8 sites are reached
+inside that dispatcher; and runtime proved transport succeeds immediately before
+the processes disappear. This does not yet confirm causality.
+
+Falsifiable prediction: build cs, with only
+`g_enable_puppet_melee_callsite_relay=false`, must omit the relay install line,
+exchange state packets, keep both processes alive, and restore the visible peer.
+If packet exchange remains but the peer is still absent, cq is rejected as the
+connection-regression cause and cp becomes the next rollback boundary. Melee is
+explicitly parked during this discriminator.

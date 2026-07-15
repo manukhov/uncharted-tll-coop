@@ -2782,3 +2782,12 @@ a 456-byte sequence-1 state packet, and each accepted the other's packet at the
 same world position. The apparent initial non-connection was the interval before
 each local Player published a valid position. Transport and snapshot publication
 are healthy; a remaining missing puppet belongs to the downstream apply path.
+
+## 2026-07-15 build cs: park cq melee patch to isolate connection regression
+
+User reports the peer is still visually absent and that the pre-change build
+worked. The cr processes exchanged sequence 1 and then both disappeared after
+Player creation. Build cs disables only the cq E8/FF25 melee callsite relay while
+retaining cp cleanup and one-shot network milestones. Prediction: stable visible
+peer means cq caused the regression; absent peer means roll back cp next. Melee
+sync is parked for this test.
