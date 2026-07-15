@@ -239,3 +239,20 @@ sender and `square-query-forced` on the peer. Absence of the sender line rejects
 the Joypad ownership/query hypothesis. Sender presence without receiver force
 selects packet edge transport. Once receiver force appears, the existing queue
 and TryAnim stage outcomes retain their prior meanings.
+
+## 2026-07-15 build cx result
+
+**CONFIRMED (user and stage log):** PID 24300 captured
+`local-square-captured`; peer PID 23460 logged `square-query-forced` and
+`queue-square=1`; the user saw the remote melee animation. Both directions had
+already completed first packet exchange and remote Player materialization.
+
+The subsequent callsite probe logged `try-anim=0 enabled=0 netHi=0` despite the
+visible animation. Therefore that helper's boolean return is not a valid verdict
+for the complete native square-command animation path; the visual result and
+successful native queue consumption supersede the earlier interpretation.
+
+Build cy removes the temporary vtable `+0x210` swap, TryAnim callsite relay, and
+all melee stage logging. Production retains only the confirmed local bound-Joypad
+square capture, bounded wire pulse, and remote square force in the existing
+Joypad hook.

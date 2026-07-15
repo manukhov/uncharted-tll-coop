@@ -2851,3 +2851,9 @@ hook only when the Joypad equals the one selected by retained slot 0's live
 `Player+0x39B8`. It emits one `local-square-captured` marker, retains the 150 ms
 edge pulse, and leaves all manual melee execution paths parked. The receiver's
 cw queue/TryAnim stage probes remain active for the next tap.
+
+**CONFIRMED (user):** cx produced the visible remote hit. The sender logged local
+square capture; the receiver forced square and retrieved it from queue `+0x210`.
+Although the observed TryAnim call returned zero, the animation was visible, so
+that return is not the whole path's success flag. cy removes every stage probe and
+keeps only the working square relay.

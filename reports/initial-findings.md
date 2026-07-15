@@ -27851,3 +27851,19 @@ The corrected capture surface is **STATIC** with three independent anchors:
 Build cx captures only original-true `melee-square` on the Joypad selected by
 retained slot 0's live `Player+0x39B8`, then publishes the existing bounded melee
 pulse. Manual dispatcher, queue push, TryAnim, and publish calls remain parked.
+
+### 2026-07-15 CONFIRMED: bound-Joypad square relay produces visible remote melee
+
+Build cx completed the predicted sender and receiver stages: PID 24300 logged
+local square capture; PID 23460 forced `melee-square` and retrieved it through
+controller queue vtable `+0x210`. The user confirmed the remote hit animation was
+visible. This confirms the minimal production route:
+
+- capture original-true `melee-square` on retained slot 0's bound Joypad;
+- publish one bounded protocol pulse;
+- consume its edge only at retained slot 1's stock Joypad square query;
+- let the native dispatcher, command queue, and animation graph run normally.
+
+The diagnostic TryAnim callsite returned zero while the hit was visible, so its
+boolean return is **REJECTED** as an end-to-end animation-success indicator.
+Build cy removes the temporary queue-vtable and TryAnim probes plus stage logs.

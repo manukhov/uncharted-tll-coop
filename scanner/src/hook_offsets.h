@@ -94,8 +94,6 @@ constexpr std::uintptr_t kMeleeR1IsCommandActiveCallsiteRva = 0x1273AE2;
 constexpr std::uintptr_t kMeleeLmousePressIsCommandActiveCallsiteRva = 0x1273D3B;
 // MoveStick air-melee anim gate (sub_1410FC9F0); net-mode early-out blocks puppet.
 constexpr std::uintptr_t kPlayerMeleeTryAnimRva = 0x10FC9F0;
-constexpr std::uintptr_t kPlayerMeleeTryAnimCallsiteRva = 0x0F07A0A;
-constexpr std::uintptr_t kMeleeCommandQueueQuerySquareRva = 0x1279F10;
 constexpr std::uintptr_t kMeleeTryAnimEnabledGlobalRva = 0x3ECF31A;
 constexpr std::uintptr_t kNetModeFlagsGlobalRva = 0x3E07470;
 // Large mounted action controller used by TryAnim (not the +0x1F60 queue owner).

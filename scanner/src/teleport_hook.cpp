@@ -142,9 +142,6 @@ PlayerInputIsCommandActiveFunction
 using PlayerMeleeTryAnimFunction =
     char(__fastcall*)(void**, void*, double);
 PlayerMeleeTryAnimFunction g_original_player_melee_try_anim = nullptr;
-PlayerMeleeTryAnimFunction g_original_player_melee_try_anim_callsite = nullptr;
-using MeleeCommandQueryFunction = std::int64_t(__fastcall*)(void*, int*);
-MeleeCommandQueryFunction g_original_melee_square_query = nullptr;
 std::atomic<bool> g_puppet_melee_try_anim_bypass{false};
 // Melee relay REMOVED (co): cm crash + cn broke weapon give; pivot back to
 // locomotion/weapon/cover only.
@@ -154,10 +151,6 @@ constexpr bool g_enable_puppet_melee_exec_relay = false;
 // this patches only two press queries inside the stock melee dispatcher.
 constexpr bool g_enable_puppet_melee_callsite_relay = true;
 std::atomic<ULONGLONG> g_local_melee_press_until_ms{0};
-std::atomic<bool> g_melee_local_square_logged{false};
-std::atomic<std::uint32_t> g_melee_probe_stage{0};
-std::atomic<ULONGLONG> g_melee_square_injected_ms{0};
-std::atomic<bool> g_melee_square_false_logged{false};
 // Full 0x141272A50 dispatcher from the input hook REJECTED ck: PID 11188 hung
 // after MELEE-RECV, zero MELEE-EXEC (Joypad_IsCommandActive recursion / heavy path).
 constexpr bool g_enable_puppet_melee_full_dispatch = false;
@@ -1521,17 +1514,6 @@ char __fastcall hooked_joypad_is_command_active(
                                         pending, pending - 1,
                                         std::memory_order_acq_rel,
                                         std::memory_order_acquire)) {
-                                std::uint32_t expected_stage = 0;
-                                if (g_melee_probe_stage.compare_exchange_strong(
-                                        expected_stage, 1,
-                                        std::memory_order_acq_rel,
-                                        std::memory_order_acquire)) {
-                                    g_melee_square_injected_ms.store(
-                                        GetTickCount64(),
-                                        std::memory_order_release);
-                                    boot_log_line(
-                                        "MELEE-STAGE square-query-forced");
-                                }
                                 return 1;
                             }
                         }
@@ -1577,10 +1559,6 @@ char __fastcall hooked_joypad_is_command_active(
                 if (joypad == local_joypad) {
                     g_local_melee_press_until_ms.store(
                         GetTickCount64() + 150, std::memory_order_release);
-                    if (!g_melee_local_square_logged.exchange(
-                            true, std::memory_order_acq_rel)) {
-                        boot_log_line("MELEE-STAGE local-square-captured");
-                    }
                 }
             }
         }
@@ -20849,149 +20827,6 @@ bool install_player_melee_press_callsite_relay() {
     return true;
 }
 
-std::int64_t __fastcall hooked_melee_square_query(void* controller, int* out) {
-    const std::int64_t result = g_original_melee_square_query != nullptr
-                                    ? g_original_melee_square_query(controller, out)
-                                    : 0;
-    if (g_melee_probe_stage.load(std::memory_order_acquire) != 1 ||
-        controller == nullptr) {
-        return result;
-    }
-    void* player = nullptr;
-    __try {
-        player = *reinterpret_cast<void**>(
-            static_cast<std::byte*>(controller) +
-            kPlayerMeleeControllerPlayerBackrefOffset);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return result;
-    }
-    if (player != retained_player_object(1)) {
-        return result;
-    }
-    if (result != 0) {
-        std::uint32_t expected_stage = 1;
-        if (g_melee_probe_stage.compare_exchange_strong(
-                expected_stage, 2, std::memory_order_acq_rel,
-                std::memory_order_acquire)) {
-            boot_log_line("MELEE-STAGE queue-square=1");
-        }
-    } else {
-        const ULONGLONG injected =
-            g_melee_square_injected_ms.load(std::memory_order_acquire);
-        if (injected != 0 && GetTickCount64() - injected >= 100 &&
-            !g_melee_square_false_logged.exchange(
-                true, std::memory_order_acq_rel)) {
-            boot_log_line("MELEE-STAGE queue-square=0-after-100ms");
-        }
-    }
-    return result;
-}
-
-char __fastcall hooked_player_melee_try_anim_callsite(
-    void** player, void* move_vec, double move_mag) {
-    const char result = g_original_player_melee_try_anim_callsite != nullptr
-                            ? g_original_player_melee_try_anim_callsite(
-                                  player, move_vec, move_mag)
-                            : 0;
-    if (player == nullptr || reinterpret_cast<void*>(player) !=
-                                 retained_player_object(1)) {
-        return result;
-    }
-    std::uint32_t expected_stage = 2;
-    if (g_melee_probe_stage.compare_exchange_strong(
-            expected_stage, 3, std::memory_order_acq_rel,
-            std::memory_order_acquire)) {
-        std::ostringstream line;
-        line << "MELEE-STAGE try-anim=" << static_cast<unsigned>(result)
-             << " enabled="
-             << static_cast<unsigned>(*reinterpret_cast<const std::uint8_t*>(
-                    g_module + kMeleeTryAnimEnabledGlobalRva))
-             << " netHi="
-             << static_cast<unsigned>(*reinterpret_cast<const std::uint8_t*>(
-                    g_module + kNetModeFlagsGlobalRva + 3));
-        boot_log_line(line.str().c_str());
-    }
-    return result;
-}
-
-bool install_melee_square_stage_probes() {
-    auto* const query_slot = reinterpret_cast<std::uintptr_t*>(
-        g_module + kPlayerMeleeControllerVtableRva +
-        kPlayerMeleeControllerValidateCommandVtableOffset);
-    const std::uintptr_t expected_query =
-        g_module + kMeleeCommandQueueQuerySquareRva;
-    if (*query_slot != expected_query) {
-        boot_log_line("MELEE-STAGE probes SKIPPED (square vtable slot)");
-        return false;
-    }
-    DWORD old_query_protection = 0;
-    if (!VirtualProtect(query_slot, sizeof(*query_slot), PAGE_READWRITE,
-                        &old_query_protection)) {
-        boot_log_line("MELEE-STAGE probes SKIPPED (square protect)");
-        return false;
-    }
-    g_original_melee_square_query =
-        reinterpret_cast<MeleeCommandQueryFunction>(*query_slot);
-    *query_slot = reinterpret_cast<std::uintptr_t>(&hooked_melee_square_query);
-    DWORD ignored = 0;
-    VirtualProtect(query_slot, sizeof(*query_slot), old_query_protection,
-                   &ignored);
-
-    auto* const call_site = reinterpret_cast<std::uint8_t*>(
-        g_module + kPlayerMeleeTryAnimCallsiteRva);
-    if (call_site[0] != 0xE8) {
-        boot_log_line("MELEE-STAGE TryAnim probe SKIPPED (not E8)");
-        return false;
-    }
-    std::int32_t original_displacement = 0;
-    std::memcpy(&original_displacement, call_site + 1,
-                sizeof(original_displacement));
-    const std::uintptr_t target =
-        reinterpret_cast<std::uintptr_t>(call_site + 5) +
-        static_cast<std::intptr_t>(original_displacement);
-    if (target != g_module + kPlayerMeleeTryAnimRva) {
-        boot_log_line("MELEE-STAGE TryAnim probe SKIPPED (target)");
-        return false;
-    }
-    g_original_player_melee_try_anim_callsite =
-        reinterpret_cast<PlayerMeleeTryAnimFunction>(target);
-    constexpr std::size_t kRelaySize = 14;
-    auto* const relay = static_cast<std::uint8_t*>(
-        allocate_executable_near(call_site, kRelaySize));
-    if (relay == nullptr) {
-        boot_log_line("MELEE-STAGE TryAnim probe SKIPPED (relay)");
-        return false;
-    }
-    relay[0] = 0xFF;
-    relay[1] = 0x25;
-    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
-    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
-        reinterpret_cast<std::uintptr_t>(
-            &hooked_player_melee_try_anim_callsite);
-    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
-    const std::int64_t displacement =
-        reinterpret_cast<std::intptr_t>(relay) -
-        reinterpret_cast<std::intptr_t>(call_site + 5);
-    if (displacement < INT32_MIN || displacement > INT32_MAX) {
-        VirtualFree(relay, 0, MEM_RELEASE);
-        boot_log_line("MELEE-STAGE TryAnim probe SKIPPED (range)");
-        return false;
-    }
-    DWORD old_call_protection = 0;
-    if (!VirtualProtect(call_site, 5, PAGE_EXECUTE_READWRITE,
-                        &old_call_protection)) {
-        VirtualFree(relay, 0, MEM_RELEASE);
-        boot_log_line("MELEE-STAGE TryAnim probe SKIPPED (protect)");
-        return false;
-    }
-    *reinterpret_cast<std::int32_t*>(call_site + 1) =
-        static_cast<std::int32_t>(displacement);
-    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
-    VirtualProtect(call_site, 5, old_call_protection, &ignored);
-    boot_log_line("MELEE-STAGE square/queue/TryAnim probes installed");
-    return true;
-}
-
 using DrawControlSetChildFlagsFunction = void(__fastcall*)(
     void*, std::uint32_t);
 DrawControlSetChildFlagsFunction g_original_draw_control_set_child_flags = nullptr;
@@ -23334,7 +23169,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15cx (local square capture + stage probes)");
+        "TLL hook DLL init 2026-07-15cy (confirmed melee square relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -23353,7 +23188,6 @@ DWORD WINAPI install_hook(void*) {
     }
     if (g_enable_puppet_melee_callsite_relay) {
         install_player_melee_press_callsite_relay();
-        install_melee_square_stage_probes();
     }
     boot_log_line(
         "PlayerMeleeTryAnim global hook parked (cj uses inline puppet-only bypass)");
