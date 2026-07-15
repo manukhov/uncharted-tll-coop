@@ -7975,6 +7975,27 @@ std::int64_t __fastcall hooked_gun_move_build_action_state(
                 std::memcpy(
                     root_quat, target_local_quat, sizeof(target_local_quat));
                 staged_snapshot = true;
+                static std::atomic<bool> first_stage_logged{false};
+                if (!first_stage_logged.exchange(
+                        true, std::memory_order_relaxed)) {
+                    float movement_magnitude = -1.0F;
+                    if (readable_bytes(
+                            static_cast<std::byte*>(controller) + 0x160) >=
+                        sizeof(float)) {
+                        movement_magnitude = *reinterpret_cast<const float*>(
+                            static_cast<const std::byte*>(controller) + 0x160);
+                    }
+                    const float root_dot = std::fabs(
+                        saved_root_quat[0] * target_local_quat[0] +
+                        saved_root_quat[1] * target_local_quat[1] +
+                        saved_root_quat[2] * target_local_quat[2] +
+                        saved_root_quat[3] * target_local_quat[3]);
+                    std::ostringstream line;
+                    line << "AIM-ACTION-BASIS first stage child=" << child_state
+                         << " move=" << movement_magnitude
+                         << " rootDot=" << root_dot;
+                    boot_log_line(line.str().c_str());
+                }
             }
         }
     }
@@ -23715,7 +23736,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15di (snapshot Player root into GunMove action)");
+        "TLL hook DLL init 2026-07-15dj (confirm GunMove action snapshot delivery)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

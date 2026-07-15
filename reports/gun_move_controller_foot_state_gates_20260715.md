@@ -107,3 +107,19 @@ not seed `FgAnimData+0xD4` or force child states 3/4. If entry/gait are unchange
 despite the marker, stale `Player+0x140` is rejected and missing child-action
 advancement becomes the stronger explanation. Any root drift, wrong facing, or
 kneeling after lifecycle transition rejects the temporary snapshot boundary.
+
+## Build di runtime and build dj discriminator
+
+**NO VISIBLE PROGRESS:** the user reports unchanged ADS entry, gait and stationary
+turn behavior in build di. Both processes installed the `0x140E9063B` callsite and
+reached peer ADS/FgAnim publication. However the per-call marker used
+`force_log_line`, which is deliberately compiled out in production, so this run
+does not prove that a state transition reached the builder after the 250 ms gate.
+
+Build dj changes no animation behavior. It emits exactly one `boot_log_line` per
+process when the wrapper actually stages `Player+0x140`, including selected child
+state, controller movement magnitude and quaternion dot between native and staged
+root. A marker with a materially non-unit dot plus unchanged visuals rejects the
+stale snapshot. No marker after a fresh ADS transition proves the child action was
+already built outside this callsite/gate and moves the trace to initial builder
+path `0x140E8E830 -> 0x140E8D140`.

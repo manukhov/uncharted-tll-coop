@@ -3029,6 +3029,13 @@ update resumes. Prediction: wrong-side ADS entry and moving gait improve, while
 stationary planted-foot turning remains for the separate cold-state initiator
 pass. A lifecycle kneeling regression rejects the snapshot boundary.
 
+Build di produced no visible progress. Installation and ADS/FgAnim were confirmed,
+but its wrapper marker used production-disabled runtime logging, so action-snapshot
+delivery is still unknown. Build dj changes no behavior and writes exactly one
+boot marker per process on the first staged builder call, including child state,
+movement magnitude and root quaternion dot. This distinguishes an inert snapshot
+from an action built before or outside the admitted `0x140E9063B` path.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

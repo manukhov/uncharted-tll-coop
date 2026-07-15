@@ -28102,3 +28102,17 @@ aim-walk foot direction improves, while stationary planted-foot turning remains.
 An `AIM-ACTION-BASIS` marker with unchanged entry/gait rejects the stale action
 snapshot; kneeling/root drift after location lifecycle rejects the temporary
 boundary itself.
+
+### 2026-07-15 build di runtime: no visible progress; delivery unconfirmed
+
+- **NO VISIBLE PROGRESS:** entry, aim-walk gait and planted-foot turning appear
+  unchanged to the user.
+- Both processes installed the `0x140E9063B` callsite and reached peer ADS plus
+  FgAnim world publication.
+- The intended per-call marker used production-disabled `force_log_line`, so its
+  absence cannot distinguish an inert snapshot from a builder that never ran after
+  the 250 ms admission gate.
+- Build dj adds one boot-only marker per process with builder child state,
+  movement magnitude and native-versus-staged root dot. It changes no animation
+  behavior. A non-unit dot with unchanged visuals rejects stale `Player+0x140`;
+  no marker selects the earlier `0x140E8E830` builder path.
