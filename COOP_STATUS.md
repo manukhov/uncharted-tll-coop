@@ -2872,3 +2872,20 @@ keeps only the working square relay.
   the true consumer and 3x4 matrix convention for `FgAnimData+0x230`, then write
   a discriminating read-only prediction before launching two instances.
 - Report: `reports/player_aim_audio_path_correction_20260715.md`.
+
+## 2026-07-15 STATIC: ADS body yaw belongs to FgAnimData render-world publication
+
+- `FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` is the true final
+  consumer: it copies CPU skinning matrices `FgAnimData+0x230` to upload storage
+  `+0x240`, then obtains the independent render-world matrix through
+  `FgAnimData_GetRenderWorldMatrix 0x1403014F0`.
+- That getter reads `FgAnimData+0x1C0`, written by
+  `FgAnimData_PublishWorldTransform 0x1418C55D0` ->
+  `FgAnimData_PublishWorldMatrix 0x1418C54D0`.
+- Animation-manager phase `0x40` owns the stock publication at callsite
+  `0x141A8FC00` with ABI `rcx=fg, rdx=quat+translation, r8b=0`.
+- Therefore the previous post-Player-update `Player+0x140` writes could be true in
+  logs while visually inert: the renderer consumed an already separated FgAnimData
+  snapshot. Do not rotate/copy the full 651-joint palette for body yaw.
+- Evidence, alternatives and runtime prediction:
+  `reports/player_aim_fganim_world_transform_20260715.md`.

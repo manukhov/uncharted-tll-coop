@@ -951,13 +951,15 @@ Do not reopen these as the first move:
       0x141B757F0`; it is AudioManager ARM.
 - [x] Correct the decimal/hex offset error: final FgAnimData matrices are current
       `+0x230`, previous `+0x238`, not hex `+0x560/+0x568`.
-- [ ] Resolve every typed consumer of `FgAnimData+0x230` after
-      `AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00` and identify the
-      real render-owner generation.
-- [ ] Establish the 3x4 matrix convention and whether body yaw belongs in a root
-      row, all rows, or a pre-blend Player transform.
-- [ ] Only after the evidence quota, run a read-only two-instance discriminator
-      that separates missing palette yaw from wrong render-owner consumption.
+- [x] Resolve the typed consumer: `FgDrawManager_PrepareInstanceForRendering
+      0x14181A9B0` copies CPU `+0x230` to upload `+0x240` and separately binds the
+      `FgAnimData+0x1C0` render-world matrix.
+- [x] Establish body-yaw ownership: phase `0x40` publishes quaternion+translation
+      through `FgAnimData_PublishWorldTransform 0x1418C55D0`; no all-joint rewrite
+      is required for whole-body rotation.
+- [ ] Run the earned two-instance exam using only the `0x141A8FC00` phase-`0x40`
+      callsite relay. Expected: peer ADS camera yaw turns the whole model; release
+      restores native publication; no pose, weapon, hair or locomotion regression.
 
 ## Rule
 

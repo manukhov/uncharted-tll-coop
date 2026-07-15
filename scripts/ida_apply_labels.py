@@ -537,6 +537,48 @@ FUNCTIONS = {
         "+0x230 into previous buffer +0x238; fallback allocates and publishes "
         "identity matrices with the same layout.",
     ),
+    0x1418C4FB0: (
+        "FgAnimData_AllocateAndSwapSkinningBuffers",
+        "Allocates two 48-byte-per-joint buffers and swaps current/previous CPU "
+        "buffers at +0x230/+0x238 and upload buffers at +0x240/+0x248.",
+    ),
+    0x1418C50C0: (
+        "FgAnimData_PrepareSkinningMtxUploadBuffer",
+        "Exact FgAnimData::PrepareSkinningMtxUploadBuffer assertion in anim-data.cpp. "
+        "Copies the CPU skinning matrices at +0x230 to upload matrices at +0x240.",
+    ),
+    0x14181A9B0: (
+        "FgDrawManager_PrepareInstanceForRendering",
+        "Exact PrepareInstanceForRendering assertions in fg-draw-mgr.cpp. Copies "
+        "FgAnimData CPU matrices to upload storage and publishes the render world "
+        "matrix returned by FgAnimData_GetRenderWorldMatrix into each FgInstance.",
+    ),
+    0x14181B890: (
+        "FgDrawManager_PrepareInstancesJob",
+        "FgDrawManager worker that processes FgAnimData entries in batches of eight "
+        "through FgDrawManager_PrepareInstanceForRendering.",
+    ),
+    0x1403014F0: (
+        "FgAnimData_GetRenderWorldMatrix",
+        "Returns the published 4x4 matrix at FgAnimData+0x1C0, optionally multiplied "
+        "by the auxiliary matrix at +0x2E0 when flag 0x40000 is set.",
+    ),
+    0x140301310: (
+        "Matrix4x4_Multiply",
+        "Multiplies two 4x4 matrices; used by FgAnimData_GetRenderWorldMatrix for "
+        "the optional auxiliary render transform.",
+    ),
+    0x1418C54D0: (
+        "FgAnimData_PublishWorldMatrix",
+        "Publishes a 64-byte world matrix to FgAnimData+0x1C0 and updates the "
+        "current transform snapshot when requested by the caller.",
+    ),
+    0x1418C55D0: (
+        "FgAnimData_PublishWorldTransform",
+        "Converts quaternion+translation input to a matrix, applies FgAnimData scale, "
+        "and calls FgAnimData_PublishWorldMatrix. ABI is rcx=FgAnimData, "
+        "rdx=32-byte transform, r8b=publish-current flag.",
+    ),
     0x141AB97C0: (
         "ProcessAnimCmdListSegment",
         "Exact ProcessAnimCmdListSegment source assertion in anim-commands.cpp:822. "

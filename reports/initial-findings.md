@@ -27884,3 +27884,21 @@ Build cy removes the temporary queue-vtable and TryAnim probes plus stage logs.
   publishes `+0x230` before dispatching retained-owner vtable `+0x410/+0x418`.
   Full alternatives, evidence quota, and the next falsifiable prediction:
   `reports/player_aim_audio_path_correction_20260715.md`.
+
+### 2026-07-15 STATIC: ADS body turn is `FgAnimData+0x1C0` world publication
+
+The actual render boundary is now resolved. `FgDrawManager_PrepareInstanceForRendering
+0x14181A9B0` has exact `fg-draw-mgr.cpp` source assertions, copies CPU skinning
+matrices from `FgAnimData+0x230` to upload storage `+0x240`, and independently
+calls `FgAnimData_GetRenderWorldMatrix 0x1403014F0`. The getter reads the 64-byte
+world matrix at `FgAnimData+0x1C0` (optionally multiplied by `+0x2E0`).
+
+`FgAnimData_PublishWorldTransform 0x1418C55D0` converts a 32-byte
+quaternion+translation block, applies the FgAnimData scale, and publishes through
+`FgAnimData_PublishWorldMatrix 0x1418C54D0`. The stock animation-manager phase
+`0x40` callsite at `0x141A8FC00` proves ABI `rcx=FgAnimData`, `rdx=transform`,
+`r8b=0`. This explains the prior runtime rejection: changing `Player+0x140` could
+track peer yaw in memory while the visible model retained the previously published
+FgAnimData matrix. Whole-body ADS yaw belongs at this publication boundary, not in
+all 651 joint matrices. Full evidence and falsifiable prediction are in
+`reports/player_aim_fganim_world_transform_20260715.md`.
