@@ -115,3 +115,17 @@ exchange state packets, keep both processes alive, and restore the visible peer.
 If packet exchange remains but the peer is still absent, cq is rejected as the
 connection-regression cause and cp becomes the next rollback boundary. Melee is
 explicitly parked during this discriminator.
+
+## 2026-07-15 build cu: isolated melee runtime exam
+
+The ct user test confirmed the missing-peer regression came from cp disabling the
+required spawn descriptor capture, not from UDP. Production capture is now
+mandatory and its diagnostic scan remains off. Build cu changes only the cq
+melee callsite relay from parked to enabled on top of that corrected baseline.
+
+Prediction: both visible peers must spawn and remain stable; one local melee tap
+must produce at most one native peer melee attempt, and holding melee must not
+enqueue a command every frame. A visible animation confirms the native R1 queue
+path is sufficient. Stable peers with no animation reject sufficiency and move
+the next static target downstream of `0x1412712D0`. Any process exit or weapon
+regression rejects the FF25 callsite relay itself and it must be parked again.

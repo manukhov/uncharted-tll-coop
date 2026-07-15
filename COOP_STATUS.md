@@ -2806,3 +2806,12 @@ are recorded in `reports/runtime_hot_path_audit_20260715.md`.
 Root cause was cp disabling the sole `g_spawn_captured` producer. The capture
 toggle is removed; production now always registers/arms the required one-shot
 descriptor capture. Its heavy diagnostic scan remains off.
+
+## 2026-07-15 build cu: melee animation exam
+
+With visible peer creation restored and made mandatory, cu re-enables only the
+two native melee press callsite relays from cq. Test one tap, then a hold, then a
+weapon pickup/switch. Expected: one peer native melee attempt per tap, no repeated
+queueing during hold, stable peers, and no weapon regression. Failure classes and
+the downstream target are recorded in
+`reports/melee_native_callsite_relay_20260715.md`.

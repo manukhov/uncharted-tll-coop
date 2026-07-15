@@ -149,7 +149,7 @@ constexpr bool g_enable_puppet_melee_button_relay = false;
 constexpr bool g_enable_puppet_melee_exec_relay = false;
 // Narrow native-context relay. Unlike the rejected global PlayerInput detour,
 // this patches only two press queries inside the stock melee dispatcher.
-constexpr bool g_enable_puppet_melee_callsite_relay = false;
+constexpr bool g_enable_puppet_melee_callsite_relay = true;
 std::atomic<ULONGLONG> g_local_melee_press_until_ms{0};
 // Full 0x141272A50 dispatcher from the input hook REJECTED ck: PID 11188 hung
 // after MELEE-RECV, zero MELEE-EXEC (Joypad_IsCommandActive recursion / heavy path).
@@ -23133,7 +23133,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15ct (restore functional spawn capture)");
+        "TLL hook DLL init 2026-07-15cu (melee relay with required spawn capture)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

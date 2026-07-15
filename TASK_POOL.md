@@ -11,6 +11,11 @@
 
 ## P0: Full Player Synchronization (CURRENT)
 
+- [~] **Melee animation runtime exam (build cu, 2026-07-15):** required spawn
+      capture is permanently on; enable only the native R1/lmouse callsite relay.
+      Test tap, hold, and weapon regression. Stable peer without animation sends
+      analysis downstream of `0x1412712D0`; crash/regression parks the relay.
+
 - [x] **Restore remote Player creation (build ct, 2026-07-15):** cp wrongly
       disabled the sole descriptor capture that writes `g_spawn_captured`; the
       live-peer slot-1 spawn gate therefore could never open despite healthy UDP.
