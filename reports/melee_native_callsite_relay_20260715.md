@@ -129,3 +129,42 @@ enqueue a command every frame. A visible animation confirms the native R1 queue
 path is sufficient. Stable peers with no animation reject sufficiency and move
 the next static target downstream of `0x1412712D0`. Any process exit or weapon
 regression rejects the FF25 callsite relay itself and it must be parked again.
+
+## 2026-07-15 build cu result and square-path correction
+
+**REJECTED (user):** peers remained visible and connected, but the remote Player
+did not visibly fight. This rejects the claim that translating every local melee
+press to `melee-r1` is sufficient. It does not reject the isolated local press
+capture or transport.
+
+Competing downstream explanations were:
+
+1. the forced R1 command was never consumed;
+2. the retained Player did not schedule the normal action dispatcher;
+3. R1 was consumed but rejected by Player state/cooldown gates;
+4. `PlayerMeleeController::TryAttack` rejected it because no local target rated.
+
+Static evidence separates the command families. The dispatcher at `0x141272A50`
+queries `melee-square` through `Joypad_IsCommandActive` at `0x141272B99` and
+immediately inserts that exact command through `0x141273FA0`. Independently,
+PlayerMeleeController vtable `+0x210 = 0x141279F10` resolves literal
+`melee-square`; `PlayerMoveStick_MainUpdate` consumes it and calls the free melee
+animation helper `0x1410FC9F0`. By contrast, vtable `+0x220 = 0x14127A250`
+resolves `melee-r1`; `Player_TryConsumeQueuedMeleeActions 0x1410F5740` routes it
+to literal `player-r1-attacks` and `PlayerMeleeController::TryAttack
+0x141275910`, which succeeds only when `MeleeAttackRater_RateTargets` selects a
+local target. The exact call graph, independent string/dataflow identities, and
+vtable slot split satisfy the static evidence quota.
+
+Build cv keeps the two exact PlayerInput callsite patches only for local
+R1/lmouse capture. It no longer forces remote R1. The already-established
+Joypad-3 command hook consumes one fresh pending pulse only when the stock
+dispatcher asks for `melee-square`; no manual queue or animation calls are made.
+
+Falsifiable prediction: a local air melee tap produces one visible free melee
+animation on the peer puppet, while holding does not repeat every frame and
+weapon pickup/switch remains healthy. If there is still no animation, the R1
+target-rater alternative is excluded; the next discriminator is whether
+`MeleeCommandQueue_QueryMeleeSquare` returns true for slot 1 versus
+`0x1410FC9F0` rejecting the naturally consumed command. A crash or lost peer
+rejects the square injection and requires immediate rollback to cu.

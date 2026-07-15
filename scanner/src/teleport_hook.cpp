@@ -1471,6 +1471,8 @@ char __fastcall hooked_joypad_is_command_active(
                     string_hash("try-enter-cover", 15, 0);
                 static const std::uint32_t kMeleeTriangleHash =
                     string_hash("melee-triangle", 14, 0);
+                static const std::uint32_t kMeleeSquareHash =
+                    string_hash("melee-square", 12, 0);
                 const std::uint64_t force =
                     g_state_net.puppet_traversal_force.load(
                         std::memory_order_acquire);
@@ -1492,6 +1494,30 @@ char __fastcall hooked_joypad_is_command_active(
                 if (hash == kCrouchHash &&
                     (force & kJoypadCrouchButtonMask) != 0) {
                     return 1;
+                }
+                // The stock dispatcher inserts melee-square from this Joypad
+                // query, and PlayerMoveStick later consumes it through the
+                // controller's +0x210 queue slot. Do not translate the peer
+                // press to melee-r1: that path requires a locally rated target.
+                if (g_enable_puppet_melee_callsite_relay &&
+                    hash == kMeleeSquareHash) {
+                    const ULONGLONG received =
+                        g_state_net.peer_state_received_ms.load(
+                            std::memory_order_acquire);
+                    if (received != 0 && GetTickCount64() - received <= 500) {
+                        std::uint32_t pending =
+                            g_state_net.pending_puppet_melee_presses.load(
+                                std::memory_order_acquire);
+                        while (pending != 0) {
+                            if (g_state_net.pending_puppet_melee_presses
+                                    .compare_exchange_weak(
+                                        pending, pending - 1,
+                                        std::memory_order_acq_rel,
+                                        std::memory_order_acquire)) {
+                                return 1;
+                            }
+                        }
+                    }
                 }
                 if (g_enable_puppet_melee_button_relay &&
                     (force & kJoypadMeleeTriangleButtonMask) != 0 &&
@@ -20693,27 +20719,10 @@ char __fastcall hooked_player_melee_press_callsite(
         }
         return original;
     }
-    if (original || hash != hashes.r1 ||
-        player != static_cast<std::byte*>(retained_player_object(1)) ||
-        !g_state_net.enabled) {
-        return original;
-    }
-    const ULONGLONG received =
-        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
-    if (received == 0 || GetTickCount64() - received > 500) {
-        return original;
-    }
-
-    std::uint32_t pending =
-        g_state_net.pending_puppet_melee_presses.load(
-            std::memory_order_acquire);
-    while (pending != 0) {
-        if (g_state_net.pending_puppet_melee_presses.compare_exchange_weak(
-                pending, pending - 1, std::memory_order_acq_rel,
-                std::memory_order_acquire)) {
-            return 1;
-        }
-    }
+    // Remote execution is deliberately left to the existing Joypad hook's
+    // melee-square query. Forcing this PlayerInput callsite produced melee-r1,
+    // which enters the target-rated attack path and does nothing when no local
+    // target is accepted.
     return original;
 }
 
@@ -20787,7 +20796,8 @@ bool install_player_melee_press_callsite_relay() {
     FlushInstructionCache(GetCurrentProcess(), callsites.front(), patch_span);
     DWORD ignored = 0;
     VirtualProtect(callsites.front(), patch_span, old_protection, &ignored);
-    boot_log_line("Player melee press callsite relay installed (r1/lmouse)");
+    boot_log_line(
+        "Player melee press capture installed (local r1/lmouse -> remote square)");
     return true;
 }
 
@@ -23133,7 +23143,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15cu (melee relay with required spawn capture)");
+        "TLL hook DLL init 2026-07-15cv (native melee-square relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

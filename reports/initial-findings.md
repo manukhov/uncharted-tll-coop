@@ -27791,3 +27791,25 @@ snapshot publication, and the melee relay as causes of the missing-peer regressi
 and confirms the disabled spawn gate as the root cause. The enable flag was then
 removed entirely; production always registers and arms this required one-shot
 capture. Do not classify it as diagnostics again.
+
+### 2026-07-15 REJECTED/STATIC: R1 is not the free melee animation path
+
+Build cu kept both remote Players visible and connected, but the user saw no
+remote fighting animation. This **REJECTS** the claim that translating every
+local melee press to `melee-r1` is sufficient.
+
+Static follow-up separates the two command families. Dispatcher
+`0x141272A50` queries `melee-square` through `Joypad_IsCommandActive` at
+`0x141272B99` and inserts it through `0x141273FA0`. Controller vtable
+`+0x210 = MeleeCommandQueue_QueryMeleeSquare 0x141279F10` independently resolves
+that literal; `PlayerMoveStick_MainUpdate` consumes it before the free animation
+helper `0x1410FC9F0`. In contrast, vtable `+0x220 = 0x14127A250` resolves
+`melee-r1`; `Player_TryConsumeQueuedMeleeActions 0x1410F5740` routes it through
+`player-r1-attacks` to `PlayerMeleeController_TryAttack 0x141275910`, whose
+literal-named body succeeds only after `MeleeAttackRater_RateTargets 0x1411F7370`
+selects a local target.
+
+Build cv retains exact local R1/lmouse capture but consumes the remote pulse only
+at the stock Joypad `melee-square` query. Manual queue/animation calls remain
+parked. Runtime prediction and competing failure outcomes are in
+`reports/melee_native_callsite_relay_20260715.md`.

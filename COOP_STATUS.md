@@ -2815,3 +2815,18 @@ weapon pickup/switch. Expected: one peer native melee attempt per tap, no repeat
 queueing during hold, stable peers, and no weapon regression. Failure classes and
 the downstream target are recorded in
 `reports/melee_native_callsite_relay_20260715.md`.
+
+**REJECTED (user):** cu kept both peers visible but produced no remote fighting
+animation. Static follow-up proved the relay translated PC lmouse into the wrong
+consumer family: R1 enters `player-r1-attacks` and target rating, while the free
+melee animation consumes `melee-square` through controller vtable `+0x210`.
+
+## 2026-07-15 build cv: preserve the square command family
+
+cv retains local R1/lmouse capture but removes remote R1 forcing. The existing
+Joypad-3 hook now consumes one fresh pending pulse only for the stock
+`melee-square` query at dispatcher callsite `0x141272B99`; the native dispatcher
+inserts the queue entry and PlayerMoveStick owns the downstream animation.
+Manual dispatcher, queue, TryAttack, and TryAnim calls remain parked. Runtime
+prediction and failure split are recorded in
+`reports/melee_native_callsite_relay_20260715.md`.

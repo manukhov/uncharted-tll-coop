@@ -7059,6 +7059,24 @@ FUNCTIONS = {
         "(many callers). Produces the locally-selected melee target stored on the "
         "combat controller (player+0x1F60 -> +0xD8).",
     ),
+    0x141279F10: (
+        "MeleeCommandQueue_QueryMeleeSquare",
+        "PlayerMeleeController vtable +0x210. Resolves melee-square (or the MP "
+        "hold/release variants) and forwards the hash to queue validator +0x1F8. "
+        "PlayerMoveStick uses a true result to enter the free melee animation path.",
+    ),
+    0x141275910: (
+        "PlayerMeleeController_TryAttack",
+        "Source literal PlayerMeleeController::TryAttack. Builds a target-rating "
+        "request, calls MeleeAttackRater_RateTargets, and commits the selected "
+        "attack through controller virtuals +0x208/+0x1D8 only on success.",
+    ),
+    0x1410F5740: (
+        "Player_TryConsumeQueuedMeleeActions",
+        "Shared Player action dispatcher. Reads Player+0x1F60, queries square, "
+        "triangle, R1, and circle through vtable +0x210/+0x218/+0x220/+0x228, "
+        "then routes accepted R1 commands to PlayerMeleeController_TryAttack.",
+    ),
     0x1402E6E10: (
         "ProcessExplosion_Init",
         "ProcessExplosion::Init (game/process-explosion.cpp): initializes the "

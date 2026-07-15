@@ -11,10 +11,11 @@
 
 ## P0: Full Player Synchronization (CURRENT)
 
-- [~] **Melee animation runtime exam (build cu, 2026-07-15):** required spawn
-      capture is permanently on; enable only the native R1/lmouse callsite relay.
-      Test tap, hold, and weapon regression. Stable peer without animation sends
-      analysis downstream of `0x1412712D0`; crash/regression parks the relay.
+- [~] **Melee animation runtime exam (build cv, 2026-07-15):** cu kept visible
+      peers but produced no remote animation, rejecting R1 sufficiency. Static
+      follow-up split R1 target-rated attacks from the free `melee-square` path.
+      cv captures local R1/lmouse but consumes the remote pulse only at the stock
+      Joypad `melee-square` query. Test tap, hold, and weapon regression.
 
 - [x] **Restore remote Player creation (build ct, 2026-07-15):** cp wrongly
       disabled the sole descriptor capture that writes `g_spawn_captured`; the
@@ -29,14 +30,14 @@
       are confirmed. If the peer is visually missing, trace snapshot freshness
       and puppet apply without changing role selection. Crash observer is parked.
 
-- [~] **Melee native callsite relay (build cq, 2026-07-15):** static quota met.
+- [x] **Melee R1 callsite relay (build cq/cu, 2026-07-15):** static quota met,
+      runtime rejected R1 sufficiency: stable visible peers, no melee animation.
       Natural owner tick `0x141279DF0` calls dispatcher `0x141272A50`; exact
       `melee-r1` E8 `0x141273AE2` feeds native queue insert `0x141273FA0`, and
       vtable `+0x220` independently queries literal `melee-r1` through `+0x1F8`.
-      Build cq patches only R1/lmouse press callsites, sends a 150 ms pulse, and
-      consumes one atomic press in slot 1. Global PlayerInput detour and manual
-      dispatcher/queue/anim paths remain parked. Next: two-copy tap/hold plus
-      GiveWeapon regression and frame-pacing exam.
+      R1 then enters `player-r1-attacks` and local target rating, so cv moves
+      remote consumption to the independent square path. Global PlayerInput
+      detour and manual dispatcher/queue/anim paths remain parked.
 
 - [x] **Grenade world-object relay (2026-07-11):** CONFIRMED v6 — `GRNE` Execute
       spawn + `GRNK` kinematics stream + derived transform write + `fuse_end=now+3s`.
