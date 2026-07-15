@@ -111,6 +111,7 @@ FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullp
 std::atomic<void*> g_puppet_fganim_data{nullptr};
 std::atomic<bool> g_puppet_fganim_world_turn_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_seen{false};
+std::atomic<bool> g_puppet_aim_vertical_blended_seen{false};
 using PlayerInputStateUpdateFunction = char(__fastcall*)(void*);
 PlayerInputStateUpdateFunction g_original_player_input_state_update = nullptr;
 using PlayerInputCommandStateUpdateFunction = void(__fastcall*)(void*);
@@ -7273,6 +7274,7 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
                 kSlot1ScreenIndex &&
             received != 0 && GetTickCount64() - received <= 250 &&
             copy_peer_state_snapshot(peer) && peer_packet_aim_active(peer) &&
+            puppet_aim_pose_relay_enabled_for_peer(peer) &&
             valid_network_position(peer.pose_seed) &&
             valid_network_orientation(peer.pose_seed + 4);
     }
@@ -7405,6 +7407,16 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
                 true, std::memory_order_relaxed)) {
             std::ostringstream marker;
             marker << "Aim residual-pitch first sample y=" << forward_y
+                   << " up=" << up << " down=" << down
+                   << " left=" << left << " right=" << right
+                   << " blend=" << blend;
+            boot_log_line(marker.str().c_str());
+        }
+        if (std::fabs(forward_y) >= 0.10F && blend >= 0.85F &&
+            !g_puppet_aim_vertical_blended_seen.exchange(
+                true, std::memory_order_relaxed)) {
+            std::ostringstream marker;
+            marker << "Aim blended-pitch sample y=" << forward_y
                    << " up=" << up << " down=" << down
                    << " left=" << left << " right=" << right
                    << " blend=" << blend;
@@ -7797,7 +7809,8 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
                        valid_network_orientation(peer.camera_quat)) {
                 camera_quat = peer.camera_quat;
             }
-            if (camera_quat != nullptr) {
+            if (camera_quat != nullptr &&
+                puppet_aim_pose_relay_enabled_for_peer(peer)) {
                 float forward_x = 0.0F;
                 float forward_z = 0.0F;
                 camera_forward_horizontal(camera_quat, forward_x, forward_z);
@@ -13013,9 +13026,20 @@ bool mirror_puppet_aim_add_to_fganim(void* player) {
         right = *reinterpret_cast<const float*>(aim_bytes + 0x8BC);
         up = *reinterpret_cast<const float*>(aim_bytes + 0x8C0);
         down = *reinterpret_cast<const float*>(aim_bytes + 0x8C4);
-        const float ctrl_sum = std::fabs(left) + std::fabs(right) +
-                               std::fabs(up) + std::fabs(down);
-        have_source = ctrl_sum >= 0.01F;
+        const float blend = std::clamp(
+            *reinterpret_cast<const float*>(aim_bytes + 0x8EC), 0.0F, 1.0F);
+        have_source = std::isfinite(left) && std::isfinite(right) &&
+                      std::isfinite(up) && std::isfinite(down) &&
+                      std::isfinite(blend);
+        if (have_source) {
+            // PublishDirectionalAimWeights applies this exact ADS blend before
+            // publishing Aim0..Aim7. Mirroring raw controller weights bypassed
+            // authored easing and exposed a saturated pose on ADS entry.
+            left *= blend;
+            right *= blend;
+            up *= blend;
+            down *= blend;
+        }
     }
     void* const publish_state = aim_publish_active_state_from_player(player);
     if (!have_source && publish_state != nullptr && publish_state != fg &&
@@ -13062,6 +13086,15 @@ bool mirror_puppet_aim_add_to_fganim(void* player) {
         force_log_line(line.str().c_str());
     }
     return true;
+}
+
+void clear_puppet_fganim_aim_add(void* player) {
+    if (!g_enable_puppet_fganim_aim_add_mirror || player == nullptr) {
+        return;
+    }
+    if (void* const fg = player_fganim_from_player(player); fg != nullptr) {
+        write_fganim_aim_add_lrdu(fg, 0.0F, 0.0F, 0.0F, 0.0F);
+    }
 }
 
 void log_puppet_aim_render_discriminator(
@@ -14381,6 +14414,7 @@ void apply_puppet_transform_post(void* /*update_object*/) {
         peer_aiming && puppet_aim_pose_relay_enabled_for_peer(pkt);
     const bool puppet_aiming_now = peer_aiming;
     static bool puppet_was_aiming = false;
+    static bool puppet_was_pose_relaying = false;
     float orientation_dot = 1.0F;
     // Peer-only aim relay: partner puppet reflects the OTHER copy's aim, never the
     // local player's camera on this screen.
@@ -14412,8 +14446,10 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     } else if (pkt.move_magnitude < 0.15F) {
         orientation_dot = blend_network_orientation(quat, pkt.quat, 0.18F);
     }
-    if (peer_aiming) {
+    if (pose_relay_for_peer) {
         mirror_puppet_aim_add_to_fganim(puppet);
+    } else if (puppet_was_pose_relaying) {
+        clear_puppet_fganim_aim_add(puppet);
     }
     if (g_enable_aim_palette_probe) {
         log_puppet_aim_render_discriminator(puppet, pkt);
@@ -14421,6 +14457,7 @@ void apply_puppet_transform_post(void* /*update_object*/) {
         log_puppet_joint_palette_motion(puppet, pkt);
     }
     puppet_was_aiming = puppet_aiming_now;
+    puppet_was_pose_relaying = pose_relay_for_peer;
     if (g_clone_freerun) {
         if (too_far) {
             std::memcpy(world, pkt.pos, sizeof(pkt.pos));
@@ -23325,7 +23362,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15db (ADS axis + residual pitch basis)");
+        "TLL hook DLL init 2026-07-15dc (blend-safe ADS + gait ownership)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

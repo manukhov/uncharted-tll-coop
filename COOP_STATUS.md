@@ -2919,3 +2919,23 @@ write output `Player+0x1720/+0x1730` are removed from both pre/post phases; the
 native `Player_PostAnimUpdate 0x1410E9210` remains their sole writer. Evidence,
 competitors and runtime prediction:
 `reports/player_aim_fganim_axis_residual_pitch_20260715.md`.
+
+### Build db partial confirmation; build dc transition/gait correction
+
+User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three
+failures remain: no visible vertical pitch, occasional folded ADS entry, and
+sliding/desynchronization while moving under peer ADS. Receiver PID 8568 captured
+`Aim residual-pitch ... y=-0.23907 up=0.543157 right=1 blend=0`: pitch reaches the
+controller, but the first sample precedes blend admission.
+
+Static re-audit found the mod mirror bypassed the exact native contract in
+`PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0`: it copied raw
+`+0x8B8..+0x8C4` without `+0x8EC`, skipped zero, and never cleared the FgAnim copy.
+Build dc applies blend, clears on exit, and adds one high-blend pitch marker.
+
+The movement failure is an ownership mismatch: native puppet ADS/pose input is
+stationary-only after the prior kneeling-slide rejection, but build db's render yaw
+ran for every peer ADS packet. Build dc gives slot `+0x58`, FgAnim mirror, and late
+world yaw the same stationary gate; moving locomotion is native pass-through.
+Detailed evidence and prediction are appended to
+`reports/player_aim_fganim_axis_residual_pitch_20260715.md`.

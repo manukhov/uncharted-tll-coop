@@ -76,3 +76,46 @@ aim; ADS entry no longer folds. If the marker reports non-zero up/down weights b
 vertical pose remains absent, the blocker is below the controller in FgAnim
 parameter consumption. If entry still folds after the output writes are parked,
 the remaining owner is ADS/action-state forcing rather than pose-seed output.
+
+## Build db runtime result
+
+**CONFIRMED:** horizontal render direction is now correct. The phase-`0x40`
+quaternion sign correction is complete.
+
+**REJECTED as a complete fix:** vertical camera motion remains invisible, ADS entry
+still occasionally folds, and moving while the peer holds ADS either desynchronizes
+or slides with mismatched leg motion. The one-shot receiver marker captured
+`cameraY=-0.23907`, raw controller `up=0.543157`, `right=1`, and `blend=0`.
+Therefore camera/pitch transport and directional computation are alive; this sample
+was taken before authored blend admission and cannot yet prove a blended pitch loss.
+
+### Static correction for build dc
+
+Three independent facts identify the folded transition:
+
+1. `PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0` stores raw LRDU
+   at controller `+0x8B8..+0x8C4` and active-state `+0x188..+0x194`.
+2. The same function separately multiplies every `aim-add-*` channel by
+   controller blend `+0x8EC` before publication.
+3. The mod mirror preferred raw controller values, skipped zero sources, and never
+   cleared FgAnim fields on ADS release. It therefore bypassed easing and retained
+   a saturated pose across transitions.
+
+Build `2026-07-15dc` mirrors `raw * clamp(blend,0,1)`, treats valid zero as a real
+source, and clears FgAnim aim-add fields when the stationary pose relay closes. A
+second bounded marker records the first non-trivial pitch sample with blend at least
+0.85, resolving the remaining vertical competitor without periodic logging.
+
+The gait defect has a separate, exact ownership mismatch. Native puppet aim input
+and pose relays are intentionally disabled above `move_magnitude=0.08` or horizontal
+velocity `0.35`, following prior kneeling-slide runtime. Build db nevertheless
+overrode the late FgAnim world yaw for every strict peer ADS packet, rotating normal
+locomotion as though it were an authored aim-walk state. Build dc gates slot `+0x58`,
+the mirror, and the world-yaw publication by the same stationary predicate. While
+moving, native locomotion owns the complete pose and world transform.
+
+**Prediction:** stationary ADS keeps the confirmed direction, enters smoothly, and
+produces a `Aim blended-pitch sample` marker if the controller sustains vertical
+weights. Starting movement releases the visual ADS pose instead of sliding or
+desynchronizing. If that high-blend marker contains non-zero up/down but no visible
+pitch, the remaining blocker is strictly below native parameter publication.

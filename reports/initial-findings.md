@@ -27931,3 +27931,18 @@ transition pose.
 Build `2026-07-15db` implements those narrow corrections. Status is STATIC pending
 the explicit visual prediction in
 `reports/player_aim_fganim_axis_residual_pitch_20260715.md`.
+
+**Build db runtime:** horizontal facing is now correct, confirming the FgAnim yaw
+axis fix. Vertical remains invisible; ADS entry sometimes folds; moving ADS can
+desynchronize or slide. The bounded marker captured non-zero raw pitch output
+(`cameraY=-0.23907`, `up=0.543157`) but `blend=0`, so camera transport and
+directional computation are CONFIRMED while blended downstream consumption remains
+open.
+
+**Build dc STATIC correction:** native publisher `0x140CB41F0` scales all four
+animation channels by controller `+0x8EC`, but the mod copied raw controller LRDU,
+ignored valid zero, and retained stale FgAnim values across ADS release. The mirror
+now applies the same blend and explicitly clears on pose-relay exit. The late FgAnim
+yaw and slot `+0x58` substitutions now share the proven stationary aim-input gate;
+ordinary moving locomotion is no longer rotated as a fake aim-walk pose. Prediction
+and alternatives are recorded in the same report.
