@@ -1,6 +1,8 @@
 import os
 import sys
 
+import idapro
+
 import ida_funcs
 import ida_idaapi
 import ida_name
@@ -27,6 +29,10 @@ def describe_func(ea):
 
 
 def main():
+    db_path = os.environ.get("TLL_IDA_DB")
+    if db_path:
+        idapro.open_database(db_path, run_auto_analysis=False)
+
     output_path = os.environ.get("TLL_IDA_OUTPUT")
     if output_path:
         sys.stdout = open(output_path, "w", encoding="utf-8")

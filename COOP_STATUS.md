@@ -3001,6 +3001,21 @@ retaining pre-consumer native-vector correction. This is a discriminator for
 turn/strafe graph ownership versus unanimated position correction; detailed
 competitors and prediction are in the aim report.
 
+### Build dh rejected; foot-state inputs split into stationary and moving paths
+
+The user reports no visible improvement from dh: planted-foot turning and
+aim-walk slide remain, while positional desynchronization is only the prior
+moderate amount. This rejects the ADS post-transform nudge as the primary slide
+cause and rejects `GunMoveController+0x150` as a moving strafe parameter.
+
+Static re-open shows why. `0x140E8F720` can choose stationary turn states 3/4
+only at zero movement and behind move-settings `+0xF4` plus Player-runtime
+`+0xD4`. Moving state construction at `0x140E8D140` instead copies controller
+`+0x100..+0x14F` into the authored `player-ap-strafe-*` graph and never consumes
+`+0x150`. Current static work is tracing the two stationary gates separately from
+the moving strafe basis. No new runtime is earned yet. Detailed record:
+`reports/gun_move_controller_foot_state_gates_20260715.md`.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

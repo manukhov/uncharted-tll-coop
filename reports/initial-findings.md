@@ -28053,3 +28053,24 @@ the kneeling-slide lifecycle regression. Vertical remains unchanged.
 Prediction: no backward aim frame at entry, stationary turns step the feet, and
 moving aim-walk loses the extra unanimated slide. Increased position drift is an
 accepted discriminator; kneeling slide or wrong direction rejects this selector.
+
+### 2026-07-15 build dh runtime: REJECTED foot selector and post-nudge causes
+
+- **REJECTED as a visible foot fix:** dh leaves stationary planted-foot turning
+  and moving aim-walk slide unchanged; positional desynchronization remains only
+  moderate, as before.
+- **REJECTED primary position-correction cause:** setting the ADS post-transform
+  nudge to zero did not change the slide.
+- **REJECTED `+0x150` as moving strafe input:** changing only
+  `GunMoveController+0x150` to render positive-Z did not change the gait. Static
+  re-open confirms the moving GunMove builder `0x140E8D140` copies only controller
+  `+0x100..+0x14F` into `player-ap-strafe-*`; `+0x150` is outside that payload.
+- **STATIC stationary gate:** `GunMoveController_SelectAimIdleTurnState
+  0x140E8F720` can return turn states 3/4 only when `+0x160 == 0`, move-settings
+  byte `+0xF4` is enabled, and Player runtime field `+0xD4` passes. Any moving
+  sample returns only states 0/1.
+
+The two remaining hypotheses are therefore separate: trace the stationary
+settings/runtime gates for planted-foot turning, and trace controller
+`+0x100..+0x140` for the authored moving strafe basis. Full evidence and
+competitors: `reports/gun_move_controller_foot_state_gates_20260715.md`.
