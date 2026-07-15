@@ -221,3 +221,54 @@ than plain running. Run-first-then-aim remains blocked until the sender stops, s
 the folded entry and historical kneeling-slide admission path do not return. RMB
 release exits ADS normally; location reload cannot retain the latch. Vertical aim
 remains unchanged and downstream.
+
+## Build de runtime and build df staged run-to-ADS
+
+**PARTIAL CONFIRMATION:** a settled ADS session remains active during movement,
+which confirms that the authored GunMove family supports locomotion after its
+blend is established. Two defects remain: its feet slide relative to translation,
+and pressing ADS after running never enters the session. The latter is the direct
+prediction of build de's stationary-only admission timer, not a new native gate.
+
+The gait-speed alternative was checked statically. `Player::GunMoveShield` vtable
+slot `+0xD0` resolves to `PlayerGunMove_GetConfiguredMoveSpeed 0x140E86980`; the
+common dispatcher calls it immediately before publishing `speed-gunmove`. It reads
+`Player+0x3328`, but a displacement-wide audit found that field's only Player-range
+write in `InitializeTopLevelPlayerOwnerFromProcessSpawnInfo 0x1410DC160` at
+`0x1410DCB4D`. It is nominal spawn configuration, not a live speed channel, so
+network-writing it is rejected.
+
+### Competing hypotheses
+
+- Mirror `Player+0x3328` as live gait speed: statically rejected by its single
+  spawn-time writer and configured-speed consumer.
+- Re-enable every pose hook immediately while running: runtime-rejected by the
+  earlier folded/kneeling admission and does not distinguish action transition
+  from an established GunMove session.
+- Keep stationary-only admission: rejected by build de because run-first ADS can
+  never start.
+- Stage input/controller admission before render ownership: selected. The held
+  `0x200` and eligibility/permission relays may move the native action machine out
+  of Run, while world-basis, blend tick and late FgAnim yaw remain closed until a
+  GunMove-family action hash is stable for 100 ms.
+
+The moonwalk has a separate proportional cause. The pre-consumer path already
+adds bounded error correction to `Player+0x3A30`, inside native locomotion. The
+post-update path additionally translates world/local position by up to `0.05 m`
+per update without advancing animation. That cap is the validated running value,
+but GunMove publishes its own slower authored speed, so the same absolute nudge is
+a larger fraction of ADS travel. Build df keeps `0.05 m` for ordinary running and
+caps only an admitted aim-walk session at `0.015 m`.
+
+### Build df prediction
+
+Starting to aim while already running first keeps normal Run rendering, then
+enters GunMove ADS after the held-button delay plus a stable 100 ms GunMove hash;
+the transient state must never receive late FgAnim yaw. Starting from idle still
+enters cleanly. During established aim-walk, feet should track translation more
+closely while position continues converging; increased drift with improved feet
+would select the nudge tradeoff, while unchanged sliding would move the fault to
+the strafe direction/root basis. The historical folded or kneeling pose rejects
+the staged admission. Vertical pitch is deliberately unchanged: the high-blend
+channel already reaches native publication, and its remaining consumer is below
+the FgAnim parameter boundary.

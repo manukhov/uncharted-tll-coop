@@ -2953,6 +2953,23 @@ authored aim-walk remains; start running before aim -> no folded ADS admission u
 stopping. Vertical is unchanged and remains the next downstream static task. Full record:
 `reports/player_aim_fganim_axis_residual_pitch_20260715.md`.
 
+### Build de runtime; build df stages running admission through GunMove
+
+The user confirmed established aim-walk remains active, but its fixed post-update
+position nudge makes the slower gait slide, and de's stationary timer prevents
+run-first ADS entirely. Build df separates button/controller admission from visual
+pose ownership: after 250 ms held ADS, native input plus eligibility/permission may
+transition out of Run; pose, blend tick, world basis and late FgAnim yaw open only
+after a GunMove-family hash remains stable for 100 ms. The session still latches at
+blend 0.95 and retains all lifecycle resets.
+
+`PlayerGunMove_GetConfiguredMoveSpeed 0x140E86980` and the sole Player+0x3328
+writer at spawn reject live speed-field mirroring. Build df instead retains the
+validated `0.05 m` post nudge for ordinary locomotion and uses `0.015 m` only while
+the staged aim pose is admitted. Prediction and competitors are recorded in
+`reports/player_aim_fganim_axis_residual_pitch_20260715.md`. Vertical remains a
+separate downstream FgAnim/palette-consumer task.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

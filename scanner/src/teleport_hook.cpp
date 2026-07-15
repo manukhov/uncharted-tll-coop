@@ -112,7 +112,8 @@ std::atomic<void*> g_puppet_fganim_data{nullptr};
 std::atomic<bool> g_puppet_fganim_world_turn_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_blended_seen{false};
-std::atomic<ULONGLONG> g_puppet_stationary_aim_since_ms{0};
+std::atomic<ULONGLONG> g_puppet_aim_press_since_ms{0};
+std::atomic<ULONGLONG> g_puppet_gun_move_aim_since_ms{0};
 std::atomic<ULONGLONG> g_puppet_aim_gate_last_eval_ms{0};
 std::atomic<bool> g_puppet_aim_session_latched{false};
 std::atomic<void*> g_puppet_aim_session_owner{nullptr};
@@ -498,13 +499,11 @@ volatile bool g_native_fire_relay = false;
 // (runtime: the remote player slides back and forth in a kneeling pose). Keep F8
 // as an explicit foreground-only A/B toggle until aim is isolated from gait.
 volatile bool g_puppet_relay_aim_press = false;
-// Default aim animation without full ADS: relay 0x200 only for non-scoped peer aim
-// while the peer is almost stationary. This avoids the rejected run/turn jitter from
-// continuous aim-press during locomotion, while still raising the weapon on hold-aim.
+// Default staged aim animation: relay 0x200 after a short hold, then wait for the
+// native GunMove action before enabling pose/render ownership.
 volatile bool g_puppet_auto_stationary_aim_press = true;
 // Legacy scoped-rifle pose-only fallback. Default OFF now that stationary scoped
-// ADS is paired with the proven DrawControl main-view flag clear. Moving ADS is
-// still rejected by puppet_aim_press_relay_enabled_for_peer.
+// ADS is paired with the proven DrawControl main-view flag clear.
 volatile bool g_puppet_rifle_pose_only_ads = false;
 // Set for the current game-thread frame while the peer is aiming — widens the
 // fire-only pose/camera overrides to sustained ADS, not just the fire instant.
@@ -984,6 +983,10 @@ bool peer_snapshot_aim_active();
 bool valid_network_movement(const coop::StatePacket& packet);
 bool puppet_aim_press_relay_enabled();
 bool puppet_aim_press_relay_enabled_for_peer(const coop::StatePacket& peer);
+bool puppet_aim_controller_relay_enabled_for_peer(
+    const coop::StatePacket& peer);
+bool read_player_current_action_hash(
+    void* player, std::uint32_t& hash, void*& active_state);
 void apply_puppet_sustained_aim_input(void* puppet);
 void force_puppet_ads_flag(void* puppet, bool active);
 bool safe_request_gun_state(void* player, int desired_state);
@@ -2440,11 +2443,12 @@ bool puppet_aim_press_relay_enabled() {
 }
 
 void reset_puppet_auto_aim_admission() {
-    g_puppet_stationary_aim_since_ms.store(0, std::memory_order_release);
+    g_puppet_aim_press_since_ms.store(0, std::memory_order_release);
+    g_puppet_gun_move_aim_since_ms.store(0, std::memory_order_release);
     g_puppet_aim_session_latched.store(false, std::memory_order_release);
 }
 
-bool puppet_stationary_aim_ready_for_peer(const coop::StatePacket& peer) {
+bool puppet_aim_press_relay_enabled_for_peer(const coop::StatePacket& peer) {
     const ULONGLONG now = GetTickCount64();
     const ULONGLONG previous_eval = g_puppet_aim_gate_last_eval_ms.exchange(
         now, std::memory_order_acq_rel);
@@ -2465,43 +2469,72 @@ bool puppet_stationary_aim_ready_for_peer(const coop::StatePacket& peer) {
         reset_puppet_auto_aim_admission();
         return false;
     }
-    // Once the stationary entry ramp completed, keep the authored GunMove ADS
-    // session alive through locomotion until RMB release or a packet/lifecycle gap.
+    // Once the action/blend entry completed, keep the authored GunMove ADS session
+    // alive through locomotion until RMB release or a packet/lifecycle gap.
     if (g_puppet_aim_session_latched.load(std::memory_order_acquire)) {
         return true;
     }
-    if (valid_network_movement(peer) && peer.move_magnitude > 0.08F) {
-        g_puppet_stationary_aim_since_ms.store(0, std::memory_order_release);
-        return false;
-    }
-    const float vx = peer.velocity[0];
-    const float vz = peer.velocity[2];
-    if (!std::isfinite(vx) || !std::isfinite(vz) ||
-        vx * vx + vz * vz >= 0.35F * 0.35F) {
-        g_puppet_stationary_aim_since_ms.store(0, std::memory_order_release);
-        return false;
-    }
 
-    // A low-speed network sample arrives before the native run-to-idle graph has
-    // settled. Let locomotion finish before admitting every ADS controller hook.
-    constexpr ULONGLONG kStationaryAimDwellMs = 250;
-    ULONGLONG since = g_puppet_stationary_aim_since_ms.load(
+    // Relay the held button independently from the visual pose. This lets the
+    // native action machine leave Run and select GunMove before any late FgAnim
+    // world turn or forced blend is allowed to touch the puppet.
+    constexpr ULONGLONG kAimPressDwellMs = 250;
+    ULONGLONG since = g_puppet_aim_press_since_ms.load(
         std::memory_order_acquire);
     if (since == 0) {
-        if (g_puppet_stationary_aim_since_ms.compare_exchange_strong(
+        if (g_puppet_aim_press_since_ms.compare_exchange_strong(
                 since, now, std::memory_order_acq_rel)) {
             since = now;
         }
     }
-    return now - since >= kStationaryAimDwellMs;
+    return now - since >= kAimPressDwellMs;
 }
 
-bool puppet_aim_press_relay_enabled_for_peer(const coop::StatePacket& peer) {
-    return puppet_stationary_aim_ready_for_peer(peer);
+bool puppet_aim_controller_relay_enabled_for_peer(
+    const coop::StatePacket& peer) {
+    return puppet_aim_press_relay_enabled_for_peer(peer);
 }
 
 bool puppet_aim_pose_relay_enabled_for_peer(const coop::StatePacket& peer) {
-    return puppet_stationary_aim_ready_for_peer(peer);
+    if (!puppet_aim_controller_relay_enabled_for_peer(peer)) {
+        g_puppet_gun_move_aim_since_ms.store(0, std::memory_order_release);
+        return false;
+    }
+    if (g_puppet_relay_aim_press ||
+        g_puppet_aim_session_latched.load(std::memory_order_acquire)) {
+        return true;
+    }
+
+    std::uint32_t action_hash = 0;
+    void* active_state = nullptr;
+    void* const puppet = retained_player_object(1);
+    const bool have_action = read_player_current_action_hash(
+        puppet, action_hash, active_state);
+    const bool gun_move_action = have_action &&
+        (action_hash == 0x12D842C0u ||  // GunMove
+         action_hash == 0xF52B3E61u ||  // GunMoveShield
+         action_hash == 0x009C0AB7u ||  // GunMoveGrapple
+         action_hash == 0xA4E760F7u ||  // GunMoveCarry
+         action_hash == 0xF34DD4BEu ||  // GunMoveCarryNpc
+         action_hash == 0xD6D6FD81u);   // GunMoveHeavyWeapon
+    if (!gun_move_action) {
+        g_puppet_gun_move_aim_since_ms.store(0, std::memory_order_release);
+        return false;
+    }
+
+    // One sampled action hash can still be the first transition frame. Require a
+    // short stable GunMove interval before exposing the render/pose side of ADS.
+    constexpr ULONGLONG kGunMovePoseDwellMs = 100;
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG since = g_puppet_gun_move_aim_since_ms.load(
+        std::memory_order_acquire);
+    if (since == 0) {
+        if (g_puppet_gun_move_aim_since_ms.compare_exchange_strong(
+                since, now, std::memory_order_acq_rel)) {
+            since = now;
+        }
+    }
+    return now - since >= kGunMovePoseDwellMs;
 }
 
 // Peer-aim via network packet reaches the puppet joypad; local-lead (Chloe ADS on
@@ -14453,6 +14486,8 @@ void apply_puppet_transform_post(void* /*update_object*/) {
         peer_received != 0 && GetTickCount64() - peer_received <= 250;
     const bool peer_aiming =
         peer_fresh && (pkt.flags & 8) != 0 && peer_packet_aim_active(pkt);
+    const bool controller_relay_for_peer =
+        peer_aiming && puppet_aim_controller_relay_enabled_for_peer(pkt);
     const bool pose_relay_for_peer =
         peer_aiming && puppet_aim_pose_relay_enabled_for_peer(pkt);
     const bool puppet_aiming_now = peer_aiming;
@@ -14483,9 +14518,10 @@ void apply_puppet_transform_post(void* /*update_object*/) {
                 aim_ctrl != nullptr) {
                 force_peer_puppet_aim_blend_state(aim_ctrl);
             }
-        } else {
-            // Peer ADS may remain held while movement closes the stationary gate.
-            // Do not leave the last forced Player ADS bit latched into locomotion.
+        } else if (!controller_relay_for_peer) {
+            // Before staged admission, clear any stale forced ADS bit. Once the
+            // button/controller stage opens, leave this native output alone until
+            // GunMove is stable; clearing it here would cancel the transition.
             force_puppet_ads_flag(puppet, false);
         }
     } else if (puppet_was_aiming) {
@@ -14515,12 +14551,18 @@ void apply_puppet_transform_post(void* /*update_object*/) {
             // otherwise free-run leaves every sub-four-metre displacement frozen.
             constexpr float kNudgeDeadband = 0.03F;
             constexpr float kNudgeFraction = 0.08F;
-            constexpr float kMaxNudgePerUpdate = 0.05F;
+            // GunMove uses a slower authored gait than ordinary Run. The full
+            // running nudge visibly translates the ADS body faster than its foot
+            // cycle; retain convergence but cap that unanimated component lower.
+            const float max_nudge_per_update =
+                pose_relay_for_peer ? 0.015F : 0.05F;
             const float horizontal_sq = dx * dx + dz * dz;
             if (horizontal_sq > kNudgeDeadband * kNudgeDeadband) {
                 const float horizontal = std::sqrt(horizontal_sq);
                 float step = horizontal * kNudgeFraction;
-                if (step > kMaxNudgePerUpdate) step = kMaxNudgePerUpdate;
+                if (step > max_nudge_per_update) {
+                    step = max_nudge_per_update;
+                }
                 if (step > horizontal) step = horizontal;
                 const float nx = dx / horizontal * step;
                 const float nz = dz / horizontal * step;
@@ -21886,7 +21928,7 @@ char __fastcall hooked_player_aim_eligibility_callsite(
     coop::StatePacket peer{};
     if (received == 0 || GetTickCount64() - received > 250 ||
         !copy_peer_state_snapshot(peer) ||
-        !puppet_aim_pose_relay_enabled_for_peer(peer) ||
+        !puppet_aim_controller_relay_enabled_for_peer(peer) ||
         !valid_network_position(peer.pose_seed) ||
         !valid_network_orientation(peer.pose_seed + 4)) {
         return original;
@@ -21993,7 +22035,7 @@ char __fastcall hooked_player_aim_additive_permission_callsite(
     coop::StatePacket peer{};
     if (received == 0 || GetTickCount64() - received > 250 ||
         !copy_peer_state_snapshot(peer) ||
-        !puppet_aim_pose_relay_enabled_for_peer(peer) ||
+        !puppet_aim_controller_relay_enabled_for_peer(peer) ||
         !valid_network_position(peer.pose_seed) ||
         !valid_network_orientation(peer.pose_seed + 4)) {
         return original;
@@ -22091,7 +22133,7 @@ float __fastcall hooked_player_aim_blend_target_callsite(
     coop::StatePacket peer{};
     if (received == 0 || GetTickCount64() - received > 250 ||
         !copy_peer_state_snapshot(peer) ||
-        !puppet_aim_pose_relay_enabled_for_peer(peer)) {
+        !puppet_aim_controller_relay_enabled_for_peer(peer)) {
         return original;
     }
 
@@ -23412,7 +23454,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15de (latched aim-walk after settled ADS)");
+        "TLL hook DLL init 2026-07-15df (stage run-to-ADS through GunMove)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

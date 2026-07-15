@@ -7174,6 +7174,14 @@ FUNCTIONS = {
         "rotates the supplied direction by camera yaw, normalizes it, and writes "
         "the world-space result to GunMoveController+0x150.",
     ),
+    0x140E86980: (
+        "PlayerGunMove_GetConfiguredMoveSpeed",
+        "Player::GunMoveShield vtable slot +0xD0, called by "
+        "PlayerGunMoveShield_UpdateAndDispatch before publishing speed-gunmove. "
+        "Reads the spawn-initialized Player+0x3328 nominal speed, scales it by "
+        "the active GunMove configuration and reduces it by shield stoppage. "
+        "Player+0x3328 is not a live gait-speed output.",
+    ),
     0x140E8F720: (
         "GunMoveController_SelectAimIdleTurnState",
         "Consumes GunMoveController+0x140/+0x150/+0x160 and the current action id. "

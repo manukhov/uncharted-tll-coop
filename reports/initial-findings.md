@@ -27990,3 +27990,27 @@ evidence and competing hypotheses are in
 Prediction: settled stationary ADS transitions into authored aim-walk instead of
 plain running; run-first ADS remains deferred until stationary and does not restore
 the folded/kneeling entry. Vertical remains below native aim-channel publication.
+
+### 2026-07-15 build de runtime: STATIC staged running ADS for build df
+
+- **PARTIAL CONFIRMATION:** movement after a settled/latching ADS entry preserves
+  GunMove aim-walk, confirming movement is valid inside the established action.
+- **REJECTED as complete:** the stationary-only admission timer makes run-first ADS
+  impossible, and the user reports that the slower aim-walk visibly slides.
+- **STATIC:** `PlayerGunMove_GetConfiguredMoveSpeed 0x140E86980`, vtable `+0xD0`,
+  reads nominal `Player+0x3328` before `speed-gunmove`. A Player displacement audit
+  found its sole write at spawn (`0x1410DCB4D` in `0x1410DC160`), rejecting that
+  field as a per-frame replicated gait speed.
+- **STATIC:** the movement hook already adds bounded correction to native
+  `Player+0x3A30`, while `apply_puppet_transform_post` separately translates the
+  root up to `0.05 m` per update. The latter has no animation advancement and is
+  proportionally larger for the slower GunMove gait.
+- **STATIC:** build df relays held ADS/controller admission after 250 ms even while
+  moving, but withholds blend/world/render pose ownership until a GunMove-family
+  action hash is stable for 100 ms. It lowers only admitted aim-walk's post nudge
+  to `0.015 m`; ordinary running retains the confirmed `0.05 m` cap.
+
+Prediction: run-first ADS transitions from native Run into stable GunMove before
+the visual aim hooks open, avoiding the folded/kneeling transition. Aim-walk feet
+track translation more closely while bounded convergence remains. Vertical is
+unchanged pending the downstream FgAnim/palette consumer trace.
