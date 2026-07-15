@@ -109,8 +109,7 @@ using ResolveUpperActorRecordFunction = void*(__fastcall*)(std::uint32_t);
 UpdateFunction g_original_update = nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
 std::atomic<void*> g_puppet_fganim_data{nullptr};
-std::atomic<std::uint64_t> g_puppet_fganim_world_turn_hits{0};
-std::atomic<int> g_puppet_fganim_world_turn_yaw_mdeg{0};
+std::atomic<bool> g_puppet_fganim_world_turn_seen{false};
 using PlayerInputStateUpdateFunction = char(__fastcall*)(void*);
 PlayerInputStateUpdateFunction g_original_player_input_state_update = nullptr;
 using PlayerInputCommandStateUpdateFunction = void(__fastcall*)(void*);
@@ -7784,17 +7783,17 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
                 if (std::isfinite(horizontal) && horizontal > 0.001F) {
                     std::memcpy(
                         relayed_transform, transform, sizeof(relayed_transform));
+                    // Native layout is translation vec4 followed by quaternion
+                    // vec4. 0x1418C55F8 passes transform+0x10 to the quaternion
+                    // input of 0x14019A270 and transform+0x00 as translation.
                     yaw_quat_from_horizontal_forward(
-                        forward_x, forward_z, relayed_transform);
+                        forward_x, forward_z, relayed_transform + 4);
                     selected_transform = relayed_transform;
-                    const float yaw_degrees =
-                        std::atan2(forward_x, forward_z) *
-                        (180.0F / 3.14159265F);
-                    g_puppet_fganim_world_turn_yaw_mdeg.store(
-                        static_cast<int>(yaw_degrees * 1000.0F),
-                        std::memory_order_relaxed);
-                    g_puppet_fganim_world_turn_hits.fetch_add(
-                        1, std::memory_order_relaxed);
+                    if (!g_puppet_fganim_world_turn_seen.exchange(
+                            true, std::memory_order_relaxed)) {
+                        boot_log_line(
+                            "FgAnim world-aim first matched publication");
+                    }
                 }
             }
         }
@@ -14393,24 +14392,6 @@ void apply_puppet_transform_post(void* /*update_object*/) {
     }
     if (peer_aiming) {
         mirror_puppet_aim_add_to_fganim(puppet);
-        static ULONGLONG last_world_turn_log = 0;
-        static std::uint64_t last_world_turn_hits = 0;
-        const std::uint64_t world_turn_hits =
-            g_puppet_fganim_world_turn_hits.load(std::memory_order_relaxed);
-        const ULONGLONG world_turn_now = GetTickCount64();
-        if (world_turn_hits != last_world_turn_hits &&
-            world_turn_now - last_world_turn_log >= 1000) {
-            last_world_turn_log = world_turn_now;
-            last_world_turn_hits = world_turn_hits;
-            std::ostringstream line;
-            line << "AIM-FGANIM-WORLD-TURN hits=" << world_turn_hits
-                 << " yaw="
-                 << (g_puppet_fganim_world_turn_yaw_mdeg.load(
-                         std::memory_order_relaxed) /
-                     1000.0F)
-                 << " fg=" << fg << " seq=" << pkt.sequence;
-            force_log_line(line.str().c_str());
-        }
     }
     if (g_enable_aim_palette_probe) {
         log_puppet_aim_render_discriminator(puppet, pkt);
@@ -23322,7 +23303,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15cz (FgAnim world aim turn)");
+        "TLL hook DLL init 2026-07-15da (FgAnim translation+quaternion fix)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

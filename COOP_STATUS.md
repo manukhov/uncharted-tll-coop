@@ -2883,18 +2883,24 @@ keeps only the working square relay.
   `FgAnimData_PublishWorldTransform 0x1418C55D0` ->
   `FgAnimData_PublishWorldMatrix 0x1418C54D0`.
 - Animation-manager phase `0x40` owns the stock publication at callsite
-  `0x141A8FC00` with ABI `rcx=fg, rdx=quat+translation, r8b=0`.
+  `0x141A8FC00` with ABI `rcx=fg, rdx=translation+quaternion, r8b=0`.
 - Therefore the previous post-Player-update `Player+0x140` writes could be true in
   logs while visually inert: the renderer consumed an already separated FgAnimData
   snapshot. Do not rotate/copy the full 651-joint palette for body yaw.
 - Evidence, alternatives and runtime prediction:
   `reports/player_aim_fganim_world_transform_20260715.md`.
 
-### Build cz ready for runtime exam
+### Build cz REJECTED; build da corrects transform layout
 
-`0x141A8FC00` now calls a near relay that gates by the cached remote
+`0x141A8FC00` calls a near relay that gates by the cached remote
 `Player+0x1A8` FgAnimData and a fresh peer ADS packet. It replaces only the
 quaternion in the native phase-`0x40` transform block, preserves translation and
 the publish flag, then calls untouched `FgAnimData_PublishWorldTransform`.
-Non-puppet and non-ADS publications are pass-through. Release build succeeds;
-runtime prediction remains the one recorded in the report above.
+Non-puppet and non-ADS publications are pass-through.
+
+**cz runtime REJECTED:** remote models disappeared immediately on ADS for every
+weapon. The initial wrapper wrote yaw to block `+0x00`, but exact matrix-builder
+assembly proves `+0x00` is translation and `+0x10` is quaternion. Build da writes
+only `transform[4..7]`, preserving native translation. Periodic diagnostics are
+removed; a single first-match line is retained. The corrected runtime prediction
+remains the one recorded in the report above.

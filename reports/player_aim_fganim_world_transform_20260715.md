@@ -35,12 +35,12 @@ phase-`0x40` call at `0x141A8FC00` to
    which the preparation function writes into each `FgInstance` world transform.
 3. **Call graph and phase ownership.** Animation jobs call
    `AnimManager_DispatchRetainedOwnerPhase(0x40, fg)`. At `0x141A8FC00` the
-   dispatcher passes `rcx=fg`, a native quaternion+translation block in `rdx`,
+   dispatcher passes `rcx=fg`, a native translation+quaternion block in `rdx`,
    and `r8d=0` to `0x1418C55D0`; that helper publishes through `0x1418C54D0`.
    The later `FgDrawManager_PrepareInstancesJob 0x14181B890` invokes
    `PrepareInstanceForRendering` for each FgAnimData.
 4. **ABI/field assembly.** `0x1418C55E9` saves `r8b`; `0x1418C55F0..0x1418C55FC`
-   passes transform `+0x10` and `+0x00` as translation/quaternion to the native
+   passes transform `+0x10` and `+0x00` as quaternion/translation to the native
    matrix builder. `0x1418C54DD..0x1418C5504` writes four rows to
    `+0x1C0..+0x1F0`; `0x14030150C` later addresses exactly `+0x1C0`.
 
@@ -53,20 +53,35 @@ remote body must turn with it. Joint/aim animation remains owned by the existing
 native relay, and releasing ADS must immediately restore the unmodified native
 publication.
 
-If the counter/yaw changes but the model stays fixed, hypothesis 4 wins and the
-next target is render-instance generation rather than joints. A crash before the
-first matched publication indicates callsite/ABI failure. Kneeling slide, hair or
-weapon disappearance would indicate that the correction escaped the world matrix
-and touched pose/visibility state, which this design must not do.
+If the one-shot matched-publication marker appears but the model stays fixed,
+hypothesis 4 wins and the next target is render-instance generation rather than
+joints. A crash before the marker indicates callsite/ABI failure. Kneeling slide,
+hair or weapon disappearance would indicate that the correction escaped the world
+matrix and touched pose/visibility state, which this design must not do.
 
 ## Build cz implementation
 
-Build `2026-07-15cz` patches only the direct `E8` at `0x141A8FC00` through a
+Build `2026-07-15cz` patched only the direct `E8` at `0x141A8FC00` through a
 near relay. The wrapper first compares `rcx` with the current remote Player's
 cached `FgAnimData`; every non-matching object calls the untouched native
 `0x1418C55D0` immediately. A matching object is modified only for a peer ADS
-packet no older than 250 ms. The wrapper copies the native 32-byte transform,
-replaces its quaternion with horizontal peer-camera yaw, preserves translation
-and `r8b`, then invokes the original function. It records only counters/yaw in
-the animation phase; the Player thread emits at most one diagnostic line per
-second.
+packet no older than 250 ms.
+
+### Build cz runtime rejection and corrected layout
+
+**REJECTED:** on both receivers the remote model disappeared immediately on ADS
+with every weapon, including pistols. The relay mistakenly wrote yaw to
+`transform[0..3]`. Assembly resolves the 32-byte layout unambiguously:
+
+1. `0x1418C55F8` passes `transform+0x10` as the first vector consumed by
+   `0x14019A270`; that vector is doubled/shuffled in the quaternion-to-matrix math.
+2. The original `transform+0x00` is passed in `r8` and becomes the matrix
+   translation row.
+3. The phase-`0x40` caller writes its position-derived value to `var_98` (block
+   `+0x00`) and the orientation-derived value to adjacent `var_88` (`+0x10`).
+
+Thus cz replaced translation with a near-unit quaternion and moved the render
+model away from its actor, explaining immediate weapon-independent disappearance.
+Build `2026-07-15da` preserves `transform[0..3]` and writes horizontal yaw only to
+quaternion `transform[4..7]`. It removes periodic diagnostics and emits one boot
+log line on the first matched publication.

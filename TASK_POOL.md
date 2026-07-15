@@ -954,9 +954,12 @@ Do not reopen these as the first move:
 - [x] Resolve the typed consumer: `FgDrawManager_PrepareInstanceForRendering
       0x14181A9B0` copies CPU `+0x230` to upload `+0x240` and separately binds the
       `FgAnimData+0x1C0` render-world matrix.
-- [x] Establish body-yaw ownership: phase `0x40` publishes quaternion+translation
+- [x] Establish body-yaw ownership: phase `0x40` publishes translation+quaternion
       through `FgAnimData_PublishWorldTransform 0x1418C55D0`; no all-joint rewrite
       is required for whole-body rotation.
+- [x] Reject cz block-order bug: writing yaw to transform `+0x00` overwrote
+      translation and made the model disappear on ADS. Exact layout is
+      translation `+0x00`, quaternion `+0x10`; da writes only `float[4..7]`.
 - [ ] Run the earned two-instance exam using only the `0x141A8FC00` phase-`0x40`
       callsite relay. Expected: peer ADS camera yaw turns the whole model; release
       restores native publication; no pose, weapon, hair or locomotion regression.

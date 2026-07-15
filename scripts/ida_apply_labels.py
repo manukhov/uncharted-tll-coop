@@ -575,9 +575,10 @@ FUNCTIONS = {
     ),
     0x1418C55D0: (
         "FgAnimData_PublishWorldTransform",
-        "Converts quaternion+translation input to a matrix, applies FgAnimData scale, "
-        "and calls FgAnimData_PublishWorldMatrix. ABI is rcx=FgAnimData, "
-        "rdx=32-byte transform, r8b=publish-current flag.",
+        "Converts a translation-then-quaternion input block to a matrix, applies "
+        "FgAnimData scale, and calls FgAnimData_PublishWorldMatrix. ABI is "
+        "rcx=FgAnimData, rdx={translation vec4, quaternion vec4}, "
+        "r8b=publish-current flag.",
     ),
     0x141AB97C0: (
         "ProcessAnimCmdListSegment",

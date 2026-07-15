@@ -27894,7 +27894,7 @@ calls `FgAnimData_GetRenderWorldMatrix 0x1403014F0`. The getter reads the 64-byt
 world matrix at `FgAnimData+0x1C0` (optionally multiplied by `+0x2E0`).
 
 `FgAnimData_PublishWorldTransform 0x1418C55D0` converts a 32-byte
-quaternion+translation block, applies the FgAnimData scale, and publishes through
+translation+quaternion block, applies the FgAnimData scale, and publishes through
 `FgAnimData_PublishWorldMatrix 0x1418C54D0`. The stock animation-manager phase
 `0x40` callsite at `0x141A8FC00` proves ABI `rcx=FgAnimData`, `rdx=transform`,
 `r8b=0`. This explains the prior runtime rejection: changing `Player+0x140` could
@@ -27902,3 +27902,10 @@ track peer yaw in memory while the visible model retained the previously publish
 FgAnimData matrix. Whole-body ADS yaw belongs at this publication boundary, not in
 all 651 joint matrices. Full evidence and falsifiable prediction are in
 `reports/player_aim_fganim_world_transform_20260715.md`.
+
+**Build cz REJECTED:** it wrote peer yaw to block `+0x00`; the remote model then
+disappeared immediately on ADS with every weapon. Exact assembly proves `+0x00`
+is translation and `+0x10` is quaternion: `0x1418C55F8` passes `+0x10` into the
+quaternion-to-matrix math while original `+0x00` supplies the translation row,
+and the phase caller stores position/orientation to those same adjacent slots.
+Build da preserves `+0x00` and replaces only quaternion `float[4..7]`.
