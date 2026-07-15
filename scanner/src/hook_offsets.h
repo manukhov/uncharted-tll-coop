@@ -107,6 +107,8 @@ constexpr std::size_t kPlayerMeleeActionGateByteOffset = 0x8C1;
 constexpr std::uintptr_t kDispatchPlayerMeleeCommandsRva = 0x272A50;
 constexpr std::uintptr_t kPushOrRotateMeleeCommandQueueEntryRva = 0x273FA0;
 constexpr std::uintptr_t kPlayerMeleeControllerTickDispatchRva = 0x279DF0;
+constexpr std::uintptr_t kPlayerMeleeControllerVtableRva = 0x2A6C2E8;
+constexpr std::size_t kMeleeCommandQueueRegionSize = 0x400;
 // Zeroes/init melee command descriptor before PlayerMeleeController vtable+504.
 constexpr std::uintptr_t kInitMeleeCommandDescRva = 0xE416A0;
 // Player vtable offsets used by the TryAnim success path in MoveStick LABEL_491.

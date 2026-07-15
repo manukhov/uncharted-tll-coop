@@ -1,5 +1,20 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-15, Cursor - melee cm crash, cn stable)
+
+**REJECTED (cm runtime, PIDs 16612/22284):** user punched → copy 2 (22284) exited
+silently (no crash dialog). Log: `MELEE-SEND` → `MELEE-RECV cmdActive=0 force=0x0`
+→ `MELEE-EXEC deferred` → `MELEE-EXEC drain` then **zero lines from 22284** (no
+`MELEE-EXEC hash=`). Death inside `seh_puppet_melee_exec_path` queue push.
+`locomotion_hook.log` was **16 MB** with **34k** `JOYPAD3-ANALOG` + **34k**
+`PRE-CONSUMER-MOVE` (thread_local 500ms throttle ineffective across threads).
+
+**cn:** park `g_enable_puppet_melee_exec_relay` (ci-stable button layer); fix push
+for next increment — native payload from `PlayerInputCommandState+0x7C/+0x90`,
+`PlayerMeleeController` vtable check (`0x2A6C2E8`), pre/post step logs; global
+2s rate limit on joypad/move spam. Boot `2026-07-14cn`. Next: stable dual boot,
+then re-enable exec with `MELEE-EXEC pre/post-push` bisect.
+
 ## Turn note (2026-07-15, Cursor - melee cm deferred queue-only)
 
 **REJECTED (cl, PID 22608):** second instance died at boot — log stops after DLL

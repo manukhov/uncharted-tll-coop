@@ -141,7 +141,9 @@ using PlayerMeleeTryAnimFunction =
     char(__fastcall*)(void**, void*, double);
 PlayerMeleeTryAnimFunction g_original_player_melee_try_anim = nullptr;
 std::atomic<bool> g_puppet_melee_try_anim_bypass{false};
-constexpr bool g_enable_puppet_melee_exec_relay = true;
+// cm REJECTED: PID 22284 died after MELEE-EXEC drain inside queue push (no hash
+// line). Park exec until native-matching push + controller validation (cn).
+constexpr bool g_enable_puppet_melee_exec_relay = false;
 // Full 0x141272A50 dispatcher from the input hook REJECTED ck: PID 11188 hung
 // after MELEE-RECV, zero MELEE-EXEC (Joypad_IsCommandActive recursion / heavy path).
 constexpr bool g_enable_puppet_melee_full_dispatch = false;
@@ -1184,6 +1186,21 @@ void force_log_line(const char* line) {
     boot_log_line(line);
 }
 
+bool try_rate_limited_log(std::atomic<ULONGLONG>& last_tick,
+                          ULONGLONG interval_ms, const char* line) {
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG previous = last_tick.load(std::memory_order_relaxed);
+    while (now - previous >= interval_ms) {
+        if (last_tick.compare_exchange_weak(
+                previous, now, std::memory_order_relaxed,
+                std::memory_order_relaxed)) {
+            log_line(line);
+            return true;
+        }
+    }
+    return false;
+}
+
 LONG CALLBACK crash_observer(EXCEPTION_POINTERS* exception) {
     if (exception == nullptr || exception->ExceptionRecord == nullptr) {
         return EXCEPTION_CONTINUE_SEARCH;
@@ -1813,34 +1830,35 @@ std::int64_t __fastcall hooked_input_scale_copy(
     ReleaseSRWLockExclusive(&g_joypad3_analog_lock);
 
     if (destination_index == 3) {
-        static thread_local ULONGLONG last_log = 0;
+        static std::atomic<ULONGLONG> last_analog_log{0};
         const ULONGLONG now = GetTickCount64();
-        if (now - last_log >= 500 && readable_bytes(joypad) >= 0xE8 &&
-            readable_bytes(source) >= 0x520) {
-            last_log = now;
+        if (readable_bytes(joypad) >= 0xE8 && readable_bytes(source) >= 0x520) {
             const auto* src = static_cast<const float*>(source);
             const auto* dst = static_cast<const float*>(joypad);
-            std::ostringstream line;
-            line << "JOYPAD3-ANALOG source=(" << src[0] << "," << src[1]
-                 << ") processed=(" << dst[0x48 / 4] << ","
-                 << dst[0x4C / 4] << ") right=(" << dst[0x50 / 4] << ","
-                 << dst[0x54 / 4] << ") modeOverrides="
-                 << g_force_joypad3_analog_hits.load(std::memory_order_relaxed)
-                 << " windowFocused=" << static_cast<unsigned>(saved_input_focus)
-                 << " buttons src=0x" << std::hex
-                 << *reinterpret_cast<const std::uint64_t*>(
-                        static_cast<const std::byte*>(source) + 0x518)
-                 << " pressed=0x"
-                 << *reinterpret_cast<const std::uint64_t*>(
-                        static_cast<const std::byte*>(joypad) + 0xD0)
-                 << " released=0x"
-                 << *reinterpret_cast<const std::uint64_t*>(
-                        static_cast<const std::byte*>(joypad) + 0xD8)
-                 << " current=0x"
-                 << *reinterpret_cast<const std::uint64_t*>(
-                        static_cast<const std::byte*>(joypad) + 0xE0)
-                 << std::dec;
-            log_line(line.str().c_str());
+            char line[512]{};
+            std::snprintf(
+                line, sizeof(line),
+                "JOYPAD3-ANALOG source=(%g,%g) processed=(%g,%g) right=(%g,%g) "
+                "modeOverrides=%llu windowFocused=%u buttons src=0x%llx "
+                "pressed=0x%llx released=0x%llx current=0x%llx",
+                src[0], src[1], dst[0x48 / 4], dst[0x4C / 4], dst[0x50 / 4],
+                dst[0x54 / 4],
+                static_cast<unsigned long long>(
+                    g_force_joypad3_analog_hits.load(std::memory_order_relaxed)),
+                static_cast<unsigned>(saved_input_focus),
+                static_cast<unsigned long long>(
+                    *reinterpret_cast<const std::uint64_t*>(
+                        static_cast<const std::byte*>(source) + 0x518)),
+                static_cast<unsigned long long>(
+                    *reinterpret_cast<const std::uint64_t*>(
+                        static_cast<const std::byte*>(joypad) + 0xD0)),
+                static_cast<unsigned long long>(
+                    *reinterpret_cast<const std::uint64_t*>(
+                        static_cast<const std::byte*>(joypad) + 0xD8)),
+                static_cast<unsigned long long>(
+                    *reinterpret_cast<const std::uint64_t*>(
+                        static_cast<const std::byte*>(joypad) + 0xE0)));
+            try_rate_limited_log(last_analog_log, 2000, line);
         }
         static thread_local ULONGLONG last_turn_log = 0;
         if (peer_look_injected && now - last_turn_log >= 250 &&
@@ -10333,14 +10351,43 @@ struct PuppetMeleeExecSteps {
     bool publish_ok = false;
 };
 
+bool player_melee_controller_queue_ready(void* controller) {
+    if (controller == nullptr || g_module == 0) {
+        return false;
+    }
+    if (readable_bytes(controller) <
+        kPlayerMeleeControllerQueueBaseOffset +
+            kMeleeCommandQueueRegionSize) {
+        return false;
+    }
+    void* const vtable = *reinterpret_cast<void* const*>(controller);
+    return vtable == reinterpret_cast<void*>(
+                          g_module + kPlayerMeleeControllerVtableRva);
+}
+
 bool seh_push_melee_queue_entry(void* queue_base, std::uint32_t command_hash,
-                                bool hold) {
+                                bool hold, void* player) {
     if (queue_base == nullptr || g_module == 0 || command_hash == 0) {
         return false;
     }
+    if (readable_bytes(queue_base) < kMeleeCommandQueueRegionSize) {
+        return false;
+    }
     __try {
-        alignas(16) std::uint8_t slot_payload[40]{};
+        alignas(16) std::uint8_t slot_payload[48]{};
         slot_payload[0] = hold ? 1 : 0;
+        if (player != nullptr) {
+            const auto* const input_base =
+                static_cast<const std::byte*>(player) +
+                kPlayerInputCommandStateOffset;
+            if (readable_bytes(input_base + 0xA0) >= 0x10) {
+                const float stick_component =
+                    *reinterpret_cast<const float*>(input_base + 0x7C);
+                std::fill_n(reinterpret_cast<float*>(slot_payload + 8), 4,
+                            stick_component);
+                std::memcpy(slot_payload + 24, input_base + 0x90, 16);
+            }
+        }
         using PushMeleeQueueEntryFunction = std::uint64_t(__fastcall*)(
             void*, std::uint32_t, void*, void*, float, std::uint8_t);
         const auto push_entry = reinterpret_cast<PushMeleeQueueEntryFunction>(
@@ -10379,7 +10426,8 @@ PuppetMeleeExecSteps seh_puppet_melee_exec_path(void* puppet,
         void* const controller = seh_read_ptr(
             reinterpret_cast<std::uint64_t>(
                 static_cast<std::byte*>(puppet) + kPlayerCombatControllerOffset));
-        if (controller == nullptr || !readable_bytes(controller)) {
+        if (controller == nullptr || !player_melee_controller_queue_ready(
+                                       controller)) {
             return steps;
         }
         steps.controller_ok = true;
@@ -10396,8 +10444,16 @@ PuppetMeleeExecSteps seh_puppet_melee_exec_path(void* puppet,
                 command_hash == melee_relay_hashes().r1_hold ||
                 command_hash == melee_relay_hashes().square_hold ||
                 command_hash == melee_relay_hashes().triangle_hold;
-            steps.queue_push_ok =
-                seh_push_melee_queue_entry(queue_base, command_hash, hold);
+            char pre_log[192]{};
+            std::snprintf(
+                pre_log, sizeof(pre_log),
+                "MELEE-EXEC pre queue=%p hash=0x%x hold=%u",
+                queue_base, command_hash, hold ? 1U : 0U);
+            force_log_line(pre_log);
+            steps.queue_push_ok = seh_push_melee_queue_entry(
+                queue_base, command_hash, hold, puppet);
+            force_log_line(steps.queue_push_ok ? "MELEE-EXEC post-push ok"
+                                               : "MELEE-EXEC post-push fail");
         }
 
         alignas(16) float move_block[4]{};
@@ -20822,21 +20878,18 @@ void __fastcall hooked_player_input_command_state_update(void* state) {
     *reinterpret_cast<float*>(player + 0x3A1C) = corrected_magnitude;
     std::memcpy(player + 0x3A30, corrected_world, sizeof(corrected_world));
 
-    static thread_local ULONGLONG last_log = 0;
-    const ULONGLONG now = GetTickCount64();
-    if (now - last_log >= 500) {
-        last_log = now;
-        const auto* root = reinterpret_cast<const float*>(
-            player + kPlayerLocalPosOffset);
-        std::ostringstream line;
-        line << "PRE-CONSUMER-MOVE raw=(" << peer.move_stick[0] << ","
-             << peer.move_stick[1] << ") mag=" << peer.move_magnitude
-             << " world=(" << peer.move_world[0] << "," << peer.move_world[1]
-             << "," << peer.move_world[2] << ") correction=("
-             << correction_x << "," << correction_z << ") root=(" << root[0] << ","
-             << root[1] << "," << root[2] << ")";
-        log_line(line.str().c_str());
-    }
+    static std::atomic<ULONGLONG> last_move_log{0};
+    const auto* root = reinterpret_cast<const float*>(
+        player + kPlayerLocalPosOffset);
+    char line[384]{};
+    std::snprintf(
+        line, sizeof(line),
+        "PRE-CONSUMER-MOVE raw=(%g,%g) mag=%g world=(%g,%g,%g) correction=(%g,%g) "
+        "root=(%g,%g,%g)",
+        peer.move_stick[0], peer.move_stick[1], peer.move_magnitude,
+        peer.move_world[0], peer.move_world[1], peer.move_world[2],
+        correction_x, correction_z, root[0], root[1], root[2]);
+    try_rate_limited_log(last_move_log, 2000, line);
 }
 
 void* allocate_executable_near(const void* target, std::size_t size) {
@@ -23198,7 +23251,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14cm (melee deferred queue push, anim parked)");
+        "TLL hook DLL init 2026-07-14cn (melee exec parked, native push ready, log throttle)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");

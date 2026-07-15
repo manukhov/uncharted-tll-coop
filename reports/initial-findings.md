@@ -27688,3 +27688,8 @@ HYPOTHESIS for the two remaining mechanisms**.
 - **REJECTED (build 2026-07-14cl, PID 22608):** instance 2 boot crash before
   `MELEE-HASHES`; exec never ran. **cm:** defer exec to next remote input tick;
   queue push only, anim/publish parked.
+- **REJECTED (build 2026-07-14cm, PIDs 16612/22284):** punch → copy 2 silent
+  exit after `MELEE-EXEC drain` (no `MELEE-EXEC hash=`). Queue push inside
+  `seh_puppet_melee_exec_path` on `controller+0x150`. Log 16 MB / 34k analog+move
+  spam per session (thread_local throttle). **cn:** exec parked; native-matching
+  push + vtable `0x2A6C2E8` guard + global 2s log throttle ready for co test.
