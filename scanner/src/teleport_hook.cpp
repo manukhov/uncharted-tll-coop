@@ -7172,7 +7172,6 @@ using GunMoveControllerApplyCameraYawFunction = char(__fastcall*)(
     void* controller, const float* input_direction);
 GunMoveControllerApplyCameraYawFunction
     g_original_gun_move_apply_camera_yaw = nullptr;
-bool g_gun_move_camera_turn_relay_installed = false;
 using CharacterSkeletonRenderUpdateFunction = void(__fastcall*)(void* skel_owner);
 CharacterSkeletonRenderUpdateFunction g_original_character_skeleton_render_update =
     nullptr;
@@ -7180,9 +7179,10 @@ using CharacterSkeletonEvalPerJointFunction = void(__fastcall*)(
     void* skel_owner, unsigned int* workspace, double xmm2, double xmm3);
 CharacterSkeletonEvalPerJointFunction g_original_character_skeleton_eval_per_joint =
     nullptr;
-// GunMoveController +0x150 relay REJECTED: +0x150 changes but Player+0x140 stays
-// ~30deg (0x140E8FD00 does not consume for slot-1 puppet). Direct post snap only.
-constexpr bool g_enable_gun_move_body_turn = false;
+// Broad visible-root ownership was rejected, but staged GunMove admission now
+// lets this native path select authored turn-in-place/strafe states without owning
+// final render yaw. Never pair it with the rejected post-root synchronizer.
+constexpr bool g_enable_gun_move_body_turn = true;
 // REJECTED 2026-07-14 PIDs 2084/7800: root snap does not change visible ADS aim.
 constexpr bool g_enable_puppet_ads_root_yaw_snap = false;
 // STATIC 2026-07-15: phase 0x40 publishes FgAnimData+0x1C0, which the draw
@@ -7564,6 +7564,16 @@ char __fastcall hooked_gun_move_apply_camera_yaw(
         !valid_network_orientation(peer.pose_seed + 4)) {
         return result;
     }
+    // Do not call retained_player_object from this hot path: that lookup crashed
+    // during an earlier lifecycle transition. This timestamp is set by the
+    // guarded pose gate and reset on aim release or Player replacement.
+    const ULONGLONG gun_move_since =
+        g_puppet_gun_move_aim_since_ms.load(std::memory_order_acquire);
+    const ULONGLONG now = GetTickCount64();
+    if (!g_puppet_relay_aim_press &&
+        (gun_move_since == 0 || now - gun_move_since < 100)) {
+        return result;
+    }
 
     float forward_x = 0.0F;
     float forward_z = 0.0F;
@@ -7595,7 +7605,6 @@ char __fastcall hooked_gun_move_apply_camera_yaw(
     turn_direction[3] = 0.0F;
 
     static ULONGLONG last_log = 0;
-    const ULONGLONG now = GetTickCount64();
     if (now - last_log > 250) {
         last_log = now;
         std::ostringstream line;
@@ -7630,7 +7639,6 @@ bool install_gun_move_camera_turn_relay() {
     FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
     DWORD ignored = 0;
     VirtualProtect(slot, sizeof(void*), old, &ignored);
-    g_gun_move_camera_turn_relay_installed = true;
     boot_log_line("GunMoveController camera-turn relay installed");
     return true;
 }
@@ -7865,6 +7873,11 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
     const ULONGLONG received =
         g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
     const ULONGLONG now = GetTickCount64();
+    static void* smoothed_fg = nullptr;
+    static bool smoothed_yaw_valid = false;
+    static float smoothed_yaw = 0.0F;
+    static ULONGLONG smoothed_yaw_ms = 0;
+    bool applied_aim_yaw = false;
     if (g_enable_puppet_fganim_world_aim_turn && fg != nullptr &&
         fg == puppet_fg && transform != nullptr && received != 0 &&
         now - received <= 250) {
@@ -7894,9 +7907,45 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
                     // The prior publication was visibly 180 degrees opposite.
                     // FgAnim's world quaternion must use the opposite horizontal
                     // axis from the camera -Z helper at this render boundary.
+                    const float target_yaw =
+                        std::atan2(-forward_x, -forward_z);
+                    if (!smoothed_yaw_valid || smoothed_fg != fg ||
+                        smoothed_yaw_ms == 0 || now - smoothed_yaw_ms > 500) {
+                        float current_x = 0.0F;
+                        float current_y = 0.0F;
+                        float current_z = 0.0F;
+                        quat_forward_pos_z(
+                            transform + 4, current_x, current_y, current_z);
+                        const float current_horizontal = std::sqrt(
+                            current_x * current_x + current_z * current_z);
+                        smoothed_yaw =
+                            std::isfinite(current_horizontal) &&
+                                    current_horizontal > 0.001F
+                                ? std::atan2(current_x, current_z)
+                                : target_yaw;
+                        smoothed_fg = fg;
+                        smoothed_yaw_valid = true;
+                        smoothed_yaw_ms = now;
+                    }
+                    const float dt = std::clamp(
+                        static_cast<float>(now - smoothed_yaw_ms) / 1000.0F,
+                        0.0F,
+                        0.05F);
+                    const float delta = std::atan2(
+                        std::sin(target_yaw - smoothed_yaw),
+                        std::cos(target_yaw - smoothed_yaw));
+                    constexpr float kMaxAimTurnRadiansPerSecond =
+                        240.0F * (3.14159265F / 180.0F);
+                    const float max_step =
+                        kMaxAimTurnRadiansPerSecond * dt;
+                    smoothed_yaw += std::clamp(delta, -max_step, max_step);
+                    smoothed_yaw_ms = now;
                     yaw_quat_from_horizontal_forward(
-                        -forward_x, -forward_z, relayed_transform + 4);
+                        std::sin(smoothed_yaw),
+                        std::cos(smoothed_yaw),
+                        relayed_transform + 4);
                     selected_transform = relayed_transform;
+                    applied_aim_yaw = true;
                     if (!g_puppet_fganim_world_turn_seen.exchange(
                             true, std::memory_order_relaxed)) {
                         boot_log_line(
@@ -7905,6 +7954,11 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
                 }
             }
         }
+    }
+    if (fg == puppet_fg && !applied_aim_yaw) {
+        smoothed_fg = nullptr;
+        smoothed_yaw_valid = false;
+        smoothed_yaw_ms = 0;
     }
     return native(fg, selected_transform, publish_current);
 }
@@ -14506,8 +14560,7 @@ void apply_puppet_transform_post(void* /*update_object*/) {
         if (g_puppet_aim_facing_from_camera) {
             apply_peer_aim_facing_to_player(puppet, pkt);
         }
-        if (g_enable_puppet_ads_root_yaw_snap ||
-            g_gun_move_camera_turn_relay_installed) {
+        if (g_enable_puppet_ads_root_yaw_snap) {
             sync_puppet_root_yaw_from_peer_camera(puppet, pkt);
         }
         if (pose_relay_for_peer) {
@@ -23454,7 +23507,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15df (stage run-to-ADS through GunMove)");
+        "TLL hook DLL init 2026-07-15dg (smooth render yaw plus native foot turn)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

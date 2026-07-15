@@ -272,3 +272,49 @@ the strafe direction/root basis. The historical folded or kneeling pose rejects
 the staged admission. Vertical pitch is deliberately unchanged: the high-blend
 channel already reaches native publication, and its remaining consumer is below
 the FgAnim parameter boundary.
+
+## Build df runtime and build dg turn/foot ownership
+
+**PARTIAL CONFIRMATION:** staged admission fixes the previous run-first failure and
+no longer produces the folded pose. The user reports that aim-walk is better, but
+entry performs a sharp apparent full turn, turning in place slides the feet, and
+moving aim-walk still only partly matches its foot cycle. The receiver captured a
+high-blend pitch sample during the same healthy GunMove session, so these are not
+an action-selection failure.
+
+Three independent static facts select a late-yaw ownership conflict:
+
+1. `hooked_fganim_publish_world_transform` replaces the published quaternion with
+   the final camera yaw in one call. It has no shortest-arc/rate limit and cannot
+   request a locomotion animation.
+2. `GunMoveController_SelectAimIdleTurnState 0x140E8F720` compares controller
+   `+0x140/+0x150` and returns states 3/4; builder `0x140E8D140` maps those states
+   to authored `aim-idle-rotate` / `aim-idle-rotate-cc` actions.
+3. `GunMoveController_ApplyCameraYawToMoveDirection 0x140E8F990` is called before
+   state update and supplies `+0x150`, while the current FgAnim override happens
+   after animation evaluation. The renderer and the foot/strafe graph therefore
+   see different body headings in the same frame.
+
+### Competitors and historical boundary
+
+- Position nudge alone: weakened because df already lowered it to `0.015 m`, yet
+  feet slide during pure turning in place where translation is zero.
+- Re-enable the former GunMove relay as visible/root ownership: rejected by the
+  2026-07-14 runs and later kneeling-slide lifecycle regression.
+- Directly rotate Player root after update: rejected by visual runtime and
+  lifecycle corruption.
+- Use native GunMove only for action selection, retain the proven final FgAnim
+  owner, and smooth that owner: selected. The relay is admitted only after the df
+  stable-GunMove timestamp and performs no retained-table lookup. The old post-root
+  synchronizer remains disabled.
+
+### Build dg prediction
+
+ADS entry follows the shortest horizontal arc at no more than 240 degrees/second,
+so it cannot snap or take an apparent 360-degree path. Large camera turns while
+stationary should select authored turn-in-place and visibly step the feet; moving
+ADS should choose strafe steps closer to the rendered heading. Ordinary running,
+pre-GunMove transition frames and lifecycle reload remain untouched. A return of
+the kneeling slide rejects the narrowed native selector. Smooth body yaw with
+unchanged feet would reject `+0x150` as an animation-state owner and leave the
+remaining fault inside the strafe graph's movement-direction parameters.

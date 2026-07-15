@@ -2970,6 +2970,21 @@ the staged aim pose is admitted. Prediction and competitors are recorded in
 `reports/player_aim_fganim_axis_residual_pitch_20260715.md`. Vertical remains a
 separate downstream FgAnim/palette-consumer task.
 
+### Build df runtime; build dg aligns turn/strafe state with render yaw
+
+df is partially confirmed: run-first ADS now enters without the old folded pose,
+and aim-walk is improved. The remaining sharp full-turn entry, stationary foot
+slide and partial moving foot slide share a late-owner mismatch. The phase-0x40
+FgAnim hook currently snaps directly to final camera yaw after GunMove has already
+selected its foot action from controller `+0x140/+0x150`.
+
+Build dg rate-limits final FgAnim yaw to 240 degrees/second on the shortest arc and
+re-enables `GunMoveController+0x150` only after df's stable GunMove timestamp, so
+native `aim-idle-rotate` and strafe selection can animate the feet. It deliberately
+does not re-enable the rejected post-root sync and performs no retained-table lookup
+inside the GunMove hot path. Prediction and historical competitors are recorded in
+`reports/player_aim_fganim_axis_residual_pitch_20260715.md`.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

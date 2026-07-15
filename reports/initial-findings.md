@@ -28014,3 +28014,24 @@ Prediction: run-first ADS transitions from native Run into stable GunMove before
 the visual aim hooks open, avoiding the folded/kneeling transition. Aim-walk feet
 track translation more closely while bounded convergence remains. Vertical is
 unchanged pending the downstream FgAnim/palette consumer trace.
+
+### 2026-07-15 build df runtime: STATIC smooth/native foot turn for build dg
+
+- **PARTIAL CONFIRMATION:** staged run-first ADS enters GunMove without the former
+  folded pose; aim-walk is improved.
+- **REJECTED as complete:** entry can make a sharp apparent full turn, stationary
+  turning slides instead of stepping, and moving aim-walk remains partially slid.
+- **STATIC:** the final FgAnim hook currently replaces yaw absolutely after the
+  native action graph has evaluated. It has no shortest-arc/rate limit and cannot
+  select a foot animation.
+- **STATIC:** `0x140E8F720` selects turn states 3/4 from GunMoveController
+  `+0x140/+0x150`; `0x140E8D140` maps them to authored `aim-idle-rotate` and
+  `aim-idle-rotate-cc` actions.
+- **STATIC:** build dg smooths final render yaw along the shortest arc at 240
+  degrees/second and admits the native `+0x150` selector only after stable GunMove.
+  The rejected post-root synchronizer stays disabled and the hot hook avoids the
+  lifecycle-unsafe retained-table lookup.
+
+Prediction: ADS entry no longer snaps/full-spins, stationary turns step the feet,
+and moving strafe steps align more closely with rendered heading without restoring
+the kneeling-slide lifecycle regression. Vertical remains unchanged.
