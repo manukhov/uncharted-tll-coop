@@ -8018,31 +8018,37 @@ std::int64_t __fastcall hooked_gun_move_build_action_state(
 }
 
 bool install_gun_move_action_basis_snapshot_callsite() {
-    auto* const call_site = reinterpret_cast<std::uint8_t*>(
-        g_module + kGunMoveControllerBuildActionStateCallsiteRva);
-    if (call_site[0] != 0xE8) {
-        boot_log_line(
-            "GunMove action-basis snapshot SKIPPED (callsite is not E8)");
-        return false;
-    }
-    std::int32_t displacement = 0;
-    std::memcpy(&displacement, call_site + 1, sizeof(displacement));
-    const std::uintptr_t target =
-        reinterpret_cast<std::uintptr_t>(call_site + 5) +
-        static_cast<std::intptr_t>(displacement);
+    std::uint8_t* const call_sites[] = {
+        reinterpret_cast<std::uint8_t*>(
+            g_module + kGunMoveControllerInitialBuildActionStateCallsiteRva),
+        reinterpret_cast<std::uint8_t*>(
+            g_module + kGunMoveControllerUpdateBuildActionStateCallsiteRva),
+    };
     const std::uintptr_t expected =
         g_module + kGunMoveControllerBuildActionStateRva;
-    if (target != expected) {
-        boot_log_line(
-            "GunMove action-basis snapshot SKIPPED (unexpected target)");
-        return false;
+    for (auto* const call_site : call_sites) {
+        if (call_site[0] != 0xE8) {
+            boot_log_line(
+                "GunMove action-basis snapshot SKIPPED (callsite is not E8)");
+            return false;
+        }
+        std::int32_t displacement = 0;
+        std::memcpy(&displacement, call_site + 1, sizeof(displacement));
+        const std::uintptr_t target =
+            reinterpret_cast<std::uintptr_t>(call_site + 5) +
+            static_cast<std::intptr_t>(displacement);
+        if (target != expected) {
+            boot_log_line(
+                "GunMove action-basis snapshot SKIPPED (unexpected target)");
+            return false;
+        }
     }
     g_gun_move_build_action_state =
         reinterpret_cast<GunMoveControllerBuildActionStateFunction>(expected);
 
     constexpr std::size_t kRelaySize = 14;
     auto* const relay = static_cast<std::uint8_t*>(
-        allocate_executable_near(call_site, kRelaySize));
+        allocate_executable_near(call_sites[0], kRelaySize));
     if (relay == nullptr) {
         boot_log_line(
             "GunMove action-basis snapshot SKIPPED (relay allocation)");
@@ -8055,26 +8061,40 @@ bool install_gun_move_action_basis_snapshot_callsite() {
         reinterpret_cast<std::uintptr_t>(&hooked_gun_move_build_action_state);
     FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
 
-    const std::int64_t new_displacement =
-        reinterpret_cast<std::intptr_t>(relay) -
-        reinterpret_cast<std::intptr_t>(call_site + 5);
-    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
-        VirtualFree(relay, 0, MEM_RELEASE);
-        boot_log_line("GunMove action-basis snapshot SKIPPED (rel32 range)");
-        return false;
+    std::int32_t new_displacements[2]{};
+    for (std::size_t i = 0; i < 2; ++i) {
+        const std::int64_t new_displacement =
+            reinterpret_cast<std::intptr_t>(relay) -
+            reinterpret_cast<std::intptr_t>(call_sites[i] + 5);
+        if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            boot_log_line("GunMove action-basis snapshot SKIPPED (rel32 range)");
+            return false;
+        }
+        new_displacements[i] = static_cast<std::int32_t>(new_displacement);
     }
-    DWORD old = 0;
-    if (!VirtualProtect(call_site, 5, PAGE_EXECUTE_READWRITE, &old)) {
-        VirtualFree(relay, 0, MEM_RELEASE);
-        boot_log_line("GunMove action-basis snapshot SKIPPED (VirtualProtect)");
-        return false;
+    DWORD old[2]{};
+    for (std::size_t i = 0; i < 2; ++i) {
+        if (!VirtualProtect(
+                call_sites[i], 5, PAGE_EXECUTE_READWRITE, &old[i])) {
+            for (std::size_t j = 0; j < i; ++j) {
+                DWORD ignored = 0;
+                VirtualProtect(call_sites[j], 5, old[j], &ignored);
+            }
+            VirtualFree(relay, 0, MEM_RELEASE);
+            boot_log_line(
+                "GunMove action-basis snapshot SKIPPED (VirtualProtect)");
+            return false;
+        }
     }
-    *reinterpret_cast<std::int32_t*>(call_site + 1) =
-        static_cast<std::int32_t>(new_displacement);
-    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
-    DWORD ignored = 0;
-    VirtualProtect(call_site, 5, old, &ignored);
-    boot_log_line("GunMove action-basis snapshot installed");
+    for (std::size_t i = 0; i < 2; ++i) {
+        *reinterpret_cast<std::int32_t*>(call_sites[i] + 1) =
+            new_displacements[i];
+        FlushInstructionCache(GetCurrentProcess(), call_sites[i], 5);
+        DWORD ignored = 0;
+        VirtualProtect(call_sites[i], 5, old[i], &ignored);
+    }
+    boot_log_line("GunMove action-basis snapshot callsites installed");
     return true;
 }
 
@@ -23736,7 +23756,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15dj (confirm GunMove action snapshot delivery)");
+        "TLL hook DLL init 2026-07-15dk (snapshot initial GunMove child action)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

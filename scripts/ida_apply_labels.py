@@ -7189,6 +7189,13 @@ FUNCTIONS = {
         "and snapshot Player+0x100..+0x14F, including local-root quaternion "
         "Player+0x140, into player-ap-strafe-* action arguments.",
     ),
+    0x140E8E830: (
+        "GunMoveController_InitializeActionState",
+        "GunMoveController vtable +0x28. Initializes the child action by calling "
+        "GunMoveController_BuildActionState with state 0 (or 103 under the global "
+        "mode byte), then clears movement magnitude/state fields. This is the "
+        "initial builder path used when GunMove is entered.",
+    ),
     0x140E8EE90: (
         "GunMoveController_UpdateAimMovementDirection",
         "Normalizes the supplied GunMove movement vector, stores its adjusted "

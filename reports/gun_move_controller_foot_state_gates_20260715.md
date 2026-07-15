@@ -123,3 +123,25 @@ root. A marker with a materially non-unit dot plus unchanged visuals rejects the
 stale snapshot. No marker after a fresh ADS transition proves the child action was
 already built outside this callsite/gate and moves the trace to initial builder
 path `0x140E8E830 -> 0x140E8D140`.
+
+## Build dj runtime and build dk prediction
+
+**CONFIRMED control-flow result:** after a fresh ADS transition, both processes
+reached peer synchronization and FgAnim world-aim publication, but neither emitted
+the one-shot builder marker. Therefore admitted ADS did not call the late
+`0x140E9063B` transition builder. Build di's visible no-change result did not test
+the stale snapshot.
+
+The competing path is exact: GunMoveController vtable `+0x28`, now labeled
+`GunMoveController_InitializeActionState 0x140E8E830`, calls the same builder at
+`0x140E8E8C1` with initial child state 0 (or 103 under the global mode byte), then
+clears controller movement state. Build dk routes both verified direct callsites
+through the same temporary `Player+0x140` wrapper.
+
+Prediction: the first ADS entry must emit `AIM-ACTION-BASIS first stage`, normally
+with child 0/103. A materially non-unit `rootDot` proves the initial action received
+a different heading. If wrong-side entry and aim-walk improve, the initial stale
+snapshot is confirmed. If they remain unchanged despite that marker, the snapshot
+hypothesis is rejected and child-action advancement becomes leading. No marker
+rejects the assumed initial call path; any lifecycle kneeling/root drift rejects
+the temporary substitution boundary.

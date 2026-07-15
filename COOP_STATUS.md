@@ -3036,6 +3036,14 @@ boot marker per process on the first staged builder call, including child state,
 movement magnitude and root quaternion dot. This distinguishes an inert snapshot
 from an action built before or outside the admitted `0x140E9063B` path.
 
+Build dj confirms the latter: synchronized ADS/FgAnim ran, but neither process
+entered the late transition-builder wrapper. Static xrefs select vtable `+0x28`,
+`GunMoveController_InitializeActionState 0x140E8E830`, whose call at
+`0x140E8E8C1` builds initial state 0/103 and resets movement state. Build dk routes
+both exact builder callsites through the temporary snapshot. Its one-shot marker
+must now appear on ADS entry; a non-unit root dot with unchanged visuals rejects
+the stale-snapshot hypothesis.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

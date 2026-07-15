@@ -28116,3 +28116,17 @@ boundary itself.
   movement magnitude and native-versus-staged root dot. It changes no animation
   behavior. A non-unit dot with unchanged visuals rejects stale `Player+0x140`;
   no marker selects the earlier `0x140E8E830` builder path.
+
+### 2026-07-15 build dj runtime: initial GunMove builder selected for build dk
+
+- **CONFIRMED control flow:** fresh ADS reached synchronized FgAnim publication,
+  but neither process emitted the one-shot `0x140E9063B` wrapper marker. The late
+  transition builder is not called after the admitted entry in this case.
+- **STATIC alternate xref:** GunMoveController vtable `+0x28`, labeled
+  `GunMoveController_InitializeActionState 0x140E8E830`, calls
+  `GunMoveController_BuildActionState` at `0x140E8E8C1` with state 0/103 and then
+  clears movement fields.
+- Build dk patches both verified direct callsites to the same temporary root
+  snapshot wrapper. Prediction: first ADS emits child 0/103 and a root dot. A
+  non-unit dot with no visual change rejects stale `Player+0x140`; improvement
+  confirms the initial snapshot timing. Lifecycle kneeling rejects the boundary.
