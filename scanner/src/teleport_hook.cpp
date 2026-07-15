@@ -141,8 +141,9 @@ using PlayerMeleeTryAnimFunction =
     char(__fastcall*)(void**, void*, double);
 PlayerMeleeTryAnimFunction g_original_player_melee_try_anim = nullptr;
 std::atomic<bool> g_puppet_melee_try_anim_bypass{false};
-// cm REJECTED: PID 22284 died after MELEE-EXEC drain inside queue push (no hash
-// line). Park exec until native-matching push + controller validation (cn).
+// Melee relay REMOVED (co): cm crash + cn broke weapon give; pivot back to
+// locomotion/weapon/cover only.
+constexpr bool g_enable_puppet_melee_button_relay = false;
 constexpr bool g_enable_puppet_melee_exec_relay = false;
 // Full 0x141272A50 dispatcher from the input hook REJECTED ck: PID 11188 hung
 // after MELEE-RECV, zero MELEE-EXEC (Joypad_IsCommandActive recursion / heavy path).
@@ -1456,7 +1457,8 @@ char __fastcall hooked_joypad_is_command_active(
                     (force & kJoypadCrouchButtonMask) != 0) {
                     return 1;
                 }
-                if ((force & kJoypadMeleeTriangleButtonMask) != 0 &&
+                if (g_enable_puppet_melee_button_relay &&
+                    (force & kJoypadMeleeTriangleButtonMask) != 0 &&
                     (hash == kMeleeTriangleHash ||
                      melee_relay_hash_is_puppet_force_target(hash))) {
                     return 1;
@@ -10040,7 +10042,8 @@ std::uint64_t merge_authored_traversal_button_mask(
     if (is_active(joypad, kCrouchHash, 1) || is_active(joypad, kCrouchHash, 0)) {
         mask |= kJoypadCrouchButtonMask;
     }
-    if (joypad_any_melee_button_active(joypad, is_active, nullptr)) {
+    if (g_enable_puppet_melee_button_relay &&
+        joypad_any_melee_button_active(joypad, is_active, nullptr)) {
         mask |= kJoypadMeleeTriangleButtonMask;
     }
     return mask;
@@ -10715,7 +10718,8 @@ std::uint64_t capture_peer_send_button_mask(void* player) {
     const std::uint64_t cached =
         g_cached_local_input_buttons.load(std::memory_order_relaxed);
     mask |= cached & kJoypadFireButtonMask;
-    if (player_any_melee_button_active(player, nullptr)) {
+    if (g_enable_puppet_melee_button_relay &&
+        player_any_melee_button_active(player, nullptr)) {
         mask |= kJoypadMeleeTriangleButtonMask;
     }
     return mask;
@@ -11890,8 +11894,9 @@ void send_local_player_state() {
             } else if (trav == 0) {
                 prev_loco_send_log = 0;
             }
-            if ((held_mask & kJoypadMeleeTriangleButtonMask) != 0 ||
-                (synth_pressed & kJoypadMeleeTriangleButtonMask) != 0) {
+            if (g_enable_puppet_melee_button_relay &&
+                ((held_mask & kJoypadMeleeTriangleButtonMask) != 0 ||
+                 (synth_pressed & kJoypadMeleeTriangleButtonMask) != 0)) {
                 static std::uint64_t prev_melee_send_log = 0;
                 const std::uint64_t melee_bits =
                     (held_mask | synth_pressed) & kJoypadMeleeTriangleButtonMask;
@@ -20654,7 +20659,8 @@ char __fastcall hooked_player_input_state_update(void* player) {
         std::uint32_t active_hash = 0;
         if (player_any_melee_button_active(player, &active_hash)) {
             static std::uint32_t prev_probe_hash = 0;
-            if (active_hash != prev_probe_hash) {
+            if (g_enable_puppet_melee_button_relay &&
+                active_hash != prev_probe_hash) {
                 prev_probe_hash = active_hash;
                 log_melee_relay_event("MELEE-PROBE", player,
                                       kJoypadMeleeTriangleButtonMask);
@@ -20729,9 +20735,10 @@ char __fastcall hooked_player_input_state_update(void* player) {
                 }
             }
         }
-        if ((player_consumed_edges & kJoypadMeleeTriangleButtonMask) != 0 ||
-            (g_state_net.puppet_traversal_force.load(std::memory_order_acquire) &
-             kJoypadMeleeTriangleButtonMask) != 0) {
+        if (g_enable_puppet_melee_button_relay &&
+            ((player_consumed_edges & kJoypadMeleeTriangleButtonMask) != 0 ||
+             (g_state_net.puppet_traversal_force.load(std::memory_order_acquire) &
+              kJoypadMeleeTriangleButtonMask) != 0)) {
             static std::uint64_t prev_melee_recv_log = 0;
             const std::uint64_t melee_bits =
                 player_consumed_edges & kJoypadMeleeTriangleButtonMask;
@@ -20763,7 +20770,8 @@ char __fastcall hooked_player_input_state_update(void* player) {
                 force_log_line(recv.str().c_str());
             }
         }
-        if ((player_consumed_edges & kJoypadMeleeTriangleButtonMask) != 0) {
+        if (g_enable_puppet_melee_button_relay &&
+            (player_consumed_edges & kJoypadMeleeTriangleButtonMask) != 0) {
             std::uint32_t relay_hash = 1;
             player_any_melee_button_active(player, &relay_hash);
             if (relay_hash == 0) {
@@ -23251,7 +23259,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-14cn (melee exec parked, native push ready, log throttle)");
+        "TLL hook DLL init 2026-07-14co (melee relay removed, log throttle)");
     AddVectoredExceptionHandler(0, &crash_observer);
     boot_log_line(
         "TLL hook DLL init 2026-07-08bk (cover: field-only sustain, no try-enter)");
@@ -23260,7 +23268,12 @@ DWORD WINAPI install_hook(void*) {
     install_joypad3_analog_route();
     install_joypad3_keyboard_isolation();
     install_joypad3_is_command_active_force();
-    install_player_input_is_command_active_force();
+    if (g_enable_puppet_melee_button_relay) {
+        install_player_input_is_command_active_force();
+    } else {
+        boot_log_line(
+            "PlayerInputCommandState IsCommandActive force-hook parked (melee off)");
+    }
     boot_log_line(
         "PlayerMeleeTryAnim global hook parked (cj uses inline puppet-only bypass)");
     install_player_fire_capture();

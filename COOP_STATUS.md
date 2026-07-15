@@ -1,5 +1,18 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Turn note (2026-07-15, Cursor - melee removed co)
+
+**REJECTED (cn, user):** melee still non-functional; weapon give broke on puppet.
+`HELD-WEAPON-APPLY gave=0` with `gunOk=1 giveAllowed=1`. Suspect
+`PlayerInputCommandState IsCommandActive` melee force-hook (16-byte patch on
+`0x183ABF0` path) interfering with native weapon/command queries.
+
+**co:** `g_enable_puppet_melee_button_relay=false` — no MELEE-SEND/RECV, no
+puppet melee force, **do not install** PlayerInputCommandState force-hook;
+joypad hook keeps jump/evade/crouch/cover only. Exec path stays parked. Boot
+`2026-07-14co`. Next: verify weapon give + stable dual boot before any new anim
+work.
+
 ## Turn note (2026-07-15, Cursor - melee cm crash, cn stable)
 
 **REJECTED (cm runtime, PIDs 16612/22284):** user punched → copy 2 (22284) exited

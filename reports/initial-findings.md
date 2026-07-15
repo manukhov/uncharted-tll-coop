@@ -27693,3 +27693,7 @@ HYPOTHESIS for the two remaining mechanisms**.
   `seh_puppet_melee_exec_path` on `controller+0x150`. Log 16 MB / 34k analog+move
   spam per session (thread_local throttle). **cn:** exec parked; native-matching
   push + vtable `0x2A6C2E8` guard + global 2s log throttle ready for co test.
+- **REJECTED (build 2026-07-14cn, user):** melee still broken; puppet weapon give
+  regressed (`HELD-WEAPON-APPLY gave=0`). **co:** entire melee button relay off;
+  `PlayerInputCommandState IsCommandActive` hook not installed; joypad force keeps
+  traversal/cover only.
