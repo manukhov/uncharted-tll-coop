@@ -2920,6 +2920,24 @@ native `Player_PostAnimUpdate 0x1410E9210` remains their sole writer. Evidence,
 competitors and runtime prediction:
 `reports/player_aim_fganim_axis_residual_pitch_20260715.md`.
 
+### Build dc runtime; build dd ready for transition test
+
+Build dc preserved correct horizontal ADS facing, but the user isolated two
+transition defects: ADS entered directly from idle is clean while run-to-ADS can
+fold, and walking while ADS is held makes the puppet retain one stale aim point.
+The receiver also captured a high-blend vertical sample (`blend=0.866667`,
+`up=0.167019`, camera `y=-0.603211`) without visible pitch. Direct FgAnim aim-add
+mirroring is therefore runtime-rejected as the vertical consumer and parked.
+
+Static audit found the movement mismatch: input/world-basis/render-yaw were
+stationary-only, but controller blend tick, eligibility, additive permission and
+blend target remained forced for all peer ADS. Build dd puts the entire mod-owned
+ADS chain behind one stationary predicate with a 250 ms dwell and clears the forced
+ADS flag immediately on movement. Prediction: no stale aim point while walking;
+run-to-ADS enters cleanly after the short dwell; stationary horizontal facing stays
+correct. Vertical remains the next static task below native channel publication.
+Report: `reports/player_aim_fganim_axis_residual_pitch_20260715.md`.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

@@ -27946,3 +27946,26 @@ now applies the same blend and explicitly clears on pose-relay exit. The late Fg
 yaw and slot `+0x58` substitutions now share the proven stationary aim-input gate;
 ordinary moving locomotion is no longer rotated as a fake aim-walk pose. Prediction
 and alternatives are recorded in the same report.
+
+### 2026-07-15 build dc runtime: STATIC transition-owner fix for build dd
+
+- **CONFIRMED:** receiver PID 15604 captured camera `y=-0.603211`, controller
+  `up=0.167019`, `right=0.630614`, and blend `0.866667` in one sample. Vertical
+  camera data survives transport, directional computation, and blend publication.
+- **REJECTED runtime:** the direct FgAnimData `+0x188..+0x194` mirror still made
+  no visible vertical change. It is parked; the vertical blocker is downstream of
+  `PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0`.
+- **STATIC:** build dc gated input, world-basis and render yaw during locomotion but
+  left aim blend tick, eligibility, additive permission, and blend target active
+  for every peer ADS packet. This split ownership exactly explains the user's stale
+  fixed aim point while walking.
+- **STATIC:** idle ADS entry is clean while run-to-ADS folds. Prior action-state
+  runtime independently captured transient hash `0xE1939F43` before stable
+  `GunMove 0x12D842C0`, so build dd requires 250 ms of stable stationary packets
+  before admitting the complete mod-owned ADS chain.
+
+Prediction: build dd removes the walking fixed point and folded run-to-ADS entry,
+while retaining confirmed stationary horizontal facing. Vertical pitch is expected
+to remain absent pending static tracing below the published aim channels. Full
+evidence and competing hypotheses are in
+`reports/player_aim_fganim_axis_residual_pitch_20260715.md`.

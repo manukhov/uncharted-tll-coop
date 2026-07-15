@@ -119,3 +119,60 @@ produces a `Aim blended-pitch sample` marker if the controller sustains vertical
 weights. Starting movement releases the visual ADS pose instead of sliding or
 desynchronizing. If that high-blend marker contains non-zero up/down but no visible
 pitch, the remaining blocker is strictly below native parameter publication.
+
+## Build dc runtime result and build dd transition gate
+
+**CONFIRMED:** horizontal camera-relative facing remains correct. Receiver PID
+15604 recorded `blend=0.866667`, `up=0.167019`, `right=0.630614` while camera
+`y=-0.603211`. Camera pitch transport, directional-weight computation, and native
+blend publication are therefore all live at the same sample.
+
+**RUNTIME REJECTED:** copying those blended values directly to FgAnimData
+`+0x188..+0x194` produced no visible vertical pitch. The direct mirror is not the
+rendered vertical consumer and is parked in build dd. The remaining vertical
+failure is downstream of `PlayerAimController_PublishDirectionalAimWeights
+0x140CB41F0`, in authored parameter/palette consumption.
+
+The user also isolated the transition discriminator: entering ADS while already
+idle is clean, but entering immediately after running folds; holding ADS while
+walking makes the remote aim at one stale point. Static audit found four parts of
+the same mod-owned controller chain still admitted every fresh peer ADS packet:
+
+1. `hooked_player_aim_blend_tick` kept forcing controller `+0x8A0/+0x8EC`.
+2. The eligibility callsite kept converting native false to true.
+3. The additive-permission callsite kept converting native false to true.
+4. The blend-target callsite kept converting the native target to one.
+
+Build dc had already disabled input, slot `+0x58`, FgAnim mirroring, and render
+yaw during movement. The four ungated hooks consequently held an internally active
+ADS controller with its last stationary direction while locomotion owned the
+visible body. This exactly predicts the reported fixed point.
+
+Independent action-state runtime provides the transition evidence: retained-puppet
+ADS settles to authored `GunMove` hash `0x12D842C0`, but a short
+`0xE1939F43` state appears for one or two samples on entry. A single low-speed
+network packet therefore cannot prove that the preceding locomotion graph has
+finished blending.
+
+### Competitors
+
+- Keep the controller forced while moving and hide only render yaw: rejected by dc
+  because it produced the stale fixed point.
+- Relay full moving aim input: rejected by the confirmed kneeling-slide runtime.
+- Clear arbitrary action or pose fields on movement: rejected because these are
+  native outputs and would race the graph again.
+- Gate the complete mod-owned ADS chain behind stable stationary dwell: selected.
+
+### Build dd prediction
+
+One shared predicate now gates aim input, eligibility, additive permission, blend
+tick/target, slot `+0x58`, world-basis substitution, and late FgAnim yaw. Movement
+or aim release resets it immediately; ADS is admitted only after 250 ms of stable
+stationary packets. The last forced `Player+0x1548` ADS flag is also cleared while
+peer ADS remains held but the stationary gate is closed.
+
+Prediction: run-then-aim waits briefly and enters without folding; movement while
+holding ADS no longer retains the old aim point and native gait owns the complete
+pose; stationary horizontal direction remains correct. Vertical pitch should stay
+absent, which would preserve the now-confirmed boundary below native aim-channel
+publication rather than falsify this transition fix.

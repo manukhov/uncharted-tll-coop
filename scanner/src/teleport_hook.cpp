@@ -112,6 +112,7 @@ std::atomic<void*> g_puppet_fganim_data{nullptr};
 std::atomic<bool> g_puppet_fganim_world_turn_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_blended_seen{false};
+std::atomic<ULONGLONG> g_puppet_stationary_aim_since_ms{0};
 using PlayerInputStateUpdateFunction = char(__fastcall*)(void*);
 PlayerInputStateUpdateFunction g_original_player_input_state_update = nullptr;
 using PlayerInputCommandStateUpdateFunction = void(__fastcall*)(void*);
@@ -2435,45 +2436,51 @@ bool puppet_aim_press_relay_enabled() {
     return g_puppet_relay_aim_press;
 }
 
-bool puppet_aim_press_relay_enabled_for_peer(const coop::StatePacket& peer) {
+bool puppet_stationary_aim_ready_for_peer(const coop::StatePacket& peer) {
     if (!peer_packet_aim_active(peer)) {
+        g_puppet_stationary_aim_since_ms.store(0, std::memory_order_release);
         return false;
     }
     if (g_puppet_relay_aim_press) {
         return true;
     }
     if (!g_puppet_auto_stationary_aim_press) {
+        g_puppet_stationary_aim_since_ms.store(0, std::memory_order_release);
         return false;
     }
     if (valid_network_movement(peer) && peer.move_magnitude > 0.08F) {
+        g_puppet_stationary_aim_since_ms.store(0, std::memory_order_release);
         return false;
     }
     const float vx = peer.velocity[0];
     const float vz = peer.velocity[2];
-    return std::isfinite(vx) && std::isfinite(vz) &&
-           vx * vx + vz * vz < 0.35F * 0.35F;
+    if (!std::isfinite(vx) || !std::isfinite(vz) ||
+        vx * vx + vz * vz >= 0.35F * 0.35F) {
+        g_puppet_stationary_aim_since_ms.store(0, std::memory_order_release);
+        return false;
+    }
+
+    // A low-speed network sample arrives before the native run-to-idle graph has
+    // settled. Let locomotion finish before admitting every ADS controller hook.
+    constexpr ULONGLONG kStationaryAimDwellMs = 250;
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG since = g_puppet_stationary_aim_since_ms.load(
+        std::memory_order_acquire);
+    if (since == 0) {
+        if (g_puppet_stationary_aim_since_ms.compare_exchange_strong(
+                since, now, std::memory_order_acq_rel)) {
+            since = now;
+        }
+    }
+    return now - since >= kStationaryAimDwellMs;
+}
+
+bool puppet_aim_press_relay_enabled_for_peer(const coop::StatePacket& peer) {
+    return puppet_stationary_aim_ready_for_peer(peer);
 }
 
 bool puppet_aim_pose_relay_enabled_for_peer(const coop::StatePacket& peer) {
-    if (!peer_packet_aim_active(peer)) {
-        return false;
-    }
-    // Pose-seed relay is caller-scoped and does not inject puppet ADS/0x200 by
-    // itself. Keep it independent from the scoped-rifle ADS guard so rifle aim/fire
-    // can use the peer camera without triggering the DrawControl hide path.
-    if (g_puppet_relay_aim_press) {
-        return true;
-    }
-    if (!g_puppet_auto_stationary_aim_press) {
-        return false;
-    }
-    if (valid_network_movement(peer) && peer.move_magnitude > 0.08F) {
-        return false;
-    }
-    const float vx = peer.velocity[0];
-    const float vz = peer.velocity[2];
-    return std::isfinite(vx) && std::isfinite(vz) &&
-           vx * vx + vz * vz < 0.35F * 0.35F;
+    return puppet_stationary_aim_ready_for_peer(peer);
 }
 
 // Peer-aim via network packet reaches the puppet joypad; local-lead (Chloe ADS on
@@ -7175,7 +7182,8 @@ bool peer_puppet_aim_controller_fixup_wanted(
         g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
     coop::StatePacket peer{};
     if (received == 0 || GetTickCount64() - received > 250 ||
-        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer)) {
+        !copy_peer_state_snapshot(peer) ||
+        !puppet_aim_pose_relay_enabled_for_peer(peer)) {
         return false;
     }
     if (out_peer != nullptr) {
@@ -12783,11 +12791,11 @@ void apply_puppet_head_look_pre() {
 // 651-joint palette scans + disk logging per puppet update caused receiver stutter
 // during peer ADS even after render-hook inject was disabled (bz).
 constexpr bool g_enable_aim_palette_probe = false;
-// Runtime 2026-07-14: publish_state ([[Player+0x1A0]+0x58]+0x10) receives live
-// aim-add floats while Player+0x1A8 FgAnimData keeps stale +0x188..+0x194 (fgAdd
-// stuck at 0.2,0,0,1). Mirror publish fields into FgAnimData so
-// ProcessAnimCmdListSegment evaluates peer camera on the render-bound object.
-constexpr bool g_enable_puppet_fganim_aim_add_mirror = true;
+// REJECTED 2026-07-15dc: controller blend reached 0.866 with non-zero vertical
+// weight, but this direct FgAnim copy produced no visible pitch. It also writes
+// across authored locomotion/ADS transitions, so leave native parameter channels
+// authoritative while the downstream palette consumer is traced.
+constexpr bool g_enable_puppet_fganim_aim_add_mirror = false;
 // REJECTED (bt/bz runtime): palette→skinning copy does not fix visible ADS aim.
 // hooked_player_aim_world_basis + apply_puppet_transform_post each did 31KB memcpy
 // per frame during peer ADS → receiver lag persisted after bz.
@@ -14440,6 +14448,10 @@ void apply_puppet_transform_post(void* /*update_object*/) {
                 aim_ctrl != nullptr) {
                 force_peer_puppet_aim_blend_state(aim_ctrl);
             }
+        } else {
+            // Peer ADS may remain held while movement closes the stationary gate.
+            // Do not leave the last forced Player ADS bit latched into locomotion.
+            force_puppet_ads_flag(puppet, false);
         }
     } else if (puppet_was_aiming) {
         force_puppet_ads_flag(puppet, false);
@@ -21838,7 +21850,8 @@ char __fastcall hooked_player_aim_eligibility_callsite(
         g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
     coop::StatePacket peer{};
     if (received == 0 || GetTickCount64() - received > 250 ||
-        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer) ||
+        !copy_peer_state_snapshot(peer) ||
+        !puppet_aim_pose_relay_enabled_for_peer(peer) ||
         !valid_network_position(peer.pose_seed) ||
         !valid_network_orientation(peer.pose_seed + 4)) {
         return original;
@@ -21944,7 +21957,8 @@ char __fastcall hooked_player_aim_additive_permission_callsite(
         g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
     coop::StatePacket peer{};
     if (received == 0 || GetTickCount64() - received > 250 ||
-        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer) ||
+        !copy_peer_state_snapshot(peer) ||
+        !puppet_aim_pose_relay_enabled_for_peer(peer) ||
         !valid_network_position(peer.pose_seed) ||
         !valid_network_orientation(peer.pose_seed + 4)) {
         return original;
@@ -22041,7 +22055,8 @@ float __fastcall hooked_player_aim_blend_target_callsite(
         g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
     coop::StatePacket peer{};
     if (received == 0 || GetTickCount64() - received > 250 ||
-        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer)) {
+        !copy_peer_state_snapshot(peer) ||
+        !puppet_aim_pose_relay_enabled_for_peer(peer)) {
         return original;
     }
 
@@ -23362,7 +23377,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15dc (blend-safe ADS + gait ownership)");
+        "TLL hook DLL init 2026-07-15dd (settled ADS transition gate)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
