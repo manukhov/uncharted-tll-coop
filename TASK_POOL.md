@@ -11,11 +11,11 @@
 
 ## P0: Full Player Synchronization (CURRENT)
 
-- [~] **Melee animation runtime exam (build cv, 2026-07-15):** cu kept visible
-      peers but produced no remote animation, rejecting R1 sufficiency. Static
-      follow-up split R1 target-rated attacks from the free `melee-square` path.
-      cv captures local R1/lmouse but consumes the remote pulse only at the stock
-      Joypad `melee-square` query. Test tap, hold, and weapon regression.
+- [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
+      remote animation, so command-family selection alone is insufficient. cw
+      emits only one-shot stages at Joypad square force, controller `+0x210`, and
+      sole TryAnim callsite `0x140F07A0A`. One tap classifies the remaining gap
+      without bypassing or manually invoking the action path.
 
 - [x] **Restore remote Player creation (build ct, 2026-07-15):** cp wrongly
       disabled the sole descriptor capture that writes `g_spawn_captured`; the

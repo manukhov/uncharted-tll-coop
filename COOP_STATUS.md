@@ -2830,3 +2830,10 @@ inserts the queue entry and PlayerMoveStick owns the downstream animation.
 Manual dispatcher, queue, TryAttack, and TryAnim calls remain parked. Runtime
 prediction and failure split are recorded in
 `reports/melee_native_callsite_relay_20260715.md`.
+
+**REJECTED (user):** cv still showed no remote hit animation. Build cw now adds a
+one-shot stage discriminator at the existing Joypad square force, controller
+vtable `+0x210`, and the sole TryAnim callsite `0x140F07A0A`. It does not bypass
+or manually invoke any action. The next user tap will classify the failure as
+pending-command, queue-consumer, intermediate MoveStick gate, TryAnim gate, or
+downstream pose publication.

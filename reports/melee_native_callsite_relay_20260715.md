@@ -168,3 +168,42 @@ target-rater alternative is excluded; the next discriminator is whether
 `MeleeCommandQueue_QueryMeleeSquare` returns true for slot 1 versus
 `0x1410FC9F0` rejecting the naturally consumed command. A crash or lost peer
 rejects the square injection and requires immediate rollback to cu.
+
+## 2026-07-15 build cv result and cw stage probe
+
+**REJECTED (user):** cv also kept both peers stable but showed no remote hit
+animation. Therefore selecting the correct square command family is necessary
+but not sufficient.
+
+The remaining hypotheses are now mutually distinguishable:
+
+1. the remote Joypad square query is never reached, so the pending pulse remains;
+2. the dispatcher accepts square, but controller `+0x210` cannot retrieve it;
+3. `+0x210` retrieves square, but the intermediate MoveStick gates skip TryAnim;
+4. TryAnim is called and returns zero because one of its explicit gates rejects
+   the puppet;
+5. TryAnim returns one, but the resulting animation state is not published to the
+   visible puppet pose.
+
+The static quota is met for a stage-only runtime discriminator. The exact
+dispatcher dataflow forces square at `0x141272B99` and inserts it through
+`0x141273FA0`; independent vtable identity maps `+0x210` to
+`MeleeCommandQueue_QueryMeleeSquare 0x141279F10`; and the sole code xref to
+`Player_TryStartFreeMeleeAnimation 0x1410FC9F0` is direct E8 callsite
+`0x140F07A0A`, immediately after the `+0x210` result test at `0x140F079E5`.
+The TryAnim body independently shows explicit global, network-mode, action-state,
+and controller virtual gates before returning one.
+
+Build cw adds no periodic telemetry. It emits at most one line for each stage:
+`square-query-forced`, `queue-square=1` (or one delayed zero), and
+`try-anim=<0|1> enabled=<byte> netHi=<byte>`. The queue observation swaps only
+the known controller vtable `+0x210`; TryAnim observation patches only the direct
+E8 callsite and calls the original entry. The rejected RIP-relative prologue
+trampoline remains uninstalled.
+
+Falsifiable prediction: one remote melee tap must produce
+`square-query-forced`. If no later queue line appears, slot-1 MoveStick is not
+querying the controller. A delayed zero identifies queue insertion/resolution;
+queue one without TryAnim identifies the intervening movement gates; TryAnim zero
+identifies the helper gates; TryAnim one with no visible animation moves the bug
+strictly downstream into animation publication/evaluation.

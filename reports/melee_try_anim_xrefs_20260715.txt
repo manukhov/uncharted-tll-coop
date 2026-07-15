@@ -1,0 +1,3 @@
+TARGET 0x1410FC9F0: func_start=0x1410fc9f0 name=Player_TryStartFreeMeleeAnimation
+  xref=0x140F07A0A type=17 func_start=0x140f03500 func_name=PlayerMoveStick_MainUpdate
+  xref=0x146E4D2FC type=1 func_start=None func_name=None

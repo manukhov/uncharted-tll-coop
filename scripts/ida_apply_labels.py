@@ -7077,6 +7077,13 @@ FUNCTIONS = {
         "triangle, R1, and circle through vtable +0x210/+0x218/+0x220/+0x228, "
         "then routes accepted R1 commands to PlayerMeleeController_TryAttack.",
     ),
+    0x1410FC9F0: (
+        "Player_TryStartFreeMeleeAnimation",
+        "Sole code caller is PlayerMoveStick_MainUpdate at 0x140F07A0A after "
+        "MeleeCommandQueue_QueryMeleeSquare succeeds. Applies explicit feature, "
+        "network-mode, action-state, and Player+0x1DE0 controller gates before "
+        "dispatching Player animation decision/publish virtuals.",
+    ),
     0x1402E6E10: (
         "ProcessExplosion_Init",
         "ProcessExplosion::Init (game/process-explosion.cpp): initializes the "

@@ -27754,6 +27754,20 @@ succeeds. Status: **STATIC / HYPOTHESIS ready for runtime**; full evidence,
 competitors, and prediction are in
 `reports/melee_native_callsite_relay_20260715.md`.
 
+### 2026-07-15 REJECTED/STATIC: square selection alone does not animate slot 1
+
+The user confirmed build cv still shows no remote hit animation. This rejects
+the claim that replacing R1 with the stock square command is sufficient, while
+leaving the exact downstream stage unresolved.
+
+The sole code xref to the free melee animation helper `0x1410FC9F0` is direct E8
+callsite `0x140F07A0A` in `PlayerMoveStick_MainUpdate`, immediately after
+controller vtable `+0x210` at `0x140F079E5` returns true. Build cw observes the
+already-established Joypad square force, swaps only known vtable `+0x210`, and
+wraps only that direct TryAnim E8. Each stage logs once; no periodic diagnostics
+or manual action calls are enabled. The falsifiable branch predictions are in
+`reports/melee_native_callsite_relay_20260715.md`.
+
 ### 2026-07-15 CONFIRMED: state UDP ports bind, packet exchange still unproven
 
 In the cq two-instance run, PID 24420 bound UDP 31338 and PID 10204 bound UDP

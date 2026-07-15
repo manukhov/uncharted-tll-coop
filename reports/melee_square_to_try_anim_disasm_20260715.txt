@@ -1,0 +1,68 @@
+0x140F07950: call    qword ptr [r10+0A8h]
+0x140F07951: movzx   ebx, al
+0x140F07954: test    al, al
+0x140F07956: jz      short loc_140F079A7
+0x140F07958: jmp     short loc_140F0797A
+0x140F0795A: mov     edx, 5
+0x140F0795F: mov     ecx, 45h ; 'E'
+0x140F07964: test    al, al
+0x140F07966: cmovnz  edx, ecx
+0x140F07969: xor     r8d, r8d
+0x140F0796C: mov     rcx, r15
+0x140F0796F: call    Player_TryConsumeQueuedMeleeActions
+0x140F07974: test    al, al
+0x140F07976: jz      short loc_140F079A7
+0x140F07978: mov     bl, 1
+0x140F0797A: mov     rax, [r15]
+0x140F0797D: mov     rcx, r15
+0x140F07980: call    qword ptr [rax+9B0h]
+0x140F07986: test    rax, rax
+0x140F07989: jz      short loc_140F079A7
+0x140F0798B: mov     rcx, rax
+0x140F0798E: call    sub_14128A540
+0x140F07993: mov     rcx, 1000000000000000h
+0x140F0799D: test    [rax+50h], rcx
+0x140F079A1: jz      loc_140F07A65
+0x140F079A7: mov     rcx, r15
+0x140F079AA: call    sub_140F15780
+0x140F079AF: vcomiss xmm0, xmm9
+0x140F079B4: jbe     loc_140F07A65
+0x140F079BA: xor     edx, edx
+0x140F079BC: lea     rcx, [rsp+3670h+var_360C]
+0x140F079C1: call    sub_14014E690
+0x140F079C6: mov     edx, [rax]
+0x140F079C8: lea     rcx, [rbp+3570h+var_3400]
+0x140F079CF: call    sub_140E416A0
+0x140F079D4: mov     rcx, [r15+1F60h]
+0x140F079DB: mov     rax, [rcx]
+0x140F079DE: lea     rdx, [rbp+3570h+var_3400]
+0x140F079E5: call    qword ptr [rax+210h]
+0x140F079EB: test    al, al
+0x140F079ED: jz      short loc_140F07A65
+0x140F079EF: lea     rdx, [rbp+3570h+var_3520]
+0x140F079F3: lea     rcx, [rbp+3570h+var_34D0]
+0x140F079FA: call    sub_14014E4F0
+0x140F079FF: mov     rdx, rax
+0x140F07A02: vmovaps xmm2, xmm10
+0x140F07A07: mov     rcx, r15
+0x140F07A0A: call    sub_1410FC9F0
+0x140F07A0F: test    al, al
+0x140F07A11: jz      short loc_140F07A65
+0x140F07A13: mov     edx, 5
+0x140F07A18: lea     rcx, aMelee; "Melee"
+0x140F07A1F: call    sub_14014D910
+0x140F07A24: mov     rdx, rax
+0x140F07A27: lea     rcx, [rsp+3670h+var_360C]
+0x140F07A2C: call    sub_14014E690
+0x140F07A31: mov     rbx, rax
+0x140F07A34: lea     rdx, [rsp+3670h+var_3600]
+0x140F07A39: mov     rcx, r15
+0x140F07A3C: call    sub_1416A58D0
+0x140F07A41: mov     rcx, rax
+0x140F07A44: mov     rdx, rbx
+0x140F07A47: call    sub_14014E6A0
+0x140F07A4C: test    al, al
+0x140F07A4E: jz      loc_140F07D24
+0x140F07A54: mov     rax, [r15]
+0x140F07A57: mov     rcx, r15
+0x140F07A5A: call    qword ptr [rax+0C80h]

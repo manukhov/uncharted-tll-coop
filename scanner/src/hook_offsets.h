@@ -88,12 +88,14 @@ constexpr std::size_t kSkeletonJointCountOffset = 0x34;
 constexpr std::size_t kPlayerInputCommandStateOffset = 0x39A0;
 constexpr std::uintptr_t kPlayerInputCommandStateIsCommandActiveRva = 0x1E39D50;
 // Exact press-query callsites inside the naturally scheduled melee dispatcher.
-// Both are E8 calls to PlayerInputCommandState_IsCommandActive. The mouse site
-// captures local PC melee; the R1 site also consumes one remote melee pulse.
+// Both are E8 calls to PlayerInputCommandState_IsCommandActive. They capture
+// local PC/pad melee; remote execution is injected at the Joypad square query.
 constexpr std::uintptr_t kMeleeR1IsCommandActiveCallsiteRva = 0x1273AE2;
 constexpr std::uintptr_t kMeleeLmousePressIsCommandActiveCallsiteRva = 0x1273D3B;
 // MoveStick air-melee anim gate (sub_1410FC9F0); net-mode early-out blocks puppet.
 constexpr std::uintptr_t kPlayerMeleeTryAnimRva = 0x10FC9F0;
+constexpr std::uintptr_t kPlayerMeleeTryAnimCallsiteRva = 0x0F07A0A;
+constexpr std::uintptr_t kMeleeCommandQueueQuerySquareRva = 0x1279F10;
 constexpr std::uintptr_t kMeleeTryAnimEnabledGlobalRva = 0x3ECF31A;
 constexpr std::uintptr_t kNetModeFlagsGlobalRva = 0x3E07470;
 // Large mounted action controller used by TryAnim (not the +0x1F60 queue owner).
