@@ -3099,6 +3099,14 @@ Prediction and competitors are in
 `reports/player_aim_initial_ray_latch_20260715.md`. Feet and vertical pitch remain
 separate static tasks.
 
+Build do runtime preserves horizontal response but leaves vertical pitch and
+turn-in-place feet unchanged, confirming the predicted channel split. PID `17288`
+logged both `AIM-TARGET-EARLY` (`0x140CB17D6`) and `AIM-FIRE-SEED`
+(`0x140E2BFFF`), yet the user sees the bullet tracer fly completely away from the
+reticle. Both seed substitutions are therefore delivered but rejected as the
+final projectile-direction owner. Trace fire-argument/projectile launch data next;
+do not alter render yaw to compensate.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

@@ -28198,3 +28198,16 @@ boundary itself.
   respectively, packet/render interpolation, the native locomotion child state,
   and a downstream vertical additive channel. Broad Player-root and screen-camera
   writers remain rejected.
+
+### 2026-07-16 build do runtime: resolver seeds do not own projectile direction
+
+- **CONFIRMED horizontal-only boundary:** PIDs `17776/17288` logged v9
+  `FGANIM-WORLD-APPLY ... smooth=1`; horizontal response remains active, while the
+  user reports no vertical pitch and no turn-in-place foot steps. The latter two
+  remain separate authored animation channels.
+- **CONFIRMED seed delivery:** receiver PID `17288` logged both
+  `AIM-TARGET-EARLY` at `0x140CB17D6` and `AIM-FIRE-SEED` at `0x140E2BFFF`.
+- **REJECTED final fire ownership:** despite both markers, the bullet tracer flies
+  in a direction completely different from the reticle. The reticle target and
+  pose-seed resolver substitutions are not the final projectile-direction owner;
+  continue below fire-argument construction into weapon/projectile launch data.

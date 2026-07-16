@@ -212,3 +212,19 @@ retained. Planted feet and absent vertical pitch are explicitly expected to rema
 either changing would mean this render-only boundary owns more than the static
 model predicts. A location reload must not retain an old quaternion or reproduce
 kneeling/hair regressions.
+
+## Build do runtime: horizontal-only confirmation; fire owner remains downstream
+
+PIDs `17776` and `17288` both delivered v9 exact samples and logged
+`FGANIM-WORLD-APPLY ... smooth=1`. The user confirms that only horizontal aiming
+responds; vertical pitch remains absent and stationary turns still rotate with
+planted feet. This preserves the predicted channel split and rejects any claim
+that render-world interpolation could drive the authored pitch or foot graph.
+
+More importantly, receiver PID `17288` logged both
+`AIM-TARGET-EARLY ... site=0xcb17d6` and
+`AIM-FIRE-SEED ... site=0xe2bfff`, yet the visible bullet tracer travelled in a
+completely different direction from the reticle. Delivery at both resolver sites
+is therefore CONFIRMED but both are REJECTED as the final projectile-direction
+owner. Continue downstream through fire-argument construction and projectile
+launch direction; do not rotate the render model again to hide this error.
