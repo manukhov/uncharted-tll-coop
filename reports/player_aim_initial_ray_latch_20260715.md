@@ -177,3 +177,38 @@ three competitors left by the prediction: 20 Hz world-quaternion stepping, a
 separate authored locomotion/turn-in-place child state, and a vertical additive
 consumer downstream of the already-confirmed directional weights. Do not re-open
 Player root or broad camera writes for these symptoms.
+
+## Build do hypothesis: receiver-side temporal ownership
+
+The v9 branch currently copies all four peer quaternion floats directly into one
+render publication. The first confirmed apply had `stockPeerDot=0.450434`, or
+about 126.5 degrees of orientation separation, and therefore exposed that entire
+error in one frame. Although the sender has a 16 ms lower bound, its game-update
+caller runs substantially slower when two instances share the machine; the
+receiver consequently sees sample-and-hold motion.
+
+Independent evidence is: (1) the exact v9 `memcpy` at the confirmed render owner
+has no temporal policy; (2) the receive timestamp can remain fresh for 250 ms while
+the FgAnim sample itself has no capture timestamp; (3) the previous camera-derived
+branch already proved shortest-arc limiting changes the visible transition; and
+(4) dn runtime proved large stock/peer separation reaches the renderer. Competing
+causes are an authored upper-body transition, quaternion sign discontinuity, and
+native turn-in-place state. Sign cannot change the current matrix because `q` and
+`-q` are equivalent, but must be corrected before interpolation. Foot state and
+pitch remain separate and are not claimed by this build.
+
+Build do keeps StatePacket v9 and the same render boundary. It validates sender
+sample age, normalizes and hemisphere-aligns the target, then exponentially
+converges a per-puppet publication quaternion along the shortest arc. State resets
+on FgAnim owner replacement or packet loss and never writes Player root, movement,
+camera, palette, look, or attachment state.
+
+### Build do falsifiable prediction
+
+With both processes logging `FGANIM-WORLD-SEND/APPLY`, a large stationary camera
+turn should take a short smooth arc instead of one frame, without the old roughly
+one-second wrong-side delay. Aim direction and RMB-up persistence from dn must be
+retained. Planted feet and absent vertical pitch are explicitly expected to remain;
+either changing would mean this render-only boundary owns more than the static
+model predicts. A location reload must not retain an old quaternion or reproduce
+kneeling/hair regressions.

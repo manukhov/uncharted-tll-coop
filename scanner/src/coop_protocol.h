@@ -85,6 +85,9 @@ struct StatePacket {
     std::uint8_t weapon_snapshot[kWeaponSnapshotBytes]{};
 };
 
+static_assert(sizeof(StatePacket) == 472);
+static_assert(offsetof(StatePacket, fganim_world_quat) == 144);
+
 // Phase 3 (host-authoritative world sync): the HOST (role A) enumerates the
 // CharacterManager, picks out enemy NPCs, and sends their transforms; the CLIENT
 // (role B) matches each by name-hash to its own local enemy, disables its AI, and

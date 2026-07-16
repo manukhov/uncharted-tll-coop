@@ -113,6 +113,14 @@ std::atomic<void*> g_puppet_fganim_data{nullptr};
 std::array<std::atomic<std::uint32_t>, 4> g_local_fganim_quat_bits{};
 std::atomic<std::uint32_t> g_local_fganim_quat_sequence{0};
 std::atomic<bool> g_local_fganim_quat_valid{false};
+std::atomic<ULONGLONG> g_local_fganim_quat_captured_ms{0};
+struct PuppetFgAnimWorldSmoothingState {
+    void* owner = nullptr;
+    float quat[4]{};
+    ULONGLONG last_publish_ms = 0;
+};
+SRWLOCK g_puppet_fganim_smoothing_lock = SRWLOCK_INIT;
+PuppetFgAnimWorldSmoothingState g_puppet_fganim_smoothing{};
 std::atomic<bool> g_puppet_fganim_world_turn_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_blended_seen{false};
@@ -8146,8 +8154,10 @@ bool install_gun_move_action_basis_snapshot_callsite() {
     return true;
 }
 
-void publish_local_fganim_world_quat(const float quat[4]) {
-    if (!valid_network_orientation(quat)) {
+void publish_local_fganim_world_quat(void* owner, const float quat[4]) {
+    if (owner == nullptr ||
+        g_local_fganim_data.load(std::memory_order_acquire) != owner ||
+        !valid_network_orientation(quat)) {
         return;
     }
     std::uint32_t sequence =
@@ -8162,6 +8172,14 @@ void publish_local_fganim_world_quat(const float quat[4]) {
         std::memcpy(&bits, quat + i, sizeof(bits));
         g_local_fganim_quat_bits[i].store(bits, std::memory_order_relaxed);
     }
+    if (g_local_fganim_data.load(std::memory_order_acquire) != owner) {
+        g_local_fganim_quat_valid.store(false, std::memory_order_release);
+        g_local_fganim_quat_captured_ms.store(0, std::memory_order_release);
+        g_local_fganim_quat_sequence.store(sequence + 2, std::memory_order_release);
+        return;
+    }
+    g_local_fganim_quat_captured_ms.store(
+        GetTickCount64(), std::memory_order_release);
     g_local_fganim_quat_valid.store(true, std::memory_order_release);
     g_local_fganim_quat_sequence.store(sequence + 2, std::memory_order_release);
 }
@@ -8169,6 +8187,12 @@ void publish_local_fganim_world_quat(const float quat[4]) {
 bool copy_local_fganim_world_quat(float out[4]) {
     if (out == nullptr ||
         !g_local_fganim_quat_valid.load(std::memory_order_acquire)) {
+        return false;
+    }
+    const ULONGLONG captured =
+        g_local_fganim_quat_captured_ms.load(std::memory_order_acquire);
+    if (captured == 0 || GetTickCount64() - captured > 100 ||
+        g_local_fganim_data.load(std::memory_order_acquire) == nullptr) {
         return false;
     }
     for (int attempt = 0; attempt < 3; ++attempt) {
@@ -8192,6 +8216,81 @@ bool copy_local_fganim_world_quat(float out[4]) {
     return false;
 }
 
+bool smooth_puppet_fganim_world_quat(
+    void* owner,
+    const float stock[4],
+    const float target[4],
+    bool aiming,
+    ULONGLONG now,
+    float out[4]) {
+    if (owner == nullptr || out == nullptr ||
+        !valid_network_orientation(stock) ||
+        !valid_network_orientation(target)) {
+        return false;
+    }
+
+    AcquireSRWLockExclusive(&g_puppet_fganim_smoothing_lock);
+    auto& state = g_puppet_fganim_smoothing;
+    const bool reset = state.owner != owner || state.last_publish_ms == 0 ||
+        now < state.last_publish_ms || now - state.last_publish_ms > 250 ||
+        !valid_network_orientation(state.quat);
+    if (reset) {
+        state.owner = owner;
+        std::memcpy(state.quat, stock, sizeof(state.quat));
+        const float stock_norm_sq =
+            state.quat[0] * state.quat[0] + state.quat[1] * state.quat[1] +
+            state.quat[2] * state.quat[2] + state.quat[3] * state.quat[3];
+        const float inv_stock_norm = 1.0F / std::sqrt(stock_norm_sq);
+        for (float& component : state.quat) {
+            component *= inv_stock_norm;
+        }
+    }
+
+    const float dt = reset
+        ? 0.0F
+        : std::clamp(
+              static_cast<float>(now - state.last_publish_ms) / 1000.0F,
+              0.0F,
+              0.05F);
+    const float time_constant = aiming ? 0.075F : 0.045F;
+    const float alpha = 1.0F - std::exp(-dt / time_constant);
+    float aligned_target[4]{target[0], target[1], target[2], target[3]};
+    const float dot = state.quat[0] * aligned_target[0] +
+        state.quat[1] * aligned_target[1] +
+        state.quat[2] * aligned_target[2] +
+        state.quat[3] * aligned_target[3];
+    if (dot < 0.0F) {
+        for (float& component : aligned_target) {
+            component = -component;
+        }
+    }
+    float norm_sq = 0.0F;
+    for (std::size_t i = 0; i < 4; ++i) {
+        state.quat[i] += (aligned_target[i] - state.quat[i]) * alpha;
+        norm_sq += state.quat[i] * state.quat[i];
+    }
+    if (!std::isfinite(norm_sq) || norm_sq < 0.25F) {
+        std::memcpy(state.quat, aligned_target, sizeof(state.quat));
+        norm_sq = 1.0F;
+    }
+    const float inv_norm = 1.0F / std::sqrt(norm_sq);
+    for (std::size_t i = 0; i < 4; ++i) {
+        state.quat[i] *= inv_norm;
+        out[i] = state.quat[i];
+    }
+    state.last_publish_ms = now;
+    ReleaseSRWLockExclusive(&g_puppet_fganim_smoothing_lock);
+    return valid_network_orientation(out);
+}
+
+void reset_puppet_fganim_world_smoothing(void* owner) {
+    AcquireSRWLockExclusive(&g_puppet_fganim_smoothing_lock);
+    if (owner == nullptr || g_puppet_fganim_smoothing.owner == owner) {
+        g_puppet_fganim_smoothing = {};
+    }
+    ReleaseSRWLockExclusive(&g_puppet_fganim_smoothing_lock);
+}
+
 std::int64_t __fastcall hooked_fganim_publish_world_transform(
     void* fg, const float* transform, std::uint8_t publish_current) {
     const auto native = g_fganim_publish_world_transform;
@@ -8202,7 +8301,7 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
     const void* const local_fg =
         g_local_fganim_data.load(std::memory_order_acquire);
     if (fg != nullptr && fg == local_fg && transform != nullptr) {
-        publish_local_fganim_world_quat(transform + 4);
+        publish_local_fganim_world_quat(fg, transform + 4);
     }
 
     const float* selected_transform = transform;
@@ -8225,16 +8324,23 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
             (peer.flags & coop::kStateFlagFgAnimWorldQuat) != 0 &&
             valid_network_orientation(peer.fganim_world_quat)) {
             std::memcpy(relayed_transform, transform, sizeof(relayed_transform));
-            std::memcpy(
-                relayed_transform + 4,
-                peer.fganim_world_quat,
-                sizeof(peer.fganim_world_quat));
-            selected_transform = relayed_transform;
-            applied_world_quat = true;
-            if (peer_packet_aim_active(peer) &&
-                puppet_aim_action_relay_enabled_for_peer(peer)) {
+            const bool peer_aiming = peer_packet_aim_active(peer);
+            if (smooth_puppet_fganim_world_quat(
+                    fg, transform + 4, peer.fganim_world_quat,
+                    peer_aiming, now, relayed_transform + 4)) {
+                selected_transform = relayed_transform;
+                applied_world_quat = true;
+                const float smooth_target_dot = std::fabs(
+                    relayed_transform[4] * peer.fganim_world_quat[0] +
+                    relayed_transform[5] * peer.fganim_world_quat[1] +
+                    relayed_transform[6] * peer.fganim_world_quat[2] +
+                    relayed_transform[7] * peer.fganim_world_quat[3]);
+                constexpr float kAimReadyQuaternionDot = 0.994522F;
                 g_puppet_render_aim_yaw_ready.store(
-                    true, std::memory_order_release);
+                    peer_aiming &&
+                        puppet_aim_action_relay_enabled_for_peer(peer) &&
+                        smooth_target_dot >= kAimReadyQuaternionDot,
+                    std::memory_order_release);
             }
             static std::atomic<bool> first_world_apply_logged{false};
             if (!first_world_apply_logged.exchange(
@@ -8246,7 +8352,8 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
                     transform[7] * peer.fganim_world_quat[3]);
                 std::ostringstream line;
                 line << "FGANIM-WORLD-APPLY stockPeerDot=" << stock_peer_dot
-                     << " aim=" << (peer_packet_aim_active(peer) ? 1 : 0)
+                     << " aim=" << (peer_aiming ? 1 : 0)
+                     << " smooth=1"
                      << " seq=" << peer.sequence;
                 boot_log_line(line.str().c_str());
             }
@@ -8327,6 +8434,7 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
         }
     }
     if (fg == puppet_fg && !applied_world_quat) {
+        reset_puppet_fganim_world_smoothing(fg);
         smoothed_fg = nullptr;
         smoothed_yaw_valid = false;
         smoothed_yaw_ms = 0;
@@ -12431,6 +12539,7 @@ void send_local_player_state() {
         g_local_fganim_data.exchange(local_fg, std::memory_order_acq_rel);
     if (previous_local_fg != local_fg) {
         g_local_fganim_quat_valid.store(false, std::memory_order_release);
+        g_local_fganim_quat_captured_ms.store(0, std::memory_order_release);
     }
     if (!valid_network_position(pos)) {
         static std::atomic<bool> invalid_local_position_logged{false};
@@ -23908,7 +24017,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-16dn (relay exact FgAnim world quaternion)");
+        "TLL hook DLL init 2026-07-16do (smooth exact FgAnim world quaternion)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

@@ -3090,6 +3090,15 @@ and no vertical pitch. Continue those as interpolation, locomotion child-state,
 and downstream vertical-additive traces; do not return to rejected broad Player
 root or screen-camera writes.
 
+Build do targets only the confirmed horizontal stepping: v9 currently applies a
+potentially large exact quaternion by one-frame `memcpy`, while two-instance game
+updates deliver samples substantially slower than the nominal 16 ms lower bound.
+The receiver will hemisphere-align, normalize, and shortest-arc smooth at the same
+`0x1418C55D0` boundary, with sender sample-age and FgAnim-owner lifecycle guards.
+Prediction and competitors are in
+`reports/player_aim_initial_ray_latch_20260715.md`. Feet and vertical pitch remain
+separate static tasks.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three
