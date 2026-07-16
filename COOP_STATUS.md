@@ -3120,6 +3120,14 @@ local origin and muzzle. Do not re-enable direct PlayerFireController::Fire
 replay. Full evidence and the
 written prediction are in `reports/aim_pitch_foot_fire_owner_20260716.md`.
 
+Build `dp` runtime rejects all three selected receiver boundaries. Both processes
+installed the hooks and exchanged v10 packets, but vertical weapon motion, foot
+steps and projectile direction were unchanged. None of the receiver markers
+(`AIM-PITCH-APPLY`, `AIM-FOOT-*`, `FIRE-FINAL-DIRECTION-APPLY`) fired. Do not
+retry these callsites. Next static pass must resolve the puppet's ticking pitch
+consumer, cold turn-state initiation, and which of all three
+`BuildProjectileLaunchRecord` callsites serves the observed instant bullet.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

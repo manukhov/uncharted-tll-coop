@@ -81,3 +81,18 @@ If the tracer aligns but collision does not, the common `record+0x30` hypothesis
 is rejected. If the marker is reached but neither changes, ownership is below the
 builder. Success of one item does not confirm either of the other two. No game
 launch occurred before this prediction was written.
+
+## Runtime result: REJECTED (build dp)
+
+PIDs `19368/18056` installed all three relay groups and exchanged 504-byte v10
+state packets in both directions. Visual behavior was unchanged: no vertical
+weapon motion, no turn-in-place foot steps, and the remote bullet/tracer still
+left in the wrong direction.
+
+The bounded discriminators did not emit `AIM-PITCH-APPLY`, either `AIM-FOOT`
+marker, or `FIRE-FINAL-DIRECTION-APPLY`. Only a sender-side zero pitch capture
+appeared. Therefore delivery to the chosen receiver boundaries is rejected, not
+the UDP extension. Do not reinstall callsites `0x140CB4176`,
+`0x140E90605/0x140E9060F`, or only `0x14151B72B` as fixes. Continue through the
+puppet's actually ticking animation path, the cold turn-state entry, and all
+three `0x141520750` projectile-record callsites.

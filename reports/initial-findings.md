@@ -28231,3 +28231,12 @@ boundary itself.
   replacing only receiver launch-record `+0x30`. Evidence,
   competitors and the pre-runtime prediction are in
   `reports/aim_pitch_foot_fire_owner_20260716.md`.
+
+Build `dp` **REJECTED all three selected receiver boundaries**. PIDs
+`19368/18056` exchanged 504-byte state packets, but the user observed no vertical
+weapon motion, no foot steps during stationary ADS turning, and no projectile
+direction correction. No `AIM-PITCH-APPLY`, `AIM-FOOT-*`, or
+`FIRE-FINAL-DIRECTION-APPLY` marker fired. Thus the v10 network transport is live,
+while `0x140CB4176`, `0x140E90605/0x140E9060F`, and the isolated
+`0x14151B72B` callsite are not the active receiver boundaries in this campaign
+puppet path.
