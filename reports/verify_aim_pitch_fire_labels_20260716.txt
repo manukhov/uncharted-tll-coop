@@ -1,0 +1,17 @@
+MCP verification after applying labels to ida/tll.i64 and refreshing ida/tll_mcp.i64
+
+0x140CAF470 PlayerAimController_CommitNamedAimChannel size=0x255
+0x140E8F720 GunMoveController_SelectAimIdleTurnState size=0x218
+0x140E8FD00 GunMoveController_UpdateTurnYawFromDirection size=0x344
+0x1415182E0 ProcessWeapon_PrepareFireFromArgs size=0xA3B
+0x141518FC0 ProcessWeapon_BuildAndDispatchProjectile size=0xB47
+0x141519D30 ProcessWeapon_ProjectileEmission size=0x21A6
+0x141520750 BuildProjectileLaunchRecord size=0x136
+
+get_callers(0x141520750) includes ProcessWeapon_ProjectileEmission direct calls:
+0x14151A00E
+0x14151B72B
+0x14151BC3E
+
+The runtime relay intentionally patches only 0x14151B72B, the instant-projectile
+record whose +0x30 direction is consumed by tracer and collision.

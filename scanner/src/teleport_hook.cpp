@@ -130,6 +130,43 @@ std::atomic<bool> g_puppet_render_aim_yaw_ready{false};
 std::atomic<ULONGLONG> g_puppet_aim_gate_last_eval_ms{0};
 std::atomic<bool> g_puppet_aim_session_latched{false};
 std::atomic<void*> g_puppet_aim_session_owner{nullptr};
+struct LocalAimPitchCapture {
+    void* owner = nullptr;
+    float up = 0.0F;
+    float down = 0.0F;
+    ULONGLONG captured_ms = 0;
+};
+SRWLOCK g_local_aim_pitch_lock = SRWLOCK_INIT;
+LocalAimPitchCapture g_local_aim_pitch{};
+
+struct LocalAimFootTurnCapture {
+    void* owner = nullptr;
+    void* active_state = nullptr;
+    float direction[4]{};
+    float yaw_rate = 0.0F;
+    std::int16_t current_child = -1;
+    std::int16_t selected_child = -1;
+    ULONGLONG captured_ms = 0;
+};
+SRWLOCK g_local_aim_foot_turn_lock = SRWLOCK_INIT;
+LocalAimFootTurnCapture g_local_aim_foot_turn{};
+
+using PublishDirectionalAimWeightsFunction = void(__fastcall*)(
+    void*, float, float, float, float);
+using CommitNamedAimChannelFunction = void(__fastcall*)(
+    void*, float, std::int32_t, std::uint32_t, std::int32_t);
+using ResolveAimBaseStateFunction = void*(__fastcall*)(void*, std::int32_t);
+using SelectAimIdleTurnStateFunction = int(__fastcall*)(void*, std::uint32_t);
+using UpdateTurnYawFromDirectionFunction = std::int64_t(__fastcall*)(void*);
+PublishDirectionalAimWeightsFunction g_publish_directional_aim_weights = nullptr;
+CommitNamedAimChannelFunction g_commit_named_aim_channel = nullptr;
+ResolveAimBaseStateFunction g_resolve_aim_base_state = nullptr;
+SelectAimIdleTurnStateFunction g_select_aim_idle_turn_state = nullptr;
+UpdateTurnYawFromDirectionFunction g_update_turn_yaw_from_direction = nullptr;
+void* aim_publish_active_state_from_player(void* player);
+bool valid_foot_turn_sample(
+    const float direction[4], float yaw_rate, int current_child,
+    int selected_child);
 using PlayerInputStateUpdateFunction = char(__fastcall*)(void*);
 PlayerInputStateUpdateFunction g_original_player_input_state_update = nullptr;
 using PlayerInputCommandStateUpdateFunction = void(__fastcall*)(void*);
@@ -358,12 +395,28 @@ using PlayerFireControllerCheckShotReadinessFunction =
 PlayerFireControllerTryStartFireFunction g_original_player_try_start_fire = nullptr;
 PlayerFireControllerCheckShotReadinessFunction
     g_original_player_check_shot_readiness = nullptr;
+using BuildProjectileLaunchRecordFunction = std::int64_t(__fastcall*)(
+    void*, void*, const float*, const float*, std::uint32_t);
+BuildProjectileLaunchRecordFunction g_build_projectile_launch_record = nullptr;
+struct PeerFireDirectionCapture {
+    float final_direction[4]{};
+    std::uint32_t weapon_art_id = 0;
+    std::uint32_t sequence = 0;
+    ULONGLONG armed_ms = 0;
+};
+SRWLOCK g_peer_fire_direction_lock = SRWLOCK_INIT;
+PeerFireDirectionCapture g_peer_fire_direction{};
+thread_local bool g_pending_local_fire_packet_active = false;
+thread_local coop::FirePacket g_pending_local_fire_packet{};
 using PlayerTryStartBumpActionFunction = char(__fastcall*)(void*, void*);
 PlayerTryStartBumpActionFunction g_original_player_try_start_bump_action = nullptr;
 using PlayerBumpControllerUpdateFunction = void(__fastcall*)(void*);
 PlayerBumpControllerUpdateFunction g_original_player_bump_controller_update = nullptr;
 void __fastcall hooked_player_fire(
     void* controller, void* fire_args, void* weapon, double scalar);
+std::int64_t __fastcall hooked_build_projectile_launch_record(
+    void* out_record, void* owner, const float* origin,
+    const float* post_spread_direction, std::uint32_t knowledge_id);
 char __fastcall hooked_player_try_start_fire(void* controller);
 
 // ============================================================================
@@ -1174,6 +1227,10 @@ bool capture_gameplay_camera_quat(float out[4]);
 bool copy_valid_camera_quat(const float* src, float out[4]);
 void apply_peer_gameplay_camera(const float quat[4]);
 void apply_peer_gameplay_camera_for_player(void* player, const float quat[4]);
+bool prepare_plain_callsite_relay(
+    std::uintptr_t callsite_rva, std::uintptr_t expected_target_rva,
+    const void* hook, std::uint8_t*& callsite, std::uint8_t*& relay,
+    std::int32_t& new_displacement);
 void derive_look_stick_from_camera(
     const float body_quat[4], const float cam_quat[4], float out[2]);
 std::byte* joypad_resolved_input_block(int joypad_index);
@@ -3425,6 +3482,61 @@ bool install_build_fire_args_gate() {
                       ? "build-fire-args aim gate installed"
                       : "build-fire-args aim gate SKIPPED");
     return g_original_build_fire_args != nullptr;
+}
+
+bool fire_direction_art_matches(
+    std::uint32_t receiver_art, std::uint32_t sender_art) {
+    if (receiver_art == sender_art) {
+        return true;
+    }
+    const bool receiver_pistol = receiver_art == kCoopPistolArtId ||
+        receiver_art == kCoopScopedPistolArtId;
+    const bool sender_pistol = sender_art == kCoopPistolArtId ||
+        sender_art == kCoopScopedPistolArtId;
+    return receiver_pistol && sender_pistol;
+}
+
+bool finite_fire_direction_capture(const PeerFireDirectionCapture& capture) {
+    for (int i = 0; i < 4; ++i) {
+        if (!std::isfinite(capture.final_direction[i])) {
+            return false;
+        }
+    }
+    const float length_squared =
+        capture.final_direction[0] * capture.final_direction[0] +
+        capture.final_direction[1] * capture.final_direction[1] +
+        capture.final_direction[2] * capture.final_direction[2];
+    return length_squared > 0.01F && length_squared < 4.0F;
+}
+
+bool install_projectile_launch_record_direction_relay() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kBuildProjectileLaunchRecordCallsiteRva,
+            kBuildProjectileLaunchRecordRva,
+            reinterpret_cast<const void*>(
+                &hooked_build_projectile_launch_record),
+            callsite, relay, displacement)) {
+        boot_log_line("projectile final-direction relay SKIPPED (preflight)");
+        return false;
+    }
+    g_build_projectile_launch_record =
+        reinterpret_cast<BuildProjectileLaunchRecordFunction>(
+            g_module + kBuildProjectileLaunchRecordRva);
+    DWORD old = 0;
+    if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("projectile final-direction relay SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(callsite + 1) = displacement;
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(callsite, 5, old, &ignored);
+    boot_log_line("projectile final-direction relay installed (0x14151B72B)");
+    return true;
 }
 
 bool install_pose_seed_gate() {
@@ -7262,7 +7374,9 @@ CharacterSkeletonEvalPerJointFunction g_original_character_skeleton_eval_per_joi
 // Broad visible-root ownership was rejected, but staged GunMove admission now
 // lets this native path select authored turn-in-place/strafe states without owning
 // final render yaw. Never pair it with the rejected post-root synchronizer.
-constexpr bool g_enable_gun_move_body_turn = true;
+// The +0x150-only vtable experiment did not select authored foot states. The
+// paired selector/writer callsite relay below owns this path now.
+constexpr bool g_enable_gun_move_body_turn = false;
 // STATIC 2026-07-15: the strafe builder snapshots Player+0x100..+0x14F before
 // the late FgAnim world-yaw publication. Stage only Player+0x140 during action
 // construction and restore it immediately; this is not sustained root ownership.
@@ -12803,10 +12917,44 @@ void send_local_player_state() {
                 force_log_line(line.str().c_str());
             }
         }
+        const ULONGLONG aim_capture_now = GetTickCount64();
+        AcquireSRWLockShared(&g_local_aim_pitch_lock);
+        const LocalAimPitchCapture pitch_capture = g_local_aim_pitch;
+        ReleaseSRWLockShared(&g_local_aim_pitch_lock);
+        if (pitch_capture.owner == local_obj &&
+            pitch_capture.captured_ms != 0 &&
+            aim_capture_now - pitch_capture.captured_ms <= 100 &&
+            std::isfinite(pitch_capture.up) &&
+            std::isfinite(pitch_capture.down)) {
+            pkt.aim_pitch_up = pitch_capture.up;
+            pkt.aim_pitch_down = pitch_capture.down;
+            pkt.flags |= coop::kStateFlagAimPitch;
+        }
+
+        AcquireSRWLockShared(&g_local_aim_foot_turn_lock);
+        const LocalAimFootTurnCapture foot_capture = g_local_aim_foot_turn;
+        ReleaseSRWLockShared(&g_local_aim_foot_turn_lock);
+        if (foot_capture.owner == local_obj &&
+            foot_capture.active_state ==
+                aim_publish_active_state_from_player(local_obj) &&
+            foot_capture.captured_ms != 0 &&
+            aim_capture_now - foot_capture.captured_ms <= 100 &&
+            valid_foot_turn_sample(
+                foot_capture.direction, foot_capture.yaw_rate,
+                foot_capture.current_child, foot_capture.selected_child)) {
+            std::memcpy(
+                pkt.gun_move_turn_direction, foot_capture.direction,
+                sizeof(pkt.gun_move_turn_direction));
+            pkt.anim_turn_yaw_rate = foot_capture.yaw_rate;
+            pkt.gun_move_current_child = foot_capture.current_child;
+            pkt.gun_move_selected_child = foot_capture.selected_child;
+            pkt.flags |= coop::kStateFlagAimFootTurn;
+        }
     } else {
         pkt.flags &= static_cast<std::uint16_t>(
             ~(coop::kStateFlagPoseSeed | coop::kStateFlagPeerCamera |
-              coop::kStateFlagPeerFreeLook));
+              coop::kStateFlagPeerFreeLook | coop::kStateFlagAimPitch |
+              coop::kStateFlagAimFootTurn));
         std::memset(pkt.pose_seed, 0, sizeof(pkt.pose_seed));
         std::memset(pkt.camera_quat, 0, sizeof(pkt.camera_quat));
         std::memset(pkt.look_stick, 0, sizeof(pkt.look_stick));
@@ -13471,6 +13619,419 @@ void* aim_publish_active_state_from_player(void* player) {
     }
     return *reinterpret_cast<void* const*>(
         static_cast<const std::byte*>(child) + kPlayerAnimActiveStateOffset);
+}
+
+bool player_screen_index_is(const void* player, std::uint32_t index) {
+    if (player == nullptr ||
+        readable_bytes(static_cast<const std::byte*>(player) + 0x4010) <
+            sizeof(std::uint32_t)) {
+        return false;
+    }
+    return *reinterpret_cast<const std::uint32_t*>(
+               static_cast<const std::byte*>(player) + 0x4010) == index;
+}
+
+bool aim_controller_uses_named_channels(void* controller, void* owner) {
+    if (controller == nullptr || owner == nullptr ||
+        g_resolve_aim_base_state == nullptr ||
+        readable_bytes(static_cast<std::byte*>(owner) +
+                       kPlayerUpperStateOwnerOffset) < sizeof(void*)) {
+        return false;
+    }
+    void* const channel_base = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(owner) + kPlayerUpperStateOwnerOffset);
+    if (channel_base == nullptr) {
+        return false;
+    }
+    __try {
+        void* const resolved = g_resolve_aim_base_state(channel_base, 0);
+        if (resolved == nullptr ||
+            readable_bytes(static_cast<std::byte*>(resolved) + 0x40) < 1) {
+            return false;
+        }
+        auto* const branch_ctl = *reinterpret_cast<std::uint8_t**>(
+            static_cast<std::byte*>(resolved) + 0x38);
+        return branch_ctl != nullptr && readable_bytes(branch_ctl) >= 1 &&
+            branch_ctl[0] == 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void __fastcall hooked_publish_directional_aim_weights(
+    void* controller, float left, float right, float up, float down) {
+    if (g_publish_directional_aim_weights == nullptr) {
+        return;
+    }
+    g_publish_directional_aim_weights(controller, left, right, up, down);
+    if (g_dll_inert || controller == nullptr || !g_state_net.enabled ||
+        readable_bytes(static_cast<std::byte*>(controller) + 0x8F0) < 1) {
+        return;
+    }
+    void* const owner = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(controller) + kGunMoveControllerOwnerOffset);
+    if (owner == nullptr || !aim_controller_uses_named_channels(controller, owner)) {
+        return;
+    }
+
+    const float blend = *reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(controller) + 0x8EC);
+    if (player_screen_index_is(owner, 0)) {
+        const float pitch_up = up * blend;
+        const float pitch_down = down * blend;
+        if (!std::isfinite(pitch_up) || !std::isfinite(pitch_down) ||
+            pitch_up < 0.0F || pitch_up > 1.0F ||
+            pitch_down < 0.0F || pitch_down > 1.0F) {
+            return;
+        }
+        AcquireSRWLockExclusive(&g_local_aim_pitch_lock);
+        g_local_aim_pitch = {owner, pitch_up, pitch_down, GetTickCount64()};
+        ReleaseSRWLockExclusive(&g_local_aim_pitch_lock);
+        static std::atomic<bool> first_pitch_capture_logged{false};
+        if (!first_pitch_capture_logged.exchange(true, std::memory_order_acq_rel)) {
+            char line[160]{};
+            std::snprintf(
+                line, sizeof(line), "AIM-PITCH-CAPTURE up=%.4f down=%.4f",
+                pitch_up, pitch_down);
+            boot_log_line(line);
+        }
+        return;
+    }
+
+    if (!player_screen_index_is(owner, kSlot1ScreenIndex) ||
+        g_commit_named_aim_channel == nullptr) {
+        return;
+    }
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    coop::StatePacket peer{};
+    if (received == 0 || GetTickCount64() - received > 250 ||
+        !copy_peer_state_snapshot(peer) ||
+        (peer.flags & coop::kStateFlagAimPitch) == 0 ||
+        !peer_packet_aim_active(peer) ||
+        !std::isfinite(peer.aim_pitch_up) ||
+        !std::isfinite(peer.aim_pitch_down)) {
+        return;
+    }
+    const std::int32_t base_index = *reinterpret_cast<const std::int32_t*>(
+        static_cast<const std::byte*>(controller) + 0x8E8);
+    __try {
+        g_commit_named_aim_channel(
+            controller, peer.aim_pitch_down, base_index + 6,
+            0xE8651C16u, 2);
+        g_commit_named_aim_channel(
+            controller, peer.aim_pitch_up, base_index + 4,
+            0x7283B601u, 3);
+        static std::atomic<bool> first_pitch_apply_logged{false};
+        if (!first_pitch_apply_logged.exchange(true, std::memory_order_acq_rel)) {
+            char line[160]{};
+            std::snprintf(
+                line, sizeof(line), "AIM-PITCH-APPLY up=%.4f down=%.4f",
+                peer.aim_pitch_up, peer.aim_pitch_down);
+            boot_log_line(line);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
+
+bool valid_foot_turn_sample(
+    const float direction[4], float yaw_rate, int current_child,
+    int selected_child) {
+    if (!std::isfinite(yaw_rate) || yaw_rate < 0.0F || yaw_rate > 1.2F ||
+        current_child < -1 || current_child > INT16_MAX ||
+        selected_child < 2 || selected_child > 4) {
+        return false;
+    }
+    for (int i = 0; i < 4; ++i) {
+        if (!std::isfinite(direction[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool fresh_peer_foot_turn_sample(
+    void* controller, coop::StatePacket& peer, void*& owner,
+    void*& active_state) {
+    owner = nullptr;
+    active_state = nullptr;
+    if (controller == nullptr || !g_state_net.enabled ||
+        readable_bytes(static_cast<std::byte*>(controller) +
+                       kGunMoveControllerMoveMagnitudeOffset + sizeof(float)) < 1) {
+        return false;
+    }
+    owner = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(controller) + kGunMoveControllerOwnerOffset);
+    if (!player_screen_index_is(owner, kSlot1ScreenIndex) ||
+        *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(controller) +
+            kGunMoveControllerMoveMagnitudeOffset) != 0.0F) {
+        return false;
+    }
+    active_state = aim_publish_active_state_from_player(owner);
+    if (active_state == nullptr ||
+        readable_bytes(static_cast<std::byte*>(active_state) +
+                       kAnimStateTurnYawRateOffset + sizeof(float)) < 1) {
+        return false;
+    }
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    return received != 0 && GetTickCount64() - received <= 250 &&
+        copy_peer_state_snapshot(peer) &&
+        (peer.flags & coop::kStateFlagAimFootTurn) != 0 &&
+        peer_packet_aim_active(peer) &&
+        valid_foot_turn_sample(
+            peer.gun_move_turn_direction, peer.anim_turn_yaw_rate,
+            peer.gun_move_current_child, peer.gun_move_selected_child);
+}
+
+int __fastcall hooked_select_aim_idle_turn_state(
+    void* controller, std::uint32_t current_child) {
+    if (g_select_aim_idle_turn_state == nullptr || controller == nullptr) {
+        return static_cast<int>(current_child);
+    }
+    void* owner = nullptr;
+    if (readable_bytes(static_cast<std::byte*>(controller) +
+                       kGunMoveControllerMoveMagnitudeOffset + sizeof(float)) >= 1) {
+        owner = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(controller) + kGunMoveControllerOwnerOffset);
+    }
+
+    if (player_screen_index_is(owner, 0)) {
+        void* const active_state = aim_publish_active_state_from_player(owner);
+        float direction[4]{};
+        float yaw_rate = 0.0F;
+        const bool stationary =
+            *reinterpret_cast<const float*>(
+                static_cast<const std::byte*>(controller) +
+                kGunMoveControllerMoveMagnitudeOffset) == 0.0F;
+        if (active_state != nullptr &&
+            readable_bytes(static_cast<std::byte*>(controller) +
+                           kGunMoveControllerTurnDirectionOffset + 16) >= 1 &&
+            readable_bytes(static_cast<std::byte*>(active_state) +
+                           kAnimStateTurnYawRateOffset + sizeof(float)) >= 1) {
+            std::memcpy(
+                direction,
+                static_cast<const std::byte*>(controller) +
+                    kGunMoveControllerTurnDirectionOffset,
+                sizeof(direction));
+            yaw_rate = *reinterpret_cast<const float*>(
+                static_cast<const std::byte*>(active_state) +
+                kAnimStateTurnYawRateOffset);
+        }
+        const int selected = g_select_aim_idle_turn_state(controller, current_child);
+        if (stationary && active_state != nullptr &&
+            valid_foot_turn_sample(
+                direction, yaw_rate, static_cast<int>(current_child), selected)) {
+            AcquireSRWLockExclusive(&g_local_aim_foot_turn_lock);
+            g_local_aim_foot_turn.owner = owner;
+            g_local_aim_foot_turn.active_state = active_state;
+            std::memcpy(
+                g_local_aim_foot_turn.direction, direction, sizeof(direction));
+            g_local_aim_foot_turn.yaw_rate = yaw_rate;
+            g_local_aim_foot_turn.current_child =
+                static_cast<std::int16_t>(current_child);
+            g_local_aim_foot_turn.selected_child =
+                static_cast<std::int16_t>(selected);
+            g_local_aim_foot_turn.captured_ms = GetTickCount64();
+            ReleaseSRWLockExclusive(&g_local_aim_foot_turn_lock);
+            static std::atomic<bool> first_foot_capture_logged{false};
+            if (!first_foot_capture_logged.exchange(
+                    true, std::memory_order_acq_rel)) {
+                char line[192]{};
+                std::snprintf(
+                    line, sizeof(line),
+                    "AIM-FOOT-CAPTURE current=%u selected=%d rate=%.4f",
+                    current_child, selected, yaw_rate);
+                boot_log_line(line);
+            }
+        }
+        return selected;
+    }
+
+    coop::StatePacket peer{};
+    void* peer_owner = nullptr;
+    void* active_state = nullptr;
+    if (!fresh_peer_foot_turn_sample(
+            controller, peer, peer_owner, active_state)) {
+        return g_select_aim_idle_turn_state(controller, current_child);
+    }
+
+    auto* const direction = static_cast<std::byte*>(controller) +
+        kGunMoveControllerTurnDirectionOffset;
+    auto* const rate = static_cast<std::byte*>(active_state) +
+        kAnimStateTurnYawRateOffset;
+    float saved_direction[4]{};
+    float saved_rate = 0.0F;
+    std::memcpy(saved_direction, direction, sizeof(saved_direction));
+    saved_rate = *reinterpret_cast<float*>(rate);
+    int selected = static_cast<int>(current_child);
+    __try {
+        std::memcpy(
+            direction, peer.gun_move_turn_direction,
+            sizeof(peer.gun_move_turn_direction));
+        *reinterpret_cast<float*>(rate) = peer.anim_turn_yaw_rate;
+        selected = g_select_aim_idle_turn_state(controller, current_child);
+        static std::atomic<bool> first_foot_apply_logged{false};
+        if (!first_foot_apply_logged.exchange(true, std::memory_order_acq_rel)) {
+            char line[192]{};
+            std::snprintf(
+                line, sizeof(line),
+                "AIM-FOOT-APPLY wire=%d native=%d rate=%.4f",
+                static_cast<int>(peer.gun_move_selected_child), selected,
+                peer.anim_turn_yaw_rate);
+            boot_log_line(line);
+        }
+    } __finally {
+        std::memcpy(direction, saved_direction, sizeof(saved_direction));
+        if (aim_publish_active_state_from_player(peer_owner) == active_state) {
+            *reinterpret_cast<float*>(rate) = saved_rate;
+        }
+    }
+    return selected;
+}
+
+std::int64_t __fastcall hooked_update_turn_yaw_from_direction(void* controller) {
+    if (g_update_turn_yaw_from_direction == nullptr) {
+        return 0;
+    }
+    coop::StatePacket peer{};
+    void* owner = nullptr;
+    void* active_state = nullptr;
+    if (fresh_peer_foot_turn_sample(controller, peer, owner, active_state)) {
+        return 0;
+    }
+    return g_update_turn_yaw_from_direction(controller);
+}
+
+bool prepare_plain_callsite_relay(
+    std::uintptr_t callsite_rva, std::uintptr_t expected_target_rva,
+    const void* hook, std::uint8_t*& callsite, std::uint8_t*& relay,
+    std::int32_t& new_displacement) {
+    callsite = reinterpret_cast<std::uint8_t*>(g_module + callsite_rva);
+    relay = nullptr;
+    new_displacement = 0;
+    if (callsite[0] != 0xE8) {
+        return false;
+    }
+    std::int32_t old_displacement = 0;
+    std::memcpy(&old_displacement, callsite + 1, sizeof(old_displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(callsite + 5) +
+        static_cast<std::intptr_t>(old_displacement);
+    if (target != g_module + expected_target_rva) {
+        return false;
+    }
+    constexpr std::size_t kRelaySize = 14;
+    relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(callsite, kRelaySize));
+    if (relay == nullptr) {
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(hook);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+    const std::int64_t displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(callsite + 5);
+    if (displacement < INT32_MIN || displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        relay = nullptr;
+        return false;
+    }
+    new_displacement = static_cast<std::int32_t>(displacement);
+    return true;
+}
+
+bool install_native_aim_pitch_relay() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kPlayerAimPublishWeightsCallsiteRva,
+            kPlayerAimPublishWeightsRva,
+            reinterpret_cast<const void*>(
+                &hooked_publish_directional_aim_weights),
+            callsite, relay, displacement)) {
+        boot_log_line("native aim-pitch relay SKIPPED (preflight)");
+        return false;
+    }
+    g_publish_directional_aim_weights =
+        reinterpret_cast<PublishDirectionalAimWeightsFunction>(
+            g_module + kPlayerAimPublishWeightsRva);
+    g_commit_named_aim_channel =
+        reinterpret_cast<CommitNamedAimChannelFunction>(
+            g_module + kPlayerAimCommitNamedChannelRva);
+    g_resolve_aim_base_state = reinterpret_cast<ResolveAimBaseStateFunction>(
+        g_module + kPlayerAimResolveBaseStateRva);
+    DWORD old = 0;
+    if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("native aim-pitch relay SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(callsite + 1) = displacement;
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(callsite, 5, old, &ignored);
+    boot_log_line("native aim-pitch relay installed (0x140CB4176)");
+    return true;
+}
+
+bool install_native_aim_foot_turn_relays() {
+    std::uint8_t* writer_site = nullptr;
+    std::uint8_t* writer_relay = nullptr;
+    std::int32_t writer_displacement = 0;
+    std::uint8_t* selector_site = nullptr;
+    std::uint8_t* selector_relay = nullptr;
+    std::int32_t selector_displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kGunMoveUpdateTurnYawCallsiteRva,
+            kGunMoveUpdateTurnYawRva,
+            reinterpret_cast<const void*>(
+                &hooked_update_turn_yaw_from_direction),
+            writer_site, writer_relay, writer_displacement) ||
+        !prepare_plain_callsite_relay(
+            kGunMoveSelectAimIdleTurnCallsiteRva,
+            kGunMoveSelectAimIdleTurnRva,
+            reinterpret_cast<const void*>(
+                &hooked_select_aim_idle_turn_state),
+            selector_site, selector_relay, selector_displacement)) {
+        if (writer_relay != nullptr) {
+            VirtualFree(writer_relay, 0, MEM_RELEASE);
+        }
+        if (selector_relay != nullptr) {
+            VirtualFree(selector_relay, 0, MEM_RELEASE);
+        }
+        boot_log_line("native aim-foot relay SKIPPED (pair preflight)");
+        return false;
+    }
+    g_update_turn_yaw_from_direction =
+        reinterpret_cast<UpdateTurnYawFromDirectionFunction>(
+            g_module + kGunMoveUpdateTurnYawRva);
+    g_select_aim_idle_turn_state =
+        reinterpret_cast<SelectAimIdleTurnStateFunction>(
+            g_module + kGunMoveSelectAimIdleTurnRva);
+    DWORD old = 0;
+    const std::size_t patch_span =
+        static_cast<std::size_t>(selector_site + 5 - writer_site);
+    if (!VirtualProtect(
+            writer_site, patch_span, PAGE_EXECUTE_READWRITE, &old)) {
+        VirtualFree(writer_relay, 0, MEM_RELEASE);
+        VirtualFree(selector_relay, 0, MEM_RELEASE);
+        boot_log_line("native aim-foot relay SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(writer_site + 1) = writer_displacement;
+    *reinterpret_cast<std::int32_t*>(selector_site + 1) = selector_displacement;
+    FlushInstructionCache(GetCurrentProcess(), writer_site, patch_span);
+    DWORD ignored = 0;
+    VirtualProtect(writer_site, patch_span, old, &ignored);
+    boot_log_line("native aim-foot relays installed (0x140E90605/0x140E9060F)");
+    return true;
 }
 
 void* player_fganim_from_player(void* player) {
@@ -16479,19 +17040,21 @@ void publish_fire_packet(const coop::FirePacket& packet) {
     force_log_line(line.str().c_str());
 }
 
-void send_fire_packet(void* controller, void* fire_args, void* weapon, double scalar) {
+bool prepare_fire_packet(
+    void* controller, void* fire_args, void* weapon, double scalar,
+    coop::FirePacket& packet) {
     if (!g_state_net.enabled || !g_state_net.peer_set ||
         controller == nullptr || fire_args == nullptr || weapon == nullptr ||
         readable_bytes(fire_args) < coop::kFireArgsBytes ||
         readable_bytes(weapon) < 0x864) {
-        return;
+        return false;
     }
     void* const player = *reinterpret_cast<void**>(
         static_cast<std::byte*>(controller) + kPlayerFireControllerOwnerOffset);
     if (player != retained_player_object(0)) {
-        return;
+        return false;
     }
-    coop::FirePacket packet{};
+    packet = {};
     packet.sequence = ++g_state_net.fire_send_seq;
     packet.controller_offset = static_cast<std::uint32_t>(
         static_cast<std::byte*>(controller) - static_cast<std::byte*>(player));
@@ -16505,6 +17068,13 @@ void send_fire_packet(void* controller, void* fire_args, void* weapon, double sc
             : (held_art != 0 ? held_art : weapon_art);
     packet.scalar = scalar;
     std::memcpy(packet.fire_args, fire_args, coop::kFireArgsBytes);
+    return true;
+}
+
+void send_prepared_fire_packet(const coop::FirePacket& packet) {
+    if (!g_state_net.enabled || !g_state_net.peer_set) {
+        return;
+    }
     sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&packet),
            sizeof(packet), 0,
            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
@@ -16513,8 +17083,87 @@ void send_fire_packet(void* controller, void* fire_args, void* weapon, double sc
     line << "FIRE-RELAY send seq=" << packet.sequence
          << " art=0x" << std::hex << packet.weapon_art_id
          << " ctrlOff=0x" << packet.controller_offset
+         << " final="
+         << ((packet.flags & coop::kFireFlagFinalDirection) != 0 ? 1 : 0)
          << " roleB=" << std::dec << (g_net_role_b ? 1 : 0);
     force_log_line(line.str().c_str());
+}
+
+std::int64_t __fastcall hooked_build_projectile_launch_record(
+    void* out_record,
+    void* owner,
+    const float* origin,
+    const float* post_spread_direction,
+    std::uint32_t knowledge_id
+) {
+    if (g_build_projectile_launch_record == nullptr) {
+        return 0;
+    }
+    const std::int64_t result = g_build_projectile_launch_record(
+        out_record, owner, origin, post_spread_direction, knowledge_id);
+
+    const bool local_sender_record = g_pending_local_fire_packet_active;
+    if (local_sender_record) {
+        PeerFireDirectionCapture sender_capture{};
+        if (post_spread_direction != nullptr &&
+            readable_bytes(post_spread_direction) >= sizeof(float) * 4) {
+            std::memcpy(
+                sender_capture.final_direction, post_spread_direction,
+                sizeof(sender_capture.final_direction));
+        }
+        if (finite_fire_direction_capture(sender_capture)) {
+            std::memcpy(
+                g_pending_local_fire_packet.final_direction,
+                sender_capture.final_direction,
+                sizeof(g_pending_local_fire_packet.final_direction));
+            g_pending_local_fire_packet.flags |= coop::kFireFlagFinalDirection;
+        }
+        send_prepared_fire_packet(g_pending_local_fire_packet);
+        g_pending_local_fire_packet_active = false;
+    }
+
+    if (!local_sender_record && !g_dll_inert && g_state_net.enabled &&
+        out_record != nullptr &&
+        readable_bytes(out_record) >=
+            kProjectileLaunchRecordDirectionOffset + sizeof(float) * 4) {
+        void* const puppet = retained_player_object(1);
+        const std::uint32_t receiver_art =
+            puppet != nullptr ? puppet_active_weapon_art_id(puppet) : 0;
+        PeerFireDirectionCapture capture{};
+        bool apply = false;
+        AcquireSRWLockExclusive(&g_peer_fire_direction_lock);
+        const ULONGLONG now = GetTickCount64();
+        if (g_peer_fire_direction.armed_ms != 0 &&
+            now - g_peer_fire_direction.armed_ms <= 500 &&
+            fire_direction_art_matches(
+                receiver_art, g_peer_fire_direction.weapon_art_id) &&
+            finite_fire_direction_capture(g_peer_fire_direction)) {
+            capture = g_peer_fire_direction;
+            g_peer_fire_direction.armed_ms = 0;
+            apply = true;
+        } else if (g_peer_fire_direction.armed_ms != 0 &&
+                   now - g_peer_fire_direction.armed_ms > 500) {
+            g_peer_fire_direction.armed_ms = 0;
+        }
+        ReleaseSRWLockExclusive(&g_peer_fire_direction_lock);
+        if (apply) {
+            std::memcpy(
+                static_cast<std::byte*>(out_record) +
+                    kProjectileLaunchRecordDirectionOffset,
+                capture.final_direction, sizeof(capture.final_direction));
+            static std::atomic<bool> first_apply_logged{false};
+            if (!first_apply_logged.exchange(true, std::memory_order_acq_rel)) {
+                char line[256]{};
+                std::snprintf(
+                    line, sizeof(line),
+                    "FIRE-FINAL-DIRECTION-APPLY seq=%u dir=(%.4f,%.4f,%.4f)",
+                    capture.sequence, capture.final_direction[0],
+                    capture.final_direction[1], capture.final_direction[2]);
+                boot_log_line(line);
+            }
+        }
+    }
+    return result;
 }
 
 // SEH-isolated replay of PlayerFireController::Fire (no C++ unwinding objects).
@@ -16758,8 +17407,22 @@ void apply_queued_fire_events(void* puppet) {
         }
     }
 
-    // Button fallback when native replay is disabled or fails. Direction comes
-    // from the caller-scoped pose-seed relay; do not mutate root facing here.
+    // Button fallback keeps all receiver-local muzzle/origin/handle state. The
+    // exact sender post-spread direction is consumed once at launch record +0x30.
+    if ((packet.flags & coop::kFireFlagFinalDirection) != 0) {
+        PeerFireDirectionCapture direction_capture{};
+        std::memcpy(
+            direction_capture.final_direction, packet.final_direction,
+            sizeof(direction_capture.final_direction));
+        direction_capture.weapon_art_id = packet.weapon_art_id;
+        direction_capture.sequence = packet.sequence;
+        direction_capture.armed_ms = GetTickCount64();
+        if (finite_fire_direction_capture(direction_capture)) {
+            AcquireSRWLockExclusive(&g_peer_fire_direction_lock);
+            g_peer_fire_direction = direction_capture;
+            ReleaseSRWLockExclusive(&g_peer_fire_direction_lock);
+        }
+    }
     constexpr std::uint64_t kFireOnlyMask = kJoypadFireButtonMask;
     const std::uint64_t fire_pulse = kFireOnlyMask;
     g_state_net.pending_button_presses.fetch_or(fire_pulse, std::memory_order_release);
@@ -16812,6 +17475,7 @@ void __fastcall hooked_player_fire(
         ? *reinterpret_cast<void**>(
               static_cast<std::byte*>(controller) + kPlayerFireControllerOwnerOffset)
         : nullptr;
+    bool local_fire_packet_prepared = false;
     if (!g_net_role_b && player == retained_player_object(0)) {
         if (g_player_fire_controller_offset < 0) {
             g_player_fire_controller_offset =
@@ -16821,7 +17485,11 @@ void __fastcall hooked_player_fire(
                  << g_player_fire_controller_offset << std::dec;
             log_line(line.str().c_str());
         }
-        send_fire_packet(controller, fire_args, weapon, scalar);
+        g_pending_local_fire_packet_active = false;
+        local_fire_packet_prepared = prepare_fire_packet(
+            controller, fire_args, weapon, scalar,
+            g_pending_local_fire_packet);
+        g_pending_local_fire_packet_active = local_fire_packet_prepared;
     }
     const bool puppet_fire =
         g_puppet_relay_pose_seed && g_state_net.enabled &&
@@ -16834,6 +17502,12 @@ void __fastcall hooked_player_fire(
         apply_peer_pose_seed_to_player_aim_fields(player);
     }
     g_original_player_fire(controller, fire_args, weapon, scalar);
+    if (local_fire_packet_prepared && g_pending_local_fire_packet_active) {
+        // A non-projectile fire variant did not reach 0x14151B72B. Preserve the
+        // event but leave the final-direction flag clear.
+        send_prepared_fire_packet(g_pending_local_fire_packet);
+        g_pending_local_fire_packet_active = false;
+    }
     if (puppet_fire) {
         g_puppet_aim_ray_override = false;
         g_pose_seed_fire_only_override = false;
@@ -24017,7 +24691,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-16do (smooth exact FgAnim world quaternion)");
+        "TLL hook DLL init 2026-07-16dp (aim pitch, foot turn, final shot vector)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -24056,6 +24730,8 @@ DWORD WINAPI install_hook(void*) {
         install_player_aim_blend_target_callsite_relay();
         install_player_aim_world_basis_relay();
         install_player_aim_blend_tick_probe();
+        install_native_aim_pitch_relay();
+        install_native_aim_foot_turn_relays();
         if (g_enable_puppet_fganim_world_aim_turn) {
             install_fganim_world_aim_turn_callsite_relay();
         }
@@ -24088,6 +24764,7 @@ DWORD WINAPI install_hook(void*) {
     }
     install_give_weapon_diagnostic();
     install_build_fire_args_gate();
+    install_projectile_launch_record_direction_relay();
     // install_aim_target_gate();  // REVERTED: GetTargetPointFromReticle builds
     // its frame from entry rsp (mov rax,rsp; lea rbp,[rax-0x78]); a call-based
     // trampoline shifts rsp by 8 -> frame misaligned -> instant crash on ADS.

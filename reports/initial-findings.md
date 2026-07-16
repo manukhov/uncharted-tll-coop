@@ -28211,3 +28211,23 @@ boundary itself.
   in a direction completely different from the reticle. The reticle target and
   pose-seed resolver substitutions are not the final projectile-direction owner;
   continue below fire-argument construction into weapon/projectile launch data.
+
+### 2026-07-16 STATIC: native pitch/feet channels and final projectile record
+
+- `0x140CB41F0` publishes post-blend vertical channels through `0x140CAF470`:
+  active-state `up=+0x188`, `down=+0x18C`, channel indices `base+4/base+6`.
+- `0x140E90590` owns stationary foot states through writer `0x140E8FD00` and
+  selector `0x140E8F720`; authored states 3/4 require `controller+0x150` and
+  active-state `+0xD4`, not FgAnimData `+0xD4`.
+- FireArgs resolver seed layout is corrected to `+0x60` (quat `+0x70`). More
+  importantly, `ProcessWeapon::vftable 0x142A9BF48 +0x870 = 0x1415182E0`
+  only copies FireArgs to `ProcessWeapon+0xB00`. Downstream `0x141518FC0` and
+  projectile virtual `+0x920 = 0x141519D30` overwrite `FireArgs+0x10` and apply
+  spread. The direct callsite `0x14151B72B -> 0x141520750` then writes the
+  post-spread `R9` direction to launch record `+0x30`; both instant-projectile
+  tracer and collision consume that field. Intermediate FireArgs and separate
+  tracer-owner hypotheses are rejected.
+- Build v10 plus FirePacket v3 relays these three independent native contracts,
+  replacing only receiver launch-record `+0x30`. Evidence,
+  competitors and the pre-runtime prediction are in
+  `reports/aim_pitch_foot_fire_owner_20260716.md`.

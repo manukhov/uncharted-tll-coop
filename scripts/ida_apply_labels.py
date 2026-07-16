@@ -95,6 +95,12 @@ FUNCTIONS = {
         "PlayerAimController vtable slot +0x58. Converts world basis vectors, "
         "then dispatches slot +0x50 to compute the directional aim-additive weights.",
     ),
+    0x140CAF470: (
+        "PlayerAimController_CommitNamedAimChannel",
+        "Commits one named aim-add float channel, including zero/clear semantics, "
+        "generation tracking and dirty publication. Called by the directional "
+        "publisher for left/right/down/up in that order.",
+    ),
     0x140CAF040: (
         "PlayerAimController_ApplyBodyBasisAim",
         "PlayerAimController vtable slot +0x60. Builds the remaining body basis "
@@ -7208,7 +7214,7 @@ FUNCTIONS = {
         "GunMoveController_SelectAimIdleTurnState",
         "Consumes GunMoveController+0x140/+0x150/+0x160 and current child state. "
         "Non-zero movement returns states 0/1. At zero movement, authored move "
-        "settings+0xF4 and active FgAnimData yaw-rate +0xD4 > 0.1 gate turn "
+        "settings+0xF4 and active anim-state yaw-rate +0xD4 > 0.1 gate turn "
         "continuation states 3/4; otherwise it returns aim-idle state 2.",
     ),
     0x140E8FD00: (
@@ -7216,14 +7222,15 @@ FUNCTIONS = {
         "Reads GunMoveController+0x150, computes and smooths target yaw against the "
         "owner Player runtime world basis, writes the yaw quaternion through the "
         "Player+0x100 transform helper, commits via runtime vtable +0x208, and "
-        "publishes absolute normalized yaw rate to active FgAnimData+0xD4.",
+        "publishes absolute normalized yaw rate to active anim-state+0xD4. "
+        "That state is [[Player+0x1A0]+0x58]+0x10, not Player+0x1A8.",
     ),
     0x140E90590: (
         "GunMoveController_UpdateActionState",
         "GunMoveController vtable +0x50. Calls the turn-yaw writer for active turn "
         "states except 2/103, selects the next state via 0x140E8F720, and builds "
         "the authored child action via GunMoveController_BuildActionState. The "
-        "writer-before-selector order makes FgAnimData+0xD4 turn hysteresis, not "
+        "writer-before-selector order makes active-state+0xD4 turn hysteresis, not "
         "a proven cold aim-idle initiator.",
     ),
     0x140EF7890: (
@@ -7232,6 +7239,30 @@ FUNCTIONS = {
         "setting id, and returns its 440-byte entry from the normal or Chloe "
         "player-movement-anim-list. GunMove stationary selection reads authored "
         "turn-enable byte +0xF4 from this entry.",
+    ),
+    0x1415182E0: (
+        "ProcessWeapon_PrepareFireFromArgs",
+        "ProcessWeapon vtable +0x870. Copies the 0xA0-byte FireArgs payload to "
+        "ProcessWeapon+0xB00. It does not own final projectile direction; "
+        "downstream emission overwrites FireArgs+0x10 and applies spread.",
+    ),
+    0x141518FC0: (
+        "ProcessWeapon_BuildAndDispatchProjectile",
+        "Consumes ProcessWeapon's FireArgs copy, may overwrite direction at +0x10, "
+        "resolves the alternate per-screen pose branch, and dispatches projectile "
+        "emission through ProcessWeapon vtable +0x920.",
+    ),
+    0x141519D30: (
+        "ProcessWeapon_ProjectileEmission",
+        "ProcessWeapon vtable +0x920. Performs the late retained-player direction "
+        "rewrite, normalization and spread, then builds the instant/projectile "
+        "launch records consumed by tracer and collision.",
+    ),
+    0x141520750: (
+        "BuildProjectileLaunchRecord",
+        "Builds the common projectile launch record: receiver-local origin R8 is "
+        "stored at +0x20 and post-spread direction R9 at +0x30/+0x40. The caller "
+        "later replaces +0x40; instant projectile simulation consumes +0x30.",
     ),
     0x1416A5790: (
         "Player_IsCurrentActionStateHash",

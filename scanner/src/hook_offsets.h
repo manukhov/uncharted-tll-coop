@@ -69,8 +69,13 @@ constexpr std::size_t kPlayerAnimHubChildOffset = 0x58;
 constexpr std::size_t kPlayerAnimActiveStateOffset = 0x10;
 constexpr std::size_t kAnimStateAimAddLeftOffset = 0x190;
 constexpr std::size_t kAnimStateAimAddRightOffset = 0x194;
-constexpr std::size_t kAnimStateAimAddDownOffset = 0x188;
-constexpr std::size_t kAnimStateAimAddUpOffset = 0x18C;
+constexpr std::size_t kAnimStateAimAddUpOffset = 0x188;
+constexpr std::size_t kAnimStateAimAddDownOffset = 0x18C;
+constexpr std::size_t kAnimStateTurnYawRateOffset = 0xD4;
+constexpr std::uintptr_t kPlayerAimPublishWeightsCallsiteRva = 0xCB4176;
+constexpr std::uintptr_t kPlayerAimPublishWeightsRva = 0xCB41F0;
+constexpr std::uintptr_t kPlayerAimCommitNamedChannelRva = 0xCAF470;
+constexpr std::uintptr_t kPlayerAimResolveBaseStateRva = 0x10D5D40;
 constexpr std::size_t kFgAnimDataFlagsOffset = 0;
 constexpr std::size_t kFgAnimDataStateOffset = 4;
 constexpr std::size_t kFgAnimDataUpperStateOwnerOffset = 0x10;
@@ -171,10 +176,15 @@ constexpr std::size_t kPlayerVelocityOffset = 0x260;
 constexpr std::size_t kPlayerVelocityMirrorOffset = 0x270;
 constexpr std::size_t kReferenceTransformOffset = 0x100;
 constexpr std::size_t kCameraRotationOffset = 0x1B0;
-// PlayerFireController::FireArgs pose-seed block written by BuildFireArgs (+0x100).
-constexpr std::size_t kFireArgsPoseSeedOffset = 0x100;
-// PLAYER-FIRE runtime dumps: aim orientation quat at +0x6C (indices 27..30).
-constexpr std::size_t kFireArgsAimQuatOffset = 0x6C;
+// BuildFireArgs stack dataflow: FireArgs starts at var_520 and the 32-byte
+// resolver seed is copied to var_4C0, therefore seed=+0x60 and quat=+0x70.
+constexpr std::size_t kFireArgsPoseSeedOffset = 0x60;
+constexpr std::size_t kFireArgsAimQuatOffset = 0x70;
+constexpr std::size_t kFireArgsTargetVectorOffset = 0x00;
+constexpr std::size_t kFireArgsDirectionVectorOffset = 0x10;
+constexpr std::uintptr_t kBuildProjectileLaunchRecordRva = 0x1520750;
+constexpr std::uintptr_t kBuildProjectileLaunchRecordCallsiteRva = 0x151B72B;
+constexpr std::size_t kProjectileLaunchRecordDirectionOffset = 0x30;
 // CameraManager_GetBlendedCameraTransform out buffer: 4x4 matrix at +0x350.
 constexpr std::size_t kCameraOutMatrixOffset = 0x350;
 // Route-entity screen index field read inside GetBlendedCameraTransform.
@@ -400,6 +410,11 @@ constexpr std::uintptr_t kGunMoveControllerUpdateBuildActionStateCallsiteRva =
     0x0E9063B;
 constexpr std::size_t kGunMoveControllerOwnerOffset = 0x108;
 constexpr std::size_t kGunMoveControllerTurnDirectionOffset = 0x150;
+constexpr std::size_t kGunMoveControllerMoveMagnitudeOffset = 0x160;
+constexpr std::uintptr_t kGunMoveUpdateTurnYawCallsiteRva = 0xE90605;
+constexpr std::uintptr_t kGunMoveSelectAimIdleTurnCallsiteRva = 0xE9060F;
+constexpr std::uintptr_t kGunMoveUpdateTurnYawRva = 0xE8FD00;
+constexpr std::uintptr_t kGunMoveSelectAimIdleTurnRva = 0xE8F720;
 // Ground GunMoveShield call to Player_CheckAimActionEligibility. A callsite
 // relay can conditionally admit only the slot-1 puppet while preserving the
 // original function and all downstream weapon-specific aim arguments.

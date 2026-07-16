@@ -25,7 +25,7 @@ struct InputPacket {
 // One-shot gameplay actions need a separate reliable ordered event stream.
 constexpr std::uint16_t kStatePort = 31338;
 constexpr std::uint32_t kStatePacketMagic = 0x53504F43;  // "COPS"
-constexpr std::uint16_t kStatePacketVersion = 9;
+constexpr std::uint16_t kStatePacketVersion = 10;
 
 // StatePacket.flags extension bits (v7+):
 // 0x0100 — camera_quat mirrors sender CameraManager(0) @+0x1B0.
@@ -47,6 +47,10 @@ constexpr std::uint16_t kStateFlagPeerCoverEnterPulse = 0x1000;
 // FgAnimData_PublishWorldTransform input. The receiver substitutes it at the same
 // puppet publication boundary, avoiding camera-axis and local-root conversion.
 constexpr std::uint16_t kStateFlagFgAnimWorldQuat = 0x2000;
+// 0x4000 (v10) - post-blend native aim-add up/down channel values.
+constexpr std::uint16_t kStateFlagAimPitch = 0x4000;
+// 0x8000 (v10) - native GunMove stationary turn selector inputs/results.
+constexpr std::uint16_t kStateFlagAimFootTurn = 0x8000;
 
 // Contiguous native NetSnapshot weapon region [0x3f4, 0x504). It contains the
 // eight inventory ids, per-slot state, selected weapon classes and the four
@@ -83,10 +87,19 @@ struct StatePacket {
     std::uint8_t weapon_selected_mode = 0;
     std::uint16_t held_weapon_reserved = 0;
     std::uint8_t weapon_snapshot[kWeaponSnapshotBytes]{};
+    // v10 extension. Keeping it at the end preserves the complete v9 prefix.
+    float aim_pitch_up = 0.0F;
+    float aim_pitch_down = 0.0F;
+    float gun_move_turn_direction[4]{};
+    float anim_turn_yaw_rate = 0.0F;
+    std::int16_t gun_move_current_child = -1;
+    std::int16_t gun_move_selected_child = -1;
 };
 
-static_assert(sizeof(StatePacket) == 472);
+static_assert(sizeof(StatePacket) == 504);
 static_assert(offsetof(StatePacket, fganim_world_quat) == 144);
+static_assert(offsetof(StatePacket, aim_pitch_up) == 472);
+static_assert(offsetof(StatePacket, gun_move_turn_direction) == 480);
 
 // Phase 3 (host-authoritative world sync): the HOST (role A) enumerates the
 // CharacterManager, picks out enemy NPCs, and sends their transforms; the CLIENT
@@ -179,13 +192,14 @@ struct WeaponGivePacket {
 // One-shot fire relay: local PlayerFireController::Fire captured on the sender
 // and replayed on the remote retained Player via the same native entry point.
 constexpr std::uint32_t kFirePacketMagic = 0x45524946;  // "FIRE"
-constexpr std::uint16_t kFirePacketVersion = 2;
+constexpr std::uint16_t kFirePacketVersion = 3;
+constexpr std::uint16_t kFireFlagFinalDirection = 0x0001;
 constexpr std::size_t kFireArgsBytes = 0x100;
 
 struct FirePacket {
     std::uint32_t magic = kFirePacketMagic;
     std::uint16_t version = kFirePacketVersion;
-    std::uint16_t reserved = 0;
+    std::uint16_t flags = 0;
     std::uint32_t sequence = 0;
     // Sender Player -> PlayerFireController byte offset at fire time (Chloe 0x15cf30,
     // Nadine 0x15adb0). Zero on version-1 packets => receiver uses known fallbacks.
@@ -193,7 +207,12 @@ struct FirePacket {
     std::uint32_t weapon_art_id = 0;  // Weapon+0x860 on the sender
     double scalar = 0.0;
     std::uint8_t fire_args[kFireArgsBytes]{};
+    // v3: exact sender post-spread direction consumed by projectile record +0x30.
+    float final_direction[4]{};
 };
+
+static_assert(offsetof(FirePacket, final_direction) == 288);
+static_assert(sizeof(FirePacket) == 304);
 
 // Native NetEventEmitGrenade payload relay. The stock event serializer covers
 // bytes +0x18..+0xB5 of the 0xC0-byte event; these fields are POD and its Execute

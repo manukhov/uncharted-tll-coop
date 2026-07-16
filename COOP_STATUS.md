@@ -3107,6 +3107,19 @@ reticle. Both seed substitutions are therefore delivered but rejected as the
 final projectile-direction owner. Trace fire-argument/projectile launch data next;
 do not alter render yaw to compensate.
 
+Build v10 is ready for the next runtime discriminator. It appends exact native
+pitch values and stationary GunMove selector inputs to the v9 packet prefix,
+corrects reversed up/down active-state offsets, and pairs the foot selector with
+writer suppression. Static fire tracing resolves
+`ProcessWeapon::vtable+0x870 -> 0x1415182E0 -> 0x141518FC0`, but the latter
+overwrites FireArgs `+0x10` and applies spread. The final common boundary is
+direct callsite `0x14151B72B -> 0x141520750`, which writes post-spread `R9` to
+launch record `+0x30`; tracer and collision both consume that field. FirePacket
+v3 captures there and substitutes only receiver `record+0x30`, preserving its
+local origin and muzzle. Do not re-enable direct PlayerFireController::Fire
+replay. Full evidence and the
+written prediction are in `reports/aim_pitch_foot_fire_owner_20260716.md`.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three
