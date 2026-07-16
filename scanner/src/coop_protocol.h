@@ -25,7 +25,7 @@ struct InputPacket {
 // One-shot gameplay actions need a separate reliable ordered event stream.
 constexpr std::uint16_t kStatePort = 31338;
 constexpr std::uint32_t kStatePacketMagic = 0x53504F43;  // "COPS"
-constexpr std::uint16_t kStatePacketVersion = 8;
+constexpr std::uint16_t kStatePacketVersion = 9;
 
 // StatePacket.flags extension bits (v7+):
 // 0x0100 — camera_quat mirrors sender CameraManager(0) @+0x1B0.
@@ -43,6 +43,10 @@ constexpr std::uint16_t kStateFlagPeerFreeLook = 0x0400;
 constexpr std::uint16_t kStateFlagPeerInCover = 0x0800;
 // 0x1000 — one-shot cover-enter command edge (not try-enter-cover approach).
 constexpr std::uint16_t kStateFlagPeerCoverEnterPulse = 0x1000;
+// 0x2000 (v9) - exact world quaternion captured from the sender local Player's
+// FgAnimData_PublishWorldTransform input. The receiver substitutes it at the same
+// puppet publication boundary, avoiding camera-axis and local-root conversion.
+constexpr std::uint16_t kStateFlagFgAnimWorldQuat = 0x2000;
 
 // Contiguous native NetSnapshot weapon region [0x3f4, 0x504). It contains the
 // eight inventory ids, per-slot state, selected weapon classes and the four
@@ -64,6 +68,7 @@ struct StatePacket {
     float look_stick[2]{};            // resolved slot-0 right stick, block +0x08/+0x0C
     float camera_quat[4]{};           // sender gameplay camera rotation (v7, flag 0x100)
     float pose_seed[8]{};             // v8 flag 0x200: screen-0 pose seed pos[4]+quat[4]
+    float fganim_world_quat[4]{};      // v9 flag 0x2000: exact FgAnim world quat
     std::uint64_t input_buttons = 0;  // complete resolved button field, block +0x518
     std::uint64_t buttons_pressed = 0;
     std::uint64_t buttons_released = 0;

@@ -3069,6 +3069,19 @@ Bounded boot markers distinguish early target delivery from the native puppet fi
 resolver path. Evidence, competitors and prediction:
 `reports/player_aim_initial_ray_latch_20260715.md`.
 
+Build dm is runtime-rejected as the visual turn fix. PID 18764 logged both
+`AIM-TARGET-EARLY ... poseReady=0` and `AIM-FIRE-SEED`, but the puppet still turns
+through a wrong/jittered heading and returns to its original heading on RMB-up.
+This confirms target/fire delivery and exposes the ADS-only FgAnim publication
+lifetime as the return cause.
+
+Build dn will relay the local player's exact quaternion from
+`FgAnimData_PublishWorldTransform 0x1418C55D0` in StatePacket v9 and apply it at
+the same puppet publication boundary while packets are fresh, including after ADS
+release. It removes camera-axis guessing and performs no Player root, derived
+transform or movement writes. Full evidence and prediction are appended to
+`reports/player_aim_initial_ray_latch_20260715.md`.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

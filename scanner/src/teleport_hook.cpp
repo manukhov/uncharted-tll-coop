@@ -108,7 +108,11 @@ using ResolveUpperActorRecordFunction = void*(__fastcall*)(std::uint32_t);
 
 UpdateFunction g_original_update = nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
+std::atomic<void*> g_local_fganim_data{nullptr};
 std::atomic<void*> g_puppet_fganim_data{nullptr};
+std::array<std::atomic<std::uint32_t>, 4> g_local_fganim_quat_bits{};
+std::atomic<std::uint32_t> g_local_fganim_quat_sequence{0};
+std::atomic<bool> g_local_fganim_quat_valid{false};
 std::atomic<bool> g_puppet_fganim_world_turn_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_blended_seen{false};
@@ -8142,11 +8146,63 @@ bool install_gun_move_action_basis_snapshot_callsite() {
     return true;
 }
 
+void publish_local_fganim_world_quat(const float quat[4]) {
+    if (!valid_network_orientation(quat)) {
+        return;
+    }
+    std::uint32_t sequence =
+        g_local_fganim_quat_sequence.load(std::memory_order_acquire);
+    if ((sequence & 1U) != 0 ||
+        !g_local_fganim_quat_sequence.compare_exchange_strong(
+            sequence, sequence + 1, std::memory_order_acq_rel)) {
+        return;
+    }
+    for (std::size_t i = 0; i < 4; ++i) {
+        std::uint32_t bits = 0;
+        std::memcpy(&bits, quat + i, sizeof(bits));
+        g_local_fganim_quat_bits[i].store(bits, std::memory_order_relaxed);
+    }
+    g_local_fganim_quat_valid.store(true, std::memory_order_release);
+    g_local_fganim_quat_sequence.store(sequence + 2, std::memory_order_release);
+}
+
+bool copy_local_fganim_world_quat(float out[4]) {
+    if (out == nullptr ||
+        !g_local_fganim_quat_valid.load(std::memory_order_acquire)) {
+        return false;
+    }
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        const std::uint32_t before =
+            g_local_fganim_quat_sequence.load(std::memory_order_acquire);
+        if ((before & 1U) != 0) {
+            continue;
+        }
+        for (std::size_t i = 0; i < 4; ++i) {
+            const std::uint32_t bits =
+                g_local_fganim_quat_bits[i].load(std::memory_order_relaxed);
+            std::memcpy(out + i, &bits, sizeof(bits));
+        }
+        const std::uint32_t after =
+            g_local_fganim_quat_sequence.load(std::memory_order_acquire);
+        if (before == after && (after & 1U) == 0 &&
+            valid_network_orientation(out)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::int64_t __fastcall hooked_fganim_publish_world_transform(
     void* fg, const float* transform, std::uint8_t publish_current) {
     const auto native = g_fganim_publish_world_transform;
     if (native == nullptr) {
         return 0;
+    }
+
+    const void* const local_fg =
+        g_local_fganim_data.load(std::memory_order_acquire);
+    if (fg != nullptr && fg == local_fg && transform != nullptr) {
+        publish_local_fganim_world_quat(transform + 4);
     }
 
     const float* selected_transform = transform;
@@ -8160,12 +8216,41 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
     static bool smoothed_yaw_valid = false;
     static float smoothed_yaw = 0.0F;
     static ULONGLONG smoothed_yaw_ms = 0;
-    bool applied_aim_yaw = false;
+    bool applied_world_quat = false;
     if (g_enable_puppet_fganim_world_aim_turn && fg != nullptr &&
         fg == puppet_fg && transform != nullptr && received != 0 &&
         now - received <= 250) {
         coop::StatePacket peer{};
-        if (copy_peer_state_snapshot(peer) && peer_packet_aim_active(peer)) {
+        if (copy_peer_state_snapshot(peer) &&
+            (peer.flags & coop::kStateFlagFgAnimWorldQuat) != 0 &&
+            valid_network_orientation(peer.fganim_world_quat)) {
+            std::memcpy(relayed_transform, transform, sizeof(relayed_transform));
+            std::memcpy(
+                relayed_transform + 4,
+                peer.fganim_world_quat,
+                sizeof(peer.fganim_world_quat));
+            selected_transform = relayed_transform;
+            applied_world_quat = true;
+            if (peer_packet_aim_active(peer) &&
+                puppet_aim_action_relay_enabled_for_peer(peer)) {
+                g_puppet_render_aim_yaw_ready.store(
+                    true, std::memory_order_release);
+            }
+            static std::atomic<bool> first_world_apply_logged{false};
+            if (!first_world_apply_logged.exchange(
+                    true, std::memory_order_acq_rel)) {
+                const float stock_peer_dot = std::fabs(
+                    transform[4] * peer.fganim_world_quat[0] +
+                    transform[5] * peer.fganim_world_quat[1] +
+                    transform[6] * peer.fganim_world_quat[2] +
+                    transform[7] * peer.fganim_world_quat[3]);
+                std::ostringstream line;
+                line << "FGANIM-WORLD-APPLY stockPeerDot=" << stock_peer_dot
+                     << " aim=" << (peer_packet_aim_active(peer) ? 1 : 0)
+                     << " seq=" << peer.sequence;
+                boot_log_line(line.str().c_str());
+            }
+        } else if (peer_packet_aim_active(peer)) {
             const float* camera_quat = nullptr;
             if ((peer.flags & coop::kStateFlagPoseSeed) != 0 &&
                 valid_network_orientation(peer.pose_seed + 4)) {
@@ -8231,7 +8316,7 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
                         std::cos(smoothed_yaw),
                         relayed_transform + 4);
                     selected_transform = relayed_transform;
-                    applied_aim_yaw = true;
+                    applied_world_quat = true;
                     if (!g_puppet_fganim_world_turn_seen.exchange(
                             true, std::memory_order_relaxed)) {
                         boot_log_line(
@@ -8241,7 +8326,7 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
             }
         }
     }
-    if (fg == puppet_fg && !applied_aim_yaw) {
+    if (fg == puppet_fg && !applied_world_quat) {
         smoothed_fg = nullptr;
         smoothed_yaw_valid = false;
         smoothed_yaw_ms = 0;
@@ -12335,6 +12420,18 @@ void send_local_player_state() {
     }
     const auto* pos = reinterpret_cast<const float*>(static_cast<std::byte*>(local_obj) + kWorldPositionOffset);
     const auto* quat = reinterpret_cast<const float*>(static_cast<std::byte*>(local_obj) + kPlayerQuatOffset);
+    void* local_fg = nullptr;
+    if (readable_bytes(
+            static_cast<std::byte*>(local_obj) + kPlayerFgAnimDataOffset) >=
+        sizeof(void*)) {
+        local_fg = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(local_obj) + kPlayerFgAnimDataOffset);
+    }
+    void* const previous_local_fg =
+        g_local_fganim_data.exchange(local_fg, std::memory_order_acq_rel);
+    if (previous_local_fg != local_fg) {
+        g_local_fganim_quat_valid.store(false, std::memory_order_release);
+    }
     if (!valid_network_position(pos)) {
         static std::atomic<bool> invalid_local_position_logged{false};
         if (!invalid_local_position_logged.exchange(true, std::memory_order_relaxed)) {
@@ -12348,6 +12445,23 @@ void send_local_player_state() {
     pkt.flags = 1;
     std::memcpy(pkt.pos, pos, sizeof(pkt.pos));
     std::memcpy(pkt.quat, quat, sizeof(pkt.quat));
+    float local_fganim_quat[4]{};
+    if (copy_local_fganim_world_quat(local_fganim_quat)) {
+        std::memcpy(
+            pkt.fganim_world_quat,
+            local_fganim_quat,
+            sizeof(pkt.fganim_world_quat));
+        pkt.flags |= coop::kStateFlagFgAnimWorldQuat;
+        static std::atomic<bool> first_fganim_send_logged{false};
+        if (!first_fganim_send_logged.exchange(
+                true, std::memory_order_acq_rel)) {
+            std::ostringstream line;
+            line << "FGANIM-WORLD-SEND q=(" << local_fganim_quat[0] << ","
+                 << local_fganim_quat[1] << "," << local_fganim_quat[2] << ","
+                 << local_fganim_quat[3] << ")";
+            boot_log_line(line.str().c_str());
+        }
+    }
     // Player+0x260 reads 0 through the retained proxy (it is an anim OUTPUT, not a
     // live field on this object), so derive world velocity from the POSITION DELTA.
     // This is the signal the remote clone's locomotion uses to blend walk/run.
@@ -23794,7 +23908,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-15dm (open reticle target before pose gate)");
+        "TLL hook DLL init 2026-07-16dn (relay exact FgAnim world quaternion)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

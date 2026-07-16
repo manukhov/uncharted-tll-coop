@@ -28165,3 +28165,22 @@ boundary itself.
   strict peer ADS packet. The full pose-output site `0x1410E934B` retains staged
   admission; the broad idx-1 override remains parked. Full alternatives and
   prediction: `reports/player_aim_initial_ray_latch_20260715.md`.
+
+### 2026-07-16 build dm runtime: seed delivery confirmed, visual lifetime rejected
+
+- **CONFIRMED delivery:** PID 18764 logged
+  `AIM-TARGET-EARLY idx=1 site=0xcb17d6 ... poseReady=0` and
+  `AIM-FIRE-SEED idx=1 site=0xe2bfff`. The early reticle and native fire resolver
+  paths both received peer seed.
+- **REJECTED visual cause:** behavior did not improve. The puppet still jerks and
+  turns before aiming correctly, then returns to its original heading on RMB-up.
+- **STATIC lifetime cause:** `hooked_fganim_publish_world_transform` owns visible
+  yaw only while peer ADS and staged action admission are active; its first
+  non-applied publication clears session state and publishes the old stock
+  transform. The release return is therefore expected from the current code.
+- **Build dn STATIC:** StatePacket v9 relays the sender local Player's exact world
+  quaternion captured at `0x141A8FC00 -> FgAnimData_PublishWorldTransform
+  0x1418C55D0`, and receiver applies it at the same puppet boundary while fresh.
+  This replaces camera-axis derivation and ADS-only lifetime without touching the
+  previously rejected Player root/locomotion path. Prediction and alternatives:
+  `reports/player_aim_initial_ray_latch_20260715.md`.
