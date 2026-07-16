@@ -28184,3 +28184,17 @@ boundary itself.
   This replaces camera-axis derivation and ADS-only lifetime without touching the
   previously rejected Player root/locomotion path. Prediction and alternatives:
   `reports/player_aim_initial_ray_latch_20260715.md`.
+
+### 2026-07-16 build dn runtime: exact FgAnim world relay confirmed
+
+- **CONFIRMED delivery:** PIDs `2688` and `8736` both logged
+  `FGANIM-WORLD-SEND`; both receivers reached `FGANIM-WORLD-APPLY` with v9
+  StatePacket size `472`.
+- **CONFIRMED horizontal owner:** the user reported materially improved aiming.
+  The sender's exact publication at `0x141A8FC00 -> 0x1418C55D0` therefore owns
+  the visible horizontal heading of the puppet at the matching receiver boundary.
+- **OPEN split failures:** the remaining abrupt turn, planted turn-in-place feet,
+  and absent vertical response are not evidence against that owner. They select,
+  respectively, packet/render interpolation, the native locomotion child state,
+  and a downstream vertical additive channel. Broad Player-root and screen-camera
+  writers remain rejected.

@@ -3082,6 +3082,14 @@ release. It removes camera-axis guessing and performs no Player root, derived
 transform or movement writes. Full evidence and prediction are appended to
 `reports/player_aim_initial_ray_latch_20260715.md`.
 
+Build dn is runtime-confirmed as the visible horizontal owner. Fresh PIDs `2688`
+and `8736` both logged `FGANIM-WORLD-SEND` and `FGANIM-WORLD-APPLY` with v9
+packets, and the user reports materially better aiming. Three independent child
+problems remain: abrupt 20 Hz/render stepping, planted feet during turn-in-place,
+and no vertical pitch. Continue those as interpolation, locomotion child-state,
+and downstream vertical-additive traces; do not return to rejected broad Player
+root or screen-camera writes.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

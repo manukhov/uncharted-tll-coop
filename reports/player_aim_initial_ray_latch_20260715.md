@@ -162,3 +162,18 @@ No sender marker rejects local FgAnim identity. Markers with unchanged world tur
 select the authored upper-body/action transition. Correct direction with visible
 20 Hz stepping confirms ownership and calls for bounded interpolation, not another
 input or root writer.
+
+## Build dn runtime: exact world owner confirmed, child channels remain
+
+Fresh PIDs `2688` and `8736` both emitted `FGANIM-WORLD-SEND`; each receiver
+reached `FGANIM-WORLD-APPLY` with StatePacket v9 (`472` bytes). The user reported
+that aiming became materially better, confirming that the symmetric publication
+owns the visible horizontal heading and removing the camera-axis derivation as the
+primary remaining fault.
+
+The result is partial. Horizontal turns are still abrupt, turn-in-place does not
+advance the feet, and vertical reticle motion remains invisible. This matches the
+three competitors left by the prediction: 20 Hz world-quaternion stepping, a
+separate authored locomotion/turn-in-place child state, and a vertical additive
+consumer downstream of the already-confirmed directional weights. Do not re-open
+Player root or broad camera writes for these symptoms.
