@@ -1010,19 +1010,40 @@ Do not reopen these as the first move:
 
 ## P0 - Remote firearm ammo and HUD ownership (2026-07-18)
 
-- [ ] Identify the authoritative current-magazine/reserve fields on the live
+- [x] Identify the authoritative current-magazine/reserve fields on the live
       weapon used by `PlayerFireController` readiness and projectile emission.
-- [ ] Trace the sender(s) of weapon icon/ammo into the process-global or per-screen
+- [x] Trace the sender(s) of weapon icon/ammo into the process-global or per-screen
       HUD state and prove why the retained puppet can publish into role B's HUD.
-- [ ] Separate three competitors before runtime: (A) receiver puppet magazine zero
+- [x] Separate three competitors before runtime: (A) receiver puppet magazine zero
       blocks native shot creation; (B) HUD count is display-only while a different
       weapon field blocks fire; (C) the FirePacket is consumed but a later visual
       path is gated by ammo.
-- [ ] Extend the wire protocol only after the field owner is proven. Candidate
+- [x] Extend the wire protocol only after the field owner is proven. FirePacket v4
       payload is selected weapon art plus magazine/reserve snapshot, applied only
       to retained puppet slot 1 and never to the local role-B player's inventory.
-- [ ] Write a falsifiable test requiring role-A/role-B ammo markers, one visible
+- [x] Write a falsifiable test requiring role-A/role-B ammo markers, one visible
       remote shot at receiver-local zero, and no mutation of role B's local ammo.
+- [ ] Run build `dw` and confirm one visible zero-baseline remote shot,
+      `ammoPost=N-1/R`, screen-1 weapon-HUD gating, and unchanged local ammo.
+
+## P0 - Remote projectile origin / muzzle offset (2026-07-18)
+
+- [ ] Trace the selected launch record's origin/endpoint fields from
+      `ProcessWeapon::SpawnProjectile` into `ProjectileBulletInstant` and compare
+      them with the firing puppet's live muzzle/hand transform.
+- [ ] Separate (A) sender world origin copied through FireArgs, (B) receiver
+      puppet muzzle resolved from the wrong hand/weapon attachment, and (C) a
+      tracer-only visual offset while collision impact is correct.
+- [ ] Before runtime, predict both tracer and impact displacement from one exact
+      origin field; do not alter the already-confirmed final direction relay.
+
+## P1 - Remote reload animation sync (2026-07-18)
+
+- [ ] Trace the Player/ProcessWeapon reload command edge and its native animation
+      controller path, including the owner/screen index and magazine transition.
+- [ ] Relay the one-shot reload action to retained puppet slot 1 without writing
+      receiver-local slot 0 ammo; let the existing ammo snapshot reconcile the
+      next shot.
 
 ## Rule
 

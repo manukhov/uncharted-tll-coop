@@ -1,0 +1,270 @@
+FUNCTION 0x1410539F0 sub_1410539F0 end=0x141054ECA
+  0x141053D9C member=0x900: lea     rax, [rbp+2540h+var_1C40]
+  0x141053E08 member=0x900: mov     edx, [rbp+rax*4+2540h+var_1C40]
+
+FUNCTION 0x14105B6E0 sub_14105B6E0 end=0x14105BEF7
+  0x14105B7A4 member=0x900: vmovaps [rsp+970h+var_78+8], xmm10
+  0x14105B994 member=0x900: vmovaps xmm10, [rsp+970h+var_78+8]
+
+FUNCTION 0x1410A4D40 PlayerWeaponController_GiveWeapon end=0x1410A6A9A
+  0x1410A66D4 member=0x900: vmovaps [rsp+960h+var_68+8], xmm8
+  0x1410A6833 member=0x900: vmovaps xmm8, [rsp+960h+var_68+8]
+
+FUNCTION 0x1410A8140 sub_1410A8140 end=0x1410A866F
+  0x1410A84BF member=0x908: mov     rcx, [r14+908h]
+
+FUNCTION 0x1410F14C0 CommitResolvedPlayerSpawn end=0x1410F183C
+  0x1410F1821 member=0x908: mov     rbx, [rsp+8E0h+arg_18]
+
+FUNCTION 0x141103830 sub_141103830 end=0x141103838
+  0x141103830 member=0x900: movsx   eax, word ptr [rcx+900h]
+
+FUNCTION 0x141103840 sub_141103840 end=0x141103848
+  0x141103840 member=0x902: movsx   eax, word ptr [rcx+902h]
+
+FUNCTION 0x141103850 sub_141103850 end=0x141103861
+  0x141103850 member=0x902: movsx   eax, word ptr [rcx+902h]
+  0x141103857 member=0x900: movsx   ecx, word ptr [rcx+900h]
+
+FUNCTION 0x141103870 sub_141103870 end=0x14110387C
+  0x141103870 member=0x900: cmp     word ptr [rcx+900h], 0
+
+FUNCTION 0x141103880 sub_141103880 end=0x14110388B
+  0x141103880 member=0x908: cmp     byte ptr [rcx+908h], 0
+
+FUNCTION 0x141280A20 sub_141280A20 end=0x141280F71
+  0x141280AD6 member=0x900: vmovaps [rsp+938h+var_38], xmm7
+  0x141280F28 member=0x900: vmovaps xmm7, [rsp+938h+var_38]
+
+FUNCTION 0x141287900 sub_141287900 end=0x1412898D4
+  0x141288090 member=0x900: vmovups [rsp+23C8h+var_1AC8], xmm0
+
+FUNCTION 0x14128EF40 sub_14128EF40 end=0x14128FAC2
+  0x14128F79D member=0x904: mov     [rbp+0C30h+var_32C], edi
+  0x14128F7B1 member=0x908: mov     [rbp+0C30h+var_328], rdi
+
+FUNCTION 0x1412DE2B0 sub_1412DE2B0 end=0x1412E0DB6
+  0x1412DFFAF member=0x900: lea     rdx, [rbp+8EF0h+var_85F0]
+
+FUNCTION 0x1412EB4B0 sub_1412EB4B0 end=0x1412EEBC0
+  0x1412ED71F member=0x900: lea     rdx, [rbp+14C0h+var_BC0]
+
+FUNCTION 0x141312040 sub_141312040 end=0x141312624
+  0x14131260F member=0x900: vmovaps xmm11, [rsp+980h+var_88+8]
+
+FUNCTION 0x141360830 sub_141360830 end=0x141361EC0
+  0x141361787 member=0x908: mov     [rbp+1610h+var_D08], 100h
+  0x1413617A0 member=0x900: mov     [rbp+1610h+var_D10], r14
+  0x1413617B4 member=0x900: lea     rcx, [rbp+1610h+var_D10]
+
+FUNCTION 0x1413DD5F0 sub_1413DD5F0 end=0x1413DD7EA
+  0x1413DD626 member=0x908: cmp     [rcx+908h], rax
+
+FUNCTION 0x1413DFE60 sub_1413DFE60 end=0x1413E24C3
+  0x1413E013B member=0x908: lea     rcx, [r12+908h]
+  0x1413E0E0A member=0x908: cmp     [r12+908h], rax
+  0x1413E0EB0 member=0x908: mov     [r12+908h], r8
+  0x1413E10E9 member=0x908: mov     [r12+908h], rdx
+  0x1413E11C4 member=0x908: lea     rcx, [r12+908h]
+  0x1413E141C member=0x908: lea     rcx, [r12+908h]
+  0x1413E1727 member=0x900: mov     [r12+900h], rax
+  0x1413E1D56 member=0x900: mov     [r12+900h], rax
+  0x1413E2014 member=0x908: cmp     [rcx+908h], rax
+  0x1413E2176 member=0x908: lea     rcx, [r12+908h]
+  0x1413E244E member=0x908: lea     rcx, [r12+908h]
+
+FUNCTION 0x1413E2950 sub_1413E2950 end=0x1413E29AC
+  0x1413E2977 member=0x908: cmp     [rbx+908h], rax
+
+FUNCTION 0x1413E6DE0 sub_1413E6DE0 end=0x1413E7C52
+  0x1413E799B member=0x900: mov     [r13+900h], rax
+
+FUNCTION 0x1413E8080 sub_1413E8080 end=0x1413EA2E1
+  0x1413E85B6 member=0x904: mov     [rbp+1C20h+var_131C], edi
+  0x1413E85D9 member=0x908: mov     [rbp+1C20h+var_1318], rdi
+
+FUNCTION 0x1413F5860 sub_1413F5860 end=0x1413F5D27
+  0x1413F5D00 member=0x900: lea     r11, [rsp+908h+var_8]
+
+FUNCTION 0x1413F9230 sub_1413F9230 end=0x1413FB081
+  0x1413F97E0 member=0x904: mov     [rbp+2700h+var_1DFC], r14
+
+FUNCTION 0x141400170 sub_141400170 end=0x141402D29
+  0x14140163B member=0x900: mov     [rsi+rdi*4+900h], eax
+  0x141401669 member=0x900: mov     [rsi+rdi*4+900h], r12d
+
+FUNCTION 0x141414050 sub_141414050 end=0x1414153A0
+  0x14141473A member=0x900: lea     rax, [rdi+900h]
+  0x141415080 member=0x900: lea     r12, [rdi+900h]
+
+FUNCTION 0x141415B40 sub_141415B40 end=0x141416F90
+  0x141415E44 member=0x900: lea     r13, [r14+900h]
+  0x141416ADF member=0x900: movsxd  rax, dword ptr [r14+rdi*4+900h]
+  0x141416B39 member=0x900: movsxd  rax, dword ptr [r14+rdi*4+900h]
+
+FUNCTION 0x141419F30 sub_141419F30 end=0x14141CD46
+  0x14141C1E5 member=0x900: mov     qword ptr [rbp+1B50h+var_1250], rax
+  0x14141C1F3 member=0x908: mov     dword ptr [rbp+1B50h+var_1250+8], eax
+  0x14141C1F9 member=0x900: vmovups xmm0, [rbp+1B50h+var_1250]
+
+FUNCTION 0x141444EB0 sub_141444EB0 end=0x1414452BB
+  0x141445129 member=0x900: mov     [rbx+900h], r9
+  0x141445130 member=0x908: mov     [rbx+908h], r9d
+
+FUNCTION 0x14149E620 sub_14149E620 end=0x14149E94B
+  0x14149E75A member=0x900: mov     [rbx+900h], edi
+  0x14149E760 member=0x904: mov     qword ptr [rbx+904h], 3F800000h
+
+FUNCTION 0x1414B1F80 sub_1414B1F80 end=0x1414B21E6
+  0x1414B2168 member=0x900: vmovups [rsp+988h+var_88], ymm1
+
+FUNCTION 0x1414B2650 sub_1414B2650 end=0x1414B4135
+  0x1414B3C1B member=0x908: and     [rsp+0AB8h+var_1B0], 0F7h
+
+FUNCTION 0x1414CC4B0 sub_1414CC4B0 end=0x1414CD410
+  0x1414CC53B member=0x900: vmovups xmmword ptr [rcx+900h], xmm0
+
+FUNCTION 0x1414CE740 sub_1414CE740 end=0x1414CF05F
+  0x1414CEABB member=0x900: vmovups xmmword ptr [rbx+900h], xmm0
+
+FUNCTION 0x1414D7670 sub_1414D7670 end=0x1414D78C7
+  0x1414D777C member=0x900: vmovups xmm1, xmmword ptr [rbx+900h]
+
+FUNCTION 0x1414F0880 sub_1414F0880 end=0x1414F141D
+  0x1414F139E member=0x900: mov     [rsp+0A08h+var_108], eax
+  0x1414F13BA member=0x904: mov     [rsp+0A08h+var_104], eax
+
+FUNCTION 0x1414F2490 sub_1414F2490 end=0x1414F3785
+  0x1414F271A member=0x900: lea     rcx, [rbp+1210h+var_910]; void *
+  0x1414F2801 member=0x904: mov     [rbp+rcx*8+1210h+var_90C], eax
+  0x1414F2808 member=0x900: mov     [rbp+rcx*8+1210h+var_910], r8d
+  0x1414F35B6 member=0x900: lea     rax, [rbp+1210h+var_910]
+  0x1414F366E member=0x900: lea     rax, [rbp+1210h+var_910]
+  0x1414F370D member=0x900: lea     rax, [rbp+1210h+var_910]
+
+FUNCTION 0x1414F3E70 sub_1414F3E70 end=0x1414F3EC4
+  0x1414F3EAF member=0x900: mov     [rdi+900h], ax
+
+FUNCTION 0x1414F3FF0 sub_1414F3FF0 end=0x1414F3FF7
+  0x1414F3FF0 member=0x900: mov     [rcx+900h], edx
+
+FUNCTION 0x1414F4000 sub_1414F4000 end=0x1414F400F
+  0x1414F4000 member=0x900: mov     eax, [rcx+900h]
+  0x1414F4008 member=0x900: mov     [rcx+900h], eax
+
+FUNCTION 0x1414F4010 sub_1414F4010 end=0x1414F4017
+  0x1414F4010 member=0x900: mov     [rcx+900h], edx
+
+FUNCTION 0x1414F4020 sub_1414F4020 end=0x1414F4027
+  0x1414F4020 member=0x900: mov     eax, [rcx+900h]
+
+FUNCTION 0x1414F4030 sub_1414F4030 end=0x1414F406D
+  0x1414F404A member=0x908: mov     [rbx+908h], rax
+  0x1414F4057 member=0x900: mov     [rbx+900h], rax
+
+FUNCTION 0x1414F40C0 sub_1414F40C0 end=0x1414F44B4
+  0x1414F447C member=0x908: vmovups xmmword ptr [rdi+908h], xmm0
+
+FUNCTION 0x1414F4540 sub_1414F4540 end=0x1414F45B2
+  0x1414F4546 member=0x908: vmovups xmm0, xmmword ptr [rcx+908h]
+
+FUNCTION 0x1414F45C0 sub_1414F45C0 end=0x1414F4CD1
+  0x1414F45EC member=0x908: mov     rcx, [r13+908h]
+  0x1414F488C member=0x908: vmovups xmm2, xmmword ptr [r13+908h]
+  0x1414F4B9C member=0x908: vmovups xmm2, xmmword ptr [r13+908h]
+
+FUNCTION 0x1414F4CE0 sub_1414F4CE0 end=0x1414F4D97
+  0x1414F4D0B member=0x908: mov     [rbx+908h], rax
+  0x1414F4D18 member=0x900: mov     [rbx+900h], rax
+  0x1414F4D6F member=0x908: mov     [rbx+908h], rax
+  0x1414F4D7C member=0x900: mov     [rbx+900h], rax
+
+FUNCTION 0x1414F92F0 sub_1414F92F0 end=0x1414F9344
+  0x1414F932F member=0x900: mov     [rdi+900h], ax
+
+FUNCTION 0x1414FAF40 sub_1414FAF40 end=0x1414FBC0E
+  0x1414FB45F member=0x908: call    qword ptr [rax+908h]
+
+FUNCTION 0x14150DBF0 sub_14150DBF0 end=0x14150E0CC
+  0x14150DC76 member=0x902: cmp     [rdi+902h], bp
+  0x14150DCA4 member=0x902: movzx   eax, word ptr [rdi+902h]
+  0x14150DCAB member=0x900: add     [rdi+900h], ax
+  0x14150DCB2 member=0x902: mov     [rdi+902h], bp
+
+FUNCTION 0x14150F640 sub_14150F640 end=0x141510590
+  0x14150FCE6 member=0x900: mov     dword ptr [r15+900h], 7FFF000Ah
+  0x14150FCF1 member=0x904: mov     dword ptr [r15+904h], 1000Ah
+  0x14150FCFC member=0x908: mov     word ptr [r15+908h], 1
+  0x14150FD0E member=0x906: mov     [r15+906h], ax
+  0x14150FD1A member=0x904: mov     [r15+904h], ax
+  0x14150FD4C member=0x906: mov     [r15+906h], ax
+
+FUNCTION 0x141517C50 sub_141517C50 end=0x141517C71
+  0x141517C64 member=0x909: mov     byte ptr [rbx+909h], 1
+
+FUNCTION 0x141517C80 sub_141517C80 end=0x141517C8B
+  0x141517C80 member=0x909: cmp     byte ptr [rcx+909h], 0
+
+FUNCTION 0x141517C90 sub_141517C90 end=0x141517CF0
+  0x141517CBF member=0x908: mov     word ptr [rbx+908h], 1
+  0x141517CCC member=0x900: mov     [rbx+900h], ax
+  0x141517CDE member=0x902: mov     [rbx+902h], ax
+
+FUNCTION 0x141517CF0 sub_141517CF0 end=0x141517D75
+  0x141517D0D member=0x900: movsx   eax, word ptr [rdi+900h]
+  0x141517D1D member=0x902: movzx   edx, word ptr [rdi+902h]
+  0x141517D38 member=0x902: mov     [rdi+902h], dx
+  0x141517D47 member=0x902: add     [rdi+902h], ax
+  0x141517D57 member=0x900: mov     [rdi+900h], r8w
+  0x141517D62 member=0x909: mov     byte ptr [rdi+909h], 0
+  0x141517D69 member=0x908: mov     [rdi+908h], al
+
+FUNCTION 0x141517D80 sub_141517D80 end=0x141517DB3
+  0x141517DA1 member=0x902: mov     [rbx+902h], di
+
+FUNCTION 0x141517DC0 sub_141517DC0 end=0x1415180B3
+  0x141517EF4 member=0x904: movsx   r15d, word ptr [rsi+904h]
+
+FUNCTION 0x1415180C0 sub_1415180C0 end=0x1415182D1
+  0x1415180D7 member=0x908: mov     word ptr [rcx+908h], 1
+  0x14151813E member=0x900: movsx   ebx, word ptr [rsi+900h]
+  0x14151816D member=0x900: mov     [rsi+900h], di
+  0x141518194 member=0x902: movsx   r15d, word ptr [rsi+902h]
+  0x141518272 member=0x900: movsx   edx, word ptr [rsi+900h]
+  0x141518292 member=0x900: movsx   eax, word ptr [rsi+900h]
+  0x1415182B7 member=0x902: mov     [rsi+902h], di
+
+FUNCTION 0x1415182E0 ProcessWeapon_PrepareFireFromArgs end=0x141518D1B
+  0x141518506 member=0x900: cmp     word ptr [rdi+900h], 1
+
+FUNCTION 0x141519D30 ProcessWeapon_ProjectileEmission end=0x14151BED6
+  0x141519F8F member=0x906: mov     [rsi+906h], ax
+  0x14151BA72 member=0x906: cmp     word ptr [rsi+906h], 1
+  0x14151BC43 member=0x906: cmp     word ptr [rsi+906h], 1
+
+FUNCTION 0x14151E0B0 sub_14151E0B0 end=0x14151E2EE
+  0x14151E0CA member=0x908: mov     byte ptr [rcx+908h], 1
+  0x14151E259 member=0x900: movsx   ecx, word ptr [rdi+900h]
+  0x14151E26B member=0x902: cmp     [rdi+902h], si
+  0x14151E280 member=0x900: movsx   r8d, word ptr [rdi+900h]
+  0x14151E296 member=0x902: sub     [rdi+902h], ax
+  0x14151E2B0 member=0x900: mov     [rdi+900h], cx
+  0x14151E2E2 member=0x902: mov     [rdi+902h], si
+
+FUNCTION 0x14151E2F0 sub_14151E2F0 end=0x14151E4F1
+  0x14151E30A member=0x908: mov     byte ptr [rcx+908h], 1
+  0x14151E499 member=0x900: movsx   eax, word ptr [rdi+900h]
+  0x14151E4AA member=0x902: movzx   ecx, word ptr [rdi+902h]
+  0x14151E4B9 member=0x902: mov     [rdi+902h], cx
+  0x14151E4CF member=0x900: mov     [rdi+900h], dx
+
+FUNCTION 0x14151E500 sub_14151E500 end=0x14151E508
+  0x14151E500 member=0x908: mov     byte ptr [rcx+908h], 1
+
+FUNCTION 0x14151E740 sub_14151E740 end=0x14151EB52
+  0x14151EB13 member=0x900: dec     word ptr [rdi+900h]
+  0x14151EB21 member=0x908: mov     [rdi+908h], r11b
+
+FUNCTION 0x14151F9E0 sub_14151F9E0 end=0x14151FBC9
+  0x14151FB9E member=0x900: call    qword ptr [rdx+900h]
+

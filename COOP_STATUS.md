@@ -3503,6 +3503,96 @@ B's displayed/puppet magazine is already zero, incoming fire may produce no visi
 shot. Treat HUD publication ownership and the puppet weapon's native fire-readiness
 ammo as separate hypotheses until their fields and consumers are statically traced.
 
+### 2026-07-18 STATIC: live firearm ammo and weapon-HUD ownership; build dw
+
+The reported zero-ammo shot loss is not a cosmetic HUD-only failure. The live
+`ProcessWeapon` owns signed `int16` magazine ammo at `+0x900` and reserve ammo at
+`+0x902`; `WeaponInfo+0x84` is only the initial give count. Independent static
+evidence converges on that layout:
+
+1. vtable `+0x848/+0x858/+0x840/+0x860` at
+   `0x141103830/0x141103840/0x141103850/0x141103870` directly return magazine,
+   reserve, their sum, and `magazine<=0`;
+2. `ProcessWeapon_InitializeAmmoFromTotal 0x141517C90`,
+   `SetMagazineAmmo 0x141517CF0`, `ReloadMagazine 0x14151E0B0` and
+   `ReloadOneRound 0x14151E2F0` write the same two fields and keep loaded-state
+   bytes `+0x908/+0x909` coherent;
+3. `ProcessWeapon_ConsumeShotAmmo 0x14151E740` decrements `+0x900` at
+   `0x14151EB13` after projectile dispatch.
+
+The original mismatch is deterministic at creation time even when it looks
+random in the HUD. The whitelist fallback `safe_give_weapon_art_to_puppet`
+builds a default `WeaponInfo` through `0x1401B7600`, which writes DWORD `-1` to
+`WeaponInfo+0x84` at `0x1401B766B`. `PlayerWeaponController_GiveWeapon
+0x1410A4D40` reads that field at `0x1410A588A`; `-1` selects the authored/random
+ammo derivation branch `0x1410A589B..0x1410A591F`, whose total is passed into
+`CreateAndAddWeapon` at `0x1410A5C3E`. Therefore the receiver puppet is born with
+an independently derived total and cannot be expected to match the sender.
+
+The decisive native gate is in
+`PlayerFireController_BuildFireArgsAndFire 0x140E2BCD0`: at `0x140E2BD2D` it
+calls ProcessWeapon vtable `+0x848` and returns before
+`PlayerFireController_Fire` when the result is `<=0`; at `0x140E2BD41` it also
+rejects vtable `+0x868`, whose concrete implementation `0x141103880` reports
+`weapon+0x908==0`. Thus competitor **A is STATIC**: a receiver puppet whose live
+magazine/loaded-state reached zero takes the dry-fire path and can suppress the
+button-replayed remote shot. Competitor B (HUD number only) is rejected for this
+symptom, and competitor C (later projectile visual gate) is unnecessary to
+explain it.
+
+The icon/count leak has a separate exact owner:
+`PlayerHudScreen_WeaponAmmoPublisher 0x14135D2B0`. It reads screen index
+`state+0xF8`, selects `g_PlayerHandleForHudPublish[2*screen]` and the per-screen
+HUD block, reads the selected weapon through vtable `+0x840` total and `+0x848`
+magazine, publishes `selected-weapon-id`, `total-ammo`, `loaded-ammo` and
+`show-weapon-hud?`, then spawns the process-global `ss-hud-weapon`. Its sole
+caller is `PlayerHud_ScreenStatePublishUpdate 0x140C91970` at `0x140C921A2`,
+passing `g_PerScreenPlayerHudState + 0x100*player.screen_index`. Existing co-op
+gates covered only the reticle publishers, so the screen-1 puppet publisher still
+overwrote the single physical viewport's weapon HUD. This is **STATIC** and has
+the same deterministic correction: skip this publisher when `state+0xF8 != 0`.
+The puppet route is explicit rather than inferred from the primary HUD entry:
+the `PlayerActiveAsyncJob` descriptor at `0x143071B70` names callback
+`0x140CA1630`, which invokes `PlayerHud_ScreenStatePublishUpdate(player)` at
+`0x140CA1655` for every active Player. The latter reads that Player's
+`player+0x4010` screen index, so retained screen 1 reaches the publisher even
+though the process also has a separate screen-0 global HUD entry.
+
+Build `dw` implements the two isolated corrections. `FirePacket` v4 appends the
+sender's pre-shot `magazine/reserve`; immediately before native replay or the
+button fallback, the receiver validates weapon art and applies the snapshot only
+to retained puppet slot 1's matching `ProcessWeapon`, including `+0x908=1` and
+`+0x909=0`. Retained slot 0 (the receiver-local role-B player) is explicitly
+excluded. Native fire remains responsible for consuming exactly one round.
+Separately, a prologue-verified detour at `0x14135D2B0` passes screen 0 through
+and skips screen 1. The Release DLL builds successfully.
+
+**Falsifiable runtime prediction for build dw:** choose different visible ammo
+counts on the two local players, let the sender's retained puppet on the receiver
+reach/show zero, then fire one ordinary pistol or rifle shot with sender pre-shot
+magazine `N>0`. Sender and receiver must log the same `ammo=N/R`; receiver must
+log `FIRE-AMMO-APPLY target!=local0 before=0/... sender=N/R`, produce one visible
+shot in the confirmed direction, and return from native fire with
+`ammoPost=N-1/R`. `WEAPON-HUD gated: screen!=0` must appear when the peer draws or
+fires, while the receiver's screen-0 weapon icon/count remains its own. Switching
+control to the receiver-local player after the shot must show its original ammo
+unchanged. Any absent shot after a successful ammo apply, `target==local0`, local
+ammo mutation, or screen-0 HUD disappearance rejects the corresponding part of
+the fix.
+
+**Runtime observation (user, 2026-07-18): PARTIAL CONFIRMATION.** After the
+ammo/HUD build the user reports that the situation is visibly better. This
+supports the correction but does not yet close it: the explicit discriminator
+for receiver-local ammo remaining unchanged after control switch was not
+reported, so the task stays open rather than being promoted to fully CONFIRMED.
+
+The same observation exposed the next ballistic defect: the remote tracer/impact
+is displaced roughly one metre to the left. Because build `dv` already confirmed
+the selected launch direction and live collision ray with `dot=1.00000`, treat
+this as a separate **origin/muzzle transform** hypothesis, not a regression to
+direction-vector candidates. Reload animation sync is queued after projectile
+origin. Vertical ADS pose/movement remains independently open.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

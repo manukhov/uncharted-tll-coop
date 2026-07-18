@@ -6710,7 +6710,9 @@ FUNCTIONS = {
     0x1410A4D40: (
         "PlayerWeaponController_GiveWeapon",
         "Exact embedded signature: PlayerWeaponController::GiveWeapon(WeaponInfo*, "
-        "bool, bool, BuffSource const*). Controller vtable slot +0x158.",
+        "bool, bool, BuffSource const*), controller vtable +0x158. Reads initial "
+        "total ammo from WeaponInfo+0x84; -1 selects authored/random derivation "
+        "before passing the result to CreateAndAddWeapon vtable +0x130.",
     ),
     0x1410A1F90: (
         "PlayerWeaponController_GetWeaponBySlot",
@@ -6751,6 +6753,67 @@ FUNCTIONS = {
         "Player vtable slot +0x8C0. Resolves the special slot-19 weapon or the "
         "PlayerWeaponController current weapon, with a screen-route fallback.",
     ),
+    # --- 2026-07-18: live ProcessWeapon ammo ownership ---
+    0x141103830: (
+        "ProcessWeapon_GetMagazineAmmo",
+        "ProcessWeapon vtable +0x848. Returns signed int16 live magazine ammo "
+        "from weapon+0x900. BuildFireArgsAndFire exits before Fire when this is <=0.",
+    ),
+    0x141103840: (
+        "ProcessWeapon_GetReserveAmmo",
+        "ProcessWeapon vtable +0x858. Returns signed int16 reserve ammo from "
+        "weapon+0x902.",
+    ),
+    0x141103850: (
+        "ProcessWeapon_GetTotalAmmo",
+        "ProcessWeapon vtable +0x840. Returns magazine+reserve from signed "
+        "int16 fields weapon+0x900/+0x902.",
+    ),
+    0x141103870: (
+        "ProcessWeapon_IsMagazineEmpty",
+        "ProcessWeapon vtable +0x860. Returns weapon+0x900 <= 0.",
+    ),
+    0x141103880: (
+        "ProcessWeapon_IsMagazineUnloaded",
+        "ProcessWeapon vtable +0x868. Returns weapon+0x908 == 0; the native "
+        "ammo setters keep this loaded-state byte coherent with magazine ammo.",
+    ),
+    0x141517C90: (
+        "ProcessWeapon_InitializeAmmoFromTotal",
+        "Initializes live magazine/reserve from a total count using vtable "
+        "+0x850 capacity, then updates weapon+0x908/+0x909 state bytes.",
+    ),
+    0x141517CF0: (
+        "ProcessWeapon_SetMagazineAmmo",
+        "ProcessWeapon vtable +0x820. Clamps magazine to capacity, rebalances "
+        "reserve, writes +0x900, clears +0x909 and sets +0x908=(magazine>0).",
+    ),
+    0x141517D80: (
+        "ProcessWeapon_SetReserveAmmo",
+        "ProcessWeapon vtable +0x828. Writes the live signed int16 reserve "
+        "field at weapon+0x902 and updates ammo state.",
+    ),
+    0x1415180C0: (
+        "ProcessWeapon_AddAmmo",
+        "ProcessWeapon vtable +0x818. Adds ammo to the live magazine or reserve "
+        "according to capacity and reload state.",
+    ),
+    0x14151E0B0: (
+        "ProcessWeapon_ReloadMagazine",
+        "Moves live reserve weapon+0x902 into magazine weapon+0x900 up to "
+        "capacity and marks weapon+0x908 loaded.",
+    ),
+    0x14151E2F0: (
+        "ProcessWeapon_ReloadOneRound",
+        "Single-round reload path: decrements reserve+0x902 and increments "
+        "magazine+0x900 while capacity permits.",
+    ),
+    0x14151E740: (
+        "ProcessWeapon_ConsumeShotAmmo",
+        "Called only from ProcessWeapon_PrepareFireFromArgs after projectile "
+        "dispatch. Decrements live magazine+0x900 at 0x14151EB13 unless a "
+        "native cheat/turret/special condition suppresses consumption.",
+    ),
     0x140E28A30: (
         "PlayerFireController_UpdateInputAndFire",
         "Per-frame fire controller update. Reads fire-hold/fire-press/fire-release "
@@ -6769,7 +6832,8 @@ FUNCTIONS = {
     0x140E2B220: (
         "PlayerFireController_CheckShotReadiness",
         "Final active-weapon readiness check: rejects Drive and incompatible "
-        "player states, then checks weapon type, ammo and shot timing.",
+        "player states, then checks weapon class and shot timing/state. The "
+        "decisive magazine gate is in BuildFireArgsAndFire, not this helper.",
     ),
     0x1410B15A0: (
         "PlayerWeaponController_CanUseWeapon",
@@ -6779,7 +6843,15 @@ FUNCTIONS = {
     0x1401B7600: (
         "WeaponInfo_InitializeDefaults",
         "Initializes the 0xC0-byte WeaponInfo used by the developer give-weapon "
-        "path; authored weapon id is subsequently written at +0x80.",
+        "path; writes initial ammo DWORD -1 at +0x84 (0x1401B766B), so GiveWeapon "
+        "derives an authored/random total unless the caller replaces it. Authored "
+        "weapon id is subsequently written at +0x80.",
+    ),
+    0x140CA1630: (
+        "PlayerActiveAsyncJob_PublishHudState",
+        "Callback registered by PlayerActiveAsyncJob descriptor 0x143071B70. "
+        "Runs for each active Player and calls PlayerHud_ScreenStatePublishUpdate "
+        "at 0x140CA1655, providing the retained screen-1 puppet HUD route.",
     ),
     # --- Input block-selector bus + HUD is-aiming publish chain (2026-07-04) ---
     0x14179D780: (
@@ -6829,6 +6901,14 @@ FUNCTIONS = {
         "fixed aliases qword_143EF1F20 (= screen-0 state+0xF0) and "
         "qword_143EF1F28 (= screen-0 state+0xF8): show-blindfire-reticle, "
         "ss-hud-blindfire-reticle, blindfire-weapon-accuracy publishes.",
+    ),
+    0x14135D2B0: (
+        "PlayerHudScreen_WeaponAmmoPublisher",
+        "Per-screen weapon HUD publisher. Reads screen index at state+0xF8, "
+        "selects g_PlayerHandleForHudPublish[2*screen], reads the active "
+        "ProcessWeapon through vtable +0x840 total and +0x848 magazine, publishes "
+        "selected-weapon-id/total-ammo/loaded-ammo/show-weapon-hud?, and spawns "
+        "the process-global ss-hud-weapon. Screen 1 must be gated in single-viewport co-op.",
     ),
     0x1413B42E0: (
         "PlayerHudScreen_ReticlePublishCaller",
@@ -6913,7 +6993,10 @@ FUNCTIONS = {
     # --- Fire ray source chain (2026-07-05) ---
     0x140E2BCD0: (
         "PlayerFireController_BuildFireArgsAndFire",
-        "Sole caller of PlayerFireController_Fire. Builds FireArgs: seeds the aim "
+        "Sole caller of PlayerFireController_Fire. First resolves the active "
+        "ProcessWeapon, calls vtable +0x848 GetMagazineAmmo and +0x868 "
+        "IsMagazineUnloaded, and returns before Fire when magazine<=0 or unloaded. "
+        "Then builds FireArgs: seeds the aim "
         "ray via ResolveScreenRoutePoseSeedOrDefault(&seed, *(owner+0x4010)) "
         "(the firing player's screen index), cooks it through sub_140CADD60 into "
         "the FireArgs buffer, applies cover/strafe context (sub_1410E2950(idx)), "

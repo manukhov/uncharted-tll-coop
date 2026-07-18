@@ -160,6 +160,9 @@ constexpr std::uintptr_t kPoseSeedResolverRva = 0x1C077B0;  // ResolveScreenRout
 constexpr std::uintptr_t kReticleHudPublisherRva = 0x135A650;
 constexpr std::uintptr_t kReticleAimHudPublisherRva = 0x135AF20;
 constexpr std::uintptr_t kBlindfireReticleHudPublisherRva = 0x135C050;
+// Per-screen selected-weapon/ammo publisher. Reads state+0xF8, publishes
+// selected-weapon-id/total-ammo/loaded-ammo, and spawns ss-hud-weapon.
+constexpr std::uintptr_t kWeaponHudPublisherRva = 0x135D2B0;
 // Per-screen HUD state: the screen/slot index lives at state+0xF8 (see
 // GetRetainedPlayerEntityBySlot(*(state+248)) inside the reticle publishers
 // and the fixed screen-0 global 0x143EF1F28 = g_PerScreenPlayerHudState+0xF8).
@@ -330,6 +333,14 @@ constexpr std::uintptr_t kPlayerFireControllerFireRva = 0x0E2C730;
 constexpr std::uintptr_t kBuildFireArgsAndFireRva = 0x0E2BCD0;
 constexpr std::uintptr_t kPlayerFireControllerTryStartFireRva = 0x0E2ACA0;
 constexpr std::uintptr_t kPlayerFireControllerCheckShotReadinessRva = 0x0E2B220;
+// Live ProcessWeapon signed 16-bit ammo fields. BuildFireArgsAndFire reads the
+// magazine through vtable+0x848 and exits before Fire when it is <= 0.
+constexpr std::size_t kProcessWeaponMagazineAmmoOffset = 0x900;
+constexpr std::size_t kProcessWeaponReserveAmmoOffset = 0x902;
+// Native SetClip/Reload keep these bytes coherent with a non-empty magazine.
+// vtable+0x868 reports the unloaded state when +0x908 is zero.
+constexpr std::size_t kProcessWeaponMagazineLoadedStateOffset = 0x908;
+constexpr std::size_t kProcessWeaponAmmoDirtyStateOffset = 0x909;
 constexpr std::uintptr_t kPlayerTryStartBumpActionRva = 0x0CE8E10;
 // Weapon pickup animation relay. RequestInteract is the pickup-action start;
 // OnInteract is retained only as a safety gate for replay completion.

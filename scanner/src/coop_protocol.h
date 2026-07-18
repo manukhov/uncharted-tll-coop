@@ -192,8 +192,9 @@ struct WeaponGivePacket {
 // One-shot fire relay: local PlayerFireController::Fire captured on the sender
 // and replayed on the remote retained Player via the same native entry point.
 constexpr std::uint32_t kFirePacketMagic = 0x45524946;  // "FIRE"
-constexpr std::uint16_t kFirePacketVersion = 3;
+constexpr std::uint16_t kFirePacketVersion = 4;
 constexpr std::uint16_t kFireFlagFinalDirection = 0x0001;
+constexpr std::uint16_t kFireFlagAmmoSnapshot = 0x0002;
 constexpr std::size_t kFireArgsBytes = 0x100;
 
 struct FirePacket {
@@ -210,10 +211,17 @@ struct FirePacket {
     // v3: sender's exact selected SpawnInfo+0x28 launch direction. Receiver
     // writes it to the selected record +0x30/+0x40 before SpawnProjectile.
     float final_direction[4]{};
+    // v4: authoritative live ProcessWeapon ammo immediately before this shot.
+    // The receiver writes it only to the retained puppet's matching weapon;
+    // native fire then consumes exactly one round locally.
+    std::int16_t magazine_before = -1;
+    std::int16_t reserve_before = -1;
+    std::uint32_t ammo_reserved = 0;
 };
 
 static_assert(offsetof(FirePacket, final_direction) == 288);
-static_assert(sizeof(FirePacket) == 304);
+static_assert(offsetof(FirePacket, magazine_before) == 304);
+static_assert(sizeof(FirePacket) == 312);
 
 // Native NetEventEmitGrenade payload relay. The stock event serializer covers
 // bytes +0x18..+0xB5 of the 0xC0-byte event; these fields are POD and its Execute
@@ -306,5 +314,8 @@ struct BreakableProjectilePacket {
 constexpr std::size_t kFirePacketV1Bytes =
     offsetof(FirePacket, controller_offset) + sizeof(std::uint32_t) +
     sizeof(double) + kFireArgsBytes;
+// Version 3 ended immediately after final_direction.
+constexpr std::size_t kFirePacketV3Bytes =
+    offsetof(FirePacket, magazine_before);
 
 }  // namespace coop

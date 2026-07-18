@@ -183,6 +183,7 @@ using ReticleHudPublisherFunction = std::int64_t(__fastcall*)(void*);
 using ReticleAimHudPublisherFunction =
     std::int64_t(__fastcall*)(void*, std::uint32_t, double, std::int64_t);
 using BlindfireReticleHudPublisherFunction = void(__fastcall*)();
+using WeaponHudPublisherFunction = void(__fastcall*)(void*);
 using PoseSeedResolverFunction = void*(__fastcall*)(void*, unsigned int);
 PoseSeedResolverFunction g_original_pose_seed_resolver = nullptr;
 using GetBlendedCameraTransformFunction = std::int64_t(__fastcall*)(void*, void*);
@@ -224,6 +225,7 @@ ReticleHudPublisherFunction g_original_reticle_hud_publisher = nullptr;
 ReticleAimHudPublisherFunction g_original_reticle_aim_hud_publisher = nullptr;
 BlindfireReticleHudPublisherFunction g_original_blindfire_reticle_hud_publisher =
     nullptr;
+WeaponHudPublisherFunction g_original_weapon_hud_publisher = nullptr;
 std::atomic<DWORD> g_force_joypad3_analog_thread{0};
 std::atomic<std::uint64_t> g_force_joypad3_analog_hits{0};
 SRWLOCK g_joypad3_analog_lock = SRWLOCK_INIT;
@@ -2827,6 +2829,19 @@ void __fastcall hooked_blindfire_reticle_hud_publisher() {
     }
     if (g_original_blindfire_reticle_hud_publisher != nullptr) {
         g_original_blindfire_reticle_hud_publisher();
+    }
+}
+
+void __fastcall hooked_weapon_hud_publisher(void* state) {
+    if (hud_state_is_non_primary_screen(state)) {
+        static std::atomic<bool> first_gate_logged{false};
+        if (!first_gate_logged.exchange(true, std::memory_order_acq_rel)) {
+            boot_log_line("WEAPON-HUD gated: screen!=0 publish skipped");
+        }
+        return;
+    }
+    if (g_original_weapon_hud_publisher != nullptr) {
+        g_original_weapon_hud_publisher(state);
     }
 }
 
@@ -6039,6 +6054,10 @@ bool install_reticle_hud_gate() {
         0x4C, 0x8B, 0xDC, 0x55, 0x53, 0x49, 0x8D, 0xAB, 0x38, 0xFC,
         0xFF, 0xFF, 0x48, 0x81, 0xEC, 0xB8, 0x04, 0x00, 0x00,
     };
+    constexpr std::array<std::uint8_t, 18> kWeaponPublisherPrologue{
+        0x4C, 0x8B, 0xDC, 0x55, 0x49, 0x8D, 0xAB, 0xE8, 0xFB,
+        0xFF, 0xFF, 0x48, 0x81, 0xEC, 0x10, 0x05, 0x00, 0x00,
+    };
     g_original_reticle_hud_publisher =
         reinterpret_cast<ReticleHudPublisherFunction>(
             install_fire_gate_detour(
@@ -6063,11 +6082,20 @@ bool install_reticle_hud_gate() {
                 kBlindfirePublisherPrologue.size(),
                 reinterpret_cast<void*>(&hooked_blindfire_reticle_hud_publisher),
                 "blindfire reticle HUD publisher gate"));
+    g_original_weapon_hud_publisher =
+        reinterpret_cast<WeaponHudPublisherFunction>(
+            install_fire_gate_detour(
+                kWeaponHudPublisherRva,
+                kWeaponPublisherPrologue.data(),
+                kWeaponPublisherPrologue.size(),
+                reinterpret_cast<void*>(&hooked_weapon_hud_publisher),
+                "weapon/ammo HUD publisher gate"));
     const bool installed = g_original_reticle_hud_publisher != nullptr &&
                            g_original_reticle_aim_hud_publisher != nullptr &&
-                           g_original_blindfire_reticle_hud_publisher != nullptr;
-    log_line(installed ? "reticle HUD publisher gates installed"
-                       : "reticle HUD publisher gates incomplete");
+                           g_original_blindfire_reticle_hud_publisher != nullptr &&
+                           g_original_weapon_hud_publisher != nullptr;
+    log_line(installed ? "per-screen HUD publisher gates installed"
+                       : "per-screen HUD publisher gates incomplete");
     return installed;
 }
 
@@ -10246,8 +10274,11 @@ DWORD WINAPI state_recv_thread(void*) {
                 std::memcpy(&fp, buf, sizeof(fp));
                 if (fp.version == coop::kFirePacketVersion) {
                     publish_fire_packet(fp);
-                } else if (fp.version == 1) {
-                    fp.controller_offset = 0;
+                }
+            } else if (received ==
+                       static_cast<int>(coop::kFirePacketV3Bytes)) {
+                std::memcpy(&fp, buf, coop::kFirePacketV3Bytes);
+                if (fp.version == 3) {
                     publish_fire_packet(fp);
                 }
             } else if (received ==
@@ -17160,6 +17191,94 @@ void prepare_puppet_fire_args_from_sender(
     }
 }
 
+bool read_process_weapon_ammo(
+    const void* weapon, std::int16_t& magazine, std::int16_t& reserve) {
+    if (weapon == nullptr ||
+        readable_bytes(
+            static_cast<const std::byte*>(weapon) +
+            kProcessWeaponMagazineAmmoOffset) < 2 * sizeof(std::int16_t)) {
+        return false;
+    }
+    __try {
+        magazine = *reinterpret_cast<const std::int16_t*>(
+            static_cast<const std::byte*>(weapon) +
+            kProcessWeaponMagazineAmmoOffset);
+        reserve = *reinterpret_cast<const std::int16_t*>(
+            static_cast<const std::byte*>(weapon) +
+            kProcessWeaponReserveAmmoOffset);
+        return magazine >= 0 && reserve >= 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool apply_fire_packet_ammo_to_puppet(
+    void* puppet, const coop::FirePacket& packet) {
+    if ((packet.flags & coop::kFireFlagAmmoSnapshot) == 0 ||
+        packet.magazine_before <= 0 || packet.reserve_before < 0 ||
+        puppet == nullptr || puppet == retained_player_object(0)) {
+        return false;
+    }
+
+    void* weapon = get_player_active_weapon(puppet);
+    if (weapon == nullptr ||
+        !coop_fire_art_family_match(
+            weapon_art_id_from_object(weapon), packet.weapon_art_id)) {
+        const int slot = find_weapon_slot_by_art_id(
+            puppet, packet.weapon_art_id);
+        weapon = slot >= 0 ? get_weapon_from_slot(puppet, slot) : nullptr;
+    }
+    if (weapon == nullptr ||
+        !coop_fire_art_family_match(
+            weapon_art_id_from_object(weapon), packet.weapon_art_id) ||
+        readable_bytes(
+            static_cast<std::byte*>(weapon) +
+            kProcessWeaponMagazineAmmoOffset) <
+            kProcessWeaponAmmoDirtyStateOffset -
+                kProcessWeaponMagazineAmmoOffset + 1) {
+        return false;
+    }
+
+    std::int16_t old_magazine = -1;
+    std::int16_t old_reserve = -1;
+    if (!read_process_weapon_ammo(weapon, old_magazine, old_reserve)) {
+        return false;
+    }
+    __try {
+        *reinterpret_cast<std::int16_t*>(
+            static_cast<std::byte*>(weapon) +
+            kProcessWeaponMagazineAmmoOffset) = packet.magazine_before;
+        *reinterpret_cast<std::int16_t*>(
+            static_cast<std::byte*>(weapon) +
+            kProcessWeaponReserveAmmoOffset) = packet.reserve_before;
+        *reinterpret_cast<std::uint8_t*>(
+            static_cast<std::byte*>(weapon) +
+            kProcessWeaponMagazineLoadedStateOffset) = 1;
+        *reinterpret_cast<std::uint8_t*>(
+            static_cast<std::byte*>(weapon) +
+            kProcessWeaponAmmoDirtyStateOffset) = 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+
+    char line[272]{};
+    void* const local_player = retained_player_object(0);
+    std::snprintf(
+        line, sizeof(line),
+        "FIRE-AMMO-APPLY seq=%u art=0x%08X target=0x%llX local0=0x%llX "
+        "before=%d/%d sender=%d/%d",
+        packet.sequence, packet.weapon_art_id,
+        static_cast<unsigned long long>(
+            reinterpret_cast<std::uintptr_t>(puppet)),
+        static_cast<unsigned long long>(
+            reinterpret_cast<std::uintptr_t>(local_player)),
+        static_cast<int>(old_magazine), static_cast<int>(old_reserve),
+        static_cast<int>(packet.magazine_before),
+        static_cast<int>(packet.reserve_before));
+    boot_log_line(line);
+    return true;
+}
+
 void publish_fire_packet(const coop::FirePacket& packet) {
     const std::uint32_t head = g_fire_event_ring.head.load(std::memory_order_relaxed);
     g_fire_event_ring.packets[head % 16] = packet;
@@ -17167,8 +17286,10 @@ void publish_fire_packet(const coop::FirePacket& packet) {
     std::ostringstream line;
     line << "FIRE-RELAY recv seq=" << packet.sequence
          << " art=0x" << std::hex << packet.weapon_art_id
-         << " ctrlOff=0x" << packet.controller_offset << std::dec;
-    force_log_line(line.str().c_str());
+         << " ctrlOff=0x" << packet.controller_offset << std::dec
+         << " ammo=" << packet.magazine_before << '/'
+         << packet.reserve_before;
+    boot_log_line(line.str().c_str());
 }
 
 bool prepare_fire_packet(
@@ -17199,6 +17320,13 @@ bool prepare_fire_packet(
             : (held_art != 0 ? held_art : weapon_art);
     packet.scalar = scalar;
     std::memcpy(packet.fire_args, fire_args, coop::kFireArgsBytes);
+    std::int16_t magazine = -1;
+    std::int16_t reserve = -1;
+    if (read_process_weapon_ammo(weapon, magazine, reserve) && magazine > 0) {
+        packet.magazine_before = magazine;
+        packet.reserve_before = reserve;
+        packet.flags |= coop::kFireFlagAmmoSnapshot;
+    }
     return true;
 }
 
@@ -17214,10 +17342,12 @@ void send_prepared_fire_packet(const coop::FirePacket& packet) {
     line << "FIRE-RELAY send seq=" << packet.sequence
          << " art=0x" << std::hex << packet.weapon_art_id
          << " ctrlOff=0x" << packet.controller_offset
-         << " final="
+         << std::dec << " final="
          << ((packet.flags & coop::kFireFlagFinalDirection) != 0 ? 1 : 0)
+         << " ammo=" << packet.magazine_before << '/'
+         << packet.reserve_before
          << " roleB=" << std::dec << (g_net_role_b ? 1 : 0);
-    force_log_line(line.str().c_str());
+    boot_log_line(line.str().c_str());
 }
 
 std::size_t pending_local_fire_packet_count() {
@@ -17638,6 +17768,11 @@ void apply_queued_fire_events(void* puppet) {
         return;
     }
 
+    // The FirePacket snapshot is captured before the sender's native shot
+    // consumes ammo. Mirror it only into the retained puppet's matching live
+    // ProcessWeapon; the receiver-local player (retained slot 0) is never touched.
+    bool ammo_applied = apply_fire_packet_ammo_to_puppet(puppet, packet);
+
     const bool peer_has_pistol =
         (peer.flags & 0x80) != 0 &&
         (peer.held_weapon_art_id == kCoopPistolArtId ||
@@ -17749,12 +17884,18 @@ void apply_queued_fire_events(void* puppet) {
                 if (fired) {
                     last_native_puppet = puppet;
                     last_native_fire_ms = now;
+                    std::int16_t post_magazine = -1;
+                    std::int16_t post_reserve = -1;
+                    (void)read_process_weapon_ammo(
+                        weapon, post_magazine, post_reserve);
                     std::ostringstream line;
                     line << "FIRE-RELAY native seq=" << packet.sequence
                          << " art=0x" << std::hex << packet.weapon_art_id
                          << " hands=" << std::dec
-                         << read_weapon_in_hands_slot(puppet);
-                    log_line(line.str().c_str());
+                         << read_weapon_in_hands_slot(puppet)
+                         << " ammoPost=" << post_magazine << '/'
+                         << post_reserve;
+                    boot_log_line(line.str().c_str());
                     ++g_fire_event_ring.tail;
                     return;
                 }
@@ -17799,6 +17940,10 @@ void apply_queued_fire_events(void* puppet) {
                     puppet, static_cast<std::uint32_t>(arm_slot), true);
             }
         }
+    }
+
+    if (!ammo_applied) {
+        (void)apply_fire_packet_ammo_to_puppet(puppet, packet);
     }
 
     // Button fallback keeps all receiver-local muzzle/origin/handle state. The
