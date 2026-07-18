@@ -964,6 +964,19 @@ Do not reopen these as the first move:
       callsite relay. Expected: peer ADS camera yaw turns the whole model; release
       restores native publication; no pose, weapon, hair or locomotion regression.
 
+## P0 - Projectile final direction, local spawn record (2026-07-18)
+
+- [x] Reject `0x14151B72B` as the local projectile record: its `v590` flows only
+      into `SendNetEventEmitProjectileBullet`.
+- [x] Resolve ordinary `ProjectileBulletInstant` local construction to
+      `0x14151BC3E`; its `v628` pointer is carried by the spawn descriptor into
+      `ProcessWeapon::SpawnProjectile 0x141519B50`.
+- [x] Resolve the separate `projectile_count > 1` online branch to
+      `0x14151A00E` and `MultiProjectileBulletInstant`.
+- [ ] Build and run the written two-instance discriminator from `COOP_STATUS.md`.
+      Ordinary pistol/rifle must apply at `0x151BC3E`, multi-projectile at
+      `0x151A00E`, and neither path may touch rejected `0x151B72B`.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

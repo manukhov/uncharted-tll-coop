@@ -7258,11 +7258,30 @@ FUNCTIONS = {
         "rewrite, normalization and spread, then builds the instant/projectile "
         "launch records consumed by tracer and collision.",
     ),
+    0x141519B50: (
+        "ProcessWeapon_SpawnProjectile",
+        "Exact embedded signature ProcessWeapon::SpawnProjectile(const SpawnInfo "
+        "&, Process **). Resolves or schedules the selector-backed process spawn; "
+        "ordinary and multi-projectile descriptors carry their launch-record "
+        "pointer at SpawnInfo+0x28 into the spawned projectile Init method.",
+    ),
     0x141520750: (
         "BuildProjectileLaunchRecord",
         "Builds the common projectile launch record: receiver-local origin R8 is "
         "stored at +0x20 and post-spread direction R9 at +0x30/+0x40. The caller "
         "later replaces +0x40; instant projectile simulation consumes +0x30.",
+    ),
+    0x14152BF20: (
+        "ProjectileBulletInstant_Init",
+        "Typed by embedded projectile-bullet-instant.cpp assertions. Reads the "
+        "launch-record pointer from SpawnInfo+0x28, copies its transform/state, "
+        "and consumes the post-spread direction at launch record +0x30.",
+    ),
+    0x14152C9B0: (
+        "ProjectileBulletInstant_ProbeKick",
+        "Typed by the embedded ProjectileBulletInstant::ProbeKick signature. "
+        "Continues collision/probe setup from the instant projectile initialized "
+        "with the local spawn launch record.",
     ),
     0x1416A5790: (
         "Player_IsCurrentActionStateHash",

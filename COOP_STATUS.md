@@ -3128,6 +3128,53 @@ retry these callsites. Next static pass must resolve the puppet's ticking pitch
 consumer, cold turn-state initiation, and which of all three
 `BuildProjectileLaunchRecord` callsites serves the observed instant bullet.
 
+### 2026-07-18 recovered turn: local projectile spawn record corrected
+
+**STATIC, quota complete; runtime not yet run.** The recovered uncommitted change
+had broadened the direction hook to all three calls from
+`ProcessWeapon_ProjectileEmission 0x141519D30`. Re-auditing the complete control
+flow rejects that as unnecessarily broad and corrects the old ownership claim:
+
+- `0x14151B72B` builds `v590`, which is stored in the descriptor used by
+  `SendNetEventEmitProjectileBullet` and is not the local single-bullet spawn
+  record. This explains why build `dp` could miss the receiver's actual local
+  boundary. Do not reinstall this site.
+- `0x14151BC3E` builds `v628`; the caller stores `v628` in the
+  `ProjectileBulletInstant` spawn descriptor immediately before
+  `ProcessWeapon::SpawnProjectile 0x141519B50`.
+- `0x14151A00E` is the mutually exclusive online-definition branch reached only
+  when `ProcessWeapon+0x906` projectile count is greater than one. Its record is
+  stored at `SpawnInfo+0x28` for `MultiProjectileBulletInstant`.
+
+Three independent evidence types now converge: (1) decompiled branch conditions
+separate single/default and online multi-projectile paths; (2) record dataflow
+separates the `v590` net-event descriptor from the `v628`/`v608` local spawn-info
+pointers; (3) the typed `ProjectileBulletInstant::Init 0x14152BF20` path reads
+the spawn-info pointer at `a3+0x28` and consumes launch record direction `+0x30`,
+with the same class continuing into `ProjectileBulletInstant::ProbeKick
+0x14152C9B0`.
+
+The implementation now hooks only local spawn-record callsites
+`0x14151A00E/0x14151BC3E`. Competing hypotheses are explicit: the old
+`0x14151B72B` network-record owner is REJECTED; a below-builder tracer-only owner
+remains possible but would be falsified separately; the two retained sites cover
+multi-projectile and ordinary instant-bullet local construction without touching
+grenade/rocket switch cases.
+
+**Falsifiable prediction:** on an ordinary peer pistol/rifle shot the receiver
+must emit `FIRE-FINAL-DIRECTION-APPLY` with `site=0x151BC3E`; a multi-projectile
+weapon must use `site=0x151A00E`; neither side may report `0x151B72B`. The receiver
+tracer and collision must follow the sender post-spread direction while native
+origin, muzzle and event delivery remain unchanged. If apply fires at the
+predicted site but only the tracer changes, common record `+0x30` ownership is
+rejected; if neither retained site fires, the puppet does not use this
+`ProcessWeapon` emission path.
+
+Release build succeeds. The real IDB was saved and its MCP copy refreshed with
+new STATIC labels `ProcessWeapon_SpawnProjectile 0x141519B50`,
+`ProjectileBulletInstant_Init 0x14152BF20`, and
+`ProjectileBulletInstant_ProbeKick 0x14152C9B0`. Runtime remains pending.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

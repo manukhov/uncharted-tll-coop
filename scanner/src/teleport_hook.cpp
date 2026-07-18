@@ -3510,32 +3510,55 @@ bool finite_fire_direction_capture(const PeerFireDirectionCapture& capture) {
 }
 
 bool install_projectile_launch_record_direction_relay() {
-    std::uint8_t* callsite = nullptr;
-    std::uint8_t* relay = nullptr;
-    std::int32_t displacement = 0;
-    if (!prepare_plain_callsite_relay(
-            kBuildProjectileLaunchRecordCallsiteRva,
-            kBuildProjectileLaunchRecordRva,
-            reinterpret_cast<const void*>(
-                &hooked_build_projectile_launch_record),
-            callsite, relay, displacement)) {
-        boot_log_line("projectile final-direction relay SKIPPED (preflight)");
-        return false;
+    std::array<
+        std::uint8_t*, kBuildProjectileLaunchRecordCallsiteRvas.size()>
+        callsites{};
+    std::array<
+        std::uint8_t*, kBuildProjectileLaunchRecordCallsiteRvas.size()>
+        relays{};
+    std::array<
+        std::int32_t, kBuildProjectileLaunchRecordCallsiteRvas.size()>
+        displacements{};
+    for (std::size_t i = 0; i < callsites.size(); ++i) {
+        if (!prepare_plain_callsite_relay(
+                kBuildProjectileLaunchRecordCallsiteRvas[i],
+                kBuildProjectileLaunchRecordRva,
+                reinterpret_cast<const void*>(
+                    &hooked_build_projectile_launch_record),
+                callsites[i], relays[i], displacements[i])) {
+            for (auto* relay : relays) {
+                if (relay != nullptr) {
+                    VirtualFree(relay, 0, MEM_RELEASE);
+                }
+            }
+            boot_log_line(
+                "projectile final-direction relays SKIPPED (preflight)");
+            return false;
+        }
     }
     g_build_projectile_launch_record =
         reinterpret_cast<BuildProjectileLaunchRecordFunction>(
             g_module + kBuildProjectileLaunchRecordRva);
     DWORD old = 0;
-    if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
-        VirtualFree(relay, 0, MEM_RELEASE);
-        boot_log_line("projectile final-direction relay SKIPPED (protect)");
+    const std::size_t patch_span = static_cast<std::size_t>(
+        callsites.back() + 5 - callsites.front());
+    if (!VirtualProtect(
+            callsites.front(), patch_span, PAGE_EXECUTE_READWRITE, &old)) {
+        for (auto* relay : relays) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+        }
+        boot_log_line("projectile final-direction relays SKIPPED (protect)");
         return false;
     }
-    *reinterpret_cast<std::int32_t*>(callsite + 1) = displacement;
-    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    for (std::size_t i = 0; i < callsites.size(); ++i) {
+        *reinterpret_cast<std::int32_t*>(callsites[i] + 1) = displacements[i];
+    }
+    FlushInstructionCache(GetCurrentProcess(), callsites.front(), patch_span);
     DWORD ignored = 0;
-    VirtualProtect(callsite, 5, old, &ignored);
-    boot_log_line("projectile final-direction relay installed (0x14151B72B)");
+    VirtualProtect(callsites.front(), patch_span, old, &ignored);
+    boot_log_line(
+        "projectile final-direction relays installed "
+        "(local spawn 0x14151A00E/0x14151BC3E)");
     return true;
 }
 
@@ -17099,6 +17122,8 @@ std::int64_t __fastcall hooked_build_projectile_launch_record(
     if (g_build_projectile_launch_record == nullptr) {
         return 0;
     }
+    const std::uintptr_t callsite_rva =
+        reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - g_module - 5;
     const std::int64_t result = g_build_projectile_launch_record(
         out_record, owner, origin, post_spread_direction, knowledge_id);
 
@@ -17117,6 +17142,20 @@ std::int64_t __fastcall hooked_build_projectile_launch_record(
                 sender_capture.final_direction,
                 sizeof(g_pending_local_fire_packet.final_direction));
             g_pending_local_fire_packet.flags |= coop::kFireFlagFinalDirection;
+            static std::atomic<bool> first_capture_logged{false};
+            if (!first_capture_logged.exchange(true, std::memory_order_acq_rel)) {
+                char line[256]{};
+                std::snprintf(
+                    line, sizeof(line),
+                    "FIRE-FINAL-DIRECTION-CAPTURE site=0x%llX "
+                    "seq=%u dir=(%.4f,%.4f,%.4f)",
+                    static_cast<unsigned long long>(callsite_rva),
+                    g_pending_local_fire_packet.sequence,
+                    sender_capture.final_direction[0],
+                    sender_capture.final_direction[1],
+                    sender_capture.final_direction[2]);
+                boot_log_line(line);
+            }
         }
         send_prepared_fire_packet(g_pending_local_fire_packet);
         g_pending_local_fire_packet_active = false;
@@ -17156,7 +17195,9 @@ std::int64_t __fastcall hooked_build_projectile_launch_record(
                 char line[256]{};
                 std::snprintf(
                     line, sizeof(line),
-                    "FIRE-FINAL-DIRECTION-APPLY seq=%u dir=(%.4f,%.4f,%.4f)",
+                    "FIRE-FINAL-DIRECTION-APPLY site=0x%llX "
+                    "seq=%u dir=(%.4f,%.4f,%.4f)",
+                    static_cast<unsigned long long>(callsite_rva),
                     capture.sequence, capture.final_direction[0],
                     capture.final_direction[1], capture.final_direction[2]);
                 boot_log_line(line);
@@ -17421,6 +17462,16 @@ void apply_queued_fire_events(void* puppet) {
             AcquireSRWLockExclusive(&g_peer_fire_direction_lock);
             g_peer_fire_direction = direction_capture;
             ReleaseSRWLockExclusive(&g_peer_fire_direction_lock);
+            static std::atomic<bool> first_arm_logged{false};
+            if (!first_arm_logged.exchange(true, std::memory_order_acq_rel)) {
+                char line[128]{};
+                std::snprintf(
+                    line, sizeof(line),
+                    "FIRE-FINAL-DIRECTION-ARM seq=%u art=0x%08X",
+                    direction_capture.sequence,
+                    direction_capture.weapon_art_id);
+                boot_log_line(line);
+            }
         }
     }
     constexpr std::uint64_t kFireOnlyMask = kJoypadFireButtonMask;
@@ -17503,8 +17554,8 @@ void __fastcall hooked_player_fire(
     }
     g_original_player_fire(controller, fire_args, weapon, scalar);
     if (local_fire_packet_prepared && g_pending_local_fire_packet_active) {
-        // A non-projectile fire variant did not reach 0x14151B72B. Preserve the
-        // event but leave the final-direction flag clear.
+        // A non-projectile fire variant did not reach either local launch-record
+        // builder. Preserve the event but leave the final-direction flag clear.
         send_prepared_fire_packet(g_pending_local_fire_packet);
         g_pending_local_fire_packet_active = false;
     }
