@@ -3683,3 +3683,32 @@ ran for every peer ADS packet. Build dc gives slot `+0x58`, FgAnim mirror, and l
 world yaw the same stationary gate; moving locomotion is native pass-through.
 Detailed evidence and prediction are appended to
 `reports/player_aim_fganim_axis_residual_pitch_20260715.md`.
+
+### 2026-07-18 STATIC: move vertical channel apply to live blend tick (build dy)
+
+Build `dp` chose receiver callsite `0x140CB4176`, but runtime emitted no receiver
+`AIM-PITCH-APPLY`; the retained puppet does not run that computed-publisher edge.
+The already-installed PlayerAimController vtable `+0x30` hook does tick for slot 1
+and participates in the working ADS blend. IDA closes its ordering:
+`PublishRuntimeStateFromDecisionNodeLikeObject 0x140CA17E0` calls the common
+controller phase `0x140C9F420` at `0x140CA2952`; that phase dispatches
+Player+`0x1D90` slot `+0x30` (`PlayerAimController_UpdateBlendState
+0x140CAFA20`) before later Player publication/camera/attachment work.
+
+`0x140CAFA20` updates blend `+0x8EC` and resets/primes `Aim0..Aim7`.
+`PlayerAimController_CommitNamedAimChannel 0x140CAF470` is self-contained: it
+resolves controller owner `+0x108`, Player animation owner `+0x1A0`, channel ids
+at controller `+0x8C8`, and handles zero/clear. Build `dy` therefore commits the
+peer's post-blend `aim-add-up=base+4` / `aim-add-down=base+6` immediately after
+the original blend tick and clears them on ADS exit. Direct active-state/FgAnim
+copies, full-body pitch and broad pose/root writes remain rejected competitors.
+Release v2 builds. The real IDB labels `0x140C9F420`
+`Player_UpdateMountedControllers` and saved successfully; refreshed MCP verifies
+the name/address and caller `0x140CA2952`.
+
+**Prediction:** a large role-A up/down ADS sweep produces sender
+`AIM-PITCH-CAPTURE-ACTIVE`, receiver `AIM-PITCH-BLEND-APPLY`, visible remote
+upper-body/weapon pitch, and `AIM-PITCH-BLEND-CLEAR` on release without changing
+confirmed horizontal yaw or projectile alignment. Non-zero apply with no visible
+pitch rejects named aim parameters as the puppet's rendered vertical consumer.
+Full evidence: `reports/remote_aim_pitch_blend_tick_20260718.md`.

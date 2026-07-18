@@ -1044,6 +1044,21 @@ Do not reopen these as the first move:
       parallel left offset in either tracer or impact. PID 16512 reported
       `originError=0.00000`, `dot=1.00000`; user confirmed exact visual alignment.
 
+## P0 - Remote vertical ADS pose (2026-07-18)
+
+- [x] Reject `0x140CB4176` as the receiver apply boundary: build `dp` exchanged
+      pitch fields but the puppet never reached `AIM-PITCH-APPLY`.
+- [x] Resolve the confirmed ticking alternative: Player controller phase
+      `0x140C9F420` dispatches PlayerAimController slot `+0x30` / `0x140CAFA20`
+      before downstream Player publication.
+- [x] Implement build `dy`: after the stock blend tick, commit peer post-blend
+      `aim-add-up/down` through self-contained native `0x140CAF470`; clear both on
+      ADS exit. Release v2 builds; real IDB and refreshed MCP name `0x140C9F420`
+      `Player_UpdateMountedControllers`. Static evidence and competitors are in
+      `reports/remote_aim_pitch_blend_tick_20260718.md`.
+- [ ] Run the written `dy` up/down discriminator and require active capture,
+      blend-tick apply, visible upper-body/weapon pitch and clean clear on ADS exit.
+
 ## P1 - Remote reload animation sync (2026-07-18)
 
 - [ ] Trace the Player/ProcessWeapon reload command edge and its native animation

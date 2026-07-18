@@ -61,6 +61,14 @@ FUNCTIONS = {
         "publisher without calling Player_InteractDispatcher.",
     ),
     # --- 2026-07-12: Player aim-additive animation pipeline ---
+    0x140C9F420: (
+        "Player_UpdateMountedControllers",
+        "Common Player controller phase called at 0x140CA2952 from "
+        "PublishRuntimeStateFromDecisionNodeLikeObject. Dispatches the mounted "
+        "controllers at Player+0x1D58..+0x1FF8; Player+0x1D90 vtable slot +0x30 "
+        "is PlayerAimController_UpdateBlendState. Later Player publication, "
+        "camera and attachment phases run after this function returns.",
+    ),
     0x140CAFA20: (
         "PlayerAimController_UpdateBlendState",
         "PlayerAimController vtable slot +0x30. Called from the common Player "

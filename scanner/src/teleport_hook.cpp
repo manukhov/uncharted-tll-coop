@@ -138,6 +138,7 @@ struct LocalAimPitchCapture {
 };
 SRWLOCK g_local_aim_pitch_lock = SRWLOCK_INIT;
 LocalAimPitchCapture g_local_aim_pitch{};
+std::atomic<void*> g_puppet_named_pitch_controller{nullptr};
 
 struct LocalAimFootTurnCapture {
     void* owner = nullptr;
@@ -167,6 +168,9 @@ void* aim_publish_active_state_from_player(void* player);
 bool valid_foot_turn_sample(
     const float direction[4], float yaw_rate, int current_child,
     int selected_child);
+bool apply_peer_pitch_channels_at_blend_tick(
+    void* controller, const coop::StatePacket& peer);
+bool clear_peer_pitch_channels_at_blend_tick(void* controller);
 using PlayerInputStateUpdateFunction = char(__fastcall*)(void*);
 PlayerInputStateUpdateFunction g_original_player_input_state_update = nullptr;
 using PlayerInputCommandStateUpdateFunction = void(__fastcall*)(void*);
@@ -7677,10 +7681,20 @@ void __fastcall hooked_player_aim_blend_tick(void* controller) {
         return;
     }
 
-    if (!peer_puppet_aim_controller_fixup_wanted(controller, nullptr)) {
+    coop::StatePacket peer{};
+    if (!peer_puppet_aim_controller_fixup_wanted(controller, &peer)) {
+        if (g_puppet_named_pitch_controller.load(std::memory_order_acquire) ==
+            controller) {
+            clear_peer_pitch_channels_at_blend_tick(controller);
+        }
         return;
     }
     force_peer_puppet_aim_blend_state(controller);
+    if (!apply_peer_pitch_channels_at_blend_tick(controller, peer) &&
+        g_puppet_named_pitch_controller.load(std::memory_order_acquire) ==
+            controller) {
+        clear_peer_pitch_channels_at_blend_tick(controller);
+    }
 }
 
 std::int64_t __fastcall hooked_player_aim_world_basis(
@@ -13843,6 +13857,73 @@ bool aim_controller_uses_named_channels(void* controller, void* owner) {
     }
 }
 
+bool commit_peer_pitch_channel_pair(
+    void* controller, float up, float down) {
+    if (controller == nullptr || g_commit_named_aim_channel == nullptr ||
+        readable_bytes(static_cast<std::byte*>(controller) + 0x8F0) < 1 ||
+        !std::isfinite(up) || !std::isfinite(down) ||
+        up < 0.0F || up > 1.0F || down < 0.0F || down > 1.0F) {
+        return false;
+    }
+    void* const owner = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(controller) + kGunMoveControllerOwnerOffset);
+    if (!player_screen_index_is(owner, kSlot1ScreenIndex) ||
+        !aim_controller_uses_named_channels(controller, owner)) {
+        return false;
+    }
+    const std::int32_t base_index = *reinterpret_cast<const std::int32_t*>(
+        static_cast<const std::byte*>(controller) + 0x8E8);
+    __try {
+        // UpdateBlendState has already reset/primed the Aim0..Aim7 family for
+        // this Player phase. Commit the peer's post-blend values afterwards so
+        // the downstream animation publication consumes them in the same tick.
+        g_commit_named_aim_channel(
+            controller, down, base_index + 6, 0xE8651C16u, 2);
+        g_commit_named_aim_channel(
+            controller, up, base_index + 4, 0x7283B601u, 3);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool apply_peer_pitch_channels_at_blend_tick(
+    void* controller, const coop::StatePacket& peer) {
+    if ((peer.flags & coop::kStateFlagAimPitch) == 0 ||
+        !peer_packet_aim_active(peer) ||
+        !commit_peer_pitch_channel_pair(
+            controller, peer.aim_pitch_up, peer.aim_pitch_down)) {
+        return false;
+    }
+    g_puppet_named_pitch_controller.store(controller, std::memory_order_release);
+    static std::atomic<bool> first_pitch_blend_apply_logged{false};
+    if (!first_pitch_blend_apply_logged.exchange(
+            true, std::memory_order_acq_rel)) {
+        const float blend = *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(controller) + 0x8EC);
+        char line[192]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-PITCH-BLEND-APPLY seq=%u up=%.4f down=%.4f blend=%.4f",
+            peer.sequence, peer.aim_pitch_up, peer.aim_pitch_down, blend);
+        boot_log_line(line);
+    }
+    return true;
+}
+
+bool clear_peer_pitch_channels_at_blend_tick(void* controller) {
+    if (!commit_peer_pitch_channel_pair(controller, 0.0F, 0.0F)) {
+        return false;
+    }
+    g_puppet_named_pitch_controller.store(nullptr, std::memory_order_release);
+    static std::atomic<bool> first_pitch_blend_clear_logged{false};
+    if (!first_pitch_blend_clear_logged.exchange(
+            true, std::memory_order_acq_rel)) {
+        boot_log_line("AIM-PITCH-BLEND-CLEAR");
+    }
+    return true;
+}
+
 void __fastcall hooked_publish_directional_aim_weights(
     void* controller, float left, float right, float up, float down) {
     if (g_publish_directional_aim_weights == nullptr) {
@@ -13877,6 +13958,17 @@ void __fastcall hooked_publish_directional_aim_weights(
             char line[160]{};
             std::snprintf(
                 line, sizeof(line), "AIM-PITCH-CAPTURE up=%.4f down=%.4f",
+                pitch_up, pitch_down);
+            boot_log_line(line);
+        }
+        static std::atomic<bool> first_active_pitch_capture_logged{false};
+        if (std::max(pitch_up, pitch_down) >= 0.05F &&
+            !first_active_pitch_capture_logged.exchange(
+                true, std::memory_order_acq_rel)) {
+            char line[160]{};
+            std::snprintf(
+                line, sizeof(line),
+                "AIM-PITCH-CAPTURE-ACTIVE up=%.4f down=%.4f",
                 pitch_up, pitch_down);
             boot_log_line(line);
         }
@@ -25332,8 +25424,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-18dx "
-        "(selected launch origin+direction + safe ProbeKick callsite relay)");
+        "TLL hook DLL init 2026-07-18dy "
+        "(blend-tick pitch channels + selected launch origin+direction)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
