@@ -3742,3 +3742,37 @@ plus visible remote upper-body/weapon pitch. Horizontal yaw and projectile
 alignment remain unchanged; ADS exit leaves no stuck override. Successful active
 sets without visual pitch reject alternate `Aim4/Aim6` as the rendered consumer.
 Full evidence: `reports/remote_aim_pitch_blend_tick_20260718.md`.
+
+### 2026-07-18 REJECTED/STATIC: `dz` hooked transition only; steady-state build `ea`
+
+Fresh build-`dz` PID 9360/3108 again showed horizontal-only remote ADS. This does
+not reject `Aim4/Aim6`: PID 3108 logged only
+`AIM-PITCH-ALT-APPLY ... up=0 down=0 blend=0 setUp=0 setDown=0`, with no active
+setter marker. Later in the same run the post-world-basis diagnostic recorded
+`y=-0.136097 up=0.191499 blend=0.866667`. The active values and the instrumented
+callsite were therefore mutually exclusive.
+
+Static control flow explains the split. At `0x140CB4168`, steady-state
+`PlayerAimController_ComputeDirectionalAimWeights 0x140CB32B0` selects
+`0x140CB416F -> 0x140CB47A0`; only a controller-mode transition selects the
+previously hooked direct publisher at `0x140CB4176`. `0x140CB47A0` reads prior
+LR/UD fields, advances signed horizontal/vertical smoothing state at controller
+`+0x8A4/+0x8AC` using process delta time, splits the results back into directional
+weights, then tail-jumps at `0x140CB491A` to
+`PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0`.
+
+Build `ea` hooks only the proven E8 steady-state callsite `0x140CB416F`. Its
+wrapper lets both native smoothing and the tail-called publisher finish, reads
+the resulting controller `+0x8C0/+0x8C4` and blend `+0x8EC`, resolves the actual
+named/alternate mode, and then writes post-blend `Aim4/Aim6` through the stock
+setter `0x14172C8E0`. A global publisher-entry detour and the later slot-`+0x58`
+boundary were rejected as unnecessarily broad alternatives; direct
+active-state/FgAnim copies remain runtime-rejected.
+
+**Prediction:** a large role-A vertical ADS sweep must emit receiver
+`AIM-PITCH-SMOOTH-ACTIVE` with nonzero post-blend `up/down`. `mode=alternate`
+with a changed setter should add visible vertical motion; successful changed sets
+without it reject alternate `Aim4/Aim6`. `mode=named` with unchanged setters
+would prove stock publication already held the same values and move the blocker
+strictly downstream. Horizontal yaw/projectile alignment must remain unchanged.
+Full evidence: `reports/remote_aim_pitch_blend_tick_20260718.md`.

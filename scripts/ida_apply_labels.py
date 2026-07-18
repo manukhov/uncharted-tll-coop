@@ -77,6 +77,14 @@ FUNCTIONS = {
         "dirty. PlayerAimController's alternate publication branch calls this "
         "for Aim0/Aim2/Aim4/Aim6.",
     ),
+    0x140CB47A0: (
+        "PlayerAimController_SmoothAndPublishDirectionalAimWeights",
+        "Steady-state branch selected at 0x140CB416F when the controller mode "
+        "byte did not transition. Collapses previous left/right and up/down into "
+        "signed axes, advances scalar smoothing state at controller +0x8A4/+0x8AC, "
+        "then tail-jumps at 0x140CB491A to "
+        "PlayerAimController_PublishDirectionalAimWeights.",
+    ),
     0x140CAFA20: (
         "PlayerAimController_UpdateBlendState",
         "PlayerAimController vtable slot +0x30. Called from the common Player "

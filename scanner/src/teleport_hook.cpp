@@ -161,6 +161,8 @@ using SetExistingAnimFloatChannelFunction = char(__fastcall*)(
 using SelectAimIdleTurnStateFunction = int(__fastcall*)(void*, std::uint32_t);
 using UpdateTurnYawFromDirectionFunction = std::int64_t(__fastcall*)(void*);
 PublishDirectionalAimWeightsFunction g_publish_directional_aim_weights = nullptr;
+PublishDirectionalAimWeightsFunction g_smooth_and_publish_directional_aim_weights =
+    nullptr;
 CommitNamedAimChannelFunction g_commit_named_aim_channel = nullptr;
 ResolveAimBaseStateFunction g_resolve_aim_base_state = nullptr;
 SetExistingAnimFloatChannelFunction g_set_existing_anim_float_channel = nullptr;
@@ -170,6 +172,9 @@ void* aim_publish_active_state_from_player(void* player);
 bool valid_foot_turn_sample(
     const float direction[4], float yaw_rate, int current_child,
     int selected_child);
+bool apply_peer_pitch_after_native_publish(
+    void* controller, void* owner, const coop::StatePacket& peer,
+    float raw_up, float raw_down, float blend);
 using PlayerInputStateUpdateFunction = char(__fastcall*)(void*);
 PlayerInputStateUpdateFunction g_original_player_input_state_update = nullptr;
 using PlayerInputCommandStateUpdateFunction = void(__fastcall*)(void*);
@@ -13851,11 +13856,92 @@ bool read_aim_named_channel_mode(
     }
 }
 
-bool aim_controller_uses_named_channels(void* controller, void* owner) {
+bool apply_peer_pitch_after_native_publish(
+    void* controller, void* owner, const coop::StatePacket& peer,
+    float raw_up, float raw_down, float blend) {
+    if (controller == nullptr || owner == nullptr ||
+        g_set_existing_anim_float_channel == nullptr ||
+        !player_screen_index_is(owner, kSlot1ScreenIndex) ||
+        !std::isfinite(blend) || blend < 0.0F || blend > 1.0F ||
+        !std::isfinite(raw_up) || !std::isfinite(raw_down) ||
+        raw_up < 0.0F || raw_up > 1.0F ||
+        raw_down < 0.0F || raw_down > 1.0F) {
+        return false;
+    }
     bool uses_named_channels = false;
-    return read_aim_named_channel_mode(
-               controller, owner, uses_named_channels) &&
-        uses_named_channels;
+    if (!read_aim_named_channel_mode(
+            controller, owner, uses_named_channels)) {
+        return false;
+    }
+    const std::int32_t base_index = *reinterpret_cast<const std::int32_t*>(
+        static_cast<const std::byte*>(controller) + 0x8E8);
+    if (base_index < 0 || base_index > 1 ||
+        readable_bytes(static_cast<std::byte*>(owner) +
+                       kPlayerUpperStateOwnerOffset) < sizeof(void*)) {
+        return false;
+    }
+    void* const registry = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(owner) + kPlayerUpperStateOwnerOffset);
+    if (registry == nullptr) {
+        return false;
+    }
+    const auto* const channel_ids = reinterpret_cast<const std::uint32_t*>(
+        static_cast<const std::byte*>(controller) + 0x8C8);
+    const float pitch_up = raw_up * blend;
+    const float pitch_down = raw_down * blend;
+    __try {
+        const char set_up = g_set_existing_anim_float_channel(
+            registry, channel_ids[base_index + 4], pitch_up);
+        const char set_down = g_set_existing_anim_float_channel(
+            registry, channel_ids[base_index + 6], pitch_down);
+        static std::atomic<bool> first_active_smooth_pitch_logged{false};
+        if (std::max(pitch_up, pitch_down) >= 0.05F &&
+            !first_active_smooth_pitch_logged.exchange(
+                true, std::memory_order_acq_rel)) {
+            char line[256]{};
+            std::snprintf(
+                line, sizeof(line),
+                "AIM-PITCH-SMOOTH-ACTIVE seq=%u mode=%s "
+                "rawUp=%.4f rawDown=%.4f up=%.4f down=%.4f blend=%.4f "
+                "setUp=%u setDown=%u",
+                peer.sequence,
+                uses_named_channels ? "named" : "alternate",
+                raw_up, raw_down, pitch_up, pitch_down, blend,
+                static_cast<unsigned>(static_cast<unsigned char>(set_up)),
+                static_cast<unsigned>(static_cast<unsigned char>(set_down)));
+            boot_log_line(line);
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void __fastcall hooked_smooth_and_publish_directional_aim_weights(
+    void* controller, float left, float right, float up, float down) {
+    if (g_smooth_and_publish_directional_aim_weights == nullptr) {
+        return;
+    }
+    g_smooth_and_publish_directional_aim_weights(
+        controller, left, right, up, down);
+    if (g_dll_inert || controller == nullptr || !g_state_net.enabled ||
+        readable_bytes(static_cast<std::byte*>(controller) + 0x8F0) < 1) {
+        return;
+    }
+    coop::StatePacket peer{};
+    if (!peer_puppet_aim_controller_fixup_wanted(controller, &peer)) {
+        return;
+    }
+    void* const owner = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(controller) + kGunMoveControllerOwnerOffset);
+    const float raw_up = *reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(controller) + 0x8C0);
+    const float raw_down = *reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(controller) + 0x8C4);
+    const float blend = *reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(controller) + 0x8EC);
+    apply_peer_pitch_after_native_publish(
+        controller, owner, peer, raw_up, raw_down, blend);
 }
 
 void __fastcall hooked_publish_directional_aim_weights(
@@ -13920,64 +14006,6 @@ void __fastcall hooked_publish_directional_aim_weights(
     }
 
     if (!uses_named_channels) {
-        coop::StatePacket peer{};
-        if (g_set_existing_anim_float_channel == nullptr ||
-            !peer_puppet_aim_controller_fixup_wanted(controller, &peer) ||
-            !std::isfinite(blend) || blend < 0.0F || blend > 1.0F ||
-            !std::isfinite(up) || !std::isfinite(down) ||
-            up < 0.0F || up > 1.0F || down < 0.0F || down > 1.0F) {
-            return;
-        }
-        const std::int32_t base_index = *reinterpret_cast<const std::int32_t*>(
-            static_cast<const std::byte*>(controller) + 0x8E8);
-        if (base_index < 0 || base_index > 1 ||
-            readable_bytes(static_cast<std::byte*>(owner) +
-                           kPlayerUpperStateOwnerOffset) < sizeof(void*)) {
-            return;
-        }
-        void* const registry = *reinterpret_cast<void**>(
-            static_cast<std::byte*>(owner) + kPlayerUpperStateOwnerOffset);
-        if (registry == nullptr) {
-            return;
-        }
-        const auto* const channel_ids = reinterpret_cast<const std::uint32_t*>(
-            static_cast<const std::byte*>(controller) + 0x8C8);
-        const float pitch_up = up * blend;
-        const float pitch_down = down * blend;
-        __try {
-            const char set_up = g_set_existing_anim_float_channel(
-                registry, channel_ids[base_index + 4], pitch_up);
-            const char set_down = g_set_existing_anim_float_channel(
-                registry, channel_ids[base_index + 6], pitch_down);
-            static std::atomic<bool> first_alt_pitch_apply_logged{false};
-            if (!first_alt_pitch_apply_logged.exchange(
-                    true, std::memory_order_acq_rel)) {
-                char line[224]{};
-                std::snprintf(
-                    line, sizeof(line),
-                    "AIM-PITCH-ALT-APPLY seq=%u up=%.4f down=%.4f "
-                    "blend=%.4f setUp=%u setDown=%u baseline=0.2",
-                    peer.sequence, pitch_up, pitch_down, blend,
-                    static_cast<unsigned>(static_cast<unsigned char>(set_up)),
-                    static_cast<unsigned>(static_cast<unsigned char>(set_down)));
-                boot_log_line(line);
-            }
-            static std::atomic<bool> first_active_alt_pitch_apply_logged{false};
-            if (std::max(pitch_up, pitch_down) >= 0.05F &&
-                !first_active_alt_pitch_apply_logged.exchange(
-                    true, std::memory_order_acq_rel)) {
-                char line[224]{};
-                std::snprintf(
-                    line, sizeof(line),
-                    "AIM-PITCH-ALT-APPLY-ACTIVE seq=%u up=%.4f down=%.4f "
-                    "blend=%.4f setUp=%u setDown=%u",
-                    peer.sequence, pitch_up, pitch_down, blend,
-                    static_cast<unsigned>(static_cast<unsigned char>(set_up)),
-                    static_cast<unsigned>(static_cast<unsigned char>(set_down)));
-                boot_log_line(line);
-            }
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-        }
         return;
     }
 
@@ -14263,6 +14291,39 @@ bool install_native_aim_pitch_relay() {
     DWORD ignored = 0;
     VirtualProtect(callsite, 5, old, &ignored);
     boot_log_line("native aim-pitch relay installed (0x140CB4176)");
+    return true;
+}
+
+bool install_native_aim_pitch_smoother_relay() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kPlayerAimSmoothAndPublishWeightsCallsiteRva,
+            kPlayerAimSmoothAndPublishWeightsRva,
+            reinterpret_cast<const void*>(
+                &hooked_smooth_and_publish_directional_aim_weights),
+            callsite, relay, displacement)) {
+        boot_log_line("native aim-pitch smoother relay SKIPPED (preflight)");
+        return false;
+    }
+    g_smooth_and_publish_directional_aim_weights =
+        reinterpret_cast<PublishDirectionalAimWeightsFunction>(
+            g_module + kPlayerAimSmoothAndPublishWeightsRva);
+    g_set_existing_anim_float_channel =
+        reinterpret_cast<SetExistingAnimFloatChannelFunction>(
+            g_module + kAnimParamRegistrySetExistingFloatChannelRva);
+    DWORD old = 0;
+    if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("native aim-pitch smoother relay SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(callsite + 1) = displacement;
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(callsite, 5, old, &ignored);
+    boot_log_line("native aim-pitch smoother relay installed (0x140CB416F)");
     return true;
 }
 
@@ -25432,8 +25493,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-18dz "
-        "(alternate Aim4/Aim6 post-publisher pitch + selected launch relay)");
+        "TLL hook DLL init 2026-07-18ea "
+        "(steady-state smoother Aim4/Aim6 discriminator + selected launch relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -25473,6 +25534,7 @@ DWORD WINAPI install_hook(void*) {
         install_player_aim_world_basis_relay();
         install_player_aim_blend_tick_probe();
         install_native_aim_pitch_relay();
+        install_native_aim_pitch_smoother_relay();
         install_native_aim_foot_turn_relays();
         if (g_enable_puppet_fganim_world_aim_turn) {
             install_fganim_world_aim_turn_callsite_relay();

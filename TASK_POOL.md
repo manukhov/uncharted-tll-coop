@@ -1065,9 +1065,19 @@ Do not reopen these as the first move:
       setter `0x14172C8E0`. After the original publisher, replace `Aim4/Aim6` with
       receiver-local directional weights. Static evidence, competitors and the
       discriminator are in `reports/remote_aim_pitch_blend_tick_20260718.md`.
-- [ ] Run the written `dz` up/down discriminator and require a non-zero
-      `AIM-PITCH-ALT-APPLY-ACTIVE`, visible upper-body/weapon pitch, unchanged
-      horizontal yaw/projectile alignment, and no stuck override after ADS exit.
+- [x] Run build `dz`: user again observed horizontal-only motion. Receiver logged
+      only transition-frame `AIM-PITCH-ALT-APPLY ... up=0 down=0 blend=0`, then a
+      separate steady-state `up=0.191499 blend=0.866667`; no active setter marker.
+      Reject `0x140CB4176` as the steady-state boundary, not `Aim4/Aim6`.
+- [x] Resolve and implement build `ea`: normal steady state takes callsite
+      `0x140CB416F -> 0x140CB47A0`, which smooths signed LR/UD and tail-jumps at
+      `0x140CB491A` to the stock publisher. Relay only that callsite, wait for the
+      original smoother/publisher, then overwrite `Aim4/Aim6` from the published
+      controller fields through native `0x14172C8E0`.
+- [ ] Run the written `ea` discriminator. Require
+      `AIM-PITCH-SMOOTH-ACTIVE` with non-zero post-blend pitch and inspect
+      `mode/setUp/setDown`; only a successful active set with no visible motion may
+      reject `Aim4/Aim6` as the rendered consumer.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
