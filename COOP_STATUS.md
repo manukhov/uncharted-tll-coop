@@ -3392,6 +3392,55 @@ against the most recently owner-correct applied direction. Prediction: A/B/C giv
 either no matching instance or a low dot product; D gives `dot` near 1 while the
 user still observes a sideways tracer.
 
+### 2026-07-18 post-dt static correction: authoritative selected launch record
+
+**STATIC, quota complete; build `du` runtime not yet run.** Exact post-builder
+dataflow rejects the project's earlier assertion that `0x14151B72B` is network
+only. The `dt` mutation was owner-correct but targeted a record that is not selected
+for an ordinary single projectile:
+
+1. `0x14151B72B` builds post-spread record `var_D18`. After optionally replacing
+   the descriptor class with `MultiProjectileBulletInstant`, instructions
+   `0x14151BB9F..0x14151BBAB` unconditionally store `&var_D18` at
+   `SpawnInfo+0x28`. `SendNetEventEmitProjectileBullet 0x14151BBEF` consumes the
+   same record, but it is not its only consumer.
+2. `0x14151BC3E` builds pre-spread `var_A68`, but `cmp word ptr [rsi+0x906],1` at
+   `0x14151BC43` jumps directly to spawn for count <= 1. Only count > 1 reaches
+   `0x14151BE21..0x14151BE33` and overwrites `SpawnInfo+0x28 = &var_A68`.
+   Therefore an ordinary pistol/rifle keeps `&var_D18`; executing BC3E does not
+   prove that its result is live.
+3. `ProcessWeapon_SpawnProjectile 0x141519B50` receives that completed SpawnInfo,
+   and typed `ProjectileBulletInstant_Init 0x14152BF20` reads exactly its `+0x28`
+   pointer before consuming record `+0x30`. This selects B72B for single and BC3E
+   only for the guarded multi case.
+4. The independent build-`dt` runtime matches the branch prediction: BC3E was
+   reached with `owner1=1` and mutated to world-up, yet the visible single pistol
+   remained sideways. That is the expected result when `SpawnInfo+0x28` still
+   points to B72B's `var_D18`.
+
+Competing explanations are now separated at a later authoritative boundary:
+(A) selected-record pointer mismatch was the `dt` cause and is favored by the exact
+branch; (B) selected record reaches Init but a later overwrite rotates the live ray;
+(C) the live ProbeKick collision ray is corrected while the observed tracer belongs
+to a separate instance/effect. Directly hooking builders cannot distinguish these.
+
+Build `du` moves both sender capture and receiver apply to
+`ProcessWeapon::SpawnProjectile`, after `SpawnInfo+0x28` has selected the actual
+record. Ownership is checked through the record's `{owner+0xA8, owner+0xBC}` handle,
+not by callsite. Receiver writes both duplicated direction fields `+0x30/+0x40`.
+A read-only `ProjectileBulletInstant_ProbeKick` discriminator logs the concrete
+puppet instance's normalized `endpoint_ws-start_ws` and dot product against the
+applied sequence.
+
+**Falsifiable build-`du` prediction:** one role-A pistol shot aimed vertically up
+must produce sender `FIRE-SELECTED-RECORD-HIT owner0=1 pending=1` and
+`FIRE-SELECTED-DIRECTION-CAPTURE`; role B must produce selected `owner1=1 peerQ>=1`,
+`FIRE-SELECTED-DIRECTION-APPLY`, then `FIRE-PROBE-RAY` for the same sequence with
+world-Y near 1 and `dot >= 0.99`. The visible role-B tracer/collision must travel
+upward. APPLY without a matching ProbeKick instance rejects the selected record as
+the instant-bullet input; low dot rejects Init preservation; dot near 1 with a
+sideways visible tracer proves a separate visual instance/effect.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

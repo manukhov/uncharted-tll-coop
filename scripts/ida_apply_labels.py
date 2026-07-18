@@ -7255,22 +7255,24 @@ FUNCTIONS = {
     0x141519D30: (
         "ProcessWeapon_ProjectileEmission",
         "ProcessWeapon vtable +0x920. Performs the late retained-player direction "
-        "rewrite, normalization and spread, then builds the instant/projectile "
-        "launch records consumed by tracer and collision.",
+        "rewrite, normalization and spread. For the default branch, record "
+        "0x14151B72B is stored at SpawnInfo+0x28; only weapon+0x906 > 1 replaces "
+        "that pointer with the later 0x14151BC3E record at 0x14151BE33.",
     ),
     0x141519B50: (
         "ProcessWeapon_SpawnProjectile",
         "Exact embedded signature ProcessWeapon::SpawnProjectile(const SpawnInfo "
         "&, Process **). Resolves or schedules the selector-backed process spawn; "
-        "ordinary and multi-projectile descriptors carry their launch-record "
-        "pointer at SpawnInfo+0x28 into the spawned projectile Init method.",
+        "SpawnInfo+0x28 is the authoritative selected launch-record pointer carried "
+        "into the spawned projectile Init method.",
     ),
     0x141520750: (
         "BuildProjectileLaunchRecord",
         "Builds the common projectile launch record: source owner handle at +0x0, "
         "world origin R8 at +0x20, and caller-selected direction R9 duplicated at "
-        "+0x30/+0x40. Ordinary local call 0x14151BC3E passes normalized pre-spread "
-        "var_EA8; network-event call 0x14151B72B passes post-spread var_EB8.",
+        "+0x30/+0x40. Call 0x14151B72B passes post-spread var_EB8 and remains the "
+        "selected single-projectile record; 0x14151BC3E passes normalized "
+        "pre-spread var_EA8 and is selected only when weapon+0x906 > 1.",
     ),
     0x14152BF20: (
         "ProjectileBulletInstant_Init",

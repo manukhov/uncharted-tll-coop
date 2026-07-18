@@ -182,17 +182,22 @@ constexpr std::size_t kFireArgsPoseSeedOffset = 0x60;
 constexpr std::size_t kFireArgsAimQuatOffset = 0x70;
 constexpr std::size_t kFireArgsTargetVectorOffset = 0x00;
 constexpr std::size_t kFireArgsDirectionVectorOffset = 0x10;
-constexpr std::uintptr_t kBuildProjectileLaunchRecordRva = 0x1520750;
-// Local projectile spawn records are built at two sites. The >1 online-count
-// branch uses 0x151A00E for MultiProjectileBulletInstant. The ordinary
-// ProjectileBulletInstant path uses 0x151BC3E. Do not hook 0x151B72B: that
-// separate record is only handed to SendNetEventEmitProjectileBullet.
-constexpr std::array<std::uintptr_t, 2>
-    kBuildProjectileLaunchRecordCallsiteRvas{
-        0x151A00E,
-        0x151BC3E,
-    };
+constexpr std::uintptr_t kProcessWeaponSpawnProjectileRva = 0x1519B50;
+// ProcessWeapon::ProjectileEmission first stores the 0x151B72B record pointer at
+// SpawnInfo+0x28. Only projectile-count > 1 replaces it with the later 0x151BC3E
+// record at 0x151BE33. Observe/mutate the selected pointer at SpawnProjectile
+// instead of guessing which BuildProjectileLaunchRecord call owns this shot.
+constexpr std::size_t kSpawnInfoLaunchRecordPointerOffset = 0x28;
+constexpr std::size_t kProjectileLaunchRecordOwnerHandleOffset = 0x00;
 constexpr std::size_t kProjectileLaunchRecordDirectionOffset = 0x30;
+constexpr std::size_t kProjectileLaunchRecordDirectionMirrorOffset = 0x40;
+constexpr std::size_t kRuntimeObjectHandlePointerOffset = 0xA8;
+constexpr std::size_t kRuntimeObjectHandleIdOffset = 0xBC;
+constexpr std::uintptr_t kProjectileBulletInstantProbeKickRva = 0x152C9B0;
+constexpr std::uintptr_t kBoundTransformGetTranslationWsRva = 0x14E240;
+constexpr std::size_t kProjectileBulletInstantOwnerHandleOffset = 0x100;
+constexpr std::size_t kProjectileBulletInstantStartBoundOffset = 0x130;
+constexpr std::size_t kProjectileBulletInstantEndpointBoundOffset = 0x570;
 // CameraManager_GetBlendedCameraTransform out buffer: 4x4 matrix at +0x350.
 constexpr std::size_t kCameraOutMatrixOffset = 0x350;
 // Route-entity screen index field read inside GetBlendedCameraTransform.

@@ -395,9 +395,16 @@ using PlayerFireControllerCheckShotReadinessFunction =
 PlayerFireControllerTryStartFireFunction g_original_player_try_start_fire = nullptr;
 PlayerFireControllerCheckShotReadinessFunction
     g_original_player_check_shot_readiness = nullptr;
-using BuildProjectileLaunchRecordFunction = std::int64_t(__fastcall*)(
-    void*, void*, const float*, const float*, std::uint32_t);
-BuildProjectileLaunchRecordFunction g_build_projectile_launch_record = nullptr;
+using ProcessWeaponSpawnProjectileFunction = std::int64_t(__fastcall*)(
+    void*, void*, void*);
+using ProjectileBulletInstantProbeKickFunction = char(__fastcall*)(void*);
+using BoundTransformGetTranslationWsFunction = void*(__fastcall*)(void*, float*);
+ProcessWeaponSpawnProjectileFunction g_original_process_weapon_spawn_projectile =
+    nullptr;
+ProjectileBulletInstantProbeKickFunction
+    g_original_projectile_bullet_instant_probe_kick = nullptr;
+BoundTransformGetTranslationWsFunction g_bound_transform_get_translation_ws =
+    nullptr;
 struct PeerFireDirectionCapture {
     float final_direction[4]{};
     std::uint32_t weapon_art_id = 0;
@@ -409,6 +416,13 @@ SRWLOCK g_peer_fire_direction_lock = SRWLOCK_INIT;
 std::array<PeerFireDirectionCapture, kPeerFireDirectionCapacity>
     g_peer_fire_directions{};
 std::size_t g_peer_fire_direction_count = 0;
+struct AppliedFireDirectionObservation {
+    PeerFireDirectionCapture capture{};
+    ULONGLONG applied_ms = 0;
+    std::uintptr_t launch_record = 0;
+};
+SRWLOCK g_applied_fire_direction_observation_lock = SRWLOCK_INIT;
+AppliedFireDirectionObservation g_applied_fire_direction_observation{};
 // PlayerFireController::Fire prepares the relay packet on the game thread, but
 // ProcessWeapon::ProjectileEmission builds the local launch record later on a
 // worker thread. Keep a bounded process-wide FIFO so the local-record builder can
@@ -430,9 +444,9 @@ using PlayerBumpControllerUpdateFunction = void(__fastcall*)(void*);
 PlayerBumpControllerUpdateFunction g_original_player_bump_controller_update = nullptr;
 void __fastcall hooked_player_fire(
     void* controller, void* fire_args, void* weapon, double scalar);
-std::int64_t __fastcall hooked_build_projectile_launch_record(
-    void* out_record, void* owner, const float* origin,
-    const float* post_spread_direction, std::uint32_t knowledge_id);
+std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
+    void* process_weapon, void* spawn_info, void* out_process);
+char __fastcall hooked_projectile_bullet_instant_probe_kick(void* projectile);
 char __fastcall hooked_player_try_start_fire(void* controller);
 
 // ============================================================================
@@ -3589,56 +3603,61 @@ std::size_t peer_fire_direction_count() {
 }
 
 bool install_projectile_launch_record_direction_relay() {
-    std::array<
-        std::uint8_t*, kBuildProjectileLaunchRecordCallsiteRvas.size()>
-        callsites{};
-    std::array<
-        std::uint8_t*, kBuildProjectileLaunchRecordCallsiteRvas.size()>
-        relays{};
-    std::array<
-        std::int32_t, kBuildProjectileLaunchRecordCallsiteRvas.size()>
-        displacements{};
-    for (std::size_t i = 0; i < callsites.size(); ++i) {
-        if (!prepare_plain_callsite_relay(
-                kBuildProjectileLaunchRecordCallsiteRvas[i],
-                kBuildProjectileLaunchRecordRva,
-                reinterpret_cast<const void*>(
-                    &hooked_build_projectile_launch_record),
-                callsites[i], relays[i], displacements[i])) {
-            for (auto* relay : relays) {
-                if (relay != nullptr) {
-                    VirtualFree(relay, 0, MEM_RELEASE);
-                }
-            }
-            boot_log_line(
-                "projectile final-direction relays SKIPPED (preflight)");
-            return false;
-        }
-    }
-    g_build_projectile_launch_record =
-        reinterpret_cast<BuildProjectileLaunchRecordFunction>(
-            g_module + kBuildProjectileLaunchRecordRva);
-    DWORD old = 0;
-    const std::size_t patch_span = static_cast<std::size_t>(
-        callsites.back() + 5 - callsites.front());
-    if (!VirtualProtect(
-            callsites.front(), patch_span, PAGE_EXECUTE_READWRITE, &old)) {
-        for (auto* relay : relays) {
-            VirtualFree(relay, 0, MEM_RELEASE);
-        }
-        boot_log_line("projectile final-direction relays SKIPPED (protect)");
-        return false;
-    }
-    for (std::size_t i = 0; i < callsites.size(); ++i) {
-        *reinterpret_cast<std::int32_t*>(callsites[i] + 1) = displacements[i];
-    }
-    FlushInstructionCache(GetCurrentProcess(), callsites.front(), patch_span);
-    DWORD ignored = 0;
-    VirtualProtect(callsites.front(), patch_span, old, &ignored);
+    // 0x14152C9B0: mov rax,rsp; push rbp/rdi/r14; lea rbp,[rax-0x118].
+    // The 14-byte window has no relative operands and is safe for the common
+    // absolute-jump trampoline.
+    constexpr std::array<std::uint8_t, 14> kProbeKickPrologue{
+        0x48, 0x8B, 0xC4,
+        0x55,
+        0x57,
+        0x41, 0x56,
+        0x48, 0x8D, 0xA8, 0xE8, 0xFE, 0xFF, 0xFF,
+    };
+    g_original_projectile_bullet_instant_probe_kick =
+        reinterpret_cast<ProjectileBulletInstantProbeKickFunction>(
+            install_fire_gate_detour(
+                kProjectileBulletInstantProbeKickRva,
+                kProbeKickPrologue.data(), kProbeKickPrologue.size(),
+                reinterpret_cast<void*>(
+                    &hooked_projectile_bullet_instant_probe_kick),
+                "projectile ProbeKick direction discriminator"));
+
+    // 0x141519B50: three non-relative mov [rsp+arg],reg instructions followed by
+    // push rbp. Hooking here sees the exact launch-record pointer selected into
+    // SpawnInfo+0x28 after the 0x151B72B/0x151BC3E branch has resolved.
+    constexpr std::array<std::uint8_t, 16> kSpawnProjectilePrologue{
+        0x48, 0x89, 0x5C, 0x24, 0x08,
+        0x48, 0x89, 0x74, 0x24, 0x10,
+        0x48, 0x89, 0x7C, 0x24, 0x18,
+        0x55,
+    };
+    g_original_process_weapon_spawn_projectile =
+        reinterpret_cast<ProcessWeaponSpawnProjectileFunction>(
+            install_fire_gate_detour(
+                kProcessWeaponSpawnProjectileRva,
+                kSpawnProjectilePrologue.data(),
+                kSpawnProjectilePrologue.size(),
+                reinterpret_cast<void*>(
+                    &hooked_process_weapon_spawn_projectile),
+                "selected projectile launch-record relay"));
+    g_bound_transform_get_translation_ws =
+        reinterpret_cast<BoundTransformGetTranslationWsFunction>(
+            g_module + kBoundTransformGetTranslationWsRva);
+
+    const bool spawn_installed =
+        g_original_process_weapon_spawn_projectile != nullptr;
+    const bool probe_installed =
+        g_original_projectile_bullet_instant_probe_kick != nullptr;
     boot_log_line(
-        "projectile final-direction relays installed "
-        "(local spawn 0x14151A00E/0x14151BC3E)");
-    return true;
+        spawn_installed
+            ? "selected projectile launch-record relay installed "
+              "(ProcessWeapon::SpawnProjectile SpawnInfo+0x28)"
+            : "selected projectile launch-record relay SKIPPED");
+    boot_log_line(
+        probe_installed
+            ? "projectile ProbeKick direction discriminator installed"
+            : "projectile ProbeKick direction discriminator SKIPPED");
+    return spawn_installed && probe_installed;
 }
 
 bool install_pose_seed_gate() {
@@ -17281,127 +17300,254 @@ void flush_stale_pending_local_fire_packets() {
     }
 }
 
-std::int64_t __fastcall hooked_build_projectile_launch_record(
-    void* out_record,
-    void* owner,
-    const float* origin,
-    const float* post_spread_direction,
-    std::uint32_t knowledge_id
-) {
-    if (g_build_projectile_launch_record == nullptr) {
+bool launch_record_owned_by_runtime_object(
+    const void* launch_record, const void* runtime_object) {
+    if (launch_record == nullptr || runtime_object == nullptr) {
+        return false;
+    }
+    std::uint64_t record_handle_pointer = 0;
+    std::uint32_t record_handle_id = 0;
+    std::uint64_t object_handle_pointer = 0;
+    std::uint32_t object_handle_id = 0;
+    const auto* const record = static_cast<const std::byte*>(launch_record);
+    const auto* const object = static_cast<const std::byte*>(runtime_object);
+    if (!seh_read_qword(
+            record + kProjectileLaunchRecordOwnerHandleOffset,
+            record_handle_pointer) ||
+        !seh_read_dword(
+            record + kProjectileLaunchRecordOwnerHandleOffset + sizeof(void*),
+            record_handle_id) ||
+        !seh_read_qword(
+            object + kRuntimeObjectHandlePointerOffset,
+            object_handle_pointer) ||
+        !seh_read_dword(
+            object + kRuntimeObjectHandleIdOffset,
+            object_handle_id)) {
+        return false;
+    }
+    return (record_handle_pointer != 0 || record_handle_id != 0) &&
+        record_handle_pointer == object_handle_pointer &&
+        record_handle_id == object_handle_id;
+}
+
+void publish_applied_fire_direction_observation(
+    const PeerFireDirectionCapture& capture, const void* launch_record) {
+    AcquireSRWLockExclusive(&g_applied_fire_direction_observation_lock);
+    g_applied_fire_direction_observation.capture = capture;
+    g_applied_fire_direction_observation.applied_ms = GetTickCount64();
+    g_applied_fire_direction_observation.launch_record =
+        reinterpret_cast<std::uintptr_t>(launch_record);
+    ReleaseSRWLockExclusive(&g_applied_fire_direction_observation_lock);
+}
+
+bool snapshot_applied_fire_direction_observation(
+    AppliedFireDirectionObservation& observation) {
+    AcquireSRWLockShared(&g_applied_fire_direction_observation_lock);
+    observation = g_applied_fire_direction_observation;
+    ReleaseSRWLockShared(&g_applied_fire_direction_observation_lock);
+    return observation.capture.sequence != 0 && observation.applied_ms != 0 &&
+        GetTickCount64() - observation.applied_ms <= 1000;
+}
+
+bool selected_launch_record_from_spawn_info(
+    void* spawn_info, void*& launch_record) {
+    launch_record = nullptr;
+    std::uint64_t record_address = 0;
+    if (spawn_info == nullptr ||
+        !seh_read_qword(
+            static_cast<std::byte*>(spawn_info) +
+                kSpawnInfoLaunchRecordPointerOffset,
+            record_address) ||
+        record_address == 0) {
+        return false;
+    }
+    launch_record = reinterpret_cast<void*>(record_address);
+    return readable_bytes(launch_record) >=
+        kProjectileLaunchRecordDirectionMirrorOffset + sizeof(float) * 4;
+}
+
+std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
+    void* process_weapon, void* spawn_info, void* out_process) {
+    if (g_original_process_weapon_spawn_projectile == nullptr) {
         return 0;
     }
-    const std::uintptr_t callsite_rva =
-        reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - g_module - 5;
-    unsigned site_bit = 0;
-    if (callsite_rva == kBuildProjectileLaunchRecordCallsiteRvas[0]) {
-        site_bit = 1U;
-    } else if (callsite_rva == kBuildProjectileLaunchRecordCallsiteRvas[1]) {
-        site_bit = 2U;
-    }
-    void* const player0 = retained_player_object(0);
-    void* const player1 = retained_player_object(1);
-    const unsigned owner_class =
-        owner != nullptr && owner == player0
-            ? 1U
-            : (owner != nullptr && owner == player1 ? 2U : 0U);
-    const unsigned log_bit = site_bit << (owner_class * 2U);
-    static std::atomic<unsigned> logged_site_owner_bits{0};
-    if (site_bit != 0 &&
-        (logged_site_owner_bits.fetch_or(
-             log_bit, std::memory_order_acq_rel) & log_bit) == 0) {
-        char line[256]{};
-        std::snprintf(
-            line, sizeof(line),
-            "FIRE-LAUNCH-RECORD-HIT site=0x%llX roleB=%u pending=%u "
-            "owner0=%u owner1=%u peerQ=%llu tid=%lu",
-            static_cast<unsigned long long>(callsite_rva),
-            g_net_role_b ? 1U : 0U,
-            pending_local_fire_packet_count() != 0 ? 1U : 0U,
-            owner != nullptr && owner == player0 ? 1U : 0U,
-            owner != nullptr && owner == player1 ? 1U : 0U,
-            static_cast<unsigned long long>(peer_fire_direction_count()),
-            static_cast<unsigned long>(GetCurrentThreadId()));
-        boot_log_line(line);
-    }
-    const std::int64_t result = g_build_projectile_launch_record(
-        out_record, owner, origin, post_spread_direction, knowledge_id);
 
-    coop::FirePacket local_fire_packet{};
-    ULONGLONG local_fire_packet_age_ms = 0;
-    const bool local_player_source =
-        !g_net_role_b && owner != nullptr &&
-        owner == retained_player_object(0);
-    const bool local_sender_record =
-        local_player_source && take_pending_local_fire_packet(
-            local_fire_packet, local_fire_packet_age_ms);
-    if (local_sender_record) {
-        PeerFireDirectionCapture sender_capture{};
-        if (post_spread_direction != nullptr &&
-            readable_bytes(post_spread_direction) >= sizeof(float) * 4) {
-            std::memcpy(
-                sender_capture.final_direction, post_spread_direction,
-                sizeof(sender_capture.final_direction));
+    void* launch_record = nullptr;
+    if (selected_launch_record_from_spawn_info(spawn_info, launch_record)) {
+        void* const player0 = retained_player_object(0);
+        void* const player1 = retained_player_object(1);
+        const bool owner0 =
+            launch_record_owned_by_runtime_object(launch_record, player0);
+        const bool owner1 =
+            launch_record_owned_by_runtime_object(launch_record, player1);
+        const unsigned owner_class = owner0 ? 1U : (owner1 ? 2U : 0U);
+        static std::atomic<unsigned> logged_owner_bits{0};
+        const unsigned log_bit = 1U << owner_class;
+        if ((logged_owner_bits.fetch_or(log_bit, std::memory_order_acq_rel) &
+             log_bit) == 0) {
+            char line[320]{};
+            std::snprintf(
+                line, sizeof(line),
+                "FIRE-SELECTED-RECORD-HIT roleB=%u pending=%u owner0=%u "
+                "owner1=%u peerQ=%llu record=0x%llX tid=%lu",
+                g_net_role_b ? 1U : 0U,
+                pending_local_fire_packet_count() != 0 ? 1U : 0U,
+                owner0 ? 1U : 0U, owner1 ? 1U : 0U,
+                static_cast<unsigned long long>(peer_fire_direction_count()),
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(launch_record)),
+                static_cast<unsigned long>(GetCurrentThreadId()));
+            boot_log_line(line);
         }
-        if (finite_fire_direction_capture(sender_capture)) {
-            std::memcpy(
-                local_fire_packet.final_direction,
-                sender_capture.final_direction,
-                sizeof(local_fire_packet.final_direction));
-            local_fire_packet.flags |= coop::kFireFlagFinalDirection;
-            static std::atomic<bool> first_capture_logged{false};
-            if (!first_capture_logged.exchange(true, std::memory_order_acq_rel)) {
-                char line[256]{};
+
+        if (!g_net_role_b && owner0 && !g_dll_inert && g_state_net.enabled) {
+            coop::FirePacket packet{};
+            ULONGLONG age_ms = 0;
+            if (take_pending_local_fire_packet(packet, age_ms)) {
+                PeerFireDirectionCapture capture{};
+                std::memcpy(
+                    capture.final_direction,
+                    static_cast<std::byte*>(launch_record) +
+                        kProjectileLaunchRecordDirectionOffset,
+                    sizeof(capture.final_direction));
+                if (finite_fire_direction_capture(capture)) {
+                    std::memcpy(
+                        packet.final_direction, capture.final_direction,
+                        sizeof(packet.final_direction));
+                    packet.flags |= coop::kFireFlagFinalDirection;
+                    char line[320]{};
+                    std::snprintf(
+                        line, sizeof(line),
+                        "FIRE-SELECTED-DIRECTION-CAPTURE seq=%u age=%llu "
+                        "record=0x%llX dir=(%.4f,%.4f,%.4f)",
+                        packet.sequence,
+                        static_cast<unsigned long long>(age_ms),
+                        static_cast<unsigned long long>(
+                            reinterpret_cast<std::uintptr_t>(launch_record)),
+                        capture.final_direction[0], capture.final_direction[1],
+                        capture.final_direction[2]);
+                    boot_log_line(line);
+                }
+                send_prepared_fire_packet(packet);
+            }
+        } else if (g_net_role_b && owner1 && !g_dll_inert &&
+                   g_state_net.enabled) {
+            const std::uint32_t receiver_art =
+                puppet_active_weapon_art_id(player1);
+            PeerFireDirectionCapture capture{};
+            if (take_peer_fire_direction(receiver_art, capture) &&
+                finite_fire_direction_capture(capture)) {
+                float before[4]{};
+                std::memcpy(
+                    before,
+                    static_cast<std::byte*>(launch_record) +
+                        kProjectileLaunchRecordDirectionOffset,
+                    sizeof(before));
+                std::memcpy(
+                    static_cast<std::byte*>(launch_record) +
+                        kProjectileLaunchRecordDirectionOffset,
+                    capture.final_direction, sizeof(capture.final_direction));
+                std::memcpy(
+                    static_cast<std::byte*>(launch_record) +
+                        kProjectileLaunchRecordDirectionMirrorOffset,
+                    capture.final_direction, sizeof(capture.final_direction));
+                publish_applied_fire_direction_observation(
+                    capture, launch_record);
+                char line[384]{};
                 std::snprintf(
                     line, sizeof(line),
-                    "FIRE-FINAL-DIRECTION-CAPTURE site=0x%llX "
-                    "seq=%u age=%llu dir=(%.4f,%.4f,%.4f)",
-                    static_cast<unsigned long long>(callsite_rva),
-                    local_fire_packet.sequence,
+                    "FIRE-SELECTED-DIRECTION-APPLY seq=%u record=0x%llX "
+                    "before=(%.4f,%.4f,%.4f) after=(%.4f,%.4f,%.4f)",
+                    capture.sequence,
                     static_cast<unsigned long long>(
-                        local_fire_packet_age_ms),
-                    sender_capture.final_direction[0],
-                    sender_capture.final_direction[1],
-                    sender_capture.final_direction[2]);
+                        reinterpret_cast<std::uintptr_t>(launch_record)),
+                    before[0], before[1], before[2],
+                    capture.final_direction[0], capture.final_direction[1],
+                    capture.final_direction[2]);
                 boot_log_line(line);
             }
         }
-        send_prepared_fire_packet(local_fire_packet);
     }
+    return g_original_process_weapon_spawn_projectile(
+        process_weapon, spawn_info, out_process);
+}
 
+bool seh_projectile_probe_ray(
+    void* projectile, float* start, float* end) {
+    if (projectile == nullptr || start == nullptr || end == nullptr ||
+        g_bound_transform_get_translation_ws == nullptr) {
+        return false;
+    }
+    __try {
+        auto* const bytes = static_cast<std::byte*>(projectile);
+        g_bound_transform_get_translation_ws(
+            bytes + kProjectileBulletInstantStartBoundOffset, start);
+        g_bound_transform_get_translation_ws(
+            bytes + kProjectileBulletInstantEndpointBoundOffset, end);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+char __fastcall hooked_projectile_bullet_instant_probe_kick(void* projectile) {
+    if (g_original_projectile_bullet_instant_probe_kick == nullptr) {
+        return 0;
+    }
+    AppliedFireDirectionObservation observation{};
     void* const puppet = retained_player_object(1);
-    const bool receiver_puppet_record =
-        g_net_role_b && puppet != nullptr && owner == puppet;
-    if (!local_sender_record && receiver_puppet_record && !g_dll_inert &&
-        g_state_net.enabled &&
-        out_record != nullptr &&
-        readable_bytes(out_record) >=
-            kProjectileLaunchRecordDirectionOffset + sizeof(float) * 4) {
-        const std::uint32_t receiver_art =
-            puppet_active_weapon_art_id(puppet);
-        PeerFireDirectionCapture capture{};
-        const bool apply = take_peer_fire_direction(receiver_art, capture) &&
-            finite_fire_direction_capture(capture);
-        if (apply) {
-            std::memcpy(
-                static_cast<std::byte*>(out_record) +
-                    kProjectileLaunchRecordDirectionOffset,
-                capture.final_direction, sizeof(capture.final_direction));
-            static std::atomic<bool> first_apply_logged{false};
-            if (!first_apply_logged.exchange(true, std::memory_order_acq_rel)) {
-                char line[256]{};
+    const auto* const instance_owner_handle = projectile != nullptr
+        ? static_cast<std::byte*>(projectile) +
+              kProjectileBulletInstantOwnerHandleOffset
+        : nullptr;
+    const bool relevant = g_net_role_b && projectile != nullptr &&
+        puppet != nullptr &&
+        launch_record_owned_by_runtime_object(instance_owner_handle, puppet) &&
+        snapshot_applied_fire_direction_observation(observation);
+    if (relevant) {
+        float start[4]{};
+        float end[4]{};
+        if (seh_projectile_probe_ray(projectile, start, end)) {
+            const float dx = end[0] - start[0];
+            const float dy = end[1] - start[1];
+            const float dz = end[2] - start[2];
+            const float length = std::sqrt(dx * dx + dy * dy + dz * dz);
+            const float expected_length = std::sqrt(
+                observation.capture.final_direction[0] *
+                    observation.capture.final_direction[0] +
+                observation.capture.final_direction[1] *
+                    observation.capture.final_direction[1] +
+                observation.capture.final_direction[2] *
+                    observation.capture.final_direction[2]);
+            const float dot = length > 0.0001F && expected_length > 0.0001F
+                ? (dx * observation.capture.final_direction[0] +
+                   dy * observation.capture.final_direction[1] +
+                   dz * observation.capture.final_direction[2]) /
+                      (length * expected_length)
+                : -2.0F;
+            static std::atomic<unsigned> logged_probe_count{0};
+            if (logged_probe_count.fetch_add(1, std::memory_order_acq_rel) < 16) {
+                char line[448]{};
                 std::snprintf(
                     line, sizeof(line),
-                    "FIRE-FINAL-DIRECTION-APPLY site=0x%llX "
-                    "seq=%u dir=(%.4f,%.4f,%.4f)",
-                    static_cast<unsigned long long>(callsite_rva),
-                    capture.sequence, capture.final_direction[0],
-                    capture.final_direction[1], capture.final_direction[2]);
+                    "FIRE-PROBE-RAY seq=%u instance=0x%llX record=0x%llX "
+                    "age=%llu dot=%.5f ray=(%.4f,%.4f,%.4f) "
+                    "start=(%.3f,%.3f,%.3f) end=(%.3f,%.3f,%.3f)",
+                    observation.capture.sequence,
+                    static_cast<unsigned long long>(
+                        reinterpret_cast<std::uintptr_t>(projectile)),
+                    static_cast<unsigned long long>(observation.launch_record),
+                    static_cast<unsigned long long>(
+                        GetTickCount64() - observation.applied_ms),
+                    dot, dx / (length > 0.0001F ? length : 1.0F),
+                    dy / (length > 0.0001F ? length : 1.0F),
+                    dz / (length > 0.0001F ? length : 1.0F),
+                    start[0], start[1], start[2], end[0], end[1], end[2]);
                 boot_log_line(line);
             }
         }
     }
-    return result;
+    return g_original_projectile_bullet_instant_probe_kick(projectile);
 }
 
 // SEH-isolated replay of PlayerFireController::Fire (no C++ unwinding objects).
@@ -17646,7 +17792,8 @@ void apply_queued_fire_events(void* puppet) {
     }
 
     // Button fallback keeps all receiver-local muzzle/origin/handle state. The
-    // sender's normalized local-launch direction is consumed once at record +0x30.
+    // sender's selected SpawnInfo launch direction is queued until the receiver's
+    // selected record is known at ProcessWeapon::SpawnProjectile.
     if ((packet.flags & coop::kFireFlagFinalDirection) != 0) {
         PeerFireDirectionCapture direction_capture{};
         std::memcpy(
@@ -24954,8 +25101,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-18dt "
-        "(owner-gated bidirectional fire FIFOs)");
+        "TLL hook DLL init 2026-07-18du "
+        "(selected launch record + ProbeKick discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

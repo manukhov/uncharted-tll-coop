@@ -966,11 +966,12 @@ Do not reopen these as the first move:
 
 ## P0 - Projectile final direction, local spawn record (2026-07-18)
 
-- [x] Reject `0x14151B72B` as the local projectile record: its `v590` flows only
-      into `SendNetEventEmitProjectileBullet`.
-- [x] Resolve ordinary `ProjectileBulletInstant` local construction to
-      `0x14151BC3E`; its `v628` pointer is carried by the spawn descriptor into
-      `ProcessWeapon::SpawnProjectile 0x141519B50`.
+- [x] REJECT the prior `0x14151B72B` network-only conclusion. Its `var_D18`
+      record is both sent at `0x14151BBEF` and unconditionally stored at
+      `SpawnInfo+0x28` by `0x14151BBAB` for the single-projectile path.
+- [x] Correct `0x14151BC3E` ownership: its `var_A68` pointer replaces
+      `SpawnInfo+0x28` only behind `[ProcessWeapon+0x906] > 1` at
+      `0x14151BE21..0x14151BE33`; merely reaching BC3E does not make it live.
 - [x] Resolve the separate `projectile_count > 1` online branch to
       `0x14151A00E` and `MultiProjectileBulletInstant`.
 - [x] Run build `dr`: packet preparation succeeds on thread `2032`, while the
@@ -992,11 +993,14 @@ Do not reopen these as the first move:
       Init builds `endpoint_ws=start_ws+record+0x30`; ProbeKick derives its ray
       from `endpoint_ws-start_ws`. This rejects a hidden local-basis rotation for
       the correctly owned record.
-- [ ] Run build `dt`: receiver direction FIFO may be consumed only by
-      `pSourceGo == retained_player_object(1)`. Require role-B HIT `owner1=1`,
-      matching FIFO sequence APPLY, and visibly upward tracer/collision. If the
-      correct-owner record still goes sideways, move static analysis below Init
-      to the concrete ProbeKick ray endpoint construction.
+- [x] Run build `dt`: receiver reached BC3E with `owner1=1 peerQ=1` and applied a
+      nearly world-up vector, but the user again saw a strongly sideways pistol
+      shot. This rejects BC3E mutation as sufficient for single projectiles.
+- [x] Resolve the authoritative boundary: capture/apply the pointer already
+      selected at `ProcessWeapon::SpawnProjectile` `SpawnInfo+0x28`, and add a
+      read-only `ProjectileBulletInstant::ProbeKick` endpoint/dot discriminator.
+- [ ] Run build `du` with one upward pistol shot. Require selected-record owner
+      gates, capture/apply, ProbeKick `dot >= 0.99`, and visibly upward travel.
 
 ## Rule
 
