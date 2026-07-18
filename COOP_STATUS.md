@@ -3314,6 +3314,13 @@ owned `ProjectileBulletInstant` record and reveals a missing object discriminato
    `endpoint_ws-start_ws`, scales it by projectile range, and feeds that ray to
    the collision probes. Thus, on the intended projectile, an applied vector with
    world Y about `0.906` cannot statically produce a strongly sideways ray.
+4. A second independent consumer reaches the same field: base projectile setup
+   `0x141521F00` copies launch record `+0x30` at `0x14152244D`, and the carried
+   tracer record is normalized again by `Tracer::Init` at `0x14155C251`. Neither
+   collision nor tracer consumer reads launch record `+0x40`. RTTI TypeDescriptor
+   `0x14376EE38` and vftable `0x142A9D470` tie Init slot `+0x58` and main tick slot
+   `+0x1B8` to `ProjectileBulletInstant`, excluding an accidental neighboring
+   class interpretation.
 
 The contradiction is explained by ownership. `ProcessWeapon::ProjectileEmission`
 resolves descriptor `pSourceGo` (`a3+0x20` weak handle) and passes it as builder
@@ -3330,6 +3337,11 @@ sequence overwrite is independently CONFIRMED and can mispair rapid shots, but
 cannot alone turn several similarly upward vectors sideways; (C) a later
 trajectory overwrite is disfavored by the Init-to-ProbeKick endpoint dataflow, but
 remains the falsifier if an owner-correct apply is still visibly wrong.
+
+Accordingly, the visible build-`ds` rejection falsifies raw ungated cross-process
+transfer/correlation, not the static ownership of record `+0x30` itself. The field
+returns to STATIC for an owner-correct record; only build `dt` can promote it to
+behavior CONFIRMED.
 
 Build `dt` keeps the sender FIFO, replaces the receiver single slot with a
 16-entry, 500-ms FIFO, and consumes it only when builder argument 2 equals retained
