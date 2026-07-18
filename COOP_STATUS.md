@@ -3288,6 +3288,63 @@ written by `BuildProjectileLaunchRecord 0x141520750` through
 resolve the transform basis, and select a new boundary only after the evidence
 quota is met.
 
+### 2026-07-18 post-rejection static correction: receiver object correlation
+
+**STATIC, quota complete; build `dt` runtime not yet run.** The full dataflow
+rejects the earlier local-basis/secondary-vector explanations for a correctly
+owned `ProjectileBulletInstant` record and reveals a missing object discriminator:
+
+1. Exact callsite disassembly distinguishes the two vectors that prior comments
+   conflated. At `0x141519EFB`, normalized direction `xmm6` is stored in
+   `var_EA8`; `sub_1414F9EE0(out=var_EB8, in=var_EA8, spread...)` produces the
+   spread result. Network-record call `0x14151B72B` passes `R9=var_EB8`, while the
+   ordinary local-record call `0x14151BC3E` passes `R9=var_EA8`. Build `ds`
+   therefore relayed the sender's normalized local-launch direction, not the
+   post-spread network-event direction.
+2. `ProjectileBulletInstant_Init 0x14152BF20` loads record `+0x30`, builds the
+   endpoint bound, reads its current world translation through
+   `BoundTransform_GetTranslationWs_B 0x140186600`, adds record `+0x30`, and calls
+   `BoundTransform_SetTranslationWs 0x141686120`. The paired rotation setter
+   `0x1416861E0` explicitly converts world quaternion to parent space, proving
+   these helpers maintain a WS/PS contract rather than rotating `+0x30` as an
+   unknown local vector.
+3. `ProjectileBulletInstant_ProbeKick 0x14152C9B0` independently reads the start
+   and endpoint bound translations via the identical
+   `BoundTransform_GetTranslationWs_A 0x14014E240`, subtracts
+   `endpoint_ws-start_ws`, scales it by projectile range, and feeds that ray to
+   the collision probes. Thus, on the intended projectile, an applied vector with
+   world Y about `0.906` cannot statically produce a strongly sideways ray.
+
+The contradiction is explained by ownership. `ProcessWeapon::ProjectileEmission`
+resolves descriptor `pSourceGo` (`a3+0x20` weak handle) and passes it as builder
+argument 2, but build `ds` accepted the first matching-art record in role B from
+this generic ProcessWeapon callsite. It never required
+`owner == retained_player_object(1)`. The same run also proved the single receiver
+slot could advance ARM `seq=5` to APPLY `seq=6` before a worker consumed it. The
+callsite is shared by all shooters, so a log saying APPLY at `0x151BC3E` did not
+prove it modified the puppet projectile the user was watching.
+
+Competing hypotheses after the quota: (A) wrong `pSourceGo` record consumption is
+the primary cause and is selected by the exact missing predicate; (B) receiver
+sequence overwrite is independently CONFIRMED and can mispair rapid shots, but
+cannot alone turn several similarly upward vectors sideways; (C) a later
+trajectory overwrite is disfavored by the Init-to-ProbeKick endpoint dataflow, but
+remains the falsifier if an owner-correct apply is still visibly wrong.
+
+Build `dt` keeps the sender FIFO, replaces the receiver single slot with a
+16-entry, 500-ms FIFO, and consumes it only when builder argument 2 equals retained
+puppet slot 1. It adds bounded HIT fields `owner0/owner1/peerQ`.
+
+**Falsifiable build-`dt` prediction:** for one role-A upward pistol shot, role A
+must log `owner0=1 pending=1`; role B must log `owner1=1 peerQ>=1`, then APPLY the
+oldest matching packet sequence at `0x151BC3E`. No non-puppet record may consume
+the queue. The visible role-B tracer/collision must travel upward. If role B first
+hits with `owner1=0` and never later reaches `owner1=1`, build `ds` was modifying
+an unrelated projectile and this call family is not the puppet boundary. If
+`owner1=1` and the same sequence is applied but the shot remains sideways, reject
+record-level mutation despite the static endpoint dataflow and move the next
+boundary below Init to the concrete ProbeKick ray endpoints.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

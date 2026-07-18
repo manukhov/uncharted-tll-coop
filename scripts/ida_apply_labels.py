@@ -7267,15 +7267,37 @@ FUNCTIONS = {
     ),
     0x141520750: (
         "BuildProjectileLaunchRecord",
-        "Builds the common projectile launch record: receiver-local origin R8 is "
-        "stored at +0x20 and post-spread direction R9 at +0x30/+0x40. The caller "
-        "later replaces +0x40; instant projectile simulation consumes +0x30.",
+        "Builds the common projectile launch record: source owner handle at +0x0, "
+        "world origin R8 at +0x20, and caller-selected direction R9 duplicated at "
+        "+0x30/+0x40. Ordinary local call 0x14151BC3E passes normalized pre-spread "
+        "var_EA8; network-event call 0x14151B72B passes post-spread var_EB8.",
     ),
     0x14152BF20: (
         "ProjectileBulletInstant_Init",
         "Typed by embedded projectile-bullet-instant.cpp assertions. Reads the "
-        "launch-record pointer from SpawnInfo+0x28, copies its transform/state, "
-        "and consumes the post-spread direction at launch record +0x30.",
+        "launch-record pointer from SpawnInfo+0x28, builds m_initialPosBound, and "
+        "sets its endpoint world translation to start_ws + record+0x30. ProbeKick "
+        "later derives its ray from endpoint_ws - start_ws.",
+    ),
+    0x14014E240: (
+        "BoundTransform_GetTranslationWs_A",
+        "Resolves the bound parent transform, rotates TranslationPs by the cached "
+        "parent quaternion, adds parent TranslationWs, and returns TranslationWs.",
+    ),
+    0x140186600: (
+        "BoundTransform_GetTranslationWs_B",
+        "Second identical BoundTransform TranslationWs getter used while building "
+        "the ProjectileBulletInstant endpoint.",
+    ),
+    0x141686120: (
+        "BoundTransform_SetTranslationWs",
+        "Converts a requested world translation through the inverse cached parent "
+        "rotation and stores the resulting TranslationPs at bound+0x30.",
+    ),
+    0x1416861E0: (
+        "BoundTransform_SetRotationWs",
+        "Converts a requested world quaternion through the inverse cached parent "
+        "rotation and stores the resulting RotationPs at bound+0x40.",
     ),
     0x14152C9B0: (
         "ProjectileBulletInstant_ProbeKick",

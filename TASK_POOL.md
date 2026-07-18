@@ -983,11 +983,20 @@ Do not reopen these as the first move:
       applied the exact upward vector, but the user saw pistol and rifle bullets
       travel strongly sideways. The transport FIFO works; this receiver field
       interpretation does not.
-- [ ] Static-only: trace the complete launch record and its basis/transform from
+- [x] Static-only: trace the complete launch record and its basis/transform from
       `BuildProjectileLaunchRecord 0x141520750` through
       `ProjectileBulletInstant_Init 0x14152BF20` and downstream tracer/collision
       consumers. Distinguish local-basis, compound-transform and secondary-vector
       hypotheses before selecting another runtime boundary.
+- [x] Complete that trace: local call `0x14151BC3E` passes normalized `var_EA8`;
+      Init builds `endpoint_ws=start_ws+record+0x30`; ProbeKick derives its ray
+      from `endpoint_ws-start_ws`. This rejects a hidden local-basis rotation for
+      the correctly owned record.
+- [ ] Run build `dt`: receiver direction FIFO may be consumed only by
+      `pSourceGo == retained_player_object(1)`. Require role-B HIT `owner1=1`,
+      matching FIFO sequence APPLY, and visibly upward tracer/collision. If the
+      correct-owner record still goes sideways, move static analysis below Init
+      to the concrete ProbeKick ray endpoint construction.
 
 ## Rule
 

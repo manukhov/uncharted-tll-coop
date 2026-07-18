@@ -207,7 +207,7 @@ struct FirePacket {
     std::uint32_t weapon_art_id = 0;  // Weapon+0x860 on the sender
     double scalar = 0.0;
     std::uint8_t fire_args[kFireArgsBytes]{};
-    // v3: exact sender post-spread direction consumed by projectile record +0x30.
+    // v3: sender normalized local-launch direction consumed by record +0x30.
     float final_direction[4]{};
 };
 
