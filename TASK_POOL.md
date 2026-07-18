@@ -973,12 +973,14 @@ Do not reopen these as the first move:
       `ProcessWeapon::SpawnProjectile 0x141519B50`.
 - [x] Resolve the separate `projectile_count > 1` online branch to
       `0x14151A00E` and `MultiProjectileBulletInstant`.
-- [ ] Build and run the written two-instance discriminator from `COOP_STATUS.md`.
-      Ordinary pistol/rifle must apply at `0x151BC3E`, multi-projectile at
-      `0x151A00E`, and neither path may touch rejected `0x151B72B`.
-      Build `dq` runtime CONFIRMED the ordinary callsite in both processes but
-      found `pending=0`; run build `dr` to distinguish packet rejection from a
-      thread/lifetime handoff before implementing the direction relay.
+- [x] Run build `dr`: packet preparation succeeds on thread `2032`, while the
+      ordinary local builder runs on worker `20032`; this CONFIRMS the
+      cross-thread handoff and rejects `thread_local` correlation.
+- [ ] Run build `ds` with the owner-gated, `SRWLOCK`-protected 16-packet FIFO.
+      Ordinary role-A fire must capture/send `final=1` and role B must apply the
+      same sequence at `0x151BC3E`, without timeout/overflow. Visible tracer and
+      collision direction must match the sender; otherwise use the written
+      discriminator in `COOP_STATUS.md` to reject the failing ownership layer.
 
 ## Rule
 

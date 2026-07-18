@@ -3210,6 +3210,42 @@ adds `tid` to the builder HIT. Prediction: `ok=0` selects A; `ok=1` plus
 `pending=0` selects B, with differing tids proving a thread handoff and equal tids
 proving a later same-thread lifetime gap.
 
+**Runtime CONFIRMED (build `dr`, PIDs 3176/14556):** role A prepared the packet
+successfully on thread `2032` (`FIRE-PACKET-PREP ok=1`) and then reached the
+ordinary local record builder on worker thread `20032` with `pending=0`. Role B
+reached the same `0x14151BC3E` site on thread `20196`. This proves competitor B:
+the packet-to-final-direction bridge crosses a real thread handoff, so the old
+`thread_local FirePacket` cannot work. Packet construction, hook installation and
+the resolved local builder are not the failure.
+
+Build `ds` replaces the single-thread bridge with a process-wide, 16-entry FIFO
+protected by `SRWLOCK`. It has three independent ownership/safety grounds:
+(1) runtime thread IDs prove producer and consumer are different threads;
+(2) `ProcessWeapon::ProjectileEmission 0x141519D30` passes the resolved
+`pSourceGo` from its `a3+0x20` weak handle as builder argument 2, so consumption
+is gated to `owner == retained_player_object(0)` and enemy projectiles cannot take
+a packet; (3) `FirePacket` is a fixed 304-byte POD with a monotonic sequence, so a
+bounded FIFO preserves rapid-fire order without sharing borrowed engine pointers.
+Entries not consumed within 250 ms are sent without the final-direction flag,
+preserving non-projectile variants; queue overflow also preserves the oldest
+event instead of dropping it.
+
+Competing implementations are rejected for this exam: a process-global singleton
+would overwrite automatic-fire events; sending an immediate base packet followed
+by a correction would replay the same shot twice at the receiver; blocking the
+game thread until the worker runs would introduce a scheduler deadlock/stall
+hazard. The FIFO changes only the already-confirmed sender correlation boundary.
+
+**Falsifiable build-`ds` prediction:** one ordinary role-A shot must log
+`FIRE-LAUNCH-RECORD-HIT ... pending=1` on its worker, followed by
+`FIRE-FINAL-DIRECTION-CAPTURE site=0x151BC3E ... age=<250` and
+`FIRE-RELAY send ... final=1`. Role B must arm the same sequence and log
+`FIRE-FINAL-DIRECTION-APPLY site=0x151BC3E`. It must not log timeout/overflow for
+that shot. If the local HIT has `pending=1` but no capture, the direction pointer
+contract is false; if capture/send succeeds but role B does not apply, receiver
+arming/ownership is false; if APPLY fires yet the bullet still travels along the
+old ray, launch-record `+0x30` is not the collision/tracer owner.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

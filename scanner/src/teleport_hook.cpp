@@ -406,8 +406,21 @@ struct PeerFireDirectionCapture {
 };
 SRWLOCK g_peer_fire_direction_lock = SRWLOCK_INIT;
 PeerFireDirectionCapture g_peer_fire_direction{};
-thread_local bool g_pending_local_fire_packet_active = false;
-thread_local coop::FirePacket g_pending_local_fire_packet{};
+// PlayerFireController::Fire prepares the relay packet on the game thread, but
+// ProcessWeapon::ProjectileEmission builds the local launch record later on a
+// worker thread. Keep a bounded process-wide FIFO so the post-spread builder can
+// complete the matching packet across that handoff. The source-owner gate in the
+// builder prevents an enemy projectile from consuming a local-player packet.
+struct PendingLocalFirePacket {
+    coop::FirePacket packet{};
+    ULONGLONG queued_ms = 0;
+};
+constexpr std::size_t kPendingLocalFirePacketCapacity = 16;
+constexpr ULONGLONG kPendingLocalFirePacketTimeoutMs = 250;
+SRWLOCK g_pending_local_fire_packet_lock = SRWLOCK_INIT;
+std::array<PendingLocalFirePacket, kPendingLocalFirePacketCapacity>
+    g_pending_local_fire_packets{};
+std::size_t g_pending_local_fire_packet_count = 0;
 using PlayerTryStartBumpActionFunction = char(__fastcall*)(void*, void*);
 PlayerTryStartBumpActionFunction g_original_player_try_start_bump_action = nullptr;
 using PlayerBumpControllerUpdateFunction = void(__fastcall*)(void*);
@@ -17112,6 +17125,96 @@ void send_prepared_fire_packet(const coop::FirePacket& packet) {
     force_log_line(line.str().c_str());
 }
 
+std::size_t pending_local_fire_packet_count() {
+    AcquireSRWLockShared(&g_pending_local_fire_packet_lock);
+    const std::size_t count = g_pending_local_fire_packet_count;
+    ReleaseSRWLockShared(&g_pending_local_fire_packet_lock);
+    return count;
+}
+
+void enqueue_pending_local_fire_packet(const coop::FirePacket& packet) {
+    PendingLocalFirePacket overflow{};
+    bool send_overflow = false;
+    AcquireSRWLockExclusive(&g_pending_local_fire_packet_lock);
+    if (g_pending_local_fire_packet_count ==
+        kPendingLocalFirePacketCapacity) {
+        overflow = g_pending_local_fire_packets[0];
+        for (std::size_t i = 1; i < g_pending_local_fire_packet_count; ++i) {
+            g_pending_local_fire_packets[i - 1] =
+                g_pending_local_fire_packets[i];
+        }
+        --g_pending_local_fire_packet_count;
+        send_overflow = true;
+    }
+    PendingLocalFirePacket& pending =
+        g_pending_local_fire_packets[g_pending_local_fire_packet_count++];
+    pending.packet = packet;
+    pending.queued_ms = GetTickCount64();
+    ReleaseSRWLockExclusive(&g_pending_local_fire_packet_lock);
+
+    if (send_overflow) {
+        char line[160]{};
+        std::snprintf(
+            line, sizeof(line),
+            "FIRE-PENDING-FALLBACK seq=%u reason=overflow",
+            overflow.packet.sequence);
+        boot_log_line(line);
+        send_prepared_fire_packet(overflow.packet);
+    }
+}
+
+bool take_pending_local_fire_packet(
+    coop::FirePacket& packet, ULONGLONG& age_ms) {
+    PendingLocalFirePacket pending{};
+    bool found = false;
+    AcquireSRWLockExclusive(&g_pending_local_fire_packet_lock);
+    if (g_pending_local_fire_packet_count != 0) {
+        pending = g_pending_local_fire_packets[0];
+        for (std::size_t i = 1; i < g_pending_local_fire_packet_count; ++i) {
+            g_pending_local_fire_packets[i - 1] =
+                g_pending_local_fire_packets[i];
+        }
+        --g_pending_local_fire_packet_count;
+        found = true;
+    }
+    ReleaseSRWLockExclusive(&g_pending_local_fire_packet_lock);
+    if (!found) {
+        return false;
+    }
+    packet = pending.packet;
+    age_ms = GetTickCount64() - pending.queued_ms;
+    return true;
+}
+
+void flush_stale_pending_local_fire_packets() {
+    std::array<PendingLocalFirePacket, kPendingLocalFirePacketCapacity> stale{};
+    std::size_t stale_count = 0;
+    const ULONGLONG now = GetTickCount64();
+    AcquireSRWLockExclusive(&g_pending_local_fire_packet_lock);
+    while (g_pending_local_fire_packet_count != 0 &&
+           now - g_pending_local_fire_packets[0].queued_ms >=
+               kPendingLocalFirePacketTimeoutMs) {
+        stale[stale_count++] = g_pending_local_fire_packets[0];
+        for (std::size_t i = 1; i < g_pending_local_fire_packet_count; ++i) {
+            g_pending_local_fire_packets[i - 1] =
+                g_pending_local_fire_packets[i];
+        }
+        --g_pending_local_fire_packet_count;
+    }
+    ReleaseSRWLockExclusive(&g_pending_local_fire_packet_lock);
+
+    for (std::size_t i = 0; i < stale_count; ++i) {
+        char line[192]{};
+        std::snprintf(
+            line, sizeof(line),
+            "FIRE-PENDING-FALLBACK seq=%u age=%llu reason=timeout",
+            stale[i].packet.sequence,
+            static_cast<unsigned long long>(now - stale[i].queued_ms));
+        boot_log_line(line);
+        send_prepared_fire_packet(stale[i].packet);
+    }
+}
+
 std::int64_t __fastcall hooked_build_projectile_launch_record(
     void* out_record,
     void* owner,
@@ -17140,14 +17243,21 @@ std::int64_t __fastcall hooked_build_projectile_launch_record(
             "FIRE-LAUNCH-RECORD-HIT site=0x%llX roleB=%u pending=%u tid=%lu",
             static_cast<unsigned long long>(callsite_rva),
             g_net_role_b ? 1U : 0U,
-            g_pending_local_fire_packet_active ? 1U : 0U,
+            pending_local_fire_packet_count() != 0 ? 1U : 0U,
             static_cast<unsigned long>(GetCurrentThreadId()));
         boot_log_line(line);
     }
     const std::int64_t result = g_build_projectile_launch_record(
         out_record, owner, origin, post_spread_direction, knowledge_id);
 
-    const bool local_sender_record = g_pending_local_fire_packet_active;
+    coop::FirePacket local_fire_packet{};
+    ULONGLONG local_fire_packet_age_ms = 0;
+    const bool local_player_source =
+        !g_net_role_b && owner != nullptr &&
+        owner == retained_player_object(0);
+    const bool local_sender_record =
+        local_player_source && take_pending_local_fire_packet(
+            local_fire_packet, local_fire_packet_age_ms);
     if (local_sender_record) {
         PeerFireDirectionCapture sender_capture{};
         if (post_spread_direction != nullptr &&
@@ -17158,27 +17268,28 @@ std::int64_t __fastcall hooked_build_projectile_launch_record(
         }
         if (finite_fire_direction_capture(sender_capture)) {
             std::memcpy(
-                g_pending_local_fire_packet.final_direction,
+                local_fire_packet.final_direction,
                 sender_capture.final_direction,
-                sizeof(g_pending_local_fire_packet.final_direction));
-            g_pending_local_fire_packet.flags |= coop::kFireFlagFinalDirection;
+                sizeof(local_fire_packet.final_direction));
+            local_fire_packet.flags |= coop::kFireFlagFinalDirection;
             static std::atomic<bool> first_capture_logged{false};
             if (!first_capture_logged.exchange(true, std::memory_order_acq_rel)) {
                 char line[256]{};
                 std::snprintf(
                     line, sizeof(line),
                     "FIRE-FINAL-DIRECTION-CAPTURE site=0x%llX "
-                    "seq=%u dir=(%.4f,%.4f,%.4f)",
+                    "seq=%u age=%llu dir=(%.4f,%.4f,%.4f)",
                     static_cast<unsigned long long>(callsite_rva),
-                    g_pending_local_fire_packet.sequence,
+                    local_fire_packet.sequence,
+                    static_cast<unsigned long long>(
+                        local_fire_packet_age_ms),
                     sender_capture.final_direction[0],
                     sender_capture.final_direction[1],
                     sender_capture.final_direction[2]);
                 boot_log_line(line);
             }
         }
-        send_prepared_fire_packet(g_pending_local_fire_packet);
-        g_pending_local_fire_packet_active = false;
+        send_prepared_fire_packet(local_fire_packet);
     }
 
     if (!local_sender_record && !g_dll_inert && g_state_net.enabled &&
@@ -17556,11 +17667,13 @@ void __fastcall hooked_player_fire(
                  << g_player_fire_controller_offset << std::dec;
             log_line(line.str().c_str());
         }
-        g_pending_local_fire_packet_active = false;
+        coop::FirePacket local_fire_packet{};
         local_fire_packet_prepared = prepare_fire_packet(
             controller, fire_args, weapon, scalar,
-            g_pending_local_fire_packet);
-        g_pending_local_fire_packet_active = local_fire_packet_prepared;
+            local_fire_packet);
+        if (local_fire_packet_prepared) {
+            enqueue_pending_local_fire_packet(local_fire_packet);
+        }
         static std::atomic<bool> first_packet_prep_logged{false};
         if (!first_packet_prep_logged.exchange(true, std::memory_order_acq_rel)) {
             char line[256]{};
@@ -17590,12 +17703,6 @@ void __fastcall hooked_player_fire(
         apply_peer_pose_seed_to_player_aim_fields(player);
     }
     g_original_player_fire(controller, fire_args, weapon, scalar);
-    if (local_fire_packet_prepared && g_pending_local_fire_packet_active) {
-        // A non-projectile fire variant did not reach either local launch-record
-        // builder. Preserve the event but leave the final-direction flag clear.
-        send_prepared_fire_packet(g_pending_local_fire_packet);
-        g_pending_local_fire_packet_active = false;
-    }
     if (puppet_fire) {
         g_puppet_aim_ray_override = false;
         g_pose_seed_fire_only_override = false;
@@ -20478,6 +20585,10 @@ void net_tick() {
     static ULONGLONG last_freeze = 0, last_hp_probe = 0, last_hpsys = 0;
     static ULONGLONG last_animation_mirror = 0, last_weapon_apply = 0;
     const ULONGLONG now = GetTickCount64();
+    // Non-projectile fire variants never reach a launch-record builder. Preserve
+    // those events after a bounded wait while ordinary projectiles are completed
+    // immediately by the worker-thread callsite relay.
+    flush_stale_pending_local_fire_packets();
     if (foreground && (GetAsyncKeyState(VK_NEXT) & 1) != 0) {
         // Page Down: A/B the readable_bytes implementation. Fast = lock-free SEH
         // page probe (default); slow = original per-call VirtualQuery (VAD-lock
@@ -24779,8 +24890,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-18dr "
-        "(fire packet preparation discriminator)");
+        "TLL hook DLL init 2026-07-18ds "
+        "(cross-thread final fire direction FIFO)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
