@@ -17124,6 +17124,26 @@ std::int64_t __fastcall hooked_build_projectile_launch_record(
     }
     const std::uintptr_t callsite_rva =
         reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - g_module - 5;
+    unsigned site_bit = 0;
+    if (callsite_rva == kBuildProjectileLaunchRecordCallsiteRvas[0]) {
+        site_bit = 1U;
+    } else if (callsite_rva == kBuildProjectileLaunchRecordCallsiteRvas[1]) {
+        site_bit = 2U;
+    }
+    static std::atomic<unsigned> logged_site_bits{0};
+    if (site_bit != 0 &&
+        (logged_site_bits.fetch_or(site_bit, std::memory_order_acq_rel) &
+         site_bit) == 0) {
+        char line[192]{};
+        std::snprintf(
+            line, sizeof(line),
+            "FIRE-LAUNCH-RECORD-HIT site=0x%llX roleB=%u pending=%u tid=%lu",
+            static_cast<unsigned long long>(callsite_rva),
+            g_net_role_b ? 1U : 0U,
+            g_pending_local_fire_packet_active ? 1U : 0U,
+            static_cast<unsigned long>(GetCurrentThreadId()));
+        boot_log_line(line);
+    }
     const std::int64_t result = g_build_projectile_launch_record(
         out_record, owner, origin, post_spread_direction, knowledge_id);
 
@@ -17541,6 +17561,23 @@ void __fastcall hooked_player_fire(
             controller, fire_args, weapon, scalar,
             g_pending_local_fire_packet);
         g_pending_local_fire_packet_active = local_fire_packet_prepared;
+        static std::atomic<bool> first_packet_prep_logged{false};
+        if (!first_packet_prep_logged.exchange(true, std::memory_order_acq_rel)) {
+            char line[256]{};
+            std::snprintf(
+                line, sizeof(line),
+                "FIRE-PACKET-PREP ok=%u tid=%lu enabled=%u peer=%u "
+                "ctrl=%u args=%u weapon=%u owner0=%u",
+                local_fire_packet_prepared ? 1U : 0U,
+                static_cast<unsigned long>(GetCurrentThreadId()),
+                g_state_net.enabled ? 1U : 0U,
+                g_state_net.peer_set ? 1U : 0U,
+                controller != nullptr ? 1U : 0U,
+                fire_args != nullptr ? 1U : 0U,
+                weapon != nullptr ? 1U : 0U,
+                player == retained_player_object(0) ? 1U : 0U);
+            boot_log_line(line);
+        }
     }
     const bool puppet_fire =
         g_puppet_relay_pose_seed && g_state_net.enabled &&
@@ -24742,7 +24779,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-16dp (aim pitch, foot turn, final shot vector)");
+        "TLL hook DLL init 2026-07-18dr "
+        "(fire packet preparation discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

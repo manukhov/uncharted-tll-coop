@@ -3175,6 +3175,41 @@ new STATIC labels `ProcessWeapon_SpawnProjectile 0x141519B50`,
 `ProjectileBulletInstant_Init 0x14152BF20`, and
 `ProjectileBulletInstant_ProbeKick 0x14152C9B0`. Runtime remains pending.
 
+**Runtime attempt 2026-07-18, PIDs 16660/9932: INCONCLUSIVE, not REJECTED.** Both
+processes installed the two local relays and remained responsive; the user still
+observed the peer bullet travelling in the old wrong direction. A role-B shot
+reached `AIM-FIRE-SEED`, then a role-A-focused retry was made, but neither attempt
+emitted `FIRE-FINAL-DIRECTION-CAPTURE/ARM/APPLY`. Those markers were all gated by
+already-prepared packet state, so their absence cannot distinguish a missed
+launch-record callsite from an earlier FirePacket preparation failure.
+
+Build `dq` adds a one-shot, behavior-neutral marker at hook entry before either
+condition: `FIRE-LAUNCH-RECORD-HIT site=... roleB=... pending=...`. Written
+prediction: ordinary instant fire must hit `0x151BC3E`; `pending=1` followed by
+capture confirms sender integration, `pending=0` isolates the break above the
+builder in `PlayerFireController::Fire` packet preparation, while no HIT on
+either process rejects this `ProcessWeapon` emission family for the observed
+projectile. `0x151A00E` remains the distinct multi-projectile prediction.
+
+**Runtime CONFIRMED (build `dq`, PIDs 19036/19900):** one ordinary role-A shot
+hit exactly `0x14151BC3E` in both processes. Role A logged
+`FIRE-LAUNCH-RECORD-HIT site=0x151BC3E roleB=0 pending=0`; role B logged the same
+site with `roleB=1 pending=0` after its puppet `AIM-FIRE-SEED`. Both processes
+remained responsive. This confirms the local single-bullet callsite and rejects
+the old `0x14151B72B` network record as the receiver boundary. Direction remained
+unchanged because neither side had an armed final-direction packet; the
+callsite/record hypothesis itself is not rejected.
+
+Live `ReadProcessMemory` also confirms that `PlayerFireController::Fire
+0x140E2C730` is patched to `hooked_player_fire` in both processes. Remaining
+competitors are therefore: (A) `prepare_fire_packet` rejects the role-A context,
+or (B) it succeeds on the Fire thread but the later emission reaches
+`0x14151BC3E` after the `thread_local` pending state has been cleared or on a
+different thread. Build `dr` logs one role-A `FIRE-PACKET-PREP ok/tid/...` and
+adds `tid` to the builder HIT. Prediction: `ok=0` selects A; `ok=1` plus
+`pending=0` selects B, with differing tids proving a thread handoff and equal tids
+proving a later same-thread lifetime gap.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

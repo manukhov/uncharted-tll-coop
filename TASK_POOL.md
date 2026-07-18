@@ -976,6 +976,9 @@ Do not reopen these as the first move:
 - [ ] Build and run the written two-instance discriminator from `COOP_STATUS.md`.
       Ordinary pistol/rifle must apply at `0x151BC3E`, multi-projectile at
       `0x151A00E`, and neither path may touch rejected `0x151B72B`.
+      Build `dq` runtime CONFIRMED the ordinary callsite in both processes but
+      found `pending=0`; run build `dr` to distinguish packet rejection from a
+      thread/lifetime handoff before implementing the direction relay.
 
 ## Rule
 
