@@ -3712,3 +3712,33 @@ upper-body/weapon pitch, and `AIM-PITCH-BLEND-CLEAR` on release without changing
 confirmed horizontal yaw or projectile alignment. Non-zero apply with no visible
 pitch rejects named aim parameters as the puppet's rendered vertical consumer.
 Full evidence: `reports/remote_aim_pitch_blend_tick_20260718.md`.
+
+### 2026-07-18 REJECTED/STATIC: `dy` missed alternate channel mode; build `dz`
+
+Fresh build-`dy` processes PID 20512/12628 produced horizontal-only remote ADS;
+the user saw no vertical motion. Sender logged only zero capture, and receiver
+emitted neither `AIM-PITCH-BLEND-APPLY` nor `AIM-PITCH-APPLY`. This rejects the
+blend-tick application boundary, not named parameters: no named commit happened.
+The receiver itself computed `up=0.270986` with `blend=0.95`, proving that the
+directional vertical value is already local to the puppet publisher.
+
+Static follow-up resolves the missed discriminator inside
+`PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0`. After resolving
+Player `+0x1A0`, a zero branch-control byte uses the named commit path; the
+puppet's nonzero mode jumps to `0x140CB46F3` and writes float `0.2`
+(`0x142BE8DFC`) to channel offsets `0,2,4,6`. Constructor `0x140CAE670` identifies
+these as `Aim0/Aim2/Aim4/Aim6`. Native `0x14172C8E0` locates the existing registry
+entry, stores its float and marks it dirty.
+
+Build `dz` therefore removes the rejected blend-tick commit and, after the stock
+publisher returns, writes receiver-local `up*blend/down*blend` to alternate
+`Aim4/Aim6` through `0x14172C8E0`. Direct active-state/FgAnim copies, full-body
+pitch and broad pose/root writes remain rejected competitors; named mode remains
+unclassified because `dy` never entered it.
+
+**Prediction:** a large role-A ADS up/down sweep produces
+`AIM-PITCH-ALT-APPLY-ACTIVE` with nonzero vertical value and native set results,
+plus visible remote upper-body/weapon pitch. Horizontal yaw and projectile
+alignment remain unchanged; ADS exit leaves no stuck override. Successful active
+sets without visual pitch reject alternate `Aim4/Aim6` as the rendered consumer.
+Full evidence: `reports/remote_aim_pitch_blend_tick_20260718.md`.

@@ -69,6 +69,14 @@ FUNCTIONS = {
         "is PlayerAimController_UpdateBlendState. Later Player publication, "
         "camera and attachment phases run after this function returns.",
     ),
+    0x14172C8E0: (
+        "AnimParamRegistry_SetExistingFloatChannel",
+        "Looks up an active 0x20-byte animation-parameter registry entry by "
+        "channel id, stores the supplied finite non-negative float at entry "
+        "+0x30/+0x34, copies generation +0x28 to +0x38, and marks +0x3C/+0x3D "
+        "dirty. PlayerAimController's alternate publication branch calls this "
+        "for Aim0/Aim2/Aim4/Aim6.",
+    ),
     0x140CAFA20: (
         "PlayerAimController_UpdateBlendState",
         "PlayerAimController vtable slot +0x30. Called from the common Player "
@@ -7445,6 +7453,12 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142BE8DFC: (
+        "kAimAlternateChannelBaseline",
+        "Float 0.2 written through AnimParamRegistry_SetExistingFloatChannel to "
+        "Aim0/Aim2/Aim4/Aim6 when PlayerAimController's resolved branch-control "
+        "byte is nonzero.",
+    ),
     0x142A27658: (
         "PlayerGunMoveShield_Vtable",
         "MSVC RTTI .?AVGunMoveShield@Player@@; UpdateAndDispatch is slot +0x148 "

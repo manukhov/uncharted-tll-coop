@@ -138,7 +138,6 @@ struct LocalAimPitchCapture {
 };
 SRWLOCK g_local_aim_pitch_lock = SRWLOCK_INIT;
 LocalAimPitchCapture g_local_aim_pitch{};
-std::atomic<void*> g_puppet_named_pitch_controller{nullptr};
 
 struct LocalAimFootTurnCapture {
     void* owner = nullptr;
@@ -157,20 +156,20 @@ using PublishDirectionalAimWeightsFunction = void(__fastcall*)(
 using CommitNamedAimChannelFunction = void(__fastcall*)(
     void*, float, std::int32_t, std::uint32_t, std::int32_t);
 using ResolveAimBaseStateFunction = void*(__fastcall*)(void*, std::int32_t);
+using SetExistingAnimFloatChannelFunction = char(__fastcall*)(
+    void*, std::uint32_t, float);
 using SelectAimIdleTurnStateFunction = int(__fastcall*)(void*, std::uint32_t);
 using UpdateTurnYawFromDirectionFunction = std::int64_t(__fastcall*)(void*);
 PublishDirectionalAimWeightsFunction g_publish_directional_aim_weights = nullptr;
 CommitNamedAimChannelFunction g_commit_named_aim_channel = nullptr;
 ResolveAimBaseStateFunction g_resolve_aim_base_state = nullptr;
+SetExistingAnimFloatChannelFunction g_set_existing_anim_float_channel = nullptr;
 SelectAimIdleTurnStateFunction g_select_aim_idle_turn_state = nullptr;
 UpdateTurnYawFromDirectionFunction g_update_turn_yaw_from_direction = nullptr;
 void* aim_publish_active_state_from_player(void* player);
 bool valid_foot_turn_sample(
     const float direction[4], float yaw_rate, int current_child,
     int selected_child);
-bool apply_peer_pitch_channels_at_blend_tick(
-    void* controller, const coop::StatePacket& peer);
-bool clear_peer_pitch_channels_at_blend_tick(void* controller);
 using PlayerInputStateUpdateFunction = char(__fastcall*)(void*);
 PlayerInputStateUpdateFunction g_original_player_input_state_update = nullptr;
 using PlayerInputCommandStateUpdateFunction = void(__fastcall*)(void*);
@@ -7681,20 +7680,10 @@ void __fastcall hooked_player_aim_blend_tick(void* controller) {
         return;
     }
 
-    coop::StatePacket peer{};
-    if (!peer_puppet_aim_controller_fixup_wanted(controller, &peer)) {
-        if (g_puppet_named_pitch_controller.load(std::memory_order_acquire) ==
-            controller) {
-            clear_peer_pitch_channels_at_blend_tick(controller);
-        }
+    if (!peer_puppet_aim_controller_fixup_wanted(controller, nullptr)) {
         return;
     }
     force_peer_puppet_aim_blend_state(controller);
-    if (!apply_peer_pitch_channels_at_blend_tick(controller, peer) &&
-        g_puppet_named_pitch_controller.load(std::memory_order_acquire) ==
-            controller) {
-        clear_peer_pitch_channels_at_blend_tick(controller);
-    }
 }
 
 std::int64_t __fastcall hooked_player_aim_world_basis(
@@ -13830,7 +13819,9 @@ bool player_screen_index_is(const void* player, std::uint32_t index) {
                static_cast<const std::byte*>(player) + 0x4010) == index;
 }
 
-bool aim_controller_uses_named_channels(void* controller, void* owner) {
+bool read_aim_named_channel_mode(
+    void* controller, void* owner, bool& uses_named_channels) {
+    uses_named_channels = false;
     if (controller == nullptr || owner == nullptr ||
         g_resolve_aim_base_state == nullptr ||
         readable_bytes(static_cast<std::byte*>(owner) +
@@ -13850,78 +13841,21 @@ bool aim_controller_uses_named_channels(void* controller, void* owner) {
         }
         auto* const branch_ctl = *reinterpret_cast<std::uint8_t**>(
             static_cast<std::byte*>(resolved) + 0x38);
-        return branch_ctl != nullptr && readable_bytes(branch_ctl) >= 1 &&
-            branch_ctl[0] == 0;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-bool commit_peer_pitch_channel_pair(
-    void* controller, float up, float down) {
-    if (controller == nullptr || g_commit_named_aim_channel == nullptr ||
-        readable_bytes(static_cast<std::byte*>(controller) + 0x8F0) < 1 ||
-        !std::isfinite(up) || !std::isfinite(down) ||
-        up < 0.0F || up > 1.0F || down < 0.0F || down > 1.0F) {
-        return false;
-    }
-    void* const owner = *reinterpret_cast<void**>(
-        static_cast<std::byte*>(controller) + kGunMoveControllerOwnerOffset);
-    if (!player_screen_index_is(owner, kSlot1ScreenIndex) ||
-        !aim_controller_uses_named_channels(controller, owner)) {
-        return false;
-    }
-    const std::int32_t base_index = *reinterpret_cast<const std::int32_t*>(
-        static_cast<const std::byte*>(controller) + 0x8E8);
-    __try {
-        // UpdateBlendState has already reset/primed the Aim0..Aim7 family for
-        // this Player phase. Commit the peer's post-blend values afterwards so
-        // the downstream animation publication consumes them in the same tick.
-        g_commit_named_aim_channel(
-            controller, down, base_index + 6, 0xE8651C16u, 2);
-        g_commit_named_aim_channel(
-            controller, up, base_index + 4, 0x7283B601u, 3);
+        if (branch_ctl == nullptr || readable_bytes(branch_ctl) < 1) {
+            return false;
+        }
+        uses_named_channels = branch_ctl[0] == 0;
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
     }
 }
 
-bool apply_peer_pitch_channels_at_blend_tick(
-    void* controller, const coop::StatePacket& peer) {
-    if ((peer.flags & coop::kStateFlagAimPitch) == 0 ||
-        !peer_packet_aim_active(peer) ||
-        !commit_peer_pitch_channel_pair(
-            controller, peer.aim_pitch_up, peer.aim_pitch_down)) {
-        return false;
-    }
-    g_puppet_named_pitch_controller.store(controller, std::memory_order_release);
-    static std::atomic<bool> first_pitch_blend_apply_logged{false};
-    if (!first_pitch_blend_apply_logged.exchange(
-            true, std::memory_order_acq_rel)) {
-        const float blend = *reinterpret_cast<const float*>(
-            static_cast<const std::byte*>(controller) + 0x8EC);
-        char line[192]{};
-        std::snprintf(
-            line, sizeof(line),
-            "AIM-PITCH-BLEND-APPLY seq=%u up=%.4f down=%.4f blend=%.4f",
-            peer.sequence, peer.aim_pitch_up, peer.aim_pitch_down, blend);
-        boot_log_line(line);
-    }
-    return true;
-}
-
-bool clear_peer_pitch_channels_at_blend_tick(void* controller) {
-    if (!commit_peer_pitch_channel_pair(controller, 0.0F, 0.0F)) {
-        return false;
-    }
-    g_puppet_named_pitch_controller.store(nullptr, std::memory_order_release);
-    static std::atomic<bool> first_pitch_blend_clear_logged{false};
-    if (!first_pitch_blend_clear_logged.exchange(
-            true, std::memory_order_acq_rel)) {
-        boot_log_line("AIM-PITCH-BLEND-CLEAR");
-    }
-    return true;
+bool aim_controller_uses_named_channels(void* controller, void* owner) {
+    bool uses_named_channels = false;
+    return read_aim_named_channel_mode(
+               controller, owner, uses_named_channels) &&
+        uses_named_channels;
 }
 
 void __fastcall hooked_publish_directional_aim_weights(
@@ -13936,13 +13870,19 @@ void __fastcall hooked_publish_directional_aim_weights(
     }
     void* const owner = *reinterpret_cast<void**>(
         static_cast<std::byte*>(controller) + kGunMoveControllerOwnerOffset);
-    if (owner == nullptr || !aim_controller_uses_named_channels(controller, owner)) {
+    bool uses_named_channels = false;
+    if (owner == nullptr ||
+        !read_aim_named_channel_mode(
+            controller, owner, uses_named_channels)) {
         return;
     }
 
     const float blend = *reinterpret_cast<const float*>(
         static_cast<const std::byte*>(controller) + 0x8EC);
     if (player_screen_index_is(owner, 0)) {
+        if (!uses_named_channels) {
+            return;
+        }
         const float pitch_up = up * blend;
         const float pitch_down = down * blend;
         if (!std::isfinite(pitch_up) || !std::isfinite(pitch_down) ||
@@ -13975,8 +13915,73 @@ void __fastcall hooked_publish_directional_aim_weights(
         return;
     }
 
-    if (!player_screen_index_is(owner, kSlot1ScreenIndex) ||
-        g_commit_named_aim_channel == nullptr) {
+    if (!player_screen_index_is(owner, kSlot1ScreenIndex)) {
+        return;
+    }
+
+    if (!uses_named_channels) {
+        coop::StatePacket peer{};
+        if (g_set_existing_anim_float_channel == nullptr ||
+            !peer_puppet_aim_controller_fixup_wanted(controller, &peer) ||
+            !std::isfinite(blend) || blend < 0.0F || blend > 1.0F ||
+            !std::isfinite(up) || !std::isfinite(down) ||
+            up < 0.0F || up > 1.0F || down < 0.0F || down > 1.0F) {
+            return;
+        }
+        const std::int32_t base_index = *reinterpret_cast<const std::int32_t*>(
+            static_cast<const std::byte*>(controller) + 0x8E8);
+        if (base_index < 0 || base_index > 1 ||
+            readable_bytes(static_cast<std::byte*>(owner) +
+                           kPlayerUpperStateOwnerOffset) < sizeof(void*)) {
+            return;
+        }
+        void* const registry = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(owner) + kPlayerUpperStateOwnerOffset);
+        if (registry == nullptr) {
+            return;
+        }
+        const auto* const channel_ids = reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(controller) + 0x8C8);
+        const float pitch_up = up * blend;
+        const float pitch_down = down * blend;
+        __try {
+            const char set_up = g_set_existing_anim_float_channel(
+                registry, channel_ids[base_index + 4], pitch_up);
+            const char set_down = g_set_existing_anim_float_channel(
+                registry, channel_ids[base_index + 6], pitch_down);
+            static std::atomic<bool> first_alt_pitch_apply_logged{false};
+            if (!first_alt_pitch_apply_logged.exchange(
+                    true, std::memory_order_acq_rel)) {
+                char line[224]{};
+                std::snprintf(
+                    line, sizeof(line),
+                    "AIM-PITCH-ALT-APPLY seq=%u up=%.4f down=%.4f "
+                    "blend=%.4f setUp=%u setDown=%u baseline=0.2",
+                    peer.sequence, pitch_up, pitch_down, blend,
+                    static_cast<unsigned>(static_cast<unsigned char>(set_up)),
+                    static_cast<unsigned>(static_cast<unsigned char>(set_down)));
+                boot_log_line(line);
+            }
+            static std::atomic<bool> first_active_alt_pitch_apply_logged{false};
+            if (std::max(pitch_up, pitch_down) >= 0.05F &&
+                !first_active_alt_pitch_apply_logged.exchange(
+                    true, std::memory_order_acq_rel)) {
+                char line[224]{};
+                std::snprintf(
+                    line, sizeof(line),
+                    "AIM-PITCH-ALT-APPLY-ACTIVE seq=%u up=%.4f down=%.4f "
+                    "blend=%.4f setUp=%u setDown=%u",
+                    peer.sequence, pitch_up, pitch_down, blend,
+                    static_cast<unsigned>(static_cast<unsigned char>(set_up)),
+                    static_cast<unsigned>(static_cast<unsigned char>(set_down)));
+                boot_log_line(line);
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+        }
+        return;
+    }
+
+    if (g_commit_named_aim_channel == nullptr) {
         return;
     }
     const ULONGLONG received =
@@ -14244,6 +14249,9 @@ bool install_native_aim_pitch_relay() {
             g_module + kPlayerAimCommitNamedChannelRva);
     g_resolve_aim_base_state = reinterpret_cast<ResolveAimBaseStateFunction>(
         g_module + kPlayerAimResolveBaseStateRva);
+    g_set_existing_anim_float_channel =
+        reinterpret_cast<SetExistingAnimFloatChannelFunction>(
+            g_module + kAnimParamRegistrySetExistingFloatChannelRva);
     DWORD old = 0;
     if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
         VirtualFree(relay, 0, MEM_RELEASE);
@@ -25424,8 +25432,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-18dy "
-        "(blend-tick pitch channels + selected launch origin+direction)");
+        "TLL hook DLL init 2026-07-18dz "
+        "(alternate Aim4/Aim6 post-publisher pitch + selected launch relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

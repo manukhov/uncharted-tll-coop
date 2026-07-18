@@ -1056,8 +1056,18 @@ Do not reopen these as the first move:
       ADS exit. Release v2 builds; real IDB and refreshed MCP name `0x140C9F420`
       `Player_UpdateMountedControllers`. Static evidence and competitors are in
       `reports/remote_aim_pitch_blend_tick_20260718.md`.
-- [ ] Run the written `dy` up/down discriminator and require active capture,
-      blend-tick apply, visible upper-body/weapon pitch and clean clear on ADS exit.
+- [x] Run the written `dy` discriminator. User observed horizontal-only motion;
+      sender had no active capture, receiver had no blend/apply marker, but the
+      receiver computed `up=0.270986` at `blend=0.95`. Reject the `dy` boundary;
+      the named-channel consumer was not reached and remains unclassified.
+- [x] Resolve and implement build `dz`: the puppet takes `0x140CB41F0`'s alternate
+      branch, which writes float `0.2` to `Aim0/Aim2/Aim4/Aim6` through native
+      setter `0x14172C8E0`. After the original publisher, replace `Aim4/Aim6` with
+      receiver-local directional weights. Static evidence, competitors and the
+      discriminator are in `reports/remote_aim_pitch_blend_tick_20260718.md`.
+- [ ] Run the written `dz` up/down discriminator and require a non-zero
+      `AIM-PITCH-ALT-APPLY-ACTIVE`, visible upper-body/weapon pitch, unchanged
+      horizontal yaw/projectile alignment, and no stuck override after ADS exit.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
