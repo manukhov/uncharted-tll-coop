@@ -3357,6 +3357,41 @@ an unrelated projectile and this call family is not the puppet boundary. If
 record-level mutation despite the static endpoint dataflow and move the next
 boundary below Init to the concrete ProbeKick ray endpoints.
 
+### 2026-07-18 build dt runtime: owner-correct record mutation still sideways
+
+**REJECTED.** One ordinary role-A pistol shot aimed vertically upward falsified
+the build-`dt` prediction. Sender PID 13824 reached the ordinary local-record
+callsite with `pending=1 owner0=1` and captured `seq=1`
+`dir=(0.0100,0.9995,0.0302)`. Receiver PID 19568 armed `seq=1`, then reached the
+same `0x14151BC3E` callsite with `owner1=1 peerQ=1` and logged an applied nearly
+vertical capture, `seq=2 dir=(0.0133,0.9992,0.0372)`. Both processes remained
+responsive. The user nevertheless observed the bullet travelling strongly
+sideways again.
+
+This rejects missing-owner discrimination as a sufficient explanation. The
+`ARM seq=1` / `APPLY seq=2` transition also shows that one physical trigger can
+produce or retain more than one fire event; the receiver FIFO removed overwrite,
+but exact one-to-one projectile identity is still not proven. Static ownership of
+launch record `+0x30` remains strong, while the assumption that this mutated record
+is the record consumed by the visible/collision projectile is now REJECTED.
+
+Competing explanations at the next boundary are: (A) the record returned from
+`0x14151BC3E` is copied or overwritten before the concrete
+`ProjectileBulletInstant` consumes it; (B) duplicate/parallel projectile creation
+means the modified owner-correct record belongs to a non-visible instance while a
+different instance supplies the observed tracer; (C) the intended instance reaches
+`ProjectileBulletInstant::ProbeKick`, but its live endpoint no longer equals the
+applied vector; (D) if the live `endpoint_ws-start_ws` remains vertical while the
+visible shot is sideways, collision and the observed effect are separate runtime
+objects despite their static shared field.
+
+The next runtime test is not authorized until a read-only discriminator is placed
+at `ProjectileBulletInstant_ProbeKick 0x14152C9B0`: log the concrete instance,
+start/end world translations, normalized `endpoint-start`, and its dot product
+against the most recently owner-correct applied direction. Prediction: A/B/C give
+either no matching instance or a low dot product; D gives `dot` near 1 while the
+user still observes a sideways tracer.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three
