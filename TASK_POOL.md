@@ -999,8 +999,13 @@ Do not reopen these as the first move:
 - [x] Resolve the authoritative boundary: capture/apply the pointer already
       selected at `ProcessWeapon::SpawnProjectile` `SpawnInfo+0x28`, and add a
       read-only `ProjectileBulletInstant::ProbeKick` endpoint/dot discriminator.
-- [ ] Run build `du` with one upward pistol shot. Require selected-record owner
-      gates, capture/apply, ProbeKick `dot >= 0.99`, and visibly upward travel.
+- [x] Run build `du`: selected owner/capture/apply reached concrete ProbeKick with
+      the same `seq=1` and `dot=1.00000`, CONFIRMING the authoritative collision
+      ray, but both processes terminated because the 14-byte entry trampoline
+      clobbered ProbeKick's live `RAX=entry_rsp`.
+- [ ] Build/run `dv`: leave ProbeKick entry untouched and patch only direct call
+      `0x14152C8A6 -> 0x14152C9B0`; require the same selected-record/dot markers,
+      both processes responsive, and visible upward travel.
 
 ## Rule
 

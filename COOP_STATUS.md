@@ -3441,6 +3441,35 @@ upward. APPLY without a matching ProbeKick instance rejects the selected record 
 the instant-bullet input; low dot rejects Init preservation; dot near 1 with a
 sideways visible tracer proves a separate visual instance/effect.
 
+### 2026-07-18 build du runtime: selected ray confirmed, unsafe ProbeKick detour crashes
+
+**REJECTED as a runnable build; selected-record dataflow runtime-confirmed.** One
+role-A pistol shot caused both processes to terminate. Before termination, all
+direction discriminators completed successfully. Sender PID 13200 selected an
+`owner0=1` record and captured `seq=1 dir=(-0.3222,0.8839,0.3390)`. Receiver PID
+5276 selected an `owner1=1` record, applied the same `seq=1` over native
+`before=(0.7920,-0.2516,0.5562)`, and reached concrete instance `0x10E1020280`
+after 16 ms. Its live ProbeKick ray was
+`(-0.3222,0.8839,0.3390)` with `dot=1.00000`. This CONFIRMS that mutation of the
+authoritative `SpawnInfo+0x28` record survives Init and owns the actual collision
+ray; the prior BC3E-only boundary was the error.
+
+The crash is caused by the ProbeKick entry trampoline, not by a failed direction
+prediction. `ProjectileBulletInstant_ProbeKick 0x14152C9B0` begins with
+`mov rax,rsp` and keeps that entry-stack pointer live through saves at
+`0x14152C9CD..0x14152C9E4`. Build `du` relocated only the first 14 bytes, then the
+generic trampoline's `mov rax, jump_back; jmp rax` destroyed the live stack
+pointer before those saves. Both local and puppet bullets traverse this hook,
+explaining the symmetric termination on one shot.
+
+Do not retry build `du`. Build `dv` must leave the ProbeKick function entry
+untouched and relay only the direct call at `ProjectileBulletInstant::Init
+0x14152C8A6 -> 0x14152C9B0`; the helper may call the unpatched original normally.
+This preserves the already-confirmed selected-record mutation and discriminator
+without relocating a live prologue register. `TryExecuteCachedProbe 0x141531180`
+can bypass this direct call through slot `+0x48`; therefore absence of a dv marker
+is INCONCLUSIVE, while a present marker remains decisive.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three
