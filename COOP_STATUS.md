@@ -3246,6 +3246,26 @@ contract is false; if capture/send succeeds but role B does not apply, receiver
 arming/ownership is false; if APPLY fires yet the bullet still travels along the
 old ray, launch-record `+0x30` is not the collision/tracer owner.
 
+**Build `ds` runtime boundary CONFIRMED (PIDs 19700/2252; visible result pending):**
+the user fired several upward pistol and rifle shots. Role A prepared on thread
+`4744`, reached ordinary builder `0x14151BC3E` on worker `19680` with `pending=1`,
+and captured sequence 1 after 16 ms with final direction
+`(0.1951, 0.9057, 0.3764)`. Role B armed a received pistol-family direction and
+reached the same local builder on worker `16148`, then logged
+`FIRE-FINAL-DIRECTION-APPLY site=0x151BC3E seq=6 dir=(0.1955,0.9064,0.3744)`.
+Neither process logged FIFO timeout/overflow and both remained responsive. This
+confirms the cross-thread sender FIFO and the complete packet/capture/receiver
+apply chain; visible tracer/collision ownership still requires the user's direct
+observation before promotion to behavior CONFIRMED.
+
+The multi-shot run also exposes a separate receiver correlation limit: the first
+one-shot ARM marker saw sequence 5, while the first APPLY marker consumed sequence
+6. `g_peer_fire_direction` is a single protected slot, so a later packet can
+replace an earlier direction before its asynchronous puppet builder consumes it.
+All test shots were aimed similarly upward, so this does not falsify the current
+visible-direction exam, but rapid aim/weapon changes require a receiver-side FIFO
+if the user confirms that exact per-shot correlation is visibly relevant.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

@@ -976,11 +976,14 @@ Do not reopen these as the first move:
 - [x] Run build `dr`: packet preparation succeeds on thread `2032`, while the
       ordinary local builder runs on worker `20032`; this CONFIRMS the
       cross-thread handoff and rejects `thread_local` correlation.
-- [ ] Run build `ds` with the owner-gated, `SRWLOCK`-protected 16-packet FIFO.
-      Ordinary role-A fire must capture/send `final=1` and role B must apply the
-      same sequence at `0x151BC3E`, without timeout/overflow. Visible tracer and
-      collision direction must match the sender; otherwise use the written
-      discriminator in `COOP_STATUS.md` to reject the failing ownership layer.
+- [x] Build `ds` crossed the sender worker handoff: capture at `0x151BC3E` after
+      16 ms, packet final direction received, and role B applied it at its own
+      `0x151BC3E` without timeout/overflow; both processes stayed responsive.
+- [ ] Get the user's visible tracer/collision result for the upward pistol/rifle
+      shots. If they still follow the old ray despite APPLY, reject record `+0x30`
+      as final gameplay ownership; if they follow upward, promote the relay to
+      behavior CONFIRMED and replace the receiver's single direction slot with a
+      FIFO before testing rapid changes of aim/weapon.
 
 ## Rule
 
