@@ -158,3 +158,16 @@ the main DLL was timestamped 13:34 and 356352 bytes, while the built dx artifact
 was `tll_teleport_hook_v2.dll`, timestamped 14:03 and 358912 bytes. Build dx must
 replace the main artifact after both processes exit before the prediction can be
 evaluated. The init marker is now explicitly `2026-07-18dx`.
+
+## Runtime result: CONFIRMED
+
+Fresh processes PID 7688 (role A) and PID 16512 (role B) both loaded init tag
+`2026-07-18dx`. Ordinary pistol and rifle fire produced matching selected-launch
+capture/apply records with `originApply=1`. The concrete receiver ProbeKick rays
+reported `dot=1.00000` and `originError=0.00000`, satisfying both numeric bounds.
+
+The user confirmed that the remote tracer and bullet impact now coincide exactly;
+the former parallel left displacement is gone. This confirms selected launch
+record `+0x20` as the collision start and `+0x70` as the base/tracer origin at
+this boundary, while the already-confirmed `+0x30/+0x40` direction relay remains
+unchanged.

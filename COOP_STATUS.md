@@ -3653,6 +3653,17 @@ therefore not classified as confirmation or rejection. The rebuilt artifact now
 logs init tag `2026-07-18dx`; replace the main DLL only after both game processes
 exit, then run the written pistol/rifle discriminator.
 
+### 2026-07-18 CONFIRMED: selected projectile origin relay
+
+Fresh PID 7688 (role A) and PID 16512 (role B) both loaded build `dx`. Pistol and
+rifle fire produced selected-launch capture/apply with `originApply=1`; concrete
+receiver `FIRE-PROBE-RAY` samples reported `dot=1.00000` and
+`originError=0.00000`. The user confirmed that remote tracers and bullet impacts
+now coincide exactly. Selected record `+0x20/+0x70` origin ownership is therefore
+CONFIRMED, with the existing `+0x30/+0x40` direction relay preserved. Projectile
+direction/origin work is complete; vertical ADS pose and reload animation remain
+independent open tasks.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

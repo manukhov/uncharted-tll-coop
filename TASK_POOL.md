@@ -1039,9 +1039,10 @@ Do not reopen these as the first move:
 - [x] Implement build `dx`: FirePacket v5 relays selected-record origin and writes
       both collision start `+0x20` and base/tracer origin `+0x70`; remove the false
       `Player+0x240 -> FireArgs+0x00` target overwrite. Release v2 DLL builds.
-- [ ] Run build `dx` with pistol and rifle. Require matching capture/arm/apply,
+- [x] Run build `dx` with pistol and rifle. Matching capture/arm/apply produced
       `originApply=1`, ProbeKick `originError<=0.01`, retained `dot>=0.99`, and no
-      parallel left offset in either tracer or impact.
+      parallel left offset in either tracer or impact. PID 16512 reported
+      `originError=0.00000`, `dot=1.00000`; user confirmed exact visual alignment.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
