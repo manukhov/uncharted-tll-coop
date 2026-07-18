@@ -3479,6 +3479,30 @@ responsive after ProbeKick returns, and the visible shot must follow the logged
 ray. A crash before/after the marker rejects a different hook boundary and must be
 recorded separately; do not attribute it to direction ownership.
 
+### 2026-07-18 build dv runtime: projectile final direction confirmed
+
+**CONFIRMED.** One role-A pistol shot aimed vertically upward completed without a
+crash. Sender PID 11148 selected the owner0 record and captured
+`seq=1 dir=(-0.0219,0.9996,0.0190)`. Receiver PID 1464 selected the owner1 record,
+applied the same sequence over native `before=(0.7346,-0.1003,0.6711)`, and reached
+concrete `ProjectileBulletInstant` instance `0x10E1022D00` after 16 ms. Its live
+ray was `(-0.0219,0.9996,0.0190)` with `dot=1.00000`. Both processes remained
+responsive, and the user reported that bullets now appeared to travel correctly.
+
+This closes projectile final-direction ownership for ordinary single
+pistol/rifle shots: sender capture and receiver mutation belong at the selected
+`ProcessWeapon::SpawnProjectile` `SpawnInfo+0x28` record, with collision direction
+consumed from record `+0x30`. Keep build `dv`; do not restore any earlier builder or
+ProbeKick-entry hook.
+
+The user then identified a separate pre-existing weapon/ammo defect. Drawing a
+weapon in role A can publish the same weapon icon and an inconsistent magazine
+count into role B's HUD. Remote fire visually consumes that displayed count, but
+switching control to role B reveals that its actual ammo did not change. If role
+B's displayed/puppet magazine is already zero, incoming fire may produce no visible
+shot. Treat HUD publication ownership and the puppet weapon's native fire-readiness
+ammo as separate hypotheses until their fields and consumers are statically traced.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

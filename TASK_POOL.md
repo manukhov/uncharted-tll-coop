@@ -1003,9 +1003,26 @@ Do not reopen these as the first move:
       the same `seq=1` and `dot=1.00000`, CONFIRMING the authoritative collision
       ray, but both processes terminated because the 14-byte entry trampoline
       clobbered ProbeKick's live `RAX=entry_rsp`.
-- [ ] Build/run `dv`: leave ProbeKick entry untouched and patch only direct call
+- [x] Build/run `dv`: leave ProbeKick entry untouched and patch only direct call
       `0x14152C8A6 -> 0x14152C9B0`; require the same selected-record/dot markers,
-      both processes responsive, and visible upward travel.
+      both processes responsive, and visible upward travel. Runtime achieved
+      `seq=1`, `dot=1.00000`, both responsive, and user-visible correct travel.
+
+## P0 - Remote firearm ammo and HUD ownership (2026-07-18)
+
+- [ ] Identify the authoritative current-magazine/reserve fields on the live
+      weapon used by `PlayerFireController` readiness and projectile emission.
+- [ ] Trace the sender(s) of weapon icon/ammo into the process-global or per-screen
+      HUD state and prove why the retained puppet can publish into role B's HUD.
+- [ ] Separate three competitors before runtime: (A) receiver puppet magazine zero
+      blocks native shot creation; (B) HUD count is display-only while a different
+      weapon field blocks fire; (C) the FirePacket is consumed but a later visual
+      path is gated by ammo.
+- [ ] Extend the wire protocol only after the field owner is proven. Candidate
+      payload is selected weapon art plus magazine/reserve snapshot, applied only
+      to retained puppet slot 1 and never to the local role-B player's inventory.
+- [ ] Write a falsifiable test requiring role-A/role-B ammo markers, one visible
+      remote shot at receiver-local zero, and no mutation of role B's local ammo.
 
 ## Rule
 
