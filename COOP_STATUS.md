@@ -3266,6 +3266,28 @@ All test shots were aimed similarly upward, so this does not falsify the current
 visible-direction exam, but rapid aim/weapon changes require a receiver-side FIFO
 if the user confirms that exact per-shot correlation is visibly relevant.
 
+**REJECTED by visible runtime result:** despite the exact upward vector reaching
+receiver `launch_record+0x30`, the user observed both pistol and rifle bullets
+travelling strongly sideways, not upward. Therefore successful CAPTURE/ARM/APPLY
+does **not** confirm `+0x30` as a standalone world-space owner of visible tracer
+and collision direction. Do not retry this relay and do not promote the builder
+boundary to behavior CONFIRMED. The cross-thread FIFO itself remains confirmed as
+a transport mechanism, but applying only this field is behaviorally wrong and is
+now parked. Test PIDs 19700/2252 were stopped after the result.
+
+Competing static explanations reopened by this rejection are: (A) `+0x30` is a
+direction expressed in a source/local basis and must be transformed for the
+receiver; (B) it is world-space but is only one member of a launch transform whose
+other basis/quaternion fields remain native and rotate it later; (C) it is a
+secondary tracer/auxiliary vector while collision direction is owned elsewhere;
+(D) the single receiver slot's sequence skew paired a direction with the wrong
+projectile, although similarly upward test shots make D insufficient by itself to
+explain a strong sideways result. Next work is static-only: trace every field
+written by `BuildProjectileLaunchRecord 0x141520750` through
+`ProjectileBulletInstant_Init 0x14152BF20` and downstream trace/collision updates,
+resolve the transform basis, and select a new boundary only after the evidence
+quota is met.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

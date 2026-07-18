@@ -979,11 +979,15 @@ Do not reopen these as the first move:
 - [x] Build `ds` crossed the sender worker handoff: capture at `0x151BC3E` after
       16 ms, packet final direction received, and role B applied it at its own
       `0x151BC3E` without timeout/overflow; both processes stayed responsive.
-- [ ] Get the user's visible tracer/collision result for the upward pistol/rifle
-      shots. If they still follow the old ray despite APPLY, reject record `+0x30`
-      as final gameplay ownership; if they follow upward, promote the relay to
-      behavior CONFIRMED and replace the receiver's single direction slot with a
-      FIFO before testing rapid changes of aim/weapon.
+- [x] REJECT standalone `launch_record+0x30` world-direction ownership: build `ds`
+      applied the exact upward vector, but the user saw pistol and rifle bullets
+      travel strongly sideways. The transport FIFO works; this receiver field
+      interpretation does not.
+- [ ] Static-only: trace the complete launch record and its basis/transform from
+      `BuildProjectileLaunchRecord 0x141520750` through
+      `ProjectileBulletInstant_Init 0x14152BF20` and downstream tracer/collision
+      consumers. Distinguish local-basis, compound-transform and secondary-vector
+      hypotheses before selecting another runtime boundary.
 
 ## Rule
 
