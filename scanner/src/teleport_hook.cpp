@@ -25332,8 +25332,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-18dv "
-        "(selected launch record + safe ProbeKick callsite relay)");
+        "TLL hook DLL init 2026-07-18dx "
+        "(selected launch origin+direction + safe ProbeKick callsite relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

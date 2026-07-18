@@ -3644,6 +3644,15 @@ still-displaced collision rejects selected-record start ownership; low dot rejec
 direction/origin isolation. Full evidence is in
 `reports/remote_projectile_origin_20260718.md`.
 
+The first user launch after this build did **not** exercise dx: both running
+processes emitted the older `FIRE-SELECTED-DIRECTION-*` markers and none of
+`FIRE-SELECTED-LAUNCH-*`, `originApply`, or `originError`. The launcher had loaded
+the stale main DLL (13:34, 356352 bytes) while dx existed only as the v2 artifact
+(14:03, 358912 bytes). The report that the offset remained but looked smaller is
+therefore not classified as confirmation or rejection. The rebuilt artifact now
+logs init tag `2026-07-18dx`; replace the main DLL only after both game processes
+exit, then run the written pistol/rifle discriminator.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

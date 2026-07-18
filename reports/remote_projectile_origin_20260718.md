@@ -146,3 +146,15 @@ record's start ownership. Correct collision with a still-displaced tracer reject
 the `+0x70` base/tracer consumer conclusion. No origin flag/apply rejects packet
 version or owner/art correlation. Any direction regression (`dot < 0.99`) rejects
 the isolation of origin from direction.
+
+## First launch attempt was not build dx
+
+The user's first post-build observation (offset still present but apparently
+smaller) is **not a dx runtime result**. Both live processes loaded the older main
+`tll_teleport_hook.dll`: the log contains only
+`FIRE-SELECTED-DIRECTION-CAPTURE/APPLY` and no v5
+`FIRE-SELECTED-LAUNCH-*`, `originApply`, or `originError` markers. At launch time
+the main DLL was timestamped 13:34 and 356352 bytes, while the built dx artifact
+was `tll_teleport_hook_v2.dll`, timestamped 14:03 and 358912 bytes. Build dx must
+replace the main artifact after both processes exit before the prediction can be
+evaluated. The init marker is now explicitly `2026-07-18dx`.
