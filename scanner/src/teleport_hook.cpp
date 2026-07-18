@@ -3603,24 +3603,35 @@ std::size_t peer_fire_direction_count() {
 }
 
 bool install_projectile_launch_record_direction_relay() {
-    // 0x14152C9B0: mov rax,rsp; push rbp/rdi/r14; lea rbp,[rax-0x118].
-    // The 14-byte window has no relative operands and is safe for the common
-    // absolute-jump trampoline.
-    constexpr std::array<std::uint8_t, 14> kProbeKickPrologue{
-        0x48, 0x8B, 0xC4,
-        0x55,
-        0x57,
-        0x41, 0x56,
-        0x48, 0x8D, 0xA8, 0xE8, 0xFE, 0xFF, 0xFF,
-    };
+    // Do not detour the ProbeKick entry: its first instruction saves entry RSP in
+    // RAX and keeps it live beyond a short trampoline window. Relay the direct
+    // Init call instead, leaving the original function completely unmodified.
+    std::uint8_t* probe_callsite = nullptr;
+    std::uint8_t* probe_relay = nullptr;
+    std::int32_t probe_displacement = 0;
     g_original_projectile_bullet_instant_probe_kick =
         reinterpret_cast<ProjectileBulletInstantProbeKickFunction>(
-            install_fire_gate_detour(
-                kProjectileBulletInstantProbeKickRva,
-                kProbeKickPrologue.data(), kProbeKickPrologue.size(),
-                reinterpret_cast<void*>(
-                    &hooked_projectile_bullet_instant_probe_kick),
-                "projectile ProbeKick direction discriminator"));
+            g_module + kProjectileBulletInstantProbeKickRva);
+    bool probe_installed = prepare_plain_callsite_relay(
+        kProjectileBulletInstantProbeKickCallsiteRva,
+        kProjectileBulletInstantProbeKickRva,
+        reinterpret_cast<const void*>(
+            &hooked_projectile_bullet_instant_probe_kick),
+        probe_callsite, probe_relay, probe_displacement);
+    if (probe_installed) {
+        DWORD old = 0;
+        if (!VirtualProtect(
+                probe_callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
+            VirtualFree(probe_relay, 0, MEM_RELEASE);
+            probe_installed = false;
+        } else {
+            *reinterpret_cast<std::int32_t*>(probe_callsite + 1) =
+                probe_displacement;
+            FlushInstructionCache(GetCurrentProcess(), probe_callsite, 5);
+            DWORD ignored = 0;
+            VirtualProtect(probe_callsite, 5, old, &ignored);
+        }
+    }
 
     // 0x141519B50: three non-relative mov [rsp+arg],reg instructions followed by
     // push rbp. Hooking here sees the exact launch-record pointer selected into
@@ -3646,8 +3657,6 @@ bool install_projectile_launch_record_direction_relay() {
 
     const bool spawn_installed =
         g_original_process_weapon_spawn_projectile != nullptr;
-    const bool probe_installed =
-        g_original_projectile_bullet_instant_probe_kick != nullptr;
     boot_log_line(
         spawn_installed
             ? "selected projectile launch-record relay installed "
@@ -3655,7 +3664,8 @@ bool install_projectile_launch_record_direction_relay() {
             : "selected projectile launch-record relay SKIPPED");
     boot_log_line(
         probe_installed
-            ? "projectile ProbeKick direction discriminator installed"
+            ? "projectile ProbeKick direction discriminator installed "
+              "(direct Init callsite 0x14152C8A6)"
             : "projectile ProbeKick direction discriminator SKIPPED");
     return spawn_installed && probe_installed;
 }
@@ -25101,8 +25111,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-18du "
-        "(selected launch record + ProbeKick discriminator)");
+        "TLL hook DLL init 2026-07-18dv "
+        "(selected launch record + safe ProbeKick callsite relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

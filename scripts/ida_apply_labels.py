@@ -7305,7 +7305,9 @@ FUNCTIONS = {
         "ProjectileBulletInstant_ProbeKick",
         "Typed by the embedded ProjectileBulletInstant::ProbeKick signature. "
         "Continues collision/probe setup from the instant projectile initialized "
-        "with the local spawn launch record.",
+        "with the local spawn launch record. Entry 0x14152C9B0 keeps RAX=entry RSP "
+        "live through 0x14152C9E4, so a short absolute entry trampoline is unsafe; "
+        "instrument the direct Init call at 0x14152C8A6 instead.",
     ),
     0x1416A5790: (
         "Player_IsCurrentActionStateHash",

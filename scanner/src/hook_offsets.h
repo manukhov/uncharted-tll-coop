@@ -194,6 +194,8 @@ constexpr std::size_t kProjectileLaunchRecordDirectionMirrorOffset = 0x40;
 constexpr std::size_t kRuntimeObjectHandlePointerOffset = 0xA8;
 constexpr std::size_t kRuntimeObjectHandleIdOffset = 0xBC;
 constexpr std::uintptr_t kProjectileBulletInstantProbeKickRva = 0x152C9B0;
+constexpr std::uintptr_t kProjectileBulletInstantProbeKickCallsiteRva =
+    0x152C8A6;
 constexpr std::uintptr_t kBoundTransformGetTranslationWsRva = 0x14E240;
 constexpr std::size_t kProjectileBulletInstantOwnerHandleOffset = 0x100;
 constexpr std::size_t kProjectileBulletInstantStartBoundOffset = 0x130;

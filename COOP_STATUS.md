@@ -3470,6 +3470,15 @@ without relocating a live prologue register. `TryExecuteCachedProbe 0x141531180`
 can bypass this direct call through slot `+0x48`; therefore absence of a dv marker
 is INCONCLUSIVE, while a present marker remains decisive.
 
+Build `dv` implements that exact correction and compiles successfully. The
+ProbeKick entry is no longer patched; a preflight-verified rel32 relay replaces
+only call `0x14152C8A6`. The selected SpawnInfo relay and all packet/owner logic are
+unchanged. **Runtime prediction:** the same single upward pistol shot must repeat
+selected owner/capture/apply and `dot >= 0.99`, both processes must remain
+responsive after ProbeKick returns, and the visible shot must follow the logged
+ray. A crash before/after the marker rejects a different hook boundary and must be
+recorded separately; do not attribute it to direction ownership.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three
