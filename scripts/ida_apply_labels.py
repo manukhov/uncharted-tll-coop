@@ -7329,11 +7329,25 @@ FUNCTIONS = {
         "ProcessWeapon+0xB00. It does not own final projectile direction; "
         "downstream emission overwrites FireArgs+0x10 and applies spread.",
     ),
+    0x1414FE050: (
+        "ProcessWeapon_ResolveMuzzleTransform",
+        "ProcessWeapon vtable +0x8C8. Resolves the authored muzzle or "
+        "silenced-muzzle attachment from ProcessWeapon+0x1E0 through "
+        "0x1418B7060; falls back through 0x141686030 to the weapon bound at "
+        "+0x100. This is the native producer of the launch-origin transform.",
+    ),
+    0x141515860: (
+        "ProcessWeapon_UpdateMuzzleAndDispatchFire",
+        "ProcessWeapon vtable +0x410. Calls muzzle-transform slot +0x8C8 at "
+        "0x141515A17, stores the 32-byte result to ProcessWeapon+0x970/+0x980 "
+        "at 0x141515A22, then reaches ProcessWeapon_BuildAndDispatchProjectile.",
+    ),
     0x141518FC0: (
         "ProcessWeapon_BuildAndDispatchProjectile",
-        "Consumes ProcessWeapon's FireArgs copy, may overwrite direction at +0x10, "
-        "resolves the alternate per-screen pose branch, and dispatches projectile "
-        "emission through ProcessWeapon vtable +0x920.",
+        "Consumes ProcessWeapon's FireArgs copy, reads the native muzzle origin "
+        "from ProcessWeapon+0x970 at 0x141519124, may overwrite direction at "
+        "FireArgs+0x10, computes the final origin vector, and dispatches projectile "
+        "emission through ProcessWeapon vtable +0x920 at 0x141519773.",
     ),
     0x141519D30: (
         "ProcessWeapon_ProjectileEmission",
@@ -7352,16 +7366,25 @@ FUNCTIONS = {
     0x141520750: (
         "BuildProjectileLaunchRecord",
         "Builds the common projectile launch record: source owner handle at +0x0, "
-        "world origin R8 at +0x20, and caller-selected direction R9 duplicated at "
-        "+0x30/+0x40. Call 0x14151B72B passes post-spread var_EB8 and remains the "
+        "world origin R8 duplicated at +0x20/+0x70, and caller-selected direction "
+        "R9 duplicated at +0x30/+0x40. Call 0x14151B72B passes post-spread "
+        "var_EB8 and remains the "
         "selected single-projectile record; 0x14151BC3E passes normalized "
         "pre-spread var_EA8 and is selected only when weapon+0x906 > 1.",
+    ),
+    0x141521F00: (
+        "ProjectileBullet_InitBaseFromLaunchRecord",
+        "Base projectile launch-record setup used by ProjectileBulletInstant::Init. "
+        "Copies record+0x20 into the projectile start transform, constructs the "
+        "start bound at projectile+0x130, and independently constructs the base "
+        "projectile/tracer bound at +0x3A0 from duplicate origin record+0x70.",
     ),
     0x14152BF20: (
         "ProjectileBulletInstant_Init",
         "Typed by embedded projectile-bullet-instant.cpp assertions. Reads the "
-        "launch-record pointer from SpawnInfo+0x28, builds m_initialPosBound, and "
-        "sets its endpoint world translation to start_ws + record+0x30. ProbeKick "
+        "launch-record pointer from SpawnInfo+0x28, sets m_initialPosBound from "
+        "record+0x20, and sets its endpoint world translation to start_ws + "
+        "record+0x30. ProbeKick "
         "later derives its ray from endpoint_ws - start_ws.",
     ),
     0x14014E240: (

@@ -1028,14 +1028,20 @@ Do not reopen these as the first move:
 
 ## P0 - Remote projectile origin / muzzle offset (2026-07-18)
 
-- [ ] Trace the selected launch record's origin/endpoint fields from
+- [x] Trace the selected launch record's origin/endpoint fields from
       `ProcessWeapon::SpawnProjectile` into `ProjectileBulletInstant` and compare
       them with the firing puppet's live muzzle/hand transform.
-- [ ] Separate (A) sender world origin copied through FireArgs, (B) receiver
+- [x] Separate (A) sender world origin copied through FireArgs, (B) receiver
       puppet muzzle resolved from the wrong hand/weapon attachment, and (C) a
       tracer-only visual offset while collision impact is correct.
-- [ ] Before runtime, predict both tracer and impact displacement from one exact
+- [x] Before runtime, predict both tracer and impact displacement from one exact
       origin field; do not alter the already-confirmed final direction relay.
+- [x] Implement build `dx`: FirePacket v5 relays selected-record origin and writes
+      both collision start `+0x20` and base/tracer origin `+0x70`; remove the false
+      `Player+0x240 -> FireArgs+0x00` target overwrite. Release v2 DLL builds.
+- [ ] Run build `dx` with pistol and rifle. Require matching capture/arm/apply,
+      `originApply=1`, ProbeKick `originError<=0.01`, retained `dot>=0.99`, and no
+      parallel left offset in either tracer or impact.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

@@ -3593,6 +3593,57 @@ this as a separate **origin/muzzle transform** hypothesis, not a regression to
 direction-vector candidates. Reload animation sync is queued after projectile
 origin. Vertical ADS pose/movement remains independently open.
 
+### 2026-07-18 STATIC: selected projectile origin relay; build dx
+
+The roughly one-metre parallel left offset is now statically isolated from the
+already-confirmed direction relay. `FireArgs+0x00` is the world-space aim target,
+not an origin: `PlayerFireController_BuildFireArgsAndFire 0x140E2BCD0` stores the
+target there at `0x140E2C3AD`. The replay helper's old replacement with
+`Player+0x240` was semantically false; `Character_UpdateDerivedWorldTransformFromLocalRoot
+0x141BB8320` proves `+0x240` is the character-root world translation. That false
+write is removed. It could only affect a gated one-unit nudge along direction at
+`0x141519631..0x141519720`, so it does not explain a persistent lateral line.
+
+The real native origin is the authored weapon socket. ProcessWeapon vtable
+`+0x8C8`, concrete `0x1414FE050`, resolves `muzzle`/`silenced-muzzle` from the
+weapon attachment table and falls back to the weapon bound. ProcessWeapon vslot
+`+0x410` at `0x141515860` stores that transform to `ProcessWeapon+0x970/+0x980`;
+`ProcessWeapon_BuildAndDispatchProjectile 0x141518FC0` reads `+0x970`, computes
+the final vector and passes it through slot `+0x920` to
+`ProcessWeapon_ProjectileEmission 0x141519D30`. The selected builder passes that
+origin as R8 to `BuildProjectileLaunchRecord 0x141520750`.
+
+The record duplicates R8 at `+0x20` (`0x14152076B`) and `+0x70`
+(`0x1415207A0`). Instant collision Init consumes `+0x20` at
+`0x14152C2B7`, then computes endpoint = start + direction at
+`0x14152C808..0x14152C829`. The independent base/tracer path constructs its bound
+from `+0x70` at `0x141522169..0x141522174` and reads that world translation at
+`0x14152245B..0x141522470`. Therefore the reported tracer+impact offset shares
+one launch origin, and a complete correction must replace both copies. The
+wrong-hand hypothesis is rejected because the stock receiver resolves the exact
+authored muzzle socket; the likely mismatch is between two valid instance-local
+muzzle transforms. Tracer-only is rejected by the duplicate consumer dataflow.
+
+Build `dx` extends FirePacket to v5 with the sender's exact selected-record
+origin. At the already runtime-confirmed `ProcessWeapon::SpawnProjectile
+0x141519B50` boundary, sender owner0 captures `record+0x20`; receiver owner1/art
+matching writes it to selected record `+0x20/+0x70` before native Init. Existing
+direction `+0x30/+0x40` is unchanged. v4/v3/v1 receive compatibility remains.
+The direct ProbeKick discriminator now reports
+`originError=|live_start-relayed-origin|`. Release
+`tll_teleport_hook_v2.dll` builds successfully.
+
+**Falsifiable build-dx prediction:** one distant-wall pistol shot and one rifle
+shot must produce matching `FIRE-SELECTED-LAUNCH-CAPTURE`,
+`FIRE-FINAL-LAUNCH-ARM origin=1`, and
+`FIRE-SELECTED-LAUNCH-APPLY originApply=1`. The receiver's concrete
+`FIRE-PROBE-RAY` must keep `dot>=0.99` and report `originError<=0.01`; both tracer
+and impact must lose the previous parallel left displacement. A correct collision
+with displaced tracer rejects the `+0x70` conclusion; low origin error with a
+still-displaced collision rejects selected-record start ownership; low dot rejects
+direction/origin isolation. Full evidence is in
+`reports/remote_projectile_origin_20260718.md`.
+
 ### Build db partial confirmation; build dc transition/gait correction
 
 User runtime confirms the corrected FgAnim quaternion now faces the reticle. Three

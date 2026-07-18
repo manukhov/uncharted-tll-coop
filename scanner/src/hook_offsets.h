@@ -192,8 +192,14 @@ constexpr std::uintptr_t kProcessWeaponSpawnProjectileRva = 0x1519B50;
 // instead of guessing which BuildProjectileLaunchRecord call owns this shot.
 constexpr std::size_t kSpawnInfoLaunchRecordPointerOffset = 0x28;
 constexpr std::size_t kProjectileLaunchRecordOwnerHandleOffset = 0x00;
+// BuildProjectileLaunchRecord copies its R8 world-position vector here. Instant
+// bullet Init passes this field to BoundTransform_SetTranslationWs for the ray
+// start, then computes the endpoint as start + direction.
+constexpr std::size_t kProjectileLaunchRecordOriginOffset = 0x20;
 constexpr std::size_t kProjectileLaunchRecordDirectionOffset = 0x30;
 constexpr std::size_t kProjectileLaunchRecordDirectionMirrorOffset = 0x40;
+// The builder duplicates the same R8 origin for the base projectile/tracer path.
+constexpr std::size_t kProjectileLaunchRecordOriginMirrorOffset = 0x70;
 constexpr std::size_t kRuntimeObjectHandlePointerOffset = 0xA8;
 constexpr std::size_t kRuntimeObjectHandleIdOffset = 0xBC;
 constexpr std::uintptr_t kProjectileBulletInstantProbeKickRva = 0x152C9B0;

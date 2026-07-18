@@ -409,8 +409,10 @@ BoundTransformGetTranslationWsFunction g_bound_transform_get_translation_ws =
     nullptr;
 struct PeerFireDirectionCapture {
     float final_direction[4]{};
+    float final_origin[4]{};
     std::uint32_t weapon_art_id = 0;
     std::uint32_t sequence = 0;
+    bool has_final_origin = false;
     ULONGLONG armed_ms = 0;
 };
 constexpr std::size_t kPeerFireDirectionCapacity = 16;
@@ -3552,6 +3554,21 @@ bool finite_fire_direction_capture(const PeerFireDirectionCapture& capture) {
         capture.final_direction[1] * capture.final_direction[1] +
         capture.final_direction[2] * capture.final_direction[2];
     return length_squared > 0.01F && length_squared < 4.0F;
+}
+
+bool finite_fire_origin_capture(const PeerFireDirectionCapture& capture) {
+    if (!capture.has_final_origin) {
+        return false;
+    }
+    for (int i = 0; i < 4; ++i) {
+        if (!std::isfinite(capture.final_origin[i])) {
+            return false;
+        }
+    }
+    constexpr float kMaxWorldCoordinate = 100000000.0F;
+    return std::fabs(capture.final_origin[0]) < kMaxWorldCoordinate &&
+        std::fabs(capture.final_origin[1]) < kMaxWorldCoordinate &&
+        std::fabs(capture.final_origin[2]) < kMaxWorldCoordinate;
 }
 
 void enqueue_peer_fire_direction(const PeerFireDirectionCapture& capture) {
@@ -10273,6 +10290,12 @@ DWORD WINAPI state_recv_thread(void*) {
             if (received == static_cast<int>(sizeof(coop::FirePacket))) {
                 std::memcpy(&fp, buf, sizeof(fp));
                 if (fp.version == coop::kFirePacketVersion) {
+                    publish_fire_packet(fp);
+                }
+            } else if (received ==
+                       static_cast<int>(coop::kFirePacketV4Bytes)) {
+                std::memcpy(&fp, buf, coop::kFirePacketV4Bytes);
+                if (fp.version == 4) {
                     publish_fire_packet(fp);
                 }
             } else if (received ==
@@ -17162,25 +17185,16 @@ void sanitize_fire_args(std::uint8_t* args) {
     }
 }
 
-// Sender FireArgs carry the peer's built aim ray; keep direction, rebase origin to
-// the puppet's world position, then overlay peer pose_seed quat on the aim block.
+// Sender FireArgs+0 is the world-space aim target, not a launch origin. Preserve
+// it; the exact selected-record origin is relayed separately after native muzzle
+// resolution. Only sanitize embedded pointers and overlay the peer aim quat.
 void prepare_puppet_fire_args_from_sender(
-    void* puppet, const std::uint8_t* sender_args, std::uint8_t* out_args) {
+    void* /*puppet*/, const std::uint8_t* sender_args, std::uint8_t* out_args) {
     if (sender_args == nullptr || out_args == nullptr) {
         return;
     }
     std::memcpy(out_args, sender_args, coop::kFireArgsBytes);
     sanitize_fire_args(out_args);
-    if (puppet != nullptr &&
-        readable_bytes(static_cast<std::byte*>(puppet) + kWorldPositionOffset) >=
-            16) {
-        __try {
-            std::memcpy(
-                out_args,
-                static_cast<std::byte*>(puppet) + kWorldPositionOffset, 16);
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-        }
-    }
     std::uint8_t seed[32]{};
     if (copy_peer_pose_seed_32(seed) &&
         kFireArgsAimQuatOffset + 16 <= coop::kFireArgsBytes) {
@@ -17287,6 +17301,8 @@ void publish_fire_packet(const coop::FirePacket& packet) {
     line << "FIRE-RELAY recv seq=" << packet.sequence
          << " art=0x" << std::hex << packet.weapon_art_id
          << " ctrlOff=0x" << packet.controller_offset << std::dec
+         << " origin="
+         << ((packet.flags & coop::kFireFlagFinalOrigin) != 0 ? 1 : 0)
          << " ammo=" << packet.magazine_before << '/'
          << packet.reserve_before;
     boot_log_line(line.str().c_str());
@@ -17344,6 +17360,8 @@ void send_prepared_fire_packet(const coop::FirePacket& packet) {
          << " ctrlOff=0x" << packet.controller_offset
          << std::dec << " final="
          << ((packet.flags & coop::kFireFlagFinalDirection) != 0 ? 1 : 0)
+         << " origin="
+         << ((packet.flags & coop::kFireFlagFinalOrigin) != 0 ? 1 : 0)
          << " ammo=" << packet.magazine_before << '/'
          << packet.reserve_before
          << " roleB=" << std::dec << (g_net_role_b ? 1 : 0);
@@ -17503,7 +17521,7 @@ bool selected_launch_record_from_spawn_info(
     }
     launch_record = reinterpret_cast<void*>(record_address);
     return readable_bytes(launch_record) >=
-        kProjectileLaunchRecordDirectionMirrorOffset + sizeof(float) * 4;
+        kProjectileLaunchRecordOriginMirrorOffset + sizeof(float) * 4;
 }
 
 std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
@@ -17550,22 +17568,36 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
                     static_cast<std::byte*>(launch_record) +
                         kProjectileLaunchRecordDirectionOffset,
                     sizeof(capture.final_direction));
+                std::memcpy(
+                    capture.final_origin,
+                    static_cast<std::byte*>(launch_record) +
+                        kProjectileLaunchRecordOriginOffset,
+                    sizeof(capture.final_origin));
+                capture.has_final_origin = true;
                 if (finite_fire_direction_capture(capture)) {
                     std::memcpy(
                         packet.final_direction, capture.final_direction,
                         sizeof(packet.final_direction));
                     packet.flags |= coop::kFireFlagFinalDirection;
+                    if (finite_fire_origin_capture(capture)) {
+                        std::memcpy(
+                            packet.final_origin, capture.final_origin,
+                            sizeof(packet.final_origin));
+                        packet.flags |= coop::kFireFlagFinalOrigin;
+                    }
                     char line[320]{};
                     std::snprintf(
                         line, sizeof(line),
-                        "FIRE-SELECTED-DIRECTION-CAPTURE seq=%u age=%llu "
-                        "record=0x%llX dir=(%.4f,%.4f,%.4f)",
+                        "FIRE-SELECTED-LAUNCH-CAPTURE seq=%u age=%llu "
+                        "record=0x%llX dir=(%.4f,%.4f,%.4f) "
+                        "origin=(%.3f,%.3f,%.3f)",
                         packet.sequence,
                         static_cast<unsigned long long>(age_ms),
                         static_cast<unsigned long long>(
                             reinterpret_cast<std::uintptr_t>(launch_record)),
                         capture.final_direction[0], capture.final_direction[1],
-                        capture.final_direction[2]);
+                        capture.final_direction[2], capture.final_origin[0],
+                        capture.final_origin[1], capture.final_origin[2]);
                     boot_log_line(line);
                 }
                 send_prepared_fire_packet(packet);
@@ -17591,19 +17623,42 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
                     static_cast<std::byte*>(launch_record) +
                         kProjectileLaunchRecordDirectionMirrorOffset,
                     capture.final_direction, sizeof(capture.final_direction));
+                float origin_before[4]{};
+                const bool apply_origin =
+                    finite_fire_origin_capture(capture);
+                if (apply_origin) {
+                    std::memcpy(
+                        origin_before,
+                        static_cast<std::byte*>(launch_record) +
+                            kProjectileLaunchRecordOriginOffset,
+                        sizeof(origin_before));
+                    std::memcpy(
+                        static_cast<std::byte*>(launch_record) +
+                            kProjectileLaunchRecordOriginOffset,
+                        capture.final_origin, sizeof(capture.final_origin));
+                    std::memcpy(
+                        static_cast<std::byte*>(launch_record) +
+                            kProjectileLaunchRecordOriginMirrorOffset,
+                        capture.final_origin, sizeof(capture.final_origin));
+                }
                 publish_applied_fire_direction_observation(
                     capture, launch_record);
-                char line[384]{};
+                char line[512]{};
                 std::snprintf(
                     line, sizeof(line),
-                    "FIRE-SELECTED-DIRECTION-APPLY seq=%u record=0x%llX "
-                    "before=(%.4f,%.4f,%.4f) after=(%.4f,%.4f,%.4f)",
+                    "FIRE-SELECTED-LAUNCH-APPLY seq=%u record=0x%llX "
+                    "dirBefore=(%.4f,%.4f,%.4f) dirAfter=(%.4f,%.4f,%.4f) "
+                    "originApply=%u originBefore=(%.3f,%.3f,%.3f) "
+                    "originAfter=(%.3f,%.3f,%.3f)",
                     capture.sequence,
                     static_cast<unsigned long long>(
                         reinterpret_cast<std::uintptr_t>(launch_record)),
                     before[0], before[1], before[2],
                     capture.final_direction[0], capture.final_direction[1],
-                    capture.final_direction[2]);
+                    capture.final_direction[2], apply_origin ? 1U : 0U,
+                    origin_before[0], origin_before[1], origin_before[2],
+                    capture.final_origin[0], capture.final_origin[1],
+                    capture.final_origin[2]);
                 boot_log_line(line);
             }
         }
@@ -17665,13 +17720,26 @@ char __fastcall hooked_projectile_bullet_instant_probe_kick(void* projectile) {
                    dz * observation.capture.final_direction[2]) /
                       (length * expected_length)
                 : -2.0F;
+            const float origin_dx =
+                start[0] - observation.capture.final_origin[0];
+            const float origin_dy =
+                start[1] - observation.capture.final_origin[1];
+            const float origin_dz =
+                start[2] - observation.capture.final_origin[2];
+            const float origin_error =
+                finite_fire_origin_capture(observation.capture)
+                    ? std::sqrt(origin_dx * origin_dx +
+                                origin_dy * origin_dy +
+                                origin_dz * origin_dz)
+                    : -1.0F;
             static std::atomic<unsigned> logged_probe_count{0};
             if (logged_probe_count.fetch_add(1, std::memory_order_acq_rel) < 16) {
-                char line[448]{};
+                char line[512]{};
                 std::snprintf(
                     line, sizeof(line),
                     "FIRE-PROBE-RAY seq=%u instance=0x%llX record=0x%llX "
-                    "age=%llu dot=%.5f ray=(%.4f,%.4f,%.4f) "
+                    "age=%llu dot=%.5f originError=%.5f "
+                    "ray=(%.4f,%.4f,%.4f) "
                     "start=(%.3f,%.3f,%.3f) end=(%.3f,%.3f,%.3f)",
                     observation.capture.sequence,
                     static_cast<unsigned long long>(
@@ -17679,7 +17747,8 @@ char __fastcall hooked_projectile_bullet_instant_probe_kick(void* projectile) {
                     static_cast<unsigned long long>(observation.launch_record),
                     static_cast<unsigned long long>(
                         GetTickCount64() - observation.applied_ms),
-                    dot, dx / (length > 0.0001F ? length : 1.0F),
+                    dot, origin_error,
+                    dx / (length > 0.0001F ? length : 1.0F),
                     dy / (length > 0.0001F ? length : 1.0F),
                     dz / (length > 0.0001F ? length : 1.0F),
                     start[0], start[1], start[2], end[0], end[1], end[2]);
@@ -17946,14 +18015,20 @@ void apply_queued_fire_events(void* puppet) {
         (void)apply_fire_packet_ammo_to_puppet(puppet, packet);
     }
 
-    // Button fallback keeps all receiver-local muzzle/origin/handle state. The
-    // sender's selected SpawnInfo launch direction is queued until the receiver's
-    // selected record is known at ProcessWeapon::SpawnProjectile.
+    // Button fallback keeps the receiver-local owner/weapon state. The sender's
+    // selected SpawnInfo launch direction and origin are queued until the
+    // receiver's selected record is known at ProcessWeapon::SpawnProjectile.
     if ((packet.flags & coop::kFireFlagFinalDirection) != 0) {
         PeerFireDirectionCapture direction_capture{};
         std::memcpy(
             direction_capture.final_direction, packet.final_direction,
             sizeof(direction_capture.final_direction));
+        if ((packet.flags & coop::kFireFlagFinalOrigin) != 0) {
+            std::memcpy(
+                direction_capture.final_origin, packet.final_origin,
+                sizeof(direction_capture.final_origin));
+            direction_capture.has_final_origin = true;
+        }
         direction_capture.weapon_art_id = packet.weapon_art_id;
         direction_capture.sequence = packet.sequence;
         direction_capture.armed_ms = GetTickCount64();
@@ -17964,9 +18039,10 @@ void apply_queued_fire_events(void* puppet) {
                 char line[128]{};
                 std::snprintf(
                     line, sizeof(line),
-                    "FIRE-FINAL-DIRECTION-ARM seq=%u art=0x%08X",
+                    "FIRE-FINAL-LAUNCH-ARM seq=%u art=0x%08X origin=%u",
                     direction_capture.sequence,
-                    direction_capture.weapon_art_id);
+                    direction_capture.weapon_art_id,
+                    finite_fire_origin_capture(direction_capture) ? 1U : 0U);
                 boot_log_line(line);
             }
         }

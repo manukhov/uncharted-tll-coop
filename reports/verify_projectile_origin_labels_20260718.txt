@@ -1,0 +1,9 @@
+0x1414fe050 ProcessWeapon_ResolveMuzzleTransform size=0x22e
+0x141515860 ProcessWeapon_UpdateMuzzleAndDispatchFire size=0x156c
+0x141518fc0 ProcessWeapon_BuildAndDispatchProjectile size=0xb47
+0x141520750 BuildProjectileLaunchRecord size=0x136
+0x141521f00 ProjectileBullet_InitBaseFromLaunchRecord size=0x6e7
+0x14152bf20 ProjectileBulletInstant_Init size=0x9e9
+
+Verified through the refreshed ida/tll_mcp.i64 copy after applying labels to and
+saving the real ida/tll.i64 database.
