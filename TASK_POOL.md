@@ -1136,11 +1136,21 @@ Do not reopen these as the first move:
       `0x1418A4670` and `0x1418A4FD0`. The phase callback at `+0xE8` receives the
       already-confirmed parameter descriptor.
 - [x] Implement read-only build `eg`: log bounded screen-0/screen-1 state id,
-      authored word, callback-presence mask, flags and root identifiers during
-      nonzero vertical aim. It performs no animation writes or snapshot replay.
-- [ ] Run the written `eg` falsifier. A stable local/puppet fingerprint difference
-      selects the exact state-command frontier; matching fingerprints reject
-      instance selection and move the trace inside the common authored root.
+      snapshot word, callback-presence mask, flags, a scalar-tuple subset and raw
+      root index during nonzero vertical aim. It performs no animation writes or
+      snapshot replay.
+- [x] Run the written `eg` falsifier. The user still saw no vertical pose, but
+      sender/receiver matched on three state/callback/flag/scalar fingerprints.
+      Reject an always-different high-level state selector as the sole cause.
+- [x] Correct the root-field interpretation statically: instance `+0x130` is a
+      `SnapshotNodeHeap*`, `+0x138` is its per-instance node index, selected by
+      `0x1418B2EF0` and resolved by `0x1418C2F90`. Raw indices cannot be compared
+      across processes as root identity.
+- [ ] Next session, implement one read-only discriminator for resolved root
+      vtable/RTTI RVA and the complete config tuple: mode/apReference, all scalar
+      IDs, authored-key count/hash, override count/current match. If those match,
+      move below the common root to parameter binding/script consumption/pose
+      sink; do not write the raw root index or re-enable broad snapshot replay.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

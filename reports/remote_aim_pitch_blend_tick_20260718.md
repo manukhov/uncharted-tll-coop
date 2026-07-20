@@ -725,3 +725,42 @@ fingerprints reject instance selection and select candidate 2. A mismatch that
 appears only during entry/exit selects candidate 3 and requires aligned
 steady-state sampling. No visible pose, horizontal aim, projectile, HUD or model
 change is expected; any such change invalidates the read-only probe.
+
+### Runtime result: matching high-level state metadata, still no pitch
+
+Fresh PIDs 7684/17560 loaded `2026-07-20eg`. The user performed vertical ADS
+sweeps with pistol and rifle and again observed no vertical movement on the
+remote weapon. The read-only probe caused no reported crash or model corruption;
+both processes were closed after the capture.
+
+Three fingerprints appeared on both sender and receiver:
+
+| state `+0x98` | snapshot word | callbacks | state flags | logged scalar tuple |
+|---|---|---:|---:|---|
+| `66D4BF80` | `BE7CB4A2` | `1D` | `1` | `1CEC7F3A/6C2B2396/4B0F5DE3` |
+| `3C347132` | `C45CF708` | `38` | `0000008000000009` | `9DCD31BC/6C2B2396/4B0F5DE3` |
+| `41C84248` | `25CC08FD` | `1D` | `1` | `5F913F74/6C2B2396/4B0F5DE3` |
+
+This **REJECTS** the selected hypothesis that the puppet always lacks the
+sender's high-level state/callback/flag contract. It **CONFIRMS** that matching
+high-level state metadata plus confirmed destination LRDU is still insufficient
+for visible pitch. The receiver also logged `state=2E3C4F6B`, but the bounded
+samples were not frame-aligned, so that isolated sample is not a stable-state
+mismatch result.
+
+### Static correction and next boundary
+
+The earlier `roots/rootSnap` description was too strong. Instance `+0x130` is a
+`SnapshotNodeHeap*`; `+0x138` is only the root node index within that heap.
+`AnimStateSnapshot_SelectRootNodeIndex 0x1418B2EF0` selects it, and
+`SnapshotNodeHeap_ResolveNodeByIndex 0x1418C2F90` resolves it before the root
+virtual dispatch in `AnimStateInstance::PhaseUpdate`. Different raw indices
+across processes therefore do not prove different root classes.
+
+The next read-only comparison must record `{rootIndex, rootVtableRVA,
+rootTypeDescriptorRVA}` and the full authored-config tuple: mode `+0x18C`,
+apReference `+0x194`, scalars `+0x118/+0x11C/+0x120/+0x124/+0x12C/+0x158`,
+authored-key count/content hash from `+0x68/+0x88`, and override count/current
+state match from `+0x148`. `+0x188` is a per-activation serial and is explicitly
+non-diagnostic. Matching root/config moves the fault boundary below the common
+tree into parameter binding, script consumption, or the final pose sink.

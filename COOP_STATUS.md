@@ -3943,9 +3943,10 @@ the root snapshot node. `0x14189D720` then runs `0x1418A4670` and
 from `+0x178`.
 
 Build `eg` is read-only. During nonzero vertical aim it records, separately for
-screen 0 and screen 1, the stable snapshot state id `+0x98`, authored state word,
-callback-presence mask, state flags, root ids/index, instance flags and copy bit.
-It does not copy callbacks, request a state, replay a snapshot, or write pose data.
+screen 0 and screen 1, the snapshot state id `+0x98`, one snapshot word,
+callback-presence mask, state flags, a subset of the scalar identity tuple, the
+raw root-node index `+0x138`, instance flags and copy bit. It does not copy
+callbacks, request a state, replay a snapshot, or write pose data.
 
 Selected hypothesis: the puppet receives LRDU but its active base instance has a
 different authored state/callback/root contract, so those fields have no vertical
@@ -3957,3 +3958,40 @@ screen-1 receiver `AIM-BASE-STATE` lines. A stable difference in state id,
 callbacks or roots selects the exact state-command frontier; identical values
 reject instance selection and move the trace inside the common root node. The
 model and existing horizontal/projectile behavior must remain unchanged.
+
+### 2026-07-20 CONFIRMED/REJECTED: `eg` finds matching states but no pitch
+
+Fresh PIDs 7684/17560 loaded read-only build `eg`; the user swept vertical ADS
+with pistol and rifle and reported that the remote weapon still had no vertical
+movement. Both processes were closed after capture. No crash, model corruption,
+or new visible regression was reported.
+
+Sender and receiver both reached identical state/callback/config fingerprints
+while the receiver still lacked pitch:
+
+- `state=66D4BF80`, snapshot word `BE7CB4A2`, callbacks `1D`, flags `1`, scalar
+  tuple `1CEC7F3A/6C2B2396/4B0F5DE3`;
+- `state=3C347132`, snapshot word `C45CF708`, callbacks `38`, flags
+  `0000008000000009`, tuple `9DCD31BC/6C2B2396/4B0F5DE3`;
+- `state=41C84248`, snapshot word `25CC08FD`, callbacks `1D`, flags `1`, tuple
+  `5F913F74/6C2B2396/4B0F5DE3`.
+
+Therefore an always-different state selector/callback/flag tuple is **REJECTED**
+as the sole cause. It is **CONFIRMED** that the receiver can hold matching
+high-level authored-state metadata and already-copied LRDU without producing the
+visible vertical pose. The screen-1-only `state=2E3C4F6B` sample cannot prove a
+stable mismatch because the bounded sender/receiver samples were not
+frame-aligned.
+
+Static correction after the test: `AnimStateInstance+0x130` is a
+`SnapshotNodeHeap*`, while `+0x138` is only an index into that per-instance heap.
+Consequently different raw `rootSnap` numbers across processes are not evidence
+of different root classes. `0x1418B2EF0` selects the index and
+`SnapshotNodeHeap_ResolveNodeByIndex 0x1418C2F90` resolves it before
+`AnimStateInstance::PhaseUpdate`. The next read-only discriminator must compare
+the resolved root vtable/RTTI RVA plus the complete config tuple: mode `+0x18C`,
+apReference `+0x194`, scalar fields `+0x118/+0x11C/+0x120/+0x124/+0x12C/+0x158`,
+authored-key count/content hash at `+0x68/+0x88`, and override-table/current-match
+data at `+0x148`. A difference only in `+0x188` is expected activation serial,
+not authored identity. Continue from this static boundary tomorrow; do not patch
+the raw root index or replay the broad native snapshot.

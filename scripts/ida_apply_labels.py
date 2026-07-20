@@ -137,6 +137,17 @@ FUNCTIONS = {
         "the 0x80-byte state snapshot to instance+0x90, resolves the state id at "
         "+0x98 into authored callbacks/flags, and selects the root snapshot node.",
     ),
+    0x1418B2EF0: (
+        "AnimStateSnapshot_SelectRootNodeIndex",
+        "Selects the root node index later stored at AnimStateInstance+0x138; "
+        "the index is relative to the instance SnapshotNodeHeap at +0x130.",
+    ),
+    0x1418C2F90: (
+        "SnapshotNodeHeap_ResolveNodeByIndex",
+        "Resolves a SnapshotNodeHeap entry from the heap pointer and node index. "
+        "AnimStateInstance_PhaseUpdate uses it with instance+0x130/+0x138 before "
+        "dispatching the root node virtual methods.",
+    ),
     0x1418A0EB0: (
         "AnimStateLayer_CopyParametersToFirstInstance",
         "Traverses the first active instance track and, when instance+0x190 bit "
