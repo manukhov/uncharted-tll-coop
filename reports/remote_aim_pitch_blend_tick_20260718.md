@@ -443,3 +443,31 @@ inactive, or release-pending, hypothesis 2 wins and the next static target is th
 reader of active-state `+0x188/+0x18C`. A correlated different descriptor selects
 hypothesis 1. Active directional Aim4/Aim6 would instead select hypothesis 3 and
 force reanalysis before mutation.
+
+## Runtime `ec`: alternate Aim registry route is REJECTED
+
+Fresh PID 20884 (role A) and PID 11636 (role B) loaded build
+`2026-07-20ec`; both native aim relays and the state network installed. The user
+confirmed that ADS animation was normal again: the `eb` shake/upward jerk was
+gone. The clone's weapon still did not move vertically, as expected from a
+read-only discriminator.
+
+Receiver PID 11636 produced six steady-state screen-1 samples in structural
+`mode=alternate branch=1 base=0`. The strongest upward sample was:
+
+`blend=1 rawUD=0.9990/0 stateLRDU=0/0.9998/0.9990/0`.
+
+Thus the received/smoothed upward value survived exactly into active-state
+`stateUp`; no network, input, blend, or publisher boundary remains missing. In
+the same sample every controller Aim id A0..A7 reported `found=0`, not merely
+inactive or release-pending. The other five samples showed the same absence while
+`rawUp/stateUp` ranged from `0.5670` to `0.9933`.
+
+This falsifies hypotheses 1 and 3 and confirms hypothesis 2: the alternate graph
+does not carry vertical direction through any of this controller's Aim0..Aim7
+registry descriptors. `0x140CAF470`, `0x14172A910`, `0x14189CC80` and
+`0x14172C8E0` are all excluded as receiver vertical-apply routes. The remaining
+frontier is now strictly downstream of active-state `+0x188/+0x18C`: trace every
+reader through the authored alternate pose, joint palette and weapon attachment
+chains before proposing another mutation. Both game processes were closed after
+capturing the result.

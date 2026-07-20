@@ -3836,3 +3836,19 @@ Aim0..Aim7 descriptor/layer lifecycle fields after native publication. The
 falsifier distinguishes a different alternate descriptor from a downstream
 reader of active-state vertical fields, and predicts no `eb` shake. Full
 evidence and prediction: `reports/remote_aim_pitch_blend_tick_20260718.md`.
+
+### 2026-07-20 CONFIRMED/REJECTED: `ec` selects active-state downstream reader
+
+Fresh PID 20884/11636 loaded read-only build `ec`; both aim relays and state net
+installed. The user confirmed the `eb` shake/upward jerk was gone, while the
+clone still had no visible vertical weapon motion. Receiver screen 1 logged six
+steady samples in `mode=alternate branch=1 base=0`. At the strongest sample,
+`rawUp=0.9990` and active-state `stateUp=0.9990` with blend 1, yet every
+controller Aim0..Aim7 descriptor was wholly absent (`found=0`).
+
+Therefore pitch transport through the publisher is CONFIRMED and the entire Aim
+registry family is REJECTED for alternate vertical apply. The missing consumer
+is strictly a reader downstream of active-state `+0x188/+0x18C`. Current static
+work is tracing those reads through alternate authored pose, joint palette and
+weapon attachment publication; no new runtime mutation is authorized yet. Full
+evidence: `reports/remote_aim_pitch_blend_tick_20260718.md`.

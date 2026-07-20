@@ -1099,9 +1099,15 @@ Do not reopen these as the first move:
 - [x] Implement read-only build `ec`: remove both receiver named commits and log
       bounded local/puppet mode, branch byte, base index, active-state LRDU, and
       Aim0..Aim7 descriptor/layer lifecycle fields after native publication.
-- [ ] Run the written `ec` discriminator. It must not reproduce the `eb` shake.
-      A different alternate descriptor correlated with vertical state selects
-      that route; otherwise trace readers of active-state `+0x188/+0x18C`.
+- [x] Run the written `ec` discriminator. The `eb` shake disappeared, but the
+      clone remained vertically fixed. Receiver alternate screen 1 preserved
+      `rawUp=0.9990` exactly as active-state `stateUp=0.9990`; all Aim0..Aim7
+      descriptors were absent (`found=0`) across six samples. Confirm transport
+      through the publisher and reject the whole Aim registry as alternate apply.
+- [ ] Trace every reader of active-state `+0x188/+0x18C` through the alternate
+      authored pose, joint palette and weapon attachment chains. Resolve virtual
+      slots/RTTI and select a narrow downstream apply boundary only after three
+      independent static evidence types and a written competing prediction.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
