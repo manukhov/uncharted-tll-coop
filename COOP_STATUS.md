@@ -3905,3 +3905,27 @@ the whole buffer before `AnimStateInstance::PhaseUpdate 0x1418A4FD0` samples the
 tree. Build `ef` is read-only and compares base descriptor/instance admission,
 wrapper identity/sizes, and source/destination LRDU for screens 0/1. Written
 competitors and falsifier are in the aim report; no runtime mutation is allowed.
+
+### 2026-07-20 RUNTIME CONFIRMED/REJECTED: `ef` reaches the live evaluator instance
+
+Fresh PIDs 6772/21488 loaded read-only build `ef`; the user performed large ADS
+up/down sweeps and still observed no vertical weapon movement. All six bounded
+screen-1 samples resolved base hash `7339D08C` as a present, active type-2 layer
+with one live instance. Every sample reported `flags=0x28`, `copy=1`,
+`srcSame=1`, and compatible source/destination sizes `1840/1840`.
+
+The live destination followed the shared LRDU source closely across both signs:
+down `0.1031 -> 0.1036`, then up `0.3690 -> 0.3365`, `0.6160 -> 0.6081`,
+`0.7607 -> 0.7509`, `0.8690 -> 0.8616`, and `0.9554 -> 0.9534`. Therefore the
+alternate parameter-copy chain through `0x1418A0EB0` into the active
+`AnimStateInstance+0x178` is **CONFIRMED**. Missing descriptor/instance, missing
+copy flag, wrapper mismatch, undersized destination, and lost LRDU are
+**REJECTED** as causes of the absent pitch.
+
+The unresolved boundary is now authored animation-state/tree selection before
+or inside `AnimStateInstance::PhaseUpdate 0x1418A4FD0`: the evaluator receives
+the values, but the puppet's selected alternate graph does not produce the local
+vertical pose. Both processes were closed. Do not patch the copy routine or
+parameter buffers; compare local and puppet active instance/config/root-tree
+identity and the native snapshot/state-selection path statically before the next
+runtime test.

@@ -1124,10 +1124,17 @@ Do not reopen these as the first move:
 - [x] Implement read-only build `ef` base-instance discriminator for screens 0/1:
       descriptor/instance admission, copy flag, wrapper identity/sizes and
       source/destination LRDU. It contains no named-branch or pose mutation.
-- [ ] Run the written `ef` falsifier. If puppet destination LRDU matches source,
-      reject the copy-boundary candidate and trace authored animation-state/
-      snapshot selection; otherwise isolate the first structural difference from
-      local screen 0 before proposing a fix.
+- [x] Run the written `ef` falsifier. Screen 1 resolved active base hash
+      `7339D08C`, one live type-2 instance, `flags=0x28`, `copy=srcSame=1`, and
+      matching `1840/1840` buffers. Destination LRDU followed source through
+      down `0.1031 -> 0.1036` and up to `0.9554 -> 0.9534`, while the weapon
+      remained vertically fixed. Confirm the complete copy into the live
+      evaluator instance; reject descriptor/flag/wrapper/buffer loss.
+- [ ] Compare local screen 0 and puppet screen 1 active base
+      `AnimStateInstance` authored identity/config/root-tree fields, then trace
+      which native animation command/snapshot selects them. Do not mutate the
+      copy routine or replay the previously crashing broad snapshot path before
+      the exact selection contract and ABI meet the static evidence quota.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

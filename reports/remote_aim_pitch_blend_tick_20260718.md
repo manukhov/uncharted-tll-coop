@@ -643,3 +643,33 @@ The real IDB now carries the six STATIC names above. Headless application report
 `apply_labels OK: 1090 functions, 19 data names` and `save_database returned
 True`; independent resolution verified all six addresses, after which the MCP copy
 was refreshed and restarted.
+
+## RUNTIME CONFIRMED `ef`: LRDU reaches the active `AnimStateInstance`
+
+Fresh PIDs 6772 (role A) and 21488 (role B) loaded read-only build `ef`. The user
+performed several large vertical ADS sweeps; the clone's weapon still did not
+move vertically, and the probe caused no model regression. Six bounded receiver
+samples all resolved the base descriptor hash `7339D08C` with
+`found=1 active=1 type=2 tracks=1/2 inst=1`. The instance consistently reported
+`flags=0x28 copy=1 srcSame=1 sizes=1840/1840`.
+
+The copied destination tracked the live shared source across both directions:
+
+- down: source `0.1031`, destination `0.1036`;
+- up: source/destination `0.3690/0.3365`, `0.6160/0.6081`,
+  `0.7607/0.7509`, `0.8690/0.8616`, and `0.9554/0.9534`.
+
+Candidate 1 is therefore **REJECTED** and the full generic parameter-copy path is
+**CONFIRMED** at runtime: the alternate publisher's LRDU reaches the live
+`AnimStateInstance+0x178` buffer before evaluation. It is not valid to patch
+`0x1418A0EB0`, force `+0x190 & 0x20`, replace wrappers, or enlarge buffers.
+
+Candidate 2 becomes the selected static frontier: local and puppet use different
+authored animation-state/tree semantics, or the puppet lacks the native animation
+command/snapshot selection that makes these LRDU fields meaningful. Candidate 3,
+a late palette/attachment overwrite, remains possible but weaker because the
+parameter chain is intact and earlier downstream probes found no upstream
+vertical pose. The next discriminator must first compare local/puppet active
+instance identity, authored config, and root-tree ownership read-only; the prior
+malformed broad snapshot replay remains rejected until its exact native contract
+and ABI are statically re-established.
