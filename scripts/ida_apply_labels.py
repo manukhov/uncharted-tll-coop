@@ -120,11 +120,22 @@ FUNCTIONS = {
         "binds the shared authored parameter wrapper at +0x530, and allocates "
         "AnimStateInstance tracks through the independently asserted allocator.",
     ),
+    0x1418B3E70: (
+        "AnimStateInstance_Construct",
+        "Constructs one 0x1C0-byte AnimStateInstance and installs the RTTI-backed "
+        "vtable before authored buffers and snapshot state are initialized.",
+    ),
     0x1418B3F10: (
         "AnimStateInstance_InitializeAuthoredBuffers",
         "Initializes one preconstructed AnimStateInstance: allocates its authored "
         "parameter destination wrapper at +0x178 and sets +0x190 bit 0x20 from "
         "the layer record's authored copy-parameters byte.",
+    ),
+    0x1418B24F0: (
+        "AnimStateSnapshot_SnapshotAnimState",
+        "Source assertion identifies AnimStateSnapshot::SnapshotAnimState. Copies "
+        "the 0x80-byte state snapshot to instance+0x90, resolves the state id at "
+        "+0x98 into authored callbacks/flags, and selects the root snapshot node.",
     ),
     0x1418A0EB0: (
         "AnimStateLayer_CopyParametersToFirstInstance",
@@ -137,6 +148,21 @@ FUNCTIONS = {
         "Type-2 layer step selected by AnimControl_BeginStepInternal. Advances "
         "active AnimStateInstance tracks, performs the shared-parameter copy, "
         "then submits instances to AnimStateInstance_PhaseUpdate.",
+    ),
+    0x14189D720: (
+        "AnimStateLayer_PhaseUpdateInstances",
+        "Walks active tracks and instances, resolves each snapshot/dtgroup, then "
+        "calls AnimStateInstance_PhaseUpdate for the live instance.",
+    ),
+    0x1418A4670: (
+        "AnimStateInstance_ResolveDtGroupAndSnapshot",
+        "Refreshes instance+0x90 from the selected state snapshot, evaluates the "
+        "optional anim-state-dtgroup-func at +0xC0, and resolves its animation.",
+    ),
+    0x1418A4D50: (
+        "AnimStateInstance_EvaluatePhaseFunction",
+        "Evaluates optional anim-state-phase-func at instance+0xE8 and passes the "
+        "48-byte parameter descriptor from instance+0x178 into script evaluation.",
     ),
     0x1418A4FD0: (
         "AnimStateInstance_PhaseUpdate",

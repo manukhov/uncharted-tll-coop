@@ -1130,11 +1130,17 @@ Do not reopen these as the first move:
       down `0.1031 -> 0.1036` and up to `0.9554 -> 0.9534`, while the weapon
       remained vertically fixed. Confirm the complete copy into the live
       evaluator instance; reject descriptor/flag/wrapper/buffer loss.
-- [ ] Compare local screen 0 and puppet screen 1 active base
-      `AnimStateInstance` authored identity/config/root-tree fields, then trace
-      which native animation command/snapshot selects them. Do not mutate the
-      copy routine or replay the previously crashing broad snapshot path before
-      the exact selection contract and ABI meet the static evidence quota.
+- [x] Resolve the first authored-selection boundary. `0x1418B24F0` copies the
+      state snapshot, resolves state id at instance `+0x98`, overlays authored
+      callbacks/flags and selects the root; `0x14189D720` feeds it through
+      `0x1418A4670` and `0x1418A4FD0`. The phase callback at `+0xE8` receives the
+      already-confirmed parameter descriptor.
+- [x] Implement read-only build `eg`: log bounded screen-0/screen-1 state id,
+      authored word, callback-presence mask, flags and root identifiers during
+      nonzero vertical aim. It performs no animation writes or snapshot replay.
+- [ ] Run the written `eg` falsifier. A stable local/puppet fingerprint difference
+      selects the exact state-command frontier; matching fingerprints reject
+      instance selection and move the trace inside the common authored root.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

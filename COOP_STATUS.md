@@ -3929,3 +3929,31 @@ vertical pose. Both processes were closed. Do not patch the copy routine or
 parameter buffers; compare local and puppet active instance/config/root-tree
 identity and the native snapshot/state-selection path statically before the next
 runtime test.
+
+### 2026-07-20 STATIC: `eg` fingerprints the authored state selected inside the instance
+
+The first exact semantic boundary after the confirmed copy is
+`0x1418B24F0`. It copies the current 0x80-byte state snapshot into
+`AnimStateInstance+0x90`, reads the stable state id at instance `+0x98`, resolves
+its authored record through `0x141926AE0`, overlays callbacks/flags, and resolves
+the root snapshot node. `0x14189D720` then runs `0x1418A4670` and
+`AnimStateInstance::PhaseUpdate` for each active instance. The former evaluates
+`anim-state-dtgroup-func` from instance `+0xC0`; `0x1418A4D50` evaluates
+`anim-state-phase-func` from `+0xE8` and passes the confirmed parameter descriptor
+from `+0x178`.
+
+Build `eg` is read-only. During nonzero vertical aim it records, separately for
+screen 0 and screen 1, the stable snapshot state id `+0x98`, authored state word,
+callback-presence mask, state flags, root ids/index, instance flags and copy bit.
+It does not copy callbacks, request a state, replay a snapshot, or write pose data.
+
+Selected hypothesis: the puppet receives LRDU but its active base instance has a
+different authored state/callback/root contract, so those fields have no vertical
+meaning. Competitors are (A) identical fingerprints with the difference deeper
+inside the same authored/parametric asset, (B) a transient mismatch caused only by
+sampling different action phases, and (C) the weaker late-palette overwrite.
+Prediction: the same role-A vertical sweep produces bounded screen-0 sender and
+screen-1 receiver `AIM-BASE-STATE` lines. A stable difference in state id,
+callbacks or roots selects the exact state-command frontier; identical values
+reject instance selection and move the trace inside the common root node. The
+model and existing horizontal/projectile behavior must remain unchanged.

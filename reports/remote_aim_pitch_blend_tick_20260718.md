@@ -673,3 +673,55 @@ vertical pose. The next discriminator must first compare local/puppet active
 instance identity, authored config, and root-tree ownership read-only; the prior
 malformed broad snapshot replay remains rejected until its exact native contract
 and ABI are statically re-established.
+
+## STATIC `eg`: authored state/callback fingerprint after the confirmed copy
+
+### Exact hypothesis and competitors
+
+The selected hypothesis is now narrower than full snapshot replay: screen 0 and
+screen 1 can carry different authored base-state identities inside their live
+`AnimStateInstance`. In that case identical LRDU bytes legitimately produce
+different results because the puppet state lacks the local phase/dtgroup/root
+semantics.
+
+Competing outcomes are:
+
+1. **Selected candidate:** puppet state id, callback-presence mask, flags or root
+   identifiers differ stably from the sender's aiming instance.
+2. The fingerprints match; the missing pitch lies inside the common authored
+   root/parametric asset rather than state selection.
+3. A difference is only transient because sender and receiver samples cover
+   different transition/action phases; it must not be promoted to a write.
+4. A late palette/attachment owner erases a valid vertical result. This remains
+   weaker than candidates 1/2 because no earlier probe found an upstream vertical
+   pose.
+
+### Independent static evidence quota
+
+1. `0x1418B24F0` copies a 0x80-byte state snapshot to
+   `AnimStateInstance+0x90`, reads the state id at absolute `+0x98`, resolves the
+   authored record via `0x141926AE0`, overlays callback pointers/flags, resolves
+   the root snapshot node, and is anchored by the source assertion
+   `AnimStateSnapshot::SnapshotAnimState`.
+2. `0x14189D720` walks every active layer track/instance, maps the track snapshot
+   through `0x1418A4670`, then calls `AnimStateInstance::PhaseUpdate
+   0x1418A4FD0`. This independently ties the fingerprint to the live evaluator,
+   not an inactive configuration record.
+3. `0x1418A4670` gates `anim-state-dtgroup-func` on instance `+0xC0` and carries
+   the 48-byte parameter descriptor. `0x1418A4D50` separately gates
+   `anim-state-phase-func` on `+0xE8` and passes the same descriptor from
+   `instance+0x178` into script evaluation.
+4. Runtime build `ef` confirmed that `+0x178` already contains the incoming LRDU
+   while the visible weapon remains fixed, so state/callback semantics are the
+   first unclassified boundary after a known-good copy.
+
+### Falsifiable read-only prediction
+
+Build `2026-07-20eg` records `AIM-BASE-STATE` only during nonzero vertical aim,
+separately for sender screen 0 and receiver screen 1. A stable mismatch in
+`state`, `callbacks`, `stateFlags`, or `roots/rootSnap` selects candidate 1 and
+authorizes tracing only the command that selects that exact field. Matching
+fingerprints reject instance selection and select candidate 2. A mismatch that
+appears only during entry/exit selects candidate 3 and requires aligned
+steady-state sampling. No visible pose, horizontal aim, projectile, HUD or model
+change is expected; any such change invalidates the read-only probe.

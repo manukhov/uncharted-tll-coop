@@ -13886,6 +13886,14 @@ struct AimBaseInstanceProbe {
     std::uint32_t instance_flags = 0;
     std::uint32_t source_size = 0;
     std::uint32_t destination_size = 0;
+    std::uint32_t snapshot_state_id = 0;
+    std::uint32_t authored_state_word = 0;
+    std::uint32_t callback_presence_mask = 0;
+    std::uint32_t root_state_id = 0;
+    std::uint32_t root_anim_id = 0;
+    std::uint32_t root_variant_id = 0;
+    std::uint32_t root_snapshot_index = 0;
+    std::uint64_t authored_state_flags = 0;
     void* layer = nullptr;
     void* instance = nullptr;
     float source_lrdu[4]{};
@@ -13966,6 +13974,30 @@ AimBaseInstanceProbe probe_base_anim_state_instance(void* registry) {
         }
         result.instance_found = true;
         auto* const instance_bytes = static_cast<std::byte*>(result.instance);
+        result.snapshot_state_id =
+            *reinterpret_cast<const std::uint32_t*>(instance_bytes + 0x98);
+        result.authored_state_word =
+            *reinterpret_cast<const std::uint32_t*>(instance_bytes + 0xB0);
+        constexpr std::array<std::size_t, 6> kAuthoredCallbackOffsets{
+            0xC0, 0xD8, 0xE0, 0xE8, 0xF0, 0x100};
+        for (std::size_t index = 0;
+             index < kAuthoredCallbackOffsets.size(); ++index) {
+            if (*reinterpret_cast<void* const*>(
+                    instance_bytes + kAuthoredCallbackOffsets[index]) !=
+                nullptr) {
+                result.callback_presence_mask |= 1U << index;
+            }
+        }
+        result.authored_state_flags =
+            *reinterpret_cast<const std::uint64_t*>(instance_bytes + 0x108);
+        result.root_state_id =
+            *reinterpret_cast<const std::uint32_t*>(instance_bytes + 0x118);
+        result.root_anim_id =
+            *reinterpret_cast<const std::uint32_t*>(instance_bytes + 0x120);
+        result.root_variant_id =
+            *reinterpret_cast<const std::uint32_t*>(instance_bytes + 0x124);
+        result.root_snapshot_index =
+            *reinterpret_cast<const std::uint32_t*>(instance_bytes + 0x138);
         result.instance_flags = *reinterpret_cast<const std::uint8_t*>(
             instance_bytes + 0x190);
         result.copy_enabled = (result.instance_flags & 0x20U) != 0;
@@ -14005,6 +14037,54 @@ AimBaseInstanceProbe probe_base_anim_state_instance(void* registry) {
         return AimBaseInstanceProbe{};
     }
     return result;
+}
+
+void log_aim_base_state_fingerprint(
+    void* owner, const char* phase, float up, float down) {
+    if (owner == nullptr || phase == nullptr || !std::isfinite(up) ||
+        !std::isfinite(down) || up < 0.0F || up > 1.0F || down < 0.0F ||
+        down > 1.0F || std::max(up, down) < 0.05F ||
+        readable_bytes(static_cast<std::byte*>(owner) + 0x4010) <
+            sizeof(std::uint32_t)) {
+        return;
+    }
+    const std::uint32_t screen = *reinterpret_cast<const std::uint32_t*>(
+        static_cast<const std::byte*>(owner) + 0x4010);
+    if (screen > kSlot1ScreenIndex ||
+        readable_bytes(static_cast<std::byte*>(owner) +
+                       kPlayerUpperStateOwnerOffset) < sizeof(void*)) {
+        return;
+    }
+    void* const registry = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(owner) + kPlayerUpperStateOwnerOffset);
+    const AimBaseInstanceProbe probe =
+        probe_base_anim_state_instance(registry);
+    if (!probe.instance_found) {
+        return;
+    }
+    static std::atomic<ULONGLONG> next_log_ms[2]{};
+    static std::atomic<std::uint32_t> sample_count[2]{};
+    const ULONGLONG now = GetTickCount64();
+    if (sample_count[screen].load(std::memory_order_acquire) >= 8 ||
+        now < next_log_ms[screen].load(std::memory_order_acquire)) {
+        return;
+    }
+    next_log_ms[screen].store(now + 250, std::memory_order_release);
+    sample_count[screen].fetch_add(1, std::memory_order_acq_rel);
+    char line[640]{};
+    std::snprintf(
+        line, sizeof(line),
+        "AIM-BASE-STATE phase=%s screen=%u up=%.4f down=%.4f "
+        "base=%08X state=%08X authored=%08X callbacks=%02X "
+        "stateFlags=%016llX roots=%08X/%08X/%08X rootSnap=%08X "
+        "instFlags=%02X copy=%u",
+        phase, screen, up, down, probe.base_id, probe.snapshot_state_id,
+        probe.authored_state_word, probe.callback_presence_mask,
+        static_cast<unsigned long long>(probe.authored_state_flags),
+        probe.root_state_id, probe.root_anim_id, probe.root_variant_id,
+        probe.root_snapshot_index, probe.instance_flags,
+        static_cast<unsigned>(probe.copy_enabled));
+    boot_log_line(line);
 }
 
 AimFloatChannelProbe probe_aim_float_channel(
@@ -14224,6 +14304,7 @@ void __fastcall hooked_smooth_and_publish_directional_aim_weights(
         static_cast<const std::byte*>(controller) + 0x8C4);
     const float blend = *reinterpret_cast<const float*>(
         static_cast<const std::byte*>(controller) + 0x8EC);
+    log_aim_base_state_fingerprint(owner, "steady", raw_up, raw_down);
     log_aim_registry_snapshot(
         controller, owner, "steady", raw_up, raw_down, blend);
 }
@@ -14249,6 +14330,7 @@ void __fastcall hooked_publish_directional_aim_weights(
 
     const float blend = *reinterpret_cast<const float*>(
         static_cast<const std::byte*>(controller) + 0x8EC);
+    log_aim_base_state_fingerprint(owner, "transition", up, down);
     log_aim_registry_snapshot(
         controller, owner, "transition", up, down, blend);
     if (player_screen_index_is(owner, 0)) {
@@ -25731,8 +25813,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-20ef "
-        "(read-only base AnimStateInstance parameter-copy discriminator)");
+        "TLL hook DLL init 2026-07-20eg "
+        "(read-only authored AnimStateInstance fingerprint discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
