@@ -562,3 +562,26 @@ returned True`). Independent name resolution verified
 `AnimControl_ResolveActiveBaseStatePlayerInfo = 0x1410D5D40`, alongside the
 existing publisher and fade/release labels. The MCP copy was then refreshed from
 the saved database and its server restarted.
+
+## RUNTIME REJECTED `ed`: named fallthrough corrupts the character model
+
+Fresh PIDs 2608 (role A) and 22216 (role B) both loaded build `ed`, installed the
+publisher fallthrough patch, and established the loopback roles. On the receiver,
+screen 1 remained authored `mode=alternate branch=1`, while Aim4 became a stable
+active type-2 layer with context `AD`, `release=0`, and its weight tracked the
+incoming upward value (`target=0.5489`, then `0.6337`, `0.6445`, `0.6462`). This
+satisfied the descriptor/lifecycle half of the prediction.
+
+The visible half was decisively falsified: the user reported that the character
+model broke completely. The test was stopped and both processes were closed.
+Therefore the missing named-vs-release branch is **not** the remote pitch apply
+contract. A stable named Aim4 layer is structurally incompatible with the
+puppet's authored alternate graph; this is stronger than the earlier `eb` shake
+and rejects both global and screen-1-scoped forcing of this named path.
+
+Build `ee` removes the branch patch entirely and restores the stable `ec`
+publisher behavior. The next static frontier is the generic alternate data path:
+trace the full buffer copy from `AnimStateLayer+0x530` to
+`AnimStateInstance+0x178`, the `+0x190 & 0x20` admission flag, and evaluator entry
+`0x1418A4FD0`. No further runtime test is authorized until that path identifies
+the exact alternate pose destination and excludes late palette/attachment owners.

@@ -3882,3 +3882,15 @@ Scope warning: `ed` is a bounded runtime discriminator. The tested byte belongs
 to the currently active authored base-state player-info and may vary with cover,
 climb, or other action states. A successful visible result must be converted to a
 retained-screen-1/controller-scoped override; the global NOP is not final policy.
+
+### 2026-07-20 RUNTIME REJECTED: `ed` named fallthrough corrupts the model
+
+PIDs 2608/22216 loaded `ed`; the receiver's screen-1 Aim4 became stable and active
+with context `AD`, `release=0`, and weight tracking upward input through 0.6462.
+The user observed the character model break completely. Thus the lifecycle
+prediction passed but the visible-pose prediction failed: the named layer is
+incompatible with the puppet's authored alternate graph, not its missing apply
+edge. Both processes were closed. Build `ee` removes the global branch patch and
+restores the stable publisher path. Do not retry named fallthrough, including a
+screen-1-scoped version. Resume static tracing at the alternate
+`AnimStateLayer+0x530 -> AnimStateInstance+0x178 -> 0x1418A4FD0` evaluator path.

@@ -1111,13 +1111,15 @@ Do not reopen these as the first move:
 - [x] Resolve and implement build `ed`: validate/NOP `JNZ 0x140CB42B6`, keeping
       the stock publisher on its complete named aim-layer path. Unlike rejected
       `eb`, no second writer fights the stock alternate fade/release loop.
-- [ ] Run the written `ed` falsifier: verify stable screen-1 Aim descriptors,
-      smooth vertical arms/weapon motion, neutral ADS exit, no shake, and no
-      regression in horizontal/projectile alignment. Stable descriptors without
-      visible pitch return the trace to `ProcessAnimCmdListSegment`.
-- [ ] If `ed` succeeds visibly, replace the bounded global NOP with a retained
-      screen-1/controller-scoped branch decision; preserve the authored branch in
-      cover/climb/other action states before calling the fix production-ready.
+- [x] **REJECTED (`ed`, PIDs 2608/22216):** Aim4 became stable/active with
+      `release=0` and tracked upward weight, but the character model broke
+      completely. Named fallthrough is incompatible with the puppet's authored
+      alternate graph; do not retry it globally or screen-1-scoped.
+- [x] Remove the `ed` publisher-branch patch in stable build `ee`.
+- [ ] Trace the alternate buffer-copy/evaluator path from `AnimStateLayer+0x530`
+      to `AnimStateInstance+0x178` under `instance+0x190 & 0x20`, then through
+      `0x1418A4FD0`; identify the exact alternate pitch destination before any
+      further runtime mutation.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
