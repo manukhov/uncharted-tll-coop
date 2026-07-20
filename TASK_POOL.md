@@ -1084,10 +1084,16 @@ Do not reopen these as the first move:
       the authored direct fade before changing its weight. At the proven
       steady-state boundary, use guarded stock named commits for down/up even in
       alternate mode and log active descriptor/context/value/fade/dirty state.
-- [ ] Run the written `eb` discriminator. Require `mode=alternate`, admitted
-      named call, active context `AD` for up or `AC` for down, matching post-blend
-      value and a direct-fade request. Only successful activation/fade with no
-      palette/pose motion may reject `Aim4/Aim6` as the rendered consumer.
+- [x] Run the written `eb` discriminator. Aim4 activated with context `AD`, but
+      the supplied `0.0709` weight probed as zero and ADS began shaking/jerking
+      upward. Reject per-frame named commit in alternate mode. Disassembly proves
+      named weight `+0x2C` and alternate target `+0x30/+0x34` are mutually
+      resetting contracts sharing pending/dirty state.
+- [ ] Resolve alternate layer ownership before another run: distinguish one-time
+      activation followed only by existing-channel setter from an incompatible
+      named direct fade, and trace who deactivates Aim4/Aim6. Do not launch until
+      the selected path has three independent evidence types and a prediction
+      that excludes another named/alternate contention loop.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

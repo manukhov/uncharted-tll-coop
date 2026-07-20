@@ -355,3 +355,35 @@ unchanged, the authored-state consumer is rejected. If the descriptor is active
 immediately after commit but absent next frame, later registry replacement wins.
 If palette joints move but only the weapon remains fixed, reopen the downstream
 attachment override rather than the Aim registry.
+
+## Runtime `eb`: per-frame named/alternate ownership is REJECTED
+
+Fresh PID 19812 (role A) and PID 20316 (role B) loaded build `2026-07-20eb`; both
+aim relays installed. On ADS, the user observed a new hard regression: the remote
+aim animation broke, shook continuously and jerked the weapon upward. Both
+processes were stopped immediately after the report.
+
+Receiver PID 20316 logged the first active application:
+
+`AIM-PITCH-NAMED-ACTIVE seq=290 mode=alternate rawUp=0.1171 up=0.0709 blend=0.6056 callUp=1 activeUp=1 ctxUp=AD valueUp=0.0000 fadeUp=0 dirtyUp=1`.
+
+This falsifies the `eb` prediction. The descriptor was activated with the
+expected context, but the probed named value did not equal the supplied weight,
+the expected fade-count observation was absent, and the visible pose regressed
+instead of following pitch. The implementation that calls the named commit every
+alternate-mode frame is therefore REJECTED.
+
+Exact disassembly also exposes a dual-layout conflict that the `eb` hypothesis
+did not account for. The named commit writes weight at AnimStateLayer `+0x2C`
+and zeros `+0x30`, while `AnimParamRegistry_SetExistingFloatChannel` explicitly
+zeros `+0x2C` and writes its value to `+0x30/+0x34`. Both mark `+0x3C/+0x3D`.
+After `eb` activates Aim4, the stock alternate publisher can finally write its
+constant `0.2`; the following named call then sees the pending `+0x3D` state and
+can skip its own weight update. Thus two publication contracts contend for the
+same layer in one frame, matching the new snap/jitter symptom.
+
+This is not yet sufficient to select a replacement. Static work must determine
+whether alternate mode requires one-time layer activation followed exclusively
+by the existing-channel setter, or whether the named direct fade itself is
+incompatible and a different authored action edge owns activation. No runtime
+test is permitted until that ownership and deactivation lifecycle are resolved.

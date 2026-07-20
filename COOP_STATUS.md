@@ -3809,3 +3809,20 @@ visible arm/weapon pitch confirms the missing lifecycle edge; accepted fade with
 no palette/pose change rejects the authored consumer. Horizontal yaw and the
 confirmed projectile relay must remain unchanged. Full evidence:
 `reports/remote_aim_pitch_blend_tick_20260718.md`.
+
+### 2026-07-20 REJECTED: `eb` mixes named and alternate AnimStateLayer contracts
+
+Fresh PID 19812/20316 loaded `eb`, but ADS broke the remote animation: it shook
+and jerked the weapon upward. The processes were stopped immediately. Receiver
+PID 20316 reached the new path with `up=0.0709`, activated Aim4 context `AD`, yet
+reported `valueUp=0 fadeUp=0 dirtyUp=1`. The runtime prediction failed.
+
+Exact disassembly shows why the implementation is unsafe: named commit writes
+weight at layer `+0x2C` and zeros `+0x30`, whereas the stock alternate setter
+zeros `+0x2C` and writes `+0x30/+0x34`; both share dirty/pending bytes
+`+0x3C/+0x3D`. Once `eb` activates Aim4, the stock alternate `0.2` write becomes
+live and the following named update can be suppressed by pending state. Calling
+both contracts on one layer per frame is REJECTED. Static analysis must now
+separate one-time activation from steady alternate ownership, including the
+deactivation edge, before any new game launch. Full evidence:
+`reports/remote_aim_pitch_blend_tick_20260718.md`.
