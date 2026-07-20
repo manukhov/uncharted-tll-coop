@@ -77,6 +77,28 @@ FUNCTIONS = {
         "dirty. PlayerAimController's alternate publication branch calls this "
         "for Aim0/Aim2/Aim4/Aim6.",
     ),
+    0x14172A370: (
+        "AnimParamRegistry_ActivateTypedChannelSlot",
+        "Activates a preallocated inactive 0x20-byte registry descriptor of the "
+        "requested object type. Prefers a matching channel id, otherwise claims "
+        "a free id-zero descriptor; writes descriptor id/context and active byte "
+        "+0x14 before returning the typed object.",
+    ),
+    0x14172A910: (
+        "AnimParamRegistry_EnsureFloatAnimStateLayer",
+        "Ensures an active type-2 AnimStateLayer for a channel id through "
+        "AnimParamRegistry_ActivateTypedChannelSlot, binds registry context at "
+        "object+0x540, and initializes the layer through vtable slot +0x60. "
+        "PlayerAimController_CommitNamedAimChannel uses it before first nonzero "
+        "aim-add publication.",
+    ),
+    0x14189CC80: (
+        "AnimStateLayer_RequestDirectFade",
+        "Queues an Animation direct-fade request in the type-2 AnimStateLayer. "
+        "The function advances the bounded request queue at +0x4D4 and contains "
+        "the 'Accepted direct fade request' diagnostic; named aim-add and net-fire "
+        "paths call it after ensuring their layer.",
+    ),
     0x140CB47A0: (
         "PlayerAimController_SmoothAndPublishDirectionalAimWeights",
         "Steady-state branch selected at 0x140CB416F when the controller mode "

@@ -1074,10 +1074,20 @@ Do not reopen these as the first move:
       `0x140CB491A` to the stock publisher. Relay only that callsite, wait for the
       original smoother/publisher, then overwrite `Aim4/Aim6` from the published
       controller fields through native `0x14172C8E0`.
-- [ ] Run the written `ea` discriminator. Require
-      `AIM-PITCH-SMOOTH-ACTIVE` with non-zero post-blend pitch and inspect
-      `mode/setUp/setDown`; only a successful active set with no visible motion may
-      reject `Aim4/Aim6` as the rendered consumer.
+- [x] Run the written `ea` discriminator. User again observed horizontal-only
+      motion, but receiver logged nonzero steady-state pitch in alternate mode
+      with `setUp=0 setDown=0`. Reject the existing-entry-only path: the exact
+      setter returns zero because `Aim4/Aim6` are not active, so the rendered
+      consumer was not tested.
+- [x] Resolve and implement build `eb`: Player preallocates inactive type-2
+      `AnimStateLayer` slots; stock named commit ensures/activates one and queues
+      the authored direct fade before changing its weight. At the proven
+      steady-state boundary, use guarded stock named commits for down/up even in
+      alternate mode and log active descriptor/context/value/fade/dirty state.
+- [ ] Run the written `eb` discriminator. Require `mode=alternate`, admitted
+      named call, active context `AD` for up or `AC` for down, matching post-blend
+      value and a direct-fade request. Only successful activation/fade with no
+      palette/pose motion may reject `Aim4/Aim6` as the rendered consumer.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

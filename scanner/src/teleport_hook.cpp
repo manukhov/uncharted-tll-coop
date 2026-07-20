@@ -156,8 +156,6 @@ using PublishDirectionalAimWeightsFunction = void(__fastcall*)(
 using CommitNamedAimChannelFunction = void(__fastcall*)(
     void*, float, std::int32_t, std::uint32_t, std::int32_t);
 using ResolveAimBaseStateFunction = void*(__fastcall*)(void*, std::int32_t);
-using SetExistingAnimFloatChannelFunction = char(__fastcall*)(
-    void*, std::uint32_t, float);
 using SelectAimIdleTurnStateFunction = int(__fastcall*)(void*, std::uint32_t);
 using UpdateTurnYawFromDirectionFunction = std::int64_t(__fastcall*)(void*);
 PublishDirectionalAimWeightsFunction g_publish_directional_aim_weights = nullptr;
@@ -165,7 +163,6 @@ PublishDirectionalAimWeightsFunction g_smooth_and_publish_directional_aim_weight
     nullptr;
 CommitNamedAimChannelFunction g_commit_named_aim_channel = nullptr;
 ResolveAimBaseStateFunction g_resolve_aim_base_state = nullptr;
-SetExistingAnimFloatChannelFunction g_set_existing_anim_float_channel = nullptr;
 SelectAimIdleTurnStateFunction g_select_aim_idle_turn_state = nullptr;
 UpdateTurnYawFromDirectionFunction g_update_turn_yaw_from_direction = nullptr;
 void* aim_publish_active_state_from_player(void* player);
@@ -13856,11 +13853,78 @@ bool read_aim_named_channel_mode(
     }
 }
 
+struct AimFloatChannelProbe {
+    bool registry_valid = false;
+    bool active_float = false;
+    bool activatable = false;
+    float value = 0.0F;
+    std::uint32_t context = 0;
+    std::uint32_t direct_fade_count = 0;
+    std::uint8_t dirty = 0;
+};
+
+AimFloatChannelProbe probe_aim_float_channel(
+    void* registry, std::uint32_t channel_id) {
+    AimFloatChannelProbe result{};
+    if (registry == nullptr || channel_id == 0 ||
+        readable_bytes(registry) < 0x38) {
+        return result;
+    }
+    __try {
+        const std::uint32_t count = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(registry) + 0x28);
+        auto* const records = *reinterpret_cast<std::byte**>(
+            static_cast<std::byte*>(registry) + 0x30);
+        if (count == 0 || count > 4096 || records == nullptr ||
+            readable_bytes(records) < static_cast<std::size_t>(count) * 0x20) {
+            return result;
+        }
+        result.registry_valid = true;
+        for (std::uint32_t index = 0; index < count; ++index) {
+            const auto* const record = records +
+                static_cast<std::size_t>(index) * 0x20;
+            const std::uint32_t id =
+                *reinterpret_cast<const std::uint32_t*>(record);
+            void* const object = *reinterpret_cast<void* const*>(record + 0x08);
+            if (object == nullptr ||
+                readable_bytes(object) < 0x3E ||
+                *reinterpret_cast<const std::uint32_t*>(
+                    static_cast<const std::byte*>(object) + 0x08) != 2) {
+                continue;
+            }
+            const bool active =
+                *reinterpret_cast<const std::uint8_t*>(record + 0x14) != 0;
+            if (active && id == channel_id) {
+                result.active_float = true;
+                result.activatable = true;
+                result.value = *reinterpret_cast<const float*>(
+                    static_cast<const std::byte*>(object) + 0x2C);
+                result.context = *reinterpret_cast<const std::uint32_t*>(
+                    record + 0x10);
+                if (readable_bytes(object) >= 0x4D8) {
+                    result.direct_fade_count =
+                        *reinterpret_cast<const std::uint32_t*>(
+                            static_cast<const std::byte*>(object) + 0x4D4);
+                }
+                result.dirty = *reinterpret_cast<const std::uint8_t*>(
+                    static_cast<const std::byte*>(object) + 0x3C);
+                return result;
+            }
+            if (!active && (id == channel_id || id == 0)) {
+                result.activatable = true;
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return AimFloatChannelProbe{};
+    }
+    return result;
+}
+
 bool apply_peer_pitch_after_native_publish(
     void* controller, void* owner, const coop::StatePacket& peer,
     float raw_up, float raw_down, float blend) {
     if (controller == nullptr || owner == nullptr ||
-        g_set_existing_anim_float_channel == nullptr ||
+        g_commit_named_aim_channel == nullptr ||
         !player_screen_index_is(owner, kSlot1ScreenIndex) ||
         !std::isfinite(blend) || blend < 0.0F || blend > 1.0F ||
         !std::isfinite(raw_up) || !std::isfinite(raw_down) ||
@@ -13871,6 +13935,9 @@ bool apply_peer_pitch_after_native_publish(
     bool uses_named_channels = false;
     if (!read_aim_named_channel_mode(
             controller, owner, uses_named_channels)) {
+        return false;
+    }
+    if (uses_named_channels) {
         return false;
     }
     const std::int32_t base_index = *reinterpret_cast<const std::int32_t*>(
@@ -13890,28 +13957,58 @@ bool apply_peer_pitch_after_native_publish(
     const float pitch_up = raw_up * blend;
     const float pitch_down = raw_down * blend;
     __try {
-        const char set_up = g_set_existing_anim_float_channel(
-            registry, channel_ids[base_index + 4], pitch_up);
-        const char set_down = g_set_existing_anim_float_channel(
-            registry, channel_ids[base_index + 6], pitch_down);
+        const std::uint32_t down_id = channel_ids[base_index + 6];
+        const std::uint32_t up_id = channel_ids[base_index + 4];
+        const AimFloatChannelProbe down_before =
+            probe_aim_float_channel(registry, down_id);
+        const bool call_down = pitch_down > 0.0F
+            ? down_before.activatable
+            : down_before.active_float;
+        if (call_down) {
+            g_commit_named_aim_channel(
+                controller, pitch_down, base_index + 6, 0xE8651C16u, 2);
+        }
+        const AimFloatChannelProbe up_before =
+            probe_aim_float_channel(registry, up_id);
+        const bool call_up = pitch_up > 0.0F
+            ? up_before.activatable
+            : up_before.active_float;
+        if (call_up) {
+            g_commit_named_aim_channel(
+                controller, pitch_up, base_index + 4, 0x7283B601u, 3);
+        }
+        const AimFloatChannelProbe down_after =
+            probe_aim_float_channel(registry, down_id);
+        const AimFloatChannelProbe up_after =
+            probe_aim_float_channel(registry, up_id);
         static std::atomic<bool> first_active_smooth_pitch_logged{false};
         if (std::max(pitch_up, pitch_down) >= 0.05F &&
             !first_active_smooth_pitch_logged.exchange(
                 true, std::memory_order_acq_rel)) {
-            char line[256]{};
+            char line[512]{};
             std::snprintf(
                 line, sizeof(line),
-                "AIM-PITCH-SMOOTH-ACTIVE seq=%u mode=%s "
+                "AIM-PITCH-NAMED-ACTIVE seq=%u mode=%s "
                 "rawUp=%.4f rawDown=%.4f up=%.4f down=%.4f blend=%.4f "
-                "setUp=%u setDown=%u",
+                "callUp=%u callDown=%u activeUp=%u activeDown=%u "
+                "ctxUp=%X ctxDown=%X valueUp=%.4f valueDown=%.4f "
+                "fadeUp=%u fadeDown=%u dirtyUp=%u dirtyDown=%u",
                 peer.sequence,
                 uses_named_channels ? "named" : "alternate",
                 raw_up, raw_down, pitch_up, pitch_down, blend,
-                static_cast<unsigned>(static_cast<unsigned char>(set_up)),
-                static_cast<unsigned>(static_cast<unsigned char>(set_down)));
+                static_cast<unsigned>(call_up),
+                static_cast<unsigned>(call_down),
+                static_cast<unsigned>(up_after.active_float),
+                static_cast<unsigned>(down_after.active_float),
+                up_after.context, down_after.context,
+                up_after.value, down_after.value,
+                up_after.direct_fade_count,
+                down_after.direct_fade_count,
+                static_cast<unsigned>(up_after.dirty),
+                static_cast<unsigned>(down_after.dirty));
             boot_log_line(line);
         }
-        return true;
+        return call_up || call_down;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
     }
@@ -14277,9 +14374,6 @@ bool install_native_aim_pitch_relay() {
             g_module + kPlayerAimCommitNamedChannelRva);
     g_resolve_aim_base_state = reinterpret_cast<ResolveAimBaseStateFunction>(
         g_module + kPlayerAimResolveBaseStateRva);
-    g_set_existing_anim_float_channel =
-        reinterpret_cast<SetExistingAnimFloatChannelFunction>(
-            g_module + kAnimParamRegistrySetExistingFloatChannelRva);
     DWORD old = 0;
     if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
         VirtualFree(relay, 0, MEM_RELEASE);
@@ -14310,9 +14404,11 @@ bool install_native_aim_pitch_smoother_relay() {
     g_smooth_and_publish_directional_aim_weights =
         reinterpret_cast<PublishDirectionalAimWeightsFunction>(
             g_module + kPlayerAimSmoothAndPublishWeightsRva);
-    g_set_existing_anim_float_channel =
-        reinterpret_cast<SetExistingAnimFloatChannelFunction>(
-            g_module + kAnimParamRegistrySetExistingFloatChannelRva);
+    g_commit_named_aim_channel =
+        reinterpret_cast<CommitNamedAimChannelFunction>(
+            g_module + kPlayerAimCommitNamedChannelRva);
+    g_resolve_aim_base_state = reinterpret_cast<ResolveAimBaseStateFunction>(
+        g_module + kPlayerAimResolveBaseStateRva);
     DWORD old = 0;
     if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
         VirtualFree(relay, 0, MEM_RELEASE);
@@ -25493,7 +25589,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-18ea "
+        "TLL hook DLL init 2026-07-20eb "
         "(steady-state smoother Aim4/Aim6 discriminator + selected launch relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

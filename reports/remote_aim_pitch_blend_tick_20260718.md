@@ -243,3 +243,115 @@ Release `tll_teleport_hook_v2.dll` builds successfully with tag
 application reported `save_database returned True`. After refreshing the MCP
 copy, address lookup resolves the new name and callers `0x140CAF357` (reset/prime)
 and `0x140CB416F` (steady-state directional computation).
+
+## Runtime `ea`: existing-channel mutation rejected
+
+The user again observed horizontal-only remote ADS. Receiver PID 16948 reached
+the intended steady-state boundary with a useful vertical value:
+
+`AIM-PITCH-SMOOTH-ACTIVE seq=486 mode=alternate rawUp=0.1169 up=0.0708 blend=0.6056 setUp=0 setDown=0`.
+
+An independent later sample reached `up=0.380015` at `blend=0.872222`. Therefore
+the boundary and receiver-local vertical computation are both live. Exact
+`AnimParamRegistry_SetExistingFloatChannel 0x14172C8E0` semantics return one even
+when the existing value is unchanged; zero means that no active matching entry
+with a non-null object was found. The run rejects the direct existing-entry
+mutation used by `ea`. It does not reject `Aim4/Aim6` as a rendered consumer,
+because neither channel was activated or sent to the animation action graph.
+
+## Static `eb`: activate the stock named AnimStateLayer lifecycle
+
+### Exact hypothesis
+
+The retained puppet has preallocated but inactive type-2 animation-layer slots.
+Its alternate publisher attempts to mutate `Aim4/Aim6` as if they were already
+active, so the writes are no-ops. At the proven post-smoother boundary, build
+`eb` uses the complete stock `PlayerAimController_CommitNamedAimChannel` path for
+post-blend down/up. That path activates a reserved descriptor, initializes its
+`AnimStateLayer`, writes the weight and queues the authored `aim-add-*` direct
+fade.
+
+### Competing hypotheses
+
+1. **Selected:** activation/direct fade is the missing lifecycle edge; the full
+   stock named commit makes the authored vertical additive visible.
+2. The layer activates and its direct fade is accepted, but the retained
+   puppet's authored state is absent or never reaches `ProcessAnimCmdListSegment`.
+3. The registry/controller is replaced later in the frame, so a successful
+   activation disappears before palette publication.
+4. A late weapon-attachment stage overwrites only the weapon. This cannot explain
+   stationary upper-body/arm joints and is downstream of the palette.
+5. The Aim IDs are wrong for the puppet. This is weak: the constructor and both
+   stock publication modes independently select the same `base+4/base+6` IDs.
+
+### Independent static evidence
+
+1. **Runtime plus exact setter semantics:** `ea` reached the steady-state edge
+   with nonzero pitch, but both setter returns were zero. The setter scans only
+   active descriptors and cannot activate or allocate one.
+2. **Descriptor dataflow:** `AnimParamRegistry_ActivateTypedChannelSlot
+   0x14172A370` scans inactive 0x20-byte descriptors, prefers matching type/id,
+   falls back to a type-2 id-zero slot, writes id/context and sets `+0x14=1`.
+   `0x14172A910` calls it, binds registry context at object `+0x540` and invokes
+   the `AnimStateLayer` vtable slot `+0x60`.
+3. **Independent Player lifecycle path:** Player vtable slot `+0x710` at
+   `0x1410CE260`, callsite `0x1410CF109`, preallocates fifteen inactive type-2
+   descriptors with id zero. The type-2 constructor `0x14189B7B0` installs the
+   `AnimStateLayer` vtable and writes object type `2` at `+0x8`.
+4. **Exact aim call graph:** for a nonzero missing channel,
+   `PlayerAimController_CommitNamedAimChannel 0x140CAF470` resolves
+   `Player+0x1A0`, calls `0x14172A910`, writes the named-channel value/generation,
+   then calls `AnimStateLayer_RequestDirectFade 0x14189CC80` with the supplied
+   `aim-add-*` hash. Its zero branch safely clears only an existing type-2 entry.
+5. **Second subsystem:** `NetCharacterFireAnimationController::PushLayer
+   0x140A1A510` independently uses the same ensure, weight and direct-fade
+   protocol for `net-fire`; this rules out an aim-only interpretation of the
+   registry helpers.
+6. **Downstream consumer:** `0x141A932F8` processes animation commands and
+   `0x141A93410..0x141A9341E` publishes the current palette at FgAnimData `+0x230`;
+   `0x14181A9B0` copies it to upload `+0x240`. Weapon attachment helper
+   `0x1410EDFB0` only consumes hand/wrist transforms and does not own Aim layers.
+
+### Safety guard and implementation
+
+The stock commit dereferences the result of `0x14172A910`; it is unsafe if no
+compatible descriptor exists. Build `eb` first verifies, per channel id, either
+an active matching type-2 descriptor, an inactive matching type-2 descriptor, or
+an inactive type-2 id-zero descriptor. It then calls down with
+`(base+6, 0xE8651C16, 2)` and up with `(base+4, 0x7283B601, 3)`, both using the
+receiver's raw weight multiplied once by live blend. This is not the `dy` test:
+`dy` rejected alternate mode before calling named commit, while `ea` called only
+the incomplete existing-entry setter.
+
+For a nonzero weight, the guard accepts any of those three activatable states;
+for zero/clear, it requires an already-active matching type-2 descriptor. Thus a
+zero axis neither claims a reserve slot nor calls native code against an invalid
+registry.
+
+The runtime marker records call admission, active descriptor state, contexts
+`0xAC/0xAD`, committed values, direct-fade queue count and dirty flags. Direct
+FgAnim copies, full-body pitch, broad pose/root writes and a global publisher
+detour remain rejected competitors.
+
+Release `tll_teleport_hook_v2.dll` builds successfully with tag
+`2026-07-20eb` and contains `AIM-PITCH-NAMED-ACTIVE`. The real IDB labels
+`0x14172A370` `AnimParamRegistry_ActivateTypedChannelSlot`, `0x14172A910`
+`AnimParamRegistry_EnsureFloatAnimStateLayer`, and `0x14189CC80`
+`AnimStateLayer_RequestDirectFade`; headless application reported
+`save_database returned True`. The refreshed MCP copy resolves all three names
+and exact function sizes `0xF5/0xA9/0x2F2`.
+
+### Falsifiable prediction
+
+On fresh build `2026-07-20eb`, moving up must produce
+`AIM-PITCH-NAMED-ACTIVE mode=alternate callUp=1 activeUp=1 ctxUp=AD`, a committed
+value matching `rawUp*blend`, nonzero direct-fade queue count and dirty state.
+Moving down analogously activates context `AC`. The remote arms/upper body and
+weapon must follow vertically; zero commits must return them to neutral without
+changing confirmed horizontal yaw or projectile direction/origin.
+
+If the descriptor activates and direct fade is queued but the palette/pose stays
+unchanged, the authored-state consumer is rejected. If the descriptor is active
+immediately after commit but absent next frame, later registry replacement wins.
+If palette joints move but only the weapon remains fixed, reopen the downstream
+attachment override rather than the Aim registry.

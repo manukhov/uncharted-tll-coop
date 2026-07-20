@@ -3776,3 +3776,36 @@ without it reject alternate `Aim4/Aim6`. `mode=named` with unchanged setters
 would prove stock publication already held the same values and move the blocker
 strictly downstream. Horizontal yaw/projectile alignment must remain unchanged.
 Full evidence: `reports/remote_aim_pitch_blend_tick_20260718.md`.
+
+### 2026-07-20 REJECTED/STATIC: `ea` skipped layer activation; guarded named commit `eb`
+
+The user still observed no vertical movement. Receiver PID 16948 nevertheless
+logged `AIM-PITCH-SMOOTH-ACTIVE mode=alternate rawUp=0.1169 up=0.0708
+blend=0.6056 setUp=0 setDown=0`; a later sample reached `up=0.380015` at
+`blend=0.872222`. The boundary and pitch computation are therefore live.
+`AnimParamRegistry_SetExistingFloatChannel` returns zero only when it cannot find
+a valid active entry, so `ea` is REJECTED as an incomplete existing-entry-only
+path. `Aim4/Aim6` remain unclassified because no layer was activated.
+
+Static lifecycle tracing found the missing stock protocol. Player slot `+0x710`
+preallocates fifteen inactive type-2 `AnimStateLayer` descriptors. On first
+nonzero named aim weight, `PlayerAimController_CommitNamedAimChannel 0x140CAF470`
+calls `AnimParamRegistry_EnsureFloatAnimStateLayer 0x14172A910`, which activates a
+matching/free descriptor through `0x14172A370`, initializes virtual `+0x60`, then
+queues `aim-add-up/down` through `AnimStateLayer_RequestDirectFade 0x14189CC80`.
+The independent net-fire layer uses the same ensure/weight/fade sequence.
+
+Build `eb` replaces the rejected setter with the complete named commit after the
+proven `0x140CB416F` steady-state publisher, only for slot 1 alternate mode. A
+preflight requires an active matching, inactive matching, or inactive id-zero
+type-2 descriptor, preventing the stock null dereference when the registry is
+exhausted. Its marker records active status, contexts `AD/AC`, value, fade queue
+and dirty state. The real IDB labels the activation/ensure/direct-fade helpers.
+
+**Prediction:** fresh build `2026-07-20eb` must log
+`AIM-PITCH-NAMED-ACTIVE mode=alternate callUp=1 activeUp=1 ctxUp=AD` for an upward
+sweep, and corresponding `activeDown=1 ctxDown=AC` downward. Accepted fade plus
+visible arm/weapon pitch confirms the missing lifecycle edge; accepted fade with
+no palette/pose change rejects the authored consumer. Horizontal yaw and the
+confirmed projectile relay must remain unchanged. Full evidence:
+`reports/remote_aim_pitch_blend_tick_20260718.md`.
