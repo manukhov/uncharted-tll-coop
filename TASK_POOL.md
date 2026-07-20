@@ -1104,10 +1104,20 @@ Do not reopen these as the first move:
       `rawUp=0.9990` exactly as active-state `stateUp=0.9990`; all Aim0..Aim7
       descriptors were absent (`found=0`) across six samples. Confirm transport
       through the publisher and reject the whole Aim registry as alternate apply.
-- [ ] Trace every reader of active-state `+0x188/+0x18C` through the alternate
-      authored pose, joint palette and weapon attachment chains. Resolve virtual
-      slots/RTTI and select a narrow downstream apply boundary only after three
-      independent static evidence types and a written competing prediction.
+- [x] Trace the active-state owner into `AnimControl`: `+0x58` holds three
+      authored parameter buffers allocated by `0x141729480`; publisher LRDU is
+      written to the third pointer at `[AnimControl+0x58]+0x10` before one
+      explicit named-vs-release branch.
+- [x] Resolve and implement build `ed`: validate/NOP `JNZ 0x140CB42B6`, keeping
+      the stock publisher on its complete named aim-layer path. Unlike rejected
+      `eb`, no second writer fights the stock alternate fade/release loop.
+- [ ] Run the written `ed` falsifier: verify stable screen-1 Aim descriptors,
+      smooth vertical arms/weapon motion, neutral ADS exit, no shake, and no
+      regression in horizontal/projectile alignment. Stable descriptors without
+      visible pitch return the trace to `ProcessAnimCmdListSegment`.
+- [ ] If `ed` succeeds visibly, replace the bounded global NOP with a retained
+      screen-1/controller-scoped branch decision; preserve the authored branch in
+      cover/climb/other action states before calling the fix production-ready.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

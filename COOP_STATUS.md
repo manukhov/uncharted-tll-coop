@@ -3852,3 +3852,33 @@ is strictly a reader downstream of active-state `+0x188/+0x18C`. Current static
 work is tracing those reads through alternate authored pose, joint palette and
 weapon attachment publication; no new runtime mutation is authorized yet. Full
 evidence: `reports/remote_aim_pitch_blend_tick_20260718.md`.
+
+### 2026-07-20 STATIC: `ed` removes the stock named/release ownership conflict
+
+The exact downstream owner is the branch inside the stock publisher itself.
+`AnimControl+0x58` owns three authored parameter buffers; `0x140CB426A..4293`
+writes LRDU into the buffer at `[AnimControl+0x58]+0x10` (the third pointer),
+then `JNZ 0x140CB42B6` chooses between the complete
+named aim-layer lifecycle and the alternate fade-to-zero/release loop. The
+puppet's branch-1 path has no Aim descriptor by design; it is not a second
+vertical consumer.
+
+Build `ed` validates and NOPs only the six-byte `JNZ`, so the stock publisher
+falls through to its own four named commits. This differs from rejected `eb`:
+there is one writer and no same-frame/next-frame alternate release. Three
+independent proofs authorize the runtime test: exact branch/lifecycle disassembly,
+the generic `AnimStateLayer+0x530 -> AnimStateInstance+0x178` buffer-copy/evaluator
+chain, `ec`'s named-local/alternate-puppet split with `rawUp=stateUp=0.9990`, and
+`eb`'s visible upward weapon jerk proving the named layer reaches the rendered pose.
+
+Prediction: screen 1 gains stable Aim4/Aim6 descriptors with `release=0` and
+weights correlated to `stateUp/stateDown`, plus smooth vertical weapon motion
+without the `eb` shake; ADS exit returns neutral, while horizontal aim and
+projectile alignment remain unchanged. Active stable descriptors without visible
+pitch reject the named-overlay hypothesis. Full competitors and falsifier:
+`reports/remote_aim_pitch_blend_tick_20260718.md`.
+
+Scope warning: `ed` is a bounded runtime discriminator. The tested byte belongs
+to the currently active authored base-state player-info and may vary with cover,
+climb, or other action states. A successful visible result must be converted to a
+retained-screen-1/controller-scoped override; the global NOP is not final policy.

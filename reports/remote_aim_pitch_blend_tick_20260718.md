@@ -471,3 +471,94 @@ frontier is now strictly downstream of active-state `+0x188/+0x18C`: trace every
 reader through the authored alternate pose, joint palette and weapon attachment
 chains before proposing another mutation. Both game processes were closed after
 capturing the result.
+
+## STATIC `ed`: keep the stock publisher on its named-channel branch
+
+The downstream trace changes the interpretation of the `ec` result. The four
+LRDU floats are in the parameter buffer selected by `[AnimControl+0x58]+0x10`
+(the third of three buffer pointers): `0x141729480` allocates the three authored
+parameter buffers, and `0x140CB426A..0x140CB4293` writes the four floats into
+that third buffer. The same
+publisher then chooses the only visible aim-pose protocol at
+`0x140CB42B4/0x140CB42B6`:
+
+- branch byte zero falls through to four stock
+  `PlayerAimController_CommitNamedAimChannel 0x140CAF470` calls for
+  `aim-add-left/right/down/up`;
+- branch byte nonzero jumps to `0x140CB46F3` and only asks Aim0/Aim2/Aim4/Aim6
+  to fade to zero and release through `0x14172C8E0`.
+
+There is therefore no missing alternate Aim descriptor to create. Screen 1 is
+being kept on the explicit release path even though the receiver has supplied
+valid current LRDU weights. Build `ed` removes the six-byte conditional jump at
+`0x140CB42B6`, leaving the stock named fallthrough authoritative for every
+PlayerAimController. Local screen 0 already has branch byte zero, so its control
+flow is unchanged; the screen-1 puppet stops fighting the same named layers with
+the alternate release path.
+
+### Competing hypotheses
+
+1. **Selected:** the puppet's branch byte selects a network/alternate release
+   contract whose missing native animation snapshots are not present in the
+   retained campaign puppet. Keeping the stock publisher on its named branch
+   supplies the already-authored visible aim layers without a second writer.
+2. The LRDU parameter buffer has an independent alternate pose reader below
+   `AnimControl`; forcing the named branch would add no vertical motion.
+3. A late palette, joint, or weapon-attachment owner suppresses vertical motion
+   even when a stable named aim layer is active.
+4. Full `NetAnimCmd` snapshot replay is the required network contract. It remains
+   broader and its earlier malformed apply path crashed, so it is not selected
+   while the stock publisher has a narrower complete lifecycle.
+
+### Independent evidence quota
+
+1. **Exact control flow and data flow:** disassembly at
+   `0x140CB426A..0x140CB42B6` writes LRDU, resolves the base-state player-info
+   record, and uses one `JNZ` to choose named commit versus fade/release.
+2. **Independent lifecycle:** `0x140CAF470 -> 0x14172A910 -> 0x14189CC80`
+   activates a reserved type-2 layer, stores the weight and queues the authored
+   `aim-add-*` fade. The alternate target `0x14172C8E0` only fades that layer to
+   zero and releases it.
+3. **Independent downstream consumer:** `0x1418A0EB0` and `0x1418A30A0`
+   copy the full parameter buffer from `*(AnimStateLayer+0x530)+0x10` to
+   `*(AnimStateInstance+0x178)+0x10` when instance flag `+0x190 & 0x20` is set;
+   `0x1418A4FD0` then submits that instance state to the evaluator. The authored
+   holder is therefore not an output-only diagnostic buffer.
+4. **Runtime structural discriminator:** `ec` proved local screen 0 is named,
+   puppet screen 1 is alternate, all puppet Aim0..Aim7 descriptors are absent,
+   and `rawUp=stateUp=0.9990` survives into the publisher buffer.
+5. **Runtime visible consumer:** `eb` activated Aim4 context `AD` and immediately
+   produced an upward weapon jerk. Its continuous shake is exactly explained by
+   the next frame's stock alternate fade/release followed by reactivation. This
+   proves that a named layer reaches the visible weapon pose; it does not support
+   a missing late attachment owner.
+
+### Falsifiable runtime prediction
+
+On fresh build `2026-07-20ed`, receiver startup must log
+`named aim-publisher branch installed (0x140CB42B6 fallthrough)`. A role-A ADS
+vertical sweep must make the remote arms/weapon move smoothly up and down, with
+no `eb` shake or repeated snap. `AIM-REGISTRY-SNAPSHOT` on screen 1 should now
+show Aim4/Aim6 present and active, `release=0`, and weights correlated with
+`stateUp/stateDown` instead of all `found=0`. ADS exit must return the pose to
+neutral. Horizontal alignment and projectile direction/origin must stay unchanged.
+
+If descriptors become active and stable but vertical motion is still absent,
+hypothesis 2 wins and the next trace resumes at the command evaluator. If the
+old shake returns, the branch override is insufficient and another release
+writer exists. If horizontal/projectile alignment changes, the patch is too
+broad and must be removed.
+
+This NOP is deliberately a bounded discriminator, not the final production
+policy. `0x1410D5D40` resolves the currently active authored `base` state, so the
+tested byte can vary across cover, climb, and other action states; static analysis
+does not establish it as a permanent screen/network flag. If the visible test
+passes, replace the global branch edit with a retained-screen-1/controller-scoped
+decision and retain the original branch for all other controllers and states.
+
+The real `ida/tll.i64` was updated through `scripts/ida_apply_labels.py` and saved
+successfully (`apply_labels OK: 1084 functions, 19 data names`; `save_database
+returned True`). Independent name resolution verified
+`AnimControl_ResolveActiveBaseStatePlayerInfo = 0x1410D5D40`, alongside the
+existing publisher and fade/release labels. The MCP copy was then refreshed from
+the saved database and its server restarted.

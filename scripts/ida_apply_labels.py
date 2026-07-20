@@ -173,6 +173,14 @@ FUNCTIONS = {
         "The four weights are scaled by ADS blend this+0x8EC; Aim0..Aim7 CRCs "
         "are initialized by the PlayerAimController constructor 0x140CAE670.",
     ),
+    0x1410D5D40: (
+        "AnimControl_ResolveActiveBaseStatePlayerInfo",
+        "Resolves the active authored 'base' animation state and returns its "
+        "Player-info record; falls back through the "
+        "'default-anim-state-player-info' token. "
+        "PlayerAimController_PublishDirectionalAimWeights tests the byte behind "
+        "returned record +0x38 to select named commits versus fade/release.",
+    ),
     0x140CB32B0: (
         "PlayerAimController_ComputeDirectionalAimWeights",
         "Normalizes targetPoint-originPoint, measures signed horizontal/vertical "

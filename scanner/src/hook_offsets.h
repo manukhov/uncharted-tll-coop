@@ -74,6 +74,9 @@ constexpr std::size_t kAnimStateAimAddDownOffset = 0x18C;
 constexpr std::size_t kAnimStateTurnYawRateOffset = 0xD4;
 constexpr std::uintptr_t kPlayerAimPublishWeightsCallsiteRva = 0xCB4176;
 constexpr std::uintptr_t kPlayerAimPublishWeightsRva = 0xCB41F0;
+// PlayerAimController_PublishDirectionalAimWeights: JNZ from the authored
+// named-channel path to the alternate fade-out/release path.
+constexpr std::uintptr_t kPlayerAimAlternatePublisherBranchRva = 0xCB42B6;
 constexpr std::uintptr_t kPlayerAimSmoothAndPublishWeightsCallsiteRva = 0xCB416F;
 constexpr std::uintptr_t kPlayerAimSmoothAndPublishWeightsRva = 0xCB47A0;
 constexpr std::uintptr_t kPlayerAimResolveBaseStateRva = 0x10D5D40;

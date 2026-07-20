@@ -14411,6 +14411,36 @@ bool install_native_aim_pitch_smoother_relay() {
     return true;
 }
 
+// Bounded runtime discriminator: this patches the shared publisher globally.
+// The authored flag can vary by active base state, so a successful experiment
+// must be replaced by a retained-screen-1-scoped override before production.
+bool install_bounded_named_aim_publisher_branch_override() {
+    auto* const branch = reinterpret_cast<std::uint8_t*>(
+        g_module + kPlayerAimAlternatePublisherBranchRva);
+    constexpr std::array<std::uint8_t, 6> expected{
+        0x0F, 0x85, 0x37, 0x04, 0x00, 0x00,
+    };
+    if (std::memcmp(branch, expected.data(), expected.size()) != 0) {
+        boot_log_line(
+            "named aim-publisher branch SKIPPED (unexpected 0x140CB42B6 bytes)");
+        return false;
+    }
+
+    DWORD old = 0;
+    if (!VirtualProtect(
+            branch, expected.size(), PAGE_EXECUTE_READWRITE, &old)) {
+        boot_log_line("named aim-publisher branch SKIPPED (protect)");
+        return false;
+    }
+    std::memset(branch, 0x90, expected.size());
+    FlushInstructionCache(GetCurrentProcess(), branch, expected.size());
+    DWORD ignored = 0;
+    VirtualProtect(branch, expected.size(), old, &ignored);
+    boot_log_line(
+        "named aim-publisher branch installed (0x140CB42B6 fallthrough)");
+    return true;
+}
+
 bool install_native_aim_foot_turn_relays() {
     std::uint8_t* writer_site = nullptr;
     std::uint8_t* writer_relay = nullptr;
@@ -25577,8 +25607,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-20ec "
-        "(read-only local/puppet aim-registry discriminator + selected launch relay)");
+        "TLL hook DLL init 2026-07-20ed "
+        "(stock named aim-publisher branch + selected launch relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -25619,6 +25649,7 @@ DWORD WINAPI install_hook(void*) {
         install_player_aim_blend_tick_probe();
         install_native_aim_pitch_relay();
         install_native_aim_pitch_smoother_relay();
+        install_bounded_named_aim_publisher_branch_override();
         install_native_aim_foot_turn_relays();
         if (g_enable_puppet_fganim_world_aim_turn) {
             install_fganim_world_aim_turn_callsite_relay();
