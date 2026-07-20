@@ -13871,6 +13871,142 @@ struct AimFloatChannelProbe {
     std::uint8_t release_pending = 0;
 };
 
+struct AimBaseInstanceProbe {
+    bool registry_valid = false;
+    bool descriptor_found = false;
+    bool active = false;
+    bool instance_found = false;
+    bool copy_enabled = false;
+    bool source_matches_registry = false;
+    bool source_lrdu_valid = false;
+    bool destination_lrdu_valid = false;
+    std::uint32_t base_id = 0;
+    std::uint32_t type = 0;
+    std::uint32_t active_track_count = 0;
+    std::uint32_t instance_flags = 0;
+    std::uint32_t source_size = 0;
+    std::uint32_t destination_size = 0;
+    void* layer = nullptr;
+    void* instance = nullptr;
+    float source_lrdu[4]{};
+    float destination_lrdu[4]{};
+};
+
+AimBaseInstanceProbe probe_base_anim_state_instance(void* registry) {
+    AimBaseInstanceProbe result{};
+    if (registry == nullptr || g_module == 0 ||
+        readable_bytes(registry) < 0x60) {
+        return result;
+    }
+    __try {
+        const auto string_hash = reinterpret_cast<StringHashFunction>(
+            g_module + kStringHashRva);
+        result.base_id = string_hash("base", 4, 0);
+        const std::uint32_t count = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(registry) + 0x28);
+        auto* const records = *reinterpret_cast<std::byte**>(
+            static_cast<std::byte*>(registry) + 0x30);
+        if (count == 0 || count > 4096 || records == nullptr ||
+            readable_bytes(records) < static_cast<std::size_t>(count) * 0x20) {
+            return result;
+        }
+        result.registry_valid = true;
+        for (std::uint32_t index = 0; index < count; ++index) {
+            const auto* const record =
+                records + static_cast<std::size_t>(index) * 0x20;
+            if (*reinterpret_cast<const std::uint32_t*>(record) !=
+                result.base_id) {
+                continue;
+            }
+            result.descriptor_found = true;
+            result.active =
+                *reinterpret_cast<const std::uint8_t*>(record + 0x14) != 0;
+            result.layer = *reinterpret_cast<void* const*>(record + 0x08);
+            if (result.layer != nullptr && readable_bytes(result.layer) >= 0x0C) {
+                result.type = *reinterpret_cast<const std::uint32_t*>(
+                    static_cast<const std::byte*>(result.layer) + 0x08);
+            }
+            if (result.active && result.type == 2) {
+                break;
+            }
+        }
+        if (!result.active || result.type != 2 || result.layer == nullptr ||
+            readable_bytes(result.layer) < 0x538) {
+            return result;
+        }
+
+        auto* const layer_bytes = static_cast<std::byte*>(result.layer);
+        result.active_track_count = *reinterpret_cast<const std::uint32_t*>(
+            layer_bytes + 0x500);
+        void* const source_wrapper = *reinterpret_cast<void**>(
+            layer_bytes + 0x530);
+        void* const registry_wrapper = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(registry) + 0x58);
+        result.source_matches_registry = source_wrapper != nullptr &&
+            source_wrapper == registry_wrapper;
+
+        if (result.active_track_count != 0) {
+            void* const track_slots = *reinterpret_cast<void**>(
+                layer_bytes + 0x4F8);
+            if (track_slots != nullptr && readable_bytes(track_slots) >= 8) {
+                void* const first_track = *reinterpret_cast<void**>(track_slots);
+                if (first_track != nullptr && readable_bytes(first_track) >= 8) {
+                    void* const instance_slots =
+                        *reinterpret_cast<void**>(first_track);
+                    if (instance_slots != nullptr &&
+                        readable_bytes(instance_slots) >= 8) {
+                        result.instance = *reinterpret_cast<void**>(instance_slots);
+                    }
+                }
+            }
+        }
+        if (result.instance == nullptr ||
+            readable_bytes(result.instance) < 0x191) {
+            return result;
+        }
+        result.instance_found = true;
+        auto* const instance_bytes = static_cast<std::byte*>(result.instance);
+        result.instance_flags = *reinterpret_cast<const std::uint8_t*>(
+            instance_bytes + 0x190);
+        result.copy_enabled = (result.instance_flags & 0x20U) != 0;
+        void* const destination_wrapper = *reinterpret_cast<void**>(
+            instance_bytes + 0x178);
+
+        auto read_wrapper = [](void* wrapper, std::uint32_t& size,
+                               float (&lrdu)[4]) -> bool {
+            if (wrapper == nullptr || readable_bytes(wrapper) < 0x24) {
+                return false;
+            }
+            auto* const wrapper_bytes = static_cast<std::byte*>(wrapper);
+            void* const buffer = *reinterpret_cast<void**>(wrapper_bytes + 0x10);
+            size = *reinterpret_cast<const std::uint32_t*>(wrapper_bytes + 0x20);
+            if (buffer == nullptr || size < kAnimStateAimAddRightOffset + 4 ||
+                size > 1024 * 1024 || readable_bytes(buffer) < size) {
+                return false;
+            }
+            const auto* const bytes = static_cast<const std::byte*>(buffer);
+            lrdu[0] = *reinterpret_cast<const float*>(
+                bytes + kAnimStateAimAddLeftOffset);
+            lrdu[1] = *reinterpret_cast<const float*>(
+                bytes + kAnimStateAimAddRightOffset);
+            lrdu[2] = *reinterpret_cast<const float*>(
+                bytes + kAnimStateAimAddUpOffset);
+            lrdu[3] = *reinterpret_cast<const float*>(
+                bytes + kAnimStateAimAddDownOffset);
+            return std::all_of(std::begin(lrdu), std::end(lrdu),
+                               [](float value) { return std::isfinite(value); });
+        };
+        result.source_lrdu_valid = read_wrapper(
+            source_wrapper, result.source_size, result.source_lrdu);
+        result.destination_lrdu_valid = read_wrapper(
+            destination_wrapper, result.destination_size,
+            result.destination_lrdu);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return AimBaseInstanceProbe{};
+    }
+    return result;
+}
+
 AimFloatChannelProbe probe_aim_float_channel(
     void* registry, std::uint32_t channel_id) {
     AimFloatChannelProbe result{};
@@ -14013,6 +14149,8 @@ void log_aim_registry_snapshot(
         const auto* const channel_ids =
             reinterpret_cast<const std::uint32_t*>(
                 static_cast<const std::byte*>(controller) + 0x8C8);
+        const AimBaseInstanceProbe base_probe =
+            probe_base_anim_state_instance(registry);
         AimFloatChannelProbe probes[8]{};
         for (std::size_t index = 0; index < 8; ++index) {
             probes[index] = probe_aim_float_channel(
@@ -14023,10 +14161,26 @@ void log_aim_registry_snapshot(
             line, sizeof(line),
             "AIM-REGISTRY-SNAPSHOT phase=%s screen=%u mode=%s branch=%u "
             "base=%d blend=%.4f rawUD=%.4f/%.4f "
-            "stateLRDU=%.4f/%.4f/%.4f/%.4f",
+            "stateLRDU=%.4f/%.4f/%.4f/%.4f "
+            "baseInst={id=%08X found=%u active=%u type=%u tracks=%u "
+            "inst=%u flags=%02X copy=%u srcSame=%u sizes=%u/%u "
+            "srcLRDU=%.4f/%.4f/%.4f/%.4f dstLRDU=%.4f/%.4f/%.4f/%.4f}",
             phase, screen, uses_named_channels ? "named" : "alternate",
             static_cast<unsigned>(branch_value), base_index, blend,
-            raw_up, raw_down, state_left, state_right, state_up, state_down);
+            raw_up, raw_down, state_left, state_right, state_up, state_down,
+            base_probe.base_id,
+            static_cast<unsigned>(base_probe.descriptor_found),
+            static_cast<unsigned>(base_probe.active), base_probe.type,
+            base_probe.active_track_count,
+            static_cast<unsigned>(base_probe.instance_found),
+            base_probe.instance_flags,
+            static_cast<unsigned>(base_probe.copy_enabled),
+            static_cast<unsigned>(base_probe.source_matches_registry),
+            base_probe.source_size, base_probe.destination_size,
+            base_probe.source_lrdu[0], base_probe.source_lrdu[1],
+            base_probe.source_lrdu[2], base_probe.source_lrdu[3],
+            base_probe.destination_lrdu[0], base_probe.destination_lrdu[1],
+            base_probe.destination_lrdu[2], base_probe.destination_lrdu[3]);
         for (std::size_t index = 0;
              index < 8 && used > 0 &&
                  static_cast<std::size_t>(used) < sizeof(line);
@@ -25577,8 +25731,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-20ee "
-        "(REJECTED named aim override removed; selected launch relay)");
+        "TLL hook DLL init 2026-07-20ef "
+        "(read-only base AnimStateInstance parameter-copy discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

@@ -108,6 +108,42 @@ FUNCTIONS = {
         "the 'Accepted direct fade request' diagnostic; named aim-add and net-fire "
         "paths call it after ensuring their layer.",
     ),
+    0x141A78A60: (
+        "AnimControl_BeginStepInternal",
+        "Exact source assertion identifies AnimControl::BeginStepInternal. Sorts "
+        "the active 0x20-byte layer descriptors and dispatches object type 2 to "
+        "AnimStateLayer_Step before released layers are deactivated.",
+    ),
+    0x14189B7B0: (
+        "AnimStateLayer_Construct",
+        "Constructs the type-2 AnimStateLayer, installs its RTTI-backed vtable, "
+        "binds the shared authored parameter wrapper at +0x530, and allocates "
+        "AnimStateInstance tracks through the independently asserted allocator.",
+    ),
+    0x1418B3F10: (
+        "AnimStateInstance_InitializeAuthoredBuffers",
+        "Initializes one preconstructed AnimStateInstance: allocates its authored "
+        "parameter destination wrapper at +0x178 and sets +0x190 bit 0x20 from "
+        "the layer record's authored copy-parameters byte.",
+    ),
+    0x1418A0EB0: (
+        "AnimStateLayer_CopyParametersToFirstInstance",
+        "Traverses the first active instance track and, when instance+0x190 bit "
+        "0x20 is authored, copies the complete buffer from [layer+0x530]+0x10 "
+        "to [instance+0x178]+0x10 using the destination descriptor size.",
+    ),
+    0x1418A30A0: (
+        "AnimStateLayer_Step",
+        "Type-2 layer step selected by AnimControl_BeginStepInternal. Advances "
+        "active AnimStateInstance tracks, performs the shared-parameter copy, "
+        "then submits instances to AnimStateInstance_PhaseUpdate.",
+    ),
+    0x1418A4FD0: (
+        "AnimStateInstance_PhaseUpdate",
+        "Exact source assertion identifies AnimStateInstance::PhaseUpdate. Uses "
+        "the instance parameter descriptor at +0x178 while sampling the authored "
+        "animation tree during pre/post phase updates.",
+    ),
     0x140CB47A0: (
         "PlayerAimController_SmoothAndPublishDirectionalAimWeights",
         "Steady-state branch selected at 0x140CB416F when the controller mode "

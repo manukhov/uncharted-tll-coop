@@ -585,3 +585,61 @@ trace the full buffer copy from `AnimStateLayer+0x530` to
 `AnimStateInstance+0x178`, the `+0x190 & 0x20` admission flag, and evaluator entry
 `0x1418A4FD0`. No further runtime test is authorized until that path identifies
 the exact alternate pose destination and excludes late palette/attachment owners.
+
+## STATIC `ef`: read-only base-instance parameter-copy discriminator
+
+### Exact hypothesis and competitors
+
+The alternate publisher already writes LRDU to the shared AnimControl parameter
+buffer. The remaining narrow failure may be before evaluation: the puppet's
+active `base` type-2 layer can lack an active instance, the instance's authored
+parameter-copy bit `+0x190 & 0x20`, or a compatible destination buffer. Build
+`ef` changes no animation state; it records that exact chain for local screen 0
+and puppet screen 1.
+
+Competing outcomes are:
+
+1. **Selected diagnostic candidate:** screen 1 is missing the active base
+   descriptor/instance, copy bit, or compatible destination, so LRDU never enters
+   its live `AnimStateInstance` parameter buffer.
+2. Source and destination LRDU match while the visible pitch remains absent; the
+   puppet's active alternate animation tree does not semantically map those
+   fields, pointing to missing native animation-state/snapshot selection.
+3. Source/destination and the evaluator are correct, but a later palette or
+   attachment owner erases pitch. This remains weaker because prior palette and
+   residual-pitch probes found no corresponding upstream vertical pose.
+
+### Independent static evidence quota
+
+1. `AnimControl::BeginStepInternal 0x141A78A60`, identified by source-file and
+   function assertion strings, sorts active registry layers and dispatches type 2
+   to `0x1418A30A0`.
+2. `AnimStateLayer` constructor `0x14189B7B0`, anchored by RTTI/vtable and the
+   independent `AnimStateInstanceTrack::Allocate` assertion, binds the shared
+   parameter wrapper at layer `+0x530` and allocates the active-instance tracks.
+3. `AnimStateInstance` initializer `0x1418B3F10` allocates the destination wrapper
+   at `+0x178`; it derives flag `+0x190 & 0x20` directly from an authored config
+   byte, not a network guess.
+4. Exact disassembly at `0x1418A0EB0` traverses the first active layer track and
+   performs `memcpy([instance+0x178]+0x10, [layer+0x530]+0x10, destSize)` only
+   under that bit. Both `0x1418A2E50` and `0x1418A30A0` call it.
+5. `0x1418A4FD0` is independently anchored by the literal
+   `AnimStateInstance::PhaseUpdate`; it samples the animation tree using the
+   instance parameter descriptor at `+0x178`.
+
+### Falsifiable read-only prediction
+
+Fresh build `2026-07-20ef` must leave the model stable and log `baseInst` for both
+screens. If candidate 1 is correct, screen 1 differs from screen 0 at descriptor,
+instance, `copy`, wrapper identity/size, or destination LRDU; specifically its
+destination must fail to follow source `stateLRDU`. If screen 1 reports
+`found=active=inst=copy=srcSame=1`, compatible sizes, and destination LRDU tracks
+source while the weapon remains vertically fixed, candidate 1 is rejected and
+the trace moves to authored animation-state/snapshot selection. Any pose change
+would invalidate the read-only probe itself; no write or branch override remains
+in `ef`.
+
+The real IDB now carries the six STATIC names above. Headless application reported
+`apply_labels OK: 1090 functions, 19 data names` and `save_database returned
+True`; independent resolution verified all six addresses, after which the MCP copy
+was refreshed and restarted.

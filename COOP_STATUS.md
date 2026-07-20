@@ -3894,3 +3894,14 @@ edge. Both processes were closed. Build `ee` removes the global branch patch and
 restores the stable publisher path. Do not retry named fallthrough, including a
 screen-1-scoped version. Resume static tracing at the alternate
 `AnimStateLayer+0x530 -> AnimStateInstance+0x178 -> 0x1418A4FD0` evaluator path.
+
+### 2026-07-20 STATIC: `ef` reads the exact base-instance copy chain
+
+The chain is now exact: `AnimControl::BeginStepInternal 0x141A78A60` dispatches
+type-2 layers; constructor `0x14189B7B0` binds the shared parameter wrapper at
+layer `+0x530`; initializer `0x1418B3F10` allocates instance destination `+0x178`
+and sets `+0x190 & 0x20` from authored config; `0x1418A0EB0` conditionally copies
+the whole buffer before `AnimStateInstance::PhaseUpdate 0x1418A4FD0` samples the
+tree. Build `ef` is read-only and compares base descriptor/instance admission,
+wrapper identity/sizes, and source/destination LRDU for screens 0/1. Written
+competitors and falsifier are in the aim report; no runtime mutation is allowed.

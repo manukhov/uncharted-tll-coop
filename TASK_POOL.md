@@ -1116,10 +1116,18 @@ Do not reopen these as the first move:
       completely. Named fallthrough is incompatible with the puppet's authored
       alternate graph; do not retry it globally or screen-1-scoped.
 - [x] Remove the `ed` publisher-branch patch in stable build `ee`.
-- [ ] Trace the alternate buffer-copy/evaluator path from `AnimStateLayer+0x530`
-      to `AnimStateInstance+0x178` under `instance+0x190 & 0x20`, then through
-      `0x1418A4FD0`; identify the exact alternate pitch destination before any
-      further runtime mutation.
+- [x] Trace the alternate copy chain: `AnimControl::BeginStepInternal
+      0x141A78A60` -> type-2 layer step; layer ctor `0x14189B7B0` binds `+0x530`;
+      instance init `0x1418B3F10` allocates `+0x178` and authors flag `+0x190 &
+      0x20`; `0x1418A0EB0` copies before `AnimStateInstance::PhaseUpdate
+      0x1418A4FD0`.
+- [x] Implement read-only build `ef` base-instance discriminator for screens 0/1:
+      descriptor/instance admission, copy flag, wrapper identity/sizes and
+      source/destination LRDU. It contains no named-branch or pose mutation.
+- [ ] Run the written `ef` falsifier. If puppet destination LRDU matches source,
+      reject the copy-boundary candidate and trace authored animation-state/
+      snapshot selection; otherwise isolate the first structural difference from
+      local screen 0 before proposing a fix.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
