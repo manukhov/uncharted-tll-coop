@@ -76,9 +76,9 @@ constexpr std::uintptr_t kPlayerAimPublishWeightsCallsiteRva = 0xCB4176;
 constexpr std::uintptr_t kPlayerAimPublishWeightsRva = 0xCB41F0;
 constexpr std::uintptr_t kPlayerAimSmoothAndPublishWeightsCallsiteRva = 0xCB416F;
 constexpr std::uintptr_t kPlayerAimSmoothAndPublishWeightsRva = 0xCB47A0;
-constexpr std::uintptr_t kPlayerAimCommitNamedChannelRva = 0xCAF470;
 constexpr std::uintptr_t kPlayerAimResolveBaseStateRva = 0x10D5D40;
-constexpr std::uintptr_t kAnimParamRegistrySetExistingFloatChannelRva = 0x172C8E0;
+constexpr std::uintptr_t kAnimParamRegistryRequestLayerFadeOutAndReleaseRva =
+    0x172C8E0;
 constexpr std::size_t kFgAnimDataFlagsOffset = 0;
 constexpr std::size_t kFgAnimDataStateOffset = 4;
 constexpr std::size_t kFgAnimDataUpperStateOwnerOffset = 0x10;

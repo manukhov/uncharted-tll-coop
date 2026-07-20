@@ -1,0 +1,9 @@
+Real IDB label application:
+apply_labels OK: 1083 functions, 19 data names
+idb_path=C:\Users\Vladimir\Desktop\TLLCoopResearch\ida\tll.i64
+save_database returned True
+
+Refreshed ida/tll_mcp.i64 verification through get_function_by_address:
+0x14172C8E0 AnimParamRegistry_RequestLayerFadeOutAndRelease size=0x8A
+0x141A911A0 AnimParamRegistry_StepAndDeactivateReleasedLayers size=0x287
+0x142BE8DFC kAimAlternateLayerReleaseDuration

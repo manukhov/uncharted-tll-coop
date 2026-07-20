@@ -373,17 +373,73 @@ the expected fade-count observation was absent, and the visible pose regressed
 instead of following pitch. The implementation that calls the named commit every
 alternate-mode frame is therefore REJECTED.
 
-Exact disassembly also exposes a dual-layout conflict that the `eb` hypothesis
-did not account for. The named commit writes weight at AnimStateLayer `+0x2C`
-and zeros `+0x30`, while `AnimParamRegistry_SetExistingFloatChannel` explicitly
-zeros `+0x2C` and writes its value to `+0x30/+0x34`. Both mark `+0x3C/+0x3D`.
-After `eb` activates Aim4, the stock alternate publisher can finally write its
-constant `0.2`; the following named call then sees the pending `+0x3D` state and
-can skip its own weight update. Thus two publication contracts contend for the
-same layer in one frame, matching the new snap/jitter symptom.
+Exact disassembly resolves the apparent dual layout more strongly than the
+initial runtime note. AnimStateLayer fields are: current/evaluated weight
+`+0x28`, target weight `+0x2C`, remaining fade time `+0x30`, full fade duration
+`+0x34`, starting weight `+0x38`, easing/dirty mode `+0x3C`, and
+release-on-zero pending `+0x3D`. The formerly named
+`AnimParamRegistry_SetExistingFloatChannel 0x14172C8E0` is not a value setter.
+It writes target zero, copies current to starting weight, stores the supplied
+float in both fade-time fields, sets easing to one and marks release pending.
+It is therefore relabeled
+`AnimParamRegistry_RequestLayerFadeOutAndRelease`.
 
-This is not yet sufficient to select a replacement. Static work must determine
-whether alternate mode requires one-time layer activation followed exclusively
-by the existing-channel setter, or whether the named direct fade itself is
-incompatible and a different authored action edge owns activation. No runtime
-test is permitted until that ownership and deactivation lifecycle are resolved.
+The independent registry step at `0x141A911A0` calls the layer step routine and,
+when `+0x3D == 1 && +0x28 == 0`, calls virtual `+0x50` and clears the descriptor's
+id, context and active byte. Thus the exact `eb` loop was: named commit activates
+Aim4, stock alternate publication requests its 0.2-second fade-out/release,
+the registry deactivates it at zero, and the hook activates it again. This
+matches the continuous visible shake and upward snap. One-time named activation
+followed by `0x14172C8E0` is also REJECTED: it only schedules that layer's
+release and cannot carry pitch.
+
+`PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0` supplies a third
+independent discriminator. It always writes the real LRDU weights into the
+active state at `+0x188/+0x18C/+0x190/+0x194`. The named branch also publishes
+those values through Aim0..Aim7, while the alternate branch merely requests
+fade-out/release of Aim0/Aim2/Aim4/Aim6 with the constant 0.2 seconds. Therefore
+Aim4/Aim6 are REJECTED as the alternate vertical-data consumer; the retained
+active-state values or a different alternate descriptor/downstream reader are
+the remaining competitors.
+
+## STATIC/runtime discriminator `ec`: read-only local/puppet registry snapshot
+
+The local and puppet controllers provably do not share the same animation graph
+contract: role A logged local screen 0 in `named` mode, while receiver PID 20316
+logged puppet screen 1 in `alternate` mode. Mirroring named-layer activation
+into the alternate graph is therefore structurally invalid.
+
+Build `2026-07-20ec` removes both receiver named commits, including the older
+transition hook, and makes no animation-state mutation. After the already-proven
+native transition and steady publishers it records at most six active-pitch
+samples per screen. Each sample contains the resolved branch byte, double-buffer
+base index, active-state LRDU values, and exact descriptor/object state for
+Aim0..Aim7: id, active, type, context, current/target/start weights, remaining and
+full fade duration, easing and release-pending state.
+
+Competing hypotheses are now explicit:
+
+1. A different active Aim descriptor/context in the alternate graph tracks
+   vertical input; its weight must correlate with `stateUp/stateDown` on screen 1.
+2. No Aim descriptor tracks the alternate vertical value; the real consumer is
+   downstream of the active-state `+0x188/+0x18C` fields.
+3. Aim4/Aim6 stay active with nonzero directional targets despite the static
+   release path, which would falsify the current interpretation.
+
+The evidence quota for this read-only run is satisfied by three different
+types: exact publisher and release/deactivation disassembly, data-flow from the
+publisher arguments into the active-state fields, and the prior runtime
+local-`named`/puppet-`alternate` mode split. No animation write is needed to
+distinguish the competitors.
+
+### Falsifiable prediction
+
+On a fresh `ec` run, aiming vertically must not reproduce the `eb` shake because
+the receiver named commits are gone. Both processes must emit bounded
+`AIM-REGISTRY-SNAPSHOT` records. Screen 0 must report `mode=named`, screen 1
+`mode=alternate`, and screen 1 must show nonzero `stateUp` or `stateDown`. If no
+alternate Aim descriptor correlates with those values and Aim0/2/4/6 are absent,
+inactive, or release-pending, hypothesis 2 wins and the next static target is the
+reader of active-state `+0x188/+0x18C`. A correlated different descriptor selects
+hypothesis 1. Active directional Aim4/Aim6 would instead select hypothesis 3 and
+force reanalysis before mutation.

@@ -70,12 +70,21 @@ FUNCTIONS = {
         "camera and attachment phases run after this function returns.",
     ),
     0x14172C8E0: (
-        "AnimParamRegistry_SetExistingFloatChannel",
-        "Looks up an active 0x20-byte animation-parameter registry entry by "
-        "channel id, stores the supplied finite non-negative float at entry "
-        "+0x30/+0x34, copies generation +0x28 to +0x38, and marks +0x3C/+0x3D "
-        "dirty. PlayerAimController's alternate publication branch calls this "
-        "for Aim0/Aim2/Aim4/Aim6.",
+        "AnimParamRegistry_RequestLayerFadeOutAndRelease",
+        "Looks up an active type-2 animation layer by channel id and requests "
+        "a fade to zero followed by descriptor release: target +0x2C becomes "
+        "0, remaining/full fade time +0x30/+0x34 receive the supplied duration, "
+        "starting weight +0x38 copies current weight +0x28, easing +0x3C becomes "
+        "1, and release-pending +0x3D becomes 1. PlayerAimController's alternate "
+        "branch calls this with 0.2 seconds for Aim0/Aim2/Aim4/Aim6; it is not "
+        "a directional-weight setter.",
+    ),
+    0x141A911A0: (
+        "AnimParamRegistry_StepAndDeactivateReleasedLayers",
+        "Steps registered animation controls through AnimControl_BeginStepInternal "
+        "and deactivates a descriptor when its type-2 layer has release-pending "
+        "+0x3D set and current weight +0x28 has reached zero. The deactivation "
+        "calls vtable slot +0x50 and clears descriptor id/context/active state.",
     ),
     0x14172A370: (
         "AnimParamRegistry_ActivateTypedChannelSlot",
@@ -7484,10 +7493,10 @@ FUNCTIONS = {
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
     0x142BE8DFC: (
-        "kAimAlternateChannelBaseline",
-        "Float 0.2 written through AnimParamRegistry_SetExistingFloatChannel to "
-        "Aim0/Aim2/Aim4/Aim6 when PlayerAimController's resolved branch-control "
-        "byte is nonzero.",
+        "kAimAlternateLayerReleaseDuration",
+        "Float 0.2 used as the fade duration by "
+        "AnimParamRegistry_RequestLayerFadeOutAndRelease for Aim0/Aim2/Aim4/Aim6 "
+        "when PlayerAimController's resolved branch-control byte is nonzero.",
     ),
     0x142A27658: (
         "PlayerGunMoveShield_Vtable",

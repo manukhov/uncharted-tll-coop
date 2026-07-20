@@ -1087,13 +1087,21 @@ Do not reopen these as the first move:
 - [x] Run the written `eb` discriminator. Aim4 activated with context `AD`, but
       the supplied `0.0709` weight probed as zero and ADS began shaking/jerking
       upward. Reject per-frame named commit in alternate mode. Disassembly proves
-      named weight `+0x2C` and alternate target `+0x30/+0x34` are mutually
-      resetting contracts sharing pending/dirty state.
-- [ ] Resolve alternate layer ownership before another run: distinguish one-time
-      activation followed only by existing-channel setter from an incompatible
-      named direct fade, and trace who deactivates Aim4/Aim6. Do not launch until
-      the selected path has three independent evidence types and a prediction
-      that excludes another named/alternate contention loop.
+      `0x14172C8E0` is a fade-to-zero/release request, and `0x141A911A0`
+      deactivates its descriptor at zero. The activate/fade/release/reactivate
+      loop exactly accounts for the regression; one-time activation plus this
+      function is also rejected.
+- [x] Reject Aim4/Aim6 as alternate vertical data carriers. `0x140CB41F0` writes
+      actual LRDU to active state `+0x188..+0x194`, but alternate mode only asks
+      Aim0/Aim2/Aim4/Aim6 to fade out and release. Local screen 0 is `named` while
+      puppet screen 1 is `alternate`, so their authored graph contracts cannot be
+      mixed.
+- [x] Implement read-only build `ec`: remove both receiver named commits and log
+      bounded local/puppet mode, branch byte, base index, active-state LRDU, and
+      Aim0..Aim7 descriptor/layer lifecycle fields after native publication.
+- [ ] Run the written `ec` discriminator. It must not reproduce the `eb` shake.
+      A different alternate descriptor correlated with vertical state selects
+      that route; otherwise trace readers of active-state `+0x188/+0x18C`.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

@@ -3817,12 +3817,22 @@ and jerked the weapon upward. The processes were stopped immediately. Receiver
 PID 20316 reached the new path with `up=0.0709`, activated Aim4 context `AD`, yet
 reported `valueUp=0 fadeUp=0 dirtyUp=1`. The runtime prediction failed.
 
-Exact disassembly shows why the implementation is unsafe: named commit writes
-weight at layer `+0x2C` and zeros `+0x30`, whereas the stock alternate setter
-zeros `+0x2C` and writes `+0x30/+0x34`; both share dirty/pending bytes
-`+0x3C/+0x3D`. Once `eb` activates Aim4, the stock alternate `0.2` write becomes
-live and the following named update can be suppressed by pending state. Calling
-both contracts on one layer per frame is REJECTED. Static analysis must now
-separate one-time activation from steady alternate ownership, including the
-deactivation edge, before any new game launch. Full evidence:
-`reports/remote_aim_pitch_blend_tick_20260718.md`.
+Exact lifecycle tracing corrects the old setter interpretation.
+`0x14172C8E0` writes target `+0x2C=0`, 0.2-second remaining/full fade at
+`+0x30/+0x34`, starting weight from current `+0x28`, easing `+0x3C=1`, and
+release-pending `+0x3D=1`; it is now
+`AnimParamRegistry_RequestLayerFadeOutAndRelease`. Registry step `0x141A911A0`
+deactivates and clears the descriptor after pending weight reaches zero. Thus
+`eb` repeatedly activated Aim4 while stock alternate publication faded and
+released it, exactly explaining the shake. One-time activation plus the former
+"setter" is also REJECTED.
+
+`0x140CB41F0` writes real LRDU weights to active state
+`+0x188/+0x18C/+0x190/+0x194`; its alternate branch only releases
+Aim0/Aim2/Aim4/Aim6. Aim4/Aim6 are therefore REJECTED as alternate vertical
+data carriers. Build `ec` removes all receiver named commits and is read-only:
+it logs bounded local/puppet branch, base-index, active-state LRDU and full
+Aim0..Aim7 descriptor/layer lifecycle fields after native publication. The
+falsifier distinguishes a different alternate descriptor from a downstream
+reader of active-state vertical fields, and predicts no `eb` shake. Full
+evidence and prediction: `reports/remote_aim_pitch_blend_tick_20260718.md`.
