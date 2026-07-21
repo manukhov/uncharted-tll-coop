@@ -1,6 +1,0 @@
-TARGET 0x14181A9B0: func_start=0x14181a9b0 name=sub_14181A9B0
-  xref=0x14181B925 type=17 func_start=0x14181b890 func_name=sub_14181B890
-  xref=0x14181C102 type=19 func_start=None func_name=None
-  xref=0x14197DC54 type=17 func_start=0x14197d8c0 func_name=sub_14197D8C0
-  xref=0x146E87E2C type=1 func_start=None func_name=None
-

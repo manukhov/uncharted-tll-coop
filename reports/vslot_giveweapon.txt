@@ -1,6 +1,0 @@
-=== Player vtable 0x142A4BFE8 ===
-  +208 [slot 26] -> 0x141BB7960 'sub_141BB7960'
-  +752 [slot 94] -> 0x140CC17E0 'sub_140CC17E0'
-=== NadineBuddy vtable 0x142949638 ===
-  +208 [slot 26] -> 0x141BB7960 'sub_141BB7960'
-  +752 [slot 94] -> 0x1401D4D20 'sub_1401D4D20'

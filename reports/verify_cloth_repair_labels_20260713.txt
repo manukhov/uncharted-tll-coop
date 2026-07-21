@@ -1,4 +1,0 @@
-TARGET 0x1410FE840: Player_ChangeLookId start=0x1410FE840 end=0x1410FF492
-TARGET 0x141E61010: NdPropControl_Init start=0x141E61010 end=0x141E616B0
-TARGET 0x141E61860: NdPropControl_BuildPropSpawnList start=0x141E61860 end=0x141E61A37
-TARGET 0x141E63D70: NdPropControl_SpawnPropFromDefinition start=0x141E63D70 end=0x141E64176

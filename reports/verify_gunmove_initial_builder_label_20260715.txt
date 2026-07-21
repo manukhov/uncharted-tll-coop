@@ -1,6 +1,0 @@
-IDB binary-name verification after scripts/ida_apply_labels.py:
-address=0x140E8E830 name=GunMoveController_InitializeActionState
-comment=GunMoveController vtable +0x28; calls GunMoveController_BuildActionState
-with initial child state 0/103, then clears movement state fields.
-apply_status: apply_labels OK: 1048 functions, 18 data names
-apply_status: save_database returned True

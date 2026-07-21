@@ -1,4 +1,0 @@
-TARGET 0x140B580C0: func_start=0x140b580c0 name=SelectRetainedCoopPlayerLookHash
-  xref=0x14007D3C1 type=1 func_start=0x14007d3a0 func_name=sub_14007D3A0
-  xref=0x146E232C0 type=1 func_start=None func_name=None
-

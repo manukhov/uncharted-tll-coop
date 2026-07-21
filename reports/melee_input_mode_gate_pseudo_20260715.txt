@@ -1,9 +1,0 @@
-=== 0x14183E2D0: sub_14183E2D0 [0x14183E2D0..0x14183E302] ===
-char __fastcall sub_14183E2D0(__int64 a1)
-{
-  if ( (*(unsigned __int8 (__fastcall **)(__int64))(*(_QWORD *)qword_143FE1070 + 152LL))(qword_143FE1070) )
-    return 0;
-  else
-    return *(_BYTE *)(a1 + 3041);
-}
-

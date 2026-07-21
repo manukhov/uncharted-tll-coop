@@ -1,7 +1,0 @@
-==== 0x140237760 ====
-  CALL from 0x141004E0F
-  CALL from 0x141290FAE
-
-==== 0x140239100 ====
-  CALL from 0x140DD2E72
-

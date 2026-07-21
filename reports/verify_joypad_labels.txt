@@ -1,4 +1,0 @@
-JoypadState_UpdateEnabledBinding 0x141837530
-Input_BlendAxisByThresholds 0x140289A90
-JoypadState_Construct 0x141836640
-g_DebugCheatFlags_AmmoGrenades 0x143ECEAA4

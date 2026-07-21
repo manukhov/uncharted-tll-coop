@@ -1,7 +1,0 @@
-{
-  "mcpServers": {
-    "ida-tll": {
-      "url": "http://172.21.144.1:8745/mcp"
-    }
-  }
-}

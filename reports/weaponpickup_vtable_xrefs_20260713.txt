@@ -1,9 +1,0 @@
-TARGET 0x142AA66C0: func_start=None name=None
-  xref=0x14157916F type=1 func_start=0x141579150 func_name=WeaponPickup_Factory
-  xref=0x1415791D0 type=1 func_start=0x141579150 func_name=WeaponPickup_Factory
-  xref=0x14157921E type=1 func_start=0x141579210 func_name=sub_141579210
-
-TARGET 0x142AA6E90: func_start=None name=None
-  xref=0x14157903B type=1 func_start=0x141578f90 func_name=sub_141578F90
-  xref=0x1415790F6 type=1 func_start=None func_name=None
-

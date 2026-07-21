@@ -1,7 +1,0 @@
-0x1413538B0: sub     rsp, 28h
-0x1413538B4: call    sub_1417F1270
-0x1413538B9: lea     rcx, qword_143F03ED0
-0x1413538C0: call    sub_1413B2950
-0x1413538C5: add     rsp, 28h
-0x1413538C9: jmp     sub_1413569E0
-0x1413538CE: align 10h

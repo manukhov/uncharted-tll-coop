@@ -1,4 +1,0 @@
-TARGET 0x140CAFD90: func_start=0x140cafd90 name=PlayerAimController_GetAimOriginPoint
-  xref=0x142A0B278 type=1 func_start=None func_name=None
-  xref=0x146E2DF40 type=1 func_start=None func_name=None
-

@@ -1,7 +1,0 @@
-TARGET 0x1417C3790: ResolveOrMaterializeRuntimeStateObjectFromSelectorPacket start=0x1417C3790 end=0x1417C43E8
-// Consumes the compact packet built by 0x1417C32A0. Requires packet +0x50, checks selector/capability gates through 0x1417C4800, builds a returned runtime object family, copies packet payload blocks from +0x20/+0x40 into that object, and exposes retained/live identity at returned_object+0xA8/+0xBC. The returned object now looks more like a materialized runtime companion to the packet than the final Player-side external_state itself; the stronger direct shape match for 0x1418C4840 is the extended wrapper family at 0x1417C35A0.
-void ResolveOrMaterializeRuntimeStateObjectFromSelectorPacket()
-{
-  JUMPOUT(0x1417C3792LL);
-}
-

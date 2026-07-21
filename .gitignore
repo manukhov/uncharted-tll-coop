@@ -17,16 +17,14 @@ ida/*.til
 __pycache__/
 *.pyc
 
-# Generated reports / scratch
-reports/_tmp_*
-reports/*.log
-reports/*.log.prev_*
-reports/*runtime_objects.json
-reports/probe_addrs.txt
+# Generated reports / scratch (local, never versioned)
+reports/
+.codex/*.txt
 scanner/_build*.cmd
 scanner/build-wincheck/
 ida/*.log
 ida/*.txt
+ida/*.$$$
 
 # VS Code
 .vscode/

@@ -1,7 +1,0 @@
-0x142A0DBE8: dq offset ??_R4BoatDriving@Player@@6B@
-0x142A0DBF0: dq offset sub_140CD47D0
-0x142A0DBF8: dq offset sub_140CD3B80
-0x142A0DC00: dq offset sub_140CD3B20
-0x142A0DC08: dq offset sub_140CD45A0
-0x142A0DC10: dq offset PlayerScriptedInteractController_UpdateAndDispatch
-0x142A0DC18: dq offset sub_1416A32D0
