@@ -1064,3 +1064,46 @@ Prediction for a fresh stable center/up/down ADS sweep:
   endpoint sample appears;
 - any crash, visible animation/model/input change, write, or invalid owner-chain
   sample invalidates `ej`.
+
+## CONFIRMED/REJECTED `ej`: the complete active Blend spine matches
+
+Fresh PIDs 16476 (screen 0) and 15632 (screen 1) loaded read-only build
+`2026-07-21ej`. The user performed the requested vertical ADS motion. Both
+processes remained responsive; neither crashed, and both were closed after log
+collection.
+
+In stable state `3C347132`, both processes converged on the same four-Blend
+endpoint spine. Per-process heap indices differed, but every normalized semantic
+field matched:
+
+1. Depth 0 is `AnimSnapshotNodeBlend` (`vt/TD RVA
+   02B15218/03771508`), weight approximately zero, selecting child 0. Its
+   flags/mode are `0C/1`, and its descriptor is the already-confirmed root VM
+   `CDFC7F1B`, code `18/88C7741D`, constants `1/35DC6391`, direct vertical mask
+   `00`. The unselected child is `AnimSnapshotNodeEmptyPose`
+   (`02B3D590/03772710`).
+2. Depth 1 is Blend, weight exactly `3F800000` (1.0), selecting child 1,
+   flags/mode `02/1`. It has no script descriptor.
+3. Depth 2 is Blend, weight exactly zero, selecting child 0, flags/mode `04/2`.
+   Its VM is `CDFC7F1B`, code `13/C6EBF6D6`, no constants, direct vertical mask
+   `00`; the unselected child is `AnimSnapshotNodeAnimation`
+   (`02B14D68/037713E8`).
+4. Depth 3 is Blend, weight exactly 1.0, selecting child 1, flags/mode `00/2`,
+   with no script descriptor. The selected endpoint is
+   `AnimSnapshotNodeAnimation` (`02B14D68/037713E8`).
+
+Both walks stopped validly at the first non-Blend endpoint (`stop=3`,
+`valid=1`). Thus the runtime result satisfies the complete-match branch of the
+written falsifier: the entire active Blend spine, its scripts, endpoint weights,
+flags/modes and selected child types are **REJECTED** as the vertical-aim
+discriminator. Raw heap indices are confirmed non-semantic.
+
+The concrete next frontier is the selected terminal
+`AnimSnapshotNodeAnimation`. Before any further runtime probe, trace its
+registered layout and the dataflow through
+`AnimSnapshotNodeAnimation_RefreshPhase 0x141918120`,
+`AnimSnapshotNodeAnimation_StepPhase 0x1419180A0`, and
+`AnimSnapshotNodeAnimation_GenerateAnimCommands 0x1419182E0`. The next
+hypothesis must distinguish clip/phase selection from a later command-evaluator
+or palette consumer; no non-Blend field should be read until its layout is
+proved statically.

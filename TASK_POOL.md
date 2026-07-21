@@ -1175,10 +1175,17 @@ Do not reopen these as the first move:
       over only the validated Blend layout, stopping at the first non-Blend RTTI.
       The `ei` result matched root VM/code/constants, child RTTI and typed child
       dynamics; root weight was a vertical-independent transition decay.
-- [ ] Run the written `ej` falsifier. Stable samples must select root child 0,
+- [x] Run the written `ej` falsifier. Stable samples must select root child 0,
       then nested Blend child 1. Compare normalized depth VM/weight/selected RTTI
       across screens; ignore mixed `stop=4` transitions. A full match moves the
-      next static trace into the first common non-Blend class.
+      next static trace into the first common non-Blend class. Result: the full
+      four-Blend spine matched and ended at `AnimSnapshotNodeAnimation`
+      (`02B14D68/037713E8`); only raw heap indices differed.
+- [ ] Statically prove the selected `AnimSnapshotNodeAnimation` layout and trace
+      its clip/phase data through `RefreshPhase 0x141918120`, `StepPhase
+      0x1419180A0`, and `GenerateAnimCommands 0x1419182E0`. Enumerate phase/clip
+      versus later evaluator/palette competitors and satisfy the three-type
+      evidence quota before adding another bounded read-only probe.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

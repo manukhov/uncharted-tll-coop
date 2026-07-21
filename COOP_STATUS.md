@@ -4171,3 +4171,28 @@ Mixed `stop=4` transition samples are non-diagnostic. No runtime launch is
 authorized until this written prediction and the three-type static quota above
 are present; both are detailed in
 `reports/remote_aim_pitch_blend_tick_20260718.md`.
+
+### 2026-07-21 CONFIRMED/REJECTED: `ej` matches the whole active Blend spine
+
+Fresh PIDs 16476/15632 completed the vertical ADS sweep on read-only build `ej`
+without a process crash. Both were closed after collection. Stable state
+`3C347132` produced the same valid normalized endpoint route in both processes:
+
+`Blend w~0 child0 -> Blend w=1 child1 -> Blend w=0 child0 -> Blend w=1 child1
+-> AnimSnapshotNodeAnimation`.
+
+At all four depths, vtable/TD, endpoint selection, flags/mode and bounded VM
+fingerprints matched. The scripted nodes were respectively
+`CDFC7F1B/18/88C7741D/1/35DC6391` and
+`CDFC7F1B/13/C6EBF6D6/0`; both had direct vertical-reference mask `00`.
+The terminal type matched as `AnimSnapshotNodeAnimation`
+(`vt/TD RVA 02B14D68/037713E8`), and both probes stopped validly at that first
+non-Blend node (`stop=3`). Only raw per-heap indices differed.
+
+This result **REJECTS** the complete active Blend spine as the vertical-aim
+discriminator. The next static frontier is the selected terminal Animation
+node: prove its layout and trace its phase/clip fields through
+`AnimSnapshotNodeAnimation_RefreshPhase 0x141918120`,
+`AnimSnapshotNodeAnimation_StepPhase 0x1419180A0`, and
+`AnimSnapshotNodeAnimation_GenerateAnimCommands 0x1419182E0` before defining
+another runtime probe.
