@@ -4921,3 +4921,30 @@ holster attachment failed. A rifle pointer absent from all slots while another
 slot-owned rifle becomes active confirms a separate look-created orphan. No
 owner match, unstable pointers, exception or visual change makes the test
 inconclusive and forbids a visibility fix.
+
+### 2026-07-21 CONFIRMED: persistent Nadine rifle is the normal slot-0 weapon (`ex`)
+
+The completed `ex` run rejected the remaining look-created-orphan hypothesis.
+Exact pointer equality on the established game-thread controller boundary mapped
+rifle art `0x8075397D` to slot mask `0x1` (slot 0), pistol art `0x33E29A1B` to
+slot mask `0x2` (slot 1), and grenade art `0x0B8BD6D6` to slot mask `0x4`
+(slot 2). The mapping was observed for both retained owner indices. During object
+recreation an old pointer briefly lost membership and was replaced by a new exact
+candidate, but each stable rifle candidate again resolved to slot 0; this is
+normal lifetime churn, not a second orphan object.
+
+During the pistol transition the rifle remained the slot-0 object while the
+controller reported `current=-2`, `draw=5`, `hand=0` and the pistol as the active
+art. Later the controller settled to `current=-1`, `draw=0`. Together with the
+user-visible rifle remaining in the hand, this selects a failure after inventory
+selection: the normal rifle is not rebound to its holster attachment point.
+Visibility suppression is forbidden because it would also hide the same object
+when slot 0 is legitimately drawn.
+
+The next read-only boundary is
+`PlayerWeaponHolsterAction_ResolveAndBindAttachPoint 0x141095BD0`. Competing
+hypotheses are: (H1) the function is not reached for the affected clone; (H2) its
+`weapon-holster-point` knowledge lookup returns no authored record for legacy
+look `0xD27C074F`; or (H3) the record resolves but the final Player `+0x1DF0`
+virtual `+0xB8` bind rejects or misapplies it. The next probe must compare this
+boundary against the unaffected Chloe path and make no attachment write.

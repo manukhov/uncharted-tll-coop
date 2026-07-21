@@ -1411,10 +1411,17 @@ Do not reopen these as the first move:
       draw-state, hand-attached slot and active weapon. Rifle-in-slot while the
       pistol is current selects the holster-AP failure; no slot membership selects
       a look-created orphan. No visibility or transform write in this probe.
-- [ ] Run `ex` and cycle pistol, rifle and holster once. Correlate the exact
+- [x] Run `ex` and cycle pistol, rifle and holster once. Correlate the exact
       `0x8075397D` pointer with slot mask and controller state before choosing
-      holster-AP repair versus orphan suppression.
-- [ ] After the baked rifle is isolated, resolve the player-owned rifle's failed
+      holster-AP repair versus orphan suppression. Result: rifle is the normal
+      slot-0 object (`slotMask=0x1`), pistol is slot 1 and grenade slot 2 on both
+      owners. REJECT look-created orphan; select the downstream holster bind.
+- [ ] Instrument `PlayerWeaponHolsterAction_ResolveAndBindAttachPoint
+      0x141095BD0` read-only and compare legacy Nadine with Chloe. Distinguish
+      function-not-reached, null `weapon-holster-point` knowledge record, and a
+      resolved record rejected/misapplied by the final Player+0x1DF0 `+0xB8`
+      bind. Do not write an attachment yet.
+- [ ] After the failed bind boundary is proven, resolve the player-owned rifle's
       `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
       Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a
       compatible shoulder AP or apply a bounded standard spine/chest fallback
