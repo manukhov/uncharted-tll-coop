@@ -4708,3 +4708,24 @@ response while the user still sees no pitch selects a consumer after
 `FgAnimData+0x230`. Invalid destination/layout/readability guards, a missing
 same-signature pair, unrelated raw pose hashes, crash or any new visible model
 problem make the test inconclusive. The single Release DLL builds successfully.
+
+### 2026-07-21 INCONCLUSIVE: `es` sampled a segment without opcode 26
+
+The user swept vertical ADS with three weapons and again observed no remote
+vertical weapon movement and no new bug. PIDs 15512/23648 remained responsive,
+logged no exception and were closed after capture.
+
+All bounded `AIM-COMMON-OUTPUT` records reported `stages=1/1/0`,
+`case26_count=0`, `palette_targets_valid=0` and `written=0`. The selected
+`ProcessAnimCmdListSegment` invocation therefore contained command 3 and command
+16 but not the command-26 palette publication. The palette read after that
+invocation sampled the shared buffer after a segment which did not write it;
+its raw hashes and large joint deltas cannot be attributed to the selected
+case-6 evaluation and are non-semantic.
+
+This makes build `es` **inconclusive** under its written guard rather than a
+negative palette result. The static opcode-26 destination proof remains valid,
+but the runtime boundary is split across command-list segments. Vertical ADS is
+parked at the user's request. If resumed, first correlate the same WorkBuffer
+across segments and select the invocation that actually counts command 26;
+do not compare whole-palette deltas from a command-3/16-only segment.

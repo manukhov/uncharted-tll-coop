@@ -1338,14 +1338,19 @@ Do not reopen these as the first move:
       `FgAnimData+0x230 + 48*first_joint` destination. Four STATIC labels are saved;
       build `es` records normalized late-command semantics and post-return palette
       response without writes.
-- [ ] Run read-only build `es` from a low vertical value through a strong up/down
+- [x] Run read-only build `es` from a low vertical value through a strong up/down
       sweep for both pistol and rifle so both exact signatures get four local and
       retained group-0 samples. A stable same-signature topology/blend/plugin hash split
       selects late command overwrite; matching summaries with a retained-only
       missing palette response selects evaluator/ValidBits/joint-program output;
       corresponding palette responses with no visible pitch move the frontier
       after `FgAnimData+0x230`. Any palette guard failure, crash or new model
-      regression invalidates the test.
+      regression invalidates the test. Result: all records had stages `3/16/26 =
+      1/1/0`, zero valid palette targets and zero writes. The selected wrapper
+      invocation did not contain opcode 26, so palette deltas were unrelated and
+      the test is INCONCLUSIVE. No visible pitch and no regression across three
+      weapons. Parked; on resume correlate WorkBuffer across command-list segments
+      and probe only the segment that actually publishes opcode 26.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
