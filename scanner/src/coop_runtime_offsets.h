@@ -513,6 +513,14 @@ constexpr std::uintptr_t kResolveKnowledgeRegistryEntryByIdRva = 0x1765030;
 constexpr std::uintptr_t kPlayerWeaponAnimNamedEventRva = 0x108DE30;
 constexpr std::uintptr_t kWeaponHolsterBuildBindingRva = 0x14FE540;
 constexpr std::uintptr_t kWeaponAttachmentAttachToOwnerPointRva = 0x1ED0370;
+// Stock AttachSystem repair path for legacy Nadine's filtered-out firearm
+// attachment records. The two transform helpers convert a Chloe marker-local
+// record to an equivalent transform relative to a joint shared by both rigs;
+// AppendRecord then uses the existing engine-owned spare capacity.
+constexpr std::uintptr_t kAttachSystemAppendRecordRva = 0x18B6E50;
+constexpr std::uintptr_t kRigGetJointTransformRva = 0x1687C90;
+constexpr std::uintptr_t kTransformMakeRelativeRva = 0x01990F0;
+constexpr std::uintptr_t kTransformComposeRva = 0x01998F0;
 // RTTI-backed ProcessWeapon vtable. Runtime exact-parent census identifies
 // pistol/rifle/grenade children by this class and authored art at +0x860.
 constexpr std::uintptr_t kProcessWeaponVtableRva = 0x2A9BF48;

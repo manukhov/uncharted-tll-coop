@@ -1492,6 +1492,9 @@ Do not reopen these as the first move:
       seam, so the repair must be idempotent and use the existing allocation.
       Forty live snapshots select Chloe `spined` joint 29 as the stable parent
       of marker 48 (RMS `~2.9e-5`); target Nadine `spined` is joint 18.
+      The pelvis pair is independently selected by the authored holster-control
+      child/parent indices and live census (RMS `~0.0075`), though its relative
+      transform animates and the first repair intentionally captures one pose.
 - [ ] Build and run `fc`: compose each Chloe marker relative to its standard
       parent with the authored attachment transform, remap the joint to Nadine's
       `spined`/`pelvis`, clear runtime state and append the two 48-byte records

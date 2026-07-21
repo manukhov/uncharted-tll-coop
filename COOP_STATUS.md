@@ -5224,6 +5224,13 @@ rigid at RMS `~2.9e-5`; progressively higher spine ancestors drifted from
 `~0.0034` to `~0.0123`. This independently selects `spined`, rather than merely
 choosing the nearest plausible bone name. The two source spine markers 47/48
 were also effectively coincident.
+For the rifle, the earlier world-pose census likewise selected
+`pelvis(3) -> pelvis_holster(199)` over every other joint (RMS `~0.0075`). That
+agrees with the independent `InitializeHolsterJoints` child/parent pair and its
+`UpdateHolsterJointTransforms -> Transform_MakeRelative(parent, child)` consumer.
+Unlike the spine marker, this relative transform changes during the holster
+animation, so the one-time composite deliberately captures the pose at repair;
+placement/animation quality remains a separate runtime falsifier.
 
 The bounded repair therefore needs no new allocation and must not copy Chloe's
 raw joint indices. For each missing id it will derive the donor marker relative

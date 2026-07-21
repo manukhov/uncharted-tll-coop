@@ -12778,10 +12778,373 @@ void diagnose_player_weapon_anim_control_game_thread() {
     }
 }
 
+constexpr std::uint32_t kChloeAttachDonorLookId = 0x3F334972u;
+constexpr std::uint32_t kLegacyNadineAttachTargetLookId = 0xD27C074Fu;
+constexpr std::uint32_t kTargSpinePropAttachId = 0x00AD047Au;
+constexpr std::uint32_t kGunHolsterAttachId = 0x555EFB8Du;
+constexpr std::uint32_t kSpinedJointNameId = 0xB5AFAB6Eu;
+constexpr std::uint32_t kPelvisJointNameId = 0x5C11C590u;
+
+struct NadineAttachRepairResult {
+    int status = 0;
+    std::uintptr_t donor_table = 0;
+    std::uintptr_t target_table = 0;
+    std::uintptr_t target_records = 0;
+    std::uint32_t capacity = 0;
+    std::uint32_t before_count = 0;
+    std::uint32_t after_count = 0;
+    std::int16_t donor_spined = -1;
+    std::int16_t donor_pelvis = -1;
+    std::int16_t target_spined = -1;
+    std::int16_t target_pelvis = -1;
+    std::int16_t spine_marker = -1;
+    std::int16_t pelvis_marker = -1;
+    std::uint8_t before_spine = 0;
+    std::uint8_t before_pelvis = 0;
+    std::uint8_t after_spine = 0;
+    std::uint8_t after_pelvis = 0;
+};
+
+struct alignas(16) NadineAttachTransform32 {
+    std::byte bytes[32];
+};
+
+struct alignas(16) NadineAttachRecord48 {
+    std::byte bytes[48];
+};
+
+bool raw_attach_transform_valid(const NadineAttachTransform32* transform) {
+    if (transform == nullptr) {
+        return false;
+    }
+    const auto* const values = reinterpret_cast<const float*>(transform);
+    for (std::size_t index = 0; index < 8; ++index) {
+        if (!std::isfinite(values[index])) {
+            return false;
+        }
+    }
+    const float quaternion_norm_squared =
+        values[4] * values[4] + values[5] * values[5] +
+        values[6] * values[6] + values[7] * values[7];
+    return quaternion_norm_squared > 0.5F &&
+        quaternion_norm_squared < 1.5F;
+}
+
+std::byte* raw_find_attach_record(
+    std::byte* table, std::uint32_t attach_id, int* index_out) {
+    const std::uint32_t count =
+        *reinterpret_cast<const std::uint32_t*>(table + 0x4);
+    auto* const records = *reinterpret_cast<std::byte**>(table + 0x8);
+    for (std::uint32_t index = 0; index < count; ++index) {
+        std::byte* const record = records + static_cast<std::size_t>(index) * 48;
+        if (*reinterpret_cast<const std::uint32_t*>(record + 0x20) ==
+            attach_id) {
+            if (index_out != nullptr) {
+                *index_out = static_cast<int>(index);
+            }
+            return record;
+        }
+    }
+    if (index_out != nullptr) {
+        *index_out = -1;
+    }
+    return nullptr;
+}
+
+std::int16_t raw_resolve_attach_joint(
+    std::byte* table, std::uint32_t joint_name_id) {
+    // AttachSystem+0x10 points to the DrawControl used by InitFromDcData.
+    // DrawControl+0x18 owns the descriptor whose +0x38 count and +0x58
+    // stride-16 hash table are the engine's own authored-joint resolver.
+    auto* const draw_control = *reinterpret_cast<std::byte**>(table + 0x10);
+    if (draw_control == nullptr) {
+        return -1;
+    }
+    auto* const descriptor = *reinterpret_cast<std::byte**>(
+        draw_control + 0x18);
+    if (descriptor == nullptr) {
+        return -1;
+    }
+    const std::uint32_t count =
+        *reinterpret_cast<const std::uint32_t*>(descriptor + 0x38);
+    auto* const names = *reinterpret_cast<std::byte**>(descriptor + 0x58);
+    if (names == nullptr || count == 0 || count > 1024) {
+        return -1;
+    }
+    for (std::uint32_t index = 0; index < count; ++index) {
+        if (*reinterpret_cast<const std::uint32_t*>(
+                names + static_cast<std::size_t>(index) * 16) ==
+            joint_name_id) {
+            return static_cast<std::int16_t>(index);
+        }
+    }
+    return -1;
+}
+
+bool raw_append_parent_remapped_attach_record(
+    std::byte* donor_table, std::byte* target_table,
+    std::uint32_t attach_id, std::int16_t donor_parent,
+    std::int16_t target_parent, std::int16_t* marker_out) {
+    std::byte* const donor_record =
+        raw_find_attach_record(donor_table, attach_id, nullptr);
+    if (donor_record == nullptr || donor_parent < 0 || target_parent < 0) {
+        return false;
+    }
+    const std::int16_t marker = *reinterpret_cast<const std::int16_t*>(
+        donor_record + 0x24);
+    if (marker < 0) {
+        return false;
+    }
+    if (marker_out != nullptr) {
+        *marker_out = marker;
+    }
+
+    using GetJointTransformFunction = NadineAttachTransform32*(__fastcall*)(
+        void*, std::uint32_t);
+    using TransformFunction = NadineAttachTransform32*(__fastcall*)(
+        const NadineAttachTransform32*, NadineAttachTransform32*,
+        const NadineAttachTransform32*);
+    using AppendRecordFunction = void(__fastcall*)(void*, const void*);
+
+    const auto get_joint_transform =
+        reinterpret_cast<GetJointTransformFunction>(
+            g_module + kRigGetJointTransformRva);
+    const auto make_relative = reinterpret_cast<TransformFunction>(
+        g_module + kTransformMakeRelativeRva);
+    const auto compose = reinterpret_cast<TransformFunction>(
+        g_module + kTransformComposeRva);
+    const auto append_record = reinterpret_cast<AppendRecordFunction>(
+        g_module + kAttachSystemAppendRecordRva);
+
+    // AttachSystem+0x10 points to DrawControl; its inline +0x30 Pose is the
+    // receiver expected by GetJointTransform.
+    auto* const donor_draw_control = *reinterpret_cast<std::byte**>(
+        donor_table + 0x10);
+    if (donor_draw_control == nullptr) {
+        return false;
+    }
+    void* const donor_pose = donor_draw_control + 0x30;
+    const NadineAttachTransform32* const parent_transform =
+        get_joint_transform(donor_pose, static_cast<std::uint32_t>(donor_parent));
+    const NadineAttachTransform32* const marker_transform =
+        get_joint_transform(donor_pose, static_cast<std::uint32_t>(marker));
+    if (!raw_attach_transform_valid(parent_transform) ||
+        !raw_attach_transform_valid(marker_transform)) {
+        return false;
+    }
+
+    NadineAttachTransform32 marker_relative{};
+    NadineAttachTransform32 record_relative{};
+    make_relative(parent_transform, &marker_relative, marker_transform);
+    compose(
+        &marker_relative, &record_relative,
+        reinterpret_cast<const NadineAttachTransform32*>(donor_record));
+    if (!raw_attach_transform_valid(&marker_relative) ||
+        !raw_attach_transform_valid(&record_relative)) {
+        return false;
+    }
+
+    NadineAttachRecord48 remapped{};
+    std::memcpy(remapped.bytes, donor_record, sizeof(remapped.bytes));
+    std::memcpy(remapped.bytes, record_relative.bytes,
+                sizeof(record_relative.bytes));
+    *reinterpret_cast<std::int16_t*>(remapped.bytes + 0x24) = target_parent;
+    *reinterpret_cast<std::uint16_t*>(remapped.bytes + 0x26) &= 1u;
+    *reinterpret_cast<std::uint32_t*>(remapped.bytes + 0x28) = 0;
+    *reinterpret_cast<std::uint32_t*>(remapped.bytes + 0x2C) = 0;
+    append_record(target_table, &remapped);
+    return raw_find_attach_record(target_table, attach_id, nullptr) != nullptr;
+}
+
+bool raw_repair_legacy_nadine_attach_points(
+    void* donor_player, void* target_player,
+    NadineAttachRepairResult* result) {
+    auto* const donor_table = *reinterpret_cast<std::byte**>(
+        static_cast<std::byte*>(donor_player) + 0x1E0);
+    auto* const target_table = *reinterpret_cast<std::byte**>(
+        static_cast<std::byte*>(target_player) + 0x1E0);
+    result->donor_table = reinterpret_cast<std::uintptr_t>(donor_table);
+    result->target_table = reinterpret_cast<std::uintptr_t>(target_table);
+    if (donor_table == nullptr || target_table == nullptr) {
+        result->status = -1;
+        return false;
+    }
+
+    const std::uint32_t donor_capacity =
+        *reinterpret_cast<const std::uint32_t*>(donor_table + 0x0);
+    const std::uint32_t donor_count =
+        *reinterpret_cast<const std::uint32_t*>(donor_table + 0x4);
+    void* const donor_records = *reinterpret_cast<void**>(donor_table + 0x8);
+    if (donor_capacity == 0 || donor_capacity > 256 ||
+        donor_count > donor_capacity || donor_records == nullptr) {
+        result->status = -8;
+        return false;
+    }
+
+    result->capacity =
+        *reinterpret_cast<const std::uint32_t*>(target_table + 0x0);
+    result->before_count =
+        *reinterpret_cast<const std::uint32_t*>(target_table + 0x4);
+    result->target_records = reinterpret_cast<std::uintptr_t>(
+        *reinterpret_cast<void**>(target_table + 0x8));
+    if (result->capacity == 0 || result->capacity > 256 ||
+        result->before_count > result->capacity ||
+        result->target_records == 0) {
+        result->status = -2;
+        return false;
+    }
+
+    result->before_spine = raw_find_attach_record(
+        target_table, kTargSpinePropAttachId, nullptr) != nullptr;
+    result->before_pelvis = raw_find_attach_record(
+        target_table, kGunHolsterAttachId, nullptr) != nullptr;
+    if (result->before_spine && result->before_pelvis) {
+        result->after_count = result->before_count;
+        result->after_spine = 1;
+        result->after_pelvis = 1;
+        result->status = 2;
+        return true;
+    }
+
+    const std::uint32_t missing =
+        (result->before_spine ? 0u : 1u) +
+        (result->before_pelvis ? 0u : 1u);
+    if (result->capacity - result->before_count < missing ||
+        raw_find_attach_record(
+            donor_table, kTargSpinePropAttachId, nullptr) == nullptr ||
+        raw_find_attach_record(
+            donor_table, kGunHolsterAttachId, nullptr) == nullptr) {
+        result->status = -3;
+        return false;
+    }
+
+    result->donor_spined = raw_resolve_attach_joint(
+        donor_table, kSpinedJointNameId);
+    result->donor_pelvis = raw_resolve_attach_joint(
+        donor_table, kPelvisJointNameId);
+    result->target_spined = raw_resolve_attach_joint(
+        target_table, kSpinedJointNameId);
+    result->target_pelvis = raw_resolve_attach_joint(
+        target_table, kPelvisJointNameId);
+    if (result->donor_spined < 0 || result->donor_pelvis < 0 ||
+        result->target_spined < 0 || result->target_pelvis < 0) {
+        result->status = -4;
+        return false;
+    }
+
+    if (!result->before_spine &&
+        !raw_append_parent_remapped_attach_record(
+            donor_table, target_table, kTargSpinePropAttachId,
+            result->donor_spined, result->target_spined,
+            &result->spine_marker)) {
+        result->status = -5;
+        return false;
+    }
+    if (!result->before_pelvis &&
+        !raw_append_parent_remapped_attach_record(
+            donor_table, target_table, kGunHolsterAttachId,
+            result->donor_pelvis, result->target_pelvis,
+            &result->pelvis_marker)) {
+        result->status = -6;
+        return false;
+    }
+
+    result->after_count =
+        *reinterpret_cast<const std::uint32_t*>(target_table + 0x4);
+    result->after_spine = raw_find_attach_record(
+        target_table, kTargSpinePropAttachId, nullptr) != nullptr;
+    result->after_pelvis = raw_find_attach_record(
+        target_table, kGunHolsterAttachId, nullptr) != nullptr;
+    result->status =
+        result->after_spine && result->after_pelvis &&
+                result->after_count == result->before_count + missing
+            ? 1
+            : -7;
+    return result->status > 0;
+}
+
+bool seh_repair_legacy_nadine_attach_points(
+    void* donor_player, void* target_player,
+    NadineAttachRepairResult* result) {
+    __try {
+        return raw_repair_legacy_nadine_attach_points(
+            donor_player, target_player, result);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        result->status = -100;
+        return false;
+    }
+}
+
+void ensure_legacy_nadine_attach_points_game_thread() {
+    void* donor = nullptr;
+    void* target = nullptr;
+    int target_owner = -1;
+    for (int owner = 0; owner < 2; ++owner) {
+        void* const player = retained_player_object(owner);
+        const std::uint32_t look = safe_get_look_id(player);
+        if (look == kChloeAttachDonorLookId) {
+            donor = player;
+        } else if (look == kLegacyNadineAttachTargetLookId) {
+            target = player;
+            target_owner = owner;
+        }
+    }
+    if (target == nullptr) {
+        return;
+    }
+
+    NadineAttachRepairResult result{};
+    if (donor == nullptr) {
+        result.status = -10;
+    } else {
+        seh_repair_legacy_nadine_attach_points(donor, target, &result);
+    }
+
+    std::uint64_t signature = 1469598103934665603ULL;
+    auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(reinterpret_cast<std::uintptr_t>(target));
+    mix(result.target_table);
+    mix(result.target_records);
+    mix(result.after_count);
+    mix(result.after_spine);
+    mix(result.after_pelvis);
+    mix(static_cast<std::uint32_t>(result.status > 0 ? 1 : result.status));
+    static std::array<std::uint64_t, 2> last_signatures{};
+    const std::size_t memo_index = target_owner == 1 ? 1u : 0u;
+    if (last_signatures[memo_index] == signature) {
+        return;
+    }
+    last_signatures[memo_index] = signature;
+
+    std::ostringstream line;
+    line << "NADINE-ATTACH-REPAIR owner=" << target_owner
+         << " status=" << result.status
+         << " target=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(target)
+         << " donor=0x" << reinterpret_cast<std::uintptr_t>(donor)
+         << " table=0x" << result.target_table
+         << " records=0x" << result.target_records << std::dec
+         << " before=" << result.before_count << "/" << result.capacity
+         << " after=" << result.after_count << "/" << result.capacity
+         << " ids=" << static_cast<unsigned>(result.before_spine) << "/"
+         << static_cast<unsigned>(result.before_pelvis) << "->"
+         << static_cast<unsigned>(result.after_spine) << "/"
+         << static_cast<unsigned>(result.after_pelvis)
+         << " spine=" << result.spine_marker << ":"
+         << result.donor_spined << "->" << result.target_spined
+         << " pelvis=" << result.pelvis_marker << ":"
+         << result.donor_pelvis << "->" << result.target_pelvis;
+    write_log_line(line.str().c_str());
+}
+
 void apply_peer_held_weapon_state() {
     coop::StatePacket peer{};
     void* puppet = nullptr;
     if (!latest_peer_state(peer, puppet)) return;
+    ensure_legacy_nadine_attach_points_game_thread();
     diagnose_nadine_weapon_membership_game_thread();
     diagnose_player_weapon_anim_control_game_thread();
     // Slot MIRROR up front, unconditionally (2026-07-07): this was gated behind
@@ -30060,8 +30423,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21fb "
-        "(read-only holster event/binding/final-attach discriminator)");
+        "TLL co-op runtime init 2026-07-21fc "
+        "(stock AttachSystem append for legacy Nadine firearm holsters)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
