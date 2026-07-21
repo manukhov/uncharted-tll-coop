@@ -1107,3 +1107,92 @@ registered layout and the dataflow through
 hypothesis must distinguish clip/phase selection from a later command-evaluator
 or palette consumer; no non-Blend field should be read until its layout is
 proved statically.
+
+## STATIC `ek`: selected Animation leaf clip/phase discriminator
+
+The terminal layout is now proven rather than inferred from its RTTI name.
+Registered factory `AnimSnapshotNodeAnimation_Create 0x141917A80` allocates
+exactly 0x80 bytes and installs vtable `0x142B14D68`; its slots 9--14 resolve to
+the class-specific initialization, clip resolution, phase refresh/step and
+command generation methods.
+
+`AnimSnapshotNodeAnimation_InitializeFromDescriptor 0x141917D00` establishes the
+dynamic fields used by those slots:
+
+- source and resolved animation StringIds at `+0x40/+0x44`;
+- the two remap/asset lookup keys at `+0x48/+0x4C`;
+- resolved clip pointer at `+0x50` and phase-function descriptor at `+0x58`;
+- current/previous phase at `+0x60/+0x64`;
+- automatic phase stepping and evaluated `anim-node-flip-func` flags at
+  `+0x68/+0x69`.
+
+The initializer evaluates `anim-node-name-func`, resolves authored remaps through
+`AnimSetRemap_ResolveAnimationId 0x1417CA2E0`, and slot 10 resolves the resulting
+clip through `AnimationDatabase_ResolveClip 0x1417C8E20`. Slot 11
+`AnimSnapshotNodeAnimation_RefreshPhase 0x141918120` evaluates the descriptor at
+`+0x58` as `anim-node-phase-func`, preserves `+0x60` into `+0x64`, and writes the
+new phase. Slot 13 advances the same pair from clip timing when `+0x68` is set.
+
+The value is proven to reach the pose. Slot 14
+`AnimSnapshotNodeAnimation_GenerateAnimCommands 0x1419182E0` consumes the clip
+at `+0x50`, resolved id `+0x44`, phase `+0x60` and flip `+0x69`, then emits
+command `0x60006`. `ProcessAnimCmdListSegment 0x141AB97C0` case 6 independently
+reads that command's clip pointer and phase/frame field, evaluates the animation
+clip and installs its pose result.
+
+### Exact hypothesis and competitors
+
+The selected hypothesis is that the two processes reach the same terminal class
+but differ in its resolved animation id/clip or in the dynamic phase driven by
+`anim-node-phase-func`; one of those normalized fields will correlate with the
+missing vertical aim.
+
+Competing hypotheses are:
+
+1. The source/resolved animation ids and clip identity match, but phase VM or
+   current phase differs; vertical aim is encoded as clip phase.
+2. Phase matches, but source/resolved id, remap keys or clip-consumed identity
+   words differ; vertical aim selects a distinct authored clip.
+3. The complete Animation leaf matches; divergence begins in command context,
+   plugin evaluation, joint masks, or a later palette consumer.
+4. The selected endpoint changes during a mixed transition or the snapshot/clip
+   is torn. Such a sample is invalid and cannot select any hypothesis.
+
+### Independent static evidence quota
+
+1. Factory allocation, RTTI/vtable identity and slot map prove the 0x80-byte
+   concrete class and its class-specific methods.
+2. Slot-9 initialization plus the independent remap/clip resolver calls prove
+   the meaning and ownership of fields `+0x40..+0x58` and flags `+0x68/+0x69`.
+3. Slots 11 and 13 both write the current/previous phase pair `+0x60/+0x64` from
+   independent scripted and time-step paths.
+4. Slot 14 emits command `0x60006`, and independent evaluator case 6 consumes
+   its clip and phase/frame to produce a pose.
+
+### Read-only implementation and falsifier
+
+Build `2026-07-21ek` activates only after the already-validated Blend walk stops
+at the selected Animation vtable. It rereads the checked heap record, RTTI and
+all proven node fields; fingerprints the bounded phase VM; and records only
+clip offsets independently read by slot 14/evaluator case 6 (`clip+0x24`,
+`clip+0x28 -> +0x04/+0x08`, and `clip+0x40`). Every node, descriptor, clip and
+clip-data pointer/field is validated by a second read. No pointer value is
+logged, no game function is called, and no memory is written.
+
+Prediction for a fresh stable center/up/down ADS sweep:
+
+- differing source/resolved animation ids, lookup keys or normalized clip words
+  select the clip-selection path;
+- matching clip fields but a phase VM/current-phase difference correlated with
+  vertical input selects the phase path;
+- a complete match of ids, clip words, phase VM, current/previous phase and flags
+  rejects the Animation leaf and moves the next static trace to command case 6
+  context/plugin/joint-mask consumers;
+- invalid leaf/clip double-read state or a non-Animation endpoint invalidates the
+  sample; raw node/clip pointers and heap indices remain non-diagnostic;
+- any crash, visible model/input change, or write invalidates `ek`.
+
+The Release DLLs build successfully; only the pre-existing C4456 warning remains.
+The real IDB now contains the six Animation construction/remap/clip labels,
+reports 1118 functions/19 data names, and `save_database returned True`; the MCP
+copy was refreshed and resolves the new names.

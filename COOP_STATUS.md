@@ -4196,3 +4196,36 @@ node: prove its layout and trace its phase/clip fields through
 `AnimSnapshotNodeAnimation_StepPhase 0x1419180A0`, and
 `AnimSnapshotNodeAnimation_GenerateAnimCommands 0x1419182E0` before defining
 another runtime probe.
+
+### 2026-07-21 STATIC: `ek` proves the terminal Animation clip/phase path
+
+The terminal class is a registered 0x80-byte `AnimSnapshotNodeAnimation` with
+vtable `0x142B14D68`. Newly labelled slot 9
+`AnimSnapshotNodeAnimation_InitializeFromDescriptor 0x141917D00` establishes
+source/resolved animation ids `+0x40/+0x44`, remap keys `+0x48/+0x4C`, clip
+`+0x50`, phase descriptor `+0x58`, phase pair `+0x60/+0x64`, and auto-step/flip
+flags `+0x68/+0x69`. Slot 10
+`AnimSnapshotNodeAnimation_ResolveClip 0x141918070` resolves the clip through
+`AnimationDatabase_ResolveClip 0x1417C8E20`; authored remaps pass through
+`AnimSetRemap_ResolveAnimationId 0x1417CA2E0`.
+
+Slots 11 and 13 independently write the phase pair from
+`anim-node-phase-func` or clip time. Slot 14 consumes resolved id/clip/phase and
+emits command `0x60006`; `ProcessAnimCmdListSegment 0x141AB97C0` case 6 then
+consumes its clip and phase/frame and produces the pose. This satisfies the
+four-type static quota.
+
+Read-only build `2026-07-21ek` runs only on the selected terminal Animation
+endpoint. It double-reads the proven node layout, bounded phase VM, and only the
+clip offsets consumed by the generator/evaluator; it logs normalized ids/words,
+never pointers, and performs no call or write. Falsifier: a clip/id split selects
+authored clip selection; matching clip with phase/VM split selects phase; a full
+match rejects the leaf and moves to command-case-6 context/plugin/joint-mask
+consumers. Invalid/torn samples and raw indices are non-diagnostic. Full evidence
+and exact safety bounds are in
+`reports/remote_aim_pitch_blend_tick_20260718.md`.
+
+The Release build succeeds with only the pre-existing C4456 warning. The real
+IDB has all six new Animation construction/remap/clip labels (1118 functions,
+19 data names, `save_database returned True`), and the refreshed MCP copy
+resolves them.

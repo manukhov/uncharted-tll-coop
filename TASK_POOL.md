@@ -1181,11 +1181,19 @@ Do not reopen these as the first move:
       next static trace into the first common non-Blend class. Result: the full
       four-Blend spine matched and ended at `AnimSnapshotNodeAnimation`
       (`02B14D68/037713E8`); only raw heap indices differed.
-- [ ] Statically prove the selected `AnimSnapshotNodeAnimation` layout and trace
+- [x] Statically prove the selected `AnimSnapshotNodeAnimation` layout and trace
       its clip/phase data through `RefreshPhase 0x141918120`, `StepPhase
       0x1419180A0`, and `GenerateAnimCommands 0x1419182E0`. Enumerate phase/clip
       versus later evaluator/palette competitors and satisfy the three-type
-      evidence quota before adding another bounded read-only probe.
+      evidence quota before adding another bounded read-only probe. Result:
+      0x80-byte layout, ids/remap/clip fields, phase VM/pair and command `0x60006`
+      consumption are offset- and vtable-proven; build `ek` is read-only.
+- [ ] Run the written `ek` falsifier. Compare normalized Animation source/resolved
+      ids, remap keys, clip-consumed words, phase VM and current/previous phase
+      during stable center/up/down ADS. An id/clip split selects authored clip
+      selection; a phase-only split selects `anim-node-phase-func`; a complete
+      match moves the static trace into command-case-6 context/plugin/joint-mask
+      consumers. Ignore raw indices/pointers and any invalid/torn sample.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

@@ -13924,7 +13924,35 @@ struct AimBlendSpineProbe {
     // 1 non-Blend root, 2 invalid child, 3 non-Blend endpoint, 4 mixed
     // weight, 5 cycle, 6 depth cap, 7 torn layout.
     std::uint32_t stop_reason = 0;
+    std::uint32_t endpoint_index = UINT32_MAX;
+    std::uint32_t endpoint_vtable_rva = 0;
+    std::uint32_t endpoint_type_descriptor_rva = 0;
     std::array<AimBlendSpineNodeProbe, kAimBlendSpineMaxDepth> nodes{};
+};
+
+struct AimAnimationLeafProbe {
+    bool node_valid = false;
+    bool rtti_valid = false;
+    bool layout_valid = false;
+    bool phase_vm_valid = false;
+    bool clip_valid = false;
+    bool clip_data_valid = false;
+    std::uint32_t node_index = UINT32_MAX;
+    std::uint32_t vtable_rva = 0;
+    std::uint32_t type_descriptor_rva = 0;
+    std::uint32_t source_animation_id = 0;
+    std::uint32_t resolved_animation_id = 0;
+    std::uint32_t asset_lookup_key_0 = 0;
+    std::uint32_t asset_lookup_key_1 = 0;
+    std::uint32_t phase_word = 0;
+    std::uint32_t previous_phase_word = 0;
+    std::uint32_t clip_flags = 0;
+    std::uint32_t clip_word_40 = 0;
+    std::uint32_t clip_data_word_04 = 0;
+    std::uint32_t clip_data_word_08 = 0;
+    std::uint8_t auto_step = 0;
+    std::uint8_t flip = 0;
+    AimBlendVmProbe phase_vm{};
 };
 
 struct AimBaseInstanceProbe {
@@ -13987,6 +14015,7 @@ struct AimBaseInstanceProbe {
     float destination_lrdu[4]{};
     AimBlendVmProbe root_blend_vm{};
     AimBlendSpineProbe blend_spine{};
+    AimAnimationLeafProbe animation_leaf{};
 };
 
 void aim_fingerprint_mix_bytes(
@@ -14229,6 +14258,112 @@ bool probe_snapshot_heap_node(
         node == *reinterpret_cast<void* const*>(record);
 }
 
+AimAnimationLeafProbe probe_aim_animation_leaf(
+    void* heap, std::uint32_t node_index) {
+    AimAnimationLeafProbe result{};
+    result.node_index = node_index;
+    void* node = nullptr;
+    if (!probe_snapshot_heap_node(heap, node_index, node)) {
+        return result;
+    }
+    result.node_valid = true;
+    result.rtti_valid = probe_msvc_rtti_identity(
+        node, result.vtable_rva, result.type_descriptor_rva);
+    if (!result.rtti_valid ||
+        result.vtable_rva != kAnimSnapshotNodeAnimationVtableRva ||
+        readable_bytes(node) < 0x6A) {
+        return result;
+    }
+
+    const auto* const bytes = static_cast<const std::byte*>(node);
+    const std::uintptr_t vtable =
+        *reinterpret_cast<const std::uintptr_t*>(node);
+    result.source_animation_id =
+        *reinterpret_cast<const std::uint32_t*>(bytes + 0x40);
+    result.resolved_animation_id =
+        *reinterpret_cast<const std::uint32_t*>(bytes + 0x44);
+    result.asset_lookup_key_0 =
+        *reinterpret_cast<const std::uint32_t*>(bytes + 0x48);
+    result.asset_lookup_key_1 =
+        *reinterpret_cast<const std::uint32_t*>(bytes + 0x4C);
+    void* const clip = *reinterpret_cast<void* const*>(bytes + 0x50);
+    void* const phase_descriptor =
+        *reinterpret_cast<void* const*>(bytes + 0x58);
+    result.phase_word =
+        *reinterpret_cast<const std::uint32_t*>(bytes + 0x60);
+    result.previous_phase_word =
+        *reinterpret_cast<const std::uint32_t*>(bytes + 0x64);
+    result.auto_step =
+        *reinterpret_cast<const std::uint8_t*>(bytes + 0x68);
+    result.flip = *reinterpret_cast<const std::uint8_t*>(bytes + 0x69);
+    result.phase_vm_valid = probe_aim_blend_vm_descriptor(
+        phase_descriptor, result.phase_vm);
+
+    if (clip != nullptr && readable_bytes(clip) >= 0x44) {
+        const auto* const clip_bytes = static_cast<const std::byte*>(clip);
+        result.clip_flags =
+            *reinterpret_cast<const std::uint32_t*>(clip_bytes + 0x24);
+        void* const clip_data =
+            *reinterpret_cast<void* const*>(clip_bytes + 0x28);
+        result.clip_word_40 =
+            *reinterpret_cast<const std::uint32_t*>(clip_bytes + 0x40);
+        result.clip_valid =
+            clip == *reinterpret_cast<void* const*>(bytes + 0x50) &&
+            result.clip_flags ==
+                *reinterpret_cast<const std::uint32_t*>(clip_bytes + 0x24) &&
+            clip_data ==
+                *reinterpret_cast<void* const*>(clip_bytes + 0x28) &&
+            result.clip_word_40 ==
+                *reinterpret_cast<const std::uint32_t*>(clip_bytes + 0x40);
+        if (clip_data != nullptr && readable_bytes(clip_data) >= 0x0C) {
+            const auto* const clip_data_bytes =
+                static_cast<const std::byte*>(clip_data);
+            result.clip_data_word_04 =
+                *reinterpret_cast<const std::uint32_t*>(
+                    clip_data_bytes + 0x04);
+            result.clip_data_word_08 =
+                *reinterpret_cast<const std::uint32_t*>(
+                    clip_data_bytes + 0x08);
+            result.clip_data_valid =
+                clip_data ==
+                    *reinterpret_cast<void* const*>(clip_bytes + 0x28) &&
+                result.clip_data_word_04 ==
+                    *reinterpret_cast<const std::uint32_t*>(
+                        clip_data_bytes + 0x04) &&
+                result.clip_data_word_08 ==
+                    *reinterpret_cast<const std::uint32_t*>(
+                        clip_data_bytes + 0x08);
+        }
+    }
+
+    void* verify_node = nullptr;
+    result.layout_valid =
+        probe_snapshot_heap_node(heap, node_index, verify_node) &&
+        verify_node == node &&
+        vtable == *reinterpret_cast<const std::uintptr_t*>(node) &&
+        result.source_animation_id ==
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x40) &&
+        result.resolved_animation_id ==
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x44) &&
+        result.asset_lookup_key_0 ==
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x48) &&
+        result.asset_lookup_key_1 ==
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x4C) &&
+        clip == *reinterpret_cast<void* const*>(bytes + 0x50) &&
+        phase_descriptor ==
+            *reinterpret_cast<void* const*>(bytes + 0x58) &&
+        result.phase_word ==
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x60) &&
+        result.previous_phase_word ==
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x64) &&
+        result.auto_step ==
+            *reinterpret_cast<const std::uint8_t*>(bytes + 0x68) &&
+        result.flip ==
+            *reinterpret_cast<const std::uint8_t*>(bytes + 0x69) &&
+        result.phase_vm_valid;
+    return result;
+}
+
 AimBlendSpineProbe probe_aim_blend_spine(
     void* heap, std::uint32_t root_index) {
     AimBlendSpineProbe result{};
@@ -14352,6 +14487,10 @@ AimBlendSpineProbe probe_aim_blend_spine(
         }
         if (entry.child_vtable_rva[selected] !=
             kAnimSnapshotNodeBlendVtableRva) {
+            result.endpoint_index = entry.child_indices[selected];
+            result.endpoint_vtable_rva = entry.child_vtable_rva[selected];
+            result.endpoint_type_descriptor_rva =
+                entry.child_type_descriptor_rva[selected];
             result.valid = true;
             result.stop_reason = 3;
             return result;
@@ -14805,6 +14944,15 @@ AimBaseInstanceProbe probe_base_anim_state_instance(void* registry) {
                         if (result.root_rtti_valid) {
                             result.blend_spine = probe_aim_blend_spine(
                                 root_heap, result.root_snapshot_index);
+                            if (result.blend_spine.valid &&
+                                result.blend_spine.stop_reason == 3 &&
+                                result.blend_spine.endpoint_vtable_rva ==
+                                    kAnimSnapshotNodeAnimationVtableRva) {
+                                result.animation_leaf =
+                                    probe_aim_animation_leaf(
+                                        root_heap,
+                                        result.blend_spine.endpoint_index);
+                            }
                         }
 
                         // The root can be torn down on another animation phase.
@@ -14859,6 +15007,7 @@ AimBaseInstanceProbe probe_base_anim_state_instance(void* registry) {
                             result.root_child_dynamic_word_64 = {};
                             result.root_blend_vm = {};
                             result.blend_spine = {};
+                            result.animation_leaf = {};
                         }
                     }
                 }
@@ -15065,6 +15214,90 @@ void log_aim_base_state_fingerprint(
                           << node.child_vtable_rva[1] << '/' << std::setw(8)
                           << node.child_type_descriptor_rva[1];
                 boot_log_line(node_line.str().c_str());
+            }
+        }
+
+        if (probe.animation_leaf.node_valid) {
+            const AimAnimationLeafProbe& leaf = probe.animation_leaf;
+            std::ostringstream leaf_line;
+            leaf_line << "AIM-ANIM-LEAF tick=" << now
+                      << " phase=" << phase
+                      << " screen=" << screen
+                      << " state=" << std::uppercase << std::hex
+                      << std::setw(8) << std::setfill('0')
+                      << probe.snapshot_state_id
+                      << " idx=" << std::setw(8) << leaf.node_index
+                      << " node=" << std::setw(8) << leaf.vtable_rva
+                      << '/' << std::setw(8)
+                      << leaf.type_descriptor_rva
+                      << " valid=" << std::dec
+                      << static_cast<unsigned>(leaf.node_valid) << '/'
+                      << static_cast<unsigned>(leaf.rtti_valid) << '/'
+                      << static_cast<unsigned>(leaf.layout_valid) << '/'
+                      << static_cast<unsigned>(leaf.clip_valid) << '/'
+                      << static_cast<unsigned>(leaf.clip_data_valid)
+                      << std::uppercase << std::hex
+                      << " anim=" << std::setw(8)
+                      << leaf.source_animation_id << '/' << std::setw(8)
+                      << leaf.resolved_animation_id << '/' << std::setw(8)
+                      << leaf.asset_lookup_key_0 << '/' << std::setw(8)
+                      << leaf.asset_lookup_key_1
+                      << " phaseW=" << std::setw(8) << leaf.phase_word
+                      << '/' << std::setw(8) << leaf.previous_phase_word
+                      << " flags=" << std::setw(2)
+                      << static_cast<unsigned>(leaf.auto_step) << '/'
+                      << std::setw(2) << static_cast<unsigned>(leaf.flip)
+                      << " clip=" << std::setw(8) << leaf.clip_flags
+                      << '/' << std::setw(8) << leaf.clip_word_40
+                      << '/' << std::setw(8) << leaf.clip_data_word_04
+                      << '/' << std::setw(8) << leaf.clip_data_word_08
+                      << " phaseVm=" << std::setw(8)
+                      << leaf.phase_vm.script_id << '/' << std::dec
+                      << leaf.phase_vm.code_count << '/'
+                      << std::uppercase << std::hex << std::setw(8)
+                      << leaf.phase_vm.code_hash << '/' << std::dec
+                      << leaf.phase_vm.constant_count << '/'
+                      << std::uppercase << std::hex << std::setw(8)
+                      << leaf.phase_vm.constant_hash << '/' << std::setw(2)
+                      << leaf.phase_vm.vertical_reference_mask << '/'
+                      << std::dec
+                      << static_cast<unsigned>(leaf.phase_vm_valid) << '/'
+                      << static_cast<unsigned>(
+                             leaf.phase_vm.descriptor_present) << '/'
+                      << static_cast<unsigned>(leaf.phase_vm.code_valid) << '/'
+                      << static_cast<unsigned>(
+                             leaf.phase_vm.constants_valid);
+            boot_log_line(leaf_line.str().c_str());
+
+            static std::atomic<bool> phase_vm_dumped[2]{};
+            if (leaf.phase_vm.code_valid &&
+                leaf.phase_vm.constants_valid &&
+                !phase_vm_dumped[screen].exchange(
+                    true, std::memory_order_acq_rel)) {
+                std::ostringstream dump;
+                dump << "AIM-ANIM-PHASE-VM-DUMP tick=" << now
+                     << " screen=" << screen
+                     << " state=" << std::uppercase << std::hex
+                     << std::setw(8) << std::setfill('0')
+                     << probe.snapshot_state_id << " code=";
+                for (std::uint32_t index = 0;
+                     index < leaf.phase_vm.code_count; ++index) {
+                    if (index != 0) {
+                        dump << ',';
+                    }
+                    dump << std::setw(8)
+                         << leaf.phase_vm.code_words[index];
+                }
+                dump << " constants=";
+                for (std::uint32_t index = 0;
+                     index < leaf.phase_vm.constant_count; ++index) {
+                    if (index != 0) {
+                        dump << ',';
+                    }
+                    dump << std::setw(16)
+                         << leaf.phase_vm.constants[index];
+                }
+                boot_log_line(dump.str().c_str());
             }
         }
 
@@ -26826,8 +27059,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-21ej "
-        "(read-only active Blend-spine RTTI and VM discriminator)");
+        "TLL hook DLL init 2026-07-21ek "
+        "(read-only selected Animation leaf clip/phase discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

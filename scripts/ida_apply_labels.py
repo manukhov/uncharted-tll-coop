@@ -185,6 +185,40 @@ FUNCTIONS = {
         "Virtual slot 14 (+0x70). Generates both child command streams and appends "
         "the 0x60007 blend command whose final dword is node+0x60.",
     ),
+    0x1419179C0: (
+        "AnimSnapshotNodeAnimation_Construct",
+        "Constructs the 0x80-byte RTTI-backed AnimSnapshotNodeAnimation and "
+        "installs its vtable after the common snapshot-node base constructor.",
+    ),
+    0x141917A80: (
+        "AnimSnapshotNodeAnimation_Create",
+        "Registered anim-node-animation factory. Reuses caller storage or "
+        "allocates 0x80 bytes, constructs the common base, and installs the "
+        "AnimSnapshotNodeAnimation vtable.",
+    ),
+    0x141917D00: (
+        "AnimSnapshotNodeAnimation_InitializeFromDescriptor",
+        "Animation-node virtual slot 9. Resolves anim-node-name-func and "
+        "anim-node-flip-func, initializes source/resolved animation ids at "
+        "+0x40/+0x44, resolver keys at +0x48/+0x4C, phase descriptor +0x58, "
+        "phase +0x60/+0x64, and flags +0x68/+0x69.",
+    ),
+    0x141918070: (
+        "AnimSnapshotNodeAnimation_ResolveClip",
+        "Animation-node virtual slot 10. Resolves the clip from node+0x48, "
+        "+0x4C and resolved animation id +0x44, then stores it at node+0x50.",
+    ),
+    0x1417CA2E0: (
+        "AnimSetRemap_ResolveAnimationId",
+        "Binary-searches authored remap tables for an animation id and returns "
+        "the resolved id plus the two asset lookup keys consumed by the "
+        "Animation snapshot node.",
+    ),
+    0x1417C8E20: (
+        "AnimationDatabase_ResolveClip",
+        "Resolves an animation clip from two asset lookup keys and a resolved "
+        "animation id, with the existing optional fallback search.",
+    ),
     0x141918120: (
         "AnimSnapshotNodeAnimation_RefreshPhase",
         "Animation-node virtual slot 11. Optionally evaluates anim-node-phase-func "
