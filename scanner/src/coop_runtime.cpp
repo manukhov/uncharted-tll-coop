@@ -26485,11 +26485,24 @@ void log_holster_bind_probe(
     const std::uint32_t active_art =
         weapon_art_id_from_object(active_weapon);
     void* bind_controller = nullptr;
+    std::array<std::int32_t, 4> holster_joint_indices{
+        -99, -99, -99, -99};
+    std::array<std::uint32_t, 16> holster_transform_bits{};
     if (context.player != nullptr &&
         readable_bytes(static_cast<std::byte*>(context.player) + 0x1DF0) >=
             sizeof(void*)) {
         bind_controller = *reinterpret_cast<void**>(
             static_cast<std::byte*>(context.player) + 0x1DF0);
+    }
+    if (bind_controller != nullptr && readable_bytes(bind_controller) >= 0xD0) {
+        std::memcpy(
+            holster_joint_indices.data(),
+            static_cast<const std::byte*>(bind_controller) + 0x78,
+            sizeof(holster_joint_indices));
+        std::memcpy(
+            holster_transform_bits.data(),
+            static_cast<const std::byte*>(bind_controller) + 0x90,
+            sizeof(holster_transform_bits));
     }
 
     std::uint64_t signature = 1469598103934665603ULL;
@@ -26506,6 +26519,12 @@ void log_holster_bind_probe(
     mix(reinterpret_cast<std::uintptr_t>(context.lookup_entry));
     mix(reinterpret_cast<std::uintptr_t>(context.lookup_payload));
     mix(bind_result);
+    for (const std::int32_t index : holster_joint_indices) {
+        mix(static_cast<std::uint32_t>(index));
+    }
+    for (const std::uint32_t bits : holster_transform_bits) {
+        mix(bits);
+    }
     mix(static_cast<std::uint32_t>(current_slot));
     mix(draw_state);
     mix(static_cast<std::uint32_t>(hand_slot));
@@ -26546,6 +26565,17 @@ void log_holster_bind_probe(
                 context.lookup_payload)
          << " bindResult=0x" << bind_result
          << " bindCtrl=0x" << reinterpret_cast<std::uintptr_t>(bind_controller)
+         << std::dec << " joints=" << holster_joint_indices[0] << ","
+         << holster_joint_indices[1] << "," << holster_joint_indices[2]
+         << "," << holster_joint_indices[3]
+         << " transformBits=" << std::hex;
+    for (std::size_t i = 0; i < holster_transform_bits.size(); ++i) {
+        if (i == 8) {
+            line << "/";
+        }
+        line << holster_transform_bits[i] << ",";
+    }
+    line
          << std::dec << " current=" << current_slot << " draw=" << draw_state
          << " hand=" << hand_slot << " active=0x" << std::hex
          << reinterpret_cast<std::uintptr_t>(active_weapon) << "/0x"
@@ -29398,8 +29428,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21ey "
-        "(read-only Nadine holster bind and knowledge lookup discriminator)");
+        "TLL co-op runtime init 2026-07-21ez "
+        "(read-only PlayerWeaponAnimControl holster-joint discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

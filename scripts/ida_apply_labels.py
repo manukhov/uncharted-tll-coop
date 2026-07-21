@@ -7021,8 +7021,34 @@ FUNCTIONS = {
         "PlayerWeaponHolsterAction_ResolveAndBindAttachPoint",
         "Resolves the live ProcessWeapon from the action handle, reads its authored "
         "art id at +0x860, selects mirrored/normal weapon-base-layer state and the "
-        "per-art weapon-holster-point record, then binds the resulting attachment "
-        "descriptor through Player+0x1DF0 virtual +0xB8.",
+        "per-art weapon-holster-point record, configures PlayerWeaponAnimControl "
+        "through Player+0x1DF0, then stores the weapon handle through vtable +0xB8.",
+    ),
+    0x14108F4D0: (
+        "PlayerWeaponAnimControl_Create",
+        "Allocates the 0xE0-byte RTTI-backed PlayerWeaponAnimControl and installs "
+        "vtable 0x142A46778. Player initialization stores it at Player+0x1DF0.",
+    ),
+    0x14108DAB0: (
+        "PlayerWeaponAnimControl_SetWeaponHandle",
+        "PlayerWeaponAnimControl vtable +0xB8. Copies the supplied 16-byte game "
+        "object handle into control+0x30; it does not itself bind an attach point.",
+    ),
+    0x14108DE30: (
+        "PlayerWeaponAnimControl_HandleNamedWeaponEvent",
+        "PlayerWeaponAnimControl vtable +0xE8. Reads the stored weapon handle at "
+        "+0x30 and publishes a named authored event to the resolved weapon process.",
+    ),
+    0x14108E700: (
+        "PlayerWeaponAnimControl_InitializeHolsterJoints",
+        "PlayerWeaponAnimControl vtable +0x130. Resolves r_leg_gun_holster, "
+        "r_upper_leg, pelvis_holster and pelvis in the owning Player skeleton into "
+        "signed indices at +0x78/+0x7C/+0x80/+0x84.",
+    ),
+    0x14108EBF0: (
+        "PlayerWeaponAnimControl_UpdateHolsterJointTransforms",
+        "PlayerWeaponAnimControl vtable +0x138. Builds the two relative holster "
+        "transforms at +0x90/+0xB0 only when each stored joint-index pair is valid.",
     ),
     0x14150F2E0: (
         "ProcessWeapon_Ctor",

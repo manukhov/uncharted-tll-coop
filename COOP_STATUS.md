@@ -5001,3 +5001,41 @@ selected at or after Player+0x1DF0 virtual `+0xB8`. The next static task is to
 resolve that concrete vtable target and trace where it maps the shared record to
 the active DrawControl/skeleton attach point. No synthetic shoulder transform is
 authorized until that mapping failure is proven.
+
+### 2026-07-21 STATIC: PlayerWeaponAnimControl holster-joint discriminator (`ez`)
+
+Resolving the concrete RTTI/vtable target corrects the earlier description of
+the final call. Player initialization creates a 0xE0-byte
+`PlayerWeaponAnimControl` through `0x14108F4D0`, installs vtable `0x142A46778`
+and stores the object at `Player+0x1DF0`. Its vtable `+0xB8` implementation is
+`0x14108DAB0`, which only copies the supplied 16-byte weapon handle into
+control `+0x30`; it does not bind a DrawControl attachment point. The holster
+action also updates animation-control state through slots `+0x100/+0x110/+0xF0`
+before storing that handle.
+
+The next concrete data dependency is in the same RTTI-backed class.
+`PlayerWeaponAnimControl_InitializeHolsterJoints 0x14108E700` hashes and resolves
+exact skeleton joints `r_leg_gun_holster`, `r_upper_leg`, `pelvis_holster` and
+`pelvis`, storing signed indices at control `+0x78/+0x7C/+0x80/+0x84` (or `-1`
+when absent). `PlayerWeaponAnimControl_UpdateHolsterJointTransforms
+0x14108EBF0` reads those exact pairs and writes the two 32-byte relative
+transforms at `+0x90/+0xB0` only when both indices in a pair are valid.
+`PlayerWeaponAnimControl_HandleNamedWeaponEvent 0x14108DE30` is the later
+consumer of the stored weapon handle and publishes authored animation events to
+the resolved weapon process.
+
+This yields three competing explanations: (J1) legacy Nadine lacks one of the
+four exact holster joints, leaving an index pair invalid; (J2) all indices exist
+but one relative-transform cache remains default/stale because the update path
+does not complete for her look; or (J3) indices and transforms are populated,
+moving the failure to the later named animation event. Independent evidence is
+the RTTI/vtable identity, the named-joint pseudocode/dataflow, and runtime `ey`
+proof that both looks use this live control with the same rifle handle/record.
+
+Build `ez` keeps the proven outer hook read-only and adds only guarded reads of
+the four signed indices and 64 raw transform bytes from the exact control. Its
+written prediction: Chloe must show four valid indices and populated transforms.
+Any Nadine `-1` with the corresponding transform absent selects J1; four valid
+indices but a default/stale Nadine transform selects J2; equivalent valid indices
+and populated transforms reject both and select J3. Any install skip, exception,
+crash or model regression invalidates the test.

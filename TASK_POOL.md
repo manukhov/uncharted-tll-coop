@@ -1431,10 +1431,17 @@ Do not reopen these as the first move:
       Result: both Nadine owners and Chloe call rifle lookup id `0x68F32771` and
       receive non-null entry/payload; the payload is shared. REJECT H1/H2 and
       select H3 at/after Player+0x1DF0 virtual `+0xB8`.
-- [ ] Resolve the concrete Player+0x1DF0 vtable `+0xB8` target and trace the
+- [x] Resolve the concrete Player+0x1DF0 vtable `+0xB8` target and trace the
       shared `0x68F32771` record into the active look's attachment graph. Compare
       its resolved attach-point/joint or failure status for Chloe and look
-      `0xD27C074F` before introducing any fallback transform.
+      `0xD27C074F` before introducing any fallback transform. Result: the object
+      is RTTI `PlayerWeaponAnimControl`; `+0xB8`/`0x14108DAB0` only stores the
+      weapon handle. Its `+0x130` initializer resolves four exact holster joints,
+      and `+0x138` builds transforms only for valid index pairs.
+- [ ] Run `ez` and repeat pistol/rifle holster on both copies. Compare control
+      `+0x78..+0x84` joint indices and `+0x90..+0xCF` transform bits for Chloe and
+      legacy Nadine. A Nadine `-1` selects missing-joint fallback; valid/equivalent
+      data moves the next probe to the named animation event at `0x14108DE30`.
 - [ ] After the failed bind boundary is proven, resolve the player-owned rifle's
       `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
       Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a
