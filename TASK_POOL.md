@@ -1316,11 +1316,22 @@ Do not reopen these as the first move:
       roots, palettes, case-6 payloads or other LRDU fields. Result: exact
       owner/freshness/range guards and one-shot markers are implemented; the
       single Release DLL builds successfully.
-- [ ] Run `er` with strong vertical ADS in both directions. Require nonzero wire
+- [x] Run `er` with strong vertical ADS in both directions. Require nonzero wire
       capture and receiver apply plus retained `AIM-CASE6`; reject the boundary
       if any marker is absent. If retained case-6 appears, compare only complete
       same-signature local/puppet records and separately verify visible pitch,
-      horizontal yaw/projectile alignment, ADS exit, and model stability.
+      horizontal yaw/projectile alignment, ADS exit, and model stability. Result:
+      wire markers were absent, so the new hook is not confirmed. However both
+      same-signature local/retained case-6 pairs were complete and semantically
+      matched while the user saw no vertical pitch and no other regression.
+      Reject case-6 inputs and move to their common pose/palette output.
+- [ ] Statically trace the common pose result after direct
+      `AnimCmdEvaluator_ApplyAnimationDirect 0x14217C7F0` and retarget copy
+      `AnimCmdEvaluator_CopyMaskedPose 0x14217D280`. Resolve processing-group
+      work-buffer ownership, later command blend/merge consumers, and the exact
+      publication into FgAnimData palette/skinning buffers. Enumerate output
+      overwrite versus joint-mask versus late-publication competitors and meet
+      the three-type evidence quota before another runtime probe.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

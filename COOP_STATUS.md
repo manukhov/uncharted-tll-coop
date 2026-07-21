@@ -4616,3 +4616,30 @@ only active-state up/down after the stock publisher and emits one nonzero
 `AIM-PITCH-WIRE-APPLY`. No packet or stale packet performs no write, leaving the
 stock publisher authoritative for clearing. All `eq` stage/case-6 counters remain
 enabled for the falsifier. The single Release DLL builds successfully.
+
+### 2026-07-21 REJECTED/CONFIRMED: `er` has no visible pitch; case-6 inputs match
+
+The user observed no remote vertical weapon movement, but also no shake, model
+corruption or other regression. PIDs 22784/23956 remained responsive and logged
+no exception before both were closed. Neither process emitted the required
+nonzero `AIM-PITCH-WIRE-CAPTURE` or `AIM-PITCH-WIRE-APPLY`, so the new steady
+wire hook is **not confirmed** and cannot be credited for the runtime state.
+
+Nevertheless this run finally produced complete same-signature local/retained
+case-6 pairs. For signature `0A/6C2B2396/4B0F5DE3/09A0`, PID 22784 screen 0 and
+PID 23956 screen 1 both reached vertical up near 1.0 and took the direct branch
+to target `6C2B2396/4B0F5DE3` with counts `651/8/8` and callbacks
+`006CCB30/006CD220/006CD620`. For signature
+`0B/27E57F43/FD6DBE03/09A0`, PID 23956 screen 0 and PID 22784 screen 1 both took
+the retarget branch to `ED25C708/C39CA709`, counts `580/8/8`, entry 124,
+map/coverage 1 and the same callbacks. Isolated group/context-flag timing samples
+were not stable across the four records and cannot select a route.
+
+This **REJECTS case-6 source/target skeleton selection, direct-vs-retarget
+branch, retarget entry/map/coverage and callback selection as the missing visible
+vertical discriminator**. Actual retained active-state vertical and complete
+case-6 admission are now confirmed in a no-pitch run. The frontier moves to the
+common pose output after `AnimCmdEvaluator_ApplyAnimationDirect 0x14217C7F0` and
+`AnimCmdEvaluator_CopyMaskedPose 0x14217D280`: trace processing-group work-buffer
+ownership through command blending/merge and final FgAnimData palette/skinning
+publication before defining another runtime probe.
