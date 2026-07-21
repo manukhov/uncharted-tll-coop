@@ -1,10 +1,11 @@
-// hook_offsets.h — TLL co-op hook: module-base-relative addresses (RVAs), struct
-// field offsets, and timing/tunable constants for tll.exe (1.4.21058.0).
+// coop_runtime_offsets.h — TLL co-op runtime: module-base-relative addresses
+// (RVAs), struct field offsets, and timing/tunable constants for tll.exe
+// (1.4.21058.0).
 //
 // SINGLE SOURCE OF TRUTH for the reverse-engineered addresses used by the injected
-// hook. Every value is documented at its declaration; keep it in sync with the IDA
-// database (ida/tll.i64) and reports/initial-findings.md. `constexpr` at namespace
-// scope has internal linkage, so this header is included by teleport_hook.cpp only
+// runtime. Every value is documented at its declaration; keep it in sync with the
+// IDA database (ida/tll.i64) and COOP_STATUS.md. `constexpr` at namespace
+// scope has internal linkage, so this header is included by coop_runtime.cpp only
 // (behaviour is identical to the previous inline block; no linkage change).
 //
 // Naming: k<Subsystem><What>Rva   = add to g_module for the absolute address.

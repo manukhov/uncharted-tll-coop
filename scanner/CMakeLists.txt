@@ -1,35 +1,33 @@
 cmake_minimum_required(VERSION 3.24)
-project(TLLObjectScanner LANGUAGES CXX)
+project(TLLCoopTools LANGUAGES CXX)
 
-add_executable(tll_object_scanner src/main.cpp)
-add_executable(tll_nudge src/nudge.cpp)
-add_executable(tll_injector src/injector.cpp)
-add_executable(tll_buddy_teleport src/buddy_teleport.cpp)
+add_executable(tll_object_scanner src/object_scanner.cpp)
+add_executable(tll_player_nudge src/player_position_nudge.cpp)
+add_executable(tll_dll_injector src/dll_injector.cpp)
+add_executable(tll_buddy_teleport_toggle src/buddy_teleport_toggle.cpp)
 add_executable(tll_remote_input_client src/remote_input_client.cpp)
 add_executable(tll_runtime_code_dump src/runtime_code_dump.cpp)
 add_executable(tll_netplayer_probe src/netplayer_probe.cpp)
-add_executable(tll_read src/mem_read.cpp)
-add_executable(tll_write_dword src/write_dword.cpp)
-add_executable(tll_scan_dword src/scan_dword.cpp)
-add_executable(tll_slot_dump src/slot_dump.cpp)
-add_library(tll_teleport_hook SHARED src/teleport_hook.cpp)
-add_library(tll_teleport_hook_v2 SHARED src/teleport_hook.cpp)
+add_executable(tll_memory_reader src/memory_reader.cpp)
+add_executable(tll_dword_writer src/dword_writer.cpp)
+add_executable(tll_dword_scanner src/dword_scanner.cpp)
+add_executable(tll_input_slot_dump src/input_slot_dump.cpp)
+add_library(tll_coop_runtime SHARED src/coop_runtime.cpp)
 
 foreach(
     target
     tll_object_scanner
-    tll_nudge
-    tll_injector
-    tll_buddy_teleport
+    tll_player_nudge
+    tll_dll_injector
+    tll_buddy_teleport_toggle
     tll_remote_input_client
     tll_runtime_code_dump
     tll_netplayer_probe
-    tll_read
-    tll_write_dword
-    tll_scan_dword
-    tll_slot_dump
-    tll_teleport_hook
-    tll_teleport_hook_v2
+    tll_memory_reader
+    tll_dword_writer
+    tll_dword_scanner
+    tll_input_slot_dump
+    tll_coop_runtime
 )
     target_compile_features(${target} PRIVATE cxx_std_20)
     target_compile_definitions(
@@ -50,19 +48,11 @@ foreach(
 endforeach()
 
 set_target_properties(
-    tll_teleport_hook
+    tll_coop_runtime
     PROPERTIES
         PREFIX ""
-        OUTPUT_NAME "tll_teleport_hook"
+        OUTPUT_NAME "tll_coop_runtime"
 )
 
-set_target_properties(
-    tll_teleport_hook_v2
-    PROPERTIES
-        PREFIX ""
-        OUTPUT_NAME "tll_teleport_hook_v2"
-)
-
-target_link_libraries(tll_teleport_hook PRIVATE ws2_32)
-target_link_libraries(tll_teleport_hook_v2 PRIVATE ws2_32)
+target_link_libraries(tll_coop_runtime PRIVATE ws2_32)
 target_link_libraries(tll_remote_input_client PRIVATE ws2_32)

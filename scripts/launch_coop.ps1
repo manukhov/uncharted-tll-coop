@@ -7,7 +7,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $buildPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\scanner\build"))
-$injectorPath = Join-Path $buildPath "tll_injector.exe"
+$injectorPath = Join-Path $buildPath "tll_dll_injector.exe"
 
 if (-not (Test-Path -LiteralPath $GamePath -PathType Leaf)) {
     throw "Game executable not found: $GamePath"

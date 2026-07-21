@@ -19,7 +19,8 @@ __pycache__/
 
 # Generated reports / scratch (local, never versioned)
 reports/
-.codex/*.txt
+.codex/
+.agents/
 scanner/_build*.cmd
 scanner/build-wincheck/
 ida/*.log

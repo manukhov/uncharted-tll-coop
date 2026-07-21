@@ -336,7 +336,7 @@ std::vector<std::uintptr_t> find_objects_by_vtable(HANDLE process,
 
 void print_usage() {
     std::fprintf(stderr,
-                 "usage: tll_slot_dump.exe [--set-look <slot0..slot5|all> <chloe|nadine|hex>]\n");
+                 "usage: tll_input_slot_dump.exe [--set-look <slot0..slot5|all> <chloe|nadine|hex>]\n");
 }
 
 int wmain(int argc, wchar_t** argv) {

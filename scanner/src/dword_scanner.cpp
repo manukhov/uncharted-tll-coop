@@ -74,7 +74,7 @@ bool readable_page(DWORD protect) {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc < 2) {
-        fwprintf(stderr, L"usage: tll_scan_dword.exe [--range <start-hex> <end-hex>] <dword-hex> [dword-hex...]\n");
+        fwprintf(stderr, L"usage: tll_dword_scanner.exe [--range <start-hex> <end-hex>] <dword-hex> [dword-hex...]\n");
         return 1;
     }
 

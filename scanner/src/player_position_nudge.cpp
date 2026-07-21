@@ -2,10 +2,12 @@
 #include <TlHelp32.h>
 
 #include <array>
-#include <charconv>
+#include <cerrno>
 #include <cstdint>
+#include <cwchar>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <string_view>
 
@@ -93,23 +95,19 @@ std::optional<ProcessInfo> find_tll_process() {
 }
 
 std::optional<std::uintptr_t> parse_address(const wchar_t* text) {
-    std::wstring_view value(text);
-    if (value.starts_with(L"0x") || value.starts_with(L"0X")) {
-        value.remove_prefix(2);
+    const wchar_t* digits = text;
+    if (digits[0] == L'0' && (digits[1] == L'x' || digits[1] == L'X')) {
+        digits += 2;
     }
 
-    std::string narrow(value.begin(), value.end());
-    std::uintptr_t address = 0;
-    const auto result = std::from_chars(
-        narrow.data(),
-        narrow.data() + narrow.size(),
-        address,
-        16
-    );
-    if (result.ec != std::errc{} || result.ptr != narrow.data() + narrow.size()) {
+    errno = 0;
+    wchar_t* end = nullptr;
+    const unsigned long long parsed = std::wcstoull(digits, &end, 16);
+    if (errno == ERANGE || end == digits || *end != L'\0' ||
+        parsed > std::numeric_limits<std::uintptr_t>::max()) {
         return std::nullopt;
     }
-    return address;
+    return static_cast<std::uintptr_t>(parsed);
 }
 
 template <typename T>
@@ -129,7 +127,7 @@ bool read_value(HANDLE process, std::uintptr_t address, T& value) {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc != 2) {
-        std::cerr << "usage: tll_nudge.exe <nadine-object-address>\n";
+        std::cerr << "usage: tll_player_nudge.exe <nadine-object-address>\n";
         return 1;
     }
 

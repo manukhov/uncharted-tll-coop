@@ -67,7 +67,7 @@ int wmain(int argc, wchar_t** argv) {
             static_cast<DWORD>(executable_path.size())
         );
         dll_path = std::filesystem::path(executable_path.data()).parent_path() /
-                   L"tll_teleport_hook.dll";
+                   L"tll_coop_runtime.dll";
     }
     dll_path = std::filesystem::absolute(dll_path);
 
@@ -152,7 +152,7 @@ int wmain(int argc, wchar_t** argv) {
         return 7;
     }
 
-    std::cout << "tll_teleport_hook.dll loaded into PID " << *process_id
-              << '\n';
+    std::wcout << dll_path.filename().native() << L" loaded into PID "
+               << *process_id << L'\n';
     return 0;
 }

@@ -432,13 +432,13 @@ second player. Repro in initial-findings.md "MAJOR BREAKTHROUGH".
       spawn fires and writes Nadine's state id. Result was partial: only hair
       remained on the clone, which proves `player+0x170` and `player+0x190`
       must be patched as one visual pair.
-- [x] Runtime: validate the paired `teleport_hook.cpp` override:
+- [x] Runtime: validate the paired `coop_runtime.cpp` override:
       `0x141BB4B01 -> player+0x170` and
       `0x141BB4B14 -> player+0x190`. Logs confirmed both
       `VISUAL look seed hit ... PATCHED` and
       `VISUAL state seed hit ... PATCHED`.
 - [x] Visual check: paired override fired in live runtime but still produced
-      floating Nadine hair only. `tll_slot_dump` confirmed slot1 has Nadine
+      floating Nadine hair only. `tll_input_slot_dump` confirmed slot1 has Nadine
       `+170/+190`, so those two fields are necessary but not sufficient.
 - [ ] IMMEDIATE: identify the body/rig source still left on the player path.
       Current hard clues:

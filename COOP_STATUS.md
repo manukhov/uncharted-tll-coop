@@ -291,7 +291,7 @@ wrong way, then stays pinned to one world point while the host moves the reticle
 blended to `StatePacket::quat` (body). Aim IK/target fields were written only
 POST native update, so GunMoveShield consumed stale data the same frame.
 
-**Fix under test (`teleport_hook.cpp`):**
+**Fix under test (`coop_runtime.cpp`):**
 1. `apply_puppet_aim_pre` before native Player update — camera facing, pose quat,
    IK points, `+0x1570/+0x21F0` targets, ADS flag, blend state.
 2. POST pass reinforces the same (no body-quat blend while pose relay active).
@@ -310,7 +310,7 @@ with scoped sniper ADS. Main-view relay CONFIRMED (hair/rifle visible).
 **Runtime evidence:** `AIM-WORLD-BASIS` fires with changing `fwd`/`yawPre`, but
 `AIM-WEIGHTS-POST` often shows `blend=0` (published aim-add weights zeroed).
 
-**Fix under test (uncommitted `teleport_hook.cpp`):**
+**Fix under test (uncommitted `coop_runtime.cpp`):**
 1. `force_peer_puppet_aim_blend_state` — sustain `controller+0x8A0=1` and
    `+0x8EC=1` on blend tick, world-basis hook, and post-update for slot-1 puppet.
 2. Blend-target relay always returns `max(original, 1.0)` during peer ADS (not
@@ -322,7 +322,7 @@ with scoped sniper ADS. Main-view relay CONFIRMED (hair/rifle visible).
 yaw via soft blend; pistol ADS unchanged. Log `AIM-BLEND-TARGET` and
 `blend=1` in `AIM-WEIGHTS-POST`.
 
-**Rebuild:** `scanner/build/tll_teleport_hook_v2.dll` — inject and retest.
+**Rebuild:** `scanner/build/tll_coop_runtime.dll` — inject and retest.
 
 ## Turn note (2026-07-13, Cursor - resume aim after Codex handoff)
 
@@ -589,7 +589,7 @@ Details: `reports/real2p_exp3b_active_player_gate.txt`.
 
 ## Turn note (2026-07-10, Cursor — full pickup native recipe in hook)
 
-**Сделано в `teleport_hook.cpp` / `hook_offsets.h`:**
+**Сделано в `coop_runtime.cpp` / `coop_runtime_offsets.h`:**
 
 - `seh_run_puppet_pickup_recipe`: `Player_ResolveWeaponPickupInteractAnim`
   (`0x140C7FF40`) → `InputScreenBlock_ActivateCommand` → optional
@@ -605,7 +605,7 @@ Details: `reports/real2p_exp3b_active_player_gate.txt`.
 - Исправлен баг: `GetAvailability` вызывался с `pickup` вместо `puppet` как arg2.
 - Gesture window: 700ms → 1200ms per-frame re-activate.
 
-**Билд:** `scanner/build/tll_teleport_hook_v2.dll` OK. Inject в PID 14224/18988 —
+**Билд:** `scanner/build/tll_coop_runtime.dll` OK. Inject в PID 14224/18988 —
 boot lines в `locomotion_hook.log`.
 
 **Прогноз in-game теста:** подбор M-30 на host → `GIVEWEAPON-RELAY-STORED` затем
@@ -1070,7 +1070,7 @@ give-once memo; при `target=-1` — fallback remove по WeaponArtDef+8 че�
 
 ## Turn note (2026-07-06, Cursor — продолжение Claude: fire-caller pose-seed + pickup relay, build OK)
 
-**Собрано и заинжекчено** (PID 25372 / 16372, `tll_teleport_hook.dll`). Логи по
+**Собрано и заинжекчено** (PID 25372 / 16372, `tll_coop_runtime.dll`). Логи по
 умолчанию OFF (F11).
 
 **Сделано поверх незакоммиченного WIP Claude:**
@@ -1169,7 +1169,7 @@ readable_bytes; F8 = puppet aim-press (ADS) relay; F7 = legacy move-gate.
 Доказательства индекса: `GetRetainedPlayerEntityBySlot(*(a1+248))` + джойпад
 `0xBF0*(slot+2)` (совпадает со slot0→joypad2, slot1→joypad3) + фикс-алиасы screen-0.
 
-**Фикс (teleport_hook.cpp, собрано+заинжекчено):** хуки на `0x14135A650` и
+**Фикс (coop_runtime.cpp, собрано+заинжекчено):** хуки на `0x14135A650` и
 `0x14135AF20` — скип паблиша, если `*(state+0xF8) != 0`
 (`hud_state_is_non_primary_screen`, лог `RETICLE-HUD gated: screen!=0` /
 `RETICLE-AIM-HUD gated: screen!=0`). Не зависит от оружия/ADS. Гейт
@@ -1252,7 +1252,7 @@ HUD корректны — скоуп течёт через **глобальны
    не может поднять scope-visible.
 НЕ трогать биты ввода (блок-1 REJECTED). look/направление — чинить отдельно.
 
-**Игра запущена (PID 14440/8524), DLL заинжекчена** — `scanner/build/tll_read.exe --pid N <addr> <len>`.
+**Игра запущена (PID 14440/8524), DLL заинжекчена** — `scanner/build/tll_memory_reader.exe --pid N <addr> <len>`.
 
 ---
 
@@ -1281,7 +1281,7 @@ HUD корректны — скоуп течёт через **глобальны
   через сэндвич). Движение/gate-биты не тронуты. Скраб локального пэда оставлен.
 
 ### User test checklist (next turn)
-1. Обе копии с новой `tll_teleport_hook_v2.dll`, ≥10 c после спавна.
+1. Обе копии с новой `tll_coop_runtime.dll`, ≥10 c после спавна.
 2. Chloe держит прицел → на копии 2: поза прицеливания у марионетки, лог
    `JOYPAD3-ANALOG ... current=` содержит `0x200`, и **нет** ретикла/зума у Нэдин.
 3. `REMOTE-ACTIONS branch=` больше не содержит `0x200/0x800` — это норма.
@@ -1342,7 +1342,7 @@ HUD корректны — скоуп течёт через **глобальны
   `Input_ScaleCopyVirtual` while suppressed; require `puppet_weapon_sync_ready`;
   use packet `controller_offset` + weapon-art match before replay; clear suppress on
   native-fail so button fallback still works.
-- **Runtime:** built `scanner/build/tll_teleport_hook_v2.dll` OK.
+- **Runtime:** built `scanner/build/tll_coop_runtime.dll` OK.
   **User test:** Chloe pistol shot → copy 2 survives; log shows one `FIRE-RELAY native`
   and **no** `FIRE-GATE` fire-press on remote player in the same 250 ms window.
 
@@ -1399,7 +1399,7 @@ HUD корректны — скоуп течёт через **глобальны
 - **STATIC:** shot direction should follow peer camera quat once both instances run v7 DLL.
   Aim animation needs sustained `0x200` + gun-out; rifle draw on Nadine may still lag
   (`HELD-WEAPON-APPLY`) — separate from look relay.
-- **Runtime:** built `scanner/build/tll_teleport_hook_v2.dll`; injected PIDs 10040/20400.
+- **Runtime:** built `scanner/build/tll_coop_runtime.dll`; injected PIDs 10040/20400.
   **User test:** Chloe aim (hold) → Nadine aim pose; Chloe shoot → Nadine muzzle direction
   matches; log should show non-zero `right=(…)` on JOYPAD3-ANALOG and peer camera applied.
 
@@ -1413,7 +1413,7 @@ HUD корректны — скоуп течёт через **глобальны
   pre-gives coop arts from peer raw-id snapshot (flag `0x40`); apply path gives + re-resolves
   slot when missing; rifle-out forces switch even when `weapon_selected_mode==0`; sender
   prefers rifle art when pistol hand-attached but active/requested slot is rifle.
-- **Runtime:** build OK (`tll_teleport_hook_v2.dll`); two instances injected (PIDs vary).
+- **Runtime:** build OK (`tll_coop_runtime.dll`); two instances injected (PIDs vary).
   **Needs user test:** pick up rifle → expect `HELD-WEAPON-APPLY art=0x8075397d slot=0
   gave=1 select=1` on puppet side; visual should show rifle (Nadine holster overlap may
   still apply).
@@ -1498,8 +1498,8 @@ HUD корректны — скоуп течёт через **глобальны
 4. **Винтовка** — отдельная задача (slot 0 blocked на кукле).
 
 ### Сборка / инжект
-- DLL: `scanner/build/tll_teleport_hook_v2.dll`
-- Запуск: `taskkill /F /IM tll.exe` → две копии → ~18s → `tll_injector.exe --pid PID -- tll_teleport_hook_v2.dll`
+- DLL: `scanner/build/tll_coop_runtime.dll`
+- Запуск: `taskkill /F /IM tll.exe` → две копии → ~18s → `tll_dll_injector.exe --pid PID -- tll_coop_runtime.dll`
 - Peer: `reports/coop_peer.txt` = `127.0.0.1`
 - Лог: `reports/locomotion_hook.log`
 
@@ -1586,7 +1586,7 @@ Goal (north star): a fully-playable **second player as Nadine** in the *Uncharte
 The Lost Legacy* campaign (`tll.exe`), via runtime DLL injection — eventually a
 two-PC networked co-op.
 
-All work is **runtime injection** (`scanner/src/teleport_hook.cpp` + `tll_injector.exe`).
+All work is **runtime injection** (`scanner/src/coop_runtime.cpp` + `tll_dll_injector.exe`).
 No asset/.pak modding (rejected as out of scope and because it would change *both*
 players, not just the clone).
 
@@ -2108,7 +2108,7 @@ resolver override + `scene_hash`/`world_pos` fallback lookup.
 | `SendNetEventSyncBreakable` multicast call | `0xA65771` | builds tag `0x0101006B`, net id from `+0xD8` |
 | Net resolver | `sub_141622BC0` `0x1622BC0` | table `0x6466FE0`; campaign peer often empty |
 
-**Mod implementation (`teleport_hook.cpp`, `coop_protocol.h` v2):**
+**Mod implementation (`coop_runtime.cpp`, `coop_protocol.h` v2):**
 - UDP `BRKW`/`BRKP`/`BRKS` (`BreakableSyncPacket` adds `scene_hash@+0x38`, `world_pos`).
 - Hooks: send-mask observe; sync-multicast callsite `0xA65771` → `BRKS-SEND`; resolver
   override `0x1622BC0`; local-apply relay `0x88E044`; explosion-damage fn `0x88E6F0`;
@@ -3630,7 +3630,7 @@ matching writes it to selected record `+0x20/+0x70` before native Init. Existing
 direction `+0x30/+0x40` is unchanged. v4/v3/v1 receive compatibility remains.
 The direct ProbeKick discriminator now reports
 `originError=|live_start-relayed-origin|`. Release
-`tll_teleport_hook_v2.dll` builds successfully.
+`tll_coop_runtime.dll` builds successfully.
 
 **Falsifiable build-dx prediction:** one distant-wall pistol shot and one rifle
 shot must produce matching `FIRE-SELECTED-LAUNCH-CAPTURE`,

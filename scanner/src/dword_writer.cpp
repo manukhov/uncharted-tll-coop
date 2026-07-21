@@ -2,7 +2,7 @@
 // (0x140...) or a raw process address, writes a 32-bit value, then verifies by
 // reading it back.
 //
-// usage: tll_write_dword.exe <addr-hex> <value-hex>
+// usage: tll_dword_writer.exe <addr-hex> <value-hex>
 #include <Windows.h>
 #include <TlHelp32.h>
 
@@ -40,7 +40,7 @@ std::optional<std::pair<DWORD, std::uintptr_t>> find_tll() {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc != 3) {
-        fwprintf(stderr, L"usage: tll_write_dword.exe <addr-hex> <value-hex>\n");
+        fwprintf(stderr, L"usage: tll_dword_writer.exe <addr-hex> <value-hex>\n");
         return 1;
     }
     const std::uintptr_t input = wcstoull(argv[1], nullptr, 16);

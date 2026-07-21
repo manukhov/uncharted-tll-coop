@@ -85,7 +85,7 @@ int wmain(int argc, wchar_t** argv) {
     if (argc != 2 ||
         (std::wstring_view(argv[1]) != L"on" &&
          std::wstring_view(argv[1]) != L"off")) {
-        std::cerr << "usage: tll_buddy_teleport.exe <on|off>\n";
+        std::cerr << "usage: tll_buddy_teleport_toggle.exe <on|off>\n";
         return 1;
     }
 

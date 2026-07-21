@@ -2,9 +2,9 @@
 // bytes either from a preferred-base VA inside tll.exe (0x140...) or from a
 // raw process address / heap object handle (e.g. 0x10E0...).
 //
-// usage: tll_read.exe <addr-hex> <byte-count-hex>
-//   tll_read.exe 0x14697AD50 0x40   # tll.exe VA -> rebased
-//   tll_read.exe 0x10E0200160 0x40  # raw process address
+// usage: tll_memory_reader.exe <addr-hex> <byte-count-hex>
+//   tll_memory_reader.exe 0x14697AD50 0x40   # tll.exe VA -> rebased
+//   tll_memory_reader.exe 0x10E0200160 0x40  # raw process address
 #include <Windows.h>
 #include <TlHelp32.h>
 
@@ -53,7 +53,7 @@ int wmain(int argc, wchar_t** argv) {
         forced_pid = static_cast<DWORD>(std::wcstoul(argv[2], nullptr, 10));
         first = 3;
     } else if (argc != 3) {
-        fwprintf(stderr, L"usage: tll_read.exe [--pid N] <addr-hex> <count-hex>\n");
+        fwprintf(stderr, L"usage: tll_memory_reader.exe [--pid N] <addr-hex> <count-hex>\n");
         return 1;
     }
     const std::uintptr_t input = wcstoull(argv[first], nullptr, 16);
