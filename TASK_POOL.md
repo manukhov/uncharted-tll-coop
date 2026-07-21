@@ -1352,6 +1352,32 @@ Do not reopen these as the first move:
       weapons. Parked; on resume correlate WorkBuffer across command-list segments
       and probe only the segment that actually publishes opcode 26.
 
+## P0 - Nadine legacy-look weapon attachment (CURRENT, 2026-07-21)
+
+- [x] Recover the prior Nadine weapon history and keep the confirmed general
+      weapon-display fixes. `ApplyWeaponSwitch(-1)`, slot mirror, draw-state
+      capture and edge-triggered holster are working layers; do not repeat the
+      rejected per-frame holster or gun-state loops.
+- [x] Separate the persistent legacy-look rifle from player inventory. Commit
+      `37cb845` proved it remains after removing every controller weapon; current
+      DrawControl logs pin the exact five-mesh `0xd27c074f` signature versus two
+      Chloe meshes. The independent player-owned holster AP gap remains at
+      `PlayerWeaponHolsterAction_ResolveAndBindAttachPoint 0x141095BD0`.
+- [x] Build a bounded standalone-mesh discriminator. Build `et` uses F11 to cycle
+      baseline and one hidden legacy-look parent mesh, restores the previous mesh,
+      requires all five exact ids, and touches no inventory/attachment state.
+- [ ] Run `et`: focus the window that renders Nadine and press F11 up to six
+      times. Record which `NADINE-MESH-PROBE index/id` removes the persistent
+      rifle and whether any body/clothing disappears with it. A rifle-only index
+      becomes the default suppression; a combined mesh or no affected index
+      rejects this route before any holster-AP write.
+- [ ] After the baked rifle is isolated, resolve the player-owned rifle's failed
+      `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
+      Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a
+      compatible shoulder AP or apply a bounded standard spine/chest fallback
+      with the authored per-weapon offset. Do not revive wrist-copy or joypad-gate
+      hypotheses.
+
 ## P1 - Remote reload animation sync (2026-07-18)
 
 - [ ] Trace the Player/ProcessWeapon reload command edge and its native animation

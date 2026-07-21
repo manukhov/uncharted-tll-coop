@@ -275,6 +275,12 @@ volatile bool g_force_local_nadine = false;
 // cautious experiments (each may black-screen).
 volatile std::uint32_t g_nadine_swap_hash = 0xd27c074fu;  // known-rendering look
 volatile int g_nadine_swap_index = 0;
+// Build et: the legacy 0xd27c074f look owns five stable parent-DrawControl meshes
+// while Chloe owns two. Historical runtime proved its rifle survives removal of
+// every PlayerWeaponController item, so F11 cycles a single hidden look mesh to
+// distinguish a standalone baked rifle from rifle geometry merged into clothing.
+// -1 is the untouched baseline; 0..4 hide exactly one legacy-look mesh.
+std::atomic<int> g_nadine_parent_mesh_probe_index{-1};
 // Two-instance role: false = role A (recv :31338, "player 1", local Chloe), true =
 // role B (recv :31339, "player 2", local Nadine). Set in start_state_net().
 volatile bool g_net_role_b = false;
@@ -21943,6 +21949,17 @@ bool seh_show_draw_control_mesh(void* draw_control, std::uint32_t mesh_index) {
     }
 }
 
+bool seh_hide_draw_control_mesh(void* draw_control, std::uint32_t mesh_index) {
+    using HideMeshFn = std::int64_t(__fastcall*)(void*, std::uint32_t);
+    __try {
+        reinterpret_cast<HideMeshFn>(
+            g_module + kDrawControlHideMeshRva)(draw_control, mesh_index);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 unsigned restore_hidden_draw_control_meshes(void* draw_control) {
     if (draw_control == nullptr || readable_bytes(draw_control) < 0x20) {
         return 0;
@@ -26687,11 +26704,94 @@ std::uint64_t player_draw_snapshot_signature(
     return signature;
 }
 
+void apply_legacy_nadine_parent_mesh_probe(void* parent_draw) {
+    // Stable across every logged rebuild of the only renderable Nadine Player
+    // look. Requiring the full ordered signature prevents this diagnostic from
+    // touching Chloe, ProcessWeapon, hair/cloth attachables or another look.
+    constexpr std::array<std::uint32_t, 5> kLegacyNadineMeshIds{
+        0x6E18DCD5u, 0x4A7DF04Fu, 0xA674E571u, 0x5EAAF523u,
+        0xC450A073u};
+    if (parent_draw == nullptr || readable_bytes(parent_draw) < 0x20) {
+        return;
+    }
+    auto* const draw = static_cast<std::byte*>(parent_draw);
+    auto* const meshes = *reinterpret_cast<std::byte**>(draw + 0x8);
+    const std::uint32_t mesh_count =
+        *reinterpret_cast<const std::uint32_t*>(draw + 0x14);
+    constexpr std::size_t kMeshStride = 0x250;
+    constexpr std::size_t kMeshIdOffset = 0x18;
+    constexpr std::size_t kVisibleOffset = 0x243;
+    if (mesh_count != kLegacyNadineMeshIds.size() || meshes == nullptr ||
+        readable_bytes(meshes) < kMeshStride * kLegacyNadineMeshIds.size()) {
+        return;
+    }
+    for (std::size_t i = 0; i < kLegacyNadineMeshIds.size(); ++i) {
+        if (*reinterpret_cast<const std::uint32_t*>(
+                meshes + kMeshStride * i + kMeshIdOffset) !=
+            kLegacyNadineMeshIds[i]) {
+            return;
+        }
+    }
+
+    if (process_owns_foreground_window() &&
+        (GetAsyncKeyState(VK_F11) & 1) != 0) {
+        int next = g_nadine_parent_mesh_probe_index.load(
+            std::memory_order_relaxed) + 1;
+        if (next >= static_cast<int>(kLegacyNadineMeshIds.size())) {
+            next = -1;
+        }
+        g_nadine_parent_mesh_probe_index.store(next, std::memory_order_release);
+    }
+
+    const int selected = g_nadine_parent_mesh_probe_index.load(
+        std::memory_order_acquire);
+    static void* last_draw = nullptr;
+    static int last_selected = -1;
+    const bool changed = parent_draw != last_draw || selected != last_selected;
+    if (changed && parent_draw == last_draw && last_selected >= 0 &&
+        last_selected < static_cast<int>(kLegacyNadineMeshIds.size())) {
+        seh_show_draw_control_mesh(
+            parent_draw, static_cast<std::uint32_t>(last_selected));
+    }
+
+    bool applied = true;
+    if (selected >= 0 && selected < static_cast<int>(kLegacyNadineMeshIds.size())) {
+        auto* const mesh = meshes != nullptr
+            ? meshes + kMeshStride * static_cast<std::size_t>(selected)
+            : nullptr;
+        if (mesh == nullptr || readable_bytes(mesh) < kMeshStride) {
+            applied = false;
+        } else if (*reinterpret_cast<const std::uint8_t*>(
+                       mesh + kVisibleOffset) != 0) {
+            applied = seh_hide_draw_control_mesh(
+                parent_draw, static_cast<std::uint32_t>(selected));
+        }
+    }
+
+    if (changed) {
+        std::ostringstream line;
+        line << "NADINE-MESH-PROBE index=" << selected;
+        if (selected >= 0 &&
+            selected < static_cast<int>(kLegacyNadineMeshIds.size())) {
+            line << " id=0x" << std::hex
+                 << kLegacyNadineMeshIds[static_cast<std::size_t>(selected)]
+                 << std::dec << " hidden=" << (applied ? 1 : 0);
+        } else {
+            line << " baseline-restored=1";
+        }
+        force_log_line(line.str().c_str());
+    }
+    last_draw = parent_draw;
+    last_selected = selected;
+}
+
 char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
     void* child_draw, void* parent_draw, void* attachable) {
     char result = g_original_draw_control_sync_parent_visibility != nullptr
         ? g_original_draw_control_sync_parent_visibility(child_draw, parent_draw)
         : 0;
+
+    apply_legacy_nadine_parent_mesh_probe(parent_draw);
 
     void* const puppet = retained_player_object(1);
     if (!g_state_net.enabled || puppet == nullptr ||
@@ -28704,8 +28804,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21es "
-        "(steady wire-pitch apply + dual-signature case-6 discriminator)");
+        "TLL co-op runtime init 2026-07-21et "
+        "(legacy Nadine parent-mesh discriminator; F11 cycles baseline/0..4)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

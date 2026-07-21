@@ -7017,6 +7017,19 @@ FUNCTIONS = {
         "writes wrist weapon-attachment transforms through the embedded object at "
         "Player+0x3530 into Player+0x3600/+0x3608.",
     ),
+    0x141095BD0: (
+        "PlayerWeaponHolsterAction_ResolveAndBindAttachPoint",
+        "Resolves the live ProcessWeapon from the action handle, reads its authored "
+        "art id at +0x860, selects mirrored/normal weapon-base-layer state and the "
+        "per-art weapon-holster-point record, then binds the resulting attachment "
+        "descriptor through Player+0x1DF0 virtual +0xB8.",
+    ),
+    0x1410F8660: (
+        "StringId_FormatDashedPairAndHash",
+        "Formats the supplied category/value pair as '-%s-%s' and returns its "
+        "engine CRC-style StringId. Used for weapon-holster-point, animation "
+        "layers and many other hierarchical authored keys.",
+    ),
     0x14023AEA0: (
         "InputObject_MatchesActiveLocalJoypad",
         "Returns true when object+0x44 has bit 0x80000 and object+0x50 matches the "

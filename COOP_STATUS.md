@@ -4729,3 +4729,43 @@ but the runtime boundary is split across command-list segments. Vertical ADS is
 parked at the user's request. If resumed, first correlate the same WorkBuffer
 across segments and select the invocation that actually counts command 26;
 do not compare whole-palette deltas from a command-3/16-only segment.
+
+### 2026-07-21 STATIC: Nadine double-weapon symptom splits at the legacy look
+
+The current priority is Nadine's weapon presentation: drawing a pistol leaves a
+rifle intersecting it in the hand, and putting weapons away leaves the rifle in
+the hand instead of across the shoulder. History proves that the general remote
+Player inventory/draw state is not the first broken layer. Build `b3549d8`
+already confirmed `PlayerWeaponController+0x120/+0x134` and native
+`ApplyWeaponSwitch(-1)` holster; build `3cdb21c` confirmed slot mirroring without
+flicker or locomotion regression.
+
+The remaining symptom has two independent sources. Commit `37cb845` removed all
+PlayerWeaponController weapons and the rifle still rendered, proving that this
+rifle is built into the only usable Nadine Player look `0xd27c074f`. Separately,
+`PlayerWeaponHolsterAction_ResolveAndBindAttachPoint 0x141095BD0` resolves each
+player-owned weapon's `weapon-holster-point` from its art definition and binds it
+through `Player+0x1DF0` virtual `+0xB8`; that authored AP is absent from the
+companion look, so a player-owned holstered weapon can still fall back to a hand.
+`Player_KickPlayerDepenetrateWeapons 0x1410EDFB0` is only the downstream wrist
+depenetration transform path and is not a holster fix.
+
+Three independent evidence types select the first discriminator: the inventory-
+removal runtime result; the appearance-callsite/look-builder dataflow; and stable
+DrawControl structure across many rebuilds. Chloe look `0x3f334972` owns two
+parent meshes, while legacy Nadine owns five with the exact ordered ids
+`6E18DCD5,4A7DF04F,A674E571,5EAAF523,C450A073`. The competing hypotheses are:
+(H1) the built-in rifle is one standalone look mesh; (H2) it is merged into a
+body/clothing mesh; or (H3) the visible overlap is only a ProcessWeapon attachable,
+which the inventory-removal result predicts against.
+
+Read/write-bounded build `2026-07-21et` cycles F11 through baseline and one hidden
+legacy-look parent mesh at a time. It requires the complete five-id signature,
+uses the stock `IDrawControl_HideMesh 0x141754510`/`ShowMesh 0x141754A30`, restores
+the prior probe mesh before changing selection, and never changes inventory,
+weapon state, attachment transforms or Chloe/other looks. Falsifier: exactly one
+F11 index removing only the persistent rifle confirms H1 and becomes the default
+suppression; rifle plus a body/clothing region disappearing selects H2 and rejects
+mesh suppression; no index affecting the rifle rejects the parent-look mesh route
+and moves to attachable/process identification. The player-owned shoulder AP is a
+separate second stage after the baked rifle is isolated.

@@ -482,6 +482,7 @@ constexpr std::uintptr_t kPlayerAimAdditivePermissionRva = 0x0CADF40;
 // local scoped camera but not for the remote retained Player.
 constexpr std::uintptr_t kPlayerMainViewVisibilityUpdateRva = 0x0C990A0;
 // Exact inverse of IDrawControl_HideMesh: writes mesh entry +0x243 to 0xFF.
+constexpr std::uintptr_t kDrawControlHideMeshRva = 0x1754510;
 constexpr std::uintptr_t kDrawControlShowMeshRva = 0x1754A30;
 // False branch of Script_SetInstanceFlagDrawInMainView. RDI still carries the
 // explicit target object while RCX is target+0x198 DrawControl.
