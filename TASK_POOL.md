@@ -1384,15 +1384,21 @@ Do not reopen these as the first move:
       `NADINE-ATTACHABLE` child signatures and no visual regression. Resolve each
       vtable/mesh signature statically; if only hair/cloth reaches the callsite,
       reject this boundary rather than hiding another guessed mesh. Result:
-      INCONCLUSIVE, zero accepted records in both responsive processes, no crash.
-      The same exact matcher worked in `et`, so instrument guard/snapshot rejection
-      after parent match instead of broadening the parent or changing visibility.
+      INCONCLUSIVE, no records in both responsive processes, no crash. Correction:
+      `force_log_line()` was compiled out, so this says nothing about accepted
+      records or guards.
 - [x] Build `ev`, a bounded read-only exact-parent hit/rejection census before the
       `attachable >= 0x4F0` and child-snapshot guards. Record readable extent,
       child mesh header/snapshot success and raw RBX value so the next test
       distinguishes an undersized object, wrong object base and child capture
       failure.
-- [ ] Run `ev` with the legacy Nadine parent visible. Classify the first
+- [x] Run `ev` with the legacy Nadine parent visible and force pistol/rifle
+      draw/holster plus movement. Result: no lines and no regression, but source
+      audit proved its `force_log_line()` result path was compile-time disabled;
+      no callsite conclusion is allowed.
+- [x] Build `ew` with only the maximum-32 exact-parent census routed through the
+      persistent writer; keep global diagnostics and all visibility writes off.
+- [ ] Run `ew` with the legacy Nadine parent visible. Classify the first
       `NADINE-ATTACHABLE-HIT` records by `attachReadable`, `snapshot`, vtable and
       child mesh ids before selecting any rifle visibility/attachment action.
 - [ ] After the baked rifle is isolated, resolve the player-owned rifle's failed

@@ -26904,7 +26904,10 @@ void census_legacy_nadine_attachable(
     for (std::uint32_t i = 0; i < child.readable_meshes; ++i) {
         line << "0x" << std::hex << child.mesh_ids[i] << ",";
     }
-    force_log_line(line.str().c_str());
+    // Production keeps force_log_line() compiled out. This census is already
+    // bounded to 32 semantic signatures, so use the persistent writer directly
+    // without enabling the high-volume legacy diagnostics.
+    write_log_line(line.str().c_str());
 }
 
 char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
@@ -28929,8 +28932,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21ev "
-        "(read-only exact-parent attachable rejection census; max 32 signatures)");
+        "TLL co-op runtime init 2026-07-21ew "
+        "(read-only exact-parent attachable census with bounded writer; max 32)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

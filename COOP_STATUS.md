@@ -4851,3 +4851,21 @@ readable vtable finally yields the child classes needed to identify the rifle.
 Still receiving no `NADINE-ATTACHABLE-HIT` record would contradict the prior `et`
 reachability result and make timing/rebuild at this callsite the only remaining
 explanation. An exception or visual change rejects the diagnostic.
+
+### 2026-07-21 CORRECTION: `eu`/`ev` telemetry was compiled out; build `ew`
+
+After `ev` again produced no record, the user explicitly drew and holstered both
+pistol and rifle and moved the player; PIDs 2472/20636 remained responsive and
+logged no exception. Source audit then found the decisive instrumentation error:
+production sets `kEnableRuntimeDiagnosticLogging=false`, so `force_log_line()` is
+compile-time a no-op. `et`, `eu` and `ev` all used that function for their result
+lines. Their absent lines contain **no evidence** about callsite reachability,
+parent matching, RBX readability or child snapshots. This supersedes the
+downstream-guard interpretation in the earlier `eu` note. The visible `et` body-
+mesh result remains valid because mesh writes did not depend on logging.
+
+Build `2026-07-21ew` keeps global/high-volume runtime diagnostics disabled and
+routes only the already-bounded exact-parent census (maximum 32 semantic
+signatures) through the persistent writer. It makes no visibility, attachment,
+inventory or transform write. Prediction and falsifier remain those of `ev`, but
+an empty census is meaningful only now that the dedicated result writer is live.
