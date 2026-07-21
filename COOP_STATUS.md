@@ -4869,3 +4869,32 @@ routes only the already-bounded exact-parent census (maximum 32 semantic
 signatures) through the persistent writer. It makes no visibility, attachment,
 inventory or transform write. Prediction and falsifier remain those of `ev`, but
 an empty census is meaningful only now that the dedicated result writer is live.
+
+### 2026-07-21 CONFIRMED: exact Nadine child identities (`ew`)
+
+Build `ew` produced stable exact-parent records in responsive PID 19324 with no
+exception or visual regression. The surviving objects are now separated without
+guessing:
+
+- `ProcessWeapon::vftable 0x142A9BF48`, art `0x33E29A1B`, child mesh
+  `0x33E29A1B` = pistol;
+- the same `ProcessWeapon` class, art `0x8075397D`, child mesh `0x255BEBA0` =
+  the rifle which overlaps the pistol and remains in the hand;
+- the same class, art `0x0B8BD6D6`, child mesh `0x836D013E` = grenade;
+- `ProcessCharCloth::vftable 0x142BAF780`, child mesh `0x7368D4A2` = hair.
+
+All three weapon-family objects for the affected exact parent share handle/id
+`0x10E0201128/0x493` and resolved-parent id `0x493`; snapshots succeed and each
+owns one readable child mesh. IDA independently resolves vtable `0x142A9BF48`
+through constructor `0x14150F2E0` and destructor `0x141510990`, both explicitly
+installing `ProcessWeapon::vftable`. The grenade art is independently established
+by the confirmed grenade relay. Thus the persistent rifle is a real
+`ProcessWeapon`, not parent clothing geometry or `ProcessCharCloth`.
+
+Do not simply hide art `0x8075397D`: the same object must render when the rifle is
+selected. The next discriminator is exact pointer membership in
+PlayerWeaponController slots on the game thread. If the census pointer equals a
+slot object while pistol/current-state is active, the failure is the downstream
+`weapon-holster-point` bind. If it is absent from every slot, it is a look-created
+orphan and can be suppressed only outside a real rifle selection. This pointer
+comparison must precede any visibility or transform write.

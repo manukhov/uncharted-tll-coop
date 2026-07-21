@@ -1398,9 +1398,18 @@ Do not reopen these as the first move:
       no callsite conclusion is allowed.
 - [x] Build `ew` with only the maximum-32 exact-parent census routed through the
       persistent writer; keep global diagnostics and all visibility writes off.
-- [ ] Run `ew` with the legacy Nadine parent visible. Classify the first
+- [x] Run `ew` with the legacy Nadine parent visible. Classify the first
       `NADINE-ATTACHABLE-HIT` records by `attachReadable`, `snapshot`, vtable and
       child mesh ids before selecting any rifle visibility/attachment action.
+      CONFIRMED: `ProcessWeapon` rifle art `0x8075397D`, mesh `0x255BEBA0`;
+      pistol `0x33E29A1B`; grenade `0x0B8BD6D6`/mesh `0x836D013E`; hair is
+      `ProcessCharCloth`/mesh `0x7368D4A2`.
+- [ ] Capture the exact ProcessWeapon pointers at the async census, then compare
+      them with PlayerWeaponController `GetWeaponBySlot` results only on the game
+      thread. Log owner player index, exact slot membership, current slot,
+      draw-state, hand-attached slot and active weapon. Rifle-in-slot while the
+      pistol is current selects the holster-AP failure; no slot membership selects
+      a look-created orphan. No visibility or transform write in this probe.
 - [ ] After the baked rifle is isolated, resolve the player-owned rifle's failed
       `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
       Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a

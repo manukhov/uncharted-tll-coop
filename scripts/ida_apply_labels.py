@@ -7024,6 +7024,17 @@ FUNCTIONS = {
         "per-art weapon-holster-point record, then binds the resulting attachment "
         "descriptor through Player+0x1DF0 virtual +0xB8.",
     ),
+    0x14150F2E0: (
+        "ProcessWeapon_Ctor",
+        "Constructs ProcessWeapon and installs vtable 0x142A9BF48. Runtime census "
+        "identified pistol 0x33E29A1B, rifle 0x8075397D and grenade 0x0B8BD6D6 "
+        "children through this RTTI-backed class.",
+    ),
+    0x141510990: (
+        "ProcessWeapon_Dtor",
+        "Destroys ProcessWeapon-owned handles and child state, restores the "
+        "ProcessWeaponBase vtable, then delegates to the base destructor.",
+    ),
     0x1410F8660: (
         "StringId_FormatDashedPairAndHash",
         "Formats the supplied category/value pair as '-%s-%s' and returns its "
