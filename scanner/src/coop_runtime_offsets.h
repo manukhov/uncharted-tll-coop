@@ -99,6 +99,8 @@ constexpr std::uintptr_t kAnimManagerPublishWorldTransformCallsiteRva = 0x1A8FC0
 constexpr std::size_t kFgAnimDataSkeletonOffset = 0x18;
 constexpr std::size_t kSkeletonJointCountOffset = 0x34;
 // Animation command evaluator and the fixed-stride SkelTable retarget registry.
+// Its 0x28-byte AnimCmdContext is {target skeleton, FgAnimData+0x2C0 value,
+// &FgAnimData+0x1C0, optional scratch, flags}; the scratch pointer may be null.
 // ProcessAnimCmdListSegment case 6 selects direct clip evaluation when the
 // source/target underlying skeleton ids match, otherwise it resolves this table.
 constexpr std::uintptr_t kProcessAnimCmdListSegmentRva = 0x1AB97C0;

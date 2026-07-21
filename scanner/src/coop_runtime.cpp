@@ -14855,17 +14855,17 @@ AimCase6ContextProbe probe_aim_case6_context(const void* context) {
             static_cast<const std::byte*>(context);
         void* const target_skeleton =
             *reinterpret_cast<void* const*>(context_bytes);
-        void* const scratch =
-            *reinterpret_cast<void* const*>(context_bytes + 0x08);
-        const std::uintptr_t context_word_10 =
-            *reinterpret_cast<const std::uintptr_t*>(context_bytes + 0x10);
+        const std::uintptr_t context_word_08 =
+            *reinterpret_cast<const std::uintptr_t*>(context_bytes + 0x08);
         void* const render_world_matrix =
+            *reinterpret_cast<void* const*>(context_bytes + 0x10);
+        void* const scratch =
             *reinterpret_cast<void* const*>(context_bytes + 0x18);
         const std::uint32_t context_flags =
             *reinterpret_cast<const std::uint32_t*>(context_bytes + 0x20);
         const std::uintptr_t matrix_value =
             reinterpret_cast<std::uintptr_t>(render_world_matrix);
-        if (target_skeleton == nullptr || scratch == nullptr ||
+        if (target_skeleton == nullptr ||
             matrix_value < kFgAnimDataRenderWorldMatrixOffset) {
             return result;
         }
@@ -14880,7 +14880,7 @@ AimCase6ContextProbe probe_aim_case6_context(const void* context) {
         if (*reinterpret_cast<void* const*>(
                 fg_bytes + kFgAnimDataSkeletonOffset) != target_skeleton ||
             *reinterpret_cast<const std::uintptr_t*>(fg_bytes + 0x2C0) !=
-                context_word_10 ||
+                context_word_08 ||
             fg_bytes + kFgAnimDataRenderWorldMatrixOffset !=
                 render_world_matrix) {
             return result;
@@ -14941,12 +14941,12 @@ AimCase6ContextProbe probe_aim_case6_context(const void* context) {
         result.valid =
             target_skeleton ==
                 *reinterpret_cast<void* const*>(context_bytes) &&
-            scratch ==
-                *reinterpret_cast<void* const*>(context_bytes + 0x08) &&
-            context_word_10 ==
+            context_word_08 ==
                 *reinterpret_cast<const std::uintptr_t*>(
-                    context_bytes + 0x10) &&
+                    context_bytes + 0x08) &&
             render_world_matrix ==
+                *reinterpret_cast<void* const*>(context_bytes + 0x10) &&
+            scratch ==
                 *reinterpret_cast<void* const*>(context_bytes + 0x18) &&
             context_flags ==
                 *reinterpret_cast<const std::uint32_t*>(
@@ -14954,7 +14954,7 @@ AimCase6ContextProbe probe_aim_case6_context(const void* context) {
             target_skeleton ==
                 *reinterpret_cast<void* const*>(
                     fg_bytes + kFgAnimDataSkeletonOffset) &&
-            context_word_10 ==
+            context_word_08 ==
                 *reinterpret_cast<const std::uintptr_t*>(fg_bytes + 0x2C0) &&
             fg_anim_data ==
                 *reinterpret_cast<void* const*>(
@@ -28054,7 +28054,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21en "
+        "TLL co-op runtime init 2026-07-21eo "
         "(read-only dual-signature case-6 retarget discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

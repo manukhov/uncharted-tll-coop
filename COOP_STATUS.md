@@ -4322,10 +4322,11 @@ JointParams/ValidBits into the same processing-group output as direct evaluation
 The owning context is independently proven in both
 `AnimManager_PerformAnimBlend 0x141A92260` and
 `AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00`: context `+0` is the
-target ArtItemSkeleton from `FgAnimData+0x18`, `+0x10` is the value stored at
-`FgAnimData+0x2C0`, `+0x18` points back to `FgAnimData+0x1C0`, and `+0x20` holds
-flags. Processing-group index is argument 4; the optional five-argument callback
-is used only by the cross-skeleton branch and originates in job slots 3..5.
+target ArtItemSkeleton from `FgAnimData+0x18`, `+0x08` is the value stored at
+`FgAnimData+0x2C0`, `+0x10` points back to `FgAnimData+0x1C0`, `+0x18` is an
+optional scratch allocation, and `+0x20` holds flags. Processing-group index is
+argument 4; the optional five-argument callback is used only by the
+cross-skeleton branch and originates in job slots 3..5.
 
 The exact runtime hypothesis for build `em` is that the local player evaluates
 the selected command directly while the retained puppet uses retargeting, or
@@ -4407,3 +4408,54 @@ again. Return to static analysis and prove the exact same-instance dataflow from
 the selected `AnimSnapshotNodeAnimation` leaf through command generation into
 `ProcessAnimCmdListSegment`, including which FgAnimData/context owns that list and
 whether another dispatcher consumes this command class.
+
+### 2026-07-21 STATIC: same-instance command path exposes the `en` context bug
+
+The exact selected leaf and the real consumer are now connected without a copy
+or alternate dispatcher. `AnimStateSnapshot_GenerateAnimCommands 0x141AB6C40`
+resolves the root from `AnimStateInstance+0x130/+0x138`, invokes root virtual
+slot `+0x70`, and passes its caller-owned command-list record unchanged.
+`0x14189EA60` preserves that record across the active `AnimStateLayer` instance
+stack; exact source-asserted `AnimControl_CreateAnimCommands 0x14172C370` passes
+it through the type-2 control path; and exact source-asserted
+`AnimManager_CreateAnimCmdsForObject 0x141A8FCF0` fills the per-object record
+owned by `0x141A91490`. `AnimManager_PerformAnimBlend 0x141A92260` receives the
+same returned pointer/count record and calls `ProcessAnimCmdListSegment` at
+`0x141A92759`. The selected leaf's `0x60006` therefore cannot bypass this
+consumer or be transformed into a different list on this path.
+
+The empty `en` probe instead came from a one-qword error in our context
+reconstruction. Exact `PerformAnimBlend` instructions store
+`[FgAnimData+0x2C0]` at context `+0x08` (`0x141A926A6..0x141A926AD`), store
+`&FgAnimData+0x1C0` at context `+0x10` (`0x141A926B5..0x141A926BC`), and put the
+scratch allocation at `+0x18` (`0x141A9269E`). The independent first async path
+does the same at `0x141A92DC4..0x141A92DDA`, with scratch at `0x141A92DB9`; its
+second consumer reuses that context. Build `en` incorrectly subtracted `0x1C0`
+from context `+0x18`, so it reconstructed FgAnimData from scratch and rejected
+every valid call before parsing opcode 6. Scratch can also legitimately be null
+when no scalar scratch space is required.
+
+This satisfies five independent evidence types: the leaf virtual-slot payload;
+the upward source-asserted call graph; unchanged command-record pointer/count
+dataflow into the consumer; exact `PerformAnimBlend` context-construction
+instructions; and an independent async caller with the same layout. The primary
+hypothesis for read-only build `eo` is that correcting only this layout will
+admit complete same-signature `AIM-CASE6` records. Competitors are: (1) no record
+still reaches case 6, falsifying the context-layout explanation; (2) complete
+same-signature normalized records match, rejecting case-6 inputs and moving the
+frontier to the common pose/palette path; (3) a stable branch, retarget
+pair/group/coverage or callback-RVA split selects only that retarget route.
+
+The `eo` falsifier retains the exact two-signature selector and every command,
+asset, player/screen, ADS/vertical and double-read guard. If exact leaf telemetry
+again reaches at least 0.20 vertical weight but neither process emits
+`AIM-CASE6`, the corrected-context hypothesis is rejected. Complete normalized
+same-signature records decide between the later common output path and retarget
+route as above. A crash, torn/incomplete sample, game-data write or visible model
+change invalidates the test.
+
+The three exact source-asserted functions are labelled STATIC in the single real
+IDB. The headless apply reports 1127 functions and 19 data names with
+`save_database returned True`; after restarting MCP, independent lookups resolve
+all three names and their expected callers. Release build `2026-07-21eo` compiles
+successfully.

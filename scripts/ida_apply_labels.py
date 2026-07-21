@@ -234,6 +234,24 @@ FUNCTIONS = {
         "Animation-node virtual slot 14. Emits the 0x60006 animation command from "
         "the selected clip and dynamic phase at node+0x60.",
     ),
+    0x141AB6C40: (
+        "AnimStateSnapshot_GenerateAnimCommands",
+        "Exact AnimStateSnapshot::GenerateAnimCommands source assertion. Resolves "
+        "the root node from AnimStateInstance+0x130/+0x138 and invokes virtual "
+        "slot 14 with the caller-owned command-list record unchanged.",
+    ),
+    0x14172C370: (
+        "AnimControl_CreateAnimCommands",
+        "Exact AnimControl::CreateAnimCmds source assertion. Dispatches type-2 "
+        "animation controls through their active AnimStateLayer instances while "
+        "preserving the caller-owned command-list record.",
+    ),
+    0x141A8FCF0: (
+        "AnimManager_CreateAnimCmdsForObject",
+        "Exact CreateAnimCmdsForObject source assertion in anim-mgr-jobs.cpp. "
+        "Dispatches an object's animation control into the command-list record "
+        "later returned to AnimManager_PerformAnimBlend.",
+    ),
     0x14022C820: (
         "ScriptManager_EvalChecked",
         "Validates the requested script id against descriptor+0x18 before "

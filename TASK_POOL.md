@@ -1258,12 +1258,23 @@ Do not reopen these as the first move:
       exact signatures and `up=1.0` were independently observed, both processes
       stayed stable, but no `AIM-CASE6` record reached the falsifier. The earlier
       selector-miss explanation is rejected; direct/retarget remains untested.
-- [ ] Statically prove the same-instance path from the selected
+- [x] Statically prove the same-instance path from the selected
       `AnimSnapshotNodeAnimation` leaf through its `0x60006` command into the
       actual command-list consumer and owning FgAnimData/context. Resolve whether
       `ProcessAnimCmdListSegment` is bypassed for this leaf or the current context
       reconstruction selects a different owner before defining another runtime
-      probe. Do not widen the signature filter again.
+      probe. Do not widen the signature filter again. Result: the exact
+      source-asserted call chain preserves one command-list record into
+      `ProcessAnimCmdListSegment`; no bypass exists. `en` instead reconstructed
+      FgAnimData from scratch at context `+0x18`, while two independent callers
+      prove `&FgAnimData+0x1C0` is context `+0x10` and scratch is `+0x18`.
+- [ ] Run read-only build `eo` during strong up/down ADS on both copies. It fixes
+      only the statically proven context layout and keeps the exact two-signature
+      selector. No `AIM-CASE6` despite eligible leaf/vertical telemetry rejects
+      the layout explanation; complete same-signature normalized equality moves
+      to the common pose/palette path, while a stable branch/retarget/callback
+      split selects that exact route. Any crash, write, torn sample or visible
+      model change invalidates the test.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
