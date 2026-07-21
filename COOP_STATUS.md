@@ -4539,3 +4539,24 @@ retained path does not reach this direct consumer family in the current run.
 The next read-only probe must count these stages under hard bounds before another
 payload comparison. It must not remove ownership/vertical/signature checks from
 the actual `AIM-CASE6` records.
+
+### 2026-07-21 STATIC: `eq` distinguishes retained owner, timing and signature loss
+
+Read-only build `2026-07-21eq` adds no game-memory access beyond fields already
+validated by `eo`. It preserves the exact `ep` `AIM-CASE6` eligibility and adds
+only process-local atomic counters for: bounded consumer calls, validated
+context layout, Fg owner match to slot 0/slot 1/neither, ADS admission,
+active-state availability, vertical admission, structurally valid list, selected
+signature and emitted record. At most four `AIM-CASE6-STAGES` summaries are
+written per process after either screen first reaches the vertical threshold;
+no pointer is logged and the Release DLL builds successfully.
+
+The evidence quota is the exact context construction in two native caller
+families, the same-instance leaf-to-consumer command path, `eo`'s successful
+screen-0 records, and `ep`'s negative result after removing the only ADS-bit
+predicate. Falsifier: `owner1=0` with growing validated layouts selects a
+different retained Fg owner/consumer; `owner1>0` but `active1` or `vertical1=0`
+selects admission timing; `vertical1>0` but `signature1=0` selects command/clip
+selection; `signature1>0` without `emitted1` identifies an internal probe guard.
+Only a complete retained record may resume the original same-signature
+direct/retarget comparison. Counter magnitude alone is non-semantic.

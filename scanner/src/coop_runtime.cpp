@@ -14792,6 +14792,10 @@ constexpr std::size_t kAimCase6RetargetEntryStride = 0x40;
 constexpr std::size_t kAimCase6RetargetGroupStride = 0x20;
 
 struct AimCase6ContextProbe {
+    bool layout_valid = false;
+    bool owner_valid = false;
+    bool ads_valid = false;
+    bool active_state_valid = false;
     bool valid = false;
     bool vertical_valid = false;
     std::uint32_t screen = UINT32_MAX;
@@ -14804,6 +14808,93 @@ struct AimCase6ContextProbe {
     void* fg_anim_data = nullptr;
     void* target_skeleton = nullptr;
 };
+
+struct AimCase6StageCounters {
+    std::atomic<std::uint64_t> bounded_calls{0};
+    std::atomic<std::uint64_t> layout_valid{0};
+    std::atomic<std::uint64_t> owner_other{0};
+    std::atomic<std::uint64_t> owner_valid[2]{};
+    std::atomic<std::uint64_t> ads_valid[2]{};
+    std::atomic<std::uint64_t> active_state_valid[2]{};
+    std::atomic<std::uint64_t> vertical_valid[2]{};
+    std::atomic<std::uint64_t> structural_list_valid[2]{};
+    std::atomic<std::uint64_t> selected_signature[2]{};
+    std::atomic<std::uint64_t> emitted[2]{};
+    std::atomic<ULONGLONG> next_log_ms{0};
+    std::atomic<std::uint32_t> log_count{0};
+};
+
+AimCase6StageCounters g_aim_case6_stage_counters{};
+
+void log_aim_case6_stages_if_due() {
+    auto& counters = g_aim_case6_stage_counters;
+    if (counters.vertical_valid[0].load(std::memory_order_relaxed) == 0 &&
+        counters.vertical_valid[1].load(std::memory_order_relaxed) == 0) {
+        return;
+    }
+    if (counters.log_count.load(std::memory_order_acquire) >= 4) {
+        return;
+    }
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG due = counters.next_log_ms.load(std::memory_order_acquire);
+    if (now < due ||
+        !counters.next_log_ms.compare_exchange_strong(
+            due, now + 500, std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
+        return;
+    }
+    const std::uint32_t sample = counters.log_count.fetch_add(
+        1, std::memory_order_acq_rel);
+    if (sample >= 4) {
+        return;
+    }
+
+    char line[1024]{};
+    std::snprintf(
+        line, sizeof(line),
+        "AIM-CASE6-STAGES tick=%llu sample=%u bounded=%llu layout=%llu "
+        "owner=%llu/%llu/%llu ads=%llu/%llu active=%llu/%llu "
+        "vertical=%llu/%llu list=%llu/%llu signature=%llu/%llu "
+        "emitted=%llu/%llu",
+        static_cast<unsigned long long>(now), sample,
+        static_cast<unsigned long long>(
+            counters.bounded_calls.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.layout_valid.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.owner_valid[0].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.owner_valid[1].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.owner_other.load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.ads_valid[0].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.ads_valid[1].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.active_state_valid[0].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.active_state_valid[1].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.vertical_valid[0].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.vertical_valid[1].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.structural_list_valid[0].load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.structural_list_valid[1].load(
+                std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.selected_signature[0].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.selected_signature[1].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.emitted[0].load(std::memory_order_relaxed)),
+        static_cast<unsigned long long>(
+            counters.emitted[1].load(std::memory_order_relaxed)));
+    boot_log_line(line);
+}
 
 struct AimCase6CommandProbe {
     bool command_valid = false;
@@ -14885,6 +14976,10 @@ AimCase6ContextProbe probe_aim_case6_context(const void* context) {
                 render_world_matrix) {
             return result;
         }
+        result.layout_valid = true;
+        result.context_flags = context_flags;
+        result.fg_anim_data = fg_anim_data;
+        result.target_skeleton = target_skeleton;
 
         void* player = nullptr;
         std::uint32_t screen = UINT32_MAX;
@@ -14910,10 +15005,16 @@ AimCase6ContextProbe probe_aim_case6_context(const void* context) {
         // Player+0x1548 is a reliable local-view ADS/HUD bit, but prior runtime
         // proved it is not stable for the retained puppet. Screen 1 is still
         // bounded by exact FgAnimData ownership and live nonzero LRDU below.
-        if (player == nullptr ||
-            (screen != kSlot1ScreenIndex && !player_ads_active(player))) {
+        if (player == nullptr) {
             return result;
         }
+        result.owner_valid = true;
+        result.screen = screen;
+        result.player = player;
+        if (screen != kSlot1ScreenIndex && !player_ads_active(player)) {
+            return result;
+        }
+        result.ads_valid = true;
 
         void* const active_state = aim_publish_active_state_from_player(player);
         if (active_state == nullptr ||
@@ -14921,6 +15022,7 @@ AimCase6ContextProbe probe_aim_case6_context(const void* context) {
                 kAnimStateAimAddRightOffset + sizeof(float)) {
             return result;
         }
+        result.active_state_valid = true;
         const auto* const state_bytes =
             static_cast<const std::byte*>(active_state);
         const std::uint32_t up_word =
@@ -15196,10 +15298,35 @@ void probe_process_anim_case6(
         return;
     }
 
+    auto& stage_counters = g_aim_case6_stage_counters;
+    stage_counters.bounded_calls.fetch_add(1, std::memory_order_relaxed);
+
     const AimCase6ContextProbe context =
         probe_aim_case6_context(context_ptr);
+    if (context.layout_valid) {
+        stage_counters.layout_valid.fetch_add(1, std::memory_order_relaxed);
+        if (context.owner_valid && context.screen <= kSlot1ScreenIndex) {
+            stage_counters.owner_valid[context.screen].fetch_add(
+                1, std::memory_order_relaxed);
+            if (context.ads_valid) {
+                stage_counters.ads_valid[context.screen].fetch_add(
+                    1, std::memory_order_relaxed);
+            }
+            if (context.active_state_valid) {
+                stage_counters.active_state_valid[context.screen].fetch_add(
+                    1, std::memory_order_relaxed);
+            }
+            if (context.vertical_valid) {
+                stage_counters.vertical_valid[context.screen].fetch_add(
+                    1, std::memory_order_relaxed);
+            }
+        } else {
+            stage_counters.owner_other.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
     if (!context.valid || !context.vertical_valid ||
         context.screen > kSlot1ScreenIndex) {
+        log_aim_case6_stages_if_due();
         return;
     }
     static std::atomic<ULONGLONG> next_log_ms[2]{};
@@ -15222,8 +15349,11 @@ void probe_process_anim_case6(
         cursor += words;
     }
     if (cursor != command_word_count) {
+        log_aim_case6_stages_if_due();
         return;
     }
+    stage_counters.structural_list_valid[context.screen].fetch_add(
+        1, std::memory_order_relaxed);
 
     cursor = 0;
     while (cursor < command_word_count) {
@@ -15235,6 +15365,10 @@ void probe_process_anim_case6(
         if (opcode == 6 && words == 6) {
             const AimCase6CommandProbe command = probe_aim_case6_command(
                 commands + cursor, context, processing_group);
+            if (command.command_valid && command.clip_valid) {
+                stage_counters.selected_signature[context.screen].fetch_add(
+                    1, std::memory_order_relaxed);
+            }
             if (command.command_valid && command.clip_valid &&
                 command.target_valid && command.retarget_table_valid) {
                 ULONGLONG due = next_log_ms[context.screen].load(
@@ -15251,6 +15385,8 @@ void probe_process_anim_case6(
                 if (sample >= 4) {
                     return;
                 }
+                stage_counters.emitted[context.screen].fetch_add(
+                    1, std::memory_order_relaxed);
 
                 const std::uint32_t callback_rva_a5 =
                     normalize_tll_callback_rva(callback_a5);
@@ -15300,11 +15436,13 @@ void probe_process_anim_case6(
                     static_cast<unsigned long long>(command.coverage_word_0),
                     callback_rva_a5, callback_rva_a6, callback_rva_a7);
                 boot_log_line(line);
+                log_aim_case6_stages_if_due();
                 return;
             }
         }
         cursor += words;
     }
+    log_aim_case6_stages_if_due();
 }
 
 std::uint32_t __fastcall hooked_process_anim_cmd_list_segment(
@@ -28058,7 +28196,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21ep "
+        "TLL co-op runtime init 2026-07-21eq "
         "(read-only dual-signature case-6 retarget discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

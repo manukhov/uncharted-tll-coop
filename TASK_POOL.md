@@ -1292,7 +1292,7 @@ Do not reopen these as the first move:
       Result: eight complete screen-0 records, zero screen-1 records despite
       live bidirectional state-net. Removing the retained ADS-bit gate changed
       nothing, so that explanation is rejected; case-6 semantics remain untested.
-- [ ] Implement bounded read-only build `eq` with per-stage case-6 counters:
+- [x] Implement bounded read-only build `eq` with per-stage case-6 counters:
       structurally valid list, valid context layout, derived Fg match to retained
       slot 0/1/other, valid active-state vertical, and exact selected signature.
       Emit only a small normalized summary; do not log pointers, widen the two
@@ -1300,6 +1300,11 @@ Do not reopen these as the first move:
       Fg match selects owner/context tracing; a slot-1 match without vertical
       selects timing/admission; a vertical slot-1 match without signature selects
       command selection; a fully eligible call without output is a probe bug.
+      Result: process-local counters emit at most four summaries only after
+      vertical activity; the Release DLL builds successfully.
+- [ ] Run `eq` with strong vertical ADS on both copies and classify the first
+      zero slot-1 stage exactly as written above. Do not alter animation state or
+      define another payload probe until the missing stage is selected.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
