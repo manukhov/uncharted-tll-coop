@@ -1626,7 +1626,13 @@ Do not reopen these as the first move:
       builder for legacy Nadine, exact slot 1 and types 0/3; it preserves the
       per-art transforms. Require
       `type=0|3 slot1=1 attach=0x8A0249B5 redirect=1/1` plus a physical joint-5
-      selection before accepting the visual result.
+      selection before accepting the visual result. REJECTED: live values were
+      rifle type 0, pistol type 1 and grenade type 4, so the assumed enum mapping
+      was wrong and the strict gate wrote nothing. More importantly, the hook
+      saw pistol/rifle bindings only for local Chloe; retained legacy Nadine
+      reached it only for the grenade. Trace the puppet's actual
+      `SwitchToWeapon(..., false)` / inactive-reconcile path and classify the
+      handgun by its exact slot-1 pointer instead of art id or this enum.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

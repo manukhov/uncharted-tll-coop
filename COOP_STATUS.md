@@ -5919,3 +5919,31 @@ retain their original ids, and hands/body must remain unchanged. A non-handgun
 type for the tested pistol, `redirect=0`, a later different physical id, back
 placement, jitter/sliding or any rifle/grenade/body regression falsifies the
 corresponding part of this hypothesis.
+
+### 2026-07-21 REJECTED: build `fn` is not the live remote-Nadine pistol boundary
+
+The user retested several pistols and every one still used Chloe's back holster;
+there were no crashes or other regressions. The written type prediction failed
+before any write: live `WeaponArtDef+0x10` values were rifle `type=0`, standard
+pistol `type=1`, and grenade `type=4`. Therefore the direct interpretation of
+the argument consumed by `WeaponArtDef_SelectNpcHolsterAttachId 0x1405E76E0` as
+this cached WeaponArtDef/type field is REJECTED. The strict `type=0|3` gate did
+not redirect anything (`redirect=0/0`), so the failed build remained a safe
+no-write test.
+
+The owner/call coverage gives a stronger rejection. During the actual firearm
+draw/holster test, `NADINE-HOLSTER-BINDING` recorded the standard pistol and
+rifle only for the local Chloe look `0x3F334972`. The retained legacy-Nadine
+Player look `0xD27C074F` reached the hook only for the grenade; it produced no
+pistol binding row at all. Thus `WeaponHolster_BuildBinding 0x1414FE540` is a
+real Player attachment consumer, but it is not the live boundary used by the
+remote puppet's synchronized pistol transition in this scenario.
+
+Do not revise the enum and retry this hook. The next analysis must follow the
+already-observed remote path from `apply_peer_held_weapon_state` through
+`safe_weapon_controller_draw(controller, slot, false)` and the inactive-weapon
+reconciler. The exact inventory slot remains the strongest runtime classifier:
+the peer census independently established rifle slot 0, pistol slot 1 and
+grenade slot 2 even for picked-up art `0x9A07E17F`. Any replacement write must
+be gated by the exact retained-player slot-1 pointer, skip the active slot, and
+verify `weapon+0x688` after the physical attach call.
