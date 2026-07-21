@@ -12627,11 +12627,163 @@ void diagnose_nadine_weapon_membership_game_thread() {
     }
 }
 
+void diagnose_player_weapon_anim_control_game_thread() {
+    // Read-only census of the exact PlayerWeaponAnimControl created by Player
+    // initialization. Unlike the action-hook discriminator, admission depends
+    // only on stable identity/look/joint data; animated transform words are
+    // output-only and therefore cannot exhaust the bounded logger.
+    constexpr std::uintptr_t kPlayerWeaponAnimControlVtableRva = 0x2A46778;
+    struct CensusMemo {
+        std::uint64_t signature = 0;
+        std::uint8_t samples = 0;
+        ULONGLONG last_sample_ms = 0;
+        std::array<std::uint32_t, 16> first_transform_bits{};
+    };
+    static std::array<CensusMemo, 2> memos{};
+
+    for (int owner_index = 0; owner_index < 2; ++owner_index) {
+        void* const player = retained_player_object(owner_index);
+        if (player == nullptr ||
+            readable_bytes(static_cast<std::byte*>(player) + 0x1DF0) <
+                sizeof(void*)) {
+            continue;
+        }
+
+        std::uint32_t look = 0;
+        if (readable_bytes(static_cast<std::byte*>(player) + 0x170) >=
+            sizeof(look)) {
+            std::memcpy(&look, static_cast<std::byte*>(player) + 0x170,
+                        sizeof(look));
+        }
+        void* control = nullptr;
+        std::memcpy(&control, static_cast<std::byte*>(player) + 0x1DF0,
+                    sizeof(control));
+
+        std::uintptr_t control_vtable = 0;
+        void* skeleton_owner = nullptr;
+        void* control_owner = nullptr;
+        std::array<std::uint64_t, 2> stored_handle{};
+        std::array<std::int32_t, 4> holster_joint_indices{
+            -99, -99, -99, -99};
+        std::array<std::uint32_t, 16> holster_transform_bits{};
+        std::array<std::int32_t, 3> selectors{-99, -99, -99};
+        const bool control_readable =
+            control != nullptr && readable_bytes(control) >= 0xDC;
+        if (control_readable) {
+            const auto* const bytes = static_cast<const std::byte*>(control);
+            std::memcpy(&control_vtable, bytes, sizeof(control_vtable));
+            std::memcpy(&skeleton_owner, bytes + 0x8, sizeof(skeleton_owner));
+            std::memcpy(&control_owner, bytes + 0x10, sizeof(control_owner));
+            std::memcpy(stored_handle.data(), bytes + 0x30,
+                        sizeof(stored_handle));
+            std::memcpy(holster_joint_indices.data(), bytes + 0x78,
+                        sizeof(holster_joint_indices));
+            std::memcpy(holster_transform_bits.data(), bytes + 0x90,
+                        sizeof(holster_transform_bits));
+            std::memcpy(selectors.data(), bytes + 0xD0, sizeof(selectors));
+        }
+
+        std::uint64_t signature = 1469598103934665603ULL;
+        auto mix = [&signature](std::uint64_t value) {
+            signature ^= value;
+            signature *= 1099511628211ULL;
+        };
+        mix(reinterpret_cast<std::uintptr_t>(player));
+        mix(reinterpret_cast<std::uintptr_t>(control));
+        mix(look);
+        mix(control_vtable);
+        mix(reinterpret_cast<std::uintptr_t>(skeleton_owner));
+        mix(reinterpret_cast<std::uintptr_t>(control_owner));
+        for (const std::int32_t index : holster_joint_indices) {
+            mix(static_cast<std::uint32_t>(index));
+        }
+        if (signature == 0) {
+            signature = 1;
+        }
+
+        CensusMemo& memo = memos[owner_index];
+        if (memo.signature != signature) {
+            memo = {};
+            memo.signature = signature;
+        }
+        const ULONGLONG now = GetTickCount64();
+        if (memo.samples >= 2 ||
+            (memo.samples == 1 && now - memo.last_sample_ms < 750)) {
+            continue;
+        }
+
+        const bool transform_changed =
+            memo.samples != 0 &&
+            memo.first_transform_bits != holster_transform_bits;
+        if (memo.samples == 0) {
+            memo.first_transform_bits = holster_transform_bits;
+        }
+        const int sample_index = memo.samples;
+        ++memo.samples;
+        memo.last_sample_ms = now;
+
+        const bool leg_block_zero = std::all_of(
+            holster_transform_bits.begin(), holster_transform_bits.begin() + 8,
+            [](std::uint32_t bits) { return bits == 0; });
+        const bool pelvis_block_zero = std::all_of(
+            holster_transform_bits.begin() + 8,
+            holster_transform_bits.end(),
+            [](std::uint32_t bits) { return bits == 0; });
+        bool transforms_finite = true;
+        for (const std::uint32_t bits : holster_transform_bits) {
+            float value = 0.0F;
+            std::memcpy(&value, &bits, sizeof(value));
+            transforms_finite = transforms_finite && std::isfinite(value);
+        }
+        const std::uintptr_t vtable_rva =
+            control_vtable >= g_module ? control_vtable - g_module : 0;
+
+        std::ostringstream line;
+        line << "PLAYER-WEAPON-ANIM-CENSUS owner=" << owner_index
+             << " player=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(player)
+             << " look=0x" << look
+             << " control=0x" << reinterpret_cast<std::uintptr_t>(control)
+             << " readable=" << std::dec << (control_readable ? 1 : 0)
+             << " vtableRva=0x" << std::hex << vtable_rva
+             << " expected=" << std::dec
+             << (control_vtable ==
+                     g_module + kPlayerWeaponAnimControlVtableRva
+                 ? 1 : 0)
+             << " skeleton=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(skeleton_owner)
+             << " controlOwner=0x"
+             << reinterpret_cast<std::uintptr_t>(control_owner)
+             << " storedHandle=0x" << stored_handle[0] << "/0x"
+             << stored_handle[1] << std::dec
+             << " joints=" << holster_joint_indices[0] << ","
+             << holster_joint_indices[1] << ","
+             << holster_joint_indices[2] << ","
+             << holster_joint_indices[3]
+             << " selectors=" << selectors[0] << "," << selectors[1]
+             << "," << selectors[2]
+             << " sample=" << sample_index
+             << " blockZero=" << (leg_block_zero ? 1 : 0) << "/"
+             << (pelvis_block_zero ? 1 : 0)
+             << " finite=" << (transforms_finite ? 1 : 0)
+             << " changed=" << (transform_changed ? 1 : 0)
+             << " transformBits=" << std::hex;
+        for (std::size_t i = 0; i < holster_transform_bits.size(); ++i) {
+            if (i == 8) {
+                line << "/";
+            }
+            line << holster_transform_bits[i] << ",";
+        }
+        write_log_line(line.str().c_str());
+    }
+}
+
 void apply_peer_held_weapon_state() {
     coop::StatePacket peer{};
     void* puppet = nullptr;
     if (!latest_peer_state(peer, puppet)) return;
     diagnose_nadine_weapon_membership_game_thread();
+    diagnose_player_weapon_anim_control_game_thread();
     // Slot MIRROR up front, unconditionally (2026-07-07): this was gated behind
     // g_puppet_pregive_holstered (parked OFF since the 07-06 flicker regression),
     // which silently disabled the whole reconciliation - puppet spawned with no
@@ -26522,9 +26674,6 @@ void log_holster_bind_probe(
     for (const std::int32_t index : holster_joint_indices) {
         mix(static_cast<std::uint32_t>(index));
     }
-    for (const std::uint32_t bits : holster_transform_bits) {
-        mix(bits);
-    }
     mix(static_cast<std::uint32_t>(current_slot));
     mix(draw_state);
     mix(static_cast<std::uint32_t>(hand_slot));
@@ -29428,8 +29577,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21ez "
-        "(read-only PlayerWeaponAnimControl holster-joint discriminator)");
+        "TLL co-op runtime init 2026-07-21fa "
+        "(bounded game-thread PlayerWeaponAnimControl census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

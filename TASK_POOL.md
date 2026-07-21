@@ -1442,7 +1442,7 @@ Do not reopen these as the first move:
       Chloe consistently had joints `101,5,199,3` and two live transform blocks,
       but dynamic transform words were incorrectly part of the 64-entry dedupe
       signature. The table filled before a legacy-Nadine sample; select no J1/J2/J3.
-- [ ] Run the corrected game-thread census of `Player+0x1DF0` for both retained
+- [ ] Run build `fa` with the corrected game-thread census of `Player+0x1DF0` for both retained
       Players. Deduplicate on stable player/look/joint identity only and keep the
       transform blocks output-only. A Nadine `-1` selects J1; valid joints with a
       default/stale block select J2; valid live blocks move to the named event.

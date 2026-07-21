@@ -5055,3 +5055,23 @@ The corrected discriminator will read `Player+0x1DF0` from the established
 game-thread peer-state tick and deduplicate only stable identity/look/joint
 fields. The dynamic transform words remain output-only. This guarantees a
 bounded census of both retained Players independent of weapon-action frequency.
+
+### 2026-07-21 STATIC: bounded game-thread control census (`fa`)
+
+Build `fa` adds no game write or engine call. On the already established
+game-thread peer-state tick it takes two snapshots, 750 ms apart, for each
+retained Player/control/look/joint identity. It validates the RTTI vtable RVA,
+records control skeleton/Player owners, stored weapon handle, four joint indices,
+selectors `+0xD0/+0xD4/+0xD8`, and both transform blocks. Only stable identity,
+owners and indices participate in admission; handle, selectors and transform
+words are output-only. The old action-hook logger is also corrected so animated
+transform words no longer consume its semantic-dedupe table.
+
+Written prediction/falsifier: both owners must emit exactly two
+`PLAYER-WEAPON-ANIM-CENSUS` records with `readable=1`, `expected=1` and
+`controlOwner==player`. A legacy-Nadine negative joint selects J1. Four valid
+joints but a zero/non-finite or unchanged default transform block selects J2.
+Four valid joints with finite, nonzero and changing blocks reject J1/J2 and move
+the failure boundary to `PlayerWeaponAnimControl_HandleNamedWeaponEvent
+0x14108DE30`. A missing owner, wrong vtable, exception, crash or unrelated model
+regression invalidates this probe.
