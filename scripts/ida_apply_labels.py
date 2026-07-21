@@ -7000,16 +7000,22 @@ FUNCTIONS = {
         "animation. This may solve visible weapons together with animation.",
     ),
     0x141BB7960: (
-        "Player_PublishWeaponInventoryEntry",
-        "Player virtual +0xD0 weapon-entry sink. Resolves the weapon controller "
-        "through virtual slot 24 and forwards the structured entry to "
-        "WeaponController_ApplyInventoryEntry; defers while unavailable.",
+        "Process_PublishStructuredEntry",
+        "Common Process virtual +0xD0 event sink present in hundreds of RTTI "
+        "vtables. Resolves the concrete process event controller through virtual "
+        "slot 24 and forwards the structured entry; defers while unavailable.",
     ),
     0x141E72540: (
-        "WeaponController_ApplyInventoryEntry",
-        "Applies one structured weapon inventory entry through immediate, "
-        "replacement or deferred controller paths. The entry is more than a "
-        "bare held-weapon id.",
+        "ProcessEventController_DispatchStructuredEntry",
+        "Dispatches a structured Process event through immediate script, "
+        "replacement or deferred controller paths. PlayerWeaponAnimControl uses "
+        "this generic path for authored named weapon events.",
+    ),
+    0x1401D4EE0: (
+        "Process_GetEventController",
+        "Common Process virtual slot 24 implementation. Returns the event/script "
+        "controller stored at Process+0x218; Process_PublishStructuredEntry calls "
+        "this slot before dispatching a structured event.",
     ),
     0x1410EDFB0: (
         "Player_KickPlayerDepenetrateWeapons",
@@ -7049,6 +7055,49 @@ FUNCTIONS = {
         "PlayerWeaponAnimControl_UpdateHolsterJointTransforms",
         "PlayerWeaponAnimControl vtable +0x138. Builds the two relative holster "
         "transforms at +0x90/+0xB0 only when each stored joint-index pair is valid.",
+    ),
+    0x14108ECE0: (
+        "PlayerWeaponAnimControl_UpdateHolsterIk",
+        "PlayerWeaponAnimControl vtable +0x140. Selects the leg or pelvis parent "
+        "index at +0x7C/+0x84, composes it with the cached parent-relative "
+        "transform at +0x90/+0xB0, and feeds WeaponHolsterIkBlender.",
+    ),
+    0x1414FE7E0: (
+        "WeaponHolster_SelectCharacterAttachPoint",
+        "Selects gun_holster_pelvis, gun_holster_leg or generic gun_holster by "
+        "scanning the target character's authored attachment-point records at "
+        "+0x1E0.",
+    ),
+    0x1414FEB30: (
+        "WeaponHolster_ResolveAttachPoint",
+        "Uses the weapon-art holster joint when it is non-generic; otherwise "
+        "delegates to WeaponHolster_SelectCharacterAttachPoint for the target "
+        "character.",
+    ),
+    0x1414FE540: (
+        "WeaponHolster_BuildBinding",
+        "Builds the selected gun_holster* StringId plus the authored per-weapon "
+        "holster transforms and scalar into the binding output consumed by "
+        "PlayerWeaponHolsterAction_ResolveAndBindAttachPoint.",
+    ),
+    0x1403421B0: (
+        "Script_ReattachPlayerWeapon",
+        "Native reattach-player-weapon script command. Validates a "
+        "ProcessWeaponBase selector, builds the holster binding, resolves the "
+        "owner attachment point and reaches WeaponAttachment_AttachToOwnerPoint.",
+    ),
+    0x140342EE0: (
+        "Script_AttachPlayerWeaponBackToHolster",
+        "Native attach-player-weapon-back-to-holster script command. Builds the "
+        "holster binding and physically attaches the weapon before publishing "
+        "the set-attached structured event.",
+    ),
+    0x141ED0370: (
+        "WeaponAttachment_AttachToOwnerPoint",
+        "Concrete attachment mutation used by the two player-weapon script "
+        "commands. Replaces weapon+0x4E0 parent handle, selects the owner's "
+        "+0x1E0 attachment record by StringId, updates weapon+0x688/+0x691 and "
+        "runs the attachment refresh virtuals.",
     ),
     0x14150F2E0: (
         "ProcessWeapon_Ctor",

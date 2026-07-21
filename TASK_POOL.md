@@ -1447,10 +1447,28 @@ Do not reopen these as the first move:
       `101,5,199,3` and two changing transforms; legacy Nadine has
       `-1,5,-1,3` and two unchanged identity transforms. Vtable and control
       ownership match, ruling out a stale/wrong PlayerWeaponAnimControl.
-- [ ] Trace every consumer of control `+0x78..+0x84` and `+0x90..+0xCF` before
-      writing a fallback. Prove whether substituting the resolved parent index
-      (`r_upper_leg`/`pelvis`) for each missing authored child safely produces
-      the identity relative transform expected by the downstream attach path.
+- [x] Trace every consumer of control `+0x78..+0x84` and `+0x90..+0xCF` before
+      writing a fallback. REJECT the proposed child-index-to-parent substitution:
+      `0x14108EBF0` would only regenerate identity, while
+      `PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0` already composes that
+      identity with the same parent indices at `+0x7C/+0x84`. It cannot change
+      the current target or visible attachment.
+- [x] Resolve the named-event path after PlayerWeaponAnimControl. Vtable `+0xE8`
+      publishes the authored event through the ProcessWeapon common Process
+      `+0xD0` sink `0x141BB7960`; ProcessWeapon slot 24 returns the generic event
+      controller at `+0x218`, which dispatches at `0x141E72540`. Correct the old
+      weapon-inventory-specific labels in the IDB.
+- [x] Resolve the concrete attachment mutation independently of authored
+      state-script data. `Script_ReattachPlayerWeapon 0x1403421B0` and
+      `Script_AttachPlayerWeaponBackToHolster 0x140342EE0` both build the binding
+      and call `WeaponAttachment_AttachToOwnerPoint 0x141ED0370`, which replaces
+      the parent handle and selects the owner `+0x1E0` attach record.
+- [ ] Run the next read-only discriminator: compare Chloe and legacy Nadine for
+      (a) emission of named event `0x9E2D6552`
+      (`reparent-weapon-to-holster`) and (b) `WeaponHolster_BuildBinding
+      0x1414FE540` output: selected `gun_holster*` id, authored transforms and
+      scalar; also record whether final `0x141ED0370` is reached and succeeds.
+      Cycle pistol/rifle draw and holster on both copies.
 - [ ] After the failed bind boundary is proven, resolve the player-owned rifle's
       `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
       Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a

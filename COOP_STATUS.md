@@ -5094,3 +5094,63 @@ primary boundary, though downstream authored-event behavior still matters after
 providing a compatible fallback. The next step is to trace all consumers of the
 two index/relative-transform pairs and prove whether mapping each missing child
 to its resolved parent is a safe identity fallback.
+
+### 2026-07-21 STATIC/REJECTED: identity joint fallback cannot move the weapon
+
+A complete displacement audit of PlayerWeaponAnimControl found only three roles
+for `+0x78..+0xCF`: `0x14108E700` initializes the joint indices and identity
+transforms, `0x14108EBF0` conditionally derives each child transform relative to
+its parent, and `PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0` consumes
+the parent index (`+0x7C` or `+0x84`) plus that parent-relative transform
+(`+0x90` or `+0xB0`). The transform helpers independently establish the math:
+`0x1401990F0` derives `inverse(parent) * child`, while `0x1401998F0` composes
+`parent * relative`.
+
+Therefore substituting `r_upper_leg`/`pelvis` as each missing child would merely
+make `0x14108EBF0` write identity again. `0x14108ECE0` already composes the same
+parent with the current identity cache, so the proposed fallback has no
+behavioral delta. REJECT it without a runtime launch. The absent marker joints
+remain CONFIRMED, but they explain the missing authored IK offset rather than by
+themselves proving the final visible prop-reparent failure.
+
+The final named-event graph is now concrete. `PlayerWeaponAnimControl` vtable
+`+0xE8` (`0x14108DE30`) extracts the authored `name` StringId and publishes a
+structured entry through the resolved ProcessWeapon virtual `+0xD0`. That target,
+`0x141BB7960`, is shared by hundreds of Process vtables, not Player-specific;
+ProcessWeapon RTTI vtable `0x142A9BF48` slot 24 is `0x1401D4EE0`, which returns
+the event controller at `Process+0x218`. Generic dispatcher `0x141E72540` then
+executes or defers the matching script event. The old
+`Player_PublishWeaponInventoryEntry` / `WeaponController_ApplyInventoryEntry`
+labels were consequently rejected and replaced by generic Process-event names.
+
+The authored mapping between `0x9E2D6552` and a native command lives in
+state-script data, so `0x14197FA30` must not be called the attach handler: its
+switch only formats the debug/event-log string. The physical mutation was found
+independently through two registered script natives:
+`Script_ReattachPlayerWeapon 0x1403421B0` and
+`Script_AttachPlayerWeaponBackToHolster 0x140342EE0`. Both validate a
+`ProcessWeaponBase`, call `WeaponHolster_BuildBinding`, resolve the selected id
+in the owner attachment table at `+0x1E0`, and reach
+`WeaponAttachment_AttachToOwnerPoint 0x141ED0370`. That function replaces the
+weapon parent handle at `+0x4E0`, updates the attachment descriptor at `+0x6A0`,
+selects/writes the owner attachment index at `+0x688/+0x691`, and runs the
+attachment refresh virtuals. The script natives publish `set-attached` only
+after this path.
+
+Competing boundaries for the visible rifle are now: (E1) legacy Nadine never
+emits `0x9E2D6552` (`reparent-weapon-to-holster`); (E2) both emit it, but
+`WeaponHolster_BuildBinding 0x1414FE540` selects a different or generic
+`gun_holster*` record for Nadine; (E3) event and binding match, so failure lies
+after the common Process dispatcher in the attachment consumer. Evidence quota
+for a read-only discriminator is satisfied by the RTTI/vtable chain, the named
+event and binding pseudocode/dataflow, and the independent embedded event-name
+string/logger mapping.
+
+Written prediction: after cycling pistol and rifle on both copies, E1 produces
+the reparent event for Chloe but not legacy Nadine; E2 produces the event for
+both but different selected binding ids or default/changed transform payloads;
+equivalent event and binding records reject E1/E2 and select E3; direct reach
+and return status at `0x141ED0370` then separates a skipped state-script command
+from an attach-point lookup/mutation failure. Any write, crash, missing
+hook-install marker, invalid ProcessWeapon vtable/owner, or model regression
+invalidates the test.
