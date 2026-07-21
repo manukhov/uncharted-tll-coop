@@ -5772,3 +5772,17 @@ wrong relative to the Player selects S1; a correct thigh world output on the
 known pistol ProcessWeapon while the visual remains on the back selects S3. A
 crash, changed weapon state or missing markers after both exact owners and their
 holstered pistols exist falsifies the probe itself.
+
+Build `fl` implements that discriminator at the narrower direct callsite
+`0x141515A30` rather than detouring the shared base function globally. The relay
+preserves the stock `NdAttachableObject_PostJointUpdate_Async` call and accepts
+only RTTI-exact ProcessWeapon objects. It further gates native samples to exact
+NadineBuddy art `0xC7CB8F0E`, and Player samples to standard pistol art
+`0x33E29A1B` whose retained owner has look `0xD27C074F`. For each semantic
+`{role, owner, weapon, art, attach index/id}` state it records at most three
+samples, 750 ms apart. Each record contains the selected 48-byte AttachSystem
+record, pre/post hashes/change masks, `+0x100..+0x14F`,
+`+0x240..+0x29F`, owner local/world fields and DrawControl pointer. This keeps
+the hot async boundary bounded while retaining enough raw bits to normalize the
+two actors offline. The release DLL built successfully; gameplay verification
+is still pending.

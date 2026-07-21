@@ -1591,12 +1591,20 @@ Do not reopen these as the first move:
       `NdAttachableObject_ResolveSelectedAttachmentTransform 0x141ED1780` and
       its generic local/depenetration stage `0x141ED0A70`. No separate prop or
       owner-class branch was found.
-- [ ] Build the written S1/S2/S3 discriminator from `COOP_STATUS.md`: retain the
+- [x] Build the written S1/S2/S3 discriminator from `COOP_STATUS.md`: retain the
       proven `fk` pistolHolster selection and pass-through-capture both native
       and Player pistol around the ProcessWeapon direct base call into
       `NdAttachableObject_PostJointUpdate_Async 0x141ED28E0`. Compare selected
       record ownership, link/local fields and final `+0x240/+0x250/+0x280` to
       distinguish wrong joint pose, stale weapon link, and a separate drawable.
+      Build `fl` patches only direct callsite `0x141515A30`, gates exact native
+      and Player pistol owners, and logs at most three spaced samples per
+      semantic attachment state. Release build passed.
+- [ ] Run `fl`: verify both processes boot with the final-transform probe
+      installed, provoke native Nadine's drawn/holstered pistol state if
+      available, and draw then holster the standard pistol on legacy Player
+      Nadine. Compare `NADINE-FINAL-XFORM role=0` against Player role 1/2; do not
+      infer from raw world positions without the logged owner transform.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

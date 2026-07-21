@@ -513,6 +513,12 @@ constexpr std::uintptr_t kResolveKnowledgeRegistryEntryByIdRva = 0x1765030;
 constexpr std::uintptr_t kPlayerWeaponAnimNamedEventRva = 0x108DE30;
 constexpr std::uintptr_t kWeaponHolsterBuildBindingRva = 0x14FE540;
 constexpr std::uintptr_t kWeaponAttachmentAttachToOwnerPointRva = 0x1ED0370;
+// ProcessWeapon vtable +0x410 (0x141515860) directly calls the shared
+// NdAttachableObject base update here. Relaying this one E8 observes only the
+// ProcessWeapon final-transform boundary and leaves the global base function
+// untouched.
+constexpr std::uintptr_t kProcessWeaponPostJointBaseCallsiteRva = 0x1515A30;
+constexpr std::uintptr_t kNdAttachableObjectPostJointUpdateRva = 0x1ED28E0;
 // Read-only active-grip discriminator. GunMoveController vtable +0xB8 reaches
 // 0x140E909C0, which calls ArmBlockProbes::Kick(Player*, bool). The probe logs
 // its completed output beside the active rightHand attach record so authored
