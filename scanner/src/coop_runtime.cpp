@@ -27363,46 +27363,6 @@ struct WeaponArtHolsterListProbe {
     std::array<std::uint32_t, 32> holster_ids{};
 };
 
-bool seh_read_weapon_art_type(std::uint32_t art, int* type_out) {
-    if (type_out == nullptr) {
-        return false;
-    }
-    *type_out = -1;
-    __try {
-        using GetRegistryFunction = void*(__fastcall*)();
-        using LookupRecordFunction = void*(__fastcall*)(void*, std::uint32_t);
-        void* const registry = reinterpret_cast<GetRegistryFunction>(
-            g_module + kGetCachedWeaponArtDefsHashRegistryRva)();
-        if (registry == nullptr) {
-            return false;
-        }
-        auto* const record = static_cast<const std::byte*>(
-            reinterpret_cast<LookupRecordFunction>(
-                g_module + kLookupRegistryRecordPointerByIdRva)(registry, art));
-        if (record == nullptr || readable_bytes(record) < 0x14) {
-            return false;
-        }
-        *type_out = *reinterpret_cast<const int*>(record + 0x10);
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        *type_out = -1;
-        return false;
-    }
-}
-
-bool seh_write_holster_binding_attach_id(
-    void* output, std::uint32_t attach_id) {
-    __try {
-        if (output == nullptr || readable_bytes(output) < sizeof(attach_id)) {
-            return false;
-        }
-        *static_cast<std::uint32_t*>(output) = attach_id;
-        return *static_cast<const std::uint32_t*>(output) == attach_id;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
 bool seh_read_weapon_art_holster_list(
     std::uint32_t art, WeaponArtHolsterListProbe* probe) {
     if (probe == nullptr) {
@@ -27942,6 +27902,20 @@ bool seh_read_weapon_attachment_state(
     }
 }
 
+bool seh_weapon_parent_resolves_to_owner(void* weapon, void* owner) {
+    __try {
+        if (weapon == nullptr || owner == nullptr) {
+            return false;
+        }
+        auto* const parent_handle = *reinterpret_cast<const std::byte* const*>(
+            static_cast<const std::byte*>(weapon) + 0x4E0);
+        return parent_handle != nullptr &&
+            *reinterpret_cast<void* const*>(parent_handle + 0x8) == owner;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 bool seh_read_owner_attach_record_id(
     void* owner, std::uint8_t attach_index, std::uint32_t* attach_id_out,
     std::uintptr_t* records_generation_out) {
@@ -28000,7 +27974,8 @@ bool seh_attach_weapon_to_owner_point(
 
 bool claim_nadine_inactive_attach_attempt(
     void* weapon, std::uintptr_t records_generation,
-    std::uint32_t expected_attach_id) {
+    std::uint32_t expected_attach_id,
+    std::uint64_t holster_generation) {
     std::uint64_t signature = 1469598103934665603ULL;
     auto mix = [&signature](std::uint64_t value) {
         signature ^= value;
@@ -28009,10 +27984,12 @@ bool claim_nadine_inactive_attach_attempt(
     mix(reinterpret_cast<std::uintptr_t>(weapon));
     mix(records_generation);
     mix(expected_attach_id);
+    mix(holster_generation);
     if (signature == 0) {
         signature = 1;
     }
     static std::array<std::uint64_t, 64> attempts{};
+    static std::size_t replacement_cursor = 0;
     for (std::uint64_t& attempt : attempts) {
         if (attempt == signature) {
             return false;
@@ -28022,7 +27999,9 @@ bool claim_nadine_inactive_attach_attempt(
             return true;
         }
     }
-    return false;
+    attempts[replacement_cursor % attempts.size()] = signature;
+    ++replacement_cursor;
+    return true;
 }
 
 void reconcile_legacy_nadine_inactive_weapons_game_thread(
@@ -28036,6 +28015,8 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
         std::uint32_t draw_state = 0xFFFFFFFFu;
         int gun_state = -99;
         ULONGLONG since_ms = 0;
+        std::uint64_t slot_one_holster_generation = 1;
+        bool slot_one_was_active = false;
     };
     static std::array<DwellMemo, 2> dwell_memos{};
 
@@ -28058,13 +28039,24 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
         }
         const int gun_state = read_gun_state(player);
         DwellMemo& memo = dwell_memos[owner_index];
-        if (memo.player != player || memo.current_slot != current_slot ||
-            memo.draw_state != draw_state || memo.gun_state != gun_state) {
+        if (memo.player != player) {
+            memo = {};
             memo.player = player;
             memo.current_slot = current_slot;
             memo.draw_state = draw_state;
             memo.gun_state = gun_state;
             memo.since_ms = now;
+            memo.slot_one_holster_generation = 1;
+        } else if (memo.current_slot != current_slot ||
+                   memo.draw_state != draw_state ||
+                   memo.gun_state != gun_state) {
+            memo.current_slot = current_slot;
+            memo.draw_state = draw_state;
+            memo.gun_state = gun_state;
+            memo.since_ms = now;
+        }
+        if (current_slot == 1 && draw_state != 0 && draw_state != 5) {
+            memo.slot_one_was_active = true;
         }
 
         int active_slot = -1;
@@ -28089,6 +28081,18 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
         if (!state_admitted || now - memo.since_ms < required_dwell_ms) {
             continue;
         }
+        if (memo.slot_one_was_active && active_slot != 1) {
+            ++memo.slot_one_holster_generation;
+            memo.slot_one_was_active = false;
+        }
+
+        // A peer packet can request slot 1 while its puppet controller is still
+        // briefly at draw=0. Do not race that upcoming hand attach. Slot 1 is
+        // genuinely inactive when the peer is holstered or another slot is out.
+        if (player == peer_puppet && active_slot < 0 &&
+            (peer.flags & 0x80) != 0) {
+            continue;
+        }
 
         int right_hand_index = -1;
         if (!seh_find_owner_attach_point(
@@ -28104,7 +28108,8 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
             void* const weapon = get_weapon_from_slot(player, slot);
             const std::uint32_t art = weapon_art_id_from_object(weapon);
             std::uint32_t expected_attach_id = 0;
-            if (art == kCoopPistolArtId) {
+            const bool exact_slot_one_handgun = slot == 1 && weapon != nullptr;
+            if (exact_slot_one_handgun) {
                 expected_attach_id = kPistolHolsterAttachId;
             } else if (art == kCoopRifleArtId) {
                 expected_attach_id = kGunHolsterAttachId;
@@ -28125,6 +28130,11 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
                     weapon, &pre_parent_id, &pre_index)) {
                 continue;
             }
+            const bool pre_parent_is_owner =
+                seh_weapon_parent_resolves_to_owner(weapon, player);
+            if (!pre_parent_is_owner) {
+                continue;
+            }
             std::uint32_t pre_attach_id = 0;
             std::uintptr_t records_generation = 0;
             if (!seh_read_owner_attach_record_id(
@@ -28135,12 +28145,15 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
             const bool stale_hand_attachment =
                 pre_index == static_cast<std::uint8_t>(right_hand_index) &&
                 pre_attach_id == 0x61A48E01u;
-            const bool wrong_pistol_back_attachment =
-                art == kCoopPistolArtId &&
-                pre_attach_id == kTargSpinePropAttachId;
-            if ((!stale_hand_attachment && !wrong_pistol_back_attachment) ||
+            const bool wrong_slot_one_attachment =
+                exact_slot_one_handgun &&
+                pre_attach_id != kPistolHolsterAttachId;
+            if ((!stale_hand_attachment && !wrong_slot_one_attachment) ||
                 !claim_nadine_inactive_attach_attempt(
-                    weapon, records_generation, expected_attach_id)) {
+                    weapon, records_generation, expected_attach_id,
+                    exact_slot_one_handgun
+                        ? memo.slot_one_holster_generation
+                        : 0)) {
                 continue;
             }
 
@@ -28151,13 +28164,15 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
             std::uint8_t post_index = 0xFF;
             const bool post_readable = seh_read_weapon_attachment_state(
                 weapon, &post_parent_id, &post_index);
+            const bool post_parent_is_owner =
+                seh_weapon_parent_resolves_to_owner(weapon, player);
             std::uint32_t post_attach_id = 0;
             std::uintptr_t post_generation = 0;
             const bool post_id_readable = post_readable &&
                 seh_read_owner_attach_record_id(
                     player, post_index, &post_attach_id, &post_generation);
             const bool verified = call_completed && attach_result == 1 &&
-                post_id_readable &&
+                post_id_readable && post_parent_is_owner &&
                 post_index == static_cast<std::uint8_t>(expected_index) &&
                 post_attach_id == expected_attach_id;
 
@@ -28171,6 +28186,10 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
                  << " slot=" << slot << " active=" << active_slot
                  << " draw=" << draw_state << " gun=" << gun_state
                  << " dwell=" << (now - memo.since_ms)
+                 << " generation="
+                 << (exact_slot_one_handgun
+                         ? memo.slot_one_holster_generation
+                         : 0)
                  << " index=" << static_cast<unsigned>(pre_index) << "->"
                  << static_cast<unsigned>(post_index)
                  << " id=0x" << std::hex << pre_attach_id << "->0x"
@@ -28179,6 +28198,8 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
                  << post_parent_id
                  << " result=0x" << attach_result << std::dec
                  << " call=" << (call_completed ? 1 : 0)
+                 << " parentOwner=" << (pre_parent_is_owner ? 1 : 0) << "->"
+                 << (post_parent_is_owner ? 1 : 0)
                  << " verified=" << (verified ? 1 : 0);
             write_log_line(line.str().c_str());
         }
@@ -28245,11 +28266,8 @@ void* __fastcall hooked_weapon_holster_build_binding(
     }
     std::uint32_t source_attach_id = 0;
     std::array<std::uint32_t, 17> payload_bits{};
-    const bool source_readable = seh_read_holster_binding_output(
+    seh_read_holster_binding_output(
         output, &source_attach_id, payload_bits.data());
-    int art_type = -1;
-    const bool art_type_valid =
-        seh_read_weapon_art_type(art, &art_type);
     std::uint32_t look = 0;
     const bool look_valid = seh_read_player_look(player, &look);
     int pistol_holster_index = -1;
@@ -28259,19 +28277,12 @@ void* __fastcall hooked_weapon_holster_build_binding(
         seh_find_owner_attach_point(
             player, kPistolHolsterAttachId, &pistol_holster_index) &&
         pistol_holster_index >= 0 && pistol_holster_index <= 0xFE;
-    const bool handgun = art_type_valid && (art_type == 0 || art_type == 3);
     const bool slot_one_weapon = get_weapon_from_slot(player, 1) == weapon;
-    const bool should_redirect = source_readable && handgun && slot_one_weapon &&
-        pistol_holster_present && output != nullptr;
-    const bool redirected = should_redirect &&
-        (source_attach_id == kPistolHolsterAttachId ||
-         seh_write_holster_binding_attach_id(
-             output, kPistolHolsterAttachId));
 
     std::uint32_t attach_id = 0;
     const bool readable = seh_read_holster_binding_output(
         output, &attach_id, payload_bits.data());
-    if (!relevant_holster_probe_art(art) && !should_redirect) {
+    if (!relevant_holster_probe_art(art)) {
         return result;
     }
     log_weapon_art_holster_list_once(owner_index, art);
@@ -28290,9 +28301,7 @@ void* __fastcall hooked_weapon_holster_build_binding(
     mix(art);
     mix(source_attach_id);
     mix(attach_id);
-    mix(static_cast<std::uint32_t>(art_type));
     mix(slot_one_weapon ? 1u : 0u);
-    mix(redirected ? 1u : 0u);
     for (const std::uint32_t bits : payload_bits) {
         mix(bits);
     }
@@ -28307,8 +28316,6 @@ void* __fastcall hooked_weapon_holster_build_binding(
          << " look=0x" << look
          << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
          << " art=0x" << art << std::dec
-         << " type=" << art_type
-         << " typeValid=" << (art_type_valid ? 1 : 0)
          << " slot1=" << (slot_one_weapon ? 1 : 0)
          << " source=0x" << std::hex << source_attach_id
          << " attach=0x" << attach_id
@@ -28318,8 +28325,6 @@ void* __fastcall hooked_weapon_holster_build_binding(
          << " readable=" << (readable ? 1 : 0)
          << " pistolPresent=" << (pistol_holster_present ? 1 : 0)
          << " pistolIndex=" << pistol_holster_index
-         << " redirect=" << (should_redirect ? 1 : 0) << "/"
-         << (redirected ? 1 : 0)
          << " lookValid=" << (look_valid ? 1 : 0)
          << " bits=" << std::hex;
     for (std::size_t i = 0; i < payload_bits.size(); ++i) {
@@ -32213,8 +32218,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21fn "
-        "(Nadine all-handgun holster binding reroute)");
+        "TLL co-op runtime init 2026-07-21fo "
+        "(Nadine slot-one inactive holster recovery)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

@@ -5947,3 +5947,64 @@ the peer census independently established rifle slot 0, pistol slot 1 and
 grenade slot 2 even for picked-up art `0x9A07E17F`. Any replacement write must
 be gated by the exact retained-player slot-1 pointer, skip the active slot, and
 verify `weapon+0x688` after the physical attach call.
+
+### 2026-07-21 STATIC: build `fo` repairs exact slot 1 after each inactive edge
+
+The remote transition is now traced past the rejected binding hook.
+`PlayerWeaponController_SwitchToWeapon 0x1410A1C10` delegates on a puppet to
+vtable `+0x48`, `PlayerWeaponController_ApplyWeaponSwitch 0x1410A28A0`.
+For `slot=-1,inHands=false`, that state machine starts
+`PlayerWeaponController_StartHolsterTransition 0x1410A3EA0` and a
+`PlayerPutGunAwayAction`; none of these functions writes `weapon+0x688`
+synchronously. This explains why success from SwitchToWeapon does not identify
+the final attachment point and why `WeaponHolster_BuildBinding 0x1414FE540`
+could be absent for the retained puppet pistol.
+
+The existing inactive reconciler is still the narrowest physical recovery, but
+it had two independent coverage holes. It recognized only art `0x33E29A1B`, and
+its claim key `(weapon,target,records allocation)` permanently suppressed a
+second repair after the first successful draw/holster cycle. The selected stock
+helper `WeaponAttachment_AttachToOwnerPoint 0x141ED0370` is not a raw field
+write: it resolves the requested id in owner `+0x1E0`, updates the owner handle,
+writes the selected record index to `weapon+0x688`, and refreshes attachment
+state. Independent Player paths `0x1410A9DD0` and `0x1410A2150` call the same
+helper for hand attachment. Earlier build `fe` then proved at runtime that the
+helper returns 1 and changes both parent-owned firearms to the requested record,
+while build `fm` proved that the remapped `pistolHolster` record exists at joint
+5. These call-graph, field-dataflow, independent-consumer and runtime facts
+satisfy the evidence quota.
+
+Competing repairs are rejected as follows. Retrying the post-builder rewrite is
+excluded by `fn` call coverage. Treating vtable `+0x48` as the final writer is
+excluded by its async-action dataflow. Writing `+0x688` directly would omit the
+owner/orientation refresh. Invoking the controller's broader holster vslot
+`+0x3D0` would re-enter the art-specific selector that chose Chloe's point and
+would also emit unrelated action/event state. The remaining minimal operation
+is the already-proven direct stock attach helper after a stable inactive edge.
+
+Build `fo` therefore classifies a handgun by identity, not art: the weapon
+returned by inventory vtable `+0xB0` for exact slot 1. It acts only on a stable
+legacy-Nadine Player, skips the current/active slot, requires the weapon parent
+handle to resolve back to that Player, requires the remapped target record, and
+accepts any current attachment id other than `pistolHolster`. A remote puppet
+at transient `draw=0` is additionally blocked while its peer still requests a
+draw. The one-shot claim now includes a slot-1 inactive-generation counter:
+slot 1 becoming active arms it, and a later stable holstered or other-slot-active
+state advances it exactly once. Thus a later engine overwrite can be corrected,
+while a stable successful attachment causes no repeated call. The rejected
+WeaponArtDef type writer was removed; its old hook is read-only again.
+
+Prediction: a picked slot-1 pistol such as `0x9A07E17F` must produce one
+`NADINE-INACTIVE-ATTACH` after at least 250 ms stable inactivity with its old id
+changing to `0x8A0249B5`, `parentOwner=1->1`, and `verified=1`; the selected record must
+remain the already-logged joint-5 remap. No slot-1 repair may occur while slot 1
+is active. After another draw then holster (or switch to slot 0), the generation
+must increase and exactly one new repair may occur only if the engine restored a
+different id. Slot 0 and grenade slot 2 must not enter this generic rule; hands,
+body and controller state must remain intact. Missing generation/verification,
+an active-slot write, repeated per-frame calls, a non-slot-1 reroute, crash,
+jitter or verified joint-5 selection that still renders on the back falsifies
+the corresponding part of the hypothesis.
+
+The release DLL compiled successfully with marker `2026-07-21fo`; runtime
+verification is pending.

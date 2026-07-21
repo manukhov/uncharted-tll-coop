@@ -1633,6 +1633,14 @@ Do not reopen these as the first move:
       reached it only for the grenade. Trace the puppet's actual
       `SwitchToWeapon(..., false)` / inactive-reconcile path and classify the
       handgun by its exact slot-1 pointer instead of art id or this enum.
+      STATIC build `fo`: the controller path ends in an asynchronous
+      PlayerPutGunAwayAction and does not synchronously write `weapon+0x688`.
+      Reuse the runtime-proven direct stock attach helper, but gate it on exact
+      inactive slot 1, resolved owner and a stable transition generation.
+      Re-arm once after each slot-1-active -> inactive edge so a later cycle is
+      repairable without a per-frame call. Require old-id -> `0x8A0249B5`,
+      `parentOwner=1->1`, `verified=1`, a generation increment on the second cycle,
+      no active-slot call and no slot-0/slot-2 generic reroute.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
