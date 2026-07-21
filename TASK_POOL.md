@@ -1416,7 +1416,7 @@ Do not reopen these as the first move:
       holster-AP repair versus orphan suppression. Result: rifle is the normal
       slot-0 object (`slotMask=0x1`), pistol is slot 1 and grenade slot 2 on both
       owners. REJECT look-created orphan; select the downstream holster bind.
-- [ ] Instrument `PlayerWeaponHolsterAction_ResolveAndBindAttachPoint
+- [x] Instrument `PlayerWeaponHolsterAction_ResolveAndBindAttachPoint
       0x141095BD0` read-only and compare legacy Nadine with Chloe. Distinguish
       function-not-reached, null `weapon-holster-point` knowledge record, and a
       resolved record rejected/misapplied by the final Player+0x1DF0 `+0xB8`
@@ -1424,10 +1424,17 @@ Do not reopen these as the first move:
       Build `ey` installs an exact-prologue outer detour plus the direct
       `0x141095E49 -> ResolveKnowledgeRegistryEntryById` callsite relay. It logs
       at most 64 deduplicated results and preserves all inputs/returns/state.
-- [ ] Run `ey`; on each copy draw pistol, holster, draw rifle, holster. Require
+- [x] Run `ey`; on each copy draw pistol, holster, draw rifle, holster. Require
       the holster-probe install line, stable gameplay and bounded
       `NADINE-HOLSTER-BIND` records. Compare `look`, `lookup/entry/payload` and
       `bindResult` for Chloe versus legacy Nadine before any attachment write.
+      Result: both Nadine owners and Chloe call rifle lookup id `0x68F32771` and
+      receive non-null entry/payload; the payload is shared. REJECT H1/H2 and
+      select H3 at/after Player+0x1DF0 virtual `+0xB8`.
+- [ ] Resolve the concrete Player+0x1DF0 vtable `+0xB8` target and trace the
+      shared `0x68F32771` record into the active look's attachment graph. Compare
+      its resolved attach-point/joint or failure status for Chloe and look
+      `0xD27C074F` before introducing any fallback transform.
 - [ ] After the failed bind boundary is proven, resolve the player-owned rifle's
       `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
       Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a

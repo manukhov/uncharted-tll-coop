@@ -4979,3 +4979,25 @@ H3 at or after the final bind and justifies tracing/materializing a compatible
 shoulder AP. Chloe provides the unaffected comparison. Any hook-install skip,
 exception, crash or new model regression invalidates the probe and forbids a
 repair write.
+
+### 2026-07-21 CONFIRMED: holster record resolves; failure is downstream (`ey`)
+
+Both injected `ey` processes remained responsive and installed both probe
+boundaries. The affected legacy-Nadine paths were reached for both a role-B local
+Player (`owner=0`) and the retained remote Player (`owner=1`, look
+`0xD27C074F`). For rifle art `0x8075397D` every recorded path called the exact
+knowledge lookup with id `0x68F32771` and received a non-null entry and payload.
+The payload pointer was identical to Chloe's unaffected rifle path, and the outer
+function completed through the same final-call return value and non-null
+Player+0x1DF0 controller. Pistol art `0x33E29A1B` consistently skipped this
+rifle-specific lookup on both looks, providing an independent control that the
+scoped callsite capture was not spuriously firing.
+
+This **rejects H1** (action not reached) and **rejects H2** (missing/null authored
+`weapon-holster-point` knowledge record for Nadine). It also corrects the older
+asset-level wording: the shared per-weapon holster record exists and resolves;
+what differs is its application to the legacy look's attachment graph. H3 is
+selected at or after Player+0x1DF0 virtual `+0xB8`. The next static task is to
+resolve that concrete vtable target and trace where it maps the shared record to
+the active DrawControl/skeleton attach point. No synthetic shoulder transform is
+authorized until that mapping failure is proven.
