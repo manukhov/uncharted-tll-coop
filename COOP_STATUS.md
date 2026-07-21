@@ -5852,3 +5852,24 @@ already-used `RigGetJointTransform` / `Transform_MakeRelative` /
 the helper samples a live native pose rather than bind pose, so any visible
 jitter or sliding is explicitly a falsifier. Release build `2026-07-21fm`
 compiled successfully; runtime verification is pending.
+
+### 2026-07-21 CONFIRMED/REJECTED: build `fm` remaps the record, but non-default pistols bypass the reconciler
+
+The user tested multiple pistols in build `fm`; all still holstered at Chloe's
+back location. Both processes remained responsive and the semantic record remap
+itself satisfied every written structural prediction: `marker=99:99->99`,
+`parent=5->5`, `recordJoint=5`, `changed=1`. The target table retained
+`pistolHolster 0x8A0249B5` at joint 5 with the remapped transform. Therefore a
+bad append, raw joint 99 and a failed parent conversion are rejected for this
+run, while the visual thigh-placement prediction is REJECTED.
+
+The same run identifies a distinct coverage failure. The fired slot-1 handgun
+was art `0x9A07E17F`, whereas the inactive-weapon reconciler classifies a pistol
+only by exact equality with the original co-op art `0x33E29A1B`. No
+`NADINE-INACTIVE-ATTACH` attempt occurred for `0x9A07E17F`, so that handgun never
+entered the remapped `pistolHolster` path. The other retained arts were slot-0
+`0xB6B0DD17` and grenade `0x0B8BD6D6`; the latter independently selected its
+expected `0x754D9C3B` control and must not be redirected. The next step is to
+replace the single-art check with the engine's WeaponArtDef handgun class at the
+Player holster-binding boundary, after statically proving its type values and
+the exact output consumer.

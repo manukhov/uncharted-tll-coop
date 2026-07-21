@@ -1616,7 +1616,12 @@ Do not reopen these as the first move:
       transform; redirect only inactive standard pistols and preserve drawn
       rightHand, rifle, arms and body under the written prediction. STATIC build
       `fm` is ready; verify `recordJoint=5 changed=1` before judging geometry,
-      and treat jitter/sliding as a live-pose-remap falsifier.
+      and treat jitter/sliding as a live-pose-remap falsifier. Runtime confirmed
+      `recordJoint=5 changed=1`, but the visual stayed on the back. The active
+      tested handgun was picked-up art `0x9A07E17F`; the exact-art reconciler
+      only recognizes `0x33E29A1B`, so it made no attach attempt. Generalize at
+      the proven Player holster-binding output using WeaponArtDef handgun type,
+      explicitly excluding long guns and grenade type.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
