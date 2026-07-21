@@ -4298,3 +4298,56 @@ as the missing vertical discriminator. Do not activate/synthesize any named aim
 layer. The frontier returns to `ProcessAnimCmdListSegment 0x141AB97C0` case 6:
 statically separate command context, skeleton/joint-set/plugin evaluation and
 later pose-merge/palette publication before defining another runtime probe.
+
+### 2026-07-21 STATIC: case 6 separates direct evaluation from retargeting
+
+`AnimSnapshotNodeAnimation_GenerateAnimCommands 0x1419182E0` emits an exact
+24-byte `0x00060006` command: `ArtItemAnim*` at `+0x08`, output/group word at
+`+0x10`, and phase float at `+0x14`. The selected `ek` clip is uniquely bounded
+by `ArtItemAnim+0x24 = 0000000A`, art-skeleton id `+0x40 = 6C2B2396`, and the
+underlying object at `+0x28` carrying id `+0x04 = 4B0F5DE3` and word
+`+0x08 = 000009A0`.
+
+`ProcessAnimCmdListSegment 0x141AB97C0` case 6 compares that source underlying
+skeleton id with the target underlying id reached through
+`AnimCmdContext+0 -> ArtItemSkeleton+0x40 -> +0x04`. Equal ids enter newly named
+`AnimCmdEvaluator_ApplyAnimationDirect 0x14217C7F0`. Unequal ids look up the
+source/target art-skeleton pair through `SkelTable_FindRetargetEntry
+0x1417D0BD0`, validate entry feature word `+0x22` and group mapping `+0x28`,
+resolve the source through `SkelTable_ResolveArtItemSkeleton 0x1417CD100`, and
+call the exact source-asserted `RetargetAnimUsingBatchMgr 0x14193B2C0`.
+`AnimCmdEvaluator_CopyMaskedPose 0x14217D280` then publishes the retargeted
+JointParams/ValidBits into the same processing-group output as direct evaluation;
+`AnimCmdEvaluator_ClearOutput 0x14217D940` handles invalid output.
+
+The owning context is independently proven in both
+`AnimManager_PerformAnimBlend 0x141A92260` and
+`AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00`: context `+0` is the
+target ArtItemSkeleton from `FgAnimData+0x18`, `+0x10` is the value stored at
+`FgAnimData+0x2C0`, `+0x18` points back to `FgAnimData+0x1C0`, and `+0x20` holds
+flags. Processing-group index is argument 4; the optional five-argument callback
+is used only by the cross-skeleton branch and originates in job slots 3..5.
+
+The exact runtime hypothesis for build `em` is that the local player evaluates
+the selected command directly while the retained puppet uses retargeting, or
+uses a different retarget pair/group/callback whose mapping omits the vertical
+upper-joint contribution. Competitors are: (1) both processes have identical
+validated context, skeleton ids, group, callback RVAs and predicted branch, so
+the split is later in the common pose/palette path; (2) only raw pointers or
+output indices differ, which is non-semantic; (3) command/context/assets change
+during reread, which invalidates the sample.
+
+The static quota has five independent evidence types: generator command layout;
+case-6 source/target comparison; fixed-stride retarget-table lookup; exact
+`RetargetAnimUsingBatchMgr` source assertion plus mapping/group dataflow; and
+two independent callers constructing the same context before both branches
+converge on the work-buffer pose output. The written falsifier is therefore:
+a stable direct/retarget, pair/group/coverage, or callback-RVA split selects only
+that retarget route; a complete normalized match rejects case-6 inputs and moves
+to the common output merge/palette consumer. Raw addresses, output indices and
+torn reads cannot select either result; any call, write, crash or visible model
+change invalidates `em`.
+
+All six strong STATIC functions are labelled in the real IDB. The headless apply
+reports 1124 functions and 19 data names with `save_database returned True`; an
+independent dump resolves every new name, and the MCP copy was refreshed.

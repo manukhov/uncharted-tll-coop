@@ -1215,11 +1215,27 @@ Do not reopen these as the first move:
       channels and stable live instance/root signatures. One early three-track
       `E2B990B9` transition collapsed after 500 ms; only fade-time residues
       differed. The complete active-layer inventory is rejected.
-- [ ] Trace `ProcessAnimCmdListSegment 0x141AB97C0` case 6 statically in both
+- [x] Trace `ProcessAnimCmdListSegment 0x141AB97C0` case 6 statically in both
       directions. Prove the complete command payload and owning command context,
       resolve skeleton/joint-set/plugin inputs and the downstream pose-merge or
       palette publication edge, enumerate competing boundaries, and satisfy the
-      three-type evidence quota before defining any `em` runtime probe.
+      three-type evidence quota before defining any `em` runtime probe. Result:
+      five evidence types prove exact `0x60006` payload/context, the underlying
+      skeleton-id direct branch, SkelTable retarget pair/group mapping and both
+      branches converging on the processing-group pose output. Six strong STATIC
+      labels were saved and verified in the real IDB.
+- [ ] Implement read-only build `em` at the proven case-6 boundary. Select only
+      the exact `ek` clip signature; reconstruct and double-read the owning
+      FgAnimData/context; log normalized source/target ids, direct-vs-retarget
+      prediction, processing group, entry feature/coverage summary and callback
+      RVAs under strict per-screen bounds. Never call a resolver/callback or log
+      pointers/output indices.
+- [ ] Run the written `em` falsifier during strong up/down ADS on both copies. A
+      stable branch, retarget pair/group/coverage or callback split selects that
+      exact route; a complete normalized match rejects case-6 inputs and moves
+      to the common pose merge/palette consumer. Ignore raw-address/index-only
+      differences and invalidate torn, incomplete, crashing or visible-changing
+      samples.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

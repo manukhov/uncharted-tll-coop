@@ -837,6 +837,41 @@ FUNCTIONS = {
         "normal joint-blend producers; consumes AnimCmdContext and drives palette "
         "output including aim-add-* parameter lookup.",
     ),
+    0x1417D0BD0: (
+        "SkelTable_FindRetargetEntry",
+        "Looks up the fixed-stride SkelTable retarget entry for a source/target "
+        "ArtItemSkeleton StringId pair. ProcessAnimCmdListSegment case 6 validates "
+        "the returned entry's feature word at +0x22 and mapping table at +0x28.",
+    ),
+    0x1417CD100: (
+        "SkelTable_ResolveArtItemSkeleton",
+        "Resolves an ArtItemSkeleton from its StringId through the skeleton registry. "
+        "ProcessAnimCmdListSegment case 6 uses it to validate the source skeleton "
+        "before cross-skeleton animation retargeting.",
+    ),
+    0x14193B2C0: (
+        "RetargetAnimUsingBatchMgr",
+        "Exact RetargetAnimUsingBatchMgr source assertion in retarget-util.cpp:202. "
+        "Evaluates an ArtItemAnim across source and target ArtItemSkeletons using a "
+        "SkelTable retarget entry and returns target JointParams/ValidBits buffers.",
+    ),
+    0x14217C7F0: (
+        "AnimCmdEvaluator_ApplyAnimationDirect",
+        "Direct ProcessAnimCmdListSegment case-6 evaluator used when the source and "
+        "target underlying skeleton ids match. Evaluates the clip into the current "
+        "processing group's work-buffer pose output.",
+    ),
+    0x14217D280: (
+        "AnimCmdEvaluator_CopyMaskedPose",
+        "Copies masked JointParams and ValidBits into the current processing-group "
+        "output. ProcessAnimCmdListSegment case 6 uses it to publish the pose returned "
+        "by RetargetAnimUsingBatchMgr into the same work buffer as direct evaluation.",
+    ),
+    0x14217D940: (
+        "AnimCmdEvaluator_ClearOutput",
+        "Clears or invalidates a processing-group output slot when animation command "
+        "evaluation cannot produce a valid pose.",
+    ),
     0x14217CF90: (
         "AnimCmdEvaluator_ApplyBlend",
         "The ProcessAnimCmdListSegment case-7 consumer for command 0x60007. "
