@@ -1463,19 +1463,28 @@ Do not reopen these as the first move:
       `Script_AttachPlayerWeaponBackToHolster 0x140342EE0` both build the binding
       and call `WeaponAttachment_AttachToOwnerPoint 0x141ED0370`, which replaces
       the parent handle and selects the owner `+0x1E0` attach record.
-- [ ] Run the next read-only discriminator: compare Chloe and legacy Nadine for
+- [x] Run the next read-only discriminator: compare Chloe and legacy Nadine for
       (a) emission of named event `0x9E2D6552`
       (`reparent-weapon-to-holster`) and (b) `WeaponHolster_BuildBinding
       0x1414FE540` output: selected `gun_holster*` id, authored transforms and
       scalar; also record whether final `0x141ED0370` is reached and succeeds.
       Build `fb` installs all three pass-through hooks. Cycle pistol/rifle draw
-      and holster on both copies.
-- [ ] After the failed bind boundary is proven, resolve the player-owned rifle's
-      `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
-      Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a
-      compatible shoulder AP or apply a bounded standard spine/chest fallback
-      with the authored per-weapon offset. Do not revive wrist-copy or joypad-gate
-      hypotheses.
+      and holster on both copies. CONFIRMED: binding id and payload match across
+      looks, but legacy Nadine lacks pistol id `0x00AD047A` and rifle id
+      `0x555EFB8D` in owner `+0x1E0`; grenade control `0x754D9C3B` exists for both.
+      The final attach function succeeds for hand id `0x61A48E01`; the missing
+      holster ids are gated before mutation. The empty event channel is
+      non-discriminating because it was empty for both looks.
+- [ ] Trace the owner `+0x1E0` attachment-table constructor, owner, 48-byte record
+      layout, destructor/copy path and every supported mutation API. Resolve the
+      StringId preimages for `0x61A48E01`, `0x00AD047A` and `0x754D9C3B`, and
+      enumerate which authored shoulder/back records already exist on legacy
+      Nadine. Do not write until allocation and lifetime are proven.
+- [ ] After the table contract is proven, either materialize compatible pistol
+      and rifle records using the engine's own API or select an existing
+      shoulder/back record and preserve the authored per-weapon offset. The hand
+      id `0x61A48E01`, child-index identity fallback, wrist-copy and joypad-gate
+      paths are rejected repair targets.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

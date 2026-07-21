@@ -5160,4 +5160,34 @@ no attachment writes of its own. `NADINE-HOLSTER-EVENT` records the authored
 event StringId from `0x14108DE30`; `NADINE-HOLSTER-BINDING` records the selected
 id, both transforms, scalar and whether the target exists in owner `+0x1E0`;
 `NADINE-HOLSTER-ATTACH` records direct `0x141ED0370` reach, target presence,
-return value and pre/post parent/index state. Runtime result is pending.
+return value and pre/post parent/index state.
+
+### 2026-07-21 CONFIRMED: legacy Nadine lacks the selected weapon attach records (`fb`)
+
+Build `fb` stayed stable in both processes and selected a single concrete
+boundary. `WeaponHolster_BuildBinding 0x1414FE540` produced the same attach id
+and the same transform/scalar payload for Chloe and legacy Nadine. For pistol art
+`0x33E29A1B` it selected art-specific id `0x00AD047A`; Chloe resolved it at owner
+attachment index 40 (`present=1`, 28 samples), while legacy Nadine had no record
+(`present=0`, `index=-1`, 16 samples). For rifle art `0x8075397D` it selected
+generic `gun_holster` id `0x555EFB8D`; Chloe resolved index 8 (`present=1`, 26
+samples), while legacy Nadine again had no record (`present=0`, `index=-1`, 18
+samples). The independent grenade control `0x0B8BD6D6` selected `0x754D9C3B`,
+which exists for both looks (Chloe index 42, Nadine index 37).
+
+This rejects E2's wrong/different binding payload and confirms the gap in the
+active look/owner attachment table at `Player+0x1E0`: legacy Nadine is missing
+exactly the selected pistol and rifle attachment ids, while a neighboring
+weapon-class attachment remains authored. `WeaponAttachment_AttachToOwnerPoint
+0x141ED0370` independently succeeded (`result=1`, `present=1`) for hand attach id
+`0x61A48E01` on both looks and both firearm arts, proving that the generic attach
+mutation and hand path are healthy. No final-attach record used either missing
+holster id, consistent with the native command being gated by its preceding
+owner-table lookup. The event probe emitted no records for either look and is
+therefore non-discriminating, not evidence for a Nadine-specific event loss.
+
+The next task is static: recover the construction, ownership, record format and
+mutation/copy APIs of `Player+0x1E0` before adding data. A compatible record may
+only be materialized after proving its allocation/lifetime rules and the target
+joint/transform relationship; hand id `0x61A48E01` is the current broken fallback
+and is not a repair target.
