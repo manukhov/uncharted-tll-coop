@@ -1374,12 +1374,16 @@ Do not reopen these as the first move:
       removed body parts in sequence; hair, rifle and grenade remained floating.
       REJECT parent-look mesh suppression. The rifle is a separate look-created
       attachable, not one of the five body meshes.
-- [ ] At the existing `NdAttachableObject_PostJointUpdate_Async` callsite
+- [x] Build `eu` at the existing `NdAttachableObject_PostJointUpdate_Async` callsite
       `0x141ED63F7`, capture a bounded read-only census only when the parent
       DrawControl matches all five Nadine ids. Record unique child object vtable
       RVA, type id, child mesh ids, `+0x4E0/+0x4E8` parent handle and plausible
       `+0x860` ProcessWeapon art. Use the surviving hair/rifle/grenade trio to
       identify the persistent rifle child before changing visibility or binding.
+- [ ] Run `eu` in normal gameplay with Nadine visible. Require stable
+      `NADINE-ATTACHABLE` child signatures and no visual regression. Resolve each
+      vtable/mesh signature statically; if only hair/cloth reaches the callsite,
+      reject this boundary rather than hiding another guessed mesh.
 - [ ] After the baked rifle is isolated, resolve the player-owned rifle's failed
       `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
       Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a

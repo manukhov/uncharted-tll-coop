@@ -4789,3 +4789,32 @@ five-mesh signature can distinguish their object vtable, type id, child mesh ids
 parent handle and any ProcessWeapon art id without writing game state. Only after
 the persistent rifle child is identified may a visibility or attachment fix be
 defined; hiding body meshes must not be repeated.
+
+### 2026-07-21 STATIC: bounded child-attachable census (`eu`)
+
+Build `2026-07-21eu` disables every write from the rejected F11 parent-mesh
+probe and reuses the already-installed callsite `0x141ED63F7` only as a read
+boundary. The hook accepts a sample only when the parent DrawControl owns the
+complete ordered Nadine signature
+`6E18DCD5,4A7DF04F,A674E571,5EAAF523,C450A073`; it then records at most 32
+unique child signatures: attachable vtable RVA/type id, child DrawControl mesh
+ids, `+0x4E0/+0x4E8` parent handle and a guarded `+0x860` art candidate. It does
+not change visibility, attachment state, inventory or transforms.
+
+The evidence quota for this diagnostic is satisfied by three independent
+types: static callsite dataflow supplies `{child DrawControl, parent DrawControl,
+attachable}`; the exact five-id parent signature isolates the one legacy Nadine
+look from Chloe and other draw graphs; and runtime mesh isolation proved that
+hair, rifle and grenade survive as separate children after every parent body
+mesh is removed. Competing outcomes are: (H1) three stable child classes/mesh
+signatures expose the rifle directly; (H2) only ordinary hair/cloth children
+cross this callsite and the rifle uses another attachment boundary; (H3) the
+rifle is a ProcessWeapon child and exposes a known weapon art at `+0x860`.
+
+Written prediction/falsifier: normal gameplay with Nadine visible should emit
+stable `NADINE-ATTACHABLE` records for the surviving child topology without any
+model change. A child carrying a known rifle art selects H3; otherwise distinct
+stable vtable/mesh signatures for hair, rifle and grenade select H1 and must be
+resolved statically before any visibility write. Only hair/cloth records, no
+records despite the exact parent being visible, an exception, or any visual
+regression makes the boundary inconclusive and forbids a suppression build.

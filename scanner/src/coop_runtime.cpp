@@ -281,6 +281,7 @@ volatile int g_nadine_swap_index = 0;
 // distinguish a standalone baked rifle from rifle geometry merged into clothing.
 // -1 is the untouched baseline; 0..4 hide exactly one legacy-look mesh.
 std::atomic<int> g_nadine_parent_mesh_probe_index{-1};
+constexpr bool kEnableNadineParentMeshProbe = false;
 // Two-instance role: false = role A (recv :31338, "player 1", local Chloe), true =
 // role B (recv :31339, "player 2", local Nadine). Set in start_state_net().
 volatile bool g_net_role_b = false;
@@ -26704,15 +26705,14 @@ std::uint64_t player_draw_snapshot_signature(
     return signature;
 }
 
-void apply_legacy_nadine_parent_mesh_probe(void* parent_draw) {
-    // Stable across every logged rebuild of the only renderable Nadine Player
-    // look. Requiring the full ordered signature prevents this diagnostic from
-    // touching Chloe, ProcessWeapon, hair/cloth attachables or another look.
-    constexpr std::array<std::uint32_t, 5> kLegacyNadineMeshIds{
-        0x6E18DCD5u, 0x4A7DF04Fu, 0xA674E571u, 0x5EAAF523u,
-        0xC450A073u};
+constexpr std::array<std::uint32_t, 5> kLegacyNadineParentMeshIds{
+    0x6E18DCD5u, 0x4A7DF04Fu, 0xA674E571u, 0x5EAAF523u,
+    0xC450A073u};
+
+bool legacy_nadine_parent_draw_matches(
+    void* parent_draw, std::byte** meshes_out = nullptr) {
     if (parent_draw == nullptr || readable_bytes(parent_draw) < 0x20) {
-        return;
+        return false;
     }
     auto* const draw = static_cast<std::byte*>(parent_draw);
     auto* const meshes = *reinterpret_cast<std::byte**>(draw + 0x8);
@@ -26720,24 +26720,40 @@ void apply_legacy_nadine_parent_mesh_probe(void* parent_draw) {
         *reinterpret_cast<const std::uint32_t*>(draw + 0x14);
     constexpr std::size_t kMeshStride = 0x250;
     constexpr std::size_t kMeshIdOffset = 0x18;
-    constexpr std::size_t kVisibleOffset = 0x243;
-    if (mesh_count != kLegacyNadineMeshIds.size() || meshes == nullptr ||
-        readable_bytes(meshes) < kMeshStride * kLegacyNadineMeshIds.size()) {
-        return;
+    if (mesh_count != kLegacyNadineParentMeshIds.size() || meshes == nullptr ||
+        readable_bytes(meshes) <
+            kMeshStride * kLegacyNadineParentMeshIds.size()) {
+        return false;
     }
-    for (std::size_t i = 0; i < kLegacyNadineMeshIds.size(); ++i) {
+    for (std::size_t i = 0; i < kLegacyNadineParentMeshIds.size(); ++i) {
         if (*reinterpret_cast<const std::uint32_t*>(
                 meshes + kMeshStride * i + kMeshIdOffset) !=
-            kLegacyNadineMeshIds[i]) {
-            return;
+            kLegacyNadineParentMeshIds[i]) {
+            return false;
         }
+    }
+    if (meshes_out != nullptr) {
+        *meshes_out = meshes;
+    }
+    return true;
+}
+
+void apply_legacy_nadine_parent_mesh_probe(void* parent_draw) {
+    // Stable across every logged rebuild of the only renderable Nadine Player
+    // look. Requiring the full ordered signature prevents this diagnostic from
+    // touching Chloe, ProcessWeapon, hair/cloth attachables or another look.
+    std::byte* meshes = nullptr;
+    constexpr std::size_t kMeshStride = 0x250;
+    constexpr std::size_t kVisibleOffset = 0x243;
+    if (!legacy_nadine_parent_draw_matches(parent_draw, &meshes)) {
+        return;
     }
 
     if (process_owns_foreground_window() &&
         (GetAsyncKeyState(VK_F11) & 1) != 0) {
         int next = g_nadine_parent_mesh_probe_index.load(
             std::memory_order_relaxed) + 1;
-        if (next >= static_cast<int>(kLegacyNadineMeshIds.size())) {
+        if (next >= static_cast<int>(kLegacyNadineParentMeshIds.size())) {
             next = -1;
         }
         g_nadine_parent_mesh_probe_index.store(next, std::memory_order_release);
@@ -26749,13 +26765,14 @@ void apply_legacy_nadine_parent_mesh_probe(void* parent_draw) {
     static int last_selected = -1;
     const bool changed = parent_draw != last_draw || selected != last_selected;
     if (changed && parent_draw == last_draw && last_selected >= 0 &&
-        last_selected < static_cast<int>(kLegacyNadineMeshIds.size())) {
+        last_selected < static_cast<int>(kLegacyNadineParentMeshIds.size())) {
         seh_show_draw_control_mesh(
             parent_draw, static_cast<std::uint32_t>(last_selected));
     }
 
     bool applied = true;
-    if (selected >= 0 && selected < static_cast<int>(kLegacyNadineMeshIds.size())) {
+    if (selected >= 0 &&
+        selected < static_cast<int>(kLegacyNadineParentMeshIds.size())) {
         auto* const mesh = meshes != nullptr
             ? meshes + kMeshStride * static_cast<std::size_t>(selected)
             : nullptr;
@@ -26772,9 +26789,10 @@ void apply_legacy_nadine_parent_mesh_probe(void* parent_draw) {
         std::ostringstream line;
         line << "NADINE-MESH-PROBE index=" << selected;
         if (selected >= 0 &&
-            selected < static_cast<int>(kLegacyNadineMeshIds.size())) {
+            selected < static_cast<int>(kLegacyNadineParentMeshIds.size())) {
             line << " id=0x" << std::hex
-                 << kLegacyNadineMeshIds[static_cast<std::size_t>(selected)]
+                 << kLegacyNadineParentMeshIds[
+                        static_cast<std::size_t>(selected)]
                  << std::dec << " hidden=" << (applied ? 1 : 0);
         } else {
             line << " baseline-restored=1";
@@ -26785,13 +26803,110 @@ void apply_legacy_nadine_parent_mesh_probe(void* parent_draw) {
     last_selected = selected;
 }
 
+void census_legacy_nadine_attachable(
+    void* parent_draw, void* child_draw, void* attachable) {
+    if (!legacy_nadine_parent_draw_matches(parent_draw) || child_draw == nullptr ||
+        attachable == nullptr || readable_bytes(attachable) < 0x4F0) {
+        return;
+    }
+
+    AttachmentDrawSnapshot child{};
+    if (!seh_capture_attachment_draw_snapshot(child_draw, child)) {
+        return;
+    }
+    auto* const bytes = static_cast<const std::byte*>(attachable);
+    const std::uintptr_t vtable =
+        *reinterpret_cast<const std::uintptr_t*>(bytes);
+    const std::uintptr_t vtable_rva =
+        g_module != 0 && vtable >= g_module ? vtable - g_module : vtable;
+    const std::uint32_t type_id =
+        *reinterpret_cast<const std::uint32_t*>(bytes + 0x38);
+    const void* const parent_handle =
+        *reinterpret_cast<void* const*>(bytes + 0x4E0);
+    const std::uint32_t parent_id =
+        *reinterpret_cast<const std::uint32_t*>(bytes + 0x4E8);
+    const void* resolved_parent = nullptr;
+    std::uint32_t resolved_parent_id = 0;
+    if (parent_handle != nullptr && readable_bytes(parent_handle) >= 0x10) {
+        resolved_parent = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(parent_handle) + 0x8);
+        if (resolved_parent != nullptr &&
+            readable_bytes(static_cast<const std::byte*>(resolved_parent) + 0xC0) >=
+                1) {
+            resolved_parent_id = *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(resolved_parent) + 0xBC);
+        }
+    }
+    std::uint32_t art_candidate = 0;
+    if (readable_bytes(bytes + 0x860) >= sizeof(art_candidate)) {
+        art_candidate = *reinterpret_cast<const std::uint32_t*>(bytes + 0x860);
+    }
+
+    std::uint64_t signature = 1469598103934665603ULL;
+    auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(vtable_rva);
+    mix(type_id);
+    mix(parent_id);
+    mix(art_candidate);
+    mix(child.mesh_count);
+    for (std::uint32_t i = 0; i < child.readable_meshes; ++i) {
+        mix(child.mesh_ids[i]);
+    }
+    if (signature == 0) {
+        signature = 1;
+    }
+
+    static std::array<std::atomic<std::uint64_t>, 32> seen{};
+    std::atomic<std::uint64_t>* claimed = nullptr;
+    for (auto& slot : seen) {
+        std::uint64_t current = slot.load(std::memory_order_relaxed);
+        if (current == signature) {
+            return;
+        }
+        if (current == 0 && slot.compare_exchange_strong(
+                                current, signature,
+                                std::memory_order_relaxed)) {
+            claimed = &slot;
+            break;
+        }
+    }
+    if (claimed == nullptr) {
+        return;
+    }
+
+    std::ostringstream line;
+    line << "NADINE-ATTACHABLE object=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(attachable)
+         << " vtableRva=0x" << vtable_rva
+         << " type=0x" << type_id
+         << " childDraw=0x" << reinterpret_cast<std::uintptr_t>(child_draw)
+         << " parentHandle=0x" << reinterpret_cast<std::uintptr_t>(parent_handle)
+         << "/0x" << parent_id
+         << " resolvedParent=0x"
+         << reinterpret_cast<std::uintptr_t>(resolved_parent)
+         << "/0x" << resolved_parent_id
+         << " artCandidate=0x" << art_candidate << std::dec
+         << " meshes=" << child.readable_meshes << "/" << child.mesh_count
+         << " drawIds=";
+    for (std::uint32_t i = 0; i < child.readable_meshes; ++i) {
+        line << "0x" << std::hex << child.mesh_ids[i] << ",";
+    }
+    force_log_line(line.str().c_str());
+}
+
 char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
     void* child_draw, void* parent_draw, void* attachable) {
     char result = g_original_draw_control_sync_parent_visibility != nullptr
         ? g_original_draw_control_sync_parent_visibility(child_draw, parent_draw)
         : 0;
 
-    apply_legacy_nadine_parent_mesh_probe(parent_draw);
+    if constexpr (kEnableNadineParentMeshProbe) {
+        apply_legacy_nadine_parent_mesh_probe(parent_draw);
+    }
+    census_legacy_nadine_attachable(parent_draw, child_draw, attachable);
 
     void* const puppet = retained_player_object(1);
     if (!g_state_net.enabled || puppet == nullptr ||
@@ -28804,8 +28919,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21et "
-        "(legacy Nadine parent-mesh discriminator; F11 cycles baseline/0..4)");
+        "TLL co-op runtime init 2026-07-21eu "
+        "(read-only legacy Nadine attachable census; max 32 signatures)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
