@@ -1438,10 +1438,14 @@ Do not reopen these as the first move:
       is RTTI `PlayerWeaponAnimControl`; `+0xB8`/`0x14108DAB0` only stores the
       weapon handle. Its `+0x130` initializer resolves four exact holster joints,
       and `+0x138` builds transforms only for valid index pairs.
-- [ ] Run `ez` and repeat pistol/rifle holster on both copies. Compare control
-      `+0x78..+0x84` joint indices and `+0x90..+0xCF` transform bits for Chloe and
-      legacy Nadine. A Nadine `-1` selects missing-joint fallback; valid/equivalent
-      data moves the next probe to the named animation event at `0x14108DE30`.
+- [x] Run `ez` and repeat pistol/rifle holster on both copies. INCONCLUSIVE:
+      Chloe consistently had joints `101,5,199,3` and two live transform blocks,
+      but dynamic transform words were incorrectly part of the 64-entry dedupe
+      signature. The table filled before a legacy-Nadine sample; select no J1/J2/J3.
+- [ ] Run the corrected game-thread census of `Player+0x1DF0` for both retained
+      Players. Deduplicate on stable player/look/joint identity only and keep the
+      transform blocks output-only. A Nadine `-1` selects J1; valid joints with a
+      default/stale block select J2; valid live blocks move to the named event.
 - [ ] After the failed bind boundary is proven, resolve the player-owned rifle's
       `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
       Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a

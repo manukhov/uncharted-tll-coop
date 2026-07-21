@@ -5039,3 +5039,19 @@ Any Nadine `-1` with the corresponding transform absent selects J1; four valid
 indices but a default/stale Nadine transform selects J2; equivalent valid indices
 and populated transforms reject both and select J3. Any install skip, exception,
 crash or model regression invalidates the test.
+
+### 2026-07-21 INCONCLUSIVE: `ez` exhausted its semantic-dedupe table on live transforms
+
+Both `ez` instances remained stable and the Chloe control consistently reported
+four valid indices `101,5,199,3` plus two populated, continuously changing
+transform blocks. However, the transform words themselves were included in the
+64-entry uniqueness signature. PID 19644 therefore consumed all 64 entries on
+the first Chloe rifle transition; PID 18504 consumed 63 on Chloe rifle plus one
+on Chloe pistol. No `look=0xD27C074F` sample was admitted. This does not select
+J1, J2 or J3 and must not be interpreted as evidence that Nadine skipped the
+action: build `ey` already proved that the same action reaches both looks.
+
+The corrected discriminator will read `Player+0x1DF0` from the established
+game-thread peer-state tick and deduplicate only stable identity/look/joint
+fields. The dynamic transform words remain output-only. This guarantees a
+bounded census of both retained Players independent of weapon-action frequency.
