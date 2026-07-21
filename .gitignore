@@ -27,9 +27,6 @@ ida/*.log
 ida/*.txt
 ida/*.$$$
 
-# VS Code
-.vscode/
-
 # Windows
 *.exe
 *.dll
