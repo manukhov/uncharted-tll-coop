@@ -5670,3 +5670,11 @@ to the unchanged original rightHand joint 30. Rifle attachment, arm pose,
 ProcessWeaponStrap and all Chloe records must remain unchanged. A crash, missing
 body part, jitter, back placement, wrong hand placement or any rifle/arm
 regression falsifies the fix.
+
+Build `fk` implements exactly that boundary. It waits for a live exact
+NadineBuddy and legacy-Nadine Player, verifies `r_leg_holster` in both tables,
+uses the established engine transform/AppendRecord path to add only
+`pistolHolster`, and clears the copied runtime fields. The inactive-weapon
+reconciler now selects this id only for standard pistol art; its rifle branch
+remains byte-for-byte unchanged. The existing repair log records count,
+presence, joint and final transform before any user test.

@@ -1579,6 +1579,7 @@ Do not reopen these as the first move:
       hash directly in both rigs under a written Q1/Q2/Q3 prediction. CONFIRMED:
       `actualNamed=99/99`; append the exact native pistolHolster record with
       runtime fields cleared and redirect only inactive standard pistols to it.
+      Build `fk` implements this narrow transfer; runtime result pending.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
