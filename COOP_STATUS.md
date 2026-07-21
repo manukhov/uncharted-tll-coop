@@ -4384,3 +4384,11 @@ FgAnimData, player/screen, ADS, vertical, command-size and double-read guards.
 It must report the selected signature as normalized ids so the two assets are
 never conflated; only complete records from the same signature may be compared
 between screens.
+
+Read-only build `2026-07-21en` implements that bounded retry. Its selector is
+the exact two-element set `0A/6C2B2396/4B0F5DE3/09A0` and
+`0B/27E57F43/FD6DBE03/09A0`; every accepted `AIM-CASE6` record now includes all
+four signature words. All prior command-list, FgAnimData ownership,
+player/screen, ADS/vertical, target/retarget and double-read guards are unchanged.
+No resolver/callback is invoked and no game memory is written. The renamed
+single target `tll_coop_runtime.dll` builds cleanly from a fresh build directory.

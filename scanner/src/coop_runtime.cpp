@@ -14775,11 +14775,17 @@ AimAnimationLeafProbe probe_aim_animation_leaf(
     return result;
 }
 
-constexpr std::uint32_t kAimCase6SelectedClipFlags = 0x0000000A;
-constexpr std::uint32_t kAimCase6SelectedSourceArtSkeletonId = 0x6C2B2396;
-constexpr std::uint32_t kAimCase6SelectedSourceUnderlyingSkeletonId =
-    0x4B0F5DE3;
-constexpr std::uint32_t kAimCase6SelectedClipDataWord08 = 0x000009A0;
+struct AimCase6ClipSignature {
+    std::uint32_t flags;
+    std::uint32_t art_skeleton_id;
+    std::uint32_t underlying_skeleton_id;
+    std::uint32_t data_word_08;
+};
+
+constexpr std::array<AimCase6ClipSignature, 2> kAimCase6SelectedClips{{
+    {0x0000000A, 0x6C2B2396, 0x4B0F5DE3, 0x000009A0},
+    {0x0000000B, 0x27E57F43, 0xFD6DBE03, 0x000009A0},
+}};
 constexpr std::size_t kAimCase6MaxCommandWords = 4096;
 constexpr std::size_t kAimCase6MaxRetargetEntries = 4096;
 constexpr std::size_t kAimCase6RetargetEntryStride = 0x40;
@@ -14810,6 +14816,7 @@ struct AimCase6CommandProbe {
     bool coverage_valid = false;
     bool direct = false;
     std::uint32_t phase_word = 0;
+    std::uint32_t source_clip_flags = 0;
     std::uint32_t source_art_skeleton_id = 0;
     std::uint32_t source_underlying_skeleton_id = 0;
     std::uint32_t source_clip_data_word_08 = 0;
@@ -15009,7 +15016,7 @@ AimCase6CommandProbe probe_aim_case6_command(
         }
 
         const auto* const clip_bytes = static_cast<const std::byte*>(clip);
-        const std::uint32_t clip_flags =
+        result.source_clip_flags =
             *reinterpret_cast<const std::uint32_t*>(clip_bytes + 0x24);
         void* const clip_data =
             *reinterpret_cast<void* const*>(clip_bytes + 0x28);
@@ -15024,15 +15031,19 @@ AimCase6CommandProbe probe_aim_case6_command(
             *reinterpret_cast<const std::uint32_t*>(clip_data_bytes + 0x04);
         result.source_clip_data_word_08 =
             *reinterpret_cast<const std::uint32_t*>(clip_data_bytes + 0x08);
-        result.clip_valid =
-            clip_flags == kAimCase6SelectedClipFlags &&
-            result.source_art_skeleton_id ==
-                kAimCase6SelectedSourceArtSkeletonId &&
-            result.source_underlying_skeleton_id ==
-                kAimCase6SelectedSourceUnderlyingSkeletonId &&
-            result.source_clip_data_word_08 ==
-                kAimCase6SelectedClipDataWord08 &&
-            clip_flags ==
+        const bool selected_clip = std::any_of(
+            kAimCase6SelectedClips.begin(), kAimCase6SelectedClips.end(),
+            [&](const AimCase6ClipSignature& signature) {
+                return result.source_clip_flags == signature.flags &&
+                    result.source_art_skeleton_id ==
+                        signature.art_skeleton_id &&
+                    result.source_underlying_skeleton_id ==
+                        signature.underlying_skeleton_id &&
+                    result.source_clip_data_word_08 ==
+                        signature.data_word_08;
+            });
+        result.clip_valid = selected_clip &&
+            result.source_clip_flags ==
                 *reinterpret_cast<const std::uint32_t*>(clip_bytes + 0x24) &&
             clip_data ==
                 *reinterpret_cast<void* const*>(clip_bytes + 0x28) &&
@@ -15254,7 +15265,7 @@ void probe_process_anim_case6(
                     "AIM-CASE6 tick=%llu screen=%u sample=%u "
                     "up=%.4f down=%.4f ctxFlags=%08X group=%u "
                     "valid=%u/%u/%u/%u/%u/%u/%u "
-                    "phase=%08X source=%08X/%08X/%08X "
+                    "phase=%08X signature=%08X/%08X/%08X/%08X "
                     "target=%08X/%08X/%u/%u/%u branch=%s "
                     "entry=%u/%08X map=%u coverage=%u/%016llX "
                     "callbacks=%08X/%08X/%08X",
@@ -15269,6 +15280,7 @@ void probe_process_anim_case6(
                     static_cast<unsigned>(command.retarget_entry_valid),
                     static_cast<unsigned>(command.retarget_group_valid),
                     command.phase_word,
+                    command.source_clip_flags,
                     command.source_art_skeleton_id,
                     command.source_underlying_skeleton_id,
                     command.source_clip_data_word_08,
@@ -28042,8 +28054,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-21em "
-        "(read-only selected case-6 skeleton and retarget discriminator)");
+        "TLL co-op runtime init 2026-07-21en "
+        "(read-only dual-signature case-6 retarget discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

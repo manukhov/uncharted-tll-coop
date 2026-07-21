@@ -1243,11 +1243,18 @@ Do not reopen these as the first move:
       leaf `0B/27E57F43/FD6DBE03/09A0` did not match `em`'s deliberately narrow
       `0A/6C2B2396/4B0F5DE3/09A0` selector, so no `AIM-CASE6` records were
       eligible.
-- [ ] Extend the read-only selector to the two exact observed case-6 leaf
+- [x] Extend the read-only selector to the two exact observed case-6 leaf
       signatures and rerun the same falsifier. Keep the signatures distinct in
       normalized output and compare only complete same-signature records across
       screens; retain all ownership, ADS/vertical, list-bound and double-read
-      guards.
+      guards. Result: build `en` accepts only the exact `0A/6C2B2396/4B0F5DE3/09A0`
+      and `0B/27E57F43/FD6DBE03/09A0` set, logs the full signature and preserves
+      every prior read-only guard; the fresh single-DLL target builds cleanly.
+- [ ] Run build `en` during strong up/down ADS on both copies. Compare only
+      complete records carrying the same four-word signature; a stable branch,
+      pair/group/coverage or callback-RVA split selects the retarget route, while
+      a complete normalized match rejects case-6 inputs and moves to the common
+      output merge/palette consumer.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
