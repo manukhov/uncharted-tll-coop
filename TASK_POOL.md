@@ -1495,12 +1495,20 @@ Do not reopen these as the first move:
       The pelvis pair is independently selected by the authored holster-control
       child/parent indices and live census (RMS `~0.0075`), though its relative
       transform animates and the first repair intentionally captures one pose.
-- [ ] Build and run `fc`: compose each Chloe marker relative to its standard
+- [x] Build and run `fc`: compose each Chloe marker relative to its standard
       parent with the authored attachment transform, remap the joint to Nadine's
       `spined`/`pelvis`, clear runtime state and append the two 48-byte records
       through `AttachSystem_AppendRecord`. Require `39/45 -> 41/45`, both ids
       present, stable body/grenade, and rifle/pistol holster reparenting away from
       `rightHand`. Do not allocate/replace the container or copy joint 48/199.
+      REJECTED before mutation: the virtual-look admission gate matched neither
+      retained player, so no repair marker appeared and Nadine stayed `39/45`.
+      The immediately-following census proved both raw `Player+0x170` look ids
+      and the game-thread tick were valid.
+- [ ] Build and run `fd` with the gate changed only to raw active look
+      `Player+0x170`. Require the original `39/45 -> 41/45`, both ids present,
+      joints `48:29->18` and `199:3->3`, successful final reparenting, stable
+      body/grenade and no exception.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

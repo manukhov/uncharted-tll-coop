@@ -13081,7 +13081,18 @@ void ensure_legacy_nadine_attach_points_game_thread() {
     int target_owner = -1;
     for (int owner = 0; owner < 2; ++owner) {
         void* const player = retained_player_object(owner);
-        const std::uint32_t look = safe_get_look_id(player);
+        // Holster BuildBinding and the PlayerWeaponAnimControl census both
+        // consume the active authored look stored at Player+0x170. The virtual
+        // vtable[94] getter is a different look/appearance projection and made
+        // fc reject both otherwise-valid retained players before logging.
+        std::uint32_t look = 0;
+        if (player != nullptr &&
+            readable_bytes(static_cast<std::byte*>(player) + 0x170) >=
+                sizeof(look)) {
+            std::memcpy(
+                &look, static_cast<std::byte*>(player) + 0x170,
+                sizeof(look));
+        }
         if (look == kChloeAttachDonorLookId) {
             donor = player;
         } else if (look == kLegacyNadineAttachTargetLookId) {
@@ -30423,8 +30434,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21fc "
-        "(stock AttachSystem append for legacy Nadine firearm holsters)");
+        "TLL co-op runtime init 2026-07-21fd "
+        "(raw active-look gate for stock Nadine AttachSystem append)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

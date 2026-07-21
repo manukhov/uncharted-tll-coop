@@ -5254,3 +5254,22 @@ inactive weapon away from `rightHand`; a crash, count outside `41/45`, a copied
 joint 48/199, a missing hook marker, lost body part, broken grenade or visible
 regression falsifies the repair. Placement may still need a bounded transform
 adjustment, but record presence and physical reparenting must succeed first.
+
+### 2026-07-21 REJECTED: build fc never passed its look-identity gate
+
+Both copies stayed stable and exercised rifle/pistol draw/holster, but the
+written append prediction failed before mutation: there was no
+`NADINE-ATTACH-REPAIR` marker, legacy Nadine remained `present=0/index=-1` for
+both ids, and the final path continued to attach to `rightHand 0x61A48E01`.
+This is a mod admission bug, not evidence against the AttachSystem repair.
+`ensure_legacy_nadine_attach_points_game_thread` runs immediately before the
+PlayerWeaponAnimControl census; that census repeatedly saw retained Chloe
+`Player+0x170=0x3F334972` and Nadine `Player+0x170=0xD27C074F`, proving the tick
+and both inputs were live. The rejected gate instead called virtual vtable slot
+94, whose look/appearance projection did not match either raw active-look id, so
+the function returned without even emitting a failure record.
+
+Build `fd` changes only that rejected discriminator to the exact `Player+0x170`
+field already consumed by the confirmed holster binding and census paths. The
+original `39/45 -> 41/45`, ids `0/0 -> 1/1`, remapped joints `48:29->18` and
+`199:3->3`, no-crash/no-body-regression prediction remains otherwise unchanged.
