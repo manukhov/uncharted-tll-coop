@@ -13871,6 +13871,25 @@ struct AimFloatChannelProbe {
     std::uint8_t release_pending = 0;
 };
 
+constexpr std::uint32_t kAnimSnapshotNodeAnimationVtableRva = 0x02B14D68;
+constexpr std::uint32_t kAnimSnapshotNodeBlendVtableRva = 0x02B15218;
+
+struct AimBlendVmProbe {
+    bool descriptor_present = false;
+    bool descriptor_valid = false;
+    bool code_valid = false;
+    bool code_terminated = false;
+    bool constants_valid = false;
+    std::uint32_t script_id = 0;
+    std::uint32_t code_count = 0;
+    std::uint32_t code_hash = 2166136261U;
+    std::uint32_t constant_count = 0;
+    std::uint32_t constant_hash = 2166136261U;
+    std::uint32_t vertical_reference_mask = 0;
+    std::array<std::uint32_t, 64> code_words{};
+    std::array<std::uint64_t, 32> constants{};
+};
+
 struct AimBaseInstanceProbe {
     bool registry_valid = false;
     bool descriptor_found = false;
@@ -13884,6 +13903,8 @@ struct AimBaseInstanceProbe {
     bool override_table_valid = false;
     bool root_node_valid = false;
     bool root_rtti_valid = false;
+    bool root_blend_valid = false;
+    bool root_dynamic_valid = false;
     std::uint32_t base_id = 0;
     std::uint32_t type = 0;
     std::uint32_t active_track_count = 0;
@@ -13911,12 +13932,23 @@ struct AimBaseInstanceProbe {
     std::uint32_t root_heap_max_count = 0;
     std::uint32_t root_vtable_rva = 0;
     std::uint32_t root_type_descriptor_rva = 0;
+    std::uint32_t root_dynamic_word_60 = 0;
+    std::uint32_t root_child_valid_mask = 0;
+    std::uint32_t root_child_rtti_valid_mask = 0;
+    std::uint32_t root_child_dynamic_valid_mask = 0;
+    std::array<std::uint32_t, 2> root_child_vtable_rva{};
+    std::array<std::uint32_t, 2> root_child_type_descriptor_rva{};
+    std::array<std::uint32_t, 2> root_child_dynamic_word_60{};
+    std::array<std::uint32_t, 2> root_child_dynamic_word_64{};
     std::uint8_t config_mode = 0;
+    std::uint8_t root_blend_flags = 0;
+    std::uint32_t root_blend_mode = 0;
     std::uint64_t authored_state_flags = 0;
     void* layer = nullptr;
     void* instance = nullptr;
     float source_lrdu[4]{};
     float destination_lrdu[4]{};
+    AimBlendVmProbe root_blend_vm{};
 };
 
 void aim_fingerprint_mix_bytes(
@@ -13995,6 +14027,168 @@ bool probe_msvc_rtti_identity(
     vtable_rva = static_cast<std::uint32_t>(vtable - g_module);
     type_descriptor_rva = type_rva;
     return true;
+}
+
+bool aim_vm_opcode_reads_constant(std::uint8_t opcode) {
+    switch (opcode) {
+        case 9:
+        case 10:
+        case 11:
+        case 19:
+        case 20:
+        case 21:
+        case 63:
+        case 64:
+        case 65:
+        case 68:
+        case 69:
+        case 70:
+        case 71:
+        case 72:
+        case 73:
+        case 74:
+            return true;
+        default:
+            return false;
+    }
+}
+
+void mark_aim_vm_vertical_reference(
+    std::uint64_t value, std::uint32_t& mask) {
+    const std::array<std::uint32_t, 2> halves{
+        static_cast<std::uint32_t>(value),
+        static_cast<std::uint32_t>(value >> 32),
+    };
+    for (const std::uint32_t half : halves) {
+        if (half == kAnimStateAimAddUpOffset) {
+            mask |= 1U << 0;
+        } else if (half == kAnimStateAimAddDownOffset) {
+            mask |= 1U << 1;
+        } else if (half == kAnimStateAimAddLeftOffset) {
+            mask |= 1U << 2;
+        } else if (half == kAnimStateAimAddRightOffset) {
+            mask |= 1U << 3;
+        } else if (half == 0x7283B601U) {
+            mask |= 1U << 4;
+        } else if (half == 0xE8651C16U) {
+            mask |= 1U << 5;
+        }
+    }
+}
+
+bool probe_aim_blend_vm_descriptor(
+    void* descriptor, AimBlendVmProbe& result) {
+    result = AimBlendVmProbe{};
+    if (descriptor == nullptr) {
+        return true;
+    }
+    result.descriptor_present = true;
+    if (readable_bytes(descriptor) < 0x20) {
+        return false;
+    }
+    const auto* const descriptor_bytes =
+        static_cast<const std::byte*>(descriptor);
+    const auto* const code = *reinterpret_cast<const std::byte* const*>(
+        descriptor_bytes);
+    const auto* const constants =
+        *reinterpret_cast<const std::uint64_t* const*>(descriptor_bytes + 0x08);
+    result.script_id = *reinterpret_cast<const std::uint32_t*>(
+        descriptor_bytes + 0x18);
+    result.descriptor_valid = true;
+    if (code == nullptr) {
+        return true;
+    }
+
+    std::uint32_t required_constants = 0;
+    for (std::uint32_t index = 0;
+         index < static_cast<std::uint32_t>(result.code_words.size()); ++index) {
+        const auto* const instruction = code + index * sizeof(std::uint32_t);
+        if (readable_bytes(instruction) < sizeof(std::uint32_t)) {
+            return false;
+        }
+        const std::uint32_t word =
+            *reinterpret_cast<const std::uint32_t*>(instruction);
+        result.code_words[index] = word;
+        result.code_count = index + 1;
+        aim_fingerprint_mix_bytes(
+            result.code_hash, &word, sizeof(word));
+        const std::uint8_t opcode = static_cast<std::uint8_t>(word);
+        if (aim_vm_opcode_reads_constant(opcode)) {
+            const std::uint32_t constant_index = (word >> 16) & 0xFFU;
+            required_constants = std::max(
+                required_constants, constant_index + 1);
+        }
+        if (opcode == 0) {
+            result.code_terminated = true;
+            break;
+        }
+    }
+    result.code_valid = result.code_count != 0 && result.code_terminated;
+    result.constant_count = std::min<std::uint32_t>(
+        required_constants,
+        static_cast<std::uint32_t>(result.constants.size()));
+    if (required_constants > result.constants.size()) {
+        return false;
+    }
+    if (result.constant_count == 0) {
+        result.constants_valid = true;
+        return result.code_valid;
+    }
+    if (constants == nullptr ||
+        readable_bytes(constants) <
+            static_cast<std::size_t>(result.constant_count) *
+                sizeof(std::uint64_t)) {
+        return false;
+    }
+    for (std::uint32_t index = 0; index < result.constant_count; ++index) {
+        const std::uint64_t value = constants[index];
+        result.constants[index] = value;
+        aim_fingerprint_mix_bytes(
+            result.constant_hash, &value, sizeof(value));
+        mark_aim_vm_vertical_reference(
+            value, result.vertical_reference_mask);
+    }
+    result.constants_valid = true;
+
+    // Reject a torn descriptor/code sample. The bytecode and constant-pool
+    // pointers are asset-owned and must remain stable for the whole walk.
+    return code == *reinterpret_cast<const std::byte* const*>(descriptor_bytes) &&
+        constants == *reinterpret_cast<const std::uint64_t* const*>(
+                         descriptor_bytes + 0x08) &&
+        result.script_id == *reinterpret_cast<const std::uint32_t*>(
+                                descriptor_bytes + 0x18) &&
+        result.code_valid;
+}
+
+bool probe_snapshot_heap_node(
+    void* heap, std::uint32_t index, void*& node) {
+    node = nullptr;
+    if (heap == nullptr || index == UINT32_MAX ||
+        readable_bytes(heap) < 0xB0) {
+        return false;
+    }
+    const auto* const heap_bytes = static_cast<const std::byte*>(heap);
+    const std::uint32_t count = *reinterpret_cast<const std::uint32_t*>(
+        heap_bytes + 0xAC);
+    const auto* const records = *reinterpret_cast<const std::byte* const*>(
+        heap_bytes + 0xA0);
+    if (count == 0 || count > 0x100000 || index >= count || records == nullptr) {
+        return false;
+    }
+    const auto* const record =
+        records + static_cast<std::size_t>(index) * 0x28;
+    if (readable_bytes(record) < sizeof(void*)) {
+        return false;
+    }
+    node = *reinterpret_cast<void* const*>(record);
+    if (node == nullptr || readable_bytes(node) < sizeof(void*)) {
+        node = nullptr;
+        return false;
+    }
+    return count == *reinterpret_cast<const std::uint32_t*>(heap_bytes + 0xAC) &&
+        records == *reinterpret_cast<const std::byte* const*>(
+                       heap_bytes + 0xA0) &&
+        node == *reinterpret_cast<void* const*>(record);
 }
 
 struct AimOverrideFingerprint {
@@ -14309,6 +14503,132 @@ AimBaseInstanceProbe probe_base_anim_state_instance(void* registry) {
                             root_node, result.root_vtable_rva,
                             result.root_type_descriptor_rva);
 
+                        if (result.root_rtti_valid &&
+                            result.root_vtable_rva ==
+                                kAnimSnapshotNodeBlendVtableRva &&
+                            readable_bytes(root_node) >= 0x64) {
+                            const auto* const root_bytes =
+                                static_cast<const std::byte*>(root_node);
+                            const std::array<std::uint32_t, 2> child_indices{
+                                *reinterpret_cast<const std::uint32_t*>(
+                                    root_bytes + 0x40),
+                                *reinterpret_cast<const std::uint32_t*>(
+                                    root_bytes + 0x44),
+                            };
+                            result.root_blend_flags =
+                                *reinterpret_cast<const std::uint8_t*>(
+                                    root_bytes + 0x48);
+                            result.root_blend_mode =
+                                *reinterpret_cast<const std::uint32_t*>(
+                                    root_bytes + 0x4C);
+                            void* const script_descriptor =
+                                *reinterpret_cast<void* const*>(
+                                    root_bytes + 0x58);
+                            result.root_dynamic_word_60 =
+                                *reinterpret_cast<const std::uint32_t*>(
+                                    root_bytes + 0x60);
+                            result.root_dynamic_valid =
+                                result.root_dynamic_word_60 ==
+                                *reinterpret_cast<const std::uint32_t*>(
+                                    root_bytes + 0x60);
+                            result.root_blend_valid =
+                                probe_aim_blend_vm_descriptor(
+                                    script_descriptor,
+                                    result.root_blend_vm);
+
+                            for (std::size_t child_index = 0;
+                                 child_index < child_indices.size();
+                                 ++child_index) {
+                                void* child_node = nullptr;
+                                if (!probe_snapshot_heap_node(
+                                        root_heap,
+                                        child_indices[child_index],
+                                        child_node)) {
+                                    continue;
+                                }
+                                result.root_child_valid_mask |=
+                                    1U << child_index;
+                                if (probe_msvc_rtti_identity(
+                                        child_node,
+                                        result.root_child_vtable_rva[child_index],
+                                        result.root_child_type_descriptor_rva[
+                                            child_index])) {
+                                    result.root_child_rtti_valid_mask |=
+                                        1U << child_index;
+                                }
+                                const std::uint32_t child_vtable_rva =
+                                    result.root_child_vtable_rva[child_index];
+                                if (child_vtable_rva ==
+                                        kAnimSnapshotNodeBlendVtableRva &&
+                                    readable_bytes(child_node) >= 0x64) {
+                                    const auto* const child_bytes =
+                                        static_cast<const std::byte*>(child_node);
+                                    const std::uint32_t dynamic_60 =
+                                        *reinterpret_cast<const std::uint32_t*>(
+                                            child_bytes + 0x60);
+                                    result.root_child_dynamic_word_60[
+                                        child_index] = dynamic_60;
+                                    if (dynamic_60 ==
+                                            *reinterpret_cast<
+                                                const std::uint32_t*>(
+                                                child_bytes + 0x60) &&
+                                        *reinterpret_cast<const std::uintptr_t*>(
+                                            child_node) ==
+                                            g_module + child_vtable_rva) {
+                                        result.root_child_dynamic_valid_mask |=
+                                            1U << child_index;
+                                    }
+                                } else if (child_vtable_rva ==
+                                               kAnimSnapshotNodeAnimationVtableRva &&
+                                           readable_bytes(child_node) >= 0x68) {
+                                    const auto* const child_bytes =
+                                        static_cast<const std::byte*>(child_node);
+                                    const std::uint32_t dynamic_60 =
+                                        *reinterpret_cast<const std::uint32_t*>(
+                                            child_bytes + 0x60);
+                                    const std::uint32_t dynamic_64 =
+                                        *reinterpret_cast<const std::uint32_t*>(
+                                            child_bytes + 0x64);
+                                    result.root_child_dynamic_word_60[
+                                        child_index] = dynamic_60;
+                                    result.root_child_dynamic_word_64[
+                                        child_index] = dynamic_64;
+                                    if (dynamic_60 ==
+                                            *reinterpret_cast<
+                                                const std::uint32_t*>(
+                                                child_bytes + 0x60) &&
+                                        dynamic_64 ==
+                                            *reinterpret_cast<
+                                                const std::uint32_t*>(
+                                                child_bytes + 0x64) &&
+                                        *reinterpret_cast<const std::uintptr_t*>(
+                                            child_node) ==
+                                            g_module + child_vtable_rva) {
+                                        result.root_child_dynamic_valid_mask |=
+                                            1U << child_index;
+                                    }
+                                }
+                            }
+
+                            result.root_blend_valid =
+                                result.root_blend_valid &&
+                                child_indices[0] ==
+                                    *reinterpret_cast<const std::uint32_t*>(
+                                        root_bytes + 0x40) &&
+                                child_indices[1] ==
+                                    *reinterpret_cast<const std::uint32_t*>(
+                                        root_bytes + 0x44) &&
+                                result.root_blend_flags ==
+                                    *reinterpret_cast<const std::uint8_t*>(
+                                        root_bytes + 0x48) &&
+                                result.root_blend_mode ==
+                                    *reinterpret_cast<const std::uint32_t*>(
+                                        root_bytes + 0x4C) &&
+                                script_descriptor ==
+                                    *reinterpret_cast<void* const*>(
+                                        root_bytes + 0x58);
+                        }
+
                         // The root can be torn down on another animation phase.
                         // Accept a sample only when the full owner chain and
                         // vtable are unchanged after the RTTI walk.
@@ -14349,6 +14669,17 @@ AimBaseInstanceProbe probe_base_anim_state_instance(void* registry) {
                             result.root_rtti_valid = false;
                             result.root_vtable_rva = 0;
                             result.root_type_descriptor_rva = 0;
+                            result.root_blend_valid = false;
+                            result.root_dynamic_valid = false;
+                            result.root_dynamic_word_60 = 0;
+                            result.root_child_valid_mask = 0;
+                            result.root_child_rtti_valid_mask = 0;
+                            result.root_child_dynamic_valid_mask = 0;
+                            result.root_child_vtable_rva = {};
+                            result.root_child_type_descriptor_rva = {};
+                            result.root_child_dynamic_word_60 = {};
+                            result.root_child_dynamic_word_64 = {};
+                            result.root_blend_vm = {};
                         }
                     }
                 }
@@ -14456,6 +14787,73 @@ void log_aim_base_state_fingerprint(
         probe.root_heap_max_count, probe.instance_flags,
         static_cast<unsigned>(probe.copy_enabled));
     boot_log_line(line);
+
+    if (probe.root_blend_valid) {
+        char blend_line[1536]{};
+        std::snprintf(
+            blend_line, sizeof(blend_line),
+            "AIM-BASE-BLEND tick=%llu phase=%s screen=%u up=%.4f down=%.4f "
+            "state=%08X rootW=%08X/%u rootFlags=%02X rootMode=%08X "
+            "vm=%08X/%u/%08X/%u/%u/%08X/%02X/%u/%u/%u "
+            "childMask=%u/%u/%u "
+            "child0=%08X/%08X/%08X/%08X "
+            "child1=%08X/%08X/%08X/%08X",
+            static_cast<unsigned long long>(now), phase, screen, up, down,
+            probe.snapshot_state_id, probe.root_dynamic_word_60,
+            static_cast<unsigned>(probe.root_dynamic_valid),
+            static_cast<unsigned>(probe.root_blend_flags),
+            probe.root_blend_mode, probe.root_blend_vm.script_id,
+            probe.root_blend_vm.code_count, probe.root_blend_vm.code_hash,
+            static_cast<unsigned>(probe.root_blend_vm.code_terminated),
+            probe.root_blend_vm.constant_count,
+            probe.root_blend_vm.constant_hash,
+            probe.root_blend_vm.vertical_reference_mask,
+            static_cast<unsigned>(probe.root_blend_vm.descriptor_present),
+            static_cast<unsigned>(probe.root_blend_vm.code_valid),
+            static_cast<unsigned>(probe.root_blend_vm.constants_valid),
+            probe.root_child_valid_mask,
+            probe.root_child_rtti_valid_mask,
+            probe.root_child_dynamic_valid_mask,
+            probe.root_child_vtable_rva[0],
+            probe.root_child_type_descriptor_rva[0],
+            probe.root_child_dynamic_word_60[0],
+            probe.root_child_dynamic_word_64[0],
+            probe.root_child_vtable_rva[1],
+            probe.root_child_type_descriptor_rva[1],
+            probe.root_child_dynamic_word_60[1],
+            probe.root_child_dynamic_word_64[1]);
+        boot_log_line(blend_line);
+
+        static std::atomic<bool> vm_dumped[2]{};
+        if (probe.snapshot_state_id == 0x3C347132U &&
+            probe.root_blend_vm.code_valid &&
+            probe.root_blend_vm.constants_valid &&
+            !vm_dumped[screen].exchange(true, std::memory_order_acq_rel)) {
+            std::ostringstream dump;
+            dump << "AIM-BASE-VM-DUMP tick=" << now
+                 << " screen=" << screen
+                 << " state=" << std::uppercase << std::hex
+                 << std::setw(8) << std::setfill('0')
+                 << probe.snapshot_state_id << " code=";
+            for (std::uint32_t index = 0;
+                 index < probe.root_blend_vm.code_count; ++index) {
+                if (index != 0) {
+                    dump << ',';
+                }
+                dump << std::setw(8) << probe.root_blend_vm.code_words[index];
+            }
+            dump << " constants=";
+            for (std::uint32_t index = 0;
+                 index < probe.root_blend_vm.constant_count; ++index) {
+                if (index != 0) {
+                    dump << ',';
+                }
+                dump << std::setw(16)
+                     << probe.root_blend_vm.constants[index];
+            }
+            boot_log_line(dump.str().c_str());
+        }
+    }
 }
 
 AimFloatChannelProbe probe_aim_float_channel(
@@ -26184,8 +26582,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-21eh "
-        "(read-only resolved root RTTI and authored-config discriminator)");
+        "TLL hook DLL init 2026-07-21ei "
+        "(read-only root blend VM, weight, and child-type discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

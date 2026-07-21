@@ -862,3 +862,89 @@ The next static frontier is the common root vslot `+0x68` invoked at
 `0x1418A529F`. Resolve vtable `0x142B15218`, TypeDescriptor `0x143771508`, and
 the concrete slot target, then follow parameter binding and command/pose output.
 Raw root index must not be copied or treated as identity.
+
+## STATIC `ei`: root Blend VM and command-weight boundary
+
+The previous frontier description is now corrected. Vtable `0x142B15218` belongs
+to `AnimSnapshotNodeBlend` (TypeDescriptor `0x143771508`). Its `+0x68` method is
+`AnimSnapshotNodeBlend_StepChildren 0x14191E550`; it only resolves child indices
+at `node+0x40/+0x44` and forwards virtual slot 13. It does not interpret the
+parameter buffer and is **REJECTED** as the pitch consumer.
+
+### Exact hypothesis and competitors
+
+The selected diagnostic hypothesis is that the common root's earlier slot 11,
+`AnimSnapshotNodeBlend_RefreshPhasesAndBlends 0x14191E180`, evaluates different
+dynamic state on sender and receiver even though `eh` matched the root/config and
+`ef` matched destination LRDU. A stable difference in `root+0x60` or in a typed
+immediate child dynamic value would identify the first concrete split.
+
+Competing hypotheses are:
+
+1. The root script is unrelated to vertical aim; its weight and immediate child
+   state match, and pitch is consumed only in a deeper child/IK/warper node.
+2. The root script does consume vertical state, but both processes produce the
+   same weight; divergence begins when slot 14 generates or later applies the
+   animation command graph.
+3. The authored child pair differs despite matching root RTTI/config. Child
+   indices themselves are per-heap noise; only resolved RTTI RVAs are semantic.
+4. A transient snapshot teardown changes the root/child/descriptor chain while
+   sampled. Such a sample is invalid and cannot authorize a write.
+
+### Independent static evidence quota
+
+1. RTTI, registration, and construction independently converge:
+   vtable `0x142B15218` has COL `0x142CDF2B0`, TD `0x143771508`
+   (`.?AVAnimSnapshotNodeBlend@@`); `0x1400EDCC0` registers literal
+   `AnimSnapshotNodeBlend`, factory `0x14191DC30`, size `0x80`.
+2. `AnimStateSnapshot_RefreshPhasesAndBlends 0x1418B3150` resolves the live root
+   and invokes vslot 11 with the parameter context. Blend slot 11 copies the
+   48-byte context supplied from `instance+0x178`, evaluates the descriptor saved
+   at `node+0x58` as `anim-node-blend-func`, clamps the result, and stores it at
+   `node+0x60` before recursively refreshing children.
+3. The independent downstream command path
+   `CreateAnimCmdsForObject 0x141A8FCF0 -> AnimControl::CreateAnimCmds
+   0x14172C370 -> 0x14189EA60 -> 0x141AB6C40` resolves the same root and invokes
+   vslot 14. `AnimSnapshotNodeBlend_GenerateAnimCommands 0x14191E5F0` appends six
+   dwords `[0x60007, childA, childB, depth, node+0x4C, node+0x60]`; therefore the
+   probed dynamic weight reaches an actual animation command.
+4. The VM boundary is offset-exact. `ScriptManager_EvalChecked 0x14022C820`
+   validates descriptor script id `+0x18`; `ScriptVm_ExecuteBytecode
+   0x141763FE0` reads four-byte instructions from descriptor `+0`, qword constants
+   from `+0x8`, and caps the copied argument array at 65 entries. This permits a
+   bounded read-only bytecode/constant fingerprint instead of calling the VM.
+5. Child type cannot be guessed from the root vtable. Slot 9
+   `AnimSnapshotNodeBlend_SnapshotChildren 0x14191DF90` recursively materializes
+   runtime authored descriptors `+0x8/+0x10`. Static competing implementations
+   include Animation, Warper, Unary/IK families, Leaf/EmptyPose and InstanceZero;
+   resolved per-node RTTI is required.
+
+### Read-only implementation and falsifier
+
+Build `2026-07-21ei` extends the existing bounded sample only after validating the
+same root owner chain. It records root blend flags/mode, exact float bits at
+`root+0x60`, script id, a maximum of 64 four-byte VM instructions, and at most 32
+directly referenced constants. It also resolves both immediate children through
+the checked snapshot heap, records vtable/TD RVAs, and reads `+0x60/+0x64` only
+for the statically proved Blend and Animation layouts. Every mutable pointer,
+index, vtable and dynamic word is reread; invalid/torn samples carry validity
+bits. No resolver, script, virtual animation, command, or pose function is
+called, and no game memory is written.
+
+For stable state `3C347132`, each process emits one `AIM-BASE-VM-DUMP`. Direct
+constant hits are flagged for LRDU offsets `0x188..0x194` and known vertical ids
+`7283B601/E8651C16`; the full bounded code/constant list remains available for
+offline decoding when the script reaches data through a native-call opcode.
+
+Prediction:
+
+- stable sender/receiver root-weight divergence correlated with up/down selects
+  root slot 11 parameter/script consumption;
+- equal root weight but different resolved child RTTI or typed child dynamic word
+  selects the concrete child subtree;
+- matching root weight, script fingerprint, child RTTI and typed child dynamics
+  rejects the immediate root boundary and moves the trace to slot 14 command
+  generation/application;
+- raw heap indices, pointers, activation serials, and untyped constant-pointer
+  values are non-diagnostic;
+- any crash, visible animation/model change, or input change invalidates `ei`.

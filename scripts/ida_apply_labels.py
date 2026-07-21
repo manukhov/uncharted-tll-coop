@@ -148,6 +148,68 @@ FUNCTIONS = {
         "AnimStateInstance_PhaseUpdate uses it with instance+0x130/+0x138 before "
         "dispatching the root node virtual methods.",
     ),
+    0x1418B3150: (
+        "AnimStateSnapshot_RefreshPhasesAndBlends",
+        "Source assertion identifies AnimStateSnapshot::RefreshPhasesAndBlends. "
+        "Resolves the snapshot root and passes the live parameter context to root "
+        "virtual slot 11 (+0x58).",
+    ),
+    0x14191DC30: (
+        "AnimSnapshotNodeBlend_Create",
+        "Registered factory for the RTTI-backed 0x80-byte AnimSnapshotNodeBlend "
+        "class; constructs the two-child snapshot node from authored data.",
+    ),
+    0x14191DF00: (
+        "AnimSnapshotNodeBlend_Construct",
+        "Installs the AnimSnapshotNodeBlend vtable and initializes its two child "
+        "indices and dynamic blend fields.",
+    ),
+    0x14191DF90: (
+        "AnimSnapshotNodeBlend_SnapshotChildren",
+        "Materializes authored descriptor children +0x8/+0x10 into snapshot-heap "
+        "indices at node+0x40/+0x44 and saves the blend script descriptor at +0x58.",
+    ),
+    0x14191E180: (
+        "AnimSnapshotNodeBlend_RefreshPhasesAndBlends",
+        "Virtual slot 11 (+0x58). Evaluates anim-node-blend-func with the live "
+        "parameter context, clamps the result into node+0x60, then recurses into "
+        "the selected child nodes.",
+    ),
+    0x14191E550: (
+        "AnimSnapshotNodeBlend_StepChildren",
+        "Virtual slot 13 (+0x68). Resolves node+0x40/+0x44 and forwards the step "
+        "call to both children; it does not itself interpret animation parameters.",
+    ),
+    0x14191E5F0: (
+        "AnimSnapshotNodeBlend_GenerateAnimCommands",
+        "Virtual slot 14 (+0x70). Generates both child command streams and appends "
+        "the 0x60007 blend command whose final dword is node+0x60.",
+    ),
+    0x141918120: (
+        "AnimSnapshotNodeAnimation_RefreshPhase",
+        "Animation-node virtual slot 11. Optionally evaluates anim-node-phase-func "
+        "and stores the resulting phase at node+0x60.",
+    ),
+    0x1419180A0: (
+        "AnimSnapshotNodeAnimation_StepPhase",
+        "Animation-node virtual slot 13. Advances the dynamic phase at node+0x60 "
+        "from delta time and the authored animation record.",
+    ),
+    0x1419182E0: (
+        "AnimSnapshotNodeAnimation_GenerateAnimCommands",
+        "Animation-node virtual slot 14. Emits the 0x60006 animation command from "
+        "the selected clip and dynamic phase at node+0x60.",
+    ),
+    0x14022C820: (
+        "ScriptManager_EvalChecked",
+        "Validates the requested script id against descriptor+0x18 before "
+        "dispatching the descriptor bytecode and argument array to the script VM.",
+    ),
+    0x141763FE0: (
+        "ScriptVm_ExecuteBytecode",
+        "Executes four-byte VM instructions from descriptor+0 using the qword "
+        "constant pool at descriptor+0x8 and a bounded copied argument array.",
+    ),
     0x141926AE0: (
         "AnimStateOverrideTable_FindStateRecord",
         "Scans enabled 24-byte override records in reverse and returns the first "

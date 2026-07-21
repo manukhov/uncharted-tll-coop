@@ -4086,3 +4086,36 @@ how that concrete node binds the `instance+0x178` descriptor into generated
 animation/pose commands. Do not compare or copy raw root indices, and do not add
 another runtime probe until competing consumers below this slot are separated
 statically.
+
+### 2026-07-21 STATIC: `ei` resolves the root Blend VM and command output
+
+The previous `+0x68` frontier is corrected. Vtable `0x142B15218`, COL
+`0x142CDF2B0`, and TD `0x143771508` identify `AnimSnapshotNodeBlend`; registered
+factory `0x14191DC30` creates the 0x80-byte class. Slot `+0x68`
+`0x14191E550` only resolves `node+0x40/+0x44` and steps both children, so it is
+**REJECTED** as the parameter consumer.
+
+The live parameter boundary is root slot `+0x58`:
+`AnimStateSnapshot_RefreshPhasesAndBlends 0x1418B3150` supplies the live context,
+and `AnimSnapshotNodeBlend_RefreshPhasesAndBlends 0x14191E180` copies its 48 bytes,
+evaluates the `node+0x58` descriptor as `anim-node-blend-func`, clamps the result,
+and stores it at `node+0x60`. Independently, the local command path reaches root
+slot `+0x70`; `AnimSnapshotNodeBlend_GenerateAnimCommands 0x14191E5F0` appends
+`[0x60007, childA, childB, depth, node+0x4C, node+0x60]`. The probed weight is
+therefore proven to reach the generated animation command rather than being an
+unused cache field.
+
+Exact child types remain runtime-authored: slot 9 `0x14191DF90` materializes
+descriptor children `+0x8/+0x10`; candidates include Animation, Warper, Unary/IK
+families and leaves. Build `2026-07-21ei` is read-only and bounded. It records the
+root weight/flags/mode, script id, at most 64 four-byte VM instructions and 32
+direct constants, plus resolved child vtable/TD RVAs and typed dynamic fields for
+proved Blend/Animation layouts. Mutable owner chains and values are reread; it
+calls no native resolver/VM/animation function and performs no write.
+
+Falsifier: a stable root-weight split correlated with vertical input selects root
+script/binding. Equal root weight but different child RTTI/typed dynamics selects
+the concrete child subtree. A complete match rejects the immediate root and moves
+the trace to slot-14 command application. Raw indices/pointers and activation
+serial remain non-diagnostic. Full evidence and the exact safety caps are in
+`reports/remote_aim_pitch_blend_tick_20260718.md`.

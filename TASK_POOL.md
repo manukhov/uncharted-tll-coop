@@ -1156,11 +1156,20 @@ Do not reopen these as the first move:
       callback/flags, all scalars, mode/apReference, key hash, override result,
       heap max, instance flags and copy bit. Only root index and activation serial
       differed; reject concrete-root/config routing as the missing-pitch cause.
-- [ ] Resolve concrete root vtable `0x142B15218`, RTTI TD `0x143771508`, and
-      vslot `+0x68` target called at `0x1418A529F`. Trace descriptor/key use into
-      generated animation/pose commands in both directions and enumerate
-      competing consumers before choosing the next probe. Do not copy raw root
-      index or add another runtime test before the static evidence quota.
+- [x] Resolve concrete root vtable `0x142B15218` as
+      `AnimSnapshotNodeBlend`. Vslot `+0x68` / `0x14191E550` only steps children;
+      reject it as a parameter consumer. Actual input evaluation is vslot
+      `+0x58` / `0x14191E180`, which evaluates `anim-node-blend-func` into
+      `node+0x60`; vslot `+0x70` / `0x14191E5F0` emits that value in command
+      `0x60007`. RTTI/factory, call/dataflow, VM layout and downstream command
+      evidence satisfy the static quota.
+- [x] Implement read-only build `ei`: bounded root weight/VM fingerprint and
+      resolved immediate-child RTTI/typed dynamic fields. It calls no native
+      resolver, VM or animation method and writes no game state.
+- [ ] Run the written `ei` falsifier with stable center/up/down ADS motion. Compare
+      aligned screen-0/screen-1 root weight, VM code/constants, child RTTI and
+      typed child dynamics. Ignore raw heap indices/pointers. A full match moves
+      the next static trace to slot-14 command application.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
