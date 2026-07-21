@@ -1404,12 +1404,16 @@ Do not reopen these as the first move:
       CONFIRMED: `ProcessWeapon` rifle art `0x8075397D`, mesh `0x255BEBA0`;
       pistol `0x33E29A1B`; grenade `0x0B8BD6D6`/mesh `0x836D013E`; hair is
       `ProcessCharCloth`/mesh `0x7368D4A2`.
-- [ ] Capture the exact ProcessWeapon pointers at the async census, then compare
+- [x] Build `ex`: capture the exact ProcessWeapon pointers at the async census,
+      then compare
       them with PlayerWeaponController `GetWeaponBySlot` results only on the game
       thread. Log owner player index, exact slot membership, current slot,
       draw-state, hand-attached slot and active weapon. Rifle-in-slot while the
       pistol is current selects the holster-AP failure; no slot membership selects
       a look-created orphan. No visibility or transform write in this probe.
+- [ ] Run `ex` and cycle pistol, rifle and holster once. Correlate the exact
+      `0x8075397D` pointer with slot mask and controller state before choosing
+      holster-AP repair versus orphan suppression.
 - [ ] After the baked rifle is isolated, resolve the player-owned rifle's failed
       `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
       Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a

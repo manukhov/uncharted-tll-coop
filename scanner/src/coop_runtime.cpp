@@ -282,6 +282,13 @@ volatile int g_nadine_swap_index = 0;
 // -1 is the untouched baseline; 0..4 hide exactly one legacy-look mesh.
 std::atomic<int> g_nadine_parent_mesh_probe_index{-1};
 constexpr bool kEnableNadineParentMeshProbe = false;
+struct NadineWeaponCandidate {
+    std::atomic<std::uintptr_t> object{0};
+    std::atomic<std::uintptr_t> parent_draw{0};
+    std::atomic<std::uint32_t> art{0};
+    std::atomic<std::uint32_t> mesh{0};
+};
+std::array<NadineWeaponCandidate, 8> g_nadine_weapon_candidates{};
 // Two-instance role: false = role A (recv :31338, "player 1", local Chloe), true =
 // role B (recv :31339, "player 2", local Nadine). Set in start_state_net().
 volatile bool g_net_role_b = false;
@@ -12521,10 +12528,110 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
     }
 }
 
+void diagnose_nadine_weapon_membership_game_thread() {
+    // The attachable hook runs from PostJointUpdate_Async and only publishes
+    // pointers. All PlayerWeaponController vtable reads stay on this established
+    // game-thread tick.
+    static std::array<std::uint64_t, 8> last_signatures{};
+    static std::array<std::uint8_t, 8> log_counts{};
+    for (std::size_t candidate_index = 0;
+         candidate_index < g_nadine_weapon_candidates.size();
+         ++candidate_index) {
+        const NadineWeaponCandidate& candidate =
+            g_nadine_weapon_candidates[candidate_index];
+        const std::uintptr_t object_value =
+            candidate.object.load(std::memory_order_acquire);
+        if (object_value <= 1 || log_counts[candidate_index] >= 16) {
+            continue;
+        }
+        void* const object = reinterpret_cast<void*>(object_value);
+        void* const parent_draw = reinterpret_cast<void*>(
+            candidate.parent_draw.load(std::memory_order_relaxed));
+        const std::uint32_t art =
+            candidate.art.load(std::memory_order_relaxed);
+        const std::uint32_t mesh =
+            candidate.mesh.load(std::memory_order_relaxed);
+
+        int owner_index = -1;
+        void* owner = nullptr;
+        for (int player_index = 0; player_index < 2; ++player_index) {
+            void* const player = retained_player_object(player_index);
+            if (player == nullptr ||
+                readable_bytes(static_cast<std::byte*>(player) + 0x1A0) < 1) {
+                continue;
+            }
+            void* const player_draw = *reinterpret_cast<void**>(
+                static_cast<std::byte*>(player) + 0x198);
+            if (player_draw == parent_draw) {
+                owner_index = player_index;
+                owner = player;
+                break;
+            }
+        }
+
+        std::uint32_t slot_mask = 0;
+        if (owner != nullptr) {
+            for (int slot = 0; slot <= 22; ++slot) {
+                if (get_weapon_from_slot(owner, slot) == object) {
+                    slot_mask |= 1u << slot;
+                }
+            }
+        }
+        int current_slot = -99;
+        std::uint32_t draw_state = 0xFFFFFFFFu;
+        if (owner != nullptr) {
+            read_weapon_draw_state(owner, current_slot, draw_state);
+        }
+        const int hand_slot = owner != nullptr
+            ? capture_hand_attached_slot_int(owner)
+            : -1;
+        void* const active_weapon = owner != nullptr
+            ? get_player_active_weapon(owner)
+            : nullptr;
+        const std::uint32_t active_art =
+            weapon_art_id_from_object(active_weapon);
+
+        std::uint64_t signature = 1469598103934665603ULL;
+        auto mix = [&signature](std::uint64_t value) {
+            signature ^= value;
+            signature *= 1099511628211ULL;
+        };
+        mix(object_value);
+        mix(static_cast<std::uint32_t>(owner_index));
+        mix(slot_mask);
+        mix(static_cast<std::uint32_t>(current_slot));
+        mix(draw_state);
+        mix(static_cast<std::uint32_t>(hand_slot));
+        mix(reinterpret_cast<std::uintptr_t>(active_weapon));
+        mix(active_art);
+        if (last_signatures[candidate_index] == signature) {
+            continue;
+        }
+        last_signatures[candidate_index] = signature;
+        ++log_counts[candidate_index];
+
+        std::ostringstream line;
+        line << "NADINE-WEAPON-MEMBERSHIP candidate=" << candidate_index
+             << " object=0x" << std::hex << object_value
+             << " art=0x" << art << " mesh=0x" << mesh
+             << " parentDraw=0x"
+             << reinterpret_cast<std::uintptr_t>(parent_draw)
+             << std::dec << " owner=" << owner_index
+             << " slotMask=0x" << std::hex << slot_mask << std::dec
+             << " current=" << current_slot << " draw=" << draw_state
+             << " hand=" << hand_slot
+             << " active=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(active_weapon)
+             << "/0x" << active_art << std::dec;
+        write_log_line(line.str().c_str());
+    }
+}
+
 void apply_peer_held_weapon_state() {
     coop::StatePacket peer{};
     void* puppet = nullptr;
     if (!latest_peer_state(peer, puppet)) return;
+    diagnose_nadine_weapon_membership_game_thread();
     // Slot MIRROR up front, unconditionally (2026-07-07): this was gated behind
     // g_puppet_pregive_holstered (parked OFF since the 07-06 flicker regression),
     // which silently disabled the whole reconciliation - puppet spawned with no
@@ -26866,6 +26973,37 @@ void census_legacy_nadine_attachable(
         signature = 1;
     }
 
+    if (vtable_rva == kProcessWeaponVtableRva && art_candidate != 0) {
+        const std::uintptr_t object_value =
+            reinterpret_cast<std::uintptr_t>(attachable);
+        for (NadineWeaponCandidate& candidate : g_nadine_weapon_candidates) {
+            std::uintptr_t current =
+                candidate.object.load(std::memory_order_acquire);
+            if (current == object_value) {
+                candidate.parent_draw.store(
+                    reinterpret_cast<std::uintptr_t>(parent_draw),
+                    std::memory_order_relaxed);
+                candidate.art.store(art_candidate, std::memory_order_relaxed);
+                candidate.mesh.store(
+                    child.readable_meshes != 0 ? child.mesh_ids[0] : 0,
+                    std::memory_order_relaxed);
+                break;
+            }
+            if (current == 0 && candidate.object.compare_exchange_strong(
+                                    current, 1, std::memory_order_acq_rel)) {
+                candidate.parent_draw.store(
+                    reinterpret_cast<std::uintptr_t>(parent_draw),
+                    std::memory_order_relaxed);
+                candidate.art.store(art_candidate, std::memory_order_relaxed);
+                candidate.mesh.store(
+                    child.readable_meshes != 0 ? child.mesh_ids[0] : 0,
+                    std::memory_order_relaxed);
+                candidate.object.store(object_value, std::memory_order_release);
+                break;
+            }
+        }
+    }
+
     static std::array<std::atomic<std::uint64_t>, 32> seen{};
     std::atomic<std::uint64_t>* claimed = nullptr;
     for (auto& slot : seen) {
@@ -28932,8 +29070,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21ew "
-        "(read-only exact-parent attachable census with bounded writer; max 32)");
+        "TLL co-op runtime init 2026-07-21ex "
+        "(read-only Nadine ProcessWeapon slot-membership correlation)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

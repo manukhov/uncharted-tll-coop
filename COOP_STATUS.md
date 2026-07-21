@@ -4898,3 +4898,26 @@ slot object while pistol/current-state is active, the failure is the downstream
 `weapon-holster-point` bind. If it is absent from every slot, it is a look-created
 orphan and can be suppressed only outside a real rifle selection. This pointer
 comparison must precede any visibility or transform write.
+
+### 2026-07-21 STATIC: ProcessWeapon inventory-membership correlation (`ex`)
+
+Build `2026-07-21ex` keeps the exact-parent async hook read-only: it publishes
+only `{ProcessWeapon pointer, parent DrawControl, art, first mesh id}` through a
+bounded eight-slot atomic bridge. The established game-thread weapon tick then
+matches the parent DrawControl against retained Player 0/1, compares the exact
+pointer with all controller slots 0..22, and records slot mask, controller current
+slot/draw state, hand-attached slot and active weapon pointer/art. At most 16
+state changes per candidate are written. No engine vtable call is made from the
+async hook and no game field is modified.
+
+Three independent evidence types justify the discriminator: RTTI/vtable xrefs
+prove the candidates are `ProcessWeapon`; the `ew` census proves the exact arts,
+meshes and common Nadine parent; and `PlayerWeaponController::GetWeaponBySlot`
+vtable `+0xB0` plus the confirmed `+0x120/+0x134` fields provide an independent
+inventory/draw-state view on the game thread. Written prediction: while the user
+cycles pistol, rifle and holster, a rifle pointer present in a stable slot while
+the pistol is current/drawn confirms a normal inventory object whose authored
+holster attachment failed. A rifle pointer absent from all slots while another
+slot-owned rifle becomes active confirms a separate look-created orphan. No
+owner match, unstable pointers, exception or visual change makes the test
+inconclusive and forbids a visibility fix.

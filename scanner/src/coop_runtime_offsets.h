@@ -497,6 +497,9 @@ constexpr std::uintptr_t kDrawControlClearChildFlagsByMaskRva = 0x1754FF0;
 constexpr std::uintptr_t kNdAttachableSyncParentVisibilityCallsiteRva =
     0x1ED63F7;
 constexpr std::uintptr_t kDrawControlSyncParentVisibilityRva = 0x1754DA0;
+// RTTI-backed ProcessWeapon vtable. Runtime exact-parent census identifies
+// pistol/rifle/grenade children by this class and authored art at +0x860.
+constexpr std::uintptr_t kProcessWeaponVtableRva = 0x2A9BF48;
 // RTTI-backed ProcessCharCloth vtable. At the callsite above RBX still owns the
 // NdAttachableObject, so the relay can distinguish cloth from other attachments.
 constexpr std::uintptr_t kProcessCharClothVtableRva = 0x2BAF780;
