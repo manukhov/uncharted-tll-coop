@@ -4248,3 +4248,30 @@ internals, compare the complete native active type-2 layer set and evaluated
 instance roots across local and puppet: local vertical may be contributed by a
 separate additive layer rather than the matching `base` command. The earlier
 model-breaking `ed` named-layer force remains rejected; do not reactivate it.
+
+### 2026-07-21 STATIC: `el` inventories every evaluated type-2 layer
+
+The safe discriminator is now fully bounded. `AnimControl_BeginStepInternal
+0x141A78A60` proves registry count/array `+0x28/+0x30`, 0x20-byte records,
+channel/context `+0x00/+0x10`, active/type `+0x14/+0x18`, object `+0x08`, and the
+type-2 dispatch to `AnimStateLayer_Step`. Independent release traversal
+`0x141A911A0` confirms the same record ownership/lifetime.
+
+`AnimStateLayer_Construct 0x14189B7B0` proves RTTI
+`02B0ABB0/03770FC0`, object type `+0x08`, and live track storage
+`+0x4F8/+0x500`; `AnimStateInstance_Construct 0x1418B3E70` proves the 0x1C0
+instance and RTTI `02B0C730/03771100`. `AnimStateLayer_PhaseUpdateInstances
+0x14189D720` independently consumes track instance-array/live-count
+`+0x00/+0x12`, so the inventory covers evaluated rather than dormant instances.
+This satisfies the four-type static quota.
+
+Read-only build `2026-07-21el` samples only stable ADS state `3C347132` above
+0.25 vertical input. It double-reads and normalizes every active type-2 channel,
+fade/track state, live instance state/flags and root RTTI under explicit
+24-layer, 8-track and 4-instance bounds. It logs no pointers/heap indices, calls
+no native function and writes nothing. Falsifier: a stable semantic layer/root
+difference selects only that layer; a complete valid match rejects the full
+active-layer set and returns the frontier to command-case-6 context,
+skeleton/joint-mask, plugin and palette consumers. Truncated/torn samples,
+order/address/index-only differences and isolated fade transients are
+non-diagnostic. Both Release DLLs build with only the pre-existing C4456 warning.

@@ -13873,6 +13873,82 @@ struct AimFloatChannelProbe {
 
 constexpr std::uint32_t kAnimSnapshotNodeAnimationVtableRva = 0x02B14D68;
 constexpr std::uint32_t kAnimSnapshotNodeBlendVtableRva = 0x02B15218;
+constexpr std::uint32_t kAnimStateLayerVtableRva = 0x02B0ABB0;
+constexpr std::uint32_t kAnimStateLayerTypeDescriptorRva = 0x03770FC0;
+constexpr std::uint32_t kAnimStateInstanceVtableRva = 0x02B0C730;
+constexpr std::uint32_t kAnimStateInstanceTypeDescriptorRva = 0x03771100;
+
+constexpr std::size_t kAimLayerInventoryMaxLayers = 24;
+constexpr std::size_t kAimLayerInventoryMaxTracks = 8;
+constexpr std::size_t kAimLayerInventoryMaxInstancesPerTrack = 4;
+
+struct AimLayerInstanceInventoryProbe {
+    bool instance_valid = false;
+    bool instance_rtti_valid = false;
+    bool root_present = false;
+    bool root_rtti_valid = false;
+    bool layout_valid = false;
+    std::uint32_t slot_index = 0;
+    std::uint32_t instance_vtable_rva = 0;
+    std::uint32_t instance_type_descriptor_rva = 0;
+    std::uint32_t state_id = 0;
+    std::uint32_t instance_flags = 0;
+    std::uint32_t root_vtable_rva = 0;
+    std::uint32_t root_type_descriptor_rva = 0;
+};
+
+struct AimLayerTrackInventoryProbe {
+    bool track_valid = false;
+    bool layout_valid = false;
+    bool truncated = false;
+    std::uint32_t track_index = 0;
+    std::uint32_t instance_capacity = 0;
+    std::uint32_t live_instance_count = 0;
+    std::uint32_t captured_instance_count = 0;
+    std::array<
+        AimLayerInstanceInventoryProbe,
+        kAimLayerInventoryMaxInstancesPerTrack> instances{};
+};
+
+struct AimLayerInventoryProbe {
+    bool record_valid = false;
+    bool layer_rtti_valid = false;
+    bool layer_layout_valid = false;
+    bool tracks_valid = false;
+    bool truncated = false;
+    std::uint32_t record_index = 0;
+    std::uint32_t channel_id = 0;
+    std::uint32_t context = 0;
+    std::uint32_t record_type = 0;
+    std::uint32_t layer_type = 0;
+    std::uint32_t layer_vtable_rva = 0;
+    std::uint32_t layer_type_descriptor_rva = 0;
+    std::uint32_t current_weight_word = 0;
+    std::uint32_t target_weight_word = 0;
+    std::uint32_t remaining_fade_word = 0;
+    std::uint32_t full_fade_word = 0;
+    std::uint32_t starting_weight_word = 0;
+    std::uint32_t active_track_count = 0;
+    std::uint32_t captured_track_count = 0;
+    std::uint8_t easing_mode = 0;
+    std::uint8_t release_pending = 0;
+    std::uint8_t layer_flag_3e = 0;
+    std::array<
+        AimLayerTrackInventoryProbe,
+        kAimLayerInventoryMaxTracks> tracks{};
+};
+
+struct AimActiveLayerInventoryProbe {
+    bool registry_valid = false;
+    bool layout_valid = false;
+    bool truncated = false;
+    std::uint32_t registry_count = 0;
+    std::uint32_t active_type2_count = 0;
+    std::uint32_t captured_layer_count = 0;
+    std::array<
+        AimLayerInventoryProbe,
+        kAimLayerInventoryMaxLayers> layers{};
+};
 
 struct AimBlendVmProbe {
     bool descriptor_present = false;
@@ -14256,6 +14332,342 @@ bool probe_snapshot_heap_node(
         records == *reinterpret_cast<const std::byte* const*>(
                        heap_bytes + 0xA0) &&
         node == *reinterpret_cast<void* const*>(record);
+}
+
+AimActiveLayerInventoryProbe probe_active_type2_layer_inventory(
+    void* registry) {
+    AimActiveLayerInventoryProbe result{};
+    if (registry == nullptr || g_module == 0 ||
+        readable_bytes(registry) < 0x60) {
+        return result;
+    }
+
+    __try {
+        const auto* const registry_bytes =
+            static_cast<const std::byte*>(registry);
+        const std::uint32_t registry_count =
+            *reinterpret_cast<const std::uint32_t*>(registry_bytes + 0x28);
+        auto* const records = *reinterpret_cast<std::byte* const*>(
+            registry_bytes + 0x30);
+        if (registry_count > 4096 ||
+            (registry_count != 0 &&
+             (records == nullptr ||
+              readable_bytes(records) <
+                  static_cast<std::size_t>(registry_count) * 0x20))) {
+            return result;
+        }
+        result.registry_valid = true;
+        result.registry_count = registry_count;
+
+        for (std::uint32_t record_index = 0;
+             record_index < registry_count; ++record_index) {
+            const auto* const record =
+                records + static_cast<std::size_t>(record_index) * 0x20;
+            const std::uint32_t channel_id =
+                *reinterpret_cast<const std::uint32_t*>(record);
+            void* const layer =
+                *reinterpret_cast<void* const*>(record + 0x08);
+            const std::uint32_t context =
+                *reinterpret_cast<const std::uint32_t*>(record + 0x10);
+            const std::uint8_t active =
+                *reinterpret_cast<const std::uint8_t*>(record + 0x14);
+            const std::uint32_t record_type =
+                *reinterpret_cast<const std::uint32_t*>(record + 0x18);
+            if (active == 0 || record_type != 2) {
+                continue;
+            }
+
+            ++result.active_type2_count;
+            if (result.captured_layer_count >= result.layers.size()) {
+                result.truncated = true;
+                continue;
+            }
+
+            AimLayerInventoryProbe& layer_probe =
+                result.layers[result.captured_layer_count++];
+            layer_probe.record_index = record_index;
+            layer_probe.channel_id = channel_id;
+            layer_probe.context = context;
+            layer_probe.record_type = record_type;
+
+            if (layer == nullptr || readable_bytes(layer) < 0x508) {
+                layer_probe.record_valid =
+                    channel_id ==
+                        *reinterpret_cast<const std::uint32_t*>(record) &&
+                    layer == *reinterpret_cast<void* const*>(record + 0x08) &&
+                    context ==
+                        *reinterpret_cast<const std::uint32_t*>(record + 0x10) &&
+                    active ==
+                        *reinterpret_cast<const std::uint8_t*>(record + 0x14) &&
+                    record_type ==
+                        *reinterpret_cast<const std::uint32_t*>(record + 0x18);
+                continue;
+            }
+
+            const auto* const layer_bytes =
+                static_cast<const std::byte*>(layer);
+            const std::uintptr_t layer_vtable =
+                *reinterpret_cast<const std::uintptr_t*>(layer);
+            layer_probe.layer_rtti_valid = probe_msvc_rtti_identity(
+                layer, layer_probe.layer_vtable_rva,
+                layer_probe.layer_type_descriptor_rva);
+            layer_probe.layer_type =
+                *reinterpret_cast<const std::uint32_t*>(layer_bytes + 0x08);
+            layer_probe.current_weight_word =
+                *reinterpret_cast<const std::uint32_t*>(layer_bytes + 0x28);
+            layer_probe.target_weight_word =
+                *reinterpret_cast<const std::uint32_t*>(layer_bytes + 0x2C);
+            layer_probe.remaining_fade_word =
+                *reinterpret_cast<const std::uint32_t*>(layer_bytes + 0x30);
+            layer_probe.full_fade_word =
+                *reinterpret_cast<const std::uint32_t*>(layer_bytes + 0x34);
+            layer_probe.starting_weight_word =
+                *reinterpret_cast<const std::uint32_t*>(layer_bytes + 0x38);
+            layer_probe.easing_mode =
+                *reinterpret_cast<const std::uint8_t*>(layer_bytes + 0x3C);
+            layer_probe.release_pending =
+                *reinterpret_cast<const std::uint8_t*>(layer_bytes + 0x3D);
+            layer_probe.layer_flag_3e =
+                *reinterpret_cast<const std::uint8_t*>(layer_bytes + 0x3E);
+            void* const track_slots =
+                *reinterpret_cast<void* const*>(layer_bytes + 0x4F8);
+            layer_probe.active_track_count =
+                *reinterpret_cast<const std::uint32_t*>(layer_bytes + 0x500);
+
+            const bool track_array_valid =
+                layer_probe.active_track_count <= 256 &&
+                (layer_probe.active_track_count == 0 ||
+                 (track_slots != nullptr &&
+                  readable_bytes(track_slots) >=
+                      static_cast<std::size_t>(
+                          layer_probe.active_track_count) * sizeof(void*)));
+            if (track_array_valid) {
+                layer_probe.captured_track_count =
+                    std::min<std::uint32_t>(
+                        layer_probe.active_track_count,
+                        static_cast<std::uint32_t>(
+                            layer_probe.tracks.size()));
+                layer_probe.truncated =
+                    layer_probe.active_track_count >
+                    layer_probe.tracks.size();
+
+                for (std::uint32_t track_index = 0;
+                     track_index < layer_probe.captured_track_count;
+                     ++track_index) {
+                    AimLayerTrackInventoryProbe& track_probe =
+                        layer_probe.tracks[track_index];
+                    track_probe.track_index = track_index;
+                    void* const track =
+                        *(static_cast<void* const*>(track_slots) + track_index);
+                    if (track == nullptr || readable_bytes(track) < 0x18) {
+                        continue;
+                    }
+                    const auto* const track_bytes =
+                        static_cast<const std::byte*>(track);
+                    void* const instance_slots =
+                        *reinterpret_cast<void* const*>(track_bytes);
+                    track_probe.instance_capacity =
+                        *reinterpret_cast<const std::uint16_t*>(
+                            track_bytes + 0x10);
+                    track_probe.live_instance_count =
+                        *reinterpret_cast<const std::uint16_t*>(
+                            track_bytes + 0x12);
+                    track_probe.track_valid =
+                        track_probe.live_instance_count <=
+                            track_probe.instance_capacity &&
+                        track_probe.instance_capacity <= 4096 &&
+                        (track_probe.live_instance_count == 0 ||
+                         (instance_slots != nullptr &&
+                          readable_bytes(instance_slots) >=
+                              static_cast<std::size_t>(
+                                  track_probe.live_instance_count) *
+                                  sizeof(void*)));
+                    if (!track_probe.track_valid) {
+                        continue;
+                    }
+
+                    track_probe.captured_instance_count =
+                        std::min<std::uint32_t>(
+                            track_probe.live_instance_count,
+                            static_cast<std::uint32_t>(
+                                track_probe.instances.size()));
+                    track_probe.truncated =
+                        track_probe.live_instance_count >
+                        track_probe.instances.size();
+                    bool instances_valid = !track_probe.truncated;
+
+                    for (std::uint32_t instance_index = 0;
+                         instance_index <
+                             track_probe.captured_instance_count;
+                         ++instance_index) {
+                        AimLayerInstanceInventoryProbe& instance_probe =
+                            track_probe.instances[instance_index];
+                        instance_probe.slot_index = instance_index;
+                        void* const instance =
+                            *(static_cast<void* const*>(instance_slots) +
+                              instance_index);
+                        if (instance == nullptr ||
+                            readable_bytes(instance) < 0x198) {
+                            instances_valid = false;
+                            continue;
+                        }
+                        instance_probe.instance_valid = true;
+                        const auto* const instance_bytes =
+                            static_cast<const std::byte*>(instance);
+                        const std::uintptr_t instance_vtable =
+                            *reinterpret_cast<const std::uintptr_t*>(instance);
+                        instance_probe.instance_rtti_valid =
+                            probe_msvc_rtti_identity(
+                                instance,
+                                instance_probe.instance_vtable_rva,
+                                instance_probe.instance_type_descriptor_rva);
+                        instance_probe.state_id =
+                            *reinterpret_cast<const std::uint32_t*>(
+                                instance_bytes + 0x98);
+                        void* const root_heap =
+                            *reinterpret_cast<void* const*>(
+                                instance_bytes + 0x130);
+                        const std::uint32_t root_index =
+                            *reinterpret_cast<const std::uint32_t*>(
+                                instance_bytes + 0x138);
+                        instance_probe.instance_flags =
+                            *reinterpret_cast<const std::uint8_t*>(
+                                instance_bytes + 0x190);
+
+                        void* root_node = nullptr;
+                        instance_probe.root_present =
+                            probe_snapshot_heap_node(
+                                root_heap, root_index, root_node);
+                        if (instance_probe.root_present) {
+                            instance_probe.root_rtti_valid =
+                                probe_msvc_rtti_identity(
+                                    root_node,
+                                    instance_probe.root_vtable_rva,
+                                    instance_probe.root_type_descriptor_rva);
+                        }
+
+                        instance_probe.layout_valid =
+                            instance_vtable ==
+                                *reinterpret_cast<const std::uintptr_t*>(
+                                    instance) &&
+                            instance_probe.state_id ==
+                                *reinterpret_cast<const std::uint32_t*>(
+                                    instance_bytes + 0x98) &&
+                            root_heap ==
+                                *reinterpret_cast<void* const*>(
+                                    instance_bytes + 0x130) &&
+                            root_index ==
+                                *reinterpret_cast<const std::uint32_t*>(
+                                    instance_bytes + 0x138) &&
+                            instance_probe.instance_flags ==
+                                *reinterpret_cast<const std::uint8_t*>(
+                                    instance_bytes + 0x190) &&
+                            instance_probe.instance_rtti_valid &&
+                            instance_probe.instance_vtable_rva ==
+                                kAnimStateInstanceVtableRva &&
+                            instance_probe.instance_type_descriptor_rva ==
+                                kAnimStateInstanceTypeDescriptorRva &&
+                            (!instance_probe.root_present ||
+                             instance_probe.root_rtti_valid);
+                        instances_valid =
+                            instances_valid && instance_probe.layout_valid;
+                    }
+
+                    track_probe.layout_valid =
+                        instance_slots ==
+                            *reinterpret_cast<void* const*>(track_bytes) &&
+                        track_probe.instance_capacity ==
+                            *reinterpret_cast<const std::uint16_t*>(
+                                track_bytes + 0x10) &&
+                        track_probe.live_instance_count ==
+                            *reinterpret_cast<const std::uint16_t*>(
+                                track_bytes + 0x12) &&
+                        instances_valid;
+                }
+            }
+
+            layer_probe.tracks_valid = track_array_valid &&
+                !layer_probe.truncated;
+            for (std::uint32_t track_index = 0;
+                 track_index < layer_probe.captured_track_count;
+                 ++track_index) {
+                layer_probe.tracks_valid = layer_probe.tracks_valid &&
+                    layer_probe.tracks[track_index].track_valid &&
+                    layer_probe.tracks[track_index].layout_valid;
+            }
+
+            layer_probe.record_valid =
+                channel_id ==
+                    *reinterpret_cast<const std::uint32_t*>(record) &&
+                layer == *reinterpret_cast<void* const*>(record + 0x08) &&
+                context ==
+                    *reinterpret_cast<const std::uint32_t*>(record + 0x10) &&
+                active ==
+                    *reinterpret_cast<const std::uint8_t*>(record + 0x14) &&
+                record_type ==
+                    *reinterpret_cast<const std::uint32_t*>(record + 0x18);
+            layer_probe.layer_layout_valid =
+                layer_vtable ==
+                    *reinterpret_cast<const std::uintptr_t*>(layer) &&
+                layer_probe.layer_type ==
+                    *reinterpret_cast<const std::uint32_t*>(
+                        layer_bytes + 0x08) &&
+                layer_probe.current_weight_word ==
+                    *reinterpret_cast<const std::uint32_t*>(
+                        layer_bytes + 0x28) &&
+                layer_probe.target_weight_word ==
+                    *reinterpret_cast<const std::uint32_t*>(
+                        layer_bytes + 0x2C) &&
+                layer_probe.remaining_fade_word ==
+                    *reinterpret_cast<const std::uint32_t*>(
+                        layer_bytes + 0x30) &&
+                layer_probe.full_fade_word ==
+                    *reinterpret_cast<const std::uint32_t*>(
+                        layer_bytes + 0x34) &&
+                layer_probe.starting_weight_word ==
+                    *reinterpret_cast<const std::uint32_t*>(
+                        layer_bytes + 0x38) &&
+                layer_probe.easing_mode ==
+                    *reinterpret_cast<const std::uint8_t*>(
+                        layer_bytes + 0x3C) &&
+                layer_probe.release_pending ==
+                    *reinterpret_cast<const std::uint8_t*>(
+                        layer_bytes + 0x3D) &&
+                layer_probe.layer_flag_3e ==
+                    *reinterpret_cast<const std::uint8_t*>(
+                        layer_bytes + 0x3E) &&
+                track_slots ==
+                    *reinterpret_cast<void* const*>(layer_bytes + 0x4F8) &&
+                layer_probe.active_track_count ==
+                    *reinterpret_cast<const std::uint32_t*>(
+                        layer_bytes + 0x500) &&
+                layer_probe.layer_rtti_valid &&
+                layer_probe.layer_vtable_rva ==
+                    kAnimStateLayerVtableRva &&
+                layer_probe.layer_type_descriptor_rva ==
+                    kAnimStateLayerTypeDescriptorRva &&
+                layer_probe.layer_type == 2 && layer_probe.tracks_valid;
+        }
+
+        result.layout_valid = result.registry_valid && !result.truncated &&
+            result.active_type2_count == result.captured_layer_count &&
+            registry_count ==
+                *reinterpret_cast<const std::uint32_t*>(
+                    registry_bytes + 0x28) &&
+            records == *reinterpret_cast<std::byte* const*>(
+                           registry_bytes + 0x30);
+        for (std::uint32_t layer_index = 0;
+             layer_index < result.captured_layer_count; ++layer_index) {
+            const AimLayerInventoryProbe& layer_probe =
+                result.layers[layer_index];
+            result.layout_valid = result.layout_valid &&
+                layer_probe.record_valid &&
+                layer_probe.layer_layout_valid;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return AimActiveLayerInventoryProbe{};
+    }
+    return result;
 }
 
 AimAnimationLeafProbe probe_aim_animation_leaf(
@@ -15054,6 +15466,133 @@ AimBaseInstanceProbe probe_base_anim_state_instance(void* registry) {
     return result;
 }
 
+void log_aim_active_layer_inventory(
+    void* registry, const char* phase, std::uint32_t screen,
+    std::uint32_t state_id, float up, float down) {
+    if (registry == nullptr || phase == nullptr || screen > kSlot1ScreenIndex ||
+        state_id != 0x3C347132U || !std::isfinite(up) ||
+        !std::isfinite(down) || std::max(up, down) < 0.25F) {
+        return;
+    }
+
+    static std::atomic<ULONGLONG> next_log_ms[2]{};
+    static std::atomic<std::uint32_t> sample_count[2]{};
+    const ULONGLONG now = GetTickCount64();
+    if (sample_count[screen].load(std::memory_order_acquire) >= 4 ||
+        now < next_log_ms[screen].load(std::memory_order_acquire)) {
+        return;
+    }
+    next_log_ms[screen].store(now + 500, std::memory_order_release);
+    sample_count[screen].fetch_add(1, std::memory_order_acq_rel);
+
+    AimActiveLayerInventoryProbe probe =
+        probe_active_type2_layer_inventory(registry);
+    std::sort(
+        probe.layers.begin(),
+        probe.layers.begin() + probe.captured_layer_count,
+        [](const AimLayerInventoryProbe& left,
+           const AimLayerInventoryProbe& right) {
+            if (left.channel_id != right.channel_id) {
+                return left.channel_id < right.channel_id;
+            }
+            if (left.context != right.context) {
+                return left.context < right.context;
+            }
+            return left.record_index < right.record_index;
+        });
+
+    char header[512]{};
+    std::snprintf(
+        header, sizeof(header),
+        "AIM-LAYER-INVENTORY tick=%llu phase=%s screen=%u "
+        "up=%.4f down=%.4f state=%08X registry=%u active2=%u "
+        "captured=%u valid=%u/%u truncated=%u",
+        static_cast<unsigned long long>(now), phase, screen, up, down,
+        state_id, probe.registry_count, probe.active_type2_count,
+        probe.captured_layer_count,
+        static_cast<unsigned>(probe.registry_valid),
+        static_cast<unsigned>(probe.layout_valid),
+        static_cast<unsigned>(probe.truncated));
+    boot_log_line(header);
+
+    for (std::uint32_t layer_index = 0;
+         layer_index < probe.captured_layer_count; ++layer_index) {
+        const AimLayerInventoryProbe& layer = probe.layers[layer_index];
+        char layer_line[768]{};
+        std::snprintf(
+            layer_line, sizeof(layer_line),
+            "AIM-LAYER tick=%llu screen=%u channel=%08X context=%08X "
+            "types=%u/%u layer=%08X/%08X valid=%u/%u/%u/%u "
+            "fade=%08X/%08X/%08X/%08X/%08X flags=%02X/%02X/%02X "
+            "tracks=%u/%u truncated=%u",
+            static_cast<unsigned long long>(now), screen,
+            layer.channel_id, layer.context, layer.record_type,
+            layer.layer_type, layer.layer_vtable_rva,
+            layer.layer_type_descriptor_rva,
+            static_cast<unsigned>(layer.record_valid),
+            static_cast<unsigned>(layer.layer_rtti_valid),
+            static_cast<unsigned>(layer.layer_layout_valid),
+            static_cast<unsigned>(layer.tracks_valid),
+            layer.current_weight_word, layer.target_weight_word,
+            layer.remaining_fade_word, layer.full_fade_word,
+            layer.starting_weight_word,
+            static_cast<unsigned>(layer.easing_mode),
+            static_cast<unsigned>(layer.release_pending),
+            static_cast<unsigned>(layer.layer_flag_3e),
+            layer.active_track_count, layer.captured_track_count,
+            static_cast<unsigned>(layer.truncated));
+        boot_log_line(layer_line);
+
+        for (std::uint32_t track_index = 0;
+             track_index < layer.captured_track_count; ++track_index) {
+            const AimLayerTrackInventoryProbe& track =
+                layer.tracks[track_index];
+            char track_line[512]{};
+            std::snprintf(
+                track_line, sizeof(track_line),
+                "AIM-LAYER-TRACK tick=%llu screen=%u channel=%08X "
+                "context=%08X track=%u capacity=%u live=%u captured=%u "
+                "valid=%u/%u truncated=%u",
+                static_cast<unsigned long long>(now), screen,
+                layer.channel_id, layer.context, track.track_index,
+                track.instance_capacity, track.live_instance_count,
+                track.captured_instance_count,
+                static_cast<unsigned>(track.track_valid),
+                static_cast<unsigned>(track.layout_valid),
+                static_cast<unsigned>(track.truncated));
+            boot_log_line(track_line);
+
+            for (std::uint32_t instance_index = 0;
+                 instance_index < track.captured_instance_count;
+                 ++instance_index) {
+                const AimLayerInstanceInventoryProbe& instance =
+                    track.instances[instance_index];
+                char instance_line[640]{};
+                std::snprintf(
+                    instance_line, sizeof(instance_line),
+                    "AIM-LAYER-INSTANCE tick=%llu screen=%u channel=%08X "
+                    "context=%08X track=%u slot=%u state=%08X flags=%02X "
+                    "instance=%08X/%08X root=%08X/%08X "
+                    "valid=%u/%u/%u/%u/%u",
+                    static_cast<unsigned long long>(now), screen,
+                    layer.channel_id, layer.context, track.track_index,
+                    instance.slot_index, instance.state_id,
+                    instance.instance_flags,
+                    instance.instance_vtable_rva,
+                    instance.instance_type_descriptor_rva,
+                    instance.root_vtable_rva,
+                    instance.root_type_descriptor_rva,
+                    static_cast<unsigned>(instance.instance_valid),
+                    static_cast<unsigned>(instance.instance_rtti_valid),
+                    static_cast<unsigned>(instance.root_present),
+                    static_cast<unsigned>(instance.root_rtti_valid),
+                    static_cast<unsigned>(instance.layout_valid));
+                boot_log_line(instance_line);
+            }
+        }
+    }
+}
+
 void log_aim_base_state_fingerprint(
     void* owner, const char* phase, float up, float down) {
     if (owner == nullptr || phase == nullptr || !std::isfinite(up) ||
@@ -15077,6 +15616,8 @@ void log_aim_base_state_fingerprint(
     if (!probe.instance_found) {
         return;
     }
+    log_aim_active_layer_inventory(
+        registry, phase, screen, probe.snapshot_state_id, up, down);
     static std::atomic<ULONGLONG> next_log_ms[2]{};
     static std::atomic<std::uint32_t> sample_count[2]{};
     const ULONGLONG now = GetTickCount64();
@@ -27059,8 +27600,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-21ek "
-        "(read-only selected Animation leaf clip/phase discriminator)");
+        "TLL hook DLL init 2026-07-21el "
+        "(read-only active type-2 layer and instance-root inventory)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

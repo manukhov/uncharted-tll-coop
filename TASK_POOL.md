@@ -1195,13 +1195,22 @@ Do not reopen these as the first move:
       match moves the static trace into command-case-6 context/plugin/joint-mask
       consumers. Ignore raw indices/pointers and any invalid/torn sample. Result:
       all 28 valid samples matched exactly and phase stayed zero through up/down.
-- [ ] Before instrumenting command case 6, statically prove a bounded inventory
+- [x] Before instrumenting command case 6, statically prove a bounded inventory
       of every active type-2 `AnimControl` registry layer and its first evaluated
       `AnimStateInstance` root. Compare local and puppet semantic layer ids/types,
       active/track state and normalized root RTTI; do not force or synthesize the
       model-breaking named aim layer. A matching complete layer inventory returns
       the frontier to case-6 context/plugin/joint-mask consumers; a concrete
-      differing layer becomes the only next tree to trace.
+      differing layer becomes the only next tree to trace. Result: registry,
+      concrete layer/track, live instance and evaluated-root layouts have four
+      independent evidence types; read-only build `el` double-reads every bounded
+      chain and exposes only normalized semantic fields.
+- [ ] Run the written `el` falsifier with strong vertical ADS on both copies.
+      Compare valid inventories as sets keyed by channel id/context: layer type
+      and fade words, live track/instance state and normalized root RTTI. Ignore
+      raw ordering/pointers/root indices and isolated fade transients. A stable
+      concrete difference selects only that layer; a complete match moves to
+      command-case-6 context/skeleton/joint-mask/plugin/palette consumers.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

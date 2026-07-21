@@ -1231,3 +1231,89 @@ blindly forcing the named layer on the puppet corrupts the model, so the safe
 next discriminator is a bounded inventory of the native active-layer set and
 its evaluated instance roots, followed by case-6 context only for the concrete
 differing layer.
+
+## STATIC `el`: complete active type-2 layer and evaluated-root inventory
+
+The next boundary is now defined from the native registry and evaluator rather
+than from a guessed channel name. `AnimControl_BeginStepInternal 0x141A78A60`
+reads the registry count at `AnimControl+0x28` and its 0x20-byte record array at
+`+0x30`, sorts those records by the dword at record `+0x10`, checks active byte
+`+0x14` and object type `+0x18`, and dispatches active type 2 through
+`AnimStateLayer_Step 0x1418A30A0`. The layer pointer is record `+0x08` and the
+semantic channel id is record `+0x00`.
+
+The concrete type-2 object is independently bounded. `AnimStateLayer_Construct
+0x14189B7B0` installs vtable/type-descriptor RVA `02B0ABB0/03770FC0`, writes
+object type 2 at `layer+0x08`, and owns the live track-pointer array/count at
+`+0x4F8/+0x500`. Each live track exposes its instance-pointer array at `+0x00`,
+capacity word at `+0x10`, and live count word at `+0x12`.
+`AnimStateInstance_Construct 0x1418B3E70` constructs exactly 0x1C0 bytes with
+vtable/type-descriptor RVA `02B0C730/03771100`; the already-proven current state,
+root heap/index and flags are at `+0x98`, `+0x130/+0x138`, and `+0x190`.
+
+### Exact hypothesis and competitors
+
+The selected hypothesis is that stable vertical ADS on the local player has at
+least one active type-2 layer, live instance state, or normalized root class
+that is absent or semantically different on the retained puppet. That concrete
+layer, rather than the matching `base` tree, contributes the local vertical
+weapon pose.
+
+Competing hypotheses are:
+
+1. The complete active-layer set, live track/instance state and root RTTI match;
+   the missing pitch therefore begins in command-case-6 context, skeleton,
+   joint mask, plugin evaluation, or later palette consumption.
+2. A stable channel id/context, layer type/weight, live state id or root RTTI
+   differs. Only that concrete layer becomes the next tree to trace.
+3. Only record order, raw pointers, root heap indices, activation serials, or a
+   one-sample fade transient differ. Those values are not a semantic split.
+4. The registry, layer, track, instance or heap chain changes during reread, or
+   a configured bound truncates it. Such a sample is torn/incomplete and cannot
+   select any hypothesis.
+
+### Independent static evidence quota
+
+1. `AnimControl_BeginStepInternal` proves the registry record stride, id,
+   context/order, active/type discriminator and exact type-2 dispatch edge.
+2. `AnimParamRegistry_StepAndDeactivateReleasedLayers 0x141A911A0`
+   independently traverses the same count/array/stride, calls the object release
+   vslot, then clears record active/id/context; this confirms record ownership
+   and lifetime rather than merely the step function's local interpretation.
+3. `AnimStateLayer_Construct` proves concrete RTTI, object type, track storage
+   and its instance pool; `AnimStateInstance_Construct` independently proves the
+   0x1C0 instance size and RTTI.
+4. `AnimStateLayer_PhaseUpdateInstances 0x14189D720` walks every live track via
+   `+0x4F8/+0x500`, every live instance via track `+0x00/+0x12`, resolves its
+   snapshot and calls `AnimStateInstance_PhaseUpdate`. Thus the proposed
+   inventory covers the actual evaluated roots, not dormant preallocated slots.
+
+### Read-only implementation and falsifier
+
+Build `2026-07-21el` runs only in stable ADS state `3C347132` with vertical input
+at least 0.25. It takes four samples per screen, 500 ms apart. Each sample scans
+at most 4096 registry records, captures every active type-2 record up to 24
+layers, and bounds each layer to eight tracks and four live instances per track;
+any exceeded bound marks the whole inventory incomplete. Registry records,
+layer fade/track fields, track counts, instance state/root fields and snapshot
+heap records are reread before acceptance. RTTI must match the proven layer and
+instance classes. The log is sorted by channel id/context and contains only
+normalized ids, types, fade words, live counts, state ids, flags and RTTI RVAs;
+it logs no pointers or root heap indices, calls no game function and writes no
+game memory.
+
+Prediction for fresh strong up/down ADS:
+
+- one stable semantic layer/instance/root difference across valid samples
+  selects that layer as the sole next tree to trace;
+- a complete normalized match rejects the entire active type-2 layer set as the
+  discriminator and returns the frontier to command-case-6 context,
+  skeleton/joint-mask, plugin and palette consumers;
+- order-only, address/index-only or isolated fade differences are
+  non-diagnostic;
+- `valid=0`, truncation, a changing reread, crash, visible model/input change or
+  any write invalidates the test.
+
+Both Release DLLs build successfully; the only compiler diagnostic is the
+pre-existing C4456 warning. All functions used by this proof were already named
+and saved in the current real IDB, so `el` requires no new IDB mutation.
