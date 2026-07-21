@@ -4560,3 +4560,49 @@ selects admission timing; `vertical1>0` but `signature1=0` selects command/clip
 selection; `signature1>0` without `emitted1` identifies an internal probe guard.
 Only a complete retained record may resume the original same-signature
 direct/retarget comparison. Counter magnitude alone is non-semantic.
+
+### 2026-07-21 CONFIRMED: `eq` selects missing retained vertical admission
+
+Fresh PIDs 7444/16088 remained responsive and produced all four bounded stage
+summaries plus the expected local case-6 records. PID 16088 ended with
+`owner=3555/4260/1142335`, `active=3555/4260`, and
+`vertical=720/0`; PID 7444 ended with `owner=10632/8050/1222559`,
+`active=10632/8050`, and `vertical=906/0`. Thus thousands of native consumer
+calls reconstructed the exact retained slot-1 Fg owner and readable active
+state, but not one saw retained up/down reach the 0.20 threshold. Local records
+still reached direct `0A` and retarget `0B` exactly as before. Both processes
+were closed after capture.
+
+This **CONFIRMS that the missing stage is vertical admission before command
+evaluation** and rejects different Fg ownership, absent retained consumer calls,
+and the screen-1 ADS-bit gate. The case-6 direct/retarget semantics remain
+unclassified because their retained input is still zero.
+
+A source audit identifies the concrete transport break. The steady callsite
+`0x140CB416F -> PlayerAimController_SmoothAndPublishDirectionalAimWeights
+0x140CB47A0` returns with valid controller `+0x8C0/+0x8C4` and blend `+0x8EC`,
+as independently shown by local case-6 vertical values reaching 1.0. However
+`hooked_smooth_and_publish_directional_aim_weights` only logs those values. The
+wire snapshot `g_local_aim_pitch` is updated only by the transition callsite
+`0x140CB4176`, which logged `AIM-PITCH-CAPTURE up=0 down=0` in both `eq`
+processes. Repository-wide reference audit also proves
+`StatePacket::aim_pitch_up/down` have no receiver reader at all: they are written
+into the packet and cleared from flags, but never applied.
+
+The next narrow hypothesis is therefore that completing this already-versioned
+transport at the same steady publisher boundary will make retained case 6 see
+the peer's vertical value. The sender must store finite post-blend up/down after
+the stock smoother/publisher for screen 0. On screen 1, after the same stock
+publisher returns, a fresh peer packet carrying `kStateFlagAimPitch` may replace
+only active-state `aim-add-up/down` at `+0x188/+0x18C`; the original publisher
+owns clearing when the packet is absent or stale. This boundary precedes the
+already-proven `AnimStateLayer_CopyParametersToFirstInstance` copy and avoids all
+rejected named-layer, Fg mirror, root, palette and branch patches.
+
+Competing outcomes are: the screen-1 steady hook does not execute, selecting a
+different earlier scheduled apply boundary; wire apply executes and retained
+case 6 becomes eligible but normalized semantics differ, selecting that exact
+case-6 route; or same-signature case-6 records match and visible pitch is still
+absent, selecting the common pose/palette output. A bounded runtime test must
+require nonzero sender capture, nonzero receiver apply, retained case-6 admission
+and no shake/model corruption before claiming progress.
