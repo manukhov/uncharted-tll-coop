@@ -1278,15 +1278,17 @@ Do not reopen these as the first move:
       eight complete records and is confirmed, but all were screen 0. The two
       local processes used different signatures/branches, so the required
       same-signature local/puppet comparison remains unexecuted.
-- [ ] Implement and run read-only build `ep`: keep the local screen-0 ADS-bit
+- [x] Implement read-only build `ep`: keep the local screen-0 ADS-bit
       requirement, but remove that mod-only bit gate for retained screen 1 after
       exact Player/Fg ownership is proven. Still require at least 0.20 finite
       active-state vertical weight, one of the two exact signatures, bounded
-      command/assets and all double-reads. Compare only complete same-signature
-      screen-0/screen-1 records across the two processes. No screen-1 record
-      despite eligible leaf/vertical telemetry rejects the gate explanation;
-      equality moves to common pose/palette output, while a stable semantic
-      branch/target/retarget/callback split selects only that route.
+      command/assets and all double-reads. Result: only the screen-1 ADS-bit test
+      is omitted; the single Release DLL builds successfully.
+- [ ] Run `ep` with strong vertical ADS on both copies. Compare only complete
+      same-signature screen-0/screen-1 records across the two processes. No
+      screen-1 record despite eligible leaf/vertical telemetry rejects the gate
+      explanation; equality moves to common pose/palette output, while a stable
+      semantic branch/target/retarget/callback split selects only that route.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

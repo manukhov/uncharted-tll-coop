@@ -4486,3 +4486,31 @@ Animation leaf/signature. Therefore the next bounded discriminator may omit
 only this redundant ADS-bit gate for screen 1 while retaining exact player/Fg,
 nonzero vertical state, signature, command and double-read requirements. Screen
 0 must keep the local ADS-bit gate.
+
+### 2026-07-21 STATIC: `ep` admits retained case 6 without trusting its HUD ADS bit
+
+The hypothesis is exact: retained-player `Player+0x1548` is the only artificial
+predicate preventing otherwise eligible screen-1 case-6 records. It is safe to
+remove only for screen 1 because the probe has already proven the actual
+`FgAnimData` owner and screen, and still requires finite active-state vertical
+weight of at least 0.20 before parsing either exact six-dword clip signature.
+`ProcessAnimCmdListSegment` itself does not read this Player HUD/state bit.
+
+The evidence quota consists of three independent prior runtime boundaries plus
+the current code path: `ec` proves nonzero screen-1 active-state LRDU; `ef` proves
+that LRDU in the live evaluator-instance copy; `ek` proves the selected retained
+Animation leaf and exact clip payload; and `eo` proves that every later context,
+command and asset guard succeeds for the corresponding local records. Competing
+hypotheses are that screen 1 misses the case-6 call at the same vertical moment,
+or that it uses a different Fg owner/command despite the prior leaf evidence.
+
+Read-only build `2026-07-21ep` therefore keeps the ADS-bit requirement for local
+screen 0 and omits it only for retained screen 1. All ownership, vertical,
+two-signature, command-bound, asset, retarget and double-read checks remain
+unchanged. The Release DLL builds successfully. Falsifier: eligible local records
+without any retained record reject the ADS-bit explanation; complete
+same-signature equality rejects case-6 inputs and moves to the common
+pose/palette output; a stable same-signature semantic branch, target,
+retarget-map/coverage or callback split selects only that exact route. Raw
+pointers/indices, different signatures, torn records, crash or visible change
+cannot select a result.

@@ -14907,7 +14907,11 @@ AimCase6ContextProbe probe_aim_case6_context(const void* context) {
                 break;
             }
         }
-        if (player == nullptr || !player_ads_active(player)) {
+        // Player+0x1548 is a reliable local-view ADS/HUD bit, but prior runtime
+        // proved it is not stable for the retained puppet. Screen 1 is still
+        // bounded by exact FgAnimData ownership and live nonzero LRDU below.
+        if (player == nullptr ||
+            (screen != kSlot1ScreenIndex && !player_ads_active(player))) {
             return result;
         }
 
@@ -28054,7 +28058,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21eo "
+        "TLL co-op runtime init 2026-07-21ep "
         "(read-only dual-signature case-6 retarget discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
