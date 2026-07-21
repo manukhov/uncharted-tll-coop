@@ -1505,10 +1505,19 @@ Do not reopen these as the first move:
       retained player, so no repair marker appeared and Nadine stayed `39/45`.
       The immediately-following census proved both raw `Player+0x170` look ids
       and the game-thread tick were valid.
-- [ ] Build and run `fd` with the gate changed only to raw active look
+- [x] Build and run `fd` with the gate changed only to raw active look
       `Player+0x170`. Require the original `39/45 -> 41/45`, both ids present,
       joints `48:29->18` and `199:3->3`, successful final reparenting, stable
       body/grenade and no exception.
+      PARTIAL: append and lookup passed exactly in both processes, with pistol at
+      index 39 and rifle at 40 and no exception. Physical reparenting failed:
+      every observed Nadine final attach still targeted `rightHand`, while the
+      pre-existing `PlayerWeaponAnimControl` cache remained `-1,5,-1,3`.
+- [ ] Trace the constructor, look-change lifecycle and stock refresh path for
+      `PlayerWeaponAnimControl+0x78/+0x7C/+0x80/+0x84`. Determine how its missing
+      spine/pelvis child joints are recomputed after AttachSystem materialization;
+      do not patch these output/cache fields directly. Require three independent
+      static evidence types and a new written final-reparent prediction.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

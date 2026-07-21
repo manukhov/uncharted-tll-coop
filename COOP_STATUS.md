@@ -5273,3 +5273,23 @@ Build `fd` changes only that rejected discriminator to the exact `Player+0x170`
 field already consumed by the confirmed holster binding and census paths. The
 original `39/45 -> 41/45`, ids `0/0 -> 1/1`, remapped joints `48:29->18` and
 `199:3->3`, no-crash/no-body-regression prediction remains otherwise unchanged.
+
+### 2026-07-21 CONFIRMED/REJECTED: fd repairs lookup, not physical reparenting
+
+Build `fd` passed the bounded AttachSystem portion in both processes. Each legacy
+Nadine produced `status=1`, `39/45 -> 41/45`, ids `0/0 -> 1/1`, and exactly the
+predicted remaps `spine=48:29->18`, `pelvis=199:3->3`. Rebuilt/player-replaced
+instances subsequently reported `status=2` at `41/45`, demonstrating that the
+repair survives the observed copy/rebuild path. `WeaponHolsterBuildBinding`
+then resolved pistol `0x00AD047A` at index 39 and rifle `0x555EFB8D` at index 40
+on legacy Nadine. Both processes remained responsive and emitted no exception.
+
+The larger physical-reparent prediction is REJECTED. Across both processes the
+final attach hook saw four legacy-Nadine mutations, all to
+`rightHand 0x61A48E01`, and none to either newly-present id. The exact
+`PlayerWeaponAnimControl` cache stayed `joints=-1,5,-1,3`: its missing authored
+child slots were initialized before the new AttachSystem records existed and
+are a separate gate downstream of lookup presence. Therefore record materializing
+is retained as CONFIRMED infrastructure, but it is not by itself the visible
+weapon fix. Next work must recover the stock lifecycle/refresh API for
+`PlayerWeaponAnimControl+0x78..+0x84`; direct field writes remain disallowed.
