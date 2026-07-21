@@ -1571,7 +1571,9 @@ Do not reopen these as the first move:
 - [ ] Resolve the native `pistolHolster` joint-99 name against the legacy Nadine
       Player rig before transferring it. If the named joint is absent, remap the
       authored record through its proven semantic parent; never copy raw joint
-      99 or runtime fields blindly.
+      99 or runtime fields blindly. Build `fi` compares both rig descriptors and
+      `r_upper_leg` using only guarded reads; written P1/P2/P3 prediction is in
+      `COOP_STATUS.md`.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

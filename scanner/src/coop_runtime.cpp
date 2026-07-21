@@ -327,6 +327,7 @@ bool g_split_render_applied = false;
 bool g_split_login_done = false;
 void* g_last_nadine_object = nullptr;
 void log_native_nadine_weapon_state(void* npc);
+void log_native_nadine_pistol_joint_mapping(void* npc);
 
 // ProcessCharCloth is a separate child process from the Player DrawControl.
 // The async attachment hook only publishes observations; the Nadine/main-game
@@ -26476,6 +26477,7 @@ void __fastcall hooked_update(void* object) {
         observe_nadine_visual_identity(object);
         log_native_nadine_attach_records(object);
         log_native_nadine_weapon_state(object);
+        log_native_nadine_pistol_joint_mapping(object);
         g_last_nadine_object = object;  // set EARLY so the clone auto-spawn (below)
                                         // can read Nadine's look2 for the body swap.
         maybe_queue_remote_cloth_rebuild();
@@ -27312,6 +27314,8 @@ std::uint32_t g_named_event_name_property_id = 0;
 std::uint32_t g_gun_holster_id = 0;
 std::uint32_t g_gun_holster_leg_id = 0;
 std::uint32_t g_gun_holster_pelvis_id = 0;
+std::uint32_t g_r_leg_gun_holster_joint_name_id = 0;
+std::uint32_t g_r_upper_leg_joint_name_id = 0;
 
 int retained_player_index(void* player) {
     if (player == retained_player_object(0)) {
@@ -27354,6 +27358,156 @@ bool seh_read_player_look(void* player, std::uint32_t* look_out) {
         *look_out = 0;
         return false;
     }
+}
+
+struct NativeNadinePistolJointMappingCapture {
+    std::uint32_t native_count = 0;
+    std::uint32_t target_count = 0;
+    std::uint32_t pistol_attach_id = 0;
+    std::uint32_t native_joint_name_id = 0;
+    std::int16_t native_record_joint = -1;
+    std::int16_t native_named_holster_joint = -1;
+    std::int16_t target_named_holster_joint = -1;
+    std::int16_t native_upper_leg_joint = -1;
+    std::int16_t target_upper_leg_joint = -1;
+    std::array<std::uint32_t, 8> transform_bits{};
+};
+
+std::uint32_t raw_attach_joint_name_id(
+    std::byte* table, std::int16_t joint_index) {
+    if (table == nullptr || joint_index < 0) {
+        return 0;
+    }
+    auto* const draw_control = *reinterpret_cast<std::byte**>(table + 0x10);
+    if (draw_control == nullptr) {
+        return 0;
+    }
+    auto* const descriptor = *reinterpret_cast<std::byte**>(
+        draw_control + 0x18);
+    if (descriptor == nullptr) {
+        return 0;
+    }
+    const std::uint32_t count =
+        *reinterpret_cast<const std::uint32_t*>(descriptor + 0x38);
+    auto* const names = *reinterpret_cast<const std::byte* const*>(
+        descriptor + 0x58);
+    if (names == nullptr || count == 0 || count > 1024 ||
+        static_cast<std::uint32_t>(joint_index) >= count) {
+        return 0;
+    }
+    return *reinterpret_cast<const std::uint32_t*>(
+        names + static_cast<std::size_t>(joint_index) * 16);
+}
+
+bool seh_capture_native_nadine_pistol_joint_mapping(
+    void* npc, void* target,
+    NativeNadinePistolJointMappingCapture* capture) {
+    if (capture == nullptr) {
+        return false;
+    }
+    *capture = {};
+    capture->native_record_joint = -1;
+    capture->native_named_holster_joint = -1;
+    capture->target_named_holster_joint = -1;
+    capture->native_upper_leg_joint = -1;
+    capture->target_upper_leg_joint = -1;
+    __try {
+        if (npc == nullptr || target == nullptr ||
+            g_r_leg_gun_holster_joint_name_id == 0 ||
+            g_r_upper_leg_joint_name_id == 0) {
+            return false;
+        }
+        auto* const native_table = *reinterpret_cast<std::byte**>(
+            static_cast<std::byte*>(npc) + 0x1E0);
+        auto* const target_table = *reinterpret_cast<std::byte**>(
+            static_cast<std::byte*>(target) + 0x1E0);
+        if (native_table == nullptr || target_table == nullptr) {
+            return false;
+        }
+        capture->native_count = *reinterpret_cast<const std::uint32_t*>(
+            native_table + 0x4);
+        capture->target_count = *reinterpret_cast<const std::uint32_t*>(
+            target_table + 0x4);
+        constexpr std::uint32_t kPistolHolsterAttachId = 0x8A0249B5u;
+        std::byte* const pistol_record = raw_find_attach_record(
+            native_table, kPistolHolsterAttachId, nullptr);
+        if (pistol_record == nullptr) {
+            return false;
+        }
+        capture->pistol_attach_id = kPistolHolsterAttachId;
+        std::memcpy(
+            capture->transform_bits.data(), pistol_record,
+            sizeof(capture->transform_bits));
+        capture->native_record_joint =
+            *reinterpret_cast<const std::int16_t*>(pistol_record + 0x24);
+        capture->native_joint_name_id = raw_attach_joint_name_id(
+            native_table, capture->native_record_joint);
+        capture->native_named_holster_joint = raw_resolve_attach_joint(
+            native_table, g_r_leg_gun_holster_joint_name_id);
+        capture->target_named_holster_joint = raw_resolve_attach_joint(
+            target_table, g_r_leg_gun_holster_joint_name_id);
+        capture->native_upper_leg_joint = raw_resolve_attach_joint(
+            native_table, g_r_upper_leg_joint_name_id);
+        capture->target_upper_leg_joint = raw_resolve_attach_joint(
+            target_table, g_r_upper_leg_joint_name_id);
+        return capture->native_joint_name_id != 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *capture = {};
+        capture->native_record_joint = -1;
+        capture->native_named_holster_joint = -1;
+        capture->target_named_holster_joint = -1;
+        capture->native_upper_leg_joint = -1;
+        capture->target_upper_leg_joint = -1;
+        return false;
+    }
+}
+
+void log_native_nadine_pistol_joint_mapping(void* npc) {
+    static bool logged = false;
+    if (logged || !seh_is_exact_nadine_buddy(npc)) {
+        return;
+    }
+    void* target = nullptr;
+    int target_owner = -1;
+    for (int owner = 0; owner < 2; ++owner) {
+        void* const candidate = retained_player_object(owner);
+        std::uint32_t look = 0;
+        if (candidate != nullptr && seh_read_player_look(candidate, &look) &&
+            look == 0xD27C074Fu) {
+            target = candidate;
+            target_owner = owner;
+            break;
+        }
+    }
+    if (target == nullptr) {
+        return;
+    }
+    NativeNadinePistolJointMappingCapture capture{};
+    if (!seh_capture_native_nadine_pistol_joint_mapping(
+            npc, target, &capture)) {
+        return;
+    }
+    logged = true;
+
+    std::ostringstream line;
+    line << "NPC-NADINE-PISTOL-JOINT-MAP npc=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(npc)
+         << " target=0x" << reinterpret_cast<std::uintptr_t>(target)
+         << " attach=0x" << capture.pistol_attach_id
+         << " jointName=0x" << capture.native_joint_name_id
+         << " expectedName=0x" << g_r_leg_gun_holster_joint_name_id
+         << std::dec << " owner=" << target_owner
+         << " count=" << capture.native_count << "/" << capture.target_count
+         << " recordJoint=" << capture.native_record_joint
+         << " namedJoint=" << capture.native_named_holster_joint
+         << "/" << capture.target_named_holster_joint
+         << " upperLeg=" << capture.native_upper_leg_joint
+         << "/" << capture.target_upper_leg_joint
+         << " transform=" << std::hex;
+    for (const std::uint32_t bits : capture.transform_bits) {
+        line << bits << ",";
+    }
+    write_log_line(line.str().c_str());
 }
 
 bool seh_resolve_anim_control_weapon(
@@ -28416,6 +28570,9 @@ bool install_nadine_holster_final_boundary_probe() {
     g_gun_holster_id = safe_string_id_hash("gun_holster", 11);
     g_gun_holster_leg_id = safe_string_id_hash("gun_holster_leg", 15);
     g_gun_holster_pelvis_id = safe_string_id_hash("gun_holster_pelvis", 18);
+    g_r_leg_gun_holster_joint_name_id =
+        safe_string_id_hash("r_leg_gun_holster", 17);
+    g_r_upper_leg_joint_name_id = safe_string_id_hash("r_upper_leg", 11);
 
     constexpr std::array<std::uint8_t, 19> kNamedEventPrologue{
         0x4C, 0x8B, 0xDC, 0x49, 0x89, 0x5B, 0x18, 0x49, 0x89, 0x7B,
@@ -28465,7 +28622,9 @@ bool install_nadine_holster_final_boundary_probe() {
          << " nameKey=0x" << std::hex << g_named_event_name_property_id
          << " generic=0x" << g_gun_holster_id
          << " leg=0x" << g_gun_holster_leg_id
-         << " pelvis=0x" << g_gun_holster_pelvis_id;
+         << " pelvis=0x" << g_gun_holster_pelvis_id
+         << " rLegJoint=0x" << g_r_leg_gun_holster_joint_name_id
+         << " rUpperLeg=0x" << g_r_upper_leg_joint_name_id;
     boot_log_line(line.str().c_str());
     return installed;
 }
@@ -31430,8 +31589,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21fh "
-        "(read-only native-Nadine attach-table and weapon-call discriminator)");
+        "TLL co-op runtime init 2026-07-21fi "
+        "(read-only native pistolHolster joint-name/remap discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

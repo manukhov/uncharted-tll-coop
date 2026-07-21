@@ -5572,3 +5572,35 @@ The census also exposed diagnostic log amplification: the engine streamed
 multiple pointer generations with identical `43/44` content. Subsequent builds
 must deduplicate table/state observations by semantic contents rather than
 allocation addresses.
+
+### 2026-07-21 STATIC: fi identifies the native thigh-record joint before remap
+
+The native `pistolHolster` record cannot be copied with raw joint `99` merely
+because the NPC and legacy Player share look id `0xD27C074F`. The already
+confirmed Player control failed to resolve `r_leg_gun_holster`, while the NPC
+AttachSystem is built from a different `npc-common` namespace plus its look
+extension. The semantic joint name must be compared through each rig descriptor.
+
+The relevant data path is concrete: AttachSystem `+0x10` owns the DrawControl;
+DrawControl `+0x18` owns the rig descriptor; descriptor `+0x38` is the joint
+count and `+0x58` is the stride-16 joint-name table used by
+`AttachSystem_InitFromDcData`. The existing remap routine independently uses the
+engine's joint transforms to derive `inverse(parent) * marker`, composes that
+with the authored record transform, replaces the joint with the target semantic
+parent, and clears runtime fields before `AttachSystem_AppendRecord`.
+
+Competing outcomes are: (P1) native joint 99 is `r_leg_gun_holster`, absent in
+legacy Player, while `r_upper_leg` resolves in both rigs, authorizing the proven
+parent-relative remap; (P2) the same named holster joint exists in both rigs and
+the exact record can target its resolved Player index; (P3) joint 99 names a
+different marker or the semantic parent is missing, rejecting transfer. The
+confirmed fh record, descriptor/InitFromDcData field path, Player-control
+negative result and remap transform dataflow provide independent evidence types.
+
+Build `fi` is read-only and semantically deduplicated. On an exact NadineBuddy
+plus a retained legacy-Nadine Player it records the native joint-99 name id,
+resolves `r_leg_gun_holster` and `r_upper_leg` in both descriptors, and emits the
+record transform. Prediction: name equality plus `namedJoint=99/-1` and a valid
+`upperLeg` pair selects P1; two valid named indices select P2; another name or a
+missing upper-leg index selects P3. Any crash, missing marker after both actors
+exist or visual change falsifies the probe. It performs no engine call or write.
