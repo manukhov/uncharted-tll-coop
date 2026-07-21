@@ -4769,3 +4769,23 @@ suppression; rifle plus a body/clothing region disappearing selects H2 and rejec
 mesh suppression; no index affecting the rifle rejects the parent-look mesh route
 and moves to attachable/process identification. The player-owned shoulder AP is a
 separate second stage after the baked rifle is isolated.
+
+### 2026-07-21 REJECTED: persistent rifle is not a parent look mesh
+
+The user cycled all five `et` mesh states. They removed Nadine's body parts in
+sequence (head, torso, arms, legs and the remaining body section). After all five
+parent meshes had been classified, hair, the rifle and the grenade still floated
+in the scene. Both processes remained responsive and were closed after the test.
+
+This **rejects H1 and the parent-look mesh suppression route**. It also corrects
+the old wording from commit `37cb845`: the rifle is look-created and survives
+PlayerWeaponController inventory removal, but it is not baked into one of the
+five parent body meshes. Hair, rifle and grenade are independent children of the
+Player DrawControl/attachment graph. The next read-only boundary is already
+installed: at `NdAttachableObject_PostJointUpdate_Async 0x141ED28E0`, callsite
+`0x141ED63F7` supplies child DrawControl, parent DrawControl and the current
+attachable object. A bounded census of children whose parent has the exact Nadine
+five-mesh signature can distinguish their object vtable, type id, child mesh ids,
+parent handle and any ProcessWeapon art id without writing game state. Only after
+the persistent rifle child is identified may a visibility or attachment fix be
+defined; hiding body meshes must not be repeated.

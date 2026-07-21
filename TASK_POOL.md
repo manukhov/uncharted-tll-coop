@@ -1366,11 +1366,20 @@ Do not reopen these as the first move:
 - [x] Build a bounded standalone-mesh discriminator. Build `et` uses F11 to cycle
       baseline and one hidden legacy-look parent mesh, restores the previous mesh,
       requires all five exact ids, and touches no inventory/attachment state.
-- [ ] Run `et`: focus the window that renders Nadine and press F11 up to six
+- [x] Run `et`: focus the window that renders Nadine and press F11 up to six
       times. Record which `NADINE-MESH-PROBE index/id` removes the persistent
       rifle and whether any body/clothing disappears with it. A rifle-only index
       becomes the default suppression; a combined mesh or no affected index
-      rejects this route before any holster-AP write.
+      rejects this route before any holster-AP write. Result: all five indices
+      removed body parts in sequence; hair, rifle and grenade remained floating.
+      REJECT parent-look mesh suppression. The rifle is a separate look-created
+      attachable, not one of the five body meshes.
+- [ ] At the existing `NdAttachableObject_PostJointUpdate_Async` callsite
+      `0x141ED63F7`, capture a bounded read-only census only when the parent
+      DrawControl matches all five Nadine ids. Record unique child object vtable
+      RVA, type id, child mesh ids, `+0x4E0/+0x4E8` parent handle and plausible
+      `+0x860` ProcessWeapon art. Use the surviving hair/rifle/grenade trio to
+      identify the persistent rifle child before changing visibility or binding.
 - [ ] After the baked rifle is isolated, resolve the player-owned rifle's failed
       `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
       Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a
