@@ -5427,3 +5427,47 @@ matching ArmBlock selects G1; matching rightHand with missing/different ArmBlock
 inputs selects G2; agreement at both boundaries selects G3. The probe changes no
 argument, return value, transform, IK field or animation state. A crash, visual
 change or absent hook marker falsifies the diagnostic implementation.
+
+### 2026-07-21 CONFIRMED: fg separates Nadine rightHand from the shared arm profile
+
+The user exercised idle, drawn and ADS states with both pistol and rifle in both
+instances. Both processes remained responsive and no new visual regression was
+reported. PIDs `16640` and `19148` both logged the `2026-07-21fg` init marker and
+an installed `ArmBlockProbes_Kick` hook, so the read-only discriminator itself
+passed its runtime safety prediction.
+
+The WeaponArt alternative-list hypothesis is rejected. Rifle art `0x8075397D`
+and pistol art `0x33E29A1B` both resolved through the live cached WeaponArtDef
+registry, but their `+0xD8` descriptors had `count=0` (`capacity=1`). The third
+observed art `0x0B8BD6D6` was also empty. There is no hidden authored secondary
+hip-holster id to select for the standard pistol.
+
+The first untouched legacy-Nadine AttachSystem generation had exactly `39/45`
+records. At the active boundary, Chloe and Nadine consistently used different
+concrete `rightHand 0x61A48E01` records:
+
+- Chloe: index `1`, joint `41`, flags `0x7FBA`, identity local transform;
+- legacy Nadine: index `16`, joint `30`, flags `0`, identity local transform.
+
+For a drawn weapon, weapon `+0x688` selected those respective indices; after
+holstering, it selected the fd compatibility records (`39` for pistol and `40`
+for rifle on Nadine). Thus G1 is selected at the attachment boundary exactly as
+predicted, although the different joint numbers may be legitimate rig-local
+indices and must be compared with native NPC Nadine before being treated as a
+copy target.
+
+G2's missing ArmBlock-input prediction is rejected. Matching pistol/rifle states
+on both looks repeatedly produced the same inline profile families, including
+`9DCD31BC,8DFC1F97,9E9B57EB,8DFC1F97,5EBFF070` for pistol samples and
+`9DCD31BC,9DCD31BC,DF8131B3,9DCD31BC,5F061E58` for rifle samples. The completed
+world-space output arrays differ, but they include each actor's distinct world
+pose and therefore cannot by themselves distinguish a bad rig from normal
+placement. For the torso-crossing arm the remaining candidate is G3: the common
+profile reaches a different skeleton/retarget downstream.
+
+The next boundary follows the user's stronger control suggestion: inspect the
+real `NadineBuddy` NPC, whose native firearm presentation is known visually to
+have the correct thigh holster, back rifle, sling and arm poses. First recover
+its look/rig and weapon-attachment ownership statically; if the exact DC asset
+records are runtime-only, extend the existing common attachment hook to log the
+NPC's selected attach ids and concrete record data without writing either actor.

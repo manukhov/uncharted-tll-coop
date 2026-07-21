@@ -1544,10 +1544,18 @@ Do not reopen these as the first move:
       GunMove -> ArmBlockProbes path, with a possible common upstream authored
       animation/retarget defect. Three evidence types and a written G1/G2/G3
       discriminator are recorded in `COOP_STATUS.md`.
-- [ ] Build and run `fg`, a read-only comparison of Chloe/Nadine original attach
+- [x] Build and run `fg`, a read-only comparison of Chloe/Nadine original attach
       records, WeaponArtDef holster lists, active `rightHand` record and completed
-      ArmBlock output. Exercise idle/drawn/ADS with pistol and rifle; no transform,
-      IK, attachment or animation write is allowed in this build.
+      ArmBlock output. CONFIRMED: WeaponArt alternative lists are empty; Chloe and
+      legacy Nadine use different rig-local `rightHand` records (joint 41/flags
+      `0x7FBA` versus joint 30/flags `0`), while their matching pistol/rifle states
+      reach the same ArmBlock inline profile families. No crash or new visual
+      regression occurred.
+- [ ] Trace native NPC `NadineBuddy` firearm presentation before changing Player
+      data. Recover its look/rig, active and holstered weapon attach ids/records,
+      arm-pose owner and strap process. If authored DC records are unavailable in
+      the IDB, add only a bounded read-only NPC branch to the already-installed
+      common weapon-attachment hook and compare it with legacy-Nadine Player.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
