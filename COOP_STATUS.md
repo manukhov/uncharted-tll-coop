@@ -5191,3 +5191,59 @@ mutation/copy APIs of `Player+0x1E0` before adding data. A compatible record may
 only be materialized after proving its allocation/lifetime rules and the target
 joint/transform relationship; hand id `0x61A48E01` is the current broken fallback
 and is not a repair target.
+
+### 2026-07-21 STATIC: the stock AttachSystem has safe slack and an append API
+
+The owner field is an `AttachSystem*`, allocated as a 24-byte container at
+`NdGameObject+0x1E0`. Exact source assertions identify
+`Player_SetupAttachSystemFromLookData 0x1410CDF90` and
+`AttachSystem_InitFromDcData 0x1418B61B0`. Setup selects `player`, `player-net`
+or `player-young-drake` and calls the loader with reserve count zero. The loader
+resolves `*attach-points*` DC data against the active rig, allocates
+`capacity * 48` bytes and materializes only records whose authored joints exist.
+The container layout is capacity `+0x0`, live count `+0x4`, records `+0x8` and rig
+context `+0x10`; a record is transform `+0x0..+0x1F`, StringId `+0x20`, signed
+joint index `+0x24`, flag bit0 `+0x26` and runtime dword `+0x28`.
+
+Three independent observations make an in-place append preferable to any
+allocation replacement. First, `AttachSystem_AppendRecord 0x1418B6E50` checks
+`count < capacity`, validates the signed joint against the active rig and copies
+exactly that record form. Second, live read-only process memory in both copies
+matched `capacity=45,count=44` for Chloe and `capacity=45,count=39` for legacy
+Nadine: the loader retained six unused slots after five authored records failed
+joint resolution. Third, the five missing Chloe joints were recovered directly
+from the live rig name table: `spine_prop_attachment` (47),
+`spine_prop_alt_attachment` (48), `flashlight_attach` (106), `l_pouch_offset`
+(127) and `pelvis_holster` (199). The two records selected by current firearms
+are exactly `targSpineProp 0x00AD047A -> spine_prop_alt_attachment` and
+`gun_holster 0x555EFB8D -> pelvis_holster`. Legacy Nadine lacks those marker
+joints but contains their standard parents `spined` (18) and `pelvis` (3).
+The Chloe source indices differ: `spined` is 29 and `pelvis` is 3. Across 40
+live transform snapshots, `spined(29) -> spine_prop_alt_attachment(48)` stayed
+rigid at RMS `~2.9e-5`; progressively higher spine ancestors drifted from
+`~0.0034` to `~0.0123`. This independently selects `spined`, rather than merely
+choosing the nearest plausible bone name. The two source spine markers 47/48
+were also effectively coincident.
+
+The bounded repair therefore needs no new allocation and must not copy Chloe's
+raw joint indices. For each missing id it will derive the donor marker relative
+to its standard parent with `Transform_MakeRelative 0x1401990F0`, compose that
+with the donor record transform through `Transform_Compose 0x1401998F0`, replace
+the joint index with Nadine's resolved `spined`/`pelvis`, clear the runtime dword
+and append through the stock API. Competing fixes are now: (R1) direct raw-record
+copy, rejected because joint 48/199 means unrelated or out-of-range data on
+Nadine; (R2) rebuild/reallocate the whole container, unnecessary and riskier
+because six stock slots are free; (R3) parent-remapped composite append, selected.
+The ordinary look-change path clears/rebuilds this same container, so the repair
+must be idempotent and repeat after a records-pointer/count change. The visible
+`PlayerBase -> Character -> NdGameObject` destructor chain does not expose a
+separate safe ownership replacement seam; no replacement is needed for R3.
+
+Written prediction for build `fc`: before the append, legacy Nadine is
+`39/45` and lacks both ids; afterward it is `41/45`, both lookups resolve and
+`NADINE-HOLSTER-BINDING` changes to `present=1` for rifle and pistol without any
+change to Chloe or grenade. Cycling rifle/pistol draw and holster must move the
+inactive weapon away from `rightHand`; a crash, count outside `41/45`, a copied
+joint 48/199, a missing hook marker, lost body part, broken grenade or visible
+regression falsifies the repair. Placement may still need a bounded transform
+adjustment, but record presence and physical reparenting must succeed first.

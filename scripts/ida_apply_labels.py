@@ -7080,6 +7080,47 @@ FUNCTIONS = {
         "holster transforms and scalar into the binding output consumed by "
         "PlayerWeaponHolsterAction_ResolveAndBindAttachPoint.",
     ),
+    0x1410CDF90: (
+        "Player_SetupAttachSystemFromLookData",
+        "Exact Player::SetupAttachSystem source assertion. Selects player, "
+        "player-net or player-young-drake from runtime mode/look state and calls "
+        "AttachSystem_InitFromDcData on Player+0x1E0 with reserve count zero.",
+    ),
+    0x1418B61B0: (
+        "AttachSystem_InitFromDcData",
+        "Exact AttachSystem::InitFromDcData source assertion. Resolves the "
+        "authored *attach-points* knowledge data, allocates capacity*48 bytes, "
+        "resolves each authored joint against the active rig and materializes "
+        "valid 48-byte attachment records into the AttachSystem container.",
+    ),
+    0x1418B6D40: (
+        "AttachSystem_CopyConstruct",
+        "Deep-copies AttachSystem capacity*48 bytes and live count into a new "
+        "engine allocation while intentionally clearing the destination rig "
+        "context pointer at +0x10.",
+    ),
+    0x1418B6E20: (
+        "AttachSystem_Clear",
+        "Clears only the AttachSystem live record count at +0x4; capacity and "
+        "the existing 48-byte record allocation remain intact.",
+    ),
+    0x1418B6E50: (
+        "AttachSystem_AppendRecord",
+        "Appends one 48-byte attachment record when live count is below capacity "
+        "and its signed joint index is -1 or valid for the active rig. Copies "
+        "transform, StringId, joint, flag bit0 and runtime dword, then advances "
+        "the live count.",
+    ),
+    0x1401990F0: (
+        "Transform_MakeRelative",
+        "Computes inverse(parent) * child for the compact 32-byte translation/"
+        "quaternion transform representation and writes the result argument.",
+    ),
+    0x1401998F0: (
+        "Transform_Compose",
+        "Composes parent * relative for the compact 32-byte translation/"
+        "quaternion transform representation and writes the result argument.",
+    ),
     0x1403421B0: (
         "Script_ReattachPlayerWeapon",
         "Native reattach-player-weapon script command. Validates a "

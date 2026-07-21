@@ -1475,16 +1475,29 @@ Do not reopen these as the first move:
       The final attach function succeeds for hand id `0x61A48E01`; the missing
       holster ids are gated before mutation. The empty event channel is
       non-discriminating because it was empty for both looks.
-- [ ] Trace the owner `+0x1E0` attachment-table constructor, owner, 48-byte record
-      layout, destructor/copy path and every supported mutation API. Resolve the
+- [x] Trace the owner `+0x1E0` attachment-table constructor, owner, 48-byte record
+      layout, look-change/copy path and the supported in-place mutation API. Resolve the
       StringId preimages for `0x61A48E01`, `0x00AD047A` and `0x754D9C3B`, and
       enumerate which authored shoulder/back records already exist on legacy
-      Nadine. Do not write until allocation and lifetime are proven.
-- [ ] After the table contract is proven, either materialize compatible pistol
-      and rifle records using the engine's own API or select an existing
-      shoulder/back record and preserve the authored per-weapon offset. The hand
-      id `0x61A48E01`, child-index identity fallback, wrist-copy and joypad-gate
-      paths are rejected repair targets.
+      Nadine. Do not write until allocation and lifetime are proven. Result:
+      exact `AttachSystem::InitFromDcData 0x1418B61B0` and append API
+      `0x1418B6E50`; container is `capacity,count,records,rig` at `+0,+4,+8,+16`.
+      Live Chloe is `45/44`, Nadine `45/39`, so six engine-owned slots are free.
+      Preimages: `0x61A48E01=rightHand`, `0x00AD047A=targSpineProp`; grenade id
+      has no executable string preimage. Missing source marker joints are
+      `spine_prop_alt_attachment` and `pelvis_holster`, with standard Nadine
+      parents `spined` and `pelvis`.
+      Look changes clear/rebuild the container and may replace its records
+      pointer; the visible destructor chain exposes no separate replacement
+      seam, so the repair must be idempotent and use the existing allocation.
+      Forty live snapshots select Chloe `spined` joint 29 as the stable parent
+      of marker 48 (RMS `~2.9e-5`); target Nadine `spined` is joint 18.
+- [ ] Build and run `fc`: compose each Chloe marker relative to its standard
+      parent with the authored attachment transform, remap the joint to Nadine's
+      `spined`/`pelvis`, clear runtime state and append the two 48-byte records
+      through `AttachSystem_AppendRecord`. Require `39/45 -> 41/45`, both ids
+      present, stable body/grenade, and rifle/pistol holster reparenting away from
+      `rightHand`. Do not allocate/replace the container or copy joint 48/199.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
