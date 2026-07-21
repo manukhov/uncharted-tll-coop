@@ -6008,3 +6008,47 @@ the corresponding part of the hypothesis.
 
 The release DLL compiled successfully with marker `2026-07-21fo`; runtime
 verification is pending.
+
+### 2026-07-21 CONFIRMED/REJECTED: `fo` re-arms correctly, but the broken action restores Chloe's point
+
+The user completed repeated draw/holster cycles on both copies. There were no
+crashes, but the pistol still appeared at the same Chloe/back location. The
+user also clarified that the draw and put-away animations have been broken from
+the beginning of this weapon-sync work; this is pre-existing behavior rather
+than a regression introduced by `fo`.
+
+The mechanical `fo` prediction is CONFIRMED. Both retained legacy-Nadine
+Players produced verified slot-1 repairs. Initial generation 1 and later
+generations 2 and 3 each changed the standard pistol from either `rightHand` or
+the art-specific Chloe point `0x00AD047A` to `pistolHolster 0x8A0249B5`.
+Every call returned 1, resolved the weapon parent back to the same Player
+(`parentOwner=1->1`), and finished on the expected record with `verified=1`.
+While the rifle was active, the pistol repair correctly ran as inactive
+`slot=1 active=0 draw=2`; the generic rule did not capture grenade slot 2.
+Thus exact-slot classification, stable-edge admission and per-cycle re-arming
+are all confirmed.
+
+The visual/persistence prediction is REJECTED. The same pistol objects entered
+later generations with `pre_attach_id=0x00AD047A` again, proving that the engine
+restored Chloe's art-specific attachment after each successful direct repair.
+This is not a missing retry: `fo` did retry and verified the target on both
+copies, yet the user saw no visual improvement. More importantly, the installed
+`PlayerWeaponAnimControl` named-event hook recorded zero
+`NADINE-HOLSTER-EVENT` rows during the whole test, while the final attach hook
+recorded hand attaches. This independently matches the reported missing/broken
+draw and put-away animations.
+
+Stop changing record transforms, attachment ids and retry timing. The next P0
+is the absent weapon-action animation/event pipeline. Compare a working local
+Chloe draw/put-away cycle against the retained legacy-Nadine puppet from
+`PlayerWeaponController_ApplyWeaponSwitch 0x1410A28A0` through
+`PlayerPutGunAwayAction` / `PlayerGetWeaponInHandAction`, action admission at
+`sub_142053820`, the animation layer, and
+`PlayerWeaponAnimControl` named-event dispatch `0x14108DE30`. Determine why the
+puppet reaches hand attach/state transitions without emitting the reparent
+marker/event. The direct inactive repair should be disabled or kept diagnostic
+only before that discriminator test so it cannot mask event ordering.
+
+Both test processes were closed after log capture. IDA MCP remains stopped, the
+release DLL on disk is build `fo`, and the next session should restart MCP for
+static analysis before any new game launch.

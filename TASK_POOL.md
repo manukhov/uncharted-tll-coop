@@ -1640,7 +1640,19 @@ Do not reopen these as the first move:
       Re-arm once after each slot-1-active -> inactive edge so a later cycle is
       repairable without a per-frame call. Require old-id -> `0x8A0249B5`,
       `parentOwner=1->1`, `verified=1`, a generation increment on the second cycle,
-      no active-slot call and no slot-0/slot-2 generic reroute.
+      no active-slot call and no slot-0/slot-2 generic reroute. CONFIRMED
+      mechanically on both copies through generations 1/2/3, but REJECTED as a
+      visual/persistent fix: each later generation again began at `0x00AD047A`,
+      and the pistol remained on the back despite every call verifying
+      `0x8A0249B5`. Do not tune the point or retry timing further.
+- [ ] Restore the missing draw/put-away action animation and reparent-event path
+      for the retained puppet. User confirms both animations were broken from
+      the beginning, and build `fo` emitted zero `NADINE-HOLSTER-EVENT` rows
+      despite hand attaches and controller transitions. Statically compare a
+      working Chloe cycle with legacy Nadine from ApplyWeaponSwitch through
+      PlayerPutGunAwayAction / PlayerGetWeaponInHandAction, `sub_142053820`, the
+      animation layer and named-event dispatch `0x14108DE30`. Disable the direct
+      inactive repair before the next discriminator runtime test.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
