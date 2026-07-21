@@ -803,6 +803,14 @@ FUNCTIONS = {
         "normal joint-blend producers; consumes AnimCmdContext and drives palette "
         "output including aim-add-* parameter lookup.",
     ),
+    0x14217CF90: (
+        "AnimCmdEvaluator_ApplyBlend",
+        "The ProcessAnimCmdListSegment case-7 consumer for command 0x60007. "
+        "Takes the emitted left/right output indices, output/mode and final float "
+        "weight, then invokes the transform and scalar pose-blend helpers. The "
+        "generator short-circuits weight <=0.0001 to child 0 and weight >=0.9999 "
+        "to child 1 when endpoint evaluation is enabled.",
+    ),
     0x141B5CE90: (
         "AudioManager_RenderJobEntry",
         "Ndjob callback scheduled by AudioManager_RunRenderJob. When owner+0x81 "

@@ -13890,6 +13890,43 @@ struct AimBlendVmProbe {
     std::array<std::uint64_t, 32> constants{};
 };
 
+constexpr std::size_t kAimBlendSpineMaxDepth = 8;
+
+struct AimBlendSpineNodeProbe {
+    bool node_valid = false;
+    bool rtti_valid = false;
+    bool layout_valid = false;
+    bool vm_valid = false;
+    std::uint32_t node_index = UINT32_MAX;
+    std::uint32_t vtable_rva = 0;
+    std::uint32_t type_descriptor_rva = 0;
+    std::uint32_t weight_word = 0;
+    std::uint32_t mode = 0;
+    std::uint32_t script_id = 0;
+    std::uint32_t code_count = 0;
+    std::uint32_t code_hash = 0;
+    std::uint32_t constant_count = 0;
+    std::uint32_t constant_hash = 0;
+    std::uint32_t vertical_reference_mask = 0;
+    std::uint32_t child_valid_mask = 0;
+    std::uint32_t child_rtti_valid_mask = 0;
+    std::array<std::uint32_t, 2> child_indices{UINT32_MAX, UINT32_MAX};
+    std::array<std::uint32_t, 2> child_vtable_rva{};
+    std::array<std::uint32_t, 2> child_type_descriptor_rva{};
+    std::uint8_t flags = 0;
+    // 0/1 is the statically proved endpoint child, 2 means a mixed blend.
+    std::uint8_t selected_child = 2;
+};
+
+struct AimBlendSpineProbe {
+    bool valid = false;
+    std::uint32_t count = 0;
+    // 1 non-Blend root, 2 invalid child, 3 non-Blend endpoint, 4 mixed
+    // weight, 5 cycle, 6 depth cap, 7 torn layout.
+    std::uint32_t stop_reason = 0;
+    std::array<AimBlendSpineNodeProbe, kAimBlendSpineMaxDepth> nodes{};
+};
+
 struct AimBaseInstanceProbe {
     bool registry_valid = false;
     bool descriptor_found = false;
@@ -13949,6 +13986,7 @@ struct AimBaseInstanceProbe {
     float source_lrdu[4]{};
     float destination_lrdu[4]{};
     AimBlendVmProbe root_blend_vm{};
+    AimBlendSpineProbe blend_spine{};
 };
 
 void aim_fingerprint_mix_bytes(
@@ -14189,6 +14227,141 @@ bool probe_snapshot_heap_node(
         records == *reinterpret_cast<const std::byte* const*>(
                        heap_bytes + 0xA0) &&
         node == *reinterpret_cast<void* const*>(record);
+}
+
+AimBlendSpineProbe probe_aim_blend_spine(
+    void* heap, std::uint32_t root_index) {
+    AimBlendSpineProbe result{};
+    if (heap == nullptr || root_index == UINT32_MAX) {
+        result.stop_reason = 2;
+        return result;
+    }
+
+    std::array<std::uint32_t, kAimBlendSpineMaxDepth> visited{};
+    std::uint32_t current_index = root_index;
+    for (std::size_t depth = 0; depth < result.nodes.size(); ++depth) {
+        if (std::find(visited.begin(), visited.begin() + depth,
+                      current_index) != visited.begin() + depth) {
+            result.stop_reason = 5;
+            return result;
+        }
+        visited[depth] = current_index;
+
+        void* node = nullptr;
+        if (!probe_snapshot_heap_node(heap, current_index, node)) {
+            result.stop_reason = 2;
+            return result;
+        }
+        AimBlendSpineNodeProbe& entry = result.nodes[result.count++];
+        entry.node_index = current_index;
+        entry.node_valid = true;
+        entry.rtti_valid = probe_msvc_rtti_identity(
+            node, entry.vtable_rva, entry.type_descriptor_rva);
+        if (!entry.rtti_valid ||
+            entry.vtable_rva != kAnimSnapshotNodeBlendVtableRva) {
+            result.stop_reason = 1;
+            return result;
+        }
+        if (readable_bytes(node) < 0x64) {
+            result.stop_reason = 7;
+            return result;
+        }
+
+        const auto* const bytes = static_cast<const std::byte*>(node);
+        const std::uintptr_t vtable =
+            *reinterpret_cast<const std::uintptr_t*>(node);
+        entry.child_indices[0] =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x40);
+        entry.child_indices[1] =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x44);
+        entry.flags = *reinterpret_cast<const std::uint8_t*>(bytes + 0x48);
+        entry.mode = *reinterpret_cast<const std::uint32_t*>(bytes + 0x4C);
+        void* const script_descriptor =
+            *reinterpret_cast<void* const*>(bytes + 0x58);
+        entry.weight_word =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x60);
+
+        AimBlendVmProbe vm{};
+        entry.vm_valid = probe_aim_blend_vm_descriptor(script_descriptor, vm);
+        entry.script_id = vm.script_id;
+        entry.code_count = vm.code_count;
+        entry.code_hash = vm.code_hash;
+        entry.constant_count = vm.constant_count;
+        entry.constant_hash = vm.constant_hash;
+        entry.vertical_reference_mask = vm.vertical_reference_mask;
+
+        for (std::size_t child = 0; child < entry.child_indices.size(); ++child) {
+            void* child_node = nullptr;
+            if (!probe_snapshot_heap_node(
+                    heap, entry.child_indices[child], child_node)) {
+                continue;
+            }
+            entry.child_valid_mask |= 1U << child;
+            if (probe_msvc_rtti_identity(
+                    child_node, entry.child_vtable_rva[child],
+                    entry.child_type_descriptor_rva[child])) {
+                entry.child_rtti_valid_mask |= 1U << child;
+            }
+        }
+
+        void* verify_node = nullptr;
+        entry.layout_valid =
+            probe_snapshot_heap_node(heap, current_index, verify_node) &&
+            verify_node == node &&
+            vtable == *reinterpret_cast<const std::uintptr_t*>(node) &&
+            entry.child_indices[0] ==
+                *reinterpret_cast<const std::uint32_t*>(bytes + 0x40) &&
+            entry.child_indices[1] ==
+                *reinterpret_cast<const std::uint32_t*>(bytes + 0x44) &&
+            entry.flags ==
+                *reinterpret_cast<const std::uint8_t*>(bytes + 0x48) &&
+            entry.mode ==
+                *reinterpret_cast<const std::uint32_t*>(bytes + 0x4C) &&
+            script_descriptor ==
+                *reinterpret_cast<void* const*>(bytes + 0x58) &&
+            entry.weight_word ==
+                *reinterpret_cast<const std::uint32_t*>(bytes + 0x60);
+        if (!entry.layout_valid || !entry.vm_valid) {
+            result.stop_reason = 7;
+            return result;
+        }
+
+        float weight = 0.0F;
+        std::memcpy(&weight, &entry.weight_word, sizeof(weight));
+        if (!std::isfinite(weight) || weight < -0.0001F ||
+            weight > 1.0001F) {
+            result.stop_reason = 7;
+            return result;
+        }
+        if (std::fabs(weight) <= 0.0001F) {
+            entry.selected_child = 0;
+        } else if (std::fabs(weight - 1.0F) <= 0.0001F) {
+            entry.selected_child = 1;
+        } else {
+            entry.selected_child = 2;
+            result.valid = true;
+            result.stop_reason = 4;
+            return result;
+        }
+
+        const std::size_t selected = entry.selected_child;
+        if ((entry.child_valid_mask & (1U << selected)) == 0 ||
+            (entry.child_rtti_valid_mask & (1U << selected)) == 0) {
+            result.stop_reason = 2;
+            return result;
+        }
+        if (entry.child_vtable_rva[selected] !=
+            kAnimSnapshotNodeBlendVtableRva) {
+            result.valid = true;
+            result.stop_reason = 3;
+            return result;
+        }
+        current_index = entry.child_indices[selected];
+    }
+
+    result.valid = true;
+    result.stop_reason = 6;
+    return result;
 }
 
 struct AimOverrideFingerprint {
@@ -14629,6 +14802,11 @@ AimBaseInstanceProbe probe_base_anim_state_instance(void* registry) {
                                         root_bytes + 0x58);
                         }
 
+                        if (result.root_rtti_valid) {
+                            result.blend_spine = probe_aim_blend_spine(
+                                root_heap, result.root_snapshot_index);
+                        }
+
                         // The root can be torn down on another animation phase.
                         // Accept a sample only when the full owner chain and
                         // vtable are unchanged after the RTTI walk.
@@ -14680,6 +14858,7 @@ AimBaseInstanceProbe probe_base_anim_state_instance(void* registry) {
                             result.root_child_dynamic_word_60 = {};
                             result.root_child_dynamic_word_64 = {};
                             result.root_blend_vm = {};
+                            result.blend_spine = {};
                         }
                     }
                 }
@@ -14823,6 +15002,71 @@ void log_aim_base_state_fingerprint(
             probe.root_child_dynamic_word_60[1],
             probe.root_child_dynamic_word_64[1]);
         boot_log_line(blend_line);
+
+        if (probe.blend_spine.count != 0) {
+            std::ostringstream spine_header;
+            spine_header << "AIM-BLEND-SPINE tick=" << now
+                         << " phase=" << phase
+                         << " screen=" << screen
+                         << " state=" << std::uppercase << std::hex
+                         << std::setw(8) << std::setfill('0')
+                         << probe.snapshot_state_id << std::dec
+                         << " count=" << probe.blend_spine.count
+                         << " stop=" << probe.blend_spine.stop_reason
+                         << " valid="
+                         << static_cast<unsigned>(probe.blend_spine.valid);
+            boot_log_line(spine_header.str().c_str());
+
+            for (std::uint32_t depth = 0;
+                 depth < probe.blend_spine.count; ++depth) {
+                const AimBlendSpineNodeProbe& node =
+                    probe.blend_spine.nodes[depth];
+                std::ostringstream node_line;
+                node_line << "AIM-BLEND-NODE tick=" << now
+                          << " screen=" << screen
+                          << " state=" << std::uppercase << std::hex
+                          << std::setw(8) << std::setfill('0')
+                          << probe.snapshot_state_id << std::dec
+                          << " depth=" << depth << std::uppercase << std::hex
+                          << " idx=" << std::setw(8) << node.node_index
+                          << " node=" << std::setw(8) << node.vtable_rva
+                          << '/' << std::setw(8)
+                          << node.type_descriptor_rva
+                          << " weight=" << std::setw(8) << node.weight_word
+                          << "/" << std::dec
+                          << static_cast<unsigned>(node.layout_valid)
+                          << std::uppercase << std::hex
+                          << " flags=" << std::setw(2)
+                          << static_cast<unsigned>(node.flags)
+                          << " mode=" << std::setw(8) << node.mode
+                          << " select=" << std::dec
+                          << static_cast<unsigned>(node.selected_child)
+                          << std::uppercase << std::hex
+                          << " vm=" << std::setw(8) << node.script_id
+                          << '/' << std::dec << node.code_count
+                          << '/' << std::uppercase << std::hex
+                          << std::setw(8) << node.code_hash
+                          << '/' << std::dec << node.constant_count
+                          << '/' << std::uppercase << std::hex
+                          << std::setw(8) << node.constant_hash
+                          << '/' << std::setw(2)
+                          << node.vertical_reference_mask
+                          << '/' << std::dec
+                          << static_cast<unsigned>(node.vm_valid)
+                          << " childMask=" << node.child_valid_mask
+                          << '/' << node.child_rtti_valid_mask
+                          << std::uppercase << std::hex
+                          << " child0=" << std::setw(8)
+                          << node.child_indices[0] << '/' << std::setw(8)
+                          << node.child_vtable_rva[0] << '/' << std::setw(8)
+                          << node.child_type_descriptor_rva[0]
+                          << " child1=" << std::setw(8)
+                          << node.child_indices[1] << '/' << std::setw(8)
+                          << node.child_vtable_rva[1] << '/' << std::setw(8)
+                          << node.child_type_descriptor_rva[1];
+                boot_log_line(node_line.str().c_str());
+            }
+        }
 
         static std::atomic<bool> vm_dumped[2]{};
         if (probe.snapshot_state_id == 0x3C347132U &&
@@ -26582,8 +26826,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-21ei "
-        "(read-only root blend VM, weight, and child-type discriminator)");
+        "TLL hook DLL init 2026-07-21ej "
+        "(read-only active Blend-spine RTTI and VM discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

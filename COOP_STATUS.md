@@ -4142,3 +4142,32 @@ the refresh/command semantics. Then a bounded read-only traversal may follow
 only nodes whose Blend layout is already established and stop at the first
 non-Blend RTTI. Do not launch another probe or guess Unary/IK/Warper layouts
 before that proof.
+
+### 2026-07-21 STATIC: `ej` proves and traces the active Blend endpoints
+
+The endpoint route is now offset- and command-proven. At
+`AnimSnapshotNodeBlend_GenerateAnimCommands 0x14191E5F0`, child 0 comes from
+`+0x40`, child 1 from `+0x44`, and the engine epsilon is 0.0001
+(`0x142BE8B44 = 0x38D1B717`). Near-zero weight short-circuits to child 0 at
+`0x14191E751`; near-one weight short-circuits to child 1 at `0x14191E7A5`.
+The generic path emits command `0x60007`; `ProcessAnimCmdListSegment
+0x141AB97C0` case 7 consumes its left/right/weight fields and calls
+`AnimCmdEvaluator_ApplyBlend 0x14217CF90`, which sends the same weight to the
+transform and scalar pose-blend helpers. The real IDB has the new label, reports
+1112 functions/19 data names, and `save_database returned True`.
+
+Therefore the confirmed steady `ei` route starts `root weight~0 -> child0`, then
+`nested Blend weight=1 -> child1`. Read-only build `2026-07-21ej` traverses only
+this proven endpoint Blend layout, with an eight-node cap, cycle detection,
+double-read layout validation, checked heap records/RTTI and bounded VM
+fingerprints. It stops before reading any non-Blend dynamic layout. The Release
+DLLs build successfully; the pre-existing C4456 warning remains unrelated.
+
+Falsifier: stable endpoint samples must reproduce root selection 0 and nested
+selection 1. The first aligned VM/weight/selected-child RTTI difference selects
+the authored split. A complete match through the same first non-Blend RTTI
+rejects the active Blend spine and moves the trace into that concrete node.
+Mixed `stop=4` transition samples are non-diagnostic. No runtime launch is
+authorized until this written prediction and the three-type static quota above
+are present; both are detailed in
+`reports/remote_aim_pitch_blend_tick_20260718.md`.

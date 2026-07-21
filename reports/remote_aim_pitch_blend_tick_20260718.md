@@ -987,3 +987,80 @@ nested Blend spine. Before another runtime test, prove from slots 11/14 which
 child is selected at weight zero, then define a bounded normalized traversal
 that follows only the already-proved Blend layout. Do not infer layouts for
 Unary/IK/Warper nodes from their class names.
+
+## STATIC `ej`: active endpoint Blend-spine discriminator
+
+The next child is no longer ambiguous. In
+`AnimSnapshotNodeBlend_GenerateAnimCommands 0x14191E5F0`, child 0 is resolved
+from `node+0x40` and child 1 from `node+0x44`. With endpoint evaluation enabled,
+the function compares the weight against the engine epsilon at `0x142BE8B44`
+(`0x38D1B717`, exactly 0.0001): weight near zero calls only child 0 at
+`0x14191E751`, while weight near one calls only child 1 at `0x14191E7A5`.
+
+The non-short-circuit path independently proves the same ordering. It emits
+command `0x60007` as `{left output, right output, destination depth, mode,
+weight}`. `ProcessAnimCmdListSegment 0x141AB97C0` case 7 reads the two output
+indices and the float at command `+0x14`, then calls
+`AnimCmdEvaluator_ApplyBlend 0x14217CF90`. That helper feeds the same weight in
+`XMM3` into both transform and scalar pose-blend helpers. Thus zero selects the
+left/child-0 result and one selects the right/child-1 result; flag bit 1 changes
+generation order/depth allocation, not endpoint identity.
+
+Applied to the confirmed `ei` sample, the steady active route begins
+`root(weight~0) -> child0 Blend(weight=1) -> child1`. The first node after that
+second endpoint is not yet typed and is the exact next runtime discriminator.
+
+### Exact hypothesis and competitors
+
+The selected hypothesis is that the first sender/receiver semantic difference
+appears on this active endpoint Blend spine: a nested VM fingerprint, endpoint
+weight, or selected-child RTTI will differ at one normalized depth.
+
+Competing hypotheses are:
+
+1. The complete active Blend spine matches and terminates at the same non-Blend
+   RTTI; the divergence is inside that concrete Unary/IK/Warper/leaf node.
+2. The active authored tree matches completely and divergence begins only in
+   command evaluation, plugin processing, or the final palette/attachment sink.
+3. A transition produces an interior weight, so both branches contribute and a
+   single endpoint spine is not defined. Such a sample must stop as mixed rather
+   than guessing a child.
+4. A concurrent snapshot rebuild tears an index, RTTI, script descriptor, or
+   weight during traversal. Such a sample is invalid and non-diagnostic.
+
+### Independent static evidence quota
+
+1. Generator dataflow resolves the two proven child fields `+0x40/+0x44`, reads
+   weight `+0x60`, and has explicit epsilon endpoint branches to child 0/child 1.
+2. The independent downstream `ProcessAnimCmdListSegment` case-7 path consumes
+   command `0x60007` left/right/output/mode/weight fields and calls the newly
+   labelled `AnimCmdEvaluator_ApplyBlend 0x14217CF90`.
+3. `AnimCmdEvaluator_ApplyBlend` independently passes that weight to separate
+   transform and scalar pose-blend helpers, so it is a real pose result rather
+   than command-list metadata.
+4. Runtime-confirmed `ei` topology supplies the first two normalized endpoint
+   choices: root weight decays below epsilon to child 0, whose validated Blend
+   weight is exactly 1.0 and therefore selects child 1.
+
+### Read-only implementation and falsifier
+
+Build `2026-07-21ej` follows at most eight nodes and only while the current RTTI
+is the already-proved `AnimSnapshotNodeBlend` vtable RVA `02B15218`. At every
+depth it double-reads vtable, child indices, flags, mode, script descriptor and
+weight; validates both child heap records and MSVC RTTI; fingerprints bounded VM
+code/constants; detects cycles; and stops on a mixed weight, invalid/torn field,
+depth cap, or the first non-Blend endpoint. It never reads a non-Blend dynamic
+layout, calls no game function, and writes no game memory.
+
+Prediction for a fresh stable center/up/down ADS sweep:
+
+- the steady root records select child 0 and the next Blend records select child
+  1; failure of those two choices rejects the static endpoint interpretation;
+- the first aligned depth with different VM hash, endpoint weight, or selected
+  child RTTI identifies the concrete authored split;
+- a full aligned match through the same first non-Blend RTTI rejects the entire
+  active Blend spine and moves the trace into that concrete implementation;
+- `stop=4` is transition-only mixed weight and must be ignored until a stable
+  endpoint sample appears;
+- any crash, visible animation/model/input change, write, or invalid owner-chain
+  sample invalidates `ej`.

@@ -1170,11 +1170,15 @@ Do not reopen these as the first move:
       aligned screen-0/screen-1 root weight, VM code/constants, child RTTI and
       typed child dynamics. Ignore raw heap indices/pointers. A full match moves
       the next static trace to slot-14 command application.
-- [ ] Trace the nested Blend spine below root child 0. First prove which command
+- [x] Trace the nested Blend spine below root child 0. Prove which command
       child contributes at weight zero; then implement a bounded read-only walk
       over only the validated Blend layout, stopping at the first non-Blend RTTI.
       The `ei` result matched root VM/code/constants, child RTTI and typed child
       dynamics; root weight was a vertical-independent transition decay.
+- [ ] Run the written `ej` falsifier. Stable samples must select root child 0,
+      then nested Blend child 1. Compare normalized depth VM/weight/selected RTTI
+      across screens; ignore mixed `stop=4` transitions. A full match moves the
+      next static trace into the first common non-Blend class.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
