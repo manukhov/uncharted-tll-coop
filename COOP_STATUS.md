@@ -4119,3 +4119,26 @@ the concrete child subtree. A complete match rejects the immediate root and move
 the trace to slot-14 command application. Raw indices/pointers and activation
 serial remain non-diagnostic. Full evidence and the exact safety caps are in
 `reports/remote_aim_pitch_blend_tick_20260718.md`.
+
+### 2026-07-21 CONFIRMED/REJECTED: `ei` matches the root VM and child topology
+
+Fresh PIDs 11468/11736 completed the vertical ADS sweep on read-only build `ei`
+without a crash or model regression. In stable state `3C347132`, both processes
+had the identical valid root VM: script `CDFC7F1B`, 18 instructions, code hash
+`88C7741D`, one constant `000000004666093B` (hash `35DC6391`), and direct
+vertical-reference mask `00`. Root flags/mode were `0C/1`.
+
+Both also resolved child 0 as another `AnimSnapshotNodeBlend`
+(`02B15218/03771508`) with weight 1.0 and child 1 as
+`AnimSnapshotNodeEmptyPose` (`02B3D590/03772710`). The root weight followed the
+same time-shifted transition decay in both processes rather than vertical input:
+screen 1 `up` reached about 0.6096 while the weight continued from about 0.0135
+toward zero. Root slot 11 and the immediate Blend/EmptyPose pair are therefore
+**REJECTED** as the vertical discriminator; the node is a generic transition.
+
+Both processes were closed. The concrete next frontier is child 0's nested Blend
+spine. First prove statically which child contributes at root weight zero from
+the refresh/command semantics. Then a bounded read-only traversal may follow
+only nodes whose Blend layout is already established and stop at the first
+non-Blend RTTI. Do not launch another probe or guess Unary/IK/Warper layouts
+before that proof.

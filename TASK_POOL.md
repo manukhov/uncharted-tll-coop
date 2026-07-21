@@ -1166,10 +1166,15 @@ Do not reopen these as the first move:
 - [x] Implement read-only build `ei`: bounded root weight/VM fingerprint and
       resolved immediate-child RTTI/typed dynamic fields. It calls no native
       resolver, VM or animation method and writes no game state.
-- [ ] Run the written `ei` falsifier with stable center/up/down ADS motion. Compare
+- [x] Run the written `ei` falsifier with stable center/up/down ADS motion. Compare
       aligned screen-0/screen-1 root weight, VM code/constants, child RTTI and
       typed child dynamics. Ignore raw heap indices/pointers. A full match moves
       the next static trace to slot-14 command application.
+- [ ] Trace the nested Blend spine below root child 0. First prove which command
+      child contributes at weight zero; then implement a bounded read-only walk
+      over only the validated Blend layout, stopping at the first non-Blend RTTI.
+      The `ei` result matched root VM/code/constants, child RTTI and typed child
+      dynamics; root weight was a vertical-independent transition decay.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

@@ -948,3 +948,42 @@ Prediction:
 - raw heap indices, pointers, activation serials, and untyped constant-pointer
   values are non-diagnostic;
 - any crash, visible animation/model change, or input change invalidates `ei`.
+
+## CONFIRMED/REJECTED `ei`: immediate root Blend is not the vertical consumer
+
+Fresh PIDs 11468 (screen 0, role A) and 11736 (screen 1, role B) loaded
+`2026-07-21ei`. The user performed the requested vertical ADS motion. Both
+processes remained responsive and were closed after collection; there was no
+crash or visible model regression.
+
+Stable state `3C347132` produced the same fully valid root VM in both processes:
+
+- script id `CDFC7F1B`, 18 instructions, terminated flag `1` and code hash
+  `88C7741D`;
+- one constant, hash `35DC6391`, exact value `000000004666093B`;
+- direct vertical-reference mask `00`: neither LRDU offsets `0x188..0x194` nor
+  known vertical ids `7283B601/E8651C16` appear in the bounded stream;
+- exact code
+  `00310043,00320143,00330243,00340343,00350443,00360543,00000615,00030743,00050843,00073143,00083243,0206061C,00000743,0007070F,8407073B,0007070E,07060607,00060600`.
+
+The resolved steady child topology also matched. Child 0 is another
+`AnimSnapshotNodeBlend` (`vt/TD RVA 02B15218/03771508`) with typed weight
+`3F800000` (1.0). Child 1 is `AnimSnapshotNodeEmptyPose`
+(`02B3D590/03772710`). Validity tuple `3/3/1` proves both child nodes and RTTI;
+the typed-dynamic bit applies only to the Blend child, as expected.
+
+Most importantly, the root weight did not track vertical input. It followed the
+same one-way transition decay, merely time-shifted between processes: screen 0
+sampled approximately `0.754014 -> 0.082313 -> 0.005204 -> 0.000302 -> ...`,
+while screen 1 sampled `1.000000 -> 0.176280 -> 0.013489 -> 0.000668 -> ...`.
+On screen 1, `up` rose to approximately `0.6096` while the root weight continued
+toward zero. Root flags `0C` and mode `1` remained stable.
+
+This is the falsifier's complete-match/non-correlated outcome. Root slot 11 and
+its immediate Blend/EmptyPose pair are **REJECTED** as the vertical-aim
+discriminator. The root is a generic transition node. Because its child 0 is a
+second validated Blend with weight 1.0, the next static frontier is the active
+nested Blend spine. Before another runtime test, prove from slots 11/14 which
+child is selected at weight zero, then define a bounded normalized traversal
+that follows only the already-proved Blend layout. Do not infer layouts for
+Unary/IK/Warper nodes from their class names.
