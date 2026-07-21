@@ -1442,10 +1442,15 @@ Do not reopen these as the first move:
       Chloe consistently had joints `101,5,199,3` and two live transform blocks,
       but dynamic transform words were incorrectly part of the 64-entry dedupe
       signature. The table filled before a legacy-Nadine sample; select no J1/J2/J3.
-- [ ] Run build `fa` with the corrected game-thread census of `Player+0x1DF0` for both retained
-      Players. Deduplicate on stable player/look/joint identity only and keep the
-      transform blocks output-only. A Nadine `-1` selects J1; valid joints with a
-      default/stale block select J2; valid live blocks move to the named event.
+- [x] Run build `fa` with the corrected game-thread census of `Player+0x1DF0`
+      for both retained Players. CONFIRMED J1 in both processes: Chloe has
+      `101,5,199,3` and two changing transforms; legacy Nadine has
+      `-1,5,-1,3` and two unchanged identity transforms. Vtable and control
+      ownership match, ruling out a stale/wrong PlayerWeaponAnimControl.
+- [ ] Trace every consumer of control `+0x78..+0x84` and `+0x90..+0xCF` before
+      writing a fallback. Prove whether substituting the resolved parent index
+      (`r_upper_leg`/`pelvis`) for each missing authored child safely produces
+      the identity relative transform expected by the downstream attach path.
 - [ ] After the failed bind boundary is proven, resolve the player-owned rifle's
       `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
       Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a

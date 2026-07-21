@@ -5075,3 +5075,22 @@ Four valid joints with finite, nonzero and changing blocks reject J1/J2 and move
 the failure boundary to `PlayerWeaponAnimControl_HandleNamedWeaponEvent
 0x14108DE30`. A missing owner, wrong vtable, exception, crash or unrelated model
 regression invalidates this probe.
+
+### 2026-07-21 CONFIRMED: legacy Nadine lacks both authored holster joints (`fa`)
+
+Build `fa` remained stable in both processes and independently produced the
+same look-specific result. Every Chloe control (`look=0x3F334972`) had joint
+indices `101,5,199,3`; its two finite transform blocks were non-default and
+changed between the 750 ms samples. Every legacy-Nadine control
+(`look=0xD27C074F`) had `-1,5,-1,3`: `r_leg_gun_holster` and
+`pelvis_holster` are absent, while their intended parents `r_upper_leg` and
+`pelvis` resolve. Both transform blocks stayed at the identity encoding
+`0,0,0,0,0,0,0,0x3F800000` and `changed=0`.
+
+The discriminator also ruled out stale/wrong control ownership: every sample
+had `readable=1`, vtable RVA `0x2A46778`, `expected=1`, and
+`controlOwner==player`. J1 is therefore CONFIRMED. J2 and J3 are rejected as the
+primary boundary, though downstream authored-event behavior still matters after
+providing a compatible fallback. The next step is to trace all consumers of the
+two index/relative-transform pairs and prove whether mapping each missing child
+to its resolved parent is a safe identity fallback.
