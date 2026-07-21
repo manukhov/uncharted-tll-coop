@@ -5471,3 +5471,64 @@ have the correct thigh holster, back rifle, sling and arm poses. First recover
 its look/rig and weapon-attachment ownership statically; if the exact DC asset
 records are runtime-only, extend the existing common attachment hook to log the
 NPC's selected attach ids and concrete record data without writing either actor.
+
+### 2026-07-21 STATIC: fh isolates the native NadineBuddy attachment owner
+
+The user's native-NPC control is materially stronger than copying Chloe data.
+`NadineBuddy_Create 0x1404A0F40` constructs the separate RTTI/vtable class at
+`0x142949638`; vtable `+0x58` installs the inline `nadine-buddy` identity,
+`+0x570` returns that name, and `+0xEB8` returns `nadine-default`. This is not a
+legacy Nadine skin on a Player object.
+
+`Npc_SetupAttachSystem 0x1404059E0` is NadineBuddy vtable `+0x448`. Its decompiled
+dataflow initializes the pointer-owned `*(npc+0x1E0)` through
+`AttachSystem_InitFromDcData 0x1418B61B0` with namespace `npc-common`, then adds
+the current look/rig extension reached through `npc+0x170`. Player instead owns
+the distinct `Player_SetupAttachSystemFromLookData 0x1410CDF90` path and selects
+`player`/`player-net`. Independently, the `npc-holster-weapon` command at
+`0x14055D800` reaches the nested controller from `npc+0x15C8`; its companion
+`0x14055DA40` waits for that action. That proves native NPC command ownership,
+and the deeper controller graph resolves the physical selection.
+The earlier hardcoded `holster`/`backHolster` candidate at `0x1404990C0` is
+rejected for NadineBuddy: its only owning vtable is a sibling NPC class, while
+Nadine's same `+0x848` slot is the trivial `return 1` function `0x1402F8B20`.
+
+`AiWeaponController_Construct 0x1405A9AE0` installs vtable `0x1429673C8` and is
+published as element 7 of the control table at `npc+0x15C8`. Its virtual `+0xB8`
+force-state path reaches `AiWeaponController_EnforceWeaponAttachment
+0x1405AE580` at `+0x170`. That function reads the NPC table, selects
+`rightHand 0x61A48E01` for drawn state (with an explicit leftHand special case),
+and maps WeaponArtDef type through `0x1405E76E0` to
+`pistolHolster 0x8A0249B5` or `longgunHolster 0x80E37582` for holstered state. It
+then compares the resolved index with byte `weapon+0x688` and rebinds through
+the weapon virtual `+0x7A8`. It does not use Player WeaponHolster or the common
+`WeaponAttachment_AttachToOwnerPoint 0x141ED0370` boundary.
+
+Thus the refined competitors are: (N1) holstering is only a visual NPC prop;
+(N2) the NPC controller physically selects authored pistolHolster/longgunHolster
+records; (N3) it reuses the Player/common final-attach path. N2 is selected and
+N1/N3 rejected by the exact controller pseudocode and disjoint call graph. Exact
+RTTI/vtable identity, independent setup/command/controller graphs, decompiled
+field dataflow and the named attach constants satisfy the evidence quota.
+
+Native active arms are also a separate pipeline. NPC virtual `+0xFA8` resolves
+WeaponSkill, Nadine's `+0xFD8/+0xFE0` fire functions reach ProcessWeapon virtual
+`+0x870`, and no edge reaches Player GunMove, ArmBlockProbes or
+PlayerArmIKAction. The sling is independently a ProcessWeaponStrap child
+(constructor `0x141509650`, vtable `0x142A9B0A0`) gated by WeaponArtDef `+0x38`
+and stored at ProcessWeapon `+0xAE0`; it is neither collision nor an AttachSystem
+record. The exact NPC arm animation/profile and live strap child remain runtime
+asset questions.
+
+Build `fh` is read-only. It accepts an object only when both vtable
+`0x142949638` and inline name `nadine-buddy` agree, snapshots the full native
+`*(npc+0x1E0)` table with every 48-byte record, observes stable ProcessWeapon
+`+0x688`, and pass-through hooks the exact NPC controller boundary. Prediction:
+gunState 1 must resolve `rightHand`; gunState 0 must resolve pistolHolster or
+longgunHolster according to art, and the post index must name the corresponding
+native record. Missing IDs or an unchanged/`0xFF` post index falsify the assumed
+live asset mapping; another attach id falsifies the static mapping; calls at the
+common attachment hook are explicitly not required. An absent table/boundary
+marker, crash or visual change falsifies the probe itself; merely not exercising
+a native weapon transition is inconclusive. No transform, attachment record,
+controller, animation, visibility or return value is written.

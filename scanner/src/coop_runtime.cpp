@@ -326,6 +326,7 @@ bool g_force_split_render_enabled = false;  // OFF: split-render mode broke main
 bool g_split_render_applied = false;
 bool g_split_login_done = false;
 void* g_last_nadine_object = nullptr;
+void log_native_nadine_weapon_state(void* npc);
 
 // ProcessCharCloth is a separate child process from the Player DrawControl.
 // The async attachment hook only publishes observations; the Nadine/main-game
@@ -13159,6 +13160,79 @@ void log_original_nadine_attach_records(
              << " index=" << index << " id=0x" << std::hex
              << bits[8] << std::dec << " joint=" << joint
              << " flags=0x" << std::hex << flags
+             << " runtime=0x" << bits[10] << " transform=";
+        for (std::size_t part = 0; part < 8; ++part) {
+            line << bits[part] << ",";
+        }
+        write_log_line(line.str().c_str());
+    }
+}
+
+bool seh_read_native_nadine_identity_fields(
+    void* npc, std::uint32_t* look_out, std::uint32_t* state_out) {
+    if (look_out == nullptr || state_out == nullptr) {
+        return false;
+    }
+    *look_out = 0;
+    *state_out = 0;
+    __try {
+        if (npc == nullptr) {
+            return false;
+        }
+        *look_out = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(npc) + 0x170);
+        *state_out = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(npc) + 0x190);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *look_out = 0;
+        *state_out = 0;
+        return false;
+    }
+}
+
+// Native NadineBuddy owns a pointer to an Npc AttachSystem at +0x1E0. The
+// container layout is shared with Player, but its authored source is npc-common
+// plus the active NPC look/rig extension. Keep this census separate from the
+// legacy-Nadine Player snapshot and never use either table as a write donor.
+void log_native_nadine_attach_records(void* npc) {
+    OriginalNadineAttachSnapshot snapshot{};
+    if (!seh_capture_original_nadine_attach_records(npc, &snapshot)) {
+        static bool unreadable_logged = false;
+        if (!unreadable_logged) {
+            unreadable_logged = true;
+            write_log_line("NPC-NADINE-ATTACH-TABLE unreadable");
+        }
+        return;
+    }
+    static std::uintptr_t logged_generation = 0;
+    if (logged_generation == snapshot.records) {
+        return;
+    }
+    logged_generation = snapshot.records;
+
+    std::uint32_t look = 0;
+    std::uint32_t state = 0;
+    seh_read_native_nadine_identity_fields(npc, &look, &state);
+
+    std::ostringstream header;
+    header << "NPC-NADINE-ATTACH-TABLE npc=0x" << std::hex
+           << reinterpret_cast<std::uintptr_t>(npc)
+           << " look=0x" << look << " state=0x" << state
+           << " table=0x" << snapshot.table
+           << " records=0x" << snapshot.records << std::dec
+           << " count=" << snapshot.count << "/" << snapshot.capacity;
+    write_log_line(header.str().c_str());
+    for (std::uint32_t index = 0; index < snapshot.count; ++index) {
+        const auto& bits = snapshot.record_bits[index];
+        const std::int16_t joint =
+            static_cast<std::int16_t>(bits[9] & 0xFFFFu);
+        const std::uint16_t flags =
+            static_cast<std::uint16_t>(bits[9] >> 16);
+        std::ostringstream line;
+        line << "NPC-NADINE-ATTACH-RECORD index=" << index
+             << " id=0x" << std::hex << bits[8] << std::dec
+             << " joint=" << joint << " flags=0x" << std::hex << flags
              << " runtime=0x" << bits[10] << " transform=";
         for (std::size_t part = 0; part < 8; ++part) {
             line << bits[part] << ",";
@@ -26400,6 +26474,8 @@ void __fastcall hooked_update(void* object) {
             reinterpret_cast<const char*>(object) + sizeof(void*)
         ) == "nadine-buddy") {
         observe_nadine_visual_identity(object);
+        log_native_nadine_attach_records(object);
+        log_native_nadine_weapon_state(object);
         g_last_nadine_object = object;  // set EARLY so the clone auto-spawn (below)
                                         // can read Nadine's look2 for the body swap.
         maybe_queue_remote_cloth_rebuild();
@@ -27247,6 +27323,21 @@ int retained_player_index(void* player) {
     return -1;
 }
 
+bool seh_is_exact_nadine_buddy(void* object) {
+    __try {
+        if (object == nullptr || g_nadine_vtable == nullptr ||
+            *reinterpret_cast<const std::uintptr_t*>(object) !=
+                reinterpret_cast<std::uintptr_t>(g_nadine_vtable)) {
+            return false;
+        }
+        const char* const name = reinterpret_cast<const char*>(object) + 0x8;
+        return readable_bytes(name) >= 13 &&
+            std::memcmp(name, "nadine-buddy", 13) == 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 bool seh_read_player_look(void* player, std::uint32_t* look_out) {
     if (look_out == nullptr) {
         return false;
@@ -27813,6 +27904,7 @@ void* __fastcall hooked_weapon_holster_build_binding(
 std::uintptr_t __fastcall hooked_weapon_attachment_attach_to_owner_point(
     void* weapon, void* owner, std::uint32_t attach_id) {
     const int owner_index = retained_player_index(owner);
+    const bool native_nadine = seh_is_exact_nadine_buddy(owner);
     const std::uint32_t art = weapon_art_id_from_object(weapon);
     int attach_index = -1;
     const bool attach_present =
@@ -27835,7 +27927,8 @@ std::uintptr_t __fastcall hooked_weapon_attachment_attach_to_owner_point(
     const bool post_readable = seh_read_weapon_attachment_state(
         weapon, &post_parent_id, &post_attach_index);
 
-    if (owner_index < 0 || !relevant_holster_probe_art(art)) {
+    if (!native_nadine &&
+        (owner_index < 0 || !relevant_holster_probe_art(art))) {
         return result;
     }
     std::uint64_t signature = 1469598103934665603ULL;
@@ -27849,13 +27942,16 @@ std::uintptr_t __fastcall hooked_weapon_attachment_attach_to_owner_point(
     mix(result);
     mix(post_parent_id);
     mix(post_attach_index);
+    mix(native_nadine ? 1u : 0u);
     static std::array<std::atomic<std::uint64_t>, 192> seen{};
     if (!claim_holster_probe_signature(seen, signature)) {
         return result;
     }
     std::ostringstream line;
-    line << "NADINE-HOLSTER-ATTACH owner=" << owner_index
-         << " player=0x" << std::hex
+    line << (native_nadine
+                 ? "NPC-NADINE-WEAPON-ATTACH owner=npc"
+                 : "NADINE-HOLSTER-ATTACH owner=player")
+         << "/" << owner_index << " object=0x" << std::hex
          << reinterpret_cast<std::uintptr_t>(owner)
          << " look=0x" << look
          << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
@@ -27872,6 +27968,198 @@ std::uintptr_t __fastcall hooked_weapon_attachment_attach_to_owner_point(
          << " lookValid=" << (look_valid ? 1 : 0);
     write_log_line(line.str().c_str());
     return result;
+}
+
+// Observe the result of AiWeaponController's native virtual +0x7A8 rebind. The
+// NPC path does not have to cross WeaponAttachment_AttachToOwnerPoint, so the
+// stable weapon+0x688 index is the authoritative post-state discriminator.
+void log_native_nadine_weapon_state(void* npc) {
+    if (!seh_is_exact_nadine_buddy(npc)) {
+        return;
+    }
+    void* const weapon = get_player_active_weapon(npc);  // shared vtable +0x8C0
+    const std::uint32_t art = weapon_art_id_from_object(weapon);
+    std::uint32_t parent_id = 0;
+    std::uint8_t attach_index = 0xFF;
+    const bool state_readable = seh_read_weapon_attachment_state(
+        weapon, &parent_id, &attach_index);
+    std::uint32_t attach_id = 0;
+    std::uintptr_t records_generation = 0;
+    const bool record_readable = seh_read_owner_attach_record_id(
+        npc, attach_index, &attach_id, &records_generation);
+
+    std::uint64_t signature = 1469598103934665603ULL;
+    auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(reinterpret_cast<std::uintptr_t>(npc));
+    mix(reinterpret_cast<std::uintptr_t>(weapon));
+    mix(art);
+    mix(parent_id);
+    mix(attach_index);
+    mix(attach_id);
+    mix(records_generation);
+    static std::uint64_t last_signature = 0;
+    if (signature == last_signature) {
+        return;
+    }
+    last_signature = signature;
+
+    std::ostringstream line;
+    line << "NPC-NADINE-WEAPON-STATE npc=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(npc)
+         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
+         << " art=0x" << art << " parent=0x" << parent_id
+         << " attach=0x" << attach_id
+         << " records=0x" << records_generation << std::dec
+         << " index=" << static_cast<unsigned>(attach_index)
+         << " readable=" << (state_readable ? 1 : 0) << "/"
+         << (record_readable ? 1 : 0);
+    write_log_line(line.str().c_str());
+}
+
+using AiWeaponControllerEnforceWeaponAttachmentFunction =
+    void(__fastcall*)(void*, void*, int);
+AiWeaponControllerEnforceWeaponAttachmentFunction
+    g_original_ai_weapon_controller_enforce_attachment = nullptr;
+
+struct NativeNadineWeaponBoundaryCapture {
+    void* owner = nullptr;
+    std::uint32_t requested_state = 0;
+    std::uint32_t transition_state = 0;
+    std::uint32_t art = 0;
+    std::uint32_t parent_id = 0;
+    std::uint32_t attach_id = 0;
+    std::uintptr_t records_generation = 0;
+    std::uint8_t attach_index = 0xFF;
+    bool controller_readable = false;
+    bool weapon_readable = false;
+    bool record_readable = false;
+};
+
+bool seh_capture_native_nadine_weapon_boundary(
+    void* controller, void* weapon,
+    NativeNadineWeaponBoundaryCapture* capture) {
+    if (capture == nullptr) {
+        return false;
+    }
+    *capture = {};
+    capture->attach_index = 0xFF;
+    __try {
+        if (controller == nullptr) {
+            return false;
+        }
+        auto* const bytes = static_cast<const std::byte*>(controller);
+        capture->owner = *reinterpret_cast<void* const*>(bytes + 0x8);
+        capture->requested_state =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x3D8);
+        capture->transition_state =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x3DC);
+        capture->controller_readable = true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *capture = {};
+        capture->attach_index = 0xFF;
+        return false;
+    }
+    capture->art = weapon_art_id_from_object(weapon);
+    capture->weapon_readable = seh_read_weapon_attachment_state(
+        weapon, &capture->parent_id, &capture->attach_index);
+    capture->record_readable = seh_read_owner_attach_record_id(
+        capture->owner, capture->attach_index, &capture->attach_id,
+        &capture->records_generation);
+    return capture->controller_readable;
+}
+
+void __fastcall hooked_ai_weapon_controller_enforce_attachment(
+    void* controller, void* weapon, int gun_state) {
+    NativeNadineWeaponBoundaryCapture before{};
+    seh_capture_native_nadine_weapon_boundary(controller, weapon, &before);
+    const bool native_nadine = seh_is_exact_nadine_buddy(before.owner);
+
+    if (g_original_ai_weapon_controller_enforce_attachment != nullptr) {
+        g_original_ai_weapon_controller_enforce_attachment(
+            controller, weapon, gun_state);
+    }
+
+    if (!native_nadine) {
+        return;
+    }
+    NativeNadineWeaponBoundaryCapture after{};
+    seh_capture_native_nadine_weapon_boundary(controller, weapon, &after);
+
+    std::uint64_t signature = 1469598103934665603ULL;
+    auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(reinterpret_cast<std::uintptr_t>(controller));
+    mix(reinterpret_cast<std::uintptr_t>(weapon));
+    mix(static_cast<std::uint32_t>(gun_state));
+    mix(before.requested_state);
+    mix(before.transition_state);
+    mix(before.attach_index);
+    mix(before.attach_id);
+    mix(after.attach_index);
+    mix(after.attach_id);
+    static std::array<std::atomic<std::uint64_t>, 192> seen{};
+    if (!claim_holster_probe_signature(seen, signature)) {
+        return;
+    }
+
+    std::ostringstream line;
+    line << "NPC-NADINE-AI-WEAPON-BOUNDARY controller=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(controller)
+         << " npc=0x" << reinterpret_cast<std::uintptr_t>(before.owner)
+         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
+         << " art=0x" << before.art << std::dec
+         << " argState=" << gun_state
+         << " controllerState=" << before.requested_state
+         << "/" << before.transition_state
+         << " index=" << static_cast<unsigned>(before.attach_index)
+         << "->" << static_cast<unsigned>(after.attach_index)
+         << " attach=0x" << std::hex << before.attach_id << "->0x"
+         << after.attach_id << " parent=0x" << before.parent_id << "->0x"
+         << after.parent_id << " records=0x" << after.records_generation
+         << std::dec << " readable="
+         << (before.controller_readable ? 1 : 0) << "/"
+         << (before.weapon_readable ? 1 : 0) << "/"
+         << (before.record_readable ? 1 : 0) << "->"
+         << (after.weapon_readable ? 1 : 0) << "/"
+         << (after.record_readable ? 1 : 0);
+    write_log_line(line.str().c_str());
+}
+
+bool install_native_nadine_weapon_boundary_probe() {
+    auto* const vtable = reinterpret_cast<std::uintptr_t*>(
+        g_module + kAiWeaponControllerVtableRva);
+    auto* const slot = &vtable[
+        kAiWeaponControllerEnforceWeaponAttachmentVtableOffset / sizeof(void*)];
+    const std::uintptr_t expected =
+        g_module + kAiWeaponControllerEnforceWeaponAttachmentRva;
+    if (*slot != expected) {
+        boot_log_line(
+            "native Nadine AiWeaponController probe SKIPPED: unexpected vslot");
+        return false;
+    }
+    g_original_ai_weapon_controller_enforce_attachment =
+        reinterpret_cast<AiWeaponControllerEnforceWeaponAttachmentFunction>(
+            *slot);
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            slot, sizeof(*slot), PAGE_READWRITE, &old_protection)) {
+        g_original_ai_weapon_controller_enforce_attachment = nullptr;
+        boot_log_line(
+            "native Nadine AiWeaponController probe SKIPPED: VirtualProtect");
+        return false;
+    }
+    *slot = reinterpret_cast<std::uintptr_t>(
+        &hooked_ai_weapon_controller_enforce_attachment);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(*slot));
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(*slot), old_protection, &ignored);
+    boot_log_line("native Nadine AiWeaponController probe installed at vtable+0x170");
+    return true;
 }
 
 using ArmBlockProbesKickFunction =
@@ -31143,8 +31431,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21fg "
-        "(read-only Nadine active-grip and authored-holster discriminator)");
+        "TLL co-op runtime init 2026-07-21fh "
+        "(read-only native-Nadine attach-table and weapon-call discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -31174,6 +31462,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_weapon_holster_bind_probe();
     install_nadine_holster_final_boundary_probe();
     install_nadine_active_grip_probe();
+    install_native_nadine_weapon_boundary_probe();
     // The scoped DrawControl 0x40 relay and post mesh scan were rejected by the
     // 2026-07-13 runtime discriminator; leave the dormant code available for
     // reference without installing another hot-path hook.

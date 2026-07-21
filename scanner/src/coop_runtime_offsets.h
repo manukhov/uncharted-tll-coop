@@ -518,6 +518,13 @@ constexpr std::uintptr_t kWeaponAttachmentAttachToOwnerPointRva = 0x1ED0370;
 // its completed output beside the active rightHand attach record so authored
 // attachment placement can be separated from arm-pose/retarget output.
 constexpr std::uintptr_t kArmBlockProbesKickRva = 0x0C2BCB0;
+// AiWeaponController vtable +0x170. Native NPC firearm attachment state applies
+// here (rightHand versus pistolHolster/longgunHolster).
+constexpr std::uintptr_t kAiWeaponControllerEnforceWeaponAttachmentRva =
+    0x05AE580;
+constexpr std::uintptr_t kAiWeaponControllerVtableRva = 0x29673C8;
+constexpr std::size_t kAiWeaponControllerEnforceWeaponAttachmentVtableOffset =
+    0x170;
 // Cached WeaponArtDef registry and generic id lookup used by
 // WeaponHolster_ResolveAttachPoint. The runtime probe reads the art record's
 // +0xD8 holster-id list; neither helper mutates the weapon or Player.

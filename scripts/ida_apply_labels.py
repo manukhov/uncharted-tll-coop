@@ -8,6 +8,115 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-21: native NadineBuddy attachment ownership ---
+    0x1404059E0: (
+        "Npc_SetupAttachSystem",
+        "Npc/NadineBuddy vtable +0x448 implementation. Initializes the pointer-"
+        "owned AttachSystem at npc+0x1E0 from npc-common, then extends it from "
+        "the active look/rig payload reached through npc+0x170. This is distinct "
+        "from Player_SetupAttachSystemFromLookData and its player/player-net "
+        "namespaces.",
+    ),
+    0x1404A0F40: (
+        "NadineBuddy_Create",
+        "Allocates and constructs the concrete NadineBuddy object (RTTI vtable "
+        "0x142949638). Its class identity and pointer-owned NPC AttachSystem make "
+        "it the native firearm-presentation reference, not a Player look swap.",
+    ),
+    0x1404A10E0: (
+        "NadineBuddy_InitializeIdentity",
+        "NadineBuddy vtable +0x58 initializer; installs the inline object name "
+        "nadine-buddy at object+0x8. Used with the exact vtable as the bounded "
+        "runtime discriminator for the native NPC.",
+    ),
+    0x1404A0CD0: (
+        "NadineBuddy_GetName",
+        "NadineBuddy vtable +0x570 getter returning the static identity string "
+        "nadine-buddy.",
+    ),
+    0x1404A0DA0: (
+        "NadineBuddy_GetDefaultLookName",
+        "NadineBuddy vtable +0xEB8 getter returning nadine-default. This is an "
+        "NPC authored-look selector, not the legacy Nadine Player appearance "
+        "hash.",
+    ),
+    0x14055D800: (
+        "NpcHolsterWeaponCommand_Start",
+        "npc-holster-weapon command start path. Reaches the nested weapon/action "
+        "controller from owner+0x15C8 and dispatches its virtual +0xA0/+0xB8 "
+        "transition; this establishes command ownership but not a physical "
+        "AttachSystem record.",
+    ),
+    0x14055DA40: (
+        "NpcHolsterWeaponCommand_Wait",
+        "Companion wait/completion path for npc-holster-weapon. It observes the "
+        "nested controller state after the start dispatch and does not itself "
+        "materialize a 48-byte attach record.",
+    ),
+    0x1405A9AE0: (
+        "AiWeaponController_Construct",
+        "Constructs the 1712-byte NPC weapon controller with vtable "
+        "0x1429673C8 and stores its owning NPC at controller+0x8. Generic NPC "
+        "control setup publishes it as element 7 of the table at npc+0x15C8.",
+    ),
+    0x1405AE190: (
+        "AiWeaponController_ForceState",
+        "AiWeaponController vtable +0xB8. Updates controller state +0x3D8 and "
+        "transition +0x3DC, resolves the NPC active ProcessWeapon through owner "
+        "vtable +0x8C0, then invokes the attachment enforcer at virtual +0x170.",
+    ),
+    0x1405AE580: (
+        "AiWeaponController_EnforceWeaponAttachment",
+        "AiWeaponController vtable +0x170. Scans the pointer-owned NPC "
+        "AttachSystem at *(owner+0x1E0); drawn state selects rightHand (or "
+        "leftHand for explicit special cases), while holstered state maps "
+        "WeaponArtDef type to pistolHolster/longgunHolster and rebinds the "
+        "ProcessWeapon through its virtual +0x7A8 when weapon+0x688 differs.",
+    ),
+    0x1405E76E0: (
+        "WeaponArtDef_SelectNpcHolsterAttachId",
+        "Maps NPC WeaponArtDef type 0/3 to pistolHolster 0x8A0249B5 and type "
+        "1/2 to longgunHolster 0x80E37582. This is the native NPC mapping and "
+        "does not call the Player WeaponHolster binding family.",
+    ),
+    0x140430EF0: (
+        "Npc_GetActiveProcessWeapon",
+        "Npc/NadineBuddy vtable +0x8C0. Resolves the active ProcessWeapon from "
+        "typed child records under npc+0x1FA0 with fallback handle at "
+        "npc+0x23D8/+0x23E0; shared weapon consumers use this instead of a "
+        "PlayerWeaponController.",
+    ),
+    0x1404310D0: (
+        "Npc_GiveWeapon",
+        "Builds NPC WeaponInfo with the owner's handle, root/rightHand defaults "
+        "and WeaponArtDef attach overrides, then materializes the shared "
+        "ProcessWeapon. This is the native NPC firearm owner path.",
+    ),
+    0x140435630: (
+        "Npc_SetLookAimMode",
+        "Ingress for NPC LookAim PointWs/Locatable requests. Writes one of the "
+        "priority layers rooted at npc+0x2830; native Nadine aiming does not "
+        "enter Player GunMove or PlayerArmIKAction through this path.",
+    ),
+    0x140436790: (
+        "Npc_ApplyLookAimMode",
+        "Selects the active NPC LookAim layer and publishes aim outputs at "
+        "npc+0x1930/+0x1940 with flags +0x1990/+0x1991. Called from the NPC "
+        "update graph, independently of Player ArmBlockProbes.",
+    ),
+    0x141509650: (
+        "ProcessWeaponStrap_Construct",
+        "Constructs the ProcessWeaponStrap child (vtable 0x142A9B0A0). The "
+        "strap is a weapon-mesh animation process and not holster attachment "
+        "geometry.",
+    ),
+    0x14150F640: (
+        "ProcessWeapon_Initialize",
+        "Initializes ProcessWeapon and conditionally materializes a "
+        "ProcessWeaponStrap child when the global gate, WeaponArtDef +0x38 and "
+        "weapon mesh handle permit it; the validated child handle is stored at "
+        "ProcessWeapon+0xAE0.",
+    ),
     # --- 2026-07-21: Nadine active firearm grip, arm pose and strap split ---
     0x140C2BCB0: (
         "ArmBlockProbes_Kick",

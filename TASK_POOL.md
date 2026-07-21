@@ -1556,6 +1556,15 @@ Do not reopen these as the first move:
       arm-pose owner and strap process. If authored DC records are unavailable in
       the IDB, add only a bounded read-only NPC branch to the already-installed
       common weapon-attachment hook and compare it with legacy-Nadine Player.
+      STATIC: native Nadine is a distinct RTTI class with a pointer-owned
+      `Npc::SetupAttachSystem` table initialized from `npc-common` plus current
+      look/rig data. `AiWeaponController +0x170` physically selects rightHand,
+      pistolHolster or longgunHolster and rebinds through ProcessWeapon virtual
+      `+0x7A8`; both Player WeaponHolster and a tempting hardcoded sibling-NPC
+      holster/backHolster path are rejected. Native arms use WeaponSkill rather
+      than Player GunMove/ArmBlock, and the sling is a separate art-gated
+      ProcessWeaponStrap child. Build `fh` snapshots the native table and
+      pass-through logs the exact controller pre/post index; runtime pending.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
