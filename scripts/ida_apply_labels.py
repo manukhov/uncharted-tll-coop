@@ -148,6 +148,16 @@ FUNCTIONS = {
         "AnimStateInstance_PhaseUpdate uses it with instance+0x130/+0x138 before "
         "dispatching the root node virtual methods.",
     ),
+    0x141926AE0: (
+        "AnimStateOverrideTable_FindStateRecord",
+        "Scans enabled 24-byte override records in reverse and returns the first "
+        "non-null record selected by the current AnimState state id.",
+    ),
+    0x141764B50: (
+        "SortedIdPointerTable_Find",
+        "Binary-searches the sorted uint32 id array at +0x8 and returns the "
+        "parallel pointer-array entry at +0x10 for an exact match.",
+    ),
     0x1418A0EB0: (
         "AnimStateLayer_CopyParametersToFirstInstance",
         "Traverses the first active instance track and, when instance+0x190 bit "

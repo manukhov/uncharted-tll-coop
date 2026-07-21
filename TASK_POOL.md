@@ -1146,11 +1146,16 @@ Do not reopen these as the first move:
       `SnapshotNodeHeap*`, `+0x138` is its per-instance node index, selected by
       `0x1418B2EF0` and resolved by `0x1418C2F90`. Raw indices cannot be compared
       across processes as root identity.
-- [ ] Next session, implement one read-only discriminator for resolved root
-      vtable/RTTI RVA and the complete config tuple: mode/apReference, all scalar
-      IDs, authored-key count/hash, override count/current match. If those match,
-      move below the common root to parameter binding/script consumption/pose
-      sink; do not write the raw root index or re-enable broad snapshot replay.
+- [x] Implement read-only build `eh` for resolved root vtable/RTTI RVA and the
+      complete config tuple: mode/apReference, all scalar fields, double-read
+      authored-key hash, and double-read override hash/current outer+inner match.
+      It manually bounds the heap/table layouts and never invokes native
+      resolver/override functions or writes animation state.
+- [ ] Run the written `eh` falsifier with vertical ADS sweeps. Compare screen-0
+      and screen-1 samples by system tick: persistent RTTI split selects concrete
+      root mismatch; equal RTTI plus config split selects authored routing; full
+      stable match moves below common root vslot `+0x68` to parameter/script/pose
+      consumption. Any crash or visible regression invalidates the probe.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

@@ -3995,3 +3995,60 @@ authored-key count/content hash at `+0x68/+0x88`, and override-table/current-mat
 data at `+0x148`. A difference only in `+0x188` is expected activation serial,
 not authored identity. Continue from this static boundary tomorrow; do not patch
 the raw root index or replay the broad native snapshot.
+
+### 2026-07-21 STATIC: `eh` separates concrete root type from authored config
+
+The user reconfirmed that build `eg` produced no vertical weapon movement but
+also no crash, model corruption, or other visible regression. The next probe
+therefore preserves the same read-only boundary and adds only stable identity
+fields; it does not attempt another animation fix.
+
+Selected hypothesis: sender and receiver use different concrete root-node types
+or different authored key/override routing even when the high-level state id and
+callback mask match. Competitors are (A) identical resolved root/config with the
+loss deeper in common-tree parameter/script evaluation, (B) allocator noise that
+changes only raw pointers/indices, and (C) a transition/teardown race that makes
+the sample internally inconsistent.
+
+The static evidence quota is satisfied independently:
+
+1. `AnimStateSnapshot_SnapshotAnimState 0x1418B24F0` writes the selected root
+   index at instance `+0x138`; `AnimStateInstance::PhaseUpdate 0x1418A4FD0`
+   independently reads `+0x130/+0x138`, resolves the root, and calls root vslot
+   `+0x68`. Teardown `0x14189C710` uses the same pair before resetting the index
+   to `-1`.
+2. `SnapshotNodeHeap_ResolveNodeByIndex 0x1418C2F90` is anchored by the source
+   assertion `SnapshotNodeHeap::GetNodeByIndex`: max count is `heap+0xAC`, record
+   base is `heap+0xA0`, stride is 40, and a bad index reaches assert/debugbreak.
+   The probe therefore reproduces this layout after bounds checks and never
+   calls the native resolver.
+3. MSVC-x64 RTTI identity is independently consistent for both
+   `AnimStateInstance` and `NetSnapshotEffectParser`: `vtable[-1]` points to a
+   signature-1 CompleteObjectLocator with a self RVA and TypeDescriptor RVA.
+   Build `eh` validates all of these against the PE `SizeOfImage` and logs only
+   the stable vtable/TypeDescriptor RVAs.
+4. `AnimStateInstance_InitializeAuthoredBuffers 0x1418B3F10` allocates and copies
+   `count*4` authored keys into `+0x68` and stores count at `+0x88`;
+   `0x1418A4030` can later replace the apReference key, so `eh` hashes the live
+   list twice instead of treating constructor data as immutable.
+5. `AnimStateOverrideTable_FindStateRecord 0x141926AE0` scans the external table
+   at instance `+0x148` backward in 24-byte records. Each enabled record uses
+   `SortedIdPointerTable_Find 0x141764B50` to binary-search the current state id
+   in parallel key/value arrays. The probe reproduces this read-only lookup
+   twice and marks unstable/invalid results so they are excluded from comparison.
+
+Build `2026-07-21eh` logs bounded, system-tick-aligned `AIM-BASE-CONFIG` samples
+for screen 0/1: full scalar tuple, mode/apReference, authored-key count/hash,
+override count/hash/current outer+inner match, and
+`{rootIndex,rootVtableRva,rootTypeDescriptorRva}`. Local instrumentation caps
+are 4096 keys, 1024 outer overrides, and 4096 inner keys; failures are validity
+bits, not engine claims.
+
+Falsifiable prediction: a persistent `rootVtableRva/TypeDescriptorRva` split at
+aligned ticks selects a concrete-root mismatch. Equal RTTI but different key
+hash or override match selects authored routing. If all stable fields match and
+only raw index/activation serial differs, both selection hypotheses are rejected
+and the next static trace moves below root vslot `+0x68` into common-tree
+parameter binding/script consumption/pose output. Intermittent invalid samples
+select only a transition race. No visible behavior change is expected; any crash
+or model/animation change invalidates the probe.

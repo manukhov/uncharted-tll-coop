@@ -13880,6 +13880,10 @@ struct AimBaseInstanceProbe {
     bool source_matches_registry = false;
     bool source_lrdu_valid = false;
     bool destination_lrdu_valid = false;
+    bool authored_key_list_valid = false;
+    bool override_table_valid = false;
+    bool root_node_valid = false;
+    bool root_rtti_valid = false;
     std::uint32_t base_id = 0;
     std::uint32_t type = 0;
     std::uint32_t active_track_count = 0;
@@ -13893,12 +13897,218 @@ struct AimBaseInstanceProbe {
     std::uint32_t root_anim_id = 0;
     std::uint32_t root_variant_id = 0;
     std::uint32_t root_snapshot_index = 0;
+    std::uint32_t config_scalar_11c = 0;
+    std::uint32_t config_scalar_12c = 0;
+    std::uint32_t config_scalar_158 = 0;
+    std::uint32_t activation_serial = 0;
+    std::uint32_t authored_ap_reference = 0;
+    std::uint32_t authored_key_count = 0;
+    std::uint32_t authored_key_hash = 0;
+    std::uint32_t override_count = 0;
+    std::uint32_t override_key_hash = 0;
+    std::uint32_t override_match_slot = 0;
+    std::uint32_t override_match_key_index = 0;
+    std::uint32_t root_heap_max_count = 0;
+    std::uint32_t root_vtable_rva = 0;
+    std::uint32_t root_type_descriptor_rva = 0;
+    std::uint8_t config_mode = 0;
     std::uint64_t authored_state_flags = 0;
     void* layer = nullptr;
     void* instance = nullptr;
     float source_lrdu[4]{};
     float destination_lrdu[4]{};
 };
+
+void aim_fingerprint_mix_bytes(
+    std::uint32_t& hash, const void* data, std::size_t size) {
+    const auto* const bytes = static_cast<const std::uint8_t*>(data);
+    for (std::size_t index = 0; index < size; ++index) {
+        hash ^= bytes[index];
+        hash *= 16777619U;
+    }
+}
+
+std::uint32_t tll_image_size() {
+    if (g_module == 0 ||
+        readable_bytes(reinterpret_cast<const void*>(g_module)) <
+            sizeof(IMAGE_DOS_HEADER)) {
+        return 0;
+    }
+    const auto* const dos =
+        reinterpret_cast<const IMAGE_DOS_HEADER*>(g_module);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0 ||
+        dos->e_lfanew > 0x1000) {
+        return 0;
+    }
+    const auto* const nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(
+        g_module + static_cast<std::uintptr_t>(dos->e_lfanew));
+    if (readable_bytes(nt) < sizeof(IMAGE_NT_HEADERS64) ||
+        nt->Signature != IMAGE_NT_SIGNATURE ||
+        nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
+        return 0;
+    }
+    return nt->OptionalHeader.SizeOfImage;
+}
+
+bool probe_msvc_rtti_identity(
+    void* object, std::uint32_t& vtable_rva,
+    std::uint32_t& type_descriptor_rva) {
+    vtable_rva = 0;
+    type_descriptor_rva = 0;
+    if (object == nullptr || g_module == 0 ||
+        readable_bytes(object) < sizeof(void*)) {
+        return false;
+    }
+    const std::uint32_t image_size = tll_image_size();
+    if (image_size == 0) {
+        return false;
+    }
+    const std::uintptr_t image_end = g_module + image_size;
+    const std::uintptr_t vtable =
+        *reinterpret_cast<const std::uintptr_t*>(object);
+    if (vtable < g_module + sizeof(void*) || vtable >= image_end ||
+        readable_bytes(reinterpret_cast<const void*>(vtable - sizeof(void*))) <
+            sizeof(void*)) {
+        return false;
+    }
+    const std::uintptr_t complete_object_locator =
+        *reinterpret_cast<const std::uintptr_t*>(vtable - sizeof(void*));
+    if (complete_object_locator < g_module ||
+        complete_object_locator >= image_end ||
+        readable_bytes(reinterpret_cast<const void*>(complete_object_locator)) <
+            0x18) {
+        return false;
+    }
+    const std::uint32_t signature =
+        *reinterpret_cast<const std::uint32_t*>(complete_object_locator);
+    const std::uint32_t type_rva =
+        *reinterpret_cast<const std::uint32_t*>(complete_object_locator + 0x0C);
+    const std::uint32_t self_rva =
+        *reinterpret_cast<const std::uint32_t*>(complete_object_locator + 0x14);
+    if (signature != 1 || self_rva >= image_size ||
+        g_module + self_rva != complete_object_locator || type_rva == 0 ||
+        type_rva >= image_size ||
+        readable_bytes(reinterpret_cast<const void*>(g_module + type_rva)) <
+            0x11) {
+        return false;
+    }
+    vtable_rva = static_cast<std::uint32_t>(vtable - g_module);
+    type_descriptor_rva = type_rva;
+    return true;
+}
+
+struct AimOverrideFingerprint {
+    std::uint32_t count = 0;
+    std::uint32_t key_hash = 2166136261U;
+    std::uint32_t match_slot = 0;
+    std::uint32_t match_key_index = 0;
+};
+
+bool probe_aim_override_table(
+    void* override_table, std::uint32_t state_id,
+    AimOverrideFingerprint& result) {
+    result = AimOverrideFingerprint{};
+    if (override_table == nullptr) {
+        return true;
+    }
+    if (readable_bytes(override_table) < 0x10) {
+        return false;
+    }
+    const auto* const table_bytes =
+        static_cast<const std::byte*>(override_table);
+    const auto* const records =
+        *reinterpret_cast<const std::byte* const*>(table_bytes);
+    const std::int32_t signed_count =
+        *reinterpret_cast<const std::int32_t*>(table_bytes + 0x0C);
+    if (signed_count < 0 || signed_count > 1024) {
+        return false;
+    }
+    result.count = static_cast<std::uint32_t>(signed_count);
+    if (result.count == 0) {
+        return true;
+    }
+    if (records == nullptr ||
+        readable_bytes(records) <
+            static_cast<std::size_t>(result.count) * 0x18) {
+        return false;
+    }
+    for (std::uint32_t index = 0; index < result.count; ++index) {
+        const auto* const record =
+            records + static_cast<std::size_t>(index) * 0x18;
+        const std::uint8_t enabled =
+            *reinterpret_cast<const std::uint8_t*>(record);
+        aim_fingerprint_mix_bytes(
+            result.key_hash, &enabled, sizeof(enabled));
+        void* const lookup =
+            *reinterpret_cast<void* const*>(record + 0x10);
+        if (lookup == nullptr) {
+            const std::uint32_t empty = 0;
+            aim_fingerprint_mix_bytes(
+                result.key_hash, &empty, sizeof(empty));
+            continue;
+        }
+        if (readable_bytes(lookup) < 0x18) {
+            return false;
+        }
+        const auto* const lookup_bytes =
+            static_cast<const std::byte*>(lookup);
+        const std::int32_t signed_lookup_count =
+            *reinterpret_cast<const std::int32_t*>(lookup_bytes);
+        if (signed_lookup_count < 0 || signed_lookup_count > 4096) {
+            return false;
+        }
+        const std::uint32_t lookup_count =
+            static_cast<std::uint32_t>(signed_lookup_count);
+        aim_fingerprint_mix_bytes(
+            result.key_hash, &lookup_count, sizeof(lookup_count));
+        if (lookup_count == 0) {
+            continue;
+        }
+        const auto* const lookup_keys =
+            *reinterpret_cast<const std::uint32_t* const*>(
+                lookup_bytes + 0x08);
+        if (lookup_keys == nullptr ||
+            readable_bytes(lookup_keys) <
+                static_cast<std::size_t>(lookup_count) *
+                    sizeof(std::uint32_t)) {
+            return false;
+        }
+        aim_fingerprint_mix_bytes(
+            result.key_hash, lookup_keys,
+            static_cast<std::size_t>(lookup_count) *
+                sizeof(std::uint32_t));
+        if (enabled == 0) {
+            continue;
+        }
+        std::uint32_t low = 0;
+        std::uint32_t high = lookup_count;
+        while (low < high) {
+            const std::uint32_t middle = low + (high - low) / 2;
+            if (lookup_keys[middle] < state_id) {
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
+        }
+        if (low >= lookup_count || lookup_keys[low] != state_id) {
+            continue;
+        }
+        auto* const lookup_values =
+            *reinterpret_cast<void* const* const*>(lookup_bytes + 0x10);
+        if (lookup_values == nullptr ||
+            readable_bytes(lookup_values) <
+                static_cast<std::size_t>(lookup_count) * sizeof(void*)) {
+            return false;
+        }
+        if (lookup_values[low] != nullptr) {
+            // Native 0x141926AE0 scans the outer records in reverse. A later
+            // non-null match therefore supersedes an earlier one.
+            result.match_slot = index + 1;
+            result.match_key_index = low + 1;
+        }
+    }
+    return true;
+}
 
 AimBaseInstanceProbe probe_base_anim_state_instance(void* registry) {
     AimBaseInstanceProbe result{};
@@ -13969,7 +14179,7 @@ AimBaseInstanceProbe probe_base_anim_state_instance(void* registry) {
             }
         }
         if (result.instance == nullptr ||
-            readable_bytes(result.instance) < 0x191) {
+            readable_bytes(result.instance) < 0x198) {
             return result;
         }
         result.instance_found = true;
@@ -13996,8 +14206,154 @@ AimBaseInstanceProbe probe_base_anim_state_instance(void* registry) {
             *reinterpret_cast<const std::uint32_t*>(instance_bytes + 0x120);
         result.root_variant_id =
             *reinterpret_cast<const std::uint32_t*>(instance_bytes + 0x124);
+        result.config_scalar_11c =
+            *reinterpret_cast<const std::uint32_t*>(instance_bytes + 0x11C);
+        result.config_scalar_12c =
+            *reinterpret_cast<const std::uint32_t*>(instance_bytes + 0x12C);
+        result.config_scalar_158 =
+            *reinterpret_cast<const std::uint32_t*>(instance_bytes + 0x158);
         result.root_snapshot_index =
             *reinterpret_cast<const std::uint32_t*>(instance_bytes + 0x138);
+        result.activation_serial =
+            *reinterpret_cast<const std::uint32_t*>(instance_bytes + 0x188);
+        result.config_mode =
+            *reinterpret_cast<const std::uint8_t*>(instance_bytes + 0x18C);
+        result.authored_ap_reference =
+            *reinterpret_cast<const std::uint32_t*>(instance_bytes + 0x194);
+
+        result.authored_key_count =
+            *reinterpret_cast<const std::uint32_t*>(instance_bytes + 0x88);
+        const auto* const authored_keys =
+            *reinterpret_cast<const std::uint32_t* const*>(
+                instance_bytes + 0x68);
+        result.authored_key_hash = 2166136261U;
+        if (result.authored_key_count == 0) {
+            result.authored_key_list_valid =
+                authored_keys == *reinterpret_cast<const std::uint32_t* const*>(
+                                     instance_bytes + 0x68) &&
+                *reinterpret_cast<const std::uint32_t*>(
+                    instance_bytes + 0x88) == 0;
+        } else if (result.authored_key_count <= 4096 &&
+                   authored_keys != nullptr &&
+                   readable_bytes(authored_keys) >=
+                       static_cast<std::size_t>(result.authored_key_count) *
+                           sizeof(std::uint32_t)) {
+            std::uint32_t verify_hash = 2166136261U;
+            aim_fingerprint_mix_bytes(
+                result.authored_key_hash, authored_keys,
+                static_cast<std::size_t>(result.authored_key_count) *
+                    sizeof(std::uint32_t));
+            aim_fingerprint_mix_bytes(
+                verify_hash, authored_keys,
+                static_cast<std::size_t>(result.authored_key_count) *
+                    sizeof(std::uint32_t));
+            result.authored_key_list_valid =
+                authored_keys == *reinterpret_cast<const std::uint32_t* const*>(
+                                     instance_bytes + 0x68) &&
+                result.authored_key_count ==
+                    *reinterpret_cast<const std::uint32_t*>(
+                        instance_bytes + 0x88) &&
+                result.authored_key_hash == verify_hash;
+        }
+
+        void* const override_table = *reinterpret_cast<void**>(
+            instance_bytes + 0x148);
+        AimOverrideFingerprint override_first{};
+        AimOverrideFingerprint override_second{};
+        const bool override_first_valid = probe_aim_override_table(
+            override_table, result.snapshot_state_id, override_first);
+        const bool override_second_valid = probe_aim_override_table(
+            override_table, result.snapshot_state_id, override_second);
+        result.override_table_valid = override_first_valid &&
+            override_second_valid &&
+            override_table == *reinterpret_cast<void* const*>(
+                                  instance_bytes + 0x148) &&
+            override_first.count == override_second.count &&
+            override_first.key_hash == override_second.key_hash &&
+            override_first.match_slot == override_second.match_slot &&
+            override_first.match_key_index ==
+                override_second.match_key_index;
+        if (result.override_table_valid) {
+            result.override_count = override_first.count;
+            result.override_key_hash = override_first.key_hash;
+            result.override_match_slot = override_first.match_slot;
+            result.override_match_key_index =
+                override_first.match_key_index;
+        }
+
+        void* const root_heap = *reinterpret_cast<void**>(
+            instance_bytes + 0x130);
+        if (root_heap != nullptr && readable_bytes(root_heap) >= 0xB0) {
+            const auto* const heap_bytes =
+                static_cast<const std::byte*>(root_heap);
+            result.root_heap_max_count =
+                *reinterpret_cast<const std::uint32_t*>(heap_bytes + 0xAC);
+            const auto* const heap_records =
+                *reinterpret_cast<const std::byte* const*>(heap_bytes + 0xA0);
+            if (result.root_snapshot_index != UINT32_MAX &&
+                result.root_heap_max_count != 0 &&
+                result.root_heap_max_count <= 0x100000 &&
+                result.root_snapshot_index < result.root_heap_max_count &&
+                heap_records != nullptr) {
+                const auto* const record =
+                    heap_records +
+                    static_cast<std::size_t>(result.root_snapshot_index) * 0x28;
+                if (readable_bytes(record) >= sizeof(void*)) {
+                    void* const root_node =
+                        *reinterpret_cast<void* const*>(record);
+                    if (root_node != nullptr &&
+                        readable_bytes(root_node) >= sizeof(void*)) {
+                        const std::uintptr_t root_vtable =
+                            *reinterpret_cast<const std::uintptr_t*>(root_node);
+                        result.root_rtti_valid = probe_msvc_rtti_identity(
+                            root_node, result.root_vtable_rva,
+                            result.root_type_descriptor_rva);
+
+                        // The root can be torn down on another animation phase.
+                        // Accept a sample only when the full owner chain and
+                        // vtable are unchanged after the RTTI walk.
+                        void* const verify_heap = *reinterpret_cast<void* const*>(
+                            instance_bytes + 0x130);
+                        const std::uint32_t verify_index =
+                            *reinterpret_cast<const std::uint32_t*>(
+                                instance_bytes + 0x138);
+                        if (verify_heap == root_heap &&
+                            verify_index == result.root_snapshot_index &&
+                            readable_bytes(verify_heap) >= 0xB0) {
+                            const auto* const verify_heap_bytes =
+                                static_cast<const std::byte*>(verify_heap);
+                            const auto* const verify_records =
+                                *reinterpret_cast<const std::byte* const*>(
+                                    verify_heap_bytes + 0xA0);
+                            if (verify_records == heap_records) {
+                                const auto* const verify_record =
+                                    verify_records +
+                                    static_cast<std::size_t>(verify_index) *
+                                        0x28;
+                                if (readable_bytes(verify_record) >=
+                                    sizeof(void*)) {
+                                    void* const verify_root =
+                                        *reinterpret_cast<void* const*>(
+                                            verify_record);
+                                    result.root_node_valid =
+                                        verify_root == root_node &&
+                                        readable_bytes(verify_root) >=
+                                            sizeof(void*) &&
+                                        *reinterpret_cast<
+                                            const std::uintptr_t*>(
+                                            verify_root) == root_vtable;
+                                }
+                            }
+                        }
+                        if (!result.root_node_valid) {
+                            result.root_rtti_valid = false;
+                            result.root_vtable_rva = 0;
+                            result.root_type_descriptor_rva = 0;
+                        }
+                    }
+                }
+            }
+        }
         result.instance_flags = *reinterpret_cast<const std::uint8_t*>(
             instance_bytes + 0x190);
         result.copy_enabled = (result.instance_flags & 0x20U) != 0;
@@ -14065,24 +14421,39 @@ void log_aim_base_state_fingerprint(
     static std::atomic<ULONGLONG> next_log_ms[2]{};
     static std::atomic<std::uint32_t> sample_count[2]{};
     const ULONGLONG now = GetTickCount64();
-    if (sample_count[screen].load(std::memory_order_acquire) >= 8 ||
+    if (sample_count[screen].load(std::memory_order_acquire) >= 16 ||
         now < next_log_ms[screen].load(std::memory_order_acquire)) {
         return;
     }
-    next_log_ms[screen].store(now + 250, std::memory_order_release);
+    next_log_ms[screen].store(now + 150, std::memory_order_release);
     sample_count[screen].fetch_add(1, std::memory_order_acq_rel);
-    char line[640]{};
+    char line[1280]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-BASE-STATE phase=%s screen=%u up=%.4f down=%.4f "
+        "AIM-BASE-CONFIG tick=%llu phase=%s screen=%u up=%.4f down=%.4f "
         "base=%08X state=%08X authored=%08X callbacks=%02X "
-        "stateFlags=%016llX roots=%08X/%08X/%08X rootSnap=%08X "
+        "stateFlags=%016llX scalars=%08X/%08X/%08X/%08X/%08X/%08X "
+        "mode=%02X apRef=%08X serial=%08X keys=%u/%08X/%u "
+        "overrides=%u/%08X/%u/%u/%u root=%08X/%08X/%08X/%u/%u/%u "
         "instFlags=%02X copy=%u",
-        phase, screen, up, down, probe.base_id, probe.snapshot_state_id,
+        static_cast<unsigned long long>(now), phase, screen, up, down,
+        probe.base_id, probe.snapshot_state_id,
         probe.authored_state_word, probe.callback_presence_mask,
         static_cast<unsigned long long>(probe.authored_state_flags),
-        probe.root_state_id, probe.root_anim_id, probe.root_variant_id,
-        probe.root_snapshot_index, probe.instance_flags,
+        probe.root_state_id, probe.config_scalar_11c, probe.root_anim_id,
+        probe.root_variant_id, probe.config_scalar_12c,
+        probe.config_scalar_158, probe.config_mode,
+        probe.authored_ap_reference, probe.activation_serial,
+        probe.authored_key_count, probe.authored_key_hash,
+        static_cast<unsigned>(probe.authored_key_list_valid),
+        probe.override_count, probe.override_key_hash,
+        probe.override_match_slot, probe.override_match_key_index,
+        static_cast<unsigned>(probe.override_table_valid),
+        probe.root_snapshot_index, probe.root_vtable_rva,
+        probe.root_type_descriptor_rva,
+        static_cast<unsigned>(probe.root_node_valid),
+        static_cast<unsigned>(probe.root_rtti_valid),
+        probe.root_heap_max_count, probe.instance_flags,
         static_cast<unsigned>(probe.copy_enabled));
     boot_log_line(line);
 }
@@ -25813,8 +26184,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-20eg "
-        "(read-only authored AnimStateInstance fingerprint discriminator)");
+        "TLL hook DLL init 2026-07-21eh "
+        "(read-only resolved root RTTI and authored-config discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

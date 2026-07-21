@@ -764,3 +764,70 @@ authored-key count/content hash from `+0x68/+0x88`, and override count/current
 state match from `+0x148`. `+0x188` is a per-activation serial and is explicitly
 non-diagnostic. Matching root/config moves the fault boundary below the common
 tree into parameter binding, script consumption, or the final pose sink.
+
+## STATIC `eh`: resolved root RTTI and complete config fingerprint
+
+The user explicitly reconfirmed the `eg` result: no vertical movement and no
+new bugs. `eh` remains diagnostic-only.
+
+### Hypothesis and competitors
+
+The selected hypothesis is a concrete root-node or authored-routing mismatch
+below the already matching high-level state metadata. The alternatives are:
+
+1. Same root RTTI but different authored key list or active override result.
+2. Full stable root/config match, placing the fault inside common-tree parameter
+   binding, script consumption, or later pose output.
+3. Differences only in raw pointer/root index/activation serial, which are
+   allocator/activation noise rather than semantic identity.
+4. Inconsistent repeated reads during transition or teardown; such samples must
+   be discarded and cannot authorize a write.
+
+### Independent static evidence
+
+1. Writer/consumer/lifetime paths converge on `{instance+0x130,+0x138}`:
+   `0x1418B24F0` selects and stores the root index, `0x1418A5246` resolves it in
+   steady `AnimStateInstance::PhaseUpdate` before root vslot `+0x68`, and
+   `0x14189C710` consumes the same pair during teardown before writing `-1`.
+2. `SnapshotNodeHeap_ResolveNodeByIndex 0x1418C2F90` exposes the exact layout and
+   source assertion: `maxRecordCount@+0xAC`, records pointer `@+0xA0`, 40-byte
+   records, root pointer at record `+0`. Both invalid-index paths assert and
+   debugbreak, so the probe duplicates only the reads after its own bounds checks.
+3. MSVC RTTI was validated on two independent current-binary classes. Their
+   vtables lead through `vtable[-1]` to signature-1 CompleteObjectLocators whose
+   `pSelfRva` resolves back to the COL and whose `pTypeDescriptorRva` resolves to
+   the expected names. The probe parses PE `SizeOfImage`, verifies the same
+   invariants, and records only RVAs.
+4. `0x1418B3F10` allocates/copies the authored uint32 key list and stores it at
+   `+0x68` with count `+0x88`; `0x1418A4030` can rewrite the live apReference key.
+   Pointer/count/hash are therefore reread and accepted only when stable.
+5. The pointer at instance `+0x148` is passed to `0x1418B24F0` as its override
+   table. `AnimStateOverrideTable_FindStateRecord 0x141926AE0` scans enabled
+   24-byte records backward; `SortedIdPointerTable_Find 0x141764B50` binary
+   searches state `+0x98` in `count@+0`, keys `@+0x8`, values `@+0x10`. `eh`
+   reproduces this lookup twice, compares both fingerprints/results, and marks
+   unstable results invalid for analysis.
+
+### Read-only implementation and falsifier
+
+Build `2026-07-21eh` emits at most 16 `AIM-BASE-CONFIG` samples per screen at
+150 ms spacing and includes system `tick` for cross-process alignment. Fields
+are state/callback/flags, six scalar values, mode `+0x18C`, apReference `+0x194`,
+non-diagnostic serial `+0x188`, key count/hash/valid, override
+count/hash/outer-slot/inner-index/valid, and root
+index/vtable-RVA/TypeDescriptor-RVA/node-valid/RTTI-valid/heap-max.
+
+The probe calls no animation, root, override, script, snapshot, or pose function.
+It performs no writes. It caps keys at 4096, outer overrides at 1024, and inner
+keys at 4096, checks every span, keeps the existing outer SEH boundary, and
+rereads mutable owner chains before accepting a sample.
+
+Prediction:
+
+- stable different root vtable/TD RVAs at aligned ticks selects concrete root
+  mismatch;
+- equal RTTI with different key hash or override hit selects authored routing;
+- full stable equality rejects both and moves the trace below root vslot `+0x68`;
+- differences only in root index/serial are explicitly non-diagnostic;
+- invalid repeated reads indicate transition/teardown only;
+- any crash, model damage, or visible behavior change invalidates `eh`.
