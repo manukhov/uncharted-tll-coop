@@ -1268,13 +1268,25 @@ Do not reopen these as the first move:
       `ProcessAnimCmdListSegment`; no bypass exists. `en` instead reconstructed
       FgAnimData from scratch at context `+0x18`, while two independent callers
       prove `&FgAnimData+0x1C0` is context `+0x10` and scratch is `+0x18`.
-- [ ] Run read-only build `eo` during strong up/down ADS on both copies. It fixes
+- [x] Run read-only build `eo` during strong up/down ADS on both copies. It fixes
       only the statically proven context layout and keeps the exact two-signature
       selector. No `AIM-CASE6` despite eligible leaf/vertical telemetry rejects
       the layout explanation; complete same-signature normalized equality moves
       to the common pose/palette path, while a stable branch/retarget/callback
       split selects that exact route. Any crash, write, torn sample or visible
-      model change invalidates the test.
+      model change invalidates the test. Result: the corrected layout produced
+      eight complete records and is confirmed, but all were screen 0. The two
+      local processes used different signatures/branches, so the required
+      same-signature local/puppet comparison remains unexecuted.
+- [ ] Implement and run read-only build `ep`: keep the local screen-0 ADS-bit
+      requirement, but remove that mod-only bit gate for retained screen 1 after
+      exact Player/Fg ownership is proven. Still require at least 0.20 finite
+      active-state vertical weight, one of the two exact signatures, bounded
+      command/assets and all double-reads. Compare only complete same-signature
+      screen-0/screen-1 records across the two processes. No screen-1 record
+      despite eligible leaf/vertical telemetry rejects the gate explanation;
+      equality moves to common pose/palette output, while a stable semantic
+      branch/target/retarget/callback split selects only that route.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

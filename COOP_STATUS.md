@@ -4459,3 +4459,30 @@ IDB. The headless apply reports 1127 functions and 19 data names with
 `save_database returned True`; after restarting MCP, independent lookups resolve
 all three names and their expected callers. Release build `2026-07-21eo` compiles
 successfully.
+
+### 2026-07-21 CONFIRMED/INCONCLUSIVE: `eo` fixes context ownership, but samples only screen 0
+
+Fresh PIDs 9536/19372 remained responsive and produced four complete
+`AIM-CASE6` records each before both processes were closed. This confirms the
+corrected context layout and rejects the old `en` reconstruction: every record
+passed command, clip, target, ownership and double-read guards while vertical
+weight rose from about 0.20 to 1.0.
+
+PID 19372's `0B/27E57F43/FD6DBE03/09A0` clip took the retarget branch to target
+`ED25C708/C39CA709`, joint/scalar counts `580/8`, entry 124, map/coverage 1 and
+callbacks `006CCB30/006CD220/006CD620`. PID 9536's distinct
+`0A/6C2B2396/4B0F5DE3/09A0` clip took the direct branch to matching target
+`6C2B2396/4B0F5DE3`, joint/scalar counts `651/8`, with the same callback RVAs.
+These records cannot select either hypothesis because the written falsifier
+requires the same four-word signature on sender and retained puppet; the two
+observed branches belong to different clips.
+
+All eight records were `screen=0`; no retained `screen=1` context passed the
+probe. The probe's `player_ads_active()` requirement is a mod-added diagnostic
+gate, not an input consumed by `ProcessAnimCmdListSegment`. Prior `ec` already
+proved screen-1 active-state LRDU up to `0.9990`, `ef` proved its copied live
+instance LRDU up to `0.9534`, and `ek` proved the selected screen-0/screen-1
+Animation leaf/signature. Therefore the next bounded discriminator may omit
+only this redundant ADS-bit gate for screen 1 while retaining exact player/Fg,
+nonzero vertical state, signature, command and double-read requirements. Screen
+0 must keep the local ADS-bit gate.
