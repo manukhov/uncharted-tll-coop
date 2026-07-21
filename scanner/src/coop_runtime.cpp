@@ -600,7 +600,7 @@ std::uint64_t remote_puppet_fire_pulse(std::uint64_t latch_actions) {
 volatile bool g_native_fire_relay = false;
 // Relay the peer's sustained aim-press (0x200) into the PUPPET joypad. When true
 // the puppet enters full weapon ADS — and because ss-hud-sniper-reticle-manager is
-// a PROCESS-GLOBAL singleton (see initial-findings 2026-07-04), a scoped-rifle ADS
+// a PROCESS-GLOBAL singleton (see FINDINGS_ARCHIVE.md 2026-07-04), a scoped-rifle ADS
 // on the puppet raises the sniper scope overlay on the RECEIVER's own viewport.
 // Default OFF: continuous puppet ADS still corrupts locomotion while moving
 // (runtime: the remote player slides back and forth in a kneeling pose). Keep F8

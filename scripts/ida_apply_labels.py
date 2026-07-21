@@ -576,7 +576,7 @@ FUNCTIONS = {
         "branch = give-weapon: builds WeaponInfo and calls GiveWeapon (vt+0x158). "
         "The real ground-pickup give path (ret addr 0x140DD4208).",
     ),
-    # --- 2026-07-06: weapon pickup sync design (see initial-findings) ---
+    # --- 2026-07-06: weapon pickup sync design (see FINDINGS_ARCHIVE.md) ---
     0x14157AA70: (
         "WeaponPickupInteractControl_OnInteract",
         "Named by its own assert (weapon-pickup.cpp). vtable +0x10 of "

@@ -330,7 +330,7 @@
 ## P0.5: Build-ready design backlog (STATIC done 2026-07-05; pending runtime pins)
 
 Все пункты ниже разобраны статически end-to-end; детали и адреса — в
-`reports/initial-findings.md`, рантайм-чтения собраны в
+`FINDINGS_ARCHIVE.md`, рантайм-чтения собраны в
 `reports/runtime_pins_checklist.md`. Коммиты указаны для быстрого grep лога.
 
 **Боевые действия / направление:**
@@ -407,7 +407,7 @@ Driving `SpawnPlayerFromRetainedDescriptor(desc, idx=1, ctx, ...)` (captured arg
 from a real Chloe spawn via HW-breakpoint, reissued with index=1, hotkey F12)
 produced a SECOND CONTROLLABLE PLAYER in single-player campaign (a Chloe clone).
 No crash. This validates the converged model and is the project's first real
-second player. Repro in initial-findings.md "MAJOR BREAKTHROUGH".
+second player. Repro in `FINDINGS_ARCHIVE.md` "MAJOR BREAKTHROUGH".
 
 ### P-next: Turn the second player into Nadine co-op
 - [x] Runtime check: clean `block[1]` feed and clean `FrameState+0x6FC8+0x28`
@@ -1283,10 +1283,11 @@ If a task does not directly move the project toward **полноценный к�
 b3549d8). Подобранное с земли оружие пока показывается приближённо (свой длинноствол
 по слоту): точный арт требует полного weapon-info блока — give с одним art@0x80 для
 не-whitelisted артов НЕ прилипает (движок спавнит-и-роняет; см. REJECTED-фонтан в
-initial-findings 2026-07-06).
+`FINDINGS_ARCHIVE.md`, 2026-07-06).
 
 **Задача A — точный арт подобранного оружия.** Реверсить схему weapon-info блока
-(0xC0 байт, initialize_info 0x14... в hook_offsets kInitializeWeaponInfoRva):
+(0xC0 байт, initialize_info 0x14... в `coop_runtime_offsets.h`
+`kInitializeWeaponInfoRva`):
 какие поля кроме art@0x80 обязаны быть валидны, чтобы give прилип для произвольного
 арта. Кандидат: скопировать блок из реального пикапа сендера (hook на give котроллера
 локального игрока), а не синтезировать.

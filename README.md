@@ -14,4 +14,6 @@ and future mod binaries belong in this directory.
 
 Working roadmap: [ROADMAP.md](ROADMAP.md)
 
-Confirmed reverse-engineering findings: [reports/initial-findings.md](reports/initial-findings.md)
+Current findings and test results: [COOP_STATUS.md](COOP_STATUS.md)
+
+Detailed legacy evidence through 2026-07-16: [FINDINGS_ARCHIVE.md](FINDINGS_ARCHIVE.md)

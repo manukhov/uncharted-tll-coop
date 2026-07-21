@@ -1158,7 +1158,7 @@ readable_bytes; F8 = puppet aim-press (ADS) relay; F7 = legacy move-gate.
 только при scoped-RIFLE ADS; при обычном (пистолетном) прицеле он 0. Как общий
 предикат «удалённый целится» НЕ использовать.
 
-**Новая статика (см. initial-findings, запись «Per-screen HUD reticle publishers»):**
+**Новая статика (см. `FINDINGS_ARCHIVE.md`, запись «Per-screen HUD reticle publishers»):**
 обычное перекрестие спавнится per-screen HUD паблишерами над
 `g_PerScreenPlayerHudState 0x143EF1E30` (stride 0x100), **индекс экрана/слота в
 `state+0xF8`**:
@@ -1217,7 +1217,7 @@ MCP-копия обновляется.
 **Тест (PID 14440 отпр. / 8524 приёмн.):** прицел всё ещё дублируется, снайперский
 прицел дублируется **без виньетирования**, «целится/стреляет не в ту сторону».
 → гипотеза «утечка = биты aim/fire/look в общем блоке 1» **REJECTED** (детали и
-адреса в `initial-findings.md`, запись "Runtime 2026-07-04 … REJECTED").
+адреса в `FINDINGS_ARCHIVE.md`, запись "Runtime 2026-07-04 … REJECTED").
 
 **Что доказал лог:** фикс блока-1 работает как задумано (`REMOTE-ACTIONS branch=0x9`
 без 0x200/0x800; `JOYPAD3 current=0x209` только внутри конверсии; блок восстановлен),
@@ -1542,7 +1542,7 @@ HUD корректны — скоуп течёт через **глобальны
 - **This turn:** added UDP `FirePacket` relay — sender hooks
   `PlayerFireController::Fire`, learns `Player`→controller offset from first local
   shot, replays captured `FireArgs` on remote retained `Player` each net tick.
-  Recorded as **HYPOTHESIS** in `initial-findings.md`; runtime test pending.
+  Recorded as **HYPOTHESIS** in `FINDINGS_ARCHIVE.md`; runtime test pending.
 - **Still open P0:** jump/roll/melee via button latch (needs in-game verify);
   anim mirror blocked by campaign art-group wall; Nadine holster display.
 

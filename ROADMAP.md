@@ -64,7 +64,7 @@ Target build: `tll.exe 1.4.21058.0`
 кампании без полноценной multiplayer net-сессии.**
 
 Новый главный блокер уже узкий — и ВСЕ линии сошлись в одну (см. GRAND
-SYNTHESIS в initial-findings.md):
+SYNTHESIS в `FINDINGS_ARCHIVE.md`):
 
 **spawn игрока, local-player resolver и камера — все параметризованы ОДНИМ
 screen-route index, читая two-screen route table `0x14697AD50` (route 0/1).
@@ -488,12 +488,12 @@ These points are already established and should not be re-reversed first:
   - then drops into the shared `owner+0x15B8` mode/snapshot layer
   - later re-dispatches synthesized state through the resolved live actor
 
-Full evidence and chronology remain in `reports/initial-findings.md`.
+Full legacy evidence and chronology remain in `FINDINGS_ARCHIVE.md`.
 
 ## Notes
 
-- Detailed reverse-engineering evidence belongs in
-  `reports/initial-findings.md`.
+- New reverse-engineering evidence belongs in `COOP_STATUS.md`; detailed legacy
+  evidence through 2026-07-16 remains in `FINDINGS_ARCHIVE.md`.
 - Reproducible labels/comments belong in `scripts/ida_apply_labels.py`.
 - `ROADMAP.md` should stay short and directional, not become a reverse log.
 
