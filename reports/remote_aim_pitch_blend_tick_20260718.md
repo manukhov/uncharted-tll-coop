@@ -1196,3 +1196,38 @@ The Release DLLs build successfully; only the pre-existing C4456 warning remains
 The real IDB now contains the six Animation construction/remap/clip labels,
 reports 1118 functions/19 data names, and `save_database returned True`; the MCP
 copy was refreshed and resolves the new names.
+
+## CONFIRMED/REJECTED `ek`: the selected Animation leaf also matches
+
+Fresh PIDs 18744 (screen 0) and 18868 (screen 1) loaded read-only build
+`2026-07-21ek`. The bounded samples covered downward input on screen 0
+(`down=0.0591..0.0651`) and upward input on screen 1 (`up=0.0741..0.6422`). Both
+processes remained responsive and neither crashed; both were closed after log
+collection.
+
+Every selected leaf sample was fully valid (`node/rtti/layout/clip/clipData =
+1/1/1/1/1`). All 15 screen-0 samples and all 13 screen-1 samples had the exact
+same normalized signature:
+
+- source/resolved animation id `C7FB376F/C7FB376F`;
+- remap/asset lookup keys `6C2B2396/4B0F5DE3`;
+- current/previous phase `00000000/00000000`;
+- auto-step/flip `01/00`;
+- clip-consumed words `0000000A/6C2B2396/4B0F5DE3/000009A0`;
+- no phase descriptor or bytecode: `phaseVm=00000000/0/811C9DC5/0/811C9DC5`.
+
+The phase remained exactly zero while vertical input changed, so neither clip
+selection nor phase can encode the missing pitch on this selected leaf. This is
+the complete-match branch of the written falsifier and **REJECTS** the whole
+selected `AnimSnapshotNodeAnimation` input to command `0x60006` as the vertical
+discriminator.
+
+The next static comparison must distinguish two remaining boundaries rather
+than assume case 6 is solely responsible: (1) the `AnimCmdContext`, skeleton,
+joint-set or plugin path consuming the otherwise identical command; and (2) a
+different active type-2 animation layer that contributes the local vertical
+additive after the common `base` layer. The earlier `ed` result proves that
+blindly forcing the named layer on the puppet corrupts the model, so the safe
+next discriminator is a bounded inventory of the native active-layer set and
+its evaluated instance roots, followed by case-6 context only for the concrete
+differing layer.

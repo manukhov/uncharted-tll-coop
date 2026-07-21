@@ -1188,12 +1188,20 @@ Do not reopen these as the first move:
       evidence quota before adding another bounded read-only probe. Result:
       0x80-byte layout, ids/remap/clip fields, phase VM/pair and command `0x60006`
       consumption are offset- and vtable-proven; build `ek` is read-only.
-- [ ] Run the written `ek` falsifier. Compare normalized Animation source/resolved
+- [x] Run the written `ek` falsifier. Compare normalized Animation source/resolved
       ids, remap keys, clip-consumed words, phase VM and current/previous phase
       during stable center/up/down ADS. An id/clip split selects authored clip
       selection; a phase-only split selects `anim-node-phase-func`; a complete
       match moves the static trace into command-case-6 context/plugin/joint-mask
-      consumers. Ignore raw indices/pointers and any invalid/torn sample.
+      consumers. Ignore raw indices/pointers and any invalid/torn sample. Result:
+      all 28 valid samples matched exactly and phase stayed zero through up/down.
+- [ ] Before instrumenting command case 6, statically prove a bounded inventory
+      of every active type-2 `AnimControl` registry layer and its first evaluated
+      `AnimStateInstance` root. Compare local and puppet semantic layer ids/types,
+      active/track state and normalized root RTTI; do not force or synthesize the
+      model-breaking named aim layer. A matching complete layer inventory returns
+      the frontier to case-6 context/plugin/joint-mask consumers; a concrete
+      differing layer becomes the only next tree to trace.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

@@ -4229,3 +4229,22 @@ The Release build succeeds with only the pre-existing C4456 warning. The real
 IDB has all six new Animation construction/remap/clip labels (1118 functions,
 19 data names, `save_database returned True`), and the refreshed MCP copy
 resolves them.
+
+### 2026-07-21 CONFIRMED/REJECTED: `ek` matches the Animation leaf
+
+Fresh PIDs 18744/18868 completed the read-only `ek` sweep. Screen 0 supplied
+downward input `0.0591..0.0651`; screen 1 supplied upward input
+`0.0741..0.6422`. Both processes remained responsive, did not crash, and were
+closed after collection.
+
+All 28 selected-leaf samples were fully valid and identical: animation
+`C7FB376F/C7FB376F`, remap keys `6C2B2396/4B0F5DE3`, phase pair zero, flags
+`01/00`, clip words `0000000A/6C2B2396/4B0F5DE3/000009A0`, and no phase
+descriptor/VM. The phase stayed zero throughout changing vertical input.
+
+This **REJECTS** selected Animation clip/phase input, and therefore the generated
+command-`0x60006` clip/phase payload, as the discriminator. Before probing case 6
+internals, compare the complete native active type-2 layer set and evaluated
+instance roots across local and puppet: local vertical may be contributed by a
+separate additive layer rather than the matching `base` command. The earlier
+model-breaking `ed` named-layer force remains rejected; do not reactivate it.
