@@ -4818,3 +4818,19 @@ stable vtable/mesh signatures for hair, rifle and grenade select H1 and must be
 resolved statically before any visibility write. Only hair/cloth records, no
 records despite the exact parent being visible, an exception, or any visual
 regression makes the boundary inconclusive and forbids a suppression build.
+
+### 2026-07-21 INCONCLUSIVE: `eu` accepted no child records
+
+Normal gameplay with Nadine visible produced no `NADINE-ATTACHABLE` record in
+either PID 23960 or PID 19948. Both processes stayed responsive, the `eu` init
+tag and callsite-hook installation were present, and no exception/crash marker
+appeared. They were closed after capture.
+
+This is **not** evidence that the rifle is not an attachable. The same exact
+parent matcher at the same callsite drove all five successful F11 body-mesh
+states in build `et`, so the unresolved rejection is downstream of the parent
+boundary: the `attachable >= 0x4F0` readability guard, child DrawControl snapshot,
+or the assumption that RBX is a fully readable base object. The next build must
+remain read-only and log one bounded reason record immediately after the exact
+five-mesh parent match, before applying those guards. Do not broaden the parent
+filter and do not re-enable visibility writes.

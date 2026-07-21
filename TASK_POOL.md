@@ -1380,10 +1380,18 @@ Do not reopen these as the first move:
       RVA, type id, child mesh ids, `+0x4E0/+0x4E8` parent handle and plausible
       `+0x860` ProcessWeapon art. Use the surviving hair/rifle/grenade trio to
       identify the persistent rifle child before changing visibility or binding.
-- [ ] Run `eu` in normal gameplay with Nadine visible. Require stable
+- [x] Run `eu` in normal gameplay with Nadine visible. Require stable
       `NADINE-ATTACHABLE` child signatures and no visual regression. Resolve each
       vtable/mesh signature statically; if only hair/cloth reaches the callsite,
-      reject this boundary rather than hiding another guessed mesh.
+      reject this boundary rather than hiding another guessed mesh. Result:
+      INCONCLUSIVE, zero accepted records in both responsive processes, no crash.
+      The same exact matcher worked in `et`, so instrument guard/snapshot rejection
+      after parent match instead of broadening the parent or changing visibility.
+- [ ] Build a bounded read-only exact-parent hit/rejection census before the
+      `attachable >= 0x4F0` and child-snapshot guards. Record readable extent,
+      child mesh header/snapshot success and raw RBX value so the next test
+      distinguishes an undersized object, wrong object base and child capture
+      failure.
 - [ ] After the baked rifle is isolated, resolve the player-owned rifle's failed
       `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
       Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a
