@@ -1,9 +1,9 @@
-"""Shared headless IDA MCP server (idalib) for Claude Code + Codex.
+"""Headless IDA MCP server (idalib) for this workspace.
 
-Runs on Windows Python 3.12 (with idalib activated). Binds the WSL vEthernet
-adapter so both WSL-side agents can reach it over HTTP/SSE, and reads a COPY of
-the IDB (ida/tll_mcp.i64) so the real ida/tll.i64 stays free for headless idat /
-label application. Launched by scripts/ida_mcp_server.sh.
+Runs on Windows Python 3.12 (with idalib activated), binds the WSL vEthernet
+adapter, and opens the workspace's only IDB: ida/tll.i64. The launcher must stop
+this process before headless idat applies labels, then start it again after the
+database is saved. Launched by scripts/ida_mcp_server.ps1.
 
 Fix: FastMCP auto-enables a localhost-only Host allowlist at import time (its
 default host is 127.0.0.1). We bind a different host, so we widen the allowlist to
@@ -48,9 +48,8 @@ def _direct_execute_sync(callable_, _reqf):
 
 idaapi.execute_sync = _direct_execute_sync
 
-# idalib_server.main() hardcodes transport="sse", but Codex only speaks
-# streamable-http (`codex mcp add --url`). Both Claude Code and Codex support
-# streamable-http, so force it here (endpoint becomes /mcp). Intercept the run()
+# idalib_server.main() hardcodes transport="sse", but the configured client uses
+# streamable-http. Force it here (endpoint becomes /mcp). Intercept the run()
 # call so we keep all of main()'s DB-open / tool-registration logic.
 _orig_run = idalib_server.mcp.run
 idalib_server.mcp.run = lambda *a, **k: _orig_run(transport="streamable-http")
