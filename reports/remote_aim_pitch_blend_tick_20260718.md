@@ -1317,3 +1317,43 @@ Prediction for fresh strong up/down ADS:
 Both Release DLLs build successfully; the only compiler diagnostic is the
 pre-existing C4456 warning. All functions used by this proof were already named
 and saved in the current real IDB, so `el` requires no new IDB mutation.
+
+## CONFIRMED/REJECTED `el`: the complete active type-2 inventory matches
+
+Fresh PIDs 17472 (screen 0) and 19696 (screen 1) loaded read-only build
+`2026-07-21el`. Both processes remained responsive and did not crash; both were
+closed after collection. Each process produced four bounded samples. Screen 0
+covered `up=0.2577..1.0000` and `down=0.2956`; screen 1 covered
+`up=0.2767..0.9967`. All eight headers reported the same complete registry
+shape (`registry=42 active2=7 captured=7 valid=1/1 truncated=0`).
+
+The normalized active set was identical in both processes:
+
+- `2EAA36BC/ctx 00`: one live state `FEC2DB76`, flags `08`, Animation root
+  `02B14D68/037713E8`;
+- `63B48BEE/ctx C3` and `66B82091/ctx CB`: active descriptors with zero live
+  tracks in both processes;
+- `7339D08C/ctx 0E`: one live state `3C347132`, flags `28`, Blend root
+  `02B15218/03771508`;
+- `89207057/ctx 80`: one live state `59FE38FD`, flags `08`, Animation root;
+- `E2B990B9/ctx C4`: stable state `3889CC0E`, flags `08`, root
+  `02B3D590/03772710`;
+- `F574416B/ctx 00`: one live state `05460527`, flags `08`, Animation root.
+
+The first screen-1 sample caught `E2B990B9` during a three-track transition
+(two `3889CC0E` roots and one `F5D4FF02` Blend root). By the next sample 500 ms
+later it had naturally collapsed to the same single `3889CC0E` track seen in
+all screen-0 and later screen-1 samples. This is the explicitly predicted
+one-sample transition, not a stable local/puppet discriminator. Completed-fade
+remaining-time words and the starting word of `89207057` also differed by small
+process-timing residues, while current/target weights, stable live topology and
+all semantic instance/root fields matched.
+
+This is the complete-match branch of the written falsifier and **REJECTS the
+entire active type-2 layer set, including every stable evaluated instance root,
+as the vertical-aim discriminator**. No missing named/additive layer remains to
+activate or synthesize. The next static frontier is therefore the common
+command-`0x60006` consumer: trace `ProcessAnimCmdListSegment 0x141AB97C0` case 6
+in both directions and distinguish per-command context, skeleton/joint-set or
+plugin evaluation from later pose merge/palette publication before another
+runtime probe.

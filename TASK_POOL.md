@@ -1205,12 +1205,21 @@ Do not reopen these as the first move:
       concrete layer/track, live instance and evaluated-root layouts have four
       independent evidence types; read-only build `el` double-reads every bounded
       chain and exposes only normalized semantic fields.
-- [ ] Run the written `el` falsifier with strong vertical ADS on both copies.
+- [x] Run the written `el` falsifier with strong vertical ADS on both copies.
       Compare valid inventories as sets keyed by channel id/context: layer type
       and fade words, live track/instance state and normalized root RTTI. Ignore
       raw ordering/pointers/root indices and isolated fade transients. A stable
       concrete difference selects only that layer; a complete match moves to
       command-case-6 context/skeleton/joint-mask/plugin/palette consumers.
+      Result: all eight samples were complete with the same seven active
+      channels and stable live instance/root signatures. One early three-track
+      `E2B990B9` transition collapsed after 500 ms; only fade-time residues
+      differed. The complete active-layer inventory is rejected.
+- [ ] Trace `ProcessAnimCmdListSegment 0x141AB97C0` case 6 statically in both
+      directions. Prove the complete command payload and owning command context,
+      resolve skeleton/joint-set/plugin inputs and the downstream pose-merge or
+      palette publication edge, enumerate competing boundaries, and satisfy the
+      three-type evidence quota before defining any `em` runtime probe.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

@@ -4275,3 +4275,26 @@ active-layer set and returns the frontier to command-case-6 context,
 skeleton/joint-mask, plugin and palette consumers. Truncated/torn samples,
 order/address/index-only differences and isolated fade transients are
 non-diagnostic. Both Release DLLs build with only the pre-existing C4456 warning.
+
+### 2026-07-21 CONFIRMED/REJECTED: `el` matches all active type-2 layers
+
+Fresh PIDs 17472/19696 produced four complete samples each and remained
+responsive without a crash. Screen 0 covered up to `up=1.0000` plus
+`down=0.2956`; screen 1 covered up to `up=0.9967`. Every header was
+`registry=42 active2=7 captured=7 valid=1/1 truncated=0`.
+
+Both processes had the same seven channels/contexts, live topology, instance
+states/flags and root RTTI: `2EAA36BC/00 -> FEC2DB76/Animation`,
+`63B48BEE/C3` and `66B82091/CB` with zero live tracks,
+`7339D08C/0E -> 3C347132/Blend`, `89207057/80 -> 59FE38FD/Animation`,
+`E2B990B9/C4 -> 3889CC0E/02B3D590`, and
+`F574416B/00 -> 05460527/Animation`. The first screen-1 sample caught a
+three-track `E2B990B9` transition, but it collapsed after 500 ms to the same
+single track as every stable sample. Only completed-fade timing residues
+differed.
+
+This **REJECTS the complete active type-2 layer and evaluated-root inventory**
+as the missing vertical discriminator. Do not activate/synthesize any named aim
+layer. The frontier returns to `ProcessAnimCmdListSegment 0x141AB97C0` case 6:
+statically separate command context, skeleton/joint-set/plugin evaluation and
+later pose-merge/palette publication before defining another runtime probe.
