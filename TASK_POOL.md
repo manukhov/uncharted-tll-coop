@@ -1308,12 +1308,14 @@ Do not reopen these as the first move:
       slot-1 owner and active-state counts reached 4260/8050, but retained
       vertical was exactly zero in both processes; vertical admission is the
       first missing stage.
-- [ ] Implement build `er` on the proven steady publisher boundary: capture
+- [x] Implement build `er` on the proven steady publisher boundary: capture
       finite local screen-0 `up/down * blend` after stock `0x140CB47A0`; on
       screen 1 read a fresh `kStateFlagAimPitch` packet and replace only active
       state `+0x188/+0x18C` after the stock publisher. Add one bounded nonzero
       capture/apply marker per process. Do not touch named channels, FgAnimData,
-      roots, palettes, case-6 payloads or other LRDU fields.
+      roots, palettes, case-6 payloads or other LRDU fields. Result: exact
+      owner/freshness/range guards and one-shot markers are implemented; the
+      single Release DLL builds successfully.
 - [ ] Run `er` with strong vertical ADS in both directions. Require nonzero wire
       capture and receiver apply plus retained `AIM-CASE6`; reject the boundary
       if any marker is absent. If retained case-6 appears, compare only complete

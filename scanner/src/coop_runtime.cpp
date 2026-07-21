@@ -16793,6 +16793,79 @@ void __fastcall hooked_smooth_and_publish_directional_aim_weights(
         static_cast<const std::byte*>(controller) + 0x8C4);
     const float blend = *reinterpret_cast<const float*>(
         static_cast<const std::byte*>(controller) + 0x8EC);
+
+    const float clamped_blend = std::clamp(blend, 0.0F, 1.0F);
+    if (owner == retained_player_object(0) &&
+        player_screen_index_is(owner, 0)) {
+        const float pitch_up = raw_up * clamped_blend;
+        const float pitch_down = raw_down * clamped_blend;
+        if (std::isfinite(pitch_up) && std::isfinite(pitch_down) &&
+            pitch_up >= 0.0F && pitch_up <= 1.0F &&
+            pitch_down >= 0.0F && pitch_down <= 1.0F) {
+            AcquireSRWLockExclusive(&g_local_aim_pitch_lock);
+            g_local_aim_pitch = {
+                owner, pitch_up, pitch_down, GetTickCount64()};
+            ReleaseSRWLockExclusive(&g_local_aim_pitch_lock);
+            static std::atomic<bool> first_active_wire_capture{false};
+            if (std::max(pitch_up, pitch_down) >= 0.05F &&
+                !first_active_wire_capture.exchange(
+                    true, std::memory_order_acq_rel)) {
+                char line[160]{};
+                std::snprintf(
+                    line, sizeof(line),
+                    "AIM-PITCH-WIRE-CAPTURE up=%.4f down=%.4f",
+                    pitch_up, pitch_down);
+                boot_log_line(line);
+            }
+        }
+    } else if (owner == retained_player_object(1) &&
+               player_screen_index_is(owner, kSlot1ScreenIndex)) {
+        coop::StatePacket peer{};
+        const ULONGLONG now = GetTickCount64();
+        const ULONGLONG received =
+            g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+        const bool fresh_pitch =
+            received != 0 && now - received <= 250 &&
+            copy_peer_state_snapshot(peer) &&
+            (peer.flags & coop::kStateFlagAimPitch) != 0 &&
+            peer_packet_aim_active(peer) &&
+            std::isfinite(peer.aim_pitch_up) &&
+            std::isfinite(peer.aim_pitch_down) &&
+            peer.aim_pitch_up >= 0.0F && peer.aim_pitch_up <= 1.0F &&
+            peer.aim_pitch_down >= 0.0F && peer.aim_pitch_down <= 1.0F;
+        if (fresh_pitch) {
+            void* const active_state =
+                aim_publish_active_state_from_player(owner);
+            if (active_state != nullptr &&
+                readable_bytes(
+                    static_cast<std::byte*>(active_state) +
+                    kAnimStateAimAddDownOffset) >= sizeof(float)) {
+                __try {
+                    auto* const state_bytes =
+                        static_cast<std::byte*>(active_state);
+                    *reinterpret_cast<float*>(
+                        state_bytes + kAnimStateAimAddUpOffset) =
+                        peer.aim_pitch_up;
+                    *reinterpret_cast<float*>(
+                        state_bytes + kAnimStateAimAddDownOffset) =
+                        peer.aim_pitch_down;
+                    static std::atomic<bool> first_active_wire_apply{false};
+                    if (std::max(
+                            peer.aim_pitch_up, peer.aim_pitch_down) >= 0.05F &&
+                        !first_active_wire_apply.exchange(
+                            true, std::memory_order_acq_rel)) {
+                        char line[160]{};
+                        std::snprintf(
+                            line, sizeof(line),
+                            "AIM-PITCH-WIRE-APPLY up=%.4f down=%.4f",
+                            peer.aim_pitch_up, peer.aim_pitch_down);
+                        boot_log_line(line);
+                    }
+                } __except (EXCEPTION_EXECUTE_HANDLER) {
+                }
+            }
+        }
+    }
     log_aim_base_state_fingerprint(owner, "steady", raw_up, raw_down);
     log_aim_registry_snapshot(
         controller, owner, "steady", raw_up, raw_down, blend);
@@ -28196,8 +28269,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21eq "
-        "(read-only dual-signature case-6 retarget discriminator)");
+        "TLL co-op runtime init 2026-07-21er "
+        "(steady wire-pitch apply + dual-signature case-6 discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

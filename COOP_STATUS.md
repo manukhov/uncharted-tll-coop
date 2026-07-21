@@ -4606,3 +4606,13 @@ case-6 route; or same-signature case-6 records match and visible pitch is still
 absent, selecting the common pose/palette output. A bounded runtime test must
 require nonzero sender capture, nonzero receiver apply, retained case-6 admission
 and no shake/model corruption before claiming progress.
+
+Build `2026-07-21er` implements exactly that contract. The screen-0 steady hook
+stores finite `controller(+0x8C0/+0x8C4) * clamp(+0x8EC)` in the existing locked
+wire snapshot and emits one nonzero `AIM-PITCH-WIRE-CAPTURE`. The same hook for
+the exact retained screen-1 owner requires a packet no older than 250 ms,
+`kStateFlagAimPitch`, strict peer ADS and finite unit-range values, then replaces
+only active-state up/down after the stock publisher and emits one nonzero
+`AIM-PITCH-WIRE-APPLY`. No packet or stale packet performs no write, leaving the
+stock publisher authoritative for clearing. All `eq` stage/case-6 counters remain
+enabled for the falsifier. The single Release DLL builds successfully.
