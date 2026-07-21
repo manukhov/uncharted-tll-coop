@@ -5604,3 +5604,27 @@ record transform. Prediction: name equality plus `namedJoint=99/-1` and a valid
 `upperLeg` pair selects P1; two valid named indices select P2; another name or a
 missing upper-leg index selects P3. Any crash, missing marker after both actors
 exist or visual change falsifies the probe. It performs no engine call or write.
+
+### 2026-07-21 CONFIRMED/STATIC: fi rejects r_leg_gun_holster as NPC joint 99
+
+Both `fi` instances remained responsive and emitted the same cross-rig result.
+The native `pistolHolster` record still resolved to joint `99`, but descriptor
+slot 99 named hash `0xADD0C871`, not the predicted
+`r_leg_gun_holster 0xE231DB44`. Neither NPC nor legacy Player descriptor resolved
+the latter (`namedJoint=-1/-1`). `r_upper_leg` independently resolved to joint
+`5/5`, proving the descriptors were readable and the comparison did not fail
+globally. P1 and P2 as written are rejected; P3 is selected.
+
+`StringIdHash 0x14014D830` is the non-reflected table-driven CRC used for these
+names. Reproducing its exact update rule yields `0xADD0C871` for
+`r_leg_holster`, making that the strong STATIC preimage for NPC joint 99. The
+name is distinct from PlayerWeaponAnimControl's hardcoded
+`r_leg_gun_holster`; that naming mismatch explains why the native NPC can have a
+valid authored thigh marker while the Player controller reports its different
+marker absent.
+
+Transfer is still not authorized until the legacy Player descriptor is queried
+for the actual `0xADD0C871` name. If it also resolves to joint 99, the native
+record can be copied with runtime fields cleared. If absent, the shared
+`r_upper_leg` joint 5 is the only currently proven semantic remap parent; the
+engine transform composition must be used rather than raw joint 99.
