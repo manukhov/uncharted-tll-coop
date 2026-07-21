@@ -898,6 +898,31 @@ FUNCTIONS = {
         "generator short-circuits weight <=0.0001 to child 0 and weight >=0.9999 "
         "to child 1 when endpoint evaluation is enabled.",
     ),
+    0x141AB78F0: (
+        "AnimCmdEvaluator_FinalizeGroupDefaults",
+        "Finalizes the current processing-group lane before command 3 publishes "
+        "it to the common WorkBuffer. Inverse ValidBits select missing joint and "
+        "scalar ranges, which are filled from the target skeleton defaults; the "
+        "same bits are then marked valid.",
+    ),
+    0x14217C3A0: (
+        "AnimCmdEvaluator_AllocateGroupLanes",
+        "Allocates and indexes the processing group's joint/scalar output lanes "
+        "and their 16-byte ValidBits records. Direct animation, retarget copy and "
+        "later blend commands all address this common layout.",
+    ),
+    0x14217B630: (
+        "AnimCmdEvaluator_ExecuteSkeletonJointPrograms",
+        "Command-16 evaluator that walks the target skeleton's bounded joint "
+        "program records and dispatches their transform operators over the final "
+        "WorkBuffer JointParams into the 64-byte-per-joint matrix workspace.",
+    ),
+    0x14218B170: (
+        "AnimCmdEvaluator_WriteSkinningPalette",
+        "Command-26 matrix converter. It combines the 64-byte joint workspace "
+        "with the supplied basis/inverse-bind data and writes three float4 rows "
+        "per joint to the destination generated from FgAnimData+0x230.",
+    ),
     0x141B5CE90: (
         "AudioManager_RenderJobEntry",
         "Ndjob callback scheduled by AudioManager_RunRenderJob. When owner+0x81 "

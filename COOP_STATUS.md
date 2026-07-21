@@ -4643,3 +4643,68 @@ common pose output after `AnimCmdEvaluator_ApplyAnimationDirect 0x14217C7F0` and
 `AnimCmdEvaluator_CopyMaskedPose 0x14217D280`: trace processing-group work-buffer
 ownership through command blending/merge and final FgAnimData palette/skinning
 publication before defining another runtime probe.
+
+### 2026-07-21 STATIC: common pose output terminates at FgAnimData+0x230
+
+The direct and retarget case-6 branches now have a complete common-output path.
+Command 2 constructs one processing-group evaluator whose `+0x08` pointer array
+indexes joint/scalar lanes, `+0x10` indexes their 16-byte ValidBits records and
+`+0x20` selects the group descriptor. Newly named
+`AnimCmdEvaluator_AllocateGroupLanes 0x14217C3A0` allocates those exact lanes.
+Both case-6 writers and later `AnimCmdEvaluator_ApplyBlend 0x14217CF90` use the
+same `output_index * group.byte4` addressing.
+
+Command 3 calls newly named
+`AnimCmdEvaluator_FinalizeGroupDefaults 0x141AB78F0`. It intersects the inverse
+joint/scalar ValidBits with the group mask, fills only the missing ranges from
+the target skeleton defaults, marks those ranges valid, and then publishes the
+first finalized joint lane to the common WorkBuffer at `+0x50`. Command 15
+allocates the separate 64-byte-per-joint matrix workspace at WorkBuffer `+0x58`;
+command 16 reaches newly named
+`AnimCmdEvaluator_ExecuteSkeletonJointPrograms 0x14217B630`, which walks the
+target skeleton's bounded joint-program records and dispatches their operators
+over the finalized JointParams.
+
+The palette edge is exact rather than inferred. `AnimManager_CreateAnimCmdsForObject
+0x141A8FCF0` emits ten-word opcode 26 with its first destination derived from the
+builder field that `0x141A91490` filled from `FgAnimData+0x230`; start/count occupy
+words 8/9. `ProcessAnimCmdListSegment` case 26 bounds that range to the current
+processing group and calls newly named
+`AnimCmdEvaluator_WriteSkinningPalette 0x14218B170`. The helper consumes the
+64-byte joint workspace plus supplied basis/inverse-bind data and writes three
+float4 rows (48 bytes) per joint directly to that opcode-26 destination. The
+normal `AnimManager_PerformAnimBlend` path has no later palette store because the
+command list already wrote the current buffer; the fallback independently swaps
+and fills the same `FgAnimData+0x230/+0x238` pair.
+
+This satisfies four independent evidence types: the shared evaluator lane and
+ValidBits dataflow; command-3 default-fill plus WorkBuffer publication; the
+skeleton joint-program dispatch; and independent generator/consumer agreement
+on the exact opcode-26 `FgAnimData+0x230` destination and 48-byte stride. The
+remaining competitors are now concrete: (1) later command topology, blend weights
+or plugin ids differ and overwrite the matched case-6 result; (2) those commands
+match but ValidBits/evaluation/joint-program output diverges before the palette;
+or (3) the completed current palette responds equivalently and the loss is in a
+downstream render/post-palette consumer.
+
+Read-only build `2026-07-21es` implements that discriminator without adding a
+new hot-path detour. On the already proven ProcessAnim wrapper it accepts only
+the two exact case-6 signatures and valid Player/Fg ownership with at least 0.20
+vertical state in processing group 0, which supplied complete pairs in the
+previous run. It hashes the complete opcode/word topology, every case-7
+left/right/output/mode/weight tuple, and case-23/24 plugin ids; it counts command
+3/16/26 stages and proves each opcode-26 destination equals current
+`FgAnimData+0x230 + 48 * first_joint` under the native range. After the untouched
+consumer returns, it reads that same palette, keeps a private first-sample
+baseline per screen/signature, and reports total rotation/translation delta plus
+the six largest joint rotation deltas. Four samples per screen/signature are
+allowed at 500 ms intervals; no game memory is written.
+
+Written falsifier: a stable same-signature topology/blend/plugin difference
+selects only the late-command overwrite route. Matching command summaries with
+local palette response but no corresponding retained response select the common
+evaluator/ValidBits/joint-program region. Corresponding local/retained palette
+response while the user still sees no pitch selects a consumer after
+`FgAnimData+0x230`. Invalid destination/layout/readability guards, a missing
+same-signature pair, unrelated raw pose hashes, crash or any new visible model
+problem make the test inconclusive. The single Release DLL builds successfully.

@@ -1325,13 +1325,27 @@ Do not reopen these as the first move:
       same-signature local/retained case-6 pairs were complete and semantically
       matched while the user saw no vertical pitch and no other regression.
       Reject case-6 inputs and move to their common pose/palette output.
-- [ ] Statically trace the common pose result after direct
+- [x] Statically trace the common pose result after direct
       `AnimCmdEvaluator_ApplyAnimationDirect 0x14217C7F0` and retarget copy
       `AnimCmdEvaluator_CopyMaskedPose 0x14217D280`. Resolve processing-group
       work-buffer ownership, later command blend/merge consumers, and the exact
       publication into FgAnimData palette/skinning buffers. Enumerate output
       overwrite versus joint-mask versus late-publication competitors and meet
-      the three-type evidence quota before another runtime probe.
+      the three-type evidence quota before another runtime probe. Result: command
+      3 finalizes inverse ValidBits/default ranges into WorkBuffer JointParams,
+      command 16 executes skeleton joint programs into a 64-byte matrix workspace,
+      and command 26 converts it directly into the generated
+      `FgAnimData+0x230 + 48*first_joint` destination. Four STATIC labels are saved;
+      build `es` records normalized late-command semantics and post-return palette
+      response without writes.
+- [ ] Run read-only build `es` from a low vertical value through a strong up/down
+      sweep for both pistol and rifle so both exact signatures get four local and
+      retained group-0 samples. A stable same-signature topology/blend/plugin hash split
+      selects late command overwrite; matching summaries with a retained-only
+      missing palette response selects evaluator/ValidBits/joint-program output;
+      corresponding palette responses with no visible pitch move the frontier
+      after `FgAnimData+0x230`. Any palette guard failure, crash or new model
+      regression invalidates the test.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

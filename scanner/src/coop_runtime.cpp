@@ -14921,6 +14921,79 @@ struct AimCase6CommandProbe {
     std::uint64_t coverage_word_0 = 0;
 };
 
+constexpr std::uint64_t kAimPipelineFnvOffset = 14695981039346656037ULL;
+constexpr std::uint64_t kAimPipelineFnvPrime = 1099511628211ULL;
+constexpr std::size_t kAimPipelineMaxJoints = 1024;
+constexpr std::size_t kAimPipelineJointFloats = 12;
+
+std::uint64_t aim_pipeline_hash_word(
+    std::uint64_t hash, std::uint32_t value) {
+    for (unsigned shift = 0; shift != 32; shift += 8) {
+        hash ^= static_cast<std::uint8_t>(value >> shift);
+        hash *= kAimPipelineFnvPrime;
+    }
+    return hash;
+}
+
+int aim_case6_signature_index(const AimCase6CommandProbe& command) {
+    for (std::size_t index = 0; index < kAimCase6SelectedClips.size(); ++index) {
+        const AimCase6ClipSignature& signature =
+            kAimCase6SelectedClips[index];
+        if (command.source_clip_flags == signature.flags &&
+            command.source_art_skeleton_id == signature.art_skeleton_id &&
+            command.source_underlying_skeleton_id ==
+                signature.underlying_skeleton_id &&
+            command.source_clip_data_word_08 == signature.data_word_08) {
+            return static_cast<int>(index);
+        }
+    }
+    return -1;
+}
+
+struct AimCommonCommandSummary {
+    bool valid = false;
+    bool palette_targets_valid = false;
+    std::uint32_t command_count = 0;
+    std::uint32_t case3_count = 0;
+    std::uint32_t case6_count = 0;
+    std::uint32_t selected_case6_count = 0;
+    std::uint32_t case7_count = 0;
+    std::uint32_t blend_zero_count = 0;
+    std::uint32_t blend_one_count = 0;
+    std::uint32_t blend_mid_count = 0;
+    std::uint32_t plugin23_count = 0;
+    std::uint32_t plugin24_count = 0;
+    std::uint32_t case16_count = 0;
+    std::uint32_t case26_count = 0;
+    std::uint32_t palette_joint_total = 0;
+    std::uint64_t topology_hash = kAimPipelineFnvOffset;
+    std::uint64_t blend_hash = kAimPipelineFnvOffset;
+    std::uint64_t plugin_hash = kAimPipelineFnvOffset;
+};
+
+struct AimCommonOutputPending {
+    bool valid = false;
+    AimCase6ContextProbe context{};
+    AimCase6CommandProbe selected_command{};
+    AimCommonCommandSummary commands{};
+    std::uint32_t processing_group = 0;
+    std::uint32_t signature_index = 0;
+    std::uint32_t sample = 0;
+    void* palette_before = nullptr;
+};
+
+struct AimCommonPaletteBaseline {
+    bool valid = false;
+    void* fg_anim_data = nullptr;
+    std::uint32_t joint_count = 0;
+    std::array<float,
+               kAimPipelineMaxJoints * kAimPipelineJointFloats> values{};
+};
+
+SRWLOCK g_aim_common_palette_lock = SRWLOCK_INIT;
+std::array<std::array<AimCommonPaletteBaseline, 2>, 2>
+    g_aim_common_palette_baselines{};
+
 std::uint32_t normalize_tll_callback_rva(const void* callback) {
     if (callback == nullptr) {
         return 0;
@@ -15284,6 +15357,361 @@ AimCase6CommandProbe probe_aim_case6_command(
     return result;
 }
 
+AimCommonCommandSummary probe_aim_common_commands(
+    const std::uint32_t* commands, std::uint32_t command_word_count,
+    const AimCase6ContextProbe& context, std::uint32_t processing_group,
+    AimCase6CommandProbe& selected_command,
+    std::uint32_t& selected_signature_index) {
+    AimCommonCommandSummary result{};
+    selected_signature_index = UINT32_MAX;
+    if (!context.valid || commands == nullptr || command_word_count == 0 ||
+        command_word_count > kAimCase6MaxCommandWords ||
+        readable_bytes(commands) <
+            static_cast<std::size_t>(command_word_count) *
+                sizeof(std::uint32_t)) {
+        return result;
+    }
+
+    void* current_palette = nullptr;
+    std::uint32_t joint_count = 0;
+    if (context.fg_anim_data != nullptr &&
+        readable_bytes(context.fg_anim_data) >=
+            kFgAnimDataCurrentSkinningMatsOffset + sizeof(void*) &&
+        context.target_skeleton != nullptr &&
+        readable_bytes(context.target_skeleton) >=
+            kSkeletonJointCountOffset + sizeof(std::uint32_t)) {
+        const auto* const fg =
+            static_cast<const std::byte*>(context.fg_anim_data);
+        current_palette = *reinterpret_cast<void* const*>(
+            fg + kFgAnimDataCurrentSkinningMatsOffset);
+        joint_count = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(context.target_skeleton) +
+            kSkeletonJointCountOffset);
+    }
+
+    bool all_palette_targets_valid = true;
+    std::uint32_t cursor = 0;
+    while (cursor < command_word_count) {
+        const std::uint32_t header = commands[cursor];
+        const std::uint16_t opcode =
+            static_cast<std::uint16_t>(header & 0xFFFFU);
+        const std::uint16_t words =
+            static_cast<std::uint16_t>(header >> 16);
+        if (header != commands[cursor] || words == 0 ||
+            words > command_word_count - cursor) {
+            return AimCommonCommandSummary{};
+        }
+        ++result.command_count;
+        result.topology_hash = aim_pipeline_hash_word(
+            result.topology_hash, header);
+
+        if (opcode == 3) {
+            ++result.case3_count;
+        } else if (opcode == 6 && words == 6) {
+            ++result.case6_count;
+            const AimCase6CommandProbe command = probe_aim_case6_command(
+                commands + cursor, context, processing_group);
+            const int signature_index = aim_case6_signature_index(command);
+            if (command.command_valid && command.clip_valid &&
+                signature_index >= 0) {
+                ++result.selected_case6_count;
+                if (selected_signature_index == UINT32_MAX) {
+                    selected_signature_index =
+                        static_cast<std::uint32_t>(signature_index);
+                    selected_command = command;
+                }
+            }
+        } else if (opcode == 7 && words == 6) {
+            ++result.case7_count;
+            for (std::uint32_t word = 1; word < words; ++word) {
+                const std::uint32_t value = commands[cursor + word];
+                result.blend_hash = aim_pipeline_hash_word(
+                    result.blend_hash, value);
+            }
+            float weight = 0.0F;
+            const std::uint32_t weight_word = commands[cursor + 5];
+            std::memcpy(&weight, &weight_word, sizeof(weight));
+            if (!std::isfinite(weight)) {
+                return AimCommonCommandSummary{};
+            }
+            if (weight <= 0.0001F) {
+                ++result.blend_zero_count;
+            } else if (weight >= 0.9999F) {
+                ++result.blend_one_count;
+            } else {
+                ++result.blend_mid_count;
+            }
+        } else if ((opcode == 23 || opcode == 24) && words >= 2) {
+            if (opcode == 23) {
+                ++result.plugin23_count;
+            } else {
+                ++result.plugin24_count;
+            }
+            result.plugin_hash = aim_pipeline_hash_word(
+                result.plugin_hash, opcode);
+            result.plugin_hash = aim_pipeline_hash_word(
+                result.plugin_hash, commands[cursor + 1]);
+        } else if (opcode == 16) {
+            ++result.case16_count;
+        } else if (opcode == 26 && words == 10) {
+            ++result.case26_count;
+            void* destination = nullptr;
+            std::memcpy(
+                &destination, commands + cursor + 2, sizeof(destination));
+            const std::uint32_t first_joint = commands[cursor + 8];
+            const std::uint32_t write_count = commands[cursor + 9];
+            result.palette_joint_total += write_count;
+            const auto expected = reinterpret_cast<std::uintptr_t>(
+                current_palette) +
+                static_cast<std::uintptr_t>(first_joint) *
+                    kAimPipelineJointFloats * sizeof(float);
+            const bool range_valid = current_palette != nullptr &&
+                joint_count != 0 && joint_count <= kAimPipelineMaxJoints &&
+                first_joint < joint_count && write_count != 0 &&
+                write_count <= joint_count - first_joint &&
+                reinterpret_cast<std::uintptr_t>(destination) == expected;
+            all_palette_targets_valid =
+                all_palette_targets_valid && range_valid;
+        }
+
+        if (header != commands[cursor]) {
+            return AimCommonCommandSummary{};
+        }
+        cursor += words;
+    }
+
+    result.valid = cursor == command_word_count &&
+        selected_signature_index != UINT32_MAX;
+    result.palette_targets_valid = result.case26_count != 0 &&
+        all_palette_targets_valid;
+    return result;
+}
+
+AimCommonOutputPending prepare_aim_common_output_probe(
+    const std::uint32_t* commands, std::uint32_t command_word_count,
+    const void* context_ptr, std::uint32_t processing_group) {
+    AimCommonOutputPending pending{};
+    if (g_dll_inert || !g_state_net.enabled || commands == nullptr ||
+        command_word_count == 0 ||
+        command_word_count > kAimCase6MaxCommandWords ||
+        processing_group != 0) {
+        return pending;
+    }
+
+    pending.context = probe_aim_case6_context(context_ptr);
+    if (!pending.context.valid || !pending.context.vertical_valid ||
+        pending.context.screen > kSlot1ScreenIndex) {
+        return AimCommonOutputPending{};
+    }
+    pending.processing_group = processing_group;
+    pending.commands = probe_aim_common_commands(
+        commands, command_word_count, pending.context, processing_group,
+        pending.selected_command, pending.signature_index);
+    if (!pending.commands.valid || pending.signature_index >= 2) {
+        return AimCommonOutputPending{};
+    }
+
+    static std::atomic<ULONGLONG> next_log_ms[2][2]{};
+    static std::atomic<std::uint32_t> sample_count[2][2]{};
+    const std::uint32_t screen = pending.context.screen;
+    const std::uint32_t signature = pending.signature_index;
+    const ULONGLONG now = GetTickCount64();
+    if (sample_count[screen][signature].load(std::memory_order_acquire) >= 4) {
+        return AimCommonOutputPending{};
+    }
+    ULONGLONG due = next_log_ms[screen][signature].load(
+        std::memory_order_acquire);
+    if (now < due ||
+        !next_log_ms[screen][signature].compare_exchange_strong(
+            due, now + 500, std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
+        return AimCommonOutputPending{};
+    }
+    pending.sample = sample_count[screen][signature].fetch_add(
+        1, std::memory_order_acq_rel);
+    if (pending.sample >= 4) {
+        return AimCommonOutputPending{};
+    }
+
+    const auto* const fg =
+        static_cast<const std::byte*>(pending.context.fg_anim_data);
+    pending.palette_before = *reinterpret_cast<void* const*>(
+        fg + kFgAnimDataCurrentSkinningMatsOffset);
+    pending.valid = pending.palette_before != nullptr;
+    return pending;
+}
+
+void log_aim_common_output_after(
+    const AimCommonOutputPending& pending) {
+    if (!pending.valid || pending.context.fg_anim_data == nullptr ||
+        pending.context.target_skeleton == nullptr) {
+        return;
+    }
+
+    bool layout_valid = false;
+    bool palette_pointer_stable = false;
+    bool palette_readable = false;
+    bool finite = true;
+    std::uint32_t joint_count = 0;
+    const float* current_palette = nullptr;
+    std::uint64_t pose_hash = kAimPipelineFnvOffset;
+    float rotation_delta = 0.0F;
+    float translation_delta = 0.0F;
+    std::array<std::uint32_t, 6> top_indices{};
+    std::array<float, 6> top_values{};
+
+    __try {
+        const auto* const fg =
+            static_cast<const std::byte*>(pending.context.fg_anim_data);
+        const auto* const player =
+            static_cast<const std::byte*>(pending.context.player);
+        const bool owner_stable =
+            pending.context.player != nullptr &&
+            readable_bytes(pending.context.player) >=
+                kPlayerFgAnimDataOffset + sizeof(void*) &&
+            *reinterpret_cast<void* const*>(
+                player + kPlayerFgAnimDataOffset) ==
+                pending.context.fg_anim_data;
+        layout_valid = owner_stable &&
+            readable_bytes(pending.context.fg_anim_data) >=
+                kFgAnimDataCurrentSkinningMatsOffset + sizeof(void*) &&
+            *reinterpret_cast<void* const*>(
+                fg + kFgAnimDataSkeletonOffset) ==
+                pending.context.target_skeleton;
+        if (layout_valid) {
+            current_palette = *reinterpret_cast<const float* const*>(
+                fg + kFgAnimDataCurrentSkinningMatsOffset);
+            palette_pointer_stable = current_palette == pending.palette_before;
+            joint_count = *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(
+                    pending.context.target_skeleton) +
+                kSkeletonJointCountOffset);
+            const std::size_t palette_bytes =
+                static_cast<std::size_t>(joint_count) *
+                kAimPipelineJointFloats * sizeof(float);
+            palette_readable = palette_pointer_stable && joint_count != 0 &&
+                joint_count <= kAimPipelineMaxJoints &&
+                readable_bytes(current_palette) >= palette_bytes;
+        }
+        if (palette_readable) {
+            AimCommonPaletteBaseline& baseline =
+                g_aim_common_palette_baselines[pending.context.screen]
+                                              [pending.signature_index];
+            AcquireSRWLockExclusive(&g_aim_common_palette_lock);
+            const bool reset = pending.sample == 0 || !baseline.valid ||
+                baseline.fg_anim_data != pending.context.fg_anim_data ||
+                baseline.joint_count != joint_count;
+            if (reset) {
+                std::memcpy(
+                    baseline.values.data(), current_palette,
+                    static_cast<std::size_t>(joint_count) *
+                        kAimPipelineJointFloats * sizeof(float));
+                baseline.valid = true;
+                baseline.fg_anim_data = pending.context.fg_anim_data;
+                baseline.joint_count = joint_count;
+            }
+
+            for (std::uint32_t joint = 0; joint < joint_count; ++joint) {
+                const std::size_t base =
+                    static_cast<std::size_t>(joint) *
+                    kAimPipelineJointFloats;
+                float rotation_sq = 0.0F;
+                float translation_sq = 0.0F;
+                for (std::size_t component = 0;
+                     component < kAimPipelineJointFloats; ++component) {
+                    const float value = current_palette[base + component];
+                    const float previous = baseline.values[base + component];
+                    if (!std::isfinite(value) || !std::isfinite(previous)) {
+                        finite = false;
+                        break;
+                    }
+                    std::uint32_t value_word = 0;
+                    std::memcpy(&value_word, &value, sizeof(value_word));
+                    pose_hash = aim_pipeline_hash_word(pose_hash, value_word);
+                    const float delta = value - previous;
+                    if (component == 3 || component == 7 || component == 11) {
+                        translation_sq += delta * delta;
+                    } else {
+                        rotation_sq += delta * delta;
+                    }
+                }
+                if (!finite || !std::isfinite(rotation_sq) ||
+                    !std::isfinite(translation_sq)) {
+                    break;
+                }
+                const float joint_rotation = std::sqrt(rotation_sq);
+                rotation_delta += joint_rotation;
+                translation_delta += std::sqrt(translation_sq);
+                for (std::size_t rank = 0; rank < top_values.size(); ++rank) {
+                    if (joint_rotation > top_values[rank]) {
+                        for (std::size_t move = top_values.size() - 1;
+                             move > rank; --move) {
+                            top_values[move] = top_values[move - 1];
+                            top_indices[move] = top_indices[move - 1];
+                        }
+                        top_values[rank] = joint_rotation;
+                        top_indices[rank] = joint;
+                        break;
+                    }
+                }
+            }
+            ReleaseSRWLockExclusive(&g_aim_common_palette_lock);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        finite = false;
+    }
+
+    char top[256]{};
+    std::size_t top_used = 0;
+    for (std::size_t index = 0; index < top_values.size(); ++index) {
+        const int written = std::snprintf(
+            top + top_used, sizeof(top) - top_used, "%u:%.4f%s",
+            top_indices[index], top_values[index],
+            index + 1 == top_values.size() ? "" : ",");
+        if (written <= 0 ||
+            static_cast<std::size_t>(written) >= sizeof(top) - top_used) {
+            break;
+        }
+        top_used += static_cast<std::size_t>(written);
+    }
+
+    const AimCommonCommandSummary& commands = pending.commands;
+    const AimCase6CommandProbe& selected = pending.selected_command;
+    char line[1536]{};
+    std::snprintf(
+        line, sizeof(line),
+        "AIM-COMMON-OUTPUT tick=%llu screen=%u signature=%08X/%08X/%08X/%08X "
+        "sample=%u up=%.4f down=%.4f group=%u "
+        "cmds=%u topo=%016llX case6=%u/%u "
+        "blend=%u/%016llX/%u/%u/%u plugin=%u/%u/%016llX "
+        "stages=%u/%u/%u palette=%u/%u/%u/%u joints=%u written=%u "
+        "pose=%016llX delta=%.4f/%.4f top=%s",
+        static_cast<unsigned long long>(GetTickCount64()),
+        pending.context.screen, selected.source_clip_flags,
+        selected.source_art_skeleton_id,
+        selected.source_underlying_skeleton_id,
+        selected.source_clip_data_word_08, pending.sample,
+        pending.context.up, pending.context.down, pending.processing_group,
+        commands.command_count,
+        static_cast<unsigned long long>(commands.topology_hash),
+        commands.case6_count, commands.selected_case6_count,
+        commands.case7_count,
+        static_cast<unsigned long long>(commands.blend_hash),
+        commands.blend_zero_count, commands.blend_one_count,
+        commands.blend_mid_count, commands.plugin23_count,
+        commands.plugin24_count,
+        static_cast<unsigned long long>(commands.plugin_hash),
+        commands.case3_count, commands.case16_count, commands.case26_count,
+        static_cast<unsigned>(commands.palette_targets_valid),
+        static_cast<unsigned>(layout_valid),
+        static_cast<unsigned>(palette_pointer_stable),
+        static_cast<unsigned>(palette_readable && finite), joint_count,
+        commands.palette_joint_total,
+        static_cast<unsigned long long>(pose_hash), rotation_delta,
+        translation_delta, top);
+    boot_log_line(line);
+}
+
 void probe_process_anim_case6(
     const std::uint32_t* commands, std::uint32_t command_word_count,
     const void* context_ptr, std::uint32_t processing_group,
@@ -15453,11 +15881,17 @@ std::uint32_t __fastcall hooked_process_anim_cmd_list_segment(
     probe_process_anim_case6(
         commands, command_word_count, context, processing_group,
         callback_a5, callback_a6, callback_a7);
-    return g_original_process_anim_cmd_list_segment != nullptr
+    const AimCommonOutputPending common_output =
+        prepare_aim_common_output_probe(
+            commands, command_word_count, context, processing_group);
+    const std::uint32_t result =
+        g_original_process_anim_cmd_list_segment != nullptr
         ? g_original_process_anim_cmd_list_segment(
               commands, command_word_count, context, processing_group,
               callback_a5, callback_a6, callback_a7)
         : 0;
+    log_aim_common_output_after(common_output);
+    return result;
 }
 
 bool install_aim_case6_probe() {
@@ -19012,8 +19446,9 @@ volatile bool g_readable_bytes_fast = true;
 constexpr bool g_enable_aim_animation_relays = true;
 
 constexpr bool g_enable_aim_diagnostic_probes = false;
-// Build em: bounded read-only discriminator for the selected command-0x60006
-// direct-vs-retarget boundary. Four samples per screen, no native calls/writes.
+// Build es: bounded read-only discriminator from selected command 0x60006
+// through later blend/plugin commands and the final FgAnimData+0x230 palette.
+// Four samples per signature/screen, no native calls or game-memory writes.
 constexpr bool g_enable_aim_case6_probe = true;
 
 
@@ -28269,7 +28704,7 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21er "
+        "TLL co-op runtime init 2026-07-21es "
         "(steady wire-pitch apply + dual-signature case-6 discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
