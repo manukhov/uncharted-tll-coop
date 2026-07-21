@@ -5678,3 +5678,30 @@ uses the established engine transform/AppendRecord path to add only
 reconciler now selects this id only for standard pistol art; its rifle branch
 remains byte-for-byte unchanged. The existing repair log records count,
 presence, joint and final transform before any user test.
+
+### 2026-07-21 REJECTED: native pistolHolster record alone does not move the Player visual
+
+The user holstered the standard pistol in build `fk`; both game processes stayed
+responsive and no additional regression was reported, but legacy Player Nadine
+still placed it at the same visual location as Chloe. This falsifies the narrow
+fix prediction even though both intended state changes completed successfully.
+
+The transfer itself is confirmed. Both roles appended the NPC-authored
+`pistolHolster` record to the legacy table (`41 -> 42/45`), resolved
+`r_leg_holster` as joint `99 -> 99`, and retained the native transform bits
+within normal floating-point roundoff. The inactive attachment call then moved
+the pistol from `targSpineProp` index 39 to `pistolHolster` index 41, returned
+success and verified the resulting id. A later stable sample still read
+`weapon+0x688 = 41`; the engine did not roll the state back to the Chloe record.
+
+Therefore the authored AttachSystem record and ProcessWeapon attachment byte are
+not the last visual-placement owner on the Player path. The remaining competing
+hypotheses are: (H1) Player holster IK/animation publishes a later transform and
+uses the missing Player-specific holster joints or identity cached relative
+transforms; (H2) ProcessWeapon or its mesh applies an owner-class-specific local
+offset downstream of `+0x688`; (H3) the visible holstered pistol is a separate
+prop/drawable while `+0x688` belongs to a hidden or non-rendered ProcessWeapon.
+Do not tune the native record coordinates or repeat the same transfer. Trace
+`PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0`, resolve the concrete
+WeaponHolsterIkBlender/output consumer, and locate the final weapon/mesh world
+transform write before designing another bounded discriminator.

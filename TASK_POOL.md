@@ -1568,7 +1568,7 @@ Do not reopen these as the first move:
       native pistol: `rightHand` index 19/joint 30 and `pistolHolster` index
       42/joint 99 with its full authored transform. The scene's native table had
       no longgunHolster and the native NPC carried only art `0xC7CB8F0E`.
-- [ ] Resolve the native `pistolHolster` joint-99 name against the legacy Nadine
+- [x] Resolve the native `pistolHolster` joint-99 name against the legacy Nadine
       Player rig before transferring it. If the named joint is absent, remap the
       authored record through its proven semantic parent; never copy raw joint
       99 or runtime fields blindly. Build `fi` compares both rig descriptors and
@@ -1579,7 +1579,15 @@ Do not reopen these as the first move:
       hash directly in both rigs under a written Q1/Q2/Q3 prediction. CONFIRMED:
       `actualNamed=99/99`; append the exact native pistolHolster record with
       runtime fields cleared and redirect only inactive standard pistols to it.
-      Build `fk` implements this narrow transfer; runtime result pending.
+      Build `fk` completed both writes and left `weapon+0x688` on the new
+      `pistolHolster` record, but the user still saw the Chloe holster location.
+      REJECTED as a visual fix: AttachSystem selection is not the last Player
+      placement owner, so do not repeat or coordinate-tune this record transfer.
+- [ ] Trace the final Player holstered-weapon visual transform after
+      `weapon+0x688`. Start at `PlayerWeaponAnimControl_UpdateHolsterIk
+      0x14108ECE0`, resolve WeaponHolsterIkBlender and the ProcessWeapon/mesh
+      consumer, and separate late IK override from owner-specific mesh offset
+      and a separate visible-prop path before another runtime test.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
