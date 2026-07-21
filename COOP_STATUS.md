@@ -5835,3 +5835,20 @@ the inactive standard pistol must move from the Chloe/back position to Nadine's
 thigh throughout idle motion, while drawn rightHand, rifle, arms and body remain
 unchanged. A joint other than 5, an unchanged transform, jitter, body/arm damage,
 or any non-pistol change falsifies the remap.
+
+#### 2026-07-21 STATIC: semantic upper-leg remap implemented for build `fm`
+
+`raw_append_native_nadine_pistol_holster` now resolves both the authored marker
+`r_leg_holster` and the shared parent `r_upper_leg`. The existing engine-backed
+helper evaluates `inverse(native joint5 Ws) * native joint99 Ws`, composes that
+with the authored pistol record, and appends the result against Player joint 5.
+It rejects the repair unless the output record names joint 5 and its transform
+differs from the raw NPC transform. The independent evidence is: the runtime
+comparison above isolates joint-99 pose as the divergence; both descriptors
+resolve `r_upper_leg` to joint 5; and the exact transform/record path is the
+already-used `RigGetJointTransform` / `Transform_MakeRelative` /
+`Transform_Compose` / `AttachSystem_AppendRecord` sequence consumed by
+`AttachSystem_ResolveRecordTransform`. The remaining risk is pose stability:
+the helper samples a live native pose rather than bind pose, so any visible
+jitter or sliding is explicitly a falsifier. Release build `2026-07-21fm`
+compiled successfully; runtime verification is pending.

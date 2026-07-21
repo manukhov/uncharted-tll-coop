@@ -1614,7 +1614,9 @@ Do not reopen these as the first move:
       `r_upper_leg` joint 5 using the already-proven engine MakeRelative/Compose
       recipe. Require the appended record to target joint 5 with a non-raw
       transform; redirect only inactive standard pistols and preserve drawn
-      rightHand, rifle, arms and body under the written prediction.
+      rightHand, rifle, arms and body under the written prediction. STATIC build
+      `fm` is ready; verify `recordJoint=5 changed=1` before judging geometry,
+      and treat jitter/sliding as a live-pose-remap falsifier.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

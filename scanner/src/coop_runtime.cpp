@@ -12789,6 +12789,7 @@ constexpr std::uint32_t kPistolHolsterAttachId = 0x8A0249B5u;
 constexpr std::uint32_t kSpinedJointNameId = 0xB5AFAB6Eu;
 constexpr std::uint32_t kPelvisJointNameId = 0x5C11C590u;
 constexpr std::uint32_t kRLegHolsterJointNameId = 0xADD0C871u;
+constexpr std::uint32_t kRUpperLegJointNameId = 0x0D9C305Du;
 
 struct NadineAttachRepairResult {
     int status = 0;
@@ -12818,11 +12819,15 @@ struct NativeNadinePistolHolsterRepairResult {
     std::uint32_t capacity = 0;
     std::uint32_t before_count = 0;
     std::uint32_t after_count = 0;
-    std::int16_t donor_joint = -1;
-    std::int16_t target_joint = -1;
+    std::int16_t donor_marker_joint = -1;
+    std::int16_t target_marker_joint = -1;
+    std::int16_t donor_parent_joint = -1;
+    std::int16_t target_parent_joint = -1;
     std::int16_t marker = -1;
+    std::int16_t target_record_joint = -1;
     std::uint8_t before_present = 0;
     std::uint8_t after_present = 0;
+    std::uint8_t transform_changed = 0;
     std::array<std::uint32_t, 8> transform_bits{};
 };
 
@@ -13128,14 +13133,21 @@ bool raw_append_native_nadine_pistol_holster(
         result->status = -3;
         return false;
     }
-    result->donor_joint = raw_resolve_attach_joint(
+    result->donor_marker_joint = raw_resolve_attach_joint(
         donor_table, kRLegHolsterJointNameId);
-    result->target_joint = raw_resolve_attach_joint(
+    result->target_marker_joint = raw_resolve_attach_joint(
         target_table, kRLegHolsterJointNameId);
+    result->donor_parent_joint = raw_resolve_attach_joint(
+        donor_table, kRUpperLegJointNameId);
+    result->target_parent_joint = raw_resolve_attach_joint(
+        target_table, kRUpperLegJointNameId);
     result->marker = *reinterpret_cast<const std::int16_t*>(
         donor_record + 0x24);
-    if (result->donor_joint < 0 || result->target_joint < 0 ||
-        result->marker != result->donor_joint) {
+    if (result->donor_marker_joint < 0 ||
+        result->target_marker_joint < 0 ||
+        result->donor_parent_joint < 0 ||
+        result->target_parent_joint < 0 ||
+        result->marker != result->donor_marker_joint) {
         result->status = -4;
         return false;
     }
@@ -13147,7 +13159,7 @@ bool raw_append_native_nadine_pistol_holster(
         if (result->before_count >= result->capacity ||
             !raw_append_parent_remapped_attach_record(
                 donor_table, target_table, kPistolHolsterAttachId,
-                result->donor_joint, result->target_joint,
+                result->donor_parent_joint, result->target_parent_joint,
                 &result->marker)) {
             result->status = -5;
             return false;
@@ -13159,11 +13171,17 @@ bool raw_append_native_nadine_pistol_holster(
         target_table + 0x4);
     result->after_present = target_record != nullptr ? 1u : 0u;
     if (target_record != nullptr) {
+        result->target_record_joint =
+            *reinterpret_cast<const std::int16_t*>(target_record + 0x24);
+        result->transform_changed =
+            std::memcmp(target_record, donor_record, 32) != 0 ? 1u : 0u;
         std::memcpy(
             result->transform_bits.data(), target_record,
             sizeof(result->transform_bits));
     }
     result->status = result->after_present != 0 &&
+            result->target_record_joint == result->target_parent_joint &&
+            result->transform_changed != 0 &&
             result->after_count == result->before_count +
                 (result->before_present == 0 ? 1u : 0u)
         ? (result->before_present != 0 ? 2 : 1)
@@ -13178,18 +13196,24 @@ bool seh_append_native_nadine_pistol_holster(
         return false;
     }
     *result = {};
-    result->donor_joint = -1;
-    result->target_joint = -1;
+    result->donor_marker_joint = -1;
+    result->target_marker_joint = -1;
+    result->donor_parent_joint = -1;
+    result->target_parent_joint = -1;
     result->marker = -1;
+    result->target_record_joint = -1;
     __try {
         return raw_append_native_nadine_pistol_holster(
             native_npc, target_player, result);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *result = {};
         result->status = -100;
-        result->donor_joint = -1;
-        result->target_joint = -1;
+        result->donor_marker_joint = -1;
+        result->target_marker_joint = -1;
+        result->donor_parent_joint = -1;
+        result->target_parent_joint = -1;
         result->marker = -1;
+        result->target_record_joint = -1;
         return false;
     }
 }
@@ -13424,6 +13448,8 @@ void ensure_legacy_nadine_attach_points_game_thread() {
     mix(pistol_result.target_records);
     mix(pistol_result.after_count);
     mix(pistol_result.after_present);
+    mix(static_cast<std::uint16_t>(pistol_result.target_record_joint));
+    mix(pistol_result.transform_changed);
     mix(static_cast<std::uint32_t>(
         pistol_result.status > 0 ? 1 : pistol_result.status));
     static std::array<std::uint64_t, 2> last_signatures{};
@@ -13460,8 +13486,14 @@ void ensure_legacy_nadine_attach_points_game_thread() {
          << pistol_result.after_count << "/" << pistol_result.capacity
          << " present=" << static_cast<unsigned>(pistol_result.before_present)
          << "->" << static_cast<unsigned>(pistol_result.after_present)
-         << " joint=" << pistol_result.marker << ":"
-         << pistol_result.donor_joint << "->" << pistol_result.target_joint
+         << " marker=" << pistol_result.marker << ":"
+         << pistol_result.donor_marker_joint << "->"
+         << pistol_result.target_marker_joint
+         << " parent=" << pistol_result.donor_parent_joint << "->"
+         << pistol_result.target_parent_joint
+         << " recordJoint=" << pistol_result.target_record_joint
+         << " changed="
+         << static_cast<unsigned>(pistol_result.transform_changed)
          << " transform=" << std::hex;
     for (const std::uint32_t bits : pistol_result.transform_bits) {
         line << bits << ",";
@@ -32100,8 +32132,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21fl "
-        "(Nadine ProcessWeapon final-transform discriminator)");
+        "TLL co-op runtime init 2026-07-21fm "
+        "(Nadine pistol-holster semantic upper-leg remap)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
