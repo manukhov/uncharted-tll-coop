@@ -1576,7 +1576,9 @@ Do not reopen these as the first move:
       `COOP_STATUS.md`. CONFIRMED: joint 99 is not `r_leg_gun_holster`; its hash
       `0xADD0C871` has the strong preimage `r_leg_holster`, while r_upper_leg is
       joint 5 in both rigs. Build `fj` now resolves the actual descriptor-derived
-      hash directly in both rigs under a written Q1/Q2/Q3 prediction.
+      hash directly in both rigs under a written Q1/Q2/Q3 prediction. CONFIRMED:
+      `actualNamed=99/99`; append the exact native pistolHolster record with
+      runtime fields cleared and redirect only inactive standard pistols to it.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

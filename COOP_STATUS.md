@@ -5644,3 +5644,29 @@ does not resolve back to 99 or the parent pair changes, invalidating the capture
 or preimage. Prediction: `actualNamed=99/99` selects Q1,
 `actualNamed=99/-1 upperLeg=5/5` selects Q2, and any other tuple selects Q3.
 The probe adds no call or write and keeps the semantic log bound from `fi`.
+
+### 2026-07-21 CONFIRMED: native and Player Nadine share r_leg_holster joint 99
+
+Both `fj` processes remained responsive and produced the identical tuple:
+`recordJoint=99 actualNamed=99/99 namedJoint=-1/-1 upperLeg=5/5`. Thus the
+descriptor-derived hash `0xADD0C871` resolves to joint 99 in both native NPC and
+legacy Player rigs, while PlayerWeaponAnimControl's different
+`r_leg_gun_holster 0xE231DB44` name is absent from both. Q1 is confirmed; Q2 and
+Q3 are rejected.
+
+The exact NPC `pistolHolster` record is therefore portable without inventing a
+joint or parent transform: append its 48-byte authored record to the legacy
+Player table with the same semantic joint 99, clear only `+0x28/+0x2C` runtime
+fields and nonportable flag bits as the established AppendRecord path already
+does, then select that new id only for the inactive pistol. Target capacity is
+sufficient: original legacy Nadine is `39/45`, the two existing compatibility
+records make `41/45`, and pistolHolster makes `42/45`.
+
+The falsifiable fix prediction is narrow. After the append, an inactive standard
+pistol must resolve `weapon+0x688` to a target record whose id is
+`pistolHolster`, joint is 99 and transform matches the confirmed NPC bits; it
+must appear on Nadine's thigh instead of her back. Drawn pistol must still return
+to the unchanged original rightHand joint 30. Rifle attachment, arm pose,
+ProcessWeaponStrap and all Chloe records must remain unchanged. A crash, missing
+body part, jitter, back placement, wrong hand placement or any rifle/arm
+regression falsifies the fix.
