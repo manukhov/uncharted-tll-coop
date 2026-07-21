@@ -1233,12 +1233,21 @@ Do not reopen these as the first move:
       the full bounded list, exact retained FgAnimData/screen and every selected
       asset/skeleton/entry chain before four rate-limited samples per screen; both
       Release DLLs build with only the pre-existing warning.
-- [ ] Run the written `em` falsifier during strong up/down ADS on both copies. A
+- [x] Run the written `em` falsifier during strong up/down ADS on both copies. A
       stable branch, retarget pair/group/coverage or callback split selects that
       exact route; a complete normalized match rejects case-6 inputs and moves
       to the common pose merge/palette consumer. Ignore raw-address/index-only
       differences and invalidate torn, incomplete, crashing or visible-changing
-      samples.
+      samples. Result: **INCONCLUSIVE selector miss**, not a rejection. Both
+      processes were stable and vertical ADS reached `1.0`, but current runtime
+      leaf `0B/27E57F43/FD6DBE03/09A0` did not match `em`'s deliberately narrow
+      `0A/6C2B2396/4B0F5DE3/09A0` selector, so no `AIM-CASE6` records were
+      eligible.
+- [ ] Extend the read-only selector to the two exact observed case-6 leaf
+      signatures and rerun the same falsifier. Keep the signatures distinct in
+      normalized output and compare only complete same-signature records across
+      screens; retain all ownership, ADS/vertical, list-bound and double-read
+      guards.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

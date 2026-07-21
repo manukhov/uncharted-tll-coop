@@ -4368,3 +4368,20 @@ pointer or output index is emitted. Four samples per screen are allowed at 500 m
 intervals. The probe calls the untouched trampoline after observation and never
 calls any resolver/callback or writes game data. Both Release DLLs build with only
 the pre-existing C4456 warning.
+
+### 2026-07-21 INCONCLUSIVE: build `em` selector missed the current clip
+
+Both injected processes remained responsive and produced no exception or model
+corruption. Existing aim telemetry independently proves that the test reached
+live ADS with vertical input/weight up to `1.0`, but neither process emitted an
+`AIM-CASE6` sample. This is not a negative result for the case-6 hypothesis: the
+runtime-selected valid leaf had flags/art-skeleton/underlying/word08 signature
+`0000000B/27E57F43/FD6DBE03/000009A0`, while build `em` deliberately accepted
+only the previously observed `0000000A/6C2B2396/4B0F5DE3/000009A0` signature.
+
+The falsifier therefore did not execute and no direct/retarget comparison was
+made. The next probe may admit the two exact observed signatures, preserving all
+FgAnimData, player/screen, ADS, vertical, command-size and double-read guards.
+It must report the selected signature as normalized ids so the two assets are
+never conflated; only complete records from the same signature may be compared
+between screens.
