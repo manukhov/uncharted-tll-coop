@@ -1622,6 +1622,11 @@ Do not reopen these as the first move:
       only recognizes `0x33E29A1B`, so it made no attach attempt. Generalize at
       the proven Player holster-binding output using WeaponArtDef handgun type,
       explicitly excluding long guns and grenade type.
+      STATIC build `fn` now rewrites only binding DWORD 0 after the original
+      builder for legacy Nadine, exact slot 1 and types 0/3; it preserves the
+      per-art transforms. Require
+      `type=0|3 slot1=1 attach=0x8A0249B5 redirect=1/1` plus a physical joint-5
+      selection before accepting the visual result.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

@@ -5873,3 +5873,49 @@ expected `0x754D9C3B` control and must not be redirected. The next step is to
 replace the single-art check with the engine's WeaponArtDef handgun class at the
 Player holster-binding boundary, after statically proving its type values and
 the exact output consumer.
+
+### 2026-07-21 STATIC: build `fn` reroutes every WeaponArtDef handgun binding
+
+The exact Player boundary is `WeaponHolster_BuildBinding 0x1414FE540`. It reads
+the weapon art at `ProcessWeapon+0x860`, resolves the cached WeaponArtDef, and
+first asks `WeaponHolster_ResolveAttachPoint 0x1414FEB30` for an attachment id.
+That resolver prefers a non-generic art-specific holster id; otherwise
+`WeaponHolster_SelectCharacterAttachPoint 0x1414FE7E0` scans the target
+character for `gun_holster_pelvis`, `gun_holster_leg`, then `gun_holster`.
+`pistolHolster` is an NPC namespace and is never selected by this Player
+fallback. This explains why adding the record alone cannot cover arbitrary
+Player pistol arts.
+
+The safe class discriminator is WeaponArtDef `+0x10`. The independent native
+mapper `WeaponArtDef_SelectNpcHolsterAttachId 0x1405E76E0` maps types 0 and 3 to
+`pistolHolster`, types 1 and 2 to `longgunHolster`, and all other types to zero.
+The Player action independently special-cases type 10, but that alone does not
+prove the live grenade's exact type. Build `fn` therefore also requires exact
+slot-1 pointer membership: the earlier `ex` census confirmed rifle in slot 0,
+pistol in slot 1 and grenade in slot 2 on both owners. Finally, callers such as
+`Script_AttachPlayerWeaponBackToHolster 0x140342EE0` pass the returned binding
+id directly to `WeaponAttachment_AttachToOwnerPoint`, establishing the output
+as the physical selection boundary rather than a diagnostic hint. These three
+independent dataflow/type/caller facts satisfy the pre-test evidence quota.
+
+Build `fn` calls the original builder first, then changes only output DWORD 0
+to the already-validated remapped `pistolHolster` id when all gates hold:
+retained legacy-Nadine Player, exact slot-1 weapon, WeaponArtDef type 0 or 3,
+and a present target record with a valid byte index. The per-art transforms and
+scalar in the rest of the binding stay untouched. Long guns (types 1/2), the
+slot-2 grenade, Chloe and
+drawn-hand attachment code are not modified. Competing explanations are a late
+Player fallback (rejected because the hook writes after the original builder),
+a separate visible prop (rejected for the firearm ProcessWeapon by the earlier
+render census), and an unclassified weapon type (left as an explicit no-write
+case).
+
+Prediction: on the tested `0x9A07E17F` pistol, the log must show
+`type=0|3 slot1=1`, its original `source` id, final `attach=0x8A0249B5`,
+`pistolPresent=1` and `redirect=1/1`; the following physical attach must select
+that same id/joint 5. Every holstered handgun must move to the thigh and remain
+stable through movement and another draw/holster cycle. Rifle and grenade must
+retain their original ids, and hands/body must remain unchanged. A non-handgun
+type for the tested pistol, `redirect=0`, a later different physical id, back
+placement, jitter/sliding or any rifle/grenade/body regression falsifies the
+corresponding part of this hypothesis.
