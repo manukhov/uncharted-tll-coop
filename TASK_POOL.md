@@ -1564,7 +1564,14 @@ Do not reopen these as the first move:
       holster/backHolster path are rejected. Native arms use WeaponSkill rather
       than Player GunMove/ArmBlock, and the sling is a separate art-gated
       ProcessWeaponStrap child. Build `fh` snapshots the native table and
-      pass-through logs the exact controller pre/post index; runtime pending.
+      pass-through logs the exact controller pre/post index. CONFIRMED for the
+      native pistol: `rightHand` index 19/joint 30 and `pistolHolster` index
+      42/joint 99 with its full authored transform. The scene's native table had
+      no longgunHolster and the native NPC carried only art `0xC7CB8F0E`.
+- [ ] Resolve the native `pistolHolster` joint-99 name against the legacy Nadine
+      Player rig before transferring it. If the named joint is absent, remap the
+      authored record through its proven semantic parent; never copy raw joint
+      99 or runtime fields blindly.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

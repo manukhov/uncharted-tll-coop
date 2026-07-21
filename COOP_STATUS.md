@@ -5532,3 +5532,43 @@ common attachment hook are explicitly not required. An absent table/boundary
 marker, crash or visual change falsifies the probe itself; merely not exercising
 a native weapon transition is inconclusive. No transform, attachment record,
 controller, animation, visibility or return value is written.
+
+### 2026-07-21 CONFIRMED: native Nadine pistol uses authored thigh record
+
+The user exercised the Nadine-side instance while both `fh` processes remained
+responsive. Both roles independently crossed the exact `NadineBuddy`
+AiWeaponController boundary, so the observation is not a legacy Player/clone
+transition. Native weapon art `0xC7CB8F0E` produced the predicted sequence:
+
+- drawn `gunState=1`: index `42 -> 19`, `pistolHolster 0x8A0249B5 ->`
+  `rightHand 0x61A48E01`;
+- holstered `gunState=0`: index `19 -> 42`, `rightHand -> pistolHolster`;
+- drawn again: index `42 -> 19`, `pistolHolster -> rightHand`.
+
+Every pre/post capture was readable and the selected `weapon+0x688` index named
+the predicted record after the original virtual call. This confirms N2 and the
+pass-through probe. It also confirms that the common Player/final-attach hook is
+not needed for the native controller path.
+
+The native table was stable in content at `43/44` records even when its streamed
+generation address changed. Its relevant records are:
+
+- `rightHand`, index `19`: joint `30`, identity local transform;
+- `pistolHolster`, index `42`: joint `99`, transform bits
+  `3DA1CAC1,3D23D70A,3D1FBE77,3D23D70A,`
+  `BF443E89,3CCBFD8C,3F23A8BA,3D61D9B6`.
+
+The latter decodes approximately to `(0.079, 0.040, 0.039, 0.040)` and
+`(-0.76658, 0.02490, 0.63929, 0.05514)`. This is the first exact authored Nadine
+thigh placement and replaces the earlier Chloe-derived pelvis guess. However,
+the legacy Player rig previously failed to resolve `r_leg_gun_holster`; joint
+`99` must therefore be identified by name and resolved/remapped against the
+legacy rig before copying the record. The native table in this scene contained
+no `longgunHolster 0x80E37582`, and the observed NPC only carried art
+`0xC7CB8F0E`; the user's Player-side rifle actions do not constitute a native
+NPC rifle sample.
+
+The census also exposed diagnostic log amplification: the engine streamed
+multiple pointer generations with identical `43/44` content. Subsequent builds
+must deduplicate table/state observations by semantic contents rather than
+allocation addresses.

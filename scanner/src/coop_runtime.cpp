@@ -13196,6 +13196,10 @@ bool seh_read_native_nadine_identity_fields(
 // plus the active NPC look/rig extension. Keep this census separate from the
 // legacy-Nadine Player snapshot and never use either table as a write donor.
 void log_native_nadine_attach_records(void* npc) {
+    static bool logged = false;
+    if (logged) {
+        return;
+    }
     OriginalNadineAttachSnapshot snapshot{};
     if (!seh_capture_original_nadine_attach_records(npc, &snapshot)) {
         static bool unreadable_logged = false;
@@ -13205,11 +13209,7 @@ void log_native_nadine_attach_records(void* npc) {
         }
         return;
     }
-    static std::uintptr_t logged_generation = 0;
-    if (logged_generation == snapshot.records) {
-        return;
-    }
-    logged_generation = snapshot.records;
+    logged = true;
 
     std::uint32_t look = 0;
     std::uint32_t state = 0;
@@ -27993,13 +27993,12 @@ void log_native_nadine_weapon_state(void* npc) {
         signature ^= value;
         signature *= 1099511628211ULL;
     };
-    mix(reinterpret_cast<std::uintptr_t>(npc));
-    mix(reinterpret_cast<std::uintptr_t>(weapon));
     mix(art);
     mix(parent_id);
     mix(attach_index);
     mix(attach_id);
-    mix(records_generation);
+    mix(state_readable ? 1u : 0u);
+    mix(record_readable ? 1u : 0u);
     static std::uint64_t last_signature = 0;
     if (signature == last_signature) {
         return;
@@ -28093,8 +28092,7 @@ void __fastcall hooked_ai_weapon_controller_enforce_attachment(
         signature ^= value;
         signature *= 1099511628211ULL;
     };
-    mix(reinterpret_cast<std::uintptr_t>(controller));
-    mix(reinterpret_cast<std::uintptr_t>(weapon));
+    mix(before.art);
     mix(static_cast<std::uint32_t>(gun_state));
     mix(before.requested_state);
     mix(before.transition_state);
@@ -28102,6 +28100,7 @@ void __fastcall hooked_ai_weapon_controller_enforce_attachment(
     mix(before.attach_id);
     mix(after.attach_index);
     mix(after.attach_id);
+    mix(after.parent_id);
     static std::array<std::atomic<std::uint64_t>, 192> seen{};
     if (!claim_holster_probe_signature(seen, signature)) {
         return;
