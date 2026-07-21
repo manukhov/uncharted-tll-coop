@@ -26617,6 +26617,489 @@ bool relevant_holster_probe_art(std::uint32_t art) {
            art == 0x0B8BD6D6u;
 }
 
+// Read-only E1/E2/E3 discriminator for the final Nadine holster boundary.
+// These hooks preserve every argument and return value. They observe the
+// authored named event, the selected gun_holster* binding and the concrete
+// attachment mutation independently, so a missing event cannot be confused
+// with a missing attachment point or a failed downstream mutation.
+using PlayerWeaponAnimNamedEventFunction =
+    void(__fastcall*)(void*, void*);
+using WeaponHolsterBuildBindingFunction =
+    void*(__fastcall*)(void*, void*, void*);
+using WeaponAttachmentAttachToOwnerPointFunction =
+    std::uintptr_t(__fastcall*)(void*, void*, std::uint32_t);
+
+PlayerWeaponAnimNamedEventFunction
+    g_original_player_weapon_anim_named_event = nullptr;
+WeaponHolsterBuildBindingFunction
+    g_original_weapon_holster_build_binding = nullptr;
+WeaponAttachmentAttachToOwnerPointFunction
+    g_original_weapon_attachment_attach_to_owner_point = nullptr;
+
+std::uint32_t g_named_event_name_property_id = 0;
+std::uint32_t g_gun_holster_id = 0;
+std::uint32_t g_gun_holster_leg_id = 0;
+std::uint32_t g_gun_holster_pelvis_id = 0;
+
+int retained_player_index(void* player) {
+    if (player == retained_player_object(0)) {
+        return 0;
+    }
+    if (player == retained_player_object(1)) {
+        return 1;
+    }
+    return -1;
+}
+
+bool seh_read_player_look(void* player, std::uint32_t* look_out) {
+    if (look_out == nullptr) {
+        return false;
+    }
+    *look_out = 0;
+    __try {
+        if (player == nullptr) {
+            return false;
+        }
+        *look_out = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(player) + 0x170);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *look_out = 0;
+        return false;
+    }
+}
+
+bool seh_resolve_anim_control_weapon(
+    void* control, void** player_out, void** weapon_out,
+    std::uint32_t* handle_id_out) {
+    if (player_out == nullptr || weapon_out == nullptr ||
+        handle_id_out == nullptr) {
+        return false;
+    }
+    *player_out = nullptr;
+    *weapon_out = nullptr;
+    *handle_id_out = 0;
+    __try {
+        if (control == nullptr) {
+            return false;
+        }
+        auto* const bytes = static_cast<std::byte*>(control);
+        void* const player = *reinterpret_cast<void**>(bytes + 0x10);
+        void* const handle = *reinterpret_cast<void**>(bytes + 0x30);
+        const std::uint32_t handle_id =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x38);
+        if (handle == nullptr || handle_id == 0) {
+            *player_out = player;
+            return false;
+        }
+        void* const weapon = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(handle) + 0x8);
+        if (weapon == nullptr ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<std::byte*>(weapon) +
+                kGameObjectRuntimeIdOffset) != handle_id) {
+            *player_out = player;
+            return false;
+        }
+        *player_out = player;
+        *weapon_out = weapon;
+        *handle_id_out = handle_id;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *player_out = nullptr;
+        *weapon_out = nullptr;
+        *handle_id_out = 0;
+        return false;
+    }
+}
+
+bool seh_read_named_weapon_event_id(
+    void* event, std::uint32_t* event_id_out) {
+    if (event_id_out == nullptr) {
+        return false;
+    }
+    *event_id_out = 0;
+    __try {
+        if (event == nullptr || g_named_event_name_property_id == 0 ||
+            *(static_cast<const std::byte*>(event) + 0x19) == std::byte{0}) {
+            return false;
+        }
+        auto* const properties = *reinterpret_cast<const std::byte* const*>(
+            static_cast<const std::byte*>(event) + 0x8);
+        if (properties == nullptr) {
+            return false;
+        }
+        const std::uint32_t count =
+            *reinterpret_cast<const std::uint32_t*>(properties + 0x8);
+        auto* const entries = *reinterpret_cast<const std::uint32_t* const*>(
+            properties + 0x10);
+        if (entries == nullptr || count > 256) {
+            return false;
+        }
+        for (std::uint32_t i = 0; i < count; ++i) {
+            if (entries[i * 2] == g_named_event_name_property_id) {
+                *event_id_out = entries[i * 2 + 1];
+                return true;
+            }
+        }
+        return false;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *event_id_out = 0;
+        return false;
+    }
+}
+
+bool claim_holster_probe_signature(
+    std::array<std::atomic<std::uint64_t>, 192>& seen,
+    std::uint64_t signature) {
+    if (signature == 0) {
+        signature = 1;
+    }
+    for (auto& slot : seen) {
+        std::uint64_t value = slot.load(std::memory_order_relaxed);
+        if (value == signature) {
+            return false;
+        }
+        if (value == 0 && slot.compare_exchange_strong(
+                              value, signature, std::memory_order_relaxed)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool seh_find_owner_attach_point(
+    void* owner, std::uint32_t attach_id, int* index_out) {
+    if (index_out == nullptr) {
+        return false;
+    }
+    *index_out = -1;
+    __try {
+        if (owner == nullptr || attach_id == 0) {
+            return false;
+        }
+        auto* const table = *reinterpret_cast<const std::byte* const*>(
+            static_cast<const std::byte*>(owner) + 0x1E0);
+        if (table == nullptr) {
+            return false;
+        }
+        const std::uint32_t count =
+            *reinterpret_cast<const std::uint32_t*>(table + 0x4);
+        auto* const records = *reinterpret_cast<const std::byte* const*>(
+            table + 0x8);
+        if (records == nullptr || count > 4096) {
+            return false;
+        }
+        for (std::uint32_t i = 0; i < count; ++i) {
+            if (*reinterpret_cast<const std::uint32_t*>(
+                    records + static_cast<std::size_t>(i) * 48 + 32) ==
+                attach_id) {
+                *index_out = static_cast<int>(i);
+                return true;
+            }
+        }
+        return false;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *index_out = -1;
+        return false;
+    }
+}
+
+const char* holster_attach_id_label(std::uint32_t id) {
+    if (id == g_gun_holster_id) {
+        return "generic";
+    }
+    if (id == g_gun_holster_leg_id) {
+        return "leg";
+    }
+    if (id == g_gun_holster_pelvis_id) {
+        return "pelvis";
+    }
+    return "art-specific";
+}
+
+bool seh_read_holster_binding_output(
+    void* output, std::uint32_t* attach_id_out,
+    std::uint32_t* payload_bits_out) {
+    if (attach_id_out == nullptr || payload_bits_out == nullptr) {
+        return false;
+    }
+    *attach_id_out = 0;
+    std::memset(payload_bits_out, 0, 17 * sizeof(std::uint32_t));
+    __try {
+        if (output == nullptr) {
+            return false;
+        }
+        auto* const bytes = static_cast<const std::byte*>(output);
+        *attach_id_out = *reinterpret_cast<const std::uint32_t*>(bytes);
+        std::memcpy(payload_bits_out, bytes + 0x10,
+                    16 * sizeof(std::uint32_t));
+        payload_bits_out[16] =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x50);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *attach_id_out = 0;
+        std::memset(payload_bits_out, 0, 17 * sizeof(std::uint32_t));
+        return false;
+    }
+}
+
+bool seh_read_weapon_attachment_state(
+    void* weapon, std::uint32_t* parent_id_out,
+    std::uint8_t* attach_index_out) {
+    if (parent_id_out == nullptr || attach_index_out == nullptr) {
+        return false;
+    }
+    *parent_id_out = 0;
+    *attach_index_out = 0xFF;
+    __try {
+        if (weapon == nullptr) {
+            return false;
+        }
+        auto* const bytes = static_cast<const std::byte*>(weapon);
+        *parent_id_out =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x4E8);
+        *attach_index_out =
+            *reinterpret_cast<const std::uint8_t*>(bytes + 0x688);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *parent_id_out = 0;
+        *attach_index_out = 0xFF;
+        return false;
+    }
+}
+
+void __fastcall hooked_player_weapon_anim_named_event(
+    void* control, void* event) {
+    void* player = nullptr;
+    void* weapon = nullptr;
+    std::uint32_t handle_id = 0;
+    const bool weapon_valid = seh_resolve_anim_control_weapon(
+        control, &player, &weapon, &handle_id);
+    std::uint32_t event_id = 0;
+    const bool event_valid = seh_read_named_weapon_event_id(event, &event_id);
+    const std::uint32_t art = weapon_art_id_from_object(weapon);
+    const int owner_index = retained_player_index(player);
+    std::uint32_t look = 0;
+    const bool look_valid = seh_read_player_look(player, &look);
+
+    if (g_original_player_weapon_anim_named_event != nullptr) {
+        g_original_player_weapon_anim_named_event(control, event);
+    }
+
+    if (owner_index < 0 || !relevant_holster_probe_art(art) || !event_valid) {
+        return;
+    }
+    std::uint64_t signature = 1469598103934665603ULL;
+    auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(reinterpret_cast<std::uintptr_t>(player));
+    mix(reinterpret_cast<std::uintptr_t>(weapon));
+    mix(event_id);
+    static std::array<std::atomic<std::uint64_t>, 192> seen{};
+    if (!claim_holster_probe_signature(seen, signature)) {
+        return;
+    }
+    std::ostringstream line;
+    line << "NADINE-HOLSTER-EVENT owner=" << owner_index
+         << " player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(player)
+         << " look=0x" << look
+         << " control=0x" << reinterpret_cast<std::uintptr_t>(control)
+         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
+         << "/0x" << handle_id << " art=0x" << art
+         << " event=0x" << event_id << std::dec
+         << " reparent=" << (event_id == 0x9E2D6552u ? 1 : 0)
+         << " weaponValid=" << (weapon_valid ? 1 : 0)
+         << " lookValid=" << (look_valid ? 1 : 0);
+    write_log_line(line.str().c_str());
+}
+
+void* __fastcall hooked_weapon_holster_build_binding(
+    void* weapon, void* output, void* player) {
+    void* const result = g_original_weapon_holster_build_binding != nullptr
+        ? g_original_weapon_holster_build_binding(weapon, output, player)
+        : output;
+    const int owner_index = retained_player_index(player);
+    const std::uint32_t art = weapon_art_id_from_object(weapon);
+    if (owner_index < 0 || !relevant_holster_probe_art(art) || output == nullptr) {
+        return result;
+    }
+
+    std::uint32_t attach_id = 0;
+    std::array<std::uint32_t, 17> payload_bits{};
+    const bool readable = seh_read_holster_binding_output(
+        output, &attach_id, payload_bits.data());
+    int attach_index = -1;
+    const bool attach_present =
+        seh_find_owner_attach_point(player, attach_id, &attach_index);
+    std::uint32_t look = 0;
+    const bool look_valid = seh_read_player_look(player, &look);
+
+    std::uint64_t signature = 1469598103934665603ULL;
+    auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(reinterpret_cast<std::uintptr_t>(player));
+    mix(reinterpret_cast<std::uintptr_t>(weapon));
+    mix(art);
+    mix(attach_id);
+    for (const std::uint32_t bits : payload_bits) {
+        mix(bits);
+    }
+    static std::array<std::atomic<std::uint64_t>, 192> seen{};
+    if (!claim_holster_probe_signature(seen, signature)) {
+        return result;
+    }
+    std::ostringstream line;
+    line << "NADINE-HOLSTER-BINDING owner=" << owner_index
+         << " player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(player)
+         << " look=0x" << look
+         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
+         << " art=0x" << art << " attach=0x" << attach_id
+         << "/" << holster_attach_id_label(attach_id) << std::dec
+         << " present=" << (attach_present ? 1 : 0)
+         << " index=" << attach_index
+         << " readable=" << (readable ? 1 : 0)
+         << " lookValid=" << (look_valid ? 1 : 0)
+         << " bits=" << std::hex;
+    for (std::size_t i = 0; i < payload_bits.size(); ++i) {
+        if (i == 8 || i == 16) {
+            line << "/";
+        }
+        line << payload_bits[i] << ",";
+    }
+    write_log_line(line.str().c_str());
+    return result;
+}
+
+std::uintptr_t __fastcall hooked_weapon_attachment_attach_to_owner_point(
+    void* weapon, void* owner, std::uint32_t attach_id) {
+    const int owner_index = retained_player_index(owner);
+    const std::uint32_t art = weapon_art_id_from_object(weapon);
+    int attach_index = -1;
+    const bool attach_present =
+        seh_find_owner_attach_point(owner, attach_id, &attach_index);
+    std::uint32_t look = 0;
+    const bool look_valid = seh_read_player_look(owner, &look);
+    std::uint32_t pre_parent_id = 0;
+    std::uint32_t post_parent_id = 0;
+    std::uint8_t pre_attach_index = 0xFF;
+    std::uint8_t post_attach_index = 0xFF;
+    const bool pre_readable = seh_read_weapon_attachment_state(
+        weapon, &pre_parent_id, &pre_attach_index);
+
+    const std::uintptr_t result =
+        g_original_weapon_attachment_attach_to_owner_point != nullptr
+        ? g_original_weapon_attachment_attach_to_owner_point(
+              weapon, owner, attach_id)
+        : 0;
+
+    const bool post_readable = seh_read_weapon_attachment_state(
+        weapon, &post_parent_id, &post_attach_index);
+
+    if (owner_index < 0 || !relevant_holster_probe_art(art)) {
+        return result;
+    }
+    std::uint64_t signature = 1469598103934665603ULL;
+    auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(reinterpret_cast<std::uintptr_t>(owner));
+    mix(reinterpret_cast<std::uintptr_t>(weapon));
+    mix(attach_id);
+    mix(result);
+    mix(post_parent_id);
+    mix(post_attach_index);
+    static std::array<std::atomic<std::uint64_t>, 192> seen{};
+    if (!claim_holster_probe_signature(seen, signature)) {
+        return result;
+    }
+    std::ostringstream line;
+    line << "NADINE-HOLSTER-ATTACH owner=" << owner_index
+         << " player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(owner)
+         << " look=0x" << look
+         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
+         << " art=0x" << art << " attach=0x" << attach_id
+         << "/" << holster_attach_id_label(attach_id)
+         << " result=0x" << result
+         << " parent=" << pre_parent_id << "->" << post_parent_id
+         << std::dec << " present=" << (attach_present ? 1 : 0)
+         << " index=" << attach_index
+         << " weaponIndex=" << static_cast<unsigned>(pre_attach_index)
+         << "->" << static_cast<unsigned>(post_attach_index)
+         << " preReadable=" << (pre_readable ? 1 : 0)
+         << " postReadable=" << (post_readable ? 1 : 0)
+         << " lookValid=" << (look_valid ? 1 : 0);
+    write_log_line(line.str().c_str());
+    return result;
+}
+
+bool install_nadine_holster_final_boundary_probe() {
+    g_named_event_name_property_id = safe_string_id_hash("name", 4);
+    g_gun_holster_id = safe_string_id_hash("gun_holster", 11);
+    g_gun_holster_leg_id = safe_string_id_hash("gun_holster_leg", 15);
+    g_gun_holster_pelvis_id = safe_string_id_hash("gun_holster_pelvis", 18);
+
+    constexpr std::array<std::uint8_t, 19> kNamedEventPrologue{
+        0x4C, 0x8B, 0xDC, 0x49, 0x89, 0x5B, 0x18, 0x49, 0x89, 0x7B,
+        0x20, 0x55, 0x49, 0x8D, 0xAB, 0x98, 0xFC, 0xFF, 0xFF,
+    };
+    constexpr std::array<std::uint8_t, 20> kBuildBindingPrologue{
+        0x40, 0x55, 0x56, 0x57, 0x48, 0x81, 0xEC, 0x40, 0x04, 0x00,
+        0x00, 0x48, 0xC7, 0x44, 0x24, 0x28, 0xFE, 0xFF, 0xFF, 0xFF,
+    };
+    constexpr std::array<std::uint8_t, 21> kAttachPrologue{
+        0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18,
+        0x48, 0x89, 0x7C, 0x24, 0x20, 0x41, 0x56, 0x48, 0x83, 0xEC,
+        0x30,
+    };
+
+    g_original_player_weapon_anim_named_event =
+        reinterpret_cast<PlayerWeaponAnimNamedEventFunction>(
+            install_fire_gate_detour(
+                kPlayerWeaponAnimNamedEventRva,
+                kNamedEventPrologue.data(), kNamedEventPrologue.size(),
+                reinterpret_cast<void*>(
+                    &hooked_player_weapon_anim_named_event),
+                "Nadine holster named-event probe"));
+    g_original_weapon_holster_build_binding =
+        reinterpret_cast<WeaponHolsterBuildBindingFunction>(
+            install_fire_gate_detour(
+                kWeaponHolsterBuildBindingRva,
+                kBuildBindingPrologue.data(), kBuildBindingPrologue.size(),
+                reinterpret_cast<void*>(
+                    &hooked_weapon_holster_build_binding),
+                "Nadine holster binding probe"));
+    g_original_weapon_attachment_attach_to_owner_point =
+        reinterpret_cast<WeaponAttachmentAttachToOwnerPointFunction>(
+            install_fire_gate_detour(
+                kWeaponAttachmentAttachToOwnerPointRva,
+                kAttachPrologue.data(), kAttachPrologue.size(),
+                reinterpret_cast<void*>(
+                    &hooked_weapon_attachment_attach_to_owner_point),
+                "Nadine holster final-attach probe"));
+
+    const bool installed = g_original_player_weapon_anim_named_event != nullptr &&
+        g_original_weapon_holster_build_binding != nullptr &&
+        g_original_weapon_attachment_attach_to_owner_point != nullptr;
+    std::ostringstream line;
+    line << "Nadine holster final boundary probe "
+         << (installed ? "installed" : "PARTIAL")
+         << " nameKey=0x" << std::hex << g_named_event_name_property_id
+         << " generic=0x" << g_gun_holster_id
+         << " leg=0x" << g_gun_holster_leg_id
+         << " pelvis=0x" << g_gun_holster_pelvis_id;
+    boot_log_line(line.str().c_str());
+    return installed;
+}
+
 void log_holster_bind_probe(
     const HolsterBindProbeContext& context, std::uint32_t handle_id,
     std::uintptr_t bind_result) {
@@ -29577,8 +30060,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21fa "
-        "(bounded game-thread PlayerWeaponAnimControl census)");
+        "TLL co-op runtime init 2026-07-21fb "
+        "(read-only holster event/binding/final-attach discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -29606,6 +30089,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_main_view_visibility_relay();
     install_nd_attachable_parent_visibility_relay();
     install_player_weapon_holster_bind_probe();
+    install_nadine_holster_final_boundary_probe();
     // The scoped DrawControl 0x40 relay and post mesh scan were rejected by the
     // 2026-07-13 runtime discriminator; leave the dormant code available for
     // reference without installing another hot-path hook.

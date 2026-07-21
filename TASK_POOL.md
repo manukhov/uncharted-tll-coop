@@ -1468,7 +1468,8 @@ Do not reopen these as the first move:
       (`reparent-weapon-to-holster`) and (b) `WeaponHolster_BuildBinding
       0x1414FE540` output: selected `gun_holster*` id, authored transforms and
       scalar; also record whether final `0x141ED0370` is reached and succeeds.
-      Cycle pistol/rifle draw and holster on both copies.
+      Build `fb` installs all three pass-through hooks. Cycle pistol/rifle draw
+      and holster on both copies.
 - [ ] After the failed bind boundary is proven, resolve the player-owned rifle's
       `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
       Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a

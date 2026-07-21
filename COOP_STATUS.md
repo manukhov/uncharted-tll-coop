@@ -5154,3 +5154,10 @@ and return status at `0x141ED0370` then separates a skipped state-script command
 from an attach-point lookup/mutation failure. Any write, crash, missing
 hook-install marker, invalid ProcessWeapon vtable/owner, or model regression
 invalidates the test.
+
+Build `fb` implements that prediction with three pass-through entry detours and
+no attachment writes of its own. `NADINE-HOLSTER-EVENT` records the authored
+event StringId from `0x14108DE30`; `NADINE-HOLSTER-BINDING` records the selected
+id, both transforms, scalar and whether the target exists in owner `+0x1E0`;
+`NADINE-HOLSTER-ATTACH` records direct `0x141ED0370` reach, target presence,
+return value and pre/post parent/index state. Runtime result is pending.

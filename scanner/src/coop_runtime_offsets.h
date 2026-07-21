@@ -506,6 +506,13 @@ constexpr std::uintptr_t kPlayerWeaponHolsterResolveBindRva = 0x1095BD0;
 constexpr std::uintptr_t kPlayerWeaponHolsterKnowledgeLookupCallsiteRva =
     0x1095E49;
 constexpr std::uintptr_t kResolveKnowledgeRegistryEntryByIdRva = 0x1765030;
+// Read-only final holster discriminator. The anim-control event hook exposes
+// authored named events, the binding builder exposes the selected gun_holster*
+// id and offsets, and the final mutation hook proves whether the state-script
+// path reaches the concrete owner attachment operation.
+constexpr std::uintptr_t kPlayerWeaponAnimNamedEventRva = 0x108DE30;
+constexpr std::uintptr_t kWeaponHolsterBuildBindingRva = 0x14FE540;
+constexpr std::uintptr_t kWeaponAttachmentAttachToOwnerPointRva = 0x1ED0370;
 // RTTI-backed ProcessWeapon vtable. Runtime exact-parent census identifies
 // pistol/rifle/grenade children by this class and authored art at +0x860.
 constexpr std::uintptr_t kProcessWeaponVtableRva = 0x2A9BF48;
