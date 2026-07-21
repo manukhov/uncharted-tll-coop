@@ -6,9 +6,9 @@ not matter. Resolves rip-relative operands to absolute VAs and annotates
 call/branch targets.
 
 Usage:
-    python3 scripts/disasm_va.py 0x1415B4560 [0x1409FBA60 ...]
-    python3 scripts/disasm_va.py --len 0x200 0x1415B4560
-    python3 scripts/disasm_va.py --bytes 0x1437E9700   # hex-dump data instead
+    python3 scripts/pe_disassemble_va.py 0x1415B4560 [0x1409FBA60 ...]
+    python3 scripts/pe_disassemble_va.py --len 0x200 0x1415B4560
+    python3 scripts/pe_disassemble_va.py --bytes 0x1437E9700   # hex-dump data instead
 
 Functions are decoded until a terminating ret/jmp followed by int3 padding, or
 --len bytes, whichever comes first.

@@ -1887,9 +1887,8 @@ clone locomotion), which structurally avoids the local input/FPS artifacts above
 - Look builder `sub_141BB5E00`; look-apply `sub_141804170` (`ndlib/render/look.cpp`).
 - give-weapon handler `sub_140F95850`; `GetRetainedPlayerEntityBySlot(slot)`.
 - Co-op gate `dword_143E07470` (RVA `0x3E07470`) + `byte_143E03568` (RVA `0x3E03568`) — CRASHES.
-- Tooling: `scripts/launch_inject.sh` (direct `tll.exe`, no Steam launcher; Steam
-  blocks 2 instances on one PC). IDA decompile via `scripts/ida_dump_pseudo_env.py`
-  with `TLL_IDA_TARGETS`/`TLL_IDA_OUTPUT`.
+- Tooling: the old WSL launch/decompile helpers were retired; use
+  `scripts/launch_coop.ps1 -Count 2` and native IDA MCP.
 ## 2026-07-10: puppet animation tick confirmed; pickup request sequence fixed
 
 **CONFIRMED (two-instance read-only Exp4):** both slot 0 and the network puppet

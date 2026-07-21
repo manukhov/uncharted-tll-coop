@@ -8,12 +8,12 @@ Reports, per target:
   - JMP   sites: a `jmp  rel32` whose target == VA (tail call)
   - LEA   sites: a `lea reg, [rip+x]` whose target == VA (address-taken)
 
-Usage: python3 scripts/find_callers.py 0x1409FBA60 0x140A90550 ...
+Usage: python3 scripts/pe_find_callers.py 0x1409FBA60 0x140A90550 ...
 """
 import struct
 import sys
 
-from disasm_va import Image
+from pe_disassemble_va import Image
 
 
 def s32(b):
