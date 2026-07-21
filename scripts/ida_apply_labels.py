@@ -117,6 +117,41 @@ FUNCTIONS = {
         "weapon mesh handle permit it; the validated child handle is stored at "
         "ProcessWeapon+0xAE0.",
     ),
+    0x1418B7060: (
+        "AttachSystem_ResolveRecordTransform",
+        "Validates a 48-byte AttachSystem record index, reads its signed joint "
+        "at record+0x24, obtains that joint's current world transform through "
+        "RigGetJointTransform, and composes it with the record-local 32-byte "
+        "transform. This is the first final-placement stage downstream of a "
+        "ProcessWeapon selected attachment index.",
+    ),
+    0x141ED1780: (
+        "NdAttachableObject_ResolveSelectedAttachmentTransform",
+        "Shared NdAttachableObject final-transform resolver. Follows the parent "
+        "handle at +0x4E0 to its AttachSystem, resolves selected index +0x688 "
+        "through AttachSystem_ResolveRecordTransform, then applies the object's "
+        "local/depenetration transform through 0x141ED0A70.",
+    ),
+    0x141ED1380: (
+        "NdAttachableObject_UpdateSelectedAttachmentTransform",
+        "Shared NdAttachableObject update path. Calls the selected-attachment "
+        "resolver, applies the optional blend object at +0x838 and publishes "
+        "the resulting attached-object transform. ProcessWeapon inherits this "
+        "path; PlayerWeaponAnimControl holster IK does not write it.",
+    ),
+    0x14108B120: (
+        "WeaponHolsterIkBlender_ExtractData",
+        "WeaponHolsterIkBlender vtable +0x10. Extracts a 0x38-byte "
+        "WeaponHolsterIkData record and selects hand-r, leg-holster or "
+        "back-holster animation reference data; it does not resolve or mutate "
+        "a ProcessWeapon attachment.",
+    ),
+    0x14108B580: (
+        "WeaponHolsterIkBlender_BlendData",
+        "WeaponHolsterIkBlender vtable +0x18. Blends two 0x38-byte holster-IK "
+        "records for the arm-chain target; the output feeds skeleton joint pose "
+        "updates rather than the attached weapon transform.",
+    ),
     # --- 2026-07-21: Nadine active firearm grip, arm pose and strap split ---
     0x140C2BCB0: (
         "ArmBlockProbes_Kick",
@@ -1184,8 +1219,10 @@ FUNCTIONS = {
     ),
     0x141ED28E0: (
         "NdAttachableObject_PostJointUpdate_Async",
-        "NdAttachableObject vtable+0x410. Updates attachment transforms and "
-        "propagates owner DrawControl camera/category state after joint update.",
+        "NdAttachableObject vtable+0x410. Its ProcessWeapon caller enters at "
+        "0x141515A30 after the selected record is changed. The base path first "
+        "recomputes the attached object's bound/world transform through common "
+        "vtable +0x2B8, then propagates owner DrawControl camera/category state.",
     ),
     0x141ED62D0: (
         "NdAttachableObject_SyncParentDrawVisibilityAndCameraFlags",
@@ -1249,7 +1286,9 @@ FUNCTIONS = {
     ),
     0x141BB8320: (
         "Character_UpdateDerivedWorldTransformFromLocalRoot",
-        "Common Player/NadineBuddy vtable slot +0x2B8. Derives world transform "
+        "Common Player/NadineBuddy/NdAttachableObject vtable slot +0x2B8. "
+        "For ProcessWeapon this is the last proven placement writer downstream "
+        "of the selected attachment. Derives world transform "
         "at +0x240 and root/capsule output at +0x280 from local root +0x130, "
         "local rotation +0x140, and optional parent transform +0x110/+0x120; "
         "also mirrors local root to +0x250.",

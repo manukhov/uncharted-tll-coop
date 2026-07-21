@@ -1583,11 +1583,20 @@ Do not reopen these as the first move:
       `pistolHolster` record, but the user still saw the Chloe holster location.
       REJECTED as a visual fix: AttachSystem selection is not the last Player
       placement owner, so do not repeat or coordinate-tune this record transfer.
-- [ ] Trace the final Player holstered-weapon visual transform after
-      `weapon+0x688`. Start at `PlayerWeaponAnimControl_UpdateHolsterIk
-      0x14108ECE0`, resolve WeaponHolsterIkBlender and the ProcessWeapon/mesh
-      consumer, and separate late IK override from owner-specific mesh offset
-      and a separate visible-prop path before another runtime test.
+- [x] Trace the final Player holstered-weapon visual transform after
+      `weapon+0x688`. `PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0` is
+      arm-joint IK only and cannot overwrite ProcessWeapon placement. The actual
+      shared path is `AttachSystem_ResolveRecordTransform 0x1418B7060` (live
+      joint transform times record-local transform), then
+      `NdAttachableObject_ResolveSelectedAttachmentTransform 0x141ED1780` and
+      its generic local/depenetration stage `0x141ED0A70`. No separate prop or
+      owner-class branch was found.
+- [ ] Build the written S1/S2/S3 discriminator from `COOP_STATUS.md`: retain the
+      proven `fk` pistolHolster selection and pass-through-capture both native
+      and Player pistol around the ProcessWeapon direct base call into
+      `NdAttachableObject_PostJointUpdate_Async 0x141ED28E0`. Compare selected
+      record ownership, link/local fields and final `+0x240/+0x250/+0x280` to
+      distinguish wrong joint pose, stale weapon link, and a separate drawable.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

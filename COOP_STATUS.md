@@ -5705,3 +5705,70 @@ Do not tune the native record coordinates or repeat the same transfer. Trace
 `PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0`, resolve the concrete
 WeaponHolsterIkBlender/output consumer, and locate the final weapon/mesh world
 transform write before designing another bounded discriminator.
+
+### 2026-07-21 STATIC: final attached-weapon transform path excludes Player holster IK
+
+`PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0` is not a late weapon-
+placement writer. RTTI resolves its local vtable `0x142A46748` to
+`WeaponHolsterIkBlender`; slots `0x14108B120/0x14108B580` extract and blend a
+0x38-byte `WeaponHolsterIkData` record using `apReference-hand-r`,
+`apReference_leg_holster` or `apReference_back_holster`. The result is composed
+with PlayerWeaponAnimControl's cached parent-relative marker and passed to its
+`ArmIkChain` at `+0x70`. The final writer in that branch is the skeleton joint
+cache blend `0x14181EF50`, which writes 0x30-byte world-pose entries for arm
+joints. The entire branch has no `ProcessWeapon`, parent handle `+0x4E0`, selected
+record `+0x688`, AttachSystem or drawable-transform dataflow. H1, in which this
+IK function overwrites the successful pistol attach, is therefore REJECTED.
+The missing Nadine marker children can still explain bad arm pose, but not the
+unchanged holstered weapon location.
+
+The actual shared `NdAttachableObject` path is now bounded. The selected index
+is consumed by `AttachSystem_ResolveRecordTransform 0x1418B7060`: it validates
+the 48-byte record, obtains the current world transform of signed joint
+`record+0x24` through `0x141687C90`, then composes that live joint transform with
+the record's authored 32-byte local transform. The selected-attachment resolver
+`0x141ED1780` follows parent `+0x4E0`, consumes object `+0x688` and feeds the
+generic local/link state used by the attached object.
+
+The last concrete ProcessWeapon placement boundary is even later:
+`ProcessWeapon vtable+0x410 -> 0x141515860`, whose direct base call at
+`0x141515A30` enters `NdAttachableObject_PostJointUpdate_Async 0x141ED28E0`.
+That path reaches common vtable `+0x2B8 ->
+Character_UpdateDerivedWorldTransformFromLocalRoot 0x141BB8320`, which composes
+the attachment-link parent transform at `+0x110/+0x120` with object-local
+translation/quaternion `+0x130/+0x140` and writes the render/world outputs
+`+0x240/+0x250/+0x280`. The remaining tail only synchronizes child DrawControl
+visibility/camera flags with its parent at `0x141ED63F7`; it does not replace the
+world transform. The RTTI-backed ProcessWeapon vtable inherits this shared path,
+and neither the attachment mutation nor final composition branches on Player
+versus NadineBuddy class. No separate holstered-pistol drawable was found.
+
+Three independent evidence kinds meet the static quota: concrete RTTI/vtable
+identity separates WeaponHolsterIkBlender/ArmIkChain from ProcessWeapon;
+pseudocode dataflow identifies the exact record, joint and final object-local
+stages; and build `fk` independently proves that `+0x688` and the copied record
+remain correct while the visual remains wrong. A second native-NPC controller
+path also reaches the same ProcessWeapon selected-record contract.
+
+The remaining competing hypotheses are now narrow. S1: joint 99 shares a
+name/index but has a wrong live Player pose, so the attachment link faithfully
+publishes a wrong point. S2, currently strongest: `+0x688` and record `+0x28`
+are correct, but the downstream link/local fields `+0x108/+0x10C` or
+`+0x130/+0x140` remain stale from `targSpineProp`, so the final writer reproduces
+the Chloe placement. S3: `+0x240` moves the known ProcessWeapon correctly but
+another drawable remains visible; record `+0x28` ownership and the earlier
+render-child census weigh against this, but matching final data would select it.
+
+The next build keeps the already-verified `fk` record transfer solely so the
+legacy pistol selects `pistolHolster`, and adds no new gameplay-state write. A
+pass-through hook at the exact ProcessWeapon base-update boundary snapshots both
+the native NPC pistol and legacy Player pistol before/after `0x141ED28E0`:
+parent `+0x4E0/+0x4E8`, `+0x688`, selected record including owner link `+0x28`,
+attachment-link fields `+0x108/+0x10C`, transforms at
+`+0x100/+0x110/+0x120/+0x130/+0x140/+0x240/+0x250/+0x280`, and DrawControl
+`+0x198`. Prediction: correct record/index with an unchanged old link/local/world
+selects S2; a changing and internally consistent world output that is already
+wrong relative to the Player selects S1; a correct thigh world output on the
+known pistol ProcessWeapon while the visual remains on the back selects S3. A
+crash, changed weapon state or missing markers after both exact owners and their
+holstered pistols exist falsifies the probe itself.
