@@ -1224,12 +1224,15 @@ Do not reopen these as the first move:
       skeleton-id direct branch, SkelTable retarget pair/group mapping and both
       branches converging on the processing-group pose output. Six strong STATIC
       labels were saved and verified in the real IDB.
-- [ ] Implement read-only build `em` at the proven case-6 boundary. Select only
+- [x] Implement read-only build `em` at the proven case-6 boundary. Select only
       the exact `ek` clip signature; reconstruct and double-read the owning
       FgAnimData/context; log normalized source/target ids, direct-vs-retarget
       prediction, processing group, entry feature/coverage summary and callback
       RVAs under strict per-screen bounds. Never call a resolver/callback or log
-      pointers/output indices.
+      pointers/output indices. Result: the verified 12-byte entry detour validates
+      the full bounded list, exact retained FgAnimData/screen and every selected
+      asset/skeleton/entry chain before four rate-limited samples per screen; both
+      Release DLLs build with only the pre-existing warning.
 - [ ] Run the written `em` falsifier during strong up/down ADS on both copies. A
       stable branch, retarget pair/group/coverage or callback split selects that
       exact route; a complete normalized match rejects case-6 inputs and moves

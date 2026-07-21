@@ -4351,3 +4351,20 @@ change invalidates `em`.
 All six strong STATIC functions are labelled in the real IDB. The headless apply
 reports 1124 functions and 19 data names with `save_database returned True`; an
 independent dump resolves every new name, and the MCP copy was refreshed.
+
+Read-only build `2026-07-21em` now detours only the verified 12-byte register-push
+prologue of `ProcessAnimCmdListSegment`. Before inspecting payloads it reconstructs
+the owning FgAnimData from `AnimCmdContext+0x18 - 0x1C0`, proves the inverse
+context/FgAnimData fields and exact retained player/screen, requires live ADS and
+at least 0.20 vertical weight, and structurally validates the entire command list
+under a 4096-dword bound. It then accepts only exact six-dword case-6 commands
+with the prior `ek` clip signature.
+
+Each accepted record double-reads the command, clip, underlying animation,
+target ArtItemSkeleton/underlying skeleton, fixed-stride retarget entry and first
+group-coverage word. The log contains only ids/counts, direct-vs-retarget result,
+normalized entry index/feature/coverage, group and in-image callback RVAs; no
+pointer or output index is emitted. Four samples per screen are allowed at 500 ms
+intervals. The probe calls the untouched trampoline after observation and never
+calls any resolver/callback or writes game data. Both Release DLLs build with only
+the pre-existing C4456 warning.

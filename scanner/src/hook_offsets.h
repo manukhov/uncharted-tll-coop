@@ -97,6 +97,12 @@ constexpr std::uintptr_t kFgAnimDataPublishWorldTransformRva = 0x18C55D0;
 constexpr std::uintptr_t kAnimManagerPublishWorldTransformCallsiteRva = 0x1A8FC00;
 constexpr std::size_t kFgAnimDataSkeletonOffset = 0x18;
 constexpr std::size_t kSkeletonJointCountOffset = 0x34;
+// Animation command evaluator and the fixed-stride SkelTable retarget registry.
+// ProcessAnimCmdListSegment case 6 selects direct clip evaluation when the
+// source/target underlying skeleton ids match, otherwise it resolves this table.
+constexpr std::uintptr_t kProcessAnimCmdListSegmentRva = 0x1AB97C0;
+constexpr std::uintptr_t kSkelTableRetargetEntryCountRva = 0x38401D8;
+constexpr std::uintptr_t kSkelTableRetargetEntriesRva = 0x3864A00;
 // Embedded PlayerInputCommandState (sub_14024D7E0 returns Player+0x39A0).
 constexpr std::size_t kPlayerInputCommandStateOffset = 0x39A0;
 constexpr std::uintptr_t kPlayerInputCommandStateIsCommandActiveRva = 0x1E39D50;

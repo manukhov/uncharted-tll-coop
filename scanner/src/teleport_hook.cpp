@@ -105,8 +105,13 @@ using NetPlayerTrackerNetRespawnFunction =
     void(__fastcall*)(void*, std::int32_t, std::uint8_t, const void*);
 using StringHashFunction = std::uint32_t(__fastcall*)(const char*, std::uint64_t, std::uint64_t);
 using ResolveUpperActorRecordFunction = void*(__fastcall*)(std::uint32_t);
+using ProcessAnimCmdListSegmentFunction = std::uint32_t(__fastcall*)(
+    const std::uint32_t*, std::uint32_t, const void*, std::uint32_t,
+    const void*, const void*, const void*);
 
 UpdateFunction g_original_update = nullptr;
+ProcessAnimCmdListSegmentFunction g_original_process_anim_cmd_list_segment =
+    nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
 std::atomic<void*> g_local_fganim_data{nullptr};
 std::atomic<void*> g_puppet_fganim_data{nullptr};
@@ -14776,6 +14781,555 @@ AimAnimationLeafProbe probe_aim_animation_leaf(
     return result;
 }
 
+constexpr std::uint32_t kAimCase6SelectedClipFlags = 0x0000000A;
+constexpr std::uint32_t kAimCase6SelectedSourceArtSkeletonId = 0x6C2B2396;
+constexpr std::uint32_t kAimCase6SelectedSourceUnderlyingSkeletonId =
+    0x4B0F5DE3;
+constexpr std::uint32_t kAimCase6SelectedClipDataWord08 = 0x000009A0;
+constexpr std::size_t kAimCase6MaxCommandWords = 4096;
+constexpr std::size_t kAimCase6MaxRetargetEntries = 4096;
+constexpr std::size_t kAimCase6RetargetEntryStride = 0x40;
+constexpr std::size_t kAimCase6RetargetGroupStride = 0x20;
+
+struct AimCase6ContextProbe {
+    bool valid = false;
+    bool vertical_valid = false;
+    std::uint32_t screen = UINT32_MAX;
+    std::uint32_t context_flags = 0;
+    std::uint32_t up_word = 0;
+    std::uint32_t down_word = 0;
+    float up = 0.0F;
+    float down = 0.0F;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* target_skeleton = nullptr;
+};
+
+struct AimCase6CommandProbe {
+    bool command_valid = false;
+    bool clip_valid = false;
+    bool target_valid = false;
+    bool retarget_table_valid = false;
+    bool retarget_entry_found = false;
+    bool retarget_entry_valid = false;
+    bool retarget_group_valid = false;
+    bool coverage_valid = false;
+    bool direct = false;
+    std::uint32_t phase_word = 0;
+    std::uint32_t source_art_skeleton_id = 0;
+    std::uint32_t source_underlying_skeleton_id = 0;
+    std::uint32_t source_clip_data_word_08 = 0;
+    std::uint32_t target_art_skeleton_id = 0;
+    std::uint32_t target_underlying_skeleton_id = 0;
+    std::uint32_t target_joint_count = 0;
+    std::uint32_t target_processing_group_count = 0;
+    std::uint32_t target_scalar_count = 0;
+    std::uint32_t retarget_entry_index = UINT32_MAX;
+    std::uint32_t retarget_feature_word = 0;
+    std::uint64_t coverage_word_0 = 0;
+};
+
+std::uint32_t normalize_tll_callback_rva(const void* callback) {
+    if (callback == nullptr) {
+        return 0;
+    }
+    const std::uint32_t image_size = tll_image_size();
+    const std::uintptr_t value =
+        reinterpret_cast<std::uintptr_t>(callback);
+    if (image_size == 0 || value < g_module ||
+        value >= g_module + image_size) {
+        return UINT32_MAX;
+    }
+    return static_cast<std::uint32_t>(value - g_module);
+}
+
+AimCase6ContextProbe probe_aim_case6_context(const void* context) {
+    AimCase6ContextProbe result{};
+    if (context == nullptr || readable_bytes(context) < 0x28) {
+        return result;
+    }
+
+    __try {
+        const auto* const context_bytes =
+            static_cast<const std::byte*>(context);
+        void* const target_skeleton =
+            *reinterpret_cast<void* const*>(context_bytes);
+        void* const scratch =
+            *reinterpret_cast<void* const*>(context_bytes + 0x08);
+        const std::uintptr_t context_word_10 =
+            *reinterpret_cast<const std::uintptr_t*>(context_bytes + 0x10);
+        void* const render_world_matrix =
+            *reinterpret_cast<void* const*>(context_bytes + 0x18);
+        const std::uint32_t context_flags =
+            *reinterpret_cast<const std::uint32_t*>(context_bytes + 0x20);
+        const std::uintptr_t matrix_value =
+            reinterpret_cast<std::uintptr_t>(render_world_matrix);
+        if (target_skeleton == nullptr || scratch == nullptr ||
+            matrix_value < kFgAnimDataRenderWorldMatrixOffset) {
+            return result;
+        }
+
+        void* const fg_anim_data = reinterpret_cast<void*>(
+            matrix_value - kFgAnimDataRenderWorldMatrixOffset);
+        if (readable_bytes(fg_anim_data) < 0x2C8) {
+            return result;
+        }
+        const auto* const fg_bytes =
+            static_cast<const std::byte*>(fg_anim_data);
+        if (*reinterpret_cast<void* const*>(
+                fg_bytes + kFgAnimDataSkeletonOffset) != target_skeleton ||
+            *reinterpret_cast<const std::uintptr_t*>(fg_bytes + 0x2C0) !=
+                context_word_10 ||
+            fg_bytes + kFgAnimDataRenderWorldMatrixOffset !=
+                render_world_matrix) {
+            return result;
+        }
+
+        void* player = nullptr;
+        std::uint32_t screen = UINT32_MAX;
+        for (std::uint32_t candidate = 0;
+             candidate <= kSlot1ScreenIndex; ++candidate) {
+            void* const candidate_player =
+                retained_player_object(static_cast<int>(candidate));
+            if (candidate_player == nullptr ||
+                readable_bytes(candidate_player) < 0x4014) {
+                continue;
+            }
+            const auto* const player_bytes =
+                static_cast<const std::byte*>(candidate_player);
+            if (*reinterpret_cast<void* const*>(
+                    player_bytes + kPlayerFgAnimDataOffset) == fg_anim_data &&
+                *reinterpret_cast<const std::uint32_t*>(
+                    player_bytes + 0x4010) == candidate) {
+                player = candidate_player;
+                screen = candidate;
+                break;
+            }
+        }
+        if (player == nullptr || !player_ads_active(player)) {
+            return result;
+        }
+
+        void* const active_state = aim_publish_active_state_from_player(player);
+        if (active_state == nullptr ||
+            readable_bytes(active_state) <
+                kAnimStateAimAddRightOffset + sizeof(float)) {
+            return result;
+        }
+        const auto* const state_bytes =
+            static_cast<const std::byte*>(active_state);
+        const std::uint32_t up_word =
+            *reinterpret_cast<const std::uint32_t*>(
+                state_bytes + kAnimStateAimAddUpOffset);
+        const std::uint32_t down_word =
+            *reinterpret_cast<const std::uint32_t*>(
+                state_bytes + kAnimStateAimAddDownOffset);
+        float up = 0.0F;
+        float down = 0.0F;
+        std::memcpy(&up, &up_word, sizeof(up));
+        std::memcpy(&down, &down_word, sizeof(down));
+        result.vertical_valid = std::isfinite(up) && std::isfinite(down) &&
+            up >= 0.0F && up <= 1.0F && down >= 0.0F && down <= 1.0F &&
+            std::max(up, down) >= 0.20F;
+        if (!result.vertical_valid) {
+            return result;
+        }
+
+        const auto* const player_bytes =
+            static_cast<const std::byte*>(player);
+        result.valid =
+            target_skeleton ==
+                *reinterpret_cast<void* const*>(context_bytes) &&
+            scratch ==
+                *reinterpret_cast<void* const*>(context_bytes + 0x08) &&
+            context_word_10 ==
+                *reinterpret_cast<const std::uintptr_t*>(
+                    context_bytes + 0x10) &&
+            render_world_matrix ==
+                *reinterpret_cast<void* const*>(context_bytes + 0x18) &&
+            context_flags ==
+                *reinterpret_cast<const std::uint32_t*>(
+                    context_bytes + 0x20) &&
+            target_skeleton ==
+                *reinterpret_cast<void* const*>(
+                    fg_bytes + kFgAnimDataSkeletonOffset) &&
+            context_word_10 ==
+                *reinterpret_cast<const std::uintptr_t*>(fg_bytes + 0x2C0) &&
+            fg_anim_data ==
+                *reinterpret_cast<void* const*>(
+                    player_bytes + kPlayerFgAnimDataOffset) &&
+            screen ==
+                *reinterpret_cast<const std::uint32_t*>(
+                    player_bytes + 0x4010) &&
+            up_word ==
+                *reinterpret_cast<const std::uint32_t*>(
+                    state_bytes + kAnimStateAimAddUpOffset) &&
+            down_word ==
+                *reinterpret_cast<const std::uint32_t*>(
+                    state_bytes + kAnimStateAimAddDownOffset);
+        if (!result.valid) {
+            return AimCase6ContextProbe{};
+        }
+        result.screen = screen;
+        result.context_flags = context_flags;
+        result.up_word = up_word;
+        result.down_word = down_word;
+        result.up = up;
+        result.down = down;
+        result.player = player;
+        result.fg_anim_data = fg_anim_data;
+        result.target_skeleton = target_skeleton;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return AimCase6ContextProbe{};
+    }
+    return result;
+}
+
+AimCase6CommandProbe probe_aim_case6_command(
+    const std::uint32_t* command,
+    const AimCase6ContextProbe& context,
+    std::uint32_t processing_group) {
+    AimCase6CommandProbe result{};
+    if (!context.valid || command == nullptr ||
+        readable_bytes(command) < 6 * sizeof(std::uint32_t)) {
+        return result;
+    }
+
+    __try {
+        std::array<std::uint8_t, 6 * sizeof(std::uint32_t)> first{};
+        std::array<std::uint8_t, 6 * sizeof(std::uint32_t)> second{};
+        std::memcpy(first.data(), command, first.size());
+        std::memcpy(second.data(), command, second.size());
+        std::uint32_t header = 0;
+        void* clip = nullptr;
+        std::memcpy(&header, first.data(), sizeof(header));
+        std::memcpy(&clip, first.data() + 0x08, sizeof(clip));
+        std::memcpy(&result.phase_word, first.data() + 0x14,
+                    sizeof(result.phase_word));
+        if (first != second || header != 0x00060006U) {
+            return result;
+        }
+        result.command_valid = clip != nullptr;
+        if (!result.command_valid || readable_bytes(clip) < 0x44) {
+            return result;
+        }
+
+        const auto* const clip_bytes = static_cast<const std::byte*>(clip);
+        const std::uint32_t clip_flags =
+            *reinterpret_cast<const std::uint32_t*>(clip_bytes + 0x24);
+        void* const clip_data =
+            *reinterpret_cast<void* const*>(clip_bytes + 0x28);
+        result.source_art_skeleton_id =
+            *reinterpret_cast<const std::uint32_t*>(clip_bytes + 0x40);
+        if (clip_data == nullptr || readable_bytes(clip_data) < 0x0C) {
+            return result;
+        }
+        const auto* const clip_data_bytes =
+            static_cast<const std::byte*>(clip_data);
+        result.source_underlying_skeleton_id =
+            *reinterpret_cast<const std::uint32_t*>(clip_data_bytes + 0x04);
+        result.source_clip_data_word_08 =
+            *reinterpret_cast<const std::uint32_t*>(clip_data_bytes + 0x08);
+        result.clip_valid =
+            clip_flags == kAimCase6SelectedClipFlags &&
+            result.source_art_skeleton_id ==
+                kAimCase6SelectedSourceArtSkeletonId &&
+            result.source_underlying_skeleton_id ==
+                kAimCase6SelectedSourceUnderlyingSkeletonId &&
+            result.source_clip_data_word_08 ==
+                kAimCase6SelectedClipDataWord08 &&
+            clip_flags ==
+                *reinterpret_cast<const std::uint32_t*>(clip_bytes + 0x24) &&
+            clip_data ==
+                *reinterpret_cast<void* const*>(clip_bytes + 0x28) &&
+            result.source_art_skeleton_id ==
+                *reinterpret_cast<const std::uint32_t*>(clip_bytes + 0x40) &&
+            result.source_underlying_skeleton_id ==
+                *reinterpret_cast<const std::uint32_t*>(
+                    clip_data_bytes + 0x04) &&
+            result.source_clip_data_word_08 ==
+                *reinterpret_cast<const std::uint32_t*>(
+                    clip_data_bytes + 0x08);
+        if (!result.clip_valid || context.target_skeleton == nullptr ||
+            readable_bytes(context.target_skeleton) < 0x48) {
+            return result;
+        }
+
+        const auto* const target_bytes =
+            static_cast<const std::byte*>(context.target_skeleton);
+        result.target_art_skeleton_id =
+            *reinterpret_cast<const std::uint32_t*>(target_bytes + 0x24);
+        void* const target_underlying =
+            *reinterpret_cast<void* const*>(target_bytes + 0x40);
+        if (target_underlying == nullptr ||
+            readable_bytes(target_underlying) < 0x1A) {
+            return result;
+        }
+        const auto* const underlying_bytes =
+            static_cast<const std::byte*>(target_underlying);
+        result.target_underlying_skeleton_id =
+            *reinterpret_cast<const std::uint32_t*>(underlying_bytes + 0x04);
+        result.target_joint_count =
+            *reinterpret_cast<const std::uint16_t*>(underlying_bytes + 0x10);
+        result.target_processing_group_count =
+            *reinterpret_cast<const std::uint8_t*>(underlying_bytes + 0x16);
+        result.target_scalar_count =
+            *reinterpret_cast<const std::uint16_t*>(underlying_bytes + 0x18);
+        result.target_valid =
+            result.target_art_skeleton_id ==
+                *reinterpret_cast<const std::uint32_t*>(target_bytes + 0x24) &&
+            target_underlying ==
+                *reinterpret_cast<void* const*>(target_bytes + 0x40) &&
+            result.target_underlying_skeleton_id ==
+                *reinterpret_cast<const std::uint32_t*>(
+                    underlying_bytes + 0x04) &&
+            result.target_joint_count ==
+                *reinterpret_cast<const std::uint16_t*>(
+                    underlying_bytes + 0x10) &&
+            result.target_processing_group_count ==
+                *reinterpret_cast<const std::uint8_t*>(
+                    underlying_bytes + 0x16) &&
+            result.target_scalar_count ==
+                *reinterpret_cast<const std::uint16_t*>(
+                    underlying_bytes + 0x18);
+        if (!result.target_valid) {
+            return result;
+        }
+        result.direct = result.source_underlying_skeleton_id ==
+            result.target_underlying_skeleton_id;
+
+        const auto* const count_ptr = reinterpret_cast<const std::uint32_t*>(
+            g_module + kSkelTableRetargetEntryCountRva);
+        const std::uint32_t entry_count = *count_ptr;
+        const auto* const entries = reinterpret_cast<const std::byte*>(
+            g_module + kSkelTableRetargetEntriesRva);
+        if (entry_count > kAimCase6MaxRetargetEntries ||
+            readable_bytes(entries) <
+                static_cast<std::size_t>(entry_count) *
+                    kAimCase6RetargetEntryStride) {
+            return result;
+        }
+        result.retarget_table_valid = entry_count == *count_ptr;
+        if (!result.retarget_table_valid) {
+            return result;
+        }
+
+        for (std::uint32_t index = 0; index < entry_count; ++index) {
+            const auto* const entry = entries +
+                static_cast<std::size_t>(index) *
+                    kAimCase6RetargetEntryStride;
+            const std::uint32_t source_id =
+                *reinterpret_cast<const std::uint32_t*>(entry + 0x08);
+            const std::uint32_t target_id =
+                *reinterpret_cast<const std::uint32_t*>(entry + 0x0C);
+            if (source_id != result.source_art_skeleton_id ||
+                target_id != result.target_art_skeleton_id) {
+                continue;
+            }
+            result.retarget_entry_found = true;
+            result.retarget_entry_index = index;
+            result.retarget_feature_word =
+                *reinterpret_cast<const std::uint16_t*>(entry + 0x22);
+            void* const group_table =
+                *reinterpret_cast<void* const*>(entry + 0x28);
+            result.retarget_entry_valid =
+                source_id ==
+                    *reinterpret_cast<const std::uint32_t*>(entry + 0x08) &&
+                target_id ==
+                    *reinterpret_cast<const std::uint32_t*>(entry + 0x0C) &&
+                result.retarget_feature_word ==
+                    *reinterpret_cast<const std::uint16_t*>(entry + 0x22) &&
+                group_table ==
+                    *reinterpret_cast<void* const*>(entry + 0x28);
+            if (!result.retarget_entry_valid || group_table == nullptr ||
+                processing_group > 255) {
+                break;
+            }
+
+            const auto* const group_record =
+                static_cast<const std::byte*>(group_table) +
+                static_cast<std::size_t>(processing_group) *
+                    kAimCase6RetargetGroupStride;
+            if (readable_bytes(group_record) <
+                kAimCase6RetargetGroupStride) {
+                break;
+            }
+            void* const coverage =
+                *reinterpret_cast<void* const*>(group_record);
+            result.retarget_group_valid = coverage ==
+                *reinterpret_cast<void* const*>(group_record);
+            if (result.retarget_group_valid && coverage != nullptr &&
+                readable_bytes(coverage) >= sizeof(std::uint64_t)) {
+                result.coverage_word_0 =
+                    *reinterpret_cast<const std::uint64_t*>(coverage);
+                result.coverage_valid = result.coverage_word_0 ==
+                    *reinterpret_cast<const std::uint64_t*>(coverage);
+            }
+            break;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return AimCase6CommandProbe{};
+    }
+    return result;
+}
+
+void probe_process_anim_case6(
+    const std::uint32_t* commands, std::uint32_t command_word_count,
+    const void* context_ptr, std::uint32_t processing_group,
+    const void* callback_a5, const void* callback_a6,
+    const void* callback_a7) {
+    if (g_dll_inert || !g_state_net.enabled || commands == nullptr ||
+        command_word_count == 0 ||
+        command_word_count > kAimCase6MaxCommandWords ||
+        readable_bytes(commands) <
+            static_cast<std::size_t>(command_word_count) *
+                sizeof(std::uint32_t)) {
+        return;
+    }
+
+    const AimCase6ContextProbe context =
+        probe_aim_case6_context(context_ptr);
+    if (!context.valid || !context.vertical_valid ||
+        context.screen > kSlot1ScreenIndex) {
+        return;
+    }
+    static std::atomic<ULONGLONG> next_log_ms[2]{};
+    static std::atomic<std::uint32_t> sample_count[2]{};
+    const ULONGLONG now = GetTickCount64();
+    if (sample_count[context.screen].load(std::memory_order_acquire) >= 4 ||
+        now < next_log_ms[context.screen].load(std::memory_order_acquire)) {
+        return;
+    }
+
+    std::uint32_t cursor = 0;
+    while (cursor < command_word_count) {
+        const std::uint32_t header = commands[cursor];
+        const std::uint16_t words =
+            static_cast<std::uint16_t>(header >> 16);
+        if (header != commands[cursor] || words == 0 ||
+            words > command_word_count - cursor) {
+            return;
+        }
+        cursor += words;
+    }
+    if (cursor != command_word_count) {
+        return;
+    }
+
+    cursor = 0;
+    while (cursor < command_word_count) {
+        const std::uint32_t header = commands[cursor];
+        const std::uint16_t opcode =
+            static_cast<std::uint16_t>(header & 0xFFFFU);
+        const std::uint16_t words =
+            static_cast<std::uint16_t>(header >> 16);
+        if (opcode == 6 && words == 6) {
+            const AimCase6CommandProbe command = probe_aim_case6_command(
+                commands + cursor, context, processing_group);
+            if (command.command_valid && command.clip_valid &&
+                command.target_valid && command.retarget_table_valid) {
+                ULONGLONG due = next_log_ms[context.screen].load(
+                    std::memory_order_acquire);
+                if (now < due ||
+                    !next_log_ms[context.screen].compare_exchange_strong(
+                        due, now + 500, std::memory_order_acq_rel,
+                        std::memory_order_acquire)) {
+                    return;
+                }
+                const std::uint32_t sample =
+                    sample_count[context.screen].fetch_add(
+                        1, std::memory_order_acq_rel);
+                if (sample >= 4) {
+                    return;
+                }
+
+                const std::uint32_t callback_rva_a5 =
+                    normalize_tll_callback_rva(callback_a5);
+                const std::uint32_t callback_rva_a6 =
+                    normalize_tll_callback_rva(callback_a6);
+                const std::uint32_t callback_rva_a7 =
+                    normalize_tll_callback_rva(callback_a7);
+                const char* const branch = command.direct
+                    ? "direct"
+                    : (command.retarget_entry_found
+                           ? "retarget"
+                           : "retarget-missing");
+                char line[1024]{};
+                std::snprintf(
+                    line, sizeof(line),
+                    "AIM-CASE6 tick=%llu screen=%u sample=%u "
+                    "up=%.4f down=%.4f ctxFlags=%08X group=%u "
+                    "valid=%u/%u/%u/%u/%u/%u/%u "
+                    "phase=%08X source=%08X/%08X/%08X "
+                    "target=%08X/%08X/%u/%u/%u branch=%s "
+                    "entry=%u/%08X map=%u coverage=%u/%016llX "
+                    "callbacks=%08X/%08X/%08X",
+                    static_cast<unsigned long long>(now), context.screen,
+                    sample, context.up, context.down, context.context_flags,
+                    processing_group,
+                    static_cast<unsigned>(context.valid),
+                    static_cast<unsigned>(command.command_valid),
+                    static_cast<unsigned>(command.clip_valid),
+                    static_cast<unsigned>(command.target_valid),
+                    static_cast<unsigned>(command.retarget_table_valid),
+                    static_cast<unsigned>(command.retarget_entry_valid),
+                    static_cast<unsigned>(command.retarget_group_valid),
+                    command.phase_word,
+                    command.source_art_skeleton_id,
+                    command.source_underlying_skeleton_id,
+                    command.source_clip_data_word_08,
+                    command.target_art_skeleton_id,
+                    command.target_underlying_skeleton_id,
+                    command.target_joint_count,
+                    command.target_processing_group_count,
+                    command.target_scalar_count, branch,
+                    command.retarget_entry_index,
+                    command.retarget_feature_word,
+                    static_cast<unsigned>(command.retarget_entry_found),
+                    static_cast<unsigned>(command.coverage_valid),
+                    static_cast<unsigned long long>(command.coverage_word_0),
+                    callback_rva_a5, callback_rva_a6, callback_rva_a7);
+                boot_log_line(line);
+                return;
+            }
+        }
+        cursor += words;
+    }
+}
+
+std::uint32_t __fastcall hooked_process_anim_cmd_list_segment(
+    const std::uint32_t* commands, std::uint32_t command_word_count,
+    const void* context, std::uint32_t processing_group,
+    const void* callback_a5, const void* callback_a6,
+    const void* callback_a7) {
+    probe_process_anim_case6(
+        commands, command_word_count, context, processing_group,
+        callback_a5, callback_a6, callback_a7);
+    return g_original_process_anim_cmd_list_segment != nullptr
+        ? g_original_process_anim_cmd_list_segment(
+              commands, command_word_count, context, processing_group,
+              callback_a5, callback_a6, callback_a7)
+        : 0;
+}
+
+bool install_aim_case6_probe() {
+    static const std::uint8_t kExpectedPrologue[] = {
+        0x40, 0x55, 0x56, 0x57, 0x41, 0x54,
+        0x41, 0x55, 0x41, 0x56, 0x41, 0x57};
+    void* const trampoline = install_fire_gate_detour(
+        kProcessAnimCmdListSegmentRva,
+        kExpectedPrologue, sizeof(kExpectedPrologue),
+        reinterpret_cast<void*>(hooked_process_anim_cmd_list_segment),
+        "aim case-6 read-only probe");
+    if (trampoline == nullptr) {
+        return false;
+    }
+    g_original_process_anim_cmd_list_segment =
+        reinterpret_cast<ProcessAnimCmdListSegmentFunction>(trampoline);
+    boot_log_line("aim case-6 read-only probe installed");
+    return true;
+}
+
 AimBlendSpineProbe probe_aim_blend_spine(
     void* heap, std::uint32_t root_index) {
     AimBlendSpineProbe result{};
@@ -18237,6 +18791,9 @@ volatile bool g_readable_bytes_fast = true;
 constexpr bool g_enable_aim_animation_relays = true;
 
 constexpr bool g_enable_aim_diagnostic_probes = false;
+// Build em: bounded read-only discriminator for the selected command-0x60006
+// direct-vs-retarget boundary. Four samples per screen, no native calls/writes.
+constexpr bool g_enable_aim_case6_probe = true;
 
 
 // ============================================================================
@@ -27600,8 +28157,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL hook DLL init 2026-07-21el "
-        "(read-only active type-2 layer and instance-root inventory)");
+        "TLL hook DLL init 2026-07-21em "
+        "(read-only selected case-6 skeleton and retarget discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -27643,6 +28200,9 @@ DWORD WINAPI install_hook(void*) {
         install_native_aim_pitch_relay();
         install_native_aim_pitch_smoother_relay();
         install_native_aim_foot_turn_relays();
+        if (g_enable_aim_case6_probe) {
+            install_aim_case6_probe();
+        }
         if (g_enable_puppet_fganim_world_aim_turn) {
             install_fganim_world_aim_turn_callsite_relay();
         }
