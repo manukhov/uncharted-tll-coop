@@ -5786,3 +5786,52 @@ record, pre/post hashes/change masks, `+0x100..+0x14F`,
 the hot async boundary bounded while retaining enough raw bits to normalize the
 two actors offline. The release DLL built successfully; gameplay verification
 is still pending.
+
+### 2026-07-21 CONFIRMED: Player joint-99 pose, not ProcessWeapon state, causes the wrong holster
+
+The user completed the `fl` draw/holster sequence. Both processes stayed
+responsive, the direct-call relay installed, and the game independently exposed
+a native NadineBuddy holstered-pistol sample in both roles. This gives the exact
+native-versus-Player comparison that the probe required rather than relying on
+raw record identity alone.
+
+Native and Player samples selected the same semantic input:
+
+- `pistolHolster 0x8A0249B5`;
+- joint `99`, named `r_leg_holster 0xADD0C871` in both descriptors;
+- the same authored eight-DWORD record transform (only normal floating-point
+  roundoff differed);
+- an RTTI-exact ProcessWeapon whose child DrawControl mesh id was the pistol art
+  itself (`0x33E29A1B` on Player, the native pistol mesh on NadineBuddy).
+
+The divergence was already present in the resolved `+0x130/+0x140` transform
+before `NdAttachableObject_PostJointUpdate_Async`. The base call changed no
+link/local DWORD (`changed link=0`) and merely regenerated the world/output
+blocks, so the final writer and a stale post-attach cache are rejected. The
+visibility census independently correlates the logged weapon/draw pointer with
+the rendered ProcessWeapon child, rejecting a separate visible pistol.
+
+After removing actor world translation and yaw, the native holstered pistol was
+approximately at owner-local `(-0.222, 0.835, -0.003)`, while stable Player
+samples were around `(-0.154, 0.808, -0.175)` to
+`(-0.088, 0.810, -0.229)`. Their relative quaternions also differed materially.
+Thus equal joint name/index does not mean equal live pose: NadineBuddy's NPC
+animation graph and legacy Player's animation graph publish different joint-99
+transforms. S1 is CONFIRMED; S2 (stale ProcessWeapon link/local state) and S3
+(separate visible prop) are REJECTED.
+
+Do not modify the final writer, DrawControl visibility or record coordinates.
+The next fix hypothesis is a semantic-parent remap: resolve `r_upper_leg` as
+joint 5 in both rigs, compute the native authored holster relative to native
+joint 5 as
+`inverse(native upper-leg Ws) * (native r_leg_holster Ws * authored record)`,
+then append that transform against Player joint 5. This uses the existing
+engine-backed `raw_append_parent_remapped_attach_record` recipe and makes the
+Player follow its own upper leg rather than its incompatible joint-99 pose.
+Competing alternatives are pelvis remap (wrong semantic limb) and a hard world
+offset (animation-dependent and already contradicted by the moving samples).
+Prediction: the new record must name joint 5 and differ from the raw NPC record;
+the inactive standard pistol must move from the Chloe/back position to Nadine's
+thigh throughout idle motion, while drawn rightHand, rifle, arms and body remain
+unchanged. A joint other than 5, an unchanged transform, jitter, body/arm damage,
+or any non-pistol change falsifies the remap.

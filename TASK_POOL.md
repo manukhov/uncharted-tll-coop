@@ -1605,6 +1605,16 @@ Do not reopen these as the first move:
       available, and draw then holster the standard pistol on legacy Player
       Nadine. Compare `NADINE-FINAL-XFORM role=0` against Player role 1/2; do not
       infer from raw world positions without the logged owner transform.
+- [x] Run `fl` and classify S1/S2/S3. CONFIRMED S1: native and Player use the
+      same `pistolHolster` record/joint 99, but normalized `+0x130/+0x140`
+      transforms differ before the final base update. The base writer only
+      regenerates output, and the same logged ProcessWeapon owns the rendered
+      pistol mesh. REJECT stale post-attach state and separate-prop explanations.
+- [ ] Remap native `pistolHolster` through the shared semantic parent
+      `r_upper_leg` joint 5 using the already-proven engine MakeRelative/Compose
+      recipe. Require the appended record to target joint 5 with a non-raw
+      transform; redirect only inactive standard pistols and preserve drawn
+      rightHand, rifle, arms and body under the written prediction.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
