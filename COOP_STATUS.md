@@ -4392,3 +4392,18 @@ four signature words. All prior command-list, FgAnimData ownership,
 player/screen, ADS/vertical, target/retarget and double-read guards are unchanged.
 No resolver/callback is invoked and no game memory is written. The renamed
 single target `tll_coop_runtime.dll` builds cleanly from a fresh build directory.
+
+### 2026-07-21 INCONCLUSIVE: build `en` proves the selector was not the blocker
+
+Both processes remained responsive with no exception. Independent leaf telemetry
+observed the exact allowed signatures on the two processes:
+`0A/6C2B2396/4B0F5DE3/09A0` and `0B/27E57F43/FD6DBE03/09A0`; live vertical aim
+also reached `up=1.0`. Nevertheless neither process emitted `AIM-CASE6`.
+
+This **rejects the narrow-selector-miss explanation** for the empty case-6 probe.
+It does not compare or reject the direct/retarget hypothesis because no complete
+command/context record reached the falsifier. Do not broaden the runtime selector
+again. Return to static analysis and prove the exact same-instance dataflow from
+the selected `AnimSnapshotNodeAnimation` leaf through command generation into
+`ProcessAnimCmdListSegment`, including which FgAnimData/context owns that list and
+whether another dispatcher consumes this command class.

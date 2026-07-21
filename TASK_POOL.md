@@ -1250,11 +1250,20 @@ Do not reopen these as the first move:
       guards. Result: build `en` accepts only the exact `0A/6C2B2396/4B0F5DE3/09A0`
       and `0B/27E57F43/FD6DBE03/09A0` set, logs the full signature and preserves
       every prior read-only guard; the fresh single-DLL target builds cleanly.
-- [ ] Run build `en` during strong up/down ADS on both copies. Compare only
+- [x] Run build `en` during strong up/down ADS on both copies. Compare only
       complete records carrying the same four-word signature; a stable branch,
       pair/group/coverage or callback-RVA split selects the retarget route, while
       a complete normalized match rejects case-6 inputs and moves to the common
-      output merge/palette consumer.
+      output merge/palette consumer. Result: **INCONCLUSIVE boundary miss**. Both
+      exact signatures and `up=1.0` were independently observed, both processes
+      stayed stable, but no `AIM-CASE6` record reached the falsifier. The earlier
+      selector-miss explanation is rejected; direct/retarget remains untested.
+- [ ] Statically prove the same-instance path from the selected
+      `AnimSnapshotNodeAnimation` leaf through its `0x60006` command into the
+      actual command-list consumer and owning FgAnimData/context. Resolve whether
+      `ProcessAnimCmdListSegment` is bypassed for this leaf or the current context
+      reconstruction selects a different owner before defining another runtime
+      probe. Do not widen the signature filter again.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
