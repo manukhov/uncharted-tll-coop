@@ -5293,3 +5293,44 @@ are a separate gate downstream of lookup presence. Therefore record materializin
 is retained as CONFIRMED infrastructure, but it is not by itself the visible
 weapon fix. Next work must recover the stock lifecycle/refresh API for
 `PlayerWeaponAnimControl+0x78..+0x84`; direct field writes remain disallowed.
+
+### 2026-07-21 STATIC: bounded inactive-weapon recovery candidate (`fe`)
+
+The cache-refresh alternative is rejected. `PlayerWeaponAnimControl` vslot
+`+0x130` (`0x14108E700`) resolves four skeleton-joint names and never reads the
+AttachSystem; repeating it also allocates/reinitializes `ArmIkChain` and replaces
+control `+0x70`. Vslot `+0x138` only updates a relative transform when both
+cached indices are valid. Thus fd records cannot make `-1,5,-1,3` valid, and
+neither a refresh call nor direct cache writes can perform physical reparenting.
+
+Three independent evidence types select a narrower recovery. First, both stock
+script commands call `WeaponAttachment_AttachToOwnerPoint 0x141ED0370` only
+after selecting an owner attach id. Its body replaces the weapon owner handle,
+resolves that id in owner `+0x1E0`, writes the record index to weapon `+0x688`,
+updates flags and runs attachment-refresh virtuals. Second, fb/fd runtime proved
+the same API succeeds for both looks at `rightHand`, while fd now supplies the
+missing target records at exact indices 39/40. Third, after fd cycling the stock
+state machine issued four Nadine final calls, all still to `rightHand`, proving
+that it does not automatically replay the previously skipped holster command.
+
+Competing repairs are: (R1) rerun the control initializer/updater, rejected by
+the separate skeleton namespace and unsafe IK allocation; (R2) call an entire
+script native, rejected as a raw API because it depends on parser/selector and
+interpolation state; (R3) wait for a replay, rejected by fd; (R4) call the stock
+inner attachment mutation once for an inactive weapon still bound specifically
+to the `rightHand 0x61A48E01` record, selected for a bounded test. R4 does not
+claim to reproduce the script command's later transform/interpolation/event
+sequence, so orientation and persistence remain explicit falsifiers.
+
+Build `fe` gate/prediction: validate legacy Nadine, both fd target records and
+the weapon's current `+0x688 -> record id` as `rightHand`. At stable `draw=0`,
+repair both firearms; at `draw=2/4`, repair only slots other than `current`.
+Never act in `draw=1`; a stuck `draw=5,current<0` is admitted only after at least
+1000 ms unchanged and independent `GunHolstered` (for the remote puppet, only
+its packet's holstered bit). Attempt once per `(weapon,target,records allocation)`.
+If correct, the call returns 1, inactive pistol/rifle changes to index 39/40 and
+stays there,
+the current slot remains on the hand, and the visible double-weapon/stale-rifle
+bug disappears without restarting draw state. A zero return, active-slot write,
+immediate rightHand rollback, wrong orientation, jitter, transition restart,
+crash or body/grenade regression falsifies R4.

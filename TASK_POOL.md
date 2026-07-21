@@ -1513,11 +1513,20 @@ Do not reopen these as the first move:
       index 39 and rifle at 40 and no exception. Physical reparenting failed:
       every observed Nadine final attach still targeted `rightHand`, while the
       pre-existing `PlayerWeaponAnimControl` cache remained `-1,5,-1,3`.
-- [ ] Trace the constructor, look-change lifecycle and stock refresh path for
+- [x] Trace the constructor, look-change lifecycle and stock refresh path for
       `PlayerWeaponAnimControl+0x78/+0x7C/+0x80/+0x84`. Determine how its missing
       spine/pelvis child joints are recomputed after AttachSystem materialization;
       do not patch these output/cache fields directly. Require three independent
       static evidence types and a new written final-reparent prediction.
+      STATIC result: no safe refresh exists. `+0x130` resolves the unchanged
+      skeleton namespace and reallocates ArmIkChain; `+0x138` skips invalid pairs.
+      Cache patch/update is rejected as unrelated to physical attachment.
+- [ ] Build and run `fe`: once per records allocation, call stock
+      `WeaponAttachment_AttachToOwnerPoint` only for an inactive firearm whose
+      current resolved attach id is still `rightHand`. Stable `draw=0/2/4` only;
+      admit stuck `draw=5,current<0` after 1000 ms plus confirmed holstered state.
+      Never touch `current`, never act in draw transition 1, and verify result,
+      post index/id and persistence before making a visible claim.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
