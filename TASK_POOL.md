@@ -1521,12 +1521,26 @@ Do not reopen these as the first move:
       STATIC result: no safe refresh exists. `+0x130` resolves the unchanged
       skeleton namespace and reallocates ArmIkChain; `+0x138` skips invalid pairs.
       Cache patch/update is rejected as unrelated to physical attachment.
-- [ ] Build and run `fe`: once per records allocation, call stock
+- [x] Build and run `fe`: once per records allocation, call stock
       `WeaponAttachment_AttachToOwnerPoint` only for an inactive firearm whose
       current resolved attach id is still `rightHand`. Stable `draw=0/2/4` only;
       admit stuck `draw=5,current<0` after 1000 ms plus confirmed holstered state.
       Never touch `current`, never act in draw transition 1, and verify result,
       post index/id and persistence before making a visible claim.
+      CONFIRMED/PARTIAL: the rifle now leaves Nadine's hand and no longer overlaps
+      the drawn pistol. Placement fidelity is not solved: pistol targets the
+      copied Chloe back point, rifle intersects the torso, and active grips/left
+      arm are wrong.
+- [ ] Recover Nadine's authored holster mapping statically. Identify the exact
+      hip/leg pistol attach id, joint and transform plus Nadine's rifle-back
+      transform/selector. Compare them with copied `targSpineProp`/`gun_holster`;
+      do not hand-tune matrices or call collision a fix.
+- [ ] Trace active pistol/rifle grip and left-hand IK/profile selection for
+      legacy Nadine. Determine whether crooked ADS placement and the arm crossing
+      the torso share one missing binding or are independent. Require three
+      evidence types and a written discriminator before a new runtime build.
+- [ ] After firearm geometry is correct, locate the rifle sling as a separate
+      prop/visibility/attachment candidate; do not block the holster mapping on it.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 

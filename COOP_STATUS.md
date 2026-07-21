@@ -5329,8 +5329,35 @@ Never act in `draw=1`; a stuck `draw=5,current<0` is admitted only after at leas
 1000 ms unchanged and independent `GunHolstered` (for the remote puppet, only
 its packet's holstered bit). Attempt once per `(weapon,target,records allocation)`.
 If correct, the call returns 1, inactive pistol/rifle changes to index 39/40 and
-stays there,
-the current slot remains on the hand, and the visible double-weapon/stale-rifle
+stays there, the current slot remains on the hand, and the visible
+double-weapon/stale-rifle
 bug disappears without restarting draw state. A zero return, active-slot write,
 immediate rightHand rollback, wrong orientation, jitter, transition restart,
 crash or body/grenade regression falsifies R4.
+
+### 2026-07-21 CONFIRMED/PARTIAL: fe reparents inactive firearms but exposes authored-pose gaps
+
+The user verified both weapon cycles with build `fe`. The inactive rifle now
+leaves Nadine's hand and moves behind her back; when the pistol is drawn, the
+rifle is no longer rendered through it. This confirms the bounded stock
+`WeaponAttachment_AttachToOwnerPoint` recovery as the missing physical-reparent
+step and closes the original double-weapon/stale-rifle-in-hand defect. Both
+processes remained responsive after the test.
+
+The full placement prediction is only PARTIAL, not a finished presentation fix.
+Four visible falsifiers remain: the pistol does not sit correctly in the hands
+while ADS; the nominally free/left arm crosses the torso and reaches the weapon
+for both pistol and rifle; the back rifle intersects Nadine's torso and lacks
+its sling; and the holstered pistol goes to the copied Chloe back point rather
+than Nadine's thigh holster. The last two placement errors are evidence against
+a collision explanation: fd/fe deliberately copied Chloe's `targSpineProp` and
+`gun_holster` records and their authored transforms into a different skeleton.
+The sling may be a separate prop/visibility record and must not be assumed to be
+part of collision or weapon attachment.
+
+Next work is static again. First recover Nadine's actual hip/leg pistol target
+and her own rifle-back transform/selector rather than tuning copied matrices.
+In parallel, trace the active-weapon left-hand IK/profile inputs to decide whether
+the bad grip and torso-crossing arm share one missing Nadine animation binding or
+are independent defects. No transform offset or IK field should be patched until
+the stock authored source and competing explanations are resolved.
