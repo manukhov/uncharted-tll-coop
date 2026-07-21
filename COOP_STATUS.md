@@ -4052,3 +4052,37 @@ and the next static trace moves below root vslot `+0x68` into common-tree
 parameter binding/script consumption/pose output. Intermittent invalid samples
 select only a transition race. No visible behavior change is expected; any crash
 or model/animation change invalidates the probe.
+
+### 2026-07-21 CONFIRMED/REJECTED: `eh` matches concrete root and full config
+
+Fresh PIDs 22396/12792 loaded build `eh`; the vertical ADS sweep completed
+without a crash. Five tightly aligned steady pairs (screen-0/screen-1 tick gaps
+15-16 ms at 435127843/859 through 435128468/484) were fully valid and agreed on:
+
+- state `3C347132`, snapshot word `C45CF708`, callbacks `38`, state flags
+  `0000008000000009`;
+- scalar tuple
+  `9DCD31BC/8DFC1F97/6C2B2396/4B0F5DE3/3E999999/3F800000`, mode `02`,
+  apReference `0`;
+- authored keys `count=2 hash=07D401B5 valid=1`;
+- overrides `count=0 hash=811C9DC5 match=0/0 valid=1`;
+- concrete root vtable RVA `02B15218`, TypeDescriptor RVA `03771508`, both
+  node/RTTI validity bits set, heap max count `512`;
+- instance flags `28` and parameter-copy bit set.
+
+Only raw root index (`0x16` sender vs `0x29` receiver) and activation serial
+(`0x0E` vs `0x0D`) differed. Those are per-heap/per-activation values and were
+predicted as non-diagnostic. Therefore concrete root type, authored key content,
+override routing, mode/apReference, and the full logged scalar contract are
+**REJECTED** as causes of the missing vertical pose. It is now **CONFIRMED** that
+the same concrete root/config consumes a destination parameter buffer already
+known to contain the relayed LRDU, yet the receiver still produces no visible
+pitch.
+
+Both processes were closed. The next boundary is below the common root virtual
+call at `AnimStateInstance::PhaseUpdate 0x1418A529F` (root vslot `+0x68`). Resolve
+vtable `0x142B15218`, its RTTI at `0x143771508`, and the slot target; then trace
+how that concrete node binds the `instance+0x178` descriptor into generated
+animation/pose commands. Do not compare or copy raw root indices, and do not add
+another runtime probe until competing consumers below this slot are separated
+statically.

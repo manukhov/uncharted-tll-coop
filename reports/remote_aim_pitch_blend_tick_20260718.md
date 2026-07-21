@@ -831,3 +831,34 @@ Prediction:
 - differences only in root index/serial are explicitly non-diagnostic;
 - invalid repeated reads indicate transition/teardown only;
 - any crash, model damage, or visible behavior change invalidates `eh`.
+
+### Runtime result: root RTTI and authored config match
+
+PIDs 22396/12792 loaded `2026-07-21eh`. The test completed without a crash and
+yielded five fully valid aligned pairs with only 15-16 ms screen-to-screen skew:
+
+| screen-0 tick | screen-1 tick | state | root vt/TD RVA | keys | overrides |
+|---:|---:|---|---|---|---|
+| 435127843 | 435127859 | `3C347132` | `02B15218/03771508` | `2/07D401B5/1` | `0/811C9DC5/0/0/1` |
+| 435128000 | 435128015 | `3C347132` | `02B15218/03771508` | `2/07D401B5/1` | `0/811C9DC5/0/0/1` |
+| 435128156 | 435128171 | `3C347132` | `02B15218/03771508` | `2/07D401B5/1` | `0/811C9DC5/0/0/1` |
+| 435128312 | 435128328 | `3C347132` | `02B15218/03771508` | `2/07D401B5/1` | `0/811C9DC5/0/0/1` |
+| 435128468 | 435128484 | `3C347132` | `02B15218/03771508` | `2/07D401B5/1` | `0/811C9DC5/0/0/1` |
+
+Every pair also matched snapshot word `C45CF708`, callbacks `38`, flags
+`0000008000000009`, scalar tuple
+`9DCD31BC/8DFC1F97/6C2B2396/4B0F5DE3/3E999999/3F800000`, mode `02`, apReference
+`0`, heap max `512`, instance flags `28`, and copy bit `1`. Root-node and RTTI
+validity bits were both `1`.
+
+The only differences were raw root index `0x16`/`0x29` and activation serial
+`0x0E`/`0x0D`. This is the falsifier's allocator/activation-noise outcome.
+Concrete root type, authored keys, override routing, mode/apReference and scalar
+configuration are therefore **REJECTED** as explanations. Combined with `ef`,
+the receiver now has both the LRDU destination data and the same concrete
+root/config, but still lacks visible pitch.
+
+The next static frontier is the common root vslot `+0x68` invoked at
+`0x1418A529F`. Resolve vtable `0x142B15218`, TypeDescriptor `0x143771508`, and
+the concrete slot target, then follow parameter binding and command/pose output.
+Raw root index must not be copied or treated as identity.

@@ -1151,11 +1151,16 @@ Do not reopen these as the first move:
       authored-key hash, and double-read override hash/current outer+inner match.
       It manually bounds the heap/table layouts and never invokes native
       resolver/override functions or writes animation state.
-- [ ] Run the written `eh` falsifier with vertical ADS sweeps. Compare screen-0
-      and screen-1 samples by system tick: persistent RTTI split selects concrete
-      root mismatch; equal RTTI plus config split selects authored routing; full
-      stable match moves below common root vslot `+0x68` to parameter/script/pose
-      consumption. Any crash or visible regression invalidates the probe.
+- [x] Run the written `eh` falsifier. Five screen-0/screen-1 pairs aligned within
+      15-16 ms matched root vtable RVA `02B15218`, TD RVA `03771508`, state,
+      callback/flags, all scalars, mode/apReference, key hash, override result,
+      heap max, instance flags and copy bit. Only root index and activation serial
+      differed; reject concrete-root/config routing as the missing-pitch cause.
+- [ ] Resolve concrete root vtable `0x142B15218`, RTTI TD `0x143771508`, and
+      vslot `+0x68` target called at `0x1418A529F`. Trace descriptor/key use into
+      generated animation/pose commands in both directions and enumerate
+      competing consumers before choosing the next probe. Do not copy raw root
+      index or add another runtime test before the static evidence quota.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
