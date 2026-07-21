@@ -4834,3 +4834,20 @@ or the assumption that RBX is a fully readable base object. The next build must
 remain read-only and log one bounded reason record immediately after the exact
 five-mesh parent match, before applying those guards. Do not broaden the parent
 filter and do not re-enable visibility writes.
+
+### 2026-07-21 STATIC: exact-parent rejection telemetry (`ev`)
+
+Build `2026-07-21ev` moves logging immediately behind the already-proven exact
+five-mesh Nadine parent matcher. It no longer requires a non-null or `0x4F0`-
+readable RBX value and no longer discards a failed child DrawControl snapshot.
+Each of at most 32 semantic signatures records raw RBX/child addresses, readable
+extents, guarded vtable/type/parent/art fields, snapshot success and any readable
+child mesh ids. All rejected F11 visibility code remains compile-time disabled.
+
+Written discriminator: `attachReadable < 0x4EC` with a valid child snapshot
+rejects the fully-readable base-object assumption; `snapshot=0` with a readable
+RBX selects the child DrawControl interpretation/capture; `snapshot=1` and a
+readable vtable finally yields the child classes needed to identify the rifle.
+Still receiving no `NADINE-ATTACHABLE-HIT` record would contradict the prior `et`
+reachability result and make timing/rebuild at this callsite the only remaining
+explanation. An exception or visual change rejects the diagnostic.

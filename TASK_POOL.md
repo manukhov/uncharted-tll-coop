@@ -1387,11 +1387,14 @@ Do not reopen these as the first move:
       INCONCLUSIVE, zero accepted records in both responsive processes, no crash.
       The same exact matcher worked in `et`, so instrument guard/snapshot rejection
       after parent match instead of broadening the parent or changing visibility.
-- [ ] Build a bounded read-only exact-parent hit/rejection census before the
+- [x] Build `ev`, a bounded read-only exact-parent hit/rejection census before the
       `attachable >= 0x4F0` and child-snapshot guards. Record readable extent,
       child mesh header/snapshot success and raw RBX value so the next test
       distinguishes an undersized object, wrong object base and child capture
       failure.
+- [ ] Run `ev` with the legacy Nadine parent visible. Classify the first
+      `NADINE-ATTACHABLE-HIT` records by `attachReadable`, `snapshot`, vtable and
+      child mesh ids before selecting any rifle visibility/attachment action.
 - [ ] After the baked rifle is isolated, resolve the player-owned rifle's failed
       `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
       Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a

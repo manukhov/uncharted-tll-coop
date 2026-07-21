@@ -26805,26 +26805,32 @@ void apply_legacy_nadine_parent_mesh_probe(void* parent_draw) {
 
 void census_legacy_nadine_attachable(
     void* parent_draw, void* child_draw, void* attachable) {
-    if (!legacy_nadine_parent_draw_matches(parent_draw) || child_draw == nullptr ||
-        attachable == nullptr || readable_bytes(attachable) < 0x4F0) {
+    if (!legacy_nadine_parent_draw_matches(parent_draw)) {
         return;
     }
 
     AttachmentDrawSnapshot child{};
-    if (!seh_capture_attachment_draw_snapshot(child_draw, child)) {
-        return;
-    }
+    const std::size_t child_readable =
+        child_draw != nullptr ? readable_bytes(child_draw) : 0;
+    const bool child_snapshot_ok =
+        seh_capture_attachment_draw_snapshot(child_draw, child);
+    const std::size_t attachable_readable =
+        attachable != nullptr ? readable_bytes(attachable) : 0;
     auto* const bytes = static_cast<const std::byte*>(attachable);
-    const std::uintptr_t vtable =
-        *reinterpret_cast<const std::uintptr_t*>(bytes);
+    const std::uintptr_t vtable = attachable_readable >= sizeof(std::uintptr_t)
+        ? *reinterpret_cast<const std::uintptr_t*>(bytes)
+        : 0;
     const std::uintptr_t vtable_rva =
         g_module != 0 && vtable >= g_module ? vtable - g_module : vtable;
-    const std::uint32_t type_id =
-        *reinterpret_cast<const std::uint32_t*>(bytes + 0x38);
-    const void* const parent_handle =
-        *reinterpret_cast<void* const*>(bytes + 0x4E0);
-    const std::uint32_t parent_id =
-        *reinterpret_cast<const std::uint32_t*>(bytes + 0x4E8);
+    const std::uint32_t type_id = attachable_readable >= 0x3C
+        ? *reinterpret_cast<const std::uint32_t*>(bytes + 0x38)
+        : 0;
+    const void* const parent_handle = attachable_readable >= 0x4EC
+        ? *reinterpret_cast<void* const*>(bytes + 0x4E0)
+        : nullptr;
+    const std::uint32_t parent_id = attachable_readable >= 0x4EC
+        ? *reinterpret_cast<const std::uint32_t*>(bytes + 0x4E8)
+        : 0;
     const void* resolved_parent = nullptr;
     std::uint32_t resolved_parent_id = 0;
     if (parent_handle != nullptr && readable_bytes(parent_handle) >= 0x10) {
@@ -26838,7 +26844,7 @@ void census_legacy_nadine_attachable(
         }
     }
     std::uint32_t art_candidate = 0;
-    if (readable_bytes(bytes + 0x860) >= sizeof(art_candidate)) {
+    if (attachable_readable >= 0x864) {
         art_candidate = *reinterpret_cast<const std::uint32_t*>(bytes + 0x860);
     }
 
@@ -26851,6 +26857,7 @@ void census_legacy_nadine_attachable(
     mix(type_id);
     mix(parent_id);
     mix(art_candidate);
+    mix(child_snapshot_ok ? 1 : 0);
     mix(child.mesh_count);
     for (std::uint32_t i = 0; i < child.readable_meshes; ++i) {
         mix(child.mesh_ids[i]);
@@ -26878,7 +26885,7 @@ void census_legacy_nadine_attachable(
     }
 
     std::ostringstream line;
-    line << "NADINE-ATTACHABLE object=0x" << std::hex
+    line << "NADINE-ATTACHABLE-HIT object=0x" << std::hex
          << reinterpret_cast<std::uintptr_t>(attachable)
          << " vtableRva=0x" << vtable_rva
          << " type=0x" << type_id
@@ -26889,6 +26896,9 @@ void census_legacy_nadine_attachable(
          << reinterpret_cast<std::uintptr_t>(resolved_parent)
          << "/0x" << resolved_parent_id
          << " artCandidate=0x" << art_candidate << std::dec
+         << " attachReadable=" << attachable_readable
+         << " childReadable=" << child_readable
+         << " snapshot=" << (child_snapshot_ok ? 1 : 0)
          << " meshes=" << child.readable_meshes << "/" << child.mesh_count
          << " drawIds=";
     for (std::uint32_t i = 0; i < child.readable_meshes; ++i) {
@@ -28919,8 +28929,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21eu "
-        "(read-only legacy Nadine attachable census; max 32 signatures)");
+        "TLL co-op runtime init 2026-07-21ev "
+        "(read-only exact-parent attachable rejection census; max 32 signatures)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
