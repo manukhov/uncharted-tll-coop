@@ -5361,3 +5361,69 @@ In parallel, trace the active-weapon left-hand IK/profile inputs to decide wheth
 the bad grip and torso-crossing arm share one missing Nadine animation binding or
 are independent defects. No transform offset or IK field should be patched until
 the stock authored source and competing explanations are resolved.
+
+### 2026-07-21 STATIC: active grip, arm pose, holster and sling have separate owners
+
+The four visible defects do not belong to one collision/IK switch. The stock
+active-weapon attach path is `WeaponAttachment_AttachToOwnerPoint 0x141ED0370`:
+it resolves the Player `rightHand 0x61A48E01` record from `Player+0x1E0` and
+stores its index at weapon `+0x688`. This owns the weapon's attachment placement,
+not the left-arm pose. The independent GunMove path resolves vtable
+`0x142A280A8 +0xB8 -> 0x140E909C0 -> ArmBlockProbes_Kick 0x140C2BCB0`; the exact
+`aim-block.cpp:223` assertion and helper `0x140C2C2F0` show it consuming
+`stand-p-aim`, `*player-aim-probes*`, `apReference-shoulder` and
+`apReference-gun`, with `r_shoulder/spined` fallbacks. It does not read weapon
+art, the look id or holster records. The older
+`Player_KickPlayerDepenetrateWeapons 0x1410EDFB0` path remains a downstream
+wrist-depenetration layer and is rejected as the primary persistent grip owner.
+
+The per-look `PlayerArmIKAction` is also now concrete.
+`Player_ChangeLookId 0x1410FE840` allocates a 336-byte action through constructor
+`0x1418F1E60`,
+stores it at `Player+0x4308`, and repeats this at initial top-level Player spawn.
+The constructor configures paired `spined -> r_hand_prop_attachment` and
+`spined -> l_hand_prop_attachment` chains under `*player-ik-arm*`;
+`PlayerArmIKAction_UpdateProcedural 0x140C7E8D0` publishes their two stored
+targets. This makes a shared look/retarget defect possible, but does not collapse
+the two downstream owners: weapon placement still comes from `rightHand`, while
+the crossing arm is produced by the GunMove/arm-pose side.
+
+The thigh-holster alternatives were eliminated statically. Standard pistol art
+`0x33E29A1B` has non-generic primary id `targSpineProp 0x00AD047A`, so
+`WeaponHolster_ResolveAttachPoint 0x1414FEB30` returns it immediately and never
+calls `WeaponHolster_SelectCharacterAttachPoint 0x1414FE7E0`. Only a zero or
+generic art id enters the latter's priority
+`gun_holster_pelvis 0xBA712574 -> gun_holster_leg 0x77BEFE9D -> gun_holster 0x555EFB8D`.
+None of those three ids
+exists in legacy Nadine's original 39-record Player attach table. Her existing
+`targRUpperLeg 0x7141CB0E` is not a holster: `0x140E4ADB0` consumes it with both
+ankles and both upper legs as a general body landmark, with no weapon edge.
+Therefore no exact Nadine Player thigh transform can honestly be inferred from
+that record. A non-primary pistol WeaponArtDef entry is the remaining authored
+alternative and must be read before inventing a new attachment.
+
+The missing rifle sling is independently tied to
+`ProcessWeaponStrap_EventHandler 0x14150C9C0`, whose exact
+`process-weapon-strap.cpp` assertion publishes `play-animation` for
+`ak47-holster--strap` and `rifle-strap-unholstered`; sibling `0x141509D10`
+publishes the unholstered strap state from the base animation state. Sling state
+is therefore parked until the attachment/pose geometry is correct, but collision
+is rejected as its source.
+
+Competing active-pose hypotheses are now: (G1) Chloe and Nadine have different
+`rightHand` record/local attachment transforms, producing the crooked weapon;
+(G2) the rightHand attachment agrees but Nadine lacks/differs in
+`apReference-gun`/`apReference-shoulder`, producing different ArmBlock output;
+(G3) both boundaries agree and the final authored GunMove animation retarget is
+wrong on legacy Nadine. Call/xref graphs, exact field dataflow, source strings
+and the confirmed fb/fd/fe structure satisfy the three-kind evidence quota.
+
+Build `fg` is a read-only discriminator. Before the fd append it records every
+original Nadine attach record and reads the pistol/rifle WeaponArtDef `+0xD8`
+holster-id list. On every stable pistol/rifle state it samples the active
+`rightHand` record and weapon `+0x688` beside completed `ArmBlockProbes+0x58`,
+`+0xD0/+0xD8` and `+0xF0..+0x137`. Prediction: differing rightHand data with
+matching ArmBlock selects G1; matching rightHand with missing/different ArmBlock
+inputs selects G2; agreement at both boundaries selects G3. The probe changes no
+argument, return value, transform, IK field or animation state. A crash, visual
+change or absent hook marker falsifies the diagnostic implementation.

@@ -513,6 +513,16 @@ constexpr std::uintptr_t kResolveKnowledgeRegistryEntryByIdRva = 0x1765030;
 constexpr std::uintptr_t kPlayerWeaponAnimNamedEventRva = 0x108DE30;
 constexpr std::uintptr_t kWeaponHolsterBuildBindingRva = 0x14FE540;
 constexpr std::uintptr_t kWeaponAttachmentAttachToOwnerPointRva = 0x1ED0370;
+// Read-only active-grip discriminator. GunMoveController vtable +0xB8 reaches
+// 0x140E909C0, which calls ArmBlockProbes::Kick(Player*, bool). The probe logs
+// its completed output beside the active rightHand attach record so authored
+// attachment placement can be separated from arm-pose/retarget output.
+constexpr std::uintptr_t kArmBlockProbesKickRva = 0x0C2BCB0;
+// Cached WeaponArtDef registry and generic id lookup used by
+// WeaponHolster_ResolveAttachPoint. The runtime probe reads the art record's
+// +0xD8 holster-id list; neither helper mutates the weapon or Player.
+constexpr std::uintptr_t kGetCachedWeaponArtDefsHashRegistryRva = 0x14FA380;
+constexpr std::uintptr_t kLookupRegistryRecordPointerByIdRva = 0x1614E40;
 // Stock AttachSystem repair path for legacy Nadine's filtered-out firearm
 // attachment records. The two transform helpers convert a Chloe marker-local
 // record to an equivalent transform relative to a joint shared by both rigs;

@@ -1531,14 +1531,23 @@ Do not reopen these as the first move:
       the drawn pistol. Placement fidelity is not solved: pistol targets the
       copied Chloe back point, rifle intersects the torso, and active grips/left
       arm are wrong.
-- [ ] Recover Nadine's authored holster mapping statically. Identify the exact
-      hip/leg pistol attach id, joint and transform plus Nadine's rifle-back
-      transform/selector. Compare them with copied `targSpineProp`/`gun_holster`;
-      do not hand-tune matrices or call collision a fix.
-- [ ] Trace active pistol/rifle grip and left-hand IK/profile selection for
-      legacy Nadine. Determine whether crooked ADS placement and the arm crossing
-      the torso share one missing binding or are independent. Require three
-      evidence types and a written discriminator before a new runtime build.
+- [x] Recover Nadine's stock Player holster mapping statically. Result: standard
+      pistol art directly selects `targSpineProp` and bypasses character
+      pelvis/leg selection; the original Nadine table contains no
+      `gun_holster_pelvis`, `gun_holster_leg` or generic `gun_holster`, and
+      `targRUpperLeg` is a locomotion/body landmark rather than a weapon holster.
+      No stock Player thigh transform was found; inspect the live WeaponArtDef
+      holster-id list before constructing a compatibility record.
+- [x] Trace active pistol/rifle placement and arm-pose selection for legacy
+      Nadine. STATIC result: active weapon placement is the `rightHand` attach
+      record/weapon `+0x688`; the torso-crossing arm is a separate
+      GunMove -> ArmBlockProbes path, with a possible common upstream authored
+      animation/retarget defect. Three evidence types and a written G1/G2/G3
+      discriminator are recorded in `COOP_STATUS.md`.
+- [ ] Build and run `fg`, a read-only comparison of Chloe/Nadine original attach
+      records, WeaponArtDef holster lists, active `rightHand` record and completed
+      ArmBlock output. Exercise idle/drawn/ADS with pistol and rifle; no transform,
+      IK, attachment or animation write is allowed in this build.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

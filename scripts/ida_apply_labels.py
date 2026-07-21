@@ -8,6 +8,57 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-21: Nadine active firearm grip, arm pose and strap split ---
+    0x140C2BCB0: (
+        "ArmBlockProbes_Kick",
+        "Source assertion aim-block.cpp:223 names ArmBlockProbes::Kick(Player*, "
+        "bool). Called from the GunMove controller path; builds four probe "
+        "records through 0x140C2C2F0 and writes the completed result arrays at "
+        "this+0xD0/+0xD8. This is an arm/aim-block producer, not a weapon "
+        "attachment or holster transform owner.",
+    ),
+    0x140C2C2F0: (
+        "ArmBlockProbes_BuildProbeInputs",
+        "Helper for ArmBlockProbes_Kick. Resolves stand-p-aim, "
+        "*player-aim-probes*, apReference-shoulder and apReference-gun, with "
+        "r_shoulder/spined fallbacks, then returns the local probe geometry. "
+        "It does not read WeaponArtDef holster data or Player look ids.",
+    ),
+    0x140C7E8D0: (
+        "PlayerArmIKAction_UpdateProcedural",
+        "Exact ikactions.cpp:257 source assertion. Publishes the two stored arm "
+        "targets from the PlayerArmIKAction into its paired procedural chains. "
+        "The action is recreated from the active look by Player_ChangeLookId.",
+    ),
+    0x140E909C0: (
+        "GunMoveController_KickArmBlockProbes",
+        "GunMove-controller vtable +0xB8 wrapper that reaches "
+        "ArmBlockProbes_Kick at controller+0x310 for the owning Player. This "
+        "separates the authored GunMove arm-pose path from ProcessWeapon's "
+        "rightHand attachment path.",
+    ),
+    0x141509D10: (
+        "ProcessWeaponStrap_PlayUnholsteredState",
+        "Resolves the base animation state, builds the authored "
+        "rifle-strap-unholstered event and dispatches it through the animation "
+        "state object. Strap visibility is therefore a separate authored "
+        "animation concern, not collision or holster attachment geometry.",
+    ),
+    0x14150C9C0: (
+        "ProcessWeaponStrap_EventHandler",
+        "Exact process-weapon-strap.cpp EventHandler assertion. Handles the "
+        "strap state events by publishing play-animation for "
+        "ak47-holster--strap or rifle-strap-unholstered through the owner "
+        "process and updates its local strap-state flag.",
+    ),
+    0x1418F1E60: (
+        "PlayerArmIKAction_ConstructForLook",
+        "Constructs the 336-byte per-look PlayerArmIKAction stored at "
+        "Player+0x4308. Configures paired right/left procedural chains from "
+        "spined to r_hand_prop_attachment/l_hand_prop_attachment and binds the "
+        "*player-ik-arm* action id. Called at top-level Player spawn and again "
+        "from Player_ChangeLookId.",
+    ),
     # --- 2026-07-13: native pickup gesture controller ---
     0x140F49300: (
         "PlayerPickupController_Construct",

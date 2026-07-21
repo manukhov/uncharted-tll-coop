@@ -13075,6 +13075,98 @@ bool seh_repair_legacy_nadine_attach_points(
     }
 }
 
+struct OriginalNadineAttachSnapshot {
+    std::uintptr_t table = 0;
+    std::uintptr_t records = 0;
+    std::uint32_t capacity = 0;
+    std::uint32_t count = 0;
+    std::array<std::array<std::uint32_t, 12>, 256> record_bits{};
+};
+
+bool seh_capture_original_nadine_attach_records(
+    void* player, OriginalNadineAttachSnapshot* snapshot) {
+    if (snapshot == nullptr) {
+        return false;
+    }
+    *snapshot = {};
+    __try {
+        if (player == nullptr) {
+            return false;
+        }
+        auto* const table = *reinterpret_cast<const std::byte* const*>(
+            static_cast<const std::byte*>(player) + 0x1E0);
+        if (table == nullptr) {
+            return false;
+        }
+        const std::uint32_t capacity =
+            *reinterpret_cast<const std::uint32_t*>(table + 0x0);
+        const std::uint32_t count =
+            *reinterpret_cast<const std::uint32_t*>(table + 0x4);
+        auto* const records = *reinterpret_cast<const std::byte* const*>(
+            table + 0x8);
+        if (capacity == 0 || capacity > 256 || count > capacity ||
+            records == nullptr || readable_bytes(records) < count * 48ULL) {
+            return false;
+        }
+        snapshot->table = reinterpret_cast<std::uintptr_t>(table);
+        snapshot->records = reinterpret_cast<std::uintptr_t>(records);
+        snapshot->capacity = capacity;
+        snapshot->count = count;
+        for (std::uint32_t index = 0; index < count; ++index) {
+            std::memcpy(
+                snapshot->record_bits[index].data(),
+                records + static_cast<std::size_t>(index) * 48, 48);
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *snapshot = {};
+        return false;
+    }
+}
+
+void log_original_nadine_attach_records(
+    int owner_index, void* player) {
+    if (owner_index < 0 || owner_index > 1) {
+        return;
+    }
+    OriginalNadineAttachSnapshot snapshot{};
+    if (!seh_capture_original_nadine_attach_records(player, &snapshot)) {
+        write_log_line("NADINE-ATTACH-ORIGINAL unreadable");
+        return;
+    }
+    static std::array<std::uintptr_t, 2> logged_generations{};
+    if (logged_generations[owner_index] == snapshot.records) {
+        return;
+    }
+    logged_generations[owner_index] = snapshot.records;
+
+    std::ostringstream header;
+    header << "NADINE-ATTACH-ORIGINAL owner=" << owner_index
+           << " player=0x" << std::hex
+           << reinterpret_cast<std::uintptr_t>(player)
+           << " table=0x" << snapshot.table
+           << " records=0x" << snapshot.records << std::dec
+           << " count=" << snapshot.count << "/" << snapshot.capacity;
+    write_log_line(header.str().c_str());
+    for (std::uint32_t index = 0; index < snapshot.count; ++index) {
+        const auto& bits = snapshot.record_bits[index];
+        const std::int16_t joint =
+            static_cast<std::int16_t>(bits[9] & 0xFFFFu);
+        const std::uint16_t flags =
+            static_cast<std::uint16_t>(bits[9] >> 16);
+        std::ostringstream line;
+        line << "NADINE-ATTACH-ORIGINAL-RECORD owner=" << owner_index
+             << " index=" << index << " id=0x" << std::hex
+             << bits[8] << std::dec << " joint=" << joint
+             << " flags=0x" << std::hex << flags
+             << " runtime=0x" << bits[10] << " transform=";
+        for (std::size_t part = 0; part < 8; ++part) {
+            line << bits[part] << ",";
+        }
+        write_log_line(line.str().c_str());
+    }
+}
+
 void ensure_legacy_nadine_attach_points_game_thread() {
     void* donor = nullptr;
     void* target = nullptr;
@@ -13103,6 +13195,11 @@ void ensure_legacy_nadine_attach_points_game_thread() {
     if (target == nullptr) {
         return;
     }
+
+    // Preserve the authored legacy-Nadine table before the bounded repair adds
+    // the two Chloe-derived compatibility records. This is diagnostic only and
+    // is memoized by the engine-owned records allocation.
+    log_original_nadine_attach_records(target_owner, target);
 
     NadineAttachRepairResult result{};
     if (donor == nullptr) {
@@ -26995,6 +27092,127 @@ bool relevant_holster_probe_art(std::uint32_t art) {
            art == 0x0B8BD6D6u;
 }
 
+struct WeaponArtHolsterListProbe {
+    bool registry_valid = false;
+    bool record_valid = false;
+    bool descriptor_valid = false;
+    bool ids_readable = false;
+    std::uintptr_t registry = 0;
+    std::uintptr_t record = 0;
+    std::uintptr_t descriptor = 0;
+    std::uintptr_t ids = 0;
+    std::uint32_t count = 0;
+    std::uint32_t capacity = 0;
+    std::array<std::uint32_t, 8> descriptor_bits{};
+    std::array<std::uint32_t, 32> holster_ids{};
+};
+
+bool seh_read_weapon_art_holster_list(
+    std::uint32_t art, WeaponArtHolsterListProbe* probe) {
+    if (probe == nullptr) {
+        return false;
+    }
+    *probe = {};
+    __try {
+        using GetRegistryFunction = void*(__fastcall*)();
+        using LookupRecordFunction = void*(__fastcall*)(void*, std::uint32_t);
+        void* const registry = reinterpret_cast<GetRegistryFunction>(
+            g_module + kGetCachedWeaponArtDefsHashRegistryRva)();
+        probe->registry = reinterpret_cast<std::uintptr_t>(registry);
+        probe->registry_valid = registry != nullptr;
+        if (registry == nullptr) {
+            return false;
+        }
+        void* const record = reinterpret_cast<LookupRecordFunction>(
+            g_module + kLookupRegistryRecordPointerByIdRva)(registry, art);
+        probe->record = reinterpret_cast<std::uintptr_t>(record);
+        probe->record_valid = record != nullptr;
+        if (record == nullptr ||
+            readable_bytes(static_cast<std::byte*>(record) + 0xE0) < 1) {
+            return false;
+        }
+        auto* const descriptor = *reinterpret_cast<const std::byte* const*>(
+            static_cast<const std::byte*>(record) + 0xD8);
+        probe->descriptor = reinterpret_cast<std::uintptr_t>(descriptor);
+        if (descriptor == nullptr || readable_bytes(descriptor) < 0x20) {
+            return false;
+        }
+        probe->descriptor_valid = true;
+        std::memcpy(
+            probe->descriptor_bits.data(), descriptor,
+            sizeof(probe->descriptor_bits));
+        probe->count = *reinterpret_cast<const std::uint32_t*>(descriptor);
+        probe->capacity =
+            *reinterpret_cast<const std::uint32_t*>(descriptor + 0x4);
+        auto* const ids = *reinterpret_cast<const std::uint32_t* const*>(
+            descriptor + 0x8);
+        probe->ids = reinterpret_cast<std::uintptr_t>(ids);
+        if (probe->count > probe->holster_ids.size() ||
+            probe->capacity > 4096 || probe->count > probe->capacity ||
+            ids == nullptr ||
+            readable_bytes(ids) < probe->count * sizeof(std::uint32_t)) {
+            return false;
+        }
+        if (probe->count != 0) {
+            std::memcpy(
+                probe->holster_ids.data(), ids,
+                probe->count * sizeof(std::uint32_t));
+        }
+        probe->ids_readable = true;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void log_weapon_art_holster_list_once(
+    int owner_index, std::uint32_t art) {
+    if (owner_index < 0 || !relevant_holster_probe_art(art)) {
+        return;
+    }
+    WeaponArtHolsterListProbe probe{};
+    seh_read_weapon_art_holster_list(art, &probe);
+    std::uint64_t signature =
+        (static_cast<std::uint64_t>(art) << 32) ^ probe.record ^
+        (probe.descriptor << 1) ^ probe.count;
+    if (signature == 0) {
+        signature = 1;
+    }
+    static std::array<std::uint64_t, 8> seen{};
+    for (std::uint64_t& entry : seen) {
+        if (entry == signature) {
+            return;
+        }
+        if (entry == 0) {
+            entry = signature;
+            break;
+        }
+    }
+    std::ostringstream line;
+    line << "WEAPON-ART-HOLSTER-LIST owner=" << owner_index
+         << " art=0x" << std::hex << art
+         << " registry=0x" << probe.registry
+         << " record=0x" << probe.record
+         << " descriptor=0x" << probe.descriptor
+         << " idsPtr=0x" << probe.ids << std::dec
+         << " valid=" << (probe.registry_valid ? 1 : 0) << "/"
+         << (probe.record_valid ? 1 : 0) << "/"
+         << (probe.descriptor_valid ? 1 : 0) << "/"
+         << (probe.ids_readable ? 1 : 0)
+         << " count=" << probe.count << "/" << probe.capacity
+         << " descriptorBits=" << std::hex;
+    for (const std::uint32_t bits : probe.descriptor_bits) {
+        line << bits << ",";
+    }
+    line << " ids=";
+    const std::size_t logged_ids =
+        probe.count <= probe.holster_ids.size() ? probe.count : 0;
+    for (std::size_t index = 0; index < logged_ids; ++index) {
+        line << probe.holster_ids[index] << ",";
+    }
+    write_log_line(line.str().c_str());
+}
+
 // Read-only E1/E2/E3 discriminator for the final Nadine holster boundary.
 // These hooks preserve every argument and return value. They observe the
 // authored named event, the selected gun_holster* binding and the concrete
@@ -27541,6 +27759,7 @@ void* __fastcall hooked_weapon_holster_build_binding(
     if (owner_index < 0 || !relevant_holster_probe_art(art) || output == nullptr) {
         return result;
     }
+    log_weapon_art_holster_list_once(owner_index, art);
 
     std::uint32_t attach_id = 0;
     std::array<std::uint32_t, 17> payload_bits{};
@@ -27653,6 +27872,256 @@ std::uintptr_t __fastcall hooked_weapon_attachment_attach_to_owner_point(
          << " lookValid=" << (look_valid ? 1 : 0);
     write_log_line(line.str().c_str());
     return result;
+}
+
+using ArmBlockProbesKickFunction =
+    std::int64_t(__fastcall*)(void*, void*, bool);
+ArmBlockProbesKickFunction g_original_arm_block_probes_kick = nullptr;
+
+struct ActiveGripProbeMemo {
+    void* player = nullptr;
+    std::uint64_t state_signature = 0;
+    ULONGLONG last_sample_ms = 0;
+    unsigned samples = 0;
+};
+
+struct ActiveGripRawCapture {
+    std::array<std::uint32_t, 12> hand_record_bits{};
+    bool hand_record_readable = false;
+    std::uint32_t hand_record_id = 0;
+    std::int16_t hand_joint = -1;
+    std::uint16_t hand_flags = 0;
+    std::uint32_t hand_runtime = 0;
+    std::uintptr_t attach_records = 0;
+    std::uint32_t arm_count = 0;
+    std::uintptr_t arm_output0 = 0;
+    std::uintptr_t arm_output1 = 0;
+    std::array<std::uint32_t, 18> arm_inline_bits{};
+    std::array<std::uint32_t, 32> arm_output0_bits{};
+    std::array<std::uint32_t, 32> arm_output1_bits{};
+    std::size_t arm_output_dwords = 0;
+    bool arm_inline_readable = false;
+    bool arm_outputs_readable = false;
+};
+
+bool seh_capture_active_grip_raw(
+    void* probes, void* player, int right_hand_index,
+    ActiveGripRawCapture* capture) {
+    if (capture == nullptr) {
+        return false;
+    }
+    *capture = {};
+    capture->hand_joint = -1;
+    __try {
+        auto* const table = *reinterpret_cast<const std::byte* const*>(
+            static_cast<const std::byte*>(player) + 0x1E0);
+        if (table != nullptr) {
+            const std::uint32_t count =
+                *reinterpret_cast<const std::uint32_t*>(table + 0x4);
+            auto* const records = *reinterpret_cast<const std::byte* const*>(
+                table + 0x8);
+            capture->attach_records =
+                reinterpret_cast<std::uintptr_t>(records);
+            if (records != nullptr && right_hand_index >= 0 &&
+                static_cast<std::uint32_t>(right_hand_index) < count) {
+                const auto* const record = records +
+                    static_cast<std::size_t>(right_hand_index) * 48;
+                if (readable_bytes(record) >= 48) {
+                    std::memcpy(
+                        capture->hand_record_bits.data(), record,
+                        sizeof(capture->hand_record_bits));
+                    capture->hand_record_id =
+                        *reinterpret_cast<const std::uint32_t*>(record + 0x20);
+                    capture->hand_joint =
+                        *reinterpret_cast<const std::int16_t*>(record + 0x24);
+                    capture->hand_flags =
+                        *reinterpret_cast<const std::uint16_t*>(record + 0x26);
+                    capture->hand_runtime =
+                        *reinterpret_cast<const std::uint32_t*>(record + 0x28);
+                    capture->hand_record_readable = true;
+                }
+            }
+        }
+
+        auto* const probe_bytes = static_cast<const std::byte*>(probes);
+        if (readable_bytes(probe_bytes) >= 0x138) {
+            capture->arm_count = *reinterpret_cast<const std::uint32_t*>(
+                probe_bytes + 0x58);
+            auto* const output0 = *reinterpret_cast<const std::byte* const*>(
+                probe_bytes + 0xD0);
+            auto* const output1 = *reinterpret_cast<const std::byte* const*>(
+                probe_bytes + 0xD8);
+            capture->arm_output0 = reinterpret_cast<std::uintptr_t>(output0);
+            capture->arm_output1 = reinterpret_cast<std::uintptr_t>(output1);
+            std::memcpy(
+                capture->arm_inline_bits.data(), probe_bytes + 0xF0,
+                sizeof(capture->arm_inline_bits));
+            capture->arm_inline_readable = true;
+            const std::size_t output_count =
+                std::min<std::size_t>(capture->arm_count, 4);
+            capture->arm_output_dwords = output_count * 8;
+            const std::size_t output_bytes =
+                capture->arm_output_dwords * sizeof(std::uint32_t);
+            if (output_bytes == 0) {
+                capture->arm_outputs_readable = true;
+            } else if (output0 != nullptr && output1 != nullptr &&
+                       readable_bytes(output0) >= output_bytes &&
+                       readable_bytes(output1) >= output_bytes) {
+                std::memcpy(
+                    capture->arm_output0_bits.data(), output0, output_bytes);
+                std::memcpy(
+                    capture->arm_output1_bits.data(), output1, output_bytes);
+                capture->arm_outputs_readable = true;
+            }
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *capture = {};
+        capture->hand_joint = -1;
+        return false;
+    }
+}
+
+std::int64_t __fastcall hooked_arm_block_probes_kick(
+    void* probes, void* player, bool enabled) {
+    const std::int64_t result = g_original_arm_block_probes_kick != nullptr
+        ? g_original_arm_block_probes_kick(probes, player, enabled)
+        : 0;
+    const int owner_index = retained_player_index(player);
+    if (owner_index < 0 || probes == nullptr || player == nullptr) {
+        return result;
+    }
+
+    const int hand_slot = capture_hand_attached_slot_int(player);
+    void* weapon = hand_slot >= 0
+        ? get_weapon_from_slot(player, hand_slot)
+        : nullptr;
+    if (weapon == nullptr) {
+        weapon = get_player_active_weapon(player);
+    }
+    const std::uint32_t art = weapon_art_id_from_object(weapon);
+    if (art != kCoopPistolArtId && art != kCoopRifleArtId) {
+        return result;
+    }
+
+    std::uint32_t look = 0;
+    const bool look_valid = seh_read_player_look(player, &look);
+    int current_slot = -1;
+    std::uint32_t draw_state = 0xFFFFFFFFu;
+    const bool draw_valid =
+        read_weapon_draw_state(player, current_slot, draw_state);
+    const bool ads = player_ads_active(player);
+    int right_hand_index = -1;
+    const bool right_hand_present = seh_find_owner_attach_point(
+        player, 0x61A48E01u, &right_hand_index);
+
+    std::uint64_t state_signature = 1469598103934665603ULL;
+    auto mix = [&state_signature](std::uint64_t value) {
+        state_signature ^= value;
+        state_signature *= 1099511628211ULL;
+    };
+    mix(reinterpret_cast<std::uintptr_t>(player));
+    mix(look);
+    mix(art);
+    mix(static_cast<std::uint32_t>(hand_slot));
+    mix(static_cast<std::uint32_t>(current_slot));
+    mix(draw_state);
+    mix(enabled ? 1u : 0u);
+    mix(ads ? 1u : 0u);
+
+    static std::array<ActiveGripProbeMemo, 2> memos{};
+    ActiveGripProbeMemo& memo = memos[owner_index];
+    if (memo.player != player || memo.state_signature != state_signature) {
+        memo = {};
+        memo.player = player;
+        memo.state_signature = state_signature;
+    }
+    const ULONGLONG now = GetTickCount64();
+    if (memo.samples >= 2 ||
+        (memo.samples != 0 && now - memo.last_sample_ms < 750)) {
+        return result;
+    }
+
+    ActiveGripRawCapture capture{};
+    seh_capture_active_grip_raw(
+        probes, player, right_hand_index, &capture);
+
+    std::uint32_t weapon_parent = 0;
+    std::uint8_t weapon_attach_index = 0xFF;
+    const bool weapon_attach_readable = seh_read_weapon_attachment_state(
+        weapon, &weapon_parent, &weapon_attach_index);
+    const unsigned sample = memo.samples++;
+    memo.last_sample_ms = now;
+
+    std::ostringstream line;
+    line << "ACTIVE-GRIP-POSE owner=" << owner_index
+         << " player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(player)
+         << " look=0x" << look
+         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
+         << " art=0x" << art << std::dec
+         << " sample=" << sample
+         << " enabled=" << (enabled ? 1 : 0)
+         << " ads=" << (ads ? 1 : 0)
+         << " draw=" << current_slot << "/" << draw_state
+         << " handSlot=" << hand_slot
+         << " rightHand=" << (right_hand_present ? 1 : 0)
+         << "/" << right_hand_index
+         << " weaponAttach=" << (weapon_attach_readable ? 1 : 0)
+         << "/" << static_cast<unsigned>(weapon_attach_index)
+         << "/0x" << std::hex << weapon_parent
+         << " lookValid=" << std::dec << (look_valid ? 1 : 0)
+         << " drawValid=" << (draw_valid ? 1 : 0)
+         << " recordValid=" << (capture.hand_record_readable ? 1 : 0)
+         << " recordId=0x" << std::hex << capture.hand_record_id << std::dec
+         << " joint=" << capture.hand_joint
+         << " flags=0x" << std::hex << capture.hand_flags
+         << " runtime=0x" << capture.hand_runtime
+         << " records=0x" << capture.attach_records
+         << " recordBits=";
+    for (const std::uint32_t bits : capture.hand_record_bits) {
+        line << bits << ",";
+    }
+    line << " arm=0x" << reinterpret_cast<std::uintptr_t>(probes)
+         << " count=" << std::dec << capture.arm_count
+         << " output0=0x" << std::hex << capture.arm_output0
+         << " output1=0x" << capture.arm_output1 << std::dec
+         << " readable=" << (capture.arm_inline_readable ? 1 : 0) << "/"
+         << (capture.arm_outputs_readable ? 1 : 0)
+         << " inline=" << std::hex;
+    for (const std::uint32_t bits : capture.arm_inline_bits) {
+        line << bits << ",";
+    }
+    line << " output0Bits=";
+    for (std::size_t index = 0; index < capture.arm_output_dwords; ++index) {
+        line << capture.arm_output0_bits[index] << ",";
+    }
+    line << " output1Bits=";
+    for (std::size_t index = 0; index < capture.arm_output_dwords; ++index) {
+        line << capture.arm_output1_bits[index] << ",";
+    }
+    write_log_line(line.str().c_str());
+    return result;
+}
+
+bool install_nadine_active_grip_probe() {
+    constexpr std::array<std::uint8_t, 15> expected{
+        0x4C, 0x8B, 0xDC,
+        0x49, 0x89, 0x5B, 0x18,
+        0x57,
+        0x48, 0x81, 0xEC, 0x30, 0x03, 0x00, 0x00,
+    };
+    g_original_arm_block_probes_kick =
+        reinterpret_cast<ArmBlockProbesKickFunction>(
+            install_fire_gate_detour(
+                kArmBlockProbesKickRva,
+                expected.data(), expected.size(),
+                reinterpret_cast<void*>(&hooked_arm_block_probes_kick),
+                "Nadine active grip/ArmBlock read-only probe"));
+    boot_log_line(g_original_arm_block_probes_kick != nullptr
+                      ? "Nadine active grip/ArmBlock probe installed"
+                      : "Nadine active grip/ArmBlock probe SKIPPED");
+    return g_original_arm_block_probes_kick != nullptr;
 }
 
 bool install_nadine_holster_final_boundary_probe() {
@@ -30674,8 +31143,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21fe "
-        "(bounded stock reattach for inactive legacy Nadine firearms)");
+        "TLL co-op runtime init 2026-07-21fg "
+        "(read-only Nadine active-grip and authored-holster discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -30704,6 +31173,7 @@ DWORD WINAPI install_hook(void*) {
     install_nd_attachable_parent_visibility_relay();
     install_player_weapon_holster_bind_probe();
     install_nadine_holster_final_boundary_probe();
+    install_nadine_active_grip_probe();
     // The scoped DrawControl 0x40 relay and post mesh scan were rejected by the
     // 2026-07-13 runtime discriminator; leave the dormant code available for
     // reference without installing another hot-path hook.
