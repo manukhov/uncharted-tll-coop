@@ -1421,6 +1421,13 @@ Do not reopen these as the first move:
       function-not-reached, null `weapon-holster-point` knowledge record, and a
       resolved record rejected/misapplied by the final Player+0x1DF0 `+0xB8`
       bind. Do not write an attachment yet.
+      Build `ey` installs an exact-prologue outer detour plus the direct
+      `0x141095E49 -> ResolveKnowledgeRegistryEntryById` callsite relay. It logs
+      at most 64 deduplicated results and preserves all inputs/returns/state.
+- [ ] Run `ey`; on each copy draw pistol, holster, draw rifle, holster. Require
+      the holster-probe install line, stable gameplay and bounded
+      `NADINE-HOLSTER-BIND` records. Compare `look`, `lookup/entry/payload` and
+      `bindResult` for Chloe versus legacy Nadine before any attachment write.
 - [ ] After the failed bind boundary is proven, resolve the player-owned rifle's
       `weapon-holster-point` bind on look `0xd27c074f`. Compare the final
       Player+0x1DF0 `+0xB8` request/result against Chloe and either materialize a

@@ -497,6 +497,15 @@ constexpr std::uintptr_t kDrawControlClearChildFlagsByMaskRva = 0x1754FF0;
 constexpr std::uintptr_t kNdAttachableSyncParentVisibilityCallsiteRva =
     0x1ED63F7;
 constexpr std::uintptr_t kDrawControlSyncParentVisibilityRva = 0x1754DA0;
+// PlayerWeaponHolsterAction resolves the action's ProcessWeapon handle, looks up
+// its authored weapon-holster-point record, then binds the copied handle through
+// Player+0x1DF0 vtable +0xB8. The direct lookup callsite is instrumented together
+// with the outer function so a missing record is distinguishable from a failed
+// final bind without changing attachment state.
+constexpr std::uintptr_t kPlayerWeaponHolsterResolveBindRva = 0x1095BD0;
+constexpr std::uintptr_t kPlayerWeaponHolsterKnowledgeLookupCallsiteRva =
+    0x1095E49;
+constexpr std::uintptr_t kResolveKnowledgeRegistryEntryByIdRva = 0x1765030;
 // RTTI-backed ProcessWeapon vtable. Runtime exact-parent census identifies
 // pistol/rifle/grenade children by this class and authored art at +0x860.
 constexpr std::uintptr_t kProcessWeaponVtableRva = 0x2A9BF48;

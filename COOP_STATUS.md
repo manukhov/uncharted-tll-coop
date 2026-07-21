@@ -4948,3 +4948,34 @@ hypotheses are: (H1) the function is not reached for the affected clone; (H2) it
 look `0xD27C074F`; or (H3) the record resolves but the final Player `+0x1DF0`
 virtual `+0xB8` bind rejects or misapplies it. The next probe must compare this
 boundary against the unaffected Chloe path and make no attachment write.
+
+### 2026-07-21 STATIC: outer holster action plus exact knowledge lookup probe (`ey`)
+
+Three independent evidence types now support a bounded runtime discriminator.
+First, decompilation traces the action handle at `action+0x30/+0x38` to the live
+`ProcessWeapon`, reads art at `+0x860`, constructs the per-art
+`weapon-holster-point` id, resolves it through
+`ResolveKnowledgeRegistryEntryById 0x141765030`, and finally passes the copied
+handle to Player `+0x1DF0` virtual `+0xB8`. Second, retail disassembly confirms
+the exact direct lookup call at `0x141095E49` (`E8 -> 0x141765030`) and the final
+indirect bind at `0x141095F0D`; the 19-byte outer prologue contains complete,
+non-RIP-relative instructions. Third, runtime `ex` proves the affected rifle is
+the normal live slot-0 `ProcessWeapon`, so this action boundary is downstream of
+the already-correct inventory identity.
+
+Build `ey` is read-only. Its outer detour copies that exact 19-byte prologue and
+uses a register-preserving RIP-indirect trampoline jump because entry RAX still
+holds the original stack pointer at `0x141095BE3`. A second near relay replaces
+only the confirmed direct lookup call. Thread-local scope correlates lookup id,
+entry and first payload pointer with the exact action/player/weapon, resolved
+look, controller state and unchanged final bind result. Output is deduplicated
+and bounded to 64 signatures; no argument, return value or game field is changed.
+
+Written prediction/falsifier: no `NADINE-HOLSTER-BIND` record for a visible
+Nadine holster transition selects H1 (outer action not reached). A record with
+`lookup=0`, null entry or null payload selects H2 (category/knowledge resolution
+failure). A non-null lookup record with the rifle still visibly in hand selects
+H3 at or after the final bind and justifies tracing/materializing a compatible
+shoulder AP. Chloe provides the unaffected comparison. Any hook-install skip,
+exception, crash or new model regression invalidates the probe and forbids a
+repair write.

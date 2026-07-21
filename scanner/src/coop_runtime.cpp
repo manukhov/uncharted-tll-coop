@@ -26373,6 +26373,334 @@ void* allocate_executable_near(const void* target, std::size_t size) {
     return nullptr;
 }
 
+// Read-only discriminator for the legacy-Nadine holster failure. The outer
+// action hook supplies exact Player/ProcessWeapon context; the direct callsite
+// hook below observes only the weapon-holster-point knowledge lookup made by
+// that action. Neither hook changes an argument, return value or game field.
+using PlayerWeaponHolsterResolveBindFunction =
+    std::uintptr_t(__fastcall*)(void*, void*);
+using ResolveKnowledgeRegistryEntryByIdFunction =
+    void*(__fastcall*)(std::uint32_t);
+PlayerWeaponHolsterResolveBindFunction
+    g_original_player_weapon_holster_resolve_bind = nullptr;
+ResolveKnowledgeRegistryEntryByIdFunction
+    g_original_holster_resolve_knowledge_entry = nullptr;
+
+struct HolsterBindProbeContext {
+    bool active = false;
+    void* action = nullptr;
+    void* player = nullptr;
+    void* weapon = nullptr;
+    std::uint32_t art = 0;
+    std::uint32_t look = 0;
+    bool lookup_called = false;
+    std::uint32_t lookup_id = 0;
+    void* lookup_entry = nullptr;
+    void* lookup_payload = nullptr;
+};
+thread_local HolsterBindProbeContext g_holster_bind_probe_context{};
+
+bool seh_resolve_holster_action_weapon(
+    void* action, void** weapon_out, std::uint32_t* handle_id_out) {
+    if (weapon_out == nullptr || handle_id_out == nullptr) {
+        return false;
+    }
+    *weapon_out = nullptr;
+    *handle_id_out = 0;
+    __try {
+        if (action == nullptr) {
+            return false;
+        }
+        auto* const action_bytes = static_cast<std::byte*>(action);
+        void* const handle = *reinterpret_cast<void**>(action_bytes + 0x30);
+        const std::uint32_t handle_id =
+            *reinterpret_cast<const std::uint32_t*>(action_bytes + 0x38);
+        if (handle == nullptr || handle_id == 0) {
+            return false;
+        }
+        void* const weapon = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(handle) + 0x8);
+        if (weapon == nullptr ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<std::byte*>(weapon) +
+                kGameObjectRuntimeIdOffset) != handle_id) {
+            return false;
+        }
+        *weapon_out = weapon;
+        *handle_id_out = handle_id;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *weapon_out = nullptr;
+        *handle_id_out = 0;
+        return false;
+    }
+}
+
+void* seh_read_first_pointer(void* address) {
+    __try {
+        return address != nullptr ? *reinterpret_cast<void**>(address) : nullptr;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return nullptr;
+    }
+}
+
+void* __fastcall hooked_holster_resolve_knowledge_entry(
+    std::uint32_t knowledge_id) {
+    void* const result =
+        g_original_holster_resolve_knowledge_entry != nullptr
+        ? g_original_holster_resolve_knowledge_entry(knowledge_id)
+        : nullptr;
+    if (g_holster_bind_probe_context.active) {
+        g_holster_bind_probe_context.lookup_called = true;
+        g_holster_bind_probe_context.lookup_id = knowledge_id;
+        g_holster_bind_probe_context.lookup_entry = result;
+        g_holster_bind_probe_context.lookup_payload =
+            seh_read_first_pointer(result);
+    }
+    return result;
+}
+
+bool relevant_holster_probe_art(std::uint32_t art) {
+    return art == kCoopPistolArtId || art == kCoopRifleArtId ||
+           art == 0x0B8BD6D6u;
+}
+
+void log_holster_bind_probe(
+    const HolsterBindProbeContext& context, std::uint32_t handle_id,
+    std::uintptr_t bind_result) {
+    if (!relevant_holster_probe_art(context.art)) {
+        return;
+    }
+    int owner_index = -1;
+    if (context.player == retained_player_object(0)) {
+        owner_index = 0;
+    } else if (context.player == retained_player_object(1)) {
+        owner_index = 1;
+    }
+    int current_slot = -99;
+    std::uint32_t draw_state = 0xFFFFFFFFu;
+    read_weapon_draw_state(context.player, current_slot, draw_state);
+    const int hand_slot = capture_hand_attached_slot_int(context.player);
+    void* const active_weapon = get_player_active_weapon(context.player);
+    const std::uint32_t active_art =
+        weapon_art_id_from_object(active_weapon);
+    void* bind_controller = nullptr;
+    if (context.player != nullptr &&
+        readable_bytes(static_cast<std::byte*>(context.player) + 0x1DF0) >=
+            sizeof(void*)) {
+        bind_controller = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(context.player) + 0x1DF0);
+    }
+
+    std::uint64_t signature = 1469598103934665603ULL;
+    auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(reinterpret_cast<std::uintptr_t>(context.player));
+    mix(reinterpret_cast<std::uintptr_t>(context.weapon));
+    mix(context.art);
+    mix(context.look);
+    mix(context.lookup_called ? 1 : 0);
+    mix(context.lookup_id);
+    mix(reinterpret_cast<std::uintptr_t>(context.lookup_entry));
+    mix(reinterpret_cast<std::uintptr_t>(context.lookup_payload));
+    mix(bind_result);
+    mix(static_cast<std::uint32_t>(current_slot));
+    mix(draw_state);
+    mix(static_cast<std::uint32_t>(hand_slot));
+    mix(active_art);
+    if (signature == 0) {
+        signature = 1;
+    }
+    static std::array<std::atomic<std::uint64_t>, 64> seen{};
+    bool claimed = false;
+    for (auto& slot : seen) {
+        std::uint64_t value = slot.load(std::memory_order_relaxed);
+        if (value == signature) {
+            return;
+        }
+        if (value == 0 && slot.compare_exchange_strong(
+                              value, signature, std::memory_order_relaxed)) {
+            claimed = true;
+            break;
+        }
+    }
+    if (!claimed) {
+        return;
+    }
+
+    std::ostringstream line;
+    line << "NADINE-HOLSTER-BIND player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(context.player)
+         << " owner=" << std::dec << owner_index
+         << " look=0x" << std::hex << context.look
+         << " action=0x" << reinterpret_cast<std::uintptr_t>(context.action)
+         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(context.weapon)
+         << "/0x" << handle_id << " art=0x" << context.art
+         << " lookup=" << std::dec << (context.lookup_called ? 1 : 0)
+         << "/0x" << std::hex << context.lookup_id
+         << " entry=0x" << reinterpret_cast<std::uintptr_t>(
+                context.lookup_entry)
+         << " payload=0x" << reinterpret_cast<std::uintptr_t>(
+                context.lookup_payload)
+         << " bindResult=0x" << bind_result
+         << " bindCtrl=0x" << reinterpret_cast<std::uintptr_t>(bind_controller)
+         << std::dec << " current=" << current_slot << " draw=" << draw_state
+         << " hand=" << hand_slot << " active=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(active_weapon) << "/0x"
+         << active_art << std::dec;
+    write_log_line(line.str().c_str());
+}
+
+std::uintptr_t __fastcall hooked_player_weapon_holster_resolve_bind(
+    void* action, void* player) {
+    HolsterBindProbeContext previous = g_holster_bind_probe_context;
+    HolsterBindProbeContext current{};
+    current.active = true;
+    current.action = action;
+    current.player = player;
+    std::uint32_t handle_id = 0;
+    seh_resolve_holster_action_weapon(action, &current.weapon, &handle_id);
+    current.art = weapon_art_id_from_object(current.weapon);
+    if (player != nullptr &&
+        readable_bytes(static_cast<std::byte*>(player) + 0x170) >=
+            sizeof(std::uint32_t)) {
+        current.look = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(player) + 0x170);
+    }
+    g_holster_bind_probe_context = current;
+    const std::uintptr_t result =
+        g_original_player_weapon_holster_resolve_bind != nullptr
+        ? g_original_player_weapon_holster_resolve_bind(action, player)
+        : 0;
+    current = g_holster_bind_probe_context;
+    g_holster_bind_probe_context = previous;
+    log_holster_bind_probe(current, handle_id, result);
+    return result;
+}
+
+bool install_player_weapon_holster_bind_probe() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kPlayerWeaponHolsterKnowledgeLookupCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line("Nadine holster probe SKIPPED (lookup is not E8)");
+        return false;
+    }
+    std::int32_t old_displacement = 0;
+    std::memcpy(&old_displacement, call_site + 1, sizeof(old_displacement));
+    const std::uintptr_t lookup_target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(old_displacement);
+    if (lookup_target != g_module + kResolveKnowledgeRegistryEntryByIdRva) {
+        boot_log_line("Nadine holster probe SKIPPED (unexpected lookup target)");
+        return false;
+    }
+    g_original_holster_resolve_knowledge_entry =
+        reinterpret_cast<ResolveKnowledgeRegistryEntryByIdFunction>(
+            lookup_target);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("Nadine holster probe SKIPPED (lookup relay allocation)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_holster_resolve_knowledge_entry);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+    const std::int64_t relay_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (relay_displacement < INT32_MIN || relay_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("Nadine holster probe SKIPPED (lookup relay range)");
+        return false;
+    }
+
+    constexpr std::array<std::uint8_t, 19> kExpectedPrologue{
+        0x48, 0x8B, 0xC4, 0x57, 0x41, 0x54, 0x41, 0x55, 0x41, 0x56,
+        0x41, 0x57, 0x48, 0x81, 0xEC, 0xB0, 0x00, 0x00, 0x00,
+    };
+    auto* const target = reinterpret_cast<std::uint8_t*>(
+        g_module + kPlayerWeaponHolsterResolveBindRva);
+    if (std::memcmp(target, kExpectedPrologue.data(),
+                    kExpectedPrologue.size()) != 0) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("Nadine holster probe SKIPPED (unexpected prologue)");
+        return false;
+    }
+
+    // Use a register-preserving RIP-indirect jump back. The stolen prologue's
+    // `mov rax,rsp` value remains live at 0x141095BE3, so the generic absolute
+    // trampoline (which uses RAX for its jump) is not valid for this function.
+    constexpr std::size_t kTrampolineJumpSize = 14;
+    auto* const trampoline = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, kExpectedPrologue.size() + kTrampolineJumpSize,
+        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("Nadine holster probe SKIPPED (trampoline allocation)");
+        return false;
+    }
+    std::memcpy(trampoline, target, kExpectedPrologue.size());
+    auto* const jump_back = trampoline + kExpectedPrologue.size();
+    jump_back[0] = 0xFF;
+    jump_back[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(jump_back + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(jump_back + 6) =
+        reinterpret_cast<std::uintptr_t>(target + kExpectedPrologue.size());
+    FlushInstructionCache(
+        GetCurrentProcess(), trampoline,
+        kExpectedPrologue.size() + kTrampolineJumpSize);
+    g_original_player_weapon_holster_resolve_bind =
+        reinterpret_cast<PlayerWeaponHolsterResolveBindFunction>(trampoline);
+
+    DWORD call_old_protection = 0;
+    if (!VirtualProtect(call_site, 5, PAGE_EXECUTE_READWRITE,
+                        &call_old_protection)) {
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_player_weapon_holster_resolve_bind = nullptr;
+        boot_log_line("Nadine holster probe SKIPPED (lookup protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(relay_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, call_old_protection, &ignored);
+
+    DWORD target_old_protection = 0;
+    if (!VirtualProtect(target, kExpectedPrologue.size(),
+                        PAGE_EXECUTE_READWRITE, &target_old_protection)) {
+        boot_log_line(
+            "Nadine holster outer probe SKIPPED (entry protect; lookup pass-through)");
+        return false;
+    }
+    constexpr std::size_t kEntryJumpSize = 12;
+    target[0] = 0x48;
+    target[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(target + 2) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_player_weapon_holster_resolve_bind);
+    target[10] = 0xFF;
+    target[11] = 0xE0;
+    std::memset(target + kEntryJumpSize, 0x90,
+                kExpectedPrologue.size() - kEntryJumpSize);
+    FlushInstructionCache(GetCurrentProcess(), target, kExpectedPrologue.size());
+    VirtualProtect(target, kExpectedPrologue.size(), target_old_protection,
+                   &ignored);
+    boot_log_line(
+        "Nadine holster bind probe installed (outer action + exact knowledge lookup)");
+    return true;
+}
+
 char __fastcall hooked_player_melee_press_callsite(
     void* state, std::uint32_t hash, std::uint8_t edge) {
     const char original =
@@ -29070,8 +29398,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21ex "
-        "(read-only Nadine ProcessWeapon slot-membership correlation)");
+        "TLL co-op runtime init 2026-07-21ey "
+        "(read-only Nadine holster bind and knowledge lookup discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -29098,6 +29426,7 @@ DWORD WINAPI install_hook(void*) {
     install_scope_visible_gate();
     install_player_main_view_visibility_relay();
     install_nd_attachable_parent_visibility_relay();
+    install_player_weapon_holster_bind_probe();
     // The scoped DrawControl 0x40 relay and post mesh scan were rejected by the
     // 2026-07-13 runtime discriminator; leave the dormant code available for
     // reference without installing another hot-path hook.
