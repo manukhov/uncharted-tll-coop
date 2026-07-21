@@ -4514,3 +4514,28 @@ pose/palette output; a stable same-signature semantic branch, target,
 retarget-map/coverage or callback split selects only that exact route. Raw
 pointers/indices, different signatures, torn records, crash or visible change
 cannot select a result.
+
+### 2026-07-21 REJECTED/INCONCLUSIVE: `ep` proves the retained ADS bit was not the blocker
+
+Fresh PIDs 21824/18588 remained responsive and state-net exchanged packets in
+both directions (`remote Player synchronization enabled`). Each process again
+produced four complete screen-0 records while vertical weight rose to 1.0: the
+`0A` clip remained direct to `6C2B2396/4B0F5DE3`, and the `0B` clip remained
+retargeted to `ED25C708/C39CA709` through entry 124. No exception was logged and
+both processes were closed after capture.
+
+There was no `screen=1` `AIM-CASE6` record after removing its ADS-bit gate, and
+no screen-1 sample from the retained aim base/layer probes in this run. This
+**rejects retained `Player+0x1548` as the reason** the case-6 comparison was
+empty. It does not reject case 6 itself: the same-signature local/puppet
+falsifier still has no retained record.
+
+The remaining competitors are now ordered, not guessed: (1) valid command
+contexts reconstruct an Fg owner that is not the retained Player's `+0x1A8`;
+(2) the Fg owner does match screen 1, but active-state vertical admission is not
+simultaneous with this consumer; (3) the exact selected signature is absent from
+the retained consumer call despite the earlier leaf boundary; or (4) the
+retained path does not reach this direct consumer family in the current run.
+The next read-only probe must count these stages under hard bounds before another
+payload comparison. It must not remove ownership/vertical/signature checks from
+the actual `AIM-CASE6` records.

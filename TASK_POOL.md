@@ -1284,11 +1284,22 @@ Do not reopen these as the first move:
       active-state vertical weight, one of the two exact signatures, bounded
       command/assets and all double-reads. Result: only the screen-1 ADS-bit test
       is omitted; the single Release DLL builds successfully.
-- [ ] Run `ep` with strong vertical ADS on both copies. Compare only complete
+- [x] Run `ep` with strong vertical ADS on both copies. Compare only complete
       same-signature screen-0/screen-1 records across the two processes. No
       screen-1 record despite eligible leaf/vertical telemetry rejects the gate
       explanation; equality moves to common pose/palette output, while a stable
       semantic branch/target/retarget/callback split selects only that route.
+      Result: eight complete screen-0 records, zero screen-1 records despite
+      live bidirectional state-net. Removing the retained ADS-bit gate changed
+      nothing, so that explanation is rejected; case-6 semantics remain untested.
+- [ ] Implement bounded read-only build `eq` with per-stage case-6 counters:
+      structurally valid list, valid context layout, derived Fg match to retained
+      slot 0/1/other, valid active-state vertical, and exact selected signature.
+      Emit only a small normalized summary; do not log pointers, widen the two
+      signatures, or weaken the actual `AIM-CASE6` record guards. A zero slot-1
+      Fg match selects owner/context tracing; a slot-1 match without vertical
+      selects timing/admission; a vertical slot-1 match without signature selects
+      command selection; a fully eligible call without output is a probe bug.
 
 ## P1 - Remote reload animation sync (2026-07-18)
 
