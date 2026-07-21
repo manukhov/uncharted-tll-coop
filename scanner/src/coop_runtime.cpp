@@ -27366,6 +27366,8 @@ struct NativeNadinePistolJointMappingCapture {
     std::uint32_t pistol_attach_id = 0;
     std::uint32_t native_joint_name_id = 0;
     std::int16_t native_record_joint = -1;
+    std::int16_t native_actual_name_joint = -1;
+    std::int16_t target_actual_name_joint = -1;
     std::int16_t native_named_holster_joint = -1;
     std::int16_t target_named_holster_joint = -1;
     std::int16_t native_upper_leg_joint = -1;
@@ -27407,6 +27409,8 @@ bool seh_capture_native_nadine_pistol_joint_mapping(
     }
     *capture = {};
     capture->native_record_joint = -1;
+    capture->native_actual_name_joint = -1;
+    capture->target_actual_name_joint = -1;
     capture->native_named_holster_joint = -1;
     capture->target_named_holster_joint = -1;
     capture->native_upper_leg_joint = -1;
@@ -27442,6 +27446,10 @@ bool seh_capture_native_nadine_pistol_joint_mapping(
             *reinterpret_cast<const std::int16_t*>(pistol_record + 0x24);
         capture->native_joint_name_id = raw_attach_joint_name_id(
             native_table, capture->native_record_joint);
+        capture->native_actual_name_joint = raw_resolve_attach_joint(
+            native_table, capture->native_joint_name_id);
+        capture->target_actual_name_joint = raw_resolve_attach_joint(
+            target_table, capture->native_joint_name_id);
         capture->native_named_holster_joint = raw_resolve_attach_joint(
             native_table, g_r_leg_gun_holster_joint_name_id);
         capture->target_named_holster_joint = raw_resolve_attach_joint(
@@ -27454,6 +27462,8 @@ bool seh_capture_native_nadine_pistol_joint_mapping(
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *capture = {};
         capture->native_record_joint = -1;
+        capture->native_actual_name_joint = -1;
+        capture->target_actual_name_joint = -1;
         capture->native_named_holster_joint = -1;
         capture->target_named_holster_joint = -1;
         capture->native_upper_leg_joint = -1;
@@ -27499,6 +27509,8 @@ void log_native_nadine_pistol_joint_mapping(void* npc) {
          << std::dec << " owner=" << target_owner
          << " count=" << capture.native_count << "/" << capture.target_count
          << " recordJoint=" << capture.native_record_joint
+         << " actualNamed=" << capture.native_actual_name_joint
+         << "/" << capture.target_actual_name_joint
          << " namedJoint=" << capture.native_named_holster_joint
          << "/" << capture.target_named_holster_joint
          << " upperLeg=" << capture.native_upper_leg_joint
@@ -31589,8 +31601,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21fi "
-        "(read-only native pistolHolster joint-name/remap discriminator)");
+        "TLL co-op runtime init 2026-07-21fj "
+        "(read-only r_leg_holster cross-rig resolution discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

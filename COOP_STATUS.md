@@ -5628,3 +5628,19 @@ for the actual `0xADD0C871` name. If it also resolves to joint 99, the native
 record can be copied with runtime fields cleared. If absent, the shared
 `r_upper_leg` joint 5 is the only currently proven semantic remap parent; the
 engine transform composition must be used rather than raw joint 99.
+
+### 2026-07-21 STATIC: fj resolves the actual r_leg_holster hash in both rigs
+
+Build `fj` extends the proven `fi` capture by resolving the descriptor-derived
+`native_joint_name_id` itself in both the NPC and legacy Player descriptors. It
+does not trust the proposed preimage and does not substitute the Player
+controller's different hardcoded name.
+
+The remaining alternatives are now exact: (Q1) actual hash `0xADD0C871`
+resolves `99/99`, authorizing the native local transform on the Player's own
+matching joint; (Q2) it resolves `99/-1` while `r_upper_leg` remains `5/5`,
+authorizing only the existing parent-relative engine remap; (Q3) the native hash
+does not resolve back to 99 or the parent pair changes, invalidating the capture
+or preimage. Prediction: `actualNamed=99/99` selects Q1,
+`actualNamed=99/-1 upperLeg=5/5` selects Q2, and any other tuple selects Q3.
+The probe adds no call or write and keeps the semantic log bound from `fi`.
