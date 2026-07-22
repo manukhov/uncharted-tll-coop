@@ -1541,10 +1541,18 @@ Do not reopen these as the first move:
       REJECTED: the role-B local Nadine is owner 0, not owner 1, so the refresh
       gate never admitted the affected object and the rifle remained in hand at
       spawn.
-- [ ] Run corrected build `gm` with the local role-B owner-0 gate. Require the
+- [x] Run corrected build `gm` with the local role-B owner-0 gate. Require the
       initial stable holstered state to emit `owner=0 slot=0 localViewRefresh=1
       result=1 verified=1` before any draw/put cycle, remove the rifle from the
       local hand, and preserve normal rifle draw plus pistol/body state.
+      REJECTED for visibility: the exact call emitted `result=1 verified=1`, but
+      the rifle remained in the local hand. Attachment selection is not the
+      role-B main-view render boundary.
+- [ ] Run build `gn`, hiding only the exact local owner-0 slot-0 rifle
+      DrawControl while `current<0,draw=0`, and restoring only meshes hidden by
+      this path when slot 0 becomes active. Require a non-zero
+      `NADINE-LOCAL-RIFLE-VIS action=hide` at spawn, matching `show` on draw,
+      no rifle in the inactive local hand, and no pistol/body/role-A regression.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

@@ -14223,6 +14223,7 @@ void ensure_legacy_nadine_attach_points_game_thread() {
 
 void reconcile_legacy_nadine_inactive_rifle_game_thread(
     const coop::StatePacket& peer, void* peer_puppet);
+void sync_local_nadine_rifle_visibility_game_thread();
 
 void apply_peer_held_weapon_state() {
     coop::StatePacket peer{};
@@ -14230,6 +14231,7 @@ void apply_peer_held_weapon_state() {
     if (!latest_peer_state(peer, puppet)) return;
     ensure_legacy_nadine_attach_points_game_thread();
     reconcile_legacy_nadine_inactive_rifle_game_thread(peer, puppet);
+    sync_local_nadine_rifle_visibility_game_thread();
     diagnose_nadine_weapon_membership_game_thread();
     diagnose_weapon_geometry_owners_game_thread();
     diagnose_player_weapon_anim_control_game_thread();
@@ -30346,15 +30348,7 @@ void reconcile_legacy_nadine_inactive_rifle_game_thread(
             const bool stale_hand_attachment =
                 pre_index == static_cast<std::uint8_t>(right_hand_index) &&
                 pre_attach_id == 0x61A48E01u;
-            // On role B, retained owner 0 is the locally viewed Nadine. Stock
-            // can select gun_holster in +0x688 without refreshing the rendered
-            // attachment, while the role-A observer already sees the world
-            // instance correctly. Replay the same stock attach once per local
-            // holster generation even when the selected id is already right.
-            const bool local_view_refresh =
-                g_net_role_b && owner_index == 0 &&
-                pre_attach_id == expected_attach_id;
-            if ((!stale_hand_attachment && !local_view_refresh) ||
+            if (!stale_hand_attachment ||
                 !claim_nadine_inactive_attach_attempt(
                     weapon, records_generation, expected_attach_id,
                     memo.slot_zero_holster_generation)) {
@@ -30391,7 +30385,7 @@ void reconcile_legacy_nadine_inactive_rifle_game_thread(
                  << " draw=" << draw_state << " gun=" << gun_state
                  << " dwell=" << (now - memo.since_ms)
                  << " generation=" << memo.slot_zero_holster_generation
-                 << " localViewRefresh=" << (local_view_refresh ? 1 : 0)
+                 << " staleHand=1"
                  << " index=" << static_cast<unsigned>(pre_index) << "->"
                  << static_cast<unsigned>(post_index)
                  << " id=0x" << std::hex << pre_attach_id << "->0x"
@@ -30406,6 +30400,127 @@ void reconcile_legacy_nadine_inactive_rifle_game_thread(
             write_log_line(line.str().c_str());
         }
     }
+}
+
+void sync_local_nadine_rifle_visibility_game_thread() {
+    // gm proved that a successful same-id AttachToOwnerPoint replay does not
+    // move the rifle visible in the role-B main view. The exact inventory
+    // ProcessWeapon nevertheless owns a valid DrawControl with active LODs.
+    // Hide only that slot-0 DrawControl while it is stably inactive, and undo
+    // only our own mesh hides before slot 0 becomes active.
+    if (!g_net_role_b) {
+        return;
+    }
+    void* const player = retained_player_object(0);
+    std::uint32_t look = 0;
+    if (!seh_read_player_look(player, &look) ||
+        look != kLegacyNadineAttachTargetLookId ||
+        !player_object_stable(player)) {
+        return;
+    }
+
+    int current_slot = -99;
+    std::uint32_t draw_state = 0xFFFFFFFFu;
+    if (!read_weapon_draw_state(player, current_slot, draw_state)) {
+        return;
+    }
+    const bool rifle_active =
+        current_slot == 0 && draw_state != 0 && draw_state != 5;
+    const bool rifle_stably_inactive =
+        current_slot < 0 && draw_state == 0;
+    if (!rifle_active && !rifle_stably_inactive) {
+        return;
+    }
+
+    void* const weapon = get_weapon_from_slot(player, 0);
+    if (weapon_art_id_from_object(weapon) != kCoopRifleArtId) {
+        return;
+    }
+    void* const draw_control = draw_control_from_renderable_object(weapon);
+    if (draw_control == nullptr || readable_bytes(draw_control) < 0x20) {
+        return;
+    }
+    auto* const draw = static_cast<std::byte*>(draw_control);
+    auto* const meshes = *reinterpret_cast<std::byte**>(draw + 0x8);
+    const std::uint32_t mesh_count =
+        *reinterpret_cast<const std::uint32_t*>(draw + 0x14);
+    constexpr std::size_t kMeshStride = 0x250;
+    constexpr std::size_t kVisibleOffset = 0x243;
+    if (meshes == nullptr || mesh_count == 0 || mesh_count > 64 ||
+        readable_bytes(meshes) < kMeshStride) {
+        return;
+    }
+
+    struct HiddenRifleMemo {
+        void* weapon = nullptr;
+        void* draw_control = nullptr;
+        std::uint64_t hidden_mesh_mask = 0;
+    };
+    static std::array<HiddenRifleMemo, 32> memos{};
+    HiddenRifleMemo* memo = nullptr;
+    for (HiddenRifleMemo& candidate : memos) {
+        if (candidate.weapon == weapon &&
+            candidate.draw_control == draw_control) {
+            memo = &candidate;
+            break;
+        }
+    }
+    if (memo == nullptr && rifle_stably_inactive) {
+        for (HiddenRifleMemo& candidate : memos) {
+            if (candidate.weapon == nullptr) {
+                candidate.weapon = weapon;
+                candidate.draw_control = draw_control;
+                memo = &candidate;
+                break;
+            }
+        }
+    }
+    if (memo == nullptr) {
+        return;
+    }
+
+    const std::uint64_t before_mask = memo->hidden_mesh_mask;
+    std::uint64_t changed_mask = 0;
+    for (std::uint32_t mesh_index = 0; mesh_index < mesh_count; ++mesh_index) {
+        auto* const mesh = meshes + kMeshStride * mesh_index;
+        if (readable_bytes(mesh) < kMeshStride) {
+            break;
+        }
+        const std::uint64_t bit = 1ULL << mesh_index;
+        const std::uint8_t before = *reinterpret_cast<const std::uint8_t*>(
+            mesh + kVisibleOffset);
+        if (rifle_stably_inactive) {
+            if (before != 0 &&
+                seh_hide_draw_control_mesh(draw_control, mesh_index) &&
+                *reinterpret_cast<const std::uint8_t*>(
+                    mesh + kVisibleOffset) == 0) {
+                memo->hidden_mesh_mask |= bit;
+                changed_mask |= bit;
+            }
+        } else if ((memo->hidden_mesh_mask & bit) != 0 &&
+                   seh_show_draw_control_mesh(draw_control, mesh_index) &&
+                   *reinterpret_cast<const std::uint8_t*>(
+                       mesh + kVisibleOffset) != 0) {
+            memo->hidden_mesh_mask &= ~bit;
+            changed_mask |= bit;
+        }
+    }
+    if (changed_mask == 0) {
+        return;
+    }
+
+    std::ostringstream line;
+    line << "NADINE-LOCAL-RIFLE-VIS owner=0 player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(player)
+         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
+         << " draw=0x" << reinterpret_cast<std::uintptr_t>(draw_control)
+         << " action=" << (rifle_stably_inactive ? "hide" : "show")
+         << " changed=0x" << changed_mask
+         << " mask=0x" << before_mask << "->0x"
+         << memo->hidden_mesh_mask << std::dec
+         << " current=" << current_slot << " drawState=" << draw_state
+         << " meshes=" << mesh_count;
+    write_log_line(line.str().c_str());
 }
 
 void __fastcall hooked_player_weapon_anim_named_event(
@@ -35412,8 +35527,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22gm "
-        "(role-B local Nadine spawn-rifle attachment refresh; pistol animation unchanged)");
+        "TLL co-op runtime init 2026-07-22gn "
+        "(role-B local Nadine inactive-rifle render gate; pistol animation unchanged)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

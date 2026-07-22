@@ -7774,3 +7774,45 @@ without requiring a draw/put cycle, and the rifle is no longer attached to her
 hand immediately after spawn. The active rifle, pistol, body and role-A observer
 must remain unchanged; missing mutation, crash or a drawn-rifle regression
 rejects the correction.
+
+### 2026-07-22 REJECTED: `gm` attach succeeds but cannot change local render
+
+The exact predicted role-B call occurred at initial spawn:
+`NADINE-INACTIVE-ATTACH owner=0 slot=0 localViewRefresh=1 result=1 verified=1`
+with `40/555EFB8D -> 40/555EFB8D` and an owner-resolving parent before and after.
+The user still saw the rifle in Nadine's hand. This runtime result rejects both
+wrong-owner and missing-attachment-refresh explanations. A selector/link replay
+at `0x141ED0370` is not the boundary controlling the role-B main-view image.
+
+The same exact slot-0 ProcessWeapon independently owns a valid child DrawControl
+and FgAnimData with three active, driven LOD instances and matching retained
+owner id. This rules out an unrelated orphan as the only visible rifle. The
+role-A observer simultaneously renders the rifle at `gun_holster` on the thigh,
+so the remaining defect is view-specific rendering, not shared inventory state.
+
+### 2026-07-22 STATIC: local inactive-rifle render gate (`gn`)
+
+Competing repairs are now separated. Repeating or changing the attachment call
+is rejected by `gm`. Writing Fg instance `active` bytes directly would race the
+render worker and is not admitted. The bounded candidate uses the already
+identified stock `DrawControl_HideMesh 0x141754510` / `ShowMesh 0x141754A30`
+pair on the exact role-B owner-0 slot-0 ProcessWeapon. These routines previously
+produced immediate per-mesh visible changes during the legacy-Nadine body probe,
+which is independent runtime evidence that this is a real render gate.
+
+Build `gn` removes the ineffective same-id attachment replay while retaining
+the proven stale-`rightHand` repair. On the game thread it requires role B,
+owner 0, exact legacy-Nadine look, exact slot-0 rifle art and a self-consistent
+weapon DrawControl. Only stable `current<0,draw=0` hides its meshes. Only a real
+slot-0 active state restores the mesh indices that this path itself hid. It does
+not inspect the Player/body DrawControl, any pistol object, role A, or any loose
+weapon candidate.
+
+**Falsifiable `gn` prediction:** both copies load marker `2026-07-22gn`. Before
+any weapon input, role B emits `NADINE-LOCAL-RIFLE-VIS owner=0 action=hide` with
+a non-zero changed/mask value and the rifle is absent from local Nadine's hand.
+Drawing slot 0 emits the matching `action=show`, makes the rifle visible in hand,
+and subsequent holstering hides it again. Chloe's copy continues to show its
+current thigh placement; pistol, body and grenade remain unchanged. No hide
+line, a zero mask, an invisible drawn rifle, body loss or crash rejects this
+render-gate repair.
