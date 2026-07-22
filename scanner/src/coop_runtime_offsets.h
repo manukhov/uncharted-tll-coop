@@ -539,6 +539,21 @@ constexpr std::uintptr_t kWeaponAttachmentSelectExistingOwnerPointRva =
 // untouched.
 constexpr std::uintptr_t kProcessWeaponPostJointBaseCallsiteRva = 0x1515A30;
 constexpr std::uintptr_t kNdAttachableObjectPostJointUpdateRva = 0x1ED28E0;
+// NdAttachableObject_ResolveSelectedAttachmentTransform has already resolved
+// the selected AttachSystem record into a 32-byte world transform when it
+// reaches this direct E8. The callee either copies that transform unchanged
+// (object+0x68C == -1) or applies the object's mesh-local/depenetration
+// correction, so a pass-through relay separates record placement from the
+// last object-local adjustment without touching attachment state.
+constexpr std::uintptr_t kNdAttachableObjectLocalTransformCallsiteRva =
+    0x1ED19BB;
+constexpr std::uintptr_t kNdAttachableObjectApplyLocalTransformRva =
+    0x1ED0A70;
+// Final compose inside the source-identified "Animating" update. Its R8 is
+// exactly object+0x130, after the selected-attachment update and any later
+// animation-layer overwrite, immediately before FgAnimData publication.
+constexpr std::uintptr_t kNdAttachableObjectFinalLocalComposeCallsiteRva =
+    0x1ED287B;
 // Read-only active-grip discriminator. GunMoveController vtable +0xB8 reaches
 // 0x140E909C0, which calls ArmBlockProbes::Kick(Player*, bool). The probe logs
 // its completed output beside the active rightHand attach record so authored
@@ -569,6 +584,10 @@ constexpr std::uintptr_t kTransformComposeRva = 0x01998F0;
 constexpr std::uintptr_t kProcessWeaponVtableRva = 0x2A9BF48;
 constexpr std::uintptr_t kProcessWeaponSelectExistingOwnerPointVtableSlotRva =
     kProcessWeaponVtableRva + 0x7A8;
+constexpr std::uintptr_t kProcessWeaponUpdateSelectedAttachmentVtableSlotRva =
+    kProcessWeaponVtableRva + 0x7B8;
+constexpr std::uintptr_t kNdAttachableObjectUpdateSelectedAttachmentRva =
+    0x1ED1380;
 // RTTI-backed ProcessCharCloth vtable. At the callsite above RBX still owns the
 // NdAttachableObject, so the relay can distinguish cloth from other attachments.
 constexpr std::uintptr_t kProcessCharClothVtableRva = 0x2BAF780;

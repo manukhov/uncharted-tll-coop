@@ -190,6 +190,24 @@ FUNCTIONS = {
         "the resulting attached-object transform. ProcessWeapon inherits this "
         "path; PlayerWeaponAnimControl holster IK does not write it.",
     ),
+    0x141ED0A70: (
+        "NdAttachableObject_ApplyLocalAttachmentCorrection",
+        "Consumes the selected AttachSystem record's already-resolved 32-byte "
+        "world transform. If object+0x68C is -1 it copies input to output "
+        "unchanged; otherwise it derives a rig-joint-relative correction from "
+        "object+0x1A8 and the local/depenetration state at +0x4F0..+0x52F and "
+        "+0x5F0/+0x5F4. The sole caller is the direct E8 at 0x141ED19BB in "
+        "NdAttachableObject_ResolveSelectedAttachmentTransform.",
+    ),
+    0x141ED2060: (
+        "NdAttachableObject_UpdateAnimatingLayersAndPublish",
+        "Source-bound to the Animating layer and the "
+        "NdDrawableObject::GetAnimateCtrl assertion. Calls virtual +0x7B8 for "
+        "the selected-attachment update, may rewrite object+0x130/+0x140 from "
+        "an active animation layer at 0x141ED2721/0x141ED2741, then composes "
+        "that local state with +0x110/+0x120 and publishes it to FgAnimData at "
+        "0x141ED288F.",
+    ),
     0x14108B120: (
         "WeaponHolsterIkBlender_ExtractData",
         "WeaponHolsterIkBlender vtable +0x10. Extracts a 0x38-byte "

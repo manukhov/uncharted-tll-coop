@@ -6727,3 +6727,73 @@ final instance writer. The next static boundary is the consumer chain from
 `ProcessWeapon+0x688/+0x6A0` and parent `AttachSystem+0x1E0` into the retained
 owner composition `+0x110/+0x120` plus `+0x130/+0x140` published at
 `0x141A8FC00`. Both processes were closed after capture.
+
+### 2026-07-22 STATIC: selected record, local correction and `Animating` overwrite (`fz`)
+
+The `fy` result removes the separate-prop branch: the visible pistol/rifle
+geometry belongs to the exact inventory `ProcessWeapon`. The earlier `fl`
+boundary also showed that the common final FgAnimData publication is coherent.
+The useful remaining split is inside the concrete ProcessWeapon attachment
+update, before that common writer.
+
+The static evidence quota is satisfied by four independent kinds. First, exact
+ProcessWeapon vtable `0x142A9BF48` slot `+0x7B8` resolves to
+`NdAttachableObject_UpdateSelectedAttachmentTransform 0x141ED1380`. Second,
+direct disassembly at `0x141ED17F3..0x141ED1827` follows the validated parent
+handle `weapon+0x4E0/+0x4E8`, reads the parent `AttachSystem` at `+0x1E0`, and
+passes selected byte `weapon+0x688` to
+`AttachSystem_ResolveRecordTransform 0x1418B7060`; that callee reads the signed
+record joint at `+0x24` and composes its current world pose with the authored
+record-local transform. Third, the exact callsite sequence
+`0x141ED19AB..0x141ED19D1` passes the completed 32-byte transform in `R8`, a
+distinct output buffer in `RDX`, and the weapon in `RCX` to sole callee
+`0x141ED0A70`, then returns that output directly. Fourth, decompilation proves
+`weapon+0x68C == -1` is an exact 32-byte copy; the other branch reads the rig at
+`+0x1A8` and local/depenetration state at `+0x4F0..+0x52F` and
+`+0x5F0/+0x5F4`. It never reads the previously suspected `weapon+0x6A0`, so
+that descriptor is REJECTED as a placement input. The callee is named STATIC
+`NdAttachableObject_ApplyLocalAttachmentCorrection` in the real IDB.
+
+The trace also found a concrete later competitor. Source string `Animating` and
+the `NdDrawableObject::GetAnimateCtrl` assertion bind `0x141ED2060` to the
+animation-layer update. It first calls ProcessWeapon vslot `+0x7B8`, but an
+active layer can write the same local transform again at `0x141ED2721`
+(`weapon+0x130`) and `0x141ED2741` (`+0x140`). Only then does direct callsite
+`0x141ED287B` compose that local state with `+0x110/+0x120`, immediately before
+`FgAnimData_PublishWorldTransform 0x141ED288F`. This `Animating` overwrite is
+the strongest concrete late candidate for restoring a back/thigh pose after a
+correct attachment selection.
+
+`PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0` is REJECTED as a competing
+late weapon writer. It consumes blended `WeaponHolsterIkData` and writes only
+arm-chain joint world poses through `0x14181EF50`; it never reads a
+ProcessWeapon handle and never writes `+0x688`, `+0x4E0`, an AttachSystem record
+or a weapon/render transform. It can still explain malformed free-arm pose, but
+cannot undo the weapon attachment itself.
+
+The alternatives and pre-runtime prediction are explicit:
+
+- **Hrec:** `AttachSystem_ResolveRecordTransform` already produces the wrong
+  world pose. `fz` will show that the discriminating difference is present in
+  the `0x141ED19BB` input, while the local stage copies it unchanged or behaves
+  equivalently for native and legacy Nadine.
+- **Hlocal:** `0x141ED0A70` introduces the error. Legacy Nadine will show a
+  stable nonzero input/output change tied to a non-`-1` `weapon+0x68C` or local
+  state that is absent/different on native Nadine.
+- **Hblend:** the optional `weapon+0x838` path changes the selected result inside
+  vslot `+0x7B8`. The `0x141ED19BB` output will remain sound while the local
+  state captured on return from `+0x7B8` will already differ.
+- **Hanim:** selected update returns a stable correct `+0x130/+0x140`, but the
+  exact same 32 bytes differ at `0x141ED287B`; this directly confirms the
+  `Animating` layer writer at `0x141ED2721/2741`.
+
+Build `2026-07-22fz` installs three pass-through boundaries: the verified direct
+E8 `0x141ED19BB`, exact ProcessWeapon vslot `+0x7B8`, and final direct compose
+callsite `0x141ED287B`. It preserves every original return value and snapshots
+at most four samples per stable native/legacy weapon role. No engine call is
+added and no weapon, record, pose or render field is written. Missing positive
+controls, an unexpected call target, a crash or a visual regression makes the
+test inconclusive. The release DLL compiled successfully. The real single IDB
+was updated with the two STATIC names (`apply_labels OK: 1227 functions, 20 data
+names`, `save_database returned True`), the MCP copy was restarted, and both
+names resolve from the refreshed database. Runtime verification is pending.

@@ -1756,7 +1756,19 @@ Do not reopen these as the first move:
       active/matrix/owner masks and three driven instances. H4 separate prop is
       REJECTED; continue only with H2 by tracing `ProcessWeapon+0x688/+0x6A0`
       and parent AttachSystem into the owner transform published at
-      `0x141A8FC00`. Both processes were closed.
+      `0x141A8FC00`. Both processes were closed. STATIC `fz`: `+0x6A0` is not
+      consumed by the render-transform path. `0x141ED1780` resolves `+0x688`
+      through the parent AttachSystem, then sole callsite `0x141ED19BB` passes
+      the completed record/joint world transform to
+      `NdAttachableObject_ApplyLocalAttachmentCorrection 0x141ED0A70`. It
+      copies unchanged when `weapon+0x68C == -1`; otherwise it uses the weapon
+      rig and `+0x4F0..+0x52F/+0x5F0/+0x5F4`. A separate concrete competitor
+      follows: source-bound `Animating` update `0x141ED2060` can rewrite
+      `+0x130/+0x140` at `0x141ED2721/2741` after the selected update and before
+      final compose/publish `0x141ED287B/0x141ED288F`. Run bounded `fz` and
+      classify Hrec, Hlocal, Hblend or Hanim. Holster IK `0x14108ECE0` is
+      statically REJECTED as a weapon-placement writer because it changes only
+      arm skeleton joints.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

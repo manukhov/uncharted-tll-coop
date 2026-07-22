@@ -30315,6 +30315,587 @@ bool install_nadine_final_transform_probe() {
     return true;
 }
 
+// Read-only Hrec/Hlocal discriminator at the only direct call from
+// NdAttachableObject_ResolveSelectedAttachmentTransform into the object's final
+// mesh-local/depenetration adjustment. The input is the selected AttachSystem
+// record's already-resolved world transform; the output is returned immediately
+// to the stock attachment updater. The hook never changes either buffer.
+using NdAttachableObjectApplyLocalTransformFunction =
+    std::int64_t(__fastcall*)(void*, void*, const void*);
+NdAttachableObjectApplyLocalTransformFunction
+    g_original_nd_attachable_apply_local_transform = nullptr;
+
+struct NadineLocalTransformProbeCapture {
+    void* weapon = nullptr;
+    void* owner = nullptr;
+    void* rig_owner = nullptr;
+    std::uintptr_t parent_handle = 0;
+    std::uintptr_t attach_table = 0;
+    std::uintptr_t attach_records = 0;
+    std::uint32_t parent_id = 0;
+    std::uint32_t owner_runtime_id = 0;
+    std::uint32_t owner_look = 0;
+    std::uint32_t art = 0;
+    std::uint32_t attach_id = 0;
+    std::uint32_t attach_count = 0;
+    std::int32_t local_joint_selector = -1;
+    std::uint8_t attach_index = 0xFF;
+    std::int16_t attach_joint = -1;
+    int role = -1;
+    std::array<std::uint32_t, 12> record_bits{};
+    std::array<std::uint32_t, 8> input_bits{};
+    std::array<std::uint32_t, 8> output_bits{};
+    std::array<std::uint32_t, 16> local_before_bits{};
+    std::array<std::uint32_t, 16> local_after_bits{};
+    std::array<std::uint32_t, 2> correction_state_before_bits{};
+    std::array<std::uint32_t, 2> correction_state_after_bits{};
+    bool record_readable = false;
+    bool readable = false;
+};
+
+bool seh_capture_nadine_local_transform_pre(
+    void* weapon, const void* input,
+    NadineLocalTransformProbeCapture* capture) {
+    if (capture == nullptr) {
+        return false;
+    }
+    *capture = {};
+    capture->weapon = weapon;
+    capture->attach_index = 0xFF;
+    capture->attach_joint = -1;
+    capture->local_joint_selector = -1;
+    capture->role = -1;
+    __try {
+        if (weapon == nullptr || input == nullptr) {
+            return false;
+        }
+        auto* const bytes = static_cast<const std::byte*>(weapon);
+        if (*reinterpret_cast<const std::uintptr_t*>(bytes) !=
+            g_module + kProcessWeaponVtableRva) {
+            return false;
+        }
+        capture->art = *reinterpret_cast<const std::uint32_t*>(bytes + 0x860);
+        if (capture->art != kCoopPistolArtId &&
+            capture->art != kCoopRifleArtId &&
+            capture->art != 0xC7CB8F0Eu) {
+            return false;
+        }
+
+        auto* const parent_handle = *reinterpret_cast<const std::byte* const*>(
+            bytes + 0x4E0);
+        capture->parent_handle =
+            reinterpret_cast<std::uintptr_t>(parent_handle);
+        capture->parent_id = *reinterpret_cast<const std::uint32_t*>(
+            bytes + 0x4E8);
+        if (parent_handle == nullptr) {
+            return false;
+        }
+        capture->owner = *reinterpret_cast<void* const*>(parent_handle + 0x8);
+        if (capture->owner == nullptr) {
+            return false;
+        }
+        auto* const owner_bytes = static_cast<const std::byte*>(capture->owner);
+        capture->owner_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(owner_bytes + 0xBC);
+        capture->owner_look =
+            *reinterpret_cast<const std::uint32_t*>(owner_bytes + 0x170);
+        if (capture->owner_runtime_id != capture->parent_id) {
+            return false;
+        }
+        if (capture->art == 0xC7CB8F0Eu &&
+            seh_is_exact_nadine_buddy(capture->owner)) {
+            capture->role = 0;
+        } else {
+            const int owner_index = retained_player_index(capture->owner);
+            if (owner_index >= 0 &&
+                capture->owner_look == kLegacyNadineAttachTargetLookId) {
+                if (capture->art == kCoopPistolArtId) {
+                    capture->role = owner_index + 1;
+                } else if (capture->art == kCoopRifleArtId) {
+                    capture->role = owner_index + 3;
+                }
+            }
+        }
+        if (capture->role < 0) {
+            return false;
+        }
+
+        capture->attach_index = *reinterpret_cast<const std::uint8_t*>(
+            bytes + 0x688);
+        capture->local_joint_selector =
+            *reinterpret_cast<const std::int32_t*>(bytes + 0x68C);
+        capture->rig_owner = *reinterpret_cast<void* const*>(bytes + 0x1A8);
+        std::memcpy(
+            capture->input_bits.data(), input,
+            sizeof(capture->input_bits));
+        std::memcpy(
+            capture->local_before_bits.data(), bytes + 0x4F0,
+            sizeof(capture->local_before_bits));
+        std::memcpy(
+            capture->correction_state_before_bits.data(), bytes + 0x5F0,
+            sizeof(capture->correction_state_before_bits));
+
+        capture->attach_table = reinterpret_cast<std::uintptr_t>(
+            *reinterpret_cast<void* const*>(owner_bytes + 0x1E0));
+        auto* const table = reinterpret_cast<const std::byte*>(
+            capture->attach_table);
+        if (table != nullptr) {
+            capture->attach_count =
+                *reinterpret_cast<const std::uint32_t*>(table + 0x4);
+            auto* const records =
+                *reinterpret_cast<const std::byte* const*>(table + 0x8);
+            capture->attach_records =
+                reinterpret_cast<std::uintptr_t>(records);
+            if (records != nullptr && capture->attach_count <= 4096 &&
+                capture->attach_index < capture->attach_count) {
+                const auto* const record = records +
+                    static_cast<std::size_t>(capture->attach_index) * 48;
+                std::memcpy(
+                    capture->record_bits.data(), record,
+                    sizeof(capture->record_bits));
+                capture->attach_id =
+                    *reinterpret_cast<const std::uint32_t*>(record + 0x20);
+                capture->attach_joint =
+                    *reinterpret_cast<const std::int16_t*>(record + 0x24);
+                capture->record_readable = true;
+            }
+        }
+        capture->readable = true;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *capture = {};
+        capture->weapon = weapon;
+        capture->attach_index = 0xFF;
+        capture->attach_joint = -1;
+        capture->local_joint_selector = -1;
+        capture->role = -1;
+        return false;
+    }
+}
+
+bool seh_capture_nadine_local_transform_post(
+    void* weapon, const void* output,
+    NadineLocalTransformProbeCapture* capture) {
+    if (capture == nullptr || weapon == nullptr || output == nullptr) {
+        return false;
+    }
+    __try {
+        const auto* const bytes = static_cast<const std::byte*>(weapon);
+        std::memcpy(
+            capture->output_bits.data(), output,
+            sizeof(capture->output_bits));
+        std::memcpy(
+            capture->local_after_bits.data(), bytes + 0x4F0,
+            sizeof(capture->local_after_bits));
+        std::memcpy(
+            capture->correction_state_after_bits.data(), bytes + 0x5F0,
+            sizeof(capture->correction_state_after_bits));
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+struct NadineLocalTransformProbeMemo {
+    void* owner = nullptr;
+    void* weapon = nullptr;
+    std::uint32_t art = 0;
+    std::uint32_t attach_id = 0;
+    std::uint8_t attach_index = 0xFF;
+    unsigned samples = 0;
+    ULONGLONG last_sample_ms = 0;
+};
+
+bool claim_nadine_local_transform_sample(
+    const NadineLocalTransformProbeCapture& capture, unsigned* sample_out) {
+    if (capture.role < 0 || capture.role >= 5 || sample_out == nullptr) {
+        return false;
+    }
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static std::array<NadineLocalTransformProbeMemo, 5> memos{};
+    const ULONGLONG now = GetTickCount64();
+    bool accepted = false;
+    AcquireSRWLockExclusive(&lock);
+    NadineLocalTransformProbeMemo& memo =
+        memos[static_cast<std::size_t>(capture.role)];
+    if (memo.owner != capture.owner || memo.weapon != capture.weapon ||
+        memo.art != capture.art || memo.attach_id != capture.attach_id ||
+        memo.attach_index != capture.attach_index) {
+        memo = {};
+        memo.owner = capture.owner;
+        memo.weapon = capture.weapon;
+        memo.art = capture.art;
+        memo.attach_id = capture.attach_id;
+        memo.attach_index = capture.attach_index;
+    }
+    if (memo.samples < 4 &&
+        (memo.samples == 0 || now - memo.last_sample_ms >= 500)) {
+        *sample_out = memo.samples++;
+        memo.last_sample_ms = now;
+        accepted = true;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    return accepted;
+}
+
+void log_nadine_local_transform_sample(
+    unsigned sample, const NadineLocalTransformProbeCapture& capture) {
+    std::uint32_t input_output_changed = 0;
+    for (std::size_t index = 0; index < capture.input_bits.size(); ++index) {
+        if (capture.input_bits[index] != capture.output_bits[index]) {
+            input_output_changed |= 1u << index;
+        }
+    }
+    std::uint32_t local_changed = 0;
+    for (std::size_t index = 0; index < capture.local_before_bits.size(); ++index) {
+        if (capture.local_before_bits[index] != capture.local_after_bits[index]) {
+            local_changed |= 1u << index;
+        }
+    }
+    const std::uint64_t input_hash = nadine_final_transform_hash(
+        capture.input_bits.data(), capture.input_bits.size());
+    const std::uint64_t output_hash = nadine_final_transform_hash(
+        capture.output_bits.data(), capture.output_bits.size());
+    const std::uint64_t local_before_hash = nadine_final_transform_hash(
+        capture.local_before_bits.data(), capture.local_before_bits.size());
+    const std::uint64_t local_after_hash = nadine_final_transform_hash(
+        capture.local_after_bits.data(), capture.local_after_bits.size());
+
+    std::ostringstream line;
+    line << "NADINE-LOCAL-XFORM role=" << capture.role
+         << " sample=" << sample
+         << " owner=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(capture.owner)
+         << "/0x" << capture.owner_runtime_id
+         << " look=0x" << capture.owner_look
+         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(capture.weapon)
+         << " art=0x" << capture.art
+         << " parentHandle=0x" << capture.parent_handle
+         << "/0x" << capture.parent_id
+         << " rig=0x" << reinterpret_cast<std::uintptr_t>(capture.rig_owner)
+         << " table=0x" << capture.attach_table
+         << "/0x" << capture.attach_records
+         << " attach=" << std::dec
+         << static_cast<unsigned>(capture.attach_index)
+         << "/" << capture.attach_count
+         << "/0x" << std::hex << capture.attach_id
+         << " joint=" << std::dec << capture.attach_joint
+         << " localJoint=" << capture.local_joint_selector
+         << " valid=" << (capture.readable ? 1 : 0)
+         << "/" << (capture.record_readable ? 1 : 0)
+         << " changed=0x" << std::hex << input_output_changed
+         << "/0x" << local_changed
+         << " hashes=0x" << input_hash << "->0x" << output_hash
+         << "/0x" << local_before_hash << "->0x" << local_after_hash
+         << " record=";
+    for (const std::uint32_t bits : capture.record_bits) {
+        line << bits << ",";
+    }
+    line << " input=";
+    for (const std::uint32_t bits : capture.input_bits) {
+        line << bits << ",";
+    }
+    line << " output=";
+    for (const std::uint32_t bits : capture.output_bits) {
+        line << bits << ",";
+    }
+    line << " localBefore=";
+    for (const std::uint32_t bits : capture.local_before_bits) {
+        line << bits << ",";
+    }
+    line << " localAfter=";
+    for (const std::uint32_t bits : capture.local_after_bits) {
+        line << bits << ",";
+    }
+    line << " correction=";
+    for (const std::uint32_t bits : capture.correction_state_before_bits) {
+        line << bits << ",";
+    }
+    line << "->";
+    for (const std::uint32_t bits : capture.correction_state_after_bits) {
+        line << bits << ",";
+    }
+    write_log_line(line.str().c_str());
+}
+
+std::int64_t __fastcall hooked_nd_attachable_apply_local_transform(
+    void* weapon, void* output, const void* input) {
+    NadineLocalTransformProbeCapture capture{};
+    const bool relevant =
+        seh_capture_nadine_local_transform_pre(weapon, input, &capture);
+    unsigned sample = 0;
+    const bool log_sample =
+        relevant && claim_nadine_local_transform_sample(capture, &sample);
+    const std::int64_t result =
+        g_original_nd_attachable_apply_local_transform != nullptr
+            ? g_original_nd_attachable_apply_local_transform(
+                  weapon, output, input)
+            : 0;
+    if (log_sample &&
+        seh_capture_nadine_local_transform_post(weapon, output, &capture)) {
+        log_nadine_local_transform_sample(sample, capture);
+    }
+    return result;
+}
+
+bool install_nadine_local_transform_probe() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kNdAttachableObjectLocalTransformCallsiteRva,
+            kNdAttachableObjectApplyLocalTransformRva,
+            reinterpret_cast<const void*>(
+                &hooked_nd_attachable_apply_local_transform),
+            callsite, relay, displacement)) {
+        boot_log_line("Nadine local-transform probe SKIPPED (preflight)");
+        return false;
+    }
+    g_original_nd_attachable_apply_local_transform =
+        reinterpret_cast<NdAttachableObjectApplyLocalTransformFunction>(
+            g_module + kNdAttachableObjectApplyLocalTransformRva);
+    DWORD old = 0;
+    if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_nd_attachable_apply_local_transform = nullptr;
+        boot_log_line("Nadine local-transform probe SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(callsite + 1) = displacement;
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(callsite, 5, old, &ignored);
+    boot_log_line(
+        "Nadine local-transform read-only probe installed at 0x141ED19BB");
+    return true;
+}
+
+// The source-identified "Animating" update calls ProcessWeapon vtable +0x7B8,
+// then may write +0x130/+0x140 again from an animation layer before its final
+// Transform_Compose at 0x141ED287B. These two pass-through boundaries snapshot
+// the same local field on the same thread, making that overwrite directly
+// observable without changing the pose.
+using NdAttachableObjectUpdateSelectedAttachmentFunction =
+    std::int64_t(__fastcall*)(void*);
+NdAttachableObjectUpdateSelectedAttachmentFunction
+    g_original_process_weapon_update_selected_attachment = nullptr;
+
+struct NadinePostSelectedLocalSnapshot {
+    void* weapon = nullptr;
+    void* owner = nullptr;
+    std::uint32_t art = 0;
+    std::uint32_t attach_id = 0;
+    std::uint8_t attach_index = 0xFF;
+    int role = -1;
+    std::array<std::uint32_t, 8> local_bits{};
+    bool valid = false;
+};
+
+thread_local NadinePostSelectedLocalSnapshot
+    g_nadine_post_selected_local_snapshot{};
+
+std::int64_t __fastcall hooked_process_weapon_update_selected_attachment(
+    void* weapon) {
+    const std::int64_t result =
+        g_original_process_weapon_update_selected_attachment != nullptr
+            ? g_original_process_weapon_update_selected_attachment(weapon)
+            : 0;
+    g_nadine_post_selected_local_snapshot = {};
+    NadineLocalTransformProbeCapture capture{};
+    const auto* const local = weapon != nullptr
+        ? static_cast<const std::byte*>(weapon) + 0x130
+        : nullptr;
+    if (seh_capture_nadine_local_transform_pre(weapon, local, &capture)) {
+        NadinePostSelectedLocalSnapshot& snapshot =
+            g_nadine_post_selected_local_snapshot;
+        snapshot.weapon = weapon;
+        snapshot.owner = capture.owner;
+        snapshot.art = capture.art;
+        snapshot.attach_id = capture.attach_id;
+        snapshot.attach_index = capture.attach_index;
+        snapshot.role = capture.role;
+        snapshot.local_bits = capture.input_bits;
+        snapshot.valid = true;
+    }
+    return result;
+}
+
+using TransformComposeFunction = NadineAttachTransform32*(__fastcall*)(
+    const NadineAttachTransform32*, NadineAttachTransform32*,
+    const NadineAttachTransform32*);
+TransformComposeFunction g_original_nadine_final_local_compose = nullptr;
+
+struct NadineAnimatingTransformMemo {
+    void* owner = nullptr;
+    void* weapon = nullptr;
+    std::uint32_t art = 0;
+    std::uint32_t attach_id = 0;
+    std::uint8_t attach_index = 0xFF;
+    unsigned samples = 0;
+    ULONGLONG last_sample_ms = 0;
+};
+
+bool claim_nadine_animating_transform_sample(
+    const NadineLocalTransformProbeCapture& capture, unsigned* sample_out) {
+    if (capture.role < 0 || capture.role >= 5 || sample_out == nullptr) {
+        return false;
+    }
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static std::array<NadineAnimatingTransformMemo, 5> memos{};
+    const ULONGLONG now = GetTickCount64();
+    bool accepted = false;
+    AcquireSRWLockExclusive(&lock);
+    NadineAnimatingTransformMemo& memo =
+        memos[static_cast<std::size_t>(capture.role)];
+    if (memo.owner != capture.owner || memo.weapon != capture.weapon ||
+        memo.art != capture.art || memo.attach_id != capture.attach_id ||
+        memo.attach_index != capture.attach_index) {
+        memo = {};
+        memo.owner = capture.owner;
+        memo.weapon = capture.weapon;
+        memo.art = capture.art;
+        memo.attach_id = capture.attach_id;
+        memo.attach_index = capture.attach_index;
+    }
+    if (memo.samples < 4 &&
+        (memo.samples == 0 || now - memo.last_sample_ms >= 500)) {
+        *sample_out = memo.samples++;
+        memo.last_sample_ms = now;
+        accepted = true;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    return accepted;
+}
+
+void log_nadine_animating_transform_sample(
+    unsigned sample, const NadineLocalTransformProbeCapture& capture,
+    const NadinePostSelectedLocalSnapshot& selected) {
+    std::uint32_t changed = 0;
+    if (selected.valid) {
+        for (std::size_t index = 0; index < selected.local_bits.size(); ++index) {
+            if (selected.local_bits[index] != capture.input_bits[index]) {
+                changed |= 1u << index;
+            }
+        }
+    }
+    const std::uint64_t selected_hash = nadine_final_transform_hash(
+        selected.local_bits.data(), selected.local_bits.size());
+    const std::uint64_t final_hash = nadine_final_transform_hash(
+        capture.input_bits.data(), capture.input_bits.size());
+    std::ostringstream line;
+    line << "NADINE-ANIMATING-XFORM role=" << capture.role
+         << " sample=" << sample
+         << " owner=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(capture.owner)
+         << "/0x" << capture.owner_runtime_id
+         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(capture.weapon)
+         << " art=0x" << capture.art
+         << " attach=" << std::dec
+         << static_cast<unsigned>(capture.attach_index)
+         << "/0x" << std::hex << capture.attach_id
+         << " selectedValid=" << std::dec
+         << (selected.valid && selected.weapon == capture.weapon ? 1 : 0)
+         << " changed=0x" << std::hex << changed
+         << " hashes=0x" << selected_hash << "->0x" << final_hash
+         << " selected=";
+    for (const std::uint32_t bits : selected.local_bits) {
+        line << bits << ",";
+    }
+    line << " final=";
+    for (const std::uint32_t bits : capture.input_bits) {
+        line << bits << ",";
+    }
+    write_log_line(line.str().c_str());
+}
+
+NadineAttachTransform32* __fastcall hooked_nadine_final_local_compose(
+    const NadineAttachTransform32* parent, NadineAttachTransform32* output,
+    const NadineAttachTransform32* local) {
+    void* const weapon = local != nullptr
+        ? reinterpret_cast<void*>(
+              reinterpret_cast<std::uintptr_t>(local) - 0x130)
+        : nullptr;
+    NadineLocalTransformProbeCapture capture{};
+    const bool relevant =
+        seh_capture_nadine_local_transform_pre(weapon, local, &capture);
+    const NadinePostSelectedLocalSnapshot selected =
+        g_nadine_post_selected_local_snapshot;
+    unsigned sample = 0;
+    const bool log_sample = relevant &&
+        selected.valid && selected.weapon == weapon &&
+        claim_nadine_animating_transform_sample(capture, &sample);
+    NadineAttachTransform32* const result =
+        g_original_nadine_final_local_compose != nullptr
+            ? g_original_nadine_final_local_compose(parent, output, local)
+            : output;
+    if (log_sample) {
+        log_nadine_animating_transform_sample(sample, capture, selected);
+    }
+    return result;
+}
+
+bool install_nadine_post_selected_transform_probe() {
+    auto* const slot = reinterpret_cast<std::uintptr_t*>(
+        g_module + kProcessWeaponUpdateSelectedAttachmentVtableSlotRva);
+    const std::uintptr_t expected =
+        g_module + kNdAttachableObjectUpdateSelectedAttachmentRva;
+    if (*slot != expected) {
+        boot_log_line(
+            "Nadine post-selected transform probe SKIPPED (unexpected vslot)");
+        return false;
+    }
+    g_original_process_weapon_update_selected_attachment =
+        reinterpret_cast<NdAttachableObjectUpdateSelectedAttachmentFunction>(
+            *slot);
+    DWORD old = 0;
+    if (!VirtualProtect(slot, sizeof(*slot), PAGE_READWRITE, &old)) {
+        g_original_process_weapon_update_selected_attachment = nullptr;
+        boot_log_line(
+            "Nadine post-selected transform probe SKIPPED (protect)");
+        return false;
+    }
+    *slot = reinterpret_cast<std::uintptr_t>(
+        &hooked_process_weapon_update_selected_attachment);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(*slot));
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(*slot), old, &ignored);
+    boot_log_line(
+        "Nadine post-selected transform read-only vtable probe installed");
+    return true;
+}
+
+bool install_nadine_final_local_compose_probe() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kNdAttachableObjectFinalLocalComposeCallsiteRva,
+            kTransformComposeRva,
+            reinterpret_cast<const void*>(
+                &hooked_nadine_final_local_compose),
+            callsite, relay, displacement)) {
+        boot_log_line("Nadine final-local compose probe SKIPPED (preflight)");
+        return false;
+    }
+    g_original_nadine_final_local_compose =
+        reinterpret_cast<TransformComposeFunction>(
+            g_module + kTransformComposeRva);
+    DWORD old = 0;
+    if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_nadine_final_local_compose = nullptr;
+        boot_log_line("Nadine final-local compose probe SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(callsite + 1) = displacement;
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(callsite, 5, old, &ignored);
+    boot_log_line(
+        "Nadine final-local compose read-only probe installed at 0x141ED287B");
+    return true;
+}
+
 using ArmBlockProbesKickFunction =
     std::int64_t(__fastcall*)(void*, void*, bool);
 ArmBlockProbesKickFunction g_original_arm_block_probes_kick = nullptr;
@@ -33917,8 +34498,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22fy "
-        "(renderer-wide pistol/rifle FgGeometry owner census)");
+        "TLL co-op runtime init 2026-07-22fz "
+        "(selected-record versus weapon-local transform discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -33951,6 +34532,9 @@ DWORD WINAPI install_hook(void*) {
     install_nadine_active_grip_probe();
     install_native_nadine_weapon_boundary_probe();
     install_nadine_final_transform_probe();
+    install_nadine_local_transform_probe();
+    install_nadine_post_selected_transform_probe();
+    install_nadine_final_local_compose_probe();
     // The scoped DrawControl 0x40 relay and post mesh scan were rejected by the
     // 2026-07-13 runtime discriminator; leave the dormant code available for
     // reference without installing another hot-path hook.
