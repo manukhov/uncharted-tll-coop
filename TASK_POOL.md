@@ -1906,7 +1906,14 @@ Do not reopen these as the first move:
       Compare a stock back positive control. Build `gi` parks the rejected row
       mutation and keeps only the read-only 144-family result probe; do not run a
       new mutation before three independent static evidence types and a written
-      discriminator.
+      discriminator. STATIC `gj` meets that quota without restoring the row
+      mutation: the mirror category precedes player-mesh, both leg outputs are
+      terminal in all 406 player-mesh objects, and the exact clips exist in
+      `anim-player-movement.pak`. Its bounded wrapper probe runs the proven leg
+      terminal through the same active `AnimSetRemap` and `ResolveClip` only into
+      stack-local output after the stock back lookup. Test one pistol Put and
+      classify Hremap/Hnull/Hvalid-noIK from the written prediction in
+      `COOP_STATUS.md`; no visual change is expected.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

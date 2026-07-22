@@ -7597,3 +7597,46 @@ no usable custom holster data). Before any further mutation, trace the returned
 clip and active snapshot ownership/weight at these boundaries and compare a
 stock back positive control. No game or injection is required until this static
 dataflow is pinned and a bounded read-only prediction is written.
+
+### 2026-07-22 STATIC: terminal leg clips are authored; bounded lookup discriminator (`gj`)
+
+The complete asset chain confirms that `gh` did not pair incompatible rows.
+`player-overlays.bin` object `0x0CEA0E76`, category
+`weapon-base-layer-mirror 0x1BA911E4`, runs before `player-mesh` and maps
+`8DCA21F2 -> 2E881D58` plus `1FB7D7B3 -> 253A3A91`. The campaign Chloe object
+`0x4C9FB65C` then maps the former through back
+`933CEF1E -> 9C559A24` and the latter through back finish
+`3C29021C -> 6A53B39B`. The `gh` destinations `93AB6B11` and `A67333CE` are
+terminal leg clips: none of all 406 player-mesh objects contains either as a
+source row. This shorter path is authored, not a truncated chain.
+
+The animation pack supplies an independent positive control.
+`anim-player-movement.pak` contains `93AB6B11` at offsets `0x1341E0` and
+`0x2265228`, and `A67333CE` at `0x13BB40` and `0x2270B50`; the non-mirrored leg
+clips are present as well. Pack membership does not prove that the active
+AnimSet lookup keys resolve them, so Hremap and Hnull remain live.
+
+Static decompilation makes a non-mutating counterfactual safe.
+`AnimSetRemap_ResolveAnimationId 0x1417CA2E0` only binary-searches the supplied
+AnimSet and writes its three-DWORD output. `AnimationDatabase_ResolveClip
+0x1417C8E20` only queries the resolved id and optional fallback registries.
+Build `gj` therefore leaves the stock back animation untouched and brackets
+`AnimationDatabase_ResolveClipWithOverlays 0x140516230` only for an exact
+legacy-Nadine master state and idle Put sources `8DCA21F2/1FB7D7B3`. After the
+normal lookup returns, it passes the already runtime-proven corresponding leg
+terminal through the same active AnimSet and clip lookup into stack-local
+outputs. It logs source, stock overlay terminal/clip, post-AnimSet leg id, both
+lookup keys and leg clip pointer. It writes no animation, overlay, snapshot,
+weapon or Player state.
+
+**Falsifiable `gj` prediction:** both copies load marker `2026-07-22gj`, report
+the overlay family probe with `mutation=0`, and install the read-only clip lookup
+probe. One legacy-Nadine pistol Put emits `NADINE-HOLSTER-CLIP-LOOKUP` with
+`overlaySeen=1, mapped=1, safe=1` and a non-null stock clip. A post-remap id
+different from `legTerminal` selects Hremap. An equal id with `legClip=0`
+selects Hnull. An equal id with a non-null leg clip, combined with `gh`'s exact
+leg terminal and invalid final IK, selects Hvalid-noIK and moves the next static
+boundary to active snapshot/reference ownership. The visible animation must be
+the stable stock back motion with no new jitter because `gj` performs no
+selection mutation. A crash, missing install, visual change, unsafe call or any
+row shadow invalidates the probe.
