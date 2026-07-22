@@ -523,6 +523,10 @@ constexpr std::uintptr_t kWeaponAttachmentAttachToOwnerPointRva = 0x1ED0370;
 // vtable +0x7A8 selects a record in the existing Player owner's AttachSystem.
 constexpr std::uintptr_t kPlayerStateActionFactoryRva = 0x10FD120;
 constexpr std::uintptr_t kPlayerHolsterWeaponAnimActionExecuteRva = 0x108A640;
+constexpr std::uintptr_t kPlayerHolsterWeaponAnimActionUpdateTailCallsiteRva =
+    0x108A5F9;
+constexpr std::uintptr_t kPlayerHolsterWeaponAnimActionTransitionCallsiteRva =
+    0x108A62B;
 constexpr std::uintptr_t kWeaponAttachmentSelectExistingOwnerPointRva =
     0x1ED0580;
 // ProcessWeapon vtable +0x410 (0x141515860) directly calls the shared
@@ -559,6 +563,8 @@ constexpr std::uintptr_t kTransformComposeRva = 0x01998F0;
 // RTTI-backed ProcessWeapon vtable. Runtime exact-parent census identifies
 // pistol/rifle/grenade children by this class and authored art at +0x860.
 constexpr std::uintptr_t kProcessWeaponVtableRva = 0x2A9BF48;
+constexpr std::uintptr_t kProcessWeaponSelectExistingOwnerPointVtableSlotRva =
+    kProcessWeaponVtableRva + 0x7A8;
 // RTTI-backed ProcessCharCloth vtable. At the callsite above RBX still owns the
 // NdAttachableObject, so the relay can distinguish cloth from other attachments.
 constexpr std::uintptr_t kProcessCharClothVtableRva = 0x2BAF780;

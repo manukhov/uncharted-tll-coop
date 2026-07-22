@@ -6275,3 +6275,58 @@ selector, callback and registration names were applied to the single
 `ida/tll.i64`; `save_database returned True`. The restarted MCP verified the
 saved names and the executor xrefs from both derived dispatch wrappers. Runtime
 verification is pending.
+
+### 2026-07-22 RUNTIME REJECTED: `fq` entry detours crash both processes
+
+Processes 6048 and 12956 both loaded build `fq`, reported the complete install
+marker `animAction=111`, reached the ordinary network startup, and then crashed
+before any `NADINE-ANIM-ACTION-FACTORY`, `NADINE-HOLSTER-ACTION-EXEC` or
+`NADINE-HOLSTER-SELECT` row. Both logs ended in the same early initialization
+window; no weapon input was required. This invalidates the probe implementation,
+not the static AnimAction ownership model.
+
+Exact instruction-boundary inspection identifies three independent defects in
+the new entry detours. The 24-byte factory copy ended with the first `0x48` byte
+of `mov [rax+8],rbx` at `0x1410FD137`; moreover its generic trampoline jump used
+RAX even though the retail prologue deliberately preserved the original RSP in
+that live register. The 28-byte executor copy ended with the first `0x80` byte
+of `cmp byte ptr [rcx+0x30],0` at `0x14108A65B`. The selector copy included the
+relative call at `0x141ED058C`, but the generic trampoline does not relocate
+rel32 operands. Any one is unsafe; all three entry-detour variants are REJECTED
+and must not be restored with a longer guessed byte count.
+
+### 2026-07-22 STATIC: safe owner/callsite/vtable AnimAction discriminator (`fr`)
+
+Build `fr` preserves the same read-only observations without relocating retail
+instructions. The Player-embedded AnimActionMgr at `Player+0x1B8` stores its
+factory at manager `+0x18`, therefore the game-thread installer replaces only
+the retained owner's aligned function pointer at `Player+0x1D0`; the wrapper
+calls untouched `Player_CreateStateAction 0x1410FD120` directly. This is scoped
+to the two retained Players and re-applied only when their object identity
+changes.
+
+The executor has two exact direct transfer sites. Update tail-jumps via `E9` at
+`0x14108A5F9`, while OnTransition calls via `E8` at `0x14108A62B`; both resolve
+to `PlayerHolsterWeaponAnimAction_Execute 0x14108A640`. Each five-byte relative
+operand now targets a nearby absolute relay, so no callee prologue or live
+register is copied. Finally, IDB data and runtime-class identity agree that
+`ProcessWeapon` vtable `0x142A9BF48` slot `+0x7A8` at `0x142A9C6F0` contains
+exactly `WeaponAttachment_SelectExistingOwnerPoint 0x141ED0580`. Swapping that
+single checked pointer observes the logical attachment mutation while calling
+the untouched function body.
+
+The evidence quota is met by: exact retail instruction boundaries and branch
+targets; independent manager/vtable pointer identity; and the already-proven
+callsite-relay plus checked-vtable installation patterns used by stable hooks in
+this DLL. Competing instrumentation choices are the rejected function-entry
+copies, hardware breakpoints (too broad and thread-sensitive), and post-state
+polling (cannot distinguish a missed executor from a failed selector).
+
+Written prediction: both copies must start with marker `2026-07-22fr`, report
+`animSafe=111`, and later report one owner-local factory install per retained
+Player without crashing before input. A pistol and rifle draw/Put cycle on
+Chloe must produce `weapon-holster` factory, Execute and selector rows. The
+legacy Nadine sequence then selects the same A-E hypotheses written above. Any
+pre-input crash, site/slot mismatch, missing owner factory install, changed
+weapon behavior or non-stock state mutation rejects `fr`. The release DLL
+compiled successfully; runtime verification is pending.

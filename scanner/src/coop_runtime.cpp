@@ -13503,11 +13503,13 @@ void ensure_legacy_nadine_attach_points_game_thread() {
 
 void reconcile_legacy_nadine_inactive_weapons_game_thread(
     const coop::StatePacket& peer, void* peer_puppet);
+void ensure_player_anim_action_factory_probes_game_thread();
 
 void apply_peer_held_weapon_state() {
     coop::StatePacket peer{};
     void* puppet = nullptr;
     if (!latest_peer_state(peer, puppet)) return;
+    ensure_player_anim_action_factory_probes_game_thread();
     ensure_legacy_nadine_attach_points_game_thread();
     // Diagnostic build fp: park the proven direct inactive attach while the
     // native action lifecycle is observed. Its later repair otherwise masks
@@ -28304,6 +28306,69 @@ void* __fastcall hooked_player_state_action_factory(
     return action;
 }
 
+bool patch_player_anim_action_factory_seh(
+    void* player, void* expected, void* replacement, void** observed_out) {
+    constexpr std::size_t kPlayerAnimActionFactoryOffset = 0x1D0;
+    if (observed_out == nullptr) {
+        return false;
+    }
+    *observed_out = nullptr;
+    __try {
+        auto* const slot = reinterpret_cast<void* volatile*>(
+            static_cast<std::byte*>(player) +
+            kPlayerAnimActionFactoryOffset);
+        *observed_out = *slot;
+        if (*observed_out == replacement) {
+            return true;
+        }
+        if (*observed_out != expected) {
+            return false;
+        }
+        const bool installed = InterlockedCompareExchangePointer(
+            slot, replacement, expected) == expected;
+        *observed_out = *slot;
+        return installed;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *observed_out = nullptr;
+        return false;
+    }
+}
+
+void ensure_player_anim_action_factory_probes_game_thread() {
+    // Player embeds AnimActionMgr at +0x1B8; its factory field is manager+0x18.
+    // Swapping this owner-local data pointer avoids relocating the factory's
+    // frame-building entry prologue. The hook calls the untouched retail entry.
+    static std::array<void*, 2> installed_players{};
+    void* const expected = reinterpret_cast<void*>(
+        g_module + kPlayerStateActionFactoryRva);
+    void* const replacement = reinterpret_cast<void*>(
+        &hooked_player_state_action_factory);
+    if (g_original_player_state_action_factory == nullptr) {
+        return;
+    }
+    for (int owner_index = 0; owner_index < 2; ++owner_index) {
+        void* const player = retained_player_object(owner_index);
+        if (player == nullptr) {
+            continue;
+        }
+        void* observed = nullptr;
+        if (!patch_player_anim_action_factory_seh(
+                player, expected, replacement, &observed)) {
+            continue;
+        }
+        if (installed_players[owner_index] == player) {
+            continue;
+        }
+        installed_players[owner_index] = player;
+        std::ostringstream line;
+        line << "Player AnimAction factory owner probe installed owner="
+             << owner_index << " player=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(player)
+             << " current=0x" << reinterpret_cast<std::uintptr_t>(observed);
+        boot_log_line(line.str().c_str());
+    }
+}
+
 void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
     const PlayerHolsterAnimActionSnapshot before =
         capture_player_holster_anim_action(action);
@@ -28419,6 +28484,126 @@ std::uintptr_t __fastcall hooked_weapon_attachment_select_existing_owner_point(
          << (after.record_readable ? 1 : 0);
     write_log_line(line.str().c_str());
     return result;
+}
+
+bool install_player_holster_execute_callsite_probe() {
+    struct Site {
+        std::uint8_t* address;
+        std::uint8_t opcode;
+    };
+    std::array<Site, 2> sites{
+        Site{reinterpret_cast<std::uint8_t*>(
+                 g_module +
+                 kPlayerHolsterWeaponAnimActionUpdateTailCallsiteRva),
+             0xE9},
+        Site{reinterpret_cast<std::uint8_t*>(
+                 g_module +
+                 kPlayerHolsterWeaponAnimActionTransitionCallsiteRva),
+             0xE8},
+    };
+    const std::uintptr_t expected_target =
+        g_module + kPlayerHolsterWeaponAnimActionExecuteRva;
+    for (const Site& site : sites) {
+        std::int32_t current_displacement = 0;
+        std::memcpy(
+            &current_displacement, site.address + 1,
+            sizeof(current_displacement));
+        const std::uintptr_t current_target =
+            reinterpret_cast<std::uintptr_t>(site.address + 5) +
+            static_cast<std::intptr_t>(current_displacement);
+        if (site.address[0] != site.opcode ||
+            current_target != expected_target) {
+            boot_log_line(
+                "Player weapon-holster execute probe SKIPPED (site mismatch)");
+            return false;
+        }
+    }
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(sites[0].address, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line(
+            "Player weapon-holster execute probe SKIPPED (no near relay)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_player_holster_weapon_anim_action_execute);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    for (const Site& site : sites) {
+        const std::int64_t displacement =
+            reinterpret_cast<std::intptr_t>(relay) -
+            reinterpret_cast<std::intptr_t>(site.address + 5);
+        if (displacement < INT32_MIN || displacement > INT32_MAX) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            boot_log_line(
+                "Player weapon-holster execute probe SKIPPED (relay range)");
+            return false;
+        }
+    }
+
+    auto* const range_start = sites[0].address;
+    const std::size_t range_size = static_cast<std::size_t>(
+        sites[1].address + 5 - range_start);
+    g_original_player_holster_weapon_anim_action_execute =
+        reinterpret_cast<PlayerHolsterWeaponAnimActionExecuteFunction>(
+            expected_target);
+    DWORD old = 0;
+    if (!VirtualProtect(
+            range_start, range_size, PAGE_EXECUTE_READWRITE, &old)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_player_holster_weapon_anim_action_execute = nullptr;
+        boot_log_line(
+            "Player weapon-holster execute probe SKIPPED (protect)");
+        return false;
+    }
+    for (const Site& site : sites) {
+        const std::int64_t displacement =
+            reinterpret_cast<std::intptr_t>(relay) -
+            reinterpret_cast<std::intptr_t>(site.address + 5);
+        *reinterpret_cast<std::int32_t*>(site.address + 1) =
+            static_cast<std::int32_t>(displacement);
+    }
+    FlushInstructionCache(GetCurrentProcess(), range_start, range_size);
+    DWORD ignored = 0;
+    VirtualProtect(range_start, range_size, old, &ignored);
+    boot_log_line(
+        "Player weapon-holster execute probe installed (E9/E8 callsites)");
+    return true;
+}
+
+bool install_weapon_existing_owner_selector_vtable_probe() {
+    auto* const slot = reinterpret_cast<void**>(
+        g_module + kProcessWeaponSelectExistingOwnerPointVtableSlotRva);
+    void* const expected = reinterpret_cast<void*>(
+        g_module + kWeaponAttachmentSelectExistingOwnerPointRva);
+    if (*slot != expected) {
+        boot_log_line(
+            "Player weapon existing-owner selector probe SKIPPED (slot mismatch)");
+        return false;
+    }
+    DWORD old = 0;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+        boot_log_line(
+            "Player weapon existing-owner selector probe SKIPPED (protect)");
+        return false;
+    }
+    g_original_weapon_attachment_select_existing_owner_point =
+        reinterpret_cast<WeaponAttachmentSelectExistingOwnerPointFunction>(
+            expected);
+    *slot = reinterpret_cast<void*>(
+        &hooked_weapon_attachment_select_existing_owner_point);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(void*), old, &ignored);
+    boot_log_line(
+        "Player weapon existing-owner selector probe installed (ProcessWeapon vtable+0x7A8)");
+    return true;
 }
 
 bool seh_attach_weapon_to_owner_point(
@@ -29705,22 +29890,6 @@ bool install_nadine_holster_final_boundary_probe() {
         0x48, 0x89, 0x7C, 0x24, 0x20, 0x41, 0x56, 0x48, 0x83, 0xEC,
         0x30,
     };
-    constexpr std::array<std::uint8_t, 24> kStateActionFactoryPrologue{
-        0x48, 0x8B, 0xC4, 0x56, 0x57, 0x41, 0x56, 0x48,
-        0x81, 0xEC, 0x50, 0x04, 0x00, 0x00, 0x48, 0xC7,
-        0x44, 0x24, 0x38, 0xFE, 0xFF, 0xFF, 0xFF, 0x48,
-    };
-    constexpr std::array<std::uint8_t, 28> kHolsterActionExecutePrologue{
-        0x41, 0x56, 0x48, 0x81, 0xEC, 0xE0, 0x04, 0x00,
-        0x00, 0x48, 0x8B, 0x05, 0x28, 0xA5, 0xF6, 0x01,
-        0x48, 0x33, 0xC4, 0x48, 0x89, 0x84, 0x24, 0x40,
-        0x04, 0x00, 0x00, 0x80,
-    };
-    constexpr std::array<std::uint8_t, 17> kSelectExistingPointPrologue{
-        0x40, 0x56, 0x48, 0x83, 0xEC, 0x20, 0x44, 0x8B, 0xCA,
-        0x48, 0x8B, 0xF1, 0xE8, 0xBF, 0x17, 0x00, 0x00,
-    };
-
     g_original_player_weapon_anim_named_event =
         reinterpret_cast<PlayerWeaponAnimNamedEventFunction>(
             install_fire_gate_detour(
@@ -29756,38 +29925,18 @@ bool install_nadine_holster_final_boundary_probe() {
                 "Nadine holster final-attach probe"));
     g_original_player_state_action_factory =
         reinterpret_cast<PlayerStateActionFactoryFunction>(
-            install_fire_gate_detour(
-                kPlayerStateActionFactoryRva,
-                kStateActionFactoryPrologue.data(),
-                kStateActionFactoryPrologue.size(),
-                reinterpret_cast<void*>(&hooked_player_state_action_factory),
-                "Player weapon AnimAction factory probe"));
-    g_original_player_holster_weapon_anim_action_execute =
-        reinterpret_cast<PlayerHolsterWeaponAnimActionExecuteFunction>(
-            install_fire_gate_detour(
-                kPlayerHolsterWeaponAnimActionExecuteRva,
-                kHolsterActionExecutePrologue.data(),
-                kHolsterActionExecutePrologue.size(),
-                reinterpret_cast<void*>(
-                    &hooked_player_holster_weapon_anim_action_execute),
-                "Player weapon-holster AnimAction execute probe"));
-    g_original_weapon_attachment_select_existing_owner_point =
-        reinterpret_cast<WeaponAttachmentSelectExistingOwnerPointFunction>(
-            install_fire_gate_detour(
-                kWeaponAttachmentSelectExistingOwnerPointRva,
-                kSelectExistingPointPrologue.data(),
-                kSelectExistingPointPrologue.size(),
-                reinterpret_cast<void*>(
-                    &hooked_weapon_attachment_select_existing_owner_point),
-                "Player weapon existing-owner attach selector probe"));
+            g_module + kPlayerStateActionFactoryRva);
+    const bool holster_execute_installed =
+        install_player_holster_execute_callsite_probe();
+    const bool selector_installed =
+        install_weapon_existing_owner_selector_vtable_probe();
 
     const bool installed = g_original_player_weapon_anim_named_event != nullptr &&
         g_original_player_move_sequencer_update != nullptr &&
         g_original_weapon_holster_build_binding != nullptr &&
         g_original_weapon_attachment_attach_to_owner_point != nullptr &&
         g_original_player_state_action_factory != nullptr &&
-        g_original_player_holster_weapon_anim_action_execute != nullptr &&
-        g_original_weapon_attachment_select_existing_owner_point != nullptr;
+        holster_execute_installed && selector_installed;
     std::ostringstream line;
     line << "Nadine holster final boundary probe "
          << (installed ? "installed" : "PARTIAL")
@@ -29799,14 +29948,10 @@ bool install_nadine_holster_final_boundary_probe() {
          << " rUpperLeg=0x" << g_r_upper_leg_joint_name_id
          << " actionLifecycle="
          << (g_original_player_move_sequencer_update != nullptr ? 1 : 0)
-         << " animAction="
+         << " animSafe="
          << (g_original_player_state_action_factory != nullptr ? 1 : 0)
-         << (g_original_player_holster_weapon_anim_action_execute != nullptr
-                 ? 1
-                 : 0)
-         << (g_original_weapon_attachment_select_existing_owner_point != nullptr
-                 ? 1
-                 : 0);
+         << (holster_execute_installed ? 1 : 0)
+         << (selector_installed ? 1 : 0);
     boot_log_line(line.str().c_str());
     return installed;
 }
@@ -32771,8 +32916,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22fq "
-        "(weapon-holster AnimAction discriminator)");
+        "TLL co-op runtime init 2026-07-22fr "
+        "(safe weapon-holster AnimAction relays)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

@@ -1678,11 +1678,14 @@ Do not reopen these as the first move:
       selects the existing-owner attach record at `weapon+0x688`.
       `0x00AD047A` is confirmed `targSpineProp`, a required stock intermediate,
       and absence of direct `0x141ED0370` holster calls in `fp` is not a failure.
-      Build `fq` passively distinguishes A no factory, B no executor, C unresolved
-      state/weapon, D failed targSpineProp guard and E wrong final selector using
-      the written prediction in COOP_STATUS. Keep direct repair disabled.
-      Release DLL `2026-07-22fq` compiled; the single IDB is saved/labeled and
-      MCP verification passed. Runtime comparison is pending.
+      Build `fq` was RUNTIME REJECTED: both processes crashed before input because
+      its generic entry trampolines copied two partial instructions and one
+      unrelocated rel32 call. Do not restore those entry hooks. Replacement `fr`
+      uses owner-local factory pointer `Player+0x1D0`, exact executor E9/E8 sites
+      `0x14108A5F9/0x14108A62B`, and checked ProcessWeapon vtable slot
+      `0x142A9C6F0`; it retains the same A-E discriminator without copying retail
+      prologues. Release DLL `2026-07-22fr` compiled; runtime comparison is
+      pending under the new written prediction. Keep direct repair disabled.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
