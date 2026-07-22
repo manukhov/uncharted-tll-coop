@@ -28961,7 +28961,6 @@ struct NadinePistolHolsterExecuteContext {
     void* player = nullptr;
     bool active = false;
     bool saw_anim_point = false;
-    bool redirected_final_point = false;
 };
 
 thread_local NadinePistolHolsterExecuteContext
@@ -29013,49 +29012,6 @@ HolsterExecuteWeaponLocalSnapshot capture_holster_execute_weapon_local(
     return snapshot;
 }
 
-bool seh_apply_native_nadine_pistol_holster_local_contract(
-    void* player, void* expected_weapon) {
-    __try {
-        if (player == nullptr || expected_weapon == nullptr ||
-            get_weapon_from_slot(player, 1) != expected_weapon ||
-            !seh_weapon_parent_resolves_to_owner(expected_weapon, player)) {
-            return false;
-        }
-        auto* const bytes = static_cast<std::byte*>(expected_weapon);
-        if (readable_bytes(bytes) < 0x689) {
-            return false;
-        }
-        const std::uint8_t attach_index =
-            *reinterpret_cast<const std::uint8_t*>(bytes + 0x688);
-        std::uint32_t attach_id = 0;
-        std::uintptr_t records_generation = 0;
-        if (!seh_read_owner_attach_record_id(
-                player, attach_index, &attach_id, &records_generation) ||
-            attach_id != kPistolHolsterAttachId) {
-            return false;
-        }
-
-        // The native Nadine AI path selects pistolHolster without running the
-        // Player holster binding/action writers. Runtime fz captured identity
-        // in these eight words for the native holstered pistol. Reproduce that
-        // local contract after the scoped Player action redirects its final
-        // selector to the same authored record, and stop the Player-only blend
-        // from restoring the incompatible Chloe holster binding.
-        constexpr std::array<std::uint32_t, 8> kNativeLocalIdentityBits{
-            0, 0, 0, 0, 0, 0, 0, 0x3F800000u};
-        constexpr std::array<std::uint32_t, 2> kStoppedBlendBits{0, 0};
-        std::memcpy(
-            bytes + 0x4F0, kNativeLocalIdentityBits.data(),
-            sizeof(kNativeLocalIdentityBits));
-        std::memcpy(
-            bytes + 0x640, kStoppedBlendBits.data(),
-            sizeof(kStoppedBlendBits));
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
 void log_holster_execute_weapon_local(
     int owner_index, void* player, std::uint32_t look, int slot,
     const HolsterExecuteWeaponLocalSnapshot& before,
@@ -29099,34 +29055,6 @@ void log_holster_execute_weapon_local(
     write_log_line(line.str().c_str());
 }
 
-void log_nadine_pistol_holster_local_repair(
-    int owner_index, void* player,
-    const HolsterExecuteWeaponLocalSnapshot& stock,
-    const HolsterExecuteWeaponLocalSnapshot& repaired, bool applied) {
-    std::ostringstream line;
-    line << "NADINE-PISTOL-HOLSTER-LOCAL-REPAIR owner=" << owner_index
-         << " player=0x" << std::hex
-         << reinterpret_cast<std::uintptr_t>(player)
-         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(stock.weapon)
-         << " art=0x" << stock.art
-         << std::dec << " attach="
-         << static_cast<unsigned>(stock.attach_index)
-         << " applied=" << (applied ? 1 : 0)
-         << " valid=" << (stock.readable ? 1 : 0) << "/"
-         << (repaired.readable ? 1 : 0)
-         << std::hex << " blend=" << stock.blend_bits[0] << ","
-         << stock.blend_bits[1] << "->" << repaired.blend_bits[0] << ","
-         << repaired.blend_bits[1] << " local=";
-    for (std::size_t index = 0; index < 8; ++index) {
-        line << stock.local_bits[index] << ",";
-    }
-    line << "->";
-    for (std::size_t index = 0; index < 8; ++index) {
-        line << repaired.local_bits[index] << ",";
-    }
-    write_log_line(line.str().c_str());
-}
-
 void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
     const PlayerHolsterAnimActionSnapshot before =
         capture_player_holster_anim_action(action);
@@ -29154,8 +29082,6 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
     if (g_original_player_holster_weapon_anim_action_execute != nullptr) {
         g_original_player_holster_weapon_anim_action_execute(action);
     }
-    const NadinePistolHolsterExecuteContext completed_context =
-        g_nadine_pistol_holster_execute_context;
     std::array<HolsterExecuteWeaponLocalSnapshot, 2> local_stock_after{};
     if (owner_index >= 0 && before.executed == 0) {
         for (int slot = 0; slot < 2; ++slot) {
@@ -29167,18 +29093,6 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
 
     if (owner_index < 0) {
         return;
-    }
-    if (before.executed == 0 && completed_context.active &&
-        completed_context.redirected_final_point &&
-        local_stock_after[1].readable) {
-        const bool applied =
-            seh_apply_native_nadine_pistol_holster_local_contract(
-                before.player, local_stock_after[1].weapon);
-        const HolsterExecuteWeaponLocalSnapshot repaired =
-            capture_holster_execute_weapon_local(before.player, 1);
-        log_nadine_pistol_holster_local_repair(
-            owner_index, before.player, local_stock_after[1], repaired,
-            applied);
     }
     const PlayerHolsterAnimActionSnapshot after =
         capture_player_holster_anim_action(action);
@@ -29268,7 +29182,6 @@ std::uintptr_t __fastcall hooked_weapon_attachment_select_existing_owner_point(
                attach_id == kTargSpinePropAttachId) {
         effective_attach_id = kPistolHolsterAttachId;
         redirected = true;
-        context.redirected_final_point = true;
     }
     const std::uintptr_t result =
         g_original_weapon_attachment_select_existing_owner_point != nullptr
@@ -34686,8 +34599,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22gb "
-        "(scoped native-Nadine pistol-holster local contract)");
+        "TLL co-op runtime init 2026-07-22gc "
+        "(gb local-contract repair removed; selector observation retained)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

@@ -6971,3 +6971,37 @@ nonidentity pistol local, wrong visible placement, any rifle/Chloe change, crash
 or body regression rejects this boundary; identity local with a still-wrong
 thigh pose selects the independent Hrecord alternative.
 The `gb` Release DLL compiled successfully.
+
+Runtime `gb` REJECTS the local-contract repair as sufficient and selects
+**Hrecord**. Both PIDs `12172/16940` remained stable and emitted respectively
+four and three exact `NADINE-PISTOL-HOLSTER-LOCAL-REPAIR applied=1` rows. Every
+repair followed the required legacy-Nadine slot-1 selector sequence, resolved
+attachment id `0x8A0249B5` at index 41, replaced all eight primary local
+transform DWORDs with identity and cleared the blend. All subsequent covered
+`NADINE-LOCAL-XFORM` samples for that weapon still selected `pistolHolster`,
+joint 5, and read the repaired identity; the final visible ProcessWeapon and
+all three active child DrawControls were positively covered. No crash,
+exception, rifle repair or body regression occurred.
+
+The user nevertheless observed the pistol in the same wrong back position.
+Therefore `weapon+0x4F0`, its blend at `+0x640`, late Animating overwrite,
+separate prop/LOD and selector timing are REJECTED as causes of the remaining
+placement error in the covered state. The scoped identity write has been
+removed from build `gc`; retaining it would only mutate a proven-irrelevant
+field. The exact final selector redirect and read-only action/local diagnostics
+remain.
+
+The remaining transform input is the copied attachment record itself. Its
+current joint-5 transform was derived by
+`raw_append_parent_remapped_attach_record` from the donor's *live animated*
+joint 5 and joint 99 at one arbitrary initialization frame. Independent
+processes produced different copied DWORDs, while the authored donor record is
+fixed. That session dependence is incompatible with a stable attachment-space
+record and is now the leading Hlive hypothesis. Competing Hbind uses the native
+rig's authored bind/default transforms for the same joint-5-to-joint-99
+conversion; Hdynamic would instead require recomputing a target-space value
+from live donor and Player poses every frame. Before another runtime test,
+resolve the rig descriptor's bind/rest transform storage and the stock engine
+consumer that turns it into joint/model transforms; compare its joint 5 and 99
+semantics against `RigGetJointTransform 0x141A98870` and eliminate Hdynamic or
+Hbind statically.

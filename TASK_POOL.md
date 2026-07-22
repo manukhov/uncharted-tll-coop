@@ -1798,12 +1798,20 @@ Do not reopen these as the first move:
       action handoff endpoint at `+0x620` toward the Player binding endpoint at
       `+0x600`, writes `+0x4F0`, and clears the duration at completion. Hscript
       is REJECTED; Haction and its stock continuation are resolved.
-- [ ] Run bounded `gb`: after only the exact redirected legacy-Nadine slot-1
+- [x] Run bounded `gb`: after only the exact redirected legacy-Nadine slot-1
       action, validate `pistolHolster`, replace the incompatible Player local
       transform with the runtime-proven native identity and clear its blend.
       Require one applied repair row, identity at the next local-correction
       sample, correct visible thigh placement, no rifle repair and no body/Chloe
       regression. Identity plus wrong placement selects independent Hrecord.
+      Result: REJECTED as sufficient. Both PIDs applied identity and cleared
+      blend at the exact scoped action; every subsequent covered pistol sample
+      retained `pistolHolster` joint 5 and identity local, with final visible
+      ProcessWeapon/child DrawControls positively covered, but the user saw the
+      unchanged back position. Remove the inert mutation and resolve a stable
+      bind/rest-space joint-5-to-joint-99 remap before another runtime test; the
+      current record incorrectly samples a one-frame live NPC pose and differs
+      between processes.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
