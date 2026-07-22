@@ -1777,6 +1777,18 @@ Do not reopen these as the first move:
       `Animating` overwrite for covered states. Trace writers and initialization
       contract of `+0x68C` and `+0x4F0..+0x52F` on Player versus NPC before any
       mutation. Both processes were closed.
+      STATIC `ga`: `WeaponHolster_BuildBinding 0x1414FE540` returns id at `+0`
+      and its primary authored transform at `+0x10`; Player controller
+      `0x1410A9670` copies that transform to `weapon+0x4F0` after selecting the
+      id. Native AI controller `0x1405AE580` only selects the native id and does
+      not write local state. The later Player `weapon-holster` action computes
+      its `targSpinePropAnim -> final record` handoff and directly overwrites
+      `+0x4F0/+0x500` at `0x14108AD4F/AD57`, then seeds the blend. Because the
+      scoped repair redirects only that final record to `pistolHolster`, the
+      action applies a back-holster continuity delta in the thigh record's
+      coordinates. Run the bounded before/after `ga` action snapshot; Haction
+      requires the post value to equal the next `fz` localBefore sample before
+      any corrective mutation.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

@@ -122,7 +122,9 @@ FUNCTIONS = {
         "AttachSystem at *(owner+0x1E0); drawn state selects rightHand (or "
         "leftHand for explicit special cases), while holstered state maps "
         "WeaponArtDef type to pistolHolster/longgunHolster and rebinds the "
-        "ProcessWeapon through its virtual +0x7A8 when weapon+0x688 differs.",
+        "ProcessWeapon through its virtual +0x7A8 when weapon+0x688 differs. "
+        "Unlike the Player controller, this path never builds an authored "
+        "holster binding and never writes weapon+0x4F0/+0x500.",
     ),
     0x1405E76E0: (
         "WeaponArtDef_SelectNpcHolsterAttachId",
@@ -7345,9 +7347,10 @@ FUNCTIONS = {
     ),
     0x1414FE540: (
         "WeaponHolster_BuildBinding",
-        "Builds the selected gun_holster* StringId plus the authored per-weapon "
-        "holster transforms and scalar into the binding output consumed by "
-        "PlayerWeaponHolsterAction_ResolveAndBindAttachPoint.",
+        "Builds a Player holster binding: selected gun_holster* StringId at "
+        "+0, primary authored transform at +0x10/+0x20, secondary transform at "
+        "+0x30/+0x40 and scalar at +0x50. The controller copies the primary "
+        "transform into weapon+0x4F0/+0x500.",
     ),
     0x1410CDF90: (
         "Player_SetupAttachSystemFromLookData",
@@ -8349,13 +8352,17 @@ FUNCTIONS = {
         "PlayerHolsterWeaponAnimAction_Execute",
         "One-shot weapon-holster executor. Resolves the current weapon, calls "
         "PlayerWeaponController vtable +0x3D0, requires targSpineProp, selects "
-        "targSpinePropAnim and seeds the authored attachment blend.",
+        "targSpinePropAnim, calls the rebind again, then writes the computed "
+        "record-handoff transform to weapon+0x4F0/+0x500 at 0x14108AD4F and "
+        "seeds the authored attachment blend.",
     ),
     0x1410A9670: (
         "PlayerWeaponController_RebindWeaponToHolster",
         "PlayerWeaponController vtable +0x3D0. The ordinary path builds the "
         "weapon's authored holster binding and passes its attach id to weapon "
-        "vtable +0x7A8 while retaining the same Player owner.",
+        "vtable +0x7A8 while retaining the same Player owner, then copies the "
+        "binding's primary transform (+0x10) to weapon+0x4F0/+0x500 at "
+        "0x1410A9A65/0x1410A9A99.",
     ),
     0x141ED0580: (
         "WeaponAttachment_SelectExistingOwnerPoint",

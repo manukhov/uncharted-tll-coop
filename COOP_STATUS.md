@@ -6839,3 +6839,77 @@ The next static task is to trace writers/lifetime of `weapon+0x68C` and
 find the narrow stock condition that suppresses or selects this correction for
 native holstered weapons. Do not patch `+0x68C` or zero `+0x4F0` until that
 contract is resolved.
+
+### 2026-07-22 STATIC: Player `weapon-holster` action owns the late local offset (`ga`)
+
+The writer trace resolves the apparent `fz` local-correction result one stage
+further upstream. `weapon+0x68C` is initialized to `-1` by
+`NdAttachableObject_Init 0x141ECEFE0`, then replaced at `0x141ECF4A1` by the
+joint index resolved from init data. Both the native and Player weapons reached
+`fz` with index zero, so this selector alone cannot explain their different
+corrections. The discriminating state is the 32-byte primary transform at
+`weapon+0x4F0/+0x500`.
+
+Three independent evidence kinds identify its Player owner. First,
+`WeaponHolster_BuildBinding 0x1414FE540` returns a concrete 0x54-byte binding:
+attach StringId at `+0`, primary transform at `+0x10/+0x20`, secondary transform
+at `+0x30/+0x40`, and scalar at `+0x50`. An art-specific row copies those fields
+from the cached WeaponArtDef holster record; a missing row produces identity.
+Second, `PlayerWeaponController_RebindWeaponToHolster 0x1410A9670` calls that
+builder at `0x1410A9A02`, selects output `+0` through weapon vslot `+0x7A8`, then
+copies output `+0x10..+0x2F` verbatim into `weapon+0x4F0..+0x50F` at
+`0x1410A9A65/0x1410A9A99` (and independently for slot 21 at `0x1410A9B04`).
+Third, native `AiWeaponController_EnforceWeaponAttachment 0x1405AE580` maps the
+WeaponArtDef class to `pistolHolster`/`longgunHolster` and invokes only vslot
+`+0x7A8` at `0x1405AE89A`; it never builds a Player binding and never writes
+`+0x4F0`.
+
+The one-shot Player animation action is a later, stronger writer than the
+builder. `PlayerHolsterWeaponAnimAction_Execute 0x14108A640` first calls the
+controller rebind, requires `targSpineProp`, selects `targSpinePropAnim`,
+resolves that record's transform, and calls the controller rebind again at
+`0x14108AB72`. It then resolves the newly selected final record, computes the
+relative handoff transform, and writes the result directly to
+`weapon+0x4F0/+0x500` at `0x14108AD4F/0x14108AD57`; the following block preserves
+the old/new transforms and seeds a `0.1` blend at `+0x600..+0x647`. This is the
+exact incompatibility with the current scoped selector repair: the action
+computes a Chloe authored `targSpinePropAnim -> targSpineProp` handoff, but its
+third selector is redirected to Nadine's copied `pistolHolster`, so the same
+back-holster continuity delta is applied in the thigh record's coordinate
+space.
+
+Existing `fz` runtime ordering supports that dataflow without yet proving the
+exact write instruction. On the retained legacy-Nadine pistol, the binding row
+was `3D9BA5E3,...,3F7BF4C4`, the selector sequence was
+`targSpineProp -> targSpinePropAnim -> pistolHolster`, and the immediately
+following local stage read a different nonidentity transform
+`BE2E30E9,...,3F2DE578`. The same one-shot action was positively reached and
+latched `executed=0->1`. Therefore a simple stale builder payload is excluded;
+the late action delta is the remaining concrete writer between those samples.
+
+Competing hypotheses are explicit. **Haction** predicts that the first
+`weapon-holster` execution changes the active slot's `+0x4F0..+0x52F` from its
+pre-action value to exactly the nonidentity value later consumed by
+`0x141ED0A70`, with selected id ending at `pistolHolster`; the native NPC has no
+such action. **Hscript** predicts no action-local change and requires a later
+`reattach-player-weapon`/event writer. **Hrecord** predicts the action-local
+write occurs but the visible displacement remains after that local value is
+eventually removed, leaving the copied record independently wrong. **Hbuilder**
+predicts the post-action value equals the builder's primary payload and is
+rejected if the two differ.
+
+Build `2026-07-22ga` extends the already-installed pass-through action wrapper
+with bounded before/after snapshots of slots 0 and 1. It logs the selected byte,
+all 16 DWORDs at `+0x4F0..+0x52F`, and the two blend DWORDs at `+0x640`, only on
+the first `executed=0` call. It adds no engine call beyond the already-used
+inventory slot getter and writes no weapon, action, attachment, animation or
+render state. Prediction: a retained-Nadine pistol holster cycle must emit one
+slot-1 `NADINE-HOLSTER-LOCAL-WRITE` with nonzero `changed`, final selected index
+for `pistolHolster`, and post words equal to the next
+`NADINE-LOCAL-XFORM localBefore`; rifle slot 0 provides the independent Player
+control. `changed=0`, a different final value, missing action reach, a crash or
+any visual regression makes Haction inconclusive. Runtime verification is
+pending. The release DLL compiled successfully. The four existing STATIC IDB
+comments were refined with the exact binding layout and write sites
+(`apply_labels OK: 1227 functions, 20 data names`, `save_database returned
+True`); the restarted MCP resolves every updated comment from the single IDB.
