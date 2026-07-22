@@ -7464,3 +7464,37 @@ The next runtime must first replace the append-only state list with a bounded
 current-state mapping and log all exact family hits, tagged and untagged. It may
 mutate only a tagged exact source/back pair; absence of every family source will
 then reject this resolver as the live holster selection boundary.
+
+### 2026-07-22 HYPOTHESIS: full chest-holster family discriminator (`gg`)
+
+Build `gg` closes both holes left by `gf`. The 64-entry append-only ownership
+list is replaced by a 1024-slot direct current-state map. Every
+`AnimOverlayState_Copy` atomically overwrites the destination's classification,
+including explicit untagging when its source is not the retained legacy-Nadine
+master state; stale track addresses therefore cannot fill the table. The
+resolver recognizes all 144 exact `p-holster-chest` and
+`p-unholster-chest` rows reproduced from the installed campaign-Chloe and
+`vill-nadine-08` DC00 objects. Each tuple contains source, Chloe-back target
+and Nadine-leg target whose remaining 32 row bytes are identical.
+
+The alternatives are now falsifiable. **Gfamily** predicts Put/draw reaches at
+least one family source on a tagged state; an exact Chloe-back result is changed
+to its paired Nadine-leg id and must move the Player holster motion toward the
+thigh. **Gowner** predicts family hits exist but only with `tagged=0`, proving
+the master-to-track ownership bridge is incomplete. **Gchain** predicts a tagged
+family source whose final authored output is not its direct back target
+(`exactBack=0`), selecting a downstream chained-remap seam. **Gother** predicts
+zero family rows in both tagged and untagged calls during a covered Put cycle,
+rejecting this overlay resolver as the live chest/back decision boundary rather
+than authorizing another blind row mutation.
+
+**Written runtime prediction:** both copies must load marker `2026-07-22gg`,
+install the two overlay detours, report `family=144 stateSlots=1024`, and emit
+the retained Nadine `NADINE-HOLSTER-OVERLAY-COPY` marker. Drawing and putting
+away the standard pistol must then either produce a classifying
+`NADINE-HOLSTER-FAMILY-ROW`, or its complete absence selects Gother. Only a row
+with `tagged=1 exactBack=1` may report `replaced=1`; it must end at the
+paired leg id and visually move the put-away motion to the thigh. Untagged rows,
+non-back outputs, rifle, Chloe and every unrelated animation remain unchanged.
+A crash, hook-install failure, body regression, rifle mutation or replacement
+outside the exact tagged pair invalidates the probe.

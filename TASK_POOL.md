@@ -1876,6 +1876,13 @@ Do not reopen these as the first move:
       leg-only targets for Chloe versus `vill-nadine-08`. Next replace the
       append-only 64-state tag list with a current bounded mapping and observe
       every exact family hit (tagged and untagged) before widening mutation.
+      Build `gg` implements that discriminator: a direct 1024-slot current-state
+      map replaces stale classifications, all 144 source/back/leg tuples are
+      embedded from the reproducible PSARC audit, and every family hit is logged
+      whether tagged or not. Only an exact tagged Chloe-back result may be
+      replaced. Test one standard-pistol draw/Put cycle on legacy Nadine; classify
+      Gfamily/Gowner/Gchain/Gother from the written prediction in
+      `COOP_STATUS.md`.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

@@ -28508,10 +28508,167 @@ AnimOverlayStateCopyFunction g_original_anim_overlay_state_copy = nullptr;
 AnimOverlayStateResolveAnimationIdFunction
     g_original_anim_overlay_state_resolve_animation_id = nullptr;
 
-constexpr std::uint32_t kHolsterChestIdleStandPartId = 0x8DCA21F2u;
-constexpr std::uint32_t kHolsterBackIdleStandPartId = 0x11438F72u;
-constexpr std::uint32_t kHolsterLegIdleStandPartId = 0x4A5559F7u;
-constexpr std::size_t kTrackedLegacyNadineOverlayStateCount = 64;
+struct HolsterOverlayReplacement {
+    std::uint32_t source;
+    std::uint32_t chloe_back;
+    std::uint32_t nadine_leg;
+};
+
+// Exact p-holster-chest / p-unholster-chest family shared by the campaign
+// Chloe and vill-nadine-08 player-mesh overlay sets. The 32-byte row tails are
+// byte-identical; only the authored target differs.
+constexpr std::array<HolsterOverlayReplacement, 144>
+    kHolsterOverlayReplacements{{
+    {0x6C3F979Au, 0xEEC390EFu, 0x6BE64FB2u},
+    {0x062EC57Cu, 0x3C68C935u, 0x354A9741u},
+    {0x1FB7D7B3u, 0xA20325F5u, 0xA294A1FAu},
+    {0x8DCA21F2u, 0x11438F72u, 0x4A5559F7u},
+    {0x3683C4A7u, 0x1D93DF24u, 0x1B54CAAFu},
+    {0xE452EAD2u, 0x6B9CB7C5u, 0xD31ABA8Du},
+    {0xAFB364A4u, 0x30AD2EF7u, 0x2D960631u},
+    {0x66846123u, 0xC5F79FA2u, 0x18645910u},
+    {0x8168B106u, 0xBB2EBD4Fu, 0xB20CE33Bu},
+    {0x30DAFCB1u, 0xECE77859u, 0x489F0948u},
+    {0x253A3A91u, 0x3C29021Cu, 0xA67333CEu},
+    {0x2E881D58u, 0x933CEF1Eu, 0x93AB6B11u},
+    {0xD014E7F3u, 0xD30C32D0u, 0x95F8A973u},
+    {0x3EB8FF4Cu, 0x38543F2Cu, 0xB73951D8u},
+    {0x7BB7679Bu, 0x8DF14A29u, 0xB1DCE37Au},
+    {0x2E885EE8u, 0x3B1E5B31u, 0xE185C5F4u},
+    {0xC76ED06Bu, 0xD0BE7AE7u, 0xFF9B3333u},
+    {0x77BABAF9u, 0x44598DBEu, 0xFAD11FCDu},
+    {0x6FBD52E3u, 0x55FB5EAAu, 0x5CD900DEu},
+    {0x06E94D9Du, 0x84154AE8u, 0x013095B5u},
+    {0x642C1C9Au, 0xEBE2418Du, 0x53644CC5u},
+    {0xFE82F50Du, 0x43ACF847u, 0x2A1EFA22u},
+    {0x1C37B602u, 0xBEC9F7AFu, 0x82A7A437u},
+    {0xB849CC4Au, 0x27578619u, 0x3A6CAEDFu},
+    {0x1838AD3Du, 0x2BDB9A7Au, 0x95530809u},
+    {0xC77DE4D5u, 0xBE63A4BCu, 0xA5A086DDu},
+    {0x15DDF39Du, 0xC9E07775u, 0x6D980664u},
+    {0x7940EDC9u, 0x4306E180u, 0x4A24BFF4u},
+    {0x16C6DDCCu, 0x102A1DACu, 0x9F477358u},
+    {0x1D6DEBBEu, 0x4C18A0BBu, 0x683A144Bu},
+    {0x3BC305A2u, 0x32DEB612u, 0x9B4D862Eu},
+    {0xBBBEBCC3u, 0x4DF89171u, 0x71D53822u},
+    {0x84C5EFBFu, 0x17DE5295u, 0xF999FD81u},
+    {0xCDD3DB3Eu, 0x9FDBD0EEu, 0x94EB5807u},
+    {0x9468CE4Bu, 0xED768E22u, 0xF6B5AC43u},
+    {0x9413CF33u, 0xA7F0F874u, 0x19786A07u},
+    {0xBF346869u, 0x1DCA29C4u, 0x21A47A5Cu},
+    {0x340B69A5u, 0x33445BBEu, 0xA14CE60Au},
+    {0xE7AB584Du, 0xB6DE1348u, 0x92FCA7B8u},
+    {0x9AEDBFC2u, 0x9C017FA2u, 0x136C1156u},
+    {0xF410AA2Cu, 0x670B1706u, 0x894CB812u},
+    {0x9D3CB97Au, 0xCF34B2AAu, 0xC4043A43u},
+    {0x039D214Cu, 0x7A836125u, 0x61404344u},
+    {0xA1E241D4u, 0x92017693u, 0x2C89E4E0u},
+    {0xCFE12DFAu, 0x6D1F6C57u, 0x51713FCFu},
+    {0x02A81002u, 0x05E72219u, 0x97EF9FADu},
+    {0x8A66DF6Fu, 0xDB13946Au, 0xFF31209Au},
+    {0xAF1C3125u, 0xA9F0F145u, 0x269D9FB1u},
+    {0x8DB0D63Bu, 0x3544E7AAu, 0x1CE29AB6u},
+    {0xDAF3BE3Du, 0x29849315u, 0x96D1F88Eu},
+    {0xE65B463Eu, 0x158DB5EEu, 0xC5971E2Du},
+    {0xC3E3BB3Cu, 0xACE44AFAu, 0xB0731015u},
+    {0x558D51E6u, 0x985C38FDu, 0x3DD360C2u},
+    {0x67D68499u, 0xB2C58622u, 0x7E5223D6u},
+    {0x4F92E993u, 0x5ACE7211u, 0xA5ED8DECu},
+    {0xC9F7C06Du, 0x74D9CD27u, 0x1D6BCF42u},
+    {0xFD6593A8u, 0x4591A239u, 0x6C37DF25u},
+    {0x8A1CDC79u, 0x796BF151u, 0xC63E9ACAu},
+    {0x71AEA939u, 0x82785AE9u, 0x5262F12Au},
+    {0xF61235DBu, 0x9915C41Du, 0x85829EF2u},
+    {0x25581475u, 0xE8897D6Eu, 0x4D062551u},
+    {0x5175FD3Eu, 0x8466FF85u, 0x48F15A71u},
+    {0x225F6EB1u, 0x3703F533u, 0xC8200ACEu},
+    {0xFC064E8Au, 0x412843C0u, 0x289A41A5u},
+    {0x44E13C89u, 0xD8689209u, 0x837E448Cu},
+    {0xFEE0DC7Cu, 0x43542E3Au, 0x43C3AA35u},
+    {0x7E1EC702u, 0x461F8AAFu, 0xD19B85AFu},
+    {0xED4A69AAu, 0x74F54950u, 0x31FFAC36u},
+    {0x65D0C6FDu, 0x66C813DEu, 0x203C887Du},
+    {0x84313383u, 0x82DDF3E3u, 0x0DB09D17u},
+    {0x60CFF333u, 0x9689DE81u, 0xAAA477D2u},
+    {0x4052B6FDu, 0x55C4B324u, 0x8F5F2DE1u},
+    {0x3434791Au, 0xA8BDD79Au, 0xF3AB011Fu},
+    {0xAE0FBE38u, 0x13BB4C7Eu, 0x132CC871u},
+    {0xE9EB2805u, 0xD1EA65A8u, 0x466E6AA8u},
+    {0xD8BBE74Du, 0x4104C7B7u, 0x040E22D1u},
+    {0x1505836Eu, 0x161D564Du, 0x50E9CDEEu},
+    {0xB2924A24u, 0xB47E8A44u, 0x3B13E4B0u},
+    {0x0D027411u, 0xFB4459A3u, 0xC769F0F0u},
+    {0x75A3381Au, 0x60353DC3u, 0xBAAEA306u},
+    {0xE050D44Cu, 0x58A4E5DDu, 0x710298C1u},
+    {0xDCD77131u, 0x2FA05C19u, 0x90F53782u},
+    {0xD812078Cu, 0x2BC4F45Cu, 0xFBDE5F9Fu},
+    {0xBE898C78u, 0xD18E7DBEu, 0xCD192751u},
+    {0x386D5391u, 0xF5BC3A8Au, 0x503362B5u},
+    {0x92BF68D4u, 0x47AC6A6Fu, 0x8B3BCF9Bu},
+    {0xB80332F1u, 0xAD5FA973u, 0x527C568Eu},
+    {0xB49DF729u, 0x09B3FA63u, 0x6001F806u},
+    {0x908591DFu, 0x2871A04Eu, 0x01D7DD52u},
+    {0x8C381375u, 0x7F4F3E5Du, 0xC01A55C6u},
+    {0x4FE7E88Bu, 0xBC311B5Bu, 0x6C2BB098u},
+    {0x8B78029Fu, 0xE47FF359u, 0xF8E8A9B6u},
+    {0x48B81602u, 0x85697F19u, 0x20E62726u},
+    {0xA41C1173u, 0x710F13C8u, 0xBD98B63Cu},
+    {0xD5CEB5D3u, 0xC0922E51u, 0x3FB1D1ACu},
+    {0x816C79CEu, 0x3C427484u, 0x55F076E1u},
+    {0xA140F429u, 0x23BCF35Cu, 0xA6992C01u},
+    {0x294E2B47u, 0x1308270Eu, 0x1A2A797Au},
+    {0xDF35E7EEu, 0x628115A8u, 0x621691A7u},
+    {0x9EEE84B8u, 0x02672A38u, 0x5971FCBDu},
+    {0x1FE075FEu, 0x80FE3FADu, 0x9DC5176Bu},
+    {0x76092D7Au, 0xD4F76CD7u, 0xE8993F4Fu},
+    {0xD8EBCC54u, 0xDE070C34u, 0x516A62C0u},
+    {0xBFDF7ECCu, 0xBCC7ABEFu, 0xFA33304Cu},
+    {0x6613A968u, 0x5C55A521u, 0x5577FB55u},
+    {0x93B913BEu, 0x4F849756u, 0xEBFCE647u},
+    {0xBAB94546u, 0xA3AA7DCBu, 0x39F04C19u},
+    {0x8E7E0524u, 0x33CAF762u, 0x335D736Du},
+    {0xA4EDF862u, 0x52ABD5D0u, 0x6E867C83u},
+    {0x813EDD1Fu, 0x88236EAFu, 0x21B05E93u},
+    {0x78E40458u, 0x479E4457u, 0x0748DE56u},
+    {0x2427A4D3u, 0xF134A668u, 0x3DA3039Cu},
+    {0xCE1E108Cu, 0x73AAE2CAu, 0x733D66C5u},
+    {0xCF92E962u, 0xD681D1EFu, 0x4CDBE03Du},
+    {0xDCD8A925u, 0xA1380F5Au, 0xF19E3012u},
+    {0x54E05A92u, 0x6CE1173Fu, 0xFB65183Fu},
+    {0x6447B17Bu, 0xB154B3C0u, 0x7DC31634u},
+    {0xB2A9E320u, 0x8DD3A32Fu, 0xCD05392Eu},
+    {0x36AB7011u, 0xA096AF3Cu, 0x428ADE4Bu},
+    {0xD3E42D4Au, 0xC6B8B6C8u, 0x399B4935u},
+    {0x5327F779u, 0x3C2006BFu, 0x20B75C50u},
+    {0x24E14468u, 0xD737B7B8u, 0x072D1C7Bu},
+    {0x41974E3Du, 0x139F45EDu, 0x18AFCD04u},
+    {0x79D712DFu, 0xEACCAFF5u, 0x048B00E1u},
+    {0x59338C28u, 0xE41D8162u, 0x8DAF8307u},
+    {0xA7093236u, 0xB255A9B4u, 0x4D765649u},
+    {0xCDAED60Au, 0xCAE1E411u, 0x58E959A5u},
+    {0x42269509u, 0xE0D8D4A4u, 0xDCB6873Cu},
+    {0x941B625Eu, 0x16E7652Bu, 0x93C2BA76u},
+    {0x068FF543u, 0x9A065BC3u, 0xC1108D46u},
+    {0x0FEB1FCEu, 0x35AD1387u, 0x3C8F4DF3u},
+    {0xF8A495BCu, 0x451067FAu, 0x4587E3F5u},
+    {0x93A98EA4u, 0x3157CF09u, 0x0D399C91u},
+    {0xAA245F46u, 0xACC89F26u, 0x23A5F1D2u},
+    {0x2ABBE389u, 0xB5A5A9DAu, 0xA89E811Cu},
+    {0x27BE0F37u, 0x24A6DA14u, 0x625241B7u},
+    {0x53483F1Fu, 0x690E3356u, 0x602C6D22u},
+    {0x161F74DFu, 0xABAB8699u, 0xAB3C0296u},
+    {0xB51C2737u, 0x6921A3DFu, 0xCD59D2CEu},
+    {0x9D283714u, 0x843B0F99u, 0x1E613E4Bu},
+    {0x649E7EC1u, 0x6D83CD71u, 0xC410FD4Du},
+    {0x0A2B974Au, 0x3551D745u, 0x75874D44u},
+    {0x91B66E15u, 0x67F043A7u, 0x5BDDEAF4u},
+    {0xBC46D528u, 0x6955D793u, 0xA5C27267u},
+}};
+
+constexpr std::size_t kTrackedLegacyNadineOverlayStateCount = 1024;
+static_assert((kTrackedLegacyNadineOverlayStateCount &
+               (kTrackedLegacyNadineOverlayStateCount - 1)) == 0);
+constexpr std::uintptr_t kLegacyNadineOverlayStateTag = 1;
 std::array<std::atomic<std::uintptr_t>,
            kTrackedLegacyNadineOverlayStateCount>
     g_legacy_nadine_track_overlay_states{};
@@ -28575,47 +28732,48 @@ bool seh_classify_legacy_nadine_master_overlay_state(
 
 bool update_legacy_nadine_track_overlay_state(void* state, bool legacy_nadine) {
     const std::uintptr_t value = reinterpret_cast<std::uintptr_t>(state);
-    if (value == 0) {
+    if (value == 0 || (value & kLegacyNadineOverlayStateTag) != 0) {
         return false;
     }
-    if (!legacy_nadine) {
-        for (auto& slot : g_legacy_nadine_track_overlay_states) {
-            std::uintptr_t expected = value;
-            if (slot.compare_exchange_strong(
-                    expected, 0, std::memory_order_acq_rel,
-                    std::memory_order_acquire)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    for (const auto& slot : g_legacy_nadine_track_overlay_states) {
-        if (slot.load(std::memory_order_acquire) == value) {
-            return false;
-        }
-    }
-    for (auto& slot : g_legacy_nadine_track_overlay_states) {
-        std::uintptr_t expected = 0;
-        if (slot.compare_exchange_strong(
-                expected, value, std::memory_order_acq_rel,
-                std::memory_order_acquire)) {
-            return true;
-        }
-    }
-    return false;
+    const std::size_t slot_index =
+        ((value >> 4) ^ (value >> 13) ^ (value >> 22)) &
+        (kTrackedLegacyNadineOverlayStateCount - 1);
+    const std::uintptr_t encoded = value |
+        (legacy_nadine ? kLegacyNadineOverlayStateTag : 0);
+    const std::uintptr_t previous =
+        g_legacy_nadine_track_overlay_states[slot_index].exchange(
+            encoded, std::memory_order_acq_rel);
+    return previous != encoded;
 }
 
 bool is_legacy_nadine_track_overlay_state(void* state) {
     const std::uintptr_t value = reinterpret_cast<std::uintptr_t>(state);
-    if (value == 0) {
+    if (value == 0 || (value & kLegacyNadineOverlayStateTag) != 0) {
         return false;
     }
-    for (const auto& slot : g_legacy_nadine_track_overlay_states) {
-        if (slot.load(std::memory_order_acquire) == value) {
-            return true;
+    const std::size_t slot_index =
+        ((value >> 4) ^ (value >> 13) ^ (value >> 22)) &
+        (kTrackedLegacyNadineOverlayStateCount - 1);
+    return g_legacy_nadine_track_overlay_states[slot_index].load(
+               std::memory_order_acquire) ==
+        (value | kLegacyNadineOverlayStateTag);
+}
+
+const HolsterOverlayReplacement* find_holster_overlay_replacement(
+    std::uint32_t source, std::uint32_t authored_output) {
+    const HolsterOverlayReplacement* source_match = nullptr;
+    for (const auto& row : kHolsterOverlayReplacements) {
+        if (row.source != source) {
+            continue;
+        }
+        if (source_match == nullptr) {
+            source_match = &row;
+        }
+        if (row.chloe_back == authored_output) {
+            return &row;
         }
     }
-    return false;
+    return source_match;
 }
 
 std::uintptr_t __fastcall hooked_anim_overlay_state_copy(
@@ -28654,23 +28812,33 @@ std::uint32_t* __fastcall hooked_anim_overlay_state_resolve_animation_id(
         ? g_original_anim_overlay_state_resolve_animation_id(
               state, output, input, select_variant)
         : output;
-    if (output == nullptr || input != kHolsterChestIdleStandPartId ||
-        !is_legacy_nadine_track_overlay_state(state)) {
+    if (output == nullptr) {
         return result;
     }
     const std::uint32_t authored_output = *output;
-    const bool replaced = authored_output == kHolsterBackIdleStandPartId;
+    const HolsterOverlayReplacement* const replacement =
+        find_holster_overlay_replacement(input, authored_output);
+    if (replacement == nullptr) {
+        return result;
+    }
+    const bool tagged = is_legacy_nadine_track_overlay_state(state);
+    const bool exact_back = replacement->chloe_back == authored_output;
+    const bool replaced = tagged && exact_back;
     if (replaced) {
-        *output = kHolsterLegIdleStandPartId;
+        *output = replacement->nadine_leg;
     }
     static std::atomic<std::uint32_t> logged{0};
-    if (logged.fetch_add(1, std::memory_order_relaxed) < 64) {
+    if (logged.fetch_add(1, std::memory_order_relaxed) < 512) {
         std::ostringstream line;
-        line << "NADINE-HOLSTER-ROW state=0x" << std::hex
+        line << "NADINE-HOLSTER-FAMILY-ROW state=0x" << std::hex
              << reinterpret_cast<std::uintptr_t>(state)
              << " input=0x" << input
              << " authored=0x" << authored_output
+             << " back=0x" << replacement->chloe_back
+             << " leg=0x" << replacement->nadine_leg
              << " effective=0x" << *output << std::dec
+             << " tagged=" << (tagged ? 1 : 0)
+             << " exactBack=" << (exact_back ? 1 : 0)
              << " replaced=" << (replaced ? 1 : 0)
              << " variant=" << static_cast<unsigned>(select_variant);
         write_log_line(line.str().c_str());
@@ -28707,9 +28875,8 @@ bool install_legacy_nadine_holster_overlay_repair() {
     std::ostringstream line;
     line << "legacy-Nadine holster overlay repair "
          << (installed ? "installed" : "PARTIAL")
-         << " chest=0x" << std::hex << kHolsterChestIdleStandPartId
-         << " back=0x" << kHolsterBackIdleStandPartId
-         << " leg=0x" << kHolsterLegIdleStandPartId;
+         << " family=" << std::dec << kHolsterOverlayReplacements.size()
+         << " stateSlots=" << kTrackedLegacyNadineOverlayStateCount;
     boot_log_line(line.str().c_str());
     return installed;
 }
@@ -35108,8 +35275,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22gf "
-        "(scoped legacy-Nadine chest-holster overlay repair)");
+        "TLL co-op runtime init 2026-07-22gg "
+        "(full legacy-Nadine chest-holster family discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
