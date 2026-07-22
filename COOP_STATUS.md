@@ -7058,3 +7058,70 @@ weapon or skeleton. **Falsifiable prediction:** a pistol put-away must emit
 selects Hbackref; only missing/invalid/zero-weight rows select Hclip. A crash,
 hook-install mismatch, non-slot-1 admission or any visual change invalidates
 the probe. The Release DLL compiled successfully.
+
+### 2026-07-22 STATIC: holster IK reads WeaponPartial, not the pistol layer (`ge`)
+
+The full caller chain removes two previously ambiguous configuration candidates.
+`PlayerPutGunAwayAction_OnStart 0x141096BB0` requests
+`s_weapon-holster 0xDF5B68FC` through
+`PlayerWeaponAnimControl_RequestWeaponState 0x14108C2D0`; that method targets
+layer `0xE2B990B9`, whose executable StringId preimage is exactly
+`WeaponPartial`, and records the requested state at control `+0x18`. Much later,
+`PlayerWeaponController_RebindWeaponToHolster 0x1410A9670` calls control vtable
+`+0x148` at `0x1410A9773` only for weapon category zero. The concrete method,
+now `PlayerWeaponAnimControl_RequestPistolHolsterLayerState 0x14108F0B0`, requests
+`s_pistol-holster` on a different layer, `0x63B48BEE`. Therefore the pistol-layer
+state cannot be the source snapshot from which holster IK obtains leg/back; the
+relevant authored state is `s_weapon-holster` on WeaponPartial.
+
+The post-blend consumer confirms the ordering independently.
+`Player_PostAnimBlending_Async 0x1410EB6A0` first calls control vtable `+0x138`
+at `0x1410EB6EB` to refresh the marker-relative bases, then near the end calls
+vtable `+0x140` at `0x1410EBAE5`. The latter constructs a
+`WeaponHolsterIkBlender` and passes the active WeaponPartial layer to
+`AnimStateLayer_ExtractAndBlendCustomData 0x14108F800`. That generic reducer
+walks every live snapshot, calls `ExtractData`, blends transitions through
+`BlendData`, and only then returns the single final `WeaponHolsterIkData` that
+drives the arm chain. This also exposes a flaw in `gd`: logging each intermediate
+`ExtractData` result could misclassify a transition containing both leg and back
+sources; only the reducer output is decisive.
+
+The configuration audit further narrows the code-controlled inputs.
+`PlayerWeaponHolsterAction_ResolveAndBindAttachPoint 0x141095BD0` passes the
+WeaponArt class and id through vtable `+0x100`; concrete methods
+`0x14108E5A0 -> 0x14108E620/0x14108E690` store only class/art selectors at
+control `+0xD0/+0xD4/+0xD8`. Separately,
+`Player_BuildWeaponHolsterSpeedKnowledgeId 0x1410B1C80` builds only
+`weapon-holster-type-normal/fast/very-fast/zipline`, so that knowledge family is
+a movement-speed/context selector rather than the leg/back decision. The one
+explicit positional input remains `weapon-holster-point-*`: initializer
+`0x1400C28C0` defines generic/leg/pelvis, and the action commits the matching
+knowledge before requesting `s_weapon-holster`. Standard pistol art instead
+selects non-generic `targSpineProp`, bypasses the character scan, fails all three
+table comparisons and commits no positional knowledge. This is a strong static
+mechanism for WeaponPartial to fall back to its Chloe/back branch, but the
+authored graph lives outside `tll.exe`, so it is not promoted to runtime fact.
+
+The remaining competitors are now **Hpoint** (missing
+`weapon-holster-point-gun_holster_leg` makes the final WeaponPartial reducer emit
+back), **Hmarker** (the final reducer already emits leg, but absent
+`r_leg_gun_holster` leaves its basis identity), and **Hclip** (the final reducer
+is missing, invalid or zero-weight). The old **Hpistol-layer** and
+**Hholster-type** candidates are STATIC REJECTED. If Hpoint wins, the stock-aligned
+candidate is a scoped legacy-Nadine slot-1 leg-point knowledge input before
+`s_weapon-holster`, not a global reference-id rewrite; joint 99 may still be
+needed as the marker fallback once the leg branch is active.
+
+Build `2026-07-22ge` replaces the intermediate ExtractData hook with a read-only
+hook on `0x14108F800`, admits only exact requested state `0xDF5B68FC`, and logs a
+deduplicated `NADINE-HOLSTER-IK-FINAL` row after all active sources are blended.
+It still mutates no animation, knowledge, marker, weapon or skeleton state.
+**Revised falsifiable prediction:** a legacy-Nadine pistol Put must reach the
+final reducer while control `+0x18` equals `s_weapon-holster`. A valid nonzero
+`back` final row selects Hpoint; valid nonzero `leg` with tuple `-1,5,-1,3` and
+identity leg basis selects Hmarker; a missing reducer call or invalid/zero-weight
+final row selects Hclip. Intermediate source references can no longer affect the
+classification. Runtime verification remains pending. The Release DLL compiled
+successfully with marker `2026-07-22ge`. Seven new STATIC function names and
+comments were applied to the shared IDB (`apply_labels OK: 1235 functions, 20
+data names`; `save_database returned True`) and verified after restarting MCP.

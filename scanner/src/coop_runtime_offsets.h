@@ -522,7 +522,12 @@ constexpr std::uintptr_t kPlayerWeaponAnimNamedEventRva = 0x108DE30;
 // the leg or pelvis target basis.
 constexpr std::uintptr_t kPlayerWeaponAnimControlUpdateHolsterIkRva =
     0x108ECE0;
-constexpr std::uintptr_t kWeaponHolsterIkBlenderExtractDataRva = 0x108B120;
+// The generic reducer returns the final custom-data record after all live
+// snapshots and transitions have been blended. Hooking this boundary avoids
+// mistaking one intermediate ExtractData source for the IK result actually
+// consumed by PlayerWeaponAnimControl_UpdateHolsterIk.
+constexpr std::uintptr_t kAnimStateLayerExtractAndBlendCustomDataRva =
+    0x108F800;
 // Shared Player move-action sequencer. Its phase update owns the first
 // PlayerGetWeaponInHandAction / PlayerPutGunAwayAction vtable dispatch and the
 // later phase-specific checks, so a before/after detour distinguishes a queued

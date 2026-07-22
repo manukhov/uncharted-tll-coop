@@ -1812,19 +1812,23 @@ Do not reopen these as the first move:
       owner-relative comparison supersedes Hrecord for the visible trajectory:
       Player and native final pistol translations are thigh-equivalent within a
       few centimetres.
-- [ ] Run bounded read-only `gd` holster-IK discriminator. Prior runtime census
+- [ ] Run bounded read-only `ge` holster-IK discriminator. Prior runtime census
       proves legacy Nadine's PlayerWeaponAnimControl resolves joints
       `-1,5,-1,3` and leaves both marker bases identity, while Chloe resolves
       `101,5,199,3`. Native and Player Nadine instead share the real pistol
       marker at joint 99/name `0xADD0C871`; the Player control hard-codes absent
-      `r_leg_gun_holster 0xE231DB44`. Static dataflow through
-      `0x14108E700 -> 0x14108EBF0 -> 0x14108ECE0` and extractor `0x14108B120`
-      proves the missing marker and leg/back animation reference are the two
-      discriminators. Require `NADINE-HOLSTER-IK-DATA` during a pistol put-away:
-      valid nonzero `leg` plus the identity leg basis selects joint-99 marker
-      repair; valid nonzero `back` selects reference/holster-type retargeting;
-      missing, invalid or zero-weight data selects the base clip path. No state
-      is mutated by `gd`.
+      `r_leg_gun_holster 0xE231DB44`. New static dataflow proves
+      `s_pistol-holster` runs on separate layer `0x63B48BEE`, whereas Put requests
+      `s_weapon-holster` on `WeaponPartial 0xE2B990B9` and holster IK reduces that
+      layer at `0x14108F800`. Weapon class/art at `+0xD0/+0xD4/+0xD8` and
+      `weapon-holster-type-normal/fast/very-fast/zipline` are not positional.
+      The only stock position input is `weapon-holster-point-*`, which standard
+      pistol `targSpineProp` currently fails to commit. `ge` must log the final,
+      post-blend `NADINE-HOLSTER-IK-FINAL` only while requested state is
+      `0xDF5B68FC`: valid nonzero back selects the missing leg-point knowledge
+      path; valid nonzero leg plus identity leg basis selects joint-99 marker
+      repair; missing, invalid or zero-weight final data selects the base clip.
+      No state is mutated.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

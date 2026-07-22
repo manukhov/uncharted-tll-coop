@@ -232,6 +232,50 @@ FUNCTIONS = {
         "records for the arm-chain target; the output feeds skeleton joint pose "
         "updates rather than the attached weapon transform.",
     ),
+    0x14108F800: (
+        "AnimStateLayer_ExtractAndBlendCustomData",
+        "Generic active-snapshot reducer. Walks the live snapshot trees of one "
+        "type-2 AnimStateLayer, calls the supplied custom blender's ExtractData "
+        "for each source and BlendData for transitions, then returns the final "
+        "custom-data record. PlayerWeaponAnimControl uses it to obtain the final "
+        "WeaponHolsterIkData from WeaponPartial.",
+    ),
+    0x14108F0B0: (
+        "PlayerWeaponAnimControl_RequestPistolHolsterLayerState",
+        "PlayerWeaponAnimControl vtable +0x148. Requests s_pistol-holster on "
+        "layer 0x63B48BEE. This is a different layer from WeaponPartial "
+        "0xE2B990B9, which supplies the holster-IK hand/leg/back references.",
+    ),
+    0x14108E5A0: (
+        "PlayerWeaponAnimControl_SetWeaponDescriptor",
+        "PlayerWeaponAnimControl vtable +0x100. Forwards weapon class and art id "
+        "to vtable +0x108, mirrors the class through +0x110, then refreshes the "
+        "weapon-tweaks knowledge entry through +0xF0.",
+    ),
+    0x14108E620: (
+        "PlayerWeaponAnimControl_SetWeaponClassAndArt",
+        "PlayerWeaponAnimControl vtable +0x108. Stores weapon class at +0xD0 "
+        "and WeaponArt id at +0xD4, invalidating the derived animation selector "
+        "only when either changes. These fields are not a leg/back holster type.",
+    ),
+    0x14108E690: (
+        "PlayerWeaponAnimControl_SetWeaponClass",
+        "PlayerWeaponAnimControl vtable +0x110. Stores the weapon class at "
+        "+0xD8 and invalidates its derived animation selector on change; it does "
+        "not choose a holster attachment or IK reference.",
+    ),
+    0x1400C28C0: (
+        "InitializeWeaponHolsterPointIdTable",
+        "Static initializer for the three Player holster-point ids: gun_holster, "
+        "gun_holster_leg and gun_holster_pelvis. The action-side table maps them "
+        "to weapon-holster-point-* knowledge keys in that order.",
+    ),
+    0x1410B1C80: (
+        "Player_BuildWeaponHolsterSpeedKnowledgeId",
+        "Builds weapon-holster-type-normal/fast/very-fast/zipline from movement "
+        "state. This knowledge family selects transition speed/context and is "
+        "not the leg/back holster-point discriminator.",
+    ),
     # --- 2026-07-21: Nadine active firearm grip, arm pose and strap split ---
     0x140C2BCB0: (
         "ArmBlockProbes_Kick",
@@ -7340,10 +7384,11 @@ FUNCTIONS = {
     ),
     0x14108ECE0: (
         "PlayerWeaponAnimControl_UpdateHolsterIk",
-        "PlayerWeaponAnimControl vtable +0x140. Reads the extracted reference "
-        "id at WeaponHolsterIkData+0x30, selects the leg or pelvis parent index "
-        "at control+0x7C/+0x84, composes it with the cached marker-relative "
-        "transform at +0x90/+0xB0, and drives the arm IK chain.",
+        "PlayerWeaponAnimControl vtable +0x140, called near the end of "
+        "Player_PostAnimBlending_Async after vtable +0x138 refreshes both bases. "
+        "Reduces active WeaponPartial 0xE2B990B9 snapshots to one "
+        "WeaponHolsterIkData, selects the leg or pelvis pair from its reference "
+        "id, composes the cached marker-relative basis and drives the arm IK.",
     ),
     0x1414FE7E0: (
         "WeaponHolster_SelectCharacterAttachPoint",
@@ -7359,10 +7404,11 @@ FUNCTIONS = {
     ),
     0x1414FE540: (
         "WeaponHolster_BuildBinding",
-        "Builds a Player holster binding: selected gun_holster* StringId at "
-        "+0, primary authored transform at +0x10/+0x20, secondary transform at "
-        "+0x30/+0x40 and scalar at +0x50. The controller copies the primary "
-        "transform into weapon+0x4F0/+0x500.",
+        "Builds a Player holster binding: selected attachment StringId at +0, "
+        "primary authored transform at +0x10/+0x20, secondary transform at "
+        "+0x30/+0x40 and scalar at +0x50. A non-generic first WeaponArt record "
+        "such as pistol targSpineProp bypasses the character gun_holster* scan. "
+        "The controller copies the primary transform to weapon+0x4F0/+0x500.",
     ),
     0x1410CDF90: (
         "Player_SetupAttachSystemFromLookData",
