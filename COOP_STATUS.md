@@ -6650,7 +6650,7 @@ ProcessWeapon `+0x110/+0x120` and `+0x130/+0x140`, back to the selected attachme
 output, and identify any independent prop consumer before another runtime hook.
 Both game processes were closed after capture.
 
-### 2026-07-22 STATIC: renderer-wide ArtItemGeo owner census (`fx`)
+### 2026-07-22 RUNTIME REJECTED / STATIC: corrected renderer-wide geometry owner census (`fx` -> `fy`)
 
 The `fw` admission gate was intentionally too narrow to decide its remaining
 H4: it accepted an FgAnimData only after resolving an RTTI-exact
@@ -6662,20 +6662,29 @@ composition is internally coherent and that placement differences originate in
 the resolved attachment/joint pose before the common final writer. Repeating
 that hook would not distinguish the still-open separate-prop alternative.
 
-Three independent evidence types identify a stronger renderer-wide key.
-`IDrawControl_AddMesh 0x141751E30` retains each LOD's `ArtItemGeo*` in the
-`0x20`-byte available-LOD entry at `+0x10` and its resource id at `+0x18`;
-`FgInstance_Init 0x14192E590` independently writes that exact `ArtItemGeo*` to
-the allocated `FgInstance+0x1B0`; and `fw` runtime established the exact three
-pistol resource ids `33E29A1B,49AE2C65,44ED0ABC` and rifle ids
-`255BEBA0,FDBF86F9,F0FCA020`, including their live pool indices and common
-FgAnimData matrices. Pointer equality at `+0x1B0` can therefore find every
-foreground instance using the same firearm geometry without assuming its owner
-class, parent or inventory membership.
+Runtime `fx` produced 768 positive-control `NADINE-WEAPON-MEMBERSHIP` rows across
+both processes, loaded the intended build and installed the post-render relay,
+but produced zero `WEAPON-GEOMETRY-OWNER` rows and no crash. This rejects the
+specific premise that the available-LOD `ArtItemGeo*` at entry `+0x10` equals
+`FgInstance+0x1B0`; the census is inconclusive about H2 versus H4. Both processes
+were closed after capture.
 
-Build `2026-07-22fx` keeps the proven post-`0x14181B925` relay read-only. It
-first learns the six exact ArtItemGeo pointers from the validated current
-ProcessWeapon DrawControls. Once all six are known, it scans each FgAnimData's
+The corrected key now has four independent evidence types. First,
+`ArtItemGeo_ResolveFgGeometry 0x1417CB100` reads only ArtItemGeo resource id
+`+0x18`, looks it up in the global geometry registry, and returns the matched
+payload's shared pointer. Second, both the LOD0 path at `0x14175224C` and the
+additional-LOD loop at `0x1417525FE` pass that returned pointer as the third
+argument to `FgInstance_Init 0x14192E590`. Third, the exact source assertion at
+`0x14192EB04` identifies that argument as `const FgGeometry*`, and
+`0x14192E830` stores it at `FgInstance+0x1B0`. Fourth, `fw` runtime established
+the exact three live pistol resource ids `33E29A1B,49AE2C65,44ED0ABC` and rifle
+ids `255BEBA0,FDBF86F9,F0FCA020`, their pool instances and coherent FgAnimData
+owners. Therefore the live known LOD instance's `+0x1B0`, rather than the
+available-LOD retained pointer, is the renderer-wide shared identity.
+
+Build `2026-07-22fy` keeps the proven post-`0x14181B925` relay read-only. It
+learns each available resolved FgGeometry pointer directly from the validated
+current ProcessWeapon LOD instance and immediately scans every FgAnimData's
 bounded driven list (maximum 256 entries), compares only `FgInstance+0x1B0`, and
 publishes at most 32 unique matching FgAnimData owners through an atomic bridge.
 Game-thread `WEAPON-GEOMETRY-OWNER` rows record owner/vtable/runtime id, optional
@@ -6690,6 +6699,9 @@ becomes the next static target. H2 predicts that every legacy-Nadine firearm hit
 is one of the known exact ProcessWeapons, with all three bits active and matching
 the FgAnimData matrix/owner id; this rejects a second foreground prop and returns
 the investigation to the local-versus-remote attachment pose upstream of
-publication. Missing positive-control rows, fewer than all six learned LODs,
-table saturation, crash or a visual regression makes the census inconclusive.
-The release DLL compiled successfully; runtime verification is pending.
+publication. Missing positive-control rows for a drawn weapon, table saturation,
+crash or a visual regression makes the corrected census inconclusive. The
+corrected release DLL compiled successfully. The real single IDB was updated
+with `ArtItemGeo_ResolveFgGeometry` and the corrected `FgInstance_Init` comment
+(`apply_labels OK: 1225 functions, 20 data names`, `save_database returned
+True`); runtime verification is pending.

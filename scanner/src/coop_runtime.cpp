@@ -296,15 +296,17 @@ struct NadineWeaponCandidate {
 // keep a bounded but large enough census to retain both stale and current pairs.
 std::array<NadineWeaponCandidate, 32> g_nadine_weapon_candidates{};
 
-// Build fx: FgInstance_Init stores the exact ArtItemGeo pointer at instance+0x1B0.
-// Learn the six pistol/rifle LOD geometry pointers from the already-proven current
-// ProcessWeapon DrawControls, then use them as a renderer-wide identity key.  This
-// catches a second prop even when its FgAnimData owner is not a ProcessWeapon and
-// therefore could never pass the narrower fw admission gate.
+// Build fy: IDrawControl_AddMesh resolves each ArtItemGeo resource id through
+// ArtItemGeo_ResolveFgGeometry and FgInstance_Init stores that shared FgGeometry*
+// at instance+0x1B0. Learn the six resolved pointers from the live LOD instances
+// of already-proven current ProcessWeapon DrawControls, then use them as a
+// renderer-wide identity key. This catches a second prop even when its FgAnimData
+// owner is not a ProcessWeapon and therefore could never pass the narrower fw
+// admission gate.
 constexpr std::array<std::uint32_t, 6> kWeaponGeometryResourceIds{
     0x33E29A1Bu, 0x49AE2C65u, 0x44ED0ABCu,
     0x255BEBA0u, 0xFDBF86F9u, 0xF0FCA020u};
-std::array<std::atomic<std::uintptr_t>, 6> g_weapon_geometry_art_items{};
+std::array<std::atomic<std::uintptr_t>, 6> g_weapon_fg_geometries{};
 
 struct WeaponGeometryOwnerCandidate {
     std::atomic<std::uintptr_t> anim_data{0};
@@ -31170,7 +31172,7 @@ using FgDrawManagerPrepareInstanceFunction =
 FgDrawManagerPrepareInstanceFunction
     g_original_fgdraw_prepare_instance = nullptr;
 
-void learn_weapon_geometry_art_items(
+void learn_weapon_fg_geometries(
     std::uint32_t art, const std::byte* meshes) {
     if (meshes == nullptr ||
         (art != 0x33E29A1Bu && art != 0x8075397Du) ||
@@ -31183,16 +31185,21 @@ void learn_weapon_geometry_art_items(
         const auto* const lod = meshes + 0x20 * lod_index;
         const std::uint32_t resource_id =
             *reinterpret_cast<const std::uint32_t*>(lod + 0x18);
-        const std::uintptr_t retained = reinterpret_cast<std::uintptr_t>(
-            *reinterpret_cast<void* const*>(lod + 0x10));
-        if (retained == 0) {
+        const auto* const instance = static_cast<const std::byte*>(
+            *reinterpret_cast<void* const*>(lod));
+        if (instance == nullptr || readable_bytes(instance) < 0x1B8) {
+            continue;
+        }
+        const std::uintptr_t fg_geometry = reinterpret_cast<std::uintptr_t>(
+            *reinterpret_cast<void* const*>(instance + 0x1B0));
+        if (fg_geometry == 0) {
             continue;
         }
         for (std::size_t known_index = 0;
              known_index < kWeaponGeometryResourceIds.size(); ++known_index) {
             if (kWeaponGeometryResourceIds[known_index] == resource_id) {
-                g_weapon_geometry_art_items[known_index].store(
-                    retained, std::memory_order_release);
+                g_weapon_fg_geometries[known_index].store(
+                    fg_geometry, std::memory_order_release);
                 break;
             }
         }
@@ -31207,13 +31214,15 @@ void capture_weapon_geometry_owners(
             return;
         }
         std::array<std::uintptr_t, 6> known_geometries{};
+        bool any_known_geometry = false;
         for (std::size_t index = 0; index < known_geometries.size(); ++index) {
             known_geometries[index] =
-                g_weapon_geometry_art_items[index].load(
+                g_weapon_fg_geometries[index].load(
                     std::memory_order_acquire);
-            if (known_geometries[index] == 0) {
-                return;
-            }
+            any_known_geometry |= known_geometries[index] != 0;
+        }
+        if (!any_known_geometry) {
+            return;
         }
 
         auto* const fg = static_cast<const std::byte*>(fg_anim_data);
@@ -31260,7 +31269,8 @@ void capture_weapon_geometry_owners(
                 *reinterpret_cast<void* const*>(instance + 0x1B0));
             for (std::size_t known_index = 0;
                  known_index < known_geometries.size(); ++known_index) {
-                if (geometry != known_geometries[known_index]) {
+                if (known_geometries[known_index] == 0 ||
+                    geometry != known_geometries[known_index]) {
                     continue;
                 }
                 const std::uint32_t bit = 1u << known_index;
@@ -31401,7 +31411,7 @@ void capture_nadine_fgdraw_candidate(
         if (meshes != nullptr && mesh_count != 0 && mesh_count <= 128 &&
             readable_bytes(meshes) >= 0x20) {
             mesh_id = *reinterpret_cast<std::uint32_t*>(meshes + 0x18);
-            learn_weapon_geometry_art_items(
+            learn_weapon_fg_geometries(
                 *reinterpret_cast<std::uint32_t*>(weapon_bytes + 0x860),
                 meshes);
         }
@@ -33907,8 +33917,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22fx "
-        "(renderer-wide pistol/rifle ArtItemGeo owner census)");
+        "TLL co-op runtime init 2026-07-22fy "
+        "(renderer-wide pistol/rifle FgGeometry owner census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

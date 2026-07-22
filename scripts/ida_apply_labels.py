@@ -15,6 +15,13 @@ FUNCTIONS = {
         "m_availableLods entries (stride 0x20) and allocates every FgInstance "
         "against the one FgAnimData pointer stored at DrawControl+0.",
     ),
+    0x1417CB100: (
+        "ArtItemGeo_ResolveFgGeometry",
+        "Looks up ArtItemGeo+0x18 resource id in the global geometry registry "
+        "and returns the shared FgGeometry pointer stored at the matched "
+        "registry payload+0x10. IDrawControl_AddMesh passes this result, not "
+        "the ArtItemGeo pointer, to FgInstance_Init for every LOD.",
+    ),
     0x141753200: (
         "IDrawControl_NotifyMeshUnloaded",
         "Exact IDrawControl::NotifyMeshUnloaded source assertion. Iterates the "
@@ -48,9 +55,9 @@ FUNCTIONS = {
     0x14192E590: (
         "FgInstance_Init",
         "Initializes a newly allocated FgInstance from its FgAnimData owner and "
-        "ArtItemGeo. Stores the exact ArtItemGeo pointer at FgInstance+0x1B0, "
-        "captures the retained owner id at +0x250, and sets the per-instance "
-        "geometry/render state used by every mesh LOD.",
+        "resolved FgGeometry. Stores the shared FgGeometry pointer at "
+        "FgInstance+0x1B0, captures the retained owner id at +0x250, and sets "
+        "the per-instance geometry/render state used by every mesh LOD.",
     ),
     # --- 2026-07-21: native NadineBuddy attachment ownership ---
     0x1404059E0: (
