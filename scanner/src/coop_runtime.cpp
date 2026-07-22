@@ -30346,13 +30346,13 @@ void reconcile_legacy_nadine_inactive_rifle_game_thread(
             const bool stale_hand_attachment =
                 pre_index == static_cast<std::uint8_t>(right_hand_index) &&
                 pre_attach_id == 0x61A48E01u;
-            // On role B, retained owner 1 is the locally viewed Nadine. Stock
+            // On role B, retained owner 0 is the locally viewed Nadine. Stock
             // can select gun_holster in +0x688 without refreshing the rendered
             // attachment, while the role-A observer already sees the world
             // instance correctly. Replay the same stock attach once per local
             // holster generation even when the selected id is already right.
             const bool local_view_refresh =
-                g_net_role_b && owner_index == 1 &&
+                g_net_role_b && owner_index == 0 &&
                 pre_attach_id == expected_attach_id;
             if ((!stale_hand_attachment && !local_view_refresh) ||
                 !claim_nadine_inactive_attach_attempt(
@@ -35412,8 +35412,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22gl "
-        "(role-B Nadine inactive-rifle attachment refresh; pistol animation unchanged)");
+        "TLL co-op runtime init 2026-07-22gm "
+        "(role-B local Nadine spawn-rifle attachment refresh; pistol animation unchanged)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

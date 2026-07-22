@@ -7745,3 +7745,32 @@ hand because active slot 0 is excluded. The Chloe observer, pistol, grenade,
 body and weapon animation state must remain unchanged. A zero/unsafe call,
 active-slot refresh, rifle disappearance while drawn, body regression or crash
 rejects the repair.
+
+### 2026-07-22 REJECTED: `gl` targeted the observer owner, not local Nadine
+
+Both `gl` processes remained responsive and installed the expected hooks, but no
+`NADINE-INACTIVE-ATTACH localViewRefresh=1` line was emitted and the rifle still
+hung from Nadine's hand immediately after spawn. The post-test membership trace
+resolved the mistaken ownership assumption: on role B the local Nadine is
+owner 0, while owner 1 is Nadine's observed world instance on role A. The
+`g_net_role_b && owner_index == 1` gate therefore admitted no local refresh at
+all. The rifle moving to the leg only after a manual draw/put cycle was native
+game behavior, not evidence that `gl` had run.
+
+### 2026-07-22 STATIC: correct initial local owner gate (`gm`)
+
+Build `gm` changes only the role-B local-view predicate from owner 1 to owner 0.
+The remaining scope is unchanged: exact legacy Nadine, exact inactive slot-0
+rifle, valid owner-backed `gun_holster`, one replay per holster generation, and
+no pistol processing. This is supported independently by the role-B membership
+line (`owner=0 slotMask=1 current=-1 draw=0 hand=-1 selected=40/555EFB8D`), the
+role-A observer membership line for the counterpart (`owner=1`), and the absence
+of the predicted `gl` mutation despite both hooks and networking being live.
+
+**Falsifiable `gm` prediction:** both copies load marker `2026-07-22gm`. Once
+the role-B local Nadine reaches the initial stable holstered state, the log emits
+`NADINE-INACTIVE-ATTACH owner=0 slot=0 localViewRefresh=1 result=0x1 verified=1`
+without requiring a draw/put cycle, and the rifle is no longer attached to her
+hand immediately after spawn. The active rifle, pistol, body and role-A observer
+must remain unchanged; missing mutation, crash or a drawn-rifle regression
+rejects the correction.

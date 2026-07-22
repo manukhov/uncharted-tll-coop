@@ -1531,13 +1531,20 @@ Do not reopen these as the first move:
       the drawn pistol. Placement fidelity is not solved: pistol targets the
       copied Chloe back point, rifle intersects the torso, and active grips/left
       arm are wrong.
-- [ ] Run scoped build `gl` for the role-B-only stale rendered rifle attachment.
+- [x] Run scoped build `gl` for the role-B-only stale rendered rifle attachment.
       Current telemetry already has slot 0 on `gun_holster 0x555EFB8D` while the
       Nadine-controlled copy still shows it in the hand; role-A Chloe sees the
       world instance correctly. `gl` replays stock `AttachToOwnerPoint` only for
       inactive exact slot-0 rifle, once per holster generation, and never touches
       pistol slot 1. Require `localViewRefresh=1 result=1 verified=1`, rifle out
       of the local hand, normal rifle draw, and no body/pistol regression.
+      REJECTED: the role-B local Nadine is owner 0, not owner 1, so the refresh
+      gate never admitted the affected object and the rifle remained in hand at
+      spawn.
+- [ ] Run corrected build `gm` with the local role-B owner-0 gate. Require the
+      initial stable holstered state to emit `owner=0 slot=0 localViewRefresh=1
+      result=1 verified=1` before any draw/put cycle, remove the rifle from the
+      local hand, and preserve normal rifle draw plus pistol/body state.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no
