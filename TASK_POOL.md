@@ -1812,7 +1812,7 @@ Do not reopen these as the first move:
       owner-relative comparison supersedes Hrecord for the visible trajectory:
       Player and native final pistol translations are thigh-equivalent within a
       few centimetres.
-- [ ] Run bounded read-only `ge` holster-IK discriminator, then attribute any back
+- [x] Run bounded read-only `ge` holster-IK discriminator, then attribute any back
       result at the newly resolved Chloe-map boundary before attempting a fix.
       Prior runtime census proves legacy Nadine's PlayerWeaponAnimControl resolves
       joints `-1,5,-1,3` and leaves both marker bases identity, while Chloe
@@ -1892,7 +1892,21 @@ Do not reopen these as the first move:
       master-state `AnimOverlayState_FindMatchingRow 0x1417FA6E0` shadow: copy
       the 0x28 Chloe row, change only target `+0x4` to the paired leg id, and
       preserve all group/variant tail fields plus downstream chaining. Test one
-      legacy-Nadine pistol Put against the written `gh` prediction.
+      legacy-Nadine pistol Put against the written `gh` prediction. RUNTIME
+      REJECTED: the shadow changed the terminal clips from the named backflip
+      family to the named leg family, but the user still saw the back motion and
+      observed new jitter. The simultaneous final holster-IK reducer remained
+      `reference=0, weight=0, valid=0` in both processes. Remove the row shadow;
+      do not tune or widen the 144-row table.
+- [ ] Resolve Hlookup/Hblend/Hcontent downstream of the proven leg overlay output.
+      Trace `AnimationDatabase_ResolveClipWithOverlays 0x140516230` through
+      `AnimSetRemap_ResolveAnimationId 0x1417CA2E0` and
+      `AnimationDatabase_ResolveClip 0x1417C8E20`, then identify the active
+      snapshot weight/owner that feeds the zero-valued final holster-IK reducer.
+      Compare a stock back positive control. Build `gi` parks the rejected row
+      mutation and keeps only the read-only 144-family result probe; do not run a
+      new mutation before three independent static evidence types and a written
+      discriminator.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

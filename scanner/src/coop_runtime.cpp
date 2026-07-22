@@ -28501,13 +28501,9 @@ bool seh_read_player_look(void* player, std::uint32_t* look_out) {
 using AnimOverlayStateResolveAnimationIdFunction =
     std::uint32_t*(__fastcall*)(
         void*, std::uint32_t*, std::uint32_t, std::uint8_t);
-using AnimOverlayStateFindMatchingRowFunction =
-    void*(__fastcall*)(void*, void*, const void*);
 
 AnimOverlayStateResolveAnimationIdFunction
     g_original_anim_overlay_state_resolve_animation_id = nullptr;
-AnimOverlayStateFindMatchingRowFunction
-    g_original_anim_overlay_state_find_matching_row = nullptr;
 
 struct HolsterOverlayReplacement {
     std::uint32_t source;
@@ -28740,84 +28736,6 @@ const HolsterOverlayReplacement* find_holster_overlay_replacement(
     return source_match;
 }
 
-struct HolsterOverlayShadowRow {
-    std::array<std::byte, 0x28> bytes{};
-};
-
-thread_local std::array<HolsterOverlayShadowRow, 64>
-    g_holster_overlay_shadow_rows{};
-thread_local std::size_t g_holster_overlay_shadow_cursor = 0;
-
-void* __fastcall hooked_anim_overlay_state_find_matching_row(
-    void* state, void* output, const void* cursor) {
-    void* const result =
-        g_original_anim_overlay_state_find_matching_row != nullptr
-        ? g_original_anim_overlay_state_find_matching_row(
-              state, output, cursor)
-        : output;
-    if (output == nullptr || cursor == nullptr ||
-        readable_bytes(cursor) < 4 ||
-        readable_bytes(static_cast<std::byte*>(output) + 0x10) <
-            sizeof(void*)) {
-        return result;
-    }
-    const std::uint32_t source =
-        *reinterpret_cast<const std::uint32_t*>(cursor);
-    if (find_holster_overlay_replacement(source, 0) == nullptr) {
-        return result;
-    }
-
-    int owner_index = -1;
-    void* player = nullptr;
-    if (!seh_classify_legacy_nadine_master_overlay_state(
-            state, &owner_index, &player)) {
-        return result;
-    }
-    auto* const row = *reinterpret_cast<std::byte**>(
-        static_cast<std::byte*>(output) + 0x10);
-    if (row == nullptr || readable_bytes(row) < 0x28) {
-        return result;
-    }
-    const std::uint32_t row_source =
-        *reinterpret_cast<const std::uint32_t*>(row);
-    const std::uint32_t row_target =
-        *reinterpret_cast<const std::uint32_t*>(row + 4);
-    const HolsterOverlayReplacement* const replacement =
-        find_holster_overlay_replacement(source, row_target);
-    if (replacement == nullptr || row_source != source ||
-        replacement->chloe_back != row_target) {
-        return result;
-    }
-
-    HolsterOverlayShadowRow& shadow =
-        g_holster_overlay_shadow_rows[
-            g_holster_overlay_shadow_cursor++ %
-            g_holster_overlay_shadow_rows.size()];
-    std::memcpy(shadow.bytes.data(), row, shadow.bytes.size());
-    *reinterpret_cast<std::uint32_t*>(shadow.bytes.data() + 4) =
-        replacement->nadine_leg;
-    *reinterpret_cast<std::byte**>(
-        static_cast<std::byte*>(output) + 0x10) =
-        shadow.bytes.data();
-
-    static std::atomic<std::uint32_t> logged{0};
-    if (logged.fetch_add(1, std::memory_order_relaxed) < 256) {
-        std::ostringstream line;
-        line << "NADINE-HOLSTER-ROW-SHADOW owner=" << owner_index
-             << " player=0x" << std::hex
-             << reinterpret_cast<std::uintptr_t>(player)
-             << " state=0x" << reinterpret_cast<std::uintptr_t>(state)
-             << " source=0x" << source
-             << " target=0x" << row_target
-             << "->0x" << replacement->nadine_leg
-             << " row=0x" << reinterpret_cast<std::uintptr_t>(row)
-             << " shadow=0x"
-             << reinterpret_cast<std::uintptr_t>(shadow.bytes.data());
-        write_log_line(line.str().c_str());
-    }
-    return result;
-}
-
 std::uint32_t* __fastcall hooked_anim_overlay_state_resolve_animation_id(
     void* state, std::uint32_t* output, std::uint32_t input,
     std::uint8_t select_variant) {
@@ -28861,24 +28779,11 @@ std::uint32_t* __fastcall hooked_anim_overlay_state_resolve_animation_id(
     return result;
 }
 
-bool install_legacy_nadine_holster_overlay_repair() {
-    constexpr std::array<std::uint8_t, 15> kFindRowPrologue{
-        0x48, 0x89, 0x5C, 0x24, 0x08,
-        0x48, 0x89, 0x6C, 0x24, 0x10,
-        0x48, 0x89, 0x74, 0x24, 0x18,
-    };
+bool install_legacy_nadine_holster_overlay_probe() {
     constexpr std::array<std::uint8_t, 12> kResolvePrologue{
         0x40, 0x55, 0x56, 0x41, 0x55, 0x41,
         0x57, 0x48, 0x8D, 0x6C, 0x24, 0xA8,
     };
-    g_original_anim_overlay_state_find_matching_row =
-        reinterpret_cast<AnimOverlayStateFindMatchingRowFunction>(
-            install_fire_gate_detour(
-                kAnimOverlayStateFindMatchingRowRva,
-                kFindRowPrologue.data(), kFindRowPrologue.size(),
-                reinterpret_cast<void*>(
-                    &hooked_anim_overlay_state_find_matching_row),
-                "legacy-Nadine overlay row shadow"));
     g_original_anim_overlay_state_resolve_animation_id =
         reinterpret_cast<AnimOverlayStateResolveAnimationIdFunction>(
             install_fire_gate_detour(
@@ -28886,15 +28791,14 @@ bool install_legacy_nadine_holster_overlay_repair() {
                 kResolvePrologue.data(), kResolvePrologue.size(),
                 reinterpret_cast<void*>(
                     &hooked_anim_overlay_state_resolve_animation_id),
-                "legacy-Nadine chest-holster row repair"));
+                "legacy-Nadine chest-holster family probe"));
     const bool installed =
-        g_original_anim_overlay_state_find_matching_row != nullptr &&
         g_original_anim_overlay_state_resolve_animation_id != nullptr;
     std::ostringstream line;
-    line << "legacy-Nadine holster overlay repair "
+    line << "legacy-Nadine holster overlay probe "
          << (installed ? "installed" : "PARTIAL")
          << " family=" << std::dec << kHolsterOverlayReplacements.size()
-         << " shadowRows=" << g_holster_overlay_shadow_rows.size();
+         << " mutation=0";
     boot_log_line(line.str().c_str());
     return installed;
 }
@@ -35293,8 +35197,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22gh "
-        "(legacy-Nadine master-state overlay row shadow)");
+        "TLL co-op runtime init 2026-07-22gi "
+        "(rejected holster row shadow parked; overlay probe read-only)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -35322,7 +35226,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_main_view_visibility_relay();
     install_fgdraw_prepare_instance_relay();
     install_nd_attachable_parent_visibility_relay();
-    install_legacy_nadine_holster_overlay_repair();
+    install_legacy_nadine_holster_overlay_probe();
     install_player_weapon_holster_bind_probe();
     install_nadine_holster_final_boundary_probe();
     install_nadine_holster_ik_probe();

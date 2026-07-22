@@ -7560,3 +7560,40 @@ back-chain result. The arm/put-away motion must move to Nadine's thigh. Chloe,
 native NPC Nadine, rifle, grenade, body and unrelated overlays remain unchanged.
 A missing shadow, non-master shadow, unchanged final chain, back motion, crash
 or any control-owner mutation rejects the proposed seam.
+
+### 2026-07-22 RUNTIME REJECTED: `gh` reaches leg clips but not the arm path (`gi` rollback)
+
+Both `gh` processes remained responsive and the scoped row shadow reached the
+exact legacy-Nadine master states. The replacement was not swallowed by another
+Chloe row: for input `0x8DCA21F2`, the prior `gg` chain ended at named clip
+`p-holster-backflip^idle-mirror-stand-part 0x9C559A24`, while `gh` ended at
+`p-holster-leg^idle-mirror-stand-part 0x93AB6B11`. The matching finish path
+changed from backflip `0x6A53B39B` to leg
+`p-holster-leg^idle-mirror-stand-finish-part 0xA67333CE`. The asset names, exact
+row-shadow log and final resolver output independently prove that the full
+overlay chain changed to the intended leg family.
+
+The visual prediction nevertheless failed. The user still saw the put-away
+motion go behind Nadine's back and reported that the animation had become more
+jerky. Simultaneously, both exact slot-1 Player-Nadine paths reached
+`NADINE-HOLSTER-IK-FINAL` for `s_weapon-holster` with
+`reference=0, weight=0, valid=0` and joint tuple `-1,5,-1,3`. Thus Hmarker and a
+remaining chest-to-back overlay edge are rejected for this covered transition;
+the leg clip does not produce a usable final holster-IK contribution. The
+campaign Chloe map is real, but rewriting it is **RUNTIME REJECTED as a visual
+fix**. The row shadow is removed in build `gi`; the resolver-family hook remains
+read-only (`mutation=0`) so the reported jitter is not retained.
+
+The next boundary is after overlay resolution, not another DC row. Static call
+order is exact:
+`AnimationDatabase_ResolveClipWithOverlays 0x140516230` calls
+`AnimOverlayState_ResolveAnimationId 0x1417F9F00`, then
+`AnimSetRemap_ResolveAnimationId 0x1417CA2E0`, then tail-calls
+`AnimationDatabase_ResolveClip 0x1417C8E20`. Competing hypotheses are now
+**Hlookup** (the terminal leg id cannot resolve a clip in the active animation
+set), **Hblend** (the leg clip resolves but its snapshot has zero final weight or
+loses to another track), and **Hcontent** (the resolved leg clip itself supplies
+no usable custom holster data). Before any further mutation, trace the returned
+clip and active snapshot ownership/weight at these boundaries and compare a
+stock back positive control. No game or injection is required until this static
+dataflow is pinned and a bounded read-only prediction is written.
