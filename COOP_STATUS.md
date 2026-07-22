@@ -6705,3 +6705,25 @@ corrected release DLL compiled successfully. The real single IDB was updated
 with `ArtItemGeo_ResolveFgGeometry` and the corrected `FgInstance_Init` comment
 (`apply_labels OK: 1225 functions, 20 data names`, `save_database returned
 True`); runtime verification is pending.
+
+Runtime `fy` CONFIRMED the corrected resolver identity and REJECTED H4 in the
+tested scene. Across PIDs `14008/7480` it emitted 91
+`WEAPON-GEOMETRY-OWNER` rows and 793 membership rows, with no crash. Every one
+of the 91 geometry hits resolved to the exact `ProcessWeapon` vtable
+`RVA 0x2A9BF48`; `processWeapon=0` never occurred. The two legacy-Nadine
+owners in each process were stable FgAnimData pairs for rifle art `8075397D`
+and pistol art `33E29A1B`, parent look `D27C074F`, with retained id equal to
+runtime id and equal nonzero resource/active/matrixMatch/ownerMatch masks. The
+other hits were ordinary ProcessWeapons for look `3F334972` or one unparented
+pistol owner; none was an alternate prop owner. The one-bit pistol/rifle masks
+(`0x1`/`0x8`) are representative shared-FgGeometry aliases while every matching
+owner still reports three driven instances; they do not indicate a missing LOD.
+
+Therefore the visibly wrong legacy-Nadine firearm is the exact inventory
+ProcessWeapon already observed by `fw`, not a separate foreground drawable.
+H4 is REJECTED and H2 is selected: the incorrect placement enters the known
+ProcessWeapon FgAnimData through its attachment/owner pose before the coherent
+final instance writer. The next static boundary is the consumer chain from
+`ProcessWeapon+0x688/+0x6A0` and parent `AttachSystem+0x1E0` into the retained
+owner composition `+0x110/+0x120` plus `+0x130/+0x140` published at
+`0x141A8FC00`. Both processes were closed after capture.

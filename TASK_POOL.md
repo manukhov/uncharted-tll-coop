@@ -1750,6 +1750,13 @@ Do not reopen these as the first move:
       the same read-only renderer-wide census. Positive controls must now appear;
       only then decide whether an active matching geometry has a
       non-inventory/non-ProcessWeapon owner.
+      RUNTIME `fy`: 91 positive geometry-owner rows, 793 membership rows and no
+      crash. All hits were exact ProcessWeapon (`processWeapon=0` count zero).
+      Both legacy-Nadine pistol/rifle owners had matching retained/runtime ids,
+      active/matrix/owner masks and three driven instances. H4 separate prop is
+      REJECTED; continue only with H2 by tracing `ProcessWeapon+0x688/+0x6A0`
+      and parent AttachSystem into the owner transform published at
+      `0x141A8FC00`. Both processes were closed.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
