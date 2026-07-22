@@ -28494,6 +28494,226 @@ bool seh_read_player_look(void* player, std::uint32_t* look_out) {
     }
 }
 
+// Scoped legacy-Nadine overlay repair. The authored campaign-Chloe player-mesh
+// map is shared, so mutating its 0x28-byte row would also redirect real Chloe.
+// Instead, observe the engine's master->track-local copy and remember only local
+// states whose source is the master state of a visible legacy-Nadine Player.
+using AnimOverlayStateCopyFunction =
+    std::uintptr_t(__fastcall*)(void*, void*);
+using AnimOverlayStateResolveAnimationIdFunction =
+    std::uint32_t*(__fastcall*)(
+        void*, std::uint32_t*, std::uint32_t, std::uint8_t);
+
+AnimOverlayStateCopyFunction g_original_anim_overlay_state_copy = nullptr;
+AnimOverlayStateResolveAnimationIdFunction
+    g_original_anim_overlay_state_resolve_animation_id = nullptr;
+
+constexpr std::uint32_t kHolsterChestIdleStandPartId = 0x8DCA21F2u;
+constexpr std::uint32_t kHolsterBackIdleStandPartId = 0x11438F72u;
+constexpr std::uint32_t kHolsterLegIdleStandPartId = 0x4A5559F7u;
+constexpr std::size_t kTrackedLegacyNadineOverlayStateCount = 64;
+std::array<std::atomic<std::uintptr_t>,
+           kTrackedLegacyNadineOverlayStateCount>
+    g_legacy_nadine_track_overlay_states{};
+
+bool seh_classify_legacy_nadine_master_overlay_state(
+    void* state, int* owner_index_out, void** player_out) {
+    if (owner_index_out != nullptr) {
+        *owner_index_out = -1;
+    }
+    if (player_out != nullptr) {
+        *player_out = nullptr;
+    }
+    __try {
+        if (state == nullptr) {
+            return false;
+        }
+        for (int owner_index = 0; owner_index < 2; ++owner_index) {
+            void* const player = retained_player_object(owner_index);
+            if (player == nullptr) {
+                continue;
+            }
+            const std::uint32_t visible_look =
+                *reinterpret_cast<const std::uint32_t*>(
+                    static_cast<const std::byte*>(player) + 0x170);
+            if (visible_look != kLegacyNadineAttachTargetLookId) {
+                continue;
+            }
+            void* const upper_owner = *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(player) +
+                kPlayerUpperStateOwnerOffset);
+            if (upper_owner == nullptr) {
+                continue;
+            }
+            void* const wrapper = *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(upper_owner) +
+                kPlayerUpperOwnerOverlayWrapperOffset);
+            void* const master_state = wrapper != nullptr
+                ? *reinterpret_cast<void* const*>(wrapper)
+                : nullptr;
+            if (master_state != state) {
+                continue;
+            }
+            if (owner_index_out != nullptr) {
+                *owner_index_out = owner_index;
+            }
+            if (player_out != nullptr) {
+                *player_out = player;
+            }
+            return true;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        if (owner_index_out != nullptr) {
+            *owner_index_out = -1;
+        }
+        if (player_out != nullptr) {
+            *player_out = nullptr;
+        }
+    }
+    return false;
+}
+
+bool update_legacy_nadine_track_overlay_state(void* state, bool legacy_nadine) {
+    const std::uintptr_t value = reinterpret_cast<std::uintptr_t>(state);
+    if (value == 0) {
+        return false;
+    }
+    if (!legacy_nadine) {
+        for (auto& slot : g_legacy_nadine_track_overlay_states) {
+            std::uintptr_t expected = value;
+            if (slot.compare_exchange_strong(
+                    expected, 0, std::memory_order_acq_rel,
+                    std::memory_order_acquire)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    for (const auto& slot : g_legacy_nadine_track_overlay_states) {
+        if (slot.load(std::memory_order_acquire) == value) {
+            return false;
+        }
+    }
+    for (auto& slot : g_legacy_nadine_track_overlay_states) {
+        std::uintptr_t expected = 0;
+        if (slot.compare_exchange_strong(
+                expected, value, std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool is_legacy_nadine_track_overlay_state(void* state) {
+    const std::uintptr_t value = reinterpret_cast<std::uintptr_t>(state);
+    if (value == 0) {
+        return false;
+    }
+    for (const auto& slot : g_legacy_nadine_track_overlay_states) {
+        if (slot.load(std::memory_order_acquire) == value) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::uintptr_t __fastcall hooked_anim_overlay_state_copy(
+    void* destination, void* source) {
+    const std::uintptr_t result = g_original_anim_overlay_state_copy != nullptr
+        ? g_original_anim_overlay_state_copy(destination, source)
+        : 0;
+    int owner_index = -1;
+    void* player = nullptr;
+    const bool legacy_nadine =
+        seh_classify_legacy_nadine_master_overlay_state(
+            source, &owner_index, &player);
+    const bool changed = update_legacy_nadine_track_overlay_state(
+        destination, legacy_nadine);
+    if (legacy_nadine && changed) {
+        static std::atomic<std::uint32_t> logged{0};
+        if (logged.fetch_add(1, std::memory_order_relaxed) < 32) {
+            std::ostringstream line;
+            line << "NADINE-HOLSTER-OVERLAY-COPY owner=" << owner_index
+                 << " player=0x" << std::hex
+                 << reinterpret_cast<std::uintptr_t>(player)
+                 << " master=0x" << reinterpret_cast<std::uintptr_t>(source)
+                 << " local=0x"
+                 << reinterpret_cast<std::uintptr_t>(destination);
+            write_log_line(line.str().c_str());
+        }
+    }
+    return result;
+}
+
+std::uint32_t* __fastcall hooked_anim_overlay_state_resolve_animation_id(
+    void* state, std::uint32_t* output, std::uint32_t input,
+    std::uint8_t select_variant) {
+    std::uint32_t* const result =
+        g_original_anim_overlay_state_resolve_animation_id != nullptr
+        ? g_original_anim_overlay_state_resolve_animation_id(
+              state, output, input, select_variant)
+        : output;
+    if (output == nullptr || input != kHolsterChestIdleStandPartId ||
+        !is_legacy_nadine_track_overlay_state(state)) {
+        return result;
+    }
+    const std::uint32_t authored_output = *output;
+    const bool replaced = authored_output == kHolsterBackIdleStandPartId;
+    if (replaced) {
+        *output = kHolsterLegIdleStandPartId;
+    }
+    static std::atomic<std::uint32_t> logged{0};
+    if (logged.fetch_add(1, std::memory_order_relaxed) < 64) {
+        std::ostringstream line;
+        line << "NADINE-HOLSTER-ROW state=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(state)
+             << " input=0x" << input
+             << " authored=0x" << authored_output
+             << " effective=0x" << *output << std::dec
+             << " replaced=" << (replaced ? 1 : 0)
+             << " variant=" << static_cast<unsigned>(select_variant);
+        write_log_line(line.str().c_str());
+    }
+    return result;
+}
+
+bool install_legacy_nadine_holster_overlay_repair() {
+    constexpr std::array<std::uint8_t, 13> kCopyPrologue{
+        0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48,
+        0x83, 0xEC, 0x20, 0x48, 0x8B, 0xDA,
+    };
+    constexpr std::array<std::uint8_t, 12> kResolvePrologue{
+        0x40, 0x55, 0x56, 0x41, 0x55, 0x41,
+        0x57, 0x48, 0x8D, 0x6C, 0x24, 0xA8,
+    };
+    g_original_anim_overlay_state_copy =
+        reinterpret_cast<AnimOverlayStateCopyFunction>(
+            install_fire_gate_detour(
+                kAnimOverlayStateCopyRva,
+                kCopyPrologue.data(), kCopyPrologue.size(),
+                reinterpret_cast<void*>(&hooked_anim_overlay_state_copy),
+                "legacy-Nadine overlay ownership copy"));
+    g_original_anim_overlay_state_resolve_animation_id =
+        reinterpret_cast<AnimOverlayStateResolveAnimationIdFunction>(
+            install_fire_gate_detour(
+                kAnimOverlayStateResolveAnimationIdRva,
+                kResolvePrologue.data(), kResolvePrologue.size(),
+                reinterpret_cast<void*>(
+                    &hooked_anim_overlay_state_resolve_animation_id),
+                "legacy-Nadine chest-holster row repair"));
+    const bool installed = g_original_anim_overlay_state_copy != nullptr &&
+        g_original_anim_overlay_state_resolve_animation_id != nullptr;
+    std::ostringstream line;
+    line << "legacy-Nadine holster overlay repair "
+         << (installed ? "installed" : "PARTIAL")
+         << " chest=0x" << std::hex << kHolsterChestIdleStandPartId
+         << " back=0x" << kHolsterBackIdleStandPartId
+         << " leg=0x" << kHolsterLegIdleStandPartId;
+    boot_log_line(line.str().c_str());
+    return installed;
+}
+
 struct NativeNadinePistolJointMappingCapture {
     std::uint32_t native_count = 0;
     std::uint32_t target_count = 0;
@@ -34888,8 +35108,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22ge "
-        "(read-only Nadine holster IK reference discriminator)");
+        "TLL co-op runtime init 2026-07-22gf "
+        "(scoped legacy-Nadine chest-holster overlay repair)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -34917,6 +35137,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_main_view_visibility_relay();
     install_fgdraw_prepare_instance_relay();
     install_nd_attachable_parent_visibility_relay();
+    install_legacy_nadine_holster_overlay_repair();
     install_player_weapon_holster_bind_probe();
     install_nadine_holster_final_boundary_probe();
     install_nadine_holster_ik_probe();

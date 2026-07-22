@@ -7394,3 +7394,34 @@ the master pointer is rejected because it sees the copied destination. The
 remaining static task is to enumerate the smallest exact campaign-Chloe
 chest-to-back family (draw, holster and mirrored/group variants) before writing
 the runtime prediction. No game or injection was started.
+
+### 2026-07-22 HYPOTHESIS: scoped Rrow idle-state discriminator (`gf`)
+
+Build `gf` implements only the smallest proven member of Rrow. A detour at
+`AnimOverlayState_Copy 0x1417F9DD0` tags a destination state only when its source
+equals the current master state reached through a retained Player whose visible
+look at `+0x170` is legacy Nadine `0xD27C074F`. Copying the same destination from
+any other source clears the tag. `AnimOverlayState_ResolveAnimationId
+0x1417F9F00` leaves every untagged call and every unrelated input unchanged. For
+a tagged state and exactly `p-holster-chest^idle-stand-part 0x8DCA21F2`, it calls
+the original resolver first and changes only the proven Chloe output
+`p-holster-back^idle-stand-part 0x11438F72` to the proven compatible
+`p-holster-leg^idle-stand-part 0x4A5559F7`. The shared DC row is never written.
+
+**Falsifiable runtime prediction:** both copies must load without a hook-install
+failure. The Nadine-owning process must log `NADINE-HOLSTER-OVERLAY-COPY`, then
+on the relevant idle state log
+`NADINE-HOLSTER-ROW ... input=0x8dca21f2 authored=0x11438f72`
+`effective=0x4a5559f7 replaced=1`. After putting away a pistol and allowing the
+idle pose to settle, Nadine must hold it at the leg rather than the back. Chloe
+must still use her original back placement, and no body part, rifle or unrelated
+animation may change. This first discriminator does **not** predict corrected
+draw/put transition motion, because their source-id family is not yet enumerated.
+
+The alternatives are separated as follows. A copy log without a row log rejects
+the assumption that the generic idle source reaches this Player track. A row log
+with `authored` other than `0x11438F72` rejects the exact campaign-Chloe map for
+that live state and must not be force-replaced. A successful replacement log with
+the weapon still settling on the back proves a downstream remap/attachment owner
+still overrides the clip. A crash before any copy/row log points to detour ABI or
+prologue handling rather than to the authored-map hypothesis.

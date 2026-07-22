@@ -64,6 +64,12 @@ constexpr std::uintptr_t kNdGameObjectRefreshWorldTransformRva = 0x1BB8320;
 // first DWORD select owner vtable +0x400/+0x408/+0x410 for bits 8/0x10/0x20.
 constexpr std::size_t kPlayerFgAnimDataOffset = 0x1A8;
 constexpr std::size_t kPlayerUpperStateOwnerOffset = 0x1A0;
+// The upper owner owns a wrapper at +0x60; dereferencing the wrapper yields the
+// Player master AnimOverlayState installed at AnimStateLayer+0x18. The layer
+// step copies that master into a track-local state before snapshot resolution.
+constexpr std::size_t kPlayerUpperOwnerOverlayWrapperOffset = 0x60;
+constexpr std::uintptr_t kAnimOverlayStateCopyRva = 0x17F9DD0;
+constexpr std::uintptr_t kAnimOverlayStateResolveAnimationIdRva = 0x17F9F00;
 // PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0 writes directional
 // fields to [[Player+0x1A0]+0x58]+0x10 at +0x188..+0x194 (D/U/L/R layout).
 constexpr std::size_t kPlayerAnimHubChildOffset = 0x58;

@@ -1863,6 +1863,12 @@ Do not reopen these as the first move:
       exact campaign-Chloe chest-to-back family, including holster/draw and
       mirrored/group variants, then scope **Rrow** to legacy Nadine plus only
       those source ids. No state is mutated.
+      Build `gf` is the bounded first discriminator: it tags track-local states
+      only at `AnimOverlayState_Copy`, and only rewrites the exact idle row
+      `0x8DCA21F2: 0x11438F72 -> 0x4A5559F7`. Test pistol put-away and settled
+      idle placement first; do not claim transition animation fixed from this
+      single source id. Written positive and negative predictions are in
+      `COOP_STATUS.md`.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
