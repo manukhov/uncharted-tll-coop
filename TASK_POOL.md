@@ -1789,6 +1789,21 @@ Do not reopen these as the first move:
       coordinates. Run the bounded before/after `ga` action snapshot; Haction
       requires the post value to equal the next `fz` localBefore sample before
       any corrective mutation.
+      RUNTIME `ga`: the one-shot pistol action changed all eight local-transform
+      words, selected `pistolHolster` index 41 and seeded duration/progress
+      `0.1/0`; the rifle control copied its generic builder payload without a
+      blend. The immediate pistol local sample differed only because stock
+      `NdAttachableObject_UpdateLocalAttachmentBlend 0x141ED4390` had already
+      advanced it. Static disassembly proves this updater smoothsteps from the
+      action handoff endpoint at `+0x620` toward the Player binding endpoint at
+      `+0x600`, writes `+0x4F0`, and clears the duration at completion. Hscript
+      is REJECTED; Haction and its stock continuation are resolved.
+- [ ] Run bounded `gb`: after only the exact redirected legacy-Nadine slot-1
+      action, validate `pistolHolster`, replace the incompatible Player local
+      transform with the runtime-proven native identity and clear its blend.
+      Require one applied repair row, identity at the next local-correction
+      sample, correct visible thigh placement, no rifle repair and no body/Chloe
+      regression. Identity plus wrong placement selects independent Hrecord.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

@@ -6913,3 +6913,61 @@ pending. The release DLL compiled successfully. The four existing STATIC IDB
 comments were refined with the exact binding layout and write sites
 (`apply_labels OK: 1227 functions, 20 data names`, `save_database returned
 True`); the restarted MCP resolves every updated comment from the single IDB.
+
+### 2026-07-22 RUNTIME/STATIC: action write confirmed, stock blend resolved (`ga` -> `gb`)
+
+Runtime `ga` confirms the action owner, with one correction to the written
+prediction. PIDs `18288/22340` emitted 12 bounded
+`NADINE-HOLSTER-LOCAL-WRITE` rows, 31 action rows, 28 selector rows and no crash
+or exception. On every covered legacy-Nadine pistol cycle, the exact selector
+sequence was `targSpineProp -> targSpinePropAnim -> pistolHolster`; the one-shot
+action changed all eight transform DWORDs at `weapon+0x4F0/+0x500`, changed the
+selected byte from rightHand index 16 to pistolHolster index 41, and seeded
+`+0x640/+0x644 = 0.1/0`. The Player rifle control changed index 16 to generic
+index 40 and copied the builder payload unchanged, without starting this blend.
+
+The strict prediction that the action's post value would equal the immediately
+next local-correction input was false. The next pistol sample was close but not
+identical, while a later sample converged to the stable Player pistol binding
+`3D9BA5E3,BCA3D70A,BD4CCCCD,0,BD6477B3,BDCD7209,3E0A06FB,3F7BF4C4`
+(quaternion sign may flip without changing rotation). This does not select
+Hscript: direct disassembly resolves the only intervening writer.
+
+`NdAttachableObject_UpdateLocalAttachmentBlend 0x141ED4390` reads duration
+`object+0x640`, adds `GetProcessDeltaTime()/duration` to progress `+0x644`,
+clamps it to one, passes it through mode-2 smoothstep, and calls transform
+interpolator `0x140221550`. That callee computes
+`endpoint620 + t * (endpoint600 - endpoint620)` and stores the result into
+`object+0x4F0/+0x500`; at progress one the updater clears `+0x640`. The action
+had stored the computed handoff at `+0x620/+0x630` and the Player builder target
+at `+0x600/+0x610`, so the observed sequence is exactly the stock Player blend
+from the back-holster handoff back to the Player holster binding. Independent
+callers include concrete ProcessWeapon updates such as `0x141500880`, which
+invoke this shared updater once per frame. Hscript is REJECTED for the covered
+interval; Haction is CONFIRMED as the immediate writer and the stock blend is
+its continuation. Hrecord remains the falsifier for a local-contract repair.
+
+The native comparison now supplies a narrow replacement contract: native Nadine
+selects the same copied `pistolHolster` record through the AI controller, never
+runs the Player builder/action, and `fz` measured an identity local transform
+with negligible correction. Build `2026-07-22gb` therefore keeps the final
+selector redirect but, only after that exact legacy-Nadine Player action has
+observed `targSpinePropAnim` and redirected its final slot-1 selector, validates
+that the weapon still belongs to that Player and resolves to `pistolHolster`.
+It then writes native identity to the first eight DWORDs at `+0x4F0` and clears
+the Player-only duration/progress at `+0x640/+0x644`. It does not touch the
+attachment record, rifle slot, Chloe, native Nadine, hand state or any other
+action. A dedicated repair row preserves both the stock post-action value and
+the repaired value for audit.
+
+**Falsifiable `gb` prediction:** each tested legacy-Nadine pistol holster cycle
+must retain the stock nonidentity `NADINE-HOLSTER-LOCAL-WRITE`, then emit exactly
+one `NADINE-PISTOL-HOLSTER-LOCAL-REPAIR applied=1` ending in
+`0,0,0,0,0,0,0,3F800000` with blend `0,0`. The next selected-transform sample
+for that weapon must use pistolHolster index 41 and read the same identity local;
+the pistol must appear at the thigh rather than the back. Rifle cycles must emit
+no repair row and retain their current behavior. A missing repair, a later
+nonidentity pistol local, wrong visible placement, any rifle/Chloe change, crash
+or body regression rejects this boundary; identity local with a still-wrong
+thigh pose selects the independent Hrecord alternative.
+The `gb` Release DLL compiled successfully.

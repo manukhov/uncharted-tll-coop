@@ -210,6 +210,14 @@ FUNCTIONS = {
         "that local state with +0x110/+0x120 and publishes it to FgAnimData at "
         "0x141ED288F.",
     ),
+    0x141ED4390: (
+        "NdAttachableObject_UpdateLocalAttachmentBlend",
+        "Shared per-frame local-attachment blend updater. When object+0x640 "
+        "is positive, advances progress at +0x644 by process delta divided by "
+        "that duration, applies smoothstep mode 2, and interpolates the 32-byte "
+        "transform from endpoint +0x620/+0x630 toward +0x600/+0x610 into "
+        "object+0x4F0/+0x500. Clears +0x640 when progress reaches 1.0.",
+    ),
     0x14108B120: (
         "WeaponHolsterIkBlender_ExtractData",
         "WeaponHolsterIkBlender vtable +0x10. Extracts a 0x38-byte "
