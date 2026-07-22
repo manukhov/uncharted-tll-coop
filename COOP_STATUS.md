@@ -7816,3 +7816,42 @@ and subsequent holstering hides it again. Chloe's copy continues to show its
 current thigh placement; pistol, body and grenade remain unchanged. No hide
 line, a zero mask, an invisible drawn rifle, body loss or crash rejects this
 render-gate repair.
+
+### 2026-07-22 REJECTED: `gn` game-thread hide is overwritten later
+
+Build `gn` selected the exact role-B owner-0 slot-0 rifle and successfully
+called `DrawControl_HideMesh` with `changed=1`. Nevertheless, the user still saw
+the rifle in hand at spawn. The log then repeated the same successful
+`action=hide changed=1` for the same weapon and DrawControl on every game tick.
+Because the mesh byte was non-zero again before each call, a later stock writer
+was re-showing it after every game-thread hide. This rejects both wrong-object
+and ineffective-HideMesh explanations and identifies call ordering as the
+remaining boundary.
+
+### 2026-07-22 STATIC: post-parent-visibility rifle gate (`go`)
+
+The existing exact callsite relay runs inside
+`NdAttachableObject_PostJointUpdate_Async` immediately after stock
+`DrawControlSyncParentVisibility` and receives the current child DrawControl and
+attachable ProcessWeapon. That original function is the observed later writer
+capable of undoing `gn`. Independently, the earlier legacy-Nadine mesh probe
+successfully removed individual visible body meshes from this same post-call
+boundary without corrupting the model, proving that a stock HideMesh call here
+survives into rendering.
+
+Build `go` changes the game-thread path into a publisher only. Stable role-B
+owner-0 `current<0,draw=0` publishes the exact slot-0 rifle pointer and a
+generation. The late relay requires pointer equality, rifle art, and exact
+`weapon+0x198 == child_draw`, then hides only that weapon's meshes after stock
+visibility sync. On slot-0 activation, the game thread clears the published
+target before restoring the mesh. No Player/body DrawControl, role-A instance,
+pistol or loose rifle candidate is admitted.
+
+**Falsifiable `go` prediction:** both copies load marker `2026-07-22go`. At
+initial role-B spawn the log first emits `action=arm-late-hide`, then one
+`action=late-hide changed=1` for the same weapon/generation, and the rifle is no
+longer visible in local Nadine's hand. Drawing the rifle emits
+`action=disarm-show` and shows it; returning to stable inactive state arms and
+late-hides it again. The role-A thigh rifle, pistol, body and grenade remain
+unchanged. Missing late-hide, an invisible active rifle, body loss or crash
+rejects the ordering repair.

@@ -1548,11 +1548,19 @@ Do not reopen these as the first move:
       REJECTED for visibility: the exact call emitted `result=1 verified=1`, but
       the rifle remained in the local hand. Attachment selection is not the
       role-B main-view render boundary.
-- [ ] Run build `gn`, hiding only the exact local owner-0 slot-0 rifle
+- [x] Run build `gn`, hiding only the exact local owner-0 slot-0 rifle
       DrawControl while `current<0,draw=0`, and restoring only meshes hidden by
       this path when slot 0 becomes active. Require a non-zero
       `NADINE-LOCAL-RIFLE-VIS action=hide` at spawn, matching `show` on draw,
       no rifle in the inactive local hand, and no pistol/body/role-A regression.
+      REJECTED by ordering: the exact mesh was successfully hidden with
+      `changed=1` every tick, but a later stock visibility writer re-enabled it
+      before rendering and it remained visible.
+- [ ] Run build `go`, publishing the exact inactive local rifle on the game
+      thread and applying HideMesh from the existing attachable relay after
+      stock `DrawControlSyncParentVisibility`. Require `arm-late-hide` followed
+      by one same-generation `late-hide changed=1`, no spawn rifle in the local
+      hand, matching `disarm-show` on rifle draw, and no body/pistol regression.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no
