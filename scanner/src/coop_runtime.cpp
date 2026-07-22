@@ -33217,6 +33217,267 @@ void __fastcall hooked_fgdraw_prepare_instance(
     }
 }
 
+struct NadineRifleCullQueueMatch {
+    std::uintptr_t instance = 0;
+    std::uint32_t owner_id = 0;
+    std::uint32_t geometry_mask = 0;
+    std::uint8_t active = 0;
+    std::uint8_t target_lod = 0xFF;
+};
+
+struct NadineRifleCullQueueSnapshot {
+    std::uint32_t queue_count = 0;
+    std::uint32_t target_lod_count = 0;
+    std::uint32_t target_mask = 0;
+    std::uint32_t target_active_mask = 0;
+    std::uint32_t owner_hits = 0;
+    std::uint32_t geometry_hits = 0;
+    std::uint32_t match_count = 0;
+    std::uint32_t target_runtime_id = 0;
+    std::array<NadineRifleCullQueueMatch, 12> matches{};
+};
+
+bool seh_capture_nadine_rifle_cull_queue(
+    void* const* queue_instances, std::uint32_t queue_count,
+    NadineRifleCullQueueSnapshot* snapshot) {
+    if (snapshot == nullptr) {
+        return false;
+    }
+    *snapshot = {};
+    __try {
+        const std::uintptr_t target_value =
+            g_local_nadine_inactive_rifle_weapon.load(
+                std::memory_order_acquire);
+        if (!g_net_role_b || target_value == 0 || queue_instances == nullptr ||
+            queue_count > 0x10000u ||
+            readable_bytes(queue_instances) <
+                sizeof(void*) * static_cast<std::size_t>(queue_count)) {
+            return false;
+        }
+        void* const target = reinterpret_cast<void*>(target_value);
+        if (readable_bytes(target) < 0x864) {
+            return false;
+        }
+        const auto* const target_bytes = static_cast<const std::byte*>(target);
+        if (*reinterpret_cast<const std::uintptr_t*>(target_bytes) !=
+                g_module + kProcessWeaponVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(target_bytes + 0x860) !=
+                kCoopRifleArtId) {
+            return false;
+        }
+        snapshot->target_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                target_bytes + kGameObjectRuntimeIdOffset);
+
+        NadineMembershipRenderState render{};
+        if (!seh_capture_nadine_membership_render_state(
+                target, nullptr, nullptr, &render)) {
+            return false;
+        }
+        snapshot->target_lod_count = std::min<std::uint32_t>(
+            render.lod_count, static_cast<std::uint32_t>(render.lods.size()));
+        std::array<std::uintptr_t, 8> target_instances{};
+        std::array<std::uintptr_t, 8> target_geometries{};
+        for (std::uint32_t lod_index = 0;
+             lod_index < snapshot->target_lod_count; ++lod_index) {
+            const NadineLodRenderState& lod = render.lods[lod_index];
+            target_instances[lod_index] = lod.instance;
+            if (lod.active != 0) {
+                snapshot->target_active_mask |= 1u << lod_index;
+            }
+            if (lod.instance != 0 &&
+                readable_bytes(reinterpret_cast<void*>(lod.instance)) >=
+                    0x1B8) {
+                target_geometries[lod_index] =
+                    reinterpret_cast<std::uintptr_t>(
+                        *reinterpret_cast<void* const*>(
+                            reinterpret_cast<const std::byte*>(lod.instance) +
+                            0x1B0));
+            }
+        }
+
+        snapshot->queue_count = queue_count;
+        for (std::uint32_t queue_index = 0;
+             queue_index < queue_count; ++queue_index) {
+            void* const instance = queue_instances[queue_index];
+            if (instance == nullptr || readable_bytes(instance) < 0x258) {
+                continue;
+            }
+            const auto* const instance_bytes =
+                static_cast<const std::byte*>(instance);
+            const std::uintptr_t instance_value =
+                reinterpret_cast<std::uintptr_t>(instance);
+            std::uint8_t target_lod = 0xFF;
+            for (std::uint32_t lod_index = 0;
+                 lod_index < snapshot->target_lod_count; ++lod_index) {
+                if (target_instances[lod_index] == instance_value) {
+                    target_lod = static_cast<std::uint8_t>(lod_index);
+                    snapshot->target_mask |= 1u << lod_index;
+                    break;
+                }
+            }
+            const std::uint32_t owner_id =
+                *reinterpret_cast<const std::uint32_t*>(
+                    instance_bytes + 0x250);
+            const std::uintptr_t geometry =
+                reinterpret_cast<std::uintptr_t>(
+                    *reinterpret_cast<void* const*>(instance_bytes + 0x1B0));
+            std::uint32_t geometry_mask = 0;
+            for (std::uint32_t lod_index = 0;
+                 lod_index < snapshot->target_lod_count; ++lod_index) {
+                if (target_geometries[lod_index] != 0 &&
+                    target_geometries[lod_index] == geometry) {
+                    geometry_mask |= 1u << lod_index;
+                }
+            }
+            const bool owner_match = owner_id == snapshot->target_runtime_id;
+            snapshot->owner_hits += owner_match ? 1u : 0u;
+            snapshot->geometry_hits += geometry_mask != 0 ? 1u : 0u;
+            if (target_lod == 0xFF && !owner_match && geometry_mask == 0) {
+                continue;
+            }
+            if (snapshot->match_count < snapshot->matches.size()) {
+                NadineRifleCullQueueMatch& match =
+                    snapshot->matches[snapshot->match_count];
+                match.instance = instance_value;
+                match.owner_id = owner_id;
+                match.geometry_mask = geometry_mask;
+                match.active = *reinterpret_cast<const std::uint8_t*>(
+                    instance_bytes + 0x1A0);
+                match.target_lod = target_lod;
+            }
+            ++snapshot->match_count;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *snapshot = {};
+        return false;
+    }
+}
+
+using CullFgLodsSpawnFunction = std::int64_t(__fastcall*)(
+    void*, void*, void* const*, void*, std::uint32_t, void*, void*, void*);
+CullFgLodsSpawnFunction g_original_cull_fg_lods_spawn = nullptr;
+
+std::int64_t __fastcall hooked_cull_fg_lods_spawn(
+    void* job_out, void* counter_out, void* const* queue_instances,
+    void* lod_data, std::uint32_t queue_count, void* scene,
+    void* view_frustum, void* counter) {
+    NadineRifleCullQueueSnapshot snapshot{};
+    const std::uint64_t generation =
+        g_local_nadine_inactive_rifle_generation.load(
+            std::memory_order_acquire);
+    static thread_local std::uint64_t sampled_generation = 0;
+    static thread_local std::uint32_t generation_samples = 0;
+    if (sampled_generation != generation) {
+        sampled_generation = generation;
+        generation_samples = 0;
+    }
+    const bool captured = generation != 0 && generation_samples < 6 &&
+        seh_capture_nadine_rifle_cull_queue(
+            queue_instances, queue_count, &snapshot);
+    if (captured) {
+        ++generation_samples;
+    }
+    const std::int64_t result = g_original_cull_fg_lods_spawn != nullptr
+        ? g_original_cull_fg_lods_spawn(
+              job_out, counter_out, queue_instances, lod_data, queue_count,
+              scene, view_frustum, counter)
+        : 0;
+    if (!captured) {
+        return result;
+    }
+
+    std::ostringstream line;
+    line << "NADINE-RIFLE-CULL-QUEUE generation=" << generation
+         << " sample=" << generation_samples
+         << " target=0x" << std::hex
+         << g_local_nadine_inactive_rifle_weapon.load(
+                std::memory_order_relaxed)
+         << "/0x" << snapshot.target_runtime_id
+         << std::dec << " queue=" << snapshot.queue_count
+         << " lods=" << snapshot.target_lod_count
+         << " targetMask=0x" << std::hex << snapshot.target_mask
+         << " activeMask=0x" << snapshot.target_active_mask
+         << std::dec << " ownerHits=" << snapshot.owner_hits
+         << " geometryHits=" << snapshot.geometry_hits
+         << " matches=" << snapshot.match_count << " entries=";
+    const std::uint32_t stored_matches = std::min<std::uint32_t>(
+        snapshot.match_count,
+        static_cast<std::uint32_t>(snapshot.matches.size()));
+    for (std::uint32_t index = 0; index < stored_matches; ++index) {
+        const NadineRifleCullQueueMatch& match = snapshot.matches[index];
+        line << "[0x" << std::hex << match.instance
+             << ":owner=0x" << match.owner_id
+             << ":geom=0x" << match.geometry_mask
+             << std::dec << ":active="
+             << static_cast<unsigned>(match.active)
+             << ":target=" << static_cast<unsigned>(match.target_lod)
+             << "]";
+    }
+    write_log_line(line.str().c_str());
+    return result;
+}
+
+bool install_render_main_cull_fg_lods_relay() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kRenderMgrMainDrawCullFgLodsCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line("CullFgLods relay SKIPPED (not E8)");
+        return false;
+    }
+    std::int32_t old_displacement = 0;
+    std::memcpy(&old_displacement, call_site + 1, sizeof(old_displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(old_displacement);
+    const std::uintptr_t expected =
+        g_module + kRenderMgrCullFgLodsSpawnRva;
+    if (target != expected) {
+        boot_log_line("CullFgLods relay SKIPPED (target)");
+        return false;
+    }
+    g_original_cull_fg_lods_spawn =
+        reinterpret_cast<CullFgLodsSpawnFunction>(expected);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("CullFgLods relay SKIPPED (relay)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(&hooked_cull_fg_lods_spawn);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("CullFgLods relay SKIPPED (range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("CullFgLods relay SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line("CullFgLods callsite relay installed");
+    return true;
+}
+
 bool install_fgdraw_prepare_instance_relay() {
     auto* const call_site = reinterpret_cast<std::uint8_t*>(
         g_module + kFgDrawManagerPrepareInstanceCallsiteRva);
@@ -35831,8 +36092,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22gq "
-        "(role-B local Nadine synchronous FgDraw discriminator; pistol animation unchanged)");
+        "TLL co-op runtime init 2026-07-22gr "
+        "(role-B local Nadine final CullFgLods queue discriminator; pistol animation unchanged)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -35860,6 +36121,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_main_view_visibility_relay();
     install_fgdraw_prepare_instance_relay();
     install_fgdraw_synchronous_prepare_instance_relay();
+    install_render_main_cull_fg_lods_relay();
     install_nd_attachable_parent_visibility_relay();
     install_legacy_nadine_holster_overlay_probe();
     install_legacy_nadine_holster_clip_lookup_probe();

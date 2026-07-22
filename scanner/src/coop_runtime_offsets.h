@@ -115,6 +115,12 @@ constexpr std::uintptr_t kFgDrawManagerPrepareInstanceCallsiteRva = 0x181B925;
 // PostAnimProcessing worker batch.
 constexpr std::uintptr_t kFgDrawManagerSynchronousPrepareInstanceCallsiteRva =
     0x197DC54;
+// RenderMgr::MainDrawCore passes the completed per-frame FgInstance pointer
+// array, matching FgLodData array and instance count to CullFgLods::Spawn.
+// This is the first consumer after FgDrawManager's queue publication and is a
+// read-only discriminator for stale or alternate rifle submissions.
+constexpr std::uintptr_t kRenderMgrCullFgLodsSpawnRva = 0x1A2C440;
+constexpr std::uintptr_t kRenderMgrMainDrawCullFgLodsCallsiteRva = 0x1661A57;
 constexpr std::size_t kFgAnimDataSkeletonOffset = 0x18;
 constexpr std::size_t kSkeletonJointCountOffset = 0x34;
 // Animation command evaluator and the fixed-stride SkelTable retarget registry.

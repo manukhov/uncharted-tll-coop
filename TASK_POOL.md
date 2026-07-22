@@ -1571,11 +1571,19 @@ Do not reopen these as the first move:
       REJECTED: the exact same-generation skip occurred, but the rifle remained
       visible. Static xrefs show this intercepted only worker callsite
       `0x14181B925`; a separate synchronous caller exists at `0x14197DC54`.
-- [ ] Run read-only build `gq` and classify the synchronous
+- [x] Run read-only build `gq` and classify the synchronous
       `PrepareInstanceForRendering` caller at `0x14197DC54`. Require either an
       exact `sync-prepare mode=1 targetMatch=1`, a pre-publication legacy-rifle
       `targetMatch=0` only, or no sync row alongside the worker skip; do not
       mutate the second path until this discriminator chooses among S1/S2/S3.
+      Result: S3. Role B emitted 14 worker skips and zero synchronous rows while
+      the rifle remained in the local hand; S1/S2 are REJECTED.
+- [ ] Run read-only build `gr` at the final `CullFgLods::Spawn` call
+      `0x141661A57`. With the existing inactive/skip suppression still active,
+      classify a nonzero exact `targetMask` as stale/independent queue admission
+      (R1), an alternate same-owner/geometry hit as R2, or all-zero matches with
+      the visible rifle as a separate render path (R3). Require bounded role-B
+      rows, no crash and no body/pistol regression.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

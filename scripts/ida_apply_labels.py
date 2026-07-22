@@ -1295,6 +1295,19 @@ FUNCTIONS = {
         "Builds and submits six worker records which batch FgAnimData entries "
         "through FgDrawManager_PrepareInstancesJob.",
     ),
+    0x141661960: (
+        "RenderMgr_MainDrawCore",
+        "Exact RenderMgr::MainDrawCore source assertion in render-mgr.cpp. Reads "
+        "the current Fg render-frame queue through context+0x10960 and passes "
+        "its FgInstance pointer array, FgLodData array and count to "
+        "CullFgLods_Spawn at 0x141661A57.",
+    ),
+    0x141A2C440: (
+        "CullFgLods_Spawn",
+        "Exact CullFgLods::Spawn source assertion in mesh-cull-fg-inl.h. Accepts "
+        "FgInstance**, FgLodData*, count, Scene and ViewFrustum and schedules the "
+        "foreground LOD-culling work consumed by RenderMgr_MainDrawCore.",
+    ),
     0x14197D8C0: (
         "AnimFramePlayback_PublishRetainedFgAnim",
         "Resolves a retained owner through +0x108/+0x110, obtains its FgAnimData "

@@ -7951,3 +7951,59 @@ no synchronous legacy-rifle row although the normal `skip-prepare` marker still
 appears. Because this build is diagnostic and pass-through at the new path, the
 spawn rifle is expected to remain visible; crash or a body/pistol regression
 invalidates the capture.
+
+### 2026-07-22 RUNTIME: `gq` selects S3; preparation is not final admission
+
+The user again saw the rifle attached to the local Nadine hand. Both copies
+loaded `gq` without a crash. Role B emitted 14 exact worker
+`action=skip-prepare` rows over successive published generations, but the new
+synchronous relay emitted zero `action=sync-prepare` rows in either process.
+This is the written S3 outcome: the retained animation-playback path at
+`0x14197DC54` does not submit either the current or a pre-publication
+legacy-Nadine rifle in this scene. S1 and S2 are REJECTED.
+
+The remaining raw xref at `0x14181C102` is not another live caller. Retail
+disassembly identifies a leaf block at `0x14181C0D0` which loads the global
+FgInstance pool and tail-jumps to `PrepareInstanceForRendering`, but a complete
+retail rel32/address-taker scan finds no call, jump or LEA to that leaf block.
+The only reachable direct sites remain the instrumented worker call
+`0x14181B925` and the observed-zero synchronous call `0x14197DC54`.
+
+### 2026-07-22 STATIC: final `CullFgLods` queue discriminator (`gr`)
+
+The final queue has now been traced instead of inferred. First,
+`FgDrawManager_PrepareInstanceForRendering` increments the producer count at
+render-frame queue `+0x30`, stores each admitted `FgInstance*` in the pointer
+array at queue `+0x8`, and writes its corresponding 176/224-byte render records.
+Second, frame handoff copies the producer count into queue `+0`; the allocation
+and frame-begin paths both use the same render context pointer at `+0x10960`.
+Third, exact source strings bind `RenderMgr::MainDrawCore 0x141661960` and
+`CullFgLods::Spawn 0x141A2C440`: the direct call at `0x141661A57` passes
+`queue+0x8`, `queue+0x18`, `queue+0`, Scene and ViewFrustum to the LOD culler.
+This supplies independent producer dataflow, frame-lifetime dataflow, and exact
+source/callsite identity.
+
+Competing explanations are bounded at that consumer. R1 predicts at least one
+exact target LOD pointer in the cull queue despite the worker skip and inactive
+bytes, proving a stale or independently republished queue entry. R2 predicts no
+exact pointer but another queued instance with the same runtime owner id or one
+of the exact rifle `FgGeometry*` values, proving that the current pointer census
+missed an alternate instance. R3 predicts zero exact, owner-id and geometry
+matches while the rifle remains visible, proving that the visible object is not
+coming through this standard `CullFgLods` submission and reopening a separate
+view/child-render path rather than another DrawControl write.
+
+Build `gr` keeps the already-visible `gp/go` suppression in place and adds one
+checked E8 relay at `0x141661A57`. For at most six consumer calls per published
+rifle generation it reads the final queue before calling untouched
+`CullFgLods::Spawn`, compares every bounded entry against the exact target LOD
+pointers, runtime owner id and resolved geometry pointers, then logs
+`NADINE-RIFLE-CULL-QUEUE`. It writes no queue, instance, weapon, transform or
+visibility state.
+
+**Falsifiable `gr` prediction:** both copies load marker `2026-07-22gr` and the
+CullFgLods relay. Role B emits bounded queue rows. A nonzero `targetMask` selects
+R1; `targetMask=0` with nonzero `ownerHits` or `geometryHits` selects R2; all
+three zero while the rifle remains in the hand selects R3. Missing role-B rows,
+an unreadable/implausible queue, crash, body loss or a new pistol regression
+invalidates the capture.
