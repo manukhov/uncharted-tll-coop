@@ -14221,7 +14221,7 @@ void ensure_legacy_nadine_attach_points_game_thread() {
     write_log_line(line.str().c_str());
 }
 
-void reconcile_legacy_nadine_inactive_weapons_game_thread(
+void reconcile_legacy_nadine_inactive_rifle_game_thread(
     const coop::StatePacket& peer, void* peer_puppet);
 
 void apply_peer_held_weapon_state() {
@@ -14229,10 +14229,7 @@ void apply_peer_held_weapon_state() {
     void* puppet = nullptr;
     if (!latest_peer_state(peer, puppet)) return;
     ensure_legacy_nadine_attach_points_game_thread();
-    // Diagnostic build fp: park the proven direct inactive attach while the
-    // native action lifecycle is observed. Its later repair otherwise masks
-    // the ordering boundary that this build needs to distinguish.
-    // reconcile_legacy_nadine_inactive_weapons_game_thread(peer, puppet);
+    reconcile_legacy_nadine_inactive_rifle_game_thread(peer, puppet);
     diagnose_nadine_weapon_membership_game_thread();
     diagnose_weapon_geometry_owners_game_thread();
     diagnose_player_weapon_anim_control_game_thread();
@@ -30212,7 +30209,7 @@ bool claim_nadine_inactive_attach_attempt(
     return true;
 }
 
-void reconcile_legacy_nadine_inactive_weapons_game_thread(
+void reconcile_legacy_nadine_inactive_rifle_game_thread(
     const coop::StatePacket& peer, void* peer_puppet) {
     if (g_original_weapon_attachment_attach_to_owner_point == nullptr) {
         return;
@@ -30223,8 +30220,8 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
         std::uint32_t draw_state = 0xFFFFFFFFu;
         int gun_state = -99;
         ULONGLONG since_ms = 0;
-        std::uint64_t slot_one_holster_generation = 1;
-        bool slot_one_was_active = false;
+        std::uint64_t slot_zero_holster_generation = 1;
+        bool slot_zero_was_active = false;
     };
     static std::array<DwellMemo, 2> dwell_memos{};
 
@@ -30254,7 +30251,7 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
             memo.draw_state = draw_state;
             memo.gun_state = gun_state;
             memo.since_ms = now;
-            memo.slot_one_holster_generation = 1;
+            memo.slot_zero_holster_generation = 1;
         } else if (memo.current_slot != current_slot ||
                    memo.draw_state != draw_state ||
                    memo.gun_state != gun_state) {
@@ -30263,8 +30260,8 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
             memo.gun_state = gun_state;
             memo.since_ms = now;
         }
-        if (current_slot == 1 && draw_state != 0 && draw_state != 5) {
-            memo.slot_one_was_active = true;
+        if (current_slot == 0 && draw_state != 0 && draw_state != 5) {
+            memo.slot_zero_was_active = true;
         }
 
         int active_slot = -1;
@@ -30289,14 +30286,13 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
         if (!state_admitted || now - memo.since_ms < required_dwell_ms) {
             continue;
         }
-        if (memo.slot_one_was_active && active_slot != 1) {
-            ++memo.slot_one_holster_generation;
-            memo.slot_one_was_active = false;
+        if (memo.slot_zero_was_active && active_slot != 0) {
+            ++memo.slot_zero_holster_generation;
+            memo.slot_zero_was_active = false;
         }
 
-        // A peer packet can request slot 1 while its puppet controller is still
-        // briefly at draw=0. Do not race that upcoming hand attach. Slot 1 is
-        // genuinely inactive when the peer is holstered or another slot is out.
+        // A peer packet can request a drawn weapon while its puppet controller
+        // is still briefly at draw=0. Do not race the upcoming hand attach.
         if (player == peer_puppet && active_slot < 0 &&
             (peer.flags & 0x80) != 0) {
             continue;
@@ -30309,21 +30305,18 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
             continue;
         }
 
-        for (int slot = 0; slot < 18; ++slot) {
+        // Slot 0 is the runtime-confirmed rifle. Pistol placement remains on
+        // the separate parked holster investigation and is never touched here.
+        for (int slot = 0; slot < 1; ++slot) {
             if (slot == active_slot) {
                 continue;
             }
             void* const weapon = get_weapon_from_slot(player, slot);
             const std::uint32_t art = weapon_art_id_from_object(weapon);
-            std::uint32_t expected_attach_id = 0;
-            const bool exact_slot_one_handgun = slot == 1 && weapon != nullptr;
-            if (exact_slot_one_handgun) {
-                expected_attach_id = kPistolHolsterAttachId;
-            } else if (art == kCoopRifleArtId) {
-                expected_attach_id = kGunHolsterAttachId;
-            } else {
+            if (art != kCoopRifleArtId) {
                 continue;
             }
+            const std::uint32_t expected_attach_id = kGunHolsterAttachId;
 
             int expected_index = -1;
             if (!seh_find_owner_attach_point(
@@ -30353,15 +30346,18 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
             const bool stale_hand_attachment =
                 pre_index == static_cast<std::uint8_t>(right_hand_index) &&
                 pre_attach_id == 0x61A48E01u;
-            const bool wrong_slot_one_attachment =
-                exact_slot_one_handgun &&
-                pre_attach_id != kPistolHolsterAttachId;
-            if ((!stale_hand_attachment && !wrong_slot_one_attachment) ||
+            // On role B, retained owner 1 is the locally viewed Nadine. Stock
+            // can select gun_holster in +0x688 without refreshing the rendered
+            // attachment, while the role-A observer already sees the world
+            // instance correctly. Replay the same stock attach once per local
+            // holster generation even when the selected id is already right.
+            const bool local_view_refresh =
+                g_net_role_b && owner_index == 1 &&
+                pre_attach_id == expected_attach_id;
+            if ((!stale_hand_attachment && !local_view_refresh) ||
                 !claim_nadine_inactive_attach_attempt(
                     weapon, records_generation, expected_attach_id,
-                    exact_slot_one_handgun
-                        ? memo.slot_one_holster_generation
-                        : 0)) {
+                    memo.slot_zero_holster_generation)) {
                 continue;
             }
 
@@ -30394,10 +30390,8 @@ void reconcile_legacy_nadine_inactive_weapons_game_thread(
                  << " slot=" << slot << " active=" << active_slot
                  << " draw=" << draw_state << " gun=" << gun_state
                  << " dwell=" << (now - memo.since_ms)
-                 << " generation="
-                 << (exact_slot_one_handgun
-                         ? memo.slot_one_holster_generation
-                         : 0)
+                 << " generation=" << memo.slot_zero_holster_generation
+                 << " localViewRefresh=" << (local_view_refresh ? 1 : 0)
                  << " index=" << static_cast<unsigned>(pre_index) << "->"
                  << static_cast<unsigned>(post_index)
                  << " id=0x" << std::hex << pre_attach_id << "->0x"
@@ -35418,8 +35412,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22gk "
-        "(Nadine holster remap/clip counterfactual; no animation mutation)");
+        "TLL co-op runtime init 2026-07-22gl "
+        "(role-B Nadine inactive-rifle attachment refresh; pistol animation unchanged)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

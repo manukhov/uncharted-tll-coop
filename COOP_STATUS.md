@@ -7679,10 +7679,69 @@ snapshot, overlay row, weapon or Player field is written.
 install `legacy-Nadine holster remap lookup probe`. One pistol Put must emit a
 family line with `callerRva`, followed by `NADINE-HOLSTER-REMAP-LOOKUP` with the
 same source/terminal, `mapped=1`, `stockSafe=1`, `legSafe=1` and non-null stock
-clip. Return RVAs `0x18B2945/0x18B295D` select the snapshot path; other paired
+clip. Return RVAs `0x18B2945/0x18B2959` select the snapshot path; other paired
 RVAs identify the actual direct caller without widening admission. A leg id
 changed by the active set selects Hremap; unchanged id plus null `legClip`
 selects Hnull; unchanged id plus non-null `legClip` selects Hvalid-noIK and
 moves the boundary to snapshot weight/reference ownership. Missing chained
 output, unsafe lookup, crash or any visible animation change invalidates the
 probe.
+
+### 2026-07-22 CONFIRMED: `gk` rejects leg remap/lookup failure
+
+Both responsive processes reached the direct snapshot path. Every admitted
+pair reported `resolverCallerRva=0x18B2945` and
+`remapCallerRva=0x18B2959`, confirming the static
+`AnimStateSnapshot_SnapshotAnimState` edge rather than the rejected wrapper
+assumption. On the covered mirror and non-mirror transitions, the active AnimSet
+left each paired leg id unchanged, reused the same lookup keys
+`ED25C708/C39CA709`, and returned a non-null leg clip. Examples include
+`93AB6B11 -> clip 0x105A7B0BD8`, `A67333CE -> 0x105A7BC500`,
+`4A5559F7 -> 0x105A7AF5E0` and `A294A1FA -> 0x105A7BBD00`.
+
+Thus Hremap and Hnull are **RUNTIME REJECTED** for the exact covered Put
+families. Hvalid-noIK is selected: the intended leg clips exist and resolve,
+but the later final holster-IK reducer still has no valid weighted reference.
+Pistol placement work is parked at that snapshot/reference boundary while the
+user-prioritized local rifle defect is handled.
+
+### 2026-07-22 STATIC: role-B local rifle refresh (`gl`)
+
+The user reported an exact view split: after holstering, the rifle remains in
+Nadine's hand on the Nadine-controlled copy, while the Chloe observer already
+sees it removed from the hand. Current `gk` membership telemetry independently
+shows the affected role-B retained owner 1 in a stable holstered state
+(`current=-1, draw=0, hand=-1`) with the exact slot-0 rifle
+`art=8075397D` already selecting index 40 / `gun_holster 555EFB8D`. The visual
+hand pose therefore cannot be repaired by changing inventory slot or selected
+attachment id again; the locally rendered physical attachment is stale after a
+correct selector update.
+
+Three independent facts support a bounded refresh. First, runtime build `fe`
+already confirmed that stock `WeaponAttachment_AttachToOwnerPoint 0x141ED0370`
+moves this exact normal slot-0 rifle out of Nadine's hand. Second, current exact
+pointer membership and selected-id telemetry prove the same ProcessWeapon is
+still involved, not an orphan or duplicate inventory object. Third, static
+decompilation shows that `AttachToOwnerPoint` has no same-id early return: it
+always replaces the parent handle, calls the attachment refresh virtuals,
+selects `weapon+0x688`, and runs the final update virtual. Replaying the same
+`gun_holster` id is therefore a real physical refresh, not a no-op selector
+write.
+
+Build `gl` re-enables the previously parked reconciler as a rifle-only path.
+It never examines or writes pistol slot 1. It skips active slot 0, requires a
+stable admitted `draw=0/2/4` state (or the already proven guarded stuck-state
+case), exact legacy Nadine, exact slot-0 rifle art and an owner-backed
+`gun_holster` record. The old confirmed `rightHand -> gun_holster` repair is
+retained. In addition, only on role B owner 1 it replays the already-selected
+`gun_holster` once per rifle holster generation to refresh the local rendered
+attachment.
+
+**Falsifiable `gl` prediction:** both copies load marker `2026-07-22gl`. On the
+Nadine copy, the initial holstered state or one rifle draw/put cycle emits
+`NADINE-INACTIVE-ATTACH slot=0 localViewRefresh=1 result=0x1 verified=1`, and
+the rifle no longer remains in her hand. Drawing slot 0 must still put it in the
+hand because active slot 0 is excluded. The Chloe observer, pistol, grenade,
+body and weapon animation state must remain unchanged. A zero/unsafe call,
+active-slot refresh, rifle disappearance while drawn, body regression or crash
+rejects the repair.
