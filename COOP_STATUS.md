@@ -5853,43 +5853,6 @@ the helper samples a live native pose rather than bind pose, so any visible
 jitter or sliding is explicitly a falsifier. Release build `2026-07-21fm`
 compiled successfully; runtime verification is pending.
 
-### 2026-07-22 RUNTIME CONFIRMED: Nadine lacks the stock pistol animation point (`fr`)
-
-Processes 17996 and 20372 loaded `fr`, installed both safe code-boundary probes
-and reported `animSafe=111`. They remained stable through repeated pistol/rifle
-Get and Put cycles on both copies; no behavior regression or crash was observed.
-Both processes were closed after the bounded capture.
-
-The executor result rejects action hypotheses A-C. Exact
-`PlayerHolsterWeaponAnimAction` objects (`vtableRva=0x2A46560`, marker
-`0xFA06C342`, layer `0xE2B990B9`) changed `executed=0->1` for both Chloe look
-`0x3F334972` and legacy Nadine look `0xD27C074F` on both process roles. The
-owner-local factory swap emitted no install/factory rows, so absence at that
-late factory subprobe is not admissible evidence; the exact derived executor
-independently proves the action had already been created and dispatched.
-
-The selector sequence isolates the first concrete look difference. Chloe's
-pistol Put changes `rightHand -> targSpineProp 0x00AD047A`, then
-`targSpineProp -> targSpinePropAnim 0xBBACEF13`, then returns to
-`targSpineProp`. Across both Chloe roles, every captured
-`targSpinePropAnim` request changed the record to `0xBBACEF13`. Nadine reaches
-the same executor and can select `targSpineProp`, but every captured pistol
-request for `targSpinePropAnim` left the current id at `0x00AD047A`. Thus the
-legacy look has no selectable stock animation attachment record for that id.
-The rifle control independently selected generic `gun_holster 0x555EFB8D` on
-both looks, matching the user-visible rifle return to the back.
-
-This selects a refined E: the multi-stage stock selector runs, but Nadine's
-pistol animation-point request cannot change the attachment record. The final
-stock Put intentionally selects `targSpineProp`, which is Chloe's back-holster
-destination and explains why Nadine still stores the pistol on her back despite
-having a separate hip-holster record (`0x8A0249B5`, index 41) in the repaired
-owner table. The next fix must map only legacy-Nadine pistol holster animation
-and final Put semantics to that existing hip record. It must distinguish Get
-from Put; globally redirecting every `targSpineProp` request would also alter
-the draw path and is not authorized. The ineffective late factory-pointer probe
-should be removed from the next build.
-
 ### 2026-07-21 CONFIRMED/REJECTED: build `fm` remaps the record, but non-default pistols bypass the reconciler
 
 The user tested multiple pistols in build `fm`; all still holstered at Chloe's
@@ -6367,3 +6330,88 @@ legacy Nadine sequence then selects the same A-E hypotheses written above. Any
 pre-input crash, site/slot mismatch, missing owner factory install, changed
 weapon behavior or non-stock state mutation rejects `fr`. The release DLL
 compiled successfully; runtime verification is pending.
+
+### 2026-07-22 RUNTIME CONFIRMED: Nadine lacks the stock pistol animation point (`fr`)
+
+Processes 17996 and 20372 loaded `fr`, installed both safe code-boundary probes
+and reported `animSafe=111`. They remained stable through repeated pistol/rifle
+Get and Put cycles on both copies; no behavior regression or crash was observed.
+Both processes were closed after the bounded capture.
+
+The executor result rejects action hypotheses A-C. Exact
+`PlayerHolsterWeaponAnimAction` objects (`vtableRva=0x2A46560`, marker
+`0xFA06C342`, layer `0xE2B990B9`) changed `executed=0->1` for both Chloe look
+`0x3F334972` and legacy Nadine look `0xD27C074F` on both process roles. The
+owner-local factory swap emitted no install/factory rows, so absence at that
+late factory subprobe is not admissible evidence; the exact derived executor
+independently proves the action had already been created and dispatched.
+
+The selector sequence isolates the first concrete look difference. Chloe's
+pistol Put changes `rightHand -> targSpineProp 0x00AD047A`, then
+`targSpineProp -> targSpinePropAnim 0xBBACEF13`, then returns to
+`targSpineProp`. Across both Chloe roles, every captured
+`targSpinePropAnim` request changed the record to `0xBBACEF13`. Nadine reaches
+the same executor and can select `targSpineProp`, but every captured pistol
+request for `targSpinePropAnim` left the current id at `0x00AD047A`. Thus the
+legacy look has no selectable stock animation attachment record for that id.
+The rifle control independently selected generic `gun_holster 0x555EFB8D` on
+both looks, matching the user-visible rifle return to the back.
+
+This selects a refined E: the multi-stage stock selector runs, but Nadine's
+pistol animation-point request cannot change the attachment record. The final
+stock Put intentionally selects `targSpineProp`, which is Chloe's back-holster
+destination and explains why Nadine still stores the pistol on her back despite
+having a separate hip-holster record (`0x8A0249B5`, index 41) in the repaired
+owner table. The next fix must map only legacy-Nadine pistol holster animation
+and final Put semantics to that existing hip record. It must distinguish Get
+from Put; globally redirecting every `targSpineProp` request would also alter
+the draw path and is not authorized. The ineffective late factory-pointer probe
+should be removed from the next build.
+
+### 2026-07-22 STATIC: map Nadine pistol Put inside the stock AnimAction (`fs`)
+
+The exact `fr` selector order and the executor dataflow rule out a global
+attachment redirect. `PlayerHolsterWeaponAnimAction_Execute 0x14108A640` first
+requires the selected record id to equal `targSpineProp 0x00AD047A`, then
+explicitly requests and rechecks `targSpinePropAnim 0xBBACEF13`, and only after
+that performs the final controller rebind. Rewriting the first spine request
+would fail the mandatory guard; repairing after Execute is also rejected by the
+earlier runtime observation that the engine overwrites the late repair.
+
+Build `fs` therefore makes two bounded compatibility changes. First, after the
+validated native-Nadine `pistolHolster 0x8A0249B5` record has been remapped to
+the Player's shared `r_upper_leg` joint 5, the repair appends
+`targSpinePropAnim 0xBBACEF13` as an exact transform/joint alias of that hip
+record. This lets the stock animation-point selection and its id check succeed.
+Second, the safe Execute callsite wrapper establishes a thread-local scope only
+for legacy-Nadine's one-shot Put executor. Inside that scope the checked
+ProcessWeapon vtable selector preserves the first `0x00AD047A`, observes the
+`0xBBACEF13` stage, and rewrites only a later `0x00AD047A` request to
+`pistolHolster 0x8A0249B5`. It additionally requires that the selected weapon
+is exactly the owner's slot-1 weapon, covering different pistols without
+depending on one art id. Chloe, slot-0 rifles, grenades, Get and every selector
+call outside the exact executor remain unchanged. The direct inactive repair
+stays disabled.
+
+Independent evidence is: the runtime look asymmetry at the exact selector; the
+executor's three-stage disassembly and mandatory id checks; the already
+validated joint-5 hip record and transform; and the rejected post-action repair
+showing that the intervention must occur inside Execute. Competing hypotheses
+are (H1) alias plus final redirect restores the Put animation path and leaves
+the pistol on the thigh; (H2) all ids become correct but a later transform owner
+still leaves it visually on the back; and (H3) another selector order appears,
+which is a new static lead rather than permission for a broader redirect.
+
+Written prediction for `fs`: both copies start without a pre-input crash and
+report `holsterSafe=11`. Legacy Nadine's repair reports an animation alias with
+the same joint/transform as `pistolHolster`. On pistol Put, the first requested
+AD remains effective AD, BB changes the record to BB, and the later requested
+AD logs `effective=0x8A0249B5`, `redirect=1`, ending on the hip id. Chloe's
+requested/effective ids remain identical; rifle and grenade never redirect.
+The pistol must finish at Nadine's thigh and the previously broken Put/draw
+presentation should improve without body, arm, rifle or grenade regressions.
+Any crash, alias mismatch, missing BB transition, redirect outside slot 1, final
+id other than `0x8A0249B5`, back placement or model damage falsifies H1. The
+ineffective owner-local factory-pointer probe and its runtime offset were
+removed rather than carried into the fix. The release DLL compiled successfully
+with marker `2026-07-22fs`; runtime verification is pending.

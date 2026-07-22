@@ -1689,10 +1689,16 @@ Do not reopen these as the first move:
       `targSpineProp -> targSpinePropAnim -> targSpineProp`; every Nadine
       `targSpinePropAnim 0xBBACEF13` request left the current record at
       `targSpineProp 0x00AD047A`. The final stock spine selection explains the
-      back holster. Next: statically distinguish Get/Put at the selector and map
-      only legacy-Nadine pistol Put/animation semantics to existing hip record
-      `0x8A0249B5` index 41. Remove the ineffective late factory-pointer probe;
-      keep direct repair disabled.
+      back holster. STATIC `fs` now clones the validated joint-5
+      `pistolHolster 0x8A0249B5` record as the missing `targSpinePropAnim`
+      alias, then scopes the checked selector to the exact legacy-Nadine Put
+      executor and slot-1 weapon. It preserves the prerequisite spine request,
+      allows the animation-point request, and redirects only the later/final
+      spine request to the hip record. The ineffective factory pointer probe is
+      removed and direct inactive repair remains disabled. Runtime prediction:
+      `holsterSafe=11`, alias joint/transform equality, AD unchanged then BB,
+      then final `AD -> effective 8A` with `redirect=1`; Chloe, rifle, grenade,
+      Get and body geometry must remain unchanged. Test multiple pistols.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
