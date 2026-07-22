@@ -7425,3 +7425,42 @@ that live state and must not be force-replaced. A successful replacement log wit
 the weapon still settling on the back proves a downstream remap/attachment owner
 still overrides the clip. A crash before any copy/row log points to detour ABI or
 prologue handling rather than to the authored-map hypothesis.
+
+### 2026-07-22 REJECTED: `gf` single idle-row discriminator did not reach its row
+
+The user tested both weapon types after both `gf` processes installed the copy
+and resolver detours successfully. The visible result was unchanged: the rifle
+still occupied the leg/holster location and the pistol still went behind Nadine's
+back. Both games remained responsive and there was no new body or animation
+regression.
+
+The runtime markers separate hook admission from row selection. PID 11968 logged
+legacy-Nadine master-to-local copies for retained owner 0; PID 12256 logged the
+same for retained owner 1. Thus the visual-identity check and master-state
+ownership path both reached the expected local and remote Nadine Players.
+Neither process logged a single `NADINE-HOLSTER-ROW`, so the exact
+`0x8DCA21F2 -> 0x11438F72` replacement was never applied. The claim that this one
+idle-part id alone is sufficient is **REJECTED**. This result does not yet reject
+Hchloemap: the active call may use another member of the authored family, or the
+64-entry append-only tag table may fill with stale track states during repeated
+Player construction before the live holster track is inserted.
+
+The asset comparison was therefore widened without another game run. Campaign
+Chloe has exactly 144 rows whose resolved source names begin with
+`p-holster-chest` or `p-unholster-chest`. `vill-nadine-08` has the same 144 source
+ids. For every pair, the remaining 32 bytes of the 0x28 row are byte-identical;
+only the target differs from a back-family id to the corresponding leg-family
+id. The family includes idle, mirror-idle, stand-aim, cover, ledge and propane
+variants and their add/finish/grab/part components. The first four are:
+
+- `0x6C3F979A`: `p-holster-chest^idle-stand-add`, back `0xEEC390EF`, leg `0x6BE64FB2`;
+- `0x062EC57C`: `idle-stand-finish-add`, back `0x3C68C935`, leg `0x354A9741`;
+- `0x1FB7D7B3`: `idle-stand-finish-part`, back `0xA20325F5`, leg `0xA294A1FA`;
+- `0x8DCA21F2`: `idle-stand-part`, back `0x11438F72`, leg `0x4A5559F7`.
+
+`scripts/psarc_asset_audit.py` now reproduces this comparison directly by
+combining the DC00 rows with names from `actor77.psarc/anim-player-movement.pak`.
+The next runtime must first replace the append-only state list with a bounded
+current-state mapping and log all exact family hits, tagged and untagged. It may
+mutate only a tagged exact source/back pair; absence of every family source will
+then reject this resolver as the live holster selection boundary.

@@ -289,6 +289,122 @@ def inspect_player_mesh_dc00(
     print(f"dc00_player_mesh_objects_shown={shown}")
 
 
+def collect_player_mesh_rows(
+    data: bytes, look_label: str
+) -> list[tuple[int, int, int, bytes]]:
+    """Return (source, target, file offset, remaining row bytes) for one look."""
+
+    if len(data) < 0x20 or data[:4] != b"00CD":
+        raise ValueError("player-mesh comparison requires a DC00 entry")
+    look_id, _ = parse_id(look_label)
+    player_mesh_id = string_id(b"player-mesh")
+    player_id = string_id(b"player")
+    overlay_set_id = string_id(b"anim-overlay-set")
+    object_count = struct.unpack_from("<I", data, 0x14)[0]
+    rows: list[tuple[int, int, int, bytes]] = []
+
+    for index in range(object_count):
+        index_offset = 0x20 + index * 0x10
+        _object_id, type_id, record_offset, _reserved = struct.unpack_from(
+            "<IIII", data, index_offset
+        )
+        if record_offset + 0x30 > len(data):
+            raise ValueError(f"DC00 object {index} has an invalid record offset")
+        table_offset = struct.unpack_from("<Q", data, record_offset)[0]
+        table_count, object_kind, _record_object_id, owner_id, record_look_id = (
+            struct.unpack_from("<IIIII", data, record_offset + 8)
+        )
+        record_type = struct.unpack_from("<I", data, record_offset + 0x2C)[0]
+        if (
+            type_id != overlay_set_id
+            or record_type != overlay_set_id
+            or object_kind != player_mesh_id
+            or owner_id != player_id
+            or record_look_id != look_id
+        ):
+            continue
+        table_end = table_offset + table_count * 0x28
+        if table_offset > len(data) or table_end > len(data):
+            raise ValueError(f"DC00 object {index} has an invalid overlay table")
+        for row in range(table_count):
+            row_offset = table_offset + row * 0x28
+            source_id, target_id = struct.unpack_from("<II", data, row_offset)
+            rows.append(
+                (source_id, target_id, row_offset, data[row_offset + 8 : row_offset + 0x28])
+            )
+    return rows
+
+
+def collect_printable_string_ids(
+    data: bytes, min_length: int
+) -> dict[int, list[str]]:
+    """Build a StringId-to-text index from NUL-separated printable asset names."""
+
+    printable = re.compile(rb"[ -~]{%d,}" % max(1, min_length))
+    names: dict[int, list[str]] = {}
+    for match in printable.finditer(data):
+        raw = match.group()
+        text = raw.decode("ascii")
+        names.setdefault(string_id(raw), []).append(text)
+    return names
+
+
+def compare_player_mesh_rows(
+    data: bytes,
+    base_look: str,
+    compare_looks: list[str],
+    known_names: dict[int, list[str]],
+    name_regex: str | None,
+    limit: int,
+) -> None:
+    """Compare one player-mesh table with control looks by exact source id."""
+
+    base_rows = collect_player_mesh_rows(data, base_look)
+    controls = {
+        label: collect_player_mesh_rows(data, label) for label in compare_looks
+    }
+    control_by_source: dict[str, dict[int, list[tuple[int, int, bytes]]]] = {}
+    for label, rows in controls.items():
+        by_source: dict[int, list[tuple[int, int, bytes]]] = {}
+        for source_id, target_id, offset, tail in rows:
+            by_source.setdefault(source_id, []).append((target_id, offset, tail))
+        control_by_source[label] = by_source
+
+    pattern = re.compile(name_regex) if name_regex is not None else None
+    shown = 0
+    matched = 0
+    for source_id, target_id, offset, tail in base_rows:
+        source_name = "|".join(known_names.get(source_id, []))
+        if pattern is not None and not pattern.search(source_name):
+            continue
+        matched += 1
+        if shown >= limit:
+            continue
+        target_name = "|".join(known_names.get(target_id, []))
+        print(
+            f"compare base={base_look!r} source=0x{source_id:08X} "
+            f"source_name={source_name!r} target=0x{target_id:08X} "
+            f"target_name={target_name!r} offset=0x{offset:X}"
+        )
+        for label in compare_looks:
+            hits = control_by_source[label].get(source_id, [])
+            if not hits:
+                print(f"  control={label!r} hits=0")
+                continue
+            for control_target, control_offset, control_tail in hits:
+                control_name = "|".join(known_names.get(control_target, []))
+                print(
+                    f"  control={label!r} target=0x{control_target:08X} "
+                    f"target_name={control_name!r} offset=0x{control_offset:X} "
+                    f"same_tail={int(control_tail == tail)}"
+                )
+        shown += 1
+    print(
+        f"compared_base_rows={len(base_rows)} matched={matched} "
+        f"shown={shown} limit={limit}"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive", type=Path, help="PSARC archive path")
@@ -327,6 +443,26 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="STRING_OR_U32",
         help="print replacement rows for this source id; repeatable",
     )
+    parser.add_argument(
+        "--compare-player-mesh-look",
+        action="append",
+        default=[],
+        metavar="STRING_OR_U32",
+        help="compare the first --player-mesh-look with this control look",
+    )
+    parser.add_argument(
+        "--name-archive",
+        type=Path,
+        help="optional PSARC containing printable animation names",
+    )
+    parser.add_argument(
+        "--name-entry",
+        help="entry in --name-archive used to resolve row StringIds",
+    )
+    parser.add_argument(
+        "--map-name-regex",
+        help="restrict compared rows to resolved source names matching this regex",
+    )
     parser.add_argument("--min-string", type=int, default=3)
     parser.add_argument("--limit", type=int, default=200)
     return parser
@@ -336,6 +472,12 @@ def main() -> int:
     args = build_parser().parse_args()
     if args.map_source and not args.player_mesh_look:
         raise ValueError("--map-source requires at least one --player-mesh-look")
+    if args.compare_player_mesh_look and len(args.player_mesh_look) != 1:
+        raise ValueError(
+            "--compare-player-mesh-look requires exactly one --player-mesh-look"
+        )
+    if (args.name_archive is None) != (args.name_entry is None):
+        raise ValueError("--name-archive and --name-entry must be supplied together")
     archive = Psarc(args.archive.resolve(), args.oodle.resolve() if args.oodle else None)
     print(
         f"archive={archive.path} version=0x{archive.version:X} "
@@ -366,6 +508,28 @@ def main() -> int:
 
     if args.player_mesh_look or args.map_source:
         inspect_player_mesh_dc00(data, args.player_mesh_look, args.map_source)
+
+    if args.compare_player_mesh_look:
+        known_names: dict[int, list[str]] = {}
+        if args.name_archive is not None:
+            name_archive = Psarc(
+                args.name_archive.resolve(),
+                args.oodle.resolve() if args.oodle else None,
+            )
+            name_data = name_archive.extract(args.name_entry)
+            known_names = collect_printable_string_ids(name_data, args.min_string)
+            print(
+                f"name_archive={name_archive.path} name_entry={args.name_entry} "
+                f"name_bytes={len(name_data)} known_name_ids={len(known_names)}"
+            )
+        compare_player_mesh_rows(
+            data,
+            args.player_mesh_look[0],
+            args.compare_player_mesh_look,
+            known_names,
+            args.map_name_regex,
+            args.limit,
+        )
 
     parsed_ids = [parse_id(value) for value in args.id]
     known: dict[int, list[str]] = {}

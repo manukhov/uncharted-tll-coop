@@ -1869,6 +1869,13 @@ Do not reopen these as the first move:
       idle placement first; do not claim transition animation fixed from this
       single source id. Written positive and negative predictions are in
       `COOP_STATUS.md`.
+      Runtime REJECTED the single-row sufficiency claim: both owner-0/owner-1
+      master-copy markers appeared, but no `NADINE-HOLSTER-ROW` marker did and
+      the pistol remained at the back. Static comparison now proves a 144-row
+      chest holster/unholster family with identical row tails and back-only versus
+      leg-only targets for Chloe versus `vill-nadine-08`. Next replace the
+      append-only 64-state tag list with a current bounded mapping and observe
+      every exact family hit (tagged and untagged) before widening mutation.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
