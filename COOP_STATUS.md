@@ -6138,3 +6138,49 @@ The release DLL compiled successfully with marker `2026-07-22fp`. All eight
 new STATIC function names were applied to the single `ida/tll.i64`,
 `save_database returned True`, and MCP lookup verified the saved names. Runtime
 verification is pending.
+
+### 2026-07-22 CONFIRMED/REJECTED: `fp` proves a shared downstream holster gap
+
+The user completed pistol and rifle draw/put-away cycles on both copies. Both
+processes remained alive and the probe installed with `actionLifecycle=1`.
+Processes 18076 and 22204 were closed after log capture.
+
+The action-loss prediction is REJECTED. Exact Get and Put actions were observed
+for both local and retained Players, both Chloe look `0x3F334972` and legacy
+Nadine look `0xD27C074F`, and both standard pistol art `0x33E29A1B` and rifle
+art `0x8075397D`. Every covered action reached native OnStart through a
+sequencer `state=0->1` transition with a valid weapon handle. Get requested
+`s_weapon-grab = 0x28B0F93B`; Put requested
+`s_weapon-holster = 0xDF5B68FC`. Get later changed `state=1->3` in phase 2 and
+Put changed `state=1->3` in phase 0. `WeaponHolster_BuildBinding` rows were also
+present for both looks, independently confirming that both OnStart methods
+passed through `PlayerWeaponHolsterAction_ResolveAndBindAttachPoint`.
+
+The broadened callback prediction also produced a decisive negative result:
+there were zero `NADINE-HOLSTER-EVENT` rows after both `fp` init markers. This
+time owner, weapon validity, event-name validity and art whitelist could not
+suppress a reached row, so `PlayerWeaponAnimControl_HandleNamedWeaponEvent
+0x14108DE30` was genuinely not entered for any retained Player in the tested
+cycles. The earlier claim that a missing callback here specifically explained
+Nadine's broken holster path is therefore REJECTED; the same absence occurs for
+Chloe and Nadine and cannot distinguish the legacy look.
+
+The physical boundary is equally clear. With the direct inactive repair parked,
+the run emitted twelve `NADINE-HOLSTER-ATTACH` rows. Every one selected
+`rightHand = 0x61A48E01` while drawing. There was no final attach to a holster
+point during Put for either look. Thus the native Get path still reaches the
+concrete hand mutation, but the synchronized Put path has no observed physical
+holster mutation. The visual failure is a shared weapon-transition downstream
+gap, not primarily Nadine attachment geometry.
+
+The written expectation that a working Chloe cycle would exercise the named
+event was falsified. Do not force `0x14108DE30`, delay action completion, or
+resume transform/id tuning from this result. The next static task is to audit
+the other PlayerWeaponAnimControl event/state callbacks around vtable
+`+0xD0..+0xE8`, then follow the actual callers of
+`Script_ReattachPlayerWeapon 0x1403421B0` and
+`Script_AttachPlayerWeaponBackToHolster 0x140342EE0` to the concrete state-script
+or action-completion boundary. If the current-state monitor remains ambiguous,
+the next runtime discriminator may read the exact value returned by
+`PlayerWeaponAnimControl_GetCurrentWeaponState 0x14108D080`; it must not invoke
+or overwrite the animation state.

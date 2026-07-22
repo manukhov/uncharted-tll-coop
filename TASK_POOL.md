@@ -1662,6 +1662,15 @@ Do not reopen these as the first move:
       reached bit. Test one Chloe-versus-Nadine draw/put-away cycle and classify
       action-cleared-before-tick, missing sequencer phase, anim-layer failure or
       logger filter suppression from the written prediction in COOP_STATUS.
+      CONFIRMED/REJECTED: both looks and both firearm arts reached Get/Put
+      `state=0->1`, valid binding and requested grab/holster states, then their
+      normal phase monitor changed `1->3`. Zero unfiltered named-event entries
+      proves `0x14108DE30` was not reached for either look, while all twelve
+      physical attach rows were rightHand and none were holster. Reject a
+      Nadine-specific action-loss or this named callback as the discriminator.
+      Audit PlayerWeaponAnimControl vtable `+0xD0..+0xE8` and trace the true
+      state-script callers of ReattachPlayerWeapon/AttachBackToHolster before
+      another runtime build.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
