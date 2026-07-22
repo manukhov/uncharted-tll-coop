@@ -255,6 +255,16 @@ FUNCTIONS = {
         "layer 0x63B48BEE. This is a different layer from WeaponPartial "
         "0xE2B990B9, which supplies the holster-IK hand/leg/back references.",
     ),
+    0x1410973F0: (
+        "PlayerPlayWeaponOverlayAction_GetTypeName",
+        "Returns the exact RTTI/factory name PlayerPlayWeaponOverlayAction.",
+    ),
+    0x141097400: (
+        "PlayerPlayWeaponOverlayAction_Construct",
+        "Constructs the 0x50-byte PlayerPlayWeaponOverlayAction from the shared "
+        "Player weapon-action base, installs vtable 0x142A48828, and stores the "
+        "initial overlay blend scalar at action+0x48.",
+    ),
     0x141097450: (
         "PlayerPlayWeaponOverlayAction_OnStart",
         "RTTI PlayerPlayWeaponOverlayAction vtable +0x10. Resolves the shared "
@@ -269,6 +279,12 @@ FUNCTIONS = {
         "resolves *chloe-weapon-anim-overlay-map* and maps the input animation "
         "StringId through its SortedIdPointerTable. Returns zero when the "
         "feature, skeleton test, named map or key is absent.",
+    ),
+    0x14109D0E0: (
+        "PlayerWeaponController_Construct",
+        "Constructs the PlayerWeaponController, installs vtable 0x142A47F90, "
+        "initializes its weapon-slot records, and clears the two cached overlay "
+        "table handle blocks later searched at controller+0x468/+0x488.",
     ),
     0x14109D650: (
         "PlayerWeaponController_FindWeaponOverlayRecordByAnimId",

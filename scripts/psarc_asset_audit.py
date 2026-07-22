@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only PSARC manifest, StringId, and printable-string inspector.
+"""Read-only PSARC, StringId, DC00 overlay, and printable-string inspector.
 
 The Lost Legacy's gameplay DC and animation archives use Oodle-compressed PSARC
 blocks.  This tool keeps selected entries in memory; it never extracts assets to
@@ -203,6 +203,92 @@ def format_context(
     return "  ".join(parts)
 
 
+def inspect_player_mesh_dc00(
+    data: bytes, look_labels: list[str], source_labels: list[str]
+) -> None:
+    """Print selected player-mesh anim-overlay-set objects from a DC00 entry."""
+
+    if len(data) < 0x20 or data[:4] != b"00CD":
+        raise ValueError("--player-mesh-look requires a DC00 entry")
+
+    object_count = struct.unpack_from("<I", data, 0x14)[0]
+    index_end = 0x20 + object_count * 0x10
+    if index_end > len(data):
+        raise ValueError("truncated DC00 object index")
+
+    wanted_looks = [parse_id(label) for label in look_labels]
+    wanted_sources = [parse_id(label) for label in source_labels]
+    wanted_look_ids = {value for value, _ in wanted_looks}
+    player_mesh_id = string_id(b"player-mesh")
+    player_id = string_id(b"player")
+    overlay_set_id = string_id(b"anim-overlay-set")
+    shown = 0
+    found_look_ids: set[int] = set()
+
+    print(
+        f"dc00_objects={object_count} "
+        f"player_mesh_id=0x{player_mesh_id:08X} "
+        f"overlay_set_id=0x{overlay_set_id:08X}"
+    )
+    for index in range(object_count):
+        index_offset = 0x20 + index * 0x10
+        object_id, type_id, record_offset, reserved = struct.unpack_from(
+            "<IIII", data, index_offset
+        )
+        if record_offset + 0x30 > len(data):
+            raise ValueError(f"DC00 object {index} has an invalid record offset")
+
+        table_offset = struct.unpack_from("<Q", data, record_offset)[0]
+        table_count, object_kind, record_object_id, owner_id, look_id = (
+            struct.unpack_from("<IIIII", data, record_offset + 8)
+        )
+        aux_offset = struct.unpack_from("<Q", data, record_offset + 0x20)[0]
+        record_type = struct.unpack_from("<I", data, record_offset + 0x2C)[0]
+        if (
+            type_id != overlay_set_id
+            or record_type != overlay_set_id
+            or object_kind != player_mesh_id
+            or owner_id != player_id
+        ):
+            continue
+        if wanted_look_ids and look_id not in wanted_look_ids:
+            continue
+
+        labels = [label for value, label in wanted_looks if value == look_id]
+        label_text = "|".join(labels) if labels else "unlabelled"
+        print(
+            f"object[{index}] id=0x{object_id:08X} look=0x{look_id:08X} "
+            f"({label_text}) record=0x{record_offset:X} "
+            f"table=0x{table_offset:X} count={table_count} aux=0x{aux_offset:X} "
+            f"echo=0x{record_object_id:08X} reserved=0x{reserved:08X}"
+        )
+        shown += 1
+        found_look_ids.add(look_id)
+
+        table_end = table_offset + table_count * 0x28
+        if table_offset > len(data) or table_end > len(data):
+            raise ValueError(f"DC00 object {index} has an invalid overlay table")
+        for source_id, source_label in wanted_sources:
+            hits = 0
+            for row in range(table_count):
+                row_offset = table_offset + row * 0x28
+                row_source, row_target = struct.unpack_from("<II", data, row_offset)
+                if row_source == source_id:
+                    print(
+                        f"  map source={source_label!r}/0x{source_id:08X} "
+                        f"row={row} offset=0x{row_offset:X} "
+                        f"target=0x{row_target:08X}"
+                    )
+                    hits += 1
+            if hits == 0:
+                print(f"  map source={source_label!r}/0x{source_id:08X} hits=0")
+
+    for look_id, look_label in wanted_looks:
+        if look_id not in found_look_ids:
+            print(f"look={look_label!r}/0x{look_id:08X} objects=0")
+    print(f"dc00_player_mesh_objects_shown={shown}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive", type=Path, help="PSARC archive path")
@@ -227,6 +313,20 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="REGEX",
         help="print unique printable ASCII strings matching REGEX",
     )
+    parser.add_argument(
+        "--player-mesh-look",
+        action="append",
+        default=[],
+        metavar="STRING_OR_U32",
+        help="inspect this look in a player-mesh DC00 entry; repeatable",
+    )
+    parser.add_argument(
+        "--map-source",
+        action="append",
+        default=[],
+        metavar="STRING_OR_U32",
+        help="print replacement rows for this source id; repeatable",
+    )
     parser.add_argument("--min-string", type=int, default=3)
     parser.add_argument("--limit", type=int, default=200)
     return parser
@@ -234,6 +334,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
+    if args.map_source and not args.player_mesh_look:
+        raise ValueError("--map-source requires at least one --player-mesh-look")
     archive = Psarc(args.archive.resolve(), args.oodle.resolve() if args.oodle else None)
     print(
         f"archive={archive.path} version=0x{archive.version:X} "
@@ -252,12 +354,18 @@ def main() -> int:
         print(f"listed={shown} limit={args.limit}")
 
     if args.entry is None:
-        if args.id or args.strings:
-            raise ValueError("--entry is required with --id or --strings")
+        if args.id or args.strings or args.player_mesh_look or args.map_source:
+            raise ValueError(
+                "--entry is required with --id, --strings, "
+                "--player-mesh-look or --map-source"
+            )
         return 0
 
     data = archive.extract(args.entry)
     print(f"entry={args.entry} bytes={len(data)}")
+
+    if args.player_mesh_look or args.map_source:
+        inspect_player_mesh_dc00(data, args.player_mesh_look, args.map_source)
 
     parsed_ids = [parse_id(value) for value in args.id]
     known: dict[int, list[str]] = {}

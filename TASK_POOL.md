@@ -1828,12 +1828,20 @@ Do not reopen these as the first move:
       `player-mesh-overlays.bin` contains explicit chest->back/leg/waist maps.
       Native helper `0x14109D450` is gated on `chloe-base`, resolves
       `*chloe-weapon-anim-overlay-map*`, and controller vtable `+0x3C0` tests the
-      mapped id before the original. `ge`: valid nonzero leg plus identity basis
-      selects Hmarker; missing/invalid/zero selects Hclip; valid back proves only
-      that the final snapshot lacks leg. For a back result, add one read-only row
-      containing `0x14109D450` input/output, Chloe-base predicate and `+0x3C0`
-      selected record: chest->back selects Hchloemap, no such remap leaves authored
-      Hpoint. No state is mutated.
+      mapped id before the original. The DC00 parser now ties
+      `player-mesh/player/chloe 0x3F334972` specifically to chest->back at
+      `0xDFAB0`, while neither legacy look `0xD27C074F` nor plain `nadine` owns a
+      player-mesh overlay object. Outfit controls prove this is per-look:
+      `vill-nadine-08/10/12` and `fh-chloe-08` map chest->leg, but
+      `vill-nadine-16` maps chest->back. Hchloemap is therefore the leading STATIC
+      selection model for the Chloe-born Player with a Nadine render look.
+      `ge`: valid nonzero leg plus identity basis selects Hmarker;
+      missing/invalid/zero selects Hclip; valid back proves only that the final
+      snapshot lacks leg. Do not assume Put directly reaches `0x14109D450`:
+      `0x1410A3EA0 -> 0x141096BB0` only builds holster-speed knowledge and requests
+      `s_weapon-holster`. First resolve the remaining DC00/named-map load-time or
+      later-action consumer; only then add a bounded read-only map-selection row.
+      No state is mutated.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

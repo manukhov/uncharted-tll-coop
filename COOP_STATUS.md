@@ -7191,3 +7191,58 @@ The PSARC auditor reproduced the state and chest-to-back/leg pairs against the
 installed archives. Six new STATIC names plus the refined extractor comment were
 applied to the single `ida/tll.i64` (`apply_labels OK: 1241 functions, 20 data
 names`; `save_database returned True`) and verified through the restarted MCP.
+
+### 2026-07-22 STATIC: the campaign Chloe DC00 object maps chest holster to back
+
+The `player-mesh-overlays.bin` container is now decoded far enough to replace
+the earlier unowned offset examples with named authored objects. Its `00CD`
+header contains 411 indexed objects. Each relevant 0x30-byte record identifies
+`anim-overlay-set 0x65FA07C0`, `player-mesh 0x675A8F15`, owner
+`player 0xCDE4B742`, one look StringId, and a 0x28-stride replacement table.
+`scripts/psarc_asset_audit.py --player-mesh-look ... --map-source ...` performs
+this parse directly from the compressed PSARC entry and reports absent looks as
+well as matching rows.
+
+The campaign object is exact: object 123 (`0x4C9FB65C`) at record `0x30D8` is
+tagged `player-mesh/player/chloe 0x3F334972`; its table begins at `0xDFA38`, has
+979 rows, and row 3 at `0xDFAB0` maps
+`p-holster-chest^idle-stand-part 0x8DCA21F2` to
+`p-holster-back^idle-stand-part 0x11438F72`. The smaller
+`chloe-srilanka 0x7DA5EF0B` and `chloe-srilanka-noscarf 0x1AF14BC6` objects do
+not contain that source key. Neither the engine StringId for `nadine`
+(`0xC7E2539B`) nor the legacy visual look `0xD27C074F` has a player-mesh object
+in this DC00 at all.
+
+Control objects disprove a character-wide rule and show that the map is
+per-look/per-outfit. `vill-nadine-08`, `vill-nadine-10` and `vill-nadine-12`
+share a table whose chest row maps to leg `0x4A5559F7`; `vill-nadine-16` maps the
+same source to back, while `fh-chloe-08` maps it to leg. Native Nadine also has
+104 `r_leg_holster 0xADD0C871` records in `anim-nadine-npc-dlc.pak`, whereas the
+Player movement pack has 6793 references to Chloe's
+`r_leg_gun_holster 0xE231DB44`. This independently explains why copying the NPC
+skin onto a Player does not import the NPC's authored weapon route.
+
+The current compatibility code makes this mismatch reachable in principle. The
+second Player is born from Chloe's descriptor; the caller-gated appearance swap
+and the later `Player+0x170/+0x190` visual-pair override replace render/look
+identity only and explicitly leave the Player skeleton record untouched. Native
+`PlayerAnimOwner_UsesChloeBaseSkeleton 0x1410EB3E0` therefore remains consistent
+with selecting the hard-coded Chloe map even while the visible raw look is
+`0xD27C074F`. Together with the generic chest state in `anim-player.bin` and the
+exact campaign-Chloe chest-to-back row, **Hchloemap is now the leading STATIC
+selection model**, but not yet a confirmed root cause.
+
+One competing boundary was also eliminated. The actual put-away chain is
+`PlayerWeaponController_StartHolsterTransition 0x1410A3EA0` ->
+`PlayerPutGunAwayAction_OnStart 0x141096BB0`; it builds only a
+`weapon-holster-type-{normal,fast,very-fast,zipline}` knowledge id and requests
+`s_weapon-holster`. It does not directly call
+`PlayerWeaponController_MapChloeBaseWeaponOverlayId 0x14109D450` or controller
+vtable `+0x3C0`. Therefore a missing `0x14109D450` hit during Put would not by
+itself reject Hchloemap: the remaining bridge may be authored-table selection at
+load time or a later overlay action. The next static step is to resolve that
+DC00/named-object consumer before designing another runtime discriminator. No
+game or injection was started in this pass. The exact overlay-action name getter,
+constructor and `PlayerWeaponController_Construct 0x14109D0E0` were added to the
+single IDB (`apply_labels OK: 1244 functions, 20 data names`;
+`save_database returned True`) and verified after restarting MCP.
