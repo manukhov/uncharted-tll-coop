@@ -6052,3 +6052,89 @@ only before that discriminator test so it cannot mask event ordering.
 Both test processes were closed after log capture. IDA MCP remains stopped, the
 release DLL on disk is build `fo`, and the next session should restart MCP for
 static analysis before any new game launch.
+
+### 2026-07-22 STATIC: weapon action loss is now bounded at PlayerMoveSequencer (`fp`)
+
+The previous checkpoint called `sub_142053820` an action-admission boundary.
+That interpretation is corrected. `PlayerMoveSequencer_EnqueueControllerAction
+0x142053820` has no reject predicate or virtual call: it copies the pending tag
+from controller `+0x100` to action `+0x1C` when required, stores the controller
+at action `+0x28`, links the action into the selected intrusive-list channel and
+clears the pending tag. Both `PlayerWeaponController_ApplyWeaponSwitch
+0x1410A28A0` and `PlayerWeaponController_StartHolsterTransition 0x1410A3EA0`
+use channel 1 for their weapon actions. Queue insertion therefore cannot itself
+explain the missing animation.
+
+The real execution boundary is `PlayerMoveSequencer_UpdatePhase 0x142051EC0`.
+The sequencer owns the Player at `+0x18`, channel count at `+0x110` and channel
+lists at `+0x120`. When an action enters with lifecycle state `action+0x18 == 0`,
+the update changes it to 1 and calls vtable `+0x10` OnStart. Phase 0/1/2/3 then
+dispatches vtable `+0x28/+0x30/+0x38/+0x40`; state 2 or 3 is removed through the
+common cleanup path. Independent callers place phase 2 in
+`Player_PostAnimUpdate 0x1410E9210`, phase 3 in
+`Player_PostAnimBlending_Async 0x1410EB6A0`, and phase 0 in `0x140CA4B20`.
+
+The two exact RTTI actions now resolve end to end. `PlayerGetWeaponInHandAction`
+vtable `0x142A485E8` uses `PlayerGetWeaponInHandAction_OnStart 0x141096150` and
+phase-2 monitor `0x141096730`. `PlayerPutGunAwayAction` vtable `0x142A48708`
+uses `PlayerPutGunAwayAction_OnStart 0x141096BB0` and phase-0 monitor
+`0x141096F00`. Both OnStart methods first call
+`PlayerWeaponHolsterAction_ResolveAndBindAttachPoint 0x141095BD0`, which reaches
+`WeaponHolster_BuildBinding`, configures PlayerWeaponAnimControl and stores the
+weapon handle. Only afterwards do they request `s_weapon-holster`/grab/draw and
+mirror/no-weapon variants through `PlayerWeaponAnimControl` vtable `+0x10`, now
+named `PlayerWeaponAnimControl_RequestWeaponState 0x14108C2D0`. That request
+targets exact animation layer `0xE2B990B9` through a selector fast path or a
+direct-fade fallback. Vtable `+0x98`,
+`PlayerWeaponAnimControl_GetCurrentWeaponState 0x14108D080`, supplies the state
+ids that the two action monitors compare before setting lifecycle state 3.
+
+The zero-row named-event result from `fo` is not a callback count. The hook
+address, ABI and native event layout are statically correct, but the logger
+discarded an entry when the weapon handle was invalid/cleared, the event lacked
+a `name`, the owner was outside the retained pair, or the weapon art was not in
+the default pistol/rifle/grenade whitelist. Picked pistol `0x9A07E17F` was
+explicitly outside that whitelist. Thus zero `NADINE-HOLSTER-EVENT` rows alone
+does not prove that `PlayerWeaponAnimControl_HandleNamedWeaponEvent 0x14108DE30`
+was never entered.
+
+Competing explanations are now separated as follows. A rejected enqueue is
+REJECTED by the unconditional list-insertion dataflow. Missing Nadine holster
+joints/records are REJECTED as the primary action-loss cause because both
+OnStart methods reach the binding resolver before the animation layer consumes
+those downstream data. The open candidates are: the retained action is removed
+or replaced before its first sequencer tick; the retained Player sequencer does
+not receive the required phase; OnStart runs but the animation-layer selector
+or authored state fails; or the named-event logger merely hid a real callback.
+RTTI/vtable identity, controller-to-sequencer call graph, direct lifecycle field
+writes and the independent animation-layer/state consumers provide four
+independent evidence types before runtime.
+
+Build `fp` adds one pass-through detour at `0x142051EC0`. It snapshots channel 1
+before and after the original only for retained Players, searches a bounded 16
+nodes for the exact Get/Put vtables, and records lifecycle/tag/flags, controller
+slot/draw state, weapon handle/art and PlayerWeaponAnimControl requested state.
+Rows are deduplicated by the complete lifecycle transition, while one no-action
+row per owner/phase proves that the sequencer itself ran. The named-event hook
+now emits a retained-owner reached row before its old weapon/event/art filters
+can hide the entry. The direct inactive slot-1 attach repair is parked in this
+diagnostic build so it cannot mask native ordering. No action, sequencer or
+animation method is invoked manually and no gameplay state is written by the
+new probe.
+
+Falsifiable prediction for one Chloe-versus-legacy-Nadine draw and put-away
+cycle: working Chloe must show exact Get/Put actions changing `state=0->1` in
+the appropriate sequencer phase, a subsequent binding/animation request, and
+event or completion. If legacy Nadine has no exact action while no-action phase
+rows continue, the action was cleared before the tick. If it shows `0->1`,
+OnStart ran; missing binding then falsifies the old art-filtered binding logger,
+while a nonzero animation request with no reached named-event row selects the
+animation-layer/authored-event boundary. If no lifecycle row at all exists for
+the retained Player, the scheduling-gap candidate wins. Any state mutation
+outside these native before/after transitions, changed weapon behavior, crash,
+or missing Chloe control sequence falsifies probe safety or coverage.
+
+The release DLL compiled successfully with marker `2026-07-22fp`. All eight
+new STATIC function names were applied to the single `ida/tll.i64`,
+`save_database returned True`, and MCP lookup verified the saved names. Runtime
+verification is pending.

@@ -511,6 +511,11 @@ constexpr std::uintptr_t kResolveKnowledgeRegistryEntryByIdRva = 0x1765030;
 // id and offsets, and the final mutation hook proves whether the state-script
 // path reaches the concrete owner attachment operation.
 constexpr std::uintptr_t kPlayerWeaponAnimNamedEventRva = 0x108DE30;
+// Shared Player move-action sequencer. Its phase update owns the first
+// PlayerGetWeaponInHandAction / PlayerPutGunAwayAction vtable dispatch and the
+// later phase-specific checks, so a before/after detour distinguishes a queued
+// action from one that actually reached OnStart without invoking engine code.
+constexpr std::uintptr_t kPlayerMoveSequencerUpdateRva = 0x2051EC0;
 constexpr std::uintptr_t kWeaponHolsterBuildBindingRva = 0x14FE540;
 constexpr std::uintptr_t kWeaponAttachmentAttachToOwnerPointRva = 0x1ED0370;
 // ProcessWeapon vtable +0x410 (0x141515860) directly calls the shared

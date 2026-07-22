@@ -13509,7 +13509,10 @@ void apply_peer_held_weapon_state() {
     void* puppet = nullptr;
     if (!latest_peer_state(peer, puppet)) return;
     ensure_legacy_nadine_attach_points_game_thread();
-    reconcile_legacy_nadine_inactive_weapons_game_thread(peer, puppet);
+    // Diagnostic build fp: park the proven direct inactive attach while the
+    // native action lifecycle is observed. Its later repair otherwise masks
+    // the ordering boundary that this build needs to distinguish.
+    // reconcile_legacy_nadine_inactive_weapons_game_thread(peer, puppet);
     diagnose_nadine_weapon_membership_game_thread();
     diagnose_player_weapon_anim_control_game_thread();
     // Slot MIRROR up front, unconditionally (2026-07-07): this was gated behind
@@ -27483,6 +27486,10 @@ using WeaponAttachmentAttachToOwnerPointFunction =
 
 PlayerWeaponAnimNamedEventFunction
     g_original_player_weapon_anim_named_event = nullptr;
+using PlayerMoveSequencerUpdateFunction =
+    void(__fastcall*)(void*, int);
+PlayerMoveSequencerUpdateFunction
+    g_original_player_move_sequencer_update = nullptr;
 WeaponHolsterBuildBindingFunction
     g_original_weapon_holster_build_binding = nullptr;
 WeaponAttachmentAttachToOwnerPointFunction
@@ -27503,6 +27510,227 @@ int retained_player_index(void* player) {
         return 1;
     }
     return -1;
+}
+
+bool claim_holster_probe_signature(
+    std::array<std::atomic<std::uint64_t>, 192>& seen,
+    std::uint64_t signature);
+bool seh_read_player_look(void* player, std::uint32_t* look_out);
+
+// Read-only lifecycle snapshot for the exact channel-one weapon actions. The
+// common sequencer stores its owner Player at +0x18, its channel count at
+// +0x110, and the intrusive-list table at +0x120. Channel one is where
+// PlayerWeaponController queues both draw and put-away actions.
+struct WeaponActionLifecycleSnapshot {
+    bool readable = false;
+    bool action_present = false;
+    void* player = nullptr;
+    void* action = nullptr;
+    void* controller = nullptr;
+    void* weapon = nullptr;
+    void* anim_control = nullptr;
+    std::uintptr_t action_vtable = 0;
+    std::uint32_t action_state = 0xFFFFFFFFu;
+    std::int32_t action_tag = -1;
+    std::uint32_t action_flags = 0;
+    std::uint32_t action_mode = 0;
+    std::uint32_t action_handle_id = 0;
+    std::int32_t controller_slot = -99;
+    std::uint32_t controller_draw_state = 0xFFFFFFFFu;
+    std::uint32_t anim_requested_state = 0;
+    std::uint32_t anim_handle_id = 0;
+    std::uint32_t weapon_art = 0;
+};
+
+bool seh_capture_weapon_action_lifecycle(
+    void* sequencer, WeaponActionLifecycleSnapshot* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (sequencer == nullptr || g_module == 0) {
+            return false;
+        }
+        auto* const sequencer_bytes = static_cast<std::byte*>(sequencer);
+        output->player = *reinterpret_cast<void**>(sequencer_bytes + 0x18);
+        output->readable = true;
+
+        const std::int32_t channel_count =
+            *reinterpret_cast<const std::int32_t*>(sequencer_bytes + 0x110);
+        auto* const lists = *reinterpret_cast<std::byte**>(
+            sequencer_bytes + 0x120);
+        if (channel_count <= 1 || channel_count > 32 || lists == nullptr) {
+            return true;
+        }
+
+        auto* node = *reinterpret_cast<std::byte**>(lists + 0x10);
+        auto* const sentinel = lists + 0x8;
+        for (std::size_t index = 0;
+             node != nullptr && node != sentinel && index < 16;
+             ++index) {
+            const std::uintptr_t vtable =
+                *reinterpret_cast<const std::uintptr_t*>(node);
+            if (vtable == g_module + 0x2A485E8 ||
+                vtable == g_module + 0x2A48708) {
+                output->action_present = true;
+                output->action = node;
+                output->action_vtable = vtable;
+                output->action_state =
+                    *reinterpret_cast<const std::uint32_t*>(node + 0x18);
+                output->action_tag =
+                    *reinterpret_cast<const std::int32_t*>(node + 0x1C);
+                output->action_flags =
+                    *reinterpret_cast<const std::uint32_t*>(node + 0x24);
+                output->controller =
+                    *reinterpret_cast<void**>(node + 0x28);
+                output->action_mode =
+                    *reinterpret_cast<const std::uint32_t*>(node + 0x48);
+                void* const handle = *reinterpret_cast<void**>(node + 0x30);
+                output->action_handle_id =
+                    *reinterpret_cast<const std::uint32_t*>(node + 0x38);
+                if (handle != nullptr && output->action_handle_id != 0) {
+                    void* const weapon = *reinterpret_cast<void**>(
+                        static_cast<std::byte*>(handle) + 0x8);
+                    if (weapon != nullptr &&
+                        *reinterpret_cast<const std::uint32_t*>(
+                            static_cast<std::byte*>(weapon) +
+                            kGameObjectRuntimeIdOffset) ==
+                            output->action_handle_id) {
+                        output->weapon = weapon;
+                    }
+                }
+                break;
+            }
+            node = *reinterpret_cast<std::byte**>(node + 0x8);
+        }
+
+        if (!output->action_present) {
+            return true;
+        }
+        auto* const controller_bytes =
+            static_cast<std::byte*>(output->controller);
+        if (controller_bytes != nullptr) {
+            output->controller_slot =
+                *reinterpret_cast<const std::int32_t*>(
+                    controller_bytes + kWeaponCtrlCurrentSlotOffset);
+            output->controller_draw_state =
+                *reinterpret_cast<const std::uint32_t*>(
+                    controller_bytes + kWeaponCtrlDrawStateOffset);
+        }
+        auto* const player_bytes = static_cast<std::byte*>(output->player);
+        if (player_bytes != nullptr) {
+            output->anim_control =
+                *reinterpret_cast<void**>(player_bytes + 0x1DF0);
+        }
+        auto* const control_bytes =
+            static_cast<std::byte*>(output->anim_control);
+        if (control_bytes != nullptr &&
+            *reinterpret_cast<const std::uintptr_t*>(control_bytes) ==
+                g_module + 0x2A46778) {
+            output->anim_requested_state =
+                *reinterpret_cast<const std::uint32_t*>(
+                    control_bytes + 0x18);
+            output->anim_handle_id =
+                *reinterpret_cast<const std::uint32_t*>(
+                    control_bytes + 0x38);
+        }
+        output->weapon_art = weapon_art_id_from_object(output->weapon);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+const char* weapon_action_kind(
+    const WeaponActionLifecycleSnapshot& snapshot) {
+    if (snapshot.action_vtable == g_module + 0x2A485E8) {
+        return "get";
+    }
+    if (snapshot.action_vtable == g_module + 0x2A48708) {
+        return "put";
+    }
+    return "none";
+}
+
+void __fastcall hooked_player_move_sequencer_update(
+    void* sequencer, int phase) {
+    WeaponActionLifecycleSnapshot before{};
+    seh_capture_weapon_action_lifecycle(sequencer, &before);
+    const int before_owner = retained_player_index(before.player);
+
+    if (g_original_player_move_sequencer_update != nullptr) {
+        g_original_player_move_sequencer_update(sequencer, phase);
+    }
+
+    WeaponActionLifecycleSnapshot after{};
+    seh_capture_weapon_action_lifecycle(sequencer, &after);
+    const int after_owner = retained_player_index(after.player);
+    const int owner = before_owner >= 0 ? before_owner : after_owner;
+    if (owner < 0) {
+        return;
+    }
+
+    // One row per distinct lifecycle state is enough to prove whether the
+    // retained Player's sequencer ran without flooding the per-frame log.
+    std::uint64_t signature = 1469598103934665603ULL;
+    auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(static_cast<std::uint32_t>(owner));
+    mix(static_cast<std::uint32_t>(phase));
+    mix(reinterpret_cast<std::uintptr_t>(before.action));
+    mix(before.action_state);
+    mix(before.anim_requested_state);
+    mix(reinterpret_cast<std::uintptr_t>(after.action));
+    mix(after.action_state);
+    mix(after.anim_requested_state);
+    static std::array<std::atomic<std::uint64_t>, 192> seen{};
+    if (!claim_holster_probe_signature(seen, signature)) {
+        return;
+    }
+
+    std::uint32_t look = 0;
+    const bool look_valid = seh_read_player_look(
+        before.player != nullptr ? before.player : after.player, &look);
+    std::ostringstream line;
+    line << "WEAPON-ACTION-LIFECYCLE owner=" << owner
+         << " phase=" << phase
+         << " look=0x" << std::hex << look
+         << " sequencer=0x" << reinterpret_cast<std::uintptr_t>(sequencer)
+         << " action=0x" << reinterpret_cast<std::uintptr_t>(before.action)
+         << "->0x" << reinterpret_cast<std::uintptr_t>(after.action)
+         << " vtable=0x" << before.action_vtable
+         << "->0x" << after.action_vtable
+         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(before.weapon)
+         << "->0x" << reinterpret_cast<std::uintptr_t>(after.weapon)
+         << " art=0x" << before.weapon_art << "->0x" << after.weapon_art
+         << " handle=0x" << before.action_handle_id
+         << "->0x" << after.action_handle_id
+         << " anim=0x" << before.anim_requested_state
+         << "->0x" << after.anim_requested_state
+         << " animHandle=0x" << before.anim_handle_id
+         << "->0x" << after.anim_handle_id << std::dec
+         << " kind=" << weapon_action_kind(before)
+         << "->" << weapon_action_kind(after)
+         << " state=" << before.action_state
+         << "->" << after.action_state
+         << " tag=" << before.action_tag << "->" << after.action_tag
+         << " flags=" << before.action_flags
+         << "->" << after.action_flags
+         << " mode=" << before.action_mode << "->" << after.action_mode
+         << " slot=" << before.controller_slot
+         << "->" << after.controller_slot
+         << " draw=" << before.controller_draw_state
+         << "->" << after.controller_draw_state
+         << " present=" << (before.action_present ? 1 : 0)
+         << "->" << (after.action_present ? 1 : 0)
+         << " readable=" << (before.readable ? 1 : 0)
+         << "->" << (after.readable ? 1 : 0)
+         << " lookValid=" << (look_valid ? 1 : 0);
+    write_log_line(line.str().c_str());
 }
 
 bool seh_is_exact_nadine_buddy(void* object) {
@@ -28224,7 +28452,10 @@ void __fastcall hooked_player_weapon_anim_named_event(
         g_original_player_weapon_anim_named_event(control, event);
     }
 
-    if (owner_index < 0 || !relevant_holster_probe_art(art) || !event_valid) {
+    // This hook is also the reached-bit for the native callback. Do not let an
+    // invalid/cleared handle, an unnamed event, or a picked-up weapon art turn
+    // a real entry into a false "zero calls" result.
+    if (owner_index < 0) {
         return;
     }
     std::uint64_t signature = 1469598103934665603ULL;
@@ -28233,8 +28464,10 @@ void __fastcall hooked_player_weapon_anim_named_event(
         signature *= 1099511628211ULL;
     };
     mix(reinterpret_cast<std::uintptr_t>(player));
+    mix(reinterpret_cast<std::uintptr_t>(control));
     mix(reinterpret_cast<std::uintptr_t>(weapon));
     mix(event_id);
+    mix(event_valid ? 1 : 0);
     static std::array<std::atomic<std::uint64_t>, 192> seen{};
     if (!claim_holster_probe_signature(seen, signature)) {
         return;
@@ -28249,6 +28482,9 @@ void __fastcall hooked_player_weapon_anim_named_event(
          << "/0x" << handle_id << " art=0x" << art
          << " event=0x" << event_id << std::dec
          << " reparent=" << (event_id == 0x9E2D6552u ? 1 : 0)
+         << " entry=1"
+         << " eventValid=" << (event_valid ? 1 : 0)
+         << " relevantArt=" << (relevant_holster_probe_art(art) ? 1 : 0)
          << " weaponValid=" << (weapon_valid ? 1 : 0)
          << " lookValid=" << (look_valid ? 1 : 0);
     write_log_line(line.str().c_str());
@@ -29207,6 +29443,10 @@ bool install_nadine_holster_final_boundary_probe() {
         0x4C, 0x8B, 0xDC, 0x49, 0x89, 0x5B, 0x18, 0x49, 0x89, 0x7B,
         0x20, 0x55, 0x49, 0x8D, 0xAB, 0x98, 0xFC, 0xFF, 0xFF,
     };
+    constexpr std::array<std::uint8_t, 16> kMoveSequencerUpdatePrologue{
+        0x40, 0x55, 0x41, 0x54, 0x41, 0x56, 0x41, 0x57,
+        0x48, 0x83, 0xEC, 0x38, 0x48, 0x8B, 0x69, 0x18,
+    };
     constexpr std::array<std::uint8_t, 20> kBuildBindingPrologue{
         0x40, 0x55, 0x56, 0x57, 0x48, 0x81, 0xEC, 0x40, 0x04, 0x00,
         0x00, 0x48, 0xC7, 0x44, 0x24, 0x28, 0xFE, 0xFF, 0xFF, 0xFF,
@@ -29225,6 +29465,15 @@ bool install_nadine_holster_final_boundary_probe() {
                 reinterpret_cast<void*>(
                     &hooked_player_weapon_anim_named_event),
                 "Nadine holster named-event probe"));
+    g_original_player_move_sequencer_update =
+        reinterpret_cast<PlayerMoveSequencerUpdateFunction>(
+            install_fire_gate_detour(
+                kPlayerMoveSequencerUpdateRva,
+                kMoveSequencerUpdatePrologue.data(),
+                kMoveSequencerUpdatePrologue.size(),
+                reinterpret_cast<void*>(
+                    &hooked_player_move_sequencer_update),
+                "Nadine weapon-action lifecycle probe"));
     g_original_weapon_holster_build_binding =
         reinterpret_cast<WeaponHolsterBuildBindingFunction>(
             install_fire_gate_detour(
@@ -29243,6 +29492,7 @@ bool install_nadine_holster_final_boundary_probe() {
                 "Nadine holster final-attach probe"));
 
     const bool installed = g_original_player_weapon_anim_named_event != nullptr &&
+        g_original_player_move_sequencer_update != nullptr &&
         g_original_weapon_holster_build_binding != nullptr &&
         g_original_weapon_attachment_attach_to_owner_point != nullptr;
     std::ostringstream line;
@@ -29253,7 +29503,9 @@ bool install_nadine_holster_final_boundary_probe() {
          << " leg=0x" << g_gun_holster_leg_id
          << " pelvis=0x" << g_gun_holster_pelvis_id
          << " rLegJoint=0x" << g_r_leg_gun_holster_joint_name_id
-         << " rUpperLeg=0x" << g_r_upper_leg_joint_name_id;
+         << " rUpperLeg=0x" << g_r_upper_leg_joint_name_id
+         << " actionLifecycle="
+         << (g_original_player_move_sequencer_update != nullptr ? 1 : 0);
     boot_log_line(line.str().c_str());
     return installed;
 }
@@ -32218,8 +32470,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-21fo "
-        "(Nadine slot-one inactive holster recovery)");
+        "TLL co-op runtime init 2026-07-22fp "
+        "(Nadine weapon-action lifecycle discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

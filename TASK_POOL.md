@@ -1652,7 +1652,16 @@ Do not reopen these as the first move:
       working Chloe cycle with legacy Nadine from ApplyWeaponSwitch through
       PlayerPutGunAwayAction / PlayerGetWeaponInHandAction, `sub_142053820`, the
       animation layer and named-event dispatch `0x14108DE30`. Disable the direct
-      inactive repair before the next discriminator runtime test.
+      inactive repair before the next discriminator runtime test. STATIC
+      correction: `PlayerMoveSequencer_EnqueueControllerAction 0x142053820` is
+      unconditional queue insertion, not an admission predicate. Real OnStart
+      is owned by `PlayerMoveSequencer_UpdatePhase 0x142051EC0`, which changes
+      action state `0->1`, invokes vt+0x10 and later phase-specific monitors.
+      Build `fp` parks the inactive repair and adds a bounded before/after
+      channel-1 lifecycle probe plus an unfiltered retained-owner named-event
+      reached bit. Test one Chloe-versus-Nadine draw/put-away cycle and classify
+      action-cleared-before-tick, missing sequencer phase, anim-layer failure or
+      logger filter suppression from the written prediction in COOP_STATUS.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

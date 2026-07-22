@@ -8100,6 +8100,60 @@ FUNCTIONS = {
         "PlayerWeaponController vtable +0xE0. This is a shield-specific query, "
         "not a generic screen-active or weapon-ready predicate.",
     ),
+    0x142053820: (
+        "PlayerMoveSequencer_EnqueueControllerAction",
+        "Unconditionally links the supplied action into the requested "
+        "PlayerMoveSequencer channel, copies controller+0x100 into "
+        "action+0x1C when needed, stores the controller at action+0x28, and "
+        "clears controller+0x100. This is queue insertion, not an admission "
+        "predicate.",
+    ),
+    0x142051EC0: (
+        "PlayerMoveSequencer_UpdatePhase",
+        "Ticks every enabled action channel for phase 0..3. An action at "
+        "+0x18 state 0 is changed to 1 before vtable+0x10 OnStart; later it "
+        "dispatches vtable+0x28/+0x30/+0x38/+0x40 and removes state 2/3 "
+        "actions through PlayerMoveSequencer cleanup.",
+    ),
+    0x141096150: (
+        "PlayerGetWeaponInHandAction_OnStart",
+        "PlayerGetWeaponInHandAction vtable +0x10. Resolves and binds the "
+        "weapon holster descriptor, derives s_weapon-holster state variants, "
+        "then requests the state through PlayerWeaponAnimControl vtable +0x10.",
+    ),
+    0x141096730: (
+        "PlayerGetWeaponInHandAction_PostAnimUpdate",
+        "PlayerGetWeaponInHandAction vtable +0x38, dispatched in sequencer "
+        "phase 2. Compares PlayerWeaponAnimControl current state with the "
+        "expected holster/no-mirror variants and sets action+0x18 to 3 on a "
+        "mismatch or completed auto state.",
+    ),
+    0x141096BB0: (
+        "PlayerPutGunAwayAction_OnStart",
+        "PlayerPutGunAwayAction vtable +0x10. Resolves and binds the weapon "
+        "holster descriptor, selects s_weapon-holster or no-weapon state from "
+        "the current animation state, then requests it through "
+        "PlayerWeaponAnimControl vtable +0x10.",
+    ),
+    0x141096F00: (
+        "PlayerPutGunAwayAction_PreAnimUpdate",
+        "PlayerPutGunAwayAction vtable +0x28, dispatched in sequencer phase 0. "
+        "Compares the current animation state against s_weapon-holster and "
+        "s_weapon-holster^no-weapon variants and sets action+0x18 to 3 on "
+        "mismatch.",
+    ),
+    0x14108C2D0: (
+        "PlayerWeaponAnimControl_RequestWeaponState",
+        "PlayerWeaponAnimControl vtable +0x10. Requests a weapon state on the "
+        "exact 0xE2B990B9 animation layer through a selector fast path or the "
+        "direct-fade fallback, and records the requested state at control+0x18.",
+    ),
+    0x14108D080: (
+        "PlayerWeaponAnimControl_GetCurrentWeaponState",
+        "PlayerWeaponAnimControl vtable +0x98. Reads the active state id from "
+        "animation layer 0xE2B990B9 and returns zero when that layer/state is "
+        "not currently available.",
+    ),
 }
 
 # Data/global names (set via ida_name on data addresses).
