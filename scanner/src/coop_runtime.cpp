@@ -28501,8 +28501,6 @@ bool seh_read_player_look(void* player, std::uint32_t* look_out) {
 using AnimOverlayStateResolveAnimationIdFunction =
     std::uint32_t*(__fastcall*)(
         void*, std::uint32_t*, std::uint32_t, std::uint8_t);
-using AnimationDatabaseResolveClipWithOverlaysFunction =
-    void*(__fastcall*)(void*, void**, std::uint32_t);
 using AnimSetRemapResolveAnimationIdFunction =
     std::uint32_t*(__fastcall*)(void*, std::uint32_t*, std::uint32_t);
 using AnimationDatabaseResolveClipFunction =
@@ -28511,8 +28509,8 @@ using AnimationDatabaseResolveClipFunction =
 
 AnimOverlayStateResolveAnimationIdFunction
     g_original_anim_overlay_state_resolve_animation_id = nullptr;
-AnimationDatabaseResolveClipWithOverlaysFunction
-    g_original_animation_database_resolve_clip_with_overlays = nullptr;
+AnimSetRemapResolveAnimationIdFunction
+    g_original_anim_set_remap_resolve_animation_id = nullptr;
 
 struct HolsterClipLookupProbeContext {
     bool active = false;
@@ -28522,6 +28520,7 @@ struct HolsterClipLookupProbeContext {
     void* state = nullptr;
     std::uint32_t source = 0;
     std::uint32_t overlay_terminal = 0;
+    std::uintptr_t resolver_caller_rva = 0;
 };
 
 thread_local HolsterClipLookupProbeContext
@@ -28761,6 +28760,11 @@ const HolsterOverlayReplacement* find_holster_overlay_replacement(
 std::uint32_t* __fastcall hooked_anim_overlay_state_resolve_animation_id(
     void* state, std::uint32_t* output, std::uint32_t input,
     std::uint8_t select_variant) {
+    const std::uintptr_t return_address =
+        reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const std::uintptr_t caller_rva = return_address >= g_module
+        ? return_address - g_module
+        : return_address;
     std::uint32_t* const result =
         g_original_anim_overlay_state_resolve_animation_id != nullptr
         ? g_original_anim_overlay_state_resolve_animation_id(
@@ -28779,11 +28783,17 @@ std::uint32_t* __fastcall hooked_anim_overlay_state_resolve_animation_id(
     void* player = nullptr;
     const bool master = seh_classify_legacy_nadine_master_overlay_state(
         state, &owner_index, &player);
-    if (g_holster_clip_lookup_probe_context.active &&
-        g_holster_clip_lookup_probe_context.state == state &&
-        g_holster_clip_lookup_probe_context.source == input) {
+    if (master &&
+        (input == 0x8DCA21F2u || input == 0x1FB7D7B3u)) {
+        g_holster_clip_lookup_probe_context = {};
+        g_holster_clip_lookup_probe_context.active = true;
+        g_holster_clip_lookup_probe_context.owner_index = owner_index;
+        g_holster_clip_lookup_probe_context.player = player;
+        g_holster_clip_lookup_probe_context.state = state;
+        g_holster_clip_lookup_probe_context.source = input;
         g_holster_clip_lookup_probe_context.overlay_seen = true;
         g_holster_clip_lookup_probe_context.overlay_terminal = authored_output;
+        g_holster_clip_lookup_probe_context.resolver_caller_rva = caller_rva;
     }
     const bool exact_back = replacement->chloe_back == authored_output;
     static std::atomic<std::uint32_t> logged{0};
@@ -28801,28 +28811,11 @@ std::uint32_t* __fastcall hooked_anim_overlay_state_resolve_animation_id(
              << " player=0x" << std::hex
              << reinterpret_cast<std::uintptr_t>(player) << std::dec
              << " exactBack=" << (exact_back ? 1 : 0)
-             << " variant=" << static_cast<unsigned>(select_variant);
+             << " variant=" << static_cast<unsigned>(select_variant)
+             << " callerRva=0x" << std::hex << caller_rva << std::dec;
         write_log_line(line.str().c_str());
     }
     return result;
-}
-
-bool seh_read_overlay_state_ref(void** state_ref, void** state_out) {
-    if (state_out != nullptr) {
-        *state_out = nullptr;
-    }
-    __try {
-        if (state_ref == nullptr || state_out == nullptr) {
-            return false;
-        }
-        *state_out = *state_ref;
-        return *state_out != nullptr;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        if (state_out != nullptr) {
-            *state_out = nullptr;
-        }
-        return false;
-    }
 }
 
 bool find_idle_holster_leg_terminal(
@@ -28871,8 +28864,10 @@ HolsterClipCounterfactualResult seh_resolve_holster_clip_counterfactual(
             return result;
         }
         auto* const remap =
-            reinterpret_cast<AnimSetRemapResolveAnimationIdFunction>(
-                g_module + kAnimSetRemapResolveAnimationIdRva);
+            g_original_anim_set_remap_resolve_animation_id != nullptr
+            ? g_original_anim_set_remap_resolve_animation_id
+            : reinterpret_cast<AnimSetRemapResolveAnimationIdFunction>(
+                  g_module + kAnimSetRemapResolveAnimationIdRva);
         auto* const resolve_clip =
             reinterpret_cast<AnimationDatabaseResolveClipFunction>(
                 g_module + kAnimationDatabaseResolveClipRva);
@@ -28890,42 +28885,55 @@ HolsterClipCounterfactualResult seh_resolve_holster_clip_counterfactual(
     return result;
 }
 
-void* __fastcall hooked_animation_database_resolve_clip_with_overlays(
-    void* animation_set, void** overlay_state_ref, std::uint32_t input) {
-    const HolsterClipLookupProbeContext previous_context =
+HolsterClipCounterfactualResult seh_lookup_resolved_holster_clip(
+    const std::uint32_t* resolved) {
+    HolsterClipCounterfactualResult result{};
+    __try {
+        if (resolved == nullptr) {
+            return result;
+        }
+        auto* const resolve_clip =
+            reinterpret_cast<AnimationDatabaseResolveClipFunction>(
+                g_module + kAnimationDatabaseResolveClipRva);
+        result.remapped_id = resolved[0];
+        result.lookup_key_1 = resolved[1];
+        result.lookup_key_2 = resolved[2];
+        result.clip = resolve_clip(
+            resolved[1], resolved[2], resolved[0], 1);
+        result.safe = true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        result = {};
+    }
+    return result;
+}
+
+std::uint32_t* __fastcall hooked_anim_set_remap_resolve_animation_id(
+    void* animation_set, std::uint32_t* output, std::uint32_t input) {
+    const std::uintptr_t return_address =
+        reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const std::uintptr_t remap_caller_rva = return_address >= g_module
+        ? return_address - g_module
+        : return_address;
+    const HolsterClipLookupProbeContext context =
         g_holster_clip_lookup_probe_context;
     g_holster_clip_lookup_probe_context = {};
 
-    void* state = nullptr;
-    int owner_index = -1;
-    void* player = nullptr;
-    const bool candidate =
-        (input == 0x8DCA21F2u || input == 0x1FB7D7B3u) &&
-        seh_read_overlay_state_ref(overlay_state_ref, &state) &&
-        seh_classify_legacy_nadine_master_overlay_state(
-            state, &owner_index, &player);
-    if (candidate) {
-        g_holster_clip_lookup_probe_context.active = true;
-        g_holster_clip_lookup_probe_context.owner_index = owner_index;
-        g_holster_clip_lookup_probe_context.player = player;
-        g_holster_clip_lookup_probe_context.state = state;
-        g_holster_clip_lookup_probe_context.source = input;
-    }
+    std::uint32_t* const result =
+        g_original_anim_set_remap_resolve_animation_id != nullptr
+        ? g_original_anim_set_remap_resolve_animation_id(
+              animation_set, output, input)
+        : output;
 
-    void* const stock_clip =
-        g_original_animation_database_resolve_clip_with_overlays != nullptr
-        ? g_original_animation_database_resolve_clip_with_overlays(
-              animation_set, overlay_state_ref, input)
-        : nullptr;
-
-    if (candidate) {
+    if (context.active && input == context.overlay_terminal) {
         std::uint32_t leg_terminal = 0;
         const bool mapped =
-            g_holster_clip_lookup_probe_context.overlay_seen &&
+            context.overlay_seen &&
             find_idle_holster_leg_terminal(
-                input,
-                g_holster_clip_lookup_probe_context.overlay_terminal,
+                context.source,
+                context.overlay_terminal,
                 &leg_terminal);
+        const HolsterClipCounterfactualResult stock_result =
+            seh_lookup_resolved_holster_clip(output);
         HolsterClipCounterfactualResult leg_result{};
         if (mapped) {
             leg_result = seh_resolve_holster_clip_counterfactual(
@@ -28934,55 +28942,61 @@ void* __fastcall hooked_animation_database_resolve_clip_with_overlays(
         static std::atomic<std::uint32_t> logged{0};
         if (logged.fetch_add(1, std::memory_order_relaxed) < 64) {
             std::ostringstream line;
-            line << "NADINE-HOLSTER-CLIP-LOOKUP owner=" << owner_index
+            line << "NADINE-HOLSTER-REMAP-LOOKUP owner="
+                 << context.owner_index
                  << " player=0x" << std::hex
-                 << reinterpret_cast<std::uintptr_t>(player)
-                 << " state=0x" << reinterpret_cast<std::uintptr_t>(state)
+                 << reinterpret_cast<std::uintptr_t>(context.player)
+                 << " state=0x"
+                 << reinterpret_cast<std::uintptr_t>(context.state)
                  << " animSet=0x"
                  << reinterpret_cast<std::uintptr_t>(animation_set)
-                 << " source=0x" << input
+                 << " source=0x" << context.source
                  << " stockTerminal=0x"
-                 << g_holster_clip_lookup_probe_context.overlay_terminal
+                 << context.overlay_terminal
+                 << " stockRemapped=0x" << stock_result.remapped_id
+                 << " stockKeys=0x" << stock_result.lookup_key_1
+                 << "/0x" << stock_result.lookup_key_2
                  << " stockClip=0x"
-                 << reinterpret_cast<std::uintptr_t>(stock_clip)
+                 << reinterpret_cast<std::uintptr_t>(stock_result.clip)
                  << " legTerminal=0x" << leg_terminal
-                 << " remapped=0x" << leg_result.remapped_id
-                 << " keys=0x" << leg_result.lookup_key_1
+                 << " legRemapped=0x" << leg_result.remapped_id
+                 << " legKeys=0x" << leg_result.lookup_key_1
                  << "/0x" << leg_result.lookup_key_2
                  << " legClip=0x"
                  << reinterpret_cast<std::uintptr_t>(leg_result.clip)
+                 << " resolverCallerRva=0x"
+                 << context.resolver_caller_rva
+                 << " remapCallerRva=0x" << remap_caller_rva
                  << std::dec
-                 << " overlaySeen="
-                 << (g_holster_clip_lookup_probe_context.overlay_seen ? 1 : 0)
                  << " mapped=" << (mapped ? 1 : 0)
-                 << " safe=" << (leg_result.safe ? 1 : 0);
+                 << " stockSafe=" << (stock_result.safe ? 1 : 0)
+                 << " legSafe=" << (leg_result.safe ? 1 : 0);
             write_log_line(line.str().c_str());
         }
     }
-
-    g_holster_clip_lookup_probe_context = previous_context;
-    return stock_clip;
+    return result;
 }
 
 bool install_legacy_nadine_holster_clip_lookup_probe() {
     constexpr std::array<std::uint8_t, 15> kPrologue{
-        0x40, 0x56, 0x48, 0x83, 0xEC, 0x30, 0x45, 0x8B,
-        0xC8, 0x48, 0x8B, 0xF1, 0x48, 0x85, 0xD2,
+        0x48, 0x89, 0x5C, 0x24, 0x08,
+        0x48, 0x89, 0x6C, 0x24, 0x10,
+        0x48, 0x89, 0x74, 0x24, 0x18,
     };
-    g_original_animation_database_resolve_clip_with_overlays =
-        reinterpret_cast<AnimationDatabaseResolveClipWithOverlaysFunction>(
+    g_original_anim_set_remap_resolve_animation_id =
+        reinterpret_cast<AnimSetRemapResolveAnimationIdFunction>(
             install_fire_gate_detour(
-                kAnimationDatabaseResolveClipWithOverlaysRva,
+                kAnimSetRemapResolveAnimationIdRva,
                 kPrologue.data(), kPrologue.size(),
                 reinterpret_cast<void*>(
-                    &hooked_animation_database_resolve_clip_with_overlays),
-                "legacy-Nadine holster clip lookup probe"));
+                    &hooked_anim_set_remap_resolve_animation_id),
+                "legacy-Nadine holster remap lookup probe"));
     const bool installed =
-        g_original_animation_database_resolve_clip_with_overlays != nullptr;
+        g_original_anim_set_remap_resolve_animation_id != nullptr;
     boot_log_line(
         installed
-            ? "legacy-Nadine holster clip lookup probe installed (read-only counterfactual)"
-            : "legacy-Nadine holster clip lookup probe PARTIAL");
+            ? "legacy-Nadine holster remap lookup probe installed (read-only chained counterfactual)"
+            : "legacy-Nadine holster remap lookup probe PARTIAL");
     return installed;
 }
 
@@ -35404,8 +35418,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22gj "
-        "(Nadine holster clip lookup counterfactual; no animation mutation)");
+        "TLL co-op runtime init 2026-07-22gk "
+        "(Nadine holster remap/clip counterfactual; no animation mutation)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

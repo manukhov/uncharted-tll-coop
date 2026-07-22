@@ -1914,6 +1914,13 @@ Do not reopen these as the first move:
       stack-local output after the stock back lookup. Test one pistol Put and
       classify Hremap/Hnull/Hvalid-noIK from the written prediction in
       `COOP_STATUS.md`; no visual change is expected.
+      RUNTIME `gj` was inconclusive: exact master-state family results and the
+      action executed, but the wrapper-scoped lookup line never appeared.
+      Static xrefs and `AnimStateSnapshot_SnapshotAnimState 0x1418B24F0` prove
+      the resolver also feeds `AnimSetRemap` directly. Build `gk` therefore
+      correlates the exact family result with the next same-thread remap input,
+      logs both return RVAs, and compares stock/leg remap keys and clip pointers
+      without animation mutation. Run the written `gk` discriminator next.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

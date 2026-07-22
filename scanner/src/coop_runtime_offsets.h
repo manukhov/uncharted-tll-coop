@@ -68,9 +68,7 @@ constexpr std::size_t kPlayerUpperStateOwnerOffset = 0x1A0;
 // Player master AnimOverlayState installed at AnimStateLayer+0x18. The layer
 // step copies that master into a track-local state before snapshot resolution.
 constexpr std::size_t kPlayerUpperOwnerOverlayWrapperOffset = 0x60;
-// Animation clip lookup pipeline. ResolveClipWithOverlays first executes the
-// per-instance overlay chain, then AnimSetRemap, then ResolveClip.
-constexpr std::uintptr_t kAnimationDatabaseResolveClipWithOverlaysRva = 0x516230;
+// Animation-id/clip lookup pipeline used by the scoped Nadine probes.
 constexpr std::uintptr_t kAnimSetRemapResolveAnimationIdRva = 0x17CA2E0;
 constexpr std::uintptr_t kAnimationDatabaseResolveClipRva = 0x17C8E20;
 constexpr std::uintptr_t kAnimOverlayStateResolveAnimationIdRva = 0x17F9F00;

@@ -7640,3 +7640,49 @@ boundary to active snapshot/reference ownership. The visible animation must be
 the stable stock back motion with no new jitter because `gj` performs no
 selection mutation. A crash, missing install, visual change, unsafe call or any
 row shadow invalidates the probe.
+
+### 2026-07-22 RUNTIME INCONCLUSIVE: `gj` missed the live resolver caller; chained remap discriminator (`gk`)
+
+Both `gj` processes loaded the expected marker and installed the read-only
+family and wrapper probes without a hook failure. The test reached exact
+legacy-Nadine master states for both idle Put sources: `8DCA21F2` resolved to
+`F5765D3B` and `1FB7D7B3` resolved to `AD6A50CF` on the covered non-mirrored
+path. `NADINE-HOLSTER-ACTION-EXEC` also completed for the same retained Player.
+However, neither process emitted `NADINE-HOLSTER-CLIP-LOOKUP`. Therefore `gj`
+does not distinguish Hremap, Hnull or Hvalid-noIK; absence of that line is not
+evidence that either leg clip is missing.
+
+The failed admission has a static explanation. Cross-references show that
+`AnimOverlayState_ResolveAnimationId 0x1417F9F00` has many direct callers in
+addition to `AnimationDatabase_ResolveClipWithOverlays 0x140516230`.
+`AnimStateSnapshot_SnapshotAnimState 0x1418B24F0` is one exact example: its call
+at `0x1418B2940` consumes the track overlay state, then its next call at
+`0x1418B2954` passes the returned terminal directly to
+`AnimSetRemap_ResolveAnimationId 0x1417CA2E0` and stores all three returned
+DWORDs in the snapshot. Independently, the remap decompile proves a pure
+binary search/default-key write, and `AnimationDatabase_ResolveClip 0x1417C8E20`
+is already the read-only consumer of that three-DWORD tuple. These facts reject
+the assumption that the relevant family event must be nested beneath the
+`0x140516230` wrapper and satisfy the evidence quota for moving the probe to the
+shared resolver-to-remap edge.
+
+Build `gk` removes the unreachable wrapper detour. On an exact master-state
+idle source, the existing resolver hook now arms a thread-local record with the
+source, stock terminal, owner and resolver return RVA. The immediately following
+`AnimSetRemap_ResolveAnimationId` detour consumes that record only when its input
+equals the captured terminal. It first preserves the original stock result,
+then runs the paired leg terminal through the same AnimSet into stack-local
+storage and performs read-only stock/leg clip lookups. No game animation,
+snapshot, overlay row, weapon or Player field is written.
+
+**Falsifiable `gk` prediction:** both copies load marker `2026-07-22gk` and
+install `legacy-Nadine holster remap lookup probe`. One pistol Put must emit a
+family line with `callerRva`, followed by `NADINE-HOLSTER-REMAP-LOOKUP` with the
+same source/terminal, `mapped=1`, `stockSafe=1`, `legSafe=1` and non-null stock
+clip. Return RVAs `0x18B2945/0x18B295D` select the snapshot path; other paired
+RVAs identify the actual direct caller without widening admission. A leg id
+changed by the active set selects Hremap; unchanged id plus null `legClip`
+selects Hnull; unchanged id plus non-null `legClip` selects Hvalid-noIK and
+moves the boundary to snapshot weight/reference ownership. Missing chained
+output, unsafe lookup, crash or any visible animation change invalidates the
+probe.
