@@ -33027,11 +33027,77 @@ void capture_nadine_fgdraw_candidate(
     }
 }
 
+bool seh_fg_anim_owned_by_local_inactive_rifle(void* fg_anim_data) {
+    __try {
+        const std::uintptr_t target =
+            g_local_nadine_inactive_rifle_weapon.load(
+                std::memory_order_acquire);
+        if (target == 0 || fg_anim_data == nullptr ||
+            readable_bytes(fg_anim_data) < 0x320) {
+            return false;
+        }
+        auto* const fg = static_cast<const std::byte*>(fg_anim_data);
+        void* const retained_handle = *reinterpret_cast<void* const*>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        const std::uint32_t retained_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset);
+        if (retained_handle == nullptr ||
+            readable_bytes(retained_handle) < 0x10) {
+            return false;
+        }
+        void* const owner = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(retained_handle) + 0x8);
+        if (reinterpret_cast<std::uintptr_t>(owner) != target ||
+            owner == nullptr || readable_bytes(owner) < 0x864) {
+            return false;
+        }
+        auto* const weapon = static_cast<const std::byte*>(owner);
+        return *reinterpret_cast<const std::uintptr_t*>(weapon) ==
+                   g_module + kProcessWeaponVtableRva &&
+               *reinterpret_cast<const std::uint32_t*>(
+                   weapon + kGameObjectRuntimeIdOffset) == retained_id &&
+               *reinterpret_cast<const std::uint32_t*>(weapon + 0x860) ==
+                   kCoopRifleArtId &&
+               *reinterpret_cast<void* const*>(weapon + 0x1A8) ==
+                   fg_anim_data;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 void __fastcall hooked_fgdraw_prepare_instance(
     void* fg_anim_data, void* instance_pool_base, bool mode) {
-    if (g_original_fgdraw_prepare_instance != nullptr) {
+    const bool suppress_inactive_local_rifle =
+        seh_fg_anim_owned_by_local_inactive_rifle(fg_anim_data);
+    if (!suppress_inactive_local_rifle &&
+        g_original_fgdraw_prepare_instance != nullptr) {
         g_original_fgdraw_prepare_instance(
             fg_anim_data, instance_pool_base, mode);
+    }
+    if (suppress_inactive_local_rifle) {
+        const std::uint64_t generation =
+            g_local_nadine_inactive_rifle_generation.load(
+                std::memory_order_acquire);
+        static std::atomic<std::uint64_t> logged_generation{0};
+        std::uint64_t previous = logged_generation.load(
+            std::memory_order_relaxed);
+        if (previous != generation &&
+            logged_generation.compare_exchange_strong(
+                previous, generation, std::memory_order_relaxed)) {
+            std::ostringstream line;
+            line << "NADINE-LOCAL-RIFLE-FGDRAW action=skip-prepare"
+                 << " generation=" << generation
+                 << " fg=0x" << std::hex
+                 << reinterpret_cast<std::uintptr_t>(fg_anim_data)
+                 << " weapon=0x"
+                 << g_local_nadine_inactive_rifle_weapon.load(
+                        std::memory_order_relaxed)
+                 << " pool=0x"
+                 << reinterpret_cast<std::uintptr_t>(instance_pool_base)
+                 << std::dec << " mode=" << (mode ? 1 : 0);
+            write_log_line(line.str().c_str());
+        }
     }
     if (g_state_net.enabled) {
         capture_nadine_fgdraw_candidate(fg_anim_data, instance_pool_base);
@@ -35591,8 +35657,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22go "
-        "(late role-B local Nadine inactive-rifle render gate; pistol animation unchanged)");
+        "TLL co-op runtime init 2026-07-22gp "
+        "(role-B local Nadine inactive-rifle FgDraw submission gate; pistol animation unchanged)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

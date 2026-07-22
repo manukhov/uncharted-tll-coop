@@ -1556,11 +1556,18 @@ Do not reopen these as the first move:
       REJECTED by ordering: the exact mesh was successfully hidden with
       `changed=1` every tick, but a later stock visibility writer re-enabled it
       before rendering and it remained visible.
-- [ ] Run build `go`, publishing the exact inactive local rifle on the game
+- [x] Run build `go`, publishing the exact inactive local rifle on the game
       thread and applying HideMesh from the existing attachable relay after
       stock `DrawControlSyncParentVisibility`. Require `arm-late-hide` followed
       by one same-generation `late-hide changed=1`, no spawn rifle in the local
       hand, matching `disarm-show` on rifle draw, and no body/pistol regression.
+      REJECTED for visible output: both late markers occurred and the exact
+      rifle reported `instances=3/0`, but the starting rifle remained visible.
+- [ ] Run build `gp`, skipping stock `PrepareInstanceForRendering 0x14181A9B0`
+      only when FgAnim retained owner, runtime id, art and pointer all match the
+      published inactive local rifle. Require `skip-prepare` for the same
+      generation, no spawn rifle in the local hand, normal rendering after
+      `disarm-show`, and no pistol/body/role-A regression.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

@@ -7855,3 +7855,43 @@ longer visible in local Nadine's hand. Drawing the rifle emits
 late-hides it again. The role-A thigh rifle, pistol, body and grenade remain
 unchanged. Missing late-hide, an invisible active rifle, body loss or crash
 rejects the ordering repair.
+
+### 2026-07-22 REJECTED: `go` reaches late visibility but rifle remains
+
+Build `go` emitted both `arm-late-hide` and same-generation
+`late-hide changed=1` for the exact current owner-0 slot-0 rifle. Its subsequent
+membership and geometry-owner snapshots showed all three rifle LOD instances
+inactive (`instances=3/0`, geometry `active=0`) while the pistol instances
+remained active. The user nevertheless still saw the starting rifle in the
+local hand. Therefore neither the ProcessWeapon attachment link nor its
+DrawControl visibility/instance-active state is the final main-view submission
+gate.
+
+### 2026-07-22 STATIC: suppress exact inactive rifle render preparation (`gp`)
+
+IDA decompilation identifies `0x14181A9B0` as
+`PrepareInstanceForRendering(FgAnimData*, FgInstance*, bool)` from
+`fg-draw-mgr.cpp`. It copies CPU skinning matrices, publishes the render-world
+matrix into every driven `FgInstance`, and at `0x14181B650..0x14181B68A`
+increments the per-frame queue and writes each instance into it. The existing
+callsite relay at `0x14181B925` already receives the exact FgAnimData and pool
+used by the successful geometry-owner census. This is downstream of the
+rejected attachment and DrawControl boundaries.
+
+Build `gp` keeps the exact game-thread publication and late visibility gate,
+then adds a final admission check at that relay. It resolves
+`FgAnimData+0x1A8` back through its retained handle, requires pointer equality
+with the published rifle, matching retained/runtime id, ProcessWeapon vtable,
+rifle art and `weapon+0x1A8 == FgAnimData`. Only then is the stock prepare call
+skipped for the inactive rifle. No instance bytes are written. When slot 0
+becomes active, the game thread clears the published pointer and the original
+function resumes automatically.
+
+**Falsifiable `gp` prediction:** both copies load marker `2026-07-22gp`. Initial
+role-B spawn emits `arm-late-hide`, `late-hide`, and
+`NADINE-LOCAL-RIFLE-FGDRAW action=skip-prepare` for the same generation; the
+rifle is absent from the local hand. Drawing slot 0 emits `disarm-show`, stops
+the skip and renders the rifle normally. The role-A instance, active pistol,
+body and grenade remain unchanged. A reached skip with the rifle still visible
+would prove a second, as-yet-unidentified FgAnim/geometry owner; missing rifle
+when active, body loss or crash rejects the submission gate.
