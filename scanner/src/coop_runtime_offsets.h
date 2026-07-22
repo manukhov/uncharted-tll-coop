@@ -96,6 +96,11 @@ constexpr std::size_t kFgAnimDataCurrentUploadSkinningMatsOffset = 0x240;
 constexpr std::size_t kFgAnimDataPreviousUploadSkinningMatsOffset = 0x248;
 constexpr std::uintptr_t kFgAnimDataPublishWorldTransformRva = 0x18C55D0;
 constexpr std::uintptr_t kAnimManagerPublishWorldTransformCallsiteRva = 0x1A8FC00;
+// FgDrawManager worker callsite. The worker passes one FgAnimData and the
+// global FgInstance pool to PrepareInstanceForRendering; after the call every
+// driven 0x280-byte instance owns the current render-world matrix at +0x140.
+constexpr std::uintptr_t kFgDrawManagerPrepareInstanceRva = 0x181A9B0;
+constexpr std::uintptr_t kFgDrawManagerPrepareInstanceCallsiteRva = 0x181B925;
 constexpr std::size_t kFgAnimDataSkeletonOffset = 0x18;
 constexpr std::size_t kSkeletonJointCountOffset = 0x34;
 // Animation command evaluator and the fixed-stride SkelTable retarget registry.

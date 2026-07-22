@@ -285,13 +285,96 @@ constexpr bool kEnableNadineParentMeshProbe = false;
 struct NadineWeaponCandidate {
     std::atomic<std::uintptr_t> object{0};
     std::atomic<std::uintptr_t> parent_draw{0};
+    std::atomic<std::uintptr_t> anim_data{0};
+    std::atomic<std::uintptr_t> instance_pool_base{0};
     std::atomic<std::uint32_t> art{0};
     std::atomic<std::uint32_t> mesh{0};
+    std::atomic<ULONGLONG> last_seen_ms{0};
 };
 // Several ProcessWeapon generations can overlap while the retained Player/look
 // is rebuilt. Eight entries filled before the stable clone appeared in fs, so
 // keep a bounded but large enough census to retain both stale and current pairs.
 std::array<NadineWeaponCandidate, 32> g_nadine_weapon_candidates{};
+
+void publish_nadine_weapon_candidate(
+    void* object, void* parent_draw, void* anim_data,
+    void* instance_pool_base, std::uint32_t art, std::uint32_t mesh) {
+    const std::uintptr_t object_value =
+        reinterpret_cast<std::uintptr_t>(object);
+    if (object_value <= 1) {
+        return;
+    }
+    const ULONGLONG now = GetTickCount64();
+    NadineWeaponCandidate* destination = nullptr;
+    bool claimed_new_slot = false;
+    for (NadineWeaponCandidate& candidate : g_nadine_weapon_candidates) {
+        std::uintptr_t current =
+            candidate.object.load(std::memory_order_acquire);
+        if (current == object_value) {
+            destination = &candidate;
+            break;
+        }
+        if (current == 0 && candidate.object.compare_exchange_strong(
+                                current, 1, std::memory_order_acq_rel)) {
+            destination = &candidate;
+            claimed_new_slot = true;
+            break;
+        }
+    }
+    if (destination == nullptr) {
+        // Keep the 32 most recently observed generations. The old census never
+        // reused a slot and saturated before the final draw/Put sequence.
+        NadineWeaponCandidate* oldest = &g_nadine_weapon_candidates[0];
+        ULONGLONG oldest_ms = oldest->last_seen_ms.load(
+            std::memory_order_relaxed);
+        for (NadineWeaponCandidate& candidate : g_nadine_weapon_candidates) {
+            const ULONGLONG seen = candidate.last_seen_ms.load(
+                std::memory_order_relaxed);
+            if (seen < oldest_ms) {
+                oldest = &candidate;
+                oldest_ms = seen;
+            }
+        }
+        std::uintptr_t expected = oldest->object.load(std::memory_order_acquire);
+        if (expected <= 1 || !oldest->object.compare_exchange_strong(
+                                 expected, 1, std::memory_order_acq_rel)) {
+            return;
+        }
+        destination = oldest;
+        claimed_new_slot = true;
+    }
+
+    if (claimed_new_slot) {
+        destination->parent_draw.store(0, std::memory_order_relaxed);
+        destination->anim_data.store(0, std::memory_order_relaxed);
+        destination->instance_pool_base.store(0, std::memory_order_relaxed);
+        destination->art.store(0, std::memory_order_relaxed);
+        destination->mesh.store(0, std::memory_order_relaxed);
+    }
+    if (parent_draw != nullptr) {
+        destination->parent_draw.store(
+            reinterpret_cast<std::uintptr_t>(parent_draw),
+            std::memory_order_relaxed);
+    }
+    if (anim_data != nullptr) {
+        destination->anim_data.store(
+            reinterpret_cast<std::uintptr_t>(anim_data),
+            std::memory_order_relaxed);
+    }
+    if (instance_pool_base != nullptr) {
+        destination->instance_pool_base.store(
+            reinterpret_cast<std::uintptr_t>(instance_pool_base),
+            std::memory_order_relaxed);
+    }
+    if (art != 0) {
+        destination->art.store(art, std::memory_order_relaxed);
+    }
+    if (mesh != 0) {
+        destination->mesh.store(mesh, std::memory_order_relaxed);
+    }
+    destination->last_seen_ms.store(now, std::memory_order_relaxed);
+    destination->object.store(object_value, std::memory_order_release);
+}
 // Two-instance role: false = role A (recv :31338, "player 1", local Chloe), true =
 // role B (recv :31339, "player 2", local Nadine). Set in start_state_net().
 volatile bool g_net_role_b = false;
@@ -12534,19 +12617,58 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
     }
 }
 
+std::uint64_t hash_nadine_render_words(
+    const std::uint32_t* values, std::size_t count) {
+    std::uint64_t hash = 1469598103934665603ULL;
+    for (std::size_t index = 0; index < count; ++index) {
+        hash ^= values[index];
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+struct NadineLodRenderState {
+    std::uintptr_t instance = 0;
+    std::uintptr_t freed_instance = 0;
+    std::uintptr_t art_item_geo = 0;
+    std::uintptr_t instance_ptr_88 = 0;
+    std::uintptr_t instance_ptr_90 = 0;
+    std::uintptr_t instance_ptr_98 = 0;
+    std::uint64_t matrix_hash = 0;
+    std::uint32_t resource_id = 0;
+    std::uint32_t pool_index = 0xFFFFFFFFu;
+    std::uint32_t flags = 0;
+    std::uint32_t owner_id = 0;
+    std::uint8_t active = 0;
+    std::uint8_t category = 0;
+    std::uint8_t driven = 0;
+};
+
 struct NadineMembershipRenderState {
     std::uint8_t attach_index = 0xFF;
     std::uint32_t attach_id = 0;
     std::uintptr_t child_draw = 0;
+    std::uintptr_t anim_data = 0;
+    std::uintptr_t instance_pool_base = 0;
+    std::uintptr_t fg_owner = 0;
     std::uint32_t child_draw_flags = 0;
+    std::uint32_t fg_flags = 0;
+    std::uint32_t fg_owner_id = 0;
+    std::uint32_t fg_driven_count = 0;
+    std::uint32_t fg_driven_max = 0;
+    std::uint64_t fg_world_hash = 0;
+    std::uint64_t fg_aux_hash = 0;
     std::uint8_t child_own_gate = 0;
     std::uint8_t child_inherited_gate = 0;
     std::uint32_t child_instances = 0;
     std::uint32_t child_active_instances = 0;
+    std::uint32_t lod_count = 0;
+    std::array<NadineLodRenderState, 8> lods{};
 };
 
 bool seh_capture_nadine_membership_render_state(
-    void* object, void* owner, NadineMembershipRenderState* state) {
+    void* object, void* owner, void* instance_pool_base,
+    NadineMembershipRenderState* state) {
     if (state == nullptr) {
         return false;
     }
@@ -12561,6 +12683,8 @@ bool seh_capture_nadine_membership_render_state(
             object_bytes + 0x688);
         state->child_draw = reinterpret_cast<std::uintptr_t>(
             *reinterpret_cast<void* const*>(object_bytes + 0x198));
+        state->instance_pool_base =
+            reinterpret_cast<std::uintptr_t>(instance_pool_base);
         if (owner != nullptr && state->attach_index != 0xFF) {
             auto* const owner_bytes = static_cast<const std::byte*>(owner);
             auto* const table = *reinterpret_cast<const std::byte* const*>(
@@ -12590,6 +12714,38 @@ bool seh_capture_nadine_membership_render_state(
             *reinterpret_cast<const std::uint8_t*>(draw + 0x1C);
         state->child_inherited_gate =
             *reinterpret_cast<const std::uint8_t*>(draw + 0x1D);
+        auto* const fg = *reinterpret_cast<const std::byte* const*>(draw);
+        state->anim_data = reinterpret_cast<std::uintptr_t>(fg);
+        const std::uint32_t* driven_indices = nullptr;
+        if (fg != nullptr && readable_bytes(fg) >= 0x320) {
+            state->fg_flags =
+                *reinterpret_cast<const std::uint32_t*>(fg);
+            state->fg_driven_max =
+                *reinterpret_cast<const std::uint32_t*>(fg + 0x208);
+            state->fg_driven_count =
+                *reinterpret_cast<const std::uint32_t*>(fg + 0x20C);
+            driven_indices = *reinterpret_cast<const std::uint32_t* const*>(
+                fg + 0x210);
+            const void* const owner_handle =
+                *reinterpret_cast<void* const*>(fg + 0x1A8);
+            state->fg_owner_id =
+                *reinterpret_cast<const std::uint32_t*>(fg + 0x1B0);
+            if (owner_handle != nullptr && readable_bytes(owner_handle) >= 0x10) {
+                state->fg_owner = reinterpret_cast<std::uintptr_t>(
+                    *reinterpret_cast<void* const*>(
+                        static_cast<const std::byte*>(owner_handle) + 0x8));
+            }
+            state->fg_world_hash = hash_nadine_render_words(
+                reinterpret_cast<const std::uint32_t*>(fg + 0x1C0), 16);
+            state->fg_aux_hash = hash_nadine_render_words(
+                reinterpret_cast<const std::uint32_t*>(fg + 0x2E0), 16);
+            if (state->fg_driven_count > state->fg_driven_max ||
+                state->fg_driven_count > 4096 || driven_indices == nullptr ||
+                readable_bytes(driven_indices) <
+                    sizeof(std::uint32_t) * state->fg_driven_count) {
+                driven_indices = nullptr;
+            }
+        }
         auto* const meshes =
             *reinterpret_cast<const std::byte* const*>(draw + 0x8);
         const std::uint32_t mesh_count =
@@ -12599,20 +12755,69 @@ bool seh_capture_nadine_membership_render_state(
             return true;
         }
         const std::uint32_t entry_count = std::min<std::uint32_t>(
-            *reinterpret_cast<const std::uint8_t*>(meshes + 0x242), 16);
+            *reinterpret_cast<const std::uint8_t*>(meshes + 0x242),
+            static_cast<std::uint32_t>(state->lods.size()));
+        state->lod_count = entry_count;
         for (std::uint32_t entry_index = 0;
              entry_index < entry_count; ++entry_index) {
             auto* const entry = meshes + 0x20 * entry_index;
             void* const instance = *reinterpret_cast<void* const*>(entry);
+            NadineLodRenderState& lod = state->lods[entry_index];
+            lod.instance = reinterpret_cast<std::uintptr_t>(instance);
+            lod.freed_instance = reinterpret_cast<std::uintptr_t>(
+                *reinterpret_cast<void* const*>(entry + 0x8));
             void* const retained = *reinterpret_cast<void* const*>(entry + 0x10);
+            lod.art_item_geo = reinterpret_cast<std::uintptr_t>(retained);
+            lod.resource_id = *reinterpret_cast<const std::uint32_t*>(
+                entry + 0x18);
             if (instance == nullptr || retained == nullptr ||
-                readable_bytes(instance) < 0x1A1) {
+                readable_bytes(instance) < 0x258) {
                 continue;
             }
+            const auto* const instance_bytes =
+                static_cast<const std::byte*>(instance);
+            lod.flags = *reinterpret_cast<const std::uint32_t*>(
+                instance_bytes + 0x18);
+            lod.instance_ptr_88 = reinterpret_cast<std::uintptr_t>(
+                *reinterpret_cast<void* const*>(instance_bytes + 0x88));
+            lod.instance_ptr_90 = reinterpret_cast<std::uintptr_t>(
+                *reinterpret_cast<void* const*>(instance_bytes + 0x90));
+            lod.instance_ptr_98 = reinterpret_cast<std::uintptr_t>(
+                *reinterpret_cast<void* const*>(instance_bytes + 0x98));
+            lod.matrix_hash = hash_nadine_render_words(
+                reinterpret_cast<const std::uint32_t*>(
+                    instance_bytes + 0x140),
+                16);
+            lod.owner_id = *reinterpret_cast<const std::uint32_t*>(
+                instance_bytes + 0x250);
+            lod.active = *reinterpret_cast<const std::uint8_t*>(
+                instance_bytes + 0x1A0);
+            lod.category = *reinterpret_cast<const std::uint8_t*>(
+                instance_bytes + 0x1A4);
+            const std::uintptr_t instance_value =
+                reinterpret_cast<std::uintptr_t>(instance);
+            const std::uintptr_t pool_value =
+                reinterpret_cast<std::uintptr_t>(instance_pool_base);
+            if (pool_value != 0 && instance_value >= pool_value &&
+                (instance_value - pool_value) % 0x280 == 0) {
+                const std::uintptr_t index_value =
+                    (instance_value - pool_value) / 0x280;
+                if (index_value <= 0xFFFFFFFFULL) {
+                    lod.pool_index = static_cast<std::uint32_t>(index_value);
+                    if (driven_indices != nullptr) {
+                        for (std::uint32_t driven_index = 0;
+                             driven_index < state->fg_driven_count;
+                             ++driven_index) {
+                            if (driven_indices[driven_index] == lod.pool_index) {
+                                lod.driven = 1;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
             ++state->child_instances;
-            state->child_active_instances +=
-                *reinterpret_cast<const std::uint8_t*>(
-                    static_cast<const std::byte*>(instance) + 0x1A0) != 0;
+            state->child_active_instances += lod.active != 0;
         }
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -12626,8 +12831,9 @@ void diagnose_nadine_weapon_membership_game_thread() {
     // The attachable hook runs from PostJointUpdate_Async and only publishes
     // pointers. All PlayerWeaponController vtable reads stay on this established
     // game-thread tick.
-    static std::array<std::uint64_t, 8> last_signatures{};
-    static std::array<std::uint8_t, 8> log_counts{};
+    static std::array<std::uintptr_t, 32> last_objects{};
+    static std::array<std::uint64_t, 32> last_signatures{};
+    static std::array<std::uint8_t, 32> log_counts{};
     for (std::size_t candidate_index = 0;
          candidate_index < g_nadine_weapon_candidates.size();
          ++candidate_index) {
@@ -12635,7 +12841,15 @@ void diagnose_nadine_weapon_membership_game_thread() {
             g_nadine_weapon_candidates[candidate_index];
         const std::uintptr_t object_value =
             candidate.object.load(std::memory_order_acquire);
-        if (object_value <= 1 || log_counts[candidate_index] >= 16) {
+        if (object_value <= 1) {
+            continue;
+        }
+        if (last_objects[candidate_index] != object_value) {
+            last_objects[candidate_index] = object_value;
+            last_signatures[candidate_index] = 0;
+            log_counts[candidate_index] = 0;
+        }
+        if (log_counts[candidate_index] >= 24) {
             continue;
         }
         void* const object = reinterpret_cast<void*>(object_value);
@@ -12645,6 +12859,10 @@ void diagnose_nadine_weapon_membership_game_thread() {
             candidate.art.load(std::memory_order_relaxed);
         const std::uint32_t mesh =
             candidate.mesh.load(std::memory_order_relaxed);
+        void* const candidate_fg = reinterpret_cast<void*>(
+            candidate.anim_data.load(std::memory_order_relaxed));
+        void* const instance_pool_base = reinterpret_cast<void*>(
+            candidate.instance_pool_base.load(std::memory_order_relaxed));
 
         int owner_index = -1;
         void* owner = nullptr;
@@ -12686,7 +12904,8 @@ void diagnose_nadine_weapon_membership_game_thread() {
             weapon_art_id_from_object(active_weapon);
 
         NadineMembershipRenderState render{};
-        seh_capture_nadine_membership_render_state(object, owner, &render);
+        seh_capture_nadine_membership_render_state(
+            object, owner, instance_pool_base, &render);
 
         std::uint64_t signature = 1469598103934665603ULL;
         auto mix = [&signature](std::uint64_t value) {
@@ -12704,11 +12923,31 @@ void diagnose_nadine_weapon_membership_game_thread() {
         mix(render.attach_index);
         mix(render.attach_id);
         mix(render.child_draw);
+        mix(render.anim_data);
+        mix(reinterpret_cast<std::uintptr_t>(candidate_fg));
+        mix(render.instance_pool_base);
+        mix(render.fg_owner);
+        mix(render.fg_owner_id);
+        mix(render.fg_driven_count);
+        mix(render.fg_driven_max);
         mix(render.child_draw_flags);
         mix(render.child_own_gate);
         mix(render.child_inherited_gate);
         mix(render.child_instances);
         mix(render.child_active_instances);
+        mix(render.lod_count);
+        for (const NadineLodRenderState& lod : render.lods) {
+            mix(lod.instance);
+            mix(lod.freed_instance);
+            mix(lod.art_item_geo);
+            mix(lod.resource_id);
+            mix(lod.pool_index);
+            mix(lod.flags);
+            mix(lod.owner_id);
+            mix(lod.active);
+            mix(lod.category);
+            mix(lod.driven);
+        }
         if (last_signatures[candidate_index] == signature) {
             continue;
         }
@@ -12732,11 +12971,43 @@ void diagnose_nadine_weapon_membership_game_thread() {
              << static_cast<unsigned>(render.attach_index)
              << "/0x" << std::hex << render.attach_id
              << " childDraw=0x" << render.child_draw
+             << " fg=0x" << render.anim_data
+             << "/0x" << reinterpret_cast<std::uintptr_t>(candidate_fg)
+             << " pool=0x" << render.instance_pool_base
+             << " fgOwner=0x" << render.fg_owner
+             << "/0x" << render.fg_owner_id
+             << " fgFlags=0x" << render.fg_flags
              << " draw=0x" << render.child_draw_flags << std::dec
              << "/" << static_cast<unsigned>(render.child_own_gate)
              << "/" << static_cast<unsigned>(render.child_inherited_gate)
              << " instances=" << render.child_instances
-             << "/" << render.child_active_instances;
+             << "/" << render.child_active_instances
+             << " driven=" << render.fg_driven_count
+             << "/" << render.fg_driven_max
+             << " lods=" << render.lod_count
+             << " fgHash=0x" << std::hex << render.fg_world_hash
+             << "/0x" << render.fg_aux_hash
+             << " entries=";
+        for (std::uint32_t lod_index = 0;
+             lod_index < render.lod_count && lod_index < render.lods.size();
+             ++lod_index) {
+            const NadineLodRenderState& lod = render.lods[lod_index];
+            line << "[" << std::dec << lod_index << ":0x" << std::hex
+                 << lod.resource_id << ":0x" << lod.instance
+                 << "/0x" << lod.freed_instance
+                 << "/0x" << lod.art_item_geo
+                 << ":pool=" << std::dec << lod.pool_index
+                 << ":driven=" << static_cast<unsigned>(lod.driven)
+                 << ":active=" << static_cast<unsigned>(lod.active)
+                 << ":flags=0x" << std::hex << lod.flags
+                 << ":cat=0x" << static_cast<unsigned>(lod.category)
+                 << ":owner=0x" << lod.owner_id
+                 << ":matrix=0x" << lod.matrix_hash
+                 << ":raw=" << (lod.matrix_hash == render.fg_world_hash ? 1 : 0)
+                 << ":ptr=0x" << lod.instance_ptr_88
+                 << "/0x" << lod.instance_ptr_90
+                 << "/0x" << lod.instance_ptr_98 << "]";
+        }
         write_log_line(line.str().c_str());
     }
 }
@@ -30692,6 +30963,147 @@ bool install_scoped_draw_flag_callsite_relay() {
     return true;
 }
 
+using FgDrawManagerPrepareInstanceFunction =
+    void(__fastcall*)(void*, void*, bool);
+FgDrawManagerPrepareInstanceFunction
+    g_original_fgdraw_prepare_instance = nullptr;
+
+void capture_nadine_fgdraw_candidate(
+    void* fg_anim_data, void* instance_pool_base) {
+    __try {
+        if (fg_anim_data == nullptr || instance_pool_base == nullptr ||
+            readable_bytes(fg_anim_data) < 0x320) {
+            return;
+        }
+        auto* const fg = static_cast<std::byte*>(fg_anim_data);
+        void* const retained_handle = *reinterpret_cast<void**>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        const std::uint32_t retained_id = *reinterpret_cast<std::uint32_t*>(
+            fg + kFgAnimDataRetainedIdOffset);
+        if (retained_handle == nullptr || readable_bytes(retained_handle) < 0x10) {
+            return;
+        }
+        void* const weapon = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(retained_handle) + 0x8);
+        if (weapon == nullptr || readable_bytes(weapon) < 0x864 ||
+            *reinterpret_cast<std::uintptr_t*>(weapon) !=
+                g_module + kProcessWeaponVtableRva ||
+            *reinterpret_cast<std::uint32_t*>(
+                static_cast<std::byte*>(weapon) +
+                kGameObjectRuntimeIdOffset) != retained_id) {
+            return;
+        }
+        auto* const weapon_bytes = static_cast<std::byte*>(weapon);
+        void* const child_draw = *reinterpret_cast<void**>(weapon_bytes + 0x198);
+        if (child_draw == nullptr || readable_bytes(child_draw) < 0x20 ||
+            *reinterpret_cast<void**>(child_draw) != fg_anim_data) {
+            return;
+        }
+
+        void* parent_draw = nullptr;
+        void* const parent_handle = *reinterpret_cast<void**>(
+            weapon_bytes + 0x4E0);
+        if (parent_handle != nullptr && readable_bytes(parent_handle) >= 0x10) {
+            void* const parent = *reinterpret_cast<void**>(
+                static_cast<std::byte*>(parent_handle) + 0x8);
+            if (parent != nullptr && readable_bytes(parent) >= 0x1A0 &&
+                *reinterpret_cast<std::uint32_t*>(
+                    static_cast<std::byte*>(parent) + 0x170) ==
+                    kLegacyNadineAttachTargetLookId) {
+                parent_draw = *reinterpret_cast<void**>(
+                    static_cast<std::byte*>(parent) + 0x198);
+            }
+        }
+        if (parent_draw == nullptr) {
+            return;
+        }
+
+        std::uint32_t mesh_id = 0;
+        auto* const draw = static_cast<std::byte*>(child_draw);
+        auto* const meshes = *reinterpret_cast<std::byte**>(draw + 0x8);
+        const std::uint32_t mesh_count =
+            *reinterpret_cast<std::uint32_t*>(draw + 0x14);
+        if (meshes != nullptr && mesh_count != 0 && mesh_count <= 128 &&
+            readable_bytes(meshes) >= 0x20) {
+            mesh_id = *reinterpret_cast<std::uint32_t*>(meshes + 0x18);
+        }
+        publish_nadine_weapon_candidate(
+            weapon, parent_draw, fg_anim_data, instance_pool_base,
+            *reinterpret_cast<std::uint32_t*>(weapon_bytes + 0x860), mesh_id);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
+
+void __fastcall hooked_fgdraw_prepare_instance(
+    void* fg_anim_data, void* instance_pool_base, bool mode) {
+    if (g_original_fgdraw_prepare_instance != nullptr) {
+        g_original_fgdraw_prepare_instance(
+            fg_anim_data, instance_pool_base, mode);
+    }
+    if (g_state_net.enabled) {
+        capture_nadine_fgdraw_candidate(fg_anim_data, instance_pool_base);
+    }
+}
+
+bool install_fgdraw_prepare_instance_relay() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kFgDrawManagerPrepareInstanceCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line("FgDraw prepare-instance relay SKIPPED (not E8)");
+        return false;
+    }
+    std::int32_t old_displacement = 0;
+    std::memcpy(&old_displacement, call_site + 1, sizeof(old_displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(old_displacement);
+    const std::uintptr_t expected =
+        g_module + kFgDrawManagerPrepareInstanceRva;
+    if (target != expected) {
+        boot_log_line("FgDraw prepare-instance relay SKIPPED (target)");
+        return false;
+    }
+    g_original_fgdraw_prepare_instance =
+        reinterpret_cast<FgDrawManagerPrepareInstanceFunction>(expected);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("FgDraw prepare-instance relay SKIPPED (relay)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(&hooked_fgdraw_prepare_instance);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("FgDraw prepare-instance relay SKIPPED (range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("FgDraw prepare-instance relay SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line("FgDraw prepare-instance callsite relay installed");
+    return true;
+}
+
 using DrawControlSyncParentVisibilityFunction =
     char(__fastcall*)(void*, void*);
 DrawControlSyncParentVisibilityFunction
@@ -31041,34 +31453,13 @@ void census_legacy_nadine_attachable(
     }
 
     if (vtable_rva == kProcessWeaponVtableRva && art_candidate != 0) {
-        const std::uintptr_t object_value =
-            reinterpret_cast<std::uintptr_t>(attachable);
-        for (NadineWeaponCandidate& candidate : g_nadine_weapon_candidates) {
-            std::uintptr_t current =
-                candidate.object.load(std::memory_order_acquire);
-            if (current == object_value) {
-                candidate.parent_draw.store(
-                    reinterpret_cast<std::uintptr_t>(parent_draw),
-                    std::memory_order_relaxed);
-                candidate.art.store(art_candidate, std::memory_order_relaxed);
-                candidate.mesh.store(
-                    child.readable_meshes != 0 ? child.mesh_ids[0] : 0,
-                    std::memory_order_relaxed);
-                break;
-            }
-            if (current == 0 && candidate.object.compare_exchange_strong(
-                                    current, 1, std::memory_order_acq_rel)) {
-                candidate.parent_draw.store(
-                    reinterpret_cast<std::uintptr_t>(parent_draw),
-                    std::memory_order_relaxed);
-                candidate.art.store(art_candidate, std::memory_order_relaxed);
-                candidate.mesh.store(
-                    child.readable_meshes != 0 ? child.mesh_ids[0] : 0,
-                    std::memory_order_relaxed);
-                candidate.object.store(object_value, std::memory_order_release);
-                break;
-            }
+        void* anim_data = nullptr;
+        if (child_draw != nullptr && readable_bytes(child_draw) >= sizeof(void*)) {
+            anim_data = *reinterpret_cast<void**>(child_draw);
         }
+        publish_nadine_weapon_candidate(
+            attachable, parent_draw, anim_data, nullptr, art_candidate,
+            child.readable_meshes != 0 ? child.mesh_ids[0] : 0);
     }
 
     static std::array<std::atomic<std::uint64_t>, 32> seen{};
@@ -33137,8 +33528,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22fu "
-        "(Nadine weapon generation and visible-instance census)");
+        "TLL co-op runtime init 2026-07-22fw "
+        "(Nadine weapon rolling LOD and render-matrix census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -33164,6 +33555,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
     install_player_main_view_visibility_relay();
+    install_fgdraw_prepare_instance_relay();
     install_nd_attachable_parent_visibility_relay();
     install_player_weapon_holster_bind_probe();
     install_nadine_holster_final_boundary_probe();

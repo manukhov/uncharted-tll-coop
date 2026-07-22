@@ -1732,6 +1732,10 @@ Do not reopen these as the first move:
       did not prove the visible matrix. Next build a rolling generation census
       and record per-LOD driven membership, `+0x250` owner id and hashes of
       instance `+0x140`, FgAnimData `+0x1C0/+0x2E0`; do not tune attachment ids.
+      Build `fw` implements the read-only post-`0x14181B925` capture, rolling
+      32-generation table and per-LOD fields. It also fixes the old 32-candidate
+      versus 8-memo out-of-bounds defect. Release compilation succeeds; run the
+      exact initial/draw-pistol/draw-put-rifle/draw-put-pistol sequence next.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

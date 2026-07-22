@@ -6602,3 +6602,22 @@ is the direct `FgDrawManager_PrepareInstanceForRendering` call at `0x14181B925`.
 Prediction: a non-driven active LOD or unequal final matrix selects H1; three
 driven equal LODs with a wrong publication selects H2; a live old owner id selects
 H3; if every ProcessWeapon instance is coherent, H4 wins.
+
+Build `fw` implements exactly this read-only discriminator. A checked E8 relay
+at `0x14181B925` calls untouched
+`FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` first, then admits only
+an RTTI-exact ProcessWeapon whose `owner+0x198 -> DrawControl+0` equals the
+current FgAnimData and whose attachment parent has legacy-Nadine look
+`0xD27C074F`. It publishes the exact instance-pool base to the game-thread
+census. The old never-reused 32-entry candidate table is now a least-recently-
+seen rolling table; each structural transition logs per-LOD live/freed/ArtItemGeo
+pointers, resource id, pool index/driven membership, flags/active/category,
+`FgInstance+0x250`, instance `+0x140` hash, FgAnimData `+0x1C0/+0x2E0` hashes and
+the auxiliary instance pointers `+0x88/+0x90/+0x98`.
+
+The same change fixes a diagnostic-only bounds defect in `fu`: candidate storage
+had 32 entries while `last_signatures` and `log_counts` had only 8, so candidates
+8..31 indexed past both memo arrays. `fw` sizes all memo arrays to 32 and resets
+them whenever a rolling slot changes object. No weapon, attachment, DrawControl
+or render value is written. The release DLL compiled successfully with marker
+`2026-07-22fw`; runtime verification is pending under the prediction above.
