@@ -6460,3 +6460,68 @@ boundary. No further attachment-id mutation is justified until those owners are
 resolved. The rollback release compiled successfully with marker
 `2026-07-22ft`; it was not launched because the next runtime test still requires
 the new static owner proof.
+
+### 2026-07-22 STATIC: exact ProcessWeapon ownership and generation discriminator (`fu`)
+
+The post-`fs` log contains a stronger clue than an art/slot mismatch. During one
+legacy-Nadine Player generation, two successive pistol objects
+`0x10E100D180/0x10E100C380` and two rifle objects
+`0x10E1009280/0x10E1008480` resolved through the same retained parent handle.
+Both pistol objects reached `pistolHolster 0x8A0249B5`, joint 5. Earlier rows also
+show old pistol/rifle/grenade objects losing all inventory slot membership while
+new same-art objects became the controller's slots. The old eight-entry census
+filled before the stable clone pair appeared, so it could not classify whether
+the stale or current generation still owned active render instances.
+
+Static tracing rejects normal cross-art mesh ownership. ProcessWeapon vtable
+`0x142A9BF48` slot `+0x7A8 -> WeaponAttachment_SelectExistingOwnerPoint
+0x141ED0580` writes only that exact object's selected byte `+0x688` at
+`0x141ED06EF`. `NdAttachableObject_ResolveSelectedAttachmentTransform
+0x141ED1780` reads the same byte and parent `+0x4E0/+0x4E8`, resolves the same
+owner's AttachSystem through `AttachSystem_ResolveRecordTransform 0x1418B7060`,
+and publishes the local result through `NdAttachableObject_UpdateSelectedAttachmentTransform
+0x141ED1380` into the same object. ProcessWeapon slot `+0x410 -> 0x141515860`
+calls `NdAttachableObject_PostJointUpdate_Async 0x141ED28E0` at `0x141515A30`;
+its base transform path derives that same object's world outputs
+`+0x240/+0x250/+0x280`. Finally `NdAttachableObject_SyncParentDrawVisibilityAndCameraFlags
+0x141ED62D0` reads child DrawControl strictly from the same object at `+0x198`.
+The independent `ew/fl` runtime census already correlated pistol art
+`0x33E29A1B` with pistol mesh `0x33E29A1B` and rifle art `0x8075397D` with rifle
+mesh `0x255BEBA0`. `PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0` is also
+excluded: it writes only arm joint-cache world poses and never reads a
+ProcessWeapon or attachment field.
+
+Competing hypotheses are now: (H1) an old slotless generation keeps active draw
+instances and is the visible back/leg weapon while the current logical object is
+moved correctly; (H2) the exact active object selects the right record but its
+derived world transform is not refreshed; (H3) the art/mesh identity changes in
+a later generation or the user-visible firearm is a third non-inventory object.
+Evidence quota is met by exact field dataflow, RTTI/vtable and callsite identity,
+independent runtime art/mesh correlation, and the negative IK-owner trace.
+
+Build `fu` therefore re-enables the already crash-safe `fs` mapping only to
+reproduce the visible failure and adds no new gameplay mutation. Its bounded
+read-only census keeps 32 ProcessWeapon generations and records, for pistol and
+rifle separately, the exact pointer, controller slot/current membership,
+selected record id, child DrawControl/mesh id, draw gates, active instance count,
+and local/final transforms at the existing `0x141515A30` boundary. Written
+prediction: if H1 is correct, a slotless old object remains `activeInstances>0`
+while the current slot pistol reaches `8A`; if H2 is correct, the exact active
+pistol has `8A` but its `+0x240/+0x250/+0x280` output does not follow the local
+result; if an art owns the other art's mesh id, H3's generation-specific
+ownership anomaly wins. If every active exact child has the expected art, mesh,
+id and final transform, the visible firearm is outside the inventoried
+ProcessWeapon children and the selector mapping is rejected as causal.
+
+The initial pistol invisibility remains a separate ordering bug, but its static
+repair boundary is now resolved. In the common lifecycle
+`PlayerUpperDrawControlLifecycleAndAmbientOccluderStage 0x141BB4280`, the Player
+vslot `+0x448` call at `0x141BB5043` returns to `0x141BB5049` only after
+`Player_SetupAttachSystemFromLookData 0x1410CDF90` has called
+`AttachSystem_InitFromDcData 0x1418B61B0` at `0x1410CE226`. The weapon controller
+at `Player+0x1D88` is constructed later through `0x1410DD0FC -> 0x1410CA921`, so
+the continuation is pre-controller and pre-selector. A future early repair must
+gate on the exact Player vtable and raw look `Player+0x170`, not retained-slot
+identity, because retained publication has not occurred yet. The `fu` release
+compiled successfully with marker `2026-07-22fu`; runtime verification is
+pending.

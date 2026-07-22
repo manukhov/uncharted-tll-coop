@@ -1704,6 +1704,17 @@ Do not reopen these as the first move:
       Separately move compatibility-table materialization earlier: initial
       AD/generic selectors returned 0 before repair, explaining why the pistol
       is invisible until its first draw/Put cycle.
+      STATIC `fu`: the exact-object graph rejects normal cross-art ownership:
+      selected `+0x688`, local/final transforms and child DrawControl `+0x198`
+      remain on one ProcessWeapon, and holster IK only writes arm joints. The
+      `fs` log instead contains overlapping same-art generations and old objects
+      losing slot membership. Reproduce the safe mapping with a 32-generation
+      read-only census of slot/current, selected id, mesh, draw gates, active
+      instances and final transforms. H1 predicts a slotless old object remains
+      active while the current pistol reaches 8A; H2 predicts the exact active
+      object's final transform fails to follow its selected record. The earliest
+      proven initial-table repair boundary is continuation `0x141BB5049`, after
+      Player vslot `+0x448` returns and before `Player+0x1D88` construction.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
