@@ -6649,3 +6649,47 @@ trace the exact phase-`0x40` owner inputs around `0x141A8FC00`, including
 ProcessWeapon `+0x110/+0x120` and `+0x130/+0x140`, back to the selected attachment
 output, and identify any independent prop consumer before another runtime hook.
 Both game processes were closed after capture.
+
+### 2026-07-22 STATIC: renderer-wide ArtItemGeo owner census (`fx`)
+
+The `fw` admission gate was intentionally too narrow to decide its remaining
+H4: it accepted an FgAnimData only after resolving an RTTI-exact
+`ProcessWeapon`, its own DrawControl and a legacy-Nadine attachment parent. A
+separate prop using the same firearm geometry could never appear in that table.
+The phase-`0x40` branch is not the next runtime boundary: the earlier `fl` probe
+already established that the same `+0x110/+0x120` plus `+0x130/+0x140`
+composition is internally coherent and that placement differences originate in
+the resolved attachment/joint pose before the common final writer. Repeating
+that hook would not distinguish the still-open separate-prop alternative.
+
+Three independent evidence types identify a stronger renderer-wide key.
+`IDrawControl_AddMesh 0x141751E30` retains each LOD's `ArtItemGeo*` in the
+`0x20`-byte available-LOD entry at `+0x10` and its resource id at `+0x18`;
+`FgInstance_Init 0x14192E590` independently writes that exact `ArtItemGeo*` to
+the allocated `FgInstance+0x1B0`; and `fw` runtime established the exact three
+pistol resource ids `33E29A1B,49AE2C65,44ED0ABC` and rifle ids
+`255BEBA0,FDBF86F9,F0FCA020`, including their live pool indices and common
+FgAnimData matrices. Pointer equality at `+0x1B0` can therefore find every
+foreground instance using the same firearm geometry without assuming its owner
+class, parent or inventory membership.
+
+Build `2026-07-22fx` keeps the proven post-`0x14181B925` relay read-only. It
+first learns the six exact ArtItemGeo pointers from the validated current
+ProcessWeapon DrawControls. Once all six are known, it scans each FgAnimData's
+bounded driven list (maximum 256 entries), compares only `FgInstance+0x1B0`, and
+publishes at most 32 unique matching FgAnimData owners through an atomic bridge.
+Game-thread `WEAPON-GEOMETRY-OWNER` rows record owner/vtable/runtime id, optional
+ProcessWeapon art and parent look, matched/active resource masks, matrix and
+owner-id equality masks, categories and driven count. No weapon, attachment,
+DrawControl, FgAnimData or instance field is written.
+
+Competing predictions are now explicit. H4 predicts an active pistol/rifle mask
+whose FgAnimData owner is not the already-known Nadine inventory ProcessWeapon
+(`processWeapon=0` or `knownNadine=0` with the legacy-Nadine visual); that owner
+becomes the next static target. H2 predicts that every legacy-Nadine firearm hit
+is one of the known exact ProcessWeapons, with all three bits active and matching
+the FgAnimData matrix/owner id; this rejects a second foreground prop and returns
+the investigation to the local-versus-remote attachment pose upstream of
+publication. Missing positive-control rows, fewer than all six learned LODs,
+table saturation, crash or a visual regression makes the census inconclusive.
+The release DLL compiled successfully; runtime verification is pending.

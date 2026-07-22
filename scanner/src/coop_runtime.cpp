@@ -296,6 +296,101 @@ struct NadineWeaponCandidate {
 // keep a bounded but large enough census to retain both stale and current pairs.
 std::array<NadineWeaponCandidate, 32> g_nadine_weapon_candidates{};
 
+// Build fx: FgInstance_Init stores the exact ArtItemGeo pointer at instance+0x1B0.
+// Learn the six pistol/rifle LOD geometry pointers from the already-proven current
+// ProcessWeapon DrawControls, then use them as a renderer-wide identity key.  This
+// catches a second prop even when its FgAnimData owner is not a ProcessWeapon and
+// therefore could never pass the narrower fw admission gate.
+constexpr std::array<std::uint32_t, 6> kWeaponGeometryResourceIds{
+    0x33E29A1Bu, 0x49AE2C65u, 0x44ED0ABCu,
+    0x255BEBA0u, 0xFDBF86F9u, 0xF0FCA020u};
+std::array<std::atomic<std::uintptr_t>, 6> g_weapon_geometry_art_items{};
+
+struct WeaponGeometryOwnerCandidate {
+    std::atomic<std::uintptr_t> anim_data{0};
+    std::atomic<std::uintptr_t> instance_pool_base{0};
+    std::atomic<std::uintptr_t> owner{0};
+    std::atomic<std::uintptr_t> owner_vtable_rva{0};
+    std::atomic<std::uintptr_t> parent{0};
+    std::atomic<std::uint64_t> world_hash{0};
+    std::atomic<std::uint64_t> categories{0};
+    std::atomic<std::uint64_t> instance_flags_hash{0};
+    std::atomic<std::uint32_t> retained_id{0};
+    std::atomic<std::uint32_t> owner_runtime_id{0};
+    std::atomic<std::uint32_t> art{0};
+    std::atomic<std::uint32_t> parent_look{0};
+    std::atomic<std::uint32_t> driven_count{0};
+    std::atomic<std::uint32_t> resource_mask{0};
+    std::atomic<std::uint32_t> active_mask{0};
+    std::atomic<std::uint32_t> matrix_match_mask{0};
+    std::atomic<std::uint32_t> owner_match_mask{0};
+    std::atomic<ULONGLONG> last_seen_ms{0};
+};
+std::array<WeaponGeometryOwnerCandidate, 32>
+    g_weapon_geometry_owner_candidates{};
+
+void publish_weapon_geometry_owner_candidate(
+    void* anim_data, void* instance_pool_base, void* owner,
+    std::uintptr_t owner_vtable_rva, void* parent, std::uint64_t world_hash,
+    std::uint64_t categories, std::uint64_t instance_flags_hash,
+    std::uint32_t retained_id, std::uint32_t owner_runtime_id,
+    std::uint32_t art, std::uint32_t parent_look,
+    std::uint32_t driven_count, std::uint32_t resource_mask,
+    std::uint32_t active_mask, std::uint32_t matrix_match_mask,
+    std::uint32_t owner_match_mask) {
+    const std::uintptr_t anim_value =
+        reinterpret_cast<std::uintptr_t>(anim_data);
+    if (anim_value <= 1 || resource_mask == 0) {
+        return;
+    }
+    WeaponGeometryOwnerCandidate* destination = nullptr;
+    for (WeaponGeometryOwnerCandidate& candidate :
+         g_weapon_geometry_owner_candidates) {
+        std::uintptr_t current =
+            candidate.anim_data.load(std::memory_order_acquire);
+        if (current == anim_value) {
+            destination = &candidate;
+            break;
+        }
+        if (current == 0 && candidate.anim_data.compare_exchange_strong(
+                                current, 1, std::memory_order_acq_rel)) {
+            destination = &candidate;
+            break;
+        }
+    }
+    if (destination == nullptr) {
+        return;
+    }
+
+    destination->instance_pool_base.store(
+        reinterpret_cast<std::uintptr_t>(instance_pool_base),
+        std::memory_order_relaxed);
+    destination->owner.store(
+        reinterpret_cast<std::uintptr_t>(owner), std::memory_order_relaxed);
+    destination->owner_vtable_rva.store(
+        owner_vtable_rva, std::memory_order_relaxed);
+    destination->parent.store(
+        reinterpret_cast<std::uintptr_t>(parent), std::memory_order_relaxed);
+    destination->world_hash.store(world_hash, std::memory_order_relaxed);
+    destination->categories.store(categories, std::memory_order_relaxed);
+    destination->instance_flags_hash.store(
+        instance_flags_hash, std::memory_order_relaxed);
+    destination->retained_id.store(retained_id, std::memory_order_relaxed);
+    destination->owner_runtime_id.store(
+        owner_runtime_id, std::memory_order_relaxed);
+    destination->art.store(art, std::memory_order_relaxed);
+    destination->parent_look.store(parent_look, std::memory_order_relaxed);
+    destination->driven_count.store(driven_count, std::memory_order_relaxed);
+    destination->resource_mask.store(resource_mask, std::memory_order_relaxed);
+    destination->active_mask.store(active_mask, std::memory_order_relaxed);
+    destination->matrix_match_mask.store(
+        matrix_match_mask, std::memory_order_relaxed);
+    destination->owner_match_mask.store(
+        owner_match_mask, std::memory_order_relaxed);
+    destination->last_seen_ms.store(GetTickCount64(), std::memory_order_release);
+    destination->anim_data.store(anim_value, std::memory_order_release);
+}
+
 void publish_nadine_weapon_candidate(
     void* object, void* parent_draw, void* anim_data,
     void* instance_pool_base, std::uint32_t art, std::uint32_t mesh) {
@@ -13012,6 +13107,112 @@ void diagnose_nadine_weapon_membership_game_thread() {
     }
 }
 
+void diagnose_weapon_geometry_owners_game_thread() {
+    static std::array<std::uint64_t, 32> last_signatures{};
+    static std::array<std::uint32_t, 32> log_counts{};
+    for (std::size_t candidate_index = 0;
+         candidate_index < g_weapon_geometry_owner_candidates.size();
+         ++candidate_index) {
+        const WeaponGeometryOwnerCandidate& candidate =
+            g_weapon_geometry_owner_candidates[candidate_index];
+        const std::uintptr_t anim_data =
+            candidate.anim_data.load(std::memory_order_acquire);
+        if (anim_data <= 1) {
+            continue;
+        }
+        const std::uintptr_t owner =
+            candidate.owner.load(std::memory_order_relaxed);
+        const std::uintptr_t owner_vtable_rva =
+            candidate.owner_vtable_rva.load(std::memory_order_relaxed);
+        const std::uintptr_t parent =
+            candidate.parent.load(std::memory_order_relaxed);
+        const std::uint64_t world_hash =
+            candidate.world_hash.load(std::memory_order_relaxed);
+        const std::uint64_t categories =
+            candidate.categories.load(std::memory_order_relaxed);
+        const std::uint64_t instance_flags_hash =
+            candidate.instance_flags_hash.load(std::memory_order_relaxed);
+        const std::uint32_t retained_id =
+            candidate.retained_id.load(std::memory_order_relaxed);
+        const std::uint32_t owner_runtime_id =
+            candidate.owner_runtime_id.load(std::memory_order_relaxed);
+        const std::uint32_t art =
+            candidate.art.load(std::memory_order_relaxed);
+        const std::uint32_t parent_look =
+            candidate.parent_look.load(std::memory_order_relaxed);
+        const std::uint32_t driven_count =
+            candidate.driven_count.load(std::memory_order_relaxed);
+        const std::uint32_t resource_mask =
+            candidate.resource_mask.load(std::memory_order_relaxed);
+        const std::uint32_t active_mask =
+            candidate.active_mask.load(std::memory_order_relaxed);
+        const std::uint32_t matrix_match_mask =
+            candidate.matrix_match_mask.load(std::memory_order_relaxed);
+        const std::uint32_t owner_match_mask =
+            candidate.owner_match_mask.load(std::memory_order_relaxed);
+
+        bool known_nadine_weapon = false;
+        for (const NadineWeaponCandidate& known :
+             g_nadine_weapon_candidates) {
+            if (known.anim_data.load(std::memory_order_relaxed) == anim_data) {
+                known_nadine_weapon = true;
+                break;
+            }
+        }
+
+        std::uint64_t signature = 1469598103934665603ULL;
+        auto mix = [&signature](std::uint64_t value) {
+            signature ^= value;
+            signature *= 1099511628211ULL;
+        };
+        mix(anim_data);
+        mix(owner);
+        mix(owner_vtable_rva);
+        mix(parent);
+        mix(categories);
+        mix(instance_flags_hash);
+        mix(retained_id);
+        mix(owner_runtime_id);
+        mix(art);
+        mix(parent_look);
+        mix(driven_count);
+        mix(resource_mask);
+        mix(active_mask);
+        mix(matrix_match_mask);
+        mix(owner_match_mask);
+        mix(known_nadine_weapon ? 1 : 0);
+        if (last_signatures[candidate_index] == signature ||
+            log_counts[candidate_index] >= 16) {
+            continue;
+        }
+        last_signatures[candidate_index] = signature;
+        ++log_counts[candidate_index];
+
+        std::ostringstream line;
+        line << "WEAPON-GEOMETRY-OWNER candidate=" << candidate_index
+             << " fg=0x" << std::hex << anim_data
+             << " owner=0x" << owner
+             << " vtableRva=0x" << owner_vtable_rva
+             << " retained=0x" << retained_id
+             << " runtime=0x" << owner_runtime_id
+             << " art=0x" << art
+             << " parent=0x" << parent
+             << " look=0x" << parent_look
+             << " resources=0x" << resource_mask
+             << " active=0x" << active_mask
+             << " matrixMatch=0x" << matrix_match_mask
+             << " ownerMatch=0x" << owner_match_mask
+             << " categories=0x" << categories
+             << " instanceFlagsHash=0x" << instance_flags_hash
+             << " worldHash=0x" << world_hash
+             << std::dec << " driven=" << driven_count
+             << " processWeapon="
+             << (owner_vtable_rva == kProcessWeaponVtableRva ? 1 : 0)
+             << " knownNadine=" << (known_nadine_weapon ? 1 : 0);
+        write_log_line(line.str().c_str());
+    }
+}
+
 void diagnose_player_weapon_anim_control_game_thread() {
     // Read-only census of the exact PlayerWeaponAnimControl created by Player
     // initialization. Unlike the action-hook discriminator, admission depends
@@ -14031,6 +14232,7 @@ void apply_peer_held_weapon_state() {
     // the ordering boundary that this build needs to distinguish.
     // reconcile_legacy_nadine_inactive_weapons_game_thread(peer, puppet);
     diagnose_nadine_weapon_membership_game_thread();
+    diagnose_weapon_geometry_owners_game_thread();
     diagnose_player_weapon_anim_control_game_thread();
     // Slot MIRROR up front, unconditionally (2026-07-07): this was gated behind
     // g_puppet_pregive_holstered (parked OFF since the 07-06 flicker regression),
@@ -30968,6 +31170,179 @@ using FgDrawManagerPrepareInstanceFunction =
 FgDrawManagerPrepareInstanceFunction
     g_original_fgdraw_prepare_instance = nullptr;
 
+void learn_weapon_geometry_art_items(
+    std::uint32_t art, const std::byte* meshes) {
+    if (meshes == nullptr ||
+        (art != 0x33E29A1Bu && art != 0x8075397Du) ||
+        readable_bytes(meshes) < 0x250) {
+        return;
+    }
+    const std::uint32_t lod_count = std::min<std::uint32_t>(
+        *reinterpret_cast<const std::uint8_t*>(meshes + 0x242), 8);
+    for (std::uint32_t lod_index = 0; lod_index < lod_count; ++lod_index) {
+        const auto* const lod = meshes + 0x20 * lod_index;
+        const std::uint32_t resource_id =
+            *reinterpret_cast<const std::uint32_t*>(lod + 0x18);
+        const std::uintptr_t retained = reinterpret_cast<std::uintptr_t>(
+            *reinterpret_cast<void* const*>(lod + 0x10));
+        if (retained == 0) {
+            continue;
+        }
+        for (std::size_t known_index = 0;
+             known_index < kWeaponGeometryResourceIds.size(); ++known_index) {
+            if (kWeaponGeometryResourceIds[known_index] == resource_id) {
+                g_weapon_geometry_art_items[known_index].store(
+                    retained, std::memory_order_release);
+                break;
+            }
+        }
+    }
+}
+
+void capture_weapon_geometry_owners(
+    void* fg_anim_data, void* instance_pool_base) {
+    __try {
+        if (fg_anim_data == nullptr || instance_pool_base == nullptr ||
+            readable_bytes(fg_anim_data) < 0x320) {
+            return;
+        }
+        std::array<std::uintptr_t, 6> known_geometries{};
+        for (std::size_t index = 0; index < known_geometries.size(); ++index) {
+            known_geometries[index] =
+                g_weapon_geometry_art_items[index].load(
+                    std::memory_order_acquire);
+            if (known_geometries[index] == 0) {
+                return;
+            }
+        }
+
+        auto* const fg = static_cast<const std::byte*>(fg_anim_data);
+        const std::uint32_t driven_count =
+            *reinterpret_cast<const std::uint32_t*>(fg + 0x20C);
+        const auto* const driven_indices =
+            *reinterpret_cast<const std::uint32_t* const*>(fg + 0x210);
+        if (driven_count == 0 || driven_count > 256 ||
+            driven_indices == nullptr ||
+            readable_bytes(driven_indices) <
+                sizeof(std::uint32_t) * driven_count) {
+            return;
+        }
+        const std::uint64_t world_hash = hash_nadine_render_words(
+            reinterpret_cast<const std::uint32_t*>(fg + 0x1C0), 16);
+        std::uint32_t resource_mask = 0;
+        std::uint32_t active_mask = 0;
+        std::uint32_t matrix_match_mask = 0;
+        std::uint32_t owner_match_mask = 0;
+        std::uint64_t categories = 0;
+        std::uint64_t instance_flags_hash = 1469598103934665603ULL;
+        const std::uint32_t retained_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset);
+        const std::uintptr_t pool_value =
+            reinterpret_cast<std::uintptr_t>(instance_pool_base);
+        for (std::uint32_t driven_index = 0;
+             driven_index < driven_count; ++driven_index) {
+            const std::uint32_t pool_index = driven_indices[driven_index];
+            if (pool_index >= 0x10000u) {
+                continue;
+            }
+            const std::uintptr_t instance_value =
+                pool_value + static_cast<std::uintptr_t>(pool_index) * 0x280;
+            if (instance_value < pool_value) {
+                continue;
+            }
+            const auto* const instance =
+                reinterpret_cast<const std::byte*>(instance_value);
+            if (readable_bytes(instance) < 0x258) {
+                continue;
+            }
+            const std::uintptr_t geometry = reinterpret_cast<std::uintptr_t>(
+                *reinterpret_cast<void* const*>(instance + 0x1B0));
+            for (std::size_t known_index = 0;
+                 known_index < known_geometries.size(); ++known_index) {
+                if (geometry != known_geometries[known_index]) {
+                    continue;
+                }
+                const std::uint32_t bit = 1u << known_index;
+                resource_mask |= bit;
+                if (*reinterpret_cast<const std::uint8_t*>(
+                        instance + 0x1A0) != 0) {
+                    active_mask |= bit;
+                }
+                categories &= ~(0xFFULL << (8 * known_index));
+                categories |= static_cast<std::uint64_t>(
+                    *reinterpret_cast<const std::uint8_t*>(
+                        instance + 0x1A4)) << (8 * known_index);
+                const std::uint32_t instance_flags =
+                    *reinterpret_cast<const std::uint32_t*>(instance + 0x18);
+                instance_flags_hash ^=
+                    (static_cast<std::uint64_t>(known_index) << 32) |
+                    instance_flags;
+                instance_flags_hash *= 1099511628211ULL;
+                if (hash_nadine_render_words(
+                        reinterpret_cast<const std::uint32_t*>(
+                            instance + 0x140), 16) == world_hash) {
+                    matrix_match_mask |= bit;
+                }
+                if (*reinterpret_cast<const std::uint32_t*>(
+                        instance + 0x250) == retained_id) {
+                    owner_match_mask |= bit;
+                }
+                break;
+            }
+        }
+        if (resource_mask == 0) {
+            return;
+        }
+
+        void* owner = nullptr;
+        std::uintptr_t owner_vtable_rva = 0;
+        std::uint32_t owner_runtime_id = 0;
+        std::uint32_t art = 0;
+        void* parent = nullptr;
+        std::uint32_t parent_look = 0;
+        void* const retained_handle = *reinterpret_cast<void* const*>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        if (retained_handle != nullptr &&
+            readable_bytes(retained_handle) >= 0x10) {
+            owner = *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(retained_handle) + 0x8);
+        }
+        if (owner != nullptr && readable_bytes(owner) >= 0xC0) {
+            const auto* const owner_bytes = static_cast<const std::byte*>(owner);
+            const std::uintptr_t owner_vtable =
+                *reinterpret_cast<const std::uintptr_t*>(owner_bytes);
+            if (owner_vtable >= g_module) {
+                owner_vtable_rva = owner_vtable - g_module;
+            }
+            owner_runtime_id = *reinterpret_cast<const std::uint32_t*>(
+                owner_bytes + kGameObjectRuntimeIdOffset);
+            if (owner_vtable_rva == kProcessWeaponVtableRva &&
+                readable_bytes(owner) >= 0x864) {
+                art = *reinterpret_cast<const std::uint32_t*>(
+                    owner_bytes + 0x860);
+                void* const parent_handle =
+                    *reinterpret_cast<void* const*>(owner_bytes + 0x4E0);
+                if (parent_handle != nullptr &&
+                    readable_bytes(parent_handle) >= 0x10) {
+                    parent = *reinterpret_cast<void* const*>(
+                        static_cast<const std::byte*>(parent_handle) + 0x8);
+                    if (parent != nullptr && readable_bytes(parent) >= 0x174) {
+                        parent_look = *reinterpret_cast<const std::uint32_t*>(
+                            static_cast<const std::byte*>(parent) + 0x170);
+                    }
+                }
+            }
+        }
+        publish_weapon_geometry_owner_candidate(
+            fg_anim_data, instance_pool_base, owner, owner_vtable_rva, parent,
+            world_hash, categories, instance_flags_hash, retained_id,
+            owner_runtime_id, art, parent_look, driven_count, resource_mask,
+            active_mask, matrix_match_mask, owner_match_mask);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
+
 void capture_nadine_fgdraw_candidate(
     void* fg_anim_data, void* instance_pool_base) {
     __try {
@@ -31026,6 +31401,9 @@ void capture_nadine_fgdraw_candidate(
         if (meshes != nullptr && mesh_count != 0 && mesh_count <= 128 &&
             readable_bytes(meshes) >= 0x20) {
             mesh_id = *reinterpret_cast<std::uint32_t*>(meshes + 0x18);
+            learn_weapon_geometry_art_items(
+                *reinterpret_cast<std::uint32_t*>(weapon_bytes + 0x860),
+                meshes);
         }
         publish_nadine_weapon_candidate(
             weapon, parent_draw, fg_anim_data, instance_pool_base,
@@ -31042,6 +31420,7 @@ void __fastcall hooked_fgdraw_prepare_instance(
     }
     if (g_state_net.enabled) {
         capture_nadine_fgdraw_candidate(fg_anim_data, instance_pool_base);
+        capture_weapon_geometry_owners(fg_anim_data, instance_pool_base);
     }
 }
 
@@ -33528,8 +33907,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22fw "
-        "(Nadine weapon rolling LOD and render-matrix census)");
+        "TLL co-op runtime init 2026-07-22fx "
+        "(renderer-wide pistol/rifle ArtItemGeo owner census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

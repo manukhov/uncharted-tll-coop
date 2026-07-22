@@ -48,8 +48,9 @@ FUNCTIONS = {
     0x14192E590: (
         "FgInstance_Init",
         "Initializes a newly allocated FgInstance from its FgAnimData owner and "
-        "ArtItemGeo. Captures the retained owner id at FgInstance+0x250 and "
-        "sets the per-instance geometry/render state used by every mesh LOD.",
+        "ArtItemGeo. Stores the exact ArtItemGeo pointer at FgInstance+0x1B0, "
+        "captures the retained owner id at +0x250, and sets the per-instance "
+        "geometry/render state used by every mesh LOD.",
     ),
     # --- 2026-07-21: native NadineBuddy attachment ownership ---
     0x1404059E0: (

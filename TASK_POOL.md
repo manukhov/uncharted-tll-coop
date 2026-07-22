@@ -1740,6 +1740,14 @@ Do not reopen these as the first move:
       the same FgAnimData/pool slots for the successor while the old child became
       invalid, so stale LOD H1/H3 are REJECTED. Next statically trace phase-0x40
       owner composition around `0x141A8FC00` versus a separate visible prop.
+      STATIC `fx`: do not repeat the phase hook yet; `fw` admitted only an exact
+      ProcessWeapon and therefore could not observe H4. `FgInstance_Init
+      0x14192E590` stores the LOD entry's exact `ArtItemGeo*` at
+      `FgInstance+0x1B0`. Learn the six proven pistol/rifle LOD pointers from the
+      current weapons, then scan every bounded FgAnimData driven list at the same
+      post-render callsite. `WEAPON-GEOMETRY-OWNER` is read-only and must show
+      whether any active matching geometry has a non-inventory/non-ProcessWeapon
+      owner. Runtime `fx` is pending.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
