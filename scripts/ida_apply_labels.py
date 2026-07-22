@@ -1289,6 +1289,19 @@ FUNCTIONS = {
         "FgDrawManager worker that processes FgAnimData entries in batches of eight "
         "through FgDrawManager_PrepareInstanceForRendering.",
     ),
+    0x14181BA10: (
+        "FgDrawManager_PostAnimProcessing",
+        "Exact FgDrawMgr::PostAnimProcessing source assertion in fg-draw-mgr.cpp. "
+        "Builds and submits six worker records which batch FgAnimData entries "
+        "through FgDrawManager_PrepareInstancesJob.",
+    ),
+    0x14197D8C0: (
+        "AnimFramePlayback_PublishRetainedFgAnim",
+        "Resolves a retained owner through +0x108/+0x110, obtains its FgAnimData "
+        "through owner+0x1A0 -> +0x20, copies an authored animation frame into "
+        "+0x230/+0x238 and +0x1C0, then synchronously calls "
+        "FgDrawManager_PrepareInstanceForRendering at 0x14197DC54 with mode 1.",
+    ),
     0x1403014F0: (
         "FgAnimData_GetRenderWorldMatrix",
         "Returns the published 4x4 matrix at FgAnimData+0x1C0, optionally multiplied "

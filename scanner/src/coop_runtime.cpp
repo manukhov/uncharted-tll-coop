@@ -33066,6 +33066,118 @@ bool seh_fg_anim_owned_by_local_inactive_rifle(void* fg_anim_data) {
     }
 }
 
+bool seh_fg_anim_owned_by_legacy_nadine_rifle(
+    void* fg_anim_data, std::uintptr_t* owner_out,
+    std::uintptr_t* parent_out, bool* target_match_out) {
+    __try {
+        if (owner_out == nullptr || parent_out == nullptr ||
+            target_match_out == nullptr || fg_anim_data == nullptr ||
+            readable_bytes(fg_anim_data) < 0x320) {
+            return false;
+        }
+        *owner_out = 0;
+        *parent_out = 0;
+        *target_match_out = false;
+        auto* const fg = static_cast<const std::byte*>(fg_anim_data);
+        void* const retained_handle = *reinterpret_cast<void* const*>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        const std::uint32_t retained_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset);
+        if (retained_handle == nullptr ||
+            readable_bytes(retained_handle) < 0x10) {
+            return false;
+        }
+        void* const owner = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(retained_handle) + 0x8);
+        if (owner == nullptr || readable_bytes(owner) < 0x864) {
+            return false;
+        }
+        auto* const weapon = static_cast<const std::byte*>(owner);
+        if (*reinterpret_cast<const std::uintptr_t*>(weapon) !=
+                g_module + kProcessWeaponVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(
+                weapon + kGameObjectRuntimeIdOffset) != retained_id ||
+            *reinterpret_cast<const std::uint32_t*>(weapon + 0x860) !=
+                kCoopRifleArtId ||
+            *reinterpret_cast<void* const*>(weapon + 0x1A8) != fg_anim_data) {
+            return false;
+        }
+        void* const parent_handle = *reinterpret_cast<void* const*>(
+            weapon + 0x4E0);
+        if (parent_handle == nullptr ||
+            readable_bytes(parent_handle) < 0x10) {
+            return false;
+        }
+        void* const parent = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(parent_handle) + 0x8);
+        if (parent == nullptr || readable_bytes(parent) < 0x174 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(parent) + 0x170) !=
+                kLegacyNadineAttachTargetLookId) {
+            return false;
+        }
+        const std::uintptr_t owner_value =
+            reinterpret_cast<std::uintptr_t>(owner);
+        *owner_out = owner_value;
+        *parent_out = reinterpret_cast<std::uintptr_t>(parent);
+        *target_match_out = owner_value ==
+            g_local_nadine_inactive_rifle_weapon.load(
+                std::memory_order_acquire);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void __fastcall hooked_fgdraw_prepare_instance_synchronous(
+    void* fg_anim_data, void* instance_pool_base, bool mode) {
+    std::uintptr_t owner = 0;
+    std::uintptr_t parent = 0;
+    bool target_match = false;
+    const bool legacy_nadine_rifle = g_net_role_b &&
+        seh_fg_anim_owned_by_legacy_nadine_rifle(
+            fg_anim_data, &owner, &parent, &target_match);
+    if (g_original_fgdraw_prepare_instance != nullptr) {
+        g_original_fgdraw_prepare_instance(
+            fg_anim_data, instance_pool_base, mode);
+    }
+    if (!legacy_nadine_rifle) {
+        return;
+    }
+    static std::atomic<std::uintptr_t> logged_owner_before_target{0};
+    static std::atomic<std::uint64_t> logged_target_generation{0};
+    if (target_match) {
+        const std::uint64_t generation =
+            g_local_nadine_inactive_rifle_generation.load(
+                std::memory_order_acquire);
+        if (logged_target_generation.exchange(
+                generation, std::memory_order_relaxed) == generation) {
+            return;
+        }
+    } else if (logged_owner_before_target.exchange(
+                   owner, std::memory_order_relaxed) == owner) {
+        return;
+    }
+    std::ostringstream line;
+    line << "NADINE-LOCAL-RIFLE-FGDRAW action=sync-prepare"
+         << " generation="
+         << g_local_nadine_inactive_rifle_generation.load(
+                std::memory_order_acquire)
+         << " fg=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(fg_anim_data)
+         << " weapon=0x" << owner
+         << " parent=0x" << parent
+         << " target=0x"
+         << g_local_nadine_inactive_rifle_weapon.load(
+                std::memory_order_acquire)
+         << " pool=0x"
+         << reinterpret_cast<std::uintptr_t>(instance_pool_base)
+         << std::dec << " mode=" << (mode ? 1 : 0)
+         << " targetMatch=" << (target_match ? 1 : 0);
+    write_log_line(line.str().c_str());
+}
+
 void __fastcall hooked_fgdraw_prepare_instance(
     void* fg_anim_data, void* instance_pool_base, bool mode) {
     const bool suppress_inactive_local_rifle =
@@ -33161,6 +33273,68 @@ bool install_fgdraw_prepare_instance_relay() {
     DWORD ignored = 0;
     VirtualProtect(call_site, 5, old_protection, &ignored);
     boot_log_line("FgDraw prepare-instance callsite relay installed");
+    return true;
+}
+
+bool install_fgdraw_synchronous_prepare_instance_relay() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kFgDrawManagerSynchronousPrepareInstanceCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line("FgDraw synchronous prepare relay SKIPPED (not E8)");
+        return false;
+    }
+    std::int32_t old_displacement = 0;
+    std::memcpy(&old_displacement, call_site + 1, sizeof(old_displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(old_displacement);
+    const std::uintptr_t expected =
+        g_module + kFgDrawManagerPrepareInstanceRva;
+    if (target != expected) {
+        boot_log_line("FgDraw synchronous prepare relay SKIPPED (target)");
+        return false;
+    }
+    if (g_original_fgdraw_prepare_instance == nullptr) {
+        g_original_fgdraw_prepare_instance =
+            reinterpret_cast<FgDrawManagerPrepareInstanceFunction>(expected);
+    }
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("FgDraw synchronous prepare relay SKIPPED (relay)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_fgdraw_prepare_instance_synchronous);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("FgDraw synchronous prepare relay SKIPPED (range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("FgDraw synchronous prepare relay SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line("FgDraw synchronous prepare callsite relay installed");
     return true;
 }
 
@@ -35657,8 +35831,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22gp "
-        "(role-B local Nadine inactive-rifle FgDraw submission gate; pistol animation unchanged)");
+        "TLL co-op runtime init 2026-07-22gq "
+        "(role-B local Nadine synchronous FgDraw discriminator; pistol animation unchanged)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -35685,6 +35859,7 @@ DWORD WINAPI install_hook(void*) {
     install_scope_visible_gate();
     install_player_main_view_visibility_relay();
     install_fgdraw_prepare_instance_relay();
+    install_fgdraw_synchronous_prepare_instance_relay();
     install_nd_attachable_parent_visibility_relay();
     install_legacy_nadine_holster_overlay_probe();
     install_legacy_nadine_holster_clip_lookup_probe();

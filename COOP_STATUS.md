@@ -7895,3 +7895,59 @@ the skip and renders the rifle normally. The role-A instance, active pistol,
 body and grenade remain unchanged. A reached skip with the rifle still visible
 would prove a second, as-yet-unidentified FgAnim/geometry owner; missing rifle
 when active, body loss or crash rejects the submission gate.
+
+### 2026-07-22 REJECTED: `gp` intercepted only the worker prepare path
+
+Runtime build `gp` reached the full same-generation chain on role B:
+`arm-late-hide`, `late-hide changed=1`, and
+`NADINE-LOCAL-RIFLE-FGDRAW action=skip-prepare` all named the same inactive
+owner-0 rifle and FgAnimData. The user still saw the rifle in the local hand.
+The prior claim that `0x14181B925` was the final render-admission boundary is
+therefore REJECTED. `PrepareInstanceForRendering` updates render data; the
+single intercepted worker callsite does not prove either exclusive preparation
+or admission to a view.
+
+### 2026-07-22 STATIC: second synchronous prepare path discriminator (`gq`)
+
+The `gp` result has a concrete static correction. Cross-references to
+`FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` include not only the
+worker call at `0x14181B925`, but also executable call `0x14197DC54` inside
+`sub_14197D8C0` (and an unowned code xref at `0x14181C102`). The second path is
+independent of the normal PostAnimProcessing batch: it resolves a retained
+owner through `a1+0x108/+0x110`, obtains that owner's FgAnimData through
+`owner+0x1A0 -> +0x20`, copies an authored frame into CPU skinning buffers
+`FgAnimData+0x230/+0x238`, writes the 64-byte render-world matrix at `+0x1C0`,
+and then calls the same prepare function with the global instance pool and
+`mode=1`. Two independent data-table references at `0x142ECCC34` and
+`0x142ECCCB4` register this function. These xrefs, retained-owner dataflow and
+direct render-buffer writes satisfy the static evidence quota.
+
+Competing explanations are now bounded. S1 predicts that the exact local
+inactive rifle reaches `0x14197DC54`, so `gp` left an independent synchronous
+preparation path intact. S2 predicts only a pre-publication legacy-Nadine rifle
+hit, identifying a one-shot spawn wrapper which can survive after inventory
+replacement. S3 predicts no legacy-Nadine rifle hit at this callsite, proving
+that `PrepareInstanceForRendering` is merely data preparation and that the next
+target must be the later view-specific instance admission/filter.
+
+Build `gq` leaves both preparation paths pass-through and adds a checked E8
+relay only at `0x14197DC54`. Its SEH-bounded read-only classifier requires exact
+ProcessWeapon vtable, retained/runtime id equality, rifle art, reciprocal
+`weapon+0x1A8` FgAnimData, and a parent with legacy-Nadine look. It logs owner,
+parent, FgAnimData, mode, published target and `targetMatch`, once before target
+publication and once per matched generation. It writes no weapon, FgAnimData,
+instance or visibility state.
+
+The real IDB now names `FgDrawManager_PostAnimProcessing 0x14181BA10` and
+`AnimFramePlayback_PublishRetainedFgAnim 0x14197D8C0`; headless apply reported
+`1257 functions, 20 data names`, `save_database returned True`, and the restarted
+MCP resolved both names. The release DLL compiled successfully.
+
+**Falsifiable `gq` prediction:** both copies load marker `2026-07-22gq` and
+install the synchronous relay. On role B, S1 emits `action=sync-prepare mode=1
+targetMatch=1` for the same weapon/FgAnimData as `skip-prepare`; S2 emits only a
+legacy rifle row with `targetMatch=0` before the published generation; S3 emits
+no synchronous legacy-rifle row although the normal `skip-prepare` marker still
+appears. Because this build is diagnostic and pass-through at the new path, the
+spawn rifle is expected to remain visible; crash or a body/pistol regression
+invalidates the capture.

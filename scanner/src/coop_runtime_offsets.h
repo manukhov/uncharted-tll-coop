@@ -110,6 +110,11 @@ constexpr std::uintptr_t kAnimManagerPublishWorldTransformCallsiteRva = 0x1A8FC0
 // driven 0x280-byte instance owns the current render-world matrix at +0x140.
 constexpr std::uintptr_t kFgDrawManagerPrepareInstanceRva = 0x181A9B0;
 constexpr std::uintptr_t kFgDrawManagerPrepareInstanceCallsiteRva = 0x181B925;
+// A synchronous animation-playback path also publishes directly into an
+// owner's FgAnimData and invokes PrepareInstanceForRendering outside the normal
+// PostAnimProcessing worker batch.
+constexpr std::uintptr_t kFgDrawManagerSynchronousPrepareInstanceCallsiteRva =
+    0x197DC54;
 constexpr std::size_t kFgAnimDataSkeletonOffset = 0x18;
 constexpr std::size_t kSkeletonJointCountOffset = 0x34;
 // Animation command evaluator and the fixed-stride SkelTable retarget registry.

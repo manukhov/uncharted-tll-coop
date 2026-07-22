@@ -1563,11 +1563,19 @@ Do not reopen these as the first move:
       hand, matching `disarm-show` on rifle draw, and no body/pistol regression.
       REJECTED for visible output: both late markers occurred and the exact
       rifle reported `instances=3/0`, but the starting rifle remained visible.
-- [ ] Run build `gp`, skipping stock `PrepareInstanceForRendering 0x14181A9B0`
+- [x] Run build `gp`, skipping stock `PrepareInstanceForRendering 0x14181A9B0`
       only when FgAnim retained owner, runtime id, art and pointer all match the
       published inactive local rifle. Require `skip-prepare` for the same
       generation, no spawn rifle in the local hand, normal rendering after
       `disarm-show`, and no pistol/body/role-A regression.
+      REJECTED: the exact same-generation skip occurred, but the rifle remained
+      visible. Static xrefs show this intercepted only worker callsite
+      `0x14181B925`; a separate synchronous caller exists at `0x14197DC54`.
+- [ ] Run read-only build `gq` and classify the synchronous
+      `PrepareInstanceForRendering` caller at `0x14197DC54`. Require either an
+      exact `sync-prepare mode=1 targetMatch=1`, a pre-publication legacy-rifle
+      `targetMatch=0` only, or no sync row alongside the worker skip; do not
+      mutate the second path until this discriminator chooses among S1/S2/S3.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no
