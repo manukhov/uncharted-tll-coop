@@ -1723,9 +1723,15 @@ Do not reopen these as the first move:
       immediate retired generation did go `3/3 -> 0/0`, but other detached
       generations retained `3/3` and the bounded table saturated, so narrow H1
       remains open. The two camera copies also disagreed about overlapping
-      pistol/rifle visibility. Next trace DrawControl's three view-specific
-      instances to their cached matrices and replace the saturating generation
-      census with a rolling one; do not tune attachment ids further.
+      pistol/rifle visibility. STATIC `fv` corrects the instance model:
+      `mesh+0x242` is `m_availableLods`, and the three `0x20`-byte entries are
+      LODs sharing one `DrawControl+0` FgAnimData. Its driven-list indices live
+      at `+0x210/+0x20C`; `FgDrawManager_PrepareInstanceForRendering
+      0x14181A9B0` copies the common `FgAnimData+0x1C0` render matrix into each
+      `FgInstance+0x140`. Correct ProcessWeapon `+0x240/+0x250/+0x280` therefore
+      did not prove the visible matrix. Next build a rolling generation census
+      and record per-LOD driven membership, `+0x250` owner id and hashes of
+      instance `+0x140`, FgAnimData `+0x1C0/+0x2E0`; do not tune attachment ids.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

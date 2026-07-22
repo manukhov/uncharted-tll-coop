@@ -8,6 +8,49 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-22: DrawControl LOD/FgInstance render ownership ---
+    0x141751E30: (
+        "IDrawControl_AddMesh",
+        "Exact IDrawControl::AddMesh source assertion. Materializes the mesh's "
+        "m_availableLods entries (stride 0x20) and allocates every FgInstance "
+        "against the one FgAnimData pointer stored at DrawControl+0.",
+    ),
+    0x141753200: (
+        "IDrawControl_NotifyMeshUnloaded",
+        "Exact IDrawControl::NotifyMeshUnloaded source assertion. Iterates the "
+        "mesh m_availableLods entries and transitions their live/freed instance "
+        "pointers; the entries are LODs, not camera-specific copies.",
+    ),
+    0x141753560: (
+        "IDrawControl_Relink",
+        "Exact IDrawControl::Relink source assertion. Reallocates each LOD "
+        "m_pInstance against DrawControl+0 FgAnimData, initializes it from the "
+        "retained ArtItemGeo and frees the prior m_pFreedInstance.",
+    ),
+    0x141819F30: (
+        "FgDrawMgr_AllocateInstance",
+        "Exact FgDrawMgr::AllocateInstance source assertion. Allocates a 0x280-"
+        "byte FgInstance from the global pool and appends its pool index to the "
+        "FgAnimData driven-instance list at +0x210/+0x20C.",
+    ),
+    0x14181A2A0: (
+        "FgDrawMgr_FreeInstance",
+        "Exact FgDrawMgr::FreeInstance source assertion. Detaches the pool "
+        "instance index from its FgAnimData and releases the same 0x280-byte "
+        "FgInstance slot.",
+    ),
+    0x14181A5A0: (
+        "FgDrawMgr_DetachInstanceFromAnimData",
+        "Removes one FgInstance pool index from FgAnimData+0x210 with a swap-"
+        "delete and decrements +0x20C; the source assertion verifies the driven "
+        "instance count falls by exactly one.",
+    ),
+    0x14192E590: (
+        "FgInstance_Init",
+        "Initializes a newly allocated FgInstance from its FgAnimData owner and "
+        "ArtItemGeo. Captures the retained owner id at FgInstance+0x250 and "
+        "sets the per-instance geometry/render state used by every mesh LOD.",
+    ),
     # --- 2026-07-21: native NadineBuddy attachment ownership ---
     0x1404059E0: (
         "Npc_SetupAttachSystem",
@@ -1012,7 +1055,8 @@ FUNCTIONS = {
         "FgDrawManager_PrepareInstanceForRendering",
         "Exact PrepareInstanceForRendering assertions in fg-draw-mgr.cpp. Copies "
         "FgAnimData CPU matrices to upload storage and publishes the render world "
-        "matrix returned by FgAnimData_GetRenderWorldMatrix into each FgInstance.",
+        "matrix returned by FgAnimData_GetRenderWorldMatrix into each driven "
+        "FgInstance at +0x140..+0x17F.",
     ),
     0x14181B890: (
         "FgDrawManager_PrepareInstancesJob",

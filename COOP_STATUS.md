@@ -6551,11 +6551,54 @@ pair became current, rejecting a universal "the immediately previous object is
 always rendered" rule. Other later slotless generations retained `3/3`
 instances after owner resolution was lost, and the bounded 32-entry table filled
 before the final user sequence. H1 therefore remains open in the narrower form:
-a detached older generation or one of the three view-specific instances can be
-the visible stale firearm. The different Nadine-view/Chloe-view result, despite
-matching current logical transforms in both processes, makes per-view instance
-publication/caching the next discriminator. Do not change attachment ids again.
-Statically trace the three DrawControl mesh instances from the exact object's
-published `+0x240/+0x250/+0x280` world outputs to each render-instance matrix,
-then extend the census with per-instance identity/transform and a rolling rather
-than saturating generation table.
+a detached older generation or one of the three still-unclassified render
+instances can be the visible stale firearm. The different Nadine-view/Chloe-view
+result, despite matching current logical transforms in both processes, makes
+render-instance lifetime/publication the next discriminator. Do not change
+attachment ids again.
+
+### 2026-07-22 STATIC correction: weapon DrawControl entries are LODs (`fv`)
+
+The three active entries reported by `fu` are not view-specific copies.
+`IDrawControl_Relink 0x141753560` and
+`IDrawControl_NotifyMeshUnloaded 0x141753200` identify `mesh+0x242` as
+`m_availableLods`; each `0x20`-byte LOD entry contains live instance `+0`, freed
+instance `+8`, retained `ArtItemGeo* +0x10` and resource id `+0x18`.
+`IDrawControl_AddMesh 0x141751E30` allocates every LOD through
+`FgDrawMgr_AllocateInstance 0x141819F30` against the single FgAnimData pointer at
+`DrawControl+0`. Allocation appends the `0x280`-stride global-pool index to
+`FgAnimData+0x210`, whose current/max counts are `+0x20C/+0x208`;
+`FgDrawMgr_DetachInstanceFromAnimData 0x14181A5A0` removes it by swap-delete and
+`FgDrawMgr_FreeInstance 0x14181A2A0` releases the same index. These source
+assertions, direct field writes and the independent AddMesh/Relink paths satisfy
+the static evidence quota.
+
+The final render boundary also corrects the old `+0x240/+0x250/+0x280`
+assumption. Animation-manager phase `0x40` resolves the ProcessWeapon owner from
+`FgAnimData+0x1A8/+0x1B0` and publishes its composed world transform through
+`FgAnimData_PublishWorldTransform 0x1418C55D0` into `FgAnimData+0x1C0`.
+`FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` walks that FgAnimData's
+driven list and at `0x14181B3F4..0x14181B424` copies the result of
+`FgAnimData_GetRenderWorldMatrix 0x1403014F0` to each `FgInstance+0x140..+0x17F`.
+All three LODs therefore should receive one matrix. The getter uses `+0x1C0`
+directly unless flag `0x40000` selects an additional multiplication by
+`FgAnimData+0x2E0`. Visibility/camera helpers only modify instance `+0x18`,
+`+0x1A0` and `+0x1A4`; they do not write the matrix.
+
+Competing hypotheses are now: (H1) an active LOD is absent from the FgAnimData
+driven list and retains stale `+0x140`; (H2) the exact current weapon's FgAnimData
+owner or published `+0x1C0/+0x2E0` is wrong; (H3) a slotless old generation stays
+active and can be identified by the owner id captured at `FgInstance+0x250`;
+(H4) the visible firearm is a separate prop outside the inventoried
+ProcessWeapon graph. The earlier "different matrices in three camera copies"
+candidate is REJECTED, as is the claim that correct ProcessWeapon
+`+0x240/+0x250/+0x280` proves the rendered matrix.
+
+The next read-only build must use a rolling generation census and, for every LOD,
+record its live/freed/ArtItemGeo pointers, resource id, active/flag state,
+`FgInstance+0x250`, membership in `FgAnimData+0x210`, and hashes of instance
+`+0x140`, FgAnimData `+0x1C0` and auxiliary `+0x2E0`. A safe post-call boundary
+is the direct `FgDrawManager_PrepareInstanceForRendering` call at `0x14181B925`.
+Prediction: a non-driven active LOD or unequal final matrix selects H1; three
+driven equal LODs with a wrong publication selects H2; a live old owner id selects
+H3; if every ProcessWeapon instance is coherent, H4 wins.
