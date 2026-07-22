@@ -6415,3 +6415,48 @@ id other than `0x8A0249B5`, back placement or model damage falsifies H1. The
 ineffective owner-local factory-pointer probe and its runtime offset were
 removed rather than carried into the fix. The release DLL compiled successfully
 with marker `2026-07-22fs`; runtime verification is pending.
+
+### 2026-07-22 RUNTIME REJECTED: logical pistol hip id moves the wrong visible mesh (`fs`)
+
+Processes 1796 and 8984 loaded `fs`, installed the safe hooks with
+`holsterSafe=11` and remained stable throughout the test. The structural half
+of H1 matched exactly. Legacy Nadine's table reported `animAlias=2`, pistol
+index `41`, alias index `42`, joint `5 -> 5` and `transformEqual=1`. On both
+retained roles, standard pistol art `0x33E29A1B` in weapon slot 1 repeatedly
+selected `AD -> BB -> effective 8A`: the first `targSpineProp` request stayed
+unchanged, `targSpinePropAnim` selected alias index 42, and the final request
+logged `redirect=1` and ended on `pistolHolster` index 41. Rifle art
+`0x8075397D` in slot 0 continued to request/select generic
+`gun_holster 0x555EFB8D` at index 40 and never crossed the redirect.
+
+The visible prediction nevertheless failed. The user saw the rifle model move
+from its back location to Nadine's thigh, while the pistol still appeared on
+her back. The pistol was also absent immediately after spawn and appeared only
+after its first draw/Put cycle. Therefore the art/slot filter itself is not the
+failure: the runtime rows preserve the already-confirmed identities
+`0x33E29A1B = pistol/slot 1` and `0x8075397D = rifle/slot 0`. Instead, H1 is
+REJECTED and H2 is selected: the logical ProcessWeapon attach record at
+`weapon+0x688` is not the final owner of the visible Player-Nadine weapon mesh,
+or the downstream DrawControl/child binding crosses those logical objects.
+Do not swap slot numbers or broaden the selector redirect from this result.
+
+The initial invisibility has a separate concrete ordering explanation. Before
+the compatibility repair ran, the first legacy-Nadine selector calls for rifle
+generic and pistol `targSpineProp` both returned zero and left `rightHand`
+selected. Later rows, after the table had been repaired, returned one for the
+same ids. `ensure_legacy_nadine_attach_points_game_thread` currently waits for
+`latest_peer_state` in `apply_peer_held_weapon_state`, so it can run after the
+initial weapon-holster pass. The repair must eventually move to an earlier
+game-thread lifecycle boundary after `Player+0x1E0` is materialized but before
+the first BuildBinding/selector calls.
+
+Both processes were closed after capture. Build `ft` removes the BB alias and
+the scoped final redirect so the visible rifle regression is parked; it retains
+the crash-safe Execute/selector observation and the previously proven basic
+AD/generic compatibility records. The next static task is to trace each
+ProcessWeapon through `NdAttachableObject_PostJointUpdate_Async` into its actual
+DrawControl/mesh child and independently locate the pre-holster Player lifecycle
+boundary. No further attachment-id mutation is justified until those owners are
+resolved. The rollback release compiled successfully with marker
+`2026-07-22ft`; it was not launched because the next runtime test still requires
+the new static owner proof.

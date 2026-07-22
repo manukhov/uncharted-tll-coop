@@ -1691,14 +1691,19 @@ Do not reopen these as the first move:
       `targSpineProp 0x00AD047A`. The final stock spine selection explains the
       back holster. STATIC `fs` now clones the validated joint-5
       `pistolHolster 0x8A0249B5` record as the missing `targSpinePropAnim`
-      alias, then scopes the checked selector to the exact legacy-Nadine Put
-      executor and slot-1 weapon. It preserves the prerequisite spine request,
-      allows the animation-point request, and redirects only the later/final
-      spine request to the hip record. The ineffective factory pointer probe is
-      removed and direct inactive repair remains disabled. Runtime prediction:
-      `holsterSafe=11`, alias joint/transform equality, AD unchanged then BB,
-      then final `AD -> effective 8A` with `redirect=1`; Chloe, rifle, grenade,
-      Get and body geometry must remain unchanged. Test multiple pistols.
+      alias, then scoped the checked selector to the exact legacy-Nadine Put
+      executor and slot-1 weapon. RUNTIME REJECTED: all logical predictions
+      passed (`holsterSafe=11`, alias joint/transform equality and pistol art
+      `0x33E29A1B` AD->BB->8A/index 41), while rifle art `0x8075397D` stayed on
+      generic/index 40; visually, however, the rifle moved to the thigh and the
+      pistol remained on the back. H2 is selected: `weapon+0x688` is not the
+      last visible mesh owner, or downstream DrawControl/child binding crosses
+      the objects. Do not swap slots or broaden the id redirect. Build `ft`
+      parks both fs mutations. Next: trace both ProcessWeapon objects through
+      `NdAttachableObject_PostJointUpdate_Async` into their actual mesh children.
+      Separately move compatibility-table materialization earlier: initial
+      AD/generic selectors returned 0 before repair, explaining why the pistol
+      is invisible until its first draw/Put cycle.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

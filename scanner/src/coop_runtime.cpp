@@ -12784,7 +12784,6 @@ void diagnose_player_weapon_anim_control_game_thread() {
 constexpr std::uint32_t kChloeAttachDonorLookId = 0x3F334972u;
 constexpr std::uint32_t kLegacyNadineAttachTargetLookId = 0xD27C074Fu;
 constexpr std::uint32_t kTargSpinePropAttachId = 0x00AD047Au;
-constexpr std::uint32_t kTargSpinePropAnimAttachId = 0xBBACEF13u;
 constexpr std::uint32_t kGunHolsterAttachId = 0x555EFB8Du;
 constexpr std::uint32_t kPistolHolsterAttachId = 0x8A0249B5u;
 constexpr std::uint32_t kSpinedJointNameId = 0xB5AFAB6Eu;
@@ -12830,21 +12829,6 @@ struct NativeNadinePistolHolsterRepairResult {
     std::uint8_t after_present = 0;
     std::uint8_t transform_changed = 0;
     std::array<std::uint32_t, 8> transform_bits{};
-};
-
-struct NadinePistolAnimAliasResult {
-    int status = 0;
-    std::uintptr_t target_table = 0;
-    std::uint32_t capacity = 0;
-    std::uint32_t before_count = 0;
-    std::uint32_t after_count = 0;
-    int pistol_index = -1;
-    int alias_index = -1;
-    std::int16_t pistol_joint = -1;
-    std::int16_t alias_joint = -1;
-    std::uint8_t before_present = 0;
-    std::uint8_t after_present = 0;
-    std::uint8_t transform_equal = 0;
 };
 
 struct alignas(16) NadineAttachTransform32 {
@@ -13205,77 +13189,6 @@ bool raw_append_native_nadine_pistol_holster(
     return result->status > 0;
 }
 
-bool raw_append_nadine_pistol_anim_alias(
-    void* target_player, NadinePistolAnimAliasResult* result) {
-    auto* const target_table = *reinterpret_cast<std::byte**>(
-        static_cast<std::byte*>(target_player) + 0x1E0);
-    result->target_table = reinterpret_cast<std::uintptr_t>(target_table);
-    if (target_table == nullptr) {
-        result->status = -1;
-        return false;
-    }
-    result->capacity = *reinterpret_cast<const std::uint32_t*>(
-        target_table + 0x0);
-    result->before_count = *reinterpret_cast<const std::uint32_t*>(
-        target_table + 0x4);
-    auto* const records = *reinterpret_cast<std::byte**>(target_table + 0x8);
-    if (result->capacity == 0 || result->capacity > 256 ||
-        result->before_count > result->capacity || records == nullptr) {
-        result->status = -2;
-        return false;
-    }
-
-    std::byte* const pistol_record = raw_find_attach_record(
-        target_table, kPistolHolsterAttachId, &result->pistol_index);
-    if (pistol_record == nullptr) {
-        result->status = -3;
-        return false;
-    }
-    result->pistol_joint = *reinterpret_cast<const std::int16_t*>(
-        pistol_record + 0x24);
-
-    std::byte* alias_record = raw_find_attach_record(
-        target_table, kTargSpinePropAnimAttachId, &result->alias_index);
-    result->before_present = alias_record != nullptr ? 1u : 0u;
-    if (alias_record == nullptr) {
-        if (result->before_count >= result->capacity) {
-            result->status = -4;
-            return false;
-        }
-        using AppendRecordFunction = void(__fastcall*)(void*, const void*);
-        const auto append_record = reinterpret_cast<AppendRecordFunction>(
-            g_module + kAttachSystemAppendRecordRva);
-        NadineAttachRecord48 alias{};
-        std::memcpy(alias.bytes, pistol_record, sizeof(alias.bytes));
-        *reinterpret_cast<std::uint32_t*>(alias.bytes + 0x20) =
-            kTargSpinePropAnimAttachId;
-        *reinterpret_cast<std::uint16_t*>(alias.bytes + 0x26) &= 1u;
-        *reinterpret_cast<std::uint32_t*>(alias.bytes + 0x28) = 0;
-        *reinterpret_cast<std::uint32_t*>(alias.bytes + 0x2C) = 0;
-        append_record(target_table, &alias);
-        alias_record = raw_find_attach_record(
-            target_table, kTargSpinePropAnimAttachId, &result->alias_index);
-    }
-
-    result->after_count = *reinterpret_cast<const std::uint32_t*>(
-        target_table + 0x4);
-    result->after_present = alias_record != nullptr ? 1u : 0u;
-    if (alias_record != nullptr) {
-        result->alias_joint = *reinterpret_cast<const std::int16_t*>(
-            alias_record + 0x24);
-        result->transform_equal =
-            std::memcmp(alias_record, pistol_record, 32) == 0 ? 1u : 0u;
-    }
-    result->status = result->after_present != 0 &&
-            result->alias_joint == result->pistol_joint &&
-            result->transform_equal != 0 &&
-            result->after_count == result->before_count +
-                (result->before_present == 0 ? 1u : 0u)
-        ? (result->before_present != 0 ? 2 : 1)
-        : -5;
-    return result->status > 0;
-}
-
 bool seh_append_native_nadine_pistol_holster(
     void* native_npc, void* target_player,
     NativeNadinePistolHolsterRepairResult* result) {
@@ -13301,29 +13214,6 @@ bool seh_append_native_nadine_pistol_holster(
         result->target_parent_joint = -1;
         result->marker = -1;
         result->target_record_joint = -1;
-        return false;
-    }
-}
-
-bool seh_append_nadine_pistol_anim_alias(
-    void* target_player, NadinePistolAnimAliasResult* result) {
-    if (result == nullptr) {
-        return false;
-    }
-    *result = {};
-    result->pistol_index = -1;
-    result->alias_index = -1;
-    result->pistol_joint = -1;
-    result->alias_joint = -1;
-    __try {
-        return raw_append_nadine_pistol_anim_alias(target_player, result);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        *result = {};
-        result->status = -100;
-        result->pistol_index = -1;
-        result->alias_index = -1;
-        result->pistol_joint = -1;
-        result->alias_joint = -1;
         return false;
     }
 }
@@ -13543,13 +13433,6 @@ void ensure_legacy_nadine_attach_points_game_thread() {
             native_nadine, target, &pistol_result);
     }
 
-    NadinePistolAnimAliasResult alias_result{};
-    if (pistol_result.status <= 0) {
-        alias_result.status = -10;
-    } else {
-        seh_append_nadine_pistol_anim_alias(target, &alias_result);
-    }
-
     std::uint64_t signature = 1469598103934665603ULL;
     auto mix = [&signature](std::uint64_t value) {
         signature ^= value;
@@ -13569,12 +13452,6 @@ void ensure_legacy_nadine_attach_points_game_thread() {
     mix(pistol_result.transform_changed);
     mix(static_cast<std::uint32_t>(
         pistol_result.status > 0 ? 1 : pistol_result.status));
-    mix(alias_result.after_count);
-    mix(alias_result.after_present);
-    mix(static_cast<std::uint16_t>(alias_result.alias_joint));
-    mix(alias_result.transform_equal);
-    mix(static_cast<std::uint32_t>(
-        alias_result.status > 0 ? 1 : alias_result.status));
     static std::array<std::uint64_t, 2> last_signatures{};
     const std::size_t memo_index = target_owner == 1 ? 1u : 0u;
     if (last_signatures[memo_index] == signature) {
@@ -13621,18 +13498,6 @@ void ensure_legacy_nadine_attach_points_game_thread() {
     for (const std::uint32_t bits : pistol_result.transform_bits) {
         line << bits << ",";
     }
-    line << std::dec << " animAlias=" << alias_result.status
-         << " table=0x" << std::hex << alias_result.target_table << std::dec
-         << " count=" << alias_result.before_count << "->"
-         << alias_result.after_count << "/" << alias_result.capacity
-         << " present=" << static_cast<unsigned>(alias_result.before_present)
-         << "->" << static_cast<unsigned>(alias_result.after_present)
-         << " index=" << alias_result.pistol_index << "->"
-         << alias_result.alias_index
-         << " joint=" << alias_result.pistol_joint << "->"
-         << alias_result.alias_joint
-         << " transformEqual="
-         << static_cast<unsigned>(alias_result.transform_equal);
     write_log_line(line.str().c_str());
 }
 
@@ -28371,25 +28236,6 @@ PlayerHolsterAnimActionSnapshot capture_player_holster_anim_action(
     return snapshot;
 }
 
-struct NadinePistolHolsterExecuteContext {
-    void* player = nullptr;
-    bool active = false;
-    bool saw_anim_point = false;
-};
-
-thread_local NadinePistolHolsterExecuteContext
-    g_nadine_pistol_holster_execute_context{};
-
-bool seh_weapon_is_player_slot(
-    void* player, void* weapon, int slot) {
-    __try {
-        return player != nullptr && weapon != nullptr &&
-            get_weapon_from_slot(player, slot) == weapon;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
 void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
     const PlayerHolsterAnimActionSnapshot before =
         capture_player_holster_anim_action(action);
@@ -28398,19 +28244,9 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
     const bool look_valid =
         seh_read_player_look(before.player, &look);
 
-    const NadinePistolHolsterExecuteContext previous_context =
-        g_nadine_pistol_holster_execute_context;
-    g_nadine_pistol_holster_execute_context = {};
-    if (before.readable && before.executed == 0 && owner_index >= 0 &&
-        look_valid && look == kLegacyNadineAttachTargetLookId) {
-        g_nadine_pistol_holster_execute_context.player = before.player;
-        g_nadine_pistol_holster_execute_context.active = true;
-    }
-
     if (g_original_player_holster_weapon_anim_action_execute != nullptr) {
         g_original_player_holster_weapon_anim_action_execute(action);
     }
-    g_nadine_pistol_holster_execute_context = previous_context;
 
     if (owner_index < 0) {
         return;
@@ -28483,33 +28319,13 @@ std::uintptr_t __fastcall hooked_weapon_attachment_select_existing_owner_point(
     void* weapon, std::uint32_t attach_id, void* binding) {
     const ExistingOwnerAttachSnapshot before =
         capture_existing_owner_attach(weapon);
-    auto& context = g_nadine_pistol_holster_execute_context;
-    const bool scoped_pistol = context.active &&
-        context.player == before.owner &&
-        before.look == kLegacyNadineAttachTargetLookId &&
-        seh_weapon_is_player_slot(context.player, weapon, 1);
-    std::uint32_t effective_attach_id = attach_id;
-    bool redirected = false;
-    if (scoped_pistol &&
-        attach_id == kTargSpinePropAnimAttachId) {
-        // Preserve the stock animation-point request. The compatibility alias
-        // materialized in the legacy Nadine table gives it the validated hip
-        // transform while satisfying Execute's mandatory BBACEF13 id check.
-        context.saw_anim_point = true;
-    } else if (scoped_pistol && context.saw_anim_point &&
-               attach_id == kTargSpinePropAttachId) {
-        // Only the AD request after the animation point is the final Put
-        // controller rebind. The earlier AD prerequisite remains untouched.
-        effective_attach_id = kPistolHolsterAttachId;
-        redirected = true;
-    }
     const std::uintptr_t result =
         g_original_weapon_attachment_select_existing_owner_point != nullptr
         ? g_original_weapon_attachment_select_existing_owner_point(
-              weapon, effective_attach_id, binding)
+              weapon, attach_id, binding)
         : 0;
     if (before.owner_index < 0 ||
-        (!relevant_holster_probe_art(before.art) && !scoped_pistol)) {
+        !relevant_holster_probe_art(before.art)) {
         return result;
     }
     const ExistingOwnerAttachSnapshot after =
@@ -28523,9 +28339,6 @@ std::uintptr_t __fastcall hooked_weapon_attachment_select_existing_owner_point(
          << " art=0x" << before.art
          << " requested=0x" << attach_id << "/"
          << holster_attach_id_label(attach_id)
-         << " effective=0x" << effective_attach_id << "/"
-         << holster_attach_id_label(effective_attach_id)
-         << " redirect=" << std::dec << (redirected ? 1 : 0) << std::hex
          << " result=0x" << result
          << " parent=0x" << before.parent_id << "->0x" << after.parent_id
          << " id=0x" << before.attach_id << "->0x" << after.attach_id
@@ -32965,8 +32778,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22fs "
-        "(Nadine pistol AnimAction hip mapping)");
+        "TLL co-op runtime init 2026-07-22ft "
+        "(rejected Nadine pistol hip mapping parked)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
