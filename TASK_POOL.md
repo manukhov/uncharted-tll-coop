@@ -1715,6 +1715,17 @@ Do not reopen these as the first move:
       object's final transform fails to follow its selected record. The earliest
       proven initial-table repair boundary is continuation `0x141BB5049`, after
       Player vslot `+0x448` returns and before `Player+0x1D88` construction.
+      RUNTIME `fu`: current exact pistol and rifle objects in both processes had
+      the expected art/mesh pairs, `3/3` active child instances and changing
+      final-world outputs. Both pistols ended at 8A/joint 5 and both rifles at
+      generic/joint 3 even though the pistol was visibly on the back and the
+      rifle on the thigh. H2 and the cross-art H3 variant are REJECTED. One
+      immediate retired generation did go `3/3 -> 0/0`, but other detached
+      generations retained `3/3` and the bounded table saturated, so narrow H1
+      remains open. The two camera copies also disagreed about overlapping
+      pistol/rifle visibility. Next trace DrawControl's three view-specific
+      instances to their cached matrices and replace the saturating generation
+      census with a rolling one; do not tune attachment ids further.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

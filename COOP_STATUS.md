@@ -6523,5 +6523,39 @@ at `Player+0x1D88` is constructed later through `0x1410DD0FC -> 0x1410CA921`, so
 the continuation is pre-controller and pre-selector. A future early repair must
 gate on the exact Player vtable and raw look `Player+0x170`, not retained-slot
 identity, because retained publication has not occurred yet. The `fu` release
-compiled successfully with marker `2026-07-22fu`; runtime verification is
-pending.
+compiled successfully with marker `2026-07-22fu`.
+
+`fu` runtime result (two copies, PIDs 15640/14020): the user-visible result is
+still wrong, but it rejects the current-slot selector/final-transform theory as
+the complete cause. On the Nadine copy the initial pistol was invisible and the
+rifle hung in her hand before any draw. Drawing the pistol showed pistol and
+rifle interpenetrating in Nadine's own view, while the Chloe copy showed only
+the pistol in hand and the rifle holstered. After one rifle draw/put cycle the
+rifle moved to the thigh despite a back-holster animation; the next pistol draw
+contained only the pistol, but its put-away still appeared on the back.
+
+Both processes nevertheless agreed on the exact current-slot objects. PID
+15640's pistol `0x10E08E2600` (art/mesh `0x33E29A1B`) and PID 14020's pistol
+`0x10E0E86200` ended at attachment index 41/id `0x8A0249B5`, joint 5. Their
+rifles `0x10E08DE700` and `0x10E0E82300` (art `0x8075397D`, mesh
+`0x255BEBA0`) ended at generic index 40/id `0x555EFB8D`, joint 3. Each exact
+child reported three of three active DrawControl instances, and the final-world
+hashes changed across hand/generic/hip transitions. Thus H2 as written is
+REJECTED: the current exact object's derived world transform does refresh. The
+expected art/mesh pair on both current objects also rejects H3's cross-art child
+variant.
+
+The census only partially distinguishes H1. One immediate replacement pair
+lost its slot and went from `3/3` to `0/0` child instances before the successor
+pair became current, rejecting a universal "the immediately previous object is
+always rendered" rule. Other later slotless generations retained `3/3`
+instances after owner resolution was lost, and the bounded 32-entry table filled
+before the final user sequence. H1 therefore remains open in the narrower form:
+a detached older generation or one of the three view-specific instances can be
+the visible stale firearm. The different Nadine-view/Chloe-view result, despite
+matching current logical transforms in both processes, makes per-view instance
+publication/caching the next discriminator. Do not change attachment ids again.
+Statically trace the three DrawControl mesh instances from the exact object's
+published `+0x240/+0x250/+0x280` world outputs to each render-instance matrix,
+then extend the census with per-instance identity/transform and a rolling rather
+than saturating generation table.
