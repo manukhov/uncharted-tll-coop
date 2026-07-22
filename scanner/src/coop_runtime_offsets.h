@@ -518,6 +518,13 @@ constexpr std::uintptr_t kPlayerWeaponAnimNamedEventRva = 0x108DE30;
 constexpr std::uintptr_t kPlayerMoveSequencerUpdateRva = 0x2051EC0;
 constexpr std::uintptr_t kWeaponHolsterBuildBindingRva = 0x14FE540;
 constexpr std::uintptr_t kWeaponAttachmentAttachToOwnerPointRva = 0x1ED0370;
+// Stock Player weapon-marker path. AnimActionMgr calls the Player factory for
+// weapon-holster, the one-shot action executes the transition, and weapon
+// vtable +0x7A8 selects a record in the existing Player owner's AttachSystem.
+constexpr std::uintptr_t kPlayerStateActionFactoryRva = 0x10FD120;
+constexpr std::uintptr_t kPlayerHolsterWeaponAnimActionExecuteRva = 0x108A640;
+constexpr std::uintptr_t kWeaponAttachmentSelectExistingOwnerPointRva =
+    0x1ED0580;
 // ProcessWeapon vtable +0x410 (0x141515860) directly calls the shared
 // NdAttachableObject base update here. Relaying this one E8 observes only the
 // ProcessWeapon final-transform boundary and leaves the global base function

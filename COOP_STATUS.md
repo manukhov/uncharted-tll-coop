@@ -6165,13 +6165,14 @@ cycles. The earlier claim that a missing callback here specifically explained
 Nadine's broken holster path is therefore REJECTED; the same absence occurs for
 Chloe and Nadine and cannot distinguish the legacy look.
 
-The physical boundary is equally clear. With the direct inactive repair parked,
-the run emitted twelve `NADINE-HOLSTER-ATTACH` rows. Every one selected
-`rightHand = 0x61A48E01` while drawing. There was no final attach to a holster
-point during Put for either look. Thus the native Get path still reaches the
-concrete hand mutation, but the synchronized Put path has no observed physical
-holster mutation. The visual failure is a shared weapon-transition downstream
-gap, not primarily Nadine attachment geometry.
+With the direct inactive repair parked, the run emitted twelve
+`NADINE-HOLSTER-ATTACH` rows and every one selected
+`rightHand = 0x61A48E01` while drawing. This originally looked like proof that
+Put never performed a holster mutation. The later complete call graph corrects
+that interpretation: `WeaponAttachment_AttachToOwnerPoint 0x141ED0370` is the
+owner-changing path, while stock Player Put keeps the same owner and changes
+only the existing-owner attach index through weapon vtable `+0x7A8`. The `fp`
+rows therefore prove the hand path but are silent about the real Put boundary.
 
 The written expectation that a working Chloe cycle would exercise the named
 event was falsified. Do not force `0x14108DE30`, delay action completion, or
@@ -6184,3 +6185,93 @@ or action-completion boundary. If the current-state monitor remains ambiguous,
 the next runtime discriminator may read the exact value returned by
 `PlayerWeaponAnimControl_GetCurrentWeaponState 0x14108D080`; it must not invoke
 or overwrite the animation state.
+
+### 2026-07-22 STATIC: `weapon-holster` AnimAction owns the stock Put rebind (`fq`)
+
+The remaining `PlayerWeaponAnimControl` callback family is not the physical
+attachment owner. Vtable `+0xC0 0x14108E470` only queries the authored `auto`
+flag; `+0xC8 0x14108D3B0` tests/requests a state in layer `0xE2B990B9`;
+`+0xD0 0x14108B720` relocates owned pointers; `+0xD8 0x14108D450` refreshes
+`overlays-changed`; and `+0xE0 0x14108DAC0` publishes `play-animation` to a
+weapon/prop through helper `0x14108D780`. None reaches the Player action factory,
+the holster action, weapon `+0x688` or either attachment API. Vtable `+0xE8`
+remains only the already-rejected named-property callback.
+
+Action removal is independently excluded. Source-identified
+`PlayerMoveSequencer_RemovePlayerMoveAction 0x142051D00` changes lifecycle
+state 1 to 2, calls action vtable `+0x18`, then `+0x00`, unlinks the action and
+calls deleting destructor `+0x08`. Both exact Get/Put vtables use
+`nullsub_1352 0x140C3A100` at `+0x18`, `nullsub_166 0x140C3A0B0` at `+0x00`,
+and destructors that only restore `PlayerMoveAction::vftable` and free 80 bytes.
+There is no completion-time weapon mutation hidden after the phase monitor.
+
+The missing boundary instead belongs to Player's separate `AnimActionMgr` at
+`Player+0x1B8`. Player Init calls `0x142057380` to create a 16-entry manager and
+installs factory `0x1410FD120`. `AnimActionMgr_AnimStateCreate 0x142057BA0`
+passes the authored action StringId, Player, manager id, animation layer and
+AnimInstance id to that factory. Case `weapon-holster = 0xFA06C342` allocates
+the exact RTTI class `PlayerHolsterWeaponAnimAction`, vtable `0x142A46560`;
+nearby independent cases create `weapon-grab`, `weapon-draw` and
+`weapon-holster-finish` actions. State transition/per-frame dispatch at
+`0x142057FB0/0x142058130` reaches the holster derived wrappers and its one-shot
+executor `PlayerHolsterWeaponAnimAction_Execute 0x14108A640`. State end only
+marks the action finished and does not execute a missed holster marker.
+
+The executor's dataflow is concrete. It latches `action+0x30=1`, resolves the
+current animation state and ProcessWeapon, and calls
+`PlayerWeaponController_RebindWeaponToHolster 0x1410A9670` through controller
+vtable `+0x3D0`. It then requires the weapon's current `+0x688` record to be
+`targSpineProp = 0x00AD047A`, switches through weapon vtable `+0x7A8` to
+`targSpinePropAnim = 0xBBACEF13`, composes the authored animation transform,
+calls the controller rebind again and seeds the weapon blend blocks.
+`0x00AD047A` is therefore a stock named prerequisite, not a corrupt generic
+back attachment.
+
+The controller's ordinary path calls `WeaponHolster_BuildBinding` and passes
+its attach id to weapon vtable `+0x7A8`. ProcessWeaponBase and the firearm
+derived vtables share `WeaponAttachment_SelectExistingOwnerPoint 0x141ED0580`,
+which searches the existing owner's AttachSystem and writes the selected byte
+index to `weapon+0x688` at `0x141ED06EF`. This intentionally does not call the
+owner-changing `WeaponAttachment_AttachToOwnerPoint 0x141ED0370`. Registered
+script commands `reattach-player-weapon` and
+`attach-player-weapon-back-to-holster` remain real alternatives, but their lack
+of native callers and the working stock same-owner path reject them as the
+mandatory Player Put boundary.
+
+The competing hypotheses are now: (A) the synchronized animation state never
+creates `weapon-holster` in the retained Player's AnimActionMgr; (B) the factory
+creates it but the state-transition/per-frame wrappers never execute it; (C)
+the executor is reached but cannot resolve the current state/weapon after
+latching its one-shot byte; (D) its first controller rebind runs, but the
+resulting record is not required `targSpineProp`, so the guard exits; (E) the
+full multi-stage selector runs but selects/writes the wrong final record.
+Factory RTTI/case identity, dispatcher/vtable identity, executor field dataflow,
+and the independent same-owner setter write provide four evidence types.
+
+Build `fq` adds three pass-through probes: factory `0x1410FD120`, executor
+`0x14108A640`, and logical existing-owner setter `0x141ED0580`. Factory rows
+include the exact authored action and returned vtable; executor rows include all
+action identity/lifecycle fields before and after; setter rows include requested
+id plus `weapon+0x688` record id/index before and after. The old final attach
+logger now also records caller RVA, while the direct inactive repair remains
+disabled. The probe invokes no action, controller, animation or attachment
+method and performs no gameplay write.
+
+Written prediction for one pistol and rifle draw/put-away cycle on Chloe and
+legacy Nadine: all three probes must install (`animAction=111`). Chloe must show
+factory `0xFA06C342 -> vtableRva 0x2A46560`, executor entry, and a selector
+sequence containing the authored `targSpineProp`/`targSpinePropAnim` stages plus
+the final binding. For the retained Player, no holster factory row selects A;
+factory without executor selects B; executor with `executed 0->1` and no setter
+selects C; one setter ending on a record other than `0x00AD047A` selects D; a
+multi-stage setter sequence with the wrong final id selects E. A different
+sequence is a new static lead. Any changed behavior, missing install marker,
+wrong factory vtable, crash or non-stock action-state mutation invalidates the
+probe.
+
+The release DLL compiled successfully with marker `2026-07-22fq`. All newly
+STATIC AnimActionMgr, Player holster action, controller rebind, same-owner
+selector, callback and registration names were applied to the single
+`ida/tll.i64`; `save_database returned True`. The restarted MCP verified the
+saved names and the executor xrefs from both derived dispatch wrappers. Runtime
+verification is pending.

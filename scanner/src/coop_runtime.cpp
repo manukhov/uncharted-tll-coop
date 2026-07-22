@@ -27483,6 +27483,11 @@ using WeaponHolsterBuildBindingFunction =
     void*(__fastcall*)(void*, void*, void*);
 using WeaponAttachmentAttachToOwnerPointFunction =
     std::uintptr_t(__fastcall*)(void*, void*, std::uint32_t);
+using PlayerStateActionFactoryFunction = void*(__fastcall*)(
+    std::uint32_t, void*, std::uint32_t, std::uint32_t, std::uint32_t);
+using PlayerHolsterWeaponAnimActionExecuteFunction = void(__fastcall*)(void*);
+using WeaponAttachmentSelectExistingOwnerPointFunction =
+    std::uintptr_t(__fastcall*)(void*, std::uint32_t, void*);
 
 PlayerWeaponAnimNamedEventFunction
     g_original_player_weapon_anim_named_event = nullptr;
@@ -27494,6 +27499,11 @@ WeaponHolsterBuildBindingFunction
     g_original_weapon_holster_build_binding = nullptr;
 WeaponAttachmentAttachToOwnerPointFunction
     g_original_weapon_attachment_attach_to_owner_point = nullptr;
+PlayerStateActionFactoryFunction g_original_player_state_action_factory = nullptr;
+PlayerHolsterWeaponAnimActionExecuteFunction
+    g_original_player_holster_weapon_anim_action_execute = nullptr;
+WeaponAttachmentSelectExistingOwnerPointFunction
+    g_original_weapon_attachment_select_existing_owner_point = nullptr;
 
 std::uint32_t g_named_event_name_property_id = 0;
 std::uint32_t g_gun_holster_id = 0;
@@ -28064,6 +28074,15 @@ bool seh_find_owner_attach_point(
 }
 
 const char* holster_attach_id_label(std::uint32_t id) {
+    if (id == 0x00AD047Au) {
+        return "targSpineProp";
+    }
+    if (id == 0xBBACEF13u) {
+        return "targSpinePropAnim";
+    }
+    if (id == 0x61A48E01u) {
+        return "rightHand";
+    }
     if (id == kPistolHolsterAttachId) {
         return "nadine-pistol";
     }
@@ -28177,6 +28196,229 @@ bool seh_read_owner_attach_record_id(
         *records_generation_out = 0;
         return false;
     }
+}
+
+const char* player_state_action_label(std::uint32_t id) {
+    switch (id) {
+        case 0xFA06C342u:
+            return "weapon-holster";
+        case 0xB6CD24A9u:
+            return "weapon-grab";
+        case 0x76ADEE00u:
+            return "weapon-holster-finish";
+        case 0x8D6E26DCu:
+            return "weapon-draw";
+        default:
+            return "other";
+    }
+}
+
+bool relevant_weapon_state_action(std::uint32_t id) {
+    return id == 0xFA06C342u || id == 0xB6CD24A9u ||
+        id == 0x76ADEE00u || id == 0x8D6E26DCu;
+}
+
+struct PlayerHolsterAnimActionSnapshot {
+    bool readable = false;
+    void* player = nullptr;
+    std::uintptr_t vtable = 0;
+    std::uint32_t action_id = 0;
+    std::uint32_t layer_id = 0;
+    std::uint32_t manager_id = 0;
+    std::uint32_t anim_instance_id = 0;
+    std::uint8_t finished = 0;
+    std::uint8_t executed = 0;
+};
+
+PlayerHolsterAnimActionSnapshot capture_player_holster_anim_action(
+    void* action) {
+    PlayerHolsterAnimActionSnapshot snapshot{};
+    __try {
+        if (action == nullptr) {
+            return snapshot;
+        }
+        auto* const bytes = static_cast<const std::byte*>(action);
+        snapshot.vtable = *reinterpret_cast<const std::uintptr_t*>(bytes);
+        snapshot.action_id =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x08);
+        snapshot.player = *reinterpret_cast<void* const*>(bytes + 0x10);
+        snapshot.layer_id =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x18);
+        snapshot.manager_id =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x1C);
+        snapshot.anim_instance_id =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x20);
+        snapshot.finished =
+            *reinterpret_cast<const std::uint8_t*>(bytes + 0x28);
+        snapshot.executed =
+            *reinterpret_cast<const std::uint8_t*>(bytes + 0x30);
+        snapshot.readable = true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        snapshot = {};
+    }
+    return snapshot;
+}
+
+std::uintptr_t read_object_vtable_seh(void* object) {
+    __try {
+        if (object == nullptr) {
+            return 0;
+        }
+        return *reinterpret_cast<const std::uintptr_t*>(object);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 0;
+    }
+}
+
+void* __fastcall hooked_player_state_action_factory(
+    std::uint32_t action_id, void* player, std::uint32_t manager_id,
+    std::uint32_t layer_id, std::uint32_t anim_instance_id) {
+    void* const action = g_original_player_state_action_factory != nullptr
+        ? g_original_player_state_action_factory(
+              action_id, player, manager_id, layer_id, anim_instance_id)
+        : nullptr;
+    const int owner_index = retained_player_index(player);
+    if (owner_index < 0 || !relevant_weapon_state_action(action_id)) {
+        return action;
+    }
+    // Only weapon-holster is known to allocate the 0x38-byte derived object.
+    // The neighbouring weapon actions can be smaller, so the factory probe must
+    // not read holster-only fields such as action+0x30 from them.
+    const std::uintptr_t vtable = read_object_vtable_seh(action);
+    std::uint32_t look = 0;
+    const bool look_valid = seh_read_player_look(player, &look);
+    std::ostringstream line;
+    line << "NADINE-ANIM-ACTION-FACTORY owner=" << owner_index
+         << " player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(player)
+         << " look=0x" << look
+         << " action=0x" << action_id << "/"
+         << player_state_action_label(action_id)
+         << " layer=0x" << layer_id
+         << " manager=0x" << manager_id
+         << " instance=0x" << anim_instance_id
+         << " object=0x" << reinterpret_cast<std::uintptr_t>(action)
+         << " vtableRva=0x" << (vtable >= g_module ? vtable - g_module : vtable)
+         << std::dec << " lookValid=" << (look_valid ? 1 : 0);
+    write_log_line(line.str().c_str());
+    return action;
+}
+
+void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
+    const PlayerHolsterAnimActionSnapshot before =
+        capture_player_holster_anim_action(action);
+    const int owner_index = retained_player_index(before.player);
+    std::uint32_t look = 0;
+    const bool look_valid =
+        seh_read_player_look(before.player, &look);
+
+    if (g_original_player_holster_weapon_anim_action_execute != nullptr) {
+        g_original_player_holster_weapon_anim_action_execute(action);
+    }
+
+    if (owner_index < 0) {
+        return;
+    }
+    const PlayerHolsterAnimActionSnapshot after =
+        capture_player_holster_anim_action(action);
+    std::ostringstream line;
+    line << "NADINE-HOLSTER-ACTION-EXEC owner=" << owner_index
+         << " player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(before.player)
+         << " look=0x" << look
+         << " action=0x" << reinterpret_cast<std::uintptr_t>(action)
+         << " vtableRva=0x"
+         << (before.vtable >= g_module
+                 ? before.vtable - g_module
+                 : before.vtable)
+         << " marker=0x" << before.action_id
+         << " layer=0x" << before.layer_id
+         << " manager=0x" << before.manager_id
+         << " instance=0x" << before.anim_instance_id
+         << std::dec << " finished="
+         << static_cast<unsigned>(before.finished) << "->"
+         << static_cast<unsigned>(after.finished)
+         << " executed=" << static_cast<unsigned>(before.executed) << "->"
+         << static_cast<unsigned>(after.executed)
+         << " readable=" << (before.readable ? 1 : 0) << "/"
+         << (after.readable ? 1 : 0)
+         << " lookValid=" << (look_valid ? 1 : 0);
+    write_log_line(line.str().c_str());
+}
+
+struct ExistingOwnerAttachSnapshot {
+    bool readable = false;
+    bool record_readable = false;
+    int owner_index = -1;
+    void* owner = nullptr;
+    std::uint32_t look = 0;
+    std::uint32_t art = 0;
+    std::uint32_t parent_id = 0;
+    std::uint32_t attach_id = 0;
+    std::uint8_t attach_index = 0xFF;
+};
+
+ExistingOwnerAttachSnapshot capture_existing_owner_attach(void* weapon) {
+    ExistingOwnerAttachSnapshot snapshot{};
+    snapshot.art = weapon_art_id_from_object(weapon);
+    for (int owner_index = 0; owner_index < 2; ++owner_index) {
+        void* const owner = retained_player_object(owner_index);
+        if (seh_weapon_parent_resolves_to_owner(weapon, owner)) {
+            snapshot.owner_index = owner_index;
+            snapshot.owner = owner;
+            break;
+        }
+    }
+    if (snapshot.owner_index < 0 ||
+        !seh_read_weapon_attachment_state(
+            weapon, &snapshot.parent_id, &snapshot.attach_index)) {
+        return snapshot;
+    }
+    seh_read_player_look(snapshot.owner, &snapshot.look);
+    std::uintptr_t records_generation = 0;
+    snapshot.record_readable = seh_read_owner_attach_record_id(
+        snapshot.owner, snapshot.attach_index, &snapshot.attach_id,
+        &records_generation);
+    snapshot.readable = true;
+    return snapshot;
+}
+
+std::uintptr_t __fastcall hooked_weapon_attachment_select_existing_owner_point(
+    void* weapon, std::uint32_t attach_id, void* binding) {
+    const ExistingOwnerAttachSnapshot before =
+        capture_existing_owner_attach(weapon);
+    const std::uintptr_t result =
+        g_original_weapon_attachment_select_existing_owner_point != nullptr
+        ? g_original_weapon_attachment_select_existing_owner_point(
+              weapon, attach_id, binding)
+        : 0;
+    if (before.owner_index < 0 ||
+        !relevant_holster_probe_art(before.art)) {
+        return result;
+    }
+    const ExistingOwnerAttachSnapshot after =
+        capture_existing_owner_attach(weapon);
+    std::ostringstream line;
+    line << "NADINE-HOLSTER-SELECT owner=" << before.owner_index
+         << " player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(before.owner)
+         << " look=0x" << before.look
+         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
+         << " art=0x" << before.art
+         << " requested=0x" << attach_id << "/"
+         << holster_attach_id_label(attach_id)
+         << " result=0x" << result
+         << " parent=0x" << before.parent_id << "->0x" << after.parent_id
+         << " id=0x" << before.attach_id << "->0x" << after.attach_id
+         << std::dec << " index="
+         << static_cast<unsigned>(before.attach_index) << "->"
+         << static_cast<unsigned>(after.attach_index)
+         << " readable=" << (before.readable ? 1 : 0) << "/"
+         << (after.readable ? 1 : 0)
+         << " record=" << (before.record_readable ? 1 : 0) << "/"
+         << (after.record_readable ? 1 : 0);
+    write_log_line(line.str().c_str());
+    return result;
 }
 
 bool seh_attach_weapon_to_owner_point(
@@ -28575,6 +28817,11 @@ void* __fastcall hooked_weapon_holster_build_binding(
 
 std::uintptr_t __fastcall hooked_weapon_attachment_attach_to_owner_point(
     void* weapon, void* owner, std::uint32_t attach_id) {
+    const std::uintptr_t caller_address =
+        reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const std::uintptr_t caller_rva = caller_address >= g_module
+        ? caller_address - g_module
+        : caller_address;
     const int owner_index = retained_player_index(owner);
     const bool native_nadine = seh_is_exact_nadine_buddy(owner);
     const std::uint32_t art = weapon_art_id_from_object(weapon);
@@ -28615,6 +28862,7 @@ std::uintptr_t __fastcall hooked_weapon_attachment_attach_to_owner_point(
     mix(post_parent_id);
     mix(post_attach_index);
     mix(native_nadine ? 1u : 0u);
+    mix(caller_rva);
     static std::array<std::atomic<std::uint64_t>, 192> seen{};
     if (!claim_holster_probe_signature(seen, signature)) {
         return result;
@@ -28629,6 +28877,7 @@ std::uintptr_t __fastcall hooked_weapon_attachment_attach_to_owner_point(
          << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
          << " art=0x" << art << " attach=0x" << attach_id
          << "/" << holster_attach_id_label(attach_id)
+         << " callerRva=0x" << caller_rva
          << " result=0x" << result
          << " parent=" << pre_parent_id << "->" << post_parent_id
          << std::dec << " present=" << (attach_present ? 1 : 0)
@@ -29456,6 +29705,21 @@ bool install_nadine_holster_final_boundary_probe() {
         0x48, 0x89, 0x7C, 0x24, 0x20, 0x41, 0x56, 0x48, 0x83, 0xEC,
         0x30,
     };
+    constexpr std::array<std::uint8_t, 24> kStateActionFactoryPrologue{
+        0x48, 0x8B, 0xC4, 0x56, 0x57, 0x41, 0x56, 0x48,
+        0x81, 0xEC, 0x50, 0x04, 0x00, 0x00, 0x48, 0xC7,
+        0x44, 0x24, 0x38, 0xFE, 0xFF, 0xFF, 0xFF, 0x48,
+    };
+    constexpr std::array<std::uint8_t, 28> kHolsterActionExecutePrologue{
+        0x41, 0x56, 0x48, 0x81, 0xEC, 0xE0, 0x04, 0x00,
+        0x00, 0x48, 0x8B, 0x05, 0x28, 0xA5, 0xF6, 0x01,
+        0x48, 0x33, 0xC4, 0x48, 0x89, 0x84, 0x24, 0x40,
+        0x04, 0x00, 0x00, 0x80,
+    };
+    constexpr std::array<std::uint8_t, 17> kSelectExistingPointPrologue{
+        0x40, 0x56, 0x48, 0x83, 0xEC, 0x20, 0x44, 0x8B, 0xCA,
+        0x48, 0x8B, 0xF1, 0xE8, 0xBF, 0x17, 0x00, 0x00,
+    };
 
     g_original_player_weapon_anim_named_event =
         reinterpret_cast<PlayerWeaponAnimNamedEventFunction>(
@@ -29490,11 +29754,40 @@ bool install_nadine_holster_final_boundary_probe() {
                 reinterpret_cast<void*>(
                     &hooked_weapon_attachment_attach_to_owner_point),
                 "Nadine holster final-attach probe"));
+    g_original_player_state_action_factory =
+        reinterpret_cast<PlayerStateActionFactoryFunction>(
+            install_fire_gate_detour(
+                kPlayerStateActionFactoryRva,
+                kStateActionFactoryPrologue.data(),
+                kStateActionFactoryPrologue.size(),
+                reinterpret_cast<void*>(&hooked_player_state_action_factory),
+                "Player weapon AnimAction factory probe"));
+    g_original_player_holster_weapon_anim_action_execute =
+        reinterpret_cast<PlayerHolsterWeaponAnimActionExecuteFunction>(
+            install_fire_gate_detour(
+                kPlayerHolsterWeaponAnimActionExecuteRva,
+                kHolsterActionExecutePrologue.data(),
+                kHolsterActionExecutePrologue.size(),
+                reinterpret_cast<void*>(
+                    &hooked_player_holster_weapon_anim_action_execute),
+                "Player weapon-holster AnimAction execute probe"));
+    g_original_weapon_attachment_select_existing_owner_point =
+        reinterpret_cast<WeaponAttachmentSelectExistingOwnerPointFunction>(
+            install_fire_gate_detour(
+                kWeaponAttachmentSelectExistingOwnerPointRva,
+                kSelectExistingPointPrologue.data(),
+                kSelectExistingPointPrologue.size(),
+                reinterpret_cast<void*>(
+                    &hooked_weapon_attachment_select_existing_owner_point),
+                "Player weapon existing-owner attach selector probe"));
 
     const bool installed = g_original_player_weapon_anim_named_event != nullptr &&
         g_original_player_move_sequencer_update != nullptr &&
         g_original_weapon_holster_build_binding != nullptr &&
-        g_original_weapon_attachment_attach_to_owner_point != nullptr;
+        g_original_weapon_attachment_attach_to_owner_point != nullptr &&
+        g_original_player_state_action_factory != nullptr &&
+        g_original_player_holster_weapon_anim_action_execute != nullptr &&
+        g_original_weapon_attachment_select_existing_owner_point != nullptr;
     std::ostringstream line;
     line << "Nadine holster final boundary probe "
          << (installed ? "installed" : "PARTIAL")
@@ -29505,7 +29798,15 @@ bool install_nadine_holster_final_boundary_probe() {
          << " rLegJoint=0x" << g_r_leg_gun_holster_joint_name_id
          << " rUpperLeg=0x" << g_r_upper_leg_joint_name_id
          << " actionLifecycle="
-         << (g_original_player_move_sequencer_update != nullptr ? 1 : 0);
+         << (g_original_player_move_sequencer_update != nullptr ? 1 : 0)
+         << " animAction="
+         << (g_original_player_state_action_factory != nullptr ? 1 : 0)
+         << (g_original_player_holster_weapon_anim_action_execute != nullptr
+                 ? 1
+                 : 0)
+         << (g_original_weapon_attachment_select_existing_owner_point != nullptr
+                 ? 1
+                 : 0);
     boot_log_line(line.str().c_str());
     return installed;
 }
@@ -32470,8 +32771,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22fp "
-        "(Nadine weapon-action lifecycle discriminator)");
+        "TLL co-op runtime init 2026-07-22fq "
+        "(weapon-holster AnimAction discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

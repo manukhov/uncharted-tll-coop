@@ -7332,6 +7332,38 @@ FUNCTIONS = {
         "holster binding and physically attaches the weapon before publishing "
         "the set-attached structured event.",
     ),
+    0x140340C40: (
+        "Script_AttachObjectOffset",
+        "Registered state-script native attach-offset. Parses an attachable "
+        "object, owner and authored point/offset, calls "
+        "WeaponAttachment_AttachToOwnerPoint, then publishes set-attached.",
+    ),
+    0x140341430: (
+        "Script_AttachObject",
+        "Registered state-script native attach. Parses an attachable object, "
+        "owner and authored attach point, calls "
+        "WeaponAttachment_AttachToOwnerPoint, then publishes set-attached.",
+    ),
+    0x14003EA60: (
+        "Script_RegisterAttachOffset",
+        "Static native-registration stub pairing the literal attach-offset "
+        "with Script_AttachObjectOffset in the global script-native registry.",
+    ),
+    0x14003EAC0: (
+        "Script_RegisterAttach",
+        "Static native-registration stub pairing the literal attach with "
+        "Script_AttachObject in the global script-native registry.",
+    ),
+    0x14003EB80: (
+        "Script_RegisterReattachPlayerWeapon",
+        "Static native-registration stub pairing reattach-player-weapon with "
+        "Script_ReattachPlayerWeapon in the global script-native registry.",
+    ),
+    0x14003EC40: (
+        "Script_RegisterAttachPlayerWeaponBackToHolster",
+        "Static native-registration stub pairing "
+        "attach-player-weapon-back-to-holster with its native implementation.",
+    ),
     0x141ED0370: (
         "WeaponAttachment_AttachToOwnerPoint",
         "Concrete attachment mutation used by the two player-weapon script "
@@ -8115,6 +8147,12 @@ FUNCTIONS = {
         "dispatches vtable+0x28/+0x30/+0x38/+0x40 and removes state 2/3 "
         "actions through PlayerMoveSequencer cleanup.",
     ),
+    0x142051D00: (
+        "PlayerMoveSequencer_RemovePlayerMoveAction",
+        "Source-identified RemovePlayerMoveAction. Changes lifecycle state 1 "
+        "to 2, invokes vtable +0x18 followed by +0x00, unlinks the intrusive "
+        "node and calls the deleting destructor at +0x08.",
+    ),
     0x141096150: (
         "PlayerGetWeaponInHandAction_OnStart",
         "PlayerGetWeaponInHandAction vtable +0x10. Resolves and binds the "
@@ -8154,10 +8192,116 @@ FUNCTIONS = {
         "animation layer 0xE2B990B9 and returns zero when that layer/state is "
         "not currently available.",
     ),
+    0x14108B720: (
+        "PlayerWeaponAnimControl_RelocatePointers",
+        "PlayerWeaponAnimControl vtable +0xD0 relocation callback. Adjusts "
+        "owned pointers that fall inside a relocated memory interval; it does "
+        "not consume weapon state or perform attachment mutation.",
+    ),
+    0x14108D450: (
+        "PlayerWeaponAnimControl_UpdateOverlaysChanged",
+        "PlayerWeaponAnimControl vtable +0xD8. Consumes the authored "
+        "overlays-changed marker and refreshes animation overlay state without "
+        "reading the weapon attachment descriptor.",
+    ),
+    0x14108D780: (
+        "PlayerWeaponAnimControl_PublishPropPlayAnimation",
+        "Builds and publishes a play-animation event to a resolved weapon/prop "
+        "process; this animates the prop but does not reparent it.",
+    ),
+    0x14108DAC0: (
+        "PlayerWeaponAnimControl_UpdatePropAnimations",
+        "PlayerWeaponAnimControl vtable +0xE0. Tracks authored per-state prop "
+        "animation data and delegates play-animation events for primary and "
+        "optional secondary props; it never calls the attachment helper.",
+    ),
+    0x14108D3B0: (
+        "PlayerWeaponAnimControl_RequestStateIfPresent",
+        "PlayerWeaponAnimControl vtable +0xC8. Tests a requested state in the "
+        "weapon layer and invokes the generic state-transition/fade helper when "
+        "present; it has no physical attachment write.",
+    ),
+    0x14108E470: (
+        "PlayerWeaponAnimControl_IsCurrentWeaponStateAuto",
+        "PlayerWeaponAnimControl vtable +0xC0. Queries the authored auto flag "
+        "for the current state in weapon layer 0xE2B990B9.",
+    ),
+    0x142057380: (
+        "AnimActionMgr_Init",
+        "Initializes the owner-local animation StateAction manager, its bounded "
+        "action storage and factory pointer. Player installs this at +0x1B8.",
+    ),
+    0x142057BA0: (
+        "AnimActionMgr_AnimStateCreate",
+        "Creates authored StateActions for a new animation state by calling the "
+        "manager factory with action StringId, owner, manager id, layer id and "
+        "AnimInstance id, then starts the returned action through vtable +0x10.",
+    ),
+    0x142057FB0: (
+        "AnimActionMgr_OnStateTransition",
+        "Finds the active authored action for a state transition and dispatches "
+        "StateAction vtable +0x18. Player weapon-holster reaches its derived "
+        "one-shot wrapper through this path.",
+    ),
+    0x142058040: (
+        "AnimActionMgr_OnStateEnd",
+        "Dispatches StateAction vtable +0x20 at animation-state end. The base "
+        "wrapper marks a missed weapon-holster action finished without forcing "
+        "its one-shot executor.",
+    ),
+    0x142058130: (
+        "AnimActionMgr_Update",
+        "Per-frame authored action update. Calls StateAction vtable +0x28; the "
+        "Player weapon-holster wrapper executes after normalized time 0.9.",
+    ),
+    0x1410FD120: (
+        "Player_CreateStateAction",
+        "Player AnimActionMgr factory. Case 0xFA06C342 allocates the exact "
+        "PlayerHolsterWeaponAnimAction for weapon-holster and records Player, "
+        "manager, animation layer and AnimInstance identity in the action.",
+    ),
+    0x141089C70: (
+        "PlayerStateAction_ResolveCurrentWeapon",
+        "Resolves the action's current animation layer/state and returns its "
+        "ProcessWeapon only when the expected process type bit is present.",
+    ),
+    0x14108A5D0: (
+        "PlayerHolsterWeaponAnimAction_Update",
+        "PlayerHolsterWeaponAnimAction derived update wrapper. Executes the "
+        "one-shot holster path after current animation time exceeds 0.9.",
+    ),
+    0x14108A610: (
+        "PlayerHolsterWeaponAnimAction_OnTransition",
+        "PlayerHolsterWeaponAnimAction derived transition wrapper. A nonzero "
+        "transition marker executes the one-shot holster path.",
+    ),
+    0x14108A640: (
+        "PlayerHolsterWeaponAnimAction_Execute",
+        "One-shot weapon-holster executor. Resolves the current weapon, calls "
+        "PlayerWeaponController vtable +0x3D0, requires targSpineProp, selects "
+        "targSpinePropAnim and seeds the authored attachment blend.",
+    ),
+    0x1410A9670: (
+        "PlayerWeaponController_RebindWeaponToHolster",
+        "PlayerWeaponController vtable +0x3D0. The ordinary path builds the "
+        "weapon's authored holster binding and passes its attach id to weapon "
+        "vtable +0x7A8 while retaining the same Player owner.",
+    ),
+    0x141ED0580: (
+        "WeaponAttachment_SelectExistingOwnerPoint",
+        "Common weapon vtable +0x7A8 implementation. Searches the current "
+        "owner's AttachSystem by StringId and writes the selected byte index to "
+        "weapon+0x688 without changing the owner handle.",
+    ),
 }
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142A46560: (
+        "PlayerHolsterWeaponAnimAction_Vtable",
+        "MSVC RTTI vtable for PlayerHolsterWeaponAnimAction; created by Player "
+        "StateAction factory case weapon-holster 0xFA06C342.",
+    ),
     0x142BE8DFC: (
         "kAimAlternateLayerReleaseDuration",
         "Float 0.2 used as the fade duration by "

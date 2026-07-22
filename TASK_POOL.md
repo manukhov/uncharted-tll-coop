@@ -1669,8 +1669,20 @@ Do not reopen these as the first move:
       physical attach rows were rightHand and none were holster. Reject a
       Nadine-specific action-loss or this named callback as the discriminator.
       Audit PlayerWeaponAnimControl vtable `+0xD0..+0xE8` and trace the true
-      state-script callers of ReattachPlayerWeapon/AttachBackToHolster before
-      another runtime build.
+      completion boundary. STATIC correction `fq`: callbacks `+0xC0..+0xE8`
+      own only state/overlay/prop-animation/named-property work and exact Get/Put
+      cleanup callbacks are null. Stock Put instead uses the separate
+      `Player+0x1B8` AnimActionMgr: factory `0x1410FD120` creates
+      `weapon-holster` action `0x142A46560`, executor `0x14108A640` calls
+      controller `0x1410A9670`, and weapon vtable `+0x7A8 -> 0x141ED0580`
+      selects the existing-owner attach record at `weapon+0x688`.
+      `0x00AD047A` is confirmed `targSpineProp`, a required stock intermediate,
+      and absence of direct `0x141ED0370` holster calls in `fp` is not a failure.
+      Build `fq` passively distinguishes A no factory, B no executor, C unresolved
+      state/weapon, D failed targSpineProp guard and E wrong final selector using
+      the written prediction in COOP_STATUS. Keep direct repair disabled.
+      Release DLL `2026-07-22fq` compiled; the single IDB is saved/labeled and
+      MCP verification passed. Runtime comparison is pending.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
