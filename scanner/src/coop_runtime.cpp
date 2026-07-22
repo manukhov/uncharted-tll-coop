@@ -29340,6 +29340,255 @@ bool install_weapon_existing_owner_selector_vtable_probe() {
     return true;
 }
 
+using PlayerWeaponAnimControlUpdateHolsterIkFunction =
+    void(__fastcall*)(void*);
+using WeaponHolsterIkBlenderExtractDataFunction =
+    std::uint8_t(__fastcall*)(void*, void*, void*);
+
+PlayerWeaponAnimControlUpdateHolsterIkFunction
+    g_original_player_weapon_anim_control_update_holster_ik = nullptr;
+WeaponHolsterIkBlenderExtractDataFunction
+    g_original_weapon_holster_ik_blender_extract_data = nullptr;
+
+std::uint32_t g_ap_reference_hand_r_id = 0;
+std::uint32_t g_ap_reference_leg_holster_id = 0;
+std::uint32_t g_ap_reference_back_holster_id = 0;
+
+struct NadineHolsterIkProbeContext {
+    bool active = false;
+    int owner_index = -1;
+    void* player = nullptr;
+    void* control = nullptr;
+    void* weapon = nullptr;
+    std::uint32_t art = 0;
+    std::uint32_t extract_calls = 0;
+};
+
+thread_local NadineHolsterIkProbeContext g_nadine_holster_ik_probe_context{};
+
+struct NadineHolsterIkDataSnapshot {
+    bool readable = false;
+    std::array<std::uint32_t, 8> target_bits{};
+    std::uint8_t valid = 0;
+    std::uint32_t reference_id = 0;
+    std::uint32_t weight_bits = 0;
+    std::array<std::int32_t, 4> joints{-99, -99, -99, -99};
+    std::array<std::uint32_t, 16> basis_bits{};
+};
+
+bool seh_capture_nadine_holster_ik_data(
+    void* output, void* control, NadineHolsterIkDataSnapshot* snapshot) {
+    if (snapshot == nullptr) {
+        return false;
+    }
+    *snapshot = {};
+    __try {
+        if (output == nullptr || control == nullptr) {
+            return false;
+        }
+        const auto* const output_bytes =
+            static_cast<const std::byte*>(output);
+        const auto* const control_bytes =
+            static_cast<const std::byte*>(control);
+        std::memcpy(
+            snapshot->target_bits.data(), output_bytes,
+            sizeof(snapshot->target_bits));
+        snapshot->valid = *reinterpret_cast<const std::uint8_t*>(
+            output_bytes + 0x20);
+        snapshot->reference_id =
+            *reinterpret_cast<const std::uint32_t*>(output_bytes + 0x30);
+        snapshot->weight_bits =
+            *reinterpret_cast<const std::uint32_t*>(output_bytes + 0x34);
+        std::memcpy(
+            snapshot->joints.data(), control_bytes + 0x78,
+            sizeof(snapshot->joints));
+        std::memcpy(
+            snapshot->basis_bits.data(), control_bytes + 0x90,
+            sizeof(snapshot->basis_bits));
+        snapshot->readable = true;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *snapshot = {};
+        return false;
+    }
+}
+
+const char* holster_ik_reference_label(std::uint32_t reference_id) {
+    if (reference_id == g_ap_reference_hand_r_id) {
+        return "hand-r";
+    }
+    if (reference_id == g_ap_reference_leg_holster_id) {
+        return "leg";
+    }
+    if (reference_id == g_ap_reference_back_holster_id) {
+        return "back";
+    }
+    return "other";
+}
+
+std::uint8_t __fastcall hooked_weapon_holster_ik_blender_extract_data(
+    void* blender, void* source, void* output) {
+    const std::uint8_t result =
+        g_original_weapon_holster_ik_blender_extract_data != nullptr
+        ? g_original_weapon_holster_ik_blender_extract_data(
+              blender, source, output)
+        : 0;
+
+    auto& context = g_nadine_holster_ik_probe_context;
+    if (!context.active) {
+        return result;
+    }
+    ++context.extract_calls;
+
+    NadineHolsterIkDataSnapshot snapshot{};
+    seh_capture_nadine_holster_ik_data(
+        output, context.control, &snapshot);
+
+    static std::array<std::atomic<std::uint32_t>, 2> log_counts{};
+    if (context.owner_index < 0 || context.owner_index >= 2 ||
+        log_counts[context.owner_index].fetch_add(
+            1, std::memory_order_relaxed) >= 64) {
+        return result;
+    }
+
+    std::ostringstream line;
+    line << "NADINE-HOLSTER-IK-DATA owner=" << context.owner_index
+         << " player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(context.player)
+         << " control=0x"
+         << reinterpret_cast<std::uintptr_t>(context.control)
+         << " weapon=0x"
+         << reinterpret_cast<std::uintptr_t>(context.weapon)
+         << " art=0x" << context.art
+         << " source=0x" << reinterpret_cast<std::uintptr_t>(source)
+         << " reference=0x" << snapshot.reference_id << "/"
+         << holster_ik_reference_label(snapshot.reference_id)
+         << " weight=0x" << snapshot.weight_bits
+         << std::dec << " call=" << context.extract_calls
+         << " result=" << static_cast<unsigned>(result)
+         << " valid=" << static_cast<unsigned>(snapshot.valid)
+         << " readable=" << (snapshot.readable ? 1 : 0)
+         << " joints=" << snapshot.joints[0] << ","
+         << snapshot.joints[1] << "," << snapshot.joints[2] << ","
+         << snapshot.joints[3] << " target=" << std::hex;
+    for (const std::uint32_t bits : snapshot.target_bits) {
+        line << bits << ",";
+    }
+    line << " basis=";
+    for (std::size_t index = 0; index < snapshot.basis_bits.size(); ++index) {
+        if (index == 8) {
+            line << "/";
+        }
+        line << snapshot.basis_bits[index] << ",";
+    }
+    write_log_line(line.str().c_str());
+    return result;
+}
+
+void __fastcall hooked_player_weapon_anim_control_update_holster_ik(
+    void* control) {
+    const NadineHolsterIkProbeContext previous_context =
+        g_nadine_holster_ik_probe_context;
+    g_nadine_holster_ik_probe_context = {};
+
+    void* player = nullptr;
+    void* weapon = nullptr;
+    std::uint32_t handle_id = 0;
+    std::uint32_t look = 0;
+    const bool resolved = seh_resolve_anim_control_weapon(
+        control, &player, &weapon, &handle_id);
+    const int owner_index = retained_player_index(player);
+    if (resolved && handle_id != 0 && owner_index >= 0 &&
+        seh_read_player_look(player, &look) &&
+        look == kLegacyNadineAttachTargetLookId &&
+        seh_weapon_is_player_slot(player, weapon, 1)) {
+        g_nadine_holster_ik_probe_context.active = true;
+        g_nadine_holster_ik_probe_context.owner_index = owner_index;
+        g_nadine_holster_ik_probe_context.player = player;
+        g_nadine_holster_ik_probe_context.control = control;
+        g_nadine_holster_ik_probe_context.weapon = weapon;
+        g_nadine_holster_ik_probe_context.art =
+            weapon_art_id_from_object(weapon);
+    }
+
+    if (g_original_player_weapon_anim_control_update_holster_ik != nullptr) {
+        g_original_player_weapon_anim_control_update_holster_ik(control);
+    }
+
+    auto& context = g_nadine_holster_ik_probe_context;
+    if (context.active && context.extract_calls == 0) {
+        static std::array<std::atomic<std::uint32_t>, 2> missing_counts{};
+        if (missing_counts[context.owner_index].fetch_add(
+                1, std::memory_order_relaxed) < 16) {
+            std::ostringstream line;
+            line << "NADINE-HOLSTER-IK-UPDATE owner="
+                 << context.owner_index << " player=0x" << std::hex
+                 << reinterpret_cast<std::uintptr_t>(context.player)
+                 << " control=0x"
+                 << reinterpret_cast<std::uintptr_t>(context.control)
+                 << " weapon=0x"
+                 << reinterpret_cast<std::uintptr_t>(context.weapon)
+                 << " art=0x" << context.art
+                 << " extracted=0";
+            write_log_line(line.str().c_str());
+        }
+    }
+    g_nadine_holster_ik_probe_context = previous_context;
+}
+
+bool install_nadine_holster_ik_probe() {
+    g_ap_reference_hand_r_id = safe_string_id_hash("apReference-hand-r", 18);
+    g_ap_reference_leg_holster_id =
+        safe_string_id_hash("apReference_leg_holster", 23);
+    g_ap_reference_back_holster_id =
+        safe_string_id_hash("apReference_back_holster", 24);
+
+    constexpr std::array<std::uint8_t, 12> kExtractPrologue{
+        0x4C, 0x8B, 0xDC, 0x55, 0x57, 0x48, 0x81, 0xEC, 0x48, 0x05,
+        0x00, 0x00,
+    };
+    // Keep the complete RAX-as-original-RSP save block in the trampoline.
+    // The generic detour jump-back uses RAX; the next stock instruction at
+    // +0x43 overwrites it with __security_cookie, so no live register is lost.
+    constexpr std::array<std::uint8_t, 67> kUpdatePrologue{
+        0x48, 0x8B, 0xC4, 0x55, 0x41, 0x56, 0x41, 0x57, 0x48, 0x8D,
+        0xA8, 0x58, 0xFB, 0xFF, 0xFF, 0x48, 0x81, 0xEC, 0x90, 0x05,
+        0x00, 0x00, 0x48, 0xC7, 0x45, 0x80, 0xFE, 0xFF, 0xFF, 0xFF,
+        0x48, 0x89, 0x58, 0x10, 0x48, 0x89, 0x70, 0x18, 0x48, 0x89,
+        0x78, 0x20, 0xC5, 0xF8, 0x29, 0x70, 0xD8, 0xC5, 0xF8, 0x29,
+        0x78, 0xC8, 0xC5, 0x78, 0x29, 0x40, 0xB8, 0xC5, 0x78, 0x29,
+        0x48, 0xA8, 0xC5, 0x78, 0x29, 0x50, 0x98,
+    };
+    g_original_weapon_holster_ik_blender_extract_data =
+        reinterpret_cast<WeaponHolsterIkBlenderExtractDataFunction>(
+            install_fire_gate_detour(
+                kWeaponHolsterIkBlenderExtractDataRva,
+                kExtractPrologue.data(), kExtractPrologue.size(),
+                reinterpret_cast<void*>(
+                    &hooked_weapon_holster_ik_blender_extract_data),
+                "Nadine holster IK reference probe"));
+    g_original_player_weapon_anim_control_update_holster_ik =
+        reinterpret_cast<PlayerWeaponAnimControlUpdateHolsterIkFunction>(
+            install_fire_gate_detour(
+                kPlayerWeaponAnimControlUpdateHolsterIkRva,
+                kUpdatePrologue.data(), kUpdatePrologue.size(),
+                reinterpret_cast<void*>(
+                    &hooked_player_weapon_anim_control_update_holster_ik),
+                "Nadine holster IK control scope"));
+
+    const bool installed =
+        g_original_weapon_holster_ik_blender_extract_data != nullptr &&
+        g_original_player_weapon_anim_control_update_holster_ik != nullptr;
+    std::ostringstream line;
+    line << "Nadine holster IK probe "
+         << (installed ? "installed" : "PARTIAL")
+         << " refs=0x" << std::hex << g_ap_reference_hand_r_id
+         << "/0x" << g_ap_reference_leg_holster_id
+         << "/0x" << g_ap_reference_back_holster_id;
+    boot_log_line(line.str().c_str());
+    return installed;
+}
+
 bool seh_attach_weapon_to_owner_point(
     void* weapon, void* owner, std::uint32_t attach_id,
     std::uintptr_t* result_out) {
@@ -34599,8 +34848,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22gc "
-        "(gb local-contract repair removed; selector observation retained)");
+        "TLL co-op runtime init 2026-07-22gd "
+        "(read-only Nadine holster IK reference discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -34630,6 +34879,7 @@ DWORD WINAPI install_hook(void*) {
     install_nd_attachable_parent_visibility_relay();
     install_player_weapon_holster_bind_probe();
     install_nadine_holster_final_boundary_probe();
+    install_nadine_holster_ik_probe();
     install_nadine_active_grip_probe();
     install_native_nadine_weapon_boundary_probe();
     install_nadine_final_transform_probe();

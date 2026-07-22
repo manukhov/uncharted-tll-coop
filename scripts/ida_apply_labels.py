@@ -221,9 +221,10 @@ FUNCTIONS = {
     0x14108B120: (
         "WeaponHolsterIkBlender_ExtractData",
         "WeaponHolsterIkBlender vtable +0x10. Extracts a 0x38-byte "
-        "WeaponHolsterIkData record and selects hand-r, leg-holster or "
-        "back-holster animation reference data; it does not resolve or mutate "
-        "a ProcessWeapon attachment.",
+        "WeaponHolsterIkData record. The sampled-reference mask chooses "
+        "apReference_leg_holster when bit 1 is present, otherwise "
+        "apReference_back_holster, and writes that id at output+0x30. It does "
+        "not resolve or mutate a ProcessWeapon attachment.",
     ),
     0x14108B580: (
         "WeaponHolsterIkBlender_BlendData",
@@ -7328,7 +7329,9 @@ FUNCTIONS = {
         "PlayerWeaponAnimControl_InitializeHolsterJoints",
         "PlayerWeaponAnimControl vtable +0x130. Resolves r_leg_gun_holster, "
         "r_upper_leg, pelvis_holster and pelvis in the owning Player skeleton into "
-        "signed indices at +0x78/+0x7C/+0x80/+0x84.",
+        "signed indices at +0x78/+0x7C/+0x80/+0x84. Runtime legacy Nadine "
+        "resolves -1,5,-1,3 because both Chloe marker names are absent; her "
+        "actual pistol marker is joint 99 under a different name id.",
     ),
     0x14108EBF0: (
         "PlayerWeaponAnimControl_UpdateHolsterJointTransforms",
@@ -7337,9 +7340,10 @@ FUNCTIONS = {
     ),
     0x14108ECE0: (
         "PlayerWeaponAnimControl_UpdateHolsterIk",
-        "PlayerWeaponAnimControl vtable +0x140. Selects the leg or pelvis parent "
-        "index at +0x7C/+0x84, composes it with the cached parent-relative "
-        "transform at +0x90/+0xB0, and feeds WeaponHolsterIkBlender.",
+        "PlayerWeaponAnimControl vtable +0x140. Reads the extracted reference "
+        "id at WeaponHolsterIkData+0x30, selects the leg or pelvis parent index "
+        "at control+0x7C/+0x84, composes it with the cached marker-relative "
+        "transform at +0x90/+0xB0, and drives the arm IK chain.",
     ),
     0x1414FE7E0: (
         "WeaponHolster_SelectCharacterAttachPoint",

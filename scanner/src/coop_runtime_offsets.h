@@ -516,6 +516,13 @@ constexpr std::uintptr_t kResolveKnowledgeRegistryEntryByIdRva = 0x1765030;
 // id and offsets, and the final mutation hook proves whether the state-script
 // path reaches the concrete owner attachment operation.
 constexpr std::uintptr_t kPlayerWeaponAnimNamedEventRva = 0x108DE30;
+// Player holster IK is a separate skeleton/arm path from the ProcessWeapon
+// attachment. The outer update scopes the exact PlayerWeaponAnimControl; its
+// blender extracts the authored hand/leg/back reference record used to choose
+// the leg or pelvis target basis.
+constexpr std::uintptr_t kPlayerWeaponAnimControlUpdateHolsterIkRva =
+    0x108ECE0;
+constexpr std::uintptr_t kWeaponHolsterIkBlenderExtractDataRva = 0x108B120;
 // Shared Player move-action sequencer. Its phase update owns the first
 // PlayerGetWeaponInHandAction / PlayerPutGunAwayAction vtable dispatch and the
 // later phase-specific checks, so a before/after detour distinguishes a queued

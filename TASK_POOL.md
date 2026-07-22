@@ -1808,10 +1808,23 @@ Do not reopen these as the first move:
       blend at the exact scoped action; every subsequent covered pistol sample
       retained `pistolHolster` joint 5 and identity local, with final visible
       ProcessWeapon/child DrawControls positively covered, but the user saw the
-      unchanged back position. Remove the inert mutation and resolve a stable
-      bind/rest-space joint-5-to-joint-99 remap before another runtime test; the
-      current record incorrectly samples a one-frame live NPC pose and differs
-      between processes.
+      unchanged back position. The inert mutation is removed. A later exact
+      owner-relative comparison supersedes Hrecord for the visible trajectory:
+      Player and native final pistol translations are thigh-equivalent within a
+      few centimetres.
+- [ ] Run bounded read-only `gd` holster-IK discriminator. Prior runtime census
+      proves legacy Nadine's PlayerWeaponAnimControl resolves joints
+      `-1,5,-1,3` and leaves both marker bases identity, while Chloe resolves
+      `101,5,199,3`. Native and Player Nadine instead share the real pistol
+      marker at joint 99/name `0xADD0C871`; the Player control hard-codes absent
+      `r_leg_gun_holster 0xE231DB44`. Static dataflow through
+      `0x14108E700 -> 0x14108EBF0 -> 0x14108ECE0` and extractor `0x14108B120`
+      proves the missing marker and leg/back animation reference are the two
+      discriminators. Require `NADINE-HOLSTER-IK-DATA` during a pistol put-away:
+      valid nonzero `leg` plus the identity leg basis selects joint-99 marker
+      repair; valid nonzero `back` selects reference/holster-type retargeting;
+      missing, invalid or zero-weight data selects the base clip path. No state
+      is mutated by `gd`.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

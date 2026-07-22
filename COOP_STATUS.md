@@ -7003,5 +7003,58 @@ conversion; Hdynamic would instead require recomputing a target-space value
 from live donor and Player poses every frame. Before another runtime test,
 resolve the rig descriptor's bind/rest transform storage and the stock engine
 consumer that turns it into joint/model transforms; compare its joint 5 and 99
-semantics against `RigGetJointTransform 0x141A98870` and eliminate Hdynamic or
+semantics against `RigPose_GetJointWorldTransform 0x141687C90` and eliminate Hdynamic or
 Hbind statically.
+
+### 2026-07-22 STATIC/RUNTIME: final pistol point is already thigh-equivalent; holster IK is the new boundary (`gd`)
+
+The Hrecord conclusion above is superseded by an exact world-space comparison.
+After normalizing the final ProcessWeapon transform by its owner root, native
+Nadine's persistent pistol translation was `(-0.222, 0.835, -0.003)` metres.
+The two `gb` legacy-Nadine Players were `(-0.238, 0.812, -0.014)` and
+`(-0.263, 0.816, 0.008)` metres. Thus the covered final point differs by only a
+few centimetres and is already thigh-equivalent; it cannot explain the user's
+unchanged observation that Nadine performs the put-away motion toward her back.
+The session-dependent copied record remains technically imperfect, but it is no
+longer the leading cause of that animation trajectory.
+
+Three independent evidence kinds move the boundary to the stock Player holster
+IK. First, the existing runtime census consistently captured legacy Nadine's
+`PlayerWeaponAnimControl+0x78` joint tuple as `-1,5,-1,3`, with identity leg and
+pelvis bases at `+0x90/+0xB0`; Chloe resolved `101,5,199,3` and produced two
+nonidentity bases. The independent native/Player joint-name capture showed that
+Nadine's actual pistol marker is joint 99 with name id `0xADD0C871` in both rigs,
+whereas the Player control hard-codes `r_leg_gun_holster = 0xE231DB44`, absent
+from both. Second, `PlayerWeaponAnimControl_InitializeHolsterJoints 0x14108E700`
+resolves exactly `r_leg_gun_holster/r_upper_leg` into `+0x78/+0x7C` and
+`pelvis_holster/pelvis` into `+0x80/+0x84`; the missing marker indices therefore
+directly explain the identity cached transforms. Its sibling
+`0x14108EBF0` computes marker-relative-to-parent transforms only when both
+indices are valid. Third, `PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0`
+selects the leg pair or pelvis pair from the reference id emitted by
+`WeaponHolsterIkBlender_ExtractData 0x14108B120`, composes that basis with the
+authored target, and drives the arm IK chain. The extractor independently
+distinguishes `apReference_leg_holster` from `apReference_back_holster`; it does
+not touch ProcessWeapon attachment state.
+
+Competing hypotheses are now explicit. **Hmarker** predicts the pistol clip
+emits a valid, nonzero-weight leg reference, but the control feeds it the
+observed identity leg basis because the Chloe-only marker name is missing;
+joint 99 is then the exact replacement candidate. **Hbackref** predicts the
+clip emits the back reference, making the missing leg marker irrelevant and
+requiring the authored reference/holster-type decision to be retargeted.
+**Hclip** predicts no usable extractor result (no call, `valid=0`, or zero
+weight), leaving the visible hand path in the base animation clip rather than
+this IK correction.
+
+Build `2026-07-22gd` adds a read-only two-boundary discriminator. It scopes
+`PlayerWeaponAnimControl_UpdateHolsterIk` only to a retained legacy-Nadine
+slot-1 weapon, then records the exact `WeaponHolsterIkData` result: reference
+id, valid flag, weight, target transform, joint tuple and both cached bases. It
+does not alter the marker indices, cached transforms, reference id, IK target,
+weapon or skeleton. **Falsifiable prediction:** a pistol put-away must emit
+`NADINE-HOLSTER-IK-DATA`. A valid nonzero `leg` row with joints
+`-1,5,-1,3` and identity first basis selects Hmarker; a valid nonzero `back` row
+selects Hbackref; only missing/invalid/zero-weight rows select Hclip. A crash,
+hook-install mismatch, non-slot-1 admission or any visual change invalidates
+the probe. The Release DLL compiled successfully.
