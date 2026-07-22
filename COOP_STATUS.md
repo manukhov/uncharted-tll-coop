@@ -5853,6 +5853,43 @@ the helper samples a live native pose rather than bind pose, so any visible
 jitter or sliding is explicitly a falsifier. Release build `2026-07-21fm`
 compiled successfully; runtime verification is pending.
 
+### 2026-07-22 RUNTIME CONFIRMED: Nadine lacks the stock pistol animation point (`fr`)
+
+Processes 17996 and 20372 loaded `fr`, installed both safe code-boundary probes
+and reported `animSafe=111`. They remained stable through repeated pistol/rifle
+Get and Put cycles on both copies; no behavior regression or crash was observed.
+Both processes were closed after the bounded capture.
+
+The executor result rejects action hypotheses A-C. Exact
+`PlayerHolsterWeaponAnimAction` objects (`vtableRva=0x2A46560`, marker
+`0xFA06C342`, layer `0xE2B990B9`) changed `executed=0->1` for both Chloe look
+`0x3F334972` and legacy Nadine look `0xD27C074F` on both process roles. The
+owner-local factory swap emitted no install/factory rows, so absence at that
+late factory subprobe is not admissible evidence; the exact derived executor
+independently proves the action had already been created and dispatched.
+
+The selector sequence isolates the first concrete look difference. Chloe's
+pistol Put changes `rightHand -> targSpineProp 0x00AD047A`, then
+`targSpineProp -> targSpinePropAnim 0xBBACEF13`, then returns to
+`targSpineProp`. Across both Chloe roles, every captured
+`targSpinePropAnim` request changed the record to `0xBBACEF13`. Nadine reaches
+the same executor and can select `targSpineProp`, but every captured pistol
+request for `targSpinePropAnim` left the current id at `0x00AD047A`. Thus the
+legacy look has no selectable stock animation attachment record for that id.
+The rifle control independently selected generic `gun_holster 0x555EFB8D` on
+both looks, matching the user-visible rifle return to the back.
+
+This selects a refined E: the multi-stage stock selector runs, but Nadine's
+pistol animation-point request cannot change the attachment record. The final
+stock Put intentionally selects `targSpineProp`, which is Chloe's back-holster
+destination and explains why Nadine still stores the pistol on her back despite
+having a separate hip-holster record (`0x8A0249B5`, index 41) in the repaired
+owner table. The next fix must map only legacy-Nadine pistol holster animation
+and final Put semantics to that existing hip record. It must distinguish Get
+from Put; globally redirecting every `targSpineProp` request would also alter
+the draw path and is not authorized. The ineffective late factory-pointer probe
+should be removed from the next build.
+
 ### 2026-07-21 CONFIRMED/REJECTED: build `fm` remaps the record, but non-default pistols bypass the reconciler
 
 The user tested multiple pistols in build `fm`; all still holstered at Chloe's

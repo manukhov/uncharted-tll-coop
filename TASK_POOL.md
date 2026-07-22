@@ -1684,8 +1684,15 @@ Do not reopen these as the first move:
       uses owner-local factory pointer `Player+0x1D0`, exact executor E9/E8 sites
       `0x14108A5F9/0x14108A62B`, and checked ProcessWeapon vtable slot
       `0x142A9C6F0`; it retains the same A-E discriminator without copying retail
-      prologues. Release DLL `2026-07-22fr` compiled; runtime comparison is
-      pending under the new written prediction. Keep direct repair disabled.
+      prologues. RUNTIME `fr`: stable on both copies. Exact holster action
+      executed for both looks, rejecting A-C. Chloe pistol selected
+      `targSpineProp -> targSpinePropAnim -> targSpineProp`; every Nadine
+      `targSpinePropAnim 0xBBACEF13` request left the current record at
+      `targSpineProp 0x00AD047A`. The final stock spine selection explains the
+      back holster. Next: statically distinguish Get/Put at the selector and map
+      only legacy-Nadine pistol Put/animation semantics to existing hip record
+      `0x8A0249B5` index 41. Remove the ineffective late factory-pointer probe;
+      keep direct repair disabled.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
