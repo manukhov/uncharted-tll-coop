@@ -1578,12 +1578,20 @@ Do not reopen these as the first move:
       mutate the second path until this discriminator chooses among S1/S2/S3.
       Result: S3. Role B emitted 14 worker skips and zero synchronous rows while
       the rifle remained in the local hand; S1/S2 are REJECTED.
-- [ ] Run read-only build `gr` at the final `CullFgLods::Spawn` call
+- [x] Run read-only build `gr` at the final `CullFgLods::Spawn` call
       `0x141661A57`. With the existing inactive/skip suppression still active,
       classify a nonzero exact `targetMask` as stale/independent queue admission
       (R1), an alternate same-owner/geometry hit as R2, or all-zero matches with
       the visible rifle as a separate render path (R3). Require bounded role-B
       rows, no crash and no body/pistol regression.
+      Result: R2. The visible rifle remained; the exact target LODs were absent
+      (`targetMask=0`, `activeMask=0`), but generations 3-8 consistently queued
+      three other active instances with the same three geometry identities
+      (`geometryHits=3`, `ownerHits=0`). R1/R3 are REJECTED.
+- [ ] Trace the alternate spawn-rifle LOD set selected by `gr`
+      (`0x1118D10400`, `0x1118D10680`, `0x1118D10900`) backward through the
+      `PrepareInstanceForRendering` producer and resolve its owning renderable
+      or weapon container. Do not mutate the already-absent published target.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

@@ -8007,3 +8007,27 @@ R1; `targetMask=0` with nonzero `ownerHits` or `geometryHits` selects R2; all
 three zero while the rifle remains in the hand selects R3. Missing role-B rows,
 an unreadable/implausible queue, crash, body loss or a new pistol regression
 invalidates the capture.
+
+### 2026-07-22 RUNTIME: `gr` selects R2; a second rifle instance is rendered
+
+The user still saw the rifle attached to the local Nadine hand immediately
+after spawn. Both copies loaded `2026-07-22gr`, the checked relay at
+`0x141661A57` installed, and neither process crashed. In role B every settled
+queue sample had `targetMask=0` and `activeMask=0`: the three LOD instances of
+the published inactive rifle were absent from the final `CullFgLods` input, so
+the existing `go/gp` suppression is working and R1 is REJECTED.
+
+From published generations 3 through 8, however, the same final queue contained
+three active instances with `geometryHits=3`, while `ownerHits=0`. The stable
+instances were `0x1118D10400`, `0x1118D10680` and `0x1118D10900`; each carried
+one of the exact three rifle geometry identities and remained active while the
+published target changed between `0x10E0CA1A00` and later weapon objects. This
+is the written R2 outcome: the visible spawn rifle is rendered by a distinct
+three-LOD `FgInstance` set, not by the weapon instance currently discovered and
+suppressed. R3 is REJECTED.
+
+Next static target: trace those alternate LOD instances backward from their
+`PrepareInstanceForRendering` producer and resolve their owning renderable or
+weapon container. Any next runtime discriminator must match the alternate
+geometry set at the producer boundary; further writes to the already-absent
+published target are ruled out.
