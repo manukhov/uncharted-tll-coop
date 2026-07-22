@@ -1812,23 +1812,28 @@ Do not reopen these as the first move:
       owner-relative comparison supersedes Hrecord for the visible trajectory:
       Player and native final pistol translations are thigh-equivalent within a
       few centimetres.
-- [ ] Run bounded read-only `ge` holster-IK discriminator. Prior runtime census
-      proves legacy Nadine's PlayerWeaponAnimControl resolves joints
-      `-1,5,-1,3` and leaves both marker bases identity, while Chloe resolves
-      `101,5,199,3`. Native and Player Nadine instead share the real pistol
-      marker at joint 99/name `0xADD0C871`; the Player control hard-codes absent
-      `r_leg_gun_holster 0xE231DB44`. New static dataflow proves
-      `s_pistol-holster` runs on separate layer `0x63B48BEE`, whereas Put requests
-      `s_weapon-holster` on `WeaponPartial 0xE2B990B9` and holster IK reduces that
-      layer at `0x14108F800`. Weapon class/art at `+0xD0/+0xD4/+0xD8` and
-      `weapon-holster-type-normal/fast/very-fast/zipline` are not positional.
-      The only stock position input is `weapon-holster-point-*`, which standard
-      pistol `targSpineProp` currently fails to commit. `ge` must log the final,
-      post-blend `NADINE-HOLSTER-IK-FINAL` only while requested state is
-      `0xDF5B68FC`: valid nonzero back selects the missing leg-point knowledge
-      path; valid nonzero leg plus identity leg basis selects joint-99 marker
-      repair; missing, invalid or zero-weight final data selects the base clip.
-      No state is mutated.
+- [ ] Run bounded read-only `ge` holster-IK discriminator, then attribute any back
+      result at the newly resolved Chloe-map boundary before attempting a fix.
+      Prior runtime census proves legacy Nadine's PlayerWeaponAnimControl resolves
+      joints `-1,5,-1,3` and leaves both marker bases identity, while Chloe
+      resolves `101,5,199,3`; native/Player Nadine share the real pistol marker at
+      joint 99/name `0xADD0C871`, but Player hard-codes absent
+      `r_leg_gun_holster 0xE231DB44`. Put requests `s_weapon-holster` on
+      `WeaponPartial 0xE2B990B9`; final reducer `0x14108F800` is decisive.
+      `AnimStateSnapshot_EvaluateReferenceSetMask 0x1418B3770` proves leg has
+      priority whenever the selected snapshot contains it, and the final IK path
+      never reads `weapon-holster-point-*`; the old direct-native Hpoint claim is
+      REJECTED. Asset audit now proves generic `anim-player.bin` uses
+      `p-holster-chest^idle-stand-part 0x8DCA21F2`, while
+      `player-mesh-overlays.bin` contains explicit chest->back/leg/waist maps.
+      Native helper `0x14109D450` is gated on `chloe-base`, resolves
+      `*chloe-weapon-anim-overlay-map*`, and controller vtable `+0x3C0` tests the
+      mapped id before the original. `ge`: valid nonzero leg plus identity basis
+      selects Hmarker; missing/invalid/zero selects Hclip; valid back proves only
+      that the final snapshot lacks leg. For a back result, add one read-only row
+      containing `0x14109D450` input/output, Chloe-base predicate and `+0x3C0`
+      selected record: chest->back selects Hchloemap, no such remap leaves authored
+      Hpoint. No state is mutated.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

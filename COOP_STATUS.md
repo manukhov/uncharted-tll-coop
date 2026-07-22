@@ -7125,3 +7125,69 @@ classification. Runtime verification remains pending. The Release DLL compiled
 successfully with marker `2026-07-22ge`. Seven new STATIC function names and
 comments were applied to the shared IDB (`apply_labels OK: 1235 functions, 20
 data names`; `save_database returned True`) and verified after restarting MCP.
+
+### 2026-07-22 STATIC: authored holster maps expose a Chloe-base remap before IK
+
+The previously external-looking clip boundary is now partially resolved from the
+installed game archives without extracting assets into the repository. `dc1.psarc`
+contains `anim-player.bin` and `player-mesh-overlays.bin`; `actor77.psarc` contains
+the corresponding animation packs. The new read-only
+`scripts/psarc_asset_audit.py` parses their Oodle-compressed PSARC blocks in memory,
+recomputes the game's zero-seeded non-reflected CRC32 StringIds, and reproduces the
+following records.
+
+`anim-player.bin` encodes the generic Player state with chest-named animations.
+At file offset `0x1D8E0`, `p-holster-chest^idle-stand-part 0x8DCA21F2` is followed
+by `s_weapon-holster 0xDF5B68FC` and action `weapon-holster 0xFA06C342`; the
+unholster-side record at `0x1D760` similarly contains
+`p-unholster-chest^idle-part 0x66846123`, the same state and action. In contrast,
+`player-mesh-overlays.bin` contains explicit 40-byte source/replacement records:
+the same chest holster id is paired with `p-holster-back^idle-stand-part
+0x11438F72` at `0x7D78`, with `p-holster-leg^idle-stand-part 0x4A5559F7` at
+`0x1FCD0`, and with `p-holster-waist^idle-stand-part 0x109BF2C2` at `0x32D40`.
+The surrounding tables repeat the same source/replacement structure for the add,
+finish, mirror, aim and unholster families. Thus back/leg/waist selection is an
+authored animation-id remap, not a transform inferred from ProcessWeapon.
+
+Native code provides an independently convergent Chloe-only boundary.
+`PlayerWeaponController_MapChloeBaseWeaponOverlayId 0x14109D450` first requires
+the animation owner at controller `+0x108` to pass
+`PlayerAnimOwner_UsesChloeBaseSkeleton 0x1410EB3E0`, whose only accepted ids are
+`chloe-base-test` and `chloe-base`. It then resolves the exact named object
+`*chloe-weapon-anim-overlay-map*` and maps the input animation StringId through a
+`SortedIdPointerTable`. Controller vtable `+0x3C0`, now
+`PlayerWeaponController_FindWeaponOverlayRecord 0x14109D740`, searches the
+controller's overlay tables with that Chloe-mapped id first and only falls back
+to the original id if the mapped record is absent. RTTI and the vtable slot give
+an independent consumer: `PlayerPlayWeaponOverlayAction_OnStart 0x141097450`
+queries this exact `+0x3C0` method before publishing its selected weapon overlay.
+The exact named-object-to-one-specific-DC-table association and reachability from
+the current Put state are not yet proven, so this is not promoted to a bug fix.
+
+The final IK semantics are now exact as well.
+`AnimStateSnapshot_EvaluateReferenceSetMask 0x1418B3770` samples the requested
+hand/leg/back references from the selected authored snapshot and returns bits
+`1/2/4`. `WeaponHolsterIkBlender_ExtractData 0x14108B120` requires hand plus at
+least one holster bit; leg has priority whenever bit 2 is present, while back is
+used only when leg is absent. Missing hand or both holster references yields
+`valid=0`. Neither this sampler, the reducer nor the consumer reads any
+`weapon-holster-point-*` knowledge. Therefore the direct native claim "missing
+leg-point knowledge selects back" is STATIC REJECTED. The broader **Hpoint** can
+still exist in authored graph/script selection, but remains HYPOTHESIS.
+
+The competitors are revised. **Hchloemap** predicts the legacy Nadine Player still
+reports `chloe-base`, the hard-coded Chloe map converts the generic chest holster
+animation to the back family, and the final snapshot consequently lacks a usable
+leg reference. **Hpoint** predicts a different authored condition selects the back
+family without that Chloe remap. **Hmarker** predicts the final snapshot already
+contains leg but the hard-coded missing `r_leg_gun_holster` leaves its cached basis
+identity. **Hclip** predicts no valid weighted hand-plus-holster reference set.
+Build `ge` remains a valid final-IK discriminator, but a back row now proves only
+that the selected final snapshot lacks leg; it does not by itself distinguish
+Hchloemap from authored Hpoint. A later read-only probe must capture the
+`0x14109D450` input/output and the `+0x3C0` chosen record alongside the existing
+final reducer row. No game or injection was started during this static pass.
+The PSARC auditor reproduced the state and chest-to-back/leg pairs against the
+installed archives. Six new STATIC names plus the refined extractor comment were
+applied to the single `ida/tll.i64` (`apply_labels OK: 1241 functions, 20 data
+names`; `save_database returned True`) and verified through the restarted MCP.

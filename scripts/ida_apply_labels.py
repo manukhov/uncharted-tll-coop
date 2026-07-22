@@ -221,10 +221,19 @@ FUNCTIONS = {
     0x14108B120: (
         "WeaponHolsterIkBlender_ExtractData",
         "WeaponHolsterIkBlender vtable +0x10. Extracts a 0x38-byte "
-        "WeaponHolsterIkData record. The sampled-reference mask chooses "
-        "apReference_leg_holster when bit 1 is present, otherwise "
-        "apReference_back_holster, and writes that id at output+0x30. It does "
-        "not resolve or mutate a ProcessWeapon attachment.",
+        "WeaponHolsterIkData record. Requires sampled apReference-hand-r plus "
+        "at least one holster reference. Leg bit 1 has priority; otherwise a "
+        "present back bit 2 is selected. Missing hand or both holster refs "
+        "produce valid=0. Writes the selected id at output+0x30 and does not "
+        "resolve or mutate a ProcessWeapon attachment.",
+    ),
+    0x1418B3770: (
+        "AnimStateSnapshot_EvaluateReferenceSetMask",
+        "Evaluates a requested reference-id array against one authored "
+        "AnimStateSnapshot root through virtual slot 25. ORs bit 1<<index for "
+        "each successfully sampled reference and leaves each sampled transform "
+        "in its corresponding output block. WeaponHolsterIkBlender requests "
+        "hand-r, leg-holster and back-holster and consumes this exact mask.",
     ),
     0x14108B580: (
         "WeaponHolsterIkBlender_BlendData",
@@ -245,6 +254,39 @@ FUNCTIONS = {
         "PlayerWeaponAnimControl vtable +0x148. Requests s_pistol-holster on "
         "layer 0x63B48BEE. This is a different layer from WeaponPartial "
         "0xE2B990B9, which supplies the holster-IK hand/leg/back references.",
+    ),
+    0x141097450: (
+        "PlayerPlayWeaponOverlayAction_OnStart",
+        "RTTI PlayerPlayWeaponOverlayAction vtable +0x10. Resolves the shared "
+        "weapon/holster binding, chooses a movement-context weapon overlay, "
+        "and queries PlayerWeaponController vtable +0x3C0 for the mapped "
+        "overlay record before publishing the resulting animation id.",
+    ),
+    0x14109D450: (
+        "PlayerWeaponController_MapChloeBaseWeaponOverlayId",
+        "Read-only helper used by controller overlay lookup. When the animation "
+        "owner at controller+0x108 reports chloe-base or chloe-base-test, "
+        "resolves *chloe-weapon-anim-overlay-map* and maps the input animation "
+        "StringId through its SortedIdPointerTable. Returns zero when the "
+        "feature, skeleton test, named map or key is absent.",
+    ),
+    0x14109D650: (
+        "PlayerWeaponController_FindWeaponOverlayRecordByAnimId",
+        "Searches the controller's two cached weapon-overlay table handles at "
+        "+0x468 and +0x488 for one animation StringId and returns its overlay "
+        "record when the key/value tables contain it.",
+    ),
+    0x14109D740: (
+        "PlayerWeaponController_FindWeaponOverlayRecord",
+        "PlayerWeaponController vtable +0x3C0. First maps the requested "
+        "animation through the Chloe-base weapon overlay map and searches that "
+        "mapped id; if no record exists, retries the original animation id.",
+    ),
+    0x1410EB3E0: (
+        "PlayerAnimOwner_UsesChloeBaseSkeleton",
+        "Queries the animation owner's vtable +0x300 identity and returns true "
+        "only for chloe-base-test or chloe-base. This gates the hard-coded "
+        "*chloe-weapon-anim-overlay-map* remap in PlayerWeaponController.",
     ),
     0x14108E5A0: (
         "PlayerWeaponAnimControl_SetWeaponDescriptor",
