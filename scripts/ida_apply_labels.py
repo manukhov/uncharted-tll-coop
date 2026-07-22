@@ -8,6 +8,34 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-22: Player Look2 -> player-mesh animation knowledge ---
+    0x140A1DCC0: (
+        "Player_GetAppearanceHash",
+        "Player vtable slot +0x2E0 (index 92). Returns Player+0x15A4 through "
+        "the caller-provided StringId output. The legacy Nadine compatibility "
+        "hook overrides this return only inside the render look-builder caller; "
+        "it does not change Player+0x15A0 or animation knowledge.",
+    ),
+    0x1410D6AD0: (
+        "Player_ApplyLook2MeshKnowledge",
+        "Resolves Player+0x15A0 as a Look2, formats the exact "
+        "player-mesh/<Look2-name> registry key, and commits the resolved record "
+        "into the Player animation-knowledge sink, with player-mesh/default as "
+        "fallback. Also commits mesh/default and female/default. Called during "
+        "top-level Player initialization and by Player_ChangeLookId.",
+    ),
+    0x141800C00: (
+        "RenderLook_ResolveLook2ById",
+        "ndlib/render/look.cpp Look2 registry lookup used by "
+        "Player_ApplyLook2MeshKnowledge. Resolves the StringId supplied from "
+        "Player+0x15A0 into the small render-look handle consumed by the type "
+        "validator.",
+    ),
+    0x141801400: (
+        "RenderLook_GetValidatedLook2",
+        "Validates the resolved render-look handle as type look2 and returns "
+        "the typed record whose name is used to form player-mesh/<Look2-name>.",
+    ),
     # --- 2026-07-22: DrawControl LOD/FgInstance render ownership ---
     0x141751E30: (
         "IDrawControl_AddMesh",

@@ -244,11 +244,11 @@ volatile bool g_dll_inert = false;
 volatile bool g_hide_clone_from_slot = false;
 void* g_clone_cached = nullptr;
 
-// Player vtable[92] (sub_140A1DCC0) = the APPEARANCE-hash getter (returns
-// object+0x15A4 into *a2), fed to the look builder -> appearance-record -> mesh.
-// We hook it so the clone's look build resolves NADINE's appearance (0xd27c074f =
-// hash("nadine")) instead of Chloe's (0x3f334972). Gated to the clone spawn window
-// so Chloe's own look is untouched.
+// Player vtable[92] (Player_GetAppearanceHash 0x140A1DCC0) returns
+// object+0x15A4 into *a2. The hook is admitted only from the render look-builder
+// return site, so the clone's visible mesh resolves NADINE's legacy appearance
+// (0xd27c074f) instead of Chloe's (0x3f334972). It intentionally does not change
+// Player+0x15A0 or the player-mesh animation-knowledge selection derived from it.
 constexpr std::size_t kAppearanceSlot = 92;
 using AppearanceFunction = std::uint32_t* (__fastcall*)(void*, std::uint32_t*);
 AppearanceFunction g_original_appearance = nullptr;
@@ -6754,9 +6754,9 @@ void dump_body_subobject_diff() {
     probe_collbody("clone1", clone1);
 
     // APPEARANCE probe: Player appearance hash = object+0x15A4 (returned by
-    // vtable[92]=sub_140A1DCC0, fed to the look builder -> appearance-record
-    // lookups -> mesh). Read it for both Chloe-players, and Nadine's appearance
-    // hash via her vtable[92]. The swap = make the clone's look build use Nadine's.
+    // vtable[92]=Player_GetAppearanceHash), used by the render look builder.
+    // Read it for both Chloe Players and Nadine. This is separate from the
+    // Player+0x15A0 Look2 id that selects player-mesh animation knowledge.
     auto probe_appearance = [&](const char* tag, void* obj) {
         if (obj == nullptr || readable_bytes(obj) < 0x15A8) return;
         std::uint32_t f15a4 = *reinterpret_cast<std::uint32_t*>(static_cast<std::byte*>(obj) + 0x15A4);
@@ -35093,7 +35093,7 @@ DWORD WINAPI install_hook(void*) {
         } else {
             log_line("Player vtable[87] unexpected; player hook skipped");
         }
-        // Hook Player vtable[92] = appearance-hash getter (sub_140A1DCC0) for the
+        // Hook Player vtable[92] = Player_GetAppearanceHash for the render-only
         // Nadine look swap on the clone (gated by g_appearance_swap_active).
         auto* aslot = &pvt[kAppearanceSlot];
         if (*aslot == g_module + 0x0A1DCC0) {

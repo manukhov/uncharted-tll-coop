@@ -7246,3 +7246,56 @@ game or injection was started in this pass. The exact overlay-action name getter
 constructor and `PlayerWeaponController_Construct 0x14109D0E0` were added to the
 single IDB (`apply_labels OK: 1244 functions, 20 data names`;
 `save_database returned True`) and verified after restarting MCP.
+
+### 2026-07-22 STATIC: Player+0x15A0 keeps the render-swapped Player on Chloe animation knowledge
+
+The missing native-to-asset bridge is now exact. `Player_ApplyLook2MeshKnowledge
+0x1410D6AD0` reads the Look2 id from `Player+0x15A0`, resolves and validates it
+through `RenderLook_ResolveLook2ById 0x141800C00` and
+`RenderLook_GetValidatedLook2 0x141801400`, then formats the exact registry key
+`player-mesh/<Look2-name>`. The resolved record is passed to
+`CommitResolvedKnowledgeRecordIntoSinkSlot 0x1417F9150`, which uses the record
+key at `+0xC`, writes its value from `+0x10` into the parallel value array, stores
+the record pointer and refreshes the sink. This is active Player animation
+knowledge, not a passive asset lookup. The same function also installs
+`mesh/default` and `female/default`, and falls back to `player-mesh/default` only
+when the named Look2 record is absent.
+
+Two independent callers establish the lifecycle. Top-level Player initialization
+calls the selector at `0x1410DDB39`; `Player_ChangeLookId 0x1410FE840` calls it
+again at `0x1410FF1BD` after rebuilding the visual body. `ChangeLookId` stores
+its requested Look2 at `Player+0x15A0` (`0x1410FE89D`). Its separate appearance
+field is `Player+0x15A4`, returned by Player vtable slot 92,
+`Player_GetAppearanceHash 0x140A1DCC0`; that getter only copies `+0x15A4` to the
+caller's output.
+
+The compatibility mod currently hooks only this appearance getter. Admission is
+restricted to the render look-builder return address `0x1BB4AB9`, where the hook
+replaces the returned value with legacy Nadine `0xD27C074F`; all other calls use
+the original getter. The later compatibility write changes only the visible
+pair at `Player+0x170/+0x190`. It never changes `Player+0x15A0`, so the
+Chloe-born second Player remains on the `player-mesh/chloe` animation-knowledge
+record even while its rendered body is Nadine. That exact DC00 object contains
+the already-proven `p-holster-chest -> p-holster-back` row at `0xDFAB0`.
+
+This supplies three independent evidence types for the root-cause model:
+(1) the campaign asset owns an exact Chloe chest-to-back row; (2) native dataflow
+selects and commits `player-mesh/<Player+0x15A0>` into the animation-knowledge
+sink; and (3) source audit proves the compatibility layer is render-only and
+leaves that selector Chloe. Together with the existing runtime observation that
+the hybrid Player uses the back motion, **Hchloemap is promoted to strong
+STATIC root cause**, not CONFIRMED until a scoped repair passes a written runtime
+prediction.
+
+The fix alternatives are now bounded. Writing `Player+0x15A0/+0x15A4` to a
+Nadine Look2 is rejected as a repair direction: the earlier full look rebuild
+broke the body/black-screen path, and neither plain `nadine` nor legacy
+`0xD27C074F` owns a player-mesh object in this DC00. Substituting an entire
+`vill-nadine-*` or `fh-chloe-*` table is also unsafe because each contains
+hundreds of outfit-specific mappings, and control outfits disagree between leg
+and back. The leading repair candidate is therefore **Rrow**: preserve Chloe's
+animation knowledge and replace only the exact chest-holster animation family
+with the compatible leg family for the legacy-Nadine Player. Before implementing
+it, resolve the runtime layout and consumer of the committed `anim-overlay-set`
+record and its 0x28 mapping rows; do not patch the whole knowledge record or
+start another game test yet. No game or injection was started during this pass.

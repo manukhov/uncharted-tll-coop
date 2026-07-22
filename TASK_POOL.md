@@ -1833,15 +1833,24 @@ Do not reopen these as the first move:
       `0xDFAB0`, while neither legacy look `0xD27C074F` nor plain `nadine` owns a
       player-mesh overlay object. Outfit controls prove this is per-look:
       `vill-nadine-08/10/12` and `fh-chloe-08` map chest->leg, but
-      `vill-nadine-16` maps chest->back. Hchloemap is therefore the leading STATIC
-      selection model for the Chloe-born Player with a Nadine render look.
+      `vill-nadine-16` maps chest->back. The remaining native bridge is now exact:
+      `Player_ApplyLook2MeshKnowledge 0x1410D6AD0` reads `Player+0x15A0`, formats
+      `player-mesh/<Look2-name>` and commits the record into Player animation
+      knowledge during spawn and `Player_ChangeLookId`. The compatibility hook
+      changes only the `Player+0x15A4` getter result inside the render builder and
+      the visible `+0x170/+0x190` pair; it never changes `+0x15A0`. The
+      Nadine-rendered Chloe-born Player therefore keeps the exact Chloe
+      chest->back knowledge map. Hchloemap is a strong STATIC root cause.
       `ge`: valid nonzero leg plus identity basis selects Hmarker;
       missing/invalid/zero selects Hclip; valid back proves only that the final
       snapshot lacks leg. Do not assume Put directly reaches `0x14109D450`:
       `0x1410A3EA0 -> 0x141096BB0` only builds holster-speed knowledge and requests
-      `s_weapon-holster`. First resolve the remaining DC00/named-map load-time or
-      later-action consumer; only then add a bounded read-only map-selection row.
-      No state is mutated.
+      `s_weapon-holster`. Do not write the unsafe whole Look2 or substitute an
+      entire outfit table: legacy `0xD27C074F` has no player-mesh object and the
+      existing outfit tables contain hundreds of unrelated, disagreeing rows.
+      Next resolve the runtime `anim-overlay-set` record/table layout and the
+      consumer of its 0x28 rows, then design a legacy-Nadine-only replacement of
+      the chest-holster family with leg (**Rrow**). No state is mutated.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
