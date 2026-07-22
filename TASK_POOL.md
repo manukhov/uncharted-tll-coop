@@ -1768,7 +1768,15 @@ Do not reopen these as the first move:
       final compose/publish `0x141ED287B/0x141ED288F`. Run bounded `fz` and
       classify Hrec, Hlocal, Hblend or Hanim. Holster IK `0x14108ECE0` is
       statically REJECTED as a weapon-placement writer because it changes only
-      arm skeleton joints.
+      arm skeleton joints. RUNTIME `fz`: Hlocal CONFIRMED. Native holstered
+      pistol correction was numerically negligible, but Player-Nadine
+      `pistolHolster` gained at least `0.09312 m / 20.395 deg` and
+      `gun_holster` gained a stable `0.01676 m / 7.070 deg` inside
+      `0x141ED0A70`; all used `weapon+0x68C == 0`. Seven paired
+      post-selected/final-local rows had `changed=0`, rejecting the observed
+      `Animating` overwrite for covered states. Trace writers and initialization
+      contract of `+0x68C` and `+0x4F0..+0x52F` on Player versus NPC before any
+      mutation. Both processes were closed.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

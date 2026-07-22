@@ -6797,3 +6797,45 @@ test inconclusive. The release DLL compiled successfully. The real single IDB
 was updated with the two STATIC names (`apply_labels OK: 1227 functions, 20 data
 names`, `save_database returned True`), the MCP copy was restarted, and both
 names resolve from the refreshed database. Runtime verification is pending.
+
+Runtime `fz` CONFIRMED **Hlocal** and rejected `Animating` as the observed
+late overwrite in the covered states. Both PIDs `7584/18788` loaded the intended
+build and installed all three probes. The capture produced 306
+`NADINE-LOCAL-XFORM`, seven `NADINE-ANIMATING-XFORM`, 248 final-transform, 1037
+membership and 156 geometry-owner rows without a crash. Both processes were
+closed after capture.
+
+All seven paired post-selected-versus-final-local rows had `changed=0`: the
+exact `weapon+0x130/+0x140` returned by ProcessWeapon vslot `+0x7B8` survived
+unchanged to final compose `0x141ED287B`. Those positive controls covered native
+Nadine's holstered pistol, legacy-Nadine rifle at `gun_holster`, and legacy
+Player pistol/rifle generic/active states. No paired final-compose sample was
+emitted for the inactive Player pistol at `pistolHolster`, so the general
+animation writer remains capable in other scenes, but it is not the writer that
+caused any observed paired-state displacement here.
+
+The direct local-correction boundary is decisive. Every captured relevant
+weapon used `weapon+0x68C == 0`. Converting the raw IEEE-754 input/output words
+to translation distance and quaternion angle gives:
+
+| Role / selected record | Samples | Translation introduced by `0x141ED0A70` | Rotation introduced |
+|---|---:|---:|---:|
+| native Nadine pistol, `pistolHolster`, joint 99 | 4 | below numerical reporting precision | below numerical reporting precision |
+| Player Nadine pistol, `pistolHolster`, joint 5 | 45 | min `0.09312`, average `0.12164`, max `0.54377` m | min `20.395`, average `24.278`, max `94.425` deg |
+| Player Nadine rifle, `gun_holster`, joint 3 | 55 | min `0.01674`, average `0.01676`, max `0.01678` m | stable `7.070` deg |
+
+The native pistol's `weapon+0x4F0` transform is identity in the holstered
+samples, whereas the legacy Player pistol and rifle carry stable non-identity
+art-specific values there. Thus the remapped AttachSystem record is not the
+only source of the visible pose: `NdAttachableObject_ApplyLocalAttachmentCorrection`
+consumes a different ProcessWeapon-local contract on the Player path and adds a
+large, deterministic correction after the selected record has already been
+resolved. Hlocal is CONFIRMED. Hrec is not yet rejected because the copied
+record may independently need refinement, but further record tuning before
+fixing this proven local-stage mismatch would conflate two transforms.
+
+The next static task is to trace writers/lifetime of `weapon+0x68C` and
+`+0x4F0..+0x52F`, compare Player versus `Npc_GiveWeapon` initialization, and
+find the narrow stock condition that suppresses or selects this correction for
+native holstered weapons. Do not patch `+0x68C` or zero `+0x4F0` until that
+contract is resolved.
