@@ -8,6 +8,54 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-22: anim-overlay-set runtime consumer and layout ---
+    0x140516230: (
+        "AnimationDatabase_ResolveClipWithOverlays",
+        "Resolves an input animation StringId through the per-instance "
+        "AnimOverlayState first, then through AnimSetRemap_ResolveAnimationId, "
+        "and finally looks up the resulting clip in AnimationDatabase. This "
+        "establishes the execution order of player-mesh overlay rows.",
+    ),
+    0x1417F92A0: (
+        "AnimOverlays_NotifyDcUpdated",
+        "Exact source assertion names AnimOverlays::NotifyDcUpdated. Re-resolves "
+        "the registered overlay records after DC changes, preserves compatible "
+        "per-slot records, resizes the state when the registry schema grows, and "
+        "refreshes every retained overlay slot.",
+    ),
+    0x1417F9B30: (
+        "AnimOverlayState_Initialize",
+        "Initializes one per-instance overlay state. Allocates the overlay-set "
+        "pointer array at +0x8, the parallel value-id array at +0x10 and the "
+        "four-entry variant history at +0x18; stores set count at +0x24 and "
+        "random/flags state at +0x25/+0x26.",
+    ),
+    0x1417F9DD0: (
+        "AnimOverlayState_Copy",
+        "Copies one per-instance overlay state: set pointers, value ids, hash, "
+        "four-entry variant history, set count and random/flags state. Used to "
+        "publish the active Player knowledge into AnimStateLayer instances.",
+    ),
+    0x1417F9F00: (
+        "AnimOverlayState_ResolveAnimationId",
+        "Executes authored anim-overlay remaps. Repeatedly finds a matching 0x28 "
+        "row, replaces the current animation id with row+0x4, handles grouped "
+        "variants and row flags, and follows chains up to 100 steps. Its cycle "
+        "diagnostic explicitly reports the input animation and overlay-set id.",
+    ),
+    0x1417FA3C0: (
+        "AnimOverlayState_SelectVariant",
+        "Selects and records one grouped overlay-row variant in the four-entry "
+        "history at state+0x18. Supports sequential or randomized selection and "
+        "refreshes the state hash after updating the selected index.",
+    ),
+    0x1417FA6E0: (
+        "AnimOverlayState_FindMatchingRow",
+        "Walks the state+0x8 overlay-set array (count at +0x24). Each set has "
+        "0x28-byte rows at +0, row count at +0x8 and a parallel source-id array "
+        "at +0x20. Returns the row matching the input animation and mirror flag, "
+        "plus its set and row indices.",
+    ),
     # --- 2026-07-22: Player Look2 -> player-mesh animation knowledge ---
     0x140A1DCC0: (
         "Player_GetAppearanceHash",

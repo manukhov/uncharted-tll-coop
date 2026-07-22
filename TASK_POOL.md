@@ -1848,9 +1848,16 @@ Do not reopen these as the first move:
       `s_weapon-holster`. Do not write the unsafe whole Look2 or substitute an
       entire outfit table: legacy `0xD27C074F` has no player-mesh object and the
       existing outfit tables contain hundreds of unrelated, disagreeing rows.
-      Next resolve the runtime `anim-overlay-set` record/table layout and the
-      consumer of its 0x28 rows, then design a legacy-Nadine-only replacement of
-      the chest-holster family with leg (**Rrow**). No state is mutated.
+      Runtime layout and consumer are now exact. `AnimOverlays_NotifyDcUpdated
+      0x1417F92A0` watches `anim-overlay-set`; the per-instance state owns its set
+      pointers at `+0x8` and count at `+0x24`. `AnimOverlayState_FindMatchingRow
+      0x1417FA6E0` walks each set's 0x28 rows (`set+0`) through the parallel
+      source-id array (`set+0x20`), and `AnimOverlayState_ResolveAnimationId
+      0x1417F9F00` replaces the current id with `row+0x4` before final clip lookup.
+      Do not mutate the shared DC row: that would redirect Chloe globally. Next
+      resolve the Player-owned callsite/context and its per-instance
+      `AnimOverlayState*`, then scope **Rrow** to legacy Nadine plus exact
+      `WeaponPartial/s_weapon-holster` chest-family ids. No state is mutated.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

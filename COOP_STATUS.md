@@ -7299,3 +7299,53 @@ with the compatible leg family for the legacy-Nadine Player. Before implementing
 it, resolve the runtime layout and consumer of the committed `anim-overlay-set`
 record and its 0x28 mapping rows; do not patch the whole knowledge record or
 start another game test yet. No game or injection was started during this pass.
+
+### 2026-07-22 STATIC: anim-overlay runtime consumes the DC00 0x28 rows before clip lookup
+
+The runtime consumer and record layout are now resolved. `AnimOverlays_NotifyDcUpdated
+0x1417F92A0` is pinned by its exact source assertion in `anim-overlay.cpp`. It
+re-resolves the registered overlay records after a DC update, resizes the live
+state when the registry schema grows, restores compatible old entries by their
+record keys and refreshes the derived state. The associated callback registration
+explicitly watches both `anim-overlay-set` and `anim-overlay-layer-priorities`.
+This ties the parsed DC00 object type to the live animation subsystem rather than
+only to the generic knowledge registry.
+
+The per-instance structure is also exact. `AnimOverlayState_Initialize
+0x1417F9B30` stores the overlay-set count at `state+0x24`, allocates the set-pointer
+array at `+0x8`, the parallel value-id array at `+0x10`, and a 64-byte/four-entry
+variant history at `+0x18`; RNG and flags occupy `+0x25/+0x26`.
+`AnimOverlayState_Copy 0x1417F9DD0` copies all of this state into active
+AnimStateLayer instances. This provides the per-Player ownership needed for a
+future scoped repair even though the underlying DC00 set objects are shared.
+
+`AnimOverlayState_FindMatchingRow 0x1417FA6E0` exposes the authored table layout.
+It walks the set pointers at `state+0x8` in registry order. Each live set has its
+0x28-byte row array at `set+0`, row count at `set+0x8`, and a parallel source-id
+array at `set+0x20`. It matches the current animation id against that source array,
+validates the mirror selector against row flags at `row+0x26`, and returns the
+row pointer together with set/row cursors. This is structurally identical to the
+DC00 table audited by `psarc_asset_audit.py`, whose first two DWORDs are source
+and target.
+
+`AnimOverlayState_ResolveAnimationId 0x1417F9F00` is the actual executor. Starting
+from an input animation id, it calls the row lookup, replaces the id with
+`row+0x4`, applies grouped variant selection through
+`AnimOverlayState_SelectVariant 0x1417FA3C0`, and follows chained replacements
+for at most 100 steps. Its failure diagnostic explicitly says
+`Circular remap chain ... in overlay set`, using the active set's record id.
+Finally, `AnimationDatabase_ResolveClipWithOverlays 0x140516230` performs this
+overlay resolution first, then calls `AnimSetRemap_ResolveAnimationId
+0x1417CA2E0`, and only then resolves the final animation clip. Therefore the
+campaign Chloe row `0x8DCA21F2 -> 0x11438F72` is executed before the back-family
+clip/snapshot is selected; it is not inert metadata.
+
+This closes the planned Rrow table-consumer boundary, but it also rules out an
+unsafe implementation: overwriting `row+0x4` in the DC object would alter the
+shared Chloe map for every owner using it. The safe seam must instead be the
+legacy-Nadine Player's per-instance overlay resolution, admitted by the exact
+`WeaponPartial/s_weapon-holster` path and exact chest-family source ids, while
+leaving Chloe, other looks, other overlay rows and the shared DC set immutable.
+The next static step is to identify that Player-owned callsite/context and prove
+how its `AnimOverlayState*` maps back to the retained Player before writing a
+bounded prediction. No game or injection was started.
