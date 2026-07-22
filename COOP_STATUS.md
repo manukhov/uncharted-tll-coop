@@ -6621,3 +6621,31 @@ had 32 entries while `last_signatures` and `log_counts` had only 8, so candidate
 them whenever a rolling slot changes object. No weapon, attachment, DrawControl
 or render value is written. The release DLL compiled successfully with marker
 `2026-07-22fw`; runtime verification is pending under the prediction above.
+
+`fw` runtime result (two copies, PIDs 336/23004) rejects stale LOD lifetime and
+per-LOD matrix divergence. For every valid current pistol/rifle generation in
+both processes, all three LODs were active, each pool index was present in the
+same FgAnimData driven list (`3/64`), every `FgInstance+0x250` owner id matched
+the FgAnimData/current ProcessWeapon runtime id, and all three
+`FgInstance+0x140` hashes were bit-identical to the current FgAnimData `+0x1C0`
+hash (`raw=1`). `DrawControl+0` also matched the FgAnimData admitted by the
+post-`0x14181B925` hook. The auxiliary `+0x2E0` hash stayed constant while the
+published/instance hashes changed with weapon state.
+
+The rolling census captured repeated ProcessWeapon wrapper replacement. A
+retired pistol/rifle pointer lost slot membership and its child became invalid;
+the successor immediately became slot 1/2 current while retaining the same
+FgAnimData addresses, pool indices and runtime owner ids. The shared live LODs
+then named the successor as `fgOwner`; there was no independently active old LOD
+with a different `+0x250` owner id. Therefore H1 and H3 are REJECTED for the
+tested sequence. Visibility/camera selection cannot explain the placement by
+choosing another LOD because all three carry the same current matrix.
+
+The remaining split is now upstream of FgInstance: (H2) animation-manager phase
+`0x40` publishes the wrong ProcessWeapon owner composition into the otherwise
+coherent FgAnimData `+0x1C0`, or (H4) the visibly wrong firearm is a separate
+prop outside the ProcessWeapon DrawControl graph. The next static task is to
+trace the exact phase-`0x40` owner inputs around `0x141A8FC00`, including
+ProcessWeapon `+0x110/+0x120` and `+0x130/+0x140`, back to the selected attachment
+output, and identify any independent prop consumer before another runtime hook.
+Both game processes were closed after capture.

@@ -1734,8 +1734,12 @@ Do not reopen these as the first move:
       instance `+0x140`, FgAnimData `+0x1C0/+0x2E0`; do not tune attachment ids.
       Build `fw` implements the read-only post-`0x14181B925` capture, rolling
       32-generation table and per-LOD fields. It also fixes the old 32-candidate
-      versus 8-memo out-of-bounds defect. Release compilation succeeds; run the
-      exact initial/draw-pistol/draw-put-rifle/draw-put-pistol sequence next.
+      versus 8-memo out-of-bounds defect. RUNTIME `fw`: every current pistol and
+      rifle had three active/driven LODs, matching `+0x250` owner ids and three
+      `FgInstance+0x140` hashes equal to FgAnimData `+0x1C0`. Replacement reused
+      the same FgAnimData/pool slots for the successor while the old child became
+      invalid, so stale LOD H1/H3 are REJECTED. Next statically trace phase-0x40
+      owner composition around `0x141A8FC00` versus a separate visible prop.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
