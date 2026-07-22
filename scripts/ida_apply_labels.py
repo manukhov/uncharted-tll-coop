@@ -32,9 +32,11 @@ FUNCTIONS = {
     ),
     0x1417F9DD0: (
         "AnimOverlayState_Copy",
-        "Copies one per-instance overlay state: set pointers, value ids, hash, "
-        "four-entry variant history, set count and random/flags state. Used to "
-        "publish the active Player knowledge into AnimStateLayer instances.",
+        "Copies one per-instance overlay state from source a2 to destination a1: "
+        "set pointers, value ids, hash, four-entry variant history, set count and "
+        "random/flags state. AnimStateLayer_Step calls it at 0x1418A3725 with "
+        "layer+0x18 as the Player-owned master source and the first track's +0x8 "
+        "state pointer as the destination.",
     ),
     0x1417F9F00: (
         "AnimOverlayState_ResolveAnimationId",
@@ -68,9 +70,10 @@ FUNCTIONS = {
         "Player_ApplyLook2MeshKnowledge",
         "Resolves Player+0x15A0 as a Look2, formats the exact "
         "player-mesh/<Look2-name> registry key, and commits the resolved record "
-        "into the Player animation-knowledge sink, with player-mesh/default as "
-        "fallback. Also commits mesh/default and female/default. Called during "
-        "top-level Player initialization and by Player_ChangeLookId.",
+        "through the wrapper at [Player+0x1A0]+0x60 into the Player master "
+        "animation-overlay state, with player-mesh/default as fallback. Also "
+        "commits mesh/default and female/default. Called during top-level Player "
+        "initialization and by Player_ChangeLookId.",
     ),
     0x141800C00: (
         "RenderLook_ResolveLook2ById",
@@ -588,7 +591,9 @@ FUNCTIONS = {
         "AnimStateSnapshot_SnapshotAnimState",
         "Source assertion identifies AnimStateSnapshot::SnapshotAnimState. Copies "
         "the 0x80-byte state snapshot to instance+0x90, resolves the state id at "
-        "+0x98 into authored callbacks/flags, and selects the root snapshot node.",
+        "+0x98 into authored callbacks/flags, and selects the root snapshot node. "
+        "At 0x1418B2940 it resolves the requested animation through the track-local "
+        "AnimOverlayState supplied as a4 before the AnimSet remap and clip lookup.",
     ),
     0x1418B2EF0: (
         "AnimStateSnapshot_SelectRootNodeIndex",
@@ -734,18 +739,24 @@ FUNCTIONS = {
     0x1418A30A0: (
         "AnimStateLayer_Step",
         "Type-2 layer step selected by AnimControl_BeginStepInternal. Advances "
-        "active AnimStateInstance tracks, performs the shared-parameter copy, "
+        "active AnimStateInstance tracks, copies the Player-owned master overlay "
+        "state from layer+0x18 into the first track-local state at track+0x8 via "
+        "AnimOverlayState_Copy at 0x1418A3725, performs the shared-parameter copy, "
         "then submits instances to AnimStateInstance_PhaseUpdate.",
     ),
     0x14189D720: (
         "AnimStateLayer_PhaseUpdateInstances",
-        "Walks active tracks and instances, resolves each snapshot/dtgroup, then "
-        "calls AnimStateInstance_PhaseUpdate for the live instance.",
+        "Walks active tracks and instances, passes each track-local "
+        "AnimOverlayState pointer from track+0x8 to "
+        "AnimStateInstance_ResolveDtGroupAndSnapshot at 0x14189D824, resolves each "
+        "snapshot/dtgroup, then phase-updates the live instance.",
     ),
     0x1418A4670: (
         "AnimStateInstance_ResolveDtGroupAndSnapshot",
         "Refreshes instance+0x90 from the selected state snapshot, evaluates the "
-        "optional anim-state-dtgroup-func at +0xC0, and resolves its animation.",
+        "optional anim-state-dtgroup-func at +0xC0, and forwards its third "
+        "AnimOverlayState argument unchanged into "
+        "AnimStateSnapshot_SnapshotAnimState for animation resolution.",
     ),
     0x1418A4D50: (
         "AnimStateInstance_EvaluatePhaseFunction",
@@ -6704,8 +6715,10 @@ FUNCTIONS = {
         "`*player-default-overlays-count*`, `*player-default-overlays*`, "
         "`apReference`, `align`, `run-chloe`, and `base-read-joints-layer`. "
         "Early in the path it resolves knowledge/state ids through "
-        "0x1417651D0/0x141765030 and publishes them into the sink at "
-        "[active_state+0x60] via 0x1417F9150. Later it builds the owner at "
+        "0x1417651D0/0x141765030 and publishes them through the wrapper at "
+        "[upper_owner+0x60] via 0x1417F9150. The dereferenced master overlay "
+        "state is then installed at +0x18 in each constructed AnimCmdGenerator, "
+        "AnimSnapshot and AnimPose layer. Later it builds the owner at "
         "player+0x4260, seeds typed subrecords through 0x141728D90/0x14172A720/"
         "0x14172ACD0, and only after those upper overlay/reference layers are "
         "prepared does control continue into the animation-snapshot stage at "

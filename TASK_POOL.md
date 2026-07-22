@@ -1854,10 +1854,15 @@ Do not reopen these as the first move:
       0x1417FA6E0` walks each set's 0x28 rows (`set+0`) through the parallel
       source-id array (`set+0x20`), and `AnimOverlayState_ResolveAnimationId
       0x1417F9F00` replaces the current id with `row+0x4` before final clip lookup.
-      Do not mutate the shared DC row: that would redirect Chloe globally. Next
-      resolve the Player-owned callsite/context and its per-instance
-      `AnimOverlayState*`, then scope **Rrow** to legacy Nadine plus exact
-      `WeaponPartial/s_weapon-holster` chest-family ids. No state is mutated.
+      Do not mutate the shared DC row: that would redirect Chloe globally. The
+      Player ownership path is now resolved:
+      `Player+0x1A0 -> owner+0x60 wrapper -> layer+0x18 master ->`
+      `AnimOverlayState_Copy -> track+0x8 local -> 0x1418B2940 resolver`.
+      A final resolver sees the local copy, not the master pointer; classify and
+      clear destination states at the copy boundary. Next enumerate the smallest
+      exact campaign-Chloe chest-to-back family, including holster/draw and
+      mirrored/group variants, then scope **Rrow** to legacy Nadine plus only
+      those source ids. No state is mutated.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

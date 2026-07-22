@@ -7349,3 +7349,48 @@ leaving Chloe, other looks, other overlay rows and the shared DC set immutable.
 The next static step is to identify that Player-owned callsite/context and prove
 how its `AnimOverlayState*` maps back to the retained Player before writing a
 bounded prediction. No game or injection was started.
+
+### 2026-07-22 STATIC: Player master overlay state reaches the track-local snapshot resolver
+
+The remaining ownership boundary is now exact. `Player_ApplyLook2MeshKnowledge
+0x1410D6AD0` obtains the upper owner from `Player+0x1A0`, reads its wrapper at
+`owner+0x60`, and commits the selected `player-mesh/<Look2-name>` record through
+that wrapper. `PublishUpperPlayerOverlayReadJointAndReferenceState 0x1410CE260`
+uses the same `owner+0x60` wrapper at `0x1410CE56F`, `0x1410CE597` and
+`0x1410CE693`. When it constructs `AnimCmdGeneratorLayer`, `AnimSnapshotLayer`
+and `AnimPoseLayer`, it dereferences the wrapper and stores the resulting master
+`AnimOverlayState*` at each layer's `+0x18` (`0x1410CEFE1`, `0x1410CF17B` and
+`0x1410CF22C`). The earlier description of this sink as
+`[active_state+0x60]` was therefore imprecise; it is owned by the upper owner at
+`Player+0x1A0`.
+
+The copy into an executing track is equally concrete. In `AnimStateLayer_Step
+0x1418A30A0`, the call at `0x1418A3725` invokes `AnimOverlayState_Copy
+0x1417F9DD0` with `layer+0x18` as the source and the first track's state pointer
+at `track+0x8` as the destination. The destination is not the master pointer; it
+is a track-local copy, so pointer equality at the final resolver would have been
+the wrong ownership test.
+
+The destination then survives unchanged to the live row consumer.
+`AnimStateLayer_PhaseUpdateInstances 0x14189D720` passes `track+0x8` at
+`0x14189D824` into `AnimStateInstance_ResolveDtGroupAndSnapshot 0x1418A4670`.
+That function forwards the argument twice to `AnimStateSnapshot_SnapshotAnimState
+0x1418B24F0`, whose call at `0x1418B2940` executes
+`AnimOverlayState_ResolveAnimationId` before the AnimSet remap and clip lookup.
+The complete dataflow is therefore:
+
+`Player+0x1A0 -> owner+0x60 wrapper -> master state -> layer+0x18 ->`
+`AnimOverlayState_Copy -> track+0x8 local state -> snapshot -> row resolver`.
+
+This adds three independent static evidence types: the Player/owner field
+dataflow, three separately constructed layer types receiving the same master
+state, and the downstream copy/caller chain into the exact resolver. It also
+defines a scoped repair seam without mutating shared DC data: observe
+`AnimOverlayState_Copy(dst, src)`, classify `dst` only when `src` is the retained
+legacy-Nadine Player's current master state, clear that classification whenever
+the same destination is copied from another source, and admit replacement only
+for the exact chest-holster source-id family. A resolver-only comparison against
+the master pointer is rejected because it sees the copied destination. The
+remaining static task is to enumerate the smallest exact campaign-Chloe
+chest-to-back family (draw, holster and mirrored/group variants) before writing
+the runtime prediction. No game or injection was started.
