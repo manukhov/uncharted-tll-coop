@@ -7498,3 +7498,65 @@ paired leg id and visually move the put-away motion to the thigh. Untagged rows,
 non-back outputs, rifle, Chloe and every unrelated animation remain unchanged.
 A crash, hook-install failure, body regression, rifle mutation or replacement
 outside the exact tagged pair invalidates the probe.
+
+### 2026-07-22 RUNTIME/STATIC: `gg` selects master-state row shadow (`gh`)
+
+Both `gg` processes remained responsive and installed the full-family probe.
+The covered legacy-Nadine Put cycles reached the exact 144-row family, so
+Gother is REJECTED. PID 15384 copied master `0x10E0AB18B0` to local
+`0x10E0AF2550`, then resolved all four covered holster sources
+`AFB364A4, 66846123, 8DCA21F2, 1FB7D7B3` on state
+`0x10E0AB18B0` itself. PID 1932 produced the same relation with master
+`0x10E0EB12B0`. Thus the earlier static assumption that this live Put path
+resolves only through the track-local copy is **RUNTIME REJECTED**: the relevant
+resolver receives the retained Player's master state directly. Gowner is
+selected, but no broader pointer tag is needed because
+`seh_classify_legacy_nadine_master_overlay_state` already proves the exact
+Player owner.
+
+Every covered final output had `exactBack=0`: for example source
+`8DCA21F2` completed as `9C559A24`, while its first Chloe row target is
+`11438F72`; `1FB7D7B3` completed as `6A53B39B` instead of direct target
+`A20325F5`. This selects Gchain and proves that changing the output after
+`AnimOverlayState_ResolveAnimationId` is too late. No row was mutated by
+`gg`.
+
+The user's gold suppressed pistol is still a valid standard-pistol test. Its
+ProcessWeapon remained art/mesh `0x33E29A1B` in slot 1; its three child
+resources were `0x33E29A1B, 0x49AE2C65, 0x44ED0ABC`. The cosmetic gold and
+suppressor resources therefore do not bypass the Player animation-family
+boundary. The simultaneous native control also completed a real NPC holster in
+PID 1932: `NpcWeaponController` state 0 changed the NPC pistol from
+`rightHand/index 19` to `pistolHolster/index 42`. It emitted no Player
+family row, confirming that native NPC Nadine uses a separate animation graph;
+its transition is an endpoint control, not a Player action that can be copied.
+
+Static row-consumer evidence now fixes the safe mutation seam.
+`AnimOverlayState_FindMatchingRow 0x1417FA6E0` returns the exact 0x28 row
+pointer at output `+0x10`; `AnimOverlayState_ResolveAnimationId` reads the
+target at `row+0x4`, processes the row's grouping/variant fields and only then
+feeds the chosen target back into the next lookup, for up to 100 chained steps.
+The asset audit independently proves that each Chloe-back/Nadine-leg pair has
+an identical remaining 32-byte tail. Calling the resolver anew with the leg id
+would skip the first row's grouping and variant-history effects, while writing
+the shared DC row would affect Chloe globally; both alternatives are rejected.
+
+Build `gh` therefore detours only `AnimOverlayState_FindMatchingRow`. After
+the stock lookup, it requires an exact family source, exact Chloe-back target
+and a state equal to the retained visible legacy-Nadine Player's master state.
+It copies the full 0x28 row into a thread-local 64-row ring, changes only DWORD
+`+0x4` to the paired Nadine-leg target, and returns that shadow pointer. The
+resolver detour is now read-only and records the final chained result; the stale
+copy/tag table and its post-resolution mutation are removed. The ring exceeds
+the resolver's static maximum of 16 rows in one grouped selection.
+
+**Falsifiable `gh` prediction:** both copies load marker `2026-07-22gh` and
+report `family=144 shadowRows=64`. A legacy-Nadine pistol Put emits
+`NADINE-HOLSTER-ROW-SHADOW` on the exact master state for the covered family
+members, with target changing from the logged Chloe-back id to the paired
+Nadine-leg id. The subsequent `NADINE-HOLSTER-FAMILY-RESULT` reports
+`master=1` and a chained output different from the corresponding `gg`
+back-chain result. The arm/put-away motion must move to Nadine's thigh. Chloe,
+native NPC Nadine, rifle, grenade, body and unrelated overlays remain unchanged.
+A missing shadow, non-master shadow, unchanged final chain, back motion, crash
+or any control-owner mutation rejects the proposed seam.

@@ -1883,6 +1883,16 @@ Do not reopen these as the first move:
       replaced. Test one standard-pistol draw/Put cycle on legacy Nadine; classify
       Gfamily/Gowner/Gchain/Gother from the written prediction in
       `COOP_STATUS.md`.
+      RUNTIME `gg`: exact family hits occurred in both processes, rejecting
+      Gother. The resolver state equalled the retained Player's master pointer,
+      not the tagged local copy, and every output had already passed a longer
+      remap chain. The gold suppressed visual remains standard pistol art
+      `0x33E29A1B`; its gold/suppressor ids are child resources, so the test is
+      valid. Build `gh` replaces the stale copy/tag scheme with an exact
+      master-state `AnimOverlayState_FindMatchingRow 0x1417FA6E0` shadow: copy
+      the 0x28 Chloe row, change only target `+0x4` to the paired leg id, and
+      preserve all group/variant tail fields plus downstream chaining. Test one
+      legacy-Nadine pistol Put against the written `gh` prediction.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

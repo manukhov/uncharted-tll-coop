@@ -68,8 +68,8 @@ constexpr std::size_t kPlayerUpperStateOwnerOffset = 0x1A0;
 // Player master AnimOverlayState installed at AnimStateLayer+0x18. The layer
 // step copies that master into a track-local state before snapshot resolution.
 constexpr std::size_t kPlayerUpperOwnerOverlayWrapperOffset = 0x60;
-constexpr std::uintptr_t kAnimOverlayStateCopyRva = 0x17F9DD0;
 constexpr std::uintptr_t kAnimOverlayStateResolveAnimationIdRva = 0x17F9F00;
+constexpr std::uintptr_t kAnimOverlayStateFindMatchingRowRva = 0x17FA6E0;
 // PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0 writes directional
 // fields to [[Player+0x1A0]+0x58]+0x10 at +0x188..+0x194 (D/U/L/R layout).
 constexpr std::size_t kPlayerAnimHubChildOffset = 0x58;
