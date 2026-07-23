@@ -1593,11 +1593,18 @@ Do not reopen these as the first move:
       `+0x210` driven list -> retained `Process+0xA8/+0xBC` pair. Exact source
       identities correct `0x14177F7F0` to `AnimMgr_AllocateAnimData` and
       `0x1418C4840` to `FgAnimData_Init`.
-- [ ] Run read-only build `gs` and resolve the three geometry-matched alternate
-      LODs to their live FgAnimData and retained Process. Classify exactly one
-      owner per LOD as O1, no driven-list owner as O2, and multiple/invalid
-      ownership as O3. Require the existing target-absent and geometry-hit
-      positive controls, no crash and no visual regression.
+- [x] Run read-only build `gs` and resolve the three geometry-matched alternate
+      LODs to their live FgAnimData and retained Process. Result: O2 CONFIRMED
+      on local-Nadine role B. Pool indices `1000/1001/1002` remained in the
+      final queue with `geometryHits=3`, but every sample returned
+      `fg=0/owners=0`; the current rifle remained absent and no visual
+      regression occurred. O1 and O3 are REJECTED.
+- [ ] Trace the static release path from FgAnimData's driven-instance list to
+      the global FgInstance pool and final render queue. Locate the exact
+      removal/free operation for `FgAnimData+0x210` indices, the release of
+      `qword_1467C3480[index]`, and the queue invalidation that should prevent
+      stale released slots `1000/1001/1002` from reaching `CullFgLods::Spawn`.
+      Do not write to the current Player rifle or to an already-released slot.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

@@ -8078,3 +8078,28 @@ shows `targetMask=0` and three alternate `geometryHits`. Exactly one
 O1. `fg=0/owners=0` selects O2. `owners>1`, an invalid object, or unequal
 retained/runtime ids selects O3. Missing positive controls, a crash, body/pistol
 regression or a visibly absent spawn rifle invalidates the capture.
+
+### 2026-07-23 CONFIRMED: visible spawn rifle is stale pool publication (`gs`)
+
+Both copies loaded `2026-07-23gs`; role A was PID 7752 and local-Nadine role B
+was PID 2044. The user confirmed the rifle was still attached to Nadine's hand
+immediately after spawn and that the existing character/weapon behavior did not
+regress, so the read-only capture is valid.
+
+Every role-B sample across generations 13 and 14 reproduced all positive
+controls: the tracked current rifle remained absent from the final queue
+(`targetMask=0`, `activeMask=0`), while exactly three active geometry-matched
+instances remained at global FgInstance pool indices `1000/1001/1002`
+(`geometryHits=3`). All three independently resolved `fg=0`, `owners=0`,
+`handle=0`, `object=0` in every sample. Their copied instance owner id was
+`0x717`, but no allocated FgAnimData driven list contained any of those indices.
+
+This selects O2. The visible spawn rifle is not owned by a second live
+FgAnimData/Process at the final cull boundary: released FgInstance slots remain
+published in the renderer queue after their sole FgAnimData owner has dropped
+them. O1 (one live owner) and O3 (multiple/invalid live owners) are REJECTED.
+Further owner lookup or writes against the current Player rifle cannot remove
+this artifact. The next static target is the FgAnimData/FgInstance release path:
+identify where indices are removed from `FgAnimData+0x210`, where
+`qword_1467C3480` slots are released, and which final render queue is supposed
+to discard the retired indices.
