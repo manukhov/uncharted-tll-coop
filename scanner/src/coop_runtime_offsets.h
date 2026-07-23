@@ -642,6 +642,12 @@ constexpr std::uintptr_t kProcessWeaponVtableRva = 0x2A9BF48;
 // descriptor (context+0x28) before later draw/put actions can rewrite it.
 constexpr std::uintptr_t kProcessWeaponBaseInitRva = 0x14FAF40;
 constexpr std::uintptr_t kProcessWeaponBaseInitCallsiteRva = 0x150F6AF;
+// PlayerWeaponController vtable +0x3D0. The stock Player holster AnimAction
+// calls this with its current ProcessWeapon; it builds the authored holster
+// binding, selects the existing owner point and copies the binding-local
+// transform into weapon+0x4F0/+0x500.
+constexpr std::uintptr_t kPlayerWeaponControllerRebindWeaponToHolsterRva =
+    0x10A9670;
 constexpr std::uintptr_t kProcessWeaponSelectExistingOwnerPointVtableSlotRva =
     kProcessWeaponVtableRva + 0x7A8;
 constexpr std::uintptr_t kProcessWeaponUpdateSelectedAttachmentVtableSlotRva =

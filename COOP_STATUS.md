@@ -8445,3 +8445,53 @@ added later from the retained Chloe donor. The next candidate must reuse the
 stock Player weapon state machine only after that record exists, with a
 one-shot local-Nadine spawn generation and positive completion at
 `current<0, draw=0, selected=40`.
+
+### 2026-07-23 STATIC: one-shot stock holster rebind is the `gz` discriminator
+
+The missing post-init transition now has a narrower native boundary than
+`SwitchToWeapon`. Calling `PlayerWeaponController_SwitchToWeapon 0x1410A1C10`
+with slot zero and `inHands=false` is not a direct holster operation when the
+controller begins at `current=-1, draw=0`: its vtable `+0x48` implementation
+instead starts a GetWeaponInHand/draw transition. The genuine put-away action
+eventually reaches `PlayerWeaponController_RebindWeaponToHolster
+0x1410A9670`, controller vtable `+0x3D0`.
+
+Four independent evidence types meet the static quota. First, the vtable data
+xref at `0x142A48360` identifies the exact PlayerWeaponController slot, and
+`PlayerHolsterWeaponAnimAction_Execute 0x14108A640` invokes that slot with the
+current ProcessWeapon at `0x14108AB72`. Second, the concrete ordinary path calls
+`WeaponHolster_BuildBinding 0x1414FE540` at `0x1410A9A02`, selects the returned
+attach id through weapon vtable `+0x7A8`, and copies the binding primary
+transform to `weapon+0x4F0/+0x500` at `0x1410A9A65/0x1410A9A99`. Third, runtime
+`ga` independently proved that the rifle control changes selected index
+`16 -> 40 / gun_holster` and copies the builder payload without starting the
+pistol-only handoff blend. Fourth, runtime `gy` proved the local Nadine rifle
+still begins at rightHand index 16 and that a normal manual draw/put supplies
+the missing later transition.
+
+The candidates are explicit. Z1: one direct stock rebind after the compatibility
+`gun_holster` record exists performs the missing selector/local-binding update
+and moves the visible spawn rifle without an animation. Z2: those fields change,
+but the later AnimAction handoff or another render owner is also necessary, so
+the visible rifle remains. Z3: the stock call is unsafe or resolves a different
+record in the spawn state. The rifle control from `ga` weakens Z2, but only
+visible runtime behavior can reject it.
+
+Build `gz` disables the now-conclusive ProcessWeapon init hook and installs no
+new code hook. On the game thread it admits only role B, retained local look
+`0xD27C074F`, exact slot-zero rifle art `0x8075397D`, stable
+`current<0/draw=0/no-hand-slot`, same resolved Player owner, and selected
+`rightHand 0x61A48E01`. It additionally requires the repaired owner table to
+contain `gun_holster 0x555EFB8D`, then calls the stock concrete rebind once per
+Player/weapon/record-allocation generation and never retries. The post row
+records attachment index/id, parent, primary-local hash and strict verification.
+
+**Falsifiable `gz` prediction:** before any weapon input, role B emits exactly
+one `NADINE-LOCAL-RIFLE-REBIND` with `index=16->40`,
+`id=61A48E01->555EFB8D`, changed primary-local hash and `verified=1`; role A
+emits none. The rifle must no longer be glued to local Nadine's hand, while
+body, pistol, grenade and the remote Chloe remain unchanged and neither copy
+develops the earlier extreme lag. If the row verifies but the rifle remains,
+Z1 is REJECTED in favor of Z2 and the call must not repeat. A crash, freeze,
+wrong record, repeated row, any draw/put animation, body regression or role-A
+mutation rejects the boundary.
