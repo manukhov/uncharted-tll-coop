@@ -1512,7 +1512,8 @@ constexpr bool kEnableRejectedNadineWeaponRuntimeProbes = false;
 constexpr bool kEnableProcessWeaponInitProbe = false;
 // Build gz tests the now-static-complete missing transition through one stock
 // PlayerWeaponController rebind. The implementation is role-B/local-Nadine,
-// exact-rifle, rightHand->gun_holster and once-per-generation scoped.
+// exact-rifle, rightHand->gun_holster and once-per-generation scoped. Build ha
+// removes gz's circular no-hand-slot guard while logging that stale query.
 constexpr bool kEnableInitialLocalNadineRifleRebind = true;
 volatile bool g_logging_enabled = false;
 static SRWLOCK g_log_lock = SRWLOCK_INIT;
@@ -30738,10 +30739,13 @@ void rebind_initial_local_nadine_rifle_game_thread() {
     int current_slot = -99;
     std::uint32_t draw_state = 0xFFFFFFFFu;
     if (!read_weapon_draw_state(player, current_slot, draw_state) ||
-        current_slot >= 0 || draw_state != 0 ||
-        capture_hand_attached_slot_int(player) >= 0) {
+        current_slot >= 0 || draw_state != 0) {
         return;
     }
+    // This query is diagnostic, not an admission gate. The defect is precisely
+    // that a logically holstered controller can still report slot zero as
+    // physically attached to rightHand.
+    const int hand_slot = capture_hand_attached_slot_int(player);
 
     if (readable_bytes(static_cast<std::byte*>(player) + 0x1D90) <
         sizeof(void*)) {
@@ -30829,6 +30833,7 @@ void rebind_initial_local_nadine_rifle_game_thread() {
          << static_cast<unsigned>(post_index)
          << " expected=" << gun_holster_index
          << " current=" << current_slot << " draw=" << draw_state
+         << " handSlot=" << hand_slot
          << " call=" << (call_completed ? 1 : 0)
          << " readable=" << (post_readable ? 1 : 0) << "/"
          << (post_id_readable ? 1 : 0)
@@ -36746,8 +36751,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-23gz "
-        "(hot/rejected probes disabled; one-shot stock local rifle rebind)");
+        "TLL co-op runtime init 2026-07-23ha "
+        "(gz no-hand guard removed; one-shot stock local rifle rebind)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
