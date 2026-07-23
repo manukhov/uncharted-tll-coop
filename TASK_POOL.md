@@ -1668,12 +1668,16 @@ Do not reopen these as the first move:
       exact `rightHand 16 -> gun_holster 40` with the same owner and no lag.
       The rifle nevertheless remained glued in the local view. Both direct
       attachment APIs are REJECTED as the main-view fix.
-- [ ] Run build `hb`: after 750 ms of the same strict cold-spawn state, invoke
+- [x] Run build `hb`: after 750 ms of the same strict cold-spawn state, invoke
       `PlayerWeaponController_StartHolsterTransition 0x1410A3EA0` once with the
       exact slot-zero ProcessWeapon. Keep only the two-callsite holster AnimAction
       executor probe. Classify B1/B2/B3 from the written prediction in
       `COOP_STATUS.md`; reject on any repeat, stuck draw-state 5, crash, surprise
       draw, or unrelated character/weapon regression.
+      Result: B3. The one-shot start changed `draw=0->5`, exact
+      `weapon-holster` executed `0->1`, and the rifle changed `16->40`, but the
+      local image remained glued to the hand. Park the cold Put; a future return
+      must isolate the preceding Draw phase instead.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

@@ -8642,3 +8642,25 @@ leaving the local hand selects B1. A start row with no executor row and the
 unchanged image selects B2. A reached executor with the rifle still glued
 selects B3. Any repeated start, crash/freeze, controller stuck in transition,
 unexpected draw, or body/pistol/grenade/role-A regression rejects the boundary.
+
+### 2026-07-23 RUNTIME REJECTED: `hb` reaches the complete Put but the rifle remains
+
+Role B PID 11124 emitted the single predicted cold start:
+
+`NADINE-LOCAL-RIFLE-HOLSTER-START player=0x10E0A92C80
+weapon=0x10E0D36B80 id=0x61A48E01 index=16 expected=40
+current=-1->-1 draw=0->5 handSlot=0 call=1`.
+
+The authored action was not missing. The same owner immediately reached
+`weapon-holster 0xFA06C342` on `WeaponPartial 0xE2B990B9`;
+`PlayerHolsterWeaponAnimAction_Execute` changed `executed=0->1`, completed, and
+the rifle changed `attach=16->40`. Its local transform and blend remained
+unchanged, exactly as the static long-gun guard predicted. The user still saw
+the rifle in the same local-hand position.
+
+This selects B3 and rejects a cold Put or missing Put/prop-action state as the
+fix. The manual draw/put difference must be introduced by the preceding Draw
+phase or another state it initializes, not by strengthening the Put/rebind
+again. Build `hb` is parked: its one-shot transition and execute callsite probe
+are disabled while the user-prioritized grenade synchronization is handled.
+Both game processes were closed.

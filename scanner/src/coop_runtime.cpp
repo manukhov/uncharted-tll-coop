@@ -1514,7 +1514,7 @@ constexpr bool kEnableProcessWeaponInitProbe = false;
 // fix. Build hb instead runs the full stock Put transition once: this is the
 // narrow path that also binds PlayerWeaponAnimControl, requests
 // s_weapon-holster and publishes the authored prop-animation state.
-constexpr bool kEnableInitialLocalNadineRifleHolsterTransition = true;
+constexpr bool kEnableInitialLocalNadineRifleHolsterTransition = false;
 volatile bool g_logging_enabled = false;
 static SRWLOCK g_log_lock = SRWLOCK_INIT;
 static HANDLE g_log_handle = INVALID_HANDLE_VALUE;
