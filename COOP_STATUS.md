@@ -8495,3 +8495,35 @@ develops the earlier extreme lag. If the row verifies but the rifle remains,
 Z1 is REJECTED in favor of Z2 and the call must not repeat. A crash, freeze,
 wrong record, repeated row, any draw/put animation, body regression or role-A
 mutation rejects the boundary.
+
+### 2026-07-23 RUNTIME: `gz` is stable but its no-hand-slot admission is rejected
+
+Both `gz` copies loaded and remained responsive. The user confirmed that the
+previous extreme role-B lag is gone. From Chloe's copy the remote Nadine rifle
+is now seen at the back rather than the thigh, while Nadine's own copy still
+shows the spawn rifle glued to her hand. That external placement cannot be
+credited to the new call: neither PID emitted
+`NADINE-LOCAL-RIFLE-REBIND`, so the `gz` rebind body was never entered.
+
+The failed admission is consistent with the already-confirmed contradiction
+that defines this bug. Earlier bounded rows repeatedly measured the local
+controller as `current=-1, draw=0` while the exact slot-zero ProcessWeapon
+remained selected at `rightHand` index 16; the old same-owner probe explicitly
+classified this as `staleHand=1`. Requiring
+`capture_hand_attached_slot_int(player) < 0` therefore asks the buggy physical
+attachment query to deny the very stale hand attachment that the repair is
+scoped to find. That guard is REJECTED, not the stock rebind hypothesis.
+
+Build `ha` removes only that circular guard. It still requires role B, local
+legacy-Nadine look, stable controller `current<0/draw=0`, exact slot-zero rifle
+art, same resolved owner, selected `rightHand` id/index, and an existing
+`gun_holster` record. The observed hand-slot value is captured for the audit
+row, and the call remains once per Player/weapon/record generation with no
+retry.
+
+**Falsifiable `ha` prediction:** role B now emits exactly one rebind row with
+`handSlot=0`, `index=16->40`, `id=61A48E01->555EFB8D`, a changed primary-local
+hash and `verified=1`. If it verifies but the local rifle remains at the hand,
+the direct rebind is REJECTED as a main-view fix and Z2 wins. If no row appears,
+the row's still-unmet prerequisite must be instrumented before any further
+write. No lag, repeated call, animation or non-rifle mutation is permitted.
