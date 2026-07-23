@@ -95,6 +95,21 @@ constexpr std::size_t kFgAnimDataUpperStateOwnerOffset = 0x10;
 constexpr std::size_t kFgAnimDataRetainedHandleOffset = 0x1A8;
 constexpr std::size_t kFgAnimDataRetainedIdOffset = 0x1B0;
 constexpr std::size_t kFgAnimDataRenderWorldMatrixOffset = 0x1C0;
+// AnimMgr::AllocateAnimData claims one 0x380-byte slot from this fixed-capacity
+// pool and records every driven global FgInstance index at +0x210. The first
+// 0x600 allocation bits correspond one-to-one with the pool slots.
+constexpr std::uintptr_t kFgAnimDataPoolAllocatedBitsRva = 0x66CE200;
+constexpr std::uintptr_t kFgAnimDataPoolBasePointerRva = 0x66D0200;
+constexpr std::uint32_t kFgAnimDataPoolCapacity = 0x600;
+constexpr std::size_t kFgAnimDataPoolStride = 0x380;
+constexpr std::size_t kFgAnimDataMaxDrivenInstancesOffset = 0x208;
+constexpr std::size_t kFgAnimDataDrivenInstanceCountOffset = 0x20C;
+constexpr std::size_t kFgAnimDataDrivenInstanceIndicesOffset = 0x210;
+// FgDrawMgr::AllocateInstance claims one 0x280-byte slot from this global pool
+// and appends its index to exactly one owning FgAnimData driven list.
+constexpr std::uintptr_t kFgInstancePoolBasePointerRva = 0x67C3480;
+constexpr std::uintptr_t kFgInstancePoolCapacityRva = 0x67C3488;
+constexpr std::size_t kFgInstancePoolStride = 0x280;
 constexpr std::size_t kFgAnimDataRuntimePayloadOffset = 0x230;
 constexpr std::size_t kFgAnimDataPreviousPaletteOffset = 0x238;
 // Hex-Rays prints structure offsets in decimal: its +560/+568 are +0x230/+0x238.

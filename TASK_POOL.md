@@ -1588,10 +1588,16 @@ Do not reopen these as the first move:
       (`targetMask=0`, `activeMask=0`), but generations 3-8 consistently queued
       three other active instances with the same three geometry identities
       (`geometryHits=3`, `ownerHits=0`). R1/R3 are REJECTED.
-- [ ] Trace the alternate spawn-rifle LOD set selected by `gr`
-      (`0x1118D10400`, `0x1118D10680`, `0x1118D10900`) backward through the
-      `PrepareInstanceForRendering` producer and resolve its owning renderable
-      or weapon container. Do not mutate the already-absent published target.
+- [x] Establish the static reverse map for the alternate spawn-rifle LOD set
+      selected by `gr`: global FgInstance index -> allocated FgAnimData
+      `+0x210` driven list -> retained `Process+0xA8/+0xBC` pair. Exact source
+      identities correct `0x14177F7F0` to `AnimMgr_AllocateAnimData` and
+      `0x1418C4840` to `FgAnimData_Init`.
+- [ ] Run read-only build `gs` and resolve the three geometry-matched alternate
+      LODs to their live FgAnimData and retained Process. Classify exactly one
+      owner per LOD as O1, no driven-list owner as O2, and multiple/invalid
+      ownership as O3. Require the existing target-absent and geometry-hit
+      positive controls, no crash and no visual regression.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

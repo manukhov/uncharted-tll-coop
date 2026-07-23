@@ -8031,3 +8031,50 @@ Next static target: trace those alternate LOD instances backward from their
 weapon container. Any next runtime discriminator must match the alternate
 geometry set at the producer boundary; further writes to the already-absent
 published target are ruled out.
+
+### 2026-07-23 STATIC: reverse alternate FgInstance ownership (`gs`)
+
+The `gr` addresses are three ordinary global-pool `FgInstance` slots: their
+spacing is exactly the allocator stride `0x280`. The reverse ownership path is
+now static and has three independent evidence types. First,
+`FgDrawMgr_AllocateInstance 0x141819F30` claims
+`[qword_1467C3480 + index*0x280]` and appends that exact index to the one owning
+`FgAnimData+0x210` list, incrementing `+0x20C`. Second,
+`FgInstance_Init 0x14192E590` stores `FgGeometry*` at instance `+0x1B0` and
+copies `FgAnimData+0x1B0` into instance `+0x250` after validating the retained
+pair. Thus the observed alternate value `0x7FF` is an owner identity, not a LOD
+or cull flag. Third, exact source identity at
+`AnimMgr_AllocateAnimData 0x14177F7F0` proves the global FgAnimData pool is
+`qword_1466D0200`, has `0x600` slots of stride `0x380`, and seeds
+`+0x1A8/+0x1B0` directly from `Process+0xA8/+0xBC`.
+
+The earlier generic names at `0x14177F7F0/0x1418C4840` are corrected by their
+exact source assertions to `AnimMgr_AllocateAnimData` and `FgAnimData_Init`;
+`IDrawControl_Construct 0x141751BB0` independently stores that same FgAnimData
+at DrawControl `+0` before `IDrawControl_AddMesh` allocates its LOD instances.
+
+Competing outcomes are now bounded. O1: each geometry-matched alternate index
+occurs in exactly one live FgAnimData driven list and its retained pair resolves
+to one concrete Process; that owner is the actual spawn-rifle container. O2:
+the active queued index occurs in no live driven list, proving stale/released
+pool publication. O3: an index occurs in multiple lists or resolves an invalid
+retained pair, proving ownership aliasing/lifetime corruption rather than a
+normal second drawable.
+
+Build `gs` extends only the existing read-only `CullFgLods` discriminator. For
+each geometry match it derives the global instance index, scans only allocated
+FgAnimData slots, records list position/count, retained handle/id, resolved
+owner pointer/vtable/runtime id, optional ProcessWeapon art and matrix equality,
+then calls stock `CullFgLods::Spawn` unchanged. It writes no pool, list,
+instance, owner, transform or visibility state. The release DLL compiled
+successfully. The three exact names were applied to the single `ida/tll.i64`
+(`apply_labels OK: 1260 functions, 20 data names`;
+`save_database returned True`) and independently resolved through the restarted
+MCP.
+
+**Falsifiable `gs` prediction:** both copies load `2026-07-23gs`; role B again
+shows `targetMask=0` and three alternate `geometryHits`. Exactly one
+`fg/owners=1` plus a valid object whose runtime id equals retained id selects
+O1. `fg=0/owners=0` selects O2. `owners>1`, an invalid object, or unequal
+retained/runtime ids selects O3. Missing positive controls, a crash, body/pistol
+regression or a visibly absent spawn rifle invalidates the capture.

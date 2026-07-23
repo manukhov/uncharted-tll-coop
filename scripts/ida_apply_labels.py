@@ -94,6 +94,12 @@ FUNCTIONS = {
         "m_availableLods entries (stride 0x20) and allocates every FgInstance "
         "against the one FgAnimData pointer stored at DrawControl+0.",
     ),
+    0x141751BB0: (
+        "IDrawControl_Construct",
+        "Exact IDrawControl::IDrawControl(FgAnimData*, unsigned int) source "
+        "assertion. Stores the owning FgAnimData at +0 and allocates the "
+        "fixed-stride mesh-entry array later consumed by IDrawControl_AddMesh.",
+    ),
     0x1417CB100: (
         "ArtItemGeo_ResolveFgGeometry",
         "Looks up ArtItemGeo+0x18 resource id in the global geometry registry "
@@ -6929,26 +6935,19 @@ FUNCTIONS = {
         "hashed owner-local runtime registry rather than a passive state blob.",
     ),
     0x14177F7F0: (
-        "AllocateGlobalRuntimeStateSlot380AndSeedRetainedPair",
-        "Generic global runtime-state slot allocator used by the top-level "
-        "Player ProcessSpawnInfo path and several non-Player callsites. Claims "
-        "a 0x380-byte slot from the global pool at 0x1466D0200, resets it, "
-        "copies an optional retained/runtime pair into +0x1A8, stores the "
-        "incoming type/context id into +0x208, zeroes +0x20C, and may "
-        "allocate an auxiliary payload into +0x210.",
+        "AnimMgr_AllocateAnimData",
+        "Exact AnimMgr::AllocateAnimData(unsigned int, Process*) source "
+        "identity. Claims a 0x380-byte FgAnimData slot from the global pool "
+        "at 0x1466D0200, copies Process+0xA8/+0xBC into the retained pair at "
+        "+0x1A8/+0x1B0, and initializes the driven-instance capacity/count/"
+        "index array at +0x208/+0x20C/+0x210.",
     ),
     0x1418C4840: (
-        "ApplyExternalStateAndTransformBlockIntoRuntimeStateSlot",
-        "Generic apply/commit helper over the 0x380 runtime-state slots "
-        "allocated by 0x14177F7F0. Copies source links from external_state "
-        "into +0x20/+0x130/+0x138 and +0x18/+0x1A0, using external_state "
-        "payload fields at +0x40/+0x48/+0x58. Initializes the auxiliary "
-        "subobject at +0x200, converts the incoming transform block into the "
-        "committed spatial block at +0x1C0..+0x1F0, and seeds late defaults "
-        "across +0x280..+0x320 before returning the populated slot object. "
-        "That packet shape lines up more naturally with the extended wrapper "
-        "family initialized by 0x1417C35A0 than with the returned object "
-        "family materialized by 0x1417C3790.",
+        "FgAnimData_Init",
+        "Exact FgAnimData::Init(ArtItemSkeleton*, Transform&, "
+        "JointCache::ConfigType) source assertion. Initializes a 0x380-byte "
+        "AnimMgr pool slot, commits the initial world transform at "
+        "+0x1C0..+0x1F0 and seeds the late animation state.",
     ),
     0x1417CD200: (
         "LookupUpperPlayerStateRecordByAuthoredHash",

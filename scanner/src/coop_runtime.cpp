@@ -33223,6 +33223,19 @@ struct NadineRifleCullQueueMatch {
     std::uint32_t geometry_mask = 0;
     std::uint8_t active = 0;
     std::uint8_t target_lod = 0xFF;
+    std::uint32_t instance_pool_index = 0xFFFFFFFFu;
+    std::uintptr_t anim_data = 0;
+    std::uint32_t anim_pool_index = 0xFFFFFFFFu;
+    std::uint32_t driven_position = 0xFFFFFFFFu;
+    std::uint32_t driven_count = 0;
+    std::uint32_t anim_owner_matches = 0;
+    std::uintptr_t retained_handle = 0;
+    std::uint32_t retained_id = 0;
+    std::uintptr_t owner = 0;
+    std::uintptr_t owner_vtable_rva = 0;
+    std::uint32_t owner_runtime_id = 0;
+    std::uint32_t owner_art = 0;
+    std::uint8_t world_matrix_match = 0;
 };
 
 struct NadineRifleCullQueueSnapshot {
@@ -33236,6 +33249,158 @@ struct NadineRifleCullQueueSnapshot {
     std::uint32_t target_runtime_id = 0;
     std::array<NadineRifleCullQueueMatch, 12> matches{};
 };
+
+void seh_resolve_nadine_rifle_cull_queue_owners(
+    NadineRifleCullQueueSnapshot* snapshot) {
+    if (snapshot == nullptr || snapshot->match_count == 0) {
+        return;
+    }
+    __try {
+        auto* const instance_pool = *reinterpret_cast<std::byte**>(
+            g_module + kFgInstancePoolBasePointerRva);
+        const std::uint32_t instance_capacity =
+            *reinterpret_cast<const std::uint32_t*>(
+                g_module + kFgInstancePoolCapacityRva);
+        auto* const anim_pool = *reinterpret_cast<std::byte**>(
+            g_module + kFgAnimDataPoolBasePointerRva);
+        const auto* const anim_allocated =
+            reinterpret_cast<const std::uint64_t*>(
+                g_module + kFgAnimDataPoolAllocatedBitsRva);
+        if (instance_pool == nullptr || anim_pool == nullptr ||
+            instance_capacity == 0 || instance_capacity > 0x10000u) {
+            return;
+        }
+
+        const std::uint32_t stored_matches = std::min<std::uint32_t>(
+            snapshot->match_count,
+            static_cast<std::uint32_t>(snapshot->matches.size()));
+        for (std::uint32_t match_index = 0;
+             match_index < stored_matches; ++match_index) {
+            NadineRifleCullQueueMatch& match =
+                snapshot->matches[match_index];
+            if (match.instance <
+                reinterpret_cast<std::uintptr_t>(instance_pool)) {
+                continue;
+            }
+            const std::uintptr_t delta =
+                match.instance -
+                reinterpret_cast<std::uintptr_t>(instance_pool);
+            if (delta % kFgInstancePoolStride != 0) {
+                continue;
+            }
+            const std::uintptr_t pool_index =
+                delta / kFgInstancePoolStride;
+            if (pool_index >= instance_capacity) {
+                continue;
+            }
+            match.instance_pool_index =
+                static_cast<std::uint32_t>(pool_index);
+        }
+
+        for (std::uint32_t anim_index = 0;
+             anim_index < kFgAnimDataPoolCapacity; ++anim_index) {
+            if ((anim_allocated[anim_index >> 6] &
+                 (std::uint64_t{1} << (anim_index & 0x3F))) == 0) {
+                continue;
+            }
+            auto* const fg =
+                anim_pool +
+                static_cast<std::size_t>(anim_index) *
+                    kFgAnimDataPoolStride;
+            const std::uint32_t max_driven =
+                *reinterpret_cast<const std::uint32_t*>(
+                    fg + kFgAnimDataMaxDrivenInstancesOffset);
+            const std::uint32_t driven_count =
+                *reinterpret_cast<const std::uint32_t*>(
+                    fg + kFgAnimDataDrivenInstanceCountOffset);
+            const auto* const driven_indices =
+                *reinterpret_cast<const std::uint32_t* const*>(
+                    fg + kFgAnimDataDrivenInstanceIndicesOffset);
+            if (driven_count == 0 || driven_count > max_driven ||
+                driven_count > 0x100u || driven_indices == nullptr ||
+                readable_bytes(driven_indices) <
+                    sizeof(std::uint32_t) *
+                        static_cast<std::size_t>(driven_count)) {
+                continue;
+            }
+            for (std::uint32_t driven_position = 0;
+                 driven_position < driven_count; ++driven_position) {
+                const std::uint32_t instance_index =
+                    driven_indices[driven_position];
+                for (std::uint32_t match_index = 0;
+                     match_index < stored_matches; ++match_index) {
+                    NadineRifleCullQueueMatch& match =
+                        snapshot->matches[match_index];
+                    if (match.instance_pool_index == 0xFFFFFFFFu ||
+                        match.instance_pool_index != instance_index) {
+                        continue;
+                    }
+                    ++match.anim_owner_matches;
+                    if (match.anim_data != 0) {
+                        continue;
+                    }
+                    match.anim_data =
+                        reinterpret_cast<std::uintptr_t>(fg);
+                    match.anim_pool_index = anim_index;
+                    match.driven_position = driven_position;
+                    match.driven_count = driven_count;
+                    void* const retained_handle =
+                        *reinterpret_cast<void* const*>(
+                            fg + kFgAnimDataRetainedHandleOffset);
+                    match.retained_handle =
+                        reinterpret_cast<std::uintptr_t>(retained_handle);
+                    match.retained_id =
+                        *reinterpret_cast<const std::uint32_t*>(
+                            fg + kFgAnimDataRetainedIdOffset);
+                    if (retained_handle != nullptr &&
+                        readable_bytes(retained_handle) >= 0x10) {
+                        void* const owner =
+                            *reinterpret_cast<void* const*>(
+                                static_cast<const std::byte*>(
+                                    retained_handle) + 0x8);
+                        match.owner =
+                            reinterpret_cast<std::uintptr_t>(owner);
+                        if (owner != nullptr &&
+                            readable_bytes(owner) >=
+                                kGameObjectRuntimeIdOffset +
+                                    sizeof(std::uint32_t)) {
+                            const auto* const owner_bytes =
+                                static_cast<const std::byte*>(owner);
+                            const std::uintptr_t vtable =
+                                *reinterpret_cast<const std::uintptr_t*>(
+                                    owner_bytes);
+                            if (vtable >= g_module) {
+                                match.owner_vtable_rva =
+                                    vtable - g_module;
+                            }
+                            match.owner_runtime_id =
+                                *reinterpret_cast<const std::uint32_t*>(
+                                    owner_bytes +
+                                    kGameObjectRuntimeIdOffset);
+                            if (match.owner_vtable_rva ==
+                                    kProcessWeaponVtableRva &&
+                                readable_bytes(owner) >= 0x864) {
+                                match.owner_art =
+                                    *reinterpret_cast<
+                                        const std::uint32_t*>(
+                                        owner_bytes + 0x860);
+                            }
+                        }
+                    }
+                    match.world_matrix_match =
+                        std::memcmp(
+                            reinterpret_cast<const void*>(
+                                match.instance + 0x140),
+                            fg + kFgAnimDataRenderWorldMatrixOffset,
+                            0x40) == 0
+                            ? 1
+                            : 0;
+                }
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
 
 bool seh_capture_nadine_rifle_cull_queue(
     void* const* queue_instances, std::uint32_t queue_count,
@@ -33348,6 +33513,7 @@ bool seh_capture_nadine_rifle_cull_queue(
             }
             ++snapshot->match_count;
         }
+        seh_resolve_nadine_rifle_cull_queue_owners(snapshot);
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *snapshot = {};
@@ -33413,6 +33579,20 @@ std::int64_t __fastcall hooked_cull_fg_lods_spawn(
              << std::dec << ":active="
              << static_cast<unsigned>(match.active)
              << ":target=" << static_cast<unsigned>(match.target_lod)
+             << ":pool=" << match.instance_pool_index
+             << ":fg=0x" << std::hex << match.anim_data
+             << "/" << std::dec << match.anim_pool_index
+             << ":driven=" << match.driven_position
+             << "/" << match.driven_count
+             << ":owners=" << match.anim_owner_matches
+             << ":handle=0x" << std::hex << match.retained_handle
+             << ":retained=0x" << match.retained_id
+             << ":object=0x" << match.owner
+             << ":vtable=0x" << match.owner_vtable_rva
+             << ":runtime=0x" << match.owner_runtime_id
+             << ":art=0x" << match.owner_art
+             << std::dec << ":world="
+             << static_cast<unsigned>(match.world_matrix_match)
              << "]";
     }
     write_log_line(line.str().c_str());
@@ -36092,8 +36272,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-22gr "
-        "(role-B local Nadine final CullFgLods queue discriminator; pistol animation unchanged)");
+        "TLL co-op runtime init 2026-07-23gs "
+        "(role-B alternate Nadine rifle FgAnimData owner discriminator; pistol animation unchanged)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
