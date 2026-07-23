@@ -139,7 +139,18 @@
       through the real falling edge. Runtime prediction: one rise/fall, one
       `GRENADE-SCHEDULER-CONSUME`, one StartArc and at most one ammo decrement,
       with no repeated held grenades before release. A single remaining wrong
-      trajectory is deliberately a separate downstream result.
+      trajectory is deliberately a separate downstream result. **RUNTIME
+      PARTIAL CONFIRM / REJECT:** `hl` now gives exactly one StartArc and one
+      ammo decrement per network cycle, creates once and reuses thereafter.
+      But the receiver reaches state 2, returns to state 0 before the real
+      sender false, never reaches the authored marker, and the deferred GRNE
+      then materializes the separate exploding grenade the user sees. Static
+      correction: state-2 deadline calls `0x140E1F5B0`, whose ordinary path
+      writes state 4; state 4 has a fourth exact `grenade-arc` query at
+      `0x140E2227D` that `hl` omitted. Its unrelayed false prematurely calls
+      `0x140E1FF90` and enters release/state 7. Next build must relay this
+      fourth site with the held level while leaving the scheduler consumed and
+      leaving GRNE/trajectory untouched.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /

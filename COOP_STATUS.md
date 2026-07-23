@@ -9433,3 +9433,57 @@ has a wrong trajectory, that independently selects a later trajectory/owner
 input boundary; it does not falsify the scheduler latch. Repeated StartArc,
 missing state-1/state-2 release, a crash, or failure to accept the next distinct
 press rejects `hl`.
+
+### 2026-07-23 RUNTIME PARTIAL CONFIRM / REJECT: `hl` stops re-entry but misses state 4
+
+The scheduler-consumption prediction passed for its exact boundary. PID 11508
+(local Nadine) produced two observed arc cycles, sequences `456 -> 545` and
+`803 -> 892`. On PID 10948 each cycle produced exactly one scheduler true,
+CanStart, StartArc entry/exit and `GRENADE-SCHEDULER-CONSUME`. The first cycle
+created and bound one grenade ProcessWeapon; the second reused it. Receiver
+ammo decreased once per cycle, `3 -> 2 -> 1`, rather than four times during one
+held level. No second StartArc occurred between either rising and falling edge.
+This confirms the `hl` latch and rejects continued scheduler re-entry or
+duplicate factory creation as the source of the remaining visible grenades.
+
+The overall visual result remains REJECTED: the user still sees additional
+grenades spawn. Neither cycle produced `GRENADE-ANIM-SPAWN-NATIVE`. The first
+receiver cycle reached logged state 1 at sequence 456 and state 2 at sequence
+459, but was already back in state 0 when the actual sender false arrived at
+sequence 545. Its authoritative GRNE then entered
+`GRENADE-EVENT-DEFER seq=1 waiting for puppet throw marker`; the second cycle
+did the same for sequence 2. Thus one held `ProcessGrenadeInHand` lifecycle is
+abandoned, then the delayed fallback materializes a separate exploding
+grenade. This is below the scheduler latch.
+
+Three independent static/runtime evidence types select the missing boundary:
+
+1. **State-transition runtime evidence:** the receiver progresses state
+   `1 -> 2 -> 0` before the transmitted release and never reaches the authored
+   projectile marker, while StartArc count and ammo are now correct.
+2. **Controller control flow:** in state 2,
+   `PlayerGrenadeController_UpdateStateAndCommitThrow 0x140E21310` checks the
+   absolute deadline at `0x140E219EB`. Expiry calls `sub_140E1F5B0` at
+   `0x140E226C6`; its ordinary non-dynamite path initializes post-hold context
+   and writes controller state 4 at `0x140E1FB08`.
+3. **Independent state-4 consumer:** state 4 queries the same literal
+   `grenade-arc` through the same embedded owner command state at
+   `0x140E2227D`. Build `hl` does not relay this fourth callsite. The puppet's
+   original query therefore returns false even while the peer still holds.
+   Its false branch calls `sub_140E1FF90` at `0x140E222BC`; that function either
+   starts `PlayerGrenadeController_StartThrowAction` immediately or writes
+   state 7 with a deadline, whose timeout can reset the controller to state 0.
+
+The alternatives are now explicit. **N1** repeated scheduler entry is rejected
+by exactly one StartArc and one ammo decrement per network cycle. **N2**
+factory/Init duplication is rejected before the marker: one exact ProcessWeapon
+is created then reused, and no native ProjectileGrenade marker Init occurs.
+**N3** missing state-4 held-command relay is selected by the timer path and the
+unpatched exact callsite. **N4** a later state-7/action/animation defect remains
+possible only if state 4 receives the correct true/false transition and the
+authored marker is still absent.
+
+The next build must add `0x140E2227D` to the already cold-validated atomic
+callsite relay and treat it like state 1/state 2: return the peer's live held
+level, never the scheduler-consumed value. It must not change GRNE, trajectory,
+fuse, ProcessGrenadeInHand or animation functions in the same discriminator.
