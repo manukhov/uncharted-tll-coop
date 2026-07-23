@@ -8401,3 +8401,47 @@ rightHand input (I1, subject to the role-A control); `40->40` selects I2; no
 local-player rifle row selects I3. The visible rifle is expected to remain
 wrong in this read-only build. Any freeze, crash, body/weapon regression,
 renderer-wide log flood, or visible mutation invalidates the probe.
+
+### 2026-07-23 RUNTIME: `gy` selects a missing post-init holster transition
+
+Both copies loaded `gy` and remained responsive through scene materialization:
+role A PID 14868 and role B PID 13584. The install log confirms that neither
+`CullFgLods` nor either FgDraw prepare callsite was patched, the rejected
+holster/transform probes were absent, and only the cold init callsite plus the
+independently required cloth relay remained. The process-local init output was
+bounded to seven rows on each side; there was no renderer-wide flood.
+
+The discriminator is symmetric and exact. The role-A local Chloe rifle
+initialized as:
+
+`art=8075397D parent=retained0 look=3F334972 attachId=61A48E01
+selected=255->1`.
+
+The role-B local Nadine rifle initialized as:
+
+`art=8075397D parent=retained0 look=D27C074F attachId=61A48E01
+selected=255->16`.
+
+The remote controls repeat the inverse pair: role-B remote Chloe selected
+index 1 and role-A remote Nadine selected index 16. Pistol rows follow the same
+per-look result. In every row the descriptor and post-init local-transform
+hashes are identical (`AE617165`), parent handle/id is preserved, result is
+zero, and the requested attachment id is confirmed `rightHand 0x61A48E01`.
+
+I2 and I3 are therefore REJECTED: the local rifle does reach normal
+`ProcessWeapon_Initialize`, and it does not begin at `gun_holster` index 40.
+The narrow version of I1 (a role-B-only bad init/cache) is also rejected,
+because the role-A remote Nadine has the same `255->16` initialization yet is
+later displayed at the thigh. The selected result is a missing **post-init**
+holster transition on the local role-B Player. Initial weapon creation
+correctly resolves `rightHand` to the character-specific index (Chloe 1,
+legacy Nadine 16); the remote co-op apply path later holsters its Nadine weapon,
+and a manual local draw/put does the same, but local spawn never performs that
+later transition.
+
+Do not rewrite the init descriptor or force index 40 inside
+`ProcessWeaponBase_Init`: the required compatibility `gun_holster` record is
+added later from the retained Chloe donor. The next candidate must reuse the
+stock Player weapon state machine only after that record exists, with a
+one-shot local-Nadine spawn generation and positive completion at
+`current<0, draw=0, selected=40`.
