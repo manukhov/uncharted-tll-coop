@@ -92,9 +92,17 @@
       FastGrenade vtable probe, native marker/Init hooks and role A/B networking
       without a VEH exception. The original-target publication race is the
       leading `hg` crash cause, though timing instrumentation prevents calling
-      it unique. Next step is the written behavior test: one grenade throw while
-      checking peer animation, native collision-safe trajectory and natural
-      landing/fuse explosion.
+      it unique. **RUNTIME REJECTED behavior:** the puppet reaches scheduler,
+      CanStart and StartArc state 1, but release returns directly to state 0;
+      no authored marker/Init follows. The custom GRNE then waits 2.5 seconds,
+      starts a fresh 3-second fuse and remains at its spawn point because the
+      fallback applies no relayed velocity. Static decompilation selects the
+      release gate `sub_140E20850`: FastGrenade vtable `+0xD0`
+      (`sub_140E1AD40`) must resolve the selected pointer/handle pair at
+      controller `+0x128/+0x130` and its object virtual `+0x840` must report a
+      positive count. Next: trace all pair writers/initializers, identify that
+      object's concrete type and resolve `+0x840`; distinguish null/stale K1,
+      zero-count K2 and wrong-slot K3 before another runtime test.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /

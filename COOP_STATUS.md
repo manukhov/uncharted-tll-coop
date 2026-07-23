@@ -9127,3 +9127,47 @@ CanStart true, Start/state 1, release, authored marker, exactly one native
 explosion. Missing animation, stationary projectile, geometry tunneling or a
 spawn-point explosion each falsifies a different downstream boundary; do not
 change the installer during that test.
+
+### 2026-07-23 RUNTIME REJECTED: `hh` release gate drops the authored throw
+
+The first deliberate `hh` throw from PID 4168 reached PID 8272 and produced the
+bounded controller sequence:
+
+1. `GRENADE-CONTROLLER stage=scheduler value=1 ... ownerMatch=1 state=0 flags=0xd2 slot=0`
+2. `can-start value=1`, `start-entry state=0`, `start-exit state=1`
+3. `state1 value=1`, followed on release by `scheduler value=0`,
+   `state1 value=0`, then `can-start value=1 state=0`
+4. no `GRENADE-ANIM-SPAWN-NATIVE`; the inbound authoritative event ended at
+   `GRENADE-EVENT-DEFER ... waiting for puppet throw marker`
+
+Visually the peer grenade exploded at the throw origin and noticeably late.
+This rejects F1 (scheduler not reached), F2 (CanStart rejection) and F3
+(StartArc failure), and selects F4: state 1 cannot cross its release gate into
+the authored throw action. `PlayerGrenadeController_UpdateStateAndCommitThrow
+0x140E21310` calls `sub_140E20850` at `0x140E218E9`; a false result leaves the
+release path and returns the controller to state 0 instead of calling
+`PlayerGrenadeController_ReleaseArcAndAdvanceThrow 0x140E21270`.
+
+The delay and origin are separate, already-bounded consequences of the fallback
+and are not native grenade physics. The receive path deliberately waits 2500 ms
+for the absent authored marker, then executes the custom GRNE fallback, whose
+fresh local fuse runs for another 3.0 seconds. That fallback patches only its
+spawn transform; the relayed `g_pending_grenade_vel` is not applied after
+Execute because the old raw transform/velocity path is parked. The fallback
+projectile therefore remains at its spawn point until that later fuse expires.
+
+Static decompilation narrows the failed gate. Its flags half already passes for
+`flags=0xd2`; the other half calls FastGrenade vtable `+0xD0`, resolved to
+`sub_140E1AD40`, and requires the returned selected-grenade object to report a
+positive value through virtual `+0x840`. The resolver selects one of two
+pointer/handle pairs at controller `+0x128/+0x130`, indexed by
+controller `+0x18C` (runtime slot 0), rejects null/stale pairs by checking the
+object handle at `+0xBC`, and marks a valid object at `+0x72`.
+
+Competing causes for the next static pass are therefore K1: the retained puppet
+has a null or stale selected pair; K2: the pair resolves but virtual `+0x840`
+reports zero grenade count; K3: the valid pair lives in the other selected slot.
+Before another runtime build, trace every writer/initializer of both pairs and
+resolve the concrete object type and `+0x840` slot. Do not manually invoke
+StartThrowAction, copy live owner pointers, restore raw Player `+0x260/+0x270`
+writes, or re-enable transform pinning.
