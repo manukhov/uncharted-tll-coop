@@ -33241,15 +33241,6 @@ struct NadineRifleCullQueueMatch {
     std::uint8_t pool_primary_used = 0;
     std::uint8_t pool_secondary_used = 0;
     std::uint8_t pool_pending_delete = 0;
-    std::uintptr_t registry_handle = 0;
-    std::uintptr_t registry_object = 0;
-    std::uintptr_t registry_vtable_rva = 0;
-    std::uint32_t registry_runtime_id = 0;
-    std::uint32_t registry_art = 0;
-    std::uintptr_t registry_draw_control = 0;
-    std::uintptr_t registry_anim_data = 0;
-    std::uint32_t registry_current_refs = 0;
-    std::uint32_t registry_freed_refs = 0;
 };
 
 struct NadineRifleCullQueueSnapshot {
@@ -33263,104 +33254,6 @@ struct NadineRifleCullQueueSnapshot {
     std::uint32_t target_runtime_id = 0;
     std::array<NadineRifleCullQueueMatch, 12> matches{};
 };
-
-void seh_resolve_nadine_rifle_registry_owner(
-    NadineRifleCullQueueMatch* match) {
-    if (match == nullptr || match->owner_id == 0 || g_module == 0) {
-        return;
-    }
-    using ResolveFn =
-        std::int64_t*(__fastcall*)(std::uint64_t, std::uint32_t);
-    const auto resolve = reinterpret_cast<ResolveFn>(
-        g_module + kResolveGameObjectHandleByIdRva);
-    __try {
-        const std::uint64_t manager =
-            *reinterpret_cast<const std::uint64_t*>(
-                g_module + kGlobalManagerTableRva + 22 * 8);
-        if (manager == 0) {
-            return;
-        }
-        std::int64_t* const handle = resolve(manager, match->owner_id);
-        match->registry_handle =
-            reinterpret_cast<std::uintptr_t>(handle);
-        if (handle == nullptr || handle[0] == 0 ||
-            static_cast<std::uint32_t>(handle[1]) != match->owner_id) {
-            return;
-        }
-        void* const object = *reinterpret_cast<void**>(handle[0] + 8);
-        match->registry_object =
-            reinterpret_cast<std::uintptr_t>(object);
-        if (object == nullptr ||
-            readable_bytes(object) <
-                kGameObjectRuntimeIdOffset + sizeof(std::uint32_t)) {
-            return;
-        }
-        const auto* const object_bytes =
-            static_cast<const std::byte*>(object);
-        match->registry_runtime_id =
-            *reinterpret_cast<const std::uint32_t*>(
-                object_bytes + kGameObjectRuntimeIdOffset);
-        if (match->registry_runtime_id != match->owner_id) {
-            return;
-        }
-        const std::uintptr_t vtable =
-            *reinterpret_cast<const std::uintptr_t*>(object_bytes);
-        if (vtable >= g_module) {
-            match->registry_vtable_rva = vtable - g_module;
-        }
-        if (match->registry_vtable_rva != kProcessWeaponVtableRva ||
-            readable_bytes(object) < 0x864) {
-            return;
-        }
-        match->registry_art =
-            *reinterpret_cast<const std::uint32_t*>(
-                object_bytes + 0x860);
-        auto* const draw = static_cast<const std::byte*>(
-            *reinterpret_cast<void* const*>(object_bytes + 0x198));
-        match->registry_draw_control =
-            reinterpret_cast<std::uintptr_t>(draw);
-        if (draw == nullptr || readable_bytes(draw) < 0x18) {
-            return;
-        }
-        match->registry_anim_data =
-            reinterpret_cast<std::uintptr_t>(
-                *reinterpret_cast<void* const*>(draw));
-        const auto* const meshes =
-            *reinterpret_cast<const std::byte* const*>(draw + 0x8);
-        const std::uint32_t mesh_count =
-            *reinterpret_cast<const std::uint32_t*>(draw + 0x14);
-        if (meshes == nullptr || mesh_count == 0 || mesh_count > 64 ||
-            readable_bytes(meshes) <
-                static_cast<std::size_t>(mesh_count) * 0x250) {
-            return;
-        }
-        for (std::uint32_t mesh_index = 0;
-             mesh_index < mesh_count; ++mesh_index) {
-            const auto* const mesh =
-                meshes + static_cast<std::size_t>(mesh_index) * 0x250;
-            const std::uint32_t lod_count =
-                std::min<std::uint32_t>(
-                    *reinterpret_cast<const std::uint8_t*>(
-                        mesh + 0x242),
-                    8);
-            for (std::uint32_t lod_index = 0;
-                 lod_index < lod_count; ++lod_index) {
-                const auto* const lod = mesh + 0x20 * lod_index;
-                if (reinterpret_cast<std::uintptr_t>(
-                        *reinterpret_cast<void* const*>(lod)) ==
-                    match->instance) {
-                    ++match->registry_current_refs;
-                }
-                if (reinterpret_cast<std::uintptr_t>(
-                        *reinterpret_cast<void* const*>(lod + 0x8)) ==
-                    match->instance) {
-                    ++match->registry_freed_refs;
-                }
-            }
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-    }
-}
 
 void seh_resolve_nadine_rifle_cull_queue_owners(
     NadineRifleCullQueueSnapshot* snapshot) {
@@ -33535,11 +33428,6 @@ void seh_resolve_nadine_rifle_cull_queue_owners(
                             : 0;
                 }
             }
-        }
-        for (std::uint32_t match_index = 0;
-             match_index < stored_matches; ++match_index) {
-            seh_resolve_nadine_rifle_registry_owner(
-                &snapshot->matches[match_index]);
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
     }
@@ -33744,17 +33632,6 @@ std::int64_t __fastcall hooked_cull_fg_lods_spawn(
              << "/" << static_cast<unsigned>(match.pool_secondary_used)
              << ":pending="
              << static_cast<unsigned>(match.pool_pending_delete)
-             << ":registry=0x" << std::hex
-             << match.registry_handle
-             << "/0x" << match.registry_object
-             << ":rvtable=0x" << match.registry_vtable_rva
-             << ":rruntime=0x" << match.registry_runtime_id
-             << ":rart=0x" << match.registry_art
-             << ":draw=0x" << match.registry_draw_control
-             << ":anim=0x" << match.registry_anim_data
-             << std::dec << ":refs="
-             << match.registry_current_refs
-             << "/" << match.registry_freed_refs
              << "]";
     }
     write_log_line(line.str().c_str());
@@ -36434,8 +36311,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-23gu "
-        "(role-B stale Nadine rifle owner-registry discriminator; read-only; pistol animation unchanged)");
+        "TLL co-op runtime init 2026-07-23gv "
+        "(post-gu registry-call rollback; stale Nadine rifle census only; pistol animation unchanged)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

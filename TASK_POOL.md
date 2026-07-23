@@ -1624,11 +1624,19 @@ Do not reopen these as the first move:
       FgAnimData. Normal NotifyMeshUnloaded is also excluded by the observed
       clear `FgInstance+0x18 bit 1`; normal Relink/remove/destruction frees both
       LOD pointers before `AnimMgr_FreeAnimData 0x14177FA70`.
-- [ ] Build read-only `gu`: resolve copied owner id `0x956` through
-      `ResolveGameObjectHandleById 0x140A989C0` and compare the three exact
-      queue instances against a resolved ProcessWeapon DrawControl's current
-      and freed LOD pointers. Classify live-current W1, live-freed W2,
-      absent/orphan W3, or reused non-weapon id W4 before any render mutation.
+- [x] Build read-only `gu`: resolve the copied owner id through
+      `ResolveGameObjectHandleById 0x140A989C0`. Runtime evidence selected W3:
+      the three instances carried old id `0x727`, while the current rifle was
+      `0x4CD`, and the authoritative registry returned no handle/object.
+      However, the local-Nadine copy visually froze immediately after load, so
+      the render-thread registry call is a REJECTED method and the result is not
+      promoted to CONFIRMED. Build `gv` removes it completely.
+- [ ] Trace the exact ProcessWeapon replacement/destruction event which drops
+      id `0x727` while leaving its three primary-used FgInstances. Prefer the
+      already captured weapon-action / GiveWeapon lifecycle over another cull
+      mutation. If cleanup is required, prove the correct FgDrawMgr thread,
+      manager pointer and `FreeInstance` already-detached argument before a
+      runtime test; never call the object registry from the cull hook again.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

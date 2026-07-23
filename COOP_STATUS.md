@@ -8210,3 +8210,34 @@ contains the pointers; this selects orphaned instances from a destroyed or
 replaced ProcessWeapon. A reused non-weapon object for `0x956` is a fourth,
 explicit invalid-owner-id outcome. No render or object write is justified
 before this result.
+
+### 2026-07-23 RUNTIME EVIDENCE / REJECTED METHOD: old rifle id is absent (`gu`)
+
+Both copies loaded `2026-07-23gu` (role A PID 9784, local-Nadine role B PID
+5700). When role B reached generation 2, its final cull queue again contained
+three geometry-matched instances, pool slots `443/444/445`. They retained
+copied owner id `0x727`, were primary-used (`used=1/0`), non-pending and
+ownerless in the complete allocated-FgAnimData census. The current inactive
+rifle was a different live object, runtime id `0x4CD`.
+
+The authoritative game-object registry lookup for `0x727` returned no handle
+or object (`registry=0/0`) for all three entries. This is direct support for W3:
+the visible geometry belongs to a destroyed or replaced ProcessWeapon, while
+its three FgInstances survived. It also matches the user's independent visual
+description that the rifle is not held by the animated hands and instead looks
+like a separate object glued to Nadine.
+
+The run is not promoted to CONFIRMED because the local-Nadine copy visually
+froze immediately after loading. Calling
+`ResolveGameObjectHandleById 0x140A989C0` from the render/cull hook is therefore
+REJECTED as a runtime technique even though it returned one complete
+discriminator line. Both processes were closed, and build `gv` removes the
+registry call and all associated DrawControl traversal. Do not call the
+game-object registry from `CullFgLods::Spawn` again.
+
+The next fix must address the leaked owner lifecycle or retire the exact
+ownerless FgInstances through a proven FgDrawMgr path. Do not alter the current
+rifle (`0x4CD`) and do not hide geometry solely by art id: the positive
+criterion must retain the exact conjunction already observed (role B, current
+Nadine rifle absent, same three LOD geometries, foreign owner id, no allocated
+FgAnimData owner, primary-used and non-pending).
