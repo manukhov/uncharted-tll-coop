@@ -51,11 +51,16 @@
       visible arc, but rejected per-frame `set_position=true`: the remote grenade
       passes through walls and ground because those writes bypass collision. The
       generic relayed `0x100/0x400` input also produced no remote throw animation.
-      The transform-pinning experiment is parked. Current static work is to trace
-      the exact launch vector/scalar from `EmitGrenadeProjectile 0x14154B3B0`
-      through `NetEventEmitGrenade` / `ProcessSpawnInfo` and seed the native
-      physics descriptor before materialization; separately resolve the exact
-      grenade action command/edge and `CheckActionExclusions 0x140E2ADF0`.
+      The transform-pinning experiment is parked. Static quota for `he` is met:
+      `EmitProjectileProcess 0x14154AAE0` stores the local launch vector at shared
+      descriptor `+0x50`, while `NetEventEmitGrenade_Execute 0x140BE63A0` reaches
+      that same descriptor/materializer without filling it. The exact authored
+      input is `grenade-arc` hash `0x45ABCE38`; its release starts
+      `grenade-starting-throw`, and marker callsite `0x14040D852` emits the
+      projectile. Build `he` seeds descriptor `+0x50`, relays the exact command
+      boolean in StatePacket v11, and suppresses only the puppet marker's duplicate
+      projectile. Runtime prediction is recorded in `COOP_STATUS.md`; next step is
+      a deliberate hold/release throw into ground/wall on two fresh copies.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /

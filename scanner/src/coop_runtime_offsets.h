@@ -314,6 +314,7 @@ constexpr std::uintptr_t kPlayerLookAtUpdateIkRva = 0xEDA680;     // vtable+0x38
 // based prologue (trampoline-safe): 40 53 56 57 41 54 41 55 41 56 41 57 (12 bytes).
 constexpr std::uintptr_t kProjectileGrenadeInitRva = 0x1533560;
 constexpr std::uintptr_t kEmitGrenadeProjectileRva = 0x154B3B0;
+constexpr std::uintptr_t kEmitGrenadeProjectileCallsiteRva = 0x40D852;
 // NetEventEmitGrenade is the native receiver-side spawn recipe. Its Execute
 // builds ProcessSpawnInfo and drives the descriptor/process materializer.
 constexpr std::uintptr_t kNetEventEmitGrenadeDefaultCtorRva = 0xBE5C80;

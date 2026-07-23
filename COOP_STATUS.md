@@ -8745,3 +8745,86 @@ physics launch input before materialization, so Havok owns the flight and
 contacts. In parallel, the exact grenade action command/edge and its exclusion
 gate must be resolved independently; animation is not inferred from projectile
 movement.
+
+### 2026-07-23 STATIC: native descriptor velocity and exact `grenade-arc` action (`he`)
+
+The `hc` result splits the remaining work into two independently falsifiable
+problems: native physics launch and authored Player throw animation.
+
+For launch, the competing candidates are **P1:** the GRNE payload already carries
+a complete launch basis but Execute copies it to the wrong place; **P2:** the
+network Execute and local throw use unrelated materializers; **P3:** the launch
+vector belongs to the shared process-spawn descriptor and the GRNE Execute omits
+it; **P4:** the previously suspected `ProjectileGrenade+0x6F4` is a velocity or
+speed scalar. Four independent evidence types select P3:
+
+1. Dataflow in `EmitGrenadeProjectile 0x14154B3B0` produces the finite launch
+   vector and passes it as R9 to `EmitProjectileProcess 0x14154AAE0`. The latter
+   copies the complete 16-byte vector to its descriptor at `+0x50`
+   (`0x14154ACCB..0x14154ACD4`) before materialization.
+2. The network `NetEventEmitGrenade_Execute 0x140BE63A0` builds the same
+   descriptor and gives it as argument 5 to
+   `InitializeSelectorBackedProcessSpawnPacket 0x1417C32A0`; that initializer
+   stores it at packet `+0x28`. Thus local and network routes converge on one
+   process-spawn contract, rejecting P2.
+3. `NetEventEmitGrenade_BuildFromProjectile 0x140BE5D30` copies event `+0x30`
+   from `BoundTransform_GetTranslationWs_A`: it is a 16-byte world translation.
+   Execute converts exactly that translation into the root-relative spawn
+   transform but never writes descriptor `+0x50`. This rejects P1 and corrects
+   the older archive interpretation of event `+0x30` as a full launch basis.
+4. A complete member-reference audit of grenade `+0x6F4` shows it repeatedly
+   passed as an ID to `ResolveOrCreateKnowledgeRegistryEntryById`; the GRNE
+   builder copies that ID to event `+0x40`. It is registry identity, not launch
+   speed, rejecting P4.
+
+Build `he` therefore hooks only the shared packet initializer, gates on the exact
+engine hash of selector `NetGrenade` and the bounded peer-GRNE execution flag,
+and seeds descriptor `+0x50` with the already relayed launch vector before the
+native materializer runs. It removes all post-spawn raw position/velocity writes:
+Havok must own integration and contacts.
+
+For animation, the competing candidates are **A1:** physical button masks
+`0x100/0x400` should be sufficient; **A2:** `CheckActionExclusions
+0x140E2ADF0` is the missing grenade-entry gate; **A3:** the exact command result
+`grenade-arc` must be relayed through the remote Player's native controller;
+**A4:** animation must be manually dispatched. Four independent evidence types
+select A3:
+
+1. `PlayerGrenadeController_UpdateStateAndCommitThrow 0x140E21310`, states 1/2,
+   queries `PlayerInputCommandState_IsCommandActive(owner+0x39A0,
+   0x45ABCE38, 0)` at `0x140E218DD` and `0x140E21A8F`. The command hash resolves
+   to literal `grenade-arc`; guessed physical masks are below this semantic
+   boundary and failed in `hc`, rejecting A1.
+2. Its true path updates grenade aim, while the true-to-false release calls
+   `PlayerGrenadeController_ReleaseArcAndAdvanceThrow 0x140E21270` and
+   `PlayerGrenadeController_StartThrowAction 0x140E20050`. The latter creates
+   authored action `grenade-starting-throw` (`0x6A1381B4`), dispatches it at
+   `0x140E2054F`, and enters state 8. Native command replay therefore supplies
+   the full authored animation, rejecting A4.
+3. `PlayerGrenadeAnimationMarkerHandler 0x1404885C0` independently handles marker
+   `throw-grenade` (`0x6333DA76`) and reaches the sole projectile callsite
+   `0x14040D852 -> EmitGrenadeProjectile`. Animation and projectile creation are
+   distinct phases of the same authored action.
+4. `PlayerFireController_CheckActionExclusions 0x140E2ADF0` only excludes gun
+   fire while grenade action is active; it is not the grenade-entry consumer.
+   This rejects A2.
+
+StatePacket v11 transmits the sender's exact native boolean result for
+`grenade-arc`. The existing puppet-only Joypad command hook returns it only for
+the retained remote Player. On the relayed release edge, build `he` allows the
+authored action and suppresses only puppet-owned callsite `0x14040D852` for a
+bounded 2.5-second window, so animation remains visible while the authoritative
+GRNE event owns exactly one projectile.
+
+**Falsifiable prediction before runtime:** holding and releasing one grenade
+must produce sender markers `GRENADE-ARC-SEND active=1` then `active=0`; the
+receiver must produce matching `GRENADE-ARC-COMMAND`, exactly one
+`GRENADE-ANIM-SPAWN-SUPPRESS`, and one `GRENADE-NATIVE-VELOCITY`. Visually, the
+remote Player must perform the authored throw and exactly one remote grenade must
+follow the relayed launch direction under native collision, stop/bounce on
+ground or walls, and explode at its physical landing point. A native-velocity
+marker followed by texture pass-through falsifies descriptor `+0x50`; no marker
+falsifies selector/Execute reachability; command transitions without animation
+falsify A3 or identify a later action gate; two grenades falsify the marker
+suppression boundary. Any crash or unrelated Player/weapon regression rejects
+the build.

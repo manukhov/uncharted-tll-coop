@@ -8,6 +8,45 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-23: grenade native launch descriptor and authored action ---
+    0x14154B3B0: (
+        "EmitGrenadeProjectile",
+        "Builds the finite grenade launch vector and passes it as R9 to "
+        "EmitProjectileProcess. The authored throw-grenade animation marker "
+        "reaches its sole Player projectile callsite at 0x14040D852.",
+    ),
+    0x14154AAE0: (
+        "EmitProjectileProcess",
+        "Exact projectile-process.cpp source assertion. Copies the validated "
+        "16-byte R9 launch vector into the shared process-spawn descriptor at "
+        "+0x50 (0x14154ACCB..0x14154ACD4) before materialization.",
+    ),
+    0x140E21310: (
+        "PlayerGrenadeController_UpdateStateAndCommitThrow",
+        "Core grenade controller update. States 1/2 query semantic command "
+        "grenade-arc (0x45ABCE38) through owner+0x39A0; release advances into "
+        "the authored grenade-starting-throw action.",
+    ),
+    0x140E21270: (
+        "PlayerGrenadeController_ReleaseArcAndAdvanceThrow",
+        "Release path reached when grenade-arc becomes false. Clears the arc "
+        "phase and calls PlayerGrenadeController_StartThrowAction.",
+    ),
+    0x140E20050: (
+        "PlayerGrenadeController_StartThrowAction",
+        "Creates authored grenade-starting-throw action 0x6A1381B4, dispatches "
+        "it at 0x140E2054F and advances the grenade controller to state 8.",
+    ),
+    0x1404885C0: (
+        "PlayerGrenadeAnimationMarkerHandler",
+        "Handles authored animation markers including throw-grenade "
+        "0x6333DA76, then calls Player_EmitGrenadeFromThrowMarker.",
+    ),
+    0x14040CEF0: (
+        "Player_EmitGrenadeFromThrowMarker",
+        "Player-side animation marker continuation whose sole projectile "
+        "callsite 0x14040D852 invokes EmitGrenadeProjectile.",
+    ),
     # --- 2026-07-22: anim-overlay-set runtime consumer and layout ---
     0x140516230: (
         "AnimationDatabase_ResolveClipWithOverlays",
