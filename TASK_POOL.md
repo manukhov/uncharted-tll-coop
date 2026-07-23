@@ -114,10 +114,16 @@
       setter. **RUNTIME CONFIRMED:** opposite-direction Chloe throw showed local
       slot 0 ProcessWeapon art `0x0B8BD6D6`, ammo `3+0`, while every puppet
       record 0..5 remained zero through state 1. K3 is rejected; prior Nadine
-      and current Chloe results prove symmetric K1. Next: resolve a duplicate-
-      safe lookup/factory on the puppet's own PlayerWeaponController, relay art
-      and count, then bind only that local ProcessWeapon through `0x140E17720`.
-      Never copy sender pointers across processes.
+      and current Chloe results prove symmetric K1. **STATIC `hk`:** StatePacket
+      v12 relays only selected art/slot/total. After successful stock StartArc
+      (which clears `controller+0x148` before writing state 1), the receiver
+      reuses an exact-art ProcessWeapon found through controller vtable `+0xB0`
+      or creates exactly one through native `+0x130` only when manager slot 2 is
+      empty, then binds through `0x140E17720`. GiveWeapon, forged cross-process
+      handles and occupied-slot replacement are rejected. Test the written
+      L1/L2/L3/L4 prediction: one valid `GRENADE-BIND`, no duplicate on the next
+      press, release-gate crossing, authored marker/animation and one native
+      collision-safe projectile.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /

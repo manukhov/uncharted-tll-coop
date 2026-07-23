@@ -213,6 +213,7 @@ std::atomic<int> g_grenade_scheduler_command_last{-1};
 std::atomic<int> g_grenade_state1_command_last{-1};
 std::atomic<int> g_grenade_state2_command_last{-1};
 std::atomic<int> g_grenade_can_start_last{-1};
+std::atomic<bool> g_peer_grenade_bind_attempted{false};
 // Cold-install diagnostics for the scoped grenade relay. These remain atomic
 // and allocation-free so the VEH can report the last completed stage even when
 // the process faults while every other game thread is suspended.
@@ -1324,6 +1325,7 @@ void apply_puppet_sustained_aim_input(void* puppet);
 void force_puppet_ads_flag(void* puppet, bool active);
 bool safe_request_gun_state(void* player, int desired_state);
 int find_weapon_slot_by_art_id(void* player, std::uint32_t art_id);
+void* get_weapon_from_slot(void* player, int slot);
 int resolve_give_target_slot(std::uint32_t art, int packet_slot);
 void dump_player_weapon_slots(const char* tag, void* player);
 void materialize_screen1_camera_once();
@@ -2199,12 +2201,15 @@ bool seh_read_fast_grenade_controller(
             weapon.valid = true;
             weapon.weapon_vtable =
                 *reinterpret_cast<void**>(weapon.weapon);
-            weapon.art_id = *reinterpret_cast<std::uint32_t*>(
-                static_cast<std::byte*>(weapon.weapon) + 0x860);
-            weapon.magazine = *reinterpret_cast<std::int16_t*>(
-                static_cast<std::byte*>(weapon.weapon) + 0x900);
-            weapon.reserve = *reinterpret_cast<std::int16_t*>(
-                static_cast<std::byte*>(weapon.weapon) + 0x902);
+            if (reinterpret_cast<std::uintptr_t>(weapon.weapon_vtable) ==
+                g_module + kProcessWeaponVtableRva) {
+                weapon.art_id = *reinterpret_cast<std::uint32_t*>(
+                    static_cast<std::byte*>(weapon.weapon) + 0x860);
+                weapon.magazine = *reinterpret_cast<std::int16_t*>(
+                    static_cast<std::byte*>(weapon.weapon) + 0x900);
+                weapon.reserve = *reinterpret_cast<std::int16_t*>(
+                    static_cast<std::byte*>(weapon.weapon) + 0x902);
+            }
         }
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -2260,6 +2265,184 @@ void log_peer_grenade_controller_state(
     const char* stage, bool value, std::uint32_t sequence) {
     log_grenade_controller_state(
         retained_player_object(1), "peer", stage, value, sequence);
+}
+
+bool ensure_puppet_grenade_weapon_binding(
+    void* puppet, void* grenade_controller, const coop::StatePacket& peer) {
+    if (puppet == nullptr || grenade_controller == nullptr ||
+        peer.grenade_art_id == 0 || peer.grenade_total_ammo <= 0 ||
+        g_module == 0) {
+        return false;
+    }
+
+    FastGrenadeControllerSnapshot before{};
+    if (seh_read_fast_grenade_controller(puppet, &before) &&
+        before.slot < before.weapons.size()) {
+        const auto& selected = before.weapons[before.slot];
+        if (selected.valid &&
+            reinterpret_cast<std::uintptr_t>(selected.weapon_vtable) ==
+                g_module + kProcessWeaponVtableRva &&
+            selected.art_id == peer.grenade_art_id &&
+            static_cast<int>(selected.magazine) +
+                    static_cast<int>(selected.reserve) >
+                0) {
+            return true;
+        }
+    }
+
+    int existing_slot =
+        find_weapon_slot_by_art_id(puppet, peer.grenade_art_id);
+    void* weapon =
+        existing_slot >= 0 ? get_weapon_from_slot(puppet, existing_slot)
+                           : nullptr;
+    bool created = false;
+    bool bound = false;
+    bool faulted = false;
+    bool slot_two_occupied = false;
+    bool art_definition_valid = false;
+    bool weapon_type_valid = false;
+    int art_grenade_slot = -1;
+    int total_before_bind = -1;
+
+    __try {
+        using GetRegistryFunction = void*(__fastcall*)();
+        using LookupRecordFunction =
+            void*(__fastcall*)(void*, std::uint32_t);
+        void* const registry = reinterpret_cast<GetRegistryFunction>(
+            g_module + kGetCachedWeaponArtDefsHashRegistryRva)();
+        void* const art_definition =
+            registry != nullptr
+                ? reinterpret_cast<LookupRecordFunction>(
+                      g_module + kLookupRegistryRecordPointerByIdRva)(
+                      registry, peer.grenade_art_id)
+                : nullptr;
+        if (art_definition != nullptr &&
+            readable_bytes(
+                static_cast<std::byte*>(art_definition) + 0xC) >=
+                sizeof(std::int8_t)) {
+            art_grenade_slot =
+                *reinterpret_cast<const std::int8_t*>(
+                    static_cast<const std::byte*>(art_definition) + 0xC);
+            art_definition_valid =
+                art_grenade_slot >= 0 && art_grenade_slot < 6;
+        }
+
+        auto* const player_bytes = static_cast<std::byte*>(puppet);
+        void* const weapon_controller =
+            *reinterpret_cast<void**>(player_bytes + 0x1D88);
+        const bool weapon_controller_valid =
+            weapon_controller != nullptr &&
+            *reinterpret_cast<void**>(weapon_controller) ==
+                reinterpret_cast<void*>(
+                    g_module + kPlayerWeaponControllerVtableRva);
+
+        if (art_definition_valid && weapon_controller_valid &&
+            weapon == nullptr) {
+            slot_two_occupied =
+                get_weapon_from_slot(puppet, 2) != nullptr;
+            if (!slot_two_occupied) {
+                auto** const weapon_vtable =
+                    *reinterpret_cast<void***>(weapon_controller);
+                using CreateWeaponFunction = void*(__fastcall*)(
+                    void*, std::uint32_t, std::int32_t, int, char,
+                    std::uint8_t, std::int16_t, std::int16_t, void*, char);
+                const auto create_weapon =
+                    reinterpret_cast<CreateWeaponFunction>(
+                        weapon_vtable[0x130 / sizeof(void*)]);
+                if (reinterpret_cast<std::uintptr_t>(create_weapon) ==
+                    g_module +
+                        kPlayerWeaponControllerCreateAndAddWeaponRva) {
+                    weapon = create_weapon(
+                        weapon_controller, peer.grenade_art_id,
+                        peer.grenade_total_ammo, 2, 0, 0, -1, -1, nullptr,
+                        0);
+                    created = weapon != nullptr;
+                }
+            }
+        }
+
+        if (weapon != nullptr) {
+            weapon_type_valid =
+                *reinterpret_cast<void**>(weapon) ==
+                    reinterpret_cast<void*>(
+                        g_module + kProcessWeaponVtableRva) &&
+                *reinterpret_cast<std::uint32_t*>(
+                    static_cast<std::byte*>(weapon) + 0x860) ==
+                    peer.grenade_art_id;
+        }
+
+        if (art_definition_valid && weapon_type_valid) {
+            using GetTotalAmmoFunction = int(__fastcall*)(void*);
+            using InitializeAmmoFunction =
+                void(__fastcall*)(void*, std::int32_t);
+            const auto get_total_ammo =
+                reinterpret_cast<GetTotalAmmoFunction>(
+                    g_module + kProcessWeaponGetTotalAmmoRva);
+            total_before_bind = get_total_ammo(weapon);
+            if (total_before_bind <= 0) {
+                reinterpret_cast<InitializeAmmoFunction>(
+                    g_module +
+                    kProcessWeaponInitializeAmmoFromTotalRva)(
+                    weapon, peer.grenade_total_ammo);
+                total_before_bind = get_total_ammo(weapon);
+            }
+
+            auto** const grenade_vtable =
+                *reinterpret_cast<void***>(grenade_controller);
+            using BindGrenadeWeaponFunction =
+                std::int64_t(__fastcall*)(void*, void*);
+            const auto bind_weapon =
+                reinterpret_cast<BindGrenadeWeaponFunction>(
+                    grenade_vtable[0xF0 / sizeof(void*)]);
+            if (total_before_bind > 0 &&
+                reinterpret_cast<std::uintptr_t>(bind_weapon) ==
+                    g_module +
+                        kPlayerGrenadeControllerBindWeaponSlotRva) {
+                bind_weapon(grenade_controller, weapon);
+                bound = true;
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        faulted = true;
+    }
+
+    FastGrenadeControllerSnapshot after{};
+    const bool read_after =
+        seh_read_fast_grenade_controller(puppet, &after);
+    bool selected_valid = false;
+    int selected_total = 0;
+    std::uint32_t selected_art = 0;
+    if (read_after && after.slot < after.weapons.size()) {
+        const auto& selected = after.weapons[after.slot];
+        selected_valid =
+            selected.valid &&
+            reinterpret_cast<std::uintptr_t>(selected.weapon_vtable) ==
+                g_module + kProcessWeaponVtableRva;
+        selected_total =
+            static_cast<int>(selected.magazine) +
+            static_cast<int>(selected.reserve);
+        selected_art = selected.art_id;
+    }
+
+    char line[320]{};
+    sprintf_s(
+        line,
+        "GRENADE-BIND art=0x%08x ammo=%d peerSlot=%u existingSlot=%d "
+        "artSlot=%d artValid=%d slot2Occupied=%d created=%d typeValid=%d "
+        "preBindTotal=%d bound=%d fault=%d activeSlot=%u "
+        "selectedValid=%d selectedArt=0x%08x selectedTotal=%d",
+        peer.grenade_art_id, static_cast<int>(peer.grenade_total_ammo),
+        static_cast<unsigned>(peer.grenade_selected_slot), existing_slot,
+        art_grenade_slot, art_definition_valid ? 1 : 0,
+        slot_two_occupied ? 1 : 0, created ? 1 : 0,
+        weapon_type_valid ? 1 : 0, total_before_bind,
+        bound ? 1 : 0, faulted ? 1 : 0,
+        read_after ? after.slot : 0xFFFFFFFFu, selected_valid ? 1 : 0,
+        selected_art, selected_total);
+    boot_log_line(line);
+
+    return !faulted && bound && selected_valid &&
+           selected_art == peer.grenade_art_id && selected_total > 0;
 }
 
 char __fastcall hooked_player_grenade_command_callsite(
@@ -2335,6 +2518,8 @@ char __fastcall hooked_player_grenade_command_callsite(
         active, std::memory_order_acq_rel);
     if (!was_active && active) {
         g_grenade_can_start_last.store(-1, std::memory_order_release);
+        g_peer_grenade_bind_attempted.store(
+            false, std::memory_order_release);
     }
     if (was_active && !active) {
         g_peer_grenade_release_until_ms.store(
@@ -2399,6 +2584,15 @@ std::int64_t __fastcall hooked_fast_grenade_start(void* controller) {
             ? g_original_fast_grenade_start(controller)
             : 0;
     if (is_peer) {
+        FastGrenadeControllerSnapshot after_start{};
+        if (seh_read_fast_grenade_controller(
+                puppet, &after_start) &&
+            after_start.state == 1 &&
+            !g_peer_grenade_bind_attempted.exchange(
+                true, std::memory_order_acq_rel)) {
+            ensure_puppet_grenade_weapon_binding(
+                puppet, controller, peer);
+        }
         log_peer_grenade_controller_state(
             "start-exit", true, peer.sequence);
     }
@@ -15392,6 +15586,25 @@ void send_local_player_state() {
     const bool grenade_arc_active =
         safe_query_local_grenade_arc(player_joypad_object(local_obj));
     pkt.grenade_arc_active = grenade_arc_active ? 1 : 0;
+    FastGrenadeControllerSnapshot local_grenade{};
+    if (seh_read_fast_grenade_controller(local_obj, &local_grenade) &&
+        local_grenade.slot < local_grenade.weapons.size()) {
+        const auto& selected =
+            local_grenade.weapons[local_grenade.slot];
+        if (selected.valid &&
+            reinterpret_cast<std::uintptr_t>(selected.weapon_vtable) ==
+                g_module + kProcessWeaponVtableRva &&
+            selected.art_id != 0) {
+            pkt.grenade_selected_slot =
+                static_cast<std::uint8_t>(local_grenade.slot);
+            pkt.grenade_art_id = selected.art_id;
+            const int total =
+                static_cast<int>(selected.magazine) +
+                static_cast<int>(selected.reserve);
+            pkt.grenade_total_ammo = static_cast<std::int16_t>(
+                std::clamp(total, 0, 32767));
+        }
+    }
     static bool last_grenade_arc_active = false;
     if (last_grenade_arc_active != grenade_arc_active) {
         last_grenade_arc_active = grenade_arc_active;
@@ -37571,8 +37784,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-23hj "
-        "(instrumented scoped grenade relay and authored native projectile)");
+        "TLL co-op runtime init 2026-07-23hk "
+        "(post-StartArc owner-local grenade ProcessWeapon create/bind)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

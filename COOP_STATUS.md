@@ -9288,3 +9288,65 @@ through its own `PlayerWeaponController`, then bind that local object through
 Before writing this, resolve the PlayerWeaponController factory signature and
 prove whether a matching unbound ProcessWeapon can already exist, to avoid
 duplicates and HUD/holster side effects.
+
+### 2026-07-23 STATIC: post-StartArc owner-local grenade factory/bind repair (`hk`)
+
+The final sentence above is corrected: the bind must occur **after** the
+successful stock `StartArc`, not before it. The repair now has four independent
+static evidence types and explicitly rejects the broader inventory paths.
+
+1. The native loadout caller `0x140E17070` invokes
+   `PlayerWeaponController` vtable `+0x130` at `0x140E176C1` with
+   `(art, totalAmmo, managerSlot=2, false, false, -1, -1, null, false)`;
+   a non-null result immediately enters FastGrenade vtable `+0xF0` /
+   `PlayerGrenadeController_BindGrenadeWeaponSlot 0x140E17720`.
+2. The concrete factory
+   `PlayerWeaponController_CreateAndAddWeapon 0x1410A8920` resolves the
+   `WeaponArtDef`, constructs a ProcessWeapon, routes the supplied total through
+   `ProcessWeapon_InitializeAmmoFromTotal 0x141517C90`, then writes its weak
+   handle into the caller-supplied manager slot. It performs no duplicate
+   lookup and exposes no bounds check for that slot.
+3. `PlayerWeaponController_GetWeaponBySlot 0x1410A1F90` (vtable `+0xB0`)
+   validates the manager weak record and generation. The repair first scans
+   live slots for exact ProcessWeapon vtable `0x142A9BF48` plus the transmitted
+   art id. It creates only when no match exists and native manager slot 2 is
+   empty. `GiveWeapon +0x158` is deliberately rejected because it has broader
+   HUD/class/holster side effects; forging a FastGrenade weak pair is rejected
+   because it skips Bind's registry and controller side effects.
+4. `PlayerGrenadeController_StartArc 0x140E19600` clears 16 bytes at
+   controller `+0x148` while initializing held context, then writes state 1 at
+   `0x140E19745`. Provisioning before the original can therefore be erased.
+   Build `hk` calls the original first and repairs exactly once per relayed
+   press only when the resulting controller state is 1.
+
+StatePacket v12 transmits only selected grenade art, selected slot and positive
+total ammo; it never transmits an object or weak-handle pointer. The receiver
+re-resolves the retained puppet, its current `PlayerWeaponController`, the art
+definition and all vtable targets on the game thread. An existing exact-art
+ProcessWeapon with empty ammo is replenished through the native initializer,
+not raw field writes. A different live object in manager slot 2 aborts the
+repair; no object is detached, overwritten or killed.
+
+Competing outcomes are now bounded. **L1:** an exact-art local ProcessWeapon
+already exists and is reused (`existingSlot>=0`, `created=0`). **L2:** it is
+absent, slot 2 is empty, and exactly one object is created and bound
+(`existingSlot=-1`, `slot2Occupied=0`, `created=1`). **L3:** art lookup, exact
+controller/type validation, empty-slot contract, creation or Bind fails; the
+single `GRENADE-BIND` line identifies that boundary and no direct throw action
+is invoked. **L4:** a valid selected record with positive ammo crosses the
+release gate but the authored marker is still absent, proving a downstream
+action/animation defect independent of inventory ownership.
+
+**Falsifiable `hk` prediction before runtime:** the sender reports art
+`0x0B8BD6D6`, selected slot 0 and total 3. After the receiver's successful
+StartArc, exactly one `GRENADE-BIND` line must report art slot 0, valid exact
+type, positive `preBindTotal`, `bound=1`, active slot 0, matching selected art
+and positive selected total. A second press must reuse the same object rather
+than create another. On release,
+`PlayerGrenadeController_HasUsableSelectedGrenade 0x140E20850` must no longer
+fall straight back to state 0: the positive path is the authored
+`GRENADE-ANIM-SPAWN-NATIVE`, exactly one native `ProjectileGrenade::Init`,
+custom GRNE suppression, visible throw animation, collision-safe native flight
+and natural fuse explosion. A crash, occupied slot, failed validation, missing
+selected record, second created object, or unchanged delayed origin fallback
+falsifies the corresponding L outcome. The Release DLL builds successfully.

@@ -58,8 +58,10 @@ FUNCTIONS = {
     0x140E19600: (
         "PlayerGrenadeController_StartArc",
         "FastGrenadeController vtable +0x40. Rechecks CanStart, clears and "
-        "initializes held-grenade/context state, resolves settings and "
-        "trajectory, then writes controller state 1 at 0x140E19745.",
+        "initializes held-grenade/context state (including the 16-byte record "
+        "at controller+0x148), resolves settings and trajectory, then writes "
+        "controller state 1 at 0x140E19745. A missing grenade ProcessWeapon "
+        "binding must therefore be repaired after this function returns.",
     ),
     0x140E21310: (
         "PlayerGrenadeController_UpdateStateAndCommitThrow",
@@ -88,7 +90,9 @@ FUNCTIONS = {
         "PlayerGrenadeController_BindGrenadeWeaponSlot",
         "FastGrenadeController vtable +0xF0. Uses the weapon art registry slot "
         "index and copies the ProcessWeapon weak handle from weapon+0xA8/+0xBC "
-        "into one of six controller records at +0x128+slot*0x10.",
+        "into one of six controller records at +0x128+slot*0x10, then performs "
+        "the controller registry/vtable binding side effects. Do not forge the "
+        "weak record directly.",
     ),
     0x140E1A9C0: (
         "PlayerGrenadeController_GetGrenadeWeaponBySlot",
@@ -1171,14 +1175,12 @@ FUNCTIONS = {
     ),
     0x1410A8920: (
         "PlayerWeaponController_CreateAndAddWeapon",
-        "vtable +0x130. Creates the weapon object and inserts it into a manager "
-        "SLOT. Resolves the WeaponArtDef by art (GetCachedWeaponArtDefsHashRegistry "
-        "+ LookupRegistryRecordPointerById); returns 0 (no create) if the def is "
-        "absent. The destination slot/class comes from the def record (*v16 class "
-        "hash, compared vs rightHand/ProcessShield/rocket-launcher/... branches). "
-        "ROOT of the pickup-display fountain: a relayed rifle (M-30 0x3019CBEE) "
-        "lands in manager slot 1 (secondary), colliding with the pistol - needs "
-        "a remove/swap, not an additive give.",
+        "vtable +0x130. Resolves WeaponArtDef by art, creates ProcessWeapon, "
+        "initializes live ammo from the supplied total, and writes its weak "
+        "handle to the caller-supplied manager slot without a duplicate lookup "
+        "or visible slot bounds check. The stock grenade loadout call supplies "
+        "manager slot 2 and trailing args false,false,-1,-1,null,false. Reuse an "
+        "exact-art live object first and abort if slot 2 contains another object.",
     ),
     0x1410A8670: (
         "PlayerWeaponController_KillWeaponsInClasses_1_17",
@@ -7929,6 +7931,13 @@ FUNCTIONS = {
         "PlayerWeaponController_GetWeaponBySlot",
         "Controller vtable slot +0xB0. Bounds slot to 0..22 and resolves the "
         "live weapon process handle; ProcessWeapon authored id is at +0x860.",
+    ),
+    0x1410A77E0: (
+        "PlayerWeaponController_DetachWeaponBySlot",
+        "Controller vtable +0x188. Resolves the live weapon by slot, updates "
+        "controller state, clears the manager weak record and returns the "
+        "detached object without killing it. Native removal wrappers call this "
+        "and then ProcessKillTree; never overwrite an occupied live slot.",
     ),
     0x1410A1C10: (
         "PlayerWeaponController_SwitchToWeapon",

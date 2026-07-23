@@ -652,6 +652,15 @@ constexpr std::uintptr_t kTransformComposeRva = 0x01998F0;
 // RTTI-backed ProcessWeapon vtable. Runtime exact-parent census identifies
 // pistol/rifle/grenade children by this class and authored art at +0x860.
 constexpr std::uintptr_t kProcessWeaponVtableRva = 0x2A9BF48;
+// PlayerWeaponController exact RTTI vtable and the two stock grenade-loadout
+// boundaries used by FastGrenadeController. CreateAndAddWeapon is vtable +0x130;
+// BindGrenadeWeaponSlot is FastGrenadeController vtable +0xF0.
+constexpr std::uintptr_t kPlayerWeaponControllerVtableRva = 0x2A47F90;
+constexpr std::uintptr_t kPlayerWeaponControllerCreateAndAddWeaponRva =
+    0x10A8920;
+constexpr std::uintptr_t kPlayerGrenadeControllerBindWeaponSlotRva = 0x0E17720;
+constexpr std::uintptr_t kProcessWeaponGetTotalAmmoRva = 0x1103850;
+constexpr std::uintptr_t kProcessWeaponInitializeAmmoFromTotalRva = 0x1517C90;
 // ProcessWeapon_Initialize 0x14150F640 calls ProcessWeaponBase::Init exactly
 // once at 0x14150F6AF. This cold boundary still owns the original attach-init
 // descriptor (context+0x28) before later draw/put actions can rewrite it.
