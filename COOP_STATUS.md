@@ -8828,3 +8828,37 @@ falsifies selector/Execute reachability; command transitions without animation
 falsify A3 or identify a later action gate; two grenades falsify the marker
 suppression boundary. Any crash or unrelated Player/weapon regression rejects
 the build.
+
+### 2026-07-23 RUNTIME REJECTED: `he` reaches both proposed boundaries but neither is sufficient
+
+Both copies loaded build `2026-07-23he` and remained stable. The user tested
+multiple throws and reported two exact failures: the remote Player still had no
+throw animation, and the remote grenade no longer travelled at all but remained
+at its spawn point.
+
+The bounded markers make this result conclusive:
+
+- sender `GRENADE-ARC-SEND` and receiver `GRENADE-ARC-COMMAND` both transitioned
+  `1 -> 0` on sequences `265 -> 413`, `707 -> 800`, and `938 -> 1051`;
+- receiver `GRENADE-NATIVE-VELOCITY` fired for the same throws with non-zero
+  vectors, including `(-7.948, 0.549, 9.016)` and
+  `(-11.630, 0.176, 2.647)`;
+- no `GRENADE-ANIM-SPAWN-SUPPRESS` marker appeared, proving that the remote
+  authored action never reached its `throw-grenade` projectile marker.
+
+This **rejects P3 sufficiency** as implemented: writing the relayed vector to the
+descriptor at `+0x50` inside
+`InitializeSelectorBackedProcessSpawnPacket 0x1417C32A0` is reached but does not
+launch the NetGrenade object. The field is either copied/consumed earlier,
+overwritten after this initializer, or belongs only to the local
+`EmitProjectileProcess` selector recipe. The next static pass must follow the
+descriptor from packet `+0x28` to its final materializer and enumerate every
+write/read of `+0x50`; another post-spawn raw-field write is not permitted.
+
+The result also **rejects A3 sufficiency**: returning the exact relayed
+`grenade-arc` boolean from the remote Joypad query is reached, but it does not by
+itself establish the grenade-controller state which owns the authored action.
+The next static pass must trace how a local Player enters controller states 1/2,
+which held-grenade/action fields are initialized before the command query, and
+which owner/controller object the observed remote query actually belongs to.
+Manual animation dispatch and broad input forcing remain rejected.

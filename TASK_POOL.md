@@ -59,8 +59,13 @@
       `grenade-starting-throw`, and marker callsite `0x14040D852` emits the
       projectile. Build `he` seeds descriptor `+0x50`, relays the exact command
       boolean in StatePacket v11, and suppresses only the puppet marker's duplicate
-      projectile. Runtime prediction is recorded in `COOP_STATUS.md`; next step is
-      a deliberate hold/release throw into ground/wall on two fresh copies.
+      projectile. **RUNTIME REJECTED:** all `grenade-arc` transitions and non-zero
+      descriptor writes were reached, but no authored marker followed and the
+      grenade remained at spawn. Therefore both proposed boundaries are real but
+      insufficient. Next static step: follow packet `+0x28` to the final
+      materializer and enumerate descriptor `+0x50` consumers/overwrites; in
+      parallel trace the pre-command transition which enters grenade-controller
+      states 1/2 and initializes the held-grenade/action state.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /
