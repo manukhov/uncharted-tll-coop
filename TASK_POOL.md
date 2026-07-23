@@ -1615,7 +1615,7 @@ Do not reopen these as the first move:
       `pending=0`, `retire=0`, with `owners=0`; the user clarified that the
       rifle is visually glued rather than held by the animated hands. T1/T3
       are REJECTED, and pending-delete queue filtering is not justified.
-- [ ] Trace creation and ownership of the live standalone spawn-rifle LOD set.
+- [x] Trace creation and ownership of the apparent standalone spawn-rifle LOD set.
       Distinguish a direct detach-without-free path (U1), allocation without an
       FgAnimData owner (U2), and a second owner container omitted by the `gs`
       census (U3). Resolve the attach/detach call graph and all primary-used
@@ -1624,6 +1624,9 @@ Do not reopen these as the first move:
       FgAnimData. Normal NotifyMeshUnloaded is also excluded by the observed
       clear `FgInstance+0x18 bit 1`; normal Relink/remove/destruction frees both
       LOD pointers before `AnimMgr_FreeAnimData 0x14177FA70`.
+      SUPERSEDED by the complete `gw` log: the matching geometry belongs to a
+      live remote-Chloe rifle generation and its removal does not affect the
+      local-hand artifact. Do not resume this renderer branch.
 - [x] Build read-only `gu`: resolve the copied owner id through
       `ResolveGameObjectHandleById 0x140A989C0`. Runtime evidence selected W3:
       the three instances carried old id `0x727`, while the current rifle was
@@ -1647,7 +1650,7 @@ Do not reopen these as the first move:
       extremely laggy. The same generation reached many worker-local caches,
       repeating the census/large-array work. Build `gx` leaves the final-cull
       callsite entirely unpatched; do not mutate this boundary again.
-- [ ] Run cold read-only build `gy`. It disables rejected `gm..gw`
+- [x] Run cold read-only build `gy`. It disables rejected `gm..gw`
       attachment/render/cull diagnostics and all old Nadine holster/transform
       probes while retaining the lightweight confirmed cloth observation. The
       only new hook is direct E8 `0x14150F6AF` from
@@ -1657,6 +1660,20 @@ Do not reopen these as the first move:
       `40` means gun_holster. Require no extreme lag, no crash or visual
       regression, and only bounded `NADINE-WEAPON-INIT` rows. Exact I1/I2/I3
       predictions are recorded in `COOP_STATUS.md`.
+      Result: both local and remote Nadine rifles initialize normally at
+      `rightHand` index 16. The local role-B copy alone misses a later holster
+      transition; I2/I3 and a role-B-specific bad init are REJECTED.
+- [x] Test `gz/ha` one-shot stock controller rebind on the cold local-Nadine
+      rifle. `gz`'s no-hand admission was circular; `ha` admitted and verified
+      exact `rightHand 16 -> gun_holster 40` with the same owner and no lag.
+      The rifle nevertheless remained glued in the local view. Both direct
+      attachment APIs are REJECTED as the main-view fix.
+- [ ] Run build `hb`: after 750 ms of the same strict cold-spawn state, invoke
+      `PlayerWeaponController_StartHolsterTransition 0x1410A3EA0` once with the
+      exact slot-zero ProcessWeapon. Keep only the two-callsite holster AnimAction
+      executor probe. Classify B1/B2/B3 from the written prediction in
+      `COOP_STATUS.md`; reject on any repeat, stuck draw-state 5, crash, surprise
+      draw, or unrelated character/weapon regression.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

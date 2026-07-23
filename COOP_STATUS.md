@@ -8561,3 +8561,84 @@ pre-replacement Player/ProcessWeapon generation is now a concrete alternative
 to a view flag. Trace the retained-player replacement and normal
 ProcessWeapon/DrawControl teardown in both directions; do not return to hot
 FgDraw/Cull hooks, which are already rejected and caused the earlier lag.
+
+### 2026-07-23 STATIC CORRECTION: address churn is relocation, and ProcessWeapon has no hidden rifle child
+
+The lifecycle lead from `ha` was resolved without another runtime test. A
+changing raw Player address is not evidence of simultaneous semantic Player
+generations in this engine. `PlayerWeaponController` vtable `0x142A47F90`
+contains `PlayerWeaponController_RelocateOwnerPointers 0x14109DC40` at `+0x10`.
+That callback accepts `(delta, rangeStart, rangeEnd)` and rebases the controller
+owner at `+0x108` and its `PlayerMoveSequencer` at `+0x110` whenever either lies
+inside the moved range. Independently, the weapon/action code stores stable
+`{handle,id}` pairs and resolves the live object through `*(handle+8)`, checking
+the runtime id at object `+0xBC`. The successive raw pointers in the `ha` log
+are therefore compatible with ordinary movable-process relocation. The claim
+that address churn alone identifies a leaked pre-replacement Player drawable is
+STATIC REJECTED.
+
+The apparent ProcessWeapon child candidates were also classified. Fields
+`ProcessWeapon+0x998/+0x9A8` are retained SFX actor handles produced by
+`ProcessWeapon_CreateMuzzleSfxActor 0x14151C030`; the function materializes an
+authored actor at register `muzzle` and publishes `set-register`/`set-pitch`,
+while `0x14150E860` sends their `stop` events. `ProcessWeapon+0xAE0` is the
+separately animated `ProcessWeaponStrap` object. None is a second rifle body or
+a second owner of the three firearm LOD meshes. This rejects the hidden-child
+rifle route; it does not claim that the still-unexplained local presentation is
+the already-rebound inventory drawable.
+
+### 2026-07-23 STATIC: full cold Put transition is the `hb` discriminator
+
+The `ha` result isolates the missing operation more sharply than another
+attachment retry. `PlayerWeaponController_StartHolsterTransition 0x1410A3EA0`
+has no current-slot prerequisite: it removes the old channel-1 weapon actions,
+copies the supplied ProcessWeapon `{handle,id}` into a new
+`PlayerPutGunAwayAction`, enqueues it, and changes controller draw state to 5.
+`PlayerPutGunAwayAction_OnStart 0x141096BB0` then resolves that exact handle
+through `PlayerWeaponHolsterAction_ResolveAndBindAttachPoint 0x141095BD0`,
+stores it at `PlayerWeaponAnimControl+0x30` through vtable `+0xB8`, and requests
+`s_weapon-holster` on `WeaponPartial`.
+
+The animation/prop side is an independent data path, not another spelling of
+the rejected rebind. `PlayerWeaponAnimControl_UpdatePropAnimations
+0x14108DAC0` consumes the active authored prop-animation record, resolves the
+stored ProcessWeapon handle and calls
+`PlayerWeaponAnimControl_PublishPropPlayAnimation 0x14108D780`, which publishes
+`play-animation` directly to that weapon process. Conversely,
+`PlayerHolsterWeaponAnimAction_Execute 0x14108A640` calls the same controller
+rebind first; for a long gun that selects `gun_holster`, so its subsequent
+pistol-only `targSpineProp` guard exits before the
+`targSpinePropAnim` transform/blend handoff. Thus a visible `hb` improvement
+would specifically credit the full Put/prop-animation state, not a stronger
+attachment mutation.
+
+Four independent evidence types meet the runtime quota: the concrete
+controller-to-action call graph; exact handle and state dataflow through
+`PlayerWeaponAnimControl`; the independent `play-animation` publisher into the
+ProcessWeapon; and the runtime contrast that a manual draw/put clears the local
+artifact while `ha`'s verified rebind does not.
+
+The candidates are explicit. **B1:** the cold exact-handle Put creates the
+authored weapon state and clears the local spawn artifact. **B2:** the
+PlayerMove action starts but the legacy-Nadine animation graph never creates
+the `weapon-holster` AnimAction, leaving the image unchanged. **B3:** the
+AnimAction executes and performs only the already-rejected long-gun rebind, so
+a preceding Draw or another local presentation state is required.
+
+Build `hb` waits 750 ms with one stable role-B local-Nadine Player, exact
+slot-zero rifle, `current<0/draw=0`, same resolved owner, `rightHand` selected,
+and both `gun_holster` plus the Player weapon animation/sequencer objects
+present. It then calls the stock StartHolsterTransition exactly once per
+Player/weapon/AttachSystem generation. The only new code hook is the previously
+stable E9/E8 callsite relay around
+`PlayerHolsterWeaponAnimAction_Execute`; rejected renderer, cull and broad
+holster probes remain disabled.
+
+**Falsifiable `hb` prediction:** role B emits exactly one
+`NADINE-LOCAL-RIFLE-HOLSTER-START` with `call=1`,
+`current=-1->-1`, `draw=0->5`, while role A emits none. A following
+`NADINE-HOLSTER-ACTION-EXEC owner=0 look=D27C074F executed=0->1` plus the rifle
+leaving the local hand selects B1. A start row with no executor row and the
+unchanged image selects B2. A reached executor with the rifle still glued
+selects B3. Any repeated start, crash/freeze, controller stuck in transition,
+unexpected draw, or body/pistol/grenade/role-A regression rejects the boundary.

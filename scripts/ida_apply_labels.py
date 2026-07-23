@@ -1290,7 +1290,20 @@ FUNCTIONS = {
     0x1410A3EA0: (
         "PlayerWeaponController_StartHolsterTransition",
         "Called by ApplyWeaponSwitch (vt+0x48) slot==-1 branch on the current "
-        "weapon: the native holster-everything transition.",
+        "weapon. Removes channel-1 weapon actions, enqueues an exact-handle "
+        "PlayerPutGunAwayAction and changes controller draw state to 5.",
+    ),
+    0x14109DA70: (
+        "PlayerWeaponController_AreHolsteredWeaponsHidden",
+        "Controller vtable +0x3A0 getter. Returns the boolean stored at "
+        "controller+0x44D, which selects the long-gun hidden-when-holstered "
+        "knowledge variant.",
+    ),
+    0x14109DC40: (
+        "PlayerWeaponController_RelocateOwnerPointers",
+        "Controller vtable +0x10 relocation callback. Rebases owner Player at "
+        "+0x108 and PlayerMoveSequencer at +0x110 when either pointer lies in "
+        "the engine relocation range.",
     ),
     0x141DE8EC0: (
         "NavCharacter_ApplyAnimationRootTransform",
@@ -7765,6 +7778,13 @@ FUNCTIONS = {
         "ProcessWeapon_Dtor",
         "Destroys ProcessWeapon-owned handles and child state, restores the "
         "ProcessWeaponBase vtable, then delegates to the base destructor.",
+    ),
+    0x14151C030: (
+        "ProcessWeapon_CreateMuzzleSfxActor",
+        "Builds the authored muzzle SFX selector packet, materializes the SFX "
+        "actor, publishes set-register/set-pitch state and returns its retained "
+        "handle. This is the source of ProcessWeapon+0x998/+0x9A8 handles, not "
+        "a secondary rifle drawable.",
     ),
     0x1410F8660: (
         "StringId_FormatDashedPairAndHash",

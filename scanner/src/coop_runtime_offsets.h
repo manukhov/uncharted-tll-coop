@@ -648,6 +648,12 @@ constexpr std::uintptr_t kProcessWeaponBaseInitCallsiteRva = 0x150F6AF;
 // transform into weapon+0x4F0/+0x500.
 constexpr std::uintptr_t kPlayerWeaponControllerRebindWeaponToHolsterRva =
     0x10A9670;
+// Full stock Put transition. It removes the previous channel-1 weapon action,
+// enqueues PlayerPutGunAwayAction with the supplied ProcessWeapon handle and
+// changes controller draw state to 5; unlike the terminal rebind it reaches
+// PlayerWeaponAnimControl and the authored prop-animation path.
+constexpr std::uintptr_t kPlayerWeaponControllerStartHolsterTransitionRva =
+    0x10A3EA0;
 constexpr std::uintptr_t kProcessWeaponSelectExistingOwnerPointVtableSlotRva =
     kProcessWeaponVtableRva + 0x7A8;
 constexpr std::uintptr_t kProcessWeaponUpdateSelectedAttachmentVtableSlotRva =
