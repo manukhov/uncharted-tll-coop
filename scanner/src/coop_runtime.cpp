@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -33219,7 +33220,9 @@ void __fastcall hooked_fgdraw_prepare_instance(
 
 struct NadineRifleCullQueueMatch {
     std::uintptr_t instance = 0;
+    std::uint32_t queue_index = 0xFFFFFFFFu;
     std::uint32_t owner_id = 0;
+    std::uintptr_t geometry = 0;
     std::uint32_t geometry_mask = 0;
     std::uint8_t active = 0;
     std::uint8_t target_lod = 0xFF;
@@ -33253,6 +33256,16 @@ struct NadineRifleCullQueueSnapshot {
     std::uint32_t match_count = 0;
     std::uint32_t target_runtime_id = 0;
     std::array<NadineRifleCullQueueMatch, 12> matches{};
+};
+
+struct NadineRifleCullFilterCache {
+    std::uint64_t generation = 0;
+    bool armed = false;
+    std::uint32_t owner_id = 0;
+    std::array<std::uintptr_t, 3> instances{};
+    std::array<std::uintptr_t, 3> geometries{};
+    std::array<std::uint32_t, 3> pool_indices{};
+    std::array<std::uint32_t, 3> state_flags{};
 };
 
 void seh_resolve_nadine_rifle_cull_queue_owners(
@@ -33536,7 +33549,9 @@ bool seh_capture_nadine_rifle_cull_queue(
                 NadineRifleCullQueueMatch& match =
                     snapshot->matches[snapshot->match_count];
                 match.instance = instance_value;
+                match.queue_index = queue_index;
                 match.owner_id = owner_id;
+                match.geometry = geometry;
                 match.geometry_mask = geometry_mask;
                 match.active = *reinterpret_cast<const std::uint8_t*>(
                     instance_bytes + 0x1A0);
@@ -33548,6 +33563,256 @@ bool seh_capture_nadine_rifle_cull_queue(
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *snapshot = {};
+        return false;
+    }
+}
+
+bool prepare_nadine_rifle_cull_filter(
+    const NadineRifleCullQueueSnapshot& snapshot,
+    std::uint64_t generation, NadineRifleCullFilterCache* cache) {
+    if (cache == nullptr || generation == 0 ||
+        snapshot.target_lod_count != 3 || snapshot.target_mask != 0 ||
+        snapshot.target_active_mask != 0 || snapshot.owner_hits != 0 ||
+        snapshot.geometry_hits != 3 || snapshot.match_count != 3 ||
+        snapshot.target_runtime_id == 0) {
+        return false;
+    }
+
+    NadineRifleCullFilterCache candidate{};
+    candidate.generation = generation;
+    std::uint32_t state_a_count = 0;
+    std::uint32_t state_b_count = 0;
+    for (std::size_t index = 0; index < candidate.instances.size(); ++index) {
+        const NadineRifleCullQueueMatch& match = snapshot.matches[index];
+        if (match.instance == 0 ||
+            match.queue_index >= snapshot.queue_count ||
+            match.owner_id == 0 ||
+            match.owner_id == snapshot.target_runtime_id ||
+            match.geometry_mask != 0x7 ||
+            match.active != 0xFF || match.target_lod != 0xFF ||
+            match.instance_pool_index == 0xFFFFFFFFu ||
+            match.anim_data != 0 || match.anim_owner_matches != 0 ||
+            match.pool_primary_used != 1 ||
+            match.pool_secondary_used != 0 ||
+            match.pool_pending_delete != 0 ||
+            match.instance_retire_flags != 0) {
+            return false;
+        }
+        if (index == 0) {
+            candidate.owner_id = match.owner_id;
+        } else if (match.owner_id != candidate.owner_id) {
+            return false;
+        }
+        for (std::size_t prior = 0; prior < index; ++prior) {
+            if (match.instance == candidate.instances[prior] ||
+                match.instance_pool_index == candidate.pool_indices[prior]) {
+                return false;
+            }
+        }
+        if (match.instance_state_flags == 0x21228A38u) {
+            ++state_a_count;
+        } else if (match.instance_state_flags == 0x21228E38u) {
+            ++state_b_count;
+        } else {
+            return false;
+        }
+        candidate.instances[index] = match.instance;
+        candidate.pool_indices[index] = match.instance_pool_index;
+        candidate.state_flags[index] = match.instance_state_flags;
+        candidate.geometries[index] = match.geometry;
+        if (candidate.geometries[index] == 0) {
+            return false;
+        }
+    }
+    if (state_a_count != 2 || state_b_count != 1) {
+        return false;
+    }
+    candidate.armed = true;
+    *cache = candidate;
+    return true;
+}
+
+bool writable_memory_span(void* base, std::size_t length) {
+    if (base == nullptr || length == 0) {
+        return false;
+    }
+    const std::uintptr_t begin = reinterpret_cast<std::uintptr_t>(base);
+    if (length > UINTPTR_MAX - begin) {
+        return false;
+    }
+    const std::uintptr_t end = begin + length;
+    std::uintptr_t cursor = begin;
+    while (cursor < end) {
+        MEMORY_BASIC_INFORMATION region{};
+        if (VirtualQuery(
+                reinterpret_cast<const void*>(cursor), &region,
+                sizeof(region)) == 0 ||
+            region.State != MEM_COMMIT ||
+            (region.Protect & PAGE_GUARD) != 0) {
+            return false;
+        }
+        const DWORD protection = region.Protect & 0xFF;
+        const bool writable =
+            protection == PAGE_READWRITE ||
+            protection == PAGE_EXECUTE_READWRITE ||
+            protection == PAGE_WRITECOPY ||
+            protection == PAGE_EXECUTE_WRITECOPY;
+        if (!writable) {
+            return false;
+        }
+        const std::uintptr_t region_end =
+            reinterpret_cast<std::uintptr_t>(region.BaseAddress) +
+            region.RegionSize;
+        if (region_end <= cursor) {
+            return false;
+        }
+        cursor = std::min(end, region_end);
+    }
+    return true;
+}
+
+bool seh_revalidate_nadine_rifle_cull_filter(
+    const NadineRifleCullFilterCache& cache) {
+    if (!cache.armed || cache.owner_id == 0) {
+        return false;
+    }
+    __try {
+        auto* const instance_pool = *reinterpret_cast<std::byte**>(
+            g_module + kFgInstancePoolBasePointerRva);
+        const std::uint32_t instance_capacity =
+            *reinterpret_cast<const std::uint32_t*>(
+                g_module + kFgInstancePoolCapacityRva);
+        const auto* const primary_used =
+            reinterpret_cast<const std::uint64_t*>(
+                g_module + kFgInstancePrimaryUsedBitsRva);
+        const auto* const secondary_used =
+            reinterpret_cast<const std::uint64_t*>(
+                g_module + kFgInstanceSecondaryUsedBitsRva);
+        const auto* const pending_delete =
+            reinterpret_cast<const std::uint64_t*>(
+                g_module + kFgInstancePendingDeleteBitsRva);
+        if (instance_pool == nullptr || instance_capacity == 0 ||
+            instance_capacity > 0x10000u) {
+            return false;
+        }
+        for (std::size_t index = 0; index < cache.instances.size(); ++index) {
+            const std::uint32_t pool_index = cache.pool_indices[index];
+            if (pool_index >= instance_capacity ||
+                cache.instances[index] != reinterpret_cast<std::uintptr_t>(
+                    instance_pool +
+                    static_cast<std::size_t>(pool_index) *
+                        kFgInstancePoolStride) ||
+                readable_bytes(
+                    reinterpret_cast<const void*>(cache.instances[index])) <
+                    0x258) {
+                return false;
+            }
+            const auto* const instance =
+                reinterpret_cast<const std::byte*>(cache.instances[index]);
+            const std::uint32_t word_index = pool_index >> 6;
+            const std::uint64_t bit =
+                std::uint64_t{1} << (pool_index & 0x3F);
+            if ((primary_used[word_index] & bit) == 0 ||
+                (secondary_used[word_index] & bit) != 0 ||
+                (pending_delete[word_index] & bit) != 0 ||
+                *reinterpret_cast<const std::uint32_t*>(instance + 0x250) !=
+                    cache.owner_id ||
+                *reinterpret_cast<const std::uintptr_t*>(instance + 0x1B0) !=
+                    cache.geometries[index] ||
+                *reinterpret_cast<const std::uint8_t*>(instance + 0x1A0) !=
+                    0xFF ||
+                *reinterpret_cast<const std::uint32_t*>(
+                    instance + kFgInstanceStateFlagsOffset) !=
+                    cache.state_flags[index] ||
+                *reinterpret_cast<const std::uint8_t*>(
+                    instance + kFgInstanceRetireFlagsOffset) != 0) {
+                return false;
+            }
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_compact_nadine_rifle_cull_queue(
+    void* const* queue_instances, void* lod_data,
+    std::uint32_t queue_count, const NadineRifleCullFilterCache& cache,
+    std::uint32_t* filtered_count) {
+    if (filtered_count == nullptr || queue_instances == nullptr ||
+        lod_data == nullptr || queue_count < cache.instances.size() ||
+        queue_count > 0x10000u ||
+        queue_count >
+            std::numeric_limits<std::size_t>::max() / 0xB0u) {
+        return false;
+    }
+    *filtered_count = queue_count;
+
+    std::array<std::uint32_t, 3> remove_indices{};
+    std::uint32_t remove_count = 0;
+    std::uint32_t instance_mask = 0;
+    __try {
+        for (std::uint32_t queue_index = 0;
+             queue_index < queue_count; ++queue_index) {
+            const std::uintptr_t instance = reinterpret_cast<std::uintptr_t>(
+                queue_instances[queue_index]);
+            for (std::size_t cached_index = 0;
+                 cached_index < cache.instances.size(); ++cached_index) {
+                if (instance != cache.instances[cached_index]) {
+                    continue;
+                }
+                if ((instance_mask & (1u << cached_index)) != 0 ||
+                    remove_count >= remove_indices.size()) {
+                    return false;
+                }
+                instance_mask |= 1u << cached_index;
+                remove_indices[remove_count++] = queue_index;
+            }
+        }
+        if (remove_count != cache.instances.size() || instance_mask != 0x7) {
+            return false;
+        }
+
+        const std::size_t instance_bytes =
+            sizeof(void*) * static_cast<std::size_t>(queue_count);
+        const std::size_t lod_bytes =
+            0xB0u * static_cast<std::size_t>(queue_count);
+        if (!writable_memory_span(
+                const_cast<void**>(queue_instances), instance_bytes) ||
+            !writable_memory_span(lod_data, lod_bytes)) {
+            return false;
+        }
+
+        auto** const mutable_instances =
+            const_cast<void**>(queue_instances);
+        auto* const mutable_lods = static_cast<std::byte*>(lod_data);
+        std::uint32_t write_index = 0;
+        std::uint32_t remove_position = 0;
+        for (std::uint32_t read_index = 0;
+             read_index < queue_count; ++read_index) {
+            if (remove_position < remove_count &&
+                read_index == remove_indices[remove_position]) {
+                ++remove_position;
+                continue;
+            }
+            if (write_index != read_index) {
+                mutable_instances[write_index] =
+                    mutable_instances[read_index];
+                std::memmove(
+                    mutable_lods +
+                        static_cast<std::size_t>(write_index) * 0xB0u,
+                    mutable_lods +
+                        static_cast<std::size_t>(read_index) * 0xB0u,
+                    0xB0u);
+            }
+            ++write_index;
+        }
+        if (write_index + remove_count != queue_count) {
+            return false;
+        }
+        *filtered_count = write_index;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
     }
 }
@@ -33566,21 +33831,50 @@ std::int64_t __fastcall hooked_cull_fg_lods_spawn(
             std::memory_order_acquire);
     static thread_local std::uint64_t sampled_generation = 0;
     static thread_local std::uint32_t generation_samples = 0;
+    static thread_local NadineRifleCullFilterCache filter_cache{};
     if (sampled_generation != generation) {
         sampled_generation = generation;
         generation_samples = 0;
+        filter_cache = {};
     }
-    const bool captured = generation != 0 && generation_samples < 6 &&
+    const bool captured = !filter_cache.armed && generation != 0 &&
+        generation_samples < 6 &&
         seh_capture_nadine_rifle_cull_queue(
             queue_instances, queue_count, &snapshot);
     if (captured) {
         ++generation_samples;
+        prepare_nadine_rifle_cull_filter(
+            snapshot, generation, &filter_cache);
     }
+    std::uint32_t filtered_count = queue_count;
+    const bool filtered =
+        filter_cache.generation == generation &&
+        seh_revalidate_nadine_rifle_cull_filter(filter_cache) &&
+        seh_compact_nadine_rifle_cull_queue(
+            queue_instances, lod_data, queue_count, filter_cache,
+            &filtered_count);
     const std::int64_t result = g_original_cull_fg_lods_spawn != nullptr
         ? g_original_cull_fg_lods_spawn(
-              job_out, counter_out, queue_instances, lod_data, queue_count,
+              job_out, counter_out, queue_instances, lod_data, filtered_count,
               scene, view_frustum, counter)
         : 0;
+    if (filtered) {
+        static std::atomic<std::uint64_t> logged_generation{0};
+        std::uint64_t previous = logged_generation.load(
+            std::memory_order_relaxed);
+        if (previous != generation &&
+            logged_generation.compare_exchange_strong(
+                previous, generation, std::memory_order_relaxed)) {
+            std::ostringstream filter_line;
+            filter_line
+                << "NADINE-RIFLE-CULL-FILTER generation=" << generation
+                << " removed=" << (queue_count - filtered_count)
+                << " before=" << queue_count
+                << " after=" << filtered_count
+                << " owner=0x" << std::hex << filter_cache.owner_id;
+            write_log_line(filter_line.str().c_str());
+        }
+    }
     if (!captured) {
         return result;
     }
@@ -36311,8 +36605,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-23gv "
-        "(post-gu registry-call rollback; stale Nadine rifle census only; pistol animation unchanged)");
+        "TLL co-op runtime init 2026-07-23gw "
+        "(strict paired final-cull stale-rifle filter; no registry calls; pistol animation unchanged)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

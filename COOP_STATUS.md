@@ -8274,8 +8274,10 @@ exactly three geometry matches; every match different from the target and
 carrying the same nonzero foreign owner id; every match absent from all
 allocated `FgAnimData+0x210` driven lists; primary-used set, secondary-used and
 pending-delete clear; no target-owner hits; three distinct queue indices and
-three distinct target geometry bits. Any failed clause leaves both arrays and
-count byte-for-byte unchanged.
+pool instances; every match covers the complete three-LOD target geometry mask
+`0x7`; and their state family is exactly `2 x 0x21228A38 +
+1 x 0x21228E38`. Any failed clause leaves both arrays and count byte-for-byte
+unchanged.
 
 Competing hypotheses remain explicit. F1: those three records are the
 standalone stale rifle, so paired compaction removes only the glued spawn
@@ -8292,3 +8294,9 @@ Nadine's body, pistol and current rifle state, plus Chloe's legitimate drawn or
 holstered weapon, remain visible and functional. Any freeze/crash, removal
 count other than three, missing body/weapon, or persistence of the glued rifle
 rejects F1.
+
+Build `gw` implements that guard literally. It caches only the three exact pool
+instances after a complete owner census, revalidates their owner, geometry,
+state and manager bits before each use, verifies that all three occur exactly
+once in the current queue, then compacts both writable in-place arrays and
+passes `count-3` to stock Spawn. The release DLL compiles successfully.
