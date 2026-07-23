@@ -1522,9 +1522,9 @@ int peer_slot_of_art(std::uint32_t art);
 // still go through boot_log_line(), while force_log_line() is compiled to a no-op.
 // Flip this only for a bounded experiment with a written prediction.
 constexpr bool kEnableRuntimeDiagnosticLogging = false;
-// Diagnostic hi: hh proved the cold grenade relay survives. The remaining
-// state-1 release failure is now observed through read-only selected-grenade
-// handle/ammo snapshots; command, animation and physics semantics are unchanged.
+// Diagnostic hj: hi proved selected slot 0 is null on the puppet. The full
+// six-record table is now observed read-only to exclude a valid grenade bound
+// under another art slot; command, animation and physics semantics are unchanged.
 // installer. Keep the observer early enough to capture that install-time fault;
 // it is exception-only and does no work on a normal frame.
 constexpr bool kEnableCrashObserver = true;
@@ -2144,6 +2144,7 @@ struct FastGrenadeWeaponSlotSnapshot {
     std::uint32_t handle = 0;
     void* weapon = nullptr;
     void* weapon_vtable = nullptr;
+    std::uint32_t art_id = 0;
     std::int16_t magazine = 0;
     std::int16_t reserve = 0;
     bool valid = false;
@@ -2155,7 +2156,7 @@ struct FastGrenadeControllerSnapshot {
     std::uint32_t state = 0;
     std::uint32_t slot = 0;
     std::uint8_t flags = 0;
-    std::array<FastGrenadeWeaponSlotSnapshot, 2> weapons{};
+    std::array<FastGrenadeWeaponSlotSnapshot, 6> weapons{};
 };
 
 bool seh_read_fast_grenade_controller(
@@ -2198,6 +2199,8 @@ bool seh_read_fast_grenade_controller(
             weapon.valid = true;
             weapon.weapon_vtable =
                 *reinterpret_cast<void**>(weapon.weapon);
+            weapon.art_id = *reinterpret_cast<std::uint32_t*>(
+                static_cast<std::byte*>(weapon.weapon) + 0x860);
             weapon.magazine = *reinterpret_cast<std::int16_t*>(
                 static_cast<std::byte*>(weapon.weapon) + 0x900);
             weapon.reserve = *reinterpret_cast<std::int16_t*>(
@@ -2240,6 +2243,8 @@ void log_grenade_controller_state(
              << reinterpret_cast<std::uintptr_t>(weapon.weapon_vtable)
              << std::dec
              << " s" << slot << "Valid=" << (weapon.valid ? 1 : 0)
+             << " s" << slot << "Art=0x" << std::hex << weapon.art_id
+             << std::dec
              << " s" << slot << "Magazine=" << weapon.magazine
              << " s" << slot << "Reserve=" << weapon.reserve
              << " s" << slot << "Total="
@@ -37566,7 +37571,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-23hi "
+        "TLL co-op runtime init 2026-07-23hj "
         "(instrumented scoped grenade relay and authored native projectile)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

@@ -9159,15 +9159,15 @@ projectile therefore remains at its spawn point until that later fuse expires.
 Static decompilation narrows the failed gate. Its flags half already passes for
 `flags=0xd2`; the other half calls FastGrenade vtable `+0xD0`, resolved to
 `sub_140E1AD40`, and requires the returned selected-grenade object to report a
-positive value through virtual `+0x840`. The resolver selects one of two
-pointer/handle pairs at controller `+0x128/+0x130`, indexed by
-controller `+0x18C` (runtime slot 0), rejects null/stale pairs by checking the
-object handle at `+0xBC`, and marks a valid object at `+0x72`.
+positive value through virtual `+0x840`. The resolver selects one of six
+pointer/handle records at controller `+0x128+slot*0x10`, indexed by
+controller `+0x18C` (runtime slot 0), rejects null/stale records by checking
+the object handle at `+0xBC`, and marks a valid object at `+0x72`.
 
 Competing causes for the next static pass are therefore K1: the retained puppet
 has a null or stale selected pair; K2: the pair resolves but virtual `+0x840`
 reports zero grenade count; K3: the valid pair lives in the other selected slot.
-Before another runtime build, trace every writer/initializer of both pairs and
+Before another runtime build, trace every writer/initializer of the table and
 resolve the concrete object type and `+0x840` slot. Do not manually invoke
 StartThrowAction, copy live owner pointers, restore raw Player `+0x260/+0x270`
 writes, or re-enable transform pinning.
@@ -9177,8 +9177,9 @@ writes, or re-enable transform pinning.
 The selected-pair writer, object type and count gate are now resolved through
 three independent static evidence types.
 
-1. Both FastGrenade constructors `0x140E26060/0x140E261B0` zero the two
-   pointer/handle pairs at `+0x128/+0x130` and `+0x138/+0x140`.
+1. Both FastGrenade constructors `0x140E26060/0x140E261B0` zero six
+   pointer/handle records at `+0x128+slot*0x10`; construction also zeros
+   requested/active indices `+0x188/+0x18C`.
 2. FastGrenade vtable `+0x30` is
    `PlayerGrenadeController_CreateGrenadeWeaponFromLoadout 0x140E17070`.
    It reads grenade art/count from the Player weapon-set descriptor, adjusts
@@ -9198,14 +9199,15 @@ three independent static evidence types.
 This rejects the possibility that the state-1 gate expects a separate grenade
 action object. K1, K2 and K3 remain distinguishable without mutation. Diagnostic
 build `hi` leaves command, animation, inventory and physics semantics unchanged;
-on each local send edge and each puppet controller edge it reads both weak
-handles under SEH, validates `weapon+0xBC`, records the concrete vtable, and
-records magazine/reserve/total.
+on each local send edge and each puppet controller edge it reads the first two
+weak handles under SEH, validates `weapon+0xBC`, records the concrete vtable,
+and records magazine/reserve/total.
 
 **Falsifiable `hi` prediction:** the throwing copy's `scope=local stage=send`
 must show a valid selected pair with positive total. On the receiver, K1 gives
 selected `Node=0`/`Handle=0` or `Valid=0`; K2 gives `Valid=1` with `Total=0`;
-K3 gives selected slot 0 unusable while slot 1 is valid with positive total.
+K3 gives selected slot 0 unusable while another one of the six records is valid
+with positive total.
 Only after one of these mutually exclusive outcomes is observed may the next
 build repair the stock loadout/bind boundary. The fallback delay and projectile
 position are intentionally unchanged in `hi`. The diagnostic DLL builds
@@ -9213,3 +9215,40 @@ successfully. The five resolved functions were applied to the single
 `ida/tll.i64` (`1294 functions, 20 data names`,
 `save_database returned True`) and independently resolve under the restarted
 MCP.
+
+### 2026-07-23 RUNTIME CONFIRMED: `hi` selected record is unbound
+
+The user threw once from local Nadine (PID 2284). Her local send-edge census was
+healthy and remained coherent across press/release:
+
+- selected slot `0`;
+- `s0Node=0x10e020a368`, handle `0x49d`;
+- `s0Weapon=0x10e0cbc300`;
+- concrete vtable `0x7ff69669bf48`, whose RVA is the expected ProcessWeapon
+  vtable `0x142A9BF48`;
+- `Valid=1`, magazine `3`, reserve `0`, total `3`.
+
+On Chloe's copy (PID 18160), the retained puppet Nadine reached scheduler,
+CanStart and state 1 for the same sequences `2007 -> 2058`, but the selected
+record 0 and the additionally logged record 1 were absent at every boundary:
+
+`s0Node=0 s0Handle=0 s0Weapon=0 s0Valid=0`,
+`s1Node=0 s1Handle=0 s1Weapon=0 s1Valid=0`.
+
+Release again emitted no authored marker and the authoritative event stopped at
+`GRENADE-EVENT-DEFER seq=1 waiting for puppet throw marker`. This confirms K1
+for the active record and rejects K2 (valid zero-ammo ProcessWeapon in the
+active record). It does not yet reject K3 because `hi` logged only records 0
+and 1, while the controller table has six. The controller and owner pointers
+themselves are stable; the missing selected state is specifically the stock
+grenade weapon binding.
+
+Read-only build `hj` expands the same bounded census to all six records and adds
+each valid ProcessWeapon art id. It changes no inventory or throw semantics.
+If all six puppet records are zero/invalid, K3 is rejected and the next repair
+must create or discover a grenade ProcessWeapon owned by the retained puppet
+and bind it through stock `0x140E17720`. If another record is valid, the repair
+instead uses the native requested/active-slot setter. Never copy the sender's
+node/weapon pointer across processes. `hj` builds successfully. Corrected
+six-record IDB comments were saved (`1294 functions, 20 data names`,
+`save_database returned True`).

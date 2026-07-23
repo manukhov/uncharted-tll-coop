@@ -88,17 +88,17 @@ FUNCTIONS = {
         "PlayerGrenadeController_BindGrenadeWeaponSlot",
         "FastGrenadeController vtable +0xF0. Uses the weapon art registry slot "
         "index and copies the ProcessWeapon weak handle from weapon+0xA8/+0xBC "
-        "into controller+0x128+slot*0x10.",
+        "into one of six controller records at +0x128+slot*0x10.",
     ),
     0x140E1A9C0: (
         "PlayerGrenadeController_GetGrenadeWeaponBySlot",
-        "Resolves one controller+0x128/+0x130 weak-handle pair by explicit "
+        "Resolves one six-entry controller+0x128 weak-handle record by explicit "
         "grenade slot, validates weapon+0xBC and returns the ProcessWeapon.",
     ),
     0x140E1AD40: (
         "PlayerGrenadeController_GetSelectedGrenadeWeapon",
-        "FastGrenadeController vtable +0xD0. Resolves the weak-handle pair at "
-        "controller+0x128/+0x130 selected by controller+0x18C.",
+        "FastGrenadeController vtable +0xD0. Resolves the weak-handle record at "
+        "controller+0x128+0x10*slot selected by controller+0x18C.",
     ),
     0x140E20850: (
         "PlayerGrenadeController_HasUsableSelectedGrenade",

@@ -98,17 +98,20 @@
       starts a fresh 3-second fuse and remains at its spawn point because the
       fallback applies no relayed velocity. Static decompilation selects the
       release gate `sub_140E20850`: FastGrenade vtable `+0xD0`
-      (`sub_140E1AD40`) must resolve the selected pointer/handle pair at
-      controller `+0x128/+0x130` and its object virtual `+0x840` must report a
-      positive count. **STATIC RESOLVED:** constructors zero both pairs;
+      (`sub_140E1AD40`) must resolve the selected pointer/handle record at
+      controller `+0x128+slot*0x10` and its object virtual `+0x840` must report
+      a positive count. **STATIC RESOLVED:** constructors zero all six records;
       loadout path `0x140E17070` creates a grenade `ProcessWeapon` and
       `PlayerGrenadeController_BindGrenadeWeaponSlot 0x140E17720` copies its
       weak handle into the registry-selected left/right slot. `+0x840` is
       `ProcessWeapon_GetTotalAmmo 0x141103850` over `weapon+0x900/+0x902`.
-      Read-only build `hi` logs both slots for the local send edge and puppet
-      controller edge. Its written prediction distinguishes null/stale K1,
-      valid zero-count K2 and positive ammo in the wrong slot K3; do not alter
-      inventory or call StartThrowAction before that census.
+      **RUNTIME CONFIRMED `hi`: active-record K1.** Local Nadine slot 0 is a valid
+      ProcessWeapon with ammo `3+0`; retained puppet Nadine reaches state 1
+      with logged records 0/1 entirely zero. K2 is rejected for the active
+      record; K3 remains until records 2..5 are inspected. Read-only `hj` logs
+      all six plus ProcessWeapon art id. All invalid selects a missing puppet
+      loadout/factory result; another valid record selects the native slot
+      setter. Never copy sender pointers across processes.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /
