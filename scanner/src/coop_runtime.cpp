@@ -4908,10 +4908,11 @@ void apply_pending_peer_grenade_event() {
         g_pending_grenade_event_art.load(std::memory_order_relaxed),
         &result, &stage, &fault_rva, &fault_code);
     g_last_applied_grenade_event_seq.store(seq, std::memory_order_relaxed);
-    // CONFIRMED v6 (2026-07-11): Execute materializes the peer grenade, then the
-    // GRNK stream owns its in-flight world state. The later unconfirmed v3 edit
-    // removed arm_peer_grenade_arc and made every GRNK packet a no-op because
-    // apply_grenade_kinematics_update requires g_peer_arc_grenade.
+    // RUNTIME REJECTED (hc, 2026-07-23): arming the GRNK transform stream makes
+    // the visible path match, but per-frame set_position=true bypasses collision
+    // and sends the grenade through walls/ground. Keep only this one-shot field
+    // write as a collision-safe diagnostic baseline while the native spawn
+    // descriptor launch field is resolved.
     void* const spawned = g_peer_spawned_grenade.exchange(
         nullptr, std::memory_order_acq_rel);
     bool arc_forced = false;
@@ -4919,11 +4920,8 @@ void apply_pending_peer_grenade_event() {
         grenade_has_launch_velocity(g_pending_grenade_vel)) {
         arc_forced = seh_write_grenade_launch_state(
             spawned, g_pending_grenade_pos, g_pending_grenade_vel,
-            g_pending_grenade_quat, /*set_position=*/true);
+            g_pending_grenade_quat, /*set_position=*/false);
         if (arc_forced) {
-            arm_peer_grenade_arc(
-                spawned, g_pending_grenade_pos, g_pending_grenade_vel,
-                g_pending_grenade_quat);
             g_active_grenade_throw_seq.store(seq, std::memory_order_release);
             const bool fuse_started = seh_start_peer_grenade_fuse(spawned);
             std::ostringstream fl;
@@ -14553,9 +14551,9 @@ void send_local_player_state() {
     apply_pending_peer_grenade_event();
     apply_pending_peer_breakable_event();
     pump_deferred_breakable_sync();
-    // Confirmed v6 bridge between ~16 Hz GRNK samples. Native physics on the
-    // Execute-spawned peer object does not integrate the relayed velocity.
-    reapply_peer_grenade_arc();
+    // hc rejected the GRNK transform bridge: it reproduces the path but bypasses
+    // collision. Native physics must own flight from the spawn descriptor.
+    // reapply_peer_grenade_arc();
     track_thrown_grenade();  // grenade pos/vel probe (independent of net gate)
     if (!g_state_net.enabled || !g_state_net.peer_set) {
         return;
@@ -36751,8 +36749,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-23hc "
-        "(restore confirmed grenade GRNK arc relay)");
+        "TLL co-op runtime init 2026-07-23hd "
+        "(park collision-bypassing grenade transform relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

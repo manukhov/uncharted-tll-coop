@@ -8719,3 +8719,29 @@ KIN-RECV changing while the mesh/explosion stays at origin selects G3; no native
 peer throw animation despite healthy local input selects G4 for a separate
 action-edge trace. Any crash, wall pass-through, premature detonation, duplicate
 grenade or unrelated player/weapon regression rejects the repair.
+
+### 2026-07-23 RUNTIME PARTIAL / REJECTED METHOD: `hc` relays the arc but bypasses collision
+
+Both copies loaded build `2026-07-23hc`. On a deliberate throw the user confirmed
+that the remote grenade now follows the transmitted trajectory, so the recovered
+`GRNK` producer/consumer ownership and derived-transform refresh are functional.
+However, the remote grenade falls below the ground and flies through level
+geometry. The remote Player also shows no throw animation.
+
+This selects the explicit rejection condition in the `hc` prediction. Repeated
+calls to `seh_write_grenade_launch_state(..., set_position=true)` are transform
+teleports, not a physics launch: they reproduce the sender's sampled path but
+bypass the receiver's collision solver. The result confirms the transport and
+position relay, but **rejects** the v6 per-frame transform-pinning method as a
+collision-safe grenade implementation. It also rejects the assumption that the
+generic relayed `0x100/0x400` input bits are sufficient to enter the remote
+Player's authored throw action.
+
+The active experiment is parked back at the collision-safe native `GRNE`
+materialization boundary: no `arm_peer_grenade_arc`, no per-frame position
+reapply, and only a one-shot object velocity write retained as diagnostic
+baseline. The next implementation must seed the native spawn descriptor or
+physics launch input before materialization, so Havok owns the flight and
+contacts. In parallel, the exact grenade action command/edge and its exclusion
+gate must be resolved independently; animation is not inferred from projectile
+movement.
