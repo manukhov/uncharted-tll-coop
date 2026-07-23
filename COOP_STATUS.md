@@ -9392,3 +9392,44 @@ query. It is reset on the sender's rising edge and consumed only after StartArc
 successfully reaches state 1. State-1/state-2 command queries must continue to
 receive the true held level until the real falling edge, preserving native hold
 and release semantics. Trajectory is not changed in this discriminator.
+
+### 2026-07-23 STATIC: consume one scheduler entry per relayed press (`hl`)
+
+Build `hl` implements the M3 discriminator without changing native trajectory,
+projectile construction, fuse, animation action or the state-1/state-2 command
+levels. Its evidence quota consists of three independent kinds:
+
+1. **Runtime edge/cycle evidence:** a single sender rise/fall produced four
+   receiver StartArc entries and consumed exactly four grenade counts. This is
+   impossible for a pure duplicate-factory explanation.
+2. **Scheduler control flow:** `Player_ProcessWeaponAndGrenadeInputActions
+   0x1410E71D0` queries `grenade-arc` at `0x1410E78E6` every frame, then reaches
+   CanStart `0x1410E7C7D` and Start `0x1410E7DC0` whenever the controller is
+   eligible. There is no native press-edge latch around this query.
+3. **Controller data/control flow:** `PlayerGrenadeController_StartArc
+   0x140E19600` writes state 1 and initializes its absolute-tick deadline at
+   controller `+0x1E8`. `PlayerGrenadeController_UpdateStateAndCommitThrow
+   0x140E21310` owns separate `grenade-arc` queries in states 1 and 2; its
+   downstream timer/action continuation can later return to state 0. Therefore
+   suppressing the command globally would also destroy the required held/release
+   semantics, while suppressing only a consumed scheduler entry is sufficient.
+
+The receiver now clears `g_peer_grenade_scheduler_consumed` on the true network
+rising edge. After the retained puppet's original StartArc returns with
+controller state 1, the Start hook atomically consumes the scheduler entry and
+logs one `GRENADE-SCHEDULER-CONSUME`. Subsequent scheduler queries return false
+for the remainder of that same hold. State-1 and state-2 queries still return
+the peer's live level and observe the real falling edge. The next rising edge
+clears the latch and permits exactly one new StartArc.
+
+**Falsifiable `hl` prediction before runtime:** on one deliberately long hold
+and release in a clean two-copy session, the sender emits exactly one
+`GRENADE-ARC-SEND active=1` and one `active=0`. The receiver emits exactly one
+StartArc entry/exit, one `GRENADE-SCHEDULER-CONSUME`, and one create-or-reuse
+`GRENADE-BIND`; no second StartArc may occur before the falling edge, even if
+the controller returns to state 0. Grenade ammo decreases at most once and no
+additional held grenades appear or explode. If one remaining projectile still
+has a wrong trajectory, that independently selects a later trajectory/owner
+input boundary; it does not falsify the scheduler latch. Repeated StartArc,
+missing state-1/state-2 release, a crash, or failure to accept the next distinct
+press rejects `hl`.

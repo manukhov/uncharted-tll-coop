@@ -205,6 +205,10 @@ JoypadIsCommandActiveFunction g_original_joypad_is_command_active = nullptr;
 constexpr std::uintptr_t kJoypadIsCommandActiveRva = 0x1837CD0;
 constexpr std::uint32_t kGrenadeArcCommandHash = 0x45ABCE38;
 std::atomic<bool> g_peer_grenade_command_was_active{false};
+// The scheduler owns press entry, while controller states 1/2 own the held
+// level and release. Consume only scheduler entry after one successful StartArc
+// so a controller that returns to state 0 cannot restart during the same hold.
+std::atomic<bool> g_peer_grenade_scheduler_consumed{false};
 std::atomic<ULONGLONG> g_peer_grenade_release_until_ms{0};
 std::atomic<ULONGLONG> g_peer_native_grenade_spawn_ms{0};
 std::atomic<bool> g_spawning_peer_animated_grenade{false};
@@ -2517,6 +2521,8 @@ char __fastcall hooked_player_grenade_command_callsite(
     const bool was_active = g_peer_grenade_command_was_active.exchange(
         active, std::memory_order_acq_rel);
     if (!was_active && active) {
+        g_peer_grenade_scheduler_consumed.store(
+            false, std::memory_order_release);
         g_grenade_can_start_last.store(-1, std::memory_order_release);
         g_peer_grenade_bind_attempted.store(
             false, std::memory_order_release);
@@ -2527,6 +2533,13 @@ char __fastcall hooked_player_grenade_command_callsite(
         g_peer_native_grenade_spawn_ms.store(0, std::memory_order_release);
         g_peer_animated_grenade_init_seen.store(
             false, std::memory_order_release);
+    }
+    if (return_rva ==
+            kGrenadeSchedulerIsCommandActiveCallsiteRva + 5 &&
+        active &&
+        g_peer_grenade_scheduler_consumed.load(
+            std::memory_order_acquire)) {
+        return 0;
     }
     return active ? 1 : 0;
 }
@@ -2587,11 +2600,21 @@ std::int64_t __fastcall hooked_fast_grenade_start(void* controller) {
         FastGrenadeControllerSnapshot after_start{};
         if (seh_read_fast_grenade_controller(
                 puppet, &after_start) &&
-            after_start.state == 1 &&
-            !g_peer_grenade_bind_attempted.exchange(
-                true, std::memory_order_acq_rel)) {
-            ensure_puppet_grenade_weapon_binding(
-                puppet, controller, peer);
+            after_start.state == 1) {
+            if (!g_peer_grenade_scheduler_consumed.exchange(
+                    true, std::memory_order_acq_rel)) {
+                char line[160]{};
+                sprintf_s(
+                    line, sizeof(line),
+                    "GRENADE-SCHEDULER-CONSUME seq=%u state=%u consumed=1",
+                    peer.sequence, after_start.state);
+                boot_log_line(line);
+            }
+            if (!g_peer_grenade_bind_attempted.exchange(
+                    true, std::memory_order_acq_rel)) {
+                ensure_puppet_grenade_weapon_binding(
+                    puppet, controller, peer);
+            }
         }
         log_peer_grenade_controller_state(
             "start-exit", true, peer.sequence);
@@ -37784,8 +37807,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-23hk "
-        "(post-StartArc owner-local grenade ProcessWeapon create/bind)");
+        "TLL co-op runtime init 2026-07-23hl "
+        "(one scheduler StartArc per relayed grenade press)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

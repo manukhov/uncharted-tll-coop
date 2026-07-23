@@ -39,8 +39,11 @@ FUNCTIONS = {
     0x1410E71D0: (
         "Player_ProcessWeaponAndGrenadeInputActions",
         "Player input scheduler. For grenade entry it queries exact command "
-        "grenade-arc at 0x1410E78E6, calls FastGrenadeController vtable +0xA8 "
-        "CanStart at 0x1410E7C7D, then +0x40 Start at 0x1410E7DC0.",
+        "grenade-arc as a level every frame at 0x1410E78E6, calls "
+        "FastGrenadeController vtable +0xA8 CanStart at 0x1410E7C7D, then "
+        "+0x40 Start at 0x1410E7DC0. A relayed held level therefore needs a "
+        "per-press consumed latch at this scheduler query, while the separate "
+        "state-1/state-2 queries must retain the level through release.",
     ),
     0x140E25C10: (
         "PlayerGrenadeController_LatchArcInhibitFromJoypad",
@@ -67,7 +70,10 @@ FUNCTIONS = {
         "PlayerGrenadeController_UpdateStateAndCommitThrow",
         "Core grenade controller update. States 1/2 query semantic command "
         "grenade-arc (0x45ABCE38) through owner+0x39A0; release advances into "
-        "the authored grenade-starting-throw action.",
+        "the authored grenade-starting-throw action. State 2 first checks the "
+        "absolute-tick deadline at controller+0x1E8; downstream continuations "
+        "can return the controller to state 0, allowing the per-frame scheduler "
+        "to re-enter unless one relayed press was already consumed.",
     ),
     0x140E21270: (
         "PlayerGrenadeController_ReleaseArcAndAdvanceThrow",

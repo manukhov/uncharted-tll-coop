@@ -132,7 +132,14 @@
       entry after successful state 1 while continuing to expose the held level
       to state 1/state 2 until the actual release. First prove exactly one
       StartArc per long hold; trajectory and the later authored marker remain
-      separate downstream outcomes.
+      separate downstream outcomes. **STATIC `hl`:** a new per-network-press
+      latch is cleared only on the true rising edge and consumed after original
+      StartArc reaches state 1. Only the scheduler callsite is then suppressed
+      for the remainder of that hold; state 1/state 2 retain the peer level
+      through the real falling edge. Runtime prediction: one rise/fall, one
+      `GRENADE-SCHEDULER-CONSUME`, one StartArc and at most one ammo decrement,
+      with no repeated held grenades before release. A single remaining wrong
+      trajectory is deliberately a separate downstream result.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /
