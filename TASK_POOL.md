@@ -81,8 +81,13 @@
       validation/allocation first, then requires every other process thread to
       be suspended only while the three sites are protected/patched/flushed,
       restores protection and resumes all handles on every exit. Its boot-stage
-      prediction is written; next step is a clean two-copy launch before any
-      grenade input.
+      prediction was RUNTIME REJECTED: both copies validated all sites and
+      allocated the near thunk, then exited before the relay-installed line.
+      This rejects torn rel32 writes. Next step is not another grenade change:
+      enable the already-early crash observer, publish the original target
+      before resume, and capture exact RIP/stack plus non-I/O suspend/patch/
+      resume/first-wrapper stages to distinguish suspension failure from an ABI
+      fault.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /

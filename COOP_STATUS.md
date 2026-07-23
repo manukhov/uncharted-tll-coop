@@ -9026,3 +9026,31 @@ ProjectileGrenade Init, one custom GRNE suppression, visible throw animation,
 native collision-safe flight and landing explosion. Any exit during boot
 rejects the atomic patch transaction; a live boot with no scheduler marker
 selects F1 rather than an installer failure.
+
+### 2026-07-23 RUNTIME REJECTED: `hg` disproves the torn-write cause
+
+Both fresh copies again exited immediately after injection (PIDs 9780 and
+11624). The added breadcrumbs were identical in both processes:
+
+1. `grenade command relay install begin (cold validate)`
+2. `grenade command relay callsites validated`
+3. `grenade command relay near thunk allocated`
+
+Neither emitted the subsequent relay-installed or FastGrenade marker. Because
+`hg` suspended every other enumerated process thread across all protection,
+write, cache-flush and restore operations, I2 (another game thread observing a
+torn rel32 during the write) is REJECTED. The successful validation and thunk
+allocation also reject the early part of I1. The fault is now bounded to the
+suspend/activate/resume tail or the first execution of the installed common
+wrapper before its success line can be written.
+
+Do not repeat another semantic grenade change. The next discriminator must
+capture the exact exception RIP and stack with the already-existing early crash
+observer, and add non-I/O stage state around suspend, patch, resume and first
+wrapper entry. The candidates are **J1:** thread suspension/resume itself
+invalidates an engine invariant; **J2:** the shared thunk/wrapper violates one
+of the three callsites' ABI or return-address contract; **J3:** a resumed thread
+enters the wrapper before its original-target pointer is published. J3 is cheap
+to eliminate statically by publishing the target before resume, but cannot by
+itself explain an access violation because the current null fallback returns
+zero. Exception RIP distinguishes J1 from J2 without another behavioral guess.
