@@ -2292,7 +2292,67 @@ std::int64_t __fastcall hooked_fast_grenade_start(void* controller) {
     return result;
 }
 
+struct SuspendedProcessThreads {
+    std::array<HANDLE, 256> handles{};
+    std::size_t count = 0;
+};
+
+void resume_suspended_process_threads(SuspendedProcessThreads& threads) {
+    while (threads.count != 0) {
+        HANDLE const thread = threads.handles[--threads.count];
+        ResumeThread(thread);
+        CloseHandle(thread);
+    }
+}
+
+bool suspend_other_process_threads(SuspendedProcessThreads& out) {
+    const DWORD process_id = GetCurrentProcessId();
+    const DWORD current_thread_id = GetCurrentThreadId();
+    HANDLE const snapshot =
+        CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+
+    bool complete = true;
+    THREADENTRY32 entry{};
+    entry.dwSize = sizeof(entry);
+    if (Thread32First(snapshot, &entry)) {
+        do {
+            if (entry.th32OwnerProcessID != process_id ||
+                entry.th32ThreadID == current_thread_id) {
+                continue;
+            }
+            if (out.count >= out.handles.size()) {
+                complete = false;
+                break;
+            }
+            HANDLE const thread = OpenThread(
+                THREAD_SUSPEND_RESUME, FALSE, entry.th32ThreadID);
+            if (thread == nullptr) {
+                complete = false;
+                break;
+            }
+            if (SuspendThread(thread) == static_cast<DWORD>(-1)) {
+                CloseHandle(thread);
+                complete = false;
+                break;
+            }
+            out.handles[out.count++] = thread;
+        } while (Thread32Next(snapshot, &entry));
+    } else {
+        complete = false;
+    }
+    CloseHandle(snapshot);
+    if (!complete) {
+        resume_suspended_process_threads(out);
+    }
+    return complete;
+}
+
 bool install_player_grenade_command_callsite_relay() {
+    boot_log_line(
+        "grenade command relay install begin (cold validate)");
     constexpr std::array<std::uintptr_t, 3> kCallsiteRvas{
         kGrenadeSchedulerIsCommandActiveCallsiteRva,
         kGrenadeState1IsCommandActiveCallsiteRva,
@@ -2321,6 +2381,8 @@ bool install_player_grenade_command_callsite_relay() {
             return false;
         }
     }
+    boot_log_line(
+        "grenade command relay callsites validated");
 
     constexpr std::size_t kRelaySize = 14;
     auto* const relay = static_cast<std::uint8_t*>(
@@ -2337,6 +2399,8 @@ bool install_player_grenade_command_callsite_relay() {
         reinterpret_cast<std::uintptr_t>(
             &hooked_player_grenade_command_callsite);
     FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+    boot_log_line(
+        "grenade command relay near thunk allocated");
 
     std::array<std::int32_t, kCallsiteRvas.size()> displacements{};
     for (std::size_t i = 0; i < callsites.size(); ++i) {
@@ -2352,6 +2416,14 @@ bool install_player_grenade_command_callsite_relay() {
         displacements[i] = static_cast<std::int32_t>(displacement);
     }
 
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line(
+            "grenade command callsite relay SKIPPED (thread suspend)");
+        return false;
+    }
+
     std::array<DWORD, kCallsiteRvas.size()> old_protections{};
     std::size_t protected_count = 0;
     for (; protected_count < callsites.size(); ++protected_count) {
@@ -2363,6 +2435,7 @@ bool install_player_grenade_command_callsite_relay() {
                 VirtualProtect(
                     callsites[j], 5, old_protections[j], &ignored);
             }
+            resume_suspended_process_threads(suspended_threads);
             VirtualFree(relay, 0, MEM_RELEASE);
             boot_log_line(
                 "grenade command callsite relay SKIPPED (protect)");
@@ -2377,6 +2450,7 @@ bool install_player_grenade_command_callsite_relay() {
         VirtualProtect(
             callsites[i], 5, old_protections[i], &ignored);
     }
+    resume_suspended_process_threads(suspended_threads);
     g_original_player_grenade_callsite_is_command_active =
         reinterpret_cast<PlayerInputIsCommandActiveFunction>(expected_target);
     boot_log_line(
@@ -37357,8 +37431,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-23hf "
-        "(scoped grenade action relay and authored native projectile)");
+        "TLL co-op runtime init 2026-07-23hg "
+        "(thread-safe scoped grenade relay and authored native projectile)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

@@ -77,7 +77,12 @@
       is a torn hot rel32 write while another game thread executes the per-frame
       scheduler/state call. Next build must suspend the other process threads
       across the atomic patch window or use one correctly relocated common
-      detour; do not rerun the same live E8 writer.
+      detour; do not rerun the same live E8 writer. Build `hg` now performs all
+      validation/allocation first, then requires every other process thread to
+      be suspended only while the three sites are protected/patched/flushed,
+      restores protection and resumes all handles on every exit. Its boot-stage
+      prediction is written; next step is a clean two-copy launch before any
+      grenade input.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /

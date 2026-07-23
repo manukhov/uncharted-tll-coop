@@ -8993,3 +8993,36 @@ sites makes I2 the leading hypothesis. The next build must either suspend every
 other process thread across the three five-byte patches or move the scope test
 to one safely relocated common-function detour; it must not rerun the same live
 E8 writer.
+
+### 2026-07-23 STATIC: atomic three-callsite install window (`hg`)
+
+Build `hg` preserves the already-proven `hf` command/marker/physics behavior but
+changes its installation transaction. All read-only validation, near-thunk
+allocation and rel32 range calculations complete before any game thread is
+suspended. The installer then enumerates the current process threads, excludes
+only its own injection thread, and requires every other enumerated thread to be
+successfully suspended. Only inside that bounded window does it change page
+protection and replace the three E8 displacements; it flushes the instruction
+cache, restores every original protection and resumes/closes every retained
+thread handle. Any enumeration, open, suspend or protection failure resumes all
+already-suspended threads and leaves the sites unmodified.
+
+This directly distinguishes the installation candidates without widening the
+gameplay hook. If I2 was correct, no scheduler/state thread can observe a torn
+rel32 and installation completes. If validation or allocation is the real
+problem (I1), the new boot breadcrumbs stop at `install begin`,
+`callsites validated`, or `near thunk allocated`, while the game remains alive
+because no code bytes have yet changed. The vtable slots are aligned pointer
+writes and remain after the callsite success marker; they are not part of this
+suspended window.
+
+**Falsifiable `hg` prediction:** both copies load `2026-07-23hg` and emit, in
+order, `install begin`, `callsites validated`, `near thunk allocated`,
+`grenade command relay installed`, `FastGrenade boundary probe installed`, and
+the native marker/Init probe install lines without crash or freeze. Only after
+that boot proof should the existing `hf` grenade prediction be exercised:
+scheduler true, CanStart true, Start state 1, state release, one authored
+ProjectileGrenade Init, one custom GRNE suppression, visible throw animation,
+native collision-safe flight and landing explosion. Any exit during boot
+rejects the atomic patch transaction; a live boot with no scheduler marker
+selects F1 rather than an installer failure.
