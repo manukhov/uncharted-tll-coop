@@ -43,7 +43,7 @@ FUNCTIONS = {
         "FastGrenadeController vtable +0xA8 CanStart at 0x1410E7C7D, then "
         "+0x40 Start at 0x1410E7DC0. A relayed held level therefore needs a "
         "per-press consumed latch at this scheduler query, while the separate "
-        "state-1/state-2 queries must retain the level through release.",
+        "state-1/state-2/state-4 queries must retain the level through release.",
     ),
     0x140E25C10: (
         "PlayerGrenadeController_LatchArcInhibitFromJoypad",
@@ -68,12 +68,48 @@ FUNCTIONS = {
     ),
     0x140E21310: (
         "PlayerGrenadeController_UpdateStateAndCommitThrow",
-        "Core grenade controller update. States 1/2 query semantic command "
-        "grenade-arc (0x45ABCE38) through owner+0x39A0; release advances into "
-        "the authored grenade-starting-throw action. State 2 first checks the "
-        "absolute-tick deadline at controller+0x1E8; downstream continuations "
-        "can return the controller to state 0, allowing the per-frame scheduler "
-        "to re-enter unless one relayed press was already consumed.",
+        "Core grenade controller update. States 1/2/4 query semantic command "
+        "grenade-arc (0x45ABCE38) through owner+0x39A0 at 0x140E218DD, "
+        "0x140E21A8F and 0x140E2227D. State 2 first checks the absolute-tick "
+        "deadline at controller+0x1E8 and enters post-arc state 3/4. State 4 "
+        "also requires its current-action predicate 0x140E24ED0 before reaching "
+        "the command query. All three state queries must retain the relayed "
+        "held level until true release; only scheduler entry is consumed.",
+    ),
+    0x140E1F5B0: (
+        "PlayerGrenadeController_EnterPostArcHoldState",
+        "State-2 absolute-deadline continuation. Re-resolves grenade context "
+        "and trajectory, initializes held/gesture state, then writes state 3 "
+        "for grenade-dynamite at 0x140E1FA61 or ordinary state 4 at "
+        "0x140E1FB08. State 4 owns another grenade-arc hold/release query.",
+    ),
+    0x140E1FF90: (
+        "PlayerGrenadeController_ReleasePostArcHold",
+        "State-4 false-command continuation at 0x140E222BC. Depending on "
+        "controller+0x540, either starts the authored throw action immediately "
+        "or stores the current deadline at +0x530 and writes state 7, whose "
+        "update later starts the throw or times out to idle.",
+    ),
+    0x140E19D60: (
+        "PlayerGrenadeController_EnsureGrenadeInHand",
+        "Validates FastGrenade weak record 3 at controller+0x158/+0x160 and "
+        "reattaches the same live ProcessGrenadeInHand when present. If absent, "
+        "materializes exactly one ProcessGrenadeInHand and stores its weak "
+        "node/generation at 0x140E1A1D3. This held visual is not a projectile.",
+    ),
+    0x140E1A7B0: (
+        "PlayerGrenadeController_DestroyHeldGrenadeAndEffects",
+        "Lifecycle cleanup for held record 3 and its child/effect records. "
+        "Generation-validates the ProcessGrenadeInHand then calls "
+        "ProcessKillTree at 0x140E1A803; cleanup invalidates object lifetime "
+        "rather than directly zeroing controller+0x158.",
+    ),
+    0x140E1AA00: (
+        "PlayerGrenadeController_RefreshHeldGrenadeForSelection",
+        "Grenade-selection housekeeping. Kills the prior valid record-3 "
+        "ProcessGrenadeInHand at 0x140E1AABC, clears related held effects, then "
+        "calls PlayerGrenadeController_EnsureGrenadeInHand at 0x140E1AAFE for "
+        "the newly selected ProcessWeapon.",
     ),
     0x140E21270: (
         "PlayerGrenadeController_ReleaseArcAndAdvanceThrow",

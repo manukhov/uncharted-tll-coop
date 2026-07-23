@@ -9487,3 +9487,54 @@ The next build must add `0x140E2227D` to the already cold-validated atomic
 callsite relay and treat it like state 1/state 2: return the peer's live held
 level, never the scheduler-consumed value. It must not change GRNE, trajectory,
 fuse, ProcessGrenadeInHand or animation functions in the same discriminator.
+
+### 2026-07-23 STATIC: relay post-timer state-4 hold/release (`hm`)
+
+Build `hm` adds only the fourth exact E8 callsite `0x140E2227D` to the existing
+validated/suspended patch transaction. The shared wrapper classifies it as
+`state4` and returns the live peer `grenade_arc_active`; the scheduler remains
+the sole consumer of `g_peer_grenade_scheduler_consumed`. No packet layout,
+factory/bind, controller state, action, marker, projectile, GRNE, fuse or
+trajectory data is otherwise changed.
+
+The code-level alternatives remain falsifiable. **N3a:** the missing state-4
+relay is sufficient; the receiver logs `state4 value=1` while held, then
+`state4 value=0` on the real falling edge, reaches the authored action/marker,
+and suppresses the deferred GRNE after one native ProjectileGrenade Init.
+**N3b:** state 4 now receives both levels but still returns to state 0 without
+the marker; this rejects the query boundary and selects state 7 or the authored
+action context. **N3c:** the state-4 wrapper is never reached; either the
+state-2 timer/ordinary-grenade branch differs at runtime or the state-4
+current-action predicate `sub_140E24ED0` returns false and invokes the
+controller reset before `0x140E2227D`. The next discriminator must log the
+exact state write/predicate result rather than force another transition.
+
+The apparent object multiplicity is independently classified and must not be
+"fixed" by deleting the held object. FastGrenade record 3 is the weak pair at
+controller `+0x158/+0x160`.
+`PlayerGrenadeController_EnsureGrenadeInHand 0x140E19D60` reattaches the same
+live `ProcessGrenadeInHand`, or materializes exactly one and stores its weak
+node/generation at `0x140E1A1D3`. Cleanup
+`PlayerGrenadeController_DestroyHeldGrenadeAndEffects 0x140E1A7B0` validates
+that pair and calls `ProcessKillTree` at `0x140E1A803`; selection refresh
+`0x140E1AA00` has the other bounded kill at `0x140E1AABC`. The later custom
+GRNE is a distinct ProjectileGrenade and its pending exchange/last-sequence
+guards execute at most once per event. Therefore the current visual sequence
+is the expected held presentation followed by one delayed fallback projectile,
+not evidence for a native ProjectileGrenade duplicate. Only an authored marker
+plus authored Init followed by a same-sequence GRNE Init would prove a true
+projectile duplicate.
+
+**Falsifiable `hm` prediction before runtime:** one long hold/release produces
+one scheduler true, one StartArc, one `GRENADE-SCHEDULER-CONSUME`, state 1 true,
+state 2 true, then state 4 true before sender release and state 4 false at that
+release. The controller must not return to state 0 before the falling edge.
+The positive complete path then produces one
+`GRENADE-ANIM-SPAWN-NATIVE`, one native ProjectileGrenade Init, and
+`GRENADE-EVENT-SUPPRESS` for the matching GRNE instead of delayed fallback
+execution. Visually there is one held grenade, one throw animation, and one
+collision-owned projectile/explosion. A second StartArc, missing state 4,
+state-4 false while sender remains true, no marker after the real release,
+duplicate projectile, delayed extra explosion or crash rejects the
+corresponding boundary. Trajectory accuracy remains an observed downstream
+result and is not mutated by `hm`.

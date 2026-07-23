@@ -216,6 +216,7 @@ std::atomic<bool> g_peer_animated_grenade_init_seen{false};
 std::atomic<int> g_grenade_scheduler_command_last{-1};
 std::atomic<int> g_grenade_state1_command_last{-1};
 std::atomic<int> g_grenade_state2_command_last{-1};
+std::atomic<int> g_grenade_state4_command_last{-1};
 std::atomic<int> g_grenade_can_start_last{-1};
 std::atomic<bool> g_peer_grenade_bind_attempted{false};
 // Cold-install diagnostics for the scoped grenade relay. These remain atomic
@@ -2481,6 +2482,10 @@ char __fastcall hooked_player_grenade_command_callsite(
         return_rva == kGrenadeState2IsCommandActiveCallsiteRva + 5) {
         phase = "state2";
         last = &g_grenade_state2_command_last;
+    } else if (
+        return_rva == kGrenadeState4IsCommandActiveCallsiteRva + 5) {
+        phase = "state4";
+        last = &g_grenade_state4_command_last;
     }
 
     auto call_original = [&]() -> char {
@@ -2684,10 +2689,11 @@ bool install_player_grenade_command_callsite_relay() {
     g_grenade_relay_install_stage.store(1, std::memory_order_relaxed);
     boot_log_line(
         "grenade command relay install begin (cold validate)");
-    constexpr std::array<std::uintptr_t, 3> kCallsiteRvas{
+    constexpr std::array<std::uintptr_t, 4> kCallsiteRvas{
         kGrenadeSchedulerIsCommandActiveCallsiteRva,
         kGrenadeState1IsCommandActiveCallsiteRva,
         kGrenadeState2IsCommandActiveCallsiteRva,
+        kGrenadeState4IsCommandActiveCallsiteRva,
     };
     std::array<std::uint8_t*, kCallsiteRvas.size()> callsites{};
     const std::uintptr_t expected_target =
@@ -2797,7 +2803,7 @@ bool install_player_grenade_command_callsite_relay() {
     resume_suspended_process_threads(suspended_threads);
     g_grenade_relay_install_stage.store(9, std::memory_order_relaxed);
     boot_log_line(
-        "grenade command relay installed (scheduler/state1/state2 only)");
+        "grenade command relay installed (scheduler/state1/state2/state4 only)");
     g_grenade_relay_install_stage.store(11, std::memory_order_relaxed);
     return true;
 }
@@ -37807,8 +37813,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-23hl "
-        "(one scheduler StartArc per relayed grenade press)");
+        "TLL co-op runtime init 2026-07-23hm "
+        "(relay post-timer grenade state-4 hold/release)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

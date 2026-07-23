@@ -150,7 +150,19 @@
       `0x140E2227D` that `hl` omitted. Its unrelayed false prematurely calls
       `0x140E1FF90` and enters release/state 7. Next build must relay this
       fourth site with the held level while leaving the scheduler consumed and
-      leaving GRNE/trajectory untouched.
+      leaving GRNE/trajectory untouched. **STATIC `hm`:** the fourth exact E8
+      is now part of the same suspended cold-install transaction and is
+      classified as `state4`; only scheduler uses the consumed latch. Written
+      prediction: one StartArc, state1=1, state2=1, state4=1 while held,
+      state4=0 only on the real release, then one authored marker/native Init
+      and GRNE suppression. Missing state4 selects either the timer branch or
+      the pre-query current-action predicate `0x140E24ED0`; correct state4
+      edges without a marker select state7/action context. Trajectory is not
+      changed. The visible pre-fallback object is independently confirmed as
+      the expected record-3 `ProcessGrenadeInHand` written at `0x140E1A1D3`,
+      with lifecycle kills at `0x140E1A803/0x140E1AABC`; do not suppress it.
+      A true native duplicate requires authored marker/Init plus a later GRNE
+      Init for the same event, which `hl` did not show.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /
