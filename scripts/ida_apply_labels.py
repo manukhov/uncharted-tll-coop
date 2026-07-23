@@ -1338,6 +1338,12 @@ FUNCTIONS = {
         "FgInstance**, FgLodData*, count, Scene and ViewFrustum and schedules the "
         "foreground LOD-culling work consumed by RenderMgr_MainDrawCore.",
     ),
+    0x141A2C880: (
+        "CullFgLods_ExecuteBatch",
+        "Asynchronous CullFgLods worker. Indexes the FgInstance pointer array at "
+        "8-byte stride and its paired FgLodData array at exact 0xB0-byte stride; "
+        "the two arrays and count were retained by CullFgLods_Spawn.",
+    ),
     0x14197D8C0: (
         "AnimFramePlayback_PublishRetainedFgAnim",
         "Resolves a retained owner through +0x108/+0x110, obtains its FgAnimData "

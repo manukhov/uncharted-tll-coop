@@ -8241,3 +8241,54 @@ rifle (`0x4CD`) and do not hide geometry solely by art id: the positive
 criterion must retain the exact conjunction already observed (role B, current
 Nadine rifle absent, same three LOD geometries, foreign owner id, no allocated
 FgAnimData owner, primary-used and non-pending).
+
+### 2026-07-23 STATIC: final cull pair compaction is a bounded safe boundary (`gw`)
+
+The freeze in `gu` excludes game-object registry access from the render/cull
+hook, but it does not invalidate the already read-only final-queue census. The
+next hypothesis is exact: at `RenderMgr_MainDrawCore 0x141661A57`, remove only
+the three queue records satisfying the complete stale-rifle conjunction and
+compact the paired `FgInstance*` / `FgLodData` arrays before the stock
+`CullFgLods_Spawn 0x141A2C440` call. This suppresses publication only; it does
+not free a pool slot, call an object method, or write the current rifle.
+
+Three independent static evidence types establish the boundary and its layout:
+
+1. Exact `CullFgLods::Spawn` source identity shows that arguments 3/4/5 are
+   `FgInstance**`, `FgLodData*`, and count. It stores those two input pointers
+   and count in the asynchronous job at `+0x80/+0x88/+0xC8`.
+2. The worker `CullFgLods_ExecuteBatch 0x141A2C880` independently consumes
+   `instances[index]` at an 8-byte stride and `lodData[index]` at an exact
+   `176 (0xB0)` byte stride (`0x141A2C9CF`, `0x141A2C9FE`,
+   `0x141A2CA01`, `0x141A2CE6E`). The two arrays are therefore a positional
+   pair and must be compacted together.
+3. The sole intercepted callsite loads count from `[rbx]`, the instance array
+   from `[rbx+8]`, and the LOD array from `[rbx+0x18]`, calls Spawn, then keeps
+   only the returned job handle. In-place compaction preserves the lifetime
+   required by the asynchronous worker; temporary replacement buffers would
+   not.
+
+The positive runtime guard is deliberately stricter than art matching: role B;
+a valid current local Nadine rifle; its target and active LOD masks both zero;
+exactly three geometry matches; every match different from the target and
+carrying the same nonzero foreign owner id; every match absent from all
+allocated `FgAnimData+0x210` driven lists; primary-used set, secondary-used and
+pending-delete clear; no target-owner hits; three distinct queue indices and
+three distinct target geometry bits. Any failed clause leaves both arrays and
+count byte-for-byte unchanged.
+
+Competing hypotheses remain explicit. F1: those three records are the
+standalone stale rifle, so paired compaction removes only the glued spawn
+rifle. F2: despite the zero-owner census, they are a legitimate remote weapon;
+then a correctly rendered Chloe rifle will disappear and the filter is
+REJECTED. F3: the arrays are not positional pairs or the stride is wrong; the
+worker disassembly and callsite ABI reject this statically, while any cull/body
+regression or crash rejects it at runtime.
+
+**Falsifiable `gw` prediction:** both copies load without a freeze; role B logs
+one bounded `NADINE-RIFLE-CULL-FILTER removed=3` row for the spawn generation;
+the rifle glued to local Nadine's hand is absent immediately after spawn.
+Nadine's body, pistol and current rifle state, plus Chloe's legitimate drawn or
+holstered weapon, remain visible and functional. Any freeze/crash, removal
+count other than three, missing body/weapon, or persistence of the glued rifle
+rejects F1.
