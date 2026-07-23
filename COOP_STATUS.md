@@ -8171,3 +8171,42 @@ primary-used standalone instance; U2, `FgDrawMgr_AllocateInstance 0x141819F30`
 can allocate without an FgAnimData owner; U3, the `gs` owner census omitted a
 second legitimate ownership container. Resolve the attach/detach call graph and
 trace the primary-used-bit lifetime before another runtime test.
+
+### 2026-07-23 STATIC: ownerless slot requires an abnormal owner lifecycle (`gu`)
+
+The U1/U2/U3 split is now narrower and meets the static evidence quota for one
+more read-only discriminator. First, `FgDrawMgr_AllocateInstance
+0x141819F30` asserts that its FgAnimData argument is non-null and unconditionally
+appends the allocated index to `FgAnimData+0x210`; U2 is REJECTED. Second, the
+only non-free code callers of
+`FgDrawMgr_DetachInstanceFromAnimData 0x14181A5A0` are the two compiled
+`IDrawControl::NotifyMeshUnloaded` paths. Exact source identity at
+`IDrawControl_NotifyMeshUnloaded 0x141753200` proves that path sets
+`FgInstance+0x18 bit 1`, stores the pointer in LOD
+`m_pFreedInstance +0x8`, and clears current `m_pInstance +0`. The `gt` matches
+instead have `state&2=0`, so they are not ordinary parked unloaded LODs.
+
+Third, the symmetric lifecycle independently rules out normal destruction:
+`IDrawControl_Relink 0x141753560` creates and attaches a replacement before
+freeing `m_pFreedInstance`; the per-mesh release helper `0x141752B30` frees both
+LOD pointers; and the all-mesh path `0x141752FB0` is called before
+`AnimMgr_FreeAnimData 0x14177FA70` in normal object teardown and
+`Player_ChangeLookId 0x1410FE840`. `AnimMgr_FreeAnimData` itself only clears the
+FgAnimData pool/category masks and never walks `+0x210`. Therefore a
+primary-used, ownerless, non-detached instance must either have lost its
+FgAnimData through a bypassed teardown or belong to a live runtime object whose
+ownership state is inconsistent.
+
+The remaining discriminator follows the copied owner id `0x956` through the
+confirmed game-object handle registry used by
+`ResolveGameObjectHandleById 0x140A989C0`, then checks any resolved
+ProcessWeapon DrawControl's `0x250`-stride meshes and `0x20`-stride LOD records
+for the three exact instance pointers. W1: id `0x956` resolves to a live
+ProcessWeapon and the matches occur at LOD `m_pInstance +0`; this selects a live
+object whose FgAnimData allocation/ownership state was dropped. W2: the live
+object contains the matches only at `m_pFreedInstance +0x8`; this selects
+detached-state corruption. W3: the id no longer resolves and no live DrawControl
+contains the pointers; this selects orphaned instances from a destroyed or
+replaced ProcessWeapon. A reused non-weapon object for `0x956` is a fourth,
+explicit invalid-owner-id outcome. No render or object write is justified
+before this result.

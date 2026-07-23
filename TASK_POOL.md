@@ -1620,6 +1620,15 @@ Do not reopen these as the first move:
       FgAnimData owner (U2), and a second owner container omitted by the `gs`
       census (U3). Resolve the attach/detach call graph and all primary-used
       mask writers before constructing another runtime discriminator.
+      STATIC: U2 is REJECTED because allocation requires and records a non-null
+      FgAnimData. Normal NotifyMeshUnloaded is also excluded by the observed
+      clear `FgInstance+0x18 bit 1`; normal Relink/remove/destruction frees both
+      LOD pointers before `AnimMgr_FreeAnimData 0x14177FA70`.
+- [ ] Build read-only `gu`: resolve copied owner id `0x956` through
+      `ResolveGameObjectHandleById 0x140A989C0` and compare the three exact
+      queue instances against a resolved ProcessWeapon DrawControl's current
+      and freed LOD pointers. Classify live-current W1, live-freed W2,
+      absent/orphan W3, or reused non-weapon id W4 before any render mutation.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

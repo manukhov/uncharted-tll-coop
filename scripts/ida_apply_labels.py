@@ -6966,6 +6966,19 @@ FUNCTIONS = {
         "+0x1A8/+0x1B0, and initializes the driven-instance capacity/count/"
         "index array at +0x208/+0x20C/+0x210.",
     ),
+    0x14177FA70: (
+        "AnimMgr_FreeAnimData",
+        "AnimMgr::FreeAnimData pool counterpart immediately following the "
+        "exact allocator. Derives the 0x380-byte slot index, clears every "
+        "AnimMgr category/allocated bit and returns the slot to the free mask; "
+        "it does not inspect or release FgAnimData+0x210 driven instances.",
+    ),
+    0x14181A4B0: (
+        "FgDrawMgr_AttachInstanceToAnimData",
+        "Exact FgDrawMgr::AttachInstanceToAnimData source assertion. Appends "
+        "an existing global FgInstance pool index to FgAnimData+0x210 and "
+        "increments +0x20C without allocating or changing instance state.",
+    ),
     0x1418C4840: (
         "FgAnimData_Init",
         "Exact FgAnimData::Init(ArtItemSkeleton*, Transform&, "
