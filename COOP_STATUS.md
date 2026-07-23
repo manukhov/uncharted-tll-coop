@@ -8862,3 +8862,98 @@ The next static pass must trace how a local Player enters controller states 1/2,
 which held-grenade/action fields are initialized before the command query, and
 which owner/controller object the observed remote query actually belongs to.
 Manual animation dispatch and broad input forcing remain rejected.
+
+### 2026-07-23 STATIC CORRECTION: scoped FastGrenade command and authored native projectile (`hf`)
+
+The `he` failures were caused by two semantic mistakes, not by missing packet
+reachability.
+
+For animation, the competitors are now **F1:** the retained puppet never runs
+the Player grenade scheduler; **F2:** it runs the scheduler but another
+eligibility gate rejects it; **F3:** the low Joypad relay itself asserts the
+FastGrenade inhibit path before the scheduler can start; **F4:** Start reaches
+state 1 but the held-grenade/action context cannot create the authored action.
+Four independent evidence types select F3 as the first correction and keep
+F1/F2/F4 observable:
+
+1. `Player_ProcessWeaponAndGrenadeInputActions 0x1410E71D0` reads
+   `Player+0x1E50`, queries `grenade-arc` through the embedded
+   `PlayerInputCommandState` at the exact direct callsite `0x1410E78E6`, then
+   calls FastGrenade vtable `+0xA8` at `0x1410E7C7D` and `+0x40` at
+   `0x1410E7DC0`.
+2. The concrete slots resolve through RTTI-backed vtable `0x142A227A0`:
+   `+0xA8 = PlayerGrenadeController_CanStart 0x140E25540` and
+   `+0x40 = PlayerGrenadeController_StartArc 0x140E19600`. Start rechecks
+   CanStart, resolves context/trajectory and writes state 1 at `0x140E19745`.
+3. The competing vtable `+0xA0 =
+   PlayerGrenadeController_LatchArcInhibitFromJoypad 0x140E25C10` independently
+   queries the same `grenade-arc` hash at `0x140E25D00` and sets
+   `controller+0x1A0 bit2` at `0x140E25D09`. CanStart rejects exactly that bit
+   at `0x140E255F4`. Thus `he`'s global Joypad answer could deterministically
+   block the action it was intended to start.
+4. The `he` runtime marker came from this shared lower Joypad function and
+   therefore could not distinguish scheduler, states 1/2, or the inhibiting
+   `+0xA0` caller. Its command transitions with no Start/marker are consistent
+   with F3 and do not establish F1, F2 or F4.
+
+Build `hf` removes grenade forcing from the shared Joypad hook. It patches only
+the three direct `PlayerInputCommandState_IsCommandActive` consumers:
+scheduler `0x1410E78E6`, state 1 `0x140E218DD`, and state 2
+`0x140E21A8F`. On the retained puppet alone they receive the fresh relayed
+boolean; local and unrelated calls remain original. Read-only vtable wrappers
+log exact CanStart and Start entry/exit together with controller
+`+0x120/+0x1A0/+0x18C`.
+
+For flight, the corrected consumers reject the former descriptor theory.
+`ProjectileGrenade_InitFromSpawnPacket 0x141533560` reads packet `+0x28` and
+adds descriptor `+0x50` to the bound world translation at
+`0x141533A61..0x141533A66` before building a respawn transform. The NetGrenade
+wrapper `0x141540D60` reaches that same base initializer. Consequently `+0x50`
+is a spawn translation delta in this consumer, not a NetGrenade rigid-body
+velocity sink; the `he` write is disabled.
+
+The collision-safe alternatives are **N1:** make the network-only NetGrenade
+dynamic at a still-unresolved physics component; **N2:** substitute the local
+ProjectileGrenade selector into an incompatible network descriptor; **N3:** let
+the remote Player's now-synchronized authored `throw-grenade` marker execute its
+ordinary `EmitGrenadeProjectile -> ProjectileGrenade` path. N3 is selected for
+`hf`: the marker callsite `0x14040D852` is already the sole Player projectile
+producer, the local selector is `ProjectileGrenade`, and its normal process owns
+active update, collision and fuse. More exactly,
+`EmitGrenadeProjectile 0x14154B3B0` hashes literal `ProjectileGrenade`, calls
+`EmitProjectileProcess 0x14154AAE0`, and materializes the selector only after
+the authored callsite has supplied its complete pose/vector/flag ABI.
+ProjectileGrenade vtable `0x142A9D688 +0x838` resolves
+`ProjectileGrenade::ActiveUpdate 0x14153A230`; its collision/bounce path reads
+and reflects real `m_velocity@+0x5D0` through `0x141537290`, while ActiveUpdate
+calls launch setup at `0x14153BDAF` and natural
+`SendNetEventGrenadeStartFuse 0x140BE9380` at `0x14153BE1D`. The skip-fuse
+predicate is only descriptor-derived `grenade+0x1521 bit1`; the stock local
+descriptor leaves it zero, so puppet ownership does not disable the fuse.
+
+The marker is no longer suppressed. Its synchronous
+`ProjectileGrenade::Init` is positively observed and excluded from the custom
+GRNE sender tracking. An incoming custom GRNE from the authoritative copy is
+deferred during the bounded release window and discarded only after that exact
+native Init; if no marker appears, the existing GRNE fallback remains available
+after the window.
+
+The corrected scheduler, inhibit, CanStart, StartArc, ProjectileGrenade Init and
+NetGrenade wrapper names/comments were applied to the single `ida/tll.i64`
+(`apply_labels OK: 1289 functions, 20 data names`;
+`save_database returned True`) and independently resolved through the restarted
+MCP.
+
+**Falsifiable `hf` prediction:** both copies must load `2026-07-23hf`, validate
+all three direct callsites and both FastGrenade vtable slots. One deliberate
+hold/release must show puppet `GRENADE-CONTROLLER stage=scheduler value=1`,
+`can-start value=1`, `start-entry`, `start-exit state=1`, then state1/state2
+`1 -> 0`. The authored marker must produce exactly one
+`GRENADE-ANIM-SPAWN-NATIVE ... created ProjectileGrenade`, followed by one
+`GRENADE-EVENT-SUPPRESS`; no `GRENADE-NATIVE-VELOCITY` may appear. Visually the
+remote Player must perform the throw and the one native grenade must collide,
+bounce/land and explode at its physical destination. No scheduler marker
+selects F1; scheduler with `can-start=0` selects F2 and its logged flags identify
+whether inhibit bit2 survived; Start/state1 without native Init selects F4.
+Two grenades, GRNE suppression without positive native Init, texture
+pass-through, crash or unrelated Player/weapon regression rejects the build.

@@ -62,10 +62,16 @@
       projectile. **RUNTIME REJECTED:** all `grenade-arc` transitions and non-zero
       descriptor writes were reached, but no authored marker followed and the
       grenade remained at spawn. Therefore both proposed boundaries are real but
-      insufficient. Next static step: follow packet `+0x28` to the final
-      materializer and enumerate descriptor `+0x50` consumers/overwrites; in
-      parallel trace the pre-command transition which enters grenade-controller
-      states 1/2 and initializes the held-grenade/action state.
+      insufficient. Static correction `hf`: descriptor `+0x50` is consumed as a
+      launch-relative spawn transform, not NetGrenade rigid velocity. The global
+      Joypad force also entered FastGrenade `+0xA0`, set inhibit bit
+      `controller+0x1A0 bit2`, and could make `+0xA8 CanStart` reject its own
+      action. `hf` relays `grenade-arc` only at scheduler/state1/state2 direct
+      callsites, logs CanStart/Start, lets the authored marker create an ordinary
+      local `ProjectileGrenade`, and suppresses the custom inbound GRNE only after
+      positively observing that native Init. The local selector then owns
+      ActiveUpdate, `m_velocity@+0x5D0`, collision/bounce and natural fuse. Build
+      and static prediction are ready; next step is the bounded `hf` runtime test.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /

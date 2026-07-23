@@ -19,7 +19,47 @@ FUNCTIONS = {
         "EmitProjectileProcess",
         "Exact projectile-process.cpp source assertion. Copies the validated "
         "16-byte R9 launch vector into the shared process-spawn descriptor at "
-        "+0x50 (0x14154ACCB..0x14154ACD4) before materialization.",
+        "+0x50 (0x14154ACCB..0x14154ACD4). ProjectileGrenade::Init adds this "
+        "field to the spawn translation before building a respawn transform; "
+        "it is not a direct NetGrenade rigid-body velocity sink.",
+    ),
+    0x141533560: (
+        "ProjectileGrenade_InitFromSpawnPacket",
+        "Common ProjectileGrenade initializer (vtable +0x58). Reads packet "
+        "+0x28, adds descriptor+0x50 to the bound world translation at "
+        "0x141533A61..0x141533A66, then builds the respawn transform. The "
+        "ordinary authored-marker route continues into native active update.",
+    ),
+    0x141540D60: (
+        "NetGrenade_InitNetworkStateThenProjectileBase",
+        "NetGrenade vtable +0x58 wrapper. Reads the same packet+0x28 descriptor, "
+        "initializes network-only state from descriptor+0xE0, then calls "
+        "ProjectileGrenade_InitFromSpawnPacket at 0x141540EAD.",
+    ),
+    0x1410E71D0: (
+        "Player_ProcessWeaponAndGrenadeInputActions",
+        "Player input scheduler. For grenade entry it queries exact command "
+        "grenade-arc at 0x1410E78E6, calls FastGrenadeController vtable +0xA8 "
+        "CanStart at 0x1410E7C7D, then +0x40 Start at 0x1410E7DC0.",
+    ),
+    0x140E25C10: (
+        "PlayerGrenadeController_LatchArcInhibitFromJoypad",
+        "FastGrenadeController vtable +0xA0. Independently queries grenade-arc "
+        "through the owner's Joypad and, when active, sets controller+0x1A0 "
+        "bit2 at 0x140E25D09. This is an inhibit/cancel path, not scheduler "
+        "entry.",
+    ),
+    0x140E25540: (
+        "PlayerGrenadeController_CanStart",
+        "FastGrenadeController vtable +0xA8 start eligibility. Rejects global, "
+        "owner/action and weapon-state gates and specifically returns false "
+        "when controller+0x1A0 bit2 is set at 0x140E255F4.",
+    ),
+    0x140E19600: (
+        "PlayerGrenadeController_StartArc",
+        "FastGrenadeController vtable +0x40. Rechecks CanStart, clears and "
+        "initializes held-grenade/context state, resolves settings and "
+        "trajectory, then writes controller state 1 at 0x140E19745.",
     ),
     0x140E21310: (
         "PlayerGrenadeController_UpdateStateAndCommitThrow",

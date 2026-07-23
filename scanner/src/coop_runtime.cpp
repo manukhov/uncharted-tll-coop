@@ -205,13 +205,26 @@ JoypadIsCommandActiveFunction g_original_joypad_is_command_active = nullptr;
 constexpr std::uintptr_t kJoypadIsCommandActiveRva = 0x1837CD0;
 constexpr std::uint32_t kGrenadeArcCommandHash = 0x45ABCE38;
 std::atomic<bool> g_peer_grenade_command_was_active{false};
-std::atomic<ULONGLONG> g_suppress_peer_animated_grenade_until_ms{0};
+std::atomic<ULONGLONG> g_peer_grenade_release_until_ms{0};
+std::atomic<ULONGLONG> g_peer_native_grenade_spawn_ms{0};
+std::atomic<bool> g_spawning_peer_animated_grenade{false};
+std::atomic<bool> g_peer_animated_grenade_init_seen{false};
+std::atomic<int> g_grenade_scheduler_command_last{-1};
+std::atomic<int> g_grenade_state1_command_last{-1};
+std::atomic<int> g_grenade_state2_command_last{-1};
+std::atomic<int> g_grenade_can_start_last{-1};
 using PlayerInputIsCommandActiveFunction =
     char(__fastcall*)(void*, std::uint32_t, std::uint8_t);
 PlayerInputIsCommandActiveFunction
     g_original_player_input_is_command_active = nullptr;
 PlayerInputIsCommandActiveFunction
     g_original_player_melee_callsite_is_command_active = nullptr;
+PlayerInputIsCommandActiveFunction
+    g_original_player_grenade_callsite_is_command_active = nullptr;
+using FastGrenadeCanStartFunction = bool(__fastcall*)(void*);
+using FastGrenadeStartFunction = std::int64_t(__fastcall*)(void*);
+FastGrenadeCanStartFunction g_original_fast_grenade_can_start = nullptr;
+FastGrenadeStartFunction g_original_fast_grenade_start = nullptr;
 using PlayerMeleeTryAnimFunction =
     char(__fastcall*)(void**, void*, double);
 PlayerMeleeTryAnimFunction g_original_player_melee_try_anim = nullptr;
@@ -1475,6 +1488,7 @@ bool prepare_plain_callsite_relay(
     std::uintptr_t callsite_rva, std::uintptr_t expected_target_rva,
     const void* hook, std::uint8_t*& callsite, std::uint8_t*& relay,
     std::int32_t& new_displacement);
+void* allocate_executable_near(const void* target, std::size_t size);
 void derive_look_stick_from_camera(
     const float body_quat[4], const float cam_quat[4], float out[2]);
 std::byte* joypad_resolved_input_block(int joypad_index);
@@ -1832,42 +1846,12 @@ char __fastcall hooked_joypad_is_command_active(
             void* const remote_joypad = static_cast<std::byte*>(frame_state) +
                                         0xDB0 + 0xBF0 * 3;
             if (joypad == remote_joypad) {
-                // `grenade-arc` is the exact command consumed by
-                // PlayerGrenadeController states 1/2. Relay its native result,
-                // not guessed 0x100/0x400 button bindings. A true->false edge
-                // starts the authored action; arm a narrow suppression window
-                // for its later projectile marker so GRNE remains authoritative.
-                void* const puppet = retained_player_object(1);
-                if (hash == kGrenadeArcCommandHash && edge == 0 &&
-                    joypad == player_joypad_object(puppet)) {
-                    coop::StatePacket peer{};
-                    const ULONGLONG now = GetTickCount64();
-                    const ULONGLONG received =
-                        g_state_net.peer_state_received_ms.load(
-                            std::memory_order_acquire);
-                    if (received != 0 && now - received <= 250 &&
-                        copy_peer_state_snapshot(peer)) {
-                        const bool active = peer.grenade_arc_active != 0;
-                        const bool was_active =
-                            g_peer_grenade_command_was_active.exchange(
-                                active, std::memory_order_acq_rel);
-                        if (was_active != active) {
-                            std::ostringstream line;
-                            line << "GRENADE-ARC-COMMAND peer="
-                                 << (active ? 1 : 0)
-                                 << " seq=" << peer.sequence;
-                            boot_log_line(line.str().c_str());
-                        }
-                        if (was_active && !active) {
-                            g_suppress_peer_animated_grenade_until_ms.store(
-                                now + 2500, std::memory_order_release);
-                        }
-                        return active ? 1 : 0;
-                    }
-                    // A stale packet must not manufacture a release/throw edge.
-                    g_peer_grenade_command_was_active.store(
-                        false, std::memory_order_release);
-                }
+                // Grenade intent is deliberately NOT forced at this generic
+                // Joypad boundary. FastGrenadeController +0xA0 independently
+                // queries grenade-arc here and treats true as an inhibit/cancel
+                // condition by setting controller+0x1A0 bit2. Build he forced
+                // that path and could make its own later CanStart fail. The
+                // exact scheduler/state E8 callsites are relayed separately.
                 const auto string_hash = reinterpret_cast<StringHashFunction>(
                     g_module + kStringHashRva);
                 static const std::uint32_t kJumpHash = string_hash("jump", 4, 0);
@@ -2119,6 +2103,334 @@ bool install_player_input_is_command_active_force() {
     VirtualProtect(target, kStolen, old_protection, &ignored);
     force_log_line(
         "PlayerInputCommandState IsCommandActive force-hook installed (melee)");
+    return true;
+}
+
+struct FastGrenadeControllerSnapshot {
+    void* controller = nullptr;
+    void* owner = nullptr;
+    std::uint32_t state = 0;
+    std::uint32_t slot = 0;
+    std::uint8_t flags = 0;
+};
+
+bool seh_read_fast_grenade_controller(
+    void* puppet, FastGrenadeControllerSnapshot* out) {
+    if (puppet == nullptr || out == nullptr) {
+        return false;
+    }
+    __try {
+        out->controller = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(puppet) +
+            kPlayerFastGrenadeControllerOffset);
+        if (out->controller == nullptr) {
+            return false;
+        }
+        out->owner = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(out->controller) + 0x108);
+        out->state = *reinterpret_cast<std::uint32_t*>(
+            static_cast<std::byte*>(out->controller) + 0x120);
+        out->flags = *reinterpret_cast<std::uint8_t*>(
+            static_cast<std::byte*>(out->controller) + 0x1A0);
+        out->slot = *reinterpret_cast<std::uint32_t*>(
+            static_cast<std::byte*>(out->controller) + 0x18C);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void log_peer_grenade_controller_state(
+    const char* stage, bool value, std::uint32_t sequence) {
+    void* const puppet = retained_player_object(1);
+    FastGrenadeControllerSnapshot snapshot{};
+    if (!seh_read_fast_grenade_controller(puppet, &snapshot)) {
+        boot_log_line("GRENADE-CONTROLLER state read fault");
+        return;
+    }
+    std::ostringstream line;
+    line << "GRENADE-CONTROLLER stage=" << stage
+         << " value=" << (value ? 1 : 0)
+         << " seq=" << sequence
+         << " controller=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(snapshot.controller)
+         << " ownerMatch=" << (snapshot.owner == puppet ? 1 : 0)
+         << " state=0x" << snapshot.state
+         << " flags=0x" << static_cast<unsigned>(snapshot.flags)
+         << " slot=0x" << snapshot.slot << std::dec;
+    boot_log_line(line.str().c_str());
+}
+
+char __fastcall hooked_player_grenade_command_callsite(
+    void* state, std::uint32_t hash, std::uint8_t edge) {
+    const std::uintptr_t return_address =
+        reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const std::uintptr_t return_rva =
+        return_address >= g_module ? return_address - g_module : 0;
+    const char* phase = nullptr;
+    std::atomic<int>* last = nullptr;
+    if (return_rva ==
+        kGrenadeSchedulerIsCommandActiveCallsiteRva + 5) {
+        phase = "scheduler";
+        last = &g_grenade_scheduler_command_last;
+    } else if (
+        return_rva == kGrenadeState1IsCommandActiveCallsiteRva + 5) {
+        phase = "state1";
+        last = &g_grenade_state1_command_last;
+    } else if (
+        return_rva == kGrenadeState2IsCommandActiveCallsiteRva + 5) {
+        phase = "state2";
+        last = &g_grenade_state2_command_last;
+    }
+
+    auto call_original = [&]() -> char {
+        return g_original_player_grenade_callsite_is_command_active != nullptr
+            ? g_original_player_grenade_callsite_is_command_active(
+                  state, hash, edge)
+            : 0;
+    };
+    if (phase == nullptr || state == nullptr ||
+        hash != kGrenadeArcCommandHash || edge != 0 ||
+        !g_state_net.enabled) {
+        return call_original();
+    }
+
+    auto* const player =
+        static_cast<std::byte*>(state) - kPlayerInputCommandStateOffset;
+    if (player != static_cast<std::byte*>(retained_player_object(1))) {
+        return call_original();
+    }
+
+    coop::StatePacket peer{};
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    if (received == 0 || now - received > 250 ||
+        !copy_peer_state_snapshot(peer)) {
+        // Never manufacture a release edge from a stale network packet.
+        return call_original();
+    }
+
+    const bool active = peer.grenade_arc_active != 0;
+    const int previous = last->exchange(
+        active ? 1 : 0, std::memory_order_acq_rel);
+    if (previous != (active ? 1 : 0)) {
+        log_peer_grenade_controller_state(phase, active, peer.sequence);
+    }
+
+    const bool was_active = g_peer_grenade_command_was_active.exchange(
+        active, std::memory_order_acq_rel);
+    if (!was_active && active) {
+        g_grenade_can_start_last.store(-1, std::memory_order_release);
+    }
+    if (was_active && !active) {
+        g_peer_grenade_release_until_ms.store(
+            now + 2500, std::memory_order_release);
+        g_peer_native_grenade_spawn_ms.store(0, std::memory_order_release);
+        g_peer_animated_grenade_init_seen.store(
+            false, std::memory_order_release);
+    }
+    return active ? 1 : 0;
+}
+
+bool __fastcall hooked_fast_grenade_can_start(void* controller) {
+    const bool result = g_original_fast_grenade_can_start != nullptr &&
+                        g_original_fast_grenade_can_start(controller);
+    void* const puppet = retained_player_object(1);
+    void* expected = nullptr;
+    if (puppet != nullptr) {
+        __try {
+            expected = *reinterpret_cast<void**>(
+                static_cast<std::byte*>(puppet) +
+                kPlayerFastGrenadeControllerOffset);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            expected = nullptr;
+        }
+    }
+    if (controller != nullptr && controller == expected) {
+        coop::StatePacket peer{};
+        if (copy_peer_state_snapshot(peer)) {
+            const int previous = g_grenade_can_start_last.exchange(
+                result ? 1 : 0, std::memory_order_acq_rel);
+            if (previous != (result ? 1 : 0)) {
+                log_peer_grenade_controller_state(
+                    "can-start", result, peer.sequence);
+            }
+        }
+    }
+    return result;
+}
+
+std::int64_t __fastcall hooked_fast_grenade_start(void* controller) {
+    void* const puppet = retained_player_object(1);
+    void* expected = nullptr;
+    if (puppet != nullptr) {
+        __try {
+            expected = *reinterpret_cast<void**>(
+                static_cast<std::byte*>(puppet) +
+                kPlayerFastGrenadeControllerOffset);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            expected = nullptr;
+        }
+    }
+    coop::StatePacket peer{};
+    const bool is_peer =
+        controller != nullptr && controller == expected &&
+        copy_peer_state_snapshot(peer);
+    if (is_peer) {
+        log_peer_grenade_controller_state(
+            "start-entry", true, peer.sequence);
+    }
+    const std::int64_t result =
+        g_original_fast_grenade_start != nullptr
+            ? g_original_fast_grenade_start(controller)
+            : 0;
+    if (is_peer) {
+        log_peer_grenade_controller_state(
+            "start-exit", true, peer.sequence);
+    }
+    return result;
+}
+
+bool install_player_grenade_command_callsite_relay() {
+    constexpr std::array<std::uintptr_t, 3> kCallsiteRvas{
+        kGrenadeSchedulerIsCommandActiveCallsiteRva,
+        kGrenadeState1IsCommandActiveCallsiteRva,
+        kGrenadeState2IsCommandActiveCallsiteRva,
+    };
+    std::array<std::uint8_t*, kCallsiteRvas.size()> callsites{};
+    const std::uintptr_t expected_target =
+        g_module + kPlayerInputCommandStateIsCommandActiveRva;
+    for (std::size_t i = 0; i < callsites.size(); ++i) {
+        callsites[i] = reinterpret_cast<std::uint8_t*>(
+            g_module + kCallsiteRvas[i]);
+        if (callsites[i][0] != 0xE8) {
+            boot_log_line(
+                "grenade command callsite relay SKIPPED (not E8)");
+            return false;
+        }
+        std::int32_t displacement = 0;
+        std::memcpy(
+            &displacement, callsites[i] + 1, sizeof(displacement));
+        const std::uintptr_t target =
+            reinterpret_cast<std::uintptr_t>(callsites[i] + 5) +
+            static_cast<std::intptr_t>(displacement);
+        if (target != expected_target) {
+            boot_log_line(
+                "grenade command callsite relay SKIPPED (target)");
+            return false;
+        }
+    }
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(callsites[0], kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line(
+            "grenade command callsite relay SKIPPED (relay)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_player_grenade_command_callsite);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    std::array<std::int32_t, kCallsiteRvas.size()> displacements{};
+    for (std::size_t i = 0; i < callsites.size(); ++i) {
+        const std::int64_t displacement =
+            reinterpret_cast<std::intptr_t>(relay) -
+            reinterpret_cast<std::intptr_t>(callsites[i] + 5);
+        if (displacement < INT32_MIN || displacement > INT32_MAX) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            boot_log_line(
+                "grenade command callsite relay SKIPPED (range)");
+            return false;
+        }
+        displacements[i] = static_cast<std::int32_t>(displacement);
+    }
+
+    std::array<DWORD, kCallsiteRvas.size()> old_protections{};
+    std::size_t protected_count = 0;
+    for (; protected_count < callsites.size(); ++protected_count) {
+        if (!VirtualProtect(
+                callsites[protected_count], 5, PAGE_EXECUTE_READWRITE,
+                &old_protections[protected_count])) {
+            for (std::size_t j = 0; j < protected_count; ++j) {
+                DWORD ignored = 0;
+                VirtualProtect(
+                    callsites[j], 5, old_protections[j], &ignored);
+            }
+            VirtualFree(relay, 0, MEM_RELEASE);
+            boot_log_line(
+                "grenade command callsite relay SKIPPED (protect)");
+            return false;
+        }
+    }
+    for (std::size_t i = 0; i < callsites.size(); ++i) {
+        *reinterpret_cast<std::int32_t*>(callsites[i] + 1) =
+            displacements[i];
+        FlushInstructionCache(GetCurrentProcess(), callsites[i], 5);
+        DWORD ignored = 0;
+        VirtualProtect(
+            callsites[i], 5, old_protections[i], &ignored);
+    }
+    g_original_player_grenade_callsite_is_command_active =
+        reinterpret_cast<PlayerInputIsCommandActiveFunction>(expected_target);
+    boot_log_line(
+        "grenade command relay installed (scheduler/state1/state2 only)");
+    return true;
+}
+
+bool install_fast_grenade_controller_boundary_probe() {
+    auto** const start_slot = reinterpret_cast<void**>(
+        g_module + kFastGrenadeControllerVtableRva +
+        kFastGrenadeControllerStartVtableOffset);
+    auto** const can_start_slot = reinterpret_cast<void**>(
+        g_module + kFastGrenadeControllerVtableRva +
+        kFastGrenadeControllerCanStartVtableOffset);
+    if (*start_slot != reinterpret_cast<void*>(
+                           g_module + kFastGrenadeControllerStartRva) ||
+        *can_start_slot != reinterpret_cast<void*>(
+                               g_module +
+                               kFastGrenadeControllerCanStartRva)) {
+        boot_log_line(
+            "FastGrenade boundary probe SKIPPED (vtable mismatch)");
+        return false;
+    }
+
+    DWORD start_old = 0;
+    DWORD can_start_old = 0;
+    if (!VirtualProtect(
+            start_slot, sizeof(void*), PAGE_READWRITE, &start_old)) {
+        boot_log_line(
+            "FastGrenade boundary probe SKIPPED (start protect)");
+        return false;
+    }
+    if (!VirtualProtect(
+            can_start_slot, sizeof(void*), PAGE_READWRITE,
+            &can_start_old)) {
+        DWORD ignored = 0;
+        VirtualProtect(start_slot, sizeof(void*), start_old, &ignored);
+        boot_log_line(
+            "FastGrenade boundary probe SKIPPED (can-start protect)");
+        return false;
+    }
+    g_original_fast_grenade_start =
+        reinterpret_cast<FastGrenadeStartFunction>(*start_slot);
+    g_original_fast_grenade_can_start =
+        reinterpret_cast<FastGrenadeCanStartFunction>(*can_start_slot);
+    *start_slot = reinterpret_cast<void*>(&hooked_fast_grenade_start);
+    *can_start_slot =
+        reinterpret_cast<void*>(&hooked_fast_grenade_can_start);
+    DWORD ignored = 0;
+    VirtualProtect(start_slot, sizeof(void*), start_old, &ignored);
+    VirtualProtect(
+        can_start_slot, sizeof(void*), can_start_old, &ignored);
+    boot_log_line(
+        "FastGrenade boundary probe installed (+0x40 start, +0xA8 can-start)");
     return true;
 }
 
@@ -4515,6 +4827,7 @@ std::atomic<std::uint32_t> g_grenade_event_send_seq{0};
 std::atomic<std::uint32_t> g_pending_grenade_event_seq{0};
 std::atomic<std::uint32_t> g_pending_grenade_event_art{0};
 std::atomic<std::uint32_t> g_last_applied_grenade_event_seq{0};
+std::atomic<std::uint32_t> g_grenade_event_defer_logged_seq{0};
 std::atomic<bool> g_pending_grenade_event{false};
 alignas(16) std::uint8_t
     g_pending_grenade_event_payload[coop::kGrenadeEventPayloadBytes]{};
@@ -4632,23 +4945,45 @@ std::int64_t __fastcall hooked_emit_grenade_projectile_callsite(
     void* owner, void* a2, void* a3, int a4, char a5,
     unsigned int a6, char a7, int a8, int a9, float a10) {
     const ULONGLONG now = GetTickCount64();
-    const ULONGLONG suppress_until =
-        g_suppress_peer_animated_grenade_until_ms.load(
+    const ULONGLONG release_until =
+        g_peer_grenade_release_until_ms.load(
             std::memory_order_acquire);
     if (owner != nullptr && owner == retained_player_object(1) &&
-        suppress_until != 0 && now <= suppress_until) {
-        g_suppress_peer_animated_grenade_until_ms.store(
-            0, std::memory_order_release);
-        boot_log_line(
-            "GRENADE-ANIM-SPAWN-SUPPRESS puppet marker kept animation; GRNE owns projectile");
-        return 0;
+        release_until != 0 && now <= release_until) {
+        // The authored marker owns the collision-safe local projectile. Its
+        // ordinary ProjectileGrenade path creates the physics component and
+        // natural fuse; the later GRNE NetGrenade recipe is suppressed only
+        // after this synchronous Init is observed.
+        g_peer_animated_grenade_init_seen.store(
+            false, std::memory_order_release);
+        g_spawning_peer_animated_grenade.store(
+            true, std::memory_order_release);
+        const auto emit = reinterpret_cast<EmitGrenadeProjectileFunction>(
+            g_module + kEmitGrenadeProjectileRva);
+        const std::int64_t result =
+            emit(owner, a2, a3, a4, a5, a6, a7, a8, a9, a10);
+        g_spawning_peer_animated_grenade.store(
+            false, std::memory_order_release);
+        const bool initialized =
+            g_peer_animated_grenade_init_seen.load(
+                std::memory_order_acquire);
+        if (initialized) {
+            g_peer_native_grenade_spawn_ms.store(
+                now, std::memory_order_release);
+            boot_log_line(
+                "GRENADE-ANIM-SPAWN-NATIVE puppet marker created ProjectileGrenade");
+        } else {
+            boot_log_line(
+                "GRENADE-ANIM-SPAWN-NATIVE marker reached but no ProjectileGrenade Init");
+        }
+        return result;
     }
     const auto emit = reinterpret_cast<EmitGrenadeProjectileFunction>(
         g_module + kEmitGrenadeProjectileRva);
     return emit(owner, a2, a3, a4, a5, a6, a7, a8, a9, a10);
 }
 
-bool install_puppet_grenade_projectile_suppression_callsite() {
+bool install_puppet_grenade_projectile_marker_relay() {
     std::uint8_t* callsite = nullptr;
     std::uint8_t* relay = nullptr;
     std::int32_t displacement = 0;
@@ -4658,7 +4993,7 @@ bool install_puppet_grenade_projectile_suppression_callsite() {
             reinterpret_cast<void*>(
                 &hooked_emit_grenade_projectile_callsite),
             callsite, relay, displacement)) {
-        boot_log_line("puppet grenade marker suppression SKIPPED");
+        boot_log_line("puppet grenade marker relay SKIPPED");
         return false;
     }
     DWORD old_protection = 0;
@@ -4666,7 +5001,7 @@ bool install_puppet_grenade_projectile_suppression_callsite() {
             callsite, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
         VirtualFree(relay, 0, MEM_RELEASE);
         boot_log_line(
-            "puppet grenade marker suppression SKIPPED (VirtualProtect)");
+            "puppet grenade marker relay SKIPPED (VirtualProtect)");
         return false;
     }
     std::memcpy(callsite + 1, &displacement, sizeof(displacement));
@@ -4674,7 +5009,7 @@ bool install_puppet_grenade_projectile_suppression_callsite() {
     DWORD ignored = 0;
     VirtualProtect(callsite, 5, old_protection, &ignored);
     boot_log_line(
-        "puppet grenade marker suppression installed at 0x14040D852");
+        "puppet grenade native marker relay installed at 0x14040D852");
     return true;
 }
 
@@ -5077,13 +5412,68 @@ void apply_grenade_kinematics_update(const coop::GrenadeKinematicsPacket& kp) {
 
 void apply_pending_peer_grenade_event() {
     if (!g_grenade_event_relay ||
-        !g_pending_grenade_event.exchange(false, std::memory_order_acq_rel)) {
+        !g_pending_grenade_event.load(std::memory_order_acquire)) {
         return;
     }
     const std::uint32_t seq = g_pending_grenade_event_seq.load(
         std::memory_order_relaxed);
     if (seq == 0 || seq == g_last_applied_grenade_event_seq.load(
                                std::memory_order_relaxed)) {
+        g_pending_grenade_event.store(false, std::memory_order_release);
+        return;
+    }
+
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG release_until =
+        g_peer_grenade_release_until_ms.load(std::memory_order_acquire);
+    if (release_until == 0 &&
+        g_peer_grenade_command_was_active.load(
+            std::memory_order_acquire)) {
+        coop::StatePacket peer{};
+        const ULONGLONG received =
+            g_state_net.peer_state_received_ms.load(
+                std::memory_order_acquire);
+        if (received != 0 && now - received <= 250 &&
+            copy_peer_state_snapshot(peer) &&
+            peer.grenade_arc_active == 0) {
+            // GRNE can beat the game-thread scheduler by one frame. Preserve
+            // the event while the exact command relay lets the authored marker
+            // create its ordinary ProjectileGrenade.
+            release_until = now + 2500;
+            g_peer_grenade_release_until_ms.store(
+                release_until, std::memory_order_release);
+            g_peer_native_grenade_spawn_ms.store(
+                0, std::memory_order_release);
+        }
+    }
+    if (release_until != 0 && now <= release_until) {
+        const ULONGLONG native_spawn_ms =
+            g_peer_native_grenade_spawn_ms.load(
+                std::memory_order_acquire);
+        if (native_spawn_ms != 0 && native_spawn_ms <= now) {
+            g_pending_grenade_event.store(
+                false, std::memory_order_release);
+            g_last_applied_grenade_event_seq.store(
+                seq, std::memory_order_relaxed);
+            std::ostringstream line;
+            line << "GRENADE-EVENT-SUPPRESS seq=" << seq
+                 << " native puppet ProjectileGrenade owns physics";
+            boot_log_line(line.str().c_str());
+            return;
+        }
+        const std::uint32_t previous =
+            g_grenade_event_defer_logged_seq.exchange(
+                seq, std::memory_order_acq_rel);
+        if (previous != seq) {
+            std::ostringstream line;
+            line << "GRENADE-EVENT-DEFER seq=" << seq
+                 << " waiting for puppet throw marker";
+            boot_log_line(line.str().c_str());
+        }
+        return;
+    }
+    if (!g_pending_grenade_event.exchange(
+            false, std::memory_order_acq_rel)) {
         return;
     }
 
@@ -5188,6 +5578,16 @@ void* __fastcall hooked_grenade_init(void* a1, void* a2, std::int64_t a3) {
                         ? g_original_grenade_init(a1, a2, a3)
                         : nullptr;
     seh_dump_grenade_object(a1);
+    if (g_spawning_peer_animated_grenade.load(
+            std::memory_order_acquire)) {
+        // The remote Player's authored marker is intentionally creating this
+        // process locally. Do not arm the sender-side GRNE echo path.
+        g_peer_animated_grenade_init_seen.store(
+            true, std::memory_order_release);
+        force_log_line(
+            "GRENADE-INIT puppet authored ProjectileGrenade (GRNE echo suppressed)");
+        return r;
+    }
     if (g_applying_peer_grenade.load(std::memory_order_acquire)) {
         // This is the grenade the peer's Execute is spawning - remember it so the
         // apply path can force the relayed velocity onto it (arc fix).
@@ -36957,8 +37357,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-23he "
-        "(native grenade velocity and grenade-arc action relay)");
+        "TLL co-op runtime init 2026-07-23hf "
+        "(scoped grenade action relay and authored native projectile)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -37060,8 +37460,11 @@ DWORD WINAPI install_hook(void*) {
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();
     install_weapon_pickup_gate();
-    install_grenade_spawn_descriptor_velocity_hook();
-    install_puppet_grenade_projectile_suppression_callsite();
+    boot_log_line(
+        "rejected NetGrenade descriptor+0x50 seed disabled");
+    install_player_grenade_command_callsite_relay();
+    install_fast_grenade_controller_boundary_probe();
+    install_puppet_grenade_projectile_marker_relay();
     install_grenade_init_probe();
     if (g_breakable_event_relay) {
         install_breakable_event_probe();

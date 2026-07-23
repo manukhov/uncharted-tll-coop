@@ -157,6 +157,20 @@ constexpr std::uintptr_t kSkelTableRetargetEntriesRva = 0x3864A00;
 // Embedded PlayerInputCommandState (sub_14024D7E0 returns Player+0x39A0).
 constexpr std::size_t kPlayerInputCommandStateOffset = 0x39A0;
 constexpr std::uintptr_t kPlayerInputCommandStateIsCommandActiveRva = 0x1E39D50;
+// Exact grenade command consumers. The scheduler entry and its state-1/state-2
+// hold/release updates all call PlayerInputCommandState_IsCommandActive
+// directly. Relaying only these E8 sites avoids FastGrenadeController +0xA0,
+// whose independent Joypad query marks the action inhibited at controller+0x1A0.
+constexpr std::uintptr_t kGrenadeSchedulerIsCommandActiveCallsiteRva =
+    0x10E78E6;
+constexpr std::uintptr_t kGrenadeState1IsCommandActiveCallsiteRva = 0xE218DD;
+constexpr std::uintptr_t kGrenadeState2IsCommandActiveCallsiteRva = 0xE21A8F;
+constexpr std::size_t kPlayerFastGrenadeControllerOffset = 0x1E50;
+constexpr std::uintptr_t kFastGrenadeControllerVtableRva = 0x2A227A0;
+constexpr std::size_t kFastGrenadeControllerStartVtableOffset = 0x40;
+constexpr std::size_t kFastGrenadeControllerCanStartVtableOffset = 0xA8;
+constexpr std::uintptr_t kFastGrenadeControllerStartRva = 0xE19600;
+constexpr std::uintptr_t kFastGrenadeControllerCanStartRva = 0xE25540;
 // Exact press-query callsites inside the naturally scheduled melee dispatcher.
 // Both are E8 calls to PlayerInputCommandState_IsCommandActive. They capture
 // local PC/pad melee; remote execution is injected at the Joypad square query.
