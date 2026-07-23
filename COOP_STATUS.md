@@ -9252,3 +9252,39 @@ instead uses the native requested/active-slot setter. Never copy the sender's
 node/weapon pointer across processes. `hj` builds successfully. Corrected
 six-record IDB comments were saved (`1294 functions, 20 data names`,
 `save_database returned True`).
+
+### 2026-07-23 RUNTIME CONFIRMED: `hj` rejects K3; all puppet records are empty
+
+The second bounded throw ran in the opposite direction: PID 11160 (role A,
+local Chloe) sent press/release sequences `401 -> 487`; PID 11832 (role B)
+advanced its retained puppet Chloe through scheduler, CanStart and state 1.
+The local selected record was the expected grenade ProcessWeapon:
+
+`slot=0`, `Valid=1`, art `0x0B8BD6D6`, magazine `3`, reserve `0`, total `3`,
+vtable RVA `0x2A9BF48`.
+
+All six puppet records remained exactly zero at scheduler, CanStart,
+StartArc entry/exit and state-1 release: every `s0..s5` had
+`Node=0 Handle=0 Weapon=0 Valid=0`. No authored marker followed and the
+authoritative event again entered the deliberate 2.5-second fallback defer.
+The user consequently saw the unchanged late explosion at the throw origin.
+
+This rejects K3 and confirms K1 uniquely: the retained puppet owns no bound
+grenade record anywhere in FastGrenadeController. Together with the prior
+Nadine-direction `hi` result, the defect is symmetric and not skin-specific.
+K2 (valid zero-ammo selected ProcessWeapon) and wrong selected index are also
+rejected.
+
+One local post-release census additionally showed a valid record 3 whose
+vtable RVA is `0x2A228F8`, the RTTI-confirmed
+`ProcessGrenadeInHand`, not ProcessWeapon. Its apparent ammo fields are
+therefore ignored; it is transient held-grenade state, not a competing
+inventory slot.
+
+The next implementation boundary is now narrow: relay the sender's grenade art
+and total count, create or reuse a ProcessWeapon owned by the retained puppet
+through its own `PlayerWeaponController`, then bind that local object through
+`PlayerGrenadeController_BindGrenadeWeaponSlot 0x140E17720` before StartArc.
+Before writing this, resolve the PlayerWeaponController factory signature and
+prove whether a matching unbound ProcessWeapon can already exist, to avoid
+duplicates and HUD/holster side effects.

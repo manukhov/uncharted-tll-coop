@@ -111,7 +111,13 @@
       record; K3 remains until records 2..5 are inspected. Read-only `hj` logs
       all six plus ProcessWeapon art id. All invalid selects a missing puppet
       loadout/factory result; another valid record selects the native slot
-      setter. Never copy sender pointers across processes.
+      setter. **RUNTIME CONFIRMED:** opposite-direction Chloe throw showed local
+      slot 0 ProcessWeapon art `0x0B8BD6D6`, ammo `3+0`, while every puppet
+      record 0..5 remained zero through state 1. K3 is rejected; prior Nadine
+      and current Chloe results prove symmetric K1. Next: resolve a duplicate-
+      safe lookup/factory on the puppet's own PlayerWeaponController, relay art
+      and count, then bind only that local ProcessWeapon through `0x140E17720`.
+      Never copy sender pointers across processes.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /
