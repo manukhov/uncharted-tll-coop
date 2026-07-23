@@ -162,7 +162,18 @@
       the expected record-3 `ProcessGrenadeInHand` written at `0x140E1A1D3`,
       with lifecycle kills at `0x140E1A803/0x140E1AABC`; do not suppress it.
       A true native duplicate requires authored marker/Init plus a later GRNE
-      Init for the same event, which `hl` did not show.
+      Init for the same event, which `hl` did not show. **RUNTIME PARTIAL
+      CONFIRM / REJECT `hm`:** state4=1 is reached while held and state4=0
+      appears exactly at the real falling edge; one StartArc and one ammo
+      decrement remain correct. The controller still resets to state0 with no
+      authored marker/Init, and GRNE defers. Therefore the next build is
+      bounded/log-only across `0x140E1FF90 +0x540`, StartThrowAction cover/net
+      resets, dispatch/state8 and common reset; do not force a branch yet. The
+      visible trajectory is also completely wrong. Static leading cause is
+      receiver-local screen/camera/pose input to SolveTrajectory; distinguish
+      that from wrong owner route or a separate HUD trajectory record before
+      extending StatePacket. Never restore collision-bypassing transform
+      pinning.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /

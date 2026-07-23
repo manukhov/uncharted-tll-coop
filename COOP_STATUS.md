@@ -9538,3 +9538,61 @@ state-4 false while sender remains true, no marker after the real release,
 duplicate projectile, delayed extra explosion or crash rejects the
 corresponding boundary. Trajectory accuracy remains an observed downstream
 result and is not mutated by `hm`.
+
+### 2026-07-23 RUNTIME PARTIAL CONFIRM / REJECT: `hm` reaches state 4; action still resets
+
+Build `hm` passed the exact state-4 prediction and rejects the pre-query
+predicate alternative. PID 17828 (local Chloe) sent one long
+`grenade-arc` rise at sequence 566 and fall at sequence 1608. PID 8768
+produced exactly one scheduler/CanStart/StartArc cycle, one
+`GRENADE-SCHEDULER-CONSUME`, then:
+
+- state 1 true at sequence 566;
+- state 2 true at sequence 569;
+- state 4 true at sequence 573;
+- state 4 false at the exact sender falling edge, sequence 1608.
+
+There was no repeated StartArc and the ProcessWeapon count decreased only once,
+from 3 to 2. A second observed cycle reproduced state 4 true at sequence 1892
+and false at sequence 2102, with one further count decrement. Thus
+`sub_140E24ED0` passed, `0x140E2227D` was reached, and `hm` supplied both held
+levels correctly. N3a is only partially confirmed; N3c is rejected.
+
+The controller nevertheless returned to state 0 by sequence 1632/2127. No
+`GRENADE-ANIM-SPAWN-NATIVE` or authored ProjectileGrenade Init occurred, and
+each authoritative event entered `GRENADE-EVENT-DEFER`. The user still saw a
+second grenade-looking object appear while aiming. The log proves this is not
+a second StartArc, second ProcessWeapon or native projectile Init. The remaining
+visible multiplicity is within the expected record-3 ProcessGrenadeInHand and
+its held child/effect lifecycle until a later one-shot GRNE fallback; exact
+held write/kill markers remain the bounded visual classifier.
+
+N3b is selected and now splits into four downstream alternatives:
+
+- **P1:** `PlayerGrenadeController_ReleasePostArcHold 0x140E1FF90` observes
+  `controller+0x540 == 0`, enters state 7, then times out through vtable `+0x60`
+  / `0x140E1D850` to state 0.
+- **P2:** `+0x540 != 0` enters
+  `PlayerGrenadeController_StartThrowAction 0x140E20050`, but its cover gate
+  resets at `0x140E201E0` before dispatch.
+- **P3:** StartThrowAction reaches its online `net-can-throw-func` gate and a
+  false result resets at `0x140E201E8`.
+- **P4:** dispatch `grenade-starting-throw` at `0x140E2054F` occurs and state 8
+  is written, but the animation never emits marker `0x14040D852`.
+
+The next build must be read-only and bounded: log ReleasePostArcHold entry plus
+`state/+0x540`, StartThrowAction entry, both pre-dispatch reset branches,
+successful dispatch/state 8, the common reset with return address, and the
+existing authored-marker/Init classifier. It must not force a state or disable
+a gate before one of P1-P4 is uniquely observed.
+
+The same runtime independently rejects trajectory correctness. The peer shows
+an arc, but the user reports it is completely wrong. `hm` transmits only command
+level and inventory; both StartArc and the post-timer continuation call
+`PlayerGrenadeController_SolveTrajectory` inside the receiver using its own
+resolved screen/camera/pose context. Competing trajectory causes are **T1**
+receiver-local camera/pose inputs, **T2** wrong retained-player screen route or
+owner context, and **T3** a correct controller solution but a HUD consumer
+reading a different unsynchronized record. Trace the producer/consumer fields
+and compare them with the existing pose-seed/camera relays before adding packet
+data. Do not restore the rejected per-frame transform pinning.
