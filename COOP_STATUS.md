@@ -9350,3 +9350,45 @@ custom GRNE suppression, visible throw animation, collision-safe native flight
 and natural fuse explosion. A crash, occupied slot, failed validation, missing
 selected record, second created object, or unchanged delayed origin fallback
 falsifies the corresponding L outcome. The Release DLL builds successfully.
+
+### 2026-07-23 RUNTIME REJECTED: `hk` re-enters StartArc while one press is held
+
+The `hk` factory/bind boundary itself passed. On a fresh receiver with no exact
+grenade ProcessWeapon, one `GRENADE-BIND` reported `existingSlot=-1`,
+`slot2Occupied=0`, `created=1`, `typeValid=1`, `bound=1`, selected art
+`0x0B8BD6D6` and selected total 3. On a later lifecycle the same boundary found
+and reused the exact manager-slot-2 object (`existingSlot=2`, `created=0`) and
+restored its total without creating a duplicate. This confirms L2 and the
+duplicate-safe reuse path, but rejects the complete behavioral prediction.
+
+During one continuous sender hold, the sender emitted exactly one rising edge
+(`active=1`, sequence 43191) and one falling edge (`active=0`, sequence 43329).
+The receiver nevertheless entered `PlayerGrenadeController_StartArc
+0x140E19600` four times at sequences 43191, 43222, 43251 and 43281. Its bound
+grenade count fell 3 -> 2 -> 1 -> 0. Visually, additional grenades appeared and
+exploded while the player was still merely holding the first grenade; the
+resulting collection of projectiles also made the visible trajectory appear
+incorrect.
+
+The competing explanations are now separated:
+
+- **M1 sender/network chatter is REJECTED:** only one rising and one falling
+  edge crossed the network for the hold.
+- **M2 duplicate native factory output is REJECTED:** creation happened only
+  once and subsequent binding reused the exact local ProcessWeapon.
+- **M3 scheduler level replay is selected:** `Player_ProcessWeaponAndGrenadeInputActions
+  0x1410E71D0` queries `grenade-arc` at `0x1410E78E6` every frame and calls
+  CanStart/StartArc whenever the controller can start. The relay currently
+  returns the retained peer's held level at this entry as well as in controller
+  states 1 and 2. When the native controller later returns to state 0 during
+  the same hold, the scheduler therefore starts another arc.
+- **M4 a later authored-action/animation gate remains possible:** preventing
+  scheduler replay proves only one native arc per press. If the single cycle
+  still never reaches `throw-grenade`, its state-2 timer/action continuation
+  must be traced separately.
+
+The next build must add a per-network-press consumed latch only at the scheduler
+query. It is reset on the sender's rising edge and consumed only after StartArc
+successfully reaches state 1. State-1/state-2 command queries must continue to
+receive the true held level until the real falling edge, preserving native hold
+and release semantics. Trajectory is not changed in this discriminator.

@@ -121,9 +121,18 @@
       or creates exactly one through native `+0x130` only when manager slot 2 is
       empty, then binds through `0x140E17720`. GiveWeapon, forged cross-process
       handles and occupied-slot replacement are rejected. Test the written
-      L1/L2/L3/L4 prediction: one valid `GRENADE-BIND`, no duplicate on the next
-      press, release-gate crossing, authored marker/animation and one native
-      collision-safe projectile.
+      L1/L2/L3/L4 prediction. **RUNTIME PARTIAL CONFIRM / REJECT:** the receiver
+      created and bound one exact ProcessWeapon, later reused that same object,
+      and never duplicated the factory result. However, one sender hold
+      (`active=1` seq 43191 through `active=0` seq 43329) produced four receiver
+      StartArc cycles (seq 43191/43222/43251/43281) and consumed ammo 3 -> 0,
+      matching the user's extra grenades/explosions. Sender chatter and duplicate
+      creation are rejected. Static scheduler `0x1410E78E6` is a per-frame level
+      query, so the next build must consume the rising edge once at scheduler
+      entry after successful state 1 while continuing to expose the held level
+      to state 1/state 2 until the actual release. First prove exactly one
+      StartArc per long hold; trajectory and the later authored marker remain
+      separate downstream outcomes.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /
