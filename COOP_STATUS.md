@@ -8527,3 +8527,37 @@ hash and `verified=1`. If it verifies but the local rifle remains at the hand,
 the direct rebind is REJECTED as a main-view fix and Z2 wins. If no row appears,
 the row's still-unmet prerequisite must be instrumented before any further
 write. No lag, repeated call, animation or non-rifle mutation is permitted.
+
+### 2026-07-23 RUNTIME: `ha` rejects stock rebind as the local main-view fix
+
+Role B PID 10976 emitted exactly one admitted row before any weapon input:
+
+`NADINE-LOCAL-RIFLE-REBIND player=10E0A26280
+weapon=10E0CA4280 handSlot=0 current=-1 draw=0
+id=61A48E01->555EFB8D index=16->40 expected=40 call=1
+parentOwner=1 verified=1`.
+
+The owner handle/id and attachment-record allocation were preserved. Contrary
+to the local-hash part of the prediction, the primary binding hash remained
+`77E787DB->77E787DB`; this matches the earlier `ga` rifle control, where the
+generic builder payload was already the existing rifle-local value and no
+pistol-style handoff blend was started. The user still saw exactly the same
+rifle glued to the hand in Nadine's own view. Chloe's observer view remained at
+the already-working back placement, and no renewed lag was reported.
+
+Z1 is REJECTED and Z2 is selected for this generation: changing the exact
+inventory ProcessWeapon from rightHand to gun_holster through the complete
+stock Player controller boundary does not control the local main-view image.
+This independently agrees with `gm`, where a successful same-owner attachment
+replay also changed/verified logical attachment state without changing the
+visible local rifle. Do not repeat or strengthen either attachment API.
+
+The same run exposes a lifecycle lead that must be resolved statically before
+another test. After the successful row, both processes logged successive new
+retained Player pointers and AttachSystem record allocations. Role B moved from
+`0x10E0A26280/records 0x10E0A2FA30` through later local-Nadine generations,
+while role A similarly replaced its owner-1 Player. A stale drawable from a
+pre-replacement Player/ProcessWeapon generation is now a concrete alternative
+to a view flag. Trace the retained-player replacement and normal
+ProcessWeapon/DrawControl teardown in both directions; do not return to hot
+FgDraw/Cull hooks, which are already rejected and caused the earlier lag.
