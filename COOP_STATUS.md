@@ -9054,3 +9054,48 @@ enters the wrapper before its original-target pointer is published. J3 is cheap
 to eliminate statically by publishing the target before resume, but cannot by
 itself explain an access violation because the current null fallback returns
 zero. Exception RIP distinguishes J1 from J2 without another behavioral guess.
+
+### 2026-07-23 STATIC: staged early-crash discriminator (`hh`)
+
+Build `hh` changes no grenade command, animation or physics semantics. It adds
+an exception-only VEH before the existing hook installation and records a
+lock-free stage number around the already-bounded grenade relay transaction:
+
+- 1 begin; 2 original E8 targets validated; 3 relay allocated/flushed;
+- 4 original target published; 5 all other threads suspended;
+- 6 all sites writable; 7 all rel32 values written/flushed;
+- 8 protections restored; 9 threads resumed; 10 first wrapper entry;
+- 11 the installed line completed.
+
+The observer now records exception RIP, `tll.exe` RVA, runtime-DLL RVA, thread
+ID, register/stack values, install stage, wrapper-entry count and the first
+wrapper return RVA. The original `PlayerInputCommandState_IsCommandActive`
+target is published at stage 4, before enumeration/suspension and before any
+callsite can enter the wrapper, eliminating J3 rather than merely observing it.
+
+The evidence quota for this diagnostic launch is satisfied by three different
+types. First, two independent `hg` processes produced the identical runtime
+boundary after stage 3. Second, source/data-flow audit bounds the remaining
+operations to thread enumeration/suspend, three page-protection changes, three
+rel32 writes/restores, resume, or wrapper entry. Third, Release-object
+disassembly confirms the generated order: original-target store precedes
+`CreateToolhelp32Snapshot`; stage 5 follows enumeration; stages 6/7/8 bracket
+`VirtualProtect`/write/restore; stage 9 follows every `ResumeThread`. The
+wrapper's compiled prologue also preserves the ordinary Windows x64 nonvolatile
+registers and obtains the engine return address from its caller stack.
+
+Competing hypotheses remain **J1a:** failure inside enumeration or
+`SuspendThread`; **J1b:** failure during protect/write/restore/resume;
+**J2:** a resumed callsite reaches the shared relay/wrapper with a bad
+control-flow or ABI contract; **J4:** the process is terminated without a
+catchable CPU exception (for example an external watchdog), in which case no
+VEH line will exist.
+
+**Falsifiable `hh` prediction:** inject both copies without grenade input. A
+catchable J1a failure emits `grenadeRelayStage=4`, `wrapperEntries=0`; J1b emits
+stage 5 through 8 with zero entries; J2 emits at least one wrapper entry,
+records one of the exact return RVAs `0x10E78EB`, `0xE218E2`, or `0xE21A94`,
+and the RIP/stack identifies the relay or DLL wrapper. A live process reaches
+stage 11 and the later vtable/marker install lines. Symmetric process exit with
+no exception line selects J4 and forbids another in-process semantic change
+until the termination source is captured.

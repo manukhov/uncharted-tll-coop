@@ -83,11 +83,14 @@
       restores protection and resumes all handles on every exit. Its boot-stage
       prediction was RUNTIME REJECTED: both copies validated all sites and
       allocated the near thunk, then exited before the relay-installed line.
-      This rejects torn rel32 writes. Next step is not another grenade change:
-      enable the already-early crash observer, publish the original target
-      before resume, and capture exact RIP/stack plus non-I/O suspend/patch/
-      resume/first-wrapper stages to distinguish suspension failure from an ABI
-      fault.
+      This rejects torn rel32 writes. Build `hh` changes no grenade semantics:
+      it enables the already-early crash observer, publishes the original
+      target before any suspend/patch, and records lock-free stages 1..11 plus
+      first-wrapper entry/return RVA. Its written discriminator is ready for a
+      clean two-copy injection without grenade input: stage 4 means
+      enumeration/suspend, 5..8 means protect/write/restore/resume, wrapper
+      entry plus exact caller means ABI/control flow, and an exit with no VEH
+      line means non-exception termination.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /

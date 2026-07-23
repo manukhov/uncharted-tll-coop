@@ -213,6 +213,12 @@ std::atomic<int> g_grenade_scheduler_command_last{-1};
 std::atomic<int> g_grenade_state1_command_last{-1};
 std::atomic<int> g_grenade_state2_command_last{-1};
 std::atomic<int> g_grenade_can_start_last{-1};
+// Cold-install diagnostics for the scoped grenade relay. These remain atomic
+// and allocation-free so the VEH can report the last completed stage even when
+// the process faults while every other game thread is suspended.
+std::atomic<unsigned> g_grenade_relay_install_stage{0};
+std::atomic<unsigned> g_grenade_relay_wrapper_entries{0};
+std::atomic<std::uintptr_t> g_grenade_relay_first_return_rva{0};
 using PlayerInputIsCommandActiveFunction =
     char(__fastcall*)(void*, std::uint32_t, std::uint8_t);
 PlayerInputIsCommandActiveFunction
@@ -514,6 +520,8 @@ bool g_mirror_nadine_ai_disabled = false;
 ResolveLocalPlayerFunction g_original_resolve_local_player = nullptr;
 std::uintptr_t* g_nadine_vtable = nullptr;
 std::uintptr_t g_module = 0;
+std::uintptr_t g_self_module = 0;
+std::size_t g_self_image_size = 0;
 bool g_control_enabled = false;
 // When set, NadineBuddy is driven toward the replicated peer position (remote
 // player avatar) via animated NPC move-intent instead of local WASD.
@@ -1514,7 +1522,10 @@ int peer_slot_of_art(std::uint32_t art);
 // still go through boot_log_line(), while force_log_line() is compiled to a no-op.
 // Flip this only for a bounded experiment with a written prediction.
 constexpr bool kEnableRuntimeDiagnosticLogging = false;
-constexpr bool kEnableCrashObserver = false;
+// Diagnostic hh: both hf/hg copies died inside the cold grenade relay
+// installer. Keep the observer early enough to capture that install-time fault;
+// it is exception-only and does no work on a normal frame.
+constexpr bool kEnableCrashObserver = true;
 // Build gw proved that final-cull compaction neither removes the visible spawn
 // rifle nor preserves frame time. Keep the observer code available for static
 // correlation, but do not patch the hot RenderMgr callsite in production.
@@ -1617,6 +1628,11 @@ LONG CALLBACK crash_observer(EXCEPTION_POINTERS* exception) {
     char line[1536]{};
     const auto address = reinterpret_cast<std::uintptr_t>(
         exception->ExceptionRecord->ExceptionAddress);
+    const auto dll_rva =
+        address >= g_self_module &&
+                address < g_self_module + g_self_image_size
+            ? address - g_self_module
+            : 0;
     const auto rip = exception->ContextRecord != nullptr
         ? static_cast<std::uintptr_t>(exception->ContextRecord->Rip)
         : 0;
@@ -1638,14 +1654,23 @@ LONG CALLBACK crash_observer(EXCEPTION_POINTERS* exception) {
     }
     int length = std::snprintf(
         line, sizeof(line),
-        "[pid=%lu] EXCEPTION code=0x%08lX address=0x%llX rva=0x%llX "
+        "[pid=%lu tid=%lu] EXCEPTION code=0x%08lX address=0x%llX rva=0x%llX "
+        "dllRva=0x%llX grenadeRelayStage=%u wrapperEntries=%u "
+        "firstReturnRva=0x%llX "
         "access=%llu fault=0x%llX rip=0x%llX rsp=0x%llX "
         "rcx=0x%llX rdx=0x%llX r8=0x%llX r9=0x%llX "
         "rbx=0x%llX rbp=0x%llX rsi=0x%llX rdi=0x%llX r14=0x%llX r15=0x%llX",
         static_cast<unsigned long>(GetCurrentProcessId()),
+        static_cast<unsigned long>(GetCurrentThreadId()),
         static_cast<unsigned long>(code),
         static_cast<unsigned long long>(address),
         static_cast<unsigned long long>(address > g_module ? address - g_module : 0),
+        static_cast<unsigned long long>(dll_rva),
+        g_grenade_relay_install_stage.load(std::memory_order_relaxed),
+        g_grenade_relay_wrapper_entries.load(std::memory_order_relaxed),
+        static_cast<unsigned long long>(
+            g_grenade_relay_first_return_rva.load(
+                std::memory_order_relaxed)),
         static_cast<unsigned long long>(fault_kind),
         static_cast<unsigned long long>(fault_address),
         static_cast<unsigned long long>(rip),
@@ -1670,11 +1695,17 @@ LONG CALLBACK crash_observer(EXCEPTION_POINTERS* exception) {
             const auto value_rva = value >= g_module && value < g_module + 0x30000000
                 ? value - g_module
                 : 0;
+            const auto value_dll_rva =
+                value >= g_self_module &&
+                        value < g_self_module + g_self_image_size
+                    ? value - g_self_module
+                    : 0;
             length += std::snprintf(
                 line + length, sizeof(line) - static_cast<std::size_t>(length),
-                " 0x%llX(rva=0x%llX)",
+                " 0x%llX(rva=0x%llX,dllRva=0x%llX)",
                 static_cast<unsigned long long>(value),
-                static_cast<unsigned long long>(value_rva));
+                static_cast<unsigned long long>(value_rva),
+                static_cast<unsigned long long>(value_dll_rva));
         }
         if (length > 0 && static_cast<std::size_t>(length) + 2 < sizeof(line)) {
             line[length++] = '\r';
@@ -2167,6 +2198,18 @@ char __fastcall hooked_player_grenade_command_callsite(
         reinterpret_cast<std::uintptr_t>(_ReturnAddress());
     const std::uintptr_t return_rva =
         return_address >= g_module ? return_address - g_module : 0;
+    if (g_grenade_relay_wrapper_entries.fetch_add(
+            1, std::memory_order_relaxed) == 0) {
+        g_grenade_relay_first_return_rva.store(
+            return_rva, std::memory_order_relaxed);
+        unsigned stage =
+            g_grenade_relay_install_stage.load(std::memory_order_relaxed);
+        while (stage < 10 &&
+               !g_grenade_relay_install_stage.compare_exchange_weak(
+                   stage, 10, std::memory_order_relaxed,
+                   std::memory_order_relaxed)) {
+        }
+    }
     const char* phase = nullptr;
     std::atomic<int>* last = nullptr;
     if (return_rva ==
@@ -2351,6 +2394,7 @@ bool suspend_other_process_threads(SuspendedProcessThreads& out) {
 }
 
 bool install_player_grenade_command_callsite_relay() {
+    g_grenade_relay_install_stage.store(1, std::memory_order_relaxed);
     boot_log_line(
         "grenade command relay install begin (cold validate)");
     constexpr std::array<std::uintptr_t, 3> kCallsiteRvas{
@@ -2381,6 +2425,7 @@ bool install_player_grenade_command_callsite_relay() {
             return false;
         }
     }
+    g_grenade_relay_install_stage.store(2, std::memory_order_relaxed);
     boot_log_line(
         "grenade command relay callsites validated");
 
@@ -2399,6 +2444,7 @@ bool install_player_grenade_command_callsite_relay() {
         reinterpret_cast<std::uintptr_t>(
             &hooked_player_grenade_command_callsite);
     FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+    g_grenade_relay_install_stage.store(3, std::memory_order_relaxed);
     boot_log_line(
         "grenade command relay near thunk allocated");
 
@@ -2416,6 +2462,11 @@ bool install_player_grenade_command_callsite_relay() {
         displacements[i] = static_cast<std::int32_t>(displacement);
     }
 
+    // Publish the original before any callsite can target the wrapper. hg did
+    // this after resume, leaving a real (though non-faulting) first-entry race.
+    g_original_player_grenade_callsite_is_command_active =
+        reinterpret_cast<PlayerInputIsCommandActiveFunction>(expected_target);
+    g_grenade_relay_install_stage.store(4, std::memory_order_relaxed);
     SuspendedProcessThreads suspended_threads{};
     if (!suspend_other_process_threads(suspended_threads)) {
         VirtualFree(relay, 0, MEM_RELEASE);
@@ -2423,6 +2474,7 @@ bool install_player_grenade_command_callsite_relay() {
             "grenade command callsite relay SKIPPED (thread suspend)");
         return false;
     }
+    g_grenade_relay_install_stage.store(5, std::memory_order_relaxed);
 
     std::array<DWORD, kCallsiteRvas.size()> old_protections{};
     std::size_t protected_count = 0;
@@ -2442,19 +2494,24 @@ bool install_player_grenade_command_callsite_relay() {
             return false;
         }
     }
+    g_grenade_relay_install_stage.store(6, std::memory_order_relaxed);
     for (std::size_t i = 0; i < callsites.size(); ++i) {
         *reinterpret_cast<std::int32_t*>(callsites[i] + 1) =
             displacements[i];
         FlushInstructionCache(GetCurrentProcess(), callsites[i], 5);
+    }
+    g_grenade_relay_install_stage.store(7, std::memory_order_relaxed);
+    for (std::size_t i = 0; i < callsites.size(); ++i) {
         DWORD ignored = 0;
         VirtualProtect(
             callsites[i], 5, old_protections[i], &ignored);
     }
+    g_grenade_relay_install_stage.store(8, std::memory_order_relaxed);
     resume_suspended_process_threads(suspended_threads);
-    g_original_player_grenade_callsite_is_command_active =
-        reinterpret_cast<PlayerInputIsCommandActiveFunction>(expected_target);
+    g_grenade_relay_install_stage.store(9, std::memory_order_relaxed);
     boot_log_line(
         "grenade command relay installed (scheduler/state1/state2 only)");
+    g_grenade_relay_install_stage.store(11, std::memory_order_relaxed);
     return true;
 }
 
@@ -37430,9 +37487,20 @@ DWORD WINAPI install_hook(void*) {
         log_line("tll.exe module not found");
         return 1;
     }
+    if (g_self_module != 0) {
+        const auto* const dos =
+            reinterpret_cast<const IMAGE_DOS_HEADER*>(g_self_module);
+        if (dos->e_magic == IMAGE_DOS_SIGNATURE) {
+            const auto* const nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>(
+                g_self_module + static_cast<std::uintptr_t>(dos->e_lfanew));
+            if (nt->Signature == IMAGE_NT_SIGNATURE) {
+                g_self_image_size = nt->OptionalHeader.SizeOfImage;
+            }
+        }
+    }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-23hg "
-        "(thread-safe scoped grenade relay and authored native projectile)");
+        "TLL co-op runtime init 2026-07-23hh "
+        "(instrumented scoped grenade relay and authored native projectile)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -37813,6 +37881,7 @@ DWORD WINAPI install_hook(void*) {
 
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void*) {
     if (reason == DLL_PROCESS_ATTACH) {
+        g_self_module = reinterpret_cast<std::uintptr_t>(instance);
         DisableThreadLibraryCalls(instance);
         const HANDLE thread = CreateThread(
             nullptr,
