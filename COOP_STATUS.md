@@ -8242,7 +8242,7 @@ criterion must retain the exact conjunction already observed (role B, current
 Nadine rifle absent, same three LOD geometries, foreign owner id, no allocated
 FgAnimData owner, primary-used and non-pending).
 
-### 2026-07-23 STATIC: final cull pair compaction is a bounded safe boundary (`gw`)
+### 2026-07-23 STATIC PROPOSAL / RUNTIME REJECTED: final cull compaction (`gw`)
 
 The freeze in `gu` excludes game-object registry access from the render/cull
 hook, but it does not invalidate the already read-only final-queue census. The
@@ -8256,7 +8256,8 @@ Three independent static evidence types establish the boundary and its layout:
 
 1. Exact `CullFgLods::Spawn` source identity shows that arguments 3/4/5 are
    `FgInstance**`, `FgLodData*`, and count. It stores those two input pointers
-   and count in the asynchronous job at `+0x80/+0x88/+0xC8`.
+   and count in its staging record at `+0x100/+0x108/+0x110`; the submitted
+   worker later consumes them at job offsets `+0x80/+0x88` with count `+0xC8`.
 2. The worker `CullFgLods_ExecuteBatch 0x141A2C880` independently consumes
    `instances[index]` at an 8-byte stride and `lodData[index]` at an exact
    `176 (0xB0)` byte stride (`0x141A2C9CF`, `0x141A2C9FE`,
@@ -8274,10 +8275,9 @@ exactly three geometry matches; every match different from the target and
 carrying the same nonzero foreign owner id; every match absent from all
 allocated `FgAnimData+0x210` driven lists; primary-used set, secondary-used and
 pending-delete clear; no target-owner hits; three distinct queue indices and
-pool instances; every match covers the complete three-LOD target geometry mask
-`0x7`; and their state family is exactly `2 x 0x21228A38 +
-1 x 0x21228E38`. Any failed clause leaves both arrays and count byte-for-byte
-unchanged.
+pool instances; each record carries the complete three-LOD geometry mask
+`0x7`; and the state family is `2 x 0x21228A38 + 1 x 0x21228E38`. Any
+failed clause leaves both arrays and count byte-for-byte unchanged.
 
 Competing hypotheses remain explicit. F1: those three records are the
 standalone stale rifle, so paired compaction removes only the glued spawn
@@ -8295,8 +8295,24 @@ holstered weapon, remain visible and functional. Any freeze/crash, removal
 count other than three, missing body/weapon, or persistence of the glued rifle
 rejects F1.
 
-Build `gw` implements that guard literally. It caches only the three exact pool
-instances after a complete owner census, revalidates their owner, geometry,
-state and manager bits before each use, verifies that all three occur exactly
-once in the current queue, then compacts both writable in-place arrays and
-passes `count-3` to stock Spawn. The release DLL compiles successfully.
+Runtime selected the rejection. Both copies loaded `2026-07-23gw`; role A was
+PID 15636 and local-Nadine role B was PID 9788. The strict guard repeatedly
+passed in role B: for owner id `0x743`, generations 5-10 logged exact
+`NADINE-RIFLE-CULL-FILTER removed=3 before=956 after=953`. The user nevertheless
+confirmed that the rifle remained glued to Nadine and that the Nadine copy
+became extremely laggy. F1 is therefore REJECTED: removing this exact triplet
+from these Spawn submissions does not remove the visible artifact.
+
+The log also explains the performance failure. The same generation emitted
+many `sample=1` rows, proving that the callsite is reached by multiple threads
+with independent `thread_local` caches. Each thread repeated the full
+FgAnimData owner census; armed workers additionally scanned and compacted the
+large paired arrays. This hot multi-thread mutation is REJECTED, regardless of
+whether the remaining artifact is submitted by another pass or driven through
+a different render boundary.
+
+Both game processes were closed. Build `gx` removes the runtime consequence by
+leaving the `CullFgLods` callsite entirely unpatched; it does not merely disable
+the compaction branch. Do not add another cull mutation. Continue from the
+earlier lifecycle result: trace where the obsolete ProcessWeapon owner is
+replaced or destroyed without normal DrawControl/FgInstance teardown.

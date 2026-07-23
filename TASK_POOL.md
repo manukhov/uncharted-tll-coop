@@ -1637,13 +1637,17 @@ Do not reopen these as the first move:
       mutation. If cleanup is required, prove the correct FgDrawMgr thread,
       manager pointer and `FreeInstance` already-detached argument before a
       runtime test; never call the object registry from the cull hook again.
-- [ ] Test bounded build `gw` at the already proven final-cull boundary. Compact
+- [x] Test bounded build `gw` at the final-cull boundary. Compact
       the in-place `FgInstance*` and paired `0xB0`-stride `FgLodData` arrays
       only when the complete role-B stale-rifle conjunction identifies exactly
       three distinct LOD records. Require `removed=3`, no freeze/crash, the
       glued spawn rifle absent, and all legitimate character/weapon rendering
       unchanged. Any failed guard must call stock with the original arrays and
-      count.
+      count. REJECTED: role B repeatedly logged exact `removed=3` for
+      generations 5-10, but the rifle remained visible and the copy became
+      extremely laggy. The same generation reached many worker-local caches,
+      repeating the census/large-array work. Build `gx` leaves the final-cull
+      callsite entirely unpatched; do not mutate this boundary again.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no
