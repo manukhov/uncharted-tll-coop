@@ -36751,8 +36751,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-23hb "
-        "(cold local-Nadine rifle full stock Put transition)");
+        "TLL co-op runtime init 2026-07-23hc "
+        "(restore confirmed grenade GRNK arc relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
