@@ -1605,12 +1605,21 @@ Do not reopen these as the first move:
       three-render-frame deferred `FgInstance_Reset` performed by
       `FgDrawMgr_FrameBegin 0x14181A760`. `ForAllUsedInstances 0x14181C1B0`
       independently excludes pending-delete slots.
-- [ ] Run read-only build `gt` and classify final-queue slots
+- [x] Run read-only build `gt` and classify final-queue slots
       `1000/1001/1002`: T1 requires both used bits clear plus matching
       pending-delete mask and `FgInstance+0x254 bit 1`; T2 retains a used bit
       without pending state; T3 is a disagreement between manager mask and
       instance retire state. Keep the existing target-absent, geometry-hit,
       owner-zero and visual positive controls.
+      Result: T2 CONFIRMED. All three slots remained `used=1/0`,
+      `pending=0`, `retire=0`, with `owners=0`; the user clarified that the
+      rifle is visually glued rather than held by the animated hands. T1/T3
+      are REJECTED, and pending-delete queue filtering is not justified.
+- [ ] Trace creation and ownership of the live standalone spawn-rifle LOD set.
+      Distinguish a direct detach-without-free path (U1), allocation without an
+      FgAnimData owner (U2), and a second owner container omitted by the `gs`
+      census (U3). Resolve the attach/detach call graph and all primary-used
+      mask writers before constructing another runtime discriminator.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

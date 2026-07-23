@@ -8141,3 +8141,33 @@ role B reproduces `targetMask=0`, `geometryHits=3`, `owners=0`. Exactly
 `used!=0` with no pending state selects T2. Any disagreement between pending
 mask and retire bit selects T3. Crash, missing controls or a visual regression
 invalidates the capture.
+
+### 2026-07-23 CONFIRMED: spawn rifle is a live standalone FgInstance set (`gt`)
+
+Both copies loaded `2026-07-23gt`; role A was PID 7040 and local-Nadine role B
+was PID 11288. The user confirmed that the spawn rifle remained visible with no
+new regression and clarified the visual symptom: Nadine does not hold it in an
+animated grip; it looks like an independently glued object.
+
+Role B reproduced every positive control through generations 18-20. The current
+Player rifle remained absent (`targetMask=0`, `activeMask=0`), while the same
+three geometry-matched pool slots `1000/1001/1002` remained in the final queue
+with `owners=0`. All three nevertheless had primary-used membership
+`used=1/0`, no pending-delete membership (`pending=0`), and no instance retire
+flag (`retire=0`). Their copied owner id was `0x956`, distinct from the current
+target runtime id `0x6A4`; slots 1000/1001 carried state `0x21228A38` and slot
+1002 carried `0x21228E38`.
+
+This selects T2. The visible spawn rifle is a live, manager-owned standalone
+three-LOD FgInstance set which the current FgAnimData census does not own. T1
+(deferred retirement) and T3 (mask/retire disagreement) are REJECTED. The
+earlier O2 wording that classified these slots as released/stale is superseded:
+`owners=0` was correct, but it did not imply release. Do not compact the cull
+queue by pending-delete state and do not mutate the current Player rifle.
+
+The next static split is: U1, a direct
+`FgDrawMgr_DetachInstanceFromAnimData 0x14181A5A0` caller deliberately leaves a
+primary-used standalone instance; U2, `FgDrawMgr_AllocateInstance 0x141819F30`
+can allocate without an FgAnimData owner; U3, the `gs` owner census omitted a
+second legitimate ownership container. Resolve the attach/detach call graph and
+trace the primary-used-bit lifetime before another runtime test.
