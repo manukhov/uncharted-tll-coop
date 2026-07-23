@@ -87,10 +87,14 @@
       it enables the already-early crash observer, publishes the original
       target before any suspend/patch, and records lock-free stages 1..11 plus
       first-wrapper entry/return RVA. Its written discriminator is ready for a
-      clean two-copy injection without grenade input: stage 4 means
-      enumeration/suspend, 5..8 means protect/write/restore/resume, wrapper
-      entry plus exact caller means ABI/control flow, and an exit with no VEH
-      line means non-exception termination.
+      clean two-copy injection without grenade input. **RUNTIME CONFIRMED:**
+      PID 4168/8272 both stayed alive, installed the scoped callsite relay,
+      FastGrenade vtable probe, native marker/Init hooks and role A/B networking
+      without a VEH exception. The original-target publication race is the
+      leading `hg` crash cause, though timing instrumentation prevents calling
+      it unique. Next step is the written behavior test: one grenade throw while
+      checking peer animation, native collision-safe trajectory and natural
+      landing/fuse explosion.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /

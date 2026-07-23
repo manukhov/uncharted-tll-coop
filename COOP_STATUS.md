@@ -9099,3 +9099,31 @@ and the RIP/stack identifies the relay or DLL wrapper. A live process reaches
 stage 11 and the later vtable/marker install lines. Symmetric process exit with
 no exception line selects J4 and forbids another in-process semantic change
 until the termination source is captured.
+
+### 2026-07-23 RUNTIME CONFIRMED: `hh` cold relay install survives both copies
+
+A fresh autonomous two-copy launch/injection loaded `hh` into PID 4168 (role A)
+and PID 8272 (role B). Both processes remained alive and responsive through the
+observation window, emitted no VEH exception, and independently reached:
+
+1. `grenade command relay installed (scheduler/state1/state2 only)`
+2. `FastGrenade boundary probe installed (+0x40 start, +0xA8 can-start)`
+3. native marker relay and grenade Init probe installed
+4. role-specific UDP state network started
+
+This rejects J1a/J1b as unconditional cold-install failures and confirms that
+the three patched callsites, shared relay and later vtable patches can coexist
+through boot on both copies. The only control-flow correction relative to
+crashing `hg` is publishing the original
+`PlayerInputCommandState_IsCommandActive` target before suspension/activation,
+so the first-entry race J3 is now the leading explanation. It is not promoted
+to a unique CONFIRMED crash cause because the stage/VEH instrumentation also
+perturbs timing.
+
+The behavioral `hf` prediction is now unblocked. On one copy, throw a grenade
+while observing the peer: the expected sequence is scheduler true,
+CanStart true, Start/state 1, release, authored marker, exactly one native
+`ProjectileGrenade::Init`, collision-safe flight and the natural landing/fuse
+explosion. Missing animation, stationary projectile, geometry tunneling or a
+spawn-point explosion each falsifies a different downstream boundary; do not
+change the installer during that test.
