@@ -4908,14 +4908,10 @@ void apply_pending_peer_grenade_event() {
         g_pending_grenade_event_art.load(std::memory_order_relaxed),
         &result, &stage, &fault_rva, &fault_code);
     g_last_applied_grenade_event_seq.store(seq, std::memory_order_relaxed);
-    // ARC FIX (v3, 2026-07-11): the v2 per-frame position teleport (arm_peer_grenade_
-    // arc + set_position=true) clipped the grenade through walls/ground (manual
-    // transform write bypasses collision) and never produced the native arc. Root:
-    // launch velocity is a spawn-descriptor value, and the object velocity field is a
-    // physics OUTPUT. New test: seed velocity ONCE (set_position=FALSE, no teleport)
-    // and hand off to native physics/collision. If the projectile integrates from the
-    // velocity field, the arc appears and it collides properly; if not, the fix must
-    // move into the event transform basis (path b). g_grenade_oneshot_vel toggles.
+    // CONFIRMED v6 (2026-07-11): Execute materializes the peer grenade, then the
+    // GRNK stream owns its in-flight world state. The later unconfirmed v3 edit
+    // removed arm_peer_grenade_arc and made every GRNK packet a no-op because
+    // apply_grenade_kinematics_update requires g_peer_arc_grenade.
     void* const spawned = g_peer_spawned_grenade.exchange(
         nullptr, std::memory_order_acq_rel);
     bool arc_forced = false;
@@ -4923,13 +4919,16 @@ void apply_pending_peer_grenade_event() {
         grenade_has_launch_velocity(g_pending_grenade_vel)) {
         arc_forced = seh_write_grenade_launch_state(
             spawned, g_pending_grenade_pos, g_pending_grenade_vel,
-            g_pending_grenade_quat, /*set_position=*/false);
+            g_pending_grenade_quat, /*set_position=*/true);
         if (arc_forced) {
+            arm_peer_grenade_arc(
+                spawned, g_pending_grenade_pos, g_pending_grenade_vel,
+                g_pending_grenade_quat);
             g_active_grenade_throw_seq.store(seq, std::memory_order_release);
             const bool fuse_started = seh_start_peer_grenade_fuse(spawned);
             std::ostringstream fl;
             fl << "GRENADE-FUSE-START ok=" << (fuse_started ? 1 : 0)
-               << " (oneshot vel, native physics)";
+               << " fuseEnd=now+" << kGrenadeFuseDurationSec;
             force_log_line(fl.str().c_str());
         }
     }
@@ -14554,8 +14553,9 @@ void send_local_player_state() {
     apply_pending_peer_grenade_event();
     apply_pending_peer_breakable_event();
     pump_deferred_breakable_sync();
-    // reapply_peer_grenade_arc();  // v3: disabled - per-frame position teleport
-    // clipped the grenade through walls/ground and never made a native arc.
+    // Confirmed v6 bridge between ~16 Hz GRNK samples. Native physics on the
+    // Execute-spawned peer object does not integrate the relayed velocity.
+    reapply_peer_grenade_arc();
     track_thrown_grenade();  // grenade pos/vel probe (independent of net gate)
     if (!g_state_net.enabled || !g_state_net.peer_set) {
         return;

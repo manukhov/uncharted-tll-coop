@@ -8664,3 +8664,58 @@ phase or another state it initializes, not by strengthening the Put/rebind
 again. Build `hb` is parked: its one-shot transition and execute callsite probe
 are disabled while the user-prioritized grenade synchronization is handled.
 Both game processes were closed.
+
+### 2026-07-23 STATIC: grenade-origin regression is the disabled v6 GRNK owner
+
+The user reprioritized the current P0 to grenade animation, throw, trajectory
+and landing explosion. The reported regression is specific: the peer explosion
+occurs at the throw origin instead of the thrown grenade's destination.
+
+The candidates are explicit. **G1:** the receiver still creates a grenade and
+starts a valid fuse, but later commit `ad447ff` disconnected the created object
+from the `GRNK` stream, leaving visual/collision/explosion transform at the
+initial `GRNE` point. **G2:** `SendNetEventGrenadeStartFuse` again receives
+`now` instead of an end timestamp and detonates immediately. **G3:** GRNK reaches
+an object but updates only the raw `+0x240` position, while the derived visual
+and collision transforms remain at spawn. **G4:** the sender no longer captures
+the native grenade hold/release input, so animation and projectile creation
+never begin on the peer Player.
+
+Four independent evidence types select G1 before runtime:
+
+1. Current dataflow: `apply_grenade_kinematics_update` returns unless
+   `g_peer_arc_grenade` is non-null, but `rg` finds its only non-null store inside
+   `arm_peer_grenade_arc`, whose sole call was deleted. Every GRNK is therefore
+   a deterministic no-op.
+2. Git boundary: `ad447ff` explicitly changed bootstrap
+   `set_position=true` to false, deleted `arm_peer_grenade_arc`, and commented
+   out `reapply_peer_grenade_arc`; its own message marks the build untested.
+3. Independent durable runtime evidence from 2026-07-11 confirms the opposite
+   v6 contract: `GRNE` spawn, GRNK kinematics applied to the remembered spawned
+   object, writes to `+0x130/+0x240/+0x250/+0x280`, refresh
+   `0x141BB8320`, and `fuse_end=now+3s` produced the correct arc and landing
+   explosion.
+4. Current alternatives do not match the code: fuse setup still computes
+   `now + 3.0s`; `seh_write_grenade_launch_state` still writes all four position
+   mirrors and calls the derived-transform refresh. The sender still publishes
+   the full native resolved-button mask (including grenade bits `0x100/0x400`)
+   into the puppet's `Input_ScaleCopyVirtual` path. That native Player grenade
+   controller owns `GrenadeMove`, toss action and animation.
+
+The repair restores only the last confirmed v6 boundary: bootstrap the spawned
+grenade at the relayed position, arm it as the active GRNK target, enable the
+inter-sample dead-reckon/derived-transform write, and retain the already-correct
+fuse end timestamp. It does not add a second animation system or change grenade
+ammo/inventory.
+
+**Falsifiable prediction:** on one deliberate grenade throw, the sender emits
+one `GRENADE-EVENT-SEND` followed by changing `GRENADE-KIN-SEND` positions. The
+receiver emits one successful `GRENADE-EVENT-EXEC` with non-null `spawned`,
+`arcForced=1`, `GRENADE-FUSE-START ok=1 fuseEnd=now+3`, then changing
+`GRENADE-KIN-RECV` / `GRENADE-PEER-TRACK` positions. The visible peer grenade
+must leave the throw point, follow the sender's arc, and explode at its landing
+point. A successful EXEC with no KIN-RECV selects a sequence/transport fault;
+KIN-RECV changing while the mesh/explosion stays at origin selects G3; no native
+peer throw animation despite healthy local input selects G4 for a separate
+action-edge trace. Any crash, wall pass-through, premature detonation, duplicate
+grenade or unrelated player/weapon regression rejects the repair.

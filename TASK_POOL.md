@@ -46,9 +46,15 @@
       `Player+0x39B8`; sender capture and receiver queue `+0x210` were observed and
       the user confirmed visible melee. cy removes all temporary stage probes.
 
-- [x] **Grenade world-object relay (2026-07-11):** CONFIRMED v6 — `GRNE` Execute
-      spawn + `GRNK` kinematics stream + derived transform write + `fuse_end=now+3s`.
-      Peer sees correct arc and landing explosion.
+- [~] **Grenade sync regression repair (CURRENT, 2026-07-23):** the confirmed v6
+      contract is `GRNE` Execute spawn + `GRNK` kinematics stream + derived
+      transform write + `fuse_end=now+3s`. Later unconfirmed commit `ad447ff`
+      removed the only `g_peer_arc_grenade` producer and disabled the inter-sample
+      apply, so all received `GRNK` packets became no-ops and the peer explosion
+      stayed at the throw origin. The current build restores the exact confirmed
+      v6 ownership; its runtime prediction is recorded in `COOP_STATUS.md`.
+      Grenade hold/release remains on the native Player input/action path so the
+      throw animation is engine-owned, not separately mirrored.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /
