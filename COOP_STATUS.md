@@ -8103,3 +8103,41 @@ this artifact. The next static target is the FgAnimData/FgInstance release path:
 identify where indices are removed from `FgAnimData+0x210`, where
 `qword_1467C3480` slots are released, and which final render queue is supposed
 to discard the retired indices.
+
+### 2026-07-23 STATIC: bound stale queue entries to deferred deletion (`gt`)
+
+The release path is now exact and supplies three independent evidence types for
+the next read-only discriminator. First, `FgDrawMgr_FreeInstance
+0x14181A2A0` immediately clears the slot in both used masks
+`0x1467C3080/0x1467C3600`, enqueues `{renderFrame,index}` in
+`m_deletedInstanceQueue`, sets pending-delete mask `0x1467C3A00`, sets
+`FgInstance+0x254 bit 1`, and then calls
+`FgDrawMgr_DetachInstanceFromAnimData 0x14181A5A0`. Second, exact source identity
+at `FgDrawMgr_FrameBegin 0x14181A760` waits for the GPU EOP tick from three
+render frames earlier, calls `FgInstance_Reset 0x14192F0E0`, and clears that
+pending-delete bit. Third, `FgDrawMgr_ForAllUsedInstances 0x14181C1B0`
+independently constructs the union of both used masks and explicitly excludes
+the pending-delete mask before invoking any callback. The final cull queue
+therefore violates the manager's own definition of a usable instance if the
+three `gs` matches carry this pending state.
+
+Competing outcomes are bounded. T1: all three geometry matches have both used
+bits clear and pending-delete plus `FgInstance+0x254 bit 1` set; this proves
+they are deferred-retirement entries and justifies compacting only those paired
+`FgInstance*/FgLodData` records at the final cull boundary. T2: a used bit is
+still set and pending state is clear; the owner census missed a live detached
+instance and cull filtering is not justified. T3: the manager masks and
+per-instance retire bit disagree; this indicates lifetime corruption and
+requires tracing the writer rather than filtering.
+
+Build `gt` remains read-only and extends each existing final-queue match with
+instance state `+0x18`, retire byte `+0x254`, and the three manager-mask bits.
+It leaves the queue, paired LOD data, pool and original `CullFgLods::Spawn` call
+unchanged.
+
+**Falsifiable `gt` prediction:** both copies load `2026-07-23gt`; local-Nadine
+role B reproduces `targetMask=0`, `geometryHits=3`, `owners=0`. Exactly
+`used=0/0`, `pending=1` and `retire&2=2` on all three matches selects T1.
+`used!=0` with no pending state selects T2. Any disagreement between pending
+mask and retire bit selects T3. Crash, missing controls or a visual regression
+invalidates the capture.

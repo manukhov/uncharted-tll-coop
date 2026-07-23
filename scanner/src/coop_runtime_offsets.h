@@ -107,9 +107,17 @@ constexpr std::size_t kFgAnimDataDrivenInstanceCountOffset = 0x20C;
 constexpr std::size_t kFgAnimDataDrivenInstanceIndicesOffset = 0x210;
 // FgDrawMgr::AllocateInstance claims one 0x280-byte slot from this global pool
 // and appends its index to exactly one owning FgAnimData driven list.
+// FreeInstance immediately clears both used masks, sets the pending-delete mask
+// and FgInstance+0x254 bit 1, then FrameBegin resets the slot after three GPU
+// frames and clears the pending-delete mask.
+constexpr std::uintptr_t kFgInstancePrimaryUsedBitsRva = 0x67C3080;
+constexpr std::uintptr_t kFgInstanceSecondaryUsedBitsRva = 0x67C3600;
+constexpr std::uintptr_t kFgInstancePendingDeleteBitsRva = 0x67C3A00;
 constexpr std::uintptr_t kFgInstancePoolBasePointerRva = 0x67C3480;
 constexpr std::uintptr_t kFgInstancePoolCapacityRva = 0x67C3488;
 constexpr std::size_t kFgInstancePoolStride = 0x280;
+constexpr std::size_t kFgInstanceStateFlagsOffset = 0x18;
+constexpr std::size_t kFgInstanceRetireFlagsOffset = 0x254;
 constexpr std::size_t kFgAnimDataRuntimePayloadOffset = 0x230;
 constexpr std::size_t kFgAnimDataPreviousPaletteOffset = 0x238;
 // Hex-Rays prints structure offsets in decimal: its +560/+568 are +0x230/+0x238.

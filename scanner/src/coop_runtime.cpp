@@ -33236,6 +33236,11 @@ struct NadineRifleCullQueueMatch {
     std::uint32_t owner_runtime_id = 0;
     std::uint32_t owner_art = 0;
     std::uint8_t world_matrix_match = 0;
+    std::uint32_t instance_state_flags = 0;
+    std::uint8_t instance_retire_flags = 0;
+    std::uint8_t pool_primary_used = 0;
+    std::uint8_t pool_secondary_used = 0;
+    std::uint8_t pool_pending_delete = 0;
 };
 
 struct NadineRifleCullQueueSnapshot {
@@ -33266,6 +33271,15 @@ void seh_resolve_nadine_rifle_cull_queue_owners(
         const auto* const anim_allocated =
             reinterpret_cast<const std::uint64_t*>(
                 g_module + kFgAnimDataPoolAllocatedBitsRva);
+        const auto* const instance_primary_used =
+            reinterpret_cast<const std::uint64_t*>(
+                g_module + kFgInstancePrimaryUsedBitsRva);
+        const auto* const instance_secondary_used =
+            reinterpret_cast<const std::uint64_t*>(
+                g_module + kFgInstanceSecondaryUsedBitsRva);
+        const auto* const instance_pending_delete =
+            reinterpret_cast<const std::uint64_t*>(
+                g_module + kFgInstancePendingDeleteBitsRva);
         if (instance_pool == nullptr || anim_pool == nullptr ||
             instance_capacity == 0 || instance_capacity > 0x10000u) {
             return;
@@ -33295,6 +33309,23 @@ void seh_resolve_nadine_rifle_cull_queue_owners(
             }
             match.instance_pool_index =
                 static_cast<std::uint32_t>(pool_index);
+            const std::uint32_t word_index =
+                match.instance_pool_index >> 6;
+            const std::uint64_t bit =
+                std::uint64_t{1}
+                << (match.instance_pool_index & 0x3F);
+            match.pool_primary_used =
+                (instance_primary_used[word_index] & bit) != 0 ? 1 : 0;
+            match.pool_secondary_used =
+                (instance_secondary_used[word_index] & bit) != 0 ? 1 : 0;
+            match.pool_pending_delete =
+                (instance_pending_delete[word_index] & bit) != 0 ? 1 : 0;
+            match.instance_state_flags =
+                *reinterpret_cast<const std::uint32_t*>(
+                    match.instance + kFgInstanceStateFlagsOffset);
+            match.instance_retire_flags =
+                *reinterpret_cast<const std::uint8_t*>(
+                    match.instance + kFgInstanceRetireFlagsOffset);
         }
 
         for (std::uint32_t anim_index = 0;
@@ -33593,6 +33624,14 @@ std::int64_t __fastcall hooked_cull_fg_lods_spawn(
              << ":art=0x" << match.owner_art
              << std::dec << ":world="
              << static_cast<unsigned>(match.world_matrix_match)
+             << ":state=0x" << std::hex << match.instance_state_flags
+             << ":retire=0x"
+             << static_cast<unsigned>(match.instance_retire_flags)
+             << std::dec << ":used="
+             << static_cast<unsigned>(match.pool_primary_used)
+             << "/" << static_cast<unsigned>(match.pool_secondary_used)
+             << ":pending="
+             << static_cast<unsigned>(match.pool_pending_delete)
              << "]";
     }
     write_log_line(line.str().c_str());
@@ -36272,8 +36311,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-23gs "
-        "(role-B alternate Nadine rifle FgAnimData owner discriminator; pistol animation unchanged)");
+        "TLL co-op runtime init 2026-07-23gt "
+        "(role-B stale Nadine rifle pending-delete discriminator; pistol animation unchanged)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

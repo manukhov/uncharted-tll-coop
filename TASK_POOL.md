@@ -1599,12 +1599,18 @@ Do not reopen these as the first move:
       final queue with `geometryHits=3`, but every sample returned
       `fg=0/owners=0`; the current rifle remained absent and no visual
       regression occurred. O1 and O3 are REJECTED.
-- [ ] Trace the static release path from FgAnimData's driven-instance list to
-      the global FgInstance pool and final render queue. Locate the exact
-      removal/free operation for `FgAnimData+0x210` indices, the release of
-      `qword_1467C3480[index]`, and the queue invalidation that should prevent
-      stale released slots `1000/1001/1002` from reaching `CullFgLods::Spawn`.
-      Do not write to the current Player rifle or to an already-released slot.
+- [x] Trace the static release path from FgAnimData's driven-instance list to
+      the global FgInstance pool. `FgDrawMgr_FreeInstance 0x14181A2A0` clears
+      both used masks, marks the slot pending-delete, detaches it, and queues a
+      three-render-frame deferred `FgInstance_Reset` performed by
+      `FgDrawMgr_FrameBegin 0x14181A760`. `ForAllUsedInstances 0x14181C1B0`
+      independently excludes pending-delete slots.
+- [ ] Run read-only build `gt` and classify final-queue slots
+      `1000/1001/1002`: T1 requires both used bits clear plus matching
+      pending-delete mask and `FgInstance+0x254 bit 1`; T2 retains a used bit
+      without pending state; T3 is a disagreement between manager mask and
+      instance retire state. Keep the existing target-absent, geometry-hit,
+      owner-zero and visual positive controls.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

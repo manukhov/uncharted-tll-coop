@@ -137,12 +137,36 @@ FUNCTIONS = {
         "delete and decrements +0x20C; the source assertion verifies the driven "
         "instance count falls by exactly one.",
     ),
+    0x14181A760: (
+        "FgDrawMgr_FrameBegin",
+        "Exact FgDrawMgr::FrameBegin source assertion. Waits for the GPU EOP "
+        "tick from three render frames earlier, resets each eligible "
+        "m_deletedInstanceQueue slot through FgInstance_Reset and clears its "
+        "pending-delete bit.",
+    ),
+    0x14181C1B0: (
+        "FgDrawMgr_ForAllUsedInstances",
+        "Exact FgDrawMgr::ForAllUsedInstances source assertion. Iterates the "
+        "union of both used-instance masks while explicitly excluding the "
+        "pending-delete mask before invoking the callback.",
+    ),
+    0x14181C430: (
+        "FgDrawMgr_ForAllInstances",
+        "Exact FgDrawMgr::ForAllInstances source assertion. Iterates the "
+        "caller-selected instance mask over the same 0x280-byte global pool.",
+    ),
     0x14192E590: (
         "FgInstance_Init",
         "Initializes a newly allocated FgInstance from its FgAnimData owner and "
         "resolved FgGeometry. Stores the shared FgGeometry pointer at "
         "FgInstance+0x1B0, captures the retained owner id at +0x250, and sets "
         "the per-instance geometry/render state used by every mesh LOD.",
+    ),
+    0x14192F0E0: (
+        "FgInstance_Reset",
+        "Exact FgInstance::Reset source assertion. Releases dependent render "
+        "objects and clears geometry, state, owner and retire fields after the "
+        "three-frame deferred-delete safety window.",
     ),
     # --- 2026-07-21: native NadineBuddy attachment ownership ---
     0x1404059E0: (
