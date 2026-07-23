@@ -100,9 +100,15 @@
       release gate `sub_140E20850`: FastGrenade vtable `+0xD0`
       (`sub_140E1AD40`) must resolve the selected pointer/handle pair at
       controller `+0x128/+0x130` and its object virtual `+0x840` must report a
-      positive count. Next: trace all pair writers/initializers, identify that
-      object's concrete type and resolve `+0x840`; distinguish null/stale K1,
-      zero-count K2 and wrong-slot K3 before another runtime test.
+      positive count. **STATIC RESOLVED:** constructors zero both pairs;
+      loadout path `0x140E17070` creates a grenade `ProcessWeapon` and
+      `PlayerGrenadeController_BindGrenadeWeaponSlot 0x140E17720` copies its
+      weak handle into the registry-selected left/right slot. `+0x840` is
+      `ProcessWeapon_GetTotalAmmo 0x141103850` over `weapon+0x900/+0x902`.
+      Read-only build `hi` logs both slots for the local send edge and puppet
+      controller edge. Its written prediction distinguishes null/stale K1,
+      valid zero-count K2 and positive ammo in the wrong slot K3; do not alter
+      inventory or call StartThrowAction before that census.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /

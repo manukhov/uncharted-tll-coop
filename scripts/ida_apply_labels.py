@@ -77,6 +77,35 @@ FUNCTIONS = {
         "Creates authored grenade-starting-throw action 0x6A1381B4, dispatches "
         "it at 0x140E2054F and advances the grenade controller to state 8.",
     ),
+    0x140E17070: (
+        "PlayerGrenadeController_CreateGrenadeWeaponFromLoadout",
+        "FastGrenadeController vtable +0x30. Creates the grenade ProcessWeapon "
+        "through Player+0x1D88 vtable +0x130, selecting its initial ammo from "
+        "the loadout and net-player stats, then passes the result to vtable "
+        "+0xF0 at 0x140E176D5.",
+    ),
+    0x140E17720: (
+        "PlayerGrenadeController_BindGrenadeWeaponSlot",
+        "FastGrenadeController vtable +0xF0. Uses the weapon art registry slot "
+        "index and copies the ProcessWeapon weak handle from weapon+0xA8/+0xBC "
+        "into controller+0x128+slot*0x10.",
+    ),
+    0x140E1A9C0: (
+        "PlayerGrenadeController_GetGrenadeWeaponBySlot",
+        "Resolves one controller+0x128/+0x130 weak-handle pair by explicit "
+        "grenade slot, validates weapon+0xBC and returns the ProcessWeapon.",
+    ),
+    0x140E1AD40: (
+        "PlayerGrenadeController_GetSelectedGrenadeWeapon",
+        "FastGrenadeController vtable +0xD0. Resolves the weak-handle pair at "
+        "controller+0x128/+0x130 selected by controller+0x18C.",
+    ),
+    0x140E20850: (
+        "PlayerGrenadeController_HasUsableSelectedGrenade",
+        "State-1 release gate. Requires a valid selected ProcessWeapon whose "
+        "vtable +0x840 GetTotalAmmo returns positive, plus the controller flag "
+        "condition; false returns state 1 to idle without authored throw.",
+    ),
     0x1404885C0: (
         "PlayerGrenadeAnimationMarkerHandler",
         "Handles authored animation markers including throw-grenade "

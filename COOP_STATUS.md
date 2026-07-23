@@ -9171,3 +9171,45 @@ Before another runtime build, trace every writer/initializer of both pairs and
 resolve the concrete object type and `+0x840` slot. Do not manually invoke
 StartThrowAction, copy live owner pointers, restore raw Player `+0x260/+0x270`
 writes, or re-enable transform pinning.
+
+### 2026-07-23 STATIC: selected grenade is a loadout-created `ProcessWeapon` (`hi`)
+
+The selected-pair writer, object type and count gate are now resolved through
+three independent static evidence types.
+
+1. Both FastGrenade constructors `0x140E26060/0x140E261B0` zero the two
+   pointer/handle pairs at `+0x128/+0x130` and `+0x138/+0x140`.
+2. FastGrenade vtable `+0x30` is
+   `PlayerGrenadeController_CreateGrenadeWeaponFromLoadout 0x140E17070`.
+   It reads grenade art/count from the Player weapon-set descriptor, adjusts
+   the count through the matching net-player stats, creates a `ProcessWeapon`
+   via `Player+0x1D88` vtable `+0x130` at `0x140E176C1`, then calls the
+   controller's vtable `+0xF0` at `0x140E176D5`.
+3. That `+0xF0` target is
+   `PlayerGrenadeController_BindGrenadeWeaponSlot 0x140E17720`. The weapon art
+   registry record supplies the left/right slot index; the function copies the
+   ProcessWeapon weak handle from `weapon+0xA8/+0xBC` into
+   `controller+0x128+slot*0x10`.
+4. The pair resolver `0x140E1AD40` returns the validated `ProcessWeapon`.
+   ProcessWeapon vtable `0x142A9BF48` slot `+0x840` is the already-confirmed
+   `ProcessWeapon_GetTotalAmmo 0x141103850`, which sums signed `int16`
+   magazine/reserve fields at `weapon+0x900/+0x902`.
+
+This rejects the possibility that the state-1 gate expects a separate grenade
+action object. K1, K2 and K3 remain distinguishable without mutation. Diagnostic
+build `hi` leaves command, animation, inventory and physics semantics unchanged;
+on each local send edge and each puppet controller edge it reads both weak
+handles under SEH, validates `weapon+0xBC`, records the concrete vtable, and
+records magazine/reserve/total.
+
+**Falsifiable `hi` prediction:** the throwing copy's `scope=local stage=send`
+must show a valid selected pair with positive total. On the receiver, K1 gives
+selected `Node=0`/`Handle=0` or `Valid=0`; K2 gives `Valid=1` with `Total=0`;
+K3 gives selected slot 0 unusable while slot 1 is valid with positive total.
+Only after one of these mutually exclusive outcomes is observed may the next
+build repair the stock loadout/bind boundary. The fallback delay and projectile
+position are intentionally unchanged in `hi`. The diagnostic DLL builds
+successfully. The five resolved functions were applied to the single
+`ida/tll.i64` (`1294 functions, 20 data names`,
+`save_database returned True`) and independently resolve under the restarted
+MCP.
