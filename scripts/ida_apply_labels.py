@@ -113,6 +113,24 @@ FUNCTIONS = {
         "mesh m_availableLods entries and transitions their live/freed instance "
         "pointers; the entries are LODs, not camera-specific copies.",
     ),
+    0x141752B30: (
+        "IDrawControl_ReleaseMeshLodInstances",
+        "Releases both the live and parked FgInstance pointers for every "
+        "available LOD in one DrawControl mesh entry when its ArtItemGeo is "
+        "present. Shared by individual removal and whole-control teardown.",
+    ),
+    0x141752FB0: (
+        "IDrawControl_RemoveAllMeshes",
+        "Walks the complete DrawControl mesh array, releases every mesh through "
+        "IDrawControl_ReleaseMeshLodInstances, and removes each fixed-stride "
+        "entry from the array.",
+    ),
+    0x1417539C0: (
+        "IDrawControl_Destroy",
+        "Runs IDrawControl_RemoveAllMeshes, releases the ambient-occluder "
+        "selection array, and clears the remaining DrawControl-owned storage. "
+        "Normal NdGameObject teardown calls this before AnimMgr_FreeAnimData.",
+    ),
     0x141753560: (
         "IDrawControl_Relink",
         "Exact IDrawControl::Relink source assertion. Reallocates each LOD "
@@ -279,6 +297,14 @@ FUNCTIONS = {
         "weapon mesh handle permit it; the validated child handle is stored at "
         "ProcessWeapon+0xAE0.",
     ),
+    0x1414FAF40: (
+        "ProcessWeaponBase_Init",
+        "Concrete ProcessWeapon base initialization called once from "
+        "ProcessWeapon_Initialize at 0x14150F6AF. Reads the object-init "
+        "descriptor at context+0x28, resolves WeaponArtDef state, and delegates "
+        "the shared parent/attachment setup to NdAttachableObject_Init at "
+        "0x1414FB4C2.",
+    ),
     0x1418B7060: (
         "AttachSystem_ResolveRecordTransform",
         "Validates a 48-byte AttachSystem record index, reads its signed joint "
@@ -300,6 +326,13 @@ FUNCTIONS = {
         "resolver, applies the optional blend object at +0x838 and publishes "
         "the resulting attached-object transform. ProcessWeapon inherits this "
         "path; PlayerWeaponAnimControl holster IK does not write it.",
+    ),
+    0x141ED0190: (
+        "NdAttachableObject_SetParentAndAttachmentIndex",
+        "Stores the retained parent handle/id pair into object+0x4E0/+0x4E8, "
+        "refreshes the parent-owned attachment state, stores the selected "
+        "attachment byte at +0x688, updates dependent DrawControl instance "
+        "flags, and runs the final attachment refresh virtuals.",
     ),
     0x141ED0A70: (
         "NdAttachableObject_ApplyLocalAttachmentCorrection",
@@ -3338,6 +3371,13 @@ FUNCTIONS = {
         "NdAttachableObject initialization path. Owns an independent DrawControl "
         "at object+0x198 and establishes attachment parent state around "
         "+0x4E0/+0x4E8; used by hair/look items and weapon renderables.",
+    ),
+    0x141BBA060: (
+        "NdDrawableObject_AllocateAndInitFgAnimData",
+        "Generic drawable-object vtable slot +0x6F0. Allocates FgAnimData, "
+        "initializes it from the object's retained runtime identity and authored "
+        "render data, and returns the allocation consumed by NdGameObject_Init "
+        "at object+0x1A8.",
     ),
     0x141BBACC0: (
         "BindUpperWrapperIntoPlayerCompanionBehaviorAndDrawControlState",
@@ -6828,15 +6868,13 @@ FUNCTIONS = {
         "new +0x700 state-owner band.",
     ),
     0x141BB4280: (
-        "PlayerUpperDrawControlLifecycleAndAmbientOccluderStage",
-        "Containing Player-side stage that owns the block at 0x141BB4AA0. It "
-        "seeds look-randomizer / prop-set style ids at player+0x178/+0x17C, "
-        "threads the upper lifecycle through +0x238, +0x738, +0x6F0, +0x700, "
-        "+0x718, +0x6F8, and +0x4A8, and then delegates ambient-occluder "
-        "selection plus draw-control mesh refresh through Player slot +0x740. "
-        "This makes it a real upper draw-control/finalization stage inside "
-        "the broader Player/NdGameObject bringup, not a direct ownership/"
-        "promotion hook.",
+        "NdGameObject_Init",
+        "Exact NdGameObject::Init source path shared by drawable game objects. "
+        "Calls the concrete object's vtable slot +0x6F0 to allocate FgAnimData, "
+        "stores it at object+0x1A8, constructs IDrawControl at object+0x198, "
+        "and then runs the derived initialization/finalization slots. Player "
+        "uses the extended upper-state and ambient-occluder branches in this "
+        "generic lifecycle.",
     ),
     0x141BCD340: (
         "ResolvePlayerAmbientOccluderSelectionAndRefreshDrawControlMeshes",

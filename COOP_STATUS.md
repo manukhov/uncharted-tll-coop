@@ -8316,3 +8316,88 @@ leaving the `CullFgLods` callsite entirely unpatched; it does not merely disable
 the compaction branch. Do not add another cull mutation. Continue from the
 earlier lifecycle result: trace where the obsolete ProcessWeapon owner is
 replaced or destroyed without normal DrawControl/FgInstance teardown.
+
+### 2026-07-23 RUNTIME CORRECTION: the `gw` triplet is live remote-Chloe data
+
+The complete `gw` log supersedes the unsafe `gu` registry inference. The
+filtered owner id `0x743` repeatedly resolves through the existing read-only
+geometry census to a live exact ProcessWeapon whose parent is remote Chloe
+(`look=0x3F334972`), art is the rifle `0x8075397D`, and whose own FgAnimData
+has three driven resources. Its ProcessWeapon pointer changes across rebuilds,
+while FgAnimData `0x1118AE3D80`, retained/runtime id `0x743`, art, parent and
+look remain stable. Those rows occur before, between and after the filtered
+queue rows.
+
+Therefore the earlier claim that an absent registry result proves a destroyed
+local-Nadine rifle owner is **REJECTED**. Calling the registry from the cull
+worker was already unsafe, and its W3 output was misleading. The three
+ownerless pool slots can coexist with a newer live triplet for the same remote
+weapon, but removing them does not affect the visible local-hand artifact.
+They are correlated remote render data, not a sufficient visual cause. The
+second direct `CullFgLods_Spawn` wrapper at `0x141A35220` has no code callers
+(its only xref is unwind data), so it is not a missed render submission path.
+No further cull hook is justified.
+
+The severe lag also exposed dormant rejected work outside `gw`: both
+`PrepareInstanceForRendering` callsites were still patched, and the worker path
+performed full Nadine/weapon-geometry owner scans even with global diagnostic
+logging disabled. The parent-visibility relay likewise still ran the rejected
+attachable census and late HideMesh repair. Build `gy` disables those paths,
+the rejected same-id inactive-rifle replay, and all old Nadine
+holster/transform probes. It retains only the small ProcessCharCloth
+parent-visibility observation needed by the confirmed remote hair/cloth
+repair. Thus the next run cannot repeat the `gw` cull census or the `gp/fy`
+renderer-wide scans.
+
+### 2026-07-23 STATIC: cold ProcessWeapon initialization discriminator (`gy`)
+
+The user's stable observation is more specific than the rejected render
+theories: on role B the rifle is already glued to the local hand immediately
+after spawn, yet a normal rifle draw/put cycle moves that same weapon to the
+thigh. The role-A observer already sees the thigh placement. The next
+candidate is therefore the initial attachment descriptor consumed before the
+first Player weapon action, not another render admission gate.
+
+Three independent static evidence types establish a cold read-only boundary:
+
+1. `ProcessWeapon_Initialize 0x14150F640` contains one direct E8 at
+   `0x14150F6AF` to `ProcessWeaponBase_Init 0x1414FAF40`; the caller immediately
+   checks the returned result before doing weapon-specific materialization.
+2. `ProcessWeaponBase_Init` reads the descriptor at `context+0x28` and directly
+   calls `NdAttachableObject_Init 0x141ECEFE0` at `0x1414FB4C2`. This is the
+   concrete ProcessWeapon base-init path, not a virtual render callback.
+3. `NdAttachableObject_Init` independently proves the field contract: the
+   descriptor parent handle/id at `+0x40/+0x48` feeds object
+   `+0x4E0/+0x4E8`; local transform `+0x20..+0x3F` is copied to
+   `+0x4F0..+0x50F`; and initial attachment byte `+0x66` reaches
+   `NdAttachableObject_SetParentAndAttachmentIndex 0x141ED0190`, which stores
+   the selected byte at object `+0x688`. The same init also consumes attachment
+   data/id/joint at `+0x50/+0x58/+0x5C` and flags at `+0x63`.
+
+Competing hypotheses are explicit. I1: role-B local Nadine's initial rifle
+descriptor selects `rightHand` index 16, while later stable controller state
+has already moved the logical ProcessWeapon to index 40 / `gun_holster`; the
+main-view artifact is an initialization-era attachment/cache. I2: the
+descriptor already selects index 40 and its post-init state is also 40, moving
+the cause strictly downstream of initialization. I3: no local rifle reaches
+this callsite, selecting a saved/replacement path outside normal
+`ProcessWeapon_Initialize`. If both role A and role B initialize identically at
+16, the transient is stock behavior and I1 is not specific enough to explain
+the Nadine-only artifact.
+
+Build `gy` patches only that one cold E8 and calls stock first. For at most 64
+co-op pistol/rifle initializations it records role, art, resolved parent and
+look, descriptor attachment fields, initial/post selected byte, and hashes of
+the descriptor/post local transform. It deliberately keeps non-Player rows so
+an early local initialization cannot be lost merely because the retained-player
+table is not committed yet. It performs no attachment, DrawControl, FgAnimData,
+pool, registry or cull write.
+
+**Falsifiable `gy` prediction:** both copies load the `2026-07-23gy` marker
+without the extreme role-B lag. Before any manual weapon input, role B emits a
+`NADINE-WEAPON-INIT` row for rifle art `0x8075397D`, with a valid player parent
+and `selected=X->Y`. `16->16` or `16->40` selects an initialization-era
+rightHand input (I1, subject to the role-A control); `40->40` selects I2; no
+local-player rifle row selects I3. The visible rifle is expected to remain
+wrong in this read-only build. Any freeze, crash, body/weapon regression,
+renderer-wide log flood, or visible mutation invalidates the probe.

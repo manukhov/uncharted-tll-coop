@@ -1502,6 +1502,14 @@ constexpr bool kEnableCrashObserver = false;
 // rifle nor preserves frame time. Keep the observer code available for static
 // correlation, but do not patch the hot RenderMgr callsite in production.
 constexpr bool kEnableStaleRifleCullProbe = false;
+// Builds gm..gw rejected the inactive-rifle attachment replay, late visibility
+// hide, FgDraw suppression, renderer-wide owner census and downstream holster
+// probes as fixes for the local spawn artifact. None of those hot diagnostics
+// belongs in the production hook set.
+constexpr bool kEnableRejectedNadineWeaponRuntimeProbes = false;
+// Build gy replaces the render-loop experiments with one bounded observation at
+// the cold ProcessWeapon initialization callsite.
+constexpr bool kEnableProcessWeaponInitProbe = true;
 volatile bool g_logging_enabled = false;
 static SRWLOCK g_log_lock = SRWLOCK_INIT;
 static HANDLE g_log_handle = INVALID_HANDLE_VALUE;
@@ -14236,11 +14244,13 @@ void apply_peer_held_weapon_state() {
     void* puppet = nullptr;
     if (!latest_peer_state(peer, puppet)) return;
     ensure_legacy_nadine_attach_points_game_thread();
-    reconcile_legacy_nadine_inactive_rifle_game_thread(peer, puppet);
-    sync_local_nadine_rifle_visibility_game_thread();
-    diagnose_nadine_weapon_membership_game_thread();
-    diagnose_weapon_geometry_owners_game_thread();
-    diagnose_player_weapon_anim_control_game_thread();
+    if constexpr (kEnableRejectedNadineWeaponRuntimeProbes) {
+        reconcile_legacy_nadine_inactive_rifle_game_thread(peer, puppet);
+        sync_local_nadine_rifle_visibility_game_thread();
+        diagnose_nadine_weapon_membership_game_thread();
+        diagnose_weapon_geometry_owners_game_thread();
+        diagnose_player_weapon_anim_control_game_thread();
+    }
     // Slot MIRROR up front, unconditionally (2026-07-07): this was gated behind
     // g_puppet_pregive_holstered (parked OFF since the 07-06 flicker regression),
     // which silently disabled the whole reconciliation - puppet spawned with no
@@ -19299,6 +19309,237 @@ bool prepare_plain_callsite_relay(
         return false;
     }
     new_displacement = static_cast<std::int32_t>(displacement);
+    return true;
+}
+
+using ProcessWeaponBaseInitFunction =
+    std::uint32_t*(__fastcall*)(void*, std::uint32_t*, void*);
+ProcessWeaponBaseInitFunction g_original_process_weapon_base_init = nullptr;
+
+struct ProcessWeaponInitProbeSnapshot {
+    std::uintptr_t context = 0;
+    std::uintptr_t init_data = 0;
+    std::uintptr_t init_parent_handle = 0;
+    std::uintptr_t resolved_parent = 0;
+    std::uintptr_t post_parent_handle = 0;
+    std::uint32_t init_parent_id = 0;
+    std::uint32_t resolved_parent_id = 0;
+    std::uint32_t post_parent_id = 0;
+    std::uint32_t parent_look = 0;
+    std::uint32_t parent_screen = 0xFFFFFFFFu;
+    std::uint32_t art = 0;
+    std::uint32_t attachment_data = 0;
+    std::uint32_t attachment_id = 0;
+    std::uint32_t attachment_joint = 0;
+    std::uint32_t init_local_hash = 0;
+    std::uint32_t post_local_hash = 0;
+    std::uint8_t attachment_flags = 0;
+    std::uint8_t init_selected = 0xFF;
+    std::uint8_t post_selected = 0xFF;
+    int retained_parent = -1;
+};
+
+std::uint32_t hash_probe_words(
+    const std::uint32_t* words, std::size_t count) {
+    std::uint32_t hash = 2166136261u;
+    for (std::size_t index = 0; index < count; ++index) {
+        hash ^= words[index];
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+bool seh_capture_process_weapon_init_probe(
+    void* weapon, void* context, ProcessWeaponInitProbeSnapshot& snapshot) {
+    snapshot.context = reinterpret_cast<std::uintptr_t>(context);
+    if (weapon == nullptr || context == nullptr ||
+        readable_bytes(context) < 0x30 ||
+        readable_bytes(weapon) < 0x864) {
+        return false;
+    }
+    __try {
+        auto* const weapon_bytes = static_cast<std::byte*>(weapon);
+        auto* const context_bytes = static_cast<std::byte*>(context);
+        snapshot.art = *reinterpret_cast<const std::uint32_t*>(
+            weapon_bytes + 0x860);
+        auto* const init_data = *reinterpret_cast<std::byte* const*>(
+            context_bytes + 0x28);
+        snapshot.init_data = reinterpret_cast<std::uintptr_t>(init_data);
+        if (init_data == nullptr || readable_bytes(init_data) < 0x68) {
+            return false;
+        }
+
+        snapshot.init_parent_handle =
+            *reinterpret_cast<const std::uintptr_t*>(init_data + 0x40);
+        snapshot.init_parent_id =
+            *reinterpret_cast<const std::uint32_t*>(init_data + 0x48);
+        snapshot.attachment_data =
+            *reinterpret_cast<const std::uint32_t*>(init_data + 0x50);
+        snapshot.attachment_id =
+            *reinterpret_cast<const std::uint32_t*>(init_data + 0x58);
+        snapshot.attachment_joint =
+            *reinterpret_cast<const std::uint32_t*>(init_data + 0x5C);
+        snapshot.attachment_flags =
+            *reinterpret_cast<const std::uint8_t*>(init_data + 0x63);
+        snapshot.init_selected =
+            *reinterpret_cast<const std::uint8_t*>(init_data + 0x66);
+        snapshot.init_local_hash = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(init_data + 0x20), 8);
+
+        auto* const parent_handle = reinterpret_cast<const std::byte*>(
+            snapshot.init_parent_handle);
+        if (parent_handle != nullptr &&
+            readable_bytes(parent_handle) >= 0x10) {
+            auto* const parent = *reinterpret_cast<std::byte* const*>(
+                parent_handle + 0x8);
+            if (parent != nullptr &&
+                readable_bytes(parent) >= 0x174) {
+                snapshot.resolved_parent =
+                    reinterpret_cast<std::uintptr_t>(parent);
+                snapshot.resolved_parent_id =
+                    *reinterpret_cast<const std::uint32_t*>(
+                        parent + kGameObjectRuntimeIdOffset);
+                snapshot.parent_look =
+                    *reinterpret_cast<const std::uint32_t*>(parent + 0x170);
+                if (readable_bytes(parent) >= 0x4014) {
+                    snapshot.parent_screen =
+                        *reinterpret_cast<const std::uint32_t*>(
+                            parent + 0x4010);
+                }
+                for (int index = 0; index < 2; ++index) {
+                    if (parent == retained_player_object(index)) {
+                        snapshot.retained_parent = index;
+                        break;
+                    }
+                }
+            }
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void seh_capture_process_weapon_init_post(
+    void* weapon, ProcessWeaponInitProbeSnapshot& snapshot) {
+    if (weapon == nullptr ||
+        readable_bytes(weapon) < 0x864) {
+        return;
+    }
+    __try {
+        auto* const bytes = static_cast<std::byte*>(weapon);
+        snapshot.art =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x860);
+        snapshot.post_parent_handle =
+            *reinterpret_cast<const std::uintptr_t*>(bytes + 0x4E0);
+        snapshot.post_parent_id =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x4E8);
+        snapshot.post_selected =
+            *reinterpret_cast<const std::uint8_t*>(bytes + 0x688);
+        snapshot.post_local_hash = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(bytes + 0x4F0), 8);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
+
+std::uint32_t seh_read_process_weapon_init_result(
+    const std::uint32_t* result_out) {
+    if (result_out == nullptr) {
+        return 0xFFFFFFFFu;
+    }
+    __try {
+        return *result_out;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 0xFFFFFFFFu;
+    }
+}
+
+std::uint32_t* __fastcall hooked_process_weapon_base_init(
+    void* weapon, std::uint32_t* result_out, void* context) {
+    ProcessWeaponInitProbeSnapshot snapshot{};
+    const bool captured =
+        seh_capture_process_weapon_init_probe(weapon, context, snapshot);
+    std::uint32_t* const result =
+        g_original_process_weapon_base_init != nullptr
+        ? g_original_process_weapon_base_init(weapon, result_out, context)
+        : result_out;
+    seh_capture_process_weapon_init_post(weapon, snapshot);
+
+    const bool coop_weapon =
+        snapshot.art == kCoopPistolArtId ||
+        snapshot.art == kCoopScopedPistolArtId ||
+        snapshot.art == kCoopRifleArtId;
+    if (!captured || !g_state_net.enabled || !coop_weapon) {
+        return result;
+    }
+
+    static std::atomic<std::uint32_t> rows{0};
+    const std::uint32_t row =
+        rows.fetch_add(1, std::memory_order_relaxed);
+    if (row >= 64) {
+        return result;
+    }
+
+    const std::uint32_t result_code =
+        seh_read_process_weapon_init_result(result_out);
+    std::ostringstream line;
+    line << "NADINE-WEAPON-INIT row=" << row
+         << " roleB=" << (g_net_role_b ? 1 : 0)
+         << " weapon=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(weapon)
+         << " art=0x" << snapshot.art
+         << " context=0x" << snapshot.context
+         << " init=0x" << snapshot.init_data
+         << " parentHandle=0x" << snapshot.init_parent_handle
+         << " parentId=0x" << snapshot.init_parent_id
+         << " parent=0x" << snapshot.resolved_parent
+         << "/0x" << snapshot.resolved_parent_id
+         << " look=0x" << snapshot.parent_look
+         << " attachData=0x" << snapshot.attachment_data
+         << " attachId=0x" << snapshot.attachment_id
+         << " joint=0x" << snapshot.attachment_joint
+         << " initLocal=0x" << snapshot.init_local_hash
+         << " postParent=0x" << snapshot.post_parent_handle
+         << "/0x" << snapshot.post_parent_id
+         << " postLocal=0x" << snapshot.post_local_hash
+         << " result=0x" << result_code << std::dec
+         << " retained=" << snapshot.retained_parent
+         << " screen=" << snapshot.parent_screen
+         << " flags=" << static_cast<unsigned>(snapshot.attachment_flags)
+         << " selected=" << static_cast<unsigned>(snapshot.init_selected)
+         << "->" << static_cast<unsigned>(snapshot.post_selected);
+    write_log_line(line.str().c_str());
+    return result;
+}
+
+bool install_process_weapon_init_probe() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kProcessWeaponBaseInitCallsiteRva,
+            kProcessWeaponBaseInitRva,
+            reinterpret_cast<const void*>(&hooked_process_weapon_base_init),
+            callsite, relay, displacement)) {
+        boot_log_line("ProcessWeapon init probe SKIPPED (preflight)");
+        return false;
+    }
+    g_original_process_weapon_base_init =
+        reinterpret_cast<ProcessWeaponBaseInitFunction>(
+            g_module + kProcessWeaponBaseInitRva);
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            callsite, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("ProcessWeapon init probe SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(callsite + 1) = displacement;
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(callsite, 5, old_protection, &ignored);
+    boot_log_line(
+        "ProcessWeapon cold init callsite probe installed at 0x14150F6AF");
     return true;
 }
 
@@ -34300,9 +34541,11 @@ char __fastcall hooked_nd_attachable_sync_parent_visibility_callsite(
     if constexpr (kEnableNadineParentMeshProbe) {
         apply_legacy_nadine_parent_mesh_probe(parent_draw);
     }
-    census_legacy_nadine_attachable(parent_draw, child_draw, attachable);
-    enforce_local_nadine_inactive_rifle_late_visibility(
-        child_draw, attachable);
+    if constexpr (kEnableRejectedNadineWeaponRuntimeProbes) {
+        census_legacy_nadine_attachable(parent_draw, child_draw, attachable);
+        enforce_local_nadine_inactive_rifle_late_visibility(
+            child_draw, attachable);
+    }
 
     void* const puppet = retained_player_object(1);
     if (!g_state_net.enabled || puppet == nullptr ||
@@ -36315,8 +36558,8 @@ DWORD WINAPI install_hook(void*) {
         return 1;
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-23gx "
-        "(gw final-cull filter rejected and disabled; no cull hook; pistol animation unchanged)");
+        "TLL co-op runtime init 2026-07-23gy "
+        "(rejected render probes disabled; cold ProcessWeapon init probe only)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -36342,8 +36585,13 @@ DWORD WINAPI install_hook(void*) {
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
     install_player_main_view_visibility_relay();
-    install_fgdraw_prepare_instance_relay();
-    install_fgdraw_synchronous_prepare_instance_relay();
+    if constexpr (kEnableRejectedNadineWeaponRuntimeProbes) {
+        install_fgdraw_prepare_instance_relay();
+        install_fgdraw_synchronous_prepare_instance_relay();
+    } else {
+        boot_log_line(
+            "rejected Nadine FgDraw prepare relays disabled");
+    }
     if constexpr (kEnableStaleRifleCullProbe) {
         install_render_main_cull_fg_lods_relay();
     } else {
@@ -36351,17 +36599,25 @@ DWORD WINAPI install_hook(void*) {
             "CullFgLods callsite relay disabled after rejected gw runtime");
     }
     install_nd_attachable_parent_visibility_relay();
-    install_legacy_nadine_holster_overlay_probe();
-    install_legacy_nadine_holster_clip_lookup_probe();
-    install_player_weapon_holster_bind_probe();
-    install_nadine_holster_final_boundary_probe();
-    install_nadine_holster_ik_probe();
-    install_nadine_active_grip_probe();
-    install_native_nadine_weapon_boundary_probe();
-    install_nadine_final_transform_probe();
-    install_nadine_local_transform_probe();
-    install_nadine_post_selected_transform_probe();
-    install_nadine_final_local_compose_probe();
+    if constexpr (kEnableRejectedNadineWeaponRuntimeProbes) {
+        install_legacy_nadine_holster_overlay_probe();
+        install_legacy_nadine_holster_clip_lookup_probe();
+        install_player_weapon_holster_bind_probe();
+        install_nadine_holster_final_boundary_probe();
+        install_nadine_holster_ik_probe();
+        install_nadine_active_grip_probe();
+        install_native_nadine_weapon_boundary_probe();
+        install_nadine_final_transform_probe();
+        install_nadine_local_transform_probe();
+        install_nadine_post_selected_transform_probe();
+        install_nadine_final_local_compose_probe();
+    } else {
+        boot_log_line(
+            "rejected Nadine holster/transform runtime probes disabled");
+    }
+    if constexpr (kEnableProcessWeaponInitProbe) {
+        install_process_weapon_init_probe();
+    }
     // The scoped DrawControl 0x40 relay and post mesh scan were rejected by the
     // 2026-07-13 runtime discriminator; leave the dormant code available for
     // reference without installing another hot-path hook.

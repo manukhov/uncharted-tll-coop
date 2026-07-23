@@ -637,6 +637,11 @@ constexpr std::uintptr_t kTransformComposeRva = 0x01998F0;
 // RTTI-backed ProcessWeapon vtable. Runtime exact-parent census identifies
 // pistol/rifle/grenade children by this class and authored art at +0x860.
 constexpr std::uintptr_t kProcessWeaponVtableRva = 0x2A9BF48;
+// ProcessWeapon_Initialize 0x14150F640 calls ProcessWeaponBase::Init exactly
+// once at 0x14150F6AF. This cold boundary still owns the original attach-init
+// descriptor (context+0x28) before later draw/put actions can rewrite it.
+constexpr std::uintptr_t kProcessWeaponBaseInitRva = 0x14FAF40;
+constexpr std::uintptr_t kProcessWeaponBaseInitCallsiteRva = 0x150F6AF;
 constexpr std::uintptr_t kProcessWeaponSelectExistingOwnerPointVtableSlotRva =
     kProcessWeaponVtableRva + 0x7A8;
 constexpr std::uintptr_t kProcessWeaponUpdateSelectedAttachmentVtableSlotRva =

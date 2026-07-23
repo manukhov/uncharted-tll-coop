@@ -1631,12 +1631,11 @@ Do not reopen these as the first move:
       However, the local-Nadine copy visually froze immediately after load, so
       the render-thread registry call is a REJECTED method and the result is not
       promoted to CONFIRMED. Build `gv` removes it completely.
-- [ ] Trace the exact ProcessWeapon replacement/destruction event which drops
-      id `0x727` while leaving its three primary-used FgInstances. Prefer the
-      already captured weapon-action / GiveWeapon lifecycle over another cull
-      mutation. If cleanup is required, prove the correct FgDrawMgr thread,
-      manager pointer and `FreeInstance` already-detached argument before a
-      runtime test; never call the object registry from the cull hook again.
+- [x] Correct the stale-owner theory from the complete `gw` log. Owner id
+      `0x743` belongs to a live remote-Chloe rifle ProcessWeapon/FgAnimData
+      generation; removing its older queue triplet did not alter the local
+      Nadine artifact. The unsafe `gu` registry inference and another cull
+      submission/fix are REJECTED.
 - [x] Test bounded build `gw` at the final-cull boundary. Compact
       the in-place `FgInstance*` and paired `0xB0`-stride `FgLodData` arrays
       only when the complete role-B stale-rifle conjunction identifies exactly
@@ -1648,6 +1647,16 @@ Do not reopen these as the first move:
       extremely laggy. The same generation reached many worker-local caches,
       repeating the census/large-array work. Build `gx` leaves the final-cull
       callsite entirely unpatched; do not mutate this boundary again.
+- [ ] Run cold read-only build `gy`. It disables rejected `gm..gw`
+      attachment/render/cull diagnostics and all old Nadine holster/transform
+      probes while retaining the lightweight confirmed cloth observation. The
+      only new hook is direct E8 `0x14150F6AF` from
+      `ProcessWeapon_Initialize` to `ProcessWeaponBase_Init`. Before any weapon
+      input, compare role-B local rifle descriptor selected byte and post-init
+      `ProcessWeapon+0x688` against the role-A control: `16` means rightHand,
+      `40` means gun_holster. Require no extreme lag, no crash or visual
+      regression, and only bounded `NADINE-WEAPON-INIT` rows. Exact I1/I2/I3
+      predictions are recorded in `COOP_STATUS.md`.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no
