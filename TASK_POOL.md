@@ -71,7 +71,13 @@
       local `ProjectileGrenade`, and suppresses the custom inbound GRNE only after
       positively observing that native Init. The local selector then owns
       ActiveUpdate, `m_velocity@+0x5D0`, collision/bounce and natural fuse. Build
-      and static prediction are ready; next step is the bounded `hf` runtime test.
+      `hf` was RUNTIME REJECTED before gameplay: both copies exited inside the
+      three-callsite installer, before its success marker or the later vtable
+      probe. Retail E8 bytes/targets and relay range are valid; the leading cause
+      is a torn hot rel32 write while another game thread executes the per-frame
+      scheduler/state call. Next build must suspend the other process threads
+      across the atomic patch window or use one correctly relocated common
+      detour; do not rerun the same live E8 writer.
 
 - [~] **Breakable / destructible env relay (2026-07-11):** STATIC map + mod v1 landed.
       Campaign grenade fence uses `SimpleBreakable_ExplosionDamage` `0x88E6F0` /

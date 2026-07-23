@@ -8957,3 +8957,39 @@ selects F1; scheduler with `can-start=0` selects F2 and its logged flags identif
 whether inhibit bit2 survived; Start/state1 without native Init selects F4.
 Two grenades, GRNE suppression without positive native Init, texture
 pass-through, crash or unrelated Player/weapon regression rejects the build.
+
+### 2026-07-23 RUNTIME REJECTED: `hf` crashes while installing the hot command callsites
+
+Both freshly launched copies loaded `2026-07-23hf` and then exited immediately,
+before gameplay or a grenade input. PIDs 13264 and 1740 produced the same final
+boot line:
+
+`rejected NetGrenade descriptor+0x50 seed disabled`
+
+Neither process emitted the next expected
+`grenade command relay installed (scheduler/state1/state2 only)` nor any
+FastGrenade/marker line. The failure is therefore before the vtable boundary
+probe and before all runtime grenade behavior, inside
+`install_player_grenade_command_callsite_relay`.
+
+This rejects the `hf` **installation mechanism**, not the scoped-command or
+authored-ProjectileGrenade static path. The on-disk retail bytes independently
+validate all three sites as direct E8 calls to
+`PlayerInputCommandState_IsCommandActive 0x141E39D50`:
+`0x1410E78E6 = e8 65 24 d5 00`,
+`0x140E218DD = e8 6e 84 01 01`, and
+`0x140E21A8F = e8 bc 82 01 01`. The concrete FastGrenade vtable also still
+resolves the expected Start/CanStart targets, but its installer was never
+reached.
+
+The remaining installation competitors are **I1:** allocation/validation
+inside the relay installer faults despite the verified PE bytes; **I2:** a live
+game thread executes one of these per-frame calls while its unaligned rel32
+displacement is being rewritten and observes a torn target; **I3:** the shared
+near relay is out of range for one site. Static range calculation rejects I3
+(the sites differ by only about 2.8 MiB and every displacement is explicitly
+checked before writes). The symmetric immediate crash plus hot scheduler/state
+sites makes I2 the leading hypothesis. The next build must either suspend every
+other process thread across the three five-byte patches or move the scope test
+to one safely relocated common-function detour; it must not rerun the same live
+E8 writer.
