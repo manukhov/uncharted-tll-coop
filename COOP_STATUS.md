@@ -9762,3 +9762,34 @@ The Release DLL builds successfully. `ResetToIdle` and the exact
 StartThrowAction reset-site comments were applied to the single `ida/tll.i64`
 (`1307 functions, 20 data names`, `save_database returned True`) and the reset
 name resolves under the restarted MCP.
+
+### 2026-07-26 RUNTIME REJECTED / PARTIAL: `ho` excludes state 7 but misses the state-0 writer
+
+Three throws from local Chloe reproduced the same visible result: the sender's
+ordinary grenade exploded near-immediately at the release origin, while the
+receiver's deferred explosion appeared at that origin about two seconds later.
+The arc remained correct and no unrelated regression occurred.
+
+The bounded controller evidence rejects **P1**. On the receiver every state-4
+false edge (`seq=1014`, `2002`, `3767`) logged `mode540=2` and
+`deadline530=0`; the controller then reached state 0 about 23--25 packets later
+and exactly one ammo unit was consumed. Thus `ReleasePostArcHold` must take the
+nonzero-mode `StartThrowAction` path rather than create state 7.
+
+However, `ho` emitted no `GRENADE-RESET` entry at all, despite the installed
+vtable `+0x60` hook and the observed state-0 transition. It also emitted no
+`GRENADE-ANIM-SPAWN-NATIVE`; all three GRNE events remained deferred. Therefore
+`ho` does not select P2, P3 or P4. Its reset classifier is incomplete, not
+evidence that ResetToIdle did not run: `hooked_fast_grenade_reset` first
+re-resolves `retained_player_object(1)+0x1E50` and requires pointer equality,
+while the runtime snapshots show controller-view addresses changing between
+cycles (`0x10e1050b10`, `0x10e0f8d610`, `0x10e0f8d110`).
+
+The next discriminator remains read-only. Arm a short peer-release probe at the
+exact state-4 false command and log the raw `ResetToIdle` argument/return RVA
+within that window without re-resolving the controller for admission. In
+parallel, wrap `ReleasePostArcHold 0x140E1FF90` itself and record its raw
+controller state/mode immediately before and after the original call. This
+distinguishes cover reset, net-gate reset and successful state-8 dispatch even
+if the retained proxy pointer changes. No gate, controller field, GRNE timing,
+pose or projectile behavior may be changed.

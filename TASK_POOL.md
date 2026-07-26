@@ -38,6 +38,14 @@
       pass-through FastGrenade vtable `+0x60` wrapper classifies exact reset
       return RVAs `E201EB` cover, `E2034B` net gate, `E22333` state-7 timeout.
       Written prediction in `COOP_STATUS.md`; no branch or fallback is changed.
+      **RUNTIME REJECTED / PARTIAL:** three state-4 false edges all had
+      `mode540=2`, excluding state-7 P1, then returned to state 0 with one ammo
+      decrement and no native marker. No `GRENADE-RESET` row appeared, so the
+      strict retained-controller pointer re-resolution made the reset probe
+      incomplete and P2/P3/P4 remain unresolved. Next use a short false-edge
+      release window to admit the raw reset argument and wrap
+      `ReleasePostArcHold 0x140E1FF90` for immediate pre/post state; keep the
+      test read-only and leave GRNE/pose/projectile behavior untouched.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw
