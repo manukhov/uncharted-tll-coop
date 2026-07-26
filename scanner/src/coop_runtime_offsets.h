@@ -169,9 +169,14 @@ constexpr std::uintptr_t kGrenadeState4IsCommandActiveCallsiteRva = 0xE2227D;
 constexpr std::size_t kPlayerFastGrenadeControllerOffset = 0x1E50;
 constexpr std::uintptr_t kFastGrenadeControllerVtableRva = 0x2A227A0;
 constexpr std::size_t kFastGrenadeControllerStartVtableOffset = 0x40;
+constexpr std::size_t kFastGrenadeControllerResetVtableOffset = 0x60;
 constexpr std::size_t kFastGrenadeControllerCanStartVtableOffset = 0xA8;
 constexpr std::uintptr_t kFastGrenadeControllerStartRva = 0xE19600;
+constexpr std::uintptr_t kFastGrenadeControllerResetRva = 0xE1D850;
 constexpr std::uintptr_t kFastGrenadeControllerCanStartRva = 0xE25540;
+constexpr std::uintptr_t kGrenadeResetReturnCoverAbortRva = 0xE201EB;
+constexpr std::uintptr_t kGrenadeResetReturnNetGateAbortRva = 0xE2034B;
+constexpr std::uintptr_t kGrenadeResetReturnState7TimeoutRva = 0xE22333;
 // Return address of the scheduler's FastGrenadeController::CanStart call. The
 // stock loadout binds its ProcessWeapon before StartArc; provision the retained
 // puppet only after this eligibility check succeeds, never from StartArc's

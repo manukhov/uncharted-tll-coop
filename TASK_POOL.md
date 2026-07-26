@@ -34,6 +34,10 @@
       the fallback, not a native duplicate. Keep GRNE until P1-P4 identifies why
       StartThrowAction never emits the marker. Next build is bounded read-only
       logging of `+0x540`, cover/net reset sites, dispatch/state 8 and reset RVA.
+      **STATIC `ho`:** controller snapshots now include `+0x540/+0x530`; a
+      pass-through FastGrenade vtable `+0x60` wrapper classifies exact reset
+      return RVAs `E201EB` cover, `E2034B` net gate, `E22333` state-7 timeout.
+      Written prediction in `COOP_STATUS.md`; no branch or fallback is changed.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw

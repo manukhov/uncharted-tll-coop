@@ -149,8 +149,19 @@ FUNCTIONS = {
     ),
     0x140E20050: (
         "PlayerGrenadeController_StartThrowAction",
-        "Creates authored grenade-starting-throw action 0x6A1381B4, dispatches "
-        "it at 0x140E2054F and advances the grenade controller to state 8.",
+        "Creates authored grenade-starting-throw action 0x6A1381B4. Cover "
+        "distance abort calls vtable +0x60 at 0x140E201E8 (return E201EB); the "
+        "online net-can-throw-func false branch does the same at 0x140E20348 "
+        "(return E2034B). Success dispatches at 0x140E2054F and writes state 8 "
+        "at 0x140E205A2.",
+    ),
+    0x140E1D850: (
+        "PlayerGrenadeController_ResetToIdle",
+        "FastGrenadeController vtable +0x60. Publishes aborted-grenade-aim, "
+        "destroys held grenade/effects at 0x140E1DC44, clears controller state "
+        "to 0 at 0x140E1DC8F and refreshes the arc. Important callers are the "
+        "StartThrowAction cover abort (return E201EB), online net gate abort "
+        "(E2034B), and state-7 timeout (E22333).",
     ),
     0x140E17070: (
         "PlayerGrenadeController_CreateGrenadeWeaponFromLoadout",

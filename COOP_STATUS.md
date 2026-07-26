@@ -9720,3 +9720,45 @@ StartThrowAction cover/net resets, successful dispatch/state 8, and the common
 reset return RVA. Do not disable GRNE yet: without an authored remote Init that
 would remove the only receiver-side exploding projectile. Do not mutate the
 now-confirmed pose relay or pre-Start binding order.
+
+### 2026-07-26 STATIC: classify the remote post-release reset without forcing it (`ho`)
+
+Build `ho` is deliberately read-only. Its evidence quota has three independent
+types:
+
+1. **Runtime state evidence:** in both `hn` cycles the receiver saw state-4 true
+   and the exact false edge, then returned to state 0 with one ammo decrement,
+   no authored marker/Init and a deferred GRNE event. The failure is after the
+   confirmed command/pose/binding boundaries.
+2. **Release data flow:** `PlayerGrenadeController_ReleasePostArcHold
+   0x140E1FF90` reads `controller+0x540`. Nonzero synchronously calls
+   `StartThrowAction 0x140E20050`; zero snapshots the engine deadline into
+   `+0x530` and writes state 7.
+3. **Independent reset/control-flow identity:** FastGrenade vtable `+0x60` is
+   `PlayerGrenadeController_ResetToIdle 0x140E1D850`; it destroys held record 3,
+   writes state 0 and refreshes the arc. Exact call-return RVAs distinguish the
+   competing exits: cover-distance abort `E201EB`, online
+   `net-can-throw-func` abort `E2034B`, and state-7 timeout `E22333`.
+   Conversely, successful StartThrowAction dispatches
+   `grenade-starting-throw` at `0x140E2054F` and writes state 8 at
+   `0x140E205A2`.
+
+The existing controller snapshot now includes `+0x540` and deadline `+0x530`.
+The FastGrenade boundary probe also swaps only the already-validated vtable
+`+0x60` slot for a pass-through wrapper that logs entry/exit, return RVA and
+pre/post state. No branch result, command, controller field, animation action,
+projectile, GRNE event or fuse is changed.
+
+**Falsifiable `ho` prediction before runtime:** one throw must again preserve
+the `hn` arc and one-StartArc behavior. P1 gives state-4 false with `mode540=0`,
+then `GRENADE-RESET ret=E22333 cause=state7-timeout`. P2 gives nonzero mode and
+`ret=E201EB cause=cover-abort`. P3 gives nonzero mode and
+`ret=E2034B cause=net-gate-abort`. P4 reaches state 8 and no one of those reset
+sites before the missing marker. Any other return RVA leaves P1-P4 incomplete
+and must be statically classified before mutation. A crash, missing reset hook,
+changed arc, repeated StartArc or changed explosion timing rejects the probe.
+
+The Release DLL builds successfully. `ResetToIdle` and the exact
+StartThrowAction reset-site comments were applied to the single `ida/tll.i64`
+(`1307 functions, 20 data names`, `save_database returned True`) and the reset
+name resolves under the restarted MCP.

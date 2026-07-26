@@ -235,10 +235,13 @@ PlayerInputIsCommandActiveFunction
     g_original_player_grenade_callsite_is_command_active = nullptr;
 using FastGrenadeCanStartFunction = bool(__fastcall*)(void*);
 using FastGrenadeStartFunction = std::int64_t(__fastcall*)(void*);
+using FastGrenadeResetFunction = std::int64_t(__fastcall*)(void*);
 FastGrenadeCanStartFunction g_original_fast_grenade_can_start = nullptr;
 FastGrenadeStartFunction g_original_fast_grenade_start = nullptr;
+FastGrenadeResetFunction g_original_fast_grenade_reset = nullptr;
 std::atomic<bool> g_peer_grenade_pose_seed_logged{false};
 std::atomic<bool> g_peer_grenade_release_pose_seed_logged{false};
+std::atomic<unsigned> g_peer_grenade_reset_log_rows{0};
 using PlayerMeleeTryAnimFunction =
     char(__fastcall*)(void**, void*, double);
 PlayerMeleeTryAnimFunction g_original_player_melee_try_anim = nullptr;
@@ -2164,6 +2167,8 @@ struct FastGrenadeControllerSnapshot {
     void* owner = nullptr;
     std::uint32_t state = 0;
     std::uint32_t slot = 0;
+    std::uint32_t action_mode = 0;
+    std::uint64_t release_deadline = 0;
     std::uint8_t flags = 0;
     std::array<FastGrenadeWeaponSlotSnapshot, 6> weapons{};
 };
@@ -2188,6 +2193,10 @@ bool seh_read_fast_grenade_controller(
             static_cast<std::byte*>(out->controller) + 0x1A0);
         out->slot = *reinterpret_cast<std::uint32_t*>(
             static_cast<std::byte*>(out->controller) + 0x18C);
+        out->action_mode = *reinterpret_cast<std::uint32_t*>(
+            static_cast<std::byte*>(out->controller) + 0x540);
+        out->release_deadline = *reinterpret_cast<std::uint64_t*>(
+            static_cast<std::byte*>(out->controller) + 0x530);
         for (std::size_t slot = 0; slot < out->weapons.size(); ++slot) {
             auto& weapon = out->weapons[slot];
             auto* const pair = static_cast<std::byte*>(out->controller) +
@@ -2242,7 +2251,9 @@ void log_grenade_controller_state(
          << " ownerMatch=" << (snapshot.owner == player ? 1 : 0)
          << " state=0x" << snapshot.state
          << " flags=0x" << static_cast<unsigned>(snapshot.flags)
-         << " slot=0x" << snapshot.slot;
+         << " slot=0x" << snapshot.slot
+         << " mode540=0x" << snapshot.action_mode
+         << " deadline530=0x" << snapshot.release_deadline;
     for (std::size_t slot = 0; slot < snapshot.weapons.size(); ++slot) {
         const auto& weapon = snapshot.weapons[slot];
         line << " s" << slot
@@ -2272,6 +2283,67 @@ void log_peer_grenade_controller_state(
     const char* stage, bool value, std::uint32_t sequence) {
     log_grenade_controller_state(
         retained_player_object(1), "peer", stage, value, sequence);
+}
+
+bool is_retained_peer_grenade_controller(void* controller) {
+    FastGrenadeControllerSnapshot snapshot{};
+    return controller != nullptr &&
+           seh_read_fast_grenade_controller(
+               retained_player_object(1), &snapshot) &&
+           snapshot.controller == controller;
+}
+
+void log_peer_grenade_reset(
+    const char* stage, std::uintptr_t return_rva) {
+    const unsigned row = g_peer_grenade_reset_log_rows.fetch_add(
+        1, std::memory_order_relaxed);
+    if (row >= 12) {
+        return;
+    }
+    FastGrenadeControllerSnapshot snapshot{};
+    if (!seh_read_fast_grenade_controller(
+            retained_player_object(1), &snapshot)) {
+        return;
+    }
+    coop::StatePacket peer{};
+    const bool have_peer = copy_peer_state_snapshot(peer);
+    const char* cause = "other";
+    if (return_rva == kGrenadeResetReturnCoverAbortRva) {
+        cause = "cover-abort";
+    } else if (return_rva == kGrenadeResetReturnNetGateAbortRva) {
+        cause = "net-gate-abort";
+    } else if (return_rva == kGrenadeResetReturnState7TimeoutRva) {
+        cause = "state7-timeout";
+    }
+    std::ostringstream line;
+    line << "GRENADE-RESET stage=" << stage
+         << " row=" << row
+         << " seq=" << (have_peer ? peer.sequence : 0)
+         << " ret=0x" << std::hex << return_rva
+         << " cause=" << cause
+         << " state=0x" << snapshot.state
+         << " mode540=0x" << snapshot.action_mode
+         << " deadline530=0x" << snapshot.release_deadline;
+    boot_log_line(line.str().c_str());
+}
+
+std::int64_t __fastcall hooked_fast_grenade_reset(void* controller) {
+    const bool peer = is_retained_peer_grenade_controller(controller);
+    const std::uintptr_t return_address =
+        reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const std::uintptr_t return_rva =
+        return_address >= g_module ? return_address - g_module : 0;
+    if (peer) {
+        log_peer_grenade_reset("entry", return_rva);
+    }
+    const std::int64_t result =
+        g_original_fast_grenade_reset != nullptr
+            ? g_original_fast_grenade_reset(controller)
+            : 0;
+    if (peer) {
+        log_peer_grenade_reset("exit", return_rva);
+    }
+    return result;
 }
 
 bool ensure_puppet_grenade_weapon_binding(
@@ -2537,6 +2609,8 @@ char __fastcall hooked_player_grenade_command_callsite(
             false, std::memory_order_release);
         g_peer_grenade_release_pose_seed_logged.store(
             false, std::memory_order_release);
+        g_peer_grenade_reset_log_rows.store(
+            0, std::memory_order_release);
     }
     if (was_active && !active) {
         g_peer_grenade_release_until_ms.store(
@@ -2833,11 +2907,16 @@ bool install_fast_grenade_controller_boundary_probe() {
     auto** const start_slot = reinterpret_cast<void**>(
         g_module + kFastGrenadeControllerVtableRva +
         kFastGrenadeControllerStartVtableOffset);
+    auto** const reset_slot = reinterpret_cast<void**>(
+        g_module + kFastGrenadeControllerVtableRva +
+        kFastGrenadeControllerResetVtableOffset);
     auto** const can_start_slot = reinterpret_cast<void**>(
         g_module + kFastGrenadeControllerVtableRva +
         kFastGrenadeControllerCanStartVtableOffset);
     if (*start_slot != reinterpret_cast<void*>(
                            g_module + kFastGrenadeControllerStartRva) ||
+        *reset_slot != reinterpret_cast<void*>(
+                           g_module + kFastGrenadeControllerResetRva) ||
         *can_start_slot != reinterpret_cast<void*>(
                                g_module +
                                kFastGrenadeControllerCanStartRva)) {
@@ -2847,6 +2926,7 @@ bool install_fast_grenade_controller_boundary_probe() {
     }
 
     DWORD start_old = 0;
+    DWORD reset_old = 0;
     DWORD can_start_old = 0;
     if (!VirtualProtect(
             start_slot, sizeof(void*), PAGE_READWRITE, &start_old)) {
@@ -2855,27 +2935,41 @@ bool install_fast_grenade_controller_boundary_probe() {
         return false;
     }
     if (!VirtualProtect(
+            reset_slot, sizeof(void*), PAGE_READWRITE, &reset_old)) {
+        DWORD ignored = 0;
+        VirtualProtect(start_slot, sizeof(void*), start_old, &ignored);
+        boot_log_line(
+            "FastGrenade boundary probe SKIPPED (reset protect)");
+        return false;
+    }
+    if (!VirtualProtect(
             can_start_slot, sizeof(void*), PAGE_READWRITE,
             &can_start_old)) {
         DWORD ignored = 0;
         VirtualProtect(start_slot, sizeof(void*), start_old, &ignored);
+        VirtualProtect(reset_slot, sizeof(void*), reset_old, &ignored);
         boot_log_line(
             "FastGrenade boundary probe SKIPPED (can-start protect)");
         return false;
     }
     g_original_fast_grenade_start =
         reinterpret_cast<FastGrenadeStartFunction>(*start_slot);
+    g_original_fast_grenade_reset =
+        reinterpret_cast<FastGrenadeResetFunction>(*reset_slot);
     g_original_fast_grenade_can_start =
         reinterpret_cast<FastGrenadeCanStartFunction>(*can_start_slot);
     *start_slot = reinterpret_cast<void*>(&hooked_fast_grenade_start);
+    *reset_slot = reinterpret_cast<void*>(&hooked_fast_grenade_reset);
     *can_start_slot =
         reinterpret_cast<void*>(&hooked_fast_grenade_can_start);
     DWORD ignored = 0;
     VirtualProtect(start_slot, sizeof(void*), start_old, &ignored);
+    VirtualProtect(reset_slot, sizeof(void*), reset_old, &ignored);
     VirtualProtect(
         can_start_slot, sizeof(void*), can_start_old, &ignored);
     boot_log_line(
-        "FastGrenade boundary probe installed (+0x40 start, +0xA8 can-start)");
+        "FastGrenade boundary probe installed (+0x40 start, +0x60 reset, "
+        "+0xA8 can-start)");
     return true;
 }
 
@@ -37961,8 +38055,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-26hn "
-        "(relay post-timer grenade state-4 hold/release)");
+        "TLL co-op runtime init 2026-07-26ho "
+        "(read-only grenade reset-cause discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
