@@ -9867,16 +9867,11 @@ exit `state=8` already CONFIRMS successful dispatch of
 the live authored-action path. Q1 cover abort, Q2 online net gate, and Q3's
 missing-action subvariant are rejected.
 
-The remaining failure is below action dispatch: neither throw produced
-`GRENADE-ANIM-SPAWN-NATIVE`, and both authoritative GRNE events entered the
-2.5-second `GRENADE-EVENT-DEFER` wait. The next read-only discriminator must
-separate four marker-stage alternatives: **M1**
-`PlayerGrenadeAnimationMarkerHandler 0x1404885C0` is not instantiated/ticked for
-the retained Player; **M2** it runs but cannot resolve the active authored clip
-or its `throw-grenade` marker `0x6333DA76`; **M3** the clip resolves but its
-current time never crosses the marker; **M4** the marker calls
-`Player_EmitGrenadeFromThrowMarker 0x14040CEF0`, which fails before its sole
-`EmitGrenadeProjectile` callsite `0x14040D852`.
+The then-assumed marker alternatives below action dispatch are superseded by
+the static correction that follows. Absence of `GRENADE-ANIM-SPAWN-NATIVE`
+does not classify the Player release path because that diagnostic wraps an AI
+callsite. Both authoritative GRNE events still entered the 2.5-second
+`GRENADE-EVENT-DEFER` wait.
 
 **Visual correction from the user:** the apparent object that appears directly
 in front after release is not a visible second grenade model. Only the grenade
@@ -9886,3 +9881,61 @@ duplicate ProcessGrenadeInHand or ProjectileGrenade. HUD/tell publication and
 physical projectile creation are separate paths until their call graph is
 proved. The fallback is still retained because no authored remote projectile
 has been observed.
+
+### 2026-07-26 STATIC CORRECTION: Player release already owns a native ProjectileGrenade path
+
+The prior marker map conflated Player and AI grenade implementations.
+`0x1404885C0` is **not** a Player animation-marker handler. Three independent
+evidence types settle its identity:
+
+1. **RTTI/vtable identity:** function pointer `0x1404885C0` is slot `+0x28` of
+   vtable `0x142941800`, named by RTTI
+   `.?AVThrow@BehaviorThrowGrenade@@`. Factory `0x1404889C0` allocates a 40-byte
+   state and installs exactly `BehaviorThrowGrenade::Throw::vftable`.
+2. **Registration/control flow:** `BehaviorThrowGrenade` state transition
+   `0x1404880F0` selects factory table `off_143048838` only after NPC valid-arc,
+   perception and AI gates. The adjacent source strings are
+   `game/ai/behavior/behavior-throw-grenade.cpp` and
+   `BehaviorThrowGrenade::Start(class Npc *)`.
+3. **Data flow:** the handler resolves `throw-grenade`, calls `0x14040CEF0`,
+   then publishes `ai-enemy-combat-projectile-tell`. `0x14040CEF0` has exactly
+   that AI handler as its only caller and reaches `EmitGrenadeProjectile` at
+   `0x14040D852`. It is therefore renamed `Npc_EmitGrenadeFromThrowMarker`.
+
+The actual Player path is already statically complete and does not wait for
+that AI marker. Successful state 8 later advances to state 9 and invokes
+FastGrenade vtable `+0x140` / `PlayerGrenadeController_Release 0x140E1B900` at
+`0x140E223D5`. Release re-resolves the aimed/blindfire throw pose and calls its
+sole materializer `PlayerGrenadeController_SpawnReleasedProjectile
+0x140E1C3A0` at `0x140E1C2FD`. That function independently:
+
+- resolves the selected grenade art recipe and projectile count;
+- chooses `ProjectileThrowable` only for knowledge type 16, otherwise hashes
+  literal `ProjectileGrenade`;
+- initializes a normal spawn packet and materializes the runtime process at
+  `0x140E1CE97` or `0x140E1D029`;
+- publishes player throw events and, when native online mode is active, calls
+  `SendNetEventEmitGrenade 0x140BE7000`.
+
+This changes the active alternatives. **R1:** retained Player Release creates a
+normal ProjectileGrenade, but the current Init hook misclassifies it as a local
+sender grenade. **R2:** Release reaches the materializer but its recipe/count
+loop creates no object. **R3:** it creates `ProjectileThrowable`, not the hooked
+ProjectileGrenade subtype. **R4:** a normal ProjectileGrenade is created but its
+launch state remains wrong after Init. R1 is the static leader because the
+existing `hooked_grenade_init` recognizes a peer-authored spawn only while
+`g_spawning_peer_animated_grenade` is armed around the now-proven AI callsite.
+A retained Player projectile created synchronously from `0x140E1C3A0` therefore
+falls through to `g_last_grenade`, may be relayed again as GRNE, and never sets
+`g_peer_native_grenade_spawn_ms` to suppress the original inbound fallback.
+
+The next build remains read-only. During the exact peer release window, log
+every native ProjectileGrenade Init and its subsequent position/velocity for at
+most 1.2 seconds, plus the delayed GRNE execution. It must not yet change Init
+classification, GRNE suppression, projectile state, fuse or pose. **Prediction:**
+R1 produces one receiver `GRENADE-PLAYER-NATIVE-INIT` during state 8/9, changing
+native track coordinates/velocity before the already-known delayed
+`GRENADE-EVENT-EXEC`; R2/R3 produce no such Init; R4 produces an Init but a
+stationary/invalid track. The user's icon-only observation on both copies is
+consistent with a real proximity/tell consumer but is not promoted to physical
+object evidence.

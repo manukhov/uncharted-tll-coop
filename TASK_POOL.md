@@ -59,9 +59,21 @@
       proves the successful live-action route is state `8 -> 9` at `E223DB`,
       then a direct state-0 store at `E22475`; the old Q3 requirement for
       `E22333` was wrong. Cover/net abort and missing-action reset are rejected.
-      Next distinguish marker handler absent, clip/marker lookup failure,
-      animation time not crossing the marker, and EmitGrenadeFromThrowMarker
-      failing before `0x14040D852`, using bounded read-only logging only.
+      **STATIC CORRECTION:** the proposed marker probe is rejected before
+      runtime. `0x1404885C0` is RTTI-proven
+      `BehaviorThrowGrenade::Throw` vtable `+0x28`, reached through NPC/AI
+      state tables and followed by `ai-enemy-combat-projectile-tell`;
+      `0x14040CEF0/0x14040D852` is its AI-only projectile continuation. The
+      Player state-8 path instead reaches FastGrenade vtable `+0x140` /
+      `PlayerGrenadeController_Release 0x140E1B900`, whose sole
+      `0x140E1C3A0` materializer creates `ProjectileThrowable` or ordinary
+      `ProjectileGrenade` and sends the native event. Existing Init
+      classification is armed only around the wrong AI callsite, so a native
+      retained-Player ProjectileGrenade can fall into sender capture, echo a
+      GRNE and fail to suppress the original deferred event. Next build logs
+      native Init plus 1.2 seconds of pos/vel only during the exact peer release
+      window, and logs delayed GRNE execution; it changes no classification or
+      projectile/fallback semantics.
       **VISUAL CORRECTION:** after the throw the user sees only the grenade
       warning/HUD icon directly ahead, on both copies; no second physical model
       is visible. Do not use the icon as evidence of a duplicate projectile or

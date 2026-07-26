@@ -123,7 +123,17 @@ FUNCTIONS = {
         "PlayerGrenadeController_Release",
         "FastGrenadeController::Release string anchor. Builds the authored "
         "grenade-player-*-thrown event, re-resolves the throw pose through the "
-        "aim/blindfire helpers, then destroys the held grenade/effects.",
+        "aim/blindfire helpers, calls the native released-projectile "
+        "materializer 0x140E1C3A0, then destroys the held grenade/effects.",
+    ),
+    0x140E1C3A0: (
+        "PlayerGrenadeController_SpawnReleasedProjectile",
+        "Native FastGrenade release materializer called only by Release at "
+        "0x140E1C2FD. Resolves the grenade art recipe, creates either a "
+        "ProjectileThrowable or ordinary ProjectileGrenade process, applies "
+        "the computed throw transform/launch data, and sends "
+        "NetEventEmitGrenade in native online mode. This is the Player path; "
+        "it is independent of the AI BehaviorThrowGrenade marker handler.",
     ),
     0x140E22ED0: (
         "PlayerGrenadeController_UpdateArc",
@@ -201,14 +211,18 @@ FUNCTIONS = {
         "condition; false returns state 1 to idle without authored throw.",
     ),
     0x1404885C0: (
-        "PlayerGrenadeAnimationMarkerHandler",
-        "Handles authored animation markers including throw-grenade "
-        "0x6333DA76, then calls Player_EmitGrenadeFromThrowMarker.",
+        "BehaviorThrowGrenade_Throw_Update",
+        "BehaviorThrowGrenade::Throw vtable 0x142941800 slot +0x28. Resolves "
+        "the AI/NPC animation marker throw-grenade 0x6333DA76, calls the NPC "
+        "grenade emitter, then publishes ai-enemy-combat-projectile-tell. "
+        "It is not the Player FastGrenade authored-action handler.",
     ),
     0x14040CEF0: (
-        "Player_EmitGrenadeFromThrowMarker",
-        "Player-side animation marker continuation whose sole projectile "
-        "callsite 0x14040D852 invokes EmitGrenadeProjectile.",
+        "Npc_EmitGrenadeFromThrowMarker",
+        "AI/NPC grenade emission continuation called only by "
+        "BehaviorThrowGrenade_Throw_Update. Its sole projectile callsite "
+        "0x14040D852 invokes EmitGrenadeProjectile; this is not the Player "
+        "FastGrenade release materializer.",
     ),
     # --- 2026-07-22: anim-overlay-set runtime consumer and layout ---
     0x140516230: (
