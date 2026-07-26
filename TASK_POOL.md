@@ -102,6 +102,18 @@
       GRNE then takes the existing `GRENADE-EVENT-SUPPRESS` path. No projectile,
       fuse, pose or HUD fields are changed. One-throw prediction and negative
       `GRENADE-EVENT-EXEC` condition are recorded in `COOP_STATUS.md`.
+      **RUNTIME CONFIRMED / CLOSED:** repeated throws in both directions produced
+      native OWNED -> SUPPRESS ordering, moving collision-valid tracks and zero
+      custom `GRENADE-EVENT-EXEC`; the user confirms the face-level warning icon
+      and origin explosion are gone.
+
+- [~] **Traversal climb-up completion (CURRENT, 2026-07-26):** when the sender
+      climbs onto a raised wall/obstacle, the remote Player reaches or remains in
+      wall-hang but does not complete the climb-up/grounded transition. Preserve
+      the confirmed native locomotion and collision baseline. First resolve the
+      Player wall-hang -> climb-up -> grounded controller/action graph, its input
+      edge/context/target data and the final state writer; list competing causes
+      and meet the static evidence quota before adding a bounded runtime probe.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw

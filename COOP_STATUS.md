@@ -10025,3 +10025,24 @@ track continues moving exactly as in `hq`. Neither copy may emit
 icon/explosion at the release origin. Missing OWNED selects controller-owner or
 scope failure; OWNED plus any EXEC selects a pending-event ordering/gate bug.
 Release DLL `2026-07-26hr` builds successfully.
+
+### 2026-07-26 RUNTIME CONFIRMED: native grenade ownership removes both fallback explosions (`hr`)
+
+The user confirms the warning icon and release-origin explosion are gone. The
+logs independently satisfy the complete positive and negative prediction across
+both directions and several throws. Each receiver reported
+`GRENADE-PLAYER-RELEASE-SCOPE enter`, one native Init, one
+`GRENADE-PLAYER-NATIVE-OWNED`, scope exit and exactly one
+`GRENADE-EVENT-SUPPRESS`. Every tracked object acquired nonzero launch velocity,
+advanced under gravity and showed collision response. Neither PID 11460 nor PID
+5256 emitted any `GRENADE-EVENT-EXEC` after the `hr` injection, and both remained
+responsive. The reverse echo and original delayed custom fallback are therefore
+CONFIRMED removed; retained Player's ordinary ProjectileGrenade now exclusively
+owns remote trajectory, collision and explosion.
+
+Grenade synchronization is closed for the reported throw/trajectory/explosion
+bug. The next user-selected P0 is traversal completion: after climbing onto a
+raised obstacle, the remote Player remains visually in wall-hang instead of
+transitioning onto the top surface. Preserve the confirmed locomotion baseline
+and identify the native wall-hang -> climb-up -> grounded transition statically
+before a new runtime test.
