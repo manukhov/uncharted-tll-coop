@@ -25,6 +25,15 @@
       mutation. Run the written `COOP_STATUS.md` prediction; if the extra visual
       remains, inspect ProcessWeapon vs ProcessGrenadeInHand DrawControl state
       read-only and do not suppress the authored held object.
+      **RUNTIME PARTIAL CONFIRM / REJECT:** one hold produced one pre-Start Bind,
+      one StartArc and one ammo decrement. Sender active/release seed markers and
+      receiver idx-1 active/release overrides all appeared; the user confirms the
+      arc is now correct. The extra origin explosion remains. There is still no
+      authored remote marker/ProjectileGrenade Init; state 4 returns to state 0
+      and GRNE enters its 2.5-second defer, so the delayed receiver explosion is
+      the fallback, not a native duplicate. Keep GRNE until P1-P4 identifies why
+      StartThrowAction never emits the marker. Next build is bounded read-only
+      logging of `+0x540`, cover/net reset sites, dispatch/state 8 and reset RVA.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw

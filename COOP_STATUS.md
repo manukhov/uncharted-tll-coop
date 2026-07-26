@@ -9683,3 +9683,40 @@ comments and the new UpdateArc/Release/helper names were applied to the single
 `ida/tll.i64` (`1306 functions, 20 data names`,
 `save_database returned True`) and independently resolve under the restarted
 MCP.
+
+### 2026-07-26 RUNTIME PARTIAL CONFIRM / REJECT: `hn` fixes arc pose; native remote projectile still absent
+
+PID 1356 (local Chloe) held one grenade from sequence `334` through false edge
+`736`. PID 14472 (retained Chloe) produced exactly one scheduler/CanStart/
+StartArc cycle. The stock-order correction passed precisely:
+
+- `GRENADE-BIND` occurred after scheduler CanStart and before `start-entry`;
+- it created one exact-art ProcessWeapon in empty manager slot 2, bound record 0
+  with total 3 and did not run a second Bind during the hold;
+- StartArc occurred once and the receiver count later changed only `3 -> 2`.
+
+The complete pose prediction also passed. Sender logged
+`GRENADE-POSE-SEND active=1` at sequence 334 and the cached
+`GRENADE-POSE-SEND active=0` at sequence 736. Receiver logged idx-1 overrides
+at `E1908B` during the hold (`stockPeerDot=0.854726`) and at `E1B1AF` after the
+false edge (`stockPeerDot=0.83386`). A second cycle reproduced active/release
+overrides. The user confirms that the visible trajectory is now correct. This
+CONFIRMS T1 for arc pose and rejects wrong owner screen T2 for this path.
+
+The late-Bind visual prediction is rejected as a complete fix: the user still
+sees another grenade appear at the throw origin and explode. More importantly,
+the receiver log contains no `GRENADE-ANIM-SPAWN-NATIVE` and no authored
+ProjectileGrenade Init. After state-4 false it returns to state 0 roughly 25
+packets later and the authoritative event logs `GRENADE-EVENT-DEFER`. Therefore
+the delayed receiver-side origin explosion is the existing one-shot GRNE
+fallback after its 2.5-second marker wait, not a second native remote projectile.
+The sender's near-immediate origin explosion is its ordinary locally cooked
+grenade. The correct HUD arc must not be promoted to correct projectile flight:
+the actual remote marker/launch remains absent.
+
+This evidence keeps downstream alternatives P1-P4 from `hm` and narrows the
+next step to a read-only discriminator. Log `ReleasePostArcHold+0x540`, the
+StartThrowAction cover/net resets, successful dispatch/state 8, and the common
+reset return RVA. Do not disable GRNE yet: without an authored remote Init that
+would remove the only receiver-side exploding projectile. Do not mutate the
+now-confirmed pose relay or pre-Start binding order.
