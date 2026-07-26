@@ -244,12 +244,18 @@ PlayerInputIsCommandActiveFunction
 using FastGrenadeCanStartFunction = bool(__fastcall*)(void*);
 using FastGrenadeStartFunction = std::int64_t(__fastcall*)(void*);
 using FastGrenadeResetFunction = std::int64_t(__fastcall*)(void*);
+using FastGrenadeReleaseFunction = std::int64_t(__fastcall*)(void*);
 using GrenadeReleasePostArcHoldFunction = std::int64_t(__fastcall*)(void*);
 FastGrenadeCanStartFunction g_original_fast_grenade_can_start = nullptr;
 FastGrenadeStartFunction g_original_fast_grenade_start = nullptr;
 FastGrenadeResetFunction g_original_fast_grenade_reset = nullptr;
+FastGrenadeReleaseFunction g_original_fast_grenade_release = nullptr;
 GrenadeReleasePostArcHoldFunction
     g_original_grenade_release_post_arc_hold = nullptr;
+// ProjectileGrenade::Init is synchronous inside FastGrenadeController::Release.
+// A thread-local scope identifies the retained Player's native projectile
+// without stealing a simultaneous local Player throw on the same process.
+thread_local unsigned g_peer_fast_grenade_release_scope_depth = 0;
 std::atomic<bool> g_peer_grenade_pose_seed_logged{false};
 std::atomic<bool> g_peer_grenade_release_pose_seed_logged{false};
 std::atomic<unsigned> g_peer_grenade_reset_log_rows{0};
@@ -2374,6 +2380,29 @@ std::int64_t __fastcall hooked_fast_grenade_reset(void* controller) {
     return result;
 }
 
+std::int64_t __fastcall hooked_fast_grenade_release(void* controller) {
+    FastGrenadeControllerSnapshot snapshot{};
+    void* const peer_player = retained_player_object(1);
+    const bool peer_release = peer_player != nullptr &&
+        seh_read_fast_grenade_controller_raw(controller, &snapshot) &&
+        snapshot.owner == peer_player;
+    if (peer_release) {
+        ++g_peer_fast_grenade_release_scope_depth;
+        boot_log_line("GRENADE-PLAYER-RELEASE-SCOPE enter");
+    }
+    const std::int64_t result =
+        g_original_fast_grenade_release != nullptr
+            ? g_original_fast_grenade_release(controller)
+            : 0;
+    if (peer_release) {
+        if (g_peer_fast_grenade_release_scope_depth != 0) {
+            --g_peer_fast_grenade_release_scope_depth;
+        }
+        boot_log_line("GRENADE-PLAYER-RELEASE-SCOPE exit");
+    }
+    return result;
+}
+
 void log_peer_grenade_release(
     const char* stage, void* controller, std::int64_t result) {
     const unsigned row = g_peer_grenade_release_log_rows.fetch_add(
@@ -3082,6 +3111,35 @@ bool install_fast_grenade_controller_boundary_probe() {
     boot_log_line(
         "FastGrenade boundary probe installed (+0x40 start, +0x60 reset, "
         "+0xA8 can-start)");
+    return true;
+}
+
+bool install_fast_grenade_release_scope() {
+    auto** const release_slot = reinterpret_cast<void**>(
+        g_module + kFastGrenadeControllerVtableRva +
+        kFastGrenadeControllerReleaseVtableOffset);
+    if (*release_slot != reinterpret_cast<void*>(
+                             g_module + kFastGrenadeControllerReleaseRva)) {
+        boot_log_line(
+            "FastGrenade retained-Player Release scope SKIPPED (vtable mismatch)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            release_slot, sizeof(void*), PAGE_READWRITE,
+            &old_protection)) {
+        boot_log_line(
+            "FastGrenade retained-Player Release scope SKIPPED (protect)");
+        return false;
+    }
+    g_original_fast_grenade_release =
+        reinterpret_cast<FastGrenadeReleaseFunction>(*release_slot);
+    *release_slot = reinterpret_cast<void*>(&hooked_fast_grenade_release);
+    DWORD ignored = 0;
+    VirtualProtect(
+        release_slot, sizeof(void*), old_protection, &ignored);
+    boot_log_line(
+        "FastGrenade retained-Player Release scope installed (+0x140)");
     return true;
 }
 
@@ -6375,6 +6433,19 @@ void* __fastcall hooked_grenade_init(void* a1, void* a2, std::int64_t a3) {
             }
             boot_log_line(line.str().c_str());
         }
+    }
+    if (g_peer_fast_grenade_release_scope_depth != 0) {
+        // Release belongs to retained Player slot 1 and synchronously owns this
+        // ordinary ProjectileGrenade.  Its native physics/collision/fuse path is
+        // authoritative: suppress sender capture (and therefore the GRNE echo)
+        // and positively arm suppression of the original inbound fallback.
+        g_peer_native_grenade_spawn_ms.store(now, std::memory_order_release);
+        std::ostringstream line;
+        line << "GRENADE-PLAYER-NATIVE-OWNED obj=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(a1)
+             << " caller=0x" << return_rva;
+        boot_log_line(line.str().c_str());
+        return r;
     }
     if (g_spawning_peer_animated_grenade.load(
             std::memory_order_acquire)) {
@@ -38287,8 +38358,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-26hq "
-        "(read-only grenade release pre/post discriminator)");
+        "TLL co-op runtime init 2026-07-26hr "
+        "(retained Player native grenade owns physics)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -38394,6 +38465,7 @@ DWORD WINAPI install_hook(void*) {
         "rejected NetGrenade descriptor+0x50 seed disabled");
     install_player_grenade_command_callsite_relay();
     install_fast_grenade_controller_boundary_probe();
+    install_fast_grenade_release_scope();
     install_grenade_release_post_arc_hold_probe();
     install_puppet_grenade_projectile_marker_relay();
     install_grenade_init_probe();

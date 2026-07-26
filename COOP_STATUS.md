@@ -9995,3 +9995,33 @@ inside that exact scope must set `g_peer_native_grenade_spawn_ms` and return
 before sender capture; the original inbound GRNE will then be positively
 suppressed. Do not classify by the 2.5-second time window alone, because a local
 and remote player may throw concurrently.
+
+### 2026-07-26 STATIC / IMPLEMENTED: exact retained-Player Release ownership (`hr`)
+
+Build `hr` replaces the diagnostic time window as the ownership decision with
+the exact synchronous native boundary. Three independent evidence types support
+the change: FastGrenade RTTI/vtable identity fixes `+0x140` at
+`PlayerGrenadeController_Release 0x140E1B900`; its decompiled data/control flow
+calls `PlayerGrenadeController_SpawnReleasedProjectile 0x140E1C3A0` directly at
+`0x140E1C2FD` before returning; and `hq` runtime observed the resulting normal
+ProjectileGrenade Init plus moving collision-valid track inside that release.
+
+The FastGrenade vtable `+0x140` slot is now wrapped pass-through. The wrapper
+reads controller owner `+0x108` and opens a thread-local scope only when it is
+the current retained Player slot 1. `hooked_grenade_init` reached inside that
+scope records `g_peer_native_grenade_spawn_ms` and returns before
+`g_last_grenade` sender capture. Thus the retained native projectile can no
+longer echo GRNE back to the throwing copy, while a simultaneous local Player
+Release on the same process remains outside the scope. The original inbound
+GRNE is retained only until `apply_pending_peer_grenade_event` observes the
+positive native timestamp and emits `GRENADE-EVENT-SUPPRESS`.
+
+No projectile transform, velocity, collision, fuse, art, pose or HUD state is
+written. **Falsifiable `hr` prediction:** one throw produces receiver ordering
+`GRENADE-PLAYER-RELEASE-SCOPE enter -> GRENADE-PLAYER-NATIVE-INIT ->
+GRENADE-PLAYER-NATIVE-OWNED -> ... exit -> GRENADE-EVENT-SUPPRESS`; its native
+track continues moving exactly as in `hq`. Neither copy may emit
+`GRENADE-EVENT-EXEC` for that throw, and the user must no longer see the warning
+icon/explosion at the release origin. Missing OWNED selects controller-owner or
+scope failure; OWNED plus any EXEC selects a pending-event ordering/gate bug.
+Release DLL `2026-07-26hr` builds successfully.

@@ -95,6 +95,13 @@
       reached synchronously inside it as peer-native, skip sender capture and
       positively suppress the original inbound GRNE. Do not use the broad time
       window as the semantic gate because simultaneous throws must remain safe.
+      **IMPLEMENTED `hr`:** pass-through FastGrenade `+0x140` wrapper opens a
+      thread-local scope only when controller `owner@+0x108` is retained Player
+      slot 1. Native Init inside it sets the positive native timestamp and exits
+      before sender capture, preventing the reverse echo; the original inbound
+      GRNE then takes the existing `GRENADE-EVENT-SUPPRESS` path. No projectile,
+      fuse, pose or HUD fields are changed. One-throw prediction and negative
+      `GRENADE-EVENT-EXEC` condition are recorded in `COOP_STATUS.md`.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw
