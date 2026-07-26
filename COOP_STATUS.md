@@ -9961,3 +9961,37 @@ R4 gives an Init with stationary or invalid launch state. The grenade HUD icon
 alone distinguishes none of them. Release DLL `2026-07-26hq` builds
 successfully; the next runtime test is one throw after both copies show the
 `hq` build tag and all grenade hooks installed.
+
+### 2026-07-26 RUNTIME CONFIRMED: retained Player native grenade is misclassified and echoed (`hq`)
+
+One local Chloe throw (`GRENADE-ARC-SEND` rise `seq=302`, fall `seq=460`)
+confirmed R1 and rejects R2-R4. Receiver PID 9364 entered
+`ReleasePostArcHold` in state 4, exited in state 8, then produced exactly one
+non-AI `GRENADE-PLAYER-NATIVE-INIT` (`obj=0x10e1027000`, caller RVA
+`0x17C400F`). Init began with the expected sentinel position and zero velocity;
+141 ms later the same ordinary ProjectileGrenade was at
+`(-757.450, 5.401, 385.577)` with velocity
+`(-7.445, 0.655, 9.790)`. Its position and gravity-updated velocity continued
+changing for the complete 1.2-second probe and showed a collision/settling
+transition near 766 ms. The retained Player's native projectile therefore owns
+the correct visible trajectory and collision physics.
+
+The current Init fallthrough then armed sender capture on PID 9364 and echoed a
+new GRNE to PID 17288. PID 17288 had no retained-Player release window and
+executed that echo immediately as a custom fallback
+(`GRENADE-EVENT-EXEC seq=1`, spawned `0x10e1025b00`). PID 9364 retained the
+original sender GRNE through its 2.5-second wait and then executed a second
+custom fallback (`spawned=0x10e109b000`). Both reported
+`nativeVelocity=0, fuseStarted=1`. This exactly explains the user's grenade
+warning icon at the throw origin and explosion on both copies; the icon is a
+symptom of the two fallback executions, not evidence that the correctly flying
+native model was absent.
+
+The safe fix boundary is narrower than the `hq` release-time window. Scope the
+existing FastGrenade vtable `+0x140` /
+`PlayerGrenadeController_Release 0x140E1B900` only when its controller belongs
+to retained Player slot 1. A `ProjectileGrenade::Init` reached synchronously
+inside that exact scope must set `g_peer_native_grenade_spawn_ms` and return
+before sender capture; the original inbound GRNE will then be positively
+suppressed. Do not classify by the 2.5-second time window alone, because a local
+and remote player may throw concurrently.

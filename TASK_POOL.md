@@ -85,6 +85,16 @@
       intentionally leaves capture, GRNE echo/suppression, physics, fuse and
       HUD behavior unchanged. Test exactly one throw after both copies report
       the `2026-07-26hq` build tag.
+      **RUNTIME CONFIRMED R1:** receiver native Init appeared during Release,
+      then moved with the correct launch velocity, gravity and collision. It
+      nevertheless fell into sender capture, echoed GRNE back to the thrower's
+      copy (immediate custom Execute), while the original GRNE later executed
+      on the receiver after 2.5 seconds. Those two zero-native-velocity
+      fallbacks explain the icon/explosion on both copies. Next scope FastGrenade
+      vtable `+0x140` around retained Player Release, classify only the Init
+      reached synchronously inside it as peer-native, skip sender capture and
+      positively suppress the original inbound GRNE. Do not use the broad time
+      window as the semantic gate because simultaneous throws must remain safe.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw
