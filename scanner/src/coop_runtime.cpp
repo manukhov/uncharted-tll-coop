@@ -237,6 +237,8 @@ using FastGrenadeCanStartFunction = bool(__fastcall*)(void*);
 using FastGrenadeStartFunction = std::int64_t(__fastcall*)(void*);
 FastGrenadeCanStartFunction g_original_fast_grenade_can_start = nullptr;
 FastGrenadeStartFunction g_original_fast_grenade_start = nullptr;
+std::atomic<bool> g_peer_grenade_pose_seed_logged{false};
+std::atomic<bool> g_peer_grenade_release_pose_seed_logged{false};
 using PlayerMeleeTryAnimFunction =
     char(__fastcall*)(void**, void*, double);
 PlayerMeleeTryAnimFunction g_original_player_melee_try_anim = nullptr;
@@ -2531,6 +2533,10 @@ char __fastcall hooked_player_grenade_command_callsite(
         g_grenade_can_start_last.store(-1, std::memory_order_release);
         g_peer_grenade_bind_attempted.store(
             false, std::memory_order_release);
+        g_peer_grenade_pose_seed_logged.store(
+            false, std::memory_order_release);
+        g_peer_grenade_release_pose_seed_logged.store(
+            false, std::memory_order_release);
     }
     if (was_active && !active) {
         g_peer_grenade_release_until_ms.store(
@@ -2550,6 +2556,10 @@ char __fastcall hooked_player_grenade_command_callsite(
 }
 
 bool __fastcall hooked_fast_grenade_can_start(void* controller) {
+    const std::uintptr_t return_address =
+        reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const std::uintptr_t return_rva =
+        return_address >= g_module ? return_address - g_module : 0;
     const bool result = g_original_fast_grenade_can_start != nullptr &&
                         g_original_fast_grenade_can_start(controller);
     void* const puppet = retained_player_object(1);
@@ -2571,6 +2581,22 @@ bool __fastcall hooked_fast_grenade_can_start(void* controller) {
             if (previous != (result ? 1 : 0)) {
                 log_peer_grenade_controller_state(
                     "can-start", result, peer.sequence);
+            }
+            // Stock loadout order is factory/bind -> StartArc. Provision only
+            // after the scheduler eligibility check succeeds. StartArc's own
+            // CanStart recheck (return RVA 0xE19612) sees the ready record but
+            // must never create/bind another ProcessWeapon.
+            const ULONGLONG now = GetTickCount64();
+            const ULONGLONG received =
+                g_state_net.peer_state_received_ms.load(
+                    std::memory_order_acquire);
+            if (result && return_rva == kGrenadeSchedulerCanStartReturnRva &&
+                peer.grenade_arc_active != 0 && received != 0 &&
+                now - received <= 250 &&
+                !g_peer_grenade_bind_attempted.exchange(
+                    true, std::memory_order_acq_rel)) {
+                ensure_puppet_grenade_weapon_binding(
+                    puppet, controller, peer);
             }
         }
     }
@@ -2614,11 +2640,6 @@ std::int64_t __fastcall hooked_fast_grenade_start(void* controller) {
                     "GRENADE-SCHEDULER-CONSUME seq=%u state=%u consumed=1",
                     peer.sequence, after_start.state);
                 boot_log_line(line);
-            }
-            if (!g_peer_grenade_bind_attempted.exchange(
-                    true, std::memory_order_acq_rel)) {
-                ensure_puppet_grenade_weapon_binding(
-                    puppet, controller, peer);
             }
         }
         log_peer_grenade_controller_state(
@@ -3449,6 +3470,12 @@ bool head_look_send_allowed(void* player) {
 void publish_peer_head_look_packet_fields(
     void* local_obj, coop::StatePacket& pkt) {
     pkt.flags &= static_cast<std::uint16_t>(~coop::kStateFlagPeerFreeLook);
+    // An action-scoped seed may be present for strict ADS, an active grenade
+    // hold, or the short grenade-release grace. Never let optional free-look
+    // publication strip a seed that the action publisher already selected.
+    if ((pkt.flags & coop::kStateFlagPoseSeed) != 0) {
+        return;
+    }
     if (!g_puppet_head_look_sync) {
         return;
     }
@@ -4358,6 +4385,32 @@ void apply_pose_seed_override_out(
     }
 }
 
+void apply_grenade_pose_seed_quaternion_only(
+    void* out, const std::uint8_t seed[32]) {
+    __try {
+        std::memcpy(static_cast<std::byte*>(out) + 16, seed + 16, 16);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
+
+bool is_grenade_pose_seed_return_site(std::uintptr_t caller_rva) {
+    // Exact return RVAs of direct resolver calls across the complete grenade
+    // ResolveContext/SolveTrajectory/UpdateArc/Release chain. Nearby firearm
+    // sites E268EA/E2BFFF/E2C450 are intentionally excluded.
+    constexpr std::array<std::uintptr_t, 17> kSites{
+        0xE17843, 0xE18A16, 0xE18A89, 0xE18CD3, 0xE18D62,
+        0xE18EE8, 0xE18F5B, 0xE1908B, 0xE190FE, 0xE19214,
+        0xE192A3, 0xE1B1AF, 0xE1B259, 0xE1B591, 0xE228ED,
+        0xE22A59, 0xE22C0F,
+    };
+    for (const std::uintptr_t site : kSites) {
+        if (caller_rva == site) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     void* const result = g_original_pose_seed_resolver != nullptr
         ? g_original_pose_seed_resolver(out, idx)
@@ -4375,6 +4428,9 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     }
     const bool fire_path_override =
         g_pose_seed_fire_only_override || g_puppet_aim_ray_override;
+    const bool grenade_path_override =
+        idx == kSlot1ScreenIndex &&
+        is_grenade_pose_seed_return_site(caller_rva);
     const bool sustained_slot1_override =
         g_puppet_aim_override_frame && idx == kSlot1ScreenIndex;
     // AIM-POSE-SCOPED override (2026-07-07): peer pose-seed ONLY when the caller is
@@ -4396,11 +4452,17 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     // a major lag source. Gate on the CHEAP conditions first; only snapshot when
     // this call is actually an override candidate.
     if (!g_puppet_relay_pose_seed || !g_state_net.enabled || out == nullptr ||
-        !(fire_path_override || sustained_slot1_override || caller_is_aim_site)) {
+        !(fire_path_override || grenade_path_override ||
+          sustained_slot1_override || caller_is_aim_site)) {
         return result;
     }
     coop::StatePacket peer{};
     const bool have_peer = copy_peer_state_snapshot(peer);
+    const ULONGLONG peer_received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    const ULONGLONG now = GetTickCount64();
+    const bool peer_fresh =
+        peer_received != 0 && now - peer_received <= 250;
     const bool relay_aim_pose =
         have_peer && puppet_aim_pose_relay_enabled_for_peer(peer);
     // The reticle target is an input to native ADS/fire and must be correct before
@@ -4415,7 +4477,14 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
         (g_puppet_aim_reticle_relay || relay_aim_pose);
     const bool aim_pose_seed_override =
         early_target_seed_override || late_pose_seed_override;
-    if (!(fire_path_override || sustained_slot1_override || aim_pose_seed_override)) {
+    const ULONGLONG grenade_release_until =
+        g_peer_grenade_release_until_ms.load(std::memory_order_acquire);
+    const bool grenade_pose_seed_override =
+        grenade_path_override && have_peer && peer_fresh &&
+        (peer.grenade_arc_active != 0 ||
+         (grenade_release_until != 0 && now <= grenade_release_until));
+    if (!(fire_path_override || grenade_pose_seed_override ||
+          sustained_slot1_override || aim_pose_seed_override)) {
         return result;
     }
     std::uint8_t seed[32]{};
@@ -4455,6 +4524,23 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
              << stock_peer_quat_dot();
         boot_log_line(line.str().c_str());
     }
+    const bool grenade_release_pose_override =
+        grenade_pose_seed_override && peer.grenade_arc_active == 0;
+    std::atomic<bool>& grenade_pose_log_gate =
+        grenade_release_pose_override
+            ? g_peer_grenade_release_pose_seed_logged
+            : g_peer_grenade_pose_seed_logged;
+    if (grenade_pose_seed_override &&
+        !grenade_pose_log_gate.exchange(true, std::memory_order_acq_rel)) {
+        std::ostringstream line;
+        line << "GRENADE-POSE-OVERRIDE seq=" << peer.sequence
+             << " active="
+             << static_cast<unsigned>(peer.grenade_arc_active)
+             << " idx=" << idx
+             << " site=0x" << std::hex << caller_rva << std::dec
+             << " stockPeerDot=" << stock_peer_quat_dot();
+        boot_log_line(line.str().c_str());
+    }
     static ULONGLONG last_override_log = 0;
     const ULONGLONG onow = GetTickCount64();
     if (onow - last_override_log > 2000) {
@@ -4464,7 +4550,13 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
               << " src=peer";
         force_log_line(oline.str().c_str());
     }
-    apply_pose_seed_override_out(out, seed, caller_rva);
+    if (grenade_pose_seed_override) {
+        // Every whitelisted grenade consumer reads only seed+0x10. Preserve
+        // stock position so this scope cannot move any camera/player origin.
+        apply_grenade_pose_seed_quaternion_only(out, seed);
+    } else {
+        apply_pose_seed_override_out(out, seed, caller_rva);
+    }
     return result;
 }
 
@@ -15841,8 +15933,31 @@ void send_local_player_state() {
             }
         }
     }
-    // Relay gameplay camera + pose seed ONLY while strict aim (RMB) is held.
-    // Unconditional camera relay made the puppet track peer look while running.
+    // Relay gameplay camera + pose seed while strict firearm aim OR across the
+    // exact grenade hold/release window. Release rebuilds its throw pose after
+    // the command falls, so retain the last active grenade seed for 500 ms.
+    // Outside those authored actions the camera remains private.
+    static std::uint8_t grenade_pose_seed_cache[32]{};
+    static bool have_grenade_pose_seed = false;
+    static ULONGLONG grenade_pose_publish_until_ms = 0;
+    const ULONGLONG grenade_pose_now = GetTickCount64();
+    if (grenade_arc_active) {
+        std::uint8_t active_seed[32]{};
+        if (copy_local_pose_seed_32(active_seed)) {
+            std::memcpy(
+                grenade_pose_seed_cache, active_seed,
+                sizeof(grenade_pose_seed_cache));
+            have_grenade_pose_seed = true;
+        }
+        grenade_pose_publish_until_ms = grenade_pose_now + 500;
+    }
+    const bool grenade_pose_publish =
+        grenade_arc_active ||
+        (have_grenade_pose_seed &&
+         grenade_pose_now <= grenade_pose_publish_until_ms);
+    if (!grenade_pose_publish) {
+        have_grenade_pose_seed = false;
+    }
     const bool strict_aim = local_player_strict_aim_active(local_obj);
     {
         static bool previous_strict_aim = false;
@@ -15929,6 +16044,39 @@ void send_local_player_state() {
             pkt.gun_move_selected_child = foot_capture.selected_child;
             pkt.flags |= coop::kStateFlagAimFootTurn;
         }
+    } else if (grenade_pose_publish) {
+        std::uint8_t route_seed[32]{};
+        const bool route_seed_ok = have_grenade_pose_seed;
+        float cam_quat[4]{};
+        if (route_seed_ok) {
+            std::memcpy(
+                route_seed, grenade_pose_seed_cache, sizeof(route_seed));
+            std::memcpy(pkt.pose_seed, route_seed, sizeof(pkt.pose_seed));
+            pkt.flags |= coop::kStateFlagPoseSeed;
+            std::memcpy(cam_quat, route_seed + 16, sizeof(cam_quat));
+            std::memcpy(pkt.camera_quat, cam_quat, sizeof(pkt.camera_quat));
+            pkt.flags |= coop::kStateFlagPeerCamera;
+            static int grenade_pose_send_state = -1;
+            const int pose_send_state = grenade_arc_active ? 1 : 0;
+            if (grenade_pose_send_state != pose_send_state) {
+                grenade_pose_send_state = pose_send_state;
+                const auto* const q =
+                    reinterpret_cast<const float*>(route_seed + 16);
+                std::ostringstream line;
+                line << "GRENADE-POSE-SEND seq=" << pkt.sequence
+                     << " active=" << (grenade_arc_active ? 1 : 0)
+                     << " q=(" << q[0] << "," << q[1] << ","
+                     << q[2] << "," << q[3] << ")";
+                boot_log_line(line.str().c_str());
+            }
+        } else if (capture_gameplay_camera_quat(cam_quat)) {
+            std::memcpy(pkt.camera_quat, cam_quat, sizeof(pkt.camera_quat));
+            pkt.flags |= coop::kStateFlagPeerCamera;
+        }
+        pkt.flags &= static_cast<std::uint16_t>(
+            ~(coop::kStateFlagPeerFreeLook | coop::kStateFlagAimPitch |
+              coop::kStateFlagAimFootTurn));
+        std::memset(pkt.look_stick, 0, sizeof(pkt.look_stick));
     } else {
         pkt.flags &= static_cast<std::uint16_t>(
             ~(coop::kStateFlagPoseSeed | coop::kStateFlagPeerCamera |
@@ -37813,7 +37961,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-23hm "
+        "TLL co-op runtime init 2026-07-26hn "
         "(relay post-timer grenade state-4 hold/release)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

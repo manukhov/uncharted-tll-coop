@@ -11,6 +11,21 @@
 
 ## P0: Full Player Synchronization (CURRENT)
 
+- [~] **Grenade direction / duplicate held visual (`hn`, 2026-07-26):** `hm`
+      now shows a remote throw animation visually, but the user still sees a
+      wrong arc/flight and another grenade during hold. STATIC quota is met.
+      Exact resolver-call tracing proves ResolveContext/Solve are insufficient:
+      UpdateArc and Release re-read the route quaternion at a 17-return-RVA
+      grenade-only whitelist. `hn` publishes the sender seed during hold plus a
+      500 ms false-edge grace and overrides quaternion-only for screen 1.
+      Separately, the old post-Start Bind order was based on a record-offset
+      mistake: slot 0 is `+0x128`, while StartArc clears record 2 at `+0x148`.
+      `hn` binds once after the successful scheduler CanStart and before StartArc,
+      restoring native order and removing the mid-hold ProcessWeapon presentation
+      mutation. Run the written `COOP_STATUS.md` prediction; if the extra visual
+      remains, inspect ProcessWeapon vs ProcessGrenadeInHand DrawControl state
+      read-only and do not suppress the authored held object.
+
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw
       emits only one-shot stages at Joypad square force, controller `+0x210`, and

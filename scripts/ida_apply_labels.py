@@ -61,10 +61,10 @@ FUNCTIONS = {
     0x140E19600: (
         "PlayerGrenadeController_StartArc",
         "FastGrenadeController vtable +0x40. Rechecks CanStart, clears and "
-        "initializes held-grenade/context state (including the 16-byte record "
-        "at controller+0x148), resolves settings and trajectory, then writes "
-        "controller state 1 at 0x140E19745. A missing grenade ProcessWeapon "
-        "binding must therefore be repaired after this function returns.",
+        "initializes held-grenade/context state (including record 2 at "
+        "controller+0x148), resolves settings and trajectory, then writes "
+        "controller state 1 at 0x140E19745. The selected art slot is 0 at "
+        "+0x128, so its native pre-StartArc Bind survives this clear.",
     ),
     0x140E21310: (
         "PlayerGrenadeController_UpdateStateAndCommitThrow",
@@ -116,6 +116,37 @@ FUNCTIONS = {
         "Release path reached when grenade-arc becomes false. Clears the arc "
         "phase and calls PlayerGrenadeController_StartThrowAction.",
     ),
+    0x140E1B900: (
+        "PlayerGrenadeController_Release",
+        "FastGrenadeController::Release string anchor. Builds the authored "
+        "grenade-player-*-thrown event, re-resolves the throw pose through the "
+        "aim/blindfire helpers, then destroys the held grenade/effects.",
+    ),
+    0x140E22ED0: (
+        "PlayerGrenadeController_UpdateArc",
+        "FastGrenadeController::UpdateArc string anchor. Selects the default, "
+        "aimed or blindfire pose helper and publishes the current arc state.",
+    ),
+    0x140E1B550: (
+        "PlayerGrenadeController_ProjectPointAlongCameraForward",
+        "Shared UpdateArc/Release helper. Resolves the owner screen pose seed "
+        "and consumes only its quaternion at seed+0x10 to project a point.",
+    ),
+    0x140E22730: (
+        "PlayerGrenadeController_BuildDefaultArcPose",
+        "Builds the default grenade arc pose and re-resolves the owner screen "
+        "pose quaternion for UpdateArc.",
+    ),
+    0x140E229C0: (
+        "PlayerGrenadeController_BuildAimedArcOrThrowPose",
+        "Shared aimed-mode helper used by both UpdateArc and Release. Re-reads "
+        "the owner screen pose quaternion through the common resolver.",
+    ),
+    0x140E22B80: (
+        "PlayerGrenadeController_BuildBlindfireArcOrThrowPose",
+        "Shared blindfire helper used by both UpdateArc and Release. Re-reads "
+        "the owner screen pose quaternion through the common resolver.",
+    ),
     0x140E20050: (
         "PlayerGrenadeController_StartThrowAction",
         "Creates authored grenade-starting-throw action 0x6A1381B4, dispatches "
@@ -133,8 +164,10 @@ FUNCTIONS = {
         "FastGrenadeController vtable +0xF0. Uses the weapon art registry slot "
         "index and copies the ProcessWeapon weak handle from weapon+0xA8/+0xBC "
         "into one of six controller records at +0x128+slot*0x10, then performs "
-        "the controller registry/vtable binding side effects. Do not forge the "
-        "weak record directly.",
+        "WeaponHolster_BuildBinding/attachment presentation and controller "
+        "registry side effects. Native loadout calls this before StartArc; a "
+        "late mid-aim Bind can overlap its ProcessWeapon presentation with the "
+        "separate ProcessGrenadeInHand. Do not forge the weak record directly.",
     ),
     0x140E1A9C0: (
         "PlayerGrenadeController_GetGrenadeWeaponBySlot",
@@ -8279,9 +8312,10 @@ FUNCTIONS = {
         "camera pose seed TEN times via ResolveScreenRoutePoseSeedOrDefault"
         "(&seed, *(owner+0x4010)) — the SAME per-screen fire-ray source as "
         "PlayerFireController_BuildFireArgsAndFire. Called by the trajectory "
-        "solver 0x140E1B000 ('Grenade Settings: %s' debug print). The co-op "
-        "pose-seed hook for screen index 1 therefore fixes both bullet fire and "
-        "grenade arc/throw direction for the Second player.",
+        "solver 0x140E1B000 ('Grenade Settings: %s' debug print). This function "
+        "alone is insufficient: UpdateArc and Release re-resolve the same seed "
+        "through 0x140E1B550/0x140E229C0/0x140E22B80, so the co-op override "
+        "must cover the exact full grenade callsite whitelist.",
     ),
     0x1414115B0: (
         "VehicleCtrl_NotifyPlayerEntering",
@@ -8516,8 +8550,10 @@ FUNCTIONS = {
         "(xmmword_1428805D0). This seed is the FIRE RAY origin+direction consumed "
         "by PlayerFireController_BuildFireArgsAndFire — the co-op Second player's "
         "screen-1 seed is never driven by the mod (wrong-direction shots). Co-op "
-        "fix: hook here and override out for idx==1 from the peer's relayed "
-        "screen-0 seed.",
+        "fix: hook here and override quaternion-only for idx==1 from the peer's "
+        "relayed screen-0 seed. Grenade scope is the exact 17 return-RVA "
+        "whitelist spanning ResolveContext, SolveTrajectory, UpdateArc and "
+        "Release; firearm sites E268EA/E2BFFF/E2C450 remain separate.",
     ),
     0x140E8F990: (
         "GunMoveController_ApplyCameraYawToMoveDirection",

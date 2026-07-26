@@ -172,6 +172,11 @@ constexpr std::size_t kFastGrenadeControllerStartVtableOffset = 0x40;
 constexpr std::size_t kFastGrenadeControllerCanStartVtableOffset = 0xA8;
 constexpr std::uintptr_t kFastGrenadeControllerStartRva = 0xE19600;
 constexpr std::uintptr_t kFastGrenadeControllerCanStartRva = 0xE25540;
+// Return address of the scheduler's FastGrenadeController::CanStart call. The
+// stock loadout binds its ProcessWeapon before StartArc; provision the retained
+// puppet only after this eligibility check succeeds, never from StartArc's
+// internal CanStart recheck (return RVA 0xE19612).
+constexpr std::uintptr_t kGrenadeSchedulerCanStartReturnRva = 0x10E7C83;
 // Exact press-query callsites inside the naturally scheduled melee dispatcher.
 // Both are E8 calls to PlayerInputCommandState_IsCommandActive. They capture
 // local PC/pad melee; remote execution is injected at the Joypad square query.

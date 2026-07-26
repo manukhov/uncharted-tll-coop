@@ -9596,3 +9596,90 @@ owner context, and **T3** a correct controller solution but a HUD consumer
 reading a different unsynchronized record. Trace the producer/consumer fields
 and compare them with the existing pose-seed/camera relays before adding packet
 data. Do not restore the rejected per-frame transform pinning.
+
+### 2026-07-26 RUNTIME OBSERVED / STATIC: animation visible; full grenade pose relay and native pre-bind order (`hn`)
+
+The user reports that the authored-looking remote throw animation is now
+visible after `hm`, but the visible arc/flight still points in a different
+direction and another grenade-looking object appears during the hold. This is
+a visual observation only: the prior `hm` log did not contain an authored
+marker/ProjectileGrenade Init, so animation-marker completion remains
+unconfirmed until the next bounded log.
+
+The trajectory alternatives from `hm` are now separated by three independent
+static evidence types.
+
+1. **Call graph:** `PlayerGrenadeController_SolveTrajectory 0x140E1B000` and
+   `ResolveContextSettingsAndPose 0x140E17AC0` are not the whole chain.
+   `PlayerGrenadeController_UpdateArc 0x140E22ED0` calls the default/aimed/
+   blindfire helpers `0x140E22730/0x140E229C0/0x140E22B80`; the independent
+   `PlayerGrenadeController_Release 0x140E1B900` reuses the aimed/blindfire
+   helpers. All paths converge on
+   `ResolveScreenRoutePoseSeedOrDefault 0x141C077B0`.
+2. **Data flow:** the 17 exact direct-call return RVAs are
+   `E17843`, `E18A16`, `E18A89`, `E18CD3`, `E18D62`, `E18EE8`, `E18F5B`,
+   `E1908B`, `E190FE`, `E19214`, `E192A3`, `E1B1AF`, `E1B259`, `E1B591`,
+   `E228ED`, `E22A59`, `E22C0F`. Every grenade consumer reads only the
+   quaternion at seed `+0x10`. Nearby `E268EA/E2BFFF/E2C450` are firearm
+   consumers and are excluded.
+3. **Packet/current-code structure:** StatePacket already carries the exact
+   32-byte screen-0 route seed, but the sender published it only under strict
+   RMB. `grenade-arc` is a separate command, so `hm` usually sent no seed.
+   Further, Release runs after the false edge; clearing the seed on that packet
+   would fix preview while leaving the committed throw receiver-local.
+
+This selects **T1** (receiver-local route quaternion) over T2/T3 strongly enough
+for a bounded implementation. Build `hn` publishes the cached route seed during
+the exact grenade hold and for 500 ms after falling edge, prevents optional
+head-look publication from stripping an already action-scoped seed, and applies
+a quaternion-only override at the 17 exact resolver return sites for screen 1.
+It does not write route position, a player transform, projectile transform or
+physics velocity. T2 (wrong owner screen/route) remains falsifiable by seeing no
+idx-1 override; T3 (a separate HUD/cached output) remains if correct override
+markers appear but the visible arc/flight remains wrong.
+
+The second visible object has a separate static correction. The old `hk` claim
+that StartArc erases a pre-bind confused two records:
+
+- `PlayerGrenadeController_BindGrenadeWeaponSlot 0x140E17720` for the observed
+  `artSlot=0` writes FastGrenade record 0 at controller `+0x128`.
+- `StartArc 0x140E19600` clears record 2 at `+0x148`, not record 0.
+- the factory's `managerSlot=2` write is in the distinct
+  PlayerWeaponController table at `+0x168`.
+
+Native loadout order is factory -> Bind at `0x140E176D5` -> later StartArc.
+Bind also calls `WeaponHolster_BuildBinding`, selects a ProcessWeapon attachment
+and activates an NdAttachableObject presentation. The later state-4
+`EnsureGrenadeInHand 0x140E19D60` creates a separate drawable
+ProcessGrenadeInHand in record 3. The mod's post-StartArc Bind could therefore
+introduce a ProcessWeapon presentation mid-hold while the authored held object
+is also visible.
+
+Build `hn` restores the narrow native order: only the scheduler CanStart caller
+(`call 0x1410E7C7D`, return RVA `0x10E7C83`) may bind, only after original
+CanStart returns true, with a fresh active peer packet and once per rising edge.
+StartArc's internal CanStart recheck (`E19612`) sees the ready record but cannot
+bind; the post-Start hook now only consumes the scheduler latch. Binding before
+original CanStart is rejected because its global/owner/action/cooldown gates
+must pass before any ProcessWeapon is created.
+
+**Falsifiable `hn` prediction before runtime:** one long hold/release produces
+one `GRENADE-BIND` before `start-entry`, one StartArc and at most one ammo
+decrement. Sender logs `GRENADE-POSE-SEND active=1`, then
+`GRENADE-POSE-SEND active=0` with the cached quaternion. Receiver logs an idx-1
+`GRENADE-POSE-OVERRIDE active=1` at a whitelisted ResolveContext/Solve/UpdateArc
+site and another `active=0` at `E1B591/E22A59/E22C0F` during Release. If T1 is
+correct, both the visible arc and native throw direction rotate with the sender
+view while firearm direction and local screen 0 remain unchanged. The late-bind
+candidate predicts no second grenade-looking object during hold. If it remains,
+the next read-only discriminator must compare ProcessWeapon and record-3
+DrawControl visibility; it must not kill ProcessGrenadeInHand. Missing idx 1,
+correct override logs with wrong output, arc-only correction, release-only miss,
+another ProcessWeapon bind, repeated StartArc, crash or regression in animation
+rejects the corresponding boundary.
+
+The Release DLL builds successfully. The corrected StartArc/Bind/resolver
+comments and the new UpdateArc/Release/helper names were applied to the single
+`ida/tll.i64` (`1306 functions, 20 data names`,
+`save_database returned True`) and independently resolve under the restarted
+MCP.
