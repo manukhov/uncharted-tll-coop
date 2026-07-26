@@ -9845,3 +9845,44 @@ The Release DLL builds successfully. The corrected shared `E22333` identity was
 applied to the single `ida/tll.i64` (`1307 functions, 20 data names`,
 `save_database returned True`) and independently verified through the restarted
 MCP on both `UpdateStateAndCommitThrow` and `ResetToIdle`.
+
+### 2026-07-26 RUNTIME CONFIRMED / CORRECTION: `hp` reaches the authored state-8 action
+
+Two deliberate throws from local Chloe select the successful
+`StartThrowAction` branch and reject Q1/Q2. On the retained Chloe controller
+`0x10e0f92810`, both falling edges (`seq=1085` and `seq=1747`) entered
+`ReleasePostArcHold` with `state=4`, `mode540=2`, `netModeHigh=0`, then returned
+with `state=8` and a nonzero result. No `GRENADE-RESET` row appeared. The
+controller reached state 0 at sequences 1109/1771 and consumed exactly one
+grenade each time (`3 -> 2 -> 1`). The arc remained correct and no crash or
+unrelated regression occurred.
+
+The written Q3 prediction was too narrow. Static re-audit of
+`PlayerGrenadeController_UpdateStateAndCommitThrow 0x140E21310` shows two legal
+post-success paths: missing authored state resets from state 8 through
+`E22333`, while a live authored state advances `8 -> 9` at `E223DB` and later
+writes state 0 directly at `E22475`, without `ResetToIdle`. Therefore release
+exit `state=8` already CONFIRMS successful dispatch of
+`grenade-starting-throw`; the observed no-reset transition to state 0 selects
+the live authored-action path. Q1 cover abort, Q2 online net gate, and Q3's
+missing-action subvariant are rejected.
+
+The remaining failure is below action dispatch: neither throw produced
+`GRENADE-ANIM-SPAWN-NATIVE`, and both authoritative GRNE events entered the
+2.5-second `GRENADE-EVENT-DEFER` wait. The next read-only discriminator must
+separate four marker-stage alternatives: **M1**
+`PlayerGrenadeAnimationMarkerHandler 0x1404885C0` is not instantiated/ticked for
+the retained Player; **M2** it runs but cannot resolve the active authored clip
+or its `throw-grenade` marker `0x6333DA76`; **M3** the clip resolves but its
+current time never crosses the marker; **M4** the marker calls
+`Player_EmitGrenadeFromThrowMarker 0x14040CEF0`, which fails before its sole
+`EmitGrenadeProjectile` callsite `0x14040D852`.
+
+**Visual correction from the user:** the apparent object that appears directly
+in front after release is not a visible second grenade model. Only the grenade
+warning/HUD icon appears, and it is visible on both game copies. Earlier wording
+about a "second grenade-looking object" must not be used as evidence for a
+duplicate ProcessGrenadeInHand or ProjectileGrenade. HUD/tell publication and
+physical projectile creation are separate paths until their call graph is
+proved. The fallback is still retained because no authored remote projectile
+has been observed.

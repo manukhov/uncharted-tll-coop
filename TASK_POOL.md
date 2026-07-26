@@ -52,6 +52,20 @@
       `E201EB/E2034B/E22333`, and a suspended-thread reloc-free prologue hook
       logs `ReleasePostArcHold` pre/post state. Written Q1/Q2/Q3/Q4 prediction is
       in `COOP_STATUS.md`; this build changes no grenade semantics.
+      **RUNTIME CONFIRMED / CORRECTED:** two throws entered release at state 4,
+      `mode540=2`, `netModeHigh=0` and exited synchronously at state 8 with a
+      nonzero result. They then reached state 0 without any `ResetToIdle` hook,
+      one ammo unit per throw, no marker and deferred GRNE. Static re-audit
+      proves the successful live-action route is state `8 -> 9` at `E223DB`,
+      then a direct state-0 store at `E22475`; the old Q3 requirement for
+      `E22333` was wrong. Cover/net abort and missing-action reset are rejected.
+      Next distinguish marker handler absent, clip/marker lookup failure,
+      animation time not crossing the marker, and EmitGrenadeFromThrowMarker
+      failing before `0x14040D852`, using bounded read-only logging only.
+      **VISUAL CORRECTION:** after the throw the user sees only the grenade
+      warning/HUD icon directly ahead, on both copies; no second physical model
+      is visible. Do not use the icon as evidence of a duplicate projectile or
+      held object, and trace the HUD/tell path separately.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw
