@@ -213,6 +213,14 @@ std::atomic<ULONGLONG> g_peer_grenade_release_until_ms{0};
 std::atomic<ULONGLONG> g_peer_native_grenade_spawn_ms{0};
 std::atomic<bool> g_spawning_peer_animated_grenade{false};
 std::atomic<bool> g_peer_animated_grenade_init_seen{false};
+// Read-only discriminator for the real Player release path.  The previous
+// animated-marker scope belongs to BehaviorThrowGrenade (AI), so it cannot
+// classify a ProjectileGrenade materialized by PlayerGrenadeController.
+std::atomic<void*> g_peer_release_probe_grenade{nullptr};
+std::atomic<ULONGLONG> g_peer_release_probe_grenade_ms{0};
+std::atomic<ULONGLONG> g_peer_release_probe_track_last_ms{0};
+std::atomic<unsigned> g_peer_release_probe_init_rows{0};
+std::atomic<unsigned> g_peer_release_probe_track_rows{0};
 std::atomic<int> g_grenade_scheduler_command_last{-1};
 std::atomic<int> g_grenade_state1_command_last{-1};
 std::atomic<int> g_grenade_state2_command_last{-1};
@@ -2689,6 +2697,16 @@ char __fastcall hooked_player_grenade_command_callsite(
             0, std::memory_order_release);
         g_peer_grenade_release_probe_until_ms.store(
             0, std::memory_order_release);
+        g_peer_release_probe_grenade.store(
+            nullptr, std::memory_order_release);
+        g_peer_release_probe_grenade_ms.store(
+            0, std::memory_order_release);
+        g_peer_release_probe_track_last_ms.store(
+            0, std::memory_order_release);
+        g_peer_release_probe_init_rows.store(
+            0, std::memory_order_release);
+        g_peer_release_probe_track_rows.store(
+            0, std::memory_order_release);
     }
     if (was_active && !active) {
         g_peer_grenade_release_until_ms.store(
@@ -2702,6 +2720,16 @@ char __fastcall hooked_player_grenade_command_callsite(
         g_peer_native_grenade_spawn_ms.store(0, std::memory_order_release);
         g_peer_animated_grenade_init_seen.store(
             false, std::memory_order_release);
+        g_peer_release_probe_grenade.store(
+            nullptr, std::memory_order_release);
+        g_peer_release_probe_grenade_ms.store(
+            0, std::memory_order_release);
+        g_peer_release_probe_track_last_ms.store(
+            0, std::memory_order_release);
+        g_peer_release_probe_init_rows.store(
+            0, std::memory_order_release);
+        g_peer_release_probe_track_rows.store(
+            0, std::memory_order_release);
     }
     if (return_rva ==
             kGrenadeSchedulerIsCommandActiveCallsiteRva + 5 &&
@@ -6253,7 +6281,7 @@ void apply_pending_peer_grenade_event() {
          << " result=0x" << std::hex << result
          << " faultRva=0x" << fault_rva
          << " faultCode=0x" << fault_code;
-    force_log_line(line.str().c_str());
+    boot_log_line(line.str().c_str());
 }
 
 void reapply_peer_grenade_arc() {
@@ -6301,10 +6329,53 @@ void reapply_peer_grenade_arc() {
 }
 
 void* __fastcall hooked_grenade_init(void* a1, void* a2, std::int64_t a3) {
+    const std::uintptr_t return_address =
+        reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const std::uintptr_t return_rva =
+        return_address >= g_module ? return_address - g_module : 0;
     void* const r = g_original_grenade_init != nullptr
                         ? g_original_grenade_init(a1, a2, a3)
                         : nullptr;
     seh_dump_grenade_object(a1);
+    const ULONGLONG now = GetTickCount64();
+    const bool applying_peer_event =
+        g_applying_peer_grenade.load(std::memory_order_acquire);
+    const ULONGLONG release_until =
+        g_peer_grenade_release_until_ms.load(std::memory_order_acquire);
+    if (!applying_peer_event && release_until != 0 && now <= release_until) {
+        g_peer_release_probe_grenade.store(a1, std::memory_order_release);
+        g_peer_release_probe_grenade_ms.store(now, std::memory_order_release);
+        g_peer_release_probe_track_last_ms.store(0, std::memory_order_release);
+        g_peer_release_probe_track_rows.store(0, std::memory_order_release);
+        const unsigned row = g_peer_release_probe_init_rows.fetch_add(
+            1, std::memory_order_relaxed);
+        if (row < 8) {
+            GrenadeDump d{};
+            const bool readable = a1 != nullptr &&
+                readable_bytes(static_cast<std::byte*>(a1) + 0x864) >= 4 &&
+                seh_read_grenade_object(a1, &d);
+            std::ostringstream line;
+            line << "GRENADE-PLAYER-NATIVE-INIT row=" << row
+                 << " caller=0x" << std::hex << return_rva
+                 << " obj=0x" << reinterpret_cast<std::uintptr_t>(a1)
+                 << " a2=0x" << reinterpret_cast<std::uintptr_t>(a2)
+                 << " a3=0x" << static_cast<std::uint64_t>(a3)
+                 << " ret=0x" << reinterpret_cast<std::uintptr_t>(r)
+                 << std::dec
+                 << " aiScope="
+                 << (g_spawning_peer_animated_grenade.load(
+                         std::memory_order_acquire) ? 1 : 0)
+                 << " readable=" << (readable ? 1 : 0);
+            if (readable) {
+                line << " art=0x" << std::hex << d.art << std::dec
+                     << " pos=(" << d.pos[0] << "," << d.pos[1] << ","
+                     << d.pos[2] << ")"
+                     << " vel=(" << d.vel[0] << "," << d.vel[1] << ","
+                     << d.vel[2] << ")";
+            }
+            boot_log_line(line.str().c_str());
+        }
+    }
     if (g_spawning_peer_animated_grenade.load(
             std::memory_order_acquire)) {
         // The remote Player's authored marker is intentionally creating this
@@ -6315,7 +6386,7 @@ void* __fastcall hooked_grenade_init(void* a1, void* a2, std::int64_t a3) {
             "GRENADE-INIT puppet authored ProjectileGrenade (GRNE echo suppressed)");
         return r;
     }
-    if (g_applying_peer_grenade.load(std::memory_order_acquire)) {
+    if (applying_peer_event) {
         // This is the grenade the peer's Execute is spawning - remember it so the
         // apply path can force the relayed velocity onto it (arc fix).
         g_peer_spawned_grenade.store(a1, std::memory_order_release);
@@ -6333,10 +6404,54 @@ void* __fastcall hooked_grenade_init(void* a1, void* a2, std::int64_t a3) {
 // Called each frame (sender path). Re-dumps the last-thrown grenade for ~1s to find
 // where/when pos+velocity populate (tagged GRENADE-TRACK).
 void track_thrown_grenade() {
+    const ULONGLONG now = GetTickCount64();
+    void* const probe =
+        g_peer_release_probe_grenade.load(std::memory_order_acquire);
+    const ULONGLONG probe_t0 =
+        g_peer_release_probe_grenade_ms.load(std::memory_order_acquire);
+    if (probe != nullptr && probe_t0 != 0) {
+        if (now - probe_t0 > 1200) {
+            g_peer_release_probe_grenade.store(
+                nullptr, std::memory_order_release);
+        } else {
+            const ULONGLONG last_probe_log =
+                g_peer_release_probe_track_last_ms.load(
+                    std::memory_order_acquire);
+            if (last_probe_log == 0 || now - last_probe_log >= 100) {
+                g_peer_release_probe_track_last_ms.store(
+                    now, std::memory_order_release);
+                const unsigned row =
+                    g_peer_release_probe_track_rows.fetch_add(
+                        1, std::memory_order_relaxed);
+                if (row < 12) {
+                    GrenadeDump d{};
+                    const bool readable =
+                        readable_bytes(
+                            static_cast<std::byte*>(probe) + 0x864) >= 4 &&
+                        seh_read_grenade_object(probe, &d);
+                    std::ostringstream line;
+                    line << "GRENADE-PLAYER-NATIVE-TRACK row=" << row
+                         << " dt=" << (now - probe_t0)
+                         << " obj=0x" << std::hex
+                         << reinterpret_cast<std::uintptr_t>(probe)
+                         << std::dec
+                         << " readable=" << (readable ? 1 : 0);
+                    if (readable) {
+                        line << " art=0x" << std::hex << d.art << std::dec
+                             << " pos=(" << d.pos[0] << "," << d.pos[1]
+                             << "," << d.pos[2] << ")"
+                             << " vel=(" << d.vel[0] << "," << d.vel[1]
+                             << "," << d.vel[2] << ")";
+                    }
+                    boot_log_line(line.str().c_str());
+                }
+            }
+        }
+    }
+
     void* g = g_last_grenade.load(std::memory_order_acquire);
     if (g == nullptr) return;
     const ULONGLONG t0 = g_last_grenade_ms.load(std::memory_order_acquire);
-    const ULONGLONG now = GetTickCount64();
     if (now - t0 > 1200) {
         g_last_grenade.store(nullptr, std::memory_order_release);
         return;
@@ -38172,7 +38287,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-26hp "
+        "TLL co-op runtime init 2026-07-26hq "
         "(read-only grenade release pre/post discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

@@ -78,6 +78,13 @@
       warning/HUD icon directly ahead, on both copies; no second physical model
       is visible. Do not use the icon as evidence of a duplicate projectile or
       held object, and trace the HUD/tell path separately.
+      **IMPLEMENTED `hq`:** during the exact retained-Player release window,
+      log every non-fallback `ProjectileGrenade::Init` and sample that object's
+      position/velocity for at most 1.2 seconds; also expose the delayed
+      `GRENADE-EVENT-EXEC`. This is a bounded read-only R1-R4 discriminator and
+      intentionally leaves capture, GRNE echo/suppression, physics, fuse and
+      HUD behavior unchanged. Test exactly one throw after both copies report
+      the `2026-07-26hq` build tag.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw

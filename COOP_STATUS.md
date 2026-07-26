@@ -9939,3 +9939,25 @@ native track coordinates/velocity before the already-known delayed
 stationary/invalid track. The user's icon-only observation on both copies is
 consistent with a real proximity/tell consumer but is not promoted to physical
 object evidence.
+
+### 2026-07-26 STATIC / IMPLEMENTED: bounded Player native-projectile discriminator (`hq`)
+
+Build `hq` implements the written R1-R4 discriminator without changing grenade
+classification, GRNE suppression, projectile state, fuse, pose or command
+relay. On the exact retained-Player falling edge it clears a dedicated probe;
+every ordinary `ProjectileGrenade::Init 0x141533560` reached during the ensuing
+2.5-second release window is logged as `GRENADE-PLAYER-NATIVE-INIT` unless the
+custom peer-event executor itself is creating the object. The most recent such
+object is then sampled read-only every 100 ms for at most 1.2 seconds as
+`GRENADE-PLAYER-NATIVE-TRACK`, including art, world position and velocity.
+`GRENADE-EVENT-EXEC` is promoted to the bounded boot log so the native Init and
+the delayed custom fallback can be ordered in the same trace. Rows are capped
+per throw, and the existing sender capture/GRNE echo behavior is deliberately
+left intact for diagnosis.
+
+The competing predictions remain: R1 gives a native Init plus moving track
+before the delayed event execution; R2/R3 give no native ProjectileGrenade Init;
+R4 gives an Init with stationary or invalid launch state. The grenade HUD icon
+alone distinguishes none of them. Release DLL `2026-07-26hq` builds
+successfully; the next runtime test is one throw after both copies show the
+`hq` build tag and all grenade hooks installed.
