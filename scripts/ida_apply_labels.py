@@ -8925,10 +8925,75 @@ FUNCTIONS = {
         "owner's AttachSystem by StringId and writes the selected byte index to "
         "weapon+0x688 without changing the owner handle.",
     ),
+    # --- 2026-07-26: ordinary wall-hang -> climb-up command/action path ---
+    0x14130E670: (
+        "PlayerEdgeController_IsEdgeJumpAActive",
+        "PlayerEdgeController RTTI vtable slot 19. Hashes the authored command "
+        "edge-jump-a and calls Joypad_IsCommandActive with edge=0 for the owning "
+        "Player joypad. This is distinct from generic jump/jump-hold.",
+    ),
+    0x14130ED40: (
+        "PlayerEdgeController_CanEdgeJumpAWithFacing",
+        "PlayerEdgeController RTTI vtable slot 18. Requires authored "
+        "edge-jump-a through Joypad_IsCommandActive(edge=0), then checks the "
+        "current edge/facing geometry before accepting the upward transition.",
+    ),
+    0x141315B00: (
+        "PlayerEdgeController_StartClimbUp",
+        "PlayerEdgeController RTTI vtable slot 57. Removes the current move "
+        "actions, selects ledge-climb-up/ledge-climb-up-2 and climb-up variants, "
+        "enqueues a PlayerCommonAction through PlayerMoveSequencer, then publishes "
+        "player-climb-up. This is the ordinary wall-hang climb-up transition.",
+    ),
+    0x1412C9000: (
+        "PlayerEdgeClimb2AnimAction_Update",
+        "PlayerEdgeClimb2AnimAction RTTI vtable slot 7. Advances the climb action "
+        "and independently queries authored edge-jump-a with edge=0 before "
+        "committing its continuation flag.",
+    ),
+    0x14132D340: (
+        "PlayerEdgeState_RefreshTraversalProbes",
+        "Called from PlayerEdgeState_Update before transition selection. Clears "
+        "Edge+0x48/+0x49, selects the local-bound or fallback geometry-probe path "
+        "from the owning input record, and rewrites those two traversal latches.",
+    ),
+    0x14132F990: (
+        "PlayerEdgeState_Update",
+        "Player::Edge RTTI vtable slot 4 and player-edge-state.cpp owner. Selects "
+        "ledge variants and calls the PlayerEdgeController climb-up/fall helpers; "
+        "it is the outer ordinary edge-state update rather than DragEdge, Perch "
+        "or Vault.",
+    ),
+    0x141334B80: (
+        "PlayerEdgeState_TryTransitions",
+        "Ordinary Player::Edge transition selector. Reads Edge+0x48/+0x49, "
+        "queries PlayerEdgeController slots 18/19 for edge-jump-a, and can call "
+        "slots 57/59 to start the corresponding climb transition.",
+    ),
+    0x14133F7D0: (
+        "PlayerEdgeState_IsEdgeJumpAActive",
+        "Player::Edge RTTI vtable slot 11. Independently hashes edge-jump-a and "
+        "calls Joypad_IsCommandActive with edge=0 for the owning Player.",
+    ),
 }
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142A73B90: (
+        "PlayerEdgeController_Vtable",
+        "MSVC RTTI .?AUPlayerEdgeController@@ vtable. Slots 18/19 query "
+        "edge-jump-a; slot 57 starts the ordinary ledge climb-up action.",
+    ),
+    0x142A75380: (
+        "PlayerEdgeState_Vtable",
+        "MSVC RTTI .?AVEdge@Player@@ vtable owned by player-edge-state.cpp; "
+        "slot 4 is the outer ordinary Player edge-state update.",
+    ),
+    0x142A707F0: (
+        "PlayerEdgeClimb2AnimAction_Vtable",
+        "MSVC RTTI .?AUPlayerEdgeClimb2AnimAction@@ vtable; slot 7 updates the "
+        "climb animation and queries edge-jump-a with held semantics.",
+    ),
     0x142A46560: (
         "PlayerHolsterWeaponAnimAction_Vtable",
         "MSVC RTTI vtable for PlayerHolsterWeaponAnimAction; created by Player "

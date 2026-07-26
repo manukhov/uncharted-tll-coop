@@ -762,11 +762,17 @@ constexpr std::uint64_t kJoypadJumpHoldButtonMask = 0x8000000ull;
 // Protocol-only melee cue (not a native ScaleCopy OR flag). Distinct from 0x1000000
 // face-pad bleed in Input_ScaleCopyVirtual.
 constexpr std::uint64_t kJoypadMeleeTriangleButtonMask = 0x100000000ull;
+// Protocol-only PlayerEdgeController cue. Native wall-hang/climb-up does not
+// query the generic `jump` command: PlayerEdgeController vtable slots 18/19 and
+// Player::Edge vtable slot 11 independently query authored `edge-jump-a` as a
+// held command (edge=0). Keep it distinct from raw face A=0x20, which is
+// ambiguous with the confirmed ScaleCopy evade bleed.
+constexpr std::uint64_t kJoypadEdgeJumpAIntentMask = 0x200000000ull;
 constexpr std::uint64_t kJoypadTraversalIntentMask =
     kJoypadCrouchButtonMask | kJoypadEvadeRollButtonMask |
     kJoypadJumpPressButtonMask | kJoypadJumpHoldButtonMask |
-    kJoypadMeleeTriangleButtonMask | 0x1000000ull | 0x10000000ull |
-    0x20000000ull;
+    kJoypadMeleeTriangleButtonMask | kJoypadEdgeJumpAIntentMask |
+    0x1000000ull | 0x10000000ull | 0x20000000ull;
 // NormalizeStick face buttons (engine space, CONFIRMED 0x141A99FD0):
 //   A -> 0x20, X -> 0x40, B -> 0x80. Authored jump descriptor = A (0x20),
 //   evade = B (0x80) (TRAVERSAL-PAD-MASKS 2026-07-08bg). ScaleCopy ALSO
@@ -1921,6 +1927,8 @@ char __fastcall hooked_joypad_is_command_active(
                 static const std::uint32_t kJumpHash = string_hash("jump", 4, 0);
                 static const std::uint32_t kJumpHoldHash =
                     string_hash("jump-hold", 9, 0);
+                static const std::uint32_t kEdgeJumpAHash =
+                    string_hash("edge-jump-a", 11, 0);
                 static const std::uint32_t kEvadeRollHash =
                     string_hash("evade-roll", 10, 0);
                 static const std::uint32_t kEvadeStartHash =
@@ -1949,6 +1957,24 @@ char __fastcall hooked_joypad_is_command_active(
                 if ((hash == kJumpHash || hash == kJumpHoldHash) &&
                     (force & (kJoypadJumpPressButtonMask |
                               kJoypadJumpHoldButtonMask)) != 0) {
+                    return 1;
+                }
+                // The ordinary ledge controller asks this exact command with
+                // edge=0 after wall-hang. Do not alias generic jump or raw face
+                // A here: the dedicated cue preserves authored command identity
+                // without reintroducing jump->evade/roll bleed.
+                if (hash == kEdgeJumpAHash && edge == 0 &&
+                    (force & kJoypadEdgeJumpAIntentMask) != 0) {
+                    static std::atomic<unsigned> edge_jump_a_force_logs{0};
+                    const unsigned log_index = edge_jump_a_force_logs.fetch_add(
+                        1, std::memory_order_relaxed);
+                    if (log_index < 8) {
+                        std::ostringstream line;
+                        line << "TRAVERSAL-EDGE-JUMP-A-FORCE edge="
+                             << static_cast<unsigned>(edge)
+                             << " force=0x" << std::hex << force << std::dec;
+                        boot_log_line(line.str().c_str());
+                    }
                     return 1;
                 }
                 if ((hash == kEvadeRollHash || hash == kEvadeStartHash) &&
@@ -12798,17 +12824,22 @@ std::uint64_t merge_authored_traversal_button_mask(
         g_module + kJoypadIsCommandActiveRva);
     static const std::uint32_t kJumpHash = string_hash("jump", 4, 0);
     static const std::uint32_t kJumpHoldHash = string_hash("jump-hold", 9, 0);
+    static const std::uint32_t kEdgeJumpAHash =
+        string_hash("edge-jump-a", 11, 0);
     static const std::uint32_t kEvadeRollHash = string_hash("evade-roll", 10, 0);
     static const std::uint32_t kEvadeStartHash = string_hash("evade-start", 11, 0);
     static const std::uint32_t kCrouchHash = string_hash("crouch", 6, 0);
     static std::uint64_t jump_pad = 0;
     static std::uint64_t jump_hold_pad = 0;
+    static std::uint64_t edge_jump_a_pad = 0;
     static std::uint64_t evade_pad = 0;
     static std::uint64_t crouch_pad = 0;
     static bool resolved = false;
     if (!resolved) {
         jump_pad = resolve_command_gamepad_mask(joypad, kJumpHash);
         jump_hold_pad = resolve_command_gamepad_mask(joypad, kJumpHoldHash);
+        edge_jump_a_pad =
+            resolve_command_gamepad_mask(joypad, kEdgeJumpAHash);
         evade_pad = resolve_command_gamepad_mask(joypad, kEvadeRollHash);
         if (evade_pad == 0) {
             evade_pad = resolve_command_gamepad_mask(joypad, kEvadeStartHash);
@@ -12818,6 +12849,7 @@ std::uint64_t merge_authored_traversal_button_mask(
         std::ostringstream init;
         init << "TRAVERSAL-PAD-MASKS jump=0x" << std::hex << jump_pad
              << " jumpHold=0x" << jump_hold_pad
+             << " edgeJumpA=0x" << edge_jump_a_pad
              << " evade=0x" << evade_pad
              << " crouch=0x" << crouch_pad << std::dec
              << " hashes jump=0x" << std::hex << kJumpHash
@@ -12829,6 +12861,7 @@ std::uint64_t merge_authored_traversal_button_mask(
         // with evade (A pad == eveade face bleed source).
         (void)jump_pad;
         (void)jump_hold_pad;
+        (void)edge_jump_a_pad;
         (void)evade_pad;
         (void)crouch_pad;
     }
@@ -12840,6 +12873,20 @@ std::uint64_t merge_authored_traversal_button_mask(
     if (is_active(joypad, kJumpHoldHash, 1) ||
         is_active(joypad, kJumpHoldHash, 0)) {
         mask |= kJoypadJumpHoldButtonMask;
+    }
+    // All five static `edge-jump-a` consumers use held semantics (edge=0).
+    // Capture the exact authored command rather than guessing from `jump`.
+    const bool edge_jump_a_active =
+        is_active(joypad, kEdgeJumpAHash, 0) != 0;
+    static bool edge_jump_a_was_active = false;
+    if (edge_jump_a_active != edge_jump_a_was_active) {
+        edge_jump_a_was_active = edge_jump_a_active;
+        boot_log_line(edge_jump_a_active
+                          ? "TRAVERSAL-EDGE-JUMP-A-SEND rise"
+                          : "TRAVERSAL-EDGE-JUMP-A-SEND release");
+    }
+    if (edge_jump_a_active) {
+        mask |= kJoypadEdgeJumpAIntentMask;
     }
     if (is_active(joypad, kEvadeRollHash, 1) ||
         is_active(joypad, kEvadeRollHash, 0) ||
@@ -38358,7 +38405,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-26hr "
+        "TLL co-op runtime init 2026-07-26hs "
         "(retained Player native grenade owns physics)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

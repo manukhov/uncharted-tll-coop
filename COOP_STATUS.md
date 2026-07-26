@@ -10046,3 +10046,71 @@ raised obstacle, the remote Player remains visually in wall-hang instead of
 transitioning onto the top surface. Preserve the confirmed locomotion baseline
 and identify the native wall-hang -> climb-up -> grounded transition statically
 before a new runtime test.
+
+### 2026-07-26 STATIC / IMPLEMENTED: relay the authored ordinary-edge climb command (`hs`)
+
+The ordinary wall-hang path does not complete from the generic `jump` or
+`jump-hold` commands currently carried by the co-op relay. Three independent
+static evidence types converge on the missing command boundary:
+
+1. MSVC RTTI fixes vtable `0x142A73B90` as `PlayerEdgeController`.
+   Slots 19 (`0x14130E670`) and 18 (`0x14130ED40`) independently hash
+   `edge-jump-a` and call `Joypad_IsCommandActive 0x141837CD0` with `edge=0`;
+   slot 18 then applies the edge/facing geometry gate.
+2. `PlayerEdgeController` slot 57 (`0x141315B00`) is the concrete successful
+   transition. It removes the current move action, selects
+   `ledge-climb-up`/`ledge-climb-up-2` and `climb-up`/`climb-up-2`, enqueues a
+   `PlayerCommonAction` through `PlayerMoveSequencer_EnqueueControllerAction
+   0x142053820`, and only afterwards publishes `player-climb-up`.
+3. The independent `PlayerEdgeClimb2AnimAction` RTTI object (vtable
+   `0x142A707F0`, slot 7 `0x1412C9000`) also queries `edge-jump-a` with held
+   semantics while advancing the climb action. `Player::Edge` vtable
+   `0x142A75380` slot 4 (`0x14132F990`) owns the surrounding
+   `player-edge-state.cpp` update. This separates the path from DragEdge,
+   Perch and Vault.
+4. Inside that update, `0x14132D340` first refreshes geometry-probe latches at
+   `Edge+0x48/+0x49`. The later transition selector `0x141334B80` reads them at
+   `0x141334D8D/0x141334D9A`, queries controller slots 18/19 at
+   `0x1413355A8/0x1413355BB`, and can call climb slots 57/59 at
+   `0x141336357/0x14133638F`. Thus the authored command is a real upstream gate,
+   while the edge latches remain an independently testable downstream gate.
+
+The co-op implementation had no `edge-jump-a` hash or protocol cue. Sender
+capture queried only `jump`, `jump-hold`, evade and crouch; the puppet
+`Joypad_IsCommandActive` hook could therefore return true for generic jump but
+always fell through to the native inactive Joypad-3 result when the edge
+controller requested `edge-jump-a`. Raw face A cannot safely stand in for this
+command: the confirmed ScaleCopy face-A bleed previously turned jump into
+evade/roll.
+
+Build `hs` adds a distinct protocol-only `edge-jump-a` intent bit. The sender
+sets it only from the exact authored `IsCommandActive(edge=0)` result, and the
+receiver returns it only for the exact `edge-jump-a`, `edge=0` query on remote
+Joypad 3. No Player, edge target, transform, animation, collision or vertical
+position is written. Bounded SEND rise/release and receiver FORCE rows expose
+the new boundary without enabling the broad runtime logger. The Release DLL
+build succeeds; eight new function labels and three RTTI vtable names were
+saved to the single `ida/tll.i64` (`1316 functions, 23 data names`,
+`save_database returned True`) and resolved through the restarted MCP.
+
+Competing explanations remain explicit. **T2:** the one-frame generic jump is
+consumed before a DragEdge update; this is a separate drag-edge-specific branch
+and does not explain the ordinary PlayerEdge command mismatch. **T3:** the
+receiver's `0x14132D340` geometry probes do not reproduce the sender's selected
+edge/context. Its input-record comparison with
+`g_LocalPlayerInputManager_Ptr+0x48/+0x50` selects between local-bound and
+fallback probe paths rather than simply aborting, so bypassing that comparison
+would be unsafe; FORCE-without-climb selects a read-only probe/latch diagnostic.
+Reaching stable wall-hang makes total edge acquisition failure unlikely, but a
+later context gate could still reject the climb. **T4:** the action starts but
+the default free-run transform policy
+cannot reconcile vertical root motion; below the hard-snap threshold it corrects
+X/Z only. **T5:** a downstream climb action/state transition fails after enqueue.
+
+**Falsifiable `hs` prediction:** when the sender pulls up from an ordinary
+wall-hang, its log emits `TRAVERSAL-EDGE-JUMP-A-SEND rise`; the receiver emits at
+least one `TRAVERSAL-EDGE-JUMP-A-FORCE edge=0`. The remote Player must leave
+wall-hang, play the native climb-up and finish on the top surface, with no
+jump-to-roll regression. SEND without FORCE selects packet/force publication;
+FORCE while still hanging selects T3; visible climb followed by vertical
+rollback selects T4; a started but unfinished animation selects T5.

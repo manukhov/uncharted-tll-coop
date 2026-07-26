@@ -110,10 +110,23 @@
 - [~] **Traversal climb-up completion (CURRENT, 2026-07-26):** when the sender
       climbs onto a raised wall/obstacle, the remote Player reaches or remains in
       wall-hang but does not complete the climb-up/grounded transition. Preserve
-      the confirmed native locomotion and collision baseline. First resolve the
-      Player wall-hang -> climb-up -> grounded controller/action graph, its input
-      edge/context/target data and the final state writer; list competing causes
-      and meet the static evidence quota before adding a bounded runtime probe.
+      the confirmed native locomotion and collision baseline. **STATIC QUOTA MET:**
+      ordinary `PlayerEdgeController` slots 18/19 query exact authored
+      `edge-jump-a` with `edge=0`; slot 57 `0x141315B00` creates/enqueues the
+      ledge/climb-up `PlayerCommonAction`; independent
+      `PlayerEdgeClimb2AnimAction::Update 0x1412C9000` queries the same command.
+      `PlayerEdgeState_RefreshTraversalProbes 0x14132D340` independently writes
+      `Edge+0x48/+0x49`, which `PlayerEdgeState_TryTransitions 0x141334B80`
+      consumes before calling climb slots 57/59; its local-input comparison is a
+      probe-path selector, not a safe bypass target.
+      Current sender/hook carried only generic jump/jump-hold, while raw face A
+      is forbidden by the confirmed jump->evade bleed. **IMPLEMENTED `hs`:** a
+      dedicated protocol cue captures and forces only exact `edge-jump-a` held
+      queries on remote Joypad 3, with bounded SEND/FORCE markers and no Player,
+      transform, context, collision or animation writes. Test an ordinary pull-up:
+      native climb-up + grounded completion wins T1; FORCE while still hanging
+      selects missing later edge context; climb then Y rollback selects vertical
+      freerun correction; no FORCE selects packet publication.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw
