@@ -46,6 +46,12 @@
       release window to admit the raw reset argument and wrap
       `ReleasePostArcHold 0x140E1FF90` for immediate pre/post state; keep the
       test read-only and leave GRNE/pose/projectile behavior untouched.
+      **STATIC `hp`:** `E22333` is not state-7-only; state 8 shares that reset
+      when its authored action-state lookup is absent. A 1.5-second exact
+      false-edge window now logs raw reset arguments for only
+      `E201EB/E2034B/E22333`, and a suspended-thread reloc-free prologue hook
+      logs `ReleasePostArcHold` pre/post state. Written Q1/Q2/Q3/Q4 prediction is
+      in `COOP_STATUS.md`; this build changes no grenade semantics.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw

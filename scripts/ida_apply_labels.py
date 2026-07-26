@@ -74,7 +74,10 @@ FUNCTIONS = {
         "deadline at controller+0x1E8 and enters post-arc state 3/4. State 4 "
         "also requires its current-action predicate 0x140E24ED0 before reaching "
         "the command query. All three state queries must retain the relayed "
-        "held level until true release; only scheduler entry is consumed.",
+        "held level until true release; only scheduler entry is consumed. The "
+        "ResetToIdle call returning at 0x140E22333 is shared: state 7 reaches "
+        "it on deadline expiry, while state 8 reaches it when the authored "
+        "action-state lookup is absent.",
     ),
     0x140E1F5B0: (
         "PlayerGrenadeController_EnterPostArcHoldState",
@@ -161,7 +164,8 @@ FUNCTIONS = {
         "destroys held grenade/effects at 0x140E1DC44, clears controller state "
         "to 0 at 0x140E1DC8F and refreshes the arc. Important callers are the "
         "StartThrowAction cover abort (return E201EB), online net gate abort "
-        "(E2034B), and state-7 timeout (E22333).",
+        "(E2034B), and the shared state-7 timeout/state-8 missing-action abort "
+        "(E22333).",
     ),
     0x140E17070: (
         "PlayerGrenadeController_CreateGrenadeWeaponFromLoadout",

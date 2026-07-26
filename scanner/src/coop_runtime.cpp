@@ -236,12 +236,17 @@ PlayerInputIsCommandActiveFunction
 using FastGrenadeCanStartFunction = bool(__fastcall*)(void*);
 using FastGrenadeStartFunction = std::int64_t(__fastcall*)(void*);
 using FastGrenadeResetFunction = std::int64_t(__fastcall*)(void*);
+using GrenadeReleasePostArcHoldFunction = std::int64_t(__fastcall*)(void*);
 FastGrenadeCanStartFunction g_original_fast_grenade_can_start = nullptr;
 FastGrenadeStartFunction g_original_fast_grenade_start = nullptr;
 FastGrenadeResetFunction g_original_fast_grenade_reset = nullptr;
+GrenadeReleasePostArcHoldFunction
+    g_original_grenade_release_post_arc_hold = nullptr;
 std::atomic<bool> g_peer_grenade_pose_seed_logged{false};
 std::atomic<bool> g_peer_grenade_release_pose_seed_logged{false};
 std::atomic<unsigned> g_peer_grenade_reset_log_rows{0};
+std::atomic<unsigned> g_peer_grenade_release_log_rows{0};
+std::atomic<ULONGLONG> g_peer_grenade_release_probe_until_ms{0};
 using PlayerMeleeTryAnimFunction =
     char(__fastcall*)(void**, void*, double);
 PlayerMeleeTryAnimFunction g_original_player_melee_try_anim = nullptr;
@@ -2173,33 +2178,28 @@ struct FastGrenadeControllerSnapshot {
     std::array<FastGrenadeWeaponSlotSnapshot, 6> weapons{};
 };
 
-bool seh_read_fast_grenade_controller(
-    void* puppet, FastGrenadeControllerSnapshot* out) {
-    if (puppet == nullptr || out == nullptr) {
+bool seh_read_fast_grenade_controller_raw(
+    void* controller, FastGrenadeControllerSnapshot* out) {
+    if (controller == nullptr || out == nullptr) {
         return false;
     }
     __try {
-        out->controller = *reinterpret_cast<void**>(
-            static_cast<std::byte*>(puppet) +
-            kPlayerFastGrenadeControllerOffset);
-        if (out->controller == nullptr) {
-            return false;
-        }
+        out->controller = controller;
         out->owner = *reinterpret_cast<void**>(
-            static_cast<std::byte*>(out->controller) + 0x108);
+            static_cast<std::byte*>(controller) + 0x108);
         out->state = *reinterpret_cast<std::uint32_t*>(
-            static_cast<std::byte*>(out->controller) + 0x120);
+            static_cast<std::byte*>(controller) + 0x120);
         out->flags = *reinterpret_cast<std::uint8_t*>(
-            static_cast<std::byte*>(out->controller) + 0x1A0);
+            static_cast<std::byte*>(controller) + 0x1A0);
         out->slot = *reinterpret_cast<std::uint32_t*>(
-            static_cast<std::byte*>(out->controller) + 0x18C);
+            static_cast<std::byte*>(controller) + 0x18C);
         out->action_mode = *reinterpret_cast<std::uint32_t*>(
-            static_cast<std::byte*>(out->controller) + 0x540);
+            static_cast<std::byte*>(controller) + 0x540);
         out->release_deadline = *reinterpret_cast<std::uint64_t*>(
-            static_cast<std::byte*>(out->controller) + 0x530);
+            static_cast<std::byte*>(controller) + 0x530);
         for (std::size_t slot = 0; slot < out->weapons.size(); ++slot) {
             auto& weapon = out->weapons[slot];
-            auto* const pair = static_cast<std::byte*>(out->controller) +
+            auto* const pair = static_cast<std::byte*>(controller) +
                                0x128 + slot * 0x10;
             weapon.handle_node = *reinterpret_cast<void**>(pair);
             weapon.handle = *reinterpret_cast<std::uint32_t*>(pair + 0x8);
@@ -2231,6 +2231,22 @@ bool seh_read_fast_grenade_controller(
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
     }
+}
+
+bool seh_read_fast_grenade_controller(
+    void* puppet, FastGrenadeControllerSnapshot* out) {
+    if (puppet == nullptr || out == nullptr) {
+        return false;
+    }
+    void* controller = nullptr;
+    __try {
+        controller = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(puppet) +
+            kPlayerFastGrenadeControllerOffset);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+    return seh_read_fast_grenade_controller_raw(controller, out);
 }
 
 void log_grenade_controller_state(
@@ -2285,26 +2301,17 @@ void log_peer_grenade_controller_state(
         retained_player_object(1), "peer", stage, value, sequence);
 }
 
-bool is_retained_peer_grenade_controller(void* controller) {
-    FastGrenadeControllerSnapshot snapshot{};
-    return controller != nullptr &&
-           seh_read_fast_grenade_controller(
-               retained_player_object(1), &snapshot) &&
-           snapshot.controller == controller;
-}
-
 void log_peer_grenade_reset(
-    const char* stage, std::uintptr_t return_rva) {
+    const char* stage, void* controller, std::uintptr_t return_rva) {
     const unsigned row = g_peer_grenade_reset_log_rows.fetch_add(
         1, std::memory_order_relaxed);
     if (row >= 12) {
         return;
     }
     FastGrenadeControllerSnapshot snapshot{};
-    if (!seh_read_fast_grenade_controller(
-            retained_player_object(1), &snapshot)) {
-        return;
-    }
+    const bool readable =
+        seh_read_fast_grenade_controller_raw(controller, &snapshot);
+    void* const peer_player = retained_player_object(1);
     coop::StatePacket peer{};
     const bool have_peer = copy_peer_state_snapshot(peer);
     const char* cause = "other";
@@ -2312,8 +2319,8 @@ void log_peer_grenade_reset(
         cause = "cover-abort";
     } else if (return_rva == kGrenadeResetReturnNetGateAbortRva) {
         cause = "net-gate-abort";
-    } else if (return_rva == kGrenadeResetReturnState7TimeoutRva) {
-        cause = "state7-timeout";
+    } else if (return_rva == kGrenadeResetReturnState7Or8AbortRva) {
+        cause = "state7-or-state8-abort";
     }
     std::ostringstream line;
     line << "GRENADE-RESET stage=" << stage
@@ -2321,27 +2328,94 @@ void log_peer_grenade_reset(
          << " seq=" << (have_peer ? peer.sequence : 0)
          << " ret=0x" << std::hex << return_rva
          << " cause=" << cause
-         << " state=0x" << snapshot.state
+         << " controller=0x"
+         << reinterpret_cast<std::uintptr_t>(controller)
+         << " readable=" << std::dec << (readable ? 1 : 0)
+         << " ownerMatch="
+         << (readable && snapshot.owner == peer_player ? 1 : 0)
+         << " state=0x" << std::hex << snapshot.state
          << " mode540=0x" << snapshot.action_mode
          << " deadline530=0x" << snapshot.release_deadline;
     boot_log_line(line.str().c_str());
 }
 
 std::int64_t __fastcall hooked_fast_grenade_reset(void* controller) {
-    const bool peer = is_retained_peer_grenade_controller(controller);
     const std::uintptr_t return_address =
         reinterpret_cast<std::uintptr_t>(_ReturnAddress());
     const std::uintptr_t return_rva =
         return_address >= g_module ? return_address - g_module : 0;
-    if (peer) {
-        log_peer_grenade_reset("entry", return_rva);
+    const bool classified_return =
+        return_rva == kGrenadeResetReturnCoverAbortRva ||
+        return_rva == kGrenadeResetReturnNetGateAbortRva ||
+        return_rva == kGrenadeResetReturnState7Or8AbortRva;
+    const ULONGLONG now = GetTickCount64();
+    const bool peer_release_window =
+        classified_return && controller != nullptr &&
+        now <= g_peer_grenade_release_probe_until_ms.load(
+                   std::memory_order_acquire);
+    if (peer_release_window) {
+        log_peer_grenade_reset("entry", controller, return_rva);
     }
     const std::int64_t result =
         g_original_fast_grenade_reset != nullptr
             ? g_original_fast_grenade_reset(controller)
             : 0;
-    if (peer) {
-        log_peer_grenade_reset("exit", return_rva);
+    if (peer_release_window) {
+        log_peer_grenade_reset("exit", controller, return_rva);
+    }
+    return result;
+}
+
+void log_peer_grenade_release(
+    const char* stage, void* controller, std::int64_t result) {
+    const unsigned row = g_peer_grenade_release_log_rows.fetch_add(
+        1, std::memory_order_relaxed);
+    if (row >= 8) {
+        return;
+    }
+    FastGrenadeControllerSnapshot snapshot{};
+    const bool readable =
+        seh_read_fast_grenade_controller_raw(controller, &snapshot);
+    void* const peer_player = retained_player_object(1);
+    coop::StatePacket peer{};
+    const bool have_peer = copy_peer_state_snapshot(peer);
+    const std::uint32_t net_mode_flags =
+        *reinterpret_cast<const std::uint32_t*>(
+            g_module + kNetModeFlagsGlobalRva);
+    std::ostringstream line;
+    line << "GRENADE-RELEASE stage=" << stage
+         << " row=" << row
+         << " seq=" << (have_peer ? peer.sequence : 0)
+         << " controller=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(controller)
+         << " readable=" << std::dec << (readable ? 1 : 0)
+         << " ownerMatch="
+         << (readable && snapshot.owner == peer_player ? 1 : 0)
+         << " netModeHigh=0x" << std::hex
+         << ((net_mode_flags >> 24) & 0xFFu)
+         << " state=0x" << std::hex << snapshot.state
+         << " mode540=0x" << snapshot.action_mode
+         << " deadline530=0x" << snapshot.release_deadline
+         << " result=0x" << static_cast<std::uint64_t>(result);
+    boot_log_line(line.str().c_str());
+}
+
+std::int64_t __fastcall hooked_grenade_release_post_arc_hold(
+    void* controller) {
+    const ULONGLONG now = GetTickCount64();
+    const bool peer_release_window =
+        controller != nullptr &&
+        now <= g_peer_grenade_release_probe_until_ms.load(
+                   std::memory_order_acquire);
+    if (peer_release_window) {
+        log_peer_grenade_release("entry", controller, 0);
+    }
+    const std::int64_t result =
+        g_original_grenade_release_post_arc_hold != nullptr
+            ? g_original_grenade_release_post_arc_hold(controller)
+            : 0;
+    if (peer_release_window) {
+        log_peer_grenade_release("exit", controller, result);
     }
     return result;
 }
@@ -2611,10 +2685,20 @@ char __fastcall hooked_player_grenade_command_callsite(
             false, std::memory_order_release);
         g_peer_grenade_reset_log_rows.store(
             0, std::memory_order_release);
+        g_peer_grenade_release_log_rows.store(
+            0, std::memory_order_release);
+        g_peer_grenade_release_probe_until_ms.store(
+            0, std::memory_order_release);
     }
     if (was_active && !active) {
         g_peer_grenade_release_until_ms.store(
             now + 2500, std::memory_order_release);
+        // Read-only discriminator window: ReleasePostArcHold executes
+        // immediately after this exact state-4 false result. Its successful
+        // state-8 path or one of the three classified reset returns completes
+        // well inside the observed ~400 ms state-4 -> state-0 interval.
+        g_peer_grenade_release_probe_until_ms.store(
+            now + 1500, std::memory_order_release);
         g_peer_native_grenade_spawn_ms.store(0, std::memory_order_release);
         g_peer_animated_grenade_init_seen.store(
             false, std::memory_order_release);
@@ -3496,6 +3580,39 @@ void* install_fire_gate_detour(
     DWORD ignored = 0;
     VirtualProtect(target, patch_size, old_protection, &ignored);
     return trampoline;
+}
+
+bool install_grenade_release_post_arc_hold_probe() {
+    // push rbx; sub rsp,20h; mov rax,[rcx+3D0h]. The complete 13-byte
+    // reloc-free prologue is required because the generic detour emits a
+    // 12-byte absolute jump.
+    constexpr std::array<std::uint8_t, 13> kExpectedPrologue{
+        0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48,
+        0x8B, 0x81, 0xD0, 0x03, 0x00, 0x00,
+    };
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        boot_log_line(
+            "grenade ReleasePostArcHold probe SKIPPED (thread suspend)");
+        return false;
+    }
+    void* const trampoline = install_fire_gate_detour(
+        kGrenadeReleasePostArcHoldRva,
+        kExpectedPrologue.data(), kExpectedPrologue.size(),
+        reinterpret_cast<void*>(&hooked_grenade_release_post_arc_hold),
+        "grenade ReleasePostArcHold probe");
+    if (trampoline == nullptr) {
+        resume_suspended_process_threads(suspended_threads);
+        boot_log_line(
+            "grenade ReleasePostArcHold probe SKIPPED");
+        return false;
+    }
+    g_original_grenade_release_post_arc_hold =
+        reinterpret_cast<GrenadeReleasePostArcHoldFunction>(trampoline);
+    resume_suspended_process_threads(suspended_threads);
+    boot_log_line(
+        "grenade ReleasePostArcHold probe installed (read-only pre/post)");
+    return true;
 }
 
 
@@ -38055,8 +38172,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-26ho "
-        "(read-only grenade reset-cause discriminator)");
+        "TLL co-op runtime init 2026-07-26hp "
+        "(read-only grenade release pre/post discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -38162,6 +38279,7 @@ DWORD WINAPI install_hook(void*) {
         "rejected NetGrenade descriptor+0x50 seed disabled");
     install_player_grenade_command_callsite_relay();
     install_fast_grenade_controller_boundary_probe();
+    install_grenade_release_post_arc_hold_probe();
     install_puppet_grenade_projectile_marker_relay();
     install_grenade_init_probe();
     if (g_breakable_event_relay) {

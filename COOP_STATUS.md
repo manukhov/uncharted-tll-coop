@@ -9793,3 +9793,55 @@ controller state/mode immediately before and after the original call. This
 distinguishes cover reset, net-gate reset and successful state-8 dispatch even
 if the retained proxy pointer changes. No gate, controller field, GRNE timing,
 pose or projectile behavior may be changed.
+
+### 2026-07-26 STATIC: raw release transition discriminator (`hp`)
+
+The corrected alternatives are now explicit:
+
+- **Q1:** `StartThrowAction` takes its offline cover-distance abort and calls
+  ResetToIdle at `0x140E201E8` (return `E201EB`).
+- **Q2:** native online mode is active, `net-can-throw-func` rejects the puppet
+  and ResetToIdle returns at `E2034B`.
+- **Q3:** the action descriptor is dispatched and state 8 is written, but its
+  authored action-state lookup is absent; the state-8 update then shares the
+  ResetToIdle call returning at `E22333` with the state-7 timeout path.
+- **Q4:** Release returns some state other than 0/8 or an unclassified writer
+  clears it, proving the present state machine map incomplete.
+
+The evidence quota is met by independent types:
+
+1. **Runtime data:** all three `ho` release edges entered with state 4,
+   `mode540=2`, a live record-3 held object and one available ammo unit, then
+   reached state 0 without a native marker. This excludes the zero-mode state-7
+   entry but not the later shared `E22333` reset.
+2. **Call graph and ABI:** `ReleasePostArcHold 0x140E1FF90` has exactly two
+   callers in `UpdateStateAndCommitThrow`, including the observed state-4 false
+   site `0x140E222BC`. It is `int64 __fastcall(controller)` and its 13-byte
+   prologue (`push rbx; sub rsp,20h; mov rax,[rcx+3D0h]`) is reloc-free.
+3. **Control/data flow:** nonzero `+0x540` tail-jumps directly into
+   `StartThrowAction 0x140E20050`. Inside it, the only pre-return controller
+   outcomes are the two vtable `+0x60` abort calls or dispatch at
+   `0x140E2054F` followed by state 8 at `0x140E205A2`. Independently, the state
+   switch shows that `E22333` is reachable from both state-7 deadline expiry and
+   state 8 with no live authored action, correcting the earlier state-7-only
+   label.
+
+Build `hp` arms a 1.5-second diagnostic window only when the retained peer's
+exact state-4 command returns false. During it, the existing pass-through reset
+hook admits only the three classified return RVAs and logs the raw controller
+argument rather than re-resolving `Player+0x1E50`. A suspended-thread prologue
+install wraps `ReleasePostArcHold` and logs the same raw controller immediately
+before/after the original call. It changes no return value or game state.
+
+**Falsifiable `hp` prediction before runtime:** Q1 gives release entry
+`state=4 mode=2`, reset `E201EB`, and release exit `state=0`. Q2 gives the same
+with `E2034B` and requires a nonzero native online-mode high byte. Q3 gives
+release exit `state=8`, followed within the window by reset `E22333` with no
+native marker. Q4 gives neither signature or an unexpected post-state. The arc,
+one-StartArc/one-ammo behavior and visible explosion timing must remain exactly
+as in `ho`; a crash, skipped install or semantic change rejects the probe.
+
+The Release DLL builds successfully. The corrected shared `E22333` identity was
+applied to the single `ida/tll.i64` (`1307 functions, 20 data names`,
+`save_database returned True`) and independently verified through the restarted
+MCP on both `UpdateStateAndCommitThrow` and `ResetToIdle`.
