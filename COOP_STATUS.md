@@ -10245,3 +10245,58 @@ the sender presses drop, or drop again after the 400 ms deadline. LATCH+FORCE
 while still hanging selects downstream context; SEND without LATCH selects
 packet loss/publication; LATCH without FORCE selects receiver scheduling or a
 wrong remote Joypad identity.
+
+### 2026-07-27 RUNTIME PARTIAL / STATIC FIX: relay the third drop consumer (`hv`)
+
+The `hu` receiver latch improved the user's result but did not close it: 7 of
+10 releases were visible. Transport is no longer the remaining discriminator.
+All ten attempts emitted distinct receiver LATCH rows, at packet sequences 610,
+737, 869, 1198, 1338, 1463, 2372, 3172, 3281 and 3535. The old eight-row Joypad
+FORCE cap was exhausted during the fourth attempt, so its absence later in the
+file cannot classify the three visual failures; the ten LATCH rows do prove
+that every authored event reached the receiver and armed its 400 ms window.
+
+The renewed static audit found a missing consumer inside the already-confirmed
+handler rather than another timing constant:
+
+1. The first two exact `drop`, `edge=0` checks at `0x141333301` and
+   `0x141333463` call `Joypad_IsCommandActive 0x141837CD0`. The existing puppet
+   hook covers exactly those calls and runtime logs show two FORCE returns in a
+   reached window.
+2. The third check is structurally different. At `0x14133404B` the handler
+   hashes the same four-byte `drop`; then `lea rcx,[r14+0x39A0]`, `xor r8d,r8d`
+   and `call PlayerInputCommandState_IsCommandActive 0x141E39D50` at
+   `0x14133405C`. It therefore bypasses the Joypad hook completely while
+   preserving the same hash (`0x28DCC05A`) and held semantics.
+3. The production startup log explicitly says the global
+   PlayerInputCommandState force hook is parked. It is tied to the disabled
+   melee experiment and cannot supply this third drop result. Thus `hu` made
+   the first two consumers durable but still allowed a native false result at
+   the third branch-dependent gate, matching improvement without reliability.
+4. Disassembly of the caller shows this exact result is tested immediately at
+   `0x141334061`; true jumps to `0x14133406E`, while false continues through
+   another authored/global gate. The downstream handler result is therefore
+   genuinely control-dependent on a command query not covered by `hu`.
+
+Competing explanations remain. **T2:** a downstream edge-context failure now
+requires all three command consumers to succeed first and predicts a visible
+failure despite the new state-callsite FORCE marker. **T3:** later fall/action
+reconciliation predicts that the model begins falling and then reattaches,
+which the user has not reported. **T4:** merely widening the receiver window
+cannot affect the third PlayerInputCommandState query because the protocol bit
+has no native command binding there; the 7/10 result rejects timing-only closure.
+
+Build `hv` adds a single E8 callsite relay at `0x14133405C`, validated against
+the exact target `0x141E39D50`. It calls the original for every other state,
+hash, edge or Player and forces true only for retained Player slot 1, exact
+`drop`, `edge=0`, while the received drop deadline is live. The global input
+function remains unpatched. `TRAVERSAL-EDGE-DROP-STATE-FORCE` logs once per
+event sequence when the third consumer is actually reached.
+
+**Falsifiable `hv` prediction:** in ten numbered grab-and-let-go attempts, the
+remote falls on all ten. Attempts whose native branch reaches the third query
+emit one STATE-FORCE row for their LATCH sequence; other successful branches
+may need only the two Joypad consumers. A visual failure with STATE-FORCE
+selects downstream edge context/action; a failure with LATCH but no STATE-FORCE
+selects a pre-third handler branch. There must be no crouch/roll, spontaneous
+release, or second fall after the 400 ms deadline.

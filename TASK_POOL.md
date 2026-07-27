@@ -148,7 +148,18 @@
       untouched. Test five grab-and-let-go cycles: every received event must log
       LATCH then FORCE (fast-release rows may show `force=0 ... latched=1`) and
       every remote fall must complete exactly once, with no spontaneous fall
-      after the deadline.
+      after the deadline. **RUNTIME PARTIAL (`hu`):** user saw 7/10, but all ten
+      distinct sender actions reached receiver LATCH (seq 610..3535), eliminating
+      packet loss as the residual cause. Static re-audit found the missing third
+      consumer: `PlayerEdgeState_HandleDropCommand` calls
+      `PlayerInputCommandState_IsCommandActive` at `0x14133405C` after hashing
+      the same `drop` and setting `edge=0`; the two earlier queries use Joypad,
+      while the production global PlayerInput hook is parked. **IMPLEMENTED
+      `hv`:** one target-validated E8 relay forces only this exact third call for
+      retained Player slot 1 during the live drop deadline and logs one
+      STATE-FORCE per reached event. Test ten numbered releases. 10/10 closes
+      the lifecycle; a failed number with STATE-FORCE selects downstream context,
+      while failure without it selects a pre-third handler branch.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw

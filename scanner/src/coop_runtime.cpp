@@ -241,6 +241,9 @@ PlayerInputIsCommandActiveFunction
     g_original_player_melee_callsite_is_command_active = nullptr;
 PlayerInputIsCommandActiveFunction
     g_original_player_grenade_callsite_is_command_active = nullptr;
+PlayerInputIsCommandActiveFunction
+    g_original_player_edge_drop_callsite_is_command_active = nullptr;
+constexpr std::uint32_t kEdgeDropCommandHash = 0x28DCC05A;
 using FastGrenadeCanStartFunction = bool(__fastcall*)(void*);
 using FastGrenadeStartFunction = std::int64_t(__fastcall*)(void*);
 using FastGrenadeResetFunction = std::int64_t(__fastcall*)(void*);
@@ -1273,6 +1276,9 @@ struct StateNetState {
     // puppet_traversal_force before Player::Edge makes its three held queries.
     // Preserve a received drop assertion across that packet/update race only.
     std::atomic<ULONGLONG> puppet_edge_drop_force_until_ms = 0;
+    std::atomic<std::uint32_t> puppet_edge_drop_event_sequence = 0;
+    std::atomic<std::uint32_t>
+        puppet_edge_drop_state_force_logged_sequence = 0;
     // cover-enter / try-enter-cover / one-shot cover-exit on Joypad 3.
     std::atomic<std::uint8_t> puppet_cover_force = 0;
     std::atomic<std::uint64_t> active_button_press_latch = 0;
@@ -1427,7 +1433,11 @@ void publish_peer_state_snapshot(const coop::StatePacket& packet) {
         const ULONGLONG previous_until =
             g_state_net.puppet_edge_drop_force_until_ms.exchange(
                 now + kEdgeDropForceWindowMs, std::memory_order_acq_rel);
-        if (previous_until <= now) {
+        const bool incoming_press =
+            (sanitized.buttons_pressed & kJoypadEdgeDropIntentMask) != 0;
+        if (incoming_press || previous_until <= now) {
+            g_state_net.puppet_edge_drop_event_sequence.store(
+                packet.sequence, std::memory_order_release);
             static std::atomic<unsigned> edge_drop_latch_logs{0};
             const unsigned log_index = edge_drop_latch_logs.fetch_add(
                 1, std::memory_order_relaxed);
@@ -2255,6 +2265,46 @@ bool install_player_input_is_command_active_force() {
     force_log_line(
         "PlayerInputCommandState IsCommandActive force-hook installed (melee)");
     return true;
+}
+
+char __fastcall hooked_player_edge_drop_command_callsite(
+    void* state, std::uint32_t hash, std::uint8_t edge) {
+    auto call_original = [&]() -> char {
+        return g_original_player_edge_drop_callsite_is_command_active != nullptr
+            ? g_original_player_edge_drop_callsite_is_command_active(
+                  state, hash, edge)
+            : 0;
+    };
+    if (state == nullptr || hash != kEdgeDropCommandHash || edge != 0 ||
+        !g_state_net.enabled) {
+        return call_original();
+    }
+    auto* const player =
+        static_cast<std::byte*>(state) - kPlayerInputCommandStateOffset;
+    if (player != static_cast<std::byte*>(retained_player_object(1))) {
+        return call_original();
+    }
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG force_until =
+        g_state_net.puppet_edge_drop_force_until_ms.load(
+            std::memory_order_acquire);
+    if (now >= force_until) {
+        return call_original();
+    }
+    const std::uint32_t sequence =
+        g_state_net.puppet_edge_drop_event_sequence.load(
+            std::memory_order_acquire);
+    const std::uint32_t logged_sequence =
+        g_state_net.puppet_edge_drop_state_force_logged_sequence.exchange(
+            sequence, std::memory_order_acq_rel);
+    if (sequence != 0 && logged_sequence != sequence) {
+        std::ostringstream line;
+        line << "TRAVERSAL-EDGE-DROP-STATE-FORCE seq=" << sequence
+             << " edge=" << static_cast<unsigned>(edge)
+             << " remainingMs=" << (force_until - now);
+        boot_log_line(line.str().c_str());
+    }
+    return 1;
 }
 
 struct FastGrenadeWeaponSlotSnapshot {
@@ -21043,6 +21093,50 @@ bool prepare_plain_callsite_relay(
     return true;
 }
 
+bool install_player_edge_drop_command_callsite_relay() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kPlayerEdgeDropInputIsCommandActiveCallsiteRva,
+            kPlayerInputCommandStateIsCommandActiveRva,
+            reinterpret_cast<const void*>(
+                &hooked_player_edge_drop_command_callsite),
+            callsite, relay, displacement)) {
+        boot_log_line(
+            "PlayerEdge drop state callsite relay SKIPPED (preflight)");
+        return false;
+    }
+    g_original_player_edge_drop_callsite_is_command_active =
+        reinterpret_cast<PlayerInputIsCommandActiveFunction>(
+            g_module + kPlayerInputCommandStateIsCommandActiveRva);
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_player_edge_drop_callsite_is_command_active = nullptr;
+        boot_log_line(
+            "PlayerEdge drop state callsite relay SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD old = 0;
+    if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_player_edge_drop_callsite_is_command_active = nullptr;
+        boot_log_line(
+            "PlayerEdge drop state callsite relay SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(callsite + 1) = displacement;
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(callsite, 5, old, &ignored);
+    resume_suspended_process_threads(suspended_threads);
+    boot_log_line(
+        "PlayerEdge exact drop state callsite relay installed (0x14133405C)");
+    return true;
+}
+
 using ProcessWeaponBaseInitFunction =
     std::uint32_t*(__fastcall*)(void*, std::uint32_t*, void*);
 ProcessWeaponBaseInitFunction g_original_process_weapon_base_init = nullptr;
@@ -38484,7 +38578,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27hu "
+        "TLL co-op runtime init 2026-07-27hv "
         "(retained Player native grenade owns physics)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
@@ -38496,6 +38590,7 @@ DWORD WINAPI install_hook(void*) {
     install_joypad3_analog_route();
     install_joypad3_keyboard_isolation();
     install_joypad3_is_command_active_force();
+    install_player_edge_drop_command_callsite_relay();
     if (g_enable_puppet_melee_button_relay) {
         install_player_input_is_command_active_force();
     } else {

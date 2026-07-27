@@ -157,6 +157,11 @@ constexpr std::uintptr_t kSkelTableRetargetEntriesRva = 0x3864A00;
 // Embedded PlayerInputCommandState (sub_14024D7E0 returns Player+0x39A0).
 constexpr std::size_t kPlayerInputCommandStateOffset = 0x39A0;
 constexpr std::uintptr_t kPlayerInputCommandStateIsCommandActiveRva = 0x1E39D50;
+// Third exact `drop`, edge=0 consumer inside PlayerEdgeState_HandleDropCommand.
+// The first two consumers query Joypad directly; this one bypasses that hook and
+// therefore needs its own retained-puppet callsite relay.
+constexpr std::uintptr_t kPlayerEdgeDropInputIsCommandActiveCallsiteRva =
+    0x133405C;
 // Exact grenade command consumers. The scheduler entry and its state-1/state-2/
 // state-4 hold/release updates all call PlayerInputCommandState_IsCommandActive
 // directly. Relaying only these E8 sites avoids FastGrenadeController +0xA0,
