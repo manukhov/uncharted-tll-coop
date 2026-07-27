@@ -24392,108 +24392,6 @@ void log_puppet_action_state(
     force_log_line(line.str().c_str());
 }
 
-// Read-only late-owner discriminator. Player_PostAnimUpdate writes the current
-// screen-route seed to Player+0x1720/+0x1730, while
-// Player_KickPlayerDepenetrateWeapons resolves targRWrist/rightHand from the
-// completed skeleton and publishes two final float4 values through
-// *(Player+0x3600). Compare those raw outputs with the peer seed and the FgAnim
-// render-world matrix; never write or reinterpret an unproven field.
-void log_puppet_late_pitch_owner(
-    void* puppet, const coop::StatePacket& peer) {
-    if (puppet == nullptr || !peer_packet_aim_active(peer) ||
-        !valid_network_orientation(peer.pose_seed + 4) ||
-        readable_bytes(puppet) < 0x3608 + sizeof(void*)) {
-        return;
-    }
-
-    static void* sampled_owner = nullptr;
-    static ULONGLONG next_sample_ms = 0;
-    static std::uint32_t sample_count = 0;
-    if (sampled_owner != puppet) {
-        sampled_owner = puppet;
-        next_sample_ms = 0;
-        sample_count = 0;
-    }
-    const ULONGLONG now = GetTickCount64();
-    if (sample_count >= 240 || now < next_sample_ms) {
-        return;
-    }
-
-    const auto* const player_bytes = static_cast<const std::byte*>(puppet);
-    const float* const pose_quat = reinterpret_cast<const float*>(
-        player_bytes + kPlayerAimPoseQuatOffset);
-    const float* const root_quat = reinterpret_cast<const float*>(
-        player_bytes + kPlayerQuatOffset);
-    void* const fg = *reinterpret_cast<void* const*>(
-        player_bytes + kPlayerFgAnimDataOffset);
-    void* const wrist_transform = *reinterpret_cast<void* const*>(
-        player_bytes + 0x3600);
-    if (!valid_network_orientation(pose_quat) ||
-        !valid_network_orientation(root_quat) || fg == nullptr ||
-        readable_bytes(static_cast<const std::byte*>(fg) +
-                       kFgAnimDataRenderWorldMatrixOffset) < 64 ||
-        wrist_transform == nullptr || readable_bytes(wrist_transform) < 32) {
-        return;
-    }
-    const float* const fg_world_matrix = reinterpret_cast<const float*>(
-        static_cast<const std::byte*>(fg) +
-        kFgAnimDataRenderWorldMatrixOffset);
-    const float* const wrist_values = static_cast<const float*>(wrist_transform);
-
-    float peer_x = 0.0F, peer_y = 0.0F, peer_z = 0.0F;
-    float pose_x = 0.0F, pose_y = 0.0F, pose_z = 0.0F;
-    float root_x = 0.0F, root_y = 0.0F, root_z = 0.0F;
-    quat_forward_pos_z(peer.pose_seed + 4, peer_x, peer_y, peer_z);
-    quat_forward_pos_z(pose_quat, pose_x, pose_y, pose_z);
-    quat_forward_pos_z(root_quat, root_x, root_y, root_z);
-
-    bool raw_values_valid = true;
-    for (std::size_t i = 0; i < 16; ++i) {
-        raw_values_valid = raw_values_valid &&
-            std::isfinite(fg_world_matrix[i]) &&
-            std::fabs(fg_world_matrix[i]) < 1000000.0F;
-    }
-    for (std::size_t i = 0; i < 8; ++i) {
-        raw_values_valid = raw_values_valid &&
-            std::isfinite(wrist_values[i]) &&
-            std::fabs(wrist_values[i]) < 1000000.0F;
-    }
-    if (!raw_values_valid) {
-        return;
-    }
-
-    float up = 0.0F;
-    float down = 0.0F;
-    if (void* const controller = player_aim_controller_from_player(puppet);
-        controller != nullptr &&
-        readable_bytes(static_cast<const std::byte*>(controller) + 0x8C0) >= 8) {
-        up = *reinterpret_cast<const float*>(
-            static_cast<const std::byte*>(controller) + 0x8C0);
-        down = *reinterpret_cast<const float*>(
-            static_cast<const std::byte*>(controller) + 0x8C4);
-    }
-
-    next_sample_ms = now + 150;
-    ++sample_count;
-    std::ostringstream line;
-    line << std::fixed << std::setprecision(4)
-         << "AIM-LATE-OWNER sample=" << sample_count
-         << " peerY=" << peer_y << " poseY=" << pose_y
-         << " rootY=" << root_y << " ctrlUD=" << up << "/" << down
-         << " poseQ=(" << pose_quat[0] << "," << pose_quat[1] << ","
-         << pose_quat[2] << "," << pose_quat[3] << ")"
-         << " fg3x3=(" << fg_world_matrix[0] << ","
-         << fg_world_matrix[1] << "," << fg_world_matrix[2] << ";"
-         << fg_world_matrix[4] << "," << fg_world_matrix[5] << ","
-         << fg_world_matrix[6] << ";" << fg_world_matrix[8] << ","
-         << fg_world_matrix[9] << "," << fg_world_matrix[10] << ")"
-         << " wrist0=(" << wrist_values[0] << "," << wrist_values[1]
-         << "," << wrist_values[2] << "," << wrist_values[3] << ")"
-         << " wrist1=(" << wrist_values[4] << "," << wrist_values[5]
-         << "," << wrist_values[6] << "," << wrist_values[7] << ")";
-    force_log_line(line.str().c_str());
-}
-
 // POST (after the puppet's own update runs): assert the networked transform last
 // so the engine's own integration can't fight it (was causing flicker).
 void apply_puppet_transform_post(void* /*update_object*/) {
@@ -24526,7 +24424,6 @@ void apply_puppet_transform_post(void* /*update_object*/) {
             return;
         }
     }
-    log_puppet_late_pitch_owner(puppet, pkt);
     apply_peer_health_to_slot1(pkt, false);
     auto* world = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kWorldPositionOffset);
     auto* localp = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerLocalPosOffset);
@@ -41479,8 +41376,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27iw "
-        "(raw late pitch-owner discriminator)");
+        "TLL co-op runtime init 2026-07-27ix "
+        "(late owner probe removed after animation regression)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

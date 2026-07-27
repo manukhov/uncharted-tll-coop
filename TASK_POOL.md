@@ -1862,7 +1862,7 @@ Do not reopen these as the first move:
       `+0x1720/+0x1730`; the wrist solver has no camera/LRDU read and publishes an
       already-resolved skeleton transform through `*(Player+0x3600)`; FgAnim
       world `+0x1C0` is independent of the joint-palette path.
-- [ ] Run read-only build `iw` with peer Chloe aiming strongly down while Nadine
+- [x] Run read-only build `iw` with peer Chloe aiming strongly down while Nadine
       moves her local non-ADS camera up, then reverse. Compare only bounded
       `AIM-LATE-OWNER` rows: peer/controller/pose/root plus the raw FgAnim 3x3
       matrix and two wrist float4 values. Local pose only identifies the inert
@@ -1870,7 +1870,11 @@ Do not reopen these as the first move:
       publication, first correlation in wrist selects skeleton/post-palette, and
       no sampled correlation moves the search after attachment/render space.
       Local controller UD selects a later LRDU writer. No writes or visible
-      behavior changes are allowed.
+      behavior changes are allowed. **REJECTED:** Chloe's animation collapsed
+      and slid along the floor before any `AIM-LATE-OWNER` row was emitted. Build
+      `ix` removes the sampler completely. Next discriminator must capture
+      arguments at a proven native writer/callsite; do not traverse the late
+      FgAnim/wrist pointers from the post-update hook again.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

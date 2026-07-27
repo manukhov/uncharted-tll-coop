@@ -12524,3 +12524,13 @@ visual still follows the local camera, the remaining owner is after attachment
 in render space (or the observation is perspective-only). A local controller UD
 would instead preserve the later-native-writer alternative. No rows, a crash or
 any visible regression makes the probe inconclusive.
+
+**REJECTED at runtime:** `iw` produced an immediate severe animation regression:
+remote Chloe's animation collapsed and she slid along the floor. Both processes
+remained responsive, but no `AIM-LATE-OWNER` row was emitted before the failure,
+so the probe yielded no ownership evidence. The per-frame late reader and its
+FgAnim/wrist pointer traversal were removed completely in build `ix`; do not
+reintroduce this sampler or infer a field owner from this run. The static field
+classification above remains valid, but the next discriminator must be placed
+inside an already-proven native writer/callsite with captured arguments rather
+than dereferencing late object-lifetime pointers from `apply_puppet_transform_post`.
