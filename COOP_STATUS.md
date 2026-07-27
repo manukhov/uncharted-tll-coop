@@ -12437,3 +12437,36 @@ screen-1 controller/active-state vertical values converging on peerUD through th
 stock smoother. Horizontal aim, model integrity and stability must remain
 unchanged. Following localUD, missing raw capture/apply, shake, corruption or a
 crash rejects the boundary.
+
+### 2026-07-27 RUNTIME REJECTED / TRANSPORT CONFIRMED: `iu` reaches the live evaluator but not the visible weapon
+
+The opposite-direction discriminator falsified `0x140CB416F` as the final owner
+of visible vertical weapon pose. On Nadine's receiver PID 10820 the first exact
+substitution was `localUD=0.1069/0.0000` versus transmitted
+`peerUD=0.0000/0.1306`. The immediately following screen-1 base configuration
+used `up=0.0000 down=0.1306`; the registry snapshot independently preserved
+`rawUD=0.0000/0.1306`, active-state down `0.1306`, and matching source/destination
+live-evaluator LRDU. The later bounded residual and blended samples also remained
+near peer down `0.1299`. When the peer value became unavailable, the hook emitted
+`AIM-PITCH-PRECALL-ZERO localUD=0.1845/0.0000`, proving it suppressed a strong
+receiver-local upward input rather than leaking it back through the publisher.
+
+Despite all of those peer-correct values, the user again observed remote Chloe
+aiming upward whenever Nadine's local free camera looked upward, even while
+Chloe's real aim was downward, and the inverse when Nadine looked downward. The
+effect did not require Nadine to enter ADS. Thus build `iu` **CONFIRMS** the v13
+raw-pitch transport, pre-native substitution, controller/active-state
+publication and live evaluator copy, but **REJECTS** the entire directional
+LRDU publisher/evaluator chain as the final visible-pose owner. Keeping the
+source isolation is still useful because it removes a proven local-value leak;
+do not add another downstream LRDU overwrite.
+
+The remaining competitors are now narrower: (1) late
+`Player_PostAnimUpdate 0x1410E9210` reconstructs `Player+0x1720/+0x1730` from a
+receiver-local screen-route pose seed after animation evaluation; (2) a later
+weapon/hand attachment solver reads the receiver-local camera or aim target
+directly and bypasses both LRDU and `+0x1730`; (3) the enabled FgAnim world
+quaternion relay is a separate camera-relative visual owner; or (4) a later
+native writer replaces the peer-correct LRDU after the bounded telemetry. The
+next static pass must trace writers and consumers of the late pose quaternion
+and weapon attachment transforms before another runtime mutation.

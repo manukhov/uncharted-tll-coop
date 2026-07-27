@@ -1843,12 +1843,22 @@ Do not reopen these as the first move:
       inputs on both transition/steady callsites and substitutes only retained
       screen-1 up/down before native. Rejected named layers, graph forcing and
       pose-copy remain parked.
-- [ ] Run the `iu` opposite-direction discriminator on both roles and at least a
-      pistol plus rifle: keep the receiver-local camera down while the peer aims
-      up, then reverse. `AIM-PITCH-PRECALL-APPLY` must show different localUD and
-      peerUD, while following `AIM-BASE-CONFIG`/active-state vertical values and
-      the visible remote weapon follow peerUD. No horizontal regression, shake,
-      model corruption or crash is allowed.
+- [x] Run the `iu` opposite-direction discriminator. Receiver PID 10820 replaced
+      `localUD=0.1069/0` with peer `0/0.1306`; the following screen-1 controller,
+      active state, live evaluator and bounded residual/blended samples all
+      retained peer down near `0.13`. A later stale/missing sample explicitly
+      zeroed receiver-local up `0.1845`. Nevertheless remote Chloe still followed
+      Nadine's local free-camera pitch, including outside ADS. Confirm raw-pitch
+      transport and live evaluator admission, but reject `0x140CB416F`, the LRDU
+      publisher and evaluator copy as the final visible-pose owner.
+- [ ] Trace the late visual owner statically before another game launch. Resolve
+      both sides of `Player_PostAnimUpdate 0x1410E9210`, the scoped pose-seed
+      returns at `0x140CB17D6/0x1410E934B`, writers/readers of
+      `Player+0x1720/+0x1730`, and weapon/hand attachment updates
+      `0x1410EDFB0/0x1410ECAF0`. Distinguish late pose-seed overwrite, direct
+      camera/target consumption, FgAnim world ownership and a later LRDU writer;
+      require three independent evidence types and a written prediction before
+      any mutation.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 
