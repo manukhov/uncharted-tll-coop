@@ -176,7 +176,7 @@
       responsive. Ordinary climb-up and deliberate wall-hang release are now
       closed.
 
-- [~] **Ordinary evade / running-roll synchronization (`hx`, 2026-07-27):**
+- [x] **Ordinary evade / running-roll synchronization (`hx`, CLOSED 2026-07-27):**
       STATIC quota met. `PlayerMoveStick_MainUpdate 0x140F03500` consumes exact
       `evade-start` through `PlayerEvadeController` slot 10
       (`0x140DC5670`) at `0x140F06408`, then requires slot 14 eligibility
@@ -192,7 +192,11 @@
       LOCAL-CAPTURE -> SEND -> LATCH -> FORCE -> REMOTE-START chains, with no
       remote-only roll and no jump/crouch bleed. FORCE without REMOTE-START
       selects divergent remote gates; REMOTE-START without visible motion
-      selects later locomotion correction.
+      selects later locomotion correction. **RUNTIME CONFIRMED:** user reports
+      successful bidirectional rolls; logs contain 14 complete Chloe-to-Nadine
+      and 13 complete Nadine-to-Chloe LATCH -> exact FORCE -> REMOTE-START
+      chains, with both copies responsive and no received event lacking the
+      accepted remote slot-16 action.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw

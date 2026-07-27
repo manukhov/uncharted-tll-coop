@@ -10443,3 +10443,19 @@ publication/transport; LATCH+FORCE without REMOTE-START selects remote
 slot-14/15 divergence (T3); REMOTE-START followed by a missing visible roll
 selects later state correction (T4); any remote roll without LOCAL-CAPTURE is a
 false-positive and rejects the relay boundary.
+
+### 2026-07-27 RUNTIME CONFIRMED / CLOSED: bidirectional ordinary evade (`hx`)
+
+The user confirms that the ordinary running-roll test is successful in both
+directions. The bounded log contains 14 complete Chloe-to-Nadine and 13 complete
+Nadine-to-Chloe event chains. Each received LATCH sequence is followed by the
+exact `0x140F06408` FORCE and one `PlayerEvadeController` slot-16 REMOTE-START;
+there are no received events without a remote accepted action. Both processes
+remain responsive and the user reports no new movement regressions.
+
+This confirms T1/T2 as the old failure class: sampling and replaying raw evade
+queries did not preserve the local controller's accepted action and could let
+the two copies make different gate decisions. Capturing the accepted local
+slot-16 boundary, forcing only the exact ordinary slot-10 consumer, and consuming
+the packet sequence at the remote slot-16 boundary synchronizes ordinary rolls
+without aliasing `evade-roll` or generic face-button input.
