@@ -10723,3 +10723,29 @@ exception. This confirms the pre-interaction stability prediction and separates
 the new exact-callsite/vtable packaging from the runtime-rejected `hz` global
 entry detours. Ground consume/drop correctness and prompt ownership remain
 unconfirmed until the written interaction tests run.
+
+### 2026-07-27 RUNTIME REJECTED: `ia` interaction crashes Nadine and leaves Chloe HUD defect
+
+During the first real interaction test, role-B/Nadine PID 21884 exited exactly
+when picking up a ground weapon. The bounded log contains
+`WORLD-WEAPON-INTERACT stable=0x2e3c02ad art=0x3019cbee
+source=0x10e0c2d180`, followed by process exit, but contains no
+`WORLD-WEAPON-DROP-COMMIT`, `WORLD-WEAPON-SOURCE-COMMIT`, `WORLD-WEAPON-SEND`,
+or crash-observer exception. Role-A/Chloe PID 15724 remained alive. Therefore no
+world packet was sent and neither receiver consume nor receiver drop can be the
+cause. The failure is bounded to the sender interval after the entry-detoured
+`WeaponInteractControl::OnInteract` wrapper admits the transaction and before
+either exact nested commit wrapper returns. Do not repeat the `ia` pickup test.
+
+The user also reports that the prior Chloe pickup-prompt defect remains. The log
+shows a local allow on both roles but no puppet suppress/destroy marker before
+the crash. Consequently the two-slot publisher patch plus end-of-frame keyed
+cleanup is not a runtime fix for the Chloe symptom and remains rejected as an
+ownership/lifecycle boundary, independently of the sender crash.
+
+The `ia` cold-boot result remains CONFIRMED: exact-callsite packaging removes the
+pre-interaction `hz` crash. The next sender design must remove the EH-bearing
+`WeaponInteractControl::OnInteract` entry trampoline and statically separate the
+nested detach and source-kill boundaries before another runtime test. The next
+HUD design must first identify which publisher/control actually creates the
+surviving Chloe record rather than moving the same ownership gate again.

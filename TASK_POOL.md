@@ -38,8 +38,14 @@
 - [x] **`ia` runtime CONFIRMED (boot phase):** fresh A/Chloe PID 15724 and
       B/Nadine PID 21884 remained responsive for 30+ seconds with both exact
       installers active and no crash-observer exception.
-- [ ] Runtime-check the remaining `ia` interaction phase: M30/Mazur consume/drop
-      in both directions and Chloe/Nadine prompt ownership/expiry.
+- [x] **`ia` interaction runtime REJECTED:** Nadine PID 21884 crashed after the
+      interaction-admit marker and before detach/source/send; Chloe's prior HUD
+      defect remained and no suppress/destroy marker identified its owner.
+- [ ] Replace the EH-bearing `WeaponInteractControl::OnInteract` entry trampoline
+      with an exact vtable/call-boundary design; distinguish detach-wrapper ABI
+      failure from the OnInteract trampoline statically before another launch.
+- [ ] Trace the surviving Chloe FHUD record backward to its actual concrete
+      publisher/control; do not retry the rejected two-slot ownership assumption.
 
 ## P0: Full Player Synchronization (CURRENT)
 
