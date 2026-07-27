@@ -11892,3 +11892,11 @@ must emit `PICKUP-HUD-OWNER-CLEANUP` with the exact local ID/art and normally
 new Mazur prompt remains, and neither copy may crash. `primarySelected=0` with a
 secondary match selects the second-store alternative; `destroyed=1` with a
 surviving prompt rejects thread ownership and selects a higher Flash view/cache.
+
+**Cold-start validation.** Fresh PID 23588 (role A/Chloe) and PID 1152 (role
+B/Nadine) loaded build `2026-07-27in`, installed
+`FHUD owner-thread cleanup (screen-0 exact slots)`, selected their expected UDP
+roles and remained Win32-responsive after initialization. Neither log contains a
+hook `SKIPPED`, incomplete install, or terminal exception marker. This confirms
+packaging only; the written M30/Mazur, Type-97 and reload behavior still require
+the user interaction in these running copies.
