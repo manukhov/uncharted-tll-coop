@@ -462,15 +462,10 @@ constexpr std::uintptr_t kWeaponInteractControlVftableRva = 0x29BF4A8;
 // this exact callsite. Its first argument is the explicit per-screen HUD state.
 constexpr std::uintptr_t kHudDrawInteractableRecordCallsiteRva = 0x03290FD;
 constexpr std::uintptr_t kFhudPublishInteractRecordRva = 0x1359470;
-// The script-native callsite above was runtime-silent for the authored M30
-// prompt. These are the remaining direct publishers plus the small conditional
-// tail-forwarder which all converge on FHUD_PublishInteractRecord. They are
-// diagnostic-only until a live source marker identifies the surviving prompt.
+// Runtime-confirmed sole source of the authored M30 prompt. The source record
+// carries the interactable's stock weak handle/generation at +0x18/+0x20; keep
+// this exact callsite as a bounded receiver-local ProcessWeapon candidate index.
 constexpr std::uintptr_t kPickupControlHudRecordCallsiteRva = 0x08AF179;
-constexpr std::array<std::uintptr_t, 3> kGenericHudRecordCallsiteRvas{
-    0x13B5EC8, 0x13B60F1, 0x13B62EC,
-};
-constexpr std::uintptr_t kConditionalHudRecordTailBranchRva = 0x13B48C2;
 constexpr std::uintptr_t kPlayerRequestedInteractRva = 0x0C87D70;
 // PlayerPickupController vtable +0x38 -> Start/Queue 0x140F49CA0. This is the
 // proven producer of dra-pickup-* gestures from the interact-with-me script event.

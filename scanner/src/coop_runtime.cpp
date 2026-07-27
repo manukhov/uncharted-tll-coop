@@ -8462,205 +8462,163 @@ bool install_hud_draw_interactable_primary_screen_gate() {
     return true;
 }
 
-void trace_fhud_interact_record_source(
-    std::size_t source_index, const char* source,
+constexpr std::size_t kGroundPickupHudCandidateCount = 16;
+constexpr ULONGLONG kGroundPickupHudCandidateMaxAgeMs = 15000;
+
+struct GroundPickupHudCandidate {
+    std::uintptr_t weak_handle{0};
+    std::uint32_t generation{0};
+    std::uint32_t stable_id{0};
+    std::uint32_t art{0};
+    ULONGLONG last_seen_ms{0};
+};
+
+SRWLOCK g_ground_pickup_hud_candidates_lock = SRWLOCK_INIT;
+std::array<GroundPickupHudCandidate, kGroundPickupHudCandidateCount>
+    g_ground_pickup_hud_candidates{};
+
+bool seh_resolve_ground_pickup_hud_candidate(
+    const void* per_screen_hud_state,
+    const FhudFallbackRecordIdentity& identity,
+    GroundPickupHudCandidate& candidate, void*& object) {
+    candidate = {};
+    object = nullptr;
+    if (per_screen_hud_state == nullptr || identity.weak_handle == 0 ||
+        identity.weak_generation == 0 || identity.fallback_id != 0 ||
+        readable_bytes(static_cast<const std::byte*>(per_screen_hud_state) +
+                       kPerScreenHudStateScreenIndexOffset) <
+            sizeof(std::uint32_t) ||
+        readable_bytes(reinterpret_cast<const void*>(identity.weak_handle)) <
+            16) {
+        return false;
+    }
+    __try {
+        if (*reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(per_screen_hud_state) +
+                kPerScreenHudStateScreenIndexOffset) != 0) {
+            return false;
+        }
+        object = *reinterpret_cast<void**>(identity.weak_handle + 8);
+        if (object == nullptr || readable_bytes(object) < 0x864 ||
+            *reinterpret_cast<const std::uintptr_t*>(object) !=
+                g_module + kProcessWeaponVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(object) +
+                kGameObjectRuntimeIdOffset) != identity.weak_generation) {
+            return false;
+        }
+        const std::uint32_t stable_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(object) + 0xD8);
+        const std::uint32_t art = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(object) + 0x860);
+        if (stable_id == 0 || art == 0) return false;
+        candidate = GroundPickupHudCandidate{
+            identity.weak_handle, identity.weak_generation, stable_id, art,
+            GetTickCount64()};
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        candidate = {};
+        object = nullptr;
+        return false;
+    }
+}
+
+void capture_ground_pickup_hud_candidate(
     void* per_screen_hud_state, void* record) {
     FhudFallbackRecordIdentity identity{};
     const bool have_identity =
         seh_read_fhud_fallback_record_identity(record, identity);
-    static std::array<std::atomic<std::uint64_t>, 5> last_signatures{};
-    std::uint64_t signature =
-        static_cast<std::uint64_t>(
-            reinterpret_cast<std::uintptr_t>(per_screen_hud_state)) ^
-        (static_cast<std::uint64_t>(identity.weak_handle) << 7) ^
-        (static_cast<std::uint64_t>(identity.weak_handle) >> 11) ^
-        (static_cast<std::uint64_t>(identity.weak_generation) << 32) ^
-        identity.fallback_id;
-    if (signature == 0) signature = 1;
-    if (source_index >= last_signatures.size() ||
-        last_signatures[source_index].exchange(
-            signature, std::memory_order_relaxed) == signature) {
+    GroundPickupHudCandidate observed{};
+    void* object = nullptr;
+    if (!have_identity || !seh_resolve_ground_pickup_hud_candidate(
+            per_screen_hud_state, identity, observed, object)) {
         return;
     }
-    static std::atomic<int> rows{0};
-    if (rows.fetch_add(1, std::memory_order_relaxed) >= 96) return;
-    std::ostringstream line;
-    line << "PICKUP-HUD-SOURCE source=" << source
-         << " screen="
-         << (hud_state_is_non_primary_screen(per_screen_hud_state)
-                 ? "non-primary"
-                 : "primary-or-unknown")
-         << " state=0x" << std::hex
-         << reinterpret_cast<std::uintptr_t>(per_screen_hud_state)
-         << " weak=0x" << (have_identity ? identity.weak_handle : 0)
-         << ":" << (have_identity ? identity.weak_generation : 0)
-         << " fallback=0x" << (have_identity ? identity.fallback_id : 0)
-         << std::dec;
-    boot_log_line(line.str().c_str());
-}
 
-void publish_fhud_record_from_source(
-    std::size_t source_index, const char* source,
-    void* per_screen_hud_state, void* record) {
-    trace_fhud_interact_record_source(
-        source_index, source, per_screen_hud_state, record);
-    if (g_original_hud_draw_interactable_record != nullptr) {
-        g_original_hud_draw_interactable_record(per_screen_hud_state, record);
+    bool inserted = false;
+    AcquireSRWLockExclusive(&g_ground_pickup_hud_candidates_lock);
+    std::size_t target = kGroundPickupHudCandidateCount;
+    std::size_t oldest = 0;
+    for (std::size_t i = 0; i < g_ground_pickup_hud_candidates.size(); ++i) {
+        auto& candidate = g_ground_pickup_hud_candidates[i];
+        if (candidate.weak_handle == identity.weak_handle &&
+            candidate.generation == identity.weak_generation) {
+            target = i;
+            break;
+        }
+        if (candidate.weak_handle == 0 &&
+            target == kGroundPickupHudCandidateCount) {
+            target = i;
+        }
+        if (candidate.last_seen_ms <
+            g_ground_pickup_hud_candidates[oldest].last_seen_ms) {
+            oldest = i;
+        }
+    }
+    if (target == kGroundPickupHudCandidateCount) target = oldest;
+    auto& candidate = g_ground_pickup_hud_candidates[target];
+    inserted = candidate.weak_handle != observed.weak_handle ||
+        candidate.generation != observed.generation ||
+        candidate.stable_id != observed.stable_id ||
+        candidate.art != observed.art;
+    candidate = observed;
+    ReleaseSRWLockExclusive(&g_ground_pickup_hud_candidates_lock);
+
+    if (inserted) {
+        std::ostringstream line;
+        line << "PICKUP-HUD-CANDIDATE weak=0x" << std::hex
+             << observed.weak_handle << ":" << observed.generation
+             << " object=0x" << reinterpret_cast<std::uintptr_t>(object)
+             << " local_id=0x" << observed.stable_id
+             << " art=0x" << observed.art
+             << std::dec;
+        boot_log_line(line.str().c_str());
     }
 }
 
 void __fastcall hooked_pickup_control_hud_record(void* state, void* record) {
-    publish_fhud_record_from_source(0, "pickup-control", state, record);
-}
-
-void __fastcall hooked_generic_hud_record_a(void* state, void* record) {
-    publish_fhud_record_from_source(1, "generic-a", state, record);
-}
-
-void __fastcall hooked_generic_hud_record_b(void* state, void* record) {
-    publish_fhud_record_from_source(2, "generic-b", state, record);
-}
-
-void __fastcall hooked_generic_hud_record_c(void* state, void* record) {
-    publish_fhud_record_from_source(3, "generic-c", state, record);
-}
-
-void __fastcall hooked_conditional_hud_record_tail(void* state, void* record) {
-    publish_fhud_record_from_source(4, "conditional-tail", state, record);
-}
-
-bool install_pickup_hud_source_diagnostics() {
-    constexpr std::size_t kDirectSiteCount = 4;
-    const std::array<std::uintptr_t, kDirectSiteCount> direct_rvas{
-        kPickupControlHudRecordCallsiteRva,
-        kGenericHudRecordCallsiteRvas[0],
-        kGenericHudRecordCallsiteRvas[1],
-        kGenericHudRecordCallsiteRvas[2],
-    };
-    const std::array<const void*, kDirectSiteCount> direct_hooks{
-        reinterpret_cast<const void*>(&hooked_pickup_control_hud_record),
-        reinterpret_cast<const void*>(&hooked_generic_hud_record_a),
-        reinterpret_cast<const void*>(&hooked_generic_hud_record_b),
-        reinterpret_cast<const void*>(&hooked_generic_hud_record_c),
-    };
-    std::array<std::uint8_t*, kDirectSiteCount> direct_sites{};
-    std::array<std::uint8_t*, kDirectSiteCount> direct_relays{};
-    std::array<std::int32_t, kDirectSiteCount> direct_displacements{};
-    for (std::size_t i = 0; i < kDirectSiteCount; ++i) {
-        if (!prepare_plain_callsite_relay(
-                direct_rvas[i], kFhudPublishInteractRecordRva,
-                direct_hooks[i], direct_sites[i], direct_relays[i],
-                direct_displacements[i])) {
-            for (std::uint8_t* relay : direct_relays) {
-                if (relay != nullptr) VirtualFree(relay, 0, MEM_RELEASE);
-            }
-            boot_log_line("pickup HUD source diagnostics SKIPPED (direct preflight)");
-            return false;
-        }
+    capture_ground_pickup_hud_candidate(state, record);
+    if (g_original_hud_draw_interactable_record != nullptr) {
+        g_original_hud_draw_interactable_record(state, record);
     }
+}
 
-    auto* const tail_site = reinterpret_cast<std::uint8_t*>(
-        g_module + kConditionalHudRecordTailBranchRva);
-    std::int32_t old_tail_displacement = 0;
-    std::memcpy(&old_tail_displacement, tail_site + 2,
-                sizeof(old_tail_displacement));
-    const std::uintptr_t old_tail_target =
-        reinterpret_cast<std::uintptr_t>(tail_site + 6) +
-        static_cast<std::intptr_t>(old_tail_displacement);
-    if (tail_site[0] != 0x0F || tail_site[1] != 0x85 ||
-        old_tail_target != g_module + kFhudPublishInteractRecordRva) {
-        for (std::uint8_t* relay : direct_relays) {
-            if (relay != nullptr) VirtualFree(relay, 0, MEM_RELEASE);
-        }
-        boot_log_line("pickup HUD source diagnostics SKIPPED (tail preflight)");
+bool install_ground_pickup_hud_candidate_capture() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kPickupControlHudRecordCallsiteRva,
+            kFhudPublishInteractRecordRva,
+            reinterpret_cast<const void*>(&hooked_pickup_control_hud_record),
+            callsite, relay, displacement)) {
+        boot_log_line("ground pickup HUD candidate capture SKIPPED (preflight)");
         return false;
     }
-    constexpr std::size_t kRelaySize = 14;
-    auto* const tail_relay = static_cast<std::uint8_t*>(
-        allocate_executable_near(tail_site, kRelaySize));
-    if (tail_relay == nullptr) {
-        for (std::uint8_t* relay : direct_relays) {
-            if (relay != nullptr) VirtualFree(relay, 0, MEM_RELEASE);
-        }
-        boot_log_line("pickup HUD source diagnostics SKIPPED (tail allocation)");
-        return false;
-    }
-    tail_relay[0] = 0xFF;
-    tail_relay[1] = 0x25;
-    *reinterpret_cast<std::uint32_t*>(tail_relay + 2) = 0;
-    *reinterpret_cast<std::uintptr_t*>(tail_relay + 6) =
-        reinterpret_cast<std::uintptr_t>(&hooked_conditional_hud_record_tail);
-    FlushInstructionCache(GetCurrentProcess(), tail_relay, kRelaySize);
-    const std::int64_t tail_delta =
-        reinterpret_cast<std::intptr_t>(tail_relay) -
-        reinterpret_cast<std::intptr_t>(tail_site + 6);
-    if (tail_delta < INT32_MIN || tail_delta > INT32_MAX) {
-        VirtualFree(tail_relay, 0, MEM_RELEASE);
-        for (std::uint8_t* relay : direct_relays) {
-            if (relay != nullptr) VirtualFree(relay, 0, MEM_RELEASE);
-        }
-        boot_log_line("pickup HUD source diagnostics SKIPPED (tail range)");
-        return false;
-    }
-    const std::int32_t tail_displacement =
-        static_cast<std::int32_t>(tail_delta);
-
     SuspendedProcessThreads suspended_threads{};
     if (!suspend_other_process_threads(suspended_threads)) {
-        VirtualFree(tail_relay, 0, MEM_RELEASE);
-        for (std::uint8_t* relay : direct_relays) {
-            if (relay != nullptr) VirtualFree(relay, 0, MEM_RELEASE);
-        }
-        boot_log_line("pickup HUD source diagnostics SKIPPED (thread suspend)");
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line(
+            "ground pickup HUD candidate capture SKIPPED (thread suspend)");
         return false;
     }
-    std::array<DWORD, kDirectSiteCount> old_protections{};
-    std::size_t protected_count = 0;
-    for (; protected_count < kDirectSiteCount; ++protected_count) {
-        if (!VirtualProtect(direct_sites[protected_count], 5,
-                            PAGE_EXECUTE_READWRITE,
-                            &old_protections[protected_count])) {
-            break;
-        }
-    }
-    DWORD tail_old_protection = 0;
-    const bool tail_protected = protected_count == kDirectSiteCount &&
-        VirtualProtect(tail_site, 6, PAGE_EXECUTE_READWRITE,
-                       &tail_old_protection) != FALSE;
-    if (!tail_protected) {
-        for (std::size_t i = 0; i < protected_count; ++i) {
-            DWORD ignored = 0;
-            VirtualProtect(direct_sites[i], 5, old_protections[i], &ignored);
-        }
+    DWORD old = 0;
+    if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
         resume_suspended_process_threads(suspended_threads);
-        VirtualFree(tail_relay, 0, MEM_RELEASE);
-        for (std::uint8_t* relay : direct_relays) {
-            if (relay != nullptr) VirtualFree(relay, 0, MEM_RELEASE);
-        }
-        boot_log_line("pickup HUD source diagnostics SKIPPED (protect)");
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("ground pickup HUD candidate capture SKIPPED (protect)");
         return false;
-    }
-    for (std::size_t i = 0; i < kDirectSiteCount; ++i) {
-        std::memcpy(direct_sites[i] + 1, &direct_displacements[i],
-                    sizeof(direct_displacements[i]));
-        FlushInstructionCache(GetCurrentProcess(), direct_sites[i], 5);
-    }
-    std::memcpy(tail_site + 2, &tail_displacement,
-                sizeof(tail_displacement));
-    FlushInstructionCache(GetCurrentProcess(), tail_site, 6);
-    for (std::size_t i = 0; i < kDirectSiteCount; ++i) {
-        DWORD ignored = 0;
-        VirtualProtect(direct_sites[i], 5, old_protections[i], &ignored);
-    }
-    {
-        DWORD ignored = 0;
-        VirtualProtect(tail_site, 6, tail_old_protection, &ignored);
     }
     g_original_hud_draw_interactable_record =
         reinterpret_cast<FhudPublishInteractRecordFunction>(
             g_module + kFhudPublishInteractRecordRva);
+    std::memcpy(callsite + 1, &displacement, sizeof(displacement));
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(callsite, 5, old, &ignored);
     resume_suspended_process_threads(suspended_threads);
-    boot_log_line("pickup HUD exact-source diagnostics installed (5 sites)");
+    boot_log_line("ground pickup HUD candidate capture installed (exact source)");
     return true;
 }
 
@@ -25309,71 +25267,92 @@ struct NearbyGroundProcessWeapon {
     bool exact_id{false};
 };
 
-NearbyGroundProcessWeapon seh_find_nearby_ground_process_weapon(
-    void* puppet, std::uint32_t remote_id, std::uint32_t expected_art) {
-    if (puppet == nullptr || expected_art == 0 || g_module == 0) {
+struct GroundPickupHudSearchStats {
+    std::uint32_t captured{0};
+    std::uint32_t recent{0};
+    std::uint32_t live_process_weapons{0};
+    std::uint32_t matching_art{0};
+    bool ambiguous_art{false};
+};
+
+NearbyGroundProcessWeapon seh_find_ground_process_weapon_from_hud_candidates(
+    std::uint32_t remote_id, std::uint32_t expected_art,
+    GroundPickupHudSearchStats& stats) {
+    stats = {};
+    if (expected_art == 0 || g_module == 0) {
         return {};
     }
+    std::array<GroundPickupHudCandidate, kGroundPickupHudCandidateCount>
+        candidates{};
+    AcquireSRWLockShared(&g_ground_pickup_hud_candidates_lock);
+    candidates = g_ground_pickup_hud_candidates;
+    ReleaseSRWLockShared(&g_ground_pickup_hud_candidates_lock);
+
     __try {
         NearbyGroundProcessWeapon art_fallback{};
         bool ambiguous_art = false;
-        void* seen[6 * 64]{};
+        void* seen[kGroundPickupHudCandidateCount]{};
         std::size_t seen_count = 0;
-        for (std::size_t screen_index = 0; screen_index < 6; ++screen_index) {
-            const auto* const dispatcher = reinterpret_cast<const std::byte*>(
-                g_module + kPlayerInteractDispatcherBaseRva +
-                kPlayerInteractDispatcherStride * screen_index);
-            const std::uint32_t count =
-                *reinterpret_cast<const std::uint32_t*>(dispatcher);
-            if (count > 64) continue;
-            for (std::uint32_t i = 0; i < count; ++i) {
-                const auto* const entry = dispatcher + 8 + 32 * i;
-                const std::uintptr_t weak =
-                    *reinterpret_cast<const std::uintptr_t*>(entry);
-                const std::uint32_t generation =
-                    *reinterpret_cast<const std::uint32_t*>(entry + 8);
-                if (weak == 0 || generation == 0 ||
-                    readable_bytes(reinterpret_cast<const void*>(weak)) < 16) {
-                    continue;
-                }
-                void* const object = *reinterpret_cast<void**>(weak + 8);
-                if (object == nullptr || readable_bytes(object) < 0x864) continue;
-                bool duplicate = false;
-                for (std::size_t j = 0; j < seen_count; ++j) {
-                    if (seen[j] == object) {
-                        duplicate = true;
-                        break;
-                    }
-                }
-                if (duplicate) continue;
-                seen[seen_count++] = object;
-
-                const auto* const object_bytes =
-                    static_cast<const std::byte*>(object);
-                if (*reinterpret_cast<const std::uint32_t*>(
-                        object_bytes + kGameObjectRuntimeIdOffset) != generation ||
-                    *reinterpret_cast<const std::uintptr_t*>(object_bytes) !=
-                        g_module + kProcessWeaponVtableRva) {
-                    continue;
-                }
-                const std::uint32_t art =
-                    *reinterpret_cast<const std::uint32_t*>(object_bytes + 0x860);
-                const std::uint32_t stable_id =
-                    *reinterpret_cast<const std::uint32_t*>(object_bytes + 0xD8);
-                if (stable_id == 0 ||
-                    !relay_weapon_art_matches(art, expected_art)) {
-                    continue;
-                }
-                NearbyGroundProcessWeapon candidate{
-                    object, stable_id, art, stable_id == remote_id};
-                if (candidate.exact_id) return candidate;
-                if (art_fallback.object == nullptr) {
-                    art_fallback = candidate;
-                } else if (art_fallback.object != candidate.object) {
-                    ambiguous_art = true;
+        const ULONGLONG now = GetTickCount64();
+        for (const auto& captured : candidates) {
+            if (captured.weak_handle == 0 || captured.generation == 0 ||
+                captured.last_seen_ms == 0) {
+                continue;
+            }
+            ++stats.captured;
+            if (now < captured.last_seen_ms ||
+                now - captured.last_seen_ms >
+                    kGroundPickupHudCandidateMaxAgeMs) {
+                continue;
+            }
+            ++stats.recent;
+            if (readable_bytes(reinterpret_cast<const void*>(
+                    captured.weak_handle)) < 16) {
+                continue;
+            }
+            void* const object = *reinterpret_cast<void**>(
+                captured.weak_handle + 8);
+            if (object == nullptr || readable_bytes(object) < 0x864) continue;
+            bool duplicate = false;
+            for (std::size_t j = 0; j < seen_count; ++j) {
+                if (seen[j] == object) {
+                    duplicate = true;
+                    break;
                 }
             }
+            if (duplicate) continue;
+            seen[seen_count++] = object;
+
+            const auto* const object_bytes =
+                static_cast<const std::byte*>(object);
+            if (*reinterpret_cast<const std::uint32_t*>(
+                    object_bytes + kGameObjectRuntimeIdOffset) !=
+                    captured.generation ||
+                *reinterpret_cast<const std::uintptr_t*>(object_bytes) !=
+                    g_module + kProcessWeaponVtableRva) {
+                continue;
+            }
+            ++stats.live_process_weapons;
+            const std::uint32_t art =
+                *reinterpret_cast<const std::uint32_t*>(object_bytes + 0x860);
+            const std::uint32_t stable_id =
+                *reinterpret_cast<const std::uint32_t*>(object_bytes + 0xD8);
+            if (stable_id == 0 || stable_id != captured.stable_id ||
+                !relay_weapon_art_matches(art, captured.art) ||
+                !relay_weapon_art_matches(art, expected_art)) {
+                continue;
+            }
+            ++stats.matching_art;
+            NearbyGroundProcessWeapon candidate{
+                object, stable_id, art, stable_id == remote_id};
+            if (candidate.exact_id) return candidate;
+            if (art_fallback.object == nullptr) {
+                art_fallback = candidate;
+            } else if (art_fallback.object != candidate.object) {
+                ambiguous_art = true;
+            }
         }
+        stats.ambiguous_art = ambiguous_art;
         return ambiguous_art ? NearbyGroundProcessWeapon{} : art_fallback;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return {};
@@ -25396,7 +25375,7 @@ bool seh_kill_ground_process_weapon(void* object) {
     }
 }
 
-void apply_pending_world_weapon_lifecycle(void* puppet) {
+void apply_pending_world_weapon_lifecycle() {
     apply_pending_weapon_world_packet();
     PendingWorldWeaponLifecycle& pending =
         g_pending_world_weapon_lifecycle;
@@ -25406,13 +25385,14 @@ void apply_pending_world_weapon_lifecycle(void* puppet) {
     }
     const ULONGLONG now = GetTickCount64();
     if (pending.consume_pending) {
+        GroundPickupHudSearchStats stats{};
         const NearbyGroundProcessWeapon local =
-            seh_find_nearby_ground_process_weapon(
-                puppet, pending.consumed_remote_id, pending.picked_art);
+            seh_find_ground_process_weapon_from_hud_candidates(
+                pending.consumed_remote_id, pending.picked_art, stats);
         if (local.object != nullptr) {
             const bool killed = seh_kill_ground_process_weapon(local.object);
             std::ostringstream line;
-            line << "WORLD-PICKUP-CONSUME-DIRECT seq=" << pending.sequence
+            line << "WORLD-PICKUP-CONSUME-HUD seq=" << pending.sequence
                  << " remote_id=0x" << std::hex
                  << pending.consumed_remote_id << " local_id=0x"
                  << local.stable_id
@@ -25422,8 +25402,16 @@ void apply_pending_world_weapon_lifecycle(void* puppet) {
             boot_log_line(line.str().c_str());
             if (killed) pending.consume_pending = false;
         } else if (now - pending.armed_ms > 5000) {
-            boot_log_line(
-                "WORLD-PICKUP-CONSUME-DIRECT expired without a unique nearby ProcessWeapon");
+            std::ostringstream line;
+            line << "WORLD-PICKUP-CONSUME-HUD expired seq="
+                 << pending.sequence << " art=0x" << std::hex
+                 << pending.picked_art << std::dec
+                 << " captured=" << stats.captured
+                 << " recent=" << stats.recent
+                 << " live=" << stats.live_process_weapons
+                 << " matching=" << stats.matching_art
+                 << " ambiguous=" << (stats.ambiguous_art ? 1 : 0);
+            boot_log_line(line.str().c_str());
             pending.consume_pending = false;
         }
     }
@@ -31154,7 +31142,7 @@ void __fastcall hooked_update(void* object) {
                 apply_pending_weapon_world_packet();
                 apply_peer_held_weapon_state();
                 apply_peer_weapon_give();
-                apply_pending_world_weapon_lifecycle(object);
+                apply_pending_world_weapon_lifecycle();
                 apply_queued_fire_events(object);
                 apply_puppet_velocity_pre();
                 apply_puppet_aim_pre(object);
@@ -31204,7 +31192,7 @@ void __fastcall hooked_update(void* object) {
         apply_pending_weapon_world_packet();
         apply_peer_held_weapon_state();
         apply_peer_weapon_give();
-        apply_pending_world_weapon_lifecycle(object);
+        apply_pending_world_weapon_lifecycle();
         apply_queued_fire_events(object);
     }
     drive_remote_slot1_actions_tick();
@@ -39982,8 +39970,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27id "
-        "(direct nearby world consume; exact HUD source diagnostics)");
+        "TLL co-op runtime init 2026-07-27ie "
+        "(stock HUD-weak world consume; confirmed stock drop)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -40116,7 +40104,7 @@ DWORD WINAPI install_hook(void*) {
     install_get_blended_camera_gate();
     install_reticle_hud_gate();
     install_hud_draw_interactable_primary_screen_gate();
-    install_pickup_hud_source_diagnostics();
+    install_ground_pickup_hud_candidate_capture();
     // Player collision/bump probes are intentionally parked. Enabling layer 4<->5
     // collision made the two independent simulations diverge and triggered the
     // exact-position regression. Keep the reverse-engineered code for later use.

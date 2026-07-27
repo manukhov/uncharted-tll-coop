@@ -11122,3 +11122,69 @@ non-ProcessWeapon vtable. Thus the M30 satisfies every current consume predicate
 and is uniquely identifiable through the stock FHUD record, but is not owned by
 the assumed `dispatcher+0` 32-byte arrays. The failure is object-index ownership,
 not ProcessWeapon type, generation, art, stable-ID filtering, or ProcessKillTree.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `ie` consumes the exact stock HUD weak object
+
+**Hypothesis.** The confirmed `pickup-control` record is a safe receiver-local
+index for the old ground weapon. Retain only its stock weak handle/generation in
+a bounded cache, revalidate it as an exact ProcessWeapon when a flags=3 packet
+arrives, prefer an exact stable ID and otherwise require one unique matching art,
+then call the already-confirmed `ProcessKillTree`. This changes only the rejected
+consume candidate source; the confirmed raw-art sender and stock receiver drop
+remain untouched.
+
+The hypothesis meets the evidence quota with independent binary dataflow,
+consumer/lifetime, and live-object evidence:
+
+1. In `PickupInteractControl_PublishHudPrompt 0x1408AEA00`, disassembly at
+   `0x1408AEDEA..0x1408AEDFD` copies interactable `a2+0xA8/+0xBC` to a temporary
+   weak/generation pair. `0x1408AEE21` loads that pair and `0x1408AEE49` writes it
+   to stack record `rsp+0x190 + 0x18`; `0x1408AF16E` passes that exact record to
+   `FHUD_PublishInteractRecord` at `0x1408AF179`. The next branch independently
+   uses Player `a3+0xA8/+0xBC` for availability, so the record key is the
+   interactable, not the Player or screen dispatcher.
+2. `FHUD_PublishInteractRecord 0x141359470` reads record `+0x18/+0x20`, resolves
+   the object through `weak+0x8`, and accepts it only when `object+0xBC` equals the
+   copied generation (`0x1413594A8..0x1413594D4`). The independent per-frame
+   owner `FHUD_UpdateInteractScriptsAndExpire 0x141357D60` repeats the same weak
+   and generation validation at `0x141357DF9..0x141357E01` before drawing, and
+   expires invalid/stale records through `FHUD_DestroyInteractScript`. Retaining
+   this key and repeating stock validation is therefore stronger than caching a
+   raw object pointer.
+3. The `id` runtime capture resolves HUD weak `0x10E020A728:0x505` to the exact
+   surviving M30 ProcessWeapon: exact vtable `module+0x2A9BF48`, matching
+   `+0xBC=0x505`, nonzero local stable ID, and raw art `0x3019CBEE`. The other
+   live published object has a non-ProcessWeapon vtable, so the type/art gate
+   leaves one M30 candidate.
+4. The same runtime transaction proves the competing dispatcher ownership false:
+   scanning every one of the six assumed list blobs for five seconds finds no
+   candidate although the stock HUD weak key remains live and the model remains
+   visible. The error is not a transient single-screen index.
+
+Competing designs are excluded explicitly. Retrying or widening the dispatcher
+scan repeats a runtime-rejected ownership assumption. Calling
+`ResolveGameObjectHandleById` or native world Apply repeats the `ib` registry
+deadlock. A raw-pointer cache discards the generation/lifetime contract already
+provided by stock. Scanning the physical FHUD store is a later, shared copy of
+the same record and adds another ownership/layout assumption. Hooking all weapon
+constructors/destructors is much broader than the exact source already proven.
+
+Build `ie` replaces the five-site diagnostic package with one relay at
+`0x1408AF179`. It records at most 16 primary-screen candidates, admits only a
+generation-valid exact ProcessWeapon with nonzero stable ID and art, refreshes a
+15-second age, and revalidates weak pointer, generation, vtable, stable ID and art
+at consume time. Exact local/remote stable ID wins; otherwise more than one live
+same-art object rejects the operation. The expiry marker reports captured,
+recent, live, matching and ambiguous counts. Release compilation and linking
+succeed.
+
+**Falsifiable `ie` prediction.** Before replacement, approaching the M30 must
+emit one bounded `PICKUP-HUD-CANDIDATE ... art=0x3019cbee`. Replacing it with
+Mazur must retain the confirmed flags=3 sender and
+`WORLD-PICKUP-DROP-EXISTING ... gave=1 detached=1 slotReleased=1`, and additionally
+emit exactly one receiver `WORLD-PICKUP-CONSUME-HUD ... match=unique-art killed=1`
+(or `stable-id` if IDs coincide). Visually the old M30 must disappear and exactly
+one Mazur must remain, with no freeze, crash, duplicated prompt, or weapon. An
+expiry with `captured=0` rejects source timing; `live=0` rejects weak lifetime;
+`matching=0` rejects art correspondence; `ambiguous=1` confirms the safety gate
+rather than authorizing a guess.

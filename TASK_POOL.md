@@ -99,6 +99,14 @@
       `pickup-control 0x1408AF179` weak record resolves to the surviving local
       M30 with matching generation, ProcessWeapon vtable and art. Replace only
       the consume candidate source; retain the confirmed sender/drop path.
+- [ ] **`ie` STATIC / IMPLEMENTED, runtime pending:** cache only the exact
+      `pickup-control 0x1408AF179` interactable weak/generation key after primary-
+      screen, exact-ProcessWeapon, stable-ID and art validation. Revalidate stock
+      `weak+0x8` and `object+0xBC` at flags=3 consume; prefer exact stable ID and
+      otherwise require one unique same-art candidate observed within 15 seconds.
+      The four rejected generic/tail HUD diagnostics are removed. Run the written
+      `ie` prediction: M30 candidate marker, `WORLD-PICKUP-CONSUME-HUD ...
+      killed=1`, confirmed stock Mazur drop, and no old M30/duplicate/crash.
 
 ## P0: Full Player Synchronization (CURRENT)
 

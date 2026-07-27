@@ -1406,11 +1406,12 @@ FUNCTIONS = {
         "Shared vtable +0xE0 entry in many interact-control classes. Confirmed "
         "aliases include CarryObjectInteractControl (0x1429B6878), the true "
         "PickupInteractControl vtable (0x1429B9840), WeaponInteractControl "
-        "(0x1429BF4A8), and WeaponPickupInteractControl (0x142AA6E90). a3 is "
-        "the Player GameObject; the function builds its "
-        "+0xA8/+0xBC handle, resolves a HUD index through player-manager vtable "
-        "+0xD0 (not Player+0x4010), then refreshes the four-slot FHUD interact "
-        "store through 0x141359470.",
+        "(0x1429BF4A8), and WeaponPickupInteractControl (0x142AA6E90). a2 is "
+        "the interactable GameObject and a3 is the Player: the record's "
+        "+0x18/+0x20 weak key is copied from a2+0xA8/a2+0xBC. The Player handle "
+        "selects a HUD index through player-manager vtable +0xD0 (not "
+        "Player+0x4010), then call 0x1408AF179 refreshes the four-slot FHUD "
+        "interact store through 0x141359470.",
     ),
     0x140328C20: (
         "HudScript_DrawInteractableOnObject",
@@ -1422,9 +1423,11 @@ FUNCTIONS = {
     0x141359470: (
         "FHUD_PublishInteractRecord",
         "Common FHUD interact-record publisher. Validates a record object weak "
-        "handle at +0x18/+0x20 when present, recognizes WeaponPickup, and "
-        "otherwise forwards fallback-keyed records to the physical HUD store. "
-        "The hud-draw-interactable-on-object callsite is 0x1403290FD.",
+        "handle at +0x18/+0x20 by resolving weak+0x8 and comparing "
+        "object+0xBC, recognizes WeaponPickup, and otherwise forwards "
+        "fallback-keyed records to the physical HUD store. The authored ground "
+        "weapon source callsite is 0x1408AF179; the script fallback callsite is "
+        "0x1403290FD.",
     ),
     0x1413B48A0: (
         "FHUD_PublishInteractRecordIfScreenEnabled",
