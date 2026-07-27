@@ -1377,6 +1377,18 @@ FUNCTIONS = {
         "Stock frame wrapper: prerequisite, Hud_UpdateForScreen(screen 0), then "
         "the HUD frame finalizer. It does not update the screen-1 Hud object.",
     ),
+    0x141355D00: (
+        "FHUD_InitializePerScreenHudFlash",
+        "Initializes one per-screen HudFlash state from state+0xF0, resets four "
+        "0x710-stride physical interact records, and registers reload/start/stop "
+        "movie observers. Startup calls it once for screen 0 and once for screen 1.",
+    ),
+    0x1413569E0: (
+        "FHUD_UpdateScreen0HudFlashFrame",
+        "Screen-0 HudFlash frame owner. Updates screen-0 HUD state and calls "
+        "FHUD_UpdateInteractScriptsAndExpire at 0x141356BF1; that callee's stock "
+        "expiry is the sole caller of FHUD_DestroyInteractScript.",
+    ),
     0x140DCDEA0: (
         "Player_ScriptWeaponEventHandler",
         "Player script-event handler (switch on event name-hash). Hash 0xFB1091A3 "

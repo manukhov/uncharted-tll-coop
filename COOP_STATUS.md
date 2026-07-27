@@ -11840,3 +11840,55 @@ Type-97 (or other never-published receiver pickup) must be removed with
 `source=fg-pool killed=1`; ambiguous same-art candidates must expire without a
 kill. All successful replacements must preserve `gave=1 detached=1
 slotReleased=1`, and neither copy may enter the rejected registry wait.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `in` moves exact prompt destruction onto the stock HudFlash owner thread
+
+The earlier `ig/ih` cleanup proved exact identity selection but performed the
+Flash lifetime mutation from the retained Player/world update. It reported
+`hudWeakMatched=1 hudMapMatched=1 hudDestroyed=1`, yet the visible M30 prompt
+survived and a later crash remained unlocalized. Build `in` preserves the exact
+four-slot selector but queues the consumed identity; it calls stock
+`FHUD_DestroyInteractScript 0x141357CA0` only when the screen-0 HudFlash reaches
+its own exact frame callsite `0x141356BF1`.
+
+Three independent evidence kinds establish this ownership boundary:
+
+1. The sole code xref to `FHUD_UpdateInteractScriptsAndExpire 0x141357D60` is
+   the direct call at `0x141356BF1` inside
+   `FHUD_UpdateScreen0HudFlashFrame 0x1413569E0`. The surrounding function reads
+   only the screen-0 HudFlash store, publishes screen-0 HUD flags and is reached
+   by `Hud_UpdateScreen0Frame 0x1413538B0`.
+2. `FHUD_UpdateInteractScriptsAndExpire` owns all four `0x710`-stride records,
+   validates their weak keys and active Flash processes, updates refreshed
+   records, and invokes `FHUD_DestroyInteractScript` at `0x141357F78` when a
+   script expires. That is the destroyer's only code caller.
+3. `FHUD_DestroyInteractScript` kills the active Flash Process, clears the slot
+   active field and calls `FHUD_ResetInteractRecord 0x141353750`. The previous
+   runtime exact match proves the selected weak and typed
+   `{interact-id,pickup-weapon-id}` identities are sufficient; its failure to
+   clear the display despite a successful return isolates execution ownership,
+   rather than identity, as the remaining difference from stock expiry.
+
+Competing hypotheses remain explicit. A higher copied Flash view would survive
+even the same-thread native destroy. A second store also exists: startup calls
+`FHUD_InitializePerScreenHudFlash 0x141355D00` for both state bases, whose store
+pointers are `0x143EF1F20` (screen 0) and `0x143EF2020` (screen 1). However the
+stock destroy and per-frame interact updater are hard-wired to the primary
+store, while prior exact-source runtime rows passed the primary state. `in`
+therefore records exact weak/map matches in the secondary store but never
+mutates it. Broad art-only deletion and cross-store manual ProcessKillTree remain
+rejected.
+
+The queued request is protected by an SRW lock and expires after five seconds.
+The HUD wrapper scans by raw weak/generation or a live typed map pair, destroys
+only the selected primary mask before the stock updater runs, and then forwards
+the original call unchanged. There is no publisher suppression, registry lookup,
+manual ResetInteractRecord, or Player-thread Flash call.
+
+**Falsifiable `in` prediction:** after a receiver ground model reports
+`WORLD-PICKUP-CONSUME ... killed=1 hudOwnerQueued=1`, the next screen-0 HUD frame
+must emit `PICKUP-HUD-OWNER-CLEANUP` with the exact local ID/art and normally
+`primarySelected=1 destroyed=1`. The stale M30 prompt must disappear while the
+new Mazur prompt remains, and neither copy may crash. `primarySelected=0` with a
+secondary match selects the second-store alternative; `destroyed=1` with a
+surviving prompt rejects thread ownership and selects a higher Flash view/cache.

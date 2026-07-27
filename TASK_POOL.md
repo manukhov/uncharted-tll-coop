@@ -2604,9 +2604,13 @@ Do not reopen these as the first move:
       handle, exact ProcessWeapon vtable/art, world-unparented ownership and an
       exact stable ID or unique-art fallback. Broad heap/registry scans remain
       forbidden. Release build compiles; run the written `im` discriminator.
-- [ ] Keep the Chloe stale pickup icon separate. `ik` deliberately has
-      `hudMutation=disabled`; checkpoint reset remains the only confirmed clearing
-      boundary above the rejected four-slot FHUD owner.
+- [x] Implement `in` owner-thread HUD cleanup. The old exact slot selection is
+      retained, but no Flash lifetime call runs from the retained Player/world
+      update. Queue the consumed identity and invoke stock
+      `FHUD_DestroyInteractScript` only from its exact screen-0 HudFlash frame
+      owner at callsite `0x141356BF1`; census the independently initialized
+      screen-1 store read-only. Release build compiles and awaits the written
+      prompt/crash discriminator.
 
 ## Rule
 

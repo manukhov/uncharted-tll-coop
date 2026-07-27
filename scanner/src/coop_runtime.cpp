@@ -25549,6 +25549,323 @@ struct GroundPickupFgPoolSearchStats {
     bool ambiguous_art{false};
 };
 
+constexpr std::size_t kFhudInteractSlotCount = 4;
+constexpr std::size_t kFhudInteractSlotStride = 0x710;
+constexpr std::size_t kFhudInteractScriptWeakOffset = 0x1F8;
+constexpr std::size_t kFhudInteractParameterMapOffset = 0x808;
+constexpr std::size_t kFhudInteractRecordOffset = 0x830;
+constexpr std::uint32_t kFhudInteractIdStringId = 0x13DD0384;
+constexpr std::uint32_t kFhudPickupWeaponIdStringId = 0x5458E271;
+
+struct ConsumedPickupFhudSelection {
+    std::uint8_t slot_mask{0};
+    std::uint32_t weak_matches{0};
+    std::uint32_t map_matches{0};
+    std::uint32_t selected{0};
+};
+
+struct PendingFhudOwnerCleanup {
+    bool active{false};
+    std::uint32_t sequence{0};
+    std::uintptr_t weak_handle{0};
+    std::uint32_t generation{0};
+    std::uint32_t stable_id{0};
+    std::uint32_t art{0};
+    ULONGLONG armed_ms{0};
+};
+
+SRWLOCK g_pending_fhud_owner_cleanup_lock = SRWLOCK_INIT;
+PendingFhudOwnerCleanup g_pending_fhud_owner_cleanup{};
+
+void arm_pending_fhud_owner_cleanup(
+    std::uint32_t sequence, const NearbyGroundProcessWeapon& local) {
+    PendingFhudOwnerCleanup cleanup{};
+    cleanup.active = sequence != 0 && local.weak_handle != 0 &&
+        local.generation != 0 && local.stable_id != 0 && local.art != 0;
+    cleanup.sequence = sequence;
+    cleanup.weak_handle = local.weak_handle;
+    cleanup.generation = local.generation;
+    cleanup.stable_id = local.stable_id;
+    cleanup.art = local.art;
+    cleanup.armed_ms = GetTickCount64();
+    AcquireSRWLockExclusive(&g_pending_fhud_owner_cleanup_lock);
+    g_pending_fhud_owner_cleanup = cleanup;
+    ReleaseSRWLockExclusive(&g_pending_fhud_owner_cleanup_lock);
+}
+
+bool snapshot_pending_fhud_owner_cleanup(PendingFhudOwnerCleanup& cleanup) {
+    AcquireSRWLockShared(&g_pending_fhud_owner_cleanup_lock);
+    cleanup = g_pending_fhud_owner_cleanup;
+    ReleaseSRWLockShared(&g_pending_fhud_owner_cleanup_lock);
+    return cleanup.active;
+}
+
+void complete_pending_fhud_owner_cleanup(std::uint32_t sequence) {
+    AcquireSRWLockExclusive(&g_pending_fhud_owner_cleanup_lock);
+    if (g_pending_fhud_owner_cleanup.active &&
+        g_pending_fhud_owner_cleanup.sequence == sequence) {
+        g_pending_fhud_owner_cleanup = {};
+    }
+    ReleaseSRWLockExclusive(&g_pending_fhud_owner_cleanup_lock);
+}
+
+bool seh_fhud_boxed_u32_map_value(
+    const std::byte* map, std::uint32_t key, std::uint32_t& value) {
+    value = 0;
+    if (map == nullptr || readable_bytes(map) < 24) return false;
+    __try {
+        const std::uintptr_t entries =
+            *reinterpret_cast<const std::uintptr_t*>(map);
+        const std::uint64_t capacity =
+            *reinterpret_cast<const std::uint64_t*>(map + 8);
+        const std::uint64_t size =
+            *reinterpret_cast<const std::uint64_t*>(map + 16);
+        if (entries == 0 || size == 0 || size > capacity || size > 256 ||
+            readable_bytes(reinterpret_cast<const void*>(entries)) < size * 24) {
+            return false;
+        }
+        std::uint64_t first = 0;
+        std::uint64_t count = size;
+        while (count != 0) {
+            const std::uint64_t step = count / 2;
+            const std::uint64_t index = first + step;
+            const auto* const entry =
+                reinterpret_cast<const std::byte*>(entries) +
+                static_cast<std::size_t>(index) * 24;
+            if (*reinterpret_cast<const std::uint32_t*>(entry) < key) {
+                first = index + 1;
+                count -= step + 1;
+            } else {
+                count = step;
+            }
+        }
+        if (first >= size) return false;
+        const auto* const entry =
+            reinterpret_cast<const std::byte*>(entries) +
+            static_cast<std::size_t>(first) * 24;
+        if (*reinterpret_cast<const std::uint32_t*>(entry) != key ||
+            *reinterpret_cast<const std::uint32_t*>(entry + 20) != 3) {
+            return false;
+        }
+        const std::uint64_t boxed_value =
+            *reinterpret_cast<const std::uint64_t*>(entry + 8);
+        if (boxed_value > UINT32_MAX) return false;
+        value = static_cast<std::uint32_t>(boxed_value);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_fhud_slot_has_live_script(const std::byte* slot) {
+    if (slot == nullptr) return false;
+    __try {
+        const auto* const script_weak =
+            slot + kFhudInteractScriptWeakOffset;
+        const std::uintptr_t weak_handle =
+            *reinterpret_cast<const std::uintptr_t*>(script_weak);
+        const std::uint32_t generation =
+            *reinterpret_cast<const std::uint32_t*>(script_weak + 8);
+        if (weak_handle == 0 || generation == 0 ||
+            readable_bytes(reinterpret_cast<const void*>(weak_handle)) < 16) {
+            return false;
+        }
+        const void* const process =
+            *reinterpret_cast<void* const*>(weak_handle + 8);
+        return process != nullptr && readable_bytes(process) >= 0xC0 &&
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(process) +
+                kGameObjectRuntimeIdOffset) == generation;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_select_consumed_pickup_fhud_slots(
+    void* store, const PendingFhudOwnerCleanup& pending,
+    ConsumedPickupFhudSelection& selection) {
+    selection = {};
+    if (store == nullptr || pending.weak_handle == 0 ||
+        pending.generation == 0 || pending.stable_id == 0 ||
+        pending.art == 0 || readable_bytes(store) < 0x1E00) {
+        return false;
+    }
+    __try {
+        for (std::uint32_t slot_index = 0;
+             slot_index < kFhudInteractSlotCount; ++slot_index) {
+            const auto* const slot = static_cast<const std::byte*>(store) +
+                static_cast<std::size_t>(slot_index) * kFhudInteractSlotStride;
+            const auto* const record = slot + kFhudInteractRecordOffset;
+            const std::uintptr_t record_weak =
+                *reinterpret_cast<const std::uintptr_t*>(record + 0x18);
+            const std::uint32_t record_generation =
+                *reinterpret_cast<const std::uint32_t*>(record + 0x20);
+            const bool weak_match =
+                record_weak == pending.weak_handle &&
+                record_generation == pending.generation;
+            if (weak_match) ++selection.weak_matches;
+
+            std::uint32_t map_stable_id = 0;
+            std::uint32_t map_art = 0;
+            const bool map_match = seh_fhud_slot_has_live_script(slot) &&
+                seh_fhud_boxed_u32_map_value(
+                    slot + kFhudInteractParameterMapOffset,
+                    kFhudInteractIdStringId, map_stable_id) &&
+                seh_fhud_boxed_u32_map_value(
+                    slot + kFhudInteractParameterMapOffset,
+                    kFhudPickupWeaponIdStringId, map_art) &&
+                map_stable_id == pending.stable_id &&
+                relay_weapon_art_matches(map_art, pending.art);
+            if (map_match) ++selection.map_matches;
+            if (weak_match || map_match) {
+                selection.slot_mask |=
+                    static_cast<std::uint8_t>(1u << slot_index);
+                ++selection.selected;
+            }
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        selection = {};
+        return false;
+    }
+}
+
+bool seh_destroy_selected_primary_fhud_slots(
+    std::uint8_t slot_mask, std::uint32_t& destroyed) {
+    destroyed = 0;
+    if (g_module == 0 || slot_mask == 0) return false;
+    __try {
+        void* const primary_store = *reinterpret_cast<void**>(
+            g_module + kFhudPhysicalInteractStorePtrRva);
+        if (primary_store == nullptr || readable_bytes(primary_store) < 0x1E00) {
+            return false;
+        }
+        using DestroyFn = std::int64_t(__fastcall*)(void*, std::uint32_t);
+        const auto destroy = reinterpret_cast<DestroyFn>(
+            g_module + kFhudDestroyInteractScriptRva);
+        for (std::uint32_t slot = 0; slot < kFhudInteractSlotCount; ++slot) {
+            if ((slot_mask & (1u << slot)) == 0) continue;
+            destroy(primary_store, slot);
+            ++destroyed;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+using FhudUpdateInteractScriptsFunction = std::int64_t(__fastcall*)();
+FhudUpdateInteractScriptsFunction g_original_fhud_update_interact_scripts =
+    nullptr;
+
+bool seh_get_fhud_interact_stores(void*& primary, void*& secondary) {
+    primary = nullptr;
+    secondary = nullptr;
+    if (g_module == 0) return false;
+    __try {
+        primary = *reinterpret_cast<void**>(
+            g_module + kFhudPhysicalInteractStorePtrRva);
+        secondary = *reinterpret_cast<void**>(
+            g_module + kFhudSecondaryInteractStorePtrRva);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        primary = nullptr;
+        secondary = nullptr;
+        return false;
+    }
+}
+
+std::int64_t __fastcall hooked_fhud_update_interact_scripts() {
+    PendingFhudOwnerCleanup pending{};
+    if (snapshot_pending_fhud_owner_cleanup(pending) && g_module != 0) {
+        void* primary_store = nullptr;
+        void* secondary_store = nullptr;
+        seh_get_fhud_interact_stores(primary_store, secondary_store);
+        ConsumedPickupFhudSelection primary{};
+        ConsumedPickupFhudSelection secondary{};
+        const bool primary_scanned = seh_select_consumed_pickup_fhud_slots(
+            primary_store, pending, primary);
+        const bool secondary_scanned = seh_select_consumed_pickup_fhud_slots(
+            secondary_store, pending, secondary);
+        const ULONGLONG now = GetTickCount64();
+        std::uint32_t destroyed = 0;
+        const bool cleanup_ran = primary.selected != 0 &&
+            seh_destroy_selected_primary_fhud_slots(
+                primary.slot_mask, destroyed);
+        static std::uint32_t last_wait_sequence = 0;
+        if (cleanup_ran || now - pending.armed_ms > 5000) {
+            std::ostringstream line;
+            line << "PICKUP-HUD-OWNER-CLEANUP seq=" << pending.sequence
+                 << " local_id=0x" << std::hex << pending.stable_id
+                 << " art=0x" << pending.art << std::dec
+                 << " latencyMs=" << (now - pending.armed_ms)
+                 << " primaryScanned=" << (primary_scanned ? 1 : 0)
+                 << " primaryWeak=" << primary.weak_matches
+                 << " primaryMap=" << primary.map_matches
+                 << " primarySelected=" << primary.selected
+                 << " destroyed=" << destroyed
+                 << " secondaryScanned=" << (secondary_scanned ? 1 : 0)
+                 << " secondaryWeak=" << secondary.weak_matches
+                 << " secondaryMap=" << secondary.map_matches
+                 << " secondarySelected=" << secondary.selected
+                 << " expired=" << (cleanup_ran ? 0 : 1);
+            boot_log_line(line.str().c_str());
+            complete_pending_fhud_owner_cleanup(pending.sequence);
+            last_wait_sequence = pending.sequence;
+        } else if (last_wait_sequence != pending.sequence) {
+            last_wait_sequence = pending.sequence;
+            std::ostringstream line;
+            line << "PICKUP-HUD-OWNER-WAIT seq=" << pending.sequence
+                 << " primaryScanned=" << (primary_scanned ? 1 : 0)
+                 << " primarySelected=" << primary.selected
+                 << " secondaryScanned=" << (secondary_scanned ? 1 : 0)
+                 << " secondarySelected=" << secondary.selected;
+            boot_log_line(line.str().c_str());
+        }
+    }
+    return g_original_fhud_update_interact_scripts != nullptr
+        ? g_original_fhud_update_interact_scripts()
+        : 0;
+}
+
+bool install_fhud_owner_thread_cleanup() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kFhudUpdateInteractScriptsCallsiteRva,
+            kFhudUpdateInteractScriptsRva,
+            reinterpret_cast<const void*>(&hooked_fhud_update_interact_scripts),
+            callsite, relay, displacement)) {
+        boot_log_line("FHUD owner-thread cleanup SKIPPED (preflight)");
+        return false;
+    }
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("FHUD owner-thread cleanup SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD old = 0;
+    if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("FHUD owner-thread cleanup SKIPPED (protect)");
+        return false;
+    }
+    g_original_fhud_update_interact_scripts =
+        reinterpret_cast<FhudUpdateInteractScriptsFunction>(
+            g_module + kFhudUpdateInteractScriptsRva);
+    std::memcpy(callsite + 1, &displacement, sizeof(displacement));
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(callsite, 5, old, &ignored);
+    resume_suspended_process_threads(suspended_threads);
+    boot_log_line(
+        "FHUD owner-thread cleanup installed (screen-0 exact slots)");
+    return true;
+}
+
 NearbyGroundProcessWeapon seh_find_ground_process_weapon_from_hud_candidates(
     std::uint32_t remote_id, std::uint32_t expected_art,
     GroundPickupHudSearchStats& stats) {
@@ -25813,6 +26130,9 @@ void apply_pending_world_weapon_lifecycle() {
         }
         if (local.object != nullptr) {
             const bool killed = seh_kill_ground_process_weapon(local.object);
+            if (killed) {
+                arm_pending_fhud_owner_cleanup(pending.sequence, local);
+            }
             std::ostringstream line;
             line << "WORLD-PICKUP-CONSUME seq=" << pending.sequence
                  << " source=" << source
@@ -25823,7 +26143,7 @@ void apply_pending_world_weapon_lifecycle() {
                  << " latencyMs=" << (now - pending.armed_ms)
                  << " match=" << (local.exact_id ? "stable-id" : "unique-art")
                  << " killed=" << (killed ? 1 : 0)
-                 << " hudMutation=disabled";
+                 << " hudOwnerQueued=" << (killed ? 1 : 0);
             boot_log_line(line.str().c_str());
             if (killed) pending.consume_pending = false;
         } else if (fg_scan_attempted && now - pending.armed_ms > 5000) {
@@ -40681,8 +41001,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27im "
-        "(latched reload/release relay; action-entry timing)");
+        "TLL co-op runtime init 2026-07-27in "
+        "(stock world pickup targeting; HUD-owner exact cleanup)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -40818,6 +41138,7 @@ DWORD WINAPI install_hook(void*) {
     install_reticle_hud_gate();
     install_hud_draw_interactable_primary_screen_gate();
     install_ground_pickup_hud_candidate_capture();
+    install_fhud_owner_thread_cleanup();
     // Player collision/bump probes are intentionally parked. Enabling layer 4<->5
     // collision made the two independent simulations diverge and triggered the
     // exact-position regression. Keep the reverse-engineered code for later use.
