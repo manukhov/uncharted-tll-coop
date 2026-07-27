@@ -159,7 +159,17 @@
       retained Player slot 1 during the live drop deadline and logs one
       STATE-FORCE per reached event. Test ten numbered releases. 10/10 closes
       the lifecycle; a failed number with STATE-FORCE selects downstream context,
-      while failure without it selects a pre-third handler branch.
+      while failure without it selects a pre-third handler branch. **RUNTIME
+      PARTIAL (`hv`):** four-or-five attempts produced two visual failures but
+      only two sender DROP-SEND events; both published events reached receiver
+      LATCH and both Joypad FORCE queries, while neither took the third state
+      branch. The residual loss is therefore before publication, not at the
+      new consumer. **IMPLEMENTED `hw`:** the sender now captures a true local
+      exact-drop result at the two confirmed PlayerEdge Joypad return RVAs or
+      the third PlayerInput callsite and holds only the protocol event for 250
+      ms. This bridges the one-frame native command across the 60-Hz sender
+      sampler without broad physical-button capture. Test ten numbered releases;
+      each must log LOCAL-CAPTURE -> SEND -> LATCH and fall once.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw

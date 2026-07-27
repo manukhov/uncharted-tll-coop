@@ -244,6 +244,7 @@ PlayerInputIsCommandActiveFunction
 PlayerInputIsCommandActiveFunction
     g_original_player_edge_drop_callsite_is_command_active = nullptr;
 constexpr std::uint32_t kEdgeDropCommandHash = 0x28DCC05A;
+std::atomic<ULONGLONG> g_local_edge_drop_send_until_ms{0};
 using FastGrenadeCanStartFunction = bool(__fastcall*)(void*);
 using FastGrenadeStartFunction = std::int64_t(__fastcall*)(void*);
 using FastGrenadeResetFunction = std::int64_t(__fastcall*)(void*);
@@ -1938,6 +1939,19 @@ void* player_joypad_object(void* player) {
                static_cast<std::uintptr_t>(joypad_index);
 }
 
+void latch_local_player_edge_drop(const char* source) {
+    constexpr ULONGLONG kLocalEdgeDropSendWindowMs = 250;
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG previous_until =
+        g_local_edge_drop_send_until_ms.exchange(
+            now + kLocalEdgeDropSendWindowMs, std::memory_order_acq_rel);
+    if (previous_until <= now) {
+        std::ostringstream line;
+        line << "TRAVERSAL-EDGE-DROP-LOCAL-CAPTURE source=" << source;
+        boot_log_line(line.str().c_str());
+    }
+}
+
 bool safe_query_local_grenade_arc(void* joypad) {
     if (joypad == nullptr || g_original_joypad_is_command_active == nullptr) {
         return false;
@@ -2100,6 +2114,20 @@ char __fastcall hooked_joypad_is_command_active(
     }
     const char original =
         g_original_joypad_is_command_active(joypad, hash, edge);
+    if (original && joypad != nullptr && g_module != 0 &&
+        hash == kEdgeDropCommandHash && edge == 0 &&
+        joypad == player_joypad_object(retained_player_object(0))) {
+        const std::uintptr_t return_address =
+            reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+        const std::uintptr_t return_rva =
+            return_address >= g_module ? return_address - g_module : 0;
+        if (return_rva ==
+                kPlayerEdgeDropJoypadIsCommandActiveCallsiteARva + 5 ||
+            return_rva ==
+                kPlayerEdgeDropJoypadIsCommandActiveCallsiteBRva + 5) {
+            latch_local_player_edge_drop("joypad");
+        }
+    }
     if (original && g_enable_puppet_melee_callsite_relay && joypad != nullptr &&
         g_module != 0 && hash == melee_relay_hashes().square) {
         void* const local_player = retained_player_object(0);
@@ -2281,6 +2309,13 @@ char __fastcall hooked_player_edge_drop_command_callsite(
     }
     auto* const player =
         static_cast<std::byte*>(state) - kPlayerInputCommandStateOffset;
+    if (player == static_cast<std::byte*>(retained_player_object(0))) {
+        const char original = call_original();
+        if (original) {
+            latch_local_player_edge_drop("state");
+        }
+        return original;
+    }
     if (player != static_cast<std::byte*>(retained_player_object(1))) {
         return call_original();
     }
@@ -13006,7 +13041,13 @@ std::uint64_t merge_authored_traversal_button_mask(
     }
     // PlayerEdgeState_HandleDrop consumes this exact held command at three
     // independent callsites before publishing the edge-release transition.
-    const bool edge_drop_active = is_active(joypad, kEdgeDropHash, 0) != 0;
+    const bool edge_drop_native_active =
+        is_active(joypad, kEdgeDropHash, 0) != 0;
+    const bool edge_drop_event_latched =
+        GetTickCount64() <
+        g_local_edge_drop_send_until_ms.load(std::memory_order_acquire);
+    const bool edge_drop_active =
+        edge_drop_native_active || edge_drop_event_latched;
     static bool edge_drop_was_active = false;
     if (edge_drop_active != edge_drop_was_active) {
         edge_drop_was_active = edge_drop_active;
@@ -38578,7 +38619,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27hv "
+        "TLL co-op runtime init 2026-07-27hw "
         "(retained Player native grenade owns physics)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

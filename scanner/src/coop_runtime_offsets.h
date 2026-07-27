@@ -162,6 +162,13 @@ constexpr std::uintptr_t kPlayerInputCommandStateIsCommandActiveRva = 0x1E39D50;
 // therefore needs its own retained-puppet callsite relay.
 constexpr std::uintptr_t kPlayerEdgeDropInputIsCommandActiveCallsiteRva =
     0x133405C;
+// The two earlier exact `drop`, edge=0 calls inside the same handler query
+// Joypad directly. Their return addresses scope sender event capture to the
+// native Player::Edge consumer rather than the generic physical binding.
+constexpr std::uintptr_t kPlayerEdgeDropJoypadIsCommandActiveCallsiteARva =
+    0x1333301;
+constexpr std::uintptr_t kPlayerEdgeDropJoypadIsCommandActiveCallsiteBRva =
+    0x1333463;
 // Exact grenade command consumers. The scheduler entry and its state-1/state-2/
 // state-4 hold/release updates all call PlayerInputCommandState_IsCommandActive
 // directly. Relaying only these E8 sites avoids FastGrenadeController +0xA0,

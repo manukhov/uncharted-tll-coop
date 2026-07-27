@@ -10308,3 +10308,52 @@ may need only the two Joypad consumers. A visual failure with STATE-FORCE
 selects downstream edge context/action; a failure with LATCH but no STATE-FORCE
 selects a pre-third handler branch. There must be no crouch/roll, spontaneous
 release, or second fall after the 400 ms deadline.
+
+### 2026-07-27 RUNTIME PARTIAL / STATIC FIX: capture drop at the local consumer (`hw`)
+
+The user performed four or five `hv` attempts and reports that attempts 2 and
+4-or-5 failed. The decisive log fact is earlier than any receiver gate: only two
+local `TRAVERSAL-EDGE-DROP-SEND rise` events exist. Both reached the other copy
+as LATCH (sequences 392 and 923) and both reached the two exact Joypad FORCE
+queries. No STATE-FORCE row appeared, so this particular edge geometry never
+visited the third PlayerInput branch. `hv` remains a correct relay for that
+branch but cannot repair a physical release that never entered the packet.
+
+Three independent facts identify a sender-side sampling race:
+
+1. The visual test contains at least four local releases but the sender emitted
+   only two exact `drop` rises. Receiver transport, context and fall actions
+   cannot remove a sender log line that is created before `sendto`.
+2. `send_local_player_state` calls `capture_peer_send_button_mask` only from the
+   roughly 60-Hz `net_tick`. Its exact `drop` query therefore samples a held
+   level once per 16 ms. The engine can consume a one-frame command between two
+   such samples; the existing receiver latch begins only after a sampled packet
+   and cannot recover that event.
+3. The native handler itself provides lossless semantic boundaries. Direct
+   Joypad calls at `0x141333301` and `0x141333463` return through the globally
+   installed Joypad hook, while the third exact call at `0x14133405C` already
+   passes through the new callsite wrapper. Their local Player result is the
+   command the game actually consumed, independent of the later network clock.
+
+Competing explanations are separated. **T2:** an alternate non-`drop` release
+path predicts a local fall without any of the three scoped consumer captures;
+the new LOCAL-CAPTURE marker tests it directly. **T3:** receiver handler/context
+failure predicts SEND and LATCH for a failed attempt, contradicted by the
+missing sender events here. **T4:** further receiver-window widening cannot
+create a packet for an event missed before publication.
+
+Build `hw` arms a sender-only 250 ms deadline when the local Player receives a
+true exact `drop`, `edge=0` result at either PlayerEdge Joypad return address or
+the exact PlayerInput callsite. Generic uses of the same physical binding do not
+arm it: Joypad capture is restricted by both local Joypad identity and the two
+confirmed return RVAs. `merge_authored_traversal_button_mask` publishes the
+dedicated intent while this deadline is live, yielding multiple 60-Hz packets.
+The receiver 400 ms latch and all three exact consumers remain unchanged.
+
+**Falsifiable `hw` prediction:** every local PlayerEdge release produces
+LOCAL-CAPTURE, then SEND, receiver LATCH and at least the applicable exact FORCE
+queries. Ten numbered attempts must release the remote ten times. A local fall
+without LOCAL-CAPTURE selects T2; LOCAL-CAPTURE without SEND selects sender
+merge/publication; SEND+LATCH with a visual failure returns investigation to the
+handler/fall/action discriminator. No event may be emitted for ordinary crouch
+outside PlayerEdge, and no second release may occur after the 250/400 ms windows.
