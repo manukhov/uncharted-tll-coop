@@ -10710,3 +10710,16 @@ bounded suppress/destroy markers while a local refresh for the same key prevents
 destruction. A crash before interaction rejects the exact-callsite/vtable
 packaging; stable boot but wrong M30/Mazur or prompt behavior rejects the
 corresponding lifecycle or ownership branch independently.
+
+### 2026-07-27 RUNTIME CONFIRMED: `ia` exact-callsite packaging survives cold A/B boot
+
+Fresh copies PID 15724 and PID 21884 loaded build `ia`. PID 15724 selected role A
+(local Chloe), PID 21884 selected role B (local Nadine), and both reported
+`WeaponInteractControl exact-callsite consume/drop relay installed` plus
+`weapon-pickup dual-vtable ownership and FHUD callsite cleanup installed` with no
+`SKIPPED` or `incomplete` row. After more than 30 seconds without an interaction,
+both processes remained alive and responsive and the crash observer emitted no
+exception. This confirms the pre-interaction stability prediction and separates
+the new exact-callsite/vtable packaging from the runtime-rejected `hz` global
+entry detours. Ground consume/drop correctness and prompt ownership remain
+unconfirmed until the written interaction tests run.

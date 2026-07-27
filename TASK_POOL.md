@@ -35,8 +35,11 @@
 - [x] **`ia` STATIC / IMPLEMENTED:** repackage source kill, old detach and FHUD
       update at exact callsites `0x141506839`, `0x1410A68AC`, `0x141356BF1`, and
       patch both concrete weapon HUD vtable slots `0x1429BF588`, `0x142AA6F70`.
-- [ ] Runtime-check the written `ia` prediction in two phases: stable A/B boot
-      first, then M30/Mazur consume/drop and Chloe/Nadine prompt ownership.
+- [x] **`ia` runtime CONFIRMED (boot phase):** fresh A/Chloe PID 15724 and
+      B/Nadine PID 21884 remained responsive for 30+ seconds with both exact
+      installers active and no crash-observer exception.
+- [ ] Runtime-check the remaining `ia` interaction phase: M30/Mazur consume/drop
+      in both directions and Chloe/Nadine prompt ownership/expiry.
 
 ## P0: Full Player Synchronization (CURRENT)
 
