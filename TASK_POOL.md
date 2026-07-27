@@ -1875,6 +1875,15 @@ Do not reopen these as the first move:
       `ix` removes the sampler completely. Next discriminator must capture
       arguments at a proven native writer/callsite; do not traverse the late
       FgAnim/wrist pointers from the post-update hook again.
+- [x] Verify the `ix` rollback independently. Chloe's normal animation returned,
+      while her remote vertical weapon pose still followed Nadine's local
+      non-ADS camera. PID 15396 simultaneously logged peer-correct native
+      `UD=0/0.1055` over local `UD=0/0.0338`, so rollback and original pitch leak
+      are separate.
+- [ ] Select the next discriminator statically at an existing native writer or
+      exact callsite with live arguments. Prefer the smallest boundary that
+      separates FgAnim world publication from joint-palette/wrist output; record
+      its ABI and three independent evidence types before adding any probe.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

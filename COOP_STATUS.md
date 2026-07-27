@@ -12534,3 +12534,12 @@ reintroduce this sampler or infer a field owner from this run. The static field
 classification above remains valid, but the next discriminator must be placed
 inside an already-proven native writer/callsite with captured arguments rather
 than dereferencing late object-lifetime pointers from `apply_puppet_transform_post`.
+
+**CONFIRMED rollback:** control build `ix`, which differs by fully removing the
+late sampler, restored Chloe's normal animation. During the same run the original
+fault remained: on the Nadine receiver, remote Chloe's vertical weapon pose still
+followed Nadine's local non-ADS camera up/down. The receiver log again separated
+the two inputs: for PID 15396 the early target reported `poseReady=0`, while the
+native boundary applied peer `UD=0/0.1055` over local `UD=0/0.0338`. Therefore
+the rollback fixes only the `iw` regression and does not affect the retained
+late visual-owner problem.
