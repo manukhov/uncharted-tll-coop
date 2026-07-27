@@ -11188,3 +11188,14 @@ one Mazur must remain, with no freeze, crash, duplicated prompt, or weapon. An
 expiry with `captured=0` rejects source timing; `live=0` rejects weak lifetime;
 `matching=0` rejects art correspondence; `ambiguous=1` confirms the safety gate
 rather than authorizing a guess.
+
+### 2026-07-27 RUNTIME CONFIRMED: `ie` cold A/B boot
+
+Fresh role-A/Chloe PID 21532 and role-B/local-Nadine PID 23908 both loaded build
+`2026-07-27ie`, installed `ground pickup HUD candidate capture installed (exact
+source)`, and selected the expected UDP roles. After serialized injection and an
+additional observation window both processes remain alive and Win32-responsive.
+Neither emitted an exception, `SKIPPED`, `incomplete`, candidate, world-weapon or
+unexpected SLOT-MIRROR marker before interaction. This confirms the reduced
+single-callsite packaging and clean boot only; the written M30/Mazur consume
+prediction remains pending.

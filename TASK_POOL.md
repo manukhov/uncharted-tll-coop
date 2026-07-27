@@ -107,6 +107,9 @@
       The four rejected generic/tail HUD diagnostics are removed. Run the written
       `ie` prediction: M30 candidate marker, `WORLD-PICKUP-CONSUME-HUD ...
       killed=1`, confirmed stock Mazur drop, and no old M30/duplicate/crash.
+      **Cold boot CONFIRMED:** role-A/Chloe PID 21532 and role-B/Nadine PID 23908
+      loaded `ie`, installed the exact source capture, selected the expected
+      roles, and remain responsive with no exception/skip/incomplete marker.
 
 ## P0: Full Player Synchronization (CURRENT)
 
