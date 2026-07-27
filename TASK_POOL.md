@@ -116,17 +116,22 @@
       Chloe retains a separate stale M30 FHUD record beside the new Mazur prompt.
       Scope the next change to the exact pending flags=3 transaction and its
       consumed weak+generation key.
-- [ ] **`if` STATIC / IMPLEMENTED, behavioral runtime pending:** fresh PID 16580
+- [x] **`if` mixed runtime result:** fresh PID 16580
       (A/Chloe) and PID 9620 (B/Nadine) loaded the committed DLL, stayed
-      responsive and installed the scoped hooks without exceptions. After
-      `CONSUME-HUD killed=1`,
-      scan the four stock physical records for the exact consumed weak+generation,
-      call `FHUD_DestroyInteractScript 0x141357CA0`, and suppress only a five-
-      second re-publish of that same key at `0x1408AF179`. For an exact pending
-      picked/dropped-art transaction whose peer slot already matches, bypass only
-      the generic 500-ms slot dwell. Run the written test: one destroyed HUD slot,
-      no stale M30 prompt, one Mazur, and `DROP-EXISTING latencyMs < 500` without
-      inventory/HUD regressions.
+      responsive and installed the scoped hooks without exceptions.
+      **CONFIRMED:** exact pending flags=3 replacements completed in 0-141 ms with
+      `gave=1 detached=1 slotReleased=1`; the user confirms the visible delay is
+      gone. Preserve the scoped debounce bypass. **REJECTED:** exact consumed-key
+      `FHUD_DestroyInteractScript 0x141357CA0` plus the `0x1408AF179` tombstone did
+      not clear Chloe's stale M30 prompt; several successful consumes had
+      `hudMatched=0`, and no suppress marker appeared.
+- [ ] **Trace Chloe stale-prompt ownership statically:** follow the active visible
+      Flash script and physical slot back to the submitted interact record. Explain
+      why the consumed ProcessWeapon weak+generation is absent from the four-slot
+      store while the M30 offer remains. Do not change runtime until the new
+      hypothesis distinguishes script ownership, cached display state, and a
+      different publisher/copy of the record with three independent evidence
+      types.
 
 ## P0: Full Player Synchronization (CURRENT)
 

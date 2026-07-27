@@ -11305,3 +11305,35 @@ responsive, selected their expected UDP roles, installed the exact pickup HUD
 capture and weapon-interaction relays, and emitted no hook exception or install
 failure. This validates build and installation only; the written M30/Mazur
 behavioral prediction remains pending.
+
+### 2026-07-27 CONFIRMED / REJECTED: `if` removes matched drop delay but does not clear Chloe's stale M30 prompt
+
+The runtime result cleanly separates the two `if` changes. **CONFIRMED:** the
+user reports that the replacement weapon now appears without the previous
+multi-second delay and that the remaining world replacement behavior is correct.
+Every observed matched flags=3 replacement retained the stock success invariants
+`gave=1 detached=1 slotReleased=1`; packet-to-give latencies were 62, 47, 47, 15,
+0, 109 and 141 ms. The exact pending picked/dropped-art predicate may therefore
+bypass the generic 500-ms stability dwell and must be preserved. Ordinary slot
+reconciliation remains debounced.
+
+**REJECTED:** destroying/suppressing the consumed weak+generation physical FHUD
+slot does not universally remove Chloe's stale M30 prompt. The user still saw
+the M30 offer after the corresponding world object had disappeared, while no
+other regression was observed. The discriminating markers explain why the
+prediction failed: several successful receiver consumes reached
+`killed=1 hudCleanup=1` but found `hudMatched=0 hudDestroyed=0`; other transactions
+expired without a matching live HUD candidate. Some later events did find and
+destroy one exact slot, but that is insufficient to claim the visible Chloe
+prompt is gone. No `PICKUP-HUD-CONSUMED-SUPPRESS` marker appeared, so the stale
+display was not recreated through the hooked `0x1408AF179` source after the
+tombstone was armed.
+
+This rejects the stronger ownership hypothesis that the stale Chloe prompt is
+always the current four-slot physical record with the same weak+generation as
+the consumed ProcessWeapon. It does **not** reject the statically proven roles of
+`FHUD_UpsertInteractRecord 0x141354EA0`, `FHUD_DestroyInteractScript
+0x141357CA0`, or `FHUD_ResetInteractRecord 0x141353750`. Before another runtime
+change, trace the visible Flash prompt from its active script/slot ownership back
+to the submitted record and explain the Chloe-only divergence. Preserve the
+confirmed exact world consume and immediate stock drop paths.
