@@ -12543,3 +12543,53 @@ the two inputs: for PID 15396 the early target reported `poseReady=0`, while the
 native boundary applied peer `UD=0/0.1055` over local `UD=0/0.0338`. Therefore
 the rollback fixes only the `iw` regression and does not affect the retained
 late visual-owner problem.
+
+### 2026-07-27 STATIC: `iy` moves the discriminator into opcode-26's final writer
+
+The next boundary is exact and does not repeat `iw`'s object-lifetime traversal.
+Inside `ProcessAnimCmdListSegment 0x141AB97C0`, opcode 26 has one direct callsite,
+`0x141ABAE8C`, to `AnimCmdEvaluator_WriteSkinningPalette 0x14218B170`.
+Immediately before the call, disassembly forms `RCX=uint16 joint_count`,
+`RDX=64-byte-per-joint workspace`, `R8=48-byte-per-joint bind rows`,
+`R9=common 3x4 basis`, and stack argument 5 as the palette destination carried
+in `RSI`. The callee loads all four workspace rows and writes exactly three
+float4 rows at `0x14218B39F/0x14218B3A6/0x14218B3D3`, advancing workspace by
+0x40 and destination by 0x30 for every joint.
+
+Three independent evidence types meet the runtime quota. First, generator and
+consumer agree: `AnimManager_CreateAnimCmdsForObject 0x141A8FCF0` emits the
+ten-word opcode-26 destination from `FgAnimData+0x230`, while the command parser
+bounds `first_joint/count` and reaches the single writer call. Second, the exact
+callsite ABI and the callee's address arithmetic prove 64-byte input and 48-byte
+output strides without a guessed structure cast. Third,
+`FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` consumes this completed
+palette before joint-based weapon attachment. By contrast,
+`FgAnimData_PublishWorldTransform 0x1418C55D0` publishes the independent root
+world translation/quaternion already proven to own body yaw, and the wrist
+stores at `0x1410EEB93/0x1410EEB9E` occur after the completed skeleton with
+unproven float4 semantics. They are weaker discriminators for arm pitch.
+
+The competing hypotheses are now: (P1) receiver-local camera data already
+contaminates the 64-byte joint workspace before opcode 26; (P2) workspace is
+stable but bind/common-basis conversion contaminates the 48-byte palette; (P3)
+both are peer-stable and the visible leak is introduced after palette output by
+render/attachment consumption. A separate late LRDU overwrite remains rejected
+by the peer-correct live-evaluator telemetry from `iu/ix`.
+
+Build `2026-07-27iy` patches only the existing E8 call at `0x141ABAE8C`. Its
+wrapper calls `0x14218B170` exactly once with every argument unchanged. The
+already-stable ProcessAnim detour supplies a thread-local scope from the exact
+opcode-26 words; the nested writer accepts only the largest screen-1 group-0
+range whose destination/count exactly match that command. After native returns,
+at most eight divergent samples at 500 ms intervals hash and compare only the
+workspace and destination just consumed/written. It uses no stored Player or
+FgAnim pointer, engine call, allocation or blocking lock.
+
+Written prediction: hold peer Chloe's aim clearly down/straight, then on the
+Nadine receiver, without ADS, move the local camera sky -> ground -> sky while
+the visible Chloe follows it. `peerY` must stay with Chloe and `routeY` must
+change with Nadine. Correlated workspace deltas select P1; stable workspace with
+palette-only deltas selects P2; stable hashes/rows at both stages while the
+visual moves selects P3. Missing `AIM-PALETTE-WRITER`, a crash, stutter or any
+animation/model regression makes `iy` inconclusive and requires immediate
+removal without interpreting the sampled matrices.

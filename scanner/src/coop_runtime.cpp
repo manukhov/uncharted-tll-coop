@@ -108,10 +108,13 @@ using ResolveUpperActorRecordFunction = void*(__fastcall*)(std::uint32_t);
 using ProcessAnimCmdListSegmentFunction = std::uint32_t(__fastcall*)(
     const std::uint32_t*, std::uint32_t, const void*, std::uint32_t,
     const void*, const void*, const void*);
+using AnimCmdWriteSkinningPaletteFunction = std::int64_t(__fastcall*)(
+    std::uint16_t, const float*, const float*, const float*, float*);
 
 UpdateFunction g_original_update = nullptr;
 ProcessAnimCmdListSegmentFunction g_original_process_anim_cmd_list_segment =
     nullptr;
+AnimCmdWriteSkinningPaletteFunction g_anim_cmd_write_skinning_palette = nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
 std::atomic<void*> g_local_fganim_data{nullptr};
 std::atomic<void*> g_puppet_fganim_data{nullptr};
@@ -20798,6 +20801,292 @@ void probe_process_anim_case6(
     log_aim_case6_stages_if_due();
 }
 
+struct AimSkinningWriterScope {
+    bool valid = false;
+    float* destination = nullptr;
+    std::uint32_t first_joint = 0;
+    std::uint32_t joint_count = 0;
+    float peer_y = 0.0F;
+    float route_y = 0.0F;
+    float up = 0.0F;
+    float down = 0.0F;
+};
+
+thread_local AimSkinningWriterScope g_aim_skinning_writer_scope{};
+
+struct AimSkinningWriterBaseline {
+    bool valid = false;
+    std::uint32_t first_joint = 0;
+    std::uint32_t joint_count = 0;
+    std::array<float, kAimPipelineMaxJoints * 16> workspace{};
+    std::array<float, kAimPipelineMaxJoints * 12> palette{};
+};
+
+AimSkinningWriterBaseline g_aim_skinning_writer_baseline{};
+std::atomic_flag g_aim_skinning_writer_busy = ATOMIC_FLAG_INIT;
+std::atomic<ULONGLONG> g_aim_skinning_writer_next_log_ms{0};
+std::atomic<std::uint32_t> g_aim_skinning_writer_sample_count{0};
+
+// Arm only from the exact ProcessAnimCmdListSegment invocation that owns an
+// opcode-26 command. The command itself supplies the destination, first joint
+// and range; the nested writer relay therefore never has to rediscover a late
+// Player/FgAnim pointer after the animation frame has advanced.
+void prepare_aim_skinning_writer_scope(
+    const std::uint32_t* commands, std::uint32_t command_word_count,
+    const void* context_ptr, std::uint32_t processing_group) {
+    g_aim_skinning_writer_scope = {};
+    if (g_dll_inert || !g_state_net.enabled || commands == nullptr ||
+        command_word_count == 0 ||
+        command_word_count > kAimCase6MaxCommandWords ||
+        processing_group != 0 ||
+        readable_bytes(commands) <
+            static_cast<std::size_t>(command_word_count) *
+                sizeof(std::uint32_t)) {
+        return;
+    }
+
+    const AimCase6ContextProbe context =
+        probe_aim_case6_context(context_ptr);
+    if (!context.valid || !context.vertical_valid ||
+        context.screen != kSlot1ScreenIndex || context.player == nullptr) {
+        return;
+    }
+
+    coop::StatePacket peer{};
+    if (!copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer) ||
+        (peer.flags & coop::kStateFlagPoseSeed) == 0 ||
+        !valid_network_orientation(peer.pose_seed + 4)) {
+        return;
+    }
+    const float* const route_quat = reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(context.player) +
+        kPlayerAimPoseQuatOffset);
+    if (!valid_network_orientation(route_quat)) {
+        return;
+    }
+
+    float* selected_destination = nullptr;
+    std::uint32_t selected_first_joint = 0;
+    std::uint32_t selected_joint_count = 0;
+    __try {
+        std::uint32_t cursor = 0;
+        while (cursor < command_word_count) {
+            const std::uint32_t header = commands[cursor];
+            const std::uint16_t opcode =
+                static_cast<std::uint16_t>(header & 0xFFFFU);
+            const std::uint16_t words =
+                static_cast<std::uint16_t>(header >> 16);
+            if (words == 0 || words > command_word_count - cursor) {
+                return;
+            }
+            if (opcode == 26 && words == 10) {
+                float* destination = nullptr;
+                std::memcpy(
+                    &destination, commands + cursor + 2,
+                    sizeof(destination));
+                const std::uint32_t first_joint = commands[cursor + 8];
+                const std::uint32_t joint_count = commands[cursor + 9];
+                if (destination != nullptr && joint_count != 0 &&
+                    joint_count <= kAimPipelineMaxJoints &&
+                    first_joint < kAimPipelineMaxJoints &&
+                    joint_count <= kAimPipelineMaxJoints - first_joint &&
+                    joint_count > selected_joint_count) {
+                    selected_destination = destination;
+                    selected_first_joint = first_joint;
+                    selected_joint_count = joint_count;
+                }
+            }
+            cursor += words;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return;
+    }
+    if (selected_destination == nullptr || selected_joint_count == 0) {
+        return;
+    }
+
+    float peer_x = 0.0F, peer_y = 0.0F, peer_z = 0.0F;
+    float route_x = 0.0F, route_y = 0.0F, route_z = 0.0F;
+    quat_forward_pos_z(peer.pose_seed + 4, peer_x, peer_y, peer_z);
+    quat_forward_pos_z(route_quat, route_x, route_y, route_z);
+    g_aim_skinning_writer_scope.valid = true;
+    g_aim_skinning_writer_scope.destination = selected_destination;
+    g_aim_skinning_writer_scope.first_joint = selected_first_joint;
+    g_aim_skinning_writer_scope.joint_count = selected_joint_count;
+    g_aim_skinning_writer_scope.peer_y = peer_y;
+    g_aim_skinning_writer_scope.route_y = route_y;
+    g_aim_skinning_writer_scope.up = context.up;
+    g_aim_skinning_writer_scope.down = context.down;
+}
+
+std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
+    std::uint16_t joint_count, const float* workspace,
+    const float* bind_rows, const float* common_basis, float* destination) {
+    const auto native = g_anim_cmd_write_skinning_palette;
+    if (native == nullptr) {
+        return 0;
+    }
+
+    // Native executes exactly once, with every argument unchanged, before the
+    // diagnostic inspects the buffers that this invocation just consumed/wrote.
+    const std::int64_t result = native(
+        joint_count, workspace, bind_rows, common_basis, destination);
+
+    const AimSkinningWriterScope scope = g_aim_skinning_writer_scope;
+    if (!scope.valid || workspace == nullptr || destination == nullptr ||
+        destination != scope.destination || joint_count == 0 ||
+        joint_count != scope.joint_count ||
+        std::fabs(scope.peer_y - scope.route_y) < 0.15F) {
+        return result;
+    }
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG due =
+        g_aim_skinning_writer_next_log_ms.load(std::memory_order_acquire);
+    if (now < due ||
+        !g_aim_skinning_writer_next_log_ms.compare_exchange_strong(
+            due, now + 500, std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
+        return result;
+    }
+    const std::uint32_t sample =
+        g_aim_skinning_writer_sample_count.fetch_add(
+            1, std::memory_order_acq_rel);
+    if (sample >= 8 ||
+        g_aim_skinning_writer_busy.test_and_set(std::memory_order_acquire)) {
+        return result;
+    }
+
+    AimSkinningWriterBaseline& baseline = g_aim_skinning_writer_baseline;
+    const bool reset = !baseline.valid ||
+        baseline.first_joint != scope.first_joint ||
+        baseline.joint_count != joint_count;
+    std::array<std::uint32_t, 4> top_indices{};
+    std::array<float, 4> top_scores{};
+    std::array<float, 4> top_workspace_delta{};
+    std::array<float, 4> top_palette_delta{};
+    std::uint64_t workspace_hash = kAimPipelineFnvOffset;
+    std::uint64_t palette_hash = kAimPipelineFnvOffset;
+    bool finite = true;
+
+    for (std::uint32_t joint = 0; joint < joint_count; ++joint) {
+        const float* const current_workspace = workspace +
+            static_cast<std::size_t>(joint) * 16;
+        const float* const current_palette = destination +
+            static_cast<std::size_t>(joint) * 12;
+        float workspace_delta_sq = 0.0F;
+        float palette_delta_sq = 0.0F;
+        for (std::size_t component = 0; component < 16; ++component) {
+            const float value = current_workspace[component];
+            if (!std::isfinite(value)) {
+                finite = false;
+                break;
+            }
+            std::uint32_t bits = 0;
+            std::memcpy(&bits, &value, sizeof(bits));
+            workspace_hash = aim_pipeline_hash_word(workspace_hash, bits);
+            if (!reset) {
+                const float delta = value - baseline.workspace[
+                    static_cast<std::size_t>(joint) * 16 + component];
+                workspace_delta_sq += delta * delta;
+            }
+        }
+        for (std::size_t component = 0;
+             finite && component < 12; ++component) {
+            const float value = current_palette[component];
+            if (!std::isfinite(value)) {
+                finite = false;
+                break;
+            }
+            std::uint32_t bits = 0;
+            std::memcpy(&bits, &value, sizeof(bits));
+            palette_hash = aim_pipeline_hash_word(palette_hash, bits);
+            if (!reset) {
+                const float delta = value - baseline.palette[
+                    static_cast<std::size_t>(joint) * 12 + component];
+                palette_delta_sq += delta * delta;
+            }
+        }
+        if (!finite) {
+            break;
+        }
+        const float workspace_delta = std::sqrt(workspace_delta_sq);
+        const float palette_delta = std::sqrt(palette_delta_sq);
+        const float score = workspace_delta + palette_delta;
+        for (std::size_t rank = 0; rank < top_scores.size(); ++rank) {
+            if (score > top_scores[rank]) {
+                for (std::size_t move = top_scores.size() - 1;
+                     move > rank; --move) {
+                    top_scores[move] = top_scores[move - 1];
+                    top_indices[move] = top_indices[move - 1];
+                    top_workspace_delta[move] =
+                        top_workspace_delta[move - 1];
+                    top_palette_delta[move] = top_palette_delta[move - 1];
+                }
+                top_scores[rank] = score;
+                top_indices[rank] = joint;
+                top_workspace_delta[rank] = workspace_delta;
+                top_palette_delta[rank] = palette_delta;
+                break;
+            }
+        }
+    }
+
+    if (finite) {
+        char top[1024]{};
+        std::size_t used = 0;
+        if (reset) {
+            used = static_cast<std::size_t>(std::snprintf(
+                top, sizeof(top), "baseline"));
+        } else {
+            for (std::size_t rank = 0; rank < top_indices.size(); ++rank) {
+                const std::uint32_t joint = top_indices[rank];
+                const float* const w = workspace +
+                    static_cast<std::size_t>(joint) * 16;
+                const float* const p = destination +
+                    static_cast<std::size_t>(joint) * 12;
+                const int written = std::snprintf(
+                    top + used, sizeof(top) - used,
+                    "%u:%.4f/%.4f:wY=%.3f,%.3f,%.3f:pY=%.3f,%.3f,%.3f%s",
+                    scope.first_joint + joint,
+                    top_workspace_delta[rank], top_palette_delta[rank],
+                    w[1], w[5], w[9], p[1], p[5], p[9],
+                    rank + 1 == top_indices.size() ? "" : ";");
+                if (written <= 0 ||
+                    static_cast<std::size_t>(written) >=
+                        sizeof(top) - used) {
+                    break;
+                }
+                used += static_cast<std::size_t>(written);
+            }
+        }
+
+        char line[1536]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-PALETTE-WRITER sample=%u peerY=%.4f routeY=%.4f "
+            "up=%.4f down=%.4f first=%u count=%u reset=%u "
+            "workspace=%016llX palette=%016llX top=%s",
+            sample + 1, scope.peer_y, scope.route_y, scope.up, scope.down,
+            scope.first_joint, scope.joint_count,
+            static_cast<unsigned>(reset),
+            static_cast<unsigned long long>(workspace_hash),
+            static_cast<unsigned long long>(palette_hash), top);
+        boot_log_line(line);
+
+        std::memcpy(
+            baseline.workspace.data(), workspace,
+            static_cast<std::size_t>(joint_count) * 16 * sizeof(float));
+        std::memcpy(
+            baseline.palette.data(), destination,
+            static_cast<std::size_t>(joint_count) * 12 * sizeof(float));
+        baseline.valid = true;
+        baseline.first_joint = scope.first_joint;
+        baseline.joint_count = joint_count;
+    }
+    g_aim_skinning_writer_busy.clear(std::memory_order_release);
+    return result;
+}
+
 std::uint32_t __fastcall hooked_process_anim_cmd_list_segment(
     const std::uint32_t* commands, std::uint32_t command_word_count,
     const void* context, std::uint32_t processing_group,
@@ -20809,12 +21098,17 @@ std::uint32_t __fastcall hooked_process_anim_cmd_list_segment(
     const AimCommonOutputPending common_output =
         prepare_aim_common_output_probe(
             commands, command_word_count, context, processing_group);
+    const AimSkinningWriterScope previous_skinning_scope =
+        g_aim_skinning_writer_scope;
+    prepare_aim_skinning_writer_scope(
+        commands, command_word_count, context, processing_group);
     const std::uint32_t result =
         g_original_process_anim_cmd_list_segment != nullptr
         ? g_original_process_anim_cmd_list_segment(
               commands, command_word_count, context, processing_group,
               callback_a5, callback_a6, callback_a7)
         : 0;
+    g_aim_skinning_writer_scope = previous_skinning_scope;
     log_aim_common_output_after(common_output);
     return result;
 }
@@ -20834,6 +21128,70 @@ bool install_aim_case6_probe() {
     g_original_process_anim_cmd_list_segment =
         reinterpret_cast<ProcessAnimCmdListSegmentFunction>(trampoline);
     boot_log_line("aim case-6 read-only probe installed");
+    return true;
+}
+
+bool install_aim_skinning_palette_writer_probe() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kAnimCmdWriteSkinningPaletteCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line(
+            "aim palette writer probe SKIPPED (callsite is not E8)");
+        return false;
+    }
+    std::int32_t displacement = 0;
+    std::memcpy(&displacement, call_site + 1, sizeof(displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(displacement);
+    const std::uintptr_t expected =
+        g_module + kAnimCmdWriteSkinningPaletteRva;
+    if (target != expected) {
+        boot_log_line(
+            "aim palette writer probe SKIPPED (unexpected target)");
+        return false;
+    }
+    g_anim_cmd_write_skinning_palette =
+        reinterpret_cast<AnimCmdWriteSkinningPaletteFunction>(expected);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line(
+            "aim palette writer probe SKIPPED (relay allocation)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_anim_cmd_write_skinning_palette);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("aim palette writer probe SKIPPED (rel32 range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("aim palette writer probe SKIPPED (VirtualProtect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line(
+        "aim opcode-26 palette writer probe installed (0x141ABAE8C)");
     return true;
 }
 
@@ -24637,6 +24995,10 @@ constexpr bool g_enable_aim_diagnostic_probes = false;
 // through later blend/plugin commands and the final FgAnimData+0x230 palette.
 // Four samples per signature/screen, no native calls or game-memory writes.
 constexpr bool g_enable_aim_case6_probe = true;
+// Build iy: bounded read-only samples at opcode-26's single final palette
+// writer callsite. The original runs once before eight guarded samples; no
+// stored Player/FgAnim pointers, engine calls, allocations or blocking locks.
+constexpr bool g_enable_aim_skinning_palette_writer_probe = true;
 
 
 // ============================================================================
@@ -41376,8 +41738,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27ix "
-        "(late owner probe removed after animation regression)");
+        "TLL co-op runtime init 2026-07-27iy "
+        "(opcode-26 palette writer discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -41463,6 +41825,9 @@ DWORD WINAPI install_hook(void*) {
         install_native_aim_foot_turn_relays();
         if (g_enable_aim_case6_probe) {
             install_aim_case6_probe();
+        }
+        if (g_enable_aim_skinning_palette_writer_probe) {
+            install_aim_skinning_palette_writer_probe();
         }
         if (g_enable_puppet_fganim_world_aim_turn) {
             install_fganim_world_aim_turn_callsite_relay();

@@ -1880,10 +1880,21 @@ Do not reopen these as the first move:
       non-ADS camera. PID 15396 simultaneously logged peer-correct native
       `UD=0/0.1055` over local `UD=0/0.0338`, so rollback and original pitch leak
       are separate.
-- [ ] Select the next discriminator statically at an existing native writer or
+- [x] Select the next discriminator statically at an existing native writer or
       exact callsite with live arguments. Prefer the smallest boundary that
       separates FgAnim world publication from joint-palette/wrist output; record
       its ABI and three independent evidence types before adding any probe.
+      Selected `0x141ABAE8C -> AnimCmdEvaluator_WriteSkinningPalette
+      0x14218B170`: exact ABI is joint count, 64-byte workspace, 48-byte bind
+      rows, common 3x4 basis and stack palette destination; the callee writes
+      three float4 rows per joint to the final `FgAnimData+0x230` range.
+- [ ] Run bounded build `iy`. Peer Chloe aims clearly down/straight; on the
+      Nadine receiver, without ADS, move local camera sky -> ground -> sky.
+      Require normal animation and `AIM-PALETTE-WRITER` rows with stable peerY
+      and changing routeY. Workspace-correlated deltas select pre-writer pose
+      contamination; palette-only deltas select bind/basis conversion; stable
+      workspace and palette while the visual moves select post-palette
+      render/attachment. Any regression or missing row is inconclusive.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 
