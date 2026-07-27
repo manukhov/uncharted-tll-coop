@@ -10190,3 +10190,58 @@ wall-hang and falls, without crouching, rolling or dropping while the sender
 still holds the edge. SEND without FORCE selects packet publication; FORCE
 while still hanging selects T4 and a read-only handler/downstream-context probe;
 fall followed by reattachment selects T5.
+
+### 2026-07-27 RUNTIME PARTIAL / STATIC FIX: latch the exact `drop` event (`hu`)
+
+The user reports that `ht` releases the remote Player only intermittently. The
+bounded trace separates this from a wrong command or downstream edge-context
+failure: sender PID 21964 emitted four distinct `TRAVERSAL-EDGE-DROP-SEND rise`
+events. Receiver PID 22720 reached the exact `drop`, `edge=0` hook twice for
+three of those presses, but the third sender event at log line 30127 had no
+receiver FORCE row even though the FORCE quota had not yet been exhausted.
+Thus a delivered FORCE can produce the requested visible fall, while at least
+one valid authored press disappears before the remote handler queries it.
+
+Three independent implementation/data-flow facts explain the intermittent
+delivery:
+
+1. `send_local_player_state` runs at roughly 60 Hz and derives the protocol-only
+   `drop` rising edge from consecutive held masks. A short local press therefore
+   produces a held/pressed packet immediately followed by a release packet.
+2. `publish_peer_state_snapshot` previously replaced
+   `puppet_traversal_force` on every received state packet. The release packet
+   writes zero for the `drop` bit; the separately accumulated
+   `pending_button_presses` reaches the native Joypad mask, but the protocol-only
+   bit has no native binding and the exact-hash hook reads only
+   `puppet_traversal_force`.
+3. The confirmed `PlayerEdgeState_HandleDropCommand 0x1413330C0` makes three
+   held (`edge=0`) queries during the Player edge update. Clearing the protocol
+   bit at packet receipt, rather than after that consumer window, creates the
+   observed scheduling race. The same trace shows two FORCE queries per
+   successful observed window, independently proving that a single receiver
+   query is not sufficient.
+
+Competing explanations are now distinguished. **T2:** UDP loss of the sole
+pressed packet could also remove the event, but preserving the receiver event
+window makes every received held/pressed packet durable and later repeated held
+packets can refresh it. **T3:** missing downstream edge context predicts FORCE
+without a visible fall, not SEND without any FORCE. **T4:** the user released a
+different command predicts no exact sender `drop` rise, contradicted by all four
+attempts.
+
+Build `hu` arms a receiver-only 400 ms deadline whenever an incoming state
+asserts the dedicated `drop` held/pressed bit. Only the exact `drop`, `edge=0`
+Joypad-3 hook consults this deadline; ordinary traversal bits, raw face buttons,
+crouch and `drop-hold` are unchanged. A release packet may clear the current
+mask but cannot erase the pending exact command before the three-query handler
+window. Bounded `TRAVERSAL-EDGE-DROP-LATCH` rows expose event receipt, and FORCE
+rows now include `latched=1/0`.
+
+**Falsifiable `hu` prediction:** over five ordinary grab-and-let-go attempts,
+each sender rise whose state reaches the receiver produces one LATCH window and
+at least one exact FORCE row, including `latched=1` after a fast release. The
+remote leaves wall-hang on every attempt. It must not crouch/roll, fall before
+the sender presses drop, or drop again after the 400 ms deadline. LATCH+FORCE
+while still hanging selects downstream context; SEND without LATCH selects
+packet loss/publication; LATCH without FORCE selects receiver scheduling or a
+wrong remote Joypad identity.

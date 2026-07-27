@@ -136,7 +136,19 @@
       exact `drop` on Joypad 3 with bounded SEND/FORCE markers. Test one ordinary
       grab-and-let-go: native fall wins T1; FORCE while hanging selects downstream
       edge context; fall then reattach selects later state/reconciliation; no
-      FORCE selects packet publication.
+      FORCE selects packet publication. **RUNTIME PARTIAL (`ht`):** the exact
+      command sometimes releases the remote Player, but one of four logged
+      sender rises vanished before the receiver FORCE hook while later attempts
+      still reached it. The static packet/update audit proves the protocol-only
+      bit was overwritten by the following 60-Hz release packet even though
+      native pressed edges were accumulated; the exact hook does not consume
+      that native mask. **IMPLEMENTED `hu`:** receipt of exact `drop`
+      held/pressed now arms a receiver-only 400 ms deadline used solely by the
+      exact `drop`, `edge=0` hook. `drop-hold`, crouch and raw face buttons remain
+      untouched. Test five grab-and-let-go cycles: every received event must log
+      LATCH then FORCE (fast-release rows may show `force=0 ... latched=1`) and
+      every remote fall must complete exactly once, with no spontaneous fall
+      after the deadline.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw

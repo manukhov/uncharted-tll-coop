@@ -1269,6 +1269,10 @@ struct StateNetState {
     // IsCommandActive hook returns true for jump/evade/crouch while these are set
     // — required when bindings are keyboard-only (isolation zeros keyboard path).
     std::atomic<std::uint64_t> puppet_traversal_force = 0;
+    // `drop` is a protocol-only authored command, so a release packet can erase
+    // puppet_traversal_force before Player::Edge makes its three held queries.
+    // Preserve a received drop assertion across that packet/update race only.
+    std::atomic<ULONGLONG> puppet_edge_drop_force_until_ms = 0;
     // cover-enter / try-enter-cover / one-shot cover-exit on Joypad 3.
     std::atomic<std::uint8_t> puppet_cover_force = 0;
     std::atomic<std::uint64_t> active_button_press_latch = 0;
@@ -1339,6 +1343,7 @@ std::atomic<std::uint32_t> g_pending_weapon_give_art{0};
 std::uint8_t g_pending_weapon_give_info[coop::kWeaponInfoBytes]{};
 std::atomic<bool> g_pending_weapon_give_flag{false};
 void* resolve_live_player_safe(std::uint32_t index);
+void boot_log_line(const char* line);
 bool local_player_ads_active();
 std::uint64_t capture_local_joypad_command_mask(void* player);
 bool local_player_aim_input_active();
@@ -1414,9 +1419,33 @@ void publish_peer_state_snapshot(const coop::StatePacket& packet) {
     }
     g_state_net.pending_button_presses.fetch_or(
         sanitized.buttons_pressed, std::memory_order_release);
+    const std::uint64_t incoming_traversal =
+        sanitized.input_buttons | sanitized.buttons_pressed;
+    if ((incoming_traversal & kJoypadEdgeDropIntentMask) != 0) {
+        constexpr ULONGLONG kEdgeDropForceWindowMs = 400;
+        const ULONGLONG now = GetTickCount64();
+        const ULONGLONG previous_until =
+            g_state_net.puppet_edge_drop_force_until_ms.exchange(
+                now + kEdgeDropForceWindowMs, std::memory_order_acq_rel);
+        if (previous_until <= now) {
+            static std::atomic<unsigned> edge_drop_latch_logs{0};
+            const unsigned log_index = edge_drop_latch_logs.fetch_add(
+                1, std::memory_order_relaxed);
+            if (log_index < 12) {
+                std::ostringstream line;
+                line << "TRAVERSAL-EDGE-DROP-LATCH seq=" << packet.sequence
+                     << " held="
+                     << ((sanitized.input_buttons &
+                          kJoypadEdgeDropIntentMask) != 0)
+                     << " pressed="
+                     << ((sanitized.buttons_pressed &
+                          kJoypadEdgeDropIntentMask) != 0);
+                boot_log_line(line.str().c_str());
+            }
+        }
+    }
     g_state_net.puppet_traversal_force.store(
-        (sanitized.input_buttons | sanitized.buttons_pressed) &
-            kJoypadTraversalRelayMask,
+        incoming_traversal & kJoypadTraversalRelayMask,
         std::memory_order_release);
     if ((packet.flags & 16) != 0) {
         g_state_net.pending_authoritative_teleport.store(
@@ -1987,8 +2016,14 @@ char __fastcall hooked_joypad_is_command_active(
                 // Ordinary Player::Edge release is a distinct held command.
                 // Force it only for the exact remote Joypad-3 query so the
                 // existing crouch/drop-hold/evade mappings remain isolated.
+                const bool edge_drop_packet_active =
+                    (force & kJoypadEdgeDropIntentMask) != 0;
+                const bool edge_drop_latched =
+                    GetTickCount64() <
+                    g_state_net.puppet_edge_drop_force_until_ms.load(
+                        std::memory_order_acquire);
                 if (hash == kEdgeDropHash && edge == 0 &&
-                    (force & kJoypadEdgeDropIntentMask) != 0) {
+                    (edge_drop_packet_active || edge_drop_latched)) {
                     static std::atomic<unsigned> edge_drop_force_logs{0};
                     const unsigned log_index =
                         edge_drop_force_logs.fetch_add(
@@ -1997,7 +2032,8 @@ char __fastcall hooked_joypad_is_command_active(
                         std::ostringstream line;
                         line << "TRAVERSAL-EDGE-DROP-FORCE edge="
                              << static_cast<unsigned>(edge)
-                             << " force=0x" << std::hex << force << std::dec;
+                             << " force=0x" << std::hex << force << std::dec
+                             << " latched=" << (edge_drop_latched ? 1 : 0);
                         boot_log_line(line.str().c_str());
                     }
                     return 1;
@@ -38448,7 +38484,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27ht "
+        "TLL co-op runtime init 2026-07-27hu "
         "(retained Player native grenade owns physics)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
