@@ -11401,6 +11401,12 @@ must retain `gave=1 detached=1 slotReleased=1` with sub-500-ms latency. A live
 stale prompt with `hudMapMatched=0` rejects script-map ownership; more than one
 selected slot or loss of Mazur rejects the claimed exact identity.
 
+**Cold-start validation.** The committed `ig` DLL was injected into fresh PID
+23320 (role A/Chloe) and PID 22516 (role B/Nadine). Both processes remained
+responsive, selected the expected UDP roles, and installed the exact ground HUD
+capture without an exception, skip, or hook failure. The script-map cleanup was
+not exercised during boot; the written M30/Mazur behavior test remains pending.
+
 ### 2026-07-27 priority note: remote reload animation sync follows ground-prompt closure
 
 The user explicitly requested remote reload animation synchronization. The old

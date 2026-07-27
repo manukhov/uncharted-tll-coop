@@ -132,13 +132,15 @@
       hypothesis distinguishes script ownership, cached display state, and a
       different publisher/copy of the record with three independent evidence
       types.
-- [ ] **`ig` STATIC / IMPLEMENTED, runtime pending:** the evidence quota is met.
+- [ ] **`ig` STATIC / IMPLEMENTED, behavioral runtime pending:** the evidence quota is met.
       `FHUD_UpdateSingleInteractScript 0x141358030` writes exact `interact-id`
       (`ProcessWeapon+0xD8`) and `pickup-weapon-id` (`ProcessWeapon+0x860`) into
       the live slot map at `+0x808`, independently of the copied record at
       `+0x830`. Select the exact live script by both typed keys before the world
       kill, then call stock destroy for that mask. Run the written Chloe
       M30-to-Mazur prediction; preserve the confirmed sub-141-ms stock drop.
+      Fresh PID 23320 (A/Chloe) and PID 22516 (B/Nadine) loaded the committed
+      build, stayed responsive and installed the scoped hooks without failure.
 
 ## P0: Full Player Synchronization (CURRENT)
 
