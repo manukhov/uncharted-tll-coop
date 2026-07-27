@@ -12336,3 +12336,27 @@ Receiver must emit `WORLD-PICKUP-DROP-EXISTING` and `DROP-MAP stored=1` at rough
 consume it through `source=drop-map match=paired-drop-id killed=1`. Latency near
 two seconds, a drop at a later puppet position, no visible model, fallback/expiry,
 crash or slot rollback rejects the relevant branch.
+
+### 2026-07-27 CONFIRMED: `it` completes exact ground-weapon replacement and paired consumption
+
+The user confirmed that the replaced weapon now appears immediately at the
+exchange point. The runtime evidence is stronger than the single visual check:
+the fresh pair completed 23 consecutive mixed replacements across arts
+`0x33E29A1B`, `0x27617D0D`, `0xC3181EBD` and `0x3019CBEE`. Every receiver stock
+replacement reported `gave=1 detached=1 slotReleased=1` at 0 or 16 ms and stored
+the explicit dropped-ID -> local weak/generation mapping. StatePacket catch-up
+could still arrive later, including one 984-ms case, but the bounded slot hold
+prevented any rollback.
+
+After each first ground-source pickup, every reverse operation used
+`WORLD-PICKUP-CONSUME source=drop-map match=paired-drop-id killed=1` at zero
+transaction latency. No reverse mapping fell back to art, became ambiguous,
+expired or left a duplicate. Both processes remained responsive and the user
+reported no crash or other regression.
+
+This confirms the complete three-part result: COPW v3 carries the transaction's
+exact WeaponInfo and explicit dropped stable ID; the receiver's stock GiveWeapon
+replacement runs immediately without the unrelated fire-start timer; and later
+pickup consumption follows the retained weak identity after the engine retargets
+it to the ground representation. The world-weapon replacement reliability task
+is closed as **CONFIRMED**.

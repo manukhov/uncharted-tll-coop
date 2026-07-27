@@ -2628,10 +2628,11 @@ Do not reopen these as the first move:
       A later Mazur -> Arrowhead transaction still detached the receiver Mazur
       only after 2281 ms because exact COPW incorrectly reused the fire relay's
       two-second new-puppet grace; the user did not see it at the exchange point.
-- [~] Build/test `it`: let exact COPW bypass only the fire-start timer while still
-      requiring stable Player/controller/vtable and all stock target invariants.
-      Require immediate `DROP-EXISTING`/`DROP-MAP` near 0--100 ms, visible old
-      weapon at the exchange point, and retained paired-ID consume on reversal.
+- [x] CONFIRMED `it`: 23 consecutive mixed weapon replacements detached the old
+      receiver object in 0--16 ms with `DROP-MAP stored=1`; every reverse mapping
+      consumed through `source=drop-map match=paired-drop-id killed=1`. The user
+      confirmed the old weapon now appears at the exchange point. No expiry,
+      rollback, duplicate or crash occurred. World-weapon reliability is closed.
 
 ## Rule
 
