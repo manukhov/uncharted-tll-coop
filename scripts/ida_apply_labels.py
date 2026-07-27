@@ -8938,6 +8938,18 @@ FUNCTIONS = {
         "edge-jump-a through Joypad_IsCommandActive(edge=0), then checks the "
         "current edge/facing geometry before accepting the upward transition.",
     ),
+    0x14130E890: (
+        "PlayerEdgeController_PassesDropHoldGeometryGate",
+        "PlayerEdgeController RTTI vtable slot 21. Validates the current edge "
+        "pair, separation and height/probe conditions before the auxiliary "
+        "drop-hold gate may suppress competing edge transitions.",
+    ),
+    0x14130EBF0: (
+        "PlayerEdgeController_IsDropHoldActive",
+        "PlayerEdgeController RTTI vtable slot 23. Hashes the authored command "
+        "drop-hold and calls Joypad_IsCommandActive with edge=0 for the owning "
+        "Player joypad; it is distinct from generic crouch and evade.",
+    ),
     0x141315B00: (
         "PlayerEdgeController_StartClimbUp",
         "PlayerEdgeController RTTI vtable slot 57. Removes the current move "
@@ -8974,6 +8986,43 @@ FUNCTIONS = {
         "PlayerEdgeState_IsEdgeJumpAActive",
         "Player::Edge RTTI vtable slot 11. Independently hashes edge-jump-a and "
         "calls Joypad_IsCommandActive with edge=0 for the owning Player.",
+    ),
+    0x141324450: (
+        "PlayerEdgeController_PublishReleaseEdge",
+        "PlayerEdgeController RTTI virtual entry referenced at 0x142A74258. "
+        "Hashes player-release-edge, marks the resolved current edge process at "
+        "+0x72 and dispatches that authored event through its vtable +0xD0.",
+    ),
+    0x1413330C0: (
+        "PlayerEdgeState_HandleDropCommand",
+        "Ordinary Player::Edge wall-hang release handler called from Update at "
+        "0x141331429. Independently queries authored drop with edge=0 at "
+        "0x141333301, 0x141333463 and 0x14133405C, publishes the release state "
+        "block, consumes drop, and returns handled.",
+    ),
+    0x14131F560: (
+        "PlayerEdgeController_ApplyReleaseOrGrabTransition",
+        "PlayerEdgeController RTTI vtable slot 166. Builds climb-release-edge "
+        "or climb-grab-edge actor-state descriptors, dispatches them into the "
+        "runtime slot and publishes player-left-edge after releasing.",
+    ),
+    0x141341A10: (
+        "PlayerEdgeController_PublishPlayerLeftEdge",
+        "Publishes the authored player-left-edge marker for the resolved edge "
+        "actor after the controller's release transition.",
+    ),
+    0x14133D800: (
+        "PlayerEdgeState_StartFallFromEdge",
+        "Direct ordinary-edge fall transition called by HandleDropCommand at "
+        "0x14133493D. Removes current move actions, constructs a "
+        "PlayerFallMoveUpdate, wraps it in PlayerCommonAction, enqueues it at "
+        "0x14133DA28 and exits the current Player state.",
+    ),
+    0x141319E80: (
+        "PlayerEdgeController_StartLedgeGrabFall",
+        "PlayerEdgeController RTTI vtable slot 120. Removes current actions, "
+        "builds the fall/ledge-grab-fall action pair and enqueues it at "
+        "0x14131A25E; geometry/break variants occupy adjacent slots.",
     ),
 }
 

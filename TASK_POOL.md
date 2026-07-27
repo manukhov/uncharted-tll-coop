@@ -107,10 +107,11 @@
       custom `GRENADE-EVENT-EXEC`; the user confirms the face-level warning icon
       and origin explosion are gone.
 
-- [~] **Traversal climb-up completion (CURRENT, 2026-07-26):** when the sender
-      climbs onto a raised wall/obstacle, the remote Player reaches or remains in
-      wall-hang but does not complete the climb-up/grounded transition. Preserve
-      the confirmed native locomotion and collision baseline. **STATIC QUOTA MET:**
+- [~] **Traversal wall-hang lifecycle (CURRENT, 2026-07-27):** preserve the
+      confirmed native locomotion and collision baseline. **UPWARD RUNTIME
+      CONFIRMED (`hs`):** the user confirms the remote now completes ordinary
+      climb-up; PID 8320 SEND and PID 21184 FORCE markers prove the exact
+      `edge-jump-a` boundary. Static basis retained:
       ordinary `PlayerEdgeController` slots 18/19 query exact authored
       `edge-jump-a` with `edge=0`; slot 57 `0x141315B00` creates/enqueues the
       ledge/climb-up `PlayerCommonAction`; independent
@@ -120,13 +121,22 @@
       consumes before calling climb slots 57/59; its local-input comparison is a
       probe-path selector, not a safe bypass target.
       Current sender/hook carried only generic jump/jump-hold, while raw face A
-      is forbidden by the confirmed jump->evade bleed. **IMPLEMENTED `hs`:** a
-      dedicated protocol cue captures and forces only exact `edge-jump-a` held
-      queries on remote Joypad 3, with bounded SEND/FORCE markers and no Player,
-      transform, context, collision or animation writes. Test an ordinary pull-up:
-      native climb-up + grounded completion wins T1; FORCE while still hanging
-      selects missing later edge context; climb then Y rollback selects vertical
-      freerun correction; no FORCE selects packet publication.
+      is forbidden by the confirmed jump->evade bleed. **REMAINING DOWNWARD CASE:**
+      sender lets go but remote remains hanging. **STATIC QUOTA MET / IMPLEMENTED
+      `ht`:** `PlayerEdgeState_HandleDropCommand 0x1413330C0` is called before
+      general transitions and queries exact `drop`, edge=0 at `0x141333301`,
+      `0x141333463` and `0x14133405C`; its successful branch publishes the
+      release state, consumes `drop`, calls `PlayerEdgeState_StartFallFromEdge
+      0x14133D800`, and returns handled. That helper constructs/enqueues the
+      native `PlayerFallMoveUpdate`/`PlayerCommonAction`; controller slot 166
+      `0x14131F560` dispatches `climb-release-edge` and publishes
+      `player-left-edge`; virtual `0x141324450` publishes `player-release-edge`.
+      `drop-hold` slot 23 is only an auxiliary competing-transition gate and is
+      explicitly not relayed. A dedicated protocol cue captures/forces only
+      exact `drop` on Joypad 3 with bounded SEND/FORCE markers. Test one ordinary
+      grab-and-let-go: native fall wins T1; FORCE while hanging selects downstream
+      edge context; fall then reattach selects later state/reconciliation; no
+      FORCE selects packet publication.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw

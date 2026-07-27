@@ -10114,3 +10114,79 @@ wall-hang, play the native climb-up and finish on the top surface, with no
 jump-to-roll regression. SEND without FORCE selects packet/force publication;
 FORCE while still hanging selects T3; visible climb followed by vertical
 rollback selects T4; a started but unfinished animation selects T5.
+
+### 2026-07-27 RUNTIME CONFIRMED: ordinary edge climb-up command relay (`hs`)
+
+The user confirms that the remote Player now completes an ordinary wall-hang
+pull-up and reaches the top surface. Sender PID 8320 emitted
+`TRAVERSAL-EDGE-JUMP-A-SEND rise/release`; receiver PID 21184 emitted five
+`TRAVERSAL-EDGE-JUMP-A-FORCE edge=0` rows during the successful pull-up. Both
+processes remained responsive and the user reported no jump-to-roll regression.
+This confirms the exact authored `edge-jump-a` relay and closes the upward half
+of the traversal bug.
+
+The remaining user-visible case is the opposite transition: after grabbing an
+edge and deliberately letting go, the sender falls but the remote Player remains
+in wall-hang.
+
+### 2026-07-27 STATIC / IMPLEMENTED: relay ordinary wall-hang `drop` (`ht`)
+
+The direct release handler uses another authored command that was absent from
+the co-op packet. Four independent static evidence points distinguish it from
+generic crouch, `drop-hold` and movement-family ledge drops:
+
+1. `PlayerEdgeState_Update 0x14132F990` calls `0x1413330C0` at
+   `0x141331429` before the general transition selector and treats true as a
+   handled state transition. That helper independently hashes exact literal
+   `drop` and queries it with held semantics (`edge=0`) through
+   `Joypad_IsCommandActive 0x141837CD0` at `0x141333301` and `0x141333463`,
+   then through `PlayerInputCommandState_IsCommandActive` at `0x14133405C`.
+   Its CRC is `0x28DCC05A`.
+2. The successful branch in `0x1413330C0` publishes the constructed actor-state
+   block at `0x1413344DF`, consumes the exact `drop` command through
+   `0x140EBF4C0` at `0x1413344FA`, calls `0x14133D800(..., 1)` at
+   `0x14133493D`, and returns handled at `0x1413344FF`. This is the concrete
+   ordinary wall-hang drop handler, not a passive query.
+3. `PlayerEdgeState_StartFallFromEdge 0x14133D800` removes the current move
+   actions at `0x14133D8CD`, constructs `PlayerFallMoveUpdate` at
+   `0x14133D996`, wraps/enqueues its `PlayerCommonAction` at `0x14133DA28`, and
+   exits the current Player state through vtable `+0xCC0` at `0x14133DD67`.
+   Independent controller slot 120 (`0x141319E80`) builds the related
+   `fall`/`ledge-grab-fall` action pair and enqueues it at `0x14131A25E`.
+4. Downstream notifications agree with that action path: controller slot 166
+   (`0x14131F560`) constructs `climb-release-edge`/`climb-grab-edge` state
+   descriptors and publishes `player-left-edge` through `0x141341A10`; virtual
+   `0x141324450` separately publishes `player-release-edge` to the resolved edge
+   process.
+
+Before `ht`, sender capture queried `crouch` but never `drop`, while the remote
+Joypad-3 hook only recognized the crouch hash. Sharing a physical button does
+not preserve authored command identity; forcing raw face B is also unsafe
+because it aliases the already-confirmed crouch/evade bleed.
+
+Build `ht` adds a separate protocol-only `drop` bit. Sender capture sets it only
+from exact `IsCommandActive(drop, edge=0)`; receiver force returns true only for
+the same hash and edge on remote Joypad 3. It adds bounded SEND rise/release and
+FORCE rows and writes no Player state, edge target, transform, animation or
+collision data. The Release DLL builds successfully; all direct-drop/action
+labels were saved to the single `ida/tll.i64` (`1324 functions, 23 data names`,
+`save_database returned True`) and resolved through the restarted MCP.
+
+Competing explanations remain explicit. **T2:** controller slot 23
+`0x14130EBF0` queries `drop-hold`, but it is paired with slot-21 geometry at
+`0x141334CD8/0x141334CEC` only to exit the competing transition selector, and
+its independent Update result merely inhibits the no-input branch. It is not
+the direct handled release path. **T3:** `PlayerLedgeDropController` and its
+`crouch-ledge-drop`/`run-ledge-drop-*` actions start ledge drops from ground
+movement, not release from an already grabbed ordinary edge. **T4:** the forced
+`drop` reaches the handler but the remote lacks the current-edge context needed
+by the downstream release descriptor. **T5:** native release begins, but a later
+state transition or normal position reconciliation reattaches the puppet.
+
+**Falsifiable `ht` prediction:** on one ordinary grab-and-let-go, sender logs
+`TRAVERSAL-EDGE-DROP-SEND rise`, receiver logs
+`TRAVERSAL-EDGE-DROP-FORCE edge=0`, and the remote Player immediately leaves
+wall-hang and falls, without crouching, rolling or dropping while the sender
+still holds the edge. SEND without FORCE selects packet publication; FORCE
+while still hanging selects T4 and a read-only handler/downstream-context probe;
+fall followed by reattachment selects T5.

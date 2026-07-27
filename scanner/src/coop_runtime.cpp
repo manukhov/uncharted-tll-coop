@@ -768,10 +768,15 @@ constexpr std::uint64_t kJoypadMeleeTriangleButtonMask = 0x100000000ull;
 // held command (edge=0). Keep it distinct from raw face A=0x20, which is
 // ambiguous with the confirmed ScaleCopy evade bleed.
 constexpr std::uint64_t kJoypadEdgeJumpAIntentMask = 0x200000000ull;
+// Protocol-only ordinary Player::Edge release cue. PlayerEdgeState_HandleDrop
+// queries authored `drop` three times with held semantics (edge=0); generic
+// crouch, drop-hold and raw face B are different command identities.
+constexpr std::uint64_t kJoypadEdgeDropIntentMask = 0x400000000ull;
 constexpr std::uint64_t kJoypadTraversalIntentMask =
     kJoypadCrouchButtonMask | kJoypadEvadeRollButtonMask |
     kJoypadJumpPressButtonMask | kJoypadJumpHoldButtonMask |
     kJoypadMeleeTriangleButtonMask | kJoypadEdgeJumpAIntentMask |
+    kJoypadEdgeDropIntentMask |
     0x1000000ull | 0x10000000ull | 0x20000000ull;
 // NormalizeStick face buttons (engine space, CONFIRMED 0x141A99FD0):
 //   A -> 0x20, X -> 0x40, B -> 0x80. Authored jump descriptor = A (0x20),
@@ -1929,6 +1934,8 @@ char __fastcall hooked_joypad_is_command_active(
                     string_hash("jump-hold", 9, 0);
                 static const std::uint32_t kEdgeJumpAHash =
                     string_hash("edge-jump-a", 11, 0);
+                static const std::uint32_t kEdgeDropHash =
+                    string_hash("drop", 4, 0);
                 static const std::uint32_t kEvadeRollHash =
                     string_hash("evade-roll", 10, 0);
                 static const std::uint32_t kEvadeStartHash =
@@ -1971,6 +1978,24 @@ char __fastcall hooked_joypad_is_command_active(
                     if (log_index < 8) {
                         std::ostringstream line;
                         line << "TRAVERSAL-EDGE-JUMP-A-FORCE edge="
+                             << static_cast<unsigned>(edge)
+                             << " force=0x" << std::hex << force << std::dec;
+                        boot_log_line(line.str().c_str());
+                    }
+                    return 1;
+                }
+                // Ordinary Player::Edge release is a distinct held command.
+                // Force it only for the exact remote Joypad-3 query so the
+                // existing crouch/drop-hold/evade mappings remain isolated.
+                if (hash == kEdgeDropHash && edge == 0 &&
+                    (force & kJoypadEdgeDropIntentMask) != 0) {
+                    static std::atomic<unsigned> edge_drop_force_logs{0};
+                    const unsigned log_index =
+                        edge_drop_force_logs.fetch_add(
+                            1, std::memory_order_relaxed);
+                    if (log_index < 8) {
+                        std::ostringstream line;
+                        line << "TRAVERSAL-EDGE-DROP-FORCE edge="
                              << static_cast<unsigned>(edge)
                              << " force=0x" << std::hex << force << std::dec;
                         boot_log_line(line.str().c_str());
@@ -12826,12 +12851,14 @@ std::uint64_t merge_authored_traversal_button_mask(
     static const std::uint32_t kJumpHoldHash = string_hash("jump-hold", 9, 0);
     static const std::uint32_t kEdgeJumpAHash =
         string_hash("edge-jump-a", 11, 0);
+    static const std::uint32_t kEdgeDropHash = string_hash("drop", 4, 0);
     static const std::uint32_t kEvadeRollHash = string_hash("evade-roll", 10, 0);
     static const std::uint32_t kEvadeStartHash = string_hash("evade-start", 11, 0);
     static const std::uint32_t kCrouchHash = string_hash("crouch", 6, 0);
     static std::uint64_t jump_pad = 0;
     static std::uint64_t jump_hold_pad = 0;
     static std::uint64_t edge_jump_a_pad = 0;
+    static std::uint64_t edge_drop_pad = 0;
     static std::uint64_t evade_pad = 0;
     static std::uint64_t crouch_pad = 0;
     static bool resolved = false;
@@ -12840,6 +12867,7 @@ std::uint64_t merge_authored_traversal_button_mask(
         jump_hold_pad = resolve_command_gamepad_mask(joypad, kJumpHoldHash);
         edge_jump_a_pad =
             resolve_command_gamepad_mask(joypad, kEdgeJumpAHash);
+        edge_drop_pad = resolve_command_gamepad_mask(joypad, kEdgeDropHash);
         evade_pad = resolve_command_gamepad_mask(joypad, kEvadeRollHash);
         if (evade_pad == 0) {
             evade_pad = resolve_command_gamepad_mask(joypad, kEvadeStartHash);
@@ -12850,6 +12878,7 @@ std::uint64_t merge_authored_traversal_button_mask(
         init << "TRAVERSAL-PAD-MASKS jump=0x" << std::hex << jump_pad
              << " jumpHold=0x" << jump_hold_pad
              << " edgeJumpA=0x" << edge_jump_a_pad
+             << " edgeDrop=0x" << edge_drop_pad
              << " evade=0x" << evade_pad
              << " crouch=0x" << crouch_pad << std::dec
              << " hashes jump=0x" << std::hex << kJumpHash
@@ -12862,6 +12891,7 @@ std::uint64_t merge_authored_traversal_button_mask(
         (void)jump_pad;
         (void)jump_hold_pad;
         (void)edge_jump_a_pad;
+        (void)edge_drop_pad;
         (void)evade_pad;
         (void)crouch_pad;
     }
@@ -12887,6 +12917,19 @@ std::uint64_t merge_authored_traversal_button_mask(
     }
     if (edge_jump_a_active) {
         mask |= kJoypadEdgeJumpAIntentMask;
+    }
+    // PlayerEdgeState_HandleDrop consumes this exact held command at three
+    // independent callsites before publishing the edge-release transition.
+    const bool edge_drop_active = is_active(joypad, kEdgeDropHash, 0) != 0;
+    static bool edge_drop_was_active = false;
+    if (edge_drop_active != edge_drop_was_active) {
+        edge_drop_was_active = edge_drop_active;
+        boot_log_line(edge_drop_active
+                          ? "TRAVERSAL-EDGE-DROP-SEND rise"
+                          : "TRAVERSAL-EDGE-DROP-SEND release");
+    }
+    if (edge_drop_active) {
+        mask |= kJoypadEdgeDropIntentMask;
     }
     if (is_active(joypad, kEvadeRollHash, 1) ||
         is_active(joypad, kEvadeRollHash, 0) ||
@@ -38405,7 +38448,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-26hs "
+        "TLL co-op runtime init 2026-07-27ht "
         "(retained Player native grenade owns physics)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
