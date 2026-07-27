@@ -116,6 +116,14 @@
       Chloe retains a separate stale M30 FHUD record beside the new Mazur prompt.
       Scope the next change to the exact pending flags=3 transaction and its
       consumed weak+generation key.
+- [ ] **`if` STATIC / IMPLEMENTED, runtime pending:** after `CONSUME-HUD killed=1`,
+      scan the four stock physical records for the exact consumed weak+generation,
+      call `FHUD_DestroyInteractScript 0x141357CA0`, and suppress only a five-
+      second re-publish of that same key at `0x1408AF179`. For an exact pending
+      picked/dropped-art transaction whose peer slot already matches, bypass only
+      the generic 500-ms slot dwell. Run the written test: one destroyed HUD slot,
+      no stale M30 prompt, one Mazur, and `DROP-EXISTING latencyMs < 500` without
+      inventory/HUD regressions.
 
 ## P0: Full Player Synchronization (CURRENT)
 

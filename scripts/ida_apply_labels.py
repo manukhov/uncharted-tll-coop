@@ -1436,11 +1436,25 @@ FUNCTIONS = {
         "FHUD_PublishInteractRecord at 0x1413B48C2. RCX/RDX remain the exact HUD "
         "state and interact record ABI.",
     ),
+    0x141353750: (
+        "FHUD_ResetInteractRecord",
+        "Resets one physical interact record. Explicitly zeroes its weak key at "
+        "+0x18/+0x20 and fallback key +0x28, then restores the default record "
+        "timing, transform and state fields. Called by DestroyInteractScript.",
+    ),
+    0x141354EA0: (
+        "FHUD_UpsertInteractRecord",
+        "Upserts one submitted interact record into the four-slot physical FHUD "
+        "store. Iterates four 0x710-stride records, matches live weak identities "
+        "through weak+0x8/object+0xBC (or fallback +0x28), copies the record and "
+        "sets that slot's refresh byte; otherwise selects one free slot.",
+    ),
     0x141357CA0: (
         "FHUD_DestroyInteractScript",
         "FHUD::HudFlash::DestroyInteractScript. For one of four physical HUD "
-        "slots, kills the active Flash process through ProcessKillTree, clears "
-        "the active flag, and resets its keyed interact record.",
+        "slots, kills only the active Flash process through ProcessKillTree, "
+        "clears the active flag, and calls FHUD_ResetInteractRecord to zero the "
+        "slot's weak/fallback key. Its only code caller is stock per-frame expiry.",
     ),
     0x141357D60: (
         "FHUD_UpdateInteractScriptsAndExpire",

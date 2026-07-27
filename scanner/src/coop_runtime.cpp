@@ -8464,6 +8464,7 @@ bool install_hud_draw_interactable_primary_screen_gate() {
 
 constexpr std::size_t kGroundPickupHudCandidateCount = 16;
 constexpr ULONGLONG kGroundPickupHudCandidateMaxAgeMs = 15000;
+constexpr ULONGLONG kConsumedGroundPickupHudSuppressMs = 5000;
 
 struct GroundPickupHudCandidate {
     std::uintptr_t weak_handle{0};
@@ -8476,6 +8477,36 @@ struct GroundPickupHudCandidate {
 SRWLOCK g_ground_pickup_hud_candidates_lock = SRWLOCK_INIT;
 std::array<GroundPickupHudCandidate, kGroundPickupHudCandidateCount>
     g_ground_pickup_hud_candidates{};
+std::atomic<std::uintptr_t> g_consumed_ground_pickup_hud_weak{0};
+std::atomic<std::uint32_t> g_consumed_ground_pickup_hud_generation{0};
+std::atomic<ULONGLONG> g_consumed_ground_pickup_hud_until_ms{0};
+std::atomic<bool> g_consumed_ground_pickup_hud_suppress_logged{false};
+
+void arm_consumed_ground_pickup_hud_suppression(
+    std::uintptr_t weak_handle, std::uint32_t generation) {
+    if (weak_handle == 0 || generation == 0) return;
+    g_consumed_ground_pickup_hud_weak.store(
+        weak_handle, std::memory_order_relaxed);
+    g_consumed_ground_pickup_hud_generation.store(
+        generation, std::memory_order_relaxed);
+    g_consumed_ground_pickup_hud_suppress_logged.store(
+        false, std::memory_order_relaxed);
+    g_consumed_ground_pickup_hud_until_ms.store(
+        GetTickCount64() + kConsumedGroundPickupHudSuppressMs,
+        std::memory_order_release);
+}
+
+bool consumed_ground_pickup_hud_key_is_suppressed(
+    const FhudFallbackRecordIdentity& identity) {
+    const ULONGLONG until = g_consumed_ground_pickup_hud_until_ms.load(
+        std::memory_order_acquire);
+    return until != 0 && GetTickCount64() <= until &&
+        identity.weak_handle == g_consumed_ground_pickup_hud_weak.load(
+                                    std::memory_order_relaxed) &&
+        identity.weak_generation ==
+            g_consumed_ground_pickup_hud_generation.load(
+                std::memory_order_relaxed);
+}
 
 bool seh_resolve_ground_pickup_hud_candidate(
     const void* per_screen_hud_state,
@@ -8578,6 +8609,19 @@ void capture_ground_pickup_hud_candidate(
 }
 
 void __fastcall hooked_pickup_control_hud_record(void* state, void* record) {
+    FhudFallbackRecordIdentity identity{};
+    if (seh_read_fhud_fallback_record_identity(record, identity) &&
+        consumed_ground_pickup_hud_key_is_suppressed(identity)) {
+        if (!g_consumed_ground_pickup_hud_suppress_logged.exchange(
+                true, std::memory_order_acq_rel)) {
+            std::ostringstream line;
+            line << "PICKUP-HUD-CONSUMED-SUPPRESS weak=0x" << std::hex
+                 << identity.weak_handle << ":" << identity.weak_generation
+                 << std::dec;
+            boot_log_line(line.str().c_str());
+        }
+        return;
+    }
     capture_ground_pickup_hud_candidate(state, record);
     if (g_original_hud_draw_interactable_record != nullptr) {
         g_original_hud_draw_interactable_record(state, record);
@@ -15326,6 +15370,8 @@ bool puppet_weapon_sync_ready(void* puppet);
 bool try_stock_world_weapon_replacement(
     void* puppet, int slot, void* current_weapon, std::uint32_t current_art,
     std::uint32_t peer_art, bool& gave);
+bool exact_world_weapon_replacement_pending(
+    std::uint32_t current_art, std::uint32_t peer_art);
 
 void queue_relay_pickup_gesture_after_mirror(
     std::uint32_t art, std::uint32_t seq) {
@@ -15424,7 +15470,10 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
         // Debounce only this slot. Unrelated raw-slot changes used to restart a
         // whole-snapshot one-second timer and stretched pickup display to 2-3s.
         // Empty-slot initial fill remains immediate.
-        if (cur_art != 0 && now - stable.since_ms < 500) {
+        const bool exact_world_replacement =
+            exact_world_weapon_replacement_pending(cur_art, peer_art);
+        if (cur_art != 0 && !exact_world_replacement &&
+            now - stable.since_ms < 500) {
             continue;
         }
         if (peer_art == cur_art) {
@@ -25168,6 +25217,15 @@ struct PendingWorldWeaponLifecycle {
 };
 PendingWorldWeaponLifecycle g_pending_world_weapon_lifecycle{};
 
+bool exact_world_weapon_replacement_pending(
+    std::uint32_t current_art, std::uint32_t peer_art) {
+    const PendingWorldWeaponLifecycle& pending =
+        g_pending_world_weapon_lifecycle;
+    return current_art != 0 && peer_art != 0 && pending.drop_pending &&
+        relay_weapon_art_matches(peer_art, pending.picked_art) &&
+        relay_weapon_art_matches(current_art, pending.dropped_art);
+}
+
 bool try_stock_world_weapon_replacement(
     void* puppet, int slot, void* current_weapon, std::uint32_t current_art,
     std::uint32_t peer_art, bool& gave) {
@@ -25215,6 +25273,7 @@ bool try_stock_world_weapon_replacement(
          << " dropped=0x" << current_art
          << " ptr=0x" << reinterpret_cast<std::uintptr_t>(current_weapon)
          << " gen=0x" << generation << std::dec
+         << " latencyMs=" << (GetTickCount64() - pending.armed_ms)
          << " gave=" << (gave ? 1 : 0)
          << " detached=" << (detached ? 1 : 0)
          << " slotReleased=" << (no_longer_in_slot ? 1 : 0);
@@ -25262,6 +25321,8 @@ void apply_pending_weapon_world_packet() {
 
 struct NearbyGroundProcessWeapon {
     void* object{nullptr};
+    std::uintptr_t weak_handle{0};
+    std::uint32_t generation{0};
     std::uint32_t stable_id{0};
     std::uint32_t art{0};
     bool exact_id{false};
@@ -25344,7 +25405,8 @@ NearbyGroundProcessWeapon seh_find_ground_process_weapon_from_hud_candidates(
             }
             ++stats.matching_art;
             NearbyGroundProcessWeapon candidate{
-                object, stable_id, art, stable_id == remote_id};
+                object, captured.weak_handle, captured.generation,
+                stable_id, art, stable_id == remote_id};
             if (candidate.exact_id) return candidate;
             if (art_fallback.object == nullptr) {
                 art_fallback = candidate;
@@ -25356,6 +25418,40 @@ NearbyGroundProcessWeapon seh_find_ground_process_weapon_from_hud_candidates(
         return ambiguous_art ? NearbyGroundProcessWeapon{} : art_fallback;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return {};
+    }
+}
+
+bool seh_destroy_consumed_pickup_fhud_slots(
+    std::uintptr_t weak_handle, std::uint32_t generation,
+    std::uint32_t& matched, std::uint32_t& destroyed) {
+    matched = 0;
+    destroyed = 0;
+    if (weak_handle == 0 || generation == 0 || g_module == 0) return false;
+    __try {
+        void* const store = *reinterpret_cast<void**>(
+            g_module + kFhudPhysicalInteractStorePtrRva);
+        if (store == nullptr || readable_bytes(store) < 0x1E00) return false;
+        using DestroyFn = std::int64_t(__fastcall*)(void*, std::uint32_t);
+        const auto destroy = reinterpret_cast<DestroyFn>(
+            g_module + kFhudDestroyInteractScriptRva);
+        for (std::uint32_t slot = 0; slot < 4; ++slot) {
+            const auto* const record = static_cast<const std::byte*>(store) +
+                0x830 + static_cast<std::size_t>(slot) * 0x710;
+            const std::uintptr_t record_weak =
+                *reinterpret_cast<const std::uintptr_t*>(record + 0x18);
+            const std::uint32_t record_generation =
+                *reinterpret_cast<const std::uint32_t*>(record + 0x20);
+            if (record_weak != weak_handle ||
+                record_generation != generation) {
+                continue;
+            }
+            ++matched;
+            destroy(store, slot);
+            ++destroyed;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
     }
 }
 
@@ -25391,14 +25487,28 @@ void apply_pending_world_weapon_lifecycle() {
                 pending.consumed_remote_id, pending.picked_art, stats);
         if (local.object != nullptr) {
             const bool killed = seh_kill_ground_process_weapon(local.object);
+            std::uint32_t hud_matched = 0;
+            std::uint32_t hud_destroyed = 0;
+            bool hud_cleanup_ran = false;
+            if (killed) {
+                arm_consumed_ground_pickup_hud_suppression(
+                    local.weak_handle, local.generation);
+                hud_cleanup_ran = seh_destroy_consumed_pickup_fhud_slots(
+                    local.weak_handle, local.generation,
+                    hud_matched, hud_destroyed);
+            }
             std::ostringstream line;
             line << "WORLD-PICKUP-CONSUME-HUD seq=" << pending.sequence
                  << " remote_id=0x" << std::hex
                  << pending.consumed_remote_id << " local_id=0x"
                  << local.stable_id
                  << " art=0x" << pending.picked_art << std::dec
+                 << " latencyMs=" << (now - pending.armed_ms)
                  << " match=" << (local.exact_id ? "stable-id" : "unique-art")
-                 << " killed=" << (killed ? 1 : 0);
+                 << " killed=" << (killed ? 1 : 0)
+                 << " hudCleanup=" << (hud_cleanup_ran ? 1 : 0)
+                 << " hudMatched=" << hud_matched
+                 << " hudDestroyed=" << hud_destroyed;
             boot_log_line(line.str().c_str());
             if (killed) pending.consume_pending = false;
         } else if (now - pending.armed_ms > 5000) {
@@ -25418,8 +25528,8 @@ void apply_pending_world_weapon_lifecycle() {
     if (pending.drop_pending) {
         // SLOT-MIRROR owns an exact flags=3 replacement and clears this flag
         // only after stock GiveWeapon has detached the receiver-local old weapon.
-        // Keep the intent alive across its 500 ms slot debounce and UDP ordering;
-        // the old implementation parked it immediately for COPW packets.
+        // Keep the intent alive across UDP ordering. Generic slot changes retain
+        // the 500 ms debounce; only this exact flags=3 replacement bypasses it.
         if (now - pending.armed_ms > 5000) {
             std::ostringstream line;
             line << "WORLD-PICKUP-DROP-EXISTING expired seq=" << pending.sequence
@@ -39970,8 +40080,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27ie "
-        "(stock HUD-weak world consume; confirmed stock drop)");
+        "TLL co-op runtime init 2026-07-27if "
+        "(exact FHUD consume cleanup; immediate matched stock drop)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

@@ -11228,3 +11228,73 @@ Two independent follow-ups remain:
 The consume result is **CONFIRMED** and must be preserved. Next work is scoped to
 accelerating only an exact pending stock replacement and destroying/suppressing
 only the consumed weak+generation FHUD key.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `if` clears the exact consumed HUD slot and bypasses only its matched drop debounce
+
+**Hypothesis.** The stale prompt and delayed replacement are independent local
+ordering defects. After a successful receiver consume, the exact weak+generation
+key already selected for `ProcessKillTree` can identify and destroy only its
+physical FHUD record, while a short same-key tombstone prevents a late publisher
+in the same lifecycle from recreating it. Separately, SLOT-MIRROR may bypass its
+generic 500-ms art-stability debounce when — and only when — a pending flags=3
+transaction already matches both the peer desired art and the receiver's current
+dropped art.
+
+The HUD hypothesis meets the evidence quota with independent producer, consumer,
+reset, and runtime evidence:
+
+1. `FHUD_UpsertInteractRecord 0x141354EA0` iterates exactly four records with
+   `0x710` stride. At `0x141354EDA..0x141354F58` it resolves submitted and stored
+   `+0x18/+0x20` weak keys through `weak+0x8`, compares the resulting object
+   identities after generation validation, then copies the record and sets that
+   slot's refresh byte. A stale M30 and valid Mazur therefore occupy distinct
+   physical records, matching the screenshot.
+2. `FHUD_DestroyInteractScript 0x141357CA0` asserts index `<4`, indexes the same
+   global physical store by `0x710`, kills only the active Flash process, clears
+   its active flag and calls `FHUD_ResetInteractRecord 0x141353750` on the keyed
+   record. The reset explicitly zeroes `+0x18/+0x20` and `+0x28`. The destroyer's
+   sole code xref is stock `FHUD_UpdateInteractScriptsAndExpire` at
+   `0x141357F7A`, independently confirming this is the native expiry primitive.
+3. `ie` now supplies the missing ownership information without screen or Player
+   inference: the receiver consume result contains the exact local weak handle,
+   generation, ProcessWeapon pointer, stable ID and art which produced the stale
+   record. Scanning four slot keys for exact weak+generation cannot select the new
+   Mazur record or another weapon.
+4. Runtime confirms `ProcessKillTree` removes the M30 model but leaves its prompt,
+   so waiting for gameplay-object destruction alone is insufficient. The exact
+   source call `0x1408AF179` is the only observed way the prompt can be refreshed;
+   suppressing only the consumed key there closes the reinsert race without the
+   rejected Chloe/Nadine ownership gate.
+
+The drop acceleration has three independent constraints. The COPW packet arms a
+single pending transaction with picked and dropped arts; `try_stock_world_weapon_replacement`
+already repeats both comparisons before calling stock GiveWeapon; and SLOT-MIRROR
+does not act until the peer StatePacket itself shows the picked art in the same
+slot. Thus skipping the remaining 500-ms dwell at that point does not trust COPW
+alone and does not expose ordinary snapshot reconciliation. Old/out-of-order
+StatePackets still pass through the generic stability gate.
+
+Competing designs are excluded. A broad publisher or screen-index gate previously
+moved the HUD defect between characters. Destroying all four slots would erase
+unrelated prompts. Suppression without native destroy leaves the already-visible
+Flash process until expiry, while destroy without the exact-source tombstone can
+lose to a later refresh in the same frame. Removing the global slot debounce can
+replay stale snapshots; immediately giving from COPW before a matching peer slot
+would recreate that rejected race. `if` therefore arms a five-second tombstone
+only for the consumed key, calls stock destroy only for exact matching physical
+slots, and preserves all other publishers and reconcile timing.
+
+Build `if` also adds discriminating markers: consume reports
+`latencyMs`, `hudCleanup`, `hudMatched`, and `hudDestroyed`; a prevented late
+refresh emits one `PICKUP-HUD-CONSUMED-SUPPRESS`; stock drop reports its packet-to-
+give `latencyMs`. **Falsifiable prediction:** replacing M30 with Mazur must emit
+`CONSUME-HUD ... killed=1 hudCleanup=1 hudMatched=1 hudDestroyed=1`. The M30 model
+and prompt must disappear immediately, Mazur alone must remain, and any late M30
+refresh must produce at most one suppress marker without becoming visible.
+`DROP-EXISTING` must retain `gave=1 detached=1 slotReleased=1` but now occur on the
+first matching peer slot snapshot, normally with `latencyMs < 500`, eliminating
+the visible multi-second delay. A zero HUD match with a surviving prompt rejects
+the documented physical layout; a destroyed slot which reappears without a
+suppress marker rejects the exact source; wrong-world removal rejects key
+identity; any ordinary non-world slot regression rejects the scoped debounce
+predicate.
