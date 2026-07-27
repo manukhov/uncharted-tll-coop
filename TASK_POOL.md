@@ -2594,23 +2594,23 @@ Do not reopen these as the first move:
 
 ## P0 NEXT - World-weapon replacement reliability follow-up (2026-07-27 `ik`)
 
-- [x] Implement `im` stock-target resolution for flags=3. Reuse the sender's
-      captured 0xC0-byte WeaponInfo and its raw slot byte at `+8`, then ask the
-      receiver's own GiveWeapon controller mapping for the exact object which
-      will be replaced. Protect that transaction from generic slot pre-kill and
-      log bounded `WORLD-PICKUP-DROP-STOCK-WAIT` reasons until it succeeds.
+- [x] REJECT `im/in` WeaponInfo-slot targeting. Runtime produced absent COPG and
+      garbage `WeaponInfo+8` values, while static GiveWeapon and FHUD paths prove
+      the manager slot comes from the resolved weapon art-definition record
+      `+8`; unconditional generic endpoint blocking caused the no-drop regression.
 - [x] Implement `im` HUD-independent consumed-model discovery through the fixed
       AnimMgr FgAnimData pool. Require allocation bit, generation-valid weak
       handle, exact ProcessWeapon vtable/art, world-unparented ownership and an
       exact stable ID or unique-art fallback. Broad heap/registry scans remain
       forbidden. Release build compiles; run the written `im` discriminator.
-- [x] Implement `in` owner-thread HUD cleanup. The old exact slot selection is
-      retained, but no Flash lifetime call runs from the retained Player/world
-      update. Queue the consumed identity and invoke stock
-      `FHUD_DestroyInteractScript` only from its exact screen-0 HudFlash frame
-      owner at callsite `0x141356BF1`; census the independently initialized
-      screen-1 store read-only. Release build compiles and awaits the written
-      prompt/crash discriminator.
+- [x] REJECT `in` owner-thread HUD cleanup. Exact primary weak/map selection and
+      `destroyed=1` with zero secondary matches still left Chloe's icon visible.
+- [~] Build/test `io`: resolve stock replacement slots from art definitions and
+      allow generic fallback whenever exact resolution cannot own the attempt;
+      gate `PickupInteractControl_PublishHudPrompt 0x1408AEA00` by its explicit
+      Player argument so retained Player 1 cannot create a record in the local
+      campaign HUD. Fresh-load M30/Mazur discriminator is written in
+      `COOP_STATUS.md`.
 
 ## Rule
 

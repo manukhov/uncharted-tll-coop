@@ -468,20 +468,22 @@ constexpr std::uintptr_t kPlayerTryStartBumpActionRva = 0x0CE8E10;
 constexpr std::uintptr_t kPickupRequestInteractRva = 0x08C8A40;
 constexpr std::uintptr_t kWeaponPickupOnInteractRva = 0x157AA70;
 constexpr std::uintptr_t kWeaponInteractControlVftableRva = 0x29BF4A8;
+// Shared PickupInteractControl-family vtable +0xE0 HUD publisher. Its explicit
+// third argument is the Player for whom the prompt is being built; screen-state
+// routing alone is insufficient because the retained Player can map back onto
+// the single visible campaign HUD.
+constexpr std::uintptr_t kPickupInteractControlPublishHudPromptRva = 0x08AEA00;
 // The script native hud-draw-interactable-on-object (0x140328C20) builds a
 // fallback-keyed record without Player/object weak ownership and submits it at
 // this exact callsite. Its first argument is the explicit per-screen HUD state.
 constexpr std::uintptr_t kHudDrawInteractableRecordCallsiteRva = 0x03290FD;
 constexpr std::uintptr_t kFhudPublishInteractRecordRva = 0x1359470;
-// Screen-0 HudFlash owns the physical four-slot interact lifecycle. Its frame
-// update is the sole stock caller of DestroyInteractScript; queue cleanup from
-// the Player/world thread and execute it only at this exact HUD-owner callsite.
+// Kept for the read-only/exact-slot diagnostic implementation below. Runtime
+// mutation at this owner boundary is rejected and no installer invokes it.
 constexpr std::uintptr_t kFhudUpdateInteractScriptsCallsiteRva = 0x1356BF1;
 constexpr std::uintptr_t kFhudUpdateInteractScriptsRva = 0x1357D60;
 constexpr std::uintptr_t kFhudDestroyInteractScriptRva = 0x1357CA0;
 constexpr std::uintptr_t kFhudPhysicalInteractStorePtrRva = 0x3EF1F20;
-// Second initialized per-screen HudFlash store. It is read only by the cleanup
-// probe: the stock screen-0 destroy function is hard-wired to the primary store.
 constexpr std::uintptr_t kFhudSecondaryInteractStorePtrRva = 0x3EF2020;
 // Runtime-confirmed sole source of the authored M30 prompt. The source record
 // carries the interactable's stock weak handle/generation at +0x18/+0x20; keep

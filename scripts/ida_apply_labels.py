@@ -1423,7 +1423,9 @@ FUNCTIONS = {
         "+0x18/+0x20 weak key is copied from a2+0xA8/a2+0xBC. The Player handle "
         "selects a HUD index through player-manager vtable +0xD0 (not "
         "Player+0x4010), then call 0x1408AF179 refreshes the four-slot FHUD "
-        "interact store through 0x141359470.",
+        "interact store through 0x141359470. In the retained-Player campaign "
+        "mod this mapping can route Player 1 back into the visible HUD; gate by "
+        "the explicit a3 owner before record construction.",
     ),
     0x140328C20: (
         "HudScript_DrawInteractableOnObject",
@@ -8326,10 +8328,13 @@ FUNCTIONS = {
         "Exact embedded signature: PlayerWeaponController::GiveWeapon(WeaponInfo*, "
         "bool, bool, BuffSource const*), controller vtable +0x158. Reads initial "
         "total ammo from WeaponInfo+0x84; -1 selects authored/random derivation "
-        "before passing the result to CreateAndAddWeapon vtable +0x130. For a "
-        "replaceable occupied slot it retains the exact old ProcessWeapon from "
-        "vtable +0xB0, detaches it at 0x1410A68AC, publishes weapon-dropped at "
-        "0x1410A693C, then sends it only when native net mode is enabled.",
+        "before passing the result to CreateAndAddWeapon vtable +0x130. The "
+        "replacement slot is NOT WeaponInfo+8: it resolves the incoming art via "
+        "CachedWeaponArtDefs, reads the definition record DWORD at +8, maps "
+        "campaign aliases 16->0 and 17/22->1, then retains the exact old "
+        "ProcessWeapon from vtable +0xB0. It detaches that object at 0x1410A68AC, "
+        "publishes weapon-dropped at 0x1410A693C, then sends it only when native "
+        "net mode is enabled.",
     ),
     0x1410A1F90: (
         "PlayerWeaponController_GetWeaponBySlot",

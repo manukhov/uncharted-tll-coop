@@ -11900,3 +11900,92 @@ roles and remained Win32-responsive after initialization. Neither log contains a
 hook `SKIPPED`, incomplete install, or terminal exception marker. This confirms
 packaging only; the written M30/Mazur, Type-97 and reload behavior still require
 the user interaction in these running copies.
+
+### 2026-07-27 RUNTIME REJECTED: `in` blocks the old drop and destroys the wrong HUD lifetime level
+
+The user exercised fresh PID 23588 (Chloe) and PID 1152 (Nadine). The picked
+ground object could still be consumed, but the receiver stopped dropping the
+weapon which the peer replaced. The receiver log localizes the regression:
+flags=3 sequences 2 and 4 waited with `reason=1` because no COPG `WeaponInfo`
+block existed, while sequences 1, 3 and 5 read values such as `0x43BF5F2F` and
+`0x43BF60E8` from stored `WeaponInfo+8`, mapped them as manager slots and waited
+with `reason=3`. `world_weapon_replacement_blocks_generic` then suppressed the
+previous generic stock/fallback path until the five-second lifecycle expiry.
+Thus the COPG dependency and unconditional endpoint blocker are **REJECTED**.
+
+The same run rejects the screen-0 owner-thread HUD destruction hypothesis. A
+successful consume queued the exact local weak/generation, stable ID and M30 art;
+the next owner frame reported `primaryWeak=1 primaryMap=1 primarySelected=1
+destroyed=1`, with zero secondary-store matches. The user nevertheless still
+saw the M30 pickup offer. This rules out wrong thread and second-store ownership
+for that occurrence. Direct `FHUD_DestroyInteractScript` mutation is disabled
+again; the surviving defect must be prevented at its publisher/owner boundary.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `io` restores stock art-definition targeting and gates retained-Player HUD publication
+
+The exact replacement target is a property of the picked weapon art definition,
+not of the incoming 0x90-byte `WeaponInfo`. Three independent evidence kinds
+converge:
+
+1. `PlayerWeaponController::GiveWeapon 0x1410A4D40` resolves the incoming art ID
+   through `GetCachedWeaponArtDefsHashRegistry 0x1414FA380` and
+   `LookupRegistryRecordPointerById 0x141614E40`, reads the raw manager slot from
+   the returned record at `+8` (`0x1410A4E28`), maps campaign aliases `16->0`
+   and `17/22->1`, then queries controller vtable `+0xB0` at `0x1410A4E6B`.
+2. The independent HUD consumer `FHUD_UpdateSingleInteractScript 0x141358030`
+   repeats the same art-registry lookup, record `+8` read at `0x141358285`, alias
+   mapping and controller `+0xB0` query before describing a pickup weapon.
+3. Runtime `in` falsifies `WeaponInfo+8`: it is unavailable without COPG and
+   contains non-slot values around `0x43BFxxxx` when present. In contrast, the
+   earlier generic exact transaction repeatedly completed with `gave=1
+   detached=1 slotReleased=1`.
+
+`io` uses a shared guarded art-definition slot resolver for sender pre-capture
+and receiver replacement. A successfully resolved exact stock attempt owns its
+two endpoints for that tick. Missing registry/record/current-object evidence no
+longer blocks generic reconciliation, so failure is bounded and cannot reproduce
+the `in` no-drop state. Competing logical snapshot slots remain only a fallback;
+`WeaponInfo+8` and waiting indefinitely for COPG are rejected.
+
+The HUD change acts before Flash state exists. The leading hypothesis is that
+the retained Player publishes a valid weapon-interact record into the one visible
+campaign HUD, so destroying a downstream script cannot permanently correct the
+owner mistake. Its evidence quota is also satisfied:
+
+1. `PickupInteractControl_PublishHudPrompt 0x1408AEA00` receives the
+   interactable as `a2` and explicit Player as `a3`, copies `a2+0xA8/+0xBC` into
+   the record, then resolves the Player handle through player-manager vtable
+   `+0xD0` at `0x1408AEC4B` before selecting `g_PerScreenPlayerHudState` and
+   publishing at the runtime-confirmed call `0x1408AF179`.
+2. Prior source discrimination found only this exact pickup-control call for the
+   authored M30 prompt; fallback and generic publisher callsites were silent.
+   The prompt can already exist before any pickup, proving consume-time cleanup
+   is not its creation boundary.
+3. `in` destroyed an exact primary-store slot from its stock owner frame and
+   found no secondary copy, yet the display survived. The remaining concrete
+   ownership value which precedes screen mapping is the explicit Player.
+
+Build `io` detours the reloc-free 18-byte function prologue and returns before
+record construction only when `a3 == retained_player_object(1)`. Local Player
+calls, availability, world objects and the common FHUD publisher remain stock.
+The rejected owner-thread destroy installer is disabled and successful consumes
+report `hudMutation=disabled`. The Release DLL builds successfully. Corrected
+comments for `PlayerWeaponController_GiveWeapon` and
+`PickupInteractControl_PublishHudPrompt` were applied to the single `ida/tll.i64`;
+headless persistence reported `save_database returned True`, and MCP resolves
+both names after restart.
+
+Competing hypotheses remain falsifiable. A higher Flash/view cache independent
+of the pickup-control source would survive a fresh source gate. A local-Player
+publisher with the wrong interactable would produce the icon without any
+retained-owner suppression. Broad art-only slot deletion and second-store kills
+remain rejected.
+
+**Falsifiable `io` prediction:** on a fresh load, retained-player weapon prompts
+must emit bounded `PICKUP-HUD-OWNER-SUPPRESS player=retained` rows and the stale
+M30 offer must not appear on Chloe before any pickup; approaching a real local
+weapon must still show its normal prompt. Replacing M30 with Mazur must either
+complete `WORLD-PICKUP-DROP-EXISTING` with `gave=1 detached=1 slotReleased=1`
+using a plausible raw/mapped art-definition slot, or fall through immediately to
+the previous generic path—never expire solely because COPG is absent. The picked
+model must still disappear, and neither copy may crash.

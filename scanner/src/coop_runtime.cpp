@@ -8086,25 +8086,75 @@ using GiveWeaponTailFunction = void(__fastcall*)(
     void*, void*, std::int64_t, std::int64_t, std::int64_t);
 GiveWeaponTailFunction g_original_give_weapon_tail = nullptr;
 
-void* seh_get_give_replaced_weapon(void* controller, const void* weapon_info) {
-    if (controller == nullptr || weapon_info == nullptr) {
+bool seh_resolve_weapon_art_manager_slot(
+    std::uint32_t art, std::uint32_t& raw_slot, int& mapped_slot) {
+    raw_slot = ~0u;
+    mapped_slot = -1;
+    if (art == 0 || g_module == 0) {
+        return false;
+    }
+    __try {
+        using GetRegistryFunction = void*(__fastcall*)();
+        using LookupRecordFunction =
+            void*(__fastcall*)(void*, std::uint32_t);
+        void* const registry = reinterpret_cast<GetRegistryFunction>(
+            g_module + kGetCachedWeaponArtDefsHashRegistryRva)();
+        void* const art_definition =
+            registry != nullptr
+                ? reinterpret_cast<LookupRecordFunction>(
+                      g_module + kLookupRegistryRecordPointerByIdRva)(
+                      registry, art)
+                : nullptr;
+        if (art_definition == nullptr ||
+            readable_bytes(
+                static_cast<const std::byte*>(art_definition) + 8) <
+                sizeof(raw_slot)) {
+            return false;
+        }
+        raw_slot = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(art_definition) + 8);
+        mapped_slot = static_cast<int>(raw_slot);
+        // PlayerWeaponController::GiveWeapon performs this exact campaign-only
+        // art-definition slot mapping at 0x1410A4E28..0x1410A4E47.
+        if (raw_slot == 16) {
+            mapped_slot = 0;
+        } else if (raw_slot == 17 || raw_slot == 22) {
+            mapped_slot = 1;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        raw_slot = ~0u;
+        mapped_slot = -1;
+        return false;
+    }
+}
+
+void* seh_get_replaced_weapon_for_art(
+    void* controller, std::uint32_t art, std::uint32_t* resolved_raw_slot,
+    int* resolved_mapped_slot) {
+    if (resolved_raw_slot != nullptr) *resolved_raw_slot = ~0u;
+    if (resolved_mapped_slot != nullptr) *resolved_mapped_slot = -1;
+    if (controller == nullptr || art == 0) {
         return nullptr;
     }
     __try {
-        std::uint32_t slot = *reinterpret_cast<const std::uint32_t*>(
-            static_cast<const std::byte*>(weapon_info) + 8);
-        // PlayerWeaponController::GiveWeapon performs this exact campaign-only
-        // raw-slot mapping at 0x1410A4E2D..0x1410A4E47 before vt+0xB0.
-        if (slot == 16) {
-            slot = 0;
-        } else if (slot == 17 || slot == 22) {
-            slot = 1;
+        std::uint32_t raw_slot = ~0u;
+        int mapped_slot = -1;
+        if (!seh_resolve_weapon_art_manager_slot(
+                art, raw_slot, mapped_slot) || mapped_slot < 0) {
+            return nullptr;
+        }
+        if (resolved_raw_slot != nullptr) *resolved_raw_slot = raw_slot;
+        if (resolved_mapped_slot != nullptr) {
+            *resolved_mapped_slot = mapped_slot;
         }
         auto** const vtable = *reinterpret_cast<void***>(controller);
         using GetWeaponBySlotFn = void*(__fastcall*)(void*, std::uint32_t);
         const auto get_weapon = reinterpret_cast<GetWeaponBySlotFn>(
             vtable[0xB0 / sizeof(void*)]);
-        return get_weapon != nullptr ? get_weapon(controller, slot) : nullptr;
+        return get_weapon != nullptr
+            ? get_weapon(controller, static_cast<std::uint32_t>(mapped_slot))
+            : nullptr;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return nullptr;
     }
@@ -8293,8 +8343,8 @@ void __fastcall hooked_give_weapon_tail(
                         relay_pkt.consumed_pickup_stable_id =
                             relay_pickup_stable_id;
                     }
-                    relay_dropped_weapon =
-                        seh_get_give_replaced_weapon(controller, weapon_info);
+                    relay_dropped_weapon = seh_get_replaced_weapon_for_art(
+                        controller, relay_art, nullptr, nullptr);
                     if (relay_dropped_weapon != nullptr &&
                         readable_bytes(relay_dropped_weapon) >= 0x87E) {
                         relay_dropped_weapon_art =
@@ -8436,6 +8486,87 @@ bool install_give_weapon_diagnostic() {
 using FhudPublishInteractRecordFunction = void(__fastcall*)(void*, void*);
 FhudPublishInteractRecordFunction g_original_hud_draw_interactable_record =
     nullptr;
+
+using PickupInteractControlPublishHudPromptFunction = char(__fastcall*)(
+    void*, void*, void*, std::uint8_t, int, char, std::uint8_t, int);
+PickupInteractControlPublishHudPromptFunction
+    g_original_pickup_interact_publish_hud_prompt = nullptr;
+
+void seh_read_pickup_prompt_interactable_identity(
+    const void* interactable, std::uint32_t& stable_id, std::uint32_t& art) {
+    stable_id = 0;
+    art = 0;
+    __try {
+        if (interactable == nullptr || readable_bytes(interactable) < 0x864) {
+            return;
+        }
+        stable_id = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(interactable) + 0xD8);
+        if (*reinterpret_cast<const std::uintptr_t*>(interactable) ==
+            g_module + kProcessWeaponVtableRva) {
+            art = *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(interactable) + 0x860);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        stable_id = 0;
+        art = 0;
+    }
+}
+
+char __fastcall hooked_pickup_interact_publish_hud_prompt(
+    void* control, void* interactable, void* player, std::uint8_t arg4,
+    int arg5, char arg6, std::uint8_t arg7, int arg8) {
+    // The stock function accepts an explicit Player, but then maps that Player
+    // through the campaign player manager before selecting g_PerScreenPlayerHudState.
+    // The retained Player can consequently publish into the same physical
+    // screen-0 store as the local Player. Prevent that source record from ever
+    // being created; do not destroy/copy any Flash state after publication.
+    if (player != nullptr && player == retained_player_object(1)) {
+        static std::atomic<int> suppressed{0};
+        if (suppressed.fetch_add(1, std::memory_order_relaxed) < 32) {
+            std::uint32_t stable_id = 0;
+            std::uint32_t art = 0;
+            seh_read_pickup_prompt_interactable_identity(
+                interactable, stable_id, art);
+            std::ostringstream line;
+            line << "PICKUP-HUD-OWNER-SUPPRESS player=retained"
+                 << " object=0x" << std::hex
+                 << reinterpret_cast<std::uintptr_t>(interactable)
+                 << " stable=0x" << stable_id << " art=0x" << art
+                 << std::dec;
+            boot_log_line(line.str().c_str());
+        }
+        return 0;
+    }
+    return g_original_pickup_interact_publish_hud_prompt != nullptr
+        ? g_original_pickup_interact_publish_hud_prompt(
+              control, interactable, player, arg4, arg5, arg6, arg7, arg8)
+        : 0;
+}
+
+bool install_pickup_interact_prompt_owner_gate() {
+    // mov r11,rsp; push rbx/rsi/r13/r14/r15; sub rsp,0x610. All 18 bytes are
+    // position-independent and end on an instruction boundary.
+    constexpr std::array<std::uint8_t, 18> kPublishHudPromptPrologue{
+        0x4C, 0x8B, 0xDC,
+        0x53, 0x56,
+        0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
+        0x48, 0x81, 0xEC, 0x10, 0x06, 0x00, 0x00,
+    };
+    g_original_pickup_interact_publish_hud_prompt =
+        reinterpret_cast<PickupInteractControlPublishHudPromptFunction>(
+            install_fire_gate_detour(
+                kPickupInteractControlPublishHudPromptRva,
+                kPublishHudPromptPrologue.data(),
+                kPublishHudPromptPrologue.size(),
+                reinterpret_cast<void*>(
+                    &hooked_pickup_interact_publish_hud_prompt),
+                "pickup HUD retained-Player source gate"));
+    boot_log_line(g_original_pickup_interact_publish_hud_prompt != nullptr
+                      ? "pickup HUD retained-Player source gate installed"
+                      : "pickup HUD retained-Player source gate SKIPPED");
+    return g_original_pickup_interact_publish_hud_prompt != nullptr;
+}
 
 struct FhudFallbackRecordIdentity {
     std::uintptr_t weak_handle{0};
@@ -15461,10 +15592,8 @@ enum class PendingStockWorldReplacementResult : std::uint8_t {
     Owned,
 };
 PendingStockWorldReplacementResult
-try_pending_stock_world_weapon_replacement_from_give_info(
+try_pending_stock_world_weapon_replacement_from_art_definition(
     void* puppet, std::uint32_t peer_art);
-bool world_weapon_replacement_blocks_generic(
-    std::uint32_t current_art, std::uint32_t peer_art);
 
 void queue_relay_pickup_gesture_after_mirror(
     std::uint32_t art, std::uint32_t seq) {
@@ -15546,20 +15675,22 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
             force_log_line("PICKUP-GESTURE-ARM timeout waiting for SLOT-MIRROR");
         }
     }
-    // A flags=3 ground replacement must be resolved before the generic per-slot
-    // mirror can kill either side of the transaction. Snapshot slots are logical
-    // observations ({0,1,16,17,...}); stock GiveWeapon instead reads the exact
-    // sender WeaponInfo+8 slot and applies its campaign alias mapping
-    // (16->0, 17/22->1) before controller vt+0xB0. Use that same lookup here.
-    // This pre-pass also runs before slot 0/1 can remove the dropped art while the
-    // picked art is represented by a later alias slot such as 16/17.
+    // A flags=3 ground replacement should use the same target selection as stock
+    // GiveWeapon before generic slot mirroring can pre-kill the old object. The
+    // target is not stored in WeaponInfo: stock resolves the picked art through
+    // CachedWeaponArtDefsHashRegistry, reads art-definition +8, maps campaign
+    // aliases 16->0 and 17/22->1, then queries controller vt+0xB0.
+    PendingStockWorldReplacementResult exact_stock_result =
+        PendingStockWorldReplacementResult::NotApplicable;
     for (std::size_t i = 0; i < 8; ++i) {
         std::uint32_t peer_art = 0;
         std::memcpy(
             &peer_art, peer.weapon_snapshot + i * sizeof(peer_art),
             sizeof(peer_art));
-        if (try_pending_stock_world_weapon_replacement_from_give_info(
-                puppet, peer_art) !=
+        exact_stock_result =
+            try_pending_stock_world_weapon_replacement_from_art_definition(
+                puppet, peer_art);
+        if (exact_stock_result !=
             PendingStockWorldReplacementResult::NotApplicable) {
             break;
         }
@@ -15574,10 +15705,11 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
         void* const current_weapon = get_weapon_from_slot(puppet, slot);
         const std::uint32_t cur_art =
             weapon_art_id_from_object(current_weapon);
-        if (world_weapon_replacement_blocks_generic(cur_art, peer_art)) {
-            // The stock-target pre-pass is still waiting for the exact COPG
-            // WeaponInfo or its receiver-local old object. Do not let generic
-            // ProcessKillTree+GiveWeapon consume the evidence in the meantime.
+        if (exact_stock_result == PendingStockWorldReplacementResult::Owned &&
+            exact_world_weapon_replacement_pending(cur_art, peer_art)) {
+            // An exact stock GiveWeapon attempt owns these endpoints for this
+            // tick. If art-definition resolution merely waits/fails, generic
+            // reconciliation remains available instead of suppressing the drop.
             continue;
         }
         SlotStability& stable = stability[slot];
@@ -25344,17 +25476,8 @@ bool exact_world_weapon_replacement_pending(
         relay_weapon_art_matches(current_art, pending.dropped_art);
 }
 
-bool world_weapon_replacement_blocks_generic(
-    std::uint32_t current_art, std::uint32_t peer_art) {
-    const PendingWorldWeaponLifecycle& pending =
-        g_pending_world_weapon_lifecycle;
-    return pending.drop_pending &&
-        (relay_weapon_art_matches(current_art, pending.dropped_art) ||
-         relay_weapon_art_matches(peer_art, pending.picked_art));
-}
-
 PendingStockWorldReplacementResult
-try_pending_stock_world_weapon_replacement_from_give_info(
+try_pending_stock_world_weapon_replacement_from_art_definition(
     void* puppet, std::uint32_t peer_art) {
     PendingWorldWeaponLifecycle& pending =
         g_pending_world_weapon_lifecycle;
@@ -25370,27 +25493,18 @@ try_pending_stock_world_weapon_replacement_from_give_info(
     std::uint32_t stock_current_art = 0;
     bool stock_current_detached = false;
     std::uint32_t stock_current_generation = 0;
-    const RelayedWeaponBlock* const stored =
-        relayed_weapon_store_find(pending.picked_art);
-    if (stored == nullptr) {
-        wait_reason = 1;  // COPG WeaponInfo has not reached the game thread yet.
-    } else if (puppet == nullptr ||
-               readable_bytes(static_cast<std::byte*>(puppet) + 0x1D90) <
-                   sizeof(void*)) {
+    if (puppet == nullptr ||
+        readable_bytes(static_cast<std::byte*>(puppet) + 0x1D90) <
+            sizeof(void*)) {
         wait_reason = 2;
     } else {
-        std::memcpy(&raw_slot, stored->info + 8, sizeof(raw_slot));
-        mapped_slot = static_cast<int>(raw_slot);
-        if (raw_slot == 16) {
-            mapped_slot = 0;
-        } else if (raw_slot == 17 || raw_slot == 22) {
-            mapped_slot = 1;
-        }
         void* const controller = *reinterpret_cast<void**>(
             static_cast<std::byte*>(puppet) + 0x1D88);
-        stock_current = seh_get_give_replaced_weapon(
-            controller, stored->info);
-        if (stock_current == nullptr) {
+        stock_current = seh_get_replaced_weapon_for_art(
+            controller, pending.picked_art, &raw_slot, &mapped_slot);
+        if (mapped_slot < 0) {
+            wait_reason = 1;  // Art-definition registry/record unavailable.
+        } else if (stock_current == nullptr) {
             wait_reason = 3;
         } else if (!seh_read_process_weapon_world_identity(
                        stock_current, stock_current_generation,
@@ -26130,9 +26244,6 @@ void apply_pending_world_weapon_lifecycle() {
         }
         if (local.object != nullptr) {
             const bool killed = seh_kill_ground_process_weapon(local.object);
-            if (killed) {
-                arm_pending_fhud_owner_cleanup(pending.sequence, local);
-            }
             std::ostringstream line;
             line << "WORLD-PICKUP-CONSUME seq=" << pending.sequence
                  << " source=" << source
@@ -26143,7 +26254,7 @@ void apply_pending_world_weapon_lifecycle() {
                  << " latencyMs=" << (now - pending.armed_ms)
                  << " match=" << (local.exact_id ? "stable-id" : "unique-art")
                  << " killed=" << (killed ? 1 : 0)
-                 << " hudOwnerQueued=" << (killed ? 1 : 0);
+                 << " hudMutation=disabled";
             boot_log_line(line.str().c_str());
             if (killed) pending.consume_pending = false;
         } else if (fg_scan_attempted && now - pending.armed_ms > 5000) {
@@ -41001,8 +41112,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27in "
-        "(stock world pickup targeting; HUD-owner exact cleanup)");
+        "TLL co-op runtime init 2026-07-27io "
+        "(art-definition world replacement; retained-Player HUD source gate)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -41136,9 +41247,9 @@ DWORD WINAPI install_hook(void*) {
     install_pose_seed_gate();
     install_get_blended_camera_gate();
     install_reticle_hud_gate();
+    install_pickup_interact_prompt_owner_gate();
     install_hud_draw_interactable_primary_screen_gate();
     install_ground_pickup_hud_candidate_capture();
-    install_fhud_owner_thread_cleanup();
     // Player collision/bump probes are intentionally parked. Enabling layer 4<->5
     // collision made the two independent simulations diverge and triggered the
     // exact-position regression. Keep the reverse-engineered code for later use.
