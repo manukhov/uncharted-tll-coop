@@ -249,7 +249,14 @@ constexpr std::uint32_t kEdgeDropCommandHash = 0x28DCC05A;
 std::atomic<ULONGLONG> g_local_edge_drop_send_until_ms{0};
 std::atomic<ULONGLONG> g_local_evade_start_send_until_ms{0};
 std::atomic<bool> g_local_reload_level{false};
+std::atomic<ULONGLONG> g_local_reload_press_send_until_ms{0};
 std::atomic<ULONGLONG> g_local_reload_release_send_until_ms{0};
+std::atomic<ULONGLONG> g_local_reload_press_capture_ms{0};
+using PlayerReloadActionStartFunction = std::int64_t(__fastcall*)(void*, void*);
+PlayerReloadActionStartFunction g_original_player_reload_clip_action_start =
+    nullptr;
+PlayerReloadActionStartFunction g_original_player_reload_loop_action_start =
+    nullptr;
 using PlayerEvadeStartActionFunction = std::int64_t(__fastcall*)(
     void*, void*, std::int64_t, double);
 PlayerEvadeStartActionFunction g_original_player_evade_start_action = nullptr;
@@ -1307,6 +1314,7 @@ struct StateNetState {
     std::atomic<bool> puppet_reload_held = false;
     std::atomic<ULONGLONG> puppet_reload_press_force_until_ms = 0;
     std::atomic<ULONGLONG> puppet_reload_release_force_until_ms = 0;
+    std::atomic<ULONGLONG> puppet_reload_press_received_ms = 0;
     std::atomic<std::uint32_t> puppet_reload_event_sequence = 0;
     std::atomic<std::uint32_t> puppet_reload_force_logged_sequence = 0;
     // `drop` is a protocol-only authored command, so a release packet can erase
@@ -1527,6 +1535,8 @@ void publish_peer_state_snapshot(const coop::StatePacket& packet) {
         if (incoming_reload_press) {
             g_state_net.puppet_reload_release_force_until_ms.store(
                 0, std::memory_order_release);
+            g_state_net.puppet_reload_press_received_ms.store(
+                now, std::memory_order_release);
             g_state_net.puppet_reload_press_force_until_ms.store(
                 now + kReloadForceWindowMs, std::memory_order_release);
             g_state_net.puppet_reload_event_sequence.store(
@@ -14180,13 +14190,31 @@ std::uint64_t merge_authored_traversal_button_mask(
 }
 
 std::uint64_t merge_authored_reload_button_mask(std::uint64_t mask) {
-    if (g_local_reload_level.load(std::memory_order_acquire)) {
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG press_until =
+        g_local_reload_press_send_until_ms.load(std::memory_order_acquire);
+    const bool send_press =
+        g_local_reload_level.load(std::memory_order_acquire) ||
+        now < press_until;
+    const bool send_release =
+        !send_press && now >= press_until &&
+        now < g_local_reload_release_send_until_ms.load(
+                  std::memory_order_acquire);
+    if (send_press) {
         mask |= kPlayerReloadIntentMask;
     }
-    if (GetTickCount64() <
-        g_local_reload_release_send_until_ms.load(
-            std::memory_order_acquire)) {
+    if (send_release) {
         mask |= kPlayerReloadReleaseIntentMask;
+    }
+    const std::uint64_t semantic =
+        mask & (kPlayerReloadIntentMask | kPlayerReloadReleaseIntentMask);
+    static std::uint64_t previous_semantic = 0;
+    if (semantic != previous_semantic) {
+        previous_semantic = semantic;
+        boot_log_line(send_press ? "RELOAD-SEND-LATCH press"
+                                 : send_release
+                                       ? "RELOAD-SEND-LATCH release"
+                                       : "RELOAD-SEND-LATCH clear");
     }
     return mask;
 }
@@ -31360,8 +31388,8 @@ char __fastcall hooked_player_input_state_update(void* player) {
         static bool previous_reload_level = false;
         if (reload_level != previous_reload_level) {
             previous_reload_level = reload_level;
-            boot_log_line(reload_level ? "RELOAD-SEND rise"
-                                       : "RELOAD-SEND release");
+            boot_log_line(reload_level ? "RELOAD-LOCAL-QUERY rise"
+                                       : "RELOAD-LOCAL-QUERY release");
         }
         g_cached_local_input_buttons.store(
             capture_local_joypad_command_mask(player),
@@ -36325,15 +36353,37 @@ char __fastcall hooked_player_reload_command_callsite(
         if (hash == hashes.reload) {
             g_local_reload_level.store(original != 0,
                                        std::memory_order_release);
+            if (original != 0) {
+                constexpr ULONGLONG kReloadPressSendWindowMs = 120;
+                const ULONGLONG now = GetTickCount64();
+                const ULONGLONG previous_until =
+                    g_local_reload_press_send_until_ms.exchange(
+                        now + kReloadPressSendWindowMs,
+                        std::memory_order_acq_rel);
+                if (previous_until <= now) {
+                    g_local_reload_release_send_until_ms.store(
+                        0, std::memory_order_release);
+                    g_local_reload_press_capture_ms.store(
+                        now, std::memory_order_release);
+                }
+            }
         } else if (hash == hashes.reload_release && original != 0) {
-            constexpr ULONGLONG kReloadReleaseSendWindowMs = 250;
+            constexpr ULONGLONG kReloadReleaseSendWindowMs = 160;
             const ULONGLONG now = GetTickCount64();
+            const ULONGLONG press_until =
+                g_local_reload_press_send_until_ms.load(
+                    std::memory_order_acquire);
+            const ULONGLONG release_start =
+                press_until > now ? press_until : now;
             const ULONGLONG previous_until =
                 g_local_reload_release_send_until_ms.exchange(
-                    now + kReloadReleaseSendWindowMs,
+                    release_start + kReloadReleaseSendWindowMs,
                     std::memory_order_acq_rel);
             if (previous_until <= now) {
-                boot_log_line("RELOAD-SEND explicit-release");
+                std::ostringstream line;
+                line << "RELOAD-LOCAL-QUERY explicit-release deferMs="
+                     << (release_start - now);
+                boot_log_line(line.str().c_str());
             }
         }
         return original;
@@ -36452,6 +36502,99 @@ bool install_player_reload_command_callsite_relay() {
     boot_log_line(
         "Player reload exact semantic relay installed "
         "(0x140C9E611 reload, 0x140C9E632 release)");
+    return true;
+}
+
+std::int64_t log_and_start_player_reload_action(
+    const char* kind, PlayerReloadActionStartFunction original,
+    void* action, void* player) {
+    const ULONGLONG now = GetTickCount64();
+    const bool is_local = player != nullptr &&
+        player == retained_player_object(0);
+    const bool is_remote = player != nullptr &&
+        player == retained_player_object(1);
+    if (is_local || is_remote) {
+        const ULONGLONG origin_ms = is_remote
+            ? g_state_net.puppet_reload_press_received_ms.load(
+                  std::memory_order_acquire)
+            : g_local_reload_press_capture_ms.load(
+                  std::memory_order_acquire);
+        const std::uint32_t sequence = is_remote
+            ? g_state_net.puppet_reload_event_sequence.load(
+                  std::memory_order_acquire)
+            : 0;
+        std::ostringstream line;
+        line << "RELOAD-ACTION-ENTRY kind=" << kind
+             << " owner=" << (is_remote ? "remote" : "local")
+             << " seq=" << sequence
+             << " delayMs="
+             << (origin_ms != 0 && now >= origin_ms ? now - origin_ms : 0)
+             << " action=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(action) << std::dec;
+        boot_log_line(line.str().c_str());
+    }
+    return original != nullptr ? original(action, player) : 0;
+}
+
+std::int64_t __fastcall hooked_player_reload_clip_action_start(
+    void* action, void* player) {
+    return log_and_start_player_reload_action(
+        "clip", g_original_player_reload_clip_action_start, action, player);
+}
+
+std::int64_t __fastcall hooked_player_reload_loop_action_start(
+    void* action, void* player) {
+    return log_and_start_player_reload_action(
+        "loop", g_original_player_reload_loop_action_start, action, player);
+}
+
+bool install_player_reload_action_entry_probe() {
+    auto* const clip_vtable = reinterpret_cast<std::uintptr_t*>(
+        g_module + kPlayerReloadClipActionVtableRva);
+    auto* const loop_vtable = reinterpret_cast<std::uintptr_t*>(
+        g_module + kPlayerReloadLoopActionVtableRva);
+    auto* const clip_slot =
+        &clip_vtable[kPlayerReloadActionStartVtableSlot];
+    auto* const loop_slot =
+        &loop_vtable[kPlayerReloadActionStartVtableSlot];
+    const std::uintptr_t expected_clip =
+        g_module + kPlayerReloadClipActionStartRva;
+    const std::uintptr_t expected_loop =
+        g_module + kPlayerReloadLoopActionStartRva;
+    if (*clip_slot != expected_clip || *loop_slot != expected_loop) {
+        std::ostringstream line;
+        line << "Player reload action-entry probe SKIPPED clip=0x"
+             << std::hex << *clip_slot << "/0x" << expected_clip
+             << " loop=0x" << *loop_slot << "/0x" << expected_loop
+             << std::dec;
+        boot_log_line(line.str().c_str());
+        return false;
+    }
+
+    auto* const first_slot = clip_slot < loop_slot ? clip_slot : loop_slot;
+    auto* const last_slot = clip_slot < loop_slot ? loop_slot : clip_slot;
+    const std::size_t span = static_cast<std::size_t>(
+        reinterpret_cast<std::byte*>(last_slot + 1) -
+        reinterpret_cast<std::byte*>(first_slot));
+    DWORD old_protection = 0;
+    if (!VirtualProtect(first_slot, span, PAGE_READWRITE, &old_protection)) {
+        boot_log_line("Player reload action-entry probe SKIPPED (protect)");
+        return false;
+    }
+    g_original_player_reload_clip_action_start =
+        reinterpret_cast<PlayerReloadActionStartFunction>(*clip_slot);
+    g_original_player_reload_loop_action_start =
+        reinterpret_cast<PlayerReloadActionStartFunction>(*loop_slot);
+    *clip_slot = reinterpret_cast<std::uintptr_t>(
+        &hooked_player_reload_clip_action_start);
+    *loop_slot = reinterpret_cast<std::uintptr_t>(
+        &hooked_player_reload_loop_action_start);
+    FlushInstructionCache(GetCurrentProcess(), first_slot, span);
+    DWORD ignored = 0;
+    VirtualProtect(first_slot, span, old_protection, &ignored);
+    boot_log_line(
+        "Player reload action-entry probe installed "
+        "(clip/loop vtable slot 2)");
     return true;
 }
 
@@ -40259,8 +40402,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27ik "
-        "(exact reload/release relay; FHUD mutation disabled)");
+        "TLL co-op runtime init 2026-07-27il "
+        "(latched reload/release relay; action-entry timing)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -40274,6 +40417,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_evade_start_action_relay();
     install_player_edge_drop_command_callsite_relay();
     install_player_reload_command_callsite_relay();
+    install_player_reload_action_entry_probe();
     if (g_enable_puppet_melee_button_relay) {
         install_player_input_is_command_active_force();
     } else {

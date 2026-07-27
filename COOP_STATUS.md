@@ -11741,3 +11741,42 @@ ever approached/published that weapon; relaxing art or weak validation would not
 fix `matching=0`. The persistent Chloe pickup icon remains the already-known
 separate defect: `ik` intentionally logs `hudMutation=disabled`, and this run
 adds no evidence that the rejected physical FHUD slot owns the visible prompt.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `il` latches sender reload and timestamps native action entry
+
+Build `il` closes the sender-side loss proven by `ik`: the first positive result
+from the exact local `reload` callsite opens a bounded 120-ms serialized press
+window. A positive `reload-release` query schedules its own 160-ms window only
+after the press window ends, so a short tap cannot put release on the wire before
+at least one press packet. The receiver remains restricted to retained Player
+slot 1 and the two previously proved callsites. New `RELOAD-SEND-LATCH` markers
+describe the semantic value actually placed in `StatePacket`, independently of
+the raw local query markers.
+
+The read-only action-entry timing probe also meets the evidence quota:
+
+1. RTTI constructors `0x1410983D0` and `0x14109A5C0` install the distinct clip
+   and loop vtables `0x142A48948` and `0x142A48AF8`.
+2. Direct vtable inspection independently resolves slot 2 (`+0x10`) to
+   `0x141098430` for clip reload and `0x14109A620` for loop reload; the adjacent
+   slots still resolve to their already classified update/completion bodies.
+3. Both slot-2 functions take `(action, Player)`, bind the active mounted weapon,
+   reset the Player weapon-action owner and build the upper-body gesture permit
+   context before their respective reload updates. This is the first common
+   native action boundary after accepted input, not an ammo or HUD callback.
+
+The probe only wraps those two verified vtable entries and forwards the original
+call unchanged. Competing explanations remain separable: a high
+`RELOAD-ACTION-ENTRY owner=remote delayMs` after an immediate receive/force means
+the native controller delayed action creation; a low action-entry delay but late
+visual motion moves the defect downstream into gesture presentation; no remote
+entry despite force means native eligibility rejected the retained Player.
+The release DLL compiles cleanly, and both slot-2 names were saved to and read
+back from the single `ida/tll.i64` database.
+
+**Falsifiable prediction for `il`:** every short local tap must serialize
+`press -> release -> clear` in that order and the receiver must see a press
+sequence before release. A successful reload must then emit exactly one clip
+entry for magazine weapons or one loop entry for per-round weapons. The measured
+remote delay distinguishes transport/input loss from controller or presentation
+delay; ammo remains owned by the existing snapshot path.

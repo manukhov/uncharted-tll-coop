@@ -2170,6 +2170,12 @@ FUNCTIONS = {
         "weapon-action base constructor, stores the reload mode at +0x48 and "
         "installs vtable 0x142A48948.",
     ),
+    0x141098430: (
+        "PlayerReloadClipWeaponAction_Start",
+        "PlayerReloadClipWeaponAction vtable slot 2 (+0x10). Resolves and binds "
+        "the mounted weapon attachment, resets the Player weapon-action owner, "
+        "and builds the upper gesture permit context before clip reload update.",
+    ),
     0x141098560: (
         "PlayerReloadClipWeaponAction_Update",
         "Native clip-reload action body. Drives the mounted weapon gesture, "
@@ -2188,6 +2194,12 @@ FUNCTIONS = {
         "RTTI-backed PlayerReloadLoopWeaponAction constructor. Calls the common "
         "weapon-action base constructor, stores the reload mode at +0x48 and "
         "installs vtable 0x142A48AF8.",
+    ),
+    0x14109A620: (
+        "PlayerReloadLoopWeaponAction_Start",
+        "PlayerReloadLoopWeaponAction vtable slot 2 (+0x10). Resolves and binds "
+        "the mounted weapon attachment, resets the Player weapon-action owner, "
+        "and builds the upper gesture permit context before per-round update.",
     ),
     0x14109B6D0: (
         "PlayerReloadLoopWeaponAction_UpdateCompletion",

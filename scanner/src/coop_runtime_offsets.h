@@ -163,6 +163,11 @@ constexpr std::uintptr_t kPlayerInputCommandStateIsCommandActiveRva = 0x1E39D50;
 constexpr std::uintptr_t kPlayerReloadIsCommandActiveCallsiteRva = 0xC9E611;
 constexpr std::uintptr_t kPlayerReloadReleaseIsCommandActiveCallsiteRva =
     0xC9E632;
+constexpr std::uintptr_t kPlayerReloadClipActionVtableRva = 0x2A48948;
+constexpr std::uintptr_t kPlayerReloadLoopActionVtableRva = 0x2A48AF8;
+constexpr std::size_t kPlayerReloadActionStartVtableSlot = 2;
+constexpr std::uintptr_t kPlayerReloadClipActionStartRva = 0x1098430;
+constexpr std::uintptr_t kPlayerReloadLoopActionStartRva = 0x109A620;
 // Third exact `drop`, edge=0 consumer inside PlayerEdgeState_HandleDropCommand.
 // The first two consumers query Joypad directly; this one bypasses that hook and
 // therefore needs its own retained-puppet callsite relay.

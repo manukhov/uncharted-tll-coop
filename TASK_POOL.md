@@ -2585,6 +2585,12 @@ Do not reopen these as the first move:
       bounded sender press latch and defer release until that press has crossed at
       least one send interval; then timestamp native clip/loop action entry to
       separate remaining visual startup delay from transport.
+- [x] Implement `il`: retain exact local reload press for 120 ms, defer the
+      160-ms release window until press ends, log the semantic packet phase, and
+      wrap only the statically resolved clip/loop vtable slot-2 action entries.
+      Release build compiles; the two action-entry names are saved and verified
+      in the single IDB. Run the written runtime discriminator after the
+      world-weapon reliability fix is ready for the same cold launch.
 
 ## P0 NEXT - World-weapon replacement reliability follow-up (2026-07-27 `ik`)
 
