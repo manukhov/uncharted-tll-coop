@@ -125,13 +125,20 @@
       `FHUD_DestroyInteractScript 0x141357CA0` plus the `0x1408AF179` tombstone did
       not clear Chloe's stale M30 prompt; several successful consumes had
       `hudMatched=0`, and no suppress marker appeared.
-- [ ] **Trace Chloe stale-prompt ownership statically:** follow the active visible
+- [x] **Trace Chloe stale-prompt ownership statically:** follow the active visible
       Flash script and physical slot back to the submitted interact record. Explain
       why the consumed ProcessWeapon weak+generation is absent from the four-slot
       store while the M30 offer remains. Do not change runtime until the new
       hypothesis distinguishes script ownership, cached display state, and a
       different publisher/copy of the record with three independent evidence
       types.
+- [ ] **`ig` STATIC / IMPLEMENTED, runtime pending:** the evidence quota is met.
+      `FHUD_UpdateSingleInteractScript 0x141358030` writes exact `interact-id`
+      (`ProcessWeapon+0xD8`) and `pickup-weapon-id` (`ProcessWeapon+0x860`) into
+      the live slot map at `+0x808`, independently of the copied record at
+      `+0x830`. Select the exact live script by both typed keys before the world
+      kill, then call stock destroy for that mask. Run the written Chloe
+      M30-to-Mazur prediction; preserve the confirmed sub-141-ms stock drop.
 
 ## P0: Full Player Synchronization (CURRENT)
 
@@ -2507,10 +2514,13 @@ Do not reopen these as the first move:
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
-## P1 - Remote reload animation sync (2026-07-18)
+## P0 NEXT - Remote reload animation sync (re-prioritized by user 2026-07-27)
 
 - [ ] Trace the Player/ProcessWeapon reload command edge and its native animation
       controller path, including the owner/screen index and magazine transition.
+- [ ] Revalidate the archived assumption that generic mirrored reload input starts
+      the remote animation; the user now explicitly reports this synchronization
+      is still needed, so prior "free through input" reasoning is not runtime proof.
 - [ ] Relay the one-shot reload action to retained puppet slot 1 without writing
       receiver-local slot 0 ammo; let the existing ammo snapshot reconcile the
       next shot.

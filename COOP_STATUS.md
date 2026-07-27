@@ -11337,3 +11337,75 @@ the consumed ProcessWeapon. It does **not** reject the statically proven roles o
 change, trace the visible Flash prompt from its active script/slot ownership back
 to the submitted record and explain the Chloe-only divergence. Preserve the
 confirmed exact world consume and immediate stock drop paths.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `ig` selects the active FHUD script by its exact published stable ID and weapon art
+
+**Hypothesis.** The visible stale M30 is an active per-slot Flash process whose
+copied weak record is no longer guaranteed to retain the consumed ProcessWeapon
+key by the time `if` scans it. The slot-owned parameter map survives separately
+and contains the exact local ProcessWeapon stable ID and weapon art which built
+that Flash script. Selecting the slot before `ProcessKillTree`, by either its
+still-live weak key or the exact `{interact-id, pickup-weapon-id}` pair, then
+calling stock destroy after the world kill should remove only the obsolete M30
+prompt.
+
+The hypothesis meets the static evidence quota:
+
+1. `FHUD_UpdateSingleInteractScript 0x141358030` receives the physical record and
+   its slot index. At `0x14135813F..0x14135814B` it derives a slot-owned
+   `MapArray<StringId,BoxedValue>` at `store + slot*0x710 + 0x808`. At
+   `0x141358182..0x141358249` it publishes `interact-id` directly from the
+   interactable `+0xD8`; at `0x141358259..0x14135838D` it resolves and publishes
+   `pickup-weapon-id`. For a ProcessWeaponBase,
+   `FHUD_ResolvePickupWeaponArt 0x140C888C0` selects `object+0x860`, exactly the
+   two fields already retained by the confirmed HUD candidate capture.
+2. `StringIdBoxedValueMap_Set 0x140167D70` independently proves the map ABI: a
+   sorted 24-byte entry array, count at map `+0x10`, key at entry `+0`, 64-bit
+   value at `+8`, and type tag at `+0x14`. `StringIdBoxedValueMap_LowerBound
+   0x140168170` binary-searches the same key field. The engine StringIds are
+   `interact-id = 0x13DD0384` and `pickup-weapon-id = 0x5458E271`; both updater
+   writes use type 3 and zero-extended 32-bit values.
+3. The active Flash process is not owned by the weak record. The updater tests
+   the separate generation-validated process handle at slot `+0x1F8` before
+   deciding whether to create a script (`0x1413593B1..0x14135942D`).
+   `FHUD_DestroyInteractScript 0x141357CA0` kills exactly that handle, clears its
+   active field, and only then resets the record at slot `+0x830`. Therefore an
+   active map-matched script remains safely destroyable after its record weak key
+   has diverged.
+4. Runtime `if` supplies the discriminating failure: successful world kills can
+   immediately report `hudMatched=0` while the user still sees M30, and no
+   republish suppression marker occurs. This is consistent with record-key loss,
+   but inconsistent with the rejected claim that a post-kill weak scan always
+   identifies the visible script.
+
+Competing hypotheses are bounded. A second physical HUD store is not the
+candidate source: `0x1408AF179` passes the selected per-screen state, and the
+capture admits only `state+0xF8 == 0`; screen 0's `state+0xF0` is the same
+`FHUD_PhysicalInteractStore_Ptr` initialized at `0x1400B6E62`. A pre-kill weak
+scan alone may recover some events but does not cover an already-diverged record;
+`ig` logs weak and map matches separately. Art-only deletion could remove another
+nearby M30, so it is rejected in favor of the stable-ID-plus-art pair and a live
+script handle. Clearing all four scripts would erase unrelated prompts. A new
+publisher race is not selected by the prior runtime (no suppress marker), and the
+existing exact weak-key tombstone remains as a bounded backstop.
+
+Build `ig` scans the four slots before killing the ProcessWeapon, validates the
+slot's live Flash handle, and binary-searches both typed map keys. It snapshots
+only the exact slot mask, performs the already-confirmed world kill, then invokes
+stock destroy for that mask. **Falsifiable prediction:** one M30-to-Mazur
+replacement on Chloe's receiver must report `hudScanned=1`,
+`hudMapMatched=1`, `hudMatched=1`, and `hudDestroyed=1`; `hudWeakMatched` may be
+zero or one and distinguishes the ordering-only competitor. The stale M30 prompt
+must disappear immediately while Mazur remains, and the confirmed stock drop
+must retain `gave=1 detached=1 slotReleased=1` with sub-500-ms latency. A live
+stale prompt with `hudMapMatched=0` rejects script-map ownership; more than one
+selected slot or loss of Mazur rejects the claimed exact identity.
+
+### 2026-07-27 priority note: remote reload animation sync follows ground-prompt closure
+
+The user explicitly requested remote reload animation synchronization. The old
+archive assumption that reload would arrive "for free" through generic mirrored
+button input is not accepted as current runtime proof. After the scoped ground
+prompt branch is resolved, trace the Player/ProcessWeapon reload edge, native
+animation-controller path, owner/screen selection, and magazine transition before
+adding a one-shot relay. Ammo remains owned by the existing weapon snapshot path.

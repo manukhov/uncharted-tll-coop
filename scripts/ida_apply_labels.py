@@ -1436,6 +1436,23 @@ FUNCTIONS = {
         "FHUD_PublishInteractRecord at 0x1413B48C2. RCX/RDX remain the exact HUD "
         "state and interact record ABI.",
     ),
+    0x140167D70: (
+        "StringIdBoxedValueMap_Set",
+        "MapArray<StringId,BoxedValue,1>::Set. Uses the sorted 24-byte entry "
+        "array at map+0, capacity at +8 and count at +0x10; each entry has its "
+        "StringId at +0 and a 16-byte BoxedValue at +8.",
+    ),
+    0x140168170: (
+        "StringIdBoxedValueMap_LowerBound",
+        "Binary lower_bound for the sorted 24-byte StringId/BoxedValue entries. "
+        "Returns the insertion/match index for the caller-provided StringId.",
+    ),
+    0x140C888C0: (
+        "FHUD_ResolvePickupWeaponArt",
+        "Resolves pickup-weapon-id for an interactable and Player. Uses "
+        "ProcessWeaponBase+0x860, WeaponPickup+0x520, or the grenade-specific "
+        "field according to selector/type identity.",
+    ),
     0x141353750: (
         "FHUD_ResetInteractRecord",
         "Resets one physical interact record. Explicitly zeroes its weak key at "
@@ -1448,6 +1465,14 @@ FUNCTIONS = {
         "store. Iterates four 0x710-stride records, matches live weak identities "
         "through weak+0x8/object+0xBC (or fallback +0x28), copies the record and "
         "sets that slot's refresh byte; otherwise selects one free slot.",
+    ),
+    0x141358030: (
+        "FHUD_UpdateSingleInteractScript",
+        "Builds or refreshes one of four physical interact Flash scripts. The "
+        "slot is store+index*0x710: active process weak handle at +0x1F8, "
+        "StringId/BoxedValue parameter map at +0x808, copied record at +0x830. "
+        "Publishes interact-id from object+0xD8 and pickup-weapon-id through "
+        "FHUD_ResolvePickupWeaponArt before creating/reusing the Flash process.",
     ),
     0x141357CA0: (
         "FHUD_DestroyInteractScript",
