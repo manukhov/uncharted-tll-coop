@@ -10540,3 +10540,30 @@ and the already-confirmed animation. A nonzero screen-1 SUPPRESS marker with a
 remaining duplicate selects a second same-screen publisher; a consume marker
 without visual removal rejects direct ID equality and selects the proximity-ID
 fallback; a drop Apply with no model selects the reconstructed native event.
+
+### 2026-07-27 RUNTIME REJECTED: `hy` sender and HUD ownership boundaries
+
+Fresh injected copies PID 20200 (role A / local Chloe) and PID 23412 (role B /
+local Nadine) both installed the GiveWeapon diagnostic and weapon-pickup HUD
+vtable gate. The user then tested an M30/Mazur LDR replacement in both
+directions and the pickup prompt on Nadine. The written `hy` prediction failed
+in two discriminating ways:
+
+1. Neither process emitted `PICKUP-ID-CAPTURE`, `GIVEWEAPON-RELAY-SEND`,
+   `GIVEWEAPON-RELAY-RECV`, or either `WORLD-PICKUP-*` marker during the tested
+   replacements. The peer retained the old M30 and no Mazur LDR appeared. This
+   rejects the assumption that this authored M30 replacement reaches the exact
+   script `GiveWeapon` return boundary at `0x140DD4208`; the native event Apply
+   reconstruction was never exercised and is therefore still STATIC, not
+   rejected.
+2. The Nadine duplicate/stale prompt disappeared, but the same defect appeared
+   on Chloe. No bounded `PICKUP-HUD-SUPPRESS` marker was emitted. This rejects
+   treating `Player+0x4010` at `WeaponPickupInteractControl` slot `+0xE0` as a
+   stable physical screen owner. Suppressing one publisher without explicitly
+   destroying its existing FHUD record can merely transfer which copy retains
+   the stale shared slot.
+
+Do not rerun `hy`. Before another runtime exam, trace the actually reached
+weapon-replacement boundary independently of the scripted GiveWeapon callsite,
+and resolve the HUD record key/destroy path so ownership is selected from the
+copy role/local retained Player rather than the unproven `+0x4010` field.

@@ -11,17 +11,16 @@
 
 ## P0: Ground weapon world lifecycle and pickup prompt (`hy`, 2026-07-27)
 
-- [ ] Runtime-check native ground-pickup consume in both directions: one local
-      pickup must yield one `WORLD-PICKUP-CONSUME applied=1` and remove the same
-      ground model on the peer copy.
-- [ ] Runtime-check replacement drop in both directions: swapping M30/sniper must
-      yield one delayed `WORLD-PICKUP-DROP applied=1` and exactly one replacement
-      model at the relayed transform; ammo-only pickup must not emit a drop.
-- [ ] Runtime-check Nadine pickup HUD ownership: one prompt near the weapon, stock
-      expiry after leaving, and unchanged pickup/animation after returning.
-- [ ] Promote the `hy` entries in `COOP_STATUS.md` from STATIC to CONFIRMED or
-      record the exact failed marker/prediction as REJECTED before changing the
-      native boundaries.
+- [x] **`hy` runtime REJECTED:** M30/Mazur replacement in both directions emitted
+      no pickup/GiveWeapon/world-lifecycle markers, so the selected scripted
+      `GiveWeapon` sender boundary was not reached.
+- [x] **`hy` HUD runtime REJECTED:** the defect moved from Nadine to Chloe and no
+      SUPPRESS marker appeared; `Player+0x4010` is not a proven physical-screen
+      owner and suppress-without-destroy leaves a stale shared record.
+- [ ] Trace the actually reached ground-weapon replacement boundary, preserving
+      the still-STATIC native consume/drop Apply reconstruction for a later test.
+- [ ] Resolve the WeaponPickup FHUD record key and explicit destroy/expiry path;
+      gate by local retained Player/copy role rather than `Player+0x4010`.
 
 ## P0: Full Player Synchronization (CURRENT)
 
