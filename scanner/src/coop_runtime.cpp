@@ -8086,6 +8086,65 @@ using GiveWeaponTailFunction = void(__fastcall*)(
     void*, void*, std::int64_t, std::int64_t, std::int64_t);
 GiveWeaponTailFunction g_original_give_weapon_tail = nullptr;
 
+struct WeaponInteractWorldContext {
+    bool active{false};
+    bool source_killed{false};
+    bool drop_captured{false};
+    bool picked_info_captured{false};
+    void* source{nullptr};
+    void* player{nullptr};
+    std::uint32_t source_stable_id{0};
+    std::uint32_t picked_art{0};
+    void* dropped_candidate{nullptr};
+    std::uint32_t dropped_generation{0};
+    std::uint32_t dropped_art{0};
+    std::uint32_t dropped_stable_id{0};
+    std::uint8_t dropped_payload[
+        coop::kDroppedPickupEventPayloadBytes]{};
+    std::uint8_t picked_weapon_info[coop::kWeaponInfoBytes]{};
+};
+
+WeaponInteractWorldContext g_weapon_interact_world_context{};
+std::atomic<DWORD> g_weapon_interact_owner_thread{0};
+
+bool seh_capture_active_weapon_interact_info(
+    void* controller, const void* weapon_info, std::uint32_t& captured_art) {
+    captured_art = 0;
+    WeaponInteractWorldContext& context = g_weapon_interact_world_context;
+    if (g_weapon_interact_owner_thread.load(std::memory_order_acquire) !=
+            GetCurrentThreadId() ||
+        !context.active || context.picked_info_captured ||
+        context.player == nullptr || controller == nullptr ||
+        weapon_info == nullptr ||
+        readable_bytes(static_cast<std::byte*>(context.player) + 0x1D90) <
+            sizeof(void*) ||
+        readable_bytes(weapon_info) < coop::kWeaponInfoBytes) {
+        return false;
+    }
+    __try {
+        void* const expected_controller = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(context.player) + 0x1D88);
+        std::memcpy(
+            &captured_art,
+            static_cast<const std::byte*>(weapon_info) + 0x80,
+            sizeof(captured_art));
+        if (controller != expected_controller ||
+            !relay_weapon_art_matches(captured_art, context.picked_art)) {
+            captured_art = 0;
+            return false;
+        }
+        std::memcpy(
+            context.picked_weapon_info, weapon_info,
+            coop::kWeaponInfoBytes);
+        context.picked_info_captured = true;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        context.picked_info_captured = false;
+        captured_art = 0;
+        return false;
+    }
+}
+
 bool seh_resolve_weapon_art_manager_slot(
     std::uint32_t art, std::uint32_t& raw_slot, int& mapped_slot) {
     raw_slot = ~0u;
@@ -8191,6 +8250,15 @@ void __fastcall hooked_give_weapon_tail(
     std::int64_t a5) {
     const std::uintptr_t ret =
         reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    std::uint32_t interact_info_art = 0;
+    if (seh_capture_active_weapon_interact_info(
+            controller, weapon_info, interact_info_art)) {
+        std::ostringstream line;
+        line << "WORLD-WEAPON-INFO-CAPTURE art=0x" << std::hex
+             << interact_info_art << " controller=0x"
+             << reinterpret_cast<std::uintptr_t>(controller) << std::dec;
+        boot_log_line(line.str().c_str());
+    }
     static std::atomic<int> logged{0};
     if (logged.fetch_add(1) < 400) {
         std::uint32_t art = 0;
@@ -8756,24 +8824,6 @@ bool install_ground_pickup_hud_candidate_capture() {
     return true;
 }
 
-struct WeaponInteractWorldContext {
-    bool active{false};
-    bool source_killed{false};
-    bool drop_captured{false};
-    void* source{nullptr};
-    std::uint32_t source_stable_id{0};
-    std::uint32_t picked_art{0};
-    void* dropped_candidate{nullptr};
-    std::uint32_t dropped_generation{0};
-    std::uint32_t dropped_art{0};
-    std::uint32_t dropped_stable_id{0};
-    std::uint8_t dropped_payload[
-        coop::kDroppedPickupEventPayloadBytes]{};
-};
-
-WeaponInteractWorldContext g_weapon_interact_world_context{};
-std::atomic<DWORD> g_weapon_interact_owner_thread{0};
-
 using WeaponInteractOnInteractFunction =
     void(__fastcall*)(void*, void*, void*, void*);
 using ProcessKillTreeFunction = void(__fastcall*)(void*);
@@ -8966,6 +9016,7 @@ void __fastcall hooked_weapon_interact_on_interact(
         g_weapon_interact_world_context = {};
         g_weapon_interact_world_context.active = true;
         g_weapon_interact_world_context.source = source;
+        g_weapon_interact_world_context.player = player;
         g_weapon_interact_world_context.source_stable_id = source_stable_id;
         g_weapon_interact_world_context.picked_art = picked_art;
         std::ostringstream line;
@@ -8994,6 +9045,12 @@ void __fastcall hooked_weapon_interact_on_interact(
     packet.flags = coop::kWeaponGiveWorldConsume;
     packet.picked_weapon_art_id = completed.picked_art;
     packet.consumed_pickup_stable_id = completed.source_stable_id;
+    if (completed.picked_info_captured) {
+        packet.flags |= coop::kWeaponGiveWorldInfo;
+        std::memcpy(
+            packet.picked_weapon_info, completed.picked_weapon_info,
+            sizeof(packet.picked_weapon_info));
+    }
     if (completed.drop_captured) {
         packet.flags |= coop::kWeaponGiveWorldDrop;
         packet.dropped_weapon_art_id = completed.dropped_art;
@@ -9013,6 +9070,7 @@ void __fastcall hooked_weapon_interact_on_interact(
          << " consume=0x" << packet.consumed_pickup_stable_id
          << " dropped=0x" << packet.dropped_weapon_art_id
          << " drop_id=0x" << packet.dropped_weapon_stable_id
+         << " info=" << (completed.picked_info_captured ? 1 : 0)
          << " flags=0x" << packet.flags << std::dec
          << " boundary=WeaponInteractControl bytes=" << sent;
     boot_log_line(line.str().c_str());
@@ -13344,7 +13402,11 @@ DWORD WINAPI state_recv_thread(void*) {
                      << world.consumed_pickup_stable_id << " dropped=0x"
                      << world.dropped_weapon_art_id << " drop_id=0x"
                      << world.dropped_weapon_stable_id << " flags=0x"
-                     << world.flags << std::dec << " bytes=" << received;
+                     << world.flags << std::dec << " info="
+                     << (((world.flags & coop::kWeaponGiveWorldInfo) != 0)
+                             ? 1
+                             : 0)
+                     << " bytes=" << received;
                 force_log_line(line.str().c_str());
             }
         } else if (magic == coop::kWeaponGiveMagic &&
@@ -15352,7 +15414,8 @@ bool puppet_weapon_give_vtable_ready(void* puppet) {
 // held_sync: true when apply_peer_held_weapon_state is driving this art — bypasses
 // the pregive-only pickup/pistol collision guard so the puppet can follow swaps.
 bool safe_give_weapon_art_to_puppet(
-    void* puppet, std::uint32_t art_id, bool held_sync = false) {
+    void* puppet, std::uint32_t art_id, bool held_sync = false,
+    const std::uint8_t* exact_weapon_info = nullptr) {
     if (puppet == nullptr || art_id == 0 || g_module == 0) {
         return false;
     }
@@ -15501,13 +15564,18 @@ bool safe_give_weapon_art_to_puppet(
     }
     __try {
         alignas(16) std::uint8_t weapon_info[0xC0]{};
-        if (stored != nullptr) {
+        if (exact_weapon_info != nullptr) {
+            std::memcpy(
+                weapon_info, exact_weapon_info, coop::kWeaponInfoBytes);
+        } else if (stored != nullptr) {
             std::memcpy(weapon_info, stored->info, coop::kWeaponInfoBytes);
         } else {
             initialize_info(weapon_info);
             std::memcpy(weapon_info + 0x80, &art_id, sizeof(art_id));
         }
-        give_weapon(controller, weapon_info, stored == nullptr, false, nullptr);
+        give_weapon(
+            controller, weapon_info,
+            exact_weapon_info == nullptr && stored == nullptr, false, nullptr);
         cache_puppet = puppet;
         cache_art = art_id;
         cache_ok = puppet_has_weapon_art_id(puppet, art_id);
@@ -25424,6 +25492,7 @@ struct PendingWorldWeaponLifecycle {
     bool drop_pending{false};
     bool wait_for_inventory{false};
     bool drop_applied{false};
+    bool picked_info_captured{false};
     std::int8_t drop_applied_slot{-1};
     std::uint32_t sequence{0};
     std::uint32_t picked_art{0};
@@ -25432,6 +25501,7 @@ struct PendingWorldWeaponLifecycle {
     std::uint32_t dropped_remote_id{0};
     ULONGLONG armed_ms{0};
     std::uint8_t stock_wait_reason{0};
+    std::uint8_t picked_weapon_info[coop::kWeaponInfoBytes]{};
 };
 PendingWorldWeaponLifecycle g_pending_world_weapon_lifecycle{};
 
@@ -25549,7 +25619,8 @@ try_pending_stock_world_weapon_replacement_from_art_definition(
         return PendingStockWorldReplacementResult::Owned;
     }
 
-    if (relayed_weapon_store_find(pending.picked_art) == nullptr) {
+    if (!pending.picked_info_captured &&
+        relayed_weapon_store_find(pending.picked_art) == nullptr) {
         constexpr std::uint8_t kWaitForRealWeaponInfo = 6;
         if (pending.stock_wait_reason != kWaitForRealWeaponInfo) {
             pending.stock_wait_reason = kWaitForRealWeaponInfo;
@@ -25657,7 +25728,8 @@ bool try_stock_world_weapon_replacement(
     const bool have_dropped_weak = seh_capture_process_weapon_weak_identity(
         current_weapon, dropped_weak_handle, dropped_weak_generation);
     gave = safe_give_weapon_art_to_puppet(
-        puppet, peer_art, /*held_sync=*/true);
+        puppet, peer_art, /*held_sync=*/true,
+        pending.picked_info_captured ? pending.picked_weapon_info : nullptr);
 
     bool after_detached = false;
     std::uint32_t after_generation = 0;
@@ -25728,6 +25800,19 @@ void apply_pending_weapon_world_packet() {
     pending.consumed_remote_id = packet.consumed_pickup_stable_id;
     pending.dropped_art = packet.dropped_weapon_art_id;
     pending.dropped_remote_id = packet.dropped_weapon_stable_id;
+    std::uint32_t info_art = 0;
+    if ((packet.flags & coop::kWeaponGiveWorldInfo) != 0) {
+        std::memcpy(
+            &info_art, packet.picked_weapon_info + 0x80, sizeof(info_art));
+    }
+    pending.picked_info_captured =
+        (packet.flags & coop::kWeaponGiveWorldInfo) != 0 &&
+        relay_weapon_art_matches(info_art, packet.picked_weapon_art_id);
+    if (pending.picked_info_captured) {
+        std::memcpy(
+            pending.picked_weapon_info, packet.picked_weapon_info,
+            sizeof(pending.picked_weapon_info));
+    }
     pending.armed_ms = GetTickCount64();
     pending.consume_pending =
         (packet.flags & coop::kWeaponGiveWorldConsume) != 0;
@@ -26378,9 +26463,10 @@ void apply_pending_world_weapon_lifecycle() {
     if (pending.drop_pending && !pending.drop_applied) {
         void* const puppet = retained_player_object(1);
         if (puppet != nullptr && puppet_weapon_sync_ready(puppet)) {
-            // COPG has already supplied the sender's real 0xC0 WeaponInfo block
-            // when this can succeed. This bypasses periodic StatePacket latency;
-            // the applied slot is then protected until that snapshot catches up.
+            // COPW v3 embeds the transaction's real 0xC0 WeaponInfo; older
+            // non-whitelist paths may instead have a stored COPG block. Either
+            // source bypasses periodic StatePacket latency, after which the exact
+            // applied slot is protected until that snapshot catches up.
             try_pending_stock_world_weapon_replacement_from_art_definition(
                 puppet, pending.picked_art);
         }
@@ -41292,8 +41378,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27iq "
-        "(COPW-v2 dropped-id map; immediate protected stock replacement)");
+        "TLL co-op runtime init 2026-07-27ir "
+        "(COPW-v3 exact WeaponInfo; immediate protected stock replacement)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

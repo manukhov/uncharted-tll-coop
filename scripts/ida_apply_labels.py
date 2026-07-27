@@ -1316,15 +1316,6 @@ FUNCTIONS = {
         "(runtime-proven 2026-07-10: RequestInteract hook installed but never fires).",
     ),
     # --- 2026-07-07: weapon give / slot placement (pickup display root) ---
-    0x1410A4D40: (
-        "PlayerWeaponController_GiveWeapon",
-        "vtable +0x158. WeaponInfo fields it reads: +0x80 art id, +0x84 ammo "
-        "(-1=random), +0x96 flags word, +0x9C..0xB3 net drop-transform copied to "
-        "weapon+0x866 in net mode. If art already owned (weapon+0x860 match) the "
-        "path is idempotent (updates ammo/flags); otherwise it calls the create "
-        "slot at vtable+0x130. Pickup/scripted give reaches it via sub_140DCDEA0 "
-        "(ret_rva 0xDD4208).",
-    ),
     0x1410A8920: (
         "PlayerWeaponController_CreateAndAddWeapon",
         "vtable +0x130. Resolves WeaponArtDef by art, creates ProcessWeapon, "
@@ -1514,14 +1505,17 @@ FUNCTIONS = {
         "Runtime io showed its source pointer differs from the FHUD weak target "
         "while stable id and art match. Runtime ip nevertheless found zero "
         "distinct live same-id HUD targets after every accepted interaction, so "
-        "a second ProcessKillTree call at this boundary is rejected.",
+        "a second ProcessKillTree call at this boundary is rejected. The outer "
+        "call remains active while nested PlayerWeaponController_GiveWeapon runs; "
+        "after stock return it owns the source-kill, old-detach and COPW commit, "
+        "providing an exact transaction scope for the nested WeaponInfo block.",
     ),
     0x141ED3630: (
         "ProcessWeapon_DetachToWorldTransform",
         "Detaches a ProcessWeapon into world space: sets +0x690 bit 3 and writes "
         "translation/rotation to +0x590/+0x5A0. GiveWeapon replacement calls it "
         "at 0x1410A68AC (return 0x1410A68B1) for the exact dropped old weapon. "
-        "COPW v2 captures and revalidates that object's +0xD8 stable id directly "
+        "COPW v2+ captures and revalidates that object's +0xD8 stable id directly "
         "across this call; the next ground interaction reads the same field.",
     ),
     0x1408C8950: (
@@ -1595,7 +1589,7 @@ FUNCTIONS = {
         "index 0 is valid despite older relay code rejecting it. Native event "
         "+0x1C is this stable id. Runtime ip rejected using COPW payload+4 as the "
         "key because the exact WeaponInteract detach path never invoked this "
-        "constructor and sent a zero payload; COPW v2 carries ProcessWeapon+0xD8 "
+        "constructor and sent a zero payload; COPW v2+ carries ProcessWeapon+0xD8 "
         "explicitly instead.",
     ),
     0x140BCD0F0: (
@@ -8345,7 +8339,11 @@ FUNCTIONS = {
         "campaign aliases 16->0 and 17/22->1, then retains the exact old "
         "ProcessWeapon from vtable +0xB0. It detaches that object at 0x1410A68AC, "
         "publishes weapon-dropped at 0x1410A693C, then sends it only when native "
-        "net mode is enabled.",
+        "net mode is enabled. WeaponInfo fields include art +0x80, ammo +0x84, "
+        "flags +0x96 and net drop state +0x9C..+0xB3. Runtime iq proved the "
+        "separate COPG return-RVA admission omits whitelist art 0x33E29A1B; COPW "
+        "v3 therefore captures this original 0xC0 argument at the safe +9 detour "
+        "only inside the exact outer WeaponInteractControl transaction.",
     ),
     0x1410A1F90: (
         "PlayerWeaponController_GetWeaponBySlot",

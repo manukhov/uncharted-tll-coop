@@ -194,6 +194,7 @@ constexpr std::uint16_t kWeaponGiveVersion = 3;
 constexpr std::size_t kWeaponInfoBytes = 0xC0;
 constexpr std::uint16_t kWeaponGiveWorldConsume = 0x0001;
 constexpr std::uint16_t kWeaponGiveWorldDrop = 0x0002;
+constexpr std::uint16_t kWeaponGiveWorldInfo = 0x0004;
 // NetEventAddDroppedPickup is 0x80 bytes. Its header/vtable at +0x00..+0x17 is
 // process-local; Apply consumes the portable scalar payload at +0x18..+0x77.
 constexpr std::size_t kDroppedPickupEventPayloadBytes = 0x60;
@@ -220,9 +221,10 @@ struct WeaponGivePacket {
 // Ground-world lifecycle is independent of inventory. Exact
 // WeaponInteractControl/source-kill/old-detach boundaries identify the consumed
 // and dropped ProcessWeapon objects. The legacy native-event payload is retained
-// for compatibility; v2 also carries the exact detached ProcessWeapon stable id.
+// for compatibility; v2 added the exact detached ProcessWeapon stable id, and
+// v3 embeds the real WeaponInfo captured by nested stock GiveWeapon.
 constexpr std::uint32_t kWeaponWorldMagic = 0x57504F43;  // "COPW"
-constexpr std::uint16_t kWeaponWorldVersion = 2;
+constexpr std::uint16_t kWeaponWorldVersion = 3;
 
 struct WeaponWorldPacket {
     std::uint32_t magic = kWeaponWorldMagic;
@@ -237,8 +239,11 @@ struct WeaponWorldPacket {
     std::uint32_t dropped_weapon_stable_id = 0;
     std::uint8_t
         dropped_pickup_event_payload[kDroppedPickupEventPayloadBytes]{};
+    // v3: exact 0xC0 block passed to PlayerWeaponController::GiveWeapon while
+    // the outer accepted WeaponInteractControl transaction is still active.
+    std::uint8_t picked_weapon_info[kWeaponInfoBytes]{};
 };
-static_assert(sizeof(WeaponWorldPacket) == 124);
+static_assert(sizeof(WeaponWorldPacket) == 316);
 
 // One-shot fire relay: local PlayerFireController::Fire captured on the sender
 // and replayed on the remote retained Player via the same native entry point.

@@ -2613,11 +2613,16 @@ Do not reopen these as the first move:
       exact context payload was zero, and every post-OnInteract HUD-twin lookup
       had `exactMatches=0`. Sequence 2 measured 2359 ms StatePacket latency;
       sequence 3 then expired with `hudMatching=0`, matching the surviving M30.
-- [~] Build/test `iq`: COPW v2 carries the exact detached ProcessWeapon `+0xD8`,
-      maps it to the receiver-local weak identity, and triggers stock replacement
-      directly once real COPG WeaponInfo is stored. Hold only the applied slot
-      against older StatePackets until `DROP-STATE-CATCHUP`. Run the written
-      M30 -> Mazur -> M30 discriminator; stale Chloe HUD prompt remains separate.
+- [x] PARTIAL `iq`: explicit drop ID, immediate stock replacement and stale-state
+      hold are confirmed in one direction (`latencyMs=0`, map stored, catch-up
+      15 ms). Reverse replacement expired at `reason=6`: whitelist art
+      `0x33E29A1B` is intentionally excluded from COPG, so its real info never
+      reached the receiver. The M30 consequently did not fall out.
+- [~] Build/test `ir`: capture the exact nested GiveWeapon 0xC0 argument while the
+      accepted OnInteract context owns the same thread/controller/art, embed it
+      in COPW v3, and use it only for that bounded receiver replacement. Require
+      `info=1 flags=0x7 bytes=316` in both directions and no `reason=6`; run the
+      written Mazur -> M30 -> Mazur discriminator. Chloe HUD remains separate.
 
 ## Rule
 

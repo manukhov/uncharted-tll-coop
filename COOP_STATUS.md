@@ -12167,3 +12167,69 @@ Zero `drop_id`, `realWeaponInfo=0` persisting to timeout, replacement above 500
 ms, a second weapon/model, reverse consume expiry, or a crash rejects the
 corresponding branch independently. The Chloe stale prompt is not predicted
 fixed by `iq`.
+
+### 2026-07-27 RUNTIME PARTIAL / REJECTED: `iq` fixes identity and latency but depends on a COPG packet that whitelist pickups do not send
+
+The user ran Mazur -> M30 -> Mazur on fresh `iq`. Sequence 1
+(`picked=0x3019CBEE`, `dropped=0x33E29A1B`) confirmed the new branches exactly:
+COPW sent 124 bytes with nonzero `drop_id=0x8866749C`, receiver stock replacement
+completed at `latencyMs=0`, the mapping reported `stored=1`, and StatePacket
+caught up after 15 ms. Thus explicit dropped identity, immediate application and
+the bounded slot hold are **CONFIRMED** for this direction.
+
+Sequence 2 also carried a valid nonzero dropped ID (`0x7902EA05`) and consumed
+the picked receiver model immediately, but the M30 replacement never began. It
+logged `WORLD-PICKUP-DROP-STOCK-WAIT reason=6 realWeaponInfo=0` and expired after
+five seconds. This is the reported M30 which did not fall out.
+
+The missing block is deterministic, not UDP loss. `hooked_give_weapon_tail`
+sends COPG only inside `is_pickup_relay_art`; that predicate deliberately
+excludes the whitelist art `0x33E29A1B`. No `GIVEWEAPON-RELAY-SEND/RECV/STORED`
+row exists for either current transaction. Therefore `iq`'s assumption that a
+fresh COPG is always published before COPW is **REJECTED** for whitelist picks.
+Waiting longer or weakening the real-info gate would respectively preserve the
+miss or restore the previously rejected synthetic GiveWeapon path.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `ir` embeds the exact nested GiveWeapon block in COPW v3
+
+Three independent static relationships support the replacement:
+
+1. Call/transaction ownership: accepted
+   `WeaponInteractControl_OnInteract 0x141505BB0` is the outer transaction and
+   invokes `PlayerWeaponController_GiveWeapon 0x1410A4D40` before it returns.
+   The existing exact context already owns the game thread, source art and local
+   Player for the entire nested call.
+2. Data proof: GiveWeapon's second argument is the complete 0xC0 `WeaponInfo`;
+   the function reads its art at `+0x80`, ammo at `+0x84` and additional flags/
+   state before creating or updating the ProcessWeapon. The safe `+9` detour sees
+   this original argument before the stock function consumes it.
+3. Independent commit order: COPW is constructed only after stock OnInteract has
+   returned and the source-kill and old-detach hooks have committed. Capturing
+   the nested block while the context is active and embedding it in that later
+   one-shot packet binds inventory data to the same consumed/dropped identities;
+   it does not depend on the return-RVA/whitelist admission used by COPG.
+
+`ir` admits the block only when the current thread owns the exact context, the
+GiveWeapon controller equals `context.player+0x1D88`, and `WeaponInfo+0x80`
+matches the interacted source art. COPW version 3 is 316 bytes and sets info bit
+`0x4`; receiver revalidates the embedded art, retains the block only in the
+bounded pending transaction and supplies it directly to the already-confirmed
+stock replacement. It does not add whitelist arts to the persistent COPG store,
+does not enable the rejected relayed-block loop, and does not synthesize info.
+
+Competing candidates are separated. Broadening `is_pickup_relay_art` would also
+re-enable persistent whitelist COPG behavior previously associated with
+slot-eviction ping-pong. Reusing an old stored block can carry stale ammo/state
+and is impossible for the first whitelist swap. Synthetic init+art was already
+rejected by spawn-and-drop/fountain tests. The exact nested argument is the only
+candidate that is transaction-local, complete and present for both directions.
+
+**Falsifiable `ir` prediction:** each direction must emit exactly one
+`WORLD-WEAPON-INFO-CAPTURE` with the picked art, then COPW send/receive with
+`info=1 flags=0x7 bytes=316` and a nonzero matching `drop_id`. Receiver must not
+emit `reason=6`; both replacements must complete with
+`gave=1 detached=1 slotReleased=1`, normally below 100 ms, followed by
+`DROP-MAP stored=1`. Reversing again must consume through
+`source=drop-map match=paired-drop-id killed=1`. Missing capture, `info=0`, any
+synthetic/fountain duplicate, replacement expiry, slot rollback or crash rejects
+the corresponding branch independently.
