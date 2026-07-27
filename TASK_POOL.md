@@ -41,11 +41,20 @@
 - [x] **`ia` interaction runtime REJECTED:** Nadine PID 21884 crashed after the
       interaction-admit marker and before detach/source/send; Chloe's prior HUD
       defect remained and no suppress/destroy marker identified its owner.
-- [ ] Replace the EH-bearing `WeaponInteractControl::OnInteract` entry trampoline
-      with an exact vtable/call-boundary design; distinguish detach-wrapper ABI
-      failure from the OnInteract trampoline statically before another launch.
-- [ ] Trace the surviving Chloe FHUD record backward to its actual concrete
-      publisher/control; do not retry the rejected two-slot ownership assumption.
+- [x] **`ib` STATIC / IMPLEMENTED:** the `ia` trampoline returned with
+      `mov rax,target; jmp rax` after copying stock `mov rax,rsp`; stock
+      `lea rbp,[rax-0x4F8]` therefore derived its frame from `.text`. Replace the
+      EH-bearing entry detour with sole `WeaponInteractControl+0x10` slot
+      `0x1429BF4B8`; retain the independently ABI-verified detach/kill callsites.
+- [x] **`ib` STATIC / IMPLEMENTED:** the surviving prompt is produced by script
+      native `hud-draw-interactable-on-object 0x140328C20`, which zeroes the
+      weak key, writes fallback id `record+0x28`, and bypasses both rejected HUD
+      slots at exact publish call `0x1403290FD`. Gate only that call by the
+      already-confirmed primary physical HUD state and log both key forms.
+- [ ] Run the written `ib` boot/interaction discriminator: Nadine pickup must no
+      longer crash and must reach detach/source/send; Chloe/Nadine approach and
+      leave tests must show whether suppressing the non-primary fallback record
+      removes the duplicate/stale prompt or exposes a primary cross-key duplicate.
 
 ## P0: Full Player Synchronization (CURRENT)
 

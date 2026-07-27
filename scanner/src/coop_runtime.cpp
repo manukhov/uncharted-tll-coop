@@ -8351,302 +8351,116 @@ bool install_give_weapon_diagnostic() {
     return g_original_give_weapon_tail != nullptr;
 }
 
-using WeaponPickupHudPublisherFunction = char(__fastcall*)(
-    void*, void*, void*, std::uint8_t, int, char, std::uint8_t, int);
-WeaponPickupHudPublisherFunction g_original_weapon_pickup_hud_publisher = nullptr;
+using FhudPublishInteractRecordFunction = void(__fastcall*)(void*, void*);
+FhudPublishInteractRecordFunction g_original_hud_draw_interactable_record =
+    nullptr;
 
-struct PickupHudObjectKey {
-    std::uintptr_t handle{0};
-    std::uint32_t generation{0};
+struct FhudFallbackRecordIdentity {
+    std::uintptr_t weak_handle{0};
+    std::uint32_t weak_generation{0};
+    std::uint32_t fallback_id{0};
 };
 
-SRWLOCK g_pickup_hud_key_lock = SRWLOCK_INIT;
-std::array<PickupHudObjectKey, 8> g_remote_pickup_hud_keys{};
-std::array<PickupHudObjectKey, 8> g_local_pickup_hud_keys{};
-std::size_t g_remote_pickup_hud_key_count = 0;
-std::size_t g_local_pickup_hud_key_count = 0;
-
-bool pickup_hud_key_equal(
-    const PickupHudObjectKey& lhs, const PickupHudObjectKey& rhs) {
-    return lhs.handle != 0 && lhs.handle == rhs.handle &&
-           lhs.generation != 0 && lhs.generation == rhs.generation;
-}
-
-void append_unique_pickup_hud_key(
-    std::array<PickupHudObjectKey, 8>& keys, std::size_t& count,
-    const PickupHudObjectKey& key) {
-    for (std::size_t i = 0; i < count; ++i) {
-        if (pickup_hud_key_equal(keys[i], key)) return;
-    }
-    if (count < keys.size()) keys[count++] = key;
-}
-
-bool seh_read_pickup_hud_key(void* interactable, PickupHudObjectKey& key) {
-    key = {};
-    if (interactable == nullptr || readable_bytes(interactable) < 0xC0) {
-        return false;
-    }
+bool seh_read_fhud_fallback_record_identity(
+    const void* record, FhudFallbackRecordIdentity& identity) {
+    identity = {};
+    if (record == nullptr || readable_bytes(record) < 0x2C) return false;
     __try {
-        key.handle = *reinterpret_cast<const std::uintptr_t*>(
-            static_cast<const std::byte*>(interactable) + 0xA8);
-        key.generation = *reinterpret_cast<const std::uint32_t*>(
-            static_cast<const std::byte*>(interactable) + 0xBC);
-        return key.handle != 0 && key.generation != 0;
+        const auto* bytes = static_cast<const std::byte*>(record);
+        identity.weak_handle =
+            *reinterpret_cast<const std::uintptr_t*>(bytes + 0x18);
+        identity.weak_generation =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x20);
+        identity.fallback_id =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x28);
+        return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        key = {};
+        identity = {};
         return false;
     }
 }
 
-bool seh_is_weapon_prompt_control(void* control) {
-    if (control == nullptr || readable_bytes(control) < sizeof(void*)) {
-        return false;
-    }
-    __try {
-        const std::uintptr_t vtable =
-            *reinterpret_cast<const std::uintptr_t*>(control);
-        return vtable == g_module + kWeaponInteractControlVftableRva ||
-               vtable == g_module + kWeaponPickupInteractControlVftableRva;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-char __fastcall hooked_weapon_pickup_hud_publisher(
-    void* control, void* pickup, void* player, std::uint8_t a4, int a5,
-    char a6, std::uint8_t a7, int a8) {
-    // The entry is shared by several PickupInteractControl vtables. Restrict the
-    // ownership gate to the two concrete weapon controls; unrelated doors/items
-    // remain entirely stock.
-    if (!seh_is_weapon_prompt_control(control)) {
-        return g_original_weapon_pickup_hud_publisher != nullptr
-            ? g_original_weapon_pickup_hud_publisher(
-                  control, pickup, player, a4, a5, a6, a7, a8)
-            : 0;
-    }
-    void* const local_player = retained_player_object(0);
-    void* const puppet = retained_player_object(1);
-    PickupHudObjectKey key{};
-    const bool have_key = seh_read_pickup_hud_key(pickup, key);
-    if (player != nullptr && player == puppet && puppet != nullptr) {
-        if (have_key) {
-            AcquireSRWLockExclusive(&g_pickup_hud_key_lock);
-            append_unique_pickup_hud_key(
-                g_remote_pickup_hud_keys,
-                g_remote_pickup_hud_key_count, key);
-            ReleaseSRWLockExclusive(&g_pickup_hud_key_lock);
-        }
+void __fastcall hooked_hud_draw_interactable_record(
+    void* per_screen_hud_state, void* record) {
+    // hud-draw-interactable-on-object builds a fallback-keyed record without a
+    // Player pointer or object weak handle. Its explicit per-screen state is the
+    // only proven ownership value: as with the confirmed reticle fix, screen 0
+    // is this copy's visible local HUD and screen != 0 is the retained puppet.
+    FhudFallbackRecordIdentity identity{};
+    const bool have_identity =
+        seh_read_fhud_fallback_record_identity(record, identity);
+    if (hud_state_is_non_primary_screen(per_screen_hud_state)) {
         static std::atomic<int> suppressed{0};
         if (suppressed.fetch_add(1, std::memory_order_relaxed) < 32) {
             std::ostringstream line;
-            line << "PICKUP-HUD-SUPPRESS owner=puppet player=0x" << std::hex
-                 << reinterpret_cast<std::uintptr_t>(player)
-                 << " key=0x" << key.handle << ":" << key.generation
+            line << "PICKUP-HUD-FALLBACK-SUPPRESS screen=non-primary"
+                 << " weak=0x" << std::hex
+                 << (have_identity ? identity.weak_handle : 0)
+                 << ":" << (have_identity ? identity.weak_generation : 0)
+                 << " fallback=0x"
+                 << (have_identity ? identity.fallback_id : 0)
                  << std::dec;
             boot_log_line(line.str().c_str());
         }
-        return 0;
+        return;
     }
-    if (player != nullptr && player == local_player && local_player != nullptr) {
-        if (have_key) {
-            AcquireSRWLockExclusive(&g_pickup_hud_key_lock);
-            append_unique_pickup_hud_key(
-                g_local_pickup_hud_keys,
-                g_local_pickup_hud_key_count, key);
-            ReleaseSRWLockExclusive(&g_pickup_hud_key_lock);
-        }
-        if (pickup != nullptr && readable_bytes(pickup) >= sizeof(void*) &&
-            *reinterpret_cast<const std::uintptr_t*>(pickup) ==
-                g_module + kWeaponPickupVftableRva) {
-            remember_sender_weapon_pickup(
-                reinterpret_cast<std::uint64_t>(pickup));
-        }
-        static std::atomic<bool> local_logged{false};
-        if (!local_logged.exchange(true, std::memory_order_relaxed)) {
-            boot_log_line("PICKUP-HUD-ALLOW owner=local");
-        }
-    } else {
-        static std::atomic<int> unknown_logged{0};
-        if (unknown_logged.fetch_add(1, std::memory_order_relaxed) < 8) {
-            std::ostringstream line;
-            line << "PICKUP-HUD-ALLOW owner=unknown player=0x" << std::hex
-                 << reinterpret_cast<std::uintptr_t>(player)
-                 << " local=0x" << reinterpret_cast<std::uintptr_t>(local_player)
-                 << " puppet=0x" << reinterpret_cast<std::uintptr_t>(puppet)
-                 << std::dec;
-            boot_log_line(line.str().c_str());
-        }
+    static std::atomic<bool> local_logged{false};
+    if (!local_logged.exchange(true, std::memory_order_relaxed)) {
+        std::ostringstream line;
+        line << "PICKUP-HUD-FALLBACK-ALLOW screen=primary"
+             << " weak=0x" << std::hex
+             << (have_identity ? identity.weak_handle : 0)
+             << ":" << (have_identity ? identity.weak_generation : 0)
+             << " fallback=0x"
+             << (have_identity ? identity.fallback_id : 0)
+             << std::dec;
+        boot_log_line(line.str().c_str());
     }
-    return g_original_weapon_pickup_hud_publisher != nullptr
-        ? g_original_weapon_pickup_hud_publisher(
-              control, pickup, player, a4, a5, a6, a7, a8)
-        : 0;
-}
-
-using FhudUpdateInteractScriptsFunction = std::int64_t(__fastcall*)(void*);
-FhudUpdateInteractScriptsFunction g_original_fhud_update_interact_scripts = nullptr;
-
-void* seh_get_fhud_interact_store() {
-    __try {
-        return *reinterpret_cast<void**>(g_module + kFhudInteractStorePtrRva);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return nullptr;
+    if (g_original_hud_draw_interactable_record != nullptr) {
+        g_original_hud_draw_interactable_record(
+            per_screen_hud_state, record);
     }
 }
 
-bool seh_read_fhud_interact_record_key(
-    void* store, std::uint32_t slot, PickupHudObjectKey& key) {
-    key = {};
-    __try {
-        const auto* record = static_cast<const std::byte*>(store) +
-            0x830 + static_cast<std::size_t>(slot) * 0x710;
-        key.handle =
-            *reinterpret_cast<const std::uintptr_t*>(record + 0x18);
-        key.generation =
-            *reinterpret_cast<const std::uint32_t*>(record + 0x20);
-        return key.handle != 0 && key.generation != 0;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        key = {};
-        return false;
-    }
-}
-
-bool seh_destroy_fhud_interact_slot(void* store, std::uint32_t slot) {
-    using DestroyFn = std::int64_t(__fastcall*)(void*, std::uint32_t);
-    const auto destroy = reinterpret_cast<DestroyFn>(
-        g_module + kFhudDestroyInteractScriptRva);
-    __try {
-        destroy(store, slot);
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-std::int64_t __fastcall hooked_fhud_update_interact_scripts(void* a1) {
-    std::array<PickupHudObjectKey, 8> remote{};
-    std::array<PickupHudObjectKey, 8> local{};
-    std::size_t remote_count = 0;
-    std::size_t local_count = 0;
-    AcquireSRWLockExclusive(&g_pickup_hud_key_lock);
-    remote_count = g_remote_pickup_hud_key_count;
-    local_count = g_local_pickup_hud_key_count;
-    std::copy_n(g_remote_pickup_hud_keys.begin(), remote_count, remote.begin());
-    std::copy_n(g_local_pickup_hud_keys.begin(), local_count, local.begin());
-    g_remote_pickup_hud_key_count = 0;
-    g_local_pickup_hud_key_count = 0;
-    ReleaseSRWLockExclusive(&g_pickup_hud_key_lock);
-
-    void* const store = seh_get_fhud_interact_store();
-    if (store != nullptr && readable_bytes(store) >= 0x1E00) {
-        for (std::size_t r = 0; r < remote_count; ++r) {
-            bool locally_refreshed = false;
-            for (std::size_t l = 0; l < local_count; ++l) {
-                if (pickup_hud_key_equal(remote[r], local[l])) {
-                    locally_refreshed = true;
-                    break;
-                }
-            }
-            if (locally_refreshed) continue;
-            for (std::uint32_t slot = 0; slot < 4; ++slot) {
-                PickupHudObjectKey record_key{};
-                seh_read_fhud_interact_record_key(store, slot, record_key);
-                if (!pickup_hud_key_equal(remote[r], record_key)) continue;
-                const bool destroyed =
-                    seh_destroy_fhud_interact_slot(store, slot);
-                static std::atomic<int> destroy_logged{0};
-                if (destroy_logged.fetch_add(1, std::memory_order_relaxed) < 32) {
-                    std::ostringstream line;
-                    line << "PICKUP-HUD-DESTROY slot=" << slot
-                         << " key=0x" << std::hex << remote[r].handle << ":"
-                         << remote[r].generation << std::dec
-                         << " ok=" << (destroyed ? 1 : 0);
-                    boot_log_line(line.str().c_str());
-                }
-                break;
-            }
-        }
-    }
-    return g_original_fhud_update_interact_scripts != nullptr
-        ? g_original_fhud_update_interact_scripts(a1)
-        : 0;
-}
-
-bool install_weapon_pickup_hud_gate() {
-    auto* const weapon_slot = reinterpret_cast<void**>(
-        g_module + kWeaponInteractHudVtableSlotRva);
-    auto* const pickup_slot = reinterpret_cast<void**>(
-        g_module + kWeaponPickupInteractHudVtableSlotRva);
-    void* const expected = reinterpret_cast<void*>(
-        g_module + kWeaponPickupInteractHudPublisherRva);
-    if (*weapon_slot != expected || *pickup_slot != expected) {
-        boot_log_line("weapon-pickup HUD gates SKIPPED (vtable mismatch)");
-        return false;
-    }
-    std::uint8_t* lifecycle_callsite = nullptr;
-    std::uint8_t* lifecycle_relay = nullptr;
-    std::int32_t lifecycle_displacement = 0;
+bool install_hud_draw_interactable_primary_screen_gate() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t displacement = 0;
     if (!prepare_plain_callsite_relay(
-            kFhudUpdateInteractScriptsCallsiteRva,
-            kFhudUpdateInteractScriptsRva,
+            kHudDrawInteractableRecordCallsiteRva,
+            kFhudPublishInteractRecordRva,
             reinterpret_cast<const void*>(
-                &hooked_fhud_update_interact_scripts),
-            lifecycle_callsite, lifecycle_relay,
-            lifecycle_displacement)) {
-        boot_log_line("weapon-pickup HUD gates SKIPPED (lifecycle callsite)");
+                &hooked_hud_draw_interactable_record),
+            callsite, relay, displacement)) {
+        boot_log_line(
+            "hud-draw-interactable primary-screen gate SKIPPED (preflight)");
         return false;
     }
     SuspendedProcessThreads suspended_threads{};
     if (!suspend_other_process_threads(suspended_threads)) {
-        VirtualFree(lifecycle_relay, 0, MEM_RELEASE);
-        boot_log_line("weapon-pickup HUD gates SKIPPED (thread suspend)");
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line(
+            "hud-draw-interactable primary-screen gate SKIPPED (thread suspend)");
         return false;
     }
-    DWORD weapon_old = 0;
-    DWORD pickup_old = 0;
-    DWORD callsite_old = 0;
-    const bool weapon_protected = VirtualProtect(
-        weapon_slot, sizeof(void*), PAGE_READWRITE, &weapon_old) != 0;
-    const bool pickup_protected = VirtualProtect(
-        pickup_slot, sizeof(void*), PAGE_READWRITE, &pickup_old) != 0;
-    const bool callsite_protected = VirtualProtect(
-        lifecycle_callsite, 5, PAGE_EXECUTE_READWRITE, &callsite_old) != 0;
-    if (!weapon_protected || !pickup_protected || !callsite_protected) {
-        DWORD ignored = 0;
-        if (weapon_protected) {
-            VirtualProtect(weapon_slot, sizeof(void*), weapon_old, &ignored);
-        }
-        if (pickup_protected) {
-            VirtualProtect(pickup_slot, sizeof(void*), pickup_old, &ignored);
-        }
-        if (callsite_protected) {
-            VirtualProtect(lifecycle_callsite, 5, callsite_old, &ignored);
-        }
+    DWORD old = 0;
+    if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
         resume_suspended_process_threads(suspended_threads);
-        VirtualFree(lifecycle_relay, 0, MEM_RELEASE);
-        boot_log_line("weapon-pickup HUD gates SKIPPED (protect)");
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line(
+            "hud-draw-interactable primary-screen gate SKIPPED (protect)");
         return false;
     }
-    g_original_weapon_pickup_hud_publisher =
-        reinterpret_cast<WeaponPickupHudPublisherFunction>(expected);
-    g_original_fhud_update_interact_scripts =
-        reinterpret_cast<FhudUpdateInteractScriptsFunction>(
-            g_module + kFhudUpdateInteractScriptsRva);
-    *weapon_slot = reinterpret_cast<void*>(
-        &hooked_weapon_pickup_hud_publisher);
-    *pickup_slot = reinterpret_cast<void*>(
-        &hooked_weapon_pickup_hud_publisher);
-    std::memcpy(lifecycle_callsite + 1, &lifecycle_displacement,
-                sizeof(lifecycle_displacement));
-    FlushInstructionCache(
-        GetCurrentProcess(), lifecycle_callsite, 5);
+    g_original_hud_draw_interactable_record =
+        reinterpret_cast<FhudPublishInteractRecordFunction>(
+            g_module + kFhudPublishInteractRecordRva);
+    std::memcpy(callsite + 1, &displacement, sizeof(displacement));
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
     DWORD ignored = 0;
-    VirtualProtect(weapon_slot, sizeof(void*), weapon_old, &ignored);
-    VirtualProtect(pickup_slot, sizeof(void*), pickup_old, &ignored);
-    VirtualProtect(lifecycle_callsite, 5, callsite_old, &ignored);
+    VirtualProtect(callsite, 5, old, &ignored);
     resume_suspended_process_threads(suspended_threads);
     boot_log_line(
-        "weapon-pickup dual-vtable ownership and FHUD callsite cleanup installed");
+        "hud-draw-interactable fallback primary-screen gate installed");
     return true;
 }
 
@@ -8743,15 +8557,23 @@ void __fastcall hooked_process_kill_tree_for_weapon_interact(void* process) {
 std::int64_t __fastcall hooked_process_weapon_detach(
     void* weapon, float scalar, void* translation, void* rotation,
     char a5, char a6) {
+    const DWORD thread_id = GetCurrentThreadId();
+    auto& context = g_weapon_interact_world_context;
+    const bool transaction_owned =
+        g_weapon_interact_owner_thread.load(std::memory_order_acquire) ==
+            thread_id &&
+        context.active && weapon != nullptr && weapon != context.source;
+    if (transaction_owned) {
+        static std::atomic<int> entered{0};
+        if (entered.fetch_add(1, std::memory_order_relaxed) < 16) {
+            boot_log_line("WORLD-WEAPON-DROP-ENTER exact GiveWeapon callsite");
+        }
+    }
     const std::int64_t result = g_original_process_weapon_detach != nullptr
         ? g_original_process_weapon_detach(
               weapon, scalar, translation, rotation, a5, a6)
         : 0;
-    const DWORD thread_id = GetCurrentThreadId();
-    auto& context = g_weapon_interact_world_context;
-    if (g_weapon_interact_owner_thread.load(std::memory_order_acquire) !=
-            thread_id ||
-        !context.active || weapon == nullptr || weapon == context.source) {
+    if (!transaction_owned) {
         return result;
     }
     std::uint32_t art = 0;
@@ -8844,10 +8666,15 @@ void __fastcall hooked_weapon_interact_on_interact(
 }
 
 bool install_weapon_interact_world_lifecycle() {
-    constexpr std::array<std::uint8_t, 14> kOnInteractPrologue{
-        0x48, 0x8B, 0xC4, 0x55, 0x56, 0x57,
-        0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
-    };
+    auto* const on_interact_slot = reinterpret_cast<void**>(
+        g_module + kWeaponInteractOnInteractVtableSlotRva);
+    void* const expected_on_interact = reinterpret_cast<void*>(
+        g_module + kWeaponInteractOnInteractRva);
+    if (*on_interact_slot != expected_on_interact) {
+        boot_log_line(
+            "WeaponInteractControl lifecycle SKIPPED (vtable mismatch)");
+        return false;
+    }
     std::uint8_t* detach_callsite = nullptr;
     std::uint8_t* detach_relay = nullptr;
     std::int32_t detach_displacement = 0;
@@ -8885,17 +8712,25 @@ bool install_weapon_interact_world_lifecycle() {
     }
     DWORD detach_old = 0;
     DWORD kill_old = 0;
+    DWORD on_interact_old = 0;
     const bool detach_protected = VirtualProtect(
         detach_callsite, 5, PAGE_EXECUTE_READWRITE, &detach_old) != 0;
     const bool kill_protected = VirtualProtect(
         kill_callsite, 5, PAGE_EXECUTE_READWRITE, &kill_old) != 0;
-    if (!detach_protected || !kill_protected) {
+    const bool on_interact_protected = VirtualProtect(
+        on_interact_slot, sizeof(void*), PAGE_READWRITE,
+        &on_interact_old) != 0;
+    if (!detach_protected || !kill_protected || !on_interact_protected) {
         DWORD ignored = 0;
         if (detach_protected) {
             VirtualProtect(detach_callsite, 5, detach_old, &ignored);
         }
         if (kill_protected) {
             VirtualProtect(kill_callsite, 5, kill_old, &ignored);
+        }
+        if (on_interact_protected) {
+            VirtualProtect(
+                on_interact_slot, sizeof(void*), on_interact_old, &ignored);
         }
         resume_suspended_process_threads(suspended_threads);
         VirtualFree(detach_relay, 0, MEM_RELEASE);
@@ -8910,6 +8745,11 @@ bool install_weapon_interact_world_lifecycle() {
     g_original_process_kill_tree_for_weapon_interact =
         reinterpret_cast<ProcessKillTreeFunction>(
             g_module + kProcessKillTreeRva);
+    g_original_weapon_interact_on_interact =
+        reinterpret_cast<WeaponInteractOnInteractFunction>(
+            expected_on_interact);
+    *on_interact_slot =
+        reinterpret_cast<void*>(&hooked_weapon_interact_on_interact);
     std::memcpy(detach_callsite + 1, &detach_displacement,
                 sizeof(detach_displacement));
     std::memcpy(kill_callsite + 1, &kill_displacement,
@@ -8919,19 +8759,14 @@ bool install_weapon_interact_world_lifecycle() {
     DWORD ignored = 0;
     VirtualProtect(detach_callsite, 5, detach_old, &ignored);
     VirtualProtect(kill_callsite, 5, kill_old, &ignored);
+    VirtualProtect(
+        on_interact_slot, sizeof(void*), on_interact_old, &ignored);
     resume_suspended_process_threads(suspended_threads);
-    g_original_weapon_interact_on_interact =
-        reinterpret_cast<WeaponInteractOnInteractFunction>(
-            install_fire_gate_detour(
-                kWeaponInteractOnInteractRva,
-                kOnInteractPrologue.data(), kOnInteractPrologue.size(),
-                reinterpret_cast<void*>(&hooked_weapon_interact_on_interact),
-                "WeaponInteractControl OnInteract world relay"));
     const bool installed = g_original_process_weapon_detach != nullptr &&
         g_original_process_kill_tree_for_weapon_interact != nullptr &&
         g_original_weapon_interact_on_interact != nullptr;
     boot_log_line(installed
-        ? "WeaponInteractControl exact-callsite consume/drop relay installed"
+        ? "WeaponInteractControl vtable-scoped exact-callsite relay installed"
         : "WeaponInteractControl consume/drop lifecycle relay incomplete");
     return installed;
 }
@@ -39967,8 +39802,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27ia "
-        "(exact pickup callsites; dual-vtable HUD cleanup)");
+        "TLL co-op runtime init 2026-07-27ib "
+        "(WeaponInteract vtable scope; fallback HUD screen gate)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -40100,7 +39935,7 @@ DWORD WINAPI install_hook(void*) {
     install_pose_seed_gate();
     install_get_blended_camera_gate();
     install_reticle_hud_gate();
-    install_weapon_pickup_hud_gate();
+    install_hud_draw_interactable_primary_screen_gate();
     // Player collision/bump probes are intentionally parked. Enabling layer 4<->5
     // collision made the two independent simulations diverge and triggered the
     // exact-position regression. Keep the reverse-engineered code for later use.

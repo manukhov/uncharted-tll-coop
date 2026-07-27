@@ -1410,6 +1410,20 @@ FUNCTIONS = {
         "+0xD0 (not Player+0x4010), then refreshes the four-slot FHUD interact "
         "store through 0x141359470.",
     ),
+    0x140328C20: (
+        "HudScript_DrawInteractableOnObject",
+        "Script native registered by the exact hud-draw-interactable-on-object "
+        "string xref at 0x14003A207. Parses an explicit screen/player index, "
+        "builds a fallback-keyed interact record with zero object weak handle, "
+        "selects g_PerScreenPlayerHudState, and publishes at call 0x1403290FD.",
+    ),
+    0x141359470: (
+        "FHUD_PublishInteractRecord",
+        "Common FHUD interact-record publisher. Validates a record object weak "
+        "handle at +0x18/+0x20 when present, recognizes WeaponPickup, and "
+        "otherwise forwards fallback-keyed records to the physical HUD store. "
+        "The hud-draw-interactable-on-object callsite is 0x1403290FD.",
+    ),
     0x141357CA0: (
         "FHUD_DestroyInteractScript",
         "FHUD::HudFlash::DestroyInteractScript. For one of four physical HUD "
@@ -1428,7 +1442,9 @@ FUNCTIONS = {
         "Accepted ordinary ground-weapon interaction. RDX is the source "
         "ProcessWeapon, R8 is Player. Reads source stable id +0xD8 and art "
         "+0x860, publishes give-weapon, then commits source destruction through "
-        "ProcessKillTree at call 0x141506839 (return 0x14150683E).",
+        "ProcessKillTree at call 0x141506839 (return 0x14150683E). The sole "
+        "runtime dispatch reference is WeaponInteractControl vtable +0x10 at "
+        "0x1429BF4B8; use that slot instead of relocating this EH-bearing entry.",
     ),
     0x141ED3630: (
         "ProcessWeapon_DetachToWorldTransform",
@@ -9173,6 +9189,12 @@ DATA_NAMES = {
         "MSVC RTTI .?AVWeaponInteractControl@@ vtable. Slots identify ordinary "
         "ground ProcessWeapon availability, request, OnInteract, and shared HUD "
         "publication; distinct from WeaponPickupInteractControl.",
+    ),
+    0x1429BF4B8: (
+        "WeaponInteractControl_OnInteract_VtableSlot",
+        "WeaponInteractControl vtable +0x10 and sole dispatch reference to "
+        "WeaponInteractControl_OnInteract 0x141505BB0. Patching this data slot "
+        "preserves the function's original prologue and unwind metadata.",
     ),
     0x142AA6E90: (
         "WeaponPickupInteractControl_Vtable",

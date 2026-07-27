@@ -10749,3 +10749,83 @@ pre-interaction `hz` crash. The next sender design must remove the EH-bearing
 nested detach and source-kill boundaries before another runtime test. The next
 HUD design must first identify which publisher/control actually creates the
 surviving Chloe record rather than moving the same ownership gate again.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `ib` fixes the interaction-entry ABI and intercepts the fallback HUD publisher
+
+The Nadine crash has a deterministic instruction-level cause. The sole runtime
+dispatch reference to `WeaponInteractControl::OnInteract 0x141505BB0` is vtable
+slot `WeaponInteractControl+0x10` at `0x1429BF4B8` (RTTI
+`.?AVWeaponInteractControl@@`, vtable base `0x1429BF4A8`; the constructor writes
+that vtable at `0x141103819`). The stock entry begins `mov rax,rsp` at
+`0x141505BB0`, saves registers through `0x141505BBC`, and then executes
+`lea rbp,[rax-0x4F8]` at `0x141505BBE`. The rejected `ia` entry trampoline copied
+only the first 14 bytes and returned with `mov rax,target; jmp rax`. It therefore
+replaced the live saved `RSP` in `RAX` with a code address immediately before the
+stock function derived its frame pointer; the following stack write targeted
+`.text`. This exactly predicts the observed `WORLD-WEAPON-INTERACT` followed by
+process death before either nested commit and requires no receiver/network
+failure.
+
+Two independent ABI checks exclude the nested exact-callsite relays as that
+specific cause. The caller at `0x1410A68AC` passes the replaced ProcessWeapon in
+`RCX`, the scalar in `XMM1`, transform pointers in `R8/R9`, and the last two
+arguments on the stack to `ProcessWeapon_DetachToWorldTransform 0x141ED3630`;
+the callee consumes that same layout. The compiled MSVC wrapper preserves those
+registers and relocates both stack arguments in its own unwind-described frame.
+`ib` keeps the exact detach and source-kill calls but replaces the unsafe entry
+detour with the one concrete vtable slot. The wrapper calls the original function
+directly, so the complete stock prologue and stock unwind metadata remain intact.
+It also logs `WORLD-WEAPON-DROP-ENTER` before the detach call, separating any
+future nested failure from the repaired entry failure. Fixing only the absolute
+jump encoding was rejected: even a non-clobbering relocated prologue would run
+outside the stock function's registered unwind range. Hooking the shared interact
+dispatcher was rejected because it admits unrelated controls; hooking only the
+later GiveWeapon loses the source identity needed by the consume packet.
+
+The surviving Chloe prompt comes from a statically separate publisher. The exact
+string xref for script native `hud-draw-interactable-on-object` is
+`0x14003A207`; initializer `0x14003A200` registers handler `0x140328C20`. That
+handler resolves the script object, copies its stable/fallback id from object
+`+0xD8` into record `+0x28`, explicitly zeros the weak object key at
+`+0x18/+0x20`, selects `g_PerScreenPlayerHudState` using the explicit script
+screen index, and calls `FHUD_PublishInteractRecord 0x141359470` at the exact
+five-byte callsite `0x1403290FD`. `FHUD_PublishInteractRecord` independently
+feeds `0x141354EA0`, whose upsert compares the nonzero fallback id and refreshes
+the physical four-slot store. This explains all `ia` evidence: the native bypasses
+both patched weapon-control vtable slots, and a zero weak key cannot be found or
+destroyed by the rejected weak-key cleanup.
+
+Competing HUD paths were separated before implementation. The shared control
+publisher `0x1408AEA00` is the already rejected two-vtable path, but its base
+`PickupInteractControl+0xE0` slot at `0x1429B6958` was not patched and remains a
+concrete alternative: like the two weapon-control slots, it contains
+`0x1408AEA00`. If the script discriminator fails, only that base slot should be
+probed, with exact ProcessWeapon/WeaponPickup vtable and retained-Player checks;
+the shared function entry must stay stock. The call at
+`0x1410BCDBD` belongs to `PlayerZiplineController`; generic Hud vmethods at
+`0x1413B5EC8`, `0x1413B60F1`, and `0x1413B62EC` also build fallback records but
+do not own this exact script string/callsite. Patching common publisher
+`0x141359470` would affect six unrelated callers. `ib` therefore patches only
+callsite `0x1403290FD` and applies the same already-CONFIRMED physical-HUD rule
+as the reticle fix: screen 0 calls stock, retained screen != 0 is suppressed.
+This exact script native is general interactable HUD rather than weapon-only, so
+the intended scope is all retained-player fallback prompts on the single physical
+viewport. Bounded logs include weak key and fallback id. Static data proves the
+bypass and screen selection but not yet that Chloe's surviving record is the
+non-primary instance; that last ownership statement remains the runtime
+discriminator.
+
+**Falsifiable `ib` prediction.** Both fresh copies must install
+`WeaponInteractControl vtable-scoped exact-callsite relay` and
+`hud-draw-interactable fallback primary-screen gate` and remain responsive. On
+Nadine's M30/Mazur replacement, `WORLD-WEAPON-INTERACT` must be followed by
+`WORLD-WEAPON-DROP-ENTER`/`DROP-COMMIT` when replacing a weapon,
+`SOURCE-COMMIT`, and `SEND`, without a crash. Absence of the first marker means
+dispatch bypasses the proven slot; the same pre-commit crash falsifies the live-
+`RAX` diagnosis; `DROP-ENTER` followed by death instead isolates the exact detach
+wrapper. Near a ground weapon, screen 0 must emit one fallback ALLOW and screen 1
+must emit SUPPRESS with weak key zero and a nonzero fallback id. If those markers
+appear and Chloe's duplicate/stale prompt disappears, the retained script path is
+confirmed. If SUPPRESS appears but the defect remains alongside primary ALLOW,
+the survivor is a cross-key local-control plus primary-fallback duplicate, and
+the next boundary must classify the fallback id rather than widen this gate.
