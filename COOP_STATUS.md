@@ -10968,3 +10968,40 @@ After the serialized injections and an additional 30-second observation both
 processes remained alive and Win32-responsive. This confirms only cold-start
 packaging of the direct dispatcher consume and five exact HUD relays; the written
 approach/pickup behavior remains pending.
+
+### 2026-07-27 RUNTIME PARTIAL CONFIRM / REJECT: `ic` avoids the freeze but one-screen consume and early drop capture fail
+
+The user exercised replacements in both directions. Role-A/Chloe PID 17060 sent
+M30 consume `stable=0x8914C88C art=0x3019CBEE`; role-B/Nadine PID 2848 sent the
+reverse authored weapon `stable=0xC3B02AE2 art=0xC3181EBD`. Both copies remained
+alive and responsive, so removing every receiver call to the global registry
+CONFIRMS the deadlock diagnosis and the safety of the `ic` packaging.
+
+The visible lifecycle prediction nevertheless failed. Each receiver emitted
+`WORLD-PICKUP-CONSUME-DIRECT expired without a unique nearby ProcessWeapon` and
+the user confirmed that the old M30 remained instead of changing to Mazur LDR
+(the same result occurs with other rifles). This rejects the assumption that the
+authored ground ProcessWeapon is present in the retained puppet's screen-only
+dispatcher. The already logged local pickup-control publisher proves the object
+is present through another generation-validated screen list; the next selector
+may merge all six dispatcher lists only if it deduplicates pointers, prefers an
+exact stable ID globally and accepts an art fallback only when exactly one
+unique object survives.
+
+Replacement capture independently failed on both senders. Each interaction
+emitted `WORLD-WEAPON-DROP-ENTER`, then source commit and send, but no
+`DROP-COMMIT`; both packets had `dropped=0 flags=0x1`. The user sees the replaced
+weapon correctly on the sender, so the exact old ProcessWeapon pointer is real
+but the immediate post-detach serializer is still too early. A later
+post-`WeaponInteractControl_OnInteract` capture of that saved exact pointer is
+the surviving bounded alternative; broad detach hooks or sampled slot deltas
+remain rejected.
+
+The HUD source discriminator is now conclusive for this occurrence. Both copies
+emitted only `PICKUP-HUD-SOURCE source=pickup-control` at the primary physical
+HUD state with nonzero weak keys and fallback zero. Neither the script call nor
+any of the three generic/fallback publishers nor the conditional tail produced a
+row. The user reports that the prior HUD defect is gone. Thus `0x1408AF179`
+inside `PickupInteractControl_PublishHudPrompt 0x1408AEA00` owns the live weapon
+records; the fallback hypotheses are runtime REJECTED. No new HUD suppression is
+needed while correct world-object removal stops this publisher naturally.

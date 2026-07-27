@@ -68,7 +68,7 @@
       `0x140BCE150`. Never call the global registry or either native world Apply
       from Player update; the unsafe dropped-spawn branch is parked. The receiver
       pickup-animation fallback is dispatcher-only for the same reason.
-- [ ] Run the written `ic` test. Both copies must survive boot and install the
+- [x] Run the written `ic` test. Both copies survived boot and installed the
       five-site HUD source discriminator. Approaching the M30 identifies its real
       FHUD source without suppression. Picking it up on Chloe must yield one
       `WORLD-PICKUP-CONSUME-DIRECT ... killed=1` on Nadine, no freeze, no stale
@@ -76,7 +76,17 @@
       a killed object which remains visible separates the next receiver branch.
       **Cold boot CONFIRMED:** role-A/Chloe PID 17060 and role-B/Nadine PID 2848
       remain responsive after 30+ seconds with all `ic` relays installed; live
-      approach/pickup is the remaining discriminator.
+      interaction PARTIAL CONFIRM / REJECT: neither copy freezes, but both
+      screen-1-only consumes expire and the old M30 remains. Both senders emit
+      DROP-ENTER but flags=0x1/dropped=0. HUD source is conclusively only
+      `pickup-control 0x1408AF179` on the primary state; the user reports the HUD
+      bug gone.
+- [ ] Next ground-world build: merge all six dispatcher lists with pointer
+      dedupe, exact stable-ID priority and unique-art-only fallback; save the exact
+      old weapon at DROP-ENTER and capture its payload only after the enclosing
+      OnInteract returns. Keep native registry Apply forbidden. Determine whether
+      receiver SLOT-MIRROR already detaches a corresponding old weapon before
+      adding any new materialization path.
 
 ## P0: Full Player Synchronization (CURRENT)
 
