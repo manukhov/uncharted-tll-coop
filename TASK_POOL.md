@@ -159,6 +159,12 @@
       M30 after the prompt has existed for more than 15 seconds. Require
       `captured>=1 recent=0 live>=1 matching=1`, `killed=1`, exact HUD cleanup,
       prompt/model removal, the already-confirmed fast stock drop, and no crash.
+      **Cold boot CONFIRMED:** fresh PID 20156 (A/Chloe) and PID 22624 (B/Nadine)
+      loaded `ih`, selected the expected roles, installed the exact pickup/FHUD
+      hooks and remained responsive through the observation window. Repeated
+      handled page probes at DLL `+0x4A73F` occurred while both games continued
+      normally; they are not a fatal marker. Behavioral M30 acceptance remains
+      pending.
 
 ## P0: Full Player Synchronization (CURRENT)
 

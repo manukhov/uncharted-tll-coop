@@ -11493,6 +11493,14 @@ dropped weapon must retain the confirmed sub-500-ms stock path, and neither copy
 may crash. A dead/reused candidate must remain `live=0`; two live same-art
 candidates must report ambiguity and kill neither.
 
+**Cold-start validation.** Fresh PID 20156 (role A/Chloe) and PID 22624 (role
+B/Nadine) loaded `ih`, selected their expected UDP roles, installed the exact
+WeaponInteractControl and ground-pickup FHUD hooks, and remained responsive
+through the observation window. The recurring handled DLL `+0x4A73F` page probes
+again occurred while both processes continued normal execution, independently
+confirming that marker is not the reported fatal event. The initial-M30 behavior
+prediction remains pending.
+
 ### 2026-07-27 CONFIRMED behavior / HYPOTHESIS writer: retained vertical ADS follows the receiver-local camera
 
 The missing vertical pose is not a dead animation consumer. The user observed a
