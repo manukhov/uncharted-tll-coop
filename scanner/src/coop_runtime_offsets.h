@@ -462,6 +462,15 @@ constexpr std::uintptr_t kWeaponInteractControlVftableRva = 0x29BF4A8;
 // this exact callsite. Its first argument is the explicit per-screen HUD state.
 constexpr std::uintptr_t kHudDrawInteractableRecordCallsiteRva = 0x03290FD;
 constexpr std::uintptr_t kFhudPublishInteractRecordRva = 0x1359470;
+// The script-native callsite above was runtime-silent for the authored M30
+// prompt. These are the remaining direct publishers plus the small conditional
+// tail-forwarder which all converge on FHUD_PublishInteractRecord. They are
+// diagnostic-only until a live source marker identifies the surviving prompt.
+constexpr std::uintptr_t kPickupControlHudRecordCallsiteRva = 0x08AF179;
+constexpr std::array<std::uintptr_t, 3> kGenericHudRecordCallsiteRvas{
+    0x13B5EC8, 0x13B60F1, 0x13B62EC,
+};
+constexpr std::uintptr_t kConditionalHudRecordTailBranchRva = 0x13B48C2;
 constexpr std::uintptr_t kPlayerRequestedInteractRva = 0x0C87D70;
 // PlayerPickupController vtable +0x38 -> Start/Queue 0x140F49CA0. This is the
 // proven producer of dra-pickup-* gestures from the interact-with-me script event.
@@ -507,14 +516,12 @@ constexpr std::uintptr_t kGiveWeaponTailRva = 0x10A4D49;
 // give-weapon event path (hash 0xFB1091A3 branch). Runtime-confirmed 2026-07-06:
 // a real ground pickup logs exactly this ret_rva.
 constexpr std::uintptr_t kPickupGiveRetRva = 0xDD4208;
-// Native world-pickup lifecycle. Campaign GiveWeapon executes the local drop but
-// skips SendNetEventAddDroppedPickup behind HIBYTE(g_NetModeFlags); the custom
-// relay serializes the proven event payload and invokes the native Apply entries.
+// Native dropped-pickup payload constructor. Campaign GiveWeapon executes the
+// local drop but skips SendNetEventAddDroppedPickup behind HIBYTE(g_NetModeFlags).
+// Native Apply/ID-generation RVAs are deliberately not exposed to runtime code:
+// calling them from retained Player update enters the unsafe global registry.
 constexpr std::uintptr_t kNetEventAddDroppedPickupCtorFromProcessWeaponRva =
     0x0BCC9D0;
-constexpr std::uintptr_t kNetEventAddDroppedPickupApplyRva = 0x0BCD0F0;
-constexpr std::uintptr_t kNetEventSyncWeaponPickupsApplyRva = 0x0BCE440;
-constexpr std::uintptr_t kGenerateNetDroppedPickupIdRva = 0x0A97600;
 // ProcessKillTree 0x1416A5C20: destroys a weapon process object. Used with
 // GetWeaponBySlot (controller vtable +0xB0) to free a manager slot before a
 // relayed pickup give — otherwise the new long gun spills into the next slot and

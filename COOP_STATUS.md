@@ -10882,3 +10882,78 @@ now sees the prompt defect on Nadine. The control-slot alternative survives, but
 the previously suggested slot `0x1429B6958` is independently rejected by RTTI as
 `CarryObjectInteractControl`; its true base/concrete ground-weapon owner must be
 resolved before another HUD patch.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `ic` removes receiver registry entry and enumerates the remaining HUD sources
+
+**Hypothesis.** The authored ground M30 can be consumed on the receiver without
+any global stable-ID lookup. The retained puppet's own per-screen interact
+dispatcher already owns a weak handle for the nearby ProcessWeapon; validating
+that handle and passing the exact object to `ProcessKillTree 0x1416A5C20` is the
+same terminal operation used by the native pickup lifecycle, without entering
+the registry lock which deadlocked `ib`.
+
+The hypothesis meets the evidence quota with four independent kinds:
+
+1. The live `ib` stack ends at the `pause; cmpxchg; jnz` owner loop
+   `0x140A98A00..0x140A98A04` in `ResolveGameObjectHandleById 0x140A989C0`,
+   before native Apply. Decompilation independently shows this is a wait, not an
+   exception, so wrapping it in SEH cannot make the Player-update context safe.
+2. `Player_InteractDispatcher 0x140C85D20` consumes a per-screen array at
+   `0x143EC4EE0 + screen*0x35C0`; every 32-byte entry carries a weak pointer and
+   generation which stock code validates against `object+0xBC` before publishing
+   interaction state. The retained puppet supplies the exact screen at
+   `Player+0x4010`; no global registry or cross-screen scan is required.
+3. The ordinary authored source is RTTI-fixed as exact `ProcessWeapon` vtable
+   `0x142A9BF48`, art `+0x860`, stable world ID `+0xD8`. The `ic` selector first
+   requires the remote stable ID and art; only when IDs differ between copies may
+   one unique same-art candidate in that single dispatcher be used. Multiple
+   same-art candidates are rejected rather than guessed.
+4. Stock `NetEventSyncWeaponPickups_KillEligibleProcess 0x140BCE150` type-gates
+   its resolved object to ProcessWeapon/ProcessShield and then calls
+   `ProcessKillTree` at `0x140BCE408`. Independently, the confirmed local
+   `WeaponInteractControl_OnInteract 0x141505BB0` destroys its exact source with
+   the same primitive at `0x141506839`; the existing SLOT-MIRROR removal also
+   uses that primitive from retained Player update. These three paths converge on
+   the same terminal operation.
+
+Competing receiver designs are excluded. Removing only the preliminary lookup
+but still calling `NetEventSyncWeaponPickups_Apply 0x140BCE440` is not a fix: that
+function itself enters `ResolveGameObjectHandleById`. Deferring either native
+world Apply to an arbitrary worker has no proven scheduler/ownership boundary.
+Scanning all six screens or accepting the first same-art object can destroy an
+unrelated pickup. `ic` therefore uses one generation-validated dispatcher and a
+unique fallback. `NetEventAddDroppedPickup_Apply 0x140BCD0F0` and its ID
+collision resolver are parked from this context; `ib` did not capture a drop
+payload anyway. The receiver pickup-animation fallback is also changed to use
+only its per-screen dispatcher, preventing the same registry wait after consume.
+
+The HUD branch remains diagnostic. Raw bytes prove five remaining paths to
+`FHUD_PublishInteractRecord 0x141359470`: direct `E8` calls
+`0x1408AF179`, `0x1413B5EC8`, `0x1413B60F1`, `0x1413B62EC`, and the enabled-screen
+tail `0F 85` at `0x1413B48C2`. The first is inside the shared control publisher
+`0x1408AEA00`; the next three build generic records; the last resolves
+`g_PerScreenPlayerHudState` from owner `+0x308`. `ic` relays only those exact
+sites and emits bounded `PICKUP-HUD-SOURCE` rows containing source, physical HUD
+classification, weak key and fallback ID. Every wrapper calls stock unchanged;
+there is no new suppression. The earlier script call `0x1403290FD` remains
+instrumented but is runtime-rejected for the observed M30 prompt. IDA comments
+were corrected: `0x1429B6878` is CarryObjectInteractControl, true base
+PickupInteractControl is `0x1429B9840`, and `0x1408AEA00` is shared by many
+control vtables rather than only three. New names
+`NetEventSyncWeaponPickups_KillEligibleProcess` and
+`FHUD_PublishInteractRecordIfScreenEnabled` were saved to the single IDB;
+`save_database returned True`.
+
+**Falsifiable `ic` prediction.** Fresh Chloe/Nadine copies must report build
+`2026-07-27ic`, `pickup HUD exact-source diagnostics installed (5 sites)`, and
+remain responsive before interaction. Approaching the M30 must produce a bounded
+source row for every record that can sustain the visible prompt. When Chloe picks
+it up, Nadine must receive the packet, emit exactly one
+`WORLD-PICKUP-CONSUME-DIRECT` with `match=stable-id` or `unique-art` and
+`killed=1`, remain responsive, lose the ground M30, and let its keyed prompt
+expire. No native `WORLD-PICKUP-CONSUME applied` route may run. Expiry without a
+match rejects the puppet-dispatcher ownership assumption; `killed=1` with a
+remaining model rejects ProcessKillTree as a complete terminal; successful world
+removal with a surviving prompt selects the logged FHUD source for the next
+exact-source ownership fix. Replacement-weapon spawn is not part of this exam
+and remains parked until a safe native scheduler is proven.

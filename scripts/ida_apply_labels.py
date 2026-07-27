@@ -1403,9 +1403,11 @@ FUNCTIONS = {
     ),
     0x1408AEA00: (
         "PickupInteractControl_PublishHudPrompt",
-        "Shared vtable +0xE0 entry in PickupInteractControl (0x1429B6878), "
-        "WeaponInteractControl (0x1429BF4A8), and WeaponPickupInteractControl "
-        "(0x142AA6E90). a3 is the Player GameObject; the function builds its "
+        "Shared vtable +0xE0 entry in many interact-control classes. Confirmed "
+        "aliases include CarryObjectInteractControl (0x1429B6878), the true "
+        "PickupInteractControl vtable (0x1429B9840), WeaponInteractControl "
+        "(0x1429BF4A8), and WeaponPickupInteractControl (0x142AA6E90). a3 is "
+        "the Player GameObject; the function builds its "
         "+0xA8/+0xBC handle, resolves a HUD index through player-manager vtable "
         "+0xD0 (not Player+0x4010), then refreshes the four-slot FHUD interact "
         "store through 0x141359470.",
@@ -1423,6 +1425,13 @@ FUNCTIONS = {
         "handle at +0x18/+0x20 when present, recognizes WeaponPickup, and "
         "otherwise forwards fallback-keyed records to the physical HUD store. "
         "The hud-draw-interactable-on-object callsite is 0x1403290FD.",
+    ),
+    0x1413B48A0: (
+        "FHUD_PublishInteractRecordIfScreenEnabled",
+        "Small conditional tail-forwarder: indexes g_PerScreenPlayerHudState "
+        "from owner+0x308, tests the screen FHUD enabled byte, and tail-jumps to "
+        "FHUD_PublishInteractRecord at 0x1413B48C2. RCX/RDX remain the exact HUD "
+        "state and interact record ABI.",
     ),
     0x141357CA0: (
         "FHUD_DestroyInteractScript",
@@ -1494,8 +1503,15 @@ FUNCTIONS = {
         "Consumes the entry list: resolves each id via the game-object handle "
         "registry (ResolveGameObjectHandleById) and drives the native "
         "net-pick-up-other-client flow (removes ground pickup, processes remote "
-        "client pickup). RECEIVER entry for the co-op pickup relay: stack-construct "
-        "the event and call this directly.",
+        "client pickup). Do not call this from retained Player update: the nested "
+        "registry lock can spin forever when another engine context owns it.",
+    ),
+    0x140BCE150: (
+        "NetEventSyncWeaponPickups_KillEligibleProcess",
+        "Stock resolved-object callback used by NetEventSyncWeaponPickups_Apply. "
+        "It admits Dropped/NetDropped parents and then type-gates ProcessWeapon or "
+        "ProcessShield before calling ProcessKillTree at 0x140BCE408. This is the "
+        "native terminal primitive after registry resolution.",
     ),
     0x140BCE850: (
         "NetEventSyncWeaponPickups_WalkFill",
@@ -1536,7 +1552,9 @@ FUNCTIONS = {
     0x140A989C0: (
         "ResolveGameObjectHandleById",
         "Generic game-object handle lookup: returns {ptr,id} handle validated by "
-        "*(obj+0xBC)==id (same pattern as the retained-player slot table).",
+        "*(obj+0xBC)==id. Its global owner acquisition spins at "
+        "0x140A98A00..0x140A98A04; a receiver call from retained Player update was "
+        "runtime-confirmed deadlocked there, and SEH cannot catch that wait.",
     ),
     0x141579150: (
         "WeaponPickup_Factory",

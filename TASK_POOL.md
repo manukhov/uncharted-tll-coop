@@ -51,11 +51,8 @@
       weak key, writes fallback id `record+0x28`, and bypasses both rejected HUD
       slots at exact publish call `0x1403290FD`. Gate only that call by the
       already-confirmed primary physical HUD state and log both key forms.
-- [ ] Run the written `ib` boot/interaction discriminator: Nadine pickup must no
-      longer crash and must reach detach/source/send; Chloe/Nadine approach and
-      leave tests must show whether suppressing the non-primary fallback record
-      removes the duplicate/stale prompt or exposes a primary cross-key duplicate.
-      **Boot phase CONFIRMED:** fresh Chloe PID 8004 and Nadine PID 22232 remain
+- [x] **`ib` boot/interaction discriminator:** fresh Chloe PID 8004 and Nadine
+      PID 22232 remained
       responsive with both `ib` installers active and no exception/skip marker;
       **interaction PARTIAL CONFIRM / REJECT:** Chloe now completes INTERACT ->
       SOURCE-COMMIT -> SEND, confirming the entry repair, but Nadine deadlocks
@@ -64,6 +61,19 @@
       emitted no marker. Replace the unsafe receiver registry lookup and resolve
       the true concrete control slot; `0x1429B6958` is RTTI-proven
       `CarryObjectInteractControl` and must not be patched.
+- [ ] **`ic` STATIC / IMPLEMENTED:** consume an authored ground ProcessWeapon
+      only through the retained puppet's generation-validated per-screen
+      dispatcher weak entry (exact stable ID first, unique-art fallback), then
+      call the same `ProcessKillTree 0x1416A5C20` terminal used by stock
+      `0x140BCE150`. Never call the global registry or either native world Apply
+      from Player update; the unsafe dropped-spawn branch is parked. The receiver
+      pickup-animation fallback is dispatcher-only for the same reason.
+- [ ] Run the written `ic` test. Both copies must survive boot and install the
+      five-site HUD source discriminator. Approaching the M30 identifies its real
+      FHUD source without suppression. Picking it up on Chloe must yield one
+      `WORLD-PICKUP-CONSUME-DIRECT ... killed=1` on Nadine, no freeze, no stale
+      ground model, and natural HUD expiry. A missing unique dispatcher match or
+      a killed object which remains visible separates the next receiver branch.
 
 ## P0: Full Player Synchronization (CURRENT)
 
