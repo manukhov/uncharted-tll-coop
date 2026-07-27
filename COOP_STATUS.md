@@ -10357,3 +10357,26 @@ without LOCAL-CAPTURE selects T2; LOCAL-CAPTURE without SEND selects sender
 merge/publication; SEND+LATCH with a visual failure returns investigation to the
 handler/fall/action discriminator. No event may be emitted for ordinary crouch
 outside PlayerEdge, and no second release may occur after the 250/400 ms windows.
+
+### 2026-07-27 RUNTIME CONFIRMED / CLOSED: bidirectional wall-hang release (`hw`)
+
+The user confirms 10/10 releases while playing Chloe and another 10/10 while
+playing Nadine. The logs match the full `hw` prediction in both directions:
+
+- Chloe sender PID 11608 produced ten consecutive scoped LOCAL-CAPTURE -> SEND
+  chains whose receiver PID 4684 LATCH sequences are 891, 1066, 1180, 1278,
+  1376, 1490, 1598, 1696, 1798 and 1897.
+- Nadine sender PID 4684 produced ten consecutive scoped LOCAL-CAPTURE -> SEND
+  chains whose receiver PID 11608 LATCH sequences are 2184, 2290, 2390, 2499,
+  2592, 2704, 2799, 2899, 3007 and 3112.
+- Both processes remained responsive. The applicable Joypad FORCE path was
+  observed; this edge geometry did not require the branch-dependent third state
+  consumer. The targeted state relay remains correct for the alternate native
+  branch but is not credited for the common-path closure.
+
+This confirms the actual failure mechanism: the one-frame local authored
+`drop` result could pass between the 60-Hz state snapshots. Capturing it at the
+native PlayerEdge consumer and carrying only its protocol event across the next
+250 ms closes the downward lifecycle without raw-button aliasing. Together with
+the already-confirmed `edge-jump-a` climb-up relay, ordinary wall-hang entry,
+climb-up and deliberate release are now synchronized.

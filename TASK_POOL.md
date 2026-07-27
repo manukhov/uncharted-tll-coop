@@ -107,7 +107,7 @@
       custom `GRENADE-EVENT-EXEC`; the user confirms the face-level warning icon
       and origin explosion are gone.
 
-- [~] **Traversal wall-hang lifecycle (CURRENT, 2026-07-27):** preserve the
+- [x] **Traversal wall-hang lifecycle (CLOSED, 2026-07-27):** preserve the
       confirmed native locomotion and collision baseline. **UPWARD RUNTIME
       CONFIRMED (`hs`):** the user confirms the remote now completes ordinary
       climb-up; PID 8320 SEND and PID 21184 FORCE markers prove the exact
@@ -169,7 +169,12 @@
       the third PlayerInput callsite and holds only the protocol event for 250
       ms. This bridges the one-frame native command across the 60-Hz sender
       sampler without broad physical-button capture. Test ten numbered releases;
-      each must log LOCAL-CAPTURE -> SEND -> LATCH and fall once.
+      each must log LOCAL-CAPTURE -> SEND -> LATCH and fall once. **RUNTIME
+      CONFIRMED / CLOSED:** user reports 10/10 as Chloe and 10/10 as Nadine.
+      Logs contain two ten-event bidirectional LOCAL-CAPTURE -> SEND -> LATCH
+      chains (receiver sequences 891..1897 and 2184..3112), with both copies
+      responsive. Ordinary climb-up and deliberate wall-hang release are now
+      closed.
 
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw
