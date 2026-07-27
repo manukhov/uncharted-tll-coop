@@ -10380,3 +10380,66 @@ native PlayerEdge consumer and carrying only its protocol event across the next
 250 ms closes the downward lifecycle without raw-button aliasing. Together with
 the already-confirmed `edge-jump-a` climb-up relay, ordinary wall-hang entry,
 climb-up and deliberate release are now synchronized.
+
+### 2026-07-27 STATIC / IMPLEMENTED: relay accepted ordinary evade action (`hx`)
+
+The old jump/roll relay sampled raw authored command queries at the 60-Hz state
+clock and forced both `evade-start` and `evade-roll` through the generic Joypad
+hook. That loses a short command after the native Player has already consumed
+it and can also make the remote accept a roll which the local controller rejected.
+The ordinary run-roll path is now resolved to a narrower semantic boundary:
+
+1. `PlayerMoveStick_MainUpdate 0x140F03500` calls
+   `PlayerEvadeController` vtable slot 10 at `0x140F06408`. The concrete method
+   `PlayerEvadeController_IsEvadeStartActive 0x140DC5670` hashes exact
+   `evade-start` (`0x54E63318`) and queries held semantics (`edge=0`). RTTI
+   `.?AUPlayerEvadeController@@` and vtable `0x142A1DBB8` independently fix the
+   controller identity and slot layout.
+2. The same caller next requires slot 14
+   `PlayerEvadeController_CanStartEvade 0x140DC5F50` at `0x140F064C9` and slot
+   15 `PlayerEvadeController_VehicleCheck 0x140DC5C10` at `0x140F0653F`.
+   The latter has the exact source assertion
+   `PlayerEvadeController::VehicleCheck(SMath::Vector)` in `player-evade.cpp`
+   and performs a Havok sphere cast along the candidate direction.
+3. Only after those gates pass does `PlayerMoveStick` call slot 16
+   `PlayerEvadeController_StartEvadeAction 0x140DC67D0` at `0x140F0656A`.
+   It selects roll/sprint-roll/land-roll and `run^evade`/`idle^evade`, builds
+   `PlayerCommonAction` id `0x13B4BBC1`, enqueues it at `0x140DC7820`, and the
+   caller performs the Player state transition through vtable `+0xCE0`.
+4. Competing slot 13 `PlayerEvadeController_IsEvadeRollActive 0x140DC5AE0`
+   hashes `evade-roll` (`0x3F1B1FF5`), but the ordinary `PlayerMoveStick`
+   run-roll chain never calls it. Slot 9 `PlayerEvadeController_SetStick
+   0x140DC31E0` and slot 11 `PlayerEvadeController_IsEvadeHoldActive
+   0x140DC59C0` serve separate direction/hold paths. The slot-10 helper also has
+   an outer-verb consumer at `0x140F60C8C`, so globally forcing the method itself
+   would still be too broad.
+
+Competing explanations are explicit. **T1:** a short local command is consumed
+between sender snapshots, yielding a local-only roll. **T2:** the old raw
+button/`evade-roll` alias survives on the receiver while the local slot-14/15
+gates reject, yielding a remote-only roll. **T3:** the exact accepted event is
+delivered, but the remote slot-14/15 eligibility or collision state rejects it.
+**T4:** the remote accepts the action and a later locomotion/state correction
+visually erases it.
+
+Build `hx` captures only completion of local slot 16, holds that semantic event
+for 250 ms so the state sender cannot miss it, and uses packet sequence as its
+one-shot identity. On receipt it opens a 400-ms window. The receiver overrides
+slot 10 only when its caller return is exactly `0x140F0640B` (the ordinary call
+at `0x140F06408`) and the controller owner is retained Player slot 1; reaching
+remote slot 16 consumes the sequence. Generic Joypad forcing for both evade
+hashes was removed. No Player transform, animation, collision or action object
+is written manually. The Release DLL builds successfully. Seven controller
+functions and `PlayerEvadeController_Vtable` were named in the single
+`ida/tll.i64` (`1331 functions, 24 data names`, `save_database returned True`)
+and the two critical names resolved through the restarted MCP.
+
+**Falsifiable `hx` prediction:** every accepted local ordinary roll logs exactly
+one LOCAL-CAPTURE -> SEND -> receiver LATCH -> exact FORCE -> REMOTE-START chain
+and produces exactly one matching remote roll. Ten numbered running rolls as
+Chloe and ten as Nadine must be 20/20. Jump, crouch, button hold/release and raw
+face-A input must create no evade event. LOCAL-CAPTURE without LATCH selects
+publication/transport; LATCH+FORCE without REMOTE-START selects remote
+slot-14/15 divergence (T3); REMOTE-START followed by a missing visible roll
+selects later state correction (T4); any remote roll without LOCAL-CAPTURE is a
+false-positive and rejects the relay boundary.

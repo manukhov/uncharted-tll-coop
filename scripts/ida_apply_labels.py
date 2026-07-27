@@ -8,6 +8,54 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-07-27: ordinary Player evade/run-roll acceptance chain ---
+    0x140DC31E0: (
+        "PlayerEvadeController_SetStick",
+        "PlayerEvadeController vtable slot 9. Source assertion names "
+        "PlayerEvadeController::SetStick in player-evade.cpp; selects authored "
+        "run^evade, run^evade-180 and idle^evade transitions and can enqueue "
+        "PlayerCommonAction records at 0x140DC4775/0x140DC49B5.",
+    ),
+    0x140DC5670: (
+        "PlayerEvadeController_IsEvadeStartActive",
+        "PlayerEvadeController vtable slot 10. Hashes authored evade-start "
+        "(0x54E63318) and calls Joypad_IsCommandActive with edge=0. Ordinary "
+        "PlayerMoveStick_MainUpdate consumes it at 0x140F06408; the separate "
+        "outer verb orchestrator also consumes it at 0x140F60C8C.",
+    ),
+    0x140DC59C0: (
+        "PlayerEvadeController_IsEvadeHoldActive",
+        "PlayerEvadeController vtable slot 11. Hashes authored evade-hold and "
+        "queries the owning Player Joypad with held semantics (edge=0). It is "
+        "not the ordinary run-roll start selector.",
+    ),
+    0x140DC5AE0: (
+        "PlayerEvadeController_IsEvadeRollActive",
+        "PlayerEvadeController vtable slot 13. Hashes authored evade-roll "
+        "(0x3F1B1FF5) and queries edge=0. The ordinary PlayerMoveStick run-roll "
+        "chain does not call this slot, so it must not be aliased to evade-start.",
+    ),
+    0x140DC5F50: (
+        "PlayerEvadeController_CanStartEvade",
+        "PlayerEvadeController vtable slot 14, called at 0x140F064C9 after the "
+        "ordinary evade-start query. Applies controller/owner eligibility, "
+        "cooldown and network cloaked-evade gates, including authored recharge "
+        "and sprint settings.",
+    ),
+    0x140DC5C10: (
+        "PlayerEvadeController_VehicleCheck",
+        "PlayerEvadeController vtable slot 15. Exact player-evade.cpp source "
+        "signature is PlayerEvadeController::VehicleCheck(SMath::Vector); builds "
+        "a Havok sphere-cast probe along the candidate evade direction. Ordinary "
+        "PlayerMoveStick requires true at 0x140F0653F before starting the action.",
+    ),
+    0x140DC67D0: (
+        "PlayerEvadeController_StartEvadeAction",
+        "PlayerEvadeController vtable slot 16 and accepted ordinary evade "
+        "boundary at PlayerMoveStick callsite 0x140F0656A. Selects roll, "
+        "sprint-roll or land-roll plus run^evade/idle^evade, constructs "
+        "PlayerCommonAction 0x13B4BBC1 and enqueues it at 0x140DC7820.",
+    ),
     # --- 2026-07-23: grenade native launch descriptor and authored action ---
     0x14154B3B0: (
         "EmitGrenadeProjectile",
@@ -9028,6 +9076,12 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142A1DBB8: (
+        "PlayerEvadeController_Vtable",
+        "MSVC RTTI .?AUPlayerEvadeController@@ vtable. Ordinary run-roll uses "
+        "slot 10 evade-start, slot 14 eligibility, slot 15 VehicleCheck and "
+        "slot 16 accepted action start; slot 13 evade-roll is a separate command.",
+    ),
     0x142A73B90: (
         "PlayerEdgeController_Vtable",
         "MSVC RTTI .?AUPlayerEdgeController@@ vtable. Slots 18/19 query "

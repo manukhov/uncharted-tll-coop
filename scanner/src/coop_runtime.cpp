@@ -245,6 +245,18 @@ PlayerInputIsCommandActiveFunction
     g_original_player_edge_drop_callsite_is_command_active = nullptr;
 constexpr std::uint32_t kEdgeDropCommandHash = 0x28DCC05A;
 std::atomic<ULONGLONG> g_local_edge_drop_send_until_ms{0};
+std::atomic<ULONGLONG> g_local_evade_start_send_until_ms{0};
+using PlayerEvadeStartActionFunction = std::int64_t(__fastcall*)(
+    void*, void*, std::int64_t, double);
+PlayerEvadeStartActionFunction g_original_player_evade_start_action = nullptr;
+using PlayerEvadeStartQueryFunction = char(__fastcall*)(void*);
+PlayerEvadeStartQueryFunction g_original_player_evade_start_query = nullptr;
+constexpr std::uintptr_t kPlayerEvadeControllerVtableRva = 0x2A1DBB8;
+constexpr std::size_t kPlayerEvadeStartQueryVtableSlot = 10;
+constexpr std::uintptr_t kPlayerEvadeStartQueryRva = 0xDC5670;
+constexpr std::size_t kPlayerEvadeStartActionVtableSlot = 16;
+constexpr std::uintptr_t kPlayerEvadeStartActionRva = 0xDC67D0;
+constexpr std::uintptr_t kPlayerMoveStickEvadeStartReturnRva = 0xF0640B;
 using FastGrenadeCanStartFunction = bool(__fastcall*)(void*);
 using FastGrenadeStartFunction = std::int64_t(__fastcall*)(void*);
 using FastGrenadeResetFunction = std::int64_t(__fastcall*)(void*);
@@ -760,7 +772,7 @@ constexpr std::uint64_t kInputBlockButtonBaseMask = 0x8000000000000000ull;
 // Joypad_EvaluateGamepadButtonBinding matches. Confirmed REJECTED as pad masks
 // in 2026-07-08bf (JOYPAD3 current=0x8000009, zero jump anim).
 constexpr std::uint64_t kJoypadCrouchButtonMask = 0x400000ull;
-constexpr std::uint64_t kJoypadEvadeRollButtonMask = 0x800000ull;
+constexpr std::uint64_t kJoypadEvadeStartIntentMask = 0x800000ull;
 constexpr std::uint64_t kJoypadJumpPressButtonMask = 0x4000000ull;
 constexpr std::uint64_t kJoypadJumpHoldButtonMask = 0x8000000ull;
 // Protocol-only melee cue (not a native ScaleCopy OR flag). Distinct from 0x1000000
@@ -777,7 +789,7 @@ constexpr std::uint64_t kJoypadEdgeJumpAIntentMask = 0x200000000ull;
 // crouch, drop-hold and raw face B are different command identities.
 constexpr std::uint64_t kJoypadEdgeDropIntentMask = 0x400000000ull;
 constexpr std::uint64_t kJoypadTraversalIntentMask =
-    kJoypadCrouchButtonMask | kJoypadEvadeRollButtonMask |
+    kJoypadCrouchButtonMask | kJoypadEvadeStartIntentMask |
     kJoypadJumpPressButtonMask | kJoypadJumpHoldButtonMask |
     kJoypadMeleeTriangleButtonMask | kJoypadEdgeJumpAIntentMask |
     kJoypadEdgeDropIntentMask |
@@ -1269,9 +1281,9 @@ struct StateNetState {
     coop::StatePacket peer_state{};        // latest received peer state
     std::uint32_t peer_state_sequence = 0;
     std::atomic<std::uint64_t> pending_button_presses = 0;
-    // Peer traversal INTENT (ScaleCopy-derived OR resolved face pads). Joypad 3
-    // IsCommandActive hook returns true for jump/evade/crouch while these are set
-    // — required when bindings are keyboard-only (isolation zeros keyboard path).
+    // Peer traversal INTENT (ScaleCopy-derived OR resolved face pads). The
+    // generic Joypad hook handles sustained jump/crouch; semantic evade-start
+    // is routed through the exact PlayerMoveStick controller slot below.
     std::atomic<std::uint64_t> puppet_traversal_force = 0;
     // `drop` is a protocol-only authored command, so a release packet can erase
     // puppet_traversal_force before Player::Edge makes its three held queries.
@@ -1280,6 +1292,14 @@ struct StateNetState {
     std::atomic<std::uint32_t> puppet_edge_drop_event_sequence = 0;
     std::atomic<std::uint32_t>
         puppet_edge_drop_state_force_logged_sequence = 0;
+    // Ordinary ground evade is a semantic one-shot. PlayerMoveStick accepts
+    // evade-start through PlayerEvadeController slots 10/14/15, then calls slot
+    // 16 to enqueue the action. Preserve that accepted event across packets and
+    // consume it when the remote controller actually reaches slot 16.
+    std::atomic<ULONGLONG> puppet_evade_start_force_until_ms = 0;
+    std::atomic<std::uint32_t> puppet_evade_start_event_sequence = 0;
+    std::atomic<std::uint32_t> puppet_evade_start_consumed_sequence = 0;
+    std::atomic<std::uint32_t> puppet_evade_start_force_logged_sequence = 0;
     // cover-enter / try-enter-cover / one-shot cover-exit on Joypad 3.
     std::atomic<std::uint8_t> puppet_cover_force = 0;
     std::atomic<std::uint64_t> active_button_press_latch = 0;
@@ -1412,6 +1432,15 @@ void publish_peer_state_snapshot(const coop::StatePacket& packet) {
     const bool incoming_melee_press =
         (sanitized.buttons_pressed & kJoypadMeleeTriangleButtonMask) != 0 ||
         (incoming_melee_held && !previous_melee_held);
+    const bool previous_evade_start_held =
+        g_state_net.has_peer_state.load(std::memory_order_relaxed) &&
+        (g_state_net.peer_state.input_buttons &
+         kJoypadEvadeStartIntentMask) != 0;
+    const bool incoming_evade_start_held =
+        (sanitized.input_buttons & kJoypadEvadeStartIntentMask) != 0;
+    const bool incoming_evade_start_press =
+        (sanitized.buttons_pressed & kJoypadEvadeStartIntentMask) != 0 ||
+        (incoming_evade_start_held && !previous_evade_start_held);
     g_state_net.peer_state = sanitized;
     g_state_net.peer_state_sequence = packet.sequence;
     if (g_enable_puppet_melee_callsite_relay && incoming_melee_press) {
@@ -1428,6 +1457,27 @@ void publish_peer_state_snapshot(const coop::StatePacket& packet) {
         sanitized.buttons_pressed, std::memory_order_release);
     const std::uint64_t incoming_traversal =
         sanitized.input_buttons | sanitized.buttons_pressed;
+    if ((incoming_traversal & kJoypadEvadeStartIntentMask) != 0) {
+        constexpr ULONGLONG kEvadeStartForceWindowMs = 400;
+        const ULONGLONG now = GetTickCount64();
+        const ULONGLONG previous_until =
+            g_state_net.puppet_evade_start_force_until_ms.exchange(
+                now + kEvadeStartForceWindowMs, std::memory_order_acq_rel);
+        if (incoming_evade_start_press || previous_until <= now) {
+            g_state_net.puppet_evade_start_event_sequence.store(
+                packet.sequence, std::memory_order_release);
+            static std::atomic<unsigned> evade_start_latch_logs{0};
+            const unsigned log_index = evade_start_latch_logs.fetch_add(
+                1, std::memory_order_relaxed);
+            if (log_index < 24) {
+                std::ostringstream line;
+                line << "TRAVERSAL-EVADE-START-LATCH seq=" << packet.sequence
+                     << " held=" << incoming_evade_start_held
+                     << " pressed=" << incoming_evade_start_press;
+                boot_log_line(line.str().c_str());
+            }
+        }
+    }
     if ((incoming_traversal & kJoypadEdgeDropIntentMask) != 0) {
         constexpr ULONGLONG kEdgeDropForceWindowMs = 400;
         const ULONGLONG now = GetTickCount64();
@@ -1952,6 +2002,156 @@ void latch_local_player_edge_drop(const char* source) {
     }
 }
 
+void latch_local_player_evade_start() {
+    constexpr ULONGLONG kLocalEvadeStartSendWindowMs = 250;
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG previous_until =
+        g_local_evade_start_send_until_ms.exchange(
+            now + kLocalEvadeStartSendWindowMs, std::memory_order_acq_rel);
+    if (previous_until <= now) {
+        boot_log_line(
+            "TRAVERSAL-EVADE-START-LOCAL-CAPTURE source=PlayerEvade.slot16");
+    }
+}
+
+void* player_evade_controller_owner(void* controller) {
+    if (controller == nullptr ||
+        readable_bytes(static_cast<const std::byte*>(controller) + 0x108) <
+            sizeof(void*)) {
+        return nullptr;
+    }
+    return *reinterpret_cast<void**>(
+        static_cast<std::byte*>(controller) + 0x108);
+}
+
+char __fastcall hooked_player_evade_start_query(void* controller) {
+    const std::uintptr_t return_address =
+        reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const std::uintptr_t return_rva =
+        return_address >= g_module ? return_address - g_module : 0;
+    const char original = g_original_player_evade_start_query != nullptr
+                              ? g_original_player_evade_start_query(controller)
+                              : 0;
+    if (!g_state_net.enabled ||
+        return_rva != kPlayerMoveStickEvadeStartReturnRva ||
+        player_evade_controller_owner(controller) != retained_player_object(1)) {
+        return original;
+    }
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG force_until =
+        g_state_net.puppet_evade_start_force_until_ms.load(
+            std::memory_order_acquire);
+    const std::uint32_t sequence =
+        g_state_net.puppet_evade_start_event_sequence.load(
+            std::memory_order_acquire);
+    const std::uint32_t consumed_sequence =
+        g_state_net.puppet_evade_start_consumed_sequence.load(
+            std::memory_order_acquire);
+    if (sequence == 0 || sequence == consumed_sequence || now >= force_until) {
+        return original;
+    }
+    const std::uint32_t logged_sequence =
+        g_state_net.puppet_evade_start_force_logged_sequence.exchange(
+            sequence, std::memory_order_acq_rel);
+    if (logged_sequence != sequence) {
+        std::ostringstream line;
+        line << "TRAVERSAL-EVADE-START-FORCE seq=" << sequence
+             << " callsite=0x140F06408 original="
+             << static_cast<unsigned>(original != 0)
+             << " remainingMs=" << (force_until - now);
+        boot_log_line(line.str().c_str());
+    }
+    return 1;
+}
+
+std::int64_t __fastcall hooked_player_evade_start_action(
+    void* controller, void* move_basis, std::int64_t context, double scalar) {
+    void* const owner = player_evade_controller_owner(controller);
+    const std::int64_t result =
+        g_original_player_evade_start_action != nullptr
+            ? g_original_player_evade_start_action(
+                  controller, move_basis, context, scalar)
+            : 0;
+    if (!g_state_net.enabled || owner == nullptr) {
+        return result;
+    }
+    if (owner == retained_player_object(0)) {
+        // Slot 16 is reached only after PlayerMoveStick accepted evade-start,
+        // passed the contextual/vehicle gates and committed the native action.
+        latch_local_player_evade_start();
+        return result;
+    }
+    if (owner != retained_player_object(1)) {
+        return result;
+    }
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG force_until =
+        g_state_net.puppet_evade_start_force_until_ms.load(
+            std::memory_order_acquire);
+    const std::uint32_t sequence =
+        g_state_net.puppet_evade_start_event_sequence.load(
+            std::memory_order_acquire);
+    if (sequence == 0 || now >= force_until) {
+        return result;
+    }
+    const std::uint32_t previous_consumed =
+        g_state_net.puppet_evade_start_consumed_sequence.exchange(
+            sequence, std::memory_order_acq_rel);
+    if (previous_consumed != sequence) {
+        std::ostringstream line;
+        line << "TRAVERSAL-EVADE-START-REMOTE-START seq=" << sequence
+             << " remainingMs=" << (force_until - now);
+        boot_log_line(line.str().c_str());
+    }
+    return result;
+}
+
+bool install_player_evade_start_action_relay() {
+    auto* const vtable = reinterpret_cast<std::uintptr_t*>(
+        g_module + kPlayerEvadeControllerVtableRva);
+    auto* const query_slot = &vtable[kPlayerEvadeStartQueryVtableSlot];
+    auto* const action_slot = &vtable[kPlayerEvadeStartActionVtableSlot];
+    const std::uintptr_t expected_query =
+        g_module + kPlayerEvadeStartQueryRva;
+    const std::uintptr_t expected_action =
+        g_module + kPlayerEvadeStartActionRva;
+    if (*query_slot != expected_query || *action_slot != expected_action) {
+        std::ostringstream line;
+        line << "PlayerEvade relay SKIPPED: query=0x" << std::hex
+             << *query_slot << "/0x" << expected_query << " action=0x"
+             << *action_slot << "/0x" << expected_action << std::dec;
+        boot_log_line(line.str().c_str());
+        return false;
+    }
+    auto* const first_slot = query_slot;
+    constexpr std::size_t kSlotSpan =
+        (kPlayerEvadeStartActionVtableSlot -
+         kPlayerEvadeStartQueryVtableSlot + 1) *
+        sizeof(std::uintptr_t);
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            first_slot, kSlotSpan, PAGE_READWRITE, &old_protection)) {
+        boot_log_line(
+            "PlayerEvade relay SKIPPED: VirtualProtect failed");
+        return false;
+    }
+    g_original_player_evade_start_query =
+        reinterpret_cast<PlayerEvadeStartQueryFunction>(*query_slot);
+    g_original_player_evade_start_action =
+        reinterpret_cast<PlayerEvadeStartActionFunction>(*action_slot);
+    *query_slot = reinterpret_cast<std::uintptr_t>(
+        &hooked_player_evade_start_query);
+    *action_slot = reinterpret_cast<std::uintptr_t>(
+        &hooked_player_evade_start_action);
+    FlushInstructionCache(GetCurrentProcess(), first_slot, kSlotSpan);
+    DWORD ignored = 0;
+    VirtualProtect(first_slot, kSlotSpan, old_protection, &ignored);
+    boot_log_line(
+        "PlayerEvade exact start relay installed "
+        "(query 0x140F06408, action slot16 0x140DC67D0)");
+    return true;
+}
+
 bool safe_query_local_grenade_arc(void* joypad) {
     if (joypad == nullptr || g_original_joypad_is_command_active == nullptr) {
         return false;
@@ -1989,10 +2189,6 @@ char __fastcall hooked_joypad_is_command_active(
                     string_hash("edge-jump-a", 11, 0);
                 static const std::uint32_t kEdgeDropHash =
                     string_hash("drop", 4, 0);
-                static const std::uint32_t kEvadeRollHash =
-                    string_hash("evade-roll", 10, 0);
-                static const std::uint32_t kEvadeStartHash =
-                    string_hash("evade-start", 11, 0);
                 static const std::uint32_t kCrouchHash =
                     string_hash("crouch", 6, 0);
                 static const std::uint32_t kCoverEnterHash =
@@ -2060,10 +2256,6 @@ char __fastcall hooked_joypad_is_command_active(
                              << " latched=" << (edge_drop_latched ? 1 : 0);
                         boot_log_line(line.str().c_str());
                     }
-                    return 1;
-                }
-                if ((hash == kEvadeRollHash || hash == kEvadeStartHash) &&
-                    (force & kJoypadEvadeRollButtonMask) != 0) {
                     return 1;
                 }
                 if (hash == kCrouchHash &&
@@ -2213,7 +2405,7 @@ bool install_joypad3_is_command_active_force() {
     DWORD ignored = 0;
     VirtualProtect(target, kStolen, old_protection, &ignored);
     force_log_line(
-        "Joypad3 IsCommandActive force-hook installed (jump/evade/crouch/melee/cover)");
+        "Joypad3 IsCommandActive force-hook installed (jump/crouch/melee/cover)");
     return true;
 }
 
@@ -12973,14 +13165,13 @@ std::uint64_t merge_authored_traversal_button_mask(
     static const std::uint32_t kEdgeJumpAHash =
         string_hash("edge-jump-a", 11, 0);
     static const std::uint32_t kEdgeDropHash = string_hash("drop", 4, 0);
-    static const std::uint32_t kEvadeRollHash = string_hash("evade-roll", 10, 0);
     static const std::uint32_t kEvadeStartHash = string_hash("evade-start", 11, 0);
     static const std::uint32_t kCrouchHash = string_hash("crouch", 6, 0);
     static std::uint64_t jump_pad = 0;
     static std::uint64_t jump_hold_pad = 0;
     static std::uint64_t edge_jump_a_pad = 0;
     static std::uint64_t edge_drop_pad = 0;
-    static std::uint64_t evade_pad = 0;
+    static std::uint64_t evade_start_pad = 0;
     static std::uint64_t crouch_pad = 0;
     static bool resolved = false;
     if (!resolved) {
@@ -12989,10 +13180,8 @@ std::uint64_t merge_authored_traversal_button_mask(
         edge_jump_a_pad =
             resolve_command_gamepad_mask(joypad, kEdgeJumpAHash);
         edge_drop_pad = resolve_command_gamepad_mask(joypad, kEdgeDropHash);
-        evade_pad = resolve_command_gamepad_mask(joypad, kEvadeRollHash);
-        if (evade_pad == 0) {
-            evade_pad = resolve_command_gamepad_mask(joypad, kEvadeStartHash);
-        }
+        evade_start_pad =
+            resolve_command_gamepad_mask(joypad, kEvadeStartHash);
         crouch_pad = resolve_command_gamepad_mask(joypad, kCrouchHash);
         resolved = true;
         std::ostringstream init;
@@ -13000,10 +13189,10 @@ std::uint64_t merge_authored_traversal_button_mask(
              << " jumpHold=0x" << jump_hold_pad
              << " edgeJumpA=0x" << edge_jump_a_pad
              << " edgeDrop=0x" << edge_drop_pad
-             << " evade=0x" << evade_pad
+             << " evadeStart=0x" << evade_start_pad
              << " crouch=0x" << crouch_pad << std::dec
              << " hashes jump=0x" << std::hex << kJumpHash
-             << " evade=0x" << kEvadeRollHash << std::dec;
+             << " evadeStartHash=0x" << kEvadeStartHash << std::dec;
         force_log_line(init.str().c_str());
         // Protocol maps IsCommandActive -> ScaleCopy INTENT bits (not face pads).
         // Table face values (jump=0x20/evade=0x80) are kept for diagnostics only —
@@ -13013,7 +13202,7 @@ std::uint64_t merge_authored_traversal_button_mask(
         (void)jump_hold_pad;
         (void)edge_jump_a_pad;
         (void)edge_drop_pad;
-        (void)evade_pad;
+        (void)evade_start_pad;
         (void)crouch_pad;
     }
     // a3=1 => edged path used by move consumers; a3=0 is held path used by
@@ -13058,11 +13247,23 @@ std::uint64_t merge_authored_traversal_button_mask(
     if (edge_drop_active) {
         mask |= kJoypadEdgeDropIntentMask;
     }
-    if (is_active(joypad, kEvadeRollHash, 1) ||
-        is_active(joypad, kEvadeRollHash, 0) ||
-        is_active(joypad, kEvadeStartHash, 1) ||
-        is_active(joypad, kEvadeStartHash, 0)) {
-        mask |= kJoypadEvadeRollButtonMask;
+    // Do not serialize a raw evade button query. PlayerMoveStick can reject the
+    // same press after command, movement, contextual and vehicle gates, while a
+    // slightly different remote state accepts it and rolls alone. Slot 16 of
+    // PlayerEvadeController latches only the action that the local Player
+    // actually accepted and enqueued.
+    const bool evade_start_active =
+        GetTickCount64() <
+        g_local_evade_start_send_until_ms.load(std::memory_order_acquire);
+    static bool evade_start_was_active = false;
+    if (evade_start_active != evade_start_was_active) {
+        evade_start_was_active = evade_start_active;
+        boot_log_line(evade_start_active
+                          ? "TRAVERSAL-EVADE-START-SEND rise"
+                          : "TRAVERSAL-EVADE-START-SEND release");
+    }
+    if (evade_start_active) {
+        mask |= kJoypadEvadeStartIntentMask;
     }
     if (is_active(joypad, kCrouchHash, 1) || is_active(joypad, kCrouchHash, 0)) {
         mask |= kJoypadCrouchButtonMask;
@@ -38619,8 +38820,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27hw "
-        "(retained Player native grenade owns physics)");
+        "TLL co-op runtime init 2026-07-27hx "
+        "(accepted PlayerEvade start is a consumed one-shot)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -38631,6 +38832,7 @@ DWORD WINAPI install_hook(void*) {
     install_joypad3_analog_route();
     install_joypad3_keyboard_isolation();
     install_joypad3_is_command_active_force();
+    install_player_evade_start_action_relay();
     install_player_edge_drop_command_callsite_relay();
     if (g_enable_puppet_melee_button_relay) {
         install_player_input_is_command_active_force();

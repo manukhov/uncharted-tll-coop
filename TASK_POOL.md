@@ -176,6 +176,24 @@
       responsive. Ordinary climb-up and deliberate wall-hang release are now
       closed.
 
+- [~] **Ordinary evade / running-roll synchronization (`hx`, 2026-07-27):**
+      STATIC quota met. `PlayerMoveStick_MainUpdate 0x140F03500` consumes exact
+      `evade-start` through `PlayerEvadeController` slot 10
+      (`0x140DC5670`) at `0x140F06408`, then requires slot 14 eligibility
+      (`0x140DC5F50`) and slot 15 `VehicleCheck` (`0x140DC5C10`) before calling
+      accepted action slot 16 (`0x140DC67D0`) at `0x140F0656A`. Slot 16 selects
+      authored roll variants and enqueues `PlayerCommonAction`; competing slot
+      13 hashes `evade-roll` but is not called by the ordinary path. The old
+      60-Hz raw query capture and generic forcing of both hashes are removed.
+      Sender now latches only an actually accepted local slot-16 action;
+      receiver forces only the exact slot-10 `PlayerMoveStick` callsite and
+      consumes the packet sequence on remote slot 16. **PENDING RUNTIME:** ten
+      numbered running rolls as Chloe and ten as Nadine must yield 20/20 exact
+      LOCAL-CAPTURE -> SEND -> LATCH -> FORCE -> REMOTE-START chains, with no
+      remote-only roll and no jump/crouch bleed. FORCE without REMOTE-START
+      selects divergent remote gates; REMOTE-START without visible motion
+      selects later locomotion correction.
+
 - [~] **Melee animation stage exam (build cw, 2026-07-15):** cv also produced no
       remote animation, so command-family selection alone is insufficient. cw
       emits only one-shot stages at Joypad square force, controller `+0x210`, and
