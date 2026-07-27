@@ -8464,7 +8464,6 @@ bool install_hud_draw_interactable_primary_screen_gate() {
 
 constexpr std::size_t kGroundPickupHudCandidateCount = 16;
 constexpr ULONGLONG kGroundPickupHudCandidateMaxAgeMs = 15000;
-constexpr ULONGLONG kConsumedGroundPickupHudSuppressMs = 5000;
 
 struct GroundPickupHudCandidate {
     std::uintptr_t weak_handle{0};
@@ -8477,36 +8476,6 @@ struct GroundPickupHudCandidate {
 SRWLOCK g_ground_pickup_hud_candidates_lock = SRWLOCK_INIT;
 std::array<GroundPickupHudCandidate, kGroundPickupHudCandidateCount>
     g_ground_pickup_hud_candidates{};
-std::atomic<std::uintptr_t> g_consumed_ground_pickup_hud_weak{0};
-std::atomic<std::uint32_t> g_consumed_ground_pickup_hud_generation{0};
-std::atomic<ULONGLONG> g_consumed_ground_pickup_hud_until_ms{0};
-std::atomic<bool> g_consumed_ground_pickup_hud_suppress_logged{false};
-
-void arm_consumed_ground_pickup_hud_suppression(
-    std::uintptr_t weak_handle, std::uint32_t generation) {
-    if (weak_handle == 0 || generation == 0) return;
-    g_consumed_ground_pickup_hud_weak.store(
-        weak_handle, std::memory_order_relaxed);
-    g_consumed_ground_pickup_hud_generation.store(
-        generation, std::memory_order_relaxed);
-    g_consumed_ground_pickup_hud_suppress_logged.store(
-        false, std::memory_order_relaxed);
-    g_consumed_ground_pickup_hud_until_ms.store(
-        GetTickCount64() + kConsumedGroundPickupHudSuppressMs,
-        std::memory_order_release);
-}
-
-bool consumed_ground_pickup_hud_key_is_suppressed(
-    const FhudFallbackRecordIdentity& identity) {
-    const ULONGLONG until = g_consumed_ground_pickup_hud_until_ms.load(
-        std::memory_order_acquire);
-    return until != 0 && GetTickCount64() <= until &&
-        identity.weak_handle == g_consumed_ground_pickup_hud_weak.load(
-                                    std::memory_order_relaxed) &&
-        identity.weak_generation ==
-            g_consumed_ground_pickup_hud_generation.load(
-                std::memory_order_relaxed);
-}
 
 bool seh_resolve_ground_pickup_hud_candidate(
     const void* per_screen_hud_state,
@@ -8609,19 +8578,6 @@ void capture_ground_pickup_hud_candidate(
 }
 
 void __fastcall hooked_pickup_control_hud_record(void* state, void* record) {
-    FhudFallbackRecordIdentity identity{};
-    if (seh_read_fhud_fallback_record_identity(record, identity) &&
-        consumed_ground_pickup_hud_key_is_suppressed(identity)) {
-        if (!g_consumed_ground_pickup_hud_suppress_logged.exchange(
-                true, std::memory_order_acq_rel)) {
-            std::ostringstream line;
-            line << "PICKUP-HUD-CONSUMED-SUPPRESS weak=0x" << std::hex
-                 << identity.weak_handle << ":" << identity.weak_generation
-                 << std::dec;
-            boot_log_line(line.str().c_str());
-        }
-        return;
-    }
     capture_ground_pickup_hud_candidate(state, record);
     if (g_original_hud_draw_interactable_record != nullptr) {
         g_original_hud_draw_interactable_record(state, record);
@@ -25425,150 +25381,6 @@ NearbyGroundProcessWeapon seh_find_ground_process_weapon_from_hud_candidates(
     }
 }
 
-constexpr std::size_t kFhudInteractSlotCount = 4;
-constexpr std::size_t kFhudInteractSlotStride = 0x710;
-constexpr std::size_t kFhudInteractScriptWeakOffset = 0x1F8;
-constexpr std::size_t kFhudInteractParameterMapOffset = 0x808;
-constexpr std::size_t kFhudInteractRecordOffset = 0x830;
-constexpr std::uint32_t kFhudInteractIdStringId = 0x13DD0384;
-constexpr std::uint32_t kFhudPickupWeaponIdStringId = 0x5458E271;
-
-struct ConsumedPickupFhudSelection {
-    std::uint8_t slot_mask{0};
-    std::uint32_t weak_matches{0};
-    std::uint32_t map_matches{0};
-    std::uint32_t selected{0};
-};
-
-bool seh_fhud_boxed_u32_map_value(
-    const std::byte* map, std::uint32_t key, std::uint32_t& value) {
-    value = 0;
-    if (map == nullptr || readable_bytes(map) < 24) return false;
-    const std::uintptr_t entries =
-        *reinterpret_cast<const std::uintptr_t*>(map);
-    const std::uint64_t capacity =
-        *reinterpret_cast<const std::uint64_t*>(map + 8);
-    const std::uint64_t size =
-        *reinterpret_cast<const std::uint64_t*>(map + 16);
-    if (entries == 0 || size == 0 || size > capacity || size > 256 ||
-        readable_bytes(reinterpret_cast<const void*>(entries)) < size * 24) {
-        return false;
-    }
-    std::uint64_t first = 0;
-    std::uint64_t count = size;
-    while (count != 0) {
-        const std::uint64_t step = count / 2;
-        const std::uint64_t index = first + step;
-        const auto* const entry = reinterpret_cast<const std::byte*>(entries) +
-            static_cast<std::size_t>(index) * 24;
-        if (*reinterpret_cast<const std::uint32_t*>(entry) < key) {
-            first = index + 1;
-            count -= step + 1;
-        } else {
-            count = step;
-        }
-    }
-    if (first >= size) return false;
-    const auto* const entry = reinterpret_cast<const std::byte*>(entries) +
-        static_cast<std::size_t>(first) * 24;
-    if (*reinterpret_cast<const std::uint32_t*>(entry) != key ||
-        *reinterpret_cast<const std::uint32_t*>(entry + 20) != 3) {
-        return false;
-    }
-    const std::uint64_t boxed_value =
-        *reinterpret_cast<const std::uint64_t*>(entry + 8);
-    if (boxed_value > UINT32_MAX) return false;
-    value = static_cast<std::uint32_t>(boxed_value);
-    return true;
-}
-
-bool seh_fhud_slot_has_live_script(const std::byte* slot) {
-    const auto* const script_weak = slot + kFhudInteractScriptWeakOffset;
-    const std::uintptr_t weak_handle =
-        *reinterpret_cast<const std::uintptr_t*>(script_weak);
-    const std::uint32_t generation =
-        *reinterpret_cast<const std::uint32_t*>(script_weak + 8);
-    if (weak_handle == 0 || generation == 0 ||
-        readable_bytes(reinterpret_cast<const void*>(weak_handle)) < 16) {
-        return false;
-    }
-    const void* const process = *reinterpret_cast<void* const*>(weak_handle + 8);
-    return process != nullptr && readable_bytes(process) >= 0xC0 &&
-        *reinterpret_cast<const std::uint32_t*>(
-            static_cast<const std::byte*>(process) +
-            kGameObjectRuntimeIdOffset) == generation;
-}
-
-bool seh_select_consumed_pickup_fhud_slots(
-    std::uintptr_t weak_handle, std::uint32_t generation,
-    std::uint32_t stable_id, std::uint32_t art,
-    ConsumedPickupFhudSelection& selection) {
-    selection = {};
-    if (weak_handle == 0 || generation == 0 || stable_id == 0 || art == 0 ||
-        g_module == 0) {
-        return false;
-    }
-    __try {
-        void* const store = *reinterpret_cast<void**>(
-            g_module + kFhudPhysicalInteractStorePtrRva);
-        if (store == nullptr || readable_bytes(store) < 0x1E00) return false;
-        for (std::uint32_t slot_index = 0;
-             slot_index < kFhudInteractSlotCount; ++slot_index) {
-            const auto* const slot = static_cast<const std::byte*>(store) +
-                static_cast<std::size_t>(slot_index) * kFhudInteractSlotStride;
-            const auto* const record = slot + kFhudInteractRecordOffset;
-            const std::uintptr_t record_weak =
-                *reinterpret_cast<const std::uintptr_t*>(record + 0x18);
-            const std::uint32_t record_generation =
-                *reinterpret_cast<const std::uint32_t*>(record + 0x20);
-            const bool weak_match = record_weak == weak_handle &&
-                record_generation == generation;
-            if (weak_match) ++selection.weak_matches;
-
-            std::uint32_t map_stable_id = 0;
-            std::uint32_t map_art = 0;
-            const bool map_match = seh_fhud_slot_has_live_script(slot) &&
-                seh_fhud_boxed_u32_map_value(
-                    slot + kFhudInteractParameterMapOffset,
-                    kFhudInteractIdStringId, map_stable_id) &&
-                seh_fhud_boxed_u32_map_value(
-                    slot + kFhudInteractParameterMapOffset,
-                    kFhudPickupWeaponIdStringId, map_art) &&
-                map_stable_id == stable_id && map_art == art;
-            if (map_match) ++selection.map_matches;
-            if (weak_match || map_match) {
-                selection.slot_mask |= static_cast<std::uint8_t>(1u << slot_index);
-                ++selection.selected;
-            }
-        }
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-bool seh_destroy_selected_pickup_fhud_slots(
-    std::uint8_t slot_mask, std::uint32_t& destroyed) {
-    destroyed = 0;
-    if (g_module == 0) return false;
-    __try {
-        void* const store = *reinterpret_cast<void**>(
-            g_module + kFhudPhysicalInteractStorePtrRva);
-        if (store == nullptr || readable_bytes(store) < 0x1E00) return false;
-        using DestroyFn = std::int64_t(__fastcall*)(void*, std::uint32_t);
-        const auto destroy = reinterpret_cast<DestroyFn>(
-            g_module + kFhudDestroyInteractScriptRva);
-        for (std::uint32_t slot = 0; slot < kFhudInteractSlotCount; ++slot) {
-            if ((slot_mask & (1u << slot)) == 0) continue;
-            destroy(store, slot);
-            ++destroyed;
-        }
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
 bool seh_kill_ground_process_weapon(void* object) {
     if (object == nullptr || g_module == 0) return false;
     __try {
@@ -25600,20 +25412,7 @@ void apply_pending_world_weapon_lifecycle() {
             seh_find_ground_process_weapon_from_hud_candidates(
                 pending.consumed_remote_id, pending.picked_art, stats);
         if (local.object != nullptr) {
-            ConsumedPickupFhudSelection hud_selection{};
-            const bool hud_scanned = seh_select_consumed_pickup_fhud_slots(
-                local.weak_handle, local.generation, local.stable_id,
-                local.art, hud_selection);
             const bool killed = seh_kill_ground_process_weapon(local.object);
-            std::uint32_t hud_destroyed = 0;
-            bool hud_cleanup_ran = false;
-            if (killed) {
-                arm_consumed_ground_pickup_hud_suppression(
-                    local.weak_handle, local.generation);
-                hud_cleanup_ran = hud_scanned &&
-                    seh_destroy_selected_pickup_fhud_slots(
-                        hud_selection.slot_mask, hud_destroyed);
-            }
             std::ostringstream line;
             line << "WORLD-PICKUP-CONSUME-HUD seq=" << pending.sequence
                  << " remote_id=0x" << std::hex
@@ -25623,12 +25422,7 @@ void apply_pending_world_weapon_lifecycle() {
                  << " latencyMs=" << (now - pending.armed_ms)
                  << " match=" << (local.exact_id ? "stable-id" : "unique-art")
                  << " killed=" << (killed ? 1 : 0)
-                 << " hudCleanup=" << (hud_cleanup_ran ? 1 : 0)
-                 << " hudScanned=" << (hud_scanned ? 1 : 0)
-                 << " hudWeakMatched=" << hud_selection.weak_matches
-                 << " hudMapMatched=" << hud_selection.map_matches
-                 << " hudMatched=" << hud_selection.selected
-                 << " hudDestroyed=" << hud_destroyed;
+                 << " hudMutation=disabled";
             boot_log_line(line.str().c_str());
             if (killed) pending.consume_pending = false;
         } else if (now - pending.armed_ms > 5000) {
@@ -40200,8 +39994,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27ih "
-        "(live weak FHUD candidates; exact script-map cleanup)");
+        "TLL co-op runtime init 2026-07-27ii "
+        "(live weak ground consume; FHUD mutation disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

@@ -151,20 +151,23 @@
       M30-to-Mazur prediction; preserve the confirmed sub-141-ms stock drop.
       Fresh PID 23320 (A/Chloe) and PID 22516 (B/Nadine) loaded the committed
       build, stayed responsive and installed the scoped hooks without failure.
-- [ ] **`ih` STATIC / IMPLEMENTED, runtime pending:** keep the 15-second age as
-      diagnostic telemetry only. Revalidate every captured entry through its
-      live weak pointer, generation, exact ProcessWeapon vtable, stable ID and
-      art; accept an old entry only if all of those independent identities still
-      match and reject ambiguous same-art candidates. Test the untouched initial
-      M30 after the prompt has existed for more than 15 seconds. Require
-      `captured>=1 recent=0 live>=1 matching=1`, `killed=1`, exact HUD cleanup,
-      prompt/model removal, the already-confirmed fast stock drop, and no crash.
-      **Cold boot CONFIRMED:** fresh PID 20156 (A/Chloe) and PID 22624 (B/Nadine)
-      loaded `ih`, selected the expected roles, installed the exact pickup/FHUD
-      hooks and remained responsive through the observation window. Repeated
-      handled page probes at DLL `+0x4A73F` occurred while both games continued
-      normally; they are not a fatal marker. Behavioral M30 acceptance remains
-      pending.
+- [x] **`ih` runtime REJECTED for visible HUD and stability:** the old candidate
+      passed every guard and the initial M30 transaction reported
+      `killed=1 hudWeakMatched=1 hudMapMatched=1 hudDestroyed=1`, yet Chloe still
+      displayed the stale M30 offer. A checkpoint reload removed the offer through
+      stock reset. Chloe later crashed without a terminal observer/Windows dump.
+      This rejects the selected four-slot record as owner of the visible stale UI
+      and makes further explicit FHUD mutation unsafe.
+- [x] **`ii` STATIC / IMPLEMENTED rollback:** remove the rejected
+      `FHUD_DestroyInteractScript 0x141357CA0` calls and consumed-key publisher
+      tombstone entirely. Preserve the exact live weak/generation/vtable/id/art
+      search only to kill the duplicate ground ProcessWeapon, plus the confirmed
+      sub-141-ms stock dropped-weapon replacement. Log `hudMutation=disabled`.
+- [ ] Before any new HUD patch, trace the checkpoint/reset lifecycle from the
+      visible Flash view or script cache back to the state which survives exact
+      physical-slot destruction. The next hypothesis must explain
+      `hudDestroyed=1` with a visible prompt and why checkpoint reload clears it;
+      do not scan or destroy another guessed store at runtime.
 
 ## P0: Full Player Synchronization (CURRENT)
 

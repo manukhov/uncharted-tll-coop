@@ -462,11 +462,6 @@ constexpr std::uintptr_t kWeaponInteractControlVftableRva = 0x29BF4A8;
 // this exact callsite. Its first argument is the explicit per-screen HUD state.
 constexpr std::uintptr_t kHudDrawInteractableRecordCallsiteRva = 0x03290FD;
 constexpr std::uintptr_t kFhudPublishInteractRecordRva = 0x1359470;
-// Stock four-slot physical interact HUD lifecycle. DestroyInteractScript kills
-// only the selected Flash process and resets its keyed record; the global stores
-// the four records at +0x830 with 0x710 stride.
-constexpr std::uintptr_t kFhudDestroyInteractScriptRva = 0x1357CA0;
-constexpr std::uintptr_t kFhudPhysicalInteractStorePtrRva = 0x3EF1F20;
 // Runtime-confirmed sole source of the authored M30 prompt. The source record
 // carries the interactable's stock weak handle/generation at +0x18/+0x20; keep
 // this exact callsite as a bounded receiver-local ProcessWeapon candidate index.

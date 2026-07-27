@@ -11526,3 +11526,53 @@ ownership. The exact writer remains a hypothesis until static tracing identifies
 where receiver-local camera pitch enters screen-1 `rawUD/stateLRDU` instead of the
 peer StatePacket value. The next aim change must fix that source and must not
 reactivate the rejected named-layer, forced-branch or pose-copy paths.
+
+### 2026-07-27 RUNTIME REJECTED: `ih` destroys an exact physical FHUD slot but not Chloe's visible prompt
+
+The `ih` test falsified the remaining four-slot ownership hypothesis. Nadine
+sender PID 22624 picked the untouched initial M30 and emitted
+`picked=0x3019CBEE consume=0xE3BA3FF3 dropped=0x33E29A1B`. Chloe receiver PID
+20156 accepted its old one-shot candidate after more than 15 seconds, fully
+revalidated it, killed the local M30 ProcessWeapon, selected the same physical
+FHUD slot through both independent identities, and reported
+`killed=1 hudScanned=1 hudWeakMatched=1 hudMapMatched=1 hudMatched=1
+hudDestroyed=1`. The stock dropped-weapon replacement completed 32 ms later with
+`gave=1 detached=1 slotReleased=1`.
+
+Despite that complete success marker, the user still saw the stale M30 offer on
+Chloe. Reloading the checkpoint removed it, establishing a stock reset boundary
+above or outside the exact physical record/script which `ig/ih` destroyed. This
+**REJECTS** the claim that `FHUD_PhysicalInteractStore_Ptr` and its active script
+are the sole owner of the visible stale prompt. It also rules out candidate age,
+weak-record divergence and missing typed-map identity as explanations for this
+specific display.
+
+Chloe later crashed while Nadine remained responsive. As in the prior report,
+there is no terminal crash-observer entry, WER event or dump to localize the
+fault. Nevertheless, explicit FHUD destruction and publisher suppression have
+now failed the visible acceptance criterion and add unnecessary lifetime
+mutation, so they must not remain enabled while the crash is unresolved.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `ii` removes rejected FHUD mutation and preserves world-weapon synchronization
+
+Build `ii` deletes the consumed-key publisher tombstone, the typed physical-slot
+scanner and every direct call to `FHUD_DestroyInteractScript 0x141357CA0`. The
+exact `pickup-control 0x1408AF179` capture remains only as a bounded identity
+source for duplicate ground ProcessWeapon removal. Old captures still must pass
+live weak-pointer, generation, ProcessWeapon-vtable, stable-ID and exact-art
+validation, with ambiguous same-art candidates rejected. Successful consumption
+now logs `hudMutation=disabled`.
+
+This rollback preserves both already-confirmed world behaviors: the picked model
+is removed on the receiver, and an exact flags=3 replacement still uses stock
+GiveWeapon without the generic 500-ms dwell. It intentionally leaves the Chloe
+prompt defect visible rather than mutating a disproven owner. Before another HUD
+runtime build, static analysis must trace the checkpoint/reset lifecycle and
+identify the higher Flash view, script cache or copied state which can survive
+`hudDestroyed=1` but is cleared by checkpoint reload.
+
+**Falsifiable stability prediction:** the same initial M30 pickup must still emit
+`killed=1 hudMutation=disabled`, remove the receiver model and retain the fast
+stock dropped weapon. No direct FHUD destroy or suppress marker may appear. The
+known stale prompt may remain; neither copy may crash. This test validates the
+safe rollback only and does not claim a HUD fix.
