@@ -57,7 +57,13 @@
       removes the duplicate/stale prompt or exposes a primary cross-key duplicate.
       **Boot phase CONFIRMED:** fresh Chloe PID 8004 and Nadine PID 22232 remain
       responsive with both `ib` installers active and no exception/skip marker;
-      the real interaction phase is still pending.
+      **interaction PARTIAL CONFIRM / REJECT:** Chloe now completes INTERACT ->
+      SOURCE-COMMIT -> SEND, confirming the entry repair, but Nadine deadlocks
+      before native Apply in our own `ResolveGameObjectHandleById` preflight.
+      `DROP-ENTER` also produced no DROP-COMMIT, and the exact script HUD gate
+      emitted no marker. Replace the unsafe receiver registry lookup and resolve
+      the true concrete control slot; `0x1429B6958` is RTTI-proven
+      `CarryObjectInteractControl` and must not be patched.
 
 ## P0: Full Player Synchronization (CURRENT)
 

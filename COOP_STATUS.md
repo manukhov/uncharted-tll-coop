@@ -10796,12 +10796,13 @@ both patched weapon-control vtable slots, and a zero weak key cannot be found or
 destroyed by the rejected weak-key cleanup.
 
 Competing HUD paths were separated before implementation. The shared control
-publisher `0x1408AEA00` is the already rejected two-vtable path, but its base
-`PickupInteractControl+0xE0` slot at `0x1429B6958` was not patched and remains a
-concrete alternative: like the two weapon-control slots, it contains
-`0x1408AEA00`. If the script discriminator fails, only that base slot should be
-probed, with exact ProcessWeapon/WeaponPickup vtable and retained-Player checks;
-the shared function entry must stay stock. The call at
+publisher `0x1408AEA00` is the already rejected two-vtable path, while a base
+control alias remains a concrete alternative. The address initially recorded
+here as base `PickupInteractControl+0xE0`, `0x1429B6958`, was corrected after the
+runtime test: its COL/RTTI identifies `CarryObjectInteractControl`, not the base
+pickup control, so it must not be patched. The true base vtable and concrete
+ground-weapon factory still require an exact RTTI audit; the shared function
+entry must stay stock. The call at
 `0x1410BCDBD` belongs to `PlayerZiplineController`; generic Hud vmethods at
 `0x1413B5EC8`, `0x1413B60F1`, and `0x1413B62EC` also build fallback records but
 do not own this exact script string/callsite. Patching common publisher
@@ -10841,3 +10842,43 @@ or `incomplete` marker. This confirms only the new packaging and rules out the
 old immediate/global-hook failure class. The interaction-entry RAX repair,
 consume/drop relay, and Chloe prompt ownership still require the written live
 approach/leave and M30/Mazur replacement actions.
+
+### 2026-07-27 RUNTIME PARTIAL CONFIRM / REJECT: `ib` repairs sender entry but receiver registry lookup deadlocks
+
+The user approached the weapon and then picked it up on role-A/Chloe PID 8004.
+The sender emitted `WORLD-WEAPON-INTERACT stable=0xD7C41887
+art=0x3019CBEE`, `WORLD-WEAPON-DROP-ENTER`,
+`WORLD-WEAPON-SOURCE-COMMIT`, and finally `WORLD-WEAPON-SEND seq=1 ...
+flags=0x1 bytes=120`. This CONFIRMS the `ib` live-`RAX` diagnosis and vtable-slot
+repair: the same interaction which killed `ia` now returns through the original
+OnInteract, commits source destruction, and sends a complete consume packet.
+
+Two independent pieces remain rejected. First, `DROP-ENTER` was not followed by
+`DROP-COMMIT`; the packet carried `dropped=0 flags=0x1`. The exact detach call is
+real, but reading `ProcessWeapon+0x690/+0x860` and constructing the dropped event
+immediately after that call is too early or otherwise insufficient for the
+replacement object. Second, role-B/Nadine PID 22232 froze as soon as the packet
+was processed. It remained alive/Win32-responsive, but most worker threads became
+waiters while one thread consumed CPU.
+
+A read-only suspended-thread context snapshot fixes the receiver failure to one
+instruction. Thread 12716 was spinning at
+`ResolveGameObjectHandleById+0x42 = 0x140A98A02`, the `pause; cmpxchg; jnz` loop
+on the global object-registry owner. Unwinding the live stack through the built
+DLL gives return RVAs `0x4E85F -> seh_resolve_native_world_handle`, `0x4E923 ->
+seh_resolve_weapon_pickup_by_stable_id`, `0x4B46D ->
+resolve_local_consumed_pickup_id`, and `0xD72F ->
+apply_pending_world_weapon_lifecycle`. Thus the freeze occurs in our preliminary
+stable-ID lookup from retained Player update, before
+`NetEventSyncWeaponPickups_Apply 0x140BCE440` is called. An SEH wrapper cannot
+catch a spin-lock deadlock. Do not retry any receiver design which calls the
+global handle resolver or either native world Apply from that Player-update
+boundary.
+
+The HUD discriminator is also REJECTED for the observed prompt: neither process
+emitted any `PICKUP-HUD-FALLBACK-ALLOW/SUPPRESS` row. Therefore exact script
+callsite `0x1403290FD` was not reached and cannot own this occurrence. The user
+now sees the prompt defect on Nadine. The control-slot alternative survives, but
+the previously suggested slot `0x1429B6958` is independently rejected by RTTI as
+`CarryObjectInteractControl`; its true base/concrete ground-weapon owner must be
+resolved before another HUD patch.
