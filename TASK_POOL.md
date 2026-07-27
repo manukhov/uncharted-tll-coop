@@ -32,9 +32,11 @@
       installing the four global entry detours; no ground/HUD transaction marker
       was reached, so the lifecycle model remains STATIC but that packaging must
       not be rerun.
-- [ ] Repackage source kill, old detach and FHUD update at their exact callsites,
-      patch both concrete weapon HUD vtable slots, then runtime-check boot before
-      testing consume/drop/HUD behavior independently.
+- [x] **`ia` STATIC / IMPLEMENTED:** repackage source kill, old detach and FHUD
+      update at exact callsites `0x141506839`, `0x1410A68AC`, `0x141356BF1`, and
+      patch both concrete weapon HUD vtable slots `0x1429BF588`, `0x142AA6F70`.
+- [ ] Runtime-check the written `ia` prediction in two phases: stable A/B boot
+      first, then M30/Mazur consume/drop and Chloe/Nadine prompt ownership.
 
 ## P0: Full Player Synchronization (CURRENT)
 

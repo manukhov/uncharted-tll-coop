@@ -8443,7 +8443,7 @@ char __fastcall hooked_weapon_pickup_hud_publisher(
                  << reinterpret_cast<std::uintptr_t>(player)
                  << " key=0x" << key.handle << ":" << key.generation
                  << std::dec;
-            force_log_line(line.str().c_str());
+            boot_log_line(line.str().c_str());
         }
         return 0;
     }
@@ -8463,7 +8463,7 @@ char __fastcall hooked_weapon_pickup_hud_publisher(
         }
         static std::atomic<bool> local_logged{false};
         if (!local_logged.exchange(true, std::memory_order_relaxed)) {
-            force_log_line("PICKUP-HUD-ALLOW owner=local");
+            boot_log_line("PICKUP-HUD-ALLOW owner=local");
         }
     } else {
         static std::atomic<int> unknown_logged{0};
@@ -8474,7 +8474,7 @@ char __fastcall hooked_weapon_pickup_hud_publisher(
                  << " local=0x" << reinterpret_cast<std::uintptr_t>(local_player)
                  << " puppet=0x" << reinterpret_cast<std::uintptr_t>(puppet)
                  << std::dec;
-            force_log_line(line.str().c_str());
+            boot_log_line(line.str().c_str());
         }
     }
     return g_original_weapon_pickup_hud_publisher != nullptr
@@ -8561,7 +8561,7 @@ std::int64_t __fastcall hooked_fhud_update_interact_scripts(void* a1) {
                          << " key=0x" << std::hex << remote[r].handle << ":"
                          << remote[r].generation << std::dec
                          << " ok=" << (destroyed ? 1 : 0);
-                    force_log_line(line.str().c_str());
+                    boot_log_line(line.str().c_str());
                 }
                 break;
             }
@@ -8573,39 +8573,84 @@ std::int64_t __fastcall hooked_fhud_update_interact_scripts(void* a1) {
 }
 
 bool install_weapon_pickup_hud_gate() {
-    constexpr std::array<std::uint8_t, 18> kPublisherPrologue{
-        0x4C, 0x8B, 0xDC, 0x53, 0x56, 0x41, 0x55, 0x41, 0x56,
-        0x41, 0x57, 0x48, 0x81, 0xEC, 0x10, 0x06, 0x00, 0x00,
-    };
-    constexpr std::array<std::uint8_t, 23> kLifecyclePrologue{
-        0x48, 0x8B, 0xC4, 0x48, 0x89, 0x58, 0x08, 0x48,
-        0x89, 0x68, 0x10, 0x48, 0x89, 0x70, 0x18, 0x57,
-        0x48, 0x81, 0xEC, 0x80, 0x04, 0x00, 0x00,
-    };
+    auto* const weapon_slot = reinterpret_cast<void**>(
+        g_module + kWeaponInteractHudVtableSlotRva);
+    auto* const pickup_slot = reinterpret_cast<void**>(
+        g_module + kWeaponPickupInteractHudVtableSlotRva);
+    void* const expected = reinterpret_cast<void*>(
+        g_module + kWeaponPickupInteractHudPublisherRva);
+    if (*weapon_slot != expected || *pickup_slot != expected) {
+        boot_log_line("weapon-pickup HUD gates SKIPPED (vtable mismatch)");
+        return false;
+    }
+    std::uint8_t* lifecycle_callsite = nullptr;
+    std::uint8_t* lifecycle_relay = nullptr;
+    std::int32_t lifecycle_displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kFhudUpdateInteractScriptsCallsiteRva,
+            kFhudUpdateInteractScriptsRva,
+            reinterpret_cast<const void*>(
+                &hooked_fhud_update_interact_scripts),
+            lifecycle_callsite, lifecycle_relay,
+            lifecycle_displacement)) {
+        boot_log_line("weapon-pickup HUD gates SKIPPED (lifecycle callsite)");
+        return false;
+    }
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(lifecycle_relay, 0, MEM_RELEASE);
+        boot_log_line("weapon-pickup HUD gates SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD weapon_old = 0;
+    DWORD pickup_old = 0;
+    DWORD callsite_old = 0;
+    const bool weapon_protected = VirtualProtect(
+        weapon_slot, sizeof(void*), PAGE_READWRITE, &weapon_old) != 0;
+    const bool pickup_protected = VirtualProtect(
+        pickup_slot, sizeof(void*), PAGE_READWRITE, &pickup_old) != 0;
+    const bool callsite_protected = VirtualProtect(
+        lifecycle_callsite, 5, PAGE_EXECUTE_READWRITE, &callsite_old) != 0;
+    if (!weapon_protected || !pickup_protected || !callsite_protected) {
+        DWORD ignored = 0;
+        if (weapon_protected) {
+            VirtualProtect(weapon_slot, sizeof(void*), weapon_old, &ignored);
+        }
+        if (pickup_protected) {
+            VirtualProtect(pickup_slot, sizeof(void*), pickup_old, &ignored);
+        }
+        if (callsite_protected) {
+            VirtualProtect(lifecycle_callsite, 5, callsite_old, &ignored);
+        }
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(lifecycle_relay, 0, MEM_RELEASE);
+        boot_log_line("weapon-pickup HUD gates SKIPPED (protect)");
+        return false;
+    }
     g_original_weapon_pickup_hud_publisher =
-        reinterpret_cast<WeaponPickupHudPublisherFunction>(
-            install_fire_gate_detour(
-                kWeaponPickupInteractHudPublisherRva,
-                kPublisherPrologue.data(), kPublisherPrologue.size(),
-                reinterpret_cast<void*>(&hooked_weapon_pickup_hud_publisher),
-                "weapon-pickup HUD publisher gate"));
+        reinterpret_cast<WeaponPickupHudPublisherFunction>(expected);
     g_original_fhud_update_interact_scripts =
         reinterpret_cast<FhudUpdateInteractScriptsFunction>(
-            install_fire_gate_detour(
-                kFhudUpdateInteractScriptsRva,
-                kLifecyclePrologue.data(), kLifecyclePrologue.size(),
-                reinterpret_cast<void*>(&hooked_fhud_update_interact_scripts),
-                "FHUD interact lifecycle gate"));
-    const bool installed =
-        g_original_weapon_pickup_hud_publisher != nullptr &&
-        g_original_fhud_update_interact_scripts != nullptr;
-    boot_log_line(installed
-        ? "weapon-pickup HUD ownership/lifecycle gates installed"
-        : "weapon-pickup HUD ownership/lifecycle gates incomplete");
-    return installed;
+            g_module + kFhudUpdateInteractScriptsRva);
+    *weapon_slot = reinterpret_cast<void*>(
+        &hooked_weapon_pickup_hud_publisher);
+    *pickup_slot = reinterpret_cast<void*>(
+        &hooked_weapon_pickup_hud_publisher);
+    std::memcpy(lifecycle_callsite + 1, &lifecycle_displacement,
+                sizeof(lifecycle_displacement));
+    FlushInstructionCache(
+        GetCurrentProcess(), lifecycle_callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(weapon_slot, sizeof(void*), weapon_old, &ignored);
+    VirtualProtect(pickup_slot, sizeof(void*), pickup_old, &ignored);
+    VirtualProtect(lifecycle_callsite, 5, callsite_old, &ignored);
+    resume_suspended_process_threads(suspended_threads);
+    boot_log_line(
+        "weapon-pickup dual-vtable ownership and FHUD callsite cleanup installed");
+    return true;
 }
 
-struct WeaponInteractWorldTls {
+struct WeaponInteractWorldContext {
     bool active{false};
     bool source_killed{false};
     bool drop_captured{false};
@@ -8617,7 +8662,8 @@ struct WeaponInteractWorldTls {
         coop::kDroppedPickupEventPayloadBytes]{};
 };
 
-thread_local WeaponInteractWorldTls g_weapon_interact_world_tls{};
+WeaponInteractWorldContext g_weapon_interact_world_context{};
+std::atomic<DWORD> g_weapon_interact_owner_thread{0};
 
 using WeaponInteractOnInteractFunction =
     void(__fastcall*)(void*, void*, void*, void*);
@@ -8677,19 +8723,17 @@ bool seh_read_weapon_interact_source(
 }
 
 void __fastcall hooked_process_kill_tree_for_weapon_interact(void* process) {
-    const std::uintptr_t return_address =
-        reinterpret_cast<std::uintptr_t>(_ReturnAddress());
-    const std::uintptr_t return_rva = return_address >= g_module
-        ? return_address - g_module : 0;
-    auto& tls = g_weapon_interact_world_tls;
-    if (tls.active && return_rva == kWeaponInteractSourceKillRetRva &&
-        process == tls.source) {
-        tls.source_killed = true;
+    const DWORD thread_id = GetCurrentThreadId();
+    auto& context = g_weapon_interact_world_context;
+    if (g_weapon_interact_owner_thread.load(std::memory_order_acquire) ==
+            thread_id &&
+        context.active && process == context.source) {
+        context.source_killed = true;
         std::ostringstream line;
         line << "WORLD-WEAPON-SOURCE-COMMIT stable=0x" << std::hex
-             << tls.source_stable_id << " art=0x" << tls.picked_art
+             << context.source_stable_id << " art=0x" << context.picked_art
              << std::dec;
-        force_log_line(line.str().c_str());
+        boot_log_line(line.str().c_str());
     }
     if (g_original_process_kill_tree_for_weapon_interact != nullptr) {
         g_original_process_kill_tree_for_weapon_interact(process);
@@ -8699,29 +8743,27 @@ void __fastcall hooked_process_kill_tree_for_weapon_interact(void* process) {
 std::int64_t __fastcall hooked_process_weapon_detach(
     void* weapon, float scalar, void* translation, void* rotation,
     char a5, char a6) {
-    const std::uintptr_t return_address =
-        reinterpret_cast<std::uintptr_t>(_ReturnAddress());
-    const std::uintptr_t return_rva = return_address >= g_module
-        ? return_address - g_module : 0;
     const std::int64_t result = g_original_process_weapon_detach != nullptr
         ? g_original_process_weapon_detach(
               weapon, scalar, translation, rotation, a5, a6)
         : 0;
-    auto& tls = g_weapon_interact_world_tls;
-    if (!tls.active || return_rva != kPickupReplacementDetachRetRva ||
-        weapon == nullptr || weapon == tls.source) {
+    const DWORD thread_id = GetCurrentThreadId();
+    auto& context = g_weapon_interact_world_context;
+    if (g_weapon_interact_owner_thread.load(std::memory_order_acquire) !=
+            thread_id ||
+        !context.active || weapon == nullptr || weapon == context.source) {
         return result;
     }
     std::uint32_t art = 0;
     if (seh_capture_detached_weapon_world_payload(
-            weapon, tls.source, art, tls.dropped_payload)) {
-        tls.dropped_art = art;
-        tls.drop_captured = true;
+            weapon, context.source, art, context.dropped_payload)) {
+        context.dropped_art = art;
+        context.drop_captured = true;
         std::ostringstream line;
         line << "WORLD-WEAPON-DROP-COMMIT art=0x" << std::hex << art
              << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
              << std::dec;
-        force_log_line(line.str().c_str());
+        boot_log_line(line.str().c_str());
     }
     return result;
 }
@@ -8740,29 +8782,37 @@ void __fastcall hooked_weapon_interact_on_interact(
         admitted = seh_read_weapon_interact_source(
             control, source, source_stable_id, picked_art);
     }
-    const WeaponInteractWorldTls outer = g_weapon_interact_world_tls;
+    const DWORD thread_id = GetCurrentThreadId();
     if (admitted) {
-        g_weapon_interact_world_tls = {};
-        g_weapon_interact_world_tls.active = true;
-        g_weapon_interact_world_tls.source = source;
-        g_weapon_interact_world_tls.source_stable_id = source_stable_id;
-        g_weapon_interact_world_tls.picked_art = picked_art;
+        DWORD no_owner = 0;
+        admitted = g_weapon_interact_owner_thread.compare_exchange_strong(
+            no_owner, thread_id, std::memory_order_acq_rel,
+            std::memory_order_acquire);
+    }
+    if (admitted) {
+        g_weapon_interact_world_context = {};
+        g_weapon_interact_world_context.active = true;
+        g_weapon_interact_world_context.source = source;
+        g_weapon_interact_world_context.source_stable_id = source_stable_id;
+        g_weapon_interact_world_context.picked_art = picked_art;
         std::ostringstream line;
         line << "WORLD-WEAPON-INTERACT stable=0x" << std::hex
              << source_stable_id << " art=0x" << picked_art
              << " source=0x" << reinterpret_cast<std::uintptr_t>(source)
              << std::dec;
-        force_log_line(line.str().c_str());
+        boot_log_line(line.str().c_str());
     }
     if (g_original_weapon_interact_on_interact != nullptr) {
         g_original_weapon_interact_on_interact(control, source, player, a4);
     }
     if (!admitted) return;
 
-    const WeaponInteractWorldTls completed = g_weapon_interact_world_tls;
-    g_weapon_interact_world_tls = outer;
+    const WeaponInteractWorldContext completed =
+        g_weapon_interact_world_context;
+    g_weapon_interact_world_context = {};
+    g_weapon_interact_owner_thread.store(0, std::memory_order_release);
     if (!completed.source_killed) {
-        force_log_line(
+        boot_log_line(
             "WORLD-WEAPON-REJECT interaction returned without source kill");
         return;
     }
@@ -8790,7 +8840,7 @@ void __fastcall hooked_weapon_interact_on_interact(
          << " dropped=0x" << packet.dropped_weapon_art_id
          << " flags=0x" << packet.flags << std::dec
          << " boundary=WeaponInteractControl bytes=" << sent;
-    force_log_line(line.str().c_str());
+    boot_log_line(line.str().c_str());
 }
 
 bool install_weapon_interact_world_lifecycle() {
@@ -8798,31 +8848,78 @@ bool install_weapon_interact_world_lifecycle() {
         0x48, 0x8B, 0xC4, 0x55, 0x56, 0x57,
         0x41, 0x54, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
     };
-    constexpr std::array<std::uint8_t, 23> kDetachPrologue{
-        0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C,
-        0x24, 0x18, 0x48, 0x89, 0x74, 0x24, 0x20, 0x57,
-        0x48, 0x81, 0xEC, 0x60, 0x04, 0x00, 0x00,
-    };
-    constexpr std::array<std::uint8_t, 21> kKillTreePrologue{
-        0x40, 0x55, 0x56, 0x57, 0x41, 0x56, 0x41, 0x57,
-        0x48, 0x83, 0xEC, 0x50, 0x48, 0xC7, 0x44, 0x24,
-        0x30, 0xFE, 0xFF, 0xFF, 0xFF,
-    };
+    std::uint8_t* detach_callsite = nullptr;
+    std::uint8_t* detach_relay = nullptr;
+    std::int32_t detach_displacement = 0;
+    std::uint8_t* kill_callsite = nullptr;
+    std::uint8_t* kill_relay = nullptr;
+    std::int32_t kill_displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kPickupReplacementDetachCallsiteRva,
+            kProcessWeaponDetachRva,
+            reinterpret_cast<const void*>(&hooked_process_weapon_detach),
+            detach_callsite, detach_relay, detach_displacement) ||
+        !prepare_plain_callsite_relay(
+            kWeaponInteractSourceKillCallsiteRva,
+            kProcessKillTreeRva,
+            reinterpret_cast<const void*>(
+                &hooked_process_kill_tree_for_weapon_interact),
+            kill_callsite, kill_relay, kill_displacement)) {
+        if (detach_relay != nullptr) {
+            VirtualFree(detach_relay, 0, MEM_RELEASE);
+        }
+        if (kill_relay != nullptr) {
+            VirtualFree(kill_relay, 0, MEM_RELEASE);
+        }
+        boot_log_line(
+            "WeaponInteractControl lifecycle SKIPPED (callsite preflight)");
+        return false;
+    }
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(detach_relay, 0, MEM_RELEASE);
+        VirtualFree(kill_relay, 0, MEM_RELEASE);
+        boot_log_line(
+            "WeaponInteractControl lifecycle SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD detach_old = 0;
+    DWORD kill_old = 0;
+    const bool detach_protected = VirtualProtect(
+        detach_callsite, 5, PAGE_EXECUTE_READWRITE, &detach_old) != 0;
+    const bool kill_protected = VirtualProtect(
+        kill_callsite, 5, PAGE_EXECUTE_READWRITE, &kill_old) != 0;
+    if (!detach_protected || !kill_protected) {
+        DWORD ignored = 0;
+        if (detach_protected) {
+            VirtualProtect(detach_callsite, 5, detach_old, &ignored);
+        }
+        if (kill_protected) {
+            VirtualProtect(kill_callsite, 5, kill_old, &ignored);
+        }
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(detach_relay, 0, MEM_RELEASE);
+        VirtualFree(kill_relay, 0, MEM_RELEASE);
+        boot_log_line(
+            "WeaponInteractControl lifecycle SKIPPED (protect)");
+        return false;
+    }
     g_original_process_weapon_detach =
         reinterpret_cast<ProcessWeaponDetachFunction>(
-            install_fire_gate_detour(
-                kProcessWeaponDetachRva,
-                kDetachPrologue.data(), kDetachPrologue.size(),
-                reinterpret_cast<void*>(&hooked_process_weapon_detach),
-                "pickup replacement ProcessWeapon detach"));
+            g_module + kProcessWeaponDetachRva);
     g_original_process_kill_tree_for_weapon_interact =
         reinterpret_cast<ProcessKillTreeFunction>(
-            install_fire_gate_detour(
-                kProcessKillTreeRva,
-                kKillTreePrologue.data(), kKillTreePrologue.size(),
-                reinterpret_cast<void*>(
-                    &hooked_process_kill_tree_for_weapon_interact),
-                "weapon-interact source ProcessKillTree"));
+            g_module + kProcessKillTreeRva);
+    std::memcpy(detach_callsite + 1, &detach_displacement,
+                sizeof(detach_displacement));
+    std::memcpy(kill_callsite + 1, &kill_displacement,
+                sizeof(kill_displacement));
+    FlushInstructionCache(GetCurrentProcess(), detach_callsite, 5);
+    FlushInstructionCache(GetCurrentProcess(), kill_callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(detach_callsite, 5, detach_old, &ignored);
+    VirtualProtect(kill_callsite, 5, kill_old, &ignored);
+    resume_suspended_process_threads(suspended_threads);
     g_original_weapon_interact_on_interact =
         reinterpret_cast<WeaponInteractOnInteractFunction>(
             install_fire_gate_detour(
@@ -8834,7 +8931,7 @@ bool install_weapon_interact_world_lifecycle() {
         g_original_process_kill_tree_for_weapon_interact != nullptr &&
         g_original_weapon_interact_on_interact != nullptr;
     boot_log_line(installed
-        ? "WeaponInteractControl consume/drop lifecycle relay installed"
+        ? "WeaponInteractControl exact-callsite consume/drop relay installed"
         : "WeaponInteractControl consume/drop lifecycle relay incomplete");
     return installed;
 }
@@ -39870,8 +39967,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27hz "
-        "(WeaponInteract ground lifecycle; entry-gated pickup HUD cleanup)");
+        "TLL co-op runtime init 2026-07-27ia "
+        "(exact pickup callsites; dual-vtable HUD cleanup)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

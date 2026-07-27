@@ -10660,3 +10660,53 @@ detach each have an exact five-byte callsite inside the transaction
 (`0x141506839`, `0x1410A68AC`); the FHUD updater has one exact code caller at
 `0x141356BF1`; and the two relevant weapon-control vtable slots are
 `0x1429BF588` and `0x142AA6F70`. Do not rerun build `hz`.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `ia` narrows ground/HUD interception to exact owners
+
+**Hypothesis.** The `hz` pre-interaction crash was caused by relocating one or
+more globally reached entry prologues, not by the weapon transaction model. Build
+`ia` therefore leaves `ProcessKillTree 0x1416A5C20`,
+`ProcessWeapon_DetachToWorldTransform 0x141ED3630`, the shared HUD publisher
+`0x1408AEA00`, and `FHUD_UpdateInteractScriptsAndExpire 0x141357D60` entries
+untouched. It relays only the source-kill call at `0x141506839`, the replaced-old
+weapon detach call at `0x1410A68AC`, and the single FHUD update call at
+`0x141356BF1`; it replaces only the two concrete weapon-control HUD slots
+`0x1429BF588` and `0x142AA6F70`. `WeaponInteractControl::OnInteract
+0x141505BB0` remains the transaction scope because its first fourteen bytes are
+only the standard saved-register prologue and the hook cannot execute before an
+actual accepted weapon interaction.
+
+**Independent static evidence.** (1) `WeaponInteractControl::OnInteract`
+passes its exact source ProcessWeapon in RCX to `ProcessKillTree` at
+`0x141506839`, after the give-weapon path, while `PlayerWeaponController::GiveWeapon`
+passes the exact replaced ProcessWeapon in RCX plus the authored world transform
+to `ProcessWeapon_DetachToWorldTransform` at `0x1410A68AC`. (2) Xrefs to
+`FHUD_UpdateInteractScriptsAndExpire` contain exactly one code call,
+`0x141356BF1`; raw disassembly shows a plain five-byte `E8` followed by the next
+independent HUD update. (3) RTTI/vtable layout resolves the shared publisher at
+exactly `WeaponInteractControl+0xE0 = 0x1429BF588` and
+`WeaponPickupInteractControl+0xE0 = 0x142AA6F70`; both slots currently contain
+`0x1408AEA00`. (4) Each new relay validates the original `E8` target before
+writing and leaves the callee prologue, unwind metadata, and all unrelated
+callers byte-for-byte stock. The bounded ground/HUD markers use the persistent
+logger directly; the high-volume global diagnostics remain disabled.
+
+**Competing hypotheses excluded for this build.** Broad entry detours are the
+runtime-rejected `hz` packaging. Patching only one derived weapon vtable is the
+runtime-rejected `hy` ownership asymmetry which moved the prompt bug between
+Chloe and Nadine. Destroying a keyed FHUD slot immediately inside the publisher
+is ordered too early because the stock publisher can refresh/create that record
+after the hook returns. A sampled constant slot delta is rejected because both
+concrete RTTI-backed vtable addresses are now known directly.
+
+**Falsifiable prediction.** Both fresh copies must load build `ia`, retain their
+normal A/B roles, report `WeaponInteractControl exact-callsite consume/drop relay
+installed` and `weapon-pickup dual-vtable ownership and FHUD callsite cleanup
+installed`, and remain responsive for at least 30 seconds before any pickup.
+They must not reproduce the pre-interaction `hz` crash. On interaction, the
+sender must emit one `WORLD-WEAPON-INTERACT`, one source commit, optional exact
+old-weapon drop commit, and one send; remote-only prompt refreshes must emit
+bounded suppress/destroy markers while a local refresh for the same key prevents
+destruction. A crash before interaction rejects the exact-callsite/vtable
+packaging; stable boot but wrong M30/Mazur or prompt behavior rejects the
+corresponding lifecycle or ownership branch independently.

@@ -463,9 +463,12 @@ constexpr std::uintptr_t kWeaponPickupOnInteractRva = 0x157AA70;
 constexpr std::uintptr_t kWeaponPickupInteractHudPublisherRva = 0x08AEA00;
 constexpr std::uintptr_t kWeaponInteractControlVftableRva = 0x29BF4A8;
 constexpr std::uintptr_t kWeaponPickupInteractControlVftableRva = 0x2AA6E90;
+constexpr std::uintptr_t kWeaponInteractHudVtableSlotRva = 0x29BF588;
+constexpr std::uintptr_t kWeaponPickupInteractHudVtableSlotRva = 0x2AA6F70;
 constexpr std::uintptr_t kFhudInteractStorePtrRva = 0x3EF1F20;
 constexpr std::uintptr_t kFhudDestroyInteractScriptRva = 0x1357CA0;
 constexpr std::uintptr_t kFhudUpdateInteractScriptsRva = 0x1357D60;
+constexpr std::uintptr_t kFhudUpdateInteractScriptsCallsiteRva = 0x1356BF1;
 constexpr std::uintptr_t kPlayerRequestedInteractRva = 0x0C87D70;
 // PlayerPickupController vtable +0x38 -> Start/Queue 0x140F49CA0. This is the
 // proven producer of dra-pickup-* gestures from the interact-with-me script event.
@@ -528,9 +531,9 @@ constexpr std::uintptr_t kProcessKillTreeRva = 0x16A5C20;
 // WeaponPickupInteractControl. The accepted interaction consumes the exact
 // source ProcessWeapon, while GiveWeapon detaches the replaced ProcessWeapon.
 constexpr std::uintptr_t kWeaponInteractOnInteractRva = 0x1505BB0;
-constexpr std::uintptr_t kWeaponInteractSourceKillRetRva = 0x150683E;
+constexpr std::uintptr_t kWeaponInteractSourceKillCallsiteRva = 0x1506839;
 constexpr std::uintptr_t kProcessWeaponDetachRva = 0x1ED3630;
-constexpr std::uintptr_t kPickupReplacementDetachRetRva = 0x10A68B1;
+constexpr std::uintptr_t kPickupReplacementDetachCallsiteRva = 0x10A68AC;
 // PlayerAimController::GetTargetPointFromReticle 0x140CB1720 (self-named by assert
 // player-aim.cpp). Confirmed the dominant per-frame idx==1 caller of the pose-seed
 // resolver during puppet ADS (122/frame). It reads the screen pose seed and returns
