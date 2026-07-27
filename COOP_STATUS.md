@@ -11199,3 +11199,32 @@ Neither emitted an exception, `SKIPPED`, `incomplete`, candidate, world-weapon o
 unexpected SLOT-MIRROR marker before interaction. This confirms the reduced
 single-callsite packaging and clean boot only; the written M30/Mazur consume
 prediction remains pending.
+
+### 2026-07-27 RUNTIME CONFIRMED / FOLLOW-UP: `ie` removes every picked model; drop and HUD lag remain
+
+The user exercised repeated M30, Mazur and other long-gun swaps in both
+directions. Every receiver transaction emitted
+`WORLD-PICKUP-CONSUME-HUD ... match=unique-art killed=1`; no consume expired or
+reported ambiguity. The user confirms that the picked weapon now disappears.
+This runtime-confirms the exact `0x1408AF179` weak candidate source, its
+generation/type/art revalidation, unique-art cross-copy correspondence, and
+`ProcessKillTree` as the complete world-model removal primitive.
+
+Two independent follow-ups remain:
+
+1. The replacement weapon appears on the other copy only after a visible delay.
+   Logs show consume immediately after `WORLD-WEAPON-SEND`, while
+   `WORLD-PICKUP-DROP-EXISTING` waits for SLOT-MIRROR. Code inspection identifies
+   the explicit per-slot 500-ms stability debounce as the remaining intentional
+   lower bound even for an already matched flags=3 transaction.
+2. Chloe can retain an obsolete M30 prompt after the M30 model is gone. The
+   supplied screenshot simultaneously shows a valid Mazur LDR prompt and a stale
+   `Mettler M-30` prompt, proving two physical FHUD records rather than an art
+   misclassification. Direct receiver `ProcessKillTree` removes the gameplay
+   object but does not synchronously clear its already-upserted FHUD slot; the
+   current script-fallback screen gate is unrelated to the runtime-confirmed
+   `pickup-control` source.
+
+The consume result is **CONFIRMED** and must be preserved. Next work is scoped to
+accelerating only an exact pending stock replacement and destroying/suppressing
+only the consumed weak+generation FHUD key.

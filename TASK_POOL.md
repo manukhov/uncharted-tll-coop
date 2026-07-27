@@ -99,7 +99,7 @@
       `pickup-control 0x1408AF179` weak record resolves to the surviving local
       M30 with matching generation, ProcessWeapon vtable and art. Replace only
       the consume candidate source; retain the confirmed sender/drop path.
-- [ ] **`ie` STATIC / IMPLEMENTED, runtime pending:** cache only the exact
+- [~] **`ie` RUNTIME CONFIRMED / follow-up required:** cache only the exact
       `pickup-control 0x1408AF179` interactable weak/generation key after primary-
       screen, exact-ProcessWeapon, stable-ID and art validation. Revalidate stock
       `weak+0x8` and `object+0xBC` at flags=3 consume; prefer exact stable ID and
@@ -110,6 +110,12 @@
       **Cold boot CONFIRMED:** role-A/Chloe PID 21532 and role-B/Nadine PID 23908
       loaded `ie`, installed the exact source capture, selected the expected
       roles, and remain responsive with no exception/skip/incomplete marker.
+      Repeated live swaps now emit `CONSUME-HUD ... killed=1` and the user
+      confirms every picked model disappears. Preserve this path. Remaining:
+      stock replacement still waits for the generic 500-ms slot debounce, and
+      Chloe retains a separate stale M30 FHUD record beside the new Mazur prompt.
+      Scope the next change to the exact pending flags=3 transaction and its
+      consumed weak+generation key.
 
 ## P0: Full Player Synchronization (CURRENT)
 
