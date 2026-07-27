@@ -11097,3 +11097,28 @@ and Win32-responsive. Neither emitted an exception, `SKIPPED`, `incomplete`, wor
 weapon transaction or unexpected SLOT-MIRROR marker. This confirms only the new
 raw-art/all-screen/stock-replacement packaging before interaction; the written
 M30/Mazur behavior prediction remains pending.
+
+### 2026-07-27 RUNTIME PARTIAL CONFIRMED / REJECTED: `id` drops Mazur but misses the old M30
+
+The live replacement test separates the two receiver operations. Chloe PID 23768
+sent M30 `0x3019CBEE` with detached Mazur `0x33E29A1B`; Nadine PID 15392 sent the
+reverse picked weapon with the same detached-art path. Both sides emitted
+`WORLD-WEAPON-DROP-COMMIT`, `WORLD-WEAPON-SEND ... flags=0x3`, and receiver
+`WORLD-PICKUP-DROP-EXISTING ... gave=1 detached=1 slotReleased=1`. The user
+confirmed the corresponding visible result: Mazur now falls into the world, but
+the old M30 remains. Therefore the raw detached-art relay and stock receiver
+replacement are runtime **CONFIRMED**. The all-six-dispatcher consume search is
+**REJECTED**: both transactions ended in
+`WORLD-PICKUP-CONSUME-DIRECT expired without a unique nearby ProcessWeapon`.
+
+Read-only inspection of the surviving receiver object localizes the miss. The
+only runtime-confirmed pickup HUD source, call `0x1408AF179`, repeatedly published
+weak key `0x10E020A728:0x505`. Its weak cell `+0x8` resolved to object
+`0x10E0C18580`, whose vtable is exactly ProcessWeapon
+`module+0x2A9BF48`, generation `+0xBC=0x505`, local stable ID
+`+0xD8=0x838DBA7B`, and raw art `+0x860=0x3019CBEE` (M30). A second published
+weak cell had already cleared, while the third live cell resolved to a different
+non-ProcessWeapon vtable. Thus the M30 satisfies every current consume predicate
+and is uniquely identifiable through the stock FHUD record, but is not owned by
+the assumed `dispatcher+0` 32-byte arrays. The failure is object-index ownership,
+not ProcessWeapon type, generation, art, stable-ID filtering, or ProcessKillTree.

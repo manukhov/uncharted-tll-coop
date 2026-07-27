@@ -81,7 +81,7 @@
       DROP-ENTER but flags=0x1/dropped=0. HUD source is conclusively only
       `pickup-control 0x1408AF179` on the primary state; the user reports the HUD
       bug gone.
-- [ ] **`id` STATIC / IMPLEMENTED, runtime pending:** merge all six dispatcher
+- [~] **`id` RUNTIME PARTIAL CONFIRMED / REJECTED:** merge all six dispatcher
       lists with pointer dedupe, exact stable-ID priority and unique-art-only
       fallback. Sender accepts the exact old ProcessWeapon only after stock detach
       sets `+0x690 bit 3`, relays its raw art and never calls the campaign-unsafe
@@ -92,6 +92,13 @@
       written `id` prediction in `COOP_STATUS.md` in both directions. **Cold boot
       CONFIRMED:** role-A/Chloe PID 23768 and role-B/Nadine PID 15392 remained
       responsive for 30+ seconds with no exception/skip/incomplete marker.
+      Live replacement confirms raw detached-art relay and the stock receiver
+      `GiveWeapon` drop (`gave=1 detached=1 slotReleased=1`): Mazur now appears.
+      The old M30 remains and both all-screen consumes expire, rejecting the
+      assumed dispatcher-list ownership. Read-only inspection proves the exact
+      `pickup-control 0x1408AF179` weak record resolves to the surviving local
+      M30 with matching generation, ProcessWeapon vtable and art. Replace only
+      the consume candidate source; retain the confirmed sender/drop path.
 
 ## P0: Full Player Synchronization (CURRENT)
 
