@@ -15455,6 +15455,16 @@ bool try_stock_world_weapon_replacement(
     std::uint32_t peer_art, bool& gave);
 bool exact_world_weapon_replacement_pending(
     std::uint32_t current_art, std::uint32_t peer_art);
+enum class PendingStockWorldReplacementResult : std::uint8_t {
+    NotApplicable,
+    Waiting,
+    Owned,
+};
+PendingStockWorldReplacementResult
+try_pending_stock_world_weapon_replacement_from_give_info(
+    void* puppet, std::uint32_t peer_art);
+bool world_weapon_replacement_blocks_generic(
+    std::uint32_t current_art, std::uint32_t peer_art);
 
 void queue_relay_pickup_gesture_after_mirror(
     std::uint32_t art, std::uint32_t seq) {
@@ -15536,6 +15546,24 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
             force_log_line("PICKUP-GESTURE-ARM timeout waiting for SLOT-MIRROR");
         }
     }
+    // A flags=3 ground replacement must be resolved before the generic per-slot
+    // mirror can kill either side of the transaction. Snapshot slots are logical
+    // observations ({0,1,16,17,...}); stock GiveWeapon instead reads the exact
+    // sender WeaponInfo+8 slot and applies its campaign alias mapping
+    // (16->0, 17/22->1) before controller vt+0xB0. Use that same lookup here.
+    // This pre-pass also runs before slot 0/1 can remove the dropped art while the
+    // picked art is represented by a later alias slot such as 16/17.
+    for (std::size_t i = 0; i < 8; ++i) {
+        std::uint32_t peer_art = 0;
+        std::memcpy(
+            &peer_art, peer.weapon_snapshot + i * sizeof(peer_art),
+            sizeof(peer_art));
+        if (try_pending_stock_world_weapon_replacement_from_give_info(
+                puppet, peer_art) !=
+            PendingStockWorldReplacementResult::NotApplicable) {
+            break;
+        }
+    }
     for (std::size_t i = 0; i < 8; ++i) {
         const int slot = kSlotOfIndex[i];
         if (slot < 0 || slot > 3) continue;
@@ -15546,6 +15574,12 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
         void* const current_weapon = get_weapon_from_slot(puppet, slot);
         const std::uint32_t cur_art =
             weapon_art_id_from_object(current_weapon);
+        if (world_weapon_replacement_blocks_generic(cur_art, peer_art)) {
+            // The stock-target pre-pass is still waiting for the exact COPG
+            // WeaponInfo or its receiver-local old object. Do not let generic
+            // ProcessKillTree+GiveWeapon consume the evidence in the meantime.
+            continue;
+        }
         SlotStability& stable = stability[slot];
         if (stable.puppet != puppet || stable.art != peer_art) {
             stable = {puppet, peer_art, now};
@@ -25297,6 +25331,7 @@ struct PendingWorldWeaponLifecycle {
     std::uint32_t consumed_remote_id{0};
     std::uint32_t dropped_art{0};
     ULONGLONG armed_ms{0};
+    std::uint8_t stock_wait_reason{0};
 };
 PendingWorldWeaponLifecycle g_pending_world_weapon_lifecycle{};
 
@@ -25307,6 +25342,93 @@ bool exact_world_weapon_replacement_pending(
     return current_art != 0 && peer_art != 0 && pending.drop_pending &&
         relay_weapon_art_matches(peer_art, pending.picked_art) &&
         relay_weapon_art_matches(current_art, pending.dropped_art);
+}
+
+bool world_weapon_replacement_blocks_generic(
+    std::uint32_t current_art, std::uint32_t peer_art) {
+    const PendingWorldWeaponLifecycle& pending =
+        g_pending_world_weapon_lifecycle;
+    return pending.drop_pending &&
+        (relay_weapon_art_matches(current_art, pending.dropped_art) ||
+         relay_weapon_art_matches(peer_art, pending.picked_art));
+}
+
+PendingStockWorldReplacementResult
+try_pending_stock_world_weapon_replacement_from_give_info(
+    void* puppet, std::uint32_t peer_art) {
+    PendingWorldWeaponLifecycle& pending =
+        g_pending_world_weapon_lifecycle;
+    if (!pending.drop_pending || pending.picked_art == 0 || peer_art == 0 ||
+        !relay_weapon_art_matches(peer_art, pending.picked_art)) {
+        return PendingStockWorldReplacementResult::NotApplicable;
+    }
+
+    std::uint8_t wait_reason = 0;
+    std::uint32_t raw_slot = ~0u;
+    int mapped_slot = -1;
+    void* stock_current = nullptr;
+    std::uint32_t stock_current_art = 0;
+    bool stock_current_detached = false;
+    std::uint32_t stock_current_generation = 0;
+    const RelayedWeaponBlock* const stored =
+        relayed_weapon_store_find(pending.picked_art);
+    if (stored == nullptr) {
+        wait_reason = 1;  // COPG WeaponInfo has not reached the game thread yet.
+    } else if (puppet == nullptr ||
+               readable_bytes(static_cast<std::byte*>(puppet) + 0x1D90) <
+                   sizeof(void*)) {
+        wait_reason = 2;
+    } else {
+        std::memcpy(&raw_slot, stored->info + 8, sizeof(raw_slot));
+        mapped_slot = static_cast<int>(raw_slot);
+        if (raw_slot == 16) {
+            mapped_slot = 0;
+        } else if (raw_slot == 17 || raw_slot == 22) {
+            mapped_slot = 1;
+        }
+        void* const controller = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(puppet) + 0x1D88);
+        stock_current = seh_get_give_replaced_weapon(
+            controller, stored->info);
+        if (stock_current == nullptr) {
+            wait_reason = 3;
+        } else if (!seh_read_process_weapon_world_identity(
+                       stock_current, stock_current_generation,
+                       stock_current_art, stock_current_detached)) {
+            wait_reason = 4;
+        } else if (stock_current_detached ||
+                   !relay_weapon_art_matches(
+                       stock_current_art, pending.dropped_art)) {
+            wait_reason = 5;
+        }
+    }
+
+    if (wait_reason != 0) {
+        if (pending.stock_wait_reason != wait_reason) {
+            pending.stock_wait_reason = wait_reason;
+            std::ostringstream line;
+            line << "WORLD-PICKUP-DROP-STOCK-WAIT seq=" << pending.sequence
+                 << " reason=" << static_cast<unsigned>(wait_reason)
+                 << " picked=0x" << std::hex << pending.picked_art
+                 << " dropped=0x" << pending.dropped_art
+                 << " rawSlot=0x" << raw_slot << std::dec
+                 << " mappedSlot=" << mapped_slot
+                 << " current=0x" << std::hex
+                 << reinterpret_cast<std::uintptr_t>(stock_current)
+                 << " currentArt=0x" << stock_current_art << std::dec
+                 << " detached=" << (stock_current_detached ? 1 : 0);
+            boot_log_line(line.str().c_str());
+        }
+        return PendingStockWorldReplacementResult::Waiting;
+    }
+
+    pending.stock_wait_reason = 0;
+    bool gave = false;
+    const bool owned = try_stock_world_weapon_replacement(
+        puppet, mapped_slot, stock_current, stock_current_art,
+        pending.picked_art, gave);
+    return owned ? PendingStockWorldReplacementResult::Owned
+                 : PendingStockWorldReplacementResult::Waiting;
 }
 
 bool try_stock_world_weapon_replacement(
@@ -25419,6 +25541,14 @@ struct GroundPickupHudSearchStats {
     bool ambiguous_art{false};
 };
 
+struct GroundPickupFgPoolSearchStats {
+    std::uint32_t allocated{0};
+    std::uint32_t live_process_weapons{0};
+    std::uint32_t unparented_world_weapons{0};
+    std::uint32_t matching_art{0};
+    bool ambiguous_art{false};
+};
+
 NearbyGroundProcessWeapon seh_find_ground_process_weapon_from_hud_candidates(
     std::uint32_t remote_id, std::uint32_t expected_art,
     GroundPickupHudSearchStats& stats) {
@@ -25508,6 +25638,132 @@ NearbyGroundProcessWeapon seh_find_ground_process_weapon_from_hud_candidates(
     }
 }
 
+NearbyGroundProcessWeapon seh_find_ground_process_weapon_from_fg_pool(
+    std::uint32_t remote_id, std::uint32_t expected_art,
+    GroundPickupFgPoolSearchStats& stats) {
+    stats = {};
+    if (expected_art == 0 || g_module == 0) {
+        return {};
+    }
+    __try {
+        auto* const pool = *reinterpret_cast<std::byte**>(
+            g_module + kFgAnimDataPoolBasePointerRva);
+        const auto* const allocated = reinterpret_cast<const std::uint64_t*>(
+            g_module + kFgAnimDataPoolAllocatedBitsRva);
+        if (pool == nullptr ||
+            readable_bytes(allocated) <
+                (kFgAnimDataPoolCapacity / 8) ||
+            readable_bytes(pool) <
+                static_cast<std::size_t>(kFgAnimDataPoolCapacity) *
+                    kFgAnimDataPoolStride) {
+            return {};
+        }
+
+        NearbyGroundProcessWeapon art_fallback{};
+        bool ambiguous_art = false;
+        std::array<void*, kFgAnimDataPoolCapacity> seen{};
+        std::size_t seen_count = 0;
+        for (std::uint32_t index = 0;
+             index < kFgAnimDataPoolCapacity; ++index) {
+            if ((allocated[index >> 6] &
+                 (std::uint64_t{1} << (index & 0x3F))) == 0) {
+                continue;
+            }
+            ++stats.allocated;
+            auto* const fg = pool +
+                static_cast<std::size_t>(index) * kFgAnimDataPoolStride;
+            void* const weak_handle = *reinterpret_cast<void* const*>(
+                fg + kFgAnimDataRetainedHandleOffset);
+            const std::uint32_t generation =
+                *reinterpret_cast<const std::uint32_t*>(
+                    fg + kFgAnimDataRetainedIdOffset);
+            if (weak_handle == nullptr || generation == 0 ||
+                readable_bytes(weak_handle) < 0x10) {
+                continue;
+            }
+            void* const object = *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(weak_handle) + 0x8);
+            if (object == nullptr || readable_bytes(object) < 0x864) {
+                continue;
+            }
+            bool duplicate = false;
+            for (std::size_t seen_index = 0; seen_index < seen_count;
+                 ++seen_index) {
+                if (seen[seen_index] == object) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate) continue;
+            seen[seen_count++] = object;
+
+            const auto* const weapon = static_cast<const std::byte*>(object);
+            if (*reinterpret_cast<const std::uintptr_t*>(weapon) !=
+                    g_module + kProcessWeaponVtableRva ||
+                *reinterpret_cast<const std::uint32_t*>(
+                    weapon + kGameObjectRuntimeIdOffset) != generation) {
+                continue;
+            }
+            // AnimMgr's fixed pool owns the render record. Require the exact
+            // retained-owner back-reference as an independent identity check;
+            // ProcessWeapon variants expose it either directly at +0x1A8 or
+            // through their child DrawControl at +0x198.
+            bool owns_fg = *reinterpret_cast<void* const*>(weapon + 0x1A8) == fg;
+            void* const child_draw = *reinterpret_cast<void* const*>(
+                weapon + 0x198);
+            if (!owns_fg && child_draw != nullptr &&
+                readable_bytes(child_draw) >= sizeof(void*)) {
+                owns_fg = *reinterpret_cast<void* const*>(child_draw) == fg;
+            }
+            if (!owns_fg) continue;
+            ++stats.live_process_weapons;
+
+            // Inventory/NPC weapons remain attached through the inherited
+            // NdAttachableObject parent handle. A ground pickup is world-owned:
+            // the parent cell is absent, cleared, or generation-invalid.
+            bool parented = false;
+            void* const parent_handle = *reinterpret_cast<void* const*>(
+                weapon + 0x4E0);
+            const std::uint32_t parent_generation =
+                *reinterpret_cast<const std::uint32_t*>(weapon + 0x4E8);
+            if (parent_handle != nullptr && parent_generation != 0 &&
+                readable_bytes(parent_handle) >= 0x10) {
+                void* const parent = *reinterpret_cast<void* const*>(
+                    static_cast<const std::byte*>(parent_handle) + 0x8);
+                parented = parent != nullptr && readable_bytes(parent) >= 0xC0 &&
+                    *reinterpret_cast<const std::uint32_t*>(
+                        static_cast<const std::byte*>(parent) +
+                        kGameObjectRuntimeIdOffset) == parent_generation;
+            }
+            if (parented) continue;
+            ++stats.unparented_world_weapons;
+
+            const std::uint32_t art =
+                *reinterpret_cast<const std::uint32_t*>(weapon + 0x860);
+            const std::uint32_t stable_id =
+                *reinterpret_cast<const std::uint32_t*>(weapon + 0xD8);
+            if (stable_id == 0 ||
+                !relay_weapon_art_matches(art, expected_art)) {
+                continue;
+            }
+            ++stats.matching_art;
+            NearbyGroundProcessWeapon candidate{
+                object, reinterpret_cast<std::uintptr_t>(weak_handle),
+                generation, stable_id, art, stable_id == remote_id};
+            if (candidate.exact_id) return candidate;
+            if (art_fallback.object == nullptr) {
+                art_fallback = candidate;
+            } else if (art_fallback.object != candidate.object) {
+                ambiguous_art = true;
+            }
+        }
+        stats.ambiguous_art = ambiguous_art;
+        return ambiguous_art ? NearbyGroundProcessWeapon{} : art_fallback;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return {};
+    }
+}
+
 bool seh_kill_ground_process_weapon(void* object) {
     if (object == nullptr || g_module == 0) return false;
     __try {
@@ -25534,14 +25790,32 @@ void apply_pending_world_weapon_lifecycle() {
     }
     const ULONGLONG now = GetTickCount64();
     if (pending.consume_pending) {
-        GroundPickupHudSearchStats stats{};
-        const NearbyGroundProcessWeapon local =
+        GroundPickupHudSearchStats hud_stats{};
+        GroundPickupFgPoolSearchStats fg_stats{};
+        NearbyGroundProcessWeapon local =
             seh_find_ground_process_weapon_from_hud_candidates(
-                pending.consumed_remote_id, pending.picked_art, stats);
+                pending.consumed_remote_id, pending.picked_art, hud_stats);
+        const char* source = "hud";
+        static std::uint32_t fg_scan_sequence = 0;
+        static ULONGLONG next_fg_scan_ms = 0;
+        bool fg_scan_attempted = false;
+        if (fg_scan_sequence != pending.sequence) {
+            fg_scan_sequence = pending.sequence;
+            next_fg_scan_ms = 0;
+        }
+        if (local.object == nullptr &&
+            (now >= next_fg_scan_ms || now - pending.armed_ms > 5000)) {
+            fg_scan_attempted = true;
+            next_fg_scan_ms = now + 250;
+            local = seh_find_ground_process_weapon_from_fg_pool(
+                pending.consumed_remote_id, pending.picked_art, fg_stats);
+            source = "fg-pool";
+        }
         if (local.object != nullptr) {
             const bool killed = seh_kill_ground_process_weapon(local.object);
             std::ostringstream line;
-            line << "WORLD-PICKUP-CONSUME-HUD seq=" << pending.sequence
+            line << "WORLD-PICKUP-CONSUME seq=" << pending.sequence
+                 << " source=" << source
                  << " remote_id=0x" << std::hex
                  << pending.consumed_remote_id << " local_id=0x"
                  << local.stable_id
@@ -25552,16 +25826,21 @@ void apply_pending_world_weapon_lifecycle() {
                  << " hudMutation=disabled";
             boot_log_line(line.str().c_str());
             if (killed) pending.consume_pending = false;
-        } else if (now - pending.armed_ms > 5000) {
+        } else if (fg_scan_attempted && now - pending.armed_ms > 5000) {
             std::ostringstream line;
-            line << "WORLD-PICKUP-CONSUME-HUD expired seq="
+            line << "WORLD-PICKUP-CONSUME expired seq="
                  << pending.sequence << " art=0x" << std::hex
                  << pending.picked_art << std::dec
-                 << " captured=" << stats.captured
-                 << " recent=" << stats.recent
-                 << " live=" << stats.live_process_weapons
-                 << " matching=" << stats.matching_art
-                 << " ambiguous=" << (stats.ambiguous_art ? 1 : 0);
+                 << " hudCaptured=" << hud_stats.captured
+                 << " hudRecent=" << hud_stats.recent
+                 << " hudLive=" << hud_stats.live_process_weapons
+                 << " hudMatching=" << hud_stats.matching_art
+                 << " hudAmbiguous=" << (hud_stats.ambiguous_art ? 1 : 0)
+                 << " fgAllocated=" << fg_stats.allocated
+                 << " fgLive=" << fg_stats.live_process_weapons
+                 << " fgWorld=" << fg_stats.unparented_world_weapons
+                 << " fgMatching=" << fg_stats.matching_art
+                 << " fgAmbiguous=" << (fg_stats.ambiguous_art ? 1 : 0);
             boot_log_line(line.str().c_str());
             pending.consume_pending = false;
         }
@@ -40402,7 +40681,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27il "
+        "TLL co-op runtime init 2026-07-27im "
         "(latched reload/release relay; action-entry timing)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

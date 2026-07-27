@@ -2594,15 +2594,16 @@ Do not reopen these as the first move:
 
 ## P0 NEXT - World-weapon replacement reliability follow-up (2026-07-27 `ik`)
 
-- [ ] Diagnose the flags=3 SLOT-MIRROR miss where M30 consume succeeded but the
-      detached pistol expired as `no-matching-stock-slot-replacement`. Log the
-      receiver's exact candidate slot/current art and peer picked-art at the
-      rejected predicate; do not call GiveWeapon without the stock pair.
-- [ ] Replace HUD-candidate-only consumed-model discovery. Type-97 consume expired
-      with `captured=2 live=1 matching=0` although its dropped-pistol replacement
-      succeeded in 16 ms. Statistically locate the world-owned ProcessWeapon
-      registry/container and retain exact vtable, generation, art and ambiguity
-      checks; do not reintroduce broad heap scans or FHUD mutation.
+- [x] Implement `im` stock-target resolution for flags=3. Reuse the sender's
+      captured 0xC0-byte WeaponInfo and its raw slot byte at `+8`, then ask the
+      receiver's own GiveWeapon controller mapping for the exact object which
+      will be replaced. Protect that transaction from generic slot pre-kill and
+      log bounded `WORLD-PICKUP-DROP-STOCK-WAIT` reasons until it succeeds.
+- [x] Implement `im` HUD-independent consumed-model discovery through the fixed
+      AnimMgr FgAnimData pool. Require allocation bit, generation-valid weak
+      handle, exact ProcessWeapon vtable/art, world-unparented ownership and an
+      exact stable ID or unique-art fallback. Broad heap/registry scans remain
+      forbidden. Release build compiles; run the written `im` discriminator.
 - [ ] Keep the Chloe stale pickup icon separate. `ik` deliberately has
       `hudMutation=disabled`; checkpoint reset remains the only confirmed clearing
       boundary above the rejected four-slot FHUD owner.

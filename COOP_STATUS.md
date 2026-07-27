@@ -11780,3 +11780,63 @@ sequence before release. A successful reload must then emit exactly one clip
 entry for magazine weapons or one loop entry for per-round weapons. The measured
 remote delay distinguishes transport/input loss from controller or presentation
 delay; ammo remains owned by the existing snapshot path.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `im` resolves the stock replacement target and finds unparented ground weapons without HUD
+
+The two intermittent world-weapon failures in `ik` have different, now-bounded
+causes. The flags=3 replacement miss compared the peer snapshot's logical slot
+number with the receiver's local slot array, although stock GiveWeapon maps the
+sender's raw WeaponInfo slot before selecting the object to replace. Build `im`
+instead reuses the exact 0xC0-byte WeaponInfo captured at the sender GiveWeapon
+boundary, reads its raw slot byte at `+8`, and calls the receiver controller's
+stock `GetGiveReplacedWeapon` virtual before ordinary slot reconciliation.
+
+The evidence quota is satisfied by three independent data paths:
+
+1. `WeaponGivePacket` already carries the sender's real WeaponInfo block rather
+   than a synthesized art-only record; the raw slot field at `info+8` is retained
+   byte-for-byte with the picked and dropped arts.
+2. `PlayerWeaponController::GiveWeapon 0x1410A4D40` maps raw slots at
+   `0x1410A4E2D..0x1410A4E47` (`16 -> 0`, `17/22 -> 1`) before its controller
+   vtable `+0xB0` query selects the concrete replaceable ProcessWeapon. This is
+   not the logical snapshot slot identity used by the generic mirror.
+3. The already-confirmed flags=3 path succeeds only after that exact object has
+   been passed through stock GiveWeapon and detached to world space; successful
+   runs retain `gave=1 detached=1 slotReleased=1`. `im` protects the pending
+   picked/dropped pair from generic pre-kill while this native selection waits.
+
+Competing explanations remain observable. A missing controller, unmapped raw
+slot, absent current object, art mismatch, or still-attached result emits one of
+the bounded `WORLD-PICKUP-DROP-STOCK-WAIT` reasons with raw and mapped slots.
+This distinguishes incorrect native selection from UDP delay and from the old
+generic-reconcile race. No unmatched slot is ever passed to GiveWeapon.
+
+The consumed ground model no longer depends solely on whether screen-0 HUD has
+published it. The fixed AnimMgr FgAnimData pool is a safer ownership index than
+the rejected global game-object registry:
+
+1. The pool is fixed at pointer RVA `0x66D0200`, allocation bits
+   `0x66CE200`, capacity `0x600`, and stride `0x380`; only allocated records are
+   inspected.
+2. Each retained Fg record supplies a weak handle/generation and stable object
+   identity. `im` independently validates `weak+8`, `object+0xBC`, the exact
+   ProcessWeapon vtable, stable ID and art before accepting it.
+3. ProcessWeapon `+0x1A8` (or its child DrawControl at `+0x198`) identifies the
+   owning Fg record, while inherited parent handles at `+0x4E0/+0x4E8` reject
+   inventory/NPC-attached weapons. Exact remote stable ID wins; otherwise only
+   one unparented exact-art object is accepted and ambiguity rejects the scan.
+
+The alternatives are explicitly rejected: the HUD-only index missed Type-97
+with `captured=2 live=1 matching=0`; the global object resolver froze inside its
+owner spin lock; the six per-screen dispatcher lists do not cover an unobserved
+world object; and a heap scan has neither ownership nor lifetime guarantees.
+The existing confirmed HUD candidate remains the first fast path, with the Fg
+pool used only for an armed pending consume and at most once per 250 ms.
+
+**Falsifiable `im` prediction:** every flags=3 packet must either complete stock
+replacement from the stored raw/mapped slot or emit an exact wait reason; generic
+slot reconciliation must not kill either transaction endpoint meanwhile. A
+Type-97 (or other never-published receiver pickup) must be removed with
+`source=fg-pool killed=1`; ambiguous same-art candidates must expire without a
+kill. All successful replacements must preserve `gave=1 detached=1
+slotReleased=1`, and neither copy may enter the rejected registry wait.
