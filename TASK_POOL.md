@@ -61,7 +61,7 @@
       emitted no marker. Replace the unsafe receiver registry lookup and resolve
       the true concrete control slot; `0x1429B6958` is RTTI-proven
       `CarryObjectInteractControl` and must not be patched.
-- [ ] **`ic` STATIC / IMPLEMENTED:** consume an authored ground ProcessWeapon
+- [x] **`ic` STATIC / IMPLEMENTED:** consume an authored ground ProcessWeapon
       only through the retained puppet's generation-validated per-screen
       dispatcher weak entry (exact stable ID first, unique-art fallback), then
       call the same `ProcessKillTree 0x1416A5C20` terminal used by stock
@@ -81,12 +81,15 @@
       DROP-ENTER but flags=0x1/dropped=0. HUD source is conclusively only
       `pickup-control 0x1408AF179` on the primary state; the user reports the HUD
       bug gone.
-- [ ] Next ground-world build: merge all six dispatcher lists with pointer
-      dedupe, exact stable-ID priority and unique-art-only fallback; save the exact
-      old weapon at DROP-ENTER and capture its payload only after the enclosing
-      OnInteract returns. Keep native registry Apply forbidden. Determine whether
-      receiver SLOT-MIRROR already detaches a corresponding old weapon before
-      adding any new materialization path.
+- [ ] **`id` STATIC / IMPLEMENTED, runtime pending:** merge all six dispatcher
+      lists with pointer dedupe, exact stable-ID priority and unique-art-only
+      fallback. Sender accepts the exact old ProcessWeapon only after stock detach
+      sets `+0x690 bit 3`, relays its raw art and never calls the campaign-unsafe
+      dropped-event ctor/mapper/resolver. For the matching flags=3 transaction,
+      receiver SLOT-MIRROR no longer pre-kills the old slot object: stock
+      `PlayerWeaponController_GiveWeapon 0x1410A4D40` must detach it and install the
+      picked weapon atomically. Keep native registry Apply forbidden. Run the
+      written `id` prediction in `COOP_STATUS.md` in both directions.
 
 ## P0: Full Player Synchronization (CURRENT)
 

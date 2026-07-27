@@ -11005,3 +11005,84 @@ row. The user reports that the prior HUD defect is gone. Thus `0x1408AF179`
 inside `PickupInteractControl_PublishHudPrompt 0x1408AEA00` owns the live weapon
 records; the fallback hypotheses are runtime REJECTED. No new HUD suppression is
 needed while correct world-object removal stops this publisher naturally.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `id` uses raw detached art and stock receiver replacement
+
+**Hypothesis.** The missing Mazur replacement has two independent causes, both at
+already-proven exact objects. Sender reaches the correct old ProcessWeapon at the
+`0x1410A68AC` detach call, but the relay rejects it inside a campaign-unsafe native
+event constructor. Receiver then destroys its corresponding old slot weapon with
+`ProcessKillTree` before `GiveWeapon`, so even a correct flags=3 packet would have
+nothing left to place on the ground. Build `id` relays only the validated raw art
+of the stock-detached sender object. On the exact matching receiver transaction it
+lets stock `PlayerWeaponController_GiveWeapon` own the old-object detach and new-
+weapon install, while the ordinary slot-reconcile path retains its pre-kill.
+
+The sender side meets the static evidence quota with independent dataflow, control-
+flow and serializer evidence:
+
+1. `PlayerWeaponController_GiveWeapon 0x1410A4D40` obtains the old weapon through
+   controller vtable `+0xB0` at `0x1410A4E4F`, retains that exact pointer in R15,
+   passes R15 to `ProcessWeapon_DetachToWorldTransform` at `0x1410A68AC`, then
+   immediately reads `R15+0x860`, calls two R15 virtual methods and publishes
+   `weapon-dropped` at `0x1410A693C`. The exact-call wrapper therefore has the
+   correct old object; the earlier “post-detach is too early” explanation is
+   REJECTED.
+2. `ProcessWeapon_DetachToWorldTransform 0x141ED3630` sets `weapon+0x690 bit 3`
+   and writes its world transform synchronously. If collision is absent it instead
+   kills the object at `0x141ED385F`. `id` consequently accepts only an exact
+   ProcessWeapon vtable with unchanged nonzero generation `+0xBC`, nonzero raw art
+   `+0x860`, and the committed detached bit; pointer readability alone is not the
+   admission rule.
+3. `NetEventAddDroppedPickup_CtorFromProcessWeapon 0x140BCC9D0` is not a pure
+   campaign serializer. It calls `WeaponArtId_ToNetworkIndex 0x140A80E50` and
+   `ResolveGameObjectHandleById 0x140A989C0`, and copies `weapon+0xD8` only after
+   stock sender `0x140BCD750` would normally assign a NetDroppedPickup ID. The old
+   helper also rejected compact art index zero even though Apply explicitly treats
+   indices below 19, including zero, as valid. This explains `DROP-ENTER` without
+   `DROP-COMMIT` while the local dropped model visibly survives.
+
+The receiver side independently meets the quota:
+
+1. Current `ensure_puppet_has_peer_weapons` calls
+   `seh_remove_weapon_in_slot -> ProcessKillTree` before every differing-slot give.
+   `ProcessKillTree` cannot create a world replacement, so the current code makes
+   a Mazur-on-ground result impossible by construction.
+2. Stock GiveWeapon already owns the atomic sequence: retain old slot object,
+   create/add the new weapon through vtable `+0x130`, detach the eligible old object
+   at `0x1410A68AC`, publish `weapon-dropped`, and finish with the new slot content.
+   Calling the same already-proven puppet vtable `+0x158` from the existing game-
+   thread SLOT-MIRROR boundary preserves controller ownership and ordering.
+3. `InteractDispatcher_RebuildNearbyList 0x140C837F0` admits ProcessWeapon objects
+   and stores 32-byte weak/generation entries through `0x140C817F0`;
+   `InteractDispatcher_TickNearbyList 0x140C87FB0` validates those generations.
+   `InteractDispatcher_TickAllScreenBlobs 0x1401611F0` advances multiple screen
+   blobs. This and the `ic` primary pickup-control observation reject the old
+   screen-1-only search. `id` merges all six lists, deduplicates object pointers,
+   globally prefers exact stable ID and accepts a same-art fallback only when one
+   unique object remains.
+
+Competing designs are excluded explicitly. Moving the native dropped-event ctor
+after OnInteract does not remove its mapper/resolver and ID-preparation dependency.
+Calling native AddDroppedPickup Apply from retained Player update repeats the
+registry boundary that froze `ib`. Directly calling Detach outside Give loses
+controller state/order and can kill a collision-less weapon. Keeping receiver
+pre-kill and searching afterward cannot work because the object has already entered
+teardown. Removing pre-kill for every snapshot reconcile risks reviving the old
+weapon fountain; `id` scopes the stock replacement exclusively to a pending
+flags=3 packet whose picked art equals peer slot art and whose dropped art equals
+the receiver's current slot art.
+
+Release build `id` succeeds. **Falsifiable prediction:** replacing receiver-visible
+Mazur LDR with ground M30 must produce sender `WORLD-WEAPON-DROP-COMMIT` followed
+by `WORLD-WEAPON-SEND ... dropped=<Mazur> flags=0x3`, with no native constructor,
+mapper or registry call. Receiver must first emit exactly one all-screen
+`WORLD-PICKUP-CONSUME-DIRECT ... killed=1`, then
+`WORLD-PICKUP-DROP-EXISTING ... gave=1 detached=1 slotReleased=1` and
+`SLOT-MIRROR ... stockDrop=1`. The M30 disappears and one Mazur appears where the
+remote puppet performs the stock replacement; no freeze, duplicate weapon or
+prompt regression is allowed. Reverse Nadine-to-Chloe replacement must produce the
+same chain. `DROP-COMMIT` absence rejects the exact ProcessWeapon/detached admission;
+flags=3 plus `detached=0` selects the stock ammo/state detach gate; successful
+markers with wrong visible world state reject stock receiver replacement as the
+complete materialization boundary.

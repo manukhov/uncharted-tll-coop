@@ -8671,6 +8671,8 @@ struct WeaponInteractWorldContext {
     void* source{nullptr};
     std::uint32_t source_stable_id{0};
     std::uint32_t picked_art{0};
+    void* dropped_candidate{nullptr};
+    std::uint32_t dropped_generation{0};
     std::uint32_t dropped_art{0};
     std::uint8_t dropped_payload[
         coop::kDroppedPickupEventPayloadBytes]{};
@@ -8689,23 +8691,32 @@ WeaponInteractOnInteractFunction g_original_weapon_interact_on_interact = nullpt
 ProcessKillTreeFunction g_original_process_kill_tree_for_weapon_interact = nullptr;
 ProcessWeaponDetachFunction g_original_process_weapon_detach = nullptr;
 
-bool seh_capture_detached_weapon_world_payload(
-    void* weapon, void* source, std::uint32_t& art,
-    std::uint8_t payload[coop::kDroppedPickupEventPayloadBytes]) {
+bool seh_read_process_weapon_world_identity(
+    void* weapon, std::uint32_t& generation, std::uint32_t& art,
+    bool& detached) {
+    generation = 0;
     art = 0;
-    if (weapon == nullptr || weapon == source ||
-        readable_bytes(weapon) < 0x864) {
+    detached = false;
+    if (weapon == nullptr || readable_bytes(weapon) < 0x864) {
         return false;
     }
     __try {
         const auto* bytes = static_cast<const std::byte*>(weapon);
+        if (*reinterpret_cast<const std::uintptr_t*>(bytes) !=
+                g_module + kProcessWeaponVtableRva) {
+            return false;
+        }
+        generation = *reinterpret_cast<const std::uint32_t*>(
+            bytes + kGameObjectRuntimeIdOffset);
         art = *reinterpret_cast<const std::uint32_t*>(bytes + 0x860);
         const std::uint8_t flags =
             *reinterpret_cast<const std::uint8_t*>(bytes + 0x690);
-        return art != 0 && (flags & 0x08) != 0 &&
-            seh_build_dropped_pickup_event_payload(weapon, payload);
+        detached = (flags & 0x08) != 0;
+        return generation != 0 && art != 0;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
+        generation = 0;
         art = 0;
+        detached = false;
         return false;
     }
 }
@@ -8764,6 +8775,16 @@ std::int64_t __fastcall hooked_process_weapon_detach(
             thread_id &&
         context.active && weapon != nullptr && weapon != context.source;
     if (transaction_owned) {
+        std::uint32_t generation = 0;
+        std::uint32_t art = 0;
+        bool already_detached = false;
+        if (seh_read_process_weapon_world_identity(
+                weapon, generation, art, already_detached) &&
+            !already_detached) {
+            context.dropped_candidate = weapon;
+            context.dropped_generation = generation;
+            context.dropped_art = art;
+        }
         static std::atomic<int> entered{0};
         if (entered.fetch_add(1, std::memory_order_relaxed) < 16) {
             boot_log_line("WORLD-WEAPON-DROP-ENTER exact GiveWeapon callsite");
@@ -8777,9 +8798,13 @@ std::int64_t __fastcall hooked_process_weapon_detach(
         return result;
     }
     std::uint32_t art = 0;
-    if (seh_capture_detached_weapon_world_payload(
-            weapon, context.source, art, context.dropped_payload)) {
-        context.dropped_art = art;
+    std::uint32_t generation = 0;
+    bool detached = false;
+    if (context.dropped_candidate == weapon && weapon != context.source &&
+        seh_read_process_weapon_world_identity(
+            weapon, generation, art, detached) && detached &&
+        generation == context.dropped_generation &&
+        relay_weapon_art_matches(art, context.dropped_art)) {
         context.drop_captured = true;
         std::ostringstream line;
         line << "WORLD-WEAPON-DROP-COMMIT art=0x" << std::hex << art
@@ -15340,6 +15365,9 @@ bool give_held_weapon_to_puppet(void* puppet, std::uint32_t art_id) {
 }
 
 bool puppet_weapon_sync_ready(void* puppet);
+bool try_stock_world_weapon_replacement(
+    void* puppet, int slot, void* current_weapon, std::uint32_t current_art,
+    std::uint32_t peer_art, bool& gave);
 
 void queue_relay_pickup_gesture_after_mirror(
     std::uint32_t art, std::uint32_t seq) {
@@ -15428,8 +15456,9 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
         std::memcpy(
             &peer_art, peer.weapon_snapshot + i * sizeof(peer_art),
             sizeof(peer_art));
+        void* const current_weapon = get_weapon_from_slot(puppet, slot);
         const std::uint32_t cur_art =
-            weapon_art_id_from_object(get_weapon_from_slot(puppet, slot));
+            weapon_art_id_from_object(current_weapon);
         SlotStability& stable = stability[slot];
         if (stable.puppet != puppet || stable.art != peer_art) {
             stable = {puppet, peer_art, now};
@@ -15474,18 +15503,22 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
         }
         ungivable_memo[slot] = {};
         m = {puppet, peer_art, now};
-        if (cur_art != 0) {
+        bool gave = false;
+        const bool stock_world_replacement = givable &&
+            try_stock_world_weapon_replacement(
+                puppet, slot, current_weapon, cur_art, peer_art, gave);
+        if (!stock_world_replacement && cur_art != 0) {
             seh_remove_weapon_in_slot(puppet, slot);
         }
-        bool gave = false;
-        if (givable) {
+        if (!stock_world_replacement && givable) {
             gave = safe_give_weapon_art_to_puppet(
                 puppet, peer_art, /*held_sync=*/true);
         }
         std::ostringstream line;
         line << "SLOT-MIRROR slot=" << slot << " peerArt=0x" << std::hex
              << peer_art << " was=0x" << cur_art << std::dec
-             << " gave=" << (gave ? 1 : 0);
+             << " gave=" << (gave ? 1 : 0)
+             << " stockDrop=" << (stock_world_replacement ? 1 : 0);
         force_log_line(line.str().c_str());
         if (gave && g_relay_pickup_wait_mirror.load(std::memory_order_acquire)) {
             const std::uint32_t wait_art =
@@ -25177,6 +25210,67 @@ struct PendingWorldWeaponLifecycle {
 };
 PendingWorldWeaponLifecycle g_pending_world_weapon_lifecycle{};
 
+bool try_stock_world_weapon_replacement(
+    void* puppet, int slot, void* current_weapon, std::uint32_t current_art,
+    std::uint32_t peer_art, bool& gave) {
+    gave = false;
+    PendingWorldWeaponLifecycle& pending =
+        g_pending_world_weapon_lifecycle;
+    if (puppet == nullptr || current_weapon == nullptr || current_art == 0 ||
+        peer_art == 0 || !pending.drop_pending ||
+        !relay_weapon_art_matches(peer_art, pending.picked_art) ||
+        !relay_weapon_art_matches(current_art, pending.dropped_art) ||
+        readable_bytes(current_weapon) < 0x864) {
+        return false;
+    }
+
+    std::uint32_t generation = 0;
+    std::uint32_t validated_art = 0;
+    bool was_detached = false;
+    if (!seh_read_process_weapon_world_identity(
+            current_weapon, generation, validated_art, was_detached) ||
+        !relay_weapon_art_matches(validated_art, current_art) || was_detached) {
+        return false;
+    }
+
+    // Stock GiveWeapon owns the atomic replacement sequence: it removes the old
+    // slot object, detaches that exact ProcessWeapon into world space, publishes
+    // weapon-dropped, and installs the new weapon. The ordinary SLOT-MIRROR path
+    // pre-kills the old object; that remains correct outside an exact flags=3
+    // world transaction but would make the relayed replacement impossible.
+    gave = safe_give_weapon_art_to_puppet(
+        puppet, peer_art, /*held_sync=*/true);
+
+    bool after_detached = false;
+    std::uint32_t after_generation = 0;
+    std::uint32_t after_art = 0;
+    const bool detached = seh_read_process_weapon_world_identity(
+                   current_weapon, after_generation, after_art, after_detached) &&
+        after_generation == generation &&
+        relay_weapon_art_matches(after_art, current_art) && after_detached;
+    const bool no_longer_in_slot =
+        get_weapon_from_slot(puppet, slot) != current_weapon;
+
+    std::ostringstream line;
+    line << "WORLD-PICKUP-DROP-EXISTING seq=" << pending.sequence
+         << " picked=0x" << std::hex << peer_art
+         << " dropped=0x" << current_art
+         << " ptr=0x" << reinterpret_cast<std::uintptr_t>(current_weapon)
+         << " gen=0x" << generation << std::dec
+         << " gave=" << (gave ? 1 : 0)
+         << " detached=" << (detached ? 1 : 0)
+         << " slotReleased=" << (no_longer_in_slot ? 1 : 0);
+    boot_log_line(line.str().c_str());
+
+    if (gave && detached && no_longer_in_slot) {
+        pending.drop_pending = false;
+    }
+    // The exact transaction owns this attempt even when its stock detach gate
+    // rejects the old weapon. Never fall through to ProcessKillTree in the same
+    // tick; preserve the evidence and let the bounded lifecycle timeout report it.
+    return true;
+}
+
 void apply_pending_weapon_world_packet() {
     if (!g_pending_weapon_world_flag.exchange(
             false, std::memory_order_acq_rel)) {
@@ -25217,58 +25311,67 @@ struct NearbyGroundProcessWeapon {
 
 NearbyGroundProcessWeapon seh_find_nearby_ground_process_weapon(
     void* puppet, std::uint32_t remote_id, std::uint32_t expected_art) {
-    if (puppet == nullptr || expected_art == 0 || g_module == 0 ||
-        readable_bytes(static_cast<const std::byte*>(puppet) + 0x4010) <
-            sizeof(std::int32_t)) {
+    if (puppet == nullptr || expected_art == 0 || g_module == 0) {
         return {};
     }
     __try {
-        const std::int32_t screen_index =
-            *reinterpret_cast<const std::int32_t*>(
-                static_cast<const std::byte*>(puppet) + 0x4010);
-        if (screen_index < 0 || screen_index >= 6) return {};
-        const auto* const dispatcher = reinterpret_cast<const std::byte*>(
-            g_module + kPlayerInteractDispatcherBaseRva +
-            kPlayerInteractDispatcherStride *
-                static_cast<std::size_t>(screen_index));
-        const std::uint32_t count =
-            *reinterpret_cast<const std::uint32_t*>(dispatcher);
-        if (count > 64) return {};
-
         NearbyGroundProcessWeapon art_fallback{};
         bool ambiguous_art = false;
-        for (std::uint32_t i = 0; i < count; ++i) {
-            const auto* const entry = dispatcher + 8 + 32 * i;
-            const std::uintptr_t weak =
-                *reinterpret_cast<const std::uintptr_t*>(entry);
-            const std::uint32_t generation =
-                *reinterpret_cast<const std::uint32_t*>(entry + 8);
-            if (weak == 0 || generation == 0) continue;
-            void* const object = *reinterpret_cast<void**>(weak + 8);
-            if (object == nullptr || readable_bytes(object) < 0x864) continue;
-            const auto* const object_bytes =
-                static_cast<const std::byte*>(object);
-            if (*reinterpret_cast<const std::uint32_t*>(
-                    object_bytes + kGameObjectRuntimeIdOffset) != generation ||
-                *reinterpret_cast<const std::uintptr_t*>(object_bytes) !=
-                    g_module + kProcessWeaponVtableRva) {
-                continue;
-            }
-            const std::uint32_t art =
-                *reinterpret_cast<const std::uint32_t*>(object_bytes + 0x860);
-            const std::uint32_t stable_id =
-                *reinterpret_cast<const std::uint32_t*>(object_bytes + 0xD8);
-            if (stable_id == 0 ||
-                !relay_weapon_art_matches(art, expected_art)) {
-                continue;
-            }
-            NearbyGroundProcessWeapon candidate{
-                object, stable_id, art, stable_id == remote_id};
-            if (candidate.exact_id) return candidate;
-            if (art_fallback.object == nullptr) {
-                art_fallback = candidate;
-            } else if (art_fallback.object != candidate.object) {
-                ambiguous_art = true;
+        void* seen[6 * 64]{};
+        std::size_t seen_count = 0;
+        for (std::size_t screen_index = 0; screen_index < 6; ++screen_index) {
+            const auto* const dispatcher = reinterpret_cast<const std::byte*>(
+                g_module + kPlayerInteractDispatcherBaseRva +
+                kPlayerInteractDispatcherStride * screen_index);
+            const std::uint32_t count =
+                *reinterpret_cast<const std::uint32_t*>(dispatcher);
+            if (count > 64) continue;
+            for (std::uint32_t i = 0; i < count; ++i) {
+                const auto* const entry = dispatcher + 8 + 32 * i;
+                const std::uintptr_t weak =
+                    *reinterpret_cast<const std::uintptr_t*>(entry);
+                const std::uint32_t generation =
+                    *reinterpret_cast<const std::uint32_t*>(entry + 8);
+                if (weak == 0 || generation == 0 ||
+                    readable_bytes(reinterpret_cast<const void*>(weak)) < 16) {
+                    continue;
+                }
+                void* const object = *reinterpret_cast<void**>(weak + 8);
+                if (object == nullptr || readable_bytes(object) < 0x864) continue;
+                bool duplicate = false;
+                for (std::size_t j = 0; j < seen_count; ++j) {
+                    if (seen[j] == object) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (duplicate) continue;
+                seen[seen_count++] = object;
+
+                const auto* const object_bytes =
+                    static_cast<const std::byte*>(object);
+                if (*reinterpret_cast<const std::uint32_t*>(
+                        object_bytes + kGameObjectRuntimeIdOffset) != generation ||
+                    *reinterpret_cast<const std::uintptr_t*>(object_bytes) !=
+                        g_module + kProcessWeaponVtableRva) {
+                    continue;
+                }
+                const std::uint32_t art =
+                    *reinterpret_cast<const std::uint32_t*>(object_bytes + 0x860);
+                const std::uint32_t stable_id =
+                    *reinterpret_cast<const std::uint32_t*>(object_bytes + 0xD8);
+                if (stable_id == 0 ||
+                    !relay_weapon_art_matches(art, expected_art)) {
+                    continue;
+                }
+                NearbyGroundProcessWeapon candidate{
+                    object, stable_id, art, stable_id == remote_id};
+                if (candidate.exact_id) return candidate;
+                if (art_fallback.object == nullptr) {
+                    art_fallback = candidate;
+                } else if (art_fallback.object != candidate.object) {
+                    ambiguous_art = true;
+                }
             }
         }
         return ambiguous_art ? NearbyGroundProcessWeapon{} : art_fallback;
@@ -25325,18 +25428,16 @@ void apply_pending_world_weapon_lifecycle(void* puppet) {
         }
     }
     if (pending.drop_pending) {
-        const bool inventory_ready =
-            puppet != nullptr &&
-            puppet_has_weapon_art_id(puppet, pending.picked_art) &&
-            !puppet_has_weapon_art_id(puppet, pending.dropped_art);
-        if (!pending.wait_for_inventory || inventory_ready ||
-            now - pending.armed_ms > 5000) {
+        // SLOT-MIRROR owns an exact flags=3 replacement and clears this flag
+        // only after stock GiveWeapon has detached the receiver-local old weapon.
+        // Keep the intent alive across its 500 ms slot debounce and UDP ordering;
+        // the old implementation parked it immediately for COPW packets.
+        if (now - pending.armed_ms > 5000) {
             std::ostringstream line;
-            line << "WORLD-PICKUP-DROP-PARKED seq=" << pending.sequence
+            line << "WORLD-PICKUP-DROP-EXISTING expired seq=" << pending.sequence
                  << " art=0x" << std::hex << pending.dropped_art
                  << std::dec
-                 << " inventory_ready=" << (inventory_ready ? 1 : 0)
-                 << " reason=unsafe-player-update-registry-context";
+                 << " reason=no-matching-stock-slot-replacement";
             boot_log_line(line.str().c_str());
             pending.drop_pending = false;
         }
@@ -31050,6 +31151,7 @@ void __fastcall hooked_update(void* object) {
         }
         if (object != g_controlled_object) {
             if (object == retained_player_object(1)) {
+                apply_pending_weapon_world_packet();
                 apply_peer_held_weapon_state();
                 apply_peer_weapon_give();
                 apply_pending_world_weapon_lifecycle(object);
@@ -31099,6 +31201,7 @@ void __fastcall hooked_update(void* object) {
     }
 
     if (object == retained_player_object(1)) {
+        apply_pending_weapon_world_packet();
         apply_peer_held_weapon_state();
         apply_peer_weapon_give();
         apply_pending_world_weapon_lifecycle(object);
@@ -39879,7 +39982,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27ic "
+        "TLL co-op runtime init 2026-07-27id "
         "(direct nearby world consume; exact HUD source diagnostics)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

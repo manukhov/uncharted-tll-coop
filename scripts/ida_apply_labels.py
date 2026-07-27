@@ -1525,8 +1525,11 @@ FUNCTIONS = {
     ),
     0x140BCC9D0: (
         "NetEventAddDroppedPickup_CtorFromProcessWeapon",
-        "Fills NetEventAddDroppedPickup from a detached ProcessWeapon. The event "
-        "payload at +0x18..+0x77 is pure scalar/POD and safe to relay.",
+        "Fills NetEventAddDroppedPickup from a detached ProcessWeapon, but is not "
+        "a campaign-safe raw serializer: it calls WeaponArtId_ToNetworkIndex and "
+        "ResolveGameObjectHandleById, and copies ProcessWeapon+0xD8 only after the "
+        "stock sender has normally assigned a NetDroppedPickup id. Compact art "
+        "index 0 is valid despite older relay code rejecting it.",
     ),
     0x140BCD0F0: (
         "NetEventAddDroppedPickup_Apply",
@@ -8185,7 +8188,9 @@ FUNCTIONS = {
         "WeaponArtId_ToNetworkIndex",
         "Maps Weapon+0x860 authored art id to the compact network inventory "
         "index. Used independently by projectile events and all eight entries "
-        "in NetEventCharacterMove_FillWeaponState.",
+        "in NetEventCharacterMove_FillWeaponState. Its non-standard-art fallback "
+        "depends on the dormant online definition registry, so do not use it as "
+        "a campaign raw-art serializer.",
     ),
     0x140A81050: (
         "NetGameManager_GetWeaponIdByStatIndex",
@@ -8198,7 +8203,10 @@ FUNCTIONS = {
         "Exact embedded signature: PlayerWeaponController::GiveWeapon(WeaponInfo*, "
         "bool, bool, BuffSource const*), controller vtable +0x158. Reads initial "
         "total ammo from WeaponInfo+0x84; -1 selects authored/random derivation "
-        "before passing the result to CreateAndAddWeapon vtable +0x130.",
+        "before passing the result to CreateAndAddWeapon vtable +0x130. For a "
+        "replaceable occupied slot it retains the exact old ProcessWeapon from "
+        "vtable +0xB0, detaches it at 0x1410A68AC, publishes weapon-dropped at "
+        "0x1410A693C, then sends it only when native net mode is enabled.",
     ),
     0x1410A1F90: (
         "PlayerWeaponController_GetWeaponBySlot",
