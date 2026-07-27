@@ -11298,3 +11298,10 @@ the documented physical layout; a destroyed slot which reappears without a
 suppress marker rejects the exact source; wrong-world removal rejects key
 identity; any ordinary non-world slot regression rejects the scoped debounce
 predicate.
+
+**Cold-start validation.** The committed `if` DLL was injected into fresh PID
+16580 (role A/Chloe) and PID 9620 (role B/Nadine). Both processes remained
+responsive, selected their expected UDP roles, installed the exact pickup HUD
+capture and weapon-interaction relays, and emitted no hook exception or install
+failure. This validates build and installation only; the written M30/Mazur
+behavioral prediction remains pending.

@@ -116,7 +116,10 @@
       Chloe retains a separate stale M30 FHUD record beside the new Mazur prompt.
       Scope the next change to the exact pending flags=3 transaction and its
       consumed weak+generation key.
-- [ ] **`if` STATIC / IMPLEMENTED, runtime pending:** after `CONSUME-HUD killed=1`,
+- [ ] **`if` STATIC / IMPLEMENTED, behavioral runtime pending:** fresh PID 16580
+      (A/Chloe) and PID 9620 (B/Nadine) loaded the committed DLL, stayed
+      responsive and installed the scoped hooks without exceptions. After
+      `CONSUME-HUD killed=1`,
       scan the four stock physical records for the exact consumed weak+generation,
       call `FHUD_DestroyInteractScript 0x141357CA0`, and suppress only a five-
       second re-publish of that same key at `0x1408AF179`. For an exact pending
