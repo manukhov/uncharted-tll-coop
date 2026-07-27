@@ -10829,3 +10829,15 @@ appear and Chloe's duplicate/stale prompt disappears, the retained script path i
 confirmed. If SUPPRESS appears but the defect remains alongside primary ALLOW,
 the survivor is a cross-key local-control plus primary-fallback duplicate, and
 the next boundary must classify the fallback id rather than widen this gate.
+
+### 2026-07-27 RUNTIME CONFIRMED: `ib` cold-boot packaging
+
+Fresh role-A/Chloe PID 8004 and role-B/Nadine PID 22232 loaded build `ib` and
+reported both `WeaponInteractControl vtable-scoped exact-callsite relay
+installed` and `hud-draw-interactable fallback primary-screen gate installed`.
+Both selected the expected UDP roles, remained alive and responsive beyond the
+30-second cold-boot window, and emitted no crash-observer exception, `SKIPPED`,
+or `incomplete` marker. This confirms only the new packaging and rules out the
+old immediate/global-hook failure class. The interaction-entry RAX repair,
+consume/drop relay, and Chloe prompt ownership still require the written live
+approach/leave and M30/Mazur replacement actions.

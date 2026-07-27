@@ -55,6 +55,9 @@
       longer crash and must reach detach/source/send; Chloe/Nadine approach and
       leave tests must show whether suppressing the non-primary fallback record
       removes the duplicate/stale prompt or exposes a primary cross-key duplicate.
+      **Boot phase CONFIRMED:** fresh Chloe PID 8004 and Nadine PID 22232 remain
+      responsive with both `ib` installers active and no exception/skip marker;
+      the real interaction phase is still pending.
 
 ## P0: Full Player Synchronization (CURRENT)
 
