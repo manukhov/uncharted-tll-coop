@@ -9,6 +9,20 @@
 - синхронизация всего состояния и всех действий игроков;
 - синхронизация противников только после игроков.
 
+## P0: Ground weapon world lifecycle and pickup prompt (`hy`, 2026-07-27)
+
+- [ ] Runtime-check native ground-pickup consume in both directions: one local
+      pickup must yield one `WORLD-PICKUP-CONSUME applied=1` and remove the same
+      ground model on the peer copy.
+- [ ] Runtime-check replacement drop in both directions: swapping M30/sniper must
+      yield one delayed `WORLD-PICKUP-DROP applied=1` and exactly one replacement
+      model at the relayed transform; ammo-only pickup must not emit a drop.
+- [ ] Runtime-check Nadine pickup HUD ownership: one prompt near the weapon, stock
+      expiry after leaving, and unchanged pickup/animation after returning.
+- [ ] Promote the `hy` entries in `COOP_STATUS.md` from STATIC to CONFIRMED or
+      record the exact failed marker/prediction as REJECTED before changing the
+      native boundaries.
+
 ## P0: Full Player Synchronization (CURRENT)
 
 - [~] **Grenade direction / duplicate held visual (`hn`, 2026-07-26):** `hm`

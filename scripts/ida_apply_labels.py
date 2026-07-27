@@ -1401,6 +1401,28 @@ FUNCTIONS = {
         "PickupInteractControl::RequestInteract assert in process-pickup.cpp. "
         "Publishes interact-with-me to the pickup at action start.",
     ),
+    0x1408AEA00: (
+        "WeaponPickupInteractControl_PublishHudPrompt",
+        "WeaponPickupInteractControl vtable +0xE0. Derives the Player screen, "
+        "queries availability, builds the weapon prompt and refreshes the shared "
+        "four-slot FHUD interact store through 0x141359470.",
+    ),
+    0x1408C8950: (
+        "PickupInteractControl_CompletePickup",
+        "Common successful-pickup completion. Weapon-specific caller "
+        "0x14157B44B passes WeaponPickup+0xD8 to SendNetEventPickupPickedUp, then "
+        "sets the consumed/hidden state and invokes the native remove path.",
+    ),
+    0x140BCB650: (
+        "SendNetEventPickupPickedUp",
+        "Builds the one-shot picked-up event. The weapon pickup completion passes "
+        "the canonical WeaponPickup+0xD8 object/name id as event+0x20.",
+    ),
+    0x140BCAD40: (
+        "NetEventPickupPickedUp_Apply",
+        "Resolves event+0x20 and publishes the native net-pick-up-other-client "
+        "lifecycle for the consumed world object.",
+    ),
     0x140C87D70: (
         "Player_PublishRequestedInteract",
         "Called immediately after PickupInteractControl::RequestInteract by the "
@@ -1416,7 +1438,7 @@ FUNCTIONS = {
     0x140BCDFC0: (
         "NetEventSyncWeaponPickups_Ctor",
         "Writes vftable 0x1429FCF90, type id 0x0101006A at +8, count u32 at +24; "
-        "entries at +28 = {u32 gameobject runtime id, float ammo} pairs.",
+        "entries at +28 = {u32 WeaponPickup+0xD8 stable id, float timestamp} pairs.",
     ),
     0x140BCE0B0: (
         "NetEventSyncWeaponPickups_Serialize",
@@ -1429,6 +1451,42 @@ FUNCTIONS = {
         "net-pick-up-other-client flow (removes ground pickup, processes remote "
         "client pickup). RECEIVER entry for the co-op pickup relay: stack-construct "
         "the event and call this directly.",
+    ),
+    0x140BCE850: (
+        "NetEventSyncWeaponPickups_WalkFill",
+        "WeaponPickup RTTI-filtered late-join fill. Appends object+0xD8 and the "
+        "engine-clock timestamp, independently confirming the canonical world id.",
+    ),
+    0x140BCC4B0: (
+        "NetEventAddDroppedPickup_CtorFromGameObject",
+        "Fills the portable dropped-pickup record from an NdGameObject: stable id, "
+        "network art index, transform, ammo/state and attachment metadata.",
+    ),
+    0x140BCC9D0: (
+        "NetEventAddDroppedPickup_CtorFromProcessWeapon",
+        "Fills NetEventAddDroppedPickup from a detached ProcessWeapon. The event "
+        "payload at +0x18..+0x77 is pure scalar/POD and safe to relay.",
+    ),
+    0x140BCD0F0: (
+        "NetEventAddDroppedPickup_Apply",
+        "Converts the network art index, creates the dropped ProcessWeapon at the "
+        "relayed transform and registers it in the native pickup manager.",
+    ),
+    0x140BCD750: (
+        "SendNetEventAddDroppedPickup_Object",
+        "Stock drop sender reached from GiveWeapon at 0x1410A695E only when the "
+        "native net-mode byte is set. Generates a NetDroppedPickup id, registers "
+        "the object, constructs the event and sends it.",
+    ),
+    0x140BCD970: (
+        "SendNetEventAddDroppedPickup_ProcessWeapon",
+        "ProcessWeapon overload: constructs the same 0x80-byte dropped-pickup "
+        "event via 0x140BCC9D0 and queues it to the stock net manager.",
+    ),
+    0x140A97600: (
+        "NetGameManager_GenerateDroppedPickupId",
+        "Generates the canonical NetDroppedPickup-%i-%i hash when seed id is zero; "
+        "used to avoid a receiver-local world-object id collision before Apply.",
     ),
     0x140A989C0: (
         "ResolveGameObjectHandleById",
@@ -9076,6 +9134,22 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142AA6E90: (
+        "WeaponPickupInteractControl_Vtable",
+        "MSVC RTTI .?AVWeaponPickupInteractControl@@ vtable. Slot +0x10 is "
+        "OnInteract, +0x28 RequestInteract and +0xE0 the continuous HUD prompt "
+        "publisher.",
+    ),
+    0x1429FCF90: (
+        "NetEventSyncWeaponPickups_Vtable",
+        "Native late-join pickup-consumption event vtable; Apply is "
+        "NetEventSyncWeaponPickups_Apply 0x140BCE440.",
+    ),
+    0x1429FCFD8: (
+        "NetEventAddDroppedPickup_Vtable",
+        "Native replacement-weapon world-spawn event vtable; Apply is "
+        "NetEventAddDroppedPickup_Apply 0x140BCD0F0.",
+    ),
     0x142A1DBB8: (
         "PlayerEvadeController_Vtable",
         "MSVC RTTI .?AUPlayerEvadeController@@ vtable. Ordinary run-roll uses "

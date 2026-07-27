@@ -190,8 +190,13 @@ struct PickupPacket {
 // to the puppet ONCE via controller vt+0x158 (seq-deduped, no retry loop - the
 // retry loops were the "weapon fountain" root in all three prior attempts).
 constexpr std::uint32_t kWeaponGiveMagic = 0x47504F43;  // "COPG"
-constexpr std::uint16_t kWeaponGiveVersion = 2;
+constexpr std::uint16_t kWeaponGiveVersion = 3;
 constexpr std::size_t kWeaponInfoBytes = 0xC0;
+constexpr std::uint16_t kWeaponGiveWorldConsume = 0x0001;
+constexpr std::uint16_t kWeaponGiveWorldDrop = 0x0002;
+// NetEventAddDroppedPickup is 0x80 bytes. Its header/vtable at +0x00..+0x17 is
+// process-local; Apply consumes the portable scalar payload at +0x18..+0x77.
+constexpr std::size_t kDroppedPickupEventPayloadBytes = 0x60;
 
 struct WeaponGivePacket {
     std::uint32_t magic = kWeaponGiveMagic;
@@ -201,6 +206,15 @@ struct WeaponGivePacket {
     std::uint32_t sequence = 0;
     std::uint32_t weapon_art_id = 0;  // info+0x80, for logging/sanity
     std::uint8_t weapon_info[kWeaponInfoBytes]{};
+    // v3: mirror the two native world-pickup event families independently from
+    // inventory. `consumed_pickup_stable_id` is WeaponPickup+0xD8 (the ID used
+    // by NetEventSyncWeaponPickups), not the handle-generation field at +0xBC.
+    std::uint16_t world_flags = 0;
+    std::uint16_t world_reserved = 0;
+    std::uint32_t consumed_pickup_stable_id = 0;
+    std::uint32_t dropped_weapon_art_id = 0;
+    std::uint8_t
+        dropped_pickup_event_payload[kDroppedPickupEventPayloadBytes]{};
 };
 
 // One-shot fire relay: local PlayerFireController::Fire captured on the sender

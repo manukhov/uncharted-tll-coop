@@ -10459,3 +10459,84 @@ the two copies make different gate decisions. Capturing the accepted local
 slot-16 boundary, forcing only the exact ordinary slot-10 consumer, and consuming
 the packet sequence at the remote slot-16 boundary synchronizes ordinary rolls
 without aliasing `evade-roll` or generic face-button input.
+
+### 2026-07-27 STATIC / IMPLEMENTED: ground-weapon lifecycle and pickup HUD ownership (`hy`)
+
+The user reports two independent world/HUD failures: after one copy picks up an
+M30, the other keeps the old M30 world model and does not see the weapon dropped
+in exchange; local Nadine also sees a duplicated pickup prompt which survives
+after she leaves the weapon. Existing `WeaponGivePacket` mirrors inventory only,
+while `PickupPacket` mirrors the authored bend animation. Neither owns the
+ground-object lifecycle.
+
+The static world-object path meets the evidence quota:
+
+1. RTTI/vtable identity fixes `WeaponPickupInteractControl` at vtable
+   `0x142AA6E90`. Its successful `OnInteract 0x14157AA70` path calls the common
+   completion `PickupInteractControl_CompletePickup 0x1408C8950` at exact
+   weapon-specific callsite `0x14157B44B`.
+2. That completion passes `WeaponPickup+0xD8` to
+   `SendNetEventPickupPickedUp 0x140BCB650`. Independently,
+   `NetEventSyncWeaponPickups_WalkFill 0x140BCE850` writes the same `+0xD8` ID
+   into each late-join record, and `NetEventSyncWeaponPickups_Apply
+   0x140BCE440` resolves it and publishes `net-pick-up-other-client`. The old
+   relay instead sent `WeaponPickup+0xBC`, which is only the local handle field
+   and therefore cannot own cross-copy world consumption.
+3. `PlayerWeaponController_GiveWeapon 0x1410A4D40` resolves the replaced
+   `ProcessWeapon` through vtable `+0xB0`, detaches it with its calculated world
+   transform at `0x1410A68AC`, publishes exact `weapon-dropped` at
+   `0x1410A693C`, then calls `SendNetEventAddDroppedPickup 0x140BCD750` at
+   `0x1410A695E` only when the native net-mode byte is set. Campaign therefore
+   performs the local drop but deliberately omits the remote event.
+4. `NetEventAddDroppedPickup_CtorFromProcessWeapon 0x140BCC9D0` copies the old
+   weapon ID/art/transform/ammo metadata into the portable event payload
+   `+0x18..+0x77`; the serializer confirms every carried field is scalar/POD.
+   `NetEventAddDroppedPickup_Apply 0x140BCD0F0` converts the network art index,
+   creates the dropped ProcessWeapon at that transform and registers it with the
+   native pickup manager.
+
+The HUD path is separate and also meets the quota. WeaponPickupInteractControl
+slot `+0xE0 = 0x1408AEA00` derives the Player screen and continuously upserts an
+interaction record through `0x141359470` into the shared four-slot FHUD store.
+`FHUD::HudFlash::UpdateSingleInteractScript 0x141358030` draws refreshed records
+and `DestroyInteractScript 0x141357CA0` removes records which stop refreshing.
+The screen-1 retained Player therefore keeps the same pickup prompt alive even
+after local screen 0 leaves it. A broken destroy timer is rejected: the stock
+expiry path exists and the second publisher prevents expiry. Duplicate insertion
+from one Player is rejected because `0x141354EA0` upserts by object handle.
+
+Competing world hypotheses are rejected explicitly. Inventory slot mirroring
+cannot mutate world pickups because the binary has separate picked-up and
+add-dropped NetEvent families. `ProcessKillTree` alone cannot create the
+replacement weapon or preserve its transform/state. Hooking only
+`SendNetEventAddDroppedPickup` cannot work because campaign never reaches that
+entry. Replaying the generic completion without the weapon-specific boundary
+would also consume treasure/carry-object pickups.
+
+Build `hy` upgrades `WeaponGivePacket` to v3. Sender capture records canonical
+`WeaponPickup+0xD8` only from the local weapon interaction and, after the exact
+script GiveWeapon succeeds, serializes the detached old ProcessWeapon through
+the native dropped-event constructor. Receiver consumption calls the native
+SyncWeaponPickups Apply with sequence dedupe and falls back to the same-art
+pickup in the retained puppet's proximity set if independent copies assigned a
+different dynamic ID. Replacement spawn is delayed until SLOT-MIRROR has given
+the picked art and removed the old puppet weapon, then calls the native
+AddDroppedPickup Apply once; a remaining local ID collision is remapped with the
+stock `NetDroppedPickup-%i-%i` generator. The HUD change is a vtable-slot gate
+only on WeaponPickupInteractControl `+0xE0`: screen 0 calls stock, screen 1 is
+suppressed. Doors, ladders, availability, RequestInteract, inventory and pickup
+animation are untouched. Release builds successfully.
+
+**Falsifiable `hy` prediction:** when Chloe replaces a sniper with the ground
+M30, sender emits one v3 GIVE row containing nonzero `stable_id`, one detached
+`dropped_art`, and both world flags. Receiver logs exactly one
+`WORLD-PICKUP-CONSUME applied=1` (M30 disappears) and, only after inventory is
+ready, one `WORLD-PICKUP-DROP applied=1` (one sniper appears at the sender's drop
+point). No second model may spawn and ammo-only pickup must carry no drop flag.
+The reverse Nadine-to-Chloe case must produce the same chain. Near a weapon,
+local Nadine sees exactly one prompt; after leaving it the prompt expires through
+the stock destroy path, while returning and pressing E still performs the pickup
+and the already-confirmed animation. A nonzero screen-1 SUPPRESS marker with a
+remaining duplicate selects a second same-screen publisher; a consume marker
+without visual removal rejects direct ID equality and selects the proximity-ID
+fallback; a drop Apply with no model selects the reconstructed native event.

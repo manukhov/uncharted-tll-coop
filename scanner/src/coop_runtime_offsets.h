@@ -456,6 +456,11 @@ constexpr std::uintptr_t kPlayerTryStartBumpActionRva = 0x0CE8E10;
 // OnInteract is retained only as a safety gate for replay completion.
 constexpr std::uintptr_t kPickupRequestInteractRva = 0x08C8A40;
 constexpr std::uintptr_t kWeaponPickupOnInteractRva = 0x157AA70;
+// WeaponPickupInteractControl vtable +0xE0. This publisher continuously refreshes
+// the four-slot shared FHUD interact store; screen-1 publication leaks the remote
+// Player's pickup prompt into the physical viewport.
+constexpr std::uintptr_t kWeaponPickupInteractHudVtableSlotRva = 0x2AA6F70;
+constexpr std::uintptr_t kWeaponPickupInteractHudPublisherRva = 0x08AEA00;
 constexpr std::uintptr_t kPlayerRequestedInteractRva = 0x0C87D70;
 // PlayerPickupController vtable +0x38 -> Start/Queue 0x140F49CA0. This is the
 // proven producer of dra-pickup-* gestures from the interact-with-me script event.
@@ -501,6 +506,14 @@ constexpr std::uintptr_t kGiveWeaponTailRva = 0x10A4D49;
 // give-weapon event path (hash 0xFB1091A3 branch). Runtime-confirmed 2026-07-06:
 // a real ground pickup logs exactly this ret_rva.
 constexpr std::uintptr_t kPickupGiveRetRva = 0xDD4208;
+// Native world-pickup lifecycle. Campaign GiveWeapon executes the local drop but
+// skips SendNetEventAddDroppedPickup behind HIBYTE(g_NetModeFlags); the custom
+// relay serializes the proven event payload and invokes the native Apply entries.
+constexpr std::uintptr_t kNetEventAddDroppedPickupCtorFromProcessWeaponRva =
+    0x0BCC9D0;
+constexpr std::uintptr_t kNetEventAddDroppedPickupApplyRva = 0x0BCD0F0;
+constexpr std::uintptr_t kNetEventSyncWeaponPickupsApplyRva = 0x0BCE440;
+constexpr std::uintptr_t kGenerateNetDroppedPickupIdRva = 0x0A97600;
 // ProcessKillTree 0x1416A5C20: destroys a weapon process object. Used with
 // GetWeaponBySlot (controller vtable +0xB0) to free a manager slot before a
 // relayed pickup give — otherwise the new long gun spills into the next slot and
