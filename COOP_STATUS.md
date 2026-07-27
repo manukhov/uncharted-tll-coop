@@ -11686,3 +11686,10 @@ either displacement. The complete static hypothesis and runtime prediction are
 unchanged; a successful cold boot must now log
 `Player reload exact semantic relay installed (0x140C9E611 reload,
 0x140C9E632 release)` on both copies before any visual test.
+
+**Cold-start validation.** Fresh PID 21476 (role A/Chloe) and PID 19564 (role
+B/Nadine) loaded `ik`, resolved their expected network roles, and both emitted
+the exact successful install marker for `0x140C9E611/0x140C9E632`. Both remained
+responsive through the observation window with no reload skip, hook failure, or
+terminal exception. This confirms corrected packaging only; the sender command,
+receiver force, and visible native action remain pending an actual reload.
