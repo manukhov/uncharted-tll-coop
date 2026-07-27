@@ -24392,6 +24392,102 @@ void log_puppet_action_state(
     force_log_line(line.str().c_str());
 }
 
+// Read-only late-owner discriminator. Player_PostAnimUpdate writes the current
+// screen-route seed to Player+0x1720/+0x1730, while
+// Player_KickPlayerDepenetrateWeapons resolves targRWrist/rightHand from the
+// completed skeleton and publishes its final 32-byte weapon transform through
+// *(Player+0x3600). Compare those outputs with the peer seed and the FgAnim world
+// transform; never write any of them.
+void log_puppet_late_pitch_owner(
+    void* puppet, const coop::StatePacket& peer) {
+    if (puppet == nullptr || !peer_packet_aim_active(peer) ||
+        !valid_network_orientation(peer.pose_seed + 4) ||
+        readable_bytes(puppet) < 0x3608 + sizeof(void*)) {
+        return;
+    }
+
+    static void* sampled_owner = nullptr;
+    static ULONGLONG next_sample_ms = 0;
+    static std::uint32_t sample_count = 0;
+    if (sampled_owner != puppet) {
+        sampled_owner = puppet;
+        next_sample_ms = 0;
+        sample_count = 0;
+    }
+    const ULONGLONG now = GetTickCount64();
+    if (sample_count >= 80 || now < next_sample_ms) {
+        return;
+    }
+
+    const auto* const player_bytes = static_cast<const std::byte*>(puppet);
+    const float* const pose_quat = reinterpret_cast<const float*>(
+        player_bytes + kPlayerAimPoseQuatOffset);
+    const float* const root_quat = reinterpret_cast<const float*>(
+        player_bytes + kPlayerQuatOffset);
+    void* const fg = *reinterpret_cast<void* const*>(
+        player_bytes + kPlayerFgAnimDataOffset);
+    void* const wrist_transform = *reinterpret_cast<void* const*>(
+        player_bytes + 0x3600);
+    if (!valid_network_orientation(pose_quat) ||
+        !valid_network_orientation(root_quat) || fg == nullptr ||
+        readable_bytes(static_cast<const std::byte*>(fg) +
+                       kFgAnimDataRenderWorldMatrixOffset) < 32 ||
+        wrist_transform == nullptr || readable_bytes(wrist_transform) < 32) {
+        return;
+    }
+    const float* const fg_world_quat = reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(fg) +
+        kFgAnimDataRenderWorldMatrixOffset + 16);
+    const float* const wrist_quat = reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(wrist_transform) + 16);
+    if (!valid_network_orientation(fg_world_quat) ||
+        !valid_network_orientation(wrist_quat)) {
+        return;
+    }
+
+    float peer_x = 0.0F, peer_y = 0.0F, peer_z = 0.0F;
+    float pose_x = 0.0F, pose_y = 0.0F, pose_z = 0.0F;
+    float root_x = 0.0F, root_y = 0.0F, root_z = 0.0F;
+    float fg_x = 0.0F, fg_y = 0.0F, fg_z = 0.0F;
+    float wrist_x = 0.0F, wrist_y = 0.0F, wrist_z = 0.0F;
+    quat_forward_pos_z(peer.pose_seed + 4, peer_x, peer_y, peer_z);
+    quat_forward_pos_z(pose_quat, pose_x, pose_y, pose_z);
+    quat_forward_pos_z(root_quat, root_x, root_y, root_z);
+    quat_forward_pos_z(fg_world_quat, fg_x, fg_y, fg_z);
+    quat_forward_pos_z(wrist_quat, wrist_x, wrist_y, wrist_z);
+
+    float up = 0.0F;
+    float down = 0.0F;
+    if (void* const controller = player_aim_controller_from_player(puppet);
+        controller != nullptr &&
+        readable_bytes(static_cast<const std::byte*>(controller) + 0x8C0) >= 8) {
+        up = *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(controller) + 0x8C0);
+        down = *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(controller) + 0x8C4);
+    }
+
+    // Spend the bounded sample budget only when at least one late output
+    // materially disagrees with the transmitted pitch.
+    if (std::fabs(peer_y - pose_y) < 0.06F &&
+        std::fabs(peer_y - wrist_y) < 0.06F) {
+        return;
+    }
+    next_sample_ms = now + 150;
+    ++sample_count;
+    std::ostringstream line;
+    line << std::fixed << std::setprecision(4)
+         << "AIM-LATE-OWNER sample=" << sample_count
+         << " peerY=" << peer_y << " poseY=" << pose_y
+         << " wristY=" << wrist_y << " fgY=" << fg_y
+         << " rootY=" << root_y << " ctrlUD=" << up << "/" << down
+         << " poseQ=(" << pose_quat[0] << "," << pose_quat[1] << ","
+         << pose_quat[2] << "," << pose_quat[3] << ")"
+         << " wristQ=(" << wrist_quat[0] << "," << wrist_quat[1] << ","
+         << wrist_quat[2] << "," << wrist_quat[3] << ")";
+    force_log_line(line.str().c_str());
+}
+
 // POST (after the puppet's own update runs): assert the networked transform last
 // so the engine's own integration can't fight it (was causing flicker).
 void apply_puppet_transform_post(void* /*update_object*/) {
@@ -24424,6 +24520,7 @@ void apply_puppet_transform_post(void* /*update_object*/) {
             return;
         }
     }
+    log_puppet_late_pitch_owner(puppet, pkt);
     apply_peer_health_to_slot1(pkt, false);
     auto* world = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kWorldPositionOffset);
     auto* localp = reinterpret_cast<float*>(static_cast<std::byte*>(puppet) + kPlayerLocalPosOffset);
@@ -41376,8 +41473,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27iu "
-        "(pre-blend peer pitch at native aim publisher boundaries)");
+        "TLL co-op runtime init 2026-07-27iv "
+        "(read-only late pitch-owner discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

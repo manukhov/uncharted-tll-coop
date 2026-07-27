@@ -1851,14 +1851,24 @@ Do not reopen these as the first move:
       Nadine's local free-camera pitch, including outside ADS. Confirm raw-pitch
       transport and live evaluator admission, but reject `0x140CB416F`, the LRDU
       publisher and evaluator copy as the final visible-pose owner.
-- [ ] Trace the late visual owner statically before another game launch. Resolve
+- [x] Trace the late visual owner statically before another game launch. Resolve
       both sides of `Player_PostAnimUpdate 0x1410E9210`, the scoped pose-seed
       returns at `0x140CB17D6/0x1410E934B`, writers/readers of
       `Player+0x1720/+0x1730`, and weapon/hand attachment updates
       `0x1410EDFB0/0x1410ECAF0`. Distinguish late pose-seed overwrite, direct
       camera/target consumption, FgAnim world ownership and a later LRDU writer;
       require three independent evidence types and a written prediction before
-      any mutation.
+      any mutation. Static result: PostAnim copies the screen route directly to
+      `+0x1720/+0x1730`; the wrist solver has no camera/LRDU read and publishes an
+      already-resolved skeleton transform through `*(Player+0x3600)`; FgAnim
+      world `+0x1C0` is independent of the joint-palette path.
+- [ ] Run read-only build `iv` with peer Chloe aiming strongly down while Nadine
+      moves her local non-ADS camera up, then reverse. Compare only bounded
+      `AIM-LATE-OWNER` rows: peer/controller versus `poseY`, `wristY`, `fgY` and
+      `rootY`. Matching local `poseY+wristY` selects the late screen-route or
+      post-palette branch; local pose only rejects `+0x1730` as visual; wrist/Fg
+      agreement selects the world publisher; local controller UD selects a later
+      LRDU writer. No writes or visible behavior changes are allowed.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

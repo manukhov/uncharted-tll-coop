@@ -12470,3 +12470,49 @@ quaternion relay is a separate camera-relative visual owner; or (4) a later
 native writer replaces the peer-correct LRDU after the bounded telemetry. The
 next static pass must trace writers and consumers of the late pose quaternion
 and weapon attachment transforms before another runtime mutation.
+
+### 2026-07-27 STATIC / READ-ONLY: `iv` compares the late pose, FgAnim and final wrist owners
+
+The late call graph and dataflow narrow the mismatch without reviving a rejected
+pose write. `Player_PostAnimUpdate 0x1410E9210` calls
+`ResolveScreenRoutePoseSeedOrDefault 0x141C077B0` with `Player+0x4010` at
+`0x1410E9346`, then copies its two float4 values directly to
+`Player+0x1720/+0x1730` at `0x1410E934F/0x1410E935C`. In the failed `iu` run the
+early reticle override reported `poseReady=0`, and no late
+`AIM-POSE-OVERRIDE site=0x10E934B` appeared. Therefore `+0x1730` is expected to
+remain a direct sample of the receiver's screen-1 route during the observed
+opposite-direction window. This is an output and is not being written by `iv`.
+
+The apparent direct-attachment alternative is statically rejected.
+`Player_Update 0x1410ECAF0` calls
+`Player_KickPlayerDepenetrateWeapons 0x1410EDFB0`; the callee resolves authored
+`targRWrist`, `targLWrist`, `rightHand` and `leftHand` records only through
+`AttachSystem_ResolveRecordTransform 0x1418B7060`. It has no camera, pose-seed,
+`+0x1730` or LRDU read. Its final `0x1410EEB93/0x1410EEB9E` stores publish the
+already-resolved wrist translation/quaternion through `*(Player+0x3600)`. Thus a
+wrong final wrist transform means the skeleton/pose was already wrong upstream;
+the attachment solver itself cannot introduce receiver-camera pitch.
+
+The third independent boundary is the previously proven animation output path:
+opcode 26 writes the completed joint palette to `FgAnimData+0x230`, and the
+AttachSystem joint resolver consumes the completed skeleton. Separately, the
+enabled phase-`0x40` world publisher owns `FgAnimData+0x1C0`, so its quaternion
+remains a distinct competitor rather than being conflated with the joint pose.
+Current runtime adds a fourth evidence type: peer-correct controller/live-
+evaluator LRDU coexisted with receiver-camera visual motion.
+
+Build `2026-07-27iv` adds only a bounded post-native reader. While peer ADS is
+active and a late output differs materially from the transmitted pitch, at most
+80 `AIM-LATE-OWNER` rows compare forward-Y from the peer pose seed,
+`Player+0x1730`, `FgAnimData+0x1C0`, Player root and the final wrist transform at
+`*(Player+0x3600)`, beside controller up/down. It does not call the resolver,
+change a quaternion, touch the palette or alter an attachment.
+
+The competing outcomes are falsifiable. If controller UD remains peer-correct
+but `poseY` and `wristY` move together with Nadine's opposite local camera, the
+late screen-route/post-palette branch owns the visible error. If only `poseY`
+moves locally while `wristY` follows peer pitch, `+0x1730` is a non-visual
+output and the loss lies elsewhere. If `wristY` follows `fgY`, the FgAnim world
+publisher owns it. If controller UD itself returns to local pitch after the
+existing markers, a later native LRDU writer remains viable. No rows, invalid
+quaternions, a crash or any visible regression makes the probe inconclusive.
