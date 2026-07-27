@@ -2605,12 +2605,14 @@ Do not reopen these as the first move:
       forbidden. Release build compiles; run the written `im` discriminator.
 - [x] REJECT `in` owner-thread HUD cleanup. Exact primary weak/map selection and
       `destroyed=1` with zero secondary matches still left Chloe's icon visible.
-- [~] Build/test `io`: resolve stock replacement slots from art definitions and
-      allow generic fallback whenever exact resolution cannot own the attempt;
-      gate `PickupInteractControl_PublishHudPrompt 0x1408AEA00` by its explicit
-      Player argument so retained Player 1 cannot create a record in the local
-      campaign HUD. Fresh-load M30/Mazur discriminator is written in
-      `COOP_STATUS.md`.
+- [x] CONFIRM `io` stock replacement targeting: all tested flags=3 swaps complete
+      `gave=1 detached=1 slotReleased=1` in 31--78 ms. REJECT its retained-Player
+      HUD gate: the visible stale prompt produced no suppression row.
+- [~] Build/test `ip`: map the previous sender dropped-event stable ID to the
+      receiver's exact local dropped weak+generation identity, then use that map
+      for the reverse Mazur consume. After local OnInteract, kill only the unique
+      distinct HUD ProcessWeapon twin with the same stable ID/art. Run the exact
+      M30 -> Mazur -> M30 discriminator written in `COOP_STATUS.md`.
 
 ## Rule
 

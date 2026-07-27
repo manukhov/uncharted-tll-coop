@@ -8487,87 +8487,6 @@ using FhudPublishInteractRecordFunction = void(__fastcall*)(void*, void*);
 FhudPublishInteractRecordFunction g_original_hud_draw_interactable_record =
     nullptr;
 
-using PickupInteractControlPublishHudPromptFunction = char(__fastcall*)(
-    void*, void*, void*, std::uint8_t, int, char, std::uint8_t, int);
-PickupInteractControlPublishHudPromptFunction
-    g_original_pickup_interact_publish_hud_prompt = nullptr;
-
-void seh_read_pickup_prompt_interactable_identity(
-    const void* interactable, std::uint32_t& stable_id, std::uint32_t& art) {
-    stable_id = 0;
-    art = 0;
-    __try {
-        if (interactable == nullptr || readable_bytes(interactable) < 0x864) {
-            return;
-        }
-        stable_id = *reinterpret_cast<const std::uint32_t*>(
-            static_cast<const std::byte*>(interactable) + 0xD8);
-        if (*reinterpret_cast<const std::uintptr_t*>(interactable) ==
-            g_module + kProcessWeaponVtableRva) {
-            art = *reinterpret_cast<const std::uint32_t*>(
-                static_cast<const std::byte*>(interactable) + 0x860);
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        stable_id = 0;
-        art = 0;
-    }
-}
-
-char __fastcall hooked_pickup_interact_publish_hud_prompt(
-    void* control, void* interactable, void* player, std::uint8_t arg4,
-    int arg5, char arg6, std::uint8_t arg7, int arg8) {
-    // The stock function accepts an explicit Player, but then maps that Player
-    // through the campaign player manager before selecting g_PerScreenPlayerHudState.
-    // The retained Player can consequently publish into the same physical
-    // screen-0 store as the local Player. Prevent that source record from ever
-    // being created; do not destroy/copy any Flash state after publication.
-    if (player != nullptr && player == retained_player_object(1)) {
-        static std::atomic<int> suppressed{0};
-        if (suppressed.fetch_add(1, std::memory_order_relaxed) < 32) {
-            std::uint32_t stable_id = 0;
-            std::uint32_t art = 0;
-            seh_read_pickup_prompt_interactable_identity(
-                interactable, stable_id, art);
-            std::ostringstream line;
-            line << "PICKUP-HUD-OWNER-SUPPRESS player=retained"
-                 << " object=0x" << std::hex
-                 << reinterpret_cast<std::uintptr_t>(interactable)
-                 << " stable=0x" << stable_id << " art=0x" << art
-                 << std::dec;
-            boot_log_line(line.str().c_str());
-        }
-        return 0;
-    }
-    return g_original_pickup_interact_publish_hud_prompt != nullptr
-        ? g_original_pickup_interact_publish_hud_prompt(
-              control, interactable, player, arg4, arg5, arg6, arg7, arg8)
-        : 0;
-}
-
-bool install_pickup_interact_prompt_owner_gate() {
-    // mov r11,rsp; push rbx/rsi/r13/r14/r15; sub rsp,0x610. All 18 bytes are
-    // position-independent and end on an instruction boundary.
-    constexpr std::array<std::uint8_t, 18> kPublishHudPromptPrologue{
-        0x4C, 0x8B, 0xDC,
-        0x53, 0x56,
-        0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
-        0x48, 0x81, 0xEC, 0x10, 0x06, 0x00, 0x00,
-    };
-    g_original_pickup_interact_publish_hud_prompt =
-        reinterpret_cast<PickupInteractControlPublishHudPromptFunction>(
-            install_fire_gate_detour(
-                kPickupInteractControlPublishHudPromptRva,
-                kPublishHudPromptPrologue.data(),
-                kPublishHudPromptPrologue.size(),
-                reinterpret_cast<void*>(
-                    &hooked_pickup_interact_publish_hud_prompt),
-                "pickup HUD retained-Player source gate"));
-    boot_log_line(g_original_pickup_interact_publish_hud_prompt != nullptr
-                      ? "pickup HUD retained-Player source gate installed"
-                      : "pickup HUD retained-Player source gate SKIPPED");
-    return g_original_pickup_interact_publish_hud_prompt != nullptr;
-}
-
 struct FhudFallbackRecordIdentity {
     std::uintptr_t weak_handle{0};
     std::uint32_t weak_generation{0};
@@ -8837,6 +8756,69 @@ bool install_ground_pickup_hud_candidate_capture() {
     return true;
 }
 
+bool seh_kill_weapon_interact_hud_twin(
+    void* interaction_source, std::uint32_t stable_id, std::uint32_t art,
+    void*& killed_object, std::uint32_t& exact_matches) {
+    killed_object = nullptr;
+    exact_matches = 0;
+    if (interaction_source == nullptr || stable_id == 0 || art == 0 ||
+        g_module == 0) {
+        return false;
+    }
+    std::array<GroundPickupHudCandidate, kGroundPickupHudCandidateCount>
+        candidates{};
+    AcquireSRWLockShared(&g_ground_pickup_hud_candidates_lock);
+    candidates = g_ground_pickup_hud_candidates;
+    ReleaseSRWLockShared(&g_ground_pickup_hud_candidates_lock);
+
+    __try {
+        void* selected = nullptr;
+        for (const auto& captured : candidates) {
+            if (captured.weak_handle == 0 || captured.generation == 0 ||
+                captured.stable_id != stable_id ||
+                !relay_weapon_art_matches(captured.art, art) ||
+                readable_bytes(reinterpret_cast<const void*>(
+                    captured.weak_handle)) < 16) {
+                continue;
+            }
+            void* const object = *reinterpret_cast<void**>(
+                captured.weak_handle + 8);
+            if (object == nullptr || object == interaction_source ||
+                readable_bytes(object) < 0x864) {
+                continue;
+            }
+            const auto* const bytes = static_cast<const std::byte*>(object);
+            if (*reinterpret_cast<const std::uintptr_t*>(bytes) !=
+                    g_module + kProcessWeaponVtableRva ||
+                *reinterpret_cast<const std::uint32_t*>(
+                    bytes + kGameObjectRuntimeIdOffset) !=
+                    captured.generation ||
+                *reinterpret_cast<const std::uint32_t*>(bytes + 0xD8) !=
+                    stable_id ||
+                !relay_weapon_art_matches(
+                    *reinterpret_cast<const std::uint32_t*>(bytes + 0x860),
+                    art)) {
+                continue;
+            }
+            if (selected != object) {
+                selected = object;
+                ++exact_matches;
+            }
+        }
+        if (exact_matches != 1 || selected == nullptr) {
+            return false;
+        }
+        using KillFn = void(__fastcall*)(void*);
+        reinterpret_cast<KillFn>(g_module + kProcessKillTreeRva)(selected);
+        killed_object = selected;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        killed_object = nullptr;
+        exact_matches = 0;
+        return false;
+    }
+}
+
 struct WeaponInteractWorldContext {
     bool active{false};
     bool source_killed{false};
@@ -9035,6 +9017,22 @@ void __fastcall hooked_weapon_interact_on_interact(
         boot_log_line(
             "WORLD-WEAPON-REJECT interaction returned without source kill");
         return;
+    }
+    void* hud_twin = nullptr;
+    std::uint32_t hud_twin_matches = 0;
+    const bool hud_twin_killed = seh_kill_weapon_interact_hud_twin(
+        completed.source, completed.source_stable_id, completed.picked_art,
+        hud_twin, hud_twin_matches);
+    {
+        std::ostringstream cleanup;
+        cleanup << "WORLD-WEAPON-SOURCE-HUD-TWIN stable=0x" << std::hex
+                << completed.source_stable_id << " art=0x"
+                << completed.picked_art << " source=0x"
+                << reinterpret_cast<std::uintptr_t>(completed.source)
+                << " twin=0x" << reinterpret_cast<std::uintptr_t>(hud_twin)
+                << std::dec << " exactMatches=" << hud_twin_matches
+                << " killed=" << (hud_twin_killed ? 1 : 0);
+        boot_log_line(cleanup.str().c_str());
     }
     coop::WeaponWorldPacket packet{};
     packet.sequence = g_weapon_world_send_seq.fetch_add(1) + 1;
@@ -25462,10 +25460,89 @@ struct PendingWorldWeaponLifecycle {
     std::uint32_t picked_art{0};
     std::uint32_t consumed_remote_id{0};
     std::uint32_t dropped_art{0};
+    std::uint32_t dropped_remote_id{0};
     ULONGLONG armed_ms{0};
     std::uint8_t stock_wait_reason{0};
 };
 PendingWorldWeaponLifecycle g_pending_world_weapon_lifecycle{};
+
+struct MirroredDroppedWeaponIdentity {
+    std::uint32_t remote_stable_id{0};
+    std::uintptr_t local_weak_handle{0};
+    std::uint32_t local_generation{0};
+    std::uint32_t art{0};
+    std::uint32_t sequence{0};
+    ULONGLONG recorded_ms{0};
+};
+
+constexpr std::size_t kMirroredDroppedWeaponIdentityCount = 8;
+constexpr ULONGLONG kMirroredDroppedWeaponIdentityMaxAgeMs = 60000;
+std::array<MirroredDroppedWeaponIdentity,
+           kMirroredDroppedWeaponIdentityCount>
+    g_mirrored_dropped_weapon_identities{};
+
+std::uint32_t dropped_remote_stable_id_from_payload(
+    const std::uint8_t payload[coop::kDroppedPickupEventPayloadBytes]) {
+    std::uint32_t stable_id = 0;
+    if (payload != nullptr) {
+        // The portable payload begins at native event+0x18. The constructor's
+        // dropped ProcessWeapon stable id is event+0x1C, therefore payload+4.
+        std::memcpy(&stable_id, payload + 4, sizeof(stable_id));
+    }
+    return stable_id;
+}
+
+bool seh_capture_process_weapon_weak_identity(
+    void* weapon, std::uintptr_t& weak_handle, std::uint32_t& generation) {
+    weak_handle = 0;
+    generation = 0;
+    if (weapon == nullptr || readable_bytes(weapon) < 0xC0) return false;
+    __try {
+        const auto* const bytes = static_cast<const std::byte*>(weapon);
+        weak_handle = *reinterpret_cast<const std::uintptr_t*>(bytes + 0xA8);
+        generation = *reinterpret_cast<const std::uint32_t*>(
+            bytes + kGameObjectRuntimeIdOffset);
+        if (weak_handle == 0 || generation == 0 ||
+            readable_bytes(reinterpret_cast<const void*>(weak_handle)) < 16 ||
+            *reinterpret_cast<void**>(weak_handle + 8) != weapon) {
+            weak_handle = 0;
+            generation = 0;
+            return false;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        weak_handle = 0;
+        generation = 0;
+        return false;
+    }
+}
+
+void remember_mirrored_dropped_weapon(
+    std::uint32_t remote_stable_id, std::uintptr_t local_weak_handle,
+    std::uint32_t local_generation, std::uint32_t art,
+    std::uint32_t sequence) {
+    if (remote_stable_id == 0 || local_weak_handle == 0 ||
+        local_generation == 0 || art == 0 || sequence == 0) {
+        return;
+    }
+    std::size_t target = 0;
+    for (std::size_t i = 0;
+         i < g_mirrored_dropped_weapon_identities.size(); ++i) {
+        const auto& entry = g_mirrored_dropped_weapon_identities[i];
+        if (entry.remote_stable_id == remote_stable_id ||
+            entry.recorded_ms == 0) {
+            target = i;
+            break;
+        }
+        if (entry.recorded_ms <
+            g_mirrored_dropped_weapon_identities[target].recorded_ms) {
+            target = i;
+        }
+    }
+    g_mirrored_dropped_weapon_identities[target] = {
+        remote_stable_id, local_weak_handle, local_generation, art,
+        sequence, GetTickCount64()};
+}
 
 bool exact_world_weapon_replacement_pending(
     std::uint32_t current_art, std::uint32_t peer_art) {
@@ -25573,6 +25650,10 @@ bool try_stock_world_weapon_replacement(
     // weapon-dropped, and installs the new weapon. The ordinary SLOT-MIRROR path
     // pre-kills the old object; that remains correct outside an exact flags=3
     // world transaction but would make the relayed replacement impossible.
+    std::uintptr_t dropped_weak_handle = 0;
+    std::uint32_t dropped_weak_generation = 0;
+    const bool have_dropped_weak = seh_capture_process_weapon_weak_identity(
+        current_weapon, dropped_weak_handle, dropped_weak_generation);
     gave = safe_give_weapon_art_to_puppet(
         puppet, peer_art, /*held_sync=*/true);
 
@@ -25599,6 +25680,21 @@ bool try_stock_world_weapon_replacement(
     boot_log_line(line.str().c_str());
 
     if (gave && detached && no_longer_in_slot) {
+        if (have_dropped_weak && pending.dropped_remote_id != 0) {
+            remember_mirrored_dropped_weapon(
+                pending.dropped_remote_id, dropped_weak_handle,
+                dropped_weak_generation, current_art, pending.sequence);
+        }
+        std::ostringstream mapping;
+        mapping << "WORLD-PICKUP-DROP-MAP seq=" << pending.sequence
+                << " remoteDropId=0x" << std::hex
+                << pending.dropped_remote_id << " localWeak=0x"
+                << dropped_weak_handle << ":" << dropped_weak_generation
+                << " art=0x" << current_art << std::dec
+                << " stored="
+                << ((have_dropped_weak && pending.dropped_remote_id != 0)
+                        ? 1 : 0);
+        boot_log_line(mapping.str().c_str());
         pending.drop_pending = false;
     }
     // The exact transaction owns this attempt even when its stock detach gate
@@ -25628,6 +25724,8 @@ void apply_pending_weapon_world_packet() {
     pending.picked_art = packet.picked_weapon_art_id;
     pending.consumed_remote_id = packet.consumed_pickup_stable_id;
     pending.dropped_art = packet.dropped_weapon_art_id;
+    pending.dropped_remote_id = dropped_remote_stable_id_from_payload(
+        packet.dropped_pickup_event_payload);
     pending.armed_ms = GetTickCount64();
     pending.consume_pending =
         (packet.flags & coop::kWeaponGiveWorldConsume) != 0;
@@ -25646,6 +25744,61 @@ struct NearbyGroundProcessWeapon {
     std::uint32_t art{0};
     bool exact_id{false};
 };
+
+NearbyGroundProcessWeapon seh_find_mirrored_dropped_process_weapon(
+    std::uint32_t remote_id, std::uint32_t expected_art) {
+    if (remote_id == 0 || expected_art == 0 || g_module == 0) return {};
+    const ULONGLONG now = GetTickCount64();
+    for (auto& entry : g_mirrored_dropped_weapon_identities) {
+        if (entry.remote_stable_id != remote_id ||
+            !relay_weapon_art_matches(entry.art, expected_art) ||
+            entry.recorded_ms == 0 || now < entry.recorded_ms ||
+            now - entry.recorded_ms >
+                kMirroredDroppedWeaponIdentityMaxAgeMs) {
+            continue;
+        }
+        __try {
+            if (entry.local_weak_handle == 0 ||
+                readable_bytes(reinterpret_cast<const void*>(
+                    entry.local_weak_handle)) < 16) {
+                continue;
+            }
+            void* const object = *reinterpret_cast<void**>(
+                entry.local_weak_handle + 8);
+            if (object == nullptr || readable_bytes(object) < 0x864) continue;
+            const auto* const bytes = static_cast<const std::byte*>(object);
+            const std::uint32_t generation =
+                *reinterpret_cast<const std::uint32_t*>(
+                    bytes + kGameObjectRuntimeIdOffset);
+            const std::uint32_t stable_id =
+                *reinterpret_cast<const std::uint32_t*>(bytes + 0xD8);
+            const std::uint32_t art =
+                *reinterpret_cast<const std::uint32_t*>(bytes + 0x860);
+            const std::uint8_t detach_flags =
+                *reinterpret_cast<const std::uint8_t*>(bytes + 0x690);
+            if (*reinterpret_cast<const std::uintptr_t*>(bytes) !=
+                    g_module + kProcessWeaponVtableRva ||
+                generation != entry.local_generation || stable_id == 0 ||
+                !relay_weapon_art_matches(art, expected_art) ||
+                (detach_flags & 0x08) == 0) {
+                continue;
+            }
+            return NearbyGroundProcessWeapon{
+                object, entry.local_weak_handle, generation, stable_id, art,
+                false};
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            return {};
+        }
+    }
+    return {};
+}
+
+void forget_mirrored_dropped_process_weapon(std::uint32_t remote_id) {
+    if (remote_id == 0) return;
+    for (auto& entry : g_mirrored_dropped_weapon_identities) {
+        if (entry.remote_stable_id == remote_id) entry = {};
+    }
+}
 
 struct GroundPickupHudSearchStats {
     std::uint32_t captured{0};
@@ -26224,9 +26377,14 @@ void apply_pending_world_weapon_lifecycle() {
         GroundPickupHudSearchStats hud_stats{};
         GroundPickupFgPoolSearchStats fg_stats{};
         NearbyGroundProcessWeapon local =
-            seh_find_ground_process_weapon_from_hud_candidates(
+            seh_find_mirrored_dropped_process_weapon(
+                pending.consumed_remote_id, pending.picked_art);
+        const bool from_drop_map = local.object != nullptr;
+        const char* source = from_drop_map ? "drop-map" : "hud";
+        if (local.object == nullptr) {
+            local = seh_find_ground_process_weapon_from_hud_candidates(
                 pending.consumed_remote_id, pending.picked_art, hud_stats);
-        const char* source = "hud";
+        }
         static std::uint32_t fg_scan_sequence = 0;
         static ULONGLONG next_fg_scan_ms = 0;
         bool fg_scan_attempted = false;
@@ -26252,11 +26410,18 @@ void apply_pending_world_weapon_lifecycle() {
                  << local.stable_id
                  << " art=0x" << pending.picked_art << std::dec
                  << " latencyMs=" << (now - pending.armed_ms)
-                 << " match=" << (local.exact_id ? "stable-id" : "unique-art")
+                 << " match="
+                 << (from_drop_map
+                         ? "paired-drop-id"
+                         : (local.exact_id ? "stable-id" : "unique-art"))
                  << " killed=" << (killed ? 1 : 0)
                  << " hudMutation=disabled";
             boot_log_line(line.str().c_str());
-            if (killed) pending.consume_pending = false;
+            if (killed) {
+                forget_mirrored_dropped_process_weapon(
+                    pending.consumed_remote_id);
+                pending.consume_pending = false;
+            }
         } else if (fg_scan_attempted && now - pending.armed_ms > 5000) {
             std::ostringstream line;
             line << "WORLD-PICKUP-CONSUME expired seq="
@@ -41112,8 +41277,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27io "
-        "(art-definition world replacement; retained-Player HUD source gate)");
+        "TLL co-op runtime init 2026-07-27ip "
+        "(paired dropped-weapon identity; exact HUD weak twin cleanup)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -41247,7 +41412,6 @@ DWORD WINAPI install_hook(void*) {
     install_pose_seed_gate();
     install_get_blended_camera_gate();
     install_reticle_hud_gate();
-    install_pickup_interact_prompt_owner_gate();
     install_hud_draw_interactable_primary_screen_gate();
     install_ground_pickup_hud_candidate_capture();
     // Player collision/bump probes are intentionally parked. Enabling layer 4<->5

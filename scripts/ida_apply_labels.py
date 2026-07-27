@@ -1423,9 +1423,10 @@ FUNCTIONS = {
         "+0x18/+0x20 weak key is copied from a2+0xA8/a2+0xBC. The Player handle "
         "selects a HUD index through player-manager vtable +0xD0 (not "
         "Player+0x4010), then call 0x1408AF179 refreshes the four-slot FHUD "
-        "interact store through 0x141359470. In the retained-Player campaign "
-        "mod this mapping can route Player 1 back into the visible HUD; gate by "
-        "the explicit a3 owner before record construction.",
+        "interact store through 0x141359470. Runtime io rejected the retained-"
+        "Player a3 source gate: the stale Chloe prompt produced no retained "
+        "owner call. The weak-resolved HUD ProcessWeapon can instead remain "
+        "distinct from the same-id OnInteract source killed at 0x141506839.",
     ),
     0x140328C20: (
         "HudScript_DrawInteractableOnObject",
@@ -1509,7 +1510,10 @@ FUNCTIONS = {
         "+0x860, publishes give-weapon, then commits source destruction through "
         "ProcessKillTree at call 0x141506839 (return 0x14150683E). The sole "
         "runtime dispatch reference is WeaponInteractControl vtable +0x10 at "
-        "0x1429BF4B8; use that slot instead of relocating this EH-bearing entry.",
+        "0x1429BF4B8; use that slot instead of relocating this EH-bearing entry. "
+        "Runtime io showed its source pointer differs from the FHUD weak target "
+        "while stable id and art match, so killing only this source can leave "
+        "the prompt publisher alive.",
     ),
     0x141ED3630: (
         "ProcessWeapon_DetachToWorldTransform",
@@ -1585,7 +1589,9 @@ FUNCTIONS = {
         "a campaign-safe raw serializer: it calls WeaponArtId_ToNetworkIndex and "
         "ResolveGameObjectHandleById, and copies ProcessWeapon+0xD8 only after the "
         "stock sender has normally assigned a NetDroppedPickup id. Compact art "
-        "index 0 is valid despite older relay code rejecting it.",
+        "index 0 is valid despite older relay code rejecting it. Native event "
+        "+0x1C is this stable id; because COPW copies event+0x18..+0x77, payload "
+        "+4 provides the exact sender dropped-id key for a later pickup.",
     ),
     0x140BCD0F0: (
         "NetEventAddDroppedPickup_Apply",

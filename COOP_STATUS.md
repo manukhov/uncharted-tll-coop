@@ -11999,3 +11999,99 @@ remained Win32-responsive after initialization. The old
 safe idle startup only; no retained prompt had reached the owner gate during the
 observation window, so the written fresh-load M30/Mazur transaction remains the
 required behavioral test.
+
+### 2026-07-27 RUNTIME PARTIAL / REJECTED: `io` fixes stock replacement but retained Player does not publish the stale prompt
+
+The user ran four alternating M30/Mazur transactions from Chloe. The exact stock
+replacement branch is **CONFIRMED** for this sequence: every flags=3 receiver
+transaction completed `WORLD-PICKUP-DROP-EXISTING` with `gave=1 detached=1
+slotReleased=1` in 31--78 ms. M30 consumption also completed immediately on
+sequences 1 and 3. This preserves the art-definition manager-slot resolver and
+the scoped exact-transaction debounce bypass.
+
+Reverse Mazur consumption remains incomplete for two distinct discovery states.
+Sequence 2 reached the five-second expiry before any receiver Mazur HUD candidate
+had been published (`hudMatching=0`); the generation-valid Mazur candidate
+appeared later. Sequence 4 already had two live same-art Mazur candidates and
+correctly failed closed with `hudMatching=2 hudAmbiguous=1`. Thus art-only
+selection is insufficient, while the fixed AnimMgr pool remains empty for this
+weapon family.
+
+The retained-Player publisher hypothesis is **REJECTED** by the same run. Neither
+PID emitted a single `PICKUP-HUD-OWNER-SUPPRESS` row despite repeated visible
+weapon prompts and the surviving Chloe M30 offer. The explicit `a3 ==
+retained_player_object(1)` gate therefore did not own this occurrence and is
+removed. This does not invalidate the static Player argument of
+`PickupInteractControl_PublishHudPrompt 0x1408AEA00`; it proves that the stale
+record is published with another, normally local, Player value.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `ip` pairs dropped stable IDs with local weak identities and kills the exact HUD twin
+
+Two exact identity relationships replace the rejected art/Player guesses.
+
+For the reverse Mazur, three independent evidence kinds converge:
+
+1. `NetEventAddDroppedPickup_CtorFromProcessWeapon 0x140BCC9D0` writes the
+   dropped ProcessWeapon stable ID at native event `+0x1C`; COPW copies the POD
+   range beginning at event `+0x18`, so payload `+4` is the sender ID which the
+   next `WeaponInteractControl::OnInteract 0x141505BB0` reads again from the
+   same ground weapon `+0xD8`.
+2. The receiver's exact stock GiveWeapon replacement already owns the
+   corresponding local old ProcessWeapon. `PickupInteractControl_PublishHudPrompt
+   0x1408AEA00` and `FHUD_UpdateInteractScriptsAndExpire 0x141357D60`
+   independently establish its weak identity as object `+0xA8`, generation
+   `+0xBC`, and live target `weak+0x8`.
+3. Runtime sequence 1 detached the receiver Mazur with generation `0x721`; the
+   later receiver HUD Mazur candidate also carried generation `0x721`, despite
+   a different ProcessWeapon address. This is exactly the relocation which a
+   retained weak cell is designed to survive and which pointer/art matching lost.
+
+`ip` therefore stores a bounded 60-second mapping from the sender drop payload's
+stable ID to the receiver's exact pre-GiveWeapon weak+generation/art. A later
+COPW consume first resolves that remote stable ID through the retained local weak
+cell and still requires the current target to be a generation-valid, detached
+ProcessWeapon of the exact art. HUD candidates and the fail-closed art fallback
+remain secondary paths. No heap, registry, proximity, or broad same-art scan is
+added.
+
+The Chloe prompt has a separate exact object split:
+
+1. On every observed sender interaction the HUD-captured ProcessWeapon and the
+   object passed to the native source-kill call had the same stable ID/art but
+   different addresses. For sequence 1 the pair was HUD `0x10e0c8ba00` versus
+   source `0x10e0c24a00` with ID `0xab5e92af`; sequence 2 repeated it as HUD
+   `0x10e0cc1e00` versus source `0x10e0cc1780` with ID `0xde4623e9`.
+2. `WeaponInteractControl::OnInteract` kills only its source at exact call
+   `0x141506839`. In contrast, the HUD record retains `a2+0xA8/+0xBC`, and
+   `FHUD_UpdateSingleInteractScript 0x141358030` keeps drawing only while that
+   weak target is generation-valid and derives `pickup-weapon-id` directly from
+   that target's ProcessWeapon `+0x860`.
+3. Runtime `io` showed no retained-owner suppression, while earlier native
+   FHUD slot destruction reported an exact successful destroy without removing
+   the offer. A still-live same-ID HUD ProcessWeapon therefore explains both
+   continued publication and why deleting only downstream Flash state lost.
+
+After stock OnInteract has committed its normal source kill and inventory give,
+`ip` resolves the already-captured HUD weak target by exact stable ID, generation,
+ProcessWeapon vtable and art. It calls `ProcessKillTree` only when exactly one
+distinct twin exists; zero or multiple matches fail closed. The rejected
+retained-Player prologue detour is deleted, so the shared publisher entry and its
+unwind path remain stock. Release build `2026-07-27ip` compiles successfully.
+
+Competing hypotheses remain explicit. Same-art selection is rejected by the two
+live Mazurs. Sender and receiver stable IDs cannot be compared directly, but the
+previous drop event provides their transaction-local correspondence. Extending
+the timeout would only delay a miss and cannot disambiguate sequence 4. A higher
+Flash cache is still possible only if an exact HUD twin kill succeeds and the
+offer remains; `ip` records that discriminator without manually mutating Flash.
+
+**Falsifiable `ip` prediction:** the first M30-to-Mazur replacement must retain
+`gave=1 detached=1 slotReleased=1` and emit `WORLD-PICKUP-DROP-MAP` with nonzero
+`remoteDropId`, the detached Mazur weak generation and `stored=1`. Picking that
+Mazur on the next transaction must consume the receiver copy immediately with
+`source=drop-map match=paired-drop-id killed=1`, never `expired` or
+`hudAmbiguous=1`. Each local pickup must emit
+`WORLD-WEAPON-SOURCE-HUD-TWIN exactMatches=1 killed=1`; Chloe's obsolete M30
+offer must disappear while the legitimate replacement prompt remains. A zero
+drop mapping, changed weak generation, non-unique twin, surviving prompt after
+`killed=1`, or any crash rejects the corresponding branch independently.
