@@ -2579,6 +2579,27 @@ Do not reopen these as the first move:
       verified E8 starts to `0x140C9E611/0x140C9E632`; behavior was not exercised.
 - [ ] Run the written clip plus shotgun-loop discriminator, record CONFIRMED or
       REJECTED, commit, and push.
+- [ ] `ik` runtime: remote reload is visible and first attempts reached the exact
+      receiver callsite in the same packet sequence, but a later one-frame press
+      vanished before serialization (`seq=2203` received release only). Add a
+      bounded sender press latch and defer release until that press has crossed at
+      least one send interval; then timestamp native clip/loop action entry to
+      separate remaining visual startup delay from transport.
+
+## P0 NEXT - World-weapon replacement reliability follow-up (2026-07-27 `ik`)
+
+- [ ] Diagnose the flags=3 SLOT-MIRROR miss where M30 consume succeeded but the
+      detached pistol expired as `no-matching-stock-slot-replacement`. Log the
+      receiver's exact candidate slot/current art and peer picked-art at the
+      rejected predicate; do not call GiveWeapon without the stock pair.
+- [ ] Replace HUD-candidate-only consumed-model discovery. Type-97 consume expired
+      with `captured=2 live=1 matching=0` although its dropped-pistol replacement
+      succeeded in 16 ms. Statistically locate the world-owned ProcessWeapon
+      registry/container and retain exact vtable, generation, art and ambiguity
+      checks; do not reintroduce broad heap scans or FHUD mutation.
+- [ ] Keep the Chloe stale pickup icon separate. `ik` deliberately has
+      `hudMutation=disabled`; checkpoint reset remains the only confirmed clearing
+      boundary above the rejected four-slot FHUD owner.
 
 ## Rule
 

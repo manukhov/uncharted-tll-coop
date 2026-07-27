@@ -11693,3 +11693,51 @@ the exact successful install marker for `0x140C9E611/0x140C9E632`. Both remained
 responsive through the observation window with no reload skip, hook failure, or
 terminal exception. This confirms corrected packaging only; the sender command,
 receiver force, and visible native action remain pending an actual reload.
+
+### 2026-07-27 RUNTIME PARTIAL CONFIRMED / REJECTED: `ik` makes reload visible but can lose a one-frame press
+
+The user confirms that the remote reload animation is visible, but delayed. The
+first two instrumented reloads prove the semantic path itself: Chloe PID 21476
+emitted `RELOAD-SEND rise`; Nadine PID 19564 immediately received and forced the
+same packet sequence (`seq=1371`, later `seq=1498`) at command `reload`,
+`edge=0`, with stock `original=0`. The next packet carried the synthesized
+release and the exact `reload-release` callsite was forced. There is no queued or
+multi-second network backlog between these markers. The remaining visible delay
+is downstream of command acceptance in the native controller/action/gesture
+startup and needs an action-entry timestamp before it can be attributed further.
+
+The current sender pulse is nevertheless insufficient. A later attempt logged
+local `RELOAD-SEND rise`, `release`, and `explicit-release`, but the first
+receiver row was only `RELOAD-RECV seq=2203 held=0 press=0 release=1`; no remote
+reload press arrived. The local exact query can therefore be true for less than
+one StatePacket interval. The receiver's 500-ms latch cannot recover an event
+which was never serialized. This **rejects** the unlatched sender level as a
+reliable relay. The next build should retain the exact local reload press across
+at least one bounded send interval and publish release only after that press
+window, while keeping the two receiver callsites unchanged.
+
+### 2026-07-27 RUNTIME PARTIAL CONFIRMED / REJECTED: `ik` exposes two independent world-weapon replacement gaps
+
+The test contained one flags=3 replacement in each direction, and neither is a
+generic UDP delay:
+
+1. Nadine picked M30 `0x3019CBEE` and stock detached pistol `0x33E29A1B`.
+   Chloe immediately found and killed her matching M30 (`latencyMs=0`,
+   `match=unique-art`, `killed=1`), but after five seconds the dropped-pistol
+   half expired as `reason=no-matching-stock-slot-replacement`. Thus consume
+   succeeded while SLOT-MIRROR never found the required receiver slot pair
+   `{current=dropped pistol, peer=M30}`; no stock GiveWeapon attempt occurred.
+2. Chloe picked Type-97 `0x27617D0D` and detached the same pistol. Nadine's stock
+   replacement succeeded in 16 ms (`gave=1 detached=1 slotReleased=1`), but the
+   consumed Type-97 expired with `captured=2 recent=0 live=1 matching=0
+   ambiguous=0`. The receiver had no captured live ProcessWeapon of the picked
+   art, so the HUD-candidate-only finder could not remove the old ground model.
+
+These select different next boundaries. Dropped-weapon failure needs exact slot
+inventory diagnostics when `exact_world_weapon_replacement_pending` cannot find
+the sender's detached art. Consumed-model failure needs a world-owned
+ProcessWeapon discovery path independent of whether the receiver's screen-0 HUD
+ever approached/published that weapon; relaxing art or weak validation would not
+fix `matching=0`. The persistent Chloe pickup icon remains the already-known
+separate defect: `ik` intentionally logs `hudMutation=disabled`, and this run
+adds no evidence that the rejected physical FHUD slot owns the visible prompt.
