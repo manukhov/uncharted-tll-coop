@@ -1512,14 +1512,17 @@ FUNCTIONS = {
         "runtime dispatch reference is WeaponInteractControl vtable +0x10 at "
         "0x1429BF4B8; use that slot instead of relocating this EH-bearing entry. "
         "Runtime io showed its source pointer differs from the FHUD weak target "
-        "while stable id and art match, so killing only this source can leave "
-        "the prompt publisher alive.",
+        "while stable id and art match. Runtime ip nevertheless found zero "
+        "distinct live same-id HUD targets after every accepted interaction, so "
+        "a second ProcessKillTree call at this boundary is rejected.",
     ),
     0x141ED3630: (
         "ProcessWeapon_DetachToWorldTransform",
         "Detaches a ProcessWeapon into world space: sets +0x690 bit 3 and writes "
         "translation/rotation to +0x590/+0x5A0. GiveWeapon replacement calls it "
-        "at 0x1410A68AC (return 0x1410A68B1) for the exact dropped old weapon.",
+        "at 0x1410A68AC (return 0x1410A68B1) for the exact dropped old weapon. "
+        "COPW v2 captures and revalidates that object's +0xD8 stable id directly "
+        "across this call; the next ground interaction reads the same field.",
     ),
     0x1408C8950: (
         "PickupInteractControl_CompletePickup",
@@ -1590,8 +1593,10 @@ FUNCTIONS = {
         "ResolveGameObjectHandleById, and copies ProcessWeapon+0xD8 only after the "
         "stock sender has normally assigned a NetDroppedPickup id. Compact art "
         "index 0 is valid despite older relay code rejecting it. Native event "
-        "+0x1C is this stable id; because COPW copies event+0x18..+0x77, payload "
-        "+4 provides the exact sender dropped-id key for a later pickup.",
+        "+0x1C is this stable id. Runtime ip rejected using COPW payload+4 as the "
+        "key because the exact WeaponInteract detach path never invoked this "
+        "constructor and sent a zero payload; COPW v2 carries ProcessWeapon+0xD8 "
+        "explicitly instead.",
     ),
     0x140BCD0F0: (
         "NetEventAddDroppedPickup_Apply",

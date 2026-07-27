@@ -2608,11 +2608,16 @@ Do not reopen these as the first move:
 - [x] CONFIRM `io` stock replacement targeting: all tested flags=3 swaps complete
       `gave=1 detached=1 slotReleased=1` in 31--78 ms. REJECT its retained-Player
       HUD gate: the visible stale prompt produced no suppression row.
-- [~] Build/test `ip`: map the previous sender dropped-event stable ID to the
-      receiver's exact local dropped weak+generation identity, then use that map
-      for the reverse Mazur consume. After local OnInteract, kill only the unique
-      distinct HUD ProcessWeapon twin with the same stable ID/art. Run the exact
-      M30 -> Mazur -> M30 discriminator written in `COOP_STATUS.md`.
+- [x] REJECT the two `ip` identity assumptions while retaining its proven stock
+      replacement: all dropped mappings had `remoteDropId=0 stored=0` because the
+      exact context payload was zero, and every post-OnInteract HUD-twin lookup
+      had `exactMatches=0`. Sequence 2 measured 2359 ms StatePacket latency;
+      sequence 3 then expired with `hudMatching=0`, matching the surviving M30.
+- [~] Build/test `iq`: COPW v2 carries the exact detached ProcessWeapon `+0xD8`,
+      maps it to the receiver-local weak identity, and triggers stock replacement
+      directly once real COPG WeaponInfo is stored. Hold only the applied slot
+      against older StatePackets until `DROP-STATE-CATCHUP`. Run the written
+      M30 -> Mazur -> M30 discriminator; stale Chloe HUD prompt remains separate.
 
 ## Rule
 

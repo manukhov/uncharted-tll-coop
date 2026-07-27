@@ -12095,3 +12095,75 @@ Mazur on the next transaction must consume the receiver copy immediately with
 offer must disappear while the legitimate replacement prompt remains. A zero
 drop mapping, changed weak generation, non-unique twin, surviving prompt after
 `killed=1`, or any crash rejects the corresponding branch independently.
+
+### 2026-07-27 RUNTIME PARTIAL / REJECTED: `ip` proves the stock path but its dropped-ID payload and HUD-twin hypotheses are false
+
+The alternating user test produced five exact COPW transactions. Stock receiver
+replacement remained valid whenever reached: `WORLD-PICKUP-DROP-EXISTING`
+reported `gave=1 detached=1 slotReleased=1`. The visible delay is now measured,
+not inferred: sequence 2 did not run this replacement until **2359 ms** after
+COPW because the exact branch was entered only when the periodic StatePacket
+eventually advertised the picked art.
+
+Both new `ip` identity assumptions are **REJECTED** by their written
+discriminators. Every `WORLD-PICKUP-DROP-MAP` reported `remoteDropId=0 stored=0`:
+the exact `WeaponInteractControl` context never builds the legacy native-event
+payload, so interpreting zeroed `payload+4` cannot provide the dropped stable ID.
+On the later reverse pickup, sequence 3 expired with `hudLive=1 hudMatching=0`
+and an empty fixed Fg pool; this is the user's M30 which appeared and then could
+not be removed. Separately, every
+`WORLD-WEAPON-SOURCE-HUD-TWIN` reported `exactMatches=0 killed=0`; the proposed
+distinct live same-ID HUD ProcessWeapon was not present at the post-OnInteract
+boundary. That cleanup is removed rather than widened to an art-only kill. The
+stale Chloe prompt remains open and independent of the world-model transaction.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `iq` carries ProcessWeapon+0xD8 explicitly and applies COPW before StatePacket
+
+The replacement is now backed by three independent static evidence kinds:
+
+1. Exact data ownership: `ProcessWeapon_DetachToWorldTransform 0x141ED3630` is
+   intercepted only inside the accepted local
+   `WeaponInteractControl_OnInteract 0x141505BB0` transaction. The candidate's
+   vtable, generation `+0xBC`, art `+0x860`, not-yet-detached flag `+0x690`, and
+   stable ID `+0xD8` are read before the stock call; generation/art must survive,
+   and the committed post-call stable ID must be nonzero and must match any
+   already-assigned pre-call value after the detached bit is set. A future
+   OnInteract on that same dropped object reads this `+0xD8` as its consumed ID.
+2. Independent transaction order: the sender's native GiveWeapon tail publishes
+   the real 0xC0 COPG `WeaponInfo` while the outer OnInteract is still executing;
+   COPW is sent only after OnInteract returns with both source-kill and old-detach
+   committed. The receiver can therefore require the stored real WeaponInfo and
+   act directly from COPW without synthesizing an arbitrary weapon block.
+3. Structural/runtime agreement: the art-definition resolver and stock
+   GiveWeapon replacement already complete the exact old-object detach with all
+   three invariants. The only measured delay was waiting for the ordinary
+   StatePacket to expose the new art, not any missing stock target or failed
+   detach.
+
+COPW is bumped to version 2 / 124 bytes and carries the exact detached
+`ProcessWeapon+0xD8` in `dropped_weapon_stable_id`; the unused zero legacy payload
+is no longer interpreted as identity. Once the real COPG block is present, the
+receiver resolves the stock target from the COPW picked art and runs the exact
+replacement immediately. It records the receiver-local detached weak identity
+against the explicit sender ID. Because unprotected immediate GiveWeapon was
+previously undone by an older StatePacket, `iq` retains ownership of that exact
+slot until the peer snapshot reaches the picked art; old/empty values cannot
+revert it during the bounded five-second transaction.
+
+Competing hypotheses are explicit. The legacy constructor payload is rejected
+because this exact path never fills it. Art-only reverse lookup remains rejected
+by ambiguous same-art pickups. A longer timeout cannot repair `hudMatching=0`.
+Immediate GiveWeapon without slot ownership is also rejected by the earlier
+StatePacket race; `iq` differs by requiring the real relayed block and protecting
+only the one committed transaction slot until state catch-up.
+
+**Falsifiable `iq` prediction:** every flags=3 send/receive must use 124 bytes and
+log a nonzero identical `drop_id`. Receiver replacement must normally complete
+well below the observed 2359 ms, then emit `WORLD-PICKUP-DROP-MAP ... stored=1`;
+the later reverse pickup must resolve `source=drop-map
+match=paired-drop-id killed=1`. An older snapshot may produce one bounded hold,
+then `WORLD-PICKUP-DROP-STATE-CATCHUP`; it must not revert the newly given art.
+Zero `drop_id`, `realWeaponInfo=0` persisting to timeout, replacement above 500
+ms, a second weapon/model, reverse consume expiry, or a crash rejects the
+corresponding branch independently. The Chloe stale prompt is not predicted
+fixed by `iq`.
