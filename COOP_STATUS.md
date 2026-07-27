@@ -10640,3 +10640,23 @@ and one `WORLD-WEAPON-SEND flags=0x3`. The peer must emit one matching RECV, one
 M30 disappears and exactly one Mazur appears. The reverse direction must mirror
 the chain. Merely approaching, drawing, holstering, switching, or ammo-only
 updates must emit no `WORLD-WEAPON-SEND`.
+
+### 2026-07-27 RUNTIME REJECTED: `hz` entry-detour packaging crashes before interaction
+
+Fresh copies PID 20384 and PID 3652 both loaded build `hz` and reported all new
+ground/HUD hooks installed, but each exited before any M30/Mazur action. PID
+20384 disappeared before the second injection completed; PID 3652 reached only
+the normal retained-player descriptor arm. Neither emitted
+`WORLD-WEAPON-INTERACT`, any HUD ownership marker, nor a crash-observer exception
+row. The user independently observed both copies crash.
+
+This does not exercise or reject the `WeaponInteractControl` consume/drop data
+model. It rejects the runtime packaging which detoured four globally reached
+function entries at once: broad `ProcessKillTree 0x1416A5C20`, broad
+`ProcessWeapon_DetachToWorldTransform 0x141ED3630`, per-frame
+`FHUD_UpdateInteractScriptsAndExpire 0x141357D60`, and the publisher entry
+`0x1408AEA00`. Static xrefs separate the safer alternatives: source kill and old
+detach each have an exact five-byte callsite inside the transaction
+(`0x141506839`, `0x1410A68AC`); the FHUD updater has one exact code caller at
+`0x141356BF1`; and the two relevant weapon-control vtable slots are
+`0x1429BF588` and `0x142AA6F70`. Do not rerun build `hz`.

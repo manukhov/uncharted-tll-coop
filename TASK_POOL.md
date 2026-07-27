@@ -28,8 +28,13 @@
 - [x] **`hz` STATIC / IMPLEMENTED:** hook the shared `0x1408AEA00` entry (base
       and both weapon-control vtables), gate by retained Player identity, and
       explicitly destroy remote-only keyed FHUD records before `0x141357D60`.
-- [ ] Runtime-check the written `hz` prediction in both directions and promote
-      each consume/drop/HUD result independently.
+- [x] **`hz` runtime REJECTED before interaction:** both copies crashed after
+      installing the four global entry detours; no ground/HUD transaction marker
+      was reached, so the lifecycle model remains STATIC but that packaging must
+      not be rerun.
+- [ ] Repackage source kill, old detach and FHUD update at their exact callsites,
+      patch both concrete weapon HUD vtable slots, then runtime-check boot before
+      testing consume/drop/HUD behavior independently.
 
 ## P0: Full Player Synchronization (CURRENT)
 
