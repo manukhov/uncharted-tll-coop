@@ -11649,3 +11649,21 @@ by the relay and continues to reconcile through the existing weapon snapshot.
 Release must clear the forced command. If force logs occur but controller state
 3/action markers do not, receiver eligibility/weapon state differs; if state 3
 occurs without a visible gesture, the remaining defect is presentation ownership.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `ij` relays only the two accepted reload callsites
+
+Build `ij` assigns protocol-only bits `0x800000000` and `0x1000000000` to the
+two semantic command identities without changing `StatePacket`. Sender capture
+occurs inside the exact `E8` calls at `0x140C9E622/0x140C9E637`, after
+PlayerInputCommandState has produced the same values used by stock acceptance.
+The receiver patches only those two calls and returns true only for retained
+Player slot 1, matching the exact hash and `edge=0`. The broad global
+PlayerInputCommandState hook remains parked.
+
+Short press/release transitions are bounded for 500 ms across the UDP-to-slot-16
+scheduling race; an explicit or synthesized release clears the press latch before
+asserting `reload-release`. Markers are `RELOAD-SEND`, `RELOAD-RECV`, and
+`RELOAD-INPUT-FORCE`. No ammo field, ProcessWeapon reload callback, Player slot 0,
+or HUD path is written. `scanner/build-release.cmd` compiles and links `ij`
+cleanly. Runtime behavior remains pending the already-written clip/shotgun
+discriminator.

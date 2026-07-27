@@ -2571,7 +2571,7 @@ Do not reopen these as the first move:
 - [x] Reject generic mask-only, `reload-hold`, direct ammo callbacks and the
       downstream keyed `ReloadWeapon` flag as relay boundaries. Full evidence
       and the first falsifiable runtime discriminator are in `COOP_STATUS.md`.
-- [ ] Implement exact high-bit semantic `reload`/`reload-release` relay, force
+- [x] Implement exact high-bit semantic `reload`/`reload-release` relay in `ij`, force
       only retained slot-1 PlayerInputCommandState queries with edge=0, and add
       bounded send/receive/force markers. Do not write receiver slot-0 ammo.
 - [ ] Run the written clip plus shotgun-loop discriminator, record CONFIRMED or

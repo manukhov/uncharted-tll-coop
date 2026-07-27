@@ -157,6 +157,12 @@ constexpr std::uintptr_t kSkelTableRetargetEntriesRva = 0x3864A00;
 // Embedded PlayerInputCommandState (sub_14024D7E0 returns Player+0x39A0).
 constexpr std::size_t kPlayerInputCommandStateOffset = 0x39A0;
 constexpr std::uintptr_t kPlayerInputCommandStateIsCommandActiveRva = 0x1E39D50;
+// Exact reload decision queries inside Player_BuildAcceptedActionInputState.
+// Both are direct E8 calls to PlayerInputCommandState_IsCommandActive with
+// edge=0; the first hashes `reload`, the second `reload-release`.
+constexpr std::uintptr_t kPlayerReloadIsCommandActiveCallsiteRva = 0xC9E622;
+constexpr std::uintptr_t kPlayerReloadReleaseIsCommandActiveCallsiteRva =
+    0xC9E637;
 // Third exact `drop`, edge=0 consumer inside PlayerEdgeState_HandleDropCommand.
 // The first two consumers query Joypad directly; this one bypasses that hook and
 // therefore needs its own retained-puppet callsite relay.

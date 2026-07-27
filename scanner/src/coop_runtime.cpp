@@ -243,9 +243,13 @@ PlayerInputIsCommandActiveFunction
     g_original_player_grenade_callsite_is_command_active = nullptr;
 PlayerInputIsCommandActiveFunction
     g_original_player_edge_drop_callsite_is_command_active = nullptr;
+PlayerInputIsCommandActiveFunction
+    g_original_player_reload_callsite_is_command_active = nullptr;
 constexpr std::uint32_t kEdgeDropCommandHash = 0x28DCC05A;
 std::atomic<ULONGLONG> g_local_edge_drop_send_until_ms{0};
 std::atomic<ULONGLONG> g_local_evade_start_send_until_ms{0};
+std::atomic<bool> g_local_reload_level{false};
+std::atomic<ULONGLONG> g_local_reload_release_send_until_ms{0};
 using PlayerEvadeStartActionFunction = std::int64_t(__fastcall*)(
     void*, void*, std::int64_t, double);
 PlayerEvadeStartActionFunction g_original_player_evade_start_action = nullptr;
@@ -788,6 +792,11 @@ constexpr std::uint64_t kJoypadEdgeJumpAIntentMask = 0x200000000ull;
 // queries authored `drop` three times with held semantics (edge=0); generic
 // crouch, drop-hold and raw face B are different command identities.
 constexpr std::uint64_t kJoypadEdgeDropIntentMask = 0x400000000ull;
+// Protocol-only PlayerInput semantic cues. These never represent physical pad
+// buttons: the stock reload decision consumes two distinct command hashes from
+// Player+0x39A0, so forcing them through Joypad would lose command identity.
+constexpr std::uint64_t kPlayerReloadIntentMask = 0x800000000ull;
+constexpr std::uint64_t kPlayerReloadReleaseIntentMask = 0x1000000000ull;
 constexpr std::uint64_t kJoypadTraversalIntentMask =
     kJoypadCrouchButtonMask | kJoypadEvadeStartIntentMask |
     kJoypadJumpPressButtonMask | kJoypadJumpHoldButtonMask |
@@ -805,6 +814,13 @@ constexpr std::uint64_t kJoypadFaceAButtonMask = 0x20ull;
 constexpr std::uint64_t kJoypadFaceBButtonMask = 0x80ull;
 constexpr std::uint64_t kJoypadFaceXButtonMask = 0x40ull;
 constexpr std::uint64_t kJoypadTraversalRelayMask = kJoypadTraversalIntentMask;
+
+struct ReloadRelayHashes {
+    std::uint32_t reload = 0;
+    std::uint32_t reload_release = 0;
+    bool init = false;
+};
+ReloadRelayHashes& reload_relay_hashes();
 
 struct MeleeRelayHashes {
     std::uint32_t triangle = 0;
@@ -1285,6 +1301,14 @@ struct StateNetState {
     // generic Joypad hook handles sustained jump/crouch; semantic evade-start
     // is routed through the exact PlayerMoveStick controller slot below.
     std::atomic<std::uint64_t> puppet_traversal_force = 0;
+    // Exact reload/reload-release force lifetime. Packet-held reload stays a
+    // level; short press/release transitions are retained just long enough for
+    // Player vtable slot 16 to reach the two accepted-decision callsites.
+    std::atomic<bool> puppet_reload_held = false;
+    std::atomic<ULONGLONG> puppet_reload_press_force_until_ms = 0;
+    std::atomic<ULONGLONG> puppet_reload_release_force_until_ms = 0;
+    std::atomic<std::uint32_t> puppet_reload_event_sequence = 0;
+    std::atomic<std::uint32_t> puppet_reload_force_logged_sequence = 0;
     // `drop` is a protocol-only authored command, so a release packet can erase
     // puppet_traversal_force before Player::Edge makes its three held queries.
     // Preserve a received drop assertion across that packet/update race only.
@@ -1465,6 +1489,20 @@ void publish_peer_state_snapshot(const coop::StatePacket& packet) {
     const bool incoming_evade_start_press =
         (sanitized.buttons_pressed & kJoypadEvadeStartIntentMask) != 0 ||
         (incoming_evade_start_held && !previous_evade_start_held);
+    const bool previous_reload_held =
+        g_state_net.has_peer_state.load(std::memory_order_relaxed) &&
+        (g_state_net.peer_state.input_buttons &
+         kPlayerReloadIntentMask) != 0;
+    const bool incoming_reload_held =
+        (sanitized.input_buttons & kPlayerReloadIntentMask) != 0;
+    const bool incoming_reload_press =
+        (sanitized.buttons_pressed & kPlayerReloadIntentMask) != 0 ||
+        (incoming_reload_held && !previous_reload_held);
+    const bool incoming_reload_release =
+        ((sanitized.input_buttons | sanitized.buttons_pressed) &
+         kPlayerReloadReleaseIntentMask) != 0 ||
+        (sanitized.buttons_released & kPlayerReloadIntentMask) != 0 ||
+        (previous_reload_held && !incoming_reload_held);
     g_state_net.peer_state = sanitized;
     g_state_net.peer_state_sequence = packet.sequence;
     if (g_enable_puppet_melee_callsite_relay && incoming_melee_press) {
@@ -1481,6 +1519,42 @@ void publish_peer_state_snapshot(const coop::StatePacket& packet) {
         sanitized.buttons_pressed, std::memory_order_release);
     const std::uint64_t incoming_traversal =
         sanitized.input_buttons | sanitized.buttons_pressed;
+    {
+        constexpr ULONGLONG kReloadForceWindowMs = 500;
+        const ULONGLONG now = GetTickCount64();
+        g_state_net.puppet_reload_held.store(
+            incoming_reload_held, std::memory_order_release);
+        if (incoming_reload_press) {
+            g_state_net.puppet_reload_release_force_until_ms.store(
+                0, std::memory_order_release);
+            g_state_net.puppet_reload_press_force_until_ms.store(
+                now + kReloadForceWindowMs, std::memory_order_release);
+            g_state_net.puppet_reload_event_sequence.store(
+                packet.sequence, std::memory_order_release);
+        }
+        if (incoming_reload_release) {
+            // Release wins if a very short tap is coalesced into one packet.
+            g_state_net.puppet_reload_press_force_until_ms.store(
+                0, std::memory_order_release);
+            g_state_net.puppet_reload_release_force_until_ms.store(
+                now + kReloadForceWindowMs, std::memory_order_release);
+            g_state_net.puppet_reload_event_sequence.store(
+                packet.sequence, std::memory_order_release);
+        }
+        if (incoming_reload_press || incoming_reload_release) {
+            static std::atomic<unsigned> reload_latch_logs{0};
+            const unsigned log_index = reload_latch_logs.fetch_add(
+                1, std::memory_order_relaxed);
+            if (log_index < 32) {
+                std::ostringstream line;
+                line << "RELOAD-RECV seq=" << packet.sequence
+                     << " held=" << (incoming_reload_held ? 1 : 0)
+                     << " press=" << (incoming_reload_press ? 1 : 0)
+                     << " release=" << (incoming_reload_release ? 1 : 0);
+                boot_log_line(line.str().c_str());
+            }
+        }
+    }
     if ((incoming_traversal & kJoypadEvadeStartIntentMask) != 0) {
         constexpr ULONGLONG kEvadeStartForceWindowMs = 400;
         const ULONGLONG now = GetTickCount64();
@@ -14105,6 +14179,30 @@ std::uint64_t merge_authored_traversal_button_mask(
     return mask;
 }
 
+std::uint64_t merge_authored_reload_button_mask(std::uint64_t mask) {
+    if (g_local_reload_level.load(std::memory_order_acquire)) {
+        mask |= kPlayerReloadIntentMask;
+    }
+    if (GetTickCount64() <
+        g_local_reload_release_send_until_ms.load(
+            std::memory_order_acquire)) {
+        mask |= kPlayerReloadReleaseIntentMask;
+    }
+    return mask;
+}
+
+ReloadRelayHashes& reload_relay_hashes() {
+    static ReloadRelayHashes hashes;
+    if (!hashes.init && g_module != 0) {
+        const auto string_hash = reinterpret_cast<StringHashFunction>(
+            g_module + kStringHashRva);
+        hashes.reload = string_hash("reload", 6, 0);
+        hashes.reload_release = string_hash("reload-release", 14, 0);
+        hashes.init = true;
+    }
+    return hashes;
+}
+
 MeleeRelayHashes& melee_relay_hashes() {
     static MeleeRelayHashes hashes;
     if (!hashes.init && g_module != 0) {
@@ -14762,6 +14860,7 @@ std::uint64_t capture_peer_send_button_mask(void* player) {
             mask = merge_authored_traversal_button_mask(joypad_obj, mask);
         }
     }
+    mask = merge_authored_reload_button_mask(mask);
     mask = sanitize_peer_locomotion_button_mask(mask);
     // Never relay authored face pads: jump A (0x20) bleeds into evade via
     // ScaleCopy. Locomotion protocol is INTENT bits only.
@@ -31248,8 +31347,22 @@ char __fastcall hooked_player_input_state_update(void* player) {
     if (is_remote) {
         apply_peer_pickup_animation(player);
     }
+    if (is_local) {
+        // The two exact reload callsites below republish the current level while
+        // Player vtable slot 16 runs. Clear first so a branch that is not reached
+        // this frame cannot leave a stale held command in outgoing packets.
+        g_local_reload_level.store(false, std::memory_order_release);
+    }
     const char result = g_original_player_input_state_update(player);
     if (is_local) {
+        const bool reload_level =
+            g_local_reload_level.load(std::memory_order_acquire);
+        static bool previous_reload_level = false;
+        if (reload_level != previous_reload_level) {
+            previous_reload_level = reload_level;
+            boot_log_line(reload_level ? "RELOAD-SEND rise"
+                                       : "RELOAD-SEND release");
+        }
         g_cached_local_input_buttons.store(
             capture_local_joypad_command_mask(player),
             std::memory_order_relaxed);
@@ -36190,6 +36303,158 @@ bool install_player_weapon_holster_bind_probe() {
     return true;
 }
 
+char __fastcall hooked_player_reload_command_callsite(
+    void* state, std::uint32_t hash, std::uint8_t edge) {
+    const char original =
+        g_original_player_reload_callsite_is_command_active != nullptr
+            ? g_original_player_reload_callsite_is_command_active(
+                  state, hash, edge)
+            : 0;
+    if (state == nullptr || g_module == 0 || edge != 0 ||
+        !g_state_net.enabled) {
+        return original;
+    }
+
+    auto* const player =
+        static_cast<std::byte*>(state) - kPlayerInputCommandStateOffset;
+    const auto& hashes = reload_relay_hashes();
+    if (!hashes.init) {
+        return original;
+    }
+    if (player == static_cast<std::byte*>(retained_player_object(0))) {
+        if (hash == hashes.reload) {
+            g_local_reload_level.store(original != 0,
+                                       std::memory_order_release);
+        } else if (hash == hashes.reload_release && original != 0) {
+            constexpr ULONGLONG kReloadReleaseSendWindowMs = 250;
+            const ULONGLONG now = GetTickCount64();
+            const ULONGLONG previous_until =
+                g_local_reload_release_send_until_ms.exchange(
+                    now + kReloadReleaseSendWindowMs,
+                    std::memory_order_acq_rel);
+            if (previous_until <= now) {
+                boot_log_line("RELOAD-SEND explicit-release");
+            }
+        }
+        return original;
+    }
+    if (player != static_cast<std::byte*>(retained_player_object(1))) {
+        return original;
+    }
+
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    const ULONGLONG now = GetTickCount64();
+    if (received == 0 || now - received > 1000) {
+        return original;
+    }
+    const bool force_reload =
+        hash == hashes.reload &&
+        (g_state_net.puppet_reload_held.load(std::memory_order_acquire) ||
+         now < g_state_net.puppet_reload_press_force_until_ms.load(
+                   std::memory_order_acquire));
+    const bool force_release =
+        hash == hashes.reload_release &&
+        now < g_state_net.puppet_reload_release_force_until_ms.load(
+                  std::memory_order_acquire);
+    if (!force_reload && !force_release) {
+        return original;
+    }
+
+    const std::uint32_t sequence =
+        g_state_net.puppet_reload_event_sequence.load(
+            std::memory_order_acquire);
+    const std::uint32_t logged_sequence =
+        g_state_net.puppet_reload_force_logged_sequence.exchange(
+            sequence, std::memory_order_acq_rel);
+    if (sequence != 0 && logged_sequence != sequence) {
+        std::ostringstream line;
+        line << "RELOAD-INPUT-FORCE seq=" << sequence
+             << " command=" << (force_release ? "reload-release" : "reload")
+             << " edge=" << static_cast<unsigned>(edge)
+             << " original=" << static_cast<unsigned>(original != 0);
+        boot_log_line(line.str().c_str());
+    }
+    return 1;
+}
+
+bool install_player_reload_command_callsite_relay() {
+    const std::array<std::uintptr_t, 2> callsite_rvas{
+        kPlayerReloadIsCommandActiveCallsiteRva,
+        kPlayerReloadReleaseIsCommandActiveCallsiteRva,
+    };
+    std::array<std::uint8_t*, 2> callsites{};
+    const std::uintptr_t expected_target =
+        g_module + kPlayerInputCommandStateIsCommandActiveRva;
+    for (std::size_t i = 0; i < callsites.size(); ++i) {
+        callsites[i] = reinterpret_cast<std::uint8_t*>(
+            g_module + callsite_rvas[i]);
+        if (callsites[i][0] != 0xE8) {
+            boot_log_line("Player reload relay SKIPPED (not E8)");
+            return false;
+        }
+        std::int32_t displacement = 0;
+        std::memcpy(&displacement, callsites[i] + 1, sizeof(displacement));
+        const std::uintptr_t target =
+            reinterpret_cast<std::uintptr_t>(callsites[i] + 5) +
+            static_cast<std::intptr_t>(displacement);
+        if (target != expected_target) {
+            boot_log_line("Player reload relay SKIPPED (target)");
+            return false;
+        }
+    }
+    g_original_player_reload_callsite_is_command_active =
+        reinterpret_cast<PlayerInputIsCommandActiveFunction>(expected_target);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(callsites[0], kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("Player reload relay SKIPPED (relay)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_player_reload_command_callsite);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    std::array<std::int32_t, 2> displacements{};
+    for (std::size_t i = 0; i < callsites.size(); ++i) {
+        const std::int64_t displacement =
+            reinterpret_cast<std::intptr_t>(relay) -
+            reinterpret_cast<std::intptr_t>(callsites[i] + 5);
+        if (displacement < INT32_MIN || displacement > INT32_MAX) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            boot_log_line("Player reload relay SKIPPED (range)");
+            return false;
+        }
+        displacements[i] = static_cast<std::int32_t>(displacement);
+    }
+
+    const std::size_t patch_span = static_cast<std::size_t>(
+        callsites.back() + 5 - callsites.front());
+    DWORD old_protection = 0;
+    if (!VirtualProtect(callsites.front(), patch_span,
+                        PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("Player reload relay SKIPPED (protect)");
+        return false;
+    }
+    for (std::size_t i = 0; i < callsites.size(); ++i) {
+        *reinterpret_cast<std::int32_t*>(callsites[i] + 1) = displacements[i];
+    }
+    FlushInstructionCache(GetCurrentProcess(), callsites.front(), patch_span);
+    DWORD ignored = 0;
+    VirtualProtect(callsites.front(), patch_span, old_protection, &ignored);
+    boot_log_line(
+        "Player reload exact semantic relay installed "
+        "(0x140C9E622 reload, 0x140C9E637 release)");
+    return true;
+}
+
 char __fastcall hooked_player_melee_press_callsite(
     void* state, std::uint32_t hash, std::uint8_t edge) {
     const char original =
@@ -39994,8 +40259,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27ii "
-        "(live weak ground consume; FHUD mutation disabled)");
+        "TLL co-op runtime init 2026-07-27ij "
+        "(exact reload/release relay; FHUD mutation disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -40008,6 +40273,7 @@ DWORD WINAPI install_hook(void*) {
     install_joypad3_is_command_active_force();
     install_player_evade_start_action_relay();
     install_player_edge_drop_command_callsite_relay();
+    install_player_reload_command_callsite_relay();
     if (g_enable_puppet_melee_button_relay) {
         install_player_input_is_command_active_force();
     } else {
