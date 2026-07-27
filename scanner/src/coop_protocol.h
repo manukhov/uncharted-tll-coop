@@ -25,7 +25,7 @@ struct InputPacket {
 // One-shot gameplay actions need a separate reliable ordered event stream.
 constexpr std::uint16_t kStatePort = 31338;
 constexpr std::uint32_t kStatePacketMagic = 0x53504F43;  // "COPS"
-constexpr std::uint16_t kStatePacketVersion = 12;
+constexpr std::uint16_t kStatePacketVersion = 13;
 
 // StatePacket.flags extension bits (v7+):
 // 0x0100 — camera_quat mirrors sender CameraManager(0) @+0x1B0.
@@ -47,7 +47,9 @@ constexpr std::uint16_t kStateFlagPeerCoverEnterPulse = 0x1000;
 // FgAnimData_PublishWorldTransform input. The receiver substitutes it at the same
 // puppet publication boundary, avoiding camera-axis and local-root conversion.
 constexpr std::uint16_t kStateFlagFgAnimWorldQuat = 0x2000;
-// 0x4000 (v10) - post-blend native aim-add up/down channel values.
+// 0x4000 (v13 semantics) - pre-smoothing, pre-blend native aim-add up/down inputs.
+// The receiver substitutes them at the matching PlayerAimController callsite so
+// stock smoothing, active-state publication and ADS blend remain authoritative.
 constexpr std::uint16_t kStateFlagAimPitch = 0x4000;
 // 0x8000 (v10) - native GunMove stationary turn selector inputs/results.
 constexpr std::uint16_t kStateFlagAimFootTurn = 0x8000;
@@ -87,7 +89,8 @@ struct StatePacket {
     std::uint8_t weapon_selected_mode = 0;
     std::uint16_t held_weapon_reserved = 0;
     std::uint8_t weapon_snapshot[kWeaponSnapshotBytes]{};
-    // v10 extension. Keeping it at the end preserves the complete v9 prefix.
+    // v10 extension with v13 semantics. aim_pitch_* carries raw pre-blend inputs
+    // while retaining its established wire layout and the complete v9 prefix.
     float aim_pitch_up = 0.0F;
     float aim_pitch_down = 0.0F;
     float gun_move_turn_direction[4]{};

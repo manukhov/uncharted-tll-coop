@@ -1099,9 +1099,11 @@ FUNCTIONS = {
     0x140CB47A0: (
         "PlayerAimController_SmoothAndPublishDirectionalAimWeights",
         "Steady-state branch selected at 0x140CB416F when the controller mode "
-        "byte did not transition. Collapses previous left/right and up/down into "
-        "signed axes, advances scalar smoothing state at controller +0x8A4/+0x8AC, "
-        "then tail-jumps at 0x140CB491A to "
+        "byte did not transition. ABI is RCX=controller, XMM1=left, XMM2=right, "
+        "XMM3=up, stack arg5=down. These are pre-blend inputs. The function "
+        "collapses previous left/right and up/down into signed axes, advances "
+        "scalar smoothing state at controller +0x8A4/+0x8AC, then tail-jumps at "
+        "0x140CB491A to "
         "PlayerAimController_PublishDirectionalAimWeights.",
     ),
     0x140CAFA20: (
@@ -1157,9 +1159,11 @@ FUNCTIONS = {
     ),
     0x140CB41F0: (
         "PlayerAimController_PublishDirectionalAimWeights",
-        "Publishes aim-add-left/right/down/up to the Player animation graph. "
-        "The four weights are scaled by ADS blend this+0x8EC; Aim0..Aim7 CRCs "
-        "are initialized by the PlayerAimController constructor 0x140CAE670.",
+        "Publishes pre-blend aim-add-left/right/down/up to controller "
+        "+0x8B8..+0x8C4 and active state +0x190/+0x194/+0x188/+0x18C. "
+        "Only the named-channel branch scales the four weights by ADS blend "
+        "this+0x8EC; Aim0..Aim7 CRCs are initialized by the "
+        "PlayerAimController constructor 0x140CAE670.",
     ),
     0x1410D5D40: (
         "AnimControl_ResolveActiveBaseStatePlayerInfo",

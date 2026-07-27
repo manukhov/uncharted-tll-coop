@@ -12360,3 +12360,80 @@ replacement runs immediately without the unrelated fire-start timer; and later
 pickup consumption follows the retained weak identity after the engine retargets
 it to the ground representation. The world-weapon replacement reliability task
 is closed as **CONFIRMED**.
+
+### 2026-07-27 RUNTIME CONFIRMED (visual): remote reload works
+
+The user explicitly confirmed on the current build that the remote reload is
+visible and works. This closes the behavioral requirement implemented by the
+exact `reload` / `reload-release` relay and the bounded sender latch. The current
+bounded log contains the two successful install markers but no clip/loop
+`RELOAD-ACTION-ENTRY`, so this result does not classify exact action-family
+latency. That optional diagnostic is parked and does not block vertical ADS.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `iu` replaces receiver-local vertical aim before native smoothing
+
+The user's opposite-owner observation isolates the failure: moving Nadine's
+local camera up/down moves remote Chloe's weapon in the same direction even when
+Chloe aims elsewhere. Existing aligned telemetry independently records retained
+screen-1 `up=0.8248..0.8929` while the remote owner's screen-0 value is near
+`up=0.18`, later `down=0.2505`. The animation consumer is alive; screen 1 is
+publishing the wrong process-local source.
+
+The exact writer trace meets the static evidence quota:
+
+1. At `0x140CB40E1..0x140CB416F`, instruction dataflow splits the two signed
+   axes and establishes the five-argument ABI: `RCX=controller`, `XMM1=left`,
+   `XMM2=right`, `XMM3=up`, stack arg5=`down`. `0x140CB416F` is the steady call
+   to `PlayerAimController_SmoothAndPublishDirectionalAimWeights 0x140CB47A0`;
+   `0x140CB4176` is the transition call directly to the publisher.
+2. `0x140CB47A0` reads previous LRUD from controller
+   `+0x8B8/+0x8BC/+0x8C0/+0x8C4`, advances signed horizontal/vertical smoothing
+   at `+0x8A4/+0x8AC`, splits the results, and tail-jumps at `0x140CB491A` to
+   `PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0`. Its read of
+   `+0x8EC` selects smoothing versus direct pass-through; it does not multiply
+   the input weights.
+3. `0x140CB41F0` independently writes raw weights back to the controller and to
+   active state `+0x190/+0x194/+0x188/+0x18C`. Only its named-channel commits at
+   `0x140CB438C/0x140CB443C/0x140CB4616/0x140CB46D2` multiply by ADS blend
+   `+0x8EC`. Therefore the transport contract must be pre-smoothing, pre-blend
+   up/down; feeding the old post-blend packet into the smoother would apply the
+   blend twice in named mode.
+
+The current C++ path explains the failed `er` experiment exactly. It first
+called native with receiver-local up/down, allowing native to update smoothing,
+controller fields, active state and registry. Only afterward did it overwrite
+active-state up/down with peer values. The next native tick restored the local
+values. Its sender also captured only the steady screen-0 branch after blend,
+whereas fresh `it` logs show local screen 0 repeatedly using the transition path;
+no pitch flag was consequently serialized.
+
+Competing hypotheses are separated. An absent downstream consumer is rejected by
+the visible local-camera response. More named-layer, palette or pose-copy forcing
+is rejected by prior runtime and is downstream of the now-live state. Repairing
+the earlier camera/target route remains a broader alternative, but it needlessly
+changes working horizontal aim; the common publisher boundary already exposes
+the normalized vertical pair. A late peer overwrite is confirmed as the old
+mechanism, not as a viable fix.
+
+Build `2026-07-27iu` changes only this contract. Both caller-scoped hooks capture
+local screen-0 input `up/down` before smoothing and blend. On exact retained
+screen 1 they replace only up/down with a fresh, strict-ADS peer sample before
+calling native; left/right remain untouched. Missing or stale pitch becomes
+`0/0`, so receiver-local camera values cannot leak back during packet gaps or ADS
+release. Native smoothing, raw controller/active-state writes, named publication
+and blend remain authoritative. Bounded markers record raw capture, pre-call
+peer substitution (including the displaced localUD values), and stale-source
+zeroing. The StatePacket layout is unchanged.
+
+The packet version is raised from 12 to 13 despite the unchanged layout so a
+stale `it` process cannot interpret the new raw fields as the old post-blend
+contract.
+
+**Falsifiable `iu` prediction:** aim Chloe strongly upward while Nadine's local
+camera is held down/straight, then reverse both directions and roles. The remote
+weapon must follow Chloe's transmitted direction, never Nadine's local camera.
+`AIM-PITCH-PRECALL-APPLY` must show differing `localUD` and `peerUD`, followed by
+screen-1 controller/active-state vertical values converging on peerUD through the
+stock smoother. Horizontal aim, model integrity and stability must remain
+unchanged. Following localUD, missing raw capture/apply, shake, corruption or a
+crash rejects the boundary.

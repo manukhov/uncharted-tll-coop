@@ -22133,11 +22133,105 @@ void log_aim_registry_snapshot(
     }
 }
 
+bool valid_preblend_aim_pitch(float up, float down) {
+    return std::isfinite(up) && std::isfinite(down) &&
+        up >= 0.0F && up <= 1.0F && down >= 0.0F && down <= 1.0F;
+}
+
+void route_preblend_aim_pitch(
+    void* controller, const char* phase, float& up, float& down) {
+    if (g_dll_inert || controller == nullptr || !g_state_net.enabled ||
+        readable_bytes(
+            static_cast<std::byte*>(controller) +
+            kGunMoveControllerOwnerOffset) < sizeof(void*)) {
+        return;
+    }
+
+    void* const owner = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(controller) + kGunMoveControllerOwnerOffset);
+    if (owner == nullptr) {
+        return;
+    }
+
+    if (player_screen_index_is(owner, 0)) {
+        if (!valid_preblend_aim_pitch(up, down)) {
+            return;
+        }
+        AcquireSRWLockExclusive(&g_local_aim_pitch_lock);
+        g_local_aim_pitch = {owner, up, down, GetTickCount64()};
+        ReleaseSRWLockExclusive(&g_local_aim_pitch_lock);
+
+        static std::atomic<bool> first_active_capture{false};
+        if (std::max(up, down) >= 0.05F &&
+            !first_active_capture.exchange(true, std::memory_order_acq_rel)) {
+            char line[192]{};
+            std::snprintf(
+                line, sizeof(line),
+                "AIM-PITCH-RAW-CAPTURE phase=%s up=%.4f down=%.4f",
+                phase, up, down);
+            boot_log_line(line);
+        }
+        return;
+    }
+
+    if (owner != retained_player_object(1) ||
+        !player_screen_index_is(owner, kSlot1ScreenIndex)) {
+        return;
+    }
+
+    const float receiver_up = up;
+    const float receiver_down = down;
+    up = 0.0F;
+    down = 0.0F;
+
+    coop::StatePacket peer{};
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    const bool fresh_peer_pitch =
+        received != 0 && now - received <= 250 &&
+        copy_peer_state_snapshot(peer) &&
+        (peer.flags & coop::kStateFlagAimPitch) != 0 &&
+        peer_packet_aim_active(peer) &&
+        valid_preblend_aim_pitch(peer.aim_pitch_up, peer.aim_pitch_down);
+    if (!fresh_peer_pitch) {
+        static std::atomic<bool> first_local_leak_blocked{false};
+        if (std::max(receiver_up, receiver_down) >= 0.05F &&
+            !first_local_leak_blocked.exchange(
+                true, std::memory_order_acq_rel)) {
+            char line[224]{};
+            std::snprintf(
+                line, sizeof(line),
+                "AIM-PITCH-PRECALL-ZERO phase=%s localUD=%.4f/%.4f",
+                phase, receiver_up, receiver_down);
+            boot_log_line(line);
+        }
+        return;
+    }
+
+    up = peer.aim_pitch_up;
+    down = peer.aim_pitch_down;
+    static std::atomic<bool> first_peer_apply{false};
+    const float source_delta = std::max(
+        std::fabs(up - receiver_up), std::fabs(down - receiver_down));
+    if ((std::max(up, down) >= 0.05F || source_delta >= 0.05F) &&
+        !first_peer_apply.exchange(true, std::memory_order_acq_rel)) {
+        char line[256]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-PITCH-PRECALL-APPLY phase=%s localUD=%.4f/%.4f "
+            "peerUD=%.4f/%.4f",
+            phase, receiver_up, receiver_down, up, down);
+        boot_log_line(line);
+    }
+}
+
 void __fastcall hooked_smooth_and_publish_directional_aim_weights(
     void* controller, float left, float right, float up, float down) {
     if (g_smooth_and_publish_directional_aim_weights == nullptr) {
         return;
     }
+    route_preblend_aim_pitch(controller, "steady", up, down);
     g_smooth_and_publish_directional_aim_weights(
         controller, left, right, up, down);
     if (g_dll_inert || controller == nullptr || !g_state_net.enabled ||
@@ -22153,78 +22247,6 @@ void __fastcall hooked_smooth_and_publish_directional_aim_weights(
     const float blend = *reinterpret_cast<const float*>(
         static_cast<const std::byte*>(controller) + 0x8EC);
 
-    const float clamped_blend = std::clamp(blend, 0.0F, 1.0F);
-    if (owner == retained_player_object(0) &&
-        player_screen_index_is(owner, 0)) {
-        const float pitch_up = raw_up * clamped_blend;
-        const float pitch_down = raw_down * clamped_blend;
-        if (std::isfinite(pitch_up) && std::isfinite(pitch_down) &&
-            pitch_up >= 0.0F && pitch_up <= 1.0F &&
-            pitch_down >= 0.0F && pitch_down <= 1.0F) {
-            AcquireSRWLockExclusive(&g_local_aim_pitch_lock);
-            g_local_aim_pitch = {
-                owner, pitch_up, pitch_down, GetTickCount64()};
-            ReleaseSRWLockExclusive(&g_local_aim_pitch_lock);
-            static std::atomic<bool> first_active_wire_capture{false};
-            if (std::max(pitch_up, pitch_down) >= 0.05F &&
-                !first_active_wire_capture.exchange(
-                    true, std::memory_order_acq_rel)) {
-                char line[160]{};
-                std::snprintf(
-                    line, sizeof(line),
-                    "AIM-PITCH-WIRE-CAPTURE up=%.4f down=%.4f",
-                    pitch_up, pitch_down);
-                boot_log_line(line);
-            }
-        }
-    } else if (owner == retained_player_object(1) &&
-               player_screen_index_is(owner, kSlot1ScreenIndex)) {
-        coop::StatePacket peer{};
-        const ULONGLONG now = GetTickCount64();
-        const ULONGLONG received =
-            g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
-        const bool fresh_pitch =
-            received != 0 && now - received <= 250 &&
-            copy_peer_state_snapshot(peer) &&
-            (peer.flags & coop::kStateFlagAimPitch) != 0 &&
-            peer_packet_aim_active(peer) &&
-            std::isfinite(peer.aim_pitch_up) &&
-            std::isfinite(peer.aim_pitch_down) &&
-            peer.aim_pitch_up >= 0.0F && peer.aim_pitch_up <= 1.0F &&
-            peer.aim_pitch_down >= 0.0F && peer.aim_pitch_down <= 1.0F;
-        if (fresh_pitch) {
-            void* const active_state =
-                aim_publish_active_state_from_player(owner);
-            if (active_state != nullptr &&
-                readable_bytes(
-                    static_cast<std::byte*>(active_state) +
-                    kAnimStateAimAddDownOffset) >= sizeof(float)) {
-                __try {
-                    auto* const state_bytes =
-                        static_cast<std::byte*>(active_state);
-                    *reinterpret_cast<float*>(
-                        state_bytes + kAnimStateAimAddUpOffset) =
-                        peer.aim_pitch_up;
-                    *reinterpret_cast<float*>(
-                        state_bytes + kAnimStateAimAddDownOffset) =
-                        peer.aim_pitch_down;
-                    static std::atomic<bool> first_active_wire_apply{false};
-                    if (std::max(
-                            peer.aim_pitch_up, peer.aim_pitch_down) >= 0.05F &&
-                        !first_active_wire_apply.exchange(
-                            true, std::memory_order_acq_rel)) {
-                        char line[160]{};
-                        std::snprintf(
-                            line, sizeof(line),
-                            "AIM-PITCH-WIRE-APPLY up=%.4f down=%.4f",
-                            peer.aim_pitch_up, peer.aim_pitch_down);
-                        boot_log_line(line);
-                    }
-                } __except (EXCEPTION_EXECUTE_HANDLER) {
-                }
-            }
-        }
-    }
     log_aim_base_state_fingerprint(owner, "steady", raw_up, raw_down);
     log_aim_registry_snapshot(
         controller, owner, "steady", raw_up, raw_down, blend);
@@ -22235,6 +22257,7 @@ void __fastcall hooked_publish_directional_aim_weights(
     if (g_publish_directional_aim_weights == nullptr) {
         return;
     }
+    route_preblend_aim_pitch(controller, "transition", up, down);
     g_publish_directional_aim_weights(controller, left, right, up, down);
     if (g_dll_inert || controller == nullptr || !g_state_net.enabled ||
         readable_bytes(static_cast<std::byte*>(controller) + 0x8F0) < 1) {
@@ -22254,42 +22277,6 @@ void __fastcall hooked_publish_directional_aim_weights(
     log_aim_base_state_fingerprint(owner, "transition", up, down);
     log_aim_registry_snapshot(
         controller, owner, "transition", up, down, blend);
-    if (player_screen_index_is(owner, 0)) {
-        if (!uses_named_channels) {
-            return;
-        }
-        const float pitch_up = up * blend;
-        const float pitch_down = down * blend;
-        if (!std::isfinite(pitch_up) || !std::isfinite(pitch_down) ||
-            pitch_up < 0.0F || pitch_up > 1.0F ||
-            pitch_down < 0.0F || pitch_down > 1.0F) {
-            return;
-        }
-        AcquireSRWLockExclusive(&g_local_aim_pitch_lock);
-        g_local_aim_pitch = {owner, pitch_up, pitch_down, GetTickCount64()};
-        ReleaseSRWLockExclusive(&g_local_aim_pitch_lock);
-        static std::atomic<bool> first_pitch_capture_logged{false};
-        if (!first_pitch_capture_logged.exchange(true, std::memory_order_acq_rel)) {
-            char line[160]{};
-            std::snprintf(
-                line, sizeof(line), "AIM-PITCH-CAPTURE up=%.4f down=%.4f",
-                pitch_up, pitch_down);
-            boot_log_line(line);
-        }
-        static std::atomic<bool> first_active_pitch_capture_logged{false};
-        if (std::max(pitch_up, pitch_down) >= 0.05F &&
-            !first_active_pitch_capture_logged.exchange(
-                true, std::memory_order_acq_rel)) {
-            char line[160]{};
-            std::snprintf(
-                line, sizeof(line),
-                "AIM-PITCH-CAPTURE-ACTIVE up=%.4f down=%.4f",
-                pitch_up, pitch_down);
-            boot_log_line(line);
-        }
-        return;
-    }
-
 }
 
 bool valid_foot_turn_sample(
@@ -41389,8 +41376,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27it "
-        "(immediate exact COPW detach; paired-drop weak retarget consume)");
+        "TLL co-op runtime init 2026-07-27iu "
+        "(pre-blend peer pitch at native aim publisher boundaries)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

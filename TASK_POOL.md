@@ -1520,7 +1520,7 @@ Do not reopen these as the first move:
       parallel left offset in either tracer or impact. PID 16512 reported
       `originError=0.00000`, `dot=1.00000`; user confirmed exact visual alignment.
 
-## P0 - Remote vertical ADS pose (2026-07-18)
+## P0 - Remote vertical ADS pose (CURRENT, 2026-07-27)
 
 - [x] Reject `0x140CB4176` as the receiver apply boundary: build `dp` exchanged
       pitch fields but the puppet never reached `AIM-PITCH-APPLY`.
@@ -1827,19 +1827,30 @@ Do not reopen these as the first move:
       the test is INCONCLUSIVE. No visible pitch and no regression across three
       weapons. Parked; on resume correlate WorkBuffer across command-list segments
       and probe only the segment that actually publishes opcode 26.
-- [ ] **New runtime ownership discriminator (2026-07-27):** the user observed
+- [x] **Runtime ownership discriminator and static writer trace (2026-07-27):**
+      the user observed
       that moving Nadine's local camera vertically immediately moves Chloe's
       remote weapon in the same direction even while Chloe's real aim on her own
       copy is different. Existing logs agree: Nadine receiver screen 1 carried
       `up=0.8248..0.8929` while Chloe sender screen 0 was near `up=0.18` and later
       `down=0.2505`. The vertical consumer is therefore alive; the retained
       channel is sourced from receiver-local camera pitch instead of remote-owner
-      pitch. Before any runtime mutation, trace the writer feeding screen-1
-      `AIM-REGISTRY-SNAPSHOT rawUD/stateLRDU` and `AIM-BASE-CONFIG up/down` back to
-      camera ownership versus StatePacket input. Do not revisit rejected named
-      layers, graph forcing or pose-copy experiments.
+      pitch. Exact ABI/dataflow proves `0x140CB416F` passes pre-blend
+      `XMM3=up` and stack arg5 `down` into `0x140CB47A0`, which smooths them and
+      tail-jumps to publisher `0x140CB41F0`. The old hook called native with the
+      receiver-local inputs, then wrote peer pitch only to active state, too late
+      for controller smoothing and publication. Build `iu` captures sender raw
+      inputs on both transition/steady callsites and substitutes only retained
+      screen-1 up/down before native. Rejected named layers, graph forcing and
+      pose-copy remain parked.
+- [ ] Run the `iu` opposite-direction discriminator on both roles and at least a
+      pistol plus rifle: keep the receiver-local camera down while the peer aims
+      up, then reverse. `AIM-PITCH-PRECALL-APPLY` must show different localUD and
+      peerUD, while following `AIM-BASE-CONFIG`/active-state vertical values and
+      the visible remote weapon follow peerUD. No horizontal regression, shake,
+      model corruption or crash is allowed.
 
-## P0 - Nadine legacy-look weapon attachment (CURRENT, 2026-07-21)
+## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 
 - [x] Recover the prior Nadine weapon history and keep the confirmed general
       weapon-display fixes. `ApplyWeaponSwitch(-1)`, slot mirror, draw-state
@@ -2558,7 +2569,7 @@ Do not reopen these as the first move:
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
-## P0 NEXT - Remote reload animation sync (re-prioritized by user 2026-07-27)
+## P0 - Remote reload animation sync (VISUALLY CONFIRMED, 2026-07-27)
 
 - [x] Trace the exact accepted command edge. `Player_BuildAcceptedActionInputState
       0x140C9D850` queries `reload` and `reload-release` at
@@ -2577,8 +2588,10 @@ Do not reopen these as the first move:
 - [x] Reject `ij` packaging at cold boot: it used the decompiler's post-call
       result addresses `0x140C9E622/0x140C9E637`. Build `ik` corrects the two
       verified E8 starts to `0x140C9E611/0x140C9E632`; behavior was not exercised.
-- [ ] Run the written clip plus shotgun-loop discriminator, record CONFIRMED or
-      REJECTED, commit, and push.
+- [ ] Optional classification only: capture the written clip plus shotgun-loop
+      action-entry markers if exact per-weapon delay data is needed. The user has
+      already confirmed that remote reload is visible and works on the current
+      build; do not block vertical ADS work on this diagnostic.
 - [ ] `ik` runtime: remote reload is visible and first attempts reached the exact
       receiver callsite in the same packet sequence, but a later one-frame press
       vanished before serialization (`seq=2203` received release only). Add a
@@ -2591,6 +2604,10 @@ Do not reopen these as the first move:
       Release build compiles; the two action-entry names are saved and verified
       in the single IDB. Run the written runtime discriminator after the
       world-weapon reliability fix is ready for the same cold launch.
+- [x] Current `it` visual confirmation: the user explicitly verified that remote
+      reload works. The bounded current log contains installation markers but no
+      clip/loop action-entry row, so visual synchronization is CONFIRMED while
+      exact action-family timing remains intentionally unclassified.
 
 ## P0 NEXT - World-weapon replacement reliability follow-up (2026-07-27 `ik`)
 
