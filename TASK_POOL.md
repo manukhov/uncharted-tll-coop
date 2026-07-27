@@ -89,7 +89,9 @@
       receiver SLOT-MIRROR no longer pre-kills the old slot object: stock
       `PlayerWeaponController_GiveWeapon 0x1410A4D40` must detach it and install the
       picked weapon atomically. Keep native registry Apply forbidden. Run the
-      written `id` prediction in `COOP_STATUS.md` in both directions.
+      written `id` prediction in `COOP_STATUS.md` in both directions. **Cold boot
+      CONFIRMED:** role-A/Chloe PID 23768 and role-B/Nadine PID 15392 remained
+      responsive for 30+ seconds with no exception/skip/incomplete marker.
 
 ## P0: Full Player Synchronization (CURRENT)
 

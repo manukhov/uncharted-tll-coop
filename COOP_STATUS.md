@@ -11086,3 +11086,14 @@ same chain. `DROP-COMMIT` absence rejects the exact ProcessWeapon/detached admis
 flags=3 plus `detached=0` selects the stock ammo/state detach gate; successful
 markers with wrong visible world state reject stock receiver replacement as the
 complete materialization boundary.
+
+### 2026-07-27 RUNTIME CONFIRMED: `id` cold A/B boot
+
+Fresh role-A/Chloe PID 23768 and role-B/local-Nadine PID 15392 both loaded build
+`2026-07-27id`, installed the WeaponInteractControl exact transaction and all HUD
+diagnostic sites, and selected the expected network roles. After the serialized
+injections and an additional 30-second observation both processes remained alive
+and Win32-responsive. Neither emitted an exception, `SKIPPED`, `incomplete`, world-
+weapon transaction or unexpected SLOT-MIRROR marker. This confirms only the new
+raw-art/all-screen/stock-replacement packaging before interaction; the written
+M30/Mazur behavior prediction remains pending.
