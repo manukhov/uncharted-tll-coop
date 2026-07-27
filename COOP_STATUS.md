@@ -10567,3 +10567,76 @@ Do not rerun `hy`. Before another runtime exam, trace the actually reached
 weapon-replacement boundary independently of the scripted GiveWeapon callsite,
 and resolve the HUD record key/destroy path so ownership is selected from the
 copy role/local retained Player rather than the unproven `+0x4010` field.
+
+### 2026-07-27 STATIC / IMPLEMENTED: exact ground-weapon and HUD lifecycles (`hz`)
+
+The first `hz` draft is rejected before runtime: its sampled raw-slot delta still
+classified ordinary weapons as `WeaponPickup`. Deeper RTTI/dataflow tracing
+identifies a different exact path and replaces that draft without spending a
+game launch on it.
+
+The ordinary M30/Mazur boundary meets the evidence quota with five independent
+types:
+
+1. RTTI `.?AVWeaponInteractControl@@` fixes vtable `0x1429BF4A8`; its slots are
+   `DetermineAvailability 0x141505030`, `RequestInteract 0x141505650`, and exact
+   accepted `OnInteract 0x141505BB0`. The source at RDX is a `ProcessWeapon`, not
+   a `WeaponPickup`.
+2. `OnInteract` independently reads the source stable world ID at `+0xD8`, art
+   at `+0x860`, ammo/metadata, and publishes the authored `give-weapon` event.
+   Its successful commit destroys that exact source through `ProcessKillTree` at
+   call `0x141506839` / return RVA `0x150683E`.
+3. The event graph converges through `Player_ScriptWeaponEventHandler
+   0x140DCDEA0` to `PlayerWeaponController_GiveWeapon 0x1410A4D40`. GiveWeapon
+   obtains the replaced ProcessWeapon through controller vtable `+0xB0` and
+   detaches it at call `0x1410A68AC` / return RVA `0x10A68B1`; the source and old
+   weapon are therefore two distinct, exact objects.
+4. `ProcessWeapon_DetachToWorldTransform 0x141ED3630` sets `old+0x690 & 8` and
+   commits world translation/rotation at `+0x590/+0x5A0`. Only after this return
+   is the old object safe for `NetEventAddDroppedPickup_CtorFromProcessWeapon
+   0x140BCC9D0`, which serializes the portable ID/art/transform/ammo payload.
+5. The receiver uses the separate stock event families: `NetEventSyncWeaponPickups_Apply
+   0x140BCE440` consumes the same stable-ID ProcessWeapon (direct lookup, then a
+   validated dispatcher handle/art fallback), and `NetEventAddDroppedPickup_Apply
+   0x140BCD0F0` materializes the detached old weapon.
+
+Competing hypotheses are rejected explicitly. `WeaponPickupInteractControl
+0x14157AA70` is a different RTTI class and was runtime-silent for these weapons.
+The script GiveWeapon return alone is downstream and loses the consumed source
+identity. Broad `ProcessKillTree` or detach hooks have many unrelated callers;
+`hz` accepts them only under the same thread-local `WeaponInteractControl`
+transaction and the exact two return RVAs. The sampled raw-slot delta can merge
+mutations and cannot distinguish pickup from loadout/scripted gives, so it is
+removed as a sender boundary. `COPW` remains the dedicated one-shot world packet;
+`COPG` remains inventory-only and cannot double-apply world lifecycle.
+
+The HUD correction also meets the quota. `0x1408AEA00` is aliased at slot `+0xE0`
+in base `PickupInteractControl` (`0x1429B6878`), `WeaponInteractControl`
+(`0x1429BF4A8`), and `WeaponPickupInteractControl` (`0x142AA6E90`), so patching
+one derived vtable could never cover the complete weapon path. Its R8/a3 is the
+Player: the function builds `a3+0xA8/+0xBC`, resolves the HUD index through
+manager vtable `+0xD0`, then upserts the shared four-slot FHUD store via
+`0x141359470`. The new entry detour restricts ownership gating to the two exact
+weapon-control vtables: retained Player 0 calls stock, retained Player 1 is
+suppressed, unknown Players and unrelated interact controls remain stock.
+
+Suppression alone cannot erase a record created earlier. `0x141354EA0` stores
+the interactable key at record `+0x18/+0x20`; physical store pointer
+`0x143EF1F20` owns four records at `+0x830 + index*0x710`. The entry detour queues
+remote and local keys for the current frame. Immediately before
+`FHUD_UpdateInteractScriptsAndExpire 0x141357D60`, the lifecycle detour calls
+`FHUD_DestroyInteractScript 0x141357CA0` only for a remote key not refreshed by
+the local Player, then runs the original updater. This avoids call-order races
+and uses the stock Flash ProcessKillTree/reset path.
+
+Release build `hz` succeeds. **Falsifiable prediction:** approaching the same
+weapon with either local Chloe or local Nadine emits both bounded ALLOW and
+SUPPRESS ownership markers; at most one prompt is visible and leaving the weapon
+emits `PICKUP-HUD-DESTROY` before the prompt disappears. Replacing Mazur LDR
+`0x8075397D` with M30 `0x3019CBEE` emits exactly one
+`WORLD-WEAPON-INTERACT`, one `SOURCE-COMMIT`, one `DROP-COMMIT` for the Mazur,
+and one `WORLD-WEAPON-SEND flags=0x3`. The peer must emit one matching RECV, one
+`WORLD-PICKUP-CONSUME applied=1`, and one `WORLD-PICKUP-DROP applied=1`; its old
+M30 disappears and exactly one Mazur appears. The reverse direction must mirror
+the chain. Merely approaching, drawing, holstering, switching, or ammo-only
+updates must emit no `WORLD-WEAPON-SEND`.

@@ -1402,10 +1402,39 @@ FUNCTIONS = {
         "Publishes interact-with-me to the pickup at action start.",
     ),
     0x1408AEA00: (
-        "WeaponPickupInteractControl_PublishHudPrompt",
-        "WeaponPickupInteractControl vtable +0xE0. Derives the Player screen, "
-        "queries availability, builds the weapon prompt and refreshes the shared "
-        "four-slot FHUD interact store through 0x141359470.",
+        "PickupInteractControl_PublishHudPrompt",
+        "Shared vtable +0xE0 entry in PickupInteractControl (0x1429B6878), "
+        "WeaponInteractControl (0x1429BF4A8), and WeaponPickupInteractControl "
+        "(0x142AA6E90). a3 is the Player GameObject; the function builds its "
+        "+0xA8/+0xBC handle, resolves a HUD index through player-manager vtable "
+        "+0xD0 (not Player+0x4010), then refreshes the four-slot FHUD interact "
+        "store through 0x141359470.",
+    ),
+    0x141357CA0: (
+        "FHUD_DestroyInteractScript",
+        "FHUD::HudFlash::DestroyInteractScript. For one of four physical HUD "
+        "slots, kills the active Flash process through ProcessKillTree, clears "
+        "the active flag, and resets its keyed interact record.",
+    ),
+    0x141357D60: (
+        "FHUD_UpdateInteractScriptsAndExpire",
+        "Per-frame owner of the four physical FHUD interact records. Validates "
+        "object handle/generation at record +0x18/+0x20, draws refreshed slots, "
+        "expires stale slots through FHUD_DestroyInteractScript, and clears each "
+        "refresh byte.",
+    ),
+    0x141505BB0: (
+        "WeaponInteractControl_OnInteract",
+        "Accepted ordinary ground-weapon interaction. RDX is the source "
+        "ProcessWeapon, R8 is Player. Reads source stable id +0xD8 and art "
+        "+0x860, publishes give-weapon, then commits source destruction through "
+        "ProcessKillTree at call 0x141506839 (return 0x14150683E).",
+    ),
+    0x141ED3630: (
+        "ProcessWeapon_DetachToWorldTransform",
+        "Detaches a ProcessWeapon into world space: sets +0x690 bit 3 and writes "
+        "translation/rotation to +0x590/+0x5A0. GiveWeapon replacement calls it "
+        "at 0x1410A68AC (return 0x1410A68B1) for the exact dropped old weapon.",
     ),
     0x1408C8950: (
         "PickupInteractControl_CompletePickup",
@@ -9134,11 +9163,28 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x1429B6878: (
+        "PickupInteractControl_Vtable",
+        "MSVC RTTI .?AVPickupInteractControl@@ vtable. Slot +0xE0 aliases the "
+        "shared PickupInteractControl_PublishHudPrompt entry 0x1408AEA00.",
+    ),
+    0x1429BF4A8: (
+        "WeaponInteractControl_Vtable",
+        "MSVC RTTI .?AVWeaponInteractControl@@ vtable. Slots identify ordinary "
+        "ground ProcessWeapon availability, request, OnInteract, and shared HUD "
+        "publication; distinct from WeaponPickupInteractControl.",
+    ),
     0x142AA6E90: (
         "WeaponPickupInteractControl_Vtable",
         "MSVC RTTI .?AVWeaponPickupInteractControl@@ vtable. Slot +0x10 is "
         "OnInteract, +0x28 RequestInteract and +0xE0 the continuous HUD prompt "
         "publisher.",
+    ),
+    0x143EF1F20: (
+        "FHUD_PhysicalInteractStore_Ptr",
+        "Physical FHUD/HudFlash store used by UpdateInteractScriptsAndExpire and "
+        "DestroyInteractScript. Four interact records begin at +0x830 with "
+        "stride 0x710; refresh bytes begin at +0x820.",
     ),
     0x1429FCF90: (
         "NetEventSyncWeaponPickups_Vtable",

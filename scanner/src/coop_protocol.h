@@ -217,6 +217,24 @@ struct WeaponGivePacket {
         dropped_pickup_event_payload[kDroppedPickupEventPayloadBytes]{};
 };
 
+// Ground-world lifecycle is independent of inventory. Exact
+// WeaponInteractControl/source-kill/old-detach boundaries identify the consumed
+// and dropped ProcessWeapon objects. COPW carries their native event data only.
+constexpr std::uint32_t kWeaponWorldMagic = 0x57504F43;  // "COPW"
+constexpr std::uint16_t kWeaponWorldVersion = 1;
+
+struct WeaponWorldPacket {
+    std::uint32_t magic = kWeaponWorldMagic;
+    std::uint16_t version = kWeaponWorldVersion;
+    std::uint16_t flags = 0;
+    std::uint32_t sequence = 0;
+    std::uint32_t picked_weapon_art_id = 0;
+    std::uint32_t consumed_pickup_stable_id = 0;
+    std::uint32_t dropped_weapon_art_id = 0;
+    std::uint8_t
+        dropped_pickup_event_payload[kDroppedPickupEventPayloadBytes]{};
+};
+
 // One-shot fire relay: local PlayerFireController::Fire captured on the sender
 // and replayed on the remote retained Player via the same native entry point.
 constexpr std::uint32_t kFirePacketMagic = 0x45524946;  // "FIRE"

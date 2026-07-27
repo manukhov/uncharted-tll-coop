@@ -456,11 +456,16 @@ constexpr std::uintptr_t kPlayerTryStartBumpActionRva = 0x0CE8E10;
 // OnInteract is retained only as a safety gate for replay completion.
 constexpr std::uintptr_t kPickupRequestInteractRva = 0x08C8A40;
 constexpr std::uintptr_t kWeaponPickupOnInteractRva = 0x157AA70;
-// WeaponPickupInteractControl vtable +0xE0. This publisher continuously refreshes
-// the four-slot shared FHUD interact store; screen-1 publication leaks the remote
-// Player's pickup prompt into the physical viewport.
-constexpr std::uintptr_t kWeaponPickupInteractHudVtableSlotRva = 0x2AA6F70;
+// Common weapon-prompt publisher. PickupInteractControl, WeaponInteractControl,
+// and WeaponPickupInteractControl all expose this entry at vtable slot +0xE0.
+// Hook the function entry, not one derived vtable slot, so the retained remote
+// Player cannot leak a prompt through another class alias.
 constexpr std::uintptr_t kWeaponPickupInteractHudPublisherRva = 0x08AEA00;
+constexpr std::uintptr_t kWeaponInteractControlVftableRva = 0x29BF4A8;
+constexpr std::uintptr_t kWeaponPickupInteractControlVftableRva = 0x2AA6E90;
+constexpr std::uintptr_t kFhudInteractStorePtrRva = 0x3EF1F20;
+constexpr std::uintptr_t kFhudDestroyInteractScriptRva = 0x1357CA0;
+constexpr std::uintptr_t kFhudUpdateInteractScriptsRva = 0x1357D60;
 constexpr std::uintptr_t kPlayerRequestedInteractRva = 0x0C87D70;
 // PlayerPickupController vtable +0x38 -> Start/Queue 0x140F49CA0. This is the
 // proven producer of dra-pickup-* gestures from the interact-with-me script event.
@@ -519,6 +524,13 @@ constexpr std::uintptr_t kGenerateNetDroppedPickupIdRva = 0x0A97600;
 // relayed pickup give — otherwise the new long gun spills into the next slot and
 // collides with the pistol (confirmed fountain root 2026-07-07).
 constexpr std::uintptr_t kProcessKillTreeRva = 0x16A5C20;
+// Ordinary campaign ground weapons use WeaponInteractControl, not
+// WeaponPickupInteractControl. The accepted interaction consumes the exact
+// source ProcessWeapon, while GiveWeapon detaches the replaced ProcessWeapon.
+constexpr std::uintptr_t kWeaponInteractOnInteractRva = 0x1505BB0;
+constexpr std::uintptr_t kWeaponInteractSourceKillRetRva = 0x150683E;
+constexpr std::uintptr_t kProcessWeaponDetachRva = 0x1ED3630;
+constexpr std::uintptr_t kPickupReplacementDetachRetRva = 0x10A68B1;
 // PlayerAimController::GetTargetPointFromReticle 0x140CB1720 (self-named by assert
 // player-aim.cpp). Confirmed the dominant per-frame idx==1 caller of the pose-seed
 // resolver during puppet ADS (122/frame). It reads the screen pose seed and returns

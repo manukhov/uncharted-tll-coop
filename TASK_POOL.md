@@ -17,10 +17,19 @@
 - [x] **`hy` HUD runtime REJECTED:** the defect moved from Nadine to Chloe and no
       SUPPRESS marker appeared; `Player+0x4010` is not a proven physical-screen
       owner and suppress-without-destroy leaves a stale shared record.
-- [ ] Trace the actually reached ground-weapon replacement boundary, preserving
+- [x] Trace the actually reached ground-weapon replacement boundary, preserving
       the still-STATIC native consume/drop Apply reconstruction for a later test.
-- [ ] Resolve the WeaponPickup FHUD record key and explicit destroy/expiry path;
+- [x] Resolve the WeaponPickup FHUD record key and explicit destroy/expiry path;
       gate by local retained Player/copy role rather than `Player+0x4010`.
+- [x] **`hz` STATIC / IMPLEMENTED:** replace the rejected sampled slot-delta
+      draft with exact `WeaponInteractControl::OnInteract 0x141505BB0`, source
+      kill return `0x150683E`, and old-weapon detach return `0x10A68B1` under one
+      TLS transaction; serialize the resulting native consume/drop as `COPW`.
+- [x] **`hz` STATIC / IMPLEMENTED:** hook the shared `0x1408AEA00` entry (base
+      and both weapon-control vtables), gate by retained Player identity, and
+      explicitly destroy remote-only keyed FHUD records before `0x141357D60`.
+- [ ] Runtime-check the written `hz` prediction in both directions and promote
+      each consume/drop/HUD result independently.
 
 ## P0: Full Player Synchronization (CURRENT)
 
