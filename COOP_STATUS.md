@@ -11415,3 +11415,106 @@ button input is not accepted as current runtime proof. After the scoped ground
 prompt branch is resolved, trace the Player/ProcessWeapon reload edge, native
 animation-controller path, owner/screen selection, and magazine transition before
 adding a one-shot relay. Ammo remains owned by the existing weapon snapshot path.
+
+### 2026-07-27 RUNTIME PARTIAL CONFIRM / REJECT: `ig` proves the map selector but misses the initial M30 before validation
+
+The user's first observation separates prompt creation from the pickup event: the
+stale M30 offer is already visible immediately after loading, before either player
+picks up or replaces a weapon. When Nadine later picked that initial M30, sender
+PID 22516 emitted the exact flags=3 transaction
+`picked=0x3019CBEE consume=0xA2DCA9C1 dropped=0x33E29A1B`. Receiver PID 23320
+successfully performed the stock replacement in 16 ms, but its consume expired as
+`captured=1 recent=0 live=0 matching=0 ambiguous=0`. The source was therefore
+captured; `ig` discarded it solely because the one-shot capture was older than
+`kGroundPickupHudCandidateMaxAgeMs`, before dereferencing and validating its live
+weak object. This explains both the surviving receiver M30 model and the startup
+prompt without invoking a second store or a missing publisher.
+
+The exact script-map work is only partially confirmed, not rejected. Multiple
+later `ig` transactions reached `hudScanned=1`, selected one slot through the live
+weak key and/or the typed `{interact-id,pickup-weapon-id}` map, and completed with
+`hudMatched=1 hudDestroyed=1`. That independently exercises the statically proven
+map ABI and native `FHUD_DestroyInteractScript 0x141357CA0` call. It does not
+rescue the initial-M30 acceptance test because that target was rejected upstream
+by age.
+
+The user subsequently reported a crash. No terminal exception, Windows Error
+Reporting record, or crash dump was produced. The repeated observed exception at
+DLL RVA `0x4A73F` disassembles to the guarded byte read inside `readable_bytes` and
+was followed by normal weapon, aim and fire processing, so it is an expected
+first-chance page probe rather than a localized fatal boundary. The crash remains
+real runtime evidence and prevents calling `ig` stable, but it cannot currently be
+attributed to FHUD destruction. The last log records are ordinary firearm relay
+processing after several successful HUD destroys.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `ih` treats candidate age as telemetry and retains exact live identity
+
+**Hypothesis.** `pickup-control 0x1408AF179` may publish the initial ground weapon
+only when its interaction state changes, while the created Flash script remains
+active. Capture age is consequently not an ownership property. An old capture is
+still the exact ground ProcessWeapon if its weak block remains readable, `weak+8`
+still resolves a live object, `object+0xBC` still equals the captured generation,
+the vtable is exactly ProcessWeapon, and both the stable ID and weapon art still
+equal the captured values. Making the 15-second threshold diagnostic-only should
+allow the untouched initial M30 to be consumed without admitting stale/reused
+objects.
+
+The evidence quota is satisfied by independent runtime, object-layout and FHUD
+lifecycle evidence:
+
+1. Runtime selected the precise rejected branch: `captured=1 recent=0` and zero
+   live validation on the initial M30. The candidate exists and the age gate, not
+   source capture, prevented matching.
+2. The finder independently revalidates the weak pointer, generation,
+   ProcessWeapon vtable, stable ID and exact art after that gate. A freed or reused
+   weak block cannot pass all of those constraints; two live same-art candidates
+   remain explicitly ambiguous and are not killed.
+3. `FHUD_UpdateSingleInteractScript 0x141358030` owns the Flash-process handle and
+   parameter map separately from the source publisher. Stock keeps and updates
+   that script until explicit expiry/destruction, so a persistent prompt does not
+   imply a recent source callback.
+4. Later `ig` transactions already showed that candidates which reach these live
+   checks can select and destroy exactly one matching script through the weak key
+   or stable-ID-plus-art map.
+
+Competing explanations are excluded at the decision point. A missing source is
+contradicted by `captured=1`; a dead or reused object is rejected by live
+weak/generation/vtable/ID/art validation; a broad heap scan is unnecessary because
+only the bounded exact FHUD publisher captures are considered; and multiple live
+same-art objects still fail closed. Build `ih` therefore preserves the threshold
+only as `recent` telemetry and proceeds to exact live validation for older
+captures.
+
+**Falsifiable prediction:** after the initial M30 prompt has existed for more than
+15 seconds, picking M30 on Nadine must produce receiver
+`captured>=1 recent=0 live>=1 matching=1`, then `killed=1` and exact HUD cleanup
+instead of expiry. The receiver M30 model and stale offer must disappear, the
+dropped weapon must retain the confirmed sub-500-ms stock path, and neither copy
+may crash. A dead/reused candidate must remain `live=0`; two live same-art
+candidates must report ambiguity and kill neither.
+
+### 2026-07-27 CONFIRMED behavior / HYPOTHESIS writer: retained vertical ADS follows the receiver-local camera
+
+The missing vertical pose is not a dead animation consumer. The user observed a
+direct discriminator: on Nadine's copy, aiming Nadine's local camera upward makes
+the visible remote Chloe weapon point upward immediately even when Chloe is
+actually aiming straight or down on her own copy; aiming Nadine downward makes
+remote Chloe point down. Thus the vertical animation path can move the remote
+weapon, but it is driven by the receiver's camera rather than the remote owner's
+aim.
+
+The current read-only telemetry agrees with the visual result. Nadine receiver
+PID 22516 recorded retained screen-1 `AIM-BASE-CONFIG up=0.8248`, then `0.8520`
+and `0.8929`, with matching `AIM-REGISTRY-SNAPSHOT rawUD/stateLRDU`. Interleaved
+Chloe sender PID 23320 screen-0 samples were only about `up=0.18` and later
+`down=0.2505`. The retained values therefore do not represent Chloe's transmitted
+vertical aim at those moments.
+
+This **rejects an absent downstream vertical consumer** and supersedes the parked
+assumption that another pose graph, palette copy or named aim layer must be
+invented. Those downstream experiments correctly showed that the retained graph
+consumes its available screen-1 state; the newly isolated defect is source
+ownership. The exact writer remains a hypothesis until static tracing identifies
+where receiver-local camera pitch enters screen-1 `rawUD/stateLRDU` instead of the
+peer StatePacket value. The next aim change must fix that source and must not
+reactivate the rejected named-layer, forced-branch or pose-copy paths.

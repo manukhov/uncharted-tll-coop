@@ -25361,12 +25361,16 @@ NearbyGroundProcessWeapon seh_find_ground_process_weapon_from_hud_candidates(
                 continue;
             }
             ++stats.captured;
-            if (now < captured.last_seen_ms ||
-                now - captured.last_seen_ms >
+            // The pickup-control FHUD publisher can be one-shot: the Flash prompt
+            // remains active after this capture stops refreshing. Age is useful
+            // telemetry, but it is not object ownership. Continue to require the
+            // live weak handle, generation, ProcessWeapon vtable, stable id and
+            // exact art below before accepting an older capture.
+            if (now >= captured.last_seen_ms &&
+                now - captured.last_seen_ms <=
                     kGroundPickupHudCandidateMaxAgeMs) {
-                continue;
+                ++stats.recent;
             }
-            ++stats.recent;
             if (readable_bytes(reinterpret_cast<const void*>(
                     captured.weak_handle)) < 16) {
                 continue;
@@ -40196,8 +40200,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27ig "
-        "(pre-kill FHUD select; exact script-map cleanup)");
+        "TLL co-op runtime init 2026-07-27ih "
+        "(live weak FHUD candidates; exact script-map cleanup)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

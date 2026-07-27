@@ -132,7 +132,17 @@
       hypothesis distinguishes script ownership, cached display state, and a
       different publisher/copy of the record with three independent evidence
       types.
-- [ ] **`ig` STATIC / IMPLEMENTED, behavioral runtime pending:** the evidence quota is met.
+- [x] **`ig` runtime PARTIAL CONFIRM / REJECT:** the evidence quota was met and
+      the exact slot-map path was exercised. Later swaps reported
+      `hudScanned=1 hudWeakMatched=1 hudMapMatched=1 hudDestroyed=1`, confirming
+      that the typed map can identify and destroy an eligible live script. The
+      original M30 still failed: Nadine's first pickup produced receiver
+      `captured=1 recent=0 live=0 matching=0`, so the finder rejected the sole
+      FHUD candidate at its arbitrary 15-second age gate before any live-object
+      validation. The user also reported a later crash; logs contain no terminal
+      exception or WER record, so its boundary is unresolved and `ig` does not
+      pass stability acceptance.
+- [x] **`ig` STATIC / IMPLEMENTED basis:** the evidence quota is met.
       `FHUD_UpdateSingleInteractScript 0x141358030` writes exact `interact-id`
       (`ProcessWeapon+0xD8`) and `pickup-weapon-id` (`ProcessWeapon+0x860`) into
       the live slot map at `+0x808`, independently of the copied record at
@@ -141,6 +151,14 @@
       M30-to-Mazur prediction; preserve the confirmed sub-141-ms stock drop.
       Fresh PID 23320 (A/Chloe) and PID 22516 (B/Nadine) loaded the committed
       build, stayed responsive and installed the scoped hooks without failure.
+- [ ] **`ih` STATIC / IMPLEMENTED, runtime pending:** keep the 15-second age as
+      diagnostic telemetry only. Revalidate every captured entry through its
+      live weak pointer, generation, exact ProcessWeapon vtable, stable ID and
+      art; accept an old entry only if all of those independent identities still
+      match and reject ambiguous same-art candidates. Test the untouched initial
+      M30 after the prompt has existed for more than 15 seconds. Require
+      `captured>=1 recent=0 live>=1 matching=1`, `killed=1`, exact HUD cleanup,
+      prompt/model removal, the already-confirmed fast stock drop, and no crash.
 
 ## P0: Full Player Synchronization (CURRENT)
 
@@ -1796,6 +1814,17 @@ Do not reopen these as the first move:
       the test is INCONCLUSIVE. No visible pitch and no regression across three
       weapons. Parked; on resume correlate WorkBuffer across command-list segments
       and probe only the segment that actually publishes opcode 26.
+- [ ] **New runtime ownership discriminator (2026-07-27):** the user observed
+      that moving Nadine's local camera vertically immediately moves Chloe's
+      remote weapon in the same direction even while Chloe's real aim on her own
+      copy is different. Existing logs agree: Nadine receiver screen 1 carried
+      `up=0.8248..0.8929` while Chloe sender screen 0 was near `up=0.18` and later
+      `down=0.2505`. The vertical consumer is therefore alive; the retained
+      channel is sourced from receiver-local camera pitch instead of remote-owner
+      pitch. Before any runtime mutation, trace the writer feeding screen-1
+      `AIM-REGISTRY-SNAPSHOT rawUD/stateLRDU` and `AIM-BASE-CONFIG up/down` back to
+      camera ownership versus StatePacket input. Do not revisit rejected named
+      layers, graph forcing or pose-copy experiments.
 
 ## P0 - Nadine legacy-look weapon attachment (CURRENT, 2026-07-21)
 
