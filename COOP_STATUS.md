@@ -10957,3 +10957,14 @@ remaining model rejects ProcessKillTree as a complete terminal; successful world
 removal with a surviving prompt selects the logged FHUD source for the next
 exact-source ownership fix. Replacement-weapon spawn is not part of this exam
 and remains parked until a safe native scheduler is proven.
+
+### 2026-07-27 RUNTIME CONFIRMED: `ic` cold A/B boot
+
+Fresh role-A/Chloe PID 17060 and role-B/local-Nadine PID 2848 both loaded build
+`2026-07-27ic`. Each installed the WeaponInteractControl transaction, the prior
+script fallback gate, and `pickup HUD exact-source diagnostics installed (5
+sites)` with no `SKIPPED`, `incomplete`, or crash-observer exception marker.
+After the serialized injections and an additional 30-second observation both
+processes remained alive and Win32-responsive. This confirms only cold-start
+packaging of the direct dispatcher consume and five exact HUD relays; the written
+approach/pickup behavior remains pending.

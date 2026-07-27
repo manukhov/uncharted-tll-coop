@@ -74,6 +74,9 @@
       `WORLD-PICKUP-CONSUME-DIRECT ... killed=1` on Nadine, no freeze, no stale
       ground model, and natural HUD expiry. A missing unique dispatcher match or
       a killed object which remains visible separates the next receiver branch.
+      **Cold boot CONFIRMED:** role-A/Chloe PID 17060 and role-B/Nadine PID 2848
+      remain responsive after 30+ seconds with all `ic` relays installed; live
+      approach/pickup is the remaining discriminator.
 
 ## P0: Full Player Synchronization (CURRENT)
 
