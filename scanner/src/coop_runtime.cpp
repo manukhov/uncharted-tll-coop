@@ -36451,7 +36451,7 @@ bool install_player_reload_command_callsite_relay() {
     VirtualProtect(callsites.front(), patch_span, old_protection, &ignored);
     boot_log_line(
         "Player reload exact semantic relay installed "
-        "(0x140C9E622 reload, 0x140C9E637 release)");
+        "(0x140C9E611 reload, 0x140C9E632 release)");
     return true;
 }
 
@@ -40259,7 +40259,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27ij "
+        "TLL co-op runtime init 2026-07-27ik "
         "(exact reload/release relay; FHUD mutation disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

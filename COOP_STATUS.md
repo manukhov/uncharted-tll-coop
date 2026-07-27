@@ -11614,8 +11614,9 @@ and downstream action evidence:
 
 1. `Player_BuildAcceptedActionInputState 0x140C9D850`, called by Player vtable
    slot 16 `Player_UpdateInputCommandState 0x140C9F8B0`, queries exact strings
-   `reload` and `reload-release` through Player+0x39A0 with `edge=0` at
-   `0x140C9E622` and `0x140C9E637`. It applies `no-reload`, controller and active
+   `reload` and `reload-release` through Player+0x39A0 with `edge=0` at calls
+   `0x140C9E611` and `0x140C9E632` (the returned bytes are consumed at
+   `0x140C9E622/0x140C9E637`). It applies `no-reload`, controller and active
    ProcessWeapon virtual gates before writing accepted level/release bytes to
    the RDX output block at Player+0x47B0 (`output+2/+3`).
 2. RTTI and vtable identity independently resolve the two native action classes:
@@ -11654,7 +11655,7 @@ occurs without a visible gesture, the remaining defect is presentation ownership
 
 Build `ij` assigns protocol-only bits `0x800000000` and `0x1000000000` to the
 two semantic command identities without changing `StatePacket`. Sender capture
-occurs inside the exact `E8` calls at `0x140C9E622/0x140C9E637`, after
+was intended for the exact `E8` calls at `0x140C9E611/0x140C9E632`, after
 PlayerInputCommandState has produced the same values used by stock acceptance.
 The receiver patches only those two calls and returns true only for retained
 Player slot 1, matching the exact hash and `edge=0`. The broad global
@@ -11667,3 +11668,21 @@ asserting `reload-release`. Markers are `RELOAD-SEND`, `RELOAD-RECV`, and
 or HUD path is written. `scanner/build-release.cmd` compiles and links `ij`
 cleanly. Runtime behavior remains pending the already-written clip/shotgun
 discriminator.
+
+### 2026-07-27 RUNTIME REJECTED packaging / CORRECTED: `ij` used decompiler result addresses; `ik` uses the real E8 starts
+
+Fresh PID 23188 (role A/Chloe) and PID 18936 (role B/Nadine) loaded `ij` and
+remained responsive, but both emitted `Player reload relay SKIPPED (not E8)`.
+The behavior prediction was therefore not exercised. Instruction-level IDA
+disassembly resolves the error precisely: `0x140C9E622` and `0x140C9E637` are
+the `movzx` instructions consuming AL after each query. The actual five-byte
+calls begin at `0x140C9E611` (`reload`) and `0x140C9E632`
+(`reload-release`) and both target
+`PlayerInputCommandState_IsCommandActive 0x141E39D50`.
+
+Build `ik` changes only those two RVAs and the boot/install diagnostics. Its
+installer still verifies opcode `E8` and the resolved target before modifying
+either displacement. The complete static hypothesis and runtime prediction are
+unchanged; a successful cold boot must now log
+`Player reload exact semantic relay installed (0x140C9E611 reload,
+0x140C9E632 release)` on both copies before any visual test.

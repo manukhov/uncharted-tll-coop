@@ -2562,7 +2562,7 @@ Do not reopen these as the first move:
 
 - [x] Trace the exact accepted command edge. `Player_BuildAcceptedActionInputState
       0x140C9D850` queries `reload` and `reload-release` at
-      `0x140C9E622/0x140C9E637` through Player+0x39A0 with edge=0, applies native
+      `0x140C9E611/0x140C9E632` through Player+0x39A0 with edge=0, applies native
       ProcessWeapon eligibility, and writes Player+0x47B0 accepted bytes +2/+3.
 - [x] Trace native presentation: RTTI/vtables prove clip action
       `0x1410983D0/0x142A48948` and loop action
@@ -2574,6 +2574,9 @@ Do not reopen these as the first move:
 - [x] Implement exact high-bit semantic `reload`/`reload-release` relay in `ij`, force
       only retained slot-1 PlayerInputCommandState queries with edge=0, and add
       bounded send/receive/force markers. Do not write receiver slot-0 ammo.
+- [x] Reject `ij` packaging at cold boot: it used the decompiler's post-call
+      result addresses `0x140C9E622/0x140C9E637`. Build `ik` corrects the two
+      verified E8 starts to `0x140C9E611/0x140C9E632`; behavior was not exercised.
 - [ ] Run the written clip plus shotgun-loop discriminator, record CONFIRMED or
       REJECTED, commit, and push.
 

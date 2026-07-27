@@ -2159,7 +2159,8 @@ FUNCTIONS = {
         "Builds the compact accepted action-input block supplied in RDX "
         "(Player+0x47B0 from Player_UpdateInputCommandState). For reload it "
         "queries exact PlayerInputCommandState commands reload and "
-        "reload-release with edge=0 at 0x140C9E622/0x140C9E637, applies "
+        "reload-release with edge=0 at calls 0x140C9E611/0x140C9E632 "
+        "(results consumed at 0x140C9E622/0x140C9E637), applies "
         "no-reload, active-weapon and ProcessWeapon virtual eligibility, then "
         "stores accepted level/release bytes at output+2/+3.",
     ),
