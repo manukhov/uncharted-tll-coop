@@ -1888,13 +1888,21 @@ Do not reopen these as the first move:
       0x14218B170`: exact ABI is joint count, 64-byte workspace, 48-byte bind
       rows, common 3x4 basis and stack palette destination; the callee writes
       three float4 rows per joint to the final `FgAnimData+0x230` range.
-- [ ] Run bounded build `iy`. Peer Chloe aims clearly down/straight; on the
+- [x] Run bounded build `iy`. Peer Chloe aims clearly down/straight; on the
       Nadine receiver, without ADS, move local camera sky -> ground -> sky.
       Require normal animation and `AIM-PALETTE-WRITER` rows with stable peerY
       and changing routeY. Workspace-correlated deltas select pre-writer pose
       contamination; palette-only deltas select bind/basis conversion; stable
       workspace and palette while the visual moves select post-palette
-      render/attachment. Any regression or missing row is inconclusive.
+      render/attachment. **INCONCLUSIVE:** animation remained normal but no
+      `AIM-PALETTE-WRITER` row was emitted. Probe removed completely.
+- [ ] Separate the per-process shared camera/look source by Player ownership.
+      Runtime shows both local and retained characters following the same local
+      camera vertically on each copy, while `iu` still delivers peer-correct
+      screen-1 LRDU. Trace the writer/reader chain from the per-screen route seed
+      through Player look/aim consumers, prove a narrow per-Player substitution
+      boundary with three independent evidence types, then relay the peer camera
+      there without rewriting CameraManager or the final palette.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

@@ -12593,3 +12593,21 @@ palette-only deltas selects P2; stable hashes/rows at both stages while the
 visual moves selects P3. Missing `AIM-PALETTE-WRITER`, a crash, stutter or any
 animation/model regression makes `iy` inconclusive and requires immediate
 removal without interpreting the sampled matrices.
+
+### 2026-07-28 RUNTIME INCONCLUSIVE / MODEL REFINED: `iy` misses the active range
+
+Build `iy` preserved normal animation, but emitted no `AIM-PALETTE-WRITER` row
+during the opposite-direction test. Per the written prediction, the writer
+probe yields no ownership evidence and has been removed completely; do not
+interpret the absence as selecting any of P1--P3.
+
+The visual observation is nevertheless stronger and broader than the original
+weapon-only wording. On each process, both characters' vertical look follows
+that process's local camera: on Nadine's copy, looking up as Nadine also raises
+remote Chloe's head/aim, while Chloe remains correct on her own copy; the same
+contamination occurs symmetrically on Chloe's copy. This reframes the defect as
+a per-process shared camera/look source being consumed for both Player objects,
+not an isolated firearm-palette error. The retained `iu` transport still proves
+that a separate peer value reaches screen-1 controller/LRDU state, so the next
+boundary must separate the per-Player camera/route input before the look/aim
+consumers. Late palette and wrist probes are no longer the primary direction.
