@@ -10293,6 +10293,14 @@ hash, edge or Player and forces true only for retained Player slot 1, exact
 function remains unpatched. `TRAVERSAL-EDGE-DROP-STATE-FORCE` logs once per
 event sequence when the third consumer is actually reached.
 
+The first two-copy `hv` cold launch exposed an independent launcher race: PID
+1876 installed the new relay, while PID 17556 logged `SKIPPED (thread suspend)`
+for both this relay and the pre-existing grenade command relay. `LoadLibrary`
+returns before the DLL worker finishes installing its thread-suspended hooks,
+so immediate injection of copy 2 overlapped both cold installers. The launcher
+now waits five seconds between injections by default; this changes no gameplay
+logic and makes both copies finish the same validated install sequence.
+
 **Falsifiable `hv` prediction:** in ten numbered grab-and-let-go attempts, the
 remote falls on all ten. Attempts whose native branch reaches the third query
 emit one STATE-FORCE row for their LATCH sequence; other successful branches
