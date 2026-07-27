@@ -163,6 +163,10 @@
       tombstone entirely. Preserve the exact live weak/generation/vtable/id/art
       search only to kill the duplicate ground ProcessWeapon, plus the confirmed
       sub-141-ms stock dropped-weapon replacement. Log `hudMutation=disabled`.
+      **Cold boot CONFIRMED:** fresh PID 2684 (A/Chloe) and PID 4716 (B/Nadine)
+      loaded `ii`, selected the expected roles, installed the exact world-weapon
+      hooks and remained responsive. Behavioral stability after an initial M30
+      pickup remains pending.
 - [ ] Before any new HUD patch, trace the checkpoint/reset lifecycle from the
       visible Flash view or script cache back to the state which survives exact
       physical-slot destruction. The next hypothesis must explain

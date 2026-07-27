@@ -11576,3 +11576,9 @@ identify the higher Flash view, script cache or copied state which can survive
 stock dropped weapon. No direct FHUD destroy or suppress marker may appear. The
 known stale prompt may remain; neither copy may crash. This test validates the
 safe rollback only and does not claim a HUD fix.
+
+**Cold-start validation.** Fresh PID 2684 (role A/Chloe) and PID 4716 (role
+B/Nadine) loaded `ii`, selected their expected UDP roles, installed the exact
+world-weapon capture/lifecycle hooks, and remained responsive through the
+observation window. Behavioral stability after the initial M30 transaction is
+still pending.
