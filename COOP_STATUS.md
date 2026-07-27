@@ -12233,3 +12233,57 @@ emit `reason=6`; both replacements must complete with
 `source=drop-map match=paired-drop-id killed=1`. Missing capture, `info=0`, any
 synthetic/fountain duplicate, replacement expiry, slot rollback or crash rejects
 the corresponding branch independently.
+
+### 2026-07-27 RUNTIME PARTIAL / REJECTED: `ir` fixes stock replacement but the paired-drop resolver rejects the ground representation
+
+The Type 97 (`0x27617D0D`) / Arrowhead (`0xC3181EBD`) alternation confirms the
+COPW-v3 inventory branch. Every tested transaction captured the exact nested
+WeaponInfo (`info=1 flags=0x7 bytes=316`), completed receiver stock replacement
+with `gave=1 detached=1 slotReleased=1`, stored a nonzero dropped-ID mapping and
+reached StatePacket catch-up in 47--125 ms. Missing WeaponInfo, failed GiveWeapon
+and delayed StatePacket are therefore rejected as causes of this duplication.
+
+The consume branch failed its written discriminator. No reverse transaction used
+`source=drop-map`. Type 97 happened to disappear through `source=hud
+match=unique-art`; Arrowhead eventually had three live same-art HUD candidates
+and failed closed with `hudMatching=3 hudAmbiguous=1`, exactly matching the
+user-visible duplication.
+
+The retained identity itself is valid, but its resolver has one invalid lifetime
+condition. Sequence 10 stored Arrowhead as `weak=0x10E020B588:AB1` from detached
+object `0x10E1013300`; the stock PickupControl HUD later validated the same weak
+cell and generation as live Arrowhead `ProcessWeapon 0x10E1009980`. Sequences 12
+and 14 repeat the same address-retarget pattern. The HUD validator independently
+requires exact ProcessWeapon vtable, generation, nonzero stable ID and art. Those
+are also all the paired-drop resolver's conditions except its additional
+`ProcessWeapon+0x690 bit 3` gate. Consequently the earlier assumption that this
+bit remains set for the lifetime of the ground representation is **REJECTED**:
+IDA proves `ProcessWeapon_DetachToWorldTransform 0x141ED3630` sets it on the old
+object during detach, while runtime proves the retained weak cell can subsequently
+target a different valid ground ProcessWeapon.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `is` follows the exact weak identity across the ground retarget
+
+`is` removes only the persistent `+0x690 bit 3` requirement from the paired-drop
+resolver. Its admission remains bounded by the transaction's explicit remote
+dropped stable ID, the receiver-local retained weak cell, unchanged generation,
+exact ProcessWeapon vtable, exact art, nonzero current stable ID and a 60-second
+mapping lifetime. The detached bit remains mandatory at the immediate stock
+GiveWeapon commit where it correctly proves that the old inventory object was
+dropped; it is not reused after the weak cell has been retargeted.
+
+Three independent evidence kinds support this boundary: GiveWeapon control flow
+sets the bit synchronously at `0x1410A68AC`; repeated runtime identity pairs prove
+the weak cell/generation survives while the object address changes; and the exact
+stock PickupControl HUD path validates the new target as a ground ProcessWeapon
+without reading `+0x690`. Competing explanations are eliminated by `ir`: COPW
+IDs were nonzero and mapped, exact WeaponInfo and replacement succeeded, and
+same-art fallback alone became ambiguous. Broad art search, heap scan and registry
+lookup remain rejected and are not enabled.
+
+**Falsifiable `is` prediction:** alternate Type 97 and Arrowhead on a fresh pair.
+Each reverse pickup must immediately emit `WORLD-PICKUP-CONSUME source=drop-map
+match=paired-drop-id killed=1` for the prior mapping, followed by the normal new
+drop mapping. It must not use `unique-art`, expire with `hudAmbiguous=1`, leave
+either picked model on the ground, duplicate a weapon, or crash. Any of those
+outcomes rejects the persistent-identity change.

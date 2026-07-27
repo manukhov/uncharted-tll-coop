@@ -25861,13 +25861,17 @@ NearbyGroundProcessWeapon seh_find_mirrored_dropped_process_weapon(
                 *reinterpret_cast<const std::uint32_t*>(bytes + 0xD8);
             const std::uint32_t art =
                 *reinterpret_cast<const std::uint32_t*>(bytes + 0x860);
-            const std::uint8_t detach_flags =
-                *reinterpret_cast<const std::uint8_t*>(bytes + 0x690);
+            // GiveWeapon first sets ProcessWeapon+0x690 bit 3 on the inventory
+            // object, then the retained weak cell can be retargeted to a
+            // different ground representation with the same generation.  The
+            // exact PickupControl HUD path validates that retargeted object
+            // without consulting +0x690.  Treat the bit as a detach-transition
+            // invariant only; the transaction-paired weak cell/generation plus
+            // live ProcessWeapon vtable/art remain the persistent identity.
             if (*reinterpret_cast<const std::uintptr_t*>(bytes) !=
                     g_module + kProcessWeaponVtableRva ||
                 generation != entry.local_generation || stable_id == 0 ||
-                !relay_weapon_art_matches(art, expected_art) ||
-                (detach_flags & 0x08) == 0) {
+                !relay_weapon_art_matches(art, expected_art)) {
                 continue;
             }
             return NearbyGroundProcessWeapon{
@@ -41378,8 +41382,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27ir "
-        "(COPW-v3 exact WeaponInfo; immediate protected stock replacement)");
+        "TLL co-op runtime init 2026-07-27is "
+        "(paired-drop weak retarget consume; COPW-v3 exact WeaponInfo)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

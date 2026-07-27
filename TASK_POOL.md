@@ -2618,11 +2618,15 @@ Do not reopen these as the first move:
       15 ms). Reverse replacement expired at `reason=6`: whitelist art
       `0x33E29A1B` is intentionally excluded from COPG, so its real info never
       reached the receiver. The M30 consequently did not fall out.
-- [~] Build/test `ir`: capture the exact nested GiveWeapon 0xC0 argument while the
-      accepted OnInteract context owns the same thread/controller/art, embed it
-      in COPW v3, and use it only for that bounded receiver replacement. Require
-      `info=1 flags=0x7 bytes=316` in both directions and no `reason=6`; run the
-      written Mazur -> M30 -> Mazur discriminator. Chloe HUD remains separate.
+- [x] PARTIAL `ir`: exact nested GiveWeapon capture is confirmed across repeated
+      Type 97/Arrowhead swaps (`info=1`, `flags=0x7`, 316 bytes); receiver stock
+      replacement is immediate and complete. The weapons duplicated only because
+      the paired-drop resolver incorrectly required the transient `+0x690 bit 3`
+      after the retained weak cell had moved to the ground representation.
+- [~] Build/test `is`: retain the exact remote drop ID -> local weak+generation/art
+      mapping but stop treating `+0x690 bit 3` as persistent ground ownership.
+      Require every reverse swap to consume through `source=drop-map
+      match=paired-drop-id killed=1`, with neither unique-art fallback nor expiry.
 
 ## Rule
 

@@ -1516,7 +1516,11 @@ FUNCTIONS = {
         "translation/rotation to +0x590/+0x5A0. GiveWeapon replacement calls it "
         "at 0x1410A68AC (return 0x1410A68B1) for the exact dropped old weapon. "
         "COPW v2+ captures and revalidates that object's +0xD8 stable id directly "
-        "across this call; the next ground interaction reads the same field.",
+        "across this call; the next ground interaction reads the same field. "
+        "Runtime ir proves +0x690 bit 3 is only a transition invariant: after "
+        "detach, the retained weak cell may target a different ProcessWeapon "
+        "address with the same generation/art while PickupControl publishes it "
+        "as a ground candidate, so later identity must not require this bit.",
     ),
     0x1408C8950: (
         "PickupInteractControl_CompletePickup",
