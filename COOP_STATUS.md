@@ -11989,3 +11989,13 @@ complete `WORLD-PICKUP-DROP-EXISTING` with `gave=1 detached=1 slotReleased=1`
 using a plausible raw/mapped art-definition slot, or fall through immediately to
 the previous generic path—never expire solely because COPG is absent. The picked
 model must still disappear, and neither copy may crash.
+
+**Cold-start validation.** Fresh PID 21604 selected role A/Chloe and PID 21572
+selected role B/Nadine with build `2026-07-27io`. Both installed the
+`pickup HUD retained-Player source gate`, exact ground-candidate capture and
+weapon-world lifecycle hooks without `SKIPPED` or incomplete markers, and both
+remained Win32-responsive after initialization. The old
+`FHUD owner-thread cleanup` installer is absent. This confirms packaging and
+safe idle startup only; no retained prompt had reached the owner gate during the
+observation window, so the written fresh-load M30/Mazur transaction remains the
+required behavioral test.
