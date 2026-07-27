@@ -11582,3 +11582,70 @@ B/Nadine) loaded `ii`, selected their expected UDP roles, installed the exact
 world-weapon capture/lifecycle hooks, and remained responsive through the
 observation window. Behavioral stability after the initial M30 transaction is
 still pending.
+
+### 2026-07-27 RUNTIME PARTIAL CONFIRM: `ii` preserves world replacement but not the Chloe prompt; late crash remains unlocalized
+
+The user exercised the safe `ii` rollback. Chloe still retained the obsolete
+ground-weapon prompt until a checkpoint reload, which removed it. This repeats
+the `ih` ownership discriminator without any consumed-key tombstone, physical
+FHUD scan, or call to `FHUD_DestroyInteractScript 0x141357CA0`: the visible
+prompt is checkpoint-owned state above or outside that rejected four-slot
+physical store. The log contains successful `WORLD-PICKUP-CONSUME-HUD ...
+killed=1 hudMutation=disabled` and fast stock replacement rows, so the already
+confirmed world-model synchronization survives the rollback.
+
+The Chloe copy later crashed. `ii` emitted no terminal exception/crash-observer
+marker, Windows recorded no WER event, and no dump exists; the final log rows are
+ordinary aim/fire telemetry. The crash is real but has no localized boundary and
+must not be attributed to HUD cleanup, because that mutation is absent in `ii`.
+Keep the HUD bug open and require a dump or repeatable action boundary before a
+new mutation.
+
+### 2026-07-27 STATIC: exact reload/release commands feed native clip and loop actions
+
+**Leading hypothesis.** Relay the exact semantic `reload` and `reload-release`
+levels into retained Player slot 1 at `PlayerInputCommandState_IsCommandActive
+0x141E39D50`, restricted to `Player+0x39A0` and `edge=0`. The receiver then runs
+its own stock eligibility checks and starts its native clip or per-round reload
+action. Do not copy ammo and do not call a ProcessWeapon reload callback.
+
+The evidence quota is satisfied by independent command/data-flow, vtable/RTTI,
+and downstream action evidence:
+
+1. `Player_BuildAcceptedActionInputState 0x140C9D850`, called by Player vtable
+   slot 16 `Player_UpdateInputCommandState 0x140C9F8B0`, queries exact strings
+   `reload` and `reload-release` through Player+0x39A0 with `edge=0` at
+   `0x140C9E622` and `0x140C9E637`. It applies `no-reload`, controller and active
+   ProcessWeapon virtual gates before writing accepted level/release bytes to
+   the RDX output block at Player+0x47B0 (`output+2/+3`).
+2. RTTI and vtable identity independently resolve the two native action classes:
+   `PlayerReloadClipWeaponAction` constructor `0x1410983D0`, vtable
+   `0x142A48948`; and `PlayerReloadLoopWeaponAction` constructor `0x14109A5C0`,
+   vtable `0x142A48AF8`. Their bodies bind the active mounted ProcessWeapon and
+   use the ordinary Player action graph rather than a HUD-only presentation.
+3. The clip path `0x141098560/0x1410991A0` drives
+   `s_weapon-reload-clip[-m]`, `show-magazine` and reload-end events. The loop
+   path `0x14109BBE0/0x14109B6D0` starts
+   `s_weapon-reload-loop-start` or its mirrored variant and completes according
+   to live capacity/ammo state. `PlayerWeaponController_Update 0x1410AD410`
+   applies native state 3 through `PlayerWeaponController_ApplyState
+   0x1410AAFB0`.
+
+Competing hypotheses are rejected or weakened at their exact boundary. Generic
+raw Joypad mirroring cannot represent keyboard `R` and does not preserve the two
+PlayerInput command identities. `reload-hold` is consumed in the grenade-hint
+branch of `Player_ProcessWeaponAndGrenadeInputActions 0x1410E71D0`, not at the
+accepted clip-reload decision. `ProcessWeapon_ReloadMagazine 0x14151E0B0` and
+`ProcessWeapon_ReloadOneRound 0x14151E2F0` are ammo/event callbacks and would
+double-mutate receiver ammo. The keyed `ReloadWeapon` flag is published only by
+downstream action/event completion paths and is too late to construct the native
+action.
+
+**Falsifiable prediction for the first relay build:** pressing reload on the
+sender must log a local semantic rise and a receiver force only at the two exact
+hashes with `edge=0`. The retained Player must enter the stock clip animation (or
+the per-round loop for a shotgun), while receiver slot-0 ammo remains untouched
+by the relay and continues to reconcile through the existing weapon snapshot.
+Release must clear the forced command. If force logs occur but controller state
+3/action markers do not, receiver eligibility/weapon state differs; if state 3
+occurs without a visible gesture, the remaining defect is presentation ownership.

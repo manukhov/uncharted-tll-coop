@@ -2154,6 +2154,62 @@ FUNCTIONS = {
         "PlayerInputCommandState_Update 0x141E39FB0, followed by the broader "
         "Player input/action update.",
     ),
+    0x140C9D850: (
+        "Player_BuildAcceptedActionInputState",
+        "Builds the compact accepted action-input block supplied in RDX "
+        "(Player+0x47B0 from Player_UpdateInputCommandState). For reload it "
+        "queries exact PlayerInputCommandState commands reload and "
+        "reload-release with edge=0 at 0x140C9E622/0x140C9E637, applies "
+        "no-reload, active-weapon and ProcessWeapon virtual eligibility, then "
+        "stores accepted level/release bytes at output+2/+3.",
+    ),
+    0x1410983D0: (
+        "PlayerReloadClipWeaponAction_Constructor",
+        "RTTI-backed PlayerReloadClipWeaponAction constructor. Calls the common "
+        "weapon-action base constructor, stores the reload mode at +0x48 and "
+        "installs vtable 0x142A48948.",
+    ),
+    0x141098560: (
+        "PlayerReloadClipWeaponAction_Update",
+        "Native clip-reload action body. Drives the mounted weapon gesture, "
+        "publishes show-magazine, reload-aborted and "
+        "player-finished-weapon-reload events, and leaves ammo mutation to the "
+        "ProcessWeapon callbacks.",
+    ),
+    0x1410991A0: (
+        "PlayerReloadClipWeaponAction_UpdateCompletion",
+        "Waits for s_weapon-reload-clip or its mirrored action to finish, emits "
+        "the reload-end gameplay events, publishes the downstream ReloadWeapon "
+        "owner-registry flag, and moves the action to completion state 3.",
+    ),
+    0x14109A5C0: (
+        "PlayerReloadLoopWeaponAction_Constructor",
+        "RTTI-backed PlayerReloadLoopWeaponAction constructor. Calls the common "
+        "weapon-action base constructor, stores the reload mode at +0x48 and "
+        "installs vtable 0x142A48AF8.",
+    ),
+    0x14109B6D0: (
+        "PlayerReloadLoopWeaponAction_UpdateCompletion",
+        "Checks live round/capacity state and reload-loop policy, then emits the "
+        "reload-end gameplay events and completes the per-round reload action.",
+    ),
+    0x14109BBE0: (
+        "PlayerReloadLoopWeaponAction_StartLoop",
+        "Starts the native s_weapon-reload-loop-start or mirrored action on the "
+        "mounted Player action system and marks the loop action active at +0x4C.",
+    ),
+    0x1410AAFB0: (
+        "PlayerWeaponController_ApplyState",
+        "Applies PlayerWeaponController state transitions. State 3 is the native "
+        "reloading state and selects the clip/per-round action family through "
+        "the mounted Player action graph.",
+    ),
+    0x1410AD410: (
+        "PlayerWeaponController_Update",
+        "Main PlayerWeaponController update. Consumes owner-local weapon-action "
+        "state, invokes the active ProcessWeapon virtuals and applies controller "
+        "transitions through PlayerWeaponController_ApplyState.",
+    ),
     0x141E39FB0: (
         "PlayerInputCommandState_Update",
         "Updates the embedded Player+0x39A0 input-command state through its two "

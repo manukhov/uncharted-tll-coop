@@ -2560,14 +2560,22 @@ Do not reopen these as the first move:
 
 ## P0 NEXT - Remote reload animation sync (re-prioritized by user 2026-07-27)
 
-- [ ] Trace the Player/ProcessWeapon reload command edge and its native animation
-      controller path, including the owner/screen index and magazine transition.
-- [ ] Revalidate the archived assumption that generic mirrored reload input starts
-      the remote animation; the user now explicitly reports this synchronization
-      is still needed, so prior "free through input" reasoning is not runtime proof.
-- [ ] Relay the one-shot reload action to retained puppet slot 1 without writing
-      receiver-local slot 0 ammo; let the existing ammo snapshot reconcile the
-      next shot.
+- [x] Trace the exact accepted command edge. `Player_BuildAcceptedActionInputState
+      0x140C9D850` queries `reload` and `reload-release` at
+      `0x140C9E622/0x140C9E637` through Player+0x39A0 with edge=0, applies native
+      ProcessWeapon eligibility, and writes Player+0x47B0 accepted bytes +2/+3.
+- [x] Trace native presentation: RTTI/vtables prove clip action
+      `0x1410983D0/0x142A48948` and loop action
+      `0x14109A5C0/0x142A48AF8`; they drive `s_weapon-reload-clip[-m]` and
+      `s_weapon-reload-loop-*` through PlayerWeaponController state 3.
+- [x] Reject generic mask-only, `reload-hold`, direct ammo callbacks and the
+      downstream keyed `ReloadWeapon` flag as relay boundaries. Full evidence
+      and the first falsifiable runtime discriminator are in `COOP_STATUS.md`.
+- [ ] Implement exact high-bit semantic `reload`/`reload-release` relay, force
+      only retained slot-1 PlayerInputCommandState queries with edge=0, and add
+      bounded send/receive/force markers. Do not write receiver slot-0 ammo.
+- [ ] Run the written clip plus shotgun-loop discriminator, record CONFIRMED or
+      REJECTED, commit, and push.
 
 ## Rule
 
