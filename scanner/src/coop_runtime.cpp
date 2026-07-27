@@ -26466,7 +26466,14 @@ void apply_pending_world_weapon_lifecycle() {
     const ULONGLONG now = GetTickCount64();
     if (pending.drop_pending && !pending.drop_applied) {
         void* const puppet = retained_player_object(1);
-        if (puppet != nullptr && puppet_weapon_sync_ready(puppet)) {
+        // The ordinary mirror/fire path deliberately waits two seconds after a
+        // newly tracked puppet.  COPW is already an accepted, exact transaction
+        // and carries the original WeaponInfo, so that fire-start grace would
+        // detach the old weapon seconds after (and away from) the pickup.  Keep
+        // the structural Player/controller gates but do not reuse the unrelated
+        // g_fire_puppet_ready_after_ms timer here.
+        if (puppet != nullptr && player_object_stable(puppet) &&
+            puppet_weapon_give_vtable_ready(puppet)) {
             // COPW v3 embeds the transaction's real 0xC0 WeaponInfo; older
             // non-whitelist paths may instead have a stored COPG block. Either
             // source bypasses periodic StatePacket latency, after which the exact
@@ -41382,8 +41389,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27is "
-        "(paired-drop weak retarget consume; COPW-v3 exact WeaponInfo)");
+        "TLL co-op runtime init 2026-07-27it "
+        "(immediate exact COPW detach; paired-drop weak retarget consume)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

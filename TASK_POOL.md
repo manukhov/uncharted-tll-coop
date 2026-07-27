@@ -2623,10 +2623,15 @@ Do not reopen these as the first move:
       replacement is immediate and complete. The weapons duplicated only because
       the paired-drop resolver incorrectly required the transient `+0x690 bit 3`
       after the retained weak cell had moved to the ground representation.
-- [~] Build/test `is`: retain the exact remote drop ID -> local weak+generation/art
-      mapping but stop treating `+0x690 bit 3` as persistent ground ownership.
-      Require every reverse swap to consume through `source=drop-map
-      match=paired-drop-id killed=1`, with neither unique-art fallback nor expiry.
+- [x] PARTIAL `is`: the reverse transaction now consumes through `source=drop-map
+      match=paired-drop-id killed=1`, confirming the retained weak retarget fix.
+      A later Mazur -> Arrowhead transaction still detached the receiver Mazur
+      only after 2281 ms because exact COPW incorrectly reused the fire relay's
+      two-second new-puppet grace; the user did not see it at the exchange point.
+- [~] Build/test `it`: let exact COPW bypass only the fire-start timer while still
+      requiring stable Player/controller/vtable and all stock target invariants.
+      Require immediate `DROP-EXISTING`/`DROP-MAP` near 0--100 ms, visible old
+      weapon at the exchange point, and retained paired-ID consume on reversal.
 
 ## Rule
 

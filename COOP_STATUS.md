@@ -12287,3 +12287,52 @@ match=paired-drop-id killed=1` for the prior mapping, followed by the normal new
 drop mapping. It must not use `unique-art`, expire with `hudAmbiguous=1`, leave
 either picked model on the ground, duplicate a weapon, or crash. Any of those
 outcomes rejects the persistent-identity change.
+
+### 2026-07-27 RUNTIME PARTIAL: `is` confirms paired consume but exposes a fire-readiness delay in exact COPW detach
+
+The fresh run confirms the `is` identity change. Sequence 2 consumed the prior
+receiver drop at zero transaction latency through `source=drop-map
+match=paired-drop-id killed=1`; it neither used the ambiguous art fallback nor
+expired. The retained weak-cell retarget hypothesis is therefore **CONFIRMED**.
+
+The user's later Mazur -> Arrowhead exchange exposed a separate failure. Sender
+sequence 3 captured exact WeaponInfo and a nonzero dropped ID normally. Receiver
+eventually reported `gave=1 detached=1 slotReleased=1` and `DROP-MAP stored=1`,
+but only at `latencyMs=2281`; the user did not see Mazur fall at the exchange
+point. There was no `DROP-STOCK-WAIT` row, so art-definition, slot, WeaponInfo and
+old-object validation did not cause this interval. The transaction was held
+before `try_pending_stock_world_weapon_replacement_from_art_definition`.
+
+Static control flow identifies the exact pre-call gate. `apply_pending_world_weapon_lifecycle`
+requires `puppet_weapon_sync_ready`, which in turn calls
+`track_puppet_for_fire_relay` and waits until `g_fire_puppet_ready_after_ms`; a
+newly observed puppet sets that deadline to current time plus 2000 ms. That grace
+was introduced for native fire replay after spawn, not for an already accepted
+COPW pickup transaction. Its two-second constant plus scheduling matches the
+measured 2281 ms and allows the puppet to move before stock GiveWeapon computes
+the drop transform from `controller->Player + 0x100`.
+
+### 2026-07-27 STATIC / IMPLEMENTED: `it` removes the fire timer from exact world replacement only
+
+`it` admits pending COPW replacement as soon as the retained puppet is a stable
+Player and its GiveWeapon controller/vtable is readable. These are the same
+structural checks inside the old readiness predicate; only the unrelated
+`g_fire_puppet_ready_after_ms` deadline is omitted. Ordinary slot mirroring,
+held-weapon application and native firing retain the full readiness gate.
+
+The evidence quota is met independently by control flow, timing and data flow:
+the only silent pre-call branch contains the fixed 2000-ms timer; runtime measured
+2281 ms with no downstream wait reason; and IDA shows stock GiveWeapon builds the
+detach basis from its owning Player immediately before calling
+`ProcessWeapon_DetachToWorldTransform 0x1410A68AC`, so delaying the call changes
+the world position even though the old weapon identity remains exact. Competing
+missing-info, wrong-slot, failed-detach and paired-consume hypotheses are rejected
+by the successful sequence-3 commit and sequence-2 exact consume. A broader
+unsafe GiveWeapon path is not introduced.
+
+**Falsifiable `it` prediction:** repeat Mazur -> Arrowhead on a fresh pair.
+Receiver must emit `WORLD-PICKUP-DROP-EXISTING` and `DROP-MAP stored=1` at roughly
+0--100 ms, and Mazur must be visible at the exchange point. Reversing must still
+consume it through `source=drop-map match=paired-drop-id killed=1`. Latency near
+two seconds, a drop at a later puppet position, no visible model, fallback/expiry,
+crash or slot rollback rejects the relevant branch.
