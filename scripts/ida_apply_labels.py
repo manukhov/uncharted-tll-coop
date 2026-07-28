@@ -1304,6 +1304,40 @@ FUNCTIONS = {
         "CenterPos to Player+0x38C0; distinct AimAtPos/ChestAimPos/NeckAimPos/"
         "SecondAimAtPos names use +0x38F0/+0x38D0/+0x38E0/+0x3900.",
     ),
+    0x1410D5B30: (
+        "Player_QueryNamedLookAimPoint",
+        "Single-point CRC query used by NPC host/control helpers. Maps the same "
+        "LookAtPos/AimAtPos/ChestAimPos/NeckAimPos/SecondAimAtPos names to "
+        "Player+0x38C0/+0x38F0/+0x38D0/+0x38E0/+0x3900.",
+    ),
+    0x1410E2840: (
+        "ScreenRoute_HasPreferredAimCameraCategory",
+        "Accepts a screen index, resolves its routed entity and preferred camera "
+        "child, then validates the child descriptor/category and status. The "
+        "Player named-aim-point writer uses it to select camera-derived points "
+        "instead of chest/neck fallbacks.",
+    ),
+    0x1410ED500: (
+        "Player_UpdateNamedChestNeckAndAimPoints",
+        "Player vtable slot +0xE58, called unconditionally by Player_Update at "
+        "0x1410ECA2B. Resolves targChest/targNeck into +0x38D0/+0x38E0 and "
+        "writes +0x38F0/+0x3900 either from the Player screen-route pose seed "
+        "plus target offset or from the chest/neck fallback.",
+    ),
+    0x140CB6530: (
+        "PlayerAimingMachine_EvaluateEdgeAimOrientation",
+        "PlayerAimingMachine vtable slot +0x08. CameraEdgeAim invokes it from "
+        "CameraControl UpdateLocation. Although it copies the 0x3F8 camera-0 "
+        "template, 0x141693920 immediately overwrites every orientation row "
+        "from per-machine inputs before the result becomes CameraLocation.",
+    ),
+    0x140CB8290: (
+        "PlayerAimingMachine_UpdateEdgeAimState",
+        "PlayerAimingMachine vtable slot +0x10, reached by CameraEdgeAim. Its "
+        "camera-0 state copy is likewise followed by a complete per-machine "
+        "orientation overwrite; output remains in the CameraControl/CameraLocation "
+        "path and does not write Player, FgAnim or joints.",
+    ),
     # --- 2026-07-12: scoped aim route-camera owner ---
     0x140CB0200: (
         "PlayerAimController_KickTargetPointJob",

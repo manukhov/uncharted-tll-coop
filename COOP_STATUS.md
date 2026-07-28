@@ -12983,3 +12983,72 @@ The durable IDB names are refined to
 The next vertical-aim investigation must start from the active base
 animation/evaluator graph; neither this effect event nor the already rejected
 late LookAtIK/holster-IK paths justify another runtime test.
+
+### 2026-07-28 STATIC / DIAGNOSTIC READY: live named aim-point writer at Player `+0xE58`
+
+The next exact per-Player camera boundary is
+`Player_UpdateNamedChestNeckAndAimPoints 0x1410ED500`, Player vtable slot
+`+0xE58`. This is not another inactive virtual inferred from a detached graph:
+`Player_Update 0x1410EC230` calls it unconditionally at `0x1410ECA2B`, between
+`0x1410E8F90` and `0x1410F5230`. An independent retail-PE scan finds only that
+live call and the secondary `0x1410F8F40` wrapper call at `0x1410F8F58`.
+
+The writer owns four named world points. It resolves authored `targChest` and
+`targNeck` attachment transforms into Player `+0x38D0/+0x38E0`. When
+`ScreenRoute_HasPreferredAimCameraCategory 0x1410E2840(Player+0x4010)` or the
+special Edge branch succeeds, it obtains the same Player screen's pose seed at
+`0x1410ED825`, combines it with the target offset returned by `0x141DB27A0`, and
+writes the duplicated 32-byte `AimAtPos/SecondAimAtPos` pair to
+`+0x38F0/+0x3900`. Otherwise those two fields fall back to chest/neck. This is
+the first ordinary live writer found for all four fields.
+
+The direct native-reader audit narrows, but does not yet prove, the visible-pose
+role. `Player_QueryNamedLookAimPointPair 0x1410D5710` and the single-point
+variant `0x1410D5B30` expose the fields by the exact authored names. Known
+ordinary `AimAtPos` callers use them for player-targeting, reticle/screen
+projection, target notification, fast-grapple targeting and the host-anchor
+path. The three calls at `Player_Update 0x1410ECCF0/0x1410ECDA0/0x1410ECE50`
+are gated debug drawing for `LookAtPos/AimAtPos/CameraLookAtPos`, not animation.
+No audited native reader writes FgAnim, joints or a body controller. An authored
+animation/script consumer remains a live alternative, so the field cannot yet
+be patched as a pose fix.
+
+Competing hypotheses are explicit. **H1:** retained screen 1 takes the camera
+branch, but its screen-route pose seed falls back to camera 0; therefore
+`+0x38F0/+0x3900` change with the receiver-local camera before the visible shared
+pitch. **H2:** the fields are camera-contaminated but serve targeting only, so
+they correlate with the fault without owning the visible pose. **H3:** the
+camera branch is inactive in the tested free-look/ADS state and the fields stay
+equal to chest/neck, so this boundary cannot contain the leak.
+
+The evidence quota is met for a read-only discriminator: (1) the exact live
+Player_Update call and Player vtable identity; (2) instruction-level writes and
+screen-indexed route dataflow; (3) independent named-query and targeting-reader
+paths. The next build must wrap only Player slot `+0xE58`, call native exactly
+once, and sample before/after chest, neck, AimAt and SecondAimAt for slots 0/1
+beside local/peer camera vertical components. Written prediction: with real
+Chloe held clearly down while the Nadine receiver looks up, then signs reversed,
+H1 produces slot-1 AimAt direction following `localCamY` and differing from
+chest/neck; H3 keeps AimAt equal to the attachment fallback. If H1 is observed,
+a later peer substitution is still required to distinguish H1 from H2 before
+accepting a fix. A missing slot-1 entry marker, crash, stutter or animation/model
+change makes the wrapper ABI inconclusive.
+
+### 2026-07-28 STATIC REJECTED: embedded `PlayerAimingMachine` is camera-output only
+
+RTTI resolves vtable `0x142A0B5A8` to `PlayerAimingMachine`, embedded at
+`CameraEdgeAim+0x320` and `CameraControlZoom+0x410`; it is not a second
+PlayerAimController interface. The live camera path is
+`PostProcessUpdate -> CameraManager::RunCameras -> BlendLocation -> selected
+CameraControl::UpdateLocation -> CameraEdgeAim`, which invokes machine slots
+`+0x08 0x140CB6530` and `+0x10 0x140CB8290`.
+
+This candidate is excluded by three independent facts. RTTI/constructor
+ownership places the object inside CameraControls, not Player/FgAnim. Both
+apparent camera-0 copies are followed at `0x140CB681A/0x140CB84B1` by
+`0x141693920`, which overwrites all orientation rows and associated matrix
+fields from per-machine inputs. Finally, the only surviving output becomes the
+`0x4C`-byte CameraLocation cached/blended at camera `+0x1D0..+0x218`; there is no
+Player, animation-controller, joint or palette write. The copied camera-0 state
+is a projection/collision/reticle template, not the process-global character
+pose source. Do not instrument or patch this machine for the shared-pitch bug.

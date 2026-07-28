@@ -1958,6 +1958,20 @@ Do not reopen these as the first move:
       `turn-on-torch`. `aim-at` is a flashlight effect target, not the Player
       head/upper-body/weapon pose owner. Continue from the active base
       animation/evaluator graph and do not revive this event path.
+      **STATIC `jh` CANDIDATE:** Player_Update now supplies an exact live
+      per-Player boundary: vslot `+0xE58` (`0x1410ED500`) is called
+      unconditionally at `0x1410ECA2B` and writes named chest/neck/AimAt/
+      SecondAimAt points. Its camera branch uses Player+0x4010 and the routed
+      pose seed; its fallback copies chest/neck. Native-reader audit finds only
+      targeting/projection/notification/fast-grapple/host-anchor consumers plus
+      debug drawing, so a visible authored consumer is not yet proven. Build a
+      read-only wrapper that records slot-0/1 before/after fields and compares
+      them with local/peer camera signs. Local-correlated non-fallback AimAt
+      selects contamination at this boundary but still requires a later
+      substitution falsifier; chest/neck equality rejects it. Separately,
+      `PlayerAimingMachine` is STATIC REJECTED: it is embedded in CameraEdgeAim/
+      CameraControlZoom, completely overwrites copied camera-0 orientation from
+      per-machine inputs and outputs only CameraLocation.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 
