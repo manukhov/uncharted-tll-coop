@@ -574,6 +574,13 @@ constexpr std::uintptr_t kPlayerAimPoseSeedCallSiteRva = 0x10E934B;
 // body-forward, mode bytes, and four authored angular limits.
 constexpr std::uintptr_t kPlayerAimWorldBasisVtableSlotRva = 0x2A0B250;
 constexpr std::uintptr_t kPlayerAimWorldBasisRva = 0x0CAF110;
+// PlayerAimController::ComputeAndPublishAimAdditives dispatches its `aim-at`
+// event through animation-process registry record 0 at this exact indirect
+// callsite. The registry's native Player mapper provides the owner-matched
+// process for retained screen 1.
+constexpr std::uintptr_t kPlayerAimEventDispatchCallsiteRva = 0x0CAF008;
+constexpr std::uintptr_t kFindPlayerAnimationProcessByPlayerRva = 0x0C70760;
+constexpr std::uintptr_t kThreadContextSetCurrentProcessRva = 0x16A2ED0;
 // PlayerAimController vtable +0x80 — skeleton aim origin (targHead/targPelvis).
 constexpr std::uintptr_t kPlayerAimOriginPointRva = 0x0CAFD90;
 constexpr std::uintptr_t kPlayerAimBlendTickVtableSlotRva = 0x2A0B228;

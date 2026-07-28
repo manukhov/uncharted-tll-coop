@@ -1932,7 +1932,18 @@ Do not reopen these as the first move:
       NaN. The user still saw the fault. LookAtIK and its camera-derived vslot
       `+0x40` are not the visible owner; `je` removes the whole probe. Continue
       statically from `PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0` and
-      its upstream writer graph.
+      its upstream writer graph. **`jf` STATIC / IMPLEMENTED:** that holster IK
+      path is authored three-joint arm-only code with no camera/route input, and
+      `0x1410F4E80` belongs to a non-animation host-anchor/target path. The exact
+      aim chain instead publishes correct per-Player LRDU and then dispatches
+      the target-bearing `aim-at` event at `0x140CAF008` through hard-coded
+      animation-process registry record 0. Native `0x140C70760` independently
+      maps a Player to the correct outer process in the same 32x`0xB0` registry;
+      `0x140C70900` uses that mapping for AnimControl and `play-animation`.
+      Build `jf` reroutes only fresh screen-1 ADS events to that owner process,
+      preserves screen 0 and logs one bounded `AIM-EVENT-ROUTE` discriminator.
+      The opposite-camera prediction and competing H1/H2/H3 outcomes are in
+      `COOP_STATUS.md`.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

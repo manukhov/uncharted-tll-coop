@@ -12837,3 +12837,68 @@ head paths outside LookAtIK. Next static work starts from the proven late call i
 `Player_PostAnimBlending_Async`: `PlayerWeaponAnimControl_UpdateHolsterIk
 0x14108ECE0` at `0x1410EBAE5`, while tracing its input writers far enough upward
 to distinguish weapon-arm ownership from a common animation command source.
+
+### 2026-07-28 STATIC / IMPLEMENTED: `jf` routes `aim-at` to the owning Player animation process
+
+The remaining late `Player_PostAnimBlending_Async` candidates do not explain the
+common head/weapon pitch. `PlayerWeaponAnimControl_UpdateHolsterIk
+0x14108ECE0` is vtable `0x142A46778` slot `+0x140` and is reached at
+`0x1410EBAE5`, but it reads authored `WeaponPartial/WeaponHolsterIkData` and
+writes only three joints in one arm IK chain. It has no CameraManager,
+screen-route, `Player+0x4010`, LRDU or global-camera input and cannot move the
+head. Nearby `0x1410FCB90` is an ankle/foot solver. The apparent camera reader
+`0x1410F4E80` is also excluded: it reads the unindexed
+`g_PerScreenCameraTransformCache`, but only selects `AimAtPos/AimAtChestPos` for
+the `Player+0x1FB0` NetMode host-anchor/damage-target path and writes no
+animation or joints.
+
+The exact directional-aim chain exposes a different process-global ownership
+fault. `PlayerAimController_ApplyWorldAimBasis 0x140CAF110` vtable slot `+0x58`
+calls `PlayerAimController_ComputeAndPublishAimAdditives 0x140CAECB0` slot
+`+0x50`. The latter first computes and publishes correct per-Player LRDU through
+`0x140CB32B0`, then separately builds the `aim-at` event whose payload is the
+target-point argument. At `0x140CAEEF9..0x140CAF008` it resolves and dispatches
+that event through the hard-coded first record at `0x143EC2D38`, regardless of
+the controller's owning Player.
+
+Three independent static evidence types satisfy the runtime quota:
+
+1. Instruction/dataflow evidence: the `aim-at` payload is the same target-point
+   argument already corrected for retained screen 1, but the exact indirect
+   dispatch at `0x140CAF008` loads only registry record 0 and calls its process
+   vtable slot `+0xD0`.
+2. Independent owner-mapping path: `0x140C70760` scans 32 records of stride
+   `0xB0`, validates each outer process handle, resolves its child handle at
+   `+0x190/+0x198` to a Player and returns the outer process whose child equals
+   the requested Player, plus its index.
+3. Structural lifecycle evidence: independent `0x140C70900` uses the same
+   registry to manipulate that Player's AnimControl/layers and dispatches the
+   `play-animation` event under the matched outer process. Stock publishers
+   save/set/restore `ThreadContext` around the same process vtable slot `+0xD0`.
+
+Competing hypotheses are explicit. **H1:** `aim-at` is the common late animation
+input for upper body/head/weapon, so owner routing fixes the shared vertical
+camera direction. **H2:** it is only a script/telemetry event, so the route
+marker succeeds but visible behavior is unchanged. **H3:** registry record 0
+aliases both Players; the native mapper returns index 0/the same process and no
+meaningful reroute occurs.
+
+Build `2026-07-28jf` preserves the existing `+0x58` target substitution and
+uses that wrapper only as a thread-local controller scope. It replaces exactly
+the seven-byte indirect call at `0x140CAF008` with a near relay. Screen 0 calls
+the original process vtable exactly once. During fresh peer ADS, screen 1 calls
+native `0x140C70760`, temporarily changes `ThreadContext` from record 0 to the
+owner-matched process, dispatches the unchanged event exactly once, and restores
+record 0 so the surrounding stock function can restore its prior context. No
+Player, camera, joint, event payload or registry field is synthesized by the
+mod. The bounded `AIM-EVENT-ROUTE` marker records mapping success and index.
+
+Written prediction: aim real Chloe downward/straight while the receiving Nadine
+camera looks up, then reverse both signs. If H1 is correct, retained Chloe on
+Nadine's copy follows Chloe's vertical aim while local Nadine remains unchanged;
+the boot log contains `AIM-EVENT-ROUTE mapped=1` with a nonzero index and a
+different selected process. If that marker appears but the visible fault is
+unchanged, reject H1 in favor of H2 and continue downstream of event dispatch.
+If the mapper reports index 0/the native process or no mapping, H3/the registry
+ownership model is rejected. Any crash, model deformation or local-player aim
+change rejects the relay immediately.

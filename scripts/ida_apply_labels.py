@@ -1129,11 +1129,26 @@ FUNCTIONS = {
         "weights and primes controller+0x8A0 when the current Player state "
         "allows aim additives; called from independent Player state entries.",
     ),
+    0x140C70760: (
+        "PlayerAnimationProcessRegistry_FindByPlayer",
+        "Scans 32 animation-process records of stride 0xB0, validates each "
+        "outer process handle, resolves its child handle at process+0x190/+0x198 "
+        "to a Player, and returns the outer process whose child matches the "
+        "requested Player plus its registry index.",
+    ),
+    0x140C70900: (
+        "PlayerAnimationProcessRegistry_UpdatePlayerState",
+        "Uses the same 32-entry Player-to-animation-process registry as "
+        "0x140C70760, updates the matched Player AnimControl/layers, and emits "
+        "the `play-animation` event through the matched outer process.",
+    ),
     0x140CAECB0: (
         "PlayerAimController_ComputeAndPublishAimAdditives",
         "PlayerAimController vtable slot +0x50. Receives aim/body bases and "
         "directional limits, calls 0x140CB32B0, and emits the looking-down-sights "
-        "event. Reached by the ground GunMoveShield path through slot +0x58.",
+        "event. Its target-bearing `aim-at` event is dispatched at 0x140CAF008 "
+        "through hard-coded animation-process registry record 0. Reached by the "
+        "ground GunMoveShield path through slot +0x58.",
     ),
     0x140CAF110: (
         "PlayerAimController_ApplyWorldAimBasis",
