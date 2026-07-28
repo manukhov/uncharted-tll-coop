@@ -2061,11 +2061,16 @@ Do not reopen these as the first move:
       `AIM-JOINT-BOUNDARY-JQ` rows. Both processes remained responsive and
       fault-free but emitted zero rows: INCONCLUSIVE because the marker followed
       several unreported dynamic guards; do not infer Q3 from absence alone.
-- [ ] Add a bounded read-only `jr` admission audit around the already installed
+- [x] Add a bounded read-only `jr` admission audit around the already installed
       outer segment scope and exact case-16 callsite. Separately report owner/
       opcode/direction admission, raw callsite reachability, live group
       `first/+0x10/+0x12` values, buffer admission and program-inventory/finite
       status. Preserve the native call exactly once and write no game data.
+- [ ] Run bounded build `jr`: hold Chloe's camera down; on Nadine's copy keep
+      both characters still and out of ADS while moving only the camera
+      sky -> ground -> sky. Require normal models and at least one screen-1
+      `AIM-JOINT-ADMISSION-JR inner` row; classify R1/R2/R3/R4 exactly as written
+      in `COOP_STATUS.md` before changing any animation state.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

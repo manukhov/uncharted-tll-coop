@@ -20928,6 +20928,16 @@ std::array<std::atomic<ULONGLONG>, kAimJointBoundaryMaxGroups>
     g_aim_joint_boundary_next_log_ms{};
 std::array<std::atomic<std::uint32_t>, kAimJointBoundaryMaxGroups>
     g_aim_joint_boundary_sample_count{};
+std::array<std::atomic<ULONGLONG>, kAimJointBoundaryMaxGroups>
+    g_aim_joint_admission_outer_next_log_ms{};
+std::array<std::atomic<std::uint32_t>, kAimJointBoundaryMaxGroups>
+    g_aim_joint_admission_outer_sample_count{};
+std::array<std::atomic<ULONGLONG>, kAimJointBoundaryMaxGroups>
+    g_aim_joint_admission_inner_next_log_ms{};
+std::array<std::atomic<std::uint32_t>, kAimJointBoundaryMaxGroups>
+    g_aim_joint_admission_inner_sample_count{};
+std::array<std::atomic<std::uint32_t>, kAimJointBoundaryMaxGroups>
+    g_aim_joint_admission_post_sample_count{};
 
 bool aim_hash_floats(
     const float* values, std::size_t count, std::uint64_t& hash) {
@@ -21112,37 +21122,72 @@ void prepare_aim_joint_boundary_scope(
     }
 
     coop::StatePacket peer{};
-    if (!copy_peer_state_snapshot(peer)) {
-        return;
-    }
+    const bool peer_snapshot = copy_peer_state_snapshot(peer);
     const float* peer_quat = nullptr;
     std::uint32_t peer_source = 0;
-    if ((peer.flags & coop::kStateFlagPoseSeed) != 0 &&
+    if (peer_snapshot && (peer.flags & coop::kStateFlagPoseSeed) != 0 &&
         valid_network_orientation(peer.pose_seed + 4)) {
         peer_quat = peer.pose_seed + 4;
         peer_source = 1;
-    } else if (peer_packet_free_look_active(peer)) {
+    } else if (peer_snapshot && peer_packet_free_look_active(peer)) {
         peer_quat = peer.camera_quat;
         peer_source = 2;
     }
     void* const local_player = retained_player_object(0);
-    if (peer_quat == nullptr || local_player == nullptr ||
-        readable_bytes(local_player) <
-            kPlayerAimPoseQuatOffset + 4 * sizeof(float)) {
-        return;
-    }
-    const float* const local_quat = reinterpret_cast<const float*>(
-        static_cast<const std::byte*>(local_player) +
-        kPlayerAimPoseQuatOffset);
-    if (!valid_network_orientation(local_quat)) {
-        return;
+    const bool local_pointer_valid = local_player != nullptr &&
+        readable_bytes(local_player) >=
+            kPlayerAimPoseQuatOffset + 4 * sizeof(float);
+    const float* local_quat = nullptr;
+    bool local_quat_valid = false;
+    if (local_pointer_valid) {
+        local_quat = reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(local_player) +
+            kPlayerAimPoseQuatOffset);
+        local_quat_valid = valid_network_orientation(local_quat);
     }
     float peer_x = 0.0F, peer_y = 0.0F, peer_z = 0.0F;
     float local_x = 0.0F, local_y = 0.0F, local_z = 0.0F;
-    quat_forward_pos_z(peer_quat, peer_x, peer_y, peer_z);
-    quat_forward_pos_z(local_quat, local_x, local_y, local_z);
-    if (!std::isfinite(peer_y) || !std::isfinite(local_y) ||
-        std::fabs(peer_y - local_y) < 0.20F) {
+    if (peer_quat != nullptr) {
+        quat_forward_pos_z(peer_quat, peer_x, peer_y, peer_z);
+    }
+    if (local_quat_valid) {
+        quat_forward_pos_z(local_quat, local_x, local_y, local_z);
+    }
+    const bool directions_finite = peer_quat != nullptr && local_quat_valid &&
+        std::isfinite(peer_y) && std::isfinite(local_y);
+    const float separation = directions_finite
+        ? std::fabs(peer_y - local_y)
+        : 0.0F;
+    const bool armed = directions_finite && separation >= 0.20F;
+
+    if (g_aim_joint_admission_outer_sample_count[processing_group].load(
+            std::memory_order_acquire) < 12) {
+        ULONGLONG due =
+            g_aim_joint_admission_outer_next_log_ms[processing_group].load(
+                std::memory_order_acquire);
+        if (now >= due &&
+            g_aim_joint_admission_outer_next_log_ms[processing_group]
+                .compare_exchange_strong(
+                    due, now + 350, std::memory_order_acq_rel,
+                    std::memory_order_acquire)) {
+            const std::uint32_t sample =
+                g_aim_joint_admission_outer_sample_count[processing_group]
+                    .fetch_add(1, std::memory_order_acq_rel);
+            char line[512]{};
+            std::snprintf(
+                line, sizeof(line),
+                "AIM-JOINT-ADMISSION-JR outer sample=%u group=%u "
+                "op16=%u op24=%u joints=%u peer=%u/%u local=%u/%u "
+                "peerY=%.4f localY=%.4f separation=%.4f armed=%u",
+                sample + 1, processing_group, case16_count, case24_count,
+                skeleton_joint_count, static_cast<unsigned>(peer_snapshot),
+                peer_source, static_cast<unsigned>(local_pointer_valid),
+                static_cast<unsigned>(local_quat_valid), peer_y, local_y,
+                separation, static_cast<unsigned>(armed));
+            boot_log_line(line);
+        }
+    }
+    if (!armed) {
         return;
     }
 
@@ -21312,6 +21357,141 @@ void log_aim_joint_boundary_after_case16(
     capture.valid = false;
 }
 
+void audit_aim_joint_case16_entry(
+    const AimJointBoundaryScope& scope, const void* segment_context) {
+    if (!g_state_net.enabled || segment_context == nullptr ||
+        readable_bytes(segment_context) < 0x60) {
+        return;
+    }
+    const auto* const segment =
+        static_cast<const std::byte*>(segment_context);
+    void* target_skeleton = nullptr;
+    const std::byte* group = nullptr;
+    const void* joint_params = nullptr;
+    const void* workspace = nullptr;
+    std::uint32_t first_joint = 0;
+    std::uint32_t workspace_count = 0;
+    std::uint32_t parameter_count = 0;
+    std::uint32_t group_index = UINT32_MAX;
+    std::uint32_t screen = UINT32_MAX;
+    __try {
+        target_skeleton = *reinterpret_cast<void* const*>(segment + 0x28);
+        group = *reinterpret_cast<const std::byte* const*>(segment + 0x38);
+        joint_params = *reinterpret_cast<const void* const*>(segment + 0x50);
+        workspace = *reinterpret_cast<const void* const*>(segment + 0x58);
+        if (target_skeleton == nullptr || group == nullptr ||
+            readable_bytes(target_skeleton) < 0x30 ||
+            readable_bytes(group) < 0x18) {
+            return;
+        }
+        first_joint =
+            *reinterpret_cast<const std::uint16_t*>(group + 0x00);
+        workspace_count =
+            *reinterpret_cast<const std::uint16_t*>(group + 0x10);
+        parameter_count =
+            *reinterpret_cast<const std::uint16_t*>(group + 0x12);
+        const std::uint32_t group_table_offset =
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(target_skeleton) + 0x2C);
+        const std::uintptr_t group_base =
+            reinterpret_cast<std::uintptr_t>(target_skeleton) +
+            group_table_offset;
+        const std::uintptr_t group_value =
+            reinterpret_cast<std::uintptr_t>(group);
+        if (group_value >= group_base &&
+            (group_value - group_base) % 0x20 == 0) {
+            const std::uintptr_t index = (group_value - group_base) / 0x20;
+            if (index < kAimJointBoundaryMaxGroups) {
+                group_index = static_cast<std::uint32_t>(index);
+            }
+        }
+        for (std::uint32_t candidate = 0;
+             candidate <= kSlot1ScreenIndex; ++candidate) {
+            void* const player = retained_player_object(
+                static_cast<int>(candidate));
+            if (player == nullptr || readable_bytes(player) < 0x4014) {
+                continue;
+            }
+            void* const fg = *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(player) +
+                kPlayerFgAnimDataOffset);
+            if (fg != nullptr && readable_bytes(fg) >=
+                    kFgAnimDataSkeletonOffset + sizeof(void*) &&
+                *reinterpret_cast<void* const*>(
+                    static_cast<const std::byte*>(fg) +
+                    kFgAnimDataSkeletonOffset) == target_skeleton) {
+                screen = candidate;
+                break;
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return;
+    }
+    if (screen != kSlot1ScreenIndex ||
+        group_index >= kAimJointBoundaryMaxGroups ||
+        g_aim_joint_admission_inner_sample_count[group_index].load(
+            std::memory_order_acquire) >= 12) {
+        return;
+    }
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG due =
+        g_aim_joint_admission_inner_next_log_ms[group_index].load(
+            std::memory_order_acquire);
+    if (now < due ||
+        !g_aim_joint_admission_inner_next_log_ms[group_index]
+            .compare_exchange_strong(
+                due, now + 350, std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+        return;
+    }
+    const std::uint32_t sample =
+        g_aim_joint_admission_inner_sample_count[group_index].fetch_add(
+            1, std::memory_order_acq_rel);
+    char line[768]{};
+    std::snprintf(
+        line, sizeof(line),
+        "AIM-JOINT-ADMISSION-JR inner sample=%u screen=%u group=%u "
+        "scope=%u target=%u ordinal=%u/%u first=%u workspace=%u params=%u "
+        "jp=%p work=%p readable=%u/%u",
+        sample + 1, screen, group_index, static_cast<unsigned>(scope.valid),
+        static_cast<unsigned>(target_skeleton == scope.target_skeleton),
+        scope.case16_seen, scope.case16_count, first_joint, workspace_count,
+        parameter_count, joint_params, workspace,
+        static_cast<unsigned>(joint_params != nullptr &&
+            readable_bytes(joint_params) >=
+                static_cast<std::size_t>(parameter_count) * 48),
+        static_cast<unsigned>(workspace != nullptr &&
+            readable_bytes(workspace) >=
+                (static_cast<std::size_t>(workspace_count) + 1) * 64));
+    boot_log_line(line);
+}
+
+void log_aim_joint_admission_post(
+    const AimJointBoundaryScope& scope, bool programs_valid,
+    bool joint_params_readable, bool workspace_readable, bool finite) {
+    if (scope.processing_group >= kAimJointBoundaryMaxGroups) {
+        return;
+    }
+    const std::size_t group = scope.processing_group;
+    const std::uint32_t sample =
+        g_aim_joint_admission_post_sample_count[group].fetch_add(
+            1, std::memory_order_acq_rel);
+    if (sample >= 12) {
+        return;
+    }
+    char line[384]{};
+    std::snprintf(
+        line, sizeof(line),
+        "AIM-JOINT-ADMISSION-JR post sample=%u group=%u "
+        "programs=%u readable=%u/%u finite=%u",
+        sample + 1, scope.processing_group,
+        static_cast<unsigned>(programs_valid),
+        static_cast<unsigned>(joint_params_readable),
+        static_cast<unsigned>(workspace_readable),
+        static_cast<unsigned>(finite));
+    boot_log_line(line);
+}
+
 std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
     std::uint32_t* status, const void* segment_context) {
     const auto native = g_anim_cmd_execute_joint_programs;
@@ -21321,11 +21501,15 @@ std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
     auto& live_scope = g_aim_joint_boundary_scope;
     auto& capture = g_aim_joint_boundary_capture;
     capture.valid = false;
+    if (live_scope.valid && segment_context != nullptr &&
+        readable_bytes(segment_context) >= 0x60) {
+        ++live_scope.case16_seen;
+    }
+    audit_aim_joint_case16_entry(live_scope, segment_context);
     if (!live_scope.valid || segment_context == nullptr ||
         readable_bytes(segment_context) < 0x60) {
         return native(status, segment_context);
     }
-    ++live_scope.case16_seen;
     const AimJointBoundaryScope scope = live_scope;
     if (scope.case16_seen != scope.case16_count) {
         return native(status, segment_context);
@@ -21383,9 +21567,15 @@ std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
     capture.programs = inventory_aim_joint_programs(
         target_skeleton, group);
     std::uint32_t* const result = native(status, segment_context);
-    if (!capture.programs.valid ||
-        readable_bytes(joint_params) < parameter_values * sizeof(float) ||
-        readable_bytes(workspace) < workspace_values * sizeof(float)) {
+    const bool post_joint_params_readable =
+        readable_bytes(joint_params) >= parameter_values * sizeof(float);
+    const bool post_workspace_readable =
+        readable_bytes(workspace) >= workspace_values * sizeof(float);
+    if (!capture.programs.valid || !post_joint_params_readable ||
+        !post_workspace_readable) {
+        log_aim_joint_admission_post(
+            scope, capture.programs.valid, post_joint_params_readable,
+            post_workspace_readable, false);
         return result;
     }
     std::memcpy(
@@ -21411,6 +21601,10 @@ std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
     }
     capture.in_call_joint_params_delta = std::sqrt(in_call_delta_sq);
     capture.valid = finite;
+    if (!finite) {
+        log_aim_joint_admission_post(
+            scope, true, true, true, false);
+    }
     log_aim_joint_boundary_after_case16(
         scope, capture, group_first, parameter_count, workspace_count);
     return result;
@@ -23129,7 +23323,7 @@ bool install_aim_joint_boundary_probes() {
             VirtualFree(execute_relay, 0, MEM_RELEASE);
         }
         boot_log_line(
-            "aim jq case16-return probe SKIPPED (callsite preflight)");
+            "aim jr case16 admission probe SKIPPED (callsite preflight)");
         return false;
     }
 
@@ -23141,7 +23335,7 @@ bool install_aim_joint_boundary_probes() {
         VirtualFree(execute_relay, 0, MEM_RELEASE);
         g_anim_cmd_execute_joint_programs = nullptr;
         boot_log_line(
-            "aim jq case16-return probe SKIPPED (thread suspend)");
+            "aim jr case16 admission probe SKIPPED (thread suspend)");
         return false;
     }
 
@@ -23152,7 +23346,7 @@ bool install_aim_joint_boundary_probes() {
         resume_suspended_process_threads(suspended_threads);
         VirtualFree(execute_relay, 0, MEM_RELEASE);
         g_anim_cmd_execute_joint_programs = nullptr;
-        boot_log_line("aim jq case16-return probe SKIPPED (protect)");
+        boot_log_line("aim jr case16 admission probe SKIPPED (protect)");
         return false;
     }
 
@@ -23163,7 +23357,7 @@ bool install_aim_joint_boundary_probes() {
     VirtualProtect(execute_callsite, 5, execute_old, &ignored);
     resume_suspended_process_threads(suspended_threads);
     boot_log_line(
-        "aim jq case16-return probe installed (0x141ABA973)");
+        "aim jr case16 admission probe installed (0x141ABA973)");
     return true;
 }
 
@@ -42050,8 +42244,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-28jq "
-        "(standalone case16-return discriminator)");
+        "TLL co-op runtime init 2026-07-28jr "
+        "(staged case16 admission audit)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

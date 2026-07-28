@@ -13548,3 +13548,35 @@ authored-program inventory or finite post-call capture fails; **R4**, the full
 marker appears and the earlier absence was only admission timing. A raw hook
 marker without an armed outer scope would independently confirm callsite
 reachability but select R1.
+
+### 2026-07-28 — STATIC / IMPLEMENTED: `jr` stages case-16 admission
+
+The evidence quota for a read-only admission audit is already met by three
+independent types: (1) the exact direct call at `0x141ABA973` passes the live
+`SegmentContext`; (2) callee `AnimCmdEvaluator_ExecuteSkeletonJointPrograms
+0x14217B630` consumes the encoded JointParams and workspace bases at
+`SegmentContext+0x50/+0x58`; (3) the group allocator and command generator agree
+that descriptor `+0x10` is the workspace-row count, `+0x12` is the JointParams
+count, and the workspace has one 64-byte root row. The clean but marker-free
+`jq` run independently proves that final-marker absence cannot distinguish the
+remaining dynamic guards.
+
+Read-only build `2026-07-28jr` therefore keeps the exact native call once and
+writes no game data. It emits three independently bounded stages. `outer` reports
+retained-screen ownership, opcode-16/24 counts, peer/local orientation validity,
+vertical separation and whether the scope armed. `inner` runs at the exact
+case-16 callsite even without an armed scope and reports retained screen, group,
+scope/target identity, call ordinal, live `first/+0x10/+0x12` values and buffer
+readability. `post` reports authored-program inventory, post-call buffer
+readability and finite capture failures. The existing
+`AIM-JOINT-BOUNDARY-JQ` semantic record remains the final stage.
+
+Competing outcomes and written prediction: hold Chloe's camera down; on
+Nadine's copy keep both characters still and out of ADS while moving only the
+camera sky -> ground -> sky. `inner screen=1 scope=0` without an armed `outer`
+selects R1. Armed `outer` plus `inner scope=1` with zero, out-of-range or
+unreadable workspace/parameter fields selects R2. Valid fields followed by
+`post programs=0` or `finite=0` selects R3. Repeated
+`AIM-JOINT-BOUNDARY-JQ` rows select R4 and restore the earlier Q1/Q2 semantic
+comparison. Normal models and animation, no stutter/crash, and at least one
+screen-1 `inner` record are required; otherwise the audit is inconclusive.
