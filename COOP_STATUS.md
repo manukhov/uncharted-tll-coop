@@ -13419,3 +13419,36 @@ workspace does not follow local motion but opcode-26 input diverges
 reopened. A changing in-call JointParams value, unstable operator inventory,
 crash, stutter or model regression invalidates the boundary rather than proving
 any hypothesis.
+
+### 2026-07-28 — RUNTIME INCONCLUSIVE / IMPLEMENTED: `jo` admission failure; `jp` corrects SegmentContext identity
+
+Both `2026-07-28jo` processes (PIDs 25156 and 15416) installed the case-6 and
+joint-boundary relays, remained responsive and produced no crash/fault marker,
+but emitted zero `AIM-JOINT-BOUNDARY-JO` rows during the written test. This is an
+admission failure and provides no evidence for J1, J2 or J3.
+
+**REJECTED:** `SegmentContext+0x08` is the outer `AnimCmdContext*`. Direct
+disassembly shows that `ProcessAnimCmdListSegment 0x141AB97C0` zeroes its
+128-byte stack SegmentContext at `0x141AB9986`, then explicitly stores zero at
+`+0x08` (`0x141AB9A57`). The exact case-16 path passes that same stack object in
+RDX at `0x141ABA96B` to
+`AnimCmdEvaluator_ExecuteSkeletonJointPrograms 0x14217B630` at `0x141ABA973`.
+The callee instead consumes the independently validated target skeleton at
+`+0x28`, group descriptor at `+0x38`, final JointParams at `+0x50` and matrix
+workspace at `+0x58`. Comparing `+0x08` with the outer context therefore
+rejected every valid call.
+
+Read-only build `2026-07-28jp` removes only that false identity comparison and
+retains the exact TLS owner, screen, target-skeleton, group-range, destination,
+workspace and opcode-26 writer checks. The normal generator can emit an optional
+opcode 16 at `0x141A90069` and a final opcode 16 at `0x141A900F5`, so `jp`
+requires at least one rather than exactly one. Each exact case-16 call replaces
+the pending capture, which makes the last producer before opcode 26 the one that
+can satisfy the writer/workspace match; the log records `op16` explicitly.
+
+The falsifiable prediction is unchanged except for the marker: with Chloe's
+camera held down, move only Nadine's local camera sky -> ground -> sky while both
+characters remain still and out of ADS. Normal models and repeated
+`AIM-JOINT-BOUNDARY-JP` rows are required. `deltaJP`, `deltaW` and
+`post16To26` distinguish J1/J2/J3 exactly as specified above; absence of rows,
+crash, stutter or model damage invalidates the boundary.

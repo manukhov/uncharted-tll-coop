@@ -20873,7 +20873,6 @@ AimJointBoundaryOwner probe_aim_joint_boundary_owner(const void* context) {
 
 struct AimJointBoundaryScope {
     bool valid = false;
-    const void* context = nullptr;
     void* target_skeleton = nullptr;
     float* destination = nullptr;
     std::uint32_t processing_group = 0;
@@ -20881,6 +20880,7 @@ struct AimJointBoundaryScope {
     std::uint32_t joint_count = 0;
     std::uint32_t peer_sequence = 0;
     std::uint32_t peer_source = 0;
+    std::uint32_t case16_count = 0;
     std::uint32_t case24_count = 0;
     float peer_y = 0.0F;
     float local_y = 0.0F;
@@ -21134,7 +21134,7 @@ void prepare_aim_joint_boundary_scope(
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return;
     }
-    if (case16_count != 1 || selected_destination == nullptr ||
+    if (case16_count == 0 || selected_destination == nullptr ||
         selected_count == 0) {
         return;
     }
@@ -21176,7 +21176,6 @@ void prepare_aim_joint_boundary_scope(
 
     auto& scope = g_aim_joint_boundary_scope;
     scope.valid = true;
-    scope.context = context;
     scope.target_skeleton = owner.target_skeleton;
     scope.destination = selected_destination;
     scope.processing_group = processing_group;
@@ -21184,6 +21183,7 @@ void prepare_aim_joint_boundary_scope(
     scope.joint_count = selected_count;
     scope.peer_sequence = peer.sequence;
     scope.peer_source = peer_source;
+    scope.case16_count = case16_count;
     scope.case24_count = case24_count;
     scope.peer_y = peer_y;
     scope.local_y = local_y;
@@ -21212,10 +21212,6 @@ std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
     std::uint32_t group_first = 0;
     std::uint32_t group_count = 0;
     __try {
-        if (*reinterpret_cast<const void* const*>(segment + 0x08) !=
-            scope.context) {
-            return native(status, segment_context);
-        }
         target_skeleton = *reinterpret_cast<void* const*>(segment + 0x28);
         group = *reinterpret_cast<const std::byte* const*>(segment + 0x38);
         joint_params = *reinterpret_cast<const float* const*>(segment + 0x50);
@@ -21434,16 +21430,16 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
     char line[1536]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-BOUNDARY-JO sample=%u seq=%u peerSrc=%u "
+        "AIM-JOINT-BOUNDARY-JP sample=%u seq=%u peerSrc=%u "
         "peerY=%.4f localY=%.4f dirDelta=%.4f/%.4f "
-        "group=%u first=%u count=%u reset=%u op24=%u "
+        "group=%u first=%u count=%u reset=%u op16=%u op24=%u "
         "programs=%u/%u hash=%016llX op54=%u matrixW=%u paletteR=%u custom=%u "
         "preJP=%016llX postJP=%016llX postW=%016llX writerW=%016llX "
         "deltaJP/W=%.5f/%.5f inCallJP=%.5f post16To26=%.5f topJP/W=%s",
         sample + 1, scope.peer_sequence, scope.peer_source,
         scope.peer_y, scope.local_y, peer_delta, local_delta,
         scope.processing_group, scope.first_joint, joint_count,
-        static_cast<unsigned>(reset), scope.case24_count,
+        static_cast<unsigned>(reset), scope.case16_count, scope.case24_count,
         capture.programs.program_count, capture.programs.operator_count,
         static_cast<unsigned long long>(capture.programs.hash),
         capture.programs.op54_count, capture.programs.matrix_writer_count,
@@ -23184,7 +23180,7 @@ bool install_aim_joint_boundary_probes() {
             VirtualFree(writer_relay, 0, MEM_RELEASE);
         }
         boot_log_line(
-            "aim jo joint-boundary probes SKIPPED (callsite preflight)");
+            "aim jp joint-boundary probes SKIPPED (callsite preflight)");
         return false;
     }
 
@@ -23201,7 +23197,7 @@ bool install_aim_joint_boundary_probes() {
         g_anim_cmd_execute_joint_programs = nullptr;
         g_anim_cmd_write_skinning_palette = nullptr;
         boot_log_line(
-            "aim jo joint-boundary probes SKIPPED (thread suspend)");
+            "aim jp joint-boundary probes SKIPPED (thread suspend)");
         return false;
     }
 
@@ -23224,7 +23220,7 @@ bool install_aim_joint_boundary_probes() {
         VirtualFree(writer_relay, 0, MEM_RELEASE);
         g_anim_cmd_execute_joint_programs = nullptr;
         g_anim_cmd_write_skinning_palette = nullptr;
-        boot_log_line("aim jo joint-boundary probes SKIPPED (protect)");
+        boot_log_line("aim jp joint-boundary probes SKIPPED (protect)");
         return false;
     }
 
@@ -23239,7 +23235,7 @@ bool install_aim_joint_boundary_probes() {
     VirtualProtect(writer_callsite, 5, writer_old, &ignored);
     resume_suspended_process_threads(suspended_threads);
     boot_log_line(
-        "aim jo joint-boundary probes installed "
+        "aim jp joint-boundary probes installed "
         "(case16 0x141ABA973, writer 0x141ABAE8C)");
     return true;
 }
@@ -42127,8 +42123,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-28jo "
-        "(case16 JointParams/workspace discriminator)");
+        "TLL co-op runtime init 2026-07-28jp "
+        "(corrected SegmentContext joint-boundary discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

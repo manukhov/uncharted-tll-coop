@@ -2039,13 +2039,18 @@ Do not reopen these as the first move:
       opcode 26 read the workspace. Direct dataflow, generator order, resolved
       built-in operator dispatch and plugin hashes satisfy the evidence quota;
       J1/J2/J3 and the written discriminator are in `COOP_STATUS.md`.
-- [ ] Run bounded build `jo`: Chloe camera held down; on Nadine's copy, both
+- [x] Run bounded build `jo`: Chloe camera held down; on Nadine's copy, both
       characters stationary and out of ADS, move the local camera sky -> ground
-      -> sky. Require normal models and repeated `AIM-JOINT-BOUNDARY-JO` rows.
-      `deltaJP` following local edges selects contaminated JointParams (J1);
-      peer-stable `deltaJP` with locally correlated `deltaW` and
-      `post16To26=0` selects a case16 operator (J2); a nonzero
-      `post16To26` correlated with local motion selects a later writer (J3).
+      -> sky. Both processes remained responsive but emitted no boundary rows:
+      INCONCLUSIVE admission failure. Static reinspection rejected the guard
+      equating zeroed `SegmentContext+0x08` with the outer AnimCmdContext.
+- [ ] Run corrected build `jp` with the same Chloe-down / Nadine
+      sky -> ground -> sky sequence. Require normal models and repeated
+      `AIM-JOINT-BOUNDARY-JP` rows. `deltaJP` following local edges selects
+      contaminated JointParams (J1); peer-stable `deltaJP` with locally
+      correlated `deltaW` and `post16To26=0` selects a case16 operator (J2); a
+      nonzero `post16To26` correlated with local motion selects a later writer
+      (J3).
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 
