@@ -13285,3 +13285,38 @@ stable destination/first/count range. The marker changes to
 `AIM-PALETTE-WRITER-JL`; the written sky -> ground -> sky prediction and P1/P2/P3
 classification remain otherwise unchanged. A missing second sample in a group
 is admission failure; a crash or visible regression still invalidates the ABI.
+
+### 2026-07-28 RUNTIME NARROWED / IMPLEMENTED: `jl` rejects bind/basis conversion and exposes double buffering
+
+The user ran the written split exactly: Chloe's camera stayed down while
+Nadine's camera swept sky -> ground -> sky. PIDs 14060/20984 remained responsive
+and emitted eight finite records per admitted processing group with no visible
+model or animation regression. Groups 1/2/7 repeated on both processes; group 3
+also repeated on PID 20984. Every repeated row kept the same `first/count` range.
+
+The run already rejects P2's proposed conversion inputs. Within each group the
+bind-row hash was bit-for-bit constant across all eight samples, and the common
+basis hash was always `A27AFC0E281F6508` with zero reported basis delta. At the
+same time both workspace and final palette hashes changed on every sample.
+Therefore the visible camera-dependent motion is not introduced by changing bind
+rows or the common basis inside `AnimCmdEvaluator_WriteSkinningPalette`; any
+relevant change reaching this call is already in workspace, or the visible fault
+is later and unrelated to these ordinary workspace changes.
+
+All rows nevertheless reported `reset=1`. The per-group baseline was correct,
+but its reset key still included the native destination pointer. Opcode 26 writes
+the alternating current palette buffer, so the pointer changes while the same
+stable group/range continues. Because the probe copies each completed sample into
+its own arrays, comparing those copied arrays does not require the next native
+destination address to match. The exact command destination is still validated
+against the current `FgAnimData+0x230` pointer before arming, so removing only the
+address from the local baseline reset does not weaken ownership or range safety.
+
+Build `2026-07-28jm` makes that correction, raises the per-group cap to 20, and
+logs `dirDelta=peer/local` plus total workspace/bind/palette magnitude and the
+four strongest joints. The marker is `AIM-PALETTE-WRITER-JM`. Competing results
+are now only P1 versus P3: workspace totals/joints that rise with receiver
+`localY` while peer Y stays stable select P1; workspace motion that does not
+track local Y, or remains at idle scale while the visible puppet follows local
+camera, selects P3/post-palette ownership. Any bind/basis change would reopen P2;
+normal animation and at least two non-reset samples in one group are required.

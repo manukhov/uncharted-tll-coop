@@ -20943,6 +20943,8 @@ struct AimPaletteWriterBaseline {
     std::array<float, kAimPipelineMaxJoints * 12> bind_rows{};
     std::array<float, kAimPipelineMaxJoints * 12> palette{};
     std::array<float, 12> common_basis{};
+    float peer_y = 0.0F;
+    float local_y = 0.0F;
 };
 
 constexpr std::size_t kAimPaletteWriterMaxGroups = 8;
@@ -21125,7 +21127,7 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
 
     const std::size_t group = scope.processing_group;
     if (g_aim_palette_writer_sample_count[group].load(
-            std::memory_order_acquire) >= 8) {
+            std::memory_order_acquire) >= 20) {
         return result;
     }
     const ULONGLONG now = GetTickCount64();
@@ -21157,7 +21159,6 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
     AimPaletteWriterBaseline& baseline =
         g_aim_palette_writer_baselines[group];
     const bool reset = !baseline.valid ||
-        baseline.destination != destination ||
         baseline.first_joint != scope.first_joint ||
         baseline.joint_count != joint_count ||
         baseline.processing_group != scope.processing_group;
@@ -21171,6 +21172,9 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
     std::uint64_t basis_hash = kAimPipelineFnvOffset;
     std::uint64_t palette_hash = kAimPipelineFnvOffset;
     float basis_delta_sq = 0.0F;
+    float workspace_total_delta_sq = 0.0F;
+    float bind_total_delta_sq = 0.0F;
+    float palette_total_delta_sq = 0.0F;
     bool finite = true;
 
     __try {
@@ -21232,6 +21236,9 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
             const float workspace_delta = std::sqrt(workspace_delta_sq);
             const float bind_delta = std::sqrt(bind_delta_sq);
             const float palette_delta = std::sqrt(palette_delta_sq);
+            workspace_total_delta_sq += workspace_delta_sq;
+            bind_total_delta_sq += bind_delta_sq;
+            palette_total_delta_sq += palette_delta_sq;
             const float score = workspace_delta + bind_delta + palette_delta;
             for (std::size_t rank = 0; rank < top_scores.size(); ++rank) {
                 if (score > top_scores[rank]) {
@@ -21277,7 +21284,7 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
         const std::uint32_t sample =
             g_aim_palette_writer_sample_count[group].fetch_add(
                 1, std::memory_order_acq_rel);
-        if (sample >= 8) {
+        if (sample >= 20) {
             g_aim_palette_writer_busy.clear(std::memory_order_release);
             return result;
         }
@@ -21306,10 +21313,11 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
         char line[1536]{};
         std::snprintf(
             line, sizeof(line),
-            "AIM-PALETTE-WRITER-JL sample=%u seq=%u peerSrc=%u "
+            "AIM-PALETTE-WRITER-JM sample=%u seq=%u peerSrc=%u "
             "peerY=%.4f localY=%.4f "
             "group=%u first=%u count=%u reset=%u "
             "workspace=%016llX bind=%016llX basis=%016llX palette=%016llX "
+            "dirDelta=%.4f/%.4f totalW/B/P=%.5f/%.5f/%.5f "
             "basisDelta=%.5f topW/B/P=%s",
             sample + 1, scope.peer_sequence, scope.peer_source,
             scope.peer_y, scope.local_y,
@@ -21319,6 +21327,11 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
             static_cast<unsigned long long>(bind_hash),
             static_cast<unsigned long long>(basis_hash),
             static_cast<unsigned long long>(palette_hash),
+            reset ? 0.0F : scope.peer_y - baseline.peer_y,
+            reset ? 0.0F : scope.local_y - baseline.local_y,
+            std::sqrt(workspace_total_delta_sq),
+            std::sqrt(bind_total_delta_sq),
+            std::sqrt(palette_total_delta_sq),
             std::sqrt(basis_delta_sq), top);
         boot_log_line(line);
 
@@ -21332,6 +21345,8 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
         baseline.first_joint = scope.first_joint;
         baseline.joint_count = joint_count;
         baseline.processing_group = scope.processing_group;
+        baseline.peer_y = scope.peer_y;
+        baseline.local_y = scope.local_y;
     }
     g_aim_palette_writer_busy.clear(std::memory_order_release);
     return result;
@@ -25245,9 +25260,9 @@ constexpr bool g_enable_aim_diagnostic_probes = false;
 // through later blend/plugin commands and the final FgAnimData+0x230 palette.
 // Four samples per signature/screen, no native calls or game-memory writes.
 constexpr bool g_enable_aim_case6_probe = true;
-// Build jl: repeat the final opcode-26 writer discriminator without the invalid
-// ADS/LRDU/same-segment gates from iy. Each of the eight processing groups owns
-// an independent baseline/limit so valid consecutive deltas are not discarded.
+// Build jm: compare copied samples independently of the alternating native
+// destination pointer. Exact current-palette range validation remains in the
+// outer scope; per-group totals and peer/local direction deltas classify input.
 constexpr bool g_enable_aim_palette_writer_probe = true;
 
 
@@ -41988,8 +42003,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-28jl "
-        "(per-group retained opcode-26 palette discriminator)");
+        "TLL co-op runtime init 2026-07-28jm "
+        "(double-buffer-safe opcode-26 palette discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

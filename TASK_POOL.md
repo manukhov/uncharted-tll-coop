@@ -2009,11 +2009,20 @@ Do not reopen these as the first move:
       post-`FgAnimData+0x230` consumer. **INCONCLUSIVE:** normal animation and
       two exact writer rows confirm ABI/admission, but the global counter sampled
       different groups and reset the baseline for both; no delta was measured.
-- [ ] Run build `jl` with the same stationary remote free-look and receiver
+- [x] Run build `jl` with the same stationary remote free-look and receiver
       sky -> ground -> sky sweep. Require at least two
       `AIM-PALETTE-WRITER-JL` rows from the same `group/first/count`; per-group
       workspace versus bind/basis/palette deltas then select P1/P2/P3. Zero
-      repeated group samples is admission failure only.
+      repeated group samples is admission failure only. **RUNTIME NARROWED:**
+      groups repeated safely and bind/common-basis hashes stayed exactly constant,
+      rejecting P2, but alternating palette destination pointers still reset
+      every copied baseline. P1 versus P3 remains unresolved.
+- [ ] Run double-buffer-safe build `jm` with Chloe camera held down and Nadine
+      sky -> ground -> sky while both characters stand still. Require repeated
+      non-reset `AIM-PALETTE-WRITER-JM` rows from one group. Correlation between
+      `dirDelta local`, total workspace/palette delta and stable peer Y selects
+      P1; idle-scale/non-correlated workspace while the puppet visibly follows
+      local camera selects P3. Bind/basis must remain zero-delta.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 
