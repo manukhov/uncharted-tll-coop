@@ -13111,3 +13111,21 @@ near-zero named/propagated delta during the opposing test. If no screen-1 call o
 no propagation is observed, this NetAnim route is inactive for the campaign
 puppet and H2 survives. A crash or visible model/animation change invalidates
 the wrapper ABI; the probe itself writes no game state.
+
+### 2026-07-28 RUNTIME REJECTED: `jj` NetAnim consumer is absent from the campaign puppet
+
+Fresh PIDs 1600/3116 loaded build `2026-07-28jj`; both logs confirmed successful
+installation of the RTTI-exact `NetAnimCmdGenerator` vslot `+0x68` wrapper. The
+user repeated the opposing vertical-look test and observed the same symmetric
+receiver-local camera contamination. Both processes remained alive and
+responsive, but neither log contained a single `AIM-NETANIM-SECOND` sample for
+screen 0 or screen 1.
+
+This matches the negative branch of the written prediction and **rejects
+`NetAnimCmdGenerator::UpdateFlagsAndWeapons 0x140A07160` as the live campaign
+puppet consumer** of `Player+0x3900`. The static query/copy path remains valid for
+its own game mode, but it is not reached for these retained Players; do not write
+`Player+0xF130` or `+0x1D59` and do not reintroduce this hook. H2 survives for
+the named aim-point fields: their camera contamination is confirmed, but no
+causal connection to the rendered pitch has yet been established. The completed
+probe and its runtime-only offsets were removed after this result.

@@ -580,19 +580,6 @@ constexpr std::uintptr_t kPlayerAimBlendTickVtableSlotRva = 0x2A0B228;
 constexpr std::uintptr_t kPlayerAimBlendTickRva = 0x0CAFA20;
 constexpr std::uintptr_t kPlayerAimBlendTargetCallsiteRva = 0x0CAFB7C;
 constexpr std::uintptr_t kPlayerAimBlendTargetRva = 0x0CAE480;
-// Player_UpdateNamedChestNeckAndAimPoints publishes this named world point;
-// NetAnimCmdGenerator consumes it through Player vslot +0x2D8.
-constexpr std::size_t kPlayerSecondNamedAimPointOffset = 0x3900;
-// NetAnimCmdGenerator RTTI vtable slot +0x68. The function queries the owning
-// Player's vslot +0x2D8 for "SecondAimAtPos", then publishes it into the
-// generator's Player-hosted snapshot fields (+0xF130, +0x1D59 bit 0x04).
-constexpr std::uintptr_t kNetAnimCmdGeneratorVtableRva = 0x292F368;
-constexpr std::uintptr_t kNetAnimCmdGeneratorUpdateFlagsVtableSlotRva =
-    kNetAnimCmdGeneratorVtableRva + 0x68;
-constexpr std::uintptr_t kNetAnimCmdGeneratorUpdateFlagsRva = 0xA07160;
-constexpr std::size_t kPlayerNetAnimGeneratorOffset = 0x1B30;
-constexpr std::size_t kPlayerNetAnimSecondAimPointOffset = 0xF130;
-constexpr std::size_t kPlayerNetAnimSnapshotFlagsOffset = 0x1D59;
 // GunMoveController (Player+0x1DA8) vtable +0x38. Stock code resolves the
 // owner's route camera and writes its camera-relative world direction to
 // controller+0x150 before aim-idle turn-state selection.

@@ -10658,10 +10658,6 @@ using PlayerAimWorldBasisFunction = std::int64_t(__fastcall*)(
     float vertical_limit_a,
     float vertical_limit_b);
 PlayerAimWorldBasisFunction g_original_player_aim_world_basis = nullptr;
-using NetAnimCmdGeneratorUpdateFlagsFunction = void(__fastcall*)(
-    void* generator, void* owner);
-NetAnimCmdGeneratorUpdateFlagsFunction
-    g_original_netanim_update_flags_and_weapons = nullptr;
 using GunMoveControllerApplyCameraYawFunction = char(__fastcall*)(
     void* controller, const float* input_direction);
 GunMoveControllerApplyCameraYawFunction
@@ -10693,142 +10689,6 @@ constexpr bool g_enable_puppet_ads_root_yaw_snap = false;
 // manager copies into each render instance. Override only that stock publication
 // for the remote FgAnimData while peer ADS is fresh.
 constexpr bool g_enable_puppet_fganim_world_aim_turn = true;
-
-float named_point_distance_sq(const float a[4], const float b[4]) {
-    const float dx = a[0] - b[0];
-    const float dy = a[1] - b[1];
-    const float dz = a[2] - b[2];
-    return dx * dx + dy * dy + dz * dz;
-}
-
-bool seh_read_player_screen_index(void* player, std::uint32_t& out_screen) {
-    if (player == nullptr ||
-        readable_bytes(static_cast<std::byte*>(player) + 0x4010) <
-            sizeof(out_screen)) {
-        return false;
-    }
-    __try {
-        out_screen = *reinterpret_cast<const std::uint32_t*>(
-            static_cast<const std::byte*>(player) + 0x4010);
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-struct NetAnimSecondAimSnapshot {
-    float named_second[4]{};
-    float propagated_second[4]{};
-    std::uint8_t snapshot_flags = 0;
-};
-
-bool capture_netanim_second_aim_snapshot(
-    void* player, NetAnimSecondAimSnapshot& out) {
-    if (player == nullptr ||
-        readable_bytes(
-            static_cast<std::byte*>(player) +
-            kPlayerNetAnimSecondAimPointOffset) < sizeof(out.propagated_second)) {
-        return false;
-    }
-    __try {
-        const auto* const bytes = static_cast<const std::byte*>(player);
-        std::memcpy(
-            out.named_second, bytes + kPlayerSecondNamedAimPointOffset,
-            sizeof(out.named_second));
-        std::memcpy(
-            out.propagated_second,
-            bytes + kPlayerNetAnimSecondAimPointOffset,
-            sizeof(out.propagated_second));
-        out.snapshot_flags = *reinterpret_cast<const std::uint8_t*>(
-            bytes + kPlayerNetAnimSnapshotFlagsOffset);
-        return valid_network_position(out.named_second) &&
-            valid_network_position(out.propagated_second);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-void __fastcall hooked_netanim_update_flags_and_weapons(
-    void* generator, void* owner) {
-    if (g_original_netanim_update_flags_and_weapons != nullptr) {
-        g_original_netanim_update_flags_and_weapons(generator, owner);
-    }
-    if (g_dll_inert || owner == nullptr || generator == nullptr) {
-        return;
-    }
-
-    std::uint32_t screen = UINT32_MAX;
-    if (!seh_read_player_screen_index(owner, screen) ||
-        screen > kSlot1ScreenIndex) {
-        return;
-    }
-
-    constexpr std::uint32_t kMaxSamplesPerScreen = 512;
-    static std::array<std::atomic<ULONGLONG>, 2> last_log_ms{};
-    static std::array<std::atomic<std::uint32_t>, 2> sample_counts{};
-    const ULONGLONG now = GetTickCount64();
-    ULONGLONG previous = last_log_ms[screen].load(std::memory_order_relaxed);
-    if (now - previous < 400 ||
-        !last_log_ms[screen].compare_exchange_strong(
-            previous, now, std::memory_order_relaxed)) {
-        return;
-    }
-    const std::uint32_t sample =
-        sample_counts[screen].fetch_add(1, std::memory_order_relaxed);
-    if (sample >= kMaxSamplesPerScreen) {
-        return;
-    }
-
-    NetAnimSecondAimSnapshot snapshot{};
-    const bool valid = capture_netanim_second_aim_snapshot(owner, snapshot);
-    const std::uintptr_t generator_delta =
-        reinterpret_cast<std::uintptr_t>(generator) -
-        reinterpret_cast<std::uintptr_t>(owner);
-    const float propagation_delta = valid
-        ? std::sqrt(named_point_distance_sq(
-              snapshot.named_second, snapshot.propagated_second))
-        : 0.0F;
-    std::ostringstream line;
-    line << std::fixed << std::setprecision(4)
-         << "AIM-NETANIM-SECOND sample=" << sample
-         << " slot=" << screen
-         << " owner=0x" << std::hex
-         << reinterpret_cast<std::uintptr_t>(owner)
-         << " generator=0x" << reinterpret_cast<std::uintptr_t>(generator)
-         << " generatorDelta=0x" << generator_delta << std::dec
-         << " valid=" << (valid ? 1 : 0)
-         << " flag=" << ((snapshot.snapshot_flags & 0x04u) != 0 ? 1 : 0)
-         << " namedSecondY=" << snapshot.named_second[1]
-         << " propagatedY=" << snapshot.propagated_second[1]
-         << " delta=" << propagation_delta;
-    boot_log_line(line.str().c_str());
-}
-
-bool install_netanim_second_aim_consumer_probe() {
-    auto* const slot = reinterpret_cast<void**>(
-        g_module + kNetAnimCmdGeneratorUpdateFlagsVtableSlotRva);
-    void* const expected = reinterpret_cast<void*>(
-        g_module + kNetAnimCmdGeneratorUpdateFlagsRva);
-    if (*slot != expected) {
-        boot_log_line("NetAnim SecondAimAt consumer probe SKIPPED (slot mismatch)");
-        return false;
-    }
-    g_original_netanim_update_flags_and_weapons =
-        reinterpret_cast<NetAnimCmdGeneratorUpdateFlagsFunction>(*slot);
-    DWORD old = 0;
-    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
-        boot_log_line("NetAnim SecondAimAt consumer probe SKIPPED (protect)");
-        g_original_netanim_update_flags_and_weapons = nullptr;
-        return false;
-    }
-    *slot = reinterpret_cast<void*>(&hooked_netanim_update_flags_and_weapons);
-    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
-    DWORD ignored = 0;
-    VirtualProtect(slot, sizeof(void*), old, &ignored);
-    boot_log_line(
-        "NetAnim SecondAimAt read-only consumer probe installed (+0x68)");
-    return true;
-}
 
 bool seh_read_aim_origin_point(void* controller, float out[4]) {
     if (controller == nullptr || out == nullptr || g_module == 0) {
@@ -41621,7 +41481,6 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line("named aim-point writer probe parked after conclusive ji");
-    install_netanim_second_aim_consumer_probe();
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();
     install_weapon_pickup_gate();

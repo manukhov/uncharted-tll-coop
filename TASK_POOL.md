@@ -1971,7 +1971,17 @@ Do not reopen these as the first move:
       substitution falsifier; chest/neck equality rejects it. Separately,
       `PlayerAimingMachine` is STATIC REJECTED: it is embedded in CameraEdgeAim/
       CameraControlZoom, completely overwrites copied camera-0 orientation from
-      per-machine inputs and outputs only CameraLocation.
+      per-machine inputs and outputs only CameraLocation. **`ji` RUNTIME
+      CONFIRMED / `jj` RUNTIME REJECTED:** the repaired writer probe proves that
+      screen-1 `+0x38F0/+0x3900` follows the receiver-local route rather than the
+      opposing peer seed while the camera branch is active. However the exact
+      `NetAnimCmdGenerator::UpdateFlagsAndWeapons 0x140A07160` vslot `+0x68`
+      wrapper produced zero screen-0/1 entries on both responsive campaign
+      processes. Therefore its static `SecondAimAtPos -> Player+0xF130` copy is
+      not the live puppet consumer; the `jj` hook and offsets are removed. H2
+      remains: the named fields are contaminated but may be targeting-only.
+      Continue by resolving other Player vslot `+0x2D8` named-point consumers or
+      another proven active base-animation bridge; do not patch `+0xF130/+0x1D59`.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 
