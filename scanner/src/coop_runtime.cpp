@@ -10785,12 +10785,24 @@ std::int64_t __fastcall hooked_player_named_aim_point_writer(void* player) {
         return result;
     }
 
+    // Keep this hot-path diagnostic both observable and bounded.  The normal
+    // runtime logger is intentionally compiled out, so this read-only probe
+    // uses the boot channel for at most ~3.4 minutes per screen (512 samples at
+    // 400 ms).  That is long enough to load a checkpoint and perform the
+    // opposite-pitch discriminator without restoring unbounded frame logging.
+    constexpr std::uint32_t kMaxSamplesPerScreen = 512;
     static std::array<std::atomic<ULONGLONG>, 2> last_log_ms{};
+    static std::array<std::atomic<std::uint32_t>, 2> sample_counts{};
     const ULONGLONG now = GetTickCount64();
     ULONGLONG previous = last_log_ms[screen].load(std::memory_order_relaxed);
     if (now - previous < 400 ||
         !last_log_ms[screen].compare_exchange_strong(
             previous, now, std::memory_order_relaxed)) {
+        return result;
+    }
+    const std::uint32_t sample =
+        sample_counts[screen].fetch_add(1, std::memory_order_relaxed);
+    if (sample >= kMaxSamplesPerScreen) {
         return result;
     }
 
@@ -10848,7 +10860,8 @@ std::int64_t __fastcall hooked_player_named_aim_point_writer(void* player) {
 
     std::ostringstream line;
     line << std::fixed << std::setprecision(4)
-         << "AIM-NAMED-POINT-WRITER slot=" << screen
+         << "AIM-NAMED-POINT-WRITER sample=" << sample
+         << " slot=" << screen
          << " player=0x" << std::hex
          << reinterpret_cast<std::uintptr_t>(player) << std::dec
          << " valid=" << (before_valid ? 1 : 0) << "/"
@@ -10864,7 +10877,7 @@ std::int64_t __fastcall hooked_player_named_aim_point_writer(void* player) {
          << route_self_y
          << " peer=" << (peer_y_valid ? 1 : 0) << "/" << peer_y
          << " peerAge=" << (received == 0 ? 0 : now - received);
-    force_log_line(line.str().c_str());
+    boot_log_line(line.str().c_str());
     return result;
 }
 
@@ -41579,8 +41592,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-28jh "
-        "(read-only Player named aim-point writer probe)");
+        "TLL co-op runtime init 2026-07-28ji "
+        "(bounded read-only Player named aim-point writer probe)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

@@ -13053,3 +13053,20 @@ fields from per-machine inputs. Finally, the only surviving output becomes the
 Player, animation-controller, joint or palette write. The copied camera-0 state
 is a projection/collision/reticle template, not the process-global character
 pose source. Do not instrument or patch this machine for the shared-pitch bug.
+
+### 2026-07-28 INCONCLUSIVE / IMPLEMENTED: `jh` logging gate repaired in `ji`
+
+The first `jh` visual run was unchanged, as required for a read-only probe, but
+it produced no `AIM-NAMED-POINT-WRITER` records. This absence does not test the
+candidate: the wrapper sent its only marker through `force_log_line`, while
+`kEnableRuntimeDiagnosticLogging=false` compiles that function to a no-op. Both
+processes did log successful slot `+0xE58` installation and remained responsive;
+therefore the runtime result is **INCONCLUSIVE**, not REJECTED.
+
+Build `2026-07-28ji` keeps the same ABI and calls the original writer exactly
+once. It changes only observability: one sample per 400 ms is written through
+the guaranteed boot channel, with a hard cap of 512 samples for each screen.
+No Player, camera, route, packet, animation or controller field is changed.
+The falsifiable prediction remains the `jh` prediction above: opposing vertical
+camera directions must separate whether slot-1 `AimAtPos` follows its receiver's
+screen-route seed, the replicated peer seed, or only the chest/neck fallback.
