@@ -1908,8 +1908,11 @@ Do not reopen these as the first move:
       fresh peer quaternion. `SetLookPoint/SetLookLine` were eliminated for lack
       of an ordinary per-frame caller; direct `+0x38C0` writes were eliminated
       because `ProcessJumpSpace` also reads the field. Runtime prediction is in
-      `COOP_STATUS.md`; visual confirmation and a
-      `PLAYER-CAMERA-LOOK-RELAY` marker are pending.
+      `COOP_STATUS.md`. **`ja` INCONCLUSIVE:** behavior unchanged and no success
+      marker, but external memory proves the live Player vtable slot was patched.
+      Build `jb` adds bounded pass-through `+0xEA0/+0xE80` entry/gate telemetry
+      to distinguish skipped retained call, invalid peer/local seed and vector
+      rejection before any new ownership change.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

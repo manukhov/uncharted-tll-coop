@@ -12675,3 +12675,32 @@ A marker with continued shared-camera motion rejects this point as the visible
 consumer. Traversal changes, lateral offset, horizontal regression, jitter,
 model collapse or crash reject the pivot/full-quaternion implementation, not
 the proven ABI.
+
+### 2026-07-28 RUNTIME INCONCLUSIVE / STATIC NARROWED: `ja` installed but no effective marker
+
+The user reports unchanged shared-camera behavior in opposite free-look/ADS
+testing. Neither process emitted `PLAYER-CAMERA-LOOK-RELAY`. This does not meet
+the written semantic-rejection branch because that marker was after all packet,
+identity, seed and vector gates rather than at function entry.
+
+External read-only process memory closes the vtable-mismatch alternative. In PID
+2204 the retained Players are `0x10E0A22200/0x10E0E15F00`; in PID 22364 they are
+`0x10E0A33D80/0x10E0DE5B80`. All four have the exact Player vtable RVA
+`0x2A4BFE8`, and live slot `+0xE80` in both processes points into the injected
+DLL. IDA xrefs `0x142E29860/0x142E29870/0x146E4BF04` are 32-bit function-range /
+unwind metadata, not alternate vtables. Therefore the remaining competitors are:
+
+- R1: retained Player reaches `+0xEA0` but its branch does not call `+0xE80`;
+- R2: retained `+0xE80` is reached but fresh peer quaternion or local route seed
+  rejects the transform;
+- R3: both calls and gates pass but the returned vector fails finite/length
+  validation before the success marker.
+
+Build `2026-07-28jb` keeps `ja` behavior and adds a bounded read-only discriminator.
+The exact Player `+0xEA0` wrapper logs once per second per retained slot and calls
+native once unchanged; the existing `+0xE80` wrapper now logs entry after native,
+including live Player identity, peer flags/age, local-seed validity, peer-quat
+validity and returned float4. Prediction: EA0(slot1) without E80(slot1) selects
+R1; E80(slot1) with `localSeed=0` or `peerQuat=0` selects R2; both gates equal 1
+without the success marker selects R3. Any visual/model/traversal change rejects
+the diagnostic wrapper ABI and requires immediate removal.

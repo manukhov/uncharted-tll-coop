@@ -359,6 +359,8 @@ constexpr std::uintptr_t kPlayerLookAtUpdateIkRva = 0xEDA680;     // vtable+0x38
 // hook the returned point only for retained screen-1 Player.
 constexpr std::uintptr_t kPlayerGetCameraLookAtPointSlotOffset = 0xE80;
 constexpr std::uintptr_t kPlayerGetCameraLookAtPointRva = 0x10D1B20;
+constexpr std::uintptr_t kPlayerUpdateCameraLookAtPointSlotOffset = 0xEA0;
+constexpr std::uintptr_t kPlayerUpdateCameraLookAtPointRva = 0x10D37C0;
 // Per-screen camera handle table (2 entries, {ptr,id} 16B each). The resolver
 // ResolveScreenRoutePoseSeedOrDefault reads screen idx's pose seed from
 // *(*(table[2*idx]+8)+176)+0x60. Writing the peer seed to that exact source for

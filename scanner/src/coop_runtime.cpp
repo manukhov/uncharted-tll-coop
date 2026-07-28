@@ -11344,8 +11344,11 @@ void apply_peer_head_look_to_puppet(
 // retained Player's returned point before the native processing consumes it.
 using PlayerGetCameraLookAtPointFn = float*(__fastcall*)(
     void* player, float* out_point);
+using PlayerUpdateCameraLookAtPointFn = void(__fastcall*)(void* player);
 
 PlayerGetCameraLookAtPointFn g_original_player_get_camera_look_at_point = nullptr;
+PlayerUpdateCameraLookAtPointFn g_original_player_update_camera_look_at_point =
+    nullptr;
 
 bool normalize_look_quat(const float in[4], float out[4]) {
     float norm_sq = 0.0F;
@@ -11462,6 +11465,65 @@ void log_player_camera_look_retarget(
     force_log_line(line.str().c_str());
 }
 
+void log_player_camera_boundary(
+    const char* stage, void* player, const float* out_point) {
+    void* const slot0 = retained_player_object(0);
+    void* const slot1 = retained_player_object(1);
+    int slot = -1;
+    if (player == slot0) {
+        slot = 0;
+    } else if (player == slot1) {
+        slot = 1;
+    }
+    const int log_index = slot >= 0 ? slot : 2;
+    static std::atomic<ULONGLONG> last_update[3]{};
+    static std::atomic<ULONGLONG> last_get[3]{};
+    auto& last = std::strcmp(stage, "EA0") == 0
+        ? last_update[log_index]
+        : last_get[log_index];
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG previous = last.load(std::memory_order_relaxed);
+    if (now - previous < 1000 ||
+        !last.compare_exchange_strong(
+            previous, now, std::memory_order_relaxed)) {
+        return;
+    }
+
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    coop::StatePacket peer{};
+    const bool peer_ok = copy_peer_state_snapshot(peer);
+    std::uint8_t local_seed[32]{};
+    const bool local_seed_ok = copy_local_pose_seed_32(local_seed);
+    float peer_quat[4]{};
+    std::uint32_t peer_sequence = 0;
+    const bool peer_quat_ok =
+        copy_fresh_peer_look_quat(peer_quat, peer_sequence);
+    std::uintptr_t vtable = 0;
+    if (player != nullptr && readable_bytes(player) >= sizeof(void*)) {
+        vtable = reinterpret_cast<std::uintptr_t>(
+            *reinterpret_cast<void* const*>(player));
+    }
+    std::ostringstream line;
+    line << "PLAYER-CAMERA-BOUNDARY stage=" << stage
+         << " player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(player)
+         << " slot=" << std::dec << slot
+         << " vtableRva=0x" << std::hex
+         << (vtable >= g_module ? vtable - g_module : vtable)
+         << " peerFlags=0x" << (peer_ok ? peer.flags : 0)
+         << std::dec << " peerSeq=" << (peer_ok ? peer.sequence : 0)
+         << " recvAge="
+         << (received != 0 && now >= received ? now - received : 0)
+         << " localSeed=" << (local_seed_ok ? 1 : 0)
+         << " peerQuat=" << (peer_quat_ok ? 1 : 0);
+    if (out_point != nullptr && readable_bytes(out_point) >= 4 * sizeof(float)) {
+        line << " out=(" << out_point[0] << "," << out_point[1] << ","
+             << out_point[2] << "," << out_point[3] << ")";
+    }
+    force_log_line(line.str().c_str());
+}
+
 float* __fastcall hooked_player_get_camera_look_at_point(
     void* player, float* out_point) {
     if (g_original_player_get_camera_look_at_point == nullptr) {
@@ -11469,6 +11531,7 @@ float* __fastcall hooked_player_get_camera_look_at_point(
     }
     float* const result =
         g_original_player_get_camera_look_at_point(player, out_point);
+    log_player_camera_boundary("E80", player, out_point);
     if (out_point == nullptr || readable_bytes(out_point) < 4 * sizeof(float)) {
         return result;
     }
@@ -11500,30 +11563,49 @@ float* __fastcall hooked_player_get_camera_look_at_point(
     return result;
 }
 
+void __fastcall hooked_player_update_camera_look_at_point(void* player) {
+    if (g_original_player_update_camera_look_at_point == nullptr) {
+        return;
+    }
+    log_player_camera_boundary("EA0", player, nullptr);
+    g_original_player_update_camera_look_at_point(player);
+}
+
 bool install_player_camera_look_at_point_relay() {
-    auto* const slot = reinterpret_cast<void**>(
+    auto* const get_slot = reinterpret_cast<void**>(
         g_module + kPlayerVtableRva + kPlayerGetCameraLookAtPointSlotOffset);
-    void* const expected = reinterpret_cast<void*>(
+    auto* const update_slot = reinterpret_cast<void**>(
+        g_module + kPlayerVtableRva + kPlayerUpdateCameraLookAtPointSlotOffset);
+    void* const expected_get = reinterpret_cast<void*>(
         g_module + kPlayerGetCameraLookAtPointRva);
-    if (*slot != expected) {
+    void* const expected_update = reinterpret_cast<void*>(
+        g_module + kPlayerUpdateCameraLookAtPointRva);
+    if (*get_slot != expected_get || *update_slot != expected_update) {
         boot_log_line(
             "Player camera look-at relay SKIPPED (slot mismatch)");
         return false;
     }
+    const std::size_t patch_bytes =
+        kPlayerUpdateCameraLookAtPointSlotOffset -
+        kPlayerGetCameraLookAtPointSlotOffset + sizeof(void*);
     DWORD old = 0;
-    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+    if (!VirtualProtect(get_slot, patch_bytes, PAGE_READWRITE, &old)) {
         boot_log_line(
             "Player camera look-at relay SKIPPED (protect)");
         return false;
     }
     g_original_player_get_camera_look_at_point =
-        reinterpret_cast<PlayerGetCameraLookAtPointFn>(*slot);
-    *slot = reinterpret_cast<void*>(&hooked_player_get_camera_look_at_point);
-    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+        reinterpret_cast<PlayerGetCameraLookAtPointFn>(*get_slot);
+    g_original_player_update_camera_look_at_point =
+        reinterpret_cast<PlayerUpdateCameraLookAtPointFn>(*update_slot);
+    *get_slot = reinterpret_cast<void*>(&hooked_player_get_camera_look_at_point);
+    *update_slot =
+        reinterpret_cast<void*>(&hooked_player_update_camera_look_at_point);
+    FlushInstructionCache(GetCurrentProcess(), get_slot, patch_bytes);
     DWORD ignored = 0;
-    VirtualProtect(slot, sizeof(void*), old, &ignored);
+    VirtualProtect(get_slot, patch_bytes, old, &ignored);
     boot_log_line(
-        "Player camera look-at relay installed (Player vslot +0xE80)");
+        "Player camera look-at relay installed (+0xE80, +0xEA0 read-only boundary)");
     return true;
 }
 
@@ -41568,8 +41650,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-28ja "
-        "(per-Player camera look-at relay)");
+        "TLL co-op runtime init 2026-07-28jb "
+        "(per-Player camera look-at reachability discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
