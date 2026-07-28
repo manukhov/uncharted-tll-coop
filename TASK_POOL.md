@@ -2044,13 +2044,17 @@ Do not reopen these as the first move:
       -> sky. Both processes remained responsive but emitted no boundary rows:
       INCONCLUSIVE admission failure. Static reinspection rejected the guard
       equating zeroed `SegmentContext+0x08` with the outer AnimCmdContext.
-- [ ] Run corrected build `jp` with the same Chloe-down / Nadine
+- [x] Run corrected build `jp` with the same Chloe-down / Nadine
       sky -> ground -> sky sequence. Require normal models and repeated
-      `AIM-JOINT-BOUNDARY-JP` rows. `deltaJP` following local edges selects
-      contaminated JointParams (J1); peer-stable `deltaJP` with locally
-      correlated `deltaW` and `post16To26=0` selects a case16 operator (J2); a
-      nonzero `post16To26` correlated with local motion selects a later writer
-      (J3).
+      `AIM-JOINT-BOUNDARY-JP` rows. Both processes remained responsive with no
+      faults but emitted zero rows. REJECT the same-segment scope: fresh
+      selected-aim inventory was again `stages=1/1/0` in group 0, while the
+      confirmed opcode-26 writer runs separately in groups 1/2/7.
+- [ ] Replace the rejected cross-segment wait with a read-only case-16-return
+      discriminator. Arm any ownership-validated retained screen-1 segment that
+      contains opcode 16, snapshot JointParams `+0x50` before/after and the
+      current-group workspace at `+0x58 + 0x40` after native return, and log by
+      processing group. Do not require or hook opcode 26 for this boundary.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

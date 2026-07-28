@@ -13452,3 +13452,28 @@ characters remain still and out of ADS. Normal models and repeated
 `AIM-JOINT-BOUNDARY-JP` rows are required. `deltaJP`, `deltaW` and
 `post16To26` distinguish J1/J2/J3 exactly as specified above; absence of rows,
 crash, stutter or model damage invalidates the boundary.
+
+### 2026-07-28 — RUNTIME REJECTED: `jp` still requires two different command segments
+
+The user completed the corrected Chloe-down / Nadine sky -> ground -> sky test.
+PIDs 20172 and 25168 remained responsive, both installed the exact `jp`
+callsites, and neither emitted a crash/fault marker, but there were again zero
+`AIM-JOINT-BOUNDARY-JP` rows. Consequently the run supplies no J1/J2/J3 value.
+
+**REJECTED:** correlate case 16 and opcode 26 through a scope owned by one
+`ProcessAnimCmdListSegment` invocation. Fresh inventory rows for the same run
+again show the selected aim segment as `stages=1/1/0` in processing group 0.
+This reproduces the already recorded `es` result: the selected case-6/case-16
+segment has no opcode 26. Conversely, the confirmed `jm` writer boundary reached
+opcode 26 in groups 1/2/7. Removing the false SegmentContext identity check was
+correct, but could not repair an impossible same-segment intersection.
+
+The next boundary must complete at the exact case-16 return itself. Static ABI
+evidence supports that independent discriminator: the evaluator receives the
+current stack SegmentContext at `0x141ABA973`; it reads target skeleton `+0x28`,
+group descriptor `+0x38`, JointParams base `+0x50` and matrix workspace `+0x58`.
+The workspace allocator at `0x141ABA8D0..0x141ABA8F3` reserves
+`(group+0x10 + 1) * 64` bytes, with the first 64-byte row initialized as the
+root at `0x141ABA91D..0x141ABA957`. Thus the current group's matrix output begins
+at `+0x58 + 0x40` and can be compared immediately after the untouched native
+case-16 call without waiting for an opcode-26 segment.
