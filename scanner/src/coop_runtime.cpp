@@ -1064,10 +1064,11 @@ volatile bool g_puppet_camera_drive = false;
 // jitter. Keep this as a manual Numpad / A/B path until the aim-additive input is
 // isolated from locomotion.
 volatile bool g_puppet_aim_reticle_relay = false;
-// Free-look head IK sync via PlayerLookAtIkController @ player+0x1E38 (SetLookPoint).
-// OFF (2026-07-07): user reverted — puppet spine twist unacceptable even after
-// weight/pitch tuning (bb). Code kept; flag gates send + receive.
-volatile bool g_puppet_head_look_sync = false;
+// Free-look/ADS camera-look isolation at Player vslot +0xE80. The old direct
+// PlayerLookAtIkController target writer remains rejected after it twisted the
+// spine. The current relay calls the native Player getter once and retargets
+// only its returned point for retained screen 1 before native filtering.
+volatile bool g_puppet_head_look_sync = true;
 // PATH #1 (user-approved 2026-07-07): materialize the puppet's screen-1 aim camera
 // each frame by calling UpdatePlayerAnimatedCameraControlOwnerAndRouteState on its
 // camera-control owner (player+0x36C0). The puppet HAS the owner (screen idx 1) but
@@ -11333,6 +11334,197 @@ void apply_peer_head_look_to_puppet(
              << reinterpret_cast<std::uintptr_t>(ik) << std::dec;
         force_log_line(line.str().c_str());
     }
+}
+
+// Per-Player camera/look isolation. Player_PostAnimUpdate invokes vslot +0xEA0
+// for every Player; that method calls this Player's vslot +0xE80 to obtain the
+// camera look-at point, then applies the native spring/stance processing. The
+// stock fallback reads g_LocalPlayerInputManager even for the retained Player,
+// which is the shared-camera leak observed in two-copy tests. Retarget only the
+// retained Player's returned point before the native processing consumes it.
+using PlayerGetCameraLookAtPointFn = float*(__fastcall*)(
+    void* player, float* out_point);
+
+PlayerGetCameraLookAtPointFn g_original_player_get_camera_look_at_point = nullptr;
+
+bool normalize_look_quat(const float in[4], float out[4]) {
+    float norm_sq = 0.0F;
+    for (int i = 0; i < 4; ++i) {
+        if (!std::isfinite(in[i])) {
+            return false;
+        }
+        norm_sq += in[i] * in[i];
+    }
+    if (!std::isfinite(norm_sq) || norm_sq < 0.50F || norm_sq > 1.50F) {
+        return false;
+    }
+    const float inv_norm = 1.0F / std::sqrt(norm_sq);
+    for (int i = 0; i < 4; ++i) {
+        out[i] = in[i] * inv_norm;
+    }
+    return true;
+}
+
+void rotate_look_vector_by_quat(
+    const float q[4], const float in[3], float out[3]) {
+    const float tx = 2.0F * (q[1] * in[2] - q[2] * in[1]);
+    const float ty = 2.0F * (q[2] * in[0] - q[0] * in[2]);
+    const float tz = 2.0F * (q[0] * in[1] - q[1] * in[0]);
+    out[0] = in[0] + q[3] * tx + (q[1] * tz - q[2] * ty);
+    out[1] = in[1] + q[3] * ty + (q[2] * tx - q[0] * tz);
+    out[2] = in[2] + q[3] * tz + (q[0] * ty - q[1] * tx);
+}
+
+bool copy_fresh_peer_look_quat(float out[4], std::uint32_t& sequence) {
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    if (!g_puppet_head_look_sync || !g_state_net.enabled || received == 0 ||
+        GetTickCount64() - received > 250) {
+        return false;
+    }
+    coop::StatePacket peer{};
+    if (!copy_peer_state_snapshot(peer)) {
+        return false;
+    }
+    const float* source = nullptr;
+    if ((peer.flags & coop::kStateFlagPoseSeed) != 0 &&
+        valid_network_orientation(peer.pose_seed + 4)) {
+        source = peer.pose_seed + 4;
+    } else if ((peer.flags & (coop::kStateFlagPeerFreeLook |
+                             coop::kStateFlagPeerCamera)) != 0 &&
+               valid_network_orientation(peer.camera_quat)) {
+        source = peer.camera_quat;
+    }
+    if (source == nullptr || !normalize_look_quat(source, out)) {
+        return false;
+    }
+    sequence = peer.sequence;
+    return true;
+}
+
+bool player_camera_look_retarget_context(
+    void* player, float pivot[3], float local_quat[4], float peer_quat[4],
+    std::uint32_t& sequence) {
+    if (player == nullptr || g_dll_inert ||
+        player != retained_player_object(1) ||
+        readable_bytes(static_cast<std::byte*>(player) + kWorldPositionOffset) <
+            3 * sizeof(float)) {
+        return false;
+    }
+    std::uint8_t local_seed[32]{};
+    if (!copy_local_pose_seed_32(local_seed) ||
+        !normalize_look_quat(
+            reinterpret_cast<const float*>(local_seed + 16), local_quat) ||
+        !copy_fresh_peer_look_quat(peer_quat, sequence)) {
+        return false;
+    }
+    __try {
+        std::memcpy(
+            pivot, static_cast<std::byte*>(player) + kWorldPositionOffset,
+            3 * sizeof(float));
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+    return std::isfinite(pivot[0]) && std::isfinite(pivot[1]) &&
+           std::isfinite(pivot[2]);
+}
+
+bool rotate_camera_look_vector(
+    const float local_quat[4], const float peer_quat[4],
+    const float in[3], float out[3]) {
+    const float length =
+        std::sqrt(in[0] * in[0] + in[1] * in[1] + in[2] * in[2]);
+    if (!std::isfinite(length) || length < 0.05F || length > 10000.0F) {
+        return false;
+    }
+    const float inverse_local[4]{
+        -local_quat[0], -local_quat[1], -local_quat[2], local_quat[3]};
+    float camera_space[3]{};
+    rotate_look_vector_by_quat(inverse_local, in, camera_space);
+    rotate_look_vector_by_quat(peer_quat, camera_space, out);
+    return std::isfinite(out[0]) && std::isfinite(out[1]) &&
+           std::isfinite(out[2]);
+}
+
+void log_player_camera_look_retarget(
+    const float stock[3], const float effective[3], std::uint32_t sequence) {
+    static ULONGLONG last_log = 0;
+    const ULONGLONG now = GetTickCount64();
+    if (now - last_log < 500) {
+        return;
+    }
+    last_log = now;
+    std::ostringstream line;
+    line << "PLAYER-CAMERA-LOOK-RELAY seq=" << sequence << " stock=("
+         << stock[0] << "," << stock[1] << "," << stock[2]
+         << ") peer=(" << effective[0] << "," << effective[1] << ","
+         << effective[2] << ")";
+    force_log_line(line.str().c_str());
+}
+
+float* __fastcall hooked_player_get_camera_look_at_point(
+    void* player, float* out_point) {
+    if (g_original_player_get_camera_look_at_point == nullptr) {
+        return out_point;
+    }
+    float* const result =
+        g_original_player_get_camera_look_at_point(player, out_point);
+    if (out_point == nullptr || readable_bytes(out_point) < 4 * sizeof(float)) {
+        return result;
+    }
+    float pivot[3]{};
+    float local_quat[4]{};
+    float peer_quat[4]{};
+    std::uint32_t sequence = 0;
+    if (!player_camera_look_retarget_context(
+            player, pivot, local_quat, peer_quat, sequence)) {
+        return result;
+    }
+    const float stock[3]{out_point[0], out_point[1], out_point[2]};
+    const float relative[3]{
+        stock[0] - pivot[0], stock[1] - pivot[1], stock[2] - pivot[2]};
+    float rotated[3]{};
+    if (!rotate_camera_look_vector(
+            local_quat, peer_quat, relative, rotated)) {
+        return result;
+    }
+    const float effective[3]{
+        pivot[0] + rotated[0],
+        pivot[1] + rotated[1],
+        pivot[2] + rotated[2],
+    };
+    out_point[0] = effective[0];
+    out_point[1] = effective[1];
+    out_point[2] = effective[2];
+    log_player_camera_look_retarget(stock, effective, sequence);
+    return result;
+}
+
+bool install_player_camera_look_at_point_relay() {
+    auto* const slot = reinterpret_cast<void**>(
+        g_module + kPlayerVtableRva + kPlayerGetCameraLookAtPointSlotOffset);
+    void* const expected = reinterpret_cast<void*>(
+        g_module + kPlayerGetCameraLookAtPointRva);
+    if (*slot != expected) {
+        boot_log_line(
+            "Player camera look-at relay SKIPPED (slot mismatch)");
+        return false;
+    }
+    DWORD old = 0;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+        boot_log_line(
+            "Player camera look-at relay SKIPPED (protect)");
+        return false;
+    }
+    g_original_player_get_camera_look_at_point =
+        reinterpret_cast<PlayerGetCameraLookAtPointFn>(*slot);
+    *slot = reinterpret_cast<void*>(&hooked_player_get_camera_look_at_point);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(void*), old, &ignored);
+    boot_log_line(
+        "Player camera look-at relay installed (Player vslot +0xE80)");
+    return true;
 }
 
 void yaw_quat_from_horizontal_forward(
@@ -41376,8 +41568,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-27ix "
-        "(late owner probe removed after animation regression)");
+        "TLL co-op runtime init 2026-07-28ja "
+        "(per-Player camera look-at relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -41510,6 +41702,7 @@ DWORD WINAPI install_hook(void*) {
     // trampoline shifts rsp by 8 -> frame misaligned -> instant crash on ADS.
     install_pose_seed_gate();
     install_get_blended_camera_gate();
+    install_player_camera_look_at_point_relay();
     install_reticle_hud_gate();
     install_hud_draw_interactable_primary_screen_gate();
     install_ground_pickup_hud_candidate_capture();

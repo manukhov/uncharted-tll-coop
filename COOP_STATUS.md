@@ -12611,3 +12611,67 @@ not an isolated firearm-palette error. The retained `iu` transport still proves
 that a separate peer value reaches screen-1 controller/LRDU state, so the next
 boundary must separate the per-Player camera/route input before the look/aim
 consumers. Late palette and wrist probes are no longer the primary direction.
+
+### 2026-07-28 STATIC / IMPLEMENTED: `ja` separates the per-Player camera look-at source
+
+Precise hypothesis: Player vslot `+0xE80` (`0x1410D1B20`) returns the world-space
+camera look-at point for the Player passed as `this`, but its stock fallback
+`0x1410D25C0` selects through `g_LocalPlayerInputManager_Ptr`. In the retained
+screen-1 Player this leaks the receiver's screen-0 camera into the remote
+character. Replacing only that retained Player's returned point with the same
+native point rotated into the peer camera orientation should separate the two
+characters before the stock per-Player filtering runs.
+
+The runtime quota is met by independent static evidence:
+
+1. Vtable identity and ABI: Player vtable `0x142A4BFE8`, exact slot `+0xE80` at
+   `0x142A4CE68`, contains `0x1410D1B20`. The function accepts
+   `(Player*, float4* out)`, copies one float4 to `out`, returns `out`, and is
+   anchored by the script method string `get-camera-look-at-point`.
+2. Instruction/data-source evidence: if the optional script callback does not
+   return a point, `0x1410D1B20` calls `Player::GetDefaultCameraLookAtPoint`
+   `0x1410D25C0`. Source assertions name that method, while the function reads
+   `g_LocalPlayerInputManager_Ptr` at `0x1410D28B7/0x1410D2A73` and
+   `0x1410D29F2/0x1410D29F8`. This is the concrete shared per-process source
+   predicted by the symmetric two-copy observation.
+3. Independent caller/consumer path: `Player_PostAnimUpdate 0x1410E9210` calls
+   that Player's vslot `+0xEA0` at `0x1410E9D6C`; `0x1410D37C0` in turn calls the
+   same Player's `+0xE80` at `0x1410D383D`, performs native spring/body/stance
+   processing, and only then writes the result to `Player+0x38C0` at
+   `0x1410D4CD2`. The independent named-point query `0x1410D5710` maps
+   `LookAtPos`, `CameraLookAtPos` and `CenterPos` to `+0x38C0`, while `AimAtPos`,
+   `ChestAimPos`, `NeckAimPos` and `SecondAimAtPos` use separate
+   `+0x38F0/+0x38D0/+0x38E0/+0x3900` fields. Thus the selected hook is the final
+   script-or-fallback camera-look API for one Player and precedes the native
+   filters rather than overwriting a shared or final animation buffer.
+
+Competing boundaries were eliminated. `PlayerLookAtIkController::SetLookPoint`
+and `SetLookLine` have exact storage semantics but no ordinary per-frame native
+caller: the direct point reference is the script binding and the observed line
+path clears with weight zero, so build `iz` was never run or retained. A direct
+post-write change to `Player+0x38C0` is too broad: the displacement audit also
+found reads in `ProcessJumpSpace 0x140DE16B0` and several camera queries. Another
+LRDU overwrite remains rejected by peer-correct `iu/ix` telemetry, and the old
+synthetic head-IK target remains rejected by its visible spine twist.
+
+Build `2026-07-28ja` patches only Player vslot `+0xE80`. The wrapper always calls
+the original once. For the retained Player only, with a fresh packet, it rotates
+the returned vector around that Player's world position from the receiver's
+gameplay-camera quaternion into the peer's packet quaternion. Free-look uses the
+existing `camera_quat` / `kStateFlagPeerFreeLook`; ADS uses the existing exact
+pose-seed quaternion. Local Player calls remain byte-for-byte stock, and the mod
+writes neither CameraManager/route seed nor `Player+0x38C0`, LRDU, palette,
+joints, look-IK slots or attachments.
+
+Written prediction: on opposite copies, first keep Nadine's camera clearly up
+and Chloe's clearly down without ADS, then reverse and repeat while aiming. Each
+remote character's head/upper body/weapon must follow its owner camera instead
+of the receiver camera. Both local characters, traversal, locomotion, horizontal
+aim and animation must remain unchanged. An active retained call must emit
+`PLAYER-CAMERA-LOOK-RELAY` with changing `stock`/`peer` points. No marker first
+requires checking the retained object's live vtable `+0xE80` (other Player
+vtable aliases also reference `0x1410D1B20`); it is not yet a semantic rejection.
+A marker with continued shared-camera motion rejects this point as the visible
+consumer. Traversal changes, lateral offset, horizontal regression, jitter,
+model collapse or crash reject the pivot/full-quaternion implementation, not
+the proven ABI.

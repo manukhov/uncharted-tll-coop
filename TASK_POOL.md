@@ -1896,13 +1896,20 @@ Do not reopen these as the first move:
       workspace and palette while the visual moves select post-palette
       render/attachment. **INCONCLUSIVE:** animation remained normal but no
       `AIM-PALETTE-WRITER` row was emitted. Probe removed completely.
-- [ ] Separate the per-process shared camera/look source by Player ownership.
+- [~] Separate the per-process shared camera/look source by Player ownership.
       Runtime shows both local and retained characters following the same local
       camera vertically on each copy, while `iu` still delivers peer-correct
-      screen-1 LRDU. Trace the writer/reader chain from the per-screen route seed
-      through Player look/aim consumers, prove a narrow per-Player substitution
-      boundary with three independent evidence types, then relay the peer camera
-      there without rewriting CameraManager or the final palette.
+      screen-1 LRDU. **STATIC / IMPLEMENTED `ja`:** Player vslot `+0xE80`
+      (`0x1410D1B20`) returns a float4 camera look-at point, its exact stock
+      fallback `0x1410D25C0` reads `g_LocalPlayerInputManager_Ptr`, and the same
+      Player's `+0xEA0` consumes it before native filtering and the broad
+      `Player+0x38C0` field. Call stock once and retarget only the retained
+      Player's returned vector from the receiver camera quaternion into the
+      fresh peer quaternion. `SetLookPoint/SetLookLine` were eliminated for lack
+      of an ordinary per-frame caller; direct `+0x38C0` writes were eliminated
+      because `ProcessJumpSpace` also reads the field. Runtime prediction is in
+      `COOP_STATUS.md`; visual confirmation and a
+      `PLAYER-CAMERA-LOOK-RELAY` marker are pending.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

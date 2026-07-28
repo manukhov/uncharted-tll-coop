@@ -1201,6 +1201,61 @@ FUNCTIONS = {
         "dispatch by PlayerGunMoveShield_UpdateAndDispatch and Player::ZeroG. "
         "Checks camera/look suppression and weapon/action controller state.",
     ),
+    # --- 2026-07-28: per-Player look-source boundary ---
+    0x140ED94B0: (
+        "PlayerLookAtIkController_Construct",
+        "Constructs the 0x460-byte PlayerLookAtIkController and installs vtable "
+        "0x142A2D550. Initializes the two authored target slots and the three "
+        "IK solver records consumed by UpdateIk.",
+    ),
+    0x140ED95F0: (
+        "PlayerLookAtIkController_SetupSkeleton",
+        "Binds the controller to its owning Player skeleton and resolves the "
+        "authored head/root joint chain. The *player-ik-look-point* string "
+        "anchors this setup to the native look-at subsystem.",
+    ),
+    0x140EDA5F0: (
+        "PlayerLookAtIkController_SetLookPoint",
+        "Vtable slot +0x28. Stores the caller-provided weight, parameter and "
+        "world point in one of two 0x40-byte authored target slots and marks "
+        "that slot as point mode; it invents no camera or global state.",
+    ),
+    0x140EDA630: (
+        "PlayerLookAtIkController_SetLookLine",
+        "Vtable slot +0x30. Stores the caller-provided weight, parameter and "
+        "two float4 world-line endpoints in one of the same per-controller "
+        "target slots and marks that slot as line mode.",
+    ),
+    0x140EDA680: (
+        "PlayerLookAtIkController_UpdateIk",
+        "Vtable slot +0x38. Selects and eases the staged point/line slots into "
+        "controller +0x3E0/+0x3F0, then solves the controller-owned head/spine "
+        "joint chain. It consumes no CameraManager directly.",
+    ),
+    0x1410D1B20: (
+        "Player_GetCameraLookAtPoint",
+        "Player vtable slot +0xE80. Returns one float4 world-space camera "
+        "look-at point through the caller output pointer. Tries the scripted "
+        "get-camera-look-at-point override, then calls the stock fallback.",
+    ),
+    0x1410D25C0: (
+        "Player_GetDefaultCameraLookAtPoint",
+        "Source assertions give the exact method name. Builds the Player camera "
+        "look-at point and selects local input state through "
+        "g_LocalPlayerInputManager_Ptr, which is process-global.",
+    ),
+    0x1410D37C0: (
+        "Player_UpdateCameraLookAtPointState",
+        "Player vtable slot +0xEA0. Calls the same Player's +0xE80 camera "
+        "look-at getter, performs spring/body/stance processing, and writes the "
+        "filtered point to Player+0x38C0.",
+    ),
+    0x1410D5710: (
+        "Player_QueryNamedLookAimPointPair",
+        "Player vtable slot +0x2D8. Maps LookAtPos, CameraLookAtPos and "
+        "CenterPos to Player+0x38C0; distinct AimAtPos/ChestAimPos/NeckAimPos/"
+        "SecondAimAtPos names use +0x38F0/+0x38D0/+0x38E0/+0x3900.",
+    ),
     # --- 2026-07-12: scoped aim route-camera owner ---
     0x140CB0200: (
         "PlayerAimController_KickTargetPointJob",
