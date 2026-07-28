@@ -1310,6 +1310,26 @@ FUNCTIONS = {
         "LookAtPos/AimAtPos/ChestAimPos/NeckAimPos/SecondAimAtPos names to "
         "Player+0x38C0/+0x38F0/+0x38D0/+0x38E0/+0x3900.",
     ),
+    0x1406320C0: (
+        "AiKnowledgeEntity_UpdateTrackedAimVectorAndNavFrame",
+        "AI-knowledge path. Queries a tracked actor's AimAtPos and "
+        "SecondAimAtPos through vtable+0x2D8, stores Second-Aim at this "
+        "AiEntity+0x1C0, then updates its navigation frame. This is not a "
+        "rendered Player-pose consumer.",
+    ),
+    0x140632A10: (
+        "NpcLookAim_ResolveAuthoredAimPoint",
+        "Authored NPC LookAim Sniper/Watch bridge. Selects NeckAimPos or "
+        "SecondAimAtPos through NpcLookAim_QueryTargetNamedPoint and otherwise "
+        "falls back to an attachment/world offset; it does not drive Player "
+        "self-pose.",
+    ),
+    0x140632DC0: (
+        "NpcLookAim_QueryTargetNamedPoint",
+        "Helper for the authored NPC LookAim Sniper/Watch path. Resolves the "
+        "target Player and queries one of two named look/aim-point CRCs through "
+        "vtable+0x2D8.",
+    ),
     0x1410E2840: (
         "ScreenRoute_HasPreferredAimCameraCategory",
         "Accepts a screen index, resolves its routed entity and preferred camera "

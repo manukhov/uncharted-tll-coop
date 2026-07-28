@@ -1979,9 +1979,16 @@ Do not reopen these as the first move:
       wrapper produced zero screen-0/1 entries on both responsive campaign
       processes. Therefore its static `SecondAimAtPos -> Player+0xF130` copy is
       not the live puppet consumer; the `jj` hook and offsets are removed. H2
-      remains: the named fields are contaminated but may be targeting-only.
-      Continue by resolving other Player vslot `+0x2D8` named-point consumers or
-      another proven active base-animation bridge; do not patch `+0xF130/+0x1D59`.
+      is now **STATIC CONFIRMED** at the native-consumer level: the exhaustive
+      `SecondAimAtPos`/slot `+0x2D8` inventory resolves only AI knowledge,
+      authored NPC LookAim, targeting/action/debug paths and the runtime-inactive
+      NetAnim consumer. The paired `hub+0xA19/+0xA20` route is NPC-only; Player
+      uses a different vslot `+0xE38`. No consumer reaches Player/FgAnim/joints.
+      Treat `+0x38F0/+0x3900` as contaminated targeting metadata, not the visible
+      pose owner. Continue from a campaign-live Player AnimControl/base-state
+      command source toward FgAnim/joints; do not patch `0x1410ED500`,
+      `+0xF130/+0x1D59`, the NPC hub, or `PlayerRunNGunController` without new
+      reachability and receiver-identity evidence.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

@@ -13129,3 +13129,52 @@ its own game mode, but it is not reached for these retained Players; do not writ
 the named aim-point fields: their camera contamination is confirmed, but no
 causal connection to the rendered pitch has yet been established. The completed
 probe and its runtime-only offsets were removed after this result.
+
+### 2026-07-28 STATIC: named `AimAt` fields are targeting metadata, not the campaign Player pose owner
+
+The complete native-reader audit closes H2 at this boundary. A raw `.text`
+displacement scan leaves only `Player_QueryNamedLookAimPointPair 0x1410D5710`,
+`Player_QueryNamedLookAimPoint 0x1410D5B30`, initialization and the known writer
+`Player_UpdateNamedChestNeckAndAimPoints 0x1410ED500` as genuine
+`Player+0x38F0/+0x3900` references. Therefore every downstream native use of the
+two fields is mediated by Player vtable slot `+0x2D8` and can be classified from
+the complete named-string/xref inventory.
+
+All three `SecondAimAtPos` families are non-candidates for the visible campaign
+pose:
+
+1. `AiKnowledgeEntity_UpdateTrackedAimVectorAndNavFrame 0x1406320C0` queries
+   `AimAtPos` and `SecondAimAtPos`, stores their difference at the AI knowledge
+   entity's `+0x1C0`, and reaches source-identified
+   `game/ai/knowledge/entity.cpp`; callers are investigate, heard-combat and
+   heavy-gunner knowledge paths.
+2. `NpcLookAim_ResolveAuthoredAimPoint 0x140632A10` and helper
+   `NpcLookAim_QueryTargetNamedPoint 0x140632DC0` belong to the authored NPC
+   `LookAim::{Sniper,Watch}` family and select `NeckAimPos`/`SecondAimAtPos` for
+   an NPC looking at a target actor.
+3. `NetAnimCmdGenerator::UpdateFlagsAndWeapons 0x140A07160` has the real static
+   `SecondAimAtPos -> Player+0xF130` publication, but build `jj` proved that its
+   RTTI-exact vslot is not called for either campaign Player.
+
+The related hub route is also NPC-only. The sole paired `hub+0xA19/+0xA20` read
+is inside `0x1403D37E0`, GameCharacter vtable `0x14292F458` slot `+0xE38`; the
+Npc override `0x14041D870` calls it and copies its results. Player vtable
+`0x142A4BFE8` uses a different `+0xE38` implementation, `0x140FDCBC0`, which
+does not read these fields. The writer at `0x140422E5D/0x140422E64` is reached
+only from `NpcActive_AnimPhaseOwnerUpdate 0x14042D120`, independently anchored
+as `Active@Npc` vtable `0x142934888` slot `+0x20`.
+
+An exhaustive `AimAtPos`/vslot `+0x2D8` inventory finds targeting, reticle,
+raycast, projectile, AI, contextual action and debug consumers, but no write to
+the owning Player, FgAnim, joints or palette. The only unusual Player-class
+consumer is `PlayerRunNGunController 0x140F722F0` (RTTI vtable
+`0x142A35B38 +0x30`): it queries the *target actor's* `AimAtPos` and builds a
+special Cover/run-and-gun action transform. Its steady-ADS reachability and
+receiver identity are unproved, so it is not a general pose boundary.
+
+**Conclusion:** the camera contamination observed by `ji` is real but merely
+correlated targeting metadata. There is no evidence-qualified substitution
+site in this family. Do not patch `0x1410ED500`, `Player+0xF130/+0x1D59`, the
+NPC hub, or the run-and-gun controller for the vertical aim bug. The next search
+must start from a campaign-live Player animation command/base-state input and
+trace forward to FgAnim/joints, not from another camera-derived output field.
