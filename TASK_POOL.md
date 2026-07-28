@@ -2066,11 +2066,28 @@ Do not reopen these as the first move:
       opcode/direction admission, raw callsite reachability, live group
       `first/+0x10/+0x12` values, buffer admission and program-inventory/finite
       status. Preserve the native call exactly once and write no game data.
+- [x] Complete the static late-command audit before running `jr`. Case 3 publishes
+      final JointParams at `SegmentContext+0x50`; case 16 and every resolved
+      built-in/custom joint operator are closed over the four supplied buffers
+      and contain no Player/camera/global read. Campaign type 16 is an output-only
+      `GestureJointReader` emitting decimal command 23, not NetAnim. Decimal
+      command 17 independently connects the optional `FgAnimData+0x120` scalar
+      bank and one uncleared cross-group scratch block through encoded scalar
+      selectors. Constructor/reset guarantee `+0x120` starts null and no semantic
+      nonzero writer with a proven FgAnimData base was found; alias/whole-copy and
+      live authored read-before-write remain OPEN. Exact evidence, competitors
+      S1/S2/S3 and rejected alternatives are in `COOP_STATUS.md`.
 - [ ] Run bounded build `jr`: hold Chloe's camera down; on Nadine's copy keep
       both characters still and out of ADS while moving only the camera
       sky -> ground -> sky. Require normal models and at least one screen-1
       `AIM-JOINT-ADMISSION-JR inner` row; classify R1/R2/R3/R4 exactly as written
       in `COOP_STATUS.md` before changing any animation state.
+- [ ] Only after classifying `jr`, design the next read-only discriminator from
+      that result. If Q rows become reachable, use their pre/post case-16 values
+      first. If scratch/scalar-bank provenance is still needed, inventory the
+      live decimal-case-17 selector stream and hash base 1/base 3 before/after
+      groups 0/1/2/7. Do not clear scratch or substitute a scalar until a concrete
+      authored read-before-write or non-null bank producer has been demonstrated.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

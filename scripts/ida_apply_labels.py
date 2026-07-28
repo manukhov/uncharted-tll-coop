@@ -1028,14 +1028,75 @@ FUNCTIONS = {
     0x14172C370: (
         "AnimControl_CreateAnimCommands",
         "Exact AnimControl::CreateAnimCmds source assertion. Dispatches type-2 "
-        "animation controls through their active AnimStateLayer instances while "
-        "preserving the caller-owned command-list record.",
+        "AnimStateLayer instances and bound type-16 AnimCmdGeneratorLayer "
+        "instances while preserving the caller-owned command-list record.",
+    ),
+    0x1417292A0: (
+        "AnimControl_AppendAnimCmdGeneratorLayer",
+        "Allocates a 0x48-byte AnimCmdGeneratorLayer, appends its type-16 registry "
+        "record to the AnimControl builder and leaves the concrete generator slot "
+        "at layer+0x40 null until the separate bind step.",
+    ),
+    0x14172ACD0: (
+        "AnimControl_BindAnimCmdGeneratorLayerByChannel",
+        "Resolves an exact or inactive fallback registry record by authored channel, "
+        "requires layer type 16, activates the fallback when needed, and invokes "
+        "AnimCmdGeneratorLayer virtual +0x58 with the supplied concrete generator.",
+    ),
+    0x14197BE00: (
+        "AnimCmdGeneratorLayer_Setup",
+        "Exact AnimCmdGeneratorLayer::Setup source assertion. Stores channel/"
+        "priority state and the required concrete IAnimCmdGenerator pointer at "
+        "layer+0x40; asserts if that pointer is null.",
+    ),
+    0x14197BE80: (
+        "AnimCmdGeneratorLayer_Step",
+        "AnimCmdGeneratorLayer step virtual. Delegates time/state work only to the "
+        "already-bound generator at +0x40, then runs the common layer step; it does "
+        "not resolve a camera or Player owner itself.",
+    ),
+    0x141FF63B0: (
+        "GestureJointReader_Construct",
+        "Constructs the campaign Player's concrete type-16 IAnimCmdGenerator with "
+        "GestureJointReader RTTI and authored joint ids such as spine-d/head-b. "
+        "PublishUpperPlayerOverlayReadJointAndReferenceState stores it at "
+        "Player+0x47F0 before binding base-read-joints-layer.",
+    ),
+    0x141FF68F0: (
+        "GestureJointReader_GenerateAnimCommands",
+        "GestureJointReader generator virtual +0x08. Emits command 0x17 (decimal "
+        "23), hash gesture-joint-reader and the generator payload. This command is "
+        "distinct from decimal command 17's encoded-scalar copy case.",
+    ),
+    0x141FF6DE0: (
+        "GestureJointReader_AnimPluginCallback",
+        "Source-identified GestureJointReader::AnimPluginCallback. Reads already-"
+        "evaluated joint matrices, extracts authored spine/head transforms and "
+        "publishes them through the JointTree/observer path. It is an output reader, "
+        "not a Player-camera or vertical-pose source.",
     ),
     0x141A8FCF0: (
         "AnimManager_CreateAnimCmdsForObject",
         "Exact CreateAnimCmdsForObject source assertion in anim-mgr-jobs.cpp. "
         "Dispatches an object's animation control into the command-list record "
-        "later returned to AnimManager_PerformAnimBlend.",
+        "later returned to AnimManager_PerformAnimBlend. Its decimal-command-17 "
+        "producer copies build-context qword 6 into the command payload and emits "
+        "header 0x40011 at 0x141A90119.",
+    ),
+    0x141A91490: (
+        "AnimManager_BuildCommandSegmentsForObjectMask",
+        "Builds the per-object command-generation context and dispatches "
+        "AnimManager_CreateAnimCmdsForObject for every selected skeleton group. "
+        "Context qwords 5 and 6 preserve the supplied scalar-bank pointers; the "
+        "normal PerformAnimBlend caller supplies FgAnimData+0x118/+0x120.",
+    ),
+    0x141A90E70: (
+        "AnimManager_AllocateCommandSegmentsAndSharedScratch",
+        "Allocates the 0x20-byte command-list segment records for every target "
+        "skeleton processing group and one 128-byte-aligned shared scratch block "
+        "sized by ArtItemSkeleton+0x1A. The scratch pointer is returned through "
+        "the outer command context +0x18 and reused by every segment/group in "
+        "the same blend pass; this allocator does not clear that block.",
     ),
     0x14022C820: (
         "ScriptManager_EvalChecked",
@@ -1952,8 +2013,10 @@ FUNCTIONS = {
         "AnimManager_PerformAnimBlend",
         "Exact PerformAnimBlend source assertion in anim-mgr-jobs.cpp. Builds "
         "the current 48-byte-per-joint matrix palette and swaps FgAnimData "
-        "+0x230 into previous buffer +0x238; fallback allocates and publishes "
-        "identity matrices with the same layout.",
+        "+0x230 into previous buffer +0x238. Its normal command path reads the "
+        "optional scalar-bank pointers at FgAnimData+0x118/+0x120; a special "
+        "multi-group mode locally suppresses the +0x120 value without modifying "
+        "the field. Fallback allocates and publishes identity matrices.",
     ),
     0x1418C4FB0: (
         "FgAnimData_AllocateAndSwapSkinningBuffers",
@@ -2039,9 +2102,12 @@ FUNCTIONS = {
         "Per-layer animation-command evaluator reached from PerformAnimBlend and the "
         "normal joint-blend producers; consumes AnimCmdContext and drives palette "
         "output including aim-add-* parameter lookup. Its stack SegmentContext keeps "
-        "the group descriptor at +0x38, JointParams at +0x50 and matrix workspace at "
-        "+0x58. The workspace allocator uses (group+0x10 + 1) 64-byte rows; the "
-        "leading row is initialized as the root before command 16.",
+        "the shared cross-segment scratch at +0x30, group descriptor at +0x38, "
+        "JointParams at +0x50 and matrix workspace at +0x58. The workspace allocator "
+        "uses (group+0x10 + 1) 64-byte rows; the leading row is initialized as the "
+        "root before decimal command 16. Decimal command 17 runs an authored encoded-"
+        "scalar copy over JointParams, FgAnimData+0x120 payload, group temp and the "
+        "shared scratch. Command 0x17/decimal 23 is the separate plugin callback path.",
     ),
     0x1417D0BD0: (
         "SkelTable_FindRetargetEntry",
@@ -2117,6 +2183,51 @@ FUNCTIONS = {
         "AnimJointProgram_CopyEncodedScalars",
         "Copies and scatters encoded scalar register tuples between the four joint-"
         "program base arrays selected by each operand's low two bits.",
+    ),
+    0x142194620: (
+        "AnimJointProgramOp59_ConvertJointParamsToMatrices",
+        "Built-in joint-program opcode 59 wrapper. Resolves an optional authored "
+        "joint-index list, a 48-byte JointParams source and a 64-byte matrix "
+        "destination from the four encoded bases, then calls "
+        "AnimJointProgram_ConvertJointParamsToMatrices.",
+    ),
+    0x14218B5F0: (
+        "AnimJointProgram_ConvertJointParamsToMatrices",
+        "Deterministically converts count 48-byte JointParams records (scale, "
+        "quaternion and translation) into 64-byte affine matrix rows. It consumes "
+        "only its supplied buffers and optional index list; it reads no Player, "
+        "camera, screen route or mutable gameplay global.",
+    ),
+    0x141A97060: (
+        "AnimJointProgramCustomOp128",
+        "Custom joint-program operator 128 from the six-entry table at "
+        "0x143026CB0. Its complete dataflow is closed over authored operands and "
+        "the evaluator's four supplied buffers; it has no camera/global input.",
+    ),
+    0x141A951F0: (
+        "AnimJointProgramCustomOp129",
+        "Custom joint-program operator 129. Performs authored buffer-local angle/"
+        "joint work and has no Player, camera, screen-route or gameplay-global read.",
+    ),
+    0x141A945F0: (
+        "AnimJointProgramCustomOp130",
+        "Custom joint-program operator 130. Operates only on encoded evaluator "
+        "buffers and authored stream values; no camera/global source is reachable.",
+    ),
+    0x141A94D80: (
+        "AnimJointProgramCustomOp131",
+        "Custom joint-program operator 131. Operates only on encoded evaluator "
+        "buffers and authored stream values; no camera/global source is reachable.",
+    ),
+    0x141A95E80: (
+        "AnimJointProgramCustomOp132",
+        "Custom joint-program operator 132. Performs authored buffer-local IK/math "
+        "and has no Player, camera, screen-route or gameplay-global read.",
+    ),
+    0x141A97970: (
+        "AnimJointProgramCustomOp133",
+        "Custom joint-program operator 133. Operates only on encoded evaluator "
+        "buffers and authored stream values; no camera/global source is reachable.",
     ),
     0x1421944A0: (
         "AnimJointProgramOp55_TransformMatrixRange",
@@ -2262,6 +2373,8 @@ FUNCTIONS = {
     0x141A92A00: (
         "AnimManager_AsyncObjectUpdateJointBlendJob",
         "Source-identified anim-mgr-jobs.cpp AsyncObjectUpdate_JointBlend_Job. "
+        "Independently reads the persistent optional scalar-bank pointers at "
+        "FgAnimData+0x118/+0x120 before the joint-blend work. "
         "When job flags contain 0x20, resolves retained owner at +0x1A8/+0x1B0 "
         "and dispatches owner vtable+0x410 then +0x418.",
     ),
@@ -7754,7 +7867,26 @@ FUNCTIONS = {
         "Exact FgAnimData::Init(ArtItemSkeleton*, Transform&, "
         "JointCache::ConfigType) source assertion. Initializes a 0x380-byte "
         "AnimMgr pool slot, commits the initial world transform at "
-        "+0x1C0..+0x1F0 and seeds the late animation state.",
+        "+0x1C0..+0x1F0 and seeds the late animation state. It does not populate "
+        "the optional scalar-bank pointers at +0x118/+0x120.",
+    ),
+    0x1418C47B0: (
+        "FgAnimData_ConstructDefaults",
+        "Initializes the fixed FgAnimData fields and delegates to "
+        "FgAnimData_Reset. It explicitly zeros the optional pointer band "
+        "+0xF8..+0x120, including decimal-command-17's +0x120 scalar-bank pointer.",
+    ),
+    0x1418C4AD0: (
+        "FgAnimData_Reset",
+        "Resets a reusable 0x380-byte FgAnimData pool slot. It clears every qword "
+        "in the optional pointer band +0xF8..+0x120 before later Init and is called "
+        "both by pool setup and AnimMgr_AllocateAnimData.",
+    ),
+    0x1418C4E00: (
+        "FgAnimData_RelocateInternalPointers",
+        "Relocates existing internal FgAnimData pointers that fall inside a moved "
+        "memory range. The +0x120 store at 0x1418C4E6E only rebases a prior non-null "
+        "pointer; it does not create or populate the scalar bank.",
     ),
     0x1417CD200: (
         "LookupUpperPlayerStateRecordByAuthoredHash",
@@ -9541,6 +9673,23 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x143026D20: (
+        "g_AnimJointProgramBuiltinOperatorTable",
+        "Built-in skeleton joint-program dispatch table. The resolved non-null "
+        "entries include encoded scalar/matrix operators 54 through 59 used by "
+        "AnimCmdEvaluator_ExecuteSkeletonJointPrograms.",
+    ),
+    0x143026CB0: (
+        "g_AnimJointProgramCustomOperatorTable",
+        "Six-entry custom skeleton joint-program operator table for authored "
+        "opcodes 128 through 133. Every handler is closed over its operand stream "
+        "and the four evaluator buffers; none reads camera/gameplay globals.",
+    ),
+    0x14300C938: (
+        "g_AnimJointProgramCustomOperatorCount",
+        "Custom skeleton joint-program operator count. The retail value is six, "
+        "covering authored opcodes 128 through 133 in the table at 0x143026CB0.",
+    ),
     0x1429B6878: (
         "PickupInteractControl_Vtable",
         "MSVC RTTI .?AVPickupInteractControl@@ vtable. Slot +0xE0 aliases the "

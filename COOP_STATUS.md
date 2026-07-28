@@ -13580,3 +13580,111 @@ unreadable workspace/parameter fields selects R2. Valid fields followed by
 `AIM-JOINT-BOUNDARY-JQ` rows select R4 and restore the earlier Q1/Q2 semantic
 comparison. Normal models and animation, no stutter/crash, and at least one
 screen-1 `inner` record are required; otherwise the audit is inconclusive.
+
+### 2026-07-28 STATIC: case 16 is buffer-only; decimal command 17 is optional scalar-bank plumbing
+
+The static pass after build `jr` traced the complete late command boundary before
+asking for another game run. It narrows the known `jm` contamination but does not
+claim a new runtime fix. The key distinction is that the type-16 layer's command
+`0x17` is hexadecimal `0x17` / decimal 23, while the encoded-scalar command at
+`0x141ABA989` is decimal 17. They are independent parser cases and producers.
+
+The normal command construction path is now exact:
+
+1. `AnimManager_PerformAnimBlend 0x141A92260` reads optional qword pointers from
+   `FgAnimData+0x118/+0x120` at `0x141A92530/0x141A9253F` and passes them through
+   `AnimManager_BuildCommandSegmentsForObjectMask 0x141A91490`. A special mode
+   can replace only the local `+0x120` copy with null at `0x141A925BA`; it does
+   not modify the field.
+2. `AnimManager_CreateAnimCmdsForObject 0x141A8FCF0` copies context qword 6 into
+   the payload at `0x141A90111`, emits header `0x40011` at `0x141A90119`, and
+   appends the four-dword command. The independent async joint-blend job at
+   `0x141A92A00` also reads both persistent fields.
+3. Decimal case 17 reads `command+8` at `0x141ABA98F`, skips a null payload at
+   `0x141ABA997`, and passes four encoded bases to
+   `AnimJointProgram_CopyEncodedScalars 0x142189370` at `0x141ABAA12`: base 0 is
+   `SegmentContext+0x50` JointParams, base 1 is the `FgAnimData+0x120` pointee,
+   base 2 is `SegmentContext+0x68`, and base 3 is the shared scratch from
+   `SegmentContext+0x30`. Every 16-bit operand uses its low two bits as the base
+   selector and its upper bits as a byte offset; the helper copies four-byte
+   scalar values. The authored stream therefore decides whether the optional
+   bank and scratch are sources or destinations.
+
+The lifetime audit weakens `FgAnimData+0x120` as a direct camera owner.
+`FgAnimData_ConstructDefaults 0x1418C47B0` zeros it at `0x1418C47FA`, and
+`FgAnimData_Reset 0x1418C4AD0` zeros it again at `0x1418C4BD0`. The global pool
+reset and `AnimMgr_AllocateAnimData 0x14177F7F0` both run that reset before a
+campaign Player receives the slot; the Player allocation at `0x140CC149E` is
+followed by `FgAnimData_Init 0x1418C4840` at `0x140CC1636`, and Init does not
+write `+0x120`. `FgAnimData_RelocateInternalPointers 0x1418C4E00` has the only
+confirmed nonzero-looking store at `0x1418C4E6E`, but it merely rebases an
+already non-null pointer inside a moved address range. A full displacement scan
+found no semantic nonzero store with an independently proven FgAnimData base.
+Whole-structure copies or writes through a computed alias remain possible, so
+the field is not declared permanently null and its unknown initializer stays
+OPEN.
+
+The case-16 operator audit independently excludes a hidden camera read. The
+built-in dispatch table at `0x143026D20` and all six custom entries 128--133 at
+`0x143026CB0` were resolved. Matrix/scalar handlers 54--59 and custom handlers
+consume only their encoded operand stream and the four supplied bases. In
+particular, opcode 59 (`0x142194620 -> 0x14218B5F0`) deterministically converts
+48-byte JointParams into 64-byte affine rows. No handler or reachable helper
+reads Player, a screen index, a camera transform, or a mutable gameplay global.
+Thus case 16 can propagate or combine contaminated inputs, but cannot acquire a
+receiver-local camera by itself.
+
+The apparent type-16 alternative is also closed. Campaign Player setup allocates
+RTTI-exact `GestureJointReader 0x141FF63B0` for authored `spine-d/head-b`, stores
+it at `Player+0x47F0`, and binds `base-read-joints-layer` through
+`AnimControl_BindAnimCmdGeneratorLayerByChannel 0x14172ACD0`. Its generator
+`0x141FF68F0` emits command `0xA0017`, i.e. decimal case 23. That parser callback
+ends at `GestureJointReader_AnimPluginCallback 0x141FF6DE0`, which reads already
+evaluated joint matrices and publishes them to JointTree/observers. It is an
+output reader and contains no camera/global source. The campaign type-16 object
+is not the previously rejected `NetAnimCmdGenerator`.
+
+The shared scratch remains a concrete, narrower alternative. Case 0 obtains it
+from outer command context `+0x18`.
+`AnimManager_AllocateCommandSegmentsAndSharedScratch 0x141A90E70` allocates one
+128-byte-aligned block sized by target-skeleton asset word `+0x1A`, does not
+clear it, and reuses the pointer for every processing group in the same blend.
+Decimal case 17 and case 16 can both address it as base 3. The executable does
+not contain the live target skeleton's authored operand stream, so static code
+alone cannot yet prove whether a selected group reads a scratch scalar before a
+same-pass write.
+
+The evidence quota is met by independent types: direct producer/consumer
+disassembly for the command payload and selectors; constructor/reset/relocation
+dataflow for the persistent FgAnim pointer; RTTI, vtable slots and callback flow
+for the campaign type-16 object; complete built-in/custom operator-table
+resolution; and the already-confirmed runtime topology in `jm`, where groups
+1/2/7 contain the false workspace before opcode 26. The competitors are now:
+
+- **S1 (strongest):** `SegmentContext+0x50` is already contaminated when case 3
+  publishes the finalized pose lane at `0x141AB9DD6`; case 16 only converts it.
+- **S2 (OPEN):** a prior group writes receiver-local scalar state into the one
+  shared scratch, and a later authored operator reads base 3 before overwriting
+  the relevant scalar.
+- **S3 (weak / OPEN):** an alias or whole-copy producer populates the optional
+  `FgAnimData+0x120` scalar bank for this skeleton and authored decimal case 17
+  transfers it into JointParams or scratch.
+- **REJECTED:** case 16 or one of its operators directly reads the camera/global
+  route; type-16 GestureJointReader creates pitch; decimal command 17 directly
+  carries a camera transform or pose matrix.
+
+A real unindexed screen-0 read does exist inside
+`PlayerAimController_ComputeDirectionalAimWeights` at `0x140CB3CC5/0x140CB3D10`,
+but it feeds `controller+0x8B4` and the LRDU publisher. Build `iu` already forced
+peer-correct Up/Down through that complete native chain while the visible pose
+still followed the receiver-local camera. Therefore this alias remains a valid
+upstream LRDU defect but is **REJECTED as the current visible-pose owner**; do
+not reopen the discarded LRDU overwrite.
+
+No new runtime test is authorized by this entry. Finish the already-running
+read-only `jr` admission audit first. If it restores `AIM-JOINT-BOUNDARY-JQ`, its
+existing pre/post case-16 values distinguish S1 from a case-16-time input. Only
+after that result, a separate bounded read-only discriminator may inventory the
+live decimal-case-17 selectors and hash base 1/base 3 before and after groups
+0/1/2/7. A read-before-write must be demonstrated from the live authored stream
+before any scratch initialization or scalar substitution is attempted.
