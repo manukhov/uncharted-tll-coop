@@ -354,13 +354,6 @@ constexpr std::size_t kPlayerLookAtIkSlot0DataOffset = 0x350;     // SetLookPoin
 constexpr std::size_t kPlayerLookAtIkSlotTableOffset = 0x390;     // UpdateIk slot0 copy src
 constexpr std::uintptr_t kPlayerLookAtSetPointRva = 0xEDA5F0;     // vtable+0x28
 constexpr std::uintptr_t kPlayerLookAtUpdateIkRva = 0xEDA680;     // vtable+0x38
-// Player vtable 0x142A4BFE8, slot +0xE80 -> Player_GetCameraLookAtPoint
-// 0x1410D1B20. The fallback 0x1410D25C0 reads the global local-input manager;
-// hook the returned point only for retained screen-1 Player.
-constexpr std::uintptr_t kPlayerGetCameraLookAtPointSlotOffset = 0xE80;
-constexpr std::uintptr_t kPlayerGetCameraLookAtPointRva = 0x10D1B20;
-constexpr std::uintptr_t kPlayerUpdateCameraLookAtPointSlotOffset = 0xEA0;
-constexpr std::uintptr_t kPlayerUpdateCameraLookAtPointRva = 0x10D37C0;
 // Per-screen camera handle table (2 entries, {ptr,id} 16B each). The resolver
 // ResolveScreenRoutePoseSeedOrDefault reads screen idx's pose seed from
 // *(*(table[2*idx]+8)+176)+0x60. Writing the peer seed to that exact source for

@@ -1910,9 +1910,14 @@ Do not reopen these as the first move:
       because `ProcessJumpSpace` also reads the field. Runtime prediction is in
       `COOP_STATUS.md`. **`ja` INCONCLUSIVE:** behavior unchanged and no success
       marker, but external memory proves the live Player vtable slot was patched.
-      Build `jb` adds bounded pass-through `+0xEA0/+0xE80` entry/gate telemetry
-      to distinguish skipped retained call, invalid peer/local seed and vector
-      rejection before any new ownership change.
+      **`jb` RUNTIME REJECTED:** the symptom is unchanged and the active session
+      contains zero unconditional `PLAYER-CAMERA-BOUNDARY` rows, although both
+      live vtable slots point into the DLL and screen-1 `AIM-TARGET-EARLY` /
+      `AIM-PITCH-PRECALL-APPLY` markers are present. Therefore active gameplay
+      calls neither patched boundary in this state. Build `jc` removes the
+      entire `+0xE80/+0xEA0` relay and telemetry. Continue statically from the
+      later common head/look animation layer or `Player+0x36C0`; do not revive
+      these vslots as the visible owner without new reachability evidence.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

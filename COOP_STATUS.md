@@ -12704,3 +12704,48 @@ validity and returned float4. Prediction: EA0(slot1) without E80(slot1) selects
 R1; E80(slot1) with `localSeed=0` or `peerQuat=0` selects R2; both gates equal 1
 without the success marker selects R3. Any visual/model/traversal change rejects
 the diagnostic wrapper ABI and requires immediate removal.
+
+### 2026-07-28 RUNTIME REJECTED: active gameplay does not call Player `+0xE80/+0xEA0`
+
+The user repeated the opposite-camera test on build `2026-07-28jb`; the shared
+vertical camera/look contamination was unchanged and no additional model or
+animation regression appeared. The retained artifact contains **zero**
+`PLAYER-CAMERA-BOUNDARY` rows for either process, despite both processes logging
+the `jb` startup tag. This is not a packet/seed/vector-gate failure: the boundary
+marker is at the `+0xEA0` wrapper entry and immediately after the original
+`+0xE80` call, before all retarget gates.
+
+Three independent observations reject this runtime path:
+
+1. External memory in the preceding `ja/jb` audit proved that all retained
+   Players have exact base Player vtable RVA `0x2A4BFE8` and that both live
+   `+0xE80/+0xEA0` slots point into the injected DLL.
+2. The same `jb` session logged active screen-1 aim work:
+   `AIM-TARGET-EARLY idx=1 site=0xCB17D6` and
+   `AIM-PITCH-PRECALL-APPLY localUD=0.5691/0 peerUD=0/0.0114`. Thus the test was
+   not an idle or failed-injection capture, and separate peer direction was
+   available while the visible retained character still followed local camera.
+3. The user's symmetric visual result exactly persisted: each process's retained
+   character followed that process's local camera vertically. If either patched
+   vslot owned the live path, its unconditional entry marker had to appear.
+
+Therefore the earlier static call graph is a real but inactive/gated path in the
+tested gameplay state. It cannot own the visible shared-camera leak. Builds `ja`
+and `jb` are **RUNTIME REJECTED** as fixes; all vtable patches, retarget helpers,
+telemetry and their runtime offsets are removed in cleanup build
+`2026-07-28jc`. The IDB names remain valid descriptions of the functions, but
+must not be interpreted as active ordinary-gameplay ownership.
+
+The surviving competitors move later or sideways in the actual animation path:
+
+- a per-process camera-derived head/look contribution is queued through another
+  Player/controller call before final animation evaluation;
+- a later common animation command/evaluator overwrites the peer-correct screen-1
+  LRDU/pose target with screen-0 look state;
+- the mounted `PlayerCameraAnimationDirector` at `Player+0x36C0` supplies the
+  shared contribution without using these two Player virtuals.
+
+No replacement runtime hypothesis is promoted yet. The next test requires an
+exact live caller, data write/read chain into the visible animation result and a
+narrow ABI, with the alternatives above separated by three independent static
+evidence types.
