@@ -13320,3 +13320,42 @@ are now only P1 versus P3: workspace totals/joints that rise with receiver
 track local Y, or remains at idle scale while the visible puppet follows local
 camera, selects P3/post-palette ownership. Any bind/basis change would reopen P2;
 normal animation and at least two non-reset samples in one group are required.
+
+### 2026-07-28 RUNTIME CONFIRMED: `jm` places the false camera input before opcode 26
+
+The user executed the written asymmetric test: Chloe's camera remained down
+while Nadine's camera moved sky -> ground -> sky. Both PIDs 15964/25372 stayed
+responsive and produced complete, non-reset samples for groups 1, 2 and 7. The
+direction logs identify PID 15964 as the Nadine-controlled process
+independently of its transport role: its `localY` changed from about `-0.99` to
+`+0.09`, then `-0.41/-0.79`, while `peerY` remained near `-0.21`.
+
+The retained screen-1 palette on that process already received matching input
+workspace changes before `AnimCmdEvaluator_WriteSkinningPalette 0x14218B170`.
+At the upward edge (`sample=14`) `dirDelta peer/local` was
+`+0.0024/+1.0436`; total workspace deltas were `8.55685`, `6.55889` and
+`3.21187` for groups 1/2/7. The following downward edges produced
+`6.43267/14.28596/6.94463` and `0.69143/3.90827/1.74008`. By contrast, a later
+control edge with stationary local Y and peer-only `+0.1534` movement produced
+only `0.71416/1.05978/0.43793` in the same groups. The mirror process observed
+the Nadine sweep through `peerY` and changed its workspace at the same edges,
+which confirms that the direction sampling and timing were not process-role
+labels accidentally swapped.
+
+Every bind-row delta remained exactly zero and the common-basis hash remained
+`A27AFC0E281F6508`; final palette deltas followed workspace deltas. Ordinary
+idle animation can also move this workspace substantially, so total magnitude
+alone is not treated as a monotonic aim measure. The asymmetric owner/receiver
+comparison is the discriminator: screen-1 Chloe's workspace on PID 15964
+followed receiver-local Nadine camera edges while Chloe's published peer
+direction stayed fixed. This confirms P1 and rejects P3 at this boundary. The
+bug is already present in the 64-byte/joint command workspace consumed at
+`0x141ABAE8C`; it is neither introduced by bind/basis conversion nor first
+introduced after `FgAnimData+0x230`.
+
+This does **not** yet identify the upstream command that writes the false pose.
+The next static task is to enumerate the mutating opcode handlers before opcode
+26, follow the shared workspace pointer across command-list segments, and
+separate clip evaluation from later blend/plugin overwrites. The completed
+`jm` writer relay is removed in build `2026-07-28jn`; the already-established
+case-6 command probe remains available for that upstream audit.

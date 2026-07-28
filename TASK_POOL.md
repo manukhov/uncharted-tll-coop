@@ -2017,12 +2017,25 @@ Do not reopen these as the first move:
       groups repeated safely and bind/common-basis hashes stayed exactly constant,
       rejecting P2, but alternating palette destination pointers still reset
       every copied baseline. P1 versus P3 remains unresolved.
-- [ ] Run double-buffer-safe build `jm` with Chloe camera held down and Nadine
+- [x] Run double-buffer-safe build `jm` with Chloe camera held down and Nadine
       sky -> ground -> sky while both characters stand still. Require repeated
       non-reset `AIM-PALETTE-WRITER-JM` rows from one group. Correlation between
       `dirDelta local`, total workspace/palette delta and stable peer Y selects
       P1; idle-scale/non-correlated workspace while the puppet visibly follows
-      local camera selects P3. Bind/basis must remain zero-delta.
+      local camera selects P3. Bind/basis must remain zero-delta. **RUNTIME
+      CONFIRMED P1:** on PID 15964 the retained screen-1 workspace changed at
+      Nadine-local `+1.0436/-0.5039/-0.3756` vertical edges while Chloe peer Y
+      remained near `-0.21`; groups 1/2/7 all changed, bind/basis stayed exactly
+      constant, and the final palette followed workspace. The mirror PID saw
+      the same Nadine edges through peer Y. The false input is therefore already
+      in the workspace consumed at `0x141ABAE8C`, not introduced by opcode-26
+      conversion or a post-palette consumer.
+- [ ] Statically enumerate every `ProcessAnimCmdListSegment 0x141AB97C0` opcode
+      handler that can mutate the shared 64-byte/joint workspace before opcode
+      26. Trace the pointer across segments and distinguish direct clip
+      evaluation from later blend/plugin commands. Do not launch again until a
+      specific writer/callsite, competitors, three evidence types and a written
+      discriminator are recorded.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

@@ -152,11 +152,6 @@ constexpr std::size_t kSkeletonJointCountOffset = 0x34;
 // ProcessAnimCmdListSegment case 6 selects direct clip evaluation when the
 // source/target underlying skeleton ids match, otherwise it resolves this table.
 constexpr std::uintptr_t kProcessAnimCmdListSegmentRva = 0x1AB97C0;
-// Opcode 26's sole direct conversion edge inside ProcessAnimCmdListSegment.
-// It converts 64-byte evaluator workspace rows into the final 48-byte/joint
-// FgAnimData+0x230 palette range.
-constexpr std::uintptr_t kAnimCmdWriteSkinningPaletteCallsiteRva = 0x1ABAE8C;
-constexpr std::uintptr_t kAnimCmdWriteSkinningPaletteRva = 0x218B170;
 constexpr std::uintptr_t kSkelTableRetargetEntryCountRva = 0x38401D8;
 constexpr std::uintptr_t kSkelTableRetargetEntriesRva = 0x3864A00;
 // Embedded PlayerInputCommandState (sub_14024D7E0 returns Player+0x39A0).
