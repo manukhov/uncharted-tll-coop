@@ -1943,7 +1943,14 @@ Do not reopen these as the first move:
       Build `jf` reroutes only fresh screen-1 ADS events to that owner process,
       preserves screen 0 and logs one bounded `AIM-EVENT-ROUTE` discriminator.
       The opposite-camera prediction and competing H1/H2/H3 outcomes are in
-      `COOP_STATUS.md`.
+      `COOP_STATUS.md`. **`jf` RUNTIME REJECTED / `jg` cleanup:** both hooks
+      installed, but the only route attempt reported `mapped=0 index=UINT_MAX`
+      and called the unchanged native process; the user saw no change. Caller
+      dataflow proves `0x140C70760` accepts a child `Process*`, not `Player*`:
+      callers obtain it from generic actor vslot `+0xF48` or a Process factory
+      and destroy it with `ProcessKillTree`. Build `jg` removes the complete
+      event callsite/TLS relay. Do not retry a Player-key lookup; trace record 0
+      and the actual `aim-at` consumer before another runtime mutation.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

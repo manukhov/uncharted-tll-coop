@@ -1130,24 +1130,24 @@ FUNCTIONS = {
         "allows aim additives; called from independent Player state entries.",
     ),
     0x140C70760: (
-        "PlayerAnimationProcessRegistry_FindByPlayer",
-        "Scans 32 animation-process records of stride 0xB0, validates each "
-        "outer process handle, resolves its child handle at process+0x190/+0x198 "
-        "to a Player, and returns the outer process whose child matches the "
-        "requested Player plus its registry index.",
+        "TrackedProcessRegistry_FindOuterByChild",
+        "Scans 32 tracked-process records of stride 0xB0, validates each outer "
+        "Process handle, resolves its child Process handle at outer+0x190/+0x198, "
+        "and returns the outer Process whose child matches the requested Process "
+        "plus its registry index. The key is not a Player pointer.",
     ),
     0x140C70900: (
-        "PlayerAnimationProcessRegistry_UpdatePlayerState",
-        "Uses the same 32-entry Player-to-animation-process registry as "
-        "0x140C70760, updates the matched Player AnimControl/layers, and emits "
-        "the `play-animation` event through the matched outer process.",
+        "TrackedProcessRegistry_UpdateChildState",
+        "Uses the same 32-entry outer/child Process registry as 0x140C70760, "
+        "updates state associated with the matched child Process, and can emit "
+        "the `play-animation` event through the matched outer Process.",
     ),
     0x140CAECB0: (
         "PlayerAimController_ComputeAndPublishAimAdditives",
         "PlayerAimController vtable slot +0x50. Receives aim/body bases and "
         "directional limits, calls 0x140CB32B0, and emits the looking-down-sights "
         "event. Its target-bearing `aim-at` event is dispatched at 0x140CAF008 "
-        "through hard-coded animation-process registry record 0. Reached by the "
+        "through hard-coded tracked-Process registry record 0. Reached by the "
         "ground GunMoveShield path through slot +0x58.",
     ),
     0x140CAF110: (

@@ -10658,18 +10658,6 @@ using PlayerAimWorldBasisFunction = std::int64_t(__fastcall*)(
     float vertical_limit_a,
     float vertical_limit_b);
 PlayerAimWorldBasisFunction g_original_player_aim_world_basis = nullptr;
-using FindPlayerAnimationProcessByPlayerFunction = void*(__fastcall*)(
-    void* player, std::uint32_t* out_index);
-using PlayerAnimationEventDispatchFunction = void(__fastcall*)(
-    void* process, void* event_descriptor, void* argument);
-using ThreadContextSetCurrentProcessFunction = void(__fastcall*)(void* process);
-FindPlayerAnimationProcessByPlayerFunction
-    g_find_player_animation_process_by_player = nullptr;
-ThreadContextSetCurrentProcessFunction g_thread_context_set_current_process =
-    nullptr;
-thread_local void* g_scoped_player_aim_event_controller = nullptr;
-std::atomic<bool> g_player_aim_event_route_logged{false};
-std::atomic<bool> g_player_aim_event_dispatch_error_logged{false};
 using GunMoveControllerApplyCameraYawFunction = char(__fastcall*)(
     void* controller, const float* input_direction);
 GunMoveControllerApplyCameraYawFunction
@@ -10821,26 +10809,6 @@ void __fastcall hooked_player_aim_blend_tick(void* controller) {
     force_peer_puppet_aim_blend_state(controller);
 }
 
-std::int64_t call_original_player_aim_world_basis_scoped(
-    void* controller,
-    const float* target_point,
-    const float* body_forward,
-    std::uint8_t active,
-    float horizontal_limit_a,
-    float horizontal_limit_b,
-    std::uint8_t single_screen,
-    float vertical_limit_a,
-    float vertical_limit_b) {
-    void* const previous_controller = g_scoped_player_aim_event_controller;
-    g_scoped_player_aim_event_controller = controller;
-    const std::int64_t result = g_original_player_aim_world_basis(
-        controller, target_point, body_forward, active,
-        horizontal_limit_a, horizontal_limit_b, single_screen,
-        vertical_limit_a, vertical_limit_b);
-    g_scoped_player_aim_event_controller = previous_controller;
-    return result;
-}
-
 std::int64_t __fastcall hooked_player_aim_world_basis(
     void* controller,
     const float* target_point,
@@ -10881,7 +10849,7 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
     }
 
     if (!substitute) {
-        return call_original_player_aim_world_basis_scoped(
+        return g_original_player_aim_world_basis(
             controller, target_point, body_forward, active,
             horizontal_limit_a, horizontal_limit_b, single_screen,
             vertical_limit_a, vertical_limit_b);
@@ -10986,7 +10954,7 @@ std::int64_t __fastcall hooked_player_aim_world_basis(
         force_log_line(line.str().c_str());
     }
     force_peer_puppet_aim_blend_state(controller);
-    const std::int64_t result = call_original_player_aim_world_basis_scoped(
+    const std::int64_t result = g_original_player_aim_world_basis(
         controller, local_target, relayed_body_forward, active,
         lim_h_a, lim_h_b, single_screen, lim_v_a, lim_v_b);
     mirror_puppet_aim_add_to_fganim(owner);
@@ -11058,189 +11026,6 @@ bool install_player_aim_world_basis_relay() {
     DWORD ignored = 0;
     VirtualProtect(slot, sizeof(void*), old, &ignored);
     boot_log_line("PlayerAimController world-basis relay installed");
-    return true;
-}
-
-void log_player_aim_event_route_once(
-    bool mapped, std::uint32_t mapped_index,
-    void* native_process, void* selected_process) {
-    if (g_player_aim_event_route_logged.exchange(
-            true, std::memory_order_relaxed)) {
-        return;
-    }
-    std::ostringstream marker;
-    marker << "AIM-EVENT-ROUTE mapped=" << (mapped ? 1 : 0)
-           << " index=" << mapped_index
-           << " native=" << native_process
-           << " selected=" << selected_process;
-    boot_log_line(marker.str().c_str());
-}
-
-void __fastcall hooked_player_aim_event_dispatch(
-    void* native_process, void* event_descriptor, void* argument) {
-    void* selected_process = native_process;
-    std::uint32_t mapped_index = UINT32_MAX;
-    bool route_wanted = false;
-    bool mapped = false;
-
-    const ULONGLONG received =
-        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
-    coop::StatePacket peer{};
-    if (g_scoped_player_aim_event_controller != nullptr &&
-        g_find_player_animation_process_by_player != nullptr &&
-        g_thread_context_set_current_process != nullptr && received != 0 &&
-        GetTickCount64() - received <= 250 && copy_peer_state_snapshot(peer) &&
-        peer_packet_aim_active(peer) &&
-        puppet_aim_pose_relay_enabled_for_peer(peer)) {
-        __try {
-            auto* const controller = static_cast<std::byte*>(
-                g_scoped_player_aim_event_controller);
-            if (readable_bytes(controller + 0x108) >= sizeof(void*)) {
-                void* const owner =
-                    *reinterpret_cast<void* const*>(controller + 0x108);
-                route_wanted = owner != nullptr &&
-                    readable_bytes(
-                        static_cast<std::byte*>(owner) + 0x4010) >=
-                        sizeof(std::uint32_t) &&
-                    *reinterpret_cast<const std::uint32_t*>(
-                        static_cast<const std::byte*>(owner) + 0x4010) ==
-                        kSlot1ScreenIndex;
-                if (route_wanted) {
-                    void* const owner_process =
-                        g_find_player_animation_process_by_player(
-                            owner, &mapped_index);
-                    if (owner_process != nullptr) {
-                        selected_process = owner_process;
-                        mapped = true;
-                    }
-                }
-            }
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            selected_process = native_process;
-            mapped_index = UINT32_MAX;
-            mapped = false;
-        }
-    }
-
-    if (route_wanted) {
-        log_player_aim_event_route_once(
-            mapped, mapped_index, native_process, selected_process);
-    }
-
-    PlayerAnimationEventDispatchFunction dispatch = nullptr;
-    __try {
-        if (selected_process != nullptr &&
-            readable_bytes(selected_process) >= sizeof(void*)) {
-            void* const vtable = *reinterpret_cast<void* const*>(selected_process);
-            if (vtable != nullptr &&
-                readable_bytes(static_cast<std::byte*>(vtable) + 0xD0) >=
-                    sizeof(void*)) {
-                dispatch = reinterpret_cast<PlayerAnimationEventDispatchFunction>(
-                    *reinterpret_cast<void* const*>(
-                        static_cast<const std::byte*>(vtable) + 0xD0));
-            }
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        dispatch = nullptr;
-    }
-    if (dispatch == nullptr) {
-        if (!g_player_aim_event_dispatch_error_logged.exchange(
-                true, std::memory_order_relaxed)) {
-            boot_log_line("AIM-EVENT-ROUTE dispatch skipped (invalid process)");
-        }
-        return;
-    }
-
-    const bool switched_context = selected_process != native_process;
-    bool context_changed = false;
-    __try {
-        if (switched_context) {
-            g_thread_context_set_current_process(selected_process);
-            context_changed = true;
-        }
-        dispatch(selected_process, event_descriptor, argument);
-        if (context_changed) {
-            g_thread_context_set_current_process(native_process);
-            context_changed = false;
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        if (context_changed) {
-            __try {
-                g_thread_context_set_current_process(native_process);
-            } __except (EXCEPTION_EXECUTE_HANDLER) {
-            }
-        }
-        if (!g_player_aim_event_dispatch_error_logged.exchange(
-                true, std::memory_order_relaxed)) {
-            boot_log_line("AIM-EVENT-ROUTE dispatch fault contained");
-        }
-    }
-}
-
-bool install_player_aim_event_owner_route() {
-    auto* const callsite = reinterpret_cast<std::uint8_t*>(
-        g_module + kPlayerAimEventDispatchCallsiteRva);
-    constexpr std::array<std::uint8_t, 7> kExpected{
-        0x41, 0xFF, 0x91, 0xD0, 0x00, 0x00, 0x00,
-    };
-    if (std::memcmp(callsite, kExpected.data(), kExpected.size()) != 0) {
-        boot_log_line("aim-at owner route SKIPPED (callsite mismatch)");
-        return false;
-    }
-
-    constexpr std::size_t kRelaySize = 14;
-    auto* const relay = static_cast<std::uint8_t*>(
-        allocate_executable_near(callsite, kRelaySize));
-    if (relay == nullptr) {
-        boot_log_line("aim-at owner route SKIPPED (relay allocation)");
-        return false;
-    }
-    relay[0] = 0xFF;
-    relay[1] = 0x25;
-    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
-    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
-        reinterpret_cast<std::uintptr_t>(&hooked_player_aim_event_dispatch);
-    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
-    const std::int64_t displacement =
-        reinterpret_cast<std::intptr_t>(relay) -
-        reinterpret_cast<std::intptr_t>(callsite + 5);
-    if (displacement < INT32_MIN || displacement > INT32_MAX) {
-        VirtualFree(relay, 0, MEM_RELEASE);
-        boot_log_line("aim-at owner route SKIPPED (relay range)");
-        return false;
-    }
-
-    g_find_player_animation_process_by_player =
-        reinterpret_cast<FindPlayerAnimationProcessByPlayerFunction>(
-            g_module + kFindPlayerAnimationProcessByPlayerRva);
-    g_thread_context_set_current_process =
-        reinterpret_cast<ThreadContextSetCurrentProcessFunction>(
-            g_module + kThreadContextSetCurrentProcessRva);
-
-    SuspendedProcessThreads suspended_threads{};
-    if (!suspend_other_process_threads(suspended_threads)) {
-        VirtualFree(relay, 0, MEM_RELEASE);
-        boot_log_line("aim-at owner route SKIPPED (thread suspend)");
-        return false;
-    }
-    DWORD old = 0;
-    if (!VirtualProtect(
-            callsite, kExpected.size(), PAGE_EXECUTE_READWRITE, &old)) {
-        resume_suspended_process_threads(suspended_threads);
-        VirtualFree(relay, 0, MEM_RELEASE);
-        boot_log_line("aim-at owner route SKIPPED (protect)");
-        return false;
-    }
-    callsite[0] = 0xE8;
-    const std::int32_t relative = static_cast<std::int32_t>(displacement);
-    std::memcpy(callsite + 1, &relative, sizeof(relative));
-    callsite[5] = 0x90;
-    callsite[6] = 0x90;
-    FlushInstructionCache(GetCurrentProcess(), callsite, kExpected.size());
-    DWORD ignored = 0;
-    VirtualProtect(callsite, kExpected.size(), old, &ignored);
-    resume_suspended_process_threads(suspended_threads);
-    boot_log_line("aim-at event owner route installed (0x140CAF008)");
     return true;
 }
 
@@ -41591,8 +41376,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-28jf "
-        "(route aim-at event to owner animation process)");
+        "TLL co-op runtime init 2026-07-28jg "
+        "(rejected aim-at owner route removed)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -41672,7 +41457,6 @@ DWORD WINAPI install_hook(void*) {
         install_player_aim_additive_permission_callsite_relay();
         install_player_aim_blend_target_callsite_relay();
         install_player_aim_world_basis_relay();
-        install_player_aim_event_owner_route();
         install_player_aim_blend_tick_probe();
         install_native_aim_pitch_relay();
         install_native_aim_pitch_smoother_relay();

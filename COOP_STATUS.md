@@ -12902,3 +12902,39 @@ unchanged, reject H1 in favor of H2 and continue downstream of event dispatch.
 If the mapper reports index 0/the native process or no mapping, H3/the registry
 ownership model is rejected. Any crash, model deformation or local-player aim
 change rejects the relay immediately.
+
+### 2026-07-28 RUNTIME REJECTED / STATIC CORRECTION: `jf` used the wrong registry key type
+
+Both `jf` processes installed the world-basis wrapper and exact
+`0x140CAF008` callsite relay. During the user's opposite-camera test, PID 1060
+emitted the sole discriminator:
+
+`AIM-EVENT-ROUTE mapped=0 index=4294967295 native=0x10E0C0E480 selected=0x10E0C0E480`
+
+Thus no owner reroute occurred: the wrapper dispatched exactly once through the
+unchanged native record-0 process. The user observed the original symmetric
+fault with no other regression. This result does **not** reject `aim-at` as a
+possible visible input, because the proposed changed route was never reached.
+It rejects H3's specific assumption that `0x140C70760` maps a `Player*` to a
+per-Player animation process.
+
+The complete caller audit corrects that static type error with independent
+evidence. `0x140327C80` obtains the key from process factory `0x141CE9ED0` and
+later destroys it with `ProcessKillTree`; `0x140407D00` and `0x140432610`
+obtain the same key from generic actor vtable slot `+0xF48`, then destroy both
+the returned outer object and key through `ProcessKillTree`; `0x140C71E90`
+likewise optionally destroys its input key. Inside `0x140C70760`, the compared
+object is the validated handle at outer Process `+0x190/+0x198`. The 32x`0xB0`
+table is therefore an outer/child **Process registry**, not a
+Player-to-animation-process registry. The earlier IDB names/comments are
+corrected to `TrackedProcessRegistry_FindOuterByChild` and
+`TrackedProcessRegistry_UpdateChildState`.
+
+Build `2026-07-28jg` removes the complete event-dispatch callsite relay, TLS
+controller scope, owner mapper, diagnostics and runtime offsets. The proven
+fact retained in IDB is narrower: `PlayerAimController_ComputeAndPublishAimAdditives
+0x140CAECB0` dispatches its target-bearing `aim-at` event through tracked-Process
+record 0. The role of that record and the event's downstream consumer remain
+unproven. Next work must trace record-0 creation and event consumption, or find
+another common look input that reaches both head and weapon; no further runtime
+test is justified until one of those paths meets the static evidence quota.
