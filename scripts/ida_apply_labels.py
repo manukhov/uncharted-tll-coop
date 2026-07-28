@@ -2038,7 +2038,10 @@ FUNCTIONS = {
         "Exact ProcessAnimCmdListSegment source assertion in anim-commands.cpp:822. "
         "Per-layer animation-command evaluator reached from PerformAnimBlend and the "
         "normal joint-blend producers; consumes AnimCmdContext and drives palette "
-        "output including aim-add-* parameter lookup.",
+        "output including aim-add-* parameter lookup. Its stack SegmentContext keeps "
+        "the group descriptor at +0x38, JointParams at +0x50 and matrix workspace at "
+        "+0x58. The workspace allocator uses (group+0x10 + 1) 64-byte rows; the "
+        "leading row is initialized as the root before command 16.",
     ),
     0x1417D0BD0: (
         "SkelTable_FindRetargetEntry",
@@ -2100,7 +2103,9 @@ FUNCTIONS = {
         "AnimCmdEvaluator_ExecuteSkeletonJointPrograms",
         "Command-16 evaluator that walks the target skeleton's bounded joint "
         "program records and dispatches their transform operators over the final "
-        "WorkBuffer JointParams into the 64-byte-per-joint matrix workspace.",
+        "WorkBuffer JointParams into the 64-byte-per-joint matrix workspace. Each "
+        "operator receives encoded bases SegmentContext +0x50, +0x58, +0x68 and "
+        "+0x30; the current group descriptor is read from +0x38.",
     ),
     0x142194C30: (
         "AnimJointProgramOp54_CopyEncodedScalars",

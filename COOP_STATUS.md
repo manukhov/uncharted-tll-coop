@@ -13477,3 +13477,50 @@ The workspace allocator at `0x141ABA8D0..0x141ABA8F3` reserves
 root at `0x141ABA91D..0x141ABA957`. Thus the current group's matrix output begins
 at `+0x58 + 0x40` and can be compared immediately after the untouched native
 case-16 call without waiting for an opcode-26 segment.
+
+### 2026-07-28 — STATIC / IMPLEMENTED: `jq` completes at the case-16 return
+
+The evidence quota for a standalone case-16 boundary is met by independent
+types:
+
+1. Direct caller dataflow passes the 128-byte stack SegmentContext in RDX at
+   `0x141ABA96B` to the single command-16 callsite `0x141ABA973`; processing
+   groups themselves are visited by the outer `AnimManager_PerformAnimBlend`
+   loop at `0x141A92759`.
+2. Callee pseudocode for
+   `AnimCmdEvaluator_ExecuteSkeletonJointPrograms 0x14217B630` reads target
+   skeleton `+0x28` and group descriptor `+0x38`, then supplies every authored
+   operator with the four encoded bases at SegmentContext
+   `+0x50/+0x58/+0x68/+0x30`.
+3. Independent allocation dataflow sizes JointParams from group field `+0x12`
+   in 48-byte rows and sizes workspace from group field `+0x10` in 64-byte rows
+   plus one root row. The root is initialized before case 16, so the current
+   group's output begins exactly at workspace base `+0x40`.
+4. Runtime topology independently requires separation: selected aim input is in
+   group-0 `stages=1/1/0` segments, while confirmed contaminated final workspace
+   reached opcode 26 in groups 1/2/7.
+
+Competing outcomes are now:
+
+- **Q1:** case 16 runs in one or more of the previously contaminated groups
+  1/2/7 and its pre-call JointParams already follow receiver-local camera edges;
+- **Q2:** those pre-call JointParams remain peer/idle-stable, but case-16 output
+  workspace follows receiver-local edges, selecting an authored joint operator;
+- **Q3:** groups 1/2/7 do not execute case 16, or both its input and output stay
+  peer/idle-stable there; the final contamination is produced by another opcode
+  in the independent palette-publication segment.
+
+Read-only build `2026-07-28jq` arms any owner-validated retained screen-1 segment
+containing opcode 16, with no opcode-26 or palette-destination requirement. If a
+segment contains multiple case-16 commands it samples only the last. Immediately
+before/after the untouched native call it copies the exact group-sized
+JointParams buffer and the post-root workspace range, inventories the authored
+programs, and logs per-group hashes/deltas with stable per-group baselines. The
+opcode-26 writer callsite is no longer patched.
+
+Written prediction: hold Chloe's camera down, then on Nadine's copy move only the
+local camera sky -> ground -> sky while both characters remain still and out of
+ADS. Normal models plus repeated `AIM-JOINT-BOUNDARY-JQ` rows with stable
+`first/params/workspace` and program hash are required. Rows from groups 1/2/7
+classify Q1 versus Q2 by `deltaJP/W`; only other groups, no rows, unstable
+inventory, crash, stutter or model damage make the semantic test inconclusive.

@@ -2050,11 +2050,19 @@ Do not reopen these as the first move:
       faults but emitted zero rows. REJECT the same-segment scope: fresh
       selected-aim inventory was again `stages=1/1/0` in group 0, while the
       confirmed opcode-26 writer runs separately in groups 1/2/7.
-- [ ] Replace the rejected cross-segment wait with a read-only case-16-return
+- [x] Replace the rejected cross-segment wait with a read-only case-16-return
       discriminator. Arm any ownership-validated retained screen-1 segment that
       contains opcode 16, snapshot JointParams `+0x50` before/after and the
       current-group workspace at `+0x58 + 0x40` after native return, and log by
       processing group. Do not require or hook opcode 26 for this boundary.
+- [ ] Run bounded build `jq`: Chloe camera held down; on Nadine's copy, both
+      characters stationary and out of ADS, move the local camera
+      sky -> ground -> sky. Require normal models and repeated
+      `AIM-JOINT-BOUNDARY-JQ` rows. Groups 1/2/7 with local-correlated `deltaJP`
+      select upstream JointParams (Q1); stable `deltaJP` with local-correlated
+      `deltaW` selects an authored case-16 operator (Q2). Absence of case 16 in
+      those groups selects the independent opcode-26 segment for further opcode
+      inventory (Q3).
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

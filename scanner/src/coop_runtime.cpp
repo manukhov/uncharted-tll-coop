@@ -110,14 +110,11 @@ using ProcessAnimCmdListSegmentFunction = std::uint32_t(__fastcall*)(
     const void*, const void*, const void*);
 using AnimCmdExecuteJointProgramsFunction = std::uint32_t*(__fastcall*)(
     std::uint32_t*, const void*);
-using AnimCmdWriteSkinningPaletteFunction = std::int64_t(__fastcall*)(
-    std::uint16_t, const float*, const float*, const float*, float*);
 
 UpdateFunction g_original_update = nullptr;
 ProcessAnimCmdListSegmentFunction g_original_process_anim_cmd_list_segment =
     nullptr;
 AnimCmdExecuteJointProgramsFunction g_anim_cmd_execute_joint_programs = nullptr;
-AnimCmdWriteSkinningPaletteFunction g_anim_cmd_write_skinning_palette = nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
 std::atomic<void*> g_local_fganim_data{nullptr};
 std::atomic<void*> g_puppet_fganim_data{nullptr};
@@ -20874,13 +20871,12 @@ AimJointBoundaryOwner probe_aim_joint_boundary_owner(const void* context) {
 struct AimJointBoundaryScope {
     bool valid = false;
     void* target_skeleton = nullptr;
-    float* destination = nullptr;
+    std::uint32_t skeleton_joint_count = 0;
     std::uint32_t processing_group = 0;
-    std::uint32_t first_joint = 0;
-    std::uint32_t joint_count = 0;
     std::uint32_t peer_sequence = 0;
     std::uint32_t peer_source = 0;
     std::uint32_t case16_count = 0;
+    std::uint32_t case16_seen = 0;
     std::uint32_t case24_count = 0;
     float peer_y = 0.0F;
     float local_y = 0.0F;
@@ -20901,7 +20897,6 @@ struct AimJointProgramInventory {
 
 struct AimJointBoundaryCapture {
     bool valid = false;
-    const float* source_workspace = nullptr;
     AimJointProgramInventory programs{};
     float in_call_joint_params_delta = 0.0F;
     std::uint64_t pre_joint_params_hash = kAimPipelineFnvOffset;
@@ -20917,7 +20912,8 @@ thread_local AimJointBoundaryCapture g_aim_joint_boundary_capture{};
 struct AimJointBoundaryBaseline {
     bool valid = false;
     std::uint32_t first_joint = 0;
-    std::uint32_t joint_count = 0;
+    std::uint32_t parameter_count = 0;
+    std::uint32_t workspace_count = 0;
     float peer_y = 0.0F;
     float local_y = 0.0F;
     std::array<float, kAimPipelineMaxJoints * 12> pre_joint_params{};
@@ -21072,28 +21068,21 @@ void prepare_aim_joint_boundary_scope(
         owner.fg_anim_data == nullptr || owner.target_skeleton == nullptr) {
         return;
     }
-    float* current_palette = nullptr;
     std::uint32_t skeleton_joint_count = 0;
     __try {
-        current_palette = *reinterpret_cast<float* const*>(
-            static_cast<const std::byte*>(owner.fg_anim_data) +
-            kFgAnimDataCurrentSkinningMatsOffset);
         skeleton_joint_count = *reinterpret_cast<const std::uint32_t*>(
             static_cast<const std::byte*>(owner.target_skeleton) +
             kSkeletonJointCountOffset);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return;
     }
-    if (current_palette == nullptr || skeleton_joint_count == 0 ||
+    if (skeleton_joint_count == 0 ||
         skeleton_joint_count > kAimPipelineMaxJoints) {
         return;
     }
 
     std::uint32_t case16_count = 0;
     std::uint32_t case24_count = 0;
-    float* selected_destination = nullptr;
-    std::uint32_t selected_first = 0;
-    std::uint32_t selected_count = 0;
     __try {
         std::uint32_t cursor = 0;
         while (cursor < command_word_count) {
@@ -21109,22 +21098,6 @@ void prepare_aim_joint_boundary_scope(
                 ++case16_count;
             } else if (opcode == 24) {
                 ++case24_count;
-            } else if (opcode == 26 && words == 10) {
-                float* destination = nullptr;
-                std::memcpy(
-                    &destination, commands + cursor + 2,
-                    sizeof(destination));
-                const std::uint32_t first = commands[cursor + 8];
-                const std::uint32_t count = commands[cursor + 9];
-                const bool range_valid = first < skeleton_joint_count &&
-                    count != 0 && count <= skeleton_joint_count - first &&
-                    destination == current_palette +
-                        static_cast<std::size_t>(first) * 12;
-                if (range_valid && count > selected_count) {
-                    selected_destination = destination;
-                    selected_first = first;
-                    selected_count = count;
-                }
             }
             cursor += words;
         }
@@ -21134,8 +21107,7 @@ void prepare_aim_joint_boundary_scope(
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return;
     }
-    if (case16_count == 0 || selected_destination == nullptr ||
-        selected_count == 0) {
+    if (case16_count == 0) {
         return;
     }
 
@@ -21177,10 +21149,8 @@ void prepare_aim_joint_boundary_scope(
     auto& scope = g_aim_joint_boundary_scope;
     scope.valid = true;
     scope.target_skeleton = owner.target_skeleton;
-    scope.destination = selected_destination;
+    scope.skeleton_joint_count = skeleton_joint_count;
     scope.processing_group = processing_group;
-    scope.first_joint = selected_first;
-    scope.joint_count = selected_count;
     scope.peer_sequence = peer.sequence;
     scope.peer_source = peer_source;
     scope.case16_count = case16_count;
@@ -21189,145 +21159,21 @@ void prepare_aim_joint_boundary_scope(
     scope.local_y = local_y;
 }
 
-std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
-    std::uint32_t* status, const void* segment_context) {
-    const auto native = g_anim_cmd_execute_joint_programs;
-    if (native == nullptr) {
-        return status;
-    }
-    const AimJointBoundaryScope scope = g_aim_joint_boundary_scope;
-    auto& capture = g_aim_joint_boundary_capture;
-    capture.valid = false;
-    if (!scope.valid || segment_context == nullptr ||
-        readable_bytes(segment_context) < 0x60) {
-        return native(status, segment_context);
-    }
-
-    const auto* const segment =
-        static_cast<const std::byte*>(segment_context);
-    const float* joint_params = nullptr;
-    const float* workspace = nullptr;
-    const std::byte* group = nullptr;
-    void* target_skeleton = nullptr;
-    std::uint32_t group_first = 0;
-    std::uint32_t group_count = 0;
-    __try {
-        target_skeleton = *reinterpret_cast<void* const*>(segment + 0x28);
-        group = *reinterpret_cast<const std::byte* const*>(segment + 0x38);
-        joint_params = *reinterpret_cast<const float* const*>(segment + 0x50);
-        workspace = *reinterpret_cast<const float* const*>(segment + 0x58);
-        if (target_skeleton != scope.target_skeleton || group == nullptr ||
-            readable_bytes(group) < 0x18) {
-            return native(status, segment_context);
-        }
-        group_first =
-            *reinterpret_cast<const std::uint16_t*>(group + 0x00);
-        group_count =
-            *reinterpret_cast<const std::uint16_t*>(group + 0x10);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return native(status, segment_context);
-    }
-    if (scope.first_joint < group_first || group_count == 0 ||
-        scope.joint_count > group_count ||
-        scope.first_joint - group_first > group_count - scope.joint_count ||
-        joint_params == nullptr || workspace == nullptr) {
-        return native(status, segment_context);
-    }
-
-    const std::size_t local_first = scope.first_joint - group_first;
-    joint_params += local_first * 12;
-    workspace += (local_first + 1) * 16;
-    const std::size_t joint_values =
-        static_cast<std::size_t>(scope.joint_count) * 12;
-    const std::size_t workspace_values =
-        static_cast<std::size_t>(scope.joint_count) * 16;
-    if (readable_bytes(joint_params) < joint_values * sizeof(float) ||
-        readable_bytes(workspace) < workspace_values * sizeof(float)) {
-        return native(status, segment_context);
-    }
-
-    std::memcpy(
-        capture.pre_joint_params.data(), joint_params,
-        joint_values * sizeof(float));
-    capture.programs = inventory_aim_joint_programs(
-        target_skeleton, group);
-    std::uint32_t* const result = native(status, segment_context);
-    if (!capture.programs.valid ||
-        readable_bytes(joint_params) < joint_values * sizeof(float) ||
-        readable_bytes(workspace) < workspace_values * sizeof(float)) {
-        return result;
-    }
-    std::memcpy(
-        capture.post_joint_params.data(), joint_params,
-        joint_values * sizeof(float));
-    std::memcpy(
-        capture.post_workspace.data(), workspace,
-        workspace_values * sizeof(float));
-    capture.source_workspace = workspace;
-    bool finite = aim_hash_floats(
-        capture.pre_joint_params.data(), joint_values,
-        capture.pre_joint_params_hash);
-    finite = finite && aim_hash_floats(
-        capture.post_joint_params.data(), joint_values,
-        capture.post_joint_params_hash);
-    finite = finite && aim_hash_floats(
-        capture.post_workspace.data(), workspace_values,
-        capture.post_workspace_hash);
-    float in_call_delta_sq = 0.0F;
-    for (std::size_t index = 0; finite && index < joint_values; ++index) {
-        const float delta = capture.post_joint_params[index] -
-            capture.pre_joint_params[index];
-        in_call_delta_sq += delta * delta;
-    }
-    capture.in_call_joint_params_delta = std::sqrt(in_call_delta_sq);
-    capture.valid = finite;
-    return result;
-}
-
-std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
-    std::uint16_t joint_count, const float* workspace,
-    const float* bind_rows, const float* common_basis, float* destination) {
-    const auto native = g_anim_cmd_write_skinning_palette;
-    if (native == nullptr) {
-        return 0;
-    }
-    // Preserve the hot path first. This probe only reads the source workspace,
-    // which the native palette writer does not modify.
-    const std::int64_t result = native(
-        joint_count, workspace, bind_rows, common_basis, destination);
-    const AimJointBoundaryScope scope = g_aim_joint_boundary_scope;
-    AimJointBoundaryCapture& capture = g_aim_joint_boundary_capture;
-    if (!scope.valid || !capture.valid || workspace == nullptr ||
-        destination != scope.destination || workspace != capture.source_workspace ||
-        joint_count != scope.joint_count ||
+void log_aim_joint_boundary_after_case16(
+    const AimJointBoundaryScope& scope,
+    AimJointBoundaryCapture& capture, std::uint32_t first_joint,
+    std::uint32_t parameter_count, std::uint32_t workspace_count) {
+    if (!scope.valid || !capture.valid ||
         scope.processing_group >= kAimJointBoundaryMaxGroups) {
-        return result;
+        return;
     }
-
-    const std::size_t joint_values =
-        static_cast<std::size_t>(joint_count) * 12;
-    const std::size_t workspace_values =
-        static_cast<std::size_t>(joint_count) * 16;
-    if (readable_bytes(workspace) < workspace_values * sizeof(float)) {
-        return result;
-    }
-    std::uint64_t writer_hash = kAimPipelineFnvOffset;
-    if (!aim_hash_floats(workspace, workspace_values, writer_hash)) {
-        return result;
-    }
-    float post16_to_26_sq = 0.0F;
-    for (std::size_t index = 0; index < workspace_values; ++index) {
-        const float delta = workspace[index] - capture.post_workspace[index];
-        post16_to_26_sq += delta * delta;
-    }
-
     const std::size_t group = scope.processing_group;
     const ULONGLONG now = GetTickCount64();
     if (g_aim_joint_boundary_sample_count[group].load(
             std::memory_order_acquire) >= 20 ||
         now < g_aim_joint_boundary_next_log_ms[group].load(
             std::memory_order_acquire)) {
-        return result;
+        return;
     }
     ULONGLONG due = g_aim_joint_boundary_next_log_ms[group].load(
         std::memory_order_acquire);
@@ -21335,15 +21181,20 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
         !g_aim_joint_boundary_next_log_ms[group].compare_exchange_strong(
             due, now + 350, std::memory_order_acq_rel,
             std::memory_order_acquire)) {
-        return result;
+        return;
     }
 
+    const std::size_t parameter_values =
+        static_cast<std::size_t>(parameter_count) * 12;
+    const std::size_t workspace_values =
+        static_cast<std::size_t>(workspace_count) * 16;
     AcquireSRWLockExclusive(&g_aim_joint_boundary_lock);
     AimJointBoundaryBaseline& baseline =
         g_aim_joint_boundary_baselines[group];
     const bool reset = !baseline.valid ||
-        baseline.first_joint != scope.first_joint ||
-        baseline.joint_count != joint_count;
+        baseline.first_joint != first_joint ||
+        baseline.parameter_count != parameter_count ||
+        baseline.workspace_count != workspace_count;
     float joint_params_delta_sq = 0.0F;
     float workspace_delta_sq = 0.0F;
     std::array<std::uint32_t, 4> top_indices{};
@@ -21351,22 +21202,28 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
     std::array<float, 4> top_joint_params{};
     std::array<float, 4> top_workspace{};
     if (!reset) {
-        for (std::uint32_t joint = 0; joint < joint_count; ++joint) {
+        const std::uint32_t compared_count =
+            std::max(parameter_count, workspace_count);
+        for (std::uint32_t joint = 0; joint < compared_count; ++joint) {
             float joint_delta_sq = 0.0F;
             float workspace_joint_delta_sq = 0.0F;
-            for (std::size_t component = 0; component < 12; ++component) {
-                const std::size_t index =
-                    static_cast<std::size_t>(joint) * 12 + component;
-                const float delta = capture.pre_joint_params[index] -
-                    baseline.pre_joint_params[index];
-                joint_delta_sq += delta * delta;
+            if (joint < parameter_count) {
+                for (std::size_t component = 0; component < 12; ++component) {
+                    const std::size_t index =
+                        static_cast<std::size_t>(joint) * 12 + component;
+                    const float delta = capture.pre_joint_params[index] -
+                        baseline.pre_joint_params[index];
+                    joint_delta_sq += delta * delta;
+                }
             }
-            for (std::size_t component = 0; component < 16; ++component) {
-                const std::size_t index =
-                    static_cast<std::size_t>(joint) * 16 + component;
-                const float delta = capture.post_workspace[index] -
-                    baseline.post_workspace[index];
-                workspace_joint_delta_sq += delta * delta;
+            if (joint < workspace_count) {
+                for (std::size_t component = 0; component < 16; ++component) {
+                    const std::size_t index =
+                        static_cast<std::size_t>(joint) * 16 + component;
+                    const float delta = capture.post_workspace[index] -
+                        baseline.post_workspace[index];
+                    workspace_joint_delta_sq += delta * delta;
+                }
             }
             joint_params_delta_sq += joint_delta_sq;
             workspace_delta_sq += workspace_joint_delta_sq;
@@ -21395,13 +21252,14 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
     const float local_delta = reset ? 0.0F : scope.local_y - baseline.local_y;
     std::memcpy(
         baseline.pre_joint_params.data(), capture.pre_joint_params.data(),
-        joint_values * sizeof(float));
+        parameter_values * sizeof(float));
     std::memcpy(
         baseline.post_workspace.data(), capture.post_workspace.data(),
         workspace_values * sizeof(float));
     baseline.valid = true;
-    baseline.first_joint = scope.first_joint;
-    baseline.joint_count = joint_count;
+    baseline.first_joint = first_joint;
+    baseline.parameter_count = parameter_count;
+    baseline.workspace_count = workspace_count;
     baseline.peer_y = scope.peer_y;
     baseline.local_y = scope.local_y;
     ReleaseSRWLockExclusive(&g_aim_joint_boundary_lock);
@@ -21417,7 +21275,7 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
         for (std::size_t rank = 0; rank < top_indices.size(); ++rank) {
             const int written = std::snprintf(
                 top + used, sizeof(top) - used, "%u:%.4f/%.4f%s",
-                scope.first_joint + top_indices[rank],
+                first_joint + top_indices[rank],
                 top_joint_params[rank], top_workspace[rank],
                 rank + 1 == top_indices.size() ? "" : ";");
             if (written <= 0 ||
@@ -21430,15 +21288,16 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
     char line[1536]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-BOUNDARY-JP sample=%u seq=%u peerSrc=%u "
+        "AIM-JOINT-BOUNDARY-JQ sample=%u seq=%u peerSrc=%u "
         "peerY=%.4f localY=%.4f dirDelta=%.4f/%.4f "
-        "group=%u first=%u count=%u reset=%u op16=%u op24=%u "
-        "programs=%u/%u hash=%016llX op54=%u matrixW=%u paletteR=%u custom=%u "
-        "preJP=%016llX postJP=%016llX postW=%016llX writerW=%016llX "
-        "deltaJP/W=%.5f/%.5f inCallJP=%.5f post16To26=%.5f topJP/W=%s",
+        "group=%u first=%u params=%u workspace=%u reset=%u "
+        "op16=%u op24=%u programs=%u/%u hash=%016llX "
+        "op54=%u matrixW=%u paletteR=%u custom=%u "
+        "preJP=%016llX postJP=%016llX postW=%016llX "
+        "deltaJP/W=%.5f/%.5f inCallJP=%.5f topJP/W=%s",
         sample + 1, scope.peer_sequence, scope.peer_source,
         scope.peer_y, scope.local_y, peer_delta, local_delta,
-        scope.processing_group, scope.first_joint, joint_count,
+        scope.processing_group, first_joint, parameter_count, workspace_count,
         static_cast<unsigned>(reset), scope.case16_count, scope.case24_count,
         capture.programs.program_count, capture.programs.operator_count,
         static_cast<unsigned long long>(capture.programs.hash),
@@ -21447,11 +21306,113 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
         static_cast<unsigned long long>(capture.pre_joint_params_hash),
         static_cast<unsigned long long>(capture.post_joint_params_hash),
         static_cast<unsigned long long>(capture.post_workspace_hash),
-        static_cast<unsigned long long>(writer_hash),
         std::sqrt(joint_params_delta_sq), std::sqrt(workspace_delta_sq),
-        capture.in_call_joint_params_delta, std::sqrt(post16_to_26_sq), top);
+        capture.in_call_joint_params_delta, top);
     boot_log_line(line);
     capture.valid = false;
+}
+
+std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
+    std::uint32_t* status, const void* segment_context) {
+    const auto native = g_anim_cmd_execute_joint_programs;
+    if (native == nullptr) {
+        return status;
+    }
+    auto& live_scope = g_aim_joint_boundary_scope;
+    auto& capture = g_aim_joint_boundary_capture;
+    capture.valid = false;
+    if (!live_scope.valid || segment_context == nullptr ||
+        readable_bytes(segment_context) < 0x60) {
+        return native(status, segment_context);
+    }
+    ++live_scope.case16_seen;
+    const AimJointBoundaryScope scope = live_scope;
+    if (scope.case16_seen != scope.case16_count) {
+        return native(status, segment_context);
+    }
+
+    const auto* const segment =
+        static_cast<const std::byte*>(segment_context);
+    const float* joint_params = nullptr;
+    const float* workspace_base = nullptr;
+    const std::byte* group = nullptr;
+    void* target_skeleton = nullptr;
+    std::uint32_t group_first = 0;
+    std::uint32_t workspace_count = 0;
+    std::uint32_t parameter_count = 0;
+    __try {
+        target_skeleton = *reinterpret_cast<void* const*>(segment + 0x28);
+        group = *reinterpret_cast<const std::byte* const*>(segment + 0x38);
+        joint_params = *reinterpret_cast<const float* const*>(segment + 0x50);
+        workspace_base = *reinterpret_cast<const float* const*>(segment + 0x58);
+        if (target_skeleton != scope.target_skeleton || group == nullptr ||
+            readable_bytes(group) < 0x18) {
+            return native(status, segment_context);
+        }
+        group_first =
+            *reinterpret_cast<const std::uint16_t*>(group + 0x00);
+        workspace_count =
+            *reinterpret_cast<const std::uint16_t*>(group + 0x10);
+        parameter_count =
+            *reinterpret_cast<const std::uint16_t*>(group + 0x12);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return native(status, segment_context);
+    }
+    if (workspace_count == 0 || parameter_count == 0 ||
+        workspace_count > kAimPipelineMaxJoints ||
+        parameter_count > kAimPipelineMaxJoints ||
+        group_first >= scope.skeleton_joint_count ||
+        workspace_count > scope.skeleton_joint_count - group_first ||
+        joint_params == nullptr || workspace_base == nullptr) {
+        return native(status, segment_context);
+    }
+
+    const std::size_t parameter_values =
+        static_cast<std::size_t>(parameter_count) * 12;
+    const std::size_t workspace_values =
+        static_cast<std::size_t>(workspace_count) * 16;
+    if (readable_bytes(joint_params) < parameter_values * sizeof(float) ||
+        readable_bytes(workspace_base) <
+            (workspace_values + 16) * sizeof(float)) {
+        return native(status, segment_context);
+    }
+    const float* const workspace = workspace_base + 16;
+    std::memcpy(
+        capture.pre_joint_params.data(), joint_params,
+        parameter_values * sizeof(float));
+    capture.programs = inventory_aim_joint_programs(
+        target_skeleton, group);
+    std::uint32_t* const result = native(status, segment_context);
+    if (!capture.programs.valid ||
+        readable_bytes(joint_params) < parameter_values * sizeof(float) ||
+        readable_bytes(workspace) < workspace_values * sizeof(float)) {
+        return result;
+    }
+    std::memcpy(
+        capture.post_joint_params.data(), joint_params,
+        parameter_values * sizeof(float));
+    std::memcpy(
+        capture.post_workspace.data(), workspace,
+        workspace_values * sizeof(float));
+    bool finite = aim_hash_floats(
+        capture.pre_joint_params.data(), parameter_values,
+        capture.pre_joint_params_hash);
+    finite = finite && aim_hash_floats(
+        capture.post_joint_params.data(), parameter_values,
+        capture.post_joint_params_hash);
+    finite = finite && aim_hash_floats(
+        capture.post_workspace.data(), workspace_values,
+        capture.post_workspace_hash);
+    float in_call_delta_sq = 0.0F;
+    for (std::size_t index = 0; finite && index < parameter_values; ++index) {
+        const float delta = capture.post_joint_params[index] -
+            capture.pre_joint_params[index];
+        in_call_delta_sq += delta * delta;
+    }
+    capture.in_call_joint_params_delta = std::sqrt(in_call_delta_sq);
+    capture.valid = finite;
+    log_aim_joint_boundary_after_case16(
+        scope, capture, group_first, parameter_count, workspace_count);
     return result;
 }
 
@@ -23158,85 +23119,51 @@ bool install_aim_joint_boundary_probes() {
     std::uint8_t* execute_callsite = nullptr;
     std::uint8_t* execute_relay = nullptr;
     std::int32_t execute_displacement = 0;
-    std::uint8_t* writer_callsite = nullptr;
-    std::uint8_t* writer_relay = nullptr;
-    std::int32_t writer_displacement = 0;
     if (!prepare_plain_callsite_relay(
             kAnimCmdExecuteJointProgramsCallsiteRva,
             kAnimCmdExecuteJointProgramsRva,
             reinterpret_cast<const void*>(
                 &hooked_anim_cmd_execute_joint_programs),
-            execute_callsite, execute_relay, execute_displacement) ||
-        !prepare_plain_callsite_relay(
-            kAnimCmdWriteSkinningPaletteCallsiteRva,
-            kAnimCmdWriteSkinningPaletteRva,
-            reinterpret_cast<const void*>(
-                &hooked_anim_cmd_write_skinning_palette),
-            writer_callsite, writer_relay, writer_displacement)) {
+            execute_callsite, execute_relay, execute_displacement)) {
         if (execute_relay != nullptr) {
             VirtualFree(execute_relay, 0, MEM_RELEASE);
         }
-        if (writer_relay != nullptr) {
-            VirtualFree(writer_relay, 0, MEM_RELEASE);
-        }
         boot_log_line(
-            "aim jp joint-boundary probes SKIPPED (callsite preflight)");
+            "aim jq case16-return probe SKIPPED (callsite preflight)");
         return false;
     }
 
     g_anim_cmd_execute_joint_programs =
         reinterpret_cast<AnimCmdExecuteJointProgramsFunction>(
             g_module + kAnimCmdExecuteJointProgramsRva);
-    g_anim_cmd_write_skinning_palette =
-        reinterpret_cast<AnimCmdWriteSkinningPaletteFunction>(
-            g_module + kAnimCmdWriteSkinningPaletteRva);
     SuspendedProcessThreads suspended_threads{};
     if (!suspend_other_process_threads(suspended_threads)) {
         VirtualFree(execute_relay, 0, MEM_RELEASE);
-        VirtualFree(writer_relay, 0, MEM_RELEASE);
         g_anim_cmd_execute_joint_programs = nullptr;
-        g_anim_cmd_write_skinning_palette = nullptr;
         boot_log_line(
-            "aim jp joint-boundary probes SKIPPED (thread suspend)");
+            "aim jq case16-return probe SKIPPED (thread suspend)");
         return false;
     }
 
     DWORD execute_old = 0;
-    DWORD writer_old = 0;
     const bool execute_protected = VirtualProtect(
         execute_callsite, 5, PAGE_EXECUTE_READWRITE, &execute_old) != 0;
-    const bool writer_protected = VirtualProtect(
-        writer_callsite, 5, PAGE_EXECUTE_READWRITE, &writer_old) != 0;
-    if (!execute_protected || !writer_protected) {
-        DWORD ignored = 0;
-        if (execute_protected) {
-            VirtualProtect(execute_callsite, 5, execute_old, &ignored);
-        }
-        if (writer_protected) {
-            VirtualProtect(writer_callsite, 5, writer_old, &ignored);
-        }
+    if (!execute_protected) {
         resume_suspended_process_threads(suspended_threads);
         VirtualFree(execute_relay, 0, MEM_RELEASE);
-        VirtualFree(writer_relay, 0, MEM_RELEASE);
         g_anim_cmd_execute_joint_programs = nullptr;
-        g_anim_cmd_write_skinning_palette = nullptr;
-        boot_log_line("aim jp joint-boundary probes SKIPPED (protect)");
+        boot_log_line("aim jq case16-return probe SKIPPED (protect)");
         return false;
     }
 
     *reinterpret_cast<std::int32_t*>(execute_callsite + 1) =
         execute_displacement;
-    *reinterpret_cast<std::int32_t*>(writer_callsite + 1) =
-        writer_displacement;
     FlushInstructionCache(GetCurrentProcess(), execute_callsite, 5);
-    FlushInstructionCache(GetCurrentProcess(), writer_callsite, 5);
     DWORD ignored = 0;
     VirtualProtect(execute_callsite, 5, execute_old, &ignored);
-    VirtualProtect(writer_callsite, 5, writer_old, &ignored);
     resume_suspended_process_threads(suspended_threads);
     boot_log_line(
-        "aim jp joint-boundary probes installed "
-        "(case16 0x141ABA973, writer 0x141ABAE8C)");
+        "aim jq case16-return probe installed (0x141ABA973)");
     return true;
 }
 
@@ -42123,8 +42050,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-28jp "
-        "(corrected SegmentContext joint-boundary discriminator)");
+        "TLL co-op runtime init 2026-07-28jq "
+        "(standalone case16-return discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
