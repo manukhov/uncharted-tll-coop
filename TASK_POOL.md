@@ -1998,9 +1998,11 @@ Do not reopen these as the first move:
       Reject `Player+0x3FC8` as the MP-only pArtGroups table and `Player+0x1B30`
       as a NetCharacter-only generator location. The four-part evidence quota,
       competitors and corrected `iy` gate analysis are in `COOP_STATUS.md`.
-- [ ] Run read-only build `jk`: remote owner stationary in strong ADS with a
-      stable down/straight pose; receiver out of ADS moves its local camera
-      sky -> ground -> sky. Require normal animation and bounded
+- [ ] Run read-only build `jk`: leave the remote owner's free-look camera at a
+      stable down/straight direction, switch to the receiver, stay out of ADS
+      and move its local camera sky -> ground -> sky. Fresh synchronized
+      free-look camera or strict-ADS pose seed is accepted. Require normal
+      animation and bounded
       `AIM-PALETTE-WRITER-JK` rows. Workspace/local correlation selects
       pre-writer contamination; stable workspace with bind/basis/palette change
       selects conversion; all stable while the visual moves selects a

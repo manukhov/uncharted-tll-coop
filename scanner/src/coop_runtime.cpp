@@ -20926,6 +20926,7 @@ struct AimPaletteWriterScope {
     std::uint32_t joint_count = 0;
     std::uint32_t processing_group = 0;
     std::uint32_t peer_sequence = 0;
+    std::uint32_t peer_source = 0;
     float peer_y = 0.0F;
     float local_y = 0.0F;
 };
@@ -20975,9 +20976,20 @@ void prepare_aim_palette_writer_scope(
     }
 
     coop::StatePacket peer{};
-    if (!copy_peer_state_snapshot(peer) ||
-        (peer.flags & coop::kStateFlagPoseSeed) == 0 ||
-        !valid_network_orientation(peer.pose_seed + 4)) {
+    if (!copy_peer_state_snapshot(peer)) {
+        return;
+    }
+    const float* peer_quat = nullptr;
+    std::uint32_t peer_source = 0;
+    if ((peer.flags & coop::kStateFlagPoseSeed) != 0 &&
+        valid_network_orientation(peer.pose_seed + 4)) {
+        peer_quat = peer.pose_seed + 4;
+        peer_source = 1;
+    } else if (peer_packet_free_look_active(peer)) {
+        peer_quat = peer.camera_quat;
+        peer_source = 2;
+    }
+    if (peer_quat == nullptr) {
         return;
     }
 
@@ -21066,7 +21078,7 @@ void prepare_aim_palette_writer_scope(
 
     float peer_x = 0.0F, peer_y = 0.0F, peer_z = 0.0F;
     float local_x = 0.0F, local_y = 0.0F, local_z = 0.0F;
-    quat_forward_pos_z(peer.pose_seed + 4, peer_x, peer_y, peer_z);
+    quat_forward_pos_z(peer_quat, peer_x, peer_y, peer_z);
     quat_forward_pos_z(local_quat, local_x, local_y, local_z);
     if (!std::isfinite(peer_y) || !std::isfinite(local_y) ||
         std::fabs(peer_y - local_y) < 0.20F) {
@@ -21079,6 +21091,7 @@ void prepare_aim_palette_writer_scope(
     g_aim_palette_writer_scope.joint_count = selected_joint_count;
     g_aim_palette_writer_scope.processing_group = processing_group;
     g_aim_palette_writer_scope.peer_sequence = peer.sequence;
+    g_aim_palette_writer_scope.peer_source = peer_source;
     g_aim_palette_writer_scope.peer_y = peer_y;
     g_aim_palette_writer_scope.local_y = local_y;
 }
@@ -21277,11 +21290,13 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
         char line[1536]{};
         std::snprintf(
             line, sizeof(line),
-            "AIM-PALETTE-WRITER-JK sample=%u seq=%u peerY=%.4f localY=%.4f "
+            "AIM-PALETTE-WRITER-JK sample=%u seq=%u peerSrc=%u "
+            "peerY=%.4f localY=%.4f "
             "group=%u first=%u count=%u reset=%u "
             "workspace=%016llX bind=%016llX basis=%016llX palette=%016llX "
             "basisDelta=%.5f topW/B/P=%s",
-            sample + 1, scope.peer_sequence, scope.peer_y, scope.local_y,
+            sample + 1, scope.peer_sequence, scope.peer_source,
+            scope.peer_y, scope.local_y,
             scope.processing_group, scope.first_joint, scope.joint_count,
             static_cast<unsigned>(reset),
             static_cast<unsigned long long>(workspace_hash),

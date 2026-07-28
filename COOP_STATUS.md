@@ -13234,17 +13234,20 @@ The competing hypotheses are now:
 Read-only build `2026-07-28jk` arms from any opcode-26 segment only when the
 native context double-maps to retained screen 1 and the command destination
 equals the exact current `FgAnimData+0x230` subrange. It requires a fresh remote
-pose seed whose vertical direction differs from the receiver's screen-0 route,
-but deliberately requires neither receiver ADS nor retained LRDU. A TLS scope
+orientation (strict-ADS pose seed or the already synchronized free-look camera)
+whose vertical direction differs from the receiver's screen-0 route, but
+deliberately requires neither receiver ADS nor retained LRDU. A TLS scope
 carries only destination/range/group and scalar directions into the nested
 writer. The original writer executes exactly once with unchanged arguments;
 after return, at most 24 bounded samples hash and compare workspace, bind rows,
 common basis and palette. No late Player/FgAnim pointer is retained, no engine
 function is called from the nested writer, and no game data is written.
 
-Written prediction: keep the remote owner stationary and aiming clearly down or
-straight so its pose seed stays fresh; on the receiving copy remain out of ADS
-and move the local camera sky -> ground -> sky. Normal animation plus
+Written prediction: leave one owner's free-look camera stationary and clearly
+down/straight, switch to the receiving copy, remain out of ADS and move its local
+camera sky -> ground -> sky. The background copy continues publishing its fresh
+free-look quaternion; strict ADS pose seed is accepted as an alternate source
+but is not required. Normal animation plus
 `AIM-PALETTE-WRITER-JK` rows with stable `peerY` and changing `localY` is required.
 Workspace deltas following `localY` select P1. Stable workspace with changing
 bind/basis and palette selects P2. Stable workspace, bind/basis and palette while
