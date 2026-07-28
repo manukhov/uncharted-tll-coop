@@ -10658,9 +10658,10 @@ using PlayerAimWorldBasisFunction = std::int64_t(__fastcall*)(
     float vertical_limit_a,
     float vertical_limit_b);
 PlayerAimWorldBasisFunction g_original_player_aim_world_basis = nullptr;
-using PlayerNamedAimPointWriterFunction = std::int64_t(__fastcall*)(void* player);
-PlayerNamedAimPointWriterFunction g_original_player_named_aim_point_writer =
-    nullptr;
+using NetAnimCmdGeneratorUpdateFlagsFunction = void(__fastcall*)(
+    void* generator, void* owner);
+NetAnimCmdGeneratorUpdateFlagsFunction
+    g_original_netanim_update_flags_and_weapons = nullptr;
 using GunMoveControllerApplyCameraYawFunction = char(__fastcall*)(
     void* controller, const float* input_direction);
 GunMoveControllerApplyCameraYawFunction
@@ -10693,64 +10694,11 @@ constexpr bool g_enable_puppet_ads_root_yaw_snap = false;
 // for the remote FgAnimData while peer ADS is fresh.
 constexpr bool g_enable_puppet_fganim_world_aim_turn = true;
 
-struct PlayerNamedAimPointSnapshot {
-    float chest[4]{};
-    float neck[4]{};
-    float aim[4]{};
-    float second[4]{};
-};
-
-bool capture_player_named_aim_points(
-    void* player, PlayerNamedAimPointSnapshot& out) {
-    if (player == nullptr ||
-        readable_bytes(
-            static_cast<std::byte*>(player) +
-            kPlayerSecondNamedAimPointOffset) < 16) {
-        return false;
-    }
-    __try {
-        const auto* const bytes = static_cast<const std::byte*>(player);
-        std::memcpy(
-            out.chest, bytes + kPlayerChestAimPointOffset, sizeof(out.chest));
-        std::memcpy(
-            out.neck, bytes + kPlayerNeckAimPointOffset, sizeof(out.neck));
-        std::memcpy(
-            out.aim, bytes + kPlayerNamedAimPointOffset, sizeof(out.aim));
-        std::memcpy(
-            out.second, bytes + kPlayerSecondNamedAimPointOffset,
-            sizeof(out.second));
-        return valid_network_position(out.chest) &&
-            valid_network_position(out.neck) &&
-            valid_network_position(out.aim) &&
-            valid_network_position(out.second);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
 float named_point_distance_sq(const float a[4], const float b[4]) {
     const float dx = a[0] - b[0];
     const float dy = a[1] - b[1];
     const float dz = a[2] - b[2];
     return dx * dx + dy * dy + dz * dz;
-}
-
-float named_point_direction_y(const float target[4], const float origin[4]) {
-    const float dx = target[0] - origin[0];
-    const float dy = target[1] - origin[1];
-    const float dz = target[2] - origin[2];
-    const float length = std::sqrt(dx * dx + dy * dy + dz * dz);
-    return std::isfinite(length) && length > 0.001F ? dy / length : 0.0F;
-}
-
-bool quaternion_forward_y(const float quaternion[4], float& out_y) {
-    if (!valid_network_orientation(quaternion)) {
-        return false;
-    }
-    float x = 0.0F;
-    float z = 0.0F;
-    quat_forward_pos_z(quaternion, x, out_y, z);
-    return std::isfinite(out_y);
 }
 
 bool seh_read_player_screen_index(void* player, std::uint32_t& out_screen) {
@@ -10768,28 +10716,53 @@ bool seh_read_player_screen_index(void* player, std::uint32_t& out_screen) {
     }
 }
 
-std::int64_t __fastcall hooked_player_named_aim_point_writer(void* player) {
-    PlayerNamedAimPointSnapshot before{};
-    const bool before_valid = capture_player_named_aim_points(player, before);
-    const std::int64_t result =
-        g_original_player_named_aim_point_writer != nullptr
-            ? g_original_player_named_aim_point_writer(player)
-            : 0;
+struct NetAnimSecondAimSnapshot {
+    float named_second[4]{};
+    float propagated_second[4]{};
+    std::uint8_t snapshot_flags = 0;
+};
 
-    if (g_dll_inert || player == nullptr) {
-        return result;
+bool capture_netanim_second_aim_snapshot(
+    void* player, NetAnimSecondAimSnapshot& out) {
+    if (player == nullptr ||
+        readable_bytes(
+            static_cast<std::byte*>(player) +
+            kPlayerNetAnimSecondAimPointOffset) < sizeof(out.propagated_second)) {
+        return false;
     }
+    __try {
+        const auto* const bytes = static_cast<const std::byte*>(player);
+        std::memcpy(
+            out.named_second, bytes + kPlayerSecondNamedAimPointOffset,
+            sizeof(out.named_second));
+        std::memcpy(
+            out.propagated_second,
+            bytes + kPlayerNetAnimSecondAimPointOffset,
+            sizeof(out.propagated_second));
+        out.snapshot_flags = *reinterpret_cast<const std::uint8_t*>(
+            bytes + kPlayerNetAnimSnapshotFlagsOffset);
+        return valid_network_position(out.named_second) &&
+            valid_network_position(out.propagated_second);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void __fastcall hooked_netanim_update_flags_and_weapons(
+    void* generator, void* owner) {
+    if (g_original_netanim_update_flags_and_weapons != nullptr) {
+        g_original_netanim_update_flags_and_weapons(generator, owner);
+    }
+    if (g_dll_inert || owner == nullptr || generator == nullptr) {
+        return;
+    }
+
     std::uint32_t screen = UINT32_MAX;
-    if (!seh_read_player_screen_index(player, screen) ||
+    if (!seh_read_player_screen_index(owner, screen) ||
         screen > kSlot1ScreenIndex) {
-        return result;
+        return;
     }
 
-    // Keep this hot-path diagnostic both observable and bounded.  The normal
-    // runtime logger is intentionally compiled out, so this read-only probe
-    // uses the boot channel for at most ~3.4 minutes per screen (512 samples at
-    // 400 ms).  That is long enough to load a checkpoint and perform the
-    // opposite-pitch discriminator without restoring unbounded frame logging.
     constexpr std::uint32_t kMaxSamplesPerScreen = 512;
     static std::array<std::atomic<ULONGLONG>, 2> last_log_ms{};
     static std::array<std::atomic<std::uint32_t>, 2> sample_counts{};
@@ -10798,111 +10771,62 @@ std::int64_t __fastcall hooked_player_named_aim_point_writer(void* player) {
     if (now - previous < 400 ||
         !last_log_ms[screen].compare_exchange_strong(
             previous, now, std::memory_order_relaxed)) {
-        return result;
+        return;
     }
     const std::uint32_t sample =
         sample_counts[screen].fetch_add(1, std::memory_order_relaxed);
     if (sample >= kMaxSamplesPerScreen) {
-        return result;
+        return;
     }
 
-    PlayerNamedAimPointSnapshot after{};
-    const bool after_valid = capture_player_named_aim_points(player, after);
-    std::uint8_t route0_seed[32]{};
-    std::uint8_t route_self_seed[32]{};
-    const bool route0_valid = copy_screen_route_pose_seed_32(0, route0_seed);
-    const bool route_self_valid =
-        copy_screen_route_pose_seed_32(screen, route_self_seed);
-    float route0_y = 0.0F;
-    float route_self_y = 0.0F;
-    const bool route0_y_valid = route0_valid && quaternion_forward_y(
-        reinterpret_cast<const float*>(route0_seed + 16), route0_y);
-    const bool route_self_y_valid = route_self_valid && quaternion_forward_y(
-        reinterpret_cast<const float*>(route_self_seed + 16), route_self_y);
-
-    coop::StatePacket peer{};
-    const ULONGLONG received =
-        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
-    const bool peer_valid = received != 0 && copy_peer_state_snapshot(peer);
-    const float* peer_quaternion = nullptr;
-    if (peer_valid && (peer.flags & coop::kStateFlagPoseSeed) != 0 &&
-        valid_network_orientation(peer.pose_seed + 4)) {
-        peer_quaternion = peer.pose_seed + 4;
-    } else if (peer_valid && (peer.flags & coop::kStateFlagPeerCamera) != 0 &&
-               valid_network_orientation(peer.camera_quat)) {
-        peer_quaternion = peer.camera_quat;
-    }
-    float peer_y = 0.0F;
-    const bool peer_y_valid =
-        peer_quaternion != nullptr && quaternion_forward_y(peer_quaternion, peer_y);
-
-    bool camera_branch = false;
-    bool fallback_branch = false;
-    float aim_direction_y = 0.0F;
-    float native_delta = 0.0F;
-    if (after_valid) {
-        const float aim_second =
-            named_point_distance_sq(after.aim, after.second);
-        const float aim_chest = named_point_distance_sq(after.aim, after.chest);
-        const float second_chest =
-            named_point_distance_sq(after.second, after.chest);
-        const float second_neck =
-            named_point_distance_sq(after.second, after.neck);
-        camera_branch = aim_second < 0.0001F && aim_chest > 0.01F &&
-            second_neck > 0.01F;
-        fallback_branch = aim_chest < 0.0001F &&
-            (second_chest < 0.0001F || second_neck < 0.0001F);
-        aim_direction_y = named_point_direction_y(after.aim, after.chest);
-        if (before_valid) {
-            native_delta = std::sqrt(named_point_distance_sq(after.aim, before.aim));
-        }
-    }
-
+    NetAnimSecondAimSnapshot snapshot{};
+    const bool valid = capture_netanim_second_aim_snapshot(owner, snapshot);
+    const std::uintptr_t generator_delta =
+        reinterpret_cast<std::uintptr_t>(generator) -
+        reinterpret_cast<std::uintptr_t>(owner);
+    const float propagation_delta = valid
+        ? std::sqrt(named_point_distance_sq(
+              snapshot.named_second, snapshot.propagated_second))
+        : 0.0F;
     std::ostringstream line;
     line << std::fixed << std::setprecision(4)
-         << "AIM-NAMED-POINT-WRITER sample=" << sample
+         << "AIM-NETANIM-SECOND sample=" << sample
          << " slot=" << screen
-         << " player=0x" << std::hex
-         << reinterpret_cast<std::uintptr_t>(player) << std::dec
-         << " valid=" << (before_valid ? 1 : 0) << "/"
-         << (after_valid ? 1 : 0)
-         << " branch=" << (camera_branch ? "camera" :
-                            (fallback_branch ? "fallback" : "other"))
-         << " y(chest/neck/aim/second)=" << after.chest[1] << "/"
-         << after.neck[1] << "/" << after.aim[1] << "/" << after.second[1]
-         << " aimDirY=" << aim_direction_y
-         << " nativeDelta=" << native_delta
-         << " route0=" << (route0_y_valid ? 1 : 0) << "/" << route0_y
-         << " routeSelf=" << (route_self_y_valid ? 1 : 0) << "/"
-         << route_self_y
-         << " peer=" << (peer_y_valid ? 1 : 0) << "/" << peer_y
-         << " peerAge=" << (received == 0 ? 0 : now - received);
+         << " owner=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(owner)
+         << " generator=0x" << reinterpret_cast<std::uintptr_t>(generator)
+         << " generatorDelta=0x" << generator_delta << std::dec
+         << " valid=" << (valid ? 1 : 0)
+         << " flag=" << ((snapshot.snapshot_flags & 0x04u) != 0 ? 1 : 0)
+         << " namedSecondY=" << snapshot.named_second[1]
+         << " propagatedY=" << snapshot.propagated_second[1]
+         << " delta=" << propagation_delta;
     boot_log_line(line.str().c_str());
-    return result;
 }
 
-bool install_player_named_aim_point_writer_probe() {
+bool install_netanim_second_aim_consumer_probe() {
     auto* const slot = reinterpret_cast<void**>(
-        g_module + kPlayerNamedAimPointWriterVtableSlotRva);
+        g_module + kNetAnimCmdGeneratorUpdateFlagsVtableSlotRva);
     void* const expected = reinterpret_cast<void*>(
-        g_module + kPlayerNamedAimPointWriterRva);
+        g_module + kNetAnimCmdGeneratorUpdateFlagsRva);
     if (*slot != expected) {
-        boot_log_line("named aim-point writer probe SKIPPED (slot mismatch)");
+        boot_log_line("NetAnim SecondAimAt consumer probe SKIPPED (slot mismatch)");
         return false;
     }
-    g_original_player_named_aim_point_writer =
-        reinterpret_cast<PlayerNamedAimPointWriterFunction>(*slot);
+    g_original_netanim_update_flags_and_weapons =
+        reinterpret_cast<NetAnimCmdGeneratorUpdateFlagsFunction>(*slot);
     DWORD old = 0;
     if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
-        boot_log_line("named aim-point writer probe SKIPPED (protect)");
-        g_original_player_named_aim_point_writer = nullptr;
+        boot_log_line("NetAnim SecondAimAt consumer probe SKIPPED (protect)");
+        g_original_netanim_update_flags_and_weapons = nullptr;
         return false;
     }
-    *slot = reinterpret_cast<void*>(&hooked_player_named_aim_point_writer);
+    *slot = reinterpret_cast<void*>(&hooked_netanim_update_flags_and_weapons);
     FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
     DWORD ignored = 0;
     VirtualProtect(slot, sizeof(void*), old, &ignored);
-    boot_log_line("named aim-point writer read-only probe installed (+0xE58)");
+    boot_log_line(
+        "NetAnim SecondAimAt read-only consumer probe installed (+0x68)");
     return true;
 }
 
@@ -41592,8 +41516,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-28ji "
-        "(bounded read-only Player named aim-point writer probe)");
+        "TLL co-op runtime init 2026-07-28jj "
+        "(read-only NetAnim SecondAimAt consumer probe)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -41696,7 +41620,8 @@ DWORD WINAPI install_hook(void*) {
             install_character_skeleton_eval_per_joint_callsite_hook();
         }
     }
-    install_player_named_aim_point_writer_probe();
+    boot_log_line("named aim-point writer probe parked after conclusive ji");
+    install_netanim_second_aim_consumer_probe();
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();
     install_weapon_pickup_gate();

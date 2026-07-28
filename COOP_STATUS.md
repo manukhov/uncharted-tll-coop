@@ -13070,3 +13070,44 @@ No Player, camera, route, packet, animation or controller field is changed.
 The falsifiable prediction remains the `jh` prediction above: opposing vertical
 camera directions must separate whether slot-1 `AimAtPos` follows its receiver's
 screen-route seed, the replicated peer seed, or only the chest/neck fallback.
+
+### 2026-07-28 CONFIRMED / IMPLEMENTED: `ji` isolates screen-1 named-point contamination
+
+The bounded `ji` run reached both Player slots on both processes and preserved
+normal behavior. Role A was PID 24412 (local Chloe), role B PID 21628 (local
+Nadine). Most samples used the chest/neck fallback, but the deliberate opposing
+vertical test activated the camera branch and separated the candidates.
+
+For role A screen 1, `routeSelfY=+0.7459..+0.7638` while the fresh peer seed was
+`-0.9033..-0.9709`; native `AimAtPos` direction was `-0.4102..-0.3779`. For role B
+screen 1, `routeSelfY=+0.9344..+0.9371`, peer was `-0.8650..-0.8821`, and native
+AimAt direction was `-0.6895..-0.6732`. The same-run screen-0 calibration gives
+the native sign convention: route `-0.8821..-0.9709` produced positive AimAt
+direction `+0.8213..+0.8547`. Therefore each retained screen-1 point followed
+the receiver's positive local route, not the sender's negative peer seed.
+
+This **CONFIRMS H1 at the `+0x38F0/+0x3900` field boundary** and rejects H3:
+`Player_UpdateNamedChestNeckAndAimPoints` is live, its camera branch is active
+during the tested aim state, and screen 1 consumes the wrong process-local
+screen-route orientation. H2 remains open because correlation at a targeting
+field alone does not prove ownership of the visible pose.
+
+Static continuation finds an exact downstream discriminator.
+`NetAnimCmdGenerator::UpdateFlagsAndWeapons 0x140A07160` is RTTI-backed vtable
+`0x14292F368` slot `+0x68` (also anchored by its full function-signature string).
+At `0x140A0763E` it invokes the owning Player's vslot `+0x2D8` with
+`"SecondAimAtPos"`; the concrete Player target is
+`Player_QueryNamedLookAimPointPair 0x1410D5710`. It then copies that point to
+`Player+0xF130` and sets `Player+0x1D59 bit 0x04` at
+`0x140A07976..0x140A0797F`. This is the native path that must be observed rather
+than repeating the rejected raw `+0xF130/+0x1D59` writes that crashed both copies.
+
+Build `2026-07-28jj` parks the completed writer hook and wraps only the RTTI-exact
+NetAnim vslot `+0x68`. It calls native exactly once, then read-only samples the
+owner screen, generator-to-owner offset, named `+0x3900`, propagated `+0xF130`
+and native flag bit. **Prediction:** if the contaminated named point reaches the
+live animation consumer, screen 1 logs `generatorDelta=0x1B30`, flag bit 1 and a
+near-zero named/propagated delta during the opposing test. If no screen-1 call or
+no propagation is observed, this NetAnim route is inactive for the campaign
+puppet and H2 survives. A crash or visible model/animation change invalidates
+the wrapper ABI; the probe itself writes no game state.
