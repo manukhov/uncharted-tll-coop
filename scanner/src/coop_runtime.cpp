@@ -20945,10 +20945,14 @@ struct AimPaletteWriterBaseline {
     std::array<float, 12> common_basis{};
 };
 
-AimPaletteWriterBaseline g_aim_palette_writer_baseline{};
+constexpr std::size_t kAimPaletteWriterMaxGroups = 8;
+std::array<AimPaletteWriterBaseline, kAimPaletteWriterMaxGroups>
+    g_aim_palette_writer_baselines{};
 std::atomic_flag g_aim_palette_writer_busy = ATOMIC_FLAG_INIT;
-std::atomic<ULONGLONG> g_aim_palette_writer_next_log_ms{0};
-std::atomic<std::uint32_t> g_aim_palette_writer_sample_count{0};
+std::array<std::atomic<ULONGLONG>, kAimPaletteWriterMaxGroups>
+    g_aim_palette_writer_next_log_ms{};
+std::array<std::atomic<std::uint32_t>, kAimPaletteWriterMaxGroups>
+    g_aim_palette_writer_sample_count{};
 
 // Arm only from an opcode-26 segment whose native context maps exactly to the
 // retained screen-1 Player and whose destination is inside that FgAnimData's
@@ -20961,6 +20965,7 @@ void prepare_aim_palette_writer_scope(
     if (g_dll_inert || !g_state_net.enabled || commands == nullptr ||
         command_word_count == 0 ||
         command_word_count > kAimCase6MaxCommandWords ||
+        processing_group >= kAimPaletteWriterMaxGroups ||
         readable_bytes(commands) <
             static_cast<std::size_t>(command_word_count) *
                 sizeof(std::uint32_t)) {
@@ -21113,24 +21118,27 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
     if (!scope.valid || workspace == nullptr || bind_rows == nullptr ||
         common_basis == nullptr || destination == nullptr ||
         destination != scope.destination || joint_count == 0 ||
-        joint_count != scope.joint_count) {
+        joint_count != scope.joint_count ||
+        scope.processing_group >= kAimPaletteWriterMaxGroups) {
         return result;
     }
 
+    const std::size_t group = scope.processing_group;
+    if (g_aim_palette_writer_sample_count[group].load(
+            std::memory_order_acquire) >= 8) {
+        return result;
+    }
     const ULONGLONG now = GetTickCount64();
     ULONGLONG due =
-        g_aim_palette_writer_next_log_ms.load(std::memory_order_acquire);
+        g_aim_palette_writer_next_log_ms[group].load(
+            std::memory_order_acquire);
     if (now < due ||
-        !g_aim_palette_writer_next_log_ms.compare_exchange_strong(
+        !g_aim_palette_writer_next_log_ms[group].compare_exchange_strong(
             due, now + 350, std::memory_order_acq_rel,
             std::memory_order_acquire)) {
         return result;
     }
-    const std::uint32_t sample =
-        g_aim_palette_writer_sample_count.fetch_add(
-            1, std::memory_order_acq_rel);
-    if (sample >= 24 ||
-        g_aim_palette_writer_busy.test_and_set(std::memory_order_acquire)) {
+    if (g_aim_palette_writer_busy.test_and_set(std::memory_order_acquire)) {
         return result;
     }
 
@@ -21146,7 +21154,8 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
         return result;
     }
 
-    AimPaletteWriterBaseline& baseline = g_aim_palette_writer_baseline;
+    AimPaletteWriterBaseline& baseline =
+        g_aim_palette_writer_baselines[group];
     const bool reset = !baseline.valid ||
         baseline.destination != destination ||
         baseline.first_joint != scope.first_joint ||
@@ -21265,6 +21274,13 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
     }
 
     if (finite) {
+        const std::uint32_t sample =
+            g_aim_palette_writer_sample_count[group].fetch_add(
+                1, std::memory_order_acq_rel);
+        if (sample >= 8) {
+            g_aim_palette_writer_busy.clear(std::memory_order_release);
+            return result;
+        }
         char top[512]{};
         std::size_t used = 0;
         if (reset) {
@@ -21290,7 +21306,7 @@ std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
         char line[1536]{};
         std::snprintf(
             line, sizeof(line),
-            "AIM-PALETTE-WRITER-JK sample=%u seq=%u peerSrc=%u "
+            "AIM-PALETTE-WRITER-JL sample=%u seq=%u peerSrc=%u "
             "peerY=%.4f localY=%.4f "
             "group=%u first=%u count=%u reset=%u "
             "workspace=%016llX bind=%016llX basis=%016llX palette=%016llX "
@@ -25229,9 +25245,9 @@ constexpr bool g_enable_aim_diagnostic_probes = false;
 // through later blend/plugin commands and the final FgAnimData+0x230 palette.
 // Four samples per signature/screen, no native calls or game-memory writes.
 constexpr bool g_enable_aim_case6_probe = true;
-// Build jk: repeat the final opcode-26 writer discriminator without the invalid
-// ADS/LRDU/same-segment gates from iy. Exact context ownership and palette range
-// are retained; the native writer runs once before bounded read-only sampling.
+// Build jl: repeat the final opcode-26 writer discriminator without the invalid
+// ADS/LRDU/same-segment gates from iy. Each of the eight processing groups owns
+// an independent baseline/limit so valid consecutive deltas are not discarded.
 constexpr bool g_enable_aim_palette_writer_probe = true;
 
 
@@ -41972,8 +41988,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-28jk "
-        "(retained opcode-26 palette source discriminator)");
+        "TLL co-op runtime init 2026-07-28jl "
+        "(per-group retained opcode-26 palette discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

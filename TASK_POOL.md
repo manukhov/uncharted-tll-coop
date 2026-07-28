@@ -1998,7 +1998,7 @@ Do not reopen these as the first move:
       Reject `Player+0x3FC8` as the MP-only pArtGroups table and `Player+0x1B30`
       as a NetCharacter-only generator location. The four-part evidence quota,
       competitors and corrected `iy` gate analysis are in `COOP_STATUS.md`.
-- [ ] Run read-only build `jk`: leave the remote owner's free-look camera at a
+- [x] Run read-only build `jk`: leave the remote owner's free-look camera at a
       stable down/straight direction, switch to the receiver, stay out of ADS
       and move its local camera sky -> ground -> sky. Fresh synchronized
       free-look camera or strict-ADS pose seed is accepted. Require normal
@@ -2006,7 +2006,14 @@ Do not reopen these as the first move:
       `AIM-PALETTE-WRITER-JK` rows. Workspace/local correlation selects
       pre-writer contamination; stable workspace with bind/basis/palette change
       selects conversion; all stable while the visual moves selects a
-      post-`FgAnimData+0x230` consumer. Zero rows is admission failure only.
+      post-`FgAnimData+0x230` consumer. **INCONCLUSIVE:** normal animation and
+      two exact writer rows confirm ABI/admission, but the global counter sampled
+      different groups and reset the baseline for both; no delta was measured.
+- [ ] Run build `jl` with the same stationary remote free-look and receiver
+      sky -> ground -> sky sweep. Require at least two
+      `AIM-PALETTE-WRITER-JL` rows from the same `group/first/count`; per-group
+      workspace versus bind/basis/palette deltas then select P1/P2/P3. Zero
+      repeated group samples is admission failure only.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

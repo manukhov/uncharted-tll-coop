@@ -13255,3 +13255,33 @@ the visible puppet still follows `localY` selects P3. No rows despite a confirme
 install and opposing fresh directions is an admission failure, not a semantic
 result. A crash, stutter or visible model/animation change invalidates the probe
 and requires its immediate removal.
+
+### 2026-07-28 RUNTIME INCONCLUSIVE / IMPLEMENTED: `jk` reaches opcode 26; `jl` fixes group baselines
+
+Fresh PIDs 20684/7824 loaded `jk`, installed both the existing
+`ProcessAnimCmdListSegment` detour and exact writer relay at `0x141ABAE8C`, and
+remained responsive with normal models and animation throughout the user's
+free-look sweep. The test therefore confirms the writer ABI and proves that the
+corrected no-ADS admission reaches retained screen-1 opcode-26 output.
+
+Two complete records were emitted. PID 7824 reached processing group 7,
+`first=626 count=25`, with `peerSrc=2`, `peerY=+0.5219` and
+`localY=+0.0249`; PID 20684 reached group 2, `first=142 count=119`, with
+`peerSrc=2`, `peerY=+0.7589` and `localY=+0.5149`. Both workspace, bind rows,
+common basis and palette were readable and finite. Thus the synchronized
+free-look fallback and exact destination/range guards are independently
+confirmed.
+
+The causal comparison is nevertheless **INCONCLUSIVE**: the single global
+throttle/sample counter advanced while different processing groups reached the
+writer. The two surviving rows belonged to different groups and each reset the
+single baseline, so neither contained a consecutive workspace/bind/basis/palette
+delta. This is an observability defect, not evidence for P1/P2/P3.
+
+Build `2026-07-28jl` preserves the exact hypothesis, native call and all safety
+guards, but assigns each of the eight processing groups its own baseline,
+350-ms throttle and eight-sample cap. A group now compares only against its own
+stable destination/first/count range. The marker changes to
+`AIM-PALETTE-WRITER-JL`; the written sky -> ground -> sky prediction and P1/P2/P3
+classification remain otherwise unchanged. A missing second sample in a group
+is admission failure; a crash or visible regression still invalidates the ABI.
