@@ -13524,3 +13524,27 @@ ADS. Normal models plus repeated `AIM-JOINT-BOUNDARY-JQ` rows with stable
 `first/params/workspace` and program hash are required. Rows from groups 1/2/7
 classify Q1 versus Q2 by `deltaJP/W`; only other groups, no rows, unstable
 inventory, crash, stutter or model damage make the semantic test inconclusive.
+
+### 2026-07-28 — RUNTIME INCONCLUSIVE: `jq` needs staged admission evidence
+
+The user completed the bounded `jq` camera split. PIDs 25692 and 22704 stayed
+responsive, installed the sole case-16 callsite relay at `0x141ABA973`, and
+reported no crash/fault marker, but emitted zero `AIM-JOINT-BOUNDARY-JQ` rows.
+This supplies no Q1/Q2/Q3 result.
+
+Absence alone cannot select Q3 because the final marker follows several distinct
+dynamic guards: retained screen-1 owner resolution, at least one opcode 16,
+fresh peer orientation, `abs(peerY-localY) >= 0.20`, last-case16 ordinal, target
+skeleton identity, nonzero/bounded group fields `+0x10/+0x12`, readable buffers,
+valid authored-program inventory and finite copied values. Static disassembly
+proves the fields and callsite but cannot identify which live guard rejected this
+run. The next experiment must expose these stages separately and must not alter
+animation data.
+
+The staged competitors are: **R1**, the outer segment never arms (owner,
+topology or orientation gate); **R2**, the outer scope arms and the exact callsite
+runs but live group counts/pointers fail; **R3**, buffer admission passes but the
+authored-program inventory or finite post-call capture fails; **R4**, the full
+marker appears and the earlier absence was only admission timing. A raw hook
+marker without an armed outer scope would independently confirm callsite
+reachability but select R1.
