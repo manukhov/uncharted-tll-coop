@@ -12749,3 +12749,57 @@ No replacement runtime hypothesis is promoted yet. The next test requires an
 exact live caller, data write/read chain into the visible animation result and a
 narrow ABI, with the alternatives above separated by three independent static
 evidence types.
+
+### 2026-07-28 STATIC / IMPLEMENTED: `jd` observes the live per-Player LookAtIK target
+
+The next boundary is the exact late head/spine consumer rather than another
+camera guess. `AnimManager_DispatchRetainedOwnerPhase 0x141A8F9D0` dispatches
+Player vslot `+0x408` at `0x141A8FC9B`; `Player_PostAnimBlending_Async
+0x1410EB6A0` then calls `Player+0x1E38` vslot `+0x38` at `0x1410EB9C9`.
+RTTI/vtable `0x142A2D550` resolves that slot to
+`PlayerLookAtIkController_UpdateIk 0x140EDA680`. Unlike rejected Player
+`+0xE80/+0xEA0`, this path is reached from the actual animation-manager phase.
+
+Three independent static evidence types meet the runtime quota:
+
+1. Call graph and vtable identity connect the retained Player animation phase to
+   its heap controller at `Player+0x1E38` and exact slot `+0x38`.
+2. Instruction dataflow at `0x140EDA700..0x140EDA785` selects the two authored
+   target slots at `+0x330/+0x340/+0x350` and `+0x334/+0x380/+0x390`, then
+   copies the winning mode/data to `+0x3E0/+0x3F0/+0x400/+0x410`. The later
+   solver writes its effective target to `+0x430` and updates the controller's
+   `headb/spinea/neck` Jacobian chain.
+3. Source assertions name `PlayerLookAtIkController::UpdateIk(void)` and the
+   function directly resolves skeleton joints, while it contains no
+   CameraManager/global-camera read. It is therefore a proven visible
+   downstream consumer, not a guessed camera producer.
+
+The strongest upstream competitor is controller vslot `+0x40` at
+`0x140EDB180`: it reads the owning `Player+0x4010`, calls
+`ResolveScreenRoutePoseSeedOrDefault 0x141C077B0`, derives a camera-oriented
+point and stages it through vslot `+0x28`. However its known xrefs are vtables and
+the `player-ik-look-at` script binding; no ordinary per-frame native caller is
+yet proven. Other candidates were eliminated: `PlayerCameraAnimationDirector`
+at `Player+0x36C0` manages CameraControl requests after `+0x1720/+0x1730` and
+has no joint/weapon output; Player vslot `+0x4F8` writes only a navmesh blocker;
+vslot `+0x448` is one-time attachment setup.
+
+Build `2026-07-28jd` patches only LookAtIK vtable slot `+0x38`. Its wrapper
+captures the two authored slots before native, calls native exactly once with
+the original sole `RCX=controller` argument, then captures the eased/selected
+target. It never writes controller, Player, camera, animation, palette or joint
+state. Bounded `LOOK-IK` rows identify Player slot 0/1 and include source modes,
+all target Y rows, selected/effective Y, owner Y and both local/peer camera
+vertical components.
+
+Written prediction: repeat the opposite-direction test, first with local Nadine
+camera up and real Chloe down/straight, then reverse. If retained Chloe's
+authored or selected LookAtIK target changes sign with Nadine's `localCamY`, the
+contamination enters before `UpdateIk`; `0x140EDB180` and the script author of
+that slot become the next exact source boundary. If slot 1 has no active target
+or follows `peerCamY` while the visible head/weapon still follows local camera,
+the whole LookAtIK path is excluded as the shared owner and the next late
+consumer is `PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0` at
+`0x1410EBAE5`. No `LOOK-IK slot=1` row excludes the `+0x408` reachability model.
+Any crash, stutter or model/animation change makes the read-only wrapper ABI
+inconclusive and requires immediate removal.

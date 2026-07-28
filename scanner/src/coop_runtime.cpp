@@ -1763,6 +1763,9 @@ int peer_slot_of_art(std::uint32_t art);
 // still go through boot_log_line(), while force_log_line() is compiled to a no-op.
 // Flip this only for a bounded experiment with a written prediction.
 constexpr bool kEnableRuntimeDiagnosticLogging = false;
+// Read-only discriminator for the per-Player authored/selected look-at target.
+// It never changes controller state and always calls the native UpdateIk once.
+constexpr bool kEnablePlayerLookAtIkDiagnostic = true;
 // Diagnostic hj: hi proved selected slot 0 is null on the puppet. The full
 // six-record table is now observed read-only to exclude a valid grenade bound
 // under another art slot; command, animation and physics semantics are unchanged.
@@ -11167,7 +11170,8 @@ bool install_player_aim_blend_tick_probe() {
 
 using PlayerLookAtSetPointFn = void(__fastcall*)(
     void* self, unsigned int slot, int param, const float* pos, float weight);
-using PlayerLookAtUpdateIkFn = void(__fastcall*)(void* self, void* owner);
+using PlayerLookAtUpdateIkFn = void(__fastcall*)(void* self);
+PlayerLookAtUpdateIkFn g_original_player_look_at_update_ik = nullptr;
 
 void* player_look_at_ik_controller(void* player) {
     if (player == nullptr) {
@@ -11186,6 +11190,170 @@ void* player_look_at_ik_controller(void* player) {
         return nullptr;
     }
     return ik;
+}
+
+struct PlayerLookAtIkDiagnosticSnapshot {
+    float source_lifetime[2]{};       // controller +0x330/+0x334
+    std::int32_t source_mode[2]{};    // controller +0x340/+0x380
+    float source_y[2][3]{};           // +0x350/+0x390, three float4 rows
+    float eased_weight[4]{};          // controller +0x3C0..+0x3CC
+    std::int32_t selected_mode = 0;   // controller +0x3E0
+    float selected_y[3]{};            // controller +0x3F0/+0x400/+0x410
+    std::uint8_t enabled = 0;         // controller +0x420
+    float solved_target_y = 0.0F;     // controller +0x430
+};
+
+bool capture_player_look_at_ik_diagnostic(
+    void* controller, PlayerLookAtIkDiagnosticSnapshot& out) {
+    if (controller == nullptr ||
+        readable_bytes(static_cast<const std::byte*>(controller) + 0x434) <
+            sizeof(float)) {
+        return false;
+    }
+    auto* const b = static_cast<const std::byte*>(controller);
+    __try {
+        std::memcpy(out.source_lifetime, b + 0x330,
+                    sizeof(out.source_lifetime));
+        out.source_mode[0] =
+            *reinterpret_cast<const std::int32_t*>(b + 0x340);
+        out.source_mode[1] =
+            *reinterpret_cast<const std::int32_t*>(b + 0x380);
+        for (std::size_t slot = 0; slot < 2; ++slot) {
+            const std::size_t base = 0x350 + slot * 0x40;
+            for (std::size_t row = 0; row < 3; ++row) {
+                out.source_y[slot][row] =
+                    *reinterpret_cast<const float*>(b + base + row * 0x10 + 4);
+            }
+        }
+        std::memcpy(out.eased_weight, b + 0x3C0,
+                    sizeof(out.eased_weight));
+        out.selected_mode =
+            *reinterpret_cast<const std::int32_t*>(b + 0x3E0);
+        for (std::size_t row = 0; row < 3; ++row) {
+            out.selected_y[row] =
+                *reinterpret_cast<const float*>(b + 0x3F0 + row * 0x10 + 4);
+        }
+        out.enabled = *reinterpret_cast<const std::uint8_t*>(b + 0x420);
+        out.solved_target_y = *reinterpret_cast<const float*>(b + 0x430 + 4);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+int player_slot_for_look_at_ik(void* controller, void*& owner) {
+    owner = nullptr;
+    for (int slot = 0; slot < 2; ++slot) {
+        void* const player = retained_player_object(slot);
+        if (player != nullptr && player_look_at_ik_controller(player) == controller) {
+            owner = player;
+            return slot;
+        }
+    }
+    return -1;
+}
+
+void __fastcall hooked_player_look_at_update_ik(void* controller) {
+    void* owner = nullptr;
+    const int player_slot = player_slot_for_look_at_ik(controller, owner);
+    PlayerLookAtIkDiagnosticSnapshot before{};
+    const bool have_before = player_slot >= 0 &&
+        capture_player_look_at_ik_diagnostic(controller, before);
+
+    if (g_original_player_look_at_update_ik != nullptr) {
+        g_original_player_look_at_update_ik(controller);
+    }
+
+    if (!have_before || player_slot < 0 || player_slot > 1 || owner == nullptr) {
+        return;
+    }
+    static std::atomic<ULONGLONG> last_log[2]{};
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG previous = last_log[player_slot].load(std::memory_order_relaxed);
+    if (now - previous < 250 ||
+        !last_log[player_slot].compare_exchange_strong(
+            previous, now, std::memory_order_relaxed)) {
+        return;
+    }
+
+    PlayerLookAtIkDiagnosticSnapshot after{};
+    if (!capture_player_look_at_ik_diagnostic(controller, after)) {
+        return;
+    }
+
+    float local_camera_y = 9.0F;
+    float local_camera_quat[4]{};
+    if (capture_gameplay_camera_quat(local_camera_quat)) {
+        float unused_x = 0.0F;
+        float unused_z = 0.0F;
+        quat_forward_neg_z(
+            local_camera_quat, unused_x, local_camera_y, unused_z);
+    }
+    float peer_camera_y = 9.0F;
+    coop::StatePacket peer{};
+    if (copy_peer_state_snapshot(peer) &&
+        valid_network_orientation(peer.camera_quat)) {
+        float unused_x = 0.0F;
+        float unused_z = 0.0F;
+        quat_forward_neg_z(peer.camera_quat, unused_x, peer_camera_y, unused_z);
+    }
+    float owner_y = 0.0F;
+    if (readable_bytes(static_cast<const std::byte*>(owner) +
+                       kWorldPositionOffset + sizeof(float)) >= sizeof(float)) {
+        owner_y = *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(owner) +
+            kWorldPositionOffset + sizeof(float));
+    }
+
+    std::ostringstream line;
+    line << "LOOK-IK slot=" << player_slot
+         << " life=(" << before.source_lifetime[0] << ","
+         << before.source_lifetime[1] << ") mode=("
+         << before.source_mode[0] << "," << before.source_mode[1] << ")"
+         << " src0Y=(" << before.source_y[0][0] << ","
+         << before.source_y[0][1] << "," << before.source_y[0][2] << ")"
+         << " src1Y=(" << before.source_y[1][0] << ","
+         << before.source_y[1][1] << "," << before.source_y[1][2] << ")"
+         << " eased=(" << after.eased_weight[0] << ","
+         << after.eased_weight[1] << "," << after.eased_weight[2] << ","
+         << after.eased_weight[3] << ") selMode=" << after.selected_mode
+         << " selY=(" << after.selected_y[0] << ","
+         << after.selected_y[1] << "," << after.selected_y[2] << ")"
+         << " solvedY=" << after.solved_target_y
+         << " ownerY=" << owner_y << " enabled="
+         << static_cast<unsigned int>(after.enabled)
+         << " localCamY=" << local_camera_y
+         << " peerCamY=" << peer_camera_y;
+    // This bounded experiment intentionally bypasses the production-wide
+    // diagnostic switch; enabling it would revive many unrelated hot logs.
+    boot_log_line(line.str().c_str());
+}
+
+bool install_player_look_at_update_ik_diagnostic() {
+    auto* const slot = reinterpret_cast<void**>(
+        g_module + kPlayerLookAtUpdateIkVtableSlotRva);
+    void* const expected =
+        reinterpret_cast<void*>(g_module + kPlayerLookAtUpdateIkRva);
+    if (*slot != expected) {
+        boot_log_line(
+            "PlayerLookAtIkController UpdateIk diagnostic SKIPPED (slot mismatch)");
+        return false;
+    }
+    g_original_player_look_at_update_ik =
+        reinterpret_cast<PlayerLookAtUpdateIkFn>(*slot);
+    DWORD old = 0;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+        boot_log_line(
+            "PlayerLookAtIkController UpdateIk diagnostic SKIPPED (protect)");
+        g_original_player_look_at_update_ik = nullptr;
+        return false;
+    }
+    *slot = reinterpret_cast<void*>(&hooked_player_look_at_update_ik);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(void*), old, &ignored);
+    boot_log_line("PlayerLookAtIkController UpdateIk read-only diagnostic installed");
+    return true;
 }
 
 static bool seh_call_set_look_point(
@@ -41377,8 +41545,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-28jc "
-        "(rejected Player camera-look vtable path removed)");
+        "TLL co-op runtime init 2026-07-28jd "
+        "(read-only per-Player LookAtIK target discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -41480,6 +41648,9 @@ DWORD WINAPI install_hook(void*) {
         if (g_enable_puppet_workspace_palette_inject) {
             install_character_skeleton_eval_per_joint_callsite_hook();
         }
+    }
+    if constexpr (kEnablePlayerLookAtIkDiagnostic) {
+        install_player_look_at_update_ik_diagnostic();
     }
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();

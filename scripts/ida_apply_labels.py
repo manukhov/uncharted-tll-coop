@@ -1232,6 +1232,14 @@ FUNCTIONS = {
         "controller +0x3E0/+0x3F0, then solves the controller-owned head/spine "
         "joint chain. It consumes no CameraManager directly.",
     ),
+    0x140EDB180: (
+        "PlayerLookAtIkController_StageCameraDerivedLookTarget",
+        "Vtable slot +0x40. Resolves targHead from the owning Player attach "
+        "system, reads owner Player+0x4010, derives a target from "
+        "ResolveScreenRoutePoseSeedOrDefault and stages it through vslot +0x28. "
+        "Known xrefs are vtables/script binding; no ordinary per-frame caller "
+        "has yet been proven.",
+    ),
     0x1410D1B20: (
         "Player_GetCameraLookAtPoint",
         "Player vtable slot +0xE80. Returns one float4 world-space camera "

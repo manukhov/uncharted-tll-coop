@@ -1918,6 +1918,13 @@ Do not reopen these as the first move:
       entire `+0xE80/+0xEA0` relay and telemetry. Continue statically from the
       later common head/look animation layer or `Player+0x36C0`; do not revive
       these vslots as the visible owner without new reachability evidence.
+      **`jd` STATIC / IMPLEMENTED:** the actual animation-manager phase reaches
+      `Player_PostAnimBlending_Async -> Player+0x1E38 ->
+      PlayerLookAtIkController_UpdateIk 0x140EDA680`. A read-only wrapper captures
+      both authored target slots and the selected/effective target around one
+      unchanged native call for slot 0/1. Opposite local/peer camera signs will
+      determine whether shared pitch enters before head IK or whether the entire
+      LookAtIK path can be excluded in favor of the later weapon-arm controller.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 
