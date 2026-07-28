@@ -1130,24 +1130,49 @@ FUNCTIONS = {
         "allows aim additives; called from independent Player state entries.",
     ),
     0x140C70760: (
-        "TrackedProcessRegistry_FindOuterByChild",
-        "Scans 32 tracked-process records of stride 0xB0, validates each outer "
+        "FlashlightProcessRegistry_FindOuterByChild",
+        "Scans 32 flashlight-process records of stride 0xB0, validates each outer "
         "Process handle, resolves its child Process handle at outer+0x190/+0x198, "
         "and returns the outer Process whose child matches the requested Process "
-        "plus its registry index. The key is not a Player pointer.",
+        "plus its registry index. Sibling users dispatch torch-light, torch-put-out, "
+        "detach, flicker-and-die and override-radius events; the key is not a Player.",
     ),
     0x140C70900: (
-        "TrackedProcessRegistry_UpdateChildState",
-        "Uses the same 32-entry outer/child Process registry as 0x140C70760, "
+        "FlashlightProcessRegistry_UpdateChildState",
+        "Uses the same 32-entry flashlight outer/child Process registry as "
+        "0x140C70760, "
         "updates state associated with the matched child Process, and can emit "
-        "the `play-animation` event through the matched outer Process.",
+        "the `play-animation` event through the matched flashlight effect Process.",
+    ),
+    0x140C71510: (
+        "FlashlightProcessRegistry_DispatchTorchLightState",
+        "Matches a child Process in the 32-entry flashlight registry, stores its "
+        "light-state bit and dispatches internal-event-torch-light or "
+        "internal-event-torch-put-out through that Process.",
+    ),
+    0x140C719F0: (
+        "FlashlightProcessRegistry_DispatchDetachOrFlickerAndDie",
+        "Dispatches detach and flicker-and-die events while operating on the same "
+        "32-entry flashlight outer/child Process registry.",
+    ),
+    0x140C729F0: (
+        "FlashlightProcessRegistry_DispatchOverrideRadius",
+        "Matches a child Process in the flashlight registry and dispatches the "
+        "override-radius event through its outer effect Process.",
+    ),
+    0x140C73040: (
+        "DcPlayerSpawnTorch",
+        "Torch spawn routine identified by its own assertion name and "
+        "game/player/flashlight.cpp source path; validates NdAttachableObject and "
+        "dispatches turn-on-torch through the owning Process.",
     ),
     0x140CAECB0: (
         "PlayerAimController_ComputeAndPublishAimAdditives",
         "PlayerAimController vtable slot +0x50. Receives aim/body bases and "
         "directional limits, calls 0x140CB32B0, and emits the looking-down-sights "
         "event. Its target-bearing `aim-at` event is dispatched at 0x140CAF008 "
-        "through hard-coded tracked-Process registry record 0. Reached by the "
+        "through hard-coded flashlight-process registry record 0; this is a torch "
+        "effect event, not the visible Player-pose owner. Reached by the "
         "ground GunMoveShield path through slot +0x58.",
     ),
     0x140CAF110: (

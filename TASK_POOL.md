@@ -1951,6 +1951,13 @@ Do not reopen these as the first move:
       and destroy it with `ProcessKillTree`. Build `jg` removes the complete
       event callsite/TLS relay. Do not retry a Player-key lookup; trace record 0
       and the actual `aim-at` consumer before another runtime mutation.
+      **STATIC REJECTED:** that trace is complete. The same 32x`0xB0` registry
+      dispatches `internal-event-torch-light`, `internal-event-torch-put-out`,
+      `detach`, `flicker-and-die` and `override-radius`; `0x140C73040` identifies
+      itself as `DcPlayerSpawnTorch` from `game/player/flashlight.cpp` and emits
+      `turn-on-torch`. `aim-at` is a flashlight effect target, not the Player
+      head/upper-body/weapon pose owner. Continue from the active base
+      animation/evaluator graph and do not revive this event path.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

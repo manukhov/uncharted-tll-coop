@@ -12938,3 +12938,48 @@ record 0. The role of that record and the event's downstream consumer remain
 unproven. Next work must trace record-0 creation and event consumption, or find
 another common look input that reaches both head and weapon; no further runtime
 test is justified until one of those paths meets the static evidence quota.
+
+### 2026-07-28 STATIC / REJECTED: `aim-at` is a flashlight effect event, not the Player pose owner
+
+The complete sibling audit resolves the previously unknown registry role and
+rejects `jf` hypothesis H1 without another runtime mutation. The 32x`0xB0`
+outer/child Process table at `0x143EC2D38` belongs to the Player flashlight/torch
+effect subsystem. Consequently the hard-coded record-0 dispatch at
+`0x140CAF008` can explain a process-global flashlight aim target, but cannot be
+the common head, upper-body and weapon-pose owner observed by the user.
+
+Three independent static evidence types establish the classification:
+
+1. Shared-registry dataflow: `0x140C71510` scans the exact same table and emits
+   `internal-event-torch-light` / `internal-event-torch-put-out`; `0x140C719F0`
+   emits `detach` / `flicker-and-die`; `0x140C729F0` emits `override-radius`.
+   Each resolves the same child Process and dispatches through its outer Process
+   vtable slot `+0xD0` under a saved/restored `ThreadContext`.
+2. Independent source identity: `0x140C73040` contains the assertion
+   `pFlash->IsKindOf(SID("NdAttachableObject"))`, source path
+   `game/player/flashlight.cpp`, function string `DcPlayerSpawnTorch`, and emits
+   `turn-on-torch`. `TaskManager_PublishRetainedFlashlightRuntimeRecords_Slot240
+   0x1413BF7B0` independently references the same `turn-on-torch` event family.
+3. Type/lifecycle evidence: `0x140C70760` keys on a validated child `Process`
+   handle at outer `+0x190/+0x198`; its callers acquire Process objects from a
+   factory or generic actor vslot `+0xF48` and destroy them through
+   `ProcessKillTree`. No path returns a Player, FgAnim, joint workspace or body
+   animation controller.
+
+Competing hypotheses are now separated. **H1 (REJECTED):** `aim-at` drives the
+visible Player pose. This contradicts the exact torch event family and Process
+lifecycle. **H2 (STATIC):** `aim-at` drives the flashlight effect's target while
+the visible pitch is produced elsewhere in the animation/evaluator graph. This
+fits all three evidence classes and the unchanged `jf` observation. **H3
+(REJECTED):** the table is a generic Player-to-animation-process registry; the
+caller/type audit already disproved its key type.
+
+The durable IDB names are refined to
+`FlashlightProcessRegistry_FindOuterByChild`,
+`FlashlightProcessRegistry_UpdateChildState`,
+`FlashlightProcessRegistry_DispatchTorchLightState`,
+`FlashlightProcessRegistry_DispatchDetachOrFlickerAndDie`,
+`FlashlightProcessRegistry_DispatchOverrideRadius` and `DcPlayerSpawnTorch`.
+The next vertical-aim investigation must start from the active base
+animation/evaluator graph; neither this effect event nor the already rejected
+late LookAtIK/holster-IK paths justify another runtime test.
