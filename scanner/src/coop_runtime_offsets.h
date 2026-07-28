@@ -580,6 +580,15 @@ constexpr std::uintptr_t kPlayerAimBlendTickVtableSlotRva = 0x2A0B228;
 constexpr std::uintptr_t kPlayerAimBlendTickRva = 0x0CAFA20;
 constexpr std::uintptr_t kPlayerAimBlendTargetCallsiteRva = 0x0CAFB7C;
 constexpr std::uintptr_t kPlayerAimBlendTargetRva = 0x0CAE480;
+// Player vtable +0xE58. Player_Update calls this unconditionally at
+// 0x1410ECA2B; it refreshes the four authored chest/neck/AimAt world points.
+constexpr std::uintptr_t kPlayerNamedAimPointWriterVtableSlotRva =
+    kPlayerVtableRva + 0xE58;
+constexpr std::uintptr_t kPlayerNamedAimPointWriterRva = 0x10ED500;
+constexpr std::size_t kPlayerChestAimPointOffset = 0x38D0;
+constexpr std::size_t kPlayerNeckAimPointOffset = 0x38E0;
+constexpr std::size_t kPlayerNamedAimPointOffset = 0x38F0;
+constexpr std::size_t kPlayerSecondNamedAimPointOffset = 0x3900;
 // GunMoveController (Player+0x1DA8) vtable +0x38. Stock code resolves the
 // owner's route camera and writes its camera-relative world direction to
 // controller+0x150 before aim-idle turn-state selection.

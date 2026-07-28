@@ -12984,7 +12984,7 @@ The next vertical-aim investigation must start from the active base
 animation/evaluator graph; neither this effect event nor the already rejected
 late LookAtIK/holster-IK paths justify another runtime test.
 
-### 2026-07-28 STATIC / DIAGNOSTIC READY: live named aim-point writer at Player `+0xE58`
+### 2026-07-28 STATIC / IMPLEMENTED: `jh` observes the live named aim-point writer
 
 The next exact per-Player camera boundary is
 `Player_UpdateNamedChestNeckAndAimPoints 0x1410ED500`, Player vtable slot
@@ -13024,9 +13024,10 @@ equal to chest/neck, so this boundary cannot contain the leak.
 The evidence quota is met for a read-only discriminator: (1) the exact live
 Player_Update call and Player vtable identity; (2) instruction-level writes and
 screen-indexed route dataflow; (3) independent named-query and targeting-reader
-paths. The next build must wrap only Player slot `+0xE58`, call native exactly
-once, and sample before/after chest, neck, AimAt and SecondAimAt for slots 0/1
-beside local/peer camera vertical components. Written prediction: with real
+paths. Build `2026-07-28jh` wraps only Player slot `+0xE58`, calls native exactly
+once, and samples before/after chest, neck, AimAt and SecondAimAt for slots 0/1
+beside screen-0, same-screen and peer camera vertical components. It never writes
+Player, route, camera, controller, animation or packet state. Written prediction: with real
 Chloe held clearly down while the Nadine receiver looks up, then signs reversed,
 H1 produces slot-1 AimAt direction following `localCamY` and differing from
 chest/neck; H3 keeps AimAt equal to the attachment fallback. If H1 is observed,
