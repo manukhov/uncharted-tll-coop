@@ -108,10 +108,13 @@ using ResolveUpperActorRecordFunction = void*(__fastcall*)(std::uint32_t);
 using ProcessAnimCmdListSegmentFunction = std::uint32_t(__fastcall*)(
     const std::uint32_t*, std::uint32_t, const void*, std::uint32_t,
     const void*, const void*, const void*);
+using AnimCmdWriteSkinningPaletteFunction = std::int64_t(__fastcall*)(
+    std::uint16_t, const float*, const float*, const float*, float*);
 
 UpdateFunction g_original_update = nullptr;
 ProcessAnimCmdListSegmentFunction g_original_process_anim_cmd_list_segment =
     nullptr;
+AnimCmdWriteSkinningPaletteFunction g_anim_cmd_write_skinning_palette = nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
 std::atomic<void*> g_local_fganim_data{nullptr};
 std::atomic<void*> g_puppet_fganim_data{nullptr};
@@ -19933,6 +19936,124 @@ std::uint32_t normalize_tll_callback_rva(const void* callback) {
     return static_cast<std::uint32_t>(value - g_module);
 }
 
+struct AnimCmdContextOwnerProbe {
+    bool valid = false;
+    std::uint32_t screen = UINT32_MAX;
+    std::uint32_t context_flags = 0;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* target_skeleton = nullptr;
+};
+
+// Reconstruct only the native AnimCmdContext -> FgAnimData -> Player owner.
+// Unlike the case-6 selector below, this deliberately has no ADS or LRDU gate:
+// opcode 26 publishes every completed character palette, including the retained
+// Player while the receiver merely moves its local free-look camera.
+AnimCmdContextOwnerProbe probe_anim_cmd_context_owner(const void* context) {
+    AnimCmdContextOwnerProbe result{};
+    if (context == nullptr || readable_bytes(context) < 0x28) {
+        return result;
+    }
+
+    __try {
+        const auto* const context_bytes =
+            static_cast<const std::byte*>(context);
+        void* const target_skeleton =
+            *reinterpret_cast<void* const*>(context_bytes);
+        const std::uintptr_t context_word_08 =
+            *reinterpret_cast<const std::uintptr_t*>(context_bytes + 0x08);
+        void* const render_world_matrix =
+            *reinterpret_cast<void* const*>(context_bytes + 0x10);
+        void* const scratch =
+            *reinterpret_cast<void* const*>(context_bytes + 0x18);
+        const std::uint32_t context_flags =
+            *reinterpret_cast<const std::uint32_t*>(context_bytes + 0x20);
+        const std::uintptr_t matrix_value =
+            reinterpret_cast<std::uintptr_t>(render_world_matrix);
+        if (target_skeleton == nullptr ||
+            matrix_value < kFgAnimDataRenderWorldMatrixOffset) {
+            return result;
+        }
+
+        void* const fg_anim_data = reinterpret_cast<void*>(
+            matrix_value - kFgAnimDataRenderWorldMatrixOffset);
+        if (readable_bytes(fg_anim_data) < 0x2C8) {
+            return result;
+        }
+        const auto* const fg_bytes =
+            static_cast<const std::byte*>(fg_anim_data);
+        if (*reinterpret_cast<void* const*>(
+                fg_bytes + kFgAnimDataSkeletonOffset) != target_skeleton ||
+            *reinterpret_cast<const std::uintptr_t*>(fg_bytes + 0x2C0) !=
+                context_word_08 ||
+            fg_bytes + kFgAnimDataRenderWorldMatrixOffset !=
+                render_world_matrix) {
+            return result;
+        }
+
+        void* player = nullptr;
+        std::uint32_t screen = UINT32_MAX;
+        for (std::uint32_t candidate = 0;
+             candidate <= kSlot1ScreenIndex; ++candidate) {
+            void* const candidate_player =
+                retained_player_object(static_cast<int>(candidate));
+            if (candidate_player == nullptr ||
+                readable_bytes(candidate_player) < 0x4014) {
+                continue;
+            }
+            const auto* const player_bytes =
+                static_cast<const std::byte*>(candidate_player);
+            if (*reinterpret_cast<void* const*>(
+                    player_bytes + kPlayerFgAnimDataOffset) == fg_anim_data &&
+                *reinterpret_cast<const std::uint32_t*>(
+                    player_bytes + 0x4010) == candidate) {
+                player = candidate_player;
+                screen = candidate;
+                break;
+            }
+        }
+        if (player == nullptr) {
+            return result;
+        }
+
+        const auto* const player_bytes =
+            static_cast<const std::byte*>(player);
+        result.valid =
+            target_skeleton ==
+                *reinterpret_cast<void* const*>(context_bytes) &&
+            context_word_08 ==
+                *reinterpret_cast<const std::uintptr_t*>(context_bytes + 0x08) &&
+            render_world_matrix ==
+                *reinterpret_cast<void* const*>(context_bytes + 0x10) &&
+            scratch ==
+                *reinterpret_cast<void* const*>(context_bytes + 0x18) &&
+            context_flags ==
+                *reinterpret_cast<const std::uint32_t*>(context_bytes + 0x20) &&
+            target_skeleton ==
+                *reinterpret_cast<void* const*>(
+                    fg_bytes + kFgAnimDataSkeletonOffset) &&
+            context_word_08 ==
+                *reinterpret_cast<const std::uintptr_t*>(fg_bytes + 0x2C0) &&
+            fg_anim_data ==
+                *reinterpret_cast<void* const*>(
+                    player_bytes + kPlayerFgAnimDataOffset) &&
+            screen ==
+                *reinterpret_cast<const std::uint32_t*>(
+                    player_bytes + 0x4010);
+        if (!result.valid) {
+            return AnimCmdContextOwnerProbe{};
+        }
+        result.screen = screen;
+        result.context_flags = context_flags;
+        result.player = player;
+        result.fg_anim_data = fg_anim_data;
+        result.target_skeleton = target_skeleton;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return AnimCmdContextOwnerProbe{};
+    }
+    return result;
+}
+
 AimCase6ContextProbe probe_aim_case6_context(const void* context) {
     AimCase6ContextProbe result{};
     if (context == nullptr || readable_bytes(context) < 0x28) {
@@ -20798,6 +20919,393 @@ void probe_process_anim_case6(
     log_aim_case6_stages_if_due();
 }
 
+struct AimPaletteWriterScope {
+    bool valid = false;
+    float* destination = nullptr;
+    std::uint32_t first_joint = 0;
+    std::uint32_t joint_count = 0;
+    std::uint32_t processing_group = 0;
+    std::uint32_t peer_sequence = 0;
+    float peer_y = 0.0F;
+    float local_y = 0.0F;
+};
+
+thread_local AimPaletteWriterScope g_aim_palette_writer_scope{};
+
+struct AimPaletteWriterBaseline {
+    bool valid = false;
+    float* destination = nullptr;
+    std::uint32_t first_joint = 0;
+    std::uint32_t joint_count = 0;
+    std::uint32_t processing_group = 0;
+    std::array<float, kAimPipelineMaxJoints * 16> workspace{};
+    std::array<float, kAimPipelineMaxJoints * 12> bind_rows{};
+    std::array<float, kAimPipelineMaxJoints * 12> palette{};
+    std::array<float, 12> common_basis{};
+};
+
+AimPaletteWriterBaseline g_aim_palette_writer_baseline{};
+std::atomic_flag g_aim_palette_writer_busy = ATOMIC_FLAG_INIT;
+std::atomic<ULONGLONG> g_aim_palette_writer_next_log_ms{0};
+std::atomic<std::uint32_t> g_aim_palette_writer_sample_count{0};
+
+// Arm only from an opcode-26 segment whose native context maps exactly to the
+// retained screen-1 Player and whose destination is inside that FgAnimData's
+// current palette. No ADS/LRDU gate is allowed here: the observed fault occurs
+// while the receiver only moves its local free-look camera.
+void prepare_aim_palette_writer_scope(
+    const std::uint32_t* commands, std::uint32_t command_word_count,
+    const void* context_ptr, std::uint32_t processing_group) {
+    g_aim_palette_writer_scope = {};
+    if (g_dll_inert || !g_state_net.enabled || commands == nullptr ||
+        command_word_count == 0 ||
+        command_word_count > kAimCase6MaxCommandWords ||
+        readable_bytes(commands) <
+            static_cast<std::size_t>(command_word_count) *
+                sizeof(std::uint32_t)) {
+        return;
+    }
+
+    const AnimCmdContextOwnerProbe context =
+        probe_anim_cmd_context_owner(context_ptr);
+    if (!context.valid || context.screen != kSlot1ScreenIndex ||
+        context.player == nullptr || context.fg_anim_data == nullptr ||
+        context.target_skeleton == nullptr) {
+        return;
+    }
+
+    coop::StatePacket peer{};
+    if (!copy_peer_state_snapshot(peer) ||
+        (peer.flags & coop::kStateFlagPoseSeed) == 0 ||
+        !valid_network_orientation(peer.pose_seed + 4)) {
+        return;
+    }
+
+    void* const local_player = retained_player_object(0);
+    if (local_player == nullptr || readable_bytes(local_player) < 0x4014) {
+        return;
+    }
+    const auto* const local_bytes =
+        static_cast<const std::byte*>(local_player);
+    if (*reinterpret_cast<const std::uint32_t*>(local_bytes + 0x4010) != 0 ||
+        readable_bytes(local_bytes + kPlayerAimPoseQuatOffset) <
+            4 * sizeof(float)) {
+        return;
+    }
+    const float* const local_quat = reinterpret_cast<const float*>(
+        local_bytes + kPlayerAimPoseQuatOffset);
+    if (!valid_network_orientation(local_quat)) {
+        return;
+    }
+
+    float* current_palette = nullptr;
+    std::uint32_t skeleton_joint_count = 0;
+    __try {
+        current_palette = *reinterpret_cast<float* const*>(
+            static_cast<const std::byte*>(context.fg_anim_data) +
+            kFgAnimDataCurrentSkinningMatsOffset);
+        skeleton_joint_count = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(context.target_skeleton) +
+            kSkeletonJointCountOffset);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return;
+    }
+    if (current_palette == nullptr || skeleton_joint_count == 0 ||
+        skeleton_joint_count > kAimPipelineMaxJoints) {
+        return;
+    }
+
+    float* selected_destination = nullptr;
+    std::uint32_t selected_first_joint = 0;
+    std::uint32_t selected_joint_count = 0;
+    __try {
+        std::uint32_t cursor = 0;
+        while (cursor < command_word_count) {
+            const std::uint32_t header = commands[cursor];
+            const std::uint16_t opcode =
+                static_cast<std::uint16_t>(header & 0xFFFFU);
+            const std::uint16_t words =
+                static_cast<std::uint16_t>(header >> 16);
+            if (header != commands[cursor] || words == 0 ||
+                words > command_word_count - cursor) {
+                return;
+            }
+            if (opcode == 26 && words == 10) {
+                float* destination = nullptr;
+                std::memcpy(
+                    &destination, commands + cursor + 2,
+                    sizeof(destination));
+                const std::uint32_t first_joint = commands[cursor + 8];
+                const std::uint32_t joint_count = commands[cursor + 9];
+                float* const expected = current_palette +
+                    static_cast<std::size_t>(first_joint) * 12;
+                const bool range_valid = first_joint < skeleton_joint_count &&
+                    joint_count != 0 &&
+                    joint_count <= skeleton_joint_count - first_joint &&
+                    destination == expected;
+                if (range_valid && joint_count > selected_joint_count) {
+                    selected_destination = destination;
+                    selected_first_joint = first_joint;
+                    selected_joint_count = joint_count;
+                }
+            }
+            if (header != commands[cursor]) {
+                return;
+            }
+            cursor += words;
+        }
+        if (cursor != command_word_count) {
+            return;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return;
+    }
+    if (selected_destination == nullptr || selected_joint_count == 0) {
+        return;
+    }
+
+    float peer_x = 0.0F, peer_y = 0.0F, peer_z = 0.0F;
+    float local_x = 0.0F, local_y = 0.0F, local_z = 0.0F;
+    quat_forward_pos_z(peer.pose_seed + 4, peer_x, peer_y, peer_z);
+    quat_forward_pos_z(local_quat, local_x, local_y, local_z);
+    if (!std::isfinite(peer_y) || !std::isfinite(local_y) ||
+        std::fabs(peer_y - local_y) < 0.20F) {
+        return;
+    }
+
+    g_aim_palette_writer_scope.valid = true;
+    g_aim_palette_writer_scope.destination = selected_destination;
+    g_aim_palette_writer_scope.first_joint = selected_first_joint;
+    g_aim_palette_writer_scope.joint_count = selected_joint_count;
+    g_aim_palette_writer_scope.processing_group = processing_group;
+    g_aim_palette_writer_scope.peer_sequence = peer.sequence;
+    g_aim_palette_writer_scope.peer_y = peer_y;
+    g_aim_palette_writer_scope.local_y = local_y;
+}
+
+std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
+    std::uint16_t joint_count, const float* workspace,
+    const float* bind_rows, const float* common_basis, float* destination) {
+    const auto native = g_anim_cmd_write_skinning_palette;
+    if (native == nullptr) {
+        return 0;
+    }
+
+    // The game writer runs exactly once with its original arguments. Sampling
+    // happens only after it returns and never writes back into any game buffer.
+    const std::int64_t result = native(
+        joint_count, workspace, bind_rows, common_basis, destination);
+
+    const AimPaletteWriterScope scope = g_aim_palette_writer_scope;
+    if (!scope.valid || workspace == nullptr || bind_rows == nullptr ||
+        common_basis == nullptr || destination == nullptr ||
+        destination != scope.destination || joint_count == 0 ||
+        joint_count != scope.joint_count) {
+        return result;
+    }
+
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG due =
+        g_aim_palette_writer_next_log_ms.load(std::memory_order_acquire);
+    if (now < due ||
+        !g_aim_palette_writer_next_log_ms.compare_exchange_strong(
+            due, now + 350, std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
+        return result;
+    }
+    const std::uint32_t sample =
+        g_aim_palette_writer_sample_count.fetch_add(
+            1, std::memory_order_acq_rel);
+    if (sample >= 24 ||
+        g_aim_palette_writer_busy.test_and_set(std::memory_order_acquire)) {
+        return result;
+    }
+
+    const std::size_t workspace_bytes =
+        static_cast<std::size_t>(joint_count) * 16 * sizeof(float);
+    const std::size_t row_bytes =
+        static_cast<std::size_t>(joint_count) * 12 * sizeof(float);
+    if (readable_bytes(workspace) < workspace_bytes ||
+        readable_bytes(bind_rows) < row_bytes ||
+        readable_bytes(common_basis) < 12 * sizeof(float) ||
+        readable_bytes(destination) < row_bytes) {
+        g_aim_palette_writer_busy.clear(std::memory_order_release);
+        return result;
+    }
+
+    AimPaletteWriterBaseline& baseline = g_aim_palette_writer_baseline;
+    const bool reset = !baseline.valid ||
+        baseline.destination != destination ||
+        baseline.first_joint != scope.first_joint ||
+        baseline.joint_count != joint_count ||
+        baseline.processing_group != scope.processing_group;
+    std::array<std::uint32_t, 4> top_indices{};
+    std::array<float, 4> top_scores{};
+    std::array<float, 4> top_workspace_delta{};
+    std::array<float, 4> top_bind_delta{};
+    std::array<float, 4> top_palette_delta{};
+    std::uint64_t workspace_hash = kAimPipelineFnvOffset;
+    std::uint64_t bind_hash = kAimPipelineFnvOffset;
+    std::uint64_t basis_hash = kAimPipelineFnvOffset;
+    std::uint64_t palette_hash = kAimPipelineFnvOffset;
+    float basis_delta_sq = 0.0F;
+    bool finite = true;
+
+    __try {
+        for (std::uint32_t joint = 0; joint < joint_count; ++joint) {
+            const float* const current_workspace = workspace +
+                static_cast<std::size_t>(joint) * 16;
+            const float* const current_bind = bind_rows +
+                static_cast<std::size_t>(joint) * 12;
+            const float* const current_palette = destination +
+                static_cast<std::size_t>(joint) * 12;
+            float workspace_delta_sq = 0.0F;
+            float bind_delta_sq = 0.0F;
+            float palette_delta_sq = 0.0F;
+            for (std::size_t component = 0; component < 16; ++component) {
+                const float value = current_workspace[component];
+                if (!std::isfinite(value)) {
+                    finite = false;
+                    break;
+                }
+                std::uint32_t bits = 0;
+                std::memcpy(&bits, &value, sizeof(bits));
+                workspace_hash = aim_pipeline_hash_word(workspace_hash, bits);
+                if (!reset) {
+                    const float delta = value - baseline.workspace[
+                        static_cast<std::size_t>(joint) * 16 + component];
+                    workspace_delta_sq += delta * delta;
+                }
+            }
+            for (std::size_t component = 0;
+                 finite && component < 12; ++component) {
+                const std::size_t index =
+                    static_cast<std::size_t>(joint) * 12 + component;
+                const float bind_value = current_bind[component];
+                const float palette_value = current_palette[component];
+                if (!std::isfinite(bind_value) ||
+                    !std::isfinite(palette_value)) {
+                    finite = false;
+                    break;
+                }
+                std::uint32_t bind_bits = 0;
+                std::uint32_t palette_bits = 0;
+                std::memcpy(&bind_bits, &bind_value, sizeof(bind_bits));
+                std::memcpy(&palette_bits, &palette_value, sizeof(palette_bits));
+                bind_hash = aim_pipeline_hash_word(bind_hash, bind_bits);
+                palette_hash = aim_pipeline_hash_word(
+                    palette_hash, palette_bits);
+                if (!reset) {
+                    const float bind_delta =
+                        bind_value - baseline.bind_rows[index];
+                    const float palette_delta =
+                        palette_value - baseline.palette[index];
+                    bind_delta_sq += bind_delta * bind_delta;
+                    palette_delta_sq += palette_delta * palette_delta;
+                }
+            }
+            if (!finite) {
+                break;
+            }
+            const float workspace_delta = std::sqrt(workspace_delta_sq);
+            const float bind_delta = std::sqrt(bind_delta_sq);
+            const float palette_delta = std::sqrt(palette_delta_sq);
+            const float score = workspace_delta + bind_delta + palette_delta;
+            for (std::size_t rank = 0; rank < top_scores.size(); ++rank) {
+                if (score > top_scores[rank]) {
+                    for (std::size_t move = top_scores.size() - 1;
+                         move > rank; --move) {
+                        top_scores[move] = top_scores[move - 1];
+                        top_indices[move] = top_indices[move - 1];
+                        top_workspace_delta[move] =
+                            top_workspace_delta[move - 1];
+                        top_bind_delta[move] = top_bind_delta[move - 1];
+                        top_palette_delta[move] =
+                            top_palette_delta[move - 1];
+                    }
+                    top_scores[rank] = score;
+                    top_indices[rank] = joint;
+                    top_workspace_delta[rank] = workspace_delta;
+                    top_bind_delta[rank] = bind_delta;
+                    top_palette_delta[rank] = palette_delta;
+                    break;
+                }
+            }
+        }
+        for (std::size_t component = 0;
+             finite && component < 12; ++component) {
+            const float value = common_basis[component];
+            if (!std::isfinite(value)) {
+                finite = false;
+                break;
+            }
+            std::uint32_t bits = 0;
+            std::memcpy(&bits, &value, sizeof(bits));
+            basis_hash = aim_pipeline_hash_word(basis_hash, bits);
+            if (!reset) {
+                const float delta = value - baseline.common_basis[component];
+                basis_delta_sq += delta * delta;
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        finite = false;
+    }
+
+    if (finite) {
+        char top[512]{};
+        std::size_t used = 0;
+        if (reset) {
+            used = static_cast<std::size_t>(
+                std::snprintf(top, sizeof(top), "baseline"));
+        } else {
+            for (std::size_t rank = 0; rank < top_indices.size(); ++rank) {
+                const int written = std::snprintf(
+                    top + used, sizeof(top) - used,
+                    "%u:%.4f/%.4f/%.4f%s",
+                    scope.first_joint + top_indices[rank],
+                    top_workspace_delta[rank], top_bind_delta[rank],
+                    top_palette_delta[rank],
+                    rank + 1 == top_indices.size() ? "" : ";");
+                if (written <= 0 ||
+                    static_cast<std::size_t>(written) >= sizeof(top) - used) {
+                    break;
+                }
+                used += static_cast<std::size_t>(written);
+            }
+        }
+
+        char line[1536]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-PALETTE-WRITER-JK sample=%u seq=%u peerY=%.4f localY=%.4f "
+            "group=%u first=%u count=%u reset=%u "
+            "workspace=%016llX bind=%016llX basis=%016llX palette=%016llX "
+            "basisDelta=%.5f topW/B/P=%s",
+            sample + 1, scope.peer_sequence, scope.peer_y, scope.local_y,
+            scope.processing_group, scope.first_joint, scope.joint_count,
+            static_cast<unsigned>(reset),
+            static_cast<unsigned long long>(workspace_hash),
+            static_cast<unsigned long long>(bind_hash),
+            static_cast<unsigned long long>(basis_hash),
+            static_cast<unsigned long long>(palette_hash),
+            std::sqrt(basis_delta_sq), top);
+        boot_log_line(line);
+
+        std::memcpy(baseline.workspace.data(), workspace, workspace_bytes);
+        std::memcpy(baseline.bind_rows.data(), bind_rows, row_bytes);
+        std::memcpy(baseline.palette.data(), destination, row_bytes);
+        std::memcpy(
+            baseline.common_basis.data(), common_basis, 12 * sizeof(float));
+        baseline.valid = true;
+        baseline.destination = destination;
+        baseline.first_joint = scope.first_joint;
+        baseline.joint_count = joint_count;
+        baseline.processing_group = scope.processing_group;
+    }
+    g_aim_palette_writer_busy.clear(std::memory_order_release);
+    return result;
+}
+
 std::uint32_t __fastcall hooked_process_anim_cmd_list_segment(
     const std::uint32_t* commands, std::uint32_t command_word_count,
     const void* context, std::uint32_t processing_group,
@@ -20809,12 +21317,17 @@ std::uint32_t __fastcall hooked_process_anim_cmd_list_segment(
     const AimCommonOutputPending common_output =
         prepare_aim_common_output_probe(
             commands, command_word_count, context, processing_group);
+    const AimPaletteWriterScope previous_palette_scope =
+        g_aim_palette_writer_scope;
+    prepare_aim_palette_writer_scope(
+        commands, command_word_count, context, processing_group);
     const std::uint32_t result =
         g_original_process_anim_cmd_list_segment != nullptr
         ? g_original_process_anim_cmd_list_segment(
               commands, command_word_count, context, processing_group,
               callback_a5, callback_a6, callback_a7)
         : 0;
+    g_aim_palette_writer_scope = previous_palette_scope;
     log_aim_common_output_after(common_output);
     return result;
 }
@@ -20834,6 +21347,70 @@ bool install_aim_case6_probe() {
     g_original_process_anim_cmd_list_segment =
         reinterpret_cast<ProcessAnimCmdListSegmentFunction>(trampoline);
     boot_log_line("aim case-6 read-only probe installed");
+    return true;
+}
+
+bool install_aim_palette_writer_probe() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kAnimCmdWriteSkinningPaletteCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line(
+            "aim palette writer probe SKIPPED (callsite is not E8)");
+        return false;
+    }
+    std::int32_t displacement = 0;
+    std::memcpy(&displacement, call_site + 1, sizeof(displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(displacement);
+    const std::uintptr_t expected =
+        g_module + kAnimCmdWriteSkinningPaletteRva;
+    if (target != expected) {
+        boot_log_line(
+            "aim palette writer probe SKIPPED (unexpected target)");
+        return false;
+    }
+    g_anim_cmd_write_skinning_palette =
+        reinterpret_cast<AnimCmdWriteSkinningPaletteFunction>(expected);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line(
+            "aim palette writer probe SKIPPED (relay allocation)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_anim_cmd_write_skinning_palette);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("aim palette writer probe SKIPPED (rel32 range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("aim palette writer probe SKIPPED (VirtualProtect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line(
+        "aim opcode-26 palette writer probe installed (0x141ABAE8C)");
     return true;
 }
 
@@ -24637,6 +25214,10 @@ constexpr bool g_enable_aim_diagnostic_probes = false;
 // through later blend/plugin commands and the final FgAnimData+0x230 palette.
 // Four samples per signature/screen, no native calls or game-memory writes.
 constexpr bool g_enable_aim_case6_probe = true;
+// Build jk: repeat the final opcode-26 writer discriminator without the invalid
+// ADS/LRDU/same-segment gates from iy. Exact context ownership and palette range
+// are retained; the native writer runs once before bounded read-only sampling.
+constexpr bool g_enable_aim_palette_writer_probe = true;
 
 
 // ============================================================================
@@ -41376,8 +41957,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-28jj "
-        "(read-only NetAnim SecondAimAt consumer probe)");
+        "TLL co-op runtime init 2026-07-28jk "
+        "(retained opcode-26 palette source discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -41463,6 +42044,9 @@ DWORD WINAPI install_hook(void*) {
         install_native_aim_foot_turn_relays();
         if (g_enable_aim_case6_probe) {
             install_aim_case6_probe();
+        }
+        if (g_enable_aim_palette_writer_probe) {
+            install_aim_palette_writer_probe();
         }
         if (g_enable_puppet_fganim_world_aim_turn) {
             install_fganim_world_aim_turn_callsite_relay();

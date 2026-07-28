@@ -13178,3 +13178,77 @@ site in this family. Do not patch `0x1410ED500`, `Player+0xF130/+0x1D59`, the
 NPC hub, or the run-and-gun controller for the vertical aim bug. The next search
 must start from a campaign-live Player animation command/base-state input and
 trace forward to FgAnim/joints, not from another camera-derived output field.
+
+### 2026-07-28 STATIC / IMPLEMENTED: `jk` reaches the final campaign Player palette writer
+
+The campaign-live command source is now separated from two misleading network
+fields. `NetEventCharacterMove_FillAnimCmdBitStream 0x140BC4E60` reads the real
+`AnimControl*` from `Player+0x1A0`, builds its command list through
+`AnimControl_CreateAnimCommands 0x14172C370`, and derives the evaluator context
+from `Player+0x1A8` FgAnimData. Its fourth argument, supplied from
+`Player+0x3FC8`, is explicitly asserted and used as `pArtGroups`; it is only a
+32-pointer `NetSnapshot::AnimArtGroup` lookup table and is normally null in
+campaign. `Player+0x1B30` is not a hidden Player command generator either: the
+Player constructor clears that qword and never calls
+`NetAnimCmdGenerator_Initialize`; the inline generator belongs to the separate
+`NetCharacter` vtable path.
+
+Four independent evidence types meet the runtime quota for the final palette
+boundary:
+
+1. Exact instruction dataflow in the serializer distinguishes
+   `Player+0x1A0` AnimControl, `Player+0x1A8` FgAnimData and the independent
+   `Player+0x3FC8` art-group lookup.
+2. `AnimControl_CreateAnimCommands` has two converging callers: the network
+   serializer at `0x140BC4FFF` and the normal campaign/render caller at
+   `0x141A8FDFE` inside `AnimManager_CreateAnimCmdsForObject 0x141A8FCF0`.
+3. The normal caller-owned command-list pointer/count passes unchanged through
+   `AnimManager_PerformAnimBlend 0x141A92260` to
+   `ProcessAnimCmdListSegment 0x141AB97C0` at `0x141A92759`. Builds `eo..es`
+   independently confirmed exact retained Player/FgAnim ownership and live
+   screen-1 case-6 evaluation on that consumer.
+4. Opcode 26 is a ten-word command whose destination is bounded to
+   `FgAnimData+0x230 + firstJoint*0x30`. Its only direct writer call is
+   `0x141ABAE8C -> AnimCmdEvaluator_WriteSkinningPalette 0x14218B170`, with
+   64-byte workspace input, 48-byte bind rows, one common 3x4 basis and
+   48-byte final palette output per joint.
+
+The prior build `iy` was inconclusive because its diagnostic admission required
+the retained Player to pass `peer_packet_aim_active`, active LRDU >= 0.20 and the
+case-6 context in the same command-list segment. The user has since proved the
+fault while the receiver is not aiming at all, and build `es` proved that the
+selected case-6 segment can contain zero opcode-26 commands. Those gates could
+therefore suppress every real final-writer call and are removed rather than
+interpreting the old zero rows as a negative result.
+
+The competing hypotheses are now:
+
+- **P1:** receiver-local vertical look is already present in the 64-byte/joint
+  evaluator workspace before `0x14218B170`;
+- **P2:** workspace remains peer-stable, but bind rows or the common basis carry
+  receiver-local look into the 48-byte/joint palette conversion;
+- **P3:** workspace, bind/basis and final palette remain peer-stable while the
+  visible retained character still moves, placing the contamination after
+  `FgAnimData+0x230` in render/attachment consumption.
+
+Read-only build `2026-07-28jk` arms from any opcode-26 segment only when the
+native context double-maps to retained screen 1 and the command destination
+equals the exact current `FgAnimData+0x230` subrange. It requires a fresh remote
+pose seed whose vertical direction differs from the receiver's screen-0 route,
+but deliberately requires neither receiver ADS nor retained LRDU. A TLS scope
+carries only destination/range/group and scalar directions into the nested
+writer. The original writer executes exactly once with unchanged arguments;
+after return, at most 24 bounded samples hash and compare workspace, bind rows,
+common basis and palette. No late Player/FgAnim pointer is retained, no engine
+function is called from the nested writer, and no game data is written.
+
+Written prediction: keep the remote owner stationary and aiming clearly down or
+straight so its pose seed stays fresh; on the receiving copy remain out of ADS
+and move the local camera sky -> ground -> sky. Normal animation plus
+`AIM-PALETTE-WRITER-JK` rows with stable `peerY` and changing `localY` is required.
+Workspace deltas following `localY` select P1. Stable workspace with changing
+bind/basis and palette selects P2. Stable workspace, bind/basis and palette while
+the visible puppet still follows `localY` selects P3. No rows despite a confirmed
+install and opposing fresh directions is an admission failure, not a semantic
+result. A crash, stutter or visible model/animation change invalidates the probe
+and requires its immediate removal.

@@ -1989,6 +1989,22 @@ Do not reopen these as the first move:
       command source toward FgAnim/joints; do not patch `0x1410ED500`,
       `+0xF130/+0x1D59`, the NPC hub, or `PlayerRunNGunController` without new
       reachability and receiver-identity evidence.
+- [x] Trace the campaign-live Player command source to the final palette writer.
+      `Player+0x1A0 AnimControl -> AnimControl_CreateAnimCommands 0x14172C370 ->
+      AnimManager_CreateAnimCmdsForObject 0x141A8FCF0 ->
+      AnimManager_PerformAnimBlend 0x141A92260 -> ProcessAnimCmdListSegment
+      0x141AB97C0 -> opcode 26 -> 0x141ABAE8C ->
+      AnimCmdEvaluator_WriteSkinningPalette 0x14218B170 -> FgAnimData+0x230`.
+      Reject `Player+0x3FC8` as the MP-only pArtGroups table and `Player+0x1B30`
+      as a NetCharacter-only generator location. The four-part evidence quota,
+      competitors and corrected `iy` gate analysis are in `COOP_STATUS.md`.
+- [ ] Run read-only build `jk`: remote owner stationary in strong ADS with a
+      stable down/straight pose; receiver out of ADS moves its local camera
+      sky -> ground -> sky. Require normal animation and bounded
+      `AIM-PALETTE-WRITER-JK` rows. Workspace/local correlation selects
+      pre-writer contamination; stable workspace with bind/basis/palette change
+      selects conversion; all stable while the visual moves selects a
+      post-`FgAnimData+0x230` consumer. Zero rows is admission failure only.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

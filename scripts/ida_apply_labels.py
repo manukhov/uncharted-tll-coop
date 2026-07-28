@@ -8186,15 +8186,17 @@ FUNCTIONS = {
     ),
     0x140BC4E60: (
         "NetEventCharacterMove_FillAnimCmdBitStream",
-        "Serializes the native animation command list into a 4096-bit stream. "
-        "Handles clips, blending, pose/snapshot commands, hierarchy and output "
-        "commands; this is the current source-side synchronization target.",
+        "Builds native animation commands from Player+0x1A0 AnimControl via "
+        "AnimControl_CreateAnimCommands, then serializes them into a 4096-bit "
+        "stream. Its fourth argument is the multiplayer-only pArtGroups lookup "
+        "table (Player+0x3FC8), not the animation-command source.",
     ),
     0x140BC2970: (
         "NetEventCharacterMove_FillPlayer",
         "Fills a CharacterMove event for a Player and invokes "
-        "FillAnimCmdBitStream. Requires a live NetPlayerTracker, so the core "
-        "serializer must be called directly in campaign.",
+        "FillAnimCmdBitStream with Player+0x3FC8 as pArtGroups. Campaign leaves "
+        "that multiplayer-only table null; do not force this network serializer "
+        "as a replacement for the live AnimManager command path.",
     ),
     0x140BC3760: ("NetEventCharacterMove_FillNpc", "NPC CharacterMove event fill path; also invokes FillAnimCmdBitStream."),
     0x140BBD730: (
