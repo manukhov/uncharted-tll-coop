@@ -108,10 +108,16 @@ using ResolveUpperActorRecordFunction = void*(__fastcall*)(std::uint32_t);
 using ProcessAnimCmdListSegmentFunction = std::uint32_t(__fastcall*)(
     const std::uint32_t*, std::uint32_t, const void*, std::uint32_t,
     const void*, const void*, const void*);
+using AnimCmdExecuteJointProgramsFunction = std::uint32_t*(__fastcall*)(
+    std::uint32_t*, const void*);
+using AnimCmdWriteSkinningPaletteFunction = std::int64_t(__fastcall*)(
+    std::uint16_t, const float*, const float*, const float*, float*);
 
 UpdateFunction g_original_update = nullptr;
 ProcessAnimCmdListSegmentFunction g_original_process_anim_cmd_list_segment =
     nullptr;
+AnimCmdExecuteJointProgramsFunction g_anim_cmd_execute_joint_programs = nullptr;
+AnimCmdWriteSkinningPaletteFunction g_anim_cmd_write_skinning_palette = nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
 std::atomic<void*> g_local_fganim_data{nullptr};
 std::atomic<void*> g_puppet_fganim_data{nullptr};
@@ -20798,6 +20804,661 @@ void probe_process_anim_case6(
     log_aim_case6_stages_if_due();
 }
 
+struct AimJointBoundaryOwner {
+    bool valid = false;
+    std::uint32_t screen = UINT32_MAX;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* target_skeleton = nullptr;
+};
+
+AimJointBoundaryOwner probe_aim_joint_boundary_owner(const void* context) {
+    AimJointBoundaryOwner result{};
+    if (context == nullptr || readable_bytes(context) < 0x28) {
+        return result;
+    }
+    __try {
+        const auto* const bytes = static_cast<const std::byte*>(context);
+        void* const target_skeleton =
+            *reinterpret_cast<void* const*>(bytes);
+        const std::uintptr_t context_word_08 =
+            *reinterpret_cast<const std::uintptr_t*>(bytes + 0x08);
+        const std::uintptr_t render_matrix =
+            reinterpret_cast<std::uintptr_t>(
+                *reinterpret_cast<void* const*>(bytes + 0x10));
+        if (target_skeleton == nullptr ||
+            render_matrix < kFgAnimDataRenderWorldMatrixOffset) {
+            return result;
+        }
+        void* const fg_anim_data = reinterpret_cast<void*>(
+            render_matrix - kFgAnimDataRenderWorldMatrixOffset);
+        if (readable_bytes(fg_anim_data) < 0x2C8) {
+            return result;
+        }
+        const auto* const fg = static_cast<const std::byte*>(fg_anim_data);
+        if (*reinterpret_cast<void* const*>(
+                fg + kFgAnimDataSkeletonOffset) != target_skeleton ||
+            *reinterpret_cast<const std::uintptr_t*>(fg + 0x2C0) !=
+                context_word_08 ||
+            reinterpret_cast<std::uintptr_t>(
+                fg + kFgAnimDataRenderWorldMatrixOffset) != render_matrix) {
+            return result;
+        }
+        for (std::uint32_t screen = 0;
+             screen <= kSlot1ScreenIndex; ++screen) {
+            void* const player = retained_player_object(
+                static_cast<int>(screen));
+            if (player == nullptr || readable_bytes(player) < 0x4014) {
+                continue;
+            }
+            const auto* const player_bytes =
+                static_cast<const std::byte*>(player);
+            if (*reinterpret_cast<void* const*>(
+                    player_bytes + kPlayerFgAnimDataOffset) == fg_anim_data &&
+                *reinterpret_cast<const std::uint32_t*>(
+                    player_bytes + 0x4010) == screen) {
+                result.valid = true;
+                result.screen = screen;
+                result.player = player;
+                result.fg_anim_data = fg_anim_data;
+                result.target_skeleton = target_skeleton;
+                break;
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return AimJointBoundaryOwner{};
+    }
+    return result;
+}
+
+struct AimJointBoundaryScope {
+    bool valid = false;
+    const void* context = nullptr;
+    void* target_skeleton = nullptr;
+    float* destination = nullptr;
+    std::uint32_t processing_group = 0;
+    std::uint32_t first_joint = 0;
+    std::uint32_t joint_count = 0;
+    std::uint32_t peer_sequence = 0;
+    std::uint32_t peer_source = 0;
+    std::uint32_t case24_count = 0;
+    float peer_y = 0.0F;
+    float local_y = 0.0F;
+};
+
+thread_local AimJointBoundaryScope g_aim_joint_boundary_scope{};
+
+struct AimJointProgramInventory {
+    bool valid = false;
+    std::uint32_t program_count = 0;
+    std::uint32_t operator_count = 0;
+    std::uint32_t op54_count = 0;
+    std::uint32_t matrix_writer_count = 0;
+    std::uint32_t palette_reader_count = 0;
+    std::uint32_t custom_count = 0;
+    std::uint64_t hash = kAimPipelineFnvOffset;
+};
+
+struct AimJointBoundaryCapture {
+    bool valid = false;
+    const float* source_workspace = nullptr;
+    AimJointProgramInventory programs{};
+    float in_call_joint_params_delta = 0.0F;
+    std::uint64_t pre_joint_params_hash = kAimPipelineFnvOffset;
+    std::uint64_t post_joint_params_hash = kAimPipelineFnvOffset;
+    std::uint64_t post_workspace_hash = kAimPipelineFnvOffset;
+    std::array<float, kAimPipelineMaxJoints * 12> pre_joint_params{};
+    std::array<float, kAimPipelineMaxJoints * 12> post_joint_params{};
+    std::array<float, kAimPipelineMaxJoints * 16> post_workspace{};
+};
+
+thread_local AimJointBoundaryCapture g_aim_joint_boundary_capture{};
+
+struct AimJointBoundaryBaseline {
+    bool valid = false;
+    std::uint32_t first_joint = 0;
+    std::uint32_t joint_count = 0;
+    float peer_y = 0.0F;
+    float local_y = 0.0F;
+    std::array<float, kAimPipelineMaxJoints * 12> pre_joint_params{};
+    std::array<float, kAimPipelineMaxJoints * 16> post_workspace{};
+};
+
+constexpr std::size_t kAimJointBoundaryMaxGroups = 8;
+SRWLOCK g_aim_joint_boundary_lock = SRWLOCK_INIT;
+std::array<AimJointBoundaryBaseline, kAimJointBoundaryMaxGroups>
+    g_aim_joint_boundary_baselines{};
+std::array<std::atomic<ULONGLONG>, kAimJointBoundaryMaxGroups>
+    g_aim_joint_boundary_next_log_ms{};
+std::array<std::atomic<std::uint32_t>, kAimJointBoundaryMaxGroups>
+    g_aim_joint_boundary_sample_count{};
+
+bool aim_hash_floats(
+    const float* values, std::size_t count, std::uint64_t& hash) {
+    hash = kAimPipelineFnvOffset;
+    for (std::size_t index = 0; index < count; ++index) {
+        const float value = values[index];
+        if (!std::isfinite(value)) {
+            return false;
+        }
+        std::uint32_t bits = 0;
+        std::memcpy(&bits, &value, sizeof(bits));
+        hash = aim_pipeline_hash_word(hash, bits);
+    }
+    return true;
+}
+
+AimJointProgramInventory inventory_aim_joint_programs(
+    const void* target_skeleton, const void* group_descriptor) {
+    AimJointProgramInventory result{};
+    if (target_skeleton == nullptr || group_descriptor == nullptr ||
+        readable_bytes(target_skeleton) < 0x38 ||
+        readable_bytes(group_descriptor) < 0x10) {
+        return result;
+    }
+    __try {
+        const auto* const skeleton =
+            static_cast<const std::byte*>(target_skeleton);
+        const auto* const group =
+            static_cast<const std::byte*>(group_descriptor);
+        const std::uint32_t table_offset =
+            *reinterpret_cast<const std::uint32_t*>(skeleton + 0x34);
+        const std::uint16_t first_program =
+            *reinterpret_cast<const std::uint16_t*>(group + 0x06);
+        const std::uint8_t program_count =
+            *reinterpret_cast<const std::uint8_t*>(group + 0x0F);
+        if (table_offset == 0 || program_count > 64) {
+            return result;
+        }
+        const auto* const records = skeleton + table_offset +
+            static_cast<std::size_t>(first_program) * 8 + 4;
+        if (readable_bytes(records) <
+            static_cast<std::size_t>(program_count) * 8) {
+            return result;
+        }
+        result.program_count = program_count;
+        for (std::uint32_t program = 0;
+             program < program_count; ++program) {
+            const std::uint32_t stream_offset =
+                *reinterpret_cast<const std::uint32_t*>(records + program * 8);
+            const auto* cursor = reinterpret_cast<const std::uint16_t*>(
+                skeleton + stream_offset);
+            if (stream_offset == 0 || readable_bytes(cursor) < 2) {
+                return AimJointProgramInventory{};
+            }
+            bool terminated = false;
+            for (std::uint32_t operator_index = 0;
+                 operator_index < 256; ++operator_index) {
+                const std::uint16_t header = *cursor;
+                const std::uint8_t opcode =
+                    static_cast<std::uint8_t>(header & 0xFF);
+                const std::uint8_t words =
+                    static_cast<std::uint8_t>(header >> 8);
+                result.hash = aim_pipeline_hash_word(result.hash, header);
+                if (opcode == 0) {
+                    terminated = true;
+                    break;
+                }
+                if (words > 64 || readable_bytes(cursor) <
+                        static_cast<std::size_t>(words + 1) * 2) {
+                    return AimJointProgramInventory{};
+                }
+                ++result.operator_count;
+                if (opcode >= 0x80) {
+                    ++result.custom_count;
+                }
+                if (opcode == 54) {
+                    ++result.op54_count;
+                } else if (opcode == 57) {
+                    ++result.palette_reader_count;
+                }
+                const std::uint16_t* const payload = cursor + 1;
+                std::uint16_t destination = 0;
+                bool matrix_writer = false;
+                if (opcode == 55 && words >= 4) {
+                    destination = payload[3];
+                    matrix_writer = true;
+                } else if (opcode == 56 && words >= 5) {
+                    destination = payload[4];
+                    matrix_writer = true;
+                } else if ((opcode == 58 || opcode == 59) && words >= 4) {
+                    destination = payload[3];
+                    matrix_writer = true;
+                }
+                if (matrix_writer && (destination & 3U) == 1U) {
+                    ++result.matrix_writer_count;
+                }
+                for (std::uint32_t word = 0; word < words; ++word) {
+                    result.hash = aim_pipeline_hash_word(
+                        result.hash, payload[word]);
+                }
+                cursor += static_cast<std::size_t>(words) + 1;
+            }
+            if (!terminated) {
+                return AimJointProgramInventory{};
+            }
+        }
+        result.valid = true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return AimJointProgramInventory{};
+    }
+    return result;
+}
+
+void prepare_aim_joint_boundary_scope(
+    const std::uint32_t* commands, std::uint32_t command_word_count,
+    const void* context, std::uint32_t processing_group) {
+    g_aim_joint_boundary_scope = {};
+    g_aim_joint_boundary_capture.valid = false;
+    if (g_dll_inert || !g_state_net.enabled || commands == nullptr ||
+        command_word_count == 0 ||
+        command_word_count > kAimCase6MaxCommandWords ||
+        processing_group >= kAimJointBoundaryMaxGroups ||
+        readable_bytes(commands) <
+            static_cast<std::size_t>(command_word_count) *
+                sizeof(std::uint32_t)) {
+        return;
+    }
+    const ULONGLONG now = GetTickCount64();
+    if (g_aim_joint_boundary_sample_count[processing_group].load(
+            std::memory_order_acquire) >= 20 ||
+        now < g_aim_joint_boundary_next_log_ms[processing_group].load(
+            std::memory_order_acquire)) {
+        return;
+    }
+    const AimJointBoundaryOwner owner =
+        probe_aim_joint_boundary_owner(context);
+    if (!owner.valid || owner.screen != kSlot1ScreenIndex ||
+        owner.fg_anim_data == nullptr || owner.target_skeleton == nullptr) {
+        return;
+    }
+    float* current_palette = nullptr;
+    std::uint32_t skeleton_joint_count = 0;
+    __try {
+        current_palette = *reinterpret_cast<float* const*>(
+            static_cast<const std::byte*>(owner.fg_anim_data) +
+            kFgAnimDataCurrentSkinningMatsOffset);
+        skeleton_joint_count = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(owner.target_skeleton) +
+            kSkeletonJointCountOffset);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return;
+    }
+    if (current_palette == nullptr || skeleton_joint_count == 0 ||
+        skeleton_joint_count > kAimPipelineMaxJoints) {
+        return;
+    }
+
+    std::uint32_t case16_count = 0;
+    std::uint32_t case24_count = 0;
+    float* selected_destination = nullptr;
+    std::uint32_t selected_first = 0;
+    std::uint32_t selected_count = 0;
+    __try {
+        std::uint32_t cursor = 0;
+        while (cursor < command_word_count) {
+            const std::uint32_t header = commands[cursor];
+            const std::uint16_t opcode =
+                static_cast<std::uint16_t>(header & 0xFFFFU);
+            const std::uint16_t words =
+                static_cast<std::uint16_t>(header >> 16);
+            if (words == 0 || words > command_word_count - cursor) {
+                return;
+            }
+            if (opcode == 16) {
+                ++case16_count;
+            } else if (opcode == 24) {
+                ++case24_count;
+            } else if (opcode == 26 && words == 10) {
+                float* destination = nullptr;
+                std::memcpy(
+                    &destination, commands + cursor + 2,
+                    sizeof(destination));
+                const std::uint32_t first = commands[cursor + 8];
+                const std::uint32_t count = commands[cursor + 9];
+                const bool range_valid = first < skeleton_joint_count &&
+                    count != 0 && count <= skeleton_joint_count - first &&
+                    destination == current_palette +
+                        static_cast<std::size_t>(first) * 12;
+                if (range_valid && count > selected_count) {
+                    selected_destination = destination;
+                    selected_first = first;
+                    selected_count = count;
+                }
+            }
+            cursor += words;
+        }
+        if (cursor != command_word_count) {
+            return;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return;
+    }
+    if (case16_count != 1 || selected_destination == nullptr ||
+        selected_count == 0) {
+        return;
+    }
+
+    coop::StatePacket peer{};
+    if (!copy_peer_state_snapshot(peer)) {
+        return;
+    }
+    const float* peer_quat = nullptr;
+    std::uint32_t peer_source = 0;
+    if ((peer.flags & coop::kStateFlagPoseSeed) != 0 &&
+        valid_network_orientation(peer.pose_seed + 4)) {
+        peer_quat = peer.pose_seed + 4;
+        peer_source = 1;
+    } else if (peer_packet_free_look_active(peer)) {
+        peer_quat = peer.camera_quat;
+        peer_source = 2;
+    }
+    void* const local_player = retained_player_object(0);
+    if (peer_quat == nullptr || local_player == nullptr ||
+        readable_bytes(local_player) <
+            kPlayerAimPoseQuatOffset + 4 * sizeof(float)) {
+        return;
+    }
+    const float* const local_quat = reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(local_player) +
+        kPlayerAimPoseQuatOffset);
+    if (!valid_network_orientation(local_quat)) {
+        return;
+    }
+    float peer_x = 0.0F, peer_y = 0.0F, peer_z = 0.0F;
+    float local_x = 0.0F, local_y = 0.0F, local_z = 0.0F;
+    quat_forward_pos_z(peer_quat, peer_x, peer_y, peer_z);
+    quat_forward_pos_z(local_quat, local_x, local_y, local_z);
+    if (!std::isfinite(peer_y) || !std::isfinite(local_y) ||
+        std::fabs(peer_y - local_y) < 0.20F) {
+        return;
+    }
+
+    auto& scope = g_aim_joint_boundary_scope;
+    scope.valid = true;
+    scope.context = context;
+    scope.target_skeleton = owner.target_skeleton;
+    scope.destination = selected_destination;
+    scope.processing_group = processing_group;
+    scope.first_joint = selected_first;
+    scope.joint_count = selected_count;
+    scope.peer_sequence = peer.sequence;
+    scope.peer_source = peer_source;
+    scope.case24_count = case24_count;
+    scope.peer_y = peer_y;
+    scope.local_y = local_y;
+}
+
+std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
+    std::uint32_t* status, const void* segment_context) {
+    const auto native = g_anim_cmd_execute_joint_programs;
+    if (native == nullptr) {
+        return status;
+    }
+    const AimJointBoundaryScope scope = g_aim_joint_boundary_scope;
+    auto& capture = g_aim_joint_boundary_capture;
+    capture.valid = false;
+    if (!scope.valid || segment_context == nullptr ||
+        readable_bytes(segment_context) < 0x60) {
+        return native(status, segment_context);
+    }
+
+    const auto* const segment =
+        static_cast<const std::byte*>(segment_context);
+    const float* joint_params = nullptr;
+    const float* workspace = nullptr;
+    const std::byte* group = nullptr;
+    void* target_skeleton = nullptr;
+    std::uint32_t group_first = 0;
+    std::uint32_t group_count = 0;
+    __try {
+        if (*reinterpret_cast<const void* const*>(segment + 0x08) !=
+            scope.context) {
+            return native(status, segment_context);
+        }
+        target_skeleton = *reinterpret_cast<void* const*>(segment + 0x28);
+        group = *reinterpret_cast<const std::byte* const*>(segment + 0x38);
+        joint_params = *reinterpret_cast<const float* const*>(segment + 0x50);
+        workspace = *reinterpret_cast<const float* const*>(segment + 0x58);
+        if (target_skeleton != scope.target_skeleton || group == nullptr ||
+            readable_bytes(group) < 0x18) {
+            return native(status, segment_context);
+        }
+        group_first =
+            *reinterpret_cast<const std::uint16_t*>(group + 0x00);
+        group_count =
+            *reinterpret_cast<const std::uint16_t*>(group + 0x10);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return native(status, segment_context);
+    }
+    if (scope.first_joint < group_first || group_count == 0 ||
+        scope.joint_count > group_count ||
+        scope.first_joint - group_first > group_count - scope.joint_count ||
+        joint_params == nullptr || workspace == nullptr) {
+        return native(status, segment_context);
+    }
+
+    const std::size_t local_first = scope.first_joint - group_first;
+    joint_params += local_first * 12;
+    workspace += (local_first + 1) * 16;
+    const std::size_t joint_values =
+        static_cast<std::size_t>(scope.joint_count) * 12;
+    const std::size_t workspace_values =
+        static_cast<std::size_t>(scope.joint_count) * 16;
+    if (readable_bytes(joint_params) < joint_values * sizeof(float) ||
+        readable_bytes(workspace) < workspace_values * sizeof(float)) {
+        return native(status, segment_context);
+    }
+
+    std::memcpy(
+        capture.pre_joint_params.data(), joint_params,
+        joint_values * sizeof(float));
+    capture.programs = inventory_aim_joint_programs(
+        target_skeleton, group);
+    std::uint32_t* const result = native(status, segment_context);
+    if (!capture.programs.valid ||
+        readable_bytes(joint_params) < joint_values * sizeof(float) ||
+        readable_bytes(workspace) < workspace_values * sizeof(float)) {
+        return result;
+    }
+    std::memcpy(
+        capture.post_joint_params.data(), joint_params,
+        joint_values * sizeof(float));
+    std::memcpy(
+        capture.post_workspace.data(), workspace,
+        workspace_values * sizeof(float));
+    capture.source_workspace = workspace;
+    bool finite = aim_hash_floats(
+        capture.pre_joint_params.data(), joint_values,
+        capture.pre_joint_params_hash);
+    finite = finite && aim_hash_floats(
+        capture.post_joint_params.data(), joint_values,
+        capture.post_joint_params_hash);
+    finite = finite && aim_hash_floats(
+        capture.post_workspace.data(), workspace_values,
+        capture.post_workspace_hash);
+    float in_call_delta_sq = 0.0F;
+    for (std::size_t index = 0; finite && index < joint_values; ++index) {
+        const float delta = capture.post_joint_params[index] -
+            capture.pre_joint_params[index];
+        in_call_delta_sq += delta * delta;
+    }
+    capture.in_call_joint_params_delta = std::sqrt(in_call_delta_sq);
+    capture.valid = finite;
+    return result;
+}
+
+std::int64_t __fastcall hooked_anim_cmd_write_skinning_palette(
+    std::uint16_t joint_count, const float* workspace,
+    const float* bind_rows, const float* common_basis, float* destination) {
+    const auto native = g_anim_cmd_write_skinning_palette;
+    if (native == nullptr) {
+        return 0;
+    }
+    // Preserve the hot path first. This probe only reads the source workspace,
+    // which the native palette writer does not modify.
+    const std::int64_t result = native(
+        joint_count, workspace, bind_rows, common_basis, destination);
+    const AimJointBoundaryScope scope = g_aim_joint_boundary_scope;
+    AimJointBoundaryCapture& capture = g_aim_joint_boundary_capture;
+    if (!scope.valid || !capture.valid || workspace == nullptr ||
+        destination != scope.destination || workspace != capture.source_workspace ||
+        joint_count != scope.joint_count ||
+        scope.processing_group >= kAimJointBoundaryMaxGroups) {
+        return result;
+    }
+
+    const std::size_t joint_values =
+        static_cast<std::size_t>(joint_count) * 12;
+    const std::size_t workspace_values =
+        static_cast<std::size_t>(joint_count) * 16;
+    if (readable_bytes(workspace) < workspace_values * sizeof(float)) {
+        return result;
+    }
+    std::uint64_t writer_hash = kAimPipelineFnvOffset;
+    if (!aim_hash_floats(workspace, workspace_values, writer_hash)) {
+        return result;
+    }
+    float post16_to_26_sq = 0.0F;
+    for (std::size_t index = 0; index < workspace_values; ++index) {
+        const float delta = workspace[index] - capture.post_workspace[index];
+        post16_to_26_sq += delta * delta;
+    }
+
+    const std::size_t group = scope.processing_group;
+    const ULONGLONG now = GetTickCount64();
+    if (g_aim_joint_boundary_sample_count[group].load(
+            std::memory_order_acquire) >= 20 ||
+        now < g_aim_joint_boundary_next_log_ms[group].load(
+            std::memory_order_acquire)) {
+        return result;
+    }
+    ULONGLONG due = g_aim_joint_boundary_next_log_ms[group].load(
+        std::memory_order_acquire);
+    if (now < due ||
+        !g_aim_joint_boundary_next_log_ms[group].compare_exchange_strong(
+            due, now + 350, std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
+        return result;
+    }
+
+    AcquireSRWLockExclusive(&g_aim_joint_boundary_lock);
+    AimJointBoundaryBaseline& baseline =
+        g_aim_joint_boundary_baselines[group];
+    const bool reset = !baseline.valid ||
+        baseline.first_joint != scope.first_joint ||
+        baseline.joint_count != joint_count;
+    float joint_params_delta_sq = 0.0F;
+    float workspace_delta_sq = 0.0F;
+    std::array<std::uint32_t, 4> top_indices{};
+    std::array<float, 4> top_scores{};
+    std::array<float, 4> top_joint_params{};
+    std::array<float, 4> top_workspace{};
+    if (!reset) {
+        for (std::uint32_t joint = 0; joint < joint_count; ++joint) {
+            float joint_delta_sq = 0.0F;
+            float workspace_joint_delta_sq = 0.0F;
+            for (std::size_t component = 0; component < 12; ++component) {
+                const std::size_t index =
+                    static_cast<std::size_t>(joint) * 12 + component;
+                const float delta = capture.pre_joint_params[index] -
+                    baseline.pre_joint_params[index];
+                joint_delta_sq += delta * delta;
+            }
+            for (std::size_t component = 0; component < 16; ++component) {
+                const std::size_t index =
+                    static_cast<std::size_t>(joint) * 16 + component;
+                const float delta = capture.post_workspace[index] -
+                    baseline.post_workspace[index];
+                workspace_joint_delta_sq += delta * delta;
+            }
+            joint_params_delta_sq += joint_delta_sq;
+            workspace_delta_sq += workspace_joint_delta_sq;
+            const float joint_delta = std::sqrt(joint_delta_sq);
+            const float workspace_delta = std::sqrt(workspace_joint_delta_sq);
+            const float score = joint_delta + workspace_delta;
+            for (std::size_t rank = 0; rank < top_scores.size(); ++rank) {
+                if (score > top_scores[rank]) {
+                    for (std::size_t move = top_scores.size() - 1;
+                         move > rank; --move) {
+                        top_scores[move] = top_scores[move - 1];
+                        top_indices[move] = top_indices[move - 1];
+                        top_joint_params[move] = top_joint_params[move - 1];
+                        top_workspace[move] = top_workspace[move - 1];
+                    }
+                    top_scores[rank] = score;
+                    top_indices[rank] = joint;
+                    top_joint_params[rank] = joint_delta;
+                    top_workspace[rank] = workspace_delta;
+                    break;
+                }
+            }
+        }
+    }
+    const float peer_delta = reset ? 0.0F : scope.peer_y - baseline.peer_y;
+    const float local_delta = reset ? 0.0F : scope.local_y - baseline.local_y;
+    std::memcpy(
+        baseline.pre_joint_params.data(), capture.pre_joint_params.data(),
+        joint_values * sizeof(float));
+    std::memcpy(
+        baseline.post_workspace.data(), capture.post_workspace.data(),
+        workspace_values * sizeof(float));
+    baseline.valid = true;
+    baseline.first_joint = scope.first_joint;
+    baseline.joint_count = joint_count;
+    baseline.peer_y = scope.peer_y;
+    baseline.local_y = scope.local_y;
+    ReleaseSRWLockExclusive(&g_aim_joint_boundary_lock);
+
+    const std::uint32_t sample =
+        g_aim_joint_boundary_sample_count[group].fetch_add(
+            1, std::memory_order_acq_rel);
+    char top[384]{};
+    std::size_t used = 0;
+    if (reset) {
+        std::snprintf(top, sizeof(top), "baseline");
+    } else {
+        for (std::size_t rank = 0; rank < top_indices.size(); ++rank) {
+            const int written = std::snprintf(
+                top + used, sizeof(top) - used, "%u:%.4f/%.4f%s",
+                scope.first_joint + top_indices[rank],
+                top_joint_params[rank], top_workspace[rank],
+                rank + 1 == top_indices.size() ? "" : ";");
+            if (written <= 0 ||
+                static_cast<std::size_t>(written) >= sizeof(top) - used) {
+                break;
+            }
+            used += static_cast<std::size_t>(written);
+        }
+    }
+    char line[1536]{};
+    std::snprintf(
+        line, sizeof(line),
+        "AIM-JOINT-BOUNDARY-JO sample=%u seq=%u peerSrc=%u "
+        "peerY=%.4f localY=%.4f dirDelta=%.4f/%.4f "
+        "group=%u first=%u count=%u reset=%u op24=%u "
+        "programs=%u/%u hash=%016llX op54=%u matrixW=%u paletteR=%u custom=%u "
+        "preJP=%016llX postJP=%016llX postW=%016llX writerW=%016llX "
+        "deltaJP/W=%.5f/%.5f inCallJP=%.5f post16To26=%.5f topJP/W=%s",
+        sample + 1, scope.peer_sequence, scope.peer_source,
+        scope.peer_y, scope.local_y, peer_delta, local_delta,
+        scope.processing_group, scope.first_joint, joint_count,
+        static_cast<unsigned>(reset), scope.case24_count,
+        capture.programs.program_count, capture.programs.operator_count,
+        static_cast<unsigned long long>(capture.programs.hash),
+        capture.programs.op54_count, capture.programs.matrix_writer_count,
+        capture.programs.palette_reader_count, capture.programs.custom_count,
+        static_cast<unsigned long long>(capture.pre_joint_params_hash),
+        static_cast<unsigned long long>(capture.post_joint_params_hash),
+        static_cast<unsigned long long>(capture.post_workspace_hash),
+        static_cast<unsigned long long>(writer_hash),
+        std::sqrt(joint_params_delta_sq), std::sqrt(workspace_delta_sq),
+        capture.in_call_joint_params_delta, std::sqrt(post16_to_26_sq), top);
+    boot_log_line(line);
+    capture.valid = false;
+    return result;
+}
+
 std::uint32_t __fastcall hooked_process_anim_cmd_list_segment(
     const std::uint32_t* commands, std::uint32_t command_word_count,
     const void* context, std::uint32_t processing_group,
@@ -20809,12 +21470,18 @@ std::uint32_t __fastcall hooked_process_anim_cmd_list_segment(
     const AimCommonOutputPending common_output =
         prepare_aim_common_output_probe(
             commands, command_word_count, context, processing_group);
+    const AimJointBoundaryScope previous_joint_scope =
+        g_aim_joint_boundary_scope;
+    prepare_aim_joint_boundary_scope(
+        commands, command_word_count, context, processing_group);
     const std::uint32_t result =
         g_original_process_anim_cmd_list_segment != nullptr
         ? g_original_process_anim_cmd_list_segment(
               commands, command_word_count, context, processing_group,
               callback_a5, callback_a6, callback_a7)
         : 0;
+    g_aim_joint_boundary_scope = previous_joint_scope;
+    g_aim_joint_boundary_capture.valid = false;
     log_aim_common_output_after(common_output);
     return result;
 }
@@ -22488,6 +23155,92 @@ bool prepare_plain_callsite_relay(
         return false;
     }
     new_displacement = static_cast<std::int32_t>(displacement);
+    return true;
+}
+
+bool install_aim_joint_boundary_probes() {
+    std::uint8_t* execute_callsite = nullptr;
+    std::uint8_t* execute_relay = nullptr;
+    std::int32_t execute_displacement = 0;
+    std::uint8_t* writer_callsite = nullptr;
+    std::uint8_t* writer_relay = nullptr;
+    std::int32_t writer_displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kAnimCmdExecuteJointProgramsCallsiteRva,
+            kAnimCmdExecuteJointProgramsRva,
+            reinterpret_cast<const void*>(
+                &hooked_anim_cmd_execute_joint_programs),
+            execute_callsite, execute_relay, execute_displacement) ||
+        !prepare_plain_callsite_relay(
+            kAnimCmdWriteSkinningPaletteCallsiteRva,
+            kAnimCmdWriteSkinningPaletteRva,
+            reinterpret_cast<const void*>(
+                &hooked_anim_cmd_write_skinning_palette),
+            writer_callsite, writer_relay, writer_displacement)) {
+        if (execute_relay != nullptr) {
+            VirtualFree(execute_relay, 0, MEM_RELEASE);
+        }
+        if (writer_relay != nullptr) {
+            VirtualFree(writer_relay, 0, MEM_RELEASE);
+        }
+        boot_log_line(
+            "aim jo joint-boundary probes SKIPPED (callsite preflight)");
+        return false;
+    }
+
+    g_anim_cmd_execute_joint_programs =
+        reinterpret_cast<AnimCmdExecuteJointProgramsFunction>(
+            g_module + kAnimCmdExecuteJointProgramsRva);
+    g_anim_cmd_write_skinning_palette =
+        reinterpret_cast<AnimCmdWriteSkinningPaletteFunction>(
+            g_module + kAnimCmdWriteSkinningPaletteRva);
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(execute_relay, 0, MEM_RELEASE);
+        VirtualFree(writer_relay, 0, MEM_RELEASE);
+        g_anim_cmd_execute_joint_programs = nullptr;
+        g_anim_cmd_write_skinning_palette = nullptr;
+        boot_log_line(
+            "aim jo joint-boundary probes SKIPPED (thread suspend)");
+        return false;
+    }
+
+    DWORD execute_old = 0;
+    DWORD writer_old = 0;
+    const bool execute_protected = VirtualProtect(
+        execute_callsite, 5, PAGE_EXECUTE_READWRITE, &execute_old) != 0;
+    const bool writer_protected = VirtualProtect(
+        writer_callsite, 5, PAGE_EXECUTE_READWRITE, &writer_old) != 0;
+    if (!execute_protected || !writer_protected) {
+        DWORD ignored = 0;
+        if (execute_protected) {
+            VirtualProtect(execute_callsite, 5, execute_old, &ignored);
+        }
+        if (writer_protected) {
+            VirtualProtect(writer_callsite, 5, writer_old, &ignored);
+        }
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(execute_relay, 0, MEM_RELEASE);
+        VirtualFree(writer_relay, 0, MEM_RELEASE);
+        g_anim_cmd_execute_joint_programs = nullptr;
+        g_anim_cmd_write_skinning_palette = nullptr;
+        boot_log_line("aim jo joint-boundary probes SKIPPED (protect)");
+        return false;
+    }
+
+    *reinterpret_cast<std::int32_t*>(execute_callsite + 1) =
+        execute_displacement;
+    *reinterpret_cast<std::int32_t*>(writer_callsite + 1) =
+        writer_displacement;
+    FlushInstructionCache(GetCurrentProcess(), execute_callsite, 5);
+    FlushInstructionCache(GetCurrentProcess(), writer_callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(execute_callsite, 5, execute_old, &ignored);
+    VirtualProtect(writer_callsite, 5, writer_old, &ignored);
+    resume_suspended_process_threads(suspended_threads);
+    boot_log_line(
+        "aim jo joint-boundary probes installed "
+        "(case16 0x141ABA973, writer 0x141ABAE8C)");
     return true;
 }
 
@@ -24633,10 +25386,10 @@ volatile bool g_readable_bytes_fast = true;
 constexpr bool g_enable_aim_animation_relays = true;
 
 constexpr bool g_enable_aim_diagnostic_probes = false;
-// Build es: bounded read-only discriminator from selected command 0x60006
-// through later blend/plugin commands and the final FgAnimData+0x230 palette.
-// Four samples per signature/screen, no native calls or game-memory writes.
+// The case-6 detour owns the exact per-segment scope used by the jo boundary
+// probe. Both nested callsite relays are read-only and bounded to 20 samples.
 constexpr bool g_enable_aim_case6_probe = true;
+constexpr bool g_enable_aim_joint_boundary_probe = true;
 // ============================================================================
 // =====  FIRE RELAY (native replay + button pulse)
 // ============================================================================
@@ -41374,8 +42127,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-28jn "
-        "(completed opcode-26 palette probe removed)");
+        "TLL co-op runtime init 2026-07-28jo "
+        "(case16 JointParams/workspace discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -41461,6 +42214,9 @@ DWORD WINAPI install_hook(void*) {
         install_native_aim_foot_turn_relays();
         if (g_enable_aim_case6_probe) {
             install_aim_case6_probe();
+            if (g_enable_aim_joint_boundary_probe) {
+                install_aim_joint_boundary_probes();
+            }
         }
         if (g_enable_puppet_fganim_world_aim_turn) {
             install_fganim_world_aim_turn_callsite_relay();

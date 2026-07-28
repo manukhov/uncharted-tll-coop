@@ -2030,12 +2030,22 @@ Do not reopen these as the first move:
       the same Nadine edges through peer Y. The false input is therefore already
       in the workspace consumed at `0x141ABAE8C`, not introduced by opcode-26
       conversion or a post-palette consumer.
-- [ ] Statically enumerate every `ProcessAnimCmdListSegment 0x141AB97C0` opcode
+- [x] Statically enumerate every `ProcessAnimCmdListSegment 0x141AB97C0` opcode
       handler that can mutate the shared 64-byte/joint workspace before opcode
-      26. Trace the pointer across segments and distinguish direct clip
-      evaluation from later blend/plugin commands. Do not launch again until a
-      specific writer/callsite, competitors, three evidence types and a written
-      discriminator are recorded.
+      26. Opcode 16 at `0x141ABA973` is the normal broad producer: it maps final
+      JointParams (`SegmentContext+0x50`) and matrix workspace (`+0x58`) into the
+      authored skeleton-program evaluator `0x14217B630`. Opcode 15 only allocates
+      and initializes the root row; the normal post-case16 opcode-24 plugins and
+      opcode 26 read the workspace. Direct dataflow, generator order, resolved
+      built-in operator dispatch and plugin hashes satisfy the evidence quota;
+      J1/J2/J3 and the written discriminator are in `COOP_STATUS.md`.
+- [ ] Run bounded build `jo`: Chloe camera held down; on Nadine's copy, both
+      characters stationary and out of ADS, move the local camera sky -> ground
+      -> sky. Require normal models and repeated `AIM-JOINT-BOUNDARY-JO` rows.
+      `deltaJP` following local edges selects contaminated JointParams (J1);
+      peer-stable `deltaJP` with locally correlated `deltaW` and
+      `post16To26=0` selects a case16 operator (J2); a nonzero
+      `post16To26` correlated with local motion selects a later writer (J3).
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

@@ -13359,3 +13359,63 @@ The next static task is to enumerate the mutating opcode handlers before opcode
 separate clip evaluation from later blend/plugin overwrites. The completed
 `jm` writer relay is removed in build `2026-07-28jn`; the already-established
 case-6 command probe remains available for that upstream audit.
+
+### 2026-07-28 STATIC / IMPLEMENTED: `jo` splits JointParams input from command-16 workspace generation
+
+The next upstream boundary is now statically resolved. Opcode 15 allocates
+`((joint_count + 1) << 6)` bytes and stores the workspace at
+`SegmentContext+0x58`; apart from its single identity root row it does not
+populate joint matrices. Opcode 16 calls
+`AnimCmdEvaluator_ExecuteSkeletonJointPrograms 0x14217B630` at exact callsite
+`0x141ABA973`. That callee constructs four encoded operand bases from the
+segment: final `JointParams` at `+0x50`, matrix workspace at `+0x58`, and two
+additional bases at `+0x68/+0x30`, then dispatches every authored skeleton joint
+program. Opcode 26 later reads `+0x58 + ((first_joint + 1) << 6)` at
+`0x141ABAE8C`; it does not write that workspace.
+
+The evidence quota is met by independent types:
+
+1. Direct disassembly dataflow shows the case-15 allocation/store, the four
+   case-16 base pointers and the case-26 read with matching 64-byte strides.
+2. The normal command generator emits opcode 15, then opcode 16, then its two
+   known opcode-24 callbacks, and finally opcode 26; it emits no opcode 25.
+3. The actual built-in operator dispatch table at `0x143026D20` resolves opcodes
+   54--59. Opcode 55 writes 64-byte matrix rows through
+   `AnimJointProgram_TransformMatrixRange 0x14218AC90`; opcode 57 calls the same
+   palette converter as command 26 and is a reader. Encoded destination selector
+   `1` identifies the `SegmentContext+0x58` base for the other matrix operators.
+4. The two normal post-case16 opcode-24 plugins are the hash-identified
+   joint-conversion and bounding-sphere callbacks. Their default implementation
+   reads the workspace and writes retarget/bounds output elsewhere. Case 25 also
+   reads `+0x58`, but the normal generator does not emit it.
+
+Competing hypotheses at this boundary are:
+
+- **J1:** the receiver-local camera contamination is already present in the
+  final `JointParams` input at `SegmentContext+0x50`; case16 merely propagates it
+  into matrices;
+- **J2:** `JointParams` remains peer-stable and one authored operator executed by
+  case16 introduces receiver-local motion into `+0x58`;
+- **J3:** case16 output remains peer-stable and a later command mutates `+0x58`
+  before opcode 26, contrary to the currently resolved normal opcode-24 readers.
+
+Read-only build `2026-07-28jo` relays only the exact case16 and opcode-26 calls
+inside an ownership-validated screen-1 command segment. At most 20 samples per
+processing group copy the selected `JointParams` range immediately before and
+after case16, the matching workspace immediately after case16, and the exact
+same workspace at opcode 26. The native calls execute exactly once with unchanged
+arguments; sampling is throttled before the expensive copies. The log also
+inventories authored operator streams, including opcode 54, matrix writers,
+palette readers and custom operators.
+
+Written prediction: keep Chloe's camera stationary and down, then on Nadine's
+copy move only the local camera sky -> ground -> sky while both characters remain
+out of ADS and still. Normal animation plus repeated
+`AIM-JOINT-BOUNDARY-JO` rows is required. If `deltaJP` follows Nadine-local edges
+and `deltaW` follows it, J1 wins. If `deltaJP` stays at peer/idle scale while
+`deltaW` follows Nadine-local edges and `post16To26=0`, J2 wins. If post-case16
+workspace does not follow local motion but opcode-26 input diverges
+(`post16To26>0`), J3 wins and the post-case16 command classification must be
+reopened. A changing in-call JointParams value, unstable operator inventory,
+crash, stutter or model regression invalidates the boundary rather than proving
+any hypothesis.

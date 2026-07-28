@@ -2102,6 +2102,33 @@ FUNCTIONS = {
         "program records and dispatches their transform operators over the final "
         "WorkBuffer JointParams into the 64-byte-per-joint matrix workspace.",
     ),
+    0x142194C30: (
+        "AnimJointProgramOp54_CopyEncodedScalars",
+        "Built-in joint-program opcode 54 wrapper. Resolves its two encoded base/"
+        "offset operands and forwards a bounded scalar copy/scatter program to "
+        "AnimJointProgram_CopyEncodedScalars.",
+    ),
+    0x142189370: (
+        "AnimJointProgram_CopyEncodedScalars",
+        "Copies and scatters encoded scalar register tuples between the four joint-"
+        "program base arrays selected by each operand's low two bits.",
+    ),
+    0x1421944A0: (
+        "AnimJointProgramOp55_TransformMatrixRange",
+        "Built-in joint-program opcode 55 wrapper. Resolves source, common 3x4 "
+        "transform and 64-byte destination operands, then transforms a joint range.",
+    ),
+    0x14218AC90: (
+        "AnimJointProgram_TransformMatrixRange",
+        "Transforms count 64-byte matrix rows by one supplied 3x4 basis and writes "
+        "the resulting 64-byte rows to the encoded destination array.",
+    ),
+    0x142194560: (
+        "AnimJointProgramOp57_WriteSkinningPalette",
+        "Built-in joint-program opcode 57 wrapper. Resolves four encoded operands "
+        "and invokes AnimCmdEvaluator_WriteSkinningPalette; it is a workspace reader, "
+        "not a producer of the 64-byte workspace.",
+    ),
     0x14218B170: (
         "AnimCmdEvaluator_WriteSkinningPalette",
         "Command-26 matrix converter. It combines the 64-byte joint workspace "

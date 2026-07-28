@@ -152,6 +152,12 @@ constexpr std::size_t kSkeletonJointCountOffset = 0x34;
 // ProcessAnimCmdListSegment case 6 selects direct clip evaluation when the
 // source/target underlying skeleton ids match, otherwise it resolves this table.
 constexpr std::uintptr_t kProcessAnimCmdListSegmentRva = 0x1AB97C0;
+// Normal campaign command-evaluator boundaries. Opcode 16 is the only broad
+// producer of WorkBuffer+0x58; opcode 26 consumes the same 64-byte rows.
+constexpr std::uintptr_t kAnimCmdExecuteJointProgramsCallsiteRva = 0x1ABA973;
+constexpr std::uintptr_t kAnimCmdExecuteJointProgramsRva = 0x217B630;
+constexpr std::uintptr_t kAnimCmdWriteSkinningPaletteCallsiteRva = 0x1ABAE8C;
+constexpr std::uintptr_t kAnimCmdWriteSkinningPaletteRva = 0x218B170;
 constexpr std::uintptr_t kSkelTableRetargetEntryCountRva = 0x38401D8;
 constexpr std::uintptr_t kSkelTableRetargetEntriesRva = 0x3864A00;
 // Embedded PlayerInputCommandState (sub_14024D7E0 returns Player+0x39A0).
