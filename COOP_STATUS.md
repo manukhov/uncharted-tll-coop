@@ -12803,3 +12803,37 @@ consumer is `PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0` at
 `0x1410EBAE5`. No `LOOK-IK slot=1` row excludes the `+0x408` reachability model.
 Any crash, stutter or model/animation change makes the read-only wrapper ABI
 inconclusive and requires immediate removal.
+
+### 2026-07-28 RUNTIME REJECTED: LookAtIK is live but inactive during the shared-camera fault
+
+Build `2026-07-28jd` reached `PlayerLookAtIkController_UpdateIk` for both Player
+objects on both processes throughout the opposite-camera test, and caused no
+additional visible regression. This proves the `PostAnimBlending -> +0x1E38 ->
++0x38` call graph is live, unlike rejected Player `+0xE80/+0xEA0`. It also
+conclusively excludes LookAtIK as the visible shared-pitch owner in this state.
+
+On PID 24932 the local/peer camera vertical components were approximately
+`+0.94/-0.57`; PID 17568 simultaneously reported the inverse
+`-0.57/+0.94`. Despite those strong opposite signs, slot 0 and slot 1 on both
+processes continuously reported identical inactive state:
+
+- both authored lifetimes `+0x330/+0x334` were `-1`;
+- all eased weights `+0x3C0..+0x3CC` were zero;
+- selected mode `+0x3E0` and enable `+0x420` were zero;
+- authored, selected and solved target rows remained the controller's sentinel
+  NaNs.
+
+The user simultaneously confirmed the original visible behavior was unchanged.
+Therefore neither camera-derived vslot `+0x40 0x140EDB180`, its script binding,
+the authored slot selection nor the head/spine Jacobian solver produces the
+observed motion. The old direct `SetLookPoint` relay is also ruled out for this
+fault, independently of its earlier spine-twist regression.
+
+Build `2026-07-28je` removes the complete diagnostic hook, snapshot structure,
+logging and runtime offset. The durable IDB names remain because the static
+semantics are valid. The surviving owner must be a different late animation
+contribution shared by head/upper body/weapon, or separate camera-driven arm and
+head paths outside LookAtIK. Next static work starts from the proven late call in
+`Player_PostAnimBlending_Async`: `PlayerWeaponAnimControl_UpdateHolsterIk
+0x14108ECE0` at `0x1410EBAE5`, while tracing its input writers far enough upward
+to distinguish weapon-arm ownership from a common animation command source.

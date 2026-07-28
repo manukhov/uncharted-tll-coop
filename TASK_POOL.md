@@ -1925,6 +1925,14 @@ Do not reopen these as the first move:
       unchanged native call for slot 0/1. Opposite local/peer camera signs will
       determine whether shared pitch enters before head IK or whether the entire
       LookAtIK path can be excluded in favor of the later weapon-arm controller.
+      **`jd` RUNTIME REJECTED / `je` cleanup:** both Player controllers were
+      reached on both processes while local/peer camera Y had strong opposite
+      signs, but both authored lifetimes stayed `-1`, all eased weights were
+      zero, selected mode/enable were zero and every target row stayed sentinel
+      NaN. The user still saw the fault. LookAtIK and its camera-derived vslot
+      `+0x40` are not the visible owner; `je` removes the whole probe. Continue
+      statically from `PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0` and
+      its upstream writer graph.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

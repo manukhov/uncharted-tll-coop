@@ -354,8 +354,6 @@ constexpr std::size_t kPlayerLookAtIkSlot0DataOffset = 0x350;     // SetLookPoin
 constexpr std::size_t kPlayerLookAtIkSlotTableOffset = 0x390;     // UpdateIk slot0 copy src
 constexpr std::uintptr_t kPlayerLookAtSetPointRva = 0xEDA5F0;     // vtable+0x28
 constexpr std::uintptr_t kPlayerLookAtUpdateIkRva = 0xEDA680;     // vtable+0x38
-constexpr std::uintptr_t kPlayerLookAtUpdateIkVtableSlotRva =
-    0x2A2D588;  // PlayerLookAtIkController vtable 0x142A2D550 + 0x38
 // Per-screen camera handle table (2 entries, {ptr,id} 16B each). The resolver
 // ResolveScreenRoutePoseSeedOrDefault reads screen idx's pose seed from
 // *(*(table[2*idx]+8)+176)+0x60. Writing the peer seed to that exact source for
