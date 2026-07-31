@@ -2132,10 +2132,21 @@ Do not reopen these as the first move:
       10/12-custom target groups, compare bounded workspace/JointParams before
       and after each original call, and expose unwrapped gaps. Each original
       handler remains exactly once.
-- [ ] Run the written `jv` stationary camera sequence and classify the first
+- [x] Run the written `jv` stationary camera sequence and classify the first
       workspace writer as H129/H130/H131, Nadine-only H128, Hbuiltin or Hupstream.
       Require paired begin/end rows, zero `deltaJP`, normal models and responsive
-      processes before accepting the result.
+      processes before accepting the result. Result: 24/24 paired samples and
+      288/288 readable steps had zero direct JointParams/workspace changes in
+      op54/custom 128--133. Two isolated one-op gaps identify builtin opcode 40:
+      Chloe changed 48 words starting at 448; Nadine changed 15 starting at 704.
+      Live descriptors and static worker stores reproduce both exact offsets.
+- [ ] Trace opcode 40's exact isolated inputs before another runtime test.
+      Competing hypotheses are H40-JP (its 48-byte local JointParams record is
+      already receiver-camera-dependent), H40-parent (its selected 64-byte
+      source workspace matrix is), or both. Resolve the live descriptor records
+      and downstream matrix ownership statically, then implement only a bounded
+      read-only before/after capture of those inputs and output. Do not replace
+      matrices or write animation state.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

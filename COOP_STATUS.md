@@ -13926,3 +13926,61 @@ intervening builtin. Camera-correlated begin hashes with no in-call writer selec
 Hupstream. Every direct `deltaJP` must remain zero. Missing end rows, an original
 address mismatch, model damage or a process fault rejects the probe itself and
 authorizes no semantic conclusion.
+
+### 2026-08-01 RUNTIME CONFIRMED / STATIC: `jv` rejects every wrapped custom operator and identifies builtin opcode 40 as the workspace-matrix writer
+
+Both `jv` processes remained responsive with normal models. The bounded probe
+produced 24 paired begin/end samples and 288 readable step rows: Chloe group 2
+had 12 identical 11-step wrapped sequences, and Nadine group 1 had 12 identical
+13-step wrapped sequences. Every direct opcode-54/custom-opcode step reported
+`deltaJP=0 deltaW=0`; every end row reported `trailingW=0`. Thus H129, H130,
+H131, Nadine-only H128 and H54-direct are **REJECTED** as direct writers in the
+live target programs. The generic exception telemetry did record eight caught
+accesses per process at the same non-operator DLL address, but all had
+`wrapperEntries=0 firstReturnRva=0`; neither process faulted and no sampled
+operator row was unreadable or incomplete.
+
+All workspace changes instead appeared in stable gaps between wrapped
+operators. Read-only `ReadProcessMemory` of the already-live program skeletons
+decoded the complete authored streams and resolved those gaps:
+
+- Chloe group 2: the `gapW=48/448` before wrapped op130 contains exactly one
+  unwrapped operator, opcode 40 with payload `{1, 3, 0x0E20}`;
+- Nadine group 1: the `gapW=15/704` before wrapped op130 likewise contains
+  exactly one opcode 40 with payload `{1, 3, 0x69E0}`;
+- the larger Chloe gaps contain `41,40,47,40,44,40` and
+  `40,44,40,53`; Nadine's other gaps contain `41,40,47,47,47,47`,
+  `44,40,51,47,47,47,44,40,44,40,49,50`, and `44,40`.
+
+The static dispatch/dataflow independently identifies the same writer.
+`g_AnimJointProgramBuiltinOperatorTable+40*8` at `0x143026E60` resolves to
+`AnimJointProgramOp40_PropagateJointMatrices 0x142194470`. Its three-word
+payload passes `p[0]`, the four-base table selected by `p[1]`, and a descriptor
+list selected by `p[2]` to
+`AnimJointProgram_PropagateJointMatrices 0x142189FB0`. The worker processes
+`4*p[0]` records `{k, encodedSource}`, reads the 48-byte JointParams input at
+`base[0]+3*k-0x30`, reads a 64-byte parent/source matrix selected from the four
+bases, and unconditionally stores four float4 rows at
+`base[1]+4*k`, the workspace.
+
+The live descriptor contents close the static/runtime identity rather than only
+matching the opcode number:
+
+- Chloe's isolated op40 records are `{01C0,06C9}`, `{0620,1849}` and
+  `{0680,19C9}` twice. Their unique workspace destinations begin at byte
+  offsets `0x700`, `0x1880` and `0x1A00`; `0x700/4 = 448`, exactly the first
+  changed word, and three unique 64-byte matrices account for 48 changed words.
+- Nadine's four records are `{02C0,0AC9}` repeated. They rewrite the same
+  64-byte matrix at workspace byte offset `0xB00`; `0xB00/4 = 704`, exactly the
+  first changed word, with 15 of its 16 words changing.
+
+Therefore **Hbuiltin is selected, specifically opcode 40**. This does not make
+op40 the camera source: its entire dataflow is closed over JointParams, an
+already-produced parent/source workspace matrix and authored descriptors, with
+no Player, camera, screen-route or mutable gameplay-global read. The remaining
+competing upstream explanations are **H40-JP** (the local 48-byte JointParams
+input already contains the receiver-camera-dependent pitch), **H40-parent**
+(the selected parent/source workspace matrix already contains it), or both.
+The next discriminator must capture those exact two inputs and the one output
+at the isolated Chloe/Nadine op40 instances before and after the native call;
+it must not substitute a matrix or write animation state.

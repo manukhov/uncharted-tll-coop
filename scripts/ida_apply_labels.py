@@ -2202,6 +2202,22 @@ FUNCTIONS = {
         "mutating JointParams, although runtime build ju found only base-2 to base-3 "
         "tuples in the live Chloe/Nadine programs.",
     ),
+    0x142194470: (
+        "AnimJointProgramOp40_PropagateJointMatrices",
+        "Built-in joint-program opcode 40 wrapper. Payload[0] counts four-entry "
+        "descriptor blocks, payload[1] normally resolves selector 3 offset 0 to "
+        "the evaluator's four-base table, and payload[2] resolves authored "
+        "{k, encodedSource} records. Runtime build jv isolated this opcode as the "
+        "common direct writer of the target Chloe/Nadine workspace matrices.",
+    ),
+    0x142189FB0: (
+        "AnimJointProgram_PropagateJointMatrices",
+        "Processes 4*blockCount authored {k, encodedSource} records. For each, "
+        "combines the 48-byte JointParams record at base[0]+3*k-0x30 with the "
+        "selected 64-byte parent/source matrix and stores four float4 rows at "
+        "workspace base[1]+4*k. Runtime jv descriptor destinations reproduce "
+        "the exact first changed workspace words 448 for Chloe and 704 for Nadine.",
+    ),
     0x142194620: (
         "AnimJointProgramOp59_ConvertJointParamsToMatrices",
         "Built-in joint-program opcode 59 wrapper. Resolves an optional authored "
