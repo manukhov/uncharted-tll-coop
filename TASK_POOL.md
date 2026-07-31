@@ -2149,10 +2149,21 @@ Do not reopen these as the first move:
       propagates Chloe joints `26->27`, `96->97`, `102->103` and Nadine
       `42->43`; the earlier parameter-count prefix does not cover all exact
       inputs. Build `jw` wraps only slot 40 and records those inputs/output.
-- [ ] Run the written `jw` camera-distinct sequence and classify H40-JP,
+- [x] Run the written `jw` camera-distinct sequence and classify H40-JP,
       H40-parent or H40-both from exact per-record deltas. Require paired rows,
       `targets=1`, four records, no reject, normal models and responsive
       processes. No pose/matrix substitution is authorized by this test.
+      Result: 13/13 paired calls, 52/52 readable records, no rejects. Parent
+      matrices and outputs changed for every chain. JointParams also changed for
+      Chloe joints 97/103 and Nadine joint 43, but stayed bit-identical for Chloe
+      joint 27. On Chloe's receiver the changing inputs followed receiver-local
+      camera while remote Nadine was stationary, proving the contamination is
+      already upstream of opcode 40.
+- [ ] Resolve the last same-group producers of op40 parent joints Chloe
+      `26/96/102` and Nadine `42`, and the exact JointParams producers for child
+      `97/103/43`. Inventory preceding authored operators and concrete builtin/
+      custom handlers, eliminate alternate writers statically, and require the
+      three-evidence quota plus a new written prediction before runtime.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

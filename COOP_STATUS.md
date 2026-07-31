@@ -14046,3 +14046,48 @@ H40-parent; both nonzero selects H40-both. If only `peerY`-correlated changes
 appear, the exact op40 inputs already follow the remote source correctly and
 this boundary is downstream of the defect. Missing targets, descriptor drift,
 unreadable rows, model damage or a process fault rejects the probe.
+
+### 2026-08-01 RUNTIME CONFIRMED: opcode 40 receives camera-dependent parent matrices; some chains also receive camera-dependent JointParams
+
+After both checkpoints were active, build `jw` captured 13 paired target calls
+(seven Chloe group-2 samples and six Nadine group-1 samples), 52/52 readable
+record rows, and 13/13 readable ends with `targets=1`; there were no probe
+rejects. Both processes remained responsive and no model/animation fault was
+reported. The first attempt before checkpoint activation emitted no semantic
+rows because neither remote Player descriptor had yet spawned; it was a failed
+precondition, not evidence against the boundary.
+
+The performed camera sweep was the actor-reversed equivalent of the written
+sequence: Chloe's local camera moved while Nadine's stayed nearly fixed. The
+signals establish this independently on both receivers. PID 4632 (local Chloe,
+rendered Nadine puppet) held `peerY=-0.2149..-0.2057` while `localY` swept
+`-0.5607..+0.4457`. PID 10504 (local Nadine, rendered Chloe puppet) held
+`localY=-0.2149..-0.2069` while the same movement arrived as
+`peerY=-0.6850..+0.4457`. This still supplies the required local-versus-peer
+discriminator, only with the two actor roles reversed.
+
+Every comparable record changed its parent/source matrix and its produced child
+matrix:
+
+- Chloe chain `27 <- 26`: `dSrc>0` and `dOut>0` in 6/6 comparisons, while the
+  exact JointParams record remained bit-identical (`dJP=0` in 6/6).
+- Chloe chain `97 <- 96`: `dJP>0`, `dSrc>0`, and `dOut>0` in 6/6.
+- Chloe chain `103 <- 102` (duplicated descriptor): all three were nonzero in
+  12/12 rows.
+- Nadine chain `43 <- 42` (four duplicated descriptors): all three were
+  nonzero in 20/20 rows.
+
+Thus **H40-parent is CONFIRMED for every target chain**, while **H40-JP is also
+CONFIRMED for Chloe 97/103 and Nadine 43 but REJECTED for Chloe 27**. Opcode 40
+is only the first isolated direct writer: it receives the camera-dependent
+parent matrices (and, for three chains, camera-dependent JointParams) and
+propagates them to children. Most importantly, on PID 4632 these inputs followed
+receiver-local `localY` while the actual remote Nadine `peerY` was stationary,
+so the known wrong-camera behavior is already present upstream of opcode 40.
+Do not substitute opcode-40 output or hook the global builtin slot as a fix.
+
+The next static boundary is the last writer, within the same authored group,
+of parent workspace joints Chloe `26/96/102` and Nadine `42`, plus the exact
+JointParams producers for child joints `97/103/43`. Enumerate earlier operators'
+encoded destinations and resolve their concrete handlers before authorizing
+another runtime probe.
