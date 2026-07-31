@@ -2100,15 +2100,22 @@ Do not reopen these as the first move:
       `0x141AB9852` performs `RAX=[context]` then `R15=[RAX+0x40]`; carry that
       FgAnim-target child as the program skeleton and compare it with
       `SegmentContext+0x28`. Preserve native execution exactly once.
-- [ ] Run `jt` with the same opposed-camera sequence. Require `raw target=1` on
+- [x] Run `jt` with the same opposed-camera sequence. Require `raw target=1` on
       both processes, then classify the first post/boundary stage exactly as
-      written in `COOP_STATUS.md`.
-- [ ] Only after classifying `jt`, design the next read-only discriminator from
-      that result. If Q rows become reachable, use their pre/post case-16 values
-      first. If scratch/scalar-bank provenance is still needed, inventory the
-      live decimal-case-17 selector stream and hash base 1/base 3 before/after
-      groups 0/1/2/7. Do not clear scratch or substitute a scalar until a concrete
-      authored read-before-write or non-null bank producer has been demonstrated.
+      written in `COOP_STATUS.md`. Result: both processes passed exact skeleton,
+      group and buffer admission; all valid boundaries left JointParams
+      bit-identical while complex programs changed workspace. Group 0 was lost
+      only because its mixed raw words failed the obsolete finite-float filter.
+- [x] Design and implement read-only build `ju` from the classified `jt` result.
+      Hash mixed group-0 data as raw words, retain non-finite counts, decode
+      opcode-54 authored source/destination base pairs, and inventory custom
+      opcodes 128--133. Preserve the native call exactly once and write no game
+      state.
+- [ ] Run `ju` with both characters still and out of ADS: hold Chloe's camera
+      down, then on Nadine's copy move only the camera sky -> ground -> sky.
+      Require normal models, responsive processes and group-0 boundary rows on
+      both sides. Classify H54/Hcustom/Hupstream using the exact prediction in
+      `COOP_STATUS.md`; do not clear scratch or substitute a scalar.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

@@ -20897,22 +20897,32 @@ thread_local AimJointBoundaryScope g_aim_joint_boundary_scope{};
 
 struct AimJointProgramInventory {
     bool valid = false;
+    bool op54_layout_valid = true;
     std::uint32_t program_count = 0;
     std::uint32_t operator_count = 0;
     std::uint32_t op54_count = 0;
+    std::uint32_t op54_tuple_count = 0;
     std::uint32_t matrix_writer_count = 0;
     std::uint32_t palette_reader_count = 0;
     std::uint32_t custom_count = 0;
     std::uint64_t hash = kAimPipelineFnvOffset;
+    std::uint64_t op54_hash = kAimPipelineFnvOffset;
+    std::array<std::uint32_t, 16> op54_base_pairs{};
+    std::array<std::uint32_t, 4> op54_tuple_selectors{};
+    std::array<std::uint32_t, 6> custom_opcode_counts{};
 };
 
 struct AimJointBoundaryCapture {
     bool valid = false;
     AimJointProgramInventory programs{};
     float in_call_joint_params_delta = 0.0F;
+    std::uint32_t in_call_joint_params_raw_changes = 0;
     std::uint64_t pre_joint_params_hash = kAimPipelineFnvOffset;
     std::uint64_t post_joint_params_hash = kAimPipelineFnvOffset;
     std::uint64_t post_workspace_hash = kAimPipelineFnvOffset;
+    std::uint32_t pre_joint_params_nonfinite = 0;
+    std::uint32_t post_joint_params_nonfinite = 0;
+    std::uint32_t post_workspace_nonfinite = 0;
     std::array<float, kAimPipelineMaxJoints * 12> pre_joint_params{};
     std::array<float, kAimPipelineMaxJoints * 12> post_joint_params{};
     std::array<float, kAimPipelineMaxJoints * 16> post_workspace{};
@@ -20950,23 +20960,25 @@ std::array<std::atomic<std::uint32_t>, kAimJointBoundaryMaxGroups>
 std::array<std::atomic<std::uint32_t>, kAimJointBoundaryMaxGroups>
     g_aim_joint_admission_post_sample_count{};
 
-bool aim_hash_floats(
-    const float* values, std::size_t count, std::uint64_t& hash) {
+void aim_summarize_float_words(
+    const float* values, std::size_t count, std::uint64_t& hash,
+    std::uint32_t& nonfinite_count) {
     hash = kAimPipelineFnvOffset;
+    nonfinite_count = 0;
     for (std::size_t index = 0; index < count; ++index) {
         const float value = values[index];
         if (!std::isfinite(value)) {
-            return false;
+            ++nonfinite_count;
         }
         std::uint32_t bits = 0;
         std::memcpy(&bits, &value, sizeof(bits));
         hash = aim_pipeline_hash_word(hash, bits);
     }
-    return true;
 }
 
 AimJointProgramInventory inventory_aim_joint_programs(
-    const void* target_skeleton, const void* group_descriptor) {
+    const void* target_skeleton, const void* group_descriptor,
+    const void* segment_context) {
     AimJointProgramInventory result{};
     if (target_skeleton == nullptr || group_descriptor == nullptr ||
         readable_bytes(target_skeleton) < 0x38 ||
@@ -20978,6 +20990,15 @@ AimJointProgramInventory inventory_aim_joint_programs(
             static_cast<const std::byte*>(target_skeleton);
         const auto* const group =
             static_cast<const std::byte*>(group_descriptor);
+        const std::byte* operator_base1 = nullptr;
+        if (segment_context != nullptr && readable_bytes(segment_context) >= 8) {
+            const void* const segment_owner =
+                *reinterpret_cast<void* const*>(segment_context);
+            if (segment_owner != nullptr && readable_bytes(segment_owner) >= 8) {
+                operator_base1 = *reinterpret_cast<const std::byte* const*>(
+                    segment_owner);
+            }
+        }
         const std::uint32_t table_offset =
             *reinterpret_cast<const std::uint32_t*>(skeleton + 0x34);
         const std::uint16_t first_program =
@@ -21000,6 +21021,7 @@ AimJointProgramInventory inventory_aim_joint_programs(
                 *reinterpret_cast<const std::uint32_t*>(records + program * 8);
             const auto* cursor = reinterpret_cast<const std::uint16_t*>(
                 skeleton + stream_offset);
+            const auto* const program_start = cursor;
             if (stream_offset == 0 || readable_bytes(cursor) < 2) {
                 return AimJointProgramInventory{};
             }
@@ -21020,16 +21042,69 @@ AimJointProgramInventory inventory_aim_joint_programs(
                         static_cast<std::size_t>(words + 1) * 2) {
                     return AimJointProgramInventory{};
                 }
+                const std::uint16_t* const payload = cursor + 1;
                 ++result.operator_count;
                 if (opcode >= 0x80) {
                     ++result.custom_count;
+                    if (opcode <= 133) {
+                        ++result.custom_opcode_counts[opcode - 128];
+                    }
                 }
                 if (opcode == 54) {
                     ++result.op54_count;
+                    if (words < 3) {
+                        result.op54_layout_valid = false;
+                    } else {
+                        const std::uint32_t tuple_count = payload[0];
+                        const std::uint16_t base_table_operand = payload[1];
+                        const std::uint16_t tuple_operand = payload[2];
+                        const std::uint32_t tuple_selector = tuple_operand & 3U;
+                        ++result.op54_tuple_selectors[tuple_selector];
+                        result.op54_hash = aim_pipeline_hash_word(
+                            result.op54_hash, tuple_count);
+                        result.op54_hash = aim_pipeline_hash_word(
+                            result.op54_hash,
+                            static_cast<std::uint32_t>(base_table_operand) |
+                                (static_cast<std::uint32_t>(tuple_operand) << 16));
+                        const bool base_table_valid =
+                            (base_table_operand & 3U) == 3U &&
+                            (base_table_operand & 0xFFFCU) == 0U &&
+                            tuple_count <= 2048;
+                        const std::byte* tuple_base = nullptr;
+                        if (tuple_selector == 0) {
+                            tuple_base = reinterpret_cast<const std::byte*>(
+                                program_start);
+                        } else if (tuple_selector == 1) {
+                            tuple_base = operator_base1;
+                        }
+                        const auto* const tuples = tuple_base == nullptr
+                            ? nullptr
+                            : reinterpret_cast<const std::uint16_t*>(
+                                tuple_base + (tuple_operand & 0xFFFCU));
+                        if (!base_table_valid || tuples == nullptr ||
+                            readable_bytes(tuples) <
+                                static_cast<std::size_t>(tuple_count) * 4) {
+                            result.op54_layout_valid = false;
+                        } else {
+                            result.op54_tuple_count += tuple_count;
+                            for (std::uint32_t tuple = 0;
+                                 tuple < tuple_count; ++tuple) {
+                                const std::uint16_t destination = tuples[tuple * 2];
+                                const std::uint16_t source = tuples[tuple * 2 + 1];
+                                const std::size_t pair =
+                                    static_cast<std::size_t>(source & 3U) * 4 +
+                                    (destination & 3U);
+                                ++result.op54_base_pairs[pair];
+                                result.op54_hash = aim_pipeline_hash_word(
+                                    result.op54_hash,
+                                    static_cast<std::uint32_t>(destination) |
+                                        (static_cast<std::uint32_t>(source) << 16));
+                            }
+                        }
+                    }
                 } else if (opcode == 57) {
                     ++result.palette_reader_count;
                 }
-                const std::uint16_t* const payload = cursor + 1;
                 std::uint16_t destination = 0;
                 bool matrix_writer = false;
                 if (opcode == 55 && words >= 4) {
@@ -21187,7 +21262,7 @@ void prepare_aim_joint_boundary_scope(
             char line[512]{};
             std::snprintf(
                 line, sizeof(line),
-                "AIM-JOINT-ADMISSION-JT outer sample=%u group=%u "
+        "AIM-JOINT-ADMISSION-JU outer sample=%u group=%u "
                 "op16=%u op24=%u joints=%u peer=%u/%u local=%u/%u "
                 "peerY=%.4f localY=%.4f separation=%.4f armed=%u",
                 sample + 1, processing_group, case16_count, case24_count,
@@ -21254,6 +21329,8 @@ void log_aim_joint_boundary_after_case16(
         baseline.workspace_count != workspace_count;
     float joint_params_delta_sq = 0.0F;
     float workspace_delta_sq = 0.0F;
+    std::uint32_t joint_params_raw_changes = 0;
+    std::uint32_t workspace_raw_changes = 0;
     std::array<std::uint32_t, 4> top_indices{};
     std::array<float, 4> top_scores{};
     std::array<float, 4> top_joint_params{};
@@ -21268,18 +21345,36 @@ void log_aim_joint_boundary_after_case16(
                 for (std::size_t component = 0; component < 12; ++component) {
                     const std::size_t index =
                         static_cast<std::size_t>(joint) * 12 + component;
-                    const float delta = capture.pre_joint_params[index] -
-                        baseline.pre_joint_params[index];
-                    joint_delta_sq += delta * delta;
+                    const float current = capture.pre_joint_params[index];
+                    const float previous = baseline.pre_joint_params[index];
+                    std::uint32_t current_bits = 0;
+                    std::uint32_t previous_bits = 0;
+                    std::memcpy(&current_bits, &current, sizeof(current_bits));
+                    std::memcpy(&previous_bits, &previous, sizeof(previous_bits));
+                    joint_params_raw_changes +=
+                        static_cast<unsigned>(current_bits != previous_bits);
+                    if (std::isfinite(current) && std::isfinite(previous)) {
+                        const float delta = current - previous;
+                        joint_delta_sq += delta * delta;
+                    }
                 }
             }
             if (joint < workspace_count) {
                 for (std::size_t component = 0; component < 16; ++component) {
                     const std::size_t index =
                         static_cast<std::size_t>(joint) * 16 + component;
-                    const float delta = capture.post_workspace[index] -
-                        baseline.post_workspace[index];
-                    workspace_joint_delta_sq += delta * delta;
+                    const float current = capture.post_workspace[index];
+                    const float previous = baseline.post_workspace[index];
+                    std::uint32_t current_bits = 0;
+                    std::uint32_t previous_bits = 0;
+                    std::memcpy(&current_bits, &current, sizeof(current_bits));
+                    std::memcpy(&previous_bits, &previous, sizeof(previous_bits));
+                    workspace_raw_changes +=
+                        static_cast<unsigned>(current_bits != previous_bits);
+                    if (std::isfinite(current) && std::isfinite(previous)) {
+                        const float delta = current - previous;
+                        workspace_joint_delta_sq += delta * delta;
+                    }
                 }
             }
             joint_params_delta_sq += joint_delta_sq;
@@ -21342,16 +21437,48 @@ void log_aim_joint_boundary_after_case16(
             used += static_cast<std::size_t>(written);
         }
     }
-    char line[1536]{};
+    char op54_pairs[192]{};
+    std::size_t op54_used = 0;
+    for (std::size_t source = 0; source < 4; ++source) {
+        for (std::size_t destination = 0; destination < 4; ++destination) {
+            const std::uint32_t count =
+                capture.programs.op54_base_pairs[source * 4 + destination];
+            if (count == 0) {
+                continue;
+            }
+            const int written = std::snprintf(
+                op54_pairs + op54_used, sizeof(op54_pairs) - op54_used,
+                "%zu>%zu:%u", source, destination, count);
+            if (written <= 0 ||
+                static_cast<std::size_t>(written) >=
+                    sizeof(op54_pairs) - op54_used) {
+                break;
+            }
+            op54_used += static_cast<std::size_t>(written);
+            if (op54_used + 1 < sizeof(op54_pairs)) {
+                op54_pairs[op54_used++] = ';';
+                op54_pairs[op54_used] = '\0';
+            }
+        }
+    }
+    if (op54_used == 0) {
+        std::snprintf(op54_pairs, sizeof(op54_pairs), "none");
+    } else if (op54_pairs[op54_used - 1] == ';') {
+        op54_pairs[op54_used - 1] = '\0';
+    }
+    char line[2048]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-BOUNDARY-JQ sample=%u seq=%u peerSrc=%u "
+        "AIM-JOINT-BOUNDARY-JU sample=%u seq=%u peerSrc=%u "
         "peerY=%.4f localY=%.4f dirDelta=%.4f/%.4f "
         "group=%u first=%u params=%u workspace=%u reset=%u "
         "op16=%u op24=%u programs=%u/%u hash=%016llX "
         "op54=%u matrixW=%u paletteR=%u custom=%u "
+        "op54Copy=%u/%u/%016llX tupleSel=%u/%u/%u/%u pairs=%s "
+        "customOps=%u/%u/%u/%u/%u/%u "
         "preJP=%016llX postJP=%016llX postW=%016llX "
-        "deltaJP/W=%.5f/%.5f inCallJP=%.5f topJP/W=%s",
+        "nonfinite=%u/%u/%u rawChangedJP/W=%u/%u "
+        "deltaJP/W=%.5f/%.5f inCallJP=%.5f/%u topJP/W=%s",
         sample + 1, scope.peer_sequence, scope.peer_source,
         scope.peer_y, scope.local_y, peer_delta, local_delta,
         scope.processing_group, first_joint, parameter_count, workspace_count,
@@ -21360,11 +21487,29 @@ void log_aim_joint_boundary_after_case16(
         static_cast<unsigned long long>(capture.programs.hash),
         capture.programs.op54_count, capture.programs.matrix_writer_count,
         capture.programs.palette_reader_count, capture.programs.custom_count,
+        capture.programs.op54_tuple_count,
+        static_cast<unsigned>(capture.programs.op54_layout_valid),
+        static_cast<unsigned long long>(capture.programs.op54_hash),
+        capture.programs.op54_tuple_selectors[0],
+        capture.programs.op54_tuple_selectors[1],
+        capture.programs.op54_tuple_selectors[2],
+        capture.programs.op54_tuple_selectors[3], op54_pairs,
+        capture.programs.custom_opcode_counts[0],
+        capture.programs.custom_opcode_counts[1],
+        capture.programs.custom_opcode_counts[2],
+        capture.programs.custom_opcode_counts[3],
+        capture.programs.custom_opcode_counts[4],
+        capture.programs.custom_opcode_counts[5],
         static_cast<unsigned long long>(capture.pre_joint_params_hash),
         static_cast<unsigned long long>(capture.post_joint_params_hash),
         static_cast<unsigned long long>(capture.post_workspace_hash),
+        capture.pre_joint_params_nonfinite,
+        capture.post_joint_params_nonfinite,
+        capture.post_workspace_nonfinite, joint_params_raw_changes,
+        workspace_raw_changes,
         std::sqrt(joint_params_delta_sq), std::sqrt(workspace_delta_sq),
-        capture.in_call_joint_params_delta, top);
+        capture.in_call_joint_params_delta,
+        capture.in_call_joint_params_raw_changes, top);
     boot_log_line(line);
     capture.valid = false;
 }
@@ -21447,7 +21592,7 @@ void audit_aim_joint_case16_entry(
     char line[768]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-ADMISSION-JT raw sample=%u screen=1 outerGroup=%u "
+        "AIM-JOINT-ADMISSION-JU raw sample=%u screen=1 outerGroup=%u "
         "segmentGroup=%u segment=%u pointers=%u target=%u group=%u "
         "ordinal=%u/%u first=%u workspace=%u params=%u "
         "scopeTarget=%p program=%p actual=%p jp=%p work=%p readable=%u/%u",
@@ -21470,7 +21615,7 @@ void audit_aim_joint_case16_entry(
 
 void log_aim_joint_admission_post(
     const AimJointBoundaryScope& scope, bool programs_valid,
-    bool joint_params_readable, bool workspace_readable, bool finite) {
+    bool joint_params_readable, bool workspace_readable, bool captured) {
     if (scope.processing_group >= kAimJointBoundaryMaxGroups) {
         return;
     }
@@ -21484,13 +21629,13 @@ void log_aim_joint_admission_post(
     char line[384]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-ADMISSION-JT post sample=%u group=%u "
-        "programs=%u readable=%u/%u finite=%u",
+        "AIM-JOINT-ADMISSION-JU post sample=%u group=%u "
+        "programs=%u readable=%u/%u captured=%u",
         sample + 1, scope.processing_group,
         static_cast<unsigned>(programs_valid),
         static_cast<unsigned>(joint_params_readable),
         static_cast<unsigned>(workspace_readable),
-        static_cast<unsigned>(finite));
+        static_cast<unsigned>(captured));
     boot_log_line(line);
 }
 
@@ -21567,7 +21712,7 @@ std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
         capture.pre_joint_params.data(), joint_params,
         parameter_values * sizeof(float));
     capture.programs = inventory_aim_joint_programs(
-        target_skeleton, group);
+        target_skeleton, group, segment_context);
     std::uint32_t* const result = native(status, segment_context);
     const bool post_joint_params_readable =
         readable_bytes(joint_params) >= parameter_values * sizeof(float);
@@ -21586,27 +21731,39 @@ std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
     std::memcpy(
         capture.post_workspace.data(), workspace,
         workspace_values * sizeof(float));
-    bool finite = aim_hash_floats(
+    aim_summarize_float_words(
         capture.pre_joint_params.data(), parameter_values,
-        capture.pre_joint_params_hash);
-    finite = finite && aim_hash_floats(
+        capture.pre_joint_params_hash,
+        capture.pre_joint_params_nonfinite);
+    aim_summarize_float_words(
         capture.post_joint_params.data(), parameter_values,
-        capture.post_joint_params_hash);
-    finite = finite && aim_hash_floats(
+        capture.post_joint_params_hash,
+        capture.post_joint_params_nonfinite);
+    aim_summarize_float_words(
         capture.post_workspace.data(), workspace_values,
-        capture.post_workspace_hash);
+        capture.post_workspace_hash,
+        capture.post_workspace_nonfinite);
     float in_call_delta_sq = 0.0F;
-    for (std::size_t index = 0; finite && index < parameter_values; ++index) {
-        const float delta = capture.post_joint_params[index] -
-            capture.pre_joint_params[index];
-        in_call_delta_sq += delta * delta;
+    std::uint32_t in_call_raw_changes = 0;
+    for (std::size_t index = 0; index < parameter_values; ++index) {
+        const float before = capture.pre_joint_params[index];
+        const float after = capture.post_joint_params[index];
+        std::uint32_t before_bits = 0;
+        std::uint32_t after_bits = 0;
+        std::memcpy(&before_bits, &before, sizeof(before_bits));
+        std::memcpy(&after_bits, &after, sizeof(after_bits));
+        in_call_raw_changes += static_cast<unsigned>(
+            before_bits != after_bits);
+        if (std::isfinite(before) && std::isfinite(after)) {
+            const float delta = after - before;
+            in_call_delta_sq += delta * delta;
+        }
     }
     capture.in_call_joint_params_delta = std::sqrt(in_call_delta_sq);
-    capture.valid = finite;
-    if (!finite) {
-        log_aim_joint_admission_post(
-            scope, true, true, true, false);
-    }
+    capture.in_call_joint_params_raw_changes = in_call_raw_changes;
+    capture.valid = true;
+    log_aim_joint_admission_post(
+        scope, true, true, true, true);
     log_aim_joint_boundary_after_case16(
         scope, capture, group_first, parameter_count, workspace_count);
     return result;
@@ -23325,7 +23482,7 @@ bool install_aim_joint_boundary_probes() {
             VirtualFree(execute_relay, 0, MEM_RELEASE);
         }
         boot_log_line(
-            "aim jt case16 admission probe SKIPPED (callsite preflight)");
+            "aim ju case16 admission probe SKIPPED (callsite preflight)");
         return false;
     }
 
@@ -23337,7 +23494,7 @@ bool install_aim_joint_boundary_probes() {
         VirtualFree(execute_relay, 0, MEM_RELEASE);
         g_anim_cmd_execute_joint_programs = nullptr;
         boot_log_line(
-            "aim jt case16 admission probe SKIPPED (thread suspend)");
+            "aim ju case16 admission probe SKIPPED (thread suspend)");
         return false;
     }
 
@@ -23348,7 +23505,7 @@ bool install_aim_joint_boundary_probes() {
         resume_suspended_process_threads(suspended_threads);
         VirtualFree(execute_relay, 0, MEM_RELEASE);
         g_anim_cmd_execute_joint_programs = nullptr;
-        boot_log_line("aim jt case16 admission probe SKIPPED (protect)");
+        boot_log_line("aim ju case16 admission probe SKIPPED (protect)");
         return false;
     }
 
@@ -23359,7 +23516,7 @@ bool install_aim_joint_boundary_probes() {
     VirtualProtect(execute_callsite, 5, execute_old, &ignored);
     resume_suspended_process_threads(suspended_threads);
     boot_log_line(
-        "aim jt case16 admission probe installed (0x141ABA973)");
+        "aim ju case16 admission probe installed (0x141ABA973)");
     return true;
 }
 
@@ -42246,8 +42403,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-31jt "
-        "(dereferenced case16 program-skeleton audit)");
+        "TLL co-op runtime init 2026-07-31ju "
+        "(raw-word group-0 and opcode-54 inventory)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

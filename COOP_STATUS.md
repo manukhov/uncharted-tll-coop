@@ -13754,3 +13754,71 @@ Post/boundary rows then classify program inventory and finite buffers. A repeate
 `target=0` would reject the corrected child dereference; missing raw with armed
 outer would contradict the confirmed synchronous call path. Normal models and
 responsive processes remain mandatory.
+
+### 2026-07-31 RUNTIME CONFIRMED / STATIC: `jt` reaches the live joint programs; case 16 changes workspace without changing JointParams
+
+The camera-only `jt` run kept both characters still and out of ADS; both
+processes remained responsive and no model or animation fault appeared. Chloe's
+process emitted 48/48 outer/raw admission rows and Nadine's emitted 60/60.
+Every raw row had `segment=1 pointers=1 target=1 group=1`, ordinal `1/1`, and
+readable JointParams/workspace pointers. This confirms the corrected
+`R15=[(*AnimCmdContext)+0x40]` program-skeleton identity and the complete live
+path through `0x141ABA973` on both player models.
+
+The bounded semantic stage emitted 40 boundary rows for Chloe (groups 1 and 2,
+20 each) and 60 for Nadine (groups 1, 2 and 3, 20 each). Every one had identical
+pre/post JointParams hashes and `inCallJP=0.00000`. The complex authored programs
+(Chloe group 2: 27 operators, 10 custom; Nadine group 1: 41 operators, 12
+custom) nevertheless changed their workspace during both peer-only and
+local-only camera intervals while JointParams stayed bit-identical. Therefore
+case 16 does not directly mutate its `SegmentContext+0x50` JointParams input;
+its programs can consume other supplied bases and materialize matrices in the
+`+0x58` workspace. This does not yet prove which buffer owns the visible bad
+pitch.
+
+Group 0 reached the post gate on both processes with a valid one-program stream
+and readable buffers, but all 12 bounded post rows were rejected only by the old
+"every 32-bit word must be a finite float" diagnostic. Native execution
+completed normally. Treating the mixed JointParams storage as a pure float array
+was therefore **REJECTED**; raw-bit hashing is required for this group.
+
+Three independent evidence types support the next discriminator:
+
+1. The direct call graph and exact instructions pass the same SegmentContext
+   from `ProcessAnimCmdListSegment 0x141AB97C0` to
+   `AnimCmdEvaluator_ExecuteSkeletonJointPrograms 0x14217B630` at
+   `0x141ABA973`.
+2. Decompilation and the builtin dispatch slot at
+   `g_AnimJointProgramBuiltinOperatorTable+54*8` prove opcode 54 resolves four
+   encoded bases: JointParams, workspace, `SegmentContext+0x68`, and shared
+   scratch `SegmentContext+0x30`. `AnimJointProgram_CopyEncodedScalars
+   0x142189370` copies each authored 32-bit `source -> destination` tuple without
+   float math; a base 2/3 to base 1 tuple can therefore change workspace while
+   leaving JointParams untouched. Custom opcodes 128 through 133 use the same
+   base table and have no direct Player/camera-global read.
+3. The `jt` runtime structure independently shows stable JointParams alongside
+   changing workspace in the exact complex program groups.
+
+Competing explanations remain: **H54**, opcode 54 copies a receiver-local value
+from base 2/3 or shared scratch into workspace; **Hcustom**, one of authored
+custom opcodes 128--133 first introduces the workspace difference; **Hupstream**,
+the relevant workspace/input base already differs before the first operator and
+case 16 only propagates normal pose state.
+
+Read-only build `2026-07-31ju` removes only the invalid finite-float admission
+rule. It hashes all words by raw bits, reports non-finite counts and raw changed
+word counts, inventories exact custom-opcode frequencies, and decodes opcode-54
+tuple selectors plus all authored base-pair counts. It does not write game,
+animation, Player, camera, packet, scratch or joint state and calls the native
+function exactly once.
+
+Written `ju` prediction: repeat the camera-only opposed sequence with both
+characters still and out of ADS. Normal models plus group-0 boundary rows on
+both processes prove that non-finite words were the only remaining admission
+loss. A complex-group `2>1` or `3>1` opcode-54 pair together with constant
+JointParams and changing workspace selects H54's concrete buffer seam. If
+opcode 54 has no such pair, H54 is rejected for that program and the custom
+operators become the next bounded boundary. If workspace already differs before
+the first operator, Hupstream wins. Missing group-0 boundary despite
+`programs=1 readable=1/1` rejects the raw-word implementation. No write or
+native-call-count experiment is authorized by this build.

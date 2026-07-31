@@ -2178,18 +2178,26 @@ FUNCTIONS = {
         "program records and dispatches their transform operators over the final "
         "WorkBuffer JointParams into the 64-byte-per-joint matrix workspace. Each "
         "operator receives encoded bases SegmentContext +0x50, +0x58, +0x68 and "
-        "+0x30; the current group descriptor is read from +0x38.",
+        "+0x30; the current group descriptor is read from +0x38. Runtime build jt "
+        "confirmed that every captured group-1/2/3 invocation left +0x50 "
+        "JointParams bit-identical while complex authored programs changed the "
+        "+0x58 workspace.",
     ),
     0x142194C30: (
         "AnimJointProgramOp54_CopyEncodedScalars",
-        "Built-in joint-program opcode 54 wrapper. Resolves its two encoded base/"
-        "offset operands and forwards a bounded scalar copy/scatter program to "
+        "Built-in joint-program opcode 54 wrapper. payload[0] is the scalar-copy "
+        "count; payload[1] resolves the four-pointer base table (normally operator-"
+        "context selector 3), and payload[2] resolves the authored pair list from "
+        "operator-context selector 0 or 1. It forwards those inputs to "
         "AnimJointProgram_CopyEncodedScalars.",
     ),
     0x142189370: (
         "AnimJointProgram_CopyEncodedScalars",
-        "Copies and scatters encoded scalar register tuples between the four joint-"
-        "program base arrays selected by each operand's low two bits.",
+        "Copies each authored {destination, source} pair as one raw 32-bit word. "
+        "Each encoded operand's low two bits select JointParams, workspace, the "
+        "SegmentContext+0x68 base, or shared scratch; remaining bits are the byte "
+        "offset. Thus a base-2/3 to base-1 tuple can change workspace without "
+        "mutating JointParams.",
     ),
     0x142194620: (
         "AnimJointProgramOp59_ConvertJointParamsToMatrices",
