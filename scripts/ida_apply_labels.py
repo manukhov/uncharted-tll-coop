@@ -2219,28 +2219,37 @@ FUNCTIONS = {
     0x141A97060: (
         "AnimJointProgramCustomOp128",
         "Custom joint-program operator 128 from the six-entry table at "
-        "0x143026CB0. Its complete dataflow is closed over authored operands and "
-        "the evaluator's four supplied buffers; it has no camera/global input.",
+        "0x143026CB0. Each 64-byte authored record reads an encoded 16-byte "
+        "quaternion and optional scalar, computes a clamped angular weight, and "
+        "writes one encoded scalar at record+0x3C. Its dataflow is closed over the "
+        "four evaluator buffers; it has no camera/global input.",
     ),
     0x141A951F0: (
         "AnimJointProgramCustomOp129",
-        "Custom joint-program operator 129. Performs authored buffer-local angle/"
-        "joint work and has no Player, camera, screen-route or gameplay-global read.",
+        "Custom joint-program operator 129. Each 64-byte authored record reads one "
+        "encoded 16-byte quaternion, computes a signed wrapped relative angle, and "
+        "writes one encoded scalar at record+0x3C. It has no Player, camera, screen-"
+        "route or gameplay-global read.",
     ),
     0x141A945F0: (
         "AnimJointProgramCustomOp130",
-        "Custom joint-program operator 130. Operates only on encoded evaluator "
-        "buffers and authored stream values; no camera/global source is reachable.",
+        "Custom joint-program operator 130. Its descriptor supplies N encoded "
+        "scalar inputs, authored centers/weights, and M encoded scalar destinations; "
+        "it evaluates distance-weighted sums and writes those M outputs. No direct "
+        "camera/global source is reachable.",
     ),
     0x141A94D80: (
         "AnimJointProgramCustomOp131",
-        "Custom joint-program operator 131. Operates only on encoded evaluator "
-        "buffers and authored stream values; no camera/global source is reachable.",
+        "Custom joint-program operator 131. Reads one encoded 32-byte transform, "
+        "builds an affine matrix, and writes authored component codes to encoded "
+        "scalar destinations. No direct camera/global source is reachable.",
     ),
     0x141A95E80: (
         "AnimJointProgramCustomOp132",
-        "Custom joint-program operator 132. Performs authored buffer-local IK/math "
-        "and has no Player, camera, screen-route or gameplay-global read.",
+        "Custom joint-program operator 132. Its large descriptor resolves encoded "
+        "matrix/scalar inputs and encoded scalar outputs for buffer-local IK/math; "
+        "it also reads SegmentContext+0x4A flags 0x100/0x200. It has no Player, "
+        "camera, screen-route or gameplay-global read.",
     ),
     0x141A97970: (
         "AnimJointProgramCustomOp133",
@@ -9701,7 +9710,10 @@ DATA_NAMES = {
         "g_AnimJointProgramCustomOperatorTable",
         "Six-entry custom skeleton joint-program operator table for authored "
         "opcodes 128 through 133. Every handler is closed over its operand stream "
-        "and the four evaluator buffers; none reads camera/gameplay globals.",
+        "and the four evaluator buffers; none reads camera/gameplay globals. "
+        "ProcessAnimCmdListSegment stores this exact table at SegmentContext+0x10 "
+        "in 0x141AB9B44 and ExecuteSkeletonJointPrograms dispatches slot opcode-128 "
+        "through it at 0x14217B724.",
     ),
     0x14300C938: (
         "g_AnimJointProgramCustomOperatorCount",

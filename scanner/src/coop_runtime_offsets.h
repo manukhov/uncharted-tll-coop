@@ -156,6 +156,12 @@ constexpr std::uintptr_t kProcessAnimCmdListSegmentRva = 0x1AB97C0;
 // producer of WorkBuffer+0x58; opcode 26 consumes the same 64-byte rows.
 constexpr std::uintptr_t kAnimCmdExecuteJointProgramsCallsiteRva = 0x1ABA973;
 constexpr std::uintptr_t kAnimCmdExecuteJointProgramsRva = 0x217B630;
+constexpr std::uintptr_t kAnimJointProgramCustomOperatorTableRva = 0x3026CB0;
+constexpr std::uintptr_t kAnimJointProgramBuiltinOperatorTableRva = 0x3026D20;
+constexpr std::uintptr_t kAnimJointProgramOp54Rva = 0x2194C30;
+constexpr std::array<std::uintptr_t, 6> kAnimJointProgramCustomOperatorRvas{
+    0x1A97060, 0x1A951F0, 0x1A945F0,
+    0x1A94D80, 0x1A95E80, 0x1A97970};
 constexpr std::uintptr_t kAnimCmdWriteSkinningPaletteCallsiteRva = 0x1ABAE8C;
 constexpr std::uintptr_t kAnimCmdWriteSkinningPaletteRva = 0x218B170;
 constexpr std::uintptr_t kSkelTableRetargetEntryCountRva = 0x38401D8;

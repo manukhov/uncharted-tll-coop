@@ -110,11 +110,16 @@ using ProcessAnimCmdListSegmentFunction = std::uint32_t(__fastcall*)(
     const void*, const void*, const void*);
 using AnimCmdExecuteJointProgramsFunction = std::uint32_t*(__fastcall*)(
     std::uint32_t*, const void*);
+using AnimJointProgramOperatorFunction = std::uintptr_t(__fastcall*)(
+    const std::uint16_t*, const std::uintptr_t*, const void*);
 
 UpdateFunction g_original_update = nullptr;
 ProcessAnimCmdListSegmentFunction g_original_process_anim_cmd_list_segment =
     nullptr;
 AnimCmdExecuteJointProgramsFunction g_anim_cmd_execute_joint_programs = nullptr;
+AnimJointProgramOperatorFunction g_original_anim_joint_program_op54 = nullptr;
+std::array<AnimJointProgramOperatorFunction, 6>
+    g_original_anim_joint_program_custom_operators{};
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
 std::atomic<void*> g_local_fganim_data{nullptr};
 std::atomic<void*> g_puppet_fganim_data{nullptr};
@@ -20959,6 +20964,34 @@ std::array<std::atomic<std::uint32_t>, kAimJointBoundaryMaxGroups>
     g_aim_joint_admission_inner_sample_count{};
 std::array<std::atomic<std::uint32_t>, kAimJointBoundaryMaxGroups>
     g_aim_joint_admission_post_sample_count{};
+std::array<std::atomic<ULONGLONG>, kAimJointBoundaryMaxGroups>
+    g_aim_joint_operator_next_log_ms{};
+std::array<std::atomic<std::uint32_t>, kAimJointBoundaryMaxGroups>
+    g_aim_joint_operator_sample_count{};
+
+struct AimJointOperatorBoundaryScope {
+    bool active = false;
+    std::uint32_t sample = 0;
+    std::uint32_t processing_group = 0;
+    std::uint32_t operator_ordinal = 0;
+    std::uint32_t peer_sequence = 0;
+    float peer_y = 0.0F;
+    float local_y = 0.0F;
+    const void* segment_context = nullptr;
+    const std::byte* program_skeleton = nullptr;
+    const std::uint32_t* joint_params = nullptr;
+    const std::uint32_t* workspace_base = nullptr;
+    std::size_t joint_params_words = 0;
+    std::size_t workspace_words = 0;
+    std::array<std::uint32_t, kAimPipelineMaxJoints * 12>
+        pre_joint_params{};
+    std::array<std::uint32_t, (kAimPipelineMaxJoints + 1) * 16>
+        pre_workspace{};
+    std::array<std::uint32_t, (kAimPipelineMaxJoints + 1) * 16>
+        checkpoint_workspace{};
+};
+
+thread_local AimJointOperatorBoundaryScope g_aim_joint_operator_scope{};
 
 void aim_summarize_float_words(
     const float* values, std::size_t count, std::uint64_t& hash,
@@ -20974,6 +21007,32 @@ void aim_summarize_float_words(
         std::memcpy(&bits, &value, sizeof(bits));
         hash = aim_pipeline_hash_word(hash, bits);
     }
+}
+
+std::uint64_t aim_hash_raw_words(
+    const std::uint32_t* values, std::size_t count) {
+    std::uint64_t hash = kAimPipelineFnvOffset;
+    for (std::size_t index = 0; index < count; ++index) {
+        hash = aim_pipeline_hash_word(hash, values[index]);
+    }
+    return hash;
+}
+
+std::uint32_t aim_count_changed_words(
+    const std::uint32_t* before, const std::uint32_t* after,
+    std::size_t count, std::uint32_t& first_changed) {
+    std::uint32_t changed = 0;
+    first_changed = UINT32_MAX;
+    for (std::size_t index = 0; index < count; ++index) {
+        if (before[index] == after[index]) {
+            continue;
+        }
+        if (first_changed == UINT32_MAX) {
+            first_changed = static_cast<std::uint32_t>(index);
+        }
+        ++changed;
+    }
+    return changed;
 }
 
 AimJointProgramInventory inventory_aim_joint_programs(
@@ -21262,7 +21321,7 @@ void prepare_aim_joint_boundary_scope(
             char line[512]{};
             std::snprintf(
                 line, sizeof(line),
-        "AIM-JOINT-ADMISSION-JU outer sample=%u group=%u "
+        "AIM-JOINT-ADMISSION-JV outer sample=%u group=%u "
                 "op16=%u op24=%u joints=%u peer=%u/%u local=%u/%u "
                 "peerY=%.4f localY=%.4f separation=%.4f armed=%u",
                 sample + 1, processing_group, case16_count, case24_count,
@@ -21469,7 +21528,7 @@ void log_aim_joint_boundary_after_case16(
     char line[2048]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-BOUNDARY-JU sample=%u seq=%u peerSrc=%u "
+        "AIM-JOINT-BOUNDARY-JV sample=%u seq=%u peerSrc=%u "
         "peerY=%.4f localY=%.4f dirDelta=%.4f/%.4f "
         "group=%u first=%u params=%u workspace=%u reset=%u "
         "op16=%u op24=%u programs=%u/%u hash=%016llX "
@@ -21592,7 +21651,7 @@ void audit_aim_joint_case16_entry(
     char line[768]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-ADMISSION-JU raw sample=%u screen=1 outerGroup=%u "
+        "AIM-JOINT-ADMISSION-JV raw sample=%u screen=1 outerGroup=%u "
         "segmentGroup=%u segment=%u pointers=%u target=%u group=%u "
         "ordinal=%u/%u first=%u workspace=%u params=%u "
         "scopeTarget=%p program=%p actual=%p jp=%p work=%p readable=%u/%u",
@@ -21629,7 +21688,7 @@ void log_aim_joint_admission_post(
     char line[384]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-ADMISSION-JU post sample=%u group=%u "
+        "AIM-JOINT-ADMISSION-JV post sample=%u group=%u "
         "programs=%u readable=%u/%u captured=%u",
         sample + 1, scope.processing_group,
         static_cast<unsigned>(programs_valid),
@@ -21638,6 +21697,249 @@ void log_aim_joint_admission_post(
         static_cast<unsigned>(captured));
     boot_log_line(line);
 }
+
+void begin_aim_joint_operator_boundary(
+    const AimJointBoundaryScope& parent,
+    const AimJointProgramInventory& programs,
+    const void* segment_context, const void* program_skeleton,
+    const std::uint32_t* joint_params, std::size_t joint_params_words,
+    const std::uint32_t* workspace_base, std::size_t workspace_words) {
+    auto& scope = g_aim_joint_operator_scope;
+    scope.active = false;
+    if (!parent.valid || parent.processing_group >= kAimJointBoundaryMaxGroups ||
+        !programs.valid || programs.op54_count != 1 ||
+        (programs.custom_count != 10 && programs.custom_count != 12) ||
+        joint_params == nullptr || workspace_base == nullptr ||
+        joint_params_words > scope.pre_joint_params.size() ||
+        workspace_words > scope.pre_workspace.size() ||
+        readable_bytes(joint_params) < joint_params_words * sizeof(std::uint32_t) ||
+        readable_bytes(workspace_base) < workspace_words * sizeof(std::uint32_t)) {
+        return;
+    }
+    const std::size_t group = parent.processing_group;
+    const ULONGLONG now = GetTickCount64();
+    if (g_aim_joint_operator_sample_count[group].load(
+            std::memory_order_acquire) >= 12) {
+        return;
+    }
+    ULONGLONG due = g_aim_joint_operator_next_log_ms[group].load(
+        std::memory_order_acquire);
+    if (now < due ||
+        !g_aim_joint_operator_next_log_ms[group].compare_exchange_strong(
+            due, now + 350, std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
+        return;
+    }
+    const std::uint32_t sample =
+        g_aim_joint_operator_sample_count[group].fetch_add(
+            1, std::memory_order_acq_rel);
+    if (sample >= 12) {
+        return;
+    }
+
+    scope.sample = sample + 1;
+    scope.processing_group = parent.processing_group;
+    scope.operator_ordinal = 0;
+    scope.peer_sequence = parent.peer_sequence;
+    scope.peer_y = parent.peer_y;
+    scope.local_y = parent.local_y;
+    scope.segment_context = segment_context;
+    scope.program_skeleton = static_cast<const std::byte*>(program_skeleton);
+    scope.joint_params = joint_params;
+    scope.workspace_base = workspace_base;
+    scope.joint_params_words = joint_params_words;
+    scope.workspace_words = workspace_words;
+    std::memcpy(
+        scope.checkpoint_workspace.data(), workspace_base,
+        workspace_words * sizeof(std::uint32_t));
+    scope.active = true;
+
+    char line[768]{};
+    std::snprintf(
+        line, sizeof(line),
+        "AIM-JOINT-OP-JV begin sample=%u seq=%u peerY=%.4f localY=%.4f "
+        "group=%u programs=%u/%u custom=%u hash=%016llX "
+        "jp=%016llX workspace=%016llX",
+        scope.sample, scope.peer_sequence, scope.peer_y, scope.local_y,
+        scope.processing_group, programs.program_count,
+        programs.operator_count, programs.custom_count,
+        static_cast<unsigned long long>(programs.hash),
+        static_cast<unsigned long long>(aim_hash_raw_words(
+            joint_params, joint_params_words)),
+        static_cast<unsigned long long>(aim_hash_raw_words(
+            workspace_base, workspace_words)));
+    boot_log_line(line);
+}
+
+void finish_aim_joint_operator_boundary() {
+    auto& scope = g_aim_joint_operator_scope;
+    if (!scope.active) {
+        return;
+    }
+    const bool readable =
+        readable_bytes(scope.workspace_base) >=
+            scope.workspace_words * sizeof(std::uint32_t) &&
+        readable_bytes(scope.joint_params) >=
+            scope.joint_params_words * sizeof(std::uint32_t);
+    std::uint32_t trailing_first = UINT32_MAX;
+    const std::uint32_t trailing_changes = readable
+        ? aim_count_changed_words(
+            scope.checkpoint_workspace.data(), scope.workspace_base,
+            scope.workspace_words, trailing_first)
+        : 0;
+    char line[640]{};
+    std::snprintf(
+        line, sizeof(line),
+        "AIM-JOINT-OP-JV end sample=%u group=%u hooked=%u readable=%u "
+        "trailingW=%u/%u jp=%016llX workspace=%016llX",
+        scope.sample, scope.processing_group, scope.operator_ordinal,
+        static_cast<unsigned>(readable), trailing_changes, trailing_first,
+        static_cast<unsigned long long>(readable
+            ? aim_hash_raw_words(scope.joint_params, scope.joint_params_words)
+            : 0),
+        static_cast<unsigned long long>(readable
+            ? aim_hash_raw_words(scope.workspace_base, scope.workspace_words)
+            : 0));
+    scope.active = false;
+    boot_log_line(line);
+}
+
+std::uintptr_t run_aim_joint_program_operator_boundary(
+    std::uint32_t opcode, AnimJointProgramOperatorFunction native,
+    const std::uint16_t* payload, const std::uintptr_t* operator_context,
+    const void* segment_context) {
+    if (native == nullptr) {
+        return 0;
+    }
+    auto& scope = g_aim_joint_operator_scope;
+    if (!scope.active || scope.segment_context != segment_context ||
+        payload == nullptr || operator_context == nullptr ||
+        readable_bytes(payload) < 6 || readable_bytes(operator_context) < 32) {
+        return native(payload, operator_context, segment_context);
+    }
+
+    bool admitted = false;
+    std::uint16_t base_table_operand = 0;
+    const std::uintptr_t* bases = nullptr;
+    __try {
+        base_table_operand = payload[1];
+        const std::uintptr_t meta_base =
+            operator_context[base_table_operand & 3U];
+        bases = reinterpret_cast<const std::uintptr_t*>(
+            meta_base + (base_table_operand & 0xFFFCU));
+        admitted = bases != nullptr && readable_bytes(bases) >= 32 &&
+            bases[0] == reinterpret_cast<std::uintptr_t>(scope.joint_params) &&
+            bases[1] == reinterpret_cast<std::uintptr_t>(scope.workspace_base);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        admitted = false;
+    }
+    if (!admitted) {
+        return native(payload, operator_context, segment_context);
+    }
+
+    const std::uint32_t ordinal = ++scope.operator_ordinal;
+    const std::uintptr_t payload_address =
+        reinterpret_cast<std::uintptr_t>(payload);
+    const std::uintptr_t program_address =
+        reinterpret_cast<std::uintptr_t>(scope.program_skeleton);
+    const std::uint32_t payload_offset =
+        program_address != 0 && payload_address >= program_address &&
+            payload_address - program_address <= UINT32_MAX
+        ? static_cast<std::uint32_t>(
+            payload_address - program_address)
+        : UINT32_MAX;
+    std::memcpy(
+        scope.pre_joint_params.data(), scope.joint_params,
+        scope.joint_params_words * sizeof(std::uint32_t));
+    std::memcpy(
+        scope.pre_workspace.data(), scope.workspace_base,
+        scope.workspace_words * sizeof(std::uint32_t));
+    std::uint32_t gap_first = UINT32_MAX;
+    const std::uint32_t gap_changes = aim_count_changed_words(
+        scope.checkpoint_workspace.data(), scope.pre_workspace.data(),
+        scope.workspace_words, gap_first);
+    const std::uint64_t pre_joint_hash = aim_hash_raw_words(
+        scope.pre_joint_params.data(), scope.joint_params_words);
+    const std::uint64_t pre_workspace_hash = aim_hash_raw_words(
+        scope.pre_workspace.data(), scope.workspace_words);
+
+    const std::uintptr_t result =
+        native(payload, operator_context, segment_context);
+
+    const bool post_readable =
+        readable_bytes(scope.workspace_base) >=
+            scope.workspace_words * sizeof(std::uint32_t) &&
+        readable_bytes(scope.joint_params) >=
+            scope.joint_params_words * sizeof(std::uint32_t);
+    std::uint32_t joint_first = UINT32_MAX;
+    std::uint32_t workspace_first = UINT32_MAX;
+    const std::uint32_t joint_changes = post_readable
+        ? aim_count_changed_words(
+            scope.pre_joint_params.data(), scope.joint_params,
+            scope.joint_params_words, joint_first)
+        : 0;
+    const std::uint32_t workspace_changes = post_readable
+        ? aim_count_changed_words(
+            scope.pre_workspace.data(), scope.workspace_base,
+            scope.workspace_words, workspace_first)
+        : 0;
+    const std::uint64_t post_joint_hash = post_readable
+        ? aim_hash_raw_words(scope.joint_params, scope.joint_params_words)
+        : 0;
+    const std::uint64_t post_workspace_hash = post_readable
+        ? aim_hash_raw_words(scope.workspace_base, scope.workspace_words)
+        : 0;
+    if (post_readable) {
+        std::memcpy(
+            scope.checkpoint_workspace.data(), scope.workspace_base,
+            scope.workspace_words * sizeof(std::uint32_t));
+    }
+
+    char line[1024]{};
+    std::snprintf(
+        line, sizeof(line),
+        "AIM-JOINT-OP-JV step sample=%u group=%u ordinal=%u opcode=%u "
+        "payloadOff=%08X baseMeta=%04X readable=%u gapW=%u/%u "
+        "deltaJP=%u/%u deltaW=%u/%u preJP/W=%016llX/%016llX "
+        "postJP/W=%016llX/%016llX",
+        scope.sample, scope.processing_group, ordinal, opcode,
+        payload_offset, base_table_operand,
+        static_cast<unsigned>(post_readable), gap_changes, gap_first,
+        joint_changes, joint_first, workspace_changes, workspace_first,
+        static_cast<unsigned long long>(pre_joint_hash),
+        static_cast<unsigned long long>(pre_workspace_hash),
+        static_cast<unsigned long long>(post_joint_hash),
+        static_cast<unsigned long long>(post_workspace_hash));
+    boot_log_line(line);
+    return result;
+}
+
+std::uintptr_t __fastcall hooked_anim_joint_program_op54(
+    const std::uint16_t* payload, const std::uintptr_t* operator_context,
+    const void* segment_context) {
+    return run_aim_joint_program_operator_boundary(
+        54, g_original_anim_joint_program_op54, payload,
+        operator_context, segment_context);
+}
+
+#define DEFINE_AIM_CUSTOM_OPERATOR_WRAPPER(OPCODE, INDEX)                     \
+    std::uintptr_t __fastcall hooked_anim_joint_program_op##OPCODE(           \
+        const std::uint16_t* payload,                                         \
+        const std::uintptr_t* operator_context,                               \
+        const void* segment_context) {                                        \
+        return run_aim_joint_program_operator_boundary(                       \
+            OPCODE, g_original_anim_joint_program_custom_operators[INDEX],    \
+            payload, operator_context, segment_context);                      \
+    }
+
+DEFINE_AIM_CUSTOM_OPERATOR_WRAPPER(128, 0)
+DEFINE_AIM_CUSTOM_OPERATOR_WRAPPER(129, 1)
+DEFINE_AIM_CUSTOM_OPERATOR_WRAPPER(130, 2)
+DEFINE_AIM_CUSTOM_OPERATOR_WRAPPER(131, 3)
+DEFINE_AIM_CUSTOM_OPERATOR_WRAPPER(132, 4)
+DEFINE_AIM_CUSTOM_OPERATOR_WRAPPER(133, 5)
+
+#undef DEFINE_AIM_CUSTOM_OPERATOR_WRAPPER
 
 std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
     std::uint32_t* status, const void* segment_context) {
@@ -21713,7 +22015,14 @@ std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
         parameter_values * sizeof(float));
     capture.programs = inventory_aim_joint_programs(
         target_skeleton, group, segment_context);
+    begin_aim_joint_operator_boundary(
+        scope, capture.programs, segment_context, target_skeleton,
+        reinterpret_cast<const std::uint32_t*>(joint_params),
+        parameter_values,
+        reinterpret_cast<const std::uint32_t*>(workspace_base),
+        workspace_values + 16);
     std::uint32_t* const result = native(status, segment_context);
+    finish_aim_joint_operator_boundary();
     const bool post_joint_params_readable =
         readable_bytes(joint_params) >= parameter_values * sizeof(float);
     const bool post_workspace_readable =
@@ -23482,7 +23791,7 @@ bool install_aim_joint_boundary_probes() {
             VirtualFree(execute_relay, 0, MEM_RELEASE);
         }
         boot_log_line(
-            "aim ju case16 admission probe SKIPPED (callsite preflight)");
+            "aim jv case16 admission probe SKIPPED (callsite preflight)");
         return false;
     }
 
@@ -23494,7 +23803,7 @@ bool install_aim_joint_boundary_probes() {
         VirtualFree(execute_relay, 0, MEM_RELEASE);
         g_anim_cmd_execute_joint_programs = nullptr;
         boot_log_line(
-            "aim ju case16 admission probe SKIPPED (thread suspend)");
+            "aim jv case16 admission probe SKIPPED (thread suspend)");
         return false;
     }
 
@@ -23505,7 +23814,7 @@ bool install_aim_joint_boundary_probes() {
         resume_suspended_process_threads(suspended_threads);
         VirtualFree(execute_relay, 0, MEM_RELEASE);
         g_anim_cmd_execute_joint_programs = nullptr;
-        boot_log_line("aim ju case16 admission probe SKIPPED (protect)");
+        boot_log_line("aim jv case16 admission probe SKIPPED (protect)");
         return false;
     }
 
@@ -23516,7 +23825,100 @@ bool install_aim_joint_boundary_probes() {
     VirtualProtect(execute_callsite, 5, execute_old, &ignored);
     resume_suspended_process_threads(suspended_threads);
     boot_log_line(
-        "aim ju case16 admission probe installed (0x141ABA973)");
+        "aim jv case16 admission probe installed (0x141ABA973)");
+    return true;
+}
+
+bool install_aim_joint_operator_table_probes() {
+    auto* const builtin_table =
+        reinterpret_cast<AnimJointProgramOperatorFunction*>(
+            g_module + kAnimJointProgramBuiltinOperatorTableRva);
+    auto* const custom_table =
+        reinterpret_cast<AnimJointProgramOperatorFunction*>(
+            g_module + kAnimJointProgramCustomOperatorTableRva);
+    constexpr std::size_t kBuiltinOpcode = 54;
+    const std::array<AnimJointProgramOperatorFunction, 6> hooks{
+        &hooked_anim_joint_program_op128,
+        &hooked_anim_joint_program_op129,
+        &hooked_anim_joint_program_op130,
+        &hooked_anim_joint_program_op131,
+        &hooked_anim_joint_program_op132,
+        &hooked_anim_joint_program_op133};
+    if (readable_bytes(builtin_table + kBuiltinOpcode) <
+            sizeof(AnimJointProgramOperatorFunction) ||
+        readable_bytes(custom_table) <
+            sizeof(AnimJointProgramOperatorFunction) * hooks.size()) {
+        boot_log_line("aim jv operator-table probes SKIPPED (readability)");
+        return false;
+    }
+    if (builtin_table[kBuiltinOpcode] !=
+            reinterpret_cast<AnimJointProgramOperatorFunction>(
+                g_module + kAnimJointProgramOp54Rva)) {
+        boot_log_line("aim jv operator-table probes SKIPPED (op54 slot)");
+        return false;
+    }
+    for (std::size_t index = 0;
+         index < kAnimJointProgramCustomOperatorRvas.size(); ++index) {
+        if (custom_table[index] !=
+                reinterpret_cast<AnimJointProgramOperatorFunction>(
+                    g_module + kAnimJointProgramCustomOperatorRvas[index])) {
+            boot_log_line(
+                "aim jv operator-table probes SKIPPED (custom slot)");
+            return false;
+        }
+    }
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        boot_log_line(
+            "aim jv operator-table probes SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD builtin_old = 0;
+    DWORD custom_old = 0;
+    const bool builtin_protected = VirtualProtect(
+        builtin_table + kBuiltinOpcode,
+        sizeof(AnimJointProgramOperatorFunction), PAGE_READWRITE,
+        &builtin_old) != 0;
+    const bool custom_protected = builtin_protected && VirtualProtect(
+        custom_table, sizeof(AnimJointProgramOperatorFunction) * hooks.size(),
+        PAGE_READWRITE, &custom_old) != 0;
+    if (!custom_protected) {
+        if (builtin_protected) {
+            DWORD ignored = 0;
+            VirtualProtect(
+                builtin_table + kBuiltinOpcode,
+                sizeof(AnimJointProgramOperatorFunction), builtin_old,
+                &ignored);
+        }
+        resume_suspended_process_threads(suspended_threads);
+        boot_log_line("aim jv operator-table probes SKIPPED (protect)");
+        return false;
+    }
+
+    g_original_anim_joint_program_op54 = builtin_table[kBuiltinOpcode];
+    builtin_table[kBuiltinOpcode] = &hooked_anim_joint_program_op54;
+    for (std::size_t index = 0; index < hooks.size(); ++index) {
+        g_original_anim_joint_program_custom_operators[index] =
+            custom_table[index];
+        custom_table[index] = hooks[index];
+    }
+    FlushInstructionCache(
+        GetCurrentProcess(), builtin_table + kBuiltinOpcode,
+        sizeof(AnimJointProgramOperatorFunction));
+    FlushInstructionCache(
+        GetCurrentProcess(), custom_table,
+        sizeof(AnimJointProgramOperatorFunction) * hooks.size());
+    DWORD ignored = 0;
+    VirtualProtect(
+        custom_table, sizeof(AnimJointProgramOperatorFunction) * hooks.size(),
+        custom_old, &ignored);
+    VirtualProtect(
+        builtin_table + kBuiltinOpcode,
+        sizeof(AnimJointProgramOperatorFunction), builtin_old, &ignored);
+    resume_suspended_process_threads(suspended_threads);
+    boot_log_line(
+        "aim jv operator-table probes installed (op54, custom 128-133)");
     return true;
 }
 
@@ -42403,8 +42805,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-31ju "
-        "(raw-word group-0 and opcode-54 inventory)");
+        "TLL co-op runtime init 2026-07-31jv "
+        "(bounded per-operator joint-program boundary)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -42492,6 +42894,7 @@ DWORD WINAPI install_hook(void*) {
             install_aim_case6_probe();
             if (g_enable_aim_joint_boundary_probe) {
                 install_aim_joint_boundary_probes();
+                install_aim_joint_operator_table_probes();
             }
         }
         if (g_enable_puppet_fganim_world_aim_turn) {

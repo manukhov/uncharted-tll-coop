@@ -2119,12 +2119,23 @@ Do not reopen these as the first move:
       140 bounded group rows were captured with zero in-call JointParams word
       changes. Opcode 54 exclusively copies base 2 -> shared scratch (base 3),
       so H54-direct is rejected while Hcustom versus Hupstream/builtin remains.
-- [ ] Resolve the exact encoded reads/writes of the live custom opcodes 128--132
+- [x] Resolve the exact encoded reads/writes of the live custom opcodes 128--132
       statically. Then design a bounded read-only per-operator boundary that
       identifies the first workspace-changing opcode and distinguishes it from
       an already-different pre-custom workspace. Do not patch an operator table
       or run another game until the three-evidence quota and a written
-      falsifiable prediction are recorded in `COOP_STATUS.md`.
+      falsifiable prediction are recorded in `COOP_STATUS.md`. Result: op129,
+      op130 and op131 are the only common live candidates; exact dispatcher,
+      payload descriptors and encoded destinations are recorded there.
+- [x] Implement read-only build `jv`: preflight and wrap builtin opcode 54 plus
+      custom slots 128--133 through the confirmed global tables, sample only the
+      10/12-custom target groups, compare bounded workspace/JointParams before
+      and after each original call, and expose unwrapped gaps. Each original
+      handler remains exactly once.
+- [ ] Run the written `jv` stationary camera sequence and classify the first
+      workspace writer as H129/H130/H131, Nadine-only H128, Hbuiltin or Hupstream.
+      Require paired begin/end rows, zero `deltaJP`, normal models and responsive
+      processes before accepting the result.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

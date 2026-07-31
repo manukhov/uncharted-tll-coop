@@ -13861,3 +13861,68 @@ of each live custom operator's encoded input/output descriptors, followed only
 then by a bounded read-only per-operator boundary. That boundary must identify
 the first workspace-changing opcode and compare its before/after raw hashes; no
 scratch or pose write is authorized.
+
+### 2026-07-31 STATIC: live custom operators reduce the common pitch candidates to op129/op130/op131
+
+The custom-handler ABI and all live candidates were resolved in both directions
+from `AnimCmdEvaluator_ExecuteSkeletonJointPrograms 0x14217B630`. The dispatcher
+builds meta-context `{program, skeleton data, null, base[4]}` at
+`0x14217B6B7..0x14217B6F8`, selects custom slot `opcode-128` at
+`0x14217B71C..0x14217B724`, and calls `handler(payload, meta,
+SegmentContext)` once at `0x14217B742`. `ProcessAnimCmdListSegment` installs
+`g_AnimJointProgramCustomOperatorTable 0x143026CB0` and its count into
+`SegmentContext+0x10/+0x18` at `0x141AB9B44..0x141AB9B4F`. This makes the six
+global function-pointer slots an exact, preflightable wrapper boundary without
+rewriting the dispatcher.
+
+All five statically relevant handlers first resolve `payload[1]` to the same
+four evaluator bases and `payload[2]` to authored descriptors:
+
+- op128 `0x141A97060`: each 64-byte record reads an encoded quaternion and an
+  optional scalar, then writes one encoded scalar at record `+0x3C`;
+- op129 `0x141A951F0`: each 64-byte record reads one encoded 16-byte quaternion,
+  computes a signed wrapped relative angle, and writes one encoded scalar at
+  record `+0x3C`;
+- op130 `0x141A945F0`: reads an authored list of N encoded scalars, evaluates
+  distance/weight rows, and writes M encoded scalar destinations;
+- op131 `0x141A94D80`: reads one encoded 32-byte transform, builds an affine
+  matrix, and writes selected matrix components to encoded scalar destinations;
+- op132 `0x141A95E80`: reads encoded matrices/scalars and writes IK/matrix-derived
+  scalars, but is absent from both target complex programs.
+
+Three independent evidence types now satisfy the runtime quota: (1) the exact
+dispatcher/table call graph above; (2) the handlers' decoded descriptor reads
+and final encoded stores; (3) `ju` runtime inventories proving the common live
+opcodes and the preceding base-2 to base-3 quaternion copy. The competitors are:
+
+- **H129 (strongest common):** its 16-byte input consumes the scratch quaternion
+  seeded by op54 and its destination selects workspace;
+- **H130:** one or more scalar inputs select scratch and its destination list
+  selects workspace;
+- **H131:** its 32-byte input selects scratch and workspace destinations receive
+  matrix components;
+- **H128:** can explain only Nadine's 41-operator group because Chloe's
+  27-operator group contains no op128;
+- **Hbuiltin/Hupstream:** workspace changes between wrapped operators or is
+  already camera-dependent before the first wrapped operator.
+
+Read-only build `2026-07-31jv` wraps the confirmed builtin-op54 slot and custom
+slots 128--133 in their global dispatch tables after validating every original
+function address and suspending peer threads. The exact target complex groups
+(custom count 10 or 12) receive at most 12 sampled invocations. Each wrapper
+hashes/copies bounded JointParams and workspace words, calls the original
+handler exactly once, then reports direct changed-word counts plus changes in
+the gap since the previous wrapped operator. Begin/end hashes expose upstream
+or unwrapped-builtin changes. The wrappers never alter payload, base pointers,
+JointParams, workspace, scratch, Player, camera or packets.
+
+Written `jv` prediction: repeat the stationary no-ADS camera sequence. Both
+processes must install the case-16 and operator-table probes, remain responsive,
+and emit complete begin/step/end sequences for Chloe group 2 and Nadine group 1.
+The first direct `deltaW>0` at opcode 129, 130 or 131 selects the corresponding
+hypothesis; opcode 128 can be Nadine-specific but cannot be the common owner.
+`gapW>0` with adjacent wrapped operators reporting `deltaW=0` selects an
+intervening builtin. Camera-correlated begin hashes with no in-call writer select
+Hupstream. Every direct `deltaJP` must remain zero. Missing end rows, an original
+address mismatch, model damage or a process fault rejects the probe itself and
+authorizes no semantic conclusion.
