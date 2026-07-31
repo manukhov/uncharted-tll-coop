@@ -2189,7 +2189,9 @@ FUNCTIONS = {
         "count; payload[1] resolves the four-pointer base table (normally operator-"
         "context selector 3), and payload[2] resolves the authored pair list from "
         "operator-context selector 0 or 1. It forwards those inputs to "
-        "AnimJointProgram_CopyEncodedScalars.",
+        "AnimJointProgram_CopyEncodedScalars. Runtime build ju decoded every live "
+        "Chloe/Nadine tuple as base 2 -> base 3 shared scratch; no captured opcode-"
+        "54 instance wrote workspace or JointParams.",
     ),
     0x142189370: (
         "AnimJointProgram_CopyEncodedScalars",
@@ -2197,7 +2199,8 @@ FUNCTIONS = {
         "Each encoded operand's low two bits select JointParams, workspace, the "
         "SegmentContext+0x68 base, or shared scratch; remaining bits are the byte "
         "offset. Thus a base-2/3 to base-1 tuple can change workspace without "
-        "mutating JointParams.",
+        "mutating JointParams, although runtime build ju found only base-2 to base-3 "
+        "tuples in the live Chloe/Nadine programs.",
     ),
     0x142194620: (
         "AnimJointProgramOp59_ConvertJointParamsToMatrices",

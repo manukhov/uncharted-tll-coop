@@ -2111,11 +2111,20 @@ Do not reopen these as the first move:
       opcode-54 authored source/destination base pairs, and inventory custom
       opcodes 128--133. Preserve the native call exactly once and write no game
       state.
-- [ ] Run `ju` with both characters still and out of ADS: hold Chloe's camera
+- [x] Run `ju` with both characters still and out of ADS: hold Chloe's camera
       down, then on Nadine's copy move only the camera sky -> ground -> sky.
       Require normal models, responsive processes and group-0 boundary rows on
       both sides. Classify H54/Hcustom/Hupstream using the exact prediction in
-      `COOP_STATUS.md`; do not clear scratch or substitute a scalar.
+      `COOP_STATUS.md`; do not clear scratch or substitute a scalar. Result: all
+      140 bounded group rows were captured with zero in-call JointParams word
+      changes. Opcode 54 exclusively copies base 2 -> shared scratch (base 3),
+      so H54-direct is rejected while Hcustom versus Hupstream/builtin remains.
+- [ ] Resolve the exact encoded reads/writes of the live custom opcodes 128--132
+      statically. Then design a bounded read-only per-operator boundary that
+      identifies the first workspace-changing opcode and distinguishes it from
+      an already-different pre-custom workspace. Do not patch an operator table
+      or run another game until the three-evidence quota and a written
+      falsifiable prediction are recorded in `COOP_STATUS.md`.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 

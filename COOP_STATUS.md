@@ -13822,3 +13822,42 @@ operators become the next bounded boundary. If workspace already differs before
 the first operator, Hupstream wins. Missing group-0 boundary despite
 `programs=1 readable=1/1` rejects the raw-word implementation. No write or
 native-call-count experiment is authorized by this build.
+
+### 2026-07-31 RUNTIME CONFIRMED: `ju` restores group 0 and rejects opcode 54 as a direct workspace writer
+
+Both `ju` processes remained responsive with normal models and no exception.
+The stationary, no-ADS camera sequence produced the complete bounded set of 140
+semantic rows: 20 each for Chloe groups 0/1/2 and Nadine groups 0/1/2/3. All
+140 rows had matching pre/post JointParams hashes and
+`inCallJP=0.00000/0 raw words`. Group 0 therefore passed exactly when the
+finite-float rejection was removed, confirming that the old diagnostic filter
+was its only remaining admission loss. Its mixed storage legitimately changed
+between zero and `10/10/5` non-finite pre/post/workspace words during the run;
+raw-bit capture remained stable.
+
+The authored opcode-54 layouts were valid in every row and invariant for each
+program. Crucially, every decoded tuple was `base 2 -> base 3` (shared scratch),
+never `base 2/3 -> base 1` workspace and never a write to base 0 JointParams:
+
+- Chloe group 0: 12 tuples `2>3`; group 2: 4 tuples `2>3`;
+- Nadine group 0: 8 tuples `2>3`; group 1: 4 tuples `2>3`.
+
+Thus **H54-direct is REJECTED**: opcode 54 does not directly produce the
+observed workspace matrices. The stronger chain remains open: opcode 54 seeds
+shared scratch from base 2, after which a custom operator may read that scratch
+and write workspace. The complex program distributions are stable and further
+narrow the candidates:
+
+- Chloe group 2: op129 x2, op130 x2, op131 x6;
+- Nadine group 1: op128 x8, op129 x2, op130 x1, op131 x1;
+- group 0 additionally reaches op132 on Chloe, while no captured program uses
+  op133.
+
+The current full-program boundary cannot distinguish **Hcustom** (one of
+op128--132 first writes the camera-responsive workspace) from **Hupstream/
+builtin** (workspace already differs before the first custom operator or an
+intervening builtin changes it). The next admissible work is static resolution
+of each live custom operator's encoded input/output descriptors, followed only
+then by a bounded read-only per-operator boundary. That boundary must identify
+the first workspace-changing opcode and compare its before/after raw hashes; no
+scratch or pose write is authorized.
