@@ -13984,3 +13984,65 @@ input already contains the receiver-camera-dependent pitch), **H40-parent**
 The next discriminator must capture those exact two inputs and the one output
 at the isolated Chloe/Nadine op40 instances before and after the native call;
 it must not substitute a matrix or write animation state.
+
+### 2026-08-01 STATIC / TEST READY: `jw` separates opcode 40's exact JointParams and parent-matrix inputs
+
+The op40 worker equations make the live descriptor ownership exact. Because
+workspace base 1 includes its reserved leading 64-byte row, `k/16-1` is the
+actual destination joint and `(encodedSource&0xFFF0)/64-1` is its parent when
+the selector is 1. The isolated records therefore propagate these chains:
+
+- Chloe: joint `27 <- 26`, joint `97 <- 96`, and joint `103 <- 102`
+  (the last record is authored twice);
+- Nadine: joint `43 <- 42`, authored four times.
+
+For every record `AnimJointProgram_PropagateJointMatrices 0x142189FB0` reads
+exactly 48 bytes at `base[0]+3*k-0x30`, reads the 64-byte parent matrix at
+`base[1]+(encodedSource&0xFFF0)`, and writes the child matrix at
+`base[1]+4*k`. The four unconditional float4 stores at
+`0x14218A158/0x14218A192/0x14218A1CD/0x14218A1D8` feed the same workspace later
+consumed by the command-26 skinning-palette path. This excludes direct camera
+access inside op40 but does not distinguish which supplied input is already
+wrong.
+
+This exact addressing also corrects an important diagnostic limit: the earlier
+group `parameter_count` bounded hash does not cover every JointParams record
+that op40 can address. Nadine group 1 reports one local parameter, while its
+isolated op40 reads the record at `base[0]+0x810`; Chloe's later records likewise
+extend past the group's bounded prefix. Consequently `jv deltaJP=0` remains
+valid for the sampled prefix but is **not** evidence that these exact op40
+JointParams inputs were constant. No earlier runtime conclusion about the
+direct workspace writer changes.
+
+Three independent evidence types authorize the focused read-only probe:
+
+1. The dispatch-table xref and wrapper ABI fix opcode 40 at
+   `0x143026E60 -> 0x142194470 -> 0x142189FB0`.
+2. Worker disassembly fixes the 48-byte JointParams read, 64-byte parent read,
+   descriptor stride, and four workspace stores.
+3. The `jv` isolated one-op gaps plus live descriptors reproduce both first
+   changed workspace indices exactly (`448` Chloe, `704` Nadine).
+
+The remaining competitors are **H40-JP**, only the exact local JointParams
+record carries receiver-camera pitch; **H40-parent**, only the parent workspace
+matrix carries it; and **H40-both**, both inputs vary. Build `2026-08-01jw`
+preflights and wraps only builtin table slot 40. It admits only the exact
+role/group/payload triples above, snapshots each record's 12 JointParams words,
+16 source-matrix words and 16 output words, calls native op40 exactly once, and
+then snapshots the output. Per-record rows report raw hashes, changed-word
+counts and finite maximum deltas against the preceding camera-distinct sample.
+Admission is capped at 12 samples per group and does not spend the cap until
+either `peerY` or `localY` changes by at least 0.04. It writes only mod-owned
+diagnostic state, never Player, camera, packet, JointParams or workspace data.
+
+Written `jw` prediction: keep both characters still and out of ADS. Hold
+Chloe's camera down; on Nadine's copy move only the camera sky -> ground -> sky,
+pausing briefly at each end. Both processes must install the case-16 and op40
+probes, remain responsive with normal models, and emit paired begin/end rows
+with `targets=1`, four readable record rows and no reject. Input changes that
+track only the receiver-side `localY` classify the bug source: nonzero `dJP`
+with stable `dSrc` selects H40-JP; stable `dJP` with nonzero `dSrc` selects
+H40-parent; both nonzero selects H40-both. If only `peerY`-correlated changes
+appear, the exact op40 inputs already follow the remote source correctly and
+this boundary is downstream of the defect. Missing targets, descriptor drift,
+unreadable rows, model damage or a process fault rejects the probe.

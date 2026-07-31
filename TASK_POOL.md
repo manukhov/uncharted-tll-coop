@@ -2140,13 +2140,19 @@ Do not reopen these as the first move:
       op54/custom 128--133. Two isolated one-op gaps identify builtin opcode 40:
       Chloe changed 48 words starting at 448; Nadine changed 15 starting at 704.
       Live descriptors and static worker stores reproduce both exact offsets.
-- [ ] Trace opcode 40's exact isolated inputs before another runtime test.
+- [x] Trace opcode 40's exact isolated inputs before another runtime test.
       Competing hypotheses are H40-JP (its 48-byte local JointParams record is
       already receiver-camera-dependent), H40-parent (its selected 64-byte
       source workspace matrix is), or both. Resolve the live descriptor records
       and downstream matrix ownership statically, then implement only a bounded
-      read-only before/after capture of those inputs and output. Do not replace
-      matrices or write animation state.
+      read-only before/after capture of those inputs and output. Result: op40
+      propagates Chloe joints `26->27`, `96->97`, `102->103` and Nadine
+      `42->43`; the earlier parameter-count prefix does not cover all exact
+      inputs. Build `jw` wraps only slot 40 and records those inputs/output.
+- [ ] Run the written `jw` camera-distinct sequence and classify H40-JP,
+      H40-parent or H40-both from exact per-record deltas. Require paired rows,
+      `targets=1`, four records, no reject, normal models and responsive
+      processes. No pose/matrix substitution is authorized by this test.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 
