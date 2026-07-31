@@ -2090,11 +2090,20 @@ Do not reopen these as the first move:
       TLS scope, compare case-16 `SegmentContext+0x28` with the program skeleton,
       and emit a bounded raw admission row before the old target/group filters.
       Preserve the native call exactly once and write no game state.
-- [ ] Run `js` with the same opposed-camera sequence. Require normal models, an
+- [x] Run `js` with the same opposed-camera sequence. Require normal models, an
       armed outer row and at least one `AIM-JOINT-ADMISSION-JS raw` row. Exact
       target/group/segment outcomes and the follow-up post/boundary decisions are
+      written in `COOP_STATUS.md`. Result: both processes emitted 12/12 raw rows;
+      segment/pointers/group/buffers passed, but target equality failed. The
+      logged `context+0x40` value was the JointParams allocation, not a skeleton.
+- [x] Correct the static dereference and implement read-only build `jt`.
+      `0x141AB9852` performs `RAX=[context]` then `R15=[RAX+0x40]`; carry that
+      FgAnim-target child as the program skeleton and compare it with
+      `SegmentContext+0x28`. Preserve native execution exactly once.
+- [ ] Run `jt` with the same opposed-camera sequence. Require `raw target=1` on
+      both processes, then classify the first post/boundary stage exactly as
       written in `COOP_STATUS.md`.
-- [ ] Only after classifying `js`, design the next read-only discriminator from
+- [ ] Only after classifying `jt`, design the next read-only discriminator from
       that result. If Q rows become reachable, use their pre/post case-16 values
       first. If scratch/scalar-bank provenance is still needed, inventory the
       live decimal-case-17 selector stream and hash base 1/base 3 before/after

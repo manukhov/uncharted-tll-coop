@@ -13727,3 +13727,30 @@ identity; `group=0` localizes the mismatch to the group table; `segment=0` or
 outer rows would instead prove the patched callsite is not on this invocation's
 execution path. Normal models, responsive processes and at least one armed raw
 row are required.
+
+### 2026-07-31 RUNTIME CONFIRMED / STATIC CORRECTION: `js` reaches case 16; the program skeleton is `(*context)+0x40`
+
+Both `js` processes remained responsive and each emitted the full bounded set of
+12 raw rows. Every row had `segment=1 pointers=1 group=1`, ordinal `1/1`, and
+readable JointParams/workspace buffers. Thus `0x141ABA973` is the live case-16
+path and the segment/group ABI is confirmed. Every row also had `target=0`,
+selecting the corresponding written `js` outcome; no post/boundary row could pass
+the remaining equality gate.
+
+The exact pointers expose the transcription error. In both processes the value
+recorded from `AnimCmdContext+0x40` was equal to the transient JointParams base
+(`0x103F...0000`) and changed with its allocation lane, while
+`SegmentContext+0x28` was a stable child near the FgAnim target skeleton. The
+instructions at `0x141AB9852` are two loads: `mov rax,[r8]`, then
+`mov r15,[rax+0x40]`. Case setup stores that R15 at `SegmentContext+0x28` in
+`0x141AB9A68`. Therefore the case-16 program skeleton is
+`(*(AnimCmdContext+0x00))+0x40`, not `AnimCmdContext+0x40`.
+
+Read-only build `2026-07-31jt` resolves and validates that child from the already
+Player-owned FgAnim target skeleton. It changes no game data and preserves the
+native call once. Written prediction for the same opposed-camera sequence:
+`raw segment=1 pointers=1 target=1 group=1` must now appear on both processes.
+Post/boundary rows then classify program inventory and finite buffers. A repeated
+`target=0` would reject the corrected child dereference; missing raw with armed
+outer would contradict the confirmed synchronous call path. Normal models and
+responsive processes remain mandatory.

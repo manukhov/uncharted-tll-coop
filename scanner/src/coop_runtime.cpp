@@ -20812,23 +20812,28 @@ struct AimJointBoundaryOwner {
 
 AimJointBoundaryOwner probe_aim_joint_boundary_owner(const void* context) {
     AimJointBoundaryOwner result{};
-    if (context == nullptr || readable_bytes(context) < 0x48) {
+    if (context == nullptr || readable_bytes(context) < 0x28) {
         return result;
     }
     __try {
         const auto* const bytes = static_cast<const std::byte*>(context);
         void* const target_skeleton =
             *reinterpret_cast<void* const*>(bytes);
-        void* const program_skeleton =
-            *reinterpret_cast<void* const*>(bytes + 0x40);
         const std::uintptr_t context_word_08 =
             *reinterpret_cast<const std::uintptr_t*>(bytes + 0x08);
         const std::uintptr_t render_matrix =
             reinterpret_cast<std::uintptr_t>(
                 *reinterpret_cast<void* const*>(bytes + 0x10));
-        if (target_skeleton == nullptr || program_skeleton == nullptr ||
-            readable_bytes(program_skeleton) < 0x38 ||
+        if (target_skeleton == nullptr ||
+            readable_bytes(target_skeleton) < 0x48 ||
             render_matrix < kFgAnimDataRenderWorldMatrixOffset) {
+            return result;
+        }
+        void* const program_skeleton =
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(target_skeleton) + 0x40);
+        if (program_skeleton == nullptr ||
+            readable_bytes(program_skeleton) < 0x38) {
             return result;
         }
         void* const fg_anim_data = reinterpret_cast<void*>(
@@ -21182,7 +21187,7 @@ void prepare_aim_joint_boundary_scope(
             char line[512]{};
             std::snprintf(
                 line, sizeof(line),
-                "AIM-JOINT-ADMISSION-JS outer sample=%u group=%u "
+                "AIM-JOINT-ADMISSION-JT outer sample=%u group=%u "
                 "op16=%u op24=%u joints=%u peer=%u/%u local=%u/%u "
                 "peerY=%.4f localY=%.4f separation=%.4f armed=%u",
                 sample + 1, processing_group, case16_count, case24_count,
@@ -21442,7 +21447,7 @@ void audit_aim_joint_case16_entry(
     char line[768]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-ADMISSION-JS raw sample=%u screen=1 outerGroup=%u "
+        "AIM-JOINT-ADMISSION-JT raw sample=%u screen=1 outerGroup=%u "
         "segmentGroup=%u segment=%u pointers=%u target=%u group=%u "
         "ordinal=%u/%u first=%u workspace=%u params=%u "
         "scopeTarget=%p program=%p actual=%p jp=%p work=%p readable=%u/%u",
@@ -21479,7 +21484,7 @@ void log_aim_joint_admission_post(
     char line[384]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-ADMISSION-JS post sample=%u group=%u "
+        "AIM-JOINT-ADMISSION-JT post sample=%u group=%u "
         "programs=%u readable=%u/%u finite=%u",
         sample + 1, scope.processing_group,
         static_cast<unsigned>(programs_valid),
@@ -23320,7 +23325,7 @@ bool install_aim_joint_boundary_probes() {
             VirtualFree(execute_relay, 0, MEM_RELEASE);
         }
         boot_log_line(
-            "aim js case16 admission probe SKIPPED (callsite preflight)");
+            "aim jt case16 admission probe SKIPPED (callsite preflight)");
         return false;
     }
 
@@ -23332,7 +23337,7 @@ bool install_aim_joint_boundary_probes() {
         VirtualFree(execute_relay, 0, MEM_RELEASE);
         g_anim_cmd_execute_joint_programs = nullptr;
         boot_log_line(
-            "aim js case16 admission probe SKIPPED (thread suspend)");
+            "aim jt case16 admission probe SKIPPED (thread suspend)");
         return false;
     }
 
@@ -23343,7 +23348,7 @@ bool install_aim_joint_boundary_probes() {
         resume_suspended_process_threads(suspended_threads);
         VirtualFree(execute_relay, 0, MEM_RELEASE);
         g_anim_cmd_execute_joint_programs = nullptr;
-        boot_log_line("aim js case16 admission probe SKIPPED (protect)");
+        boot_log_line("aim jt case16 admission probe SKIPPED (protect)");
         return false;
     }
 
@@ -23354,7 +23359,7 @@ bool install_aim_joint_boundary_probes() {
     VirtualProtect(execute_callsite, 5, execute_old, &ignored);
     resume_suspended_process_threads(suspended_threads);
     boot_log_line(
-        "aim js case16 admission probe installed (0x141ABA973)");
+        "aim jt case16 admission probe installed (0x141ABA973)");
     return true;
 }
 
@@ -42241,8 +42246,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-07-31js "
-        "(corrected case16 program-skeleton audit)");
+        "TLL co-op runtime init 2026-07-31jt "
+        "(dereferenced case16 program-skeleton audit)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
