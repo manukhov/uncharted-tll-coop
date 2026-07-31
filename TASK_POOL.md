@@ -2077,12 +2077,24 @@ Do not reopen these as the first move:
       nonzero writer with a proven FgAnimData base was found; alias/whole-copy and
       live authored read-before-write remain OPEN. Exact evidence, competitors
       S1/S2/S3 and rejected alternatives are in `COOP_STATUS.md`.
-- [ ] Run bounded build `jr`: hold Chloe's camera down; on Nadine's copy keep
+- [x] Run bounded build `jr`: hold Chloe's camera down; on Nadine's copy keep
       both characters still and out of ADS while moving only the camera
       sky -> ground -> sky. Require normal models and at least one screen-1
       `AIM-JOINT-ADMISSION-JR inner` row; classify R1/R2/R3/R4 exactly as written
-      in `COOP_STATUS.md` before changing any animation state.
-- [ ] Only after classifying `jr`, design the next read-only discriminator from
+      in `COOP_STATUS.md` before changing any animation state. Result:
+      INCONCLUSIVE by the written rule: both processes produced armed outer rows
+      but zero inner/post/boundary rows. Static correction proves the inner
+      marker compared the FgAnim skeleton at outer `+0x00` against the distinct
+      joint-program skeleton loaded from outer `+0x40`.
+- [x] Implement read-only build `js`: carry both skeleton identities through the
+      TLS scope, compare case-16 `SegmentContext+0x28` with the program skeleton,
+      and emit a bounded raw admission row before the old target/group filters.
+      Preserve the native call exactly once and write no game state.
+- [ ] Run `js` with the same opposed-camera sequence. Require normal models, an
+      armed outer row and at least one `AIM-JOINT-ADMISSION-JS raw` row. Exact
+      target/group/segment outcomes and the follow-up post/boundary decisions are
+      written in `COOP_STATUS.md`.
+- [ ] Only after classifying `js`, design the next read-only discriminator from
       that result. If Q rows become reachable, use their pre/post case-16 values
       first. If scratch/scalar-bank provenance is still needed, inventory the
       live decimal-case-17 selector stream and hash base 1/base 3 before/after

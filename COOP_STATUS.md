@@ -13688,3 +13688,42 @@ after that result, a separate bounded read-only discriminator may inventory the
 live decimal-case-17 selectors and hash base 1/base 3 before and after groups
 0/1/2/7. A read-before-write must be demonstrated from the live authored stream
 before any scratch initialization or scalar substitution is attempted.
+
+### 2026-07-31 RUNTIME INCONCLUSIVE / STATIC CORRECTION: `jr` reached the outer list, but its inner ownership filter compared different skeleton objects
+
+Both `jr` processes remained responsive. The opposed-camera interval produced
+48 retained-screen outer rows for Chloe's process and 60 for Nadine's; samples
+1 through 7 armed with vertical separation about `1.142`. Both logs contained
+zero `inner`, `post`, or `AIM-JOINT-BOUNDARY-JQ` rows. Under the written `jr`
+requirement this is **INCONCLUSIVE**, because no raw screen-1 inner marker was
+observed. It does not select R1/R2/R3/R4 and does not support a pose-owner claim.
+
+Static review found that the supposed raw marker was itself behind an invalid
+ownership comparison. `ProcessAnimCmdListSegment 0x141AB97C0` receives the outer
+context in R8. It loads `R15 = [R8+0x40]` at `0x141AB9852`, stores that exact
+program-skeleton pointer at `SegmentContext+0x28` in `0x141AB9A68`, and passes
+the SegmentContext to case 16 at `0x141ABA96B..0x141ABA973`. The outer owner
+proof instead deliberately resolves the FgAnim skeleton from `[R8+0x00]`.
+Build `jr` required `SegmentContext+0x28 == FgAnimData+0x28`, so it compared
+`[outer+0x40]` with `[outer+0x00]` and silently discarded every nested call.
+The zero inner count therefore says nothing about callsite reachability.
+
+Read-only build `2026-07-31js` carries both proven pointers in the TLS scope:
+the FgAnim target skeleton from `outer+0x00` for Player ownership and the joint-
+program skeleton from `outer+0x40` for case-16 identity. The capture gate now
+compares `SegmentContext+0x28` only with the latter. A new bounded `raw` row is
+emitted for an armed scope before target/group admission and reports segment
+readability, pointer readability, program-target equality, group equality,
+case ordinal, exact pointers and buffer sizes. No game, animation, joint,
+camera, Player, packet, or scratch data is written; the native call remains
+exactly once.
+
+Written `js` prediction: repeat the `jr` opposed-camera sequence. Repeated
+`raw segment=1 pointers=1 target=1 group=1` proves the old Fg/program-skeleton
+comparison was the entire admission loss; `post` or boundary rows then classify
+the next real buffer/program stage. `target=0` rejects the static `outer+0x40`
+identity; `group=0` localizes the mismatch to the group table; `segment=0` or
+`pointers=0` rejects the assumed callsite ABI/layout. No raw rows despite armed
+outer rows would instead prove the patched callsite is not on this invocation's
+execution path. Normal models, responsive processes and at least one armed raw
+row are required.
