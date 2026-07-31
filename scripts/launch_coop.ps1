@@ -1,7 +1,7 @@
 param(
     [ValidateRange(1, 2)]
     [int]$Count = 1,
-    [string]$GamePath = "C:\Program Files (x86)\Steam\steamapps\common\Uncharted Legacy of Thieves Collection\tll.exe",
+    [string]$GamePath = "C:\UNCHARTED Legacy of Thieves Collection (2016-2017-2022)\Uncharted Legacy of Thieves Collection\tll.exe",
     [int]$SettleSeconds = 14,
     [ValidateRange(0, 30)]
     [int]$InjectionGapSeconds = 5
