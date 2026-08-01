@@ -15324,3 +15324,51 @@ The four callback roles above are persisted in the single `ida/tll.i64` through
 `scripts/ida_apply_labels.py`; headless save reported `1459 functions, 34 data
 names` and `save_database returned True`, and the restarted MCP independently
 resolves all four names.
+
+### 2026-08-01 RUNTIME CONFIRMED / STATIC NARROWING: `kh` resolves the native DAG and leaves three typed IK writers
+
+The reciprocal `kh` run produced eight structurally complete, stable main-list
+inventories while both processes remained responsive and the user reported no
+animation or model regression. Four Chloe variants had
+`366/452/356/376` words with command 3 at `338/424/328/348`; four Nadine
+variants had `248/334/304/522` words with command 3 at
+`220/306/276/494`. Every complete header reported the exact phase-plugin
+callback RVA `0x006CCB30`, and every conservative lane-zero trace ended with
+`openLeaves=0` at command-6 clips.
+
+Three additional 604-word Nadine lists were rejected only because the diagnostic
+filled its fixed 96-entry relevant-command array before reaching command 3. The
+process stayed responsive, so these are an instrumentation-capacity limitation,
+not a game crash or an unknown command schema. The eight complete, distinct
+inventories are sufficient to classify the live command families without asking
+for another capture.
+
+Only five command-23 StringIds occurred in the complete lists:
+
+- `0xBCA80631` — `GestureJointReader_AnimPluginCallback`, which publishes an
+  external reader result and does not author the evaluator pose;
+- `0xD229DC93` — the generic output-like branch, whose payload contains an
+  instance/hash and external result pointer rather than a pose destination;
+- `0x653AE09B` — LegFix IK with lane operands `{1,3}` or `{2,4}`;
+- `0x29BDC08C` — `WsAnkleBlend_ExecutePlugin` with operands
+  `{3,4,weight,1}`;
+- `0x98FBC8FE` — HandFix IK with operands `{0,2,pluginData}`, where static
+  dispatch passes lane 0 as mutable output and lane 2 as const input.
+
+The other known dispatcher branches (Jacobian, PointSword, snapshot IK and
+snapshot arm IK) did not occur in the captured main lists. Backward liveness at
+the live plugin points narrows the pose-writing barriers to LegFix, ankle blend
+and HandFix: LegFix sees live lane 1/2, ankle blend writes the live lane 1, and
+HandFix runs late with live lane 0. GestureJointReader and `0xD229DC93` can be
+removed once their already-indicated output-only stores are completed statically.
+
+This **CONFIRMS D-clip for every known native lane edge**, but selects
+**D-plugin/mixed overall** because typed IK callbacks can mutate those lanes
+after their command-6 ancestry. D-external via command 10 is not present in the
+complete inventories. The next step is static: prove the exact joint masks and
+root-record effects of the three live IK workers, then resolve the generator at
+`0x141FFA6E0`, which emits command 7 using a value normalized by
+`kAimAlternateLayerReleaseDuration`. Trace that blend value to its owning
+AnimControl/player state and choose a write seam only after it is distinguished
+from ordinary locomotion and transition weights. No further diagnostic game run
+is requested; the next user test must exercise a consolidated fix.

@@ -2365,11 +2365,25 @@ Do not reopen these as the first move:
       callback RVA, and trace lane-zero ancestry conservatively through the known
       schemas. Stop at command-23 barriers instead of guessing a payload layout;
       preserve one native outer call and write no game state.
-- [ ] Run the written `kh` reciprocal camera sequence. Require complete main-list
+- [x] Run the written `kh` reciprocal camera sequence. Require complete main-list
       inventories for both actors, callback RVA `0x006CCB30`, no rejects, normal
       models and responsive copies. Classify D-clip, D-blend/copy, D-plugin or
       D-external/mixed exactly as written in `COOP_STATUS.md`; do not suppress a
-      plugin or substitute a pose lane in this build.
+      plugin or substitute a pose lane in this build. Result: eight complete,
+      stable inventories resolve every known lane leaf to command 6 and expose
+      only five live plugin IDs. Gesture/output plugins are read-only candidates;
+      LegFix, ankle blend and HandFix are the remaining typed pose writers, so
+      D-clip is confirmed for native edges and D-plugin/mixed remains overall.
+      Three longer Nadine lists hit only the probe's 96-entry diagnostic cap;
+      both processes stayed responsive and no visible regression occurred.
+- [ ] Resolve the remaining `kh` plugin barriers and their upstream generator
+      statically. Prove exact destination masks/root effects for LegFix
+      `0x653AE09B`, ankle blend `0x29BDC08C` and HandFix `0x98FBC8FE`, and prove
+      Gesture/D229 output-only semantics. Resolve `sub_141FFA6E0` through RTTI,
+      callers and its command-7 children; trace the blend value normalized by
+      `kAimAlternateLayerReleaseDuration` to receiver-local versus retained-peer
+      state. Do not request another diagnostic run. The next user test must be a
+      consolidated corrective build backed by the static evidence quota.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`
