@@ -2270,11 +2270,21 @@ Do not reopen these as the first move:
       after the existing exact command-3 finalizer call, logs group-1/2 case-16
       address candidates, and compares both actors at opcode 40 independently of
       `jz`. Every wrapped native is invoked once and no game state is written.
-- [ ] Run `kd` with both screen-1 actor signatures. Require twelve exact samples,
+- [x] Run `kd` with both screen-1 actor signatures. Require twelve exact samples,
       complete Chloe `35/36/41` and Nadine `96/102` consumer masks, readable
       group metadata, normal models and responsive processes. Apply the written
       M14-external versus later-writer and group-relative Mlane versus overwrite
-      classifications; record rejects even if the probe remains stable.
+      classifications; record rejects even if the probe remains stable. Result:
+      all twelve series and masks completed without rejects. Chloe case 14 copies
+      36/36 records bit-identically into the same rows later consumed by op40, but
+      all 36 are changed before consumption, selecting a later writer. Nadine
+      group 1 publishes local rows at `+0x5A0/+0x6C0`, while group-2 op40 consumes
+      distinct descriptor rows at `+0x1200/+0x1320`, confirming Mlane.
+- [ ] Resolve Chloe's exact post-case14 writer statically. Distinguish command 15,
+      the command-16 preamble and earlier joint-program operators by exact call
+      graph, payload order and destination semantics before another runtime test.
+      Separately identify the producer of Nadine's descriptor-selected
+      `+0x1200/+0x1320` rows; do not modify the valid group-1 lane.
 - [ ] After the parent source is resolved, trace the exact JointParams producers
       for target children `97/103/43`; child 27 needs no JointParams trace because
       `jw` proved its 48-byte record bit-identical across the camera sweep.

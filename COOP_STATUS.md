@@ -14647,3 +14647,38 @@ Both paths are bounded to twelve samples at 350 ms spacing, use exact skeleton,
 group and joint signatures, and preserve every native call count. Release build
 completed successfully. Runtime classification under the preceding falsifiable
 prediction remains pending.
+
+### 2026-08-01 RUNTIME CONFIRMED: `kd` rejects case 14 as Chloe's final source and proves Nadine's descriptor-indexed lane handoff
+
+PIDs 2156/5068 completed all bounded samples and remained responsive with normal
+models. Snapshot `reports/locomotion_hook_kd_20260801_132053.log` contains no
+`AIM-HANDOFF-KD` / `AIM-LANE-KD` reject, unhandled exception or process fault.
+
+Chloe completed 12/12 case-14 samples, 36/36 source/destination record copies and
+12/12 complete group-1 consumer masks. The native helper copied every word of
+joints `35/36/41` bit-identically (`raw=0` in 36/36). The destination base and
+the later opcode-40 `jpBase` are the same, and the consumer addresses are exactly
+the copied rows (`base+0x690`, `base+0x6C0`, `base+0x7B0`). Nevertheless all 36
+consumer hashes differ: joint 35 changes all twelve words and joints 36/41 change
+eight or nine. Thus M14-external is a real import, but **M14 as the final handoff
+is REJECTED**. A later writer changes those exact rows after the case-14 helper
+returns and before the selected opcode-40 records consume them.
+
+Nadine completed 12/12 group-1 producers, group-1/group-2 case-16 entries and
+complete group-2 consumer masks. Command 3 publishes a `66+38` lane; its local
+rows for joints 96/102 are `lane+0x5A0/+0x6C0` and match the group-1
+program-local case-16 rows in 24/24 comparisons. Group 2 retains the same lane
+base but changes its metadata to target `142+96` and program `104+96`; neither
+range contains 96/102. Opcode 40 instead resolves the descriptors to
+`lane+0x1200/+0x1320`, distinct from the producer rows, in every sample. This
+**CONFIRMS Mlane** and rejects a same-address overwrite between Nadine groups 1
+and 2. The earlier discontinuity was an address/index handoff, not destruction of
+the authored group-1 records.
+
+The next static question is now narrower and has three competitors for Chloe:
+(1) command 15 rewrites or redirects the case-14 rows before command 16;
+(2) the command-16 preamble transforms them; or (3) an earlier joint-program
+operator writes the rows before the selected opcode-40 records. Resolve the exact
+writer graph and payload ordering statically before another runtime probe. For
+Nadine, trace who authors the descriptor-selected `+0x1200/+0x1320` rows; do not
+patch the valid group-1 local lane.
