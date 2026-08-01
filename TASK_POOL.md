@@ -2336,12 +2336,24 @@ Do not reopen these as the first move:
       exact PAK streams and exhaustive builtin/custom destination decoding leave
       only the op40 JointParams chain and three source-C quaternions as live
       competitors. Build `kg` records those inputs around untouched native calls.
-- [ ] Run the written `kg` discriminator. Keep one actor untouched while moving
+- [x] Run the written `kg` discriminator. Keep one actor untouched while moving
       only the receiver camera sky -> ground -> sky, then repeat reciprocally.
       Require twelve exact samples, Chloe `calls=13 mask=003FF`, Nadine
       `calls=10 mask=3FC00`, zero rejects, normal models and responsive copies.
       Classify U-JP-chain, U-sourceC or U-mixed exactly as written in
       `COOP_STATUS.md`; do not substitute a quaternion or matrix in this build.
+      Result: 12/12 exact ends per actor, zero rejects, and every chain link
+      matched its preceding output (`108/108` Chloe, `84/84` Nadine). Both roots
+      use one stable identity source while root JointParams/output change 11/11;
+      U-JP-chain is confirmed. All three source-C quaternions also change 11/11,
+      selecting overall U-mixed and rejecting U-sourceC-only.
+- [ ] Resolve the main group-0 pre-command-3 pose DAG which authors the confirmed
+      op40 JointParams and Nadine source-C records. Decode exact destination and
+      source lanes for commands 6/7/8/10/13/23 before command 3, identify the last
+      writer of the first root record and each live quaternion, and trace that
+      lane back to receiver-local versus retained-remote ownership. Use caller/
+      callee, worker store semantics and exact command-order/operand evidence;
+      do not launch or substitute pose data until a bounded seam remains.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

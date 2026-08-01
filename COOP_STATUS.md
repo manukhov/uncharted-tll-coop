@@ -15195,3 +15195,50 @@ quaternion changes with `localY`; changes in both select U-mixed. A missing
 record/mask, source discontinuity without a preceding producer, JointParams
 changing inside native op40, exception, stutter or model damage rejects the
 probe and authorizes no substitution.
+
+### 2026-08-01 RUNTIME CONFIRMED: group-0 JointParams inject the changing pose at the identity-root op40
+
+The reciprocal `kg` run completed the written structural prediction on both
+processes. PID 20808 evaluated the Nadine program and PID 21900 the Chloe
+program; both remained responsive after capture. Each produced twelve complete
+samples with exact inventories and no reject:
+
+- Nadine: `calls=10/10`, `mask=3FC00/3FC00` in 12/12 ends;
+- Chloe: `calls=13/13`, `mask=003FF/003FF` in 12/12 ends.
+
+The camera channels supply both directions of the discriminator. On PID 20808,
+samples 2--7 primarily sweep process-local `localY` while `peerY` stays within
+`0.0008`; samples 8--10 primarily sweep `peerY` while `localY` stays within
+`0.0052`. PID 21900 observes the reciprocal split: samples 2--7 primarily sweep
+`peerY`, and samples 8--11 primarily sweep `localY`. This retains the process-
+relative meaning of the telemetry names; it does not infer visible actor identity
+from PID order.
+
+The exact matrix ancestry is conclusive:
+
+- For both actors the first `W+040` input source is one constant identity matrix:
+  one source hash across all twelve samples and zero changed source words in all
+  11 comparisons. Its 48-byte JointParams record changes in 11/11 comparisons,
+  and its output changes in 11/11. Thus **U-JP-chain is CONFIRMED at the first
+  possible chain node**; opcode 40 does not introduce the camera signal.
+- Every subsequent JointParams record also changes in 11/11, as do its source
+  and output matrices. The source hash of every later record exactly equals its
+  preceding producer's output: `108/108` Chloe chain links and `84/84` Nadine
+  links. This rejects a discontinuous hidden source or later non-op40 overwrite.
+- Nadine source-C quaternions `JP+0x400/+0x430` and Chloe source-C quaternion
+  `JP+0x670` change in 11/11 comparisons. Therefore **U-sourceC-only is
+  REJECTED** because the matrix chain is already dynamic, while the overall
+  result is **U-mixed**. Chloe `JP+0x670` is specifically the quaternion slice of
+  the chain record at `JP+0x660`, not an independent fourth origin; Nadine's two
+  source-C records are separate from its op40 chain.
+
+This result moves the fault boundary above the joint-program stream. Prior `ka`
+already proved the Nadine group-0 records are ValidBits-authored before
+`AnimCmdEvaluator_FinalizeGroupDefaults 0x141AB78F0` and survive that call
+unchanged; `ju/kg` prove command 16 itself does not mutate JointParams. The next
+static task is therefore the pre-command-3 pose command DAG in the main group-0
+list, not another op40/op53 experiment. Resolve the exact last command-6/7/8/10/
+13/23 producer and input lane for the first root record and the remaining chain/
+source-C records, then distinguish a receiver-local pose input from the retained
+remote pose input. No matrix, quaternion or JointParams substitution is yet
+authorized.
