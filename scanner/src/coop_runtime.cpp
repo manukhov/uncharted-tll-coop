@@ -128,6 +128,13 @@ AnimCmdCopyGroupPoseFunction g_anim_cmd_copy_group_pose = nullptr;
 AnimCmdExpandJointParamsFunction g_anim_cmd_expand_joint_params = nullptr;
 AnimCmdExecuteJointProgramsFunction g_anim_cmd_execute_joint_programs = nullptr;
 AnimJointProgramOperatorFunction g_original_anim_joint_program_op40 = nullptr;
+AnimJointProgramOperatorFunction g_original_anim_joint_program_op41 = nullptr;
+AnimJointProgramOperatorFunction g_original_anim_joint_program_op44 = nullptr;
+AnimJointProgramOperatorFunction g_original_anim_joint_program_op47 = nullptr;
+AnimJointProgramOperatorFunction g_original_anim_joint_program_op51 = nullptr;
+AnimJointProgramOperatorFunction g_original_anim_joint_program_op128 = nullptr;
+AnimJointProgramOperatorFunction g_original_anim_joint_program_op129 = nullptr;
+AnimJointProgramOperatorFunction g_original_anim_joint_program_op131 = nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
 std::atomic<void*> g_local_fganim_data{nullptr};
 std::atomic<void*> g_puppet_fganim_data{nullptr};
@@ -21281,6 +21288,11 @@ struct AimExpansionCarryKe {
     const std::uint32_t* base_after = nullptr;
     std::array<std::uint32_t, 3> rows{};
     std::array<std::array<std::uint32_t, 12>, 3> records{};
+    std::uint32_t candidate_calls = 0;
+    std::uint32_t candidate_rejects = 0;
+    std::array<std::uint32_t, 3> operator_changed_masks{};
+    std::array<std::uint32_t, 3> resolved_destination_masks{};
+    std::array<std::uint32_t, 3> consumer_changed_masks{};
 };
 
 thread_local AimExpansionCarryKe g_aim_expansion_carry_ke{};
@@ -22066,6 +22078,13 @@ void log_aim_expansion_op40_ke(
             const std::uint32_t changed = aim_count_changed_words(
                 carry.records[index].data(), current.data(), 12,
                 first_changed);
+            std::uint32_t changed_mask = 0;
+            for (std::uint32_t word = 0; word < 12; ++word) {
+                if (carry.records[index][word] != current[word]) {
+                    changed_mask |= 1U << word;
+                }
+            }
+            carry.consumer_changed_masks[index] = changed_mask;
             carry.consumer_mask |= 1U << index;
             const auto* const expected_address =
                 reinterpret_cast<const std::uint32_t*>(
@@ -22097,6 +22116,27 @@ void log_aim_expansion_op40_ke(
             boot_log_line(line);
 
             if (carry.consumer_mask == carry.expected_mask) {
+                char writer_end[640]{};
+                std::snprintf(
+                    writer_end, sizeof(writer_end),
+                    "AIM-TAIL-WRITER-KF end sample=%u actor=%s group=%u "
+                    "calls=%u/%u rejects=%u changed=%03X/%03X/%03X "
+                    "resolved=%03X/%03X/%03X consumer=%03X/%03X/%03X "
+                    "consumerMask=%03X",
+                    carry.sample, carry.chloe ? "Chloe" : "Nadine",
+                    carry.processing_group, carry.candidate_calls,
+                    carry.chloe ? 22U : 8U, carry.candidate_rejects,
+                    carry.operator_changed_masks[0],
+                    carry.operator_changed_masks[1],
+                    carry.operator_changed_masks[2],
+                    carry.resolved_destination_masks[0],
+                    carry.resolved_destination_masks[1],
+                    carry.resolved_destination_masks[2],
+                    carry.consumer_changed_masks[0],
+                    carry.consumer_changed_masks[1],
+                    carry.consumer_changed_masks[2],
+                    carry.consumer_mask);
+                boot_log_line(writer_end);
                 char end[320]{};
                 std::snprintf(
                     end, sizeof(end),
@@ -23468,6 +23508,428 @@ std::uint32_t aim_joint_payload_offset(
             payload_address - skeleton_address <= UINT32_MAX
         ? static_cast<std::uint32_t>(payload_address - skeleton_address)
         : UINT32_MAX;
+}
+
+struct AimTailOperatorPendingKf {
+    bool active = false;
+    bool nested_valid = false;
+    std::uint32_t opcode = 0;
+    std::uint32_t payload_offset = UINT32_MAX;
+    std::uint32_t call = 0;
+    const void* segment_context = nullptr;
+    const void* nested_table = nullptr;
+    std::array<std::uintptr_t, 4> top_bases{};
+    std::array<std::uintptr_t, 4> nested_bases{};
+    std::array<const std::uint32_t*, 3> addresses{};
+    std::array<std::array<std::uint32_t, 12>, 3> before{};
+    std::array<std::uint32_t, 3> resolved_masks{};
+};
+
+void aim_tail_kf_mark_destination(
+    const AimExpansionCarryKe& carry, std::uintptr_t address,
+    std::size_t bytes, std::array<std::uint32_t, 3>& masks) {
+    if (address == 0 || bytes == 0 || bytes > 16) {
+        return;
+    }
+    const std::uintptr_t end = address + bytes;
+    if (end < address) {
+        return;
+    }
+    for (std::size_t row_index = 0;
+         row_index < carry.rows.size(); ++row_index) {
+        if ((carry.expected_mask & (1U << row_index)) == 0) {
+            continue;
+        }
+        const std::uintptr_t row_start =
+            reinterpret_cast<std::uintptr_t>(carry.base_after) +
+            static_cast<std::uintptr_t>(carry.rows[row_index]) * 48U;
+        const std::uintptr_t row_end = row_start + 48U;
+        if (end <= row_start || address >= row_end) {
+            continue;
+        }
+        for (std::uint32_t word = 0; word < 12; ++word) {
+            const std::uintptr_t word_start = row_start + word * 4U;
+            const std::uintptr_t word_end = word_start + 4U;
+            if (end > word_start && address < word_end) {
+                masks[row_index] |= 1U << word;
+            }
+        }
+    }
+}
+
+bool aim_tail_kf_decode_destinations(
+    std::uint32_t opcode, const std::uint16_t* payload,
+    AimTailOperatorPendingKf& pending) {
+    auto& carry = g_aim_expansion_carry_ke;
+    const auto mark_scalar = [&](const std::uintptr_t* bases,
+                                 std::uint32_t encoded) {
+        const std::uintptr_t address =
+            bases[encoded & 3U] + (encoded & 0xFFFFFFFCU);
+        aim_tail_kf_mark_destination(
+            carry, address, 4, pending.resolved_masks);
+    };
+    const auto mark_vector = [&](const std::uintptr_t* bases,
+                                 std::uint16_t encoded) {
+        const std::uintptr_t address =
+            bases[encoded & 3U] + (encoded & 0xFFF0U);
+        aim_tail_kf_mark_destination(
+            carry, address, 16, pending.resolved_masks);
+    };
+    const auto resolve_top = [&](std::uint16_t encoded) {
+        return pending.top_bases[encoded & 3U] + (encoded & 0xFFFCU);
+    };
+
+    if (opcode == 41 || opcode == 44) {
+        const std::size_t batch_count =
+            (static_cast<std::size_t>(payload[0]) + 3U) / 4U;
+        if (batch_count == 0 || batch_count > 64) {
+            return false;
+        }
+        const std::uintptr_t descriptor_address = resolve_top(payload[2]);
+        const std::size_t descriptor_bytes = batch_count * 64U;
+        if (readable_bytes(reinterpret_cast<const void*>(descriptor_address)) <
+            descriptor_bytes) {
+            return false;
+        }
+        const auto* const descriptors =
+            reinterpret_cast<const std::byte*>(descriptor_address);
+        if (opcode == 41) {
+            constexpr std::array<std::size_t, 12> kDestinationOffsets{{
+                10, 12, 14, 26, 28, 30, 42, 44, 46, 58, 60, 62}};
+            for (std::size_t batch = 0; batch < batch_count; ++batch) {
+                for (const std::size_t offset : kDestinationOffsets) {
+                    const std::uint16_t destination =
+                        *reinterpret_cast<const std::uint16_t*>(
+                            descriptors + batch * 64U + offset);
+                    if (destination != 0xFFFFU) {
+                        mark_scalar(pending.top_bases.data(), destination);
+                    }
+                }
+            }
+        } else {
+            constexpr std::array<std::size_t, 4> kDestinationOffsets{{
+                8, 24, 40, 56}};
+            for (std::size_t batch = 0; batch < batch_count; ++batch) {
+                for (const std::size_t offset : kDestinationOffsets) {
+                    const std::uint16_t destination =
+                        *reinterpret_cast<const std::uint16_t*>(
+                            descriptors + batch * 64U + offset);
+                    mark_vector(pending.top_bases.data(), destination);
+                }
+            }
+        }
+        return true;
+    }
+
+    if (opcode == 47 || opcode == 51) {
+        const std::size_t output_count = payload[0];
+        if (output_count == 0 || output_count > 512) {
+            return false;
+        }
+        const std::uintptr_t descriptor_address = resolve_top(payload[2]);
+        const std::size_t descriptor_bytes = output_count * 4U;
+        if (readable_bytes(reinterpret_cast<const void*>(descriptor_address)) <
+            descriptor_bytes) {
+            return false;
+        }
+        const auto* const descriptor =
+            reinterpret_cast<const std::uint16_t*>(descriptor_address);
+        for (std::size_t output = 0; output < output_count; ++output) {
+            const std::uint16_t destination = descriptor[output * 2U + 1U];
+            if (opcode == 47) {
+                mark_scalar(pending.top_bases.data(), destination);
+            } else {
+                mark_vector(pending.top_bases.data(), destination);
+            }
+        }
+        return true;
+    }
+
+    if (opcode != 128 && opcode != 129 && opcode != 131) {
+        return false;
+    }
+    const std::uintptr_t nested_address = resolve_top(payload[1]);
+    pending.nested_table = reinterpret_cast<const void*>(nested_address);
+    if (readable_bytes(pending.nested_table) < 32) {
+        return false;
+    }
+    std::memcpy(
+        pending.nested_bases.data(), pending.nested_table,
+        sizeof(pending.nested_bases));
+    pending.nested_valid = true;
+    const std::uintptr_t descriptor_address = resolve_top(payload[2]);
+    if (opcode == 128 || opcode == 129) {
+        const std::size_t record_count = payload[0];
+        if (record_count == 0 || record_count > 64 ||
+            readable_bytes(reinterpret_cast<const void*>(descriptor_address)) <
+                record_count * 64U) {
+            return false;
+        }
+        const auto* const records =
+            reinterpret_cast<const std::byte*>(descriptor_address);
+        for (std::size_t record = 0; record < record_count; ++record) {
+            const std::uint32_t destination =
+                *reinterpret_cast<const std::uint32_t*>(
+                    records + record * 64U + 60U);
+            mark_scalar(pending.nested_bases.data(), destination);
+        }
+        return true;
+    }
+
+    if (readable_bytes(reinterpret_cast<const void*>(descriptor_address)) < 12) {
+        return false;
+    }
+    const auto* const descriptor =
+        reinterpret_cast<const std::byte*>(descriptor_address);
+    const std::uint32_t output_count =
+        *reinterpret_cast<const std::uint32_t*>(descriptor + 4);
+    const std::uint16_t output_offset =
+        *reinterpret_cast<const std::uint16_t*>(descriptor + 10);
+    if (output_count > 64 ||
+        readable_bytes(descriptor + output_offset) < output_count * 8U) {
+        return false;
+    }
+    for (std::size_t output = 0; output < output_count; ++output) {
+        const std::uint32_t destination =
+            *reinterpret_cast<const std::uint32_t*>(
+                descriptor + output_offset + output * 8U + 4U);
+        mark_scalar(pending.nested_bases.data(), destination);
+    }
+    return true;
+}
+
+AimTailOperatorPendingKf prepare_aim_tail_operator_kf(
+    std::uint32_t opcode, const std::uint16_t* payload,
+    const std::uintptr_t* operator_context, const void* segment_context) {
+    AimTailOperatorPendingKf pending{};
+    auto& carry = g_aim_expansion_carry_ke;
+    const AimHandoffContext handoff = g_aim_handoff_context;
+    const std::size_t payload_bytes = opcode == 47 ? 8U : 6U;
+    if (!carry.valid || !handoff.valid ||
+        handoff.processing_group != carry.processing_group ||
+        handoff.skeleton_joint_count != (carry.chloe ? 651U : 580U) ||
+        segment_context != carry.segment_context || payload == nullptr ||
+        operator_context == nullptr || readable_bytes(payload) < payload_bytes ||
+        readable_bytes(operator_context) < 32) {
+        return pending;
+    }
+
+    const std::uintptr_t payload_address =
+        reinterpret_cast<std::uintptr_t>(payload);
+    const std::uintptr_t skeleton_address =
+        reinterpret_cast<std::uintptr_t>(handoff.program_skeleton);
+    pending.opcode = opcode;
+    pending.payload_offset = skeleton_address != 0 &&
+            payload_address >= skeleton_address &&
+            payload_address - skeleton_address <= UINT32_MAX
+        ? static_cast<std::uint32_t>(payload_address - skeleton_address)
+        : UINT32_MAX;
+    pending.segment_context = segment_context;
+
+    bool readable = true;
+    __try {
+        std::memcpy(
+            pending.top_bases.data(), operator_context,
+            sizeof(pending.top_bases));
+        for (std::size_t index = 0;
+             index < carry.rows.size(); ++index) {
+            if ((carry.expected_mask & (1U << index)) == 0) {
+                continue;
+            }
+            pending.addresses[index] =
+                reinterpret_cast<const std::uint32_t*>(
+                    reinterpret_cast<const std::byte*>(carry.base_after) +
+                    static_cast<std::size_t>(carry.rows[index]) * 48U);
+            readable = readable && pending.addresses[index] != nullptr &&
+                readable_bytes(pending.addresses[index]) >= 48;
+            if (readable) {
+                std::memcpy(
+                    pending.before[index].data(),
+                    pending.addresses[index], 48);
+            }
+        }
+        if (readable) {
+            readable = aim_tail_kf_decode_destinations(
+                opcode, payload, pending);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        readable = false;
+    }
+    if (!readable) {
+        ++carry.candidate_rejects;
+        char line[512]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-TAIL-WRITER-KF reject sample=%u actor=%s group=%u "
+            "op=%u payloadOff=%08X readable=0",
+            carry.sample, carry.chloe ? "Chloe" : "Nadine",
+            carry.processing_group, opcode, pending.payload_offset);
+        boot_log_line(line);
+        return AimTailOperatorPendingKf{};
+    }
+    pending.call = ++carry.candidate_calls;
+    pending.active = true;
+    return pending;
+}
+
+void finish_aim_tail_operator_kf(
+    const AimTailOperatorPendingKf& pending) {
+    if (!pending.active) {
+        return;
+    }
+    auto& carry = g_aim_expansion_carry_ke;
+    if (!carry.valid || pending.segment_context != carry.segment_context) {
+        return;
+    }
+    std::array<std::uint32_t, 3> changed_masks{};
+    std::array<std::uint32_t, 3> cumulative_masks{};
+    bool readable = true;
+    __try {
+        for (std::size_t index = 0;
+             index < carry.rows.size(); ++index) {
+            if ((carry.expected_mask & (1U << index)) == 0) {
+                continue;
+            }
+            std::array<std::uint32_t, 12> after{};
+            readable = pending.addresses[index] != nullptr &&
+                readable_bytes(pending.addresses[index]) >= 48;
+            if (!readable) {
+                break;
+            }
+            std::memcpy(after.data(), pending.addresses[index], 48);
+            for (std::uint32_t word = 0; word < 12; ++word) {
+                if (pending.before[index][word] != after[word]) {
+                    changed_masks[index] |= 1U << word;
+                }
+                if (carry.records[index][word] != after[word]) {
+                    cumulative_masks[index] |= 1U << word;
+                }
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        readable = false;
+    }
+    if (!readable) {
+        char line[448]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-TAIL-WRITER-KF reject sample=%u actor=%s group=%u "
+            "call=%u op=%u payloadOff=%08X post-readable=0",
+            carry.sample, carry.chloe ? "Chloe" : "Nadine",
+            carry.processing_group, pending.call, pending.opcode,
+            pending.payload_offset);
+        boot_log_line(line);
+        carry.valid = false;
+        return;
+    }
+    for (std::size_t index = 0; index < carry.rows.size(); ++index) {
+        carry.operator_changed_masks[index] |= changed_masks[index];
+        carry.resolved_destination_masks[index] |=
+            pending.resolved_masks[index];
+    }
+    char line[1536]{};
+    std::snprintf(
+        line, sizeof(line),
+        "AIM-TAIL-WRITER-KF sample=%u actor=%s group=%u call=%u "
+        "op=%u payloadOff=%08X raw=%03X/%03X/%03X "
+        "cumulative=%03X/%03X/%03X resolved=%03X/%03X/%03X "
+        "top=%p/%p/%p/%p nestedTable=%p nestedValid=%u "
+        "nested=%p/%p/%p/%p",
+        carry.sample, carry.chloe ? "Chloe" : "Nadine",
+        carry.processing_group, pending.call, pending.opcode,
+        pending.payload_offset, changed_masks[0], changed_masks[1],
+        changed_masks[2], cumulative_masks[0], cumulative_masks[1],
+        cumulative_masks[2], pending.resolved_masks[0],
+        pending.resolved_masks[1], pending.resolved_masks[2],
+        reinterpret_cast<const void*>(pending.top_bases[0]),
+        reinterpret_cast<const void*>(pending.top_bases[1]),
+        reinterpret_cast<const void*>(pending.top_bases[2]),
+        reinterpret_cast<const void*>(pending.top_bases[3]),
+        pending.nested_table, static_cast<unsigned>(pending.nested_valid),
+        reinterpret_cast<const void*>(pending.nested_bases[0]),
+        reinterpret_cast<const void*>(pending.nested_bases[1]),
+        reinterpret_cast<const void*>(pending.nested_bases[2]),
+        reinterpret_cast<const void*>(pending.nested_bases[3]));
+    boot_log_line(line);
+}
+
+std::uintptr_t invoke_aim_tail_operator_kf(
+    std::uint32_t opcode, AnimJointProgramOperatorFunction native,
+    const std::uint16_t* payload,
+    const std::uintptr_t* operator_context,
+    const void* segment_context) {
+    if (native == nullptr) {
+        return 0;
+    }
+    const AimTailOperatorPendingKf pending = prepare_aim_tail_operator_kf(
+        opcode, payload, operator_context, segment_context);
+    const std::uintptr_t result =
+        native(payload, operator_context, segment_context);
+    finish_aim_tail_operator_kf(pending);
+    return result;
+}
+
+std::uintptr_t __fastcall hooked_anim_joint_program_op41_kf(
+    const std::uint16_t* payload,
+    const std::uintptr_t* operator_context,
+    const void* segment_context) {
+    return invoke_aim_tail_operator_kf(
+        41, g_original_anim_joint_program_op41, payload,
+        operator_context, segment_context);
+}
+
+std::uintptr_t __fastcall hooked_anim_joint_program_op44_kf(
+    const std::uint16_t* payload,
+    const std::uintptr_t* operator_context,
+    const void* segment_context) {
+    return invoke_aim_tail_operator_kf(
+        44, g_original_anim_joint_program_op44, payload,
+        operator_context, segment_context);
+}
+
+std::uintptr_t __fastcall hooked_anim_joint_program_op47_kf(
+    const std::uint16_t* payload,
+    const std::uintptr_t* operator_context,
+    const void* segment_context) {
+    return invoke_aim_tail_operator_kf(
+        47, g_original_anim_joint_program_op47, payload,
+        operator_context, segment_context);
+}
+
+std::uintptr_t __fastcall hooked_anim_joint_program_op51_kf(
+    const std::uint16_t* payload,
+    const std::uintptr_t* operator_context,
+    const void* segment_context) {
+    return invoke_aim_tail_operator_kf(
+        51, g_original_anim_joint_program_op51, payload,
+        operator_context, segment_context);
+}
+
+std::uintptr_t __fastcall hooked_anim_joint_program_op128_kf(
+    const std::uint16_t* payload,
+    const std::uintptr_t* operator_context,
+    const void* segment_context) {
+    return invoke_aim_tail_operator_kf(
+        128, g_original_anim_joint_program_op128, payload,
+        operator_context, segment_context);
+}
+
+std::uintptr_t __fastcall hooked_anim_joint_program_op129_kf(
+    const std::uint16_t* payload,
+    const std::uintptr_t* operator_context,
+    const void* segment_context) {
+    return invoke_aim_tail_operator_kf(
+        129, g_original_anim_joint_program_op129, payload,
+        operator_context, segment_context);
+}
+
+std::uintptr_t __fastcall hooked_anim_joint_program_op131_kf(
+    const std::uint16_t* payload,
+    const std::uintptr_t* operator_context,
+    const void* segment_context) {
+    return invoke_aim_tail_operator_kf(
+        131, g_original_anim_joint_program_op131, payload,
+        operator_context, segment_context);
 }
 
 struct AimJointExactChainSpec {
@@ -25906,25 +26368,49 @@ bool install_aim_joint_exact_input_probe() {
     auto* const builtin_table =
         reinterpret_cast<AnimJointProgramOperatorFunction*>(
             g_module + kAnimJointProgramBuiltinOperatorTableRva);
+    auto* const custom_table =
+        reinterpret_cast<AnimJointProgramOperatorFunction*>(
+            g_module + kAnimJointProgramCustomOperatorTableRva);
     constexpr std::size_t kFirstBuiltinOpcode = 40;
-    constexpr std::size_t kLastBuiltinOpcode = 40;
+    constexpr std::size_t kLastBuiltinOpcode = 51;
     constexpr std::size_t kBuiltinSpan =
         (kLastBuiltinOpcode - kFirstBuiltinOpcode + 1) *
         sizeof(AnimJointProgramOperatorFunction);
-    if (readable_bytes(builtin_table + kFirstBuiltinOpcode) < kBuiltinSpan) {
-        boot_log_line("aim jz exact-input probe SKIPPED (readability)");
+    constexpr std::size_t kCustomSpan =
+        4U * sizeof(AnimJointProgramOperatorFunction);
+    if (readable_bytes(builtin_table + kFirstBuiltinOpcode) < kBuiltinSpan ||
+        readable_bytes(custom_table) < kCustomSpan) {
+        boot_log_line(
+            "aim jz/kf operator probes SKIPPED (readability)");
         return false;
     }
-    if (builtin_table[40] !=
-            reinterpret_cast<AnimJointProgramOperatorFunction>(
-                g_module + kAnimJointProgramOp40Rva)) {
-        boot_log_line("aim jz exact-input probe SKIPPED (slot preflight)");
+    const bool slots_match =
+        builtin_table[40] == reinterpret_cast<AnimJointProgramOperatorFunction>(
+            g_module + kAnimJointProgramOp40Rva) &&
+        builtin_table[41] == reinterpret_cast<AnimJointProgramOperatorFunction>(
+            g_module + kAnimJointProgramOp41Rva) &&
+        builtin_table[44] == reinterpret_cast<AnimJointProgramOperatorFunction>(
+            g_module + kAnimJointProgramOp44Rva) &&
+        builtin_table[47] == reinterpret_cast<AnimJointProgramOperatorFunction>(
+            g_module + kAnimJointProgramOp47Rva) &&
+        builtin_table[51] == reinterpret_cast<AnimJointProgramOperatorFunction>(
+            g_module + kAnimJointProgramOp51Rva) &&
+        custom_table[0] == reinterpret_cast<AnimJointProgramOperatorFunction>(
+            g_module + kAnimJointProgramCustomOp128Rva) &&
+        custom_table[1] == reinterpret_cast<AnimJointProgramOperatorFunction>(
+            g_module + kAnimJointProgramCustomOp129Rva) &&
+        custom_table[3] == reinterpret_cast<AnimJointProgramOperatorFunction>(
+            g_module + kAnimJointProgramCustomOp131Rva);
+    if (!slots_match) {
+        boot_log_line(
+            "aim jz/kf operator probes SKIPPED (slot preflight)");
         return false;
     }
 
     SuspendedProcessThreads suspended_threads{};
     if (!suspend_other_process_threads(suspended_threads)) {
-        boot_log_line("aim jz exact-input probe SKIPPED (thread suspend)");
+        boot_log_line(
+            "aim jz/kf operator probes SKIPPED (thread suspend)");
         return false;
     }
     DWORD builtin_old = 0;
@@ -25933,21 +26419,53 @@ bool install_aim_joint_exact_input_probe() {
         PAGE_READWRITE, &builtin_old) != 0;
     if (!builtin_protected) {
         resume_suspended_process_threads(suspended_threads);
-        boot_log_line("aim jz exact-input probe SKIPPED (protect)");
+        boot_log_line(
+            "aim jz/kf operator probes SKIPPED (builtin protect)");
+        return false;
+    }
+    DWORD custom_old = 0;
+    const bool custom_protected = VirtualProtect(
+        custom_table, kCustomSpan, PAGE_READWRITE, &custom_old) != 0;
+    if (!custom_protected) {
+        DWORD ignored = 0;
+        VirtualProtect(
+            builtin_table + kFirstBuiltinOpcode, kBuiltinSpan,
+            builtin_old, &ignored);
+        resume_suspended_process_threads(suspended_threads);
+        boot_log_line(
+            "aim jz/kf operator probes SKIPPED (custom protect)");
         return false;
     }
 
     g_original_anim_joint_program_op40 = builtin_table[40];
+    g_original_anim_joint_program_op41 = builtin_table[41];
+    g_original_anim_joint_program_op44 = builtin_table[44];
+    g_original_anim_joint_program_op47 = builtin_table[47];
+    g_original_anim_joint_program_op51 = builtin_table[51];
+    g_original_anim_joint_program_op128 = custom_table[0];
+    g_original_anim_joint_program_op129 = custom_table[1];
+    g_original_anim_joint_program_op131 = custom_table[3];
     builtin_table[40] = &hooked_anim_joint_program_op40;
+    builtin_table[41] = &hooked_anim_joint_program_op41_kf;
+    builtin_table[44] = &hooked_anim_joint_program_op44_kf;
+    builtin_table[47] = &hooked_anim_joint_program_op47_kf;
+    builtin_table[51] = &hooked_anim_joint_program_op51_kf;
+    custom_table[0] = &hooked_anim_joint_program_op128_kf;
+    custom_table[1] = &hooked_anim_joint_program_op129_kf;
+    custom_table[3] = &hooked_anim_joint_program_op131_kf;
     FlushInstructionCache(
         GetCurrentProcess(), builtin_table + kFirstBuiltinOpcode,
         kBuiltinSpan);
+    FlushInstructionCache(GetCurrentProcess(), custom_table, kCustomSpan);
     DWORD ignored = 0;
     VirtualProtect(
         builtin_table + kFirstBuiltinOpcode, kBuiltinSpan,
         builtin_old, &ignored);
+    VirtualProtect(custom_table, kCustomSpan, custom_old, &ignored);
     resume_suspended_process_threads(suspended_threads);
-    boot_log_line("aim jz exact-input probe installed (slot 40 only)");
+    boot_log_line(
+        "aim jz/kf operator probes installed "
+        "(builtin 40/41/44/47/51, custom 128/129/131)");
     return true;
 }
 
@@ -44834,8 +45352,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-01ke "
-        "(read-only expansion-tail discriminator)");
+        "TLL co-op runtime init 2026-08-01kf "
+        "(read-only per-operator tail-writer discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

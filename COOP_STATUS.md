@@ -15002,3 +15002,40 @@ operator produces the first target mask, L-builtin-alias wins. Any target
 change without a wrapped candidate, missing consumer mask, changed native-call
 count, exception, stutter or damaged model rejects the probe rather than
 confirming a writer.
+
+### 2026-08-01 STATIC / IMPLEMENTED: `kf` records every bounded tail-writer call and its resolved destination
+
+Release build `2026-08-01kf` implements the written discriminator without
+changing game-owned data. The existing command-15 hook still admits only Chloe
+group 1 `{first=205, params=1, workspace=62}` and Nadine group 2
+`{first=142, params=96, workspace=119}`, saves the exact expansion-tail rows
+and calls the native helper once.
+
+While that bounded carry is live, the operator tables wrap only builtin slots
+`41/44/47/51` and custom slots `128/129/131`; the existing opcode-40 wrapper
+still supplies the exact first-consumer boundary. Each wrapper copies the target
+rows before its call, executes the untouched saved function pointer exactly
+once, then copies the same addresses after it. `AIM-TAIL-WRITER-KF` records:
+
+- per-call and expansion-cumulative 12-bit word masks for all five rows;
+- the four top-level bases and, for custom operators, the live nested table and
+  all four nested bases;
+- masks made by resolving the operator's actual live destination fields, not by
+  assuming that a selector maps to a particular buffer.
+
+Destination decoding follows the resolved worker layouts: opcode 41's twelve
+optional scalar outputs, opcode 44's four vector outputs per batch, opcode
+47's scalar destination in each four-byte pair, opcode 51's vector destination
+in each pair, custom 128/129 record `+0x3C`, and custom 131's
+`{component,destination}` output array. End markers require `22` decoded
+candidate calls for Chloe and `8` for Nadine, zero decoder rejects, complete
+consumer mask `0x7/0x3`, and report both the OR of per-operator changes and the
+final expansion-to-consumer masks. A mismatch exposes an unwrapped writer
+instead of silently assigning it to the nearest candidate.
+
+Installation is all-or-nothing. It validates the retail function pointer in
+every patched builtin/custom slot, suspends the other process threads, changes
+only the two table ranges to writable, installs the wrappers, restores both
+protections and resumes the threads. Failure at either table leaves both
+unmodified. `scanner/build-release.cmd` completes and links
+`tll_coop_runtime.dll`; runtime classification is pending.

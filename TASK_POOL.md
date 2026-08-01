@@ -2321,10 +2321,11 @@ Do not reopen these as the first move:
       `0xF10C` and row-41 quaternion writer opcode 44 payload `0xF142`, excludes
       direct top-level base-0 destinations from Nadine's opcode 41/47 prefix,
       and bounds the remainder to custom nested-table or base-2 alias writes.
-      Implement the written read-only per-operator discriminator for
-      `41/44/47/51/128/129/131`; require exact changed-word masks, resolved
-      nested addresses, complete first-consumer masks and untouched native
-      calls before classifying each remaining row.
+      Build `kf` now implements the written read-only per-operator discriminator
+      for `41/44/47/51/128/129/131`. Run it and require `22/8` decoded calls,
+      zero rejects, exact changed-word masks, resolved live destinations,
+      complete first-consumer masks and untouched native calls before
+      classifying each remaining row.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`
