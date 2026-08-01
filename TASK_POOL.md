@@ -2189,7 +2189,11 @@ Do not reopen these as the first move:
       wrapped. Require the five Nadine and three Chloe chain rows, exactly one
       target op40, no rejects, normal models and responsive processes. Classify
       S-JP, S-src or S-both from per-chain JP/source/output deltas; no pose
-      substitution is authorized.
+      substitution is authorized. First run was structurally valid for one
+      baseline pair (`5/5`, `3/3`, zero rejects) but inconclusive: the older
+      broad boundary counter reached 20 and prevented later exact scopes. Build
+      `jz` separates that exhausted logging quota from exact admission; repeat
+      the same written discriminator.
 - [ ] After the parent source is resolved, trace the exact JointParams producers
       for target children `97/103/43`; child 27 needs no JointParams trace because
       `jw` proved its 48-byte record bit-identical across the camera sweep.

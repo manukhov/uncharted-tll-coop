@@ -14290,3 +14290,34 @@ receiver `localY` selects S-src; both select S-both. The reciprocal receiver is
 the control: its changes should follow the remote Chloe `peerY`, not its nearly
 fixed local camera. Missing chain rows, descriptor drift, unreadable input,
 model damage, hang or crash rejects the probe and authorizes no fix.
+
+### 2026-08-01 RUNTIME INCONCLUSIVE / IMPLEMENTED: `jy` exact rows are correct, but the shared boundary quota disables later samples
+
+The first `jy` run produced one structurally complete pair: PID 18360 / group 2
+reported all five Nadine-chain rows with `mask=1F`, and PID 18832 / group 1
+reported all three Chloe-chain rows with `mask=E0`. Both ends had
+`targets=1`, `wrapped40=6`, `rejects=0`, and every expected source/output was
+readable. The same-call proof also reproduced itself dynamically: Chloe C41
+used C36's exact output hash as its source hash, and C42 used C41's output hash.
+Both processes remained responsive.
+
+This run cannot classify S-JP/S-src/S-both. After that baseline, the older broad
+boundary logger rapidly reached its 20-sample limit. A guard at the beginning of
+`prepare_aim_joint_boundary_scope` then returned before constructing the scope
+used by the separately rate-limited exact probe. Repeating the camera sequence
+therefore produced no new exact rows. This is an **admission failure of the
+probe**, not evidence that any input stayed constant.
+
+The user's correction also rejects mapping the displayed character directly
+from process-role shorthand in this session: only the visibly controlled Chloe
+camera was moved, while the changed telemetry appeared as PID 18832 `localY`
+and PID 18360 `peerY`. Until visible actor identity is re-established from the
+live owner, `localY/peerY` remain process-relative telemetry channel names, not
+Chloe/Nadine labels.
+
+Build `jz` removes the exhausted broad-boundary counter from scope admission.
+The broad capture still stops at 20 rows, but the exact slot-40 discriminator
+continues using its own 12-sample, 350-ms and 0.04-direction gates. Once the
+broad quota is exhausted, it also skips the obsolete full-array copies and
+per-joint summaries, leaving only the eight exact read-only chains. The written
+`jy` semantic prediction otherwise remains unchanged.
