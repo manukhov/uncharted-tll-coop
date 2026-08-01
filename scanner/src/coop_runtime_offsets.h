@@ -156,6 +156,8 @@ constexpr std::uintptr_t kAnimCmdFinalizeGroupDefaultsCallsiteRva = 0x1AB9D18;
 constexpr std::uintptr_t kAnimCmdFinalizeGroupDefaultsRva = 0x1AB78F0;
 constexpr std::uintptr_t kAnimCmdCopyGroupPoseCallsiteRva = 0x1ABA7F5;
 constexpr std::uintptr_t kAnimCmdCopyGroupPoseRva = 0x217B310;
+constexpr std::uintptr_t kAnimCmdExpandJointParamsCallsiteRva = 0x1ABA89A;
+constexpr std::uintptr_t kAnimCmdExpandJointParamsRva = 0x217BF30;
 // Normal campaign command-evaluator boundaries. Opcode 16 is the only broad
 // producer of WorkBuffer+0x58; opcode 26 consumes the same 64-byte rows.
 constexpr std::uintptr_t kAnimCmdExecuteJointProgramsCallsiteRva = 0x1ABA973;

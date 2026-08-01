@@ -2299,12 +2299,20 @@ Do not reopen these as the first move:
       Nadine group 2 expands 96 records to 119. Runtime pointer deltas are exactly
       `62*48` and `119*48`. Local rows `35/36/41` and `96/102` are unwritten
       expansion-tail bytes, not current-list authored/default JointParams.
-- [ ] Implement a bounded read-only expansion probe at
+- [x] Implement a bounded read-only expansion probe at
       `AnimCmdEvaluator_ExpandJointParamsToTargetWorkspaceCount 0x14217BF30`.
       For only Chloe group 1 and Nadine group 2, snapshot base, finalized prefix
       and exact target tail before/after the native call, then compare the saved
       tail with later opcode-40 reads. Require one native call, identical base,
       unchanged prefix/tail, exact later matches, normal models and no faults.
+      Result: build `ke` patches the exact direct callsite `0x141ABA89A`, admits
+      only the two asset-proven signatures, preserves one native call, and keeps
+      its raw records thread-local to the current list. Release builds.
+- [ ] Run the written `ke` discriminator. Require twelve complete samples for
+      each active actor, unchanged bases/prefix/tails, complete `0x7/0x3`
+      opcode-40 masks, normal models and responsive copies. Classify
+      H-expand-carry, H-expand-replace or H-late-writer without applying pose
+      data.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

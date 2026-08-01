@@ -14829,3 +14829,43 @@ same-list writer and a target-default fill are both rejected. Before modifying
 pose data, a bounded read-only probe at `0x14217BF30` must prove that base,
 prefix and target-tail bytes survive expansion unchanged and still match the
 later opcode-40 reads.
+
+### 2026-08-01 STATIC / IMPLEMENTED: `ke` discriminates command-15 tail preservation from a hidden writer
+
+The direct command-15 callsite is exactly `0x141ABA89A ->
+AnimCmdEvaluator_ExpandJointParamsToTargetWorkspaceCount 0x14217BF30`.
+Build `ke` replaces only this `E8` with a scoped relay and calls the native
+target exactly once. It admits only screen-1 Chloe skeleton 651/group 1 with
+target/processing signatures `205:62:1 / 89:1`, or screen-1 Nadine skeleton
+580/group 2 with `142:119:96 / 104:96`. No pose, allocator metadata or command
+payload is modified.
+
+The primary hypothesis is **H-expand-carry**: command 15 releases and republishes
+the same arena front allocation without touching either the already finalized
+prefix or the newly exposed tail. Its competitors are **H-expand-replace** (the
+native call changes the base or the observed bytes while resizing) and
+**H-late-writer** (expansion itself preserves the bytes, but another same-list
+operation changes a target row before opcode 40 consumes it). Three independent
+evidence types justify the runtime discriminator: the helper's disassembly has
+the release/reserve/publish path but no copy/fill loop; the actor target and
+processing descriptors establish exact `1 -> 62` and `96 -> 119` sizes; and the
+earlier `JY` live pointer deltas are exactly `62*48` and `119*48` with opcode-40
+addresses at the predicted local rows.
+
+For each actor, the bounded probe takes at most twelve samples. Before and after
+the native call it records `SegmentContext+0x50`, compares every raw word in the
+initialized prefix, and compares Chloe rows `35/36/41` or Nadine rows `96/102`.
+The same thread-local, list-scoped records are then compared with the exact later
+opcode-40 addresses; a new outer list clears the carry.
+
+**Falsifiable runtime prediction (written before launch):** if H-expand-carry is
+correct, all admitted samples have identical before/after bases, zero changed
+prefix words, zero changed words in every target tail record, and complete later
+consumer masks `0x7` for Chloe / `0x3` for Nadine with `sameBase=1`,
+`sameAddress=1` and `raw=0`. A changed base or any in-call byte change selects
+H-expand-replace. Expansion-preserved rows which differ at opcode 40 select
+H-late-writer. Any missing exact mask, probe rejection, exception, damaged model,
+crash or unresponsive process invalidates the run. Even a clean match proves
+only an unwritten current-list carry; it does not yet distinguish accidental
+receiver-local arena reuse from an intended prior-list dependency. Release DLL
+builds successfully; runtime classification is pending.

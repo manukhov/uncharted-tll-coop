@@ -112,6 +112,8 @@ using AnimCmdFinalizeGroupDefaultsFunction = std::uint32_t*(__fastcall*)(
     std::uint32_t*, const void*);
 using AnimCmdCopyGroupPoseFunction = std::uint32_t*(__fastcall*)(
     std::uint32_t*, void*, const void*, const void*);
+using AnimCmdExpandJointParamsFunction = std::uint32_t*(__fastcall*)(
+    std::uint32_t*, void*);
 using AnimCmdExecuteJointProgramsFunction = std::uint32_t*(__fastcall*)(
     std::uint32_t*, const void*);
 using AnimJointProgramOperatorFunction = std::uintptr_t(__fastcall*)(
@@ -123,6 +125,7 @@ ProcessAnimCmdListSegmentFunction g_original_process_anim_cmd_list_segment =
 AnimCmdFinalizeGroupDefaultsFunction g_anim_cmd_finalize_group_defaults =
     nullptr;
 AnimCmdCopyGroupPoseFunction g_anim_cmd_copy_group_pose = nullptr;
+AnimCmdExpandJointParamsFunction g_anim_cmd_expand_joint_params = nullptr;
 AnimCmdExecuteJointProgramsFunction g_anim_cmd_execute_joint_programs = nullptr;
 AnimJointProgramOperatorFunction g_original_anim_joint_program_op40 = nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
@@ -21263,6 +21266,28 @@ std::atomic<std::uint32_t> g_aim_case14_sample_count_kd{0};
 std::atomic<ULONGLONG> g_aim_nadine_lane_next_log_ms_kd{0};
 std::atomic<std::uint32_t> g_aim_nadine_lane_sample_count_kd{0};
 
+struct AimExpansionCarryKe {
+    bool valid = false;
+    bool chloe = false;
+    std::uint32_t sample = 0;
+    std::uint32_t processing_group = UINT32_MAX;
+    std::uint32_t target_first = 0;
+    std::uint32_t processing_count = 0;
+    std::uint32_t workspace_count = 0;
+    std::uint32_t consumer_mask = 0;
+    std::uint32_t expected_mask = 0;
+    const void* segment_context = nullptr;
+    const std::uint32_t* base_before = nullptr;
+    const std::uint32_t* base_after = nullptr;
+    std::array<std::uint32_t, 3> rows{};
+    std::array<std::array<std::uint32_t, 12>, 3> records{};
+};
+
+thread_local AimExpansionCarryKe g_aim_expansion_carry_ke{};
+std::array<std::atomic<ULONGLONG>, 2> g_aim_expansion_next_log_ms_ke{};
+std::array<std::atomic<std::uint32_t>, 2>
+    g_aim_expansion_sample_count_ke{};
+
 void aim_summarize_float_words(
     const float* values, std::size_t count, std::uint64_t& hash,
     std::uint32_t& nonfinite_count) {
@@ -21344,6 +21369,226 @@ bool admit_aim_handoff_sample_kd(
     }
     sample = index + 1;
     return true;
+}
+
+std::uint32_t* __fastcall hooked_anim_cmd_expand_joint_params_ke(
+    std::uint32_t* status, void* segment_context) {
+    const auto native = g_anim_cmd_expand_joint_params;
+    if (native == nullptr) {
+        return status;
+    }
+
+    const AimHandoffContext handoff = g_aim_handoff_context;
+    const bool chloe = handoff.valid &&
+        handoff.skeleton_joint_count == 651 &&
+        handoff.processing_group == 1;
+    const bool nadine = handoff.valid &&
+        handoff.skeleton_joint_count == 580 &&
+        handoff.processing_group == 2;
+    if ((!chloe && !nadine) || segment_context == nullptr ||
+        readable_bytes(segment_context) < 0x58) {
+        return native(status, segment_context);
+    }
+
+    const std::array<std::uint32_t, 3> rows = chloe
+        ? std::array<std::uint32_t, 3>{{35, 36, 41}}
+        : std::array<std::uint32_t, 3>{{96, 102, UINT32_MAX}};
+    const std::size_t row_count = chloe ? 3 : 2;
+    const std::uint32_t expected_target_first = chloe ? 205U : 142U;
+    const std::uint32_t expected_processing_first = chloe ? 89U : 104U;
+    const std::uint32_t expected_processing_count = chloe ? 1U : 96U;
+    const std::uint32_t expected_workspace_count = chloe ? 62U : 119U;
+    const std::uint32_t actor_index = chloe ? 0U : 1U;
+
+    const std::uint16_t* target_group = nullptr;
+    const std::uint16_t* processing_descriptor = nullptr;
+    const std::uint32_t* base_before = nullptr;
+    std::uint32_t target_first = 0;
+    std::uint32_t processing_first = 0;
+    std::uint32_t processing_count = 0;
+    std::uint32_t workspace_count = 0;
+    std::uint32_t parameter_count = 0;
+    bool metadata = false;
+    __try {
+        const auto* const segment =
+            static_cast<const std::byte*>(segment_context);
+        target_group = *reinterpret_cast<const std::uint16_t* const*>(
+            segment + 0x38);
+        processing_descriptor =
+            *reinterpret_cast<const std::uint16_t* const*>(segment + 0x40);
+        base_before = *reinterpret_cast<const std::uint32_t* const*>(
+            segment + 0x50);
+        metadata = target_group != nullptr &&
+            processing_descriptor != nullptr && base_before != nullptr &&
+            readable_bytes(target_group) >= 0x18 &&
+            readable_bytes(processing_descriptor) >= 10;
+        if (metadata) {
+            target_first = target_group[0];
+            workspace_count = target_group[8];
+            parameter_count = target_group[9];
+            processing_count = processing_descriptor[0];
+            processing_first = processing_descriptor[3];
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        metadata = false;
+    }
+    if (!metadata || target_first != expected_target_first ||
+        processing_first != expected_processing_first ||
+        processing_count != expected_processing_count ||
+        workspace_count != expected_workspace_count ||
+        parameter_count != expected_processing_count) {
+        return native(status, segment_context);
+    }
+
+    std::uint32_t sample = 0;
+    if (!admit_aim_handoff_sample_kd(
+            g_aim_expansion_next_log_ms_ke[actor_index],
+            g_aim_expansion_sample_count_ke[actor_index], sample)) {
+        return native(status, segment_context);
+    }
+
+    constexpr std::size_t kMaxPrefixWords = 96U * 12U;
+    std::array<std::uint32_t, kMaxPrefixWords> prefix_before{};
+    std::array<std::array<std::uint32_t, 12>, 3> tail_before{};
+    const std::size_t prefix_words =
+        static_cast<std::size_t>(processing_count) * 12U;
+    bool pre_readable = false;
+    __try {
+        const std::size_t last_tail_bytes =
+            (static_cast<std::size_t>(rows[row_count - 1]) + 1U) * 48U;
+        pre_readable = prefix_words <= prefix_before.size() &&
+            readable_bytes(base_before) >= last_tail_bytes;
+        if (pre_readable) {
+            std::memcpy(
+                prefix_before.data(), base_before,
+                prefix_words * sizeof(std::uint32_t));
+            for (std::size_t index = 0; index < row_count; ++index) {
+                std::memcpy(
+                    tail_before[index].data(),
+                    reinterpret_cast<const std::byte*>(base_before) +
+                        static_cast<std::size_t>(rows[index]) * 48U,
+                    48U);
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        pre_readable = false;
+    }
+    if (!pre_readable) {
+        char line[448]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-EXPAND-KE reject sample=%u actor=%s group=%u "
+            "segment=%p baseBefore=%p pre-readable=0",
+            sample, chloe ? "Chloe" : "Nadine",
+            handoff.processing_group, segment_context, base_before);
+        boot_log_line(line);
+        return native(status, segment_context);
+    }
+
+    std::uint32_t* const result = native(status, segment_context);
+
+    const std::uint32_t* base_after = nullptr;
+    std::array<std::array<std::uint32_t, 12>, 3> tail_after{};
+    bool post_readable = false;
+    __try {
+        const auto* const segment =
+            static_cast<const std::byte*>(segment_context);
+        base_after = *reinterpret_cast<const std::uint32_t* const*>(
+            segment + 0x50);
+        const std::size_t last_tail_bytes =
+            (static_cast<std::size_t>(rows[row_count - 1]) + 1U) * 48U;
+        post_readable = base_after != nullptr &&
+            readable_bytes(base_after) >= last_tail_bytes;
+        if (post_readable) {
+            for (std::size_t index = 0; index < row_count; ++index) {
+                std::memcpy(
+                    tail_after[index].data(),
+                    reinterpret_cast<const std::byte*>(base_after) +
+                        static_cast<std::size_t>(rows[index]) * 48U,
+                    48U);
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        post_readable = false;
+    }
+    if (!post_readable) {
+        char line[448]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-EXPAND-KE reject sample=%u actor=%s group=%u "
+            "segment=%p baseBefore/After=%p/%p post-readable=0",
+            sample, chloe ? "Chloe" : "Nadine",
+            handoff.processing_group, segment_context, base_before,
+            base_after);
+        boot_log_line(line);
+        return result;
+    }
+
+    std::uint32_t prefix_first_changed = UINT32_MAX;
+    const std::uint32_t prefix_changed = aim_count_changed_words(
+        prefix_before.data(), base_after, prefix_words,
+        prefix_first_changed);
+    AimExpansionCarryKe carry{};
+    carry.valid = true;
+    carry.chloe = chloe;
+    carry.sample = sample;
+    carry.processing_group = handoff.processing_group;
+    carry.target_first = target_first;
+    carry.processing_count = processing_count;
+    carry.workspace_count = workspace_count;
+    carry.expected_mask = chloe ? 0x7U : 0x3U;
+    carry.segment_context = segment_context;
+    carry.base_before = base_before;
+    carry.base_after = base_after;
+    carry.rows = rows;
+    carry.records = tail_after;
+    g_aim_expansion_carry_ke = carry;
+
+    char header[768]{};
+    std::snprintf(
+        header, sizeof(header),
+        "AIM-EXPAND-KE sample=%u actor=%s group=%u segment=%p "
+        "baseBefore/After=%p/%p same=%u targetFirst=%u "
+        "processingFirst/Count=%u/%u targetParams/Workspace=%u/%u "
+        "prefixWords=%zu rawPrefix=%u first=%u "
+        "hashPrefixBefore/After=%016llX/%016llX",
+        sample, chloe ? "Chloe" : "Nadine",
+        handoff.processing_group, segment_context, base_before, base_after,
+        static_cast<unsigned>(base_before == base_after), target_first,
+        processing_first, processing_count, parameter_count, workspace_count,
+        prefix_words, prefix_changed, prefix_first_changed,
+        static_cast<unsigned long long>(aim_hash_raw_words(
+            prefix_before.data(), prefix_words)),
+        static_cast<unsigned long long>(aim_hash_raw_words(
+            base_after, prefix_words)));
+    boot_log_line(header);
+
+    for (std::size_t index = 0; index < row_count; ++index) {
+        std::uint32_t first_changed = UINT32_MAX;
+        const std::uint32_t changed = aim_count_changed_words(
+            tail_before[index].data(), tail_after[index].data(), 12,
+            first_changed);
+        char line[768]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-EXPAND-KE tail sample=%u actor=%s row=%u global=%u "
+            "addressBefore/After=%p/%p raw=%u first=%u d=%.5f "
+            "hashBefore/After=%016llX/%016llX",
+            sample, chloe ? "Chloe" : "Nadine", rows[index],
+            target_first + rows[index],
+            reinterpret_cast<const std::byte*>(base_before) +
+                static_cast<std::size_t>(rows[index]) * 48U,
+            reinterpret_cast<const std::byte*>(base_after) +
+                static_cast<std::size_t>(rows[index]) * 48U,
+            changed, first_changed, aim_raw_word_float_delta(
+                tail_before[index].data(), tail_after[index].data(), 12),
+            static_cast<unsigned long long>(aim_hash_raw_words(
+                tail_before[index].data(), 12)),
+            static_cast<unsigned long long>(aim_hash_raw_words(
+                tail_after[index].data(), 12)));
+        boot_log_line(line);
+    }
+    return result;
 }
 
 std::uint32_t* __fastcall hooked_anim_cmd_copy_group_pose_kd(
@@ -21739,6 +21984,142 @@ void log_aim_lane_case16_kd(const void* segment_context) {
             static_cast<unsigned>(target_readable && target_hash == producer_hash),
             static_cast<unsigned>(program_readable && program_hash == producer_hash));
         boot_log_line(line);
+    }
+}
+
+void log_aim_expansion_op40_ke(
+    const std::uint16_t* payload, const std::uintptr_t* operator_context,
+    const void* segment_context) {
+    auto& carry = g_aim_expansion_carry_ke;
+    const AimHandoffContext handoff = g_aim_handoff_context;
+    if (!carry.valid || !handoff.valid ||
+        handoff.processing_group != carry.processing_group ||
+        handoff.skeleton_joint_count != (carry.chloe ? 651U : 580U) ||
+        payload == nullptr || operator_context == nullptr ||
+        segment_context == nullptr || readable_bytes(payload) < 6 ||
+        readable_bytes(operator_context) < 32) {
+        return;
+    }
+    const std::size_t record_count =
+        static_cast<std::size_t>(payload[0]) * 4U;
+    if (record_count == 0 || record_count > 256) {
+        return;
+    }
+
+    __try {
+        const std::uint16_t base_operand = payload[1];
+        const std::uintptr_t base_table_address =
+            operator_context[base_operand & 3U] +
+            (base_operand & 0xFFFCU);
+        const auto* const bases =
+            reinterpret_cast<const std::uintptr_t*>(base_table_address);
+        const std::uint16_t descriptor_operand = payload[2];
+        const std::uintptr_t descriptor_address =
+            operator_context[descriptor_operand & 3U] +
+            (descriptor_operand & 0xFFFCU);
+        const auto* const descriptors =
+            reinterpret_cast<const std::uint16_t*>(descriptor_address);
+        if (bases == nullptr || descriptors == nullptr ||
+            readable_bytes(bases) < 32 ||
+            readable_bytes(descriptors) < record_count * 4U) {
+            return;
+        }
+
+        for (std::size_t record = 0; record < record_count; ++record) {
+            const std::uint16_t k = descriptors[record * 2U];
+            if (k < 0x10U || (k & 0xFU) != 0) {
+                continue;
+            }
+            const std::uint32_t row = k / 16U - 1U;
+            std::size_t index = carry.rows.size();
+            for (std::size_t candidate = 0;
+                 candidate < carry.rows.size(); ++candidate) {
+                if (row == carry.rows[candidate]) {
+                    index = candidate;
+                    break;
+                }
+            }
+            if (index >= carry.rows.size() ||
+                (carry.expected_mask & (1U << index)) == 0 ||
+                (carry.consumer_mask & (1U << index)) != 0) {
+                continue;
+            }
+
+            const auto* const actual =
+                reinterpret_cast<const std::uint32_t*>(
+                    bases[0] + 3U * static_cast<std::uintptr_t>(k) - 0x30U);
+            if (readable_bytes(actual) < 48) {
+                char reject[448]{};
+                std::snprintf(
+                    reject, sizeof(reject),
+                    "AIM-EXPAND-KE consumer-reject sample=%u actor=%s "
+                    "group=%u row=%u address=%p readable=0",
+                    carry.sample, carry.chloe ? "Chloe" : "Nadine",
+                    carry.processing_group, row, actual);
+                boot_log_line(reject);
+                continue;
+            }
+
+            std::array<std::uint32_t, 12> current{};
+            std::memcpy(current.data(), actual, 48);
+            std::uint32_t first_changed = UINT32_MAX;
+            const std::uint32_t changed = aim_count_changed_words(
+                carry.records[index].data(), current.data(), 12,
+                first_changed);
+            carry.consumer_mask |= 1U << index;
+            const auto* const expected_address =
+                reinterpret_cast<const std::uint32_t*>(
+                    reinterpret_cast<const std::byte*>(carry.base_after) +
+                    static_cast<std::size_t>(row) * 48U);
+            char line[896]{};
+            std::snprintf(
+                line, sizeof(line),
+                "AIM-EXPAND-KE consumer sample=%u actor=%s group=%u "
+                "row=%u global=%u record=%zu expandSegment/opSegment=%p/%p "
+                "baseAfter/opBase=%p/%p sameBase=%u addressExpected/Actual=%p/%p "
+                "sameAddress=%u raw=%u first=%u d=%.5f "
+                "hashExpand/Consumer=%016llX/%016llX mask=%03X",
+                carry.sample, carry.chloe ? "Chloe" : "Nadine",
+                carry.processing_group, row, carry.target_first + row,
+                record, carry.segment_context, segment_context,
+                carry.base_after, reinterpret_cast<const void*>(bases[0]),
+                static_cast<unsigned>(
+                    reinterpret_cast<std::uintptr_t>(carry.base_after) ==
+                    bases[0]),
+                expected_address, actual,
+                static_cast<unsigned>(expected_address == actual), changed,
+                first_changed, aim_raw_word_float_delta(
+                    carry.records[index].data(), current.data(), 12),
+                static_cast<unsigned long long>(aim_hash_raw_words(
+                    carry.records[index].data(), 12)),
+                static_cast<unsigned long long>(aim_hash_raw_words(
+                    current.data(), 12)), carry.consumer_mask);
+            boot_log_line(line);
+
+            if (carry.consumer_mask == carry.expected_mask) {
+                char end[320]{};
+                std::snprintf(
+                    end, sizeof(end),
+                    "AIM-EXPAND-KE consumer-end sample=%u actor=%s "
+                    "group=%u mask=%03X expected=%03X",
+                    carry.sample, carry.chloe ? "Chloe" : "Nadine",
+                    carry.processing_group, carry.consumer_mask,
+                    carry.expected_mask);
+                boot_log_line(end);
+                carry.valid = false;
+                break;
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        char line[320]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-EXPAND-KE consumer-reject sample=%u actor=%s group=%u "
+            "exception=1",
+            carry.sample, carry.chloe ? "Chloe" : "Nadine",
+            carry.processing_group);
+        boot_log_line(line);
+        carry.valid = false;
     }
 }
 
@@ -22430,6 +22811,7 @@ void prepare_aim_joint_boundary_scope(
     g_aim_joint_boundary_capture.valid = false;
     g_aim_finalizer_probe_scope = {};
     g_aim_handoff_context = {};
+    g_aim_expansion_carry_ke = {};
     if (g_dll_inert || !g_state_net.enabled || commands == nullptr ||
         command_word_count == 0 ||
         command_word_count > kAimCase6MaxCommandWords ||
@@ -23164,6 +23546,7 @@ std::uintptr_t __fastcall hooked_anim_joint_program_op40(
     if (native == nullptr) {
         return 0;
     }
+    log_aim_expansion_op40_ke(payload, operator_context, segment_context);
     log_aim_handoff_op40_kd(payload, operator_context, segment_context);
     auto& scope = g_aim_joint_operator_scope;
     if (!scope.active || scope.segment_context != segment_context ||
@@ -23632,6 +24015,8 @@ std::uint32_t __fastcall hooked_process_anim_cmd_list_segment(
         g_aim_finalizer_probe_scope;
     const AimHandoffContext previous_handoff_context =
         g_aim_handoff_context;
+    const AimExpansionCarryKe previous_expansion_carry =
+        g_aim_expansion_carry_ke;
     prepare_aim_joint_boundary_scope(
         commands, command_word_count, context, processing_group);
     const std::uint32_t result =
@@ -23644,6 +24029,7 @@ std::uint32_t __fastcall hooked_process_anim_cmd_list_segment(
     g_aim_joint_boundary_scope = previous_joint_scope;
     g_aim_finalizer_probe_scope = previous_finalizer_scope;
     g_aim_handoff_context = previous_handoff_context;
+    g_aim_expansion_carry_ke = previous_expansion_carry;
     g_aim_joint_boundary_capture.valid = false;
     log_aim_common_output_after(common_output);
     return result;
@@ -25413,6 +25799,54 @@ bool install_aim_finalizer_probe() {
     resume_suspended_process_threads(suspended_threads);
     boot_log_line(
         "aim kb finalizer probe installed (0x141AB9D18, read-only)");
+    return true;
+}
+
+bool install_aim_expansion_probe_ke() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kAnimCmdExpandJointParamsCallsiteRva,
+            kAnimCmdExpandJointParamsRva,
+            reinterpret_cast<const void*>(
+                &hooked_anim_cmd_expand_joint_params_ke),
+            callsite, relay, displacement)) {
+        if (relay != nullptr) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+        }
+        boot_log_line(
+            "aim ke expansion probe SKIPPED (callsite preflight)");
+        return false;
+    }
+
+    g_anim_cmd_expand_joint_params =
+        reinterpret_cast<AnimCmdExpandJointParamsFunction>(
+            g_module + kAnimCmdExpandJointParamsRva);
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_anim_cmd_expand_joint_params = nullptr;
+        boot_log_line(
+            "aim ke expansion probe SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (VirtualProtect(
+            callsite, 5, PAGE_EXECUTE_READWRITE, &old_protection) == 0) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_anim_cmd_expand_joint_params = nullptr;
+        boot_log_line("aim ke expansion probe SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(callsite + 1) = displacement;
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(callsite, 5, old_protection, &ignored);
+    resume_suspended_process_threads(suspended_threads);
+    boot_log_line(
+        "aim ke expansion probe installed (0x141ABA89A, read-only)");
     return true;
 }
 
@@ -44490,6 +44924,7 @@ DWORD WINAPI install_hook(void*) {
             if (g_enable_aim_joint_boundary_probe) {
                 install_aim_case14_handoff_probe_kd();
                 install_aim_finalizer_probe();
+                install_aim_expansion_probe_ke();
                 install_aim_joint_boundary_probes();
                 install_aim_joint_exact_input_probe();
             }
