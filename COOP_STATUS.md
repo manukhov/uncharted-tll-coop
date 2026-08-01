@@ -14479,3 +14479,12 @@ record must match the finalizer-post record, and the later target-group op40
 record must either match it (no late import) or differ (V-post). Any range miss,
 missing cross-group consumer, multiple finalizers, crash or model damage rejects
 the corrected probe.
+
+Build `kb` implements the corrected mapping without changing the native data.
+It validates and logs `first+count`, indexes the finalizer lane and MSB-first
+ValidBits by `local=global-first`, and keeps the same one-call wrapper at
+`0x141AB9D18`. A lock-protected diagnostic carry preserves the two later-group
+producer snapshots across evaluator calls; the existing exact opcode-40 wrapper
+compares Nadine `96/102` in consumer group 2 and Chloe `35/36/41` in consumer
+group 1. The same producer-group case-16 comparison remains as an intermediate
+control. The Release DLL builds successfully.

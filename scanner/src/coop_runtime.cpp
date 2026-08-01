@@ -21030,6 +21030,8 @@ struct AimFinalizerTargetSpec {
     const char* actor = "unknown";
     std::uint32_t skeleton_joint_count = 0;
     std::uint32_t processing_group = UINT32_MAX;
+    std::uint32_t consumer_group = UINT32_MAX;
+    std::uint32_t expected_first_joint = 0;
     std::uint32_t expected_joint_count = 0;
     std::uint32_t joint_count = 0;
     std::array<std::uint32_t, kAimFinalizerMaxJoints> joints{};
@@ -21037,9 +21039,10 @@ struct AimFinalizerTargetSpec {
 
 constexpr std::array<AimFinalizerTargetSpec, kAimFinalizerTargetCount>
     kAimFinalizerTargets{{
-        {"Nadine", 580, 0, 104, 9, {0, 14, 15, 16, 17, 18, 32, 33, 34}},
-        {"Nadine", 580, 2, 119, 2, {96, 102}},
-        {"Chloe", 651, 1, 62, 3, {35, 36, 41}},
+        {"Nadine", 580, 0, 0, 0, 66, 9,
+            {0, 14, 15, 16, 17, 18, 32, 33, 34}},
+        {"Nadine", 580, 1, 2, 66, 38, 2, {96, 102}},
+        {"Chloe", 651, 0, 1, 0, 89, 3, {35, 36, 41}},
     }};
 
 struct AimFinalizerAdmissionState {
@@ -21054,6 +21057,8 @@ struct AimFinalizerProbeScope {
     std::uint32_t sample = 0;
     std::uint32_t finalizer_calls = 0;
     std::uint32_t case16_mask = 0;
+    std::uint32_t consumer_mask = 0;
+    std::uint32_t evaluator_first_joint = 0;
     std::uint32_t evaluator_joint_count = 0;
     std::uint64_t pre_valid_bits[2]{};
     std::uint64_t post_valid_bits[2]{};
@@ -21062,6 +21067,9 @@ struct AimFinalizerProbeScope {
 };
 
 thread_local AimFinalizerProbeScope g_aim_finalizer_probe_scope{};
+std::array<AimFinalizerProbeScope, kAimFinalizerTargetCount>
+    g_aim_finalizer_carry_scopes{};
+SRWLOCK g_aim_finalizer_carry_lock = SRWLOCK_INIT;
 SRWLOCK g_aim_finalizer_admission_lock = SRWLOCK_INIT;
 std::array<AimFinalizerAdmissionState, kAimFinalizerTargetCount>
     g_aim_finalizer_admission_states{};
@@ -21246,23 +21254,30 @@ std::uint32_t* __fastcall hooked_anim_cmd_finalize_group_defaults(
             readable_bytes(lane_pointers) >= sizeof(void*) &&
             readable_bytes(valid_bits) >= 16 && readable_bytes(group) >= 10) {
             lane = lane_pointers[0];
+            pending.evaluator_first_joint = group[3];
             pending.evaluator_joint_count = group[0];
-            const std::uint32_t highest_joint =
-                target->joints[target->joint_count - 1];
             pre_readable = lane != nullptr &&
-                pending.evaluator_joint_count > highest_joint &&
                 pending.evaluator_joint_count <= 128 &&
                 readable_bytes(lane) >=
-                    (static_cast<std::size_t>(highest_joint) + 1) * 48;
+                    static_cast<std::size_t>(pending.evaluator_joint_count) * 48;
+            for (std::size_t index = 0;
+                 pre_readable && index < target->joint_count; ++index) {
+                const std::uint32_t joint = target->joints[index];
+                pre_readable = joint >= pending.evaluator_first_joint &&
+                    joint - pending.evaluator_first_joint <
+                        pending.evaluator_joint_count;
+            }
             if (pre_readable) {
                 pending.pre_valid_bits[0] = valid_bits[0];
                 pending.pre_valid_bits[1] = valid_bits[1];
                 for (std::size_t index = 0;
                      index < target->joint_count; ++index) {
+                    const std::uint32_t local_joint =
+                        target->joints[index] - pending.evaluator_first_joint;
                     std::memcpy(
                         pre_records[index].data(),
                         reinterpret_cast<const std::byte*>(lane) +
-                            static_cast<std::size_t>(target->joints[index]) * 48,
+                            static_cast<std::size_t>(local_joint) * 48,
                         48);
                 }
             }
@@ -21280,10 +21295,12 @@ std::uint32_t* __fastcall hooked_anim_cmd_finalize_group_defaults(
             pending.post_valid_bits[1] = valid_bits[1];
             for (std::size_t index = 0;
                  index < target->joint_count; ++index) {
+                const std::uint32_t local_joint =
+                    target->joints[index] - pending.evaluator_first_joint;
                 const auto* const record =
                     reinterpret_cast<const std::uint32_t*>(
                         reinterpret_cast<const std::byte*>(lane) +
-                        static_cast<std::size_t>(target->joints[index]) * 48);
+                        static_cast<std::size_t>(local_joint) * 48);
                 if (readable_bytes(record) < 48) {
                     post_readable = false;
                     break;
@@ -21300,27 +21317,32 @@ std::uint32_t* __fastcall hooked_anim_cmd_finalize_group_defaults(
         char line[512]{};
         std::snprintf(
             line, sizeof(line),
-            "AIM-JOINT-VALID-KA reject sample=%u actor=%s group=%u "
-            "pre=%u post=%u count=%u expected=%u",
+            "AIM-JOINT-VALID-KB reject sample=%u actor=%s group=%u "
+            "pre=%u post=%u range=%u+%u expected=%u+%u",
             sample, target->actor, target->processing_group,
             static_cast<unsigned>(pre_readable),
             static_cast<unsigned>(post_readable),
-            pending.evaluator_joint_count, target->expected_joint_count);
+            pending.evaluator_first_joint, pending.evaluator_joint_count,
+            target->expected_first_joint, target->expected_joint_count);
         boot_log_line(line);
         return result;
     }
 
     pending.captured = true;
     g_aim_finalizer_probe_scope = pending;
+    AcquireSRWLockExclusive(&g_aim_finalizer_carry_lock);
+    g_aim_finalizer_carry_scopes[target_index] = pending;
+    ReleaseSRWLockExclusive(&g_aim_finalizer_carry_lock);
     char header[640]{};
     std::snprintf(
         header, sizeof(header),
-        "AIM-JOINT-VALID-KA begin sample=%u actor=%s skeleton=%u group=%u "
-        "seq=%u peerY=%.4f localY=%.4f count=%u expected=%u "
+        "AIM-JOINT-VALID-KB begin sample=%u actor=%s skeleton=%u group=%u "
+        "seq=%u peerY=%.4f localY=%.4f range=%u+%u expected=%u+%u "
         "bitsPre=%016llX/%016llX bitsPost=%016llX/%016llX",
         sample, target->actor, target->skeleton_joint_count,
         target->processing_group, parent.peer_sequence,
-        parent.peer_y, parent.local_y, pending.evaluator_joint_count,
+        parent.peer_y, parent.local_y, pending.evaluator_first_joint,
+        pending.evaluator_joint_count, target->expected_first_joint,
         target->expected_joint_count,
         static_cast<unsigned long long>(pending.pre_valid_bits[0]),
         static_cast<unsigned long long>(pending.pre_valid_bits[1]),
@@ -21335,14 +21357,18 @@ std::uint32_t* __fastcall hooked_anim_cmd_finalize_group_defaults(
         char line[768]{};
         std::snprintf(
             line, sizeof(line),
-            "AIM-JOINT-VALID-KA joint sample=%u actor=%s group=%u joint=%u "
-            "valid=%u/%u raw=%u d=%.5f hashPre/Post=%016llX/%016llX",
+            "AIM-JOINT-VALID-KB joint sample=%u actor=%s group=%u "
+            "joint=%u local=%u valid=%u/%u raw=%u d=%.5f "
+            "hashPre/Post=%016llX/%016llX",
             sample, target->actor, target->processing_group,
             target->joints[index],
+            target->joints[index] - pending.evaluator_first_joint,
             static_cast<unsigned>(aim_finalizer_valid_bit(
-                pending.pre_valid_bits, target->joints[index])),
+                pending.pre_valid_bits,
+                target->joints[index] - pending.evaluator_first_joint)),
             static_cast<unsigned>(aim_finalizer_valid_bit(
-                pending.post_valid_bits, target->joints[index])),
+                pending.post_valid_bits,
+                target->joints[index] - pending.evaluator_first_joint)),
             changed, aim_raw_word_float_delta(
                 pre_records[index].data(), pending.post_records[index].data(),
                 12),
@@ -21385,7 +21411,7 @@ void log_aim_finalizer_case16_joint(
     char line[768]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-VALID-KA case16 sample=%u actor=%s group=%u joint=%u "
+        "AIM-JOINT-VALID-KB case16 sample=%u actor=%s group=%u joint=%u "
         "source=%s raw=%u d=%.5f hashPost/Case16=%016llX/%016llX",
         probe.sample, target.actor, target.processing_group, joint, source,
         changed, aim_raw_word_float_delta(
@@ -21394,6 +21420,89 @@ void log_aim_finalizer_case16_joint(
             probe.post_records[target_joint_index].data(), 12)),
         static_cast<unsigned long long>(aim_hash_raw_words(record, 12)));
     boot_log_line(line);
+}
+
+void log_aim_finalizer_consumer_joint(
+    std::uint32_t processing_group, std::uint32_t skeleton_joint_count,
+    std::uint32_t joint, const std::uint32_t* record) {
+    if (record == nullptr || readable_bytes(record) < 48) {
+        return;
+    }
+    bool matched = false;
+    bool complete = false;
+    std::uint32_t matched_target_index = UINT32_MAX;
+    std::uint32_t sample = 0;
+    std::uint32_t consumer_mask = 0;
+    std::array<std::uint32_t, 12> post_record{};
+    AcquireSRWLockExclusive(&g_aim_finalizer_carry_lock);
+    for (std::size_t target_index = 0;
+         target_index < kAimFinalizerTargets.size(); ++target_index) {
+        auto& carry = g_aim_finalizer_carry_scopes[target_index];
+        const auto& target = kAimFinalizerTargets[target_index];
+        if (!carry.captured ||
+            target.skeleton_joint_count != skeleton_joint_count ||
+            target.consumer_group != processing_group ||
+            target.consumer_group == target.processing_group) {
+            continue;
+        }
+        std::size_t target_joint_index = target.joint_count;
+        for (std::size_t index = 0; index < target.joint_count; ++index) {
+            if (target.joints[index] == joint) {
+                target_joint_index = index;
+                break;
+            }
+        }
+        if (target_joint_index == target.joint_count) {
+            continue;
+        }
+        const std::uint32_t bit = 1U << target_joint_index;
+        if ((carry.consumer_mask & bit) != 0U) {
+            break;
+        }
+        carry.consumer_mask |= bit;
+        const std::uint32_t expected =
+            (1U << target.joint_count) - 1U;
+        matched = true;
+        complete = carry.consumer_mask == expected;
+        matched_target_index = static_cast<std::uint32_t>(target_index);
+        sample = carry.sample;
+        consumer_mask = carry.consumer_mask;
+        post_record = carry.post_records[target_joint_index];
+        break;
+    }
+    ReleaseSRWLockExclusive(&g_aim_finalizer_carry_lock);
+    if (!matched || matched_target_index >= kAimFinalizerTargetCount) {
+        return;
+    }
+    const auto& target = kAimFinalizerTargets[matched_target_index];
+    std::uint32_t ignored_first = UINT32_MAX;
+    const std::uint32_t changed = aim_count_changed_words(
+        post_record.data(), record, 12, ignored_first);
+    char line[768]{};
+    std::snprintf(
+        line, sizeof(line),
+        "AIM-JOINT-VALID-KB consumer sample=%u actor=%s "
+        "producerGroup=%u consumerGroup=%u joint=%u raw=%u d=%.5f "
+        "hashPost/Consumer=%016llX/%016llX",
+        sample, target.actor, target.processing_group,
+        processing_group, joint, changed,
+        aim_raw_word_float_delta(post_record.data(), record, 12),
+        static_cast<unsigned long long>(aim_hash_raw_words(
+            post_record.data(), 12)),
+        static_cast<unsigned long long>(aim_hash_raw_words(record, 12)));
+    boot_log_line(line);
+    if (complete) {
+        const std::uint32_t expected =
+            (1U << target.joint_count) - 1U;
+        char end_line[384]{};
+        std::snprintf(
+            end_line, sizeof(end_line),
+            "AIM-JOINT-VALID-KB consumer-end sample=%u actor=%s "
+            "producerGroup=%u consumerGroup=%u mask=%03X expected=%03X",
+            sample, target.actor, target.processing_group,
+            processing_group, consumer_mask, expected);
+        boot_log_line(end_line);
+    }
 }
 
 void finish_aim_finalizer_probe() {
@@ -21407,7 +21516,7 @@ void finish_aim_finalizer_probe() {
     char line[448]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-VALID-KA end sample=%u actor=%s group=%u captured=%u "
+        "AIM-JOINT-VALID-KB end sample=%u actor=%s group=%u captured=%u "
         "calls=%u case16Mask=%03X expected=%03X",
         probe.sample, target.actor, target.processing_group,
         static_cast<unsigned>(probe.captured), probe.finalizer_calls,
@@ -22361,6 +22470,12 @@ std::uintptr_t __fastcall hooked_anim_joint_program_op40(
                     reinterpret_cast<const std::uint32_t*>(
                         joint_params_address),
                     "op40");
+                log_aim_finalizer_consumer_joint(
+                    scope.processing_group,
+                    g_aim_joint_boundary_scope.skeleton_joint_count,
+                    joint,
+                    reinterpret_cast<const std::uint32_t*>(
+                        joint_params_address));
             }
             AimJointExactChainSpec spec{};
             if (!resolve_aim_joint_exact_chain(
@@ -22657,15 +22772,13 @@ std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
         if (target.processing_group == scope.processing_group &&
             target.skeleton_joint_count == scope.skeleton_joint_count) {
             for (std::size_t index = 0;
-                 index < target.joint_count; ++index) {
+                index < target.joint_count; ++index) {
                 const std::uint32_t joint = target.joints[index];
-                if (joint < parameter_count) {
-                    log_aim_finalizer_case16_joint(
-                        joint,
-                        reinterpret_cast<const std::uint32_t*>(joint_params) +
-                            static_cast<std::size_t>(joint) * 12,
-                        "segment");
-                }
+                log_aim_finalizer_case16_joint(
+                    joint,
+                    reinterpret_cast<const std::uint32_t*>(joint_params) +
+                        static_cast<std::size_t>(joint) * 12,
+                    "segment-global");
             }
         }
     }
@@ -24463,7 +24576,7 @@ bool install_aim_finalizer_probe() {
             VirtualFree(relay, 0, MEM_RELEASE);
         }
         boot_log_line(
-            "aim ka finalizer probe SKIPPED (callsite preflight)");
+            "aim kb finalizer probe SKIPPED (callsite preflight)");
         return false;
     }
 
@@ -24474,7 +24587,7 @@ bool install_aim_finalizer_probe() {
     if (!suspend_other_process_threads(suspended_threads)) {
         VirtualFree(relay, 0, MEM_RELEASE);
         g_anim_cmd_finalize_group_defaults = nullptr;
-        boot_log_line("aim ka finalizer probe SKIPPED (thread suspend)");
+        boot_log_line("aim kb finalizer probe SKIPPED (thread suspend)");
         return false;
     }
     DWORD old_protection = 0;
@@ -24483,7 +24596,7 @@ bool install_aim_finalizer_probe() {
         resume_suspended_process_threads(suspended_threads);
         VirtualFree(relay, 0, MEM_RELEASE);
         g_anim_cmd_finalize_group_defaults = nullptr;
-        boot_log_line("aim ka finalizer probe SKIPPED (protect)");
+        boot_log_line("aim kb finalizer probe SKIPPED (protect)");
         return false;
     }
     *reinterpret_cast<std::int32_t*>(callsite + 1) = displacement;
@@ -24492,7 +24605,7 @@ bool install_aim_finalizer_probe() {
     VirtualProtect(callsite, 5, old_protection, &ignored);
     resume_suspended_process_threads(suspended_threads);
     boot_log_line(
-        "aim ka finalizer probe installed (0x141AB9D18, read-only)");
+        "aim kb finalizer probe installed (0x141AB9D18, read-only)");
     return true;
 }
 

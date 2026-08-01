@@ -2231,12 +2231,19 @@ Do not reopen these as the first move:
       change for `0/14/15/16/17/18/32/33/34`. Nadine group 2 and Chloe group 1
       rejected only the probe's incorrect global-as-local indexing: their local
       evaluator counts were 96 and one. Both processes remained responsive.
-- [ ] Correct build `kb` using the finalizer's local range
+- [x] Correct build `kb` using the finalizer's local range
       `group[3]..group[3]+group[0]`. Probe Nadine `96/102` in producer group 1
       and Chloe `35/36/41` in producer group 0, retain the post-finalizer record
       until the later target-group opcode 40 consumes it, and apply the corrected
       prediction in `COOP_STATUS.md`. Keep the native call exactly once and do
-      not modify ValidBits or pose data.
+      not modify ValidBits or pose data. Result: `kb` maps each global joint to
+      its local lane, preserves sampled records across evaluator groups under a
+      diagnostic lock, and compares them at both producer case 16 and the exact
+      later opcode-40 consumer. Release builds successfully.
+- [ ] Run the corrected `kb` sequence and require ranges `0+66`, `66+38`,
+      `0+89`, complete producer and consumer masks, one finalizer call, normal
+      models and responsive processes. Classify authored/default/post ownership
+      separately for Nadine `96/102` and Chloe `35/36/41`.
 - [ ] After the parent source is resolved, trace the exact JointParams producers
       for target children `97/103/43`; child 27 needs no JointParams trace because
       `jw` proved its 48-byte record bit-identical across the camera sweep.
