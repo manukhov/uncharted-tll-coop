@@ -1079,7 +1079,10 @@ FUNCTIONS = {
         "AnimManager_CreateAnimCmdsForObject",
         "Exact CreateAnimCmdsForObject source assertion in anim-mgr-jobs.cpp. "
         "Dispatches an object's animation control into the command-list record "
-        "later returned to AnimManager_PerformAnimBlend. Its decimal-command-17 "
+        "later returned to AnimManager_PerformAnimBlend. In build mode 2 it emits "
+        "the six-word command 14 at 0x141A8FF52..0x141A8FF89 from build-context "
+        "qwords 7/6, after the preceding command-3/4 close and before command 15. "
+        "Its decimal-command-17 "
         "producer copies build-context qword 6 into the command payload and emits "
         "header 0x40011 at 0x141A90119. The command-16 header 0x00020010 is "
         "appended first at 0x141A900F5..0x141A90106; command 17 is appended only "

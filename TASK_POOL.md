@@ -2249,11 +2249,23 @@ Do not reopen these as the first move:
       later op40 records nevertheless differ for Chloe 12/12 and Nadine 11/11.
       This confirms a local-lane to later-consumer discontinuity while rejecting
       the earlier `segment-global` address label as an established contract.
-- [ ] Inventory the exact live command order with read-only build `kc`. For only
+- [x] Inventory the exact live command order with read-only build `kc`. For only
       skeletons 580/651 and groups 0/1/2, report context flags, ordered command
       topology, and positions/counts of commands 3/13/14/15/16. Apply the written
       M14-external/M14-default/Mlane/Mother discriminator in `COOP_STATUS.md`;
-      do not hash or substitute pose data until this boundary is selected.
+      do not hash or substitute pose data until this boundary is selected. Result:
+      both actors run an identical short group-0 list with six-word command 14
+      strictly between commands 3 and 16 under flags zero. It occurs between the
+      main group-0 and group-1/2 calls. Main group-1/2 lists contain no command 14
+      and all case-13 copies precede command 3. Select M14-external for Chloe's
+      group-0 -> group-1 path, Mlane for Nadine's group-1 -> group-2 path, and
+      reject M14-default plus late Mother.
+- [ ] Implement the split read-only `kd` discriminator. At the exact case-14 call
+      `0x141ABA7F5`, compare Chloe source/destination records `35/36/41` and carry
+      them to group-1 op40. Separately log Nadine command-3 lane publication and
+      group-1/2 resolved addresses for `96/102`. Decouple the comparison from the
+      old `jz` admission gate, call every native function once, and change no pose
+      data. Apply the exact prediction in `COOP_STATUS.md`.
 - [ ] After the parent source is resolved, trace the exact JointParams producers
       for target children `97/103/43`; child 27 needs no JointParams trace because
       `jw` proved its 48-byte record bit-identical across the camera sweep.

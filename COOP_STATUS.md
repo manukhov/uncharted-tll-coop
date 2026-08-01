@@ -14557,3 +14557,69 @@ M14-default; no command 14 rejects both M14 branches and leaves Mlane/Mother. A
 command 13 after command 3 selects Mother as a concrete lane-copy competitor.
 Malformed lists, inconsistent topology for the same actor/group, missing command
 3/16, crash, hang or model damage rejects the inventory.
+
+### 2026-08-01 RUNTIME CONFIRMED: `kc` splits the Chloe case-14 import from the Nadine lane handoff
+
+PIDs 19276/17492 reached the world without any input sequence. Both processes
+remained responsive with normal models, every relevant command list was
+structurally complete, and no `AIM-CMD-TOPOLOGY-KC reject` or process fault was
+emitted. The bounded inventory captured all required actor/group combinations.
+
+The decisive topology is the identical short group-0 list for both skeletons:
+
+`0,1,2,9,3,4,14,15,16,17,24,24,26,5`
+
+It has 58 words / 14 commands, topology hash `1DFFCE38AB69AE11`,
+`c3=1@4`, `c14=1@6`, `c15=1@7`, `c16=1@8`, and
+`case14WordMask=00000040`, proving a six-word command 14. Its context flags are
+`00000000`, so the executed handler is the external-pose helper call at
+`0x141ABA7F5`, not the inline default-copy branch. On first appearance the log
+order is main group 0, this short group-0 import, then main groups 1/2. Thus it is
+an exact between-group import competitor for Chloe producer group 0 -> consumer
+group 1.
+
+Every main actor list has command 3 followed by command 4, command 15 and command
+16, with **no command 14 after command 3**. All command-13 occurrences precede
+command 3. Chloe groups 1/2 use flags `00000002`; Nadine groups 1/2 use flags
+`00000000`, but neither topology contains command 14, so the flags alone do not
+copy a pose. The main group-1 and group-2 topology is identical within each
+actor, establishing consecutive evaluation of the same list under two group
+indices.
+
+The runtime result therefore classifies the competitors by path:
+
+- **Chloe `35/36/41`: M14-external remains selected.** A real six-word case 14
+  executes between the producing group-0 lane and the later group-1 consumer.
+  M14-default is rejected because the flags byte is zero.
+- **Nadine `96/102`: both M14 branches are rejected for the group-1 -> group-2
+  handoff.** No command 14 executes between those groups.
+- **Mother via late case 13 is rejected for both actors.** Every case 13 is
+  ordered before finalization command 3.
+- **Mlane remains selected for Nadine.** Command 3 publication, group-relative
+  JointParams addressing or a group-index remap must account for the group-1
+  authored lane differing from group-2 opcode-40 input.
+
+This split also agrees with the static emitter. In
+`AnimManager_CreateAnimCmdsForObject 0x141A8FCF0`, build mode 2 emits header
+`0x0006000E` at `0x141A8FF52`, stores build-context qwords 7/6 as its two pointer
+payloads at `0x141A8FF61..0x141A8FF88`, and appends it after the preceding
+command-3/4 close but before command 15. The handler then forwards those pointers
+to `AnimCmdEvaluator_CopyGroupPoseToWorkBuffer` exactly as the live flags predict.
+
+The next read-only discriminator must remain split. For Chloe, a direct-call
+wrapper at `0x141ABA7F5` must hash only the external source records and copied
+WorkBuffer records for group-0 joints `35/36/41`, then carry them to the exact
+group-1 opcode-40 consumer. For Nadine, instrument command-3 publication at
+`0x141AB9DD6/0x141AB9DE4` and case-16 entry in groups 1/2 to log the actual lane
+base, WorkBuffer pointer, group-first/count metadata and exact record address for
+`96/102`; do not assume global indexing and do not use the old `jz` admission
+gate. No pose value may be changed.
+
+**Falsifiable `kd` prediction:** Chloe case 14 must copy its source record
+bit-identically to the destination, and that post-copy hash must either match the
+later group-1 consumer (confirming M14 as the handoff) or differ (selecting another
+post-import writer). Nadine must show whether group-1 and group-2 resolve
+`96/102` to the same address: different resolved addresses select group-relative
+Mlane; the same address with a changed hash selects an actual overwrite between
+groups. Missing exact calls, unreadable metadata, multiple native calls, crash,
+hang or model damage rejects the probe.

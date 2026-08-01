@@ -43723,8 +43723,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-01jz "
-        "(read-only exact op40 JP/source/output chains)");
+        "TLL co-op runtime init 2026-08-01kc "
+        "(read-only animation command topology inventory)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
