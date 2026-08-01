@@ -118,8 +118,6 @@ ProcessAnimCmdListSegmentFunction g_original_process_anim_cmd_list_segment =
     nullptr;
 AnimCmdExecuteJointProgramsFunction g_anim_cmd_execute_joint_programs = nullptr;
 AnimJointProgramOperatorFunction g_original_anim_joint_program_op40 = nullptr;
-AnimJointProgramOperatorFunction g_original_anim_joint_program_op49 = nullptr;
-AnimJointProgramOperatorFunction g_original_anim_joint_program_op50 = nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
 std::atomic<void*> g_local_fganim_data{nullptr};
 std::atomic<void*> g_puppet_fganim_data{nullptr};
@@ -20986,8 +20984,7 @@ struct AimJointOperatorBoundaryScope {
     std::uint32_t target_op40_count = 0;
     std::uint32_t wrapped_operator_count = 0;
     std::uint32_t producer_op40_count = 0;
-    std::uint32_t op49_count = 0;
-    std::uint32_t op50_count = 0;
+    std::uint32_t exact_chain_mask = 0;
     std::uint32_t probe_reject_count = 0;
     std::uint32_t peer_sequence = 0;
     float peer_y = 0.0F;
@@ -21003,6 +21000,24 @@ struct AimJointOperatorBoundaryScope {
 };
 
 thread_local AimJointOperatorBoundaryScope g_aim_joint_operator_scope{};
+
+constexpr std::size_t kAimJointExactChainCount = 8;
+
+struct AimJointExactInputBaseline {
+    bool valid = false;
+    std::uint32_t processing_group = UINT32_MAX;
+    std::uint32_t payload_offset = UINT32_MAX;
+    std::uint32_t record = UINT32_MAX;
+    float peer_y = 0.0F;
+    float local_y = 0.0F;
+    std::array<std::uint32_t, 12> joint_params{};
+    std::array<std::uint32_t, 16> source{};
+    std::array<std::uint32_t, 16> output{};
+};
+
+SRWLOCK g_aim_joint_exact_input_lock = SRWLOCK_INIT;
+std::array<AimJointExactInputBaseline, kAimJointExactChainCount>
+    g_aim_joint_exact_input_baselines{};
 
 void aim_summarize_float_words(
     const float* values, std::size_t count, std::uint64_t& hash,
@@ -21044,6 +21059,24 @@ std::uint32_t aim_count_changed_words(
         ++changed;
     }
     return changed;
+}
+
+float aim_raw_word_float_delta(
+    const std::uint32_t* before, const std::uint32_t* after,
+    std::size_t count) {
+    float delta_sq = 0.0F;
+    for (std::size_t index = 0; index < count; ++index) {
+        float lhs = 0.0F;
+        float rhs = 0.0F;
+        std::memcpy(&lhs, before + index, sizeof(lhs));
+        std::memcpy(&rhs, after + index, sizeof(rhs));
+        if (!std::isfinite(lhs) || !std::isfinite(rhs)) {
+            continue;
+        }
+        const float delta = rhs - lhs;
+        delta_sq += delta * delta;
+    }
+    return std::sqrt(delta_sq);
 }
 
 AimJointProgramInventory inventory_aim_joint_programs(
@@ -21332,7 +21365,7 @@ void prepare_aim_joint_boundary_scope(
             char line[512]{};
             std::snprintf(
                 line, sizeof(line),
-                "AIM-JOINT-ADMISSION-JX outer sample=%u group=%u "
+                "AIM-JOINT-ADMISSION-JY outer sample=%u group=%u "
                 "op16=%u op24=%u joints=%u peer=%u/%u local=%u/%u "
                 "peerY=%.4f localY=%.4f separation=%.4f armed=%u",
                 sample + 1, processing_group, case16_count, case24_count,
@@ -21539,7 +21572,7 @@ void log_aim_joint_boundary_after_case16(
     char line[2048]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-BOUNDARY-JX sample=%u seq=%u peerSrc=%u "
+        "AIM-JOINT-BOUNDARY-JY sample=%u seq=%u peerSrc=%u "
         "peerY=%.4f localY=%.4f dirDelta=%.4f/%.4f "
         "group=%u first=%u params=%u workspace=%u reset=%u "
         "op16=%u op24=%u programs=%u/%u hash=%016llX "
@@ -21662,7 +21695,7 @@ void audit_aim_joint_case16_entry(
     char line[768]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-ADMISSION-JX raw sample=%u screen=1 outerGroup=%u "
+        "AIM-JOINT-ADMISSION-JY raw sample=%u screen=1 outerGroup=%u "
         "segmentGroup=%u segment=%u pointers=%u target=%u group=%u "
         "ordinal=%u/%u first=%u workspace=%u params=%u "
         "scopeTarget=%p program=%p actual=%p jp=%p work=%p readable=%u/%u",
@@ -21699,7 +21732,7 @@ void log_aim_joint_admission_post(
     char line[384]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-ADMISSION-JX post sample=%u group=%u "
+        "AIM-JOINT-ADMISSION-JY post sample=%u group=%u "
         "programs=%u readable=%u/%u captured=%u",
         sample + 1, scope.processing_group,
         static_cast<unsigned>(programs_valid),
@@ -21767,8 +21800,7 @@ void begin_aim_joint_operator_boundary(
     scope.target_op40_count = 0;
     scope.wrapped_operator_count = 0;
     scope.producer_op40_count = 0;
-    scope.op49_count = 0;
-    scope.op50_count = 0;
+    scope.exact_chain_mask = 0;
     scope.probe_reject_count = 0;
     scope.peer_sequence = parent.peer_sequence;
     scope.peer_y = parent.peer_y;
@@ -21787,7 +21819,7 @@ void begin_aim_joint_operator_boundary(
     char line[768]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-PRODUCER-JX begin sample=%u seq=%u peerY=%.4f localY=%.4f "
+        "AIM-JOINT-EXACT-JY begin sample=%u seq=%u peerY=%.4f localY=%.4f "
         "group=%u programs=%u/%u custom=%u hash=%016llX "
         "jp=%016llX workspace=%016llX",
         scope.sample, scope.peer_sequence, scope.peer_y, scope.local_y,
@@ -21820,12 +21852,24 @@ void finish_aim_joint_operator_boundary() {
     char line[640]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-PRODUCER-JX end sample=%u group=%u targets=%u "
-        "wrapped=%u producer40=%u op49=%u op50=%u rejects=%u readable=%u "
+        "AIM-JOINT-EXACT-JY end sample=%u group=%u targets=%u "
+        "wrapped40=%u producer40=%u chains=%u/%u mask=%02X expected=%02X "
+        "rejects=%u readable=%u "
         "trailingW=%u/%u jp=%016llX workspace=%016llX",
         scope.sample, scope.processing_group, scope.target_op40_count,
         scope.wrapped_operator_count, scope.producer_op40_count,
-        scope.op49_count, scope.op50_count, scope.probe_reject_count,
+        static_cast<unsigned>(
+            (scope.exact_chain_mask & 0x01U) != 0U) +
+            static_cast<unsigned>((scope.exact_chain_mask & 0x02U) != 0U) +
+            static_cast<unsigned>((scope.exact_chain_mask & 0x04U) != 0U) +
+            static_cast<unsigned>((scope.exact_chain_mask & 0x08U) != 0U) +
+            static_cast<unsigned>((scope.exact_chain_mask & 0x10U) != 0U) +
+            static_cast<unsigned>((scope.exact_chain_mask & 0x20U) != 0U) +
+            static_cast<unsigned>((scope.exact_chain_mask & 0x40U) != 0U) +
+            static_cast<unsigned>((scope.exact_chain_mask & 0x80U) != 0U),
+        scope.processing_group == 2 ? 5U : 3U, scope.exact_chain_mask,
+        scope.processing_group == 2 ? 0x1FU : 0xE0U,
+        scope.probe_reject_count,
         static_cast<unsigned>(readable), trailing_changes, trailing_first,
         static_cast<unsigned long long>(readable
             ? aim_hash_raw_words(scope.joint_params, scope.joint_params_words)
@@ -21850,20 +21894,73 @@ std::uint32_t aim_joint_payload_offset(
         : UINT32_MAX;
 }
 
-bool aim_joint_is_tracked_parent(
-    std::uint32_t processing_group, std::uint32_t joint) {
+struct AimJointExactChainSpec {
+    std::uint32_t index = UINT32_MAX;
+    const char* name = "unknown";
+    bool source_after_call = false;
+};
+
+bool resolve_aim_joint_exact_chain(
+    std::uint32_t processing_group, std::uint32_t payload_offset,
+    std::uint32_t record, std::uint16_t k, std::uint16_t encoded_source,
+    AimJointExactChainSpec& result) {
     if (processing_group == 2) {
-        return joint == 26 || joint == 96 || joint == 102;
+        if (payload_offset == 0x8FA8U && record == 1 &&
+            k == 0x0190U && encoded_source == 0x109BU) {
+            result = {0, "N24", false};
+            return true;
+        }
+        if (payload_offset == 0x8FBAU && record == 23 &&
+            k == 0x01A0U && encoded_source == 0x0649U) {
+            result = {1, "N25", false};
+            return true;
+        }
+        if (payload_offset == 0x8FBAU && record == 81 &&
+            k == 0x0610U && encoded_source == 0x0009U) {
+            result = {2, "N96", false};
+            return true;
+        }
+        if (payload_offset == 0x8FBAU && record == 82 &&
+            k == 0x0670U && encoded_source == 0x0009U) {
+            result = {3, "N102", false};
+            return true;
+        }
+        if (payload_offset == 0x8FCAU && record == 0 &&
+            k == 0x01B0U && encoded_source == 0x0689U) {
+            result = {4, "N26", false};
+            return true;
+        }
+        return false;
     }
-    return processing_group == 1 && joint == 42;
+    if (processing_group != 1 || payload_offset != 0xF14AU) {
+        return false;
+    }
+    if (record == 1 && k == 0x0250U && encoded_source == 0x0901U) {
+        result = {5, "C36", false};
+        return true;
+    }
+    if (record == 11 && k == 0x02A0U && encoded_source == 0x0949U) {
+        result = {6, "C41", true};
+        return true;
+    }
+    if (record == 25 && k == 0x02B0U && encoded_source == 0x0A89U) {
+        result = {7, "C42", true};
+        return true;
+    }
+    return false;
 }
 
-struct AimJointParentWriterMatch {
+struct AimJointExactChainCapture {
+    AimJointExactChainSpec spec{};
     std::uint32_t record = 0;
     std::uint16_t k = 0;
     std::uint16_t encoded_source = 0;
     std::uint32_t joint = UINT32_MAX;
-    std::array<std::uint32_t, 16> before{};
+    const std::uint32_t* source_address = nullptr;
+    const std::uint32_t* output_address = nullptr;
+    std::array<std::uint32_t, 12> joint_params{};
+    std::array<std::uint32_t, 16> source_before{};
+    std::array<std::uint32_t, 16> output_before{};
 };
 
 std::uintptr_t __fastcall hooked_anim_joint_program_op40(
@@ -21892,8 +21989,8 @@ std::uintptr_t __fastcall hooked_anim_joint_program_op40(
     const std::size_t record_count =
         static_cast<std::size_t>(payload[0]) * 4U;
     constexpr std::size_t kMaxRecords = 256;
-    constexpr std::size_t kMaxMatches = 32;
-    std::array<AimJointParentWriterMatch, kMaxMatches> matches{};
+    constexpr std::size_t kMaxMatches = 5;
+    std::array<AimJointExactChainCapture, kMaxMatches> matches{};
     std::size_t match_count = 0;
     bool admitted = record_count <= kMaxRecords;
 
@@ -21918,33 +22015,56 @@ std::uintptr_t __fastcall hooked_anim_joint_program_op40(
              admitted && record < record_count; ++record) {
             const std::uint16_t k = descriptors[record * 2];
             const std::uint16_t encoded_source = descriptors[record * 2 + 1];
+            AimJointExactChainSpec spec{};
+            if (!resolve_aim_joint_exact_chain(
+                    scope.processing_group, payload_offset,
+                    static_cast<std::uint32_t>(record), k, encoded_source,
+                    spec)) {
+                continue;
+            }
             const std::uint32_t workspace_row = k / 16U;
             const std::uint32_t joint =
                 k >= 0x10U && (k & 0xFU) == 0 && workspace_row != 0
                 ? workspace_row - 1
                 : UINT32_MAX;
-            if (!aim_joint_is_tracked_parent(
-                    scope.processing_group, joint)) {
-                continue;
-            }
-            if (match_count >= matches.size()) {
+            if (joint == UINT32_MAX || match_count >= matches.size()) {
                 admitted = false;
                 break;
             }
             auto& match = matches[match_count++];
+            match.spec = spec;
             match.record = static_cast<std::uint32_t>(record);
             match.k = k;
             match.encoded_source = encoded_source;
             match.joint = joint;
-            const std::uintptr_t output_address = bases[1] + 4U * k;
-            admitted =
-                readable_bytes(reinterpret_cast<const void*>(output_address)) >=
-                match.before.size() * sizeof(std::uint32_t);
+            const std::uintptr_t joint_params_address =
+                bases[0] + 3U * static_cast<std::uintptr_t>(k) - 0x30U;
+            const std::uintptr_t source_address =
+                bases[encoded_source & 3U] + (encoded_source & 0xFFF0U);
+            const std::uintptr_t output_address =
+                bases[1] + 4U * static_cast<std::uintptr_t>(k);
+            match.source_address =
+                reinterpret_cast<const std::uint32_t*>(source_address);
+            match.output_address =
+                reinterpret_cast<const std::uint32_t*>(output_address);
+            admitted = readable_bytes(
+                    reinterpret_cast<const void*>(joint_params_address)) >=
+                    match.joint_params.size() * sizeof(std::uint32_t) &&
+                readable_bytes(match.source_address) >=
+                    match.source_before.size() * sizeof(std::uint32_t) &&
+                readable_bytes(match.output_address) >=
+                    match.output_before.size() * sizeof(std::uint32_t);
             if (admitted) {
                 std::memcpy(
-                    match.before.data(),
-                    reinterpret_cast<const void*>(output_address),
-                    match.before.size() * sizeof(std::uint32_t));
+                    match.joint_params.data(),
+                    reinterpret_cast<const void*>(joint_params_address),
+                    match.joint_params.size() * sizeof(std::uint32_t));
+                std::memcpy(
+                    match.source_before.data(), match.source_address,
+                    match.source_before.size() * sizeof(std::uint32_t));
+                std::memcpy(
+                    match.output_before.data(), match.output_address,
+                    match.output_before.size() * sizeof(std::uint32_t));
             }
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -21956,7 +22076,7 @@ std::uintptr_t __fastcall hooked_anim_joint_program_op40(
         char line[448]{};
         std::snprintf(
             line, sizeof(line),
-            "AIM-JOINT-PRODUCER-JX reject sample=%u group=%u ord=%u "
+            "AIM-JOINT-EXACT-JY reject sample=%u group=%u ord=%u "
             "op=40 payloadOff=%08X p=%04X/%04X/%04X records=%u",
             scope.sample, scope.processing_group, ordinal, payload_offset,
             static_cast<unsigned>(payload[0]),
@@ -21978,7 +22098,7 @@ std::uintptr_t __fastcall hooked_anim_joint_program_op40(
     char header[576]{};
     std::snprintf(
         header, sizeof(header),
-        "AIM-JOINT-PRODUCER-JX op sample=%u seq=%u peerY=%.4f localY=%.4f "
+        "AIM-JOINT-EXACT-JY op sample=%u seq=%u peerY=%.4f localY=%.4f "
         "group=%u ord=%u op=40 payloadOff=%08X p=%04X/%04X/%04X "
         "records=%u matches=%u phase=%s target=%u",
         scope.sample, scope.peer_sequence, scope.peer_y, scope.local_y,
@@ -21993,153 +22113,132 @@ std::uintptr_t __fastcall hooked_anim_joint_program_op40(
 
     for (std::size_t index = 0; index < match_count; ++index) {
         const auto& match = matches[index];
-        std::array<std::uint32_t, 16> after{};
+        std::array<std::uint32_t, 16> source_after{};
+        std::array<std::uint32_t, 16> output_after{};
         bool readable = false;
         __try {
-            const auto* const output = scope.workspace_base + match.k;
-            readable = readable_bytes(output) >=
-                after.size() * sizeof(std::uint32_t);
+            readable = readable_bytes(match.source_address) >=
+                    source_after.size() * sizeof(std::uint32_t) &&
+                readable_bytes(match.output_address) >=
+                    output_after.size() * sizeof(std::uint32_t);
             if (readable) {
                 std::memcpy(
-                    after.data(), output,
-                    after.size() * sizeof(std::uint32_t));
+                    source_after.data(), match.source_address,
+                    source_after.size() * sizeof(std::uint32_t));
+                std::memcpy(
+                    output_after.data(), match.output_address,
+                    output_after.size() * sizeof(std::uint32_t));
             }
         } __except (EXCEPTION_EXECUTE_HANDLER) {
             readable = false;
         }
-        std::uint32_t first = UINT32_MAX;
-        const std::uint32_t changed = readable
-            ? aim_count_changed_words(
-                match.before.data(), after.data(), after.size(), first)
-            : 0;
-        char line[640]{};
+        if (!readable) {
+            ++scope.probe_reject_count;
+            char reject_line[448]{};
+            std::snprintf(
+                reject_line, sizeof(reject_line),
+                "AIM-JOINT-EXACT-JY reject sample=%u group=%u ord=%u "
+                "chain=%s payloadOff=%08X rec=%u post-unreadable",
+                scope.sample, scope.processing_group, ordinal,
+                match.spec.name, payload_offset, match.record);
+            boot_log_line(reject_line);
+            continue;
+        }
+
+        const auto& source = match.spec.source_after_call
+            ? source_after
+            : match.source_before;
+        std::uint32_t call_out_first = UINT32_MAX;
+        const std::uint32_t call_out_changes = aim_count_changed_words(
+            match.output_before.data(), output_after.data(),
+            output_after.size(), call_out_first);
+        std::uint32_t call_source_first = UINT32_MAX;
+        const std::uint32_t call_source_changes = aim_count_changed_words(
+            match.source_before.data(), source_after.data(),
+            source_after.size(), call_source_first);
+
+        bool reset = true;
+        float peer_delta = 0.0F;
+        float local_delta = 0.0F;
+        std::uint32_t joint_params_changes = 0;
+        std::uint32_t source_changes = 0;
+        std::uint32_t output_changes = 0;
+        std::uint32_t ignored_first = UINT32_MAX;
+        float joint_params_delta = 0.0F;
+        float source_delta = 0.0F;
+        float output_delta = 0.0F;
+        AcquireSRWLockExclusive(&g_aim_joint_exact_input_lock);
+        auto& baseline =
+            g_aim_joint_exact_input_baselines[match.spec.index];
+        reset = !baseline.valid ||
+            baseline.processing_group != scope.processing_group ||
+            baseline.payload_offset != payload_offset ||
+            baseline.record != match.record;
+        if (!reset) {
+            peer_delta = scope.peer_y - baseline.peer_y;
+            local_delta = scope.local_y - baseline.local_y;
+            joint_params_changes = aim_count_changed_words(
+                baseline.joint_params.data(), match.joint_params.data(),
+                match.joint_params.size(), ignored_first);
+            source_changes = aim_count_changed_words(
+                baseline.source.data(), source.data(), source.size(),
+                ignored_first);
+            output_changes = aim_count_changed_words(
+                baseline.output.data(), output_after.data(),
+                output_after.size(), ignored_first);
+            joint_params_delta = aim_raw_word_float_delta(
+                baseline.joint_params.data(), match.joint_params.data(),
+                match.joint_params.size());
+            source_delta = aim_raw_word_float_delta(
+                baseline.source.data(), source.data(), source.size());
+            output_delta = aim_raw_word_float_delta(
+                baseline.output.data(), output_after.data(),
+                output_after.size());
+        }
+        baseline.valid = true;
+        baseline.processing_group = scope.processing_group;
+        baseline.payload_offset = payload_offset;
+        baseline.record = match.record;
+        baseline.peer_y = scope.peer_y;
+        baseline.local_y = scope.local_y;
+        baseline.joint_params = match.joint_params;
+        baseline.source = source;
+        baseline.output = output_after;
+        ReleaseSRWLockExclusive(&g_aim_joint_exact_input_lock);
+
+        const std::uint32_t chain_bit = 1U << match.spec.index;
+        if ((scope.exact_chain_mask & chain_bit) != 0U) {
+            ++scope.probe_reject_count;
+        }
+        scope.exact_chain_mask |= chain_bit;
+
+        char line[1024]{};
         std::snprintf(
             line, sizeof(line),
-            "AIM-JOINT-PRODUCER-JX match sample=%u group=%u ord=%u "
-            "payloadOff=%08X rec=%u k=%04X src=%04X joint=%u "
-            "readable=%u callOut=%u/%u hashB/A=%016llX/%016llX",
-            scope.sample, scope.processing_group, ordinal, payload_offset,
-            match.record, static_cast<unsigned>(match.k),
+            "AIM-JOINT-EXACT-JY chain sample=%u seq=%u group=%u ord=%u "
+            "chain=%s payloadOff=%08X rec=%u k=%04X src=%04X joint=%u "
+            "srcPhase=%s reset=%u dCam=%.4f/%.4f "
+            "rawJP/src/out=%u/%u/%u dJP/src/out=%.5f/%.5f/%.5f "
+            "callSrc=%u/%u callOut=%u/%u hashJP/src/out=%016llX/%016llX/%016llX",
+            scope.sample, scope.peer_sequence, scope.processing_group, ordinal,
+            match.spec.name, payload_offset, match.record,
+            static_cast<unsigned>(match.k),
             static_cast<unsigned>(match.encoded_source), match.joint,
-            static_cast<unsigned>(readable), changed, first,
+            match.spec.source_after_call ? "post" : "pre",
+            static_cast<unsigned>(reset), peer_delta, local_delta,
+            joint_params_changes, source_changes, output_changes,
+            joint_params_delta, source_delta, output_delta,
+            call_source_changes, call_source_first,
+            call_out_changes, call_out_first,
             static_cast<unsigned long long>(aim_hash_raw_words(
-                match.before.data(), match.before.size())),
-            static_cast<unsigned long long>(readable
-                ? aim_hash_raw_words(after.data(), after.size())
-                : 0));
+                match.joint_params.data(), match.joint_params.size())),
+            static_cast<unsigned long long>(aim_hash_raw_words(
+                source.data(), source.size())),
+            static_cast<unsigned long long>(aim_hash_raw_words(
+                output_after.data(), output_after.size())));
         boot_log_line(line);
     }
     return result;
-}
-
-std::uintptr_t hooked_anim_joint_program_matrix_writer(
-    std::uint32_t opcode, AnimJointProgramOperatorFunction native,
-    const std::uint16_t* payload, const std::uintptr_t* operator_context,
-    const void* segment_context) {
-    if (native == nullptr) {
-        return 0;
-    }
-    auto& scope = g_aim_joint_operator_scope;
-    if (!scope.active || scope.processing_group != 1 ||
-        scope.segment_context != segment_context || payload == nullptr ||
-        operator_context == nullptr || readable_bytes(payload) < 6) {
-        return native(payload, operator_context, segment_context);
-    }
-    const std::uint32_t ordinal = ++scope.wrapped_operator_count;
-    const bool after_target = scope.target_op40_count != 0;
-    const std::uint32_t payload_offset =
-        aim_joint_payload_offset(scope, payload);
-    constexpr std::uint32_t kParentJoint = 42;
-    constexpr std::size_t kParentWord = (kParentJoint + 1U) * 16U;
-    std::array<std::uint32_t, 16> before{};
-    bool admitted = scope.workspace_words >= kParentWord + before.size();
-    __try {
-        admitted = admitted &&
-            readable_bytes(scope.workspace_base + kParentWord) >=
-                before.size() * sizeof(std::uint32_t);
-        if (admitted) {
-            std::memcpy(
-                before.data(), scope.workspace_base + kParentWord,
-                before.size() * sizeof(std::uint32_t));
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        admitted = false;
-    }
-    if (!admitted) {
-        ++scope.probe_reject_count;
-        char reject_line[448]{};
-        std::snprintf(
-            reject_line, sizeof(reject_line),
-            "AIM-JOINT-PRODUCER-JX reject sample=%u group=%u ord=%u "
-            "op=%u payloadOff=%08X parent42-unreadable",
-            scope.sample, scope.processing_group, ordinal, opcode,
-            payload_offset);
-        boot_log_line(reject_line);
-        return native(payload, operator_context, segment_context);
-    }
-
-    const std::uintptr_t result =
-        native(payload, operator_context, segment_context);
-    if (opcode == 49) {
-        ++scope.op49_count;
-    } else {
-        ++scope.op50_count;
-    }
-    std::array<std::uint32_t, 16> after{};
-    bool readable = false;
-    __try {
-        readable = readable_bytes(scope.workspace_base + kParentWord) >=
-            after.size() * sizeof(std::uint32_t);
-        if (readable) {
-            std::memcpy(
-                after.data(), scope.workspace_base + kParentWord,
-                after.size() * sizeof(std::uint32_t));
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        readable = false;
-    }
-    std::uint32_t first = UINT32_MAX;
-    const std::uint32_t changed = readable
-        ? aim_count_changed_words(
-            before.data(), after.data(), after.size(), first)
-        : 0;
-    char line[768]{};
-    std::snprintf(
-        line, sizeof(line),
-        "AIM-JOINT-PRODUCER-JX matrix sample=%u seq=%u peerY=%.4f "
-        "localY=%.4f group=%u ord=%u op=%u payloadOff=%08X "
-        "p=%04X/%04X/%04X phase=%s joint=42 readable=%u "
-        "callOut=%u/%u hashB/A=%016llX/%016llX",
-        scope.sample, scope.peer_sequence, scope.peer_y, scope.local_y,
-        scope.processing_group, ordinal, opcode, payload_offset,
-        static_cast<unsigned>(payload[0]),
-        static_cast<unsigned>(payload[1]),
-        static_cast<unsigned>(payload[2]),
-        after_target ? "post" : "pre", static_cast<unsigned>(readable),
-        changed, first,
-        static_cast<unsigned long long>(aim_hash_raw_words(
-            before.data(), before.size())),
-        static_cast<unsigned long long>(readable
-            ? aim_hash_raw_words(after.data(), after.size())
-            : 0));
-    boot_log_line(line);
-    return result;
-}
-
-std::uintptr_t __fastcall hooked_anim_joint_program_op49(
-    const std::uint16_t* payload, const std::uintptr_t* operator_context,
-    const void* segment_context) {
-    return hooked_anim_joint_program_matrix_writer(
-        49, g_original_anim_joint_program_op49, payload, operator_context,
-        segment_context);
-}
-
-std::uintptr_t __fastcall hooked_anim_joint_program_op50(
-    const std::uint16_t* payload, const std::uintptr_t* operator_context,
-    const void* segment_context) {
-    return hooked_anim_joint_program_matrix_writer(
-        50, g_original_anim_joint_program_op50, payload, operator_context,
-        segment_context);
 }
 
 std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
@@ -23992,7 +24091,7 @@ bool install_aim_joint_boundary_probes() {
             VirtualFree(execute_relay, 0, MEM_RELEASE);
         }
         boot_log_line(
-            "aim jx case16 admission probe SKIPPED (callsite preflight)");
+            "aim jy case16 admission probe SKIPPED (callsite preflight)");
         return false;
     }
 
@@ -24004,7 +24103,7 @@ bool install_aim_joint_boundary_probes() {
         VirtualFree(execute_relay, 0, MEM_RELEASE);
         g_anim_cmd_execute_joint_programs = nullptr;
         boot_log_line(
-            "aim jx case16 admission probe SKIPPED (thread suspend)");
+            "aim jy case16 admission probe SKIPPED (thread suspend)");
         return false;
     }
 
@@ -24015,7 +24114,7 @@ bool install_aim_joint_boundary_probes() {
         resume_suspended_process_threads(suspended_threads);
         VirtualFree(execute_relay, 0, MEM_RELEASE);
         g_anim_cmd_execute_joint_programs = nullptr;
-        boot_log_line("aim jx case16 admission probe SKIPPED (protect)");
+        boot_log_line("aim jy case16 admission probe SKIPPED (protect)");
         return false;
     }
 
@@ -24026,39 +24125,33 @@ bool install_aim_joint_boundary_probes() {
     VirtualProtect(execute_callsite, 5, execute_old, &ignored);
     resume_suspended_process_threads(suspended_threads);
     boot_log_line(
-        "aim jx case16 admission probe installed (0x141ABA973)");
+        "aim jy case16 admission probe installed (0x141ABA973)");
     return true;
 }
 
-bool install_aim_joint_parent_producer_probe() {
+bool install_aim_joint_exact_input_probe() {
     auto* const builtin_table =
         reinterpret_cast<AnimJointProgramOperatorFunction*>(
             g_module + kAnimJointProgramBuiltinOperatorTableRva);
     constexpr std::size_t kFirstBuiltinOpcode = 40;
-    constexpr std::size_t kLastBuiltinOpcode = 50;
+    constexpr std::size_t kLastBuiltinOpcode = 40;
     constexpr std::size_t kBuiltinSpan =
         (kLastBuiltinOpcode - kFirstBuiltinOpcode + 1) *
         sizeof(AnimJointProgramOperatorFunction);
     if (readable_bytes(builtin_table + kFirstBuiltinOpcode) < kBuiltinSpan) {
-        boot_log_line("aim jx parent-producer probe SKIPPED (readability)");
+        boot_log_line("aim jy exact-input probe SKIPPED (readability)");
         return false;
     }
     if (builtin_table[40] !=
             reinterpret_cast<AnimJointProgramOperatorFunction>(
-                g_module + kAnimJointProgramOp40Rva) ||
-        builtin_table[49] !=
-            reinterpret_cast<AnimJointProgramOperatorFunction>(
-                g_module + kAnimJointProgramOp49Rva) ||
-        builtin_table[50] !=
-            reinterpret_cast<AnimJointProgramOperatorFunction>(
-                g_module + kAnimJointProgramOp50Rva)) {
-        boot_log_line("aim jx parent-producer probe SKIPPED (slot preflight)");
+                g_module + kAnimJointProgramOp40Rva)) {
+        boot_log_line("aim jy exact-input probe SKIPPED (slot preflight)");
         return false;
     }
 
     SuspendedProcessThreads suspended_threads{};
     if (!suspend_other_process_threads(suspended_threads)) {
-        boot_log_line("aim jx parent-producer probe SKIPPED (thread suspend)");
+        boot_log_line("aim jy exact-input probe SKIPPED (thread suspend)");
         return false;
     }
     DWORD builtin_old = 0;
@@ -24067,16 +24160,12 @@ bool install_aim_joint_parent_producer_probe() {
         PAGE_READWRITE, &builtin_old) != 0;
     if (!builtin_protected) {
         resume_suspended_process_threads(suspended_threads);
-        boot_log_line("aim jx parent-producer probe SKIPPED (protect)");
+        boot_log_line("aim jy exact-input probe SKIPPED (protect)");
         return false;
     }
 
     g_original_anim_joint_program_op40 = builtin_table[40];
-    g_original_anim_joint_program_op49 = builtin_table[49];
-    g_original_anim_joint_program_op50 = builtin_table[50];
     builtin_table[40] = &hooked_anim_joint_program_op40;
-    builtin_table[49] = &hooked_anim_joint_program_op49;
-    builtin_table[50] = &hooked_anim_joint_program_op50;
     FlushInstructionCache(
         GetCurrentProcess(), builtin_table + kFirstBuiltinOpcode,
         kBuiltinSpan);
@@ -24085,7 +24174,7 @@ bool install_aim_joint_parent_producer_probe() {
         builtin_table + kFirstBuiltinOpcode, kBuiltinSpan,
         builtin_old, &ignored);
     resume_suspended_process_threads(suspended_threads);
-    boot_log_line("aim jx parent-producer probe installed (slots 40/49/50)");
+    boot_log_line("aim jy exact-input probe installed (slot 40 only)");
     return true;
 }
 
@@ -42972,8 +43061,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-01jx "
-        "(bounded parent-writer inventory at opcodes 40/49/50)");
+        "TLL co-op runtime init 2026-08-01jy "
+        "(read-only exact op40 JP/source/output chains)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -43061,7 +43150,7 @@ DWORD WINAPI install_hook(void*) {
             install_aim_case6_probe();
             if (g_enable_aim_joint_boundary_probe) {
                 install_aim_joint_boundary_probes();
-                install_aim_joint_parent_producer_probe();
+                install_aim_joint_exact_input_probe();
             }
         }
         if (g_enable_puppet_fganim_world_aim_turn) {

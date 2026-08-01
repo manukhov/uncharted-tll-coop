@@ -14212,7 +14212,7 @@ joint 96, 102, 26, and 42. Resolve the last writers/initializers of these exact
 four JointParams records and three source matrices, and distinguish which input
 already follows receiver-local camera, before another runtime launch.
 
-### 2026-08-01 STATIC / TEST READY: `jy` isolates exact JointParams and source chains of the confirmed parent producers
+### 2026-08-01 STATIC / IMPLEMENTED / TEST READY: `jy` isolates exact JointParams and source chains of the confirmed parent producers
 
 The `jx` runtime payload offsets establish bounded local maps into each actor's
 descriptor blob. For Nadine, runtime descriptor offsets
@@ -14275,7 +14275,11 @@ changes with receiver-local camera while its source matrix is stable),
 must wrap only builtin slot 40. It captures JP/source/output for Nadine joints
 24/25/26/96/102 and Chloe joints 36/41/42 only at the exact payload/record
 pairs above, compares each chain with its own prior sample, and calls every
-native operator exactly once. It must not substitute any pose value.
+native operator exactly once. The implemented wrapper uses the post-call
+joint-36/joint-41 rows for Chloe records 11/25 because the proven sequential
+same-call records produced those exact sources; all other sources are sampled
+before the native call. The rejected op49/op50 wrappers have been removed. No
+pose value is substituted.
 
 **Falsifiable runtime prediction:** a camera-distinct sequence after both remote
 Players spawn must yield paired admitted group-2/group-1 samples, the expected
