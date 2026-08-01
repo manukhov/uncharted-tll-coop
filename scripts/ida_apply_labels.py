@@ -2258,9 +2258,13 @@ FUNCTIONS = {
         "AnimCmdEvaluator_ExecuteSkeletonJointPrograms",
         "Command-16 evaluator that walks the target skeleton's bounded joint "
         "program records and dispatches their transform operators over the final "
-        "WorkBuffer JointParams into the 64-byte-per-joint matrix workspace. Each "
-        "operator receives encoded bases SegmentContext +0x50, +0x58, +0x68 and "
-        "+0x30; the current group descriptor is read from +0x38. Runtime build jt "
+        "WorkBuffer JointParams into the 64-byte-per-joint matrix workspace. The "
+        "outer operator context is {programStart, ownerBase, null, baseTable}; its "
+        "selector-3 baseTable is the nested array {SegmentContext+0x50 JointParams, "
+        "+0x58 workspace, +0x68 auxiliary, +0x30 scratch}. Built-in payload word 1 "
+        "normally selects that nested table, while payload word 2 selects authored "
+        "descriptors from programStart. The current group descriptor is read from "
+        "+0x38. Runtime build jt "
         "confirmed that the finalized parameterCount prefix remained bit-identical "
         "while complex authored programs changed the +0x58 workspace. Runtime ke "
         "corrected that scope: command 16 rewrites selected JointParams rows in "
@@ -2331,7 +2335,8 @@ FUNCTIONS = {
     0x142194680: (
         "AnimJointProgramOp41_ScatterVectorComponents",
         "Built-in joint-program opcode 41 wrapper. Resolves 64-byte authored "
-        "records plus an auxiliary vector stream and calls "
+        "records from outer selector 0 and the four encoded destinations through "
+        "the nested base table selected by payload word 1, then calls "
         "AnimJointProgram_ScatterVectorComponents. Each record can write up to "
         "twelve optional encoded scalar destinations.",
     ),
@@ -2344,10 +2349,11 @@ FUNCTIONS = {
     0x1421946D0: (
         "AnimJointProgramOp44_AssembleEncodedVectors",
         "Built-in joint-program opcode 44 wrapper. Resolves 64-byte authored "
-        "records plus an auxiliary stream and calls "
+        "records from outer selector 0 and encoded destinations through the nested "
+        "base table selected by payload word 1, then calls "
         "AnimJointProgram_AssembleEncodedVectors. Chloe payload 0xF142 is the "
         "last operator before consumer 0xF14A and writes row 41 quaternion at "
-        "selector-0 destination +0x7C0.",
+        "nested selector-0 JointParams destination +0x7C0.",
     ),
     0x14218C530: (
         "AnimJointProgram_AssembleEncodedVectors",
@@ -2358,8 +2364,9 @@ FUNCTIONS = {
     0x142194720: (
         "AnimJointProgramOp47_ApplyScalarCoefficients",
         "Built-in joint-program opcode 47 wrapper. Payload[3] selects the generic "
-        "or arity-1/2/3/4 scalar-coefficient worker; each four-lane batch writes "
-        "four encoded scalar destinations.",
+        "or arity-1/2/3/4 scalar-coefficient worker; payload[1] resolves the nested "
+        "base table and each four-lane batch writes four encoded scalar "
+        "destinations. Chloe payload 0xF04C writes row-36 words 8 and 10.",
     ),
     0x14218CAC0: (
         "AnimJointProgram_ApplyScalarCoefficients_Generic",
@@ -2388,9 +2395,12 @@ FUNCTIONS = {
     ),
     0x142194880: (
         "AnimJointProgramOp49_WriteEncodedVectors",
-        "Built-in joint-program opcode 49 wrapper. Resolves authored streams and "
-        "invokes the primary encoded-float4 writer plus two optional auxiliary "
-        "writer phases selected by the authored header.",
+        "Built-in joint-program opcode 49 wrapper. Payload word 1 resolves the "
+        "nested four-base table and word 2 resolves authored streams from outer "
+        "selector 0. It invokes the primary encoded-float4 writer plus two optional "
+        "auxiliary writer phases selected by the authored header. Target-stream "
+        "payloads Chloe 0xF03C and Nadine 0x8F4C rewrite the translation vector of "
+        "Chloe row 35 and Nadine rows 96/102 respectively.",
     ),
     0x14218D570: (
         "AnimJointProgram_WriteEncodedVectors",
@@ -2409,9 +2419,12 @@ FUNCTIONS = {
     ),
     0x142194940: (
         "AnimJointProgramOp50_ComposeEncodedVectors",
-        "Built-in joint-program opcode 50 wrapper. Resolves authored streams and "
-        "invokes the primary four-output vector composer plus an optional "
-        "auxiliary full-vector phase.",
+        "Built-in joint-program opcode 50 wrapper. Payload word 1 resolves the "
+        "nested four-base table and word 2 resolves authored streams from outer "
+        "selector 0. It invokes the primary four-output vector composer plus an "
+        "optional auxiliary full-vector phase. Target-stream payloads Chloe "
+        "0xF044 and Nadine 0x8F54 write the quaternion vector of Chloe row 35 and "
+        "Nadine rows 96/102 respectively.",
     ),
     0x14218F660: (
         "AnimJointProgram_ComposeEncodedVectors",
@@ -2427,7 +2440,8 @@ FUNCTIONS = {
         "AnimJointProgramOp51_BlendEncodedVectors",
         "Built-in joint-program opcode 51 wrapper. Initializes encoded vector "
         "destinations, then optionally dispatches an authored four-output vector "
-        "blend phase. Chloe payload 0xF10C writes row 36 quaternion at selector-0 "
+        "blend phase through the nested table selected by payload word 1. Chloe "
+        "payload 0xF10C writes row 36 quaternion at nested selector-0 JointParams "
         "destination +0x6D0 in both phases.",
     ),
     0x14218D2D0: (
@@ -2439,6 +2453,25 @@ FUNCTIONS = {
         "AnimJointProgram_BlendEncodedVectors",
         "Opcode-51 auxiliary worker. Processes four encoded float4 outputs per "
         "16-byte descriptor record and can write a complete workspace matrix.",
+    ),
+    0x142194AB0: (
+        "AnimJointProgramOp52_WriteAuthoredVectorsAndScalars",
+        "Built-in joint-program opcode 52 wrapper. Payload words 0/1 count vector "
+        "and scalar records, word 2 selects the nested four-base table, and word 3 "
+        "selects authored descriptors from outer selector 0. It calls "
+        "AnimJointProgram_WriteAuthoredVectorsAndScalars. Exact target streams "
+        "begin with this opcode at Chloe payload 0xF032 and Nadine payload 0x8F42; "
+        "it writes the scale and translation vectors of all five inspected "
+        "JointParams rows before op49/op50 fill later components.",
+    ),
+    0x1421897C0: (
+        "AnimJointProgram_WriteAuthoredVectorsAndScalars",
+        "Opcode-52 worker. Its first loop copies four authored float4 values per "
+        "16-byte descriptor to encoded vector destinations; its second loop copies "
+        "four authored floats per descriptor to encoded scalar destinations. All "
+        "destinations resolve through the nested base table, while sources are "
+        "read only from the authored constant tail supplied by the wrapper. It "
+        "reads no Player, camera or gameplay global.",
     ),
     0x142194B10: (
         "AnimJointProgramOp53_CopyEncodedVectors",

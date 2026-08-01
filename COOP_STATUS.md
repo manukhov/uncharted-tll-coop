@@ -15039,3 +15039,73 @@ only the two table ranges to writable, installs the wrappers, restores both
 protections and resumes the threads. Failure at either table leaves both
 unmodified. `scanner/build-release.cmd` completes and links
 `tll_coop_runtime.dll`; runtime classification is pending.
+
+### 2026-08-01 CONFIRMED / REJECTED: `kf` exposes the omitted stream head and completes the five-row writer inventory
+
+The user completed the read-only `2026-08-01kf` run on both live actors. Both
+copies remained responsive. There are twelve complete samples per actor, every
+native wrapper returned, every first-consumer mask is complete (`0x7` Chloe,
+`0x3` Nadine), and every decoder reject count is zero. The predicted call totals
+were nevertheless wrong in all samples: Chloe produced `26`, not `22`, bounded
+calls and Nadine produced `10`, not `8`. This **REJECTS L-unlisted's old weak
+status and the claimed `0xF074/0x8F70` stream boundary**. The package records at
+`skeleton+0x34`, combined with each group descriptor's `firstProgram/programCount`,
+give exact starts `0xF030` for Chloe and `0x8F40` for Nadine. Both streams begin
+with opcodes `52,49,50`; the first wrapped opcode 47 was only operator 3.
+
+The observed changes are exact and repeat in 12/12 samples:
+
+- Chloe opcode 47 payload `0xF04C` changes row-36 mask `0x500`; opcode 51
+  `0xF10C` changes row 36 by `0x0F0`; opcode 44 `0xF142` changes row 41 by
+  `0x0F0`. All other wrapped builtins and every custom 128/129/131 call change
+  none of the five rows. The first wrapped call already enters with row 35 mask
+  `0xFFF` and row 36/41 masks `0x208/0x708` or `0xA08/0xF08` before its own
+  `0x500` row-36 write.
+- Nadine's first wrapped call at `0x8F5C` already enters with both rows at
+  `0xFFF`; none of the ten wrapped calls changes either row afterward.
+- End markers are stable: Chloe `changed=000/5F0/0F0` and consumer
+  `FFF/7F8/7F8` for six samples then `FFF/FF8/FF8` for six; Nadine
+  `changed=000/000/000`, consumer `FFF/FFF/000` in all twelve.
+
+`kf` also exposes and corrects an address-model error in its diagnostic decoder.
+`AnimCmdEvaluator_ExecuteSkeletonJointPrograms 0x14217B630` builds outer context
+`{programStart, ownerBase, null, &baseTable}`. The nested `baseTable` is
+`{SegmentContext+0x50 JointParams, +0x58 workspace, +0x68 auxiliary,
++0x30 scratch}`. Builtin payload word 1 selects this nested table; payload word 2
+selects descriptors through outer selector 0. `kf` incorrectly resolved builtin
+descriptor destinations against the outer context, so its builtin
+`resolved=000` field is a **REJECTED diagnostic result**, not evidence that the
+stores missed the rows. Custom decoding did use the nested table; its selector-2
+destinations resolve to the distinct auxiliary buffer and neither address nor
+change a target. **L-custom is REJECTED.**
+
+Three independent static evidence types now complete the inventory: exact PAK
+program records/order, wrapper-to-worker call contracts, and decoded authored
+destination fields. `AnimJointProgramOp52_WriteAuthoredVectorsAndScalars
+0x142194AB0` calls `AnimJointProgram_WriteAuthoredVectorsAndScalars
+0x1421897C0`; the worker copies authored constant vectors/scalars through the
+nested base table and has no Player/camera/global input. The full target writes
+before their first consumers are:
+
+- Chloe opcode 52 `0xF032`: row 35 `+0x690/+0x6B0`, row 36
+  `+0x6C0/+0x6E0`, row 41 `+0x7B0/+0x7D0`; opcode 49 `0xF03C` repeats row-35
+  translation `+0x6B0`; opcode 50 `0xF044` writes row-35 quaternion `+0x6A0`;
+  opcode 47 `0xF04C` writes row-36 scalar words 8 and 10; opcode 51 `0xF10C`
+  writes row-36 quaternion `+0x6D0`; opcode 44 `0xF142` writes row-41
+  quaternion `+0x7C0`.
+- Nadine opcode 52 `0x8F42`: row 96 `+0x1200/+0x1220` and row 102
+  `+0x1320/+0x1340`; opcode 49 `0x8F4C` repeats translations
+  `+0x1220/+0x1340`; opcode 50 `0x8F54` writes quaternions
+  `+0x1210/+0x1330`. No later operator before consumer `0x8FBA` targets either
+  row.
+
+This closes the writer-location question but not the upstream pitch source.
+Opcode 52 is authored-constant initialization and is excluded as the vertical
+camera carrier. The remaining competitors are **S50-derived** (Nadine 96/102 and
+Chloe 35 quaternions derive from opcode-50 nested inputs), **S47/51/44-derived**
+(Chloe 36/41 late scalar/quaternion inputs carry pitch), and **S-mixed** (the
+three paths require separate upstream inputs). Before another runtime launch,
+trace the exact encoded sources feeding target outputs in op49/op50/op47/op51/
+op44 back through the nested selector-2/3 buffers and identify their last
+writers. A later read-only probe is justified only if that static graph leaves
+two distinguishable live aliases.

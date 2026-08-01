@@ -2316,16 +2316,22 @@ Do not reopen these as the first move:
       tail changes, and complete exact-address masks. All 60 later consumer rows
       differ, selecting H-expand-carry across command 15 plus H-late-writer
       inside command 16. Both copies remained responsive.
-- [ ] Trace the exact command-16 JointParams writers after expansion. Static
-      enumeration now proves Chloe row-36 quaternion writer opcode 51 payload
-      `0xF10C` and row-41 quaternion writer opcode 44 payload `0xF142`, excludes
-      direct top-level base-0 destinations from Nadine's opcode 41/47 prefix,
-      and bounds the remainder to custom nested-table or base-2 alias writes.
-      Build `kf` now implements the written read-only per-operator discriminator
-      for `41/44/47/51/128/129/131`. Run it and require `22/8` decoded calls,
-      zero rejects, exact changed-word masks, resolved live destinations,
-      complete first-consumer masks and untouched native calls before
-      classifying each remaining row.
+- [x] Trace the exact command-16 JointParams writers after expansion. Runtime
+      `kf` completed 12/12 samples per actor with zero rejects and responsive
+      copies, but correctly disproved the expected `22/8` call counts: exact PAK
+      program records start at `0xF030/0x8F40` with omitted opcodes `52,49,50`.
+      Static destination decoding plus `kf` masks now accounts for every word of
+      Chloe rows `35/36/41` and Nadine rows `96/102`. Custom operators do not
+      address or change them. The direct builtin `resolved=000` diagnostic is
+      rejected because it decoded against the outer context instead of the
+      nested `{JointParams,workspace,aux,scratch}` table.
+- [ ] Trace the upstream encoded inputs of the confirmed JointParams writers.
+      Exclude opcode 52's authored constants, then follow the exact sources of
+      Nadine/Chloe opcode 50, Chloe opcode 47 `0xF04C`, opcode 51 `0xF10C`, and
+      opcode 44 `0xF142` through nested selector-2/3 buffers to their last writer.
+      Competing outcomes are S50-derived, S47/51/44-derived, and S-mixed. Do not
+      launch again until the static source graph leaves a bounded, falsifiable
+      live-alias choice.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`
