@@ -1081,7 +1081,9 @@ FUNCTIONS = {
         "Dispatches an object's animation control into the command-list record "
         "later returned to AnimManager_PerformAnimBlend. Its decimal-command-17 "
         "producer copies build-context qword 6 into the command payload and emits "
-        "header 0x40011 at 0x141A90119.",
+        "header 0x40011 at 0x141A90119. The command-16 header 0x00020010 is "
+        "appended first at 0x141A900F5..0x141A90106; command 17 is appended only "
+        "at 0x141A90111..0x141A9012C, so it cannot initialize case-16 op40 inputs.",
     ),
     0x141A91490: (
         "AnimManager_BuildCommandSegmentsForObjectMask",
@@ -2164,7 +2166,21 @@ FUNCTIONS = {
         "Finalizes the current processing-group lane before command 3 publishes "
         "it to the common WorkBuffer. Inverse ValidBits select missing joint and "
         "scalar ranges, which are filled from the target skeleton defaults; the "
-        "same bits are then marked valid.",
+        "same bits are then marked valid. The 0x142188FF0 -> 0x142192640 path "
+        "copies one exact 48-byte JointParams record per missing joint. Already-"
+        "valid records retain preceding authored direct/retarget/blend output.",
+    ),
+    0x142188FF0: (
+        "AnimCmdEvaluator_FillMissingJointDefaults",
+        "Called by FinalizeGroupDefaults for inverse-ValidBits joint ranges. "
+        "Selects target-skeleton default JointParams records and forwards each "
+        "missing joint to AnimJointParams_CopyRecord48.",
+    ),
+    0x142192640: (
+        "AnimJointParams_CopyRecord48",
+        "Copies one complete 48-byte JointParams record. In command-3 default "
+        "finalization its source is skeleton defaults and its destination is the "
+        "fresh current processing-group lane.",
     ),
     0x14217C3A0: (
         "AnimCmdEvaluator_AllocateGroupLanes",
@@ -2220,7 +2236,10 @@ FUNCTIONS = {
         "workspace base[1]+4*k. Runtime jv descriptor destinations reproduce "
         "the exact first changed workspace words 448 for Chloe and 704 for Nadine. "
         "Runtime jx proved all four parent outputs change inside these earlier "
-        "calls, while subsequent Chloe-puppet op49/op50 leave joint 42 unchanged.",
+        "calls, while subsequent Chloe-puppet op49/op50 leave joint 42 unchanged. "
+        "The descriptor loop is strictly sequential (advance at 0x14218A04C, "
+        "next record at 0x14218A1E0), so same-call chains scratch->24->25->26 "
+        "and 35->36->41->42 consume the earlier record's completed output.",
     ),
     0x142194680: (
         "AnimJointProgramOp41_ScatterVectorComponents",

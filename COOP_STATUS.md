@@ -14109,9 +14109,11 @@ corresponding base actor packages:
 - `nadine-dlc-base.pak+0x5DD40` contains
   `{01C0,06C9},{0620,1849},{0680,19C9},{0680,19C9}`, the live group-2
   targets `27 <- 26`, `97 <- 96`, and duplicated `103 <- 102`. Earlier tables
-  contain `{01B0,0689}` four times at `+0x5DCB0`, `{0610,1709}` at
-  `+0x5BE70`, and `{0670,0009}` four times at `+0x5BD30`: exact opcode-40
-  destinations for parent joints 26, 96, and 102 respectively.
+  contain `{01B0,0689}` four times at `+0x5DCB0`, `{0610,0009}` at
+  `+0x5DC04`, and `{0670,0009}` at `+0x5DC08`: the exact live opcode-40
+  destinations for parent joints 26, 96, and 102 respectively. The older
+  `{0610,1709}` hit at `+0x5BE70` and `{0670,0009}` hits at
+  `+0x5BD30..+0x5BD3C` are unrelated candidate tables, not the `jx` producer.
 
 These byte-exact records are independent evidence that earlier opcode-40
 instances can produce every contaminated parent row. They do **not** establish
@@ -14209,3 +14211,78 @@ the workspace matrix for joint 41. Their corresponding 48-byte JointParams are
 joint 96, 102, 26, and 42. Resolve the last writers/initializers of these exact
 four JointParams records and three source matrices, and distinguish which input
 already follows receiver-local camera, before another runtime launch.
+
+### 2026-08-01 STATIC / TEST READY: `jy` isolates exact JointParams and source chains of the confirmed parent producers
+
+The `jx` runtime payload offsets establish bounded local maps into each actor's
+descriptor blob. For Nadine, runtime descriptor offsets
+`0x09E0/0x0BA0/0x0D90/0x0E20` map to
+`nadine-dlc-base.pak+0x5D900/+0x5DAC0/+0x5DCB0/+0x5DD40`, a constant local
+delta of `+0x5CF20`. For Chloe, runtime offsets
+`0x66E0/0x67F0/0x69E0` map to
+`chloe-base.pak+0x6F890/+0x6F9A0/+0x6FB90`, a constant local delta of
+`+0x691B0`. This is deliberately only a map of the bounded descriptor blobs;
+it does not revive a global file-to-runtime mapping.
+
+Those exact tables and the sequential loop in
+`AnimJointProgram_PropagateJointMatrices 0x142189FB0` close the source chains.
+The worker advances the descriptor by four bytes at `0x14218A04C`, resolves
+`base[src&3]+(src&0xFFF0)` at `0x14218A053..0x14218A061`, and stores four
+output rows at `0x14218A158/0x14218A192/0x14218A1CD/0x14218A1D8` before
+advancing to the next record at `0x14218A1E0`. Therefore an earlier record's
+output is the later record's actual same-call source:
+
+- Nadine puppet / group 2: op40 `0x8FA8`, record 1
+  `{0190,109B}`, produces joint 24 from selector-3 scratch `+0x1090`;
+  op40 `0x8FBA`, record 23 `{01A0,0649}`, produces joint 25 from joint 24;
+  records 81/82 `{0610,0009}/{0670,0009}` produce joints 96/102 from the
+  selector-1 prefix; op40 `0x8FCA` then produces joint 26 from joint 25.
+  The target `0x8FE2` consumes joints 26/96/102.
+- Chloe puppet / group 1: op40 `0xF14A`, records 1/11/25
+  `{0250,0901}/{02A0,0949}/{02B0,0A89}` form
+  `joint35 -> joint36 -> joint41 -> joint42`; target `0xF16A` consumes joint
+  42. The preceding op40 `0xF13A` does not write joint 35, so joint 35 is a
+  bounded entry input to this op40 chain.
+
+The two non-workspace input lifetimes are also bounded. In
+`ProcessAnimCmdListSegment 0x141AB97C0`, command 15 allocates
+`(workspaceCount+1)*64` bytes at `0x141ABA8F3` and unconditionally initializes
+the selector-1 prefix row at `0x141ABA921..0x141ABA95C`; command 16 then calls
+the joint-program executor at `0x141ABA973`. Thus `src=0009` does not inherit a
+stale workspace row. JointParams lanes are allocated earlier in the segment;
+command 3 calls `AnimCmdEvaluator_FinalizeGroupDefaults 0x141AB78F0`, whose
+`0x142188FF0 -> 0x142192640` path copies exact 48-byte default records for
+invalid joints. Already-valid joints retain values from the preceding authored
+direct/retarget/blend commands. This eliminates previous-frame entry state but
+does not yet decide default versus authored production for each exact JP record.
+Case 17 (`AnimJointProgram_CopyEncodedScalars 0x142189370`) is **REJECTED** as
+an initializer of these case-16 inputs by outer program order:
+`AnimManager_CreateAnimCmdsForObject 0x141A8FCF0` appends the `0x00020010`
+command-16 header at `0x141A900F5..0x141A90106`, then appends command 17 at
+`0x141A90111..0x141A9012C`. It therefore executes only after the op40 reads.
+
+Three independent evidence kinds now authorize one more read-only test:
+
+1. `jx` fixed the exact live op40 payloads, record numbers and execution order.
+2. The bounded actor-package maps reproduce every descriptor byte and expose
+   the complete sequential parent chains.
+3. IDA worker and segment-command dataflow fix the JP/source/output addresses,
+   same-call ordering, workspace-prefix initialization and JP lane lifetime.
+
+The remaining competitors are **S-JP** (the exact 48-byte JointParams record
+changes with receiver-local camera while its source matrix is stable),
+**S-src** (the source changes while JP is stable), and **S-both**. Build `jy`
+must wrap only builtin slot 40. It captures JP/source/output for Nadine joints
+24/25/26/96/102 and Chloe joints 36/41/42 only at the exact payload/record
+pairs above, compares each chain with its own prior sample, and calls every
+native operator exactly once. It must not substitute any pose value.
+
+**Falsifiable runtime prediction:** a camera-distinct sequence after both remote
+Players spawn must yield paired admitted group-2/group-1 samples, the expected
+five/three exact chains, exactly one target op40, no rejects, normal models and
+responsive processes. On the Chloe-side receiver, a nonzero per-sample JP delta
+with stable source selects S-JP; stable JP with a source delta that follows
+receiver `localY` selects S-src; both select S-both. The reciprocal receiver is
+the control: its changes should follow the remote Chloe `peerY`, not its nearly
+fixed local camera. Missing chain rows, descriptor drift, unreadable input,
+model damage, hang or crash rejects the probe and authorizes no fix.

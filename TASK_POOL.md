@@ -2174,11 +2174,22 @@ Do not reopen these as the first move:
       words of Nadine-puppet joints `26/96/102` and Chloe-puppet joint `42` in
       every sample. Later group-1 op49/op50 changed zero words; P40-final is
       confirmed and P49/P50 rejected.
-- [ ] Resolve the exact inputs of the confirmed parent-producing op40 instances:
+- [x] Resolve the exact inputs of the confirmed parent-producing op40 instances:
       Nadine-puppet JointParams `26/96/102`, source joint 25 and selector-1
       workspace prefix `+0`; Chloe-puppet JointParams `42` and source joint 41.
       Trace their last writers/initializers and eliminate entry-state versus
-      authored-operator alternatives before a new discriminator.
+      authored-operator alternatives before a new discriminator. Result: bounded
+      PAK/runtime maps expose the full sequential op40 chains
+      `scratch->24->25->26`, `prefix->96/102`, and
+      `35->36->41->42`; command 15 initializes the prefix immediately before
+      case16, while command 3 defaults or preceding authored commands initialize
+      fresh per-segment JP lanes. Previous-frame entry state is excluded and
+      case17 is ordered after case16.
+- [ ] Run the written `jy` exact-input discriminator with only builtin slot 40
+      wrapped. Require the five Nadine and three Chloe chain rows, exactly one
+      target op40, no rejects, normal models and responsive processes. Classify
+      S-JP, S-src or S-both from per-chain JP/source/output deltas; no pose
+      substitution is authorized.
 - [ ] After the parent source is resolved, trace the exact JointParams producers
       for target children `97/103/43`; child 27 needs no JointParams trace because
       `jw` proved its 48-byte record bit-identical across the camera sweep.
