@@ -14623,3 +14623,27 @@ post-import writer). Nadine must show whether group-1 and group-2 resolve
 Mlane; the same address with a changed hash selects an actual overwrite between
 groups. Missing exact calls, unreadable metadata, multiple native calls, crash,
 hang or model damage rejects the probe.
+
+### 2026-08-01 STATIC / IMPLEMENTED / TEST READY: `kd` observes the two selected handoffs independently
+
+Release build `kd` implements the written discriminator without changing pose,
+validity or animation state. It keeps a small TLS owner context immediately after
+the exact screen-1 skeleton/group validation, before the older camera-separation
+admission gate, so the new evidence cannot disappear merely because the `jz`
+camera sample did not arm.
+
+For Chloe skeleton 651/group 0, a direct-call relay at `0x141ABA7F5` wraps only
+`AnimCmdEvaluator_CopyGroupPoseToWorkBuffer 0x14217B310`. It records absolute
+source and group-local destination rows for joints `35/36/41`, calls the native
+helper exactly once, then carries the copied destination hashes to the first exact
+group-1 opcode-40 records. For Nadine skeleton 580/group 1, the existing exact
+command-3 finalizer callsite `0x141AB9D18` records the published evaluator lane
+after its single native call. Case-16 entry then reports target/program ranges and
+all three explicit candidate addresses (absolute, target-local and program-local)
+for groups 1/2, while the opcode-40 wrapper independently reports the actual
+consumer addresses for `96/102` before the old `jz` scope check.
+
+Both paths are bounded to twelve samples at 350 ms spacing, use exact skeleton,
+group and joint signatures, and preserve every native call count. Release build
+completed successfully. Runtime classification under the preceding falsifiable
+prediction remains pending.

@@ -110,6 +110,8 @@ using ProcessAnimCmdListSegmentFunction = std::uint32_t(__fastcall*)(
     const void*, const void*, const void*);
 using AnimCmdFinalizeGroupDefaultsFunction = std::uint32_t*(__fastcall*)(
     std::uint32_t*, const void*);
+using AnimCmdCopyGroupPoseFunction = std::uint32_t*(__fastcall*)(
+    std::uint32_t*, void*, const void*, const void*);
 using AnimCmdExecuteJointProgramsFunction = std::uint32_t*(__fastcall*)(
     std::uint32_t*, const void*);
 using AnimJointProgramOperatorFunction = std::uintptr_t(__fastcall*)(
@@ -120,6 +122,7 @@ ProcessAnimCmdListSegmentFunction g_original_process_anim_cmd_list_segment =
     nullptr;
 AnimCmdFinalizeGroupDefaultsFunction g_anim_cmd_finalize_group_defaults =
     nullptr;
+AnimCmdCopyGroupPoseFunction g_anim_cmd_copy_group_pose = nullptr;
 AnimCmdExecuteJointProgramsFunction g_anim_cmd_execute_joint_programs = nullptr;
 AnimJointProgramOperatorFunction g_original_anim_joint_program_op40 = nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
@@ -20885,6 +20888,17 @@ AimJointBoundaryOwner probe_aim_joint_boundary_owner(const void* context) {
     return result;
 }
 
+struct AimHandoffContext {
+    bool valid = false;
+    std::uint32_t skeleton_joint_count = 0;
+    std::uint32_t processing_group = UINT32_MAX;
+    std::uint32_t context_flags = 0;
+    void* target_skeleton = nullptr;
+    void* program_skeleton = nullptr;
+};
+
+thread_local AimHandoffContext g_aim_handoff_context{};
+
 struct AimCommandTopologySeen {
     std::uint32_t count = 0;
     std::array<std::uint64_t, 4> hashes{};
@@ -21204,6 +21218,51 @@ std::array<std::atomic<ULONGLONG>, kAimFinalizerTargetCount>
 std::array<std::atomic<std::uint32_t>, kAimFinalizerTargetCount>
     g_aim_finalizer_sample_count{};
 
+struct AimCase14CarryKd {
+    bool valid = false;
+    std::uint32_t sample = 0;
+    std::uint32_t consumer_mask = 0;
+    std::uint32_t first_joint = 0;
+    std::uint32_t joint_count = 0;
+    const void* segment_context = nullptr;
+    const void* source_base = nullptr;
+    const void* destination_base = nullptr;
+    std::array<std::array<std::uint32_t, 12>, 3> records{};
+};
+
+struct AimNadineLaneCarryKd {
+    bool valid = false;
+    std::uint32_t sample = 0;
+    std::uint32_t case16_mask = 0;
+    std::uint32_t consumer_mask = 0;
+    std::uint32_t first_joint = 0;
+    std::uint32_t joint_count = 0;
+    const void* evaluator_context = nullptr;
+    const void* segment_context = nullptr;
+    const void* lane_base = nullptr;
+    const void* work_before = nullptr;
+    std::array<std::array<std::uint32_t, 12>, 2> records{};
+};
+
+struct AimNadineLanePendingKd {
+    bool admitted = false;
+    std::uint32_t sample = 0;
+    std::uint32_t first_joint = 0;
+    std::uint32_t joint_count = 0;
+    const void* evaluator_context = nullptr;
+    const void* segment_context = nullptr;
+    const std::uint32_t* lane_base = nullptr;
+    const void* work_before = nullptr;
+};
+
+SRWLOCK g_aim_handoff_kd_lock = SRWLOCK_INIT;
+AimCase14CarryKd g_aim_case14_carry_kd{};
+AimNadineLaneCarryKd g_aim_nadine_lane_carry_kd{};
+std::atomic<ULONGLONG> g_aim_case14_next_log_ms_kd{0};
+std::atomic<std::uint32_t> g_aim_case14_sample_count_kd{0};
+std::atomic<ULONGLONG> g_aim_nadine_lane_next_log_ms_kd{0};
+std::atomic<std::uint32_t> g_aim_nadine_lane_sample_count_kd{0};
+
 void aim_summarize_float_words(
     const float* values, std::size_t count, std::uint64_t& hash,
     std::uint32_t& nonfinite_count) {
@@ -21262,6 +21321,553 @@ float aim_raw_word_float_delta(
         delta_sq += delta * delta;
     }
     return std::sqrt(delta_sq);
+}
+
+bool admit_aim_handoff_sample_kd(
+    std::atomic<ULONGLONG>& next_log_ms,
+    std::atomic<std::uint32_t>& sample_count, std::uint32_t& sample) {
+    sample = 0;
+    if (sample_count.load(std::memory_order_acquire) >= 12) {
+        return false;
+    }
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG due = next_log_ms.load(std::memory_order_acquire);
+    if (now < due || !next_log_ms.compare_exchange_strong(
+            due, now + 350, std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
+        return false;
+    }
+    const std::uint32_t index =
+        sample_count.fetch_add(1, std::memory_order_acq_rel);
+    if (index >= 12) {
+        return false;
+    }
+    sample = index + 1;
+    return true;
+}
+
+std::uint32_t* __fastcall hooked_anim_cmd_copy_group_pose_kd(
+    std::uint32_t* status, void* segment_context,
+    const void* source_joint_params, const void* source_scalars) {
+    const auto native = g_anim_cmd_copy_group_pose;
+    if (native == nullptr) {
+        return status;
+    }
+    const AimHandoffContext handoff = g_aim_handoff_context;
+    std::uint32_t sample = 0;
+    if (!handoff.valid || handoff.skeleton_joint_count != 651 ||
+        handoff.processing_group != 0 ||
+        (handoff.context_flags & 0xFFU) != 0 ||
+        !admit_aim_handoff_sample_kd(
+            g_aim_case14_next_log_ms_kd, g_aim_case14_sample_count_kd,
+            sample)) {
+        return native(
+            status, segment_context, source_joint_params, source_scalars);
+    }
+
+    constexpr std::array<std::uint32_t, 3> kJoints{{35, 36, 41}};
+    std::uint32_t first_joint = 0;
+    std::uint32_t joint_count = 0;
+    const std::uint32_t* destination = nullptr;
+    std::array<std::array<std::uint32_t, 12>, 3> source_records{};
+    bool readable = false;
+    __try {
+        const auto* const segment =
+            static_cast<const std::byte*>(segment_context);
+        const auto* const target_group =
+            segment_context != nullptr && readable_bytes(segment_context) >= 0x68
+            ? *reinterpret_cast<const std::uint16_t* const*>(segment + 0x38)
+            : nullptr;
+        const auto* const program_group =
+            segment_context != nullptr && readable_bytes(segment_context) >= 0x68
+            ? *reinterpret_cast<const std::uint16_t* const*>(segment + 0x40)
+            : nullptr;
+        destination =
+            segment_context != nullptr && readable_bytes(segment_context) >= 0x68
+            ? *reinterpret_cast<const std::uint32_t* const*>(segment + 0x50)
+            : nullptr;
+        readable = target_group != nullptr && program_group != nullptr &&
+            destination != nullptr && source_joint_params != nullptr &&
+            readable_bytes(target_group) >= 0x18 &&
+            readable_bytes(program_group) >= 10;
+        if (readable) {
+            first_joint = program_group[3];
+            joint_count = target_group[9];
+            readable = joint_count != 0 && joint_count <= 128;
+        }
+        for (std::size_t index = 0;
+             readable && index < kJoints.size(); ++index) {
+            const std::uint32_t joint = kJoints[index];
+            readable = joint >= first_joint &&
+                joint - first_joint < joint_count;
+            const auto* const source = reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(source_joint_params) +
+                static_cast<std::size_t>(joint) * 48);
+            const auto* const target = reinterpret_cast<const std::uint32_t*>(
+                reinterpret_cast<const std::byte*>(destination) +
+                static_cast<std::size_t>(joint - first_joint) * 48);
+            readable = readable && readable_bytes(source) >= 48 &&
+                readable_bytes(target) >= 48;
+            if (readable) {
+                std::memcpy(source_records[index].data(), source, 48);
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        readable = false;
+    }
+    if (!readable) {
+        char line[512]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-HANDOFF-KD case14-reject sample=%u actor=Chloe group=0 "
+            "segment=%p source=%p destination=%p range=%u+%u",
+            sample, segment_context, source_joint_params, destination,
+            first_joint, joint_count);
+        boot_log_line(line);
+        return native(
+            status, segment_context, source_joint_params, source_scalars);
+    }
+
+    std::uint32_t* const result = native(
+        status, segment_context, source_joint_params, source_scalars);
+    std::array<std::array<std::uint32_t, 12>, 3> destination_records{};
+    bool post_readable = true;
+    __try {
+        for (std::size_t index = 0; index < kJoints.size(); ++index) {
+            const auto* const target = reinterpret_cast<const std::uint32_t*>(
+                reinterpret_cast<const std::byte*>(destination) +
+                static_cast<std::size_t>(kJoints[index] - first_joint) * 48);
+            post_readable = post_readable && readable_bytes(target) >= 48;
+            if (post_readable) {
+                std::memcpy(destination_records[index].data(), target, 48);
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        post_readable = false;
+    }
+    if (!post_readable) {
+        char line[384]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-HANDOFF-KD case14-reject sample=%u actor=Chloe group=0 "
+            "post-readable=0 destination=%p",
+            sample, destination);
+        boot_log_line(line);
+        return result;
+    }
+
+    AimCase14CarryKd carry{};
+    carry.valid = true;
+    carry.sample = sample;
+    carry.first_joint = first_joint;
+    carry.joint_count = joint_count;
+    carry.segment_context = segment_context;
+    carry.source_base = source_joint_params;
+    carry.destination_base = destination;
+    carry.records = destination_records;
+    AcquireSRWLockExclusive(&g_aim_handoff_kd_lock);
+    g_aim_case14_carry_kd = carry;
+    ReleaseSRWLockExclusive(&g_aim_handoff_kd_lock);
+
+    char header[512]{};
+    std::snprintf(
+        header, sizeof(header),
+        "AIM-HANDOFF-KD case14 sample=%u actor=Chloe group=0 "
+        "flags=%08X segment=%p source=%p destination=%p range=%u+%u",
+        sample, handoff.context_flags, segment_context, source_joint_params,
+        destination, first_joint, joint_count);
+    boot_log_line(header);
+    for (std::size_t index = 0; index < kJoints.size(); ++index) {
+        std::uint32_t first_changed = UINT32_MAX;
+        const std::uint32_t changed = aim_count_changed_words(
+            source_records[index].data(), destination_records[index].data(),
+            12, first_changed);
+        char line[640]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-HANDOFF-KD case14-record sample=%u joint=%u local=%u "
+            "raw=%u first=%u d=%.5f hashSource/Destination=%016llX/%016llX",
+            sample, kJoints[index], kJoints[index] - first_joint, changed,
+            first_changed, aim_raw_word_float_delta(
+                source_records[index].data(),
+                destination_records[index].data(), 12),
+            static_cast<unsigned long long>(aim_hash_raw_words(
+                source_records[index].data(), 12)),
+            static_cast<unsigned long long>(aim_hash_raw_words(
+                destination_records[index].data(), 12)));
+        boot_log_line(line);
+    }
+    return result;
+}
+
+AimNadineLanePendingKd prepare_aim_nadine_lane_kd(
+    const void* evaluator_context) {
+    AimNadineLanePendingKd pending{};
+    const AimHandoffContext handoff = g_aim_handoff_context;
+    if (!handoff.valid || handoff.skeleton_joint_count != 580 ||
+        handoff.processing_group != 1 || evaluator_context == nullptr ||
+        readable_bytes(evaluator_context) < 0x28 ||
+        !admit_aim_handoff_sample_kd(
+            g_aim_nadine_lane_next_log_ms_kd,
+            g_aim_nadine_lane_sample_count_kd, pending.sample)) {
+        return pending;
+    }
+    __try {
+        const auto* const context =
+            static_cast<const std::byte*>(evaluator_context);
+        const auto* const lane_pointers =
+            *reinterpret_cast<const std::uint32_t* const* const*>(
+                context + 0x08);
+        const auto* const group =
+            *reinterpret_cast<const std::uint16_t* const*>(context + 0x20);
+        pending.segment_context =
+            *reinterpret_cast<const void* const*>(context);
+        pending.evaluator_context = evaluator_context;
+        pending.lane_base = lane_pointers != nullptr ? lane_pointers[0] : nullptr;
+        if (pending.segment_context != nullptr &&
+            readable_bytes(pending.segment_context) >= 0x58) {
+            pending.work_before = *reinterpret_cast<const void* const*>(
+                static_cast<const std::byte*>(pending.segment_context) + 0x50);
+        }
+        if (group != nullptr && readable_bytes(group) >= 10) {
+            pending.first_joint = group[3];
+            pending.joint_count = group[0];
+        }
+        pending.admitted = pending.lane_base != nullptr &&
+            pending.first_joint == 66 && pending.joint_count == 38 &&
+            readable_bytes(pending.lane_base) >=
+                static_cast<std::size_t>(pending.joint_count) * 48;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        pending.admitted = false;
+    }
+    return pending;
+}
+
+void finish_aim_nadine_lane_kd(const AimNadineLanePendingKd& pending) {
+    if (pending.sample == 0) {
+        return;
+    }
+    constexpr std::array<std::uint32_t, 2> kJoints{{96, 102}};
+    AimNadineLaneCarryKd carry{};
+    carry.sample = pending.sample;
+    carry.first_joint = pending.first_joint;
+    carry.joint_count = pending.joint_count;
+    carry.evaluator_context = pending.evaluator_context;
+    carry.segment_context = pending.segment_context;
+    carry.lane_base = pending.lane_base;
+    carry.work_before = pending.work_before;
+    bool readable = pending.admitted;
+    __try {
+        for (std::size_t index = 0;
+             readable && index < kJoints.size(); ++index) {
+            const auto* const record = reinterpret_cast<const std::uint32_t*>(
+                reinterpret_cast<const std::byte*>(pending.lane_base) +
+                static_cast<std::size_t>(
+                    kJoints[index] - pending.first_joint) * 48);
+            readable = readable_bytes(record) >= 48;
+            if (readable) {
+                std::memcpy(carry.records[index].data(), record, 48);
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        readable = false;
+    }
+    if (!readable) {
+        char line[512]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-LANE-KD producer-reject sample=%u actor=Nadine group=1 "
+            "evaluator=%p segment=%p lane=%p workBefore=%p range=%u+%u",
+            pending.sample, pending.evaluator_context,
+            pending.segment_context, pending.lane_base,
+            pending.work_before, pending.first_joint, pending.joint_count);
+        boot_log_line(line);
+        return;
+    }
+    carry.valid = true;
+    AcquireSRWLockExclusive(&g_aim_handoff_kd_lock);
+    g_aim_nadine_lane_carry_kd = carry;
+    ReleaseSRWLockExclusive(&g_aim_handoff_kd_lock);
+    char header[640]{};
+    std::snprintf(
+        header, sizeof(header),
+        "AIM-LANE-KD producer sample=%u actor=Nadine group=1 "
+        "evaluator=%p segment=%p lane=%p workBefore=%p range=%u+%u",
+        pending.sample, pending.evaluator_context, pending.segment_context,
+        pending.lane_base, pending.work_before, pending.first_joint,
+        pending.joint_count);
+    boot_log_line(header);
+    for (std::size_t index = 0; index < kJoints.size(); ++index) {
+        char line[448]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-LANE-KD producer-record sample=%u joint=%u local=%u "
+            "address=%p hash=%016llX",
+            pending.sample, kJoints[index],
+            kJoints[index] - pending.first_joint,
+            reinterpret_cast<const std::byte*>(pending.lane_base) +
+                static_cast<std::size_t>(
+                    kJoints[index] - pending.first_joint) * 48,
+            static_cast<unsigned long long>(aim_hash_raw_words(
+                carry.records[index].data(), 12)));
+        boot_log_line(line);
+    }
+}
+
+std::uint32_t* invoke_anim_cmd_finalize_group_defaults_kd(
+    AnimCmdFinalizeGroupDefaultsFunction native, std::uint32_t* status,
+    const void* evaluator_context,
+    const AimNadineLanePendingKd& pending) {
+    std::uint32_t* const result = native(status, evaluator_context);
+    finish_aim_nadine_lane_kd(pending);
+    return result;
+}
+
+void log_aim_lane_case16_kd(const void* segment_context) {
+    const AimHandoffContext handoff = g_aim_handoff_context;
+    if (!handoff.valid || handoff.skeleton_joint_count != 580 ||
+        (handoff.processing_group != 1 && handoff.processing_group != 2) ||
+        segment_context == nullptr || readable_bytes(segment_context) < 0x60) {
+        return;
+    }
+    AimNadineLaneCarryKd carry{};
+    const std::uint32_t group_bit = 1U << handoff.processing_group;
+    AcquireSRWLockExclusive(&g_aim_handoff_kd_lock);
+    if (g_aim_nadine_lane_carry_kd.valid &&
+        (g_aim_nadine_lane_carry_kd.case16_mask & group_bit) == 0) {
+        g_aim_nadine_lane_carry_kd.case16_mask |= group_bit;
+        carry = g_aim_nadine_lane_carry_kd;
+    }
+    ReleaseSRWLockExclusive(&g_aim_handoff_kd_lock);
+    if (!carry.valid) {
+        return;
+    }
+
+    constexpr std::array<std::uint32_t, 2> kJoints{{96, 102}};
+    const std::uint32_t* joint_params = nullptr;
+    const std::uint16_t* target_group = nullptr;
+    const std::uint16_t* program_group = nullptr;
+    std::uint32_t target_first = 0;
+    std::uint32_t target_count = 0;
+    std::uint32_t program_first = 0;
+    std::uint32_t program_count = 0;
+    bool metadata = false;
+    __try {
+        const auto* const segment =
+            static_cast<const std::byte*>(segment_context);
+        target_group = *reinterpret_cast<const std::uint16_t* const*>(
+            segment + 0x38);
+        program_group = *reinterpret_cast<const std::uint16_t* const*>(
+            segment + 0x40);
+        joint_params = *reinterpret_cast<const std::uint32_t* const*>(
+            segment + 0x50);
+        metadata = target_group != nullptr && program_group != nullptr &&
+            joint_params != nullptr && readable_bytes(target_group) >= 0x18 &&
+            readable_bytes(program_group) >= 10;
+        if (metadata) {
+            target_first = target_group[0];
+            target_count = target_group[9];
+            program_first = program_group[3];
+            program_count = program_group[0];
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        metadata = false;
+    }
+    char header[768]{};
+    std::snprintf(
+        header, sizeof(header),
+        "AIM-LANE-KD case16 sample=%u actor=Nadine group=%u "
+        "segment=%p producerSegment=%p lane=%p workBefore=%p workNow=%p "
+        "targetRange=%u+%u programRange=%u+%u metadata=%u",
+        carry.sample, handoff.processing_group, segment_context,
+        carry.segment_context, carry.lane_base, carry.work_before,
+        joint_params, target_first, target_count, program_first,
+        program_count, static_cast<unsigned>(metadata));
+    boot_log_line(header);
+    if (!metadata) {
+        return;
+    }
+
+    for (std::size_t index = 0; index < kJoints.size(); ++index) {
+        const std::uint32_t joint = kJoints[index];
+        const auto* const global_record = reinterpret_cast<const std::uint32_t*>(
+            reinterpret_cast<const std::byte*>(joint_params) +
+            static_cast<std::size_t>(joint) * 48);
+        const std::uint32_t* target_record = nullptr;
+        if (joint >= target_first && joint - target_first < target_count) {
+            target_record = reinterpret_cast<const std::uint32_t*>(
+                reinterpret_cast<const std::byte*>(joint_params) +
+                static_cast<std::size_t>(joint - target_first) * 48);
+        }
+        const std::uint32_t* program_record = nullptr;
+        if (joint >= program_first && joint - program_first < program_count) {
+            program_record = reinterpret_cast<const std::uint32_t*>(
+                reinterpret_cast<const std::byte*>(joint_params) +
+                static_cast<std::size_t>(joint - program_first) * 48);
+        }
+        const bool global_readable = readable_bytes(global_record) >= 48;
+        const bool target_readable = target_record != nullptr &&
+            readable_bytes(target_record) >= 48;
+        const bool program_readable = program_record != nullptr &&
+            readable_bytes(program_record) >= 48;
+        const std::uint64_t producer_hash = aim_hash_raw_words(
+            carry.records[index].data(), 12);
+        const std::uint64_t global_hash = global_readable
+            ? aim_hash_raw_words(global_record, 12) : 0;
+        const std::uint64_t target_hash = target_readable
+            ? aim_hash_raw_words(target_record, 12) : 0;
+        const std::uint64_t program_hash = program_readable
+            ? aim_hash_raw_words(program_record, 12) : 0;
+        char line[896]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-LANE-KD case16-record sample=%u group=%u joint=%u "
+            "producer=%p/%016llX global=%p/%u/%016llX "
+            "targetLocal=%p/%u/%016llX programLocal=%p/%u/%016llX "
+            "match=%u/%u/%u",
+            carry.sample, handoff.processing_group, joint,
+            reinterpret_cast<const std::byte*>(carry.lane_base) +
+                static_cast<std::size_t>(joint - carry.first_joint) * 48,
+            static_cast<unsigned long long>(producer_hash), global_record,
+            static_cast<unsigned>(global_readable),
+            static_cast<unsigned long long>(global_hash), target_record,
+            static_cast<unsigned>(target_readable),
+            static_cast<unsigned long long>(target_hash), program_record,
+            static_cast<unsigned>(program_readable),
+            static_cast<unsigned long long>(program_hash),
+            static_cast<unsigned>(global_readable && global_hash == producer_hash),
+            static_cast<unsigned>(target_readable && target_hash == producer_hash),
+            static_cast<unsigned>(program_readable && program_hash == producer_hash));
+        boot_log_line(line);
+    }
+}
+
+void log_aim_handoff_op40_kd(
+    const std::uint16_t* payload, const std::uintptr_t* operator_context,
+    const void* segment_context) {
+    const AimHandoffContext handoff = g_aim_handoff_context;
+    const bool chloe = handoff.valid && handoff.skeleton_joint_count == 651 &&
+        handoff.processing_group == 1;
+    const bool nadine = handoff.valid && handoff.skeleton_joint_count == 580 &&
+        handoff.processing_group == 2;
+    if ((!chloe && !nadine) || payload == nullptr ||
+        operator_context == nullptr || segment_context == nullptr ||
+        readable_bytes(payload) < 6 || readable_bytes(operator_context) < 32) {
+        return;
+    }
+    const std::size_t record_count =
+        static_cast<std::size_t>(payload[0]) * 4U;
+    if (record_count == 0 || record_count > 256) {
+        return;
+    }
+    __try {
+        const std::uint16_t base_operand = payload[1];
+        const std::uintptr_t base_table_address =
+            operator_context[base_operand & 3U] +
+            (base_operand & 0xFFFCU);
+        const auto* const bases =
+            reinterpret_cast<const std::uintptr_t*>(base_table_address);
+        const std::uint16_t descriptor_operand = payload[2];
+        const std::uintptr_t descriptor_address =
+            operator_context[descriptor_operand & 3U] +
+            (descriptor_operand & 0xFFFCU);
+        const auto* const descriptors =
+            reinterpret_cast<const std::uint16_t*>(descriptor_address);
+        if (bases == nullptr || descriptors == nullptr ||
+            readable_bytes(bases) < 32 ||
+            readable_bytes(descriptors) < record_count * 4U) {
+            return;
+        }
+        for (std::size_t record = 0; record < record_count; ++record) {
+            const std::uint16_t k = descriptors[record * 2];
+            const std::uint32_t row = k / 16U;
+            if (k < 0x10U || (k & 0xFU) != 0 || row == 0) {
+                continue;
+            }
+            const std::uint32_t joint = row - 1;
+            std::size_t index = 0;
+            if (chloe) {
+                if (joint == 35) index = 0;
+                else if (joint == 36) index = 1;
+                else if (joint == 41) index = 2;
+                else continue;
+            } else {
+                if (joint == 96) index = 0;
+                else if (joint == 102) index = 1;
+                else continue;
+            }
+            const auto* const actual = reinterpret_cast<const std::uint32_t*>(
+                bases[0] + 3U * static_cast<std::uintptr_t>(k) - 0x30U);
+            if (readable_bytes(actual) < 48) {
+                continue;
+            }
+            std::array<std::uint32_t, 12> expected{};
+            std::uint32_t sample = 0;
+            std::uint32_t completed_mask = 0;
+            const std::uint32_t bit = 1U << index;
+            bool admitted = false;
+            AcquireSRWLockExclusive(&g_aim_handoff_kd_lock);
+            if (chloe && g_aim_case14_carry_kd.valid &&
+                (g_aim_case14_carry_kd.consumer_mask & bit) == 0) {
+                g_aim_case14_carry_kd.consumer_mask |= bit;
+                expected = g_aim_case14_carry_kd.records[index];
+                sample = g_aim_case14_carry_kd.sample;
+                completed_mask = g_aim_case14_carry_kd.consumer_mask;
+                admitted = true;
+            } else if (nadine && g_aim_nadine_lane_carry_kd.valid &&
+                (g_aim_nadine_lane_carry_kd.consumer_mask & bit) == 0) {
+                g_aim_nadine_lane_carry_kd.consumer_mask |= bit;
+                expected = g_aim_nadine_lane_carry_kd.records[index];
+                sample = g_aim_nadine_lane_carry_kd.sample;
+                completed_mask = g_aim_nadine_lane_carry_kd.consumer_mask;
+                admitted = true;
+            }
+            ReleaseSRWLockExclusive(&g_aim_handoff_kd_lock);
+            if (!admitted) {
+                continue;
+            }
+            std::array<std::uint32_t, 12> current{};
+            std::memcpy(current.data(), actual, 48);
+            std::uint32_t first_changed = UINT32_MAX;
+            const std::uint32_t changed = aim_count_changed_words(
+                expected.data(), current.data(), 12, first_changed);
+            char line[768]{};
+            std::snprintf(
+                line, sizeof(line),
+                "AIM-HANDOFF-KD consumer sample=%u actor=%s group=%u "
+                "joint=%u record=%u jpBase=%p address=%p raw=%u first=%u "
+                "d=%.5f hashProducer/Consumer=%016llX/%016llX mask=%03X",
+                sample, chloe ? "Chloe" : "Nadine",
+                handoff.processing_group, joint,
+                static_cast<unsigned>(record),
+                reinterpret_cast<const void*>(bases[0]), actual, changed,
+                first_changed, aim_raw_word_float_delta(
+                    expected.data(), current.data(), 12),
+                static_cast<unsigned long long>(aim_hash_raw_words(
+                    expected.data(), 12)),
+                static_cast<unsigned long long>(aim_hash_raw_words(
+                    current.data(), 12)), completed_mask);
+            boot_log_line(line);
+            const std::uint32_t expected_mask = chloe ? 0x7U : 0x3U;
+            if (completed_mask == expected_mask) {
+                char end[256]{};
+                std::snprintf(
+                    end, sizeof(end),
+                    "AIM-HANDOFF-KD consumer-end sample=%u actor=%s "
+                    "group=%u mask=%03X expected=%03X",
+                    sample, chloe ? "Chloe" : "Nadine",
+                    handoff.processing_group, completed_mask, expected_mask);
+                boot_log_line(end);
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        char line[256]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-HANDOFF-KD consumer-reject actor=%s group=%u exception=1",
+            chloe ? "Chloe" : "Nadine", handoff.processing_group);
+        boot_log_line(line);
+    }
 }
 
 const AimFinalizerTargetSpec* resolve_aim_finalizer_target(
@@ -21339,22 +21945,27 @@ std::uint32_t* __fastcall hooked_anim_cmd_finalize_group_defaults(
     if (native == nullptr) {
         return status;
     }
+    const AimNadineLanePendingKd nadine_lane_kd =
+        prepare_aim_nadine_lane_kd(evaluator_context);
     const auto& parent = g_aim_joint_boundary_scope;
     std::uint32_t target_index = UINT32_MAX;
     const auto* const target =
         resolve_aim_finalizer_target(parent, target_index);
     if (target == nullptr || evaluator_context == nullptr ||
         readable_bytes(evaluator_context) < 0x28) {
-        return native(status, evaluator_context);
+        return invoke_anim_cmd_finalize_group_defaults_kd(
+            native, status, evaluator_context, nadine_lane_kd);
     }
     auto& existing = g_aim_finalizer_probe_scope;
     if (existing.sample != 0) {
         ++existing.finalizer_calls;
-        return native(status, evaluator_context);
+        return invoke_anim_cmd_finalize_group_defaults_kd(
+            native, status, evaluator_context, nadine_lane_kd);
     }
     std::uint32_t sample = 0;
     if (!admit_aim_finalizer_sample(target_index, parent, sample)) {
-        return native(status, evaluator_context);
+        return invoke_anim_cmd_finalize_group_defaults_kd(
+            native, status, evaluator_context, nadine_lane_kd);
     }
 
     AimFinalizerProbeScope pending{};
@@ -21412,7 +22023,8 @@ std::uint32_t* __fastcall hooked_anim_cmd_finalize_group_defaults(
         pre_readable = false;
     }
 
-    std::uint32_t* const result = native(status, evaluator_context);
+    std::uint32_t* const result = invoke_anim_cmd_finalize_group_defaults_kd(
+        native, status, evaluator_context, nadine_lane_kd);
     bool post_readable = pre_readable;
     __try {
         post_readable = post_readable && readable_bytes(valid_bits) >= 16;
@@ -21817,6 +22429,7 @@ void prepare_aim_joint_boundary_scope(
     g_aim_joint_boundary_scope = {};
     g_aim_joint_boundary_capture.valid = false;
     g_aim_finalizer_probe_scope = {};
+    g_aim_handoff_context = {};
     if (g_dll_inert || !g_state_net.enabled || commands == nullptr ||
         command_word_count == 0 ||
         command_word_count > kAimCase6MaxCommandWords ||
@@ -21845,6 +22458,17 @@ void prepare_aim_joint_boundary_scope(
         skeleton_joint_count > kAimPipelineMaxJoints) {
         return;
     }
+
+    std::uint32_t context_flags = 0;
+    __try {
+        context_flags = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(context) + 0x20);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return;
+    }
+    g_aim_handoff_context = {
+        true, skeleton_joint_count, processing_group, context_flags,
+        owner.target_skeleton, owner.program_skeleton};
 
     log_aim_command_topology_kc(
         commands, command_word_count, context, processing_group, owner,
@@ -22540,6 +23164,7 @@ std::uintptr_t __fastcall hooked_anim_joint_program_op40(
     if (native == nullptr) {
         return 0;
     }
+    log_aim_handoff_op40_kd(payload, operator_context, segment_context);
     auto& scope = g_aim_joint_operator_scope;
     if (!scope.active || scope.segment_context != segment_context ||
         payload == nullptr || operator_context == nullptr ||
@@ -22832,6 +23457,7 @@ std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
     if (native == nullptr) {
         return status;
     }
+    log_aim_lane_case16_kd(segment_context);
     auto& live_scope = g_aim_joint_boundary_scope;
     auto& capture = g_aim_joint_boundary_capture;
     capture.valid = false;
@@ -23004,6 +23630,8 @@ std::uint32_t __fastcall hooked_process_anim_cmd_list_segment(
         g_aim_joint_boundary_scope;
     const AimFinalizerProbeScope previous_finalizer_scope =
         g_aim_finalizer_probe_scope;
+    const AimHandoffContext previous_handoff_context =
+        g_aim_handoff_context;
     prepare_aim_joint_boundary_scope(
         commands, command_word_count, context, processing_group);
     const std::uint32_t result =
@@ -23015,6 +23643,7 @@ std::uint32_t __fastcall hooked_process_anim_cmd_list_segment(
     finish_aim_finalizer_probe();
     g_aim_joint_boundary_scope = previous_joint_scope;
     g_aim_finalizer_probe_scope = previous_finalizer_scope;
+    g_aim_handoff_context = previous_handoff_context;
     g_aim_joint_boundary_capture.valid = false;
     log_aim_common_output_after(common_output);
     return result;
@@ -24689,6 +25318,54 @@ bool prepare_plain_callsite_relay(
         return false;
     }
     new_displacement = static_cast<std::int32_t>(displacement);
+    return true;
+}
+
+bool install_aim_case14_handoff_probe_kd() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kAnimCmdCopyGroupPoseCallsiteRva,
+            kAnimCmdCopyGroupPoseRva,
+            reinterpret_cast<const void*>(
+                &hooked_anim_cmd_copy_group_pose_kd),
+            callsite, relay, displacement)) {
+        if (relay != nullptr) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+        }
+        boot_log_line(
+            "aim kd case14 handoff probe SKIPPED (callsite preflight)");
+        return false;
+    }
+
+    g_anim_cmd_copy_group_pose =
+        reinterpret_cast<AnimCmdCopyGroupPoseFunction>(
+            g_module + kAnimCmdCopyGroupPoseRva);
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_anim_cmd_copy_group_pose = nullptr;
+        boot_log_line(
+            "aim kd case14 handoff probe SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (VirtualProtect(
+            callsite, 5, PAGE_EXECUTE_READWRITE, &old_protection) == 0) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_anim_cmd_copy_group_pose = nullptr;
+        boot_log_line("aim kd case14 handoff probe SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(callsite + 1) = displacement;
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(callsite, 5, old_protection, &ignored);
+    resume_suspended_process_threads(suspended_threads);
+    boot_log_line(
+        "aim kd case14 handoff probe installed (0x141ABA7F5, read-only)");
     return true;
 }
 
@@ -43723,8 +44400,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-01kc "
-        "(read-only animation command topology inventory)");
+        "TLL co-op runtime init 2026-08-01kd "
+        "(read-only case14 and lane handoff discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -43811,6 +44488,7 @@ DWORD WINAPI install_hook(void*) {
         if (g_enable_aim_case6_probe) {
             install_aim_case6_probe();
             if (g_enable_aim_joint_boundary_probe) {
+                install_aim_case14_handoff_probe_kd();
                 install_aim_finalizer_probe();
                 install_aim_joint_boundary_probes();
                 install_aim_joint_exact_input_probe();

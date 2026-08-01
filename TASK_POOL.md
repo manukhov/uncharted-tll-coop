@@ -2260,12 +2260,21 @@ Do not reopen these as the first move:
       and all case-13 copies precede command 3. Select M14-external for Chloe's
       group-0 -> group-1 path, Mlane for Nadine's group-1 -> group-2 path, and
       reject M14-default plus late Mother.
-- [ ] Implement the split read-only `kd` discriminator. At the exact case-14 call
+- [x] Implement the split read-only `kd` discriminator. At the exact case-14 call
       `0x141ABA7F5`, compare Chloe source/destination records `35/36/41` and carry
       them to group-1 op40. Separately log Nadine command-3 lane publication and
       group-1/2 resolved addresses for `96/102`. Decouple the comparison from the
       old `jz` admission gate, call every native function once, and change no pose
-      data. Apply the exact prediction in `COOP_STATUS.md`.
+      data. Apply the exact prediction in `COOP_STATUS.md`. Result: release build
+      `kd` installs the bounded case-14 call relay, captures Nadine's group-1 lane
+      after the existing exact command-3 finalizer call, logs group-1/2 case-16
+      address candidates, and compares both actors at opcode 40 independently of
+      `jz`. Every wrapped native is invoked once and no game state is written.
+- [ ] Run `kd` with both screen-1 actor signatures. Require twelve exact samples,
+      complete Chloe `35/36/41` and Nadine `96/102` consumer masks, readable
+      group metadata, normal models and responsive processes. Apply the written
+      M14-external versus later-writer and group-relative Mlane versus overwrite
+      classifications; record rejects even if the probe remains stable.
 - [ ] After the parent source is resolved, trace the exact JointParams producers
       for target children `97/103/43`; child 27 needs no JointParams trace because
       `jw` proved its 48-byte record bit-identical across the camera sweep.
