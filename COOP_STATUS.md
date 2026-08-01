@@ -15109,3 +15109,89 @@ trace the exact encoded sources feeding target outputs in op49/op50/op47/op51/
 op44 back through the nested selector-2/3 buffers and identify their last
 writers. A later read-only probe is justified only if that static graph leaves
 two distinguishable live aliases.
+
+### 2026-08-01 STATIC / IMPLEMENTED / TEST READY: target controls collapse to the exact group-0 matrix source graph
+
+The upstream encoded-input audit is complete. The apparent dynamic inputs of
+the target-group JointParams writers are authored constants, not live camera
+state:
+
+- Chloe opcode 50 reads scalar controls at auxiliary `+0x30/+0x38/+0x3C/+0x44`,
+  opcode 51 reads weight `+0x48`, and opcode 44 reads twelve auxiliary scalar
+  lanes. Nadine opcode 50 reads auxiliary `+0/+4/+8/+0xC`. Every one is written
+  by an earlier opcode 52 authored-constant record.
+- Chloe opcode 47's remaining scalar comes from scratch `+0x16D4`; the preceding
+  opcode 54 copies it from auxiliary `+0x14C8`, which is likewise authored by
+  group-0 opcode 52. Consequently S50-derived and S47/51/44-derived are
+  **REJECTED as independent live camera sources**.
+
+The dynamic handoff is instead opcode 53. It exports Chloe JointParams
+quaternion `+0x670` and workspace matrices `+0x840/+0x940` to scratch
+`+0x190/+0xD90/+0xE90`; Nadine similarly exports JointParams quaternions
+`+0x400/+0x430` and workspace matrices `+0x500/+0x540` to
+`+0x160/+0x190/+0xD90/+0xDD0`. Those values feed the later target writers.
+
+The two exact group-0 programs were decoded from the actor PAKs and matched to
+their runtime inventories:
+
+- Chloe skeleton `+0x5A180`, group-0 program RVAs `+0x54B0/+0xD460`, hash
+  `2DFB5E9BFDA0AD63`, `2` programs, `63` operators, `18` custom. Its op40 chain
+  is `W+040 <- prefix/JP+000`, `W+680 <- W+040/JP+4B0`,
+  `W+6C0 <- W+680/JP+4E0`, `W+700 <- W+6C0/JP+510`,
+  `W+740 <- W+700/JP+540`, `W+780 <- W+740/JP+570`,
+  `W+7C0 <- W+780/JP+5A0`, `W+840 <- W+7C0/JP+600`,
+  `W+8C0 <- W+840/JP+660`, `W+940 <- W+8C0/JP+6C0`.
+- Nadine skeleton `+0x53FE0`, group-0 program RVA `+0x53E0`, hash
+  `4644E83EF8252D43`, `1` program, `51` operators, `18` custom. Its chain is
+  `W+040 <- prefix/JP+000`, `W+3C0 <- W+040/JP+2A0`,
+  `W+400 <- W+3C0/JP+2D0`, `W+440 <- W+400/JP+300`,
+  `W+480 <- W+440/JP+330`, `W+4C0 <- W+480/JP+360`, then the same opcode-40
+  call produces `W+500 <- W+4C0/JP+390` and
+  `W+540 <- W+4C0/JP+3C0`.
+
+The prefix input is not the missing camera state: command 15 initializes
+workspace `+0` as identity. Its helper `0x14217B480` builds the four encoded
+bases and copies only group-authored auxiliary scalars through
+`AnimJointProgram_CopyEncodedScalars 0x142189370`. No command-16 operator writes
+any exact JointParams record in the chains above, nor Chloe `JP+0x670` or Nadine
+`JP+0x400/+0x430`; these values already exist at command-16 entry.
+
+The destination audit covers every opcode present in either stream that can
+write an encoded operand: builtins `40/41/44/47/49/50/51/52/53/54` and custom
+`128..132`. Custom opcode 130 obtains its output count from descriptor dword
+`+8` and its encoded destination array through descriptor word `+22`; opcode
+132 obtains its count from dword `+4`, its output table through word `+76`, and
+uses `{component,destination}` entries with destination dword `+4`. With these
+schemas resolved, no non-op40 destination overlaps any active chain node. This
+eliminates a hidden later writer rather than merely failing to observe one.
+
+The remaining competitors are therefore:
+
+1. **U-JP-chain**: the first camera-dependent group-0 JointParams record injects
+   receiver-local pitch, which subsequent op40 matrices propagate.
+2. **U-sourceC**: the separately exported Chloe `JP+0x670` or Nadine
+   `JP+0x400/+0x430` quaternion carries pitch while the matrix chain does not.
+3. **U-mixed**: both channels change, or the two actors use different channels.
+
+The evidence quota is met by independent PAK program order/descriptors, IDA
+worker dataflow and an exhaustive exact-destination audit, with the prior
+camera-correlated downstream op40 runtime result as a fourth kind. Release build
+`2026-08-01kg` implements a read-only discriminator. It admits only the two
+exact group-0 inventories above, snapshots every chain record, selected source
+matrix and output around the untouched native opcode-40 call, and separately
+hashes the three source-C quaternions. It performs no pose, packet or camera
+write and calls every native handler exactly once.
+
+**Falsifiable prediction (written before launch):** each actor must complete
+twelve camera-distinct samples with normal models, responsive processes and
+zero rejects. Chloe must report `13` opcode-40 calls and chain mask `0x003FF`;
+Nadine must report `10` calls and mask `0x3FC00`. Under a sky -> ground -> sky
+receiver-camera sweep while the other copy remains untouched, U-JP-chain wins
+only if an earliest chain node has a stable incoming source but a changing
+JointParams mask correlated with `localY` rather than `peerY`, its output
+changes, and every later source hash matches the preceding output. U-sourceC
+wins only if the matrix-chain inputs remain stable while an exact source-C
+quaternion changes with `localY`; changes in both select U-mixed. A missing
+record/mask, source discontinuity without a preceding producer, JointParams
+changing inside native op40, exception, stutter or model damage rejects the
+probe and authorizes no substitution.

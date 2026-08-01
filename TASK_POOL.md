@@ -2325,13 +2325,23 @@ Do not reopen these as the first move:
       address or change them. The direct builtin `resolved=000` diagnostic is
       rejected because it decoded against the outer context instead of the
       nested `{JointParams,workspace,aux,scratch}` table.
-- [ ] Trace the upstream encoded inputs of the confirmed JointParams writers.
+- [x] Trace the upstream encoded inputs of the confirmed JointParams writers.
       Exclude opcode 52's authored constants, then follow the exact sources of
       Nadine/Chloe opcode 50, Chloe opcode 47 `0xF04C`, opcode 51 `0xF10C`, and
       opcode 44 `0xF142` through nested selector-2/3 buffers to their last writer.
       Competing outcomes are S50-derived, S47/51/44-derived, and S-mixed. Do not
       launch again until the static source graph leaves a bounded, falsifiable
-      live-alias choice.
+      live-alias choice. Result: every target scalar control resolves to an
+      opcode-52 authored constant. Opcode 53 exports the live group-0 outputs;
+      exact PAK streams and exhaustive builtin/custom destination decoding leave
+      only the op40 JointParams chain and three source-C quaternions as live
+      competitors. Build `kg` records those inputs around untouched native calls.
+- [ ] Run the written `kg` discriminator. Keep one actor untouched while moving
+      only the receiver camera sky -> ground -> sky, then repeat reciprocally.
+      Require twelve exact samples, Chloe `calls=13 mask=003FF`, Nadine
+      `calls=10 mask=3FC00`, zero rejects, normal models and responsive copies.
+      Classify U-JP-chain, U-sourceC or U-mixed exactly as written in
+      `COOP_STATUS.md`; do not substitute a quaternion or matrix in this build.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

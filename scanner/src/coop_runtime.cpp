@@ -21300,6 +21300,94 @@ std::array<std::atomic<ULONGLONG>, 2> g_aim_expansion_next_log_ms_ke{};
 std::array<std::atomic<std::uint32_t>, 2>
     g_aim_expansion_sample_count_ke{};
 
+struct AimUpstreamChainSpecKg {
+    bool chloe = false;
+    const char* name = "unknown";
+    std::uint32_t payload_offset = UINT32_MAX;
+    std::uint32_t record = UINT32_MAX;
+    std::uint16_t k = 0;
+    std::uint16_t encoded_source = 0;
+    bool source_after_call = false;
+};
+
+constexpr std::array<AimUpstreamChainSpecKg, 18> kAimUpstreamChainSpecsKg{{
+    {true, "C-W040", 0x5546U, 3, 0x0010U, 0x0009U, false},
+    {true, "C-W680", 0x5574U, 2, 0x01A0U, 0x0049U, false},
+    {true, "C-W6C0", 0x558CU, 1, 0x01B0U, 0x0689U, false},
+    {true, "C-W700", 0x55B4U, 2, 0x01C0U, 0x06C9U, false},
+    {true, "C-W740", 0x55D4U, 3, 0x01D0U, 0x0709U, false},
+    {true, "C-W780", 0x55FCU, 10, 0x01E0U, 0x0749U, false},
+    {true, "C-W7C0", 0x5614U, 2, 0x01F0U, 0x0789U, true},
+    {true, "C-W840", 0xD47AU, 2, 0x0210U, 0x07C9U, false},
+    {true, "C-W8C0", 0xD492U, 2, 0x0230U, 0x0849U, false},
+    {true, "C-W940", 0xD4AAU, 0, 0x0250U, 0x08C9U, false},
+    {false, "N-W040", 0x542EU, 3, 0x0010U, 0x0009U, false},
+    {false, "N-W3C0", 0x54A4U, 2, 0x00F0U, 0x0041U, false},
+    {false, "N-W400", 0x54D0U, 1, 0x0100U, 0x03C9U, false},
+    {false, "N-W440", 0x54F0U, 2, 0x0110U, 0x0409U, false},
+    {false, "N-W480", 0x5500U, 2, 0x0120U, 0x0449U, false},
+    {false, "N-W4C0", 0x5510U, 2, 0x0130U, 0x0489U, false},
+    {false, "N-W500", 0x5510U, 7, 0x0140U, 0x04C9U, true},
+    {false, "N-W540", 0x5510U, 8, 0x0150U, 0x04C9U, true},
+}};
+
+struct AimUpstreamChainBaselineKg {
+    bool valid = false;
+    float peer_y = 0.0F;
+    float local_y = 0.0F;
+    std::array<std::uint32_t, 12> joint_params{};
+    std::array<std::uint32_t, 16> source{};
+    std::array<std::uint32_t, 16> output{};
+};
+
+struct AimUpstreamVectorSpecKg {
+    bool chloe = false;
+    const char* name = "unknown";
+    std::uint32_t joint_params_offset = 0;
+};
+
+constexpr std::array<AimUpstreamVectorSpecKg, 3>
+    kAimUpstreamVectorSpecsKg{{
+        {true, "C-JP34-quat", 0x0670U},
+        {false, "N-JP21-quat", 0x0400U},
+        {false, "N-JP22-quat", 0x0430U},
+    }};
+
+struct AimUpstreamVectorBaselineKg {
+    bool valid = false;
+    float peer_y = 0.0F;
+    float local_y = 0.0F;
+    std::array<std::uint32_t, 4> value{};
+};
+
+struct AimUpstreamScopeKg {
+    bool active = false;
+    bool chloe = false;
+    std::uint32_t sample = 0;
+    std::uint32_t peer_sequence = 0;
+    std::uint32_t op40_calls = 0;
+    std::uint32_t rejects = 0;
+    std::uint32_t matched_mask = 0;
+    float peer_y = 0.0F;
+    float local_y = 0.0F;
+    const void* segment_context = nullptr;
+    const std::byte* program_skeleton = nullptr;
+    const std::uint32_t* joint_params = nullptr;
+    const std::uint32_t* workspace_base = nullptr;
+    std::size_t joint_params_words = 0;
+    std::size_t workspace_words = 0;
+};
+
+thread_local AimUpstreamScopeKg g_aim_upstream_scope_kg{};
+SRWLOCK g_aim_upstream_lock_kg = SRWLOCK_INIT;
+std::array<AimUpstreamChainBaselineKg, kAimUpstreamChainSpecsKg.size()>
+    g_aim_upstream_chain_baselines_kg{};
+std::array<AimUpstreamVectorBaselineKg, kAimUpstreamVectorSpecsKg.size()>
+    g_aim_upstream_vector_baselines_kg{};
+std::array<AimJointOp40AdmissionState, 2> g_aim_upstream_admission_kg{};
+std::array<std::atomic<ULONGLONG>, 2> g_aim_upstream_next_log_ms_kg{};
+std::array<std::atomic<std::uint32_t>, 2> g_aim_upstream_sample_count_kg{};
+
 void aim_summarize_float_words(
     const float* values, std::size_t count, std::uint64_t& hash,
     std::uint32_t& nonfinite_count) {
@@ -21340,6 +21428,19 @@ std::uint32_t aim_count_changed_words(
         ++changed;
     }
     return changed;
+}
+
+std::uint32_t aim_changed_word_mask(
+    const std::uint32_t* before, const std::uint32_t* after,
+    std::size_t count) {
+    std::uint32_t mask = 0;
+    const std::size_t bounded_count = std::min<std::size_t>(count, 32);
+    for (std::size_t index = 0; index < bounded_count; ++index) {
+        if (before[index] != after[index]) {
+            mask |= 1U << index;
+        }
+    }
+    return mask;
 }
 
 float aim_raw_word_float_delta(
@@ -23932,6 +24033,426 @@ std::uintptr_t __fastcall hooked_anim_joint_program_op131_kf(
         operator_context, segment_context);
 }
 
+void begin_aim_upstream_scope_kg(
+    const AimJointBoundaryScope& parent,
+    const AimJointProgramInventory& programs,
+    const void* segment_context, const void* program_skeleton,
+    const std::uint32_t* joint_params, std::size_t joint_params_words,
+    const std::uint32_t* workspace_base, std::size_t workspace_words) {
+    auto& scope = g_aim_upstream_scope_kg;
+    scope = {};
+    if (!parent.valid || parent.processing_group != 0 ||
+        segment_context == nullptr || program_skeleton == nullptr ||
+        joint_params == nullptr || workspace_base == nullptr ||
+        !programs.valid || programs.op54_count != 1 ||
+        programs.custom_count != 18) {
+        return;
+    }
+
+    const bool chloe =
+        parent.skeleton_joint_count == 651 && programs.program_count == 2 &&
+        programs.operator_count == 63 &&
+        programs.hash == 0x2DFB5E9BFDA0AD63ULL &&
+        joint_params_words == 89U * 12U &&
+        workspace_words == (205U + 1U) * 16U;
+    const bool nadine =
+        parent.skeleton_joint_count == 580 && programs.program_count == 1 &&
+        programs.operator_count == 51 &&
+        programs.hash == 0x4644E83EF8252D43ULL &&
+        joint_params_words == 66U * 12U &&
+        workspace_words == (104U + 1U) * 16U;
+    if (!chloe && !nadine) {
+        return;
+    }
+
+    const std::size_t actor_index = chloe ? 0U : 1U;
+    bool camera_changed = false;
+    AcquireSRWLockShared(&g_aim_upstream_lock_kg);
+    const auto admission = g_aim_upstream_admission_kg[actor_index];
+    camera_changed = !admission.valid ||
+        std::fabs(parent.peer_y - admission.peer_y) >= 0.04F ||
+        std::fabs(parent.local_y - admission.local_y) >= 0.04F;
+    ReleaseSRWLockShared(&g_aim_upstream_lock_kg);
+    if (!camera_changed ||
+        g_aim_upstream_sample_count_kg[actor_index].load(
+            std::memory_order_acquire) >= 12) {
+        return;
+    }
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG due = g_aim_upstream_next_log_ms_kg[actor_index].load(
+        std::memory_order_acquire);
+    if (now < due ||
+        !g_aim_upstream_next_log_ms_kg[actor_index].compare_exchange_strong(
+            due, now + 350, std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
+        return;
+    }
+    const std::uint32_t sample =
+        g_aim_upstream_sample_count_kg[actor_index].fetch_add(
+            1, std::memory_order_acq_rel);
+    if (sample >= 12) {
+        return;
+    }
+    AcquireSRWLockExclusive(&g_aim_upstream_lock_kg);
+    g_aim_upstream_admission_kg[actor_index] = {
+        true, parent.peer_y, parent.local_y};
+    ReleaseSRWLockExclusive(&g_aim_upstream_lock_kg);
+
+    scope.active = true;
+    scope.chloe = chloe;
+    scope.sample = sample + 1;
+    scope.peer_sequence = parent.peer_sequence;
+    scope.peer_y = parent.peer_y;
+    scope.local_y = parent.local_y;
+    scope.segment_context = segment_context;
+    scope.program_skeleton = static_cast<const std::byte*>(program_skeleton);
+    scope.joint_params = joint_params;
+    scope.workspace_base = workspace_base;
+    scope.joint_params_words = joint_params_words;
+    scope.workspace_words = workspace_words;
+
+    char header[768]{};
+    std::snprintf(
+        header, sizeof(header),
+        "AIM-UPSTREAM-KG begin sample=%u actor=%s seq=%u "
+        "peerY=%.4f localY=%.4f programs=%u/%u custom=%u "
+        "hash=%016llX jp=%p/%zu workspace=%p/%zu",
+        scope.sample, chloe ? "Chloe" : "Nadine", scope.peer_sequence,
+        scope.peer_y, scope.local_y, programs.program_count,
+        programs.operator_count, programs.custom_count,
+        static_cast<unsigned long long>(programs.hash), joint_params,
+        joint_params_words, workspace_base, workspace_words);
+    boot_log_line(header);
+
+    for (std::size_t index = 0;
+         index < kAimUpstreamVectorSpecsKg.size(); ++index) {
+        const auto& spec = kAimUpstreamVectorSpecsKg[index];
+        if (spec.chloe != chloe ||
+            spec.joint_params_offset + 16U > joint_params_words * 4U) {
+            continue;
+        }
+        std::array<std::uint32_t, 4> value{};
+        std::memcpy(
+            value.data(),
+            reinterpret_cast<const std::byte*>(joint_params) +
+                spec.joint_params_offset,
+            sizeof(value));
+        AimUpstreamVectorBaselineKg previous{};
+        AcquireSRWLockExclusive(&g_aim_upstream_lock_kg);
+        previous = g_aim_upstream_vector_baselines_kg[index];
+        g_aim_upstream_vector_baselines_kg[index] = {
+            true, scope.peer_y, scope.local_y, value};
+        ReleaseSRWLockExclusive(&g_aim_upstream_lock_kg);
+        std::uint32_t first_changed = UINT32_MAX;
+        const std::uint32_t changed = previous.valid
+            ? aim_count_changed_words(
+                previous.value.data(), value.data(), value.size(),
+                first_changed)
+            : 0;
+        const std::uint32_t mask = previous.valid
+            ? aim_changed_word_mask(
+                previous.value.data(), value.data(), value.size())
+            : 0;
+        char line[640]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-UPSTREAM-KG vector sample=%u actor=%s name=%s "
+            "jpOff=%04X reset=%u dCam=%.4f/%.4f raw=%u mask=%X "
+            "d=%.5f hash=%016llX",
+            scope.sample, chloe ? "Chloe" : "Nadine", spec.name,
+            spec.joint_params_offset, static_cast<unsigned>(!previous.valid),
+            previous.valid ? scope.peer_y - previous.peer_y : 0.0F,
+            previous.valid ? scope.local_y - previous.local_y : 0.0F,
+            changed, mask,
+            previous.valid ? aim_raw_word_float_delta(
+                previous.value.data(), value.data(), value.size()) : 0.0F,
+            static_cast<unsigned long long>(
+                aim_hash_raw_words(value.data(), value.size())));
+        boot_log_line(line);
+    }
+}
+
+struct AimUpstreamCaptureKg {
+    std::size_t spec_index = 0;
+    const std::uint32_t* source_address = nullptr;
+    const std::uint32_t* output_address = nullptr;
+    std::array<std::uint32_t, 12> joint_params{};
+    std::array<std::uint32_t, 16> source_before{};
+    std::array<std::uint32_t, 16> output_before{};
+};
+
+struct AimUpstreamPendingKg {
+    bool active = false;
+    std::uint32_t payload_offset = UINT32_MAX;
+    std::array<AimUpstreamCaptureKg, 4> captures{};
+    std::size_t capture_count = 0;
+};
+
+AimUpstreamPendingKg prepare_aim_upstream_op40_kg(
+    const std::uint16_t* payload,
+    const std::uintptr_t* operator_context,
+    const void* segment_context) {
+    AimUpstreamPendingKg pending{};
+    auto& scope = g_aim_upstream_scope_kg;
+    if (!scope.active || scope.segment_context != segment_context ||
+        payload == nullptr || operator_context == nullptr ||
+        readable_bytes(payload) < 6 ||
+        readable_bytes(operator_context) < 32) {
+        return pending;
+    }
+    ++scope.op40_calls;
+    const std::uintptr_t payload_address =
+        reinterpret_cast<std::uintptr_t>(payload);
+    const std::uintptr_t skeleton_address =
+        reinterpret_cast<std::uintptr_t>(scope.program_skeleton);
+    if (payload_address < skeleton_address ||
+        payload_address - skeleton_address > UINT32_MAX) {
+        ++scope.rejects;
+        return pending;
+    }
+    pending.payload_offset = static_cast<std::uint32_t>(
+        payload_address - skeleton_address);
+    const std::size_t record_count =
+        static_cast<std::size_t>(payload[0]) * 4U;
+    if (record_count == 0 || record_count > 256) {
+        ++scope.rejects;
+        return pending;
+    }
+
+    bool readable = false;
+    __try {
+        const std::uint16_t base_operand = payload[1];
+        const auto* const bases =
+            reinterpret_cast<const std::uintptr_t*>(
+                operator_context[base_operand & 3U] +
+                (base_operand & 0xFFFCU));
+        const std::uint16_t descriptor_operand = payload[2];
+        const auto* const descriptors =
+            reinterpret_cast<const std::uint16_t*>(
+                operator_context[descriptor_operand & 3U] +
+                (descriptor_operand & 0xFFFCU));
+        readable = bases != nullptr && descriptors != nullptr &&
+            readable_bytes(bases) >= 32 &&
+            readable_bytes(descriptors) >= record_count * 4U &&
+            bases[0] == reinterpret_cast<std::uintptr_t>(scope.joint_params) &&
+            bases[1] == reinterpret_cast<std::uintptr_t>(scope.workspace_base);
+        for (std::size_t record = 0;
+             readable && record < record_count; ++record) {
+            const std::uint16_t k = descriptors[record * 2U];
+            const std::uint16_t encoded_source =
+                descriptors[record * 2U + 1U];
+            for (std::size_t spec_index = 0;
+                 spec_index < kAimUpstreamChainSpecsKg.size(); ++spec_index) {
+                const auto& spec = kAimUpstreamChainSpecsKg[spec_index];
+                if (spec.chloe != scope.chloe ||
+                    spec.payload_offset != pending.payload_offset ||
+                    spec.record != record || spec.k != k ||
+                    spec.encoded_source != encoded_source) {
+                    continue;
+                }
+                if (pending.capture_count >= pending.captures.size() ||
+                    k < 0x10U || (k & 0xFU) != 0) {
+                    readable = false;
+                    break;
+                }
+                const auto* const joint_params =
+                    reinterpret_cast<const std::uint32_t*>(
+                        bases[0] + 3U * static_cast<std::uintptr_t>(k) -
+                        0x30U);
+                const auto* const source =
+                    reinterpret_cast<const std::uint32_t*>(
+                        bases[encoded_source & 3U] +
+                        (encoded_source & 0xFFF0U));
+                const auto* const output =
+                    reinterpret_cast<const std::uint32_t*>(
+                        bases[1] + 4U * static_cast<std::uintptr_t>(k));
+                readable = readable_bytes(joint_params) >= 48 &&
+                    readable_bytes(source) >= 64 &&
+                    readable_bytes(output) >= 64;
+                if (!readable) {
+                    break;
+                }
+                auto& capture = pending.captures[pending.capture_count++];
+                capture.spec_index = spec_index;
+                capture.source_address = source;
+                capture.output_address = output;
+                std::memcpy(
+                    capture.joint_params.data(), joint_params,
+                    sizeof(capture.joint_params));
+                std::memcpy(
+                    capture.source_before.data(), source,
+                    sizeof(capture.source_before));
+                std::memcpy(
+                    capture.output_before.data(), output,
+                    sizeof(capture.output_before));
+                break;
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        readable = false;
+    }
+    if (!readable) {
+        ++scope.rejects;
+        char line[512]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-UPSTREAM-KG reject sample=%u actor=%s payloadOff=%08X "
+            "p=%04X/%04X/%04X records=%zu",
+            scope.sample, scope.chloe ? "Chloe" : "Nadine",
+            pending.payload_offset, static_cast<unsigned>(payload[0]),
+            static_cast<unsigned>(payload[1]),
+            static_cast<unsigned>(payload[2]), record_count);
+        boot_log_line(line);
+        return {};
+    }
+    pending.active = pending.capture_count != 0;
+    return pending;
+}
+
+void finish_aim_upstream_op40_kg(
+    const AimUpstreamPendingKg& pending) {
+    if (!pending.active) {
+        return;
+    }
+    auto& scope = g_aim_upstream_scope_kg;
+    for (std::size_t capture_index = 0;
+         capture_index < pending.capture_count; ++capture_index) {
+        const auto& capture = pending.captures[capture_index];
+        if (capture.spec_index >= kAimUpstreamChainSpecsKg.size()) {
+            ++scope.rejects;
+            continue;
+        }
+        const auto& spec = kAimUpstreamChainSpecsKg[capture.spec_index];
+        std::array<std::uint32_t, 16> source_after{};
+        std::array<std::uint32_t, 16> output_after{};
+        bool readable = false;
+        __try {
+            readable = readable_bytes(capture.source_address) >= 64 &&
+                readable_bytes(capture.output_address) >= 64;
+            if (readable) {
+                std::memcpy(
+                    source_after.data(), capture.source_address,
+                    sizeof(source_after));
+                std::memcpy(
+                    output_after.data(), capture.output_address,
+                    sizeof(output_after));
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            readable = false;
+        }
+        if (!readable) {
+            ++scope.rejects;
+            continue;
+        }
+        const auto& source = spec.source_after_call
+            ? source_after : capture.source_before;
+        AimUpstreamChainBaselineKg previous{};
+        AcquireSRWLockExclusive(&g_aim_upstream_lock_kg);
+        previous = g_aim_upstream_chain_baselines_kg[capture.spec_index];
+        g_aim_upstream_chain_baselines_kg[capture.spec_index] = {
+            true, scope.peer_y, scope.local_y, capture.joint_params,
+            source, output_after};
+        ReleaseSRWLockExclusive(&g_aim_upstream_lock_kg);
+
+        std::uint32_t ignored_first = UINT32_MAX;
+        const std::uint32_t jp_changed = previous.valid
+            ? aim_count_changed_words(
+                previous.joint_params.data(), capture.joint_params.data(),
+                capture.joint_params.size(), ignored_first) : 0;
+        const std::uint32_t source_changed = previous.valid
+            ? aim_count_changed_words(
+                previous.source.data(), source.data(), source.size(),
+                ignored_first) : 0;
+        const std::uint32_t output_changed = previous.valid
+            ? aim_count_changed_words(
+                previous.output.data(), output_after.data(),
+                output_after.size(), ignored_first) : 0;
+        const std::uint32_t call_source_changed = aim_count_changed_words(
+            capture.source_before.data(), source_after.data(),
+            source_after.size(), ignored_first);
+        const std::uint32_t call_output_changed = aim_count_changed_words(
+            capture.output_before.data(), output_after.data(),
+            output_after.size(), ignored_first);
+        const std::uint32_t bit = 1U << capture.spec_index;
+        if ((scope.matched_mask & bit) != 0U) {
+            ++scope.rejects;
+        }
+        scope.matched_mask |= bit;
+
+        char line[1280]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-UPSTREAM-KG chain sample=%u actor=%s seq=%u "
+            "peerY=%.4f localY=%.4f name=%s payloadOff=%08X rec=%u "
+            "k=%04X src=%04X jpOff=%04X srcOff=%04X outOff=%04X "
+            "srcPhase=%s reset=%u dCam=%.4f/%.4f "
+            "rawJP/src/out=%u/%u/%u maskJP/src/out=%03X/%04X/%04X "
+            "dJP/src/out=%.5f/%.5f/%.5f callSrc/out=%u/%u "
+            "hashJP/src/out=%016llX/%016llX/%016llX",
+            scope.sample, scope.chloe ? "Chloe" : "Nadine",
+            scope.peer_sequence, scope.peer_y, scope.local_y, spec.name,
+            pending.payload_offset, spec.record,
+            static_cast<unsigned>(spec.k),
+            static_cast<unsigned>(spec.encoded_source),
+            static_cast<unsigned>(3U * spec.k - 0x30U),
+            static_cast<unsigned>(spec.encoded_source & 0xFFF0U),
+            static_cast<unsigned>(4U * spec.k),
+            spec.source_after_call ? "post" : "pre",
+            static_cast<unsigned>(!previous.valid),
+            previous.valid ? scope.peer_y - previous.peer_y : 0.0F,
+            previous.valid ? scope.local_y - previous.local_y : 0.0F,
+            jp_changed, source_changed, output_changed,
+            previous.valid ? aim_changed_word_mask(
+                previous.joint_params.data(), capture.joint_params.data(),
+                capture.joint_params.size()) : 0,
+            previous.valid ? aim_changed_word_mask(
+                previous.source.data(), source.data(), source.size()) : 0,
+            previous.valid ? aim_changed_word_mask(
+                previous.output.data(), output_after.data(),
+                output_after.size()) : 0,
+            previous.valid ? aim_raw_word_float_delta(
+                previous.joint_params.data(), capture.joint_params.data(),
+                capture.joint_params.size()) : 0.0F,
+            previous.valid ? aim_raw_word_float_delta(
+                previous.source.data(), source.data(), source.size()) : 0.0F,
+            previous.valid ? aim_raw_word_float_delta(
+                previous.output.data(), output_after.data(),
+                output_after.size()) : 0.0F,
+            call_source_changed, call_output_changed,
+            static_cast<unsigned long long>(aim_hash_raw_words(
+                capture.joint_params.data(), capture.joint_params.size())),
+            static_cast<unsigned long long>(aim_hash_raw_words(
+                source.data(), source.size())),
+            static_cast<unsigned long long>(aim_hash_raw_words(
+                output_after.data(), output_after.size())));
+        boot_log_line(line);
+    }
+}
+
+void finish_aim_upstream_scope_kg() {
+    auto& scope = g_aim_upstream_scope_kg;
+    if (!scope.active) {
+        return;
+    }
+    const std::uint32_t expected_mask =
+        scope.chloe ? 0x000003FFU : 0x0003FC00U;
+    const std::uint32_t expected_calls = scope.chloe ? 13U : 10U;
+    char line[640]{};
+    std::snprintf(
+        line, sizeof(line),
+        "AIM-UPSTREAM-KG end sample=%u actor=%s calls=%u/%u "
+        "mask=%05X/%05X rejects=%u jpHash=%016llX workspaceHash=%016llX",
+        scope.sample, scope.chloe ? "Chloe" : "Nadine",
+        scope.op40_calls, expected_calls, scope.matched_mask, expected_mask,
+        scope.rejects,
+        static_cast<unsigned long long>(aim_hash_raw_words(
+            scope.joint_params, scope.joint_params_words)),
+        static_cast<unsigned long long>(aim_hash_raw_words(
+            scope.workspace_base, scope.workspace_words)));
+    scope.active = false;
+    boot_log_line(line);
+}
+
 struct AimJointExactChainSpec {
     std::uint32_t index = UINT32_MAX;
     const char* name = "unknown";
@@ -24008,13 +24529,22 @@ std::uintptr_t __fastcall hooked_anim_joint_program_op40(
     if (native == nullptr) {
         return 0;
     }
+    const AimUpstreamPendingKg upstream_kg =
+        prepare_aim_upstream_op40_kg(
+            payload, operator_context, segment_context);
+    const auto invoke_native = [&]() {
+        const std::uintptr_t result =
+            native(payload, operator_context, segment_context);
+        finish_aim_upstream_op40_kg(upstream_kg);
+        return result;
+    };
     log_aim_expansion_op40_ke(payload, operator_context, segment_context);
     log_aim_handoff_op40_kd(payload, operator_context, segment_context);
     auto& scope = g_aim_joint_operator_scope;
     if (!scope.active || scope.segment_context != segment_context ||
         payload == nullptr || operator_context == nullptr ||
         readable_bytes(payload) < 6 || readable_bytes(operator_context) < 32) {
-        return native(payload, operator_context, segment_context);
+        return invoke_native();
     }
 
     const std::uint32_t payload_offset =
@@ -24139,11 +24669,10 @@ std::uintptr_t __fastcall hooked_anim_joint_program_op40(
             static_cast<unsigned>(payload[2]),
             static_cast<unsigned>(record_count));
         boot_log_line(line);
-        return native(payload, operator_context, segment_context);
+        return invoke_native();
     }
 
-    const std::uintptr_t result =
-        native(payload, operator_context, segment_context);
+    const std::uintptr_t result = invoke_native();
     if (target) {
         ++scope.target_op40_count;
     }
@@ -24394,6 +24923,12 @@ std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
     }
     capture.programs = inventory_aim_joint_programs(
         target_skeleton, group, segment_context);
+    begin_aim_upstream_scope_kg(
+        scope, capture.programs, segment_context, target_skeleton,
+        reinterpret_cast<const std::uint32_t*>(joint_params),
+        parameter_values,
+        reinterpret_cast<const std::uint32_t*>(workspace_base),
+        workspace_values + 16);
     begin_aim_joint_operator_boundary(
         scope, capture.programs, segment_context, target_skeleton,
         reinterpret_cast<const std::uint32_t*>(joint_params),
@@ -24402,6 +24937,7 @@ std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
         workspace_values + 16);
     std::uint32_t* const result = native(status, segment_context);
     finish_aim_joint_operator_boundary();
+    finish_aim_upstream_scope_kg();
     if (!capture_broad_boundary) {
         return result;
     }
@@ -45352,8 +45888,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-01kf "
-        "(read-only per-operator tail-writer discriminator)");
+        "TLL co-op runtime init 2026-08-01kg "
+        "(read-only group-0 aim-source chain discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

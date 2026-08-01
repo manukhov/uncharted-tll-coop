@@ -2254,6 +2254,15 @@ FUNCTIONS = {
         "its authored min/max X/Y bounds at +0x7FC/+0x800/+0x804/+0x808. This "
         "rejects interpreting those fields as a live local-camera vector.",
     ),
+    0x14217B480: (
+        "AnimCmdEvaluator_InitializeAuxiliaryEncodedScalars",
+        "Command-15 auxiliary initializer. Builds encoded bases from "
+        "SegmentContext+0x60, the command payload, SegmentContext+0x68 and "
+        "skeleton-authored data, then calls AnimJointProgram_CopyEncodedScalars "
+        "over group-authored tuple tables. Exact Chloe/Nadine group-0 tuples "
+        "initialize only the auxiliary prefix; they do not author the workspace "
+        "matrix-chain root, which command 15 leaves as identity.",
+    ),
     0x14217B630: (
         "AnimCmdEvaluator_ExecuteSkeletonJointPrograms",
         "Command-16 evaluator that walks the target skeleton's bounded joint "
@@ -2329,8 +2338,12 @@ FUNCTIONS = {
         "completed output. Runtime jz classified the inputs: Nadine local "
         "24/25/26 and Chloe local 42 are source-driven, Nadine local 96/102 are "
         "JointParams-driven, and Chloe local 36/41 "
-        "change in both inputs. Therefore this final worker is downstream of a "
-        "mixed contamination and is not a valid blanket substitution boundary.",
+        "change in both inputs. Exact PAK decoding further resolves the complete "
+        "group-0 chains: Chloe W+040/+680/+6C0/+700/+740/+780/+7C0/+840/+8C0/"
+        "+940 and Nadine W+040/+3C0/+400/+440/+480/+4C0/+500/+540. An exhaustive "
+        "destination audit finds no non-op40 overwrite of these active nodes. "
+        "Therefore this worker is downstream of a mixed contamination and is not "
+        "a valid blanket substitution boundary.",
     ),
     0x142194680: (
         "AnimJointProgramOp41_ScatterVectorComponents",
@@ -2477,7 +2490,10 @@ FUNCTIONS = {
         "AnimJointProgramOp53_CopyEncodedVectors",
         "Built-in joint-program opcode 53. Each 16-byte descriptor batch contains "
         "four {destination, source} encoded-float4 pairs and copies four complete "
-        "vectors directly.",
+        "vectors directly. Exact group-0 streams export Chloe JointParams +0x670 "
+        "and workspace +0x840/+0x940 into scratch +0x190/+0xD90/+0xE90; Nadine "
+        "exports JointParams +0x400/+0x430 and workspace +0x500/+0x540 into "
+        "scratch +0x160/+0x190/+0xD90/+0xDD0.",
     ),
     0x142194620: (
         "AnimJointProgramOp59_ConvertJointParamsToMatrices",
@@ -2516,8 +2532,10 @@ FUNCTIONS = {
         "AnimJointProgramCustomOp130",
         "Custom joint-program operator 130. Its descriptor supplies N encoded "
         "scalar inputs, authored centers/weights, and M encoded scalar destinations; "
-        "it evaluates distance-weighted sums and writes those M outputs. No direct "
-        "camera/global source is reachable.",
+        "it evaluates distance-weighted sums and writes those M outputs. The "
+        "output count is descriptor dword +8 and the encoded destination dword "
+        "array is addressed by descriptor word +22. No direct camera/global "
+        "source is reachable.",
     ),
     0x141A94D80: (
         "AnimJointProgramCustomOp131",
@@ -2531,7 +2549,9 @@ FUNCTIONS = {
         "AnimJointProgramCustomOp132",
         "Custom joint-program operator 132. Its large descriptor resolves encoded "
         "matrix/scalar inputs and encoded scalar outputs for buffer-local IK/math; "
-        "it also reads SegmentContext+0x4A flags 0x100/0x200. It has no Player, "
+        "its output count is descriptor dword +4 and word +76 addresses a table "
+        "of {component,destination} records whose encoded destination is dword +4. "
+        "It also reads SegmentContext+0x4A flags 0x100/0x200. It has no Player, "
         "camera, screen-route or gameplay-global read.",
     ),
     0x141A97970: (
