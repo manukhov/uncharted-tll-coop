@@ -14359,7 +14359,7 @@ producers of Nadine JP96/JP102 and the smaller Chloe JP36/JP41 changes. No pose
 substitution is authorized until those upstream writers converge on a bounded
 common receiver-camera input or are classified as separate paths.
 
-### 2026-08-01 STATIC: exact pre-target matrix ancestry is closed; direct Gesture camera anchors are rejected
+### 2026-08-01 STATIC / IMPLEMENTED: exact ancestry and `ka` ValidBits discriminator
 
 The two source-side frontiers from `jz` are now bounded to their exact program
 writers. The live Nadine group-0 stream has FNV hash `4644E83EF8252D43` and
@@ -14430,3 +14430,13 @@ selects V-default; a finalizer-post hash that differs from the later exact
 case-16 record selects V-post. Mixed outcomes select independent producer paths.
 Missing target bits, multiple unexpected finalizers, unreadable lanes, model
 damage, hang or crash rejects the probe and authorizes no substitution.
+
+Build `ka` implements that boundary with a direct-call relay only at
+`0x141AB9D18`. Admission is restricted to the exact retained skeleton/group
+signatures `580/0`, `580/2` and `651/1`, twelve camera-distinct samples each.
+The wrapper snapshots the current lane and ValidBits, calls
+`AnimCmdEvaluator_FinalizeGroupDefaults` exactly once, snapshots again, and
+stores only local diagnostic copies. At case 16 it compares the saved post
+records with the live segment/opcode-40 JointParams records. It never writes a
+ValidBit, JointParams record, workspace row or game-owned pointer. The Release
+DLL builds successfully.

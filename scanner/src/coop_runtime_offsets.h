@@ -152,6 +152,8 @@ constexpr std::size_t kSkeletonJointCountOffset = 0x34;
 // ProcessAnimCmdListSegment case 6 selects direct clip evaluation when the
 // source/target underlying skeleton ids match, otherwise it resolves this table.
 constexpr std::uintptr_t kProcessAnimCmdListSegmentRva = 0x1AB97C0;
+constexpr std::uintptr_t kAnimCmdFinalizeGroupDefaultsCallsiteRva = 0x1AB9D18;
+constexpr std::uintptr_t kAnimCmdFinalizeGroupDefaultsRva = 0x1AB78F0;
 // Normal campaign command-evaluator boundaries. Opcode 16 is the only broad
 // producer of WorkBuffer+0x58; opcode 26 consumes the same 64-byte rows.
 constexpr std::uintptr_t kAnimCmdExecuteJointProgramsCallsiteRva = 0x1ABA973;

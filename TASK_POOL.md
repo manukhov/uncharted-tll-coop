@@ -2212,13 +2212,21 @@ Do not reopen these as the first move:
       The direct Gesture-camera theory is rejected at its claimed anchors:
       `InputManager+0x50` is a frame epoch and grid `+0x7FC..+0x808` is authored
       min/max data. Exact JointParams ownership remains OPEN.
-- [ ] Implement read-only build `ka` at the sole
+- [x] Implement read-only build `ka` at the sole
       `AnimCmdEvaluator_FinalizeGroupDefaults` callsite `0x141AB9D18`. Capture
       pre/post MSB-first ValidBits and 48-byte hashes for Nadine group-0 joints
       `0/14/15/16/17/18/32/33/34`, Nadine group-2 `96/102`, and Chloe group-1
       `35/36/41`; compare the finalizer-post records with the existing case-16
       records. Classify V-authored, V-default or V-post exactly as written in
       `COOP_STATUS.md`. Call the native finalizer once and write no game state.
+      Result: the direct-call relay is restricted to skeleton/group signatures
+      `580/0`, `580/2`, `651/1`, keeps twelve independent camera-distinct
+      samples, and compares finalizer-post records at segment/opcode-40 entry.
+      Release builds successfully; runtime classification remains pending.
+- [ ] Run the written `ka` camera-distinct sequence. Require all three exact
+      actor/group signatures, one finalizer call, complete case-16 masks, normal
+      models and responsive processes. Classify every joint as V-authored,
+      V-default or V-post before considering any pose substitution.
 - [ ] After the parent source is resolved, trace the exact JointParams producers
       for target children `97/103/43`; child 27 needs no JointParams trace because
       `jw` proved its 48-byte record bit-identical across the camera sweep.
