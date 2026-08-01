@@ -14919,3 +14919,86 @@ stopped responding. The next step is static: enumerate every command-16 operator
 before the first consumer of local rows `35/36/41` and `96/102`, resolve encoded
 destinations selecting base 0, and identify the last concrete JointParams writer
 for each row before another runtime launch or pose substitution.
+
+### 2026-08-01 STATIC / TEST READY: exact operator order proves two Chloe tail writers and bounds the nested-table remainder
+
+The complete single-program streams were decoded from `chloe-base.pak` and
+`nadine-dlc-base.pak`, not inferred from runtime ordinals. The command-16
+executor `AnimCmdEvaluator_ExecuteSkeletonJointPrograms 0x14217B630` performs
+no JointParams preamble store: it constructs the four top-level bases from
+`SegmentContext+0x50/+0x58/+0x68/+0x30`, then dispatches the authored stream in
+order. Therefore every `ke` tail change must occur in a concrete operator.
+
+The first relevant consumers and their exact preceding candidates are:
+
+- Chloe row 35 is first read by opcode 40 payload `0xF13A`; rows 36/41 are
+  first read by payload `0xF14A`. The preceding stream is the exact sequence
+  `129x2, 41, 40, 47x4, 128x8, 44, 40, 51, 47x3, 44, 40, 44, 40` at payload
+  RVAs `0xF074..0xF14A`.
+- Nadine rows 96/102 are first read by opcode 40 payload `0x8FBA`. Its exact
+  prefix is `129x2, 131x4, 41, 40, 47, 40` at payload RVAs
+  `0x8F70..0x8FBA`.
+
+Direct handler/descriptor decoding proves two partial Chloe writers:
+
+1. Opcode 51 payload `0xF10C` has `count=4`, selector-0 descriptor `0x49B0`.
+   `AnimJointProgram_InitializeEncodedVectors 0x14218D2D0` takes its four
+   vector destinations from descriptor words at `+2/+6/+0xA/+0xE`; they are
+   `+0x1C0/+0x4C0/+0x6D0/+0xAF0`. Its one-record auxiliary phase
+   `AnimJointProgram_BlendEncodedVectors 0x1421902D0` writes the same four
+   destinations again. Consequently `+0x6D0`, Chloe local row 36 quaternion
+   words `+0x10..+0x1C`, has a concrete STATIC last writer inside opcode 51.
+2. Opcode 44 payload `0xF142` has `count=8`, descriptor `0x6720` and two
+   64-byte batches. `AnimJointProgram_AssembleEncodedVectors 0x14218C530`
+   stores four vectors per batch; its second batch includes selector-0
+   destination `+0x7C0`, Chloe local row 41 quaternion words
+   `+0x10..+0x1C`. This opcode is immediately before consumer `0xF14A`, so it
+   is the concrete STATIC last writer of those four words.
+
+The remaining direct-output alternatives are sharply bounded. Nadine's opcode
+41 descriptor `0x0970` has one batch and all six live destinations select
+top-level base 2; its opcode 47 descriptor `0x0A20` has two four-lane batches
+and all eight destinations also select base 2. Chloe's three opcode-41 batches
+select base 2, while its direct opcode-47 and earlier opcode-44 destinations do
+not address rows `35/36/41`. Thus there is no unresolved command-16 preamble or
+generic direct base-0 writer for Nadine `96/102`.
+
+The remaining custom path uses a different address contract and cannot be
+classified from the low selector alone. Custom opcodes 128/129 first resolve
+payload selector 3 as a four-pointer table, then resolve record `+0x3C` through
+that nested table; opcode 131 uses the same nested table for its descriptor
+outputs. The intended package descriptors form exact selector-2 scalar runs:
+
+- Chloe op129/op128 outputs cover nested offsets `+0x360..+0x384` in ten
+  contiguous four-byte slots;
+- Nadine op129/op131 outputs before `0x8FBA` form selector-2 clusters beginning
+  at `+0x140` and `+0x178`.
+
+Those nested selector-2 pointers are live shared-scratch contents, not the
+top-level `SegmentContext+0x68` pointer, so a static selector count alone cannot
+prove which expanded JointParams words they alias. The remaining competitors
+are now **L-custom** (one of op128/129/131 changes a target through the nested
+table), **L-builtin-alias** (a top-level base-2 destination aliases a target
+tail address), and **L-unlisted** (the bounded stream inventory is wrong).
+L-unlisted is already weak because the package stream, runtime program hash and
+all `ke` consumer payload RVAs agree.
+
+The evidence quota for a read-only discriminator is met by three independent
+types: exact package operator order, worker disassembly/store semantics, and
+decoded authored destination fields, with the independent `ke` changed-word
+masks as runtime correlation. The next build may therefore wrap only candidate
+operators `41/44/47/51/128/129/131`, snapshot the five expansion-tail rows
+immediately before and after each untouched native call, and log changed-word
+masks plus the resolved nested table bases. It must not write pose, camera,
+packet or operator data.
+
+**Falsifiable prediction (written before launch):** if L-custom is correct,
+the first nonzero masks for Chloe row 35 and Nadine rows 96/102 will appear on
+custom-op records and their resolved nested destination addresses will equal
+the saved target addresses. Chloe row 36 must additionally show mask `0x0F0`
+at payload `0xF10C`, and row 41 mask `0x0F0` at `0xF142`; later candidate calls
+before each first consumer must not change those four words. If a non-custom
+operator produces the first target mask, L-builtin-alias wins. Any target
+change without a wrapped candidate, missing consumer mask, changed native-call
+count, exception, stutter or damaged model rejects the probe rather than
+confirming a writer.

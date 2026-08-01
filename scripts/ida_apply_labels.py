@@ -2264,7 +2264,9 @@ FUNCTIONS = {
         "confirmed that the finalized parameterCount prefix remained bit-identical "
         "while complex authored programs changed the +0x58 workspace. Runtime ke "
         "corrected that scope: command 16 rewrites selected JointParams rows in "
-        "the command-15 expanded tail, which the old prefix hash did not cover.",
+        "the command-15 expanded tail, which the old prefix hash did not cover. "
+        "The executor itself performs no JointParams preamble store; the writes "
+        "must occur in dispatched operators.",
     ),
     0x14217BF30: (
         "AnimCmdEvaluator_ExpandJointParamsToTargetWorkspaceCount",
@@ -2343,7 +2345,9 @@ FUNCTIONS = {
         "AnimJointProgramOp44_AssembleEncodedVectors",
         "Built-in joint-program opcode 44 wrapper. Resolves 64-byte authored "
         "records plus an auxiliary stream and calls "
-        "AnimJointProgram_AssembleEncodedVectors.",
+        "AnimJointProgram_AssembleEncodedVectors. Chloe payload 0xF142 is the "
+        "last operator before consumer 0xF14A and writes row 41 quaternion at "
+        "selector-0 destination +0x7C0.",
     ),
     0x14218C530: (
         "AnimJointProgram_AssembleEncodedVectors",
@@ -2423,7 +2427,8 @@ FUNCTIONS = {
         "AnimJointProgramOp51_BlendEncodedVectors",
         "Built-in joint-program opcode 51 wrapper. Initializes encoded vector "
         "destinations, then optionally dispatches an authored four-output vector "
-        "blend phase.",
+        "blend phase. Chloe payload 0xF10C writes row 36 quaternion at selector-0 "
+        "destination +0x6D0 in both phases.",
     ),
     0x14218D2D0: (
         "AnimJointProgram_InitializeEncodedVectors",
@@ -2460,15 +2465,19 @@ FUNCTIONS = {
         "Custom joint-program operator 128 from the six-entry table at "
         "0x143026CB0. Each 64-byte authored record reads an encoded 16-byte "
         "quaternion and optional scalar, computes a clamped angular weight, and "
-        "writes one encoded scalar at record+0x3C. Its dataflow is closed over the "
-        "four evaluator buffers; it has no camera/global input.",
+        "writes one encoded scalar at record+0x3C. Payload selector 3 resolves a "
+        "nested four-pointer table first, so the record destination selector is "
+        "relative to that live table rather than the top-level evaluator bases. "
+        "Its dataflow has no camera/global input.",
     ),
     0x141A951F0: (
         "AnimJointProgramCustomOp129",
         "Custom joint-program operator 129. Each 64-byte authored record reads one "
         "encoded 16-byte quaternion, computes a signed wrapped relative angle, and "
-        "writes one encoded scalar at record+0x3C. It has no Player, camera, screen-"
-        "route or gameplay-global read.",
+        "writes one encoded scalar at record+0x3C through the nested four-pointer "
+        "table resolved by payload selector 3. The record selector is therefore "
+        "not a top-level base selector. It has no Player, camera, screen-route or "
+        "gameplay-global read.",
     ),
     0x141A945F0: (
         "AnimJointProgramCustomOp130",
@@ -2481,7 +2490,9 @@ FUNCTIONS = {
         "AnimJointProgramCustomOp131",
         "Custom joint-program operator 131. Reads one encoded 32-byte transform, "
         "builds an affine matrix, and writes authored component codes to encoded "
-        "scalar destinations. No direct camera/global source is reachable.",
+        "scalar destinations through the nested four-pointer table selected by "
+        "payload word 1. Its descriptor destination selector is not a top-level "
+        "base selector. No direct camera/global source is reachable.",
     ),
     0x141A95E80: (
         "AnimJointProgramCustomOp132",
