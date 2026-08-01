@@ -14167,3 +14167,45 @@ the following group-1 opcode 49/50 rows have `callOut=0`, P40-final wins; a
 nonzero change selects P49 or P50. A missing parent match, unreadable row,
 unexpected target count, damaged model, hang, or crash rejects this boundary.
 No substitution or fix is authorized by this test.
+
+### 2026-08-01 RUNTIME CONFIRMED: the last earlier opcode 40 produces every contaminated parent row; opcodes 49/50 do not overwrite Chloe joint 42
+
+Build `jx` captured eight paired samples per receiver (16 begins and 16 ends),
+with the exact target opcode 40 once in every sample, no probe rejects, all rows
+readable, both processes responsive, and no reported model fault. The performed
+Chloe camera sweep gave the intended discriminator: PID 9136 / Chloe-side
+receiver / Nadine puppet held `peerY=-0.2157..-0.2072` while receiver-local
+`localY` swept `+0.0521..+0.9342`; PID 8444 / Nadine-side receiver / Chloe
+puppet held `localY=-0.2156..-0.2072` while the same Chloe movement arrived as
+`peerY=+0.0521..+0.9342`.
+
+The live descriptor inventory exactly reproduced the actor-package records and
+identified the final parent writers:
+
+- Nadine puppet / group 2: opcode 40 at payload `0x8FBA`, record 81
+  `{k=0610,src=0009}`, wrote joint 96; record 82 `{k=0670,src=0009}` wrote
+  joint 102. Both changed all 16 words in 8/8 samples. The next opcode 40 at
+  `0x8FCA` contained four `{k=01B0,src=0689}` records for joint 26; every
+  captured call changed all 16 words, producing 32/32 matching rows across the
+  eight samples. The isolated target remained `0x8FE2`.
+- Chloe puppet / group 1: opcode 40 at payload `0xF14A`, record 25
+  `{k=02B0,src=0A89}`, wrote joint 42 and changed all 16 words in 8/8 samples.
+  The following opcode 49 at `0xF152` and opcode 50 at `0xF15A` left joint 42
+  bit-identical in 8/8 samples each. The earlier same-group opcode 49/50 pair at
+  `0xF03C/0xF044` also left that row unchanged. The isolated target remained
+  `0xF16A`.
+
+Therefore **P40-final is CONFIRMED** and **P49/P50 is REJECTED** for this chain.
+The prior `jw` contamination is created at the output of these earlier opcode-40
+instances, before the target child propagators. Opcodes 49/50 are proven capable
+by static analysis but are not the active parent writers here and must not be
+used as a fix boundary.
+
+The next boundary is now exact rather than operator-wide. The Nadine-puppet
+joint-96 and joint-102 producers both read `encodedSource=0x0009`, the selector-1
+workspace prefix matrix at base `+0`; the joint-26 producer reads `0x0689`, the
+workspace matrix for joint 25. The Chloe-puppet joint-42 producer reads `0x0A89`,
+the workspace matrix for joint 41. Their corresponding 48-byte JointParams are
+joint 96, 102, 26, and 42. Resolve the last writers/initializers of these exact
+four JointParams records and three source matrices, and distinguish which input
+already follows receiver-local camera, before another runtime launch.

@@ -2165,11 +2165,20 @@ Do not reopen these as the first move:
       analysis shows op44/49/50/51/53 are also full-row-capable, while op41/47
       are scalar scatter. Prior `jv` ordering leaves only group-1 op49/op50 as
       possible later overwrites after the final earlier op40.
-- [ ] Run the written `jx` parent-writer discriminator. Require paired admitted
+- [x] Run the written `jx` parent-writer discriminator. Require paired admitted
       group-1/2 scopes, exactly one target op40, no rejects, normal models and
       responsive processes. Classify P40-final versus a group-1 op49/op50
       overwrite from exact parent-row before/after deltas. Missing op40 parent
-      destinations selects Pother/mixed and authorizes no fix.
+      destinations selects Pother/mixed and authorizes no fix. Result: 8/8 paired
+      samples per receiver, no rejects. Earlier op40 instances changed all 16
+      words of Nadine-puppet joints `26/96/102` and Chloe-puppet joint `42` in
+      every sample. Later group-1 op49/op50 changed zero words; P40-final is
+      confirmed and P49/P50 rejected.
+- [ ] Resolve the exact inputs of the confirmed parent-producing op40 instances:
+      Nadine-puppet JointParams `26/96/102`, source joint 25 and selector-1
+      workspace prefix `+0`; Chloe-puppet JointParams `42` and source joint 41.
+      Trace their last writers/initializers and eliminate entry-state versus
+      authored-operator alternatives before a new discriminator.
 - [ ] After the parent source is resolved, trace the exact JointParams producers
       for target children `97/103/43`; child 27 needs no JointParams trace because
       `jw` proved its 48-byte record bit-identical across the camera sweep.

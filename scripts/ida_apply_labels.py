@@ -2208,7 +2208,9 @@ FUNCTIONS = {
         "descriptor blocks, payload[1] normally resolves selector 3 offset 0 to "
         "the evaluator's four-base table, and payload[2] resolves authored "
         "{k, encodedSource} records. Runtime build jv isolated this opcode as the "
-        "common direct writer of the target Chloe/Nadine workspace matrices.",
+        "common direct writer of the target Chloe/Nadine workspace matrices; jx "
+        "then confirmed earlier instances as the final writers of Nadine-puppet "
+        "parents 26/96/102 and Chloe-puppet parent 42.",
     ),
     0x142189FB0: (
         "AnimJointProgram_PropagateJointMatrices",
@@ -2216,7 +2218,9 @@ FUNCTIONS = {
         "combines the 48-byte JointParams record at base[0]+3*k-0x30 with the "
         "selected 64-byte parent/source matrix and stores four float4 rows at "
         "workspace base[1]+4*k. Runtime jv descriptor destinations reproduce "
-        "the exact first changed workspace words 448 for Chloe and 704 for Nadine.",
+        "the exact first changed workspace words 448 for Chloe and 704 for Nadine. "
+        "Runtime jx proved all four parent outputs change inside these earlier "
+        "calls, while subsequent Chloe-puppet op49/op50 leave joint 42 unchanged.",
     ),
     0x142194680: (
         "AnimJointProgramOp41_ScatterVectorComponents",
