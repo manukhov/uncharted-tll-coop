@@ -2280,11 +2280,20 @@ Do not reopen these as the first move:
       all 36 are changed before consumption, selecting a later writer. Nadine
       group 1 publishes local rows at `+0x5A0/+0x6C0`, while group-2 op40 consumes
       distinct descriptor rows at `+0x1200/+0x1320`, confirming Mlane.
-- [ ] Resolve Chloe's exact post-case14 writer statically. Distinguish command 15,
+- [x] Resolve Chloe's exact post-case14 writer statically. Distinguish command 15,
       the command-16 preamble and earlier joint-program operators by exact call
       graph, payload order and destination semantics before another runtime test.
       Separately identify the producer of Nadine's descriptor-selected
-      `+0x1200/+0x1320` rows; do not modify the valid group-1 lane.
+      `+0x1200/+0x1320` rows; do not modify the valid group-1 lane. Result: reject
+      the shared-lifetime premise. Case-14 and the target op40 run in separate
+      `ProcessAnimCmdListSegment` invocations; command 2 allocates fresh lanes and
+      command 5 releases them before the next list. Repeated bases are arena reuse,
+      so none of the three proposed same-object writers explains the difference.
+- [ ] Resolve the target-list WorkBuffer layout before another carry. Prove the
+      allocation/block contract behind Nadine group-2 op40 reads at
+      `base+96*48/+102*48`, beginning at and beyond a nominal 96-record lane, and
+      map the corresponding Chloe group-1 addresses. Then trace only the same-list
+      cases 6/7/8/13 -> command-3 -> op40 lifetime.
 - [ ] After the parent source is resolved, trace the exact JointParams producers
       for target children `97/103/43`; child 27 needs no JointParams trace because
       `jw` proved its 48-byte record bit-identical across the camera sweep.

@@ -14682,3 +14682,38 @@ operator writes the rows before the selected opcode-40 records. Resolve the exac
 writer graph and payload ordering statically before another runtime probe. For
 Nadine, trace who authors the descriptor-selected `+0x1200/+0x1320` rows; do not
 patch the valid group-1 local lane.
+
+### 2026-08-01 STATIC CORRECTION / REJECTED INTERPRETATION: equal allocator addresses are not a cross-list pose lifetime
+
+The raw `kd` measurements above remain valid, but the phrase "later writer changes
+those exact rows" is **REJECTED as a lifetime claim**. The case-14 sample and the
+later group-1 opcode-40 sample belong to separate invocations of
+`ProcessAnimCmdListSegment 0x141AB97C0`, not to one live `SegmentContext`.
+
+The ownership is explicit in the function rather than inferred from the repeated
+virtual address. Command 0 constructs a fresh stack `SegmentContext`; command 2
+calls `AnimCmdEvaluator_AllocateGroupLanes 0x14217C3A0`, which obtains a fresh
+per-output block from the invocation's WorkBuffer and installs its lane pointers.
+Command 3 publishes that invocation's first finalized lane at
+`SegmentContext+0x50`. Command 5 then releases `+0x50`, `+0x58`, `+0x60` and
+`+0x68` through `0x14217AB90` and immediately returns. The `kc` order independently
+shows the short group-0 case-14 list ending in command 5 before the separate Chloe
+group-1 list starts. The observed `0x103F7/8/9/A00000` rotation is therefore arena
+reuse; equal numeric bases do not prove object identity after command 5.
+
+This rejects all three proposed same-object post-case14 writers (command 15,
+command-16 preamble and an earlier joint operator) as explanations of the
+cross-list hash difference. Chloe's case-14 import is consumed only within its
+own short group-0 list and is not the group-1 JointParams source. Nadine group 1
+and group 2 likewise own separate evaluator lifetimes: `kd` confirms that the old
+cross-group comparison mixed a local `66+38` lane with different descriptor
+addresses, but it does not establish a group-1-to-group-2 pose publication.
+
+The actual frontier must remain within one target-list lifetime. Chloe group 1
+and Nadine group 2 each execute authored cases 6/7/8/13 before command 3, then
+finalize their own lanes before opcode 40. Static allocation also exposes a new
+addressing question: Nadine group 2 reports 96 local 48-byte records, while op40
+reads `base+96*48` and `base+102*48`; the former begins exactly at the nominal
+lane boundary. Resolve the allocator block metadata and the op40 base-table
+contract before assigning those addresses to skeleton-global joints or adding
+another runtime carry.
