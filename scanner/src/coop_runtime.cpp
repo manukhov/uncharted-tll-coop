@@ -20885,6 +20885,132 @@ AimJointBoundaryOwner probe_aim_joint_boundary_owner(const void* context) {
     return result;
 }
 
+struct AimCommandTopologySeen {
+    std::uint32_t count = 0;
+    std::array<std::uint64_t, 4> hashes{};
+};
+
+SRWLOCK g_aim_command_topology_lock = SRWLOCK_INIT;
+std::array<std::array<std::array<AimCommandTopologySeen, 2>, 8>, 2>
+    g_aim_command_topologies{};
+
+void log_aim_command_topology_kc(
+    const std::uint32_t* commands, std::uint32_t command_word_count,
+    const void* context, std::uint32_t processing_group,
+    const AimJointBoundaryOwner& owner, std::uint32_t skeleton_joint_count) {
+    if (commands == nullptr || command_word_count == 0 || context == nullptr ||
+        owner.screen != kSlot1ScreenIndex || processing_group >= 3 ||
+        (skeleton_joint_count != 580 && skeleton_joint_count != 651) ||
+        readable_bytes(context) < 0x24 ||
+        readable_bytes(commands) <
+            static_cast<std::size_t>(command_word_count) * sizeof(*commands)) {
+        return;
+    }
+
+    std::uint32_t context_flags = 0;
+    std::array<std::uint32_t, 5> counts{};
+    std::array<std::uint32_t, 5> first_positions{
+        UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX};
+    std::uint64_t topology_hash = kAimPipelineFnvOffset;
+    std::uint32_t command_count = 0;
+    std::uint32_t case14_word_mask = 0;
+    char sequence[1024]{};
+    std::size_t sequence_used = 0;
+    bool structurally_valid = false;
+    __try {
+        context_flags = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(context) + 0x20);
+        std::uint32_t cursor = 0;
+        while (cursor < command_word_count) {
+            const std::uint32_t header = commands[cursor];
+            const std::uint16_t opcode =
+                static_cast<std::uint16_t>(header & 0xFFFFU);
+            const std::uint16_t words =
+                static_cast<std::uint16_t>(header >> 16);
+            if (words == 0 || words > command_word_count - cursor ||
+                header != commands[cursor]) {
+                break;
+            }
+            topology_hash = aim_pipeline_hash_word(topology_hash, header);
+            const int written = std::snprintf(
+                sequence + sequence_used, sizeof(sequence) - sequence_used,
+                "%s%u", command_count == 0 ? "" : ",",
+                static_cast<unsigned>(opcode));
+            if (written > 0 &&
+                static_cast<std::size_t>(written) <
+                    sizeof(sequence) - sequence_used) {
+                sequence_used += static_cast<std::size_t>(written);
+            }
+            constexpr std::array<std::uint16_t, 5> watched{{3, 13, 14, 15, 16}};
+            for (std::size_t index = 0; index < watched.size(); ++index) {
+                if (opcode != watched[index]) {
+                    continue;
+                }
+                if (counts[index] == 0) {
+                    first_positions[index] = command_count;
+                }
+                ++counts[index];
+            }
+            if (opcode == 14 && words < 32) {
+                case14_word_mask |= 1U << words;
+            }
+            ++command_count;
+            cursor += words;
+        }
+        structurally_valid = cursor == command_word_count;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        structurally_valid = false;
+    }
+    if (!structurally_valid) {
+        char line[384]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-CMD-TOPOLOGY-KC reject actor=%s skeleton=%u group=%u "
+            "flags=%08X words=%u commands=%u structural=0",
+            skeleton_joint_count == 580 ? "Nadine" : "Chloe",
+            skeleton_joint_count, processing_group, context_flags,
+            command_word_count, command_count);
+        boot_log_line(line);
+        return;
+    }
+
+    const std::size_t actor_index = skeleton_joint_count == 580 ? 0 : 1;
+    const std::size_t mode_index = (context_flags & 0xFFU) == 0 ? 0 : 1;
+    bool admit = false;
+    AcquireSRWLockExclusive(&g_aim_command_topology_lock);
+    auto& seen =
+        g_aim_command_topologies[actor_index][processing_group][mode_index];
+    bool duplicate = false;
+    for (std::size_t index = 0; index < seen.count; ++index) {
+        duplicate = duplicate || seen.hashes[index] == topology_hash;
+    }
+    if (!duplicate && seen.count < seen.hashes.size()) {
+        seen.hashes[seen.count++] = topology_hash;
+        admit = true;
+    }
+    ReleaseSRWLockExclusive(&g_aim_command_topology_lock);
+    if (!admit) {
+        return;
+    }
+
+    char line[2048]{};
+    std::snprintf(
+        line, sizeof(line),
+        "AIM-CMD-TOPOLOGY-KC actor=%s skeleton=%u group=%u flags=%08X "
+        "mode=%s words=%u commands=%u hash=%016llX "
+        "c3=%u@%u c13=%u@%u c14=%u@%u c15=%u@%u c16=%u@%u "
+        "case14WordMask=%08X sequence=%s",
+        skeleton_joint_count == 580 ? "Nadine" : "Chloe",
+        skeleton_joint_count, processing_group, context_flags,
+        (context_flags & 0xFFU) == 0 ? "external" : "defaults",
+        command_word_count, command_count,
+        static_cast<unsigned long long>(topology_hash),
+        counts[0], first_positions[0], counts[1], first_positions[1],
+        counts[2], first_positions[2], counts[3], first_positions[3],
+        counts[4], first_positions[4], case14_word_mask, sequence);
+    boot_log_line(line);
+}
+
 struct AimJointBoundaryScope {
     bool valid = false;
     void* target_skeleton = nullptr;
@@ -21719,6 +21845,10 @@ void prepare_aim_joint_boundary_scope(
         skeleton_joint_count > kAimPipelineMaxJoints) {
         return;
     }
+
+    log_aim_command_topology_kc(
+        commands, command_word_count, context, processing_group, owner,
+        skeleton_joint_count);
 
     std::uint32_t case16_count = 0;
     std::uint32_t case24_count = 0;

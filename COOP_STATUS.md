@@ -14488,3 +14488,72 @@ producer snapshots across evaluator calls; the existing exact opcode-40 wrapper
 compares Nadine `96/102` in consumer group 2 and Chloe `35/36/41` in consumer
 group 1. The same producer-group case-16 comparison remains as an intermediate
 control. The Release DLL builds successfully.
+
+### 2026-08-01 RUNTIME CONFIRMED / STATIC OPEN: `kb` finds the exact local-lane to later-consumer discontinuity
+
+PIDs 15424/18140 completed the corrected camera-distinct sequence and remained
+responsive with normal character models. All three finalizer ranges matched the
+static map exactly in 12/12 samples: Nadine `0+66`, Nadine `66+38`, and Chloe
+`0+89`. Every finalizer ran exactly once and every producer case-16 mask was
+complete (`1FF`, `003`, and `007`). No `AIM-JOINT-VALID-KB` reject or process
+fault occurred.
+
+The local-lane classifications are now exact. Nadine group 0 joints
+`0/14/15/16/17/18/32/33/34` and group 1 joints `96/102` were already valid in
+all 12 samples and survived the finalizer bit-identically: they are
+**V-authored**, not defaults. Chloe `35/36/41` were V-authored in 10 samples;
+in two transition samples their bits were clear and command 3 filled all three
+from defaults. This mixed Chloe transition does not explain the steady-state
+defect because the later consumer disagreed in both authored and default cases.
+
+The important new result is the handoff discontinuity. The exact later
+opcode-40 consumer record differed from the saved producer finalizer record for
+Chloe `35/36/41` in 12/12 comparisons and for Nadine `96/102` in every admitted
+comparison (11/11; one twelfth Nadine consumer was skipped only because the old
+`jz` exact-op40 admission gate had not armed before the carry advanced). The
+records were readable and finite. The producer-group `SegmentContext+0x50`
+comparison also differed for Nadine group 1 in 12/12 and for the two Chloe
+default-transition samples, so that diagnostic address cannot yet be called a
+global joint-indexed array. The earlier `segment-global` log label is therefore
+**REJECTED** as an established address contract.
+
+This rejects a finalizer/default-fill fix: the receiver-camera-dependent values
+are already authored before command 3, and changing FinalizeGroupDefaults would
+discard valid animation output. The remaining competitors are:
+
+1. **M14-external:** command 14 runs after command 3 with context flags byte zero
+   and `AnimCmdEvaluator_CopyGroupPoseToWorkBuffer 0x14217B310` imports a distinct
+   supplied pose into WorkBuffer;
+2. **M14-default:** command 14 runs with a nonzero flags byte and its inline
+   `0x141ABA714..0x141ABA7D4` branch copies target-skeleton defaults;
+3. **Mlane:** command 3 publishes a different evaluator output lane or the
+   WorkBuffer pointer is group-local, so the apparent change is an address/index
+   handoff rather than a later overwrite;
+4. **Mother:** case 13 or another command copies a different authored lane before
+   command 16.
+
+Static evidence bounds the first two competitors. Case 14 is the only explicit
+post-finalization full group-pose import in `ProcessAnimCmdListSegment
+0x141AB97C0`. With `AnimCmdContext+0x20` low byte zero it calls
+`AnimCmdEvaluator_CopyGroupPoseToWorkBuffer 0x14217B310` at `0x141ABA7F5`;
+otherwise `0x141ABA714..0x141ABA7D4` copies the current target group's skeleton
+defaults directly into `SegmentContext+0x50/+0x60`. The helper has only the case
+14 callsite and `AnimCmdEvaluator_CopyTargetDefaultsToWorkBuffer 0x141AB78C0`
+as callers, and its disassembly fixes the 48-byte source stride, group-first
+offset and WorkBuffer destinations. Case 3 at `0x141AB9DD6/0x141AB9DE4` either
+installs the current output-lane pointer or marks an already-present pointer as
+multi-output; this keeps Mlane distinct from an overwrite claim.
+
+Before another pose capture, build `kc` must inventory the exact live command
+headers and context flags for only skeletons 580/651 and relevant groups 0/1/2.
+It must report the ordered positions/counts of commands 3/13/14/15/16 and the
+case-14 payload word count without changing any game state. This discriminator
+selects which copy boundary deserves the next exact hash comparison.
+
+**Falsifiable `kc` prediction:** each admitted relevant command list must be
+structurally complete and contain command 3 before command 16. If command 14 is
+present between them, flags byte zero selects M14-external and nonzero selects
+M14-default; no command 14 rejects both M14 branches and leaves Mlane/Mother. A
+command 13 after command 3 selects Mother as a concrete lane-copy competitor.
+Malformed lists, inconsistent topology for the same actor/group, missing command
+3/16, crash, hang or model damage rejects the inventory.

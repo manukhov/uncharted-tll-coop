@@ -2240,10 +2240,20 @@ Do not reopen these as the first move:
       its local lane, preserves sampled records across evaluator groups under a
       diagnostic lock, and compares them at both producer case 16 and the exact
       later opcode-40 consumer. Release builds successfully.
-- [ ] Run the corrected `kb` sequence and require ranges `0+66`, `66+38`,
+- [x] Run the corrected `kb` sequence and require ranges `0+66`, `66+38`,
       `0+89`, complete producer and consumer masks, one finalizer call, normal
       models and responsive processes. Classify authored/default/post ownership
-      separately for Nadine `96/102` and Chloe `35/36/41`.
+      separately for Nadine `96/102` and Chloe `35/36/41`. Result: all ranges and
+      producer masks completed without rejects. Nadine targets are V-authored;
+      Chloe is V-authored in 10/12 and default-filled in two transitions. Exact
+      later op40 records nevertheless differ for Chloe 12/12 and Nadine 11/11.
+      This confirms a local-lane to later-consumer discontinuity while rejecting
+      the earlier `segment-global` address label as an established contract.
+- [ ] Inventory the exact live command order with read-only build `kc`. For only
+      skeletons 580/651 and groups 0/1/2, report context flags, ordered command
+      topology, and positions/counts of commands 3/13/14/15/16. Apply the written
+      M14-external/M14-default/Mlane/Mother discriminator in `COOP_STATUS.md`;
+      do not hash or substitute pose data until this boundary is selected.
 - [ ] After the parent source is resolved, trace the exact JointParams producers
       for target children `97/103/43`; child 27 needs no JointParams trace because
       `jw` proved its 48-byte record bit-identical across the camera sweep.

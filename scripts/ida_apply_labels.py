@@ -2173,6 +2173,21 @@ FUNCTIONS = {
         "global joint indices. Already-valid records retain preceding authored "
         "direct/retarget/blend output.",
     ),
+    0x14217B310: (
+        "AnimCmdEvaluator_CopyGroupPoseToWorkBuffer",
+        "Copies the current processing group's JointParams and scalar range into "
+        "SegmentContext WorkBuffer pointers +0x50/+0x60. The joint source starts "
+        "at suppliedPose + 48*programGroup[3], the destination is WorkBuffer+0x50, "
+        "and the copied count is targetGroup+0x12. ProcessAnimCmdListSegment case "
+        "14 calls it for the flags-byte-zero external-pose branch; the wrapper at "
+        "0x141AB78C0 supplies the target skeleton default arrays.",
+    ),
+    0x141AB78C0: (
+        "AnimCmdEvaluator_CopyTargetDefaultsToWorkBuffer",
+        "Thin wrapper over AnimCmdEvaluator_CopyGroupPoseToWorkBuffer. It supplies "
+        "the target skeleton's JointParams and scalar default arrays from the "
+        "offsets at skeleton+0x20/+0x24.",
+    ),
     0x142188FF0: (
         "AnimCmdEvaluator_FillMissingJointDefaults",
         "Called by FinalizeGroupDefaults for inverse-ValidBits joint ranges. "
