@@ -14091,3 +14091,79 @@ of parent workspace joints Chloe `26/96/102` and Nadine `42`, plus the exact
 JointParams producers for child joints `97/103/43`. Enumerate earlier operators'
 encoded destinations and resolve their concrete handlers before authorizing
 another runtime probe.
+
+### 2026-08-01 STATIC / TEST READY: actor packages expose candidate parent writers; only Chloe-puppet op49/op50 remain as later overwrite competitors
+
+The group labels in the earlier diagnostic notes describe the **receiver
+process**, not the rendered skeleton. PID 4632 / group 2 is the Chloe-side
+receiver evaluating the remote **Nadine puppet**; PID 10504 / group 1 is the
+Nadine-side receiver evaluating the remote **Chloe puppet**. The asset evidence
+below uses actor names to avoid repeating that ambiguity.
+
+Read-only PSARC inspection found the exact live target descriptor arrays in the
+corresponding base actor packages:
+
+- `chloe-base.pak+0x6FB90` contains `{02C0,0AC9}` four times, the live
+  group-1 target `43 <- 42`; its preceding table at `+0x6FA04` contains
+  `{02B0,0A89}`, an opcode-40 destination for parent joint 42 from joint 41;
+- `nadine-dlc-base.pak+0x5DD40` contains
+  `{01C0,06C9},{0620,1849},{0680,19C9},{0680,19C9}`, the live group-2
+  targets `27 <- 26`, `97 <- 96`, and duplicated `103 <- 102`. Earlier tables
+  contain `{01B0,0689}` four times at `+0x5DCB0`, `{0610,1709}` at
+  `+0x5BE70`, and `{0670,0009}` four times at `+0x5BD30`: exact opcode-40
+  destinations for parent joints 26, 96, and 102 respectively.
+
+These byte-exact records are independent evidence that earlier opcode-40
+instances can produce every contaminated parent row. They do **not** establish
+a linear file-offset-to-runtime-program mapping: the loader reorganizes the
+authored stream, so no absolute runtime payload address is inferred from the
+PAK offsets.
+
+IDA resolves the remaining builtin competitors and their concrete store
+shapes. Opcode 44 (`0x1421946D0 -> 0x14218C530`) can assemble all four matrix
+rows from scalar descriptors. Opcode 49 (`0x142194880`) calls
+`0x14218D570`, optionally `0x14218D800` and `0x14218E120`; all three paths
+write encoded float4 destinations. Opcode 50 (`0x142194940`) calls
+`0x14218F660` and optionally `0x142190910`, also writing encoded float4
+destinations. Opcodes 51 (`0x1421949E0`) and 53 (`0x142194B10`) are likewise
+full-row-capable. Opcodes 41 and 47 are scalar-scatter writers and would require
+many authored destinations to rebuild a full row.
+
+The already captured `jv` execution order eliminates most of these from the
+last-writer question. On the Nadine puppet / group 2, the final earlier opcode
+40 is followed only by custom opcode 131 calls, whose runtime output was zero,
+before the target opcode 40. On the Chloe puppet / group 1 the relevant tail is
+`... 44, 40, 49, 50, 131, target-40`; therefore only opcodes 49 and 50 can
+still overwrite a parent row written by that final earlier opcode 40.
+
+The competing hypotheses for the next run are:
+
+- **P40-final:** the last earlier opcode 40 contains the exact parent
+  destinations (26/96/102 or 42), changes them, and the later group-1 opcodes
+  49/50 leave joint 42 bit-identical;
+- **P49/P50:** the earlier opcode 40 writes joint 42, but opcode 49 or 50 then
+  changes it before the target;
+- **Pother/mixed:** at least one required parent destination is absent from the
+  earlier opcode-40 inventory, or neither captured later writer explains its
+  final value; this preserves op44/op51/op53/scalar-scatter or entry-state as
+  competitors and requires a wider static pass.
+
+The evidence quota is satisfied by three different kinds: exact `jv` runtime
+operator order and payload boundaries; executable dispatch/xref/store analysis
+for opcodes 40/49/50; and byte-exact actor-package descriptor records for both
+skeletons. Build `2026-08-01jx` therefore installs a bounded, read-only wrapper
+only in builtin slots 40, 49, and 50. Within the already admitted group-1/2
+scope it inventories every opcode-40 `{k,encodedSource}` record, snapshots only
+parent joints 26/96/102/42 around matching writes, and snapshots group-1 joint
+42 around opcodes 49/50. Every native operator is called exactly once; no game,
+pose, matrix, payload, or descriptor value is changed.
+
+**Falsifiable runtime prediction:** after both remote Players exist, a
+camera-distinct sequence must produce paired `JX begin/end` samples with the
+exact target payload once, no rejects, normal models, and both processes
+responsive. Pre-target opcode-40 matches for all three Nadine-puppet parents and
+the Chloe-puppet parent, with nonzero per-call changes, select the producer. If
+the following group-1 opcode 49/50 rows have `callOut=0`, P40-final wins; a
+nonzero change selects P49 or P50. A missing parent match, unreadable row,
+unexpected target count, damaged model, hang, or crash rejects this boundary.
+No substitution or fix is authorized by this test.

@@ -2218,6 +2218,121 @@ FUNCTIONS = {
         "workspace base[1]+4*k. Runtime jv descriptor destinations reproduce "
         "the exact first changed workspace words 448 for Chloe and 704 for Nadine.",
     ),
+    0x142194680: (
+        "AnimJointProgramOp41_ScatterVectorComponents",
+        "Built-in joint-program opcode 41 wrapper. Resolves 64-byte authored "
+        "records plus an auxiliary vector stream and calls "
+        "AnimJointProgram_ScatterVectorComponents. Each record can write up to "
+        "twelve optional encoded scalar destinations.",
+    ),
+    0x14218BC40: (
+        "AnimJointProgram_ScatterVectorComponents",
+        "Reads four encoded float4 inputs and authored auxiliary vectors per "
+        "64-byte record, then scatters up to twelve scalar results to encoded "
+        "destinations. A 0xFFFF destination is skipped.",
+    ),
+    0x1421946D0: (
+        "AnimJointProgramOp44_AssembleEncodedVectors",
+        "Built-in joint-program opcode 44 wrapper. Resolves 64-byte authored "
+        "records plus an auxiliary stream and calls "
+        "AnimJointProgram_AssembleEncodedVectors.",
+    ),
+    0x14218C530: (
+        "AnimJointProgram_AssembleEncodedVectors",
+        "Consumes twelve encoded scalar inputs per 64-byte record and stores four "
+        "encoded float4 destinations. The four destinations can comprise a full "
+        "64-byte workspace matrix.",
+    ),
+    0x142194720: (
+        "AnimJointProgramOp47_ApplyScalarCoefficients",
+        "Built-in joint-program opcode 47 wrapper. Payload[3] selects the generic "
+        "or arity-1/2/3/4 scalar-coefficient worker; each four-lane batch writes "
+        "four encoded scalar destinations.",
+    ),
+    0x14218CAC0: (
+        "AnimJointProgram_ApplyScalarCoefficients_Generic",
+        "Generic opcode-47 scalar-coefficient worker selected when payload arity "
+        "is outside 1..4. Processes four encoded scalar lanes per batch.",
+    ),
+    0x142192B10: (
+        "AnimJointProgram_ApplyScalarCoefficients_Arity1",
+        "Opcode-47 one-coefficient scalar worker; writes four encoded scalar "
+        "destinations per batch.",
+    ),
+    0x142192D30: (
+        "AnimJointProgram_ApplyScalarCoefficients_Arity2",
+        "Opcode-47 two-coefficient scalar worker; writes four encoded scalar "
+        "destinations per batch.",
+    ),
+    0x142192FD0: (
+        "AnimJointProgram_ApplyScalarCoefficients_Arity3",
+        "Opcode-47 three-coefficient scalar worker; writes four encoded scalar "
+        "destinations per batch.",
+    ),
+    0x1421932F0: (
+        "AnimJointProgram_ApplyScalarCoefficients_Arity4",
+        "Opcode-47 four-coefficient scalar worker; writes four encoded scalar "
+        "destinations per batch.",
+    ),
+    0x142194880: (
+        "AnimJointProgramOp49_WriteEncodedVectors",
+        "Built-in joint-program opcode 49 wrapper. Resolves authored streams and "
+        "invokes the primary encoded-float4 writer plus two optional auxiliary "
+        "writer phases selected by the authored header.",
+    ),
+    0x14218D570: (
+        "AnimJointProgram_WriteEncodedVectors",
+        "Primary opcode-49 worker. Processes authored per-output streams and "
+        "stores arbitrary encoded float4 destinations.",
+    ),
+    0x14218D800: (
+        "AnimJointProgram_WriteEncodedVectorPairs",
+        "Optional opcode-49 auxiliary worker. A 16-byte descriptor addresses "
+        "eight encoded float4 operands and can write full workspace rows.",
+    ),
+    0x14218E120: (
+        "AnimJointProgram_WriteEncodedVectorBatches",
+        "Optional opcode-49 four-output batch worker. Destination fields at "
+        "+2/+6/+0xA/+0xE are encoded float4 addresses.",
+    ),
+    0x142194940: (
+        "AnimJointProgramOp50_ComposeEncodedVectors",
+        "Built-in joint-program opcode 50 wrapper. Resolves authored streams and "
+        "invokes the primary four-output vector composer plus an optional "
+        "auxiliary full-vector phase.",
+    ),
+    0x14218F660: (
+        "AnimJointProgram_ComposeEncodedVectors",
+        "Primary opcode-50 worker. Its 32-byte four-output descriptor batch "
+        "stores encoded float4 destinations at +6/+0xE/+0x16/+0x1E.",
+    ),
+    0x142190910: (
+        "AnimJointProgram_ComposeEncodedVectorsAux",
+        "Optional opcode-50 auxiliary worker. Uses four encoded float4 addresses "
+        "and a 64-byte authored record to write a complete vector batch.",
+    ),
+    0x1421949E0: (
+        "AnimJointProgramOp51_BlendEncodedVectors",
+        "Built-in joint-program opcode 51 wrapper. Initializes encoded vector "
+        "destinations, then optionally dispatches an authored four-output vector "
+        "blend phase.",
+    ),
+    0x14218D2D0: (
+        "AnimJointProgram_InitializeEncodedVectors",
+        "Opcode-51 primary worker. Consumes a four-byte tuple per output and "
+        "initializes encoded float4 destinations from authored scalar operands.",
+    ),
+    0x1421902D0: (
+        "AnimJointProgram_BlendEncodedVectors",
+        "Opcode-51 auxiliary worker. Processes four encoded float4 outputs per "
+        "16-byte descriptor record and can write a complete workspace matrix.",
+    ),
+    0x142194B10: (
+        "AnimJointProgramOp53_CopyEncodedVectors",
+        "Built-in joint-program opcode 53. Each 16-byte descriptor batch contains "
+        "four {destination, source} encoded-float4 pairs and copies four complete "
+        "vectors directly.",
+    ),
     0x142194620: (
         "AnimJointProgramOp59_ConvertJointParamsToMatrices",
         "Built-in joint-program opcode 59 wrapper. Resolves an optional authored "

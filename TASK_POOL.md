@@ -2159,11 +2159,20 @@ Do not reopen these as the first move:
       joint 27. On Chloe's receiver the changing inputs followed receiver-local
       camera while remote Nadine was stationary, proving the contamination is
       already upstream of opcode 40.
-- [ ] Resolve the last same-group producers of op40 parent joints Chloe
-      `26/96/102` and Nadine `42`, and the exact JointParams producers for child
-      `97/103/43`. Inventory preceding authored operators and concrete builtin/
-      custom handlers, eliminate alternate writers statically, and require the
-      three-evidence quota plus a new written prediction before runtime.
+- [x] Resolve the static parent-writer candidate set for the rendered actors.
+      Exact actor-package records identify earlier opcode-40 destinations for
+      Nadine-puppet parents `26/96/102` and Chloe-puppet parent `42`. IDA store
+      analysis shows op44/49/50/51/53 are also full-row-capable, while op41/47
+      are scalar scatter. Prior `jv` ordering leaves only group-1 op49/op50 as
+      possible later overwrites after the final earlier op40.
+- [ ] Run the written `jx` parent-writer discriminator. Require paired admitted
+      group-1/2 scopes, exactly one target op40, no rejects, normal models and
+      responsive processes. Classify P40-final versus a group-1 op49/op50
+      overwrite from exact parent-row before/after deltas. Missing op40 parent
+      destinations selects Pother/mixed and authorizes no fix.
+- [ ] After the parent source is resolved, trace the exact JointParams producers
+      for target children `97/103/43`; child 27 needs no JointParams trace because
+      `jw` proved its 48-byte record bit-identical across the camera sweep.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 
