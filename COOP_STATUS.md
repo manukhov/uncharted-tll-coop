@@ -15242,3 +15242,85 @@ list, not another op40/op53 experiment. Resolve the exact last command-6/7/8/10/
 source-C records, then distinguish a receiver-local pose input from the retained
 remote pose input. No matrix, quaternion or JointParams substitution is yet
 authorized.
+
+### 2026-08-01 STATIC / IMPLEMENTED / TEST READY: command-23 is a typed IK dispatcher, not one output reader
+
+The first pre-command-3 DAG pass resolves the evaluator command schemas and the
+previously ambiguous plugin boundary. Command headers store the opcode in the
+low word and total dword count in the high word. Before command 3 publishes lane
+zero, the relevant writers are now exact:
+
+- command 6 writes output lane `word4` from the clip pointer in `word2/3` and
+  phase `word5`, through either
+  `AnimCmdEvaluator_ApplyAnimationDirect 0x14217C7F0` or retarget plus
+  `AnimCmdEvaluator_CopyMaskedPose 0x14217D280`;
+- command 7 reads lanes `word1/word2`, writes `word3`, and supplies mode `word4`
+  plus float weight `word5` to
+  `AnimCmdEvaluator_ApplyBlend 0x14217CF90`;
+- command 8 mutates the lane in `word1`, command 9 clears `word1`, command 10
+  imports an external masked pose into `word1`, and command 13 copies the complete
+  pose/ValidBits lane `word1 -> word2`;
+- command 3 calls `AnimCmdEvaluator_FinalizeGroupDefaults 0x141AB78F0` on lane
+  zero. It fills only invalid records from skeleton defaults, so `kg`'s already
+  valid changing root record must have been produced by the preceding DAG.
+
+The normal `AnimManager_PerformAnimBlend 0x141A92260` callsite at `0x141A92759`
+passes `AsyncUpdateJobData` qword slots `3/4/5` as the three evaluator callbacks.
+Slot 3 resolves through global `0x1466D0C50`, initialized at `0x140157E76` and
+`0x14177F7C7`, to newly named
+`Game_ProcessAnimPhasePluginFunc 0x1406CCB30`. Decimal command 23 places its
+StringId in `word1`, its payload at `command+0x10`, and invokes this callback.
+The game dispatcher has four direct IDs and otherwise calls newly named
+`Nd_ProcessAnimPhasePluginFunc 0x141937780`:
+
+- `0xBCA80631` reaches the already named output-only
+  `GestureJointReader_AnimPluginCallback 0x141FF6DE0`;
+- `0x0265E9ED` reaches newly named `PointSwordAnim_RunIk 0x1406FB070`;
+- `0x29BDC08C` reaches newly named `WsAnkleBlend_ExecutePlugin 0x1406FD4A0`;
+- the generic dispatcher includes concrete Jacobian IK (`0x0F50C4F9`), hand-fix
+  IK (`0x98FBC8FE`), snapshot IK (`0xDCE67275`) and snapshot arm IK
+  (`0x7D73D51B`) paths, among other typed branches.
+
+This rejects the former implicit assumption that every main-list command 23 is
+the campaign GestureJointReader. Several branches resolve evaluator lanes from
+their payload and write JointParams or transforms. The evidence quota for a
+read-only live inventory is met by three independent kinds: exact evaluator
+switch/callee dataflow for commands 6/7/8/9/10/13; the outer job-record to global
+callback initialization chain; and source-string plus concrete StringId dispatch
+inside the game/ND plugin callbacks. Exact command ordering from `kc` is a fourth
+kind and proves the candidate writers precede command 3 in the main group-0 list.
+
+The live alternatives are now:
+
+1. **D-clip:** backward ancestry of lane zero terminates in a command-6 clip;
+2. **D-blend/copy:** command 7 or 13 routes a receiver-local child lane into lane
+   zero even though the leaf clip itself is not the owner;
+3. **D-plugin:** a command-23 IK payload writes or aliases the live ancestry;
+4. **D-external/mixed:** command 8/10 or more than one branch contributes.
+
+Release build `2026-08-01kh` adds a bounded, read-only inventory on the already
+installed outer segment detour. It accepts only screen-1, flags-zero, group-0
+main lists with command 3 after position 20; validates the entire immutable list
+twice; reports every command-6/7/8/9/10/13/23 operand tuple before command 3 and
+performs a conservative backward lane-zero trace through known schemas. It does
+not dereference plugin payload pointers, call callbacks, or write game state;
+the original evaluator still runs exactly once.
+
+**Falsifiable prediction (written before launch):** with both actors stationary
+and out of ADS, keep one copy untouched and sweep only the other copy's camera
+sky -> ground -> sky, then repeat reciprocally. Each actor must yield at least
+one structurally complete `AIM-POSE-DAG-KH` main-list inventory, the same callback
+RVA `0x006CCB30`, command 3 after position 20 and no reject/fault/model damage.
+A fully resolved backward trace ending at command 6 selects D-clip; a final
+command-7/13 route selects D-blend/copy; a command-23 barrier on the live lane or
+a plugin ID whose payload names that lane selects D-plugin for the next static
+decoder; command 8/10 or multiple unresolved barriers select D-external/mixed.
+Changing topology across the two camera directions is recorded but does not by
+itself prove pose ownership. Missing main-list records, an unknown command word
+count, torn double-read, callback mismatch or visible regression invalidates the
+test and authorizes no substitution.
+
+The four callback roles above are persisted in the single `ida/tll.i64` through
+`scripts/ida_apply_labels.py`; headless save reported `1459 functions, 34 data
+names` and `save_database returned True`, and the restarted MCP independently
+resolves all four names.

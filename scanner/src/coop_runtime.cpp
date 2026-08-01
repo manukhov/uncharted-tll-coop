@@ -21035,6 +21035,279 @@ void log_aim_command_topology_kc(
     boot_log_line(line);
 }
 
+struct AimPoseDagCommandKh {
+    std::uint32_t position = 0;
+    std::uint32_t cursor = 0;
+    std::uint16_t opcode = 0;
+    std::uint16_t words = 0;
+    std::array<std::uint32_t, 8> operands{};
+};
+
+struct AimPoseDagSeenKh {
+    std::uint32_t count = 0;
+    std::array<std::uint64_t, 4> hashes{};
+};
+
+SRWLOCK g_aim_pose_dag_lock_kh = SRWLOCK_INIT;
+std::array<AimPoseDagSeenKh, 2> g_aim_pose_dag_seen_kh{};
+
+void log_aim_pose_dag_kh(
+    const std::uint32_t* commands, std::uint32_t command_word_count,
+    const void* context, std::uint32_t processing_group,
+    const void* callback_a5, const AimJointBoundaryOwner& owner,
+    std::uint32_t skeleton_joint_count) {
+    constexpr std::uint32_t kExpectedGamePluginCallbackRva = 0x006CCB30U;
+    constexpr std::size_t kMaxRelevantCommands = 96;
+    constexpr std::size_t kMaxTrackedLanes = 256;
+    if (commands == nullptr || context == nullptr || !owner.valid ||
+        owner.screen != kSlot1ScreenIndex || processing_group != 0 ||
+        (skeleton_joint_count != 580 && skeleton_joint_count != 651) ||
+        command_word_count == 0 ||
+        command_word_count > kAimCase6MaxCommandWords ||
+        readable_bytes(context) < 0x24 ||
+        readable_bytes(commands) <
+            static_cast<std::size_t>(command_word_count) * sizeof(*commands)) {
+        return;
+    }
+
+    std::array<AimPoseDagCommandKh, kMaxRelevantCommands> relevant{};
+    std::uint32_t relevant_count = 0;
+    std::uint32_t command_count = 0;
+    std::uint32_t command3_position = UINT32_MAX;
+    std::uint32_t command3_cursor = UINT32_MAX;
+    std::uint32_t context_flags = UINT32_MAX;
+    std::uint64_t topology_hash = kAimPipelineFnvOffset;
+    std::uint64_t inventory_hash = kAimPipelineFnvOffset;
+    std::uint64_t first_raw_hash = kAimPipelineFnvOffset;
+    std::uint64_t second_raw_hash = kAimPipelineFnvOffset;
+    bool structurally_valid = false;
+    bool relevant_overflow = false;
+    __try {
+        context_flags = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(context) + 0x20);
+        std::uint32_t cursor = 0;
+        while (cursor < command_word_count) {
+            const std::uint32_t header = commands[cursor];
+            const std::uint16_t opcode =
+                static_cast<std::uint16_t>(header & 0xFFFFU);
+            const std::uint16_t words =
+                static_cast<std::uint16_t>(header >> 16);
+            if (words == 0 || words > command_word_count - cursor ||
+                header != commands[cursor]) {
+                break;
+            }
+            topology_hash = aim_pipeline_hash_word(topology_hash, header);
+            for (std::uint32_t word = 0; word < words; ++word) {
+                first_raw_hash = aim_pipeline_hash_word(
+                    first_raw_hash, commands[cursor + word]);
+            }
+            if (command3_position == UINT32_MAX && opcode == 3) {
+                command3_position = command_count;
+                command3_cursor = cursor;
+            }
+            const bool relevant_opcode = opcode == 6 || opcode == 7 ||
+                opcode == 8 || opcode == 9 || opcode == 10 ||
+                opcode == 13 || opcode == 23;
+            if (command3_position == UINT32_MAX && relevant_opcode) {
+                if (relevant_count >= relevant.size()) {
+                    relevant_overflow = true;
+                    break;
+                }
+                auto& saved = relevant[relevant_count++];
+                saved.position = command_count;
+                saved.cursor = cursor;
+                saved.opcode = opcode;
+                saved.words = words;
+                const std::uint32_t operand_count = std::min<std::uint32_t>(
+                    words > 0 ? words - 1 : 0,
+                    static_cast<std::uint32_t>(saved.operands.size()));
+                for (std::uint32_t word = 0; word < operand_count; ++word) {
+                    saved.operands[word] = commands[cursor + 1 + word];
+                }
+                inventory_hash = aim_pipeline_hash_word(
+                    inventory_hash, header);
+                if (opcode == 6 && words >= 5) {
+                    inventory_hash = aim_pipeline_hash_word(
+                        inventory_hash, commands[cursor + 4]);
+                } else if (opcode == 7 && words >= 5) {
+                    for (std::uint32_t word = 1; word <= 4; ++word) {
+                        inventory_hash = aim_pipeline_hash_word(
+                            inventory_hash, commands[cursor + word]);
+                    }
+                } else if ((opcode == 8 || opcode == 9 || opcode == 10) &&
+                           words >= 2) {
+                    inventory_hash = aim_pipeline_hash_word(
+                        inventory_hash, commands[cursor + 1]);
+                } else if (opcode == 13 && words >= 3) {
+                    inventory_hash = aim_pipeline_hash_word(
+                        inventory_hash, commands[cursor + 1]);
+                    inventory_hash = aim_pipeline_hash_word(
+                        inventory_hash, commands[cursor + 2]);
+                } else if (opcode == 23 && words >= 2) {
+                    inventory_hash = aim_pipeline_hash_word(
+                        inventory_hash, commands[cursor + 1]);
+                }
+            }
+            ++command_count;
+            cursor += words;
+        }
+        structurally_valid = !relevant_overflow &&
+            command3_position != UINT32_MAX && cursor == command_word_count;
+        MemoryBarrier();
+        for (std::uint32_t word = 0; word < command_word_count; ++word) {
+            second_raw_hash = aim_pipeline_hash_word(
+                second_raw_hash, commands[word]);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        structurally_valid = false;
+    }
+    if (context_flags != 0 || command3_position <= 20) {
+        return;
+    }
+
+    const std::uint32_t callback_rva = normalize_tll_callback_rva(callback_a5);
+    const bool callback_valid =
+        callback_rva == kExpectedGamePluginCallbackRva;
+    const bool raw_stable = first_raw_hash == second_raw_hash;
+    if (!structurally_valid || !raw_stable || !callback_valid) {
+        char line[512]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-POSE-DAG-KH reject actor=%s joints=%u group=%u flags=%08X "
+            "words=%u cmds=%u c3=%u@%u relevant=%u overflow=%u "
+            "structural=%u stable=%u callback=%08X",
+            skeleton_joint_count == 580 ? "Nadine" : "Chloe",
+            skeleton_joint_count, processing_group, context_flags,
+            command_word_count, command_count, command3_position,
+            command3_cursor, relevant_count,
+            static_cast<unsigned>(relevant_overflow),
+            static_cast<unsigned>(structurally_valid),
+            static_cast<unsigned>(raw_stable), callback_rva);
+        boot_log_line(line);
+        return;
+    }
+
+    const std::size_t actor_index = skeleton_joint_count == 580 ? 0 : 1;
+    bool admit = false;
+    AcquireSRWLockExclusive(&g_aim_pose_dag_lock_kh);
+    auto& seen = g_aim_pose_dag_seen_kh[actor_index];
+    bool duplicate = false;
+    for (std::size_t index = 0; index < seen.count; ++index) {
+        duplicate = duplicate || seen.hashes[index] == inventory_hash;
+    }
+    if (!duplicate && seen.count < seen.hashes.size()) {
+        seen.hashes[seen.count++] = inventory_hash;
+        admit = true;
+    }
+    ReleaseSRWLockExclusive(&g_aim_pose_dag_lock_kh);
+    if (!admit) {
+        return;
+    }
+
+    std::array<std::uint8_t, kMaxTrackedLanes> live{};
+    live[0] = 1;
+    std::array<std::uint8_t, kMaxRelevantCommands> hits{};
+    std::array<std::uint16_t, kMaxRelevantCommands> live_before{};
+    std::array<std::uint16_t, kMaxRelevantCommands> live_after{};
+    std::array<std::uint8_t, kMaxRelevantCommands> barriers{};
+    std::uint32_t barrier_count = 0;
+    auto count_live = [&]() {
+        std::uint16_t count = 0;
+        for (const auto value : live) {
+            count += static_cast<std::uint16_t>(value != 0);
+        }
+        return count;
+    };
+    auto live_lane = [&](std::uint32_t lane) {
+        return lane < live.size() && live[lane] != 0;
+    };
+    for (std::uint32_t reverse = relevant_count; reverse != 0; --reverse) {
+        const std::uint32_t index = reverse - 1;
+        const auto& command = relevant[index];
+        live_before[index] = count_live();
+        if (command.opcode == 6 && command.words == 6) {
+            const std::uint32_t destination = command.operands[3];
+            if (live_lane(destination)) {
+                hits[index] = 1;
+                live[destination] = 0;
+            }
+        } else if (command.opcode == 7 && command.words == 6) {
+            const std::uint32_t left = command.operands[0];
+            const std::uint32_t right = command.operands[1];
+            const std::uint32_t destination = command.operands[2];
+            if (live_lane(destination)) {
+                hits[index] = 1;
+                live[destination] = 0;
+                if (left < live.size()) {
+                    live[left] = 1;
+                }
+                if (right < live.size()) {
+                    live[right] = 1;
+                }
+            }
+        } else if ((command.opcode == 8 || command.opcode == 9 ||
+                    command.opcode == 10) && command.words >= 2) {
+            const std::uint32_t destination = command.operands[0];
+            if (live_lane(destination)) {
+                hits[index] = 1;
+                if (command.opcode == 9 || command.opcode == 10) {
+                    live[destination] = 0;
+                }
+            }
+        } else if (command.opcode == 13 && command.words >= 3) {
+            const std::uint32_t source = command.operands[0];
+            const std::uint32_t destination = command.operands[1];
+            if (live_lane(destination)) {
+                hits[index] = 1;
+                live[destination] = 0;
+                if (source < live.size()) {
+                    live[source] = 1;
+                }
+            }
+        } else if (command.opcode == 23 && live_before[index] != 0) {
+            barriers[index] = 1;
+            ++barrier_count;
+        }
+        live_after[index] = count_live();
+    }
+
+    char header_line[640]{};
+    std::snprintf(
+        header_line, sizeof(header_line),
+        "AIM-POSE-DAG-KH actor=%s joints=%u group=0 flags=%08X "
+        "words=%u cmds=%u c3=%u@%u relevant=%u topo=%016llX "
+        "inventory=%016llX raw=%016llX callback=%08X barriers=%u "
+        "openLeaves=%u",
+        skeleton_joint_count == 580 ? "Nadine" : "Chloe",
+        skeleton_joint_count, context_flags, command_word_count, command_count,
+        command3_position, command3_cursor, relevant_count,
+        static_cast<unsigned long long>(topology_hash),
+        static_cast<unsigned long long>(inventory_hash),
+        static_cast<unsigned long long>(first_raw_hash), callback_rva,
+        barrier_count, count_live());
+    boot_log_line(header_line);
+
+    for (std::uint32_t index = 0; index < relevant_count; ++index) {
+        const auto& command = relevant[index];
+        char line[640]{};
+        std::snprintf(
+            line, sizeof(line),
+            "AIM-POSE-DAG-KH cmd actor=%s pos=%u cursor=%u op=%u words=%u "
+            "arg=%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X "
+            "hit=%u barrier=%u live=%u->%u",
+            skeleton_joint_count == 580 ? "Nadine" : "Chloe",
+            command.position, command.cursor,
+            static_cast<unsigned>(command.opcode),
+            static_cast<unsigned>(command.words), command.operands[0],
+            command.operands[1], command.operands[2], command.operands[3],
+            command.operands[4], command.operands[5], command.operands[6],
+            command.operands[7], static_cast<unsigned>(hits[index]),
+            static_cast<unsigned>(barriers[index]), live_before[index],
+            live_after[index]);
+        boot_log_line(line);
+    }
+}
+
 struct AimJointBoundaryScope {
     bool valid = false;
     void* target_skeleton = nullptr;
@@ -22947,7 +23220,8 @@ AimJointProgramInventory inventory_aim_joint_programs(
 
 void prepare_aim_joint_boundary_scope(
     const std::uint32_t* commands, std::uint32_t command_word_count,
-    const void* context, std::uint32_t processing_group) {
+    const void* context, std::uint32_t processing_group,
+    const void* callback_a5) {
     g_aim_joint_boundary_scope = {};
     g_aim_joint_boundary_capture.valid = false;
     g_aim_finalizer_probe_scope = {};
@@ -22996,6 +23270,9 @@ void prepare_aim_joint_boundary_scope(
     log_aim_command_topology_kc(
         commands, command_word_count, context, processing_group, owner,
         skeleton_joint_count);
+    log_aim_pose_dag_kh(
+        commands, command_word_count, context, processing_group, callback_a5,
+        owner, skeleton_joint_count);
 
     std::uint32_t case16_count = 0;
     std::uint32_t case24_count = 0;
@@ -25016,7 +25293,7 @@ std::uint32_t __fastcall hooked_process_anim_cmd_list_segment(
     const AimExpansionCarryKe previous_expansion_carry =
         g_aim_expansion_carry_ke;
     prepare_aim_joint_boundary_scope(
-        commands, command_word_count, context, processing_group);
+        commands, command_word_count, context, processing_group, callback_a5);
     const std::uint32_t result =
         g_original_process_anim_cmd_list_segment != nullptr
         ? g_original_process_anim_cmd_list_segment(
@@ -45888,8 +46165,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-01kg "
-        "(read-only group-0 aim-source chain discriminator)");
+        "TLL co-op runtime init 2026-08-01kh "
+        "(read-only main group-0 pose-command DAG inventory)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

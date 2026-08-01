@@ -2353,7 +2353,23 @@ Do not reopen these as the first move:
       writer of the first root record and each live quaternion, and trace that
       lane back to receiver-local versus retained-remote ownership. Use caller/
       callee, worker store semantics and exact command-order/operand evidence;
-      do not launch or substitute pose data until a bounded seam remains.
+      do not launch or substitute pose data until a bounded seam remains. Static
+      progress: commands 6/7/8/9/10/13 have exact lane schemas; command 3 finalizes
+      only lane zero. Command 23 dispatches by StringId through
+      `Game_ProcessAnimPhasePluginFunc 0x1406CCB30` and includes both the output-only
+      GestureJointReader and real IK pose writers, so it cannot be treated as one
+      semantic class.
+- [x] Implement bounded read-only build `kh`: admit only screen-1 flags-zero main
+      group-0 lists whose command 3 occurs after position 20, double-validate the
+      immutable stream, log all pre-command-3 command-6/7/8/9/10/13/23 tuples plus
+      callback RVA, and trace lane-zero ancestry conservatively through the known
+      schemas. Stop at command-23 barriers instead of guessing a payload layout;
+      preserve one native outer call and write no game state.
+- [ ] Run the written `kh` reciprocal camera sequence. Require complete main-list
+      inventories for both actors, callback RVA `0x006CCB30`, no rejects, normal
+      models and responsive copies. Classify D-clip, D-blend/copy, D-plugin or
+      D-external/mixed exactly as written in `COOP_STATUS.md`; do not suppress a
+      plugin or substitute a pose lane in this build.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

@@ -1075,6 +1075,34 @@ FUNCTIONS = {
         "publishes them through the JointTree/observer path. It is an output reader, "
         "not a Player-camera or vertical-pose source.",
     ),
+    0x1406CCB30: (
+        "Game_ProcessAnimPhasePluginFunc",
+        "Game-side ProcessAnimPhasePluginFunc installed in the three-callback "
+        "animation-manager table at 0x1466D0C50. ProcessAnimCmdListSegment decimal "
+        "case 23 reaches it through AsyncUpdateJobData slot 3. Dispatches concrete "
+        "game plugin StringIds, including GestureJointReader and several IK writers, "
+        "then falls back to Nd_ProcessAnimPhasePluginFunc.",
+    ),
+    0x1406FB070: (
+        "PointSwordAnim_RunIk",
+        "Source-identified PointSwordAnim::RunIk callback selected by game animation "
+        "plugin StringId 0x0265E9ED. Reads and writes evaluator pose data through "
+        "the command-23 AnimPluginContext.",
+    ),
+    0x1406FD4A0: (
+        "WsAnkleBlend_ExecutePlugin",
+        "Source-identified WsAnkleBlend::ExecutePlugin callback selected by game "
+        "animation plugin StringId 0x29BDC08C. Consumes explicit input/output lane "
+        "indices from the command-23 payload and writes joint transforms.",
+    ),
+    0x141937780: (
+        "Nd_ProcessAnimPhasePluginFunc",
+        "Source-identified NdProcessAnimPhasePluginFunc fallback for decimal command "
+        "23. Dispatches built-in IK plugin StringIds including Jacobian, hand-fix, "
+        "AnimSnapshotNodeIK and AnimSnapshotNodeArmIk paths; several branches mutate "
+        "JointParams or evaluator pose lanes, so plugin IDs must be resolved before "
+        "treating command 23 as read-only.",
+    ),
     0x141A8FCF0: (
         "AnimManager_CreateAnimCmdsForObject",
         "Exact CreateAnimCmdsForObject source assertion in anim-mgr-jobs.cpp. "
