@@ -14358,3 +14358,75 @@ last writer of Chloe entry joint 35; independently resolve the authored/default
 producers of Nadine JP96/JP102 and the smaller Chloe JP36/JP41 changes. No pose
 substitution is authorized until those upstream writers converge on a bounded
 common receiver-camera input or are classified as separate paths.
+
+### 2026-08-01 STATIC: exact pre-target matrix ancestry is closed; direct Gesture camera anchors are rejected
+
+The two source-side frontiers from `jz` are now bounded to their exact program
+writers. The live Nadine group-0 stream has FNV hash `4644E83EF8252D43` and
+starts at `nadine-dlc-base.pak+0x593C0`. Its opcode-40 records form the uninterrupted
+same-call chain `0 <- prefix`, `14 <- 0`, `15 <- 14`, `16 <- 15`, `17 <- 16`,
+`18 <- 17`, `32 <- 18`, `33 <- 32`, `34 <- 33`. The final opcode 53 then copies
+all four rows of workspace joint 34 into selector-3 scratch
+`+0x1090/+0x10A0/+0x10B0/+0x10C0`; target group 2 later consumes that matrix at
+N24. The intervening opcode 44/47/49/50/51 descriptors do not target those
+rows. The apparent `0481` occurrences in the opcode-51 region are source/mode
+operands: its primary and blend output lists both select `1360`, so joint 17 is
+not overwritten.
+
+The unique Nadine group-1 stream (`86BC35B23563D52E`, package
+`+0x5CD70..0x5CD82`) cannot replace this scratch value: its opcode-53 destination
+range is only `+0x0723..+0x0AD3`. Therefore the group-0 joint-34 copy survives
+until target group 2. For Chloe, the exact group-1 stream
+`793ABE0A610FD9E9` at `chloe-base.pak+0x691B0` has its last joint-35 writer at
+opcode-40 index 24 (`descriptor +0x6DB40`, `{0240,0009}`). Later opcode
+51/47/44 records do not write joint 35, and opcode-40 index 30 has no joint-35
+destination. This closes the two source matrices without appealing to a broad
+workspace delta.
+
+The remaining JointParams producer set is also finite. Before command 3, cases
+6/7/8/10/13 can publish authored pose records and their 16-byte ValidBits;
+`AnimCmdEvaluator_FinalizeGroupDefaults 0x141AB78F0` then intersects a group
+MSB-first joint mask with the inverse of the current ValidBits and copies
+48-byte skeleton defaults only for missing joints. Case 3 publishes the
+finalized lane to the common WorkBuffer before case 16. A later case-14 pose
+import remains the distinct post-finalization competitor. Consequently the
+exact joints can be classified without changing pose data by sampling their
+pre/post-finalizer bits and record hashes, then comparing the post-finalizer
+record with the existing case-16/op40 record.
+
+An initially plausible direct Gesture-camera source is **REJECTED at both
+claimed anchors**. `AnimNodeGesture_StepAngles 0x141FFEDB0` compares its cached
+state with `g_LocalPlayerInputManager_Ptr+0x50`, but that qword is the shared
+frame/epoch value. `AnimNodeGesture+0x60 -> +0x7FC/+0x800/+0x804/+0x808` is not
+a live camera vector: `GestureGridCache_BuildFromAnimationClips 0x141D7BD70`
+computes those four values as the authored animation-grid min/max X/Y bounds,
+and `AnimNodeGesture_GetGestureGridBounds 0x1420F3AB0` reads the same block.
+Gesture evaluation remains one generic authored JP route, but no direct
+Player/camera ownership follows from these fields. The dynamic inputs consumed
+by the large solver at `0x1420F4E00` remain OPEN.
+
+Three independent evidence kinds authorize the next read-only discriminator:
+
+1. exact PAK stream hashes, descriptors, record order and destination operands;
+2. opcode-40/opcode-53 worker read/write dataflow plus exclusion of every
+   intervening full-row writer;
+3. generator/evaluator command order and the exact FinalizeGroupDefaults
+   ValidBits/default-fill contract.
+
+The competitors are **V-authored** (the target bit is already set and its
+record survives command 3), **V-default** (the bit is clear and command 3
+changes the record to the skeleton default), and **V-post** (the command-3
+record differs from the case-16 record, selecting a later pose import). Build
+`ka` must hook only the direct call at `0x141AB9D18`, log pre/post ValidBits and
+48-byte hashes for Nadine group-0 joints `0/14/15/16/17/18/32/33/34`, Nadine
+group-2 joints `96/102`, and Chloe group-1 joints `35/36/41`, and invoke the
+native finalizer exactly once. It must not set a bit or copy a pose record.
+
+**Falsifiable runtime prediction:** the same camera-distinct sequence must
+produce bounded `ka` rows for all three exact actor/group signatures, normal
+models and responsive processes. A set pre-bit with an unchanged pre/post hash
+selects V-authored; a clear pre-bit that becomes set with a changed record
+selects V-default; a finalizer-post hash that differs from the later exact
+case-16 record selects V-post. Mixed outcomes select independent producer paths.
+Missing target bits, multiple unexpected finalizers, unreadable lanes, model
+damage, hang or crash rejects the probe and authorizes no substitution.

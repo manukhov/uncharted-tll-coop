@@ -2204,7 +2204,21 @@ Do not reopen these as the first move:
       Competing hypotheses are a shared receiver-camera pose-root writer,
       independent authored JP/source paths, or a mixed convergence. Require
       caller/callee, exact read/write dataflow and command-order evidence before
-      designing a discriminator or substitution.
+      designing a discriminator or substitution. Static progress: the Nadine
+      source is now the exact group-0 chain
+      `prefix->0->14->15->16->17->18->32->33->34`, copied by opcode 53 to
+      scratch `+0x1090`; Chloe joint 35's last writer is group-1 opcode-40 index
+      24. All intervening full-row writers were excluded from their descriptors.
+      The direct Gesture-camera theory is rejected at its claimed anchors:
+      `InputManager+0x50` is a frame epoch and grid `+0x7FC..+0x808` is authored
+      min/max data. Exact JointParams ownership remains OPEN.
+- [ ] Implement read-only build `ka` at the sole
+      `AnimCmdEvaluator_FinalizeGroupDefaults` callsite `0x141AB9D18`. Capture
+      pre/post MSB-first ValidBits and 48-byte hashes for Nadine group-0 joints
+      `0/14/15/16/17/18/32/33/34`, Nadine group-2 `96/102`, and Chloe group-1
+      `35/36/41`; compare the finalizer-post records with the existing case-16
+      records. Classify V-authored, V-default or V-post exactly as written in
+      `COOP_STATUS.md`. Call the native finalizer once and write no game state.
 - [ ] After the parent source is resolved, trace the exact JointParams producers
       for target children `97/103/43`; child 27 needs no JointParams trace because
       `jw` proved its 48-byte record bit-identical across the camera sweep.

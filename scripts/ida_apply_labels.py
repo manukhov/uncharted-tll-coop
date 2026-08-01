@@ -2188,6 +2188,41 @@ FUNCTIONS = {
         "and their 16-byte ValidBits records. Direct animation, retarget copy and "
         "later blend commands all address this common layout.",
     ),
+    0x141FFEDB0: (
+        "AnimNodeGesture_StepAngles",
+        "Updates an AnimNodeGesture's cached angle/transform state once per shared "
+        "frame epoch and dispatches the gesture-state solver. The compared "
+        "g_LocalPlayerInputManager_Ptr+0x50 qword is an epoch, not a camera vector; "
+        "the literal aim only selects authored gesture settings.",
+    ),
+    0x1420F3F50: (
+        "GestureLayer_PreAlignUpdatePerGestureNode",
+        "GestureLayer per-node pre-align update path. It reaches "
+        "AnimNodeGesture_StepAngles for active gesture nodes; this establishes a "
+        "generic authored-pose route but does not establish Player/camera ownership.",
+    ),
+    0x1420F3AB0: (
+        "AnimNodeGesture_GetGestureGridBounds",
+        "Reads the four authored animation-grid bounds from the cached grid at "
+        "AnimNodeGesture+0x60: min/max X at +0x7FC/+0x800 and min/max Y at "
+        "+0x804/+0x808. These fields are asset bounds, not live camera direction.",
+    ),
+    0x141FFA020: (
+        "AnimNodeGesture_TrySnapshotNode",
+        "Source-identified AnimNodeGesture snapshot path. Resolves and stores the "
+        "cached gesture animation grid at node+0x60 before serializing node state.",
+    ),
+    0x141D7B860: (
+        "GestureGridCache_FindOrBuild",
+        "Finds an existing gesture animation-grid cache entry or builds it through "
+        "GestureGridCache_BuildFromAnimationClips for AnimNodeGesture consumers.",
+    ),
+    0x141D7BD70: (
+        "GestureGridCache_BuildFromAnimationClips",
+        "Builds a gesture animation grid from AnimationDatabase clips and computes "
+        "its authored min/max X/Y bounds at +0x7FC/+0x800/+0x804/+0x808. This "
+        "rejects interpreting those fields as a live local-camera vector.",
+    ),
     0x14217B630: (
         "AnimCmdEvaluator_ExecuteSkeletonJointPrograms",
         "Command-16 evaluator that walks the target skeleton's bounded joint "
