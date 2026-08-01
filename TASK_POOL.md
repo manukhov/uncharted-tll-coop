@@ -2308,11 +2308,19 @@ Do not reopen these as the first move:
       Result: build `ke` patches the exact direct callsite `0x141ABA89A`, admits
       only the two asset-proven signatures, preserves one native call, and keeps
       its raw records thread-local to the current list. Release builds.
-- [ ] Run the written `ke` discriminator. Require twelve complete samples for
+- [x] Run the written `ke` discriminator. Require twelve complete samples for
       each active actor, unchanged bases/prefix/tails, complete `0x7/0x3`
       opcode-40 masks, normal models and responsive copies. Classify
       H-expand-carry, H-expand-replace or H-late-writer without applying pose
-      data.
+      data. Result: 12/12 samples per actor have identical bases, zero prefix and
+      tail changes, and complete exact-address masks. All 60 later consumer rows
+      differ, selecting H-expand-carry across command 15 plus H-late-writer
+      inside command 16. Both copies remained responsive.
+- [ ] Trace the exact command-16 JointParams writers after expansion. Enumerate
+      every operator before the first consumers of Chloe local `35/36/41` and
+      Nadine local `96/102`, resolve encoded destinations selecting base 0, and
+      identify the last writer for each row with three static evidence types
+      before another runtime test.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

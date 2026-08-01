@@ -2261,9 +2261,10 @@ FUNCTIONS = {
         "WorkBuffer JointParams into the 64-byte-per-joint matrix workspace. Each "
         "operator receives encoded bases SegmentContext +0x50, +0x58, +0x68 and "
         "+0x30; the current group descriptor is read from +0x38. Runtime build jt "
-        "confirmed that every captured group-1/2/3 invocation left +0x50 "
-        "JointParams bit-identical while complex authored programs changed the "
-        "+0x58 workspace.",
+        "confirmed that the finalized parameterCount prefix remained bit-identical "
+        "while complex authored programs changed the +0x58 workspace. Runtime ke "
+        "corrected that scope: command 16 rewrites selected JointParams rows in "
+        "the command-15 expanded tail, which the old prefix hash did not cover.",
     ),
     0x14217BF30: (
         "AnimCmdEvaluator_ExpandJointParamsToTargetWorkspaceCount",
@@ -2271,7 +2272,10 @@ FUNCTIONS = {
         "with a 48*targetGroup.workspaceCount block at the same WorkBuffer offset "
         "and republishes the same base. The allocation is tagged with target-group "
         "first/count, but this helper does not copy or zero the newly exposed tail. "
-        "Chloe group 1 expands 1 to 62 records; Nadine group 2 expands 96 to 119.",
+        "Chloe group 1 expands 1 to 62 records; Nadine group 2 expands 96 to 119. "
+        "Runtime ke confirmed identical before/after bases, finalized prefixes and "
+        "target-tail rows in 12/12 samples per actor; earlier command-16 operators "
+        "then rewrite all five inspected tail rows before their opcode-40 reads.",
     ),
     0x142194C30: (
         "AnimJointProgramOp54_CopyEncodedScalars",

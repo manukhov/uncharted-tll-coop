@@ -14869,3 +14869,53 @@ crash or unresponsive process invalidates the run. Even a clean match proves
 only an unwritten current-list carry; it does not yet distinguish accidental
 receiver-local arena reuse from an intended prior-list dependency. Release DLL
 builds successfully; runtime classification is pending.
+
+### 2026-08-01 RUNTIME CONFIRMED: command 15 preserves the tail, then command 16 rewrites every aim input row
+
+Build `ke` completed all bounded samples on PID 17892 (rendered Chloe, group 1)
+and PID 19020 (rendered Nadine, group 2). Both processes remained responsive,
+the user reported no model or animation damage, and the snapshot is
+`reports/locomotion_hook_ke_20260801_145417.log`. There are no
+`AIM-EXPAND-KE` reject rows.
+
+The command-15 half is exact in all 24 samples:
+
+- all 24 before/after `SegmentContext+0x50` bases are identical;
+- Chloe's 12-word finalized prefix and Nadine's 1152-word finalized prefix have
+  `rawPrefix=0` in 12/12 samples each;
+- Chloe local rows `35/36/41` are bit-identical across expansion in 36/36
+  comparisons, and Nadine rows `96/102` are bit-identical in 24/24;
+- the tail values are not one constant default: Chloe produced 12/12/11 unique
+  pre-expansion hashes for rows `35/36/41`, and Nadine produced 2/12 for
+  `96/102`, consistent with live arena contents rather than package defaults.
+
+This **CONFIRMS H-expand-carry** only across
+`AnimCmdEvaluator_ExpandJointParamsToTargetWorkspaceCount 0x14217BF30`: the
+native helper republishes the same allocation and changes none of the inspected
+prefix or tail words.
+
+The later-consumer half rejects the stronger no-writer prediction. Every opcode-
+40 comparison used the same `SegmentContext`, same `+0x50` base and exact same
+address saved at expansion (`sameBase=1`, `sameAddress=1` in 60/60), and all 24
+consumer masks completed (`0x7` Chloe, `0x3` Nadine). Nevertheless every record
+had changed before its consuming opcode 40:
+
+- Chloe row 35 changed 12/12 words in all 12 samples; rows 36 and 41 changed
+  eight or nine words in all 24 comparisons;
+- Nadine rows 96 and 102 changed 12/12 words in all 24 comparisons.
+
+Therefore **H-late-writer is CONFIRMED** and the prior static statement that a
+hidden same-list writer was rejected is itself **REJECTED**. The outer command-
+15 tail survives intact, but an earlier operator inside command 16 authors these
+five JointParams rows before the selected opcode-40 records read them. The old
+whole-command `JointParams unchanged` result covered only the finalized
+`parameterCount` prefix (one Chloe row / 96 Nadine rows); it never covered this
+expanded tail.
+
+Each process also logged eight caught first-chance reads at DLL RVA `0x586AF`.
+Disassembly identifies that RVA as the opt-in fast `readable_bytes` page-touch
+loop; all are handled probes, not terminal game faults, and neither process
+stopped responding. The next step is static: enumerate every command-16 operator
+before the first consumer of local rows `35/36/41` and `96/102`, resolve encoded
+destinations selecting base 0, and identify the last concrete JointParams writer
+for each row before another runtime launch or pose substitution.
