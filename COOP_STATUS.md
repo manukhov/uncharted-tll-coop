@@ -14440,3 +14440,42 @@ stores only local diagnostic copies. At case 16 it compares the saved post
 records with the live segment/opcode-40 JointParams records. It never writes a
 ValidBit, JointParams record, workspace row or game-owned pointer. The Release
 DLL builds successfully.
+
+### 2026-08-01 RUNTIME PARTIAL / REJECTED INDEX MAP: `ka` proves authored Nadine group-0 ancestry
+
+PIDs 14312/17872 completed the opposed-camera sequence and remained responsive.
+The exact Nadine group-0 signature produced 12/12 complete samples, one native
+finalizer call each and `case16Mask=1FF/1FF`. Every target joint
+`0/14/15/16/17/18/32/33/34` had its ValidBit set before command 3, a zero-word
+pre/post record delta, and an identical finalizer-post/case-16 hash. Each joint
+nevertheless produced 12 distinct hashes across the 12 camera-separated
+samples. This **CONFIRMS V-authored** and rejects both V-default and V-post for
+the complete Nadine matrix chain that feeds joint 34 and scratch `+0x1090`.
+
+The other two signatures reject the probe's index map rather than a producer
+hypothesis. Nadine outer group 2 reported an evaluator joint count of 96, so
+global joints 96/102 could not both be indexed as local records. Chloe outer
+group 1 reported a count of one, so global joints 35/36/41 likewise were not
+local records. All 12 samples for each were rejected before reading a target
+record; the native finalizer still ran exactly once, and the existing `jz`
+case-16/op40 scopes remained complete with zero rejects.
+
+The disassembly explains the mismatch. Finalization masks only the local
+`group[0]` record count, while `group[3]` selects the first skeleton-default
+record passed to `AnimCmdEvaluator_FillMissingJointDefaults`; the published
+WorkBuffer is subsequently addressed by global joint numbers. The target
+opcode-40 group is therefore not necessarily the group that authored its
+JointParams. Existing exact group counts locate the corrected producers:
+Nadine group 0 owns global `0..65`, Nadine group 1 owns the following 38-record
+range containing `96/102`, and Chloe group 0 owns the 89-record range containing
+`35/36/41`. Build `kb` must validate `group[3]` at runtime, convert each global
+joint to `local=global-group[3]`, and preserve a read-only post-finalizer copy
+through the later consumer group. No substitution is authorized.
+
+**Corrected falsifiable prediction:** `kb` must report the expected local range
+for Nadine `580/0`, Nadine `580/1` and Chloe `651/0`; all fourteen target joints
+must receive a pre/post validity classification. The producer-group case-16
+record must match the finalizer-post record, and the later target-group op40
+record must either match it (no late import) or differ (V-post). Any range miss,
+missing cross-group consumer, multiple finalizers, crash or model damage rejects
+the corrected probe.

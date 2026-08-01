@@ -2167,8 +2167,11 @@ FUNCTIONS = {
         "it to the common WorkBuffer. Inverse ValidBits select missing joint and "
         "scalar ranges, which are filled from the target skeleton defaults; the "
         "same bits are then marked valid. The 0x142188FF0 -> 0x142192640 path "
-        "copies one exact 48-byte JointParams record per missing joint. Already-"
-        "valid records retain preceding authored direct/retarget/blend output.",
+        "copies one exact 48-byte JointParams record per missing joint. The joint "
+        "mask spans the local group[0] record count, while group[3] selects the "
+        "first skeleton-default record; published WorkBuffer consumers later use "
+        "global joint indices. Already-valid records retain preceding authored "
+        "direct/retarget/blend output.",
     ),
     0x142188FF0: (
         "AnimCmdEvaluator_FillMissingJointDefaults",

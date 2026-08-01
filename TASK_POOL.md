@@ -2223,10 +2223,20 @@ Do not reopen these as the first move:
       `580/0`, `580/2`, `651/1`, keeps twelve independent camera-distinct
       samples, and compares finalizer-post records at segment/opcode-40 entry.
       Release builds successfully; runtime classification remains pending.
-- [ ] Run the written `ka` camera-distinct sequence. Require all three exact
+- [x] Run the written `ka` camera-distinct sequence. Require all three exact
       actor/group signatures, one finalizer call, complete case-16 masks, normal
       models and responsive processes. Classify every joint as V-authored,
-      V-default or V-post before considering any pose substitution.
+      V-default or V-post before considering any pose substitution. Result:
+      Nadine group 0 completed 12/12 samples and proves V-authored with no late
+      change for `0/14/15/16/17/18/32/33/34`. Nadine group 2 and Chloe group 1
+      rejected only the probe's incorrect global-as-local indexing: their local
+      evaluator counts were 96 and one. Both processes remained responsive.
+- [ ] Correct build `kb` using the finalizer's local range
+      `group[3]..group[3]+group[0]`. Probe Nadine `96/102` in producer group 1
+      and Chloe `35/36/41` in producer group 0, retain the post-finalizer record
+      until the later target-group opcode 40 consumes it, and apply the corrected
+      prediction in `COOP_STATUS.md`. Keep the native call exactly once and do
+      not modify ValidBits or pose data.
 - [ ] After the parent source is resolved, trace the exact JointParams producers
       for target children `97/103/43`; child 27 needs no JointParams trace because
       `jw` proved its 48-byte record bit-identical across the camera sweep.
