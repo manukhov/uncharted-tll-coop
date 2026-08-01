@@ -2110,7 +2110,8 @@ FUNCTIONS = {
         "the joint-program skeleton at +0x28 (loaded by `RAX=[AnimCmdContext+0x00]; "
         "R15=[RAX+0x40]` at 0x141AB9852 and stored at 0x141AB9A68), shared "
         "cross-segment scratch "
-        "at +0x30, group descriptor at +0x38, "
+        "at +0x30, target skeleton group descriptor at +0x38, the current "
+        "10-byte processing/allocation descriptor at +0x40, "
         "JointParams at +0x50 and matrix workspace at +0x58. "
         "The distinct outer AnimCmdContext+0x00 pointer is the FgAnim target skeleton "
         "used for Player ownership; SegmentContext+0x28 is its child at +0x40, not "
@@ -2210,9 +2211,12 @@ FUNCTIONS = {
     ),
     0x14217C3A0: (
         "AnimCmdEvaluator_AllocateGroupLanes",
-        "Allocates and indexes the processing group's joint/scalar output lanes "
-        "and their 16-byte ValidBits records. Direct animation, retarget copy and "
-        "later blend commands all address this common layout.",
+        "Allocates and indexes the current 10-byte processing descriptor's "
+        "joint/scalar output lanes and ValidBits blocks. Word 0 supplies the "
+        "48-byte JointParams record count, word 1 the rounded scalar count, "
+        "byte 4 the lane multiplicity and word 3 the first skeleton joint. "
+        "This descriptor is distinct from the target skeleton group's "
+        "workspace/parameter counts at SegmentContext+0x38.",
     ),
     0x141FFEDB0: (
         "AnimNodeGesture_StepAngles",
@@ -2285,24 +2289,27 @@ FUNCTIONS = {
         "descriptor blocks, payload[1] normally resolves selector 3 offset 0 to "
         "the evaluator's four-base table, and payload[2] resolves authored "
         "{k, encodedSource} records. Runtime build jv isolated this opcode as the "
-        "common direct writer of the target Chloe/Nadine workspace matrices; jx "
-        "then confirmed earlier instances as the final writers of Nadine-puppet "
-        "parents 26/96/102 and Chloe-puppet parent 42.",
+        "common direct writer of the target Chloe/Nadine workspace matrices. Its "
+        "descriptor k values encode target-group-local rows, not skeleton-global "
+        "joint IDs.",
     ),
     0x142189FB0: (
         "AnimJointProgram_PropagateJointMatrices",
         "Processes 4*blockCount authored {k, encodedSource} records. For each, "
         "combines the 48-byte JointParams record at base[0]+3*k-0x30 with the "
         "selected 64-byte parent/source matrix and stores four float4 rows at "
-        "workspace base[1]+4*k. Runtime jv descriptor destinations reproduce "
+        "workspace base[1]+4*k. Live k values are 16*(localRow+1), so the "
+        "JointParams row is k/16-1 and skeleton-global joint is the current "
+        "target group's first joint plus that local row. Runtime jv destinations reproduce "
         "the exact first changed workspace words 448 for Chloe and 704 for Nadine. "
         "Runtime jx proved all four parent outputs change inside these earlier "
         "calls, while subsequent Chloe-puppet op49/op50 leave joint 42 unchanged. "
         "The descriptor loop is strictly sequential (advance at 0x14218A04C, "
-        "next record at 0x14218A1E0), so same-call chains scratch->24->25->26 "
-        "and 35->36->41->42 consume the earlier record's completed output. "
-        "Runtime jz classified the inputs: Nadine 24/25/26 and Chloe 42 are "
-        "source-driven, Nadine 96/102 are JointParams-driven, and Chloe 36/41 "
+        "next record at 0x14218A1E0), so same-call local-row chains "
+        "scratch->24->25->26 and 35->36->41->42 consume the earlier record's "
+        "completed output. Runtime jz classified the inputs: Nadine local "
+        "24/25/26 and Chloe local 42 are source-driven, Nadine local 96/102 are "
+        "JointParams-driven, and Chloe local 36/41 "
         "change in both inputs. Therefore this final worker is downstream of a "
         "mixed contamination and is not a valid blanket substitution boundary.",
     ),

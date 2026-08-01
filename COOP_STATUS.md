@@ -14717,3 +14717,52 @@ reads `base+96*48` and `base+102*48`; the former begins exactly at the nominal
 lane boundary. Resolve the allocator block metadata and the op40 base-table
 contract before assigning those addresses to skeleton-global joints or adding
 another runtime carry.
+
+### 2026-08-01 STATIC CORRECTION / REJECTED INDEX MODEL: opcode-40 `k` selects a target-group-local row
+
+The earlier interpretation of opcode-40 destinations `35/36/41/42` and
+`24/25/26/96/102` as skeleton-global joint IDs is **REJECTED**. The raw `jx` to
+`kd` addresses, hashes and same-call ordering remain valid, but those numbers
+are local rows in the current target skeleton group. Consequently the `ka` to
+`kd` producer search followed unrelated, identically numbered global joints in
+earlier groups and cannot establish a cross-group JointParams handoff.
+
+Three independent facts fix the index contract:
+
+1. `AnimJointProgram_PropagateJointMatrices 0x142189FB0` receives `k` in
+   16-byte units. Its JointParams read is `base[0] + 3*k - 0x30`, and its matrix
+   write is `base[1] + 4*k`. Every admitted live descriptor has
+   `k = 16*(localRow+1)`, so the leading matrix row is reserved and the
+   JointParams row is exactly `localRow = k/16 - 1`.
+2. The `JY` target-group records independently report Nadine group 2 as
+   `first=142, params=96, workspace=119` and Chloe group 1 as
+   `first=205, params=1, workspace=62`. The skeleton-global joint corresponding
+   to an opcode row is therefore `group.first + localRow`, not `localRow` alone.
+3. The old `JY` workspace-delta ranking already used this `first+local` map: its
+   changed global rows cluster at Nadine `238/244` and Chloe `240/241/246`, the
+   same rows obtained from the exact opcode descriptors. This agreement is
+   independent of the later `kb/kc/kd` carry logic.
+
+The corrected chains are:
+
+- Nadine group 2 local `24 -> 25 -> 26` maps to global `166 -> 167 -> 168`;
+  local `96/102` maps to global `238/244`; the target children formerly called
+  `27/97/103` are global `169/239/245`.
+- Chloe group 1 local `35 -> 36 -> 41 -> 42` maps to global
+  `240 -> 241 -> 246 -> 247`; the target child formerly called `43` is global
+  `248`.
+
+This also corrects the pending allocator question. The target-group
+`parameter_count` at `SegmentContext+0x38 -> +0x12` is not the allocator lane
+size. Command 2 passes a separate 10-byte processing descriptor through the
+evaluator at `+0x20` (the SegmentContext keeps that pointer at `+0x40`), and
+`AnimCmdEvaluator_AllocateGroupLanes 0x14217C3A0` sizes each JointParams block
+from that descriptor's word 0. Command 3 publishes only the first finalized
+lane to `SegmentContext+0x50`. Thus `base+96*48` cannot yet be labelled either
+"past the lane" or a normal JointParams row from `parameter_count` alone.
+
+The new static frontier is to enumerate the command-2 processing-descriptor
+sequence within the same Chloe-group-1 and Nadine-group-2 list, including every
+word-0 count, word-3 first joint, byte-4 lane count and the exact WorkBuffer
+stride. Only after that layout proves which allocated block owns local rows
+`35/36/41` and `96/102` can their same-list cases 6/7/8/13 producer be traced.

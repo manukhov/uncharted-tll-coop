@@ -2289,10 +2289,18 @@ Do not reopen these as the first move:
       `ProcessAnimCmdListSegment` invocations; command 2 allocates fresh lanes and
       command 5 releases them before the next list. Repeated bases are arena reuse,
       so none of the three proposed same-object writers explains the difference.
-- [ ] Resolve the target-list WorkBuffer layout before another carry. Prove the
-      allocation/block contract behind Nadine group-2 op40 reads at
-      `base+96*48/+102*48`, beginning at and beyond a nominal 96-record lane, and
-      map the corresponding Chloe group-1 addresses. Then trace only the same-list
+- [x] Correct the opcode-40 index model before another carry. `k` encodes a
+      target-group-local row (`k/16-1`), while skeleton-global joint is
+      `group.first+local`: Nadine group-2 `96/102 -> 238/244`, Chloe group-1
+      `35/36/41 -> 240/241/246`. Reject the `ka` through `kd` cross-group producer
+      attribution; it followed unrelated global joints with the same numbers.
+- [ ] Resolve the target-list WorkBuffer layout before another carry. Enumerate
+      every command-2 10-byte processing descriptor in the Chloe-group-1 and
+      Nadine-group-2 lists and prove its word-0 JointParams allocation count,
+      word-3 first joint, byte-4 lane count and typed-block stride. The target
+      group's `parameter_count` at `+0x12` is a separate field and does not bound
+      `SegmentContext+0x50`; use the actual allocator sequence to assign local
+      rows `35/36/41` and `96/102`, then trace only the same-list
       cases 6/7/8/13 -> command-3 -> op40 lifetime.
 - [ ] After the parent source is resolved, trace the exact JointParams producers
       for target children `97/103/43`; child 27 needs no JointParams trace because
