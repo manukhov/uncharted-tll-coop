@@ -15443,3 +15443,34 @@ receiver-camera ownership with an apply marker rejects H-ring and this seam;
 correct pitch plus distortion rejects radius/origin preservation; no marker
 means the active gesture uses another target class. This is the sole next user
 exam; no intermediate diagnostic run is requested.
+
+### 2026-08-01 RUNTIME REJECTED: `ki` TargetAimAt relay is not the live correction seam
+
+The written `ki` exam completed on fresh PIDs 18000 and 8004 without a crash or
+new model regression, but the user observed no change: each remote character
+continued to follow the receiver-local vertical look. Both processes logged
+`Gesture::TargetAimAt peer-direction relay installed`, proving the expected
+vtable pointer matched and the patch was installed, while neither process
+emitted `GESTURE-AIM-TARGET relay applied`.
+
+This was not an inactive aim test. PID 8004 logged both
+`Aim residual-pitch first sample y=-0.127385` and
+`Aim blended-pitch sample y=-0.127385`, and the shared active base
+`base=7339D08C state=3C347132` reached nonzero screen-1 values in both
+directions, including `up=0.9983` and `down=0.4126`. The post-gate relay path
+therefore did not apply despite a live vertical aim consumer.
+
+**REJECTED:** replacing the retained Player output of
+`GestureTargetAimAt_GetTarget 0x1406F26D0` as implemented in `ki` is sufficient
+to correct the campaign puppet's vertical aim. Because its sole apply marker was
+after the owner, fresh-peer and strict-ADS gates, this run cannot distinguish a
+provider that was never invoked for the retained actor from a call rejected by
+one of those gates. It does not invalidate the static RTTI, factory, vtable or
+generic Gesture data-flow identities recorded above; it rejects only this seam
+as the justified live fix. The vtable mutation and its dead runtime code are
+removed from the DLL, while the IDB labels remain valid.
+
+Do not spend another user run separating those two inert cases. Resume static
+work from the proven live screen-1 base state `7339D08C/3C347132`: resolve the
+exact owner and upstream writer that supplies its `up/down` fields, and only
+return to runtime with a corrective build whose data flow reaches that state.

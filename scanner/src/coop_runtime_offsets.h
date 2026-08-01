@@ -602,17 +602,6 @@ constexpr std::uintptr_t kPlayerAimBlendTickVtableSlotRva = 0x2A0B228;
 constexpr std::uintptr_t kPlayerAimBlendTickRva = 0x0CAFA20;
 constexpr std::uintptr_t kPlayerAimBlendTargetCallsiteRva = 0x0CAFB7C;
 constexpr std::uintptr_t kPlayerAimBlendTargetRva = 0x0CAE480;
-// Gesture::TargetAimAt is the authored target provider selected by
-// GestureMgr_CreateTargetProvider for CRC 0xE83A8507. Gesture::GetComputeArgs
-// calls this one-slot vtable before AnimNodeGesture::StepAngles caches the
-// horizontal/vertical gesture angles. Patching this slot changes only AimAt
-// gesture targets; LookAt and script-lambda targets retain their stock paths.
-constexpr std::uintptr_t kGestureTargetAimAtVtableRva = 0x2980938;
-constexpr std::uintptr_t kGestureTargetAimAtGetTargetRva = 0x06F26D0;
-constexpr std::size_t kGestureTargetOwnerWeakCellOffset = 0x8;
-constexpr std::size_t kGestureTargetOwnerIdOffset = 0x10;
-constexpr std::size_t kGestureTargetOwnerObjectIdOffset = 0xBC;
-constexpr std::size_t kGestureTargetOwnerPositionOffset = 0x110;
 // GunMoveController (Player+0x1DA8) vtable +0x38. Stock code resolves the
 // owner's route camera and writes its camera-relative world direction to
 // controller+0x150 before aim-idle turn-state selection.

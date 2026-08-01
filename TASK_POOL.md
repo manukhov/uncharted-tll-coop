@@ -2385,14 +2385,19 @@ Do not reopen these as the first move:
       getter resolves the exact owner and consumes its +0x18F0/+0x1900/+0x1910
       target ring through `0x141DE6500`. Detailed LegFix/ankle/HandFix masks no
       longer block a target-only correction and remain stock.
-- [ ] Run one consolidated `ki` exam when the user is ready. The new one-slot
-      TargetAimAt vtable relay changes only retained slot-1 authored AimAt output
-      to the fresh peer pose-seed +Z direction, preserving the native owner,
-      target radius, transition state, clips, IK and final matrices. Hold the
-      receiver camera fixed while the sender aims sky -> ground -> sky, then hold
-      the sender fixed and move only the receiver camera. The puppet must follow
-      only the sender; local Player behavior and both models must remain normal.
-      No further diagnostic-only build or micro-test is authorized first.
+- [x] Run the consolidated `ki` exam. Both vtable installs succeeded and both
+      copies remained responsive, but visible receiver-camera ownership was
+      unchanged and neither PID emitted the post-gate
+      `GESTURE-AIM-TARGET relay applied` marker. Active screen-1
+      `7339D08C/3C347132` still traversed nonzero up/down values. The implemented
+      TargetAimAt seam is therefore REJECTED as a sufficient live correction;
+      its vtable mutation and dead runtime code are removed without discarding
+      the independently proven static Gesture identities.
+- [ ] Keep runtime tests parked. Statically resolve the exact owner and upstream
+      writer feeding `up/down` into live screen-1 base/state
+      `7339D08C/3C347132`, then distinguish that path from receiver-local screen
+      0 camera state. Do not ask for another diagnostic run; the next user exam
+      must contain one evidence-backed correction that reaches this live state.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`
