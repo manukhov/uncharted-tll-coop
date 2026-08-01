@@ -2376,14 +2376,23 @@ Do not reopen these as the first move:
       D-clip is confirmed for native edges and D-plugin/mixed remains overall.
       Three longer Nadine lists hit only the probe's 96-entry diagnostic cap;
       both processes stayed responsive and no visible regression occurred.
-- [ ] Resolve the remaining `kh` plugin barriers and their upstream generator
-      statically. Prove exact destination masks/root effects for LegFix
-      `0x653AE09B`, ankle blend `0x29BDC08C` and HandFix `0x98FBC8FE`, and prove
-      Gesture/D229 output-only semantics. Resolve `sub_141FFA6E0` through RTTI,
-      callers and its command-7 children; trace the blend value normalized by
-      `kAimAlternateLayerReleaseDuration` to receiver-local versus retained-peer
-      state. Do not request another diagnostic run. The next user test must be a
-      consolidated corrective build backed by the static evidence quota.
+- [x] Supersede the remaining `kh` plugin-mask branch with the narrower authored
+      Gesture target seam. Static call/data flow now closes
+      `GestureTargetAimAt_GetTarget 0x1406F26D0 -> Gesture_GetComputeArgs
+      0x141FD3180 -> ComputeArgs -> AnimNodeGesture_StepAngles 0x141FFEDB0 ->
+      cached angles +0x80/+0x84`; RTTI/vtable identity and the
+      target factory independently bind CRC `0xE83A8507` to TargetAimAt. The
+      getter resolves the exact owner and consumes its +0x18F0/+0x1900/+0x1910
+      target ring through `0x141DE6500`. Detailed LegFix/ankle/HandFix masks no
+      longer block a target-only correction and remain stock.
+- [ ] Run one consolidated `ki` exam when the user is ready. The new one-slot
+      TargetAimAt vtable relay changes only retained slot-1 authored AimAt output
+      to the fresh peer pose-seed +Z direction, preserving the native owner,
+      target radius, transition state, clips, IK and final matrices. Hold the
+      receiver camera fixed while the sender aims sky -> ground -> sky, then hold
+      the sender fixed and move only the receiver camera. The puppet must follow
+      only the sender; local Player behavior and both models must remain normal.
+      No further diagnostic-only build or micro-test is authorized first.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

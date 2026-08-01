@@ -2250,9 +2250,63 @@ FUNCTIONS = {
     0x141FFEDB0: (
         "AnimNodeGesture_StepAngles",
         "Updates an AnimNodeGesture's cached angle/transform state once per shared "
-        "frame epoch and dispatches the gesture-state solver. The compared "
-        "g_LocalPlayerInputManager_Ptr+0x50 qword is an epoch, not a camera vector; "
-        "the literal aim only selects authored gesture settings.",
+        "frame epoch. It invokes the Gesture::GetComputeArgs closure through "
+        "computeArgs+0x70 vtable slot +8, runs the gesture solver, and stores the "
+        "resulting cached angles at node+0x80/+0x84 for Step/command generation. "
+        "The compared g_LocalPlayerInputManager_Ptr+0x50 qword is an epoch, not a "
+        "camera vector; the literal aim selects authored gesture settings.",
+    ),
+    0x141FFA550: (
+        "AnimNodeGesture_Step",
+        "Consumes the cached gesture state produced by AnimNodeGesture_StepAngles "
+        "and advances the node's authored gesture animation state.",
+    ),
+    0x141FFA6E0: (
+        "AnimNodeGesture_GenerateAnimCommands",
+        "Generates the gesture node's animation commands from the cached angles, "
+        "selected authored clips and transition/blend state.",
+    ),
+    0x141FFE100: (
+        "AnimNodeGesture_SelectGestureAnims",
+        "Selects authored gesture animation clips from the cached gesture grid "
+        "using the live angle state prepared by StepAngles.",
+    ),
+    0x141FD1C20: (
+        "Gesture_ResolveJointReferenceTransform",
+        "Builds one gesture joint-reference transform. It resolves an authored "
+        "joint when present, otherwise calls the optional joint-reader provider "
+        "through vtable slot +8. This is distinct from the Gesture::Target slot-0 "
+        "query performed directly by Gesture_GetComputeArgs.",
+    ),
+    0x141FD3180: (
+        "Gesture_GetComputeArgs",
+        "Exact source-asserted Gesture::GetComputeArgs. Requires pOwner and "
+        "pTarget, calls target vtable slot 0 directly, stores that world target "
+        "in the returned compute object, and installs its closure at +0x70.",
+    ),
+    0x141FD3680: (
+        "Gesture_GetComputeArgs_BuildStepState",
+        "Closure invoked by AnimNodeGesture_StepAngles. Resolves the target/joint "
+        "reference transforms through 0x141FD21D0/0x141FD25B0 and allocates the "
+        "144-byte per-step gesture solver state.",
+    ),
+    0x1406F3510: (
+        "GestureMgr_CreateTargetProvider",
+        "Constructs the exact target provider for a gesture: TargetLookAt for CRC "
+        "0xA399FA92, TargetAimAt for CRC 0xE83A8507, or TargetScriptLambda. The "
+        "native owner weak cell/id are copied from owner+0xA8/+0xBC.",
+    ),
+    0x1406F26D0: (
+        "GestureTargetAimAt_GetTarget",
+        "Gesture::TargetAimAt vtable slot 0. Resolves and generation-validates its "
+        "exact owner from target+0x8/+0x10, then returns the world target built by "
+        "BuildOwnerDirectionVectorFromStateSlotsAndDescriptor.",
+    ),
+    0x1420F2DC0: (
+        "GestureLayer_BuildComputeArgsForNode",
+        "Builds the per-node inputs used by the gesture pre-align path and calls "
+        "Gesture_GetComputeArgs with the node's exact owner and target provider. "
+        "Its returned object is passed to AnimNodeGesture_StepAngles.",
     ),
     0x1420F3F50: (
         "GestureLayer_PreAlignUpdatePerGestureNode",
@@ -5519,9 +5573,16 @@ FUNCTIONS = {
     0x141DE6500: (
         "BuildOwnerDirectionVectorFromStateSlotsAndDescriptor",
         "Synthesizes a world/reference vector from owner state slots "
-        "+0x18F0/+0x1990, validates the authored descriptor at +0x108/+0x10C, "
+        "+0x18F0/+0x1900/+0x1910 selected by flags +0x1921/+0x1922, validates "
+        "the authored descriptor at +0x108/+0x10C, "
         "refreshes owner+0x110, and combines that descriptor offset with owner "
         "transform +0x120 before writing the final vector to caller storage.",
+    ),
+    0x141DE6270: (
+        "NavCharacter_SetBaseTargetPointWorld",
+        "Refreshes the owner transform, converts the supplied world point into "
+        "owner-local space, writes it to the base target slot at +0x18F0 and sets "
+        "the corresponding validity byte at +0x1920.",
     ),
     0x14063CF00: (
         "CheckHelper1FC0CandidateAgainstRetainedPair",

@@ -15372,3 +15372,74 @@ root-record effects of the three live IK workers, then resolve the generator at
 AnimControl/player state and choose a write seam only after it is distinguished
 from ordinary locomotion and transition weights. No further diagnostic game run
 is requested; the next user test must exercise a consolidated fix.
+
+### 2026-08-01 STATIC / IMPLEMENTED / TEST READY: route authored TargetAimAt to peer direction (`ki`)
+
+The final `kh` capture closes the diagnostic branch without another game run.
+Both actors already contain camera-correlated JointParams before final skeleton
+assembly, so the fault is upstream of command 16 and not a palette, ValidBits or
+late IK overwrite. A narrower native path is now resolved end to end:
+
+1. `Gesture_GetComputeArgs 0x141FD3180` is source-asserted with exact `pOwner`
+   and `pTarget` parameters. At `0x141FD32A3` it directly calls target vtable
+   slot 0, stores the returned world point in the compute object, and installs
+   its step-state closure at `+0x70`.
+2. `GestureLayer_BuildComputeArgsForNode 0x1420F2DC0` supplies the node's exact
+   owner/target provider. `GestureLayer_PreAlignUpdatePerGestureNode
+   0x1420F3F50` passes the returned object to
+   `AnimNodeGesture_StepAngles 0x141FFEDB0`. StepAngles invokes closure
+   `0x141FD3680`, runs the solver and stores its live angle outputs at node
+   `+0x80/+0x84`; the named Step, SelectGestureAnims and GenerateAnimCommands
+   functions consume those values. The closure's shared
+   `Gesture_ResolveJointReferenceTransform 0x141FD1C20` handles authored joint
+   or optional joint-reader references and is not the target-provider call.
+3. RTTI and the factory independently identify the concrete provider. The
+   one-slot vtable `0x142980938` is `Gesture::TargetAimAt` and points to
+   `GestureTargetAimAt_GetTarget 0x1406F26D0`. The exact factory
+   `GestureMgr_CreateTargetProvider 0x1406F3510` selects it only for CRC
+   `0xE83A8507`, while LookAt CRC `0xA399FA92` and script-lambda targets use
+   different classes.
+4. `GestureTargetAimAt_GetTarget` resolves the exact generation-checked owner
+   from target `+0x8/+0x10` and calls
+   `BuildOwnerDirectionVectorFromStateSlotsAndDescriptor 0x141DE6500`. That
+   builder selects owner-local target `+0x1910`, `+0x1900` or base `+0x18F0`
+   from validity bytes `+0x1922/+0x1921`, refreshes owner transform
+   `+0x110/+0x120`, and returns the world target. The base writer
+   `NavCharacter_SetBaseTargetPointWorld 0x141DE6270` converts an incoming world
+   point to `+0x18F0` and sets `+0x1920`.
+
+These are four independent evidence kinds: exact caller/callee data flow,
+RTTI/vtable identity, source strings and factory CRC/type selection, and target
+ring field reads/writes; the prior `kh/kg` runtime provenance is an additional
+boundary check. The live alternatives are now explicit:
+
+- **H-ring (leading):** receiver-local state has already contaminated the
+  retained Player target ring, so TargetAimAt returns the wrong pitch;
+- **H-owner:** TargetAimAt resolves the local Player instead of its puppet owner.
+  This is weakened by the factory's exact weak owner/id copy and the getter's
+  `owner+0xBC` generation validation;
+- **H-post-angle:** the target and cached angles are correct but a later blend
+  overwrites them. This is weakened by the direct StepAngles cache-to-command
+  chain and by `kh`, but remains the negative outcome if the narrow relay is
+  inert visually.
+
+Build `ki` patches only TargetAimAt vtable slot 0 after verifying that its stock
+pointer is exactly `0x1406F26D0`. The original getter runs first. Only a fresh,
+strict-ADS packet and the generation-valid retained screen-1 owner may replace
+the returned direction; the native world-target radius and W component are
+preserved while direction becomes the sender pose-seed's positive-Z forward.
+Local Player, LookAt/script targets, clips, gesture state, IK, root transforms and
+final matrices remain stock. The completed `kh` case-6/joint probes are disabled
+so this build no longer performs the multi-megabyte hot-path capture. Release
+compilation and linking succeed through `scanner/build-release.cmd`.
+
+**Falsifiable prediction (written before the next launch):** hold the receiver
+camera fixed while the sender remains in ADS and sweeps sky -> ground -> sky; the
+remote weapon must follow the sender pitch and emit one
+`GESTURE-AIM-TARGET relay applied` marker. Then hold the sender fixed and move
+only the receiver camera; the remote weapon must not follow it. Both local
+Players, horizontal aim, locomotion and models must remain normal. Continued
+receiver-camera ownership with an apply marker rejects H-ring and this seam;
+correct pitch plus distortion rejects radius/origin preservation; no marker
+means the active gesture uses another target class. This is the sole next user
+exam; no intermediate diagnostic run is requested.
