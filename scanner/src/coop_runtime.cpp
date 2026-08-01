@@ -44834,8 +44834,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-01kd "
-        "(read-only case14 and lane handoff discriminator)");
+        "TLL co-op runtime init 2026-08-01ke "
+        "(read-only expansion-tail discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
