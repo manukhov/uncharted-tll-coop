@@ -2185,15 +2185,26 @@ Do not reopen these as the first move:
       case16, while command 3 defaults or preceding authored commands initialize
       fresh per-segment JP lanes. Previous-frame entry state is excluded and
       case17 is ordered after case16.
-- [ ] Run the written `jy` exact-input discriminator with only builtin slot 40
+- [x] Run the written `jy` exact-input discriminator with only builtin slot 40
       wrapped. Require the five Nadine and three Chloe chain rows, exactly one
       target op40, no rejects, normal models and responsive processes. Classify
       S-JP, S-src or S-both from per-chain JP/source/output deltas; no pose
       substitution is authorized. First run was structurally valid for one
       baseline pair (`5/5`, `3/3`, zero rejects) but inconclusive: the older
       broad boundary counter reached 20 and prevented later exact scopes. Build
-      `jz` separates that exhausted logging quota from exact admission; repeat
-      the same written discriminator.
+      `jz` separated that exhausted logging quota from exact admission. The
+      repeated run produced 12/12 scopes per process with zero rejects. Result
+      is mixed by chain: Nadine `24->25->26` and Chloe final joint 42 are S-src;
+      Nadine 96/102 are S-JP; Chloe 36/41 are S-both, with the source contribution
+      dominant at joint 36.
+- [ ] Trace the newly confirmed upstream inputs before another runtime test.
+      Resolve the last writer of Nadine selector-3 scratch `+0x1090` feeding
+      joint 24 and the last writer of Chloe entry joint 35. Separately resolve
+      authored/default JointParams producers for Nadine 96/102 and Chloe 36/41.
+      Competing hypotheses are a shared receiver-camera pose-root writer,
+      independent authored JP/source paths, or a mixed convergence. Require
+      caller/callee, exact read/write dataflow and command-order evidence before
+      designing a discriminator or substitution.
 - [ ] After the parent source is resolved, trace the exact JointParams producers
       for target children `97/103/43`; child 27 needs no JointParams trace because
       `jw` proved its 48-byte record bit-identical across the camera sweep.

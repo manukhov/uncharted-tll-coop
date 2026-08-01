@@ -2239,7 +2239,11 @@ FUNCTIONS = {
         "calls, while subsequent Chloe-puppet op49/op50 leave joint 42 unchanged. "
         "The descriptor loop is strictly sequential (advance at 0x14218A04C, "
         "next record at 0x14218A1E0), so same-call chains scratch->24->25->26 "
-        "and 35->36->41->42 consume the earlier record's completed output.",
+        "and 35->36->41->42 consume the earlier record's completed output. "
+        "Runtime jz classified the inputs: Nadine 24/25/26 and Chloe 42 are "
+        "source-driven, Nadine 96/102 are JointParams-driven, and Chloe 36/41 "
+        "change in both inputs. Therefore this final worker is downstream of a "
+        "mixed contamination and is not a valid blanket substitution boundary.",
     ),
     0x142194680: (
         "AnimJointProgramOp41_ScatterVectorComponents",

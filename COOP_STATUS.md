@@ -14321,3 +14321,40 @@ continues using its own 12-sample, 350-ms and 0.04-direction gates. Once the
 broad quota is exhausted, it also skips the obsolete full-array copies and
 per-joint summaries, leaving only the eight exact read-only chains. The written
 `jy` semantic prediction otherwise remains unchanged.
+
+### 2026-08-01 RUNTIME CONFIRMED: `jz` proves mixed source/JointParams contamination before the final aim parents
+
+The repeated camera-distinct `jz` run completed the discriminator on both
+processes. PID 19756 / group 2 and PID 18400 / group 1 each admitted 12 samples.
+All 24 scopes had exactly one target op40, six wrapped op40 calls, the expected
+five/three chains (`mask=1F/E0`), readable inputs and outputs, and zero rejects.
+Both processes were responsive after the capture. The process-relative camera
+channels were reciprocal: group 2 changed mainly with `localY` while its
+`peerY` stayed near `-0.21`; group 1 changed mainly with `peerY` while its
+`localY` stayed near `-0.21`. This is consistent with the user's controlled
+Chloe-camera sweep, but it does not relabel the process-relative channel names.
+
+All 11 non-baseline transitions classify the exact op40 inputs:
+
+- Nadine-puppet `N24 -> N25 -> N26` is **S-src**. Each JointParams record was
+  bit-identical in 11/11 transitions, while source and output changed in 11/11.
+  The median source deltas were `0.45795/0.45598/0.45991`; the same-call source
+  hash of each later record exactly matched the preceding record's output.
+- Nadine-puppet `N96/N102` is **S-JP**. Each selector-1 prefix source was
+  bit-identical in 11/11 transitions, while JointParams and output changed in
+  11/11. Median JP deltas were `0.25251/0.22548` and maxima reached
+  `2.00203/2.02795`.
+- Chloe-puppet `C36/C41` is **S-both**: both JP and source changed in 11/11
+  transitions, although C36's JP delta was small (median `0.00024`) compared
+  with its source (median `0.09111`). `C42` is unambiguously **S-src**: its JP
+  hash `69B8F2B8B216F00D` stayed bit-identical, while source and output changed
+  in 11/11 with identical deltas. C41's source hash matched C36's output and
+  C42's source hash matched C41's output in every sample.
+
+This confirms the overall **S-both/mixed-by-chain** result and rejects a single
+late target-JP or final-parent-op40 fix. The next static frontier is split:
+trace the last writer of Nadine selector-3 scratch `+0x1090` feeding N24 and the
+last writer of Chloe entry joint 35; independently resolve the authored/default
+producers of Nadine JP96/JP102 and the smaller Chloe JP36/JP41 changes. No pose
+substitution is authorized until those upstream writers converge on a bounded
+common receiver-camera input or are classified as separate paths.
