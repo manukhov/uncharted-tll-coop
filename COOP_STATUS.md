@@ -14766,3 +14766,66 @@ sequence within the same Chloe-group-1 and Nadine-group-2 list, including every
 word-0 count, word-3 first joint, byte-4 lane count and the exact WorkBuffer
 stride. Only after that layout proves which allocated block owns local rows
 `35/36/41` and `96/102` can their same-list cases 6/7/8/13 producer be traced.
+
+### 2026-08-01 STATIC / RUNTIME-CORRELATED: command 15 exposes an unwritten JointParams tail
+
+The target-list WorkBuffer layout is now resolved. The opcode-40 inputs called
+"JP36/41" and "JP96/102" by `jz` are inside the final
+`SegmentContext+0x50` allocation, but they were not part of the processing lane
+that command 3 finalized. Command 15 expands that smaller lane in place to the
+target group's workspace count without copying or initializing the newly
+exposed tail.
+
+The exact asset descriptors are:
+
+- `chloe-base.pak+0x5A2C0` processing descriptor 0 is
+  `{jointCount=89, scalarCount=27, lanes=2, first=0}`; descriptor 1 at
+  `+0x5A2CA` is `{jointCount=1, scalarCount=0, lanes=1, first=89}`. Target group
+  1 at `+0x5A1E0` selects descriptor 1 and reports
+  `{first=205, workspaceCount=62, parameterCount=1}`.
+- `nadine-dlc-base.pak+0x54120/+0x5412A/+0x54134` contains processing
+  descriptors `{66, first=0}`, `{38, first=66}` and `{96, first=104}`. Target
+  group 2 at `+0x54060` selects descriptor 2 and reports
+  `{first=142, workspaceCount=119, parameterCount=96}`.
+
+`AnimCmdEvaluator_ExpandJointParamsToTargetWorkspaceCount 0x14217BF30` is the
+missing command-15 step. If `SegmentContext+0x50` already exists and is owned by
+the current list, it releases the old allocation metadata, constructs a new
+front allocation at the same WorkBuffer offset, sizes it as
+`48 * targetGroup.workspaceCount`, tags it with
+`{first=targetGroup.first, count=workspaceCount}`, and republishes the same base
+pointer. It contains no `memcpy`, default-fill loop or zeroing operation.
+`AnimCmdEvaluator_FinalizeGroupDefaults 0x141AB78F0` ran earlier under command 3
+and was bounded to the smaller processing-descriptor word-0 count, so it cannot
+have filled the expanded tail. After the expansion, the only outer operations
+before command 16 allocate the separate matrix workspace and initialize its
+leading root matrix; none writes `+0x50`.
+
+Two independent runtime facts match this disassembly exactly. In `JY`, Chloe
+group 1 always had `jp -> work = 0xBA0 = 62*48`, while Nadine group 2 had
+`jp -> work = 0x1650 = 119*48`. Thus the live command-16 base covers the expanded
+workspace count, not the original 1/96-record processing lane. The exact target
+rows are therefore:
+
+- Chloe local `35/36/41` at `+0x690/+0x6C0/+0x7B0`, all in the newly exposed
+  tail after the single finalized row.
+- Nadine local `96/102` at `+0x1200/+0x1320`, both in the newly exposed tail
+  after the 96 finalized rows.
+
+The tail is also not a hidden target-skeleton default. The package-default FNV
+hashes for Chloe globals `240/241/246` are
+`E9FF932224C2D87D/1367459897800D7C/F239AF01336A2EAB`, and for Nadine globals
+`238/244` are `CBFCD78F41F9F9A5/5DC48A8FA4684728`. None matches the corresponding
+live `JY` row hashes; an exhaustive scan found no live target hash among any
+48-byte default record in its actor skeleton.
+
+This **REJECTS** the old `S-JP`/authored-JointParams label for these rows. The
+worker does interpret the 48 bytes as JointParams, but their current-list owner
+is an unwritten expansion tail preserving prior arena contents. The immediate
+competitors are now precise: (1) the tail is accidental allocator reuse from a
+receiver-local animation list; or (2) the engine intentionally relies on a
+specific prior-list raw carry that our two-player ordering replaces. A hidden
+same-list writer and a target-default fill are both rejected. Before modifying
+pose data, a bounded read-only probe at `0x14217BF30` must prove that base,
+prefix and target-tail bytes survive expansion unchanged and still match the
+later opcode-40 reads.

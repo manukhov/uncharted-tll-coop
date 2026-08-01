@@ -2177,10 +2177,11 @@ FUNCTIONS = {
         "scalar ranges, which are filled from the target skeleton defaults; the "
         "same bits are then marked valid. The 0x142188FF0 -> 0x142192640 path "
         "copies one exact 48-byte JointParams record per missing joint. The joint "
-        "mask spans the local group[0] record count, while group[3] selects the "
-        "first skeleton-default record; published WorkBuffer consumers later use "
-        "global joint indices. Already-valid records retain preceding authored "
-        "direct/retarget/blend output.",
+        "mask spans the processing descriptor's word-0 record count, while word 3 "
+        "selects the first skeleton-default record. Command 15 may later replace "
+        "this allocation in place with a larger target-workspace-count block; "
+        "FinalizeGroupDefaults does not initialize that expanded tail. Already-valid "
+        "prefix records retain preceding authored direct/retarget/blend output.",
     ),
     0x14217B310: (
         "AnimCmdEvaluator_CopyGroupPoseToWorkBuffer",
@@ -2263,6 +2264,14 @@ FUNCTIONS = {
         "confirmed that every captured group-1/2/3 invocation left +0x50 "
         "JointParams bit-identical while complex authored programs changed the "
         "+0x58 workspace.",
+    ),
+    0x14217BF30: (
+        "AnimCmdEvaluator_ExpandJointParamsToTargetWorkspaceCount",
+        "Command-15 helper. Replaces an owned SegmentContext+0x50 allocation "
+        "with a 48*targetGroup.workspaceCount block at the same WorkBuffer offset "
+        "and republishes the same base. The allocation is tagged with target-group "
+        "first/count, but this helper does not copy or zero the newly exposed tail. "
+        "Chloe group 1 expands 1 to 62 records; Nadine group 2 expands 96 to 119.",
     ),
     0x142194C30: (
         "AnimJointProgramOp54_CopyEncodedScalars",

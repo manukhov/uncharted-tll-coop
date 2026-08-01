@@ -2294,17 +2294,22 @@ Do not reopen these as the first move:
       `group.first+local`: Nadine group-2 `96/102 -> 238/244`, Chloe group-1
       `35/36/41 -> 240/241/246`. Reject the `ka` through `kd` cross-group producer
       attribution; it followed unrelated global joints with the same numbers.
-- [ ] Resolve the target-list WorkBuffer layout before another carry. Enumerate
-      every command-2 10-byte processing descriptor in the Chloe-group-1 and
-      Nadine-group-2 lists and prove its word-0 JointParams allocation count,
-      word-3 first joint, byte-4 lane count and typed-block stride. The target
-      group's `parameter_count` at `+0x12` is a separate field and does not bound
-      `SegmentContext+0x50`; use the actual allocator sequence to assign local
-      rows `35/36/41` and `96/102`, then trace only the same-list
-      cases 6/7/8/13 -> command-3 -> op40 lifetime.
-- [ ] After the parent source is resolved, trace the exact JointParams producers
-      for target children `97/103/43`; child 27 needs no JointParams trace because
-      `jw` proved its 48-byte record bit-identical across the camera sweep.
+- [x] Resolve the target-list WorkBuffer layout. Chloe group 1 starts from a
+      one-record processing lane and command 15 expands it in place to 62 records;
+      Nadine group 2 expands 96 records to 119. Runtime pointer deltas are exactly
+      `62*48` and `119*48`. Local rows `35/36/41` and `96/102` are unwritten
+      expansion-tail bytes, not current-list authored/default JointParams.
+- [ ] Implement a bounded read-only expansion probe at
+      `AnimCmdEvaluator_ExpandJointParamsToTargetWorkspaceCount 0x14217BF30`.
+      For only Chloe group 1 and Nadine group 2, snapshot base, finalized prefix
+      and exact target tail before/after the native call, then compare the saved
+      tail with later opcode-40 reads. Require one native call, identical base,
+      unchanged prefix/tail, exact later matches, normal models and no faults.
+- [ ] After expansion provenance is confirmed, choose between explicit
+      sender-tail transport and a deterministic intended prior-list carry. Trace
+      target children Chloe local `43` (global 248) and Nadine local `97/103`
+      (global 239/245); Nadine local 27 needs no input trace because `jw` proved
+      its 48-byte record bit-identical across the camera sweep.
 
 ## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
 
