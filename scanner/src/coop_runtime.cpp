@@ -21255,12 +21255,6 @@ void prepare_aim_joint_boundary_scope(
         return;
     }
     const ULONGLONG now = GetTickCount64();
-    if (g_aim_joint_boundary_sample_count[processing_group].load(
-            std::memory_order_acquire) >= 20 ||
-        now < g_aim_joint_boundary_next_log_ms[processing_group].load(
-            std::memory_order_acquire)) {
-        return;
-    }
     const AimJointBoundaryOwner owner =
         probe_aim_joint_boundary_owner(context);
     if (!owner.valid || owner.screen != kSlot1ScreenIndex ||
@@ -21365,7 +21359,7 @@ void prepare_aim_joint_boundary_scope(
             char line[512]{};
             std::snprintf(
                 line, sizeof(line),
-                "AIM-JOINT-ADMISSION-JY outer sample=%u group=%u "
+                "AIM-JOINT-ADMISSION-JZ outer sample=%u group=%u "
                 "op16=%u op24=%u joints=%u peer=%u/%u local=%u/%u "
                 "peerY=%.4f localY=%.4f separation=%.4f armed=%u",
                 sample + 1, processing_group, case16_count, case24_count,
@@ -21572,7 +21566,7 @@ void log_aim_joint_boundary_after_case16(
     char line[2048]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-BOUNDARY-JY sample=%u seq=%u peerSrc=%u "
+        "AIM-JOINT-BOUNDARY-JZ sample=%u seq=%u peerSrc=%u "
         "peerY=%.4f localY=%.4f dirDelta=%.4f/%.4f "
         "group=%u first=%u params=%u workspace=%u reset=%u "
         "op16=%u op24=%u programs=%u/%u hash=%016llX "
@@ -21695,7 +21689,7 @@ void audit_aim_joint_case16_entry(
     char line[768]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-ADMISSION-JY raw sample=%u screen=1 outerGroup=%u "
+        "AIM-JOINT-ADMISSION-JZ raw sample=%u screen=1 outerGroup=%u "
         "segmentGroup=%u segment=%u pointers=%u target=%u group=%u "
         "ordinal=%u/%u first=%u workspace=%u params=%u "
         "scopeTarget=%p program=%p actual=%p jp=%p work=%p readable=%u/%u",
@@ -21732,7 +21726,7 @@ void log_aim_joint_admission_post(
     char line[384]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-ADMISSION-JY post sample=%u group=%u "
+        "AIM-JOINT-ADMISSION-JZ post sample=%u group=%u "
         "programs=%u readable=%u/%u captured=%u",
         sample + 1, scope.processing_group,
         static_cast<unsigned>(programs_valid),
@@ -21819,7 +21813,7 @@ void begin_aim_joint_operator_boundary(
     char line[768]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-EXACT-JY begin sample=%u seq=%u peerY=%.4f localY=%.4f "
+        "AIM-JOINT-EXACT-JZ begin sample=%u seq=%u peerY=%.4f localY=%.4f "
         "group=%u programs=%u/%u custom=%u hash=%016llX "
         "jp=%016llX workspace=%016llX",
         scope.sample, scope.peer_sequence, scope.peer_y, scope.local_y,
@@ -21852,7 +21846,7 @@ void finish_aim_joint_operator_boundary() {
     char line[640]{};
     std::snprintf(
         line, sizeof(line),
-        "AIM-JOINT-EXACT-JY end sample=%u group=%u targets=%u "
+        "AIM-JOINT-EXACT-JZ end sample=%u group=%u targets=%u "
         "wrapped40=%u producer40=%u chains=%u/%u mask=%02X expected=%02X "
         "rejects=%u readable=%u "
         "trailingW=%u/%u jp=%016llX workspace=%016llX",
@@ -22076,7 +22070,7 @@ std::uintptr_t __fastcall hooked_anim_joint_program_op40(
         char line[448]{};
         std::snprintf(
             line, sizeof(line),
-            "AIM-JOINT-EXACT-JY reject sample=%u group=%u ord=%u "
+            "AIM-JOINT-EXACT-JZ reject sample=%u group=%u ord=%u "
             "op=40 payloadOff=%08X p=%04X/%04X/%04X records=%u",
             scope.sample, scope.processing_group, ordinal, payload_offset,
             static_cast<unsigned>(payload[0]),
@@ -22098,7 +22092,7 @@ std::uintptr_t __fastcall hooked_anim_joint_program_op40(
     char header[576]{};
     std::snprintf(
         header, sizeof(header),
-        "AIM-JOINT-EXACT-JY op sample=%u seq=%u peerY=%.4f localY=%.4f "
+        "AIM-JOINT-EXACT-JZ op sample=%u seq=%u peerY=%.4f localY=%.4f "
         "group=%u ord=%u op=40 payloadOff=%08X p=%04X/%04X/%04X "
         "records=%u matches=%u phase=%s target=%u",
         scope.sample, scope.peer_sequence, scope.peer_y, scope.local_y,
@@ -22137,7 +22131,7 @@ std::uintptr_t __fastcall hooked_anim_joint_program_op40(
             char reject_line[448]{};
             std::snprintf(
                 reject_line, sizeof(reject_line),
-                "AIM-JOINT-EXACT-JY reject sample=%u group=%u ord=%u "
+                "AIM-JOINT-EXACT-JZ reject sample=%u group=%u ord=%u "
                 "chain=%s payloadOff=%08X rec=%u post-unreadable",
                 scope.sample, scope.processing_group, ordinal,
                 match.spec.name, payload_offset, match.record);
@@ -22215,7 +22209,7 @@ std::uintptr_t __fastcall hooked_anim_joint_program_op40(
         char line[1024]{};
         std::snprintf(
             line, sizeof(line),
-            "AIM-JOINT-EXACT-JY chain sample=%u seq=%u group=%u ord=%u "
+            "AIM-JOINT-EXACT-JZ chain sample=%u seq=%u group=%u ord=%u "
             "chain=%s payloadOff=%08X rec=%u k=%04X src=%04X joint=%u "
             "srcPhase=%s reset=%u dCam=%.4f/%.4f "
             "rawJP/src/out=%u/%u/%u dJP/src/out=%.5f/%.5f/%.5f "
@@ -22310,9 +22304,14 @@ std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
         return native(status, segment_context);
     }
     const float* const workspace = workspace_base + 16;
-    std::memcpy(
-        capture.pre_joint_params.data(), joint_params,
-        parameter_values * sizeof(float));
+    const bool capture_broad_boundary =
+        g_aim_joint_boundary_sample_count[scope.processing_group].load(
+            std::memory_order_acquire) < 20;
+    if (capture_broad_boundary) {
+        std::memcpy(
+            capture.pre_joint_params.data(), joint_params,
+            parameter_values * sizeof(float));
+    }
     capture.programs = inventory_aim_joint_programs(
         target_skeleton, group, segment_context);
     begin_aim_joint_operator_boundary(
@@ -22323,6 +22322,9 @@ std::uint32_t* __fastcall hooked_anim_cmd_execute_joint_programs(
         workspace_values + 16);
     std::uint32_t* const result = native(status, segment_context);
     finish_aim_joint_operator_boundary();
+    if (!capture_broad_boundary) {
+        return result;
+    }
     const bool post_joint_params_readable =
         readable_bytes(joint_params) >= parameter_values * sizeof(float);
     const bool post_workspace_readable =
@@ -24091,7 +24093,7 @@ bool install_aim_joint_boundary_probes() {
             VirtualFree(execute_relay, 0, MEM_RELEASE);
         }
         boot_log_line(
-            "aim jy case16 admission probe SKIPPED (callsite preflight)");
+            "aim jz case16 admission probe SKIPPED (callsite preflight)");
         return false;
     }
 
@@ -24103,7 +24105,7 @@ bool install_aim_joint_boundary_probes() {
         VirtualFree(execute_relay, 0, MEM_RELEASE);
         g_anim_cmd_execute_joint_programs = nullptr;
         boot_log_line(
-            "aim jy case16 admission probe SKIPPED (thread suspend)");
+            "aim jz case16 admission probe SKIPPED (thread suspend)");
         return false;
     }
 
@@ -24114,7 +24116,7 @@ bool install_aim_joint_boundary_probes() {
         resume_suspended_process_threads(suspended_threads);
         VirtualFree(execute_relay, 0, MEM_RELEASE);
         g_anim_cmd_execute_joint_programs = nullptr;
-        boot_log_line("aim jy case16 admission probe SKIPPED (protect)");
+        boot_log_line("aim jz case16 admission probe SKIPPED (protect)");
         return false;
     }
 
@@ -24125,7 +24127,7 @@ bool install_aim_joint_boundary_probes() {
     VirtualProtect(execute_callsite, 5, execute_old, &ignored);
     resume_suspended_process_threads(suspended_threads);
     boot_log_line(
-        "aim jy case16 admission probe installed (0x141ABA973)");
+        "aim jz case16 admission probe installed (0x141ABA973)");
     return true;
 }
 
@@ -24139,19 +24141,19 @@ bool install_aim_joint_exact_input_probe() {
         (kLastBuiltinOpcode - kFirstBuiltinOpcode + 1) *
         sizeof(AnimJointProgramOperatorFunction);
     if (readable_bytes(builtin_table + kFirstBuiltinOpcode) < kBuiltinSpan) {
-        boot_log_line("aim jy exact-input probe SKIPPED (readability)");
+        boot_log_line("aim jz exact-input probe SKIPPED (readability)");
         return false;
     }
     if (builtin_table[40] !=
             reinterpret_cast<AnimJointProgramOperatorFunction>(
                 g_module + kAnimJointProgramOp40Rva)) {
-        boot_log_line("aim jy exact-input probe SKIPPED (slot preflight)");
+        boot_log_line("aim jz exact-input probe SKIPPED (slot preflight)");
         return false;
     }
 
     SuspendedProcessThreads suspended_threads{};
     if (!suspend_other_process_threads(suspended_threads)) {
-        boot_log_line("aim jy exact-input probe SKIPPED (thread suspend)");
+        boot_log_line("aim jz exact-input probe SKIPPED (thread suspend)");
         return false;
     }
     DWORD builtin_old = 0;
@@ -24160,7 +24162,7 @@ bool install_aim_joint_exact_input_probe() {
         PAGE_READWRITE, &builtin_old) != 0;
     if (!builtin_protected) {
         resume_suspended_process_threads(suspended_threads);
-        boot_log_line("aim jy exact-input probe SKIPPED (protect)");
+        boot_log_line("aim jz exact-input probe SKIPPED (protect)");
         return false;
     }
 
@@ -24174,7 +24176,7 @@ bool install_aim_joint_exact_input_probe() {
         builtin_table + kFirstBuiltinOpcode, kBuiltinSpan,
         builtin_old, &ignored);
     resume_suspended_process_threads(suspended_threads);
-    boot_log_line("aim jy exact-input probe installed (slot 40 only)");
+    boot_log_line("aim jz exact-input probe installed (slot 40 only)");
     return true;
 }
 
@@ -43061,7 +43063,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-01jy "
+        "TLL co-op runtime init 2026-08-01jz "
         "(read-only exact op40 JP/source/output chains)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
