@@ -12367,28 +12367,27 @@ bool install_move_leg_ik_footstep_admission_probe() {
         new_displacements[i] = static_cast<std::int32_t>(displacement);
     }
 
-    DWORD old[2]{};
-    for (std::size_t i = 0; i < 2; ++i) {
-        if (!VirtualProtect(
-                call_sites[i], 5, PAGE_EXECUTE_READWRITE, &old[i])) {
-            for (std::size_t j = 0; j < i; ++j) {
-                DWORD ignored = 0;
-                VirtualProtect(call_sites[j], 5, old[j], &ignored);
-            }
-            VirtualFree(relay, 0, MEM_RELEASE);
-            g_move_leg_ik_update_next_footsteps = nullptr;
-            boot_log_line(
-                "MoveLegIk admission probe SKIPPED (VirtualProtect)");
-            return false;
-        }
+    // Both retail callsites are on the same 4 KiB page. Protecting/restoring
+    // them independently restores RX after the first write and faults on the
+    // second. Patch the one contiguous range under one protection lifetime.
+    const std::size_t patch_span =
+        static_cast<std::size_t>(call_sites[1] + 5 - call_sites[0]);
+    DWORD old = 0;
+    if (!VirtualProtect(
+            call_sites[0], patch_span, PAGE_EXECUTE_READWRITE, &old)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_move_leg_ik_update_next_footsteps = nullptr;
+        boot_log_line(
+            "MoveLegIk admission probe SKIPPED (VirtualProtect)");
+        return false;
     }
     for (std::size_t i = 0; i < 2; ++i) {
         *reinterpret_cast<std::int32_t*>(call_sites[i] + 1) =
             new_displacements[i];
         FlushInstructionCache(GetCurrentProcess(), call_sites[i], 5);
-        DWORD ignored = 0;
-        VirtualProtect(call_sites[i], 5, old[i], &ignored);
     }
+    DWORD ignored = 0;
+    VirtualProtect(call_sites[0], patch_span, old, &ignored);
     boot_log_line(
         "MoveLegIk footstep admission probe installed (read-only) "
         "(0x14210199C/0x142101F69)");
@@ -47820,7 +47819,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02o "
+        "TLL co-op runtime init 2026-08-02p "
         "(read-only MoveLegIk footstep admission probe)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

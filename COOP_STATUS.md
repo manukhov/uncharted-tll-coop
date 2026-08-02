@@ -16594,6 +16594,21 @@ among H1--H4 decides the next implementation. Absence of rows or any visible pos
 regression rejects the probe packaging itself. Release DLL builds successfully;
 runtime classification is pending.
 
+### 2026-08-02 RUNTIME REJECTED/REPAIRED: build `o` probe installer page lifetime
+
+Self-launch of PIDs 9840/10032 rejected build `o` before gameplay. Both processes
+faulted while installing the second probe callsite: access-write fault
+`0x142101F6A`, DLL RVA `0x356F8`, with the two expected callsites visible in
+registers as `0x14210199C/0x142101F69`. They share one 4 KiB code page. The
+installer called `VirtualProtect` on each address, but restored the first site's
+old RX protection before writing the second site on that same page. No probe row
+or gameplay behavior was reached, so this says nothing about H1--H4.
+
+Build `2026-08-02p` repairs only that packaging bug: it changes protection once
+over the single contiguous `0x5D2`-byte range, writes and flushes both rel32
+displacements while the range is RWX, then restores the original protection
+once. The read-only wrapper and written H1--H4 prediction are unchanged.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

@@ -101,7 +101,11 @@
       `0x142103AAE..0x142103ACB` / `0x142103BB4..0x142103BCC`. The effect is an
       authored clip cue; `payload+0x8 == 3` is its parameter count, and
       `+0x2C/+0x30 >= 0` is the only admission-valid gate for both output blocks.
-- [ ] Run the single build-`o` read-only discriminator: stationary ADS-turn local
+- [x] Reject build `o` probe packaging before gameplay: both self-launched copies
+      faulted writing `0x142101F6A` because the two callsites share one code page
+      and the installer restored RX after the first write. Build `p` protects,
+      patches and restores the one contiguous range; probe semantics are unchanged.
+- [ ] Run the single build-`p` read-only discriminator: stationary ADS-turn local
       Chloe while watching from Nadine. Compare bounded
       `AIM-FOOT-ADMISSION owner=0/1 window=0/1` rows. Local `-1` selects a wrong
       owner; local admitted/puppet `-1` selects a missing clip effect; both
