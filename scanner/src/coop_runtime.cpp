@@ -58,6 +58,8 @@ namespace {
 using UpdateFunction = void(__fastcall*)(void*);
 using FgAnimDataPublishWorldTransformFunction = std::int64_t(__fastcall*)(
     void*, const float*, std::uint8_t);
+using CharacterLegIkControllerUpdateFunction = void(__fastcall*)(
+    void*, const void*, std::uintptr_t);
 using BuildNavigationFrameFunction =
     void(__fastcall*)(void*, const void*, std::uint32_t, float);
 using MoveToFunction = void(__fastcall*)(
@@ -136,6 +138,8 @@ AnimJointProgramOperatorFunction g_original_anim_joint_program_op128 = nullptr;
 AnimJointProgramOperatorFunction g_original_anim_joint_program_op129 = nullptr;
 AnimJointProgramOperatorFunction g_original_anim_joint_program_op131 = nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
+CharacterLegIkControllerUpdateFunction
+    g_character_leg_ik_controller_update = nullptr;
 std::atomic<void*> g_local_fganim_data{nullptr};
 std::atomic<void*> g_puppet_fganim_data{nullptr};
 std::array<std::atomic<std::uint32_t>, 4> g_local_fganim_quat_bits{};
@@ -149,6 +153,14 @@ struct PuppetFgAnimWorldSmoothingState {
 };
 SRWLOCK g_puppet_fganim_smoothing_lock = SRWLOCK_INIT;
 PuppetFgAnimWorldSmoothingState g_puppet_fganim_smoothing{};
+struct PuppetLegIkWorldFrameState {
+    void* fg = nullptr;
+    float world_quat[4]{};
+    ULONGLONG published_ms = 0;
+};
+SRWLOCK g_puppet_leg_ik_world_frame_lock = SRWLOCK_INIT;
+PuppetLegIkWorldFrameState g_puppet_leg_ik_world_frame{};
+std::atomic<bool> g_puppet_leg_ik_stage_logged{false};
 std::atomic<bool> g_puppet_fganim_world_turn_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_blended_seen{false};
@@ -12076,6 +12088,55 @@ void reset_puppet_fganim_world_smoothing(void* owner) {
     ReleaseSRWLockExclusive(&g_puppet_fganim_smoothing_lock);
 }
 
+void publish_puppet_leg_ik_world_frame(
+    void* fg, const float world_quat[4], ULONGLONG now) {
+    if (fg == nullptr || world_quat == nullptr ||
+        !valid_network_orientation(world_quat)) {
+        return;
+    }
+    AcquireSRWLockExclusive(&g_puppet_leg_ik_world_frame_lock);
+    g_puppet_leg_ik_world_frame.fg = fg;
+    std::memcpy(
+        g_puppet_leg_ik_world_frame.world_quat,
+        world_quat,
+        sizeof(g_puppet_leg_ik_world_frame.world_quat));
+    g_puppet_leg_ik_world_frame.published_ms = now;
+    ReleaseSRWLockExclusive(&g_puppet_leg_ik_world_frame_lock);
+}
+
+void reset_puppet_leg_ik_world_frame(void* fg) {
+    AcquireSRWLockExclusive(&g_puppet_leg_ik_world_frame_lock);
+    if (fg == nullptr || g_puppet_leg_ik_world_frame.fg == fg) {
+        g_puppet_leg_ik_world_frame = {};
+    }
+    ReleaseSRWLockExclusive(&g_puppet_leg_ik_world_frame_lock);
+}
+
+bool copy_puppet_leg_ik_world_frame(
+    void* player, float out[4], ULONGLONG& age_ms) {
+    if (player == nullptr || out == nullptr ||
+        readable_bytes(static_cast<std::byte*>(player) +
+                       kPlayerFgAnimDataOffset) < sizeof(void*)) {
+        return false;
+    }
+    void* const player_fg = *reinterpret_cast<void**>(
+        static_cast<std::byte*>(player) + kPlayerFgAnimDataOffset);
+    const ULONGLONG now = GetTickCount64();
+    bool valid = false;
+    AcquireSRWLockShared(&g_puppet_leg_ik_world_frame_lock);
+    const auto& state = g_puppet_leg_ik_world_frame;
+    if (player_fg != nullptr && state.fg == player_fg &&
+        state.published_ms != 0 && now >= state.published_ms &&
+        now - state.published_ms <= 100 &&
+        valid_network_orientation(state.world_quat)) {
+        std::memcpy(out, state.world_quat, sizeof(state.world_quat));
+        age_ms = now - state.published_ms;
+        valid = true;
+    }
+    ReleaseSRWLockShared(&g_puppet_leg_ik_world_frame_lock);
+    return valid;
+}
+
 std::int64_t __fastcall hooked_fganim_publish_world_transform(
     void* fg, const float* transform, std::uint8_t publish_current) {
     const auto native = g_fganim_publish_world_transform;
@@ -12101,6 +12162,7 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
     static float smoothed_yaw = 0.0F;
     static ULONGLONG smoothed_yaw_ms = 0;
     bool applied_world_quat = false;
+    bool applied_peer_aiming = false;
     if (g_enable_puppet_fganim_world_aim_turn && fg != nullptr &&
         fg == puppet_fg && transform != nullptr && received != 0 &&
         now - received <= 250) {
@@ -12115,6 +12177,7 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
                     peer_aiming, now, relayed_transform + 4)) {
                 selected_transform = relayed_transform;
                 applied_world_quat = true;
+                applied_peer_aiming = peer_aiming;
                 const float smooth_target_dot = std::fabs(
                     relayed_transform[4] * peer.fganim_world_quat[0] +
                     relayed_transform[5] * peer.fganim_world_quat[1] +
@@ -12209,6 +12272,7 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
                         relayed_transform + 4);
                     selected_transform = relayed_transform;
                     applied_world_quat = true;
+                    applied_peer_aiming = true;
                     if (!g_puppet_fganim_world_turn_seen.exchange(
                             true, std::memory_order_relaxed)) {
                         boot_log_line(
@@ -12218,12 +12282,22 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
             }
         }
     }
-    if (fg == puppet_fg && !applied_world_quat) {
-        reset_puppet_fganim_world_smoothing(fg);
-        smoothed_fg = nullptr;
-        smoothed_yaw_valid = false;
-        smoothed_yaw_ms = 0;
-        g_puppet_render_aim_yaw_ready.store(false, std::memory_order_release);
+    if (fg == puppet_fg) {
+        if (applied_world_quat && applied_peer_aiming &&
+            selected_transform != nullptr) {
+            publish_puppet_leg_ik_world_frame(
+                fg, selected_transform + 4, now);
+        } else {
+            reset_puppet_leg_ik_world_frame(fg);
+        }
+        if (!applied_world_quat) {
+            reset_puppet_fganim_world_smoothing(fg);
+            smoothed_fg = nullptr;
+            smoothed_yaw_valid = false;
+            smoothed_yaw_ms = 0;
+            g_puppet_render_aim_yaw_ready.store(
+                false, std::memory_order_release);
+        }
     }
     return native(fg, selected_transform, publish_current);
 }
@@ -12285,6 +12359,151 @@ bool install_fganim_world_aim_turn_callsite_relay() {
     DWORD ignored = 0;
     VirtualProtect(call_site, 5, old_protection, &ignored);
     boot_log_line("FgAnim phase-0x40 world-aim relay installed");
+    return true;
+}
+
+bool seh_prepare_puppet_leg_ik_world_frame(
+    void* controller,
+    void*& player,
+    float saved_local_root[4],
+    float staged_local_root[4],
+    float& root_dot,
+    ULONGLONG& frame_age_ms) {
+    player = nullptr;
+    root_dot = 1.0F;
+    frame_age_ms = 0;
+    __try {
+        if (g_dll_inert || !g_state_net.enabled || controller == nullptr ||
+            !g_enable_puppet_fganim_world_aim_turn ||
+            readable_bytes(static_cast<std::byte*>(controller) + 0x8) <
+                sizeof(void*)) {
+            return false;
+        }
+        player = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(controller) + 0x8);
+        if (player == nullptr || player != retained_player_object(1) ||
+            readable_bytes(static_cast<std::byte*>(player) +
+                           kPlayerQuatOffset) < 4 * sizeof(float)) {
+            return false;
+        }
+
+        float staged_world_root[4]{};
+        if (!copy_puppet_leg_ik_world_frame(
+                player, staged_world_root, frame_age_ms) ||
+            !world_quat_to_player_local_root(
+                player, staged_world_root, staged_local_root)) {
+            return false;
+        }
+
+        auto* const local_root = reinterpret_cast<float*>(
+            static_cast<std::byte*>(player) + kPlayerQuatOffset);
+        std::memcpy(
+            saved_local_root, local_root, 4 * sizeof(float));
+        root_dot = std::fabs(
+            saved_local_root[0] * staged_local_root[0] +
+            saved_local_root[1] * staged_local_root[1] +
+            saved_local_root[2] * staged_local_root[2] +
+            saved_local_root[3] * staged_local_root[3]);
+        return std::isfinite(root_dot);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        player = nullptr;
+        root_dot = 1.0F;
+        frame_age_ms = 0;
+        return false;
+    }
+}
+
+void log_puppet_leg_ik_world_frame_stage(
+    void* player, float root_dot, ULONGLONG frame_age_ms) {
+    // Wait for a real turn. Logging an initial dot=1 row would prove reachability
+    // but not the nontrivial input that is meant to drive foot replanting.
+    constexpr float kTwoDegreeQuaternionDot = 0.9998477F;
+    if (player == nullptr || root_dot >= kTwoDegreeQuaternionDot ||
+        g_puppet_leg_ik_stage_logged.exchange(
+            true, std::memory_order_acq_rel)) {
+        return;
+    }
+    const float clamped_dot = std::clamp(root_dot, 0.0F, 1.0F);
+    const float delta_degrees =
+        2.0F * std::acos(clamped_dot) * (180.0F / 3.14159265F);
+    std::ostringstream line;
+    line << "AIM-LEG-IK-STAGE owner=1 player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(player) << std::dec
+         << " frameAgeMs=" << frame_age_ms
+         << " rootDot=" << root_dot
+         << " deltaDeg=" << delta_degrees
+         << " restored=1";
+    boot_log_line(line.str().c_str());
+}
+
+void __fastcall hooked_character_leg_ik_controller_update(
+    void* controller, const void* delta_transform, std::uintptr_t update_flags) {
+    const auto native = g_character_leg_ik_controller_update;
+    if (native == nullptr) {
+        return;
+    }
+
+    void* player = nullptr;
+    alignas(16) float saved_local_root[4]{};
+    alignas(16) float staged_local_root[4]{};
+    float root_dot = 1.0F;
+    ULONGLONG frame_age_ms = 0;
+    const bool staged = seh_prepare_puppet_leg_ik_world_frame(
+        controller,
+        player,
+        saved_local_root,
+        staged_local_root,
+        root_dot,
+        frame_age_ms);
+    if (!staged) {
+        native(controller, delta_transform, update_flags);
+        return;
+    }
+
+    auto* const local_root = reinterpret_cast<float*>(
+        static_cast<std::byte*>(player) + kPlayerQuatOffset);
+    std::memcpy(local_root, staged_local_root, sizeof(staged_local_root));
+    native(controller, delta_transform, update_flags);
+    std::memcpy(local_root, saved_local_root, sizeof(saved_local_root));
+    log_puppet_leg_ik_world_frame_stage(player, root_dot, frame_age_ms);
+}
+
+bool install_character_leg_ik_world_frame_relay() {
+    auto* const slot = reinterpret_cast<void**>(
+        g_module + kCharacterLegIkControllerUpdateVtableSlotRva);
+    void* const expected = reinterpret_cast<void*>(
+        g_module + kCharacterLegIkControllerUpdateRva);
+    if (*slot != expected) {
+        boot_log_line(
+            "CharacterLegIk world-frame relay SKIPPED (slot mismatch)");
+        return false;
+    }
+    g_character_leg_ik_controller_update =
+        reinterpret_cast<CharacterLegIkControllerUpdateFunction>(expected);
+    DWORD old = 0;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+        g_character_leg_ik_controller_update = nullptr;
+        boot_log_line(
+            "CharacterLegIk world-frame relay SKIPPED (protect)");
+        return false;
+    }
+    void* const previous = InterlockedCompareExchangePointer(
+        reinterpret_cast<PVOID volatile*>(slot),
+        reinterpret_cast<void*>(&hooked_character_leg_ik_controller_update),
+        expected);
+    if (previous != expected) {
+        DWORD ignored = 0;
+        VirtualProtect(slot, sizeof(void*), old, &ignored);
+        g_character_leg_ik_controller_update = nullptr;
+        boot_log_line(
+            "CharacterLegIk world-frame relay SKIPPED (slot race)");
+        return false;
+    }
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(void*), old, &ignored);
+    boot_log_line(
+        "CharacterLegIk world-frame relay installed (0x142BBB478)");
     return true;
 }
 
@@ -47343,8 +47562,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02k "
-        "(exact ADS foot-action OnStart discriminator)");
+        "TLL co-op runtime init 2026-08-02l "
+        "(scoped CharacterLegIk world-frame relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -47429,8 +47648,8 @@ DWORD WINAPI install_hook(void*) {
         install_native_aim_pitch_smoother_relay();
         install_player_strafe_ik_forward_y_relay();
         install_native_aim_foot_turn_relays();
-        install_aim_step_phase0_discriminator();
-        install_aim_step_on_start_discriminator();
+        boot_log_line(
+            "rejected ADS foot-action OnStart/phase-0 probes disabled");
         if (g_enable_aim_case6_probe) {
             install_aim_case6_probe();
             if (g_enable_aim_joint_boundary_probe) {
@@ -47442,7 +47661,9 @@ DWORD WINAPI install_hook(void*) {
             }
         }
         if (g_enable_puppet_fganim_world_aim_turn) {
-            install_fganim_world_aim_turn_callsite_relay();
+            if (install_fganim_world_aim_turn_callsite_relay()) {
+                install_character_leg_ik_world_frame_relay();
+            }
         }
         if (g_enable_gun_move_body_turn) {
             install_gun_move_camera_turn_relay();

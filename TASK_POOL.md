@@ -64,12 +64,19 @@
       The full graph has no horizontal turn selector; the concrete late owner is
       `MoveLegIkNew` under `CharacterLegIkController`, which writes both per-leg
       predicted transforms and immediately commits the resulting joints.
-- [ ] Implement and run one scoped `CharacterLegIkController::Update` test. For
-      the retained puppet only, temporarily stage peer-relayed world yaw as
-      `Player+0x140` local-root yaw during that single stock call, convert through
-      parent `Player+0x120`, then restore immediately. Prediction: remote feet
-      step/replant during stationary ADS turning without changing collision,
-      locomotion, reload pose or post-ADS heading.
+- [x] Implement build `2026-08-02l` at exact `CharacterLegIkController` vtable
+      slot `0x142BBB478`: cache the already-smoothed puppet world quaternion at
+      the confirmed phase-`0x40` publication, convert through parent
+      `Player+0x120`, stage only `Player+0x140` during the one stock
+      `CharacterLegIkController_Update 0x141F9E6F0` call, then restore all 16
+      bytes. The DLL builds successfully and the rejected OnStart/phase-zero
+      probes are disabled.
+- [ ] Run one stationary ADS turn on Chloe with build `l`. Prediction: the
+      bounded `AIM-LEG-IK-STAGE owner=1 ... restored=1` marker accompanies
+      visible remote Nadine foot replanting/steps, while smooth body/weapon yaw,
+      locomotion, reload pose, collision and post-ADS heading remain unchanged.
+      If the marker fires without visible foot movement, reject this seam and
+      move to the two `MoveLegIkNew+0x3A90` predicted-transform blocks.
 
 ## P0: Ground weapon world lifecycle and pickup prompt (`hy`, 2026-07-27)
 

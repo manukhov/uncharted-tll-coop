@@ -128,6 +128,12 @@ constexpr std::size_t kFgAnimDataCurrentUploadSkinningMatsOffset = 0x240;
 constexpr std::size_t kFgAnimDataPreviousUploadSkinningMatsOffset = 0x248;
 constexpr std::uintptr_t kFgAnimDataPublishWorldTransformRva = 0x18C55D0;
 constexpr std::uintptr_t kAnimManagerPublishWorldTransformCallsiteRva = 0x1A8FC00;
+// Player_PostAnimBlending_Async calls CharacterLegIkController vtable +0x18
+// immediately after the phase-0x40 FgAnim world publication and immediately
+// before vtable +0x30 commits the resulting joint transforms.
+constexpr std::uintptr_t kCharacterLegIkControllerUpdateRva = 0x1F9E6F0;
+constexpr std::uintptr_t kCharacterLegIkControllerUpdateVtableSlotRva =
+    0x2BBB478;
 // FgDrawManager worker callsite. The worker passes one FgAnimData and the
 // global FgInstance pool to PrepareInstanceForRendering; after the call every
 // driven 0x280-byte instance owns the current render-world matrix at +0x140.

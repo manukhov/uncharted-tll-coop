@@ -16398,6 +16398,28 @@ bound-frame input is rejected and the next seam moves into the two
 or post-ADS heading regression rejects the boundary immediately; do not retain
 the staged root outside the one native call.
 
+### 2026-08-02 IMPLEMENTED: scoped CharacterLegIK world-frame relay (`2026-08-02l`)
+
+Build `l` implements exactly the seam above and no sustained Player-root write.
+The confirmed phase-`0x40` callsite `0x141A8FC00` caches the actual smoothed
+world quaternion passed to `FgAnimData_PublishWorldTransform` only for the
+retained puppet and only while a fresh peer ADS state is active. The exact
+`CharacterLegIkController` vtable slot `0x142BBB478` (`+0x18`, stock target
+`CharacterLegIkController_Update 0x141F9E6F0`) then converts that world
+quaternion through parent `Player+0x120`, saves all 16 bytes at
+`Player+0x140`, stages the converted local quaternion for the one stock call and
+restores all bytes immediately afterward. The cache expires after 100 ms and is
+matched to the puppet's exact `FgAnimData` pointer, preventing a stale or
+cross-owner frame from reaching the controller.
+
+The previous exact `PlayerCommonAction::OnStart` and phase-zero diagnostics are
+disabled rather than left on the live path. A bounded nontrivial first-use row
+`AIM-LEG-IK-STAGE owner=1 ... frameAgeMs=... deltaDeg=... restored=1` separates
+hook reachability from the visible-foot result. The DLL builds successfully with
+the new slot preflight and restores the slot page protection after installation.
+Runtime status remains **HYPOTHESIS** until the written stationary-ADS prediction
+is observed; build/install markers alone are not confirmation.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge
