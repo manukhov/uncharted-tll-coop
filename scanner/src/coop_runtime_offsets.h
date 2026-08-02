@@ -710,6 +710,10 @@ constexpr std::uintptr_t kPlayerMoveSequencerUpdateRva = 0x2051EC0;
 // Exact Player phase-zero call: mov rcx,[Player+0x3BD0], xor edx,edx,
 // call PlayerMoveSequencer_UpdatePhase.
 constexpr std::uintptr_t kPlayerMoveSequencerPhase0CallsiteRva = 0x0CA4B85;
+// PlayerCommonAction vtable slot +0x10. PlayerMoveSequencer sets lifecycle
+// +0x18 from 0 to 1 immediately before dispatching this exact OnStart slot.
+constexpr std::uintptr_t kPlayerCommonActionOnStartVtableSlotRva = 0x2A076A0;
+constexpr std::uintptr_t kPlayerCommonActionOnStartRva = 0x0C59180;
 constexpr std::uintptr_t kWeaponHolsterBuildBindingRva = 0x14FE540;
 constexpr std::uintptr_t kWeaponAttachmentAttachToOwnerPointRva = 0x1ED0370;
 // Stock Player weapon-marker path. AnimActionMgr calls the Player factory for

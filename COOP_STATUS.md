@@ -16261,6 +16261,44 @@ remain Win32-responsive and neither emitted a crash-observer exception,
 `SKIPPED`, or partial-install marker. This confirms only exact-callsite packaging;
 no `AIM-STEP-PH0`, remote shot, or visual behavior test has yet been performed.
 
+### 2026-08-02 STATIC: exact PlayerCommonAction OnStart discriminator for ADS feet
+
+The phase-zero callsite discriminator remains read-only, but its lack of rows in
+ordinary sessions cannot distinguish a missed `0x140CA4B85` scheduling edge from
+an absent GunMove action. Build `2026-08-02k` therefore observes the exact common
+action start itself by swapping only `PlayerCommonAction` vtable slot `+0x10` at
+`0x142A076A0`; preflight requires its stock target
+`PlayerCommonAction_OnStart 0x140C59180`.
+
+This boundary has four independent static anchors. First, the vtable qword is
+exactly `0x140C59180`, while `PlayerMoveSequencer_UpdatePhase 0x142051EC0` sets
+action lifecycle `+0x18` to 1 immediately before calling slot 2. Second,
+`GunMoveController_BuildActionState 0x140E8D140` cases 3/4 construct the exact
+`PlayerCommonAction` and retain `aim-idle-rotate` (`0x02C3CE2F`) or
+`aim-idle-rotate-cc` (`0x7D168D2E`) in the `PlayerUpdatePlayAnimFade` updater at
+action `+0x40`. Third, `PlayerCommonAction_OnStart` invokes that animation updater
+first, before the movement updater at `+0x30`. Fourth,
+`PlayerMoveController_ReplaceChannel0Action 0x142053590` removes channel zero and
+enqueues the replacement, and `PlayerMoveSequencer_EnqueueControllerAction
+0x142053820` stores the originating controller at action `+0x28`; controller
+`+0x108/+0x110` and Player `+0x3BD0` independently close owner/sequencer identity.
+
+Competing outcomes remain F1: only the source retained Player starts the exact
+action; F2: both retained Players start it and lower-body layer resolution masks
+the puppet; F3: neither produces an exact row during a visible local foot step,
+which rejects the current action/updater classification. The hook snapshots only
+the two exact animation ids for retained owners, calls stock exactly once, then
+logs at most 32 rows per owner so synchronous file I/O cannot delay the authored
+animation start and allocator address reuse cannot hide the opposite turn. It
+writes no action, controller, sequencer, clip, or transform.
+
+**Falsifiable prediction:** one stationary ADS turn left and right emits exact
+`AIM-STEP-ONSTART` rows with lifecycle 1, base layer `0x7339D08C`, exact RTTI and
+all owner/sequencer checks equal to one. Owner 0 only selects F1 and permits an
+event relay at the native builder boundary. Matching owner 0 and owner 1 rows
+select F2 and prohibit forcing the builder; zero owner-0 rows while the local
+feet visibly step selects F3 and rejects this boundary.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

@@ -8,6 +8,22 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-08-02: ADS turn-in-place authored action lifecycle ---
+    0x140C59180: (
+        "PlayerCommonAction_OnStart",
+        "PlayerCommonAction vtable slot +0x10. PlayerMoveSequencer changes "
+        "action lifecycle +0x18 from 0 to 1 immediately before this call. "
+        "Dispatches the animation updater at action+0x40 first, followed by "
+        "the movement updater at +0x30 and optional updater at +0x38.",
+    ),
+    0x142053590: (
+        "PlayerMoveController_ReplaceChannel0Action",
+        "Removes every current action from channel zero of the controller's "
+        "PlayerMoveSequencer at controller+0x110, then enqueues the supplied "
+        "replacement through PlayerMoveSequencer_EnqueueControllerAction. "
+        "GunMoveController_BuildActionState uses this for aim-idle-rotate and "
+        "aim-idle-rotate-cc.",
+    ),
     # --- 2026-07-27: ordinary Player evade/run-roll acceptance chain ---
     0x140DC31E0: (
         "PlayerEvadeController_SetStick",

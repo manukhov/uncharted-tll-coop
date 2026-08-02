@@ -49,8 +49,11 @@
 - [ ] Only if the worker relay leaves true no-entry side streaks: trace the ribbon/tracer
       child instruction inside retained muzzle SFX at ProcessWeapon
       `+0x998/+0x9A8`, below the shared flash/audio actor boundary.
-- [ ] Run the exact channel-0 `PlayerMoveSequencer_UpdatePhase` action-start
-      discriminator for local and puppet GunMove. Confirm sender-only
+- [ ] Run build `2026-08-02k` once: stand still in ADS and rotate about 90
+      degrees left/right. The exact `PlayerCommonAction` vtable `+0x10`
+      discriminator observes `OnStart` directly, independent of which
+      `PlayerMoveSequencer_UpdatePhase` callsite reached lifecycle 0. Confirm
+      sender-only
       `PlayerUpdatePlayAnimFade` edges for `aim-idle-rotate[-cc]` before relaying
       any foot action. Do not retry the rejected `0x140E90605/0x140E9060F`
       temporary selector snapshots.

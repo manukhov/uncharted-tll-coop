@@ -38300,6 +38300,10 @@ PlayerMoveSequencerUpdateFunction
     g_original_player_move_sequencer_update = nullptr;
 PlayerMoveSequencerUpdateFunction
     g_aim_step_player_move_sequencer_update = nullptr;
+using PlayerCommonActionOnStartFunction =
+    std::int64_t(__fastcall*)(void*, void*);
+PlayerCommonActionOnStartFunction
+    g_original_player_common_action_on_start = nullptr;
 WeaponHolsterBuildBindingFunction
     g_original_weapon_holster_build_binding = nullptr;
 WeaponAttachmentAttachToOwnerPointFunction
@@ -38504,6 +38508,233 @@ constexpr std::uint32_t kBaseAnimationLayerId = 0x7339D08Cu;
 bool aim_step_animation_id(std::uint32_t animation_id) {
     return animation_id == kAimIdleRotateAnimationId ||
         animation_id == kAimIdleRotateCcAnimationId;
+}
+
+struct AimStepOnStartSnapshot {
+    bool recognized = false;
+    bool exact_chain = false;
+    bool controller_owner_ok = false;
+    bool controller_sequencer_ok = false;
+    bool player_sequencer_ok = false;
+    void* player = nullptr;
+    void* action = nullptr;
+    void* controller = nullptr;
+    void* movement_updater = nullptr;
+    void* animation_updater = nullptr;
+    std::uintptr_t action_vtable = 0;
+    std::uintptr_t controller_vtable = 0;
+    std::uintptr_t movement_vtable = 0;
+    std::uintptr_t animation_vtable = 0;
+    std::uint32_t lifecycle = 0xFFFFFFFFu;
+    std::int32_t tag = -99;
+    std::uint32_t flags = 0;
+    std::uint32_t animation_id = 0;
+    std::uint32_t layer_id = 0;
+    std::uint32_t screen_index = 0xFFFFFFFFu;
+};
+
+bool seh_capture_aim_step_on_start(
+    void* action, void* player, AimStepOnStartSnapshot* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (action == nullptr || player == nullptr || g_module == 0) {
+            return false;
+        }
+        auto* const action_bytes = static_cast<std::byte*>(action);
+        output->player = player;
+        output->action = action;
+        output->action_vtable =
+            *reinterpret_cast<const std::uintptr_t*>(action_bytes);
+        if (output->action_vtable !=
+            g_module + kPlayerCommonActionVtableRva) {
+            return true;
+        }
+        output->controller =
+            *reinterpret_cast<void**>(action_bytes + 0x28);
+        output->movement_updater =
+            *reinterpret_cast<void**>(action_bytes + 0x30);
+        output->animation_updater =
+            *reinterpret_cast<void**>(action_bytes + 0x40);
+        if (output->animation_updater == nullptr) {
+            return true;
+        }
+        auto* const animation_bytes =
+            static_cast<std::byte*>(output->animation_updater);
+        output->animation_vtable =
+            *reinterpret_cast<const std::uintptr_t*>(animation_bytes);
+        output->animation_id =
+            *reinterpret_cast<const std::uint32_t*>(animation_bytes + 0x8);
+        output->layer_id =
+            *reinterpret_cast<const std::uint32_t*>(animation_bytes + 0xC);
+        if (output->animation_vtable !=
+                g_module + kPlayerUpdatePlayAnimFadeVtableRva ||
+            !aim_step_animation_id(output->animation_id)) {
+            return true;
+        }
+        output->recognized = true;
+        output->movement_vtable = output->movement_updater != nullptr
+            ? *reinterpret_cast<const std::uintptr_t*>(
+                  output->movement_updater)
+            : 0;
+        output->lifecycle =
+            *reinterpret_cast<const std::uint32_t*>(action_bytes + 0x18);
+        output->tag =
+            *reinterpret_cast<const std::int32_t*>(action_bytes + 0x1C);
+        output->flags =
+            *reinterpret_cast<const std::uint32_t*>(action_bytes + 0x24);
+        void* controller_sequencer = nullptr;
+        if (output->controller != nullptr) {
+            auto* const controller_bytes =
+                static_cast<std::byte*>(output->controller);
+            output->controller_vtable =
+                *reinterpret_cast<const std::uintptr_t*>(controller_bytes);
+            output->controller_owner_ok =
+                *reinterpret_cast<void**>(controller_bytes + 0x108) == player;
+            controller_sequencer =
+                *reinterpret_cast<void**>(controller_bytes + 0x110);
+            output->controller_sequencer_ok =
+                controller_sequencer != nullptr;
+        }
+        auto* const player_bytes = static_cast<std::byte*>(player);
+        output->screen_index =
+            *reinterpret_cast<const std::uint32_t*>(player_bytes + 0x4010);
+        output->player_sequencer_ok =
+            controller_sequencer != nullptr &&
+            *reinterpret_cast<void**>(player_bytes + 0x3BD0) ==
+                controller_sequencer;
+        output->exact_chain =
+            output->lifecycle == 1 &&
+            output->controller_vtable ==
+                g_module + kGunMoveControllerVtableRva &&
+            output->movement_vtable ==
+                g_module + kPlayerGroundMoveUpdateWithFallVtableRva &&
+            output->layer_id == kBaseAnimationLayerId &&
+            output->controller_owner_ok &&
+            output->controller_sequencer_ok &&
+            output->player_sequencer_ok;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+void log_aim_step_on_start(const AimStepOnStartSnapshot& snapshot) {
+    if (!snapshot.recognized) {
+        return;
+    }
+    const int owner = retained_player_index(snapshot.player);
+    if (owner < 0) {
+        return;
+    }
+    // The 72-byte action allocator can reuse an address. Bound rows per owner
+    // instead of permanently deduplicating by pointer so a later left/right
+    // transition cannot disappear from the diagnostic.
+    static std::array<std::atomic<std::uint32_t>, 2> row_counts{};
+    const std::uint32_t row = row_counts[owner].fetch_add(
+        1, std::memory_order_acq_rel);
+    if (row >= 32) {
+        return;
+    }
+
+    std::ostringstream line;
+    line << "AIM-STEP-ONSTART t=" << GetTickCount64()
+         << " owner=" << owner
+         << " player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(snapshot.player)
+         << " action=0x"
+         << reinterpret_cast<std::uintptr_t>(snapshot.action)
+         << " ctrlvt=0x" << snapshot.controller_vtable
+         << " anim=0x" << snapshot.animation_id
+         << " layer=0x" << snapshot.layer_id
+         << " actvt=0x" << snapshot.action_vtable
+         << " movevt=0x" << snapshot.movement_vtable
+         << " upvt=0x" << snapshot.animation_vtable
+         << " ctrl=0x"
+         << reinterpret_cast<std::uintptr_t>(snapshot.controller)
+         << std::dec
+         << " row=" << row
+         << " tid=" << GetCurrentThreadId()
+         << " life=" << snapshot.lifecycle
+         << " exact=" << (snapshot.exact_chain ? 1 : 0)
+         << " screen=" << snapshot.screen_index
+         << " ctrlOwner=" << (snapshot.controller_owner_ok ? 1 : 0)
+         << " ctrlSeq=" << (snapshot.controller_sequencer_ok ? 1 : 0)
+         << " playerSeq=" << (snapshot.player_sequencer_ok ? 1 : 0)
+         << " expectedMove="
+         << (snapshot.movement_vtable ==
+                 g_module + kPlayerGroundMoveUpdateWithFallVtableRva
+             ? 1 : 0)
+         << " expectedLayer="
+         << (snapshot.layer_id == kBaseAnimationLayerId ? 1 : 0)
+         << " tag=" << snapshot.tag
+         << " flags=0x" << std::hex << snapshot.flags;
+    boot_log_line(line.str().c_str());
+}
+
+std::int64_t __fastcall hooked_player_common_action_on_start(
+    void* action, void* player) {
+    AimStepOnStartSnapshot snapshot{};
+    seh_capture_aim_step_on_start(action, player, &snapshot);
+    if (g_original_player_common_action_on_start == nullptr) {
+        log_aim_step_on_start(snapshot);
+        return 0;
+    }
+    const std::int64_t result =
+        g_original_player_common_action_on_start(action, player);
+    // The snapshot is POD and was taken at entry, so logging after stock cannot
+    // delay the authored animation start or dereference an action that ended.
+    log_aim_step_on_start(snapshot);
+    return result;
+}
+
+bool install_aim_step_on_start_discriminator() {
+    auto* const slot = reinterpret_cast<void**>(
+        g_module + kPlayerCommonActionOnStartVtableSlotRva);
+    void* const expected = reinterpret_cast<void*>(
+        g_module + kPlayerCommonActionOnStartRva);
+    if (*slot != expected) {
+        boot_log_line(
+            "ADS foot-step OnStart discriminator SKIPPED (slot mismatch)");
+        return false;
+    }
+    g_original_player_common_action_on_start =
+        reinterpret_cast<PlayerCommonActionOnStartFunction>(expected);
+    DWORD old = 0;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+        g_original_player_common_action_on_start = nullptr;
+        boot_log_line(
+            "ADS foot-step OnStart discriminator SKIPPED (protect)");
+        return false;
+    }
+    void* const previous = InterlockedCompareExchangePointer(
+        reinterpret_cast<PVOID volatile*>(slot),
+        reinterpret_cast<void*>(&hooked_player_common_action_on_start),
+        expected);
+    if (previous != expected) {
+        DWORD ignored = 0;
+        VirtualProtect(slot, sizeof(void*), old, &ignored);
+        g_original_player_common_action_on_start = nullptr;
+        boot_log_line(
+            "ADS foot-step OnStart discriminator SKIPPED (slot race)");
+        return false;
+    }
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    DWORD ignored = 0;
+    const BOOL protection_restored =
+        VirtualProtect(slot, sizeof(void*), old, &ignored);
+    if (!protection_restored) {
+        boot_log_line(
+            "ADS foot-step OnStart discriminator installed "
+            "(0x142A076A0, protection restore failed)");
+        return true;
+    }
+    boot_log_line(
+        "ADS foot-step OnStart discriminator installed (0x142A076A0)");
+    return true;
 }
 
 bool seh_capture_aim_step_phase0(
@@ -47112,8 +47343,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02j "
-        "(bidirectional owner-gated fire relay)");
+        "TLL co-op runtime init 2026-08-02k "
+        "(exact ADS foot-action OnStart discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -47199,6 +47430,7 @@ DWORD WINAPI install_hook(void*) {
         install_player_strafe_ik_forward_y_relay();
         install_native_aim_foot_turn_relays();
         install_aim_step_phase0_discriminator();
+        install_aim_step_on_start_discriminator();
         if (g_enable_aim_case6_probe) {
             install_aim_case6_probe();
             if (g_enable_aim_joint_boundary_probe) {
