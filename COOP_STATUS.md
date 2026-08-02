@@ -16420,6 +16420,27 @@ the new slot preflight and restores the slot page protection after installation.
 Runtime status remains **HYPOTHESIS** until the written stationary-ADS prediction
 is observed; build/install markers alone are not confirmation.
 
+### 2026-08-02 RUNTIME REJECTED: scoped `Player+0x140` staging does not drive foot replant
+
+The user performed the written build-`l` test on local Chloe while observing
+remote Nadine. Both PIDs 3528/12108 remained responsive and no unrelated pose
+regression was reported, but Nadine's feet still did not step or replant during
+the stationary ADS turn. Receiver PID 12108 emitted the bounded exact-use row
+`AIM-LEG-IK-STAGE owner=1 ... frameAgeMs=0 rootDot=0.999512
+deltaDeg=3.58026 restored=1`.
+
+This is the predicted negative result with all preconditions present: the exact
+`CharacterLegIkController_Update 0x141F9E6F0` hook ran for retained owner 1,
+consumed the current relayed world frame in the same millisecond, saw a
+nontrivial local-root delta and restored the staged bytes, yet did not alter the
+visible feet. Therefore temporary `Player+0x140` staging is **REJECTED as a
+sufficient MoveLegIkNew input** and is disabled in build `2026-08-02m`; it must
+not be broadened into a sustained root writer. The remaining live candidates
+move below the controller frame: the two predicted-foot transform blocks at
+`MoveLegIkNew+0x3A90+0x20*index`, the per-leg targets at
+`MoveLegIkNew+0xE0/+0x40+0x50*leg`, or the final joint-commit buffers. Static
+dataflow must distinguish these before another runtime test.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

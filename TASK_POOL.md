@@ -71,12 +71,19 @@
       `CharacterLegIkController_Update 0x141F9E6F0` call, then restore all 16
       bytes. The DLL builds successfully and the rejected OnStart/phase-zero
       probes are disabled.
-- [ ] Run one stationary ADS turn on Chloe with build `l`. Prediction: the
+- [x] Run one stationary ADS turn on Chloe with build `l`. Prediction: the
       bounded `AIM-LEG-IK-STAGE owner=1 ... restored=1` marker accompanies
       visible remote Nadine foot replanting/steps, while smooth body/weapon yaw,
       locomotion, reload pose, collision and post-ADS heading remain unchanged.
-      If the marker fires without visible foot movement, reject this seam and
-      move to the two `MoveLegIkNew+0x3A90` predicted-transform blocks.
+      **REJECTED:** receiver PID 12108 logged `frameAgeMs=0`, `deltaDeg=3.58026`
+      and `restored=1`, but the user observed no foot movement and no other
+      regression. Build `m` disables the scoped root stage.
+- [ ] Trace all writers and consumers of the two
+      `MoveLegIkNew+0x3A90+0x20*index` predicted-foot transforms and the per-leg
+      `+0xE0/+0x40+0x50*leg` target blocks. Distinguish a stale world-frame
+      transform from a missing turn-intent/replant trigger and the later
+      controller joint-commit buffers; do not run another game test until one
+      boundary meets the three-kind evidence quota.
 
 ## P0: Ground weapon world lifecycle and pickup prompt (`hy`, 2026-07-27)
 

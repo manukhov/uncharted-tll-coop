@@ -47562,8 +47562,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02l "
-        "(scoped CharacterLegIk world-frame relay)");
+        "TLL co-op runtime init 2026-08-02m "
+        "(rejected CharacterLegIk world-frame relay disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -47661,10 +47661,10 @@ DWORD WINAPI install_hook(void*) {
             }
         }
         if (g_enable_puppet_fganim_world_aim_turn) {
-            if (install_fganim_world_aim_turn_callsite_relay()) {
-                install_character_leg_ik_world_frame_relay();
-            }
+            install_fganim_world_aim_turn_callsite_relay();
         }
+        boot_log_line(
+            "rejected CharacterLegIk world-frame relay disabled");
         if (g_enable_gun_move_body_turn) {
             install_gun_move_camera_turn_relay();
         }
