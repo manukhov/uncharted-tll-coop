@@ -60,6 +60,9 @@ using FgAnimDataPublishWorldTransformFunction = std::int64_t(__fastcall*)(
     void*, const float*, std::uint8_t);
 using CharacterLegIkControllerUpdateFunction = void(__fastcall*)(
     void*, const void*, std::uintptr_t);
+using MoveLegIkUpdateNextFootstepsFunction = std::int64_t(__fastcall*)(
+    void*, void*, void*, float, float, const float*, void*, void*, void*, void*,
+    void*);
 using BuildNavigationFrameFunction =
     void(__fastcall*)(void*, const void*, std::uint32_t, float);
 using MoveToFunction = void(__fastcall*)(
@@ -140,6 +143,8 @@ AnimJointProgramOperatorFunction g_original_anim_joint_program_op131 = nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
 CharacterLegIkControllerUpdateFunction
     g_character_leg_ik_controller_update = nullptr;
+MoveLegIkUpdateNextFootstepsFunction g_move_leg_ik_update_next_footsteps =
+    nullptr;
 std::atomic<void*> g_local_fganim_data{nullptr};
 std::atomic<void*> g_puppet_fganim_data{nullptr};
 std::array<std::atomic<std::uint32_t>, 4> g_local_fganim_quat_bits{};
@@ -161,6 +166,8 @@ struct PuppetLegIkWorldFrameState {
 SRWLOCK g_puppet_leg_ik_world_frame_lock = SRWLOCK_INIT;
 PuppetLegIkWorldFrameState g_puppet_leg_ik_world_frame{};
 std::atomic<bool> g_puppet_leg_ik_stage_logged{false};
+std::atomic<std::uint32_t> g_footstep_admission_probe_rows{0};
+std::array<std::atomic<ULONGLONG>, 4> g_footstep_admission_probe_last_ms{};
 std::atomic<bool> g_puppet_fganim_world_turn_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_blended_seen{false};
@@ -12135,6 +12142,257 @@ bool copy_puppet_leg_ik_world_frame(
     }
     ReleaseSRWLockShared(&g_puppet_leg_ik_world_frame_lock);
     return valid;
+}
+
+struct FootstepAdmissionProbeSample {
+    float phase[2]{};
+    float history_world[2][4]{};
+    float history_local[2][4]{};
+    float next_world[2][4]{};
+    float next_local[2][4]{};
+};
+
+bool seh_capture_footstep_admission_probe(
+    void* move_leg, FootstepAdmissionProbeSample& sample) {
+    __try {
+        if (move_leg == nullptr) {
+            return false;
+        }
+        const auto* const base = static_cast<const std::byte*>(move_leg);
+        std::memcpy(sample.phase, base + 0x2C, sizeof(sample.phase));
+        for (std::size_t leg = 0; leg < 2; ++leg) {
+            const std::size_t stride = leg * 0x50;
+            std::memcpy(
+                sample.history_world[leg], base + 0x50 + stride,
+                sizeof(sample.history_world[leg]));
+            std::memcpy(
+                sample.history_local[leg], base + 0x70 + stride,
+                sizeof(sample.history_local[leg]));
+            std::memcpy(
+                sample.next_world[leg], base + 0xF0 + stride,
+                sizeof(sample.next_world[leg]));
+            std::memcpy(
+                sample.next_local[leg], base + 0x110 + stride,
+                sizeof(sample.next_local[leg]));
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        sample = {};
+        return false;
+    }
+}
+
+void log_footstep_admission_probe(
+    int owner,
+    int window,
+    const float* world_locator,
+    const FootstepAdmissionProbeSample& sample) {
+    if (owner < 0 || owner > 1 || window < 0 || window > 1 ||
+        world_locator == nullptr) {
+        return;
+    }
+    const std::size_t rate_slot =
+        static_cast<std::size_t>(owner * 2 + window);
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG last =
+        g_footstep_admission_probe_last_ms[rate_slot].load(
+            std::memory_order_acquire);
+    if (last != 0 && now - last < 125) {
+        return;
+    }
+    if (!g_footstep_admission_probe_last_ms[rate_slot].compare_exchange_strong(
+            last, now, std::memory_order_acq_rel)) {
+        return;
+    }
+    const std::uint32_t row =
+        g_footstep_admission_probe_rows.fetch_add(
+            1, std::memory_order_acq_rel);
+    constexpr std::uint32_t kMaxRows = 160;
+    if (row >= kMaxRows) {
+        return;
+    }
+
+    unsigned admitted_mask = 0;
+    for (std::size_t leg = 0; leg < 2; ++leg) {
+        if (std::isfinite(sample.phase[leg]) && sample.phase[leg] >= 0.0F) {
+            admitted_mask |= 1U << leg;
+        }
+    }
+    std::ostringstream line;
+    line << std::fixed << std::setprecision(3)
+         << "AIM-FOOT-ADMISSION row=" << row
+         << " owner=" << owner
+         << " window=" << window
+         << " mask=" << admitted_mask
+         << " phase=" << sample.phase[0] << "/" << sample.phase[1]
+         << " locQ=" << world_locator[4] << "," << world_locator[5]
+         << "," << world_locator[6] << "," << world_locator[7];
+    for (std::size_t leg = 0; leg < 2; ++leg) {
+        line << " L" << leg
+             << " hw=" << sample.history_world[leg][0] << ","
+             << sample.history_world[leg][2]
+             << " hl=" << sample.history_local[leg][0] << ","
+             << sample.history_local[leg][2]
+             << " nw=" << sample.next_world[leg][0] << ","
+             << sample.next_world[leg][2]
+             << " nl=" << sample.next_local[leg][0] << ","
+             << sample.next_local[leg][2];
+    }
+    boot_log_line(line.str().c_str());
+}
+
+std::int64_t __fastcall hooked_move_leg_ik_update_next_footsteps_probe(
+    void* move_leg,
+    void* character,
+    void* snapshot,
+    float phase_from,
+    float phase_to,
+    const float* world_locator,
+    void* bound_frame,
+    void* art_skeleton,
+    void* anim_info,
+    void* joint_hierarchy,
+    void* binding) {
+    const auto native = g_move_leg_ik_update_next_footsteps;
+    if (native == nullptr) {
+        return 0;
+    }
+    const std::uintptr_t return_rva =
+        reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - g_module;
+    const int window =
+        return_rva == kMoveLegIkUpdateNextFootstepsFirstCallsiteRva + 5
+        ? 0
+        : (return_rva ==
+                   kMoveLegIkUpdateNextFootstepsSecondCallsiteRva + 5
+               ? 1
+               : -1);
+
+    const std::int64_t result = native(
+        move_leg,
+        character,
+        snapshot,
+        phase_from,
+        phase_to,
+        world_locator,
+        bound_frame,
+        art_skeleton,
+        anim_info,
+        joint_hierarchy,
+        binding);
+
+    if (g_dll_inert || !g_state_net.enabled || character == nullptr ||
+        world_locator == nullptr || window < 0) {
+        return result;
+    }
+    int owner = -1;
+    bool aiming = false;
+    if (character == retained_player_object(0)) {
+        owner = 0;
+        aiming = player_ads_active(character);
+    } else if (character == retained_player_object(1)) {
+        owner = 1;
+        coop::StatePacket peer{};
+        const ULONGLONG received =
+            g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+        const ULONGLONG now = GetTickCount64();
+        aiming = received != 0 && now >= received && now - received <= 250 &&
+            copy_peer_state_snapshot(peer) && peer_packet_aim_active(peer);
+    }
+    FootstepAdmissionProbeSample sample{};
+    if (owner >= 0 && aiming &&
+        seh_capture_footstep_admission_probe(move_leg, sample)) {
+        log_footstep_admission_probe(owner, window, world_locator, sample);
+    }
+    return result;
+}
+
+bool install_move_leg_ik_footstep_admission_probe() {
+    std::uint8_t* const call_sites[] = {
+        reinterpret_cast<std::uint8_t*>(
+            g_module + kMoveLegIkUpdateNextFootstepsFirstCallsiteRva),
+        reinterpret_cast<std::uint8_t*>(
+            g_module + kMoveLegIkUpdateNextFootstepsSecondCallsiteRva),
+    };
+    const std::uintptr_t expected =
+        g_module + kMoveLegIkUpdateNextFootstepsRva;
+    for (auto* const call_site : call_sites) {
+        if (call_site[0] != 0xE8) {
+            boot_log_line(
+                "MoveLegIk admission probe SKIPPED (callsite is not E8)");
+            return false;
+        }
+        std::int32_t displacement = 0;
+        std::memcpy(&displacement, call_site + 1, sizeof(displacement));
+        const std::uintptr_t target =
+            reinterpret_cast<std::uintptr_t>(call_site + 5) +
+            static_cast<std::intptr_t>(displacement);
+        if (target != expected) {
+            boot_log_line(
+                "MoveLegIk admission probe SKIPPED (unexpected target)");
+            return false;
+        }
+    }
+    g_move_leg_ik_update_next_footsteps =
+        reinterpret_cast<MoveLegIkUpdateNextFootstepsFunction>(expected);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_sites[0], kRelaySize));
+    if (relay == nullptr) {
+        g_move_leg_ik_update_next_footsteps = nullptr;
+        boot_log_line(
+            "MoveLegIk admission probe SKIPPED (relay allocation)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_move_leg_ik_update_next_footsteps_probe);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    std::int32_t new_displacements[2]{};
+    for (std::size_t i = 0; i < 2; ++i) {
+        const std::int64_t displacement =
+            reinterpret_cast<std::intptr_t>(relay) -
+            reinterpret_cast<std::intptr_t>(call_sites[i] + 5);
+        if (displacement < INT32_MIN || displacement > INT32_MAX) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            g_move_leg_ik_update_next_footsteps = nullptr;
+            boot_log_line(
+                "MoveLegIk admission probe SKIPPED (rel32 range)");
+            return false;
+        }
+        new_displacements[i] = static_cast<std::int32_t>(displacement);
+    }
+
+    DWORD old[2]{};
+    for (std::size_t i = 0; i < 2; ++i) {
+        if (!VirtualProtect(
+                call_sites[i], 5, PAGE_EXECUTE_READWRITE, &old[i])) {
+            for (std::size_t j = 0; j < i; ++j) {
+                DWORD ignored = 0;
+                VirtualProtect(call_sites[j], 5, old[j], &ignored);
+            }
+            VirtualFree(relay, 0, MEM_RELEASE);
+            g_move_leg_ik_update_next_footsteps = nullptr;
+            boot_log_line(
+                "MoveLegIk admission probe SKIPPED (VirtualProtect)");
+            return false;
+        }
+    }
+    for (std::size_t i = 0; i < 2; ++i) {
+        *reinterpret_cast<std::int32_t*>(call_sites[i] + 1) =
+            new_displacements[i];
+        FlushInstructionCache(GetCurrentProcess(), call_sites[i], 5);
+        DWORD ignored = 0;
+        VirtualProtect(call_sites[i], 5, old[i], &ignored);
+    }
+    boot_log_line(
+        "MoveLegIk footstep admission probe installed (read-only) "
+        "(0x14210199C/0x142101F69)");
+    return true;
 }
 
 std::int64_t __fastcall hooked_fganim_publish_world_transform(
@@ -47562,8 +47820,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02m "
-        "(rejected CharacterLegIk world-frame relay disabled)");
+        "TLL co-op runtime init 2026-08-02o "
+        "(read-only MoveLegIk footstep admission probe)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -47663,6 +47921,7 @@ DWORD WINAPI install_hook(void*) {
         if (g_enable_puppet_fganim_world_aim_turn) {
             install_fganim_world_aim_turn_callsite_relay();
         }
+        install_move_leg_ik_footstep_admission_probe();
         boot_log_line(
             "rejected CharacterLegIk world-frame relay disabled");
         if (g_enable_gun_move_body_turn) {

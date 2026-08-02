@@ -37,9 +37,10 @@ FUNCTIONS = {
     ),
     0x1420FFD00: (
         "MoveLegIkNew_ApplyLegToGround",
-        "Exact MoveLegIkNew::ApplyLegToGround source assertion. Consumes one of the "
-        "two predicted foot transforms at MoveLegIkNew+0x3A90+0x20*leg together "
-        "with Character+0x100 BoundTransform and solves that leg against ground.",
+        "Exact MoveLegIkNew::ApplyLegToGround source assertion. Composes the "
+        "current ankle world locator with the static per-foot contact reference at "
+        "MoveLegIkNew+0x3A90+0x20*leg, uses Character+0x100 world translation and "
+        "solves that leg against the retained ground result.",
     ),
     0x1421010D0: (
         "MoveLegIkNew_Update",
@@ -51,13 +52,46 @@ FUNCTIONS = {
         "MoveLegIkNew_UpdateFeetPlanted",
         "Exact MoveLegIkNew::UpdateFeetPlanted source assertion. Rebuilds the active "
         "AnimStateSnapshot, invokes MoveLegIkNew_UpdateNextFootsteps for its two "
-        "phase windows and composes the per-leg predicted transforms.",
+        "phase windows, composes the two captured ankle world locators with static "
+        "contact references into +0x3B80/+0x3B90 ground-probe origins, then calls "
+        "MoveLegIkNew_FindFootPlantGround.",
     ),
     0x142102DF0: (
         "MoveLegIkNew_UpdateNextFootsteps",
         "Exact MoveLegIkNew::UpdateNextFootsteps source assertion. Filters authored "
-        "foot-effect events, resolves heel/ball and ankle references, then writes the "
-        "two per-leg target blocks and predicted transforms at +0x3A90.",
+        "foot-effect entries with exactly three key/value parameters, resolves "
+        "heel/ball and ankle references, writes the two "
+        "per-leg target/history blocks and reads, but does not initialize or write, "
+        "the static contact references at +0x3A90/+0x3AB0.",
+    ),
+    0x141918750: (
+        "AnimSnapshotNodeAnimation_CollectEffectEntries",
+        "AnimSnapshotNodeAnimation vtable slot +0xB8. Passes the concrete "
+        "animation asset/clip owner at node+0x50 and the requested phase window "
+        "to AnimationAsset_CollectEffectEntriesForWindow.",
+    ),
+    0x14191EF80: (
+        "AnimSnapshotNodeBlend_CollectEffectEntries",
+        "AnimSnapshotNodeBlend vtable slot +0xB8. Recurses into one or both "
+        "selected children according to the blend weight at +0x60; it does not "
+        "synthesize a turn-step event.",
+    ),
+    0x141AD5570: (
+        "AnimSnapshotNodeUnary_CollectEffectEntries",
+        "Shared Unary, HandFix, ArmIk, LegFix and IK vtable +0xB8 delegate. "
+        "Forwards effect collection to the child at +0x40.",
+    ),
+    0x141918540: (
+        "AnimationAsset_CollectEffectEntriesForWindow",
+        "Collects authored animation effects across the requested phase window, "
+        "delegates table decoding to AnimationEffectTable_CollectWindow and "
+        "removes entries below the min-blend threshold.",
+    ),
+    0x1418BBCF0: (
+        "AnimationEffectTable_CollectWindow",
+        "Wrapper around BuildAnimationEffectEntryList for the immutable authored "
+        "clip-effect table. Result entries retain process-local pointers into the "
+        "asset and must not be synthesized from network data.",
     ),
     0x1421043F0: (
         "MoveLegIkNew_PostAnimUpdate",
@@ -70,6 +104,59 @@ FUNCTIONS = {
         "Worker callback named MoveLegIkNewUpdateFeetPlantedJob by its job record. "
         "Forwards the captured Character, locators and mode into "
         "MoveLegIkNew_UpdateFeetPlanted.",
+    ),
+    0x14181DA50: (
+        "JointSet_GetJointLocWs",
+        "Exact JointSet::GetJointLocWs source assertion. Validates the joint "
+        "offset, dispatches JointSet vtable +0x38 to refresh it and returns the "
+        "32-byte world transform at the selected cache slot.",
+    ),
+    0x142103CE0: (
+        "MoveLegIkNew_GetPredictedFootPointsWs",
+        "MoveLegIkNew vtable +0x88. Ensures the two foot contact offsets, rotates "
+        "each by its current ankle JointSet world quaternion and adds the ankle "
+        "world translation to return two predicted foot points.",
+    ),
+    0x142105090: (
+        "MoveLegIkNew_CacheCharacterBoundTransform",
+        "Copies the Character 0x50-byte BoundTransform from +0x100 into "
+        "MoveLegIkNew+0x180, resolves its world translation, applies the cached "
+        "root-height component and marks the cache valid at +0x1D0.",
+    ),
+    0x142105110: (
+        "MoveLegIkNew_EnsureFootJointOffsets",
+        "Lazily resolves the authored right/left ankle, heel and ball joints and "
+        "initializes the two per-foot contact offsets consumed at +0x3A90/+0x3AB0.",
+    ),
+    0x142103E10: (
+        "MoveLegIkNew_FindFootPlantGround",
+        "Exact MoveLegIkNew::FindFootPlantGround source assertion. Reads the three "
+        "world-space probe points beginning at MoveLegIkNew+0x3B80, submits the "
+        "bounded GroundModel queries and waits for their results.",
+    ),
+    0x1421043A0: (
+        "MoveLegIkNew_FindFootPlantGroundJob",
+        "Private job callback built by MoveLegIkNew_FindFootPlantGround. Selects "
+        "five or twenty samples and forwards the captured three points to "
+        "GroundModel_DoFindGround.",
+    ),
+    0x142104EC0: (
+        "MoveLegIkNew_ProjectAdmittedTargetsToGround",
+        "MoveLegIkNew vtable slot +0x98. For each leg whose +0x2C/+0x30 "
+        "admission phase is nonnegative, resolves the +0x40/+0x90 target record "
+        "and projects its point through the corresponding embedded GroundModel.",
+    ),
+    0x142129D00: (
+        "GroundModel_DoFindGround",
+        "Exact GroundModel::DoFindGround source assertion from ik-ground-model.cpp. "
+        "Builds collision probes between the supplied world points and stores the "
+        "selected ground result in the caller-owned GroundModel record.",
+    ),
+    0x14212BB20: (
+        "GroundModel_ConstructGroundFromContacts",
+        "Exact GroundModel::ConstructGroundFromContacts source assertion. Builds "
+        "the retained ground path/contact vectors and validity state from the "
+        "collision samples; it does not admit or create a footstep target.",
     ),
     0x141897030: (
         "GetProcessDeltaTime",

@@ -16355,12 +16355,15 @@ is met by four independent evidence types:
    MoveLegIkNew_UpdateFeetPlanted 0x142101330`.
 4. **Instruction-level dataflow.** `MoveLegIkNew_UpdateFeetPlanted` invokes
    `MoveLegIkNew_UpdateNextFootsteps 0x142102DF0` for both phase windows. That
-   function filters `foot-effect 0x6EA107C4` type 3, resolves joint parameter
+   function filters exact authored effect `foot-effect 0x6EA107C4` with exactly
+   three key/value parameters, resolves joint parameter
    `0xB726CE12`, heel/ball ids `D4D0E3F2/E1216D15/CE1363B3/FBE2ED54` and
-   ankle references `14643F16/2195B1F1`, then writes per-leg target blocks at
-   `MoveLegIkNew+0xE0+0x50*leg` / `+0x40+0x50*leg` and predicted foot transforms
-   at `MoveLegIkNew+0x3A90+0x20*index`. The controller's following vtable `+0x30`
-   copies valid results into the live 48-byte-per-joint skeleton palette.
+   ankle references `14643F16/2195B1F1`, then writes per-leg target/history blocks
+   at `MoveLegIkNew+0xE0+0x50*leg` / `+0x40+0x50*leg`. Its use of
+   `MoveLegIkNew+0x3A90+0x20*index` is read-only: those are static authored
+   ankle-to-contact references initialized by `0x142105110`, not predicted-foot
+   outputs. The controller's following vtable `+0x30` copies valid results into
+   the live 48-byte-per-joint skeleton palette.
 
 The competitors are now closed. **S1 authored selector is REJECTED** by the full
 asset graph and the equal local/puppet runtime leaf. **S3 continuous/root-motion
@@ -16393,10 +16396,11 @@ Nadine visibly replant/step both feet while its body and weapon keep the already
 confirmed smooth heading. A bounded first-use marker must report puppet owner,
 fresh peer state, valid parent/local conversion and a nontrivial native-to-staged
 quaternion delta. If the marker fires but the feet stay planted, this scoped
-bound-frame input is rejected and the next seam moves into the two
-`MoveLegIkNew+0x3A90` predicted transforms. Any locomotion, reload-pose, collision
-or post-ADS heading regression rejects the boundary immediately; do not retain
-the staged root outside the one native call.
+bound-frame input is rejected and the next seam moves into the two private ankle
+world captures and their derived ground-probe origins at
+`MoveLegIkNew+0x3B80/+0x3B90`. Any locomotion, reload-pose, collision or post-ADS
+heading regression rejects the boundary immediately; do not retain the staged
+root outside the one native call.
 
 ### 2026-08-02 IMPLEMENTED: scoped CharacterLegIK world-frame relay (`2026-08-02l`)
 
@@ -16436,10 +16440,159 @@ nontrivial local-root delta and restored the staged bytes, yet did not alter the
 visible feet. Therefore temporary `Player+0x140` staging is **REJECTED as a
 sufficient MoveLegIkNew input** and is disabled in build `2026-08-02m`; it must
 not be broadened into a sustained root writer. The remaining live candidates
-move below the controller frame: the two predicted-foot transform blocks at
-`MoveLegIkNew+0x3A90+0x20*index`, the per-leg targets at
+move below the controller frame: the two private ankle-world job captures and
+their `MoveLegIkNew+0x3B80/+0x3B90` ground-probe origins, the per-leg targets at
 `MoveLegIkNew+0xE0/+0x40+0x50*leg`, or the final joint-commit buffers. Static
 dataflow must distinguish these before another runtime test.
+
+### 2026-08-02 STATIC: the stale inputs are the two private ankle-world job captures
+
+The negative build-`l` result is now explained at instruction level and selects
+a lower, mutation-free seam. Four independent evidence kinds close the path:
+
+1. **BoundTransform field dataflow.** `Player+0x100` is a 0x50-byte
+   `BoundTransform`: parent handle `+0x108/+0x10C`, cached parent translation and
+   quaternion `+0x110/+0x120`, local translation `+0x130`, and local quaternion
+   `+0x140`. `BoundTransform_GetTranslationWs_A 0x14014E240` refreshes the
+   32-byte parent cache, rotates only local translation `+0x130` by parent
+   quaternion `+0x120`, and adds parent translation `+0x110`; it never reads
+   `+0x140`. `MoveLegIkNew_ApplyLegToGround 0x1420FFD00` calls that exact helper
+   on `Character+0x100`. This directly explains why staging only `+0x140` did
+   not change its live ground frame.
+2. **Exact producer/job/consumer chain.** `MoveLegIkNew_PostAnimUpdate
+   0x1421043F0` calls exact-source `JointSet_GetJointLocWs 0x14181DA50` for both
+   ankle JointSets and copies two complete 32-byte world transforms into its
+   private job record. `MoveLegIkNew_UpdateFeetPlantedJob 0x142104A80` copies
+   them to its own stack and its sole direct call at `0x142104AB3` passes them as
+   arguments 4/5 to `MoveLegIkNew_UpdateFeetPlanted 0x142101330`. That function
+   uses arguments 4/5 as the parent inputs to `Transform_Compose` at
+   `0x142101FDE/0x142102007`; the relative inputs are the read-only contact
+   references `+0x3A90/+0x3AB0`. Only each composed translation is retained, at
+   `MoveLegIkNew+0x3B80/+0x3B90` (`0x142101FEE/0x142102010`).
+3. **Exact ground consumer.** The same `UpdateFeetPlanted` call reaches
+   `MoveLegIkNew_FindFootPlantGround 0x142103E10` at `0x142102443` after those
+   stores. The callee walks the three world points beginning at `+0x3B80`, puts
+   them into private job records, and its exact callback `0x1421043A0` calls
+   `GroundModel_DoFindGround 0x142129D00`. Thus changing the two captured ankle
+   locators changes the collision-probe origins consumed in the same stock call;
+   it is not dead diagnostic state.
+4. **Frame ordering.** `Player_PostAnimUpdate_Async 0x1410E9210` dispatches
+   `CharacterLegIkController_PostAnimUpdate 0x141FA0F30` at `0x1410E9F3A`, which
+   schedules the captures above. The confirmed phase-0x40 publication applies
+   peer yaw later at `0x141A8FC00`; the following
+   `Player_PostAnimBlending_Async 0x1410EB6A0` waits for the prior foot job in
+   `MoveLegIkNew_Update`, solves both legs and commits them. Thus the renderer
+   and the async ankle captures genuinely see different world frames.
+5. **Final-writer exclusion.** `CharacterLegIkController_CommitJointTransforms
+   0x141F9E190` only tests each valid byte, copies its corresponding 32-byte IK
+   result into the live 48-byte joint palette and resets temporary chain caches.
+   It does not derive another yaw or overwrite the solved leg with a competing
+   transform.
+
+The competing hypotheses are separated. **J1 (stale ground-probe frame)** is
+real but **STATIC REJECTED as sufficient for a step**: the two ankle captures
+are receiver-native, yet their derived points only enter the later terrain
+query. **J2 (authored top-level turn action)** remains runtime-rejected: the
+exact `aim-idle-rotate` OnStart/phase-zero boundary did not fire even while local
+feet visibly stepped, and both screens reported the same active
+`strafe-idle-ap` leaf. The distinct lower **J2b** candidate is still open: the
+authored `foot-effect` with its three parameters plus reference-set-mask
+admission that writes the
+per-leg target/history blocks. **J3 (late commit overwrite)** is rejected by the
+exact commit copy loop. **J4 (write `+0x3A90` directly)** is rejected statically
+because `+0x3A90/+0x3AB0` are lazily initialized authored contact references and
+are only read on steady-state paths, not dynamic targets.
+
+The IDB now carries the additional STATIC names `JointSet_GetJointLocWs
+0x14181DA50`, `MoveLegIkNew_GetPredictedFootPointsWs 0x142103CE0`,
+`MoveLegIkNew_FindFootPlantGround 0x142103E10`,
+`MoveLegIkNew_FindFootPlantGroundJob 0x1421043A0`,
+`MoveLegIkNew_CacheCharacterBoundTransform 0x142105090`,
+`MoveLegIkNew_EnsureFootJointOffsets 0x142105110` and
+`GroundModel_DoFindGround 0x142129D00`, plus
+`GroundModel_ConstructGroundFromContacts 0x14212BB20`.
+
+### 2026-08-02 STATIC REJECTED: private ankle-frame relay cannot admit a step
+
+The proposed build `n` at worker callsite `0x142104AB3` was removed before
+runtime. `MoveLegIkNew_FindFootPlantGround` sends the corrected
+`+0x3B80/+0x3B90` points only to the two embedded per-leg `GroundModel` objects
+(`MoveLegIkNew+0x1E0/+0x14C0`, stride `0x12E0`). Its callback reaches
+`GroundModel_DoFindGround 0x142129D00`, which calls
+`GroundModel_ConstructGroundFromContacts 0x14212BB20` at `0x14212AA44`. The
+result is terrain-only state: path/spline `GroundModel+0x50`, contact vectors
+`+0x460/+0x470`, scalars `+0x480/+0x484` and valid byte `+0x488`; reject paths at
+`0x14212BC69/0x14212C3A2` clear that byte. Later helpers consume this retained
+ground contact at `0x1421024AD/0x1421025AA`.
+
+The step-admission decision has already happened before either probe-origin
+store. `MoveLegIkNew_UpdateNextFootsteps` requires authored `foot-effect` with
+`payload+0x8 == 3` key/value parameters at `0x142103246` and
+`AnimStateSnapshot_EvaluateReferenceSetMask == 3` at
+`0x142103A12` before it writes the per-leg target/history blocks at
+`0x142103AAE..0x142103ACB` and `0x142103BB4..0x142103BCC`. Only afterwards does
+the parent function write `+0x3B80/+0x3B90` and call the ground-query path.
+Changing a later ray origin can alter terrain projection or foot height but
+cannot retroactively pass the earlier event/mask gate or synthesize a replant.
+The shipped runtime therefore stays at safe build `2026-08-02m`; no build `n`
+DLL was retained or launched. Next static work must trace the lower
+`foot-effect`/reference-mask admission and its target/history dataflow.
+
+### 2026-08-02 STATIC/IMPLEMENTED: read-only MoveLegIk admission discriminator (`2026-08-02o`)
+
+The lower admission audit corrects two earlier semantic mistakes and earns one
+read-only runtime discriminator, but not a target mutation:
+
+1. **RTTI/vtable and call graph.** `AnimSnapshotNodeAnimation` vtable
+   `0x142B14D68` slot `+0xB8` is
+   `AnimSnapshotNodeAnimation_CollectEffectEntries 0x141918750`; Blend
+   `0x142B15218` uses `0x14191EF80`, and Unary/IK wrappers delegate through
+   `0x141AD5570`. The only concrete producer path is
+   `0x141918750 -> AnimationAsset_CollectEffectEntriesForWindow 0x141918540 ->
+   AnimationEffectTable_CollectWindow 0x1418BBCF0 ->
+   BuildAnimationEffectEntryList 0x1418BB6D0`. Therefore `foot-effect` is an
+   authored cue of the selected animation clip/window, not a separate
+   turn-step decision synthesized from yaw.
+2. **Asset-entry dataflow.** `BuildAnimationEffectEntryList` reads the immutable
+   clip effect table (`asset+0x4` count, `+0x8` array, stride `0x18`) and emits a
+   0x20-byte entry containing clip/id plus two pointers back into that asset
+   effect. Such records are process-local and must not be synthesized or copied
+   over the network. At `0x142103246`, `payload+0x8 == 3` is the parameter count,
+   not an event type. The following joint parameter selects heel/ball; the later
+   mask value `3` means both ankle references resolved.
+3. **Admission and downstream readers.** `MoveLegIkNew+0x2C/+0x30` is initialized
+   to `-1.0` and becomes `>=0` only after the exact effect, heel/ball parameter,
+   free per-leg latch and ankle-reference mask all pass. It is the validity gate
+   for both 0x50-byte per-leg outputs. The `+0xE0+0x50*leg` target is consumed at
+   `UpdateFeetPlanted 0x1421020F7..0x1421022FB` to choose the next point relative
+   to `+0x3BA0`; the `+0x40+0x50*leg` history/current target is consumed by
+   `MoveLegIkNew_ProjectAdmittedTargetsToGround 0x142104EC0` before the per-leg
+   GroundModel queries. Neither block owns a separate valid byte.
+4. **Exact observation seam.** The two direct E8 calls at
+   `0x14210199C/0x142101F69` both target
+   `MoveLegIkNew_UpdateNextFootsteps 0x142102DF0` and pass the two private
+   32-byte world Locators from `rbp+0x200/+0x220`. Their exact returns
+   `0x1421019A1/0x142101F6E` are after the stock admission/stores and before the
+   later ground/solve path. Build `o` relays only these callsites to a wrapper
+   that first executes stock unchanged and then logs normalized numeric phase,
+   locator and target values for retained local/puppet owners. It writes no game
+   object, event entry, target block or Locator.
+
+The competitors and falsifiable result are explicit. **H1:** if local Chloe
+visibly steps but its `owner=0` rows remain `mask=0`/phase `-1`, this authored
+effect path is not the visible ADS-step owner. **H2:** local rows become admitted
+but receiver `owner=1` stays `-1`, so the puppet loses the authored clip/window
+effect. **H3:** both admit but normalized target/Locator values diverge, selecting
+the private target-frame input for a later mutation. **H4:** admission and targets
+match, moving the fault below this boundary into GroundModel/solve/commit.
+
+**Written test prediction:** on build `o`, hold stationary ADS on Chloe and turn
+left/right far enough to see her local feet step while observing from Nadine.
+Visible behavior must remain identical to build `m`; logs on both processes must
+emit bounded `AIM-FOOT-ADMISSION owner=0/1 window=0/1` rows. The first distinction
+among H1--H4 decides the next implementation. Absence of rows or any visible pose
+regression rejects the probe packaging itself. Release DLL builds successfully;
+runtime classification is pending.
 
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 

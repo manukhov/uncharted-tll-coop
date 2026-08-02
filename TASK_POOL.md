@@ -62,8 +62,9 @@
 - [x] Trace horizontal turn-in-place inside the runtime-confirmed base state
       `strafe-idle-ap 0x3C347132` / asset graph `anim-player.bin+0x66048`.
       The full graph has no horizontal turn selector; the concrete late owner is
-      `MoveLegIkNew` under `CharacterLegIkController`, which writes both per-leg
-      predicted transforms and immediately commits the resulting joints.
+      `MoveLegIkNew` under `CharacterLegIkController`, which updates both per-leg
+      target/history blocks, performs ground probes and commits the resulting
+      joints.
 - [x] Implement build `2026-08-02l` at exact `CharacterLegIkController` vtable
       slot `0x142BBB478`: cache the already-smoothed puppet world quaternion at
       the confirmed phase-`0x40` publication, convert through parent
@@ -78,12 +79,35 @@
       **REJECTED:** receiver PID 12108 logged `frameAgeMs=0`, `deltaDeg=3.58026`
       and `restored=1`, but the user observed no foot movement and no other
       regression. Build `m` disables the scoped root stage.
-- [ ] Trace all writers and consumers of the two
-      `MoveLegIkNew+0x3A90+0x20*index` predicted-foot transforms and the per-leg
-      `+0xE0/+0x40+0x50*leg` target blocks. Distinguish a stale world-frame
-      transform from a missing turn-intent/replant trigger and the later
-      controller joint-commit buffers; do not run another game test until one
-      boundary meets the three-kind evidence quota.
+- [x] Trace the private ankle-world captures and the
+      `MoveLegIkNew+0x3B80/+0x3B90` ground-probe origins and distinguish the
+      remaining candidates. Exact `PostAnimUpdate 0x1421043F0`
+      captures two ankle JointSet world transforms before the late FgAnim yaw;
+      its job passes only private stack copies through `0x142104AB3` into
+      `UpdateFeetPlanted`, which composes them with the read-only static contact
+      references `+0x3A90/+0x3AB0` and stores the resulting translations at
+      `+0x3B80/+0x3B90`. The same call passes those origins to
+      `FindFootPlantGround 0x142103E10`; the final controller commit only copies
+      valid solved joints. **STATIC REJECTED as sufficient:** those origins feed
+      only later GroundModel terrain/contact queries. The authored foot-effect
+      with exactly three parameters and
+      reference-set-mask admission already ran before the origins were stored,
+      so proposed build `n` was removed without a runtime test; build `m` remains.
+- [x] Trace the lower step-admission boundary inside
+      `MoveLegIkNew_UpdateNextFootsteps 0x142102DF0`: producer and ownership of
+      the authored three-parameter `foot-effect`, exact inputs to
+      `AnimStateSnapshot_EvaluateReferenceSetMask` at `0x142103A0D`, and all
+      downstream readers/validity of per-leg target/history blocks written at
+      `0x142103AAE..0x142103ACB` / `0x142103BB4..0x142103BCC`. The effect is an
+      authored clip cue; `payload+0x8 == 3` is its parameter count, and
+      `+0x2C/+0x30 >= 0` is the only admission-valid gate for both output blocks.
+- [ ] Run the single build-`o` read-only discriminator: stationary ADS-turn local
+      Chloe while watching from Nadine. Compare bounded
+      `AIM-FOOT-ADMISSION owner=0/1 window=0/1` rows. Local `-1` selects a wrong
+      owner; local admitted/puppet `-1` selects a missing clip effect; both
+      admitted with divergent numeric targets selects target-frame correction;
+      matching outputs selects the later GroundModel/solve/commit path. The
+      wrapper calls stock first and never mutates game state.
 
 ## P0: Ground weapon world lifecycle and pickup prompt (`hy`, 2026-07-27)
 

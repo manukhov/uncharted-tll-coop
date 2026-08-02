@@ -134,6 +134,15 @@ constexpr std::uintptr_t kAnimManagerPublishWorldTransformCallsiteRva = 0x1A8FC0
 constexpr std::uintptr_t kCharacterLegIkControllerUpdateRva = 0x1F9E6F0;
 constexpr std::uintptr_t kCharacterLegIkControllerUpdateVtableSlotRva =
     0x2BBB478;
+// MoveLegIkNew::UpdateFeetPlanted builds two private world Locators and passes
+// each one by pointer to MoveLegIkNew::UpdateNextFootsteps. These are the only
+// two direct E8 calls in the function; a read-only callsite probe observes the
+// admission phases and target records immediately after the stock function.
+constexpr std::uintptr_t kMoveLegIkUpdateNextFootstepsRva = 0x2102DF0;
+constexpr std::uintptr_t kMoveLegIkUpdateNextFootstepsFirstCallsiteRva =
+    0x210199C;
+constexpr std::uintptr_t kMoveLegIkUpdateNextFootstepsSecondCallsiteRva =
+    0x2101F69;
 // FgDrawManager worker callsite. The worker passes one FgAnimData and the
 // global FgInstance pool to PrepareInstanceForRendering; after the call every
 // driven 0x280-byte instance owns the current render-world matrix at +0x140.
