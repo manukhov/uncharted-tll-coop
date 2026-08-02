@@ -37933,6 +37933,8 @@ using PlayerMoveSequencerUpdateFunction =
     void(__fastcall*)(void*, int);
 PlayerMoveSequencerUpdateFunction
     g_original_player_move_sequencer_update = nullptr;
+PlayerMoveSequencerUpdateFunction
+    g_aim_step_player_move_sequencer_update = nullptr;
 WeaponHolsterBuildBindingFunction
     g_original_weapon_holster_build_binding = nullptr;
 WeaponAttachmentAttachToOwnerPointFunction
@@ -38307,25 +38309,60 @@ void log_aim_step_phase0_transition(
     boot_log_line(line.str().c_str());
 }
 
+void __fastcall hooked_aim_step_player_move_sequencer_phase0(
+    void* sequencer, int phase) {
+    AimStepPhase0Snapshot before{};
+    seh_capture_aim_step_phase0(sequencer, &before);
+    if (g_aim_step_player_move_sequencer_update != nullptr) {
+        g_aim_step_player_move_sequencer_update(sequencer, phase);
+    }
+    AimStepPhase0Snapshot after{};
+    seh_capture_aim_step_phase0(sequencer, &after);
+    log_aim_step_phase0_transition(sequencer, before, after);
+}
+
+bool install_aim_step_phase0_discriminator() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kPlayerMoveSequencerPhase0CallsiteRva,
+            kPlayerMoveSequencerUpdateRva,
+            reinterpret_cast<const void*>(
+                &hooked_aim_step_player_move_sequencer_phase0),
+            callsite, relay, displacement)) {
+        boot_log_line(
+            "ADS foot-step phase-0 discriminator SKIPPED (preflight)");
+        return false;
+    }
+    g_aim_step_player_move_sequencer_update =
+        reinterpret_cast<PlayerMoveSequencerUpdateFunction>(
+            g_module + kPlayerMoveSequencerUpdateRva);
+    DWORD old = 0;
+    if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        g_aim_step_player_move_sequencer_update = nullptr;
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line(
+            "ADS foot-step phase-0 discriminator SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(callsite + 1) = displacement;
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(callsite, 5, old, &ignored);
+    boot_log_line(
+        "ADS foot-step phase-0 discriminator installed (0x140CA4B85)");
+    return true;
+}
+
 void __fastcall hooked_player_move_sequencer_update(
     void* sequencer, int phase) {
-    AimStepPhase0Snapshot aim_step_before{};
-    if (phase == 0) {
-        seh_capture_aim_step_phase0(sequencer, &aim_step_before);
-    }
     WeaponActionLifecycleSnapshot before{};
     seh_capture_weapon_action_lifecycle(sequencer, &before);
     const int before_owner = retained_player_index(before.player);
 
     if (g_original_player_move_sequencer_update != nullptr) {
         g_original_player_move_sequencer_update(sequencer, phase);
-    }
-
-    if (phase == 0) {
-        AimStepPhase0Snapshot aim_step_after{};
-        seh_capture_aim_step_phase0(sequencer, &aim_step_after);
-        log_aim_step_phase0_transition(
-            sequencer, aim_step_before, aim_step_after);
     }
 
     WeaponActionLifecycleSnapshot after{};
@@ -46710,8 +46747,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02d "
-        "(ADS channel-zero foot-step discriminator)");
+        "TLL co-op runtime init 2026-08-02e "
+        "(exact-callsite ADS foot-step discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -46796,6 +46833,7 @@ DWORD WINAPI install_hook(void*) {
         install_native_aim_pitch_smoother_relay();
         install_player_strafe_ik_forward_y_relay();
         install_native_aim_foot_turn_relays();
+        install_aim_step_phase0_discriminator();
         if (g_enable_aim_case6_probe) {
             install_aim_case6_probe();
             if (g_enable_aim_joint_boundary_probe) {

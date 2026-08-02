@@ -16224,10 +16224,19 @@ IK and cannot initiate the lower-body action. **F4 (rejected as next seam):** th
 campaign-incomplete CharacterMove AnimCmd snapshot requires the unavailable
 `Player+0x3FC8` art-group table and is not safe to synthesize.
 
-Build `d` is deliberately read-only for feet. It extends the already installed,
-previously stable `PlayerMoveSequencer_UpdatePhase` pass-through hook; it adds no
-new patch point and calls stock exactly once. Only phase 0 for an exact retained
-Player is inspected. Ownership must agree through `Player+0x3BD0`,
+Build `d` was intended to be deliberately read-only for feet, but its first live
+installation check showed that the diagnostic had been attached to the old
+holster lifecycle detour, which is correctly parked with the other rejected
+Nadine weapon probes. Neither PID 16516 nor PID 6672 emitted an install marker,
+so build `d` is **REJECTED as a runnable foot discriminator** without making any
+claim about the action hypothesis. No user gameplay test was requested under it.
+
+Build `e` instead patches the unique Player phase-zero direct callsite
+`0x140CA4B85` to `PlayerMoveSequencer_UpdatePhase 0x142051EC0`. The original E8
+decodes exactly to that target and the caller loads `rcx=[Player+0x3BD0]` after
+zeroing `edx`; the relay preflight verifies both the E8 and target before writing
+its displacement. It calls stock exactly once and inspects only an exact retained
+Player. Ownership must agree through `Player+0x3BD0`,
 action-controller `+0x108` and controller-sequencer `+0x110`; channel 0 is scanned
 with a 16-node cap, and only the exact RTTI plus the two exact animation IDs can
 emit bounded `AIM-STEP-PH0` rows. No action, controller, sequencer, clip or
@@ -16240,6 +16249,6 @@ remote Player emits no equivalent edge, selecting F1 and earning a monotonic
 one-shot action-edge relay. If the remote also emits the same exact `0->1` edge,
 F1 is rejected and the next static trace moves below OnStart into
 AnimStateLayer clip resolution/masking; the builder/selector must not be forced.
-Release compilation completed without warnings or errors; build `d` contains
+Release compilation completed without warnings or errors; build `e` contains
 both this read-only discriminator and the independently documented remote-fire
 pulse release from build `c`.

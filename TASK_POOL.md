@@ -11,7 +11,7 @@
 
 ## P0 NEXT: ADS feet and duplicate tracer follow-up (2026-08-02)
 
-- [ ] Run build `2026-08-02d` tracer discriminator: require one selected-launch
+- [ ] Run build `2026-08-02e` tracer discriminator: require one selected-launch
       apply and consumed pulse per remote shot, no owner-1 unmatched projectile,
       one correct tracer and one correct impact. If the visual duplicate remains
       without `UNMATCHED`, trace the separate muzzle/effect owner instead.

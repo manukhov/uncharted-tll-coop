@@ -703,6 +703,9 @@ constexpr std::uintptr_t kAnimStateLayerExtractAndBlendCustomDataRva =
 // later phase-specific checks, so a before/after detour distinguishes a queued
 // action from one that actually reached OnStart without invoking engine code.
 constexpr std::uintptr_t kPlayerMoveSequencerUpdateRva = 0x2051EC0;
+// Exact Player phase-zero call: mov rcx,[Player+0x3BD0], xor edx,edx,
+// call PlayerMoveSequencer_UpdatePhase.
+constexpr std::uintptr_t kPlayerMoveSequencerPhase0CallsiteRva = 0x0CA4B85;
 constexpr std::uintptr_t kWeaponHolsterBuildBindingRva = 0x14FE540;
 constexpr std::uintptr_t kWeaponAttachmentAttachToOwnerPointRva = 0x1ED0370;
 // Stock Player weapon-marker path. AnimActionMgr calls the Player factory for
