@@ -16354,3 +16354,24 @@ Cold installation is CONFIRMED on both copies (PIDs 6536/17008): both log build
 0x142AA3238)` marker and their expected A/B roles, and both windows remain
 responsive. This confirms hook installation/preflight only; the visual and
 ProbeKick prediction above remains pending an automatic-fire test.
+
+### 2026-08-02 RUNTIME: Tracer origin fixes only materialized subset; single-source V1 rejected
+
+The automatic-fire test visibly split about half the streaks correctly from the
+remaining side-origin streaks. Role-B PID 17008 logged 96 selected launch applies.
+Within the bounded diagnostics, 58 sequences reached exactly one matching
+`Tracer::Init` (`init=1`, direction `dot=1.00000`) and 32 distinct sequences
+returned from the exact same `SpawnProjectile` scope with
+`TRACER-VISUAL-ORIGIN-MISS`; the final six sequences exceeded both bounded log
+caps. The matched rows measured 0.48--0.79 m origin deltas, overwhelmingly
+lateral, and moved the corresponding visible lines to the correct muzzle.
+
+Therefore the narrow `Tracer::Init +0x70` isolation is CONFIRMED for launches
+that materialize a `Tracer`, but V1 as the owner of every visible automatic-fire
+streak is REJECTED. A miss is not a failed owner/direction predicate: `init_count`
+is checked after the entire exact stock SpawnProjectile call, so no Tracer Init
+occurred in that launch at all. The remaining HYPOTHESIS is an alternate authored
+visual branch selected per shot (possibly muzzle SFX or an instant-projectile
+streak path), not another physical projectile. The next static pass must resolve
+the branch that suppresses Tracer materialization and trace its selected visual
+object before another runtime write.

@@ -20,10 +20,15 @@
       record reads direction `+0x30` and visual origin `+0x70`. Build `f` uses
       exact SpawnProjectile-scoped TLS and restores only `+0x70` during Init;
       physical `+0x20` and the correct impact path remain relayed.
-- [ ] Run build `2026-08-02f`: automatic fire must emit one
-      `TRACER-VISUAL-ORIGIN` per selected launch, move only the visual start to
-      the clone muzzle, and preserve impact marks/ProbeKick. No visual change
-      selects asset/muzzle ownership instead of another projectile edit.
+- [x] Run build `2026-08-02f`: the `Tracer::Init +0x70` swap fixes only the
+      launches that materialize a Tracer. Of 96 role-B selected applies, bounded
+      logs contain 58 exact `init=1/dot=1` matches and 32 exact-scope misses,
+      matching the visible roughly half-correct/half-side result. The hypothesis
+      that every streak belongs to this Tracer is REJECTED.
+- [ ] Resolve the stock per-shot branch that produces a visible side streak when
+      exact SpawnProjectile scope emits no Tracer Init. Prove whether it belongs
+      to muzzle SFX, an instant-projectile visual, or an authored alternate before
+      changing another origin/transform.
 - [ ] Run the exact channel-0 `PlayerMoveSequencer_UpdatePhase` action-start
       discriminator for local and puppet GunMove. Confirm sender-only
       `PlayerUpdatePlayAnimFade` edges for `aim-idle-rotate[-cc]` before relaying
