@@ -2427,13 +2427,16 @@ Do not reopen these as the first move:
       BaseLayer supplies no custom TargetPoint; the config factory rejects zero
       and the per-node path constructs a plain fallback. G1 is therefore
       REJECTED, not a correction seam.
-- [ ] Keep runtime tests parked. Follow the selected `strafe-idle-ap+0x66048`
+- [x] Keep runtime tests parked. Follow the selected `strafe-idle-ap+0x66048`
       Animation endpoint through command evaluation into the late visible-pose
       DAG and find a post-command head/spine/arms writer with an owner
       screen-route or camera dependency. G3, a non-Gesture producer or
       post-command writer, is the sole surviving topology. Do not repatch
       PlayerStrafeLookAt, Gesture targets, LRDU, active-state weights, LookAtIK
-      or the flashlight-only LookAtOrCamera.
+      or the flashlight-only LookAtOrCamera. STATIC result: the late writer is
+      `Player+0x1D50 -> PlayerStrafeController_UpdatePostAnimBlend 0x14100C400
+      -> PlayerStrafeController_UpdateStrafeIk 0x14100B370`; its exact source
+      worker derives pitch from a routed-camera Locator and writes `headb/spined`.
 - [x] Resolve descriptor type 1 as exact RTTI `AnimSimpleLayer`. Its command
       generator `0x141894A90`, step `0x1418966C0`, instance phase helper
       `0x1418F3AA0` and layer fade helper `0x141896950` close all ordinary
@@ -2441,11 +2444,23 @@ Do not reopen these as the first move:
       and fade config, with no Player/camera/input read. Player's sole named
       persistent Simple layer is `FlinchPartial`; directional aim is type 2.
       Reject the ordinary type-1 clip/time/fade path as the steady camera source.
-- [ ] Resolve all concrete Player fields and vtable targets called by
+- [x] Resolve all concrete Player fields and vtable targets called by
       `Player_PostAnimBlending_Async 0x1410EB6A0`, especially `+0x1D50`,
       `+0x1DD8`, `+0x1FB0`, `+0x1FE0` and `+0x1FF0`. Audit joint scope and every
       Player screen-route/camera dependency; keep limb-only and traversal-only
-      solvers separate from a common head/spine/arms writer.
+      solvers separate from a common head/spine/arms writer. Leg, hand,
+      wall-hand, bear-climb, pickup, bump, flashlight and holster paths are
+      scoped accordingly; `+0x1FB0` is an event/host-anchor hub. Only the
+      PlayerStrafeController path combines routed-camera data with a common
+      `headb/spined` post-blend correction.
+- [ ] Close the correction seam statically before another build. Compare the
+      exact `GunMove` output Locator quaternion against the network pose-seed
+      quaternion, including forward-axis sign/handedness and the off-center
+      reticle contribution. Choose between a narrow returned-Locator quaternion
+      replacement and rebuilding camera-state prefix rows `+0x00/+0x10/+0x20`
+      only for the nested `0x140F68D80` unprojection. Do not reuse the existing
+      raw-transform-only `out+0x350` writer: it cannot affect
+      `CameraState_UnprojectScreenPoint 0x1416954F0`.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

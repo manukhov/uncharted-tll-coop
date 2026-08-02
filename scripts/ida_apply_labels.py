@@ -2101,6 +2101,49 @@ FUNCTIONS = {
         "assertion. Runs CharacterLegIkController and other post-blend IK "
         "controllers after the animation manager's phase-0x10 dispatch.",
     ),
+    0x14100B370: (
+        "PlayerStrafeController_UpdateStrafeIk",
+        "Exact player-strafe.cpp:1030 source assertion names "
+        "PlayerStrafeController::UpdateStrafeIk. Reads the quaternion at "
+        "incoming Locator+0x10, derives vertical pitch with asin, resolves "
+        "the headb and spined joint chains, and commits their post-blend "
+        "joint corrections. Called only by the concrete PlayerStrafeController "
+        "vtable +0x60 method 0x14100C400.",
+    ),
+    0x14100C400: (
+        "PlayerStrafeController_UpdatePostAnimBlend",
+        "Concrete PlayerStrafeController vtable 0x142A3FA88 slot +0x60. "
+        "Reached from Player_PostAnimBlending_Async through Player+0x1D50; "
+        "validates the current strafe action and passes the supplied Locator "
+        "to PlayerStrafeController_UpdateStrafeIk.",
+    ),
+    0x1410F9050: (
+        "Player_BuildStrafeIkReferenceLocator",
+        "Builds the 32-byte Locator immediately consumed by "
+        "PlayerStrafeController vtable +0x60. Seeds position from "
+        "ResolveScreenRoutePoseSeedOrDefault(Player+0x4010), then selects "
+        "GunMoveGrapple/StrafeMelee/GunMove/GrenadeMove/ReviveCharacter. "
+        "The ordinary GunMove branch converts the routed screen reticle point "
+        "to a world direction through CameraScreenRoute_UnprojectPointDirection, "
+        "builds an orthonormal forward/up basis, converts it to a quaternion, "
+        "and stores that quaternion at output+0x10.",
+    ),
+    0x140F68D80: (
+        "CameraScreenRoute_UnprojectPointDirection",
+        "Resolves CameraManager_GetBlendedCameraTransform for the supplied "
+        "screen index and unprojects the supplied two-float screen point through "
+        "CameraState_UnprojectScreenPoint. Returns only the normalized world "
+        "direction. The ordinary GunMove strafe-IK locator calls it at "
+        "0x1410F986C.",
+    ),
+    0x1416954F0: (
+        "CameraState_UnprojectScreenPoint",
+        "Unprojects a screen pixel using camera-state basis rows +0x00/+0x10/"
+        "+0x20 and projection scales +0x80/+0x94, writes camera origin from "
+        "+0x30, and writes a normalized world direction. At viewport center "
+        "the direction is the +0x20 basis row. This consumes the camera-state "
+        "derived prefix, not only its raw transform at +0x350.",
+    ),
     0x141A92260: (
         "AnimManager_PerformAnimBlend",
         "Exact PerformAnimBlend source assertion in anim-mgr-jobs.cpp. Builds "
@@ -6587,16 +6630,20 @@ FUNCTIONS = {
         "translation.",
     ),
     0x1415D23B0: (
-        "BuildNormalizedPhaseBasisFromTwoVectors",
-        "Normalizes and cross-combines two incoming vectors into a packed "
-        "phase/orientation basis block used by the downstream transition "
-        "application family.",
+        "BuildOrthonormalBasisFromTwoVectorsAndPosition",
+        "Normalizes two incoming vectors, cross-combines them into an "
+        "orthonormal 3x3 basis, and copies the fourth input vector into the "
+        "translation row. The final boolean selects handedness. Used by the "
+        "GunMove strafe-IK locator to construct a basis from the unprojected "
+        "screen direction and world up.",
     ),
     0x142177E50: (
-        "BuildInterpolatedVectorFromThresholdRecord",
-        "Converts a packed threshold/range record into an interpolated vector "
-        "block using fields around +0x0/+0x4/+0x8/+0x10/+0x14/+0x18/+0x20/"
-        "+0x24/+0x28. Used directly under 0x1402EF420.",
+        "Quaternion_FromOrthonormalBasis",
+        "Exact matrix-to-quaternion conversion over the 3x3 basis fields at "
+        "+0x00/+0x04/+0x08, +0x10/+0x14/+0x18 and +0x20/+0x24/+0x28. "
+        "Computes sqrt(trace+1), half-scale and the three antisymmetric "
+        "differences. The GunMove strafe-IK locator stores its result as the "
+        "output Locator quaternion.",
     ),
     0x141BE20C0: (
         "DispatchPhaseTransitionInstructionListToActorState",
@@ -8849,10 +8896,10 @@ FUNCTIONS = {
         "policy owners and should be treated as part of the same promotion map.",
     ),
     0x14100D5A0: (
-        "BuildMountedPlayerSubsystem1D50",
-        "Direct builder for outer_owner+0x1D50 in the same early Player::Init "
-        "mount band surrounding the later qualification and presentation "
-        "owners.",
+        "PlayerStrafeController_Create",
+        "Allocates and constructs the concrete PlayerStrafeController stored "
+        "at Player+0x1D50. Installs RTTI vtable 0x142A3FA88, initializes its "
+        "JointChain and JacobianMap storage, and returns the 0x320-byte object.",
     ),
     0x141301710: (
         "ConstructMountedPlayerSubsystem1DA0_Size52C0",
@@ -9630,22 +9677,32 @@ FUNCTIONS = {
     ),
     0x141C06650: (
         "CameraManager_GetBlendedCameraTransform",
-        "Extracts a screen's current camera transform into the out buffer for "
+        "Copies a screen's complete camera state into the out buffer for "
         "consumers (e.g. PlayerFireController_Fire aim direction). Picks the "
         "active camera child via SelectPreferredCameraChildFromRouteEntity; if a "
         "single camera is active copies g_PerScreenCameraTransformCache "
         "(0x1465FDAA0, stride 0x400 per screen index *(mgr+292)), else builds a "
         "blend from mgr+0x1A0, then CameraState_CopyTransformAndParams -> out. "
-        "The out camera 4x4 matrix is at out+0x350; params (fov) at out+0x390. "
-        "Co-op aim-fix intercept: for screen index 1 overwrite out+0x350 rotation "
-        "from peer.camera_quat.",
+        "CameraState_CopyPrefix350 first copies +0x000..+0x34F, then the raw "
+        "4x4 transform at +0x350 and params at +0x390 are copied. Screen "
+        "unprojection consumes the derived basis prefix +0x00/+0x10/+0x20; "
+        "overwriting only raw transform +0x350 after this copy does not rebuild "
+        "or alter that already-emitted prefix.",
+    ),
+    0x14014BF00: (
+        "CameraState_CopyPrefix350",
+        "Leaf copy of exactly 0x350 bytes from source camera state to "
+        "destination (+0x000 through +0x34F). Called first by "
+        "CameraState_CopyTransformAndParams before the separate raw transform "
+        "and parameter tail copies.",
     ),
     0x14014BDA0: (
         "CameraState_CopyTransformAndParams",
-        "Copies a camera state's 4x4 transform matrix (dst+0x350..+0x390, four "
-        "xmmword) plus following params (+0x390 fov, +0x3C0.. and byte flags) "
-        "from src to dst. Used by CameraManager_GetBlendedCameraTransform to emit "
-        "the resolved per-screen camera transform.",
+        "Copies a complete camera state. First calls CameraState_CopyPrefix350 "
+        "for +0x000..+0x34F, then copies the raw 4x4 transform "
+        "(+0x350..+0x38F), scalar params (+0x390..), vectors +0x3C0/+0x3D0, "
+        "flags and the tail through +0x3F4. Used by "
+        "CameraManager_GetBlendedCameraTransform.",
     ),
     # --- Fire ray source chain (2026-07-05) ---
     0x140E2BCD0: (

@@ -4717,6 +4717,12 @@ bool copy_peer_aim_orientation_quat(float out[4]) {
     return false;
 }
 
+// Writes only CameraState's raw transform rotation at +0x350. It intentionally
+// preserves translation and every parameter, but it also does NOT rebuild the
+// derived camera-state prefix at +0x000..+0x34F. CameraState_UnprojectScreenPoint
+// (0x1416954F0) reads its orientation basis from +0x00/+0x10/+0x20, so a
+// post-GetBlendedCameraTransform call to this helper cannot change that
+// consumer's already-copied screen ray.
 void write_camera_matrix_rotation_from_quat(void* out_buffer, const float quat[4]) {
     if (out_buffer == nullptr || quat == nullptr ||
         readable_bytes(out_buffer) <
@@ -5090,6 +5096,9 @@ std::int64_t __fastcall hooked_get_blended_camera_transform(
         return result;
     }
     __try {
+        // Raw transform only. This remains useful to consumers which read the
+        // +0x350 transform directly, but it is not a strafe-IK pitch fix:
+        // CameraState_UnprojectScreenPoint reads the derived prefix instead.
         write_camera_matrix_rotation_from_quat(out_buffer, quat);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
     }

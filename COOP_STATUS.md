@@ -15814,3 +15814,133 @@ Competing explanations are now separated:
 No runtime test is justified. Continue by resolving every concrete controller
 invoked by `Player_PostAnimBlending_Async 0x1410EB6A0` and exclude limb-only or
 state-specific solvers before choosing a new seam.
+
+### 2026-08-02 STATIC: late `PlayerStrafeController` imports routed-camera pitch into `headb/spined`
+
+The post-command search has found a concrete common upper-body writer. This
+revises the narrower 2026-07-28 conclusion that the remaining late controllers
+were only weapon-arm contributors: that pass covered the final holster/flashlight/
+bump tail but did not resolve the earlier `Player+0x1D50` virtual call.
+
+`Player_PostAnimBlending_Async 0x1410EB6A0` performs the following exact sequence
+at `0x1410EB9FA..0x1410EBA20`:
+
+1. load the object at `Player+0x1D50`;
+2. call `Player_BuildStrafeIkReferenceLocator 0x1410F9050(Player, &locator)`;
+3. invoke the object's vtable slot `+0x60` with that returned Locator.
+
+The field is no longer an anonymous mounted subsystem. Its allocator/constructor
+`PlayerStrafeController_Create 0x14100D5A0` installs exact RTTI vtable
+`PlayerStrafeController::vftable 0x142A3FA88`; qword `vtable+0x60` is
+`PlayerStrafeController_UpdatePostAnimBlend 0x14100C400`. That method validates
+the current action record and blend weight, then its sole joint worker call at
+`0x14100C795` passes the supplied Locator to
+`PlayerStrafeController_UpdateStrafeIk 0x14100B370`.
+
+The worker has an exact source assertion at `player-strafe.cpp:1030` with the
+full signature
+`PlayerStrafeController::UpdateStrafeIk(..., const Locator &, ...)`. Its
+instruction dataflow is the missing vertical path:
+
+- `0x14100B43F` reads the Locator quaternion at argument `+0x10`;
+- `0x14100B43F..0x14100B4E0` expands that quaternion into basis vectors;
+- `0x14100B4E6` selects the vertical component, clamps it to `[-1,+1]`, and
+  `0x14100B501` calls `asinf`; multiplication by the rad-to-degree constant at
+  `0x14100B506` produces the pitch angle;
+- literal joint names `headb` at `0x14100B965` and `spined` at `0x14100BC87`
+  select two procedural chains;
+- `0x14100C322` submits the joint result and `0x14100C32C` commits the chain.
+
+This is not a hand-only or leg-only solver. It is a late, source-named
+head/spine writer driven by a Locator supplied immediately after the other
+post-blend IK passes.
+
+The Locator producer is action-specific. It first seeds a default 32-byte
+Locator through
+`ResolveScreenRoutePoseSeedOrDefault(&seed, *(Player+0x4010))` at
+`0x1410F9725`, then distinguishes `GunMoveGrapple`, `StrafeMelee`, `GunMove`,
+`GrenadeMove` and `ReviveCharacter`. The independently runtime-confirmed stable
+ordinary ADS action is `GunMove 0x12D842C0`, so its branch is the relevant one.
+For that branch:
+
+1. `0x1410F97DB` reloads the owner screen index from `Player+0x4010`;
+2. `0x1410F97E7/0x1410F97F3` fetches the complete routed camera state;
+3. the per-screen layout record builds the reticle pixel at
+   `0x1410F9816..0x1410F9867`;
+4. `CameraScreenRoute_UnprojectPointDirection 0x140F68D80` at
+   `0x1410F986C` converts that pixel to a normalized world direction;
+5. `BuildOrthonormalBasisFromTwoVectorsAndPosition 0x1415D23B0` combines that
+   direction with world up, and
+   `Quaternion_FromOrthonormalBasis 0x142177E50` performs the exact
+   trace/antisymmetric matrix-to-quaternion conversion;
+6. `0x1410F9AFA` stores the selected result at output Locator `+0x10`, while
+   position at `+0x00` remains the routed pose-seed position.
+
+The unprojection closes the camera axis convention without guessing.
+`CameraScreenRoute_UnprojectPointDirection` calls
+`CameraManager_GetBlendedCameraTransform`, then
+`CameraState_UnprojectScreenPoint 0x1416954F0`. The latter reads the camera-state
+basis rows at `+0x00/+0x10/+0x20`, projection scales at `+0x80/+0x94`, converts
+the supplied pixel to signed normalized screen coordinates, and normalizes
+`screen_x*row0 + screen_y*row1 + row2`. At viewport center the output direction
+is therefore the positive `+0x20` basis row; upward/downward camera pitch changes
+the exact vertical component which is later converted back to Locator quaternion
+and consumed by `asinf` in `UpdateStrafeIk`.
+
+This also exposes why the existing broad camera-transform hook cannot correct
+this path. `CameraState_CopyTransformAndParams 0x14014BDA0` first calls
+`CameraState_CopyPrefix350 0x14014BF00` to copy `+0x000..+0x34F`, then separately
+copies the raw 4x4 transform at `+0x350` and the parameter tail. The mod helper
+`write_camera_matrix_rotation_from_quat` changes only raw transform rotation at
+`out+0x350` **after** the native copy; it never rebuilds the already-copied
+derived basis at `out+0x00/+0x10/+0x20` used by unprojection. Moreover,
+`g_puppet_aim_override_frame` is initialized/reset false and has no true writer,
+so the non-fire branch of `hooked_get_blended_camera_transform` is currently
+unarmed even before this layout mismatch is considered. Writing the raw
+screen-1 cache transform alone is consequently **REJECTED as a sufficient
+strafe-IK correction**.
+
+The other concrete post-blend fields provide an independent scope exclusion:
+
+- `Player+0x1DC0` is `CharacterLegIkController`;
+- `+0x1DC8` dispatches exact-source `CharacterHandIK::Update`;
+- `+0x1DD0` dispatches exact-source `CharacterWallHandIK::Update(float)`;
+- `+0x1DD8` dispatches exact-source `PlayerBearClimbIK::Update`;
+- `+0x1E38` is the already runtime-rejected inactive `LookAtIK` path;
+- `+0x1EB8`, `+0x1FE0`, `+0x1FF0` and the final `+0x1DF0` call are respectively
+  pickup-arm, bump-arm, flashlight-arm and holster-arm/state-specific paths;
+- `+0x1FB0` is the mounted event/host-anchor hub, not a joint solver;
+- final Player vslot `+0xEC8` merely returns `Player+0x4318` for cleanup.
+
+Three independent evidence kinds now satisfy the static quota: exact RTTI and
+vtable identity for the `Player+0x1D50` call; instruction-level camera-to-
+Locator-to-`asinf` dataflow; and source/joint identity tying the final writer to
+`PlayerStrafeController::UpdateStrafeIk`, `headb` and `spined`. The competing
+models are:
+
+- **P1 late strafe-IK camera import (LEADING STATIC):** directly explains why
+  the retained character follows the receiver's local vertical camera even
+  after peer-correct LRDU reached the earlier state graph.
+- **P2 strafe IK is yaw-only (REJECTED):** the worker explicitly derives pitch
+  with `asinf` and applies head/spine chains.
+- **P3 a later common writer replaces this result (strongly narrowed):** every
+  later concrete controller is arm/state-specific or cleanup; no later common
+  head/spine writer exists in this Player method.
+- **P4 the existing `out+0x350` camera hook already covers it (REJECTED):** the
+  consumer reads the copied prefix, and the normal non-fire guard is never armed.
+
+Runtime remains parked. Two static correction seams remain to compare before an
+implementation: (A) replace only the returned screen-1 `GunMove` Locator
+quaternion with the fresh strict-ADS peer pose quaternion, preserving native
+position; or (B) rebuild the exact derived camera-state basis only for the
+`0x140F68D80` call nested under ordinary `GunMove`, preserving the native reticle
+offset. Seam B is more faithful to the stock screen-point calculation; seam A is
+narrower. Before choosing, prove whether the peer pose-seed quaternion and the
+GunMove-produced quaternion share handedness/sign for the forward axis and
+whether the native off-center reticle contribution is required for horizontal
+aim. No game run is justified until that comparison is complete.
+
+All newly resolved functions and the corrected complete-camera-state layout are
+saved in the sole `ida/tll.i64`: the headless label pass reported 1516 functions,
+45 data names and `save_database returned True`; the restarted MCP independently
+resolves the new names above.
