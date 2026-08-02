@@ -16348,3 +16348,9 @@ direction/origin remain unchanged. That confirms V1. A matching marker with no
 visual change rejects V1 and moves to asset/muzzle ownership V2/V3; changed
 impacts or missing shots reject the claimed synchronous lifetime isolation and
 require immediate rollback.
+
+Cold installation is CONFIRMED on both copies (PIDs 6536/17008): both log build
+`2026-08-02f`, the aligned `Tracer visual-origin relay installed (vtable slot
+0x142AA3238)` marker and their expected A/B roles, and both windows remain
+responsive. This confirms hook installation/preflight only; the visual and
+ProbeKick prediction above remains pending an automatic-fire test.
