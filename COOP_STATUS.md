@@ -16561,3 +16561,18 @@ it must not send that received sequence back. Chloe-to-Nadine fire must remain
 unchanged. A role-B send with no role-A owner1 apply rejects receiver symmetry;
 any immediate alternating send loop rejects the owner-based echo proof and
 requires rollback.
+
+### 2026-08-02 CONFIRMED: fire relay is bidirectional without echo (`2026-08-02j`)
+
+The user confirmed that Nadine's shots are now visible on Chloe. Logs match the
+observable result exactly: role-B PID 8752 emitted 99 `FIRE-RELAY send` packets
+with Nadine controller offset `0x15ADB0`, and role-A PID 13784 received exactly
+99. In the reverse direction role A emitted 9 packets and role B received
+exactly 9. There were no surplus sends in either process, rejecting the echo
+alternative.
+
+Role A applied Nadine sequences only to retained owner1, including matching
+`FIRE-AMMO-APPLY`, `FIRE-SELECTED-LAUNCH-APPLY` and both caller-thread and worker
+`TRACER-VISUAL-ORIGIN` rows with direction `dot=1.00000`. Chloe-to-Nadine fire
+remained visible. The old role flag was therefore the sole cause of the one-way
+behavior; retained owner0/owner1 is the confirmed symmetric identity boundary.

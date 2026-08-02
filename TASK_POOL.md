@@ -42,10 +42,10 @@
 - [x] Run one short automatic burst on build `2026-08-02i`. Both caller-thread
       and worker Tracer candidates now reach the visual-only `+0x70` swap; the
       user confirmed that all Chloe automatic-fire tracers originate correctly.
-- [ ] Run build `2026-08-02j` in both directions. Require Nadine local fire on
-      role B to emit one `FIRE-RELAY send ... roleB=1`, Chloe role A to receive
-      and apply it only to owner1, and no echo send from the receiving copy.
-      Recheck a few Chloe shots for regression.
+- [x] Run build `2026-08-02j` in both directions. Nadine role B sent 99 shots
+      and Chloe role A received exactly 99; Chloe sent 9 and Nadine received
+      exactly 9. Both receiver paths applied owner1 launch direction/origin and
+      Tracer visual correction, with no echo send or crash.
 - [ ] Only if the worker relay leaves true no-entry side streaks: trace the ribbon/tracer
       child instruction inside retained muzzle SFX at ProcessWeapon
       `+0x998/+0x9A8`, below the shared flash/audio actor boundary.
