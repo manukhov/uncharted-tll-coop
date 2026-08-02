@@ -134,15 +134,14 @@ constexpr std::uintptr_t kAnimManagerPublishWorldTransformCallsiteRva = 0x1A8FC0
 constexpr std::uintptr_t kCharacterLegIkControllerUpdateRva = 0x1F9E6F0;
 constexpr std::uintptr_t kCharacterLegIkControllerUpdateVtableSlotRva =
     0x2BBB478;
-// MoveLegIkNew::UpdateFeetPlanted builds two private world Locators and passes
-// each one by pointer to MoveLegIkNew::UpdateNextFootsteps. These are the only
-// two direct E8 calls in the function; a read-only callsite probe observes the
-// admission phases and target records immediately after the stock function.
-constexpr std::uintptr_t kMoveLegIkUpdateNextFootstepsRva = 0x2102DF0;
-constexpr std::uintptr_t kMoveLegIkUpdateNextFootstepsFirstCallsiteRva =
-    0x210199C;
-constexpr std::uintptr_t kMoveLegIkUpdateNextFootstepsSecondCallsiteRva =
-    0x2101F69;
+// The feet-planted worker restores the captured Character and MoveLegIkNew from
+// job+0x40/+0x48, then makes the sole direct call to UpdateFeetPlanted. Unlike
+// UpdateNextFootsteps' optimized-away source arg2, RDX here is a live Character
+// pointer. A stock-first observer at this callsite can classify both private
+// phase windows without a silent owner-identity miss.
+constexpr std::uintptr_t kMoveLegIkUpdateFeetPlantedRva = 0x2101330;
+constexpr std::uintptr_t kMoveLegIkUpdateFeetPlantedJobCallsiteRva =
+    0x2104AB3;
 // FgDrawManager worker callsite. The worker passes one FgAnimData and the
 // global FgInstance pool to PrepareInstanceForRendering; after the call every
 // driven 0x280-byte instance owns the current render-world matrix at +0x140.

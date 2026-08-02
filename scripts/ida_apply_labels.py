@@ -9,6 +9,25 @@ import idc
 
 FUNCTIONS = {
     # --- 2026-08-02: active post-blend foot-step owner ---
+    0x141F9D610: (
+        "CharacterLegIkController_Construct",
+        "Constructs the 0x4560-byte CharacterLegIkController, including the "
+        "embedded MoveLegIkNew at +0x1F0, then clears active ILegIk pointers "
+        "+0x3E18/+0x3E20 before initialization selects concrete modules.",
+    ),
+    0x141F9DC30: (
+        "CharacterLegIkController_Initialize",
+        "CharacterLegIkController vtable slot +0x8. Receives the owning Player "
+        "as arg2, stores it at controller+0x8, initializes every embedded leg-IK "
+        "implementation with that same owner and selects MoveLegIkNew "
+        "controller+0x1F0 into active ILegIk pointer +0x3E18 when empty.",
+    ),
+    0x142104AC0: (
+        "MoveLegIkNew_Construct",
+        "Constructs the embedded MoveLegIkNew, installs vtable 0x142BD4B00 and "
+        "initializes its per-leg target/history Locators, GroundModel records "
+        "and cached contact state.",
+    ),
     0x141F9E150: (
         "CharacterLegIkController_ResetIkBuffers",
         "CharacterLegIkController vtable slot +0x28, called immediately before "
@@ -62,7 +81,9 @@ FUNCTIONS = {
         "foot-effect entries with exactly three key/value parameters, resolves "
         "heel/ball and ankle references, writes the two "
         "per-leg target/history blocks and reads, but does not initialize or write, "
-        "the static contact references at +0x3A90/+0x3AB0.",
+        "the static contact references at +0x3A90/+0x3AB0. Its source Character "
+        "arg2 is optimized dead: direct callers do not materialize RDX and the "
+        "callee overwrites it at 0x142102EDD before any possible use.",
     ),
     0x141918750: (
         "AnimSnapshotNodeAnimation_CollectEffectEntries",

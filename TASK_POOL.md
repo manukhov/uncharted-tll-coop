@@ -114,10 +114,16 @@
       inventories while retaining all confirmed functional relays/repairs. The
       prior run wrote 1,869 diagnostic rows, including 809 full attachment records
       and 16 exception stack dumps.
-- [ ] Resolve statically what exact Character/owner pointer is passed as argument
-      2 at `0x14210199C/0x142101F69`, why it did not equal retained slot 0/1 in
-      build `p`, and select a mutation-free admission observer without a silent
-      identity gate. No further foot runtime test until that gate is proven.
+- [x] Resolve the build-`p` zero-row owner gate. `UpdateNextFootsteps` source
+      arg2 is optimized dead: first caller leaves `[AnimControl+0x58]` in RDX,
+      second does not set RDX, and `0x142102EDD` overwrites it before any read.
+      Prove the real owner chain through controller `+0x8` -> job `+0x40` and
+      select sole Character-bearing callsite `0x142104AB3`.
+- [ ] Run one stationary ADS turn with build `r`. Require lifetime
+      `AIM-FOOT-JOB-REACH owner=0/1` before classifying bounded admission rows:
+      F1 local admits/puppet differs; F2 local visible step but phases stay `-1`;
+      F3 both admit/match and the fault is below admission. Any missing reach,
+      pose regression or renewed lag rejects the observer packaging.
 - [x] Confirm build `q` performance: PIDs 15444/6220 remained responsive with
       zero exception/AIM/attachment diagnostic rows, and the user confirmed the
       recent gameplay lag is gone with normal behavior.

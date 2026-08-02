@@ -16640,6 +16640,60 @@ exception dumps, zero AIM inventory rows and zero attachment inventory rows; bot
 processes remained responsive. The user confirmed the recent gameplay lag is
 gone and reported normal behavior. The production diagnostic cleanup is retained.
 
+### 2026-08-02 STATIC/IMPLEMENTED: Character-bearing feet-planted observer (`2026-08-02r`)
+
+The zero-row build-`p` result is now explained and the old identity gate is
+**REJECTED**. The source signature of
+`MoveLegIkNew_UpdateNextFootsteps 0x142102DF0` shows a Character arg2, but the
+optimized retail ABI never materializes or consumes it. At the first caller,
+`0x142101960` leaves `[AnimControl+0x58]` in `RDX` while also placing that value
+in stack arg9; the second caller does not set `RDX` at all. The callee preserves
+`RCX`, `R8` and `XMM3`, not `RDX`, and overwrites `RDX` at `0x142102EDD` before
+any possible read. Thus the former `character == retained Player` comparison
+tested stale ABI state and necessarily suppressed the observation.
+
+Three independent evidence types select a stronger boundary:
+
+1. **Construction and ownership dataflow.** `0x1410CB0A1..0x1410CB0C0`
+   allocates/constructs `CharacterLegIkController 0x141F9D610` and stores it at
+   `Player+0x1DC0`; the following vslot `+0x8` call passes that exact Player.
+   `CharacterLegIkController_Initialize 0x141F9DC30` stores it at controller
+   `+0x8`, initializes embedded `MoveLegIkNew` at `+0x1F0`, and selects that
+   module into active pointer `+0x3E18` when empty.
+2. **RTTI/vtable and producer chain.** `CharacterLegIkController_PostAnimUpdate
+   0x141FA0F30` loads active ILegIk from `+0x3E18`, the exact Character from
+   `+0x8`, and dispatches vslot `+0x28`; MoveLegIkNew resolves that slot to
+   `0x1421043F0`. It stores Character and MoveLeg pointers in its private job at
+   `+0x40/+0x48` (`0x14210486E/0x142104879`).
+3. **Single concrete consumer.** `MoveLegIkNew_UpdateFeetPlantedJob
+   0x142104A80` restores `RDX=[job+0x40]` and `RCX=[job+0x48]`, then makes the
+   sole direct call `0x142104AB3 -> MoveLegIkNew_UpdateFeetPlanted
+   0x142101330`. The target immediately consumes Character fields including
+   `+0x1A0`; this argument is live and cannot be an optimized-away placeholder.
+
+Competing seams are closed. Matching `self` against active pointer
+`controller+0x3E18` is structurally valid but can race a module switch after the
+async job was queued. Matching `self == controller+0x1F0` unnecessarily assumes
+the ordinary embedded implementation. Keeping the two inner callsite hooks
+would still have no reliable owner argument. The sole outer callsite
+`0x142104AB3` is therefore selected.
+
+Build `r` replaces both old inner patches with one stock-first, read-only E8
+relay at `0x142104AB3`. It emits one lifetime `AIM-FOOT-JOB-REACH` per retained
+owner before ADS/state gates, then bounded `AIM-FOOT-ADMISSION` rows for both
+private Locators after stock returns. It does not mutate Player, MoveLegIk,
+phase, target, Locator, GroundModel or joints. Release DLL builds successfully.
+
+The falsifiable runtime classification is now: **F1**, local visible ADS feet
+replant and local `phase>=0`, while puppet stays unadmitted or its targets differ,
+selects authored admission/target loss; **F2**, local visible replant with reach
+rows but both local phases remaining `-1`, rejects `foot-effect` as the visible
+ADS-step path and moves the search to procedural `MoveLegIkNew_Update` /
+`ApplyLegToGround`; **F3**, both owners admit with matching targets while only
+the puppet fails visually, moves the fault below admission into GroundModel,
+solve or apply. No reach row rejects the new owner/callsite proof or packaging;
+any pose/performance regression rejects the observer itself.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge
