@@ -32412,7 +32412,9 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
             boot_log_line(line);
         }
 
-        if (!g_net_role_b && owner0 && !g_dll_inert && g_state_net.enabled) {
+        // Slot 0 is the locally controlled Player in both processes.  Capture
+        // its selected launch independently of the A/B transport role.
+        if (owner0 && !g_dll_inert && g_state_net.enabled) {
             coop::FirePacket packet{};
             ULONGLONG age_ms = 0;
             if (take_pending_local_fire_packet(packet, age_ms)) {
@@ -32456,8 +32458,9 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
                 }
                 send_prepared_fire_packet(packet);
             }
-        } else if (g_net_role_b && owner1 && !g_dll_inert &&
-                   g_state_net.enabled) {
+        // Slot 1 is the retained remote puppet in both processes.  Applying
+        // only to owner1 also prevents a received shot from being re-sent.
+        } else if (owner1 && !g_dll_inert && g_state_net.enabled) {
             const std::uint32_t receiver_art =
                 puppet_active_weapon_art_id(player1);
             PeerFireDirectionCapture capture{};
@@ -32659,7 +32662,7 @@ std::uint64_t* __fastcall hooked_tracer_init(
 
     std::uint64_t seed_address = 0;
     void* const puppet = retained_player_object(1);
-    if (!g_net_role_b || g_dll_inert || !g_state_net.enabled ||
+    if (g_dll_inert || !g_state_net.enabled ||
         spawn_info == nullptr || puppet == nullptr ||
         !seh_read_qword(
             static_cast<std::byte*>(spawn_info) +
@@ -32848,7 +32851,7 @@ char __fastcall hooked_projectile_bullet_instant_probe_kick(void* projectile) {
         ? static_cast<std::byte*>(projectile) +
               kProjectileBulletInstantOwnerHandleOffset
         : nullptr;
-    const bool relevant = g_net_role_b && projectile != nullptr &&
+    const bool relevant = projectile != nullptr &&
         puppet != nullptr &&
         launch_record_owned_by_runtime_object(instance_owner_handle, puppet) &&
         snapshot_applied_fire_direction_observation(observation);
@@ -33253,7 +33256,7 @@ void __fastcall hooked_player_fire(
               static_cast<std::byte*>(controller) + kPlayerFireControllerOwnerOffset)
         : nullptr;
     bool local_fire_packet_prepared = false;
-    if (!g_net_role_b && player == retained_player_object(0)) {
+    if (player == retained_player_object(0)) {
         if (g_player_fire_controller_offset < 0) {
             g_player_fire_controller_offset =
                 static_cast<std::byte*>(controller) - static_cast<std::byte*>(player);
@@ -47109,8 +47112,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02i "
-        "(Tracer worker-context relay without copied-origin gate)");
+        "TLL co-op runtime init 2026-08-02j "
+        "(bidirectional owner-gated fire relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

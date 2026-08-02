@@ -25,10 +25,10 @@
       logs contain 58 exact `init=1/dot=1` matches and 32 exact-scope misses,
       matching the visible roughly half-correct/half-side result. The hypothesis
       that every streak belongs to this Tracer is REJECTED.
-- [ ] Resolve the stock per-shot branch that produces a visible side streak when
-      exact SpawnProjectile scope emits no Tracer Init. Prove whether it belongs
-      to muzzle SFX, an instant-projectile visual, or an authored alternate before
-      changing another origin/transform.
+- [x] Resolve the apparent no-Tracer half: `ProcessWeapon_SpawnProjectile`
+      0x141519B50` submits `ProcessWeapon_MaterializeProjectileJob 0x141519B20`
+      and blocks in `Ndjob_WaitForCounter 0x1415B5300`; Tracer Init therefore
+      runs on a worker outside the caller's TLS for those launches.
 - [x] Run bounded build `2026-08-02g` for one short automatic burst. Classify each
       prior `MISS` by exact Tracer entry/readable-seed/owner/direction counters;
       do not treat accepted-patch count as total Init count again. Prediction:
@@ -39,10 +39,14 @@
       `source=job` was confirmed, but the added 5 cm copied-origin gate was
       REJECTED: all 32 capped misses passed entry/seed/owner/direction and failed
       only origin, regressing visible lines to the side.
-- [ ] Run one short automatic burst on build `2026-08-02i`. Require both TLS and
-      job candidates to reach the visual-only `+0x70` swap and all visible lines
-      to originate at the receiver-native muzzle.
-- [ ] Only if build `h` leaves true no-entry side streaks: trace the ribbon/tracer
+- [x] Run one short automatic burst on build `2026-08-02i`. Both caller-thread
+      and worker Tracer candidates now reach the visual-only `+0x70` swap; the
+      user confirmed that all Chloe automatic-fire tracers originate correctly.
+- [ ] Run build `2026-08-02j` in both directions. Require Nadine local fire on
+      role B to emit one `FIRE-RELAY send ... roleB=1`, Chloe role A to receive
+      and apply it only to owner1, and no echo send from the receiving copy.
+      Recheck a few Chloe shots for regression.
+- [ ] Only if the worker relay leaves true no-entry side streaks: trace the ribbon/tracer
       child instruction inside retained muzzle SFX at ProcessWeapon
       `+0x998/+0x9A8`, below the shared flash/audio actor boundary.
 - [ ] Run the exact channel-0 `PlayerMoveSequencer_UpdatePhase` action-start

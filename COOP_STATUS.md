@@ -16501,3 +16501,63 @@ stock Tracer Init call. Prediction: both `source=tls` and `source=job` candidate
 reach `TRACER-VISUAL-ORIGIN`, capped misses no longer report fully matched
 candidates, and all visible automatic-fire lines originate at the correct
 receiver-native muzzle.
+
+### 2026-08-02 CONFIRMED: caller and worker Tracers use the receiver-native muzzle (`2026-08-02i`)
+
+The user tested automatic weapons and confirmed that all Chloe tracers now
+originate correctly from the remote clone's muzzle. This confirms that the
+selected-launch context must cover both the synchronous and blocking worker-job
+materialization paths, and that the removed copied-origin equality check was the
+only false predicate in build `h`. Physical launch origin/direction and impact
+behavior remain unchanged. The separate muzzle-SFX/alternate-ribbon branch is
+not needed for the observed automatic-fire streaks and stays parked unless a
+future true no-entry case is observed.
+
+The same test exposed a pre-existing one-way relay: Chloe fire is visible on the
+Nadine copy, but Nadine fire is not visible on the Chloe copy. Current logs
+contain 152 `FIRE-RELAY send` rows from role-A PID 13840 and their matching
+role-B receives, but zero role-B fire sends after the user fired Nadine.
+
+### 2026-08-02 STATIC: make fire relay symmetric by retained owner (`2026-08-02j`)
+
+Hypothesis **B1 (leading):** the fire implementation is structurally symmetric,
+but obsolete `g_net_role_b` guards artificially restrict capture to role A and
+remote launch/tracer application to role B. The intended identity boundary is
+already `retained_player_object(0)` for the local Player and
+`retained_player_object(1)` for the remote puppet in every process.
+
+Competing explanations are **B2:** role-B local Nadine is not retained slot 0,
+so removing role guards would select the wrong owner; **B3:** the role-B UDP
+sender is unavailable; **B4:** symmetric capture would echo receiver-generated
+puppet shots back to the originator.
+
+Three independent evidence types reject B2--B4 and satisfy the runtime quota:
+
+1. Exact source dataflow: `prepare_fire_packet` accepts only the controller owner
+   equal to retained slot 0, while `apply_queued_fire_events` is invoked only for
+   retained slot 1 on either copy. `hooked_player_fire`, selected-record capture,
+   selected-record application, Tracer visual correction and ProbeKick telemetry
+   alone add role-A/role-B restrictions on top of those owner predicates.
+2. Runtime object identity: on role-B PID 2088, incoming Chloe shots log
+   `FIRE-AMMO-APPLY target=0x10E0DD1480 local0=0x10E0A34400`; selected launch
+   records separately classify local Nadine emissions as `owner0=1,owner1=0`
+   and relayed Chloe emissions as `owner0=0,owner1=1`.
+3. Independent transport and echo evidence: the same role-B PID successfully
+   emitted `WORLD-WEAPON-SEND` sequences 3--5, rejecting a broken reverse UDP
+   path. A received button pulse can invoke fire only for retained owner1;
+   sender preparation and selected-record capture require owner0, so the
+   receiver cannot enqueue or send the puppet emission.
+
+Build `j` removes only those five fire-specific role checks. Local packet
+preparation and selected-launch capture remain owner0-only; direction/origin,
+Tracer visual origin and ProbeKick observation remain owner1-only. All inert,
+network-enabled, readability, weapon-art and direction-dot gates are preserved.
+
+**Falsifiable prediction:** firing Nadine on role B produces
+`FIRE-PACKET-PREP ok=1`, owner0 selected-launch capture and exactly one
+`FIRE-RELAY send ... roleB=1` per native shot. Role A receives the same sequence,
+applies it to owner1, and emits the corresponding TLS/job Tracer visual marker;
+it must not send that received sequence back. Chloe-to-Nadine fire must remain
+unchanged. A role-B send with no role-A owner1 apply rejects receiver symmetry;
+any immediate alternating send loop rejects the owner-based echo proof and
+requires rollback.
