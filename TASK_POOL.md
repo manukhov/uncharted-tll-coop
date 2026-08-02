@@ -35,9 +35,13 @@
       the side-streak half reports `entries=0`, matching authored per-emission
       `allow-tracer=0`. Confirmed: 63/63 entries passed owner+direction and all
       32 capped misses had `entries=0`.
-- [ ] Run one short automatic burst on build `2026-08-02h`. Require worker-side
-      `source=job` Tracer matches and no visible side-origin half. If
-      `entries=0` misses remain, reject the job explanation for those shots.
+- [x] Run one short automatic burst on build `2026-08-02h`. Worker-side
+      `source=job` was confirmed, but the added 5 cm copied-origin gate was
+      REJECTED: all 32 capped misses passed entry/seed/owner/direction and failed
+      only origin, regressing visible lines to the side.
+- [ ] Run one short automatic burst on build `2026-08-02i`. Require both TLS and
+      job candidates to reach the visual-only `+0x70` swap and all visible lines
+      to originate at the receiver-native muzzle.
 - [ ] Only if build `h` leaves true no-entry side streaks: trace the ribbon/tracer
       child instruction inside retained muzzle SFX at ProcessWeapon
       `+0x998/+0x9A8`, below the shared flash/audio actor boundary.

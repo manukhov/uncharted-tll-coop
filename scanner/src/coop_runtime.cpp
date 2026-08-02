@@ -755,13 +755,11 @@ struct TracerVisualOriginContext {
     bool active = false;
     std::uint32_t sequence = 0;
     float native_visual_origin[4]{};
-    float relayed_visual_origin[4]{};
     float final_direction[4]{};
     unsigned entry_count = 0;
     unsigned seed_count = 0;
     unsigned owner_match_count = 0;
     unsigned direction_match_count = 0;
-    unsigned origin_match_count = 0;
     unsigned init_count = 0;
 };
 thread_local TracerVisualOriginContext g_tracer_visual_origin_context{};
@@ -777,7 +775,6 @@ enum class TracerVisualCounter {
     Seed,
     Owner,
     Direction,
-    Origin,
     Init,
 };
 
@@ -827,9 +824,6 @@ unsigned increment_pending_tracer_visual_counter(
             break;
         case TracerVisualCounter::Direction:
             target = &context.direction_match_count;
-            break;
-        case TracerVisualCounter::Origin:
-            target = &context.origin_match_count;
             break;
         case TracerVisualCounter::Init:
             target = &context.init_count;
@@ -32526,10 +32520,6 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
                             native_visual_origin,
                             sizeof(armed_tracer_context.native_visual_origin));
                         std::memcpy(
-                            armed_tracer_context.relayed_visual_origin,
-                            capture.final_origin,
-                            sizeof(armed_tracer_context.relayed_visual_origin));
-                        std::memcpy(
                             armed_tracer_context.final_direction,
                             capture.final_direction,
                             sizeof(armed_tracer_context.final_direction));
@@ -32615,11 +32605,6 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
         (had_pending_tracer_context
              ? pending_tracer_context.direction_match_count
              : 0U);
-    const unsigned total_origin_count =
-        g_tracer_visual_origin_context.origin_match_count +
-        (had_pending_tracer_context
-             ? pending_tracer_context.origin_match_count
-             : 0U);
     const unsigned total_init_count =
         g_tracer_visual_origin_context.init_count +
         (had_pending_tracer_context ? pending_tracer_context.init_count : 0U);
@@ -32632,10 +32617,10 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
             std::snprintf(
                 line, sizeof(line),
                 "TRACER-VISUAL-ORIGIN-MISS seq=%u entries=%u seeds=%u "
-                "owners=%u directions=%u origins=%u",
+                "owners=%u directions=%u",
                 armed_tracer_context.sequence,
                 total_entry_count, total_seed_count, total_owner_count,
-                total_direction_count, total_origin_count);
+                total_direction_count);
             boot_log_line(line);
         }
     }
@@ -32703,8 +32688,7 @@ std::uint64_t* __fastcall hooked_tracer_init(
     for (int index = 0; index < 3; ++index) {
         finite = finite && std::isfinite(seed_direction[index]) &&
             std::isfinite(context.final_direction[index]) &&
-            std::isfinite(context.native_visual_origin[index]) &&
-            std::isfinite(context.relayed_visual_origin[index]);
+            std::isfinite(context.native_visual_origin[index]);
         seed_length_sq += seed_direction[index] * seed_direction[index];
         expected_length_sq += context.final_direction[index] *
             context.final_direction[index];
@@ -32753,25 +32737,6 @@ std::uint64_t* __fastcall hooked_tracer_init(
             return native(tracer, result, spawn_info);
         }
     }
-    const float relay_dx = saved_visual_origin[0] -
-        context.relayed_visual_origin[0];
-    const float relay_dy = saved_visual_origin[1] -
-        context.relayed_visual_origin[1];
-    const float relay_dz = saved_visual_origin[2] -
-        context.relayed_visual_origin[2];
-    const float relayed_origin_delta_sq =
-        relay_dx * relay_dx + relay_dy * relay_dy + relay_dz * relay_dz;
-    const bool origin_match =
-        std::isfinite(relayed_origin_delta_sq) &&
-        relayed_origin_delta_sq <= 0.0025F;
-    if (origin_match) {
-        increment_counter(
-            TracerVisualCounter::Origin, context.origin_match_count);
-    }
-    if (!origin_match) {
-        return native(tracer, result, spawn_info);
-    }
-
     const float dx = saved_visual_origin[0] -
         context.native_visual_origin[0];
     const float dy = saved_visual_origin[1] -
@@ -47144,8 +47109,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02h "
-        "(Tracer worker-context relay)");
+        "TLL co-op runtime init 2026-08-02i "
+        "(Tracer worker-context relay without copied-origin gate)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

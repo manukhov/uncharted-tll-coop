@@ -16474,3 +16474,30 @@ Falsifiable prediction: the formerly side-origin half will log
 all visible automatic-fire lines will start at the correct receiver-native
 muzzle. If misses remain `entries=0`, the worker explanation is rejected for
 those launches and the authored-cadence/muzzle-SFX branch resumes priority.
+
+### 2026-08-02 CONFIRMED/REJECTED: worker handoff is real; copied-origin equality is false (`2026-08-02h`)
+
+The runtime test confirmed the worker hypothesis but rejected build `h`'s extra
+origin guard. The receiver logged 65 bounded `source=tls` candidates and 31
+`source=job` candidates; all showed `owner=1`, `dir=1`, and `dot=1.00000`.
+Therefore the old build-`g` `entries=0` half was Tracer materialization on the
+blocking worker branch, not proof of authored `allow-tracer=0` or muzzle SFX.
+
+However, almost every candidate was rejected after those successful gates. All
+32 capped misses were `entries=1,seeds=1,owners=1,directions=1,origins=0`, and
+the user observed every line originating roughly one metre to the side. The
+hypothesis that the selected caller launch record's relayed `+0x70` remains
+within 5 cm of the copied record passed to `Tracer::Init` is REJECTED. Prior
+build-`f` logs already contained accepted copied-record origins 0.5--2.0 m from
+the caller's `originAfter`, consistent with stock materialization rebuilding or
+selecting another launch-record copy. Pointer equality is also rejected by the
+existing logs: caller records are low stack addresses while Tracer seeds are
+separate high addresses.
+
+Build `i` removes only this disproven copied-origin gate. It retains the narrow
+native-call lifetime, role B, retained owner1 and direction-dot filters for both
+TLS and worker sources, and still swaps only copied record `+0x70` during the
+stock Tracer Init call. Prediction: both `source=tls` and `source=job` candidates
+reach `TRACER-VISUAL-ORIGIN`, capped misses no longer report fully matched
+candidates, and all visible automatic-fire lines originate at the correct
+receiver-native muzzle.
