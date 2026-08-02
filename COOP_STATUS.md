@@ -15944,3 +15944,130 @@ All newly resolved functions and the corrected complete-camera-state layout are
 saved in the sole `ida/tll.i64`: the headless label pass reported 1516 functions,
 45 data names and `save_database returned True`; the restarted MCP independently
 resolves the new names above.
+
+### 2026-08-02 STATIC: exact vertical-only seam is final `StrafeIk` forward-Y transport
+
+The seam comparison requested above is now closed without a game run. Replacing
+the complete `GunMove` Locator quaternion with `StatePacket::pose_seed` is not an
+exact correction: the two quaternions share the same camera convention, but they
+are sampled on opposite sides of the native reticle projection.
+
+The reticle contribution is explicit instruction dataflow, not a UI assumption.
+`PlayerAimController_ApplyWorldAimBasis 0x140CAF110` calls
+`ResolveReticleOffsetPublisherByNetMode 0x141504D50`; that resolver selects exact
+authored publisher names `*reticle-offset*` or `*net-reticle-offset*`. The caller
+reads its float pair at publisher `+0xA0/+0xA4` and writes it to the owning
+screen-route HUD record `+0x38/+0x3C` at `0x140CAF18A/0x140CAF18F`. The `GunMove`
+block at `0x1410F982A..0x1410F985B` then builds its screen point from
+`(+0x30 + +0x38, +0x34 + +0x3C)`. This is byte-for-byte the calculation in
+`CameraScreenRoute_UnprojectReticleDirection 0x140F68F10`; the separate
+`CameraScreenRoute_UnprojectReticleDirectionWithExtraOffset 0x140F68E30` adds
+`+0x40/+0x44` for the full target/projectile reticle path. Therefore a raw peer
+pose quaternion contains camera-centre orientation, while the final `GunMove`
+Locator contains the routed reticle offset as well.
+
+The forward-axis sign is independently closed by three consumers. The
+`GunMove` builder constructs its quaternion from the unprojected world direction
+plus constant world up `(0,1,0,0)`. Both
+`PlayerAimController_GetTargetPointFromReticle 0x140CB1720` and
+`PlayerGrenadeController_ProjectPointAlongCameraForward 0x140E1B550` expand the
+same route pose quaternion as `q*(0,0,+1)*inverse(q)`. Finally,
+`PlayerStrafeController_UpdateStrafeIk 0x14100B370` repeats that positive-`Z`
+expansion before selecting `forward.y`. The older mod helper that interprets a
+gameplay camera as looking down local `-Z` belongs only to the rejected
+camera-facing root/body-yaw relay; it must not be reused for pose seed, fire ray
+or this Locator.
+
+The exact vtable ABI supplies a much narrower capture/apply boundary:
+
+- `PlayerStrafeController::vftable 0x142A3FA88 +0x08` is now named
+  `PlayerStrafeController_Initialize 0x141007880`. The Player assembly call at
+  `0x1410CA7BA..0x1410CA7D6` stores the object at `Player+0x1D50`, then invokes
+  this slot with `rdx=Player`; the callee stores it at controller `+0x108`.
+- qword `vtable+0x60` (`0x142A3FAE8`) is exactly
+  `PlayerStrafeController_UpdatePostAnimBlend 0x14100C400`, ABI
+  `void(controller, const Locator*)`. The ordinary Player post-blend call supplies
+  the just-built 32-byte Locator at `0x1410EBA20`. It has no direct code caller;
+  the concrete vtable owns the dispatch. In contrast,
+  `Player_BuildStrafeIkReferenceLocator` has thirteen callsites across action,
+  traversal and controller code, so detouring that producer without a return-site
+  discriminator would be materially broader.
+- its call at `0x14100C795` passes horizontal strafe direction separately as
+  argument 7 (`controller+0x300`) and the Locator separately as argument 8.
+  `UpdateStrafeIk` constructs `StrafeDirBlender`/`ApStrafeDirBlender` from the
+  former. From the latter it retains only two values: positive-`Z` `forward.y`
+  for `asinf`, and the quaternion's positive-`X` right axis saved at
+  `var_658`, later used as the head/spine rotation axis. Locator forward `x/z`
+  do not become the horizontal strafe input.
+
+Consequently the leading correction is **not** another camera override. The
+same `+0x60` wrapper should perform a bounded two-sided relay:
+
+1. for the sender's screen-0 controller, while the current action is exact
+   `GunMove 0x12D842C0`, expand the already-final native Locator quaternion and
+   capture one scalar `strafe_ik_forward_y`;
+2. publish that scalar in a new versioned `StatePacket` tail field with an
+   explicit validity byte (all 16 bits of the existing `flags` field are already
+   allocated; `aim_pitch_up/down` retain their distinct pre-blend semantics);
+3. for the receiver's screen-1 controller, require fresh strict peer ADS, valid
+   scalar (the existing aim relays use a 250 ms bound), and receiver action
+   `GunMove`; copy the native 32-byte Locator and alter only its quaternion
+   before calling the original slot;
+4. preserve the native positive-`X` right axis, set the desired positive-`Z`
+   forward vector's Y to the peer scalar clamped inside `(-1,+1)` by a small
+   epsilon, derive the horizontal forward as `right x worldUp`, and rebuild the
+   quaternion with the same native
+   `BuildOrthonormalBasisFromTwoVectorsAndPosition(..., worldUp, true)` plus
+   `Quaternion_FromOrthonormalBasis` pair. The copied Locator position and the
+   separate horizontal strafe argument remain untouched.
+
+This avoids an Euler reconstruction and is well-defined even near vertical aim:
+the native right axis survives when the forward vector's horizontal projection
+approaches zero. Because the stock `GunMove` Locator was itself constructed from
+world up with the same handedness, rebuilding from the preserved right-derived
+azimuth reproduces that right axis while changing only the scalar which stock
+`asinf` consumes.
+
+Competing seams are now classified:
+
+- **C1 full peer pose quaternion replacement (REJECTED as an exact fix):** it
+  discards the final authored reticle offset and replaces the right axis/horizontal
+  orientation despite horizontal aim already being correct.
+- **C2 rebuild camera-state prefix rows (VALID BUT TOO BROAD):** it can reach the
+  unprojection, but it mutates a complete camera product shared by other consumers
+  and still has to reconstruct projection-derived state.
+- **C3 derive pitch from `peer pose - local screen-1 pose` (HYPOTHESIS/FALLBACK):**
+  this can preserve the receiver's scalar reticle offset. It is structurally
+  consistent because exact-source `CameraManager_RunCameras 0x141C0B410` writes
+  its final Locator at manager `+0x1A0`, `CameraFinalInfo_Set 0x141727D50`
+  derives the complete state from that Locator, and
+  `CameraManager_RefreshSnapshot 0x141C06240` copies the same 32 bytes to
+  snapshot `+0x60`. It is still not exact between processes: the authored
+  `+0x38/+0x3C` reticle offset, FOV/aspect/projection and snapshot frame can
+  differ, so it cannot guarantee the sender's final GunMove elevation.
+- **C4 capture final sender Locator `forward.y` and apply at the same controller
+  slot (LEADING STATIC):** it transports the exact post-reticle value consumed by
+  stock head/spine IK and leaves its independent horizontal input and native right
+  axis intact.
+
+Static evidence quota is satisfied by four different kinds: concrete RTTI/vtable
+and initializer ownership; exact reticle-publisher-to-screen-point dataflow;
+three independent positive-`Z` quaternion consumers; and the distinct ABI/dataflow
+of horizontal vector versus Locator pitch/right axis. No runtime test has been
+performed.
+
+**Falsifiable prediction for a future bounded build:** while the sender alternates
+sky/ground ADS and the receiver holds its own camera in the opposite direction,
+the screen-1 puppet's `headb/spined` and weapon elevation must follow the captured
+sender scalar and cease following the receiver camera. Horizontal aim/tracers must
+remain unchanged, and leaving `GunMove` must immediately restore untouched native
+behavior. Continued receiver-camera following would reject this writer as final;
+horizontal drift would specifically reject the claimed right-axis preservation;
+shake or non-ADS deformation would prove the owner/action gate is too broad.
+
+The sole IDB was updated after this pass: headless apply reported 1523 functions,
+46 data names and `save_database returned True`. After MCP restart, independent
+lookups resolve `PlayerStrafeController_Initialize`,
+`ResolveReticleOffsetPublisherByNetMode`, both reticle-unprojection helpers and
+`g_ScreenRouteHudStatePtrs` at their addresses above. The final-camera provenance
+helpers named in C3 were then added to the same durable label pass.

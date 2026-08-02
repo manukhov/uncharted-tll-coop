@@ -1330,8 +1330,18 @@ FUNCTIONS = {
     ),
     0x140CAF110: (
         "PlayerAimController_ApplyWorldAimBasis",
-        "PlayerAimController vtable slot +0x58. Converts world basis vectors, "
-        "then dispatches slot +0x50 to compute the directional aim-additive weights.",
+        "PlayerAimController vtable slot +0x58. Resolves the authored "
+        "*reticle-offset* publisher through 0x141504D50, copies its +0xA0/+0xA4 "
+        "pair into the owner screen-route HUD state at +0x38/+0x3C, converts "
+        "world basis vectors, then dispatches slot +0x50 to compute the "
+        "directional aim-additive weights.",
+    ),
+    0x141504D50: (
+        "ResolveReticleOffsetPublisherByNetMode",
+        "Lazily resolves either *net-reticle-offset* or *reticle-offset* according "
+        "to HIBYTE(g_NetModeFlags) and returns the validated publisher handle. "
+        "PlayerAimController_ApplyWorldAimBasis reads float2 +0xA0/+0xA4 from "
+        "the returned object for the per-screen reticle offset.",
     ),
     0x140CAF470: (
         "PlayerAimController_CommitNamedAimChannel",
@@ -2105,17 +2115,27 @@ FUNCTIONS = {
         "PlayerStrafeController_UpdateStrafeIk",
         "Exact player-strafe.cpp:1030 source assertion names "
         "PlayerStrafeController::UpdateStrafeIk. Reads the quaternion at "
-        "incoming Locator+0x10, derives vertical pitch with asin, resolves "
-        "the headb and spined joint chains, and commits their post-blend "
-        "joint corrections. Called only by the concrete PlayerStrafeController "
-        "vtable +0x60 method 0x14100C400.",
+        "incoming Locator+0x10, retains positive-Z forward.y for asin and the "
+        "positive-X right axis for joint rotation. Its separate Vector argument "
+        "constructs StrafeDirBlender/ApStrafeDirBlender horizontal state. It "
+        "resolves the headb and spined chains and commits their post-blend joint "
+        "corrections. Called only by the concrete PlayerStrafeController vtable "
+        "+0x60 method 0x14100C400.",
+    ),
+    0x141007880: (
+        "PlayerStrafeController_Initialize",
+        "Concrete PlayerStrafeController vtable 0x142A3FA88 slot +0x08. The "
+        "Player assembly pass calls it with rdx=owning Player and r8=Player+0x3BD0; "
+        "the prologue stores those values at controller+0x108/+0x110 before "
+        "initializing the head/spine and strafe-IK joint state.",
     ),
     0x14100C400: (
         "PlayerStrafeController_UpdatePostAnimBlend",
         "Concrete PlayerStrafeController vtable 0x142A3FA88 slot +0x60. "
         "Reached from Player_PostAnimBlending_Async through Player+0x1D50; "
-        "validates the current strafe action and passes the supplied Locator "
-        "to PlayerStrafeController_UpdateStrafeIk.",
+        "ABI is void(controller, const Locator*). It validates the current "
+        "strafe action and passes the supplied Locator to "
+        "PlayerStrafeController_UpdateStrafeIk.",
     ),
     0x1410F9050: (
         "Player_BuildStrafeIkReferenceLocator",
@@ -2123,8 +2143,9 @@ FUNCTIONS = {
         "PlayerStrafeController vtable +0x60. Seeds position from "
         "ResolveScreenRoutePoseSeedOrDefault(Player+0x4010), then selects "
         "GunMoveGrapple/StrafeMelee/GunMove/GrenadeMove/ReviveCharacter. "
-        "The ordinary GunMove branch converts the routed screen reticle point "
-        "to a world direction through CameraScreenRoute_UnprojectPointDirection, "
+        "The ordinary GunMove branch builds the routed reticle point from HUD "
+        "fields (+0x30+0x38, +0x34+0x3C), converts it to a world direction "
+        "through CameraScreenRoute_UnprojectPointDirection, "
         "builds an orthonormal forward/up basis, converts it to a quaternion, "
         "and stores that quaternion at output+0x10.",
     ),
@@ -2135,6 +2156,20 @@ FUNCTIONS = {
         "CameraState_UnprojectScreenPoint. Returns only the normalized world "
         "direction. The ordinary GunMove strafe-IK locator calls it at "
         "0x1410F986C.",
+    ),
+    0x140F68E30: (
+        "CameraScreenRoute_UnprojectReticleDirectionWithExtraOffset",
+        "Builds a per-screen point from HUD route fields (+0x30+0x38+0x40, "
+        "+0x34+0x3C+0x44), scales it by the current viewport and calls "
+        "CameraScreenRoute_UnprojectPointDirection. Used by PlayerAimController "
+        "target-point and projectile paths.",
+    ),
+    0x140F68F10: (
+        "CameraScreenRoute_UnprojectReticleDirection",
+        "Builds a per-screen point from HUD route fields (+0x30+0x38, "
+        "+0x34+0x3C), scales it by the current viewport and calls "
+        "CameraScreenRoute_UnprojectPointDirection. The ordinary GunMove branch "
+        "of Player_BuildStrafeIkReferenceLocator inlines this exact calculation.",
     ),
     0x1416954F0: (
         "CameraState_UnprojectScreenPoint",
@@ -9689,6 +9724,25 @@ FUNCTIONS = {
         "overwriting only raw transform +0x350 after this copy does not rebuild "
         "or alter that already-emitted prefix.",
     ),
+    0x141C0B410: (
+        "CameraManager_RunCameras",
+        "Exact camera-manager.cpp CameraManager::RunCameras source assertions. "
+        "After resolving/cross-fading the finite final camera Locator, writes "
+        "its position/quaternion and parameters at manager+0x1A0 and calls "
+        "CameraFinalInfo_Set to derive complete camera state.",
+    ),
+    0x141727D50: (
+        "CameraFinalInfo_Set",
+        "Exact camera-final.cpp CameraFinalInfo::Set source assertion. Copies "
+        "and normalizes the incoming Locator position/quaternion, derives the "
+        "complete camera basis/projection fields and validates finalCamera.",
+    ),
+    0x141C06240: (
+        "CameraManager_RefreshSnapshot",
+        "Exact camera-manager.cpp CameraManager::RefreshSnapshot source "
+        "assertion. Refreshes the snapshot object, then copies the 32-byte "
+        "manager+0x1A0 final Locator into snapshot+0x60.",
+    ),
     0x14014BF00: (
         "CameraState_CopyPrefix350",
         "Leaf copy of exactly 0x350 bytes from source camera state to "
@@ -10418,6 +10472,13 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x143F041F0: (
+        "g_ScreenRouteHudStatePtrs",
+        "Per-screen HUD/reticle state pointer table, indexed with stride 0x368. "
+        "The routed reticle point uses float pairs +0x30/+0x34, +0x38/+0x3C "
+        "and optional +0x40/+0x44; PlayerAimController_ApplyWorldAimBasis writes "
+        "the dynamic reticle-offset pair at +0x38/+0x3C.",
+    ),
     0x142B09B58: (
         "AnimSimpleLayer_vftable",
         "Exact MSVC RTTI AnimSimpleLayer vtable. CreateAnimCmds is reached through "

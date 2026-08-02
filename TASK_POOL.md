@@ -2453,14 +2453,23 @@ Do not reopen these as the first move:
       scoped accordingly; `+0x1FB0` is an event/host-anchor hub. Only the
       PlayerStrafeController path combines routed-camera data with a common
       `headb/spined` post-blend correction.
-- [ ] Close the correction seam statically before another build. Compare the
-      exact `GunMove` output Locator quaternion against the network pose-seed
-      quaternion, including forward-axis sign/handedness and the off-center
-      reticle contribution. Choose between a narrow returned-Locator quaternion
-      replacement and rebuilding camera-state prefix rows `+0x00/+0x10/+0x20`
-      only for the nested `0x140F68D80` unprojection. Do not reuse the existing
-      raw-transform-only `out+0x350` writer: it cannot affect
-      `CameraState_UnprojectScreenPoint 0x1416954F0`.
+- [x] Close the correction seam statically before another build. Exact authored
+      `*reticle-offset*` dataflow proves that full `pose_seed` quaternion
+      replacement would erase the final GunMove reticle contribution. The exact
+      `PlayerStrafeController` vtable `+0x60` ABI separates horizontal direction
+      from Locator pitch/right axis. Select a versioned one-scalar relay: capture
+      sender screen-0 final Locator positive-`Z` `forward.y`, then on receiver
+      screen 1 rebuild only the copied Locator quaternion while preserving its
+      native right axis. Camera-state prefix and raw `out+0x350` writers are not
+      part of this seam.
+- [ ] Implement the bounded `PlayerStrafeController` final-forward-Y relay only
+      after this static handoff: add an explicit-validity StatePacket tail field
+      (do not repurpose v13 `aim_pitch_up/down`), hook exact vtable target
+      `0x14100C400`, gate both sides on owner screen and current action
+      `GunMove 0x12D842C0`, keep the receiver packet bound at 250 ms, clamp the
+      transported forward-Y inside `(-1,+1)`, and call the original with an
+      unmodified Locator outside fresh strict ADS. Use the written falsifiable
+      prediction before launching the game.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`
