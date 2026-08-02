@@ -38101,14 +38101,231 @@ const char* weapon_action_kind(
     return "none";
 }
 
+// Read-only discriminator for the authored GunMove channel-zero turn action.
+// The exact Player phase-zero caller loads this sequencer from Player+0x3BD0;
+// EnqueueControllerAction stores the same controller at action+0x28, and the
+// controller links back to the Player and sequencer at +0x108/+0x110.
+struct AimStepPhase0Snapshot {
+    bool readable = false;
+    bool owner_link_ok = false;
+    bool recognized = false;
+    bool controller_owner_ok = false;
+    bool controller_sequencer_ok = false;
+    void* player = nullptr;
+    void* action = nullptr;
+    void* controller = nullptr;
+    void* movement_updater = nullptr;
+    void* animation_updater = nullptr;
+    std::uintptr_t action_vtable = 0;
+    std::uintptr_t movement_vtable = 0;
+    std::uintptr_t animation_vtable = 0;
+    std::uint32_t lifecycle = 0xFFFFFFFFu;
+    std::int32_t tag = -99;
+    std::uint32_t flags = 0;
+    std::uint32_t animation_id = 0;
+    std::uint32_t layer_id = 0;
+    std::uint16_t channel_flags = 0;
+};
+
+constexpr std::uintptr_t kPlayerCommonActionVtableRva = 0x2A07690;
+constexpr std::uintptr_t kPlayerGroundMoveUpdateWithFallVtableRva = 0x2A219C0;
+constexpr std::uintptr_t kPlayerUpdatePlayAnimFadeVtableRva = 0x2A05620;
+constexpr std::uint32_t kAimIdleRotateAnimationId = 0x02C3CE2Fu;
+constexpr std::uint32_t kAimIdleRotateCcAnimationId = 0x7D168D2Eu;
+constexpr std::uint32_t kBaseAnimationLayerId = 0x7339D08Cu;
+
+bool aim_step_animation_id(std::uint32_t animation_id) {
+    return animation_id == kAimIdleRotateAnimationId ||
+        animation_id == kAimIdleRotateCcAnimationId;
+}
+
+bool seh_capture_aim_step_phase0(
+    void* sequencer, AimStepPhase0Snapshot* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (sequencer == nullptr || g_module == 0) {
+            return false;
+        }
+        auto* const sequencer_bytes = static_cast<std::byte*>(sequencer);
+        output->player = *reinterpret_cast<void**>(sequencer_bytes + 0x18);
+        output->readable = true;
+        if (retained_player_index(output->player) < 0) {
+            return true;
+        }
+        auto* const player_bytes = static_cast<std::byte*>(output->player);
+        output->owner_link_ok =
+            *reinterpret_cast<void**>(player_bytes + 0x3BD0) == sequencer;
+        if (!output->owner_link_ok) {
+            return true;
+        }
+
+        const std::int32_t channel_count =
+            *reinterpret_cast<const std::int32_t*>(sequencer_bytes + 0x110);
+        auto* const channel_flags = *reinterpret_cast<std::byte**>(
+            sequencer_bytes + 0x118);
+        auto* const lists = *reinterpret_cast<std::byte**>(
+            sequencer_bytes + 0x120);
+        if (channel_count <= 0 || channel_count > 32 || lists == nullptr) {
+            return true;
+        }
+        if (channel_flags != nullptr) {
+            output->channel_flags =
+                *reinterpret_cast<const std::uint16_t*>(channel_flags);
+        }
+
+        auto* node = *reinterpret_cast<std::byte**>(lists);
+        auto* const sentinel = lists - 0x8;
+        for (std::size_t index = 0;
+             node != nullptr && node != sentinel && index < 16;
+             ++index) {
+            const std::uintptr_t action_vtable =
+                *reinterpret_cast<const std::uintptr_t*>(node);
+            if (action_vtable == g_module + kPlayerCommonActionVtableRva) {
+                void* const controller =
+                    *reinterpret_cast<void**>(node + 0x28);
+                void* const movement =
+                    *reinterpret_cast<void**>(node + 0x30);
+                void* const animation =
+                    *reinterpret_cast<void**>(node + 0x40);
+                const std::uintptr_t animation_vtable = animation != nullptr
+                    ? *reinterpret_cast<const std::uintptr_t*>(animation)
+                    : 0;
+                const std::uint32_t animation_id = animation != nullptr
+                    ? *reinterpret_cast<const std::uint32_t*>(
+                          static_cast<std::byte*>(animation) + 0x8)
+                    : 0;
+                if (animation_vtable ==
+                        g_module + kPlayerUpdatePlayAnimFadeVtableRva &&
+                    aim_step_animation_id(animation_id)) {
+                    output->recognized = true;
+                    output->action = node;
+                    output->controller = controller;
+                    output->movement_updater = movement;
+                    output->animation_updater = animation;
+                    output->action_vtable = action_vtable;
+                    output->movement_vtable = movement != nullptr
+                        ? *reinterpret_cast<const std::uintptr_t*>(movement)
+                        : 0;
+                    output->animation_vtable = animation_vtable;
+                    output->lifecycle =
+                        *reinterpret_cast<const std::uint32_t*>(node + 0x18);
+                    output->tag =
+                        *reinterpret_cast<const std::int32_t*>(node + 0x1C);
+                    output->flags =
+                        *reinterpret_cast<const std::uint32_t*>(node + 0x24);
+                    output->animation_id = animation_id;
+                    output->layer_id =
+                        *reinterpret_cast<const std::uint32_t*>(
+                            static_cast<std::byte*>(animation) + 0xC);
+                    if (controller != nullptr) {
+                        auto* const controller_bytes =
+                            static_cast<std::byte*>(controller);
+                        output->controller_owner_ok =
+                            *reinterpret_cast<void**>(controller_bytes + 0x108) ==
+                            output->player;
+                        output->controller_sequencer_ok =
+                            *reinterpret_cast<void**>(controller_bytes + 0x110) ==
+                            sequencer;
+                    }
+                    break;
+                }
+            }
+            node = *reinterpret_cast<std::byte**>(node + 0x8);
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+void log_aim_step_phase0_transition(
+    void* sequencer,
+    const AimStepPhase0Snapshot& before,
+    const AimStepPhase0Snapshot& after) {
+    if (!before.recognized && !after.recognized) {
+        return;
+    }
+    void* const player = before.player != nullptr ? before.player : after.player;
+    const int owner = retained_player_index(player);
+    if (owner < 0) {
+        return;
+    }
+
+    std::uint64_t signature = 1469598103934665603ULL;
+    auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(static_cast<std::uint32_t>(owner));
+    mix(reinterpret_cast<std::uintptr_t>(before.action));
+    mix(before.lifecycle);
+    mix(before.animation_id);
+    mix(reinterpret_cast<std::uintptr_t>(after.action));
+    mix(after.lifecycle);
+    mix(after.animation_id);
+    static std::array<std::atomic<std::uint64_t>, 192> seen{};
+    if (!claim_holster_probe_signature(seen, signature)) {
+        return;
+    }
+
+    const AimStepPhase0Snapshot& recognized =
+        before.recognized ? before : after;
+    std::ostringstream line;
+    line << "AIM-STEP-PH0 t=" << GetTickCount64()
+         << " owner=" << owner
+         << " seq=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(sequencer)
+         << " action=0x"
+         << reinterpret_cast<std::uintptr_t>(before.action)
+         << "->0x" << reinterpret_cast<std::uintptr_t>(after.action)
+         << " life=" << std::dec << before.lifecycle
+         << "->" << after.lifecycle
+         << " anim=0x" << std::hex << recognized.animation_id
+         << " layer=0x" << recognized.layer_id
+         << " actvt=0x" << recognized.action_vtable
+         << " movevt=0x" << recognized.movement_vtable
+         << " upvt=0x" << recognized.animation_vtable
+         << " ctrl=0x"
+         << reinterpret_cast<std::uintptr_t>(recognized.controller)
+         << std::dec
+         << " ownerLink=" << (recognized.owner_link_ok ? 1 : 0)
+         << " ctrlOwner=" << (recognized.controller_owner_ok ? 1 : 0)
+         << " ctrlSeq=" << (recognized.controller_sequencer_ok ? 1 : 0)
+         << " expectedMove="
+         << (recognized.movement_vtable ==
+                 g_module + kPlayerGroundMoveUpdateWithFallVtableRva
+             ? 1 : 0)
+         << " expectedLayer="
+         << (recognized.layer_id == kBaseAnimationLayerId ? 1 : 0)
+         << " tag=" << recognized.tag
+         << " flags=0x" << std::hex << recognized.flags
+         << " channelFlags=0x" << recognized.channel_flags;
+    boot_log_line(line.str().c_str());
+}
+
 void __fastcall hooked_player_move_sequencer_update(
     void* sequencer, int phase) {
+    AimStepPhase0Snapshot aim_step_before{};
+    if (phase == 0) {
+        seh_capture_aim_step_phase0(sequencer, &aim_step_before);
+    }
     WeaponActionLifecycleSnapshot before{};
     seh_capture_weapon_action_lifecycle(sequencer, &before);
     const int before_owner = retained_player_index(before.player);
 
     if (g_original_player_move_sequencer_update != nullptr) {
         g_original_player_move_sequencer_update(sequencer, phase);
+    }
+
+    if (phase == 0) {
+        AimStepPhase0Snapshot aim_step_after{};
+        seh_capture_aim_step_phase0(sequencer, &aim_step_after);
+        log_aim_step_phase0_transition(
+            sequencer, aim_step_before, aim_step_after);
     }
 
     WeaponActionLifecycleSnapshot after{};
@@ -46493,8 +46710,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02c "
-        "(consumed remote-fire pulse release)");
+        "TLL co-op runtime init 2026-08-02d "
+        "(ADS channel-zero foot-step discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

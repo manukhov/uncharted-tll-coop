@@ -16184,3 +16184,62 @@ burst may show `released=0 peerQ>0` while another packet is queued, but still on
 apply per emitted projectile. Any duplicated/wrong tracer with no unmatched
 projectile rejects T1 and selects the separate-effect trace; any unmatched after
 `released=1` proves another native fire source survives the synthetic pulse.
+
+### 2026-08-02 STATIC: authored ADS foot step reaches channel-zero phase 0 (`2026-08-02d`)
+
+The confirmed late `FgAnimData_PublishWorldTransform` relay turns the remote body
+after the action graph has already evaluated. It therefore explains the exact
+symptom: correct visible yaw with planted/sliding feet. The old temporary
+`0x140E90605/0x140E9060F` direction/rate relay remains rejected; its installed
+hooks produced no `AIM-FOOT` runtime markers and it depends on a contingent
+GunMove update path.
+
+The actual authored foot-step owner is now closed statically by four independent
+evidence types:
+
+1. `GunMoveController_UpdateActionState 0x140E90590` calls
+   `GunMoveController_BuildActionState 0x140E8D140` only when the selected child
+   changes. The builder has only this update caller and its initialization caller.
+2. Builder case 3 hashes `aim-idle-rotate` (`0x02C3CE2F`) and case 4 hashes
+   `aim-idle-rotate-cc` (`0x7D168D2E`), constructs a channel-zero action and
+   enqueues it through `PlayerMoveSequencer_EnqueueControllerAction
+   0x142053820`.
+3. RTTI identifies the exact object chain as `PlayerCommonAction` vtable
+   `0x142A07690`, `PlayerGroundMoveUpdateWithFall` vtable `0x142A219C0`, and
+   `PlayerUpdatePlayAnimFade` vtable `0x142A05620`. The updater retains the exact
+   animation StringId at `+0x08` and base-layer id `0x7339D08C` at `+0x0C`.
+4. `PlayerMoveSequencer_UpdatePhase 0x142051EC0` changes a new action's lifecycle
+   `+0x18` from 0 to 1 before vtable `+0x10` OnStart. `PlayerCommonAction_OnStart
+   0x140C59180` invokes the animation updater at action `+0x40`; its concrete
+   updater requests that exact clip through `AnimStateLayer_RequestDirectFade
+   0x14189CC80`.
+
+The alternatives are explicit. **F1 (leading):** the local retained Player gets
+the 3/4 channel-zero action edge while the remote retained Player does not,
+because late FgAnim yaw never creates the upstream cold transition. **F2:** both
+Players start the exact same action, but the remote AnimStateLayer resolves or
+masks the lower-body clip downstream. **F3 (rejected as owner):**
+`PlayerStrafeController_UpdatePostAnimBlend 0x14100C400` is post-blend head/spine
+IK and cannot initiate the lower-body action. **F4 (rejected as next seam):** the
+campaign-incomplete CharacterMove AnimCmd snapshot requires the unavailable
+`Player+0x3FC8` art-group table and is not safe to synthesize.
+
+Build `d` is deliberately read-only for feet. It extends the already installed,
+previously stable `PlayerMoveSequencer_UpdatePhase` pass-through hook; it adds no
+new patch point and calls stock exactly once. Only phase 0 for an exact retained
+Player is inspected. Ownership must agree through `Player+0x3BD0`,
+action-controller `+0x108` and controller-sequencer `+0x110`; channel 0 is scanned
+with a 16-node cap, and only the exact RTTI plus the two exact animation IDs can
+emit bounded `AIM-STEP-PH0` rows. No action, controller, sequencer, clip or
+transform is written.
+
+**Falsifiable prediction:** during stationary ADS rotation the source Player
+emits a single `AIM-STEP-PH0` transition with lifecycle `0->1`, animation
+`02C3CE2F` or `7D168D2E`, and all ownership/type checks equal to one. The planted
+remote Player emits no equivalent edge, selecting F1 and earning a monotonic
+one-shot action-edge relay. If the remote also emits the same exact `0->1` edge,
+F1 is rejected and the next static trace moves below OnStart into
+AnimStateLayer clip resolution/masking; the builder/selector must not be forced.
+Release compilation completed without warnings or errors; build `d` contains
+both this read-only discriminator and the independently documented remote-fire
+pulse release from build `c`.
