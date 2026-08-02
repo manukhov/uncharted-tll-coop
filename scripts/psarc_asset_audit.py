@@ -405,6 +405,115 @@ def compare_player_mesh_rows(
     )
 
 
+def collect_gesture_target_types(data: bytes) -> dict[int, int]:
+    """Return authored gesture object id -> target-provider type from DC00."""
+
+    if len(data) < 0x20 or data[:4] != b"00CD":
+        raise ValueError("gesture settings audit requires a DC00 entry")
+    object_count = struct.unpack_from("<I", data, 0x14)[0]
+    index_end = 0x20 + object_count * 0x10
+    if index_end > len(data):
+        raise ValueError("truncated gesture DC00 object index")
+
+    gesture_type_id = string_id(b"gesture")
+    targets: dict[int, int] = {}
+    for index in range(object_count):
+        index_offset = 0x20 + index * 0x10
+        object_id, type_id, record_offset, _reserved = struct.unpack_from(
+            "<IIII", data, index_offset
+        )
+        if type_id != gesture_type_id:
+            continue
+        if record_offset + 0x18 > len(data):
+            raise ValueError(
+                f"gesture DC00 object {index} has an invalid record offset"
+            )
+        targets[object_id] = struct.unpack_from("<I", data, record_offset + 0x14)[0]
+    return targets
+
+
+def audit_anim_node_gestures(anim_data: bytes, gesture_data: bytes) -> None:
+    """Cross-reference Player AnimNodeGesture descriptors with gesture settings."""
+
+    node_type_id = string_id(b"anim-node-gesture")
+    signature = struct.pack("<II", node_type_id, node_type_id)
+    targets = collect_gesture_target_types(gesture_data)
+    target_labels = {
+        0: "none",
+        0xA399FA92: "LookAt",
+        0xE83A8507: "AimAt",
+    }
+    descriptors: list[tuple[int, int, int, int, int, int, int, int]] = []
+    for signature_offset in find_all(anim_data, signature):
+        descriptor_offset = signature_offset + 4
+        if descriptor_offset + 0x28 > len(anim_data):
+            raise ValueError(
+                f"truncated AnimNodeGesture descriptor at 0x{descriptor_offset:X}"
+            )
+        (
+            descriptor_type,
+            gesture_id,
+            selector_callback,
+            remap_callback,
+            target_callback,
+            mode,
+            flags,
+        ) = struct.unpack_from("<IIQQQII", anim_data, descriptor_offset)
+        if descriptor_type != node_type_id:
+            raise ValueError(
+                f"bad AnimNodeGesture type at 0x{descriptor_offset:X}"
+            )
+        target_type = targets.get(gesture_id, 0) if gesture_id else 0
+        descriptors.append(
+            (
+                descriptor_offset,
+                gesture_id,
+                selector_callback,
+                remap_callback,
+                target_callback,
+                mode,
+                flags,
+                target_type,
+            )
+        )
+
+    fixed = [row for row in descriptors if row[1] != 0]
+    dynamic = [row for row in descriptors if row[1] == 0]
+    fixed_look_at = [row for row in fixed if row[7] == 0xA399FA92]
+    fixed_aim_at = [row for row in fixed if row[7] == 0xE83A8507]
+    fixed_none = [row for row in fixed if row[7] == 0]
+    dynamic_target_callbacks = [row for row in dynamic if row[4] != 0]
+
+    print(
+        f"anim_node_gesture_id=0x{node_type_id:08X} "
+        f"gesture_settings={len(targets)} descriptors={len(descriptors)} "
+        f"fixed={len(fixed)} dynamic={len(dynamic)}"
+    )
+    for (
+        offset,
+        gesture_id,
+        selector_callback,
+        remap_callback,
+        target_callback,
+        mode,
+        flags,
+        target_type,
+    ) in descriptors:
+        target_label = target_labels.get(target_type, "other")
+        print(
+            f"node offset=0x{offset:X} gesture=0x{gesture_id:08X} "
+            f"target=0x{target_type:08X}/{target_label} "
+            f"selector=0x{selector_callback:X} remap=0x{remap_callback:X} "
+            f"target_callback=0x{target_callback:X} mode=0x{mode:X} "
+            f"flags=0x{flags:X}"
+        )
+    print(
+        f"fixed_look_at={len(fixed_look_at)} "
+        f"fixed_aim_at={len(fixed_aim_at)} fixed_none={len(fixed_none)} "
+        f"dynamic_target_callbacks={len(dynamic_target_callbacks)}"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive", type=Path, help="PSARC archive path")
@@ -463,6 +572,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--map-name-regex",
         help="restrict compared rows to resolved source names matching this regex",
     )
+    parser.add_argument(
+        "--gesture-node-audit",
+        action="store_true",
+        help=(
+            "cross-reference AnimNodeGesture descriptors in --entry with "
+            "authored target types from --gesture-settings-entry"
+        ),
+    )
+    parser.add_argument(
+        "--gesture-settings-entry",
+        default="gestures.bin",
+        help="DC00 gesture settings entry used by --gesture-node-audit",
+    )
     parser.add_argument("--min-string", type=int, default=3)
     parser.add_argument("--limit", type=int, default=200)
     return parser
@@ -496,15 +618,29 @@ def main() -> int:
         print(f"listed={shown} limit={args.limit}")
 
     if args.entry is None:
-        if args.id or args.strings or args.player_mesh_look or args.map_source:
+        if (
+            args.id
+            or args.strings
+            or args.player_mesh_look
+            or args.map_source
+            or args.gesture_node_audit
+        ):
             raise ValueError(
                 "--entry is required with --id, --strings, "
-                "--player-mesh-look or --map-source"
+                "--player-mesh-look, --map-source or --gesture-node-audit"
             )
         return 0
 
     data = archive.extract(args.entry)
     print(f"entry={args.entry} bytes={len(data)}")
+
+    if args.gesture_node_audit:
+        gesture_data = archive.extract(args.gesture_settings_entry)
+        print(
+            f"gesture_settings_entry={args.gesture_settings_entry} "
+            f"bytes={len(gesture_data)}"
+        )
+        audit_anim_node_gestures(data, gesture_data)
 
     if args.player_mesh_look or args.map_source:
         inspect_player_mesh_dc00(data, args.player_mesh_look, args.map_source)

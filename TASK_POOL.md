@@ -2358,7 +2358,13 @@ Do not reopen these as the first move:
       only lane zero. Command 23 dispatches by StringId through
       `Game_ProcessAnimPhasePluginFunc 0x1406CCB30` and includes both the output-only
       GestureJointReader and real IK pose writers, so it cannot be treated as one
-      semantic class.
+      semantic class. Further static closure: LegFix/ankle write only the two
+      authored leg-chain joint sets and HandFix writes only the selected
+      shoulder/elbow arm chain; none reads Player/camera/aim state, so these
+      plugins cannot introduce the observed common head/spine/arms pitch.
+      `AnimNodeGesture_EmitSelectedClipCommand 0x141FFEA20` is an exact command-6
+      producer and `0x141FFA900` emits the associated command-7 grid blends, but
+      the live `kh` heap clips are not yet tied to one retained Gesture owner.
 - [x] Implement bounded read-only build `kh`: admit only screen-1 flags-zero main
       group-0 lists whose command 3 occurs after position 20, double-validate the
       immutable stream, log all pre-command-3 command-6/7/8/9/10/13/23 tuples plus
@@ -2393,11 +2399,30 @@ Do not reopen these as the first move:
       TargetAimAt seam is therefore REJECTED as a sufficient live correction;
       its vtable mutation and dead runtime code are removed without discarding
       the independently proven static Gesture identities.
-- [ ] Keep runtime tests parked. Statically resolve the exact owner and upstream
-      writer feeding `up/down` into live screen-1 base/state
-      `7339D08C/3C347132`, then distinguish that path from receiver-local screen
-      0 camera state. Do not ask for another diagnostic run; the next user exam
-      must contain one evidence-backed correction that reaches this live state.
+- [x] Close the redundant live-base writer task. The exact owner chain is
+      controller `+0x108 -> Player+0x1A0 -> +0x58 -> +0x10`, and
+      `PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0` writes both
+      controller `+0x8C0/+0x8C4` and active-state `+0x188/+0x18C`. Build `iu`
+      already delivered peer-correct values through this state/evaluator while
+      visible pitch still followed the receiver camera, so this boundary is
+      REJECTED as the rendered correction seam.
+- [x] Resolve the concrete target-provider and its ordinary upstream writer.
+      The live base layer always dispatches a null custom TargetPoint; node
+      `+0xE8` is authored bytecode. Archive cross-reference proves 11 fixed
+      generic Player nodes use `LookAt`, none uses `AimAt`, and only one of five
+      dynamic descriptors carries a target lambda. Exact RTTI trackers at
+      `Player+0x21E0/+0x2260` feed `Player_GetLookAtTargetPoint`; normal
+      `Player::Move::Update` unconditionally reaches `PlayerStrafeLookAt`, whose
+      default request reads the owner screen route and writes the first tracker.
+- [ ] Keep runtime tests parked. Tie one of the fixed `LookAt` descriptors, or
+      the sole dynamic descriptor at `anim-player.bin+0x11A5A0` with target
+      callback `+0x120F50`, to the retained camera-correlated command-6/7
+      cluster. G1 (ordinary LookAt contaminated by the receiver-local
+      PlayerStrafeLookAt request) is now leading; G2 is one authored lambda and
+      G3 is a non-Gesture generator. Only after closing that asset-to-command
+      identity should a build retarget the retained Player's default strafe-look
+      request from the peer pose seed. Do not repatch LRDU, active-state weights,
+      AimAt, LookAtIK or flashlight-only LookAtOrCamera.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

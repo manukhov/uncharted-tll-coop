@@ -2247,6 +2247,41 @@ FUNCTIONS = {
         "This descriptor is distinct from the target skeleton group's "
         "workspace/parameter counts at SegmentContext+0x38.",
     ),
+    0x141936A90: (
+        "LegFixIkBinaryPluginNodeBatchCallback",
+        "Source-asserted LegFixIkBinaryPlugInNodeBatchCallback. Resolves exactly "
+        "two LegIkChain setups for the current skeleton, validates only their "
+        "authored joint-index lists, requires the left/output pose lanes to "
+        "alias, and calls LegFixIk_SolveTwoLegChains. It consumes pose lanes and "
+        "skeleton setup only; it has no Player, camera or aim-controller input.",
+    ),
+    0x141944670: (
+        "LegFixIk_SolveTwoLegChains",
+        "LegFix worker reached by the source-named binary plugin callback. The "
+        "outer loop is exactly two chains; each chain reads its three key joint "
+        "indices and copies solved transforms back only through that chain's "
+        "authored index list. It cannot introduce head, spine or arm pitch.",
+    ),
+    0x141988200: (
+        "HandFixIkPluginCallback",
+        "Exact source signature HandFixIkPluginCallback. The command-23 worker "
+        "resolves the left and right wrist chains and invokes SolveArmIk for the "
+        "two arms. Its inputs are plugin data plus mutable/const JointParams "
+        "lanes; it has no Player or camera lookup.",
+    ),
+    0x1418F0B60: (
+        "SolveArmIk",
+        "Source-asserted SolveArmIk. Validates shoulder, elbow and wrist offsets "
+        "for one left/right arm and writes the elbow and shoulder JointParams "
+        "through 0x14181F450; the wrist supplies the end target/reference. This "
+        "bounds HandFix to the selected arm hierarchy.",
+    ),
+    0x14181DEA0: (
+        "JointSet_HasAllJointsInValidBits",
+        "Tests every authored joint index in a joint-set/IK-chain descriptor "
+        "against a ValidBits block and returns false at the first missing bit. "
+        "LegFix uses it independently for each of its two leg chains.",
+    ),
     0x141FFEDB0: (
         "AnimNodeGesture_StepAngles",
         "Updates an AnimNodeGesture's cached angle/transform state once per shared "
@@ -2259,12 +2294,29 @@ FUNCTIONS = {
     0x141FFA550: (
         "AnimNodeGesture_Step",
         "Consumes the cached gesture state produced by AnimNodeGesture_StepAngles "
-        "and advances the node's authored gesture animation state.",
+        "and advances the node's authored gesture animation state. Node+0x70 is "
+        "only the elapsed timer for a selected-gesture transition: it is reset "
+        "when the selected clip changes and expires after the shared 0.2-second "
+        "constant; it is not a vertical-aim value.",
     ),
     0x141FFA6E0: (
         "AnimNodeGesture_GenerateAnimCommands",
         "Generates the gesture node's animation commands from the cached angles, "
-        "selected authored clips and transition/blend state.",
+        "selected authored clips and transition/blend state. During a clip "
+        "transition it emits old/new selections and command 7 with "
+        "clamp(node+0x70 / 0.2, 0, 1); this is generic temporal blending.",
+    ),
+    0x141FFA900: (
+        "AnimNodeGesture_EmitSelectedAnimCommands",
+        "Emits one to three selected gesture clips through "
+        "AnimNodeGesture_EmitSelectedClipCommand and combines them with command "
+        "7 according to the authored gesture-grid interpolation weights.",
+    ),
+    0x141FFEA20: (
+        "AnimNodeGesture_EmitSelectedClipCommand",
+        "Resolves one selected gesture-grid entry at AnimNodeGesture+0x60 and "
+        "emits its exact six-word command-6 record (0x60006), including the "
+        "ArtItemAnim pointer, destination lane and phase.",
     ),
     0x141FFE100: (
         "AnimNodeGesture_SelectGestureAnims",
@@ -2278,6 +2330,19 @@ FUNCTIONS = {
         "through vtable slot +8. This is distinct from the Gesture::Target slot-0 "
         "query performed directly by Gesture_GetComputeArgs.",
     ),
+    0x141FD1070: (
+        "GestureConfig_Get",
+        "Exact source-asserted Gesture::Config::Get. Returns the process-global "
+        "g_GestureConfig_Ptr and asserts if the game has not installed a config. "
+        "The stock singleton uses GestureConfig_Base_vftable.",
+    ),
+    0x141FD2F40: (
+        "GestureRegistry_ResolveGestureSettings",
+        "Resolves an authored gesture settings object from the global gestures "
+        "registry. GestureLayer and AnimNodeGesture callers use its target type, "
+        "grid settings and behavior flags; this is asset metadata, not a live "
+        "camera read.",
+    ),
     0x141FD3180: (
         "Gesture_GetComputeArgs",
         "Exact source-asserted Gesture::GetComputeArgs. Requires pOwner and "
@@ -2289,6 +2354,13 @@ FUNCTIONS = {
         "Closure invoked by AnimNodeGesture_StepAngles. Resolves the target/joint "
         "reference transforms through 0x141FD21D0/0x141FD25B0 and allocates the "
         "144-byte per-step gesture solver state.",
+    ),
+    0x141FD38B0: (
+        "Gesture_ComputeAnglesFromTargetAndReference",
+        "Sole direct caller is AnimNodeGesture_StepAngles. Computes the two "
+        "cached gesture angles and accompanying transform from the resolved "
+        "target, joint/reference transforms and authored limits. StepAngles "
+        "does not pass the optional ComputeArgs+0x18 muzzle-reference pointer.",
     ),
     0x1406F3510: (
         "GestureMgr_CreateTargetProvider",
@@ -2302,6 +2374,102 @@ FUNCTIONS = {
         "exact owner from target+0x8/+0x10, then returns the world target built by "
         "BuildOwnerDirectionVectorFromStateSlotsAndDescriptor.",
     ),
+    0x1406F2FE0: (
+        "GestureConfig_QueryOptionalAimWeaponMuzzleReference",
+        "GestureConfig vtable slot +0x18. Only for AimAt CRC 0xE83A8507 and a "
+        "view/context-valid owner, resolves Player_GetActiveWeapon and "
+        "ProcessWeapon_ResolveMuzzleTransform and returns an optional vector. "
+        "Gesture_GetComputeArgs stores it at ComputeArgs+0x18, but the direct "
+        "StepAngles solver path never consumes that field.",
+    ),
+    0x1406F2360: (
+        "GestureTargetLookAt_GetTarget",
+        "Gesture::TargetLookAt vtable slot 0. Resolves the generation-valid owner "
+        "and calls its vtable slot +0x908, with an NPC fallback, before converting "
+        "the returned owner-relative point to world space. It does not read the "
+        "screen camera directly.",
+    ),
+    0x1406F2530: (
+        "GestureTargetLookAtOrCamera_GetTarget",
+        "Gesture::TargetLookAtOrCamera vtable slot 0. Resolves the owner and, "
+        "when its component gate is present, calls owner vtable slot +0xE90. "
+        "The only ordinary constructor xref is the PlayerFlashlightController "
+        "torch-look-strafe gesture path, so this is not a generic firearm seam.",
+    ),
+    0x1410D4E70: (
+        "Player_GetLookAtTargetPoint",
+        "Player vtable slot +0x908. Chooses the first active authored look-target "
+        "slot at Player+0x21E0/+0x2260; otherwise returns a point in front of the "
+        "Player from its own world transform. It has no screen-route lookup.",
+    ),
+    0x1410D5010: (
+        "Player_GetLookAtOrCameraTargetPoint",
+        "Player vtable slot +0xE90. Chooses the same authored look-target slots; "
+        "its fallback reads Player+0x4010, resolves that screen route through "
+        "0x14015BF00 and builds a forward world target. The sole ordinary "
+        "TargetLookAtOrCamera constructor is flashlight-only.",
+    ),
+    0x1410C6A90: (
+        "PlayerLookAtTracker_IsActive",
+        "PlayerLookAtTracker vtable slot 0. Returns tracker+0x70, the active "
+        "flag tested by Player_GetLookAtTargetPoint for the two embedded "
+        "records at Player+0x21E0/+0x2260.",
+    ),
+    0x1410F40D0: (
+        "PlayerLookAtTracker_SetTargetPoint",
+        "PlayerLookAtTracker vtable slot +0x8. Copies the incoming world point "
+        "to tracker+0x60, sets tracker+0x70 active and refreshes owner-side "
+        "look state through PlayerStrafeLookAt_UpdateOwnerTargetBasis.",
+    ),
+    0x1410F4110: (
+        "PlayerLookAtTracker_ClearTarget",
+        "PlayerLookAtTracker vtable slot +0x10. Clears tracker+0x70 and informs "
+        "the owning PlayerLookAtController about the tracker command id.",
+    ),
+    0x1401B6F70: (
+        "LookAtTracker_SetDirectPoint",
+        "Stores an authored/direct point at tracker+0x10, clears object, attach "
+        "and callback sources, then calls virtual slot +0x8. For "
+        "PlayerLookAtTracker that copies the same point to +0x60 and activates "
+        "the record.",
+    ),
+    0x1401B7020: (
+        "LookAtTracker_UpdateResolvedTarget",
+        "Shared ILookAtTracker update. Resolves callback, object joint/attach or "
+        "direct-point sources and publishes the resulting world point through "
+        "virtual slot +0x8; clears invalid sources through slot +0x10.",
+    ),
+    0x141000BC0: (
+        "PlayerStrafeLookAt_ResolveReferencePoint",
+        "Returns an authored override when available; otherwise resolves the "
+        "owning Player's screen route from Player+0x4010 and builds a point "
+        "from the camera quaternion and targHead attachment.",
+    ),
+    0x141001570: (
+        "PlayerStrafeLookAt_BuildDefaultCameraRequest",
+        "Builds the default PlayerLookAtTracker request. Reads the owner screen "
+        "route at Player+0x4010, compares its camera-forward basis with the "
+        "reference direction and, when eligible, returns a direct-point request "
+        "whose point was built by PlayerStrafeLookAt_ResolveReferencePoint.",
+    ),
+    0x141000DA0: (
+        "PlayerStrafeLookAt_Update",
+        "Updates the Player+0x21E0 PlayerLookAtTracker from ScriptMove, rope, "
+        "authored target and default camera branches. The ordinary fallback "
+        "calls PlayerStrafeLookAt_BuildDefaultCameraRequest and publishes its "
+        "camera-derived point through LookAtTracker_SetDirectPoint.",
+    ),
+    0x140F027A0: (
+        "PlayerMove_UpdateStrafeLookAt",
+        "Thin ordinary Player::Move helper that calls PlayerStrafeLookAt_Update "
+        "on Player+0x3230. PlayerMoveStick_MainUpdate invokes it unconditionally "
+        "in the normal Move update path.",
+    ),
+    0x1410F4180: (
+        "PlayerStrafeLookAt_UpdateOwnerTargetBasis",
+        "Refreshes targHead/world-basis state and cover-dependent owner data "
+        "after PlayerLookAtTracker_SetTargetPoint publishes a new target.",
+    ),
     0x1420F2DC0: (
         "GestureLayer_BuildComputeArgsForNode",
         "Builds the per-node inputs used by the gesture pre-align path and calls "
@@ -2314,6 +2482,24 @@ FUNCTIONS = {
         "AnimNodeGesture_StepAngles for active gesture nodes; this establishes a "
         "generic authored-pose route but does not establish Player/camera ownership.",
     ),
+    0x1420F3CA0: (
+        "GestureLayer_DispatchPreAlignToAnimNodeGesture",
+        "Hashes AnimNodeGesture, iterates matching nodes in the selected graph "
+        "and dispatches a copied 144-byte pre-align context to "
+        "GestureLayer_PreAlignUpdatePerGestureNode.",
+    ),
+    0x1420F6B30: (
+        "BaseLayerGestureLayer_PreAlignUpdate",
+        "BaseLayerGestureLayer vtable slot +0xD8. Builds the AnimNodeGesture "
+        "dispatch context with context+0x10 explicitly null, so the live base "
+        "layer does not provide an embedded custom TargetPoint.",
+    ),
+    0x1420F96E0: (
+        "GestureLayer_PreAlignUpdate",
+        "GestureLayer vtable slot +0xD8. Unlike BaseLayerGestureLayer, can place "
+        "its embedded object+0x1C0 Gesture::TargetPoint into dispatch "
+        "context+0x10 when object+0x240 enables that authored override.",
+    ),
     0x1420F3AB0: (
         "AnimNodeGesture_GetGestureGridBounds",
         "Reads the four authored animation-grid bounds from the cached grid at "
@@ -2322,8 +2508,28 @@ FUNCTIONS = {
     ),
     0x141FFA020: (
         "AnimNodeGesture_TrySnapshotNode",
-        "Source-identified AnimNodeGesture snapshot path. Resolves and stores the "
-        "cached gesture animation grid at node+0x60 before serializing node state.",
+        "Source-identified AnimNodeGesture snapshot path. Validates the "
+        "anim-node-gesture descriptor, copies authored gesture id from +0x4 and "
+        "target script callback from +0x18 into node+0xD0/+0xE8, resolves final "
+        "settings id at node+0xD4, and builds the cached grid at node+0x60. "
+        "Node+0xE8 is authored bytecode, not live camera state.",
+    ),
+    0x141FF9A50: (
+        "AnimNodeGesture_Construct",
+        "AnimNodeGesture constructor. Installs AnimNodeGesture_vftable and "
+        "initializes node+0xE8 to null before an authored descriptor can supply "
+        "the optional target script callback during TrySnapshotNode.",
+    ),
+    0x141ECDC20: (
+        "GestureTargetScriptLambda_GetTarget",
+        "Gesture::TargetScriptLambda vtable slot 0. Generation-validates its "
+        "owner and executes the authored target bytecode with the owner-local "
+        "script argument; it performs no direct native camera/global-input read.",
+    ),
+    0x14011D230: (
+        "RegisterAnimNodeGestureSnapshotFactory",
+        "Registers the anim-node-gesture StringId with the snapshot factory "
+        "that reaches AnimNodeGesture_TrySnapshotNode.",
     ),
     0x141D7B860: (
         "GestureGridCache_FindOrBuild",
@@ -5020,11 +5226,11 @@ FUNCTIONS = {
         "virtual slot +0x0 with (decision_object, owner).",
     ),
     0x140CA17E0: (
-        "PublishRuntimeStateFromDecisionNodeLikeObject",
-        "Large state-publication path that expects a node-like object with a "
-        "parent/runtime pointer at +0x8. Reads broad owner/runtime state from "
-        "that parent, builds multiple transform/state payloads, and publishes "
-        "them through downstream runtime/debug channels.",
+        "PlayerActive_Update",
+        "Exact source assertion Player::Active::Update(void). Resolves the "
+        "owning Player from active-state+0x8, updates broad gameplay state and "
+        "refreshes both embedded PlayerLookAtTracker records near the end of "
+        "the frame. This replaces the old generic decision-node label.",
     ),
     0x141DE1600: (
         "ConstructOwnerRuntimeClass_WithNestedControlAndDecisionNode",
@@ -8400,33 +8606,28 @@ FUNCTIONS = {
         "object when dl&1 is set.",
     ),
     0x1410C6B90: (
-        "GetUpperPlayerManager3FD8",
-        "Trivial getter that returns outer_owner+0x3FD8. This pins +0x3FD8 as "
-        "another formal upper Player manager slot beside +0x2018 and +0x3BD0.",
+        "Player_GetGestureController",
+        "Trivial Player getter for Player+0x3FD8. RTTI vtable 0x142B91B60 "
+        "identifies the object exactly as GestureController.",
     ),
     0x141E65C60: (
-        "ConstructUpperPlayerManager3FD8_Size5E70",
-        "Allocator wrapper for the large upper Player manager stored at "
-        "outer_owner+0x3FD8. Allocates size 0x5E70 and then jumps into "
-        "0x141E66090 for in-place initialization.",
+        "GestureController_Create",
+        "Allocator wrapper for the GestureController stored at Player+0x3FD8. "
+        "Allocates size 0x5E70 and calls GestureController_Initialize.",
     ),
     0x141E66090: (
-        "InitializeUpperPlayerManager3FD8",
-        "In-place initializer for the large upper Player manager at "
-        "outer_owner+0x3FD8. Stamps vtable 0x142B91B60, stores the outer owner "
-        "in +0x10, seeds large internal tables and state bands, and prepares "
-        "late links around +0x830/+0x838/+0x840 and +0x5E50/+0x5E60.",
+        "GestureController_Initialize",
+        "In-place GestureController initializer. Stamps exact RTTI vtable "
+        "0x142B91B60, stores the Player owner in +0x10 and initializes its "
+        "layer-handler arrays and late state links.",
     ),
     0x141E668C0: (
-        "RegisterUpperPlayerBridgeIntoManager3FD8AndBuildEntryHandlers",
-        "Manager-side registration path for outer_owner+0x3FD8. Stores the "
-        "incoming owner-derived value in +0x18, stores the tiny upper bridge "
-        "wrapper in +0x20, calls wrapper->virtual +0x18, derives an entry "
-        "count through manager->virtual +0x38, allocates arrays in +0xD8/+0xE0, "
-        "and builds per-entry handler objects keyed by authored/state tags. "
-        "The current body allocates at least one trivial compact handler shell "
-        "and one heavier 0x290 per-entry handler that stores the bridge wrapper "
-        "at +0x288 and owner-derived state bands across +0x1C0..+0x284.",
+        "GestureController_BindOwnerAndBuildLayerHandlers",
+        "Binds the Player bridge into GestureController and builds authored "
+        "layer handlers. Tag 0x675650B0 creates a 0x290 GestureLayer; live base "
+        "tag 0x7339D08C creates the compact BaseLayerGestureLayer. This exact "
+        "tag split determines whether pre-align context+0x10 can carry a custom "
+        "TargetPoint.",
     ),
     0x141E52590: (
         "BuildFixedTwoEntryUpperPlayerAuthoredDescriptor",
@@ -10092,6 +10293,53 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142A4BEF8: (
+        "PlayerLookAtTracker_vftable",
+        "Exact MSVC RTTI PlayerLookAtTracker vtable used by both embedded "
+        "Player records at +0x21E0/+0x2260. Slot 0 tests +0x70 active, +0x8 "
+        "publishes a world target and +0x10 clears it.",
+    ),
+    0x142B91B60: (
+        "GestureController_vftable",
+        "Exact MSVC RTTI GestureController vtable for Player+0x3FD8.",
+    ),
+    0x142BD3B30: (
+        "BaseLayerGestureLayer_vftable",
+        "Exact BaseLayerGestureLayer RTTI vtable. Slot +0xD8 is the pre-align "
+        "update that dispatches a null custom TargetPoint.",
+    ),
+    0x142BD4068: (
+        "GestureLayer_vftable",
+        "Exact GestureLayer RTTI vtable. Slot +0xD8 may dispatch the embedded "
+        "object+0x1C0 custom TargetPoint when enabled.",
+    ),
+    0x142BC16B0: (
+        "AnimNodeGesture_vftable",
+        "Exact AnimNodeGesture RTTI vtable installed by its constructor.",
+    ),
+    0x142B9CCC8: (
+        "GestureTargetScriptLambda_vftable",
+        "Exact Gesture::TargetScriptLambda RTTI vtable. Slot 0 executes the "
+        "authored owner-scoped target callback.",
+    ),
+    0x146C71A10: (
+        "g_GestureConfig_Ptr",
+        "Process-global Gesture::Config pointer returned by GestureConfig_Get. "
+        "The stock game installs g_DefaultGestureConfigInstance; this pointer is "
+        "configuration metadata, not a per-Player camera object.",
+    ),
+    0x143052930: (
+        "g_DefaultGestureConfigInstance",
+        "Stock Gesture::Config singleton object. Its first qword is "
+        "GestureConfig_Base_vftable and it is installed into "
+        "g_GestureConfig_Ptr by the game initialization paths.",
+    ),
+    0x1429809E8: (
+        "GestureConfig_Base_vftable",
+        "Base Gesture::Config vtable. Slot +0x18 is the optional AimAt weapon "
+        "muzzle-reference query and slot +0x20 creates LookAt, AimAt or script "
+        "target providers from authored gesture settings.",
+    ),
     0x143026D20: (
         "g_AnimJointProgramBuiltinOperatorTable",
         "Built-in skeleton joint-program dispatch table. The resolved non-null "

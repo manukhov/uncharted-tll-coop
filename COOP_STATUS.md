@@ -15474,3 +15474,173 @@ Do not spend another user run separating those two inert cases. Resume static
 work from the proven live screen-1 base state `7339D08C/3C347132`: resolve the
 exact owner and upstream writer that supplies its `up/down` fields, and only
 return to runtime with a corrective build whose data flow reaches that state.
+
+### 2026-08-01 STATIC: close the base-writer, late-IK and false Gesture seams
+
+The requested writer audit first corrects the preceding hand-off: the exact
+owner and writer of the live `7339D08C/3C347132` up/down state were already
+resolved before `ki`. `AssembleLargePlayerOwnerSubsystemGraph 0x1410CA720`
+constructs `PlayerAimController` with vtable `0x142A0B1F8`; slot `+0x08`
+`0x142053470` binds controller `+0x108` to the owning Player. Slots `+0x50`,
+`+0x58` and `+0xF8` are respectively
+`PlayerAimController_ComputeAndPublishAimAdditives 0x140CAECB0`,
+`PlayerAimController_ApplyWorldAimBasis 0x140CAF110` and
+`PlayerAimController_GetTargetPointFromReticle 0x140CB1720`.
+`PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0` writes the
+controller `+0x8C0/+0x8C4` pair and follows controller `+0x108 ->
+Player+0x1A0 -> +0x58 -> +0x10` to write active-state `+0x188/+0x18C`.
+`AnimControl_ResolveActiveBaseStatePlayerInfo 0x1410D5D40` independently hashes
+literal `base` and resolves the same owner-local AnimControl registry. Thus this
+is a per-Player writer, not an unresolved shared-camera read.
+
+That boundary is also already semantically closed. Build `iu` delivered
+peer-correct LRDU through this controller, active state and evaluator while the
+visible retained weapon/head still followed the receiver camera. Repatching
+`0x140CB41F0`, active-state `+0x188/+0x18C` or the controller's smoothed fields
+cannot correct the rendered source and is **REJECTED**. The next search must not
+repeat the now-redundant “find the live up/down writer” task.
+
+Four competing downstream/upstream explanations were then separated without a
+new game run:
+
+1. **H-plugin (REJECTED): command-23 IK introduces the camera pitch.** The exact
+   `0x653AE09B` dispatcher reaches source-asserted
+   `LegFixIkBinaryPluginNodeBatchCallback 0x141936A90`. It resolves exactly two
+   `LegIkChain` setups, validates only their authored joint lists and calls
+   `LegFixIk_SolveTwoLegChains 0x141944670`; that worker loops over two chains,
+   reads three key joints per chain and copies back only indices from each leg
+   list. `WsAnkleBlend_ExecutePlugin 0x1406FD4A0` uses the same two-leg setup.
+   The exact `0x98FBC8FE` dispatcher validates `HANDFIXIK`, and source-asserted
+   `HandFixIkPluginCallback 0x141988200` invokes `SolveArmIk 0x1418F0B60` for
+   `L_Wrist` and `R_Wrist`; the solver writes only shoulder/elbow records for
+   the selected arm chain. None of the three reads Player, screen route,
+   camera, aim controller or target-ring state. They can propagate or locally
+   solve an already-authored pose, but cannot create the common head/spine/arms
+   receiver-camera dependency observed by the user.
+2. **H-transition (REJECTED): `AnimNodeGesture+0x70` is a vertical blend.**
+   `AnimNodeGesture_Step 0x141FFA550` increments this field by `dt`, clears the
+   transition at the shared float constant `0.2`, and resets it when the selected
+   gesture changes. `AnimNodeGesture_GenerateAnimCommands 0x141FFA6E0` emits the
+   old and new selected clips and command 7 with
+   `clamp(node+0x70 / 0.2, 0, 1)`. This is a 200-ms clip-transition clock, not
+   Player-owned direction. The earlier task to trace it into AnimControl/player
+   state is therefore retired.
+3. **H-config-muzzle (REJECTED): GestureConfig slot `+0x18` feeds the live angle
+   solver.** Source-asserted `GestureConfig_Get 0x141FD1070` returns the global
+   `g_GestureConfig_Ptr 0x146C71A10`; the stock object
+   `g_DefaultGestureConfigInstance 0x143052930` uses base vtable `0x1429809E8`.
+   Its slot `+0x18`, now named
+   `GestureConfig_QueryOptionalAimWeaponMuzzleReference 0x1406F2FE0`, is called
+   only for AimAt CRC `0xE83A8507`, filters the owner through the current view
+   bit, resolves `Player_GetActiveWeapon 0x1410D67B0` and
+   `ProcessWeapon_ResolveMuzzleTransform 0x1414FE050`, and returns an optional
+   vector. `Gesture_GetComputeArgs 0x141FD3180` stores the heap copy only at
+   ComputeArgs `+0x18`. Its closure `0x141FD3680` clones the 144-byte object but
+   replaces the resolved pointers at `+0x10/+0x28/+0x68`; the sole solver call
+   in `AnimNodeGesture_StepAngles 0x141FFEDB0` passes `+0x30/+0x68/+0x28/+0x38`
+   and never reads `+0x18`. Therefore the weapon-muzzle optional does not reach
+   cached gesture angles `+0x80/+0x84` on this path.
+4. **H-global-input (REJECTED inside the direct Gesture chain): the Gesture
+   solver itself reads screen-0 input direction.** `Gesture_GetComputeArgs`, its
+   closure, the solver, `AnimNodeGesture_Step`, `SelectGestureAnims`,
+   `GenerateAnimCommands`, `AnimNodeGesture_EmitSelectedAnimCommands
+   0x141FFA900` and `AnimNodeGesture_EmitSelectedClipCommand 0x141FFEA20` contain
+   no camera/stick read. The only `g_LocalPlayerInputManager_Ptr` access in
+   `AnimNodeGesture_StepAngles` and
+   `GestureLayer_PreAlignUpdatePerGestureNode 0x1420F3F50` is the qword at
+   `+0x50`, compared/stored as the current frame epoch for two-entry snapshots.
+   Adjacent gesture-cache workers `0x141FFBCD0`, `0x141FFECB0`, `0x1420F1260`,
+   `0x1420F2290`, `0x1420F3100` and `0x1420FAAA0` likewise use only the `+0x48`
+   or `+0x50` frame counters for cache age, selection and expiry.
+
+The command-generation half is now named as well. `0x141FFEA20` emits the exact
+six-word command-6 record `0x60006` for one selected ArtItemAnim; `0x141FFA900`
+emits one to three such clips and command-7 interpolation. This explains the
+command-6/7 clusters in the already-confirmed `kh` DAG without promoting any
+one heap clip to Player ownership.
+
+The exact layer split also eliminates the supposed `nodeRecord+0x10` writer.
+`GestureController_Initialize 0x141E66090` stamps exact RTTI vtable
+`0x142B91B60`; `GestureController_BindOwnerAndBuildLayerHandlers 0x141E668C0`
+creates a full `GestureLayer` for authored tag `0x675650B0`, but creates the
+compact `BaseLayerGestureLayer` for the live base tag `0x7339D08C`.
+`BaseLayerGestureLayer_PreAlignUpdate 0x1420F6B30` always places null at dispatch
+context `+0x10`; only `GestureLayer_PreAlignUpdate 0x1420F96E0` can place its
+embedded object `+0x1C0` `Gesture::TargetPoint` there when `+0x240` enables it.
+`GestureLayer_DispatchPreAlignToAnimNodeGesture 0x1420F3CA0` then hashes
+`AnimNodeGesture` and gives the copied context to each matching node. Thus the
+live base layer has no hidden custom TargetPoint writer.
+
+The other apparent per-node live field is authored as well.
+`AnimNodeGesture_Construct 0x141FF9A50` initializes node `+0xE8` to null;
+`AnimNodeGesture_TrySnapshotNode 0x141FFA020` validates the
+`anim-node-gesture` descriptor, copies descriptor `+0x18` to node `+0xE8`, and
+resolves the settings id at node `+0xD4`. If present,
+`GestureTargetScriptLambda_GetTarget 0x141ECDC20` generation-validates the owner
+and executes that stored bytecode with the owner-local script argument. It has
+no direct native camera/global-input read. Therefore node `+0xE8` is an authored
+target callback, not a retained runtime camera field.
+
+The reproducible archive audit now resolves the stock generic Player target
+classes rather than inferring them from one runtime hook. Running
+`scripts/psarc_asset_audit.py ... --entry anim-player.bin
+--gesture-node-audit` cross-references `anim-player.bin` descriptors with the
+2675 `gesture` records in `gestures.bin`. The Player graph contains exactly 17
+`AnimNodeGesture` descriptors: 12 fixed and five selector-driven. Eleven fixed
+ids resolve to target type `0xA399FA92` (`LookAt`), one fixed id has no target,
+and **zero** fixed ids use `0xE83A8507` (`AimAt`). Of the five dynamic nodes,
+only the descriptor at file offset `0x11A5A0` carries a target-script callback
+(`0x120F50`). This statically explains why the installed TargetAimAt hook had no
+apply calls: AimAt is the wrong fixed target class for `anim-player.bin`.
+
+The ordinary `LookAt` target has now been traced through its upstream writer.
+`InitializePlayerCtorAndStampPlayerVftable 0x1410C8FD0` constructs two embedded
+RTTI `PlayerLookAtTracker` records at `Player+0x21E0/+0x2260`, each stride
+`0x80`. `PlayerLookAtTracker_IsActive 0x1410C6A90` returns record `+0x70`, and
+`PlayerLookAtTracker_SetTargetPoint 0x1410F40D0` copies the incoming world point
+to record `+0x60` before setting `+0x70`. `Player_GetLookAtTargetPoint
+0x1410D4E70` tests the higher-priority `+0x2260` record first, then `+0x21E0`,
+and consumes exactly that `+0x60` point. Its own-transform fallback therefore
+does not prove that ordinary `LookAt` is camera-independent.
+
+The first tracker has an ordinary, campaign-wide camera writer. Exact
+`PlayerMoveStick_MainUpdate 0x140F03500` calls
+`PlayerMove_UpdateStrafeLookAt 0x140F027A0` unconditionally at `0x140F0402D`;
+the wrapper updates Player-owned `PlayerStrafeLookAt` at `Player+0x3230` through
+`PlayerStrafeLookAt_Update 0x141000DA0`. In its normal no-script/no-object
+fallback, `PlayerStrafeLookAt_BuildDefaultCameraRequest 0x141001570` reads
+`ResolveScreenRoutePoseSeedOrDefault(Player+0x4010)`. Its reference builder
+`PlayerStrafeLookAt_ResolveReferencePoint 0x141000BC0` independently reads the
+same screen route, combines its quaternion with `targHead`, and returns the
+world point. `PlayerStrafeLookAt_Update` passes an eligible direct-point request
+through `LookAtTracker_SetDirectPoint 0x1401B6F70`, which reaches the exact
+`Player+0x21E0 -> +0x60/+0x70` storage above. Separate Drive, FreeRope, PushPull
+and Script Player state vtables also call the same updater; normal Move is the
+critical unconditional caller.
+
+This supplies three independent static evidence kinds for the leading model:
+
+1. call graph: ordinary `Player::Move::Update` reaches the Player-owned strafe
+   look updater every frame;
+2. instruction dataflow: the updater reads the owner screen route and publishes
+   the derived point into the first exact RTTI `PlayerLookAtTracker`;
+3. consumer/assets: `GestureTargetLookAt_GetTarget 0x1406F2360` reaches
+   `Player_GetLookAtTargetPoint`, while 11 fixed generic Player gesture nodes are
+   authored as `LookAt` and none as `AimAt`.
+
+The direct `GestureTargetLookAtOrCamera` class remains flashlight-only: its sole
+ordinary constructor xref is the `PlayerFlashlightController` path beside
+`dra-torch-look-strafe-gesture`. The correction is that ordinary
+`GestureTargetLookAt` can still receive a camera-derived point indirectly from
+`PlayerStrafeLookAt`; the previous fallback-only reading was incomplete.
+
+**Surviving static frontier:** G1, a Player-owned target contaminated before
+`Gesture_GetComputeArgs`, is now the leading evidence-backed model. G2 is
+reduced to the single dynamic `anim-player.bin` descriptor with target callback
+`0x120F50`; G3 remains possible until the fixed `LookAt` node (or that one
+lambda) is tied to the camera-correlated command-6/7 cluster in the retained
+command list. Keep runtime parked. The next corrective build, when this final
+asset-to-command identity is closed, should separate only the retained Player's
+default `PlayerStrafeLookAt` camera request using the peer pose seed; it must not
+repatch LRDU, active-state weights, AimAt, LookAtIK or the flashlight-only
+`LookAtOrCamera` class.
