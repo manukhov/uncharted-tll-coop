@@ -167,6 +167,14 @@ struct LocalAimPitchCapture {
 SRWLOCK g_local_aim_pitch_lock = SRWLOCK_INIT;
 LocalAimPitchCapture g_local_aim_pitch{};
 
+struct LocalStrafeIkForwardYCapture {
+    void* owner = nullptr;
+    float forward_y = 0.0F;
+    ULONGLONG captured_ms = 0;
+};
+SRWLOCK g_local_strafe_ik_forward_y_lock = SRWLOCK_INIT;
+LocalStrafeIkForwardYCapture g_local_strafe_ik_forward_y{};
+
 struct LocalAimFootTurnCapture {
     void* owner = nullptr;
     void* active_state = nullptr;
@@ -1473,6 +1481,7 @@ bool puppet_aim_action_relay_enabled_for_peer(
     const coop::StatePacket& peer);
 bool read_player_current_action_hash(
     void* player, std::uint32_t& hash, void*& active_state);
+bool player_screen_index_is(const void* player, std::uint32_t index);
 void apply_puppet_sustained_aim_input(void* puppet);
 void force_puppet_ads_flag(void* puppet, bool active);
 bool safe_request_gun_state(void* player, int desired_state);
@@ -10679,6 +10688,245 @@ void quat_forward_pos_z(const float q[4], float& fx, float& fy, float& fz) {
     }
 }
 
+using PlayerStrafeControllerUpdatePostAnimBlendFunction = void(__fastcall*)(
+    void*, const float*);
+using BuildOrthonormalBasisFromTwoVectorsAndPositionFunction =
+    std::int64_t(__fastcall*)(
+        float*, const float*, const float*, const float*, std::uint8_t);
+using QuaternionFromOrthonormalBasisFunction = std::int64_t(__fastcall*)(
+    float*, const float*);
+PlayerStrafeControllerUpdatePostAnimBlendFunction
+    g_original_player_strafe_update_post_anim_blend = nullptr;
+BuildOrthonormalBasisFromTwoVectorsAndPositionFunction
+    g_build_orthonormal_basis_from_two_vectors_and_position = nullptr;
+QuaternionFromOrthonormalBasisFunction
+    g_quaternion_from_orthonormal_basis = nullptr;
+
+constexpr std::uint32_t kExactGunMoveActionHash = 0x12D842C0u;
+
+bool player_action_is_exact_gun_move(void* player) {
+    std::uint32_t action_hash = 0;
+    void* active_state = nullptr;
+    return read_player_current_action_hash(player, action_hash, active_state) &&
+        action_hash == kExactGunMoveActionHash;
+}
+
+bool quat_right_pos_x_horizontal(
+    const float q[4], float& right_x, float& right_z) {
+    if (!valid_network_orientation(q)) {
+        return false;
+    }
+    const float x = q[0];
+    const float y = q[1];
+    const float z = q[2];
+    const float w = q[3];
+    // Same positive-X basis expansion retained by
+    // PlayerStrafeController_UpdateStrafeIk at var_658.
+    right_x = 1.0F - 2.0F * (y * y + z * z);
+    right_z = 2.0F * (x * z - w * y);
+    const float horizontal_length =
+        std::sqrt(right_x * right_x + right_z * right_z);
+    if (!std::isfinite(horizontal_length) || horizontal_length < 1.0e-4F) {
+        return false;
+    }
+    right_x /= horizontal_length;
+    right_z /= horizontal_length;
+    return true;
+}
+
+bool seh_rebuild_strafe_ik_quaternion(
+    const float native_quat[4], float peer_forward_y, float out_quat[4]) {
+    if (native_quat == nullptr || out_quat == nullptr ||
+        g_build_orthonormal_basis_from_two_vectors_and_position == nullptr ||
+        g_quaternion_from_orthonormal_basis == nullptr ||
+        !std::isfinite(peer_forward_y)) {
+        return false;
+    }
+    float right_x = 0.0F;
+    float right_z = 0.0F;
+    if (!quat_right_pos_x_horizontal(native_quat, right_x, right_z)) {
+        return false;
+    }
+
+    constexpr float kVerticalEpsilon = 1.0e-4F;
+    const float forward_y = std::clamp(
+        peer_forward_y, -1.0F + kVerticalEpsilon,
+        1.0F - kVerticalEpsilon);
+    const float horizontal = std::sqrt(std::max(
+        0.0F, 1.0F - forward_y * forward_y));
+    // right x worldUp is native positive-Z forward. Preserve the receiver's
+    // final reticle-derived azimuth/right axis while replacing only forward.y.
+    alignas(16) const float desired_forward[4]{
+        -right_z * horizontal, forward_y, right_x * horizontal, 0.0F};
+    alignas(16) const float world_up[4]{0.0F, 1.0F, 0.0F, 0.0F};
+    alignas(16) const float zero_position[4]{};
+    alignas(16) float basis[16]{};
+    alignas(16) float rebuilt[4]{};
+    __try {
+        g_build_orthonormal_basis_from_two_vectors_and_position(
+            basis, desired_forward, world_up, zero_position, 1);
+        g_quaternion_from_orthonormal_basis(rebuilt, basis);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+    if (!valid_network_orientation(rebuilt)) {
+        return false;
+    }
+    std::memcpy(out_quat, rebuilt, sizeof(rebuilt));
+    return true;
+}
+
+void __fastcall hooked_player_strafe_update_post_anim_blend(
+    void* controller, const float* locator) {
+    if (g_original_player_strafe_update_post_anim_blend == nullptr) {
+        return;
+    }
+    if (g_dll_inert || controller == nullptr || locator == nullptr ||
+        readable_bytes(static_cast<std::byte*>(controller) +
+                       kPlayerStrafeControllerOwnerOffset) < sizeof(void*) ||
+        readable_bytes(locator) < 8 * sizeof(float)) {
+        g_original_player_strafe_update_post_anim_blend(controller, locator);
+        return;
+    }
+
+    void* const owner = *reinterpret_cast<void* const*>(
+        static_cast<const std::byte*>(controller) +
+        kPlayerStrafeControllerOwnerOffset);
+    if (owner != nullptr && player_screen_index_is(owner, 0)) {
+        if (owner == retained_player_object(0) &&
+            local_player_strict_aim_active(owner) &&
+            player_action_is_exact_gun_move(owner) &&
+            valid_network_orientation(locator + 4)) {
+            float forward_x = 0.0F;
+            float forward_y = 0.0F;
+            float forward_z = 0.0F;
+            quat_forward_pos_z(
+                locator + 4, forward_x, forward_y, forward_z);
+            if (std::isfinite(forward_y) &&
+                forward_y >= -1.001F && forward_y <= 1.001F) {
+                AcquireSRWLockExclusive(&g_local_strafe_ik_forward_y_lock);
+                g_local_strafe_ik_forward_y.owner = owner;
+                g_local_strafe_ik_forward_y.forward_y =
+                    std::clamp(forward_y, -1.0F, 1.0F);
+                g_local_strafe_ik_forward_y.captured_ms = GetTickCount64();
+                ReleaseSRWLockExclusive(&g_local_strafe_ik_forward_y_lock);
+                static std::atomic<bool> first_capture_logged{false};
+                if (!first_capture_logged.exchange(
+                        true, std::memory_order_acq_rel)) {
+                    char line[160]{};
+                    std::snprintf(
+                        line, sizeof(line),
+                        "STRAFE-IK-Y-CAPTURE y=%.5f", forward_y);
+                    boot_log_line(line);
+                }
+            }
+        }
+        g_original_player_strafe_update_post_anim_blend(controller, locator);
+        return;
+    }
+
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    coop::StatePacket peer{};
+    if (!g_state_net.enabled || owner == nullptr ||
+        owner != retained_player_object(1) ||
+        !player_screen_index_is(owner, kSlot1ScreenIndex) ||
+        !player_action_is_exact_gun_move(owner) || received == 0 ||
+        GetTickCount64() - received > 250 ||
+        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer) ||
+        peer.strafe_ik_forward_y_valid != 1 ||
+        !std::isfinite(peer.strafe_ik_forward_y) ||
+        peer.strafe_ik_forward_y < -1.001F ||
+        peer.strafe_ik_forward_y > 1.001F) {
+        g_original_player_strafe_update_post_anim_blend(controller, locator);
+        return;
+    }
+
+    alignas(16) float corrected_locator[8]{};
+    std::memcpy(corrected_locator, locator, sizeof(corrected_locator));
+    const float native_forward_y = [&]() {
+        float x = 0.0F;
+        float y = 0.0F;
+        float z = 0.0F;
+        quat_forward_pos_z(locator + 4, x, y, z);
+        return y;
+    }();
+    if (!seh_rebuild_strafe_ik_quaternion(
+            locator + 4, peer.strafe_ik_forward_y,
+            corrected_locator + 4)) {
+        g_original_player_strafe_update_post_anim_blend(controller, locator);
+        return;
+    }
+
+    static std::atomic<bool> first_apply_logged{false};
+    if (!first_apply_logged.exchange(true, std::memory_order_acq_rel)) {
+        char line[224]{};
+        std::snprintf(
+            line, sizeof(line),
+            "STRAFE-IK-Y-APPLY seq=%u native=%.5f peer=%.5f",
+            peer.sequence, native_forward_y, peer.strafe_ik_forward_y);
+        boot_log_line(line);
+    }
+    g_original_player_strafe_update_post_anim_blend(
+        controller, corrected_locator);
+}
+
+bool install_player_strafe_ik_forward_y_relay() {
+    auto* const slot = reinterpret_cast<void**>(
+        g_module + kPlayerStrafeControllerVtableRva +
+        kPlayerStrafeControllerUpdatePostAnimBlendSlotOffset);
+    void* const expected = reinterpret_cast<void*>(
+        g_module + kPlayerStrafeControllerUpdatePostAnimBlendRva);
+    constexpr std::array<std::uint8_t, 10> kBasisPrologue{
+        0x48, 0x8B, 0xC4, 0x48, 0x81, 0xEC, 0x98, 0x00, 0x00, 0x00};
+    constexpr std::array<std::uint8_t, 10> kQuaternionPrologue{
+        0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x30};
+    if (*slot != expected ||
+        std::memcmp(
+            reinterpret_cast<const void*>(
+                g_module +
+                kBuildOrthonormalBasisFromTwoVectorsAndPositionRva),
+            kBasisPrologue.data(), kBasisPrologue.size()) != 0 ||
+        std::memcmp(
+            reinterpret_cast<const void*>(
+                g_module + kQuaternionFromOrthonormalBasisRva),
+            kQuaternionPrologue.data(), kQuaternionPrologue.size()) != 0) {
+        boot_log_line(
+            "PlayerStrafe final-forward-Y relay SKIPPED (preflight mismatch)");
+        return false;
+    }
+
+    g_original_player_strafe_update_post_anim_blend =
+        reinterpret_cast<PlayerStrafeControllerUpdatePostAnimBlendFunction>(
+            *slot);
+    g_build_orthonormal_basis_from_two_vectors_and_position =
+        reinterpret_cast<
+            BuildOrthonormalBasisFromTwoVectorsAndPositionFunction>(
+            g_module +
+            kBuildOrthonormalBasisFromTwoVectorsAndPositionRva);
+    g_quaternion_from_orthonormal_basis =
+        reinterpret_cast<QuaternionFromOrthonormalBasisFunction>(
+            g_module + kQuaternionFromOrthonormalBasisRva);
+
+    DWORD old = 0;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+        g_original_player_strafe_update_post_anim_blend = nullptr;
+        g_build_orthonormal_basis_from_two_vectors_and_position = nullptr;
+        g_quaternion_from_orthonormal_basis = nullptr;
+        boot_log_line(
+            "PlayerStrafe final-forward-Y relay SKIPPED (protect)");
+        return false;
+    }
+    *slot = reinterpret_cast<void*>(
+        &hooked_player_strafe_update_post_anim_blend);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(void*), old, &ignored);
+    boot_log_line(
+        "PlayerStrafe final-forward-Y relay installed (vtable +0x60)");
+    return true;
+}
+
 using PlayerAimWorldBasisFunction = std::int64_t(__fastcall*)(
     void* controller,
     const float* target_point,
@@ -18039,6 +18287,20 @@ void send_local_player_state() {
             pkt.aim_pitch_up = pitch_capture.up;
             pkt.aim_pitch_down = pitch_capture.down;
             pkt.flags |= coop::kStateFlagAimPitch;
+        }
+
+        AcquireSRWLockShared(&g_local_strafe_ik_forward_y_lock);
+        const LocalStrafeIkForwardYCapture strafe_ik_capture =
+            g_local_strafe_ik_forward_y;
+        ReleaseSRWLockShared(&g_local_strafe_ik_forward_y_lock);
+        if (strafe_ik_capture.owner == local_obj &&
+            strafe_ik_capture.captured_ms != 0 &&
+            aim_capture_now - strafe_ik_capture.captured_ms <= 100 &&
+            std::isfinite(strafe_ik_capture.forward_y) &&
+            strafe_ik_capture.forward_y >= -1.0F &&
+            strafe_ik_capture.forward_y <= 1.0F) {
+            pkt.strafe_ik_forward_y = strafe_ik_capture.forward_y;
+            pkt.strafe_ik_forward_y_valid = 1;
         }
 
         AcquireSRWLockShared(&g_local_aim_foot_turn_lock);
@@ -46174,8 +46436,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-01kh "
-        "(read-only main group-0 pose-command DAG inventory)");
+        "TLL co-op runtime init 2026-08-02a "
+        "(bounded PlayerStrafe final-forward-Y relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -46258,6 +46520,7 @@ DWORD WINAPI install_hook(void*) {
         install_player_aim_blend_tick_probe();
         install_native_aim_pitch_relay();
         install_native_aim_pitch_smoother_relay();
+        install_player_strafe_ik_forward_y_relay();
         install_native_aim_foot_turn_relays();
         if (g_enable_aim_case6_probe) {
             install_aim_case6_probe();

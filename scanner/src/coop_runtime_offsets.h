@@ -602,6 +602,20 @@ constexpr std::uintptr_t kPlayerAimBlendTickVtableSlotRva = 0x2A0B228;
 constexpr std::uintptr_t kPlayerAimBlendTickRva = 0x0CAFA20;
 constexpr std::uintptr_t kPlayerAimBlendTargetCallsiteRva = 0x0CAFB7C;
 constexpr std::uintptr_t kPlayerAimBlendTargetRva = 0x0CAE480;
+// PlayerStrafeController (Player+0x1D50) concrete vtable +0x60. The Player
+// post-animation-blend phase supplies the final routed-camera/reticle Locator;
+// UpdateStrafeIk consumes its positive-Z forward.y for head/spine pitch.
+constexpr std::uintptr_t kPlayerStrafeControllerVtableRva = 0x2A3FA88;
+constexpr std::size_t
+    kPlayerStrafeControllerUpdatePostAnimBlendSlotOffset = 0x60;
+constexpr std::uintptr_t
+    kPlayerStrafeControllerUpdatePostAnimBlendRva = 0x100C400;
+constexpr std::size_t kPlayerStrafeControllerOwnerOffset = 0x108;
+// Exact native pair used by Player_BuildStrafeIkReferenceLocator to turn
+// forward/world-up into a Locator quaternion.
+constexpr std::uintptr_t
+    kBuildOrthonormalBasisFromTwoVectorsAndPositionRva = 0x15D23B0;
+constexpr std::uintptr_t kQuaternionFromOrthonormalBasisRva = 0x2177E50;
 // GunMoveController (Player+0x1DA8) vtable +0x38. Stock code resolves the
 // owner's route camera and writes its camera-relative world direction to
 // controller+0x150 before aim-idle turn-state selection.

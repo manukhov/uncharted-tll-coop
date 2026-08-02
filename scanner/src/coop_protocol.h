@@ -25,7 +25,7 @@ struct InputPacket {
 // One-shot gameplay actions need a separate reliable ordered event stream.
 constexpr std::uint16_t kStatePort = 31338;
 constexpr std::uint32_t kStatePacketMagic = 0x53504F43;  // "COPS"
-constexpr std::uint16_t kStatePacketVersion = 13;
+constexpr std::uint16_t kStatePacketVersion = 14;
 
 // StatePacket.flags extension bits (v7+):
 // 0x0100 — camera_quat mirrors sender CameraManager(0) @+0x1B0.
@@ -108,15 +108,23 @@ struct StatePacket {
     std::uint32_t grenade_art_id = 0;
     std::int16_t grenade_total_ammo = 0;
     std::uint16_t grenade_inventory_reserved = 0;
+    // v14: exact positive-Z forward.y expanded from the sender's final GunMove
+    // StrafeIk Locator at PlayerStrafeController vtable +0x60. This is sampled
+    // after authored reticle projection, unlike pose_seed and aim_pitch_*.
+    float strafe_ik_forward_y = 0.0F;
+    std::uint8_t strafe_ik_forward_y_valid = 0;
+    std::uint8_t strafe_ik_reserved[3]{};
 };
 
-static_assert(sizeof(StatePacket) == 520);
+static_assert(sizeof(StatePacket) == 528);
 static_assert(offsetof(StatePacket, fganim_world_quat) == 144);
 static_assert(offsetof(StatePacket, aim_pitch_up) == 472);
 static_assert(offsetof(StatePacket, gun_move_turn_direction) == 480);
 static_assert(offsetof(StatePacket, grenade_arc_active) == 504);
 static_assert(offsetof(StatePacket, grenade_art_id) == 508);
 static_assert(offsetof(StatePacket, grenade_total_ammo) == 512);
+static_assert(offsetof(StatePacket, strafe_ik_forward_y) == 516);
+static_assert(offsetof(StatePacket, strafe_ik_forward_y_valid) == 520);
 
 // Phase 3 (host-authoritative world sync): the HOST (role A) enumerates the
 // CharacterManager, picks out enemy NPCs, and sends their transforms; the CLIENT

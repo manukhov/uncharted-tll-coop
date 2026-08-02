@@ -16071,3 +16071,38 @@ lookups resolve `PlayerStrafeController_Initialize`,
 `ResolveReticleOffsetPublisherByNetMode`, both reticle-unprojection helpers and
 `g_ScreenRouteHudStatePtrs` at their addresses above. The final-camera provenance
 helpers named in C3 were then added to the same durable label pass.
+
+### 2026-08-02 HYPOTHESIS build `2026-08-02a`: bounded final `StrafeIk forward.y` relay
+
+The selected static seam is now implemented, but remains **HYPOTHESIS** until the
+written sky/ground discriminator above is run. `StatePacket` v14 extends the v13
+prefix from 520 to 528 bytes with `strafe_ik_forward_y` at `+516` and an explicit
+validity byte at `+520`; no existing flags or `aim_pitch_up/down` semantics were
+repurposed.
+
+The runtime replaces only concrete `PlayerStrafeController::vftable +0x60` after
+verifying that the slot still points to
+`PlayerStrafeController_UpdatePostAnimBlend 0x14100C400`. Installation also
+checks the reloc-free prologues of
+`BuildOrthonormalBasisFromTwoVectorsAndPosition 0x1415D23B0` and
+`Quaternion_FromOrthonormalBasis 0x142177E50` before exposing their direct-call
+pointers. A mismatch skips the relay instead of patching an unknown build.
+
+At runtime the wrapper has only two owned cases:
+
+- screen 0, retained local owner, foreground strict RMB and exact
+  `GunMove 0x12D842C0`: expand the supplied final Locator quaternion as positive
+  Z and cache its finite `forward.y` for at most 100 ms;
+- screen 1, retained puppet owner, exact `GunMove`, strict peer ADS packet no
+  older than 250 ms and v14 validity byte exactly one: copy the 32-byte Locator,
+  preserve the copied quaternion's positive-X right-axis azimuth, set only the
+  reconstructed positive-Z forward Y (clamped to `[-0.9999,+0.9999]`), rebuild
+  with the native basis/quaternion pair, and call stock code with the copy.
+
+Every other owner, action, packet state, stale sample, invalid quaternion or
+failed native rebuild calls the original function with the original Locator.
+Position, horizontal strafe input, `pose_seed`, root orientation and the older
+pre-blend aim-pitch relay are untouched. Release compilation completed without
+warnings/errors, and the DLL contains the version marker plus the bounded
+install/capture/apply markers. No game process was launched for this build yet;
+the earlier falsifiable prediction remains the required next step.

@@ -2462,14 +2462,20 @@ Do not reopen these as the first move:
       screen 1 rebuild only the copied Locator quaternion while preserving its
       native right axis. Camera-state prefix and raw `out+0x350` writers are not
       part of this seam.
-- [ ] Implement the bounded `PlayerStrafeController` final-forward-Y relay only
-      after this static handoff: add an explicit-validity StatePacket tail field
+- [x] Implement the bounded `PlayerStrafeController` final-forward-Y relay only
+      after this static handoff: add an explicit-validity StatePacket v14 tail field
       (do not repurpose v13 `aim_pitch_up/down`), hook exact vtable target
       `0x14100C400`, gate both sides on owner screen and current action
       `GunMove 0x12D842C0`, keep the receiver packet bound at 250 ms, clamp the
       transported forward-Y inside `(-1,+1)`, and call the original with an
-      unmodified Locator outside fresh strict ADS. Use the written falsifiable
-      prediction before launching the game.
+      unmodified Locator outside fresh strict ADS. Build `2026-08-02a` compiles;
+      its vtable and native-math prologue preflight skips unknown binaries.
+- [ ] Run the written `2026-08-02a` discriminator: hold the receiver camera
+      opposite while the sender alternates sky/ground in exact GunMove ADS.
+      Require `STRAFE-IK-Y-CAPTURE` and `STRAFE-IK-Y-APPLY`, vertical puppet
+      head/spine/weapon following the sender, unchanged horizontal aim/tracers,
+      and immediate native behavior after ADS/GunMove exit. Record CONFIRMED or
+      REJECTED before changing another seam.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`
