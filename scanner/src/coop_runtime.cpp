@@ -756,6 +756,10 @@ struct TracerVisualOriginContext {
     std::uint32_t sequence = 0;
     float native_visual_origin[4]{};
     float final_direction[4]{};
+    unsigned entry_count = 0;
+    unsigned seed_count = 0;
+    unsigned owner_match_count = 0;
+    unsigned direction_match_count = 0;
     unsigned init_count = 0;
 };
 thread_local TracerVisualOriginContext g_tracer_visual_origin_context{};
@@ -32512,11 +32516,16 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
         const unsigned index = logged_misses.fetch_add(
             1, std::memory_order_relaxed);
         if (index < 32) {
-            char line[128]{};
+            char line[224]{};
             std::snprintf(
                 line, sizeof(line),
-                "TRACER-VISUAL-ORIGIN-MISS seq=%u",
-                armed_tracer_context.sequence);
+                "TRACER-VISUAL-ORIGIN-MISS seq=%u entries=%u seeds=%u "
+                "owners=%u directions=%u",
+                armed_tracer_context.sequence,
+                g_tracer_visual_origin_context.entry_count,
+                g_tracer_visual_origin_context.seed_count,
+                g_tracer_visual_origin_context.owner_match_count,
+                g_tracer_visual_origin_context.direction_match_count);
             boot_log_line(line);
         }
     }
@@ -32534,26 +32543,31 @@ std::uint64_t* __fastcall hooked_tracer_init(
     }
 
     auto& context = g_tracer_visual_origin_context;
-    std::uint64_t seed_address = 0;
-    void* const puppet = retained_player_object(1);
-    const bool candidate =
-        g_net_role_b && !g_dll_inert && g_state_net.enabled &&
-        context.active &&
-        spawn_info != nullptr && puppet != nullptr &&
-        seh_read_qword(
-            static_cast<std::byte*>(spawn_info) +
-                kSpawnInfoLaunchRecordPointerOffset,
-            seed_address) &&
-        seed_address != 0 &&
-        readable_bytes(reinterpret_cast<void*>(seed_address)) >=
-            kProjectileLaunchRecordOriginMirrorOffset + sizeof(float) * 4 &&
-        launch_record_owned_by_runtime_object(
-            reinterpret_cast<void*>(seed_address), puppet);
-    if (!candidate) {
+    if (!context.active) {
         return native(tracer, result, spawn_info);
     }
+    ++context.entry_count;
+
+    std::uint64_t seed_address = 0;
+    void* const puppet = retained_player_object(1);
+    if (!g_net_role_b || g_dll_inert || !g_state_net.enabled ||
+        spawn_info == nullptr || puppet == nullptr ||
+        !seh_read_qword(
+            static_cast<std::byte*>(spawn_info) +
+                kSpawnInfoLaunchRecordPointerOffset,
+            seed_address) ||
+        seed_address == 0 ||
+        readable_bytes(reinterpret_cast<void*>(seed_address)) <
+            kProjectileLaunchRecordOriginMirrorOffset + sizeof(float) * 4) {
+        return native(tracer, result, spawn_info);
+    }
+    ++context.seed_count;
 
     auto* const seed = reinterpret_cast<std::byte*>(seed_address);
+    const bool owner_match = launch_record_owned_by_runtime_object(seed, puppet);
+    if (owner_match) {
+        ++context.owner_match_count;
+    }
     float seed_direction[4]{};
     std::memcpy(
         seed_direction, seed + kProjectileLaunchRecordDirectionOffset,
@@ -32576,7 +32590,29 @@ std::uint64_t* __fastcall hooked_tracer_init(
         return native(tracer, result, spawn_info);
     }
     direction_dot /= std::sqrt(seed_length_sq * expected_length_sq);
-    if (!std::isfinite(direction_dot) || direction_dot < 0.99F) {
+    const bool direction_match =
+        std::isfinite(direction_dot) && direction_dot >= 0.99F;
+    if (direction_match) {
+        ++context.direction_match_count;
+    }
+
+    static std::atomic<unsigned> logged_candidates{0};
+    const unsigned candidate_index = logged_candidates.fetch_add(
+        1, std::memory_order_relaxed);
+    if (candidate_index < 96) {
+        char line[256]{};
+        std::snprintf(
+            line, sizeof(line),
+            "TRACER-VISUAL-CANDIDATE seq=%u entry=%u owner=%u "
+            "dir=%u dot=%.5f seed=0x%llX tracer=0x%llX",
+            context.sequence, context.entry_count, owner_match ? 1U : 0U,
+            direction_match ? 1U : 0U, direction_dot,
+            static_cast<unsigned long long>(seed_address),
+            static_cast<unsigned long long>(
+                reinterpret_cast<std::uintptr_t>(tracer)));
+        boot_log_line(line);
+    }
+    if (!owner_match || !direction_match) {
         return native(tracer, result, spawn_info);
     }
 
@@ -46961,8 +46997,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02f "
-        "(isolated Tracer visual-origin relay)");
+        "TLL co-op runtime init 2026-08-02g "
+        "(Tracer candidate discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

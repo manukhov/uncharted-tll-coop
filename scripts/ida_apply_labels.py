@@ -9396,12 +9396,38 @@ FUNCTIONS = {
         "Destroys ProcessWeapon-owned handles and child state, restores the "
         "ProcessWeaponBase vtable, then delegates to the base destructor.",
     ),
+    0x1401D0A90: (
+        "ProcessWeapon_ParseAllowTracerAndDispatch",
+        "Parses the authored allow-tracer key from the emission parameter map. "
+        "Missing or nonzero values dispatch true through virtual slot +0x800; "
+        "an explicit zero dispatches false and later clears launch-record+0x88 "
+        "bit 5, preventing stock Tracer materialization.",
+    ),
+    0x1415068E0: (
+        "WeaponUpgrade_ClampLevelIndex",
+        "Validates the selected per-property upgrade level against the authored "
+        "level count, emits the embedded out-of-range diagnostic, and clamps to "
+        "the highest defined level.",
+    ),
+    0x141506AB0: (
+        "WeaponUpgradeTable_GetValueByIndex",
+        "Reads the upgrade-level byte at upgrade_levels[index], validates that "
+        "level against the weapon-art id, and returns the selected 32-bit table "
+        "value or 0xFFFFFFFF. ProjectileBullet tracer materialization queries "
+        "index 0x0D at 0x1415224AE.",
+    ),
     0x14151C030: (
         "ProcessWeapon_CreateMuzzleSfxActor",
         "Builds the authored muzzle SFX selector packet, materializes the SFX "
         "actor, publishes set-register/set-pitch state and returns its retained "
         "handle. This is the source of ProcessWeapon+0x998/+0x9A8 handles, not "
         "a secondary rifle drawable.",
+    ),
+    0x14150E860: (
+        "ProcessWeapon_StopMuzzleSfxActors",
+        "Stops the retained authored muzzle SFX actors held at ProcessWeapon "
+        "+0x998/+0x9A8 and clears their lifecycle state. This is the teardown "
+        "boundary paired with ProcessWeapon_CreateMuzzleSfxActor.",
     ),
     0x14155BE10: (
         "Tracer_InitFromProjectileLaunchRecord",
@@ -10155,7 +10181,10 @@ FUNCTIONS = {
         "Base projectile launch-record setup used by ProjectileBulletInstant::Init. "
         "Copies record+0x20 into the projectile start transform, constructs the "
         "start bound at projectile+0x130, and independently constructs the base "
-        "projectile/tracer bound at +0x3A0 from duplicate origin record+0x70.",
+        "projectile/tracer bound at +0x3A0 from duplicate origin record+0x70. "
+        "Tracer materialization is then gated by authored no-tracers state and "
+        "WeaponUpgradeTable_GetValueByIndex(..., 0x0D) <= 0 before selecting "
+        "the Tracer process at 0x141522541..0x141522592.",
     ),
     0x14152BF20: (
         "ProjectileBulletInstant_Init",

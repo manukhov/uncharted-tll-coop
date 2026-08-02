@@ -16366,12 +16366,57 @@ returned from the exact same `SpawnProjectile` scope with
 caps. The matched rows measured 0.48--0.79 m origin deltas, overwhelmingly
 lateral, and moved the corresponding visible lines to the correct muzzle.
 
-Therefore the narrow `Tracer::Init +0x70` isolation is CONFIRMED for launches
-that materialize a `Tracer`, but V1 as the owner of every visible automatic-fire
-streak is REJECTED. A miss is not a failed owner/direction predicate: `init_count`
-is checked after the entire exact stock SpawnProjectile call, so no Tracer Init
-occurred in that launch at all. The remaining HYPOTHESIS is an alternate authored
-visual branch selected per shot (possibly muzzle SFX or an instant-projectile
-streak path), not another physical projectile. The next static pass must resolve
-the branch that suppresses Tracer materialization and trace its selected visual
-object before another runtime write.
+Therefore the narrow `Tracer::Init +0x70` isolation is CONFIRMED for accepted
+launches, but V1 as the proven owner of every visible automatic-fire streak is
+not established. The first interpretation of `MISS` as proof that no Tracer Init
+occurred was too strong: `init_count` increments only after the hook's owner and
+direction predicates pass. A stock Tracer may have entered and failed either
+predicate. The remaining alternatives are an over-strict predicate, an authored
+branch that suppresses Tracer materialization, and a separate muzzle/instant-
+projectile visual path.
+
+### 2026-08-02 STATIC: discriminate absent Tracer from rejected Tracer (`2026-08-02g`)
+
+Three independent static facts define a bounded read-only discriminator:
+
+1. RTTI slot `0x142AA3238` is the common `Tracer::Init 0x14155BE10` entry, so an
+   entry counter before any owner/direction test observes every Tracer created
+   synchronously inside the exact SpawnProjectile TLS scope.
+2. `ProjectileBullet_InitBaseFromLaunchRecord 0x141521F00` contains the complete
+   stock materialization branch. It first requires projectile flags `+0x1B0 & 4`
+   at `0x141522344`; a clear bit jumps directly to `0x1415225A0`, bypassing the
+   entire `"Tracer"` path. The bit is sourced from launch-record `+0x88 bit 5`,
+   which `ProcessWeapon_ProjectileEmission 0x141519D30` sets from emission flag
+   `a7 bit 0` at `0x14151B7F8..0x14151B809`. After the separate `no-tracers`
+   authored-state check at `0x141522425`, the function calls upgrade lookup
+   `WeaponUpgradeTable_GetValueByIndex 0x141506AB0` with index `0x0D` at
+   `0x1415224AE`; only a result `<= 0` reaches selector `"Tracer"` and synchronous
+   materialization at `0x141522541..0x141522592`.
+3. The current successful patch adds to `init_count` only after copied-record
+   readability, retained-puppet owner equality and direction dot `>=0.99`.
+   Therefore counters at entry, readable seed, owner match and direction match
+   distinguish all competing explanations without changing stock behavior.
+
+The independent authored-data path resolves the cadence source:
+`ProcessWeapon_ParseAllowTracerAndDispatch 0x1401D0A90` hashes the literal
+`"allow-tracer"`, treats a missing/nonzero entry as true and an explicit zero as
+false, then dispatches the boolean through virtual slot `+0x800` at
+`0x1401D0B91`. This can suppress stock Tracer materialization per emission inside
+one automatic burst. Upgrade property 13 is a second suppressor but is more
+consistent with a weapon/upgrade-wide mode than alternating shots. Separately,
+the retained muzzle-SFX actors at ProcessWeapon `+0x998/+0x9A8` are created by
+`ProcessWeapon_CreateMuzzleSfxActor 0x14151C030`, updated in the already named
+`ProcessWeapon_UpdateMuzzleAndDispatchFire 0x141515860`, and stopped by
+`ProcessWeapon_StopMuzzleSfxActors 0x14150E860`; this visual path has no launch-
+record trajectory input and remains the leading owner of a visible side streak
+when `allow-tracer=0`.
+
+Build `g` keeps the proven `+0x70` swap for accepted records and adds bounded
+`TRACER-VISUAL-CANDIDATE` plus expanded `TRACER-VISUAL-ORIGIN-MISS` telemetry.
+The release DLL builds successfully with marker
+`2026-08-02g (Tracer candidate discriminator)`.
+Competing predictions are exact: `entries=1,seeds=1,owners=0,directions=1`
+selects an over-strict owner gate; `entries=1` with a direction failure selects
+a distinct Tracer seed; `entries=0` confirms the stock `no-tracers`/upgrade-13
+branch and moves ownership to a separate visual path. No new origin, transform,
+packet or gameplay field is written by this discriminator.
