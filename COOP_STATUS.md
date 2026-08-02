@@ -15767,3 +15767,50 @@ Keep runtime parked. Resume from the already-proven steady
 search for post-command head/spine/arms writers with a Player screen-route or
 camera dependency. Do not patch `PlayerStrafeLookAt`, Gesture targets, LRDU,
 active-state weights, LookAtIK or the flashlight path.
+
+### 2026-08-02 STATIC/REJECTED: type-1 `AnimSimpleLayer` is clip/time/fade only
+
+The remaining non-Gesture command producer is no longer an undifferentiated
+layer family. `AnimControl_CreateAnimCommands 0x14172C370` dispatches descriptor
+type 1 to exact-source `AnimSimpleLayer_CreateAnimCommands 0x141894A90`, while
+`AnimControl_BeginStepInternal 0x141A78A60` reaches
+`AnimSimpleLayer_Step 0x1418966C0` through `AnimSimpleLayer::vftable
+0x142B09B58+0x40`. RTTI, the constructor `0x141893B90`, registry append
+`0x141728C10` and both central dispatchers independently establish the concrete
+class and ownership.
+
+Its complete mutable dataflow has no vertical view input. Each active
+`AnimSimpleInstance` emits command 6 from its resolved clip and phase `+0x78`;
+additional tracks emit command 7 using fade weight `+0x94`.
+`AnimSimpleInstance_UpdatePhase 0x1418F3AA0` derives those values only from
+delta time, playback speed, clip metadata and fade time/curve. The layer-level
+fade helper `0x141896950` likewise closes over current/desired/start weights and
+remaining/total fade time. `CreateAnimCmds`, `Step` and this helper closure read
+no Player, CameraManager, screen route or input global.
+
+Player setup provides a separate ownership check. At `0x1410CEF8E`,
+`PublishUpperPlayerOverlayReadJointAndReferenceState 0x1410CE260` appends the
+only named persistent type-1 layer using `g_FlinchPartialLayerId 0x143ECD8E4`,
+initialized from literal `FlinchPartial` by `0x140096DB0`, then appends twelve
+anonymous reusable slots. Ordinary directional aim instead uses the already
+confirmed type-2 `AnimStateLayer` publication path. Direct callers of
+`AnimSimpleLayer_FadeToAnim 0x1418945E0` request transient authored clips such
+as flinch, locomotion, facial, weapon/recoil, grenade grip and scripted actions;
+the handler still supplies no camera value to those requests.
+
+Competing explanations are now separated:
+
+- **S1 ordinary type-1 phase/weight imports camera pitch (REJECTED):** exact
+  phase and weight ancestry is clip/time/fade-only.
+- **S2 an external SimpleLayer callback imports camera pitch (HYPOTHESIS):** the
+  optional callback fields `+0x98/+0xA0` are zeroed by construction and Player
+  setup does not install them; a complete audit of all later descriptor-based
+  writes is still absent, so this narrow transient possibility is not promoted
+  to a steady ADS owner.
+- **S3 type-2 state graph or a post-command writer introduces the dependency
+  (OPEN):** type 2 remains the authored ordinary-aim owner, while late Player
+  post-blend controllers remain to be resolved.
+
+No runtime test is justified. Continue by resolving every concrete controller
+invoked by `Player_PostAnimBlending_Async 0x1410EB6A0` and exclude limb-only or
+state-specific solvers before choosing a new seam.

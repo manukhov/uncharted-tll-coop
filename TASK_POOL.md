@@ -2434,6 +2434,18 @@ Do not reopen these as the first move:
       post-command writer, is the sole surviving topology. Do not repatch
       PlayerStrafeLookAt, Gesture targets, LRDU, active-state weights, LookAtIK
       or the flashlight-only LookAtOrCamera.
+- [x] Resolve descriptor type 1 as exact RTTI `AnimSimpleLayer`. Its command
+      generator `0x141894A90`, step `0x1418966C0`, instance phase helper
+      `0x1418F3AA0` and layer fade helper `0x141896950` close all ordinary
+      command-6 phase / command-7 weight ancestry over clip metadata, delta time
+      and fade config, with no Player/camera/input read. Player's sole named
+      persistent Simple layer is `FlinchPartial`; directional aim is type 2.
+      Reject the ordinary type-1 clip/time/fade path as the steady camera source.
+- [ ] Resolve all concrete Player fields and vtable targets called by
+      `Player_PostAnimBlending_Async 0x1410EB6A0`, especially `+0x1D50`,
+      `+0x1DD8`, `+0x1FB0`, `+0x1FE0` and `+0x1FF0`. Audit joint scope and every
+      Player screen-route/camera dependency; keep limb-only and traversal-only
+      solvers separate from a common head/spine/arms writer.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

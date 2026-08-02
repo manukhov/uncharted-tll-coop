@@ -1027,9 +1027,68 @@ FUNCTIONS = {
     ),
     0x14172C370: (
         "AnimControl_CreateAnimCommands",
-        "Exact AnimControl::CreateAnimCmds source assertion. Dispatches type-2 "
-        "AnimStateLayer instances and bound type-16 AnimCmdGeneratorLayer "
-        "instances while preserving the caller-owned command-list record.",
+        "Exact AnimControl::CreateAnimCmds source assertion. Dispatches type-1 "
+        "AnimSimpleLayer, type-2 AnimStateLayer, type-4, type-8 and bound "
+        "type-16 AnimCmdGeneratorLayer records while preserving the caller-owned "
+        "command-list record.",
+    ),
+    0x141893B90: (
+        "AnimSimpleLayer_Construct",
+        "Constructs the 0xB8-byte RTTI AnimSimpleLayer and its 0xB0-byte "
+        "AnimSimpleInstance storage. AnimControl registers this object as layer "
+        "descriptor type 1.",
+    ),
+    0x141728C10: (
+        "AnimControl_AppendSimpleLayer",
+        "Allocates AnimSimpleLayer, appends its type-1 descriptor to AnimControl "
+        "and configures the requested channel, priority and capacity through "
+        "the layer virtual setup slot.",
+    ),
+    0x14172A540: (
+        "AnimControl_GetOrActivateSimpleLayerByChannel",
+        "Finds the active type-1 layer for an authored channel or activates a "
+        "fallback type-1 slot, then dispatches virtual +0x38 with the channel "
+        "and request argument.",
+    ),
+    0x1418945E0: (
+        "AnimSimpleLayer_FadeToAnim",
+        "Resolves or creates an AnimSimpleInstance for an explicit clip request, "
+        "inserts it at the front of the layer and seeds playback/fade state. "
+        "The operation is request-driven rather than a camera sampler.",
+    ),
+    0x141894A90: (
+        "AnimSimpleLayer_CreateAnimCommands",
+        "Exact AnimSimpleLayer::CreateAnimCmds source assertion. Emits command 6 "
+        "from each active clip and phase at instance+0x78, then command 7 with "
+        "the fade weight at instance+0x94. It has no Player, Camera or Input read.",
+    ),
+    0x1418966C0: (
+        "AnimSimpleLayer_Step",
+        "Type-1 layer step. Advances clip phase, removes faded instances, updates "
+        "the layer fade and authored animation effects. Dynamic values close over "
+        "delta time, clip metadata and fade config, not Player camera direction.",
+    ),
+    0x1418F3AA0: (
+        "AnimSimpleInstance_UpdatePhase",
+        "Advances normalized phase at instance+0x7C from delta time, playback "
+        "speed and clip metadata, writes command phase at +0x78 and updates the "
+        "instance fade weight at +0x94.",
+    ),
+    0x141896950: (
+        "AnimSimpleLayer_UpdateFade",
+        "Updates layer+0x28 current weight toward +0x2C using remaining/total "
+        "fade time at +0x30/+0x34, start weight +0x38 and authored curve +0x3C.",
+    ),
+    0x14189EA60: (
+        "AnimStateLayer_CreateAnimCommands",
+        "Type-2 layer command generator. Walks active AnimStateInstances through "
+        "AnimStateSnapshot_GenerateAnimCommands and emits transition command 7 "
+        "from per-state track weight +0x158; it contains no direct camera read.",
+    ),
+    0x140096DB0: (
+        "InitializeFlinchPartialLayerId",
+        "Computes the StringId of literal FlinchPartial and stores it in the "
+        "single named persistent type-1 Player overlay layer id global.",
     ),
     0x1417292A0: (
         "AnimControl_AppendAnimCmdGeneratorLayer",
@@ -10302,6 +10361,16 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142B09B58: (
+        "AnimSimpleLayer_vftable",
+        "Exact MSVC RTTI AnimSimpleLayer vtable. CreateAnimCmds is reached through "
+        "the type-1 AnimControl dispatcher and step through vtable +0x40.",
+    ),
+    0x143ECD8E4: (
+        "g_FlinchPartialLayerId",
+        "StringId initialized from literal FlinchPartial and used by Player setup "
+        "for its one named persistent AnimSimpleLayer.",
+    ),
     0x142A4BEF8: (
         "PlayerLookAtTracker_vftable",
         "Exact MSVC RTTI PlayerLookAtTracker vtable used by both embedded "
