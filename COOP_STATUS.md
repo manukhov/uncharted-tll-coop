@@ -16104,7 +16104,7 @@ failed native rebuild calls the original function with the original Locator.
 Position, horizontal strafe input, `pose_seed`, root orientation and the older
 pre-blend aim-pitch relay are untouched. Release compilation completed without
 warnings/errors, and the DLL contains the version marker plus the bounded
-install/capture/apply markers. No game process was launched for this build yet;
+install/capture/apply markers. The live install-only result is recorded below;
 the earlier falsifiable prediction remains the required next step.
 
 Build `2026-08-02a` was stopped at installation and is **REJECTED as a runnable
@@ -16114,3 +16114,10 @@ that the vtable slot and basis prologue matched, while retail
 `Quaternion_FromOrthonormalBasis` starts `48 89 5C 24 10` rather than the
 incorrectly transcribed `...24 08`. Build `b` corrects only that expected byte;
 there was no capture, apply or visual test under build `a`.
+
+Build `2026-08-02b` then passed its bounded live installation preflight on both
+fresh copies: PID 9336 (role A/Chloe) and PID 7364 (role B/Nadine) each logged
+`PlayerStrafe final-forward-Y relay installed (vtable +0x60)`, remained
+responsive, and emitted no crash-observer exception. This confirms only the
+address/signature guard and patch installation. No `CAPTURE`/`APPLY` marker or
+visual sky/ground result exists yet, so the behavior stays **HYPOTHESIS**.
