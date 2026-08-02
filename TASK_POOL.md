@@ -59,10 +59,17 @@
       visibly stepped. F3 is selected: these actions are not the live visible
       foot boundary, so the native builder must not be forced and the rejected
       `0x140E90605/0x140E9060F` selector snapshots must not be retried.
-- [ ] Trace horizontal turn-in-place inside the runtime-confirmed base state
+- [x] Trace horizontal turn-in-place inside the runtime-confirmed base state
       `strafe-idle-ap 0x3C347132` / asset graph `anim-player.bin+0x66048`.
-      Resolve the exact selector input and output clip/pose writer that differ
-      between local Player and puppet before adding another runtime probe.
+      The full graph has no horizontal turn selector; the concrete late owner is
+      `MoveLegIkNew` under `CharacterLegIkController`, which writes both per-leg
+      predicted transforms and immediately commits the resulting joints.
+- [ ] Implement and run one scoped `CharacterLegIkController::Update` test. For
+      the retained puppet only, temporarily stage peer-relayed world yaw as
+      `Player+0x140` local-root yaw during that single stock call, convert through
+      parent `Player+0x120`, then restore immediately. Prediction: remote feet
+      step/replant during stationary ADS turning without changing collision,
+      locomotion, reload pose or post-ADS heading.
 
 ## P0: Ground weapon world lifecycle and pickup prompt (`hy`, 2026-07-27)
 

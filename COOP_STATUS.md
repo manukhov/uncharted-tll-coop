@@ -16328,6 +16328,76 @@ the `strafe-idle-ap` graph, S2 a post-command leg/foot IK writer, and S3 root
 motion extracted from a continuously active clip. No further runtime test is
 earned until one of these is selected by three independent evidence types.
 
+### 2026-08-02 STATIC: `MoveLegIkNew` is the live post-blend ADS foot-step owner
+
+The complete live `strafe-idle-ap 0x3C347132` graph and the downstream Player
+post-blend chain select **S2**, not another authored left/right action. The quota
+is met by four independent evidence types:
+
+1. **Asset topology and ids.** The complete active route is
+   `anim-player.bin+0x66048 -> +0xCA320 -> +0x10FCA8 -> +0x11B748 ->
+   +0x121268`, ending at animation `C7FB376F`. Its only dynamic sibling is
+   `B1E7C4F4`, resolved as `p2h-basic-aim-blocked-stand--add`; the root Gesture
+   `7855F662` is targetless. There is no horizontal left/right turn selector or
+   separate turn-output clip in the live graph.
+2. **RTTI/vtable identity.** `Player+0x1DC0` is the concrete
+   `CharacterLegIkController` vtable `0x142BBB460`. Its ordinary active module is
+   the embedded `MoveLegIkNew` at controller `+0x1F0`, vtable `0x142BD4B00`,
+   retained at controller `+0x3E18`.
+3. **Bidirectional call graph.** `Player_PostAnimBlending_Async 0x1410EB6A0`
+   calls `CharacterLegIkController_ResetIkBuffers 0x141F9E150`, then
+   `CharacterLegIkController_Update 0x141F9E6F0`, then
+   `CharacterLegIkController_CommitJointTransforms 0x141F9E190`. The concrete
+   `MoveLegIkNew_Update 0x1421010D0` updates both legs and calls
+   `MoveLegIkNew_ApplyLegToGround 0x1420FFD00` once per leg. Its post-animation
+   slot is `MoveLegIkNew_PostAnimUpdate 0x1421043F0`, which schedules
+   `MoveLegIkNew_UpdateFeetPlantedJob 0x142104A80 ->
+   MoveLegIkNew_UpdateFeetPlanted 0x142101330`.
+4. **Instruction-level dataflow.** `MoveLegIkNew_UpdateFeetPlanted` invokes
+   `MoveLegIkNew_UpdateNextFootsteps 0x142102DF0` for both phase windows. That
+   function filters `foot-effect 0x6EA107C4` type 3, resolves joint parameter
+   `0xB726CE12`, heel/ball ids `D4D0E3F2/E1216D15/CE1363B3/FBE2ED54` and
+   ankle references `14643F16/2195B1F1`, then writes per-leg target blocks at
+   `MoveLegIkNew+0xE0+0x50*leg` / `+0x40+0x50*leg` and predicted foot transforms
+   at `MoveLegIkNew+0x3A90+0x20*index`. The controller's following vtable `+0x30`
+   copies valid results into the live 48-byte-per-joint skeleton palette.
+
+The competitors are now closed. **S1 authored selector is REJECTED** by the full
+asset graph and the equal local/puppet runtime leaf. **S3 continuous/root-motion
+clip is REJECTED as a standalone owner:** `AnimSnapshotNodeAnimation::StepPhase
+0x1419180A0` advances only from delta time/clip metadata and exposes no yaw or
+left/right input; it supplies the event stream consumed by S2. **S4 a later
+opaque joint plugin is REJECTED as the visible owner** because the concrete
+MoveLegIkNew chain writes both leg targets and the immediately following
+CharacterLegIk commit publishes those exact joints.
+
+The mismatch is architectural. The confirmed receiver yaw is applied at
+`FgAnimData_PublishWorldTransform 0x1418C55D0`, after authored pose evaluation,
+while `CharacterLegIkController_Update` composes its character world frame from
+parent `Player+0x110/+0x120` and local root `Player+0x130/+0x140`. On the puppet
+that local root remains at the receiver-native heading, so MoveLegIkNew plants
+feet in one frame and the renderer subsequently turns the whole model in another.
+
+The narrow implementation seam is the exact controller vtable `+0x18` call. For
+the retained puppet only, while a fresh peer ADS packet and the confirmed FgAnim
+world relay are active, convert the already-relayed world quaternion through the
+parent quaternion at `Player+0x120`, stage only local-root quaternion
+`Player+0x140` for the duration of `CharacterLegIkController_Update`, and restore
+all 16 bytes immediately after stock returns. This is not a sustained Player root
+writer: physics, locomotion selection and every later Player controller continue
+to see the native root, while MoveLegIkNew receives the same world yaw that the
+renderer will publish.
+
+**Falsifiable prediction:** one stationary ADS turn on Chloe makes the remote
+Nadine visibly replant/step both feet while its body and weapon keep the already
+confirmed smooth heading. A bounded first-use marker must report puppet owner,
+fresh peer state, valid parent/local conversion and a nontrivial native-to-staged
+quaternion delta. If the marker fires but the feet stay planted, this scoped
+bound-frame input is rejected and the next seam moves into the two
+`MoveLegIkNew+0x3A90` predicted transforms. Any locomotion, reload-pose, collision
+or post-ADS heading regression rejects the boundary immediately; do not retain
+the staged root outside the one native call.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

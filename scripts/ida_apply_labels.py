@@ -8,6 +8,79 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-08-02: active post-blend foot-step owner ---
+    0x141F9E150: (
+        "CharacterLegIkController_ResetIkBuffers",
+        "CharacterLegIkController vtable slot +0x28, called immediately before "
+        "Update by Player_PostAnimBlending_Async. Resets both leg-chain work "
+        "buffers and the two auxiliary joint caches without publishing joints.",
+    ),
+    0x141F9E190: (
+        "CharacterLegIkController_CommitJointTransforms",
+        "CharacterLegIkController vtable slot +0x30, called immediately after "
+        "Update by Player_PostAnimBlending_Async. Copies valid 32-byte IK joint "
+        "results into the live 48-byte-per-joint FgAnim skeleton palette, then "
+        "resets the temporary chain caches.",
+    ),
+    0x141F9E6F0: (
+        "CharacterLegIkController_Update",
+        "Exact character-leg-ik-controller.cpp CharacterLegIkController::Update. "
+        "Composes Character world translation/quaternion from Player+0x110..0x140, "
+        "updates the active ILegIk implementation and mutates both leg chains before "
+        "CharacterLegIkController_CommitJointTransforms publishes their joints.",
+    ),
+    0x141FA0F30: (
+        "CharacterLegIkController_PostAnimUpdate",
+        "Exact CharacterLegIkController::PostAnimUpdate source assertion. Dispatches "
+        "the active ILegIk vtable +0x28 post-animation callback and resets the two "
+        "leg-chain temporary buffers.",
+    ),
+    0x1420FFD00: (
+        "MoveLegIkNew_ApplyLegToGround",
+        "Exact MoveLegIkNew::ApplyLegToGround source assertion. Consumes one of the "
+        "two predicted foot transforms at MoveLegIkNew+0x3A90+0x20*leg together "
+        "with Character+0x100 BoundTransform and solves that leg against ground.",
+    ),
+    0x1421010D0: (
+        "MoveLegIkNew_Update",
+        "MoveLegIkNew vtable slot +0x20. Waits for the prior feet-planted job, "
+        "updates both ankle chains and calls MoveLegIkNew_ApplyLegToGround exactly "
+        "once for each leg before CharacterLegIkController commits the joints.",
+    ),
+    0x142101330: (
+        "MoveLegIkNew_UpdateFeetPlanted",
+        "Exact MoveLegIkNew::UpdateFeetPlanted source assertion. Rebuilds the active "
+        "AnimStateSnapshot, invokes MoveLegIkNew_UpdateNextFootsteps for its two "
+        "phase windows and composes the per-leg predicted transforms.",
+    ),
+    0x142102DF0: (
+        "MoveLegIkNew_UpdateNextFootsteps",
+        "Exact MoveLegIkNew::UpdateNextFootsteps source assertion. Filters authored "
+        "foot-effect events, resolves heel/ball and ankle references, then writes the "
+        "two per-leg target blocks and predicted transforms at +0x3A90.",
+    ),
+    0x1421043F0: (
+        "MoveLegIkNew_PostAnimUpdate",
+        "Exact MoveLegIkNew::PostAnimUpdate source assertion and vtable slot +0x28. "
+        "Builds the feet-planted work item consumed on the next update and schedules "
+        "MoveLegIkNew_UpdateFeetPlantedJob.",
+    ),
+    0x142104A80: (
+        "MoveLegIkNew_UpdateFeetPlantedJob",
+        "Worker callback named MoveLegIkNewUpdateFeetPlantedJob by its job record. "
+        "Forwards the captured Character, locators and mode into "
+        "MoveLegIkNew_UpdateFeetPlanted.",
+    ),
+    0x141897030: (
+        "GetProcessDeltaTime",
+        "Exact ndlib process clock source assertions name GetProcessDeltaTime. "
+        "Returns the current process clock delta converted to seconds.",
+    ),
+    0x141728A80: (
+        "AnimControl_GetJointCache",
+        "Exact AnimControl::GetJointCache source assertion. Validates m_pAnimData at "
+        "+0x20 and returns its joint-cache object at +0x30.",
+    ),
     # --- 2026-08-02: ADS turn-in-place authored action lifecycle ---
     0x140C59180: (
         "PlayerCommonAction_OnStart",
