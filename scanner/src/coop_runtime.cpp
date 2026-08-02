@@ -755,14 +755,93 @@ struct TracerVisualOriginContext {
     bool active = false;
     std::uint32_t sequence = 0;
     float native_visual_origin[4]{};
+    float relayed_visual_origin[4]{};
     float final_direction[4]{};
     unsigned entry_count = 0;
     unsigned seed_count = 0;
     unsigned owner_match_count = 0;
     unsigned direction_match_count = 0;
+    unsigned origin_match_count = 0;
     unsigned init_count = 0;
 };
 thread_local TracerVisualOriginContext g_tracer_visual_origin_context{};
+// ProcessWeapon::SpawnProjectile may materialize the selector synchronously or
+// submit sub_141519B20 to a worker and wait for its counter. TLS covers the
+// synchronous branch. Keep the same selected-launch context visible while the
+// native call waits so the worker's Tracer::Init can make the identical, tightly
+// gated visual-only +0x70 swap.
+SRWLOCK g_tracer_visual_pending_lock = SRWLOCK_INIT;
+TracerVisualOriginContext g_tracer_visual_pending_context{};
+enum class TracerVisualCounter {
+    Entry,
+    Seed,
+    Owner,
+    Direction,
+    Origin,
+    Init,
+};
+
+void publish_pending_tracer_visual_context(
+    const TracerVisualOriginContext& context) {
+    AcquireSRWLockExclusive(&g_tracer_visual_pending_lock);
+    g_tracer_visual_pending_context = context;
+    ReleaseSRWLockExclusive(&g_tracer_visual_pending_lock);
+}
+
+bool snapshot_pending_tracer_visual_context(
+    TracerVisualOriginContext& context) {
+    AcquireSRWLockShared(&g_tracer_visual_pending_lock);
+    const bool active = g_tracer_visual_pending_context.active;
+    if (active) {
+        context = g_tracer_visual_pending_context;
+    }
+    ReleaseSRWLockShared(&g_tracer_visual_pending_lock);
+    return active;
+}
+
+void clear_pending_tracer_visual_context(std::uint32_t sequence) {
+    AcquireSRWLockExclusive(&g_tracer_visual_pending_lock);
+    if (g_tracer_visual_pending_context.active &&
+        g_tracer_visual_pending_context.sequence == sequence) {
+        g_tracer_visual_pending_context = {};
+    }
+    ReleaseSRWLockExclusive(&g_tracer_visual_pending_lock);
+}
+
+unsigned increment_pending_tracer_visual_counter(
+    std::uint32_t sequence, TracerVisualCounter counter) {
+    unsigned value = 0;
+    AcquireSRWLockExclusive(&g_tracer_visual_pending_lock);
+    auto& context = g_tracer_visual_pending_context;
+    if (context.active && context.sequence == sequence) {
+        unsigned* target = nullptr;
+        switch (counter) {
+        case TracerVisualCounter::Entry:
+            target = &context.entry_count;
+            break;
+        case TracerVisualCounter::Seed:
+            target = &context.seed_count;
+            break;
+        case TracerVisualCounter::Owner:
+            target = &context.owner_match_count;
+            break;
+        case TracerVisualCounter::Direction:
+            target = &context.direction_match_count;
+            break;
+        case TracerVisualCounter::Origin:
+            target = &context.origin_match_count;
+            break;
+        case TracerVisualCounter::Init:
+            target = &context.init_count;
+            break;
+        }
+        if (target != nullptr) {
+            value = ++*target;
+        }
+    }
+    ReleaseSRWLockExclusive(&g_tracer_visual_pending_lock);
+    return value;
+}
 // PlayerFireController::Fire prepares the relay packet on the game thread, but
 // ProcessWeapon::ProjectileEmission builds the local launch record later on a
 // worker thread. Keep a bounded process-wide FIFO so the local-record builder can
@@ -32447,6 +32526,10 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
                             native_visual_origin,
                             sizeof(armed_tracer_context.native_visual_origin));
                         std::memcpy(
+                            armed_tracer_context.relayed_visual_origin,
+                            capture.final_origin,
+                            sizeof(armed_tracer_context.relayed_visual_origin));
+                        std::memcpy(
                             armed_tracer_context.final_direction,
                             capture.final_direction,
                             sizeof(armed_tracer_context.final_direction));
@@ -32506,12 +32589,41 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
         g_tracer_visual_origin_context;
     if (armed_tracer_context.active) {
         g_tracer_visual_origin_context = armed_tracer_context;
+        publish_pending_tracer_visual_context(armed_tracer_context);
     }
     const std::int64_t spawn_result =
         g_original_process_weapon_spawn_projectile(
             process_weapon, spawn_info, out_process);
-    if (armed_tracer_context.active &&
-        g_tracer_visual_origin_context.init_count == 0) {
+    TracerVisualOriginContext pending_tracer_context{};
+    const bool had_pending_tracer_context =
+        armed_tracer_context.active &&
+        snapshot_pending_tracer_visual_context(pending_tracer_context) &&
+        pending_tracer_context.sequence == armed_tracer_context.sequence;
+    const unsigned total_entry_count =
+        g_tracer_visual_origin_context.entry_count +
+        (had_pending_tracer_context ? pending_tracer_context.entry_count : 0U);
+    const unsigned total_seed_count =
+        g_tracer_visual_origin_context.seed_count +
+        (had_pending_tracer_context ? pending_tracer_context.seed_count : 0U);
+    const unsigned total_owner_count =
+        g_tracer_visual_origin_context.owner_match_count +
+        (had_pending_tracer_context
+             ? pending_tracer_context.owner_match_count
+             : 0U);
+    const unsigned total_direction_count =
+        g_tracer_visual_origin_context.direction_match_count +
+        (had_pending_tracer_context
+             ? pending_tracer_context.direction_match_count
+             : 0U);
+    const unsigned total_origin_count =
+        g_tracer_visual_origin_context.origin_match_count +
+        (had_pending_tracer_context
+             ? pending_tracer_context.origin_match_count
+             : 0U);
+    const unsigned total_init_count =
+        g_tracer_visual_origin_context.init_count +
+        (had_pending_tracer_context ? pending_tracer_context.init_count : 0U);
+    if (armed_tracer_context.active && total_init_count == 0) {
         static std::atomic<unsigned> logged_misses{0};
         const unsigned index = logged_misses.fetch_add(
             1, std::memory_order_relaxed);
@@ -32520,16 +32632,15 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
             std::snprintf(
                 line, sizeof(line),
                 "TRACER-VISUAL-ORIGIN-MISS seq=%u entries=%u seeds=%u "
-                "owners=%u directions=%u",
+                "owners=%u directions=%u origins=%u",
                 armed_tracer_context.sequence,
-                g_tracer_visual_origin_context.entry_count,
-                g_tracer_visual_origin_context.seed_count,
-                g_tracer_visual_origin_context.owner_match_count,
-                g_tracer_visual_origin_context.direction_match_count);
+                total_entry_count, total_seed_count, total_owner_count,
+                total_direction_count, total_origin_count);
             boot_log_line(line);
         }
     }
     if (armed_tracer_context.active) {
+        clear_pending_tracer_visual_context(armed_tracer_context.sequence);
         g_tracer_visual_origin_context = previous_tracer_context;
     }
     return spawn_result;
@@ -32542,11 +32653,24 @@ std::uint64_t* __fastcall hooked_tracer_init(
         return result;
     }
 
-    auto& context = g_tracer_visual_origin_context;
-    if (!context.active) {
+    auto& thread_context = g_tracer_visual_origin_context;
+    TracerVisualOriginContext pending_context{};
+    const bool worker_source =
+        !thread_context.active &&
+        snapshot_pending_tracer_visual_context(pending_context);
+    if (!thread_context.active && !worker_source) {
         return native(tracer, result, spawn_info);
     }
-    ++context.entry_count;
+    auto& context = worker_source ? pending_context : thread_context;
+    const auto increment_counter =
+        [&](TracerVisualCounter counter, unsigned& thread_value) {
+            return worker_source
+                ? increment_pending_tracer_visual_counter(
+                      context.sequence, counter)
+                : ++thread_value;
+        };
+    const unsigned entry_count = increment_counter(
+        TracerVisualCounter::Entry, context.entry_count);
 
     std::uint64_t seed_address = 0;
     void* const puppet = retained_player_object(1);
@@ -32561,12 +32685,12 @@ std::uint64_t* __fastcall hooked_tracer_init(
             kProjectileLaunchRecordOriginMirrorOffset + sizeof(float) * 4) {
         return native(tracer, result, spawn_info);
     }
-    ++context.seed_count;
+    increment_counter(TracerVisualCounter::Seed, context.seed_count);
 
     auto* const seed = reinterpret_cast<std::byte*>(seed_address);
     const bool owner_match = launch_record_owned_by_runtime_object(seed, puppet);
     if (owner_match) {
-        ++context.owner_match_count;
+        increment_counter(TracerVisualCounter::Owner, context.owner_match_count);
     }
     float seed_direction[4]{};
     std::memcpy(
@@ -32579,7 +32703,8 @@ std::uint64_t* __fastcall hooked_tracer_init(
     for (int index = 0; index < 3; ++index) {
         finite = finite && std::isfinite(seed_direction[index]) &&
             std::isfinite(context.final_direction[index]) &&
-            std::isfinite(context.native_visual_origin[index]);
+            std::isfinite(context.native_visual_origin[index]) &&
+            std::isfinite(context.relayed_visual_origin[index]);
         seed_length_sq += seed_direction[index] * seed_direction[index];
         expected_length_sq += context.final_direction[index] *
             context.final_direction[index];
@@ -32593,7 +32718,8 @@ std::uint64_t* __fastcall hooked_tracer_init(
     const bool direction_match =
         std::isfinite(direction_dot) && direction_dot >= 0.99F;
     if (direction_match) {
-        ++context.direction_match_count;
+        increment_counter(
+            TracerVisualCounter::Direction, context.direction_match_count);
     }
 
     static std::atomic<unsigned> logged_candidates{0};
@@ -32603,9 +32729,10 @@ std::uint64_t* __fastcall hooked_tracer_init(
         char line[256]{};
         std::snprintf(
             line, sizeof(line),
-            "TRACER-VISUAL-CANDIDATE seq=%u entry=%u owner=%u "
+            "TRACER-VISUAL-CANDIDATE seq=%u source=%s entry=%u owner=%u "
             "dir=%u dot=%.5f seed=0x%llX tracer=0x%llX",
-            context.sequence, context.entry_count, owner_match ? 1U : 0U,
+            context.sequence, worker_source ? "job" : "tls", entry_count,
+            owner_match ? 1U : 0U,
             direction_match ? 1U : 0U, direction_dot,
             static_cast<unsigned long long>(seed_address),
             static_cast<unsigned long long>(
@@ -32625,6 +32752,24 @@ std::uint64_t* __fastcall hooked_tracer_init(
         if (!std::isfinite(saved_visual_origin[index])) {
             return native(tracer, result, spawn_info);
         }
+    }
+    const float relay_dx = saved_visual_origin[0] -
+        context.relayed_visual_origin[0];
+    const float relay_dy = saved_visual_origin[1] -
+        context.relayed_visual_origin[1];
+    const float relay_dz = saved_visual_origin[2] -
+        context.relayed_visual_origin[2];
+    const float relayed_origin_delta_sq =
+        relay_dx * relay_dx + relay_dy * relay_dy + relay_dz * relay_dz;
+    const bool origin_match =
+        std::isfinite(relayed_origin_delta_sq) &&
+        relayed_origin_delta_sq <= 0.0025F;
+    if (origin_match) {
+        increment_counter(
+            TracerVisualCounter::Origin, context.origin_match_count);
+    }
+    if (!origin_match) {
+        return native(tracer, result, spawn_info);
     }
 
     const float dx = saved_visual_origin[0] -
@@ -32656,7 +32801,8 @@ std::uint64_t* __fastcall hooked_tracer_init(
         seed + kProjectileLaunchRecordOriginMirrorOffset,
         saved_visual_origin,
         sizeof(saved_visual_origin));
-    ++context.init_count;
+    const unsigned init_count = increment_counter(
+        TracerVisualCounter::Init, context.init_count);
 
     static std::atomic<unsigned> logged{0};
     const unsigned index = logged.fetch_add(1, std::memory_order_relaxed);
@@ -32664,11 +32810,12 @@ std::uint64_t* __fastcall hooked_tracer_init(
         char line[384]{};
         std::snprintf(
             line, sizeof(line),
-            "TRACER-VISUAL-ORIGIN seq=%u init=%u dot=%.5f "
+            "TRACER-VISUAL-ORIGIN seq=%u source=%s init=%u dot=%.5f "
             "delta=%.3f lateral=%.3f "
             "seed=0x%llX tracer=0x%llX native=(%.3f,%.3f,%.3f) "
             "physical=(%.3f,%.3f,%.3f)",
-            context.sequence, context.init_count, direction_dot,
+            context.sequence, worker_source ? "job" : "tls", init_count,
+            direction_dot,
             visual_origin_delta, lateral_delta,
             static_cast<unsigned long long>(seed_address),
             static_cast<unsigned long long>(
@@ -46997,8 +47144,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02g "
-        "(Tracer candidate discriminator)");
+        "TLL co-op runtime init 2026-08-02h "
+        "(Tracer worker-context relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

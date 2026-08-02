@@ -16421,7 +16421,7 @@ a distinct Tracer seed; `entries=0` confirms the stock `no-tracers`/upgrade-13
 branch and moves ownership to a separate visual path. No new origin, transform,
 packet or gameplay field is written by this discriminator.
 
-### 2026-08-02 CONFIRMED: side-streak shots never enter `Tracer::Init` (`2026-08-02g`)
+### 2026-08-02 CONFIRMED: side-streak shots have no caller-thread `Tracer::Init` (`2026-08-02g`)
 
 The user fired an automatic burst from Chloe while observing the remote copy and
 again saw roughly half of the lines originate correctly and half originate from
@@ -16431,10 +16431,46 @@ rows. Every raw candidate had `owner=1`, `dir=1`, and direction `dot=1.00000`;
 there were zero predicate failures. Every miss was exactly
 `entries=0,seeds=0,owners=0,directions=0`.
 
-This confirms the pre-test prediction and rejects the over-strict owner/direction
-filter and distinct-seed alternatives. The stock authored cadence omits the
-`Tracer` object on the remaining launches, yet the user still sees a side streak,
-so that streak is owned by a separate visual path. The leading STATIC candidate
-is the retained muzzle-SFX actor path at ProcessWeapon `+0x998/+0x9A8`. The next
-write must be below its shared actor boundary: skipping or stopping the whole
-actor would also remove muzzle flash/audio and is not an acceptable final fix.
+This confirms the pre-test predicate prediction and rejects the over-strict
+owner/direction and distinct-seed alternatives for synchronous entries. It does
+not prove that no Tracer is materialized after the caller's TLS scope: a later
+static pass found a blocking worker-job branch in the same stock function. The
+authored `allow-tracer` cadence and retained muzzle-SFX actor therefore remain
+competing explanations, not the confirmed owner of these 32 misses.
+
+### 2026-08-02 STATIC: `SpawnProjectile` worker branch escapes Tracer TLS (`2026-08-02h`)
+
+The missing half has a stronger in-class explanation than muzzle SFX, supported
+by three independent static evidence types:
+
+1. `ProcessWeapon_SpawnProjectile 0x141519B50` tests the copied job-policy byte at
+   `0x141519C16`. One branch calls
+   `ResolveOrMaterializeRuntimeStateObjectFromSelectorPacket` directly at
+   `0x141519C26`; the other installs callback `0x141519B20` into a job record at
+   `0x141519C44..0x141519C4B` and submits it at `0x141519CEC`.
+2. Callback `ProcessWeapon_MaterializeProjectileJob 0x141519B20` directly calls
+   the same materializer at `0x141519B2E`. Projectile Init and its nested
+   `Tracer::Init 0x14155BE10` consequently execute on the worker thread, where the
+   caller's `thread_local TracerVisualOriginContext` is inactive.
+3. Before returning, `ProcessWeapon_SpawnProjectile` passes the counter to
+   `Ndjob_WaitForCounter 0x1415B5300` at `0x141519CF9`; its embedded assertion
+   names `ndjob::WaitForCounter`. It then releases the waited counter at
+   `0x141519D01`. Thus the selected-launch context remains valid for the entire
+   worker materialization if published process-wide only for the duration of the
+   stock call.
+
+Build `h` publishes the already proven selected-launch context behind an SRW
+lock while the native SpawnProjectile call is active. The vtable Tracer hook uses
+TLS first and falls back to this process-wide snapshot only on a worker thread.
+The fallback retains all existing gates (role B, owner1, direction dot `>=0.99`)
+and adds an exact copied-record origin check within 5 cm before temporarily
+restoring only record `+0x70`. It never changes `+0x20`, direction, collision,
+authored cadence, muzzle SFX, flash or audio. Release build marker is
+`2026-08-02h (Tracer worker-context relay)`.
+
+Falsifiable prediction: the formerly side-origin half will log
+`TRACER-VISUAL-CANDIDATE source=job` followed by
+`TRACER-VISUAL-ORIGIN source=job`, the old `entries=0` misses will collapse, and
+all visible automatic-fire lines will start at the correct receiver-native
+muzzle. If misses remain `entries=0`, the worker explanation is rejected for
+those launches and the authored-cadence/muzzle-SFX branch resumes priority.

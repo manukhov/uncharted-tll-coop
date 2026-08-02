@@ -35,9 +35,12 @@
       the side-streak half reports `entries=0`, matching authored per-emission
       `allow-tracer=0`. Confirmed: 63/63 entries passed owner+direction and all
       32 capped misses had `entries=0`.
-- [ ] Trace the ribbon/tracer child instruction inside retained muzzle SFX at
-      ProcessWeapon `+0x998/+0x9A8`. Isolate its transform/locator below the
-      shared actor boundary so the final fix preserves muzzle flash and audio.
+- [ ] Run one short automatic burst on build `2026-08-02h`. Require worker-side
+      `source=job` Tracer matches and no visible side-origin half. If
+      `entries=0` misses remain, reject the job explanation for those shots.
+- [ ] Only if build `h` leaves true no-entry side streaks: trace the ribbon/tracer
+      child instruction inside retained muzzle SFX at ProcessWeapon
+      `+0x998/+0x9A8`, below the shared flash/audio actor boundary.
 - [ ] Run the exact channel-0 `PlayerMoveSequencer_UpdatePhase` action-start
       discriminator for local and puppet GunMove. Confirm sender-only
       `PlayerUpdatePlayAnimFade` edges for `aim-idle-rotate[-cc]` before relaying

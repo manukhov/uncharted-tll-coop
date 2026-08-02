@@ -10163,9 +10163,29 @@ FUNCTIONS = {
     0x141519B50: (
         "ProcessWeapon_SpawnProjectile",
         "Exact embedded signature ProcessWeapon::SpawnProjectile(const SpawnInfo "
-        "&, Process **). Resolves or schedules the selector-backed process spawn; "
-        "SpawnInfo+0x28 is the authoritative selected launch-record pointer carried "
-        "into the spawned projectile Init method.",
+        "&, Process **). SpawnInfo+0x28 is the authoritative selected launch-record "
+        "pointer. Job-policy bit 0 selects direct materialization at 0x141519C26; "
+        "otherwise it submits ProcessWeapon_MaterializeProjectileJob and blocks in "
+        "Ndjob_WaitForCounter before returning.",
+    ),
+    0x141519B20: (
+        "ProcessWeapon_MaterializeProjectileJob",
+        "Worker callback installed by ProcessWeapon_SpawnProjectile at "
+        "0x141519C44. Materializes the selector packet and writes the optional "
+        "Process output pointer; nested projectile and Tracer Init execute on this "
+        "worker thread.",
+    ),
+    0x1415B5300: (
+        "Ndjob_WaitForCounter",
+        "Blocking job-counter wait identified by embedded ndjob::WaitForCounter "
+        "assertions. ProcessWeapon_SpawnProjectile waits here after submitting its "
+        "materialization callback.",
+    ),
+    0x1415B4200: (
+        "Ndjob_ReleaseCounter",
+        "Releases a completed job counter back to its pool after clearing the "
+        "counter record. Called immediately after ProcessWeapon_SpawnProjectile's "
+        "blocking wait.",
     ),
     0x141520750: (
         "BuildProjectileLaunchRecord",
