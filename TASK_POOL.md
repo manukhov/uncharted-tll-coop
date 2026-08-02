@@ -11,10 +11,14 @@
 
 ## P0 NEXT: ADS feet and duplicate tracer follow-up (2026-08-02)
 
-- [ ] Run build `2026-08-02e` tracer discriminator: require one selected-launch
-      apply and consumed pulse per remote shot, no owner-1 unmatched projectile,
-      one correct tracer and one correct impact. If the visual duplicate remains
-      without `UNMATCHED`, trace the separate muzzle/effect owner instead.
+- [x] REJECT duplicate-projectile cause under build `2026-08-02e`: automatic
+      side tracers persisted with zero owner-1 unmatched projectiles and exact
+      ProbeKick direction/origin. Receiver-native versus relayed launch origins
+      differ by 0.347--1.957 m (median 0.943 m).
+- [ ] Separate visual Tracer start from physical collision origin. First prove
+      exact `Tracer::Init` ownership/count and compare its seed origin with the
+      receiver-native muzzle origin; do not revert launch-record `+0x70` or the
+      correct impact path.
 - [ ] Run the exact channel-0 `PlayerMoveSequencer_UpdatePhase` action-start
       discriminator for local and puppet GunMove. Confirm sender-only
       `PlayerUpdatePlayAnimFade` edges for `aim-idle-rotate[-cc]` before relaying

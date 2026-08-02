@@ -16260,3 +16260,33 @@ projectile relay, and the confirmed PlayerStrafe vertical relay. Both processes
 remain Win32-responsive and neither emitted a crash-observer exception,
 `SKIPPED`, or partial-install marker. This confirms only exact-callsite packaging;
 no `AIM-STEP-PH0`, remote shot, or visual behavior test has yet been performed.
+
+### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
+
+The user fired automatic weapons under build `e` and still saw tracers emerge
+from the side. This falsifies build `c` as the visible fix. Receiver PID 8840
+processed selected launch records through sequence 141 without one
+`FIRE-SELECTED-LAUNCH-UNMATCHED` row. Every logged pulse decision corresponded to
+a matched apply; the first bounded ProbeKick samples again measured
+`dot=1.00000` and `originError=0.00000`. Thus there is no evidence for a second
+receiver-native projectile, and T1 is **REJECTED** as the cause of the reported
+side tracer. The consumed-pulse release remains a narrow safety correction but
+is not promoted as a visual fix.
+
+The same run selects a more specific visual/physical-origin split. Across 122
+receiver `FIRE-SELECTED-LAUNCH-APPLY` rows, the distance from the receiver-native
+`originBefore` to the sender-authored `originAfter` was 0.347--1.957 m, with a
+0.943 m median and 1.485 m 90th percentile. That magnitude directly matches the
+reported side emission. The relayed origin is required by the confirmed
+collision path, while the receiver weapon's muzzle effect remains at its native
+local attachment. The next static pass must separate Tracer initialization from
+the restored projectile/collision origin; reverting record `+0x70` globally
+would regress the already correct impacts.
+
+Competing explanations are now: **V1 (leading):** one correctly relayed Tracer
+starts from sender world origin while the receiver muzzle/weapon effect starts
+0.3--2.0 m away; **V2:** one Tracer asset emits more than one ribbon from a
+single Init; **V3:** `ProcessWeapon_CreateMuzzleSfxActor 0x14151C030` creates the
+second visible streak from the receiver weapon transform. A bounded exact
+`Tracer::Init 0x14155BE10` owner/origin discriminator must separate V1/V2 from
+V3 before any visual write.
