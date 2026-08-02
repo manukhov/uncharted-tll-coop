@@ -9,6 +9,18 @@
 - синхронизация всего состояния и всех действий игроков;
 - синхронизация противников только после игроков.
 
+## P0 NEXT: ADS feet and duplicate tracer follow-up (2026-08-02)
+
+- [ ] Run build `2026-08-02c` tracer discriminator: require one selected-launch
+      apply and consumed pulse per remote shot, no owner-1 unmatched projectile,
+      one correct tracer and one correct impact. If the visual duplicate remains
+      without `UNMATCHED`, trace the separate muzzle/effect owner instead.
+- [ ] Instrument the exact channel-0 `PlayerMoveSequencer_UpdatePhase` action
+      start for local and puppet GunMove. Confirm sender-only
+      `PlayerUpdatePlayAnimFade` edges for `aim-idle-rotate[-cc]` before relaying
+      any foot action. Do not retry the rejected `0x140E90605/0x140E9060F`
+      temporary selector snapshots.
+
 ## P0: Ground weapon world lifecycle and pickup prompt (`hy`, 2026-07-27)
 
 - [x] **`hy` runtime REJECTED:** M30/Mazur replacement in both directions emitted

@@ -16136,3 +16136,51 @@ both cases; the user reported success, both processes remained responsive, and
 neither current PID emitted a crash-observer exception. No new IDB label is
 needed: all three native functions and the concrete controller slot were already
 named and saved before implementation.
+
+### 2026-08-02 STATIC: duplicate remote tracer is an unmatched second projectile (`2026-08-02c`)
+
+The user reports a new visual-only split after the selected launch-record relay
+was confirmed: bullet impacts remain correct, while some shots show a second
+tracer near the muzzle or a tracer in another direction. The selected projectile
+itself cannot explain that split. Three independent static evidence types close
+the selected-record dataflow:
+
+1. `ProcessWeapon_SpawnProjectile 0x141519B50` receives the authoritative
+   `SpawnInfo+0x28` launch record. The receiver hook applies the relayed direction
+   at record `+0x30/+0x40` and origin at `+0x20/+0x70` before calling stock code.
+2. `ProjectileBullet_InitBaseFromLaunchRecord 0x141521F00` copies record `+0x30`
+   to projectile `+0x2A0` and the world translation of record `+0x70` to
+   projectile `+0x2E0`, then constructs the exact `Tracer` selector with seed
+   `projectile+0x270`.
+3. `Tracer::Init 0x14155BE10` reads that seed's `+0x30/+0x70` fields (the same
+   projectile `+0x2A0/+0x2E0`) to construct its basis and transform. The existing
+   receiver ProbeKick observation independently measured `dot=1.00000` and
+   `originError=0.00000` for this same applied record.
+
+The competing explanations are therefore separable. **T1 (leading):** the
+receiver creates an additional native projectile after the selected one. Each
+FirePacket enqueues exactly one `PeerFireDirectionCapture`, but
+`apply_queued_fire_events` also keeps synthetic fire held for 150 ms. Successful
+`hooked_player_try_start_fire` clears the latch edge but leaves
+`g_fire_button_hold_until_ms` alive, so a subsequent input frame can assert fire
+again after the sole capture was consumed. That second projectile necessarily
+uses the receiver's camera/muzzle record. **T2 (rejected for the selected
+projectile):** `Tracer::Init` derives a different direction from the corrected
+record; the exact field dataflow above contradicts it. **T3 (remaining only if
+T1 is falsified):** a separate weapon/muzzle effect visually resembles a tracer;
+this requires an unmatched-count-free run before tracing its effect owner.
+
+Build `c` changes no launch-record transform. After the matching receiver
+projectile consumes a capture, it clears the fire hold, active latch and pending
+edge immediately, but only when no second legitimate capture is already queued.
+The bounded `FIRE-REMOTE-PULSE-CONSUMED` marker records that decision. A second
+owner-1 SpawnProjectile within 250 ms of the previous apply, with no matching
+capture, emits bounded `FIRE-SELECTED-LAUNCH-UNMATCHED` telemetry.
+
+**Falsifiable prediction:** one remote semiautomatic shot produces one
+`FIRE-SELECTED-LAUNCH-APPLY`, followed by `PULSE-CONSUMED released=1`, and no
+nearby `UNMATCHED`; its single tracer and impact agree. A legitimate automatic
+burst may show `released=0 peerQ>0` while another packet is queued, but still one
+apply per emitted projectile. Any duplicated/wrong tracer with no unmatched
+projectile rejects T1 and selects the separate-effect trace; any unmatched after
+`released=1` proves another native fire source survives the synthetic pulse.

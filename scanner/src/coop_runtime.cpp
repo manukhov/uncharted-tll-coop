@@ -32258,6 +32258,35 @@ bool selected_launch_record_from_spawn_info(
         kProjectileLaunchRecordOriginMirrorOffset + sizeof(float) * 4;
 }
 
+void finish_consumed_remote_fire_pulse(std::uint32_t sequence) {
+    // A FirePacket arms one selected-launch capture and a short synthetic button
+    // hold so a temporarily-not-ready receiver weapon can retry.  Once the
+    // matching projectile exists, keeping that same hold alive can make an
+    // automatic weapon enter SpawnProjectile again without a matching capture.
+    // Preserve the hold only when another legitimate packet is already queued.
+    const std::size_t queued = peer_fire_direction_count();
+    const bool released = queued == 0;
+    if (released) {
+        g_fire_button_hold_until_ms = 0;
+        g_state_net.active_button_press_latch.fetch_and(
+            ~kJoypadFireButtonMask, std::memory_order_release);
+        g_state_net.pending_button_presses.fetch_and(
+            ~kJoypadFireButtonMask, std::memory_order_release);
+    }
+
+    static std::atomic<unsigned> logged{0};
+    const unsigned index = logged.fetch_add(1, std::memory_order_relaxed);
+    if (index < 32) {
+        char line[192]{};
+        std::snprintf(
+            line, sizeof(line),
+            "FIRE-REMOTE-PULSE-CONSUMED seq=%u released=%u peerQ=%llu",
+            sequence, released ? 1U : 0U,
+            static_cast<unsigned long long>(queued));
+        boot_log_line(line);
+    }
+}
+
 std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
     void* process_weapon, void* spawn_info, void* out_process) {
     if (g_original_process_weapon_spawn_projectile == nullptr) {
@@ -32377,6 +32406,7 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
                 }
                 publish_applied_fire_direction_observation(
                     capture, launch_record);
+                finish_consumed_remote_fire_pulse(capture.sequence);
                 char line[512]{};
                 std::snprintf(
                     line, sizeof(line),
@@ -32394,6 +32424,33 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
                     capture.final_origin[0], capture.final_origin[1],
                     capture.final_origin[2]);
                 boot_log_line(line);
+            } else {
+                // If another owner-1 projectile appears shortly after an
+                // applied capture, it is a second native emission rather than a
+                // divergent tracer transform belonging to the selected shot.
+                AppliedFireDirectionObservation previous{};
+                if (snapshot_applied_fire_direction_observation(previous)) {
+                    const ULONGLONG age_ms =
+                        GetTickCount64() - previous.applied_ms;
+                    if (age_ms <= 250) {
+                        static std::atomic<unsigned> logged_unmatched{0};
+                        const unsigned index = logged_unmatched.fetch_add(
+                            1, std::memory_order_relaxed);
+                        if (index < 32) {
+                            char line[256]{};
+                            std::snprintf(
+                                line, sizeof(line),
+                                "FIRE-SELECTED-LAUNCH-UNMATCHED "
+                                "afterSeq=%u age=%llu art=0x%08X peerQ=%llu",
+                                previous.capture.sequence,
+                                static_cast<unsigned long long>(age_ms),
+                                receiver_art,
+                                static_cast<unsigned long long>(
+                                    peer_fire_direction_count()));
+                            boot_log_line(line);
+                        }
+                    }
+                }
             }
         }
     }
@@ -46436,8 +46493,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02b "
-        "(bounded PlayerStrafe final-forward-Y relay)");
+        "TLL co-op runtime init 2026-08-02c "
+        "(consumed remote-fire pulse release)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
