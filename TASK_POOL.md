@@ -49,14 +49,20 @@
 - [ ] Only if the worker relay leaves true no-entry side streaks: trace the ribbon/tracer
       child instruction inside retained muzzle SFX at ProcessWeapon
       `+0x998/+0x9A8`, below the shared flash/audio actor boundary.
-- [ ] Run build `2026-08-02k` once: stand still in ADS and rotate about 90
+- [x] Run build `2026-08-02k` once: stand still in ADS and rotate about 90
       degrees left/right. The exact `PlayerCommonAction` vtable `+0x10`
       discriminator observes `OnStart` directly, independent of which
       `PlayerMoveSequencer_UpdatePhase` callsite reached lifecycle 0. Confirm
-      sender-only
-      `PlayerUpdatePlayAnimFade` edges for `aim-idle-rotate[-cc]` before relaying
-      any foot action. Do not retry the rejected `0x140E90605/0x140E9060F`
-      temporary selector snapshots.
+      sender-only `PlayerUpdatePlayAnimFade` edges for
+      `aim-idle-rotate[-cc]`. Result: both responsive PIDs produced zero
+      `AIM-STEP-ONSTART` and zero `AIM-STEP-PH0` rows while the local Player
+      visibly stepped. F3 is selected: these actions are not the live visible
+      foot boundary, so the native builder must not be forced and the rejected
+      `0x140E90605/0x140E9060F` selector snapshots must not be retried.
+- [ ] Trace horizontal turn-in-place inside the runtime-confirmed base state
+      `strafe-idle-ap 0x3C347132` / asset graph `anim-player.bin+0x66048`.
+      Resolve the exact selector input and output clip/pose writer that differ
+      between local Player and puppet before adding another runtime probe.
 
 ## P0: Ground weapon world lifecycle and pickup prompt (`hy`, 2026-07-27)
 

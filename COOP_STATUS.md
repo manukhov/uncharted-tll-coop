@@ -16299,6 +16299,35 @@ event relay at the native builder boundary. Matching owner 0 and owner 1 rows
 select F2 and prohibit forcing the builder; zero owner-0 rows while the local
 feet visibly step selects F3 and rejects this boundary.
 
+### 2026-08-02 RUNTIME REJECTED: aim-idle-rotate actions are not the live visible ADS foot boundary
+
+The user performed the written stationary ADS turn about 90 degrees left and
+right on local Chloe under build `2026-08-02k`. PID 1460 (role A/Chloe) and PID
+4444 (role B/Nadine) both installed the phase-zero and exact
+`PlayerCommonAction::OnStart` discriminators, stayed Win32-responsive, and
+reported no crash or `SKIPPED` marker. The complete post-install log contains
+zero `AIM-STEP-ONSTART` and zero `AIM-STEP-PH0` rows for both processes.
+
+The local Player visibly performed the foot step that the remote Player lacks,
+so this is the pre-written F3 outcome, not evidence that both animations are
+masked. The exact `aim-idle-rotate` / `aim-idle-rotate-cc` channel-zero action
+classification is **REJECTED as the reached visible foot boundary** for this
+runtime path. It remains a valid static mapping of dormant GunMove builder cases,
+but neither the builder nor its selector may be forced as a synchronization fix.
+This independently agrees with the older build `dj` result: the late
+`0x140E9063B` builder never ran after admitted ADS entry, while only the initial
+child-103 builder was reached.
+
+At the same test boundary the existing read-only animation inventory identified
+the active base state on both screens as `0x7339D08C/0x3C347132`; the asset audit
+already resolves `0x3C347132` to printable `strafe-idle-ap` with graph
+`anim-player.bin+0x66048`. The next static search therefore starts inside that
+live graph and must identify its horizontal turn selector/output clip or
+post-command pose writer. Competing owners are: S1 an authored selector within
+the `strafe-idle-ap` graph, S2 a post-command leg/foot IK writer, and S3 root
+motion extracted from a continuously active clip. No further runtime test is
+earned until one of these is selected by three independent evidence types.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge
