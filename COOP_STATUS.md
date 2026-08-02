@@ -16694,6 +16694,37 @@ the puppet fails visually, moves the fault below admission into GroundModel,
 solve or apply. No reach row rejects the new owner/callsite proof or packaging;
 any pose/performance regression rejects the observer itself.
 
+### 2026-08-03 RUNTIME CONFIRMED: puppet loses MoveLegIk foot-effect admission (`r`, F1)
+
+The instructed stationary Chloe ADS turn produced the exact distinguishing
+result, with no exception in either responsive process:
+
+- role-A/Chloe PID 17208 reached retained owner 0 and emitted 160 bounded rows;
+  38 were admitted (`mask=1` four times, `mask=2` four times and `mask=3`
+  thirty times). Both phase values and both numeric target/history records
+  changed while the local feet replanted;
+- role-B/Nadine PID 17052 reached retained owner 1 for the remote Chloe, but all
+  26 sampled rows remained `mask=0`, `phase=-1.000/-1.000` while the peer aim
+  relay was live. Its retained numeric records stayed at their prior values;
+- both PIDs also emitted the one-shot `AIM-FOOT-JOB-REACH` marker for owners 0
+  and 1, proving the absence is not another identity/callsite miss. Neither PID
+  emitted an exception.
+
+Therefore **F1 is CONFIRMED**: authored `foot-effect` admission is a real
+actuator for the visible local ADS replant, and the receiver puppet loses that
+admission before GroundModel/solve/commit. **F2 is REJECTED** because visible
+local replants coincide with nonnegative phase records. **F3 is REJECTED**
+because the receiver never reaches admitted state, so a lower-only ground or
+joint-commit defect cannot explain this test.
+
+This result does not yet authorize copying the full 0x50-byte records. The next
+static pass must determine the first downstream reads and lifetimes of
+`MoveLegIkNew+0x2C/+0x30`, target/history Locators at `+0x40/+0x90` and
+`+0xE0/+0x130`, and the GroundModel inputs. It must distinguish a phase-only
+relay from numeric target relay and prove where a receiver write can occur
+after stock admission but before the first consumer, without copying authored
+asset pointers or racing the async job.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

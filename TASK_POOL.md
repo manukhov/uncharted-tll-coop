@@ -119,11 +119,22 @@
       second does not set RDX, and `0x142102EDD` overwrites it before any read.
       Prove the real owner chain through controller `+0x8` -> job `+0x40` and
       select sole Character-bearing callsite `0x142104AB3`.
-- [ ] Run one stationary ADS turn with build `r`. Require lifetime
+- [x] Run one stationary ADS turn with build `r`. Require lifetime
       `AIM-FOOT-JOB-REACH owner=0/1` before classifying bounded admission rows:
       F1 local admits/puppet differs; F2 local visible step but phases stay `-1`;
       F3 both admit/match and the fault is below admission. Any missing reach,
       pose regression or renewed lag rejects the observer packaging.
+      **CONFIRMED F1:** local Chloe PID 17208 admitted in 38/160 rows (30
+      `mask=3`), while remote Chloe owner 1 in PID 17052 stayed `mask=0`,
+      `phase=-1/-1` in all 26 rows; both owner reach markers fired and neither
+      process emitted an exception.
+- [ ] Trace every first downstream reader and reset/write lifetime for
+      `MoveLegIkNew+0x2C/+0x30`, the numeric 0x50-byte target/history records at
+      `+0x40/+0x90` and `+0xE0/+0x130`, and their GroundModel consumers. Reject
+      unsafe full-record or phase-only candidates and select an exact receiver
+      write seam after stock admission but before the first required consumer.
+      No new runtime mutation until the async lifetime and process-local asset
+      pointer exclusions satisfy the static evidence quota.
 - [x] Confirm build `q` performance: PIDs 15444/6220 remained responsive with
       zero exception/AIM/attachment diagnostic rows, and the user confirmed the
       recent gameplay lag is gone with normal behavior.
