@@ -15644,3 +15644,71 @@ asset-to-command identity is closed, should separate only the retained Player's
 default `PlayerStrafeLookAt` camera request using the peer pose seed; it must not
 repatch LRDU, active-state weights, AimAt, LookAtIK or the flashlight-only
 `LookAtOrCamera` class.
+
+### 2026-08-01 STATIC/REJECTED: the sole dynamic Gesture target belongs to `prone`, not ordinary ADS
+
+The last dynamic Gesture competitor is now asset-owned without a runtime run.
+The extended reproducible command
+`scripts/psarc_asset_audit.py ... --entry anim-player.bin
+--gesture-node-audit` follows exact qword references and decodes the two
+straight-line VM callbacks. Descriptor `anim-player.bin+0x11A5A0` has exactly
+one `anim-node-blend` parent at `+0x10CE40`. That parent has child 0
+`+0x11A708`, an `anim-node-animation` with id `0xFAFAA661`; child 1 is the
+dynamic Gesture; its blend callback at descriptor `+0x20` is null and its
+authored weight at `+0x28` is `1.0`.
+
+The native snapshot implementation independently fixes the field meanings.
+`AnimSnapshotNodeBlend_SnapshotChildren 0x14191DF90` converts descriptor
+children `+0x8/+0x10` to snapshot indices `+0x40/+0x44`, copies callback
+`+0x20` to node `+0x58`, and copies the authored weight `+0x28` to node
+`+0x60`. `AnimSnapshotNodeBlend_RefreshPhasesAndBlends 0x14191E180` preserves
+that weight when callback `+0x58` is null; the already-proven near-one branch in
+`AnimSnapshotNodeBlend_GenerateAnimCommands 0x14191E5F0` selects child 1.
+Consequently this subtree can reach
+`AnimNodeGesture_EmitSelectedClipCommand 0x141FFEA20` command 6 and the
+associated command-7 grid/transition blends, but only when its owning state is
+selected.
+
+Every reverse edge from that parent is unique:
+
+`0x10CE40 <- [0x10A4C8] <- [0xEECB8] <- [0x737D8 in descriptor 0x737C8]
+<- [state record 0x149C0+0x18]`.
+
+State record `+0x149C0` points to printable name `prone` at `+0x131DED`, carries
+the matching StringId `0x056246CC`, and repeats animation id `0xFAFAA661` at
+record `+0x20`. The repeated animation id independently agrees with the
+fallback child at `+0x11A708`. In contrast, the runtime-confirmed ordinary ADS
+state `0x3C347132` is printable `strafe-idle-ap` in the separate state record
+`+0xD040`, whose graph pointer is `+0x66048`, not this unique `prone` chain.
+
+The VM callbacks are exact as well. Selector descriptor `+0x11FC58`, code
+`+0x122598`, returns
+`*(u32 *)(*(u64 *)(arg1+0x10)+0x5C0)`. Target descriptor `+0x120F50`, code
+`+0x122B90`, returns the **address**
+`*(u64 *)(arg0+0x10)+0x5D0`; it does not dereference a pointer stored at
+`+0x5D0`. `GestureTargetScriptLambda_GetTarget 0x141ECDC20` supplies
+`*(*(owner+0x1A0)+0x58)` as arg0, then copies the 16-byte inline vector from the
+returned address. A batch audit finds only readers of this dynamic selector/
+target block in `anim-player.bin`, and exact executable searches find no
+immediate, raw-data or printable-string preimage for script ids `0x6F850220`
+and `0x3C0D3A80`; they remain asset-local identifiers rather than native camera
+functions.
+
+This closes three independent evidence kinds: a unique serialized owner chain
+plus matching fallback id, native descriptor-to-command field semantics, and
+exact VM dataflow contrasted with the independently named live ADS state.
+Competing outcomes are now:
+
+- **G2 dynamic target (REJECTED for ordinary ADS):** the only target lambda is
+  owned by `prone`, so it cannot explain receiver-camera pitch while the proven
+  active state is `strafe-idle-ap`;
+- **G1 fixed LookAt (leading):** one of the eleven fixed LookAt nodes may belong
+  to the ordinary ADS graph and receive the camera-derived
+  `PlayerStrafeLookAt` point;
+- **G3 non-Gesture generator:** the camera-correlated command-6/7 cluster may
+  still be produced outside Gesture.
+
+No runtime test is justified yet. The next static step is to reverse-own the
+eleven fixed LookAt descriptors and determine whether any reaches state graph
+`strafe-idle-ap+0x66048`; if none does, G1 is rejected and the search moves to
+the non-Gesture command producer without another user exam.

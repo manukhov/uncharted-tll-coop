@@ -2414,15 +2414,21 @@ Do not reopen these as the first move:
       `Player+0x21E0/+0x2260` feed `Player_GetLookAtTargetPoint`; normal
       `Player::Move::Update` unconditionally reaches `PlayerStrafeLookAt`, whose
       default request reads the owner screen route and writes the first tracker.
-- [ ] Keep runtime tests parked. Tie one of the fixed `LookAt` descriptors, or
-      the sole dynamic descriptor at `anim-player.bin+0x11A5A0` with target
-      callback `+0x120F50`, to the retained camera-correlated command-6/7
-      cluster. G1 (ordinary LookAt contaminated by the receiver-local
-      PlayerStrafeLookAt request) is now leading; G2 is one authored lambda and
-      G3 is a non-Gesture generator. Only after closing that asset-to-command
-      identity should a build retarget the retained Player's default strafe-look
-      request from the peer pose seed. Do not repatch LRDU, active-state weights,
-      AimAt, LookAtIK or flashlight-only LookAtOrCamera.
+- [x] Reverse-own the sole dynamic target lambda. Exact qword edges lead
+      `0x11A5A0 <- 0x10CE40 <- 0x10A4C8 <- 0xEECB8 <- 0x737C8 <- prone state
+      record 0x149C0`; matching fallback id `0xFAFAA661`, the fixed weight-one
+      Blend semantics and exact selector/inline-target VM fields independently
+      confirm that ownership. The proven live `strafe-idle-ap` state uses the
+      separate graph `0x66048`, so G2 is REJECTED for ordinary ADS.
+- [ ] Keep runtime tests parked. Reverse-own all eleven fixed `LookAt`
+      descriptors and determine whether any reaches the `strafe-idle-ap`
+      graph at `anim-player.bin+0x66048`. G1 (ordinary LookAt contaminated by
+      the receiver-local PlayerStrafeLookAt request) remains leading; G3 is a
+      non-Gesture generator. If no fixed LookAt belongs to that state, reject
+      G1 and move directly to the non-Gesture command producer. Only after the
+      asset-to-command identity is closed should a corrective build be proposed.
+      Do not repatch LRDU, active-state weights, AimAt, LookAtIK or the
+      flashlight-only LookAtOrCamera.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

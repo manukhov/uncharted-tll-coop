@@ -432,6 +432,281 @@ def collect_gesture_target_types(data: bytes) -> dict[int, int]:
     return targets
 
 
+def read_u32(data: bytes, offset: int) -> int:
+    return struct.unpack_from("<I", data, offset)[0]
+
+
+def read_u64(data: bytes, offset: int) -> int:
+    return struct.unpack_from("<Q", data, offset)[0]
+
+
+def qword_references(data: bytes, target: int) -> list[int]:
+    return find_all(data, struct.pack("<Q", target))
+
+
+def read_c_string(data: bytes, offset: int, limit: int = 128) -> str | None:
+    if not 0 < offset < len(data):
+        return None
+    end = data.find(b"\0", offset, min(len(data), offset + limit))
+    if end < 0 or end == offset:
+        return None
+    raw = data[offset:end]
+    if any(byte < 0x20 or byte > 0x7E for byte in raw):
+        return None
+    return raw.decode("ascii")
+
+
+def state_record_for_graph_reference(
+    data: bytes, reference_offset: int, graph_offset: int
+) -> tuple[int, str, int, int] | None:
+    record_offset = reference_offset - 0x18
+    if record_offset < 0 or record_offset + 0x28 > len(data):
+        return None
+    if read_u64(data, record_offset + 0x18) != graph_offset:
+        return None
+    name_offset = read_u64(data, record_offset)
+    name = read_c_string(data, name_offset)
+    if name is None:
+        return None
+    state_id = read_u32(data, record_offset + 0x8)
+    if string_id(name.encode("ascii")) != state_id:
+        return None
+    animation_id = read_u32(data, record_offset + 0x20)
+    return record_offset, name, state_id, animation_id
+
+
+def containing_typed_descriptor(data: bytes, reference_offset: int) -> int | None:
+    """Find a nearby descriptor start marked by the duplicated type-id prefix."""
+
+    candidates: list[int] = []
+    start = max(4, reference_offset - 0x40)
+    for descriptor_offset in range(start, reference_offset + 1, 4):
+        if descriptor_offset + 4 > len(data):
+            continue
+        if read_u32(data, descriptor_offset) == 0:
+            continue
+        if data[descriptor_offset - 4 : descriptor_offset] != data[
+            descriptor_offset : descriptor_offset + 4
+        ]:
+            continue
+        field_offset = reference_offset - descriptor_offset
+        if 0x8 <= field_offset <= 0x40 and field_offset % 8 == 0:
+            candidates.append(descriptor_offset)
+    return max(candidates) if candidates else None
+
+
+def trace_unique_state_owner(
+    data: bytes, graph_offset: int, max_steps: int = 8
+) -> tuple[list[tuple[int, int]], tuple[int, str, int, int] | None]:
+    """Walk unique reverse qword references until an animation-state record."""
+
+    chain: list[tuple[int, int]] = []
+    target = graph_offset
+    for _ in range(max_steps):
+        references = qword_references(data, target)
+        if len(references) != 1:
+            break
+        reference = references[0]
+        chain.append((target, reference))
+        state = state_record_for_graph_reference(data, reference, target)
+        if state is not None:
+            return chain, state
+        descriptor = containing_typed_descriptor(data, reference)
+        target = descriptor if descriptor is not None else reference
+    return chain, None
+
+
+def format_linear_expression(expression: tuple[str | None, int]) -> str:
+    base, offset = expression
+    if base is None:
+        return f"0x{offset:X}"
+    if offset == 0:
+        return base
+    sign = "+" if offset >= 0 else "-"
+    return f"{base} {sign} 0x{abs(offset):X}"
+
+
+def decode_linear_script_callback(
+    data: bytes, descriptor_offset: int
+) -> tuple[int, int, int, list[tuple[int, int, int, int, int]], str]:
+    """Decode the straight-line subset used by authored gesture callbacks."""
+
+    if descriptor_offset + 0x1C > len(data):
+        raise ValueError(f"truncated script descriptor at 0x{descriptor_offset:X}")
+    code_offset, pool_offset = struct.unpack_from("<QQ", data, descriptor_offset)
+    descriptor_type, _size, script_id = struct.unpack_from(
+        "<III", data, descriptor_offset + 0x10
+    )
+    if descriptor_type != string_id(b"function"):
+        raise ValueError(
+            f"bad script descriptor type at 0x{descriptor_offset:X}: "
+            f"0x{descriptor_type:08X}"
+        )
+    if not 0 < code_offset < len(data):
+        raise ValueError(f"bad script code offset 0x{code_offset:X}")
+
+    registers: dict[int, tuple[str | None, int]] = {
+        0x31 + index: (f"arg{index}", 0) for index in range(16)
+    }
+    instructions: list[tuple[int, int, int, int, int]] = []
+    result = "unknown"
+    for instruction_offset in range(code_offset, min(len(data), code_offset + 0x400), 4):
+        opcode, destination, source_a, source_b = data[
+            instruction_offset : instruction_offset + 4
+        ]
+        instructions.append(
+            (instruction_offset, opcode, destination, source_a, source_b)
+        )
+        if opcode == 0x00:
+            result = format_linear_expression(
+                registers.get(source_a, (f"r{source_a}", 0))
+            )
+            break
+        if opcode == 0x43:
+            registers[destination] = registers.get(source_a, (f"r{source_a}", 0))
+        elif opcode == 0x3B:
+            base, offset = registers.get(source_a, (f"r{source_a}", 0))
+            registers[destination] = (base, offset + source_b)
+        elif opcode == 0x0C:
+            registers[destination] = (None, source_a | (source_b << 8))
+        elif opcode == 0x01:
+            left = registers.get(source_a, (f"r{source_a}", 0))
+            right = registers.get(source_b, (f"r{source_b}", 0))
+            if left[0] is None:
+                registers[destination] = (right[0], right[1] + left[1])
+            elif right[0] is None:
+                registers[destination] = (left[0], left[1] + right[1])
+            else:
+                registers[destination] = (
+                    f"({format_linear_expression(left)}) + "
+                    f"({format_linear_expression(right)})",
+                    0,
+                )
+        elif opcode in (0x0D, 0x0E, 0x0F):
+            width = {0x0D: "u32", 0x0E: "i32", 0x0F: "u64"}[opcode]
+            address = format_linear_expression(
+                registers.get(source_a, (f"r{source_a}", 0))
+            )
+            registers[destination] = (f"*({width} *)({address})", 0)
+        else:
+            # Keep decoding for a raw instruction listing, but stop symbolic
+            # propagation through operations outside this deliberately small set.
+            registers.pop(destination, None)
+    return code_offset, pool_offset, script_id, instructions, result
+
+
+def audit_script_member_accesses(data: bytes, base_offset: int) -> None:
+    """Summarize direct VM callbacks that materialize one structure base."""
+
+    script_lambda_id = string_id(b"script-lambda")
+    function_id = string_id(b"function")
+    store_opcodes = {0x10, 0x11, 0x12, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57}
+    rows: list[tuple[int, int, int, int]] = []
+    for signature_offset in find_all(data, struct.pack("<I", script_lambda_id)):
+        descriptor_offset = signature_offset + 4
+        if descriptor_offset + 0x1C > len(data):
+            continue
+        code_offset, pool_offset = struct.unpack_from("<QQ", data, descriptor_offset)
+        descriptor_type, _size, script_id = struct.unpack_from(
+            "<III", data, descriptor_offset + 0x10
+        )
+        if (
+            descriptor_type != function_id
+            or not 0 < code_offset < pool_offset <= len(data)
+            or (pool_offset - code_offset) % 4
+        ):
+            continue
+        instructions = [
+            tuple(data[offset : offset + 4])
+            for offset in range(code_offset, pool_offset, 4)
+        ]
+        materializes_base = any(
+            opcode == 0x0C and (source_a | (source_b << 8)) == base_offset
+            for opcode, _destination, source_a, source_b in instructions
+        )
+        if not materializes_base:
+            continue
+        store_count = sum(
+            opcode in store_opcodes
+            for opcode, _destination, _source_a, _source_b in instructions
+        )
+        rows.append((descriptor_offset, code_offset, script_id, store_count))
+    rendered = ",".join(
+        f"0x{descriptor:X}/0x{code:X}/0x{script_id:08X}/stores={stores}"
+        for descriptor, code, script_id, stores in rows
+    )
+    print(
+        f"vm_member_base=0x{base_offset:X} callbacks={len(rows)} "
+        f"direct_store_opcodes={sum(row[3] for row in rows)} rows=[{rendered}]"
+    )
+
+
+def audit_dynamic_gesture_owner(
+    data: bytes, descriptor_offset: int, target_callback: int
+) -> None:
+    blend_type_id = string_id(b"anim-node-blend")
+    animation_type_id = string_id(b"anim-node-animation")
+    parents: list[tuple[int, int]] = []
+    for reference in qword_references(data, descriptor_offset):
+        for child_offset, child_index in ((0x8, 0), (0x10, 1)):
+            parent = reference - child_offset
+            if parent < 0 or parent + 0x30 > len(data):
+                continue
+            if read_u32(data, parent) != blend_type_id:
+                continue
+            if read_u64(data, parent + child_offset) == descriptor_offset:
+                parents.append((parent, child_index))
+
+    print(
+        f"dynamic_node=0x{descriptor_offset:X} "
+        f"blend_parents={len(parents)}"
+    )
+    for parent, child_index in parents:
+        child0 = read_u64(data, parent + 0x8)
+        child1 = read_u64(data, parent + 0x10)
+        callback = read_u64(data, parent + 0x20)
+        weight_bits = read_u32(data, parent + 0x28)
+        weight = struct.unpack("<f", struct.pack("<I", weight_bits))[0]
+        fallback_id = 0
+        if child0 + 8 <= len(data) and read_u32(data, child0) == animation_type_id:
+            fallback_id = read_u32(data, child0 + 0x4)
+        print(
+            f"dynamic_parent=0x{parent:X} child_index={child_index} "
+            f"child0=0x{child0:X} child1=0x{child1:X} "
+            f"blend_callback=0x{callback:X} authored_weight={weight:g} "
+            f"fallback_animation=0x{fallback_id:08X}"
+        )
+        chain, state = trace_unique_state_owner(data, parent)
+        rendered_chain = " -> ".join(
+            f"0x{target:X}@0x{reference:X}" for target, reference in chain
+        )
+        print(f"dynamic_owner_chain={rendered_chain or 'none'}")
+        if state is not None:
+            state_offset, name, state_id, animation_id = state
+            print(
+                f"dynamic_owner_state=0x{state_offset:X} name={name!r} "
+                f"id=0x{state_id:08X} animation=0x{animation_id:08X} "
+                f"fallback_matches={int(animation_id == fallback_id)}"
+            )
+
+    selector_callback = read_u64(data, descriptor_offset + 0x8)
+    for role, callback in (("selector", selector_callback), ("target", target_callback)):
+        if not callback:
+            continue
+        code, pool, script_id, instructions, result = decode_linear_script_callback(
+            data, callback
+        )
+        rendered = " ".join(
+            f"{opcode:02X}:{destination:02X}:{source_a:02X}:{source_b:02X}"
+            for _offset, opcode, destination, source_a, source_b in instructions
+        )
+        print(
+            f"dynamic_{role}_callback=0x{callback:X} code=0x{code:X} "
+            f"pool=0x{pool:X} script=0x{script_id:08X} "
+            f"result={result} instructions=[{rendered}]"
+        )
+
+
 def audit_anim_node_gestures(anim_data: bytes, gesture_data: bytes) -> None:
     """Cross-reference Player AnimNodeGesture descriptors with gesture settings."""
 
@@ -512,6 +787,9 @@ def audit_anim_node_gestures(anim_data: bytes, gesture_data: bytes) -> None:
         f"fixed_aim_at={len(fixed_aim_at)} fixed_none={len(fixed_none)} "
         f"dynamic_target_callbacks={len(dynamic_target_callbacks)}"
     )
+    audit_script_member_accesses(anim_data, 0x5B0)
+    for row in dynamic_target_callbacks:
+        audit_dynamic_gesture_owner(anim_data, row[0], row[4])
 
 
 def build_parser() -> argparse.ArgumentParser:

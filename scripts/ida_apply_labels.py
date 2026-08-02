@@ -2523,8 +2523,11 @@ FUNCTIONS = {
     0x141ECDC20: (
         "GestureTargetScriptLambda_GetTarget",
         "Gesture::TargetScriptLambda vtable slot 0. Generation-validates its "
-        "owner and executes the authored target bytecode with the owner-local "
-        "script argument; it performs no direct native camera/global-input read.",
+        "owner and supplies *(*(owner+0x1A0)+0x58) as the sole script argument. "
+        "The stock anim-player prone callback dereferences argument+0x10 and "
+        "returns the address of the inline 16-byte vector at state-data+0x5D0, "
+        "which this getter copies to its output. It performs no direct native "
+        "camera/global-input read.",
     ),
     0x14011D230: (
         "RegisterAnimNodeGestureSnapshotFactory",
