@@ -16290,3 +16290,61 @@ single Init; **V3:** `ProcessWeapon_CreateMuzzleSfxActor 0x14151C030` creates th
 second visible streak from the receiver weapon transform. A bounded exact
 `Tracer::Init 0x14155BE10` owner/origin discriminator must separate V1/V2 from
 V3 before any visual write.
+
+### 2026-08-02 STATIC: isolate Tracer visual origin from confirmed collision origin (`2026-08-02f`)
+
+The runtime result and a deeper exact-function pass satisfy the evidence quota
+for a visual-only experiment:
+
+1. Runtime counted no unmatched projectile while measuring a median 0.841 m
+   component of the sender/receiver origin delta perpendicular to the relayed
+   shot direction (1.394 m at p90, 1.453 m maximum). This is a lateral tracer
+   offset, not merely travel forward from the muzzle.
+2. Tracer RTTI vtable slot `0x142AA3238` is exactly
+   `Tracer::Init 0x14155BE10`. Its ABI preserves `rcx=Tracer`, `rdx=result`, and
+   `r8=spawn_info`; the function loads the copied launch record from
+   `spawn_info+0x28` at `0x14155BF1C`.
+3. Exact disassembly reads the final direction from copied record `+0x30` at
+   `0x14155C251`, normalizes it, and reads origin `+0x70` at
+   `0x14155C349`, `0x14155C5A1`, and `0x14155C6F5`. It materializes persistent
+   Tracer transforms at `Tracer+0x100`, `+0x170`, `+0x1C0` and related effect
+   packets during this call. It never stores the copied-record pointer in the
+   Tracer object.
+4. The independently confirmed ProbeKick executes after projectile initialization
+   and consumes the restored projectile fields. Its live rays already match the
+   relayed physical origin/direction exactly, so those fields must remain the
+   collision authority after Tracer Init returns.
+
+The candidates are now: **V1 (leading):** the single Tracer is correctly built
+from the sender origin, but that origin is lateral to the receiver clone's
+visible muzzle; **V2:** one Tracer asset emits multiple ribbons and changing its
+base transform will not remove every side streak; **V3:** the visible side streak
+is the independently retained muzzle SFX actor and will ignore a Tracer-only
+change. These yield different visual results under one exact boundary.
+
+Build `f` patches only the aligned Tracer vtable slot after verifying it still
+contains `0x14155BE10`. The receiver arms thread-local context only around the
+exact stock `ProcessWeapon::SpawnProjectile` invocation for a selected role-B,
+owner-1 launch. The Tracer hook additionally requires the retained-puppet owner
+handle in the copied record and a normalized direction dot of at least 0.99.
+During synchronous stock Init it substitutes only copied-record visual origin
+`+0x70` with the saved receiver-native value; physical origin `+0x20` and
+direction `+0x30` stay relayed. It restores `+0x70` immediately after stock
+returns, before the projectile/collision path resumes.
+`TRACER-VISUAL-ORIGIN` records sequence, per-launch Init count, direction dot,
+total origin delta and lateral delta. No projectile, collision bound, weapon
+attachment, muzzle actor, Tracer direction or packet is persistently changed.
+The release DLL compiles successfully. The sole `ida/tll.i64` now names
+`Tracer_InitFromProjectileLaunchRecord 0x14155BE10` and its vtable slot
+`Tracer_InitFromProjectileLaunchRecord_VtableSlot 0x142AA3238`;
+headless persistence reported `1524 functions, 47 data names` and
+`save_database returned True`, and the restarted MCP independently resolves the
+function name.
+
+**Falsifiable prediction:** automatic fire emits one matched
+`TRACER-VISUAL-ORIGIN` per selected launch. The visible tracer begins at the
+clone's muzzle instead of 0.3--2.0 m to its side, while impact marks and ProbeKick
+direction/origin remain unchanged. That confirms V1. A matching marker with no
+visual change rejects V1 and moves to asset/muzzle ownership V2/V3; changed
+impacts or missing shots reject the claimed synchronous lifetime isolation and
+require immediate rollback.

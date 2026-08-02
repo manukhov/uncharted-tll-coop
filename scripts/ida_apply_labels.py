@@ -9403,6 +9403,13 @@ FUNCTIONS = {
         "handle. This is the source of ProcessWeapon+0x998/+0x9A8 handles, not "
         "a secondary rifle drawable.",
     ),
+    0x14155BE10: (
+        "Tracer_InitFromProjectileLaunchRecord",
+        "Exact Tracer::Init source boundary and vtable entry. ABI arguments are "
+        "(Tracer, result, spawn_info); spawn_info+0x28 selects the copied "
+        "projectile launch record. It normalizes direction at record+0x30 and "
+        "materializes persistent visual transforms from origin record+0x70.",
+    ),
     0x1410F8660: (
         "StringId_FormatDashedPairAndHash",
         "Formats the supplied category/value pair as '-%s-%s' and returns its "
@@ -10472,6 +10479,11 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142AA3238: (
+        "Tracer_InitFromProjectileLaunchRecord_VtableSlot",
+        "Exact Tracer RTTI vtable slot containing "
+        "Tracer_InitFromProjectileLaunchRecord 0x14155BE10.",
+    ),
     0x143F041F0: (
         "g_ScreenRouteHudStatePtrs",
         "Per-screen HUD/reticle state pointer table, indexed with stride 0x368. "

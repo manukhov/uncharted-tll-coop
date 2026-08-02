@@ -722,12 +722,15 @@ using ProcessWeaponSpawnProjectileFunction = std::int64_t(__fastcall*)(
     void*, void*, void*);
 using ProjectileBulletInstantProbeKickFunction = char(__fastcall*)(void*);
 using BoundTransformGetTranslationWsFunction = void*(__fastcall*)(void*, float*);
+using TracerInitFunction = std::uint64_t*(__fastcall*)(
+    void*, std::uint64_t*, void*);
 ProcessWeaponSpawnProjectileFunction g_original_process_weapon_spawn_projectile =
     nullptr;
 ProjectileBulletInstantProbeKickFunction
     g_original_projectile_bullet_instant_probe_kick = nullptr;
 BoundTransformGetTranslationWsFunction g_bound_transform_get_translation_ws =
     nullptr;
+TracerInitFunction g_original_tracer_init = nullptr;
 struct PeerFireDirectionCapture {
     float final_direction[4]{};
     float final_origin[4]{};
@@ -748,6 +751,14 @@ struct AppliedFireDirectionObservation {
 };
 SRWLOCK g_applied_fire_direction_observation_lock = SRWLOCK_INIT;
 AppliedFireDirectionObservation g_applied_fire_direction_observation{};
+struct TracerVisualOriginContext {
+    bool active = false;
+    std::uint32_t sequence = 0;
+    float native_visual_origin[4]{};
+    float final_direction[4]{};
+    unsigned init_count = 0;
+};
+thread_local TracerVisualOriginContext g_tracer_visual_origin_context{};
 // PlayerFireController::Fire prepares the relay packet on the game thread, but
 // ProcessWeapon::ProjectileEmission builds the local launch record later on a
 // worker thread. Keep a bounded process-wide FIFO so the local-record builder can
@@ -773,6 +784,8 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
     void* process_weapon, void* spawn_info, void* out_process);
 char __fastcall hooked_projectile_bullet_instant_probe_kick(void* projectile);
 char __fastcall hooked_player_try_start_fire(void* controller);
+std::uint64_t* __fastcall hooked_tracer_init(
+    void* tracer, std::uint64_t* result, void* spawn_info);
 
 // ============================================================================
 // =====  WEAPON-ART & FIRE PREDICATES
@@ -32293,6 +32306,7 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
         return 0;
     }
 
+    TracerVisualOriginContext armed_tracer_context{};
     void* launch_record = nullptr;
     if (selected_launch_record_from_spawn_info(spawn_info, launch_record)) {
         void* const player0 = retained_player_object(0);
@@ -32387,6 +32401,7 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
                         kProjectileLaunchRecordDirectionMirrorOffset,
                     capture.final_direction, sizeof(capture.final_direction));
                 float origin_before[4]{};
+                float origin_mirror_before[4]{};
                 const bool apply_origin =
                     finite_fire_origin_capture(capture);
                 if (apply_origin) {
@@ -32396,6 +32411,11 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
                             kProjectileLaunchRecordOriginOffset,
                         sizeof(origin_before));
                     std::memcpy(
+                        origin_mirror_before,
+                        static_cast<std::byte*>(launch_record) +
+                            kProjectileLaunchRecordOriginMirrorOffset,
+                        sizeof(origin_mirror_before));
+                    std::memcpy(
                         static_cast<std::byte*>(launch_record) +
                             kProjectileLaunchRecordOriginOffset,
                         capture.final_origin, sizeof(capture.final_origin));
@@ -32403,6 +32423,30 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
                         static_cast<std::byte*>(launch_record) +
                             kProjectileLaunchRecordOriginMirrorOffset,
                         capture.final_origin, sizeof(capture.final_origin));
+
+                    bool mirror_finite = true;
+                    bool primary_finite = true;
+                    for (int index = 0; index < 4; ++index) {
+                        mirror_finite = mirror_finite &&
+                            std::isfinite(origin_mirror_before[index]);
+                        primary_finite = primary_finite &&
+                            std::isfinite(origin_before[index]);
+                    }
+                    const float* const native_visual_origin = mirror_finite
+                        ? origin_mirror_before
+                        : (primary_finite ? origin_before : nullptr);
+                    if (native_visual_origin != nullptr) {
+                        armed_tracer_context.active = true;
+                        armed_tracer_context.sequence = capture.sequence;
+                        std::memcpy(
+                            armed_tracer_context.native_visual_origin,
+                            native_visual_origin,
+                            sizeof(armed_tracer_context.native_visual_origin));
+                        std::memcpy(
+                            armed_tracer_context.final_direction,
+                            capture.final_direction,
+                            sizeof(armed_tracer_context.final_direction));
+                    }
                 }
                 publish_applied_fire_direction_observation(
                     capture, launch_record);
@@ -32454,8 +32498,178 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
             }
         }
     }
-    return g_original_process_weapon_spawn_projectile(
-        process_weapon, spawn_info, out_process);
+    const TracerVisualOriginContext previous_tracer_context =
+        g_tracer_visual_origin_context;
+    if (armed_tracer_context.active) {
+        g_tracer_visual_origin_context = armed_tracer_context;
+    }
+    const std::int64_t spawn_result =
+        g_original_process_weapon_spawn_projectile(
+            process_weapon, spawn_info, out_process);
+    if (armed_tracer_context.active &&
+        g_tracer_visual_origin_context.init_count == 0) {
+        static std::atomic<unsigned> logged_misses{0};
+        const unsigned index = logged_misses.fetch_add(
+            1, std::memory_order_relaxed);
+        if (index < 32) {
+            char line[128]{};
+            std::snprintf(
+                line, sizeof(line),
+                "TRACER-VISUAL-ORIGIN-MISS seq=%u",
+                armed_tracer_context.sequence);
+            boot_log_line(line);
+        }
+    }
+    if (armed_tracer_context.active) {
+        g_tracer_visual_origin_context = previous_tracer_context;
+    }
+    return spawn_result;
+}
+
+std::uint64_t* __fastcall hooked_tracer_init(
+    void* tracer, std::uint64_t* result, void* spawn_info) {
+    const auto native = g_original_tracer_init;
+    if (native == nullptr) {
+        return result;
+    }
+
+    auto& context = g_tracer_visual_origin_context;
+    std::uint64_t seed_address = 0;
+    void* const puppet = retained_player_object(1);
+    const bool candidate =
+        g_net_role_b && !g_dll_inert && g_state_net.enabled &&
+        context.active &&
+        spawn_info != nullptr && puppet != nullptr &&
+        seh_read_qword(
+            static_cast<std::byte*>(spawn_info) +
+                kSpawnInfoLaunchRecordPointerOffset,
+            seed_address) &&
+        seed_address != 0 &&
+        readable_bytes(reinterpret_cast<void*>(seed_address)) >=
+            kProjectileLaunchRecordOriginMirrorOffset + sizeof(float) * 4 &&
+        launch_record_owned_by_runtime_object(
+            reinterpret_cast<void*>(seed_address), puppet);
+    if (!candidate) {
+        return native(tracer, result, spawn_info);
+    }
+
+    auto* const seed = reinterpret_cast<std::byte*>(seed_address);
+    float seed_direction[4]{};
+    std::memcpy(
+        seed_direction, seed + kProjectileLaunchRecordDirectionOffset,
+        sizeof(seed_direction));
+    bool finite = true;
+    float seed_length_sq = 0.0F;
+    float expected_length_sq = 0.0F;
+    float direction_dot = 0.0F;
+    for (int index = 0; index < 3; ++index) {
+        finite = finite && std::isfinite(seed_direction[index]) &&
+            std::isfinite(context.final_direction[index]) &&
+            std::isfinite(context.native_visual_origin[index]);
+        seed_length_sq += seed_direction[index] * seed_direction[index];
+        expected_length_sq += context.final_direction[index] *
+            context.final_direction[index];
+        direction_dot += seed_direction[index] * context.final_direction[index];
+    }
+    if (!finite || seed_length_sq <= 0.000001F ||
+        expected_length_sq <= 0.000001F) {
+        return native(tracer, result, spawn_info);
+    }
+    direction_dot /= std::sqrt(seed_length_sq * expected_length_sq);
+    if (!std::isfinite(direction_dot) || direction_dot < 0.99F) {
+        return native(tracer, result, spawn_info);
+    }
+
+    float saved_visual_origin[4]{};
+    std::memcpy(
+        saved_visual_origin,
+        seed + kProjectileLaunchRecordOriginMirrorOffset,
+        sizeof(saved_visual_origin));
+    for (int index = 0; index < 3; ++index) {
+        if (!std::isfinite(saved_visual_origin[index])) {
+            return native(tracer, result, spawn_info);
+        }
+    }
+
+    const float dx = saved_visual_origin[0] -
+        context.native_visual_origin[0];
+    const float dy = saved_visual_origin[1] -
+        context.native_visual_origin[1];
+    const float dz = saved_visual_origin[2] -
+        context.native_visual_origin[2];
+    const float visual_origin_delta_sq = dx * dx + dy * dy + dz * dz;
+    const float visual_origin_delta = std::sqrt(visual_origin_delta_sq);
+    const float inv_expected_length = 1.0F / std::sqrt(expected_length_sq);
+    const float along =
+        (dx * context.final_direction[0] +
+         dy * context.final_direction[1] +
+         dz * context.final_direction[2]) * inv_expected_length;
+    const float lateral_delta = std::sqrt(std::max(
+        0.0F, visual_origin_delta_sq - along * along));
+
+    // Tracer::Init synchronously materializes its persistent visual transforms
+    // from this copied record. Temporarily restore only its +0x70 visual origin
+    // while it runs, then restore the relayed value before the projectile and
+    // collision path resumes. Physical +0x20 and direction remain relayed.
+    std::memcpy(
+        seed + kProjectileLaunchRecordOriginMirrorOffset,
+        context.native_visual_origin,
+        sizeof(context.native_visual_origin));
+    std::uint64_t* const native_result = native(tracer, result, spawn_info);
+    std::memcpy(
+        seed + kProjectileLaunchRecordOriginMirrorOffset,
+        saved_visual_origin,
+        sizeof(saved_visual_origin));
+    ++context.init_count;
+
+    static std::atomic<unsigned> logged{0};
+    const unsigned index = logged.fetch_add(1, std::memory_order_relaxed);
+    if (index < 64) {
+        char line[384]{};
+        std::snprintf(
+            line, sizeof(line),
+            "TRACER-VISUAL-ORIGIN seq=%u init=%u dot=%.5f "
+            "delta=%.3f lateral=%.3f "
+            "seed=0x%llX tracer=0x%llX native=(%.3f,%.3f,%.3f) "
+            "physical=(%.3f,%.3f,%.3f)",
+            context.sequence, context.init_count, direction_dot,
+            visual_origin_delta, lateral_delta,
+            static_cast<unsigned long long>(seed_address),
+            static_cast<unsigned long long>(
+                reinterpret_cast<std::uintptr_t>(tracer)),
+            context.native_visual_origin[0],
+            context.native_visual_origin[1],
+            context.native_visual_origin[2],
+            saved_visual_origin[0], saved_visual_origin[1],
+            saved_visual_origin[2]);
+        boot_log_line(line);
+    }
+    return native_result;
+}
+
+bool install_tracer_visual_origin_relay() {
+    auto* const slot = reinterpret_cast<void**>(
+        g_module + kTracerInitVtableSlotRva);
+    void* const expected = reinterpret_cast<void*>(g_module + kTracerInitRva);
+    if (*slot != expected) {
+        boot_log_line(
+            "Tracer visual-origin relay SKIPPED (vtable preflight)");
+        return false;
+    }
+    g_original_tracer_init = reinterpret_cast<TracerInitFunction>(*slot);
+    DWORD old = 0;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+        g_original_tracer_init = nullptr;
+        boot_log_line("Tracer visual-origin relay SKIPPED (protect)");
+        return false;
+    }
+    *slot = reinterpret_cast<void*>(&hooked_tracer_init);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(void*), old, &ignored);
+    boot_log_line(
+        "Tracer visual-origin relay installed (vtable slot 0x142AA3238)");
+    return true;
 }
 
 bool seh_projectile_probe_ray(
@@ -46747,8 +46961,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02e "
-        "(exact-callsite ADS foot-step discriminator)");
+        "TLL co-op runtime init 2026-08-02f "
+        "(isolated Tracer visual-origin relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -46886,6 +47100,7 @@ DWORD WINAPI install_hook(void*) {
     install_weapon_interact_world_lifecycle();
     install_build_fire_args_gate();
     install_projectile_launch_record_direction_relay();
+    install_tracer_visual_origin_relay();
     // install_aim_target_gate();  // REVERTED: GetTargetPointFromReticle builds
     // its frame from entry rsp (mov rax,rsp; lea rbp,[rax-0x78]); a call-based
     // trampoline shifts rsp by 8 -> frame misaligned -> instant crash on ADS.

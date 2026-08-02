@@ -15,10 +15,15 @@
       side tracers persisted with zero owner-1 unmatched projectiles and exact
       ProbeKick direction/origin. Receiver-native versus relayed launch origins
       differ by 0.347--1.957 m (median 0.943 m).
-- [ ] Separate visual Tracer start from physical collision origin. First prove
-      exact `Tracer::Init` ownership/count and compare its seed origin with the
-      receiver-native muzzle origin; do not revert launch-record `+0x70` or the
-      correct impact path.
+- [x] Separate visual Tracer start from physical collision origin. Exact RTTI
+      slot `0x142AA3238` resolves to `Tracer::Init 0x14155BE10`; its copied
+      record reads direction `+0x30` and visual origin `+0x70`. Build `f` uses
+      exact SpawnProjectile-scoped TLS and restores only `+0x70` during Init;
+      physical `+0x20` and the correct impact path remain relayed.
+- [ ] Run build `2026-08-02f`: automatic fire must emit one
+      `TRACER-VISUAL-ORIGIN` per selected launch, move only the visual start to
+      the clone muzzle, and preserve impact marks/ProbeKick. No visual change
+      selects asset/muzzle ownership instead of another projectile edit.
 - [ ] Run the exact channel-0 `PlayerMoveSequencer_UpdatePhase` action-start
       discriminator for local and puppet GunMove. Confirm sender-only
       `PlayerUpdatePlayAnimFade` edges for `aim-idle-rotate[-cc]` before relaying

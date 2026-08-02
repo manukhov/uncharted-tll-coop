@@ -336,6 +336,10 @@ constexpr std::size_t kProjectileLaunchRecordDirectionOffset = 0x30;
 constexpr std::size_t kProjectileLaunchRecordDirectionMirrorOffset = 0x40;
 // The builder duplicates the same R8 origin for the base projectile/tracer path.
 constexpr std::size_t kProjectileLaunchRecordOriginMirrorOffset = 0x70;
+// Exact Tracer RTTI vtable slot containing Tracer::Init. Its third argument is
+// spawn_info and spawn_info+0x28 selects the copied launch record.
+constexpr std::uintptr_t kTracerInitVtableSlotRva = 0x2AA3238;
+constexpr std::uintptr_t kTracerInitRva = 0x155BE10;
 constexpr std::size_t kRuntimeObjectHandlePointerOffset = 0xA8;
 constexpr std::size_t kRuntimeObjectHandleIdOffset = 0xBC;
 constexpr std::uintptr_t kProjectileBulletInstantProbeKickRva = 0x152C9B0;
