@@ -16252,3 +16252,11 @@ AnimStateLayer clip resolution/masking; the builder/selector must not be forced.
 Release compilation completed without warnings or errors; build `e` contains
 both this read-only discriminator and the independently documented remote-fire
 pulse release from build `c`.
+
+The autonomous cold-install check for build `e` passed on both copies. PID 9668
+selected role A/Chloe and PID 8840 selected role B/Nadine; both logged
+`ADS foot-step phase-0 discriminator installed (0x140CA4B85)`, the selected
+projectile relay, and the confirmed PlayerStrafe vertical relay. Both processes
+remain Win32-responsive and neither emitted a crash-observer exception,
+`SKIPPED`, or partial-install marker. This confirms only exact-callsite packaging;
+no `AIM-STEP-PH0`, remote shot, or visual behavior test has yet been performed.
