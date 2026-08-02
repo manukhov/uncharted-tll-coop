@@ -16072,10 +16072,10 @@ lookups resolve `PlayerStrafeController_Initialize`,
 `g_ScreenRouteHudStatePtrs` at their addresses above. The final-camera provenance
 helpers named in C3 were then added to the same durable label pass.
 
-### 2026-08-02 HYPOTHESIS build `2026-08-02b`: bounded final `StrafeIk forward.y` relay
+### 2026-08-02 CONFIRMED build `2026-08-02b`: bounded final `StrafeIk forward.y` relay
 
-The selected static seam is now implemented, but remains **HYPOTHESIS** until the
-written sky/ground discriminator above is run. `StatePacket` v14 extends the v13
+The selected static seam was first implemented as **HYPOTHESIS** pending the
+written sky/ground discriminator above. `StatePacket` v14 extends the v13
 prefix from 520 to 528 bytes with `strafe_ik_forward_y` at `+516` and an explicit
 validity byte at `+520`; no existing flags or `aim_pitch_up/down` semantics were
 repurposed.
@@ -16120,4 +16120,19 @@ fresh copies: PID 9336 (role A/Chloe) and PID 7364 (role B/Nadine) each logged
 `PlayerStrafe final-forward-Y relay installed (vtable +0x60)`, remained
 responsive, and emitted no crash-observer exception. This confirms only the
 address/signature guard and patch installation. No `CAPTURE`/`APPLY` marker or
-visual sky/ground result exists yet, so the behavior stays **HYPOTHESIS**.
+visual sky/ground result existed at that point, so the behavior remained
+**HYPOTHESIS** until the discriminator below.
+
+The written opposite-camera discriminator then passed in both directions and
+promotes the relay to **CONFIRMED**. The user first held the receiver camera
+opposite while Nadine authored vertical ADS; PID 7364 captured the sender
+Locator and PID 9336 applied packet sequence 982 with
+`native=-0.90994 peer=+0.31339`. Reversing the roles produced PID 9336 capture
+and PID 7364 apply at sequence 2356 with
+`native=+0.46220 peer=-0.58747`. Those opposite signs prove that the wrapper
+overrode the receiver-camera-derived scalar rather than merely observing two
+coincident camera poses. The visible puppet followed the sender vertically in
+both cases; the user reported success, both processes remained responsive, and
+neither current PID emitted a crash-observer exception. No new IDB label is
+needed: all three native functions and the concrete controller slot were already
+named and saved before implementation.

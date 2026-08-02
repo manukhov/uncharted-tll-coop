@@ -2470,12 +2470,15 @@ Do not reopen these as the first move:
       transported forward-Y inside `(-1,+1)`, and call the original with an
       unmodified Locator outside fresh strict ADS. Build `2026-08-02b` compiles;
       its vtable and native-math prologue preflight skips unknown binaries.
-- [ ] Run the written `2026-08-02b` discriminator: hold the receiver camera
+- [x] Run the written `2026-08-02b` discriminator: hold the receiver camera
       opposite while the sender alternates sky/ground in exact GunMove ADS.
       Require `STRAFE-IK-Y-CAPTURE` and `STRAFE-IK-Y-APPLY`, vertical puppet
       head/spine/weapon following the sender, unchanged horizontal aim/tracers,
       and immediate native behavior after ADS/GunMove exit. Record CONFIRMED or
-      REJECTED before changing another seam.
+      REJECTED before changing another seam. CONFIRMED in both directions:
+      Nadine->Chloe applied `native=-0.90994 peer=+0.31339`; Chloe->Nadine
+      applied `native=+0.46220 peer=-0.58747`, and the visible puppet followed
+      the sender rather than the receiver camera without a crash.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`
