@@ -10880,7 +10880,7 @@ bool install_player_strafe_ik_forward_y_relay() {
     constexpr std::array<std::uint8_t, 10> kBasisPrologue{
         0x48, 0x8B, 0xC4, 0x48, 0x81, 0xEC, 0x98, 0x00, 0x00, 0x00};
     constexpr std::array<std::uint8_t, 10> kQuaternionPrologue{
-        0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48, 0x83, 0xEC, 0x30};
+        0x48, 0x89, 0x5C, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x30};
     if (*slot != expected ||
         std::memcmp(
             reinterpret_cast<const void*>(
@@ -46436,7 +46436,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02a "
+        "TLL co-op runtime init 2026-08-02b "
         "(bounded PlayerStrafe final-forward-Y relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

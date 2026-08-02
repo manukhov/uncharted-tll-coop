@@ -2468,9 +2468,9 @@ Do not reopen these as the first move:
       `0x14100C400`, gate both sides on owner screen and current action
       `GunMove 0x12D842C0`, keep the receiver packet bound at 250 ms, clamp the
       transported forward-Y inside `(-1,+1)`, and call the original with an
-      unmodified Locator outside fresh strict ADS. Build `2026-08-02a` compiles;
+      unmodified Locator outside fresh strict ADS. Build `2026-08-02b` compiles;
       its vtable and native-math prologue preflight skips unknown binaries.
-- [ ] Run the written `2026-08-02a` discriminator: hold the receiver camera
+- [ ] Run the written `2026-08-02b` discriminator: hold the receiver camera
       opposite while the sender alternates sky/ground in exact GunMove ADS.
       Require `STRAFE-IK-Y-CAPTURE` and `STRAFE-IK-Y-APPLY`, vertical puppet
       head/spine/weapon following the sender, unchanged horizontal aim/tracers,

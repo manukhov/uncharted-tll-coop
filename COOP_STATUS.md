@@ -16072,7 +16072,7 @@ lookups resolve `PlayerStrafeController_Initialize`,
 `g_ScreenRouteHudStatePtrs` at their addresses above. The final-camera provenance
 helpers named in C3 were then added to the same durable label pass.
 
-### 2026-08-02 HYPOTHESIS build `2026-08-02a`: bounded final `StrafeIk forward.y` relay
+### 2026-08-02 HYPOTHESIS build `2026-08-02b`: bounded final `StrafeIk forward.y` relay
 
 The selected static seam is now implemented, but remains **HYPOTHESIS** until the
 written sky/ground discriminator above is run. `StatePacket` v14 extends the v13
@@ -16106,3 +16106,11 @@ pre-blend aim-pitch relay are untouched. Release compilation completed without
 warnings/errors, and the DLL contains the version marker plus the bounded
 install/capture/apply markers. No game process was launched for this build yet;
 the earlier falsifiable prediction remains the required next step.
+
+Build `2026-08-02a` was stopped at installation and is **REJECTED as a runnable
+artifact**, not as a seam: both copies logged `SKIPPED (preflight mismatch)` and
+the wrapper was never installed. Read-only `ReadProcessMemory` comparison proved
+that the vtable slot and basis prologue matched, while retail
+`Quaternion_FromOrthonormalBasis` starts `48 89 5C 24 10` rather than the
+incorrectly transcribed `...24 08`. Build `b` corrects only that expected byte;
+there was no capture, apply or visual test under build `a`.
