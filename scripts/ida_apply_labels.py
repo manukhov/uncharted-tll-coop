@@ -2366,7 +2366,9 @@ FUNCTIONS = {
         "GestureMgr_CreateTargetProvider",
         "Constructs the exact target provider for a gesture: TargetLookAt for CRC "
         "0xA399FA92, TargetAimAt for CRC 0xE83A8507, or TargetScriptLambda. The "
-        "native owner weak cell/id are copied from owner+0xA8/+0xBC.",
+        "native owner weak cell/id are copied from owner+0xA8/+0xBC. A zero or "
+        "other settings target type with no script callback returns false; the "
+        "caller may then use its plain TargetPoint fallback.",
     ),
     0x1406F26D0: (
         "GestureTargetAimAt_GetTarget",
@@ -2478,9 +2480,13 @@ FUNCTIONS = {
     ),
     0x1420F3F50: (
         "GestureLayer_PreAlignUpdatePerGestureNode",
-        "GestureLayer per-node pre-align update path. It reaches "
-        "AnimNodeGesture_StepAngles for active gesture nodes; this establishes a "
-        "generic authored-pose route but does not establish Player/camera ownership.",
+        "GestureLayer per-node pre-align update path. It first uses dispatch "
+        "context+0x10 as a custom target; when that is null it asks GestureConfig "
+        "for the settings target provider, and on failure constructs a plain "
+        "Gesture::TargetPoint before building ComputeArgs. The stock base ADS "
+        "node 0xA6448 has target type zero and no target callback, while its "
+        "BaseLayer context is null, so this path supplies the plain fallback, "
+        "not LookAt, AimAt or a camera provider.",
     ),
     0x1420F3CA0: (
         "GestureLayer_DispatchPreAlignToAnimNodeGesture",

@@ -15712,3 +15712,58 @@ No runtime test is justified yet. The next static step is to reverse-own the
 eleven fixed LookAt descriptors and determine whether any reaches state graph
 `strafe-idle-ap+0x66048`; if none does, G1 is rejected and the search moves to
 the non-Gesture command producer without another user exam.
+
+### 2026-08-01 STATIC/REJECTED: ordinary ADS has one targetless Gesture, no `LookAt`
+
+The reverse-owner audit is now complete for all 17 `AnimNodeGesture`
+descriptors in `anim-player.bin`; no traversal hit its depth/node cap. It walks
+exact qword parents, promotes only descriptors with a duplicated nonzero type-id
+prefix, and accepts an owner only when state record `+0x18` is the graph pointer,
+record `+0x0` resolves to a printable name, and record `+0x8` equals that name's
+StringId. The extended `--gesture-node-audit` prints every owner set and the
+control-state summary.
+
+None of the eleven fixed `LookAt` descriptors reaches `strafe-idle-ap`. Their
+complete owner sets are ordinary locomotion/turn transitions, idle and grapple
+throw, submerged/surface swim, free-rope, vehicle leaning and salvage-trailer
+states. The other selector-driven descriptors are owned by
+`swim-submerged-idle`, the eight `s_script-full-body*` states, `prone`, and
+`s_gesture-1`; none reaches ordinary ADS either.
+
+Exactly one Gesture descriptor belongs to the control state:
+
+`state record 0xD040 strafe-idle-ap (0x3C347132) -> graph 0x66048 ->
+AnimNodeGesture 0xA6448`.
+
+The same fixed node is shared by 18 related strafe/melee/push/shield/look/crouch
+states. Its gesture id is `0x7855F662`, its descriptor target callback is null,
+and its `gestures.bin` record at `+0x4C020` has target type `0` at record
+`+0x14`. Thus it is the one fixed `none` row from the earlier 12-fixed-node
+count, not one of the eleven `LookAt` rows.
+
+Native control flow independently proves what zero means. With the live
+`BaseLayerGestureLayer_PreAlignUpdate 0x1420F6B30` dispatch context `+0x10`
+null, `GestureLayer_PreAlignUpdatePerGestureNode 0x1420F3F50` asks the config
+factory for a settings target. `GestureMgr_CreateTargetProvider 0x1406F3510`
+returns false unless it has a script callback, LookAt CRC `0xA399FA92`, or AimAt
+CRC `0xE83A8507`; target type zero therefore takes the caller's plain
+`Gesture::TargetPoint` fallback. It does not construct LookAt, AimAt,
+LookAtOrCamera or any native camera reader. The settings record's angle/joint
+data may still drive authored command-6/7 clips, but it has no target-provider
+edge from `PlayerStrafeLookAt`.
+
+This satisfies the static quota with complete asset ownership, exact settings
+data and the native provider/fallback branch. **G1 is REJECTED:** ordinary ADS
+does not contain a fixed or dynamic LookAt Gesture capable of importing the
+receiver camera. The previously recorded steady-state root behavior also
+selects the Animation endpoint rather than root child 1 at near-zero weight, so
+the targetless Gesture is not a justification to reopen the rejected Gesture
+hooks.
+
+**G3 is now the sole surviving topology:** the camera-correlated vertical pose
+is introduced by a non-Gesture producer or by a writer after command generation.
+Keep runtime parked. Resume from the already-proven steady
+`strafe-idle-ap+0x66048` Animation endpoint and the late visible-pose DAG;
+search for post-command head/spine/arms writers with a Player screen-route or
+camera dependency. Do not patch `PlayerStrafeLookAt`, Gesture targets, LRDU,
+active-state weights, LookAtIK or the flashlight path.

@@ -10,6 +10,7 @@ general-purpose archive unpacker.
 from __future__ import annotations
 
 import argparse
+from collections import deque
 import ctypes
 import re
 import struct
@@ -516,6 +517,41 @@ def trace_unique_state_owner(
     return chain, None
 
 
+def trace_state_owners(
+    data: bytes,
+    graph_offset: int,
+    max_depth: int = 12,
+    max_nodes: int = 4096,
+) -> tuple[list[tuple[int, str, int, int]], int, bool]:
+    """Reverse-walk all qword parents and return validated state records."""
+
+    queue = deque([(graph_offset, 0)])
+    seen = {graph_offset}
+    states: set[tuple[int, str, int, int]] = set()
+    complete = True
+    while queue:
+        target, depth = queue.popleft()
+        if depth >= max_depth:
+            complete = False
+            continue
+        for reference in qword_references(data, target):
+            state = state_record_for_graph_reference(data, reference, target)
+            if state is not None:
+                states.add(state)
+                continue
+            descriptor = containing_typed_descriptor(data, reference)
+            parent = descriptor if descriptor is not None else reference
+            if parent in seen:
+                continue
+            seen.add(parent)
+            if len(seen) > max_nodes:
+                complete = False
+                queue.clear()
+                break
+            queue.append((parent, depth + 1))
+    return sorted(states), len(seen), complete
+
+
 def format_linear_expression(expression: tuple[str | None, int]) -> str:
     base, offset = expression
     if base is None:
@@ -786,6 +822,32 @@ def audit_anim_node_gestures(anim_data: bytes, gesture_data: bytes) -> None:
         f"fixed_look_at={len(fixed_look_at)} "
         f"fixed_aim_at={len(fixed_aim_at)} fixed_none={len(fixed_none)} "
         f"dynamic_target_callbacks={len(dynamic_target_callbacks)}"
+    )
+    ads_name = "strafe-idle-ap"
+    ads_rows: list[tuple[int, int, int, int]] = []
+    ownership_complete = True
+    for row in descriptors:
+        owners, searched, complete = trace_state_owners(anim_data, row[0])
+        ownership_complete &= complete
+        rendered_owners = ",".join(
+            f"0x{offset:X}:{name}:0x{state_id:08X}"
+            for offset, name, state_id, _animation_id in owners
+        )
+        print(
+            f"node_owners offset=0x{row[0]:X} gesture=0x{row[1]:08X} "
+            f"target=0x{row[7]:08X} searched={searched} "
+            f"complete={int(complete)} states=[{rendered_owners}]"
+        )
+        if any(owner[1] == ads_name for owner in owners):
+            ads_rows.append((row[0], row[1], row[4], row[7]))
+    rendered_ads = ",".join(
+        f"0x{offset:X}/gesture=0x{gesture_id:08X}/"
+        f"target_callback=0x{target_callback:X}/target=0x{target_type:08X}"
+        for offset, gesture_id, target_callback, target_type in ads_rows
+    )
+    print(
+        f"gesture_owner_audit_complete={int(ownership_complete)} "
+        f"control_state={ads_name!r} nodes={len(ads_rows)} rows=[{rendered_ads}]"
     )
     audit_script_member_accesses(anim_data, 0x5B0)
     for row in dynamic_target_callbacks:

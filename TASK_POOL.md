@@ -2420,15 +2420,20 @@ Do not reopen these as the first move:
       Blend semantics and exact selector/inline-target VM fields independently
       confirm that ownership. The proven live `strafe-idle-ap` state uses the
       separate graph `0x66048`, so G2 is REJECTED for ordinary ADS.
-- [ ] Keep runtime tests parked. Reverse-own all eleven fixed `LookAt`
-      descriptors and determine whether any reaches the `strafe-idle-ap`
-      graph at `anim-player.bin+0x66048`. G1 (ordinary LookAt contaminated by
-      the receiver-local PlayerStrafeLookAt request) remains leading; G3 is a
-      non-Gesture generator. If no fixed LookAt belongs to that state, reject
-      G1 and move directly to the non-Gesture command producer. Only after the
-      asset-to-command identity is closed should a corrective build be proposed.
-      Do not repatch LRDU, active-state weights, AimAt, LookAtIK or the
-      flashlight-only LookAtOrCamera.
+- [x] Reverse-own all 17 Gesture descriptors with a complete bounded graph
+      walk. None of the 11 fixed LookAt or five dynamic descriptors reaches
+      `strafe-idle-ap`. Its sole node is fixed `0xA6448`, gesture
+      `0x7855F662`, with settings target type zero and no target callback.
+      BaseLayer supplies no custom TargetPoint; the config factory rejects zero
+      and the per-node path constructs a plain fallback. G1 is therefore
+      REJECTED, not a correction seam.
+- [ ] Keep runtime tests parked. Follow the selected `strafe-idle-ap+0x66048`
+      Animation endpoint through command evaluation into the late visible-pose
+      DAG and find a post-command head/spine/arms writer with an owner
+      screen-route or camera dependency. G3, a non-Gesture producer or
+      post-command writer, is the sole surviving topology. Do not repatch
+      PlayerStrafeLookAt, Gesture targets, LRDU, active-state weights, LookAtIK
+      or the flashlight-only LookAtOrCamera.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`
