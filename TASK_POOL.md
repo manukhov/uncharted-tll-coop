@@ -118,8 +118,9 @@
       2 at `0x14210199C/0x142101F69`, why it did not equal retained slot 0/1 in
       build `p`, and select a mutation-free admission observer without a silent
       identity gate. No further foot runtime test until that gate is proven.
-- [ ] Confirm once that build `q` removes the recent gameplay lag without changing
-      the already-confirmed aim, fire, reload, grenade and movement behavior.
+- [x] Confirm build `q` performance: PIDs 15444/6220 remained responsive with
+      zero exception/AIM/attachment diagnostic rows, and the user confirmed the
+      recent gameplay lag is gone with normal behavior.
 
 ## P0: Ground weapon world lifecycle and pickup prompt (`hy`, 2026-07-27)
 

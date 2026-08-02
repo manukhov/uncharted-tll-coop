@@ -16633,8 +16633,12 @@ Build `q` keeps the confirmed aim/weapon/attachment behavior but compiles out
 the historical aim-layer and Nadine attachment inventories, disables the global
 VEH crash observer and no longer installs the MoveLegIk admission probe. Boot and
 installation lines remain. This removes the identified synchronous file I/O and
-exception stack formatting from ordinary gameplay; the user's perceived
-performance still requires one clean production-run confirmation.
+exception stack formatting from ordinary gameplay.
+
+**RUNTIME CONFIRMED:** the clean build-`q` run in PIDs 15444/6220 produced zero
+exception dumps, zero AIM inventory rows and zero attachment inventory rows; both
+processes remained responsive. The user confirmed the recent gameplay lag is
+gone and reported normal behavior. The production diagnostic cleanup is retained.
 
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
