@@ -16420,3 +16420,21 @@ selects an over-strict owner gate; `entries=1` with a direction failure selects
 a distinct Tracer seed; `entries=0` confirms the stock `no-tracers`/upgrade-13
 branch and moves ownership to a separate visual path. No new origin, transform,
 packet or gameplay field is written by this discriminator.
+
+### 2026-08-02 CONFIRMED: side-streak shots never enter `Tracer::Init` (`2026-08-02g`)
+
+The user fired an automatic burst from Chloe while observing the remote copy and
+again saw roughly half of the lines originate correctly and half originate from
+the side. In the bounded receiver session, build `g` recorded 63 raw
+`TRACER-VISUAL-CANDIDATE` entries and 32 capped `TRACER-VISUAL-ORIGIN-MISS`
+rows. Every raw candidate had `owner=1`, `dir=1`, and direction `dot=1.00000`;
+there were zero predicate failures. Every miss was exactly
+`entries=0,seeds=0,owners=0,directions=0`.
+
+This confirms the pre-test prediction and rejects the over-strict owner/direction
+filter and distinct-seed alternatives. The stock authored cadence omits the
+`Tracer` object on the remaining launches, yet the user still sees a side streak,
+so that streak is owned by a separate visual path. The leading STATIC candidate
+is the retained muzzle-SFX actor path at ProcessWeapon `+0x998/+0x9A8`. The next
+write must be below its shared actor boundary: skipping or stopping the whole
+actor would also remove muzzle flash/audio and is not an acceptable final fix.

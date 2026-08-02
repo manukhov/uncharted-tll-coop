@@ -29,12 +29,15 @@
       exact SpawnProjectile scope emits no Tracer Init. Prove whether it belongs
       to muzzle SFX, an instant-projectile visual, or an authored alternate before
       changing another origin/transform.
-- [ ] Run bounded build `2026-08-02g` for one short automatic burst. Classify each
+- [x] Run bounded build `2026-08-02g` for one short automatic burst. Classify each
       prior `MISS` by exact Tracer entry/readable-seed/owner/direction counters;
       do not treat accepted-patch count as total Init count again. Prediction:
       the side-streak half reports `entries=0`, matching authored per-emission
-      `allow-tracer=0`; if confirmed, trace the ribbon child inside retained
-      muzzle SFX at ProcessWeapon `+0x998/+0x9A8` and preserve flash/audio.
+      `allow-tracer=0`. Confirmed: 63/63 entries passed owner+direction and all
+      32 capped misses had `entries=0`.
+- [ ] Trace the ribbon/tracer child instruction inside retained muzzle SFX at
+      ProcessWeapon `+0x998/+0x9A8`. Isolate its transform/locator below the
+      shared actor boundary so the final fix preserves muzzle flash and audio.
 - [ ] Run the exact channel-0 `PlayerMoveSequencer_UpdatePhase` action-start
       discriminator for local and puppet GunMove. Confirm sender-only
       `PlayerUpdatePlayAnimFade` edges for `aim-idle-rotate[-cc]` before relaying
