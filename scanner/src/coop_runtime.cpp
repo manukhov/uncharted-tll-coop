@@ -1904,12 +1904,16 @@ int peer_slot_of_art(std::uint32_t art);
 // still go through boot_log_line(), while force_log_line() is compiled to a no-op.
 // Flip this only for a bounded experiment with a written prediction.
 constexpr bool kEnableRuntimeDiagnosticLogging = false;
-// Diagnostic hj: hi proved selected slot 0 is null on the puppet. The full
-// six-record table is now observed read-only to exclude a valid grenade bound
-// under another art slot; command, animation and physics semantics are unchanged.
-// installer. Keep the observer early enough to capture that install-time fault;
-// it is exception-only and does no work on a normal frame.
-constexpr bool kEnableCrashObserver = true;
+// The global VEH observer was useful for bounded crash captures, but ordinary
+// engine-handled access violations made it format and synchronously write full
+// stack dumps during normal gameplay. Production must leave it detached; enable
+// it only for a written crash discriminator.
+constexpr bool kEnableCrashObserver = false;
+// Historical aim-layer and Nadine attachment inventories write hundreds of
+// rows whenever animation/attachment allocations are rebuilt. Their questions
+// are already resolved; keep the functional relays/repairs and compile out only
+// the persistent diagnostic walks and file I/O in production.
+constexpr bool kEnablePersistentStateInventoryLogging = false;
 // Build gw proved that final-cull compaction neither removes the visible spawn
 // rifle nor preserves frame time. Keep the observer code available for static
 // correlation, but do not patch the hot RenderMgr callsite in production.
@@ -17922,6 +17926,9 @@ bool seh_capture_original_nadine_attach_records(
 
 void log_original_nadine_attach_records(
     int owner_index, void* player) {
+    if constexpr (!kEnablePersistentStateInventoryLogging) {
+        return;
+    }
     if (owner_index < 0 || owner_index > 1) {
         return;
     }
@@ -17991,6 +17998,9 @@ bool seh_read_native_nadine_identity_fields(
 // plus the active NPC look/rig extension. Keep this census separate from the
 // legacy-Nadine Player snapshot and never use either table as a write donor.
 void log_native_nadine_attach_records(void* npc) {
+    if constexpr (!kEnablePersistentStateInventoryLogging) {
+        return;
+    }
     static bool logged = false;
     if (logged) {
         return;
@@ -18124,6 +18134,10 @@ void ensure_legacy_nadine_attach_points_game_thread() {
         return;
     }
     last_signatures[memo_index] = signature;
+
+    if constexpr (!kEnablePersistentStateInventoryLogging) {
+        return;
+    }
 
     std::ostringstream line;
     line << "NADINE-ATTACH-REPAIR owner=" << target_owner
@@ -27575,9 +27589,11 @@ void __fastcall hooked_smooth_and_publish_directional_aim_weights(
     const float blend = *reinterpret_cast<const float*>(
         static_cast<const std::byte*>(controller) + 0x8EC);
 
-    log_aim_base_state_fingerprint(owner, "steady", raw_up, raw_down);
-    log_aim_registry_snapshot(
-        controller, owner, "steady", raw_up, raw_down, blend);
+    if constexpr (kEnablePersistentStateInventoryLogging) {
+        log_aim_base_state_fingerprint(owner, "steady", raw_up, raw_down);
+        log_aim_registry_snapshot(
+            controller, owner, "steady", raw_up, raw_down, blend);
+    }
 }
 
 void __fastcall hooked_publish_directional_aim_weights(
@@ -27602,9 +27618,11 @@ void __fastcall hooked_publish_directional_aim_weights(
 
     const float blend = *reinterpret_cast<const float*>(
         static_cast<const std::byte*>(controller) + 0x8EC);
-    log_aim_base_state_fingerprint(owner, "transition", up, down);
-    log_aim_registry_snapshot(
-        controller, owner, "transition", up, down, blend);
+    if constexpr (kEnablePersistentStateInventoryLogging) {
+        log_aim_base_state_fingerprint(owner, "transition", up, down);
+        log_aim_registry_snapshot(
+            controller, owner, "transition", up, down, blend);
+    }
 }
 
 bool valid_foot_turn_sample(
@@ -37919,9 +37937,11 @@ void __fastcall hooked_update(void* object) {
             reinterpret_cast<const char*>(object) + sizeof(void*)
         ) == "nadine-buddy") {
         observe_nadine_visual_identity(object);
-        log_native_nadine_attach_records(object);
-        log_native_nadine_weapon_state(object);
-        log_native_nadine_pistol_joint_mapping(object);
+        if constexpr (kEnablePersistentStateInventoryLogging) {
+            log_native_nadine_attach_records(object);
+            log_native_nadine_weapon_state(object);
+            log_native_nadine_pistol_joint_mapping(object);
+        }
         g_last_nadine_object = object;  // set EARLY so the clone auto-spawn (below)
                                         // can read Nadine's look2 for the body swap.
         maybe_queue_remote_cloth_rebuild();
@@ -47819,8 +47839,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02p "
-        "(read-only MoveLegIk footstep admission probe)");
+        "TLL co-op runtime init 2026-08-02q "
+        "(production diagnostics disabled; MoveLegIk probe parked)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -47920,7 +47940,8 @@ DWORD WINAPI install_hook(void*) {
         if (g_enable_puppet_fganim_world_aim_turn) {
             install_fganim_world_aim_turn_callsite_relay();
         }
-        install_move_leg_ik_footstep_admission_probe();
+        boot_log_line(
+            "MoveLegIk footstep admission probe parked after zero-row p run");
         boot_log_line(
             "rejected CharacterLegIk world-frame relay disabled");
         if (g_enable_gun_move_body_turn) {

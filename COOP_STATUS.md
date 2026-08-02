@@ -16609,6 +16609,33 @@ over the single contiguous `0x5D2`-byte range, writes and flushes both rel32
 displacements while the range is RWX, then restores the original protection
 once. The read-only wrapper and written H1--H4 prediction are unchanged.
 
+### 2026-08-02 RUNTIME INCONCLUSIVE/PARKED: build `p` emitted zero admission rows; production diagnostics removed in `q`
+
+The user repeated the stationary ADS turn on local Chloe while observing Nadine.
+The visible feet still did not replant, but build `p` emitted **zero**
+`AIM-FOOT-ADMISSION` rows in either PID despite both exact-callsite installers
+reporting success. Therefore this visible negative does not classify H1--H4:
+the wrapper's retained-object/ADS gate failed before sampling, or the two stock
+calls were not reached for the tested owner. Do not infer missing `foot-effect`
+from an absent row and do not mutate its Locator. The probe is parked in build
+`2026-08-02q`; static work must first resolve the exact Character argument
+identity and a gate that cannot silently exclude the active owner.
+
+The same run confirmed a separate diagnostic-load regression. PIDs 10772/9120
+wrote 1,869 log rows: 809 `NADINE-ATTACH-ORIGINAL-RECORD`, 208
+`AIM-BLEND-NODE`, 112 `AIM-LAYER`, 86 each
+`NPC-NADINE-ATTACH-RECORD`/`AIM-LAYER-INSTANCE`, 84 `AIM-LAYER-TRACK`, plus 16
+full crash-observer dumps for engine-handled access violations. None of those
+inventories remains an open production question, and the detailed attachment
+walks repeatedly reran when engine allocations changed.
+
+Build `q` keeps the confirmed aim/weapon/attachment behavior but compiles out
+the historical aim-layer and Nadine attachment inventories, disables the global
+VEH crash observer and no longer installs the MoveLegIk admission probe. Boot and
+installation lines remain. This removes the identified synchronous file I/O and
+exception stack formatting from ordinary gameplay; the user's perceived
+performance still requires one clean production-run confirmation.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

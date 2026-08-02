@@ -105,13 +105,21 @@
       faulted writing `0x142101F6A` because the two callsites share one code page
       and the installer restored RX after the first write. Build `p` protects,
       patches and restores the one contiguous range; probe semantics are unchanged.
-- [ ] Run the single build-`p` read-only discriminator: stationary ADS-turn local
-      Chloe while watching from Nadine. Compare bounded
-      `AIM-FOOT-ADMISSION owner=0/1 window=0/1` rows. Local `-1` selects a wrong
-      owner; local admitted/puppet `-1` selects a missing clip effect; both
-      admitted with divergent numeric targets selects target-frame correction;
-      matching outputs selects the later GroundModel/solve/commit path. The
-      wrapper calls stock first and never mutates game state.
+- [x] Run build `p` read-only discriminator. Visible remote feet still did not
+      replant, but both processes emitted zero `AIM-FOOT-ADMISSION` rows despite
+      successful installation, so H1--H4 remain unclassified. Park the probe;
+      do not treat the visible result as evidence about `foot-effect`.
+- [x] Restore production logging profile in build `q`: disable the global crash
+      observer and compile out resolved AIM layer/registry plus Nadine attachment
+      inventories while retaining all confirmed functional relays/repairs. The
+      prior run wrote 1,869 diagnostic rows, including 809 full attachment records
+      and 16 exception stack dumps.
+- [ ] Resolve statically what exact Character/owner pointer is passed as argument
+      2 at `0x14210199C/0x142101F69`, why it did not equal retained slot 0/1 in
+      build `p`, and select a mutation-free admission observer without a silent
+      identity gate. No further foot runtime test until that gate is proven.
+- [ ] Confirm once that build `q` removes the recent gameplay lag without changing
+      the already-confirmed aim, fire, reload, grenade and movement behavior.
 
 ## P0: Ground weapon world lifecycle and pickup prompt (`hy`, 2026-07-27)
 
