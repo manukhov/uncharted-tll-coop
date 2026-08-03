@@ -62,6 +62,8 @@ using CharacterLegIkControllerUpdateFunction = void(__fastcall*)(
     void*, const void*, std::uintptr_t);
 using MoveLegIkUpdateFeetPlantedFunction = std::int64_t(__fastcall*)(
     void*, void*, int, const float*, const float*);
+using MoveLegIkGroundModelDeepCopyFunction = std::int64_t(__fastcall*)(
+    void*, const void*);
 using BuildNavigationFrameFunction =
     void(__fastcall*)(void*, const void*, std::uint32_t, float);
 using MoveToFunction = void(__fastcall*)(
@@ -143,6 +145,8 @@ FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullp
 CharacterLegIkControllerUpdateFunction
     g_character_leg_ik_controller_update = nullptr;
 MoveLegIkUpdateFeetPlantedFunction g_move_leg_ik_update_feet_planted = nullptr;
+MoveLegIkGroundModelDeepCopyFunction g_move_leg_ik_ground_model_deep_copy =
+    nullptr;
 std::atomic<void*> g_local_fganim_data{nullptr};
 std::atomic<void*> g_puppet_fganim_data{nullptr};
 std::array<std::atomic<std::uint32_t>, 4> g_local_fganim_quat_bits{};
@@ -164,9 +168,31 @@ struct PuppetLegIkWorldFrameState {
 SRWLOCK g_puppet_leg_ik_world_frame_lock = SRWLOCK_INIT;
 PuppetLegIkWorldFrameState g_puppet_leg_ik_world_frame{};
 std::atomic<bool> g_puppet_leg_ik_stage_logged{false};
-std::atomic<std::uint32_t> g_footstep_admission_probe_rows{0};
-std::array<std::atomic<ULONGLONG>, 4> g_footstep_admission_probe_last_ms{};
-std::array<std::atomic<bool>, 2> g_footstep_job_reach_seen{};
+struct AimFootstepRelayCapture {
+    void* owner = nullptr;
+    std::uint32_t sequence = 0;
+    float phase[2]{};
+    float history_world[2][8]{};
+    float history_local[2][8]{};
+    float next_world[2][8]{};
+    float next_local[2][8]{};
+    std::uint8_t admitted_mask = 0;
+    ULONGLONG captured_ms = 0;
+};
+SRWLOCK g_local_aim_footstep_lock = SRWLOCK_INIT;
+AimFootstepRelayCapture g_local_aim_footstep{};
+std::atomic<std::uint32_t> g_local_aim_footstep_sequence{0};
+std::atomic<std::uint32_t> g_puppet_aim_footstep_last_applied_sequence{0};
+std::atomic<bool> g_aim_footstep_capture_logged{false};
+std::atomic<bool> g_aim_footstep_apply_logged{false};
+
+struct MoveLegIkFeetPlantedThreadContext {
+    void* move_leg = nullptr;
+    void* character = nullptr;
+    int owner = -1;
+};
+thread_local MoveLegIkFeetPlantedThreadContext
+    g_move_leg_ik_feet_planted_thread_context{};
 std::atomic<bool> g_puppet_fganim_world_turn_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_blended_seen{false};
@@ -1913,9 +1939,9 @@ constexpr bool kEnableCrashObserver = false;
 // are already resolved; keep the functional relays/repairs and compile out only
 // the persistent diagnostic walks and file I/O in production.
 constexpr bool kEnablePersistentStateInventoryLogging = false;
-// One bounded, read-only discriminator at the worker's exact Character-bearing
-// callsite. Remove or park it after the F1/F2/F3 admission classification.
-constexpr bool kEnableMoveLegIkAdmissionProbe = true;
+// One-job numeric footstep relay at the proven Character-bearing worker and
+// pre-admission continuation seams. Process-local record headers stay native.
+constexpr bool kEnableMoveLegIkFootstepRelay = true;
 // Build gw proved that final-cull compaction neither removes the visible spawn
 // rifle nor preserves frame time. Keep the observer code available for static
 // correlation, but do not patch the hot RenderMgr callsite in production.
@@ -12150,22 +12176,54 @@ bool copy_puppet_leg_ik_world_frame(
     return valid;
 }
 
-struct FootstepAdmissionProbeSample {
-    float phase[2]{};
-    float history_world[2][4]{};
-    float history_local[2][4]{};
-    float next_world[2][4]{};
-    float next_local[2][4]{};
-};
+bool valid_aim_footstep_locator(const float locator[8]) {
+    if (locator == nullptr) {
+        return false;
+    }
+    for (std::size_t component = 0; component < 8; ++component) {
+        if (!std::isfinite(locator[component])) {
+            return false;
+        }
+    }
+    const float quat_norm_sq =
+        locator[4] * locator[4] + locator[5] * locator[5] +
+        locator[6] * locator[6] + locator[7] * locator[7];
+    return quat_norm_sq >= 0.25F && quat_norm_sq <= 2.25F;
+}
 
-bool seh_capture_footstep_admission_probe(
-    void* move_leg, FootstepAdmissionProbeSample& sample) {
+bool valid_aim_footstep_sample(const AimFootstepRelayCapture& sample) {
+    const std::uint8_t mask = sample.admitted_mask & 0x3U;
+    if (mask == 0 || (sample.admitted_mask & ~0x3U) != 0) {
+        return false;
+    }
+    for (std::size_t leg = 0; leg < 2; ++leg) {
+        const float phase = sample.phase[leg];
+        if (!std::isfinite(phase) || phase < -1.1F || phase > 1.1F) {
+            return false;
+        }
+        if ((mask & (1U << leg)) == 0) {
+            continue;
+        }
+        if (phase < 0.0F ||
+            !valid_aim_footstep_locator(sample.history_world[leg]) ||
+            !valid_aim_footstep_locator(sample.history_local[leg]) ||
+            !valid_aim_footstep_locator(sample.next_world[leg]) ||
+            !valid_aim_footstep_locator(sample.next_local[leg])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool seh_capture_aim_footstep_sample(
+    void* move_leg, AimFootstepRelayCapture& sample) {
     __try {
         if (move_leg == nullptr) {
             return false;
         }
         const auto* const base = static_cast<const std::byte*>(move_leg);
         std::memcpy(sample.phase, base + 0x2C, sizeof(sample.phase));
+        sample.admitted_mask = 0;
         for (std::size_t leg = 0; leg < 2; ++leg) {
             const std::size_t stride = leg * 0x50;
             std::memcpy(
@@ -12180,74 +12238,146 @@ bool seh_capture_footstep_admission_probe(
             std::memcpy(
                 sample.next_local[leg], base + 0x110 + stride,
                 sizeof(sample.next_local[leg]));
+            if (std::isfinite(sample.phase[leg]) &&
+                sample.phase[leg] >= 0.0F) {
+                sample.admitted_mask |= static_cast<std::uint8_t>(1U << leg);
+            }
         }
-        return true;
+        return valid_aim_footstep_sample(sample);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         sample = {};
         return false;
     }
 }
 
-void log_footstep_admission_probe(
-    int owner,
-    int window,
-    const float* world_locator,
-    const FootstepAdmissionProbeSample& sample) {
-    if (owner < 0 || owner > 1 || window < 0 || window > 1 ||
-        world_locator == nullptr) {
-        return;
-    }
-    const std::size_t rate_slot =
-        static_cast<std::size_t>(owner * 2 + window);
-    const ULONGLONG now = GetTickCount64();
-    ULONGLONG last =
-        g_footstep_admission_probe_last_ms[rate_slot].load(
-            std::memory_order_acquire);
-    if (last != 0 && now - last < 125) {
-        return;
-    }
-    if (!g_footstep_admission_probe_last_ms[rate_slot].compare_exchange_strong(
-            last, now, std::memory_order_acq_rel)) {
-        return;
-    }
-    const std::uint32_t row =
-        g_footstep_admission_probe_rows.fetch_add(
-            1, std::memory_order_acq_rel);
-    constexpr std::uint32_t kMaxRows = 160;
-    if (row >= kMaxRows) {
-        return;
-    }
-
-    unsigned admitted_mask = 0;
-    for (std::size_t leg = 0; leg < 2; ++leg) {
-        if (std::isfinite(sample.phase[leg]) && sample.phase[leg] >= 0.0F) {
-            admitted_mask |= 1U << leg;
-        }
-    }
-    std::ostringstream line;
-    line << std::fixed << std::setprecision(3)
-         << "AIM-FOOT-ADMISSION row=" << row
-         << " owner=" << owner
-         << " window=" << window
-         << " mask=" << admitted_mask
-         << " phase=" << sample.phase[0] << "/" << sample.phase[1]
-         << " locQ=" << world_locator[4] << "," << world_locator[5]
-         << "," << world_locator[6] << "," << world_locator[7];
-    for (std::size_t leg = 0; leg < 2; ++leg) {
-        line << " L" << leg
-             << " hw=" << sample.history_world[leg][0] << ","
-             << sample.history_world[leg][2]
-             << " hl=" << sample.history_local[leg][0] << ","
-             << sample.history_local[leg][2]
-             << " nw=" << sample.next_world[leg][0] << ","
-             << sample.next_world[leg][2]
-             << " nl=" << sample.next_local[leg][0] << ","
-             << sample.next_local[leg][2];
-    }
-    boot_log_line(line.str().c_str());
+bool valid_peer_aim_footstep_sample(const coop::StatePacket& peer) {
+    AimFootstepRelayCapture sample{};
+    sample.sequence = peer.aim_footstep_sequence;
+    sample.admitted_mask = peer.aim_footstep_admitted_mask;
+    std::memcpy(sample.phase, peer.aim_footstep_phase, sizeof(sample.phase));
+    std::memcpy(
+        sample.history_world, peer.aim_footstep_history_world,
+        sizeof(sample.history_world));
+    std::memcpy(
+        sample.history_local, peer.aim_footstep_history_local,
+        sizeof(sample.history_local));
+    std::memcpy(
+        sample.next_world, peer.aim_footstep_next_world,
+        sizeof(sample.next_world));
+    std::memcpy(
+        sample.next_local, peer.aim_footstep_next_local,
+        sizeof(sample.next_local));
+    return sample.sequence != 0 && valid_aim_footstep_sample(sample);
 }
 
-std::int64_t __fastcall hooked_move_leg_ik_update_feet_planted_probe(
+bool aim_footstep_sequence_is_newer(
+    std::uint32_t sequence, std::uint32_t previous) {
+    return sequence != 0 &&
+        static_cast<std::int32_t>(sequence - previous) > 0;
+}
+
+bool seh_apply_peer_aim_footstep_sample(
+    void* move_leg, const coop::StatePacket& peer) {
+    __try {
+        if (move_leg == nullptr) {
+            return false;
+        }
+        auto* const base = static_cast<std::byte*>(move_leg);
+        const std::uint8_t mask = peer.aim_footstep_admitted_mask & 0x3U;
+        // Write every numeric record first. Stock cannot observe these records
+        // until the hook returns to the first phase read at 0x142102033.
+        for (std::size_t leg = 0; leg < 2; ++leg) {
+            if ((mask & (1U << leg)) == 0) {
+                continue;
+            }
+            const std::size_t stride = leg * 0x50;
+            std::memcpy(
+                base + 0x50 + stride, peer.aim_footstep_history_world[leg],
+                sizeof(peer.aim_footstep_history_world[leg]));
+            std::memcpy(
+                base + 0x70 + stride, peer.aim_footstep_history_local[leg],
+                sizeof(peer.aim_footstep_history_local[leg]));
+            std::memcpy(
+                base + 0xF0 + stride, peer.aim_footstep_next_world[leg],
+                sizeof(peer.aim_footstep_next_world[leg]));
+            std::memcpy(
+                base + 0x110 + stride, peer.aim_footstep_next_local[leg],
+                sizeof(peer.aim_footstep_next_local[leg]));
+        }
+        std::int32_t selected_leg = -1;
+        if ((mask & 0x1U) != 0 && (mask & 0x2U) != 0) {
+            selected_leg =
+                peer.aim_footstep_phase[1] < peer.aim_footstep_phase[0]
+                ? 1
+                : 0;
+        } else if ((mask & 0x1U) != 0) {
+            selected_leg = 0;
+        } else if ((mask & 0x2U) != 0) {
+            selected_leg = 1;
+        }
+        std::memcpy(base + 0x3BD0, &selected_leg, sizeof(selected_leg));
+        // Publish admission last, after its records and retained selector are
+        // complete. The native continuation consumes +0x2C immediately.
+        for (std::size_t leg = 0; leg < 2; ++leg) {
+            if ((mask & (1U << leg)) == 0) {
+                continue;
+            }
+            std::memcpy(
+                base + 0x2C + leg * sizeof(float),
+                &peer.aim_footstep_phase[leg], sizeof(float));
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+std::int64_t __fastcall hooked_move_leg_ik_ground_model_deep_copy(
+    void* destination, const void* source) {
+    const auto native = g_move_leg_ik_ground_model_deep_copy;
+    if (native == nullptr) {
+        return 0;
+    }
+    const std::int64_t result = native(destination, source);
+    const MoveLegIkFeetPlantedThreadContext context =
+        g_move_leg_ik_feet_planted_thread_context;
+    if (g_dll_inert || !g_state_net.enabled || context.owner != 1 ||
+        context.move_leg == nullptr ||
+        destination != static_cast<std::byte*>(context.move_leg) + 0x27A0) {
+        return result;
+    }
+
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    const ULONGLONG now = GetTickCount64();
+    coop::StatePacket peer{};
+    if (received == 0 || now < received || now - received > 250 ||
+        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer) ||
+        !valid_peer_aim_footstep_sample(peer)) {
+        return result;
+    }
+    const std::uint32_t previous =
+        g_puppet_aim_footstep_last_applied_sequence.load(
+            std::memory_order_acquire);
+    if (!aim_footstep_sequence_is_newer(
+            peer.aim_footstep_sequence, previous) ||
+        !seh_apply_peer_aim_footstep_sample(context.move_leg, peer)) {
+        return result;
+    }
+    g_puppet_aim_footstep_last_applied_sequence.store(
+        peer.aim_footstep_sequence, std::memory_order_release);
+    if (!g_aim_footstep_apply_logged.exchange(
+            true, std::memory_order_acq_rel)) {
+        std::ostringstream line;
+        line << "AIM-FOOT-RELAY-APPLY seq=" << peer.aim_footstep_sequence
+             << " mask="
+             << static_cast<unsigned>(peer.aim_footstep_admitted_mask & 0x3U);
+        boot_log_line(line.str().c_str());
+    }
+    return result;
+}
+
+std::int64_t __fastcall hooked_move_leg_ik_update_feet_planted_relay(
     void* move_leg,
     void* character,
     int mode,
@@ -12257,122 +12387,155 @@ std::int64_t __fastcall hooked_move_leg_ik_update_feet_planted_probe(
     if (native == nullptr) {
         return 0;
     }
-    const std::int64_t result = native(
-        move_leg, character, mode, first_world_locator, second_world_locator);
 
-    if (g_dll_inert || character == nullptr) {
-        return result;
-    }
     int owner = -1;
-    bool aiming = false;
-    if (character == retained_player_object(0)) {
+    if (character != nullptr && character == retained_player_object(0)) {
         owner = 0;
-    } else if (character == retained_player_object(1)) {
+    } else if (character != nullptr && character == retained_player_object(1)) {
         owner = 1;
     }
-    if (owner >= 0 &&
-        !g_footstep_job_reach_seen[static_cast<std::size_t>(owner)].exchange(
-            true, std::memory_order_acq_rel)) {
-        std::ostringstream line;
-        line << "AIM-FOOT-JOB-REACH owner=" << owner
-             << " moveLeg=0x" << std::hex
-             << reinterpret_cast<std::uintptr_t>(move_leg)
-             << " character=0x"
-             << reinterpret_cast<std::uintptr_t>(character)
-             << " mode=0x" << static_cast<unsigned>(mode);
-        boot_log_line(line.str().c_str());
-    }
-    if (!g_state_net.enabled || owner < 0 || first_world_locator == nullptr ||
-        second_world_locator == nullptr) {
+    const MoveLegIkFeetPlantedThreadContext previous_context =
+        g_move_leg_ik_feet_planted_thread_context;
+    g_move_leg_ik_feet_planted_thread_context = {
+        move_leg, character, owner};
+    const std::int64_t result = native(
+        move_leg, character, mode, first_world_locator, second_world_locator);
+    g_move_leg_ik_feet_planted_thread_context = previous_context;
+
+    if (g_dll_inert || !g_state_net.enabled || owner != 0 ||
+        character == nullptr || !player_ads_active(character)) {
         return result;
     }
-    if (owner == 0) {
-        aiming = player_ads_active(character);
-    } else {
-        coop::StatePacket peer{};
-        const ULONGLONG received =
-            g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
-        const ULONGLONG now = GetTickCount64();
-        aiming = received != 0 && now >= received && now - received <= 250 &&
-            copy_peer_state_snapshot(peer) && peer_packet_aim_active(peer);
-    }
-    FootstepAdmissionProbeSample sample{};
-    if (aiming && seh_capture_footstep_admission_probe(move_leg, sample)) {
-        log_footstep_admission_probe(
-            owner, 0, first_world_locator, sample);
-        log_footstep_admission_probe(
-            owner, 1, second_world_locator, sample);
+    AimFootstepRelayCapture sample{};
+    if (seh_capture_aim_footstep_sample(move_leg, sample)) {
+        sample.owner = character;
+        sample.sequence =
+            g_local_aim_footstep_sequence.fetch_add(
+                1, std::memory_order_acq_rel) + 1;
+        sample.captured_ms = GetTickCount64();
+        AcquireSRWLockExclusive(&g_local_aim_footstep_lock);
+        g_local_aim_footstep = sample;
+        ReleaseSRWLockExclusive(&g_local_aim_footstep_lock);
+        if (!g_aim_footstep_capture_logged.exchange(
+                true, std::memory_order_acq_rel)) {
+            std::ostringstream line;
+            line << "AIM-FOOT-RELAY-CAPTURE seq=" << sample.sequence
+                 << " mask="
+                 << static_cast<unsigned>(sample.admitted_mask);
+            boot_log_line(line.str().c_str());
+        }
     }
     return result;
 }
 
-bool install_move_leg_ik_footstep_admission_probe() {
-    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+bool install_move_leg_ik_footstep_relay() {
+    auto* const outer_call_site = reinterpret_cast<std::uint8_t*>(
         g_module + kMoveLegIkUpdateFeetPlantedJobCallsiteRva);
-    const std::uintptr_t expected =
+    auto* const inner_call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kMoveLegIkPreAdmissionGroundModelCopyCallsiteRva);
+    const std::uintptr_t expected_outer =
         g_module + kMoveLegIkUpdateFeetPlantedRva;
-    if (call_site[0] != 0xE8) {
-        boot_log_line(
-            "MoveLegIk admission probe SKIPPED (callsite is not E8)");
-        return false;
-    }
-    std::int32_t displacement = 0;
-    std::memcpy(&displacement, call_site + 1, sizeof(displacement));
-    const std::uintptr_t target =
-        reinterpret_cast<std::uintptr_t>(call_site + 5) +
-        static_cast<std::intptr_t>(displacement);
-    if (target != expected) {
-        boot_log_line(
-            "MoveLegIk admission probe SKIPPED (unexpected target)");
+    const std::uintptr_t expected_inner =
+        g_module + kMoveLegIkGroundModelDeepCopyRva;
+    const auto callsite_targets = [](const std::uint8_t* site) {
+        if (site == nullptr || site[0] != 0xE8) {
+            return std::uintptr_t{0};
+        }
+        std::int32_t displacement = 0;
+        std::memcpy(&displacement, site + 1, sizeof(displacement));
+        return reinterpret_cast<std::uintptr_t>(site + 5) +
+            static_cast<std::intptr_t>(displacement);
+    };
+    if (callsite_targets(outer_call_site) != expected_outer ||
+        callsite_targets(inner_call_site) != expected_inner) {
+        boot_log_line("MoveLegIk footstep relay SKIPPED (pair preflight)");
         return false;
     }
     g_move_leg_ik_update_feet_planted =
-        reinterpret_cast<MoveLegIkUpdateFeetPlantedFunction>(expected);
+        reinterpret_cast<MoveLegIkUpdateFeetPlantedFunction>(expected_outer);
+    g_move_leg_ik_ground_model_deep_copy =
+        reinterpret_cast<MoveLegIkGroundModelDeepCopyFunction>(expected_inner);
 
     constexpr std::size_t kRelaySize = 14;
-    auto* const relay = static_cast<std::uint8_t*>(
-        allocate_executable_near(call_site, kRelaySize));
-    if (relay == nullptr) {
+    const auto make_relay = [](std::uint8_t* call_site, const void* hook) {
+        auto* const relay = static_cast<std::uint8_t*>(
+            allocate_executable_near(call_site, kRelaySize));
+        if (relay == nullptr) {
+            return static_cast<std::uint8_t*>(nullptr);
+        }
+        relay[0] = 0xFF;
+        relay[1] = 0x25;
+        *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+        *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+            reinterpret_cast<std::uintptr_t>(hook);
+        FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+        return relay;
+    };
+    auto* const outer_relay = make_relay(
+        outer_call_site,
+        reinterpret_cast<const void*>(
+            &hooked_move_leg_ik_update_feet_planted_relay));
+    auto* const inner_relay = make_relay(
+        inner_call_site,
+        reinterpret_cast<const void*>(
+            &hooked_move_leg_ik_ground_model_deep_copy));
+    if (outer_relay == nullptr || inner_relay == nullptr) {
+        if (outer_relay != nullptr) {
+            VirtualFree(outer_relay, 0, MEM_RELEASE);
+        }
+        if (inner_relay != nullptr) {
+            VirtualFree(inner_relay, 0, MEM_RELEASE);
+        }
         g_move_leg_ik_update_feet_planted = nullptr;
-        boot_log_line(
-            "MoveLegIk admission probe SKIPPED (relay allocation)");
+        g_move_leg_ik_ground_model_deep_copy = nullptr;
+        boot_log_line("MoveLegIk footstep relay SKIPPED (relay allocation)");
         return false;
     }
-    relay[0] = 0xFF;
-    relay[1] = 0x25;
-    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
-    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
-        reinterpret_cast<std::uintptr_t>(
-            &hooked_move_leg_ik_update_feet_planted_probe);
-    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+    const std::int64_t outer_displacement =
+        reinterpret_cast<std::intptr_t>(outer_relay) -
+        reinterpret_cast<std::intptr_t>(outer_call_site + 5);
+    const std::int64_t inner_displacement =
+        reinterpret_cast<std::intptr_t>(inner_relay) -
+        reinterpret_cast<std::intptr_t>(inner_call_site + 5);
+    if (outer_displacement < INT32_MIN || outer_displacement > INT32_MAX ||
+        inner_displacement < INT32_MIN || inner_displacement > INT32_MAX) {
+        VirtualFree(outer_relay, 0, MEM_RELEASE);
+        VirtualFree(inner_relay, 0, MEM_RELEASE);
+        g_move_leg_ik_update_feet_planted = nullptr;
+        g_move_leg_ik_ground_model_deep_copy = nullptr;
+        boot_log_line("MoveLegIk footstep relay SKIPPED (rel32 range)");
+        return false;
+    }
 
-    const std::int64_t new_displacement =
-        reinterpret_cast<std::intptr_t>(relay) -
-        reinterpret_cast<std::intptr_t>(call_site + 5);
-    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
-        VirtualFree(relay, 0, MEM_RELEASE);
+    DWORD outer_old = 0;
+    DWORD inner_old = 0;
+    if (!VirtualProtect(
+            outer_call_site, 5, PAGE_EXECUTE_READWRITE, &outer_old) ||
+        !VirtualProtect(
+            inner_call_site, 5, PAGE_EXECUTE_READWRITE, &inner_old)) {
+        if (outer_old != 0) {
+            DWORD ignored = 0;
+            VirtualProtect(outer_call_site, 5, outer_old, &ignored);
+        }
+        VirtualFree(outer_relay, 0, MEM_RELEASE);
+        VirtualFree(inner_relay, 0, MEM_RELEASE);
         g_move_leg_ik_update_feet_planted = nullptr;
-        boot_log_line(
-            "MoveLegIk admission probe SKIPPED (rel32 range)");
+        g_move_leg_ik_ground_model_deep_copy = nullptr;
+        boot_log_line("MoveLegIk footstep relay SKIPPED (VirtualProtect)");
         return false;
     }
-
-    DWORD old = 0;
-    if (!VirtualProtect(call_site, 5, PAGE_EXECUTE_READWRITE, &old)) {
-        VirtualFree(relay, 0, MEM_RELEASE);
-        g_move_leg_ik_update_feet_planted = nullptr;
-        boot_log_line(
-            "MoveLegIk admission probe SKIPPED (VirtualProtect)");
-        return false;
-    }
-    *reinterpret_cast<std::int32_t*>(call_site + 1) =
-        static_cast<std::int32_t>(new_displacement);
-    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    *reinterpret_cast<std::int32_t*>(outer_call_site + 1) =
+        static_cast<std::int32_t>(outer_displacement);
+    *reinterpret_cast<std::int32_t*>(inner_call_site + 1) =
+        static_cast<std::int32_t>(inner_displacement);
+    FlushInstructionCache(GetCurrentProcess(), outer_call_site, 5);
+    FlushInstructionCache(GetCurrentProcess(), inner_call_site, 5);
     DWORD ignored = 0;
-    VirtualProtect(call_site, 5, old, &ignored);
+    VirtualProtect(outer_call_site, 5, outer_old, &ignored);
+    VirtualProtect(inner_call_site, 5, inner_old, &ignored);
     boot_log_line(
-        "MoveLegIk feet-planted admission probe installed (read-only) "
-        "(0x142104AB3)");
+        "MoveLegIk numeric footstep relay installed "
+        "(0x142104AB3/0x14210202E)");
     return true;
 }
 
@@ -18879,6 +19042,40 @@ void send_local_player_state() {
             pkt.gun_move_current_child = foot_capture.current_child;
             pkt.gun_move_selected_child = foot_capture.selected_child;
             pkt.flags |= coop::kStateFlagAimFootTurn;
+        }
+
+        AcquireSRWLockShared(&g_local_aim_footstep_lock);
+        const AimFootstepRelayCapture footstep_capture =
+            g_local_aim_footstep;
+        ReleaseSRWLockShared(&g_local_aim_footstep_lock);
+        if (footstep_capture.owner == local_obj &&
+            footstep_capture.sequence != 0 &&
+            footstep_capture.captured_ms != 0 &&
+            aim_capture_now >= footstep_capture.captured_ms &&
+            aim_capture_now - footstep_capture.captured_ms <= 100 &&
+            valid_aim_footstep_sample(footstep_capture)) {
+            pkt.aim_footstep_sequence = footstep_capture.sequence;
+            std::memcpy(
+                pkt.aim_footstep_phase, footstep_capture.phase,
+                sizeof(pkt.aim_footstep_phase));
+            std::memcpy(
+                pkt.aim_footstep_history_world,
+                footstep_capture.history_world,
+                sizeof(pkt.aim_footstep_history_world));
+            std::memcpy(
+                pkt.aim_footstep_history_local,
+                footstep_capture.history_local,
+                sizeof(pkt.aim_footstep_history_local));
+            std::memcpy(
+                pkt.aim_footstep_next_world,
+                footstep_capture.next_world,
+                sizeof(pkt.aim_footstep_next_world));
+            std::memcpy(
+                pkt.aim_footstep_next_local,
+                footstep_capture.next_local,
+                sizeof(pkt.aim_footstep_next_local));
+            pkt.aim_footstep_admitted_mask =
+                footstep_capture.admitted_mask;
         }
     } else if (grenade_pose_publish) {
         std::uint8_t route_seed[32]{};
@@ -47918,10 +48115,10 @@ DWORD WINAPI install_hook(void*) {
         if (g_enable_puppet_fganim_world_aim_turn) {
             install_fganim_world_aim_turn_callsite_relay();
         }
-        if constexpr (kEnableMoveLegIkAdmissionProbe) {
-            install_move_leg_ik_footstep_admission_probe();
+        if constexpr (kEnableMoveLegIkFootstepRelay) {
+            install_move_leg_ik_footstep_relay();
         } else {
-            boot_log_line("MoveLegIk admission observer disabled");
+            boot_log_line("MoveLegIk numeric footstep relay disabled");
         }
         boot_log_line(
             "rejected CharacterLegIk world-frame relay disabled");

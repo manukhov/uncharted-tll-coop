@@ -16725,6 +16725,66 @@ relay from numeric target relay and prove where a receiver write can occur
 after stock admission but before the first consumer, without copying authored
 asset pointers or racing the async job.
 
+### 2026-08-03 STATIC/IMPLEMENTED: one-job numeric MoveLeg footstep relay (`s`)
+
+The complete producer/consumer and lifetime audit satisfies the evidence quota
+for one bounded mutation. Four candidates were separated:
+
+1. **Phase-only is REJECTED.** `UpdateFeetPlanted` resets `+0x2C/+0x30` to
+   `-1.0` at `0x1421017DB/0x1421017E2`, then its admitted loop
+   `0x142102110..0x1421022DF` consumes the next record. `FindFootPlantGround
+   0x142103E10` consumes both history and next records. A phase without matching
+   record data admits stale constructor or prior-step transforms.
+2. **Phase plus only local Locators is REJECTED as a universal first-step
+   relay.** `MoveLegIkNew_Construct 0x142104AC0` leaves every record header
+   sentinel/zero and every numeric cache at zero-translation/identity. Controller
+   initialization only binds the two JointSets and initializes authored contact
+   references; it does not create these four records. Thus a receiver that never
+   admitted a step has no guaranteed valid handle or usable cached world Locator.
+3. **Full 0x50-byte record copy is REJECTED as unsafe.** The first 16 bytes of
+   each record carry an index/generation resolved through process-local
+   `qword_14386FD00`; `UpdateNextFootsteps 0x142103A22..0x142103BCC` and
+   `BuildRespawnTransformBlockFromSeedRecord 0x141685BC0` source them from the
+   producing process. Equal integers do not name equal objects in the peer.
+4. **Selected payload:** exact phase plus all four complete numeric 32-byte
+   Locators per admitted leg: history cached-world `+0x50/+0x60`, history local
+   `+0x70/+0x80`, next cached-world `+0xF0/+0x100`, and next local
+   `+0x110/+0x120`, with `0x50` leg stride. Every first consumer validates its
+   receiver-local header; when valid it refreshes cached-world from the receiver
+   object, and when invalid it deliberately falls back to these numeric caches.
+   Therefore the payload covers the first-ever admission without transferring a
+   handle. Translation and quaternion are copied as one indivisible Locator.
+
+The exact receiver seam is the direct E8 `0x14210202E -> GroundModel_DeepCopy
+0x142102690`. That stock deep copy completes first and returns immediately to
+the first final phase read at `0x142102033`; the later admitted target loop,
+`FindFootPlantGround` and solve path have not run. The outer Character-bearing
+job call `0x142104AB3` establishes thread-local `{MoveLeg, Character, owner}`
+before stock. The nested inner hook accepts only owner 1 and destination
+`MoveLeg+0x27A0`. PostAnim waits the prior MoveLeg job at
+`0x14210442F..0x142104456`, while `MoveLegIkNew_Update` waits this job at
+`0x1421010F1..0x142101118`, so the write lives wholly inside the owning worker
+between both synchronization points.
+
+`+0x3BD0` is also required retained scalar state: vtable `+0x90`,
+`0x142104E10`, later rejects the result when the selector is negative. Because
+stock computed it before the injected phases existed, the receiver recomputes
+the exact rule (sole admitted leg, or the smaller phase when both admit). It
+does **not** write process-local headers, contact references `+0x3A90/+0x3AB0`,
+native points `+0x3B80..+0x3BC0`, GroundModel data or joints. Packet v15 adds a
+source-capture sequence and 272-byte numeric payload; repeated UDP snapshots
+carry the same sequence for loss recovery, while the receiver consumes each
+source job once so a fresh phase cannot synthesize repeated steps after native
+per-job resets.
+
+**Falsifiable runtime prediction:** during stationary ADS turns by local Chloe,
+the sender must emit one bounded `AIM-FOOT-RELAY-CAPTURE`, the Nadine-side copy
+must emit one `AIM-FOOT-RELAY-APPLY`, and remote Chloe must visibly replant its
+feet instead of sliding. Local feet, body/weapon aim, locomotion, collision and
+performance must remain unchanged; no exception may occur. If apply is reached
+but feet still slide, the admission relay is insufficient and the next
+candidate is GroundModel validity versus solve/apply, not another phase source.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

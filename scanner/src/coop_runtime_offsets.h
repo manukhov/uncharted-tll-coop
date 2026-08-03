@@ -142,6 +142,13 @@ constexpr std::uintptr_t kCharacterLegIkControllerUpdateVtableSlotRva =
 constexpr std::uintptr_t kMoveLegIkUpdateFeetPlantedRva = 0x2101330;
 constexpr std::uintptr_t kMoveLegIkUpdateFeetPlantedJobCallsiteRva =
     0x2104AB3;
+// UpdateFeetPlanted first deep-copies its freshly built aggregate GroundModel,
+// then immediately reads admission phases at 0x142102033/0x142102043. Relaying
+// this one E8 call gives a stock-first continuation seam before every admitted
+// target, ground-query and solve consumer.
+constexpr std::uintptr_t kMoveLegIkGroundModelDeepCopyRva = 0x2102690;
+constexpr std::uintptr_t kMoveLegIkPreAdmissionGroundModelCopyCallsiteRva =
+    0x210202E;
 // FgDrawManager worker callsite. The worker passes one FgAnimData and the
 // global FgInstance pool to PrepareInstanceForRendering; after the call every
 // driven 0x280-byte instance owns the current render-world matrix at +0x140.

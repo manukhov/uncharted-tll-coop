@@ -72,8 +72,15 @@ FUNCTIONS = {
         "Exact MoveLegIkNew::UpdateFeetPlanted source assertion. Rebuilds the active "
         "AnimStateSnapshot, invokes MoveLegIkNew_UpdateNextFootsteps for its two "
         "phase windows, composes the two captured ankle world locators with static "
-        "contact references into +0x3B80/+0x3B90 ground-probe origins, then calls "
-        "MoveLegIkNew_FindFootPlantGround.",
+        "contact references into +0x3B80/+0x3B90 ground-probe origins, deep-copies "
+        "the aggregate GroundModel at 0x14210202E, then immediately consumes "
+        "+0x2C/+0x30 admission and calls MoveLegIkNew_FindFootPlantGround.",
+    ),
+    0x142102690: (
+        "GroundModel_DeepCopy",
+        "Deep-copies one complete 0x12E0-byte GroundModel aggregate. The exact "
+        "UpdateFeetPlanted call at 0x14210202E returns immediately before the "
+        "first final admission-phase reads at 0x142102033/0x142102043.",
     ),
     0x142102DF0: (
         "MoveLegIkNew_UpdateNextFootsteps",

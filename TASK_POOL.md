@@ -128,13 +128,22 @@
       `mask=3`), while remote Chloe owner 1 in PID 17052 stayed `mask=0`,
       `phase=-1/-1` in all 26 rows; both owner reach markers fired and neither
       process emitted an exception.
-- [ ] Trace every first downstream reader and reset/write lifetime for
+- [x] Trace every first downstream reader and reset/write lifetime for
       `MoveLegIkNew+0x2C/+0x30`, the numeric 0x50-byte target/history records at
       `+0x40/+0x90` and `+0xE0/+0x130`, and their GroundModel consumers. Reject
       unsafe full-record or phase-only candidates and select an exact receiver
       write seam after stock admission but before the first required consumer.
-      No new runtime mutation until the async lifetime and process-local asset
-      pointer exclusions satisfy the static evidence quota.
+      **STATIC/IMPLEMENTED (`s`):** exact stock-first seam `0x14210202E` is
+      immediately before first final phase read `0x142102033`; relay phases,
+      recomputed `+0x3BD0` and all four numeric Locators per admitted leg, while
+      preserving process-local 16-byte headers and every native GroundModel.
+      TLS ownership is bounded by outer Character-bearing job call
+      `0x142104AB3`; source capture sequence prevents repeat application.
+- [ ] Run one stationary ADS left/right turn on Chloe with build `s`, observing
+      from Nadine. Require one bounded CAPTURE/APPLY marker and visible remote
+      foot replants without local pose, aim, movement, collision, performance or
+      exception regression. Failure after APPLY moves the search below admission
+      into GroundModel validity versus solve/apply.
 - [x] Confirm build `q` performance: PIDs 15444/6220 remained responsive with
       zero exception/AIM/attachment diagnostic rows, and the user confirmed the
       recent gameplay lag is gone with normal behavior.

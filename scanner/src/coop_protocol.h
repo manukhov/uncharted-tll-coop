@@ -25,7 +25,7 @@ struct InputPacket {
 // One-shot gameplay actions need a separate reliable ordered event stream.
 constexpr std::uint16_t kStatePort = 31338;
 constexpr std::uint32_t kStatePacketMagic = 0x53504F43;  // "COPS"
-constexpr std::uint16_t kStatePacketVersion = 14;
+constexpr std::uint16_t kStatePacketVersion = 15;
 
 // StatePacket.flags extension bits (v7+):
 // 0x0100 — camera_quat mirrors sender CameraManager(0) @+0x1B0.
@@ -114,9 +114,22 @@ struct StatePacket {
     float strafe_ik_forward_y = 0.0F;
     std::uint8_t strafe_ik_forward_y_valid = 0;
     std::uint8_t strafe_ik_reserved[3]{};
+    // v15: one authored MoveLegIkNew foot-admission job. Only numeric Locator
+    // payloads cross the wire. The 16-byte native record headers contain
+    // process-local handle index/generation fields and are deliberately absent.
+    // A capture sequence is repeated by StatePacket until acknowledged locally,
+    // but the receiver consumes that source job at most once.
+    std::uint32_t aim_footstep_sequence = 0;
+    float aim_footstep_phase[2]{};
+    float aim_footstep_history_world[2][8]{};
+    float aim_footstep_history_local[2][8]{};
+    float aim_footstep_next_world[2][8]{};
+    float aim_footstep_next_local[2][8]{};
+    std::uint8_t aim_footstep_admitted_mask = 0;
+    std::uint8_t aim_footstep_reserved[3]{};
 };
 
-static_assert(sizeof(StatePacket) == 528);
+static_assert(sizeof(StatePacket) == 800);
 static_assert(offsetof(StatePacket, fganim_world_quat) == 144);
 static_assert(offsetof(StatePacket, aim_pitch_up) == 472);
 static_assert(offsetof(StatePacket, gun_move_turn_direction) == 480);
@@ -125,6 +138,9 @@ static_assert(offsetof(StatePacket, grenade_art_id) == 508);
 static_assert(offsetof(StatePacket, grenade_total_ammo) == 512);
 static_assert(offsetof(StatePacket, strafe_ik_forward_y) == 516);
 static_assert(offsetof(StatePacket, strafe_ik_forward_y_valid) == 520);
+static_assert(offsetof(StatePacket, aim_footstep_sequence) == 524);
+static_assert(offsetof(StatePacket, aim_footstep_phase) == 528);
+static_assert(offsetof(StatePacket, aim_footstep_admitted_mask) == 792);
 
 // Phase 3 (host-authoritative world sync): the HOST (role A) enumerates the
 // CharacterManager, picks out enemy NPCs, and sends their transforms; the CLIENT
