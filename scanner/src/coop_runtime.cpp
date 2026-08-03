@@ -186,7 +186,6 @@ LocalAimPitchCapture g_local_aim_pitch{};
 struct LocalStrafeIkForwardYCapture {
     void* owner = nullptr;
     float forward_y = 0.0F;
-    float locator_quat[4]{};
     ULONGLONG captured_ms = 0;
 };
 SRWLOCK g_local_strafe_ik_forward_y_lock = SRWLOCK_INIT;
@@ -1203,9 +1202,9 @@ volatile bool g_puppet_camera_drive = false;
 // isolated from locomotion.
 volatile bool g_puppet_aim_reticle_relay = false;
 // Peer head-look packet/apply path. The direct PlayerLookAtIkController target
-// writer remains rejected after it twisted the spine. Build x instead reuses the
-// confirmed final PlayerStrafeController boundary and its native headb/spined
-// limits; this flag gates only packet publication/application for that path.
+// writer remains rejected after it twisted the spine. Player vslots +0xE80 and
+// +0xEA0 are also rejected: both live slots were patched in build jb, but neither
+// entry was reached during active gameplay while the shared-camera leak remained.
 volatile bool g_puppet_head_look_sync = true;
 // PATH #1 (user-approved 2026-07-07): materialize the puppet's screen-1 aim camera
 // each frame by calling UpdatePlayerAnimatedCameraControlOwnerAndRouteState on its
@@ -10909,6 +10908,8 @@ void __fastcall hooked_player_strafe_update_post_anim_blend(
         kPlayerStrafeControllerOwnerOffset);
     if (owner != nullptr && player_screen_index_is(owner, 0)) {
         if (owner == retained_player_object(0) &&
+            local_player_strict_aim_active(owner) &&
+            player_action_is_exact_gun_move(owner) &&
             valid_network_orientation(locator + 4)) {
             float forward_x = 0.0F;
             float forward_y = 0.0F;
@@ -10921,10 +10922,6 @@ void __fastcall hooked_player_strafe_update_post_anim_blend(
                 g_local_strafe_ik_forward_y.owner = owner;
                 g_local_strafe_ik_forward_y.forward_y =
                     std::clamp(forward_y, -1.0F, 1.0F);
-                std::memcpy(
-                    g_local_strafe_ik_forward_y.locator_quat,
-                    locator + 4,
-                    sizeof(g_local_strafe_ik_forward_y.locator_quat));
                 g_local_strafe_ik_forward_y.captured_ms = GetTickCount64();
                 ReleaseSRWLockExclusive(&g_local_strafe_ik_forward_y_lock);
                 static std::atomic<bool> first_capture_logged{false};
@@ -10933,7 +10930,7 @@ void __fastcall hooked_player_strafe_update_post_anim_blend(
                     char line[160]{};
                     std::snprintf(
                         line, sizeof(line),
-                        "STRAFE-IK-LOCATOR-CAPTURE y=%.5f", forward_y);
+                        "STRAFE-IK-Y-CAPTURE y=%.5f", forward_y);
                     boot_log_line(line);
                 }
             }
@@ -10947,66 +10944,42 @@ void __fastcall hooked_player_strafe_update_post_anim_blend(
     coop::StatePacket peer{};
     if (!g_state_net.enabled || owner == nullptr ||
         owner != retained_player_object(1) ||
-        !player_screen_index_is(owner, kSlot1ScreenIndex) || received == 0 ||
+        !player_screen_index_is(owner, kSlot1ScreenIndex) ||
+        !player_action_is_exact_gun_move(owner) || received == 0 ||
         GetTickCount64() - received > 250 ||
-        !copy_peer_state_snapshot(peer)) {
+        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer) ||
+        peer.strafe_ik_forward_y_valid != 1 ||
+        !std::isfinite(peer.strafe_ik_forward_y) ||
+        peer.strafe_ik_forward_y < -1.001F ||
+        peer.strafe_ik_forward_y > 1.001F) {
         g_original_player_strafe_update_post_anim_blend(controller, locator);
         return;
     }
 
     alignas(16) float corrected_locator[8]{};
     std::memcpy(corrected_locator, locator, sizeof(corrected_locator));
-    const bool peer_ads = peer_packet_aim_active(peer) &&
-        player_action_is_exact_gun_move(owner);
-    if (peer_ads) {
-        if (peer.strafe_ik_forward_y_valid != 1 ||
-            !std::isfinite(peer.strafe_ik_forward_y) ||
-            peer.strafe_ik_forward_y < -1.001F ||
-            peer.strafe_ik_forward_y > 1.001F ||
-            !seh_rebuild_strafe_ik_quaternion(
-                locator + 4, peer.strafe_ik_forward_y,
-                corrected_locator + 4)) {
-            g_original_player_strafe_update_post_anim_blend(controller, locator);
-            return;
-        }
-        const float native_forward_y = [&]() {
-            float x = 0.0F;
-            float y = 0.0F;
-            float z = 0.0F;
-            quat_forward_pos_z(locator + 4, x, y, z);
-            return y;
-        }();
-        static std::atomic<bool> first_aim_apply_logged{false};
-        if (!first_aim_apply_logged.exchange(
-                true, std::memory_order_acq_rel)) {
-            char line[224]{};
-            std::snprintf(
-                line, sizeof(line),
-                "STRAFE-IK-Y-APPLY seq=%u native=%.5f peer=%.5f",
-                peer.sequence, native_forward_y, peer.strafe_ik_forward_y);
-            boot_log_line(line);
-        }
-    } else if (g_puppet_head_look_sync &&
-               peer_packet_free_look_active(peer) &&
-               peer.head_look_strafe_locator_valid == 1 &&
-               valid_network_orientation(
-                   peer.head_look_strafe_locator_quat)) {
-        std::memcpy(
-            corrected_locator + 4,
-            peer.head_look_strafe_locator_quat,
-            sizeof(peer.head_look_strafe_locator_quat));
-        static std::atomic<bool> first_head_apply_logged{false};
-        if (!first_head_apply_logged.exchange(
-                true, std::memory_order_acq_rel)) {
-            char line[160]{};
-            std::snprintf(
-                line, sizeof(line),
-                "HEAD-STRAFE-LOCATOR-APPLY seq=%u", peer.sequence);
-            boot_log_line(line);
-        }
-    } else {
+    const float native_forward_y = [&]() {
+        float x = 0.0F;
+        float y = 0.0F;
+        float z = 0.0F;
+        quat_forward_pos_z(locator + 4, x, y, z);
+        return y;
+    }();
+    if (!seh_rebuild_strafe_ik_quaternion(
+            locator + 4, peer.strafe_ik_forward_y,
+            corrected_locator + 4)) {
         g_original_player_strafe_update_post_anim_blend(controller, locator);
         return;
+    }
+
+    static std::atomic<bool> first_apply_logged{false};
+    if (!first_apply_logged.exchange(true, std::memory_order_acq_rel)) {
+        char line[224]{};
+        std::snprintf(
+            line, sizeof(line),
+            "STRAFE-IK-Y-APPLY seq=%u native=%.5f peer=%.5f",
+            peer.sequence, native_forward_y, peer.strafe_ik_forward_y);
+        boot_log_line(line);
     }
     g_original_player_strafe_update_post_anim_blend(
         controller, corrected_locator);
@@ -18831,6 +18804,20 @@ void send_local_player_state() {
             pkt.flags |= coop::kStateFlagAimPitch;
         }
 
+        AcquireSRWLockShared(&g_local_strafe_ik_forward_y_lock);
+        const LocalStrafeIkForwardYCapture strafe_ik_capture =
+            g_local_strafe_ik_forward_y;
+        ReleaseSRWLockShared(&g_local_strafe_ik_forward_y_lock);
+        if (strafe_ik_capture.owner == local_obj &&
+            strafe_ik_capture.captured_ms != 0 &&
+            aim_capture_now - strafe_ik_capture.captured_ms <= 100 &&
+            std::isfinite(strafe_ik_capture.forward_y) &&
+            strafe_ik_capture.forward_y >= -1.0F &&
+            strafe_ik_capture.forward_y <= 1.0F) {
+            pkt.strafe_ik_forward_y = strafe_ik_capture.forward_y;
+            pkt.strafe_ik_forward_y_valid = 1;
+        }
+
         AcquireSRWLockShared(&g_local_aim_foot_turn_lock);
         const LocalAimFootTurnCapture foot_capture = g_local_aim_foot_turn;
         ReleaseSRWLockShared(&g_local_aim_foot_turn_lock);
@@ -18913,33 +18900,6 @@ void send_local_player_state() {
         std::memset(pkt.look_stick, 0, sizeof(pkt.look_stick));
     }
     publish_peer_head_look_packet_fields(local_obj, pkt);
-    // PlayerStrafeController runs for the ordinary non-ADS camera path as well
-    // as GunMove. Publish its exact final route Locator every frame; receivers
-    // keep the confirmed scalar-only ADS correction and use the full quaternion
-    // only for the separately flagged free-look/head path.
-    const ULONGLONG strafe_capture_now = GetTickCount64();
-    AcquireSRWLockShared(&g_local_strafe_ik_forward_y_lock);
-    const LocalStrafeIkForwardYCapture strafe_ik_capture =
-        g_local_strafe_ik_forward_y;
-    ReleaseSRWLockShared(&g_local_strafe_ik_forward_y_lock);
-    if (strafe_ik_capture.owner == local_obj &&
-        strafe_ik_capture.captured_ms != 0 &&
-        strafe_capture_now >= strafe_ik_capture.captured_ms &&
-        strafe_capture_now - strafe_ik_capture.captured_ms <= 100 &&
-        std::isfinite(strafe_ik_capture.forward_y) &&
-        strafe_ik_capture.forward_y >= -1.0F &&
-        strafe_ik_capture.forward_y <= 1.0F &&
-        valid_network_orientation(strafe_ik_capture.locator_quat)) {
-        pkt.strafe_ik_forward_y = strafe_ik_capture.forward_y;
-        pkt.strafe_ik_forward_y_valid = 1;
-        if (g_puppet_head_look_sync) {
-            std::memcpy(
-                pkt.head_look_strafe_locator_quat,
-                strafe_ik_capture.locator_quat,
-                sizeof(pkt.head_look_strafe_locator_quat));
-            pkt.head_look_strafe_locator_valid = 1;
-        }
-    }
     // The native CharacterMove weapon helper is read-only over the live Player
     // inventory. Refresh less often than movement; the receiver republishes only
     // when this block changes.
@@ -47834,8 +47794,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-03x "
-        "(non-ADS final StrafeIk head-direction relay)");
+        "TLL co-op runtime init 2026-08-03y "
+        "(rejected non-ADS head Locator relay disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

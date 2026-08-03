@@ -17135,6 +17135,27 @@ locomotion change or ADS regression. APPLY with continued receiver following
 selects H4. Any spine deformation rejects the claim that the stock StrafeIK
 limits remain authoritative.
 
+### 2026-08-03 RUNTIME REJECTED: final non-ADS StrafeIk Locator is not the visible head direction (`x`)
+
+The packet and hook reached the intended boundary in both directions. PID 2320
+and PID 7076 each emitted `STRAFE-IK-LOCATOR-CAPTURE`; PID 7076 applied sequence
+74 and PID 2320 applied sequence 2 through `HEAD-STRAFE-LOCATOR-APPLY`. Neither
+process crashed. Nevertheless the user observed no change: the retained player
+still repeated the observing copy's head direction.
+
+This rejects H1 as the sufficient visible non-ADS head-direction owner. The
+transport, v18 layout and screen-owner gate are not the proof gap. The confirmed
+ADS forward-Y result remains valid, but copying the full non-ADS Locator at the
+same `PlayerStrafeController` boundary does not own the reported head turn. H4
+is selected: trace the independent horizontal Vector at controller `+0x300`
+and any later head/neck render writer, and distinguish them before another
+runtime test. Do not return to direct LookAtIK, broad camera/pose writes or this
+full-Locator substitution.
+
+Build `2026-08-03y` removes the rejected StatePacket v18 quaternion tail and
+restores the proven 1304-byte v17 packet plus the scalar-only exact-GunMove ADS
+relay. The broader non-ADS capture/apply path is removed.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

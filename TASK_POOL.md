@@ -776,9 +776,9 @@
       `player_aim_workspace_static_20260714.md`.
 - [~] **Head / camera look sync:** direct `PlayerLookAtIkController` SetLookPoint
       remains REJECTED because it was inactive for the fault and forced spine
-      twist. Build `x` instead uses the confirmed final
-      `PlayerStrafeController_UpdatePostAnimBlend 0x14100C400` boundary; runtime
-      discriminator pending below.
+      twist. Build `x` also reached the final StrafeIK Locator boundary in both
+      directions but was visually unchanged. Next static owner is the independent
+      `controller+0x300` Vector or a later head/neck render writer.
 - [ ] **Puppet controller model (NEW):** STATIC map in
       `reports/player_decision_node_controllers.md`. Nearby-list writer DONE;
       decision-node scheduler DONE (`0x14042D120` / `0x1404223F0` / `0x140CD3760`).
@@ -2674,11 +2674,19 @@ Do not reopen these as the first move:
       feeds its quaternion to `PlayerStrafeController_UpdateStrafeIk
       0x14100B370`, which writes literal `headb/spined`. The direct LookAtIK,
       broad camera/root paths and later common head writer are excluded.
-- [ ] Run one bounded build-`x` non-ADS discriminator: keep both characters
+- [x] Run one bounded build-`x` non-ADS discriminator: keep both characters
       stationary, hold the observer camera opposite and move only the sender
       sky -> ground. Require `STRAFE-IK-LOCATOR-CAPTURE` plus
       `HEAD-STRAFE-LOCATOR-APPLY`, sender-correct remote head/upper-spine
       direction, no twist/locomotion change, and unchanged ADS behavior.
+      **REJECTED:** both PIDs captured and applied the exact Locator, but the
+      visible remote head still followed the observing copy.
+- [ ] Trace every writer of `PlayerStrafeController+0x300` and the Vector's
+      consumption inside `PlayerStrafeController_UpdateStrafeIk`; prove whether
+      it contains receiver-camera-relative horizontal head direction or only
+      locomotion strafe. In parallel, enumerate post-`0x14100C400` head/neck
+      joint or render writers. Select one discriminator only after excluding the
+      other branch; do not retry LookAtIK or the rejected full Locator.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

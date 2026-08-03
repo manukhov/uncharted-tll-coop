@@ -25,7 +25,7 @@ struct InputPacket {
 // One-shot gameplay actions need a separate reliable ordered event stream.
 constexpr std::uint16_t kStatePort = 31338;
 constexpr std::uint32_t kStatePacketMagic = 0x53504F43;  // "COPS"
-constexpr std::uint16_t kStatePacketVersion = 18;
+constexpr std::uint16_t kStatePacketVersion = 17;
 
 // StatePacket.flags extension bits (v7+):
 // 0x0100 — camera_quat mirrors sender CameraManager(0) @+0x1B0.
@@ -108,10 +108,9 @@ struct StatePacket {
     std::uint32_t grenade_art_id = 0;
     std::int16_t grenade_total_ammo = 0;
     std::uint16_t grenade_inventory_reserved = 0;
-    // v14 field, generalized in v18: exact positive-Z forward.y expanded from
-    // the sender's final StrafeIk Locator at PlayerStrafeController vtable
-    // +0x60. Under GunMove this is sampled after authored reticle projection,
-    // unlike pose_seed and aim_pitch_*.
+    // v14: exact positive-Z forward.y expanded from the sender's final GunMove
+    // StrafeIk Locator at PlayerStrafeController vtable +0x60. This is sampled
+    // after authored reticle projection, unlike pose_seed and aim_pitch_*.
     float strafe_ik_forward_y = 0.0F;
     std::uint8_t strafe_ik_forward_y_valid = 0;
     std::uint8_t strafe_ik_reserved[3]{};
@@ -124,15 +123,9 @@ struct StatePacket {
     std::uint8_t aim_leg_base_pose_joint_count[2]{};
     std::uint8_t aim_leg_base_pose_reserved[2]{};
     float aim_leg_base_pose_local[2][8][12]{};
-    // v18: exact final StrafeIk reference quaternion produced for the sender's
-    // screen route. Non-ADS receivers substitute only this quaternion at the
-    // same PlayerStrafeController boundary; Locator position stays native.
-    float head_look_strafe_locator_quat[4]{};
-    std::uint8_t head_look_strafe_locator_valid = 0;
-    std::uint8_t head_look_strafe_locator_reserved[3]{};
 };
 
-static_assert(sizeof(StatePacket) == 1320);
+static_assert(sizeof(StatePacket) == 1304);
 static_assert(sizeof(StatePacket) <= 1472);  // IPv4 UDP payload under 1500-byte MTU.
 static_assert(offsetof(StatePacket, fganim_world_quat) == 144);
 static_assert(offsetof(StatePacket, aim_pitch_up) == 472);
@@ -145,8 +138,6 @@ static_assert(offsetof(StatePacket, strafe_ik_forward_y_valid) == 520);
 static_assert(offsetof(StatePacket, aim_leg_base_pose_sequence) == 524);
 static_assert(offsetof(StatePacket, aim_leg_base_pose_joint_count) == 528);
 static_assert(offsetof(StatePacket, aim_leg_base_pose_local) == 532);
-static_assert(offsetof(StatePacket, head_look_strafe_locator_quat) == 1300);
-static_assert(offsetof(StatePacket, head_look_strafe_locator_valid) == 1316);
 
 // Phase 3 (host-authoritative world sync): the HOST (role A) enumerates the
 // CharacterManager, picks out enemy NPCs, and sends their transforms; the CLIENT
