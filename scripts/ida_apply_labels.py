@@ -2394,6 +2394,8 @@ FUNCTIONS = {
         "incoming Locator+0x10, retains positive-Z forward.y for asin and the "
         "positive-X right axis for joint rotation. Its separate Vector argument "
         "constructs StrafeDirBlender/ApStrafeDirBlender horizontal state. It "
+        "does not consume the Locator position or import Locator forward x/z as "
+        "the separate horizontal strafe input. "
         "resolves the headb and spined chains and commits their post-blend joint "
         "corrections. Called only by the concrete PlayerStrafeController vtable "
         "+0x60 method 0x14100C400.",
@@ -2411,13 +2413,15 @@ FUNCTIONS = {
         "Reached from Player_PostAnimBlending_Async through Player+0x1D50; "
         "ABI is void(controller, const Locator*). It validates the current "
         "strafe action and passes the supplied Locator to "
-        "PlayerStrafeController_UpdateStrafeIk.",
+        "PlayerStrafeController_UpdateStrafeIk. This is the final common native "
+        "boundary before the headb/spined correction, for ADS and non-ADS alike.",
     ),
     0x1410F9050: (
         "Player_BuildStrafeIkReferenceLocator",
         "Builds the 32-byte Locator immediately consumed by "
         "PlayerStrafeController vtable +0x60. Seeds position from "
-        "ResolveScreenRoutePoseSeedOrDefault(Player+0x4010), then selects "
+        "ResolveScreenRoutePoseSeedOrDefault(Player+0x4010); ordinary non-ADS "
+        "keeps that receiver-screen quaternion. It then selects optional "
         "GunMoveGrapple/StrafeMelee/GunMove/GrenadeMove/ReviveCharacter. "
         "The ordinary GunMove branch builds the routed reticle point from HUD "
         "fields (+0x30+0x38, +0x34+0x3C), converts it to a world direction "

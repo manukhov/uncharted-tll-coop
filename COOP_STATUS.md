@@ -17066,6 +17066,75 @@ before stock solve, are the missing visible turn-in-place leg pose. Keep build
 `w` enabled and do not reopen the rejected MoveLeg admission/final-rotation or
 downstream render-overwrite alternatives for this symptom.
 
+### 2026-08-03 STATIC/IMPLEMENTED: non-ADS head direction uses the final StrafeIk Locator (`x`)
+
+The head-direction symptom is the non-ADS form of the receiver-camera ownership
+already isolated for vertical ADS. The old direct `PlayerLookAtIkController`
+target injection is not being revived: runtime showed that controller inactive
+in the shared-camera state, and forced `SetLookPoint` produced unacceptable
+spine twist. Four independent evidence types instead select the already proven
+late StrafeIK boundary:
+
+1. **Exact caller/owner chain.** `Player_PostAnimBlending_Async 0x1410EB6A0`
+   calls `Player_BuildStrafeIkReferenceLocator 0x1410F9050` and immediately
+   dispatches `Player+0x1D50` concrete
+   `PlayerStrafeController::vftable 0x142A3FA88 +0x60`, exact target
+   `PlayerStrafeController_UpdatePostAnimBlend 0x14100C400`.
+2. **Receiver-camera source dataflow.** The builder first calls
+   `ResolveScreenRoutePoseSeedOrDefault` with `Player+0x4010`. Its special
+   overrides are only GunMoveGrapple, StrafeMelee, GunMove, GrenadeMove and
+   ReviveCharacter; ordinary non-ADS keeps that per-screen Locator. Therefore
+   the retained screen-1 Player naturally receives the camera quaternion of the
+   observing process, exactly matching the reported cross-player head following.
+3. **Exact consumer/joints.** `PlayerStrafeController_UpdateStrafeIk
+   0x14100B370` reads only Locator quaternion `+0x10`, derives positive-Z
+   `forward.y` and the positive-X right axis, then resolves literal `headb` and
+   `spined` and commits their post-blend corrections. Locator position is not
+   the horizontal strafe input; that is the independent Vector at
+   `controller+0x300`.
+4. **Independent runtime/late-writer exclusion.** Build `b` already confirmed
+   the same vtable boundary in both directions for ADS: opposite receiver/sender
+   camera signs were replaced and the visible head/spine/weapon followed the
+   sender without a crash. The complete later Player controller audit found no
+   subsequent common head/spine writer.
+
+Competing hypotheses are explicit. **H1 final StrafeIk Locator is LEADING
+STATIC.** **H2 direct LookAtIK is RUNTIME REJECTED** (inactive for the fault;
+forced path twisted the spine). **H3 broad screen-1 camera/pose or root writes
+are REJECTED** because they froze locomotion facing or did not rebuild the
+derived camera prefix. **H4 the independent horizontal strafe Vector or an
+unresolved downstream renderer remains OPEN** only if the exact Locator is
+applied but the visible head still follows the receiver camera.
+
+Build `2026-08-03x` keeps the confirmed ADS behavior unchanged and adds only the
+non-ADS half of H1:
+
+- StatePacket v18 appends the sender's exact final StrafeIk Locator quaternion
+  at `+1300` with validity byte `+1316`; total packet size is 1320 bytes, still
+  below both the 1472-byte IPv4 UDP payload bound and the existing 1488-byte
+  receive buffer;
+- the local screen-0 controller captures its final native Locator at vtable
+  `+0x60` for every active StrafeIK update, not only exact GunMove;
+- exact GunMove ADS retains the already confirmed scalar-only forward-Y rebuild,
+  preserving native reticle azimuth, horizontal aim and tracer behavior;
+- only a non-ADS `PeerFreeLook` packet may substitute the full quaternion for
+  the retained screen-1 Player. Locator position, root/body quaternion,
+  movement Vector, joint buffers and all native weight/limit logic remain local;
+- the rejected direct `SetLookPoint`/broad camera paths stay uncalled.
+
+The single `ida/tll.i64` was saved after updating the exact producer, vtable
+boundary and `headb/spined` consumer comments (`save_database returned True`);
+the restarted MCP resolves all three durable names.
+
+**Falsifiable prediction:** with both characters stationary and out of ADS,
+hold the observing copy's camera in the opposite vertical direction while the
+sender looks sky -> ground. Both processes must emit
+`STRAFE-IK-LOCATOR-CAPTURE` and `HEAD-STRAFE-LOCATOR-APPLY`; the remote head/
+upper spine must follow the sender rather than the observer, with no twist,
+locomotion change or ADS regression. APPLY with continued receiver following
+selects H4. Any spine deformation rejects the claim that the stock StrafeIK
+limits remain authoritative.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge
