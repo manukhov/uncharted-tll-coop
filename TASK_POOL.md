@@ -167,12 +167,21 @@
       The puppet applies them by ordinal after its stock Update and before stock
       `CharacterLegIkController_CommitJointTransforms`; receiver joint indices,
       heap pointers, translations and validity storage remain native.
-- [ ] Run one stationary ADS turn with build `u`. Require bounded sender
+- [x] Run one stationary ADS turn with build `u`. Require bounded sender
       `AIM-LEG-IK-CAPTURE` and receiver `AIM-LEG-IK-APPLY` with identical
       sequence/count/masks. Visible remote feet must replant instead of sliding;
       no pose, locomotion or performance regression is allowed. If APPLY fires
       but sliding remains, test companion numeric translation/final render
       overwrite next and do not retry foot-effect/GroundModel admission.
+      **REJECTED:** PID 7180 captured `count=8/8 mask=ff/ff`, PID 13384 applied
+      the same complete two-chain payload, but remote Chloe still slid with fixed
+      feet. Build `v` disables the rejected shared-vtable hook.
+- [ ] Trace the pre-IK live skeleton palette producer feeding controller
+      `+0x3E30/+0x3E78`. Identify the exact base-pose joint writer and prove which
+      numeric joints can differ during local ADS turn-in-place before
+      `CharacterLegIkController_Update`. Compare authored animation evaluation,
+      palette double-buffer/current-frame selection and any post-evaluation pose
+      copy; do not return to rejected action/effect/GroundModel/JointSet seams.
 - [x] Confirm build `q` performance: PIDs 15444/6220 remained responsive with
       zero exception/AIM/attachment diagnostic rows, and the user confirmed the
       recent gameplay lag is gone with normal behavior.

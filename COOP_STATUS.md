@@ -16938,6 +16938,36 @@ compatibility. APPLY with continued sliding rejects quaternion-only final-chain
 publication and reopens either companion-translation data or a render-stage
 overwrite; do not return to foot-effect/GroundModel admission in that case.
 
+### 2026-08-03 RUNTIME REJECTED: complete final leg-rotation relay does not carry the step (`u`)
+
+The single stationary Chloe ADS turn selected the final negative branch of the
+written prediction. Both processes remained responsive and the user reported no
+new pose regression, but remote Chloe still kept both feet fixed and slid around
+the turn while the local Chloe visibly replanted them.
+
+- sender PID 7180 emitted `AIM-LEG-IK-CAPTURE seq=1 count=8/8
+  mask=0xff/0xff`;
+- receiver PID 13384 emitted `AIM-LEG-IK-APPLY seq=3 count=8/8
+  mask=0xff/0xff`;
+- the receiver therefore accepted matching chain lengths and applied every one
+  of the eight non-root rotations for both receiver-local JointSets immediately
+  before stock commit.
+
+This confirms StatePacket v16 transport, controller ownership, heap layout,
+chain-length validation and the exact post-Update/pre-Commit mutation seam. It
+**REJECTS the final CharacterLegIk quaternion set as the missing visible-step
+payload**. Together with the earlier phase/Locator/GroundModel results, the whole
+MoveLegIk correction path is now excluded as the owner of turn-in-place stepping:
+it adjusts an already evaluated ankle/leg pose but does not create the authored
+replant visible on the local player.
+
+Build `2026-08-03v` disables the rejected shared-vtable relay. The next static
+search moves to the pre-IK live skeleton palette/animation-pose producer that
+feeds the two JointSets. It must identify which base-pose joints differ during a
+local ADS turn and the exact writer before `CharacterLegIkController_Update`;
+do not retry `aim-idle-rotate`, `foot-effect`, GroundModel or final JointSet
+rotation relays.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

@@ -1912,6 +1912,10 @@ constexpr bool kEnableCrashObserver = false;
 // are already resolved; keep the functional relays/repairs and compile out only
 // the persistent diagnostic walks and file I/O in production.
 constexpr bool kEnablePersistentStateInventoryLogging = false;
+// Build u transported and applied all eight non-root rotations for both leg
+// JointSets, but the remote feet still slid. Keep the exact implementation for
+// static comparison while removing its shared-vtable hook from production.
+constexpr bool kEnableCharacterLegIkFinalRotationRelay = false;
 // Build gw proved that final-cull compaction neither removes the visible spawn
 // rifle nor preserves frame time. Keep the observer code available for static
 // correlation, but do not patch the hot RenderMgr callsite in production.
@@ -47698,8 +47702,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-03u "
-        "(final CharacterLegIk joint-rotation relay)");
+        "TLL co-op runtime init 2026-08-03v "
+        "(rejected leg relays disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -47799,7 +47803,12 @@ DWORD WINAPI install_hook(void*) {
         if (g_enable_puppet_fganim_world_aim_turn) {
             install_fganim_world_aim_turn_callsite_relay();
         }
-        install_character_leg_ik_final_rotation_relay();
+        if constexpr (kEnableCharacterLegIkFinalRotationRelay) {
+            install_character_leg_ik_final_rotation_relay();
+        } else {
+            boot_log_line(
+                "rejected CharacterLegIk final-rotation relay disabled");
+        }
         boot_log_line("rejected MoveLegIk admission relay disabled");
         if (g_enable_gun_move_body_turn) {
             install_gun_move_camera_turn_relay();
