@@ -154,11 +154,25 @@
       numeric admission REJECTED:** PID 15252 captured `seq=1 mask=3`, PID 6220
       applied the same event, both stayed responsive without exceptions, but
       remote Chloe still slid with fixed feet.
-- [ ] Audit the post-`0x14210202E` path statically. Separate missing
+- [x] Audit the post-`0x14210202E` path statically. Separate missing
       receiver-local record handles/contact references, absent GroundModel/query
       state, and later solve/apply overwrite. Trace exact writes and first reads
       through all three GroundModels, `FindFootPlantGround`, the per-leg solve
       buffers and final joint application before proposing another runtime test.
+      Handles have numeric fallback, invalid GroundModel continues through the
+      native solve fallback, the aggregate model has no later MoveLeg reader, and
+      Update is immediately followed by final commit. **STATIC/IMPLEMENTED (`u`):**
+      StatePacket v16 replaces the rejected admission event with only valid
+      quaternion rotations from controller `+0x3E30/+0x3E78` after stock Update.
+      The puppet applies them by ordinal after its stock Update and before stock
+      `CharacterLegIkController_CommitJointTransforms`; receiver joint indices,
+      heap pointers, translations and validity storage remain native.
+- [ ] Run one stationary ADS turn with build `u`. Require bounded sender
+      `AIM-LEG-IK-CAPTURE` and receiver `AIM-LEG-IK-APPLY` with identical
+      sequence/count/masks. Visible remote feet must replant instead of sliding;
+      no pose, locomotion or performance regression is allowed. If APPLY fires
+      but sliding remains, test companion numeric translation/final render
+      overwrite next and do not retry foot-effect/GroundModel admission.
 - [x] Confirm build `q` performance: PIDs 15444/6220 remained responsive with
       zero exception/AIM/attachment diagnostic rows, and the user confirmed the
       recent gameplay lag is gone with normal behavior.

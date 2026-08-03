@@ -25,7 +25,7 @@ struct InputPacket {
 // One-shot gameplay actions need a separate reliable ordered event stream.
 constexpr std::uint16_t kStatePort = 31338;
 constexpr std::uint32_t kStatePacketMagic = 0x53504F43;  // "COPS"
-constexpr std::uint16_t kStatePacketVersion = 15;
+constexpr std::uint16_t kStatePacketVersion = 16;
 
 // StatePacket.flags extension bits (v7+):
 // 0x0100 — camera_quat mirrors sender CameraManager(0) @+0x1B0.
@@ -114,20 +114,16 @@ struct StatePacket {
     float strafe_ik_forward_y = 0.0F;
     std::uint8_t strafe_ik_forward_y_valid = 0;
     std::uint8_t strafe_ik_reserved[3]{};
-    // v15: one authored MoveLegIkNew foot-admission job. Only numeric Locator
-    // payloads cross the wire. The 16-byte native record headers contain
-    // process-local handle index/generation fields and are deliberately absent.
-    // A capture sequence is repeated for the rest of its strict-ADS session (or
-    // until a newer capture supersedes it). The receiver consumes that source
-    // job at most once; ADS release clears the sender latch.
-    std::uint32_t aim_footstep_sequence = 0;
-    float aim_footstep_phase[2]{};
-    float aim_footstep_history_world[2][8]{};
-    float aim_footstep_history_local[2][8]{};
-    float aim_footstep_next_world[2][8]{};
-    float aim_footstep_next_local[2][8]{};
-    std::uint8_t aim_footstep_admitted_mask = 0;
-    std::uint8_t aim_footstep_reserved[3]{};
+    // v16: final numeric rotations produced by the sender's two leg JointSets
+    // after CharacterLegIkController::Update and immediately before the stock
+    // commit to the live skeleton palette. Slot zero in each native chain is its
+    // root and is deliberately omitted. Joint indices, heap pointers and every
+    // other process-local field remain receiver-owned.
+    std::uint32_t aim_leg_ik_sequence = 0;
+    std::uint8_t aim_leg_ik_joint_count[2]{};
+    std::uint8_t aim_leg_ik_valid_mask[2]{};
+    float aim_leg_ik_rotation[2][8][4]{};
+    std::uint8_t aim_leg_ik_reserved[12]{};
 };
 
 static_assert(sizeof(StatePacket) == 800);
@@ -139,9 +135,9 @@ static_assert(offsetof(StatePacket, grenade_art_id) == 508);
 static_assert(offsetof(StatePacket, grenade_total_ammo) == 512);
 static_assert(offsetof(StatePacket, strafe_ik_forward_y) == 516);
 static_assert(offsetof(StatePacket, strafe_ik_forward_y_valid) == 520);
-static_assert(offsetof(StatePacket, aim_footstep_sequence) == 524);
-static_assert(offsetof(StatePacket, aim_footstep_phase) == 528);
-static_assert(offsetof(StatePacket, aim_footstep_admitted_mask) == 792);
+static_assert(offsetof(StatePacket, aim_leg_ik_sequence) == 524);
+static_assert(offsetof(StatePacket, aim_leg_ik_joint_count) == 528);
+static_assert(offsetof(StatePacket, aim_leg_ik_rotation) == 532);
 
 // Phase 3 (host-authoritative world sync): the HOST (role A) enumerates the
 // CharacterManager, picks out enemy NPCs, and sends their transforms; the CLIENT

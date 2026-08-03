@@ -16873,6 +16873,71 @@ record handles/contact references, GroundModel/query state not created by the
 remote animation graph, and a later solve/apply overwrite. Do not widen the
 copied MoveLeg block or transfer process-local handles as a shortcut.
 
+### 2026-08-03 STATIC/IMPLEMENTED: relay final leg JointSet rotations before stock commit (`u`)
+
+The post-`0x14210202E` audit explains the build-`t` negative result and selects a
+strictly lower numeric boundary. Four independent evidence types meet the static
+quota:
+
+1. **Handle and terrain-query dataflow.** `MoveLegIkNew_FindFootPlantGround
+   0x142103E10` falls back to the relayed numeric Locator whenever a record's
+   process-local handle is invalid. Its worker `0x1421043A0` writes directly to
+   the embedded per-leg GroundModel and is synchronously waited at
+   `0x14210433D`. An invalid per-leg GroundModel does not suppress the solve:
+   `MoveLegIkNew_ApplyLegToGround 0x1420FFD00` continues through its native
+   fallback. The aggregate GroundModel at `MoveLeg+0x27A0` has no later MoveLeg
+   reader after the query. Missing handles and absent aggregate-query state are
+   therefore **REJECTED as the necessary step source**.
+2. **Concrete ownership and layout.** `CharacterLegIkController_Initialize
+   0x141F9DC30` creates the left/right JointSets at controller
+   `+0x3E30/+0x3E78`. `MoveLegIkNew_BindLegJointSets 0x1420FDA00` binds those
+   exact receiver-local objects into `MoveLegIkNew+0x8/+0x10`. Each JointSet
+   retains its own joint-index array at `+0x18` and five receiver-local heap
+   arrays behind `+0x20`; none of those pointers or indices may cross the wire.
+3. **Solve-result writer.** `MoveLegIkNew_DoLegIk 0x1420FE790` consumes both
+   final numeric foot targets and reaches `JointSet_ApplyRelativeJointRotation
+   0x14181F450 -> JointSet_MultiplyJointRotationAndMarkValid 0x14181F640`.
+   The latter writes the normalized quaternion at
+   `buffers[0]+0x20*joint+0x10` and marks that ordinal valid. Thus the only
+   dynamic part needed from the sender is a bounded set of numeric rotations;
+   translations, target world points and process-local handles stay native.
+4. **Immediate final consumer.** `Player_PostAnimBlending_Async` dispatches
+   controller vtable `+0x18` at `0x1410EB992` and vtable `+0x30` at
+   `0x1410EB99F` with no intervening pose writer. The second call resolves to
+   `CharacterLegIkController_CommitJointTransforms 0x141F9E190`, which copies
+   each valid JointSet rotation into the live 48-byte-per-joint skeleton palette
+   using the receiver's own index array. No later CharacterLegIk overwrite was
+   found. A late solve/commit suppression is therefore **STATIC REJECTED**.
+
+A smaller pair of 32-byte pre-`DoLegIk` foot targets remains a competing seam,
+but it contains world-space translations and still depends on the receiver solve.
+After repeated inconclusive runtime tests it is not the safer boundary. Build
+`2026-08-03u` instead hooks the already proven controller vtable `+0x18`, calls
+stock first, and then:
+
+- captures only valid quaternion rotations from the local controller's two
+  JointSets;
+- publishes at most eight non-root ordinals per leg in 800-byte StatePacket v16;
+- after the puppet's own stock Update, requires the same receiver chain lengths,
+  clears receiver validity for sender-invalid ordinals, and writes each valid
+  quaternion before publishing its receiver-local validity byte;
+- returns directly to the stock `+0x30` commit. Joint indices, pointers,
+  translations, GroundModels, contact references and record handles never cross
+  the wire.
+
+The rejected v15 admission payload and its two callsite hooks are removed. The
+release DLL builds successfully, and the IDB now names the concrete JointSet
+allocation/apply/commit chain plus `MoveLegIkNew_DoLegIk`.
+
+**Falsifiable prediction:** one stationary ADS turn must produce a bounded
+`AIM-LEG-IK-CAPTURE` on the sender and `AIM-LEG-IK-APPLY` with identical
+sequence/count/masks on the receiver, followed by visible remote foot replanting
+instead of circular sliding. Missing CAPTURE rejects the assumed live JointSet
+result boundary. CAPTURE without APPLY isolates packet freshness or chain-length
+compatibility. APPLY with continued sliding rejects quaternion-only final-chain
+publication and reopens either companion-translation data or a render-stage
+overwrite; do not return to foot-effect/GroundModel admission in that case.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

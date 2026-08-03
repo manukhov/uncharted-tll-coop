@@ -48,6 +48,48 @@ FUNCTIONS = {
         "updates the active ILegIk implementation and mutates both leg chains before "
         "CharacterLegIkController_CommitJointTransforms publishes their joints.",
     ),
+    0x141986AF0: (
+        "CharacterLegIkController_InitializeLegJointSet",
+        "Initializes one of the controller's left/right JointSets from authored "
+        "root/end joint hashes, stores its leg selector at +0x40 and resolves "
+        "the six auxiliary leg joint offsets at +0x41..+0x46.",
+    ),
+    0x14181E780: (
+        "JointSet_AllocateAndSeedBuffers",
+        "Allocates the five receiver-local JointSet work arrays behind +0x20: "
+        "two 32-byte locator arrays, one 16-byte companion array, scalars and "
+        "per-joint validity bytes; seeds them from the live skeleton palette.",
+    ),
+    0x14181ECD0: (
+        "JointSet_CommitJointTransformsAndReset",
+        "Copies each valid numeric JointSet result into the live 48-byte-per-joint "
+        "skeleton palette using the receiver-local joint-index array at +0x18, "
+        "then dispatches the JointSet reset slot.",
+    ),
+    0x14181F450: (
+        "JointSet_ApplyRelativeJointRotation",
+        "Builds a normalized relative rotation for one JointSet member and passes "
+        "it to JointSet_MultiplyJointRotationAndMarkValid; no handle or asset "
+        "pointer enters the numeric result.",
+    ),
+    0x14181F640: (
+        "JointSet_MultiplyJointRotationAndMarkValid",
+        "Multiplies a numeric quaternion into the selected JointSet locator "
+        "rotation at buffers[0]+0x20*index+0x10 and marks that joint valid through "
+        "the JointSet vtable.",
+    ),
+    0x1420FDA00: (
+        "MoveLegIkNew_BindLegJointSets",
+        "MoveLegIkNew initialization slot. Binds its left/right JointSet pointers "
+        "to CharacterLegIkController+0x3E30/+0x3E78; the second chain is exactly "
+        "the first plus the 0x48-byte JointSet stride.",
+    ),
+    0x1420FE790: (
+        "MoveLegIkNew_DoLegIk",
+        "Exact ILegIk::DoLegIk source assertion and MoveLegIkNew vtable +0x68. "
+        "Consumes the two numeric final foot targets, applies per-leg rotations "
+        "into the bound JointSets and returns immediately before stock commit.",
+    ),
     0x141FA0F30: (
         "CharacterLegIkController_PostAnimUpdate",
         "Exact CharacterLegIkController::PostAnimUpdate source assertion. Dispatches "
