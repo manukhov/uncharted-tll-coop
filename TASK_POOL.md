@@ -139,11 +139,15 @@
       preserving process-local 16-byte headers and every native GroundModel.
       TLS ownership is bounded by outer Character-bearing job call
       `0x142104AB3`; source capture sequence prevents repeat application.
-- [ ] Run one stationary ADS left/right turn on Chloe with build `s`, observing
-      from Nadine. Require one bounded CAPTURE/APPLY marker and visible remote
-      foot replants without local pose, aim, movement, collision, performance or
-      exception regression. Failure after APPLY moves the search below admission
-      into GroundModel validity versus solve/apply.
+- [x] Run one stationary ADS left/right turn on Chloe with build `s`, observing
+      from Nadine. **REJECTED before mutation:** both responsive processes
+      captured local `seq=1 mask=2`, neither emitted APPLY, and remote Chloe
+      still slid with fixed feet. This does not test Locator sufficiency.
+- [ ] Audit the complete capture-to-packet-to-apply timing/dataflow before the
+      next build. Separate sender `owner == local_obj` and 100 ms freshness,
+      StatePacket v15 publication, receiver peer-ADS/sample validation, and the
+      nested owner/destination context. Prove one exact lost boundary statically;
+      do not request another visual test merely to inventory those gates.
 - [x] Confirm build `q` performance: PIDs 15444/6220 remained responsive with
       zero exception/AIM/attachment diagnostic rows, and the user confirmed the
       recent gameplay lag is gone with normal behavior.

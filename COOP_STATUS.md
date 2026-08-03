@@ -16785,6 +16785,28 @@ performance must remain unchanged; no exception may occur. If apply is reached
 but feet still slide, the admission relay is insufficient and the next
 candidate is GroundModel validity versus solve/apply, not another phase source.
 
+### 2026-08-03 RUNTIME REJECTED: build `s` never transports a captured footstep to APPLY
+
+The stationary Chloe ADS turn left the remote Chloe sliding in a circle with
+both feet fixed. Both processes remained responsive and emitted no exception.
+The logs distinguish this from a failed numeric mutation:
+
+- role-A/Chloe PID 3036 emitted `AIM-FOOT-RELAY-CAPTURE seq=1 mask=2`;
+- role-B/Nadine PID 11876 also emitted its own local
+  `AIM-FOOT-RELAY-CAPTURE seq=1 mask=2`;
+- neither process emitted `AIM-FOOT-RELAY-APPLY`.
+
+Therefore build `s`'s runtime prediction is **REJECTED before the receiver
+mutation**. The numeric Locator payload and exact `0x14210202E` continuation
+seam remain STATIC/UNTESTED; this run provides no evidence for or against their
+visual sufficiency. The failed component is the capture-to-packet-to-apply
+packaging. Competing gates are: the sender's `owner == local_obj` / 100 ms
+publication window, the receiver's peer-ADS and packet-validity checks, and the
+receiver owner/destination context at the nested hook. The next step is a
+static timing/dataflow audit of those gates and the StatePacket publication
+schedule. Do not repeat the visual test until one exact lost boundary has been
+proved and replaced.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge
