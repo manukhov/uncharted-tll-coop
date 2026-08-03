@@ -184,11 +184,13 @@
       both nine-joint chains from it; Update entry `0x141F9E6F0` is the exact
       post-Reset/pre-solve boundary. `+0x230/+0x238` are the separate skinning
       buffers, not a double buffer for `+0x100`.
-- [ ] Run one stationary ADS left/right turn with build `w`. Require matching
+- [x] Run one stationary ADS left/right turn with build `w`. Require matching
       `AIM-LEG-BASE-CAPTURE count=8/8` and `AIM-LEG-BASE-APPLY count=8/8`, visible
       remote foot replants, no pose corruption and no renewed lag. APPLY with
       continued sliding rejects W1 and selects downstream palette/render
       overwrite W4; do not widen to all joints or retry rejected MoveLeg seams.
+      **CONFIRMED:** the user sees native-looking remote replants; both PIDs
+      produced capture and apply markers with `8/8`, without reported regressions.
 - [x] Confirm build `q` performance: PIDs 15444/6220 remained responsive with
       zero exception/AIM/attachment diagnostic rows, and the user confirmed the
       recent gameplay lag is gone with normal behavior.

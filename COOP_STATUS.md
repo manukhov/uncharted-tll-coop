@@ -17053,6 +17053,19 @@ selects packet/layout compatibility. APPLY with continued sliding rejects W1 as
 sufficient and selects W4; in that case do not widen to all 651 joints or retry
 any rejected MoveLeg admission/final-rotation seam.
 
+### 2026-08-03 RUNTIME CONFIRMED: pre-IK leg base-pose relay restores remote replants (`w`)
+
+The user confirmed that the remote player now replants the feet during a
+stationary ADS turn instead of sliding around fixed feet. The bounded markers
+also prove both directions of the relay: PID 7052 captured `count=8/8` and PID
+7288 applied it; PID 7288 then captured `count=8/8` and PID 7052 applied it.
+There was no reported pose corruption or renewed lag. This confirms W1: the
+animation-produced non-root `JointParams` rows at `FgAnimData+0x100`, applied at
+`CharacterLegIkController_Update 0x141F9E6F0` entry after Reset/preparation and
+before stock solve, are the missing visible turn-in-place leg pose. Keep build
+`w` enabled and do not reopen the rejected MoveLeg admission/final-rotation or
+downstream render-overwrite alternatives for this symptom.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge
