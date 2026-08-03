@@ -38,7 +38,7 @@ FUNCTIONS = {
         "CharacterLegIkController_CommitJointTransforms",
         "CharacterLegIkController vtable slot +0x30, called immediately after "
         "Update by Player_PostAnimBlending_Async. Copies valid 32-byte IK joint "
-        "results into the live 48-byte-per-joint FgAnim skeleton palette, then "
+        "results into the current 48-byte-per-joint JointCache local pose, then "
         "resets the temporary chain caches.",
     ),
     0x141F9E6F0: (
@@ -58,12 +58,37 @@ FUNCTIONS = {
         "JointSet_AllocateAndSeedBuffers",
         "Allocates the five receiver-local JointSet work arrays behind +0x20: "
         "two 32-byte locator arrays, one 16-byte companion array, scalars and "
-        "per-joint validity bytes; seeds them from the live skeleton palette.",
+        "per-joint validity bytes; seeds them from the current JointCache pose.",
+    ),
+    0x141986C60: (
+        "LegIkChain_ResetAndSeedFromJointCache",
+        "Concrete LegIkChain vtable slot +0x78. Called once per leg by "
+        "CharacterLegIkController_ResetIkBuffers; allocates and seeds the "
+        "JointSet from the current owner JointCache before refreshing the "
+        "authored ankle reference.",
+    ),
+    0x1418209F0: (
+        "JointSet_RefreshWorldLocatorsThroughOrdinal",
+        "Concrete LegIkChain vtable slot +0x38 used by JointSet_GetJointLocWs. "
+        "Composes local 32-byte locators through the chain and advances the "
+        "valid world-prefix cursor at JointSet+0x38.",
+    ),
+    0x141686CD0: (
+        "JointCache_InitializeAndAllocatePoseBuffers",
+        "Initializes the JointCache embedded at FgAnimData+0x30. For config "
+        "type 2 it allocates the 48-byte-per-joint local pose at overall "
+        "+0x100, the 32-byte world Locator array at +0x108 and the 64-byte "
+        "matrix workspace at +0x110.",
+    ),
+    0x141687970: (
+        "JointCache_ComputeJointWorldLocatorAndMarkValid",
+        "Converts one 64-byte JointCache matrix into the 32-byte world Locator "
+        "array and marks that skeleton joint valid in the cache bitset.",
     ),
     0x14181ECD0: (
         "JointSet_CommitJointTransformsAndReset",
         "Copies each valid numeric JointSet result into the live 48-byte-per-joint "
-        "skeleton palette using the receiver-local joint-index array at +0x18, "
+        "JointCache local pose using the receiver-local index array at +0x18, "
         "then dispatches the JointSet reset slot.",
     ),
     0x14181F450: (
@@ -1415,6 +1440,9 @@ FUNCTIONS = {
         "later returned to AnimManager_PerformAnimBlend. In build mode 2 it emits "
         "the six-word command 14 at 0x141A8FF52..0x141A8FF89 from build-context "
         "qwords 7/6, after the preceding command-3/4 close and before command 15. "
+        "For every finalized skeleton group it also emits opcode 27 (0x6001B) "
+        "with destination FgAnimData+0x100+48*groupStart, the persistent local "
+        "JointParams array consumed by post-blend IK. "
         "Its decimal-command-17 "
         "producer copies build-context qword 6 into the command payload and emits "
         "header 0x40011 at 0x141A90119. The command-16 header 0x00020010 is "
@@ -1425,6 +1453,8 @@ FUNCTIONS = {
         "AnimManager_BuildCommandSegmentsForObjectMask",
         "Builds the per-object command-generation context and dispatches "
         "AnimManager_CreateAnimCmdsForObject for every selected skeleton group. "
+        "The normal PerformAnimBlend caller passes the persistent 48-byte local "
+        "JointParams destination at FgAnimData+0x100. "
         "Context qwords 5 and 6 preserve the supplied scalar-bank pointers; the "
         "normal PerformAnimBlend caller supplies FgAnimData+0x118/+0x120.",
     ),
@@ -2430,6 +2460,9 @@ FUNCTIONS = {
         "Exact PerformAnimBlend source assertion in anim-mgr-jobs.cpp. Builds "
         "the current 48-byte-per-joint matrix palette and swaps FgAnimData "
         "+0x230 into previous buffer +0x238. Its normal command path reads the "
+        "persistent local JointParams pointer at FgAnimData+0x100 at "
+        "0x141A92547 and passes it to BuildCommandSegmentsForObjectMask; this "
+        "buffer is separate from the current/previous skinning pair. It reads "
         "optional scalar-bank pointers at FgAnimData+0x118/+0x120; a special "
         "multi-group mode locally suppresses the +0x120 value without modifying "
         "the field. Fallback allocates and publishes identity matrices.",
@@ -2524,6 +2557,9 @@ FUNCTIONS = {
         "at +0x30, target skeleton group descriptor at +0x38, the current "
         "10-byte processing/allocation descriptor at +0x40, "
         "JointParams at +0x50 and matrix workspace at +0x58. "
+        "Case 27 at 0x141ABAF3B..0x141ABAFB4 raw-copies three float4 rows per "
+        "joint from finalized WorkBuffer+0x50 into the opcode's destination, "
+        "which the normal builder points at FgAnimData+0x100. "
         "The distinct outer AnimCmdContext+0x00 pointer is the FgAnim target skeleton "
         "used for Player ownership; SegmentContext+0x28 is its child at +0x40, not "
         "the unrelated AnimCmdContext+0x40 buffer pointer. Each invocation owns a "

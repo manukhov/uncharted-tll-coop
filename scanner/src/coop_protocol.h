@@ -25,7 +25,7 @@ struct InputPacket {
 // One-shot gameplay actions need a separate reliable ordered event stream.
 constexpr std::uint16_t kStatePort = 31338;
 constexpr std::uint32_t kStatePacketMagic = 0x53504F43;  // "COPS"
-constexpr std::uint16_t kStatePacketVersion = 16;
+constexpr std::uint16_t kStatePacketVersion = 17;
 
 // StatePacket.flags extension bits (v7+):
 // 0x0100 — camera_quat mirrors sender CameraManager(0) @+0x1B0.
@@ -114,19 +114,19 @@ struct StatePacket {
     float strafe_ik_forward_y = 0.0F;
     std::uint8_t strafe_ik_forward_y_valid = 0;
     std::uint8_t strafe_ik_reserved[3]{};
-    // v16: final numeric rotations produced by the sender's two leg JointSets
-    // after CharacterLegIkController::Update and immediately before the stock
-    // commit to the live skeleton palette. Slot zero in each native chain is its
-    // root and is deliberately omitted. Joint indices, heap pointers and every
-    // other process-local field remain receiver-owned.
-    std::uint32_t aim_leg_ik_sequence = 0;
-    std::uint8_t aim_leg_ik_joint_count[2]{};
-    std::uint8_t aim_leg_ik_valid_mask[2]{};
-    float aim_leg_ik_rotation[2][8][4]{};
-    std::uint8_t aim_leg_ik_reserved[12]{};
+    // v17: the sender's complete pre-IK local-pose rows for the eight non-root
+    // joints in each leg chain. The receiver maps ordinals through its own
+    // JointSet indices at stock Update entry, after ResetIkBuffers has seeded
+    // the receiver-owned root Locator. Pointers and joint indices never cross
+    // the wire.
+    std::uint32_t aim_leg_base_pose_sequence = 0;
+    std::uint8_t aim_leg_base_pose_joint_count[2]{};
+    std::uint8_t aim_leg_base_pose_reserved[2]{};
+    float aim_leg_base_pose_local[2][8][12]{};
 };
 
-static_assert(sizeof(StatePacket) == 800);
+static_assert(sizeof(StatePacket) == 1304);
+static_assert(sizeof(StatePacket) <= 1472);  // IPv4 UDP payload under 1500-byte MTU.
 static_assert(offsetof(StatePacket, fganim_world_quat) == 144);
 static_assert(offsetof(StatePacket, aim_pitch_up) == 472);
 static_assert(offsetof(StatePacket, gun_move_turn_direction) == 480);
@@ -135,9 +135,9 @@ static_assert(offsetof(StatePacket, grenade_art_id) == 508);
 static_assert(offsetof(StatePacket, grenade_total_ammo) == 512);
 static_assert(offsetof(StatePacket, strafe_ik_forward_y) == 516);
 static_assert(offsetof(StatePacket, strafe_ik_forward_y_valid) == 520);
-static_assert(offsetof(StatePacket, aim_leg_ik_sequence) == 524);
-static_assert(offsetof(StatePacket, aim_leg_ik_joint_count) == 528);
-static_assert(offsetof(StatePacket, aim_leg_ik_rotation) == 532);
+static_assert(offsetof(StatePacket, aim_leg_base_pose_sequence) == 524);
+static_assert(offsetof(StatePacket, aim_leg_base_pose_joint_count) == 528);
+static_assert(offsetof(StatePacket, aim_leg_base_pose_local) == 532);
 
 // Phase 3 (host-authoritative world sync): the HOST (role A) enumerates the
 // CharacterManager, picks out enemy NPCs, and sends their transforms; the CLIENT
@@ -165,6 +165,8 @@ struct EnemyPacket {
     std::uint32_t timestamp_ms = 0;
     EnemyState enemies[kMaxEnemies]{};
 };
+
+static_assert(sizeof(StatePacket) <= sizeof(EnemyPacket) + 64);
 
 // Client -> host damage relay: when the CLIENT player damages a puppet enemy, the
 // client's NPC-damage hook fires; we send {enemy name-hash, damage} to the host, and

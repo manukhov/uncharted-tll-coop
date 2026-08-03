@@ -153,19 +153,18 @@ struct PuppetFgAnimWorldSmoothingState {
 };
 SRWLOCK g_puppet_fganim_smoothing_lock = SRWLOCK_INIT;
 PuppetFgAnimWorldSmoothingState g_puppet_fganim_smoothing{};
-struct AimLegIkRelayCapture {
+struct AimLegBasePoseRelayCapture {
     void* owner = nullptr;
     std::uint32_t sequence = 0;
     std::uint8_t joint_count[2]{};
-    std::uint8_t valid_mask[2]{};
-    float rotation[2][8][4]{};
+    float local[2][8][12]{};
     ULONGLONG captured_ms = 0;
 };
-SRWLOCK g_local_aim_leg_ik_lock = SRWLOCK_INIT;
-AimLegIkRelayCapture g_local_aim_leg_ik{};
-std::atomic<std::uint32_t> g_local_aim_leg_ik_sequence{0};
-std::atomic<bool> g_aim_leg_ik_capture_logged{false};
-std::atomic<bool> g_aim_leg_ik_apply_logged{false};
+SRWLOCK g_local_aim_leg_base_pose_lock = SRWLOCK_INIT;
+AimLegBasePoseRelayCapture g_local_aim_leg_base_pose{};
+std::atomic<std::uint32_t> g_local_aim_leg_base_pose_sequence{0};
+std::atomic<bool> g_aim_leg_base_pose_capture_logged{false};
+std::atomic<bool> g_aim_leg_base_pose_apply_logged{false};
 std::atomic<bool> g_puppet_fganim_world_turn_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_seen{false};
 std::atomic<bool> g_puppet_aim_vertical_blended_seen{false};
@@ -1912,10 +1911,10 @@ constexpr bool kEnableCrashObserver = false;
 // are already resolved; keep the functional relays/repairs and compile out only
 // the persistent diagnostic walks and file I/O in production.
 constexpr bool kEnablePersistentStateInventoryLogging = false;
-// Build u transported and applied all eight non-root rotations for both leg
-// JointSets, but the remote feet still slid. Keep the exact implementation for
-// static comparison while removing its shared-vtable hook from production.
-constexpr bool kEnableCharacterLegIkFinalRotationRelay = false;
+// Build u proved that the post-IK rotation delta alone is not the visible step.
+// Build w instead relays the complete pre-IK base-pose rows at the exact
+// CharacterLegIkController::Update entry after Reset/preparation.
+constexpr bool kEnableCharacterLegIkBasePoseRelay = true;
 // Build gw proved that final-cull compaction neither removes the visible spawn
 // rifle nor preserves frame time. Keep the observer code available for static
 // correlation, but do not patch the hot RenderMgr callsite in production.
@@ -12103,27 +12102,39 @@ void reset_puppet_fganim_world_smoothing(void* owner) {
 
 constexpr std::size_t kLegJointSetOffsets[2] = {15920, 15992};
 constexpr std::size_t kJointSetChainCountOffset = 18;
+constexpr std::size_t kJointSetJointIndicesOffset = 24;
 constexpr std::size_t kJointSetBuffersOffset = 32;
+constexpr std::size_t kJointSetWorldValidPrefixOffset = 56;
 constexpr std::size_t kJointLocatorStride = 32;
-constexpr std::size_t kJointLocatorRotationOffset = 16;
+constexpr std::size_t kJointLocalPoseStride = 48;
+constexpr std::size_t kJointLocalPoseRotationOffset = 16;
+constexpr std::size_t kJointLocalPoseTranslationOffset = 32;
+constexpr std::size_t kJointCompanionStride = 16;
 constexpr std::size_t kMaxRelayedLegJoints = 8;
 
-bool valid_aim_leg_ik_sample(const AimLegIkRelayCapture& sample) {
+bool valid_pose_floats(const float* values, std::size_t count) {
+    if (values == nullptr) {
+        return false;
+    }
+    for (std::size_t i = 0; i < count; ++i) {
+        if (!std::isfinite(values[i]) || std::fabs(values[i]) > 1000000.0F) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool valid_aim_leg_base_pose_sample(
+    const AimLegBasePoseRelayCapture& sample) {
     for (std::size_t leg = 0; leg < 2; ++leg) {
         const std::uint8_t count = sample.joint_count[leg];
         if (count == 0 || count > kMaxRelayedLegJoints) {
             return false;
         }
-        const std::uint16_t allowed =
-            static_cast<std::uint16_t>((1U << count) - 1U);
-        if ((sample.valid_mask[leg] & ~allowed) != 0) {
-            return false;
-        }
         for (std::size_t joint = 0; joint < count; ++joint) {
-            if ((sample.valid_mask[leg] & (1U << joint)) == 0) {
-                continue;
-            }
-            if (!valid_network_orientation(sample.rotation[leg][joint])) {
+            const float* const row = sample.local[leg][joint];
+            if (!valid_pose_floats(row, 12) ||
+                !valid_network_orientation(row + 4)) {
                 return false;
             }
         }
@@ -12131,25 +12142,50 @@ bool valid_aim_leg_ik_sample(const AimLegIkRelayCapture& sample) {
     return true;
 }
 
-bool valid_peer_aim_leg_ik_sample(const coop::StatePacket& peer) {
-    AimLegIkRelayCapture sample{};
-    sample.sequence = peer.aim_leg_ik_sequence;
+bool valid_peer_aim_leg_base_pose_sample(const coop::StatePacket& peer) {
+    AimLegBasePoseRelayCapture sample{};
+    sample.sequence = peer.aim_leg_base_pose_sequence;
     std::memcpy(
-        sample.joint_count, peer.aim_leg_ik_joint_count,
+        sample.joint_count, peer.aim_leg_base_pose_joint_count,
         sizeof(sample.joint_count));
     std::memcpy(
-        sample.valid_mask, peer.aim_leg_ik_valid_mask,
-        sizeof(sample.valid_mask));
-    std::memcpy(
-        sample.rotation, peer.aim_leg_ik_rotation,
-        sizeof(sample.rotation));
-    return sample.sequence != 0 && valid_aim_leg_ik_sample(sample);
+        sample.local, peer.aim_leg_base_pose_local,
+        sizeof(sample.local));
+    return sample.sequence != 0 && valid_aim_leg_base_pose_sample(sample);
 }
 
-bool seh_capture_aim_leg_ik_sample(
-    void* controller, AimLegIkRelayCapture& sample) {
+bool seh_capture_aim_leg_base_pose_sample(
+    void* controller, void* player, AimLegBasePoseRelayCapture& sample) {
     __try {
-        if (controller == nullptr) {
+        if (controller == nullptr || player == nullptr ||
+            readable_bytes(static_cast<std::byte*>(player) +
+                           kPlayerFgAnimDataOffset) < sizeof(void*)) {
+            return false;
+        }
+        auto* const fg = *reinterpret_cast<std::byte**>(
+            static_cast<std::byte*>(player) + kPlayerFgAnimDataOffset);
+        if (fg == nullptr ||
+            readable_bytes(fg) <
+                kFgAnimDataJointCacheLocalPoseOffset + sizeof(void*) ||
+            readable_bytes(fg + kFgAnimDataSkeletonOffset) < sizeof(void*)) {
+            return false;
+        }
+        auto* const skeleton = *reinterpret_cast<std::byte**>(
+            fg + kFgAnimDataSkeletonOffset);
+        auto* const joint_local_rows = *reinterpret_cast<const std::byte**>(
+            fg + kFgAnimDataJointCacheLocalPoseOffset);
+        if (skeleton == nullptr || joint_local_rows == nullptr ||
+            readable_bytes(skeleton) <
+                kSkeletonJointCountOffset + sizeof(std::uint32_t)) {
+            return false;
+        }
+        const std::uint32_t skeleton_joint_count =
+            *reinterpret_cast<const std::uint32_t*>(
+                skeleton + kSkeletonJointCountOffset);
+        if (skeleton_joint_count == 0 || skeleton_joint_count > 4096 ||
+            readable_bytes(joint_local_rows) <
+                static_cast<std::size_t>(skeleton_joint_count) *
+                    kJointLocalPoseStride) {
             return false;
         }
         const auto* const base = static_cast<const std::byte*>(controller);
@@ -12163,16 +12199,24 @@ bool seh_capture_aim_leg_ik_sample(
                 sample = {};
                 return false;
             }
-            const auto writable_count = static_cast<std::uint8_t>(
+            const auto relayed_count = static_cast<std::uint8_t>(
                 native_count - 1);
-            sample.joint_count[leg] = writable_count;
+            sample.joint_count[leg] = relayed_count;
+            const auto* const joint_indices =
+                *reinterpret_cast<const std::int16_t* const*>(
+                    joint_set + kJointSetJointIndicesOffset);
             auto* const buffers = *reinterpret_cast<void* const* const*>(
                 joint_set + kJointSetBuffersOffset);
-            if (buffers == nullptr || readable_bytes(buffers) < 5 * sizeof(void*)) {
+            if (joint_indices == nullptr || buffers == nullptr ||
+                readable_bytes(joint_indices) <
+                    static_cast<std::size_t>(native_count) *
+                        sizeof(std::int16_t) ||
+                readable_bytes(buffers) < 5 * sizeof(void*)) {
                 sample = {};
                 return false;
             }
-            const auto* const locators = static_cast<const std::byte*>(buffers[0]);
+            const auto* const locators =
+                static_cast<const std::byte*>(buffers[0]);
             const auto* const valid = static_cast<const std::uint8_t*>(buffers[4]);
             if (locators == nullptr || valid == nullptr ||
                 readable_bytes(locators) <
@@ -12181,36 +12225,63 @@ bool seh_capture_aim_leg_ik_sample(
                 sample = {};
                 return false;
             }
-            for (std::size_t slot = 0; slot < writable_count; ++slot) {
-                const std::size_t native_joint = slot + 1;
-                if (valid[native_joint] == 0) {
-                    continue;
-                }
-                const auto* const rotation = reinterpret_cast<const float*>(
-                    locators + native_joint * kJointLocatorStride +
-                    kJointLocatorRotationOffset);
-                if (!valid_network_orientation(rotation)) {
+            for (std::size_t slot = 0; slot < relayed_count; ++slot) {
+                const std::size_t ordinal = slot + 1;
+                const std::int16_t joint_index = joint_indices[ordinal];
+                if (joint_index < 0 ||
+                    static_cast<std::uint32_t>(joint_index) >=
+                        skeleton_joint_count) {
                     sample = {};
                     return false;
                 }
                 std::memcpy(
-                    sample.rotation[leg][slot], rotation,
-                    sizeof(sample.rotation[leg][slot]));
-                sample.valid_mask[leg] |=
-                    static_cast<std::uint8_t>(1U << slot);
+                    sample.local[leg][slot],
+                    joint_local_rows +
+                        static_cast<std::size_t>(joint_index) *
+                            kJointLocalPoseStride,
+                    sizeof(sample.local[leg][slot]));
             }
         }
-        return valid_aim_leg_ik_sample(sample);
+        return valid_aim_leg_base_pose_sample(sample);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         sample = {};
         return false;
     }
 }
 
-bool seh_apply_peer_aim_leg_ik_sample(
-    void* controller, const coop::StatePacket& peer) {
+bool seh_apply_peer_aim_leg_base_pose_sample(
+    void* controller, void* player, const coop::StatePacket& peer) {
     __try {
-        if (controller == nullptr || !valid_peer_aim_leg_ik_sample(peer)) {
+        if (controller == nullptr || player == nullptr ||
+            !valid_peer_aim_leg_base_pose_sample(peer) ||
+            readable_bytes(static_cast<std::byte*>(player) +
+                           kPlayerFgAnimDataOffset) < sizeof(void*)) {
+            return false;
+        }
+        auto* const fg = *reinterpret_cast<std::byte**>(
+            static_cast<std::byte*>(player) + kPlayerFgAnimDataOffset);
+        if (fg == nullptr ||
+            readable_bytes(fg) <
+                kFgAnimDataJointCacheLocalPoseOffset + sizeof(void*) ||
+            readable_bytes(fg + kFgAnimDataSkeletonOffset) < sizeof(void*)) {
+            return false;
+        }
+        auto* const skeleton = *reinterpret_cast<std::byte**>(
+            fg + kFgAnimDataSkeletonOffset);
+        auto* const joint_local_rows = *reinterpret_cast<std::byte**>(
+            fg + kFgAnimDataJointCacheLocalPoseOffset);
+        if (skeleton == nullptr || joint_local_rows == nullptr ||
+            readable_bytes(skeleton) <
+                kSkeletonJointCountOffset + sizeof(std::uint32_t)) {
+            return false;
+        }
+        const std::uint32_t skeleton_joint_count =
+            *reinterpret_cast<const std::uint32_t*>(
+                skeleton + kSkeletonJointCountOffset);
+        if (skeleton_joint_count == 0 || skeleton_joint_count > 4096 ||
+            readable_bytes(joint_local_rows) <
+                static_cast<std::size_t>(skeleton_joint_count) *
+                    kJointLocalPoseStride) {
             return false;
         }
         auto* const base = static_cast<std::byte*>(controller);
@@ -12219,38 +12290,69 @@ bool seh_apply_peer_aim_leg_ik_sample(
             const auto native_count = *reinterpret_cast<const std::int16_t*>(
                 joint_set + kJointSetChainCountOffset);
             if (native_count !=
-                static_cast<std::int16_t>(peer.aim_leg_ik_joint_count[leg] + 1)) {
+                static_cast<std::int16_t>(
+                    peer.aim_leg_base_pose_joint_count[leg] + 1)) {
                 return false;
             }
+            auto* const joint_indices = *reinterpret_cast<std::int16_t**>(
+                joint_set + kJointSetJointIndicesOffset);
             auto* const buffers = *reinterpret_cast<void***>(
                 joint_set + kJointSetBuffersOffset);
-            if (buffers == nullptr || readable_bytes(buffers) < 5 * sizeof(void*)) {
+            if (joint_indices == nullptr || buffers == nullptr ||
+                readable_bytes(joint_indices) <
+                    static_cast<std::size_t>(native_count) *
+                        sizeof(std::int16_t) ||
+                readable_bytes(buffers) < 5 * sizeof(void*)) {
                 return false;
             }
-            auto* const locators = static_cast<std::byte*>(buffers[0]);
+            auto* const local_locators = static_cast<std::byte*>(buffers[0]);
+            auto* const companion = static_cast<std::byte*>(buffers[2]);
             auto* const valid = static_cast<std::uint8_t*>(buffers[4]);
-            if (locators == nullptr || valid == nullptr ||
-                readable_bytes(locators) <
-                    static_cast<std::size_t>(native_count) * kJointLocatorStride ||
+            if (local_locators == nullptr || companion == nullptr ||
+                valid == nullptr ||
+                readable_bytes(local_locators) <
+                    static_cast<std::size_t>(native_count) *
+                        kJointLocatorStride ||
+                readable_bytes(companion) <
+                    static_cast<std::size_t>(native_count) *
+                        kJointCompanionStride ||
                 readable_bytes(valid) < static_cast<std::size_t>(native_count)) {
                 return false;
             }
-            const std::uint8_t mask = peer.aim_leg_ik_valid_mask[leg];
             for (std::size_t slot = 0;
-                 slot < peer.aim_leg_ik_joint_count[leg]; ++slot) {
-                const std::size_t native_joint = slot + 1;
-                if ((mask & (1U << slot)) == 0) {
-                    valid[native_joint] = 0;
-                    continue;
+                 slot < peer.aim_leg_base_pose_joint_count[leg]; ++slot) {
+                const std::size_t ordinal = slot + 1;
+                const std::int16_t joint_index = joint_indices[ordinal];
+                if (joint_index < 0 ||
+                    static_cast<std::uint32_t>(joint_index) >=
+                        skeleton_joint_count) {
+                    return false;
                 }
-                auto* const rotation = reinterpret_cast<float*>(
-                    locators + native_joint * kJointLocatorStride +
-                    kJointLocatorRotationOffset);
+                const float* const row =
+                    peer.aim_leg_base_pose_local[leg][slot];
                 std::memcpy(
-                    rotation, peer.aim_leg_ik_rotation[leg][slot],
-                    sizeof(peer.aim_leg_ik_rotation[leg][slot]));
-                valid[native_joint] = 1;
+                    joint_local_rows +
+                        static_cast<std::size_t>(joint_index) *
+                            kJointLocalPoseStride,
+                    row, kJointLocalPoseStride);
+                std::memcpy(
+                    companion + ordinal * kJointCompanionStride,
+                    row, kJointCompanionStride);
+                std::memcpy(
+                    local_locators + ordinal * kJointLocatorStride,
+                    reinterpret_cast<const std::byte*>(row) +
+                        kJointLocalPoseTranslationOffset,
+                    kJointCompanionStride);
+                std::memcpy(
+                    local_locators + ordinal * kJointLocatorStride +
+                        kJointLocalPoseRotationOffset,
+                    reinterpret_cast<const std::byte*>(row) +
+                        kJointLocalPoseRotationOffset,
+                    kJointCompanionStride);
+                valid[ordinal] = 1;
             }
+            *reinterpret_cast<std::int32_t*>(
+                joint_set + kJointSetWorldValidPrefixOffset) = 1;
         }
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -12490,90 +12592,80 @@ bool install_fganim_world_aim_turn_callsite_relay() {
 }
 
 void __fastcall hooked_character_leg_ik_controller_update(
-    void* controller, const void* delta_transform, std::uintptr_t update_flags) {
+    void* controller, const void* delta_transform,
+    std::uintptr_t update_flags) {
     const auto native = g_character_leg_ik_controller_update;
     if (native == nullptr) {
         return;
     }
 
-    native(controller, delta_transform, update_flags);
-
     if (g_dll_inert || !g_state_net.enabled || controller == nullptr) {
+        native(controller, delta_transform, update_flags);
         return;
     }
     void* const player = seh_character_leg_ik_owner(controller);
     if (player == nullptr) {
+        native(controller, delta_transform, update_flags);
         return;
     }
 
     if (player == retained_player_object(0)) {
-        if (!local_player_strict_aim_active(player)) {
-            return;
+        if (local_player_strict_aim_active(player)) {
+            AimLegBasePoseRelayCapture sample{};
+            if (seh_capture_aim_leg_base_pose_sample(
+                    controller, player, sample)) {
+                sample.owner = player;
+                sample.sequence =
+                    g_local_aim_leg_base_pose_sequence.fetch_add(
+                        1, std::memory_order_acq_rel) + 1;
+                sample.captured_ms = GetTickCount64();
+                AcquireSRWLockExclusive(&g_local_aim_leg_base_pose_lock);
+                g_local_aim_leg_base_pose = sample;
+                ReleaseSRWLockExclusive(&g_local_aim_leg_base_pose_lock);
+                if (!g_aim_leg_base_pose_capture_logged.exchange(
+                        true, std::memory_order_acq_rel)) {
+                    std::ostringstream line;
+                    line << "AIM-LEG-BASE-CAPTURE seq=" << sample.sequence
+                         << " count="
+                         << static_cast<unsigned>(sample.joint_count[0]) << "/"
+                         << static_cast<unsigned>(sample.joint_count[1]);
+                    boot_log_line(line.str().c_str());
+                }
+            }
         }
-        AimLegIkRelayCapture sample{};
-        if (!seh_capture_aim_leg_ik_sample(controller, sample)) {
-            return;
-        }
-        sample.owner = player;
-        sample.sequence =
-            g_local_aim_leg_ik_sequence.fetch_add(
-                1, std::memory_order_acq_rel) + 1;
-        sample.captured_ms = GetTickCount64();
-        AcquireSRWLockExclusive(&g_local_aim_leg_ik_lock);
-        g_local_aim_leg_ik = sample;
-        ReleaseSRWLockExclusive(&g_local_aim_leg_ik_lock);
-        if ((sample.valid_mask[0] != 0 || sample.valid_mask[1] != 0) &&
-            !g_aim_leg_ik_capture_logged.exchange(
+    } else if (player == retained_player_object(1)) {
+        const ULONGLONG received =
+            g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+        const ULONGLONG now = GetTickCount64();
+        coop::StatePacket peer{};
+        if (received != 0 && now >= received && now - received <= 250 &&
+            copy_peer_state_snapshot(peer) && peer_packet_aim_active(peer) &&
+            seh_apply_peer_aim_leg_base_pose_sample(controller, player, peer) &&
+            !g_aim_leg_base_pose_apply_logged.exchange(
                 true, std::memory_order_acq_rel)) {
             std::ostringstream line;
-            line << "AIM-LEG-IK-CAPTURE seq=" << sample.sequence
+            line << "AIM-LEG-BASE-APPLY seq="
+                 << peer.aim_leg_base_pose_sequence
                  << " count="
-                 << static_cast<unsigned>(sample.joint_count[0]) << "/"
-                 << static_cast<unsigned>(sample.joint_count[1])
-                 << " mask=0x" << std::hex
-                 << static_cast<unsigned>(sample.valid_mask[0]) << "/0x"
-                 << static_cast<unsigned>(sample.valid_mask[1]);
+                 << static_cast<unsigned>(
+                        peer.aim_leg_base_pose_joint_count[0])
+                 << "/"
+                 << static_cast<unsigned>(
+                        peer.aim_leg_base_pose_joint_count[1]);
             boot_log_line(line.str().c_str());
         }
-        return;
     }
-
-    if (player != retained_player_object(1)) {
-        return;
-    }
-    const ULONGLONG received =
-        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
-    const ULONGLONG now = GetTickCount64();
-    coop::StatePacket peer{};
-    if (received == 0 || now < received || now - received > 250 ||
-        !copy_peer_state_snapshot(peer) || !peer_packet_aim_active(peer) ||
-        !seh_apply_peer_aim_leg_ik_sample(controller, peer)) {
-        return;
-    }
-    if ((peer.aim_leg_ik_valid_mask[0] != 0 ||
-         peer.aim_leg_ik_valid_mask[1] != 0) &&
-        !g_aim_leg_ik_apply_logged.exchange(
-            true, std::memory_order_acq_rel)) {
-        std::ostringstream line;
-        line << "AIM-LEG-IK-APPLY seq=" << peer.aim_leg_ik_sequence
-             << " count="
-             << static_cast<unsigned>(peer.aim_leg_ik_joint_count[0]) << "/"
-             << static_cast<unsigned>(peer.aim_leg_ik_joint_count[1])
-             << " mask=0x" << std::hex
-             << static_cast<unsigned>(peer.aim_leg_ik_valid_mask[0]) << "/0x"
-             << static_cast<unsigned>(peer.aim_leg_ik_valid_mask[1]);
-        boot_log_line(line.str().c_str());
-    }
+    native(controller, delta_transform, update_flags);
 }
 
-bool install_character_leg_ik_final_rotation_relay() {
+bool install_character_leg_ik_base_pose_relay() {
     auto* const slot = reinterpret_cast<void**>(
         g_module + kCharacterLegIkControllerUpdateVtableSlotRva);
     void* const expected = reinterpret_cast<void*>(
         g_module + kCharacterLegIkControllerUpdateRva);
     if (*slot != expected) {
         boot_log_line(
-            "CharacterLegIk final-rotation relay SKIPPED (slot mismatch)");
+            "CharacterLegIk base-pose relay SKIPPED (slot mismatch)");
         return false;
     }
     g_character_leg_ik_controller_update =
@@ -12582,26 +12674,27 @@ bool install_character_leg_ik_final_rotation_relay() {
     if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
         g_character_leg_ik_controller_update = nullptr;
         boot_log_line(
-            "CharacterLegIk final-rotation relay SKIPPED (protect)");
+            "CharacterLegIk base-pose relay SKIPPED (protect)");
         return false;
     }
     void* const previous = InterlockedCompareExchangePointer(
         reinterpret_cast<PVOID volatile*>(slot),
-        reinterpret_cast<void*>(&hooked_character_leg_ik_controller_update),
+        reinterpret_cast<void*>(
+            &hooked_character_leg_ik_controller_update),
         expected);
     if (previous != expected) {
         DWORD ignored = 0;
         VirtualProtect(slot, sizeof(void*), old, &ignored);
         g_character_leg_ik_controller_update = nullptr;
         boot_log_line(
-            "CharacterLegIk final-rotation relay SKIPPED (slot race)");
+            "CharacterLegIk base-pose relay SKIPPED (slot race)");
         return false;
     }
     FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
     DWORD ignored = 0;
     VirtualProtect(slot, sizeof(void*), old, &ignored);
     boot_log_line(
-        "CharacterLegIk final-rotation relay installed (0x142BBB478)");
+        "CharacterLegIk pre-IK base-pose relay installed (0x142BBB478)");
     return true;
 }
 
@@ -18641,9 +18734,9 @@ void send_local_player_state() {
     }
     const bool strict_aim = local_player_strict_aim_active(local_obj);
     if (!strict_aim) {
-        AcquireSRWLockExclusive(&g_local_aim_leg_ik_lock);
-        g_local_aim_leg_ik = {};
-        ReleaseSRWLockExclusive(&g_local_aim_leg_ik_lock);
+        AcquireSRWLockExclusive(&g_local_aim_leg_base_pose_lock);
+        g_local_aim_leg_base_pose = {};
+        ReleaseSRWLockExclusive(&g_local_aim_leg_base_pose_lock);
     }
     {
         static bool previous_strict_aim = false;
@@ -18745,25 +18838,24 @@ void send_local_player_state() {
             pkt.flags |= coop::kStateFlagAimFootTurn;
         }
 
-        AcquireSRWLockShared(&g_local_aim_leg_ik_lock);
-        const AimLegIkRelayCapture leg_ik_capture = g_local_aim_leg_ik;
-        ReleaseSRWLockShared(&g_local_aim_leg_ik_lock);
-        if (leg_ik_capture.owner == local_obj &&
-            leg_ik_capture.sequence != 0 &&
-            leg_ik_capture.captured_ms != 0 &&
-            aim_capture_now >= leg_ik_capture.captured_ms &&
-            aim_capture_now - leg_ik_capture.captured_ms <= 100 &&
-            valid_aim_leg_ik_sample(leg_ik_capture)) {
-            pkt.aim_leg_ik_sequence = leg_ik_capture.sequence;
+        AcquireSRWLockShared(&g_local_aim_leg_base_pose_lock);
+        const AimLegBasePoseRelayCapture leg_base_pose_capture =
+            g_local_aim_leg_base_pose;
+        ReleaseSRWLockShared(&g_local_aim_leg_base_pose_lock);
+        if (leg_base_pose_capture.owner == local_obj &&
+            leg_base_pose_capture.sequence != 0 &&
+            leg_base_pose_capture.captured_ms != 0 &&
+            aim_capture_now >= leg_base_pose_capture.captured_ms &&
+            aim_capture_now - leg_base_pose_capture.captured_ms <= 100 &&
+            valid_aim_leg_base_pose_sample(leg_base_pose_capture)) {
+            pkt.aim_leg_base_pose_sequence = leg_base_pose_capture.sequence;
             std::memcpy(
-                pkt.aim_leg_ik_joint_count, leg_ik_capture.joint_count,
-                sizeof(pkt.aim_leg_ik_joint_count));
+                pkt.aim_leg_base_pose_joint_count,
+                leg_base_pose_capture.joint_count,
+                sizeof(pkt.aim_leg_base_pose_joint_count));
             std::memcpy(
-                pkt.aim_leg_ik_valid_mask, leg_ik_capture.valid_mask,
-                sizeof(pkt.aim_leg_ik_valid_mask));
-            std::memcpy(
-                pkt.aim_leg_ik_rotation, leg_ik_capture.rotation,
-                sizeof(pkt.aim_leg_ik_rotation));
+                pkt.aim_leg_base_pose_local, leg_base_pose_capture.local,
+                sizeof(pkt.aim_leg_base_pose_local));
         }
     } else if (grenade_pose_publish) {
         std::uint8_t route_seed[32]{};
@@ -47702,8 +47794,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-03v "
-        "(rejected leg relays disabled)");
+        "TLL co-op runtime init 2026-08-03w "
+        "(pre-IK leg base-pose relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -47803,12 +47895,10 @@ DWORD WINAPI install_hook(void*) {
         if (g_enable_puppet_fganim_world_aim_turn) {
             install_fganim_world_aim_turn_callsite_relay();
         }
-        if constexpr (kEnableCharacterLegIkFinalRotationRelay) {
-            install_character_leg_ik_final_rotation_relay();
-        } else {
-            boot_log_line(
-                "rejected CharacterLegIk final-rotation relay disabled");
+        if constexpr (kEnableCharacterLegIkBasePoseRelay) {
+            install_character_leg_ik_base_pose_relay();
         }
+        boot_log_line("rejected CharacterLegIk final-rotation relay disabled");
         boot_log_line("rejected MoveLegIk admission relay disabled");
         if (g_enable_gun_move_body_turn) {
             install_gun_move_camera_turn_relay();

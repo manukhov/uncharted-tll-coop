@@ -92,6 +92,9 @@ constexpr std::uintptr_t kAnimParamRegistryRequestLayerFadeOutAndReleaseRva =
 constexpr std::size_t kFgAnimDataFlagsOffset = 0;
 constexpr std::size_t kFgAnimDataStateOffset = 4;
 constexpr std::size_t kFgAnimDataUpperStateOwnerOffset = 0x10;
+// JointCache local-pose array used by CharacterLegIkController_ResetIkBuffers;
+// one row is 48 bytes per skeleton joint.
+constexpr std::size_t kFgAnimDataJointCacheLocalPoseOffset = 0x100;
 constexpr std::size_t kFgAnimDataRetainedHandleOffset = 0x1A8;
 constexpr std::size_t kFgAnimDataRetainedIdOffset = 0x1B0;
 constexpr std::size_t kFgAnimDataRenderWorldMatrixOffset = 0x1C0;
@@ -129,8 +132,9 @@ constexpr std::size_t kFgAnimDataPreviousUploadSkinningMatsOffset = 0x248;
 constexpr std::uintptr_t kFgAnimDataPublishWorldTransformRva = 0x18C55D0;
 constexpr std::uintptr_t kAnimManagerPublishWorldTransformCallsiteRva = 0x1A8FC00;
 // Player_PostAnimBlending_Async calls CharacterLegIkController vtable +0x18
-// immediately after the phase-0x40 FgAnim world publication and immediately
-// before vtable +0x30 commits the resulting joint transforms.
+// after ResetIkBuffers and the intervening preparation calls. Its entry is the
+// narrow boundary after both LegIkChains have been seeded from JointCache and
+// before the stock leg solver mutates their rotations.
 constexpr std::uintptr_t kCharacterLegIkControllerUpdateRva = 0x1F9E6F0;
 constexpr std::uintptr_t kCharacterLegIkControllerUpdateVtableSlotRva =
     0x2BBB478;

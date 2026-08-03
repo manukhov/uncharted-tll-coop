@@ -16968,6 +16968,91 @@ local ADS turn and the exact writer before `CharacterLegIkController_Update`;
 do not retry `aim-idle-rotate`, `foot-effect`, GroundModel or final JointSet
 rotation relays.
 
+### 2026-08-03 STATIC/IMPLEMENTED: relay the bounded pre-IK leg base pose (`w`)
+
+The upstream audit corrects the earlier generic "skeleton palette" wording and
+selects an exact numeric boundary. Five independent evidence types satisfy the
+static quota:
+
+1. **Concrete producer.** `AnimManager_PerformAnimBlend 0x141A92260` reads the
+   persistent local-pose pointer at `FgAnimData+0x100` in `0x141A92547` and
+   passes it to `AnimManager_BuildCommandSegmentsForObjectMask 0x141A91490`.
+   `AnimManager_CreateAnimCmdsForObject 0x141A8FCF0` emits opcode 27
+   (`0x6001B`) with destination `FgAnimData+0x100+48*groupStart`.
+   `ProcessAnimCmdListSegment 0x141AB97C0` case 27 at
+   `0x141ABAF3B..0x141ABAFB4` raw-copies three float4 rows per joint from the
+   finalized WorkBuffer `+0x50` into that destination. The source has already
+   passed clip evaluation/retarget, blend, default finalization and optional
+   command-16 joint programs.
+2. **Concrete RTTI/vtable consumer.** The two controller objects at
+   `+0x3E30/+0x3E78` are `LegIkChain` instances with vtable `0x142B200A8`.
+   Slot `+0x78` resolves to `LegIkChain_ResetAndSeedFromJointCache
+   0x141986C60`; controller vtable `+0x28`,
+   `CharacterLegIkController_ResetIkBuffers 0x141F9E150`, invokes it once for
+   each leg before controller vtable `+0x18` Update.
+3. **Instruction-level layout/dataflow.** `JointCache_InitializeAndAllocatePoseBuffers
+   0x141686CD0` allocates the 48-byte `JointParams` rows at overall
+   `FgAnimData+0x100`: scale `+0x00`, quaternion `+0x10`, translation `+0x20`.
+   `JointSet_AllocateAndSeedBuffers 0x14181E780` copies those three values for
+   every non-root chain ordinal into receiver-local work arrays. Ordinal zero is
+   instead seeded from the receiver's already computed world Locator. The
+   current/previous skinning pair at `FgAnimData+0x230/+0x238` is separate from
+   this persistent local pose.
+4. **Mutation-scope exclusion.** `MoveLegIkNew_DoLegIk 0x1420FE790` reaches
+   `JointSet_ApplyRelativeJointRotation 0x14181F450 ->
+   JointSet_MultiplyJointRotationAndMarkValid 0x14181F640`. That helper writes
+   only `buffers[0]+0x20*ordinal+0x10`, not base translation or scale. Build
+   `u` applied all eight post-IK quaternions for both legs and still did not
+   carry the visible step, so only that post-IK correction is runtime-rejected;
+   the distinct animation-produced base rows remain untested.
+5. **Exact ordering and later-writer exclusion.** `Player_PostAnimBlending_Async
+   0x1410EB6A0` calls Reset at `0x1410EB8AB`, performs its intervening
+   preparation, enters controller Update at `0x1410EB992`, and immediately
+   calls Commit at `0x1410EB99F`. The Update entry is therefore narrower than
+   the Reset return: both chains are fully seeded, but stock leg solve has not
+   started. Every resolved later common controller is scoped to hands,
+   wall/bear traversal, head/spine Strafe/LookAt, pickup/bump/flashlight arms or
+   holster arms; no later Player leg writer remains. The surviving alternative
+   is a still-later palette/render conversion or overwrite.
+
+The competing hypotheses are therefore explicit. **W1 pre-IK JointCache base
+pose is LEADING STATIC.** **W2 MoveLeg post-IK output is REJECTED** by build `u`
+and the rotation-only writer. **W3 a later Player leg solver is REJECTED** by the
+complete concrete post-blend scope. **W4 a downstream render-stage overwrite
+remains OPEN** and is the negative outcome of the next test.
+
+Build `2026-08-03w` implements only the W1 discriminator/fix:
+
+- StatePacket v17 replaces the rejected v16 rotation payload with the complete
+  48-byte base-pose rows for eight non-root ordinals in each leg chain;
+- the packet is 1304 bytes after structure alignment, below the 1472-byte IPv4 UDP payload limit for a
+  1500-byte MTU and below the existing 1488-byte state receive buffer;
+- the shared vtable hook remains at controller Update `+0x18`, but changes its
+  seam from the rejected post-stock-Update rotations to the exact pre-stock-
+  Update base pose. The local Player captures before stock solve; the retained
+  puppet maps the peer rows through its own joint indices and applies them before
+  stock solve to the current JointCache rows and freshly seeded JointSet arrays;
+- ordinal zero and its world Locator remain entirely receiver-native. Stock
+  `+0x38` recomputes non-root world Locators from the relayed local rows;
+- pointer values, joint indices, validity storage, skeleton handles and heap
+  ownership remain process-local. Capture/apply require fresh strict-ADS state.
+
+The release build succeeds with bounded first-use markers
+`AIM-LEG-BASE-CAPTURE count=8/8` and `AIM-LEG-BASE-APPLY count=8/8`.
+The single `ida/tll.i64` was saved successfully after applying the new
+`LegIkChain_ResetAndSeedFromJointCache`,
+`JointSet_RefreshWorldLocatorsThroughOrdinal`,
+`JointCache_InitializeAndAllocatePoseBuffers` and
+`JointCache_ComputeJointWorldLocatorAndMarkValid` labels plus the corrected
+producer/consumer comments; MCP resolves all four saved names.
+
+**Falsifiable prediction:** one stationary ADS left/right turn must produce both
+markers with matching `8/8` chain lengths and make the remote feet replant like
+the local feet, without pose corruption or renewed lag. CAPTURE without APPLY
+selects packet/layout compatibility. APPLY with continued sliding rejects W1 as
+sufficient and selects W4; in that case do not widen to all 651 joints or retry
+any rejected MoveLeg admission/final-rotation seam.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

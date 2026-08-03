@@ -176,12 +176,19 @@
       **REJECTED:** PID 7180 captured `count=8/8 mask=ff/ff`, PID 13384 applied
       the same complete two-chain payload, but remote Chloe still slid with fixed
       feet. Build `v` disables the rejected shared-vtable hook.
-- [ ] Trace the pre-IK live skeleton palette producer feeding controller
-      `+0x3E30/+0x3E78`. Identify the exact base-pose joint writer and prove which
-      numeric joints can differ during local ADS turn-in-place before
-      `CharacterLegIkController_Update`. Compare authored animation evaluation,
-      palette double-buffer/current-frame selection and any post-evaluation pose
-      copy; do not return to rejected action/effect/GroundModel/JointSet seams.
+- [x] Trace the pre-IK live pose producer feeding controller
+      `+0x3E30/+0x3E78`. `AnimManager_PerformAnimBlend 0x141A92260` passes
+      `FgAnimData+0x100` through `0x141A91490`; `0x141A8FCF0` emits opcode 27,
+      whose `ProcessAnimCmdListSegment 0x141AB97C0` case raw-copies finalized
+      48-byte JointParams rows into that persistent local pose. Reset then seeds
+      both nine-joint chains from it; Update entry `0x141F9E6F0` is the exact
+      post-Reset/pre-solve boundary. `+0x230/+0x238` are the separate skinning
+      buffers, not a double buffer for `+0x100`.
+- [ ] Run one stationary ADS left/right turn with build `w`. Require matching
+      `AIM-LEG-BASE-CAPTURE count=8/8` and `AIM-LEG-BASE-APPLY count=8/8`, visible
+      remote foot replants, no pose corruption and no renewed lag. APPLY with
+      continued sliding rejects W1 and selects downstream palette/render
+      overwrite W4; do not widen to all joints or retry rejected MoveLeg seams.
 - [x] Confirm build `q` performance: PIDs 15444/6220 remained responsive with
       zero exception/AIM/attachment diagnostic rows, and the user confirmed the
       recent gameplay lag is gone with normal behavior.
