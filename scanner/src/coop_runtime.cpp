@@ -12403,7 +12403,7 @@ std::int64_t __fastcall hooked_move_leg_ik_update_feet_planted_relay(
     g_move_leg_ik_feet_planted_thread_context = previous_context;
 
     if (g_dll_inert || !g_state_net.enabled || owner != 0 ||
-        character == nullptr || !player_ads_active(character)) {
+        character == nullptr || !local_player_strict_aim_active(character)) {
         return result;
     }
     AimFootstepRelayCapture sample{};
@@ -18944,6 +18944,15 @@ void send_local_player_state() {
         have_grenade_pose_seed = false;
     }
     const bool strict_aim = local_player_strict_aim_active(local_obj);
+    if (!strict_aim) {
+        // A footstep is an event, not a 100 ms sample. Keep it latched while
+        // this exact ADS session is held so the independently scheduled puppet
+        // MoveLeg worker cannot miss it, then discard it on release so a later
+        // ADS session cannot replay an unconsumed stale sequence.
+        AcquireSRWLockExclusive(&g_local_aim_footstep_lock);
+        g_local_aim_footstep = {};
+        ReleaseSRWLockExclusive(&g_local_aim_footstep_lock);
+    }
     {
         static bool previous_strict_aim = false;
         if (strict_aim != previous_strict_aim) {
@@ -19052,7 +19061,6 @@ void send_local_player_state() {
             footstep_capture.sequence != 0 &&
             footstep_capture.captured_ms != 0 &&
             aim_capture_now >= footstep_capture.captured_ms &&
-            aim_capture_now - footstep_capture.captured_ms <= 100 &&
             valid_aim_footstep_sample(footstep_capture)) {
             pkt.aim_footstep_sequence = footstep_capture.sequence;
             std::memcpy(
@@ -48014,8 +48022,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-02r "
-        "(Character-bearing MoveLegIk admission observer)");
+        "TLL co-op runtime init 2026-08-03t "
+        "(ADS-session-latched MoveLegIk footstep relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

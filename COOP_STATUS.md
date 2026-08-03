@@ -16807,6 +16807,48 @@ static timing/dataflow audit of those gates and the StatePacket publication
 schedule. Do not repeat the visual test until one exact lost boundary has been
 proved and replaced.
 
+### 2026-08-03 STATIC/IMPLEMENTED: latch MoveLeg foot events for one ADS session (`t`)
+
+The complete failed-boundary audit selects **temporal eviction from the latest
+StatePacket** and rejects the other transport candidates:
+
+1. **Wrong inner destination is REJECTED.** IDA renders the first argument as
+   `_DWORD *MoveLeg + 2536`, which is byte offset `2536*4 = 0x27A0`. The raw
+   instructions at `0x142102027` independently contain
+   `lea rcx,[rsi+27A0h]`, immediately followed by the patched direct call at
+   `0x14210202E`. The build-`s` destination predicate was exact.
+2. **Packet truncation/version loss is REJECTED.** Sender `sendto` transmits the
+   complete 800-byte StatePacket v15. The receive buffer is sized from the
+   larger 32-entry EnemyPacket, requires exactly `sizeof(StatePacket)`, copies
+   the complete packet, validates v15 and publishes the complete struct under
+   its SRW lock. Runtime first-send/receive markers on both processes also
+   reported `bytes=800` and live peer sequences.
+3. **Temporal eviction is selected.** Build `s` published a valid captured event
+   only while its age was at most 100 ms. Every later 60 Hz StatePacket was
+   value-initialized with foot sequence zero, and `publish_peer_state_snapshot`
+   retains only that newest packet: there is no foot-event queue or ACK anywhere
+   in the only `aim_footstep_*` use sites. The receiver's sequence comparison
+   deduplicates an event but cannot recover one after the latest snapshot has
+   overwritten it. Independently, build `r` observed 160 local owner-0 worker
+   opportunities but only 26 remote owner-1 opportunities in the same test,
+   proving the two async MoveLeg jobs do not share a 100 ms rendezvous.
+
+Build `t` treats the admitted footstep as an event. Capture now requires the
+same strict local ADS intent used by the packet publisher. The newest valid
+capture remains in every StatePacket for the rest of that ADS session (or until
+a newer capture supersedes it); receiver `sequence` still applies each source
+job at most once. On strict ADS release the sender clears the latch, preventing
+an event missed in one session from replaying during the next. Packet version,
+size, numeric Locator payload, receiver validation and mutation seam remain
+unchanged. Release build succeeds.
+
+**Falsifiable prediction:** one stationary Chloe ADS turn must now produce both
+`AIM-FOOT-RELAY-CAPTURE` and Nadine-side `AIM-FOOT-RELAY-APPLY`. No APPLY would
+reject temporal eviction and isolate peer-ADS/sample validation despite the
+latched packet. APPLY with continued sliding would finally test and reject the
+numeric Locator admission mutation itself, moving the search below
+`0x14210202E` into GroundModel/solve/apply.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

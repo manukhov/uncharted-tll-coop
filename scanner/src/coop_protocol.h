@@ -117,8 +117,9 @@ struct StatePacket {
     // v15: one authored MoveLegIkNew foot-admission job. Only numeric Locator
     // payloads cross the wire. The 16-byte native record headers contain
     // process-local handle index/generation fields and are deliberately absent.
-    // A capture sequence is repeated by StatePacket until acknowledged locally,
-    // but the receiver consumes that source job at most once.
+    // A capture sequence is repeated for the rest of its strict-ADS session (or
+    // until a newer capture supersedes it). The receiver consumes that source
+    // job at most once; ADS release clears the sender latch.
     std::uint32_t aim_footstep_sequence = 0;
     float aim_footstep_phase[2]{};
     float aim_footstep_history_world[2][8]{};
