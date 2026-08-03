@@ -2838,10 +2838,41 @@ FUNCTIONS = {
     ),
     0x1406F2360: (
         "GestureTargetLookAt_GetTarget",
-        "Gesture::TargetLookAt vtable slot 0. Resolves the generation-valid owner "
-        "and calls its vtable slot +0x908, with an NPC fallback, before converting "
-        "the returned owner-relative point to world space. It does not read the "
-        "screen camera directly.",
+        "Gesture::TargetLookAt vtable slot 0 with ABI Vec4*(provider, out). "
+        "Resolves provider+0x8/+0x10 weak owner/generation and calls Player vtable "
+        "slot +0x908, with an NPC fallback, before rotating the owner-relative "
+        "point by owner+0x120 and adding world translation owner+0x110. This is "
+        "the last target boundary before fixed Gesture angle/grid selection.",
+    ),
+    0x14211EF90: (
+        "Gesture_GetDesiredMaxBlend",
+        "Native handler for StringId 0x4666093B gesture-get-desired-max-blend. "
+        "Validates an AnimNodeGesture child and returns its cached desired blend.",
+    ),
+    0x141FFF200: (
+        "AnimNodeGesture_GetDesiredMaxBlend",
+        "Returns the generation-current Gesture cache +0x2A0 desired blend, "
+        "falling back to 1.0 when no current cache is available.",
+    ),
+    0x1420F25E0: (
+        "AnimNodeGestureCache_WriteLookAdditiveBlend",
+        "Writes Gesture cache+0x2A0 as controller fade multiplied by one minus "
+        "the maximum regular-layer disable-look-additives property weight.",
+    ),
+    0x141E68EB0: (
+        "GestureController_UpdateLookAdditiveBlend",
+        "GestureController vtable +0x50 update path and sole caller of the exact "
+        "AnimNodeGesture cache desired-look-blend writer.",
+    ),
+    0x1420F7DD0: (
+        "GestureLayer_QueryDisableLookAdditivesWeight",
+        "GestureLayer property query for disable-look-additives 0x5B3C7C02; "
+        "returns smoothstep(layer+0x270) for the matching property.",
+    ),
+    0x1420F6700: (
+        "BaseGestureLayer_QueryDisableLookAdditivesWeight",
+        "Base gesture-layer property-query vtable slot. Its stock implementation "
+        "returns zero, so it cannot suppress fixed LookAt additives.",
     ),
     0x1406F2530: (
         "GestureTargetLookAtOrCamera_GetTarget",
@@ -10853,6 +10884,11 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142980958: (
+        "GestureTargetLookAt_vftable",
+        "Unique MSVC RTTI Gesture::TargetLookAt vtable. Slot 0 is "
+        "GestureTargetLookAt_GetTarget 0x1406F2360.",
+    ),
     0x142AA3238: (
         "Tracer_InitFromProjectileLaunchRecord_VtableSlot",
         "Exact Tracer RTTI vtable slot containing "

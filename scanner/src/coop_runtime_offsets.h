@@ -616,6 +616,11 @@ constexpr std::uintptr_t kPlayerAimBlendTickVtableSlotRva = 0x2A0B228;
 constexpr std::uintptr_t kPlayerAimBlendTickRva = 0x0CAFA20;
 constexpr std::uintptr_t kPlayerAimBlendTargetCallsiteRva = 0x0CAFB7C;
 constexpr std::uintptr_t kPlayerAimBlendTargetRva = 0x0CAE480;
+// Gesture::TargetLookAt is the concrete provider used by the fixed idle/run
+// LookAt AnimNodeGesture grids. Slot 0 returns a world-space Vec4 target after
+// generation-validating the provider's weak Player owner.
+constexpr std::uintptr_t kGestureTargetLookAtVtableRva = 0x2980958;
+constexpr std::uintptr_t kGestureTargetLookAtGetTargetRva = 0x06F2360;
 // PlayerStrafeController (Player+0x1D50) concrete vtable +0x60. The Player
 // post-animation-blend phase supplies the final routed-camera/reticle Locator;
 // UpdateStrafeIk consumes its positive-Z forward.y for head/spine pitch.

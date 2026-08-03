@@ -2703,13 +2703,23 @@ Do not reopen these as the first move:
       both sites fired in both PIDs with materially different peer/native
       quaternions, both copies stayed responsive, and the visible head still
       repeated the observer camera.
-- [ ] Trace the exact non-ADS fixed-LookAt output from
+- [x] Trace the exact non-ADS fixed-LookAt output from
       `AnimNodeGesture_StepAngles` through its workspace/command rows into
       `JointParams`, the skeleton palette and render conversion. At every merge,
-      distinguish a zero/inactive authored LookAt weight from a later
-      receiver-camera-derived overwrite. Do not launch again until one exact
-      downstream writer or suppressing weight is proven with three evidence
-      kinds and the rejected tracker/LookAtIK/StrafeIK seams remain excluded.
+      distinguish a zero/inactive authored LookAt weight from a later overwrite.
+      Exact idle child1 is selected at weight approximately 1, all nine named
+      `relaxed-idle-lookat-*` grid clips exist, and no common late palette/render
+      writer exists. `GestureTargetLookAt_GetTarget 0x1406F2360` is the final
+      RTTI-exact world-target boundary before angles/grid selection; build `zb`
+      relays only its screen-1 non-ADS output and leaves rejected IK/Strafe seeds
+      excluded.
+- [ ] Run the single written build-`zb` discriminator: stationary idle, observer
+      camera held opposite, sender sky -> ground -> sky. Require bounded
+      `GESTURE-LOOK-TARGET-APPLY` with peer forward Y changing sign, visible
+      sender-correct remote head direction, and no twist, locomotion, ADS, crash
+      or performance regression. APPLY without visual change rejects the direct
+      target and selects exact clip `ValidBits` versus the first subsequent
+      state/simple/type-16 layer overwrite; do not widen the hook.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

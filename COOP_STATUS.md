@@ -17257,6 +17257,74 @@ the previous stable pose-seed hook behavior. The proven ADS StrafeIK scalar,
 turn-in-place legs, firing/tracers, packet v17 and every other confirmed relay
 remain unchanged.
 
+### 2026-08-03 STATIC / IMPLEMENTED: relay the exact fixed-Gesture world target (`zb`)
+
+The build-`z` failure rejects the two upstream `PlayerStrafeLookAt` pose-seed
+sites as a sufficient seam, but it did not reach the last concrete target
+boundary consumed by the selected fixed Gesture. A deeper owner-to-render audit
+now closes that distinction with four independent evidence types:
+
+1. **RTTI, ABI and owner identity.** `GestureTargetLookAt_GetTarget
+   0x1406F2360` is slot 0 of the unique `Gesture::TargetLookAt` vtable at
+   `0x142980958`. Its ABI is `Vec4* __fastcall(provider, Vec4* out)`. The
+   provider stores the owner weak cell/generation at `+0x8/+0x10`; the function
+   resolves `owner=*(cell+8)`, checks `owner+0xBC`, calls Player vtable slot
+   `+0x908`, rotates that owner-relative result by the quaternion at
+   `owner+0x120`, adds world translation `owner+0x110`, and returns the final
+   world-space target through `out`.
+2. **Factory and native dataflow.** `GestureMgr_CreateTargetProvider
+   0x1406F3510` installs exactly this vtable for target CRC `0xA399FA92` and
+   copies the same owner weak cell/generation. `Gesture_GetComputeArgs
+   0x141FD3180` invokes slot 0 directly; `AnimNodeGesture_StepAngles
+   0x141FFEDB0` converts that target into cached angular coordinates, then
+   `AnimNodeGesture_SelectGestureAnims 0x141FFE100` and the command emitters
+   select the grid clips and emit cmd6/cmd7.
+3. **Exact authored topology.** Idle state `0x41C84248` owns Blend root
+   `anim-player.bin+0x670C8`; its child 1 is fixed LookAt node `+0xB1098`,
+   gesture `0x7FB9C9AF`, authored weight 1. The settings grid is the full 3x3
+   `relaxed-idle-lookat-{90-l,fw,90-r}{-down,, -up}` set at -90/0/+90 degrees.
+   All nine ids occur exactly once in `anim-player-movement.pak`, excluding a
+   missing/null clip-id explanation.
+4. **Independent runtime selection plus downstream audit.** Historical
+   `locomotion_hook.log` rows for the exact idle state and callback
+   `0x3C8D22A9` repeatedly report child-1 `select=1` and weight approximately
+   1.0. The `gesture-get-desired-max-blend` callback therefore is not zeroing
+   the tested steady-idle node. The chosen cmd6/cmd7 path reaches cmd3,
+   `JointParams`, the matrix workspace, skinning palette and render upload; no
+   common later palette/render camera writer exists on normal Player playback.
+
+The remaining competing hypotheses are now narrow. **G1 (leading):** the fixed
+Gesture is live and its final `TargetLookAt` world point is still receiver-local;
+overriding this last provider output selects the correct peer-authored 3x3 pose.
+**G2:** the chosen LookAt clips do not set the visible head/neck `ValidBits`.
+**G3:** a subsequent state/simple/type-16 pre-cmd3 layer merge overwrites those
+same rows. **G4 desired-max gate** is rejected for the sampled idle state, and
+**G5 common late palette/render overwrite** is rejected statically. The old
+direct `PlayerLookAtIkController`, StrafeIK Locator and the two build-`z` seeds
+remain excluded.
+
+Build `2026-08-03zb` patches only `Gesture::TargetLookAt` vtable slot 0 after
+verifying it still contains `0x1406F2360`. It calls stock first, then requires a
+generation-valid exact Player owner with `Player+0x4010 == 1`, a fresh
+`PeerFreeLook` packet, non-ADS state, active puppet networking and the exact
+Player vtable. It preserves the stock world-target radius from `owner+0x110`
+and replaces only its direction with the normalized peer `camera_quat -Z`
+forward. Local Player, NPC, ADS, target lifetime and every downstream blend are
+untouched. The independently rejected direct `PlayerLookAtIkController` free-
+look apply is no longer issued, so this discriminator has one causal write.
+Release compilation succeeds.
+
+**Falsifiable prediction:** while both characters remain idle, hold the
+observer camera opposite and move only the sender camera sky -> ground -> sky.
+The receiver must emit bounded `GESTURE-LOOK-TARGET-APPLY` rows for its exact
+screen-1 Player, with peer forward Y changing sign, and the visible remote head
+must follow the sender rather than the observer. There must be no spine twist,
+root/locomotion movement, ADS regression, crash or frame-time degradation. An
+APPLY row with unchanged visuals rejects G1 and selects the clip-ValidBits /
+pre-cmd3 merge fork G2/G3. No APPLY row means this provider is not invoked in
+the observed state or admission is wrong. A crash/deformation rejects the
+claimed ABI, owner or world-origin isolation immediately.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge
