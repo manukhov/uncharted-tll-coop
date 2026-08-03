@@ -17225,6 +17225,38 @@ with unchanged visible direction reject L1 and select L5; one missing marker
 means the callsite admission is incomplete. Any deformation or crash rejects
 this correction seam immediately.
 
+### 2026-08-03 RUNTIME REJECTED: stock non-ADS LookAt target is not the visible shared head direction (`z`)
+
+The exact build-`z` discriminator reached both intended native inputs in both
+directions and produced no visible correction. Receiver PID 8680 logged
+`HEAD-STRAFE-LOOK-SEED` at `0x10015C5` (sequence 677) and `0x1000C30`
+(sequence 687); PID 1616 logged the same sites at sequences 1 and 49. The
+stock/peer quaternion dots included `0.33481`, so the applied peer orientation
+was materially different rather than accidentally equal. Both processes stayed
+responsive and the user nevertheless observed that the remote head still
+repeated the observing copy's direction.
+
+This rejects L1 as a **sufficient visible owner**, not merely its transport or
+callsite admission. It also sharpens the asset interpretation: the fixed idle/
+run LookAt Gesture and `Player+0x21E0` tracker exist and consume the routed
+camera-derived target, but that channel either has no effective visible weight
+in the tested base pose or is overwritten downstream. Do not repatch the
+tracker, its two pose-seed calls, direct LookAtIK, `+0x300`, or the full
+StrafeIK Locator.
+
+L5 is now selected. Continue statically from the known
+`GestureTargetLookAt_GetTarget -> Gesture_GetComputeArgs ->
+AnimNodeGesture_StepAngles` workspace writes and resolve their exact output
+weight/joint rows into the final `JointParams`, skeleton palette and render
+conversion. At each merge, distinguish **zero/inactive authored weight** from
+**a later receiver-camera-derived overwrite**. No further runtime test is
+justified until one concrete downstream writer/merge wins that comparison.
+
+Build `2026-08-03za` removes the rejected two-callsite substitution and restores
+the previous stable pose-seed hook behavior. The proven ADS StrafeIK scalar,
+turn-in-place legs, firing/tracers, packet v17 and every other confirmed relay
+remain unchanged.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

@@ -2694,12 +2694,22 @@ Do not reopen these as the first move:
       rejection remains exact for ADS only. Build `2026-08-03z` substitutes
       peer `camera_quat` only at resolver return sites `0x141000C30` and
       `0x1410015C5`, preserving the stock target, limits, blend and solver.
-- [ ] Run the one written build-`z` discriminator: stationary non-ADS,
+- [x] Run the one written build-`z` discriminator: stationary non-ADS,
       observer camera opposite, sender sky -> ground. Require both
       `HEAD-STRAFE-LOOK-SEED` sites in each process plus sender-correct remote
       head direction and no deformation. Both sites with unchanged visuals
       reject the non-ADS fixed LookAt seam and select a downstream palette/
-      render overwrite; do not widen the hook or repeat the test.
+      render overwrite; do not widen the hook or repeat the test. **REJECTED:**
+      both sites fired in both PIDs with materially different peer/native
+      quaternions, both copies stayed responsive, and the visible head still
+      repeated the observer camera.
+- [ ] Trace the exact non-ADS fixed-LookAt output from
+      `AnimNodeGesture_StepAngles` through its workspace/command rows into
+      `JointParams`, the skeleton palette and render conversion. At every merge,
+      distinguish a zero/inactive authored LookAt weight from a later
+      receiver-camera-derived overwrite. Do not launch again until one exact
+      downstream writer or suppressing weight is proven with three evidence
+      kinds and the rejected tracker/LookAtIK/StrafeIK seams remain excluded.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

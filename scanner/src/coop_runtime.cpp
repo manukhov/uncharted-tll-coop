@@ -1201,9 +1201,10 @@ volatile bool g_puppet_camera_drive = false;
 // jitter. Keep this as a manual Numpad / A/B path until the aim-additive input is
 // isolated from locomotion.
 volatile bool g_puppet_aim_reticle_relay = false;
-// Peer head-look publication. The receiver consumes camera_quat only at the two
-// stock PlayerStrafeLookAt pose-seed callsites for retained screen 1. The old
-// synthetic PlayerLookAtIkController writer remains rejected after spine twist.
+// Peer head-look packet/apply path. The direct PlayerLookAtIkController target
+// writer remains rejected after it twisted the spine. Player vslots +0xE80 and
+// +0xEA0 are also rejected: both live slots were patched in build jb, but neither
+// entry was reached during active gameplay while the shared-camera leak remained.
 volatile bool g_puppet_head_look_sync = true;
 // PATH #1 (user-approved 2026-07-07): materialize the puppet's screen-1 aim camera
 // each frame by calling UpdatePlayerAnimatedCameraControlOwnerAndRouteState on its
@@ -5317,17 +5318,6 @@ void apply_grenade_pose_seed_quaternion_only(
     }
 }
 
-bool try_apply_pose_seed_quaternion(void* out, const float quat[4]) {
-    __try {
-        std::memcpy(
-            static_cast<std::byte*>(out) + 16,
-            quat, 4 * sizeof(float));
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
 bool is_grenade_pose_seed_return_site(std::uintptr_t caller_rva) {
     // Exact return RVAs of direct resolver calls across the complete grenade
     // ResolveContext/SolveTrajectory/UpdateArc/Release chain. Nearby firearm
@@ -5381,23 +5371,14 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
         caller_rva == kPlayerAimPoseSeedCallSiteRva;
     const bool caller_is_aim_site =
         caller_is_early_target_site || caller_is_late_pose_site;
-    const bool caller_is_strafe_look_site =
-        idx == kSlot1ScreenIndex &&
-        (caller_rva == kPlayerStrafeLookAtReferenceSeedCallSiteRva ||
-         caller_rva == kPlayerStrafeLookAtDefaultSeedCallSiteRva);
     // PERF (2026-07-13): this resolver runs ~150-300x/frame (fire + every-frame
     // PostAnimUpdate pose write). The old code did copy_peer_state_snapshot (SRW
     // lock + ~460B copy, contending the net thread) UNCONDITIONALLY on every call =
     // a major lag source. Gate on the CHEAP conditions first; only snapshot when
     // this call is actually an override candidate.
-    const bool pose_seed_relay_candidate =
-        g_puppet_relay_pose_seed &&
-        (fire_path_override || grenade_path_override ||
-         sustained_slot1_override || caller_is_aim_site);
-    const bool strafe_look_relay_candidate =
-        g_puppet_head_look_sync && caller_is_strafe_look_site;
-    if (!g_state_net.enabled || out == nullptr ||
-        !(pose_seed_relay_candidate || strafe_look_relay_candidate)) {
+    if (!g_puppet_relay_pose_seed || !g_state_net.enabled || out == nullptr ||
+        !(fire_path_override || grenade_path_override ||
+          sustained_slot1_override || caller_is_aim_site)) {
         return result;
     }
     coop::StatePacket peer{};
@@ -5414,9 +5395,6 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
     // site can expose transition output while Run is still leaving its graph.
     const bool peer_aim_seed_ready =
         have_peer && peer_packet_aim_active(peer);
-    const bool strafe_look_seed_override =
-        strafe_look_relay_candidate && have_peer && peer_fresh &&
-        peer_packet_free_look_active(peer);
     const bool early_target_seed_override =
         peer_aim_seed_ready && caller_is_early_target_site;
     const bool late_pose_seed_override =
@@ -5430,45 +5408,8 @@ void* __fastcall hooked_pose_seed_resolver(void* out, unsigned int idx) {
         grenade_path_override && have_peer && peer_fresh &&
         (peer.grenade_arc_active != 0 ||
          (grenade_release_until != 0 && now <= grenade_release_until));
-    const bool fire_pose_seed_override =
-        pose_seed_relay_candidate && fire_path_override;
-    const bool sustained_pose_seed_override =
-        pose_seed_relay_candidate && sustained_slot1_override;
-    if (!(fire_pose_seed_override || grenade_pose_seed_override ||
-          sustained_pose_seed_override || aim_pose_seed_override ||
-          strafe_look_seed_override)) {
-        return result;
-    }
-    if (strafe_look_seed_override) {
-        float stock_peer_quat_dot = -1.0F;
-        if (readable_bytes(out) >= 32) {
-            const auto* const stock = reinterpret_cast<const float*>(
-                static_cast<const std::byte*>(out) + 16);
-            stock_peer_quat_dot = std::fabs(
-                stock[0] * peer.camera_quat[0] +
-                stock[1] * peer.camera_quat[1] +
-                stock[2] * peer.camera_quat[2] +
-                stock[3] * peer.camera_quat[3]);
-        }
-        if (!try_apply_pose_seed_quaternion(out, peer.camera_quat)) {
-            return result;
-        }
-        static std::atomic<bool> reference_site_logged{false};
-        static std::atomic<bool> default_site_logged{false};
-        std::atomic<bool>& log_gate =
-            caller_rva == kPlayerStrafeLookAtReferenceSeedCallSiteRva
-                ? reference_site_logged
-                : default_site_logged;
-        if (!log_gate.exchange(true, std::memory_order_acq_rel)) {
-            char line[192]{};
-            sprintf_s(
-                line, sizeof(line),
-                "HEAD-STRAFE-LOOK-SEED seq=%u site=0x%llX stockPeerDot=%.5f",
-                peer.sequence,
-                static_cast<unsigned long long>(caller_rva),
-                stock_peer_quat_dot);
-            boot_log_line(line);
-        }
+    if (!(fire_path_override || grenade_pose_seed_override ||
+          sustained_slot1_override || aim_pose_seed_override)) {
         return result;
     }
     std::uint8_t seed[32]{};
@@ -47853,8 +47794,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-03z "
-        "(stock non-ADS StrafeLookAt Gesture follows peer camera)");
+        "TLL co-op runtime init 2026-08-03za "
+        "(rejected non-ADS LookAt pose-seed relay disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

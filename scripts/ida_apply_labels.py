@@ -2899,7 +2899,10 @@ FUNCTIONS = {
         "owning Player's screen route from Player+0x4010 at exact resolver "
         "return site 0x141000C30 and builds a point from the camera quaternion "
         "and targHead attachment. This feeds authored non-ADS LookAt Gestures; "
-        "the ordinary ADS gesture is independently targetless.",
+        "the ordinary ADS gesture is independently targetless. Runtime build z "
+        "replaced this exact seed from the peer in both directions without "
+        "changing the visible shared head direction, so it is not a sufficient "
+        "visible correction seam.",
     ),
     0x141001570: (
         "PlayerStrafeLookAt_BuildDefaultCameraRequest",
@@ -2907,14 +2910,18 @@ FUNCTIONS = {
         "route at Player+0x4010 at exact resolver return site 0x1410015C5, "
         "compares its camera-forward basis with the reference direction and, "
         "when eligible, returns a direct-point request whose point was built by "
-        "PlayerStrafeLookAt_ResolveReferencePoint.",
+        "PlayerStrafeLookAt_ResolveReferencePoint. Runtime build z reached and "
+        "replaced both exact pose-seed sites in both processes with no visible "
+        "head-direction change; trace downstream weight/overwrite instead.",
     ),
     0x141000DA0: (
         "PlayerStrafeLookAt_Update",
         "Updates the Player+0x21E0 PlayerLookAtTracker from ScriptMove, rope, "
         "authored target and default camera branches. The ordinary fallback "
         "calls PlayerStrafeLookAt_BuildDefaultCameraRequest and publishes its "
-        "camera-derived point through LookAtTracker_SetDirectPoint.",
+        "camera-derived point through LookAtTracker_SetDirectPoint. This path is "
+        "statically real but runtime-rejected as the sufficient visible owner "
+        "after exact peer-seed replacement at both fallback calls.",
     ),
     0x140F027A0: (
         "PlayerMove_UpdateStrafeLookAt",
