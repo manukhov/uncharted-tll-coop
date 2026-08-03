@@ -2681,12 +2681,25 @@ Do not reopen these as the first move:
       direction, no twist/locomotion change, and unchanged ADS behavior.
       **REJECTED:** both PIDs captured and applied the exact Locator, but the
       visible remote head still followed the observing copy.
-- [ ] Trace every writer of `PlayerStrafeController+0x300` and the Vector's
-      consumption inside `PlayerStrafeController_UpdateStrafeIk`; prove whether
-      it contains receiver-camera-relative horizontal head direction or only
-      locomotion strafe. In parallel, enumerate post-`0x14100C400` head/neck
-      joint or render writers. Select one discriminator only after excluding the
-      other branch; do not retry LookAtIK or the rejected full Locator.
+- [x] Trace every writer of `PlayerStrafeController+0x300` and the tail after
+      `0x14100C400`. The steady exact setter `0x14100AC40` receives only the
+      `PlayerStrafeToEntryAction` producer's explicit
+      `(sin(yaw),0,cos(yaw),0)` XZ Vector; it has no camera reader and cannot
+      carry vertical pitch. No later common Player head/neck/spine writer exists.
+- [x] Close the non-ADS `PlayerStrafeLookAt` discriminator before building.
+      Normal Move unconditionally publishes its owner-screen camera-derived
+      point into `Player+0x21E0`; exact `idle` node `+0xB1098` and ordinary
+      run node `+0x877C8` are fixed LookAt Gestures whose native target consumer
+      reaches the Gesture angle/workspace path. The prior targetless-Gesture
+      rejection remains exact for ADS only. Build `2026-08-03z` substitutes
+      peer `camera_quat` only at resolver return sites `0x141000C30` and
+      `0x1410015C5`, preserving the stock target, limits, blend and solver.
+- [ ] Run the one written build-`z` discriminator: stationary non-ADS,
+      observer camera opposite, sender sky -> ground. Require both
+      `HEAD-STRAFE-LOOK-SEED` sites in each process plus sender-correct remote
+      head direction and no deformation. Both sites with unchanged visuals
+      reject the non-ADS fixed LookAt seam and select a downstream palette/
+      render overwrite; do not widen the hook or repeat the test.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

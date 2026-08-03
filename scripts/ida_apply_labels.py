@@ -2416,6 +2416,35 @@ FUNCTIONS = {
         "PlayerStrafeController_UpdateStrafeIk. This is the final common native "
         "boundary before the headb/spined correction, for ADS and non-ADS alike.",
     ),
+    0x14100AC40: (
+        "PlayerStrafeController_SetStrafeDirection",
+        "Concrete PlayerStrafeController vtable 0x142A3FA88 slot +0x80. Exact "
+        "16-byte setter for controller+0x300. Its sole steady Player+0x1D50 "
+        "indirect call is 0x140FF9D7B from PlayerStrafeToEntryAction, which "
+        "supplies an XZ-only normalized direction; this field cannot carry "
+        "vertical camera/head pitch.",
+    ),
+    0x140FF9920: (
+        "PlayerStrafeToEntryAction_InterpolateHorizontalYaw",
+        "Consumes two direction vectors, interpolates atan2-derived yaw through "
+        "the action's angle smoother at +0x64, and rebuilds exactly "
+        "(sin(yaw), 0, cos(yaw), 0). This is the producer proving the downstream "
+        "PlayerStrafeController+0x300 vector is horizontal-only.",
+    ),
+    0x140FF9AF0: (
+        "PlayerStrafeToEntryAction_UpdateHorizontalDirection",
+        "Normalizes the action+0x80/+0x90 XZ directions, calls "
+        "PlayerStrafeToEntryAction_InterpolateHorizontalYaw, then dispatches "
+        "PlayerStrafeController vtable +0x80 with action+0x90. Called by the "
+        "PlayerStrafeToEntryAction update paths.",
+    ),
+    0x140C5B970: (
+        "PlayerStrafeToEntryAction_UpdateGoalDirection",
+        "PlayerStrafeToEntryAction vtable +0x28. Resolves the Player+0x3FE0 goal "
+        "transform, chooses goal-forward or normalized Player-to-goal XZ "
+        "direction, smooths it into action+0x80/+0x90 and reaches the exact "
+        "PlayerStrafeController+0x300 setter through 0x140FF9AF0.",
+    ),
     0x1410F9050: (
         "Player_BuildStrafeIkReferenceLocator",
         "Builds the 32-byte Locator immediately consumed by "
@@ -2867,15 +2896,18 @@ FUNCTIONS = {
     0x141000BC0: (
         "PlayerStrafeLookAt_ResolveReferencePoint",
         "Returns an authored override when available; otherwise resolves the "
-        "owning Player's screen route from Player+0x4010 and builds a point "
-        "from the camera quaternion and targHead attachment.",
+        "owning Player's screen route from Player+0x4010 at exact resolver "
+        "return site 0x141000C30 and builds a point from the camera quaternion "
+        "and targHead attachment. This feeds authored non-ADS LookAt Gestures; "
+        "the ordinary ADS gesture is independently targetless.",
     ),
     0x141001570: (
         "PlayerStrafeLookAt_BuildDefaultCameraRequest",
         "Builds the default PlayerLookAtTracker request. Reads the owner screen "
-        "route at Player+0x4010, compares its camera-forward basis with the "
-        "reference direction and, when eligible, returns a direct-point request "
-        "whose point was built by PlayerStrafeLookAt_ResolveReferencePoint.",
+        "route at Player+0x4010 at exact resolver return site 0x1410015C5, "
+        "compares its camera-forward basis with the reference direction and, "
+        "when eligible, returns a direct-point request whose point was built by "
+        "PlayerStrafeLookAt_ResolveReferencePoint.",
     ),
     0x141000DA0: (
         "PlayerStrafeLookAt_Update",

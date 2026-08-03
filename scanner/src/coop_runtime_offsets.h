@@ -605,6 +605,16 @@ constexpr std::uintptr_t kAimTargetReticleCallSiteRva = 0xCB17D6;
 // (Player per-frame update): native code vmovups resolver result into Player+0x1720
 // and +0x1730 (aim pose). Top POSESEED-CALLERS hit ~150/frame during puppet ADS.
 constexpr std::uintptr_t kPlayerAimPoseSeedCallSiteRva = 0x10E934B;
+// Ordinary non-ADS head look is authored by the fixed LookAt Gesture in the
+// idle/locomotion state graphs. PlayerStrafeLookAt builds that Gesture's target
+// from two exact screen-route pose-seed calls: one for the targHead reference
+// point and one for the default-camera eligibility/request. On retained screen 1
+// only, substituting the peer camera quaternion at these return sites preserves
+// the stock tracker, limits, blend and Gesture solver.
+constexpr std::uintptr_t kPlayerStrafeLookAtReferenceSeedCallSiteRva =
+    0x1000C30;
+constexpr std::uintptr_t kPlayerStrafeLookAtDefaultSeedCallSiteRva =
+    0x10015C5;
 // PlayerAimController vtable +0x58 -> ApplyWorldAimBasis 0x140CAF110. This is
 // the narrow native input to directional aim-additive weights: target point,
 // body-forward, mode bytes, and four authored angular limits.

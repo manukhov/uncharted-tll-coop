@@ -17156,6 +17156,75 @@ Build `2026-08-03y` removes the rejected StatePacket v18 quaternion tail and
 restores the proven 1304-byte v17 packet plus the scalar-only exact-GunMove ADS
 relay. The broader non-ADS capture/apply path is removed.
 
+### 2026-08-03 STATIC/IMPLEMENTED: retained non-ADS LookAt Gesture receives the peer camera (`z`)
+
+The build-`x` failure is now separated from the independent
+`PlayerStrafeController+0x300` alternative without another runtime launch. A
+complete displacement/indirect-call audit finds that `+0x300` is a 16-byte
+horizontal strafe Vector, not a camera Locator. It is initialized at
+`0x14100802A`, written by the action-setup vslots at `0x141008B93` and
+`0x141009186`, and updated steadily by exact vtable `+0x80` setter
+`PlayerStrafeController_SetStrafeDirection 0x14100AC40`. The setter has one
+concrete Player callsite: `0x140FF9D6A..0x140FF9D7B`, reached from
+`PlayerStrafeToEntryAction_UpdateGoalDirection 0x140C5B970` through
+`PlayerStrafeToEntryAction_UpdateHorizontalDirection 0x140FF9AF0`.
+`PlayerStrafeToEntryAction_InterpolateHorizontalYaw 0x140FF9920` reduces the
+inputs with `atan2`, interpolates yaw and explicitly rebuilds
+`(sin(yaw), 0, cos(yaw), 0)`. There is no camera/screen-route reader in this
+producer graph. Therefore this Vector can own locomotion/entry yaw but cannot
+transport the missing vertical head direction. The tail of
+`Player_PostAnimBlending_Async` after `0x14100C400` contains only scoped
+pickup/bump/flashlight/holster-arm paths and cleanup; it has no second common
+`headb/neck/spined` writer.
+
+The non-ADS `PlayerStrafeLookAt` alternative, which the earlier **ADS-only**
+asset rejection did not exclude, now meets the static quota:
+
+1. **Call graph.** `PlayerMoveStick_MainUpdate 0x140F03500` unconditionally
+   reaches `PlayerMove_UpdateStrafeLookAt 0x140F027A0`, then Player-owned
+   `PlayerStrafeLookAt_Update 0x141000DA0` every normal Move update.
+2. **Instruction dataflow.** The ordinary fallback calls the pose-seed resolver
+   at exact return sites `0x141000C30` and `0x1410015C5`. The owner screen route
+   at `Player+0x4010` supplies the quaternion used for the `targHead` reference,
+   request eligibility and direct world point published through
+   `LookAtTracker_SetDirectPoint` into the exact tracker at
+   `Player+0x21E0,+0x60/+0x70`.
+3. **Independent asset/consumer identity.** The complete
+   `anim-player.bin --gesture-node-audit` assigns fixed LookAt node `+0xB1098`
+   (gesture `0x7FB9C9AF`) to exact `idle` state record `+0x7E40`, while fixed
+   LookAt node `+0x877C8` (gesture `0x79E97A99`) owns `run` and its ordinary
+   transitions. `GestureTargetLookAt_GetTarget 0x1406F2360` consumes
+   `Player_GetLookAtTargetPoint 0x1410D4E70`; the already-resolved native path
+   continues through Gesture compute args and `AnimNodeGesture_StepAngles` into
+   the animation command/workspace. In contrast, `strafe-idle-ap` still owns
+   the independently proven targetless node, so this seam is non-ADS only.
+
+Competing hypotheses are now distinct. **L1 non-ADS fixed LookAt is LEADING
+STATIC.** **L2 `+0x300` is REJECTED for vertical pitch** (horizontal-only, no
+camera reader). **L3 full final StrafeIK Locator is RUNTIME REJECTED** by build
+`x`. **L4 direct LookAtIK is RUNTIME REJECTED** (inactive naturally; forced
+target twisted the spine). **L5 a downstream palette/render overwrite remains
+OPEN** only if the exact stock LookAt inputs are reached and visibly ignored.
+
+Build `2026-08-03z` makes no synthetic target or joint write. In the existing
+pose-seed resolver hook, only retained screen `1`, only fresh peer
+`PeerFreeLook`, and only the two exact `PlayerStrafeLookAt` return sites replace
+the native seed quaternion with the sender's `camera_quat`; the stock position,
+tracker, eligibility, authored limits, blend and Gesture solver remain native.
+ADS, movement/root state, `+0x300`, StrafeIK and packet layout are unchanged.
+Release builds cleanly. The sole `ida/tll.i64` was saved with the four new
+PlayerStrafe/PlayerStrafeToEntry labels and corrected non-ADS LookAt comments
+(`save_database returned True`).
+
+**Falsifiable prediction:** keep both characters stationary and out of ADS;
+hold the observing copy's camera opposite while the sender moves sky -> ground.
+Both processes must emit `HEAD-STRAFE-LOOK-SEED` for **both** exact sites
+`0x1000C30` and `0x10015C5`, and the remote head/upper body must follow the
+sender without spine twist, locomotion change or ADS regression. Both markers
+with unchanged visible direction reject L1 and select L5; one missing marker
+means the callsite admission is incomplete. Any deformation or crash rejects
+this correction seam immediately.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge
