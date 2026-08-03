@@ -16849,6 +16849,30 @@ latched packet. APPLY with continued sliding would finally test and reject the
 numeric Locator admission mutation itself, moving the search below
 `0x14210202E` into GroundModel/solve/apply.
 
+### 2026-08-03 RUNTIME CONFIRMED/REJECTED: transport reaches APPLY; numeric admission is insufficient (`t`)
+
+The single stationary Chloe ADS turn produced the transport half of the exact
+prediction with no exception in either responsive process:
+
+- role-A/Chloe PID 15252 emitted `AIM-FOOT-RELAY-CAPTURE seq=1 mask=3`;
+- role-B/Nadine PID 6220 emitted `AIM-FOOT-RELAY-APPLY seq=1 mask=3`;
+- remote Chloe still kept both feet fixed and slid around the turn.
+
+Therefore ADS-session latching is **CONFIRMED** as the missing build-`s`
+transport lifetime, and the inner owner/destination, peer-ADS, packet validity
+and source-sequence gates are all reached. The stronger visual hypothesis is
+**REJECTED**: phases, retained selector and the four numeric Locator caches do
+not recreate the local foot replant even when written before the first final
+admission consumer at `0x142102033`.
+
+The next static audit moves below that seam. It must compare the admitted local
+and forced remote paths through the three retained GroundModels, asynchronous
+`MoveLegIkNew_FindFootPlantGround` result publication, per-leg solve state and
+final joint application. It must distinguish at least: missing receiver-local
+record handles/contact references, GroundModel/query state not created by the
+remote animation graph, and a later solve/apply overwrite. Do not widen the
+copied MoveLeg block or transfer process-local handles as a shortcut.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

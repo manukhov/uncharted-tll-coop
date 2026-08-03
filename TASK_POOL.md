@@ -150,10 +150,15 @@
       latest-only StatePackets before the independently scheduled puppet worker.
       Latch the newest capture through the current strict-ADS session, dedupe by
       source sequence and clear on ADS release.
-- [ ] Run the single build-`t` stationary ADS turn. Require CAPTURE and
-      receiver-side APPLY. No APPLY isolates the remaining peer-ADS/sample gate;
-      APPLY plus continued sliding rejects numeric admission and moves the next
-      static audit below `0x14210202E`.
+- [x] Run the single build-`t` stationary ADS turn. **Transport CONFIRMED,
+      numeric admission REJECTED:** PID 15252 captured `seq=1 mask=3`, PID 6220
+      applied the same event, both stayed responsive without exceptions, but
+      remote Chloe still slid with fixed feet.
+- [ ] Audit the post-`0x14210202E` path statically. Separate missing
+      receiver-local record handles/contact references, absent GroundModel/query
+      state, and later solve/apply overwrite. Trace exact writes and first reads
+      through all three GroundModels, `FindFootPlantGround`, the per-leg solve
+      buffers and final joint application before proposing another runtime test.
 - [x] Confirm build `q` performance: PIDs 15444/6220 remained responsive with
       zero exception/AIM/attachment diagnostic rows, and the user confirmed the
       recent gameplay lag is gone with normal behavior.
