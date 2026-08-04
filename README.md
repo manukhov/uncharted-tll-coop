@@ -10,9 +10,6 @@ Analyzed build:
 
 The game installation is treated as read-only. IDA databases, scripts, reports,
 and future mod binaries belong in this directory.
-# TLL Co-op Research
-
-Working roadmap: [ROADMAP.md](ROADMAP.md)
 
 Current findings and test results: [COOP_STATUS.md](COOP_STATUS.md)
 
