@@ -1,4 +1,4 @@
-# TLL Coop Research
+# Uncharted The Lost Legacy Coop Research
 
 Research workspace for the Steam build of Uncharted: The Lost Legacy.
 
