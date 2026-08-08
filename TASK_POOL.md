@@ -3540,6 +3540,13 @@ Do not reopen these as the first move:
       snapshot-node vtable slot, clip `+0x30` named-reference table dataflow and
       the active root/child topology. The eventual runtime test is read-only and
       must contain one Chloe plus one Nadine Put, not another guessed repair.
+      **STATIC / IMPLEMENTED (`zk`):** exact RTTI slot identities, evaluator
+      disassembly and clip `+0x30` id-array dataflow satisfy the quota. A scoped
+      read-only evaluator hook logs the unmodified returned mask, root
+      Blend/Unary topology and every reachable animation leaf's resolved id and
+      local `hand/leg/back` presence mask. Run exactly one standard-pistol Put on
+      Chloe and one on Nadine; classify the four written outcomes in
+      `COOP_STATUS.md`. No visual change is expected.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

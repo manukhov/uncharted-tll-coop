@@ -913,6 +913,48 @@ FUNCTIONS = {
         "in its corresponding output block. WeaponHolsterIkBlender requests "
         "hand-r, leg-holster and back-holster and consumes this exact mask.",
     ),
+    0x141918820: (
+        "AnimSnapshotNodeAnimation_SampleNamedReference",
+        "AnimSnapshotNodeAnimation vtable slot 25 (+0xC8). Uses the concrete "
+        "clip pointer at node+0x50 and requested reference id to sample one "
+        "authored named-reference transform. Failure writes the identity/zero "
+        "48-byte transform and returns false.",
+    ),
+    0x14191F220: (
+        "AnimSnapshotNodeBlend_SampleNamedReference",
+        "AnimSnapshotNodeBlend vtable slot 25 (+0xC8). Samples child index "
+        "node+0x40, conditionally samples child +0x44 according to flags, mode "
+        "and weight at +0x60, then blends successful reference transforms.",
+    ),
+    0x141AD5640: (
+        "AnimSnapshotNodeUnary_SampleNamedReference",
+        "Shared vtable slot 25 (+0xC8) for Unary and derived IK snapshot "
+        "nodes. Resolves the sole child index at node+0x40 and delegates the "
+        "same named-reference request to that child's slot 25.",
+    ),
+    0x1406D63B0: (
+        "AnimSnapshotNodeWarper_SampleNamedReference",
+        "AnimSnapshotNodeWarper vtable slot 25 (+0xC8). First delegates the "
+        "named-reference request through child index node+0x40, then applies "
+        "authored align and limb-specific warper/reference overrides.",
+    ),
+    0x1418A9500: (
+        "AnimationClip_SampleNamedReferenceById",
+        "Concrete animation-leaf reference lookup. Reads the clip from query "
+        "context+0x8, then clip+0x30 -> {count, id-array+0x8, sample-pointer "
+        "array+0x10}; linearly matches the requested id, samples its transform "
+        "and optionally applies skeleton retarget scale.",
+    ),
+    0x14193AF80: (
+        "AnimSnapshotNodeLeaf_RejectNamedReference",
+        "Leaf/empty snapshot vtable slot 25 (+0xC8). Writes the canonical "
+        "identity/zero 48-byte transform and always returns false.",
+    ),
+    0x141ABC630: (
+        "AnimSnapshotNodeOutOfMemory_RejectNamedReference",
+        "Out-of-memory snapshot-node vtable slot 25 (+0xC8); always returns "
+        "false without producing a named-reference sample.",
+    ),
     0x14108B580: (
         "WeaponHolsterIkBlender_BlendData",
         "WeaponHolsterIkBlender vtable +0x18. Blends two 0x38-byte holster-IK "
@@ -10909,6 +10951,22 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142A46748: (
+        "WeaponHolsterIkBlender_vftable",
+        "Exact MSVC RTTI WeaponHolsterIkBlender vtable. Slot +0x10 is "
+        "WeaponHolsterIkBlender_ExtractData 0x14108B120 and slot +0x18 is "
+        "WeaponHolsterIkBlender_BlendData 0x14108B580.",
+    ),
+    0x142B14D68: (
+        "AnimSnapshotNodeAnimation_vftable",
+        "Exact MSVC RTTI AnimSnapshotNodeAnimation vtable; slot +0xC8 is "
+        "AnimSnapshotNodeAnimation_SampleNamedReference 0x141918820.",
+    ),
+    0x142B15218: (
+        "AnimSnapshotNodeBlend_vftable",
+        "Exact MSVC RTTI AnimSnapshotNodeBlend vtable; slot +0xC8 is "
+        "AnimSnapshotNodeBlend_SampleNamedReference 0x14191F220.",
+    ),
     0x142BBECC0: (
         "GestureApplyJointReaderFunc_vftable",
         "Exact MSVC RTTI Gesture::ApplyJointReaderFunc vtable installed by "

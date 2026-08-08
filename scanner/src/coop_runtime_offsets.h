@@ -710,6 +710,8 @@ constexpr std::uintptr_t kPlayerWeaponAnimNamedEventRva = 0x108DE30;
 // attachment. The outer update scopes the exact PlayerWeaponAnimControl; its
 // blender extracts the authored hand/leg/back reference record used to choose
 // the leg or pelvis target basis.
+constexpr std::uintptr_t kAnimStateSnapshotEvaluateReferenceSetMaskRva =
+    0x18B3770;
 constexpr std::uintptr_t kPlayerWeaponAnimControlUpdateHolsterIkRva =
     0x108ECE0;
 // The generic reducer returns the final custom-data record after all live

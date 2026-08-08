@@ -18069,3 +18069,69 @@ owns them but the active blend drops them), and **Hwrong-snapshot** (the reducer
 samples a different base/transition snapshot). No new animation mutation is
 allowed until those alternatives are separated statically and a Chloe control is
 included in one bounded read-only test.
+
+### 2026-08-09 STATIC / IMPLEMENTED: classify the exact holster reference producer (`2026-08-09zk`)
+
+The next boundary meets the three-kind static quota without another pose or
+attachment mutation:
+
+1. The unique MSVC RTTI `WeaponHolsterIkBlender` vtable is `0x142A46748`;
+   slot `+0x10` is exactly `WeaponHolsterIkBlender_ExtractData 0x14108B120`.
+   Its sole xref at `0x142A46758` and the adjacent `BlendData 0x14108B580`
+   exclude a generic animation callback or ProcessWeapon attachment path.
+2. ExtractData builds the ordered request
+   `[apReference-hand-r, apReference_leg_holster,
+   apReference_back_holster]` and calls
+   `AnimStateSnapshot_EvaluateReferenceSetMask 0x1418B3770`. The evaluator reads
+   root heap/index from its subobject `+0xA0/+0xA8`, calls concrete snapshot-node
+   vtable slot 25 (`+0xC8`) once per id and returns the exact bit mask. ExtractData
+   admits only `(mask & 1) && mask > 1`, gives leg bit 2 priority, and otherwise
+   selects back bit 4.
+3. RTTI resolves slot 25 independently. `AnimSnapshotNodeAnimation` vtable
+   `0x142B14D68` calls `AnimSnapshotNodeAnimation_SampleNamedReference
+   0x141918820`; that passes node `+0x50`'s clip to
+   `AnimationClip_SampleNamedReferenceById 0x1418A9500`. The latter reads the
+   exact table `clip+0x30 -> {count, ids+0x8, sample pointers+0x10}` and returns
+   false when the requested id is absent. `AnimSnapshotNodeBlend` vtable
+   `0x142B15218` instead calls `0x14191F220`, which samples child indices
+   `+0x40/+0x44` and combines them by flags/mode/weight `+0x48/+0x4C/+0x60`;
+   Unary/IK nodes delegate child `+0x40` through `0x141AD5640`.
+   The remaining concrete wrapper, `AnimSnapshotNodeWarper`, independently
+   resolves to slot `0x1406D63B0`; it also delegates child `+0x40` before its
+   reference-specific align/limb overrides, so the topology walk cannot stop
+   above a hidden animation leaf.
+
+These functions and three concrete vtables are named/commented in the single
+`ida/tll.i64`; the headless write reported `1593 functions, 52 data names` and
+`save_database returned True`, and restarted MCP resolves the saved names.
+`scripts/ida_mcp_server.ps1` now falls back to `127.0.0.1` when the optional WSL
+adapter is absent, preserving the same single-IDB stop/write/restart workflow.
+
+Build `zk` hooks only the evaluator entry while the existing exact
+`PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0` TLS scope is active. The
+hook returns the unmodified stock mask and logs `HOLSTER-REF-MASK` plus
+`HOLSTER-REF-LEAVES`: root topology, concrete node sampler RVAs, Blend children
+and weight, every reachable animation leaf's resolved id, clip/reference-table
+pointers, count and local presence mask. The scope now admits both exact Chloe
+`0x3F334972` and legacy Nadine `0xD27C074F`, still only slot-1 standard-pistol
+`s_weapon-holster`. Rejected player-mesh, joint and attachment writes remain
+absent.
+
+Written discriminator for exactly one pistol Put on Chloe and one on Nadine:
+
+- **Hnormal-invalid:** both looks return mask `0/1` and final invalid, with no
+  reachable leaf owning a complete `hand+holster` pair. Holster IK is optional
+  here and this entire path is abandoned as the visible cause.
+- **Hclip-missing:** Chloe returns `5` (`hand+back`) from a leaf whose local mask
+  is `5`, while Nadine's intended leg leaf lacks hand or leg and returns `0/1`.
+  The defect is the selected clip/reference content, not Player joint setup.
+- **Hblend-suppression:** a Nadine reachable leaf owns local mask `3`
+  (`hand+leg`) but the root evaluator loses a required bit; the first Blend node
+  separating that leaf from the returned mask is the next owner.
+- **Hwrong-snapshot:** the root/leaf resolved animation ids do not match the
+  already proven back/leg Put family for the corresponding look; trace the
+  active snapshot source/transition selection instead of editing clip content.
+
+No visible change is expected. Any pose change, renewed arm distortion, crash,
+stutter, missing exact request or torn/unreadable topology rejects the probe
+packaging rather than classifying the four content hypotheses.

@@ -10,12 +10,13 @@ $databasePath = Join-Path $repoRoot 'ida\tll.i64'
 $databaseDirectory = Split-Path -Parent $databasePath
 $wrapperPath = Join-Path $PSScriptRoot 'ida_mcp_server.py'
 $port = 8745
-$hostAddress = (
-    Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias 'vEthernet (WSL)' |
-        Select-Object -First 1 -ExpandProperty IPAddress
-)
+$hostAddress = Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias 'vEthernet (WSL)' `
+    -ErrorAction SilentlyContinue |
+    Select-Object -First 1 -ExpandProperty IPAddress
 if (-not $hostAddress) {
-    throw 'The vEthernet (WSL) IPv4 address was not found.'
+    # WSL is optional. Local Codex/PowerShell clients use the loopback endpoint
+    # when the WSL adapter is absent or temporarily disabled.
+    $hostAddress = '127.0.0.1'
 }
 
 function Get-IdaMcpProcesses {
