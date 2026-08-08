@@ -1575,7 +1575,6 @@ void quat_forward_pos_z(const float q[4], float& fx, float& fy, float& fz);
 bool head_look_send_allowed(void* player);
 void publish_peer_head_look_packet_fields(
     void* local_obj, coop::StatePacket& pkt);
-extern bool g_puppet_net_apply;
 bool peer_packet_aim_active(const coop::StatePacket& peer);
 bool peer_packet_free_look_active(const coop::StatePacket& peer);
 bool peer_snapshot_aim_active();
@@ -11562,150 +11561,6 @@ bool install_player_aim_blend_tick_probe() {
 
 using PlayerLookAtSetPointFn = void(__fastcall*)(
     void* self, unsigned int slot, int param, const float* pos, float weight);
-using GestureTargetLookAtGetTargetFunction =
-    float*(__fastcall*)(void* provider, float* out_target);
-
-GestureTargetLookAtGetTargetFunction
-    g_original_gesture_target_look_at_get_target = nullptr;
-
-void* resolve_gesture_target_look_at_owner(void* provider) {
-    if (provider == nullptr ||
-        readable_bytes(static_cast<const std::byte*>(provider) + 0x10) <
-            sizeof(std::uint32_t)) {
-        return nullptr;
-    }
-    void* const weak_cell = *reinterpret_cast<void* const*>(
-        static_cast<const std::byte*>(provider) + 0x8);
-    const std::uint32_t generation = *reinterpret_cast<const std::uint32_t*>(
-        static_cast<const std::byte*>(provider) + 0x10);
-    if (weak_cell == nullptr || generation == 0 ||
-        readable_bytes(static_cast<const std::byte*>(weak_cell) + 0x8) <
-            sizeof(void*)) {
-        return nullptr;
-    }
-    void* const owner = *reinterpret_cast<void* const*>(
-        static_cast<const std::byte*>(weak_cell) + 0x8);
-    if (owner == nullptr ||
-        readable_bytes(static_cast<const std::byte*>(owner) + 0xBC) <
-            sizeof(std::uint32_t) ||
-        *reinterpret_cast<const std::uint32_t*>(
-            static_cast<const std::byte*>(owner) + 0xBC) != generation) {
-        return nullptr;
-    }
-    return owner;
-}
-
-float* __fastcall hooked_gesture_target_look_at_get_target(
-    void* provider, float* out_target) {
-    float* const result = g_original_gesture_target_look_at_get_target != nullptr
-        ? g_original_gesture_target_look_at_get_target(provider, out_target)
-        : out_target;
-    if (out_target == nullptr || g_dll_inert || !g_puppet_head_look_sync ||
-        !g_puppet_net_apply || !g_state_net.enabled) {
-        return result;
-    }
-
-    void* const owner = resolve_gesture_target_look_at_owner(provider);
-    if (owner == nullptr || !player_screen_index_is(owner, kSlot1ScreenIndex) ||
-        readable_bytes(owner) < sizeof(void*) ||
-        *reinterpret_cast<const std::uintptr_t*>(owner) !=
-            g_module + kPlayerVtableRva ||
-        readable_bytes(static_cast<const std::byte*>(owner) + 0x110) <
-            4 * sizeof(float)) {
-        return result;
-    }
-
-    const ULONGLONG now = GetTickCount64();
-    const ULONGLONG received =
-        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
-    coop::StatePacket peer{};
-    if (received == 0 || now - received > 250 ||
-        !copy_last_peer_state_snapshot(peer) ||
-        !peer_packet_free_look_active(peer) || peer_packet_aim_active(peer)) {
-        return result;
-    }
-
-    float forward_x = 0.0F;
-    float forward_y = 0.0F;
-    float forward_z = 0.0F;
-    quat_forward_neg_z(
-        peer.camera_quat, forward_x, forward_y, forward_z);
-    const float forward_len = std::sqrt(
-        forward_x * forward_x + forward_y * forward_y +
-        forward_z * forward_z);
-    if (!std::isfinite(forward_len) || forward_len < 0.001F) {
-        return result;
-    }
-    forward_x /= forward_len;
-    forward_y /= forward_len;
-    forward_z /= forward_len;
-
-    const auto* const owner_world = reinterpret_cast<const float*>(
-        static_cast<const std::byte*>(owner) + 0x110);
-    const float stock_dx = out_target[0] - owner_world[0];
-    const float stock_dy = out_target[1] - owner_world[1];
-    const float stock_dz = out_target[2] - owner_world[2];
-    const float stock_radius = std::sqrt(
-        stock_dx * stock_dx + stock_dy * stock_dy + stock_dz * stock_dz);
-    const float radius = std::isfinite(stock_radius) && stock_radius >= 0.5F &&
-            stock_radius <= 100.0F
-        ? stock_radius
-        : 8.0F;
-    const float stock_target[3]{
-        out_target[0], out_target[1], out_target[2]};
-    out_target[0] = owner_world[0] + forward_x * radius;
-    out_target[1] = owner_world[1] + forward_y * radius;
-    out_target[2] = owner_world[2] + forward_z * radius;
-    out_target[3] = 1.0F;
-
-    static std::atomic<ULONGLONG> last_log_ms{0};
-    static std::atomic<unsigned> log_count{0};
-    ULONGLONG previous_log = last_log_ms.load(std::memory_order_relaxed);
-    if (now - previous_log >= 500 &&
-        last_log_ms.compare_exchange_strong(
-            previous_log, now, std::memory_order_relaxed) &&
-        log_count.fetch_add(1, std::memory_order_relaxed) < 32) {
-        std::ostringstream line;
-        line << "GESTURE-LOOK-TARGET-APPLY seq=" << peer.sequence
-             << " owner=0x" << std::hex
-             << reinterpret_cast<std::uintptr_t>(owner) << std::dec
-             << " stock=(" << stock_target[0] << "," << stock_target[1]
-             << "," << stock_target[2] << ") peer=(" << out_target[0]
-             << "," << out_target[1] << "," << out_target[2] << ")"
-             << " forward=(" << forward_x << "," << forward_y << ","
-             << forward_z << ") radius=" << radius;
-        force_log_line(line.str().c_str());
-    }
-    return result;
-}
-
-bool install_gesture_target_look_at_relay() {
-    auto* const slot = reinterpret_cast<std::uintptr_t*>(
-        g_module + kGestureTargetLookAtVtableRva);
-    const std::uintptr_t expected =
-        g_module + kGestureTargetLookAtGetTargetRva;
-    if (*slot != expected) {
-        boot_log_line(
-            "Gesture TargetLookAt relay SKIPPED (vtable slot mismatch)");
-        return false;
-    }
-    g_original_gesture_target_look_at_get_target =
-        reinterpret_cast<GestureTargetLookAtGetTargetFunction>(*slot);
-    DWORD old = 0;
-    if (!VirtualProtect(slot, sizeof(*slot), PAGE_READWRITE, &old)) {
-        g_original_gesture_target_look_at_get_target = nullptr;
-        boot_log_line("Gesture TargetLookAt relay SKIPPED (protect)");
-        return false;
-    }
-    *slot = reinterpret_cast<std::uintptr_t>(
-        &hooked_gesture_target_look_at_get_target);
-    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(*slot));
-    DWORD ignored = 0;
-    VirtualProtect(slot, sizeof(*slot), old, &ignored);
-    boot_log_line(
-        "Gesture TargetLookAt peer-target relay installed (vtable slot 0x142980958)");
-    return true;
-}
 
 void* player_look_at_ik_controller(void* player) {
     if (player == nullptr) {
@@ -19639,9 +19494,9 @@ void apply_puppet_head_look_pre() {
     }
     const bool peer_aiming =
         (pkt.flags & 8) != 0 && peer_packet_aim_active(pkt);
-    // Free-look is now relayed at the exact fixed-Gesture TargetLookAt provider.
     // The direct PlayerLookAtIkController path was runtime-rejected and twisted
-    // the spine when forced; keep it out of this discriminator entirely.
+    // the spine when forced. The later TargetLookAt relay also had no admitted
+    // APPLY marker, so zc intentionally stages no non-ADS head write here.
     if (!peer_packet_free_look_active(pkt) && !peer_aiming) {
         clear_peer_head_look_on_puppet(puppet);
     }
@@ -47940,8 +47795,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-03zb "
-        "(fixed Gesture TargetLookAt peer-world-target relay)");
+        "TLL co-op runtime init 2026-08-08zc "
+        "(rejected Gesture TargetLookAt relay disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -48059,7 +47914,6 @@ DWORD WINAPI install_hook(void*) {
             install_character_skeleton_eval_per_joint_callsite_hook();
         }
     }
-    install_gesture_target_look_at_relay();
     boot_log_line("named aim-point writer probe parked after conclusive ji");
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();

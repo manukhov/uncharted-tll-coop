@@ -17325,6 +17325,33 @@ pre-cmd3 merge fork G2/G3. No APPLY row means this provider is not invoked in
 the observed state or admission is wrong. A crash/deformation rejects the
 claimed ABI, owner or world-origin isolation immediately.
 
+### 2026-08-08 RUNTIME REJECTED / ADMISSION UNPROVEN: build `zb` has no visible effect and no APPLY marker
+
+The user observed that the remote head still repeated the observer camera under
+build `2026-08-03zb`; there was no deformation or reported secondary regression.
+The two cold-install rows are valid: PIDs 12260 and 12612 both loaded `zb` and
+patched the exact `Gesture::TargetLookAt` vtable slot `0x142980958`. However,
+neither process emitted `GESTURE-LOOK-TARGET-APPLY`. The same log contains no
+post-install `state net first send/receive` or remote-spawn rows for those PIDs,
+so it cannot establish whether the provider was invoked with a live screen-1
+Player and a fresh `PeerFreeLook` packet.
+
+Therefore the **build is rejected**, but G1's final provider output is not
+falsified: the written prediction explicitly classified "no APPLY" as an
+invocation/admission failure. Do not widen the world-target write or treat this
+run as evidence for a downstream palette writer. Before another runtime test,
+resolve whether TargetLookAt is evaluated per frame or only while constructing/
+refreshing the Gesture snapshot, and identify the first exact screen-1-safe
+boundary that always receives the cached angles/selected grid indices. In
+parallel, finish the exact clip joint `ValidBits` and first later pre-cmd3 layer
+merge audit; those distinguish a valid but overwritten head pose from a grid
+that never authors the visible head/neck rows.
+
+Build `2026-08-08zc` removes the unproven vtable hook. It retains the prior
+decision not to call the runtime-rejected direct `PlayerLookAtIkController`
+free-look path. All confirmed ADS, foot-turn, projectile/tracer, traversal,
+reload, grenade and pickup relays remain unchanged.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

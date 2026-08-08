@@ -2713,13 +2713,22 @@ Do not reopen these as the first move:
       RTTI-exact world-target boundary before angles/grid selection; build `zb`
       relays only its screen-1 non-ADS output and leaves rejected IK/Strafe seeds
       excluded.
-- [ ] Run the single written build-`zb` discriminator: stationary idle, observer
+- [x] Run the single written build-`zb` discriminator: stationary idle, observer
       camera held opposite, sender sky -> ground -> sky. Require bounded
       `GESTURE-LOOK-TARGET-APPLY` with peer forward Y changing sign, visible
       sender-correct remote head direction, and no twist, locomotion, ADS, crash
       or performance regression. APPLY without visual change rejects the direct
       target and selects exact clip `ValidBits` versus the first subsequent
-      state/simple/type-16 layer overwrite; do not widen the hook.
+      state/simple/type-16 layer overwrite; do not widen the hook. **REJECTED /
+      ADMISSION UNPROVEN:** both PIDs installed the exact slot, but the user saw
+      no change and neither PID emitted APPLY. The same log has no post-install
+      state-send/receive rows, so this does not falsify provider output.
+- [ ] Resolve whether `GestureTargetLookAt_GetTarget 0x1406F2360` runs per frame
+      or only during Gesture snapshot/cache construction, and identify the first
+      always-live screen-1 boundary carrying its cached angles/grid indices.
+      Complete the nine clip joint `ValidBits` and first later pre-cmd3 overwrite
+      audit before building another discriminator. Build `zc` removes the
+      unproven vtable hook and keeps direct LookAtIK disabled.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`
