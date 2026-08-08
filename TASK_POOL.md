@@ -3502,7 +3502,7 @@ Do not reopen these as the first move:
       correlates the exact family result with the next same-thread remap input,
       logs both return RVAs, and compares stock/leg remap keys and clip pointers
       without animation mutation. Run the written `gk` discriminator next.
-- [ ] Test build `zh`, which supersedes the per-row Hlookup branch with the
+- [x] Test build `zh`, which supersedes the per-row Hlookup branch with the
       engine's authored knowledge boundary. Static DC00 comparison proves the
       four compatible female/Nadine looks share one exact 323-row table; its 153
       overlaps with Chloe are precisely 144 holster/unholster mappings plus nine
@@ -3513,7 +3513,20 @@ Do not reopen these as the first move:
       `pistolHolster`. Written positive/negative predictions are in
       `COOP_STATUS.md`. Test pistol Put and active pistol/rifle grip first. Cold
       spawn rifle and ProcessWeaponStrap are explicitly out of scope and should
-      remain unchanged in `zh`.
+      remain unchanged in `zh`. RUNTIME REJECTED as sufficient: both processes
+      committed record `0x6567DEA7` into slot 87 (`status=1`, then stable
+      `status=2`) and installed both exact hip hooks, but the user saw no change
+      in pistol motion, free arm, cold rifle or strap.
+- [ ] Test build `zi`: repair only the exact missing legacy-Nadine
+      `PlayerWeaponAnimControl+0x78` marker from `-1` to the descriptor-proven
+      `r_leg_holster` joint 99, requiring vtable `0x142A46778`, exact retained
+      owner and parent joint 5. The stock `0x14108EBF0` refresh then builds the
+      `+0x90` basis consumed only by the leg branch of `0x14108ECE0`. The bounded
+      final reducer probe distinguishes valid leg, valid back and invalid/zero
+      output. Use one standard-pistol Put; classify Hmarker-full/Hreference/
+      Hsolver from the written prediction in `COOP_STATUS.md`. If output remains
+      invalid, remove both the now-inert marker test and the rejected full-table
+      mutation before tracing the exact reference-set producer.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

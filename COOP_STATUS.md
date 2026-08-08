@@ -17970,3 +17970,71 @@ grip improves; if it does not, **Narm** wins without invalidating the holster
 repair. The cold-spawn rifle and sling are expected to remain unchanged and will
 be handled in separate builds. A crash, body corruption, lost locomotion or a
 missing knowledge record falsifies the repair and requires rollback.
+
+### 2026-08-09 RUNTIME REJECTED: authored player-mesh installation is visually insufficient (`2026-08-09zh`)
+
+Both processes proved that the intended record mutation succeeded. PID 3632
+and PID 4576 each emitted `NADINE-PLAYER-MESH status=1` for record
+`0x6567DEA7`, key `0x675A8F15`, slot 87, and subsequent rebuilt Player/control
+generations retained `status=2`. Both exact standard-pistol hip hooks also
+installed. The user nevertheless observed no change: the pistol still followed
+the back-holster motion, the second arm still crossed the torso, the cold rifle
+remained attached to the hand, and the back rifle/strap remained wrong.
+
+Therefore **Nmesh-as-sufficient-fix is REJECTED**. This does not disprove the
+static fact that the legacy Player was born with Chloe knowledge or that the
+shipped Nadine table differs; it proves that selecting that complete record and
+the physical thigh endpoint still does not repair any of the four visible
+symptoms. The next test must discriminate the later skeleton/IK path instead of
+adding more overlay rows.
+
+### 2026-08-09 STATIC / IMPLEMENTED: repair Nadine's exact missing leg-holster marker (`2026-08-09zi`)
+
+The next mutation satisfies the three-kind static quota and is narrower than
+the rejected table experiments:
+
+1. Independent runtime identity/census already proved that the retained
+   legacy-Nadine `PlayerWeaponAnimControl` has exact vtable `0x142A46778`, owner
+   equal to the retained Player and joint tuple `-1,5,-1,3`, while both native
+   and Player Nadine descriptors resolve `r_leg_holster 0xADD0C871` to joint 99
+   and `r_upper_leg 0x0D9C305D` to joint 5.
+2. `PlayerWeaponAnimControl_InitializeHolsterJoints 0x14108E700` writes the
+   missing Chloe-only `r_leg_gun_holster` result to control `+0x78` and its
+   parent to `+0x7C`. `PlayerWeaponAnimControl_UpdateHolsterJointTransforms
+   0x14108EBF0` independently consumes that pair and writes the marker-relative
+   basis at `+0x90`, but only when both indices are valid.
+3. `PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0` selects `+0x7C/+0x90`
+   only when the final reducer returns `apReference_leg_holster`; it then
+   composes that basis with the final target and feeds the arm IK chain. The
+   back branch instead uses `+0x84/+0xB0`, so this edit cannot redirect a back
+   reference or affect ordinary weapon attachment state.
+
+Build `zi` resolves the active legacy-Nadine descriptor again at runtime and
+writes only `control+0x78: -1 -> 99`. Admission requires the exact Player look,
+exact control vtable, exact control owner, resolved pair `99/5`, current parent
+equal to 5 and current marker exactly `-1`; an already repaired 99 is a no-op,
+and any other valid marker is preserved. The stock post-animation call refreshes
+the `+0x90` basis on the following frame. The prior full player-mesh record is
+retained for this one composition test only, because `zh` did not expose the
+final reducer output.
+
+Competing hypotheses are explicit. **Hmarker-full** predicts the complete
+authored record yields a valid nonzero leg reference and the repaired 99/5 pair
+changes the arm path toward the thigh. **Hreference** predicts the reducer is
+still `valid=0/reference=0/weight=0`, making the marker repair intentionally
+inert and selecting the snapshot reference-set producer as the next boundary.
+**Hsolver** predicts a valid leg output and refreshed nonidentity basis but no
+visual improvement, moving the failure below composition/SolveArmIk. **Narm**
+remains a separate active-grip problem and may leave the free arm broken even if
+Put is corrected.
+
+The bounded `ge` final-reducer probe is re-enabled by itself; rejected broad
+Nadine probes remain off and rows are signature-deduplicated/capped. Written
+prediction: both copies must emit `NADINE-HOLSTER-JOINT` with resolved `99/5`
+and applied or stable status. One standard-pistol Put must then emit
+`NADINE-HOLSTER-IK-FINAL`. Valid nonzero `leg` plus joints `99,5,-1,3` must move
+the hand toward the thigh (Hmarker-full); `valid=0` selects Hreference without
+tuning the marker; valid `back` proves the authored snapshot still selected the
+back branch; valid leg plus unchanged visible motion selects Hsolver. A crash,
+wrong owner/vtable, a marker other than -1/99, body corruption or new stutter
+invalidates the build.

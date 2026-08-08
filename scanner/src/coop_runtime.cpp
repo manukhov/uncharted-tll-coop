@@ -1933,6 +1933,16 @@ constexpr bool kEnableProcessWeaponInitProbe = false;
 // by the shipped game for leg-holster female looks. This is independent of the
 // parked transform probes and leaves the Player Look2/body identity untouched.
 constexpr bool kEnableLegacyNadinePlayerMeshKnowledgeRepair = true;
+// Runtime build zh proved that the full Nadine player-mesh record is installed
+// but is not sufficient by itself. Keep it for one final, bounded composition
+// test while repairing the exact missing leg-holster marker consumed by stock
+// PlayerWeaponAnimControl. If the final reducer remains invalid, both mutations
+// are removed together and the reference-set producer becomes the next boundary.
+constexpr bool kEnableLegacyNadineHolsterJointMarkerRepair = true;
+// The existing ge probe observes only the final reducer output consumed by
+// PlayerWeaponAnimControl_UpdateHolsterIk. Re-enable it for this discriminator;
+// its rows are signature-deduplicated and capped per retained owner.
+constexpr bool kEnableLegacyNadineHolsterIkVerification = true;
 // The matching authored leg-holster clips must terminate at Nadine's native
 // pistolHolster attachment. The exact Put action sequence was already observed
 // as targSpinePropAnim -> targSpineProp; redirect only its final standard-pistol
@@ -17672,6 +17682,21 @@ struct NadinePlayerMeshKnowledgeRepairResult {
     void* previous_record = nullptr;
 };
 
+std::int16_t raw_resolve_attach_joint(
+    std::byte* table, std::uint32_t joint_name_id);
+
+struct NadineHolsterJointMarkerRepairResult {
+    int status = 0;
+    void* attach_table = nullptr;
+    void* control = nullptr;
+    void* control_owner = nullptr;
+    std::int32_t resolved_marker = -1;
+    std::int32_t resolved_parent = -1;
+    std::int32_t before_marker = -99;
+    std::int32_t before_parent = -99;
+    std::int32_t after_marker = -99;
+};
+
 using StringIdFormatDashedPairAndHashFunction =
     std::uint32_t*(__fastcall*)(
         std::uint32_t*, const char*, const char*);
@@ -17802,6 +17827,91 @@ bool seh_repair_legacy_nadine_player_mesh_knowledge(
     *result = {};
     __try {
         return raw_repair_legacy_nadine_player_mesh_knowledge(player, result);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        result->status = -100;
+        return false;
+    }
+}
+
+bool raw_repair_legacy_nadine_holster_joint_marker(
+    void* player, NadineHolsterJointMarkerRepairResult* result) {
+    constexpr std::uintptr_t kExpectedControlVtableRva = 0x2A46778;
+    if (player == nullptr || result == nullptr || g_module == 0 ||
+        readable_bytes(player) < 0x1DF8) {
+        if (result != nullptr) {
+            result->status = -1;
+        }
+        return false;
+    }
+
+    auto* const player_bytes = static_cast<std::byte*>(player);
+    auto* const attach_table = *reinterpret_cast<std::byte**>(
+        player_bytes + 0x1E0);
+    auto* const control = *reinterpret_cast<std::byte**>(
+        player_bytes + 0x1DF0);
+    result->attach_table = attach_table;
+    result->control = control;
+    if (attach_table == nullptr || control == nullptr ||
+        readable_bytes(control) < 0xD0) {
+        result->status = -2;
+        return false;
+    }
+
+    const std::uintptr_t control_vtable =
+        *reinterpret_cast<const std::uintptr_t*>(control);
+    result->control_owner = *reinterpret_cast<void**>(control + 0x10);
+    if (control_vtable != g_module + kExpectedControlVtableRva ||
+        result->control_owner != player) {
+        result->status = -3;
+        return false;
+    }
+
+    result->resolved_marker = raw_resolve_attach_joint(
+        attach_table, kRLegHolsterJointNameId);
+    result->resolved_parent = raw_resolve_attach_joint(
+        attach_table, kRUpperLegJointNameId);
+    if (result->resolved_marker < 0 || result->resolved_parent < 0) {
+        result->status = -4;
+        return false;
+    }
+
+    result->before_marker = *reinterpret_cast<const std::int32_t*>(
+        control + 0x78);
+    result->before_parent = *reinterpret_cast<const std::int32_t*>(
+        control + 0x7C);
+    result->after_marker = result->before_marker;
+    if (result->before_parent != result->resolved_parent) {
+        result->status = -5;
+        return false;
+    }
+    if (result->before_marker == result->resolved_marker) {
+        result->status = 2;
+        return true;
+    }
+    // Do not replace any valid authored marker. The compatibility defect is the
+    // exact stock -1 produced by the absent Chloe-only r_leg_gun_holster name.
+    if (result->before_marker != -1) {
+        result->status = -6;
+        return false;
+    }
+
+    *reinterpret_cast<std::int32_t*>(control + 0x78) =
+        result->resolved_marker;
+    result->after_marker = *reinterpret_cast<const std::int32_t*>(
+        control + 0x78);
+    result->status =
+        result->after_marker == result->resolved_marker ? 1 : -7;
+    return result->status > 0;
+}
+
+bool seh_repair_legacy_nadine_holster_joint_marker(
+    void* player, NadineHolsterJointMarkerRepairResult* result) {
+    if (result == nullptr) {
+        return false;
+    }
+    *result = {};
+    __try {
+        return raw_repair_legacy_nadine_holster_joint_marker(player, result);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         result->status = -100;
         return false;
@@ -18487,6 +18597,50 @@ void ensure_legacy_nadine_attach_points_game_thread() {
     }
     if (target == nullptr) {
         return;
+    }
+
+    NadineHolsterJointMarkerRepairResult joint_result{};
+    if constexpr (kEnableLegacyNadineHolsterJointMarkerRepair) {
+        seh_repair_legacy_nadine_holster_joint_marker(
+            target, &joint_result);
+
+        std::uint64_t joint_signature = 1469598103934665603ULL;
+        auto mix_joint = [&joint_signature](std::uint64_t value) {
+            joint_signature ^= value;
+            joint_signature *= 1099511628211ULL;
+        };
+        mix_joint(reinterpret_cast<std::uintptr_t>(target));
+        mix_joint(reinterpret_cast<std::uintptr_t>(joint_result.control));
+        mix_joint(static_cast<std::uint32_t>(joint_result.status));
+        mix_joint(static_cast<std::uint32_t>(joint_result.before_marker));
+        mix_joint(static_cast<std::uint32_t>(joint_result.before_parent));
+        mix_joint(static_cast<std::uint32_t>(joint_result.after_marker));
+        static std::array<std::uint64_t, 2> last_joint_signatures{};
+        const std::size_t joint_memo_index = target_owner == 1 ? 1u : 0u;
+        if (last_joint_signatures[joint_memo_index] != joint_signature) {
+            last_joint_signatures[joint_memo_index] = joint_signature;
+            std::ostringstream line;
+            line << "NADINE-HOLSTER-JOINT owner=" << target_owner
+                 << " status=" << joint_result.status
+                 << " player=0x" << std::hex
+                 << reinterpret_cast<std::uintptr_t>(target)
+                 << " table=0x"
+                 << reinterpret_cast<std::uintptr_t>(
+                        joint_result.attach_table)
+                 << " control=0x"
+                 << reinterpret_cast<std::uintptr_t>(joint_result.control)
+                 << " controlOwner=0x"
+                 << reinterpret_cast<std::uintptr_t>(
+                        joint_result.control_owner)
+                 << std::dec << " resolved="
+                 << joint_result.resolved_marker << "/"
+                 << joint_result.resolved_parent << " joints="
+                 << joint_result.before_marker << "/"
+                 << joint_result.before_parent << "->"
+                 << joint_result.after_marker << "/"
+                 << joint_result.before_parent;
+            write_log_line(line.str().c_str());
+        }
     }
 
     NadinePlayerMeshKnowledgeRepairResult player_mesh_result{};
@@ -48331,8 +48485,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09zh "
-        "(legacy-Nadine authored player-mesh and hip attachment repair)");
+        "TLL co-op runtime init 2026-08-09zi "
+        "(legacy-Nadine leg-holster joint marker repair)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -48391,6 +48545,10 @@ DWORD WINAPI install_hook(void*) {
     } else {
         boot_log_line(
             "rejected Nadine holster/transform runtime probes disabled");
+    }
+    if constexpr (kEnableLegacyNadineHolsterIkVerification &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        install_nadine_holster_ik_probe();
     }
     if constexpr (kEnableLegacyNadinePistolHipAttachment &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
