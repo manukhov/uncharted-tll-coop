@@ -17463,6 +17463,47 @@ non-matching head selects E3 and the already-isolated joint-42 layer provenance.
 No observer-camera repetition may return, and there must be no deformation,
 crash, ADS/locomotion regression or measurable frame-time degradation.
 
+### 2026-08-08 RUNTIME REJECTED / STATIC IMPLEMENTED: `ze` reaches the cached target but did not prove solver consumption (`zf`)
+
+The user reports that build `ze` still does not synchronize the two copies.
+Both process logs nevertheless contain fresh, changing
+`GESTURE-CACHED-TARGET-APPLY` rows for the exact idle/run LookAt gestures and
+both positive and negative peer `forward.y` / reference-local Y. This rejects
+E1 as a complete fix, but it does **not** yet select the joint-42 overwrite:
+the hook logged every matching StepAngles entry before checking whether stock
+StepAngles actually consumed that invocation.
+
+Three independent static facts expose the remaining ambiguity. First,
+`AnimNodeGesture_StepAngles 0x141FFEDB0` validates cache `node+0xF0`, compares
+cache generation `+0x4` with `node+0xDC`, and returns at `0x141FFEE23` whenever
+cache epoch `+0x18` already equals `g_LocalPlayerInputManager+0x50`. Second,
+the closure slot `+0x8` call at `0x141FFEF42` and
+`Gesture_ComputeAnglesFromTargetAndReference 0x141FD38B0` are strictly after
+that gate. Third, the only writes to the values subsequently read by
+`AnimNodeGesture_SelectGestureAnims 0x141FFE100` are the final
+`node+0x80/+0x84` stores at `0x141FFF0C6/0x141FFF0D5`, followed by the cache
+epoch store at `0x141FFF109`.
+
+The competing hypotheses are therefore **F1 (leading):** the logged `ze`
+entries were duplicate same-epoch calls and the temporary target was never
+consumed; **F2:** the live solver consumes the target but produces unchanged or
+wrongly mapped angles; **F3:** the two angles change sender-correctly and the
+later clip/layer path overwrites neck joint 42.
+
+Build `2026-08-08zf` admits target substitution only when cache generation is
+valid and `cache+0x18 != current epoch`, exactly mirroring the native guards.
+After the stock call it records the epoch transition and the two node angles in
+a bounded `GESTURE-ANGLE-CONSUME` row. The relay remains limited to the exact
+fixed LookAt ids, screen-1 Player owner, fresh non-ADS PeerFreeLook and the
+synchronous closure lifetime.
+
+**Falsifiable prediction:** every emitted row must say `consumed=1` and advance
+the cache epoch. Angles that follow the sender sweep while the visible head
+does not select F3 and authorize the isolated joint-42 merge provenance; zero
+rows or `consumed=0` selects F1 and requires moving the relay behind the epoch
+gate. Consumed but invariant or axis-inconsistent angles select F2. No crash,
+deformation, observer-camera recoupling or performance regression is allowed.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

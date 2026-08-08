@@ -2745,12 +2745,21 @@ Do not reopen these as the first move:
       fresh, strongly changing peer vectors and observer-camera repetition
       stopped, but the two copies did not match. Closure+0x30 is reference-local,
       while `zd` incorrectly wrote a world point and forced `w=1`.
-- [ ] Run build `ze`, which preserves the confirmed live StepAngles seam but
+- [x] Run build `ze`, which preserves the confirmed live StepAngles seam but
       inverse-rotates peer world forward by the exact current reference-world
       quaternion `Player(+0x120 * +0x140)`, scales the reference-local vector by
       the stock local norm and preserves stock `w`. Exact sender match confirms
       E1; a stable inversion/axis swap selects quaternion convention E2; an
       independently moving mismatch selects the joint-42/layer-merge fork E3.
+      **REJECTED AS A COMPLETE FIX:** the user still sees no synchronization;
+      logs prove changing admitted targets but did not prove that the native
+      epoch gate let those particular StepAngles calls reach the solver.
+- [ ] Run build `zf` once with sender sky -> ground -> sky. Its exact native
+      stale-epoch admission must emit `GESTURE-ANGLE-CONSUME consumed=1`, an
+      epoch transition and changing `node+0x80/+0x84`. No rows selects the wrong
+      per-epoch invocation; consumed invariant/wrong-axis angles select the
+      target mapping; consumed sender-correct angles with no visible motion
+      select the first joint-42 layer overwrite at/after `0x14172C647`.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

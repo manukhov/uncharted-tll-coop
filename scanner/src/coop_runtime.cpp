@@ -11659,6 +11659,50 @@ std::int64_t __fastcall hooked_anim_node_gesture_step_angles(
             : 0;
     }
 
+    // StepAngles is allowed to be entered more than once for the same shared
+    // frame epoch, but only the first stale-cache entry reaches the closure and
+    // angle solver.  Do not report or substitute a target for a duplicate call:
+    // the stock function would return at 0x141FFEE23 before consuming it.
+    if (readable_bytes(static_cast<const std::byte*>(node) + 0xF0) <
+            sizeof(void*) ||
+        readable_bytes(static_cast<const std::byte*>(node) + 0xDC) <
+            sizeof(std::uint32_t)) {
+        return g_original_anim_node_gesture_step_angles != nullptr
+            ? g_original_anim_node_gesture_step_angles(node, compute_args)
+            : 0;
+    }
+    void* const angle_cache = *reinterpret_cast<void* const*>(
+        static_cast<const std::byte*>(node) + 0xF0);
+    void* const input_manager = *reinterpret_cast<void* const*>(
+        g_module + kFrameStateGlobalRva);
+    if (angle_cache == nullptr || input_manager == nullptr ||
+        readable_bytes(angle_cache) < 0x20 ||
+        readable_bytes(static_cast<const std::byte*>(input_manager) + 0x50) <
+            sizeof(std::uint64_t)) {
+        return g_original_anim_node_gesture_step_angles != nullptr
+            ? g_original_anim_node_gesture_step_angles(node, compute_args)
+            : 0;
+    }
+    const std::int32_t cache_generation =
+        *reinterpret_cast<const std::int32_t*>(
+            static_cast<const std::byte*>(angle_cache) + 0x4);
+    const std::uint32_t node_generation =
+        *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(node) + 0xDC);
+    const std::uint64_t epoch_before =
+        *reinterpret_cast<const std::uint64_t*>(
+            static_cast<const std::byte*>(angle_cache) + 0x18);
+    const std::uint64_t current_epoch =
+        *reinterpret_cast<const std::uint64_t*>(
+            static_cast<const std::byte*>(input_manager) + 0x50);
+    if (cache_generation < 0 ||
+        static_cast<std::uint32_t>(cache_generation) != node_generation ||
+        epoch_before == current_epoch) {
+        return g_original_anim_node_gesture_step_angles != nullptr
+            ? g_original_anim_node_gesture_step_angles(node, compute_args)
+            : 0;
+    }
+
     const ULONGLONG now = GetTickCount64();
     const ULONGLONG received =
         g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
@@ -11722,6 +11766,11 @@ std::int64_t __fastcall hooked_anim_node_gesture_step_angles(
     target_local[3] = stock_target[3];
     const float peer_target[3]{
         target_local[0], target_local[1], target_local[2]};
+    const float angles_before[2]{
+        *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(node) + 0x80),
+        *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(node) + 0x84)};
 
     const std::int64_t result =
         g_original_anim_node_gesture_step_angles != nullptr
@@ -11733,6 +11782,20 @@ std::int64_t __fastcall hooked_anim_node_gesture_step_angles(
     // unchanged for local/campaign consumers.
     std::memcpy(target_local, stock_target, sizeof(stock_target));
 
+    const float angles_after[2]{
+        *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(node) + 0x80),
+        *reinterpret_cast<const float*>(
+            static_cast<const std::byte*>(node) + 0x84)};
+    const std::uint64_t epoch_after =
+        *reinterpret_cast<const std::uint64_t*>(
+            static_cast<const std::byte*>(angle_cache) + 0x18);
+    const std::uint64_t manager_epoch_after =
+        *reinterpret_cast<const std::uint64_t*>(
+            static_cast<const std::byte*>(input_manager) + 0x50);
+    const bool consumed = epoch_after != epoch_before &&
+        epoch_after == manager_epoch_after;
+
     static std::atomic<ULONGLONG> last_log_ms{0};
     static std::atomic<unsigned> log_count{0};
     ULONGLONG previous = last_log_ms.load(std::memory_order_relaxed);
@@ -11741,9 +11804,14 @@ std::int64_t __fastcall hooked_anim_node_gesture_step_angles(
             previous, now, std::memory_order_relaxed) &&
         log_count.fetch_add(1, std::memory_order_relaxed) < 64) {
         std::ostringstream line;
-        line << "GESTURE-CACHED-TARGET-APPLY gesture=0x" << std::hex
+        line << "GESTURE-ANGLE-CONSUME gesture=0x" << std::hex
              << gesture_id << " seq=" << peer.sequence << std::dec
              << " age=" << (now - received)
+             << " consumed=" << (consumed ? 1 : 0)
+             << " epoch=" << epoch_before << "->" << epoch_after
+             << "/" << manager_epoch_after
+             << " angles=(" << angles_before[0] << "," << angles_before[1]
+             << ")->(" << angles_after[0] << "," << angles_after[1] << ")"
              << " stock=(" << stock_target[0] << "," << stock_target[1]
              << "," << stock_target[2] << ") peer=(" << peer_target[0] << ","
              << peer_target[1] << "," << peer_target[2] << ") forward=("
@@ -48046,8 +48114,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-08ze "
-        "(reference-local cached Gesture TargetLookAt relay)");
+        "TLL co-op runtime init 2026-08-08zf "
+        "(epoch-consumed cached Gesture TargetLookAt relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
