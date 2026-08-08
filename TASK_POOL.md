@@ -2754,12 +2754,20 @@ Do not reopen these as the first move:
       **REJECTED AS A COMPLETE FIX:** the user still sees no synchronization;
       logs prove changing admitted targets but did not prove that the native
       epoch gate let those particular StepAngles calls reach the solver.
-- [ ] Run build `zf` once with sender sky -> ground -> sky. Its exact native
+- [x] Run build `zf` once with sender sky -> ground -> sky. Its exact native
       stale-epoch admission must emit `GESTURE-ANGLE-CONSUME consumed=1`, an
       epoch transition and changing `node+0x80/+0x84`. No rows selects the wrong
       per-epoch invocation; consumed invariant/wrong-axis angles select the
       target mapping; consumed sender-correct angles with no visible motion
       select the first joint-42 layer overwrite at/after `0x14172C647`.
+      **CONFIRMED / F3 SELECTED:** both processes advanced the exact native epoch
+      with `consumed=1`; angles followed opposite sender sweeps through authored
+      limits near `(-89,-49)` and `(89,+49)`, yet the visible head did not sync.
+- [ ] Starting at `AnimControl_CreateAnimCommands 0x14172C370`, resolve the exact
+      registry/layer source, mask and weights feeding inter-layer cmd7 at
+      `0x14172C647`. Find the first post-LookAt writer of neck joint 42 and prove
+      its Player/screen ownership before changing runtime behavior. Do not revisit
+      packet, quaternion, StepAngles or clip-membership hypotheses.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

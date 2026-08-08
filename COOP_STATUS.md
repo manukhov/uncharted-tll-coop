@@ -17504,6 +17504,32 @@ rows or `consumed=0` selects F1 and requires moving the relay behind the epoch
 gate. Consumed but invariant or axis-inconsistent angles select F2. No crash,
 deformation, observer-camera recoupling or performance regression is allowed.
 
+### 2026-08-08 RUNTIME CONFIRMED / REJECTED: `zf` proves sender angles are consumed; visible neck pose is overwritten downstream
+
+The user again saw no visible head synchronization, but build `zf` resolves the
+previous ambiguity conclusively. Both PIDs emitted only native-gate-admitted
+`GESTURE-ANGLE-CONSUME` rows with `consumed=1`; every sampled cache epoch moved
+from the previous value to the current `g_LocalPlayerInputManager+0x50` value.
+Therefore F1 (duplicate calls never reaching the solver) is **REJECTED**.
+
+The solver output also tracks the relayed sender direction rather than staying
+invariant. During the opposite vertical sweeps, PID 2060 received
+`localForward.y` down to approximately `-0.75` and drove the node to the authored
+limits near `(-89,-49)`, while PID 11980 received `localForward.y` up to
+approximately `+0.98` and drove it near `(89,+49)`. Intermediate rows moved
+through non-saturated values. This independently rejects F2 (wrong or invariant
+target-to-angle mapping) and confirms the complete transport -> cached target ->
+solver -> `node+0x80/+0x84` route.
+
+The absence of visible synchronization despite those sender-correct node angles
+selects F3: the fixed LookAt clip contribution to authored neck joint 42 is
+suppressed or overwritten after `AnimNodeGesture_SelectGestureAnims
+0x141FFE100`. Do not change packet transport, quaternion conversion, the
+StepAngles seam or the nine fixed LookAt clips again. The next static target is
+the first later command/layer merge that writes joint 42, beginning with the
+inter-layer cmd7 emitted at `AnimControl_CreateAnimCommands+0x2D7
+(0x14172C647)`; identify its exact source and mask before any new runtime test.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge
