@@ -17530,6 +17530,47 @@ the first later command/layer merge that writes joint 42, beginning with the
 inter-layer cmd7 emitted at `AnimControl_CreateAnimCommands+0x2D7
 (0x14172C647)`; identify its exact source and mask before any new runtime test.
 
+### 2026-08-08 STATIC CORRECTION / IMPLEMENTED: `zf` proved consumption but used the opposite camera axis (`zg`)
+
+The immediate F3 selection above is too strong and is superseded by a concrete
+axis error visible in the same `zf` evidence. The relayed `camera_quat` is not
+from the older camera-facing body-yaw convention. Its primary sender source is
+`copy_local_pose_seed_32` / route pose seed `+0x10`, and the fallback reads the
+same gameplay-camera pose family. Three already-resolved native consumers
+independently expand this quaternion as local **positive Z**:
+
+1. `PlayerAimController_GetTargetPointFromReticle 0x140CB1720` computes
+   `q*(0,0,+1)*inverse(q)` for the reticle target;
+2. `PlayerGrenadeController_ProjectPointAlongCameraForward 0x140E1B550` uses
+   the same positive-Z forward;
+3. `PlayerStrafeController_UpdateStrafeIk 0x14100B370` expands positive Z before
+   taking `forward.y` for the procedural head/spine pitch.
+
+Build `zf` instead called `quat_forward_neg_z`. Its runtime result matches this
+mistake specifically: when the sender approached a vertical extreme, the local
+target pointed behind the gesture reference and the first solver angle remained
+clamped near `-89` on PID 2060 or `+89` on PID 11980. That systematic horizontal
+saturation is not evidence that a later layer erased a correct LookAt pose.
+Moreover, build `zd` had already changed visible behavior by removing observer-
+camera repetition, independently proving that this Gesture contribution can
+reach the rendered hierarchy.
+
+The corrected alternatives are **Z1 (leading):** the opposite forward axis is
+the remaining mismatch; **Z2:** positive Z reaches reasonable node angles but a
+later layer still suppresses neck 42; **Z3:** the reference-local conversion has
+another convention mismatch. Build `2026-08-08zg` changes only this one operation
+to `quat_forward_pos_z`; the exact stale-epoch gate, screen-1 owner, fixed LookAt
+ids, fresh non-ADS packet, inverse reference rotation and synchronous restore
+remain unchanged.
+
+**Falsifiable prediction:** a stationary sender sky -> ground -> sky sweep must
+still emit `consumed=1`, but the first angle must no longer remain systematically
+clamped at the backward-facing `+/-89` limit. The visible remote head must follow
+the sender on the opposite copy without repeating the observer. Correct node
+angles with no visible response select Z2 and resume the isolated joint-42 merge
+audit; persistent axis inversion selects Z3. No crash, deformation, ADS or
+performance regression is allowed.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

@@ -2768,6 +2768,15 @@ Do not reopen these as the first move:
       `0x14172C647`. Find the first post-LookAt writer of neck joint 42 and prove
       its Player/screen ownership before changing runtime behavior. Do not revisit
       packet, quaternion, StepAngles or clip-membership hypotheses.
+      **PARKED AFTER AXIS CORRECTION:** F3 was selected too early. The admitted
+      `camera_quat` is route-pose positive-Z, while `zf` expanded negative Z and
+      systematically clamped gesture yaw at `+/-89`. Resume this merge audit
+      only if corrected build `zg` produces reasonable sender angles without a
+      visible result.
+- [ ] Run build `zg`: stationary non-ADS sender sky -> ground -> sky while the
+      observer camera remains elsewhere. Require `consumed=1`, removal of the
+      systematic backward `+/-89` yaw saturation, sender-correct visible head
+      direction and no observer-camera repetition, deformation, crash or lag.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

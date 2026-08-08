@@ -11718,7 +11718,11 @@ std::int64_t __fastcall hooked_anim_node_gesture_step_angles(
     float forward_x = 0.0F;
     float forward_y = 0.0F;
     float forward_z = 0.0F;
-    quat_forward_neg_z(peer.camera_quat, forward_x, forward_y, forward_z);
+    // camera_quat is captured from the route pose seed.  The native reticle,
+    // aim-target and StrafeIK consumers all expand that quaternion along local
+    // +Z; using the older camera-facing -Z convention drives this gesture grid
+    // exactly backwards and clamps its yaw near +/-89 degrees.
+    quat_forward_pos_z(peer.camera_quat, forward_x, forward_y, forward_z);
     const float forward_length = std::sqrt(
         forward_x * forward_x + forward_y * forward_y +
         forward_z * forward_z);
@@ -48114,8 +48118,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-08zf "
-        "(epoch-consumed cached Gesture TargetLookAt relay)");
+        "TLL co-op runtime init 2026-08-08zg "
+        "(positive-Z epoch-consumed Gesture TargetLookAt relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
