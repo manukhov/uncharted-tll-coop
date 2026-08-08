@@ -3502,6 +3502,18 @@ Do not reopen these as the first move:
       correlates the exact family result with the next same-thread remap input,
       logs both return RVAs, and compares stock/leg remap keys and clip pointers
       without animation mutation. Run the written `gk` discriminator next.
+- [ ] Test build `zh`, which supersedes the per-row Hlookup branch with the
+      engine's authored knowledge boundary. Static DC00 comparison proves the
+      four compatible female/Nadine looks share one exact 323-row table; its 153
+      overlaps with Chloe are precisely 144 holster/unholster mappings plus nine
+      entries in the table's leading weapon/grip block. The runtime commits
+      shipped record `0x6567DEA7`
+      into only the retained legacy-Nadine `player-mesh` slot and combines it
+      with the already proven slot-1 final selector redirect to native
+      `pistolHolster`. Written positive/negative predictions are in
+      `COOP_STATUS.md`. Test pistol Put and active pistol/rifle grip first. Cold
+      spawn rifle and ProcessWeaponStrap are explicitly out of scope and should
+      remain unchanged in `zh`.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

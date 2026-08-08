@@ -374,11 +374,37 @@ def compare_player_mesh_rows(
     pattern = re.compile(name_regex) if name_regex is not None else None
     shown = 0
     matched = 0
+    control_stats = {
+        label: {
+            "source_hits": 0,
+            "source_misses": 0,
+            "same_target": 0,
+            "different_target": 0,
+            "same_tail": 0,
+            "different_tail": 0,
+        }
+        for label in compare_looks
+    }
     for source_id, target_id, offset, tail in base_rows:
         source_name = "|".join(known_names.get(source_id, []))
         if pattern is not None and not pattern.search(source_name):
             continue
         matched += 1
+        for label in compare_looks:
+            hits = control_by_source[label].get(source_id, [])
+            stats = control_stats[label]
+            if not hits:
+                stats["source_misses"] += 1
+                continue
+            stats["source_hits"] += 1
+            if any(control_target == target_id for control_target, _, _ in hits):
+                stats["same_target"] += 1
+            else:
+                stats["different_target"] += 1
+            if any(control_tail == tail for _, _, control_tail in hits):
+                stats["same_tail"] += 1
+            else:
+                stats["different_tail"] += 1
         if shown >= limit:
             continue
         target_name = "|".join(known_names.get(target_id, []))
@@ -404,6 +430,17 @@ def compare_player_mesh_rows(
         f"compared_base_rows={len(base_rows)} matched={matched} "
         f"shown={shown} limit={limit}"
     )
+    for label in compare_looks:
+        stats = control_stats[label]
+        print(
+            f"control_summary={label!r} "
+            f"source_hits={stats['source_hits']} "
+            f"source_misses={stats['source_misses']} "
+            f"same_target={stats['same_target']} "
+            f"different_target={stats['different_target']} "
+            f"same_tail={stats['same_tail']} "
+            f"different_tail={stats['different_tail']}"
+        )
 
 
 def collect_gesture_target_types(data: bytes) -> dict[int, int]:

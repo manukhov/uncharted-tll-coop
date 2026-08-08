@@ -604,7 +604,8 @@ FUNCTIONS = {
     0x1410D6AD0: (
         "Player_ApplyLook2MeshKnowledge",
         "Resolves Player+0x15A0 as a Look2, formats the exact "
-        "player-mesh/<Look2-name> registry key, and commits the resolved record "
+        "typed dashed player-mesh/Look2-name registry key, and commits the "
+        "resolved record "
         "through the wrapper at [Player+0x1A0]+0x60 into the Player master "
         "animation-overlay state, with player-mesh/default as fallback. Also "
         "commits mesh/default and female/default. Called during top-level Player "
@@ -1484,7 +1485,9 @@ FUNCTIONS = {
     0x141764B50: (
         "SortedIdPointerTable_Find",
         "Binary-searches the sorted uint32 id array at +0x8 and returns the "
-        "parallel pointer-array entry at +0x10 for an exact match.",
+        "parallel uint32 value/index entry at +0x10 for an exact match. "
+        "CommitResolvedKnowledgeRecordIntoSinkSlot uses that returned index "
+        "to select the sink's value and record-pointer arrays.",
     ),
     0x1418A0EB0: (
         "AnimStateLayer_CopyParametersToFirstInstance",

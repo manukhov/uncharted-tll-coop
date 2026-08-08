@@ -17908,3 +17908,65 @@ Role A applied Nadine sequences only to retained owner1, including matching
 `TRACER-VISUAL-ORIGIN` rows with direction `dot=1.00000`. Chloe-to-Nadine fire
 remained visible. The old role flag was therefore the sole cause of the one-way
 behavior; retained owner0/owner1 is the confirmed symmetric identity boundary.
+
+### 2026-08-09 STATIC: restore authored Nadine player-mesh knowledge and hip attachment (`2026-08-09zh`)
+
+The current legacy Nadine is rendered onto a Chloe-born `Player`; the problem is
+visible on her own copy and is therefore not a network-state defect. Four
+symptoms must remain separately falsifiable: pistol-to-back, the free arm crossing
+the torso, the cold-spawn rifle glued to the hand, and the missing/intersecting
+rifle strap.
+
+The leading hypothesis **Nmesh** is now supported by three independent evidence
+types:
+
+1. `Player_ApplyLook2MeshKnowledge 0x1410D6AD0` reads the internal Look2 at
+   `Player+0x15A0`, formats the typed `player-mesh` knowledge key and commits its
+   record through `Player+0x1A0 -> +0x60`. The compatibility renderer changes the
+   visible legacy look at `+0x170/+0x190` to `nadine-rural 0xD27C074F`, but never
+   changes `+0x15A0`; stock animation knowledge therefore remains Chloe's.
+2. A reproducible DC00 comparison of the installed
+   `player-mesh-overlays.bin` proves that `vill-nadine-08`, `vill-nadine-10`,
+   `vill-nadine-12` and `fh-chloe-08` share one byte-identical 323-row table.
+   Chloe has 979 rows. Their exact intersection is 153 sources, and all 153 map
+   to a different target: 144 are the complete `p-holster-chest` /
+   `p-unholster-chest` family (Chloe back versus Nadine leg), while the remaining
+   nine sit in the table's contiguous leading weapon/grip block. The named
+   non-holster row is
+   `lg2h-shotgun-upgrade-aim-hands -> clo-gun-grip-opener--add` for Chloe versus
+   `multi-fem-lg2h-shotgun-upgrade-aim-hands` for Nadine. All but that grip row
+   preserve the 32-byte row tail exactly.
+3. `CommitResolvedKnowledgeRecordIntoSinkSlot 0x1417F9150` resolves the sink slot
+   by `record+0x0C`, writes `record+0x10` and the record pointer into the parallel
+   arrays, then refreshes derived state. The shipped `vill-nadine-08` record is
+   independently identified as object `0x6567DEA7`, slot key
+   `player-mesh 0x675A8F15`. `SortedIdPointerTable_Find 0x141764B50` lets the
+   runtime verify the current record and avoid per-frame commits. This changes
+   neither Look2 nor body/render identity.
+
+The physical endpoint is a separate, already observed boundary. Exact legacy-
+Nadine standard-pistol Put executes the selector sequence
+`targSpinePropAnim 0xBBACEF13 -> targSpineProp 0x00AD047A`; the existing scoped
+redirect changes only the final slot-1 request to the native copied
+`pistolHolster 0x8A0249B5`. Prior tests proved that attachment-only redirection
+does not fix the Chloe back animation, while row-only redirection produces leg
+clips but leaves final holster IK invalid. Build `zh` combines the two authored
+sides without enabling any rejected renderer/transform probes.
+
+Competing hypotheses remain explicit. **Nattach-only** is rejected by the prior
+16->41 attachment test with unchanged back motion. **Narm** says Player GunMove /
+ArmBlock retargeting is independently wrong and predicts that the second arm
+will remain broken even after the authored table is active. **Ncold-rifle** says
+the spawn rifle is a skipped Draw-state initialization, and **Nstrap** says the
+sling is the separate art-gated `ProcessWeaponStrap`; both predict no change to
+those two symptoms in this build.
+
+Falsifiable runtime prediction: each process containing legacy Nadine must emit
+one bounded `NADINE-PLAYER-MESH` row with record `0x6567DEA7`, key `0x675A8F15`
+and status 1 (new commit) followed at most by stable status 2. A standard pistol
+Put must animate toward and settle at the thigh rather than the back. If the
+authored weapon/grip block owns the observed active-pose defect, the free arm/weapon
+grip improves; if it does not, **Narm** wins without invalidating the holster
+repair. The cold-spawn rifle and sling are expected to remain unchanged and will
+be handled in separate builds. A crash, body corruption, lost locomotion or a
+missing knowledge record falsifies the repair and requires rollback.
