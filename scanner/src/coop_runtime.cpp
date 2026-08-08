@@ -11586,6 +11586,41 @@ bool is_fixed_player_look_at_gesture(std::uint32_t gesture_id) {
     }
 }
 
+void multiply_quaternions_xyzw(
+    const float a[4], const float b[4], float out[4]) {
+    out[0] = a[3] * b[0] + a[0] * b[3] +
+             a[1] * b[2] - a[2] * b[1];
+    out[1] = a[3] * b[1] - a[0] * b[2] +
+             a[1] * b[3] + a[2] * b[0];
+    out[2] = a[3] * b[2] + a[0] * b[1] -
+             a[1] * b[0] + a[2] * b[3];
+    out[3] = a[3] * b[3] - a[0] * b[0] -
+             a[1] * b[1] - a[2] * b[2];
+}
+
+bool inverse_rotate_vector_by_quaternion(
+    const float q_in[4], const float vector[3], float out[3]) {
+    const float norm_sq =
+        q_in[0] * q_in[0] + q_in[1] * q_in[1] +
+        q_in[2] * q_in[2] + q_in[3] * q_in[3];
+    if (!std::isfinite(norm_sq) || norm_sq < 0.001F) {
+        return false;
+    }
+    const float inverse_norm = 1.0F / std::sqrt(norm_sq);
+    const float qx = -q_in[0] * inverse_norm;
+    const float qy = -q_in[1] * inverse_norm;
+    const float qz = -q_in[2] * inverse_norm;
+    const float qw = q_in[3] * inverse_norm;
+    const float tx = 2.0F * (qy * vector[2] - qz * vector[1]);
+    const float ty = 2.0F * (qz * vector[0] - qx * vector[2]);
+    const float tz = 2.0F * (qx * vector[1] - qy * vector[0]);
+    out[0] = vector[0] + qw * tx + (qy * tz - qz * ty);
+    out[1] = vector[1] + qw * ty + (qz * tx - qx * tz);
+    out[2] = vector[2] + qw * tz + (qx * ty - qy * tx);
+    return std::isfinite(out[0]) && std::isfinite(out[1]) &&
+        std::isfinite(out[2]);
+}
+
 std::int64_t __fastcall hooked_anim_node_gesture_step_angles(
     void* node, void* compute_args) {
     if (node == nullptr || compute_args == nullptr || g_dll_inert ||
@@ -11618,8 +11653,7 @@ std::int64_t __fastcall hooked_anim_node_gesture_step_angles(
         *reinterpret_cast<const std::uintptr_t*>(owner) !=
             g_module + kPlayerVtableRva ||
         !player_screen_index_is(owner, kSlot1ScreenIndex) ||
-        readable_bytes(static_cast<const std::byte*>(owner) + 0x110) <
-            sizeof(float) * 4) {
+        readable_bytes(static_cast<const std::byte*>(owner) + 0x120) < 0x30) {
         return g_original_anim_node_gesture_step_angles != nullptr
             ? g_original_anim_node_gesture_step_angles(node, compute_args)
             : 0;
@@ -11653,25 +11687,41 @@ std::int64_t __fastcall hooked_anim_node_gesture_step_angles(
     forward_y /= forward_length;
     forward_z /= forward_length;
 
-    auto* const target = reinterpret_cast<float*>(
+    auto* const target_local = reinterpret_cast<float*>(
         static_cast<std::byte*>(closure) + 0x30);
-    const auto* const owner_world = reinterpret_cast<const float*>(
-        static_cast<const std::byte*>(owner) + 0x110);
     const float stock_target[4]{
-        target[0], target[1], target[2], target[3]};
-    const float dx = stock_target[0] - owner_world[0];
-    const float dy = stock_target[1] - owner_world[1];
-    const float dz = stock_target[2] - owner_world[2];
-    const float stock_radius = std::sqrt(dx * dx + dy * dy + dz * dz);
+        target_local[0], target_local[1], target_local[2], target_local[3]};
+    const float stock_radius = std::sqrt(
+        stock_target[0] * stock_target[0] +
+        stock_target[1] * stock_target[1] +
+        stock_target[2] * stock_target[2]);
     const float radius = std::isfinite(stock_radius) && stock_radius >= 0.5F &&
             stock_radius <= 100.0F
         ? stock_radius
         : 8.0F;
-    target[0] = owner_world[0] + forward_x * radius;
-    target[1] = owner_world[1] + forward_y * radius;
-    target[2] = owner_world[2] + forward_z * radius;
-    target[3] = 1.0F;
-    const float peer_target[3]{target[0], target[1], target[2]};
+    const auto* const owner_quat = reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(owner) + 0x120);
+    const auto* const reference_quat = reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(owner) + 0x140);
+    float reference_world_quat[4]{};
+    multiply_quaternions_xyzw(
+        owner_quat, reference_quat, reference_world_quat);
+    const float peer_world_forward[3]{forward_x, forward_y, forward_z};
+    float peer_local_forward[3]{};
+    if (!inverse_rotate_vector_by_quaternion(
+            reference_world_quat, peer_world_forward, peer_local_forward)) {
+        return g_original_anim_node_gesture_step_angles != nullptr
+            ? g_original_anim_node_gesture_step_angles(node, compute_args)
+            : 0;
+    }
+    target_local[0] = peer_local_forward[0] * radius;
+    target_local[1] = peer_local_forward[1] * radius;
+    target_local[2] = peer_local_forward[2] * radius;
+    // This lane is a reference-local direction/vector, not a homogeneous world
+    // point. Preserve the stock fourth component exactly.
+    target_local[3] = stock_target[3];
+    const float peer_target[3]{
+        target_local[0], target_local[1], target_local[2]};
 
     const std::int64_t result =
         g_original_anim_node_gesture_step_angles != nullptr
@@ -11681,7 +11731,7 @@ std::int64_t __fastcall hooked_anim_node_gesture_step_angles(
     // The cached closure belongs to the stock graph. Limit the substitution to
     // this one synchronous StepAngles invocation and leave its persistent target
     // unchanged for local/campaign consumers.
-    std::memcpy(target, stock_target, sizeof(stock_target));
+    std::memcpy(target_local, stock_target, sizeof(stock_target));
 
     static std::atomic<ULONGLONG> last_log_ms{0};
     static std::atomic<unsigned> log_count{0};
@@ -11697,7 +11747,9 @@ std::int64_t __fastcall hooked_anim_node_gesture_step_angles(
              << " stock=(" << stock_target[0] << "," << stock_target[1]
              << "," << stock_target[2] << ") peer=(" << peer_target[0] << ","
              << peer_target[1] << "," << peer_target[2] << ") forward=("
-             << forward_x << "," << forward_y << "," << forward_z << ")";
+             << forward_x << "," << forward_y << "," << forward_z
+             << ") localForward=(" << peer_local_forward[0] << ","
+             << peer_local_forward[1] << "," << peer_local_forward[2] << ")";
         boot_log_line(line.str().c_str());
     }
     return result;
@@ -47994,8 +48046,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-08zd "
-        "(per-frame cached Gesture TargetLookAt relay)");
+        "TLL co-op runtime init 2026-08-08ze "
+        "(reference-local cached Gesture TargetLookAt relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

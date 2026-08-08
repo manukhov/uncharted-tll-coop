@@ -2736,12 +2736,21 @@ Do not reopen these as the first move:
       present, head 43/44 and spine 26-29 are not. The steady single idle state
       has no state-transition cmd7; the next common overwrite candidate is the
       inter-layer cmd7 emitted at `0x14172C647`.
-- [ ] Run the single build-`zd` cached-target discriminator: stationary non-ADS,
+- [x] Run the single build-`zd` cached-target discriminator: stationary non-ADS,
       observer held opposite, sender sky -> ground -> sky. Require bounded
       `GESTURE-CACHED-TARGET-APPLY` with changing `forward.y` plus sender-correct
       remote head direction. APPLY without visual change selects exact joint-42
       provenance across the clip output and `0x14172C647`; no APPLY identifies
-      a gesture/owner/packet gate. Do not reopen the cache-create provider hook.
+      a gesture/owner/packet gate. **PARTIAL / REJECTED:** both PIDs applied
+      fresh, strongly changing peer vectors and observer-camera repetition
+      stopped, but the two copies did not match. Closure+0x30 is reference-local,
+      while `zd` incorrectly wrote a world point and forced `w=1`.
+- [ ] Run build `ze`, which preserves the confirmed live StepAngles seam but
+      inverse-rotates peer world forward by the exact current reference-world
+      quaternion `Player(+0x120 * +0x140)`, scales the reference-local vector by
+      the stock local norm and preserves stock `w`. Exact sender match confirms
+      E1; a stable inversion/axis swap selects quaternion convention E2; an
+      independently moving mismatch selects the joint-42/layer-merge fork E3.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

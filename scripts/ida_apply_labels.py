@@ -2798,16 +2798,20 @@ FUNCTIONS = {
     0x141FD3180: (
         "Gesture_GetComputeArgs",
         "Exact source-asserted Gesture::GetComputeArgs. Requires pOwner and "
-        "pTarget, calls target vtable slot 0 directly, stores that world target "
-        "in the cached Gesture::ApplyJointReaderFunc closure at +0x70, and "
-        "returns the 144-byte ComputeArgs reused by live post-align updates.",
+        "pTarget and calls target vtable slot 0 directly. It transforms the raw "
+        "world target into the owner/reference-local basis built from Player "
+        "+0x110/+0x120/+0x130/+0x140, stores that local vector at "
+        "Gesture::ApplyJointReaderFunc+0x30, installs the closure at "
+        "ComputeArgs+0x70, and returns the 144-byte cached record reused by "
+        "live post-align updates.",
     ),
     0x141FD3680: (
         "Gesture_GetComputeArgs_BuildStepState",
         "Gesture::ApplyJointReaderFunc vtable slot +0x8, invoked by "
-        "AnimNodeGesture_StepAngles. Resolves the target/joint reference "
-        "transforms through 0x141FD21D0/0x141FD25B0 and allocates the 144-byte "
-        "per-step gesture solver state.",
+        "AnimNodeGesture_StepAngles. Reads the cached reference-local target at "
+        "closure+0x30, resolves the current joint/reference transforms through "
+        "0x141FD21D0/0x141FD25B0 and allocates the 144-byte per-step gesture "
+        "solver state.",
     ),
     0x141FD3860: (
         "GestureApplyJointReaderFunc_ScalarDeletingDestructor",
@@ -10907,7 +10911,9 @@ DATA_NAMES = {
         "Exact MSVC RTTI Gesture::ApplyJointReaderFunc vtable installed by "
         "Gesture_GetComputeArgs. Slot +0x8 is "
         "Gesture_GetComputeArgs_BuildStepState 0x141FD3680 and is invoked by "
-        "AnimNodeGesture_StepAngles during live post-align processing.",
+        "AnimNodeGesture_StepAngles during live post-align processing. The "
+        "closure stores Player at +0x28 and its reference-local target vector "
+        "at +0x30; +0x30 is not a world-space homogeneous point.",
     ),
     0x142980958: (
         "GestureTargetLookAt_vftable",

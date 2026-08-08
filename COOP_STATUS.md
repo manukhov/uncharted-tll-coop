@@ -17420,6 +17420,49 @@ visible pose rejects C1 and selects the joint-42 clip/merge fork C2/C3. There
 must be no deformation, ADS/locomotion regression, crash or measurable frame-
 time degradation.
 
+### 2026-08-08 RUNTIME PARTIAL / REJECTED: `zd` breaks observer-camera coupling but writes the wrong coordinate space
+
+The user confirmed a material causal effect: the remote head no longer repeats
+the observing copy's camera. It still does not match the sender, so `zd` is not
+a synchronization fix. Both PIDs prove full admission rather than a missing
+packet or graph route: PID 3684 and PID 12940 emitted fresh
+`GESTURE-CACHED-TARGET-APPLY` rows for idle `0x7FB9C9AF`; sequences advanced,
+ages were normally 0--31 ms and peer `forward.y` covered strong positive and
+negative values. Thus the live StepAngles seam is CONFIRMED, while the exact
+world-point write used by `zd` is REJECTED.
+
+Static reconciliation identifies the concrete mismatch. In
+`Gesture_GetComputeArgs 0x141FD3180`, the provider's raw world target is stack
+`var_E8`. The function builds a world reference position from owner
+translation/quaternion `+0x110/+0x120` and local reference position `+0x130`,
+builds the world reference quaternion as `owner+0x120 * owner+0x140`, subtracts
+the reference position from the raw target, rotates that delta by the inverse
+reference quaternion and only then stores the result at closure `+0x30`
+(`0x141FD340D..0x141FD34E5`). Therefore `+0x30` is a reference-local vector,
+not a homogeneous world point. `zd` instead added world translation and wrote
+`w=1`; its logs also exposed sentinel/local stock values such as
+`(0,0,10000)`, independently contradicting the assumed field type.
+
+Build `2026-08-08ze` retains the confirmed StepAngles, fixed-LookAt-id and
+screen-1 owner filters but performs the native coordinate conversion. It forms
+the current reference-world quaternion from Player `+0x120/+0x140`, inverse-
+rotates peer camera world `-Z` into that basis, scales it by the norm of the
+stock local target (bounded to 0.5--100 with the existing 8-unit fallback), and
+preserves the stock fourth component. The local vector exists only for the
+synchronous stock StepAngles call and is restored afterward. This distinguishes
+**E1 (leading):** the remaining mismatch was solely world-versus-reference-
+local coordinates; **E2:** quaternion order/sign is still wrong; **E3:** the
+later neck mask/layer merge blocks exact sender ownership despite the partial
+visible response.
+
+**Falsifiable prediction:** the same stationary sky -> ground -> sky sweep must
+emit APPLY rows whose world `forward` and `localForward` both change, while the
+remote head now matches the sender on the opposite copy. A consistent inverted
+or axis-swapped response selects E2; an independently moving but still
+non-matching head selects E3 and the already-isolated joint-42 layer provenance.
+No observer-camera repetition may return, and there must be no deformation,
+crash, ADS/locomotion regression or measurable frame-time degradation.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge
