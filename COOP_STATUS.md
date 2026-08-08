@@ -17352,6 +17352,74 @@ decision not to call the runtime-rejected direct `PlayerLookAtIkController`
 free-look path. All confirmed ADS, foot-turn, projectile/tracer, traversal,
 reload, grenade and pickup relays remain unchanged.
 
+### 2026-08-08 STATIC / IMPLEMENTED: relay the cached LookAt target at live `StepAngles` (`zd`)
+
+The preceding interpretation of the absent `GESTURE-LOOK-TARGET-APPLY` line
+needs one correction: build `zb` emitted that row through `force_log_line`, but
+`kEnableRuntimeDiagnosticLogging` was `false`, so the function was compiled to
+a no-op. The missing row therefore says nothing about provider admission. The
+user's unchanged visible pose remains valid, but by itself cannot distinguish a
+blocked hook from a downstream clip/mask overwrite.
+
+The provider/cache split is now exact, with four independent static evidence
+types:
+
+1. **Cache-creation gate.** `GestureLayer_PreAlignUpdatePerGestureNode
+   0x1420F3F50` samples the old `AnimNodeGesture+0xD8` cache slot sign at
+   `0x1420F440D`. It calls `GestureLayer_BuildComputeArgsForNode 0x1420F2DC0`
+   and therefore `Gesture_GetComputeArgs 0x141FD3180` only when that old slot is
+   negative. `GestureTargetLookAt_GetTarget 0x1406F2360` is consequently a
+   cache-create/rebuild getter, not the always-live final target boundary.
+2. **Live post-align route.** `GestureLayer_PostAlignUpdatePerGestureNode
+   0x1420F4700` accepts a non-negative node cache slot, finds the saved
+   144-byte ComputeArgs record and calls `AnimNodeGesture_StepAngles
+   0x141FFEDB0` at `0x1420F488C`. StepAngles independently guards the shared
+   frame epoch, then updates node angles `+0x80/+0x84`; this is the recurring
+   consumer that the late-installed build-`zb` provider hook missed.
+3. **Exact closure/field identity.** `Gesture_GetComputeArgs` creates RTTI
+   `Gesture::ApplyJointReaderFunc` vtable `0x142BBECC0`, storing its exact Player
+   owner at closure `+0x28` and the provider-derived world target at `+0x30`.
+   StepAngles invokes vtable slot `+0x8`,
+   `Gesture_GetComputeArgs_BuildStepState 0x141FD3680`; that function reads
+   closure `+0x30` on every call while refreshing the owner/joint reference.
+4. **Authored clip masks and merge alternatives.** All nine
+   `relaxed-idle-lookat-*` clips have byte-identical group-0 programs/maps and
+   the exact MSB-first joint mask `BFFCF80070E0003E`, authoring joints
+   `{0,2-13,16-20,33-35,40-42,58-62}`. The embedded skeleton table maps
+   `neck=42`, `heada=43`, `headb=44`, `spinea-d=26-29`; therefore the clips
+   directly author neck only and move the head through hierarchy. The first
+   possible same-state overwrite is transition cmd7 at `0x14189EB87`, absent
+   in single-state steady idle; the next common candidate is the inter-layer
+   cmd7 emitted at `0x14172C647`. Type-16 GestureJointReader is read-only over
+   the already evaluated matrices and is excluded.
+
+The remaining hypotheses are now narrow. **C1 (leading):** the cached closure
+target is the stale receiver-local input, so substituting it at live StepAngles
+selects the peer-authored LookAt pose. **C2:** neck-only clip authorship is
+insufficient for the visible head in the tested skeleton. **C3:** the later
+inter-layer cmd7 overwrites joint 42. The eleven fixed Player LookAt gesture ids
+are independently enumerated from `anim-player.bin`; the targetless ADS node
+and five dynamic nodes are not in the relay set.
+
+Build `2026-08-08zd` detours only `AnimNodeGesture_StepAngles 0x141FFEDB0` with
+a register-preserving trampoline. It accepts the exact
+`Gesture::ApplyJointReaderFunc` vtable, one of the eleven fixed LookAt ids and
+an exact screen-1 Player owner. With a fresh non-ADS `PeerFreeLook` packet it
+temporarily replaces closure `+0x30` by an owner-world target along peer camera
+`-Z`, preserving the stock target radius, calls stock once, then restores the
+persistent closure. Local Player, NPC, ADS, dynamic Gestures, cache lifetime
+and downstream blending are unchanged. The always-enabled buffered logger
+emits at most 64 bounded `GESTURE-CACHED-TARGET-APPLY` rows; global diagnostic
+logging remains disabled. Release compilation succeeds.
+
+**Falsifiable prediction:** stationary non-ADS sender camera sky -> ground ->
+sky must produce APPLY rows with changing `forward.y`, and the visible remote
+head must follow the sender rather than the observer. No APPLY selects an exact
+gesture/owner/packet gate. APPLY with changing peer direction but unchanged
+visible pose rejects C1 and selects the joint-42 clip/merge fork C2/C3. There
+must be no deformation, ADS/locomotion regression, crash or measurable frame-
+time degradation.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

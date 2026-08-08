@@ -2723,12 +2723,25 @@ Do not reopen these as the first move:
       ADMISSION UNPROVEN:** both PIDs installed the exact slot, but the user saw
       no change and neither PID emitted APPLY. The same log has no post-install
       state-send/receive rows, so this does not falsify provider output.
-- [ ] Resolve whether `GestureTargetLookAt_GetTarget 0x1406F2360` runs per frame
-      or only during Gesture snapshot/cache construction, and identify the first
-      always-live screen-1 boundary carrying its cached angles/grid indices.
-      Complete the nine clip joint `ValidBits` and first later pre-cmd3 overwrite
-      audit before building another discriminator. Build `zc` removes the
-      unproven vtable hook and keeps direct LookAtIK disabled.
+- [x] Resolve whether `GestureTargetLookAt_GetTarget 0x1406F2360` runs per frame
+      or only during Gesture cache construction. The old node+0xD8 sign gate
+      proves provider/GetComputeArgs is cache-create only. Live
+      `GestureLayer_PostAlignUpdatePerGestureNode 0x1420F4700` retrieves the
+      saved ComputeArgs and calls `AnimNodeGesture_StepAngles 0x141FFEDB0` once
+      per frame epoch; its exact `Gesture::ApplyJointReaderFunc` stores Player
+      at +0x28 and cached world target at +0x30.
+- [x] Decode the nine idle LookAt clip joint masks and first later overwrite
+      candidates. All nine author the identical set
+      `{0,2-13,16-20,33-35,40-42,58-62}` / mask `BFFCF80070E0003E`: neck 42 is
+      present, head 43/44 and spine 26-29 are not. The steady single idle state
+      has no state-transition cmd7; the next common overwrite candidate is the
+      inter-layer cmd7 emitted at `0x14172C647`.
+- [ ] Run the single build-`zd` cached-target discriminator: stationary non-ADS,
+      observer held opposite, sender sky -> ground -> sky. Require bounded
+      `GESTURE-CACHED-TARGET-APPLY` with changing `forward.y` plus sender-correct
+      remote head direction. APPLY without visual change selects exact joint-42
+      provenance across the clip output and `0x14172C647`; no APPLY identifies
+      a gesture/owner/packet gate. Do not reopen the cache-create provider hook.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`

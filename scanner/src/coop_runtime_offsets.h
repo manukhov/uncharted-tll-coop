@@ -616,6 +616,11 @@ constexpr std::uintptr_t kPlayerAimBlendTickVtableSlotRva = 0x2A0B228;
 constexpr std::uintptr_t kPlayerAimBlendTickRva = 0x0CAFA20;
 constexpr std::uintptr_t kPlayerAimBlendTargetCallsiteRva = 0x0CAFB7C;
 constexpr std::uintptr_t kPlayerAimBlendTargetRva = 0x0CAE480;
+// AnimNodeGesture::StepAngles is the once-per-frame-epoch consumer of the
+// cached Gesture::ApplyJointReaderFunc closure. The closure owns the target
+// captured by TargetLookAt at +0x30 and its Player owner at +0x28.
+constexpr std::uintptr_t kAnimNodeGestureStepAnglesRva = 0x1FFEDB0;
+constexpr std::uintptr_t kGestureApplyJointReaderFuncVtableRva = 0x2BBECC0;
 // PlayerStrafeController (Player+0x1D50) concrete vtable +0x60. The Player
 // post-animation-blend phase supplies the final routed-camera/reticle Locator;
 // UpdateStrafeIk consumes its positive-Z forward.y for head/spine pitch.

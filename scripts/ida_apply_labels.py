@@ -2799,13 +2799,21 @@ FUNCTIONS = {
         "Gesture_GetComputeArgs",
         "Exact source-asserted Gesture::GetComputeArgs. Requires pOwner and "
         "pTarget, calls target vtable slot 0 directly, stores that world target "
-        "in the returned compute object, and installs its closure at +0x70.",
+        "in the cached Gesture::ApplyJointReaderFunc closure at +0x70, and "
+        "returns the 144-byte ComputeArgs reused by live post-align updates.",
     ),
     0x141FD3680: (
         "Gesture_GetComputeArgs_BuildStepState",
-        "Closure invoked by AnimNodeGesture_StepAngles. Resolves the target/joint "
-        "reference transforms through 0x141FD21D0/0x141FD25B0 and allocates the "
-        "144-byte per-step gesture solver state.",
+        "Gesture::ApplyJointReaderFunc vtable slot +0x8, invoked by "
+        "AnimNodeGesture_StepAngles. Resolves the target/joint reference "
+        "transforms through 0x141FD21D0/0x141FD25B0 and allocates the 144-byte "
+        "per-step gesture solver state.",
+    ),
+    0x141FD3860: (
+        "GestureApplyJointReaderFunc_ScalarDeletingDestructor",
+        "Gesture::ApplyJointReaderFunc vtable slot 0. Restores the exact RTTI "
+        "vtable and conditionally frees the 64-byte closure allocated by "
+        "Gesture_GetComputeArgs.",
     ),
     0x141FD38B0: (
         "Gesture_ComputeAnglesFromTargetAndReference",
@@ -2841,8 +2849,9 @@ FUNCTIONS = {
         "Gesture::TargetLookAt vtable slot 0 with ABI Vec4*(provider, out). "
         "Resolves provider+0x8/+0x10 weak owner/generation and calls Player vtable "
         "slot +0x908, with an NPC fallback, before rotating the owner-relative "
-        "point by owner+0x120 and adding world translation owner+0x110. This is "
-        "the last target boundary before fixed Gesture angle/grid selection.",
+        "point by owner+0x120 and adding world translation owner+0x110. The "
+        "result is captured when the Gesture ComputeArgs cache is created or "
+        "rebuilt; later frame epochs reuse the saved closure target.",
     ),
     0x14211EF90: (
         "Gesture_GetDesiredMaxBlend",
@@ -2967,16 +2976,18 @@ FUNCTIONS = {
     ),
     0x1420F2DC0: (
         "GestureLayer_BuildComputeArgsForNode",
-        "Builds the per-node inputs used by the gesture pre-align path and calls "
-        "Gesture_GetComputeArgs with the node's exact owner and target provider. "
-        "Its returned object is passed to AnimNodeGesture_StepAngles.",
+        "Builds the per-node inputs used by the gesture cache-create path and "
+        "calls Gesture_GetComputeArgs with the node's exact owner and target "
+        "provider. PreAlign reaches this only when the old node+0xD8 cache slot "
+        "has its sign bit set.",
     ),
     0x1420F3F50: (
         "GestureLayer_PreAlignUpdatePerGestureNode",
         "GestureLayer per-node pre-align update path. It first uses dispatch "
         "context+0x10 as a custom target; when that is null it asks GestureConfig "
         "for the settings target provider, and on failure constructs a plain "
-        "Gesture::TargetPoint before building ComputeArgs. The stock base ADS "
+        "Gesture::TargetPoint before building ComputeArgs. ComputeArgs/provider "
+        "creation is gated by the old node+0xD8 cache-slot sign bit. The stock base ADS "
         "node 0xA6448 has target type zero and no target callback, while its "
         "BaseLayer context is null, so this path supplies the plain fallback, "
         "not LookAt, AimAt or a camera provider.",
@@ -2986,6 +2997,13 @@ FUNCTIONS = {
         "Hashes AnimNodeGesture, iterates matching nodes in the selected graph "
         "and dispatches a copied 144-byte pre-align context to "
         "GestureLayer_PreAlignUpdatePerGestureNode.",
+    ),
+    0x1420F4700: (
+        "GestureLayer_PostAlignUpdatePerGestureNode",
+        "Live post-align callback for one AnimNodeGesture. For a non-negative "
+        "node+0xD8 cache slot it finds the saved 144-byte ComputeArgs record and "
+        "calls AnimNodeGesture_StepAngles at 0x1420F488C; StepAngles then guards "
+        "the shared frame epoch and consumes the cached target closure.",
     ),
     0x1420F6B30: (
         "BaseLayerGestureLayer_PreAlignUpdate",
@@ -10884,6 +10902,13 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142BBECC0: (
+        "GestureApplyJointReaderFunc_vftable",
+        "Exact MSVC RTTI Gesture::ApplyJointReaderFunc vtable installed by "
+        "Gesture_GetComputeArgs. Slot +0x8 is "
+        "Gesture_GetComputeArgs_BuildStepState 0x141FD3680 and is invoked by "
+        "AnimNodeGesture_StepAngles during live post-align processing.",
+    ),
     0x142980958: (
         "GestureTargetLookAt_vftable",
         "Unique MSVC RTTI Gesture::TargetLookAt vtable. Slot 0 is "

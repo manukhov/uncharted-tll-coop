@@ -11561,6 +11561,205 @@ bool install_player_aim_blend_tick_probe() {
 
 using PlayerLookAtSetPointFn = void(__fastcall*)(
     void* self, unsigned int slot, int param, const float* pos, float weight);
+using AnimNodeGestureStepAnglesFunction =
+    std::int64_t(__fastcall*)(void* node, void* compute_args);
+
+AnimNodeGestureStepAnglesFunction g_original_anim_node_gesture_step_angles = nullptr;
+extern bool g_puppet_net_apply;
+
+bool is_fixed_player_look_at_gesture(std::uint32_t gesture_id) {
+    switch (gesture_id) {
+    case 0x79E97A99: // run, idle-run and turn transitions
+    case 0x7FB9C9AF: // idle
+    case 0xAB8138F7: // submerged attach
+    case 0x67A4E878: // free rope
+    case 0x92E8FEC5: // vehicle lean
+    case 0x6C1B6AFA: // surface crawl
+    case 0xA6FA9B4D: // submerged vertical
+    case 0x56D6B794: // submerged locomotion
+    case 0xDC8F2CC5: // surface swim
+    case 0xB11B2085: // salvage trailer
+    case 0xEF10980E: // salvage trailer sibling
+        return true;
+    default:
+        return false;
+    }
+}
+
+std::int64_t __fastcall hooked_anim_node_gesture_step_angles(
+    void* node, void* compute_args) {
+    if (node == nullptr || compute_args == nullptr || g_dll_inert ||
+        !g_puppet_head_look_sync || !g_puppet_net_apply ||
+        !g_state_net.enabled ||
+        readable_bytes(static_cast<const std::byte*>(node) + 0xD0) < 0x10 ||
+        readable_bytes(static_cast<const std::byte*>(compute_args) + 0x70) <
+            sizeof(void*)) {
+        return g_original_anim_node_gesture_step_angles != nullptr
+            ? g_original_anim_node_gesture_step_angles(node, compute_args)
+            : 0;
+    }
+
+    const std::uint32_t gesture_id = *reinterpret_cast<const std::uint32_t*>(
+        static_cast<const std::byte*>(node) + 0xD0);
+    void* const closure = *reinterpret_cast<void* const*>(
+        static_cast<const std::byte*>(compute_args) + 0x70);
+    if (!is_fixed_player_look_at_gesture(gesture_id) || closure == nullptr ||
+        readable_bytes(closure) < 0x40 ||
+        *reinterpret_cast<const std::uintptr_t*>(closure) !=
+            g_module + kGestureApplyJointReaderFuncVtableRva) {
+        return g_original_anim_node_gesture_step_angles != nullptr
+            ? g_original_anim_node_gesture_step_angles(node, compute_args)
+            : 0;
+    }
+
+    void* const owner = *reinterpret_cast<void* const*>(
+        static_cast<const std::byte*>(closure) + 0x28);
+    if (owner == nullptr || readable_bytes(owner) < sizeof(void*) ||
+        *reinterpret_cast<const std::uintptr_t*>(owner) !=
+            g_module + kPlayerVtableRva ||
+        !player_screen_index_is(owner, kSlot1ScreenIndex) ||
+        readable_bytes(static_cast<const std::byte*>(owner) + 0x110) <
+            sizeof(float) * 4) {
+        return g_original_anim_node_gesture_step_angles != nullptr
+            ? g_original_anim_node_gesture_step_angles(node, compute_args)
+            : 0;
+    }
+
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    coop::StatePacket peer{};
+    if (received == 0 || now < received || now - received > 250 ||
+        !copy_last_peer_state_snapshot(peer) ||
+        !peer_packet_free_look_active(peer) || peer_packet_aim_active(peer)) {
+        return g_original_anim_node_gesture_step_angles != nullptr
+            ? g_original_anim_node_gesture_step_angles(node, compute_args)
+            : 0;
+    }
+
+    float forward_x = 0.0F;
+    float forward_y = 0.0F;
+    float forward_z = 0.0F;
+    quat_forward_neg_z(peer.camera_quat, forward_x, forward_y, forward_z);
+    const float forward_length = std::sqrt(
+        forward_x * forward_x + forward_y * forward_y +
+        forward_z * forward_z);
+    if (!std::isfinite(forward_length) || forward_length < 0.001F) {
+        return g_original_anim_node_gesture_step_angles != nullptr
+            ? g_original_anim_node_gesture_step_angles(node, compute_args)
+            : 0;
+    }
+    forward_x /= forward_length;
+    forward_y /= forward_length;
+    forward_z /= forward_length;
+
+    auto* const target = reinterpret_cast<float*>(
+        static_cast<std::byte*>(closure) + 0x30);
+    const auto* const owner_world = reinterpret_cast<const float*>(
+        static_cast<const std::byte*>(owner) + 0x110);
+    const float stock_target[4]{
+        target[0], target[1], target[2], target[3]};
+    const float dx = stock_target[0] - owner_world[0];
+    const float dy = stock_target[1] - owner_world[1];
+    const float dz = stock_target[2] - owner_world[2];
+    const float stock_radius = std::sqrt(dx * dx + dy * dy + dz * dz);
+    const float radius = std::isfinite(stock_radius) && stock_radius >= 0.5F &&
+            stock_radius <= 100.0F
+        ? stock_radius
+        : 8.0F;
+    target[0] = owner_world[0] + forward_x * radius;
+    target[1] = owner_world[1] + forward_y * radius;
+    target[2] = owner_world[2] + forward_z * radius;
+    target[3] = 1.0F;
+    const float peer_target[3]{target[0], target[1], target[2]};
+
+    const std::int64_t result =
+        g_original_anim_node_gesture_step_angles != nullptr
+        ? g_original_anim_node_gesture_step_angles(node, compute_args)
+        : 0;
+
+    // The cached closure belongs to the stock graph. Limit the substitution to
+    // this one synchronous StepAngles invocation and leave its persistent target
+    // unchanged for local/campaign consumers.
+    std::memcpy(target, stock_target, sizeof(stock_target));
+
+    static std::atomic<ULONGLONG> last_log_ms{0};
+    static std::atomic<unsigned> log_count{0};
+    ULONGLONG previous = last_log_ms.load(std::memory_order_relaxed);
+    if (now - previous >= 500 &&
+        last_log_ms.compare_exchange_strong(
+            previous, now, std::memory_order_relaxed) &&
+        log_count.fetch_add(1, std::memory_order_relaxed) < 64) {
+        std::ostringstream line;
+        line << "GESTURE-CACHED-TARGET-APPLY gesture=0x" << std::hex
+             << gesture_id << " seq=" << peer.sequence << std::dec
+             << " age=" << (now - received)
+             << " stock=(" << stock_target[0] << "," << stock_target[1]
+             << "," << stock_target[2] << ") peer=(" << peer_target[0] << ","
+             << peer_target[1] << "," << peer_target[2] << ") forward=("
+             << forward_x << "," << forward_y << "," << forward_z << ")";
+        boot_log_line(line.str().c_str());
+    }
+    return result;
+}
+
+bool install_anim_node_gesture_cached_target_relay() {
+    constexpr std::array<std::uint8_t, 12> kExpectedPrologue{
+        0x48, 0x8B, 0xC4, 0x57, 0x41, 0x54,
+        0x41, 0x55, 0x41, 0x56, 0x41, 0x57,
+    };
+    auto* const target = reinterpret_cast<std::uint8_t*>(
+        g_module + kAnimNodeGestureStepAnglesRva);
+    if (std::memcmp(target, kExpectedPrologue.data(),
+                    kExpectedPrologue.size()) != 0) {
+        boot_log_line("AnimNodeGesture cached-target relay SKIPPED (prologue)");
+        return false;
+    }
+
+    constexpr std::size_t kReturnJumpSize = 14;
+    auto* const trampoline = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, kExpectedPrologue.size() + kReturnJumpSize,
+        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr) {
+        boot_log_line("AnimNodeGesture cached-target relay SKIPPED (allocation)");
+        return false;
+    }
+    std::memcpy(trampoline, target, kExpectedPrologue.size());
+    auto* const jump_back = trampoline + kExpectedPrologue.size();
+    jump_back[0] = 0xFF;
+    jump_back[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(jump_back + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(jump_back + 6) =
+        reinterpret_cast<std::uintptr_t>(target + kExpectedPrologue.size());
+    FlushInstructionCache(
+        GetCurrentProcess(), trampoline,
+        kExpectedPrologue.size() + kReturnJumpSize);
+    g_original_anim_node_gesture_step_angles =
+        reinterpret_cast<AnimNodeGestureStepAnglesFunction>(trampoline);
+
+    DWORD old = 0;
+    if (!VirtualProtect(target, kExpectedPrologue.size(),
+                        PAGE_EXECUTE_READWRITE, &old)) {
+        g_original_anim_node_gesture_step_angles = nullptr;
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        boot_log_line("AnimNodeGesture cached-target relay SKIPPED (protect)");
+        return false;
+    }
+    target[0] = 0x48;
+    target[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(target + 2) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_anim_node_gesture_step_angles);
+    target[10] = 0xFF;
+    target[11] = 0xE0;
+    FlushInstructionCache(
+        GetCurrentProcess(), target, kExpectedPrologue.size());
+    DWORD ignored = 0;
+    VirtualProtect(target, kExpectedPrologue.size(), old, &ignored);
+    boot_log_line(
+        "AnimNodeGesture cached TargetLookAt relay installed (0x141FFEDB0)");
+    return true;
+}
 
 void* player_look_at_ik_controller(void* player) {
     if (player == nullptr) {
@@ -47795,8 +47994,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-08zc "
-        "(rejected Gesture TargetLookAt relay disabled)");
+        "TLL co-op runtime init 2026-08-08zd "
+        "(per-frame cached Gesture TargetLookAt relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -47914,6 +48113,7 @@ DWORD WINAPI install_hook(void*) {
             install_character_skeleton_eval_per_joint_callsite_hook();
         }
     }
+    install_anim_node_gesture_cached_target_relay();
     boot_log_line("named aim-point writer probe parked after conclusive ji");
     install_player_pickup_start_relay();
     install_pickup_request_interact_gate();
