@@ -17571,6 +17571,28 @@ angles with no visible response select Z2 and resume the isolated joint-42 merge
 audit; persistent axis inversion selects Z3. No crash, deformation, ADS or
 performance regression is allowed.
 
+### 2026-08-08 RUNTIME CONFIRMED: positive-Z cached LookAt relay synchronizes remote head direction (`zg`)
+
+The user confirmed that build `2026-08-08zg` works: the rendered remote head now
+follows the direction actually viewed on the sender copy. This completes the
+original behavioral requirement that each Player own its own head direction
+instead of repeating the observing copy's camera.
+
+The bounded runtime evidence agrees with the visual result. Both processes
+continued to emit native epoch transitions with `consumed=1`; unlike the `zf`
+negative-Z run, the solver traversed ordinary non-saturated horizontal values
+(for example approximately `-12` on PID 17116) while vertical output followed
+the peer direction. The exact one-line change from `zf` to `zg` was
+`quat_forward_neg_z -> quat_forward_pos_z`, so Z1 is **CONFIRMED**. The negative-
+Z route-camera convention is **REJECTED** for this Gesture target. Z2 (required
+post-LookAt neck overwrite fix) and Z3 (another reference-space mismatch) are
+not selected by this runtime and remain unnecessary for the confirmed path.
+
+Keep the final scope: fixed Player LookAt gestures only, screen-1 Player owner,
+fresh non-ADS `PeerFreeLook`, exact stale native epoch, reference-local target
+conversion and synchronous stock closure lifetime. Do not broaden it to ADS,
+NPCs, dynamic Gesture targets or the older body-yaw camera convention.
+
 ### 2026-08-02 RUNTIME REJECTED: duplicate projectile does not cause automatic-weapon side tracers
 
 The user fired automatic weapons under build `e` and still saw tracers emerge

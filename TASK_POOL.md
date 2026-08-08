@@ -2773,10 +2773,13 @@ Do not reopen these as the first move:
       systematically clamped gesture yaw at `+/-89`. Resume this merge audit
       only if corrected build `zg` produces reasonable sender angles without a
       visible result.
-- [ ] Run build `zg`: stationary non-ADS sender sky -> ground -> sky while the
+- [x] Run build `zg`: stationary non-ADS sender sky -> ground -> sky while the
       observer camera remains elsewhere. Require `consumed=1`, removal of the
       systematic backward `+/-89` yaw saturation, sender-correct visible head
       direction and no observer-camera repetition, deformation, crash or lag.
+      **CONFIRMED:** the user reports correct synchronization. Both PIDs retained
+      `consumed=1`; ordinary non-saturated horizontal angles returned. Positive
+      Z is the final route-camera convention for cached fixed LookAt.
 - [ ] After expansion provenance is confirmed, choose between explicit
       sender-tail transport and a deterministic intended prior-list carry. Trace
       target children Chloe local `43` (global 248) and Nadine local `97/103`
