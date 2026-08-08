@@ -18038,3 +18038,34 @@ tuning the marker; valid `back` proves the authored snapshot still selected the
 back branch; valid leg plus unchanged visible motion selects Hsolver. A crash,
 wrong owner/vtable, a marker other than -1/99, body corruption or new stutter
 invalidates the build.
+
+### 2026-08-09 RUNTIME REJECTED: the repaired leg marker is not selected (`2026-08-09zi`)
+
+Both copies reached the exact scoped write. PID 15108 and PID 2844 emitted
+`NADINE-HOLSTER-JOINT status=1` with descriptor-resolved joints `99/5` and
+control transition `-1/5 -> 99/5`. The following stock
+`PlayerWeaponAnimControl_UpdateHolsterJointTransforms 0x14108EBF0` refresh was
+not skipped: the final capture contained a nonidentity `+0x90` basis. Despite
+that, the exact result consumed by
+`PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0` remained
+`reference=0, weight=0, valid=0` with joints `99,5,-1,3`.
+
+The user observed no improvement to the pistol trajectory, cold rifle or sling,
+and the free arm became slightly more distorted. Therefore **Hmarker-full** and
+the marker-as-sufficient branch of **Hsolver are REJECTED**. The marker write is
+not merely late: stock refreshed its dependent basis, but the reducer never
+selected the leg branch that could consume it. The complete player-mesh record
+from `zh`, the `+0x78` marker write and the terminal pistol attachment redirect
+are all removed in rollback build `zj`; none belongs in the production hook set.
+
+The zero reducer now selects the snapshot reference producer as the next
+boundary, but it does **not** yet prove a Nadine-specific missing-reference bug.
+`AnimStateSnapshot_EvaluateReferenceSetMask 0x1418B3770` treats named references
+as optional clip data, so a stock Chloe positive control may also be invalid
+during a fully authored Put clip. Competing explanations are: **Hnormal-invalid**
+(both looks normally use no holster-IK reference), **Hclip-missing** (only the
+Nadine terminal leaf lacks hand/leg references), **Hblend-suppression** (a leaf
+owns them but the active blend drops them), and **Hwrong-snapshot** (the reducer
+samples a different base/transition snapshot). No new animation mutation is
+allowed until those alternatives are separated statically and a Chloe control is
+included in one bounded read-only test.

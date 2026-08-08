@@ -1927,27 +1927,13 @@ constexpr bool kEnableRejectedNadineWeaponRuntimeProbes = false;
 // Build gy resolved the cold ProcessWeapon initialization question. Do not keep
 // even a bounded diagnostic hook installed once its discriminator is complete.
 constexpr bool kEnableProcessWeaponInitProbe = false;
-// The visible legacy Nadine is still a Chloe-born Player, so stock spawn loads
-// Chloe's player-mesh animation knowledge. Replace only that authored knowledge
-// slot with the byte-identical vill-nadine-08/10/12/fh-chloe-08 table selected
-// by the shipped game for leg-holster female looks. This is independent of the
-// parked transform probes and leaves the Player Look2/body identity untouched.
-constexpr bool kEnableLegacyNadinePlayerMeshKnowledgeRepair = true;
-// Runtime build zh proved that the full Nadine player-mesh record is installed
-// but is not sufficient by itself. Keep it for one final, bounded composition
-// test while repairing the exact missing leg-holster marker consumed by stock
-// PlayerWeaponAnimControl. If the final reducer remains invalid, both mutations
-// are removed together and the reference-set producer becomes the next boundary.
-constexpr bool kEnableLegacyNadineHolsterJointMarkerRepair = true;
-// The existing ge probe observes only the final reducer output consumed by
-// PlayerWeaponAnimControl_UpdateHolsterIk. Re-enable it for this discriminator;
-// its rows are signature-deduplicated and capped per retained owner.
-constexpr bool kEnableLegacyNadineHolsterIkVerification = true;
-// The matching authored leg-holster clips must terminate at Nadine's native
-// pistolHolster attachment. The exact Put action sequence was already observed
-// as targSpinePropAnim -> targSpineProp; redirect only its final standard-pistol
-// selection for the retained legacy-Nadine Player.
-constexpr bool kEnableLegacyNadinePistolHipAttachment = true;
+// Builds zh/zi proved that replacing the complete player-mesh knowledge record,
+// forcing the missing leg marker and redirecting the final pistol attachment do
+// not alter the visible back-holster trajectory. Keep all three rejected writes
+// out of production; the next discriminator is read-only and starts at the
+// snapshot reference producer.
+constexpr bool kEnableLegacyNadineHolsterIkVerification = false;
+constexpr bool kEnableLegacyNadinePistolHipAttachment = false;
 // Builds gz/ha rejected the terminal controller rebind as the local main-view
 // fix. Build hb instead runs the full stock Put transition once: this is the
 // narrow path that also binds PlayerWeaponAnimControl, requests
@@ -17608,8 +17594,6 @@ constexpr std::uint32_t kTargSpinePropAttachId = 0x00AD047Au;
 constexpr std::uint32_t kTargSpinePropAnimAttachId = 0xBBACEF13u;
 constexpr std::uint32_t kGunHolsterAttachId = 0x555EFB8Du;
 constexpr std::uint32_t kPistolHolsterAttachId = 0x8A0249B5u;
-constexpr std::uint32_t kPlayerMeshKnowledgeSlotId = 0x675A8F15u;
-constexpr std::uint32_t kVillNadine08PlayerMeshRecordId = 0x6567DEA7u;
 constexpr std::uint32_t kSpinedJointNameId = 0xB5AFAB6Eu;
 constexpr std::uint32_t kPelvisJointNameId = 0x5C11C590u;
 constexpr std::uint32_t kRLegHolsterJointNameId = 0xADD0C871u;
@@ -17669,254 +17653,6 @@ struct NadinePistolAnimAliasResult {
     std::uint8_t after_present = 0;
     std::uint8_t transform_equal = 0;
 };
-
-struct NadinePlayerMeshKnowledgeRepairResult {
-    int status = 0;
-    std::uint32_t knowledge_id = 0;
-    std::uint32_t record_key = 0;
-    std::uint32_t record_id = 0;
-    int slot = -1;
-    void* animation_owner = nullptr;
-    void* wrapper = nullptr;
-    void* record = nullptr;
-    void* previous_record = nullptr;
-};
-
-std::int16_t raw_resolve_attach_joint(
-    std::byte* table, std::uint32_t joint_name_id);
-
-struct NadineHolsterJointMarkerRepairResult {
-    int status = 0;
-    void* attach_table = nullptr;
-    void* control = nullptr;
-    void* control_owner = nullptr;
-    std::int32_t resolved_marker = -1;
-    std::int32_t resolved_parent = -1;
-    std::int32_t before_marker = -99;
-    std::int32_t before_parent = -99;
-    std::int32_t after_marker = -99;
-};
-
-using StringIdFormatDashedPairAndHashFunction =
-    std::uint32_t*(__fastcall*)(
-        std::uint32_t*, const char*, const char*);
-using ResolvePlayerMeshKnowledgeEntryFunction =
-    void*(__fastcall*)(std::uint32_t);
-using SortedIdPointerTableFindFunction =
-    std::uint32_t*(__fastcall*)(void*, std::uint32_t);
-using CommitResolvedKnowledgeRecordIntoSinkSlotFunction =
-    bool(__fastcall*)(void*, void*);
-
-bool raw_repair_legacy_nadine_player_mesh_knowledge(
-    void* player, NadinePlayerMeshKnowledgeRepairResult* result) {
-    if (player == nullptr || result == nullptr) {
-        return false;
-    }
-
-    auto* const player_bytes = static_cast<std::byte*>(player);
-    auto* const animation_owner = *reinterpret_cast<std::byte**>(
-        player_bytes + 0x1A0);
-    if (animation_owner == nullptr || readable_bytes(animation_owner) < 0x68) {
-        result->status = -1;
-        return false;
-    }
-    void* const wrapper = *reinterpret_cast<void**>(animation_owner + 0x60);
-    if (wrapper == nullptr || readable_bytes(wrapper) < 0x18) {
-        result->status = -2;
-        return false;
-    }
-    result->animation_owner = animation_owner;
-    result->wrapper = wrapper;
-
-    const auto format_key =
-        reinterpret_cast<StringIdFormatDashedPairAndHashFunction>(
-            g_module + kStringIdFormatDashedPairAndHashRva);
-    const auto resolve_entry =
-        reinterpret_cast<ResolvePlayerMeshKnowledgeEntryFunction>(
-            g_module + kResolveKnowledgeRegistryEntryByIdRva);
-    const auto find_slot = reinterpret_cast<SortedIdPointerTableFindFunction>(
-        g_module + kSortedIdPointerTableFindRva);
-    const auto commit_record =
-        reinterpret_cast<CommitResolvedKnowledgeRecordIntoSinkSlotFunction>(
-            g_module + kCommitResolvedKnowledgeRecordIntoSinkSlotRva);
-
-    static std::uint32_t cached_knowledge_id = 0;
-    static void* cached_record = nullptr;
-    if (cached_knowledge_id == 0) {
-        format_key(
-            &cached_knowledge_id, "player-mesh", "vill-nadine-08");
-    }
-    const std::uint32_t knowledge_id = cached_knowledge_id;
-    result->knowledge_id = knowledge_id;
-    if (cached_record == nullptr || readable_bytes(cached_record) < 0x14) {
-        cached_record = nullptr;
-        void* const entry = resolve_entry(knowledge_id);
-        if (entry == nullptr || readable_bytes(entry) < sizeof(void*)) {
-            result->status = -3;
-            return false;
-        }
-        cached_record = *reinterpret_cast<void**>(entry);
-    }
-    void* const record = cached_record;
-    if (record == nullptr || readable_bytes(record) < 0x14) {
-        result->status = -4;
-        return false;
-    }
-    result->record = record;
-    result->record_key = *reinterpret_cast<const std::uint32_t*>(
-        static_cast<const std::byte*>(record) + 0x0C);
-    result->record_id = *reinterpret_cast<const std::uint32_t*>(
-        static_cast<const std::byte*>(record) + 0x10);
-    if (result->record_key != kPlayerMeshKnowledgeSlotId ||
-        result->record_id != kVillNadine08PlayerMeshRecordId) {
-        result->status = -5;
-        return false;
-    }
-
-    auto* const wrapper_words = static_cast<std::uintptr_t*>(wrapper);
-    auto* const sink = reinterpret_cast<std::byte*>(wrapper_words[0]);
-    auto* const slot_metadata = reinterpret_cast<std::byte*>(wrapper_words[2]);
-    if (sink == nullptr || slot_metadata == nullptr ||
-        readable_bytes(sink) < 0x28 || readable_bytes(slot_metadata) < 0x10) {
-        result->status = -6;
-        return false;
-    }
-    void* const sorted_table = *reinterpret_cast<void**>(slot_metadata + 0x08);
-    if (sorted_table == nullptr) {
-        result->status = -7;
-        return false;
-    }
-    const std::uint32_t* const slot_pointer =
-        find_slot(sorted_table, result->record_key);
-    if (slot_pointer == nullptr || readable_bytes(slot_pointer) < 4) {
-        result->status = -8;
-        return false;
-    }
-    const int slot = static_cast<int>(*slot_pointer);
-    const unsigned slot_count = *reinterpret_cast<const std::uint8_t*>(
-        sink + 0x24);
-    if (slot < 0 || static_cast<unsigned>(slot) >= slot_count) {
-        result->status = -9;
-        return false;
-    }
-    result->slot = slot;
-    auto* const record_slots = *reinterpret_cast<void***>(sink + 0x08);
-    if (record_slots == nullptr ||
-        readable_bytes(record_slots + slot) < sizeof(void*)) {
-        result->status = -10;
-        return false;
-    }
-    result->previous_record = record_slots[slot];
-    if (result->previous_record == record) {
-        result->status = 2;
-        return true;
-    }
-    if (!commit_record(wrapper, record)) {
-        result->status = -11;
-        return false;
-    }
-    result->status = record_slots[slot] == record ? 1 : -12;
-    return result->status > 0;
-}
-
-bool seh_repair_legacy_nadine_player_mesh_knowledge(
-    void* player, NadinePlayerMeshKnowledgeRepairResult* result) {
-    if (result == nullptr) {
-        return false;
-    }
-    *result = {};
-    __try {
-        return raw_repair_legacy_nadine_player_mesh_knowledge(player, result);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        result->status = -100;
-        return false;
-    }
-}
-
-bool raw_repair_legacy_nadine_holster_joint_marker(
-    void* player, NadineHolsterJointMarkerRepairResult* result) {
-    constexpr std::uintptr_t kExpectedControlVtableRva = 0x2A46778;
-    if (player == nullptr || result == nullptr || g_module == 0 ||
-        readable_bytes(player) < 0x1DF8) {
-        if (result != nullptr) {
-            result->status = -1;
-        }
-        return false;
-    }
-
-    auto* const player_bytes = static_cast<std::byte*>(player);
-    auto* const attach_table = *reinterpret_cast<std::byte**>(
-        player_bytes + 0x1E0);
-    auto* const control = *reinterpret_cast<std::byte**>(
-        player_bytes + 0x1DF0);
-    result->attach_table = attach_table;
-    result->control = control;
-    if (attach_table == nullptr || control == nullptr ||
-        readable_bytes(control) < 0xD0) {
-        result->status = -2;
-        return false;
-    }
-
-    const std::uintptr_t control_vtable =
-        *reinterpret_cast<const std::uintptr_t*>(control);
-    result->control_owner = *reinterpret_cast<void**>(control + 0x10);
-    if (control_vtable != g_module + kExpectedControlVtableRva ||
-        result->control_owner != player) {
-        result->status = -3;
-        return false;
-    }
-
-    result->resolved_marker = raw_resolve_attach_joint(
-        attach_table, kRLegHolsterJointNameId);
-    result->resolved_parent = raw_resolve_attach_joint(
-        attach_table, kRUpperLegJointNameId);
-    if (result->resolved_marker < 0 || result->resolved_parent < 0) {
-        result->status = -4;
-        return false;
-    }
-
-    result->before_marker = *reinterpret_cast<const std::int32_t*>(
-        control + 0x78);
-    result->before_parent = *reinterpret_cast<const std::int32_t*>(
-        control + 0x7C);
-    result->after_marker = result->before_marker;
-    if (result->before_parent != result->resolved_parent) {
-        result->status = -5;
-        return false;
-    }
-    if (result->before_marker == result->resolved_marker) {
-        result->status = 2;
-        return true;
-    }
-    // Do not replace any valid authored marker. The compatibility defect is the
-    // exact stock -1 produced by the absent Chloe-only r_leg_gun_holster name.
-    if (result->before_marker != -1) {
-        result->status = -6;
-        return false;
-    }
-
-    *reinterpret_cast<std::int32_t*>(control + 0x78) =
-        result->resolved_marker;
-    result->after_marker = *reinterpret_cast<const std::int32_t*>(
-        control + 0x78);
-    result->status =
-        result->after_marker == result->resolved_marker ? 1 : -7;
-    return result->status > 0;
-}
-
-bool seh_repair_legacy_nadine_holster_joint_marker(
-    void* player, NadineHolsterJointMarkerRepairResult* result) {
-    if (result == nullptr) {
-        return false;
-    }
-    *result = {};
-    __try {
-        return raw_repair_legacy_nadine_holster_joint_marker(player, result);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        result->status = -100;
-        return false;
-    }
-}
 
 struct alignas(16) NadineAttachTransform32 {
     std::byte bytes[32];
@@ -18597,93 +18333,6 @@ void ensure_legacy_nadine_attach_points_game_thread() {
     }
     if (target == nullptr) {
         return;
-    }
-
-    NadineHolsterJointMarkerRepairResult joint_result{};
-    if constexpr (kEnableLegacyNadineHolsterJointMarkerRepair) {
-        seh_repair_legacy_nadine_holster_joint_marker(
-            target, &joint_result);
-
-        std::uint64_t joint_signature = 1469598103934665603ULL;
-        auto mix_joint = [&joint_signature](std::uint64_t value) {
-            joint_signature ^= value;
-            joint_signature *= 1099511628211ULL;
-        };
-        mix_joint(reinterpret_cast<std::uintptr_t>(target));
-        mix_joint(reinterpret_cast<std::uintptr_t>(joint_result.control));
-        mix_joint(static_cast<std::uint32_t>(joint_result.status));
-        mix_joint(static_cast<std::uint32_t>(joint_result.before_marker));
-        mix_joint(static_cast<std::uint32_t>(joint_result.before_parent));
-        mix_joint(static_cast<std::uint32_t>(joint_result.after_marker));
-        static std::array<std::uint64_t, 2> last_joint_signatures{};
-        const std::size_t joint_memo_index = target_owner == 1 ? 1u : 0u;
-        if (last_joint_signatures[joint_memo_index] != joint_signature) {
-            last_joint_signatures[joint_memo_index] = joint_signature;
-            std::ostringstream line;
-            line << "NADINE-HOLSTER-JOINT owner=" << target_owner
-                 << " status=" << joint_result.status
-                 << " player=0x" << std::hex
-                 << reinterpret_cast<std::uintptr_t>(target)
-                 << " table=0x"
-                 << reinterpret_cast<std::uintptr_t>(
-                        joint_result.attach_table)
-                 << " control=0x"
-                 << reinterpret_cast<std::uintptr_t>(joint_result.control)
-                 << " controlOwner=0x"
-                 << reinterpret_cast<std::uintptr_t>(
-                        joint_result.control_owner)
-                 << std::dec << " resolved="
-                 << joint_result.resolved_marker << "/"
-                 << joint_result.resolved_parent << " joints="
-                 << joint_result.before_marker << "/"
-                 << joint_result.before_parent << "->"
-                 << joint_result.after_marker << "/"
-                 << joint_result.before_parent;
-            write_log_line(line.str().c_str());
-        }
-    }
-
-    NadinePlayerMeshKnowledgeRepairResult player_mesh_result{};
-    if constexpr (kEnableLegacyNadinePlayerMeshKnowledgeRepair) {
-        seh_repair_legacy_nadine_player_mesh_knowledge(
-            target, &player_mesh_result);
-
-        std::uint64_t mesh_signature = 1469598103934665603ULL;
-        auto mix_mesh = [&mesh_signature](std::uint64_t value) {
-            mesh_signature ^= value;
-            mesh_signature *= 1099511628211ULL;
-        };
-        mix_mesh(reinterpret_cast<std::uintptr_t>(target));
-        mix_mesh(reinterpret_cast<std::uintptr_t>(player_mesh_result.wrapper));
-        mix_mesh(reinterpret_cast<std::uintptr_t>(player_mesh_result.record));
-        mix_mesh(reinterpret_cast<std::uintptr_t>(
-            player_mesh_result.previous_record));
-        mix_mesh(static_cast<std::uint32_t>(player_mesh_result.status));
-        static std::array<std::uint64_t, 2> last_mesh_signatures{};
-        const std::size_t mesh_memo_index = target_owner == 1 ? 1u : 0u;
-        if (last_mesh_signatures[mesh_memo_index] != mesh_signature) {
-            last_mesh_signatures[mesh_memo_index] = mesh_signature;
-            std::ostringstream line;
-            line << "NADINE-PLAYER-MESH owner=" << target_owner
-                 << " status=" << player_mesh_result.status
-                 << " player=0x" << std::hex
-                 << reinterpret_cast<std::uintptr_t>(target)
-                 << " animOwner=0x"
-                 << reinterpret_cast<std::uintptr_t>(
-                        player_mesh_result.animation_owner)
-                 << " wrapper=0x"
-                 << reinterpret_cast<std::uintptr_t>(player_mesh_result.wrapper)
-                 << " knowledge=0x" << player_mesh_result.knowledge_id
-                 << " record=0x"
-                 << reinterpret_cast<std::uintptr_t>(player_mesh_result.record)
-                 << "/0x" << player_mesh_result.record_id
-                 << " previous=0x"
-                 << reinterpret_cast<std::uintptr_t>(
-                        player_mesh_result.previous_record)
-                 << " key=0x" << player_mesh_result.record_key
-                 << std::dec << " slot=" << player_mesh_result.slot;
-            write_log_line(line.str().c_str());
-        }
     }
 
     // Preserve the authored legacy-Nadine table before the bounded repair adds
@@ -48485,7 +48134,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09zi "
+        "TLL co-op runtime init 2026-08-09zj "
         "(legacy-Nadine leg-holster joint marker repair)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

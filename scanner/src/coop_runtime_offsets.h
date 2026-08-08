@@ -701,14 +701,6 @@ constexpr std::uintptr_t kPlayerWeaponHolsterResolveBindRva = 0x1095BD0;
 constexpr std::uintptr_t kPlayerWeaponHolsterKnowledgeLookupCallsiteRva =
     0x1095E49;
 constexpr std::uintptr_t kResolveKnowledgeRegistryEntryByIdRva = 0x1765030;
-// Authored animation-knowledge selection used by
-// Player_ApplyLook2MeshKnowledge. The formatter builds the typed dashed key
-// for (category, look-name); the sink commit replaces the matching knowledge
-// slot and refreshes its derived overlay state.
-constexpr std::uintptr_t kStringIdFormatDashedPairAndHashRva = 0x10F8660;
-constexpr std::uintptr_t kSortedIdPointerTableFindRva = 0x1764B50;
-constexpr std::uintptr_t kCommitResolvedKnowledgeRecordIntoSinkSlotRva =
-    0x17F9150;
 // Read-only final holster discriminator. The anim-control event hook exposes
 // authored named events, the binding builder exposes the selected gun_holster*
 // id and offsets, and the final mutation hook proves whether the state-script

@@ -3517,7 +3517,7 @@ Do not reopen these as the first move:
       committed record `0x6567DEA7` into slot 87 (`status=1`, then stable
       `status=2`) and installed both exact hip hooks, but the user saw no change
       in pistol motion, free arm, cold rifle or strap.
-- [ ] Test build `zi`: repair only the exact missing legacy-Nadine
+- [x] Test build `zi`: repair only the exact missing legacy-Nadine
       `PlayerWeaponAnimControl+0x78` marker from `-1` to the descriptor-proven
       `r_leg_holster` joint 99, requiring vtable `0x142A46778`, exact retained
       owner and parent joint 5. The stock `0x14108EBF0` refresh then builds the
@@ -3526,7 +3526,20 @@ Do not reopen these as the first move:
       output. Use one standard-pistol Put; classify Hmarker-full/Hreference/
       Hsolver from the written prediction in `COOP_STATUS.md`. If output remains
       invalid, remove both the now-inert marker test and the rejected full-table
-      mutation before tracing the exact reference-set producer.
+      mutation before tracing the exact reference-set producer. **RUNTIME
+      REJECTED:** both PIDs applied `-1/5 -> 99/5`, stock produced a nonidentity
+      leg basis, but the reducer stayed exactly `reference=0/weight=0/valid=0`.
+      The user saw no holster improvement and a slight new arm distortion. Build
+      `zj` removes the marker, full player-mesh and terminal attachment writes.
+- [ ] Resolve the exact snapshot reference producer before another mutation.
+      Compare stock Chloe and legacy Nadine at the same standard-pistol Put.
+      Distinguish **Hnormal-invalid** (both final masks zero), **Hclip-missing**
+      (Nadine leaf clip lacks hand/leg ids), **Hblend-suppression** (leaf succeeds
+      but a Blend node drops the result), and **Hwrong-snapshot** (the reducer
+      samples a different state/leaf). Static quota must include the concrete
+      snapshot-node vtable slot, clip `+0x30` named-reference table dataflow and
+      the active root/child topology. The eventual runtime test is read-only and
+      must contain one Chloe plus one Nadine Put, not another guessed repair.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
