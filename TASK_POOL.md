@@ -3154,7 +3154,7 @@ Do not reopen these as the first move:
       role-A Chloe saw that same Nadine rifle correctly on her back. This proves
       the remaining artifact belongs to a local-main-view presentation path,
       not weapon selection, authored Draw/Put, IK/overlay setup or attachment.
-- [ ] Trace the local-main-view weapon presentation lifecycle statically. Start
+- [x] Trace the local-main-view weapon presentation lifecycle statically. Start
       from `Player_UpdateMainViewVisibilityForAttachmentsAndWeapons 0x140C990A0`,
       `PlayerWeaponController_DisableWeaponsInMainView 0x1410A01F0`, and the
       adjacent controller vtable slot `+0x378 = 0x1410A08A0`. Resolve the writers
@@ -3162,6 +3162,16 @@ Do not reopen these as the first move:
       ProcessWeapon consumers, and the first state that differs between local
       role-B Nadine and role-A's correct observed Nadine. Do not launch until
       three independent evidence types separate this path from another owner.
+      COMPLETE for `zu`: the false writer is exact `DontRenderThisFrame`; RTTI
+      resolves `ProcessWeapon_EventHandler 0x1415116C0` and
+      `ProcessWeaponBase_EventHandler 0x1414FBE10`, including strap forwarding.
+- [ ] Run the bounded `zu` discriminator at cold role-B Nadine spawn. Require one
+      successful exact-rifle `DisableMainView` row. Disappearance only in the
+      Nadine local view selects the inventory weapon's separate main-view
+      representation; unchanged pixels select Player look/mesh or another actor.
+      Do not draw the rifle unless testing the authored restore path. Release
+      build is ready; IDB labels are saved and independently verified through
+      the restarted MCP.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

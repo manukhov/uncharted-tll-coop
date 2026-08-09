@@ -1860,6 +1860,7 @@ float g_state_loopback_offset_x = 0.0F;
 std::size_t readable_bytes(const void* p);
 bool world_stable();
 bool player_object_stable(void* player);
+bool seh_read_player_look(void* player, std::uint32_t* look_out);
 bool valid_network_position(const float* position);
 bool valid_network_orientation(const float* quaternion);
 void publish_fire_packet(const coop::FirePacket& packet);
@@ -1950,6 +1951,12 @@ constexpr bool kEnableWeaponPartialNormalRequestProbe = false;
 // local-main-view-only, so leave this controller experiment disabled while the
 // separate per-view weapon presentation path is traced.
 constexpr bool kEnableInitialLocalNadineRifleFullDrawThenHolster = false;
+// Build zu: the stock weapon-controller lifecycle, physical attachment, exact
+// ProcessWeapon DrawControl and both FgDraw prepare paths have all been rejected
+// as owners of the cold role-B local image. The remaining view-specific stock
+// boundary publishes DisableMainView to ProcessWeapon actors. Keep this narrow
+// discriminator separate from the rejected renderer/attachment probes.
+constexpr bool kEnableInitialLocalNadineRifleMainViewDisableProbe = true;
 volatile bool g_logging_enabled = false;
 static SRWLOCK g_log_lock = SRWLOCK_INIT;
 static HANDLE g_log_handle = INVALID_HANDLE_VALUE;
@@ -34654,6 +34661,100 @@ bool player_is_remote_screen_slot(const void* player) {
            kSlot1ScreenIndex;
 }
 
+bool seh_publish_noarg_structured_event(
+    void* actor, std::uint32_t event_id) {
+    if (actor == nullptr || g_module == 0 || readable_bytes(actor) < sizeof(void*)) {
+        return false;
+    }
+    alignas(16) std::uint8_t event[0x130]{};
+    alignas(16) const std::uint8_t context[16]{};
+    const auto initialize = reinterpret_cast<InitializeStructuredEventFunction>(
+        g_module + kInitializeStructuredEventRva);
+    const auto publish = reinterpret_cast<PublishStructuredEventFunction>(
+        g_module + kPublishStructuredEventRva);
+    __try {
+        initialize(event, event_id, context);
+        return publish(event, actor, 0);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void apply_local_nadine_inactive_rifle_main_view_discriminator(void* player) {
+    if constexpr (!kEnableInitialLocalNadineRifleMainViewDisableProbe) {
+        (void)player;
+        return;
+    }
+    if (!g_net_role_b || player == nullptr ||
+        player != retained_player_object(0) || !player_object_stable(player)) {
+        return;
+    }
+
+    std::uint32_t look = 0;
+    if (!seh_read_player_look(player, &look) ||
+        look != kLegacyNadineAttachTargetLookId) {
+        return;
+    }
+    int current_slot = -99;
+    std::uint32_t draw_state = 0xFFFFFFFFu;
+    if (!read_weapon_draw_state(player, current_slot, draw_state)) {
+        return;
+    }
+    void* const rifle = get_weapon_from_slot(player, 0);
+    if (weapon_art_id_from_object(rifle) != kCoopRifleArtId) {
+        return;
+    }
+
+    constexpr std::uint32_t kDisableMainViewId = 0x196AE292u;
+    constexpr std::uint32_t kEnableMainViewId = 0xB6907664u;
+    static std::atomic<std::uintptr_t> disabled_rifle{0};
+    const std::uintptr_t rifle_value =
+        reinterpret_cast<std::uintptr_t>(rifle);
+    if (current_slot < 0 && draw_state == 0) {
+        // Stock UpdateWeaponMainViewVisibility can publish Show every visible
+        // frame. Publish the authored per-view inverse immediately afterwards so
+        // the discriminator remains observable without touching world visibility.
+        const bool published = seh_publish_noarg_structured_event(
+            rifle, kDisableMainViewId);
+        const std::uintptr_t previous = published
+            ? disabled_rifle.exchange(rifle_value, std::memory_order_acq_rel)
+            : disabled_rifle.load(std::memory_order_acquire);
+        if (published && previous != rifle_value) {
+            std::ostringstream line;
+            line << "NADINE-LOCAL-RIFLE-MAIN-VIEW action=disable"
+                 << " player=0x" << std::hex
+                 << reinterpret_cast<std::uintptr_t>(player)
+                 << " weapon=0x" << rifle_value
+                 << " art=0x" << kCoopRifleArtId << std::dec
+                 << " current=" << current_slot
+                 << " draw=" << draw_state
+                 << " published=1";
+            write_log_line(line.str().c_str());
+        }
+        return;
+    }
+
+    // Drawing slot zero must never inherit the diagnostic exclusion. Restore it
+    // through the authored inverse once the normal controller reaches WeaponOut.
+    if (current_slot == 0 && draw_state == 2 &&
+        disabled_rifle.load(std::memory_order_acquire) != 0) {
+        const bool published = seh_publish_noarg_structured_event(
+            rifle, kEnableMainViewId);
+        if (published) {
+            disabled_rifle.store(0, std::memory_order_release);
+            std::ostringstream line;
+            line << "NADINE-LOCAL-RIFLE-MAIN-VIEW action=restore"
+                 << " player=0x" << std::hex
+                 << reinterpret_cast<std::uintptr_t>(player)
+                 << " weapon=0x" << rifle_value << std::dec
+                 << " current=" << current_slot
+                 << " draw=" << draw_state
+                 << " published=1";
+            write_log_line(line.str().c_str());
+        }
+    }
+}
+
 bool seh_force_remote_player_main_view_visible(
     void* player, std::uint8_t* previous_request) {
     __try {
@@ -34684,6 +34785,7 @@ char __fastcall hooked_player_main_view_visibility_update(void* player) {
     const char result = g_original_player_main_view_visibility_update != nullptr
         ? g_original_player_main_view_visibility_update(player)
         : 0;
+    apply_local_nadine_inactive_rifle_main_view_discriminator(player);
     if (suppressed_remote_hide) {
         static ULONGLONG last_log = 0;
         const ULONGLONG now = GetTickCount64();
@@ -48750,8 +48852,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09zt "
-        "(rejected cold-rifle controller cycle disabled; main-view frontier)");
+        "TLL co-op runtime init 2026-08-09zu "
+        "(local Nadine inactive-rifle DisableMainView discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

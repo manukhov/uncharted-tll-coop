@@ -18665,3 +18665,76 @@ vtable `+0x378 = 0x1410A08A0`, the writers of `Player+0x1618/+0x1619`, and the
 matching ProcessWeapon message consumers remain to be resolved before another
 runtime test. Build marker advances to `2026-08-09zt`; the rejected `zs`
 experiment is disabled.
+
+### 2026-08-09 STATIC / IMPLEMENTED: isolate the local ProcessWeapon main-view representation (`zu`)
+
+The user's post-`zs` observation makes the camera split exact: the rifle remains
+glued like a static object to Nadine's hand only in role B's own local view,
+while role A Chloe sees the same Nadine with the same rifle correctly on her
+back. This excludes another shared attachment/controller-state repair and makes
+the remaining discriminator per-view rather than per-owner.
+
+Four independent static evidence types establish the next bounded boundary.
+First, `Player_UpdateMainViewVisibilityForAttachmentsAndWeapons 0x140C990A0` is
+the sole caller-side transition after the screen camera refresh; it dispatches
+`PlayerWeaponController` vtable `+0x370/+0x378` according to
+`Player+0x1618/+0x1619`. Second, the two exact slots are
+`PlayerWeaponController_DisableWeaponsInMainView 0x1410A01F0` and
+`PlayerWeaponController_UpdateWeaponMainViewVisibility 0x1410A08A0`; both walk
+the 23 live weapon slots, and the disable path publishes authored
+`DisableMainView 0x196AE292` plus `DisableCastShadows`, while the visible path can
+publish the exact inverse or `Show`. Third, the receiver identity is now exact:
+MSVC RTTI makes vtable `0x142A9BF48` `ProcessWeapon`, whose slot `+0x70` is
+`ProcessWeapon_EventHandler 0x1415116C0`; it handles all six visibility ids,
+calls the common `ProcessWeaponBase_EventHandler 0x1414FBE10`, and forwards them
+to the separately animated strap at `ProcessWeapon+0xAE0`. The base vtable
+`0x142A9A630` independently resolves through COL `0x142CD85D8` to
+`ProcessWeaponBase`. Fourth, prior runtime rejected exact attachment rebind,
+full Draw/WeaponOut/Put, DrawControl mesh hiding and both known FgDraw prepare
+paths while the local image remained, so this authored view event is not a
+repeat of those physical or renderer-wide mutations.
+
+The complete direct-displacement audit also closes the request-byte ambiguity.
+`Player+0x1619` is only the previous-frame cache; the stock tail copies current
+`+0x1618` into it and resets current to one. The meaningful zero writers are the
+two Player/net event handlers for event id `0xD8A6F55A`, the
+`net-character-invisible` publication path, and script handler
+`Script_DontRenderPlayerThisFrame 0x140FAA380`. The StringId table resolves
+`0xD8A6F55A` exactly to `DontRenderThisFrame`; the script handler independently
+parses screen index 0..1, resolves that retained Player and writes
+`Player+0x1618=0`. Thus the byte is a one-frame whole-Player render request, not
+a hidden weapon-selection or holster state.
+
+Competing hypotheses are explicit. **Mweapon-view** predicts the artifact is the
+main-view representation admitted by the exact slot-zero `ProcessWeapon`; an
+authored `DisableMainView` published after the stock per-frame `Show` removes the
+glued local rifle, while Chloe's world view remains on the back. **Mplayer-look**
+predicts the exact event publishes successfully but the artifact remains,
+proving the pixels belong to Player look/mesh state or another actor rather than
+any representation of the inventory `ProcessWeapon`. **Munsafe** is a crash,
+stall, body loss, observer change, missing exact event, or loss of the rifle when
+it is deliberately drawn; that rejects the packaging rather than either owner.
+
+Build `zu` hooks no new engine boundary. The already-stable Player main-view
+relay calls stock first, then only on role B retained local legacy Nadine with
+`current<0, draw=0` and exact slot-zero rifle art `0x8075397D` publishes the
+no-argument `DisableMainView` event to that one ProcessWeapon. It repeats after
+stock because `0x1410A08A0` can publish `Show` every frame, and records only the
+first successful generation. If slot zero reaches stable WeaponOut
+(`current=0, draw=2`), the authored `EnableMainView` inverse is published before
+the rifle can be judged active.
+
+Written falsifiable prediction before launch: role B emits exactly one
+`NADINE-LOCAL-RIFLE-MAIN-VIEW action=disable ... published=1` for the cold rifle.
+If the glued local object disappears while role A still sees the back rifle,
+**Mweapon-view** wins; if the row appears but the pixels are unchanged,
+**Mplayer-look** wins. No pistol, grenade, body, remote weapon placement or
+frame-time change is permitted. Release build and runtime are pending.
+
+Release build `zu` completed. The sole IDB was updated with
+`Script_DontRenderPlayerThisFrame 0x140FAA380`,
+`ProcessWeapon_EventHandler 0x1415116C0`,
+`ProcessWeaponBase_EventHandler 0x1414FBE10` and the two RTTI-backed vtable
+names; the label pass reported 1613 functions/56 data names and
+`save_database returned True`. The restarted MCP independently resolves both
+event-handler names. Runtime remains pending.

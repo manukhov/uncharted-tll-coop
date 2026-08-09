@@ -833,6 +833,26 @@ FUNCTIONS = {
         "weapon mesh handle permit it; the validated child handle is stored at "
         "ProcessWeapon+0xAE0.",
     ),
+    0x140FAA380: (
+        "Script_DontRenderPlayerThisFrame",
+        "Registered script handler reached through stub 0x1400A4260. Parses a "
+        "player screen index 0..1, resolves the retained Player, and writes "
+        "Player+0x1618=0. StringId 0xD8A6F55A resolves to "
+        "DontRenderThisFrame.",
+    ),
+    0x1415116C0: (
+        "ProcessWeapon_EventHandler",
+        "ProcessWeapon vtable 0x142A9BF48 slot +0x70. Handles weapon-specific "
+        "structured events, calls ProcessWeaponBase_EventHandler for common "
+        "events, and forwards Show/Hide plus main-view/cast-shadow visibility "
+        "events to the separately animated ProcessWeaponStrap at +0xAE0.",
+    ),
+    0x1414FBE10: (
+        "ProcessWeaponBase_EventHandler",
+        "ProcessWeaponBase vtable 0x142A9A630 slot +0x70. Common structured-event "
+        "handler reached directly by ProcessWeapon_EventHandler. MSVC COL at "
+        "0x142CD85D8 resolves the vtable owner to RTTI ProcessWeaponBase.",
+    ),
     0x1414FAF40: (
         "ProcessWeaponBase_Init",
         "Concrete ProcessWeapon base initialization called once from "
@@ -11053,6 +11073,16 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142A9A630: (
+        "ProcessWeaponBase_vftable",
+        "Exact MSVC RTTI ProcessWeaponBase vtable. COL 0x142CD85D8 names "
+        "ProcessWeaponBase; slot +0x70 is ProcessWeaponBase_EventHandler.",
+    ),
+    0x142A9BF48: (
+        "ProcessWeapon_vftable",
+        "Exact MSVC RTTI ProcessWeapon vtable installed by ProcessWeapon_Ctor; "
+        "slot +0x70 is ProcessWeapon_EventHandler.",
+    ),
     0x142A465C8: (
         "PlayerDrawWeaponAnimAction_vftable",
         "RTTI-backed PlayerDrawWeaponAnimAction vtable; +0x48 resolves and "
