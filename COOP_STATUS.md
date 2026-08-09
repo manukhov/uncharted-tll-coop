@@ -19289,3 +19289,44 @@ still supplies the pixels, so the exact current row disappears but the image
 remains; and **Dunsafe**: any crash, body/weapon loss outside the cold local
 rifle, or failure to restore a deliberately drawn rifle rejects the packaging.
 No runtime test is launched in this static correction.
+
+### 2026-08-09 STATIC / IMPLEMENTED: exact current LOD0 main-view flag discriminator (`aah`)
+
+The next runtime package is deliberately narrower than rejected build `zu`.
+That build proved only that an authored `DisableMainView` event was accepted by
+the exact ProcessWeapon; it did not observe the final `FgInstance+0x18` value.
+Build `aah` bypasses the event stack and writes the already proven final cull
+input at the last safe producer boundary.
+
+The evidence quota is satisfied by independent mechanisms. Descriptor
+construction and selection map current LOD0/list0 to view type 3. The cull
+worker directly rejects type 3 on `FgInstance+0x18 bit 0x40`. Exact render-pass
+source assertions consume that type-3 list, while the separate LOD2/list3 row is
+type 1 and feeds `RenderSunlightShadow`. Finally, three complete `aaf` runtime
+samples independently show the exact current LOD0 queued and selected with
+`0x40` clear. No inference depends on `FgInstance+0x1A0`.
+
+The implementation reuses the stable main-draw callsite immediately before
+`CullFgLods_Spawn 0x141A2C440`. The game thread publishes the exact current
+slot-zero rifle LOD pointers plus one atomic admission bit. Only role B, local
+legacy Nadine, exact rifle art `0x8075397D`, and controller state
+`current<0, draw=0` request suppression. The render boundary first proves that
+the exact LOD0 pointer is present in the concrete CullFgLods queue, then ORs
+only `0x40` into that instance's `+0x18`. It does not touch LOD1/LOD2,
+same-geometry twins, cull metadata, active byte `+0x1A0`, attachments or Player
+meshes. When slot zero reaches a drawn/non-holstered state, the same boundary
+clears only that bit so the rifle can render in hand. Heavy `gw` queue capture
+remains compiled out; logging is bounded to one row per generation/action.
+
+Written falsifiable prediction before launch: role B must emit
+`NADINE-RIFLE-MAIN-FLAG ... action=set ... queued=1` with LOD0 flags changing
+from a value whose `0x40` is clear to the same value with `0x40` set. If the
+glued spawn rifle disappears only in Nadine's local copy while Chloe's copy
+still sees the correct back rifle, **Dcurrent** wins. If that exact row changes
+but the glued image remains, **Dtwin** wins and the next target is the selected
+same-geometry pool-443 triplet. Drawing slot zero must restore visible in-hand
+rifle (and may emit one `action=clear` row). Any crash, body/pistol/grenade loss,
+missing exact queue hit, or failure to restore the drawn rifle selects
+**Dunsafe** and rejects the package rather than either ownership hypothesis.
+
+Release build `aah` succeeds. Runtime is pending.

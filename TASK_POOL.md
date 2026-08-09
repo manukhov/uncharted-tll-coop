@@ -3279,6 +3279,13 @@ Do not reopen these as the first move:
       Compare Dcurrent (exact LOD0 owns pixels), Dtwin (same-geometry triplet or
       another selected row owns pixels), and Dunsafe. Do not mutate `+0x1A0` or
       retry common-cull/attachment/controller paths.
+      IMPLEMENTED build `aah`: at the exact pre-`CullFgLods_Spawn` main-draw
+      callsite, require the published current LOD0 pointer to occur in the live
+      queue, then set only `FgInstance+0x18 bit 0x40` while local role-B legacy
+      Nadine has exact slot-zero rifle `current<0, draw=0`; clear it when drawn.
+      Heavy `gw` capture stays disabled. Written outcomes are Dcurrent
+      (glued image disappears, drawn rifle restores), Dtwin (exact flag changes
+      but image remains), and Dunsafe (crash/collateral/missing restore).
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

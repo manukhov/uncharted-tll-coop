@@ -432,6 +432,7 @@ struct NadinePerViewRifleTarget {
     std::atomic<std::uint64_t> sequence{0};
     std::atomic<std::uint64_t> generation{0};
     std::atomic<std::uint64_t> published_ms{0};
+    std::atomic<std::uint32_t> suppress_main_view{0};
     std::atomic<std::uintptr_t> weapon{0};
     std::atomic<std::uint32_t> runtime_id{0};
     std::atomic<std::uint32_t> lod_count{0};
@@ -1946,6 +1947,12 @@ constexpr bool kEnableStaleRifleCullProbe = false;
 // current rifle LOD0/LOD2 instances are selected in the local main view while
 // controller current=-1. The bounded census has answered its question.
 constexpr bool kEnableNadinePerViewRifleCensus = false;
+// Build aah: the completed aaf census plus the exact descriptor/cull audit
+// proves that current LOD0/list0 is view type 3 and is admitted only while
+// FgInstance+0x18 bit 0x40 is clear. Apply that one exclusion to the exact
+// current LOD0 immediately before CullFgLods; do not touch active byte +0x1A0,
+// the same-geometry twins or the sunlight-shadow LOD2/type-1 row.
+constexpr bool kEnableInitialLocalNadineExactRifleMainViewFlagProbe = true;
 // Builds gm..gw rejected the inactive-rifle attachment replay, late visibility
 // hide, FgDraw suppression, renderer-wide owner census and downstream holster
 // probes as fixes for the local spawn artifact. None of those hot diagnostics
@@ -17198,13 +17205,29 @@ void publish_local_nadine_per_view_rifle_target_game_thread() {
     if (!seh_read_player_look(player, &look) ||
         look != 0xD27C074Fu ||
         !player_object_stable(player)) {
+        g_nadine_per_view_rifle_target.suppress_main_view.store(
+            0, std::memory_order_release);
         return;
     }
     void* const weapon = get_weapon_from_slot(player, 0);
     if (weapon_art_id_from_object(weapon) != kCoopRifleArtId ||
         readable_bytes(weapon) < 0x864) {
+        g_nadine_per_view_rifle_target.suppress_main_view.store(
+            0, std::memory_order_release);
         return;
     }
+
+    int current_slot = -99;
+    std::uint32_t draw_state = 0xFFFFFFFFu;
+    if (!read_weapon_draw_state(player, current_slot, draw_state)) {
+        g_nadine_per_view_rifle_target.suppress_main_view.store(
+            0, std::memory_order_release);
+        return;
+    }
+    const std::uint32_t suppress_main_view =
+        current_slot < 0 && draw_state == 0 ? 1u : 0u;
+    g_nadine_per_view_rifle_target.suppress_main_view.store(
+        suppress_main_view, std::memory_order_release);
 
     NadineMembershipRenderState render{};
     if (!seh_capture_nadine_membership_render_state(
@@ -17269,6 +17292,8 @@ void publish_local_nadine_per_view_rifle_target_game_thread() {
     }
     g_nadine_per_view_rifle_target.published_ms.store(
         GetTickCount64(), std::memory_order_relaxed);
+    g_nadine_per_view_rifle_target.suppress_main_view.store(
+        suppress_main_view, std::memory_order_relaxed);
     g_nadine_per_view_rifle_target.generation.store(
         generation, std::memory_order_relaxed);
     g_nadine_per_view_rifle_target.sequence.fetch_add(
@@ -18604,7 +18629,8 @@ void apply_peer_held_weapon_state() {
     void* puppet = nullptr;
     if (!latest_peer_state(peer, puppet)) return;
     ensure_legacy_nadine_attach_points_game_thread();
-    if constexpr (kEnableNadinePerViewRifleCensus) {
+    if constexpr (kEnableNadinePerViewRifleCensus ||
+                  kEnableInitialLocalNadineExactRifleMainViewFlagProbe) {
         publish_local_nadine_per_view_rifle_target_game_thread();
     }
     if constexpr (kEnableInitialLocalNadineCrossSlotRefreshCycle) {
@@ -46316,6 +46342,7 @@ bool seh_capture_nadine_rifle_cull_queue(
 struct NadinePerViewRifleTargetSnapshot {
     std::uint64_t generation = 0;
     std::uint64_t published_ms = 0;
+    std::uint32_t suppress_main_view = 0;
     std::uintptr_t weapon = 0;
     std::uint32_t runtime_id = 0;
     std::uint32_t lod_count = 0;
@@ -46341,6 +46368,9 @@ bool read_nadine_per_view_rifle_target(
                 std::memory_order_relaxed);
         candidate.published_ms =
             g_nadine_per_view_rifle_target.published_ms.load(
+                std::memory_order_relaxed);
+        candidate.suppress_main_view =
+            g_nadine_per_view_rifle_target.suppress_main_view.load(
                 std::memory_order_relaxed);
         candidate.weapon =
             g_nadine_per_view_rifle_target.weapon.load(
@@ -46772,10 +46802,93 @@ using CullFgLodsSpawnFunction = std::int64_t(__fastcall*)(
     void*, void*, void* const*, void*, std::uint32_t, void*, void*, void*);
 CullFgLodsSpawnFunction g_original_cull_fg_lods_spawn = nullptr;
 
+bool seh_apply_exact_nadine_rifle_main_view_flag(
+    void* const* queue_instances, std::uint32_t queue_count,
+    const NadinePerViewRifleTargetSnapshot& target,
+    std::uint32_t* before_flags, std::uint32_t* after_flags) {
+    if (queue_instances == nullptr || queue_count == 0 ||
+        queue_count > 0x10000u || target.lod_count == 0 ||
+        target.instances[0] == 0) {
+        return false;
+    }
+    __try {
+        void* const target_lod0 =
+            reinterpret_cast<void*>(target.instances[0]);
+        bool queued = false;
+        for (std::uint32_t index = 0; index < queue_count; ++index) {
+            if (queue_instances[index] == target_lod0) {
+                queued = true;
+                break;
+            }
+        }
+        if (!queued || readable_bytes(target_lod0) <
+                           kFgInstanceStateFlagsOffset +
+                               sizeof(std::uint32_t)) {
+            return false;
+        }
+        auto* const flags = reinterpret_cast<std::uint32_t*>(
+            static_cast<std::byte*>(target_lod0) +
+            kFgInstanceStateFlagsOffset);
+        const std::uint32_t before = *flags;
+        const std::uint32_t after = target.suppress_main_view != 0
+            ? before | 0x40u
+            : before & ~0x40u;
+        *flags = after;
+        if (before_flags != nullptr) {
+            *before_flags = before;
+        }
+        if (after_flags != nullptr) {
+            *after_flags = after;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 std::int64_t __fastcall hooked_cull_fg_lods_spawn(
     void* job_out, void* counter_out, void* const* queue_instances,
     void* lod_data, std::uint32_t queue_count, void* scene,
     void* view_frustum, void* counter) {
+    if constexpr (kEnableInitialLocalNadineExactRifleMainViewFlagProbe) {
+        if (g_net_role_b) {
+            NadinePerViewRifleTargetSnapshot target{};
+            std::uint32_t before_flags = 0;
+            std::uint32_t after_flags = 0;
+            if (read_nadine_per_view_rifle_target(&target) &&
+                seh_apply_exact_nadine_rifle_main_view_flag(
+                    queue_instances, queue_count, target,
+                    &before_flags, &after_flags)) {
+                const std::uint64_t log_key =
+                    (target.generation << 1) |
+                    (target.suppress_main_view != 0 ? 1u : 0u);
+                static std::atomic<std::uint64_t> logged_key{
+                    ~std::uint64_t{0}};
+                const std::uint64_t previous = logged_key.exchange(
+                    log_key, std::memory_order_relaxed);
+                if (previous != log_key) {
+                    std::ostringstream line;
+                    line << "NADINE-RIFLE-MAIN-FLAG generation="
+                         << target.generation
+                         << " action="
+                         << (target.suppress_main_view != 0 ? "set" : "clear")
+                         << " weapon=0x" << std::hex << target.weapon
+                         << " lod0=0x" << target.instances[0]
+                         << " flags=0x" << before_flags
+                         << "->0x" << after_flags << std::dec
+                         << " queued=1";
+                    write_log_line(line.str().c_str());
+                }
+            }
+        }
+    }
+    if constexpr (!kEnableStaleRifleCullProbe) {
+        return g_original_cull_fg_lods_spawn != nullptr
+            ? g_original_cull_fg_lods_spawn(
+                  job_out, counter_out, queue_instances, lod_data,
+                  queue_count, scene, view_frustum, counter)
+            : 0;
+    }
     NadineRifleCullQueueSnapshot snapshot{};
     const std::uint64_t generation =
         g_local_nadine_inactive_rifle_generation.load(
@@ -49540,8 +49653,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09aag "
-        "(current Nadine rifle main-view submission confirmed; census disabled)");
+        "TLL co-op runtime init 2026-08-09aah "
+        "(exact current Nadine rifle LOD0 main-view flag discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -49578,7 +49691,8 @@ DWORD WINAPI install_hook(void*) {
         boot_log_line(
             "rejected Nadine FgDraw prepare relays disabled");
     }
-    if constexpr (kEnableStaleRifleCullProbe) {
+    if constexpr (kEnableStaleRifleCullProbe ||
+                  kEnableInitialLocalNadineExactRifleMainViewFlagProbe) {
         install_render_main_cull_fg_lods_relay();
     } else {
         boot_log_line(
