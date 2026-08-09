@@ -18387,3 +18387,23 @@ the same at the now-proven normal boundary: nonzero distinct ids select
 **Wnormal-same**; no admitted call selects **Wnormal-miss** and rejects the
 whole OnStart producer. No visible change is expected; any crash, hitch or pose
 change rejects the packaging.
+
+### 2026-08-09 RUNTIME CONFIRMED: normal WeaponPartial request is live and correct (`zo`)
+
+The completed Nadine pistol/rifle draw/put test selected the written
+**Wnormal-live** outcome. Both processes remained responsive and produced 17
+bounded `WEAPON-PARTIAL-NORMAL` rows across local and retained views. Exact
+legacy Nadine (`look=0xD27C074F`) repeatedly requested
+`s_weapon-out 0x7405AACB`, explicitly cleared the layer with `anim=0`, and then
+requested `s_weapon-holster 0xDF5B68FC`; every nonzero call updated control
+`+0x18` to the same id. Chloe independently reached the same out/holster states
+and one additional context id `0x88B4A907`.
+
+This confirms `PlayerWeaponAnimControl_RequestWeaponPart 0x14108C0C0` as the
+live normal producer and rejects **Wnormal-clear**, **Wnormal-same** and
+**Wnormal-miss** as explanations for Nadine's persistent pose. The broken arm,
+back holster and cold-spawn rifle therefore arise after a correct state request:
+from the animation/overlay content selected for the Chloe-born Player, its
+later layer merge, or the separate ProcessWeapon prop route. The read-only
+vtable relay is disabled in source after classification; no more runtime test is
+authorized until those content alternatives are separated statically.

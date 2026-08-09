@@ -3602,6 +3602,12 @@ Do not reopen these as the first move:
       fades exact WeaponPartial `0xE2B990B9`. A bounded four-argument relay
       records that unchanged request. Run the same single pistol/rifle cycle and
       classify Wnormal-live, Wnormal-clear, Wnormal-same or Wnormal-miss.
+      **RUNTIME CONFIRMED:** Wnormal-live won in both processes and views. Exact
+      legacy Nadine reached `s_weapon-out 0x7405AACB`, a deliberate zero clear,
+      and `s_weapon-holster 0xDF5B68FC`; every nonzero request became control
+      `+0x18`. The normal state producer/cache is correct and its probe is now
+      disabled. Continue statically at the Nadine animation-overlay set and the
+      later WeaponPartial/ProcessWeapon content owners; do not repeat this test.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

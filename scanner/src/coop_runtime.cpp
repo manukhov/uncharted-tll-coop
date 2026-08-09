@@ -1937,11 +1937,13 @@ constexpr bool kEnableLegacyNadinePistolHipAttachment = false;
 // Build zm proved that all observed legacy-Nadine selections pass through the
 // Chloe-base map but receive no mapped id or record. Keep that rejected probe
 // out of the hook set. Build zn then rejected special vtable +0x28 as the live
-// draw/put boundary. Build zo observes the sibling normal vtable +0x08 path,
-// where the final caller-side fallback id is already selected.
+// draw/put boundary. Build zo confirmed the sibling normal vtable +0x08 path:
+// stock s_weapon-out / clear / s_weapon-holster requests reach the exact
+// retained legacy-Nadine control and update +0x18. Keep the resolved probe out
+// of normal builds while the missing Nadine overlay-set content is traced.
 constexpr bool kEnableWeaponPartialSelectionProbe = false;
 constexpr bool kEnableWeaponPartialFinalRequestProbe = false;
-constexpr bool kEnableWeaponPartialNormalRequestProbe = true;
+constexpr bool kEnableWeaponPartialNormalRequestProbe = false;
 // Builds gz/ha rejected the terminal controller rebind as the local main-view
 // fix. Build hb instead runs the full stock Put transition once: this is the
 // narrow path that also binds PlayerWeaponAnimControl, requests
@@ -48620,8 +48622,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09zo "
-        "(WeaponPartial normal request probe; read-only)");
+        "TLL co-op runtime init 2026-08-09zp "
+        "(WeaponPartial probes disabled; Nadine overlay static frontier)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
