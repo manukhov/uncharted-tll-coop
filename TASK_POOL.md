@@ -3112,6 +3112,16 @@ Do not reopen these as the first move:
       `weapon-holster` executed `0->1`, and the rifle changed `16->40`, but the
       local image remained glued to the hand. Park the cold Put; a future return
       must isolate the preceding Draw phase instead.
+- [ ] Test the now-resolved preceding Draw boundary before the parked cold Put.
+      `PlayerDrawWeaponAnimAction_CommitCurrentWeapon 0x14108A400` passes the
+      weapon's exact 16-byte weak handle to PlayerWeaponController vtable
+      `+0x248` (`PlayerWeaponController_CommitDrawnWeaponHandle 0x1410AAF20`).
+      That slot finds slot 0, writes controller `+0x124`, executes the physical
+      `EquipWeaponIndex 0x1410A9DD0`/`player-grabbed` path, then commits
+      `+0x120`. A bounded build may call that verified slot once in the exact
+      cold role-B state, require both indices become 0, and only then invoke the
+      proven Put. Written Cdraw-commit/Cfull-draw/Cunsafe predictions are in
+      `COOP_STATUS.md`; never toggle ProcessWeapon `+0x8F4` for this rifle.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

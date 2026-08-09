@@ -2409,6 +2409,42 @@ FUNCTIONS = {
         "weapon. Removes channel-1 weapon actions, enqueues an exact-handle "
         "PlayerPutGunAwayAction and changes controller draw state to 5.",
     ),
+    0x141089D20: (
+        "PlayerGrabWeaponAnimAction_Construct",
+        "Constructs the RTTI-backed PlayerGrabWeaponAnimAction and registers "
+        "the authored weapon-grab action name.",
+    ),
+    0x14108A2B0: (
+        "PlayerDrawWeaponAnimAction_Construct",
+        "Constructs the RTTI-backed PlayerDrawWeaponAnimAction and registers "
+        "the authored weapon-draw action name.",
+    ),
+    0x14108A400: (
+        "PlayerDrawWeaponAnimAction_CommitCurrentWeapon",
+        "PlayerDrawWeaponAnimAction vtable +0x48. Resolves the current weapon, "
+        "copies its exact weak {cell,generation} handle from +0xA8/+0xBC, then "
+        "calls PlayerWeaponController vtable +0x248 with that 16-byte handle.",
+    ),
+    0x1410AAF20: (
+        "PlayerWeaponController_CommitDrawnWeaponHandle",
+        "PlayerWeaponController vtable +0x248. Matches the supplied 16-byte "
+        "weapon weak handle against the 23-entry table at controller+0x148, "
+        "stores the selected index at +0x124, calls EquipWeaponIndex, then "
+        "commits the same index to controller+0x120.",
+    ),
+    0x1410A9DD0: (
+        "PlayerWeaponController_EquipWeaponIndex",
+        "Concrete selected-slot presentation path reached only by the Draw "
+        "commit. Resolves the indexed ProcessWeapon, binds the active hand "
+        "attachment, resets its local attachment blend, emits player-grabbed, "
+        "and finishes through PrepareSelectedWeaponBindingBlend.",
+    ),
+    0x1410A9580: (
+        "PlayerWeaponController_PrepareSelectedWeaponBindingBlend",
+        "Resolves the controller's selected weapon and authored holster binding; "
+        "when the live selected attachment id matches that binding, copies the "
+        "blend endpoints to ProcessWeapon+0x600/+0x620 and sets its duration.",
+    ),
     0x14109DA70: (
         "PlayerWeaponController_AreHolsteredWeaponsHidden",
         "Controller vtable +0x3A0 getter. Returns the boolean stored at "
@@ -10979,6 +11015,17 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142A465C8: (
+        "PlayerDrawWeaponAnimAction_vftable",
+        "RTTI-backed PlayerDrawWeaponAnimAction vtable; +0x48 resolves and "
+        "commits the current weapon through PlayerWeaponController +0x248.",
+    ),
+    0x142A46630: (
+        "PlayerGrabWeaponAnimAction_vftable",
+        "RTTI-backed PlayerGrabWeaponAnimAction vtable. Its ProcessWeapon+0x8F4 "
+        "toggle is conditional on the spine-prop attachment and is not the "
+        "cold long-gun Draw commit.",
+    ),
     0x142A46748: (
         "WeaponHolsterIkBlender_vftable",
         "Exact MSVC RTTI WeaponHolsterIkBlender vtable. Slot +0x10 is "

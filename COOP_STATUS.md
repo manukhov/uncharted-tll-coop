@@ -18460,3 +18460,60 @@ and pistol hip attachment, while the missing sling remains the independently
 proved `ProcessWeaponStrap` route. Continue with those smaller prop lifecycles
 before attempting a full pose retarget. No runtime build was produced for this
 static classification.
+
+### 2026-08-09 STATIC: cold rifle misses the terminal Draw commit
+
+The difference between the rejected cold Put build `hb` and the user's working
+manual draw/put cycle is now exact. `PlayerDrawWeaponAnimAction` vtable
+`0x142A465C8` slot `+0x48` is
+`PlayerDrawWeaponAnimAction_CommitCurrentWeapon 0x14108A400`. It resolves the
+current ProcessWeapon, copies the 16-byte weak handle whose meaningful fields
+are weapon `+0xA8` (cell pointer) and `+0xBC` (generation), obtains the owning
+`PlayerWeaponController` from Player `+0x1D88`, and calls its exact vtable slot
+`+0x248`.
+
+That slot is `PlayerWeaponController_CommitDrawnWeaponHandle 0x1410AAF20`.
+Independent concrete dataflow matches the handle against the 23 entries at
+controller `+0x148`, writes the matched index to requested/current staging
+`+0x124`, calls
+`PlayerWeaponController_EquipWeaponIndex 0x1410A9DD0`, and finally copies the
+index into authoritative current slot `+0x120`. The equip function is the
+physical active-weapon path: it selects the indexed ProcessWeapon, binds the
+appropriate `rightHand`/`leftHand` owner point, resets its attachment blend,
+emits the authored `player-grabbed` event, and reaches
+`PlayerWeaponController_PrepareSelectedWeaponBindingBlend 0x1410A9580`.
+
+This explains `hb` without contradicting it. The cold role-B Nadine controller
+was observed at `current=-1, draw=0`; invoking
+`PlayerWeaponController_StartHolsterTransition 0x1410A3EA0` from that sentinel
+state did execute the complete Put action and rebind `rightHand 16 ->
+gun_holster 40`, but it never established a real current weapon. A manual Draw
+necessarily executes the missing `+0x248` commit first, so its later Put starts
+from `current=0` and can reconcile all active presentation state.
+
+The nearby `ProcessWeapon+0x8F4` alternative is **STATIC REJECTED for the cold
+rifle**. `PlayerGrabWeaponAnimAction` changes that flag only in the branch where
+the selected attachment equals `targSpineProp`; constructors and
+`PlayerHolsterWeaponAnimAction_Execute` initialize/set the same flag, while
+`ProcessWeaponBase_Update 0x141500880` only consumes it in that conditional
+presentation gate. The long gun starts on `rightHand` and is put on
+`gun_holster`, so mutating this pistol/spine flag cannot reproduce the omitted
+Draw commit.
+
+The next bounded build has three explicit competitors:
+
+- **Cdraw-commit:** on exact role-B local legacy Nadine, after 750 ms of stable
+  `current=-1, draw=0`, slot-zero rifle on `rightHand`, call the verified
+  controller vtable `+0x248` once with its validated weak handle, require
+  `+0x124/+0x120 = 0`, then call the already-proved stock Put. Prediction: the
+  commit reports index 0, Put changes draw `0 -> 5`, the exact holster action
+  executes, and the initially glued local rifle disappears from the hand.
+- **Cfull-draw:** both native calls and all state/attachment checks succeed, but
+  the local image remains glued. The terminal Draw commit is then insufficient;
+  an earlier full Get/Draw AnimAction phase is required before Put.
+- **Cunsafe:** the exact handle does not resolve to slot 0, state does not become
+  `current=0`, another weapon changes, the weapon visibly draws, the action
+  repeats, the game stalls/crashes, or either character regresses. This rejects
+  the runtime packaging; Put must not be called after a failed postcondition.
+
+No other Nadine weapon/renderer probe is enabled for this discriminator.
