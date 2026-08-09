@@ -3966,6 +3966,14 @@ Do not reopen these as the first move:
       the thigh. Every mismatch is stock/fail-closed. Release build passes.
       Test only cold empty-hand spawn first and require the exact counter/id
       prediction in `COOP_STATUS.md` before any manual draw/Put test.
+      **RUNTIME CONFIRMED (`aas`, real P99 only):** both views repeatedly matched
+      `rightHand -> targSpineProp -> pistolHolster`, `bridge=2`,
+      `hipRedirect=1`, `stock/call/verified=1`; Mazur-back remained verified.
+      The remaining empty-hand object is visibly smaller than a drawn P99 and
+      resembles the outfit's holstered pistol mesh. Stop changing the current
+      ProcessWeapon attachment. Statically identify whether those pixels belong
+      to a separate appearance/mesh-overlay prop, an alternate ProcessWeapon
+      child, or a stale local-view presentation before another launch.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
