@@ -2736,6 +2736,30 @@ FUNCTIONS = {
         "For each row it reads uint16 scene index at +7 and resolves the exact "
         "FgInstance through the pointer table before emitting render commands.",
     ),
+    0x1416525C0: (
+        "RenderDepthOnlyPass",
+        "Exact RenderDepthOnlyPass source assertion in render-mgr.cpp. Calls "
+        "SceneRendering_Render with view type 3 and the fixed foreground draw "
+        "list at output index 0.",
+    ),
+    0x141652A40: (
+        "RenderDepthOnlyHalf2Pass",
+        "Exact RenderDepthOnlyHalf2Pass source assertion in render-mgr.cpp. "
+        "Calls SceneRendering_Render with view type 3 and foreground output "
+        "list 0.",
+    ),
+    0x1416532A0: (
+        "RenderProjectionDepthPass",
+        "Exact RenderProjectionDepthPass source assertion in render-mgr.cpp. "
+        "Calls SceneRendering_Render with view type 3 and foreground output "
+        "list 0.",
+    ),
+    0x141657DA0: (
+        "RenderSunlightShadow",
+        "Exact RenderSunlightShadow source assertion in render-mgr.cpp. Calls "
+        "SceneRendering_Render with view type 1 and the configured foreground "
+        "draw-list group beginning at output index 3.",
+    ),
     0x14197D8C0: (
         "AnimFramePlayback_PublishRetainedFgAnim",
         "Resolves a retained owner through +0x108/+0x110, obtains its FgAnimData "

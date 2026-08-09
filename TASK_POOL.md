@@ -3259,18 +3259,26 @@ Do not reopen these as the first move:
       Fcurrent/Fsame/Fother branch; all six at zero in three valid samples while
       the rifle remains visible selects Fexternal. Crash, stall, truncation,
       zero inner rows or extra samples rejects only the probe packaging.
-      CONFIRMED Fcurrent: stable generation 7 produced exactly three complete
-      scans (507, 412 and 374 inner rows; no fourth sample). Exact current pool
-      instances 1056/LOD0 and 1058/LOD2 each had three selected submeshes in
-      every sample while the untouched rifle remained glued to Nadine's hand.
-      Build `aag` disables the completed census.
-- [ ] Trace the later stock writer that restores the exact current rifle's
-      `FgInstance+0x1A0` active bytes between the rejected `go`
-      post-parent-visibility hide and the now-confirmed completed per-view cull.
-      Resolve every write plus caller ordering and distinguish later parent
-      visibility propagation (Vparent), LOD/view preparation (Vlod), and
-      DrawControl/FgInstance rebuild (Vrebuild). Do not retry controller,
-      attachment, stale-owner, common-cull or overlay hypotheses.
+      CONFIRMED Fcurrent-selection: stable generation 7 produced exactly three
+      complete scans (507, 412 and 374 inner rows; no fourth sample). Exact
+      current pool instances 1056/LOD0 and 1058/LOD2 each had three selected
+      submeshes in every sample while the untouched rifle remained glued to
+      Nadine's hand.
+      This proves selection, not exclusive pixel ownership: same-geometry twins
+      were also selected in two samples. Build `aag` disables the census.
+- [x] Correct the false `FgInstance+0x1A0` writer frontier. Static audit proves
+      `MeshCull_CullFgViewJob 0x141A2DDD0` never reads that byte: it filters on
+      `FgInstance+0x18` and cull metadata behind `+0x1D0`. The `go`/`aaf`
+      difference therefore does not imply a later stock writer.
+- [ ] Discriminate the exact current rifle's per-view row at the proven
+      pre-cull boundary. `MeshCull_BuildFgViewDescriptors 0x141A30330` plus
+      `MeshCull_SelectFgViewDrawLists 0x141A30B80` map LOD0/list0 to view type 3
+      and LOD2/list3 to type 1. `MeshCull_CullFgViewJob` rejects type 3 by
+      `FgInstance+0x18 bit 0x40`; exact source consumer
+      `RenderSunlightShadow 0x141657DA0` proves type 1/list3 is the shadow path.
+      Compare Dcurrent (exact LOD0 owns pixels), Dtwin (same-geometry triplet or
+      another selected row owns pixels), and Dunsafe. Do not mutate `+0x1A0` or
+      retry common-cull/attachment/controller paths.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

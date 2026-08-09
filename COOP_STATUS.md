@@ -19214,29 +19214,78 @@ hits and six geometry hits. More importantly, the exact current rifle instances
 were selected: pool 1056 / target LOD0 had three inner rows in draw-list bit 0,
 and pool 1058 / target LOD2 had three inner rows in draw-list bit 3 in each of
 the three stable samples. LOD1 was not selected. Same-geometry twins also
-appeared in some frames, but they are not needed to explain the artifact because
-the exact current ProcessWeapon triplet already reaches the final local-view
-renderer. The user kept the untouched spawn rifle visibly glued to Nadine's hand
-through the capture.
+appeared in some frames. Their presence is no longer required merely to explain
+how rifle geometry reaches the renderer, because the exact current
+ProcessWeapon triplet does too; however, this read-only census does not identify
+which overlapping selected row supplies the visible pixels. The user kept the
+untouched spawn rifle visibly glued to Nadine's hand through the capture.
 
-This rejects **Fexternal** and the separate-overlay requirement. The local-only
-artifact is the current slot-zero ProcessWeapon's own FgInstance presentation:
-although the weapon controller is stably holstered (`current=-1, draw=0` in the
-already confirmed lifecycle captures), its exact LOD0/LOD2 instances are active
-and selected for the primary view. It also corrects the apparent conflict with
-`go`: that probe observed `DrawControl_HideMesh` make all three instances
-inactive at the post-parent-visibility boundary, whereas `aaf` observes the
-same current instance pointers active (`0xFF`) later at completed per-view cull.
-Therefore a later stock visibility writer restores them between those two
-boundaries. Repeating attachment, controller lifecycle, common final-cull,
-overlay or stale-owner searches is forbidden.
+This rejects **Fexternal** only as an exclusive explanation and rejects any
+requirement for a separate non-weapon overlay: the exact current slot-zero
+ProcessWeapon contributes selected FgInstance rows while the controller is
+stably holstered (`current=-1, draw=0` in the already confirmed lifecycle
+captures). It does not yet prove that those rows, rather than the same-geometry
+twins, own the visible artifact. It also narrows, but does not establish, the
+apparent conflict with `go`: that probe observed `DrawControl_HideMesh` make all
+three instances inactive in byte `FgInstance+0x1A0`, whereas `aaf` later
+observed `0xFF`. Subsequent static audit shows that
+`MeshCull_CullFgViewJob 0x141A2DDD0` never reads `+0x1A0`; it admits an instance
+using state flags at `+0x18` and cull metadata behind `+0x1D0`. Consequently no
+intervening `+0x1A0` writer is required to explain the pixels, and the earlier
+inference that stock must restore that byte is withdrawn. `go` rejects
+`+0x1A0` as a sufficient final visibility gate; it does not locate a later
+visibility owner. Repeating attachment, controller lifecycle, common
+final-cull, overlay or stale-owner searches is forbidden.
 
 Build `aag` disables the completed hot census. The next static investigation is
-the exact writer/data path that changes current rifle `FgInstance+0x1A0` from
-inactive after `NdAttachableObject_PostJointUpdate_Async` back to active before
-`MeshCull_CullFgViewJob`. Competing causes are: **Vparent**, a later parent/local
-Player visibility propagation; **Vlod**, an LOD/view preparation writer that
-reconstructs active from another state field; and **Vrebuild**, a replacement
-DrawControl/FgInstance publication that reuses the same pool pointers. Resolve
-all writes and call ordering statically before another runtime test. Both game
-processes were closed after capture.
+the exact per-view admission of the selected current rifle rows: distinguish
+**Vflag**, missing per-view exclusion bits at `FgInstance+0x18`; **Vmetadata**,
+the authored view-type bitset and submesh state behind `FgInstance+0x1D0`; and
+**Vpass**, which selected draw-list actually feeds visible colour rather than a
+shadow/depth-only pass. Resolve descriptor ordering and render consumers before
+another runtime test. Both game processes were closed after capture.
+
+### 2026-08-09 STATIC: current rifle LOD0 is main-view type 3; LOD2 is sunlight-shadow type 1
+
+The completed `aaf` rows can now be mapped to concrete cull descriptors and
+render consumers. This corrects the abandoned `+0x1A0` writer search above and
+provides three independent evidence types for the next boundary.
+
+First, `MeshCull_BuildFgViewDescriptors 0x141A30330` seeds descriptors 0/1/2
+with view types 3/6/7. Its first configured group, counted by
+`SceneWindowConfig+0x1500`, begins at descriptor 3 and writes view type 1.
+`MeshCull_SelectFgViewDrawLists 0x141A30B80` independently copies descriptor
+0's PageTable to output list 0 and descriptor 3's PageTable to output list 3.
+Thus the stable `aaf` masks are exact: current LOD0 `drawLists=0x1` is type 3,
+whereas current LOD2 `drawLists=0x8` is type 1.
+
+Second, `MeshCull_CullFgViewJob 0x141A2DDD0` reads the exact instance pointer
+from the FgScene array and switches on the descriptor's type. Types 3/6/7 are
+rejected when `FgInstance+0x18 bit 0x40` is set; type 1 is rejected when bit
+`0x80` is set. Only after those tests does it consult the geometry/cull record
+at `FgInstance+0x1D0`, require the matching type bit at cull-record `+0x114`,
+and emit the 9-byte submesh rows. It contains no `FgInstance+0x1A0` read.
+
+Third, the render-side consumers separate the passes. The exact source-asserted
+`RenderDepthOnlyPass 0x1416525C0` calls `SceneRendering_Render 0x14186C8A0`
+with view type 3 and the fixed first PageTable. The source-asserted
+`RenderSunlightShadow 0x141657DA0` calls the same renderer with view type 1 and
+the configured PageTable group beginning at list 3. Therefore LOD2/list3 is the
+shadow selection, not an alternative main-colour owner. The visible local
+artifact's relevant current row is LOD0/list0/type3.
+
+The runtime values agree with this dataflow: all three stable current LOD0 rows
+had state `0x21228A38`, so exclusion bit `0x40` was clear; current LOD2 had
+`0x21228E38`, so `0x80` was clear. The earlier `zu` result remains important but
+is now narrower: successful publication of authored `DisableMainView` did not
+prove that the exact LOD0 `+0x18` bit changed before culling. It therefore does
+not reject a direct late per-view flag discriminator at the proven current
+instance.
+
+Competing hypotheses are now **Dcurrent**: setting only the exact current
+rifle's LOD0/main-view exclusion before `CullFgLods` removes the glued image;
+**Dtwin**: the same-geometry pool-443 triplet or another already selected row
+still supplies the pixels, so the exact current row disappears but the image
+remains; and **Dunsafe**: any crash, body/weapon loss outside the cold local
+rifle, or failure to restore a deliberately drawn rifle rejects the packaging.
+No runtime test is launched in this static correction.
