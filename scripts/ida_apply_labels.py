@@ -2754,6 +2754,22 @@ FUNCTIONS = {
         "Calls SceneRendering_Render with view type 3 and foreground output "
         "list 0.",
     ),
+    0x141653680: (
+        "RenderGBuffer",
+        "RenderMgr_MainDrawCore registers this callback under the exact task "
+        "names RenderGBuffer/RenderGBufferUpdate. Its call at 0x141653B2E "
+        "passes foreground output list 0 and view type 3 to "
+        "SceneRendering_Render, proving that list 0 feeds the primary colour "
+        "GBuffer as well as depth passes.",
+    ),
+    0x14165BDC0: (
+        "RenderForwardPass",
+        "RenderMgr_MainDrawCore registers this callback under the exact task "
+        "names RenderForwardPass/RenderForwardPassUpdate. Calls "
+        "SceneRendering_Render at 0x14165BF9D/0x14165C08A with foreground "
+        "output list 0 and view type 3, independently proving a colour consumer "
+        "of the same selected PageTable.",
+    ),
     0x141657DA0: (
         "RenderSunlightShadow",
         "Exact RenderSunlightShadow source assertion in render-mgr.cpp. Calls "

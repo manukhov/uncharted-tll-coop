@@ -3293,16 +3293,17 @@ Do not reopen these as the first move:
       pool-443/444/445 triplet with no visual effect and later bound it to the
       live remote-Chloe rifle generation. Build `aai` disables the probe. Do not
       request another runtime ownership discriminator.
-- [ ] STATIC ONLY: identify the actual colour submission for the glued local
-      rifle. Trace exact list-0/type-3 consumption forward from
-      `SceneRendering_EmitDrawablePrototypeSubmeshes 0x141AB5780`: type 3 is
-      proven to feed `RenderDepthOnlyPass 0x1416525C0`, so a selected depth row
-      is not proof that it emits visible colour. Enumerate every consumer of the
-      selected PageTable and the local-player/attachment colour path, then trace
-      its concrete mesh owner backward to creation. Pool 443, exact-current
-      `+0x18` visibility bits, common cull compaction, attachment APIs and weapon
-      state cycles are already rejected. Do not launch until the complete
-      colour-owner dataflow and repair are statically proven.
+- [ ] STATIC ONLY: identify the local-only presentation/cache boundary for the
+      glued rifle. `RenderGBuffer 0x141653680` and `RenderForwardPass
+      0x14165BDC0` both consume foreground output list 0 / view type 3 through
+      `SceneRendering_Render`, so the `aaf` current LOD0 row is a real colour
+      submission and the earlier depth-only premise is rejected. `aah` proved
+      only a transient write before asynchronous `CullFgLods_Spawn`; it did not
+      prove that `MeshCull_CullFgViewJob` later consumed bit `0x40`. Trace that
+      mutable flag lifetime and the ProcessWeapon local presentation path that
+      can survive the current triplet being absent in `gr`. Pool 443,
+      attachment APIs and weapon-state cycles remain rejected. Do not launch
+      until the exact colour-owner dataflow and repair are statically closed.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

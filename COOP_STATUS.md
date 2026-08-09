@@ -19353,17 +19353,35 @@ pool-443/444/445 triplet is already independently rejected as a sufficient
 owner. `gw` compacted all three exact entries out of the pre-view foreground
 queue (`removed=3`) while the glued local rifle remained unchanged; the complete
 log later bound that generation to the live remote-Chloe ProcessWeapon. Thus
-`aah` does not reopen pool 443 or justify tracing it again. Both the exact
-current LOD0 type-3 row and the same-geometry triplet are proven insufficient.
-The remaining unresolved question is which downstream pass actually emits the
-visible colour geometry: type 3 is consumed by the depth-only path, so selection
-in list 0 is not itself proof of colour ownership.
+`aah` does not reopen pool 443 or justify tracing it again.
+
+The deeper render-graph audit corrects the colour-pass premise. MainDrawCore
+registers `0x141653680` under exact task names
+`RenderGBuffer/RenderGBufferUpdate`; its call at `0x141653B2E` passes the same
+foreground output list 0 and view type 3 to `SceneRendering_Render`. It also
+registers `0x14165BDC0` as `RenderForwardPass/RenderForwardPassUpdate`; calls at
+`0x14165BF9D/0x14165C08A` independently consume list 0/type 3. Therefore the
+current LOD0 selected by `aaf` is a real colour submission, not merely a depth
+row. `RenderDepthOnlyPass` is only another consumer of that list.
+
+This also narrows what `aah` actually rejected. Its hook writes shared
+`FgInstance+0x18` immediately before `CullFgLods_Spawn`, but the spawn stores
+the instance-pointer array into a job and the asynchronous cull worker reads
+the mutable instance flags later. The emitted `before -> after` row proves the
+producer-side write, not that `MeshCull_CullFgViewJob` consumed `0x40`; no final
+per-view list was captured in `aah`. Stock visibility paths can clear instance
+masks through `DrawControl_ClearChildInstanceFlagsByMask 0x141754FF0`.
+Consequently the exact current ProcessWeapon remains the leading colour owner;
+only this transient pre-spawn flag write is REJECTED. The role-B `gr` result,
+where the current triplet was absent from sampled common queues while the image
+persisted, keeps an independent local presentation/cache path as the competing
+hypothesis. Neither branch authorizes another runtime discriminator.
 
 Build `aai` disables the discriminator and restores the production hook set;
 the heavy queue census remains off. No more runtime ownership discriminators
-are authorized. The next work is static-only: trace the exact list-0/type-3
-consumer forward through depth, colour and forward-pass command generation, and
-trace the local-player/attachment colour submission backward to its concrete
-ProcessWeapon generation. Do not return to attachment APIs, weapon-state cycles,
-common cull compaction, pool 443 or another visibility-bit probe. Both game
-processes were closed after the result.
+are authorized. The next work is static-only: resolve the lifetime of the
+current rifle's list-0 entry from `CullFgLods_Spawn` through the asynchronous
+per-view worker and, in parallel, trace the local-only ProcessWeapon
+presentation/cache that can survive an absent common-queue row. Do not return
+to attachment APIs, weapon-state cycles, pool 443 or another pre-spawn
+visibility-bit probe. Both game processes were closed after the result.
