@@ -18341,3 +18341,49 @@ Written discriminator for one pistol and one rifle draw/put cycle on Nadine:
 No visible change is expected. A crash, hitch, changed animation, body damage or
 weapon relocation rejects the probe packaging rather than classifying these
 content outcomes.
+
+### 2026-08-09 RUNTIME REJECTED: special custom-part slot is not the live draw/put path (`zn`)
+
+Both processes installed the exact `PlayerWeaponAnimControl` vtable-`+0x28`
+relay successfully and remained responsive through the requested Nadine pistol
+and rifle draw/put cycles. The bounded log nevertheless contained zero
+`WEAPON-PARTIAL-FINAL` rows. This is the written **Wfinal-miss** outcome:
+`PlayerWeaponAnimControl_RequestCustomWeaponPart 0x14108B940` is not the live
+boundary for these visible transitions. The result rejects that special branch,
+not the whole `PlayerPlayWeaponOverlayAction` producer, and is independent of
+the available silenced-pistol variant. The `zn` vtable patch is disabled.
+
+### 2026-08-09 STATIC / IMPLEMENTED: normal WeaponPartial request slot (`zo`)
+
+The sibling normal path is now concrete:
+
+1. `PlayerWeaponAnimControl` vtable `0x142A46778` slot `+0x08` contains the
+   unique function `0x14108C0C0`, adjacent to the already resolved
+   `RequestWeaponState` at `+0x10` and special custom-part request at `+0x28`.
+2. In the same `PlayerPlayWeaponOverlayAction_OnStart` caller, the branch at
+   `0x141097EC4..0x141097EEF` copies the pose record, loads the final fallback id
+   into `R8D`, blend into `XMM3`, obtains `Player+0x1DF0` and calls vtable
+   `+0x08`. This is the explicit alternative to the missed `+0x28` branch at
+   `0x141097D90..0x141097DC7`.
+3. `0x14108C0C0` immediately stores `R8D` at control `+0x18`, copies the caller
+   record to the Player animation owner and creates or directly fades the exact
+   `WeaponPartial 0xE2B990B9` layer with that same id. A zero id instead clears
+   `+0x18` and invokes the layer-stop callback through vtable `+0x78`.
+
+The function is named
+`PlayerWeaponAnimControl_RequestWeaponPart 0x14108C0C0` in the single IDB.
+The headless write applied `1596 functions, 52 data names`, returned
+`save_database=True`, and the restarted MCP independently resolves the saved
+name.
+Build `zo` replaces only the verified vtable `+0x08` pointer, forwards the exact
+four-argument ABI unchanged and logs deduplicated final id/blend/request words
+plus control `+0x18` before/after for retained Chloe/legacy-Nadine owners. All
+earlier selector and `+0x28` probes remain disabled.
+
+Written discriminator for one Nadine pistol and rifle draw/put cycle remains
+the same at the now-proven normal boundary: nonzero distinct ids select
+**Wnormal-live**; a zero request during a visibly broken phase selects
+**Wnormal-clear**; one stale id across distinct phases selects
+**Wnormal-same**; no admitted call selects **Wnormal-miss** and rejects the
+whole OnStart producer. No visible change is expected; any crash, hitch or pose
+change rejects the packaging.

@@ -3593,7 +3593,15 @@ Do not reopen these as the first move:
       id. A bounded read-only vtable relay now logs that id and forwards all
       seven arguments unchanged for exact retained owners. Run one pistol and
       one rifle draw/put cycle on Nadine; classify Wfinal-live, Wfinal-clear,
-      Wfinal-same or Wfinal-miss. No visible change is expected.
+      Wfinal-same or Wfinal-miss. No visible change is expected. **RUNTIME
+      REJECTED:** both copies installed the relay and completed the cycles with
+      zero admitted `+0x28` calls; Wfinal-miss proves this special custom-part
+      branch is not the live draw/put path. **STATIC / IMPLEMENTED (`zo`):**
+      the sibling vtable `+0x08` target `0x14108C0C0` is the explicit normal
+      OnStart branch, stores the final `R8D` id at control `+0x18`, and starts or
+      fades exact WeaponPartial `0xE2B990B9`. A bounded four-argument relay
+      records that unchanged request. Run the same single pistol/rifle cycle and
+      classify Wnormal-live, Wnormal-clear, Wnormal-same or Wnormal-miss.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

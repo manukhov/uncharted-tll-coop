@@ -1936,10 +1936,12 @@ constexpr bool kEnableLegacyNadineHolsterIkVerification = false;
 constexpr bool kEnableLegacyNadinePistolHipAttachment = false;
 // Build zm proved that all observed legacy-Nadine selections pass through the
 // Chloe-base map but receive no mapped id or record. Keep that rejected probe
-// out of the hook set. Build zn instead observes vtable +0x28, where the final
-// caller-side fallback id is already selected, without changing the request.
+// out of the hook set. Build zn then rejected special vtable +0x28 as the live
+// draw/put boundary. Build zo observes the sibling normal vtable +0x08 path,
+// where the final caller-side fallback id is already selected.
 constexpr bool kEnableWeaponPartialSelectionProbe = false;
-constexpr bool kEnableWeaponPartialFinalRequestProbe = true;
+constexpr bool kEnableWeaponPartialFinalRequestProbe = false;
+constexpr bool kEnableWeaponPartialNormalRequestProbe = true;
 // Builds gz/ha rejected the terminal controller rebind as the local main-view
 // fix. Build hb instead runs the full stock Put transition once: this is the
 // narrow path that also binds PlayerWeaponAnimControl, requests
@@ -39501,6 +39503,106 @@ bool install_weapon_partial_final_request_probe() {
     return true;
 }
 
+using PlayerWeaponAnimControlRequestWeaponPartFunction = void(__fastcall*)(
+    void*, void*, std::uint32_t, float);
+PlayerWeaponAnimControlRequestWeaponPartFunction
+    g_original_player_weapon_anim_control_request_weapon_part = nullptr;
+
+void __fastcall hooked_player_weapon_anim_control_request_weapon_part(
+    void* control, void* request, std::uint32_t animation_id, float blend) {
+    const WeaponPartialFinalRequestSnapshot before =
+        seh_weapon_partial_final_request_snapshot(control, request);
+    if (g_original_player_weapon_anim_control_request_weapon_part != nullptr) {
+        g_original_player_weapon_anim_control_request_weapon_part(
+            control, request, animation_id, blend);
+    }
+    if (!before.valid) {
+        return;
+    }
+    const WeaponPartialFinalRequestSnapshot after =
+        seh_weapon_partial_final_request_snapshot(control, request);
+
+    std::uint32_t blend_bits = 0;
+    std::memcpy(&blend_bits, &blend, sizeof(blend_bits));
+    std::uint64_t signature = 1469598103934665603ULL;
+    auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(static_cast<std::uint32_t>(before.owner_index));
+    mix(before.look);
+    mix(animation_id);
+    mix(blend_bits);
+    for (const std::uint32_t word : before.request_words) {
+        mix(word);
+    }
+    if (signature == 0) {
+        signature = 1;
+    }
+    static std::array<std::atomic<std::uint64_t>, 192> seen{};
+    if (!claim_holster_probe_signature(seen, signature)) {
+        return;
+    }
+
+    std::ostringstream line;
+    line << "WEAPON-PARTIAL-NORMAL owner=" << before.owner_index
+         << " player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(before.player)
+         << " control=0x" << reinterpret_cast<std::uintptr_t>(control)
+         << " skeleton=0x"
+         << reinterpret_cast<std::uintptr_t>(before.skeleton_owner)
+         << " look=0x" << before.look
+         << " anim=0x" << animation_id
+         << " selected=0x" << before.selected << "->0x"
+         << after.selected
+         << " blendBits=0x" << blend_bits
+         << " request=";
+    for (const std::uint32_t word : before.request_words) {
+        line << word << ",";
+    }
+    line << std::dec << " afterValid=" << (after.valid ? 1 : 0);
+    boot_log_line(line.str().c_str());
+}
+
+bool install_weapon_partial_normal_request_probe() {
+    auto* const slot = reinterpret_cast<std::uintptr_t*>(
+        g_module + kPlayerWeaponAnimControlVtableRva +
+        kPlayerWeaponAnimControlRequestWeaponPartVtableOffset);
+    if (readable_bytes(slot) < sizeof(*slot) ||
+        *slot != g_module + kPlayerWeaponAnimControlRequestWeaponPartRva) {
+        boot_log_line(
+            "WeaponPartial normal request probe SKIPPED (vtable preflight)");
+        return false;
+    }
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        boot_log_line(
+            "WeaponPartial normal request probe SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            slot, sizeof(*slot), PAGE_EXECUTE_READWRITE, &old_protection)) {
+        resume_suspended_process_threads(suspended_threads);
+        boot_log_line(
+            "WeaponPartial normal request probe SKIPPED (VirtualProtect)");
+        return false;
+    }
+    g_original_player_weapon_anim_control_request_weapon_part =
+        reinterpret_cast<PlayerWeaponAnimControlRequestWeaponPartFunction>(
+            *slot);
+    *slot = reinterpret_cast<std::uintptr_t>(
+        &hooked_player_weapon_anim_control_request_weapon_part);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(*slot));
+    DWORD ignored = 0;
+    VirtualProtect(slot, sizeof(*slot), old_protection, &ignored);
+    resume_suspended_process_threads(suspended_threads);
+    boot_log_line(
+        "WeaponPartial normal request probe installed at vtable+0x08 (read-only)");
+    return true;
+}
+
 // Read-only lifecycle snapshot for the exact channel-one weapon actions. The
 // common sequencer stores its owner Player at +0x18, its channel count at
 // +0x110, and the intrusive-list table at +0x120. Channel one is where
@@ -48518,8 +48620,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09zn "
-        "(WeaponPartial final request probe; read-only)");
+        "TLL co-op runtime init 2026-08-09zo "
+        "(WeaponPartial normal request probe; read-only)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -48588,6 +48690,9 @@ DWORD WINAPI install_hook(void*) {
     }
     if constexpr (kEnableWeaponPartialFinalRequestProbe) {
         install_weapon_partial_final_request_probe();
+    }
+    if constexpr (kEnableWeaponPartialNormalRequestProbe) {
+        install_weapon_partial_normal_request_probe();
     }
     if constexpr (kEnableLegacyNadinePistolHipAttachment &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {

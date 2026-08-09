@@ -999,6 +999,14 @@ FUNCTIONS = {
         "(or its feather variant) on WeaponPartial 0xE2B990B9, and requests "
         "the corresponding s_weapon-out state.",
     ),
+    0x14108C0C0: (
+        "PlayerWeaponAnimControl_RequestWeaponPart",
+        "PlayerWeaponAnimControl vtable +0x08. Stores the requested animation "
+        "id at control+0x18, copies the caller pose record to the Player "
+        "animation owner, and starts or fades the exact WeaponPartial "
+        "0xE2B990B9 layer. This is the normal PlayerPlayWeaponOverlayAction "
+        "path when its special custom-part branch is not selected.",
+    ),
     0x141AD5DC0: (
         "AnimSnapshotNodeInstanceZero_Create",
         "Creates the 0x40-byte AnimSnapshotNodeInstanceZero for authored "

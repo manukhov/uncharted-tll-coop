@@ -715,6 +715,10 @@ constexpr std::uintptr_t kPlayerWeaponControllerMapChloeOverlayCallsiteRva =
 // receives the final WeaponPartial animation id after the controller lookup
 // and all caller-side fallbacks have completed.
 constexpr std::uintptr_t kPlayerWeaponAnimControlVtableRva = 0x2A46778;
+constexpr std::uintptr_t kPlayerWeaponAnimControlRequestWeaponPartRva =
+    0x108C0C0;
+constexpr std::uintptr_t kPlayerWeaponAnimControlRequestWeaponPartVtableOffset =
+    0x08;
 constexpr std::uintptr_t kPlayerWeaponAnimControlRequestCustomPartRva =
     0x108B940;
 constexpr std::uintptr_t kPlayerWeaponAnimControlRequestCustomPartVtableOffset =
