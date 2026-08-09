@@ -1942,11 +1942,10 @@ constexpr bool kEnableCharacterLegIkBasePoseRelay = true;
 // rifle nor preserves frame time. Keep the observer code available for static
 // correlation, but do not patch the hot RenderMgr callsite in production.
 constexpr bool kEnableStaleRifleCullProbe = false;
-// Build aad reached the proven main SceneWindow, but its decoder mistook the
-// outer 32-byte DrawablePrototype records for their nested 9-byte submesh rows.
-// Build aaf corrects that read-only census and keeps the bounded three-sample
-// discriminator enabled until the invalid aad classification is replaced.
-constexpr bool kEnableNadinePerViewRifleCensus = true;
+// Build aaf corrected the nested list decoder and confirmed that the exact
+// current rifle LOD0/LOD2 instances are selected in the local main view while
+// controller current=-1. The bounded census has answered its question.
+constexpr bool kEnableNadinePerViewRifleCensus = false;
 // Builds gm..gw rejected the inactive-rifle attachment replay, late visibility
 // hide, FgDraw suppression, renderer-wide owner census and downstream holster
 // probes as fixes for the local spawn artifact. None of those hot diagnostics
@@ -49541,8 +49540,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09aaf "
-        "(corrected nested Nadine main-view rifle census enabled)");
+        "TLL co-op runtime init 2026-08-09aag "
+        "(current Nadine rifle main-view submission confirmed; census disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

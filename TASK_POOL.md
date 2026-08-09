@@ -3248,7 +3248,7 @@ Do not reopen these as the first move:
       results do not classify Fexternal and do not close the main foreground
       path. The corrected nested layout and evidence are recorded in
       `COOP_STATUS.md`.
-- [ ] Run corrected bounded read-only build `aaf` at untouched cold role-B
+- [x] Run corrected bounded read-only build `aaf` at untouched cold role-B
       Nadine spawn. `SceneRendering_Render 0x14186C8A0` and
       `SceneRendering_EmitDrawablePrototypeSubmeshes 0x141AB5780` prove that
       each outer PageTable row is 32 bytes, with `FgInstance**` at `+8`, an
@@ -3259,6 +3259,18 @@ Do not reopen these as the first move:
       Fcurrent/Fsame/Fother branch; all six at zero in three valid samples while
       the rifle remains visible selects Fexternal. Crash, stall, truncation,
       zero inner rows or extra samples rejects only the probe packaging.
+      CONFIRMED Fcurrent: stable generation 7 produced exactly three complete
+      scans (507, 412 and 374 inner rows; no fourth sample). Exact current pool
+      instances 1056/LOD0 and 1058/LOD2 each had three selected submeshes in
+      every sample while the untouched rifle remained glued to Nadine's hand.
+      Build `aag` disables the completed census.
+- [ ] Trace the later stock writer that restores the exact current rifle's
+      `FgInstance+0x1A0` active bytes between the rejected `go`
+      post-parent-visibility hide and the now-confirmed completed per-view cull.
+      Resolve every write plus caller ordering and distinguish later parent
+      visibility propagation (Vparent), LOD/view preparation (Vlod), and
+      DrawControl/FgInstance rebuild (Vrebuild). Do not retry controller,
+      attachment, stale-owner, common-cull or overlay hypotheses.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

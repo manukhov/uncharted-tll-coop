@@ -19195,3 +19195,48 @@ of `aaf` succeeds. The sole IDB was saved with
 `MeshCull_SelectFgViewDrawLists 0x141A30B80`; the label pass reported 1630
 functions/56 data names and `save_database returned True`, and the restarted MCP
 independently resolves all three names.
+
+### 2026-08-09 CONFIRMED: the exact current Nadine rifle is selected in the local main view (`aaf`)
+
+The corrected nested census selected the written **Fcurrent** outcome. Both
+processes loaded `aaf` and remained responsive. After the cold role-B target
+settled at generation 7, the probe emitted exactly samples 1/2/3, all with the
+same primary `SceneWindow=0x7FF7566978B0` and config
+`0x7FF756693500`; there was no fourth sample. All three scans were complete and
+nonempty:
+
+- sample 1: 328/328 drawables, 507/507 inner submeshes;
+- sample 2: 287/287 drawables, 412/412 inner submeshes;
+- sample 3: 271/271 drawables, 374/374 inner submeshes.
+
+Every header had `truncated=0`, `targetMask=activeMask=0x7`, three exact owner
+hits and six geometry hits. More importantly, the exact current rifle instances
+were selected: pool 1056 / target LOD0 had three inner rows in draw-list bit 0,
+and pool 1058 / target LOD2 had three inner rows in draw-list bit 3 in each of
+the three stable samples. LOD1 was not selected. Same-geometry twins also
+appeared in some frames, but they are not needed to explain the artifact because
+the exact current ProcessWeapon triplet already reaches the final local-view
+renderer. The user kept the untouched spawn rifle visibly glued to Nadine's hand
+through the capture.
+
+This rejects **Fexternal** and the separate-overlay requirement. The local-only
+artifact is the current slot-zero ProcessWeapon's own FgInstance presentation:
+although the weapon controller is stably holstered (`current=-1, draw=0` in the
+already confirmed lifecycle captures), its exact LOD0/LOD2 instances are active
+and selected for the primary view. It also corrects the apparent conflict with
+`go`: that probe observed `DrawControl_HideMesh` make all three instances
+inactive at the post-parent-visibility boundary, whereas `aaf` observes the
+same current instance pointers active (`0xFF`) later at completed per-view cull.
+Therefore a later stock visibility writer restores them between those two
+boundaries. Repeating attachment, controller lifecycle, common final-cull,
+overlay or stale-owner searches is forbidden.
+
+Build `aag` disables the completed hot census. The next static investigation is
+the exact writer/data path that changes current rifle `FgInstance+0x1A0` from
+inactive after `NdAttachableObject_PostJointUpdate_Async` back to active before
+`MeshCull_CullFgViewJob`. Competing causes are: **Vparent**, a later parent/local
+Player visibility propagation; **Vlod**, an LOD/view preparation writer that
+reconstructs active from another state field; and **Vrebuild**, a replacement
+DrawControl/FgInstance publication that reuses the same pool pointers. Resolve
+all writes and call ordering statically before another runtime test. Both game
+processes were closed after capture.
