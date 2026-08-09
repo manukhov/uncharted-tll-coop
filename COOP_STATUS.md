@@ -20057,7 +20057,7 @@ falsifies a completion invariant, and a fully verified row with the visible
 P99 still in hand selects a later presentation object. Do not ask for a manual
 draw/Put cycle until the cold result and row have first passed.
 
-### 2026-08-09 RUNTIME CONFIRMED: `aas` completes the real P99 spine-to-hip handoff; visible small prop has another presentation owner
+### 2026-08-09 RUNTIME CONFIRMED / AMENDED: `aas` completes the P99 spine-to-hip handoff; visible small-object owner is unresolved
 
 Both PID 12760 and PID 17696 loaded marker `aas`, installed all three boundaries,
 assigned roles A/B and remained responsive. Every admitted cold P99 generation
@@ -20071,11 +20071,18 @@ one-shot also remained verified at `rightHand -> targSpineProp`.
 The user still saw an object at the hand on empty-hand spawn, but supplied a new
 visual discriminator: it is materially smaller than the real P99 shown after an
 actual Draw and resembles the reduced holstered pistol model belonging to the
-outfit. This falsifies **Hsame-ProcessWeapon-endpoint** for that visible object:
-the exact current ProcessWeapon is already verified on the hip, so changing its
-attachment id again cannot address the pixels. `aas` is retained as CONFIRMED
-for the real P99 handoff. The next owner search must distinguish a separate
-appearance/mesh-overlay holster prop from an alternate ProcessWeapon child or
-stale local-view presentation; prior cull/visibility and attachment-id tests
-must not be repeated. No manual draw/Put pose claim is made from this cold-only
-run, and the independent `aaq` WeaponPartial path remains untested here.
+outfit. This proves that attachment-id state and visible presentation disagree,
+but it does **not** by itself prove a second owner. The earlier renderer-wide
+`fy` census tied every hit for the known P99 geometry ids
+`255BEBA0,FDBF86F9,F0FCA020` to exact inventory `ProcessWeapon` owners; it did
+not census an as-yet-unknown reduced holster-mesh id. Therefore
+**Hsame-ProcessWeapon-endpoint** is rejected only as a complete explanation of
+the pixels, while three presentation alternatives remain open: a distinct
+appearance/mesh-overlay prop, an alternate reduced ProcessWeapon child, or a
+stale local-view transform/scale submission. `aas` remains CONFIRMED for the
+logical P99 handoff, but another attachment-id change is not authorized. The
+next static step is to identify the small object's exact geometry resource and
+scale/owner chain, reusing the proven `fy` identity path rather than repeating
+cull, visibility or controller-cycle experiments. No manual draw/Put pose claim
+is made from this cold-only run, and the independent `aaq` WeaponPartial path
+remains untested here.
