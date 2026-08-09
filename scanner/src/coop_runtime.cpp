@@ -1946,11 +1946,12 @@ constexpr bool kEnableWeaponPartialSelectionProbe = false;
 constexpr bool kEnableWeaponPartialFinalRequestProbe = false;
 constexpr bool kEnableWeaponPartialNormalRequestProbe = false;
 // Builds gz/ha rejected the terminal controller rebind, hb rejected a stock Put,
-// zq rejected the terminal Draw commit followed by Put, and zs rejected even the
-// complete stock Draw -> WeaponOut -> Put lifecycle. The surviving artifact is
-// local-main-view-only, so leave this controller experiment disabled while the
-// separate per-view weapon presentation path is traced.
-constexpr bool kEnableInitialLocalNadineRifleFullDrawThenHolster = false;
+// and zq rejected the terminal Draw commit followed by Put. Build zs exercised
+// Draw -> WeaponOut -> Put through the inner controller vtable +0x48 only. A
+// real local command enters outer vtable +0x40 PlayerWeaponController_SwitchToWeapon,
+// which also commits the selected/requested presentation slots at +0x12C/+0x130.
+// Build zw tests that exact missing outer transaction once.
+constexpr bool kEnableInitialLocalNadineRifleFullDrawThenHolster = true;
 // Build zu: the stock weapon-controller lifecycle, physical attachment, exact
 // ProcessWeapon DrawControl and both FgDraw prepare paths have all been rejected
 // as owners of the cold role-B local image. The remaining view-specific stock
@@ -42456,8 +42457,8 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
         reinterpret_cast<std::uintptr_t>(controller_vtable) !=
             g_module + kPlayerWeaponControllerVtableRva ||
         reinterpret_cast<std::uintptr_t>(
-            controller_vtable[0x48 / sizeof(void*)]) !=
-            g_module + kPlayerWeaponControllerApplyWeaponSwitchRva) {
+            controller_vtable[0x40 / sizeof(void*)]) !=
+            g_module + kSwitchToWeaponRva) {
         return;
     }
 
@@ -42511,14 +42512,27 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
                 if (now - cycle.weapon_out_since_ms >= 250) {
                     const int pre_put_current = current_slot;
                     const std::uint32_t pre_put_draw = draw_state;
-                    const bool put_call = safe_weapon_controller_draw(
-                        controller, 0xFFFFFFFFu, false);
+                    const int pre_put_selected =
+                        *reinterpret_cast<const std::int32_t*>(
+                            static_cast<const std::byte*>(controller) + 0x12C);
+                    const int pre_put_requested_hands =
+                        *reinterpret_cast<const std::int32_t*>(
+                            static_cast<const std::byte*>(controller) + 0x130);
+                    const bool put_call = safe_switch_to_weapon(
+                        player, 0xFFFFFFFFu, false);
                     int post_put_current = -99;
                     std::uint32_t post_put_draw = 0xFFFFFFFFu;
                     const bool post_readable = read_weapon_draw_state(
                         player, post_put_current, post_put_draw);
+                    const int post_put_selected =
+                        *reinterpret_cast<const std::int32_t*>(
+                            static_cast<const std::byte*>(controller) + 0x12C);
+                    const int post_put_requested_hands =
+                        *reinterpret_cast<const std::int32_t*>(
+                            static_cast<const std::byte*>(controller) + 0x130);
                     std::ostringstream line;
                     line << "NADINE-LOCAL-RIFLE-FULL-CYCLE action=put"
+                         << " route=outer"
                          << " player=0x" << std::hex
                          << reinterpret_cast<std::uintptr_t>(player)
                          << " weapon=0x"
@@ -42526,6 +42540,10 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
                          << std::dec << " current=" << pre_put_current
                          << "->" << post_put_current
                          << " draw=" << pre_put_draw << "->" << post_put_draw
+                         << " selected=" << pre_put_selected << "->"
+                         << post_put_selected
+                         << " requestedHands=" << pre_put_requested_hands
+                         << "->" << post_put_requested_hands
                          << " call=" << (put_call ? 1 : 0)
                          << " stateReadable=" << (post_readable ? 1 : 0);
                     write_log_line(line.str().c_str());
@@ -42552,12 +42570,19 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
                     player, attach_index, &attach_id, &records_generation);
             std::ostringstream line;
             line << "NADINE-LOCAL-RIFLE-FULL-CYCLE action=complete"
+                 << " route=outer"
                  << " player=0x" << std::hex
                  << reinterpret_cast<std::uintptr_t>(player)
                  << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
                  << " parent=0x" << parent_id
                  << " attachId=0x" << attach_id << std::dec
                  << " current=" << current_slot << " draw=" << draw_state
+                 << " selected="
+                 << *reinterpret_cast<const std::int32_t*>(
+                        static_cast<const std::byte*>(controller) + 0x12C)
+                 << " requestedHands="
+                 << *reinterpret_cast<const std::int32_t*>(
+                        static_cast<const std::byte*>(controller) + 0x130)
                  << " index=" << static_cast<unsigned>(attach_index)
                  << " expected=" << cycle.gun_holster_index
                  << " handSlot=" << capture_hand_attached_slot_int(player)
@@ -42622,16 +42647,25 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
 
     const int pre_requested_slot = *reinterpret_cast<const std::int32_t*>(
         static_cast<const std::byte*>(controller) + 0x124);
-    const bool draw_call = safe_weapon_controller_draw(controller, 0, true);
+    const int pre_selected_slot = *reinterpret_cast<const std::int32_t*>(
+        static_cast<const std::byte*>(controller) + 0x12C);
+    const int pre_requested_hands_slot = *reinterpret_cast<const std::int32_t*>(
+        static_cast<const std::byte*>(controller) + 0x130);
+    const bool draw_call = safe_switch_to_weapon(player, 0, true);
     int post_current_slot = -99;
     std::uint32_t post_draw_state = 0xFFFFFFFFu;
     const bool post_state_readable = read_weapon_draw_state(
         player, post_current_slot, post_draw_state);
     const int post_requested_slot = *reinterpret_cast<const std::int32_t*>(
         static_cast<const std::byte*>(controller) + 0x124);
+    const int post_selected_slot = *reinterpret_cast<const std::int32_t*>(
+        static_cast<const std::byte*>(controller) + 0x12C);
+    const int post_requested_hands_slot = *reinterpret_cast<const std::int32_t*>(
+        static_cast<const std::byte*>(controller) + 0x130);
 
     std::ostringstream line;
-    line << "NADINE-LOCAL-RIFLE-FULL-CYCLE action=draw player=0x" << std::hex
+    line << "NADINE-LOCAL-RIFLE-FULL-CYCLE action=draw route=outer player=0x"
+         << std::hex
          << reinterpret_cast<std::uintptr_t>(player)
          << " controller=0x"
          << reinterpret_cast<std::uintptr_t>(controller)
@@ -42645,6 +42679,10 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
          << " current=" << current_slot << "->" << post_current_slot
          << " requested=" << pre_requested_slot << "->"
          << post_requested_slot
+         << " selected=" << pre_selected_slot << "->"
+         << post_selected_slot
+         << " requestedHands=" << pre_requested_hands_slot << "->"
+         << post_requested_hands_slot
          << " draw=" << draw_state << "->" << post_draw_state
          << " handSlot=" << hand_slot << "->"
          << capture_hand_attached_slot_int(player)
@@ -48852,8 +48890,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09zv "
-        "(rejected ProcessWeapon main-view probe disabled; NdProp frontier)");
+        "TLL co-op runtime init 2026-08-09zw "
+        "(cold local-Nadine rifle outer SwitchToWeapon cycle)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

@@ -10049,6 +10049,26 @@ FUNCTIONS = {
         "machine. Resolves the requested and current weapon objects, applies "
         "holster/unholster transitions, and rejects invalid controller states.",
     ),
+    0x1410A4740: (
+        "PlayerWeaponController_GetEffectiveCurrentWeaponIndex",
+        "Controller vtable +0x68. Normally returns authoritative current index "
+        "+0x120; while current is transient -2, returns staged +0x124 only when "
+        "that index is valid and resolves to a current ProcessWeapon. "
+        "Player_ChangeLookId saves this result before rebuilding the look.",
+    ),
+    0x1410A6E20: (
+        "PlayerWeaponController_ReapplyWeaponIndex",
+        "Controller vtable +0x60. Resolves the current ProcessWeapon through "
+        "vtable +0xB0 and, when present, delegates the supplied index and flags "
+        "to PlayerWeaponController_ApplyImmediateWeaponIndex. ChangeLookId calls "
+        "this after rebuilding the Player body and attachment system.",
+    ),
+    0x1410A6E70: (
+        "PlayerWeaponController_ApplyImmediateWeaponIndex",
+        "Removes conflicting weapon classes, updates controller selection fields, "
+        "calls PlayerWeaponController_EquipWeaponIndex and refreshes the weapon "
+        "overlay/knowledge state. Used by GiveWeapon and vtable +0x60 reapply.",
+    ),
     0x1410A49E0: (
         "PlayerWeaponController_GetHandAttachedWeaponSlot",
         "Implementation behind controller vtable slot +0x78. Scans inventory "
@@ -10064,6 +10084,24 @@ FUNCTIONS = {
         "PlayerWeaponController_GetCurrentWeapon",
         "Controller vtable slot +0xB8. Resolves slot 19 when controller+0x120 "
         "equals 19; otherwise resolves the current slot byte at +0x12C.",
+    ),
+    0x141805C60: (
+        "ResolvedLook_ResolveProps2",
+        "Resolves the Look2 prop list into ResolvedLook+0x5848. Stores at most "
+        "16 prop ids at +0x584C with parallel flags at +0x588C; legacy "
+        "nadine-rural resolves only its authored hair-cloth prop.",
+    ),
+    0x141E61A40: (
+        "NdPropControl_MaterializePendingProps",
+        "Materializes the pending Look2 prop spawn entries built by "
+        "NdPropControl_BuildPropSpawnList and stores their retained actor weak "
+        "pairs in the live NdPropControl table.",
+    ),
+    0x141E63000: (
+        "NdPropControl_ResolveLivePropAtIndex",
+        "Validates an NdPropControl live-entry index and generation, then returns "
+        "the retained prop actor. Player main-view visibility uses this resolver "
+        "before publishing visibility events to Look2 props.",
     ),
     0x1410D67B0: (
         "Player_GetActiveWeapon",

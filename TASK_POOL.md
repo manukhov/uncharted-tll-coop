@@ -3175,14 +3175,19 @@ Do not reopen these as the first move:
       `published=1` row for slot-zero art `0x8075397D`, remained responsive, and
       the user saw no change. The pixels therefore do not belong to that
       inventory ProcessWeapon's main-view representation.
-- [ ] Classify the separate local Nadine look prop which can own the glued rifle.
-      Start from `Player+0x1B10` (`NdPropControl`): resolve the exact materializer
-      for its 40-byte retained records, the live child actor types/identity, and
-      the authored Look2/`prop` source used by local role-B Nadine versus the
-      correctly rendered remote Nadine. Keep Player body DrawControl, tracked
-      hat/hair actors and `Player+0x3518` as explicit competitors. Do not launch
-      until one candidate is identified by three independent static evidence
-      types and the runtime discriminator targets that exact child only.
+- [x] Classify the proposed separate local Nadine look prop. STATIC REJECTED:
+      `ResolvedLook_ResolveProps2 0x141805C60` gives legacy `nadine-rural` only
+      the `nadine-srilanka-hair-cloth` prop; body/shirt/holster assets contain no
+      rifle; `Player+0x3518` is the exact `add-belt-attachment` script actor; hat
+      slots were runtime-zero. Correct the overbroad `zu` owner inference:
+      `DisableMainView` is rejected, but `fy` still proves all matching rifle
+      geometry belongs to exact ProcessWeapon actors.
+- [ ] Run bounded build `zw`, replacing only `zs`'s direct inner vtable `+0x48`
+      calls with the real outer `PlayerWeaponController_SwitchToWeapon +0x40`.
+      Require one Draw -> WeaponOut -> Put -> complete sequence, exact slot-zero
+      rifle, `+0x12C/+0x130` audit, final `current=-1/draw=0/gun_holster`, and no
+      other mutation. Disappearance selects Oouter; complete unchanged pixels
+      select Oinner-same and move the frontier before SwitchToWeapon.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

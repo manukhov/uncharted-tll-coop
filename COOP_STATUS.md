@@ -18773,3 +18773,71 @@ identity and materialization path discriminate these alternatives statically.
 
 The rejected probe is disabled and the clean build marker advances to
 `2026-08-09zv`.
+
+### 2026-08-09 STATIC / IMPLEMENTED: preserve the outer local weapon-switch transaction (`zw`)
+
+The `zu` conclusion is narrowed. A successful `DisableMainView` publication
+rejects that authored event as the visibility seam, but does **not** prove a
+different actor owns the pixels. The earlier renderer-wide `fy` census found
+every matching rifle geometry owner to be an RTTI-exact `ProcessWeapon`, and no
+non-weapon geometry owner occurred. The newly completed owner audit independently
+rejects the proposed Player-look prop alternatives: legacy `nadine-rural
+0xD27C074F` has only the `nadine-srilanka-hair-cloth` Look2 prop; its body,
+shirt and holster PAK meshes contain no rifle; the `Player+0x3518` script actor
+is created by exact event `add-belt-attachment 0x9F804FB1`; and the historical
+hat census had no live hat process. Therefore the `Mplayer-look` wording above
+is retained only as the written `zu` outcome, not as a current owner claim.
+
+The apparent complete-cycle rejection in `zs` also omitted one exact stock
+boundary. The helper used by that build called
+`PlayerWeaponController_ApplyWeaponSwitch 0x1410A28A0`, vtable `+0x48`,
+directly. A real local weapon command enters the outer
+`PlayerWeaponController_SwitchToWeapon 0x1410A1C10`, vtable `+0x40`. That outer
+function validates the local current weapon and tracker policy, invokes the
+inner switch, then unconditionally writes the selected presentation byte at
+controller `+0x12C`; for an in-hands request it also writes `+0x130`. The
+independent consumer `PlayerWeaponController_GetCurrentWeapon 0x1410A1FE0`
+uses `+0x12C` to resolve the ordinary current weapon, while
+`PlayerWeaponController_GetRequestedInHandsSlot 0x1410A4CE0` returns `+0x130`.
+Thus `zs` proved the inner action/animation state machine only; it did not
+reproduce the complete local command transaction.
+
+This distinction matches independent runtime history. In `fu` the user's real
+rifle Draw/Put made the cold rifle leave Nadine's local hand, whereas `zs`'s
+programmatic inner Draw -> WeaponOut -> Put reached `current=-1`, `draw=0` and
+`gun_holster` but left the artifact visible. Cold `gy` additionally proved both
+local and remote legacy-Nadine rifles initialize normally on `rightHand` index
+16, so `Player_ChangeLookId`'s saved-slot restore and initial attachment alone
+cannot explain why only the local command path remains stale.
+
+The competitors are now exact. **Oouter**: the omitted outer `+0x40` transaction
+commits the local presentation selectors and the following normal Put clears
+the cold rifle. **Oinner-same**: `+0x12C/+0x130` change as predicted and the full
+cycle completes, but the rifle remains; then the remaining difference is
+earlier than `SwitchToWeapon` (the user-input command/action producer), not
+another attachment, DrawControl or main-view event. **Ounsafe**: rejection of
+the packaging is any failed call, missing WeaponOut/holster completion, wrong
+slot/art, crash, stall, duplicate cycle or regression to pistol/body/grenade.
+
+Build `zw` changes only the already bounded one-shot cold role-B cycle: both
+Draw and Put now call the exact outer `PlayerWeaponController_SwitchToWeapon`.
+Admission validates PlayerWeaponController RTTI and vtable `+0x40`; rows add
+`route=outer` plus `+0x12C/+0x130` before/after. All rejected attachment,
+renderer, NdProp and main-view probes remain disabled.
+
+Written falsifiable prediction before launch: role B emits exactly one
+`action=draw route=outer`, reaches `action=weapon-out`, then one
+`action=put route=outer` and `action=complete route=outer`; `+0x12C` must become
+slot 0 on Draw and the final attachment must be `gun_holster` with
+`current=-1/draw=0`. If the initially glued rifle disappears from Nadine's own
+view while role A remains correct, **Oouter** wins. A complete marker sequence
+with unchanged pixels selects **Oinner-same**. No game was launched during the
+static pass. Release build `zw` succeeds. The sole IDB was updated with
+`PlayerWeaponController_GetEffectiveCurrentWeaponIndex 0x1410A4740`,
+`PlayerWeaponController_ReapplyWeaponIndex 0x1410A6E20`,
+`PlayerWeaponController_ApplyImmediateWeaponIndex 0x1410A6E70`,
+`ResolvedLook_ResolveProps2 0x141805C60`,
+`NdPropControl_MaterializePendingProps 0x141E61A40` and
+`NdPropControl_ResolveLivePropAtIndex 0x141E63000`; the label pass reported
+1619 functions/56 data names and `save_database returned True`. The restarted
+MCP independently resolves the new names. Runtime is pending.
