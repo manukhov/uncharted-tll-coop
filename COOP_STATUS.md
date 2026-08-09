@@ -19558,3 +19558,62 @@ resolved statically. When that correction is ready, the combined prediction
 must require the stock handoff marker, the final P99 thigh endpoint, a continuous
 draw/Put transition with no hand stuck inside the torso, and no regression to
 the already confirmed Mazur-back geometry.
+
+### 2026-08-09 STATIC / IMPLEMENTED: retarget exact Nadine WeaponPartial holster families to Player leg poses (`aal`)
+
+The remaining arm owner is now resolved at the command boundary. The exact
+type-2 `WeaponPartial 0xE2B990B9` reaches
+`AnimStateLayer_CreateAnimCommands 0x14189EA60`, whose final per-layer cmd7 at
+`0x14189EC8C..0x14189ECD6` is emitted as `left=0, right=1, out=0, mode=1,
+weight=1`. Its case-7 consumer at `0x141ABA30A` calls
+`AnimCmdEvaluator_ApplyBlend 0x14217CF90`: the evaluator unions the right-hand
+ValidBits into the output and its mode-1 endpoint selects the right transform for
+every jointly authored row. Thus the correct base `p-holster-leg` motion was not
+missing; the later WeaponPartial pose overwrote its shoulder/elbow rows. This
+confirms **Wpart-overwrite**, rejects **Wbase-only** as the final owner and keeps
+**Wstrap-layer** separate because the strap siblings travel through the
+ProcessWeapon play-animation path rather than this eight-group Player layer.
+
+Asset topology independently supplies a safe, complete leaf replacement. Every
+source and donor below is an eight-group ANIM over underlying skeleton
+`0xFD6DBE03` and follows the normal case-6 retarget to Nadine target
+`0xC39CA709`. Put donors preserve the exact union of authored joints; Get donors
+release only source joint 38 (`l_palm`) to the already generated lower/base lane.
+Roles remain atomic within each four-leaf family:
+
+| context | WeaponPartial source -> Nadine Player leg donor |
+|---|---|
+| cover Put | `C9489257->837E448C` add, `1C25D197->31FFAC36` part, `2D00ED46->43C3AA35` finish-add, `82F79032->D19B85AF` finish-part |
+| cover Get | `1FEE21DE->203C887D` add, `036CBC26->0DB09D17` grab-add, `4A0BE6D8->AAA477D2` grab-part, `B18B5ECC->8F5F2DE1` part |
+| generic Put | `770B783D->6BE64FB2` add, `DE7F96E3->4A5559F7` part, `A2B2BEEB->354A9741` finish-add, `61E76061->A294A1FA` finish-part |
+| combat Get | `C38BF755->1B54CAAF` add, `8894B660->D31ABA8D` grab-add, `F0468B57->2D960631` grab-part, `F0CA0541->18645910` part |
+
+Build `aal` caches the concrete WeaponPartial layer from the already confirmed
+normal request slot `PlayerWeaponAnimControl_RequestWeaponPart 0x14108C0C0`.
+During command generation it admits only the current retained Player whose look
+is exact legacy Nadine, revalidates `player+0x1DF0`, the concrete control vtable,
+its owner backlink and the current `E2B990B9` registry record, then scopes the
+16-id map around the original resolver
+`AnimSetRemap_ResolveAnimationId 0x1417CA2E0`. Each replacement is resolved
+fresh by the stock function; no stale key/pointer is reused. A recursion guard,
+compile-time uniqueness check and whole-family allowlist exclude Chloe, NPC,
+strap, aim, reload and partial-family mutation. Release compilation succeeded.
+
+The three independent evidence kinds are: exact producer/consumer call graph and
+vtable identity; command/evaluator disassembly proving the weight-one overwrite;
+and the PAK clip groups, skeleton ids, roles and joint masks proving compatible
+donors. Alternatives are now sharply testable: **Wpart-overwrite** predicts the
+16 scoped rows and corrected arm path; **Wstance** predicts only one of cover or
+generic families will appear; a missing log row indicates scope/cache packaging,
+while present rows with unchanged arms means a still-later owner exists.
+
+**Falsifiable single-run prediction:** both processes must report marker `aal`,
+all three repair hooks installed and one or more exact
+`NADINE-WEAPON-PARTIAL-LEG-CLIP` rows whose `resolved` equals `target`. On local
+Nadine, one standing P99 draw and one Put must keep the already confirmed thigh
+endpoint, move the arms around rather than through the torso and leave neither
+hand stuck inside it. The Mazur must remain on the back after initialization;
+Chloe, body animation, grenades and frame pacing must remain unchanged. A crash,
+missing scoped row, wrong resolved id, unchanged through-torso trajectory, lost
+P99 hip endpoint or Mazur regression falsifies the corresponding boundary. No
+game process was started during implementation.

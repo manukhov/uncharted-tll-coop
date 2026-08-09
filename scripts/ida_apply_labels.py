@@ -1437,7 +1437,10 @@ FUNCTIONS = {
         "AnimStateLayer_CreateAnimCommands",
         "Type-2 layer command generator. Walks active AnimStateInstances through "
         "AnimStateSnapshot_GenerateAnimCommands and emits transition command 7 "
-        "from per-state track weight +0x158; it contains no direct camera read.",
+        "from per-state track weight +0x158. Its terminal per-layer command 7 at "
+        "0x14189EC8C..0x14189ECD6 is left=0, right=1, out=0, mode=1, weight=1; "
+        "therefore a WeaponPartial layer can replace jointly valid base-pose rows. "
+        "It contains no direct camera read.",
     ),
     0x140096DB0: (
         "InitializeFlinchPartialLayerId",
@@ -2875,7 +2878,9 @@ FUNCTIONS = {
         "AnimCmdEvaluator_ApplyBlend",
         "The ProcessAnimCmdListSegment case-7 consumer for command 0x60007. "
         "Takes the emitted left/right output indices, output/mode and final float "
-        "weight, then invokes the transform and scalar pose-blend helpers. The "
+        "weight, unions ValidBits into the output, then invokes the transform and "
+        "scalar pose-blend helpers. Mode 1 at weight 1 is right-over-left for every "
+        "joint valid in the right child. The "
         "generator short-circuits weight <=0.0001 to child 0 and weight >=0.9999 "
         "to child 1 when endpoint evaluation is enabled.",
     ),

@@ -3775,7 +3775,7 @@ Do not reopen these as the first move:
       reducer is optional here; Hclip-missing, Hblend-suppression and
       Hwrong-snapshot are rejected as Nadine-specific causes. The bounded hook
       is removed.
-- [ ] Resolve the real `WeaponPartial` arm/weapon content before another test.
+- [~] Resolve the real `WeaponPartial` arm/weapon content before another test.
       Decode joint ValidBits for the eight exact live `ak47-*--part/--add`
       clips, their authored `--strap` siblings, and the matching
       `p-holster-leg/back` player-mesh clips. Trace which AnimStateLayer emits
@@ -3852,6 +3852,17 @@ Do not reopen these as the first move:
       removes a mod-created stale-state source but does not claim to solve the
       older arm trajectory. Do not run this packaging change by itself; finish
       the final WeaponPartial owner/retarget proof and test both together once.
+      **STATIC / IMPLEMENTED (`aal`):** the final type-2 layer cmd7 and its
+      case-7 evaluator prove that exact WeaponPartial overwrites jointly valid
+      base shoulder/elbow rows with mode 1, weight 1. Four complete four-leaf
+      Player families now resolve through stock `AnimSetRemap` to compatible
+      `p-holster-leg` donors only while the current retained legacy-Nadine
+      `WeaponPartial 0xE2B990B9` builds commands. Put joint unions are identical;
+      Get releases only `l_palm` to the base lane. Exact owner/control/registry
+      guards, fresh resolver output, recursion protection and a compile-time
+      unique allowlist exclude Chloe/NPC/strap/other WeaponPartial states.
+      Release build passes. Run the one combined P99 draw/Put prediction recorded
+      in `COOP_STATUS.md`; do not split it into more diagnostic launches.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
