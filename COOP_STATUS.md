@@ -19979,3 +19979,37 @@ unchanged. A load crash rejects packaging; a missing P99 row rejects the action
 admission; a row with `stock=0` rejects a completion assumption; verified P99
 but no live-leaf rows isolates snapshot admission; both verified with unchanged
 visuals selects a later presentation owner.
+
+### 2026-08-09 RUNTIME REJECTED: `aar` postcondition mistook the stock intermediate for the final endpoint
+
+Both PID 20004 and PID 20424 loaded marker `aar`, installed the post-phase
+WeaponPartial relay and both P99 hooks, assigned roles A/B, started networking
+and remained responsive through checkpoint load. The user confirmed that local
+Nadine still spawned with the P99 model visibly fixed to the hand while the
+logical draw state was empty. The defect predates `aar`; this run did not create
+it.
+
+The bounded discriminator fired repeatedly for exact P99 generations and
+selected one unambiguous outcome:
+`id=61A48E01 -> 555EFB8D -> 555EFB8D`, `executed=0->1`,
+`handoff=1->1->1`, `stock=0`, `call=0`, `verified=0`. Thus the new code made no
+post-rebind call and the unchanged visual result is expected. The failed guard
+assumed `targSpineProp` was the stock final endpoint. Exact executor control
+flow proves instead that it is a mandatory *intermediate*: the first controller
+rebind at `0x14108A6A6` must select it for the check at `0x14108A798`; only then
+does the executor request `targSpinePropAnim` at `0x14108A882`, perform the
+second controller rebind at `0x14108AB72`, publish local/blend handoff fields and
+finish at `0x14108ADC8`. Legacy Nadine's first stock rebind selecting
+`gun_holster 0x555EFB8D` therefore exits at the check. Merely waiting until
+function return cannot repair a tail that stock never entered.
+
+This rejects **Astock-final-spine** and selects **Abridge-missing** over the
+later-presentation alternative for the next boundary. The safe correction must
+use two explicit selector phases on the exact P99 only: map the generic request
+to `targSpineProp` during the original executor so its internal spine
+postcondition and entire tail complete, require both controller rebinds to have
+crossed that scoped bridge, then run one separate concrete rebind whose generic
+request maps to `pistolHolster`. If the action operates another weapon, the
+selector's exact art/object/inventory checks admit neither phase. No further
+runtime is authorized until that two-phase state machine and its exact call
+counts are implemented and compiled.

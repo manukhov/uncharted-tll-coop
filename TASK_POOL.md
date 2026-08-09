@@ -3948,6 +3948,16 @@ Do not reopen these as the first move:
       beside the `aaq` post-phase live-snapshot leg retarget. Release build
       passes. Perform only the single combined cold-spawn plus one P99 draw/Put
       prediction recorded in `COOP_STATUS.md`; do not split it into more tests.
+      **RUNTIME REJECTED (`aar`):** both copies remained stable, but every exact
+      cold P99 row was `rightHand -> gun_holster`, `stock=0`, `call=0`; the user
+      still saw the pre-existing hand-glued P99. The strict guard confused the
+      executor's mandatory intermediate spine id with its final result. Static
+      control flow now proves the first rebind must be bridged
+      `gun_holster -> targSpineProp` to pass `0x14108A798`, after which the
+      direct Anim record, second rebind and handoff tail can run. Implement a
+      two-phase exact-P99 selector: spine bridge only during stock executor,
+      require both scoped controller rebinds, then hip mapping only in a
+      separate post-executor concrete rebind. Do not rerun the unchanged guard.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
