@@ -3913,6 +3913,19 @@ Do not reopen these as the first move:
       null guard while retaining exact track equality and all other admission and
       fail-closed resolver checks. Run only the revised single P99 draw/Put
       prediction recorded in `COOP_STATUS.md`.
+      **RUNTIME REJECTED (`aao`):** both copies stayed responsive and the pose
+      remained unchanged, but the revised pair still emitted zero replacement
+      rows. Historical exact-state `HOLSTER-REF-LEAVES` captures already prove
+      the Put source ids are live, so the miss is snapshot lifetime/order rather
+      than clip inventory: retained ownership appears after the one-time leaf
+      initializer and the cached tree is reused. Build `aap` disables the pair.
+      Next, operate only after `AnimStateLayer_PhaseUpdateInstances 0x14189D720`
+      on the exact retained Nadine WeaponPartial instance, validate its
+      `SnapshotNodeHeap* +0x130` and root `+0x138`, and update matching existing
+      animation leaves before command generation. Live memory also proves the
+      visibly hand-glued P99 is already logically on `pistolHolster`; restore
+      the stock holster executor tail before the hip rebind instead of changing
+      attachment ids or returning to renderer/cull probes.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

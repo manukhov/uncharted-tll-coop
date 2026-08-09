@@ -1988,7 +1988,7 @@ constexpr bool kEnableWeaponPartialNormalRequestProbe = false;
 // Build aan replaces only exact holster/unholster animation leaves while the
 // current retained legacy-Nadine WeaponPartial layer creates its snapshot.
 // Two direct E8 relays avoid the rejected global resolver/command detours.
-constexpr bool kEnableLegacyNadineWeaponPartialSnapshotLegRetarget = true;
+constexpr bool kEnableLegacyNadineWeaponPartialSnapshotLegRetarget = false;
 // Builds zs/zw reject a single-slot rifle Draw -> Put through both controller
 // entry levels. The historical visible recovery first drew the pistol, then
 // switched pistol -> rifle and put the rifle away. That cross-slot state-2 path
@@ -50081,8 +50081,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09aao "
-        "(null-overlay-safe Nadine WeaponPartial snapshot leaf retarget)");
+        "TLL co-op runtime init 2026-08-09aap "
+        "(rollback rejected pre-retained WeaponPartial snapshot leaf scope)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

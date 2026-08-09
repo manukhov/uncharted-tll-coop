@@ -19825,3 +19825,44 @@ the 16-id live-family inventory rather than ownership admission; `safe=0` would
 select resolver incompatibility; correct rows with unchanged through-torso arms
 would identify a later pose owner. A crash would reject the null-admitting
 snapshot/leaf package.
+
+### 2026-08-09 RUNTIME REJECTED: `aao` still misses the cached WeaponPartial snapshot
+
+Both copies loaded marker `2026-08-09aao`, installed the atomic snapshot/leaf
+relay pair and remained responsive through the requested local-Nadine P99
+draw/Put cycle. The user reported no arm-motion improvement and no other body
+regression. Neither process emitted a single
+`NADINE-WEAPON-PARTIAL-SNAPSHOT-LEG` row. Thus admitting the stock-null overlay
+did not change the result: the leaf boundary itself was not reached inside the
+retained-owner scope.
+
+The missing row does **not** reject the 16 live source ids. Historical bounded
+`HOLSTER-REF-LEAVES` captures from exact state `s_weapon-holster 0xDF5B68FC`
+already observed the complete Put families in constructed
+`AnimSnapshotNodeAnimation` leaves: Nadine cover ids
+`C9489257/1C25D197/2D00ED46/82F79032` and Chloe-base generic ids
+`770B783D/DE7F96E3/A2B2BEEB/61E76061`. The current zero-row result instead
+selects a lifetime/order mismatch: `0x14191801C` initializes a snapshot leaf
+once, before the later retained-Player ownership used by `aan/aao` is
+available; subsequent WeaponPartial requests reuse that snapshot and do not
+re-enter the initializer.
+
+The user's additional visual observation is independently classified. In the
+local-Nadine process, read-only live memory showed the exact P99 art
+`0x8075397D` logically attached to index 41 / `pistolHolster 0x8A0249B5`, with
+the holster completion byte set, while its model remained visibly glued to the
+hand. The logical attach point is therefore already correct; the remaining
+cold P99 image is a stale local presentation/handoff, consistent with the
+known `aaj` early exit from `PlayerHolsterWeaponAnimAction_Execute` after its
+internal selector is redirected. It is not evidence for another attachment id
+or another foreground-cull experiment.
+
+Build `aap` disables the rejected snapshot/leaf pair and changes no gameplay
+mutation relative to the visually confirmed `aaj` package. The next static
+boundary is after `AnimStateLayer_PhaseUpdateInstances 0x14189D720` has reused
+or materialized the exact live WeaponPartial instances: validate each current
+instance's `+0x130/+0x138` snapshot heap/root and retarget matching animation
+leaves in place before command generation. Separately, the P99 endpoint must
+let the stock holster executor finish its mandatory spine/handoff tail before
+the already proven hip rebind; no further selector, visibility or cull tuning
+is permitted.
