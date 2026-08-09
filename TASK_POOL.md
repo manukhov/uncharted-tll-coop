@@ -3895,6 +3895,14 @@ Do not reopen these as the first move:
       present as eight-group registrations in the same movement PAK. Implement
       only an atomic pair of exact E8 relays, TLS-bound to the same AnimSet;
       never restore the global resolver or command-generator detours.
+      **STATIC / IMPLEMENTED (`aan`):** the two exact E8 relays are now atomic
+      and fail-closed. Snapshot admission revalidates the current Nadine Player,
+      control, stock type-2 lookup and live track; leaf admission also requires
+      the identical AnimSet. A donor is copied only when stock source/donor ids
+      remain exact and their two nonzero lookup keys match; otherwise output is
+      stock. Release build passes. The single written test in `COOP_STATUS.md`
+      separates scope miss, safe fallback and a later owner. Do not combine this
+      run with the deleted/unisolated `aak` post-rebind branch.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

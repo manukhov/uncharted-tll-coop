@@ -1985,6 +1985,10 @@ constexpr bool kEnableInitialLocalNadineRifleRebind = true;
 constexpr bool kEnableWeaponPartialSelectionProbe = false;
 constexpr bool kEnableWeaponPartialFinalRequestProbe = false;
 constexpr bool kEnableWeaponPartialNormalRequestProbe = false;
+// Build aan replaces only exact holster/unholster animation leaves while the
+// current retained legacy-Nadine WeaponPartial layer creates its snapshot.
+// Two direct E8 relays avoid the rejected global resolver/command detours.
+constexpr bool kEnableLegacyNadineWeaponPartialSnapshotLegRetarget = true;
 // Builds zs/zw reject a single-slot rifle Draw -> Put through both controller
 // entry levels. The historical visible recovery first drew the pistol, then
 // switched pistol -> rifle and put the rifle away. That cross-slot state-2 path
@@ -39738,6 +39742,365 @@ bool install_weapon_partial_normal_request_probe() {
     return true;
 }
 
+struct LegacyNadineWeaponPartialLegClipReplacement {
+    std::uint32_t source = 0;
+    std::uint32_t donor = 0;
+};
+
+constexpr std::array<LegacyNadineWeaponPartialLegClipReplacement, 16>
+    kLegacyNadineWeaponPartialLegClipReplacements{{
+        // cover-low-l Put: add, part, finish-add, finish-part
+        {0xC9489257u, 0x837E448Cu},
+        {0x1C25D197u, 0x31FFAC36u},
+        {0x2D00ED46u, 0x43C3AA35u},
+        {0x82F79032u, 0xD19B85AFu},
+        // cover-low-l Get: add, grab-add, grab-part, part
+        {0x1FEE21DEu, 0x203C887Du},
+        {0x036CBC26u, 0x0DB09D17u},
+        {0x4A0BE6D8u, 0xAAA477D2u},
+        {0xB18B5ECCu, 0x8F5F2DE1u},
+        // generic Put: add, part, finish-add, finish-part
+        {0x770B783Du, 0x6BE64FB2u},
+        {0xDE7F96E3u, 0x4A5559F7u},
+        {0xA2B2BEEBu, 0x354A9741u},
+        {0x61E76061u, 0xA294A1FAu},
+        // combat Get: add, grab-add, grab-part, part
+        {0xC38BF755u, 0x1B54CAAFu},
+        {0x8894B660u, 0xD31ABA8Du},
+        {0xF0468B57u, 0x2D960631u},
+        {0xF0CA0541u, 0x18645910u},
+    }};
+
+constexpr bool legacy_nadine_weapon_partial_leg_clip_map_is_unique() {
+    for (std::size_t i = 0;
+         i < kLegacyNadineWeaponPartialLegClipReplacements.size(); ++i) {
+        const auto& left =
+            kLegacyNadineWeaponPartialLegClipReplacements[i];
+        if (left.source == 0 || left.donor == 0 ||
+            left.source == left.donor) {
+            return false;
+        }
+        for (std::size_t j = i + 1;
+             j < kLegacyNadineWeaponPartialLegClipReplacements.size(); ++j) {
+            const auto& right =
+                kLegacyNadineWeaponPartialLegClipReplacements[j];
+            if (left.source == right.source || left.donor == right.donor) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static_assert(legacy_nadine_weapon_partial_leg_clip_map_is_unique());
+
+constexpr std::uint32_t kWeaponPartialLayerId = 0xE2B990B9u;
+constexpr std::uint32_t kAnimStateLayerType = 2;
+constexpr std::size_t kMaxSnapshotAdmissionRegistryEntries = 64;
+constexpr std::size_t kMaxSnapshotAdmissionTracks = 64;
+
+using AnimControlFindActiveType2LayerByIdFunction = void*(__fastcall*)(
+    void*, std::uint32_t);
+using AnimStateSnapshotSnapshotAnimStateFunction = std::uint64_t(__fastcall*)(
+    void*, void*, void*, void*, void*, void*, void*, void*, void*);
+using AnimSetRemapResolveAnimationIdFunction = std::uint32_t*(__fastcall*)(
+    void*, std::uint32_t*, std::uint32_t);
+
+AnimControlFindActiveType2LayerByIdFunction
+    g_anim_control_find_active_type2_layer_by_id = nullptr;
+AnimStateSnapshotSnapshotAnimStateFunction
+    g_anim_state_snapshot_snapshot_anim_state = nullptr;
+AnimSetRemapResolveAnimationIdFunction
+    g_anim_set_remap_resolve_animation_id_for_nadine_weapon_partial = nullptr;
+
+struct LegacyNadineWeaponPartialSnapshotScope {
+    bool active = false;
+    int owner_index = -1;
+    void* player = nullptr;
+    void* overlay = nullptr;
+    void* anim_set = nullptr;
+};
+
+thread_local LegacyNadineWeaponPartialSnapshotScope
+    g_legacy_nadine_weapon_partial_snapshot_scope{};
+
+bool seh_classify_legacy_nadine_weapon_partial_snapshot_overlay(
+    void* overlay, LegacyNadineWeaponPartialSnapshotScope* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    if (overlay == nullptr ||
+        g_anim_control_find_active_type2_layer_by_id == nullptr) {
+        return false;
+    }
+    __try {
+        for (int owner_index = 0; owner_index < 2; ++owner_index) {
+            void* const player = retained_player_object(owner_index);
+            if (player == nullptr) {
+                continue;
+            }
+            const auto* const player_bytes =
+                static_cast<const std::byte*>(player);
+            if (*reinterpret_cast<const std::uint32_t*>(
+                    player_bytes + 0x170) !=
+                kLegacyNadineAttachTargetLookId) {
+                continue;
+            }
+            void* const control = *reinterpret_cast<void* const*>(
+                player_bytes + 0x1DF0);
+            if (control == nullptr) {
+                continue;
+            }
+            const auto* const control_bytes =
+                static_cast<const std::byte*>(control);
+            if (*reinterpret_cast<const std::uintptr_t*>(control_bytes) !=
+                    g_module + kPlayerWeaponAnimControlVtableRva ||
+                *reinterpret_cast<void* const*>(control_bytes + 0x10) !=
+                    player) {
+                continue;
+            }
+            void* const anim_control = *reinterpret_cast<void* const*>(
+                control_bytes + 0x8);
+            if (anim_control == nullptr) {
+                continue;
+            }
+            const auto* const anim_control_bytes =
+                static_cast<const std::byte*>(anim_control);
+            const std::uint32_t registry_count =
+                *reinterpret_cast<const std::uint32_t*>(
+                    anim_control_bytes + 0x28);
+            if (registry_count == 0 ||
+                registry_count > kMaxSnapshotAdmissionRegistryEntries) {
+                continue;
+            }
+            void* const layer =
+                g_anim_control_find_active_type2_layer_by_id(
+                    anim_control, kWeaponPartialLayerId);
+            if (layer == nullptr) {
+                continue;
+            }
+            const auto* const layer_bytes =
+                static_cast<const std::byte*>(layer);
+            if (*reinterpret_cast<const std::uint32_t*>(layer_bytes + 0x8) !=
+                kAnimStateLayerType) {
+                continue;
+            }
+            const std::uint32_t track_count =
+                *reinterpret_cast<const std::uint32_t*>(
+                    layer_bytes + 0x500);
+            auto* const tracks = *reinterpret_cast<void* const* const*>(
+                layer_bytes + 0x4F8);
+            if (track_count == 0 ||
+                track_count > kMaxSnapshotAdmissionTracks ||
+                tracks == nullptr) {
+                continue;
+            }
+            for (std::uint32_t track_index = 0;
+                 track_index < track_count; ++track_index) {
+                const auto* const track =
+                    static_cast<const std::byte*>(tracks[track_index]);
+                if (track == nullptr ||
+                    *reinterpret_cast<void* const*>(track + 0x8) != overlay) {
+                    continue;
+                }
+                output->active = true;
+                output->owner_index = owner_index;
+                output->player = player;
+                output->overlay = overlay;
+                return true;
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+    return false;
+}
+
+std::uint64_t __fastcall hooked_anim_state_snapshot_snapshot_anim_state(
+    void* snapshot, void* state_record, void* override_table,
+    void* overlay, void* overlay_again, void* anim_set,
+    void* script_context, void* knowledge, void* trailing_context) {
+    const LegacyNadineWeaponPartialSnapshotScope previous =
+        g_legacy_nadine_weapon_partial_snapshot_scope;
+    LegacyNadineWeaponPartialSnapshotScope current{};
+    if (anim_set != nullptr && overlay == overlay_again &&
+        seh_classify_legacy_nadine_weapon_partial_snapshot_overlay(
+            overlay, &current)) {
+        current.anim_set = anim_set;
+        g_legacy_nadine_weapon_partial_snapshot_scope = current;
+    } else {
+        g_legacy_nadine_weapon_partial_snapshot_scope = {};
+    }
+
+    const std::uint64_t result =
+        g_anim_state_snapshot_snapshot_anim_state != nullptr
+        ? g_anim_state_snapshot_snapshot_anim_state(
+              snapshot, state_record, override_table, overlay, overlay_again,
+              anim_set, script_context, knowledge, trailing_context)
+        : 0;
+    g_legacy_nadine_weapon_partial_snapshot_scope = previous;
+    return result;
+}
+
+const LegacyNadineWeaponPartialLegClipReplacement*
+find_legacy_nadine_weapon_partial_leg_clip_replacement(
+    std::uint32_t source) {
+    for (const auto& replacement :
+         kLegacyNadineWeaponPartialLegClipReplacements) {
+        if (replacement.source == source) {
+            return &replacement;
+        }
+    }
+    return nullptr;
+}
+
+std::uint32_t* __fastcall
+hooked_anim_snapshot_node_animation_resolve_animation_id(
+    void* anim_set, std::uint32_t* output, std::uint32_t source) {
+    const auto& scope = g_legacy_nadine_weapon_partial_snapshot_scope;
+    const auto* const replacement =
+        scope.active && scope.anim_set == anim_set
+        ? find_legacy_nadine_weapon_partial_leg_clip_replacement(source)
+        : nullptr;
+    if (replacement == nullptr || output == nullptr ||
+        g_anim_set_remap_resolve_animation_id_for_nadine_weapon_partial ==
+            nullptr) {
+        return g_anim_set_remap_resolve_animation_id_for_nadine_weapon_partial !=
+                nullptr
+            ? g_anim_set_remap_resolve_animation_id_for_nadine_weapon_partial(
+                  anim_set, output, source)
+            : output;
+    }
+
+    std::array<std::uint32_t, 3> stock{};
+    std::array<std::uint32_t, 3> donor{};
+    g_anim_set_remap_resolve_animation_id_for_nadine_weapon_partial(
+        anim_set, stock.data(), source);
+    g_anim_set_remap_resolve_animation_id_for_nadine_weapon_partial(
+        anim_set, donor.data(), replacement->donor);
+
+    const bool safe = stock[0] == source &&
+        donor[0] == replacement->donor && donor[1] != 0 && donor[2] != 0 &&
+        donor[1] == stock[1] && donor[2] == stock[2];
+    const auto& selected = safe ? donor : stock;
+    std::memcpy(output, selected.data(), sizeof(selected));
+
+    const std::size_t replacement_index = static_cast<std::size_t>(
+        replacement - kLegacyNadineWeaponPartialLegClipReplacements.data());
+    static std::array<std::atomic<bool>,
+                      kLegacyNadineWeaponPartialLegClipReplacements.size()>
+        logged{};
+    if (!logged[replacement_index].exchange(true, std::memory_order_relaxed)) {
+        std::ostringstream line;
+        line << "NADINE-WEAPON-PARTIAL-SNAPSHOT-LEG owner="
+             << scope.owner_index
+             << " player=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(scope.player)
+             << " overlay=0x"
+             << reinterpret_cast<std::uintptr_t>(scope.overlay)
+             << " animSet=0x"
+             << reinterpret_cast<std::uintptr_t>(anim_set)
+             << " source=0x" << source
+             << " donor=0x" << replacement->donor
+             << " resolved=0x" << selected[0]
+             << " keys=0x" << selected[1] << "/0x" << selected[2]
+             << std::dec << " safe=" << (safe ? 1 : 0);
+        boot_log_line(line.str().c_str());
+    }
+    return output;
+}
+
+bool install_legacy_nadine_weapon_partial_snapshot_leg_retarget() {
+    std::uint8_t* snapshot_callsite = nullptr;
+    std::uint8_t* snapshot_relay = nullptr;
+    std::int32_t snapshot_displacement = 0;
+    std::uint8_t* leaf_callsite = nullptr;
+    std::uint8_t* leaf_relay = nullptr;
+    std::int32_t leaf_displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kAnimStateInstanceSnapshotAnimStateCallsiteRva,
+            kAnimStateSnapshotSnapshotAnimStateRva,
+            reinterpret_cast<const void*>(
+                &hooked_anim_state_snapshot_snapshot_anim_state),
+            snapshot_callsite, snapshot_relay, snapshot_displacement) ||
+        !prepare_plain_callsite_relay(
+            kAnimSnapshotNodeAnimationRemapCallsiteRva,
+            kAnimSetRemapResolveAnimationIdRva,
+            reinterpret_cast<const void*>(
+                &hooked_anim_snapshot_node_animation_resolve_animation_id),
+            leaf_callsite, leaf_relay, leaf_displacement)) {
+        if (snapshot_relay != nullptr) {
+            VirtualFree(snapshot_relay, 0, MEM_RELEASE);
+        }
+        if (leaf_relay != nullptr) {
+            VirtualFree(leaf_relay, 0, MEM_RELEASE);
+        }
+        boot_log_line(
+            "Nadine WeaponPartial snapshot-leg retarget SKIPPED (pair preflight)");
+        return false;
+    }
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(snapshot_relay, 0, MEM_RELEASE);
+        VirtualFree(leaf_relay, 0, MEM_RELEASE);
+        boot_log_line(
+            "Nadine WeaponPartial snapshot-leg retarget SKIPPED (thread suspend)");
+        return false;
+    }
+
+    DWORD snapshot_old = 0;
+    DWORD leaf_old = 0;
+    const bool snapshot_protected = VirtualProtect(
+        snapshot_callsite, 5, PAGE_EXECUTE_READWRITE, &snapshot_old) != 0;
+    const bool leaf_protected = VirtualProtect(
+        leaf_callsite, 5, PAGE_EXECUTE_READWRITE, &leaf_old) != 0;
+    if (!snapshot_protected || !leaf_protected) {
+        DWORD ignored = 0;
+        if (snapshot_protected) {
+            VirtualProtect(
+                snapshot_callsite, 5, snapshot_old, &ignored);
+        }
+        if (leaf_protected) {
+            VirtualProtect(leaf_callsite, 5, leaf_old, &ignored);
+        }
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(snapshot_relay, 0, MEM_RELEASE);
+        VirtualFree(leaf_relay, 0, MEM_RELEASE);
+        boot_log_line(
+            "Nadine WeaponPartial snapshot-leg retarget SKIPPED (protect)");
+        return false;
+    }
+
+    g_anim_control_find_active_type2_layer_by_id =
+        reinterpret_cast<AnimControlFindActiveType2LayerByIdFunction>(
+            g_module + kAnimControlFindActiveType2LayerByIdRva);
+    g_anim_state_snapshot_snapshot_anim_state =
+        reinterpret_cast<AnimStateSnapshotSnapshotAnimStateFunction>(
+            g_module + kAnimStateSnapshotSnapshotAnimStateRva);
+    g_anim_set_remap_resolve_animation_id_for_nadine_weapon_partial =
+        reinterpret_cast<AnimSetRemapResolveAnimationIdFunction>(
+            g_module + kAnimSetRemapResolveAnimationIdRva);
+    std::memcpy(
+        snapshot_callsite + 1, &snapshot_displacement,
+        sizeof(snapshot_displacement));
+    std::memcpy(
+        leaf_callsite + 1, &leaf_displacement,
+        sizeof(leaf_displacement));
+    FlushInstructionCache(GetCurrentProcess(), snapshot_callsite, 5);
+    FlushInstructionCache(GetCurrentProcess(), leaf_callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(snapshot_callsite, 5, snapshot_old, &ignored);
+    VirtualProtect(leaf_callsite, 5, leaf_old, &ignored);
+    resume_suspended_process_threads(suspended_threads);
+    boot_log_line(
+        "Nadine WeaponPartial snapshot-leg retarget installed "
+        "(0x1418A46D0 + leaf 0x14191801C)");
+    return true;
+}
+
 // Read-only lifecycle snapshot for the exact channel-one weapon actions. The
 // common sequencer stores its owner Player at +0x18, its channel count at
 // +0x110, and the intrusive-list table at +0x120. Channel one is where
@@ -49714,8 +50077,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09aam "
-        "(rollback to confirmed aaj P99 boundary; aak+aal disabled after crash)");
+        "TLL co-op runtime init 2026-08-09aan "
+        "(snapshot-scoped Nadine WeaponPartial leg clips; exact leaf E8 only)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -49791,6 +50154,9 @@ DWORD WINAPI install_hook(void*) {
     }
     if constexpr (kEnableWeaponPartialNormalRequestProbe) {
         install_weapon_partial_normal_request_probe();
+    }
+    if constexpr (kEnableLegacyNadineWeaponPartialSnapshotLegRetarget) {
+        install_legacy_nadine_weapon_partial_snapshot_leg_retarget();
     }
     if constexpr (kEnableLegacyNadinePistolHipAttachment &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {

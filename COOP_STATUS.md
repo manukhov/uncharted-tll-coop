@@ -19742,3 +19742,45 @@ rejected by the same-AnimSet dataflow plus `gk` and pack membership; and
 **Hglobal-resolver** is unnecessary because only the leaf E8 is patched.
 No code mutation or game launch is authorized until the two-relay installer is
 implemented atomically and its ABI/preflight is reviewed.
+
+### 2026-08-09 STATIC / IMPLEMENTED: snapshot-scoped WeaponPartial leg leaves (`aan`)
+
+Build `aan` implements only the two proven direct-call edges. The nine-argument
+wrapper replaces the E8 at `0x1418A46D0`, preserves every argument and the
+64-bit return value, and scopes TLS only when arguments four/five are the same
+live overlay owned by the freshly resolved legacy-Nadine WeaponPartial layer.
+Admission rechecks the current retained Player, exact Nadine look, concrete
+PlayerWeaponAnimControl vtable, its owner backlink, bounded AnimControl registry,
+exact layer type/id and the layer's current bounded track array. No owner/layer
+pointer survives the call.
+
+The second relay replaces only the E8 at animation-leaf callsite `0x14191801C`.
+It additionally requires the leaf's AnimSet pointer to equal the pointer stored
+by the outer snapshot wrapper. For an admitted source it runs the stock resolver
+twice into local three-DWORD tuples. Mutation is fail-closed: the source must
+remain unchanged, the donor must resolve to the exact expected donor, both
+lookup keys must be nonzero and identical to the source keys. Otherwise the
+stock tuple is copied back unchanged. All 16 sources and 16 donors are unique at
+compile time. Logging is bounded to one row per source per process and normal
+runtime diagnostics remain disabled.
+
+Installation is atomic with respect to game threads. Both original E8 targets
+are preflighted before mutation, both near relays are allocated first, all other
+threads are suspended, both five-byte sites are protected and only then are the
+two displacements committed. Any preflight/protection failure frees the relays
+and leaves both stock calls intact. There is no function-prologue detour, no
+shared-resolver hook, no command-generator hook and no `aal` cache. MSVC release
+compilation succeeds through `scanner/build-release.cmd`; no game was launched.
+
+Competing runtime outcomes and the written prediction are deliberately narrow.
+**Aan-success** requires both processes to load marker `2026-08-09aan`, install
+the exact pair, and produce only `safe=1` rows whose `resolved` equals `donor`
+and keys remain `ED25C708/C39CA709`. A single P99 draw/Put on local Nadine must
+keep the already confirmed hip endpoint and Mazur-back geometry while replacing
+the through-torso arm path with the Player leg-holster motion. **Aan-scope-miss**
+produces no rows and no visual change; **Aan-safe-fallback** produces `safe=0`
+and the unchanged stock pose; **Aan-late-owner** produces correct safe rows but
+unchanged arms; any load crash rejects the two-relay package before further
+visual tests. The pre-existing `aaj` executor early-exit/stale-handoff remains a
+separate known limitation because rejected, unisolated `aak` code was not
+reintroduced into this package.
