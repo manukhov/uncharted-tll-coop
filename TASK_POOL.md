@@ -3165,13 +3165,24 @@ Do not reopen these as the first move:
       COMPLETE for `zu`: the false writer is exact `DontRenderThisFrame`; RTTI
       resolves `ProcessWeapon_EventHandler 0x1415116C0` and
       `ProcessWeaponBase_EventHandler 0x1414FBE10`, including strap forwarding.
-- [ ] Run the bounded `zu` discriminator at cold role-B Nadine spawn. Require one
+- [x] Run the bounded `zu` discriminator at cold role-B Nadine spawn. Require one
       successful exact-rifle `DisableMainView` row. Disappearance only in the
       Nadine local view selects the inventory weapon's separate main-view
       representation; unchanged pixels select Player look/mesh or another actor.
       Do not draw the rifle unless testing the authored restore path. Release
       build is ready; IDB labels are saved and independently verified through
-      the restarted MCP.
+      the restarted MCP. RUNTIME REJECTED: role-B PID 4744 emitted the exact
+      `published=1` row for slot-zero art `0x8075397D`, remained responsive, and
+      the user saw no change. The pixels therefore do not belong to that
+      inventory ProcessWeapon's main-view representation.
+- [ ] Classify the separate local Nadine look prop which can own the glued rifle.
+      Start from `Player+0x1B10` (`NdPropControl`): resolve the exact materializer
+      for its 40-byte retained records, the live child actor types/identity, and
+      the authored Look2/`prop` source used by local role-B Nadine versus the
+      correctly rendered remote Nadine. Keep Player body DrawControl, tracked
+      hat/hair actors and `Player+0x3518` as explicit competitors. Do not launch
+      until one candidate is identified by three independent static evidence
+      types and the runtime discriminator targets that exact child only.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

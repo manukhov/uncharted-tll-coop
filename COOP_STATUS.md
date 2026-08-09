@@ -18738,3 +18738,38 @@ Release build `zu` completed. The sole IDB was updated with
 names; the label pass reported 1613 functions/56 data names and
 `save_database returned True`. The restarted MCP independently resolves both
 event-handler names. Runtime remains pending.
+
+### 2026-08-09 RUNTIME REJECTED: the glued local rifle is not slot-zero ProcessWeapon main-view geometry (`zu`)
+
+Fresh role-B/local-Nadine PID 4744 loaded `zu`, remained responsive and emitted
+the required exact success row repeatedly:
+`NADINE-LOCAL-RIFLE-MAIN-VIEW action=disable ... art=0x8075397d current=-1
+draw=0 published=1`. The event was therefore constructed, delivered after the
+stock per-frame visibility update and accepted for the exact inactive slot-zero
+rifle. No exception, missing-event or restore-path failure occurred.
+
+The user nevertheless observed no visual change: the rifle remained glued to
+Nadine's hand in her own local view, while the other copy continued to render
+that Nadine correctly with the rifle on her back. This selects the written
+**Mplayer-look** outcome and rejects **Mweapon-view**. The artifact is not the
+main-view representation controlled by the inventory `ProcessWeapon` at
+`PlayerWeaponController` slot zero. Together with the earlier exact DrawControl,
+attachment, Draw/WeaponOut/Put and final-queue rejections, this also forbids
+another mutation of that same weapon actor as the next step.
+
+The next distinct owner frontier is the Player look-prop subsystem. The same
+`Player_UpdateMainViewVisibilityForAttachmentsAndWeapons 0x140C990A0` separately
+iterates the 40-byte retained entries of `Player+0x1B10`, resolves each through
+`0x141E63000`, and publishes the authored main-view events to those child actors.
+Exact source assertions identify this member as `NdPropControl`:
+`NdPropControl_Init 0x141E61010` resolves Look2 and `prop` records, while
+`NdPropControl_BuildPropSpawnList 0x141E61860` appends the pending definitions
+which later become live retained actors. This is not the rejected weapon-slot
+path and can explain a local-only authored object which looks attached rather
+than held. Competing owners remain Player body `DrawControl+0x198`, the tracked
+hat/hair actors at `Player+0x1758/+0x1858`, and the weak actor at
+`Player+0x3518/+0x3520`. No new runtime test is authorized until the exact child
+identity and materialization path discriminate these alternatives statically.
+
+The rejected probe is disabled and the clean build marker advances to
+`2026-08-09zv`.

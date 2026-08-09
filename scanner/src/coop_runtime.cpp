@@ -1956,7 +1956,7 @@ constexpr bool kEnableInitialLocalNadineRifleFullDrawThenHolster = false;
 // as owners of the cold role-B local image. The remaining view-specific stock
 // boundary publishes DisableMainView to ProcessWeapon actors. Keep this narrow
 // discriminator separate from the rejected renderer/attachment probes.
-constexpr bool kEnableInitialLocalNadineRifleMainViewDisableProbe = true;
+constexpr bool kEnableInitialLocalNadineRifleMainViewDisableProbe = false;
 volatile bool g_logging_enabled = false;
 static SRWLOCK g_log_lock = SRWLOCK_INIT;
 static HANDLE g_log_handle = INVALID_HANDLE_VALUE;
@@ -48852,8 +48852,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09zu "
-        "(local Nadine inactive-rifle DisableMainView discriminator)");
+        "TLL co-op runtime init 2026-08-09zv "
+        "(rejected ProcessWeapon main-view probe disabled; NdProp frontier)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
