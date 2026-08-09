@@ -41913,9 +41913,17 @@ PlayerHolsterAnimActionSnapshot capture_player_holster_anim_action(
     return snapshot;
 }
 
+enum class NadinePistolHolsterRedirectPhase : std::uint8_t {
+    kNone = 0,
+    kStockSpineBridge = 1,
+    kPostHandoffHip = 2,
+};
+
 struct NadinePistolHolsterExecuteContext {
     void* player = nullptr;
-    bool active = false;
+    NadinePistolHolsterRedirectPhase phase =
+        NadinePistolHolsterRedirectPhase::kNone;
+    unsigned redirect_count = 0;
 };
 
 thread_local NadinePistolHolsterExecuteContext
@@ -42098,16 +42106,25 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
 
     const NadinePistolHolsterExecuteContext previous_context =
         g_nadine_pistol_holster_execute_context;
-    // The stock executor requires its first rebind to select targSpineProp,
-    // then performs the second rebind and the local/blend handoff. Redirecting
-    // the selector inside that executor makes its caller-side postcondition
-    // fail and skips the tail. Keep the selector pass-through here; the scoped
-    // hip redirect is admitted only after every stock completion guard below.
     g_nadine_pistol_holster_execute_context = {};
+    if (exact_pistol_in_hand) {
+        // Legacy Nadine's stock art resolves the first holster rebind to the
+        // generic record. The executor requires targSpineProp immediately
+        // afterward and exits before its Anim record, second rebind and local
+        // handoff when that check fails. Bridge only exact P99 generic requests
+        // to the mandatory intermediate during the complete stock call.
+        g_nadine_pistol_holster_execute_context.player = before.player;
+        g_nadine_pistol_holster_execute_context.phase =
+            NadinePistolHolsterRedirectPhase::kStockSpineBridge;
+    }
 
     if (g_original_player_holster_weapon_anim_action_execute != nullptr) {
         g_original_player_holster_weapon_anim_action_execute(action);
     }
+
+    const unsigned stock_bridge_count =
+        g_nadine_pistol_holster_execute_context.redirect_count;
+    g_nadine_pistol_holster_execute_context = {};
 
     const PlayerHolsterAnimActionSnapshot stock_action_after =
         capture_player_holster_anim_action(action);
@@ -42139,18 +42156,22 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
             before.player, pistol_stock_after.weapon, kCoopPistolArtId) &&
         seh_weapon_parent_resolves_to_owner(
             pistol_stock_after.weapon, before.player) &&
-        stock_attach_readable &&
+        stock_bridge_count == 2 && stock_attach_readable &&
         stock_records_generation == before_records_generation &&
         stock_attach_id == kTargSpinePropAttachId &&
         seh_read_exact_player_weapon_controller(before.player, &controller);
 
     bool post_rebind_called = false;
+    unsigned post_hip_redirect_count = 0;
     if (stock_handoff_complete) {
         g_nadine_pistol_holster_execute_context.player = before.player;
-        g_nadine_pistol_holster_execute_context.active = true;
+        g_nadine_pistol_holster_execute_context.phase =
+            NadinePistolHolsterRedirectPhase::kPostHandoffHip;
         post_rebind_called =
             seh_call_player_weapon_controller_rebind_to_holster(
                 controller, pistol_stock_after.weapon);
+        post_hip_redirect_count =
+            g_nadine_pistol_holster_execute_context.redirect_count;
         g_nadine_pistol_holster_execute_context = {};
     }
 
@@ -42166,7 +42187,8 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
             before.player, pistol_post.attach_index, &post_attach_id,
             &post_records_generation);
     const bool post_verified = stock_handoff_complete &&
-        post_rebind_called && pistol_post.weapon == pistol_before.weapon &&
+        post_rebind_called && post_hip_redirect_count == 1 &&
+        pistol_post.weapon == pistol_before.weapon &&
         pistol_post.art == kCoopPistolArtId &&
         pistol_post.holster_handoff_finished != 0 &&
         seh_weapon_parent_resolves_to_owner(
@@ -42200,6 +42222,8 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
                     pistol_stock_after.holster_handoff_finished)
              << "->"
              << static_cast<unsigned>(pistol_post.holster_handoff_finished)
+             << " bridge=" << stock_bridge_count
+             << " hipRedirect=" << post_hip_redirect_count
              << " stock=" << (stock_handoff_complete ? 1 : 0)
              << " call=" << (post_rebind_called ? 1 : 0)
              << " verified=" << (post_verified ? 1 : 0);
@@ -42298,7 +42322,8 @@ std::uintptr_t __fastcall hooked_weapon_attachment_select_existing_owner_point(
             before.owner, kPistolHolsterAttachId,
             &pistol_holster_index) &&
         pistol_holster_index >= 0 && pistol_holster_index <= 0xFE;
-    const bool scoped_pistol = context.active &&
+    const bool scoped_pistol =
+        context.phase != NadinePistolHolsterRedirectPhase::kNone &&
         context.player == before.owner &&
         before.look == kLegacyNadineAttachTargetLookId &&
         before.art == kCoopPistolArtId &&
@@ -42308,8 +42333,13 @@ std::uintptr_t __fastcall hooked_weapon_attachment_select_existing_owner_point(
     std::uint32_t effective_attach_id = attach_id;
     bool redirected = false;
     if (scoped_pistol && attach_id == kGunHolsterAttachId) {
-        effective_attach_id = kPistolHolsterAttachId;
+        effective_attach_id =
+            context.phase ==
+                    NadinePistolHolsterRedirectPhase::kStockSpineBridge
+                ? kTargSpinePropAttachId
+                : kPistolHolsterAttachId;
         redirected = true;
+        ++context.redirect_count;
     }
     const std::uintptr_t result =
         g_original_weapon_attachment_select_existing_owner_point != nullptr
@@ -42337,6 +42367,9 @@ std::uintptr_t __fastcall hooked_weapon_attachment_select_existing_owner_point(
          << " effective=0x" << effective_attach_id << "/"
          << holster_attach_id_label(effective_attach_id)
          << " redirect=" << std::dec << (redirected ? 1 : 0) << std::hex
+         << " phase=" << std::dec
+         << static_cast<unsigned>(context.phase)
+         << " count=" << context.redirect_count << std::hex
          << " result=0x" << result
          << " parent=0x" << before.parent_id << "->0x" << after.parent_id
          << " id=0x" << before.attach_id << "->0x" << after.attach_id
@@ -50319,8 +50352,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09aar "
-        "(stock P99 handoff plus live WeaponPartial leg retarget)");
+        "TLL co-op runtime init 2026-08-09aas "
+        "(two-phase P99 spine bridge plus hip handoff)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

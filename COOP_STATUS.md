@@ -20013,3 +20013,46 @@ request maps to `pistolHolster`. If the action operates another weapon, the
 selector's exact art/object/inventory checks admit neither phase. No further
 runtime is authorized until that two-phase state machine and its exact call
 counts are implemented and compiled.
+
+### 2026-08-09 STATIC / IMPLEMENTED: two-phase P99 spine bridge and hip handoff (`aas`)
+
+Build `aas` implements the executor protocol rather than treating the return
+state as one opaque holster operation. During the original exact
+`PlayerHolsterWeaponAnimAction` call, a thread-local phase admits only the same
+retained legacy-Nadine owner, exact inventory-resolved P99 object/art and the
+observed generic request. That phase maps `gun_holster` only to the executor's
+mandatory `targSpineProp` intermediate. The direct
+`targSpinePropAnim` request remains untouched. Static control flow contains
+exactly two controller rebinds on the successful path, at `0x14108A6A6` and
+`0x14108AB72`; the wrapper therefore requires exactly two scoped bridge hits,
+the unchanged action identity, final spine record, same AttachSystem generation
+and nonzero handoff completion before enabling anything else.
+
+Only after those conditions pass does a second thread-local phase invoke the
+concrete controller rebind once and map its one generic P99 request to
+`pistolHolster`. Verification additionally requires exactly one hip redirect,
+the same controller from `Player+0x1D88`, same P99 object/art/owner/generation,
+nonzero handoff byte and final hip record. An action resolving a rifle or any
+other object cannot cross either selector phase because classification occurs
+on the concrete ProcessWeapon argument itself. Unknown requests, Chloe, NPC,
+other P99 generations and all failed counts remain stock.
+
+This meets the static evidence quota through three distinct sources: exact
+executor disassembly supplies both rebind sites, its selected-id branch and tail
+writes; the `aar` runtime row proves legacy Nadine's actual first/final stock
+selection is generic and the old post-only guard made zero calls; checked RTTI,
+owner, inventory, vtable and AttachSystem identities constrain the mutable
+selector to the exact object. The `aaq` live WeaponPartial repair remains
+independent and enabled for the later draw/Put arm pose. Release compilation
+succeeds; no game was launched during this implementation.
+
+**Single cold-spawn prediction:** both copies load marker `aas`, install all
+three boundaries and survive checkpoint load. For each admitted cold P99 the
+one summary row must show `id=61A48E01 -> 00AD047A -> 8A0249B5`,
+`bridge=2`, `hipRedirect=1`, `stock=1`, `call=1`, `verified=1`. Local Nadine's
+empty-hand spawn must then show no pistol fixed to the hand; Mazur remains on
+the back. `bridge=0` means the action resolved another object, `bridge=1` means
+the stock tail still stopped before its second rebind, `bridge=2/stock=0`
+falsifies a completion invariant, and a fully verified row with the visible
+P99 still in hand selects a later presentation object. Do not ask for a manual
+draw/Put cycle until the cold result and row have first passed.

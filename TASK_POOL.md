@@ -3958,6 +3958,14 @@ Do not reopen these as the first move:
       two-phase exact-P99 selector: spine bridge only during stock executor,
       require both scoped controller rebinds, then hip mapping only in a
       separate post-executor concrete rebind. Do not rerun the unchanged guard.
+      **STATIC / IMPLEMENTED (`aas`):** exact-P99 selector phases now match the
+      executor's real protocol. Stock phase maps two generic controller rebinds
+      to the mandatory spine intermediate while leaving the direct Anim request
+      untouched; only after exactly two hits, same action/object/generation,
+      final spine and completed handoff does a one-hit post phase map generic to
+      the thigh. Every mismatch is stock/fail-closed. Release build passes.
+      Test only cold empty-hand spawn first and require the exact counter/id
+      prediction in `COOP_STATUS.md` before any manual draw/Put test.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
