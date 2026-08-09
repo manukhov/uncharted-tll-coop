@@ -41921,6 +41921,38 @@ struct NadinePistolHolsterExecuteContext {
 thread_local NadinePistolHolsterExecuteContext
     g_nadine_pistol_holster_execute_context{};
 
+bool seh_call_player_weapon_controller_rebind_to_holster(
+    void* controller, void* weapon);
+
+bool seh_read_exact_player_weapon_controller(
+    void* player, void** controller_out) {
+    if (controller_out == nullptr) {
+        return false;
+    }
+    *controller_out = nullptr;
+    __try {
+        if (player == nullptr || g_module == 0 ||
+            readable_bytes(static_cast<std::byte*>(player) + 0x1D88) <
+                sizeof(void*)) {
+            return false;
+        }
+        void* const controller = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(player) + 0x1D88);
+        if (controller == nullptr ||
+            readable_bytes(controller) < sizeof(void*) ||
+            reinterpret_cast<std::uintptr_t>(
+                *reinterpret_cast<void**>(controller)) !=
+                g_module + kPlayerWeaponControllerVtableRva) {
+            return false;
+        }
+        *controller_out = controller;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *controller_out = nullptr;
+        return false;
+    }
+}
+
 bool seh_weapon_is_player_slot(void* player, void* weapon, int slot) {
     __try {
         return player != nullptr && weapon != nullptr &&
@@ -41945,6 +41977,7 @@ struct HolsterExecuteWeaponLocalSnapshot {
     void* weapon = nullptr;
     std::uint32_t art = 0;
     std::uint8_t attach_index = 0xFF;
+    std::uint8_t holster_handoff_finished = 0;
     std::array<std::uint32_t, 16> local_bits{};
     std::array<std::uint32_t, 2> blend_bits{};
 };
@@ -41958,12 +41991,14 @@ HolsterExecuteWeaponLocalSnapshot capture_holster_execute_weapon_local(
             return snapshot;
         }
         auto* const bytes = static_cast<const std::byte*>(snapshot.weapon);
-        if (readable_bytes(bytes) < 0x864) {
+        if (readable_bytes(bytes) < 0x8F5) {
             return snapshot;
         }
         snapshot.art = *reinterpret_cast<const std::uint32_t*>(bytes + 0x860);
         snapshot.attach_index =
             *reinterpret_cast<const std::uint8_t*>(bytes + 0x688);
+        snapshot.holster_handoff_finished =
+            *reinterpret_cast<const std::uint8_t*>(bytes + 0x8F4);
         std::memcpy(
             snapshot.local_bits.data(), bytes + 0x4F0,
             sizeof(snapshot.local_bits));
@@ -42006,6 +42041,9 @@ void log_holster_execute_weapon_local(
          << " attach=" << std::dec
          << static_cast<unsigned>(before.attach_index) << "->"
          << static_cast<unsigned>(after.attach_index)
+         << " handoff="
+         << static_cast<unsigned>(before.holster_handoff_finished) << "->"
+         << static_cast<unsigned>(after.holster_handoff_finished)
          << " valid=" << (before.readable ? 1 : 0) << "/"
          << (after.readable ? 1 : 0)
          << " changed=0x" << std::hex << changed
@@ -42030,32 +42068,142 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
     std::uint32_t look = 0;
     const bool look_valid =
         seh_read_player_look(before.player, &look);
-    std::array<HolsterExecuteWeaponLocalSnapshot, 2> local_before{};
-    if (owner_index >= 0 && before.executed == 0) {
-        for (int slot = 0; slot < 2; ++slot) {
-            local_before[slot] =
-                capture_holster_execute_weapon_local(before.player, slot);
-        }
-    }
+    const bool exact_action = before.readable && g_module != 0 &&
+        before.vtable ==
+            g_module + kPlayerHolsterWeaponAnimActionVtableRva;
+    const int pistol_slot = exact_action && owner_index >= 0
+        ? find_weapon_slot_by_art_id(before.player, kCoopPistolArtId)
+        : -1;
+    const HolsterExecuteWeaponLocalSnapshot pistol_before =
+        pistol_slot >= 0
+        ? capture_holster_execute_weapon_local(before.player, pistol_slot)
+        : HolsterExecuteWeaponLocalSnapshot{};
+
+    std::uint32_t before_attach_id = 0;
+    std::uintptr_t before_records_generation = 0;
+    const bool exact_pistol_in_hand =
+        exact_action && before.executed == 0 && owner_index >= 0 &&
+        look_valid && look == kLegacyNadineAttachTargetLookId &&
+        pistol_before.readable && pistol_before.weapon != nullptr &&
+        pistol_before.art == kCoopPistolArtId &&
+        seh_weapon_is_player_art(
+            before.player, pistol_before.weapon, kCoopPistolArtId) &&
+        seh_weapon_parent_resolves_to_owner(
+            pistol_before.weapon, before.player) &&
+        seh_read_owner_attach_record_id(
+            before.player, pistol_before.attach_index, &before_attach_id,
+            &before_records_generation) &&
+        before_records_generation != 0 &&
+        before_attach_id == 0x61A48E01u;
 
     const NadinePistolHolsterExecuteContext previous_context =
         g_nadine_pistol_holster_execute_context;
+    // The stock executor requires its first rebind to select targSpineProp,
+    // then performs the second rebind and the local/blend handoff. Redirecting
+    // the selector inside that executor makes its caller-side postcondition
+    // fail and skips the tail. Keep the selector pass-through here; the scoped
+    // hip redirect is admitted only after every stock completion guard below.
     g_nadine_pistol_holster_execute_context = {};
-    if (before.readable && before.executed == 0 && owner_index >= 0 &&
-        look_valid && look == kLegacyNadineAttachTargetLookId) {
-        g_nadine_pistol_holster_execute_context.player = before.player;
-        g_nadine_pistol_holster_execute_context.active = true;
-    }
 
     if (g_original_player_holster_weapon_anim_action_execute != nullptr) {
         g_original_player_holster_weapon_anim_action_execute(action);
     }
-    std::array<HolsterExecuteWeaponLocalSnapshot, 2> local_stock_after{};
-    if (owner_index >= 0 && before.executed == 0) {
-        for (int slot = 0; slot < 2; ++slot) {
-            local_stock_after[slot] =
-                capture_holster_execute_weapon_local(before.player, slot);
-        }
+
+    const PlayerHolsterAnimActionSnapshot stock_action_after =
+        capture_player_holster_anim_action(action);
+    const HolsterExecuteWeaponLocalSnapshot pistol_stock_after =
+        pistol_slot >= 0
+        ? capture_holster_execute_weapon_local(before.player, pistol_slot)
+        : HolsterExecuteWeaponLocalSnapshot{};
+    std::uint32_t stock_attach_id = 0;
+    std::uintptr_t stock_records_generation = 0;
+    const bool stock_attach_readable =
+        pistol_stock_after.readable &&
+        seh_read_owner_attach_record_id(
+            before.player, pistol_stock_after.attach_index,
+            &stock_attach_id, &stock_records_generation);
+    void* controller = nullptr;
+    const bool stock_handoff_complete =
+        exact_pistol_in_hand && stock_action_after.readable &&
+        stock_action_after.vtable == before.vtable &&
+        stock_action_after.player == before.player &&
+        stock_action_after.action_id == before.action_id &&
+        stock_action_after.layer_id == before.layer_id &&
+        stock_action_after.manager_id == before.manager_id &&
+        stock_action_after.anim_instance_id == before.anim_instance_id &&
+        stock_action_after.executed != 0 &&
+        pistol_stock_after.weapon == pistol_before.weapon &&
+        pistol_stock_after.art == kCoopPistolArtId &&
+        pistol_stock_after.holster_handoff_finished != 0 &&
+        seh_weapon_is_player_art(
+            before.player, pistol_stock_after.weapon, kCoopPistolArtId) &&
+        seh_weapon_parent_resolves_to_owner(
+            pistol_stock_after.weapon, before.player) &&
+        stock_attach_readable &&
+        stock_records_generation == before_records_generation &&
+        stock_attach_id == kTargSpinePropAttachId &&
+        seh_read_exact_player_weapon_controller(before.player, &controller);
+
+    bool post_rebind_called = false;
+    if (stock_handoff_complete) {
+        g_nadine_pistol_holster_execute_context.player = before.player;
+        g_nadine_pistol_holster_execute_context.active = true;
+        post_rebind_called =
+            seh_call_player_weapon_controller_rebind_to_holster(
+                controller, pistol_stock_after.weapon);
+        g_nadine_pistol_holster_execute_context = {};
+    }
+
+    const HolsterExecuteWeaponLocalSnapshot pistol_post =
+        pistol_slot >= 0
+        ? capture_holster_execute_weapon_local(before.player, pistol_slot)
+        : HolsterExecuteWeaponLocalSnapshot{};
+    std::uint32_t post_attach_id = 0;
+    std::uintptr_t post_records_generation = 0;
+    const bool post_attach_readable =
+        pistol_post.readable &&
+        seh_read_owner_attach_record_id(
+            before.player, pistol_post.attach_index, &post_attach_id,
+            &post_records_generation);
+    const bool post_verified = stock_handoff_complete &&
+        post_rebind_called && pistol_post.weapon == pistol_before.weapon &&
+        pistol_post.art == kCoopPistolArtId &&
+        pistol_post.holster_handoff_finished != 0 &&
+        seh_weapon_parent_resolves_to_owner(
+            pistol_post.weapon, before.player) &&
+        post_attach_readable &&
+        post_records_generation == before_records_generation &&
+        post_attach_id == kPistolHolsterAttachId;
+
+    if (exact_pistol_in_hand) {
+        std::ostringstream line;
+        line << "NADINE-P99-POST-HANDOFF-HIP owner=" << owner_index
+             << " player=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(before.player)
+             << " action=0x" << reinterpret_cast<std::uintptr_t>(action)
+             << " weapon=0x"
+             << reinterpret_cast<std::uintptr_t>(pistol_before.weapon)
+             << " records=0x" << before_records_generation
+             << " id=0x" << before_attach_id << "->0x"
+             << stock_attach_id << "->0x" << post_attach_id
+             << std::dec << " slot=" << pistol_slot
+             << " index="
+             << static_cast<unsigned>(pistol_before.attach_index) << "->"
+             << static_cast<unsigned>(pistol_stock_after.attach_index) << "->"
+             << static_cast<unsigned>(pistol_post.attach_index)
+             << " executed=" << static_cast<unsigned>(before.executed)
+             << "->" << static_cast<unsigned>(stock_action_after.executed)
+             << " handoff="
+             << static_cast<unsigned>(pistol_before.holster_handoff_finished)
+             << "->"
+             << static_cast<unsigned>(
+                    pistol_stock_after.holster_handoff_finished)
+             << "->"
+             << static_cast<unsigned>(pistol_post.holster_handoff_finished)
+             << " stock=" << (stock_handoff_complete ? 1 : 0)
+             << " call=" << (post_rebind_called ? 1 : 0)
+             << " verified=" << (post_verified ? 1 : 0);
+        boot_log_line(line.str().c_str());
     }
     g_nadine_pistol_holster_execute_context = previous_context;
 
@@ -42065,13 +42213,12 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
     if constexpr (!kEnablePersistentStateInventoryLogging) {
         return;
     }
-    const PlayerHolsterAnimActionSnapshot after =
-        capture_player_holster_anim_action(action);
+    const PlayerHolsterAnimActionSnapshot after = stock_action_after;
     if (before.executed == 0) {
-        for (int slot = 0; slot < 2; ++slot) {
+        if (pistol_slot >= 0) {
             log_holster_execute_weapon_local(
-                owner_index, before.player, look, slot,
-                local_before[slot], local_stock_after[slot]);
+                owner_index, before.player, look, pistol_slot,
+                pistol_before, pistol_stock_after);
         }
     }
     std::ostringstream line;
@@ -42095,7 +42242,11 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
          << static_cast<unsigned>(after.executed)
          << " readable=" << (before.readable ? 1 : 0) << "/"
          << (after.readable ? 1 : 0)
-         << " lookValid=" << (look_valid ? 1 : 0);
+         << " lookValid=" << (look_valid ? 1 : 0)
+         << " pistolHand=" << (exact_pistol_in_hand ? 1 : 0)
+         << " stockHandoff=" << (stock_handoff_complete ? 1 : 0)
+         << " postRebind=" << (post_rebind_called ? 1 : 0)
+         << " verified=" << (post_verified ? 1 : 0);
     write_log_line(line.str().c_str());
 }
 
@@ -50168,8 +50319,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09aaq "
-        "(post-phase live WeaponPartial snapshot leg retarget)");
+        "TLL co-op runtime init 2026-08-09aar "
+        "(stock P99 handoff plus live WeaponPartial leg retarget)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

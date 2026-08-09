@@ -775,6 +775,7 @@ constexpr std::uintptr_t kWeaponAttachmentAttachToOwnerPointRva = 0x1ED0370;
 // weapon-holster, the one-shot action executes the transition, and weapon
 // vtable +0x7A8 selects a record in the existing Player owner's AttachSystem.
 constexpr std::uintptr_t kPlayerHolsterWeaponAnimActionExecuteRva = 0x108A640;
+constexpr std::uintptr_t kPlayerHolsterWeaponAnimActionVtableRva = 0x2A46560;
 constexpr std::uintptr_t kPlayerHolsterWeaponAnimActionUpdateTailCallsiteRva =
     0x108A5F9;
 constexpr std::uintptr_t kPlayerHolsterWeaponAnimActionTransitionCallsiteRva =

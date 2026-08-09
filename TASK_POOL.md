@@ -3938,6 +3938,16 @@ Do not reopen these as the first move:
       Do not launch `aaq` alone: first remove the known `aaj` early exit by
       allowing the stock P99 holster executor to complete before the scoped hip
       rebind, then use one combined falsifiable visual test.
+      **STATIC / IMPLEMENTED (`aar`):** the combined package now preserves the
+      entire stock P99 executor and admits the hip selector only in a separate
+      concrete rebind after exact action identity, same P99 generation,
+      `rightHand -> targSpineProp`, `executed=0->nonzero` and nonzero
+      `weapon+0x8F4` all verify. The result must remain the same owner/P99 and
+      exact `pistolHolster`; every mismatch fails closed to the completed stock
+      back endpoint. This removes the mod-created stale-handoff source and runs
+      beside the `aaq` post-phase live-snapshot leg retarget. Release build
+      passes. Perform only the single combined cold-spawn plus one P99 draw/Put
+      prediction recorded in `COOP_STATUS.md`; do not split it into more tests.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

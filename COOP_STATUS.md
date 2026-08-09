@@ -19917,3 +19917,65 @@ single IDB now resolves `0x14172CAB0` as
 function names, returned `save_database=True`, and MCP verified the saved name.
 No game was launched because the separate known `aaj` P99 executor early-exit
 still needs to be removed before asking the user for one combined visual test.
+
+### 2026-08-09 STATIC / IMPLEMENTED: complete stock P99 handoff before the hip endpoint (`aar`)
+
+The remaining attachment and pose corrections are now packaged at their proven
+ordering boundaries. `PlayerHolsterWeaponAnimAction` has exact RTTI vtable
+`0x142A46560`; its only two execution edges at `0x14108A5F9/0x14108A62B` reach
+`PlayerHolsterWeaponAnimAction_Execute 0x14108A640`. The old `aaj` hook enabled
+the `gun_holster -> pistolHolster` selector inside that stock call. Disassembly
+proves this is too early: after its first rebind the executor requires the
+selected id to remain `targSpineProp 0x00AD047A` at `0x14108A798`; changing it
+there skips the second rebind, local-transform/blend handoff and terminal
+`weapon+0x8F4=1` store at `0x14108ADC8`. The user's cold-spawn report that the
+P99 model remains glued to Nadine's hand, while read-only state already records
+the logical hip index, is the exact visible consequence of that interrupted
+handoff rather than evidence for another attach id.
+
+Three independent evidence types authorize the corrected packaging. The exact
+factory/RTTI and checked E9/E8 sites identify the one-shot action; executor
+control flow and field writes establish the mandatory spine and completion
+postconditions; and concrete
+`PlayerWeaponController_RebindWeaponToHolster 0x1410A9670` independently builds
+its own binding and reaches ProcessWeapon vtable `+0x7A8` without the executor's
+caller-side selected-id check. Historical `gz/ha/aaj` runs further prove this
+concrete rebind is stable and that its exact P99-only selector scope reaches
+Nadine's authored `pistolHolster 0x8A0249B5` record.
+
+Build `aar` therefore leaves the selector completely pass-through while the
+original executor runs. A separate hip rebind is admitted only after all of the
+following remain exact: action vtable and identity fields; retained legacy-
+Nadine owner; inventory-resolved P99 art `0x8075397D`; same weapon object and
+AttachSystem record generation; pre-call `rightHand 0x61A48E01`; action
+`executed=0->nonzero`; nonzero `weapon+0x8F4`; stock post-call
+`targSpineProp`; same-owner parent; and current `Player+0x1D88` concrete
+PlayerWeaponController. The selector scope exists only around the final
+concrete rebind. Its result is verified as the same P99, same record generation,
+completed handoff and `pistolHolster`; any failed guard leaves the complete
+stock back-holster result untouched. This post-handoff repair is combined with
+the already implemented `aaq` live WeaponPartial snapshot retarget; release
+compilation succeeds. No game was launched during implementation.
+
+Competing explanations remain falsifiable. **Hearly-exit** predicts the exact
+`rightHand -> targSpineProp -> pistolHolster` sequence with the handoff byte set
+and removal of the cold hand-glued P99. **Hpose-owner** predicts verified
+`NADINE-WEAPON-PARTIAL-LIVE-SNAPSHOT-LEG` rows and a corrected draw/Put arm
+trajectory. **Hlater-presentation** remains only if both endpoint and live-leaf
+rows verify while the corresponding visible defect persists. Attachment-id,
+visibility and cull alternatives stay rejected and are not touched.
+
+**Single-run prediction:** both copies must load marker `2026-08-09aar`, install
+the post-phase WeaponPartial relay plus both P99 action/selector hooks and remain
+responsive through checkpoint load. On local Nadine, after cold initialization
+the P99 must no longer remain glued to the hand. One P99 draw and Put must emit
+`NADINE-P99-POST-HANDOFF-HIP` with ids
+`61A48E01 -> 00AD047A -> 8A0249B5`, `stock=1`, `call=1`, `verified=1`, while
+reached Put/Get leaves emit verified
+`NADINE-WEAPON-PARTIAL-LIVE-SNAPSHOT-LEG` rows. Visually the pistol must travel
+around rather than through the torso, end at the thigh, and leave neither hand
+stuck; Mazur remains on the back and Chloe/body/grenade/frame behavior remains
+unchanged. A load crash rejects packaging; a missing P99 row rejects the action
+admission; a row with `stock=0` rejects a completion assumption; verified P99
+but no live-leaf rows isolates snapshot admission; both verified with unchanged
+visuals selects a later presentation owner.
