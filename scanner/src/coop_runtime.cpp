@@ -1936,11 +1936,12 @@ constexpr bool kEnableCharacterLegIkBasePoseRelay = true;
 // rifle nor preserves frame time. Keep the observer code available for static
 // correlation, but do not patch the hot RenderMgr callsite in production.
 constexpr bool kEnableStaleRifleCullProbe = false;
-// Build aab is a bounded read-only discriminator after all weapon-controller,
-// attachment, DrawControl and common CullFgLods mutations were rejected. It
-// samples the final per-SceneWindow Fg draw lists three times for one published
-// local-rifle generation; it never changes visibility or render state.
-constexpr bool kEnableNadinePerViewRifleCensus = true;
+// Build aab rejected this read-only discriminator: MainDrawCore reaches the
+// callsite for several SceneWindow/pass contexts and the thread-local limiter
+// consequently emitted three samples per render thread rather than three total.
+// Keep the census compiled out until the primary local SceneWindow has a static
+// discriminator and the limiter is process-global.
+constexpr bool kEnableNadinePerViewRifleCensus = false;
 // Builds gm..gw rejected the inactive-rifle attachment replay, late visibility
 // hide, FgDraw suppression, renderer-wide owner census and downstream holster
 // probes as fixes for the local spawn artifact. None of those hot diagnostics
@@ -49461,8 +49462,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09aab "
-        "(corrected Nadine per-view cull E8 at 0x141661BE4)");
+        "TLL co-op runtime init 2026-08-09aac "
+        "(rejected multi-window Nadine per-view cull census disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

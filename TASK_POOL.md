@@ -3211,7 +3211,7 @@ Do not reopen these as the first move:
       `MeshCull_FinalizeCullFgScene 0x141A3B1F0` forwards the same 61 lists to
       rendering. Three static evidence types and all competing owner outcomes
       are recorded in `COOP_STATUS.md`.
-- [ ] Run bounded read-only build `aab` at untouched cold role-B Nadine spawn.
+- [x] Run bounded read-only build `aab` at untouched cold role-B Nadine spawn.
       Do not draw or switch weapons. Keep the glued rifle visible for at least
       five seconds and require one target plus three per-view samples with
       `truncated=0`. Classify the selected `FgScene` row as Vstale, Vcurrent,
@@ -3220,7 +3220,14 @@ Do not reopen these as the first move:
       only the packaging; do not mutate cull flags in this test. Build `aaa`
       installed nothing because it used the post-call address `0x141661BE9`;
       loaded bytes prove corrected E8 start `0x141661BE4` reaches
-      `MeshCull_WaitForCullFgScene 0x141A35BE0`.
+      `MeshCull_WaitForCullFgScene 0x141A35BE0`. RUNTIME REJECTED: the rifle
+      remained glued, while the supposedly three-sample probe repeated on
+      multiple render threads/windows because its limiter was `thread_local`.
+      The matching target and same-geometry candidates all reported zero final
+      rows in the sampled contexts, but this cannot classify Vkey until the
+      primary local `SceneWindow` is selected statically. Build `aac` disables
+      the relay. Next: resolve the MainDrawCore caller/context topology and a
+      static primary-window/pass discriminator before another launch.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

@@ -19045,3 +19045,31 @@ still independently decodes the live displacement and requires the target to be
 `MeshCull_WaitForCullFgScene 0x141A35BE0` before patching. The written visual
 and log prediction above is unchanged. Release build succeeds; runtime is
 pending.
+
+### 2026-08-09 RUNTIME REJECTED: `aab` sampled multiple SceneWindow/pass contexts
+
+The corrected relay installed in both processes and the user confirmed that the
+rifle remained visibly glued to local Nadine. Role B repeatedly published the
+same stable generation (`generation=7`, target pool indices 1056--1058) plus a
+same-geometry triplet at pool indices 443--445. All six candidates were active
+and all three target geometry bits were present, but every captured candidate
+reported `drawLists=0 drawEntries=0` while each aggregate contained only six
+lists and about 331--332 rows.
+
+This does **not** select Vkey. The written prediction explicitly rejected
+repeated unbounded output, and that rejection occurred: the three-sample state
+was `thread_local`, while `RenderMgr_MainDrawCore` reaches the wait callsite for
+multiple render threads and/or SceneWindow/pass contexts. Each thread therefore
+started its own three-sample sequence, producing many samples for the same
+generation. The small and varying aggregate list set also gives no static basis
+for identifying any one capture as the local main color view. The zero selected
+rows are only suggestive and cannot be promoted to a renderer ownership fact.
+
+Competitors remain open: **Wmain**, the glued pixels are submitted in the local
+primary SceneWindow that this multi-context probe did not identify; **Woverlay**,
+they use a separate local-player/overlay pass outside these foreground lists;
+**Wkey**, the visible draw uses a key other than the current weapon's three
+`FgGeometry*` values. The next admissible runtime test requires three static
+evidence types for a primary local SceneWindow/pass discriminator and a
+process-global sample limiter. Build `aac` compiles the census out; no draw,
+visibility, attachment or weapon state is mutated.
