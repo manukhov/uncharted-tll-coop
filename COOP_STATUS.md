@@ -19330,3 +19330,30 @@ missing exact queue hit, or failure to restore the drawn rifle selects
 **Dunsafe** and rejects the package rather than either ownership hypothesis.
 
 Release build `aah` succeeds. Runtime is pending.
+
+### 2026-08-09 RUNTIME REJECTED: exact current LOD0 main-view exclusion does not remove the glued rifle (`aah`)
+
+Both processes loaded `aah`, remained responsive and installed the exact
+pre-`CullFgLods_Spawn` callsite relay. Role-B/local-Nadine PID 2552 then emitted
+four independent generations of the required exact queue hit. Each row named
+the current slot-zero rifle and the same exact LOD0 pool pointer
+`0x1118D19000`, reported `queued=1`, and changed final cull flags from
+`0x21228A38` to `0x21228A78`. Thus bit `0x40` was genuinely present on the
+proven current LOD0 before culling; this result is stronger than `zu`, which
+proved only event delivery.
+
+The user nevertheless observed no visual change at all: the rifle remained
+glued to Nadine's hand. Neither process crashed. This rejects **Dcurrent** as a
+sufficient pixel owner and selects the non-exclusive **Dtwin** branch. The
+current ProcessWeapon contributes a selected overlapping row, but removing its
+type-3/main-view admission does not remove the image. The leading remaining
+owner is the same-geometry pool-443/444/445 triplet seen by `aaf`: its LOD0 was
+also selected in lists 0/type 3 in samples 1 and 2, while its owner could not be
+recovered by the FgAnimData-driven-instance reverse lookup. More generally, an
+additional rifle row outside the exact current triplet owns the visible pixels.
+
+Build `aai` disables the discriminator and restores the production hook set;
+the heavy queue census remains off. No more runtime ownership discriminators
+are authorized. The next work is static-only until the second triplet's creator,
+owner and lifetime are proven and a complete fix follows directly from that
+dataflow. Both game processes were closed after the result.

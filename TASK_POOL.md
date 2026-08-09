@@ -3286,6 +3286,18 @@ Do not reopen these as the first move:
       Heavy `gw` capture stays disabled. Written outcomes are Dcurrent
       (glued image disappears, drawn rifle restores), Dtwin (exact flag changes
       but image remains), and Dunsafe (crash/collateral/missing restore).
+      REJECTED by `aah`: PID 2552 produced four exact `queued=1` rows and changed
+      LOD0 flags `0x21228A38 -> 0x21228A78`; the user saw no visual change and
+      neither copy crashed. Dcurrent is false; Dtwin wins. Build `aai` disables
+      the probe. Do not request another runtime ownership discriminator.
+- [ ] STATIC ONLY: prove the creator/owner/lifetime of the same-geometry
+      pool-443/444/445 rifle triplet. `aaf` selected its LOD0 in type-3/list0
+      in samples 1 and 2, but the FgAnimData driven-instance reverse lookup
+      returned no owner. Trace FgInstance allocation/initialization and every
+      owning table that stores these indices/pointers; distinguish a stale
+      prior ProcessWeapon generation, a Player/local-view duplicate, and a
+      non-driven static prop. Do not launch until the owner and complete repair
+      are statically proven rather than merely discriminated.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

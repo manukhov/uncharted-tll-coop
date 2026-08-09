@@ -1952,7 +1952,7 @@ constexpr bool kEnableNadinePerViewRifleCensus = false;
 // FgInstance+0x18 bit 0x40 is clear. Apply that one exclusion to the exact
 // current LOD0 immediately before CullFgLods; do not touch active byte +0x1A0,
 // the same-geometry twins or the sunlight-shadow LOD2/type-1 row.
-constexpr bool kEnableInitialLocalNadineExactRifleMainViewFlagProbe = true;
+constexpr bool kEnableInitialLocalNadineExactRifleMainViewFlagProbe = false;
 // Builds gm..gw rejected the inactive-rifle attachment replay, late visibility
 // hide, FgDraw suppression, renderer-wide owner census and downstream holster
 // probes as fixes for the local spawn artifact. None of those hot diagnostics
@@ -49653,8 +49653,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09aah "
-        "(exact current Nadine rifle LOD0 main-view flag discriminator)");
+        "TLL co-op runtime init 2026-08-09aai "
+        "(exact current rifle main-view flag rejected; static twin audit)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
