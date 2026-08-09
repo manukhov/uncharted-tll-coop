@@ -3883,6 +3883,18 @@ Do not reopen these as the first move:
       identical to confirmed `aaj` except the `aam` marker. Future work must scope
       exact legacy-Nadine WeaponPartial ownership during snapshot creation without
       reintroducing a global command-generator detour.
+      **STATIC:** the correct boundary is now exact. Type-2 phase update
+      `0x14189D720` passes the live `track+0x8` overlay through
+      `0x1418A4670` into the direct SnapshotAnimState call `0x1418A46D0`.
+      Snapshot tree construction reaches animation-node vtable slot 9 at
+      `0x1418B2FAB`, and exact `AnimSnapshotNodeAnimation` calls the leaf remap
+      at `0x14191801C`. The leaf receives the identical AnimSet pointer later
+      used by the runtime-proven `gk` top-level remap. Fresh
+      `AnimControl_FindActiveType2LayerById 0x14172B3E0` plus live-track
+      comparison eliminates the rejected cache. All 32 source/donor clips are
+      present as eight-group registrations in the same movement PAK. Implement
+      only an atomic pair of exact E8 relays, TLS-bound to the same AnimSet;
+      never restore the global resolver or command-generator detours.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

@@ -1309,6 +1309,12 @@ FUNCTIONS = {
         "Materializes authored descriptor children +0x8/+0x10 into snapshot-heap "
         "indices at node+0x40/+0x44 and saves the blend script descriptor at +0x58.",
     ),
+    0x14191E3F0: (
+        "AnimSnapshotNodeBlend_RefreshBreadth",
+        "AnimSnapshotNodeBlend virtual slot 12 (+0x60). Resolves both child "
+        "indices, recursively calls their slot 12 RefreshBreadth methods, and "
+        "returns the resulting command-tree breadth.",
+    ),
     0x14191E180: (
         "AnimSnapshotNodeBlend_RefreshPhasesAndBlends",
         "Virtual slot 11 (+0x58). Evaluates anim-node-blend-func with the live "
@@ -1342,6 +1348,12 @@ FUNCTIONS = {
         "anim-node-flip-func, initializes source/resolved animation ids at "
         "+0x40/+0x44, resolver keys at +0x48/+0x4C, phase descriptor +0x58, "
         "phase +0x60/+0x64, and flags +0x68/+0x69.",
+    ),
+    0x141917A30: (
+        "AnimSnapshotNodeLeaf_RefreshBreadth",
+        "Leaf implementation of snapshot-node virtual slot 12 (+0x60); returns "
+        "breadth one. Blend nodes recurse through this slot after all animation "
+        "leaves were initialized by slot 9 during SelectRootNodeIndex.",
     ),
     0x141918070: (
         "AnimSnapshotNodeAnimation_ResolveClip",
@@ -1605,6 +1617,13 @@ FUNCTIONS = {
         "optional anim-state-dtgroup-func at +0xC0, and forwards its third "
         "AnimOverlayState argument unchanged into "
         "AnimStateSnapshot_SnapshotAnimState for animation resolution.",
+    ),
+    0x14172B3E0: (
+        "AnimControl_FindActiveType2LayerById",
+        "Binary-scans the AnimControl registry at +0x28/+0x30 for an enabled "
+        "32-byte entry with the requested layer id, then returns its layer only "
+        "when layer+0x8 is exact type 2. PlayerWeaponAnimControl uses it for "
+        "WeaponPartial 0xE2B990B9 at 0x14108C16E.",
     ),
     0x1418A4D50: (
         "AnimStateInstance_EvaluatePhaseFunction",

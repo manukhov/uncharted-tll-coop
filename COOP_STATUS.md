@@ -19680,3 +19680,65 @@ scanner source now matches visually confirmed commit `3f145ff` (`aaj`) exactly.
 The 16-id asset/mask table remains documented as STATIC evidence, but the next
 viable boundary must exist during SnapshotAnimState state creation, not later
 command generation. No runtime is authorized by this finding.
+
+### 2026-08-09 STATIC: exact WeaponPartial snapshot/leaf remap boundary
+
+The replacement can now be scoped in the phase that actually resolves the
+animation tree without a global function detour or a retained layer cache.
+`PlayerWeaponAnimControl_RequestWeaponPart 0x14108C0C0` loads its current
+AnimControl pointer from `control+0x8` and calls
+`AnimControl_FindActiveType2LayerById 0x14172B3E0` at `0x14108C16E` with exact
+`WeaponPartial 0xE2B990B9`. The callee scans the enabled 0x20-byte registry at
+AnimControl `+0x28/+0x30`, matches the requested id and returns the layer only
+when `layer+0x8 == 2`. Repeating this pure lookup from the snapshot admission
+path removes the stale-pointer lifetime risk of `aal`.
+
+The type-2 phase path is exact. `AnimStateLayer_PhaseUpdateInstances
+0x14189D720` walks the layer's track pointer array at `+0x4F8` (count `+0x500`).
+For every active instance it reads the track-local `AnimOverlayState*` from
+`track+0x8` and passes that value to
+`AnimStateInstance_ResolveDtGroupAndSnapshot 0x1418A4670` at `0x14189D824`.
+The latter forwards the same value as arguments four and five to the direct
+`AnimStateSnapshot_SnapshotAnimState 0x1418B24F0` callsite `0x1418A46D0`.
+Therefore an exact callsite wrapper can compare the incoming overlay against
+the current WeaponPartial layer's live tracks while also revalidating retained
+Player identity, Nadine look `0xD27C074F`, Player `+0x1DF0`, the concrete
+PlayerWeaponAnimControl vtable and its `control+0x10` owner backlink.
+
+The leaf edge is also proven rather than inferred. SnapshotAnimState packages
+its arguments into `v77`, with the active `AnimSet* a6` at `v77[2]`, then calls
+`AnimStateSnapshot_SelectRootNodeIndex 0x1418B2EF0`. Its factory result invokes
+snapshot-node vtable slot 9 (`+0x48`) at `0x1418B2FAB`; RTTI fixes the animation
+implementation as `AnimSnapshotNodeAnimation_InitializeFromDescriptor
+0x141917D00`. That exact leaf calls `AnimSetRemap_ResolveAnimationId
+0x1417CA2E0` at `0x14191801C` with `*(a4+0x10)`, which is the same `v77[2]/a6`
+AnimSet used later by the top-level remap at `0x1418B2954`. Blend slot 12
+`AnimSnapshotNodeBlend_RefreshBreadth 0x14191E3F0` only recurses after this tree
+construction; leaf slot 12 `0x141917A30` simply returns one. This rejects both
+the old command-generation scope and a post-snapshot top-level-field rewrite:
+the exact `ak47-*` ids are resolved inside leaf slot 9.
+
+Three independent compatibility proofs now meet the static quota. First, the
+pointer dataflow proves the leaf and the already tested top-level resolver use
+the identical AnimSet. Second, runtime build `gk` previously exercised that
+SnapshotAnimState AnimSet read-only, retained keys `ED25C708/C39CA709`, and
+returned non-null leg clips (including `4A5559F7` and `A294A1FA`). Third, a
+fresh paged-PAK audit resolves all 32 source/donor ids in the same
+`actor77.psarc/anim-player-movement.pak`; every clip has eight groups and the
+same Player skeleton/retarget family. Across each Put quartet the authored
+joint union is unchanged. Each Get quartet moves joints 33..35 from the part
+lane into the add lane and intentionally releases only joint 38 (`l_palm`) to
+the lower/base result.
+
+The leading implementation is therefore two exact E8 callsite relays only:
+wrap `0x1418A46D0` to establish TLS for the currently owned legacy-Nadine
+WeaponPartial snapshot, and wrap leaf remap `0x14191801C` to substitute one of
+the 16 role-preserving donor ids only when both TLS and the identical AnimSet
+pointer match. Competing alternatives are now rejected as follows:
+**Hother-snapshot-caller** is inapplicable to the live type-2 path because its
+phase function directly reaches `0x1418A46D0`; **Hstale-layer** is removed by
+fresh stock registry lookup and live-track comparison; **Hleaf-context** is
+rejected by the same-AnimSet dataflow plus `gk` and pack membership; and
+**Hglobal-resolver** is unnecessary because only the leaf E8 is patched.
+No code mutation or game launch is authorized until the two-relay installer is
+implemented atomically and its ABI/preflight is reviewed.
