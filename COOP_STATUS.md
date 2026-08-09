@@ -19118,7 +19118,7 @@ A clean Release build succeeds. The sole IDB was saved with
 functions/56 data names and `save_database returned True`, and the restarted MCP
 independently resolves both names.
 
-### 2026-08-09 CONFIRMED: glued local Nadine rifle bypasses the main foreground lists (`aad`)
+### 2026-08-09 RUNTIME RESULT / REJECTED DECODER: `aad` misread the foreground lists
 
 The corrected process-global census matched its written prediction exactly.
 Role-B PID 5476 emitted one target and exactly three completed samples for
@@ -19136,14 +19136,62 @@ Nevertheless every candidate in every sample had
 remained visibly glued to local Nadine. Both processes stayed responsive; no
 stall, crash or body/weapon regression occurred.
 
-This selects the written **Fexternal** outcome and rejects **Fmain**. The visible
-artifact is not produced by any exact current-rifle or same-`FgGeometry` instance
-in the proven primary foreground draw lists. Another cull/visibility mutation
-on `CullFgLods`, `CullFgSceneJob`, its final 61 lists or these six instances is
-forbidden. Remaining competitors are **Eoverlay**, a local-player/first-person
-overlay submission outside FgScene; **Ekey**, a distinct mesh/material resource
-whose geometry identity was not learned from the current ProcessWeapon; and
-**Emerged**, rifle pixels embedded in a character/look draw rather than a weapon
-draw. Build `aae` disables the hot census relay. The next static pass must trace
-local-player overlay/first-person render submissions and their concrete instance
-keys before another runtime test.
+The process-global limiter and primary-window discriminator behaved correctly,
+but the zero-row interpretation is invalid. Static re-audit below proves that
+the probe counted outer 32-byte DrawablePrototype records and then decoded their
+bytes as if they were inner 9-byte submesh rows. Thus `299/299` was a drawable
+count, every reported scene index was untrusted, and `drawEntries=0` cannot
+select **Fexternal** or reject **Fmain**. Commit `26c8c3b` preserves the original
+runtime observation in history, but its ownership conclusion is REJECTED.
+
+### 2026-08-09 STATIC / IMPLEMENTED: unwrap 32-byte drawable records before their 9-byte submeshes (`aaf`)
+
+Three independent static evidence types prove the nested final-list format and
+reject the flat decoder used by `aad`:
+
+1. Producer dataflow in `MeshCull_CullFgViewJob 0x141A2DDD0` allocates 2304-byte
+   pages and writes the packed inner `SubMeshInstance` rows at `page+9*slot`;
+   their unchanged `FgScene` index is the `uint16` at row `+7`
+   (`0x141A2E545..0x141A2E561`).
+2. The independent finalizer `MeshCull_FinalizeCullFgScene 0x141A3B1F0`
+   traverses each of the 61 published PageTables at `page+32*slot` and reads
+   flags at outer record `+0x1C` (`0x141A3B2B6..0x141A3B2D0`). Therefore those
+   PageTables cannot directly contain the 9-byte rows assumed by `aad`.
+3. The downstream render consumer `SceneRendering_Render 0x14186C8A0` uses the
+   same 32-byte stride and passes each record to
+   `SceneRendering_EmitDrawablePrototypeSubmeshes 0x141AB5780`. That function
+   independently resolves the complete layout: `FgInstance**` at record `+8`,
+   contiguous 9-byte row pointer at `+0x10`, row count in
+   `*(uint32*)(record+0x1C)&0xFFF`, and exact instance lookup through the
+   inner row's `uint16 +7` index (`0x141AB5AAB`).
+
+Build `aaf` keeps the already proven post-wait callsite and process-global
+three-sample gate, but scans the outer tables at 32-byte stride, unwraps every
+inner row array, resolves its instance through the record-local pointer table,
+and compares the resulting pointer directly with the six current/same-geometry
+candidates. The log now separates `drawables=scanned/total`,
+`submeshes=scanned/total`, and per-candidate `selectedSubmeshes`. It remains
+read-only and bounded to 61 lists, 0x20000 outer records, 0x80000 inner rows and
+three samples.
+
+Competitors are reopened. **Fcurrent**: an exact current rifle instance has at
+least one selected inner row. **Fsame**: only a same-geometry twin is selected,
+identifying a stale/alternate owner generation. **Fother**: another owner-id
+match is selected without the current geometry key. **Fexternal**: all six
+candidates have zero selected rows despite a valid nonempty nested scan and the
+rifle remaining visible.
+
+Written falsifiable prediction before launch: untouched role-B Nadine emits
+exactly samples 1/2/3 with one stable nonzero window/config pair,
+`truncated=0`, nonzero drawable and submesh totals, and no fourth sample. Any
+`selectedSubmeshes>0` selects the corresponding Fcurrent/Fsame/Fother branch.
+All six at zero in all three valid samples while the rifle remains visible
+selects Fexternal. Crash, stall, truncation, zero inner rows, changing windows
+or extra samples rejects only `aaf` packaging and does not classify ownership.
+No game was launched during this corrective static pass. A clean Release build
+of `aaf` succeeds. The sole IDB was saved with
+`SceneRendering_Render 0x14186C8A0`,
+`SceneRendering_EmitDrawablePrototypeSubmeshes 0x141AB5780` and
+`MeshCull_SelectFgViewDrawLists 0x141A30B80`; the label pass reported 1630
+functions/56 data names and `save_database returned True`, and the restarted MCP
+independently resolves all three names.

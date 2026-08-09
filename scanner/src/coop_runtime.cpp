@@ -1942,11 +1942,11 @@ constexpr bool kEnableCharacterLegIkBasePoseRelay = true;
 // rifle nor preserves frame time. Keep the observer code available for static
 // correlation, but do not patch the hot RenderMgr callsite in production.
 constexpr bool kEnableStaleRifleCullProbe = false;
-// Build aad confirmed that neither the exact current rifle instances nor their
-// same-geometry twins occur in the proven main foreground draw lists while the
-// glued rifle remains visible. Keep the completed read-only census available
-// for reference but do not patch the hot MainDraw callsite in production.
-constexpr bool kEnableNadinePerViewRifleCensus = false;
+// Build aad reached the proven main SceneWindow, but its decoder mistook the
+// outer 32-byte DrawablePrototype records for their nested 9-byte submesh rows.
+// Build aaf corrects that read-only census and keeps the bounded three-sample
+// discriminator enabled until the invalid aad classification is replaced.
+constexpr bool kEnableNadinePerViewRifleCensus = true;
 // Builds gm..gw rejected the inactive-rifle attachment replay, late visibility
 // hide, FgDraw suppression, renderer-wide owner census and downstream holster
 // probes as fixes for the local spawn artifact. None of those hot diagnostics
@@ -45974,7 +45974,7 @@ struct NadineRifleCullQueueMatch {
     std::uint32_t geometry_mask = 0;
     std::uint32_t target_instance_mask = 0;
     std::uint64_t draw_list_mask = 0;
-    std::uint32_t draw_entry_count = 0;
+    std::uint32_t selected_submesh_count = 0;
     std::uint8_t active = 0;
     std::uint8_t target_lod = 0xFF;
     std::uint32_t instance_pool_index = 0xFFFFFFFFu;
@@ -46009,8 +46009,10 @@ struct NadineRifleCullQueueSnapshot {
     std::uint32_t match_count = 0;
     std::uint32_t target_runtime_id = 0;
     std::uint32_t draw_list_count = 0;
-    std::uint32_t draw_entry_total = 0;
-    std::uint32_t draw_entry_scanned = 0;
+    std::uint32_t drawable_total = 0;
+    std::uint32_t drawable_scanned = 0;
+    std::uint32_t submesh_total = 0;
+    std::uint32_t submesh_scanned = 0;
     std::uint8_t draw_scan_truncated = 0;
     std::array<NadineRifleCullQueueMatch, 12> matches{};
 };
@@ -46479,8 +46481,9 @@ bool seh_capture_nadine_rifle_per_view_draw_lists(
         }
 
         constexpr std::uint32_t kDrawListCount = 61;
-        constexpr std::uint64_t kMaxEntriesPerList = 0x10000;
-        constexpr std::uint32_t kMaxEntriesTotal = 0x20000;
+        constexpr std::uint64_t kMaxDrawablesPerList = 0x4000;
+        constexpr std::uint32_t kMaxDrawablesTotal = 0x20000;
+        constexpr std::uint32_t kMaxSubmeshesTotal = 0x80000;
         const auto* const job_words =
             reinterpret_cast<const std::uintptr_t*>(job);
         const std::uint32_t stored_matches = std::min<std::uint32_t>(
@@ -46496,21 +46499,22 @@ bool seh_capture_nadine_rifle_per_view_draw_lists(
             ++snapshot->draw_list_count;
             const std::uint64_t raw_count =
                 *reinterpret_cast<const std::uint64_t*>(list + 8);
-            snapshot->draw_entry_total += static_cast<std::uint32_t>(
+            snapshot->drawable_total += static_cast<std::uint32_t>(
                 std::min<std::uint64_t>(raw_count, 0xFFFFFFFFULL));
-            std::uint64_t entry_count = raw_count;
-            if (entry_count > kMaxEntriesPerList) {
-                entry_count = kMaxEntriesPerList;
+            std::uint64_t drawable_count = raw_count;
+            if (drawable_count > kMaxDrawablesPerList) {
+                drawable_count = kMaxDrawablesPerList;
                 snapshot->draw_scan_truncated = 1;
             }
-            for (std::uint64_t entry_index = 0;
-                 entry_index < entry_count; ++entry_index) {
-                if (snapshot->draw_entry_scanned >= kMaxEntriesTotal) {
+            for (std::uint64_t drawable_index = 0;
+                 drawable_index < drawable_count; ++drawable_index) {
+                if (snapshot->drawable_scanned >= kMaxDrawablesTotal ||
+                    snapshot->submesh_scanned >= kMaxSubmeshesTotal) {
                     snapshot->draw_scan_truncated = 1;
                     break;
                 }
                 const std::uint32_t page_index =
-                    static_cast<std::uint32_t>(entry_index >> 8);
+                    static_cast<std::uint32_t>(drawable_index >> 8);
                 if (page_index >= 64) {
                     snapshot->draw_scan_truncated = 1;
                     break;
@@ -46518,28 +46522,69 @@ bool seh_capture_nadine_rifle_per_view_draw_lists(
                 const auto* const page =
                     *reinterpret_cast<const std::byte* const*>(
                         list + 272 + 8 * page_index);
-                if (page == nullptr || readable_bytes(page) < 2304) {
+                if (page == nullptr || readable_bytes(page) < 8192) {
                     snapshot->draw_scan_truncated = 1;
                     break;
                 }
-                const auto* const entry =
-                    page + 9 * (entry_index & 0xFF);
-                std::uint16_t scene_index = 0;
-                std::memcpy(&scene_index, entry + 7, sizeof(scene_index));
-                ++snapshot->draw_entry_scanned;
-                for (std::uint32_t match_index = 0;
-                     match_index < stored_matches; ++match_index) {
-                    NadineRifleCullQueueMatch& match =
-                        snapshot->matches[match_index];
-                    if (match.scene_index != scene_index) {
-                        continue;
+                const auto* const drawable =
+                    page + 32 * (drawable_index & 0xFF);
+                void* const* const drawable_scene_instances =
+                    *reinterpret_cast<void* const* const*>(drawable + 8);
+                const auto* const submesh_rows =
+                    *reinterpret_cast<const std::byte* const*>(drawable + 16);
+                const std::uint32_t submesh_count =
+                    *reinterpret_cast<const std::uint32_t*>(drawable + 28) &
+                    0xFFFu;
+                ++snapshot->drawable_scanned;
+                snapshot->submesh_total += submesh_count;
+                if (submesh_count == 0) {
+                    continue;
+                }
+                if (drawable_scene_instances == nullptr ||
+                    readable_bytes(drawable_scene_instances) <
+                        sizeof(void*) * static_cast<std::size_t>(scene_count) ||
+                    submesh_rows == nullptr ||
+                    readable_bytes(submesh_rows) <
+                        9u * static_cast<std::size_t>(submesh_count)) {
+                    snapshot->draw_scan_truncated = 1;
+                    break;
+                }
+                for (std::uint32_t submesh_index = 0;
+                     submesh_index < submesh_count; ++submesh_index) {
+                    if (snapshot->submesh_scanned >= kMaxSubmeshesTotal) {
+                        snapshot->draw_scan_truncated = 1;
+                        break;
                     }
-                    match.draw_list_mask |=
-                        std::uint64_t{1} << list_index;
-                    ++match.draw_entry_count;
+                    const auto* const submesh =
+                        submesh_rows + 9u * submesh_index;
+                    std::uint16_t scene_index = 0;
+                    std::memcpy(
+                        &scene_index, submesh + 7, sizeof(scene_index));
+                    ++snapshot->submesh_scanned;
+                    if (scene_index >= scene_count) {
+                        snapshot->draw_scan_truncated = 1;
+                        break;
+                    }
+                    void* const selected_instance =
+                        drawable_scene_instances[scene_index];
+                    for (std::uint32_t match_index = 0;
+                         match_index < stored_matches; ++match_index) {
+                        NadineRifleCullQueueMatch& match =
+                            snapshot->matches[match_index];
+                        if (match.instance != reinterpret_cast<std::uintptr_t>(
+                                selected_instance)) {
+                            continue;
+                        }
+                        match.draw_list_mask |=
+                            std::uint64_t{1} << list_index;
+                        ++match.selected_submesh_count;
+                    }
+                }
+                if (snapshot->draw_scan_truncated != 0) {
+                    break;
                 }
             }
-            if (snapshot->draw_entry_scanned >= kMaxEntriesTotal) {
+            if (snapshot->draw_scan_truncated != 0) {
                 break;
             }
         }
@@ -46621,8 +46666,10 @@ void* __fastcall hooked_mesh_cull_wait_for_fg_scene(
            << " geometryHits=" << snapshot.geometry_hits
            << " matches=" << snapshot.match_count
            << " lists=" << snapshot.draw_list_count
-           << " drawEntries=" << snapshot.draw_entry_scanned
-           << "/" << snapshot.draw_entry_total
+           << " drawables=" << snapshot.drawable_scanned
+           << "/" << snapshot.drawable_total
+           << " submeshes=" << snapshot.submesh_scanned
+           << "/" << snapshot.submesh_total
            << " truncated="
            << static_cast<unsigned>(snapshot.draw_scan_truncated);
     write_log_line(header.str().c_str());
@@ -46639,7 +46686,7 @@ void* __fastcall hooked_mesh_cull_wait_for_fg_scene(
              << " target=0x" << match.target_instance_mask
              << " geometry=0x" << match.geometry_mask
              << " drawLists=0x" << match.draw_list_mask << std::dec
-             << " drawEntries=" << match.draw_entry_count
+             << " selectedSubmeshes=" << match.selected_submesh_count
              << " active=" << static_cast<unsigned>(match.active)
              << " pool=" << match.instance_pool_index
              << " fg=0x" << std::hex << match.anim_data
@@ -49494,8 +49541,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09aae "
-        "(confirmed external Nadine rifle draw; main-view census disabled)");
+        "TLL co-op runtime init 2026-08-09aaf "
+        "(corrected nested Nadine main-view rifle census enabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

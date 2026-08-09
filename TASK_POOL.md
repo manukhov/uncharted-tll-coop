@@ -3242,14 +3242,23 @@ Do not reopen these as the first move:
       three accepted samples excludes the current rifle geometry key from the
       local main foreground lists and moves the search to a local-player overlay
       or a different render key. CONFIRMED: role B emitted exactly three samples,
-      one nonzero SceneWindow/config pair and no fourth sample. Across all three
-      frames, the three exact current instances and three same-geometry twins
-      were active but every one had `drawEntries=0`; the user still saw the
-      rifle glued to local Nadine. This selects Fexternal and closes the main
-      foreground-list path. Build `aae` disables the census. Next: trace the
-      local-player/first-person overlay submissions or discover the visible
-      object's distinct geometry/material key; do not mutate foreground cull
-      flags again.
+      one nonzero SceneWindow/config pair and no fourth sample. REJECTED
+      INTERPRETATION: the flat decoder used 9-byte stride on an outer table of
+      32-byte DrawablePrototype records. Thus the three zero `drawEntries`
+      results do not classify Fexternal and do not close the main foreground
+      path. The corrected nested layout and evidence are recorded in
+      `COOP_STATUS.md`.
+- [ ] Run corrected bounded read-only build `aaf` at untouched cold role-B
+      Nadine spawn. `SceneRendering_Render 0x14186C8A0` and
+      `SceneRendering_EmitDrawablePrototypeSubmeshes 0x141AB5780` prove that
+      each outer PageTable row is 32 bytes, with `FgInstance**` at `+8`, an
+      inner 9-byte row array at `+0x10`, count at `+0x1C & 0xFFF`, and the scene
+      index at inner row `+7`. Require exactly three samples, one window/config,
+      nonzero `drawables` and `submeshes`, `truncated=0`, and no fourth sample.
+      A nonzero per-candidate `selectedSubmeshes` selects the matching
+      Fcurrent/Fsame/Fother branch; all six at zero in three valid samples while
+      the rifle remains visible selects Fexternal. Crash, stall, truncation,
+      zero inner rows or extra samples rejects only the probe packaging.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

@@ -2686,8 +2686,8 @@ FUNCTIONS = {
         "MeshCull_CullFgSceneJob",
         "Exact CullFgSceneJob source assertion in mesh-cull.cpp. Copies every "
         "FgInstance+0x1D0 cull record for the concrete SceneWindow, schedules "
-        "CullFgView workers, and publishes 61 final foreground draw-list "
-        "pointers into the job record at +0x68..+0x248.",
+        "CullFgView workers, then publishes 61 foreground PageTable pointers "
+        "containing 32-byte DrawablePrototype records at job +0x68..+0x248.",
     ),
     0x141A2DDD0: (
         "MeshCull_CullFgViewJob",
@@ -2714,7 +2714,27 @@ FUNCTIONS = {
         "MeshCull_FinalizeCullFgScene",
         "Copies the completed CullFgSceneJob draw-list pointers into the "
         "496-byte render result and derives aggregate 0x8000/0x10000 flags "
-        "from its final submesh records without changing their scene indices.",
+        "by traversing 32-byte DrawablePrototype rows (page+32*slot) and their "
+        "flags at +0x1C; it does not consume the inner rows at 9-byte stride.",
+    ),
+    0x141A30B80: (
+        "MeshCull_SelectFgViewDrawLists",
+        "Selects one completed PageTable pointer from each 128-byte CullFgView "
+        "descriptor at descriptor+0x70 and writes the ordered set consumed by "
+        "CullFgSceneJob and MeshCull_FinalizeCullFgScene.",
+    ),
+    0x14186C8A0: (
+        "SceneRendering_Render",
+        "Exact SceneRendering::Render source assertions. Traverses foreground "
+        "PageTables at 32-byte stride and submits each DrawablePrototype "
+        "record to SceneRendering_EmitDrawablePrototypeSubmeshes.",
+    ),
+    0x141AB5780: (
+        "SceneRendering_EmitDrawablePrototypeSubmeshes",
+        "Consumes one 32-byte DrawablePrototype: instance pointer table at +8, "
+        "contiguous 9-byte submesh rows at +0x10, and count flags at +0x1C. "
+        "For each row it reads uint16 scene index at +7 and resolves the exact "
+        "FgInstance through the pointer table before emitting render commands.",
     ),
     0x14197D8C0: (
         "AnimFramePlayback_PublishRetainedFgAnim",
