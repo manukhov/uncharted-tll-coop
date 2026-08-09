@@ -1944,13 +1944,12 @@ constexpr bool kEnableLegacyNadinePistolHipAttachment = false;
 constexpr bool kEnableWeaponPartialSelectionProbe = false;
 constexpr bool kEnableWeaponPartialFinalRequestProbe = false;
 constexpr bool kEnableWeaponPartialNormalRequestProbe = false;
-// Builds gz/ha rejected the terminal controller rebind, hb rejected a stock Put
-// begun from current=-1 and zq rejected the terminal Draw commit followed by
-// Put. Build zs therefore replays the complete stock controller lifecycle:
-// request Draw, let PlayerWeaponController::ApplyState reach kStateWeaponOut,
-// dwell for one overlay tick, then request Put. It remains one-shot and
-// role-B-local only.
-constexpr bool kEnableInitialLocalNadineRifleFullDrawThenHolster = true;
+// Builds gz/ha rejected the terminal controller rebind, hb rejected a stock Put,
+// zq rejected the terminal Draw commit followed by Put, and zs rejected even the
+// complete stock Draw -> WeaponOut -> Put lifecycle. The surviving artifact is
+// local-main-view-only, so leave this controller experiment disabled while the
+// separate per-view weapon presentation path is traced.
+constexpr bool kEnableInitialLocalNadineRifleFullDrawThenHolster = false;
 volatile bool g_logging_enabled = false;
 static SRWLOCK g_log_lock = SRWLOCK_INIT;
 static HANDLE g_log_handle = INVALID_HANDLE_VALUE;
@@ -48751,8 +48750,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09zs "
-        "(Nadine cold-rifle full stock Draw-to-WeaponOut then Put)");
+        "TLL co-op runtime init 2026-08-09zt "
+        "(rejected cold-rifle controller cycle disabled; main-view frontier)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

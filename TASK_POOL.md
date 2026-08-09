@@ -3142,12 +3142,26 @@ Do not reopen these as the first move:
       WeaponPartial/NewIkWeapon through vtable `+0x300`, and entering literal
       `kStateWeaponOut=2`. Three evidence types and competitors are recorded in
       `COOP_STATUS.md`.
-- [ ] Run the bounded `zs` discriminator. On exact cold role-B local Nadine,
+- [x] Run the bounded `zs` discriminator. On exact cold role-B local Nadine,
       invoke the complete stock Draw once, wait for stable `current=0, draw=2`,
       dwell 250 ms for overlay/IK publication, then invoke stock Put once.
       `action=draw -> weapon-out -> put -> complete` plus disappearance of the
       glued rifle confirms Ffull-cycle; the same complete rows with persistence
-      reject the controller lifecycle and select Fexternal-context.
+      reject the controller lifecycle and select Fexternal-context. RUNTIME
+      REJECTED as sufficient: the exact four rows completed, ending at
+      `current=-1 draw=0 index=40 attachId=0x555EFB8D`, but the local role-B
+      Nadine view still showed the independently glued rifle. At the same time
+      role-A Chloe saw that same Nadine rifle correctly on her back. This proves
+      the remaining artifact belongs to a local-main-view presentation path,
+      not weapon selection, authored Draw/Put, IK/overlay setup or attachment.
+- [ ] Trace the local-main-view weapon presentation lifecycle statically. Start
+      from `Player_UpdateMainViewVisibilityForAttachmentsAndWeapons 0x140C990A0`,
+      `PlayerWeaponController_DisableWeaponsInMainView 0x1410A01F0`, and the
+      adjacent controller vtable slot `+0x378 = 0x1410A08A0`. Resolve the writers
+      of `Player+0x1618/+0x1619`, the exact `DisableMainView`/`EnableMainView`
+      ProcessWeapon consumers, and the first state that differs between local
+      role-B Nadine and role-A's correct observed Nadine. Do not launch until
+      three independent evidence types separate this path from another owner.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

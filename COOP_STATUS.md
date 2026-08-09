@@ -18629,3 +18629,39 @@ remain disabled. The seven newly resolved lifecycle functions are named in the
 single IDB; the headless pass applied `1610 functions, 54 data names`, returned
 `save_database=True`, and the restarted MCP independently resolves every saved
 name.
+
+### 2026-08-09 RUNTIME REJECTED: the complete stock weapon-controller lifecycle does not own the local rifle artifact (`zs`)
+
+The bounded role-B test produced the exact predicted stock lifecycle once and
+without a crash or unrelated state change:
+
+- `action=draw`: slot-zero rifle `art=0x8075397D`, attachment record 16
+  (`rightHand`), `current -1 -> -2`, `requested -1 -> 0`, `draw 0 -> 1`;
+- `action=weapon-out`: `current=0 requested=0 draw=2`;
+- `action=put`: `current 0 -> -2`, `draw 2 -> 5`;
+- `action=complete`: `current=-1 draw=0`, attachment record 40 with
+  `attachId=0x555EFB8D` (`gun_holster`), `handSlot=1`.
+
+The visible prediction failed despite that complete four-stage sequence. The
+rifle remained as an independently glued/static object on the hand in Nadine's
+own role-B main view. Simultaneously, role-A Chloe saw the same Nadine and rifle
+correctly, with the rifle on her back. Therefore **Ffull-cycle**, **Fik-only**
+and **Foverlay-only** are rejected as sufficient; **Fexternal-context** is
+confirmed at the discriminator's level. The weapon controller, inventory slot,
+authored Get/Draw/overlay/IK lifecycle, stock Put transition and final
+attachment selection all reach their expected state, but do not own the bad
+local pixels.
+
+This role split also rejects another generic attachment or renderer-wide retry:
+the world presentation is already correct for a different camera. The remaining
+frontier is the separate local-main-view weapon presentation policy. Its first
+known boundary is
+`Player_UpdateMainViewVisibilityForAttachmentsAndWeapons 0x140C990A0`, called
+from `PlayerActive_Update 0x140CA29C3`. It dispatches controller vtable `+0x370 =
+PlayerWeaponController_DisableWeaponsInMainView 0x1410A01F0`, which iterates all
+23 weapon slots and publishes `DisableMainView` plus `DisableCastShadows` to
+each resolved `ProcessWeapon` when its boolean input is set. The adjacent
+vtable `+0x378 = 0x1410A08A0`, the writers of `Player+0x1618/+0x1619`, and the
+matching ProcessWeapon message consumers remain to be resolved before another
+runtime test. Build marker advances to `2026-08-09zt`; the rejected `zs`
+experiment is disabled.
