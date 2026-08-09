@@ -18928,3 +18928,35 @@ Nadine's hand, **Xcross** wins. An exact complete sequence with unchanged pixels
 selects **Xsame**. No runtime was used to choose this boundary. Release build
 `2026-08-09zy (cold Nadine pistol-rifle cross-slot refresh cycle)` succeeds;
 all rejected renderer, visibility, attachment and same-slot tests remain off.
+
+### 2026-08-09 RUNTIME REJECTED: the paired pistol-to-rifle transition does not own the glued local image (`zy`)
+
+Role-B PID 17544 completed the entire written six-stage sequence twice on two
+fresh retained Player/weapon generations. The first exact run was:
+
+- `draw-pistol`: `current=-1->-2`, `requested=-1->1`, `draw=0->1`, call 1;
+- `pistol-out`: `current=1`, `requested=1`, `draw=2`;
+- `switch-to-rifle`: `current=1->-2`, `draw=2->5`,
+  `selected=1->0`, `requestedHands=1->0`, call 1;
+- `rifle-out`: `current=0`, `requested=0`, `draw=2`;
+- `put-rifle`: `current=0->-2`, `draw=2->5`, call 1;
+- `complete`: `current=-1`, `draw=0`, attachment index 40,
+  `attachId=0x555EFB8D` (`gun_holster`), `handSlot=1`.
+
+The user saw the automatic weapon changes but the rifle remained visibly glued
+to Nadine's hand. No crash, stall, missing pistol, wrong art or body regression
+occurred. This selects the written **Xsame** result and rejects **Xcross**. The
+state-2 different-slot `PlayerWeaponController_StartCrossSlotSwitch
+0x1410A4130`, its paired Put/Get actions, both controller entry levels, the full
+Get/WeaponOut/Put lifecycle, final attachment selection and the earlier terminal
+commit are all now proven insufficient for the local-only pixels. The earlier
+manual sequence that appeared to move the rifle was incidental to another
+context or presentation refresh; it is not evidence for another weapon-switch
+retry.
+
+Build `zz` disables the one-shot cross-slot cycle. The next investigation must
+not mutate weapon selection, attachment records, DrawControl visibility or the
+already-rejected world final-cull path. It must identify the separate
+screen/local-main-view submission that renders the glued geometry, starting
+from the screen-specific render instance selected for the local Player and
+tracing backward to its concrete mesh owner and creation generation.

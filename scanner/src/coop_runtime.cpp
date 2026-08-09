@@ -1949,7 +1949,7 @@ constexpr bool kEnableWeaponPartialNormalRequestProbe = false;
 // entry levels. The historical visible recovery first drew the pistol, then
 // switched pistol -> rifle and put the rifle away. That cross-slot state-2 path
 // enters 0x1410A4130 and pairs Put(old) with Get(new), unlike a cold Draw.
-constexpr bool kEnableInitialLocalNadineCrossSlotRefreshCycle = true;
+constexpr bool kEnableInitialLocalNadineCrossSlotRefreshCycle = false;
 // Build zu: the stock weapon-controller lifecycle, physical attachment, exact
 // ProcessWeapon DrawControl and both FgDraw prepare paths have all been rejected
 // as owners of the cold role-B local image. The remaining view-specific stock
@@ -48945,8 +48945,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09zy "
-        "(cold Nadine pistol-rifle cross-slot refresh cycle)");
+        "TLL co-op runtime init 2026-08-09zz "
+        "(rejected Nadine cross-slot refresh cycle disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

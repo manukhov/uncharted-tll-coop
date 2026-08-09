@@ -3193,13 +3193,22 @@ Do not reopen these as the first move:
       successfully drew slot zero but synchronously rejected the negative Put
       sentinel. Together with `zs`'s completed inner Draw/Put, this closes both
       same-slot controller entry levels; do not retry them.
-- [ ] Run bounded build `zy`, the first test of the distinct state-2 cross-slot
+- [x] Run bounded build `zy`, the first test of the distinct state-2 cross-slot
       path `PlayerWeaponController_StartCrossSlotSwitch 0x1410A4130`. On exact
       cold local role-B Nadine, execute pistol-out -> rifle-out -> native rifle
       Put once. Require the ordered six markers, final `current=-1/draw=0`, no
       duplicate or crash, and ask whether the rifle finally leaves the local
       hand. Visible repair selects Xcross; exact completion with unchanged pixels
-      selects Xsame and forbids another controller-lifecycle retry.
+      selects Xsame and forbids another controller-lifecycle retry. RUNTIME
+      REJECTED: two complete exact sequences ended at attachment index 40 and
+      `current=-1/draw=0`, but the rifle remained glued in the local Nadine view.
+      Build `zz` disables the cycle.
+- [ ] Identify the distinct local-screen render submission for the glued rifle.
+      Start at the local Player's screen-specific FgDraw/main-view selection and
+      trace backward to a concrete mesh owner and creation generation. Do not
+      revisit controller Draw/Put, attachment ids, ProcessWeapon
+      `DisableMainView`, mesh HideMesh or the rejected world final-cull path.
+      Require three independent static evidence types before another launch.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no
