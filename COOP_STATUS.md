@@ -18516,4 +18516,15 @@ The next bounded build has three explicit competitors:
   repeats, the game stalls/crashes, or either character regresses. This rejects
   the runtime packaging; Put must not be called after a failed postcondition.
 
-No other Nadine weapon/renderer probe is enabled for this discriminator.
+Build `zq` implements exactly this discriminator. Before the native call it
+validates the exact PlayerWeaponController RTTI vtable and its `+0x248` target,
+the weapon weak cell back-pointer/generation, and exactly one matching entry at
+controller `+0x148` with index 0. After the call it requires the same weapon in
+slot 0, both `+0x124/+0x120 = 0`, unchanged `draw=0`, and the verified
+`rightHand` attachment; only that conjunction may start the stock Put. The
+attempt is claimed before either native call and can never repeat for the same
+Player/weapon/attachment-table generation. One bounded
+`NADINE-LOCAL-RIFLE-DRAW-COMMIT-PUT` row records all three states. Release
+compilation succeeds with marker `2026-08-09zq (Nadine cold-rifle Draw commit
+then stock Put)`. No other Nadine weapon/renderer probe is enabled for this
+discriminator.
