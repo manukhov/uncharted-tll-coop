@@ -3608,6 +3608,17 @@ Do not reopen these as the first move:
       `+0x18`. The normal state producer/cache is correct and its probe is now
       disabled. Continue statically at the Nadine animation-overlay set and the
       later WeaponPartial/ProcessWeapon content owners; do not repeat this test.
+      **STATIC:** native Nadine's correct hip-holster chain is now exact in
+      `anim-overlays-female-buddy.bin`, but it is consumed only by
+      `GameCharacter_BuildNpcAnimTreeWithOverlays 0x141DE36E0`, shared vtable
+      slot `+0x710` on NPC-derived classes and absent from Player. Its authored
+      clips have seven groups and NPC masks, versus eight groups and incompatible
+      masks in the live Player WeaponPartial clips. **Nnpc-direct is REJECTED**:
+      do not inject the NPC set or clips into the Chloe-born Player. Split the
+      remaining work: first trace **Nprop-lifecycle** for the cold-spawn rifle
+      and pistol hip attachment; separately retain **Nretarget-player** versus
+      the much larger **Nvisual-puppet** for the arm/torso pose. Sling remains
+      the independent `ProcessWeaponStrap` route.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

@@ -249,6 +249,16 @@ def audit_pak_animation_masks(data: bytes, labels: list[str]) -> None:
             )
         return target_page, target_local
 
+    def read_c_string(page: int, local: int) -> bytes | None:
+        absolute = pages[page][0] + local
+        end = data.find(b"\0", absolute, min(len(data), absolute + 0x400))
+        if end < 0:
+            return None
+        value = data[absolute:end]
+        if not value or any(byte < 0x20 or byte >= 0x7F for byte in value):
+            return None
+        return value
+
     page_zero_offset, page_zero_size = pages[0]
     print(
         f"pak_pages={page_count} page_table=0x{page_table_offset:X} "
@@ -269,15 +279,69 @@ def audit_pak_animation_masks(data: bytes, labels: list[str]) -> None:
                 continue
             registrations.append((hit, int(slot_offset)))
 
-        if not registrations:
+        descriptors: list[tuple[int, int, str]] = []
+        for registration_offset, slot_offset in registrations:
+            descriptor_page, descriptor_local = resolve_pointer(0, slot_offset)
+            descriptors.append(
+                (
+                    descriptor_page,
+                    descriptor_local,
+                    f"page0+0x{registration_offset:X}/slot=0x{slot_offset:X}",
+                )
+            )
+
+        # NPC-oriented PAKs keep resource names in pointer-linked descriptors
+        # instead of duplicating their StringIds in page zero.  Resolve the
+        # same descriptor by its authored name and type before following +0x28.
+        if not descriptors:
+            seen_descriptors: set[tuple[int, int]] = set()
+            for source_page, source_local in fixups:
+                try:
+                    descriptor_page, descriptor_local = resolve_pointer(
+                        source_page, source_local
+                    )
+                except ValueError:
+                    continue
+                if (
+                    (descriptor_page, descriptor_local) in seen_descriptors
+                    or (descriptor_page, descriptor_local + 0x28) not in fixups
+                    or descriptor_local + 0x30 > pages[descriptor_page][1]
+                ):
+                    continue
+                seen_descriptors.add((descriptor_page, descriptor_local))
+                descriptor_offset = pages[descriptor_page][0] + descriptor_local
+                name_local, type_local = struct.unpack_from(
+                    "<QQ", data, descriptor_offset
+                )
+                if (
+                    name_local >= pages[descriptor_page][1]
+                    or type_local >= pages[descriptor_page][1]
+                ):
+                    continue
+                name = read_c_string(descriptor_page, name_local)
+                resource_type = read_c_string(descriptor_page, type_local)
+                if (
+                    name is None
+                    or resource_type != b"ANIM"
+                    or string_id(name) != animation_id
+                ):
+                    continue
+                descriptors.append(
+                    (
+                        descriptor_page,
+                        descriptor_local,
+                        f"named-descriptor/{name.decode('ascii')}",
+                    )
+                )
+
+        if not descriptors:
             print(
                 f"animation={label!r} id=0x{animation_id:08X} "
-                "registrations=0"
+                "registrations=0 named_descriptors=0"
             )
             continue
 
-        for registration_offset, slot_offset in registrations:
-            descriptor_page, descriptor_local = resolve_pointer(0, slot_offset)
+        for descriptor_page, descriptor_local, origin in descriptors:
             if descriptor_local + 0x30 > pages[descriptor_page][1]:
                 raise ValueError(
                     f"truncated animation descriptor for 0x{animation_id:08X}"
@@ -308,8 +372,7 @@ def audit_pak_animation_masks(data: bytes, labels: list[str]) -> None:
             rendered_joints = ",".join(str(joint) for joint in joints)
             print(
                 f"animation={label!r} id=0x{animation_id:08X} "
-                f"registration=page0+0x{registration_offset:X} "
-                f"slot=0x{slot_offset:X} "
+                f"origin={origin} "
                 f"descriptor=page{descriptor_page}+0x{descriptor_local:X} "
                 f"raw=0x{raw_offset:X} groups={group_count} "
                 f"mask={mask_words[0]:016X}:{mask_words[1]:016X} "
@@ -419,6 +482,123 @@ def inspect_player_mesh_dc00(
         if look_id not in found_look_ids:
             print(f"look={look_label!r}/0x{look_id:08X} objects=0")
     print(f"dc00_player_mesh_objects_shown={shown}")
+
+
+def audit_dc00_objects(
+    data: bytes, record_labels: list[str], table_offsets: list[str], limit: int
+) -> None:
+    """Locate DC00 objects by record ids or by a contained 0x28-row offset."""
+
+    if len(data) < 0x20 or data[:4] != b"00CD":
+        raise ValueError("--dc00-record-id/--dc00-table-offset requires DC00")
+
+    object_count = struct.unpack_from("<I", data, 0x14)[0]
+    index_end = 0x20 + object_count * 0x10
+    if index_end > len(data):
+        raise ValueError("truncated DC00 object index")
+
+    wanted_ids = [parse_id(label) for label in record_labels]
+    wanted_offsets = [int(value, 0) for value in table_offsets]
+    shown = 0
+    print(
+        f"dc00_object_count={object_count} index_end=0x{index_end:X} "
+        f"record_ids={','.join(f'0x{value:08X}' for value, _ in wanted_ids)} "
+        f"table_offsets={','.join(f'0x{value:X}' for value in wanted_offsets)}"
+    )
+
+    for index in range(object_count):
+        index_offset = 0x20 + index * 0x10
+        object_id, type_id, record_offset, reserved = struct.unpack_from(
+            "<IIII", data, index_offset
+        )
+        if record_offset + 0x30 > len(data):
+            continue
+        record = data[record_offset : record_offset + 0x30]
+        record_values = struct.unpack_from("<12I", record)
+        record_matches = all(
+            struct.pack("<I", value) in record for value, _ in wanted_ids
+        )
+
+        table_offset = struct.unpack_from("<Q", record, 0)[0]
+        table_count = struct.unpack_from("<I", record, 8)[0]
+        table_end = table_offset + table_count * 0x28
+        offset_matches = any(
+            table_offset <= wanted < table_end and (wanted - table_offset) % 0x28 < 8
+            for wanted in wanted_offsets
+        )
+        if (wanted_ids and not record_matches) or (wanted_offsets and not offset_matches):
+            continue
+        if not wanted_ids and not wanted_offsets:
+            continue
+
+        values = ",".join(f"{value:08X}" for value in record_values)
+        print(
+            f"object[{index}] index=0x{index_offset:X} id=0x{object_id:08X} "
+            f"type=0x{type_id:08X} record=0x{record_offset:X} "
+            f"reserved=0x{reserved:08X} table=0x{table_offset:X} "
+            f"count={table_count} record_dwords={values}"
+        )
+        for wanted in wanted_offsets:
+            if table_offset <= wanted < table_end:
+                row = (wanted - table_offset) // 0x28
+                row_offset = table_offset + row * 0x28
+                source_id, target_id = struct.unpack_from("<II", data, row_offset)
+                print(
+                    f"  contains=0x{wanted:X} row={row} row_offset=0x{row_offset:X} "
+                    f"source=0x{source_id:08X} target=0x{target_id:08X}"
+                )
+        shown += 1
+        if shown >= limit:
+            break
+    print(f"dc00_objects_shown={shown} limit={limit}")
+
+
+def audit_dc00_overlay_rows(data: bytes, map_labels: list[str], limit: int) -> None:
+    """Find source/target occurrences across every well-formed overlay-set table."""
+
+    if len(data) < 0x20 or data[:4] != b"00CD":
+        raise ValueError("--dc00-map-id requires DC00")
+    wanted = {value for value, _ in map(parse_id, map_labels)}
+    overlay_set_id = string_id(b"anim-overlay-set")
+    object_count = struct.unpack_from("<I", data, 0x14)[0]
+    shown = 0
+
+    for index in range(object_count):
+        index_offset = 0x20 + index * 0x10
+        object_id, type_id, record_offset, _reserved = struct.unpack_from(
+            "<IIII", data, index_offset
+        )
+        if type_id != overlay_set_id or record_offset + 0x30 > len(data):
+            continue
+        table_offset = struct.unpack_from("<Q", data, record_offset)[0]
+        table_count, category_id, _echo_id, owner_id, selector_id = (
+            struct.unpack_from("<IIIII", data, record_offset + 8)
+        )
+        record_type = struct.unpack_from("<I", data, record_offset + 0x2C)[0]
+        table_end = table_offset + table_count * 0x28
+        if (
+            record_type != overlay_set_id
+            or table_offset > len(data)
+            or table_end > len(data)
+        ):
+            continue
+        for row in range(table_count):
+            row_offset = table_offset + row * 0x28
+            source_id, target_id = struct.unpack_from("<II", data, row_offset)
+            if source_id not in wanted and target_id not in wanted:
+                continue
+            print(
+                f"object[{index}] id=0x{object_id:08X} record=0x{record_offset:X} "
+                f"category=0x{category_id:08X} owner=0x{owner_id:08X} "
+                f"selector=0x{selector_id:08X} table=0x{table_offset:X} "
+                f"count={table_count} row={row} offset=0x{row_offset:X} "
+                f"source=0x{source_id:08X} target=0x{target_id:08X}"
+            )
+            shown += 1
+            if shown >= limit:
+                print(f"dc00_overlay_rows_shown={shown} limit={limit}")
+                return
+    print(f"dc00_overlay_rows_shown={shown} limit={limit}")
 
 
 def collect_player_mesh_rows(
@@ -1061,6 +1241,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="print replacement rows for this source id; repeatable",
     )
     parser.add_argument(
+        "--dc00-record-id",
+        action="append",
+        default=[],
+        metavar="STRING_OR_U32",
+        help=(
+            "show DC00 objects whose first 0x30 record bytes contain every "
+            "supplied id; repeatable"
+        ),
+    )
+    parser.add_argument(
+        "--dc00-table-offset",
+        action="append",
+        default=[],
+        metavar="OFFSET",
+        help=(
+            "show the DC00 object whose 0x28-row table contains this file "
+            "offset; repeatable"
+        ),
+    )
+    parser.add_argument(
+        "--dc00-map-id",
+        action="append",
+        default=[],
+        metavar="STRING_OR_U32",
+        help=(
+            "find source or target occurrences in every valid DC00 "
+            "anim-overlay-set table; repeatable"
+        ),
+    )
+    parser.add_argument(
         "--compare-player-mesh-look",
         action="append",
         default=[],
@@ -1141,13 +1351,17 @@ def main() -> int:
             or args.strings
             or args.player_mesh_look
             or args.map_source
+            or args.dc00_record_id
+            or args.dc00_table_offset
+            or args.dc00_map_id
             or args.gesture_node_audit
             or args.animation_mask
         ):
             raise ValueError(
                 "--entry is required with --id, --strings, "
                 "--player-mesh-look, --map-source, --gesture-node-audit "
-                "or --animation-mask"
+                "--dc00-record-id, --dc00-table-offset, --dc00-map-id or "
+                "--animation-mask"
             )
         return 0
 
@@ -1167,6 +1381,14 @@ def main() -> int:
 
     if args.player_mesh_look or args.map_source:
         inspect_player_mesh_dc00(data, args.player_mesh_look, args.map_source)
+
+    if args.dc00_record_id or args.dc00_table_offset:
+        audit_dc00_objects(
+            data, args.dc00_record_id, args.dc00_table_offset, args.limit
+        )
+
+    if args.dc00_map_id:
+        audit_dc00_overlay_rows(data, args.dc00_map_id, args.limit)
 
     if args.compare_player_mesh_look:
         known_names: dict[int, list[str]] = {}

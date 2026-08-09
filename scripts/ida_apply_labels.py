@@ -5841,6 +5841,14 @@ FUNCTIONS = {
         "control collection at +0x15C8, frees the owned cluster at +0x15D0, "
         "and clears additional owned state in the +0x1700 region.",
     ),
+    0x141DE36E0: (
+        "GameCharacter_BuildNpcAnimTreeWithOverlays",
+        "GameCharacter/Npc-family vtable slot +0x710. Resolves and commits "
+        "anim-overlay-<character>-skel-<skeleton> and "
+        "anim-overlay-<character>-look-<look>, then builds the exact anim-npc "
+        "tree. The slot is shared by concrete NPC classes including Nadine, "
+        "NadineBuddy and Buddy, but is absent from the Player vtable.",
+    ),
     0x141DE3C80: (
         "RelocateOwnerRuntimeClass_WithDecisionNodeSlot",
         "Relocate/update path for the same owner/runtime class. Rebases fields "

@@ -18407,3 +18407,56 @@ from the animation/overlay content selected for the Chloe-born Player, its
 later layer merge, or the separate ProcessWeapon prop route. The read-only
 vtable relay is disabled in source after classification; no more runtime test is
 authorized until those content alternatives are separated statically.
+
+### 2026-08-09 STATIC: native Nadine's holster chain is not Player-compatible
+
+The installed NPC assets now close the apparent shortcut of borrowing Nadine's
+stock holster animation. `anim-overlays-female-buddy.bin` object 99 is exact
+`anim-overlay-set 0x65FA07C0`, category `character 0x0278EF99`, owner
+`female-buddy 0xFE48343C`, selector `0x12AC7354`, with 224 rows at `0x20B68`.
+Its terminal holster/unholster rows are:
+
+- `0x560461D6 -> 0x1AA3EFC4 nad-nw-ambi-unholster--add` and
+  `0x4D84D6B4 -> 0xEB802FA7 ...--part`;
+- `0x42883F60 -> 0xA716F4A3 nad-nw-ambi-holster--part` and
+  `0x0B423712 -> 0xB422D8E9 ...--add`;
+- the slow branch uses `0x0CE3598A -> 0x22264D57 ...--part` and
+  `0x25A8F162 -> 0x8846D6A6 ...--add`.
+
+Earlier `weapon 0xD862A057` and `weapon-base 0xA7529AFB` female-buddy sets map
+generic ids to those intermediate source ids, proving a chained NPC overlay
+stack rather than one missing Player row. `anim-overlays-nadine.bin` does not
+contain any of these seven source/target ids. Its object 32 instead belongs to
+`character/nadine/default`; importantly, `0xF19E22DC` resolves to the literal
+StringId `default`, so its earlier raw occurrence is **not** evidence that the
+rejected Player selector and this NPC row share an owner.
+
+The native consumer is now exact independently of the data file.
+`GameCharacter_BuildNpcAnimTreeWithOverlays 0x141DE36E0`, vtable slot `+0x710`,
+formats and commits `anim-overlay-<character>-skel-<skeleton>` and
+`anim-overlay-<character>-look-<look>`, then builds `anim-npc`. RTTI/vtable
+references put the same slot on `GameCharacter`, `Npc`, `Human`, `Buddy`,
+`NadineBuddy`, `Nadine` and the other NPC-derived classes. No `Player` vtable
+references it. The function is saved under that name in the single IDB.
+
+The actual clip topology supplies a third independent rejection. The four exact
+normal Nadine clips in `anim-nadine-npc-dlc.pak` have seven animation groups:
+their `--part` masks own alternating joints `20,22,24,26,28,30`, while their
+`--add` masks own `14..18,32..34,37..39`. The slow part owns `19..30`, and the
+base clip owns all NPC joints `0..65`. By contrast the live Player
+WeaponPartial clips have eight groups; Player `--part` owns `21..35` and Player
+`--add` owns `16..20,40..42,58..62`. The skeleton indices and group contracts
+are not interchangeable.
+
+Therefore **Nnpc-direct is STATIC REJECTED**: committing the NPC female-buddy
+set or substituting its clips into the Chloe-born Player cannot reproduce native
+Nadine safely. This also explains why the complete Player-mesh table experiment
+could change overlay knowledge without repairing the pose. The remaining
+architectural competitors are **Nretarget-player** (adapt Player-compatible arm
+poses/IK to Nadine proportions) and **Nvisual-puppet** (drive a native Nadine
+visual owner from the Player, a substantially larger design). They do not own
+all prop defects: **Nprop-lifecycle** remains separate for the cold-spawn rifle
+and pistol hip attachment, while the missing sling remains the independently
+proved `ProcessWeaponStrap` route. Continue with those smaller prop lifecycles
+before attempting a full pose retarget. No runtime build was produced for this
+static classification.
