@@ -1131,8 +1131,12 @@ static std::uint32_t g_puppet_gun_ok_art = 0;
 static ULONGLONG g_puppet_gun_ok_until_ms = 0;
 static ULONGLONG g_give_weapon_fail_until_ms = 0;
 static ULONGLONG g_puppet_native_fire_allowed_after_ms = 0;
-constexpr std::uint32_t kCoopPistolArtId = 0x33E29A1B;
-constexpr std::uint32_t kCoopRifleArtId = 0x8075397D;
+// Installed sidbase.bin and weapon-art.bin independently resolve these exact
+// registry keys. Keep the semantic names aligned with WeaponArtDef+0x10: the
+// old declarations had the two values reversed and consequently treated the
+// P99 as a long gun and the Mazur LDR as a handgun throughout the relay.
+constexpr std::uint32_t kCoopPistolArtId = 0x8075397D;  // pistol-silenced-dlc
+constexpr std::uint32_t kCoopRifleArtId = 0x33E29A1B;  // sniper-rifle-bolt
 constexpr std::uint32_t kCoopScopedPistolArtId = 0xC3181EBD;
 constexpr std::uint32_t kCoopType97ArtId = 0x27617D0D;
 std::atomic<bool> g_type97_normalized_block_ready{false};

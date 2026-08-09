@@ -2786,7 +2786,25 @@ Do not reopen these as the first move:
       (global 239/245); Nadine local 27 needs no input trace because `jw` proved
       its 48-byte record bit-identical across the camera sweep.
 
-## P0 - Nadine legacy-look weapon attachment (PARKED, 2026-07-27)
+## P0 CURRENT - Nadine legacy-look weapon attachment (reopened 2026-08-09)
+
+- [x] Correct the two reversed built-in firearm identities before another
+      runtime test. Installed `sidbase.bin` and `weapon-art.bin` resolve
+      `0x8075397D = pistol-silenced-dlc` and
+      `0x33E29A1B = sniper-rifle-bolt`; the exact runtime child of the former is
+      independently `0x255BEBA0 = p99-silencer-dlc`. Historical
+      `WeaponArtDef+0x10` values and the native NPC holster mapper agree:
+      `0x8075397D` is type 0/handgun and `0x33E29A1B` is type 1/long gun. The
+      source constants are corrected; all older Nadine entries that call
+      `0x8075397D` the rifle or `0x33E29A1B` the pistol retain their raw evidence
+      but their semantic labels are superseded.
+- [ ] Retarget the already proven cold stock rebind from the misidentified P99
+      to the actual `0x33E29A1B` Mazur LDR, selected by art rather than hard-coded
+      slot. Retarget the safe Put selector from the actual rifle to the actual
+      `0x8075397D` pistol and redirect its generic `gun_holster` request to the
+      copied native-Nadine `pistolHolster`. Remove the obsolete BB alias. Build
+      and launch only after both paths have exact one-shot ownership and inverse
+      draw guards.
 
 - [x] Recover the prior Nadine weapon history and keep the confirmed general
       weapon-display fixes. `ApplyWeaponSwitch(-1)`, slot mirror, draw-state

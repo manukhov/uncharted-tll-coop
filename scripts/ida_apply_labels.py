@@ -10041,8 +10041,10 @@ FUNCTIONS = {
     0x14150F2E0: (
         "ProcessWeapon_Ctor",
         "Constructs ProcessWeapon and installs vtable 0x142A9BF48. Runtime census "
-        "identified pistol 0x33E29A1B, rifle 0x8075397D and grenade 0x0B8BD6D6 "
-        "children through this RTTI-backed class.",
+        "identified firearm children through this RTTI-backed class. Installed "
+        "sidbase.bin and weapon-art.bin resolve 0x8075397D as "
+        "pistol-silenced-dlc (child 0x255BEBA0 p99-silencer-dlc), "
+        "0x33E29A1B as sniper-rifle-bolt and 0x0B8BD6D6 as the grenade.",
     ),
     0x141510990: (
         "ProcessWeapon_Dtor",

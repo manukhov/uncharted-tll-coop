@@ -19385,3 +19385,46 @@ per-view worker and, in parallel, trace the local-only ProcessWeapon
 presentation/cache that can survive an absent common-queue row. Do not return
 to attachment APIs, weapon-state cycles, pool 443 or another pre-spawn
 visibility-bit probe. Both game processes were closed after the result.
+
+### 2026-08-09 STATIC CORRECTION: the built-in pistol/rifle art identities were reversed
+
+The entire local-Nadine attachment frontier used two semantic constants whose
+values were reversed since their introduction in `3ce68547`. The installed
+assets resolve them unambiguously:
+
+- `sid1.psarc/sidbase.bin` contains the exact CRC32 preimages
+  `0x8075397D = pistol-silenced-dlc` and
+  `0x33E29A1B = sniper-rifle-bolt`;
+- `dc1.psarc/weapon-art.bin` independently contains both exact printable names
+  with those same registry keys;
+- the runtime child geometry previously associated with art `0x8075397D` is
+  `0x255BEBA0`, whose independent sidbase preimage is `p99-silencer-dlc`, not a
+  rifle mesh.
+
+The game's own type path is a fourth independent check. Historical bounded
+rows measured cached `WeaponArtDef+0x10` as type 0 for `0x8075397D` and type 1
+for `0x33E29A1B`. `WeaponArtDef_SelectNpcHolsterAttachId 0x1405E76E0` maps type
+0 to `pistolHolster` and type 1 to `longgunHolster`. The old `fn` conclusion
+that this enum interpretation was wrong is therefore superseded: its expected
+weapon labels were wrong instead.
+
+This correction also resolves the strongest historical visual contradiction.
+Build `fs` redirected art `0x33E29A1B` to `pistolHolster` and the user saw the
+**rifle** move to Nadine's thigh while the **pistol** remained on her back. That
+was not cross-art rendering: the redirect moved the actual Mazur rifle exactly
+as the corrected identity predicts. Likewise, builds `ha` through `aah` kept
+targeting art `0x8075397D` while trying to remove the visibly glued rifle, so
+their exact field/cull results describe the silenced P99 and do not reject the
+same stock attachment path for the actual rifle.
+
+Source constants are now corrected to
+`kCoopPistolArtId=0x8075397D` and
+`kCoopRifleArtId=0x33E29A1B`. Raw addresses, object pointers and field results in
+older entries remain valid, but every older semantic label that calls
+`0x8075397D` a rifle or `0x33E29A1B` a pistol is superseded. Before runtime, the
+next implementation must (1) locate the exact rifle/pistol by art rather than
+the historical slot-0/slot-1 assumption, (2) reuse the one-shot stock rifle
+rebind only for the actual `0x33E29A1B` rifle, and (3) redirect only the actual
+`0x8075397D` pistol's Put selection from generic `gun_holster` to the already
+copied native-Nadine `pistolHolster` record. The arm/torso pose and sling remain
+separate content/retarget problems.
