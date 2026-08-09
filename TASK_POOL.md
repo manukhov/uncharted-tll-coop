@@ -3873,6 +3873,16 @@ Do not reopen these as the first move:
       `aaj` behavior without requesting another test. Before any future launch,
       isolate one failing boundary statically and capture provenance before the
       original resolver/post-rebind can fault.
+      **STATIC REJECTED (postmortem):** `AnimStateLayer_CreateAnimCommands` calls
+      only `AnimStateSnapshot_GenerateAnimCommands`, which consumes an already
+      resolved root and never reaches `AnimSetRemap`. The remap actually occurs
+      earlier at `AnimStateSnapshot_SnapshotAnimState+0x464` / `0x1418B2954` and
+      is stored at snapshot `+0x88/+0x90/+0x94`. Therefore the `aal` TLS scope
+      could never admit its 16 replacements; do not retarget the same wrong phase.
+      All `aal` and untested `aak` code is removed, leaving scanner behavior
+      identical to confirmed `aaj` except the `aam` marker. Future work must scope
+      exact legacy-Nadine WeaponPartial ownership during snapshot creation without
+      reintroducing a global command-generator detour.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

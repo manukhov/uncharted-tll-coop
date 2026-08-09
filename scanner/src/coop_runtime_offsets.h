@@ -71,7 +71,6 @@ constexpr std::size_t kPlayerUpperOwnerOverlayWrapperOffset = 0x60;
 // Animation-id/clip lookup pipeline used by the scoped Nadine probes.
 constexpr std::uintptr_t kAnimSetRemapResolveAnimationIdRva = 0x17CA2E0;
 constexpr std::uintptr_t kAnimationDatabaseResolveClipRva = 0x17C8E20;
-constexpr std::uintptr_t kAnimStateLayerCreateAnimCommandsRva = 0x189EA60;
 constexpr std::uintptr_t kAnimOverlayStateResolveAnimationIdRva = 0x17F9F00;
 constexpr std::uintptr_t kAnimOverlayStateFindMatchingRowRva = 0x17FA6E0;
 // PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0 writes directional

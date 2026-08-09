@@ -1971,11 +1971,6 @@ constexpr bool kEnableProcessWeaponInitProbe = false;
 // gun_holster request. The rejected IK/knowledge writes remain disabled.
 constexpr bool kEnableLegacyNadineHolsterIkVerification = false;
 constexpr bool kEnableLegacyNadinePistolHipAttachment = true;
-// The combined aak+aal runtime crashed both processes during checkpoint load.
-// Until those two changes are isolated, retain the last visually confirmed aaj
-// behavior: redirect the selector inside the stock Put action, accepting its
-// known incomplete handoff instead of executing the unvalidated post-rebind.
-constexpr bool kEnableCompleteStockP99HolsterHandoff = false;
 // Builds gz/ha safely exercised the full stock rebind but targeted 0x8075397D,
 // the P99 rather than the visible Mazur. Retarget the one-shot boundary to the
 // actual rifle and resolve its inventory slot by art instead of assuming slot 0.
@@ -1990,12 +1985,6 @@ constexpr bool kEnableInitialLocalNadineRifleRebind = true;
 constexpr bool kEnableWeaponPartialSelectionProbe = false;
 constexpr bool kEnableWeaponPartialFinalRequestProbe = false;
 constexpr bool kEnableWeaponPartialNormalRequestProbe = false;
-// Static evidence still shows that the exact WeaponPartial layer overwrites the
-// compatible player-mesh leg pose at weight one. The first scoped implementation
-// crashed both processes before a completed replacement marker, so keep every
-// new command/resolver hook out of production until the failing boundary is
-// isolated without another visual test.
-constexpr bool kEnableLegacyNadineWeaponPartialLegClipRetarget = false;
 // Builds zs/zw reject a single-slot rifle Draw -> Put through both controller
 // entry levels. The historical visible recovery first drew the pistol, then
 // switched pistol -> rifle and put the rifle away. That cross-slot state-2 path
@@ -39654,100 +39643,13 @@ using PlayerWeaponAnimControlRequestWeaponPartFunction = void(__fastcall*)(
 PlayerWeaponAnimControlRequestWeaponPartFunction
     g_original_player_weapon_anim_control_request_weapon_part = nullptr;
 
-constexpr std::uint32_t kWeaponPartialLayerId = 0xE2B990B9u;
-
-struct WeaponPartialLayerCacheSlot {
-    std::atomic<void*> player{nullptr};
-    std::atomic<void*> control{nullptr};
-    std::atomic<void*> layer{nullptr};
-};
-
-std::array<WeaponPartialLayerCacheSlot, 2> g_weapon_partial_layer_cache{};
-
-bool seh_resolve_anim_control_layer(
-    void* control, std::uint32_t layer_id, void** layer_out) {
-    if (layer_out == nullptr) {
-        return false;
-    }
-    *layer_out = nullptr;
-    __try {
-        if (control == nullptr ||
-            *reinterpret_cast<const std::uintptr_t*>(control) !=
-                g_module + kPlayerWeaponAnimControlVtableRva) {
-            return false;
-        }
-        void* const anim_control = *reinterpret_cast<void* const*>(
-            static_cast<const std::byte*>(control) + 0x8);
-        if (anim_control == nullptr) {
-            return false;
-        }
-        const std::uint32_t count = *reinterpret_cast<const std::uint32_t*>(
-            static_cast<const std::byte*>(anim_control) + 0x28);
-        auto* const entries = *reinterpret_cast<const std::byte* const*>(
-            static_cast<const std::byte*>(anim_control) + 0x30);
-        if (entries == nullptr || count == 0 || count > 256) {
-            return false;
-        }
-        for (std::uint32_t index = 0; index < count; ++index) {
-            const std::byte* const entry = entries + index * 0x20;
-            if (*reinterpret_cast<const std::uint32_t*>(entry) != layer_id) {
-                continue;
-            }
-            void* const layer = *reinterpret_cast<void* const*>(entry + 0x8);
-            if (layer == nullptr ||
-                *reinterpret_cast<const std::uintptr_t*>(layer) !=
-                    g_module + kAnimStateLayerVtableRva) {
-                return false;
-            }
-            *layer_out = layer;
-            return true;
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        *layer_out = nullptr;
-    }
-    return false;
-}
-
-void cache_weapon_partial_layer_from_control(void* control) {
-    if constexpr (!kEnableLegacyNadineWeaponPartialLegClipRetarget) {
-        return;
-    }
-    __try {
-        if (control == nullptr) {
-            return;
-        }
-        void* const player = *reinterpret_cast<void* const*>(
-            static_cast<const std::byte*>(control) + 0x10);
-        const int owner_index = retained_player_index(player);
-        if (owner_index < 0) {
-            return;
-        }
-        void* layer = nullptr;
-        if (!seh_resolve_anim_control_layer(
-                control, kWeaponPartialLayerId, &layer)) {
-            return;
-        }
-        auto& slot = g_weapon_partial_layer_cache[owner_index];
-        slot.player.store(player, std::memory_order_release);
-        slot.control.store(control, std::memory_order_release);
-        slot.layer.store(layer, std::memory_order_release);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-    }
-}
-
 void __fastcall hooked_player_weapon_anim_control_request_weapon_part(
     void* control, void* request, std::uint32_t animation_id, float blend) {
-    WeaponPartialFinalRequestSnapshot before{};
-    if constexpr (kEnableWeaponPartialNormalRequestProbe) {
-        before = seh_weapon_partial_final_request_snapshot(control, request);
-    }
+    const WeaponPartialFinalRequestSnapshot before =
+        seh_weapon_partial_final_request_snapshot(control, request);
     if (g_original_player_weapon_anim_control_request_weapon_part != nullptr) {
         g_original_player_weapon_anim_control_request_weapon_part(
             control, request, animation_id, blend);
-    }
-    cache_weapon_partial_layer_from_control(control);
-    if constexpr (!kEnableWeaponPartialNormalRequestProbe) {
-        return;
     }
     if (!before.valid) {
         return;
@@ -40977,151 +40879,6 @@ HolsterClipCounterfactualResult seh_lookup_resolved_holster_clip(
     return result;
 }
 
-struct WeaponPartialLegClipReplacement {
-    std::uint32_t weapon_partial;
-    std::uint32_t nadine_leg;
-    const char* role;
-};
-
-// Complete atomic families for the exact cover-low-l context observed on
-// legacy Nadine plus the direct common-source generic fallback. Every source
-// and target is a Player-compatible eight-group ANIM. Put preserves the exact
-// joint union; Get deliberately releases only l_palm/joint 38 so the already
-// generated lower/base lane remains authoritative.
-constexpr std::array<WeaponPartialLegClipReplacement, 16>
-    kWeaponPartialLegClipReplacements{{
-        {0xC9489257u, 0x837E448Cu, "put-add"},
-        {0x1C25D197u, 0x31FFAC36u, "put-part"},
-        {0x2D00ED46u, 0x43C3AA35u, "put-finish-add"},
-        {0x82F79032u, 0xD19B85AFu, "put-finish-part"},
-        {0x1FEE21DEu, 0x203C887Du, "get-add"},
-        {0x036CBC26u, 0x0DB09D17u, "get-grab-add"},
-        {0x4A0BE6D8u, 0xAAA477D2u, "get-grab-part"},
-        {0xB18B5ECCu, 0x8F5F2DE1u, "get-part"},
-        {0x770B783Du, 0x6BE64FB2u, "put-idle-add"},
-        {0xDE7F96E3u, 0x4A5559F7u, "put-idle-part"},
-        {0xA2B2BEEBu, 0x354A9741u, "put-idle-finish-add"},
-        {0x61E76061u, 0xA294A1FAu, "put-idle-finish-part"},
-        {0xC38BF755u, 0x1B54CAAFu, "get-idle-add"},
-        {0x8894B660u, 0xD31ABA8Du, "get-idle-grab-add"},
-        {0xF0468B57u, 0x2D960631u, "get-idle-grab-part"},
-        {0xF0CA0541u, 0x18645910u, "get-idle-part"},
-    }};
-
-consteval bool weapon_partial_leg_clip_replacements_are_valid() {
-    for (std::size_t index = 0;
-         index < kWeaponPartialLegClipReplacements.size(); ++index) {
-        const auto& replacement = kWeaponPartialLegClipReplacements[index];
-        if (replacement.weapon_partial == 0 || replacement.nadine_leg == 0 ||
-            replacement.weapon_partial == replacement.nadine_leg) {
-            return false;
-        }
-        for (std::size_t other = index + 1;
-             other < kWeaponPartialLegClipReplacements.size(); ++other) {
-            if (replacement.weapon_partial ==
-                kWeaponPartialLegClipReplacements[other].weapon_partial) {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-static_assert(kWeaponPartialLegClipReplacements.size() == 4 * 4);
-static_assert(weapon_partial_leg_clip_replacements_are_valid());
-
-const WeaponPartialLegClipReplacement*
-find_weapon_partial_leg_clip_replacement(std::uint32_t input) {
-    for (const auto& replacement :
-         kWeaponPartialLegClipReplacements) {
-        if (replacement.weapon_partial == input) {
-            return &replacement;
-        }
-    }
-    return nullptr;
-}
-
-struct WeaponPartialLegClipRemapContext {
-    bool active = false;
-    int owner_index = -1;
-    void* player = nullptr;
-    void* layer = nullptr;
-};
-
-thread_local WeaponPartialLegClipRemapContext
-    g_weapon_partial_leg_clip_remap_context{};
-thread_local bool g_weapon_partial_leg_clip_remap_in_progress = false;
-
-WeaponPartialLegClipRemapContext classify_cached_weapon_partial_layer(
-    void* layer) {
-    WeaponPartialLegClipRemapContext result{};
-    if (layer == nullptr) {
-        return result;
-    }
-    for (int owner_index = 0; owner_index < 2; ++owner_index) {
-        auto& cached = g_weapon_partial_layer_cache[owner_index];
-        if (cached.layer.load(std::memory_order_acquire) != layer) {
-            continue;
-        }
-        void* const player = cached.player.load(std::memory_order_acquire);
-        void* const control = cached.control.load(std::memory_order_acquire);
-        if (player == nullptr || retained_player_object(owner_index) != player) {
-            continue;
-        }
-        std::uint32_t look = 0;
-        if (!seh_read_player_look(player, &look) ||
-            look != kLegacyNadineAttachTargetLookId) {
-            continue;
-        }
-        void* current_layer = nullptr;
-        if (!seh_resolve_anim_control_layer(
-                control, kWeaponPartialLayerId, &current_layer) ||
-            current_layer != layer) {
-            continue;
-        }
-        __try {
-            if (*reinterpret_cast<const std::uintptr_t*>(layer) !=
-                    g_module + kAnimStateLayerVtableRva ||
-                *reinterpret_cast<void* const*>(
-                    static_cast<const std::byte*>(player) + 0x1DF0) !=
-                    control ||
-                control == nullptr ||
-                *reinterpret_cast<const std::uintptr_t*>(control) !=
-                    g_module + kPlayerWeaponAnimControlVtableRva ||
-                *reinterpret_cast<void* const*>(
-                    static_cast<const std::byte*>(control) + 0x10) != player) {
-                continue;
-            }
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            continue;
-        }
-        result.active = true;
-        result.owner_index = owner_index;
-        result.player = player;
-        result.layer = layer;
-        return result;
-    }
-    return result;
-}
-
-bool seh_read_remapped_animation_id(
-    const std::uint32_t* output, std::uint32_t* value_out) {
-    if (value_out == nullptr) {
-        return false;
-    }
-    *value_out = 0;
-    __try {
-        if (output == nullptr) {
-            return false;
-        }
-        *value_out = output[0];
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        *value_out = 0;
-        return false;
-    }
-}
-
 std::uint32_t* __fastcall hooked_anim_set_remap_resolve_animation_id(
     void* animation_set, std::uint32_t* output, std::uint32_t input) {
     const std::uintptr_t return_address =
@@ -41133,56 +40890,11 @@ std::uint32_t* __fastcall hooked_anim_set_remap_resolve_animation_id(
         g_holster_clip_lookup_probe_context;
     g_holster_clip_lookup_probe_context = {};
 
-    const WeaponPartialLegClipRemapContext clip_context =
-        g_weapon_partial_leg_clip_remap_context;
-    const WeaponPartialLegClipReplacement* const clip_replacement =
-        clip_context.active &&
-            !g_weapon_partial_leg_clip_remap_in_progress
-        ? find_weapon_partial_leg_clip_replacement(input)
-        : nullptr;
-    const std::uint32_t effective_input = clip_replacement != nullptr
-        ? clip_replacement->nadine_leg
-        : input;
-    const bool previous_remap_in_progress =
-        g_weapon_partial_leg_clip_remap_in_progress;
-    if (clip_replacement != nullptr) {
-        g_weapon_partial_leg_clip_remap_in_progress = true;
-    }
-
     std::uint32_t* const result =
         g_original_anim_set_remap_resolve_animation_id != nullptr
         ? g_original_anim_set_remap_resolve_animation_id(
-              animation_set, output, effective_input)
+              animation_set, output, input)
         : output;
-    g_weapon_partial_leg_clip_remap_in_progress =
-        previous_remap_in_progress;
-
-    if (clip_replacement != nullptr) {
-        const std::size_t replacement_index = static_cast<std::size_t>(
-            clip_replacement -
-            kWeaponPartialLegClipReplacements.data());
-        static std::array<std::atomic<bool>,
-                          kWeaponPartialLegClipReplacements.size()>
-            logged{};
-        bool expected = false;
-        if (logged[replacement_index].compare_exchange_strong(
-                expected, true, std::memory_order_relaxed)) {
-            std::uint32_t resolved = 0;
-            seh_read_remapped_animation_id(output, &resolved);
-            std::ostringstream line;
-            line << "NADINE-WEAPON-PARTIAL-LEG-CLIP owner="
-                 << clip_context.owner_index
-                 << " player=0x" << std::hex
-                 << reinterpret_cast<std::uintptr_t>(clip_context.player)
-                 << " layer=0x"
-                 << reinterpret_cast<std::uintptr_t>(clip_context.layer)
-                 << " source=0x" << input
-                 << " target=0x" << effective_input
-                 << " resolved=0x" << resolved
-                 << " role=" << clip_replacement->role;
-            write_log_line(line.str().c_str());
-        }
-    }
 
     if (context.active && input == context.overlay_terminal) {
         std::uint32_t leg_terminal = 0;
@@ -41755,29 +41467,6 @@ struct NadinePistolHolsterExecuteContext {
 thread_local NadinePistolHolsterExecuteContext
     g_nadine_pistol_holster_execute_context{};
 
-bool seh_call_player_weapon_controller_rebind_to_holster(
-    void* controller, void* weapon);
-
-bool seh_read_player_weapon_controller(void* player, void** controller_out) {
-    if (controller_out == nullptr) {
-        return false;
-    }
-    *controller_out = nullptr;
-    __try {
-        if (player == nullptr ||
-            readable_bytes(static_cast<std::byte*>(player) + 0x1D88) <
-                sizeof(void*)) {
-            return false;
-        }
-        *controller_out = *reinterpret_cast<void**>(
-            static_cast<std::byte*>(player) + 0x1D88);
-        return *controller_out != nullptr;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        *controller_out = nullptr;
-        return false;
-    }
-}
-
 bool seh_weapon_is_player_slot(void* player, void* weapon, int slot) {
     __try {
         return player != nullptr && weapon != nullptr &&
@@ -41802,7 +41491,6 @@ struct HolsterExecuteWeaponLocalSnapshot {
     void* weapon = nullptr;
     std::uint32_t art = 0;
     std::uint8_t attach_index = 0xFF;
-    std::uint8_t holster_handoff_finished = 0;
     std::array<std::uint32_t, 16> local_bits{};
     std::array<std::uint32_t, 2> blend_bits{};
 };
@@ -41816,14 +41504,12 @@ HolsterExecuteWeaponLocalSnapshot capture_holster_execute_weapon_local(
             return snapshot;
         }
         auto* const bytes = static_cast<const std::byte*>(snapshot.weapon);
-        if (readable_bytes(bytes) < 0x8F5) {
+        if (readable_bytes(bytes) < 0x864) {
             return snapshot;
         }
         snapshot.art = *reinterpret_cast<const std::uint32_t*>(bytes + 0x860);
         snapshot.attach_index =
             *reinterpret_cast<const std::uint8_t*>(bytes + 0x688);
-        snapshot.holster_handoff_finished =
-            *reinterpret_cast<const std::uint8_t*>(bytes + 0x8F4);
         std::memcpy(
             snapshot.local_bits.data(), bytes + 0x4F0,
             sizeof(snapshot.local_bits));
@@ -41866,9 +41552,6 @@ void log_holster_execute_weapon_local(
          << " attach=" << std::dec
          << static_cast<unsigned>(before.attach_index) << "->"
          << static_cast<unsigned>(after.attach_index)
-         << " handoff="
-         << static_cast<unsigned>(before.holster_handoff_finished) << "->"
-         << static_cast<unsigned>(after.holster_handoff_finished)
          << " valid=" << (before.readable ? 1 : 0) << "/"
          << (after.readable ? 1 : 0)
          << " changed=0x" << std::hex << changed
@@ -41901,48 +41584,13 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
         }
     }
 
-    int pistol_slot = -1;
-    bool pistol_was_in_right_hand = false;
-    if (owner_index >= 0 && look_valid &&
-        look == kLegacyNadineAttachTargetLookId) {
-        for (int slot = 0; slot < 2; ++slot) {
-            const auto& snapshot = local_before[slot];
-            if (!snapshot.readable || snapshot.art != kCoopPistolArtId ||
-                snapshot.weapon == nullptr ||
-                !seh_weapon_parent_resolves_to_owner(
-                    snapshot.weapon, before.player)) {
-                continue;
-            }
-            std::uint32_t attach_id = 0;
-            std::uintptr_t records_generation = 0;
-            if (seh_read_owner_attach_record_id(
-                    before.player, snapshot.attach_index, &attach_id,
-                    &records_generation) &&
-                attach_id == 0x61A48E01u) {
-                pistol_slot = slot;
-                pistol_was_in_right_hand = true;
-            }
-            break;
-        }
-    }
-
     const NadinePistolHolsterExecuteContext previous_context =
         g_nadine_pistol_holster_execute_context;
-    if constexpr (kEnableCompleteStockP99HolsterHandoff) {
-        // The stock executor requires its first rebind to select targSpineProp
-        // and then performs a second rebind plus the record-transform/blend
-        // handoff. The unvalidated aak path keeps this pass-through and performs
-        // a separate concrete rebind after completion.
-        g_nadine_pistol_holster_execute_context = {};
-    } else {
-        // Restore the last visually confirmed aaj boundary while aak and aal are
-        // isolated. This deliberately retains aaj's known early-exit/jerk defect.
-        g_nadine_pistol_holster_execute_context = {};
-        if (before.readable && before.executed == 0 && owner_index >= 0 &&
-            look_valid && look == kLegacyNadineAttachTargetLookId) {
-            g_nadine_pistol_holster_execute_context.player = before.player;
-            g_nadine_pistol_holster_execute_context.active = true;
-        }
+    g_nadine_pistol_holster_execute_context = {};
+    if (before.readable && before.executed == 0 && owner_index >= 0 &&
+        look_valid && look == kLegacyNadineAttachTargetLookId) {
+        g_nadine_pistol_holster_execute_context.player = before.player;
+        g_nadine_pistol_holster_execute_context.active = true;
     }
 
     if (g_original_player_holster_weapon_anim_action_execute != nullptr) {
@@ -41953,32 +41601,6 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
         for (int slot = 0; slot < 2; ++slot) {
             local_stock_after[slot] =
                 capture_holster_execute_weapon_local(before.player, slot);
-        }
-    }
-
-    const PlayerHolsterAnimActionSnapshot stock_action_after =
-        capture_player_holster_anim_action(action);
-    bool post_rebind_attempted = false;
-    bool post_rebind_completed = false;
-    if constexpr (kEnableCompleteStockP99HolsterHandoff) {
-        if (before.readable && before.executed == 0 && owner_index >= 0 &&
-            look_valid && look == kLegacyNadineAttachTargetLookId &&
-            pistol_was_in_right_hand && pistol_slot >= 0 &&
-            stock_action_after.executed != 0 &&
-            local_stock_after[pistol_slot].readable &&
-            local_stock_after[pistol_slot].weapon ==
-                local_before[pistol_slot].weapon &&
-            local_stock_after[pistol_slot].holster_handoff_finished != 0) {
-            void* controller = nullptr;
-            if (seh_read_player_weapon_controller(before.player, &controller)) {
-                post_rebind_attempted = true;
-                g_nadine_pistol_holster_execute_context.player = before.player;
-                g_nadine_pistol_holster_execute_context.active = true;
-                post_rebind_completed =
-                    seh_call_player_weapon_controller_rebind_to_holster(
-                        controller, local_stock_after[pistol_slot].weapon);
-                g_nadine_pistol_holster_execute_context = {};
-            }
         }
     }
     g_nadine_pistol_holster_execute_context = previous_context;
@@ -42019,10 +41641,7 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
          << static_cast<unsigned>(after.executed)
          << " readable=" << (before.readable ? 1 : 0) << "/"
          << (after.readable ? 1 : 0)
-         << " lookValid=" << (look_valid ? 1 : 0)
-         << " pistolHand=" << (pistol_was_in_right_hand ? 1 : 0)
-         << " postRebind=" << (post_rebind_attempted ? 1 : 0) << "/"
-         << (post_rebind_completed ? 1 : 0);
+         << " lookValid=" << (look_valid ? 1 : 0);
     write_log_line(line.str().c_str());
 }
 
@@ -47181,78 +46800,6 @@ void* __fastcall hooked_mesh_cull_wait_for_fg_scene(
     return result;
 }
 
-using AnimStateLayerCreateAnimCommandsFunction = std::int64_t(__fastcall*)(
-    void*, void*, void*, void*, void*);
-AnimStateLayerCreateAnimCommandsFunction
-    g_original_anim_state_layer_create_anim_commands = nullptr;
-
-std::int64_t __fastcall hooked_anim_state_layer_create_anim_commands(
-    void* layer, void* context, void* command_buffer, void* arg4, void* arg5) {
-    const WeaponPartialLegClipRemapContext previous =
-        g_weapon_partial_leg_clip_remap_context;
-    g_weapon_partial_leg_clip_remap_context =
-        classify_cached_weapon_partial_layer(layer);
-    const std::int64_t result =
-        g_original_anim_state_layer_create_anim_commands != nullptr
-        ? g_original_anim_state_layer_create_anim_commands(
-              layer, context, command_buffer, arg4, arg5)
-        : 0;
-    g_weapon_partial_leg_clip_remap_context = previous;
-    return result;
-}
-
-bool install_legacy_nadine_weapon_partial_leg_clip_retarget() {
-    if (g_original_anim_set_remap_resolve_animation_id != nullptr ||
-        g_original_anim_state_layer_create_anim_commands != nullptr) {
-        boot_log_line(
-            "legacy-Nadine WeaponPartial leg retarget SKIPPED (hook conflict)");
-        return false;
-    }
-
-    constexpr std::array<std::uint8_t, 15> kRemapPrologue{
-        0x48, 0x89, 0x5C, 0x24, 0x08,
-        0x48, 0x89, 0x6C, 0x24, 0x10,
-        0x48, 0x89, 0x74, 0x24, 0x18,
-    };
-    g_original_anim_set_remap_resolve_animation_id =
-        reinterpret_cast<AnimSetRemapResolveAnimationIdFunction>(
-            install_fire_gate_detour(
-                kAnimSetRemapResolveAnimationIdRva,
-                kRemapPrologue.data(), kRemapPrologue.size(),
-                reinterpret_cast<void*>(
-                    &hooked_anim_set_remap_resolve_animation_id),
-                "legacy-Nadine WeaponPartial leg clip resolver"));
-    if (g_original_anim_set_remap_resolve_animation_id == nullptr) {
-        boot_log_line(
-            "legacy-Nadine WeaponPartial leg retarget SKIPPED (resolver)");
-        return false;
-    }
-
-    constexpr std::array<std::uint8_t, 16> kLayerPrologue{
-        0x48, 0x8B, 0xC4,
-        0x48, 0x89, 0x58, 0x18,
-        0x4C, 0x89, 0x48, 0x20,
-        0x55, 0x56, 0x57, 0x41, 0x54,
-    };
-    g_original_anim_state_layer_create_anim_commands =
-        reinterpret_cast<AnimStateLayerCreateAnimCommandsFunction>(
-            install_fire_gate_detour(
-                kAnimStateLayerCreateAnimCommandsRva,
-                kLayerPrologue.data(), kLayerPrologue.size(),
-                reinterpret_cast<void*>(
-                    &hooked_anim_state_layer_create_anim_commands),
-                "legacy-Nadine WeaponPartial command scope"));
-    const bool installed =
-        g_original_anim_state_layer_create_anim_commands != nullptr;
-    std::ostringstream line;
-    line << "legacy-Nadine WeaponPartial leg retarget "
-         << (installed ? "installed" : "PARTIAL")
-         << " families=4 clips="
-         << kWeaponPartialLegClipReplacements.size();
-    boot_log_line(line.str().c_str());
-    return installed;
-}
-
 bool install_render_main_wait_for_fg_scene_relay() {
     auto* const call_site = reinterpret_cast<std::uint8_t*>(
         g_module + kRenderMgrMainDrawWaitForCullFgSceneCallsiteRva);
@@ -50242,19 +49789,8 @@ DWORD WINAPI install_hook(void*) {
     if constexpr (kEnableWeaponPartialFinalRequestProbe) {
         install_weapon_partial_final_request_probe();
     }
-    if constexpr (kEnableWeaponPartialNormalRequestProbe ||
-                  kEnableLegacyNadineWeaponPartialLegClipRetarget) {
-        const bool request_installed =
-            install_weapon_partial_normal_request_probe();
-        if constexpr (kEnableLegacyNadineWeaponPartialLegClipRetarget &&
-                      !kEnableRejectedNadineWeaponRuntimeProbes) {
-            const bool clip_retarget_installed =
-                install_legacy_nadine_weapon_partial_leg_clip_retarget();
-            boot_log_line(
-                request_installed && clip_retarget_installed
-                    ? "legacy-Nadine WeaponPartial leg clip repair installed"
-                    : "legacy-Nadine WeaponPartial leg clip repair PARTIAL");
-        }
+    if constexpr (kEnableWeaponPartialNormalRequestProbe) {
+        install_weapon_partial_normal_request_probe();
     }
     if constexpr (kEnableLegacyNadinePistolHipAttachment &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {

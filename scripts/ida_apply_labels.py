@@ -1274,7 +1274,8 @@ FUNCTIONS = {
         "the 0x80-byte state snapshot to instance+0x90, resolves the state id at "
         "+0x98 into authored callbacks/flags, and selects the root snapshot node. "
         "At 0x1418B2940 it resolves the requested animation through the track-local "
-        "AnimOverlayState supplied as a4 before the AnimSet remap and clip lookup.",
+        "AnimOverlayState supplied as a4, calls AnimSetRemap at 0x1418B2954, then "
+        "stores the resolved id/key tuple at snapshot+0x88/+0x90/+0x94.",
     ),
     0x1418B2EF0: (
         "AnimStateSnapshot_SelectRootNodeIndex",
@@ -1377,7 +1378,9 @@ FUNCTIONS = {
         "AnimStateSnapshot_GenerateAnimCommands",
         "Exact AnimStateSnapshot::GenerateAnimCommands source assertion. Resolves "
         "the root node from AnimStateInstance+0x130/+0x138 and invokes virtual "
-        "slot 14 with the caller-owned command-list record unchanged.",
+        "slot 14 with the caller-owned command-list record unchanged. Its only "
+        "direct callees are the node-heap resolver and assert helper; animation ids "
+        "were already remapped during SnapshotAnimState.",
     ),
     0x14172C370: (
         "AnimControl_CreateAnimCommands",
@@ -1440,7 +1443,8 @@ FUNCTIONS = {
         "from per-state track weight +0x158. Its terminal per-layer command 7 at "
         "0x14189EC8C..0x14189ECD6 is left=0, right=1, out=0, mode=1, weight=1; "
         "therefore a WeaponPartial layer can replace jointly valid base-pose rows. "
-        "It contains no direct camera read.",
+        "Its sole direct callee is AnimStateSnapshot_GenerateAnimCommands; it does "
+        "not reach AnimSetRemap and contains no direct camera read.",
     ),
     0x140096DB0: (
         "InitializeFlinchPartialLayerId",

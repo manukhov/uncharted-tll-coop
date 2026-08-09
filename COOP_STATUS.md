@@ -19649,3 +19649,34 @@ or AnimStateLayer detour is installed, and the separate `aak` post-rebind cannot
 execute. Release compilation succeeded. No validation launch is requested: the
 next runtime is forbidden until static analysis isolates one exact failing
 boundary and supplies a pre-return crash marker or equivalent fault provenance.
+
+### 2026-08-09 STATIC REJECTED: `aal` command-generation scope cannot reach animation remap
+
+Post-crash call-graph reconstruction rejects the central `aal` execution model.
+`AnimStateLayer_CreateAnimCommands 0x14189EA60` has exactly one direct callee,
+`AnimStateSnapshot_GenerateAnimCommands 0x141AB6C40`. That function resolves the
+already constructed root from instance `+0x130/+0x138` and invokes snapshot-node
+virtual slot 14; neither function calls `AnimSetRemap_ResolveAnimationId`.
+Instead, the earlier `AnimStateSnapshot_SnapshotAnimState 0x1418B24F0` performs
+overlay resolution at `0x1418B2940`, calls `AnimSetRemap` at `0x1418B2954`, and
+stores the resolved id/key tuple at snapshot `+0x88/+0x90/+0x94`. Generation
+therefore consumes an already resolved snapshot.
+
+This is independently corroborated by the exact callee lists, the field-write
+disassembly and the older `gk` runtime in which the same shared resolver detour
+remained stable and returned non-null leg clips from the SnapshotAnimState edge.
+Consequently the TLS scope created only around `CreateAnimCommands` could never
+admit any of the 16 ids. The missing `NADINE-WEAPON-PARTIAL-LEG-CLIP` rows are now
+explained statically, **Aresolver-target is rejected as an executed cause of this
+run**, and `aal` could not have changed the arm pose even if it had remained
+stable. The combined crash is narrowed to the newly detoured command generator
+itself or the independently untested `aak` cold-state post-rebind; the run still
+does not distinguish those two.
+
+All `aal` cache, TLS, table, resolver mutation, command detour and installer code
+has been deleted rather than retained behind a disabled flag. The untested `aak`
+branch and its extra helpers were also deleted. Apart from marker `aam`, the
+scanner source now matches visually confirmed commit `3f145ff` (`aaj`) exactly.
+The 16-id asset/mask table remains documented as STATIC evidence, but the next
+viable boundary must exist during SnapshotAnimState state creation, not later
+command generation. No runtime is authorized by this finding.
