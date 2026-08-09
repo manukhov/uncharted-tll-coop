@@ -1930,9 +1930,9 @@ constexpr bool kEnableProcessWeaponInitProbe = false;
 // Builds zh/zi proved that replacing the complete player-mesh knowledge record,
 // forcing the missing leg marker and redirecting the final pistol attachment do
 // not alter the visible back-holster trajectory. Keep all three rejected writes
-// out of production; the next discriminator is read-only and starts at the
-// snapshot reference producer.
-constexpr bool kEnableLegacyNadineHolsterIkVerification = true;
+// out of production. Build zk also proved the snapshot named-reference reducer
+// invalid for stock Chloe, so that bounded read-only probe is removed as well.
+constexpr bool kEnableLegacyNadineHolsterIkVerification = false;
 constexpr bool kEnableLegacyNadinePistolHipAttachment = false;
 // Builds gz/ha rejected the terminal controller rebind as the local main-view
 // fix. Build hb instead runs the full stock Put transition once: this is the
@@ -41234,17 +41234,11 @@ using PlayerWeaponAnimControlUpdateHolsterIkFunction =
     void(__fastcall*)(void*);
 using AnimStateLayerExtractAndBlendCustomDataFunction =
     void*(__fastcall*)(void*, void*, void*, void*);
-using AnimStateSnapshotEvaluateReferenceSetMaskFunction =
-    std::uint32_t(__fastcall*)(
-        void*, void*, const std::uint32_t*, std::uint32_t, std::int32_t,
-        void*, std::uint8_t, std::uint8_t, void*, std::uint8_t, std::uint8_t);
 
 PlayerWeaponAnimControlUpdateHolsterIkFunction
     g_original_player_weapon_anim_control_update_holster_ik = nullptr;
 AnimStateLayerExtractAndBlendCustomDataFunction
     g_original_anim_state_layer_extract_and_blend_custom_data = nullptr;
-AnimStateSnapshotEvaluateReferenceSetMaskFunction
-    g_original_anim_state_snapshot_evaluate_reference_set_mask = nullptr;
 
 std::uint32_t g_ap_reference_hand_r_id = 0;
 std::uint32_t g_ap_reference_leg_holster_id = 0;
@@ -41258,10 +41252,8 @@ struct NadineHolsterIkProbeContext {
     void* control = nullptr;
     void* weapon = nullptr;
     std::uint32_t art = 0;
-    std::uint32_t look = 0;
     std::uint32_t requested_state = 0;
     std::uint32_t blend_calls = 0;
-    std::uint32_t reference_calls = 0;
 };
 
 thread_local NadineHolsterIkProbeContext g_nadine_holster_ik_probe_context{};
@@ -41345,355 +41337,6 @@ const char* holster_ik_reference_label(std::uint32_t reference_id) {
     return "other";
 }
 
-std::size_t holster_ik_probe_memo_index(
-    int owner_index, std::uint32_t look) {
-    const std::size_t owner = owner_index == 1 ? 1u : 0u;
-    const std::size_t appearance =
-        look == kLegacyNadineAttachTargetLookId ? 1u : 0u;
-    return owner * 2u + appearance;
-}
-
-constexpr std::uint32_t kAnimationSampleNamedReferenceRva = 0x1918820;
-constexpr std::uint32_t kBlendSampleNamedReferenceRva = 0x191F220;
-constexpr std::uint32_t kUnarySampleNamedReferenceRva = 0x1AD5640;
-constexpr std::uint32_t kWarperSampleNamedReferenceRva = 0x6D63B0;
-constexpr std::uint32_t kRejectSampleNamedReferenceRva = 0x193AF80;
-constexpr std::uint32_t kOutOfMemoryRejectNamedReferenceRva = 0x1ABC630;
-constexpr std::size_t kHolsterReferenceNodeLimit = 24;
-constexpr std::size_t kHolsterReferenceLeafLimit = 12;
-
-struct HolsterReferenceNodeProbe {
-    std::uint32_t index = UINT32_MAX;
-    std::uint32_t vtable_rva = 0;
-    std::uint32_t sampler_rva = 0;
-    std::uint32_t child_0 = UINT32_MAX;
-    std::uint32_t child_1 = UINT32_MAX;
-    std::uint32_t weight_bits = 0;
-    char kind = '?';
-};
-
-struct HolsterReferenceLeafProbe {
-    std::uint32_t index = UINT32_MAX;
-    std::uint32_t resolved_animation_id = 0;
-    std::uintptr_t clip = 0;
-    std::uintptr_t reference_table = 0;
-    std::uint32_t reference_count = 0;
-    std::uint32_t present_mask = 0;
-    bool table_readable = false;
-};
-
-struct HolsterReferenceTopologyProbe {
-    bool readable = false;
-    bool truncated = false;
-    std::uintptr_t heap = 0;
-    std::uint32_t root_index = UINT32_MAX;
-    std::uint32_t node_count = 0;
-    std::uint32_t leaf_count = 0;
-    std::uint32_t unknown_count = 0;
-    std::uint64_t fingerprint = 1469598103934665603ULL;
-    std::array<HolsterReferenceNodeProbe, kHolsterReferenceNodeLimit> nodes{};
-    std::array<HolsterReferenceLeafProbe, kHolsterReferenceLeafLimit> leaves{};
-};
-
-std::uint32_t module_relative_rva(std::uintptr_t address) {
-    if (g_module == 0 || address < g_module ||
-        address - g_module > UINT32_MAX) {
-        return 0;
-    }
-    return static_cast<std::uint32_t>(address - g_module);
-}
-
-void holster_reference_fingerprint_mix(
-    HolsterReferenceTopologyProbe& probe, std::uint64_t value) {
-    probe.fingerprint ^= value;
-    probe.fingerprint *= 1099511628211ULL;
-}
-
-bool raw_probe_holster_reference_topology(
-    void* evaluator_state, HolsterReferenceTopologyProbe* probe) {
-    if (evaluator_state == nullptr || probe == nullptr ||
-        readable_bytes(evaluator_state) < 0xB0) {
-        return false;
-    }
-    *probe = {};
-    probe->fingerprint = 1469598103934665603ULL;
-    const auto* const state_bytes =
-        static_cast<const std::byte*>(evaluator_state);
-    void* const heap = *reinterpret_cast<void* const*>(state_bytes + 0xA0);
-    const std::uint32_t root_index =
-        *reinterpret_cast<const std::uint32_t*>(state_bytes + 0xA8);
-    probe->heap = reinterpret_cast<std::uintptr_t>(heap);
-    probe->root_index = root_index;
-    if (heap == nullptr || root_index == UINT32_MAX) {
-        return false;
-    }
-
-    std::array<std::uint32_t, kHolsterReferenceNodeLimit> pending{};
-    std::size_t pending_read = 0;
-    std::size_t pending_count = 1;
-    pending[0] = root_index;
-
-    while (pending_read < pending_count &&
-           probe->node_count < probe->nodes.size()) {
-        const std::uint32_t index = pending[pending_read++];
-        bool already_seen = false;
-        for (std::size_t previous = 0; previous < probe->node_count; ++previous) {
-            if (probe->nodes[previous].index == index) {
-                already_seen = true;
-                break;
-            }
-        }
-        if (already_seen) {
-            continue;
-        }
-
-        void* node = nullptr;
-        if (!probe_snapshot_heap_node(heap, index, node) ||
-            readable_bytes(node) < sizeof(void*)) {
-            ++probe->unknown_count;
-            continue;
-        }
-        const auto* const node_bytes = static_cast<const std::byte*>(node);
-        const std::uintptr_t vtable =
-            *reinterpret_cast<const std::uintptr_t*>(node_bytes);
-        if (vtable == 0 ||
-            readable_bytes(reinterpret_cast<const void*>(vtable + 0xC8)) <
-                sizeof(void*)) {
-            ++probe->unknown_count;
-            continue;
-        }
-        const std::uintptr_t sampler =
-            *reinterpret_cast<const std::uintptr_t*>(vtable + 0xC8);
-
-        HolsterReferenceNodeProbe& node_probe =
-            probe->nodes[probe->node_count++];
-        node_probe.index = index;
-        node_probe.vtable_rva = module_relative_rva(vtable);
-        node_probe.sampler_rva = module_relative_rva(sampler);
-
-        if (node_probe.sampler_rva == kAnimationSampleNamedReferenceRva) {
-            node_probe.kind = 'A';
-            if (readable_bytes(node) >= 0x58 &&
-                probe->leaf_count < probe->leaves.size()) {
-                HolsterReferenceLeafProbe& leaf =
-                    probe->leaves[probe->leaf_count++];
-                leaf.index = index;
-                leaf.resolved_animation_id =
-                    *reinterpret_cast<const std::uint32_t*>(node_bytes + 0x44);
-                void* const clip =
-                    *reinterpret_cast<void* const*>(node_bytes + 0x50);
-                leaf.clip = reinterpret_cast<std::uintptr_t>(clip);
-                if (clip != nullptr && readable_bytes(clip) >= 0x38) {
-                    const auto* const clip_bytes =
-                        static_cast<const std::byte*>(clip);
-                    void* const table =
-                        *reinterpret_cast<void* const*>(clip_bytes + 0x30);
-                    leaf.reference_table =
-                        reinterpret_cast<std::uintptr_t>(table);
-                    if (table != nullptr && readable_bytes(table) >= 0x18) {
-                        const auto* const table_bytes =
-                            static_cast<const std::byte*>(table);
-                        const std::uint32_t count =
-                            *reinterpret_cast<const std::uint32_t*>(table_bytes);
-                        const auto* const ids =
-                            *reinterpret_cast<const std::uint32_t* const*>(
-                                table_bytes + 0x08);
-                        const auto* const samples =
-                            *reinterpret_cast<void* const* const*>(
-                                table_bytes + 0x10);
-                        leaf.reference_count = count;
-                        if (count <= 1024 && ids != nullptr && samples != nullptr &&
-                            readable_bytes(ids) >=
-                                static_cast<std::size_t>(count) * sizeof(*ids) &&
-                            readable_bytes(samples) >=
-                                static_cast<std::size_t>(count) * sizeof(*samples)) {
-                            leaf.table_readable = true;
-                            for (std::uint32_t ref = 0; ref < count; ++ref) {
-                                if (ids[ref] == g_ap_reference_hand_r_id) {
-                                    leaf.present_mask |= 1u;
-                                } else if (
-                                    ids[ref] == g_ap_reference_leg_holster_id) {
-                                    leaf.present_mask |= 2u;
-                                } else if (
-                                    ids[ref] == g_ap_reference_back_holster_id) {
-                                    leaf.present_mask |= 4u;
-                                }
-                            }
-                        }
-                    }
-                }
-                holster_reference_fingerprint_mix(*probe, leaf.index);
-                holster_reference_fingerprint_mix(
-                    *probe, leaf.resolved_animation_id);
-                holster_reference_fingerprint_mix(*probe, leaf.reference_count);
-                holster_reference_fingerprint_mix(*probe, leaf.present_mask);
-            }
-        } else if (node_probe.sampler_rva == kBlendSampleNamedReferenceRva) {
-            node_probe.kind = 'B';
-            if (readable_bytes(node) >= 0x64) {
-                node_probe.child_0 =
-                    *reinterpret_cast<const std::uint32_t*>(node_bytes + 0x40);
-                node_probe.child_1 =
-                    *reinterpret_cast<const std::uint32_t*>(node_bytes + 0x44);
-                node_probe.weight_bits =
-                    *reinterpret_cast<const std::uint32_t*>(node_bytes + 0x60);
-            }
-        } else if (node_probe.sampler_rva == kUnarySampleNamedReferenceRva) {
-            node_probe.kind = 'U';
-            if (readable_bytes(node) >= 0x44) {
-                node_probe.child_0 =
-                    *reinterpret_cast<const std::uint32_t*>(node_bytes + 0x40);
-            }
-        } else if (node_probe.sampler_rva == kWarperSampleNamedReferenceRva) {
-            node_probe.kind = 'W';
-            // AnimSnapshotNodeWarper first delegates the same reference request
-            // to child +0x40 before applying its authored align/limb overrides.
-            if (readable_bytes(node) >= 0x44) {
-                node_probe.child_0 =
-                    *reinterpret_cast<const std::uint32_t*>(node_bytes + 0x40);
-            }
-        } else if (node_probe.sampler_rva == kRejectSampleNamedReferenceRva ||
-                   node_probe.sampler_rva ==
-                       kOutOfMemoryRejectNamedReferenceRva) {
-            node_probe.kind = 'R';
-        } else {
-            ++probe->unknown_count;
-        }
-
-        holster_reference_fingerprint_mix(*probe, node_probe.index);
-        holster_reference_fingerprint_mix(*probe, node_probe.vtable_rva);
-        holster_reference_fingerprint_mix(*probe, node_probe.sampler_rva);
-        holster_reference_fingerprint_mix(*probe, node_probe.child_0);
-        holster_reference_fingerprint_mix(*probe, node_probe.child_1);
-        holster_reference_fingerprint_mix(*probe, node_probe.weight_bits);
-
-        for (const std::uint32_t child :
-             {node_probe.child_0, node_probe.child_1}) {
-            if (child == UINT32_MAX) {
-                continue;
-            }
-            if (pending_count < pending.size()) {
-                pending[pending_count++] = child;
-            } else {
-                probe->truncated = true;
-            }
-        }
-    }
-    if (pending_read < pending_count) {
-        probe->truncated = true;
-    }
-    probe->readable = probe->node_count != 0;
-    return probe->readable;
-}
-
-bool seh_probe_holster_reference_topology(
-    void* evaluator_state, HolsterReferenceTopologyProbe* probe) {
-    if (probe == nullptr) {
-        return false;
-    }
-    *probe = {};
-    __try {
-        return raw_probe_holster_reference_topology(evaluator_state, probe);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        *probe = {};
-        return false;
-    }
-}
-
-bool seh_is_exact_holster_reference_request(
-    const std::uint32_t* reference_ids, std::uint32_t reference_count) {
-    __try {
-        return reference_ids != nullptr && reference_count == 3 &&
-            reference_ids[0] == g_ap_reference_hand_r_id &&
-            reference_ids[1] == g_ap_reference_leg_holster_id &&
-            reference_ids[2] == g_ap_reference_back_holster_id;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-}
-
-std::uint32_t __fastcall hooked_anim_state_snapshot_evaluate_reference_set_mask(
-    void* evaluator_state, void* evaluation_context,
-    const std::uint32_t* reference_ids, std::uint32_t reference_count,
-    std::int32_t skeleton_id, void* output_transforms, std::uint8_t arg6,
-    std::uint8_t arg7, void* arg8, std::uint8_t arg9, std::uint8_t arg10) {
-    auto& context = g_nadine_holster_ik_probe_context;
-    const bool scoped = context.active &&
-        seh_is_exact_holster_reference_request(
-            reference_ids, reference_count);
-    HolsterReferenceTopologyProbe topology{};
-    if (scoped) {
-        seh_probe_holster_reference_topology(evaluator_state, &topology);
-    }
-
-    const std::uint32_t mask =
-        g_original_anim_state_snapshot_evaluate_reference_set_mask != nullptr
-        ? g_original_anim_state_snapshot_evaluate_reference_set_mask(
-              evaluator_state, evaluation_context, reference_ids,
-              reference_count, skeleton_id, output_transforms, arg6, arg7,
-              arg8, arg9, arg10)
-        : 0;
-    if (!scoped) {
-        return mask;
-    }
-    ++context.reference_calls;
-
-    std::uint64_t signature = topology.fingerprint;
-    signature ^= static_cast<std::uint64_t>(mask) << 56;
-    signature ^= static_cast<std::uint64_t>(topology.readable) << 55;
-    const std::size_t memo_index = holster_ik_probe_memo_index(
-        context.owner_index, context.look);
-    static std::array<std::atomic<std::uint64_t>, 4> last_signatures{};
-    if (last_signatures[memo_index].exchange(
-            signature, std::memory_order_relaxed) == signature) {
-        return mask;
-    }
-    static std::array<std::atomic<std::uint32_t>, 4> log_counts{};
-    if (log_counts[memo_index].fetch_add(
-            1, std::memory_order_relaxed) >= 48) {
-        return mask;
-    }
-
-    std::ostringstream line;
-    line << "HOLSTER-REF-MASK owner=" << context.owner_index
-         << " look=0x" << std::hex << context.look
-         << " state=0x" << context.requested_state
-         << " mask=0x" << mask
-         << " root=" << std::dec << topology.root_index
-         << " heap=0x" << std::hex << topology.heap
-         << std::dec << " nodes=" << topology.node_count
-         << " leaves=" << topology.leaf_count
-         << " unknown=" << topology.unknown_count
-         << " readable=" << (topology.readable ? 1 : 0)
-         << " truncated=" << (topology.truncated ? 1 : 0)
-         << " topo=";
-    for (std::size_t index = 0; index < topology.node_count; ++index) {
-        const HolsterReferenceNodeProbe& node = topology.nodes[index];
-        line << node.index << "/" << node.kind << "/" << std::hex
-             << node.vtable_rva << "/" << node.sampler_rva << std::dec
-             << "/" << node.child_0 << "," << node.child_1 << "/"
-             << std::hex << node.weight_bits << ";" << std::dec;
-    }
-    write_log_line(line.str().c_str());
-
-    std::ostringstream leaves;
-    leaves << "HOLSTER-REF-LEAVES owner=" << context.owner_index
-           << " look=0x" << std::hex << context.look
-           << " state=0x" << context.requested_state
-           << " mask=0x" << mask << " refs=";
-    for (std::size_t index = 0; index < topology.leaf_count; ++index) {
-        const HolsterReferenceLeafProbe& leaf = topology.leaves[index];
-        leaves << leaf.index << "/" << std::hex
-               << leaf.resolved_animation_id << "/" << leaf.clip << "/"
-               << leaf.reference_table << std::dec << "/"
-               << leaf.reference_count << "/" << std::hex
-               << leaf.present_mask << "/"
-               << (leaf.table_readable ? 1 : 0) << ";" << std::dec;
-    }
-    write_log_line(leaves.str().c_str());
-    return mask;
-}
-
 void* __fastcall hooked_anim_state_layer_extract_and_blend_custom_data(
     void* blender, void* output, void* layer, void* seed) {
     void* const result =
@@ -41719,25 +41362,22 @@ void* __fastcall hooked_anim_state_layer_extract_and_blend_custom_data(
         (static_cast<std::uint64_t>(
              (snapshot.weight_bits & 0x7FFFFFFFU) != 0) << 8) |
         static_cast<std::uint64_t>(snapshot.readable);
-    static std::array<std::atomic<std::uint64_t>, 4> last_signatures{};
-    const std::size_t memo_index = holster_ik_probe_memo_index(
-        context.owner_index, context.look);
+    static std::array<std::atomic<std::uint64_t>, 2> last_signatures{};
     if (context.owner_index >= 0 && context.owner_index < 2 &&
-        last_signatures[memo_index].exchange(
+        last_signatures[context.owner_index].exchange(
             signature, std::memory_order_relaxed) == signature) {
         return result;
     }
 
-    static std::array<std::atomic<std::uint32_t>, 4> log_counts{};
+    static std::array<std::atomic<std::uint32_t>, 2> log_counts{};
     if (context.owner_index < 0 || context.owner_index >= 2 ||
-        log_counts[memo_index].fetch_add(
+        log_counts[context.owner_index].fetch_add(
             1, std::memory_order_relaxed) >= 64) {
         return result;
     }
 
     std::ostringstream line;
-    line << "HOLSTER-IK-FINAL owner=" << context.owner_index
-         << " look=0x" << std::hex << context.look
+    line << "NADINE-HOLSTER-IK-FINAL owner=" << context.owner_index
          << " player=0x" << std::hex
          << reinterpret_cast<std::uintptr_t>(context.player)
          << " control=0x"
@@ -41786,8 +41426,7 @@ void __fastcall hooked_player_weapon_anim_control_update_holster_ik(
     const int owner_index = retained_player_index(player);
     if (resolved && handle_id != 0 && owner_index >= 0 &&
         seh_read_player_look(player, &look) &&
-        (look == kChloeAttachDonorLookId ||
-         look == kLegacyNadineAttachTargetLookId) &&
+        look == kLegacyNadineAttachTargetLookId &&
         seh_weapon_is_player_slot(player, weapon, 1) &&
         seh_read_anim_control_requested_state(control, &requested_state) &&
         requested_state == kWeaponHolsterRequestedStateId) {
@@ -41798,7 +41437,6 @@ void __fastcall hooked_player_weapon_anim_control_update_holster_ik(
         g_nadine_holster_ik_probe_context.weapon = weapon;
         g_nadine_holster_ik_probe_context.art =
             weapon_art_id_from_object(weapon);
-        g_nadine_holster_ik_probe_context.look = look;
         g_nadine_holster_ik_probe_context.requested_state = requested_state;
     }
 
@@ -41807,17 +41445,13 @@ void __fastcall hooked_player_weapon_anim_control_update_holster_ik(
     }
 
     auto& context = g_nadine_holster_ik_probe_context;
-    if (context.active &&
-        (context.blend_calls == 0 || context.reference_calls == 0)) {
-        static std::array<std::atomic<std::uint32_t>, 4> missing_counts{};
-        const std::size_t memo_index = holster_ik_probe_memo_index(
-            context.owner_index, context.look);
-        if (missing_counts[memo_index].fetch_add(
+    if (context.active && context.blend_calls == 0) {
+        static std::array<std::atomic<std::uint32_t>, 2> missing_counts{};
+        if (missing_counts[context.owner_index].fetch_add(
                 1, std::memory_order_relaxed) < 16) {
             std::ostringstream line;
-            line << "HOLSTER-IK-UPDATE owner="
-                 << context.owner_index << " look=0x" << std::hex
-                 << context.look << " player=0x"
+            line << "NADINE-HOLSTER-IK-UPDATE owner="
+                 << context.owner_index << " player=0x" << std::hex
                  << reinterpret_cast<std::uintptr_t>(context.player)
                  << " control=0x"
                  << reinterpret_cast<std::uintptr_t>(context.control)
@@ -41825,8 +41459,7 @@ void __fastcall hooked_player_weapon_anim_control_update_holster_ik(
                  << reinterpret_cast<std::uintptr_t>(context.weapon)
                  << " art=0x" << context.art
                  << " state=0x" << context.requested_state
-                 << std::dec << " blended=" << context.blend_calls
-                 << " references=" << context.reference_calls;
+                 << " blended=0";
             write_log_line(line.str().c_str());
         }
     }
@@ -41843,13 +41476,6 @@ bool install_nadine_holster_ik_probe() {
     constexpr std::array<std::uint8_t, 19> kBlendPrologue{
         0x40, 0x55, 0x41, 0x56, 0x48, 0x8D, 0xAC, 0x24, 0x48, 0xFF,
         0xFF, 0xFF, 0x48, 0x81, 0xEC, 0xB8, 0x01, 0x00, 0x00,
-    };
-    // Include the first RAX load and its store through [R11-0x48]. The generic
-    // trampoline's absolute jump-back may clobber RAX only after that value has
-    // been consumed; the next stock instruction reloads RAX independently.
-    constexpr std::array<std::uint8_t, 20> kReferencePrologue{
-        0x4C, 0x8B, 0xDC, 0x55, 0x56, 0x41, 0x56, 0x48, 0x83, 0xEC,
-        0x70, 0x48, 0x8B, 0x02, 0x33, 0xF6, 0x49, 0x89, 0x43, 0xB8,
     };
     // Keep the complete RAX-as-original-RSP save block in the trampoline.
     // The generic detour jump-back uses RAX; the next stock instruction at
@@ -41871,14 +41497,6 @@ bool install_nadine_holster_ik_probe() {
                 reinterpret_cast<void*>(
                     &hooked_anim_state_layer_extract_and_blend_custom_data),
                 "Nadine holster IK final-data probe"));
-    g_original_anim_state_snapshot_evaluate_reference_set_mask =
-        reinterpret_cast<AnimStateSnapshotEvaluateReferenceSetMaskFunction>(
-            install_fire_gate_detour(
-                kAnimStateSnapshotEvaluateReferenceSetMaskRva,
-                kReferencePrologue.data(), kReferencePrologue.size(),
-                reinterpret_cast<void*>(
-                    &hooked_anim_state_snapshot_evaluate_reference_set_mask),
-                "holster named-reference mask probe"));
     g_original_player_weapon_anim_control_update_holster_ik =
         reinterpret_cast<PlayerWeaponAnimControlUpdateHolsterIkFunction>(
             install_fire_gate_detour(
@@ -41890,10 +41508,9 @@ bool install_nadine_holster_ik_probe() {
 
     const bool installed =
         g_original_anim_state_layer_extract_and_blend_custom_data != nullptr &&
-        g_original_anim_state_snapshot_evaluate_reference_set_mask != nullptr &&
         g_original_player_weapon_anim_control_update_holster_ik != nullptr;
     std::ostringstream line;
-    line << "Chloe/Nadine holster reference probe "
+    line << "Nadine holster IK probe "
          << (installed ? "installed" : "PARTIAL")
          << " refs=0x" << std::hex << g_ap_reference_hand_r_id
          << "/0x" << g_ap_reference_leg_holster_id
@@ -48517,8 +48134,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09zk "
-        "(read-only Chloe/Nadine holster reference topology)");
+        "TLL co-op runtime init 2026-08-09zl "
+        "(holster reference probe removed; WeaponPartial audit)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

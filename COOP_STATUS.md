@@ -18135,3 +18135,39 @@ Written discriminator for exactly one pistol Put on Chloe and one on Nadine:
 No visible change is expected. Any pose change, renewed arm distortion, crash,
 stutter, missing exact request or torn/unreadable topology rejects the probe
 packaging rather than classifying the four content hypotheses.
+
+### 2026-08-09 RUNTIME CONFIRMED: invalid holster named references are stock (`zk`)
+
+One standard-pistol Put on each exact look produced the predicted
+**Hnormal-invalid** result without a crash or visible regression. Legacy Nadine
+(`look=0xD27C074F`) and stock Chloe (`look=0x3F334972`) both returned
+`mask=0`; every reachable animation leaf exposed a readable `clip+0x30` table
+with `reference_count=1` and local `hand/leg/back present_mask=0`. The final
+reducer stayed `reference=0, weight=0, valid=0` on both looks. Chloe nevertheless
+performed her visually correct stock holster motion, and her final record still
+contained the expected native joint tuple `101/5/199/3`.
+
+The complete captured leaf set was:
+
+- Nadine: `0xC9489257 ak47-cover-low-l^holster--add`,
+  `0x1C25D197 ...--part`, `0x2D00ED46 ...holster-finish--add`, and
+  `0x82F79032 ...holster-finish--part`;
+- Chloe: `0x770B783D ak47-holster--add`,
+  `0xDE7F96E3 ak47-holster--part`, `0xA2B2BEEB
+  ak47-holster-finish--add`, and `0x61E76061 ...--part`.
+
+Thus `WeaponHolsterIkBlender` named references are optional for these authored
+Put clips and are not the Nadine-specific visible owner. **Hclip-missing**,
+**Hblend-suppression**, and **Hwrong-snapshot** are rejected at this boundary:
+neither look owns the requested ids, both complete Blend trees were readable,
+and both resolved to their live weapon-family animation leaves. The scoped
+evaluator/topology hook is removed after this classification.
+
+The stronger static frontier is now the actual `WeaponPartial` animation
+content. The live trees select sibling `ak47-*--part` and `--add` clips, whereas
+the previously modified `player-mesh` `p-holster-leg/back` records never reached
+this reducer. Authored `ak47-*--strap` siblings exist in the same pack but were
+absent from both captured trees. Before another runtime build, resolve the joint
+ValidBits of the exact `--part/--add/--strap` clips, compare them with the
+corresponding `p-holster-leg/back` base clips, and prove the layer/command order
+that first writes or overwrites the arm, torso and sling rows.

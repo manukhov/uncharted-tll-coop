@@ -3531,7 +3531,7 @@ Do not reopen these as the first move:
       leg basis, but the reducer stayed exactly `reference=0/weight=0/valid=0`.
       The user saw no holster improvement and a slight new arm distortion. Build
       `zj` removes the marker, full player-mesh and terminal attachment writes.
-- [ ] Resolve the exact snapshot reference producer before another mutation.
+- [x] Resolve the exact snapshot reference producer before another mutation.
       Compare stock Chloe and legacy Nadine at the same standard-pistol Put.
       Distinguish **Hnormal-invalid** (both final masks zero), **Hclip-missing**
       (Nadine leaf clip lacks hand/leg ids), **Hblend-suppression** (leaf succeeds
@@ -3546,7 +3546,24 @@ Do not reopen these as the first move:
       Blend/Unary topology and every reachable animation leaf's resolved id and
       local `hand/leg/back` presence mask. Run exactly one standard-pistol Put on
       Chloe and one on Nadine; classify the four written outcomes in
-      `COOP_STATUS.md`. No visual change is expected.
+      `COOP_STATUS.md`. No visual change is expected. **RUNTIME CONFIRMED:**
+      Hnormal-invalid won: both exact looks returned mask zero, every readable
+      live leaf had one unrelated reference and local presence mask zero, and
+      Chloe still performed the correct stock motion. The named-reference
+      reducer is optional here; Hclip-missing, Hblend-suppression and
+      Hwrong-snapshot are rejected as Nadine-specific causes. The bounded hook
+      is removed.
+- [ ] Resolve the real `WeaponPartial` arm/weapon content before another test.
+      Decode joint ValidBits for the eight exact live `ak47-*--part/--add`
+      clips, their authored `--strap` siblings, and the matching
+      `p-holster-leg/back` player-mesh clips. Trace which AnimStateLayer emits
+      each command and which later merge first owns the arm/spine rows.
+      Competing hypotheses: **Wpart-overwrite** (leading: WeaponPartial
+      `--part` overwrites the base arm motion), **Wbase-only** (the selected
+      player-mesh base itself lacks required arm rows), **Wstrap-layer** (the
+      missing sling is a separate uninstantiated layer), and **Wstance** (the
+      observed cover-low-l/generic split is only stance state). Require three
+      evidence kinds and a prediction that separates them before runtime.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
