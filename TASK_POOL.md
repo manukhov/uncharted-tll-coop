@@ -3270,7 +3270,7 @@ Do not reopen these as the first move:
       `MeshCull_CullFgViewJob 0x141A2DDD0` never reads that byte: it filters on
       `FgInstance+0x18` and cull metadata behind `+0x1D0`. The `go`/`aaf`
       difference therefore does not imply a later stock writer.
-- [ ] Discriminate the exact current rifle's per-view row at the proven
+- [x] Discriminate the exact current rifle's per-view row at the proven
       pre-cull boundary. `MeshCull_BuildFgViewDescriptors 0x141A30330` plus
       `MeshCull_SelectFgViewDrawLists 0x141A30B80` map LOD0/list0 to view type 3
       and LOD2/list3 to type 1. `MeshCull_CullFgViewJob` rejects type 3 by
@@ -3288,16 +3288,21 @@ Do not reopen these as the first move:
       but image remains), and Dunsafe (crash/collateral/missing restore).
       REJECTED by `aah`: PID 2552 produced four exact `queued=1` rows and changed
       LOD0 flags `0x21228A38 -> 0x21228A78`; the user saw no visual change and
-      neither copy crashed. Dcurrent is false; Dtwin wins. Build `aai` disables
-      the probe. Do not request another runtime ownership discriminator.
-- [ ] STATIC ONLY: prove the creator/owner/lifetime of the same-geometry
-      pool-443/444/445 rifle triplet. `aaf` selected its LOD0 in type-3/list0
-      in samples 1 and 2, but the FgAnimData driven-instance reverse lookup
-      returned no owner. Trace FgInstance allocation/initialization and every
-      owning table that stores these indices/pointers; distinguish a stale
-      prior ProcessWeapon generation, a Player/local-view duplicate, and a
-      non-driven static prop. Do not launch until the owner and complete repair
-      are statically proven rather than merely discriminated.
+      neither copy crashed. Dcurrent is false. The originally written Dtwin
+      branch does not identify an owner: `gw` had already removed the complete
+      pool-443/444/445 triplet with no visual effect and later bound it to the
+      live remote-Chloe rifle generation. Build `aai` disables the probe. Do not
+      request another runtime ownership discriminator.
+- [ ] STATIC ONLY: identify the actual colour submission for the glued local
+      rifle. Trace exact list-0/type-3 consumption forward from
+      `SceneRendering_EmitDrawablePrototypeSubmeshes 0x141AB5780`: type 3 is
+      proven to feed `RenderDepthOnlyPass 0x1416525C0`, so a selected depth row
+      is not proof that it emits visible colour. Enumerate every consumer of the
+      selected PageTable and the local-player/attachment colour path, then trace
+      its concrete mesh owner backward to creation. Pool 443, exact-current
+      `+0x18` visibility bits, common cull compaction, attachment APIs and weapon
+      state cycles are already rejected. Do not launch until the complete
+      colour-owner dataflow and repair are statically proven.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

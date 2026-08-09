@@ -19344,16 +19344,26 @@ proved only event delivery.
 
 The user nevertheless observed no visual change at all: the rifle remained
 glued to Nadine's hand. Neither process crashed. This rejects **Dcurrent** as a
-sufficient pixel owner and selects the non-exclusive **Dtwin** branch. The
-current ProcessWeapon contributes a selected overlapping row, but removing its
-type-3/main-view admission does not remove the image. The leading remaining
-owner is the same-geometry pool-443/444/445 triplet seen by `aaf`: its LOD0 was
-also selected in lists 0/type 3 in samples 1 and 2, while its owner could not be
-recovered by the FgAnimData-driven-instance reverse lookup. More generally, an
-additional rifle row outside the exact current triplet owns the visible pixels.
+sufficient pixel owner, but the originally written **Dtwin** outcome cannot be
+promoted to a concrete owner. The current ProcessWeapon contributes a selected
+overlapping row, but removing its type-3 admission does not remove the image.
+
+**Static correction from the earlier complete `gw` result:** the same-geometry
+pool-443/444/445 triplet is already independently rejected as a sufficient
+owner. `gw` compacted all three exact entries out of the pre-view foreground
+queue (`removed=3`) while the glued local rifle remained unchanged; the complete
+log later bound that generation to the live remote-Chloe ProcessWeapon. Thus
+`aah` does not reopen pool 443 or justify tracing it again. Both the exact
+current LOD0 type-3 row and the same-geometry triplet are proven insufficient.
+The remaining unresolved question is which downstream pass actually emits the
+visible colour geometry: type 3 is consumed by the depth-only path, so selection
+in list 0 is not itself proof of colour ownership.
 
 Build `aai` disables the discriminator and restores the production hook set;
 the heavy queue census remains off. No more runtime ownership discriminators
-are authorized. The next work is static-only until the second triplet's creator,
-owner and lifetime are proven and a complete fix follows directly from that
-dataflow. Both game processes were closed after the result.
+are authorized. The next work is static-only: trace the exact list-0/type-3
+consumer forward through depth, colour and forward-pass command generation, and
+trace the local-player/attachment colour submission backward to its concrete
+ProcessWeapon generation. Do not return to attachment APIs, weapon-state cycles,
+common cull compaction, pool 443 or another visibility-bit probe. Both game
+processes were closed after the result.
