@@ -1942,12 +1942,11 @@ constexpr bool kEnableCharacterLegIkBasePoseRelay = true;
 // rifle nor preserves frame time. Keep the observer code available for static
 // correlation, but do not patch the hot RenderMgr callsite in production.
 constexpr bool kEnableStaleRifleCullProbe = false;
-// Build aab rejected only the thread-local limiter. Static caller tracing proves
-// that both top-level render paths invoke one RenderMgr_MainDraw per frame, and
-// MainDrawCore always passes its inline primary SceneWindow at frame+0x10 into
-// SpawnCullFgScene before assembling the GBuffer/Forward/post graph. Build aad
-// uses the process-global gate above and keeps the draw-list scan read-only.
-constexpr bool kEnableNadinePerViewRifleCensus = true;
+// Build aad confirmed that neither the exact current rifle instances nor their
+// same-geometry twins occur in the proven main foreground draw lists while the
+// glued rifle remains visible. Keep the completed read-only census available
+// for reference but do not patch the hot MainDraw callsite in production.
+constexpr bool kEnableNadinePerViewRifleCensus = false;
 // Builds gm..gw rejected the inactive-rifle attachment replay, late visibility
 // hide, FgDraw suppression, renderer-wide owner census and downstream holster
 // probes as fixes for the local spawn artifact. None of those hot diagnostics
@@ -49495,8 +49494,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09aad "
-        "(process-global bounded main-view Nadine rifle census)");
+        "TLL co-op runtime init 2026-08-09aae "
+        "(confirmed external Nadine rifle draw; main-view census disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

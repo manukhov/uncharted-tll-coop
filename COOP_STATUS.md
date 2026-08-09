@@ -19117,3 +19117,33 @@ A clean Release build succeeds. The sole IDB was saved with
 `MeshCull_BuildFgViewDescriptors 0x141A30330`; the label pass reported 1627
 functions/56 data names and `save_database returned True`, and the restarted MCP
 independently resolves both names.
+
+### 2026-08-09 CONFIRMED: glued local Nadine rifle bypasses the main foreground lists (`aad`)
+
+The corrected process-global census matched its written prediction exactly.
+Role-B PID 5476 emitted one target and exactly three completed samples for
+generation 4; there was no fourth sample. All headers used the same primary
+`SceneWindow=0x7FF7566978B0` and config `0x7FF756693500`, had
+`truncated=0`, and scanned 299/299 rows from seven nonempty lists. The scene
+contained 1043 foreground instances.
+
+Each sample found the same six candidates: exact current rifle LOD instances at
+pool indices 1056--1058 (`targetMask=0x7`) and same-geometry instances at pool
+indices 443--445 (`geometryHits=6`). All six were active, the current triplet
+matched the rifle runtime owner id, and all three geometry bits were present.
+Nevertheless every candidate in every sample had
+`drawLists=0 drawEntries=0`. The user simultaneously confirmed that the rifle
+remained visibly glued to local Nadine. Both processes stayed responsive; no
+stall, crash or body/weapon regression occurred.
+
+This selects the written **Fexternal** outcome and rejects **Fmain**. The visible
+artifact is not produced by any exact current-rifle or same-`FgGeometry` instance
+in the proven primary foreground draw lists. Another cull/visibility mutation
+on `CullFgLods`, `CullFgSceneJob`, its final 61 lists or these six instances is
+forbidden. Remaining competitors are **Eoverlay**, a local-player/first-person
+overlay submission outside FgScene; **Ekey**, a distinct mesh/material resource
+whose geometry identity was not learned from the current ProcessWeapon; and
+**Emerged**, rifle pixels embedded in a character/look draw rather than a weapon
+draw. Build `aae` disables the hot census relay. The next static pass must trace
+local-player overlay/first-person render submissions and their concrete instance
+keys before another runtime test.
