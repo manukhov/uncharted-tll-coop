@@ -154,6 +154,14 @@ constexpr std::uintptr_t kFgDrawManagerSynchronousPrepareInstanceCallsiteRva =
 // read-only discriminator for stale or alternate rifle submissions.
 constexpr std::uintptr_t kRenderMgrCullFgLodsSpawnRva = 0x1A2C440;
 constexpr std::uintptr_t kRenderMgrMainDrawCullFgLodsCallsiteRva = 0x1661A57;
+// RenderMgr::MainDrawCore next schedules CullFgSceneJob for its concrete
+// SceneWindow, waits through MeshCull::WaitForCullFgScene and finalizes the
+// resulting per-view draw lists. Each emitted 9-byte submesh row retains the
+// originating FgScene index as a uint16 at +7, which makes this post-wait
+// callsite an exact read-only provenance boundary for local-view pixels.
+constexpr std::uintptr_t kMeshCullWaitForCullFgSceneRva = 0x1A35BE0;
+constexpr std::uintptr_t kRenderMgrMainDrawWaitForCullFgSceneCallsiteRva =
+    0x1661BE9;
 constexpr std::size_t kFgAnimDataSkeletonOffset = 0x18;
 constexpr std::size_t kSkeletonJointCountOffset = 0x34;
 // Animation command evaluator and the fixed-stride SkelTable retarget registry.

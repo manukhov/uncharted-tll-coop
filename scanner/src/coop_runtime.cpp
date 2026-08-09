@@ -424,6 +424,22 @@ std::array<NadineWeaponCandidate, 32> g_nadine_weapon_candidates{};
 std::atomic<std::uintptr_t> g_local_nadine_inactive_rifle_weapon{0};
 std::atomic<std::uint64_t> g_local_nadine_inactive_rifle_generation{0};
 
+// Build aaa: publish the exact local slot-zero rifle render instances on the
+// game thread, then correlate their shared FgGeometry pointers with the
+// concrete per-SceneWindow foreground draw lists on the render thread. The
+// sequence is a small seqlock so the hot hook never observes a torn target.
+struct NadinePerViewRifleTarget {
+    std::atomic<std::uint64_t> sequence{0};
+    std::atomic<std::uint64_t> generation{0};
+    std::atomic<std::uint64_t> published_ms{0};
+    std::atomic<std::uintptr_t> weapon{0};
+    std::atomic<std::uint32_t> runtime_id{0};
+    std::atomic<std::uint32_t> lod_count{0};
+    std::array<std::atomic<std::uintptr_t>, 8> instances{};
+    std::array<std::atomic<std::uintptr_t>, 8> geometries{};
+};
+NadinePerViewRifleTarget g_nadine_per_view_rifle_target{};
+
 // Build fy: IDrawControl_AddMesh resolves each ArtItemGeo resource id through
 // ArtItemGeo_ResolveFgGeometry and FgInstance_Init stores that shared FgGeometry*
 // at instance+0x1B0. Learn the six resolved pointers from the live LOD instances
@@ -1920,6 +1936,11 @@ constexpr bool kEnableCharacterLegIkBasePoseRelay = true;
 // rifle nor preserves frame time. Keep the observer code available for static
 // correlation, but do not patch the hot RenderMgr callsite in production.
 constexpr bool kEnableStaleRifleCullProbe = false;
+// Build aaa is a bounded read-only discriminator after all weapon-controller,
+// attachment, DrawControl and common CullFgLods mutations were rejected. It
+// samples the final per-SceneWindow Fg draw lists three times for one published
+// local-rifle generation; it never changes visibility or render state.
+constexpr bool kEnableNadinePerViewRifleCensus = true;
 // Builds gm..gw rejected the inactive-rifle attachment replay, late visibility
 // hide, FgDraw suppression, renderer-wide owner census and downstream holster
 // probes as fixes for the local spawn artifact. None of those hot diagnostics
@@ -17163,6 +17184,105 @@ bool seh_capture_nadine_membership_render_state(
     }
 }
 
+void publish_local_nadine_per_view_rifle_target_game_thread() {
+    if (!g_net_role_b) {
+        return;
+    }
+    void* const player = retained_player_object(0);
+    std::uint32_t look = 0;
+    if (!seh_read_player_look(player, &look) ||
+        look != 0xD27C074Fu ||
+        !player_object_stable(player)) {
+        return;
+    }
+    void* const weapon = get_weapon_from_slot(player, 0);
+    if (weapon_art_id_from_object(weapon) != kCoopRifleArtId ||
+        readable_bytes(weapon) < 0x864) {
+        return;
+    }
+
+    NadineMembershipRenderState render{};
+    if (!seh_capture_nadine_membership_render_state(
+            weapon, player, nullptr, &render) ||
+        render.lod_count == 0) {
+        return;
+    }
+    const std::uint32_t lod_count = std::min<std::uint32_t>(
+        render.lod_count, static_cast<std::uint32_t>(render.lods.size()));
+    std::array<std::uintptr_t, 8> instances{};
+    std::array<std::uintptr_t, 8> geometries{};
+    std::uint64_t signature = 1469598103934665603ULL;
+    const auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    const std::uint32_t runtime_id =
+        *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(weapon) +
+            kGameObjectRuntimeIdOffset);
+    mix(reinterpret_cast<std::uintptr_t>(weapon));
+    mix(runtime_id);
+    mix(lod_count);
+    for (std::uint32_t index = 0; index < lod_count; ++index) {
+        instances[index] = render.lods[index].instance;
+        if (instances[index] != 0 &&
+            readable_bytes(reinterpret_cast<void*>(instances[index])) >=
+                0x1B8) {
+            geometries[index] = reinterpret_cast<std::uintptr_t>(
+                *reinterpret_cast<void* const*>(
+                    instances[index] + 0x1B0));
+        }
+        mix(instances[index]);
+        mix(geometries[index]);
+    }
+    if (signature == 0) {
+        signature = 1;
+    }
+
+    static std::uint64_t last_signature = 0;
+    if (last_signature == signature) {
+        return;
+    }
+    last_signature = signature;
+    g_nadine_per_view_rifle_target.sequence.fetch_add(
+        1, std::memory_order_acq_rel);
+    const std::uint64_t generation =
+        g_nadine_per_view_rifle_target.generation.load(
+            std::memory_order_relaxed) + 1;
+    g_nadine_per_view_rifle_target.weapon.store(
+        reinterpret_cast<std::uintptr_t>(weapon),
+        std::memory_order_relaxed);
+    g_nadine_per_view_rifle_target.runtime_id.store(
+        runtime_id, std::memory_order_relaxed);
+    g_nadine_per_view_rifle_target.lod_count.store(
+        lod_count, std::memory_order_relaxed);
+    for (std::size_t index = 0; index < instances.size(); ++index) {
+        g_nadine_per_view_rifle_target.instances[index].store(
+            instances[index], std::memory_order_relaxed);
+        g_nadine_per_view_rifle_target.geometries[index].store(
+            geometries[index], std::memory_order_relaxed);
+    }
+    g_nadine_per_view_rifle_target.published_ms.store(
+        GetTickCount64(), std::memory_order_relaxed);
+    g_nadine_per_view_rifle_target.generation.store(
+        generation, std::memory_order_relaxed);
+    g_nadine_per_view_rifle_target.sequence.fetch_add(
+        1, std::memory_order_release);
+
+    std::ostringstream line;
+    line << "NADINE-PER-VIEW-TARGET generation=" << generation
+         << " weapon=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(weapon)
+         << "/0x" << runtime_id << std::dec
+         << " lods=" << lod_count << " entries=";
+    for (std::uint32_t index = 0; index < lod_count; ++index) {
+        line << "[" << index << ":instance=0x" << std::hex
+             << instances[index] << ":geometry=0x" << geometries[index]
+             << "]";
+    }
+    write_log_line(line.str().c_str());
+}
+
 void diagnose_nadine_weapon_membership_game_thread() {
     // The attachable hook runs from PostJointUpdate_Async and only publishes
     // pointers. All PlayerWeaponController vtable reads stay on this established
@@ -18479,6 +18599,9 @@ void apply_peer_held_weapon_state() {
     void* puppet = nullptr;
     if (!latest_peer_state(peer, puppet)) return;
     ensure_legacy_nadine_attach_points_game_thread();
+    if constexpr (kEnableNadinePerViewRifleCensus) {
+        publish_local_nadine_per_view_rifle_target_game_thread();
+    }
     if constexpr (kEnableInitialLocalNadineCrossSlotRefreshCycle) {
         run_initial_local_nadine_cross_slot_refresh_cycle_game_thread();
     }
@@ -45840,8 +45963,12 @@ void __fastcall hooked_fgdraw_prepare_instance(
 
 struct NadineRifleCullQueueMatch {
     std::uintptr_t instance = 0;
+    std::uint32_t scene_index = 0xFFFFFFFFu;
     std::uint32_t owner_id = 0;
     std::uint32_t geometry_mask = 0;
+    std::uint32_t target_instance_mask = 0;
+    std::uint64_t draw_list_mask = 0;
+    std::uint32_t draw_entry_count = 0;
     std::uint8_t active = 0;
     std::uint8_t target_lod = 0xFF;
     std::uint32_t instance_pool_index = 0xFFFFFFFFu;
@@ -45873,6 +46000,10 @@ struct NadineRifleCullQueueSnapshot {
     std::uint32_t geometry_hits = 0;
     std::uint32_t match_count = 0;
     std::uint32_t target_runtime_id = 0;
+    std::uint32_t draw_list_count = 0;
+    std::uint32_t draw_entry_total = 0;
+    std::uint32_t draw_entry_scanned = 0;
+    std::uint8_t draw_scan_truncated = 0;
     std::array<NadineRifleCullQueueMatch, 12> matches{};
 };
 
@@ -46171,6 +46302,391 @@ bool seh_capture_nadine_rifle_cull_queue(
         *snapshot = {};
         return false;
     }
+}
+
+struct NadinePerViewRifleTargetSnapshot {
+    std::uint64_t generation = 0;
+    std::uint64_t published_ms = 0;
+    std::uintptr_t weapon = 0;
+    std::uint32_t runtime_id = 0;
+    std::uint32_t lod_count = 0;
+    std::array<std::uintptr_t, 8> instances{};
+    std::array<std::uintptr_t, 8> geometries{};
+};
+
+bool read_nadine_per_view_rifle_target(
+    NadinePerViewRifleTargetSnapshot* target) {
+    if (target == nullptr) {
+        return false;
+    }
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        const std::uint64_t before =
+            g_nadine_per_view_rifle_target.sequence.load(
+                std::memory_order_acquire);
+        if ((before & 1) != 0) {
+            continue;
+        }
+        NadinePerViewRifleTargetSnapshot candidate{};
+        candidate.generation =
+            g_nadine_per_view_rifle_target.generation.load(
+                std::memory_order_relaxed);
+        candidate.published_ms =
+            g_nadine_per_view_rifle_target.published_ms.load(
+                std::memory_order_relaxed);
+        candidate.weapon =
+            g_nadine_per_view_rifle_target.weapon.load(
+                std::memory_order_relaxed);
+        candidate.runtime_id =
+            g_nadine_per_view_rifle_target.runtime_id.load(
+                std::memory_order_relaxed);
+        candidate.lod_count =
+            g_nadine_per_view_rifle_target.lod_count.load(
+                std::memory_order_relaxed);
+        for (std::size_t index = 0; index < candidate.instances.size();
+             ++index) {
+            candidate.instances[index] =
+                g_nadine_per_view_rifle_target.instances[index].load(
+                    std::memory_order_relaxed);
+            candidate.geometries[index] =
+                g_nadine_per_view_rifle_target.geometries[index].load(
+                    std::memory_order_relaxed);
+        }
+        const std::uint64_t after =
+            g_nadine_per_view_rifle_target.sequence.load(
+                std::memory_order_acquire);
+        if (before == after && (after & 1) == 0 &&
+            candidate.generation != 0 && candidate.weapon != 0 &&
+            candidate.lod_count != 0 &&
+            candidate.lod_count <= candidate.instances.size()) {
+            *target = candidate;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool seh_capture_nadine_rifle_per_view_draw_lists(
+    void* cull_job, NadineRifleCullQueueSnapshot* snapshot,
+    NadinePerViewRifleTargetSnapshot* captured_target) {
+    if (snapshot == nullptr || captured_target == nullptr) {
+        return false;
+    }
+    *snapshot = {};
+    *captured_target = {};
+    __try {
+        if (!g_net_role_b ||
+            !read_nadine_per_view_rifle_target(captured_target) ||
+            cull_job == nullptr || readable_bytes(cull_job) < 592) {
+            return false;
+        }
+        const auto* const job = static_cast<const std::byte*>(cull_job);
+        const auto* const fg_scene =
+            *reinterpret_cast<const std::byte* const*>(job + 8);
+        if (fg_scene == nullptr || readable_bytes(fg_scene) < 16) {
+            return false;
+        }
+        const std::uint32_t scene_count =
+            *reinterpret_cast<const std::uint32_t*>(fg_scene);
+        void* const* const scene_instances =
+            *reinterpret_cast<void* const* const*>(fg_scene + 8);
+        if (scene_count == 0 || scene_count > 0x10000u ||
+            scene_instances == nullptr ||
+            readable_bytes(scene_instances) <
+                sizeof(void*) * static_cast<std::size_t>(scene_count)) {
+            return false;
+        }
+
+        snapshot->queue_count = scene_count;
+        snapshot->target_lod_count = captured_target->lod_count;
+        snapshot->target_runtime_id = captured_target->runtime_id;
+        for (std::uint32_t scene_index = 0; scene_index < scene_count;
+             ++scene_index) {
+            void* const instance = scene_instances[scene_index];
+            if (instance == nullptr || readable_bytes(instance) < 0x258) {
+                continue;
+            }
+            const auto* const instance_bytes =
+                static_cast<const std::byte*>(instance);
+            const std::uintptr_t instance_value =
+                reinterpret_cast<std::uintptr_t>(instance);
+            const std::uintptr_t geometry =
+                reinterpret_cast<std::uintptr_t>(
+                    *reinterpret_cast<void* const*>(
+                        instance_bytes + 0x1B0));
+            std::uint32_t target_instance_mask = 0;
+            std::uint32_t geometry_mask = 0;
+            std::uint8_t target_lod = 0xFF;
+            for (std::uint32_t lod_index = 0;
+                 lod_index < captured_target->lod_count; ++lod_index) {
+                const std::uint32_t bit = 1u << lod_index;
+                if (captured_target->instances[lod_index] != 0 &&
+                    instance_value == captured_target->instances[lod_index]) {
+                    target_instance_mask |= bit;
+                    target_lod = static_cast<std::uint8_t>(lod_index);
+                    snapshot->target_mask |= bit;
+                }
+                if (captured_target->geometries[lod_index] != 0 &&
+                    geometry == captured_target->geometries[lod_index]) {
+                    geometry_mask |= bit;
+                }
+            }
+            const std::uint32_t owner_id =
+                *reinterpret_cast<const std::uint32_t*>(
+                    instance_bytes + 0x250);
+            const bool owner_match =
+                owner_id == captured_target->runtime_id;
+            snapshot->owner_hits += owner_match ? 1u : 0u;
+            snapshot->geometry_hits += geometry_mask != 0 ? 1u : 0u;
+            if (target_instance_mask == 0 && geometry_mask == 0 &&
+                !owner_match) {
+                continue;
+            }
+            if (target_instance_mask != 0 &&
+                *reinterpret_cast<const std::uint8_t*>(
+                    instance_bytes + 0x1A0) != 0) {
+                snapshot->target_active_mask |= target_instance_mask;
+            }
+            if (snapshot->match_count < snapshot->matches.size()) {
+                NadineRifleCullQueueMatch& match =
+                    snapshot->matches[snapshot->match_count];
+                match.instance = instance_value;
+                match.scene_index = scene_index;
+                match.owner_id = owner_id;
+                match.geometry_mask = geometry_mask;
+                match.target_instance_mask = target_instance_mask;
+                match.active = *reinterpret_cast<const std::uint8_t*>(
+                    instance_bytes + 0x1A0);
+                match.target_lod = target_lod;
+            }
+            ++snapshot->match_count;
+        }
+
+        constexpr std::uint32_t kDrawListCount = 61;
+        constexpr std::uint64_t kMaxEntriesPerList = 0x10000;
+        constexpr std::uint32_t kMaxEntriesTotal = 0x20000;
+        const auto* const job_words =
+            reinterpret_cast<const std::uintptr_t*>(job);
+        const std::uint32_t stored_matches = std::min<std::uint32_t>(
+            snapshot->match_count,
+            static_cast<std::uint32_t>(snapshot->matches.size()));
+        for (std::uint32_t list_index = 0;
+             list_index < kDrawListCount; ++list_index) {
+            const auto* const list = reinterpret_cast<const std::byte*>(
+                job_words[13 + list_index]);
+            if (list == nullptr || readable_bytes(list) < 784) {
+                continue;
+            }
+            ++snapshot->draw_list_count;
+            const std::uint64_t raw_count =
+                *reinterpret_cast<const std::uint64_t*>(list + 8);
+            snapshot->draw_entry_total += static_cast<std::uint32_t>(
+                std::min<std::uint64_t>(raw_count, 0xFFFFFFFFULL));
+            std::uint64_t entry_count = raw_count;
+            if (entry_count > kMaxEntriesPerList) {
+                entry_count = kMaxEntriesPerList;
+                snapshot->draw_scan_truncated = 1;
+            }
+            for (std::uint64_t entry_index = 0;
+                 entry_index < entry_count; ++entry_index) {
+                if (snapshot->draw_entry_scanned >= kMaxEntriesTotal) {
+                    snapshot->draw_scan_truncated = 1;
+                    break;
+                }
+                const std::uint32_t page_index =
+                    static_cast<std::uint32_t>(entry_index >> 8);
+                if (page_index >= 64) {
+                    snapshot->draw_scan_truncated = 1;
+                    break;
+                }
+                const auto* const page =
+                    *reinterpret_cast<const std::byte* const*>(
+                        list + 272 + 8 * page_index);
+                if (page == nullptr || readable_bytes(page) < 2304) {
+                    snapshot->draw_scan_truncated = 1;
+                    break;
+                }
+                const auto* const entry =
+                    page + 9 * (entry_index & 0xFF);
+                std::uint16_t scene_index = 0;
+                std::memcpy(&scene_index, entry + 7, sizeof(scene_index));
+                ++snapshot->draw_entry_scanned;
+                for (std::uint32_t match_index = 0;
+                     match_index < stored_matches; ++match_index) {
+                    NadineRifleCullQueueMatch& match =
+                        snapshot->matches[match_index];
+                    if (match.scene_index != scene_index) {
+                        continue;
+                    }
+                    match.draw_list_mask |=
+                        std::uint64_t{1} << list_index;
+                    ++match.draw_entry_count;
+                }
+            }
+            if (snapshot->draw_entry_scanned >= kMaxEntriesTotal) {
+                break;
+            }
+        }
+        seh_resolve_nadine_rifle_cull_queue_owners(snapshot);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *snapshot = {};
+        *captured_target = {};
+        return false;
+    }
+}
+
+using MeshCullWaitForCullFgSceneFunction =
+    void*(__fastcall*)(void*, void*);
+MeshCullWaitForCullFgSceneFunction
+    g_original_mesh_cull_wait_for_fg_scene = nullptr;
+
+void* __fastcall hooked_mesh_cull_wait_for_fg_scene(
+    void* cull_job, void* shared_state) {
+    void* const result = g_original_mesh_cull_wait_for_fg_scene != nullptr
+        ? g_original_mesh_cull_wait_for_fg_scene(cull_job, shared_state)
+        : nullptr;
+    if (!g_net_role_b) {
+        return result;
+    }
+    NadinePerViewRifleTargetSnapshot target{};
+    if (!read_nadine_per_view_rifle_target(&target)) {
+        return result;
+    }
+    const ULONGLONG now = GetTickCount64();
+    static thread_local std::uint64_t sampled_generation = 0;
+    static thread_local std::uint32_t generation_samples = 0;
+    static thread_local ULONGLONG last_sample_ms = 0;
+    if (sampled_generation != target.generation) {
+        sampled_generation = target.generation;
+        generation_samples = 0;
+        last_sample_ms = 0;
+    }
+    if (generation_samples >= 3 || now < target.published_ms + 3000 ||
+        (last_sample_ms != 0 && now < last_sample_ms + 500)) {
+        return result;
+    }
+
+    NadineRifleCullQueueSnapshot snapshot{};
+    NadinePerViewRifleTargetSnapshot captured_target{};
+    if (!seh_capture_nadine_rifle_per_view_draw_lists(
+            cull_job, &snapshot, &captured_target) ||
+        captured_target.generation != target.generation) {
+        return result;
+    }
+    ++generation_samples;
+    last_sample_ms = now;
+    std::ostringstream header;
+    header << "NADINE-PER-VIEW-CULL generation=" << target.generation
+           << " sample=" << generation_samples
+           << " target=0x" << std::hex << target.weapon
+           << "/0x" << target.runtime_id << std::dec
+           << " scene=" << snapshot.queue_count
+           << " lods=" << snapshot.target_lod_count
+           << " targetMask=0x" << std::hex << snapshot.target_mask
+           << " activeMask=0x" << snapshot.target_active_mask << std::dec
+           << " ownerHits=" << snapshot.owner_hits
+           << " geometryHits=" << snapshot.geometry_hits
+           << " matches=" << snapshot.match_count
+           << " lists=" << snapshot.draw_list_count
+           << " drawEntries=" << snapshot.draw_entry_scanned
+           << "/" << snapshot.draw_entry_total
+           << " truncated="
+           << static_cast<unsigned>(snapshot.draw_scan_truncated);
+    write_log_line(header.str().c_str());
+    const std::uint32_t stored_matches = std::min<std::uint32_t>(
+        snapshot.match_count,
+        static_cast<std::uint32_t>(snapshot.matches.size()));
+    for (std::uint32_t index = 0; index < stored_matches; ++index) {
+        const NadineRifleCullQueueMatch& match = snapshot.matches[index];
+        std::ostringstream line;
+        line << "NADINE-PER-VIEW-ENTRY generation=" << target.generation
+             << " sample=" << generation_samples
+             << " sceneIndex=" << match.scene_index
+             << " instance=0x" << std::hex << match.instance
+             << " target=0x" << match.target_instance_mask
+             << " geometry=0x" << match.geometry_mask
+             << " drawLists=0x" << match.draw_list_mask << std::dec
+             << " drawEntries=" << match.draw_entry_count
+             << " active=" << static_cast<unsigned>(match.active)
+             << " pool=" << match.instance_pool_index
+             << " fg=0x" << std::hex << match.anim_data
+             << "/" << std::dec << match.anim_pool_index
+             << " owners=" << match.anim_owner_matches
+             << " object=0x" << std::hex << match.owner
+             << " vtable=0x" << match.owner_vtable_rva
+             << " runtime=0x" << match.owner_runtime_id
+             << " art=0x" << match.owner_art
+             << " retained=0x" << match.retained_id
+             << " state=0x" << match.instance_state_flags
+             << std::dec << " world="
+             << static_cast<unsigned>(match.world_matrix_match)
+             << " used="
+             << static_cast<unsigned>(match.pool_primary_used)
+             << "/" << static_cast<unsigned>(match.pool_secondary_used)
+             << " pending="
+             << static_cast<unsigned>(match.pool_pending_delete);
+        write_log_line(line.str().c_str());
+    }
+    return result;
+}
+
+bool install_render_main_wait_for_fg_scene_relay() {
+    auto* const call_site = reinterpret_cast<std::uint8_t*>(
+        g_module + kRenderMgrMainDrawWaitForCullFgSceneCallsiteRva);
+    if (call_site[0] != 0xE8) {
+        boot_log_line("per-view Fg cull relay SKIPPED (not E8)");
+        return false;
+    }
+    std::int32_t old_displacement = 0;
+    std::memcpy(&old_displacement, call_site + 1, sizeof(old_displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(call_site + 5) +
+        static_cast<std::intptr_t>(old_displacement);
+    const std::uintptr_t expected =
+        g_module + kMeshCullWaitForCullFgSceneRva;
+    if (target != expected) {
+        boot_log_line("per-view Fg cull relay SKIPPED (target)");
+        return false;
+    }
+    g_original_mesh_cull_wait_for_fg_scene =
+        reinterpret_cast<MeshCullWaitForCullFgSceneFunction>(expected);
+
+    constexpr std::size_t kRelaySize = 14;
+    auto* const relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(call_site, kRelaySize));
+    if (relay == nullptr) {
+        boot_log_line("per-view Fg cull relay SKIPPED (relay)");
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(
+            &hooked_mesh_cull_wait_for_fg_scene);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+    const std::int64_t new_displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(call_site + 5);
+    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("per-view Fg cull relay SKIPPED (range)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line("per-view Fg cull relay SKIPPED (protect)");
+        return false;
+    }
+    *reinterpret_cast<std::int32_t*>(call_site + 1) =
+        static_cast<std::int32_t>(new_displacement);
+    FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    DWORD ignored = 0;
+    VirtualProtect(call_site, 5, old_protection, &ignored);
+    boot_log_line("per-view Fg cull callsite relay installed");
+    return true;
 }
 
 using CullFgLodsSpawnFunction = std::int64_t(__fastcall*)(
@@ -48945,8 +49461,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09zz "
-        "(rejected Nadine cross-slot refresh cycle disabled)");
+        "TLL co-op runtime init 2026-08-09aaa "
+        "(bounded Nadine per-view rifle provenance census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -48988,6 +49504,9 @@ DWORD WINAPI install_hook(void*) {
     } else {
         boot_log_line(
             "CullFgLods callsite relay disabled after rejected gw runtime");
+    }
+    if constexpr (kEnableNadinePerViewRifleCensus) {
+        install_render_main_wait_for_fg_scene_relay();
     }
     install_nd_attachable_parent_visibility_relay();
     if constexpr (kEnableRejectedNadineWeaponRuntimeProbes) {

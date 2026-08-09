@@ -2668,6 +2668,41 @@ FUNCTIONS = {
         "8-byte stride and its paired FgLodData array at exact 0xB0-byte stride; "
         "the two arrays and count were retained by CullFgLods_Spawn.",
     ),
+    0x141A35A30: (
+        "MeshCull_SpawnCullFgScene",
+        "Exact MeshCull::SpawnCullFgScene source assertion in mesh-cull.cpp. "
+        "Allocates the 592-byte job record containing FgScene at +0x08, Scene "
+        "at +0x10, SceneWindow at +0x20, CullFgLods at +0x28 and "
+        "SharedCullState at +0x30, then schedules MeshCull_CullFgSceneJob.",
+    ),
+    0x141A32700: (
+        "MeshCull_CullFgSceneJob",
+        "Exact CullFgSceneJob source assertion in mesh-cull.cpp. Copies every "
+        "FgInstance+0x1D0 cull record for the concrete SceneWindow, schedules "
+        "CullFgView workers, and publishes 61 final foreground draw-list "
+        "pointers into the job record at +0x68..+0x248.",
+    ),
+    0x141A2DDD0: (
+        "MeshCull_CullFgViewJob",
+        "Worker reached through thunk 0x141A2E780 from the exact "
+        "SpawnJobsOnVisibleMeshes<CullFgView> source path. Resolves each "
+        "FgScene index to FgInstance*, applies view-type flags and cull "
+        "metadata, then emits 9-byte visible-submesh rows whose uint16 at +7 "
+        "is the unchanged FgScene index.",
+    ),
+    0x141A35BE0: (
+        "MeshCull_WaitForCullFgScene",
+        "RenderMgr::MainDrawCore post-SceneWindow boundary: waits for the "
+        "CullFgSceneJob counter and passes its completed 61 draw lists to "
+        "MeshCull_FinalizeCullFgScene. This is the narrow safe boundary for a "
+        "read-only local-view geometry provenance census.",
+    ),
+    0x141A3B1F0: (
+        "MeshCull_FinalizeCullFgScene",
+        "Copies the completed CullFgSceneJob draw-list pointers into the "
+        "496-byte render result and derives aggregate 0x8000/0x10000 flags "
+        "from its final submesh records without changing their scene indices.",
+    ),
     0x14197D8C0: (
         "AnimFramePlayback_PublishRetainedFgAnim",
         "Resolves a retained owner through +0x108/+0x110, obtains its FgAnimData "

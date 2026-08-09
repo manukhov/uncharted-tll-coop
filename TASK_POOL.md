@@ -3203,12 +3203,21 @@ Do not reopen these as the first move:
       REJECTED: two complete exact sequences ended at attachment index 40 and
       `current=-1/draw=0`, but the rifle remained glued in the local Nadine view.
       Build `zz` disables the cycle.
-- [ ] Identify the distinct local-screen render submission for the glued rifle.
-      Start at the local Player's screen-specific FgDraw/main-view selection and
-      trace backward to a concrete mesh owner and creation generation. Do not
-      revisit controller Draw/Put, attachment ids, ProcessWeapon
-      `DisableMainView`, mesh HideMesh or the rejected world final-cull path.
-      Require three independent static evidence types before another launch.
+- [x] Identify the distinct local-screen render submission for the glued rifle.
+      `RenderMgr_MainDrawCore` schedules exact per-`SceneWindow`
+      `MeshCull_CullFgSceneJob 0x141A32700` after common `CullFgLods`; its
+      `MeshCull_CullFgViewJob 0x141A2DDD0` emits packed 9-byte final submesh rows
+      with the unchanged source `FgScene` index at `+7`, and
+      `MeshCull_FinalizeCullFgScene 0x141A3B1F0` forwards the same 61 lists to
+      rendering. Three static evidence types and all competing owner outcomes
+      are recorded in `COOP_STATUS.md`.
+- [ ] Run bounded read-only build `aaa` at untouched cold role-B Nadine spawn.
+      Do not draw or switch weapons. Keep the glued rifle visible for at least
+      five seconds and require one target plus three per-view samples with
+      `truncated=0`. Classify the selected `FgScene` row as Vstale, Vcurrent,
+      Vother or Vkey using exact target/geometry masks, draw-entry count and
+      retained ProcessWeapon owner. Any lag/crash or scan truncation rejects
+      only the packaging; do not mutate cull flags in this test.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

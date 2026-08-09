@@ -18960,3 +18960,71 @@ already-rejected world final-cull path. It must identify the separate
 screen/local-main-view submission that renders the glued geometry, starting
 from the screen-specific render instance selected for the local Player and
 tracing backward to its concrete mesh owner and creation generation.
+
+### 2026-08-09 STATIC / IMPLEMENTED: exact per-SceneWindow rifle provenance census (`aaa`)
+
+The missing local-screen boundary is now resolved. The earlier `gr..gw` probes
+observed the common foreground queue before screen-specific selection.
+`RenderMgr_MainDrawCore 0x141661960` subsequently calls exact
+`MeshCull::SpawnCullFgScene 0x141A35A30` with one concrete `SceneWindow`; its
+592-byte job record retains `FgScene@+0x08`, `SceneWindow@+0x20` and
+`CullFgLods@+0x28`, then schedules exact `CullFgSceneJob 0x141A32700`.
+`FgScene` is `{uint32 count@+0, FgInstance**@+8}`. The job copies every
+`FgInstance+0x1D0` cull record and builds independent view-type bitsets, so this
+stage is strictly downstream of the rejected common `CullFgLods` census.
+
+Three independent static evidence types converge on an exact read-only
+provenance key:
+
+1. Source assertions and the caller graph bind `0x141A35A30 -> 0x141A32700 ->
+   0x141A35BE0` to `SpawnCullFgScene`, `CullFgSceneJob` and the post-wait
+   `RenderMgr_MainDrawCore` callsite `0x141661BE9` for the concrete window.
+2. The `SpawnJobsOnVisibleMeshes<CullFgView>` path reaches worker
+   `MeshCull_CullFgViewJob 0x141A2DDD0` through thunk `0x141A2E780`. The worker
+   indexes the original `FgScene` array, checks `FgInstance+0x18`, the
+   `+0x1D0` metadata and per-view type, then emits one packed 9-byte row for
+   every visible submesh. The unchanged source `FgScene` index is written as a
+   `uint16` at row `+7` (`0x141A2E561`).
+3. `MeshCull_CullFgSceneJob` publishes exactly 61 completed draw-list pointers
+   at job `+0x68..+0x248`; `MeshCull_FinalizeCullFgScene 0x141A3B1F0` copies
+   those same lists into the render result and only derives aggregate flags.
+   Each list owns 256-row pages at `list+0x110`, so the emitted index maps
+   losslessly back to `FgScene[index]` at the last CPU boundary before drawing.
+
+The competitors are now concrete. **Vstale**: a geometry-matched but non-current
+`ProcessWeapon` generation has one or more final draw rows only in role B's
+local window. **Vcurrent**: an exact current slot-zero rifle instance is still
+submitted despite the controller being holstered, moving the fault to its
+per-view instance/matrix copy. **Vother**: matching rows resolve to another
+Player/NPC weapon owner. **Vkey**: no selected row shares the current rifle's
+three live `FgGeometry*` values, disproving the renderer-wide geometry identity
+assumption and requiring a different asset key.
+
+Build `aaa` adds no render mutation. On the game thread it publishes the exact
+slot-zero rifle pointer/runtime id plus up to eight live LOD instance and
+`FgGeometry*` pairs through a seqlock. After that target has remained stable for
+three seconds, a relay at the verified E8 callsite `0x141661BE9` calls stock
+`MeshCull_WaitForCullFgScene 0x141A35BE0` first, then samples at most three
+completed frames 500 ms apart. It scans at most 61 lists / 0x20000 rows, records
+only exact instance, geometry or owner-id matches, and maps each selected index
+through the already proven FgInstance/FgAnimData pools to retained owner,
+runtime id, art and generation. It never changes a flag, matrix, list or actor.
+
+Written falsifiable prediction before launch: role B emits one
+`NADINE-PER-VIEW-TARGET`, followed after three seconds by three bounded
+`NADINE-PER-VIEW-CULL` samples with `truncated=0`. While the glued rifle is
+visibly present, at least one `NADINE-PER-VIEW-ENTRY` must have
+`drawEntries>0`. A selected row with `target=0` and `geometry!=0` plus a
+different ProcessWeapon object/runtime selects **Vstale/Vother**; a selected
+row with `target!=0` selects **Vcurrent**; all matching candidates at
+`drawEntries=0` selects **Vkey**. A crash, stall, repeated unbounded logging or
+`truncated=1` rejects the packaging without supporting any owner hypothesis.
+No game was launched during this static pass. A clean Release rebuild of `aaa`
+succeeds. The sole IDB was saved with
+`MeshCull_SpawnCullFgScene 0x141A35A30`,
+`MeshCull_CullFgSceneJob 0x141A32700`,
+`MeshCull_CullFgViewJob 0x141A2DDD0`,
+`MeshCull_WaitForCullFgScene 0x141A35BE0` and
+`MeshCull_FinalizeCullFgScene 0x141A3B1F0`; the label pass reported 1625
+functions/56 data names and `save_database returned True`, and the restarted
+MCP independently resolves all five names.
