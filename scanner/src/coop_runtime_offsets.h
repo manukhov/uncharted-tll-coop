@@ -833,18 +833,12 @@ constexpr std::uintptr_t kProcessWeaponBaseInitCallsiteRva = 0x150F6AF;
 // transform into weapon+0x4F0/+0x500.
 constexpr std::uintptr_t kPlayerWeaponControllerRebindWeaponToHolsterRva =
     0x10A9670;
-// Full stock Put transition. It removes the previous channel-1 weapon action,
-// enqueues PlayerPutGunAwayAction with the supplied ProcessWeapon handle and
-// changes controller draw state to 5; unlike the terminal rebind it reaches
-// PlayerWeaponAnimControl and the authored prop-animation path.
-constexpr std::uintptr_t kPlayerWeaponControllerStartHolsterTransitionRva =
-    0x10A3EA0;
-// PlayerDrawWeaponAnimAction vtable +0x48 reaches controller vtable +0x248
-// with the selected ProcessWeapon's 16-byte weak {cell,generation} handle.
-// The target matches that handle in the controller slot table, performs the
-// physical EquipWeaponIndex path, and commits +0x124 to current slot +0x120.
-constexpr std::uintptr_t kPlayerWeaponControllerCommitDrawnWeaponHandleRva =
-    0x10AAF20;
+// PlayerWeaponController vtable +0x48. This is the complete stock switch
+// request used by both Draw and Put; its Draw branch enqueues the Get and IK
+// actions and enters kStateDraw before the per-frame controller can reach
+// kStateWeaponOut.
+constexpr std::uintptr_t kPlayerWeaponControllerApplyWeaponSwitchRva =
+    0x10A28A0;
 constexpr std::uintptr_t kProcessWeaponSelectExistingOwnerPointVtableSlotRva =
     kProcessWeaponVtableRva + 0x7A8;
 constexpr std::uintptr_t kProcessWeaponUpdateSelectedAttachmentVtableSlotRva =

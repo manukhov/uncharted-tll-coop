@@ -3127,14 +3127,27 @@ Do not reopen these as the first move:
       `matched=0`, `commitVerified=1`, `putCall=1`; both copies remained
       responsive, but the local rifle stayed glued. The terminal Draw commit is
       REJECTED as sufficient and disabled in `zr`.
-- [ ] Resolve the complete Get/Draw action setup that precedes the rejected
+- [x] Resolve the complete Get/Draw action setup that precedes the rejected
       terminal commit. Start from `PlayerGetWeaponInHandAction_OnStart
       0x141096150`, its phase-2 monitor `0x141096730`, the
       `PlayerDrawWeaponAnimAction` object and the move-sequencer enqueue path.
       Trace which persistent controller/ProcessWeapon/animation state is written
       before vtable `+0x48` and later consumed by Put. Do not synthesize or enqueue
       an action until three independent static evidence types separate a full
-      native action from a smaller exact missing writer.
+      native action from a smaller exact missing writer. Resolved in `zs`: exact
+      `ApplyWeaponSwitch 0x1410A28A0` enqueues Get plus channel-4
+      `PlayerWeaponIKAction`, enters literal `kStateDraw=1`, and
+      `PlayerWeaponController_ApplyState 0x1410AAFB0` waits for Get completion
+      before enqueuing `PlayerPlayWeaponOverlayAction`, publishing
+      WeaponPartial/NewIkWeapon through vtable `+0x300`, and entering literal
+      `kStateWeaponOut=2`. Three evidence types and competitors are recorded in
+      `COOP_STATUS.md`.
+- [ ] Run the bounded `zs` discriminator. On exact cold role-B local Nadine,
+      invoke the complete stock Draw once, wait for stable `current=0, draw=2`,
+      dwell 250 ms for overlay/IK publication, then invoke stock Put once.
+      `action=draw -> weapon-out -> put -> complete` plus disappearance of the
+      glued rifle confirms Ffull-cycle; the same complete rows with persistence
+      reject the controller lifecycle and select Fexternal-context.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

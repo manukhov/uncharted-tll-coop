@@ -3783,11 +3783,49 @@ FUNCTIONS = {
         "Starts the native s_weapon-reload-loop-start or mirrored action on the "
         "mounted Player action system and marks the loop action active at +0x4C.",
     ),
+    0x141095090: (
+        "PlayerWeaponIKAction_UpdateWrapper",
+        "PlayerWeaponIKAction vtable +0x40 wrapper. Forwards the action update "
+        "to PlayerWeaponIKAction_Update and preserves the action scheduler ABI.",
+    ),
+    0x1410950E0: (
+        "PlayerWeaponIKAction_Update",
+        "Resolves the selected WeaponPartial plus r_hand_prop_attachment and "
+        "l_hand_prop_attachment, then updates the Player weapon-hand IK owner. "
+        "This action is enqueued on controller channel 4 during a full Draw.",
+    ),
+    0x14109DA80: (
+        "PlayerWeaponController_StartWeaponIKForSlot",
+        "PlayerWeaponController vtable +0x308. Removes the old channel-4 action, "
+        "constructs PlayerWeaponIKAction for the selected ProcessWeapon and "
+        "enqueues it before the controller enters kStateDraw.",
+    ),
+    0x1410A3990: (
+        "PlayerWeaponController_FinalizeWeaponSwitch",
+        "Commits the selected/current/requested weapon indices and controller "
+        "draw state. Its final boolean selects whether EquipWeaponIndex runs.",
+    ),
+    0x1410A3BB0: (
+        "PlayerWeaponController_FinalizeWeaponSwitchAndEquip",
+        "Thin wrapper over PlayerWeaponController_FinalizeWeaponSwitch with the "
+        "EquipWeaponIndex branch enabled.",
+    ),
+    0x1410A3BD0: (
+        "PlayerWeaponController_FinalizeWeaponSwitchWithoutEquip",
+        "Thin wrapper over PlayerWeaponController_FinalizeWeaponSwitch with the "
+        "terminal EquipWeaponIndex branch suppressed.",
+    ),
+    0x1410AA7B0: (
+        "PlayerWeaponController_RefreshWeaponPartialAndIK",
+        "PlayerWeaponController vtable +0x300. Resolves WeaponPartial context, "
+        "publishes NewIkWeapon and refreshes the active weapon overlay/IK state.",
+    ),
     0x1410AAFB0: (
         "PlayerWeaponController_ApplyState",
-        "Applies PlayerWeaponController state transitions. State 3 is the native "
-        "reloading state and selects the clip/per-round action family through "
-        "the mounted Player action graph.",
+        "Applies PlayerWeaponController state transitions. State 1 is kStateDraw; "
+        "after its Get action reaches a completed phase this removes the action, "
+        "enqueues PlayerPlayWeaponOverlayAction, writes state 2 kStateWeaponOut "
+        "and invokes vtable +0x300. State 3 is the native reload state.",
     ),
     0x1410AD410: (
         "PlayerWeaponController_Update",

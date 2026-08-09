@@ -18553,3 +18553,79 @@ branches. The remaining prop-lifecycle frontier is the earlier complete
 `PlayerGetWeaponInHandAction`/Draw action setup that normally precedes this
 commit, especially the state it installs before `PlayerDrawWeaponAnimAction`
 slot `+0x48` runs.
+
+### 2026-08-09 STATIC / IMPLEMENTED: full Draw reaches a distinct WeaponOut boundary (`zs`)
+
+The complete controller lifecycle is now resolved far enough to separate the
+missing work from the rejected terminal commit with three independent evidence
+types.
+
+1. RTTI/vtable identity fixes the entry path. `PlayerWeaponController` vtable
+   `0x142A47F90` slot `+0x48` is
+   `PlayerWeaponController_ApplyWeaponSwitch 0x1410A28A0`. Its normal Draw
+   branch constructs and enqueues `PlayerGetWeaponInHandAction` on channel 1,
+   invokes vtable `+0x308 =
+   PlayerWeaponController_StartWeaponIKForSlot 0x14109DA80`, saves the previous
+   controller state at `+0x138`, and writes `+0x134 = 1`.
+2. Exact state-machine dataflow names state 1 `kStateDraw` and state 2
+   `kStateWeaponOut`. `PlayerWeaponController_ApplyState 0x1410AAFB0`, called
+   directly by `PlayerWeaponController_Update 0x1410AD410`, obtains the active
+   channel-1 action and does not leave Draw until that action reports matching
+   state 1 and completed lifecycle phase 2 or 3. Only then does it remove the
+   Get action, ensure `PlayerWeaponController_EquipWeaponIndex 0x1410A9DD0`,
+   create/enqueue `PlayerPlayWeaponOverlayAction`, write `+0x134: 1 -> 2`, and
+   invoke controller vtable `+0x300`.
+3. The two omitted consumers are concrete and structurally independent of the
+   terminal slot commit. `PlayerWeaponIKAction_Update 0x1410950E0` resolves
+   `WeaponPartial`, `r_hand_prop_attachment` and `l_hand_prop_attachment` for
+   the channel-4 hand IK action. Vtable `+0x300 =
+   PlayerWeaponController_RefreshWeaponPartialAndIK 0x1410AA7B0` resolves the
+   current weapon context and publishes `NewIkWeapon`. The earlier `zo` runtime
+   independently confirmed that the resulting normal WeaponPartial request
+   reaches the live Nadine control. Build `zq` executed none of this: it changed
+   `current -1 -> 0` while draw state remained 0, then forced state 5.
+
+This also matches the independent behavioral boundary: the user's ordinary
+manual Draw followed by Put clears the cold rifle, while the exact terminal
+commit followed by Put does not. The remaining competitors are:
+
+- **Ffull-cycle** (leading): the durable prerequisite is the complete stock
+  `Draw -> WeaponOut` lifecycle, including Get completion, channel-4 weapon IK,
+  overlay creation and the `+0x300` refresh. Letting that exact path reach state
+  2 before stock Put clears the initially glued local rifle.
+- **Fik-only:** only the channel-4 `PlayerWeaponIKAction` is required. Its exact
+  update owns both hand attachment names and can explain the broken free arm,
+  but it does not write the selected ProcessWeapon attachment; the full cycle
+  safely subsumes it without synthesizing an action.
+- **Foverlay-only:** only the state-1-to-2 overlay/`NewIkWeapon` publication is
+  required. It is later than the terminal commit and can own presentation, but
+  again the stock full cycle is the narrower faithful reproduction of the known
+  working manual sequence.
+- **Fexternal-context:** even a completed full controller cycle is insufficient;
+  a manual input/camera/inventory context outside this controller owns the
+  visible repair. This remains viable only if all exact states complete and the
+  rifle still persists.
+
+Build `zs` implements the falsifiable discriminator without constructing any
+action directly. On exact role-B local legacy Nadine only, after 750 ms of
+stable `current=-1, draw=0` with slot-zero rifle physically on `rightHand`, it
+calls the verified `ApplyWeaponSwitch(slot=0, inHands=true)` once. It then waits
+up to eight seconds for exact `current=0, draw=2`, leaves the newly published
+overlay/IK state alive for 250 ms, and only then calls the same stock boundary
+with `slot=-1, inHands=false`. The attempt is claimed per Player/weapon/attach
+table generation and cannot repeat.
+
+Written prediction before launch: **Ffull-cycle** produces one `action=draw`
+row, one `action=weapon-out` row with `current=0 draw=2`, one `action=put` row
+entering the holster transition, and finally `action=complete` with
+`current=-1 draw=0`; after that the initial local rifle is no longer glued to
+Nadine's hand. A completed four-row sequence with the rifle still visible is
+**Fexternal-context** and rejects the entire controller lifecycle as sufficient.
+Missing `weapon-out`, timeout, repeated calls, another weapon changing, body
+damage, hitch or crash is **Funsafe** and rejects the packaging rather than the
+theory. The release DLL compiles with marker `2026-08-09zs (Nadine cold-rifle
+full stock Draw-to-WeaponOut then Put)`; rejected renderer/attachment probes
+remain disabled. The seven newly resolved lifecycle functions are named in the
+single IDB; the headless pass applied `1610 functions, 54 data names`, returned
+`save_database=True`, and the restarted MCP independently resolves every saved
+name.
