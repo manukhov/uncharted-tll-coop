@@ -19784,3 +19784,44 @@ unchanged arms; any load crash rejects the two-relay package before further
 visual tests. The pre-existing `aaj` executor early-exit/stale-handoff remains a
 separate known limitation because rejected, unisolated `aak` code was not
 reintroduced into this package.
+
+### 2026-08-09 RUNTIME REJECTED (`aan`) / IMPLEMENTED (`aao`): null WeaponPartial overlay
+
+Both `aan` processes loaded the exact build marker, installed the atomic relay
+pair and remained responsive through the requested local-Nadine P99 draw/Put.
+No `NADINE-WEAPON-PARTIAL-SNAPSHOT-LEG` row appeared, selecting the written
+**Aan-scope-miss** outcome rather than a resolver fallback or late visual owner.
+
+The miss is now isolated without another launch. A read-only live-state audit of
+both retained Nadine Players confirmed the exact look `0xD27C074F`, concrete
+PlayerWeaponAnimControl vtable, `control+0x10` backlink and AnimControl registry
+count 42. On the local-Nadine process the audit additionally confirmed the
+enabled `WeaponPartial 0xE2B990B9` entry and exact type-2 layer. That layer had
+one live track, but its forwarded
+`track+0x8 AnimOverlayState*` was stock null. The `aan` classifier rejected null
+before reaching any of those ownership checks.
+
+Three independent facts reject the null-as-invalid assumption. First,
+`AnimStateLayer_PhaseUpdateInstances 0x14189D720` forwards `track+0x8` at
+`0x14189D824` without a null test. Second, `AnimStateSnapshot_SnapshotAnimState`
+explicitly treats its overlay argument as optional at `0x1418B28A9` and
+`0x1418B2930`. Third, leaf slot 9 obtains the independently supplied AnimSet from
+`v77[2]` and calls the exact remap at `0x14191801C` even when `v77[0]` (overlay)
+is null. The competing registry, owner, vtable, layer-type and live-track gates
+all passed in the same live audit.
+
+Build `aao` therefore removes only the erroneous `overlay != nullptr`
+precondition. Null remains an exact comparable track value; admission still
+requires the retained legacy-Nadine Player, current control/vtable/backlink,
+fresh stock lookup of the enabled type-2 WeaponPartial layer, a bounded live
+track whose `track+0x8` equals both snapshot overlay arguments, and identical
+leaf AnimSet TLS. The resolver allowlist and fail-closed source/donor/key checks
+are unchanged.
+
+Falsifiable prediction: on the next single P99 draw/Put, both processes must
+stay responsive and `aao` must emit `safe=1` rows for the reached allowlisted
+leaves, with `resolved=donor` and unchanged nonzero keys. No row would reject
+the 16-id live-family inventory rather than ownership admission; `safe=0` would
+select resolver incompatibility; correct rows with unchanged through-torso arms
+would identify a later pose owner. A crash would reject the null-admitting
+snapshot/leaf package.

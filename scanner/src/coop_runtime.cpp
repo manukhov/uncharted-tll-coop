@@ -39830,8 +39830,12 @@ bool seh_classify_legacy_nadine_weapon_partial_snapshot_overlay(
         return false;
     }
     *output = {};
-    if (overlay == nullptr ||
-        g_anim_control_find_active_type2_layer_by_id == nullptr) {
+    // A stock WeaponPartial track is allowed to have no AnimOverlayState.
+    // PhaseUpdateInstances still forwards that exact null value as args 4/5,
+    // while snapshot leaf construction receives its AnimSet independently.
+    // Keep null as a matchable track value; exact Nadine/control/layer/track
+    // ownership below is the admission boundary.
+    if (g_anim_control_find_active_type2_layer_by_id == nullptr) {
         return false;
     }
     __try {
@@ -50077,8 +50081,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09aan "
-        "(snapshot-scoped Nadine WeaponPartial leg clips; exact leaf E8 only)");
+        "TLL co-op runtime init 2026-08-09aao "
+        "(null-overlay-safe Nadine WeaponPartial snapshot leaf retarget)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

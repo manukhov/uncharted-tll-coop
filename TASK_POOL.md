@@ -3903,6 +3903,16 @@ Do not reopen these as the first move:
       stock. Release build passes. The single written test in `COOP_STATUS.md`
       separates scope miss, safe fallback and a later owner. Do not combine this
       run with the deleted/unisolated `aak` post-rebind branch.
+      **RUNTIME REJECTED (`aan`) / IMPLEMENTED (`aao`):** both copies stayed
+      responsive but the exact leaf emitted no rows. Live read-only state proves
+      every Nadine/control/registry/layer gate passes and the sole live
+      WeaponPartial track has stock-null `track+0x8`; `aan` incorrectly rejected
+      null before ownership comparison. Phase update forwards null unchanged,
+      SnapshotAnimState explicitly accepts optional overlay, and leaf slot 9
+      gets AnimSet independently from `v77[2]`. `aao` removes only that redundant
+      null guard while retaining exact track equality and all other admission and
+      fail-closed resolver checks. Run only the revised single P99 draw/Put
+      prediction recorded in `COOP_STATUS.md`.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
