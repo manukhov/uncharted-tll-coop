@@ -2798,13 +2798,17 @@ Do not reopen these as the first move:
       source constants are corrected; all older Nadine entries that call
       `0x8075397D` the rifle or `0x33E29A1B` the pistol retain their raw evidence
       but their semantic labels are superseded.
-- [ ] Retarget the already proven cold stock rebind from the misidentified P99
+- [x] Implement build `2026-08-09aaj`: retarget the already proven cold stock
+      rebind from the misidentified P99
       to the actual `0x33E29A1B` Mazur LDR, selected by art rather than hard-coded
       slot. Retarget the safe Put selector from the actual rifle to the actual
       `0x8075397D` pistol and redirect its generic `gun_holster` request to the
       copied native-Nadine `pistolHolster`. Remove the obsolete BB alias. Build
-      and launch only after both paths have exact one-shot ownership and inverse
-      draw guards.
+      succeeds; both paths have exact one-shot ownership and inverse draw guards.
+- [ ] Run the single written `aaj` visual test. Before input, the local Nadine
+      Mazur must leave `rightHand` for `targSpineProp`; after one P99 draw/Put,
+      only the P99 must move from `gun_holster` to `pistolHolster`. Do not test
+      the separate arm-retarget or sling issues in this pass.
 
 - [x] Recover the prior Nadine weapon history and keep the confirmed general
       weapon-display fixes. `ApplyWeaponSwitch(-1)`, slot mirror, draw-state

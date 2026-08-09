@@ -19428,3 +19428,55 @@ rebind only for the actual `0x33E29A1B` rifle, and (3) redirect only the actual
 `0x8075397D` pistol's Put selection from generic `gun_holster` to the already
 copied native-Nadine `pistolHolster` record. The arm/torso pose and sling remain
 separate content/retarget problems.
+
+### 2026-08-09 STATIC / IMPLEMENTED: corrected Mazur-back and P99-hip package (`aaj`)
+
+Build `2026-08-09aaj` restores two historically stable stock boundaries, now
+scoped to the corrected objects. It does not reuse any renderer/cull experiment.
+
+For the cold visible rifle, the game-thread path admits only role B's retained
+local legacy-Nadine Player, controller `current<0/draw=0`, an inventory object
+found by exact art `0x33E29A1B`, a generation-valid same-owner attachment still
+selected at `rightHand`, and an existing donor-remapped `targSpineProp` record.
+It then calls the concrete stock
+`PlayerWeaponController_RebindWeaponToHolster 0x1410A9670` once for that exact
+`{Player, ProcessWeapon, AttachSystem records}` generation and verifies
+`rightHand -> targSpineProp`. The rejected `ha` call is not repeated on its old
+target: `ha` acted on `0x8075397D`, whose exact child is the P99. Historical
+`WeaponHolster_BuildBinding 0x1414FE540` rows independently establish that
+`0x33E29A1B` selects art-specific `targSpineProp`, and old `fs` runtime proves
+that selecting an attachment on this exact art moves the user-visible rifle.
+
+For the handgun, the already stable Player holster Execute callsite scope and
+ProcessWeapon vtable `+0x7A8` selector are installed again. The redirect now
+requires the exact same-owner inventory art `0x8075397D` and changes only its
+observed generic `gun_holster` request to the copied native-Nadine
+`pistolHolster`. It cannot admit the Mazur, any other pistol, Chloe, a remote
+owner, Draw/Get, or a selector call outside the one stock Put Execute. The old
+`targSpinePropAnim` alias is no longer appended because it belonged to the
+misidentified Mazur sequence. The native `pistolHolster` record and its
+joint-5 remap remain the independently validated Nadine hip target.
+
+Competing outcomes are explicit. **C1**: correcting the targets makes the stock
+rebind remove the spawn Mazur from Nadine's hand and the scoped selector puts
+the P99 on her thigh. **C2**: the attachment fields verify but a different
+presentation owner remains; this is weakened specifically for the Mazur by the
+old `fs` visual movement. **C3**: an unexpected inventory generation or authored
+request fails one strict guard, producing no mutation rather than a broad retry.
+The arm-through-torso pose and missing sling are separate animation/content
+owners and are not predictions of this package.
+
+Written prediction before the only authorized run: build marker is
+`2026-08-09aaj`; before weapon input role B emits at most one
+`NADINE-LOCAL-MAZUR-REBIND` for art `0x33E29A1B`, with a discovered slot,
+`id=0x61A48E01->0x00AD047A`, `call=1` and `verified=1`. The initially glued
+Mazur must move to Nadine's back, while the Chloe observer remains correct.
+Drawing and putting away the gold/suppressed P99 must redirect only art
+`0x8075397D` from `gun_holster 0x555EFB8D` to
+`pistolHolster 0x8A0249B5`, leaving the Mazur on the back. A crash, repeated
+rebind, mutation while either weapon is drawn, art `0x33E29A1B` reaching
+`pistolHolster`, or any Chloe/body/grenade regression rejects the package.
+Missing rows select C3 and forbid another blind launch; verified rows with no
+corresponding visual change select C2. Release compilation completed
+successfully through `scanner/build-release.cmd`; no game process was started
+during implementation.
