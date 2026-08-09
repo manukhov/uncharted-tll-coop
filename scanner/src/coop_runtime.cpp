@@ -1949,7 +1949,7 @@ constexpr bool kEnableWeaponPartialNormalRequestProbe = false;
 // exact terminal PlayerDrawWeaponAnimAction commit through controller vtable
 // +0x248, verifies slot 0 became the real current weapon, and only then starts
 // the already-proven Put transition. It is one-shot and role-B-local only.
-constexpr bool kEnableInitialLocalNadineRifleDrawCommitThenHolster = true;
+constexpr bool kEnableInitialLocalNadineRifleDrawCommitThenHolster = false;
 volatile bool g_logging_enabled = false;
 static SRWLOCK g_log_lock = SRWLOCK_INIT;
 static HANDLE g_log_handle = INVALID_HANDLE_VALUE;
@@ -48751,8 +48751,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09zq "
-        "(Nadine cold-rifle Draw commit then stock Put)");
+        "TLL co-op runtime init 2026-08-09zr "
+        "(rejected cold Draw-commit repair disabled; full Get/Draw frontier)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

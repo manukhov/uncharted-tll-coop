@@ -3112,7 +3112,7 @@ Do not reopen these as the first move:
       `weapon-holster` executed `0->1`, and the rifle changed `16->40`, but the
       local image remained glued to the hand. Park the cold Put; a future return
       must isolate the preceding Draw phase instead.
-- [ ] Test the now-resolved preceding Draw boundary before the parked cold Put.
+- [x] Test the now-resolved preceding Draw boundary before the parked cold Put.
       `PlayerDrawWeaponAnimAction_CommitCurrentWeapon 0x14108A400` passes the
       weapon's exact 16-byte weak handle to PlayerWeaponController vtable
       `+0x248` (`PlayerWeaponController_CommitDrawnWeaponHandle 0x1410AAF20`).
@@ -3122,6 +3122,19 @@ Do not reopen these as the first move:
       cold role-B state, require both indices become 0, and only then invoke the
       proven Put. Written Cdraw-commit/Cfull-draw/Cunsafe predictions are in
       `COOP_STATUS.md`; never toggle ProcessWeapon `+0x8F4` for this rifle.
+      Result: Cfull-draw. The exact one-shot row showed
+      `current=-1->0->0`, `requested=-1->0->0`, `draw=0->0->5`,
+      `matched=0`, `commitVerified=1`, `putCall=1`; both copies remained
+      responsive, but the local rifle stayed glued. The terminal Draw commit is
+      REJECTED as sufficient and disabled in `zr`.
+- [ ] Resolve the complete Get/Draw action setup that precedes the rejected
+      terminal commit. Start from `PlayerGetWeaponInHandAction_OnStart
+      0x141096150`, its phase-2 monitor `0x141096730`, the
+      `PlayerDrawWeaponAnimAction` object and the move-sequencer enqueue path.
+      Trace which persistent controller/ProcessWeapon/animation state is written
+      before vtable `+0x48` and later consumed by Put. Do not synthesize or enqueue
+      an action until three independent static evidence types separate a full
+      native action from a smaller exact missing writer.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

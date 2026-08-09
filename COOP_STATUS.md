@@ -18528,3 +18528,28 @@ Player/weapon/attachment-table generation. One bounded
 compilation succeeds with marker `2026-08-09zq (Nadine cold-rifle Draw commit
 then stock Put)`. No other Nadine weapon/renderer probe is enabled for this
 discriminator.
+
+### 2026-08-09 RUNTIME REJECTED: terminal Draw commit is insufficient (`zq`)
+
+The cold-spawn test selected the written **Cfull-draw** outcome exactly. Role-B
+local Nadine emitted one and only one row:
+
+`matched=0 current=-1->0->0 requested=-1->0->0 draw=0->0->5
+commitResult=0 commitCall=1 commitVerified=1 putResult=0 putCall=1`.
+
+The same exact slot-zero rifle remained in the controller, its validated weak
+handle resolved uniquely, and the attachment stayed on the expected
+`rightHand` record through the synchronous commit. Both copies remained
+responsive. Nevertheless the user confirmed that the initially glued rifle did
+not disappear from Nadine's local view.
+
+Therefore `PlayerWeaponController_CommitDrawnWeaponHandle 0x1410AAF20` followed
+by `PlayerWeaponController_StartHolsterTransition 0x1410A3EA0` is **RUNTIME
+REJECTED** as a sufficient cold-spawn repair. The result also rejects a missing
+current-slot write as the remaining cause: the exact native commit did establish
+slot 0 before Put. The one-shot mutation is disabled in build `zr`; do not retry
+the terminal commit, attachment rebind, visibility/cull or `ProcessWeapon+0x8F4`
+branches. The remaining prop-lifecycle frontier is the earlier complete
+`PlayerGetWeaponInHandAction`/Draw action setup that normally precedes this
+commit, especially the state it installs before `PlayerDrawWeaponAnimAction`
+slot `+0x48` runs.
