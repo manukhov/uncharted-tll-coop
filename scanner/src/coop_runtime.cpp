@@ -1934,6 +1934,10 @@ constexpr bool kEnableProcessWeaponInitProbe = false;
 // invalid for stock Chloe, so that bounded read-only probe is removed as well.
 constexpr bool kEnableLegacyNadineHolsterIkVerification = false;
 constexpr bool kEnableLegacyNadinePistolHipAttachment = false;
+// Bounded zm discriminator: observes the Chloe-base pre-map and the final
+// WeaponPartial overlay record for retained Chloe/legacy-Nadine Players. It
+// does not change the map output, selected record, animation id or game state.
+constexpr bool kEnableWeaponPartialSelectionProbe = true;
 // Builds gz/ha rejected the terminal controller rebind as the local main-view
 // fix. Build hb instead runs the full stock Put transition once: this is the
 // narrow path that also binds PlayerWeaponAnimControl, requests
@@ -39117,6 +39121,226 @@ bool claim_holster_probe_signature(
     std::uint64_t signature);
 bool seh_read_player_look(void* player, std::uint32_t* look_out);
 
+using PlayerWeaponControllerMapChloeOverlayIdFunction =
+    std::uint32_t*(__fastcall*)(void*, std::uint32_t*, std::uint32_t);
+using PlayerWeaponControllerFindOverlayRecordFunction =
+    void*(__fastcall*)(void*, std::uint32_t);
+PlayerWeaponControllerMapChloeOverlayIdFunction
+    g_original_player_weapon_controller_map_chloe_overlay_id = nullptr;
+PlayerWeaponControllerFindOverlayRecordFunction
+    g_original_player_weapon_controller_find_overlay_record = nullptr;
+
+struct WeaponPartialSelectionProbeContext {
+    bool active = false;
+    bool map_seen = false;
+    void* controller = nullptr;
+    std::uint32_t input = 0;
+    std::uint32_t mapped = 0;
+};
+thread_local WeaponPartialSelectionProbeContext
+    g_weapon_partial_selection_probe_context{};
+
+struct WeaponPartialSelectionOwner {
+    bool valid = false;
+    int owner_index = -1;
+    void* player = nullptr;
+    std::uint32_t look = 0;
+};
+
+WeaponPartialSelectionOwner seh_weapon_partial_selection_owner(
+    void* controller) {
+    WeaponPartialSelectionOwner result{};
+    __try {
+        if (controller == nullptr) {
+            return result;
+        }
+        void* const player = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(controller) + 0x108);
+        const int owner_index = retained_player_index(player);
+        if (owner_index < 0 || player == nullptr) {
+            return result;
+        }
+        const std::uint32_t look =
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(player) + 0x170);
+        if (look != kLegacyNadineAttachTargetLookId && look != 0x3F334972u) {
+            return result;
+        }
+        result.valid = true;
+        result.owner_index = owner_index;
+        result.player = player;
+        result.look = look;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        result = {};
+    }
+    return result;
+}
+
+std::uint32_t* __fastcall hooked_player_weapon_controller_map_chloe_overlay_id(
+    void* controller, std::uint32_t* output, std::uint32_t input) {
+    std::uint32_t* const result =
+        g_original_player_weapon_controller_map_chloe_overlay_id != nullptr
+        ? g_original_player_weapon_controller_map_chloe_overlay_id(
+              controller, output, input)
+        : output;
+    auto& context = g_weapon_partial_selection_probe_context;
+    if (context.active && context.controller == controller &&
+        context.input == input && output != nullptr) {
+        context.map_seen = true;
+        __try {
+            context.mapped = *output;
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            context.mapped = 0;
+        }
+    }
+    return result;
+}
+
+struct WeaponPartialRecordProbe {
+    bool readable = false;
+    std::uint32_t selected = 0;
+    std::array<std::uint32_t, 6> words{};
+};
+
+WeaponPartialRecordProbe seh_read_weapon_partial_record(void* record) {
+    WeaponPartialRecordProbe result{};
+    __try {
+        if (record != nullptr && readable_bytes(record) >= sizeof(result.words)) {
+            std::memcpy(result.words.data(), record, sizeof(result.words));
+            result.selected = result.words[0];
+            result.readable = true;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        result = {};
+    }
+    return result;
+}
+
+void* __fastcall hooked_player_weapon_controller_find_overlay_record(
+    void* controller, std::uint32_t input) {
+    const WeaponPartialSelectionProbeContext previous =
+        g_weapon_partial_selection_probe_context;
+    g_weapon_partial_selection_probe_context = {};
+    g_weapon_partial_selection_probe_context.active = true;
+    g_weapon_partial_selection_probe_context.controller = controller;
+    g_weapon_partial_selection_probe_context.input = input;
+
+    void* const record =
+        g_original_player_weapon_controller_find_overlay_record != nullptr
+        ? g_original_player_weapon_controller_find_overlay_record(
+              controller, input)
+        : nullptr;
+    const WeaponPartialSelectionProbeContext captured =
+        g_weapon_partial_selection_probe_context;
+    g_weapon_partial_selection_probe_context = previous;
+
+    const WeaponPartialSelectionOwner owner =
+        seh_weapon_partial_selection_owner(controller);
+    if (!owner.valid) {
+        return record;
+    }
+
+    const WeaponPartialRecordProbe record_probe =
+        seh_read_weapon_partial_record(record);
+
+    static std::atomic<std::uint32_t> logged{0};
+    if (logged.fetch_add(1, std::memory_order_relaxed) < 128) {
+        std::ostringstream line;
+        line << "WEAPON-PARTIAL-SELECT owner=" << owner.owner_index
+             << " player=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(owner.player)
+             << " controller=0x"
+             << reinterpret_cast<std::uintptr_t>(controller)
+             << " look=0x" << owner.look
+             << " input=0x" << input
+             << " mapped=0x" << captured.mapped
+             << " record=0x" << reinterpret_cast<std::uintptr_t>(record)
+             << " selected=0x" << record_probe.selected
+             << " words=";
+        for (const std::uint32_t word : record_probe.words) {
+            line << word << ",";
+        }
+        line << std::dec
+             << " mapSeen=" << (captured.map_seen ? 1 : 0)
+             << " recordReadable=" << (record_probe.readable ? 1 : 0);
+        boot_log_line(line.str().c_str());
+    }
+    return record;
+}
+
+bool install_weapon_partial_selection_probe() {
+    std::uint8_t* map_callsite = nullptr;
+    std::uint8_t* map_relay = nullptr;
+    std::int32_t map_displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kPlayerWeaponControllerMapChloeOverlayCallsiteRva,
+            kPlayerWeaponControllerMapChloeOverlayIdRva,
+            reinterpret_cast<const void*>(
+                &hooked_player_weapon_controller_map_chloe_overlay_id),
+            map_callsite, map_relay, map_displacement)) {
+        boot_log_line(
+            "WeaponPartial selector probe SKIPPED (map callsite preflight)");
+        return false;
+    }
+
+    constexpr std::array<std::uint8_t, 12> kFindPrologue{
+        0x48, 0x89, 0x5C, 0x24, 0x08,
+        0x57,
+        0x48, 0x83, 0xEC, 0x20,
+        0x8B, 0xDA,
+    };
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(map_relay, 0, MEM_RELEASE);
+        boot_log_line(
+            "WeaponPartial selector probe SKIPPED (thread suspend)");
+        return false;
+    }
+
+    DWORD map_old_protection = 0;
+    if (!VirtualProtect(
+            map_callsite, 5, PAGE_EXECUTE_READWRITE,
+            &map_old_protection)) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(map_relay, 0, MEM_RELEASE);
+        boot_log_line(
+            "WeaponPartial selector probe SKIPPED (map protect)");
+        return false;
+    }
+
+    void* const find_trampoline = install_fire_gate_detour(
+        kPlayerWeaponControllerFindOverlayRecordRva,
+        kFindPrologue.data(), kFindPrologue.size(),
+        reinterpret_cast<void*>(
+            &hooked_player_weapon_controller_find_overlay_record),
+        "WeaponPartial final overlay selector probe");
+    if (find_trampoline == nullptr) {
+        DWORD ignored = 0;
+        VirtualProtect(map_callsite, 5, map_old_protection, &ignored);
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(map_relay, 0, MEM_RELEASE);
+        boot_log_line(
+            "WeaponPartial selector probe SKIPPED (find detour)");
+        return false;
+    }
+
+    g_original_player_weapon_controller_map_chloe_overlay_id =
+        reinterpret_cast<PlayerWeaponControllerMapChloeOverlayIdFunction>(
+            g_module + kPlayerWeaponControllerMapChloeOverlayIdRva);
+    g_original_player_weapon_controller_find_overlay_record =
+        reinterpret_cast<PlayerWeaponControllerFindOverlayRecordFunction>(
+            find_trampoline);
+    std::memcpy(
+        map_callsite + 1, &map_displacement, sizeof(map_displacement));
+    FlushInstructionCache(GetCurrentProcess(), map_callsite, 5);
+    DWORD ignored = 0;
+    VirtualProtect(map_callsite, 5, map_old_protection, &ignored);
+    resume_suspended_process_threads(suspended_threads);
+    boot_log_line(
+        "WeaponPartial selector probe installed (read-only map + final record)");
+    return true;
+}
+
 // Read-only lifecycle snapshot for the exact channel-one weapon actions. The
 // common sequencer stores its owner Player at +0x18, its channel count at
 // +0x110, and the intrusive-list table at +0x120. Channel one is where
@@ -48134,8 +48358,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09zl "
-        "(holster reference probe removed; WeaponPartial audit)");
+        "TLL co-op runtime init 2026-08-09zm "
+        "(WeaponPartial Chloe-map selection probe; read-only)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -48198,6 +48422,9 @@ DWORD WINAPI install_hook(void*) {
     if constexpr (kEnableLegacyNadineHolsterIkVerification &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_nadine_holster_ik_probe();
+    }
+    if constexpr (kEnableWeaponPartialSelectionProbe) {
+        install_weapon_partial_selection_probe();
     }
     if constexpr (kEnableLegacyNadinePistolHipAttachment &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {

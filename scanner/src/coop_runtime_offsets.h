@@ -701,6 +701,16 @@ constexpr std::uintptr_t kPlayerWeaponHolsterResolveBindRva = 0x1095BD0;
 constexpr std::uintptr_t kPlayerWeaponHolsterKnowledgeLookupCallsiteRva =
     0x1095E49;
 constexpr std::uintptr_t kResolveKnowledgeRegistryEntryByIdRva = 0x1765030;
+// PlayerPlayWeaponOverlayAction reaches PlayerWeaponController vtable +0x3C0.
+// That lookup first calls the Chloe-base-only animation-id map, then searches
+// the mapped record before falling back to the original id. The exact callsite
+// relay and outer lookup hook form a bounded read-only selection discriminator.
+constexpr std::uintptr_t kPlayerWeaponControllerMapChloeOverlayIdRva =
+    0x109D450;
+constexpr std::uintptr_t kPlayerWeaponControllerFindOverlayRecordRva =
+    0x109D740;
+constexpr std::uintptr_t kPlayerWeaponControllerMapChloeOverlayCallsiteRva =
+    0x109D757;
 // Read-only final holster discriminator. The anim-control event hook exposes
 // authored named events, the binding builder exposes the selected gun_holster*
 // id and offsets, and the final mutation hook proves whether the state-script

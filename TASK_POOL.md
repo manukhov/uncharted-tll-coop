@@ -3577,6 +3577,11 @@ Do not reopen these as the first move:
       Chloe-base pre-map at 0x14109D450: Chloe contains direct ak47/grip-opener
       rows that vill-nadine-08 lacks. Capture its input/output and the final
       selected record on one controlled idle pistol cycle before bypassing it.
+      **STATIC / IMPLEMENTED (`zm`):** a reloc-free outer selector detour plus
+      the exact inner E8 map callsite relay logs unchanged input, mapped id and
+      final record for retained Chloe/Nadine only. Runtime classification is
+      Warm-map-live versus Warm-fallback versus Warm-miss; no visual change is
+      expected. Run one idle standard-pistol draw/put cycle on each look.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

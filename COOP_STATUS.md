@@ -18242,3 +18242,38 @@ vtable-`+0x3C0` record for one idle pistol draw/put on each look. No game or
 injection was started during this static pass. The two newly resolved functions
 were persisted in the single `ida/tll.i64` (`1595 functions, 52 data names`;
 `save_database returned True`) and independently verified after MCP restart.
+
+### 2026-08-09 STATIC / IMPLEMENTED: observe the Chloe grip-map selection (`zm`)
+
+Build `zm` is a bounded, read-only discriminator at the exact selection chain.
+It detours the reloc-free 12-byte entry of
+`PlayerWeaponController_FindWeaponOverlayRecord 0x14109D740` and relays only its
+direct `E8` at `0x14109D757` to
+`PlayerWeaponController_MapChloeBaseWeaponOverlayId 0x14109D450`. The outer hook
+identifies the owner through controller `+0x108`, accepts only retained Players
+whose visible look is exact Chloe `0x3F334972` or legacy Nadine `0xD27C074F`, and
+records the final overlay record's first six dwords. Every argument, map output,
+record pointer and selected id is returned unchanged. Logging is bounded to 128
+selection calls and does not enable the old global diagnostic stream.
+
+This test satisfies the quota with independent evidence: the vtable/call graph
+from `PlayerPlayWeaponOverlayAction`; the exact controller-owner, map-output and
+record-id dataflow in the two native functions; the Player/WeaponPartial joint
+ValidBits and layer order; and the installed Chloe-versus-Nadine asset-table
+asymmetry.
+
+Written prediction for one idle standard-pistol draw/put cycle on each look:
+
+- **Warm-map-live:** legacy Nadine emits `mapSeen=1, mapped!=0`, and the final
+  record is readable. If `selected` equals the mapped-record id while Chloe uses
+  the same route, the next build may bypass only this pre-map for Nadine.
+- **Warm-fallback:** Nadine emits `mapped=0`; the hard Chloe map did not own the
+  selection and is rejected before any mutation.
+- **Warm-miss:** Nadine emits `mapped!=0` but the final selected record is the
+  original fallback (or null); the mapped row is not the visible owner, so the
+  bypass is not authorized.
+- A missing map call, unreadable record, crash, stall, animation change or body
+  corruption rejects the probe packaging rather than any content hypothesis.
+
+No visual change is expected from `zm`. Release compilation succeeds with the
+marker `2026-08-09zm (WeaponPartial Chloe-map selection probe; read-only)`.
