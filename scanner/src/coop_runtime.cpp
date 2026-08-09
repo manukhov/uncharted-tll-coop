@@ -424,7 +424,7 @@ std::array<NadineWeaponCandidate, 32> g_nadine_weapon_candidates{};
 std::atomic<std::uintptr_t> g_local_nadine_inactive_rifle_weapon{0};
 std::atomic<std::uint64_t> g_local_nadine_inactive_rifle_generation{0};
 
-// Build aaa: publish the exact local slot-zero rifle render instances on the
+// Build aab: publish the exact local slot-zero rifle render instances on the
 // game thread, then correlate their shared FgGeometry pointers with the
 // concrete per-SceneWindow foreground draw lists on the render thread. The
 // sequence is a small seqlock so the hot hook never observes a torn target.
@@ -1936,7 +1936,7 @@ constexpr bool kEnableCharacterLegIkBasePoseRelay = true;
 // rifle nor preserves frame time. Keep the observer code available for static
 // correlation, but do not patch the hot RenderMgr callsite in production.
 constexpr bool kEnableStaleRifleCullProbe = false;
-// Build aaa is a bounded read-only discriminator after all weapon-controller,
+// Build aab is a bounded read-only discriminator after all weapon-controller,
 // attachment, DrawControl and common CullFgLods mutations were rejected. It
 // samples the final per-SceneWindow Fg draw lists three times for one published
 // local-rifle generation; it never changes visibility or render state.
@@ -49461,8 +49461,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09aaa "
-        "(bounded Nadine per-view rifle provenance census)");
+        "TLL co-op runtime init 2026-08-09aab "
+        "(corrected Nadine per-view cull E8 at 0x141661BE4)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

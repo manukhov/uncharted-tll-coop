@@ -161,7 +161,7 @@ constexpr std::uintptr_t kRenderMgrMainDrawCullFgLodsCallsiteRva = 0x1661A57;
 // callsite an exact read-only provenance boundary for local-view pixels.
 constexpr std::uintptr_t kMeshCullWaitForCullFgSceneRva = 0x1A35BE0;
 constexpr std::uintptr_t kRenderMgrMainDrawWaitForCullFgSceneCallsiteRva =
-    0x1661BE9;
+    0x1661BE4;
 constexpr std::size_t kFgAnimDataSkeletonOffset = 0x18;
 constexpr std::size_t kSkeletonJointCountOffset = 0x34;
 // Animation command evaluator and the fixed-stride SkelTable retarget registry.

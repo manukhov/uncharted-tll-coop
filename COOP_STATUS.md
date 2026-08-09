@@ -19028,3 +19028,20 @@ succeeds. The sole IDB was saved with
 `MeshCull_FinalizeCullFgScene 0x141A3B1F0`; the label pass reported 1625
 functions/56 data names and `save_database returned True`, and the restarted
 MCP independently resolves all five names.
+
+### 2026-08-09 RUNTIME REJECTED / IMPLEMENTED: correct the per-view call instruction (`aaa` -> `aab`)
+
+The first cold launch did not exercise the census. Both PIDs remained healthy
+and printed `per-view Fg cull relay SKIPPED (not E8)`. The authored RVA
+`0x1661BE9` was the return address after the five-byte call, not its first byte.
+A read-only dump from the loaded executable proved the exact sequence at
+`0x141661BE0` to be `30 48 8B C8 E8 F7 3F 3D 00 48...`: the `E8` begins at
+`0x141661BE4`, and `0x141661BE4 + 5 + 0x003D3FF7 = 0x141A35BE0` exactly.
+This rejects only the `aaa` packaging and does not classify Vstale/Vcurrent/
+Vother/Vkey because no hook was installed and no draw list was read.
+
+Build `aab` changes only the verified callsite RVA to `0x1661BE4`; the installer
+still independently decodes the live displacement and requires the target to be
+`MeshCull_WaitForCullFgScene 0x141A35BE0` before patching. The written visual
+and log prediction above is unchanged. Release build succeeds; runtime is
+pending.
