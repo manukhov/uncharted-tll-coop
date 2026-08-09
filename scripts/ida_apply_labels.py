@@ -11107,10 +11107,12 @@ FUNCTIONS = {
     0x14108A640: (
         "PlayerHolsterWeaponAnimAction_Execute",
         "One-shot weapon-holster executor. Resolves the current weapon, calls "
-        "PlayerWeaponController vtable +0x3D0, requires targSpineProp, selects "
+        "PlayerWeaponController vtable +0x3D0, requires exact targSpineProp at "
+        "0x14108A796 (a different selected id exits at 0x14108A798), selects "
         "targSpinePropAnim, calls the rebind again, then writes the computed "
         "record-handoff transform to weapon+0x4F0/+0x500 at 0x14108AD4F and "
-        "seeds the authored attachment blend.",
+        "seeds the authored attachment blend before setting weapon+0x8F4 at "
+        "0x14108ADC8.",
     ),
     0x1410A9670: (
         "PlayerWeaponController_RebindWeaponToHolster",
@@ -11118,7 +11120,9 @@ FUNCTIONS = {
         "weapon's authored holster binding and passes its attach id to weapon "
         "vtable +0x7A8 while retaining the same Player owner, then copies the "
         "binding's primary transform (+0x10) to weapon+0x4F0/+0x500 at "
-        "0x1410A9A65/0x1410A9A99.",
+        "0x1410A9A65/0x1410A9A99. It does not compare the selected attachment "
+        "id after vtable +0x7A8, so a separately scoped endpoint rebind has no "
+        "outer targSpineProp postcondition.",
     ),
     0x141ED0580: (
         "WeaponAttachment_SelectExistingOwnerPoint",

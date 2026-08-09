@@ -41467,6 +41467,29 @@ struct NadinePistolHolsterExecuteContext {
 thread_local NadinePistolHolsterExecuteContext
     g_nadine_pistol_holster_execute_context{};
 
+bool seh_call_player_weapon_controller_rebind_to_holster(
+    void* controller, void* weapon);
+
+bool seh_read_player_weapon_controller(void* player, void** controller_out) {
+    if (controller_out == nullptr) {
+        return false;
+    }
+    *controller_out = nullptr;
+    __try {
+        if (player == nullptr ||
+            readable_bytes(static_cast<std::byte*>(player) + 0x1D88) <
+                sizeof(void*)) {
+            return false;
+        }
+        *controller_out = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(player) + 0x1D88);
+        return *controller_out != nullptr;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *controller_out = nullptr;
+        return false;
+    }
+}
+
 bool seh_weapon_is_player_slot(void* player, void* weapon, int slot) {
     __try {
         return player != nullptr && weapon != nullptr &&
@@ -41491,6 +41514,7 @@ struct HolsterExecuteWeaponLocalSnapshot {
     void* weapon = nullptr;
     std::uint32_t art = 0;
     std::uint8_t attach_index = 0xFF;
+    std::uint8_t holster_handoff_finished = 0;
     std::array<std::uint32_t, 16> local_bits{};
     std::array<std::uint32_t, 2> blend_bits{};
 };
@@ -41504,12 +41528,14 @@ HolsterExecuteWeaponLocalSnapshot capture_holster_execute_weapon_local(
             return snapshot;
         }
         auto* const bytes = static_cast<const std::byte*>(snapshot.weapon);
-        if (readable_bytes(bytes) < 0x864) {
+        if (readable_bytes(bytes) < 0x8F5) {
             return snapshot;
         }
         snapshot.art = *reinterpret_cast<const std::uint32_t*>(bytes + 0x860);
         snapshot.attach_index =
             *reinterpret_cast<const std::uint8_t*>(bytes + 0x688);
+        snapshot.holster_handoff_finished =
+            *reinterpret_cast<const std::uint8_t*>(bytes + 0x8F4);
         std::memcpy(
             snapshot.local_bits.data(), bytes + 0x4F0,
             sizeof(snapshot.local_bits));
@@ -41552,6 +41578,9 @@ void log_holster_execute_weapon_local(
          << " attach=" << std::dec
          << static_cast<unsigned>(before.attach_index) << "->"
          << static_cast<unsigned>(after.attach_index)
+         << " handoff="
+         << static_cast<unsigned>(before.holster_handoff_finished) << "->"
+         << static_cast<unsigned>(after.holster_handoff_finished)
          << " valid=" << (before.readable ? 1 : 0) << "/"
          << (after.readable ? 1 : 0)
          << " changed=0x" << std::hex << changed
@@ -41584,14 +41613,40 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
         }
     }
 
+    int pistol_slot = -1;
+    bool pistol_was_in_right_hand = false;
+    if (owner_index >= 0 && look_valid &&
+        look == kLegacyNadineAttachTargetLookId) {
+        for (int slot = 0; slot < 2; ++slot) {
+            const auto& snapshot = local_before[slot];
+            if (!snapshot.readable || snapshot.art != kCoopPistolArtId ||
+                snapshot.weapon == nullptr ||
+                !seh_weapon_parent_resolves_to_owner(
+                    snapshot.weapon, before.player)) {
+                continue;
+            }
+            std::uint32_t attach_id = 0;
+            std::uintptr_t records_generation = 0;
+            if (seh_read_owner_attach_record_id(
+                    before.player, snapshot.attach_index, &attach_id,
+                    &records_generation) &&
+                attach_id == 0x61A48E01u) {
+                pistol_slot = slot;
+                pistol_was_in_right_hand = true;
+            }
+            break;
+        }
+    }
+
     const NadinePistolHolsterExecuteContext previous_context =
         g_nadine_pistol_holster_execute_context;
+    // The stock executor requires its first rebind to select targSpineProp and
+    // then performs a second rebind plus the record-transform/blend handoff.
+    // Redirecting its internal selector makes the targSpineProp check fail and
+    // skips that entire tail. Keep the selector pass-through until the stock
+    // action has completed, then run one self-contained controller rebind whose
+    // selector has no caller-side target-id postcondition.
     g_nadine_pistol_holster_execute_context = {};
-    if (before.readable && before.executed == 0 && owner_index >= 0 &&
-        look_valid && look == kLegacyNadineAttachTargetLookId) {
-        g_nadine_pistol_holster_execute_context.player = before.player;
-        g_nadine_pistol_holster_execute_context.active = true;
-    }
 
     if (g_original_player_holster_weapon_anim_action_execute != nullptr) {
         g_original_player_holster_weapon_anim_action_execute(action);
@@ -41601,6 +41656,30 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
         for (int slot = 0; slot < 2; ++slot) {
             local_stock_after[slot] =
                 capture_holster_execute_weapon_local(before.player, slot);
+        }
+    }
+
+    const PlayerHolsterAnimActionSnapshot stock_action_after =
+        capture_player_holster_anim_action(action);
+    bool post_rebind_attempted = false;
+    bool post_rebind_completed = false;
+    if (before.readable && before.executed == 0 && owner_index >= 0 &&
+        look_valid && look == kLegacyNadineAttachTargetLookId &&
+        pistol_was_in_right_hand && pistol_slot >= 0 &&
+        stock_action_after.executed != 0 &&
+        local_stock_after[pistol_slot].readable &&
+        local_stock_after[pistol_slot].weapon ==
+            local_before[pistol_slot].weapon &&
+        local_stock_after[pistol_slot].holster_handoff_finished != 0) {
+        void* controller = nullptr;
+        if (seh_read_player_weapon_controller(before.player, &controller)) {
+            post_rebind_attempted = true;
+            g_nadine_pistol_holster_execute_context.player = before.player;
+            g_nadine_pistol_holster_execute_context.active = true;
+            post_rebind_completed =
+                seh_call_player_weapon_controller_rebind_to_holster(
+                    controller, local_stock_after[pistol_slot].weapon);
+            g_nadine_pistol_holster_execute_context = {};
         }
     }
     g_nadine_pistol_holster_execute_context = previous_context;
@@ -41641,7 +41720,10 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
          << static_cast<unsigned>(after.executed)
          << " readable=" << (before.readable ? 1 : 0) << "/"
          << (after.readable ? 1 : 0)
-         << " lookValid=" << (look_valid ? 1 : 0);
+         << " lookValid=" << (look_valid ? 1 : 0)
+         << " pistolHand=" << (pistol_was_in_right_hand ? 1 : 0)
+         << " postRebind=" << (post_rebind_attempted ? 1 : 0) << "/"
+         << (post_rebind_completed ? 1 : 0);
     write_log_line(line.str().c_str());
 }
 

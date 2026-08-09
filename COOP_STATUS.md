@@ -19505,3 +19505,56 @@ weapon attachments are now frozen as confirmed. The next P0 is the
 Player-compatible WeaponPartial/upper-body retarget path; native NPC overlay
 clips remain forbidden because their group count and masks are incompatible.
 The rifle sling also remains a separate ProcessWeaponStrap/content task.
+
+### 2026-08-09 STATIC / IMPLEMENTED: preserve the stock P99 holster executor before the hip rebind (`aak`)
+
+The visual `aaj` success also exposed a packaging error in its endpoint hook.
+`PlayerHolsterWeaponAnimAction_Execute 0x14108A640` does not treat its first
+controller rebind as a terminal attachment operation. After the call through
+`PlayerWeaponController` vtable `+0x3D0` at `0x14108A6A6`, it resolves the
+selected attachment record and requires exact `targSpineProp 0x00AD047A` at
+`0x14108A796`. The `aaj` selector changed that internal selection to
+`pistolHolster 0x8A0249B5`; consequently the branch at `0x14108A798` jumped to
+the epilogue. It skipped the intermediate `targSpinePropAnim 0xBBACEF13`, the
+second rebind at `0x14108AB72`, the record-transform/local handoff at
+`0x14108AD4F`, its attachment-blend seed, and the final
+`weapon+0x8F4=1` store at `0x14108ADC8`. This is sufficient to explain why the
+weapon reached the correct thigh endpoint while the transition became jerkier
+and could leave the hands in a stale state.
+
+Three independent evidence types establish the corrected boundary. The exact
+RTTI/factory/vtable path identifies the one-shot action and both update wrappers;
+the executor disassembly proves the `targSpineProp` postcondition and every
+skipped write; and the independently disassembled concrete rebind
+`PlayerWeaponController_RebindWeaponToHolster 0x1410A9670` proves that it builds
+its own binding, invokes ProcessWeapon vtable `+0x7A8`, copies the binding
+transform to `weapon+0x4F0/+0x500`, and has no caller-side selected-id
+postcondition after that selector. Historical `gz/ha/aaj` runtime also proves
+that this exact concrete rebind is stable and that the scoped selector produces
+the desired P99 thigh geometry.
+
+Build `aak` therefore leaves the selector completely pass-through during the
+original executor. Only when the action changed `executed=0->1`, the exact
+same-owner P99 was attached to `rightHand` before the call, and the stock
+executor set `weapon+0x8F4`, the hook invokes one separate concrete rebind. The
+`gun_holster -> pistolHolster` selector scope exists only inside that final
+self-contained call. A failed guard now produces the complete stock back
+holster result rather than a partially executed action. Release compilation
+completed successfully; no game process was launched.
+
+Competing hypotheses remain separated. **Pearly-exit** is confirmed for the
+new `aaj` jerk/stale-handoff regression and is repaired by `aak`.
+**Pweaponpartial** remains the leading owner of the older through-torso arm
+trajectory: the shipped Player base layer contains compatible Nadine leg clips,
+but the later weight-one `WeaponPartial` layer owns the same shoulder/elbow
+joints and no shipped Player `WeaponPartial -> leg` bridge exists.
+**Pattachment-only** is rejected for arm motion because the selector writes the
+attachment index/local endpoint and never chooses an AnimState/overlay clip.
+`scripts/psarc_asset_audit.py --resolve-string-id` now provides a reusable
+printable-string preimage check used to audit those overlay selectors.
+
+No runtime is authorized yet. The remaining arm owner/retarget must first be
+resolved statically. When that correction is ready, the combined prediction
+must require the stock handoff marker, the final P99 thigh endpoint, a continuous
+draw/Put transition with no hand stuck inside the torso, and no regression to
+the already confirmed Mazur-back geometry.

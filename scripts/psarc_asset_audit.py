@@ -1216,6 +1216,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="scan for a little-endian StringId/u32; repeatable",
     )
     parser.add_argument(
+        "--resolve-string-id",
+        action="append",
+        default=[],
+        metavar="U32",
+        help=(
+            "hash printable strings in --entry and print preimages for this "
+            "StringId; repeatable"
+        ),
+    )
+    parser.add_argument(
         "--context-dwords",
         type=int,
         default=0,
@@ -1348,6 +1358,7 @@ def main() -> int:
     if args.entry is None:
         if (
             args.id
+            or args.resolve_string_id
             or args.strings
             or args.player_mesh_look
             or args.map_source
@@ -1358,7 +1369,7 @@ def main() -> int:
             or args.animation_mask
         ):
             raise ValueError(
-                "--entry is required with --id, --strings, "
+                "--entry is required with --id, --resolve-string-id, --strings, "
                 "--player-mesh-look, --map-source, --gesture-node-audit "
                 "--dc00-record-id, --dc00-table-offset, --dc00-map-id or "
                 "--animation-mask"
@@ -1427,6 +1438,30 @@ def main() -> int:
                     f"  at 0x{offset:X}: "
                     + format_context(data, offset, args.context_dwords, known)
                 )
+
+    if args.resolve_string_id:
+        targets = {parse_id(label)[0] for label in args.resolve_string_id}
+        printable = re.compile(rb"[ -~]{%d,}" % max(1, args.min_string))
+        matches: dict[tuple[int, str], int] = {}
+        for match in printable.finditer(data):
+            raw = match.group()
+            value = string_id(raw)
+            if value in targets:
+                matches.setdefault(
+                    (value, raw.decode("ascii")), match.start()
+                )
+        shown = 0
+        for (value, text), offset in sorted(matches.items()):
+            if shown >= args.limit:
+                break
+            print(f"string_id=0x{value:08X} offset=0x{offset:X} text={text!r}")
+            shown += 1
+        unresolved = targets.difference(value for value, _text in matches)
+        rendered = ",".join(f"0x{value:08X}" for value in sorted(unresolved))
+        print(
+            f"resolved_string_ids={shown} unresolved=[{rendered}] "
+            f"limit={args.limit}"
+        )
 
     if args.strings is not None:
         pattern = re.compile(args.strings)

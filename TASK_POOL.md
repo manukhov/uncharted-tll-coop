@@ -3841,6 +3841,17 @@ Do not reopen these as the first move:
       and pistol hip attachment; separately retain **Nretarget-player** versus
       the much larger **Nvisual-puppet** for the arm/torso pose. Sling remains
       the independent `ProcessWeaponStrap` route.
+      **STATIC / IMPLEMENTED (`aak`, no runtime yet):** `aaj` redirected the
+      P99 selector inside `PlayerHolsterWeaponAnimAction_Execute 0x14108A640`,
+      making its mandatory `targSpineProp` check fail at `0x14108A798` and
+      skipping the second rebind, local-transform/blend handoff and
+      `weapon+0x8F4=1`. The repair now lets the stock executor complete and
+      performs the already proven P99-hip selector only in a separate concrete
+      `PlayerWeaponController_RebindWeaponToHolster 0x1410A9670` call after the
+      exact P99 moved from `rightHand` and the completion byte was set. This
+      removes a mod-created stale-state source but does not claim to solve the
+      older arm trajectory. Do not run this packaging change by itself; finish
+      the final WeaponPartial owner/retarget proof and test both together once.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
