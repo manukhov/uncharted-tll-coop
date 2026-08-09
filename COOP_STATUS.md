@@ -18277,3 +18277,67 @@ Written prediction for one idle standard-pistol draw/put cycle on each look:
 
 No visual change is expected from `zm`. Release compilation succeeds with the
 marker `2026-08-09zm (WeaponPartial Chloe-map selection probe; read-only)`.
+
+### 2026-08-09 RUNTIME REJECTED: Chloe grip map does not select Nadine's WeaponPartial (`zm`)
+
+The completed draw/put test, performed in the reverse order and with the
+available rare silenced pistol, selected the written **Warm-fallback** outcome.
+Across both views the exact retained legacy-Nadine Player
+(`look=0xD27C074F`) produced 256 bounded rows: inputs `0x5F913F74`,
+`0x25CC08FD` and `0xF19E22DC` each reached
+`PlayerWeaponController_MapChloeBaseWeaponOverlayId 0x14109D450`, but every
+call returned `mapped=0`; the enclosing vtable-`+0x3C0` lookup returned a null
+record and `selected=0`. No row showed a nonzero mapping or readable final
+record. The exact Chloe look was not admitted before the per-process logger
+limit, so this result is deliberately limited to the faulty legacy-Nadine
+selection rather than claimed as a Chloe comparison.
+
+Therefore the hard Chloe map is **RUNTIME REJECTED** as the selected pose owner
+for the observed Nadine requests. Bypassing it would only reproduce the stock
+null result. `PlayerPlayWeaponOverlayAction_OnStart 0x141097450` instead falls
+back in its caller after the null record and passes the resulting id to
+`PlayerWeaponAnimControl` vtable `+0x28`. The `zm` outer/map detours are removed
+from the active hook set.
+
+### 2026-08-09 STATIC / IMPLEMENTED: observe the final WeaponPartial request (`zn`)
+
+The next boundary satisfies the three-kind quota and closes the blind spot left
+by `zm`:
+
+1. RTTI and the saved vtable identify `PlayerWeaponAnimControl` at
+   `0x142A46778`; slot `+0x28` is exactly
+   `PlayerWeaponAnimControl_RequestCustomWeaponPart 0x14108B940`.
+2. The direct caller disassembly at `0x141097D90..0x141097DC7` loads
+   `Player+0x1DF0`, places the already fallback-resolved animation id in `R8D`,
+   the blend in `XMM3`, the three remaining options in the ABI stack slots, and
+   invokes that exact vtable slot. This is later than the null map/record
+   boundary and therefore cannot lose the caller's fallback id.
+3. The concrete callee stores `R8D` at control `+0x18`, publishes the same id to
+   the Player animation owner and requests `custom-weapon-part` (or its feather
+   variant) on `WeaponPartial 0xE2B990B9`. Its owner at control `+0x10` and the
+   independent retained runtime census both resolve back to the exact Player
+   whose `+0x1DF0` points to this control.
+
+Build `zn` patches only the verified vtable pointer and forwards the complete
+seven-argument call unchanged. It accepts exact retained Chloe/legacy-Nadine
+owners, records the final animation id, blend/options, request words and
+control `+0x18` before/after, and deduplicates bounded signatures. The rejected
+`zm` hooks and all prior pose/attachment writes remain disabled.
+
+Written discriminator for one pistol and one rifle draw/put cycle on Nadine:
+
+- **Wfinal-live:** nonzero final ids reach `+0x28` and `selected` changes to the
+  same id. Resolve those exact assets and their joint masks; they are the active
+  WeaponPartial content owner.
+- **Wfinal-clear:** `anim=0` is the reached request for a visibly broken phase.
+  The caller is clearing WeaponPartial rather than selecting an incompatible
+  clip; trace the preceding fallback/state decision.
+- **Wfinal-same:** pistol/rifle or draw/put phases resolve to the same nonzero id
+  despite distinct visible states. The stale request/cache transition becomes
+  the leading owner.
+- **Wfinal-miss:** no exact retained-Nadine row appears during the cycle. Another
+  producer reaches the visible layer, so this OnStart/vtable path is rejected.
+
+No visible change is expected. A crash, hitch, changed animation, body damage or
+weapon relocation rejects the probe packaging rather than classifying these
+content outcomes.

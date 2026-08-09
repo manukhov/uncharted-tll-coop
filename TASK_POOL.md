@@ -3581,7 +3581,19 @@ Do not reopen these as the first move:
       the exact inner E8 map callsite relay logs unchanged input, mapped id and
       final record for retained Chloe/Nadine only. Runtime classification is
       Warm-map-live versus Warm-fallback versus Warm-miss; no visual change is
-      expected. Run one idle standard-pistol draw/put cycle on each look.
+      expected. **RUNTIME REJECTED:** the retained legacy-Nadine path produced
+      256 rows across both views for three inputs; every exact Chloe-map call
+      returned zero and the final `+0x3C0` record was null. The Chloe map is not
+      the selected content owner, so its bypass is forbidden and the `zm` hooks
+      are removed. The exact Chloe control did not enter the bounded sample,
+      which does not weaken the Nadine-specific rejection.
+      **STATIC / IMPLEMENTED (`zn`):** vtable/RTTI identity, the direct OnStart
+      callsite dataflow and the callee's `+0x18`/WeaponPartial writes prove that
+      PlayerWeaponAnimControl vtable `+0x28` receives the final caller-fallback
+      id. A bounded read-only vtable relay now logs that id and forwards all
+      seven arguments unchanged for exact retained owners. Run one pistol and
+      one rifle draw/put cycle on Nadine; classify Wfinal-live, Wfinal-clear,
+      Wfinal-same or Wfinal-miss. No visible change is expected.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

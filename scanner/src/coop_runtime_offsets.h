@@ -711,6 +711,14 @@ constexpr std::uintptr_t kPlayerWeaponControllerFindOverlayRecordRva =
     0x109D740;
 constexpr std::uintptr_t kPlayerWeaponControllerMapChloeOverlayCallsiteRva =
     0x109D757;
+// PlayerWeaponAnimControl is stored at Player+0x1DF0. Its vtable +0x28
+// receives the final WeaponPartial animation id after the controller lookup
+// and all caller-side fallbacks have completed.
+constexpr std::uintptr_t kPlayerWeaponAnimControlVtableRva = 0x2A46778;
+constexpr std::uintptr_t kPlayerWeaponAnimControlRequestCustomPartRva =
+    0x108B940;
+constexpr std::uintptr_t kPlayerWeaponAnimControlRequestCustomPartVtableOffset =
+    0x28;
 // Read-only final holster discriminator. The anim-control event hook exposes
 // authored named events, the binding builder exposes the selected gun_holster*
 // id and offsets, and the final mutation hook proves whether the state-script
