@@ -3926,6 +3926,18 @@ Do not reopen these as the first move:
       visibly hand-glued P99 is already logically on `pistolHolster`; restore
       the stock holster executor tail before the hip rebind instead of changing
       attachment ids or returning to renderer/cull probes.
+      **STATIC / IMPLEMENTED (`aaq`):** the sole type-2 phase callsite
+      `0x14172CB32` now calls stock first and then scans only the freshly
+      revalidated retained-Nadine `WeaponPartial` instances. Exact state ids
+      split Put from Get families; heap `+0xA0/+0xAC`, instance
+      `+0x130/+0x138/+0x140` and animation-leaf vtable/fields are all
+      independently proven. A donor is committed only when source/donor resolve
+      through the same AnimSet and keys match; stock `0x141918070` must resolve
+      the new clip or every changed field is rolled back. Release build passes,
+      and IDB label `AnimControl_PhaseUpdateType2Layers 0x14172CAB0` is saved.
+      Do not launch `aaq` alone: first remove the known `aaj` early exit by
+      allowing the stock P99 holster executor to complete before the scoped hip
+      rebind, then use one combined falsifiable visual test.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

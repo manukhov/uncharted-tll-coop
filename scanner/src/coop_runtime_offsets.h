@@ -731,16 +731,15 @@ constexpr std::uintptr_t kPlayerWeaponAnimControlRequestCustomPartRva =
     0x108B940;
 constexpr std::uintptr_t kPlayerWeaponAnimControlRequestCustomPartVtableOffset =
     0x28;
-// Type-2 AnimStateLayer snapshot creation owns the only phase where authored
-// AnimSnapshotNodeAnimation leaves resolve their ids. The first E8 wraps the
-// complete nine-argument SnapshotAnimState call; the second wraps only the
-// animation-leaf AnimSetRemap call (not the shared resolver prologue).
-constexpr std::uintptr_t kAnimStateInstanceSnapshotAnimStateCallsiteRva =
-    0x18A46D0;
-constexpr std::uintptr_t kAnimStateSnapshotSnapshotAnimStateRva = 0x18B24F0;
-constexpr std::uintptr_t kAnimSnapshotNodeAnimationRemapCallsiteRva =
-    0x191801C;
+// AnimControl's type-2 phase loop has one direct call to
+// AnimStateLayer_PhaseUpdateInstances. After the call, every live instance has
+// either materialized or reused its SnapshotNodeHeap and the command generator
+// has not run yet.
+constexpr std::uintptr_t kAnimControlPhaseUpdateType2LayerCallsiteRva =
+    0x172CB32;
+constexpr std::uintptr_t kAnimStateLayerPhaseUpdateInstancesRva = 0x189D720;
 constexpr std::uintptr_t kAnimControlFindActiveType2LayerByIdRva = 0x172B3E0;
+constexpr std::uintptr_t kAnimSnapshotNodeAnimationResolveClipRva = 0x1918070;
 // Read-only final holster discriminator. The anim-control event hook exposes
 // authored named events, the binding builder exposes the selected gun_holster*
 // id and offsets, and the final mutation hook proves whether the state-script

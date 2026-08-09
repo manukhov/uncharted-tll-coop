@@ -1604,6 +1604,12 @@ FUNCTIONS = {
         "AnimOverlayState_Copy at 0x1418A3725, performs the shared-parameter copy, "
         "then submits instances to AnimStateInstance_PhaseUpdate.",
     ),
+    0x14172CAB0: (
+        "AnimControl_PhaseUpdateType2Layers",
+        "Walks enabled AnimControl registry entries, calls exact "
+        "AnimStateLayer_PhaseUpdateInstances at 0x14172CB32 only for type-2 "
+        "layers, then publishes the resolved anim-blends knowledge record.",
+    ),
     0x14189D720: (
         "AnimStateLayer_PhaseUpdateInstances",
         "Walks active tracks and instances, passes each track-local "

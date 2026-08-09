@@ -19866,3 +19866,54 @@ leaves in place before command generation. Separately, the P99 endpoint must
 let the stock holster executor finish its mandatory spine/handoff tail before
 the already proven hip rebind; no further selector, visibility or cull tuning
 is permitted.
+
+### 2026-08-09 STATIC / IMPLEMENTED: retarget the retained live snapshot after phase update (`aaq`)
+
+The retained-owner lifetime gap is now closed at a boundary that runs every
+animation phase rather than only during one-time snapshot construction. Exact
+`AnimControl_PhaseUpdateType2Layers 0x14172CAB0` walks enabled registry entries,
+requires `record+0x18 == 2`, and has one direct call to
+`AnimStateLayer_PhaseUpdateInstances 0x14189D720` at `0x14172CB32`. The latter
+walks each layer track and instance, resolves or reuses its snapshot, then
+phase-updates it. `AnimControl_CreateAnimCommands 0x14172C370` is a later,
+separate pass. Therefore a post-call relay sees a complete live snapshot before
+its clips are consumed by command generation.
+
+The mutable data contract is independently exact. Every admitted
+`AnimStateInstance` has RTTI vtable `0x142B0C730`, state id at `+0x98`,
+`SnapshotNodeHeap* +0x130`, root index `+0x138` and the active AnimSet at
+`+0x140`. `SnapshotNodeHeap_ResolveNodeByIndex 0x1418C2F90` proves the heap's
+record pointer `+0xA0`, maximum count `+0xAC` and 0x28-byte records. Exact
+`AnimSnapshotNodeAnimation` vtable `0x142B14D68` owns source/resolved ids
+`+0x40/+0x44`, resolver keys `+0x48/+0x4C` and clip `+0x50`;
+`AnimSnapshotNodeAnimation_ResolveClip 0x141918070` consumes those three
+resolved fields and publishes the refreshed clip. Historical
+`HOLSTER-REF-LEAVES` rows provide a third, runtime-independent ownership check:
+the exact allowlisted Put ids already occur inside this live heap for
+`0xDF5B68FC`.
+
+Build `aaq` replaces the rejected two-callsite `aan/aao` package with one exact
+E8 relay at `0x14172CB32`. It calls stock first, then admits only the freshly
+resolved `WeaponPartial 0xE2B990B9` layer belonging to a retained Player whose
+look is exact legacy Nadine and whose concrete `PlayerWeaponAnimControl`
+vtable/backlink are unchanged. It accepts only state
+`s_weapon-holster 0xDF5B68FC` for Put families and
+`s_weapon-out 0x7405AACB` for Get families. For each exact animation leaf it
+resolves both source and donor through the instance's own AnimSet, requires the
+same nonzero resolver keys, writes only resolved id/keys, calls the stock clip
+resolver and rolls all four fields back if the donor clip or verification
+fails. Chloe, NPC, strap, reload, aim, other states, other node vtables and
+unknown ids are fail-closed.
+
+Competing hypotheses are now sharply separated. **Llive-snapshot** predicts
+verified `NADINE-WEAPON-PARTIAL-LIVE-SNAPSHOT-LEG` rows for the reached
+Put/Get family and a changed arm trajectory. **Llater-owner** predicts verified
+rows but unchanged arms, locating another post-WeaponPartial overwrite.
+**Linventory-miss** predicts no rows despite a reached exact layer/state and
+would contradict the historical leaf inventory. A crash or missing stock phase
+progress rejects the relay packaging. Release compilation succeeds and the
+single IDB now resolves `0x14172CAB0` as
+`AnimControl_PhaseUpdateType2Layers`; the headless label pass applied 1640
+function names, returned `save_database=True`, and MCP verified the saved name.
+No game was launched because the separate known `aaj` P99 executor early-exit
+still needs to be removed before asking the user for one combined visual test.
