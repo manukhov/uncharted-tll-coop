@@ -3154,6 +3154,13 @@ Do not reopen these as the first move:
       role-A Chloe saw that same Nadine rifle correctly on her back. This proves
       the remaining artifact belongs to a local-main-view presentation path,
       not weapon selection, authored Draw/Put, IK/overlay setup or attachment.
+- [x] Test the omitted outer controller boundary in build `zw`. Outer Draw
+      reached `current=0 draw=2`, but outer Put rejected the `slot=-1` sentinel
+      (`call=0`, all controller fields unchanged) and the local rifle remained
+      glued. Combined with `zs`, which already completed the inner `-1` Put,
+      this rejects both controller entry levels as the missing operation. Build
+      `zx` disables the cycle. Continue above `SwitchToWeapon` at the real local
+      input/action producer; do not retry outer/inner Put or attachment ids.
 - [x] Trace the local-main-view weapon presentation lifecycle statically. Start
       from `Player_UpdateMainViewVisibilityForAttachmentsAndWeapons 0x140C990A0`,
       `PlayerWeaponController_DisableWeaponsInMainView 0x1410A01F0`, and the

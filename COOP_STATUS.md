@@ -18841,3 +18841,27 @@ static pass. Release build `zw` succeeds. The sole IDB was updated with
 `NdPropControl_ResolveLivePropAtIndex 0x141E63000`; the label pass reported
 1619 functions/56 data names and `save_database returned True`. The restarted
 MCP independently resolves the new names. Runtime is pending.
+
+### 2026-08-09 RUNTIME REJECTED: outer `SwitchToWeapon` cannot express Put (`zw`)
+
+Role-B PID 18972 reached the exact predicted outer Draw twice. For the tested
+generation the row changed `selected=1->0`, `requestedHands=1->0`, entered
+`current=0 draw=2`, and emitted `action=weapon-out`. The attempted outer Put was
+then rejected synchronously: `action=put route=outer ... current=0->0
+draw=2->2 selected=0->0 requestedHands=0->0 call=0`. The user saw only an
+attempted motion after five seconds; the initially glued rifle remained in the
+same local-hand position.
+
+This rejects **Oouter** and corrects the experiment's packaging. Outer
+`PlayerWeaponController_SwitchToWeapon 0x1410A1C10` does not accept the inner
+sentinel `slot=-1` while slot zero is current. The native Put sentinel belongs
+to `PlayerWeaponController_ApplyWeaponSwitch 0x1410A28A0`, whose complete
+Draw -> WeaponOut -> Put -> holstered lifecycle was already reached by `zs`
+without removing the local artifact. Therefore another outer/inner retry cannot
+distinguish the cause. The remaining proven contrast is upstream of the
+controller switch: the user's real command sequence in `fu` moved the cold
+local rifle away from the hand, while synthetic calls beginning at either
+controller boundary did not. The next static frontier is the local input/action
+producer that precedes `SwitchToWeapon`, including any local-view presentation
+or inventory-generation side effect it owns. Build `zx` disables the rejected
+one-shot cycle; no runtime test is authorized for that frontier yet.

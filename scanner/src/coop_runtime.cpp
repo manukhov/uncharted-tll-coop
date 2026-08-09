@@ -1951,7 +1951,7 @@ constexpr bool kEnableWeaponPartialNormalRequestProbe = false;
 // real local command enters outer vtable +0x40 PlayerWeaponController_SwitchToWeapon,
 // which also commits the selected/requested presentation slots at +0x12C/+0x130.
 // Build zw tests that exact missing outer transaction once.
-constexpr bool kEnableInitialLocalNadineRifleFullDrawThenHolster = true;
+constexpr bool kEnableInitialLocalNadineRifleFullDrawThenHolster = false;
 // Build zu: the stock weapon-controller lifecycle, physical attachment, exact
 // ProcessWeapon DrawControl and both FgDraw prepare paths have all been rejected
 // as owners of the cold role-B local image. The remaining view-specific stock
@@ -48890,8 +48890,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09zw "
-        "(cold local-Nadine rifle outer SwitchToWeapon cycle)");
+        "TLL co-op runtime init 2026-08-09zx "
+        "(rejected cold Nadine outer switch cycle disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
