@@ -19073,3 +19073,47 @@ they use a separate local-player/overlay pass outside these foreground lists;
 evidence types for a primary local SceneWindow/pass discriminator and a
 process-global sample limiter. Build `aac` compiles the census out; no draw,
 visibility, attachment or weapon state is mutated.
+
+### 2026-08-09 STATIC / IMPLEMENTED: the first inline SceneWindow is the main color view (`aad`)
+
+The `aab` repetition is now isolated to its limiter rather than to ambiguous
+window selection. Three independent evidence types identify the exact view:
+
+1. `RenderMgr_MainDrawCore 0x141661960` has one code xref, at `0x1416661D4`
+   inside `RenderMgr_MainDraw 0x141665B40`. The latter has two top-level callers
+   (`0x140144850` and `0x140144A20`), representing alternate frame/render modes;
+   each calls MainDraw once on the same global frame record `0x1464778A0`.
+2. MainDraw first iterates the registered screen records using count `frame+0x70`
+   for preparation, but its one MainDrawCore call receives the base frame.
+   MainDrawCore sets its `SceneWindow*` to `frame+0x10` at `0x1416619DC` and
+   passes that exact pointer to `MeshCull_SpawnCullFgScene` at `0x141661BD8`.
+   There is no per-window loop around the spawn or wait.
+3. The same MainDrawCore invocation constructs the main render graph with source
+   names `RenderWaterGBufferParticles`, `RenderForwardPass`, surface reflections,
+   deferred lights and post passes. This is the primary color view, not an
+   isolated shadow/reflection worker. Independently,
+   `MeshCull_BuildFgViewDescriptors 0x141A30330` expands its concrete
+   SceneWindow config into the fixed and optional foreground view types consumed
+   by `MeshCull_CullFgSceneJob`.
+
+Thus the excess `aab` rows came from a single per-frame MainDraw migrating among
+worker threads: every thread owned a separate `thread_local` counter. Build
+`aad` replaces it with one process-global SRW-locked gate. It admits exactly
+three total samples for one published rifle generation, at least 500 ms apart,
+and records the `SceneWindow` and its config pointer in every header. The scan
+remains strictly read-only.
+
+Competitors are now **Fmain**, one current or same-geometry candidate has final
+rows in this proven main foreground view; and **Fexternal**, all six candidates
+remain absent because the glued pixels use a local-player overlay or a different
+render identity. Written prediction before launch: role B emits exactly samples
+1/2/3, all with the same nonzero `window`/`config`, `truncated=0`, and no fourth
+sample. Any `drawEntries>0` selects Fmain. All six exact/geometry candidates at
+zero in all three samples selects Fexternal and forbids another foreground-list
+visibility mutation. Extra samples, changing window pointers, crash or stall
+rejects only the packaging. No game was launched during this static pass.
+A clean Release build succeeds. The sole IDB was saved with
+`RenderMgr_MainDraw 0x141665B40` and
+`MeshCull_BuildFgViewDescriptors 0x141A30330`; the label pass reported 1627
+functions/56 data names and `save_database returned True`, and the restarted MCP
+independently resolves both names.

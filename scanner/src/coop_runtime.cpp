@@ -439,6 +439,12 @@ struct NadinePerViewRifleTarget {
     std::array<std::atomic<std::uintptr_t>, 8> geometries{};
 };
 NadinePerViewRifleTarget g_nadine_per_view_rifle_target{};
+// MainDraw can migrate between worker threads from frame to frame. The bounded
+// per-view census therefore needs one process-wide gate, not thread-local state.
+SRWLOCK g_nadine_per_view_rifle_census_lock = SRWLOCK_INIT;
+std::uint64_t g_nadine_per_view_rifle_sampled_generation = 0;
+std::uint32_t g_nadine_per_view_rifle_generation_samples = 0;
+ULONGLONG g_nadine_per_view_rifle_last_sample_ms = 0;
 
 // Build fy: IDrawControl_AddMesh resolves each ArtItemGeo resource id through
 // ArtItemGeo_ResolveFgGeometry and FgInstance_Init stores that shared FgGeometry*
@@ -1936,12 +1942,12 @@ constexpr bool kEnableCharacterLegIkBasePoseRelay = true;
 // rifle nor preserves frame time. Keep the observer code available for static
 // correlation, but do not patch the hot RenderMgr callsite in production.
 constexpr bool kEnableStaleRifleCullProbe = false;
-// Build aab rejected this read-only discriminator: MainDrawCore reaches the
-// callsite for several SceneWindow/pass contexts and the thread-local limiter
-// consequently emitted three samples per render thread rather than three total.
-// Keep the census compiled out until the primary local SceneWindow has a static
-// discriminator and the limiter is process-global.
-constexpr bool kEnableNadinePerViewRifleCensus = false;
+// Build aab rejected only the thread-local limiter. Static caller tracing proves
+// that both top-level render paths invoke one RenderMgr_MainDraw per frame, and
+// MainDrawCore always passes its inline primary SceneWindow at frame+0x10 into
+// SpawnCullFgScene before assembling the GBuffer/Forward/post graph. Build aad
+// uses the process-global gate above and keeps the draw-list scan read-only.
+constexpr bool kEnableNadinePerViewRifleCensus = true;
 // Builds gm..gw rejected the inactive-rifle attachment replay, late visibility
 // hide, FgDraw suppression, renderer-wide owner census and downstream holster
 // probes as fixes for the local spawn artifact. None of those hot diagnostics
@@ -45993,6 +45999,8 @@ struct NadineRifleCullQueueMatch {
 };
 
 struct NadineRifleCullQueueSnapshot {
+    std::uintptr_t scene_window = 0;
+    std::uintptr_t scene_window_config = 0;
     std::uint32_t queue_count = 0;
     std::uint32_t target_lod_count = 0;
     std::uint32_t target_mask = 0;
@@ -46381,6 +46389,15 @@ bool seh_capture_nadine_rifle_per_view_draw_lists(
             return false;
         }
         const auto* const job = static_cast<const std::byte*>(cull_job);
+        snapshot->scene_window = reinterpret_cast<std::uintptr_t>(
+            *reinterpret_cast<void* const*>(job + 32));
+        if (snapshot->scene_window != 0 &&
+            readable_bytes(reinterpret_cast<const void*>(
+                snapshot->scene_window)) >= 32) {
+            snapshot->scene_window_config =
+                *reinterpret_cast<const std::uintptr_t*>(
+                    snapshot->scene_window + 24);
+        }
         const auto* const fg_scene =
             *reinterpret_cast<const std::byte* const*>(job + 8);
         if (fg_scene == nullptr || readable_bytes(fg_scene) < 16) {
@@ -46554,16 +46571,24 @@ void* __fastcall hooked_mesh_cull_wait_for_fg_scene(
         return result;
     }
     const ULONGLONG now = GetTickCount64();
-    static thread_local std::uint64_t sampled_generation = 0;
-    static thread_local std::uint32_t generation_samples = 0;
-    static thread_local ULONGLONG last_sample_ms = 0;
-    if (sampled_generation != target.generation) {
-        sampled_generation = target.generation;
-        generation_samples = 0;
-        last_sample_ms = 0;
+    std::uint32_t sample_index = 0;
+    AcquireSRWLockExclusive(&g_nadine_per_view_rifle_census_lock);
+    if (g_nadine_per_view_rifle_sampled_generation != target.generation) {
+        g_nadine_per_view_rifle_sampled_generation = target.generation;
+        g_nadine_per_view_rifle_generation_samples = 0;
+        g_nadine_per_view_rifle_last_sample_ms = 0;
     }
-    if (generation_samples >= 3 || now < target.published_ms + 3000 ||
-        (last_sample_ms != 0 && now < last_sample_ms + 500)) {
+    const bool admit =
+        g_nadine_per_view_rifle_generation_samples < 3 &&
+        now >= target.published_ms + 3000 &&
+        (g_nadine_per_view_rifle_last_sample_ms == 0 ||
+         now >= g_nadine_per_view_rifle_last_sample_ms + 500);
+    if (admit) {
+        sample_index = ++g_nadine_per_view_rifle_generation_samples;
+        g_nadine_per_view_rifle_last_sample_ms = now;
+    }
+    ReleaseSRWLockExclusive(&g_nadine_per_view_rifle_census_lock);
+    if (!admit) {
         return result;
     }
 
@@ -46572,15 +46597,23 @@ void* __fastcall hooked_mesh_cull_wait_for_fg_scene(
     if (!seh_capture_nadine_rifle_per_view_draw_lists(
             cull_job, &snapshot, &captured_target) ||
         captured_target.generation != target.generation) {
+        AcquireSRWLockExclusive(&g_nadine_per_view_rifle_census_lock);
+        if (g_nadine_per_view_rifle_sampled_generation == target.generation &&
+            g_nadine_per_view_rifle_generation_samples == sample_index &&
+            g_nadine_per_view_rifle_last_sample_ms == now) {
+            --g_nadine_per_view_rifle_generation_samples;
+            g_nadine_per_view_rifle_last_sample_ms = 0;
+        }
+        ReleaseSRWLockExclusive(&g_nadine_per_view_rifle_census_lock);
         return result;
     }
-    ++generation_samples;
-    last_sample_ms = now;
     std::ostringstream header;
     header << "NADINE-PER-VIEW-CULL generation=" << target.generation
-           << " sample=" << generation_samples
+           << " sample=" << sample_index
            << " target=0x" << std::hex << target.weapon
            << "/0x" << target.runtime_id << std::dec
+           << " window=0x" << std::hex << snapshot.scene_window
+           << " config=0x" << snapshot.scene_window_config << std::dec
            << " scene=" << snapshot.queue_count
            << " lods=" << snapshot.target_lod_count
            << " targetMask=0x" << std::hex << snapshot.target_mask
@@ -46601,7 +46634,7 @@ void* __fastcall hooked_mesh_cull_wait_for_fg_scene(
         const NadineRifleCullQueueMatch& match = snapshot.matches[index];
         std::ostringstream line;
         line << "NADINE-PER-VIEW-ENTRY generation=" << target.generation
-             << " sample=" << generation_samples
+             << " sample=" << sample_index
              << " sceneIndex=" << match.scene_index
              << " instance=0x" << std::hex << match.instance
              << " target=0x" << match.target_instance_mask
@@ -49462,8 +49495,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09aac "
-        "(rejected multi-window Nadine per-view cull census disabled)");
+        "TLL co-op runtime init 2026-08-09aad "
+        "(process-global bounded main-view Nadine rifle census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

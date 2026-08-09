@@ -3228,6 +3228,20 @@ Do not reopen these as the first move:
       primary local `SceneWindow` is selected statically. Build `aac` disables
       the relay. Next: resolve the MainDrawCore caller/context topology and a
       static primary-window/pass discriminator before another launch.
+- [ ] Run corrected bounded read-only build `aad` at untouched cold role-B
+      Nadine spawn. Static caller tracing now proves `RenderMgr_MainDraw
+      0x141665B40` is reached by both top-level render modes, calls
+      `RenderMgr_MainDrawCore` exactly once, and the core passes the same inline
+      primary `SceneWindow` at frame `+0x10` into `SpawnCullFgScene` before
+      assembling GBuffer, Forward and post passes. `aad` replaces the rejected
+      thread-local limiter with one process-global SRW-locked three-sample gate
+      and logs the exact SceneWindow/config pointers. Require exactly samples
+      1/2/3, one window pointer, 500 ms spacing and `truncated=0`; any extra row
+      rejects packaging. Any target/geometry candidate with `drawEntries>0`
+      keeps the primary foreground path open; all six candidates at zero in all
+      three accepted samples excludes the current rifle geometry key from the
+      local main foreground lists and moves the search to a local-player overlay
+      or a different render key.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no

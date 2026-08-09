@@ -2656,6 +2656,13 @@ FUNCTIONS = {
         "its FgInstance pointer array, FgLodData array and count to "
         "CullFgLods_Spawn at 0x141661A57.",
     ),
+    0x141665B40: (
+        "RenderMgr_MainDraw",
+        "Per-frame RenderMgr main draw reached by both top-level render modes. "
+        "Prepares every registered screen context but calls "
+        "RenderMgr_MainDrawCore exactly once with the frame record whose first "
+        "inline SceneWindow begins at +0x10.",
+    ),
     0x141A2C440: (
         "CullFgLods_Spawn",
         "Exact CullFgLods::Spawn source assertion in mesh-cull-fg-inl.h. Accepts "
@@ -2689,6 +2696,12 @@ FUNCTIONS = {
         "FgScene index to FgInstance*, applies view-type flags and cull "
         "metadata, then emits 9-byte visible-submesh rows whose uint16 at +7 "
         "is the unchanged FgScene index.",
+    ),
+    0x141A30330: (
+        "MeshCull_BuildFgViewDescriptors",
+        "Builds the ordered 128-byte CullFgView descriptor array from the "
+        "concrete SceneWindow config. Seeds fixed view types 3, 6 and 7, then "
+        "appends configured types 1, 0, 5, 2, 4, 8, 9 and 10.",
     ),
     0x141A35BE0: (
         "MeshCull_WaitForCullFgScene",
