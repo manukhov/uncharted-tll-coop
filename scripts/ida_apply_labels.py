@@ -10049,6 +10049,14 @@ FUNCTIONS = {
         "machine. Resolves the requested and current weapon objects, applies "
         "holster/unholster transitions, and rejects invalid controller states.",
     ),
+    0x1410A4130: (
+        "PlayerWeaponController_StartCrossSlotSwitch",
+        "Exact state-2 different-slot transition used by ApplyWeaponSwitch. "
+        "Removes the prior channel-1 transition, enqueues PlayerPutGunAwayAction "
+        "for the current weapon together with PlayerGetWeaponInHandAction for "
+        "the target weapon, then enters controller state 5. This paired path is "
+        "distinct from a cold same-slot Draw followed by Put.",
+    ),
     0x1410A4740: (
         "PlayerWeaponController_GetEffectiveCurrentWeaponIndex",
         "Controller vtable +0x68. Normally returns authoritative current index "

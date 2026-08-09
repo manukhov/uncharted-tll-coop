@@ -1945,13 +1945,11 @@ constexpr bool kEnableLegacyNadinePistolHipAttachment = false;
 constexpr bool kEnableWeaponPartialSelectionProbe = false;
 constexpr bool kEnableWeaponPartialFinalRequestProbe = false;
 constexpr bool kEnableWeaponPartialNormalRequestProbe = false;
-// Builds gz/ha rejected the terminal controller rebind, hb rejected a stock Put,
-// and zq rejected the terminal Draw commit followed by Put. Build zs exercised
-// Draw -> WeaponOut -> Put through the inner controller vtable +0x48 only. A
-// real local command enters outer vtable +0x40 PlayerWeaponController_SwitchToWeapon,
-// which also commits the selected/requested presentation slots at +0x12C/+0x130.
-// Build zw tests that exact missing outer transaction once.
-constexpr bool kEnableInitialLocalNadineRifleFullDrawThenHolster = false;
+// Builds zs/zw reject a single-slot rifle Draw -> Put through both controller
+// entry levels. The historical visible recovery first drew the pistol, then
+// switched pistol -> rifle and put the rifle away. That cross-slot state-2 path
+// enters 0x1410A4130 and pairs Put(old) with Get(new), unlike a cold Draw.
+constexpr bool kEnableInitialLocalNadineCrossSlotRefreshCycle = true;
 // Build zu: the stock weapon-controller lifecycle, physical attachment, exact
 // ProcessWeapon DrawControl and both FgDraw prepare paths have all been rejected
 // as owners of the cold role-B local image. The remaining view-specific stock
@@ -18474,15 +18472,15 @@ void ensure_legacy_nadine_attach_points_game_thread() {
 void reconcile_legacy_nadine_inactive_rifle_game_thread(
     const coop::StatePacket& peer, void* peer_puppet);
 void sync_local_nadine_rifle_visibility_game_thread();
-void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread();
+void run_initial_local_nadine_cross_slot_refresh_cycle_game_thread();
 
 void apply_peer_held_weapon_state() {
     coop::StatePacket peer{};
     void* puppet = nullptr;
     if (!latest_peer_state(peer, puppet)) return;
     ensure_legacy_nadine_attach_points_game_thread();
-    if constexpr (kEnableInitialLocalNadineRifleFullDrawThenHolster) {
-        run_initial_local_nadine_rifle_full_draw_then_holster_game_thread();
+    if constexpr (kEnableInitialLocalNadineCrossSlotRefreshCycle) {
+        run_initial_local_nadine_cross_slot_refresh_cycle_game_thread();
     }
     if constexpr (kEnableRejectedNadineWeaponRuntimeProbes) {
         reconcile_legacy_nadine_inactive_rifle_game_thread(peer, puppet);
@@ -42355,7 +42353,7 @@ void reconcile_legacy_nadine_inactive_rifle_game_thread(
     }
 }
 
-bool initial_local_nadine_rifle_transition_dwell_ready(
+bool initial_local_nadine_cross_slot_dwell_ready(
     void* player, void* weapon, std::uintptr_t records_generation) {
     static void* stable_player = nullptr;
     static void* stable_weapon = nullptr;
@@ -42373,7 +42371,7 @@ bool initial_local_nadine_rifle_transition_dwell_ready(
     return now - stable_since_ms >= 750;
 }
 
-bool claim_initial_local_nadine_rifle_full_cycle(
+bool claim_initial_local_nadine_cross_slot_cycle(
     void* player, void* weapon, std::uintptr_t records_generation) {
     std::uint64_t signature = 1469598103934665603ULL;
     auto mix = [&signature](std::uint64_t value) {
@@ -42405,21 +42403,23 @@ bool claim_initial_local_nadine_rifle_full_cycle(
     return true;
 }
 
-void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
+void run_initial_local_nadine_cross_slot_refresh_cycle_game_thread() {
     if (!g_net_role_b) {
         return;
     }
 
     enum class Stage : std::uint8_t {
         kIdle,
-        kWaitWeaponOut,
+        kWaitPistolOut,
+        kWaitRifleOut,
         kWaitHolstered,
     };
     struct Cycle {
         Stage stage = Stage::kIdle;
         void* player = nullptr;
         void* controller = nullptr;
-        void* weapon = nullptr;
+        void* rifle = nullptr;
+        void* pistol = nullptr;
         std::uintptr_t records_generation = 0;
         ULONGLONG stage_started_ms = 0;
         ULONGLONG weapon_out_since_ms = 0;
@@ -42438,7 +42438,7 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
         if (cycle.stage != Stage::kIdle &&
             now - cycle.stage_started_ms >= 8000) {
             write_log_line(
-                "NADINE-LOCAL-RIFLE-FULL-CYCLE action=abort reason=owner-lost");
+                "NADINE-LOCAL-RIFLE-CROSS-SLOT action=abort reason=owner-lost");
             cycle = {};
         }
         return;
@@ -42462,9 +42462,13 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
         return;
     }
 
-    void* const weapon = get_weapon_from_slot(player, 0);
-    if (weapon_art_id_from_object(weapon) != kCoopRifleArtId ||
-        !seh_weapon_parent_resolves_to_owner(weapon, player)) {
+    void* const rifle = get_weapon_from_slot(player, 0);
+    void* const pistol = get_weapon_from_slot(player, 1);
+    const std::uint32_t pistol_art = weapon_art_id_from_object(pistol);
+    if (weapon_art_id_from_object(rifle) != kCoopRifleArtId ||
+        pistol_art == 0 || pistol_art == kCoopRifleArtId ||
+        !seh_weapon_parent_resolves_to_owner(rifle, player) ||
+        !seh_weapon_parent_resolves_to_owner(pistol, player)) {
         return;
     }
 
@@ -42476,9 +42480,9 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
 
     if (cycle.stage != Stage::kIdle) {
         if (player != cycle.player || controller != cycle.controller ||
-            weapon != cycle.weapon) {
+            rifle != cycle.rifle || pistol != cycle.pistol) {
             std::ostringstream line;
-            line << "NADINE-LOCAL-RIFLE-FULL-CYCLE action=abort"
+            line << "NADINE-LOCAL-RIFLE-CROSS-SLOT action=abort"
                  << " reason=generation-changed current=" << current_slot
                  << " draw=" << draw_state;
             write_log_line(line.str().c_str());
@@ -42486,16 +42490,17 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
             return;
         }
 
-        if (cycle.stage == Stage::kWaitWeaponOut) {
-            if (current_slot == 0 && draw_state == 2) {
+        if (cycle.stage == Stage::kWaitPistolOut) {
+            if (current_slot == 1 && draw_state == 2) {
                 if (cycle.weapon_out_since_ms == 0) {
                     cycle.weapon_out_since_ms = now;
                     std::ostringstream line;
-                    line << "NADINE-LOCAL-RIFLE-FULL-CYCLE action=weapon-out"
+                    line << "NADINE-LOCAL-RIFLE-CROSS-SLOT action=pistol-out"
                          << " player=0x" << std::hex
                          << reinterpret_cast<std::uintptr_t>(player)
-                         << " weapon=0x"
-                         << reinterpret_cast<std::uintptr_t>(weapon)
+                         << " pistol=0x"
+                         << reinterpret_cast<std::uintptr_t>(pistol)
+                         << " art=0x" << pistol_art
                          << std::dec << " current=" << current_slot
                          << " requested="
                          << *reinterpret_cast<const std::int32_t*>(
@@ -42506,44 +42511,92 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
                          << capture_hand_attached_slot_int(player);
                     write_log_line(line.str().c_str());
                 }
-                // Leave the newly enqueued PlayerPlayWeaponOverlayAction and
-                // vtable+0x300 WeaponPartial/IK refresh alive for several
-                // frames before starting Put.
-                if (now - cycle.weapon_out_since_ms >= 250) {
-                    const int pre_put_current = current_slot;
-                    const std::uint32_t pre_put_draw = draw_state;
-                    const int pre_put_selected =
+                // A real pistol -> long-gun selection enters the state-2
+                // cross-slot path and 0x1410A4130, pairing Put(old) and Get(new).
+                if (now - cycle.weapon_out_since_ms >= 500) {
+                    const int pre_switch_current = current_slot;
+                    const std::uint32_t pre_switch_draw = draw_state;
+                    const int pre_switch_selected =
                         *reinterpret_cast<const std::int32_t*>(
                             static_cast<const std::byte*>(controller) + 0x12C);
-                    const int pre_put_requested_hands =
+                    const int pre_switch_requested_hands =
                         *reinterpret_cast<const std::int32_t*>(
                             static_cast<const std::byte*>(controller) + 0x130);
-                    const bool put_call = safe_switch_to_weapon(
-                        player, 0xFFFFFFFFu, false);
+                    const bool switch_call = safe_switch_to_weapon(player, 0, true);
+                    int post_switch_current = -99;
+                    std::uint32_t post_switch_draw = 0xFFFFFFFFu;
+                    const bool post_readable = read_weapon_draw_state(
+                        player, post_switch_current, post_switch_draw);
+                    const int post_switch_selected =
+                        *reinterpret_cast<const std::int32_t*>(
+                            static_cast<const std::byte*>(controller) + 0x12C);
+                    const int post_switch_requested_hands =
+                        *reinterpret_cast<const std::int32_t*>(
+                            static_cast<const std::byte*>(controller) + 0x130);
+                    std::ostringstream line;
+                    line << "NADINE-LOCAL-RIFLE-CROSS-SLOT action=switch-to-rifle"
+                         << " route=outer"
+                         << " player=0x" << std::hex
+                         << reinterpret_cast<std::uintptr_t>(player)
+                         << " rifle=0x"
+                         << reinterpret_cast<std::uintptr_t>(rifle)
+                         << std::dec << " current=" << pre_switch_current
+                         << "->" << post_switch_current
+                         << " draw=" << pre_switch_draw << "->" << post_switch_draw
+                         << " selected=" << pre_switch_selected << "->"
+                         << post_switch_selected
+                         << " requestedHands=" << pre_switch_requested_hands
+                         << "->" << post_switch_requested_hands
+                         << " call=" << (switch_call ? 1 : 0)
+                         << " stateReadable=" << (post_readable ? 1 : 0);
+                    write_log_line(line.str().c_str());
+                    if (!switch_call) {
+                        cycle = {};
+                        return;
+                    }
+                    cycle.stage = Stage::kWaitRifleOut;
+                    cycle.stage_started_ms = now;
+                    cycle.weapon_out_since_ms = 0;
+                }
+            } else {
+                cycle.weapon_out_since_ms = 0;
+            }
+        } else if (cycle.stage == Stage::kWaitRifleOut) {
+            if (current_slot == 0 && draw_state == 2) {
+                if (cycle.weapon_out_since_ms == 0) {
+                    cycle.weapon_out_since_ms = now;
+                    std::ostringstream line;
+                    line << "NADINE-LOCAL-RIFLE-CROSS-SLOT action=rifle-out"
+                         << " player=0x" << std::hex
+                         << reinterpret_cast<std::uintptr_t>(player)
+                         << " rifle=0x"
+                         << reinterpret_cast<std::uintptr_t>(rifle)
+                         << std::dec << " current=" << current_slot
+                         << " requested="
+                         << *reinterpret_cast<const std::int32_t*>(
+                                static_cast<const std::byte*>(controller) + 0x124)
+                         << " draw=" << draw_state
+                         << " handSlot=" << capture_hand_attached_slot_int(player);
+                    write_log_line(line.str().c_str());
+                }
+                if (now - cycle.weapon_out_since_ms >= 500) {
+                    const int pre_put_current = current_slot;
+                    const std::uint32_t pre_put_draw = draw_state;
+                    const bool put_call = safe_weapon_controller_draw(
+                        controller, 0xFFFFFFFFu, false);
                     int post_put_current = -99;
                     std::uint32_t post_put_draw = 0xFFFFFFFFu;
                     const bool post_readable = read_weapon_draw_state(
                         player, post_put_current, post_put_draw);
-                    const int post_put_selected =
-                        *reinterpret_cast<const std::int32_t*>(
-                            static_cast<const std::byte*>(controller) + 0x12C);
-                    const int post_put_requested_hands =
-                        *reinterpret_cast<const std::int32_t*>(
-                            static_cast<const std::byte*>(controller) + 0x130);
                     std::ostringstream line;
-                    line << "NADINE-LOCAL-RIFLE-FULL-CYCLE action=put"
-                         << " route=outer"
-                         << " player=0x" << std::hex
+                    line << "NADINE-LOCAL-RIFLE-CROSS-SLOT action=put-rifle"
+                         << " route=inner player=0x" << std::hex
                          << reinterpret_cast<std::uintptr_t>(player)
-                         << " weapon=0x"
-                         << reinterpret_cast<std::uintptr_t>(weapon)
+                         << " rifle=0x"
+                         << reinterpret_cast<std::uintptr_t>(rifle)
                          << std::dec << " current=" << pre_put_current
                          << "->" << post_put_current
                          << " draw=" << pre_put_draw << "->" << post_put_draw
-                         << " selected=" << pre_put_selected << "->"
-                         << post_put_selected
-                         << " requestedHands=" << pre_put_requested_hands
-                         << "->" << post_put_requested_hands
                          << " call=" << (put_call ? 1 : 0)
                          << " stateReadable=" << (post_readable ? 1 : 0);
                     write_log_line(line.str().c_str());
@@ -42553,6 +42606,7 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
                     }
                     cycle.stage = Stage::kWaitHolstered;
                     cycle.stage_started_ms = now;
+                    cycle.weapon_out_since_ms = 0;
                 }
             } else {
                 cycle.weapon_out_since_ms = 0;
@@ -42565,15 +42619,14 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
             std::uintptr_t records_generation = 0;
             const bool attachment_readable =
                 seh_read_weapon_attachment_state(
-                    weapon, &parent_id, &attach_index) &&
+                    rifle, &parent_id, &attach_index) &&
                 seh_read_owner_attach_record_id(
                     player, attach_index, &attach_id, &records_generation);
             std::ostringstream line;
-            line << "NADINE-LOCAL-RIFLE-FULL-CYCLE action=complete"
-                 << " route=outer"
+            line << "NADINE-LOCAL-RIFLE-CROSS-SLOT action=complete"
                  << " player=0x" << std::hex
                  << reinterpret_cast<std::uintptr_t>(player)
-                 << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
+                 << " rifle=0x" << reinterpret_cast<std::uintptr_t>(rifle)
                  << " parent=0x" << parent_id
                  << " attachId=0x" << attach_id << std::dec
                  << " current=" << current_slot << " draw=" << draw_state
@@ -42594,9 +42647,9 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
         }
 
         if (cycle.stage != Stage::kIdle &&
-            now - cycle.stage_started_ms >= 8000) {
+            now - cycle.stage_started_ms >= 10000) {
             std::ostringstream line;
-            line << "NADINE-LOCAL-RIFLE-FULL-CYCLE action=timeout"
+            line << "NADINE-LOCAL-RIFLE-CROSS-SLOT action=timeout"
                  << " stage=" << static_cast<unsigned>(cycle.stage)
                  << " current=" << current_slot << " draw=" << draw_state
                  << " handSlot=" << capture_hand_attached_slot_int(player);
@@ -42628,7 +42681,7 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
     std::uint32_t pre_parent_id = 0;
     std::uint8_t pre_index = 0xFF;
     if (!seh_read_weapon_attachment_state(
-            weapon, &pre_parent_id, &pre_index)) {
+            rifle, &pre_parent_id, &pre_index)) {
         return;
     }
     std::uint32_t pre_attach_id = 0;
@@ -42638,10 +42691,10 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
         records_generation == 0 ||
         pre_index != static_cast<std::uint8_t>(right_hand_index) ||
         pre_attach_id != 0x61A48E01u ||
-        !initial_local_nadine_rifle_transition_dwell_ready(
-            player, weapon, records_generation) ||
-        !claim_initial_local_nadine_rifle_full_cycle(
-            player, weapon, records_generation)) {
+        !initial_local_nadine_cross_slot_dwell_ready(
+            player, rifle, records_generation) ||
+        !claim_initial_local_nadine_cross_slot_cycle(
+            player, rifle, records_generation)) {
         return;
     }
 
@@ -42651,7 +42704,7 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
         static_cast<const std::byte*>(controller) + 0x12C);
     const int pre_requested_hands_slot = *reinterpret_cast<const std::int32_t*>(
         static_cast<const std::byte*>(controller) + 0x130);
-    const bool draw_call = safe_switch_to_weapon(player, 0, true);
+    const bool draw_call = safe_switch_to_weapon(player, 1, true);
     int post_current_slot = -99;
     std::uint32_t post_draw_state = 0xFFFFFFFFu;
     const bool post_state_readable = read_weapon_draw_state(
@@ -42664,13 +42717,14 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
         static_cast<const std::byte*>(controller) + 0x130);
 
     std::ostringstream line;
-    line << "NADINE-LOCAL-RIFLE-FULL-CYCLE action=draw route=outer player=0x"
+    line << "NADINE-LOCAL-RIFLE-CROSS-SLOT action=draw-pistol route=outer player=0x"
          << std::hex
          << reinterpret_cast<std::uintptr_t>(player)
          << " controller=0x"
          << reinterpret_cast<std::uintptr_t>(controller)
-         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
-         << " art=0x" << kCoopRifleArtId
+         << " rifle=0x" << reinterpret_cast<std::uintptr_t>(rifle)
+         << " pistol=0x" << reinterpret_cast<std::uintptr_t>(pistol)
+         << " pistolArt=0x" << pistol_art
          << " records=0x" << records_generation
          << " parent=0x" << pre_parent_id
          << " id=0x" << pre_attach_id
@@ -42691,10 +42745,11 @@ void run_initial_local_nadine_rifle_full_draw_then_holster_game_thread() {
     write_log_line(line.str().c_str());
 
     if (draw_call) {
-        cycle.stage = Stage::kWaitWeaponOut;
+        cycle.stage = Stage::kWaitPistolOut;
         cycle.player = player;
         cycle.controller = controller;
-        cycle.weapon = weapon;
+        cycle.rifle = rifle;
+        cycle.pistol = pistol;
         cycle.records_generation = records_generation;
         cycle.stage_started_ms = now;
         cycle.weapon_out_since_ms = 0;
@@ -48890,8 +48945,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09zx "
-        "(rejected cold Nadine outer switch cycle disabled)");
+        "TLL co-op runtime init 2026-08-09zy "
+        "(cold Nadine pistol-rifle cross-slot refresh cycle)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -48981,7 +49036,7 @@ DWORD WINAPI install_hook(void*) {
         boot_log_line(
             "ProcessWeapon init probe disabled after conclusive gy runtime");
     }
-    if constexpr (kEnableInitialLocalNadineRifleFullDrawThenHolster &&
+    if constexpr (kEnableInitialLocalNadineCrossSlotRefreshCycle &&
                    !kEnableLegacyNadinePistolHipAttachment) {
         install_player_holster_execute_callsite_probe();
     }

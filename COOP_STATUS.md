@@ -18865,3 +18865,66 @@ controller boundary did not. The next static frontier is the local input/action
 producer that precedes `SwitchToWeapon`, including any local-view presentation
 or inventory-generation side effect it owns. Build `zx` disables the rejected
 one-shot cycle; no runtime test is authorized for that frontier yet.
+
+### 2026-08-09 STATIC / IMPLEMENTED: reproduce the real pistol-to-rifle cross-slot transaction (`zy`)
+
+The local input frontier is now resolved far enough to authorize one distinct
+test. `Player_ProcessWeaponAndGrenadeInputActions 0x1410E71D0` is the exact
+per-frame local scheduler: it queries `select-weapon-press`,
+`select-longgun`, `select-pistol` and `select-cycle` through Player input state,
+then reaches Player's controller at `Player+0x1D88`. Its ordinary selection
+branch calls PlayerWeaponController vtable `+0x40 =
+PlayerWeaponController_SwitchToWeapon 0x1410A1C10`; its native Put branch calls
+vtable `+0x48 = PlayerWeaponController_ApplyWeaponSwitch 0x1410A28A0` with the
+negative-slot sentinel. The adjacent `0x140E79E10` path is not an omitted rifle
+presentation writer: its downstream `0x140E799E0` only updates the two gadget
+indices and publishes `player-selected-gadget` / `player-unselected-gadget`.
+The post-success `switched-weapon-count` branch independently terminates in a
+global statistic increment and receives no Player or ProcessWeapon object.
+
+The important missing distinction is not another wrapper around the same cold
+slot. When controller state is literal 2 (`WeaponOut`) and the requested slot
+differs from the current slot, `ApplyWeaponSwitch` reaches the dedicated
+`PlayerWeaponController_StartCrossSlotSwitch 0x1410A4130`. That function first
+removes the old channel-1 transition, then constructs and enqueues a
+`PlayerPutGunAwayAction` for the current weapon together with a
+`PlayerGetWeaponInHandAction` for the target weapon and enters controller state
+5. A cold slot-zero Draw followed by a negative-slot Put never exercises this
+paired transition. The function is now named in the single IDB.
+
+Three independent evidence types therefore converge: (1) the exact local-input
+call graph and vtable identities; (2) the state-2/different-slot dataflow and
+the two concrete action constructors inside `0x1410A4130`; and (3) the earlier
+manual runtime sequence. In that sequence the user first drew a pistol while
+the cold rifle overlapped it, then selected the rifle and put it away; only
+after that did the rifle move away from the local hand. Every rejected
+synthetic experiment instead began with the cold rifle and performed only a
+same-slot Draw/Put lifecycle.
+
+Competing hypotheses are explicit. **Xcross** predicts that the authored
+pistol-to-rifle paired Put/Get transition rebuilds the stale local presentation,
+after which the native rifle Put leaves no rifle glued to the hand.
+**Xsame** predicts the entire sequence completes but the pixels remain, proving
+the historical manual success depended on another context or timing detail.
+**Xunsafe** is any unavailable pistol, wrong art or slot, missing stage, repeated
+cycle, crash, stall, body/pistol regression or controller state that does not
+return to holstered.
+
+Build `zy` is a one-shot exact-role-B discriminator. Only after 750 ms of stable
+legacy-Nadine cold state (`current=-1`, `draw=0`) with the exact slot-zero rifle
+physically resolving to `rightHand` and a valid non-rifle pistol in slot one, it
+calls the outer stock switch to pistol. It waits for stable pistol
+`current=1/draw=2`, dwells 500 ms, switches through the same outer boundary to
+the rifle, waits for stable rifle `current=0/draw=2`, dwells another 500 ms, and
+finally uses the native inner negative-slot Put. The generation is claimed
+before the first call and cannot repeat.
+
+Written falsifiable prediction before launch: the log contains exactly one
+ordered `draw-pistol -> pistol-out -> switch-to-rifle -> rifle-out -> put-rifle
+-> complete` sequence. The middle switch must traverse the distinct state-2
+cross-slot route, and completion must report `current=-1`, `draw=0` with the
+rifle no longer attached to `rightHand`. If the local rifle visibly leaves
+Nadine's hand, **Xcross** wins. An exact complete sequence with unchanged pixels
+selects **Xsame**. No runtime was used to choose this boundary. Release build
+`2026-08-09zy (cold Nadine pistol-rifle cross-slot refresh cycle)` succeeds;
+all rejected renderer, visibility, attachment and same-slot tests remain off.

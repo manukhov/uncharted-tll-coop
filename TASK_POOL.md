@@ -3189,12 +3189,17 @@ Do not reopen these as the first move:
       slots were runtime-zero. Correct the overbroad `zu` owner inference:
       `DisableMainView` is rejected, but `fy` still proves all matching rifle
       geometry belongs to exact ProcessWeapon actors.
-- [ ] Run bounded build `zw`, replacing only `zs`'s direct inner vtable `+0x48`
-      calls with the real outer `PlayerWeaponController_SwitchToWeapon +0x40`.
-      Require one Draw -> WeaponOut -> Put -> complete sequence, exact slot-zero
-      rifle, `+0x12C/+0x130` audit, final `current=-1/draw=0/gun_holster`, and no
-      other mutation. Disappearance selects Oouter; complete unchanged pixels
-      select Oinner-same and move the frontier before SwitchToWeapon.
+- [x] Reject build `zw`: the outer `PlayerWeaponController_SwitchToWeapon +0x40`
+      successfully drew slot zero but synchronously rejected the negative Put
+      sentinel. Together with `zs`'s completed inner Draw/Put, this closes both
+      same-slot controller entry levels; do not retry them.
+- [ ] Run bounded build `zy`, the first test of the distinct state-2 cross-slot
+      path `PlayerWeaponController_StartCrossSlotSwitch 0x1410A4130`. On exact
+      cold local role-B Nadine, execute pistol-out -> rifle-out -> native rifle
+      Put once. Require the ordered six markers, final `current=-1/draw=0`, no
+      duplicate or crash, and ask whether the rifle finally leaves the local
+      hand. Visible repair selects Xcross; exact completion with unchanged pixels
+      selects Xsame and forbids another controller-lifecycle retry.
 - [x] Recover Nadine's stock Player holster mapping statically. Result: standard
       pistol art directly selects `targSpineProp` and bypasses character
       pelvis/leg selection; the original Nadine table contains no
