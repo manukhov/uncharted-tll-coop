@@ -3863,6 +3863,16 @@ Do not reopen these as the first move:
       unique allowlist exclude Chloe/NPC/strap/other WeaponPartial states.
       Release build passes. Run the one combined P99 draw/Put prediction recorded
       in `COOP_STATUS.md`; do not split it into more diagnostic launches.
+      **RUNTIME REJECTED (`aal`):** both processes installed the combined
+      `aak+aal` package and reached co-op network startup, then crashed during
+      checkpoint load before any replacement row completed. The AnimStateLayer
+      wrapper's five-argument ABI is independently correct, but this run cannot
+      distinguish the global command-scope detour, a failure inside the scoped
+      remap resolver, or the separately untested `aak` post-handoff executing on
+      cold state. Build `aam` disables both new paths and restores exact confirmed
+      `aaj` behavior without requesting another test. Before any future launch,
+      isolate one failing boundary statically and capture provenance before the
+      original resolver/post-rebind can fault.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

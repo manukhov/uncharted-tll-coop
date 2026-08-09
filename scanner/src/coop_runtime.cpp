@@ -1971,6 +1971,11 @@ constexpr bool kEnableProcessWeaponInitProbe = false;
 // gun_holster request. The rejected IK/knowledge writes remain disabled.
 constexpr bool kEnableLegacyNadineHolsterIkVerification = false;
 constexpr bool kEnableLegacyNadinePistolHipAttachment = true;
+// The combined aak+aal runtime crashed both processes during checkpoint load.
+// Until those two changes are isolated, retain the last visually confirmed aaj
+// behavior: redirect the selector inside the stock Put action, accepting its
+// known incomplete handoff instead of executing the unvalidated post-rebind.
+constexpr bool kEnableCompleteStockP99HolsterHandoff = false;
 // Builds gz/ha safely exercised the full stock rebind but targeted 0x8075397D,
 // the P99 rather than the visible Mazur. Retarget the one-shot boundary to the
 // actual rifle and resolve its inventory slot by art instead of assuming slot 0.
@@ -1985,11 +1990,12 @@ constexpr bool kEnableInitialLocalNadineRifleRebind = true;
 constexpr bool kEnableWeaponPartialSelectionProbe = false;
 constexpr bool kEnableWeaponPartialFinalRequestProbe = false;
 constexpr bool kEnableWeaponPartialNormalRequestProbe = false;
-// The exact WeaponPartial layer overwrites the compatible player-mesh leg pose
-// at weight one. Retarget only complete Player clip families on legacy Nadine;
-// the normal request hook caches the concrete layer so the per-frame command
-// hook never scans the AnimControl registry.
-constexpr bool kEnableLegacyNadineWeaponPartialLegClipRetarget = true;
+// Static evidence still shows that the exact WeaponPartial layer overwrites the
+// compatible player-mesh leg pose at weight one. The first scoped implementation
+// crashed both processes before a completed replacement marker, so keep every
+// new command/resolver hook out of production until the failing boundary is
+// isolated without another visual test.
+constexpr bool kEnableLegacyNadineWeaponPartialLegClipRetarget = false;
 // Builds zs/zw reject a single-slot rifle Draw -> Put through both controller
 // entry levels. The historical visible recovery first drew the pistol, then
 // switched pistol -> rifle and put the rifle away. That cross-slot state-2 path
@@ -41922,13 +41928,22 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
 
     const NadinePistolHolsterExecuteContext previous_context =
         g_nadine_pistol_holster_execute_context;
-    // The stock executor requires its first rebind to select targSpineProp and
-    // then performs a second rebind plus the record-transform/blend handoff.
-    // Redirecting its internal selector makes the targSpineProp check fail and
-    // skips that entire tail. Keep the selector pass-through until the stock
-    // action has completed, then run one self-contained controller rebind whose
-    // selector has no caller-side target-id postcondition.
-    g_nadine_pistol_holster_execute_context = {};
+    if constexpr (kEnableCompleteStockP99HolsterHandoff) {
+        // The stock executor requires its first rebind to select targSpineProp
+        // and then performs a second rebind plus the record-transform/blend
+        // handoff. The unvalidated aak path keeps this pass-through and performs
+        // a separate concrete rebind after completion.
+        g_nadine_pistol_holster_execute_context = {};
+    } else {
+        // Restore the last visually confirmed aaj boundary while aak and aal are
+        // isolated. This deliberately retains aaj's known early-exit/jerk defect.
+        g_nadine_pistol_holster_execute_context = {};
+        if (before.readable && before.executed == 0 && owner_index >= 0 &&
+            look_valid && look == kLegacyNadineAttachTargetLookId) {
+            g_nadine_pistol_holster_execute_context.player = before.player;
+            g_nadine_pistol_holster_execute_context.active = true;
+        }
+    }
 
     if (g_original_player_holster_weapon_anim_action_execute != nullptr) {
         g_original_player_holster_weapon_anim_action_execute(action);
@@ -41945,23 +41960,25 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
         capture_player_holster_anim_action(action);
     bool post_rebind_attempted = false;
     bool post_rebind_completed = false;
-    if (before.readable && before.executed == 0 && owner_index >= 0 &&
-        look_valid && look == kLegacyNadineAttachTargetLookId &&
-        pistol_was_in_right_hand && pistol_slot >= 0 &&
-        stock_action_after.executed != 0 &&
-        local_stock_after[pistol_slot].readable &&
-        local_stock_after[pistol_slot].weapon ==
-            local_before[pistol_slot].weapon &&
-        local_stock_after[pistol_slot].holster_handoff_finished != 0) {
-        void* controller = nullptr;
-        if (seh_read_player_weapon_controller(before.player, &controller)) {
-            post_rebind_attempted = true;
-            g_nadine_pistol_holster_execute_context.player = before.player;
-            g_nadine_pistol_holster_execute_context.active = true;
-            post_rebind_completed =
-                seh_call_player_weapon_controller_rebind_to_holster(
-                    controller, local_stock_after[pistol_slot].weapon);
-            g_nadine_pistol_holster_execute_context = {};
+    if constexpr (kEnableCompleteStockP99HolsterHandoff) {
+        if (before.readable && before.executed == 0 && owner_index >= 0 &&
+            look_valid && look == kLegacyNadineAttachTargetLookId &&
+            pistol_was_in_right_hand && pistol_slot >= 0 &&
+            stock_action_after.executed != 0 &&
+            local_stock_after[pistol_slot].readable &&
+            local_stock_after[pistol_slot].weapon ==
+                local_before[pistol_slot].weapon &&
+            local_stock_after[pistol_slot].holster_handoff_finished != 0) {
+            void* controller = nullptr;
+            if (seh_read_player_weapon_controller(before.player, &controller)) {
+                post_rebind_attempted = true;
+                g_nadine_pistol_holster_execute_context.player = before.player;
+                g_nadine_pistol_holster_execute_context.active = true;
+                post_rebind_completed =
+                    seh_call_player_weapon_controller_rebind_to_holster(
+                        controller, local_stock_after[pistol_slot].weapon);
+                g_nadine_pistol_holster_execute_context = {};
+            }
         }
     }
     g_nadine_pistol_holster_execute_context = previous_context;
@@ -50150,8 +50167,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-09aal "
-        "(complete stock P99 handoff; scoped Nadine Player leg-clip retarget)");
+        "TLL co-op runtime init 2026-08-09aam "
+        "(rollback to confirmed aaj P99 boundary; aak+aal disabled after crash)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

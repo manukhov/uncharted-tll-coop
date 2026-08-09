@@ -19617,3 +19617,35 @@ Chloe, body animation, grenades and frame pacing must remain unchanged. A crash,
 missing scoped row, wrong resolved id, unchanged through-torso trajectory, lost
 P99 hip endpoint or Mazur regression falsifies the corresponding boundary. No
 game process was started during implementation.
+
+### 2026-08-09 RUNTIME REJECTED: combined `aak+aal` package crashes during checkpoint load
+
+The single authorized combined run falsified `aal` before a visual cycle. Both
+PID 20352 and PID 18328 reached marker `2026-08-09aal`, installed the normal
+WeaponPartial request relay, the resolver and AnimStateLayer command-scope
+detours, installed the P99 action/selector hooks, assigned co-op roles and started
+the state network. Both then crashed as the checkpoint loaded. Neither process
+completed a `NADINE-WEAPON-PARTIAL-LEG-CLIP` row. The production crash observer
+was disabled and Windows Application/WER supplied no fault record, so no exact
+exception address is available from this run.
+
+The absence of a completed row does **not** prove that no replacement started:
+the marker was intentionally emitted after the original remap resolver returned.
+The remaining competing causes are therefore **Acommand-scope** (the new global
+`AnimStateLayer_CreateAnimCommands 0x14189EA60` detour), **Aresolver-target** (a
+scoped donor entered `AnimSetRemap_ResolveAnimationId 0x1417CA2E0` but failed
+inside/before return), and **Apost-handoff** (the independently untested `aak`
+post-executor concrete rebind ran during cold holster initialization). The five-
+argument AnimStateLayer ABI was rechecked directly in IDA and matches the wrapper,
+so the simple missing-argument theory is rejected. The 16 clip ids themselves
+remain STATIC evidence only; runtime safety of injecting them through this
+AnimationSet resolver context is rejected. The older **Wpart-overwrite** owner
+finding also remains STATIC and is not invalidated by a packaging crash.
+
+Build `2026-08-09aam` disables both unvalidated execution paths and restores the
+last visually confirmed `aaj` P99 selector boundary, including its known early-
+exit/jerky handoff. Consequently no WeaponPartial request cache, resolver detour
+or AnimStateLayer detour is installed, and the separate `aak` post-rebind cannot
+execute. Release compilation succeeded. No validation launch is requested: the
+next runtime is forbidden until static analysis isolates one exact failing
+boundary and supplies a pre-return crash marker or equivalent fault provenance.
