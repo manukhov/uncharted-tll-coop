@@ -992,6 +992,18 @@ FUNCTIONS = {
         "and queries PlayerWeaponController vtable +0x3C0 for the mapped "
         "overlay record before publishing the resulting animation id.",
     ),
+    0x14108B940: (
+        "PlayerWeaponAnimControl_RequestCustomWeaponPart",
+        "PlayerWeaponAnimControl vtable +0x28. Stores the selected weapon "
+        "overlay animation id at control+0x18, requests custom-weapon-part "
+        "(or its feather variant) on WeaponPartial 0xE2B990B9, and requests "
+        "the corresponding s_weapon-out state.",
+    ),
+    0x141AD5DC0: (
+        "AnimSnapshotNodeInstanceZero_Create",
+        "Creates the 0x40-byte AnimSnapshotNodeInstanceZero for authored "
+        "anim-node-instance-0 0x95CBA180 and installs its exact RTTI vtable.",
+    ),
     0x14109D450: (
         "PlayerWeaponController_MapChloeBaseWeaponOverlayId",
         "Read-only helper used by controller overlay lookup. When the animation "

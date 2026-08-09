@@ -186,6 +186,137 @@ def find_all(data: bytes, needle: bytes) -> list[int]:
         start = offset + 1
 
 
+def audit_pak_animation_masks(data: bytes, labels: list[str]) -> None:
+    """Resolve animation registrations in a paged PAK and print joint masks.
+
+    The animation PAK uses page-relative pointers.  Its fixup table records the
+    source page, target page, and source-local pointer location for every such
+    pointer.  Animation registrations live in page zero as
+    ``{StringId, 0, slot_offset}``; the slot resolves to a resource descriptor,
+    whose pointer at +0x28 resolves to the raw ANIM object.
+    """
+
+    if len(data) < 0x2C:
+        raise ValueError("--animation-mask requires a paged animation PAK")
+
+    page_count = struct.unpack_from("<I", data, 0x10)[0]
+    page_table_offset = struct.unpack_from("<I", data, 0x14)[0]
+    if not page_count or page_count > 0x10000:
+        raise ValueError(f"invalid PAK page count: {page_count}")
+    if page_table_offset + page_count * 0xC > len(data):
+        raise ValueError("truncated PAK page table")
+
+    pages: list[tuple[int, int]] = []
+    for index in range(page_count):
+        file_offset, size, _flags = struct.unpack_from(
+            "<III", data, page_table_offset + index * 0xC
+        )
+        if file_offset + size > len(data):
+            raise ValueError(f"PAK page {index} extends beyond the entry")
+        pages.append((file_offset, size))
+
+    metadata_end = pages[0][0]
+    if metadata_end < page_table_offset + page_count * 0xC:
+        raise ValueError("PAK page zero overlaps its metadata")
+
+    fixups: dict[tuple[int, int], list[int]] = {}
+    for offset in range(0, metadata_end - 7, 8):
+        source_page, target_page, pointer_location = struct.unpack_from(
+            "<HHI", data, offset
+        )
+        if source_page >= page_count or target_page >= page_count:
+            continue
+        if pointer_location + 8 > pages[source_page][1]:
+            continue
+        fixups.setdefault((source_page, pointer_location), []).append(target_page)
+
+    def resolve_pointer(source_page: int, pointer_location: int) -> tuple[int, int]:
+        targets = fixups.get((source_page, pointer_location), [])
+        unique_targets = sorted(set(targets))
+        if len(unique_targets) != 1:
+            raise ValueError(
+                "expected one PAK pointer fixup for "
+                f"page {source_page} +0x{pointer_location:X}; "
+                f"found {unique_targets}"
+            )
+        target_page = unique_targets[0]
+        source_offset = pages[source_page][0] + pointer_location
+        target_local = struct.unpack_from("<Q", data, source_offset)[0]
+        if target_local >= pages[target_page][1]:
+            raise ValueError(
+                f"PAK pointer target page {target_page} +0x{target_local:X} "
+                "is out of range"
+            )
+        return target_page, target_local
+
+    page_zero_offset, page_zero_size = pages[0]
+    print(
+        f"pak_pages={page_count} page_table=0x{page_table_offset:X} "
+        f"fixups={sum(len(values) for values in fixups.values())}"
+    )
+    for label in labels:
+        animation_id, _original = parse_id(label)
+        registration_signature = struct.pack("<II", animation_id, 0)
+        registrations: list[tuple[int, int]] = []
+        for hit in find_all(
+            data[page_zero_offset : page_zero_offset + page_zero_size],
+            registration_signature,
+        ):
+            if hit & 7 or hit + 16 > page_zero_size:
+                continue
+            slot_offset = struct.unpack_from("<Q", data, page_zero_offset + hit + 8)[0]
+            if slot_offset > 0xFFFFFFFF or (0, slot_offset) not in fixups:
+                continue
+            registrations.append((hit, int(slot_offset)))
+
+        if not registrations:
+            print(
+                f"animation={label!r} id=0x{animation_id:08X} "
+                "registrations=0"
+            )
+            continue
+
+        for registration_offset, slot_offset in registrations:
+            descriptor_page, descriptor_local = resolve_pointer(0, slot_offset)
+            if descriptor_local + 0x30 > pages[descriptor_page][1]:
+                raise ValueError(
+                    f"truncated animation descriptor for 0x{animation_id:08X}"
+                )
+            raw_page, raw_local = resolve_pointer(
+                descriptor_page, descriptor_local + 0x28
+            )
+            raw_offset = pages[raw_page][0] + raw_local
+            if raw_offset + 0x20 > len(data) or data[raw_offset : raw_offset + 4] != b"\x02\x01CA":
+                raise ValueError(
+                    f"0x{animation_id:08X} resolved to a non-ANIM object "
+                    f"at 0x{raw_offset:X}"
+                )
+
+            group_count = struct.unpack_from("<H", data, raw_offset + 0xC)[0]
+            group_table_offset = struct.unpack_from("<I", data, raw_offset + 0x14)[0]
+            mask_offset = raw_offset + group_table_offset + group_count * 0x10
+            if group_count == 0 or mask_offset + 16 > len(data):
+                raise ValueError(
+                    f"invalid ANIM group table for 0x{animation_id:08X}"
+                )
+            mask_words = struct.unpack_from("<QQ", data, mask_offset)
+            joints = [
+                joint
+                for joint in range(128)
+                if mask_words[joint // 64] & (1 << (63 - joint % 64))
+            ]
+            rendered_joints = ",".join(str(joint) for joint in joints)
+            print(
+                f"animation={label!r} id=0x{animation_id:08X} "
+                f"registration=page0+0x{registration_offset:X} "
+                f"slot=0x{slot_offset:X} "
+                f"descriptor=page{descriptor_page}+0x{descriptor_local:X} "
+                f"raw=0x{raw_offset:X} groups={group_count} "
+                f"mask={mask_words[0]:016X}:{mask_words[1]:016X} "
+                f"joints=[{rendered_joints}]"
+            )
+
+
 def format_context(
     data: bytes, offset: int, radius: int, known: dict[int, list[str]]
 ) -> str:
@@ -962,6 +1093,16 @@ def build_parser() -> argparse.ArgumentParser:
         default="gestures.bin",
         help="DC00 gesture settings entry used by --gesture-node-audit",
     )
+    parser.add_argument(
+        "--animation-mask",
+        action="append",
+        default=[],
+        metavar="STRING_OR_U32",
+        help=(
+            "resolve this animation in a paged PAK and print its authored "
+            "joint ValidBits mask; repeatable"
+        ),
+    )
     parser.add_argument("--min-string", type=int, default=3)
     parser.add_argument("--limit", type=int, default=200)
     return parser
@@ -1001,15 +1142,20 @@ def main() -> int:
             or args.player_mesh_look
             or args.map_source
             or args.gesture_node_audit
+            or args.animation_mask
         ):
             raise ValueError(
                 "--entry is required with --id, --strings, "
-                "--player-mesh-look, --map-source or --gesture-node-audit"
+                "--player-mesh-look, --map-source, --gesture-node-audit "
+                "or --animation-mask"
             )
         return 0
 
     data = archive.extract(args.entry)
     print(f"entry={args.entry} bytes={len(data)}")
+
+    if args.animation_mask:
+        audit_pak_animation_masks(data, args.animation_mask)
 
     if args.gesture_node_audit:
         gesture_data = archive.extract(args.gesture_settings_entry)

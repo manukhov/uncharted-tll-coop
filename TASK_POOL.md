@@ -3564,6 +3564,19 @@ Do not reopen these as the first move:
       missing sling is a separate uninstantiated layer), and **Wstance** (the
       observed cover-low-l/generic split is only stance state). Require three
       evidence kinds and a prediction that separates them before runtime.
+      **STATIC:** the new paged-PAK mask audit proves all live WeaponPartial
+      parts own joints 21..35, including right shoulder plus both elbows; adds
+      own 16..20, 40..42 and 58..62. Leg/back base pairs cover the same union but
+      put joints 33..35 in the add, so Wbase-only is rejected as sufficient and
+      the later WeaponPartial can re-own the broken arm. Strap siblings instead
+      have one group with local joints 0..15 and travel through the separate
+      ProcessWeapon `play-animation` route, confirming Wstrap-layer. The direct
+      producer is PlayerPlayWeaponOverlayAction -> controller vtable +0x3C0 ->
+      PlayerWeaponAnimControl vtable +0x28 / 0x14108B940 ->
+      custom-weapon-part. Leading next discriminator is the still-active
+      Chloe-base pre-map at 0x14109D450: Chloe contains direct ak47/grip-opener
+      rows that vill-nadine-08 lacks. Capture its input/output and the final
+      selected record on one controlled idle pistol cycle before bypassing it.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

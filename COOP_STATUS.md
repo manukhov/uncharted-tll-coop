@@ -18171,3 +18171,74 @@ absent from both captured trees. Before another runtime build, resolve the joint
 ValidBits of the exact `--part/--add/--strap` clips, compare them with the
 corresponding `p-holster-leg/back` base clips, and prove the layer/command order
 that first writes or overwrites the arm, torso and sling rows.
+
+### 2026-08-09 STATIC: WeaponPartial owns the broken arm after the base holster pose
+
+The installed animation PAK is now decoded through its real page/fixup graph.
+`scripts/psarc_asset_audit.py --animation-mask` resolves the page-zero
+`{StringId, slot}` registration, resource descriptor and raw ANIM object, then
+prints the MSB-first 128-joint ValidBits mask. All four live Nadine leaves and
+all four Chloe controls use byte-identical role masks:
+
+- the `--part` clips own joints `21..35` (`mask=000007FFF0000000`), including
+  `r_shoulder 33`, `l_elbow 34` and `r_elbow 35`;
+- the `--add` clips own joints `16..20,40..42,58..62`
+  (`mask=0000F80000E0003E`), including both hand-prop attachments and `neck 42`.
+
+The base `p-holster-leg` and `p-holster-back` pairs cover the same union, but
+split it differently: their parts own `21..32`, while their adds own `33..35`.
+Therefore **Wbase-only is STATIC REJECTED as a sufficient explanation**. Even a
+correct base leg replacement is followed by WeaponPartial content that owns the
+visible right shoulder and both elbows again. This explains why the earlier
+player-mesh/leg experiments could change selection or attachment without
+repairing the free arm.
+
+The command ownership converges independently. `AnimControl_CreateAnimCommands
+0x14172C370` dispatches active registry entries in stored order; retained runtime
+inventories put the type-2 `WeaponPartial 0xE2B990B9` after the base movement
+layer. `AnimStateLayer_CreateAnimCommands 0x14189EA60` then emits its own state
+snapshot commands and final per-layer merge. The direct native producer is
+`PlayerPlayWeaponOverlayAction_OnStart 0x141097450`: it resolves a movement-
+context overlay through `PlayerWeaponController` vtable `+0x3C0`, then passes
+the selected animation id to vtable `+0x28`, now
+`PlayerWeaponAnimControl_RequestCustomWeaponPart 0x14108B940`. That method stores
+the id at control `+0x18` and requests `custom-weapon-part` (or the feather
+variant) on the exact WeaponPartial layer. The authored state root is a weight-1
+blend whose dynamic child is `anim-node-instance-0 0x95CBA180`; this is the
+externally selected animation, not a second base holster graph.
+
+The sling is conclusively separate. Every matching `ak47-*--strap` asset has one
+group and local joints `0..15` (`FFFF000000000000`), not Player-skeleton arm
+joints. `PlayerWeaponAnimControl_UpdatePropAnimations 0x14108DAC0` publishes its
+authored record through `PlayerWeaponAnimControl_PublishPropPlayAnimation
+0x14108D780` to `ProcessWeapon`, whose child at `+0xAE0` is the independently
+animated `ProcessWeaponStrap`. The strap assets were absent from the Player
+WeaponPartial trees captured by `zk`, exactly as this separate route predicts.
+**Wstrap-layer is STATIC CONFIRMED**; collision and Player-joint retargeting
+cannot restore the missing sling.
+
+The leading arm hypothesis is now the hard Chloe grip map, not the already
+rejected player-mesh record install. `PlayerAnimOwner_UsesChloeBaseSkeleton
+0x1410EB3E0` still sees the Chloe-born internal skeleton after the visual Nadine
+swap. Consequently `PlayerWeaponController_MapChloeBaseWeaponOverlayId
+0x14109D450` consults `*chloe-weapon-anim-overlay-map*` before vtable `+0x3C0`
+selects the WeaponPartial record. The asset tables independently show the same
+asymmetry: Chloe has direct rows such as `lg1h-ak47-right-hand ->
+clo-gun-grip-opener-r-hand--add`, `lg2h-ak47-aim-hands ->
+clo-gun-grip-opener--add`, and the `ak47-reload-*--arms` family; all are absent
+from `vill-nadine-08`. Installing Nadine's `player-mesh` record in `zh` could not
+disable this separate skeleton-gated Chloe map, matching its observed zero
+effect.
+
+The remaining competitors are explicit. **Warm-map** predicts bypassing only
+the Chloe-base pre-map for legacy Nadine selects the original weapon overlay and
+improves the free-arm/pistol/rifle grip. **Wpose** predicts the original record
+still resolves the same bad clip or a pose incompatible with Nadine proportions,
+so the selected id changes but the arm does not. **Wstance** remains a control:
+the captured Nadine `cover-low-l` versus Chloe generic holster split may reflect
+their different movement contexts and is not itself evidence of the bug. Before
+mutation, the next bounded hook must capture the map input/output and final
+vtable-`+0x3C0` record for one idle pistol draw/put on each look. No game or
+injection was started during this static pass. The two newly resolved functions
+were persisted in the single `ida/tll.i64` (`1595 functions, 52 data names`;
+`save_database returned True`) and independently verified after MCP restart.
