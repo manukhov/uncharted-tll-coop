@@ -19480,3 +19480,28 @@ Missing rows select C3 and forbid another blind launch; verified rows with no
 corresponding visual change select C2. Release compilation completed
 successfully through `scanner/build-release.cmd`; no game process was started
 during implementation.
+
+### 2026-08-09 RUNTIME CONFIRMED: corrected Mazur-back and P99-hip geometry (`aaj`)
+
+The written **C1** outcome won. On fresh role-B/local-Nadine PID 5260 the exact
+one-shot row reported art `0x33E29A1B`, slot 1, attachment
+`rightHand 0x61A48E01` index 16 changing to `targSpineProp 0x00AD047A`
+index 39, with `call=1`, `parentOwner=1` and `verified=1`. Three later retained
+Player generations independently produced the same verified transition. The
+user saw the cold Mazur remain on the hand only during the first few seconds of
+Player initialization and then move to Nadine's back. This confirms the stock
+rebind and its corrected rifle identity; the remaining startup delay is a
+timing/lifecycle issue rather than an unresolved attachment target.
+
+After one draw/Put cycle of the gold suppressed P99, the user saw that exact
+pistol return to Nadine's thigh holster. The Mazur stayed separate. This visually
+confirms the art-scoped `gun_holster -> pistolHolster` selector and rejects C2/C3
+for the tested inventory. No crash or body/grenade regression occurred.
+
+The same test exposes a separate animation defect, deliberately outside the
+`aaj` prediction: the Player draw/Put motion carries the pistol through Nadine's
+torso, and the arms/hands can remain intersecting inside the body. Physical
+weapon attachments are now frozen as confirmed. The next P0 is the
+Player-compatible WeaponPartial/upper-body retarget path; native NPC overlay
+clips remain forbidden because their group count and masks are incompatible.
+The rifle sling also remains a separate ProcessWeaponStrap/content task.

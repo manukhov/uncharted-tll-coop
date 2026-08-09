@@ -2805,10 +2805,18 @@ Do not reopen these as the first move:
       `0x8075397D` pistol and redirect its generic `gun_holster` request to the
       copied native-Nadine `pistolHolster`. Remove the obsolete BB alias. Build
       succeeds; both paths have exact one-shot ownership and inverse draw guards.
-- [ ] Run the single written `aaj` visual test. Before input, the local Nadine
+- [x] Run the single written `aaj` visual test. Before input, the local Nadine
       Mazur must leave `rightHand` for `targSpineProp`; after one P99 draw/Put,
       only the P99 must move from `gun_holster` to `pistolHolster`. Do not test
-      the separate arm-retarget or sling issues in this pass.
+      the separate arm-retarget or sling issues in this pass. **RUNTIME
+      CONFIRMED:** exact art `0x33E29A1B` emitted a one-shot verified
+      `rightHand -> targSpineProp` rebind across four retained Player generations;
+      the user saw the Mazur move to the back after the first few initialization
+      seconds. One suppressed-P99 draw/Put visibly returned exact art
+      `0x8075397D` to Nadine's thigh. Physical attachment geometry is now frozen.
+      The same test confirmed the separate remaining defects: the Player
+      animation carries the pistol through the torso and leaves the arms/hands
+      intersecting the body.
 
 - [x] Recover the prior Nadine weapon history and keep the confirmed general
       weapon-display fixes. `ApplyWeaponSwitch(-1)`, slot mirror, draw-state
