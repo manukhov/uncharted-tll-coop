@@ -20295,3 +20295,86 @@ Chloe, body, arms, grenades and frame time must remain unchanged; any crash,
 identity drift, missing treatment target or stock Prepare suppression rejects
 the package. No manual weapon input is required, and no game was launched while
 implementing this discriminator.
+
+### 2026-08-10 RUNTIME REJECTED / CORRECTED: `aav` followed a movable raw address, while the live P99 reverted to generic holster
+
+Both PID 14452 and PID 2684 loaded marker `2026-08-10aav`, installed the
+bounded phase-`0x40`/Prepare observers and remained responsive. The exact cold
+P99 handoff again completed as `rightHand -> targSpineProp -> pistolHolster`,
+with `bridge=2`, `hipRedirect=1`, `stock/call/verified=1`; the TLS-safe local
+refresh changed all eight `ProcessWeapon+0x130/+0x140` dwords and published one
+probe target in each process. The user nevertheless confirmed that the small
+handgun-shaped object remained fixed to local Nadine's hand.
+
+The initial absence of phase/Prepare rows is a diagnostic false negative, not a
+missing animation job. The target table retained the raw ProcessWeapon pointers
+`0x10E0C96E80` and `0x10E1005600`. Resolving each target's unchanged
+`FgAnimData+0x1A8` weak cell after the observation instead produced live exact
+ProcessWeapon pointers `0x10E0C8D500` and `0x10E0FFBC80`: both changed by the
+same `-0x9980` displacement. Runtime id (`0x51F` / `0x7BB`), ProcessWeapon
+vtable, P99 art `0x8075397D`, FgAnimData and all three driven LOD indices stayed
+unchanged. Their parent Player moved by the same displacement where applicable.
+This is the engine's already-proven movable-process relocation, not destruction
+or a second weapon generation. The `aav` validator incorrectly required the old
+raw address and therefore rejected the real worker calls.
+
+Independent live renderer inspection closes the old publication split. Both
+FgAnimData objects retained flags `0x2004C0` and three driven LODs; all six live
+FgInstance matrices and both `FgAnimData+0x1C0` matrices changed continuously.
+Thus stock phase `0x40` and Prepare were running. The decisive state difference
+is earlier: the verified pre-move P99 ended at index 41 / `pistolHolster`, while
+the relocated live P99 later stood at index 40 / `gun_holster`. Consequently
+**Hmissing-phase40**, **Hmissing-prepare** and **Hother-holster-mesh** are
+REJECTED for this occurrence. The supported cause is a late logical endpoint
+rollback after the completed handoff. Raw-address target validation in `aav` is
+also REJECTED and removed together with the already-rejected synchronous
+`+0x7B8` treatment and its dead probe code.
+
+### 2026-08-10 STATIC / IMPLEMENTED: persist the completed P99 hip endpoint across relocation (`aaw`)
+
+The relocation and attachment writers separate the remaining candidates.
+ProcessWeapon vtable `+0x08 -> ProcessWeapon_RelocateOwnedPointers
+0x141511470` is its relocation callback; it calls
+the base relocation path and rebases only owned pointers including `+0xAD0` and
+the embedded state at `+0xBE0`, never attachment byte `+0x688`. The identical
+`-0x9980` move therefore preserves index 41 at the move itself. The normal
+same-owner holster path is
+`PlayerWeaponController_RebindWeaponToHolster 0x1410A9670 ->`
+ProcessWeapon vtable `+0x7A8 -> WeaponAttachment_SelectExistingOwnerPoint
+0x141ED0580`; `WeaponHolster_BuildBinding 0x1414FE540` continues to author
+generic `gun_holster` for this legacy Player look. That later request is the
+specific mechanism capable of replacing the completed hip index with 40.
+The relocation callback is persisted in the single IDB as
+`ProcessWeapon_RelocateOwnedPointers`; the headless label pass reported 1647
+functions / 56 data names and `save_database returned True`, and the restarted
+MCP independently resolves the saved name.
+
+Build `aaw` keeps the proven two-phase action protocol unchanged. During the
+stock executor, generic requests still map only to mandatory
+`targSpineProp`; only the separate post-handoff rebind maps to
+`pistolHolster`. Outside that scope a generic request is redirected to the hip
+only when every independent invariant holds: exact retained legacy-Nadine
+owner, exact inventory P99 art and ProcessWeapon vtable, same resolved parent,
+valid AttachSystem record generation and existing hip record, nonzero terminal
+handoff byte, current selected record already generic or hip, and authoritative
+controller state `current<0 / draw=0`. A drawn weapon, transition, incomplete
+cold action, Chloe, NPC, Mazur, grenade, another inventory object or another
+attach id remains stock. Admission is based on the live inventory/parent and not
+the obsolete raw address. One bounded row per stable `FgAnimData + runtime id`
+records the actual request and verified post-index. Release compilation
+succeeds; the obsolete `aat/aav` local-refresh, phase-`0x40` and FgDraw Prepare
+probe implementation was deleted, and the hot Prepare callsite is no longer
+patched in this build.
+
+The competing outcomes remain explicit. **Wselector** predicts one
+`NADINE-P99-PERSISTENT-HIP` row after relocation with
+`request=555EFB8D->8A0249B5`, `current=-1`, `draw=0`, `handoff=1` and
+`verified=1`; the live selected index stays 41 and the small P99 leaves the hand
+without a Draw. **Wdirect-writer** predicts no row and a later index 40, proving
+that a direct parent/index writer rather than vtable `+0x7A8` owns the rollback.
+**Wpresentation** survives only if the row verifies and index 41 persists while
+the same pixels remain. A crash, incomplete stock bridge, early hip selection,
+weapon-in-hand mutation, Chloe/rifle/grenade/body regression or frame-time
+regression rejects the package. The agent may perform the cold launch and check
+the bounded row itself; user visual confirmation is requested only after the
+positive row exists.

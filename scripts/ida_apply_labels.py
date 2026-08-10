@@ -11107,6 +11107,13 @@ FUNCTIONS = {
         "owned pointers that fall inside a relocated memory interval; it does "
         "not consume weapon state or perform attachment mutation.",
     ),
+    0x141511470: (
+        "ProcessWeapon_RelocateOwnedPointers",
+        "ProcessWeapon vtable +0x08 relocation callback. Calls the base "
+        "relocation path and rebases owned pointers including +0xAD0 and the "
+        "embedded state at +0xBE0 when they fall inside the moved interval. "
+        "It does not write the selected attachment index at +0x688.",
+    ),
     0x14108D450: (
         "PlayerWeaponAnimControl_UpdateOverlaysChanged",
         "PlayerWeaponAnimControl vtable +0xD8. Consumes the authored "
