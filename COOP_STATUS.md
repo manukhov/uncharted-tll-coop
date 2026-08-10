@@ -20193,3 +20193,51 @@ owner frontier is the pair of simultaneously resolved Nadine holster meshes:
 their differing Look2 `+0x4A/+0x4B` flags and the regular holster's authored
 deform joints 143--165 versus the game's exact `r_leg_holster` weights. No
 further launch is authorized yet.
+
+### 2026-08-10 STATIC: both Nadine holster meshes are excluded as the cold hand artifact
+
+The two Look2 holster leaves are not local/remote or first/third-person
+variants. `ResolvedLook_ResolveMeshes2 0x141805020` converts raw leaf bytes
+`+0x4A/+0x4B` into descriptor bits 0/1. Both leaves have the independent
+Player/non-Player bytes `+0x28/+0x29 = 0/0`, so
+`BindUpperWrapperIntoPlayerCompanionBehaviorAndDrawControlState 0x141BBACC0`
+passes both rows to `IDrawControl_AddMesh 0x141751E30`. That function preserves
+the descriptor word in DrawControl mesh-row `+0x248`; it does not choose one
+leaf at resolve time.
+
+The late selector is exact. `DrawControl_RecomputeMeshInstanceVisibility
+0x141756E30` reads `DrawControl+0x18 bit 2`: normal gameplay hides descriptor
+bit 1 and leaves bit 0 visible, while cinematic mode hides bit 0 and leaves bit
+1 visible. It publishes the result to every `FgInstance+0x1A0` at
+`0x141756EE2`. `DrawControl_SetCinematicPresentationMode 0x141BBBB20` toggles
+the same DrawControl bit together with `FgAnimData flag 0x8000`; its callers are
+the `SsAnimateController::PostAnimUpdate` cinematic path and the explicit
+`Stopping cinematic...` teardown at `0x141E49720`. Therefore ordinary gameplay
+can display only `nadine-holster-game`; the regular `nadine-holster` deform
+chain is allocated but forced invisible.
+
+Independent mesh and renderer evidence rejects both leaves as the small pistol.
+All four `nadine-holster-game` LODs use only skeleton joints
+`3,5,15,16,38,39,74,92--96,99`; `r_leg_holster` joint 99 influences 4284/5990
+LOD0 vertices and hand joint 30 influences zero. Regular `nadine-holster` uses
+only its authored belt chain 143--165 and also has zero hand weights. Both use
+the same 580-entry StringId palette; `FgDrawManager_PrepareInstanceForRendering
+0x14181A9B0` maps palette entries by StringId, and a missing hash receives
+identity rather than a raw ordinal or hand fallback. Finally, each PAK contains
+one 22.7 x 42.3 x 20.1 cm leather holster/belt/strap mesh and no handgun
+geometry or material.
+
+The competing hypotheses are now narrower. **Hholster-raw-index**,
+**Hholster-missing-to-hand**, **Hregular-cinematic-visible** and
+**Hholster-baked-pistol** are **STATIC REJECTED** by independent asset weights,
+StringId remap code, late visibility dataflow and geometry inspection.
+**Hforce-phase10** is also not yet authorized: `AnimControl_EnableAsyncUpdate
+0x1417288C0` only ORs Fg flag `0x10`; the stock `+0x408` phase additionally runs
+Animating layers and callbacks that may overwrite `weapon+0x130/+0x140`, so it
+is broader than a publication repair. The live split remains
+**Hmissing-phase40/prepare**, where the exact P99's refreshed matrix never
+reaches or survives `0x141A8FC00 -> FgAnimData+0x1C0 -> 0x14181B925`, versus
+**Hother-drawable**, now limited to an unknown non-Look equipment/cached
+instance. The next admissible runtime boundary is read-only and must capture
+those two consecutive stock publications for the exact verified P99 before any
+additional mutation. No game was launched for this static result.

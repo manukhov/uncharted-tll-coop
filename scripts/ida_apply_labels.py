@@ -2842,6 +2842,40 @@ FUNCTIONS = {
         "callsite is 0x141A8FC00; runtime confirms this publication owns the "
         "visible retained-player body yaw.",
     ),
+    0x1417288C0: (
+        "AnimControl_EnableAsyncUpdate",
+        "Exact AnimControl::EnableAsyncUpdate source assertion. Validates the "
+        "AnimControl+0x20 FgAnimData pointer and ORs FgAnimData flags with "
+        "0x10. This only admits the full retained-owner phase-0x10 update; it "
+        "does not itself create or schedule an animation job.",
+    ),
+    0x141728930: (
+        "AnimControl_DisableAsyncUpdate",
+        "Exact AnimControl::DisableAsyncUpdate source assertion. Validates "
+        "AnimControl+0x20 and clears FgAnimData flag mask 0x38, not only the "
+        "phase-0x10 bit; therefore it is not a scoped inverse of "
+        "AnimControl_EnableAsyncUpdate.",
+    ),
+    0x1417289A0: (
+        "AnimControl_IsAsyncUpdateEnabled",
+        "Exact AnimControl::IsAsyncUpdateEnabled source assertion. Returns "
+        "whether the FgAnimData reached through AnimControl+0x20 has flag "
+        "0x10 set.",
+    ),
+    0x141756E30: (
+        "DrawControl_RecomputeMeshInstanceVisibility",
+        "Recomputes a DrawControl mesh row's final visibility and writes it "
+        "to every driven FgInstance+0x1A0. DrawControl+0x18 bit 2 selects "
+        "cinematic versus gameplay presentation: cinematic suppresses row "
+        "+0x248 bit 0, gameplay suppresses bit 1.",
+    ),
+    0x141BBBB20: (
+        "DrawControl_SetCinematicPresentationMode",
+        "Toggles DrawControl+0x18 bit 2 together with FgAnimData flag 0x8000 "
+        "and immediately recomputes mesh visibility. SsAnimate/cinematic "
+        "lifecycle callers prove this is a gameplay/cinematic selector, not "
+        "a first-person/third-person selector.",
+    ),
     0x141AB97C0: (
         "ProcessAnimCmdListSegment",
         "Exact ProcessAnimCmdListSegment source assertion in anim-commands.cpp:822. "

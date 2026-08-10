@@ -3998,6 +3998,19 @@ Do not reopen these as the first move:
       `nadine-holster[-game]` meshes, their differing Look2 view flags and the
       regular mesh's deform joints 143--165. Do not launch another diagnostic
       until that owner is exact.
+      **STATIC (`aau` continuation):** both holster leaves are now excluded.
+      Normal gameplay's exact DrawControl selector exposes only
+      `nadine-holster-game`; that mesh is weighted to body/thigh and
+      `r_leg_holster`, while the hidden cinematic leaf uses only belt joints
+      143--165. Both have zero hand weights, StringId remap has no ordinal/hand
+      fallback, and neither PAK contains firearm geometry. Do not force Fg phase
+      `0x10`: it runs the broader Animating-layer/callback pipeline. Implement
+      only the bounded read-only exact-P99 discriminator at the existing phase
+      `0x40` callsite and immediately after stock
+      `PrepareInstanceForRendering`; compare `weapon+0x130/+0x140`,
+      `FgAnimData+0x1C0` and every driven P99 instance matrix. A matching chain
+      selects another drawable; a missing/overwritten link selects its exact
+      scheduler/publication boundary.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
