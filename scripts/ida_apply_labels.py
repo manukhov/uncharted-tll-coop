@@ -826,6 +826,23 @@ FUNCTIONS = {
         "strap is a weapon-mesh animation process and not holster attachment "
         "geometry.",
     ),
+    0x14150A080: (
+        "ProcessWeaponStrap_Initialize",
+        "Initializes the materialized strap from its exact ProcessWeapon "
+        "parent. Copies parent weak handle/generation from weapon+0xA8/+0xBC "
+        "to strap+0x1280/+0x1288, resolves r_palm/l_palm against the weapon "
+        "owner, initializes strap state +0x12A0 to zero and then synchronizes "
+        "the child DrawControl with the parent.",
+    ),
+    0x14150D6D0: (
+        "ProcessWeaponStrap_SyncParentVisibility",
+        "Resolves the exact ProcessWeapon parent through strap+0x1280/+0x1288, "
+        "feeds the parent DrawControl into "
+        "DrawControl_SyncParentVisibilityAndRecomputeInstances and mirrors the "
+        "parent camera/flocking visibility flags. This weak back-reference is "
+        "the authoritative runtime child identity; strap+0xD8 is not the "
+        "WeaponArtDef selector.",
+    ),
     0x14150F640: (
         "ProcessWeapon_Initialize",
         "Initializes ProcessWeapon and conditionally materializes a "

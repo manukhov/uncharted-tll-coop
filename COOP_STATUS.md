@@ -20692,3 +20692,52 @@ the observed `+0xD8` field. Next work must resolve `0x2549DB48` and trace the
 child's state-zero animation into its drawable; the native Mazur frame remains
 STATIC and untested until the false resource guard is removed or replaced by a
 proven identity invariant.
+
+### 2026-08-10 STATIC / IMPLEMENTED: restore the stock P99 fine correction and identify the strap by its parent (`abb`)
+
+The false Mazur gate is replaced by an engine-owned identity invariant rather
+than by accepting the observed `0x2549DB48` value. Three independent static
+facts converge. `ProcessWeapon_Initialize 0x14150F640` passes WeaponArtDef
+`+0x38 = rifle-strap-spc 0xB58FB7D7` separately in the selector packet used to
+materialize the child; it does not establish that value as the child's base
+`+0xD8`. The sole child initializer, now named
+`ProcessWeaponStrap_Initialize 0x14150A080`, copies the exact parent weapon weak
+cell/generation from `weapon+0xA8/+0xBC` to
+`strap+0x1280/+0x1288`. Finally,
+`ProcessWeaponStrap_SyncParentVisibility 0x14150D6D0` consumes that same pair to
+resolve the parent ProcessWeapon and supplies its DrawControl to
+`DrawControl_SyncParentVisibilityAndRecomputeInstances 0x141754DA0`. Therefore
+the authoritative child admission is exact vtable `0x142A9B0A0`, valid child
+generation and a generation-valid `+0x1280` back-reference to the exact Mazur;
+`+0xD8` is retained only as diagnostic data. This admits the previously gated
+cold controller rebind and the still-untested Mazur final-frame substitution to
+Nadine's existing identity `spineb` record without weakening owner scope.
+
+The P99 correction is independently amended from the fresh runtime row. Its
+actual cold primary before build `aba` cleared it was
+`(+0.005,+0.016,-0.000)m` with quaternion approximately
+`(-0.04358,-0.04358,-0.00190,+0.99810)`, only 1.676 cm of translation and a
+small authored rotation. `WeaponHolster_BuildBinding 0x1414FE540` resolves this
+row by the exact P99 art and the controller copies it to the ProcessWeapon local
+correction; `NdAttachableObject_ApplyLocalAttachmentCorrection 0x141ED0A70`
+then consumes that state after the selected attachment frame. The user's result
+confirms that exact native joint 99 fixed the gross endpoint while canonical
+identity left the suppressed weapon slightly too low. A guessed manual world
+offset has no authored basis, so build `abb` keeps the confirmed native
+`pistolHolster` joint-99 record but removes the identity override and restores
+the exact stock P99 art correction.
+
+Competing predictions remain explicit. **Pstock-fine** predicts the small stock
+P99 row moves the pistol by only centimetres and corrects the low suppressor
+without returning it to the hand/back; **Pmanual-axis** would require a residual
+directional error after this authored control and is not implemented.
+**Mnative-frame** predicts the admitted Mazur row preserves selected
+`targSpineProp` while `NADINE-MAZUR-NATIVE-BACK` reports donor `targSpine` on
+joint 16 and visibly removes the half-body intersection. Because the exact strap
+child is parented to that ProcessWeapon and stock code synchronizes its
+DrawControl from the parent, the same rigid-frame correction may also reveal a
+strap previously buried with the rifle. If the rifle moves out but no strap is
+visible, **Svisibility** wins: the remaining boundary is the child's state-zero
+animation/mesh visibility, not creation, event delivery or weapon placement.
+Any P99 hand/back regression, changed Mazur selected id, failed parent
+back-reference, crash, body corruption or frame-time regression rejects `abb`.

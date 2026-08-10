@@ -1971,11 +1971,12 @@ constexpr bool kEnableProcessWeaponInitProbe = false;
 // gun_holster request. The rejected IK/knowledge writes remain disabled.
 constexpr bool kEnableLegacyNadineHolsterIkVerification = false;
 constexpr bool kEnableLegacyNadinePistolHipAttachment = true;
-// Nadine's native pistolHolster record and leather holster are both authored in
-// r_leg_holster space. The stock Player binding was built for gun_holster on the
-// back, so neutralize that primary correction only when the exact P99 endpoint
-// is redirected to the native thigh record.
-constexpr bool kEnableLegacyNadineP99HipBindingCorrection = true;
+// Build aba proved that Nadine's native pistolHolster/joint-99 endpoint is the
+// correct gross frame, but also measured the actual cold P99 art primary as a
+// small 1.676 cm authored correction rather than the stale 9.31 cm value from a
+// different binding context. Preserve that stock art correction; clearing it
+// put the suppressed P99 slightly too low in the leather holster.
+constexpr bool kEnableLegacyNadineP99HipBindingCorrection = false;
 static_assert(
     !kEnableLegacyNadineP99HipBindingCorrection ||
         kEnableLegacyNadinePistolHipAttachment,
@@ -17809,7 +17810,6 @@ constexpr std::uint32_t kPelvisJointNameId = 0x5C11C590u;
 constexpr std::uint32_t kRLegHolsterJointNameId = 0xADD0C871u;
 constexpr std::uint32_t kRUpperLegJointNameId = 0x0D9C305Du;
 constexpr std::uintptr_t kProcessWeaponStrapVtableRva = 0x2A9B0A0u;
-constexpr std::uint32_t kMazurStrapResourceId = 0xB58FB7D7u;
 
 struct NadineAttachRepairResult {
     int status = 0;
@@ -43427,6 +43427,9 @@ struct MazurStrapSnapshot {
     void* child = nullptr;
     std::uintptr_t vtable = 0;
     std::uint32_t resource_id = 0;
+    std::uintptr_t parent_weak_handle = 0;
+    std::uint32_t parent_generation = 0;
+    void* parent_weapon = nullptr;
     std::uint8_t holster_state = 0xFF;
 };
 
@@ -43455,13 +43458,32 @@ MazurStrapSnapshot capture_mazur_strap(void* weapon) {
         snapshot.vtable = *reinterpret_cast<const std::uintptr_t*>(child);
         snapshot.resource_id = *reinterpret_cast<const std::uint32_t*>(
             child + 0xD8);
+        auto* const parent_weak_handle =
+            *reinterpret_cast<std::byte* const*>(child + 0x1280);
+        snapshot.parent_weak_handle =
+            reinterpret_cast<std::uintptr_t>(parent_weak_handle);
+        snapshot.parent_generation =
+            *reinterpret_cast<const std::uint32_t*>(child + 0x1288);
+        if (parent_weak_handle != nullptr &&
+            snapshot.parent_generation != 0 &&
+            readable_bytes(parent_weak_handle) >= 0x10) {
+            snapshot.parent_weapon =
+                *reinterpret_cast<void* const*>(parent_weak_handle + 0x8);
+        }
         snapshot.holster_state = *reinterpret_cast<const std::uint8_t*>(
             child + 0x12F0);
         snapshot.valid =
             *reinterpret_cast<const std::uint32_t*>(
                 child + kGameObjectRuntimeIdOffset) == snapshot.generation &&
             snapshot.vtable == g_module + kProcessWeaponStrapVtableRva &&
-            snapshot.resource_id == kMazurStrapResourceId;
+            snapshot.parent_weak_handle ==
+                *reinterpret_cast<const std::uintptr_t*>(
+                    static_cast<const std::byte*>(weapon) + 0xA8) &&
+            snapshot.parent_weapon == weapon &&
+            snapshot.parent_generation ==
+                *reinterpret_cast<const std::uint32_t*>(
+                    static_cast<const std::byte*>(weapon) +
+                    kGameObjectRuntimeIdOffset);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         snapshot.valid = false;
     }
@@ -43505,9 +43527,13 @@ void log_mazur_strap_wait_once(
          << ":" << snapshot.generation
          << " child=0x" << reinterpret_cast<std::uintptr_t>(snapshot.child)
          << " vtable=0x" << snapshot.vtable
-         << " resource=0x" << snapshot.resource_id << std::dec
+         << " resource=0x" << snapshot.resource_id
+         << " parent=0x" << snapshot.parent_weak_handle
+         << ":" << snapshot.parent_generation
+         << "/0x" << reinterpret_cast<std::uintptr_t>(snapshot.parent_weapon)
+         << std::dec
          << " state=" << static_cast<unsigned>(snapshot.holster_state);
-    write_log_line(line.str().c_str());
+    boot_log_line(line.str().c_str());
 }
 
 void rebind_initial_local_nadine_rifle_game_thread() {
@@ -43636,7 +43662,7 @@ void rebind_initial_local_nadine_rifle_game_thread() {
          << " state=" << static_cast<unsigned>(strap_before.holster_state)
          << "->" << static_cast<unsigned>(strap_after.holster_state)
          << " strapVerified=" << (strap_verified ? 1 : 0);
-    write_log_line(line.str().c_str());
+    boot_log_line(line.str().c_str());
 }
 
 bool claim_nadine_inactive_attach_attempt(
@@ -45756,7 +45782,7 @@ void log_nadine_mazur_back_frame_once(
     for (const std::uint32_t bits : capture.binding_bits) line << bits << ",";
     line << " output=";
     for (const std::uint32_t bits : output_bits) line << bits << ",";
-    write_log_line(line.str().c_str());
+    boot_log_line(line.str().c_str());
 }
 
 std::int64_t __fastcall hooked_nd_attachable_apply_local_transform(
@@ -51294,8 +51320,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-10aba "
-        "(native Nadine body frames for holstered P99/Mazur and strap gate)");
+        "TLL co-op runtime init 2026-08-10abb "
+        "(stock P99 fine fit and parent-verified native Mazur/strap frame)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
