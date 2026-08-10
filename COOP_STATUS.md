@@ -20741,3 +20741,73 @@ visible, **Svisibility** wins: the remaining boundary is the child's state-zero
 animation/mesh visibility, not creation, event delivery or weapon placement.
 Any P99 hand/back regression, changed Mazur selected id, failed parent
 back-reference, crash, body corruption or frame-time regression rejects `abb`.
+
+### 2026-08-10 RUNTIME REJECTED: `abb` changes endpoints but not the current attachment matrices
+
+Both copies loaded `2026-08-10abb` and remained responsive. Local role-B PID
+`17428` again completed both cold controller rebinds with exact retained owner and
+generation. P99 ended at `pistolHolster` index 41 with `verified=1`; Mazur ended
+at `targSpineProp` index 39 with `verified=1`, and its exact generation-resolved
+ProcessWeaponStrap child remained stable in holstered state zero with
+`strapVerified=1`. The user nevertheless observed no change: P99 remained too
+low, Mazur remained half inside the torso, and no sling was visible. No
+`NADINE-MAZUR-NATIVE-BACK` row occurred.
+
+This rejects `abb` as a sufficient presentation fix and, more specifically,
+rejects the assumption that the cold controller rebind would necessarily cause
+the selected endpoint to be recomputed into the current local matrix. It does
+not reject the native joint-16 Mazur donor or the stock P99 fine correction:
+their sole `ApplyLocal`/selected-transform boundary was never reached. Wrong
+logical endpoint is independently rejected by the exact terminal ids. Missing
+strap creation/event delivery is independently rejected by the stable exact
+child, exact parent back-reference and state zero; the unresolved sling branch
+remains downstream animation/mesh visibility, possibly compounded by the stale
+parent weapon matrix.
+
+### 2026-08-10 STATIC / IMPLEMENTED: defer exact `+0x7B8` until the stock local blend finishes (`abc`)
+
+Three independent evidence types identify the shared missing transition. First,
+`PlayerWeaponController_RebindWeaponToHolster 0x1410A9670` builds and copies the
+art binding into ProcessWeapon `+0x4F0/+0x500`, selects the endpoint through
+vtable `+0x7A8`, and publishes `player-holstered`, but never calls vtable
+`+0x7B8` and never writes the current local matrix at `+0x130/+0x140`. Second,
+the exact per-frame continuation
+`NdAttachableObject_UpdateLocalAttachmentBlend 0x141ED4390` reads duration
+`+0x640`, advances progress `+0x644`, interpolates the binding, and at
+`0x141ED4464` clears only the four-byte duration. It conditionally calls the
+selected-attachment updater through vtable `+0x7B8` at `0x141ED4487`; an enabled
+async-update path skips that call. Third, current runtime gives both ends of the
+dataflow: the rebinds finish on exact ids while the immediate P99 refresh reports
+`local-blend`, Mazur never enters the sole hooked `ApplyLocal` callsite, and the
+cold Fg flags previously measured phase `0x40` without phase `0x10`. Phase 0x40
+can republish cached local fields but cannot resolve the new selected record.
+
+The old guarded refresh had a deterministic admission bug: it read a 64-bit
+value at `+0x640`, combining duration and progress. After stock clears duration,
+progress remains `1.0`, so that guard could report `local-blend` forever. Build
+`abc` tests the exact 32-bit duration only. A two-entry game-thread pending table
+is armed only after a verified cold P99 or Mazur rebind. It never replays the
+controller transition. On later ticks it requires the same retained local
+legacy-Nadine Player, exact inactive controller, same inventory object/art,
+owner, attachment-table generation and endpoint. It waits while `+0x640` or the
+independent blend object is active, then invokes only the already-audited native
+ProcessWeapon vtable `+0x7B8` under balanced `ContextProcess` TLS. Existing
+guards still require writable local state, exact Fg owner/generation, phase
+`0x40` present and phase `0x10` absent; post-state must retain the same endpoint.
+Scope drift aborts, and 600 unsuccessful game-thread attempts time out without
+mutation.
+
+Competing hypotheses remain falsifiable. **Hstale-current** predicts one P99 and
+one Mazur `NADINE-HOLSTER-DEFERRED-REFRESH ... terminal=finished
+refresh=ok/1/1`, with a nonzero local changed mask; Mazur must additionally emit
+`NADINE-MAZUR-NATIVE-BACK` while keeping selected id `targSpineProp` and using
+the existing `targSpine` donor on joint 16. **Hblend-not-stepped** predicts a
+bounded timeout still reporting `local-blend`. **Hscope-drift** predicts an
+explicit abort before the native call. **Hframe-insufficient** predicts the exact
+successful rows and changed matrices but unchanged pixels. Visually, the first
+outcome should finally apply the small stock P99 correction and the native
+Mazur spine frame. The sling may appear if it was buried with the stale rifle;
+if the rifle moves but the sling remains absent, its separate visibility branch
+wins and no further attachment-event replay is justified. Any crash, TLS restore
+failure, endpoint drift, active-weapon mutation or Chloe regression rejects the
+package.

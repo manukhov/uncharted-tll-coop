@@ -939,7 +939,10 @@ FUNCTIONS = {
         "is positive, advances progress at +0x644 by process delta divided by "
         "that duration, applies smoothstep mode 2, and interpolates the 32-byte "
         "transform from endpoint +0x620/+0x630 toward +0x600/+0x610 into "
-        "object+0x4F0/+0x500. Clears +0x640 when progress reaches 1.0.",
+        "object+0x4F0/+0x500. At 0x141ED4464 it clears only the duration "
+        "DWORD +0x640 when progress reaches 1.0; +0x644 remains 1.0. It then "
+        "calls vtable +0x7B8 at 0x141ED4487 only when AnimControl async-update "
+        "phase 0x10 is not enabled.",
     ),
     0x14108B120: (
         "WeaponHolsterIkBlender_ExtractData",
