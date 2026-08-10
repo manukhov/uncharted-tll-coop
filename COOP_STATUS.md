@@ -21103,3 +21103,85 @@ retain its accepted holster position and no rifle may reappear with a drawn
 pistol. Wrong ids/joints, missing exact grip rows, body corruption, crash or a
 regression in Draw/Put rejects the package. The already-authored sling is judged
 only after the parent Mazur occupies the correct frame.
+
+### 2026-08-10 RUNTIME CONFIRMED / REJECTED: `abg` fixes Mazur placement; its P99 admission and parent-follow sling theory fail
+
+The user confirmed the Mazur visual postcondition: the rifle no longer sinks
+into Nadine's body. Preserve the authored-spined correction and 5 cm clearance;
+do not tune the rifle parent again. The sling remained absent. Because the
+exact ProcessWeaponStrap child was already generation-valid, in holster state
+zero, and the visible parent rifle moved to its corrected final frame, the
+simple hypothesis that the existing child would automatically follow that
+parent into view is **REJECTED**. The remaining distinguishable owners are the
+strap simulation/mapping gate, child DrawControl visibility, and the child's
+independent published frame.
+
+The P99 grip did not change, but the bounded log contains zero
+`NADINE-P99-GENERIC-GRIP` rows while both hook-install markers are present.
+Therefore `abg` did not test the generic Player clips at all. It rejects only
+the admission assumption that the live resolver receives the Player master
+AnimOverlayState after `read_weapon_draw_state` has reached state 2/4. The
+content alternatives remain open: generic clips may fix the grip, improve it
+only partially, or be overwritten by later arm IK.
+
+### 2026-08-10 STATIC / IMPLEMENTED: copied pistol-colt state ownership and read-only strap census (`abh`)
+
+`abh` corrects the P99 boundary with three independent evidence types. First,
+raw `player-specific-weapon-overlays.bin` has the two exact pairs in selector
+`pistol-colt 0xC938AAA1`; `weapon-art.bin` independently places P99 art
+`0x8075397D` in that selector family. The same pairs also exist in Sullivan and
+Vargas sets, so source/target ids alone are not an adequate scope. Second,
+`AnimOverlayState_Initialize 0x1417F9B30` proves the set-pointer array at `+0x8`,
+parallel selector-value array at `+0x10`, and count byte at `+0x24`.
+`AnimOverlayState_FindMatchingRow 0x1417FA6E0` proves each set's row pointer at
+`+0`, count at `+0x8`, diagnostic selector at `+0x10`, source-id array at
+`+0x20`, 0x28-byte row stride and terminal id at row `+0x4`. Admission now
+requires exactly one matching row in a set whose diagnostic id and parallel
+value both equal `0xC938AAA1`. Third, `AnimOverlayState_Copy 0x1417F9DD0`,
+called from `AnimStateLayer_Step 0x1418A3725`, copies the Player-owned master
+state into the track-local state before snapshot resolution. This exact detour
+ABI/prologue and bounded direct-map ownership tag previously ran without an ABI
+failure. `abh` tags only destination states copied from role-B retained owner-0
+legacy Nadine and clears a destination tag on every nonmatching copy.
+
+The resolver repair is fail-closed: both copy and resolver detours must install;
+the state must be either the exact master or its tagged descendant; retained
+owner 0 must remain stable screen-0 legacy Nadine with exact
+PlayerWeaponController; a generation-valid P99 must exist in that Player's
+inventory and resolve back to the same owner; and the unique pistol-colt row
+must match. Current draw state is logged but no longer gates an earlier cached
+grip resolution. Chloe, remote Nadine, ordinary pistols, Sullivan/Vargas sets,
+duplicate pairs and every rifle clip fail before mutation.
+
+For the sling, `ProcessWeaponStrap_Initialize 0x14150A080` already proves the
+child retains the exact parent weapon pair and resolves `r_palm/l_palm`; both
+hashes are present in legacy Nadine's skeleton. The existing holster event path
+at `ProcessWeaponStrap_EventHandler 0x14150C9C0` is runtime-confirmed by child
+state zero, while `ProcessWeaponStrap_SimulateAndBuildJointPose 0x14150A340`
+owns the internal bytes at `+0x1290..+0x12A1` and its draw activation decision.
+`DrawControl_SyncParentVisibilityAndRecomputeInstances 0x141754DA0` separately
+owns child gates and `FgInstance+0x1A0`. `abh` mutates none of these. After a
+stable 1.5-second Mazur holster dwell it records the internal state bytes,
+child/weapon DrawControl gates, mesh gates, active instance counts,
+FgAnimData/instance matrix hashes and both object transform blocks.
+
+Competing sling predictions are explicit. **Smap** predicts the internal map
+failure byte at child `+0x129A` and zero/disabled child draw gates.
+**Svisibility** predicts a plausible simulation state but zero active child
+instances or closed mesh/DrawControl gates. **Sframe** predicts active child
+instances with a published transform chain inconsistent with the corrected
+Mazur parent. A child with active instances and matching published matrices but
+no visible sling rejects all three and moves the frontier to its exact
+geometry/material row. No visibility, event, pose or transform repair is
+authorized until this census chooses one.
+
+The combined falsifiable runtime prediction is: both P99 detours install; a
+role-B local copy emits `NADINE-P99-OVERLAY-COPY`; drawing/aiming P99 emits both
+exact `NADINE-P99-GENERIC-GRIP` sources with `tagged=1`, selector/value
+`C938AAA1/C938AAA1`, `matches=1`, and leaves Chloe untouched. A visible grip
+improvement confirms the overlay owner; rows with no improvement select
+base-insufficient or later IK; zero rows with a valid copy/set rejects the new
+state boundary. Mazur must retain its confirmed position, P99 holster placement
+must not regress, and one `NADINE-MAZUR-STRAP-CENSUS` row must classify the
+independent sling without changing it. Crash, lag, wrong selector, Mazur
+movement or weapon ownership regression rejects the package.

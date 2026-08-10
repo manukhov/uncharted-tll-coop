@@ -69,6 +69,7 @@ constexpr std::size_t kPlayerUpperStateOwnerOffset = 0x1A0;
 // step copies that master into a track-local state before snapshot resolution.
 constexpr std::size_t kPlayerUpperOwnerOverlayWrapperOffset = 0x60;
 // Animation-id/clip lookup pipeline used by the scoped Nadine probes.
+constexpr std::uintptr_t kAnimOverlayStateCopyRva = 0x17F9DD0;
 constexpr std::uintptr_t kAnimSetRemapResolveAnimationIdRva = 0x17CA2E0;
 constexpr std::uintptr_t kAnimationDatabaseResolveClipRva = 0x17C8E20;
 constexpr std::uintptr_t kAnimOverlayStateResolveAnimationIdRva = 0x17F9F00;

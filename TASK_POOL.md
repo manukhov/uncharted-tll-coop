@@ -4113,18 +4113,20 @@ Do not reopen these as the first move:
       confirmed the old weapon now appears at the exchange point. No expiry,
       rollback, duplicate or crash occurred. World-weapon reliability is closed.
 
-## P0 — Nadine local weapon presentation (`abg`)
+## P0 — Nadine local weapon presentation (`abh`)
 
-`abf` is partial runtime-confirmed: P99 holster/ownership is accepted and Mazur
-leaves the hand, but the identity `spineb` alias places Mazur at pelvis/butt
-height. Build `abg` preserves the logical AD endpoint while using the shipped
-spined-relative `targSpineProp` transform at final ApplyLocal and a bounded 5 cm
-back clearance. It also bypasses exactly two Chloe-only seven-group P99 grip
-targets in favor of their normal eight-group Player sources, scoped to local
-role-B Nadine with current drawn P99. One authorized run: verify Mazur upper-back
-placement, sling visibility, P99 Draw/Put/holster regression absence and the
-active/ADS hand grip. Use the exact log predictions recorded in `COOP_STATUS.md`;
-do not tune further from a failed row-free run.
+`abg` is partial runtime-confirmed: preserve the corrected Mazur upper-back
+placement and accepted P99 thigh holster. The sling remained absent, and the
+P99 grip repair emitted zero mutation rows, so do not tune either from that
+visual result. Build `abh` moves the P99 scope to the exact track-local state
+copied from Nadine's master and additionally requires the unique
+`pistol-colt 0xC938AAA1` overlay set plus real owner-local P99 inventory object.
+It also performs one delayed read-only ProcessWeaponStrap census; it does not
+force strap visibility or alter its frame. Run one combined test: draw and aim
+P99, then leave Mazur holstered for at least two seconds. Use the exact row and
+three-way sling predictions in `COOP_STATUS.md`. If P99 rows occur without a
+visual grip change, next isolate generic-base insufficiency versus later ArmIK;
+if the strap census selects one failed gate, repair only that proven boundary.
 
 ## Rule
 
