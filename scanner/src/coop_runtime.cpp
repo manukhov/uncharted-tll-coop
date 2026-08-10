@@ -138,6 +138,25 @@ AnimJointProgramOperatorFunction g_original_anim_joint_program_op128 = nullptr;
 AnimJointProgramOperatorFunction g_original_anim_joint_program_op129 = nullptr;
 AnimJointProgramOperatorFunction g_original_anim_joint_program_op131 = nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
+struct NadineP99Phase40ProbeSample {
+    std::uint32_t target_index = ~std::uint32_t{0};
+    std::uint32_t sample_index = 0;
+    std::uint32_t fg_flags = 0;
+    std::uint8_t attach_index = 0xFF;
+    std::uint32_t attach_id = 0;
+    std::uint64_t refreshed_local_hash = 0;
+    std::uint64_t current_local_hash = 0;
+    std::uint64_t owner_world_hash = 0;
+    std::uint64_t input_hash = 0;
+    std::uint64_t fg_before_hash = 0;
+};
+bool seh_capture_nadine_p99_phase40_before(
+    void* fg, const float* transform,
+    NadineP99Phase40ProbeSample* sample_out);
+void seh_capture_nadine_p99_phase40_after(
+    void* fg, const NadineP99Phase40ProbeSample& sample);
+void seh_capture_nadine_p99_after_prepare(
+    void* fg, void* instance_pool_base, bool mode);
 CharacterLegIkControllerUpdateFunction
     g_character_leg_ik_controller_update = nullptr;
 std::atomic<void*> g_local_fganim_data{nullptr};
@@ -1973,9 +1992,12 @@ constexpr bool kEnableLegacyNadineHolsterIkVerification = false;
 constexpr bool kEnableLegacyNadinePistolHipAttachment = true;
 // Build aat proved that a balanced, exact ProcessWeapon +0x7B8 call changes all
 // eight current-local transform dwords while the cold hand artifact remains.
-// Keep the bounded discriminator available, but do not mutate the rejected path
-// in production while the later Fg publication / second-drawable owner is traced.
-constexpr bool kEnableLegacyNadineColdP99HipTransformRefresh = false;
+// Build aav reuses that already-proven one-shot treatment only so read-only
+// observers can follow its output through stock phase 0x40 and FgDraw prepare.
+// It adds no new repair and must be disabled again after this discriminator.
+constexpr bool kEnableLegacyNadineColdP99PublicationProbe = true;
+constexpr bool kEnableLegacyNadineColdP99HipTransformRefresh =
+    kEnableLegacyNadineColdP99PublicationProbe;
 // Builds gz/ha safely exercised the full stock rebind but targeted 0x8075397D,
 // the P99 rather than the visible Mazur. Retarget the one-shot boundary to the
 // actual rifle and resolve its inventory slot by art instead of assuming slot 0.
@@ -12924,7 +12946,17 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
                 false, std::memory_order_release);
         }
     }
-    return native(fg, selected_transform, publish_current);
+    NadineP99Phase40ProbeSample p99_probe_sample{};
+    if constexpr (kEnableLegacyNadineColdP99PublicationProbe) {
+        seh_capture_nadine_p99_phase40_before(
+            fg, selected_transform, &p99_probe_sample);
+    }
+    const std::int64_t result =
+        native(fg, selected_transform, publish_current);
+    if constexpr (kEnableLegacyNadineColdP99PublicationProbe) {
+        seh_capture_nadine_p99_phase40_after(fg, p99_probe_sample);
+    }
+    return result;
 }
 
 bool install_fganim_world_aim_turn_callsite_relay() {
@@ -42055,14 +42087,433 @@ std::uint64_t nadine_p99_refresh_transform_hash(
     return hash;
 }
 
+struct NadineP99PublicationProbeTarget {
+    // 0 = empty, 1 = writer owns the slot, otherwise the immutable FgAnimData
+    // identity. Publishing the real pointer with release semantics makes every
+    // plain field below visible to the animation/render worker observers.
+    std::atomic<std::uintptr_t> fg{0};
+    std::uintptr_t weapon = 0;
+    std::uintptr_t player = 0;
+    std::uintptr_t records_generation = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    std::uint32_t player_runtime_id = 0;
+    std::uint8_t attach_index = 0xFF;
+    std::uint64_t refreshed_local_hash = 0;
+    std::atomic<std::uint32_t> phase40_claims{0};
+    std::atomic<std::uint32_t> phase40_samples{0};
+    std::atomic<std::uint32_t> prepare_samples{0};
+};
+
+std::array<NadineP99PublicationProbeTarget, 8>
+    g_nadine_p99_publication_probe_targets{};
+
+bool seh_publish_nadine_p99_publication_probe_target(
+    void* player, void* weapon, std::uintptr_t records_generation,
+    const std::array<std::uint32_t, 8>& refreshed_local) {
+    if (player == nullptr || weapon == nullptr || records_generation == 0) {
+        return false;
+    }
+    __try {
+        auto* const weapon_bytes = static_cast<const std::byte*>(weapon);
+        auto* const player_bytes = static_cast<const std::byte*>(player);
+        if (readable_bytes(weapon_bytes) < 0x864 ||
+            readable_bytes(player_bytes) <
+                kGameObjectRuntimeIdOffset + sizeof(std::uint32_t) ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon_bytes) !=
+                g_module + kProcessWeaponVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x860) !=
+                kCoopPistolArtId ||
+            !seh_weapon_is_player_art(player, weapon, kCoopPistolArtId) ||
+            !seh_weapon_parent_resolves_to_owner(weapon, player)) {
+            return false;
+        }
+        auto* const fg = *reinterpret_cast<std::byte* const*>(
+            weapon_bytes + 0x1A8);
+        if (fg == nullptr || readable_bytes(fg) < 0x220) {
+            return false;
+        }
+        auto* const retained = *reinterpret_cast<std::byte* const*>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        const std::uint32_t weapon_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                weapon_bytes + kGameObjectRuntimeIdOffset);
+        const std::uint32_t player_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                player_bytes + kGameObjectRuntimeIdOffset);
+        if (weapon_runtime_id == 0 || player_runtime_id == 0 ||
+            retained == nullptr || readable_bytes(retained) < 0x10 ||
+            *reinterpret_cast<void* const*>(retained + 0x8) != weapon ||
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset) != weapon_runtime_id) {
+            return false;
+        }
+        const std::uint8_t attach_index =
+            *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x688);
+        std::uint32_t attach_id = 0;
+        std::uintptr_t current_records = 0;
+        if (!seh_read_owner_attach_record_id(
+                player, attach_index, &attach_id, &current_records) ||
+            attach_id != kPistolHolsterAttachId ||
+            current_records != records_generation) {
+            return false;
+        }
+        const std::uintptr_t fg_value = reinterpret_cast<std::uintptr_t>(fg);
+        for (const NadineP99PublicationProbeTarget& target :
+             g_nadine_p99_publication_probe_targets) {
+            if (target.fg.load(std::memory_order_acquire) == fg_value &&
+                target.weapon == reinterpret_cast<std::uintptr_t>(weapon) &&
+                target.weapon_runtime_id == weapon_runtime_id) {
+                return true;
+            }
+        }
+        for (std::size_t index = 0;
+             index < g_nadine_p99_publication_probe_targets.size(); ++index) {
+            NadineP99PublicationProbeTarget& target =
+                g_nadine_p99_publication_probe_targets[index];
+            std::uintptr_t empty = 0;
+            if (!target.fg.compare_exchange_strong(
+                    empty, 1, std::memory_order_acq_rel)) {
+                continue;
+            }
+            target.weapon = reinterpret_cast<std::uintptr_t>(weapon);
+            target.player = reinterpret_cast<std::uintptr_t>(player);
+            target.records_generation = records_generation;
+            target.weapon_runtime_id = weapon_runtime_id;
+            target.player_runtime_id = player_runtime_id;
+            target.attach_index = attach_index;
+            target.refreshed_local_hash = nadine_p99_refresh_transform_hash(
+                refreshed_local.data(), refreshed_local.size());
+            target.phase40_claims.store(0, std::memory_order_relaxed);
+            target.phase40_samples.store(0, std::memory_order_relaxed);
+            target.prepare_samples.store(0, std::memory_order_relaxed);
+            target.fg.store(fg_value, std::memory_order_release);
+
+            char line[640]{};
+            std::snprintf(
+                line, sizeof(line),
+                "NADINE-P99-PUBLISH-TARGET target=%zu "
+                "player=0x%llx/0x%x weapon=0x%llx/0x%x fg=0x%llx "
+                "records=0x%llx attach=%u/0x%x refreshedLocal=0x%llx",
+                index,
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(player)),
+                player_runtime_id,
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(weapon)),
+                weapon_runtime_id,
+                static_cast<unsigned long long>(fg_value),
+                static_cast<unsigned long long>(records_generation),
+                static_cast<unsigned>(attach_index), attach_id,
+                static_cast<unsigned long long>(target.refreshed_local_hash));
+            write_log_line(line);
+            return true;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+    return false;
+}
+
+bool seh_validate_nadine_p99_publication_probe_target(
+    const NadineP99PublicationProbeTarget& target, void* fg,
+    std::uint8_t* attach_index_out, std::uint32_t* attach_id_out) {
+    if (attach_index_out == nullptr || attach_id_out == nullptr) {
+        return false;
+    }
+    *attach_index_out = 0xFF;
+    *attach_id_out = 0;
+    __try {
+        auto* const weapon = reinterpret_cast<const std::byte*>(target.weapon);
+        auto* const player = reinterpret_cast<const std::byte*>(target.player);
+        if (fg == nullptr || weapon == nullptr || player == nullptr ||
+            readable_bytes(weapon) < 0x864 ||
+            readable_bytes(player) <
+                kGameObjectRuntimeIdOffset + sizeof(std::uint32_t) ||
+            readable_bytes(fg) < 0x220 ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon) !=
+                g_module + kProcessWeaponVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(weapon + 0x860) !=
+                kCoopPistolArtId ||
+            *reinterpret_cast<const std::uint32_t*>(
+                weapon + kGameObjectRuntimeIdOffset) !=
+                target.weapon_runtime_id ||
+            *reinterpret_cast<const std::uint32_t*>(
+                player + kGameObjectRuntimeIdOffset) !=
+                target.player_runtime_id ||
+            *reinterpret_cast<void* const*>(weapon + 0x1A8) != fg ||
+            !seh_weapon_parent_resolves_to_owner(
+                const_cast<std::byte*>(weapon),
+                const_cast<std::byte*>(player))) {
+            return false;
+        }
+        auto* const retained = *reinterpret_cast<std::byte* const*>(
+            static_cast<std::byte*>(fg) + kFgAnimDataRetainedHandleOffset);
+        if (retained == nullptr || readable_bytes(retained) < 0x10 ||
+            *reinterpret_cast<const void* const*>(retained + 0x8) != weapon ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(fg) +
+                kFgAnimDataRetainedIdOffset) != target.weapon_runtime_id) {
+            return false;
+        }
+        const std::uint8_t attach_index =
+            *reinterpret_cast<const std::uint8_t*>(weapon + 0x688);
+        std::uintptr_t records_generation = 0;
+        if (!seh_read_owner_attach_record_id(
+                const_cast<std::byte*>(player), attach_index, attach_id_out,
+                &records_generation) ||
+            records_generation != target.records_generation ||
+            *attach_id_out != kPistolHolsterAttachId) {
+            return false;
+        }
+        *attach_index_out = attach_index;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *attach_index_out = 0xFF;
+        *attach_id_out = 0;
+        return false;
+    }
+}
+
+bool seh_capture_nadine_p99_phase40_before(
+    void* fg, const float* transform,
+    NadineP99Phase40ProbeSample* sample_out) {
+    if (sample_out == nullptr || fg == nullptr || transform == nullptr) {
+        return false;
+    }
+    *sample_out = {};
+    const std::uintptr_t fg_value = reinterpret_cast<std::uintptr_t>(fg);
+    for (std::size_t index = 0;
+         index < g_nadine_p99_publication_probe_targets.size(); ++index) {
+        NadineP99PublicationProbeTarget& target =
+            g_nadine_p99_publication_probe_targets[index];
+        if (target.fg.load(std::memory_order_acquire) != fg_value) {
+            continue;
+        }
+        const std::uint32_t sample_index =
+            target.phase40_claims.fetch_add(1, std::memory_order_acq_rel);
+        if (sample_index >= 4) {
+            return false;
+        }
+        __try {
+            std::uint8_t attach_index = 0xFF;
+            std::uint32_t attach_id = 0;
+            if (!seh_validate_nadine_p99_publication_probe_target(
+                    target, fg, &attach_index, &attach_id)) {
+                return false;
+            }
+            const auto* const weapon =
+                reinterpret_cast<const std::byte*>(target.weapon);
+            const auto* const fg_bytes = static_cast<const std::byte*>(fg);
+            sample_out->target_index = static_cast<std::uint32_t>(index);
+            sample_out->sample_index = sample_index;
+            sample_out->fg_flags =
+                *reinterpret_cast<const std::uint32_t*>(
+                    fg_bytes + kFgAnimDataFlagsOffset);
+            sample_out->attach_index = attach_index;
+            sample_out->attach_id = attach_id;
+            sample_out->refreshed_local_hash = target.refreshed_local_hash;
+            sample_out->current_local_hash =
+                nadine_p99_refresh_transform_hash(
+                    reinterpret_cast<const std::uint32_t*>(weapon + 0x130),
+                    8);
+            sample_out->owner_world_hash =
+                nadine_p99_refresh_transform_hash(
+                    reinterpret_cast<const std::uint32_t*>(weapon + 0x110),
+                    8);
+            sample_out->input_hash = nadine_p99_refresh_transform_hash(
+                reinterpret_cast<const std::uint32_t*>(transform), 8);
+            sample_out->fg_before_hash = nadine_p99_refresh_transform_hash(
+                reinterpret_cast<const std::uint32_t*>(fg_bytes + 0x1C0),
+                16);
+            return true;
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            *sample_out = {};
+            return false;
+        }
+    }
+    return false;
+}
+
+void seh_capture_nadine_p99_phase40_after(
+    void* fg, const NadineP99Phase40ProbeSample& sample) {
+    if (sample.target_index >=
+            g_nadine_p99_publication_probe_targets.size() ||
+        fg == nullptr) {
+        return;
+    }
+    __try {
+        NadineP99PublicationProbeTarget& target =
+            g_nadine_p99_publication_probe_targets[sample.target_index];
+        if (target.fg.load(std::memory_order_acquire) !=
+            reinterpret_cast<std::uintptr_t>(fg)) {
+            return;
+        }
+        const std::uint64_t fg_after_hash =
+            nadine_p99_refresh_transform_hash(
+                reinterpret_cast<const std::uint32_t*>(
+                    static_cast<const std::byte*>(fg) + 0x1C0),
+                16);
+        target.phase40_samples.fetch_add(1, std::memory_order_release);
+        char line[768]{};
+        std::snprintf(
+            line, sizeof(line),
+            "NADINE-P99-PHASE40 target=%u sample=%u fg=0x%llx "
+            "flags=0x%x attach=%u/0x%x refreshedLocal=0x%llx "
+            "currentLocal=0x%llx ownerWorld=0x%llx input=0x%llx "
+            "fg=0x%llx->0x%llx changed=%u",
+            sample.target_index, sample.sample_index,
+            static_cast<unsigned long long>(
+                reinterpret_cast<std::uintptr_t>(fg)),
+            sample.fg_flags, static_cast<unsigned>(sample.attach_index),
+            sample.attach_id,
+            static_cast<unsigned long long>(sample.refreshed_local_hash),
+            static_cast<unsigned long long>(sample.current_local_hash),
+            static_cast<unsigned long long>(sample.owner_world_hash),
+            static_cast<unsigned long long>(sample.input_hash),
+            static_cast<unsigned long long>(sample.fg_before_hash),
+            static_cast<unsigned long long>(fg_after_hash),
+            sample.fg_before_hash != fg_after_hash ? 1u : 0u);
+        write_log_line(line);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+    }
+}
+
+void seh_capture_nadine_p99_after_prepare(
+    void* fg, void* instance_pool_base, bool mode) {
+    if (fg == nullptr || instance_pool_base == nullptr) {
+        return;
+    }
+    const std::uintptr_t fg_value = reinterpret_cast<std::uintptr_t>(fg);
+    for (std::size_t index = 0;
+         index < g_nadine_p99_publication_probe_targets.size(); ++index) {
+        NadineP99PublicationProbeTarget& target =
+            g_nadine_p99_publication_probe_targets[index];
+        if (target.fg.load(std::memory_order_acquire) != fg_value ||
+            target.phase40_samples.load(std::memory_order_acquire) == 0) {
+            continue;
+        }
+        const std::uint32_t sample_index =
+            target.prepare_samples.fetch_add(1, std::memory_order_acq_rel);
+        if (sample_index >= 4) {
+            return;
+        }
+        __try {
+            std::uint8_t attach_index = 0xFF;
+            std::uint32_t attach_id = 0;
+            if (!seh_validate_nadine_p99_publication_probe_target(
+                    target, fg, &attach_index, &attach_id)) {
+                return;
+            }
+            const auto* const fg_bytes = static_cast<const std::byte*>(fg);
+            const std::uint64_t fg_hash =
+                nadine_p99_refresh_transform_hash(
+                    reinterpret_cast<const std::uint32_t*>(fg_bytes + 0x1C0),
+                    16);
+            const std::uint32_t driven_count =
+                *reinterpret_cast<const std::uint32_t*>(fg_bytes + 0x20C);
+            const auto* const driven_indices =
+                *reinterpret_cast<const std::uint32_t* const*>(
+                    fg_bytes + 0x210);
+            if (driven_count == 0 || driven_count > 256 ||
+                driven_indices == nullptr ||
+                readable_bytes(driven_indices) <
+                    driven_count * sizeof(std::uint32_t)) {
+                return;
+            }
+            char line[1536]{};
+            int used = std::snprintf(
+                line, sizeof(line),
+                "NADINE-P99-PREPARE target=%zu sample=%u "
+                "fg=0x%llx/0x%llx attach=%u/0x%x mode=%u driven=%u "
+                "entries=",
+                index, sample_index,
+                static_cast<unsigned long long>(fg_value),
+                static_cast<unsigned long long>(fg_hash),
+                static_cast<unsigned>(attach_index), attach_id,
+                mode ? 1u : 0u, driven_count);
+            if (used < 0) {
+                return;
+            }
+            used = std::min<int>(used, static_cast<int>(sizeof(line) - 1));
+            std::uint32_t matched = 0;
+            const std::uint32_t stored =
+                std::min<std::uint32_t>(driven_count, 12);
+            const std::uintptr_t pool =
+                reinterpret_cast<std::uintptr_t>(instance_pool_base);
+            for (std::uint32_t ordinal = 0; ordinal < stored; ++ordinal) {
+                const std::uint32_t pool_index = driven_indices[ordinal];
+                if (pool_index >= 0x10000u) {
+                    const int written = std::snprintf(
+                        line + used, sizeof(line) - used,
+                        "[%u:bad-index]", ordinal);
+                    if (written > 0) {
+                        used = std::min<int>(
+                            static_cast<int>(sizeof(line) - 1),
+                            used + written);
+                    }
+                    continue;
+                }
+                const std::uintptr_t instance_value =
+                    pool + static_cast<std::uintptr_t>(pool_index) * 0x280;
+                const auto* const instance =
+                    reinterpret_cast<const std::byte*>(instance_value);
+                if (instance_value < pool || readable_bytes(instance) < 0x258) {
+                    const int written = std::snprintf(
+                        line + used, sizeof(line) - used,
+                        "[%u:unreadable]", ordinal);
+                    if (written > 0) {
+                        used = std::min<int>(
+                            static_cast<int>(sizeof(line) - 1),
+                            used + written);
+                    }
+                    continue;
+                }
+                const std::uint64_t instance_hash =
+                    nadine_p99_refresh_transform_hash(
+                        reinterpret_cast<const std::uint32_t*>(
+                            instance + 0x140),
+                        16);
+                const bool matrix_match = instance_hash == fg_hash;
+                matched += matrix_match ? 1u : 0u;
+                const int written = std::snprintf(
+                    line + used, sizeof(line) - used,
+                    "[%u:pool=%u:instance=0x%llx:matrix=0x%llx:match=%u:"
+                    "active=%u:owner=0x%x:geometry=0x%llx]",
+                    ordinal, pool_index,
+                    static_cast<unsigned long long>(instance_value),
+                    static_cast<unsigned long long>(instance_hash),
+                    matrix_match ? 1u : 0u,
+                    static_cast<unsigned>(
+                        *reinterpret_cast<const std::uint8_t*>(
+                            instance + 0x1A0)),
+                    *reinterpret_cast<const std::uint32_t*>(
+                        instance + 0x250),
+                    static_cast<unsigned long long>(
+                        reinterpret_cast<std::uintptr_t>(
+                            *reinterpret_cast<void* const*>(
+                                instance + 0x1B0))));
+                if (written > 0) {
+                    used = std::min<int>(
+                        static_cast<int>(sizeof(line) - 1), used + written);
+                }
+            }
+            std::snprintf(
+                line + used, sizeof(line) - used,
+                " matched=%u/%u", matched, stored);
+            write_log_line(line);
+            return;
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            return;
+        }
+    }
+}
+
 bool claim_nadine_p99_hip_transform_refresh(
-    void* action, void* weapon, std::uintptr_t records_generation) {
+    void* weapon, std::uintptr_t records_generation) {
     std::uint64_t signature = 1469598103934665603ULL;
     auto mix = [&signature](std::uint64_t value) {
         signature ^= value;
         signature *= 1099511628211ULL;
     };
-    mix(reinterpret_cast<std::uintptr_t>(action));
     mix(reinterpret_cast<std::uintptr_t>(weapon));
     mix(records_generation);
     if (signature == 0) {
@@ -42247,7 +42698,7 @@ seh_refresh_nadine_p99_hip_transform_once(
         }
 
         if (!claim_nadine_p99_hip_transform_refresh(
-                action, weapon, records_generation)) {
+                weapon, records_generation)) {
             result.status = "already-attempted";
             return result;
         }
@@ -42534,6 +42985,12 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
               action, before.player, controller, pistol_post.weapon,
               post_records_generation)
         : NadineP99HipTransformRefreshResult{};
+    const bool publication_target =
+        kEnableLegacyNadineColdP99PublicationProbe &&
+        transform_refresh.post_verified &&
+        seh_publish_nadine_p99_publication_probe_target(
+            before.player, pistol_post.weapon, post_records_generation,
+            transform_refresh.local_after);
 
     if (exact_pistol_in_hand) {
         std::ostringstream line;
@@ -42593,6 +43050,7 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
                     transform_refresh.correction_after.data(),
                     transform_refresh.correction_after.size())
              << " saved=0x" << transform_refresh.saved_process;
+        line << " publicationTarget=" << (publication_target ? 1 : 0);
         boot_log_line(line.str().c_str());
     }
     g_nadine_pistol_holster_execute_context = previous_context;
@@ -47021,6 +47479,7 @@ void __fastcall hooked_fgdraw_prepare_instance_synchronous(
 void __fastcall hooked_fgdraw_prepare_instance(
     void* fg_anim_data, void* instance_pool_base, bool mode) {
     const bool suppress_inactive_local_rifle =
+        kEnableRejectedNadineWeaponRuntimeProbes &&
         seh_fg_anim_owned_by_local_inactive_rifle(fg_anim_data);
     if (!suppress_inactive_local_rifle &&
         g_original_fgdraw_prepare_instance != nullptr) {
@@ -47051,7 +47510,11 @@ void __fastcall hooked_fgdraw_prepare_instance(
             write_log_line(line.str().c_str());
         }
     }
-    if (g_state_net.enabled) {
+    if constexpr (kEnableLegacyNadineColdP99PublicationProbe) {
+        seh_capture_nadine_p99_after_prepare(
+            fg_anim_data, instance_pool_base, mode);
+    }
+    if constexpr (kEnableRejectedNadineWeaponRuntimeProbes) {
         capture_nadine_fgdraw_candidate(fg_anim_data, instance_pool_base);
         capture_weapon_geometry_owners(fg_anim_data, instance_pool_base);
     }
@@ -50718,8 +51181,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-10aau "
-        "(rejected cold-P99 refresh disabled; holster drawable audit)");
+        "TLL co-op runtime init 2026-08-10aav "
+        "(cold-P99 phase40-to-instance publication discriminator)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -50749,12 +51212,17 @@ DWORD WINAPI install_hook(void*) {
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
     install_player_main_view_visibility_relay();
-    if constexpr (kEnableRejectedNadineWeaponRuntimeProbes) {
+    if constexpr (kEnableRejectedNadineWeaponRuntimeProbes ||
+                  kEnableLegacyNadineColdP99PublicationProbe) {
         install_fgdraw_prepare_instance_relay();
+    } else {
+        boot_log_line("Nadine FgDraw prepare relay disabled");
+    }
+    if constexpr (kEnableRejectedNadineWeaponRuntimeProbes) {
         install_fgdraw_synchronous_prepare_instance_relay();
     } else {
         boot_log_line(
-            "rejected Nadine FgDraw prepare relays disabled");
+            "rejected Nadine synchronous FgDraw prepare relay disabled");
     }
     if constexpr (kEnableStaleRifleCullProbe ||
                   kEnableInitialLocalNadineExactRifleMainViewFlagProbe) {

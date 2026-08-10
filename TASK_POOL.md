@@ -4011,6 +4011,17 @@ Do not reopen these as the first move:
       `FgAnimData+0x1C0` and every driven P99 instance matrix. A matching chain
       selects another drawable; a missing/overwritten link selects its exact
       scheduler/publication boundary.
+      **STATIC / IMPLEMENTED (`aav`):** reuse the already proven exact-P99
+      `+0x7B8` treatment only once per weapon/record generation, then observe
+      stock phase `0x40` after `0x141A8FC00` and stock worker Prepare after
+      `0x14181B925`. The first row compares refreshed/current local, composed
+      input and pre/post `Fg+0x1C0`; the second compares that Fg matrix with all
+      driven instance matrices. Both relays call stock first, are bounded to
+      four samples and leave the rejected heavy probes disabled. Release build
+      passes. Run only untouched cold spawn: no manual draw/Put is needed. A
+      complete matching chain with the artifact still visible closes
+      `Hother-drawable`; the first missing/mismatching link identifies the exact
+      publication repair boundary.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

@@ -20241,3 +20241,57 @@ reaches or survives `0x141A8FC00 -> FgAnimData+0x1C0 -> 0x14181B925`, versus
 instance. The next admissible runtime boundary is read-only and must capture
 those two consecutive stock publications for the exact verified P99 before any
 additional mutation. No game was launched for this static result.
+
+### 2026-08-10 STATIC / IMPLEMENTED: exact P99 phase-0x40 to driven-instance discriminator (`aav`)
+
+The remaining publication split has one minimal stock boundary; forcing
+`FgAnimData flag 0x10` is unnecessary and unsafe. `AnimManager_CreateAsyncUpdateJobFunctor
+0x141781390` installs the animation functor containing `sub_141A928F0`.
+After `AnimManager_PerformAnimBlend 0x141A92905`, a nonzero `job+0x14` skips
+both retained-owner phases. Otherwise Fg flag `0x10` independently admits the
+broad ProcessWeapon vtable `+0x408` path, while flag `0x40` independently calls
+`AnimManager_DispatchRetainedOwnerPhase 0x141A8F9D0` at `0x141A929C1`. The
+`aat` P99 flags were `0x2004C0`: phase `0x10` is absent but phase `0x40` is
+eligible. Therefore no full Animating-layer update is required to test whether
+the already refreshed local reaches rendering.
+
+Three independent static evidence types close the consumer chain. The phase
+dispatcher validates the retained owner/generation, registry selector and
+`owner+0x40 bit 0`, then reads ProcessWeapon `+0x110/+0x120` and the exact
+`+0x130/+0x140` local, composes them and directly calls
+`FgAnimData_PublishWorldTransform` at `0x141A8FC00`. That publisher
+unconditionally writes all four rows at `FgAnimData+0x1C0`; its `r8b=0` only
+skips the optional current snapshot. Later
+`FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` reads the driven count
+and indices from `Fg+0x20C/+0x210`, obtains the render matrix from `Fg+0x1C0`
+for flags `0x2004C0`, and writes every 0x280-stride `FgInstance+0x140..+0x170`.
+The earlier `fw` runtime independently observed the exact current P99 with
+three driven LODs whose matrices all matched its Fg matrix; `aav` repeats that
+measurement only after the proven `aat` treatment.
+
+Build `aav` re-enables the already bounded TLS-safe `+0x7B8` treatment, now
+strictly once per `(weapon, AttachSystem-records generation)` instead of once
+per action. After its exact hip id/index/owner revalidation, an immutable
+eight-slot target table publishes the P99/Fg/runtime identities to worker
+observers. The existing phase-`0x40` callsite relay calls stock first and then
+records the refreshed/current local, owner transform, composed input and
+before/after `Fg+0x1C0` hashes. The worker relay at `0x14181B925` also calls
+stock first, then records every driven pool index, active byte, retained owner,
+geometry pointer and `FgInstance+0x140` matrix hash. It never suppresses stock
+Prepare in this build. The rejected synchronous Prepare, cull, holster and
+renderer-wide probes remain disabled. Each target records at most four phase
+and four Prepare samples; Release compilation succeeds.
+
+The outcomes are falsifiable in one untouched cold spawn. Both processes must
+load marker `2026-08-10aav`, remain responsive and emit the existing verified
+P99 handoff plus `publicationTarget=1`. **Hmissing-phase40** wins if no
+`NADINE-P99-PHASE40` row follows. A phase row with a changed post-call Fg hash
+but no `NADINE-P99-PREPARE` row selects the render-job/Prepare boundary. A
+Prepare row with fewer matrix matches than driven instances selects an instance
+overwrite/list problem. If phase publication is present and every driven P99
+instance matches `Fg+0x1C0` while the small handgun still remains at the hand,
+**Hother-drawable** wins and no ProcessWeapon/Fg mutation is authorized. Mazur,
+Chloe, body, arms, grenades and frame time must remain unchanged; any crash,
+identity drift, missing treatment target or stock Prepare suppression rejects
+the package. No manual weapon input is required, and no game was launched while
+implementing this discriminator.
