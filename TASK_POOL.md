@@ -3988,6 +3988,16 @@ Do not reopen these as the first move:
       Release build passes. Run only the written cold-spawn prediction in
       `COOP_STATUS.md`; require `refresh=ok/1/1 tls=1/1` and nonzero local
       `changed` before doing any manual draw/Put cycle.
+      **RUNTIME REJECTED (`aat`) / DISABLED (`aau`):** both copies stayed
+      responsive and every first exact P99 refresh passed all guards, restored
+      TLS and changed all eight `+0x130/+0x140` dwords (`changed=0xFF`) without
+      attachment/owner drift. The small object nevertheless remained at local
+      Nadine's hand. The synchronous current-local repair is not the pixel
+      owner and is disabled. Statically split a missing late Fg publication
+      from a second drawable; start with the two simultaneously resolved
+      `nadine-holster[-game]` meshes, their differing Look2 view flags and the
+      regular mesh's deform joints 143--165. Do not launch another diagnostic
+      until that owner is exact.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 

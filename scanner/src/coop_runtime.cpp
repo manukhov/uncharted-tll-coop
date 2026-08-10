@@ -1971,6 +1971,11 @@ constexpr bool kEnableProcessWeaponInitProbe = false;
 // gun_holster request. The rejected IK/knowledge writes remain disabled.
 constexpr bool kEnableLegacyNadineHolsterIkVerification = false;
 constexpr bool kEnableLegacyNadinePistolHipAttachment = true;
+// Build aat proved that a balanced, exact ProcessWeapon +0x7B8 call changes all
+// eight current-local transform dwords while the cold hand artifact remains.
+// Keep the bounded discriminator available, but do not mutate the rejected path
+// in production while the later Fg publication / second-drawable owner is traced.
+constexpr bool kEnableLegacyNadineColdP99HipTransformRefresh = false;
 // Builds gz/ha safely exercised the full stock rebind but targeted 0x8075397D,
 // the P99 rather than the visible Mazur. Retarget the one-shot boundary to the
 // actual rifle and resolve its inventory slot by art instead of assuming slot 0.
@@ -42524,7 +42529,7 @@ void __fastcall hooked_player_holster_weapon_anim_action_execute(void* action) {
         post_records_generation == before_records_generation &&
         post_attach_id == kPistolHolsterAttachId;
     const NadineP99HipTransformRefreshResult transform_refresh =
-        post_verified
+        kEnableLegacyNadineColdP99HipTransformRefresh && post_verified
         ? seh_refresh_nadine_p99_hip_transform_once(
               action, before.player, controller, pistol_post.weapon,
               post_records_generation)
@@ -50713,8 +50718,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-10aat "
-        "(guarded cold-P99 hip transform refresh)");
+        "TLL co-op runtime init 2026-08-10aau "
+        "(rejected cold-P99 refresh disabled; holster drawable audit)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

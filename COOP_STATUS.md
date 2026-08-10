@@ -20164,3 +20164,32 @@ sequence. On local Nadine, before any manual weapon input, the row must be
 thigh instead of the hand. Mazur remains on the back and Chloe, grenade, body,
 arms and frame time remain unchanged. Do not perform a draw/Put cycle unless
 this cold result has first passed.
+
+### 2026-08-10 RUNTIME REJECTED: synchronous P99 `+0x7B8` local refresh is not sufficient (`aat` -> `aau`)
+
+Both PID 18120 and PID 15492 loaded marker `2026-08-10aat`, installed the exact
+P99 action/selector boundaries, assigned roles A/B and remained responsive.
+The user performed only the written cold-spawn observation and confirmed that
+the small handgun-shaped object still remained at local Nadine's hand.
+
+The bounded rows reject a skipped guard or no-op call. Both owners retained the
+full `rightHand -> targSpineProp -> pistolHolster` sequence and
+`stock/call/verified=1`. The first admitted refresh on each side reported
+`refresh=ok/1/1`, `tls=1/1`, Fg flags `0x2004C0`, exact object flags
+`0x11/0x15`, unchanged correction/depenetration state and
+`changed=0xFF/0/0`: all eight dwords at ProcessWeapon `+0x130/+0x140` changed,
+with distinct nonzero before/after hashes. Attachment id, parent, controller and
+record generation reverified after the call. Later duplicate action executions
+were correctly rejected as `already-attempted`.
+
+This rejects **Hcold-current-local** as a sufficient pixel owner and proves the
+TLS-safe direct `+0x7B8` packaging itself. It does not yet distinguish
+**Hmissing-publish**, where the new local never reaches or survives the next
+FgAnimData `+0x1C0` publication, from **Hother-drawable**, where exact P99 moves
+but a second smaller mesh remains at the hand. Build `aau` disables the rejected
+refresh call; no full `+0x408`, direct Fg publication, event or renderer write
+will be added without first resolving this split statically. The next static
+owner frontier is the pair of simultaneously resolved Nadine holster meshes:
+their differing Look2 `+0x4A/+0x4B` flags and the regular holster's authored
+deform joints 143--165 versus the game's exact `r_leg_holster` weights. No
+further launch is authorized yet.
