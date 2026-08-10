@@ -20086,3 +20086,81 @@ scale/owner chain, reusing the proven `fy` identity path rather than repeating
 cull, visibility or controller-cycle experiments. No manual draw/Put pose claim
 is made from this cold-only run, and the independent `aaq` WeaponPartial path
 remains untested here.
+
+### 2026-08-10 STATIC / IMPLEMENTED: refresh the cold P99 current hip transform after `aas` (`aat`)
+
+The user's size discriminator does not select a baked outfit pistol. Exact
+`nadine-rural 0xD27C074F` Look2 traversal through
+`ResolvedLook_ResolveMeshes2 0x141805020` reaches exactly five leaves:
+`nadine-srilanka-head`, `nadine-rural-shirt`, `nadine-rural-body`,
+`nadine-holster-game 0x5EAAF523` and `nadine-holster 0xC450A073`. Both holster
+PAKs contain one leather holster/belt mesh and no firearm geometry or material.
+Their four LODs have zero vertices weighted to
+`r_hand_prop_attachment 0x05FC3888`; the game holster instead weights 4284 of
+5990 LOD0 vertices to `r_leg_holster 0xADD0C871`. Its 22.7 x 42.3 x 20.1 cm
+mesh is visibly a thigh holster, belt and straps, not a reduced handgun. This
+rejects both a sixth hidden Look2 pistol leaf and hand-skinned holster vertices.
+
+The independent native Glock candidate is also not a cold Player owner.
+`pistol-nadine 0xC7CB8F0E` resolves to geometry
+`pistol-glock-nadine 0xF856FE95`, but complete asset references place it in the
+native `nadine-buddy` AI loadout, NPC give-weapon scripts, model viewer and two
+cinematic props, not Player look/loadout/net-character creation. All 498 saved
+runtime rows for that art belong to exact NPC Nadine and none to legacy-Nadine
+Player. Conversely the corrected `aaf` main-colour census selected the exact
+current inventory P99 LOD0 while the cold defect was visible, and `fy` tied all
+known P99 geometry instances to ProcessWeapon. An unknown cinematic drawable
+is not renderer-exhaustively impossible, but it has no ordinary cold gameplay
+producer; the exact current P99 presentation remains the supported owner.
+
+The missing state inside that owner is now exact. `aas` ends in
+`PlayerWeaponController_RebindWeaponToHolster 0x1410A9670`. That function calls
+ProcessWeapon vtable `+0x7A8` to select the new record, copies binding-local
+correction to `weapon+0x4F0/+0x500`, clears the local blend and calls `+0x8A8`,
+but never calls vtable `+0x7B8` and never writes the current local transform at
+`weapon+0x130/+0x140`. The first stock recompute is
+`NdAttachableObject_UpdateSelectedAttachmentTransform 0x141ED1380` through
+`NdAttachableObject_UpdateAnimatingLayersAndPublish 0x141ED2060` in AnimManager
+phase `0x10`. Phase `0x40` only composes and publishes the cached local state.
+Therefore a cold inactive P99 can have selected id/index `pistolHolster/41`
+while still submitting its earlier hand-local matrix; drawing and putting the
+weapon activates the stock recompute and explains why the later visual becomes
+correct.
+
+Build `aat` performs exactly one synchronous stock `+0x7B8` refresh immediately
+after the already verified `rightHand -> targSpineProp -> pistolHolster` P99
+handoff, and only for the missing-phase case. Admission revalidates exact legacy
+Nadine, controller, inventory P99, ProcessWeapon vtable and unchanged
+parent/AttachSystem generation; exact hip record; resolver flags; nonzero local
+write gate; null attachment blend; zero local blend; finite correction/owner/
+current transforms; exact FgAnimData/DrawControl/retained ownership; Fg phase
+`0x10` clear and phase `0x40` set. It also validates the concrete `+0x7B8` slot.
+The wrapper saves the TLS ContextProcess, sets it to the P99 as the stock
+AnimManager does, calls once per action/weapon/record generation, restores TLS
+on every entered path, and revalidates object/controller/parent/record state.
+It does not call ProcessWeapon `+0xD0`, full `+0x408`, animation callbacks or a
+manual FgAnimData/render publication. Release compilation succeeds; no game was
+launched during implementation. The single IDB label pass applied 1641 function
+names and 56 data names with `save_database returned True`; after MCP restart,
+independent lookup resolves `0x141805020` as `ResolvedLook_ResolveMeshes2` and
+retains both attachment-transform names.
+
+The alternatives are now falsifiable. **Hcold-current-local** predicts
+`refresh=ok/1/1`, `tls=1/1`, unchanged hip id/index and nonzero first
+`changed` mask; the next ordinary phase `0x40` moves the small P99 from the hand
+to the thigh without a Draw. **Halready-current** predicts `changed=0` and an
+unchanged artifact, rejecting the stale `+0x130/+0x140` explanation.
+**Hmissing-publish** predicts a changed local matrix but no later visible/Fg
+matrix change. **Hother-drawable** survives only if the refresh changes and
+publishes the exact P99 yet a separate small handgun remains. Any guard status
+other than `ok`, nonnull blend, duplicate event, attachment drift, Chloe/rifle
+regression or crash makes the test rejected or inconclusive rather than license
+to widen the repair.
+
+**Single cold-spawn prediction:** both copies must load marker
+`2026-08-10aat`, remain responsive, and retain the exact `aas` counters and id
+sequence. On local Nadine, before any manual weapon input, the row must be
+`refresh=ok/1/1 tls=1/1` with nonzero local `changed`; the P99 must appear at the
+thigh instead of the hand. Mazur remains on the back and Chloe, grenade, body,
+arms and frame time remain unchanged. Do not perform a draw/Put cycle unless
+this cold result has first passed.

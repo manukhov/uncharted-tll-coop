@@ -879,9 +879,12 @@ FUNCTIONS = {
     0x141ED1380: (
         "NdAttachableObject_UpdateSelectedAttachmentTransform",
         "Shared NdAttachableObject update path. Calls the selected-attachment "
-        "resolver, applies the optional blend object at +0x838 and publishes "
-        "the resulting attached-object transform. ProcessWeapon inherits this "
-        "path; PlayerWeaponAnimControl holster IK does not write it.",
+        "resolver and writes the current local transform to +0x130/+0x140 when "
+        "+0x5F8 is enabled. A nonnull optional blend object at +0x838 advances "
+        "through GetProcessDeltaTime and callbacks, so out-of-phase callers must "
+        "reject that state. ProcessWeapon inherits this at vtable +0x7B8; the "
+        "normal AnimManager phase establishes that ProcessWeapon as the TLS "
+        "ContextProcess before calling it.",
     ),
     0x141ED0190: (
         "NdAttachableObject_SetParentAndAttachmentIndex",
@@ -10237,6 +10240,15 @@ FUNCTIONS = {
         "Controller vtable slot +0xB8. Resolves slot 19 when controller+0x120 "
         "equals 19; otherwise resolves the current slot byte at +0x12C.",
     ),
+    0x141805020: (
+        "ResolvedLook_ResolveMeshes2",
+        "Source-identified ResolvedLook::ResolveMeshes2 path. Recursively walks "
+        "the Look2 mesh-reference graph, resolves only look2-mesh leaves into "
+        "the ResolvedLook mesh table and copies the authored +0x48..+0x4C flag "
+        "bytes into the parallel mesh bitsets. Exact nadine-rural traversal "
+        "reaches head, shirt, body, nadine-holster-game and nadine-holster and "
+        "contains no pistol geometry leaf.",
+    ),
     0x141805C60: (
         "ResolvedLook_ResolveProps2",
         "Resolves the Look2 prop list into ResolvedLook+0x5848. Stores at most "
@@ -11156,7 +11168,9 @@ FUNCTIONS = {
         "binding's primary transform (+0x10) to weapon+0x4F0/+0x500 at "
         "0x1410A9A65/0x1410A9A99. It does not compare the selected attachment "
         "id after vtable +0x7A8, so a separately scoped endpoint rebind has no "
-        "outer targSpineProp postcondition.",
+        "outer targSpineProp postcondition. It never calls ProcessWeapon vtable "
+        "+0x7B8 and never writes the current local transform at +0x130/+0x140; "
+        "the new selected record is therefore not synchronously recomputed.",
     ),
     0x141ED0580: (
         "WeaponAttachment_SelectExistingOwnerPoint",

@@ -3974,6 +3974,20 @@ Do not reopen these as the first move:
       ProcessWeapon attachment. Statically identify whether those pixels belong
       to a separate appearance/mesh-overlay prop, an alternate ProcessWeapon
       child, or a stale local-view presentation before another launch.
+      **STATIC / IMPLEMENTED (`aat`):** the appearance alternative is now
+      rejected: exact `nadine-rural` contains only head/shirt/body plus two
+      leather holster meshes, no pistol leaf, and neither holster has a single
+      vertex weighted to the hand. The native Nadine Glock is NPC/cinematic art
+      with no cold Player producer; historical rows contain zero Player owners.
+      Exact `aas` rebind selects the hip and copies correction state but never
+      runs ProcessWeapon vtable `+0x7B8`, while phase `0x40` republishes only the
+      cached current local transform. `aat` therefore calls that exact stock
+      refresh once after the verified P99 hip handoff, only when phase `0x10` is
+      absent and phase `0x40` is pending, under balanced ProcessWeapon TLS and
+      strict vtable/owner/generation/record/blend/transform/FgAnimData guards.
+      Release build passes. Run only the written cold-spawn prediction in
+      `COOP_STATUS.md`; require `refresh=ok/1/1 tls=1/1` and nonzero local
+      `changed` before doing any manual draw/Put cycle.
 - [ ] After firearm geometry is correct, locate the rifle sling as a separate
       prop/visibility/attachment candidate; do not block the holster mapping on it.
 
