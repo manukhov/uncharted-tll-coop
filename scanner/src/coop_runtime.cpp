@@ -17888,7 +17888,7 @@ struct NadineSpinePropAliasResult {
 };
 
 constexpr std::array<std::uint32_t, 8> kCanonicalAttachIdentityBits{
-    0u, 0u, 0u, 0u, 0u, 0u, 0u, 0x3F800000u,
+    0u, 0u, 0u, 0x3F800000u, 0u, 0u, 0u, 0x3F800000u,
 };
 
 bool raw_attach_transform_valid(const NadineAttachTransform32* transform) {
@@ -51903,8 +51903,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-10abe "
-        "(early native spineb alias plus local P99 lift/back fit)");
+        "TLL co-op runtime init 2026-08-10abf "
+        "(canonical native spineb alias plus local P99 lift/back fit)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

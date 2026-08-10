@@ -4113,6 +4113,18 @@ Do not reopen these as the first move:
       confirmed the old weapon now appears at the exchange point. No expiry,
       rollback, duplicate or crash occurred. World-weapon reliability is closed.
 
+## P0 — Nadine local weapon presentation (`abf`)
+
+Fresh `abe` runtime rejected its spine-alias admission: P99 correctly reached
+the thigh at index 39, but Mazur remained on `rightHand` and no alias/rebind row
+appeared. Static root cause is exact: the shared identity literal omitted the
+first quaternion W (`0,0,0,0 / 0,0,0,1`) while every authored/live
+`targSpine` record is `0,0,0,1 / 0,0,0,1`. Build `abf` changes only this literal.
+Next and only authorized run: fresh spawn must report alias `39->40`, joints
+`16/16/16`, then a verified local Mazur `rightHand -> targSpineProp`; P99 fit is
+accepted and must not be changed. If Mazur reaches the back but the strap remains
+absent, continue statically from the existing ProcessWeaponStrap child census.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

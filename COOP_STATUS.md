@@ -20991,3 +20991,41 @@ thigh holster, slightly farther back than `abd`; role A must emit no P99 fit row
 The sling is evaluated only after Mazur reaches the corrected back endpoint. Any
 missing alias, `bridge=1`, Mazur/P99 remaining in the hand, cross-role fit row,
 pose corruption, crash or lag rejects the package.
+
+### 2026-08-10 RUNTIME REJECTED / STATIC FIX: `abe` used a malformed identity constant
+
+The user confirmed the P99 position is now acceptable and should remain as-is;
+the four-centimetre lift and two-centimetre backward correction are exact-art
+scoped to P99 `0x8075397D`, so ordinary pistols are unaffected. Mazur, however,
+remained permanently attached to the hand and overlapped the drawn P99.
+
+Fresh `abe` evidence rejects the intended spine-alias admission. There is no
+`NADINE-NATIVE-SPINE-ALIAS` or `NADINE-LOCAL-MAZUR-REBIND` row. The successful
+P99 cold repair selected `pistolHolster` at index 39, proving the neighboring
+native-pistol append ran while the earlier spine append did not. Manual P99 Put
+again stopped at `rightHand -> rightHand`, `bridge=1`, `hipRedirect=0`, matching
+the missing-AD executor failure rather than a later Mazur transform or render
+problem.
+
+The exact implementation fault is static and deterministic. Historical raw
+legacy-Nadine `targSpine 0x8E1D5EEF` records repeatedly contain transform DWORDs
+`0,0,0,3F800000,0,0,0,3F800000` on joint 16. The new shared
+`kCanonicalAttachIdentityBits` instead contained
+`0,0,0,0,0,0,0,3F800000`, so both the donor-independent helper and the old
+compatibility helper necessarily failed their `memcmp` with status `-4/-9`.
+The joint alternative is rejected by the same captures (`joint=16`) and the
+resolved `spineb` index; capacity/lifecycle alternatives are rejected by the
+immediately following successful index-39 pistol append.
+
+Build `abf` corrects only that canonical transform literal by restoring the
+missing first quaternion W component. It does not change the accepted P99 fit,
+attachment IDs, selection hooks, transforms or refresh scheduling. The bounded
+prediction is now stronger than `abe`: on a fresh table the alias must be the
+first appended record, reporting `status=1`, `count=39->40`,
+`sourceJoint=targetJoint=expected=16`, `exact=1`; `pistolHolster` must therefore
+move to index 40. Before weapon input the local Mazur must emit one verified
+`rightHand -> targSpineProp` rebind and leave the hand. One P99 Put must again
+complete both bridges and return to the hip. Missing alias, Mazur remaining in
+the hand, body/weapon corruption, crash or lag rejects `abf`; a verified Mazur
+back rebind with no sling would isolate the sling child as the next separate
+owner.
