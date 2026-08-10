@@ -1974,8 +1974,11 @@ constexpr bool kEnableLegacyNadinePistolHipAttachment = true;
 // Builds aat/aav rejected a missing local-transform refresh, phase-0x40 publish,
 // or driven-LOD prepare as the cold P99 cause. Build aaw then proved that no
 // post-handoff generic request reaches the existing-owner selector while the
-// strict holstered admission holds. Its dormant persistent redirect is removed;
-// the remaining rollback owner must be resolved before another mutation.
+// strict inactive-controller admission holds. Static caller closure shows that
+// the admission was too narrow: every generic request outside the one authored
+// PlayerHolsterWeaponAnimAction bridge is already a holster endpoint, including
+// switch/finalize/give and Player-death inventory reset paths. Keep the exact
+// retained Player-Nadine/P99 scope and persist that endpoint at pistolHolster.
 // Builds gz/ha safely exercised the full stock rebind but targeted 0x8075397D,
 // the P99 rather than the visible Mazur. Retarget the one-shot boundary to the
 // actual rifle and resolve its inventory slot by art instead of assuming slot 0.
@@ -42325,39 +42328,77 @@ std::uintptr_t __fastcall hooked_weapon_attachment_select_existing_owner_point(
             before.owner, kPistolHolsterAttachId,
             &pistol_holster_index) &&
         pistol_holster_index >= 0 && pistol_holster_index <= 0xFE;
-    const bool scoped_pistol =
-        context.phase != NadinePistolHolsterRedirectPhase::kNone &&
-        context.player == before.owner &&
+    const bool exact_nadine_pistol =
+        before.owner_index >= 0 &&
         before.look == kLegacyNadineAttachTargetLookId &&
         before.art == kCoopPistolArtId &&
         pistol_holster_present &&
         seh_weapon_is_player_art(
-            context.player, weapon, kCoopPistolArtId);
+            before.owner, weapon, kCoopPistolArtId);
+    const bool scoped_pistol = exact_nadine_pistol &&
+        context.phase != NadinePistolHolsterRedirectPhase::kNone &&
+        context.player == before.owner;
     std::uint32_t effective_attach_id = attach_id;
     bool redirected = false;
-    if (scoped_pistol && attach_id == kGunHolsterAttachId) {
-        effective_attach_id =
-            context.phase ==
+    if (exact_nadine_pistol && attach_id == kGunHolsterAttachId) {
+        // The stock holster executor alone requires targSpineProp as a
+        // temporary, twice-selected intermediate. All other gun_holster
+        // requests have already entered a semantic holster endpoint: the
+        // controller emits player-holstered and has no selected-id postcheck.
+        // Legacy Nadine's authored generic record resolves to the hand, so use
+        // her existing thigh-holster record at that exact endpoint.
+        effective_attach_id = scoped_pistol &&
+                context.phase ==
                     NadinePistolHolsterRedirectPhase::kStockSpineBridge
-                ? kTargSpinePropAttachId
-                : kPistolHolsterAttachId;
+            ? kTargSpinePropAttachId
+            : kPistolHolsterAttachId;
         redirected = true;
-        ++context.redirect_count;
+        if (scoped_pistol) {
+            ++context.redirect_count;
+        }
     }
     const std::uintptr_t result =
         g_original_weapon_attachment_select_existing_owner_point != nullptr
         ? g_original_weapon_attachment_select_existing_owner_point(
               weapon, effective_attach_id, binding)
         : 0;
+    ExistingOwnerAttachSnapshot after{};
+    if (redirected || kEnablePersistentStateInventoryLogging) {
+        after = capture_existing_owner_attach(weapon);
+    }
+    if (redirected && !scoped_pistol) {
+        static std::array<std::atomic<std::uint32_t>, 2> global_redirect_rows{};
+        const unsigned row = global_redirect_rows[before.owner_index].fetch_add(
+            1, std::memory_order_relaxed);
+        if (row < 16) {
+            const std::uintptr_t return_address =
+                reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+            std::ostringstream line;
+            line << "NADINE-P99-GLOBAL-HIP owner=" << before.owner_index
+                 << " player=0x" << std::hex
+                 << reinterpret_cast<std::uintptr_t>(before.owner)
+                 << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
+                 << " retRva=0x"
+                 << (return_address >= g_module
+                         ? return_address - g_module
+                         : return_address)
+                 << " requested=0x" << attach_id
+                 << " effective=0x" << effective_attach_id
+                 << " id=0x" << before.attach_id << "->0x"
+                 << after.attach_id << std::dec << " index="
+                 << static_cast<unsigned>(before.attach_index) << "->"
+                 << static_cast<unsigned>(after.attach_index)
+                 << " result=0x" << std::hex << result;
+            boot_log_line(line.str().c_str());
+        }
+    }
     if constexpr (!kEnablePersistentStateInventoryLogging) {
         return result;
     }
     if (before.owner_index < 0 ||
-        (!relevant_holster_probe_art(before.art) && !scoped_pistol)) {
+        (!relevant_holster_probe_art(before.art) && !exact_nadine_pistol)) {
         return result;
     }
-    const ExistingOwnerAttachSnapshot after =
-        capture_existing_owner_attach(weapon);
     std::ostringstream line;
     line << "NADINE-HOLSTER-SELECT owner=" << before.owner_index
          << " player=0x" << std::hex
@@ -50356,8 +50397,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-10aax "
-        "(rejected persistent P99 redirect removed)");
+        "TLL co-op runtime init 2026-08-10aay "
+        "(legacy-Nadine P99 generic holster endpoint redirected to hip)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

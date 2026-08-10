@@ -11213,6 +11213,34 @@ FUNCTIONS = {
         "+0x7B8 and never writes the current local transform at +0x130/+0x140; "
         "the new selected record is therefore not synchronously recomputed.",
     ),
+    0x1410A9D10: (
+        "PlayerWeaponController_RebindCurrentWeaponForHolster",
+        "Resolves the controller's current weapon through vtable +0xB0, reads "
+        "WeaponArtDefsOnline+0x30, and either calls the exact holster rebind at "
+        "vtable +0x3D0 or clears the supplied fallback slot through +0x1A0. "
+        "Called by weapon-switch finalization, GiveWeapon, immediate-index, and "
+        "the Player-death inventory reset helpers.",
+    ),
+    0x1410AEBB0: (
+        "PlayerWeaponController_ResetInventoryForPlayerDeath",
+        "PlayerWeaponController vtable +0x350. The sole exact Player+0x1D88 "
+        "dispatch is 0x140D76290 in the Player death reset path. Removes move "
+        "actions, preserves the active slot, iterates all 19 inactive inventory "
+        "slots, and calls vtable +0x3D0 for every holsterable weapon before "
+        "applying the players-drop-weapons rule.",
+    ),
+    0x140D761B0: (
+        "Player_ResetStateForDeath",
+        "Player death-state reset called from PlayerDeathAction_OnStart. Stops "
+        "active control/action state and invokes PlayerWeaponController vtable "
+        "+0x350 at 0x140D76290 before processing death-revenge/loadout rules.",
+    ),
+    0x140D77880: (
+        "PlayerDeathAction_OnStart",
+        "Death action entry: marks the action active, resets the owning Player "
+        "through Player_ResetStateForDeath, emits all-death or falling-death "
+        "VOX, and completes the remaining death-chain bookkeeping.",
+    ),
     0x141ED0580: (
         "WeaponAttachment_SelectExistingOwnerPoint",
         "Common weapon vtable +0x7A8 implementation. Searches the current "

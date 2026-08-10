@@ -20412,3 +20412,60 @@ the confirmed action-scoped spine bridge plus post-handoff hip rebind remain
 unchanged. No new mutation is authorized until the first generic writer and its
 controller phase are resolved statically. Release compilation must precede the
 next commit; no validation launch is requested for this pure rollback.
+
+### 2026-08-10 STATIC / IMPLEMENTED: close every exact Player-Nadine P99 generic holster endpoint (`aay`)
+
+The `aaw` absence came from an over-narrow admission, not from an unresolved
+renderer write. Three independent static evidence types close the generic
+selector boundary. First, RTTI fixes Player `+0x1D88` to
+`PlayerWeaponController` vtable `0x142A47F90`; its `+0x3D0` slot is the already
+confirmed `PlayerWeaponController_RebindWeaponToHolster 0x1410A9670`, while
+ProcessWeapon `+0x7A8` is
+`WeaponAttachment_SelectExistingOwnerPoint 0x141ED0580`. Second, the rebind
+builds `WeaponHolster_BuildBinding`, selects its authored id, copies its
+correction, and emits `player-holstered`; it never compares the selected id
+after `+0x7A8`. Thus controller `current/draw` are not admission conditions:
+the call itself is the semantic holster endpoint. Third, the caller closure
+contains the holster AnimAction, `ApplyWeaponSwitch`, `GiveWeapon`, the
+current-weapon helper `0x1410A9D10`, state cases in `0x1410B0570`, and the
+inactive-inventory reset `0x1410AEBB0`. They call the same `+0x3D0` endpoint
+while switch/death state can still be transitional, exactly the state excluded
+by `aaw`.
+
+The death/reset branch is independently resolved rather than guessed.
+`PlayerDeathAction_OnStart 0x140D77880 -> Player_ResetStateForDeath
+0x140D761B0` loads Player `+0x1D88` and calls vtable `+0x350` at
+`0x140D76290`. Its target `PlayerWeaponController_ResetInventoryForPlayerDeath
+0x1410AEBB0` removes weapon actions, preserves the active slot, iterates the
+other 19 inventory slots, reads `WeaponArtDefsOnline+0x30`, rebinds every
+holsterable weapon through `+0x3D0`, then applies the authored
+`players-drop-weapons` rule. This proves one concrete reason the old inactive
+state gate could miss a valid generic rollback. The competing direct writer is
+rejected for the observed post-handoff occurrence: ordinary direct
+`NdAttachableObject_SetParentAndAttachmentIndex 0x141ED0190` callers are
+ragdoll/NPC/drop/journal/phone/init paths; `NdAttachableObject_Init
+0x141ECEFE0` is a full renderable initializer that resets parent, transforms,
+DrawControl and many unrelated fields, unlike the observed identity-preserving
+ProcessWeapon relocation. The relocation callback itself was already proven
+not to write `+0x688`.
+
+Build `aay` therefore keeps the exact action protocol but corrects its endpoint
+scope. While the known PlayerHolsterWeaponAnimAction executes, its two generic
+requests still map only to mandatory `targSpineProp`; the separately verified
+post-handoff call still maps to `pistolHolster`. Every other `gun_holster`
+request maps to `pistolHolster` only when all stable identities agree: retained
+Player owner, legacy Nadine look `0xD27C074F`, exact inventory P99 art
+`0x8075397D`, same resolved owner, and an existing hip record. Chloe, NPCs,
+rifles, grenades, other attachment ids and non-inventory objects remain stock.
+A bounded `NADINE-P99-GLOBAL-HIP` row records the first 16 outside-action
+redirections per owner with return RVA and verified selected id/index.
+
+The runtime prediction is falsifiable in one normal spawn/switch sequence. Both
+copies must load marker `2026-08-10aay`, retain the existing verified
+`rightHand -> targSpineProp -> pistolHolster` action row, and emit at least one
+outside-action row as `requested=555EFB8D`, `effective=8A0249B5`, ending at
+index 41. The small P99 must leave local Nadine's hand and remain on the thigh
+through pistol/rifle switching and checkpoint reset; Draw must still attach the
+full-size P99 to the hand. A row ending anywhere except hip, missing action
+bridge, P99 remaining at the hand, wrong Draw attachment, crash, Chloe/rifle/
+grenade/body regression, or material frame-time regression rejects `aay`.
