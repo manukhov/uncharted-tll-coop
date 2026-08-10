@@ -4113,17 +4113,18 @@ Do not reopen these as the first move:
       confirmed the old weapon now appears at the exchange point. No expiry,
       rollback, duplicate or crash occurred. World-weapon reliability is closed.
 
-## P0 — Nadine local weapon presentation (`abf`)
+## P0 — Nadine local weapon presentation (`abg`)
 
-Fresh `abe` runtime rejected its spine-alias admission: P99 correctly reached
-the thigh at index 39, but Mazur remained on `rightHand` and no alias/rebind row
-appeared. Static root cause is exact: the shared identity literal omitted the
-first quaternion W (`0,0,0,0 / 0,0,0,1`) while every authored/live
-`targSpine` record is `0,0,0,1 / 0,0,0,1`. Build `abf` changes only this literal.
-Next and only authorized run: fresh spawn must report alias `39->40`, joints
-`16/16/16`, then a verified local Mazur `rightHand -> targSpineProp`; P99 fit is
-accepted and must not be changed. If Mazur reaches the back but the strap remains
-absent, continue statically from the existing ProcessWeaponStrap child census.
+`abf` is partial runtime-confirmed: P99 holster/ownership is accepted and Mazur
+leaves the hand, but the identity `spineb` alias places Mazur at pelvis/butt
+height. Build `abg` preserves the logical AD endpoint while using the shipped
+spined-relative `targSpineProp` transform at final ApplyLocal and a bounded 5 cm
+back clearance. It also bypasses exactly two Chloe-only seven-group P99 grip
+targets in favor of their normal eight-group Player sources, scoped to local
+role-B Nadine with current drawn P99. One authorized run: verify Mazur upper-back
+placement, sling visibility, P99 Draw/Put/holster regression absence and the
+active/ADS hand grip. Use the exact log predictions recorded in `COOP_STATUS.md`;
+do not tune further from a failed row-free run.
 
 ## Rule
 

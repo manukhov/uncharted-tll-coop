@@ -21029,3 +21029,77 @@ complete both bridges and return to the hip. Missing alias, Mazur remaining in
 the hand, body/weapon corruption, crash or lag rejects `abf`; a verified Mazur
 back rebind with no sling would isolate the sling child as the next separate
 owner.
+
+### 2026-08-10 RUNTIME PARTIAL CONFIRMED / REJECTED: `abf` closes weapon ownership but selects Mazur's lower-spine frame
+
+The user confirmed all three ownership postconditions of `abf`: P99 remains in
+the accepted thigh-holster position, a drawn P99 no longer shows the rifle
+glued to the hand, and Mazur can now leave the hand. The P99 lift/back correction
+is exact-art scoped to `0x8075397D`; ordinary pistols do not enter it. The visual
+Mazur prediction is rejected independently: the rifle now emerges from the
+pelvis/butt rather than occupying the upper back. This is a frame error, not a
+selection rollback. The stock action still requires and retains
+`targSpineProp 0x00AD047A`, while `abf` intentionally made that id an alias of
+legacy Nadine's identity `spineb` joint 16.
+
+The user also isolated a pre-existing drawn-P99 pose defect: the weapon body is
+no longer duplicated, but the hands do not close around its handle and the
+pistol appears to float. This is separate from the confirmed physical
+rightHand/pistolHolster attachment repair.
+
+### 2026-08-10 STATIC / IMPLEMENTED: authored spined Mazur frame and generic Player P99 grip (`abg`)
+
+Build `abg` repairs the two remaining presentation owners without changing the
+accepted P99 holster transform.
+
+For Mazur, three independent evidence kinds select the upper-back frame.
+First, exact asset data in `dc1.psarc/attach-points.bin` contains Chloe's
+`targSpineProp` row under `spined 0xB5AFAB6E` with local transform DWORDs
+`3CCCCCCD,3DEF9DB2,BDCED917,3F800000,3F45AE02,BF10FC5B,BC4A2765,3E93592B`.
+Second, legacy Nadine already owns identity record `0x4F62CD9D` on its own
+`spined` joint 18, so `AttachSystem_ResolveRecordTransform 0x1418B7060`
+supplies the target-skeleton parent frame without a cross-look ordinal.
+Third, the sole final correction call at `0x141ED19BB` accepts the resolved
+attachment frame before applying the unchanged WeaponArt binding, allowing an
+art-scoped substitution while selected id/index remain `targSpineProp`.
+`spineb` is rejected by the observed pelvis-height result; `gun_holster` is
+rejected because the compatibility record is pelvis joint 3; changing the
+shared AD record is rejected because P99 uses it as an intermediate action
+postcondition. The hook therefore composes the exact authored marker under
+target `spined` only for local role-B legacy Nadine + Mazur `0x33E29A1B`, then
+moves the final rigid transform 5 cm horizontally behind the body. The Mazur
+mesh is 10.7 cm across its narrow axis and the previous authored-spined result
+was described as roughly half submerged, grounding that bounded clearance.
+
+For the P99 grip, the exact player-specific overlay selector `0xC938AAA1`
+contains two terminal rows: `p-revolver-aim-hands 0x8DEDA29E ->
+clo-p2h-revolver-gun-grip-opener--add 0x86C090E8` and
+`p1h-revolver-fingers 0x36B8072B ->
+clo-revolver-gun-grip-opener-r-hand--add 0x2D0591FA`. Raw ANIM headers provide
+an independent structural discriminator: both generic sources are normal
+eight-group Player clips over skeleton `0xFD6DBE03`, while both Chloe targets
+are seven-group clips over `0x4B0F5DE3`; their authored hand joint sets shift
+from `[29..32]` to `[38..41]`. Neither player movement package contains a
+Nadine-specific pistol/revolver grip-opener target. Finally, the resolved engine
+chain is exact: `AnimationDatabase_ResolveClipWithOverlays 0x140516230` calls
+`AnimOverlayState_ResolveAnimationId` at `0x140516285`, passes that result into
+`AnimSetRemap_ResolveAnimationId` at `0x1405162C6`, then resolves the clip at
+`0x1405162DB`. `abg` changes only those two exact source/target pairs back to
+their generic source before the normal AnimSet remap. Admission additionally
+requires role B, retained owner 0, stable screen-0 legacy Nadine, exact
+PlayerWeaponController vtable, current draw state 2 or 4 and current-slot P99
+art. Chloe, remote Nadine, ordinary pistols, holstered P99 and every rifle clip
+fail before mutation.
+
+Competing hypotheses remain falsifiable. **Hgrip-overlay** predicts both exact
+`NADINE-P99-GENERIC-GRIP` rows and a visibly coherent handle grip;
+**Hbase-insufficient** predicts the rows but only partial improvement because
+the generic Player clips are compatible but not Nadine-tailored; **Hlate-IK**
+predicts the rows with no visible hand change because a later ArmIK owner wins.
+For Mazur, the test must log `NADINE-MAZUR-NATIVE-BACK` with selected AD
+unchanged, donor record `0x4F62CD9D` on joint 18 and `depth=1:0.05`; the rifle
+must move from pelvis height to the upper back and outside the torso. P99 must
+retain its accepted holster position and no rifle may reappear with a drawn
+pistol. Wrong ids/joints, missing exact grip rows, body corruption, crash or a
+regression in Draw/Put rejects the package. The already-authored sling is judged
+only after the parent Mazur occupies the correct frame.
