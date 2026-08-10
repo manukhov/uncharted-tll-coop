@@ -20469,3 +20469,92 @@ through pistol/rifle switching and checkpoint reset; Draw must still attach the
 full-size P99 to the hand. A row ending anywhere except hip, missing action
 bridge, P99 remaining at the hand, wrong Draw attachment, crash, Chloe/rifle/
 grenade/body regression, or material frame-time regression rejects `aay`.
+
+### 2026-08-10 RUNTIME REJECTED / COVERAGE CORRECTION: `aay` repaired only remote Nadine
+
+Both copies loaded the intended marker and remained responsive: role A PID
+`3524` at log line 63225 and role B PID `13832` at line 63288. The user observed
+the cold small P99 still fixed to local Nadine's hand. The bounded rows explain
+why this does not reject the hip selector itself. Role B/local Nadine emitted
+only the independent Mazur transition (`art=33E29A1B`, `index=16->39`) and no
+P99 action/global row. The sole `NADINE-P99-GLOBAL-HIP` occurred in role A for
+remote owner 1 at line 63379: return RVA `0x10A9A17`, requested generic
+`555EFB8D`, effective hip `8A0249B5`, `index=16->41`, `result=1`.
+
+The return RVA is exactly after the `PlayerWeaponController_RebindWeaponToHolster
+0x1410A9670` call through ProcessWeapon vtable `+0x7A8` at `0x1410A9A11`, so
+`aay` positively proves the remote controller endpoint and selector result. It
+never mutated the defective local cold P99. The visual prediction is therefore
+REJECTED because its local coverage premise was false; neither the confirmed
+hip record nor the remote generic redirect failed. The current selector snapshot
+first searches the retained-player table and cannot emit even an attempted row
+before that owner identity exists, while the local cold Player has no ordinary
+Put action in this run.
+
+### 2026-08-10 STATIC / IMPLEMENTED: compose the proven cold P99 rebind with the proven hip selector (`aaz`)
+
+No new attachment or renderer theory is introduced. Three independent runtime
+controls already cover the exact composition. `gy` proved that local legacy
+Nadine's actual P99 initializes at `rightHand` index 16. `ha` proved that a
+one-shot cold call to the exact concrete Player controller rebind is stable and
+changes that same inventory ProcessWeapon, but the historical call selected the
+defective generic record. Independently, `aaj` changed the selector inside that
+same concrete rebind from generic to `pistolHolster`; the user visually confirmed
+that the real gold/suppressed P99 moved to Nadine's thigh. The current `aay` row
+again proves the identical selector/rebind pair ends at index 41. That active
+Draw/Put control does not by itself prove that a cold inactive weapon receives
+the next stock local-transform update: `aat` measured cold Fg flags `0x2004C0`
+(phase `0x40` present, phase `0x10` absent) and proved that the guarded
+TLS-scoped vtable `+0x7B8` call safely changes all eight current-local dwords.
+`aav` independently proved that ordinary phase `0x40` and driven-instance
+Prepare then publish them. `aat` was insufficient only while a later endpoint
+rollback remained possible; combining its proven refresh with the persistent
+`aay` selector closes that gap without replaying input or a Draw/Put animation.
+
+The remaining small-drawable competitors were checked without treating raw
+DC00 offsets as runtime struct offsets. The only TLL ProcessWeaponStrap packages
+contain strap/hook/buckle/shadow geometry and no handgun body, so that optional
+`ProcessWeapon+0xAE0` child cannot explain a pistol silhouette whether or not its
+runtime art gate materializes it. The alternate Glock geometry is chosen instead
+of, not alongside, the primary geometry by the net-mode branch in
+`ProcessWeaponBase_Init`; magazine packages have no cold independent process
+creation path. Together with the earlier `fy` exact-geometry owner census and
+the holster/native-Glock exclusions, no known second cold handgun drawable
+contradicts the composed ProcessWeapon repair.
+
+Build `aaz` runs only after networking has retained role-B local Player slot 0
+and `ensure_legacy_nadine_attach_points_game_thread` has materialized the thigh
+record. It requires exact PlayerWeaponController vtable, legacy-Nadine look
+`D27C074F`, inactive controller `current<0/draw=0`, exact inventory P99 art
+`8075397D` and ProcessWeapon vtable, same generation-valid owner, selected
+`rightHand` id/index and an existing `pistolHolster`. Once per
+Player/weapon/record-allocation generation it calls the already proven concrete
+rebind under the existing one-call post-handoff selector context, verifies one
+redirect and terminal `pistolHolster` index 41, and emits
+`NADINE-P99-COLD-HIP`. A compile-time dependency and a live vtable-slot/original
+pointer check fail closed before consuming the one-shot unless the exact
+selector hook is installed. After the verified hip result, the exact stable
+`aat` guard set additionally requires the ProcessWeapon vtable/art/owner and
+generation, empty attachment blend, enabled local write, valid transforms,
+FgAnimData ownership, phase `0x40` present and phase `0x10` absent; it then saves
+TLS ContextProcess, sets the exact P99, calls native `+0x7B8`, restores TLS in a
+separate protected region and re-verifies the hip endpoint. The broader `aay`
+endpoint rule remains to prevent a later retained generic rebind from undoing
+the refreshed placement. Chloe, NPCs,
+Mazur, grenades, drawn/transitioning weapons and every non-generic request stay
+stock. No animation, FgAnimData, DrawControl, transform, input or render field is
+written directly; the selected-attachment updater is the exact native vtable
+implementation. Release compilation succeeds and the DLL contains only marker
+`2026-08-10aaz`.
+
+The falsifiable prediction needs only cold spawn observation. Role B must emit
+exactly one `NADINE-P99-COLD-HIP` with `id=61A48E01->8A0249B5`,
+`index=16->41`, `hipRedirect=1`, `call=1`, `parentOwner=1`, `verified=1`, while
+the same row must report `refresh=ok/1/1`, `tls=1/1` and a nonzero local changed
+mask; the existing Mazur row independently remains `16->39`. The small P99 must
+leave the local hand without any manual Draw/Put and appear at the thigh; later
+normal P99 Draw/Put must still show the full-size gun in hand and return it to
+the same thigh endpoint. A missing/duplicate row, failed endpoint/refresh
+verification, persistent hand image after a fully verified row, wrong active-
+weapon placement, animation/body regression, crash or frame-time regression
+rejects `aaz`.
