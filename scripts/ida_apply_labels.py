@@ -834,6 +834,20 @@ FUNCTIONS = {
         "owner, initializes strap state +0x12A0 to zero and then synchronizes "
         "the child DrawControl with the parent.",
     ),
+    0x14150A340: (
+        "ProcessWeaponStrap_SimulateAndBuildJointPose",
+        "Internal per-frame strap simulation called by the concrete vtable "
+        "+0x408 wrapper. Reads the exact ProcessWeapon parent weak pair, "
+        "consumes holstered/unholstered state at strap+0x12F0, updates the "
+        "strap's joint cache and authored/physics pose, then refreshes its "
+        "drawable activity. The state-zero path is the holstered strap pose.",
+    ),
+    0x14150C8A0: (
+        "ProcessWeaponStrap_UpdateAnimatingLayersAndPublish",
+        "ProcessWeaponStrap vtable 0x142A9B0A0 slot +0x408. Forces the full "
+        "simulation mode in ProcessWeaponStrap_SimulateAndBuildJointPose, "
+        "then executes the common post-animation and publication helpers.",
+    ),
     0x14150D6D0: (
         "ProcessWeaponStrap_SyncParentVisibility",
         "Resolves the exact ProcessWeapon parent through strap+0x1280/+0x1288, "

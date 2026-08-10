@@ -20811,3 +20811,107 @@ if the rifle moves but the sling remains absent, its separate visibility branch
 wins and no further attachment-event replay is justified. Any crash, TLS restore
 failure, endpoint drift, active-weapon mutation or Chloe regression rejects the
 package.
+
+### 2026-08-10 RUNTIME REJECTED / STATIC: `abc` disproves stale P99 state and exposes the cross-look Mazur record
+
+Both copies loaded `2026-08-10abc` without a crash or frame-time regression.
+The exact local P99 completed the deferred native `ProcessWeapon+0x7B8` call on
+its unchanged `pistolHolster` endpoint: `terminal=finished refresh=ok/1/1`,
+phase flags `0x2004C0`, balanced TLS, and `changed=0xFF` with local hash
+`6D5787B8 -> BD2675D6`. The user nevertheless saw no visual change. This
+runtime result rejects **Hstale-current** for the residual P99 fit: the exact
+current attachment transform was recomputed and published, but the suppressor
+still protrudes. Repeating the refresh, changing its scheduler, or restoring a
+different stock binding cannot solve that geometric mismatch.
+
+The Mazur path remained independently untested. Its initial native refresh
+correctly returned `active-blend`, then the deferred wrapper aborted after 99
+ticks as `scope-drift`; no `NADINE-MAZUR-NATIVE-BACK` row occurred. Source
+semantics identify the over-narrow wrapper predicate: controller draw state zero
+is the authoritative holstered state, but the inventory/current slot can become
+nonnegative while the attachment blend is still completing. The refresh helper
+already revalidates the exact retained owner, ProcessWeapon/art, table
+generation and unchanged `targSpineProp` endpoint immediately before calling
+`+0x7B8`; requiring `current<0` a second time is not an additional attachment
+safety invariant.
+
+A fresh read-only asset comparison closes the remaining P99 alternatives. The
+native `pistol-glock-nadine` body has LOD0 bounds
+`(-.01350,-.06220,-.04938)..(.01421,.08075,.17249)` metres. The suppressed P99
+body has nearly the same origin and bounds
+`(-.01437,-.07745,-.04562)..(.01642,.09149,.16834)`; its separate suppressor
+partition alone extends the maximum weapon-local Z to `0.33740` m. Thus the
+body-to-native-Glock mismatch is only millimetres, while the incompatible
+suppressor adds about 16.9 cm along weapon-local `+Z`. A translation large
+enough to hide the whole suppressor would visibly displace the grip/body from
+the leather holster. The narrow aesthetic correction is therefore a bounded
+shift opposite the proven muzzle axis, not a different joint, collision or
+another current-matrix refresh.
+
+The sling is also not missing content. Shipped `anim-player-movement.pak` and
+its DLC counterpart both contain `ak47-holster--strap 0xB9C03DE4`; the ANIM has
+one group and authored ValidBits `FFFF000000000000`, covering every joint 0..15
+of the strap model. Combined with the runtime-proven exact ProcessWeaponStrap
+child, exact parent back-reference and state zero published by
+`ProcessWeaponStrap_EventHandler 0x14150C9C0`, this rejects missing clip,
+missing child and missing holster event. The strap must be allowed to follow the
+corrected parent weapon frame before any separate visibility mutation is
+considered.
+
+### 2026-08-10 STATIC / IMPLEMENTED: native spineb record for Mazur and scoped P99 muzzle-axis lift (`abd`)
+
+Build `abd` moves the Mazur correction upstream from the unobserved late call to
+the AttachSystem source of truth. Native NPC Nadine's `targSpineProp 0x00AD047A`
+is a canonical identity record on `spineb` joint 16. The legacy Player-Nadine
+table already contains the transform-equivalent `targSpine 0x8E1D5EEF`, also
+canonical identity on its own `spineb` joint 16. The old compatibility repair
+instead copied Chloe's marker and expressed it under legacy Nadine `spined`
+joint 18, so every active blend and resolver began from a cross-look frame.
+`raw_repair_legacy_nadine_attach_points` now appends `targSpineProp` as an exact
+id alias of the target table's existing `targSpine` record. It verifies the
+source and result identity bits and joint 16, leaves the separate pelvis/gun
+compatibility record unchanged, and fails closed rather than rewriting an
+already-selected stale record. The semantic append helper now explicitly writes
+the requested id at record `+0x20`, which is required when source and alias ids
+differ. The late Mazur ApplyLocal substitution is disabled because every stock
+resolver now consumes the correct record directly.
+
+The deferred wrapper now permits a nonnegative current slot only while draw
+state remains exactly zero. Its inner helper still requires the same retained
+legacy-Nadine Player, exact controller, exact inventory Mazur, unchanged
+generation and selected `targSpineProp`, so a drawn/transitioned or rebound
+weapon fails before mutation. This lets the native `+0x7B8` refresh finish after
+the blend instead of aborting on unrelated inventory-slot ownership.
+
+For the P99, the exact final `NdAttachableObject_ApplyLocalAttachmentCorrection`
+call remains the narrowest presentation seam. After stock computes the exact
+P99/pistolHolster output, build `abd` verifies the ProcessWeapon vtable/art,
+retained legacy-Nadine owner and generation, inventory identity, selected
+`pistolHolster` id and exact `r_leg_holster` joint. It then rotates the bounded
+local vector `(0,0,-0.04m)` by the final weapon quaternion and adds it to the
+output translation. This moves the pistol four centimetres opposite its proven
+muzzle/suppressor axis without changing the shared native holster record or any
+other pistol/character. Four centimetres is less than one quarter of the 16.9 cm
+incompatible extension and approximately one pistol width, making the change
+visible while preserving most of the native body alignment.
+
+The strap continuation is now durable in the single IDB. The concrete
+ProcessWeaponStrap vtable `0x142A9B0A0` slot `+0x408` is labeled
+`ProcessWeaponStrap_UpdateAnimatingLayersAndPublish 0x14150C8A0`; it forces the
+full internal `ProcessWeaponStrap_SimulateAndBuildJointPose 0x14150A340`, which
+reads the exact parent weak pair and `+0x12F0` state before building the child
+joint pose. `scripts/ida_apply_labels.py` saved 1655 function names / 56 data
+names with `save_database returned True`; the restarted MCP resolves both names.
+
+The falsifiable fresh-spawn prediction has three independent rows. First,
+`NADINE-NATIVE-SPINE-ALIAS` must report source/target/expected joint 16 with
+`exact=1`. Second, local Mazur must retain terminal `targSpineProp` index 39 and
+its deferred refresh must finish rather than abort; it must move as one rigid
+unit out of the torso. Its already-authored state-zero strap should move with
+the corrected parent and become visible; if Mazur moves but the strap remains
+absent, only the separate strap draw/pose consumer remains. Third,
+`NADINE-P99-HIP-AXIS-LIFT` must report selected native hip joint 99 and different
+before/after translation with identical quaternion; the P99 must move upward
+along the holster without returning to the hand/back. Missing alias/lift rows,
+wrong joints, unchanged Mazur, worsening P99 fit, body corruption, crash or
+frame-time regression rejects the package.
