@@ -20378,3 +20378,37 @@ weapon-in-hand mutation, Chloe/rifle/grenade/body regression or frame-time
 regression rejects the package. The agent may perform the cold launch and check
 the bounded row itself; user visual confirmation is requested only after the
 positive row exists.
+
+### 2026-08-10 RUNTIME REJECTED: no post-handoff selector call satisfies the `aaw` persistent admission
+
+Both PID 11872 and PID 12016 loaded marker `2026-08-10aaw`, installed the
+existing-owner selector hook, assigned co-op roles and remained responsive
+through checkpoint load and subsequent weapon activity. The cold P99 action on
+both views completed the exact stock bridge and hip handoff:
+`id=61A48E01 -> 00AD047A -> 8A0249B5`, `index=16->39->41`, `bridge=2`,
+`hipRedirect=1`, `stock=1`, `call=1`, `verified=1`.
+
+No `NADINE-P99-PERSISTENT-HIP` row occurred in either process. Thus the exact
+**Wselector** prediction is REJECTED: after the completed handoff, no generic
+request crosses ProcessWeapon vtable `+0x7A8` while all strict inactive
+invariants (`handoff!=0`, `current<0`, `draw=0`, same live inventory P99 and
+owner generation) hold. The persistent branch performed no mutation, so this
+run is behaviorally the prior confirmed two-phase handoff package rather than a
+failed visible hip write.
+
+The absence does not yet prove one unique replacement writer. The remaining
+competitors are **Wtransition-selector**, in which a generic request crosses
+the same slot earlier while authoritative `current/draw` still describe a Draw
+or transition and therefore fails admission; **Wdirect-index**, in which
+`NdAttachableObject_SetParentAndAttachmentIndex 0x141ED0190` (or the
+owner-changing attach wrapper) selects index 40 without using `+0x7A8`; and a
+state-transfer/reinitialization path that restores the generic record before
+the controller settles. The relocation callback itself remains rejected as the
+writer because it does not touch `+0x688` and the observed move initially
+preserves the whole ProcessWeapon block.
+
+Build `aax` removes the dormant `aaw` admission, signature table and log path;
+the confirmed action-scoped spine bridge plus post-handoff hip rebind remain
+unchanged. No new mutation is authorized until the first generic writer and its
+controller phase are resolved statically. Release compilation must precede the
+next commit; no validation launch is requested for this pure rollback.

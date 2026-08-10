@@ -1972,10 +1972,10 @@ constexpr bool kEnableProcessWeaponInitProbe = false;
 constexpr bool kEnableLegacyNadineHolsterIkVerification = false;
 constexpr bool kEnableLegacyNadinePistolHipAttachment = true;
 // Builds aat/aav rejected a missing local-transform refresh, phase-0x40 publish,
-// or driven-LOD prepare as the cold P99 cause. The live Process block relocates
-// by one common delta while preserving its weak identity and FgAnimData; a later
-// stock generic-holster selection is what loses the already-completed hip
-// endpoint. Keep that exact P99 endpoint persistent in the selector hook.
+// or driven-LOD prepare as the cold P99 cause. Build aaw then proved that no
+// post-handoff generic request reaches the existing-owner selector while the
+// strict holstered admission holds. Its dormant persistent redirect is removed;
+// the remaining rollback owner must be resolved before another mutation.
 // Builds gz/ha safely exercised the full stock rebind but targeted 0x8075397D,
 // the P99 rather than the visible Mazur. Retarget the one-shot boundary to the
 // actual rifle and resolve its inventory slot by art instead of assuming slot 0.
@@ -42283,15 +42283,11 @@ struct ExistingOwnerAttachSnapshot {
     bool record_readable = false;
     int owner_index = -1;
     void* owner = nullptr;
-    void* fg_anim_data = nullptr;
     std::uint32_t look = 0;
     std::uint32_t art = 0;
-    std::uint32_t runtime_id = 0;
     std::uint32_t parent_id = 0;
     std::uint32_t attach_id = 0;
-    std::uintptr_t records_generation = 0;
     std::uint8_t attach_index = 0xFF;
-    std::uint8_t holster_handoff_finished = 0;
 };
 
 ExistingOwnerAttachSnapshot capture_existing_owner_attach(void* weapon) {
@@ -42310,93 +42306,12 @@ ExistingOwnerAttachSnapshot capture_existing_owner_attach(void* weapon) {
             weapon, &snapshot.parent_id, &snapshot.attach_index)) {
         return snapshot;
     }
-    __try {
-        auto* const bytes = static_cast<const std::byte*>(weapon);
-        if (readable_bytes(bytes) < 0x8F5) {
-            return snapshot;
-        }
-        snapshot.fg_anim_data = *reinterpret_cast<void* const*>(bytes + 0x1A8);
-        snapshot.runtime_id = *reinterpret_cast<const std::uint32_t*>(
-            bytes + kGameObjectRuntimeIdOffset);
-        snapshot.holster_handoff_finished =
-            *reinterpret_cast<const std::uint8_t*>(bytes + 0x8F4);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return snapshot;
-    }
     seh_read_player_look(snapshot.owner, &snapshot.look);
     snapshot.record_readable = seh_read_owner_attach_record_id(
         snapshot.owner, snapshot.attach_index, &snapshot.attach_id,
-        &snapshot.records_generation);
+        nullptr);
     snapshot.readable = true;
     return snapshot;
-}
-
-bool seh_admit_persistent_legacy_nadine_p99_hip_redirect(
-    const ExistingOwnerAttachSnapshot& snapshot, void* weapon,
-    int* current_slot_out, std::uint32_t* draw_state_out) {
-    if (current_slot_out == nullptr || draw_state_out == nullptr) {
-        return false;
-    }
-    *current_slot_out = -99;
-    *draw_state_out = 0xFFFFFFFFu;
-    __try {
-        if (!snapshot.readable || !snapshot.record_readable ||
-            snapshot.owner == nullptr || snapshot.owner_index < 0 ||
-            snapshot.look != kLegacyNadineAttachTargetLookId ||
-            snapshot.art != kCoopPistolArtId || snapshot.runtime_id == 0 ||
-            snapshot.fg_anim_data == nullptr ||
-            snapshot.records_generation == 0 ||
-            snapshot.holster_handoff_finished == 0 ||
-            (snapshot.attach_id != kPistolHolsterAttachId &&
-             snapshot.attach_id != kGunHolsterAttachId) ||
-            weapon == nullptr || readable_bytes(weapon) < 0x8F5 ||
-            *reinterpret_cast<const std::uintptr_t*>(weapon) !=
-                g_module + kProcessWeaponVtableRva ||
-            !seh_weapon_is_player_art(
-                snapshot.owner, weapon, kCoopPistolArtId) ||
-            !seh_weapon_parent_resolves_to_owner(weapon, snapshot.owner)) {
-            return false;
-        }
-        void* controller = nullptr;
-        if (!seh_read_exact_player_weapon_controller(
-                snapshot.owner, &controller) ||
-            !read_weapon_draw_state(
-                snapshot.owner, *current_slot_out, *draw_state_out) ||
-            *current_slot_out >= 0 || *draw_state_out != 0) {
-            return false;
-        }
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        *current_slot_out = -99;
-        *draw_state_out = 0xFFFFFFFFu;
-        return false;
-    }
-}
-
-bool claim_persistent_legacy_nadine_p99_hip_log(
-    const ExistingOwnerAttachSnapshot& snapshot) {
-    std::uint64_t signature = 1469598103934665603ULL;
-    auto mix = [&signature](std::uint64_t value) {
-        signature ^= value;
-        signature *= 1099511628211ULL;
-    };
-    mix(reinterpret_cast<std::uintptr_t>(snapshot.fg_anim_data));
-    mix(snapshot.runtime_id);
-    if (signature == 0) {
-        signature = 1;
-    }
-    static std::array<std::atomic<std::uint64_t>, 8> logged{};
-    for (std::atomic<std::uint64_t>& slot : logged) {
-        if (slot.load(std::memory_order_acquire) == signature) {
-            return false;
-        }
-        std::uint64_t empty = 0;
-        if (slot.compare_exchange_strong(
-                empty, signature, std::memory_order_acq_rel)) {
-            return true;
-        }
-    }
-    return false;
 }
 
 std::uintptr_t __fastcall hooked_weapon_attachment_select_existing_owner_point(
@@ -42418,62 +42333,22 @@ std::uintptr_t __fastcall hooked_weapon_attachment_select_existing_owner_point(
         pistol_holster_present &&
         seh_weapon_is_player_art(
             context.player, weapon, kCoopPistolArtId);
-    int persistent_current_slot = -99;
-    std::uint32_t persistent_draw_state = 0xFFFFFFFFu;
-    const bool persistent_pistol =
-        context.phase == NadinePistolHolsterRedirectPhase::kNone &&
-        pistol_holster_present &&
-        seh_admit_persistent_legacy_nadine_p99_hip_redirect(
-            before, weapon, &persistent_current_slot,
-            &persistent_draw_state);
     std::uint32_t effective_attach_id = attach_id;
     bool redirected = false;
-    if ((scoped_pistol || persistent_pistol) &&
-        attach_id == kGunHolsterAttachId) {
+    if (scoped_pistol && attach_id == kGunHolsterAttachId) {
         effective_attach_id =
-            scoped_pistol && context.phase ==
+            context.phase ==
                     NadinePistolHolsterRedirectPhase::kStockSpineBridge
                 ? kTargSpinePropAttachId
                 : kPistolHolsterAttachId;
         redirected = true;
-        if (scoped_pistol) {
-            ++context.redirect_count;
-        }
+        ++context.redirect_count;
     }
     const std::uintptr_t result =
         g_original_weapon_attachment_select_existing_owner_point != nullptr
         ? g_original_weapon_attachment_select_existing_owner_point(
               weapon, effective_attach_id, binding)
         : 0;
-    if (persistent_pistol && redirected &&
-        claim_persistent_legacy_nadine_p99_hip_log(before)) {
-        const ExistingOwnerAttachSnapshot after =
-            capture_existing_owner_attach(weapon);
-        std::ostringstream line;
-        line << "NADINE-P99-PERSISTENT-HIP player=0x" << std::hex
-             << reinterpret_cast<std::uintptr_t>(before.owner)
-             << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
-             << " fg=0x"
-             << reinterpret_cast<std::uintptr_t>(before.fg_anim_data)
-             << " runtime=0x" << before.runtime_id
-             << " records=0x" << before.records_generation
-             << " request=0x" << attach_id << "->0x"
-             << effective_attach_id << " result=0x" << result
-             << " id=0x" << before.attach_id << "->0x"
-             << after.attach_id << std::dec
-             << " index=" << static_cast<unsigned>(before.attach_index)
-             << "->" << static_cast<unsigned>(after.attach_index)
-             << " current=" << persistent_current_slot
-             << " draw=" << persistent_draw_state
-             << " handoff="
-             << static_cast<unsigned>(before.holster_handoff_finished)
-             << " verified="
-             << (after.record_readable &&
-                         after.attach_id == kPistolHolsterAttachId
-                     ? 1
-                     : 0);
-        boot_log_line(line.str().c_str());
-    }
     if constexpr (!kEnablePersistentStateInventoryLogging) {
         return result;
     }
@@ -50481,8 +50356,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-10aaw "
-        "(persistent relocated P99 hip endpoint)");
+        "TLL co-op runtime init 2026-08-10aax "
+        "(rejected persistent P99 redirect removed)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
