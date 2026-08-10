@@ -2014,9 +2014,12 @@ constexpr bool kEnableLegacyNadineMazurNativeBackFrame = false;
 // weapon-local +Z. The exact native hip endpoint and stock refresh are already
 // confirmed, so move only this art/endpoint 4 cm against the muzzle axis at the
 // final local-transform seam. This is less than one quarter of the incompatible
-// extension and leaves the native pistolHolster record untouched for all arts.
+// extension. A separate two-centimetre owner-local backward offset compensates
+// the forward component observed in abd without lowering the weapon again. Both
+// corrections leave the native pistolHolster record untouched for all arts.
 constexpr bool kEnableLegacyNadineP99HipAxisLift = true;
 constexpr float kLegacyNadineP99HipAxisLiftMeters = 0.04F;
+constexpr float kLegacyNadineP99HipBackMeters = 0.02F;
 // Build zm proved that all observed legacy-Nadine selections pass through the
 // Chloe-base map but receive no mapped id or record. Keep that rejected probe
 // out of the hook set. Build zn then rejected special vtable +0x28 as the live
@@ -17869,6 +17872,21 @@ struct alignas(16) NadineAttachRecord48 {
     std::byte bytes[48];
 };
 
+struct NadineSpinePropAliasResult {
+    int status = 0;
+    std::uintptr_t target_table = 0;
+    std::uintptr_t target_records = 0;
+    std::uint32_t capacity = 0;
+    std::uint32_t before_count = 0;
+    std::uint32_t after_count = 0;
+    std::int16_t source_joint = -1;
+    std::int16_t target_joint = -1;
+    std::int16_t expected_joint = -1;
+    std::uint8_t before_present = 0;
+    std::uint8_t after_present = 0;
+    std::uint8_t transform_matches = 0;
+};
+
 constexpr std::array<std::uint32_t, 8> kCanonicalAttachIdentityBits{
     0u, 0u, 0u, 0u, 0u, 0u, 0u, 0x3F800000u,
 };
@@ -18036,6 +18054,101 @@ bool raw_append_semantic_attach_record(
     *reinterpret_cast<std::uint32_t*>(copied.bytes + 0x2C) = 0;
     append_record(target_table, &copied);
     return raw_find_attach_record(target_table, attach_id, nullptr) != nullptr;
+}
+
+bool raw_ensure_legacy_nadine_spine_prop_alias(
+    void* target_player, NadineSpinePropAliasResult* result) {
+    auto* const target_table = *reinterpret_cast<std::byte**>(
+        static_cast<std::byte*>(target_player) + 0x1E0);
+    result->target_table = reinterpret_cast<std::uintptr_t>(target_table);
+    if (target_table == nullptr) {
+        result->status = -1;
+        return false;
+    }
+    result->capacity = *reinterpret_cast<const std::uint32_t*>(
+        target_table + 0x0);
+    result->before_count = *reinterpret_cast<const std::uint32_t*>(
+        target_table + 0x4);
+    auto* const records = *reinterpret_cast<std::byte**>(target_table + 0x8);
+    result->target_records = reinterpret_cast<std::uintptr_t>(records);
+    if (result->capacity == 0 || result->capacity > 256 ||
+        result->before_count > result->capacity || records == nullptr) {
+        result->status = -2;
+        return false;
+    }
+
+    std::byte* const source_record = raw_find_attach_record(
+        target_table, kTargSpineAttachId, nullptr);
+    result->expected_joint = raw_resolve_attach_joint(
+        target_table, kSpinebJointNameId);
+    if (source_record == nullptr || result->expected_joint < 0) {
+        result->status = -3;
+        return false;
+    }
+    result->source_joint = *reinterpret_cast<const std::int16_t*>(
+        source_record + 0x24);
+    if (result->source_joint != result->expected_joint ||
+        std::memcmp(
+            source_record, kCanonicalAttachIdentityBits.data(), 32) != 0) {
+        result->status = -4;
+        return false;
+    }
+
+    std::byte* target_record = raw_find_attach_record(
+        target_table, kTargSpinePropAttachId, nullptr);
+    result->before_present = target_record != nullptr ? 1u : 0u;
+    if (target_record == nullptr) {
+        if (result->before_count >= result->capacity ||
+            !raw_append_semantic_attach_record(
+                source_record, target_table, kTargSpinePropAttachId,
+                result->expected_joint)) {
+            result->status = -5;
+            return false;
+        }
+        target_record = raw_find_attach_record(
+            target_table, kTargSpinePropAttachId, nullptr);
+    }
+
+    result->after_count = *reinterpret_cast<const std::uint32_t*>(
+        target_table + 0x4);
+    result->after_present = target_record != nullptr ? 1u : 0u;
+    if (target_record != nullptr) {
+        result->target_joint = *reinterpret_cast<const std::int16_t*>(
+            target_record + 0x24);
+        result->transform_matches =
+            result->target_joint == result->expected_joint &&
+            std::memcmp(
+                target_record, kCanonicalAttachIdentityBits.data(), 32) == 0;
+    }
+    result->status = result->after_present != 0 &&
+            result->transform_matches != 0 &&
+            result->after_count == result->before_count +
+                (result->before_present == 0 ? 1u : 0u)
+        ? (result->before_present != 0 ? 2 : 1)
+        : -6;
+    return result->status > 0;
+}
+
+bool seh_ensure_legacy_nadine_spine_prop_alias(
+    void* target_player, NadineSpinePropAliasResult* result) {
+    if (result == nullptr) {
+        return false;
+    }
+    *result = {};
+    result->source_joint = -1;
+    result->target_joint = -1;
+    result->expected_joint = -1;
+    __try {
+        return raw_ensure_legacy_nadine_spine_prop_alias(
+            target_player, result);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *result = {};
+        result->status = -100;
+        result->source_joint = -1;
+        result->target_joint = -1;
+        result->expected_joint = -1;
+        return false;
+    }
 }
 
 bool raw_repair_legacy_nadine_attach_points(
@@ -18513,6 +18626,10 @@ void ensure_legacy_nadine_attach_points_game_thread() {
     void* const native_nadine = g_last_nadine_object;
     const bool native_nadine_valid = seh_is_exact_nadine_buddy(native_nadine);
 
+    NadineSpinePropAliasResult spine_alias_result{};
+    seh_ensure_legacy_nadine_spine_prop_alias(
+        target, &spine_alias_result);
+
     NadineAttachRepairResult result{};
     if (donor == nullptr) {
         result.status = -10;
@@ -18534,6 +18651,12 @@ void ensure_legacy_nadine_attach_points_game_thread() {
         signature *= 1099511628211ULL;
     };
     mix(reinterpret_cast<std::uintptr_t>(target));
+    mix(spine_alias_result.target_records);
+    mix(spine_alias_result.after_count);
+    mix(spine_alias_result.after_present);
+    mix(spine_alias_result.transform_matches);
+    mix(static_cast<std::uint32_t>(
+        spine_alias_result.status > 0 ? 1 : spine_alias_result.status));
     mix(result.target_table);
     mix(result.target_records);
     mix(result.after_count);
@@ -18556,21 +18679,24 @@ void ensure_legacy_nadine_attach_points_game_thread() {
 
     // This bounded production row proves the table-level repair itself. It is
     // intentionally independent of the disabled full attachment inventory.
-    if (result.status > 0 && result.after_spine != 0 &&
-        result.spine_transform_matches != 0) {
+    if (spine_alias_result.status > 0 &&
+        spine_alias_result.after_present != 0 &&
+        spine_alias_result.transform_matches != 0) {
         std::ostringstream alias_line;
         alias_line << "NADINE-NATIVE-SPINE-ALIAS owner=" << target_owner
                    << " player=0x" << std::hex
                    << reinterpret_cast<std::uintptr_t>(target)
-                   << " records=0x" << result.target_records << std::dec
-                   << " status=" << result.status
-                   << " count=" << result.before_count << "->"
-                   << result.after_count
-                   << " sourceJoint=" << result.spine_source_joint
-                   << " targetJoint=" << result.spine_record_joint
-                   << " expected=" << result.target_spineb
+                   << " records=0x" << spine_alias_result.target_records
+                   << std::dec
+                   << " status=" << spine_alias_result.status
+                   << " count=" << spine_alias_result.before_count << "->"
+                   << spine_alias_result.after_count
+                   << " sourceJoint=" << spine_alias_result.source_joint
+                   << " targetJoint=" << spine_alias_result.target_joint
+                   << " expected=" << spine_alias_result.expected_joint
                    << " exact="
-                   << static_cast<unsigned>(result.spine_transform_matches);
+                   << static_cast<unsigned>(
+                          spine_alias_result.transform_matches);
         boot_log_line(alias_line.str().c_str());
     }
 
@@ -18619,7 +18745,14 @@ void ensure_legacy_nadine_attach_points_game_thread() {
     for (const std::uint32_t bits : pistol_result.transform_bits) {
         line << bits << ",";
     }
-    line << std::dec << " animAlias=removed";
+    line << std::dec
+         << " spineAlias=" << spine_alias_result.status << ":"
+         << spine_alias_result.source_joint << "->"
+         << spine_alias_result.target_joint << "/"
+         << spine_alias_result.expected_joint
+         << " exact="
+         << static_cast<unsigned>(spine_alias_result.transform_matches)
+         << " animAlias=removed";
     write_log_line(line.str().c_str());
 }
 
@@ -45836,6 +45969,7 @@ struct NadineP99HipAxisLiftCapture {
     std::uint32_t generation = 0;
     std::uint8_t selected_index = 0xFF;
     std::int16_t selected_joint = -1;
+    std::array<float, 3> body_back_delta{};
     std::array<std::uint32_t, 8> before_bits{};
     std::array<std::uint32_t, 8> after_bits{};
 };
@@ -45874,7 +46008,10 @@ bool seh_apply_legacy_nadine_p99_hip_axis_lift(
             *reinterpret_cast<const std::uint32_t*>(
                 static_cast<const std::byte*>(capture->owner) +
                 kGameObjectRuntimeIdOffset) != capture->generation ||
-            retained_player_index(capture->owner) < 0 ||
+            !g_net_role_b ||
+            capture->owner != retained_player_object(0) ||
+            !player_object_stable(capture->owner) ||
+            !player_screen_index_is(capture->owner, 0) ||
             *reinterpret_cast<const std::uint32_t*>(
                 static_cast<const std::byte*>(capture->owner) + 0x170) !=
                 kLegacyNadineAttachTargetLookId ||
@@ -45934,6 +46071,49 @@ bool seh_apply_legacy_nadine_p99_hip_axis_lift(
         values[0] += rx;
         values[1] += ry;
         values[2] += rz;
+
+        // Stock world-basis construction composes parent Player+0x120 with
+        // local root Player+0x140; locomotion uses the result's local +Z as
+        // forward. Move horizontally toward -Z so this depth correction is
+        // independent of the pistol's muzzle orientation and preserves height.
+        const auto* const owner_bytes = static_cast<const std::byte*>(
+            capture->owner);
+        float parent_quat[4]{};
+        float local_root_quat[4]{};
+        float body_world_quat[4]{};
+        std::memcpy(parent_quat, owner_bytes + 0x120, sizeof(parent_quat));
+        std::memcpy(
+            local_root_quat, owner_bytes + 0x140,
+            sizeof(local_root_quat));
+        if (!valid_network_orientation(parent_quat) ||
+            !valid_network_orientation(local_root_quat)) {
+            return false;
+        }
+        multiply_quaternions_xyzw(
+            parent_quat, local_root_quat, body_world_quat);
+        if (!valid_network_orientation(body_world_quat)) {
+            return false;
+        }
+        float forward_x = 0.0F;
+        float forward_y = 0.0F;
+        float forward_z = 0.0F;
+        quat_forward_pos_z(
+            body_world_quat, forward_x, forward_y, forward_z);
+        const float horizontal_length = std::sqrt(
+            forward_x * forward_x + forward_z * forward_z);
+        if (!std::isfinite(horizontal_length) ||
+            horizontal_length < 1.0e-4F) {
+            return false;
+        }
+        forward_x /= horizontal_length;
+        forward_z /= horizontal_length;
+        capture->body_back_delta = {
+            -forward_x * kLegacyNadineP99HipBackMeters,
+            0.0F,
+            -forward_z * kLegacyNadineP99HipBackMeters,
+        };
+        values[0] += capture->body_back_delta[0];
+        values[2] += capture->body_back_delta[2];
         if (!raw_attach_transform_valid(&adjusted)) {
             return false;
         }
@@ -45975,7 +46155,11 @@ void log_nadine_p99_hip_axis_lift_once(
          << " generation=" << capture.generation
          << " selected=" << static_cast<unsigned>(capture.selected_index)
          << ":" << capture.selected_joint
-         << " meters=" << kLegacyNadineP99HipAxisLiftMeters
+         << " lift=" << kLegacyNadineP99HipAxisLiftMeters
+         << " back=" << kLegacyNadineP99HipBackMeters
+         << " bodyBack=" << capture.body_back_delta[0] << ","
+         << capture.body_back_delta[1] << ","
+         << capture.body_back_delta[2]
          << " before=";
     for (const std::uint32_t bits : capture.before_bits) line << bits << ",";
     line << " after=";
@@ -51719,8 +51903,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-10abd "
-        "(native spineb Mazur alias plus scoped P99 muzzle-axis lift)");
+        "TLL co-op runtime init 2026-08-10abe "
+        "(early native spineb alias plus local P99 lift/back fit)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

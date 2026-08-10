@@ -4022,8 +4022,14 @@ Do not reopen these as the first move:
       complete matching chain with the artifact still visible closes
       `Hother-drawable`; the first missing/mismatching link identifies the exact
       publication repair boundary.
-- [ ] After firearm geometry is correct, locate the rifle sling as a separate
-      prop/visibility/attachment candidate; do not block the holster mapping on it.
+- [ ] Run one bounded `abe` appearance test. The donor-independent native
+      `spineb` alias must be created before the hip record, restore Mazur
+      `rightHand -> targSpineProp` and restore the confirmed P99
+      `bridge=2/hipRedirect=1/verified=1` Put path. P99 fit is role-B/local-only,
+      retains the four-centimetre lift and adds two centimetres body-back. Only
+      after Mazur remains on the corrected back endpoint classify the authored
+      ProcessWeaponStrap child: visible means it followed the parent; still
+      absent selects its separate draw/pose consumer.
 
 ## P0 - Remote reload animation sync (VISUALLY CONFIRMED, 2026-07-27)
 

@@ -20915,3 +20915,79 @@ before/after translation with identical quaternion; the P99 must move upward
 along the holster without returning to the hand/back. Missing alias/lift rows,
 wrong joints, unchanged Mazur, worsening P99 fit, body corruption, crash or
 frame-time regression rejects the package.
+
+### 2026-08-10 RUNTIME REJECTED: `abd` moved P99 but skipped the required spine alias
+
+Both copies loaded marker `2026-08-10abd`. The scoped P99 correction reached the
+exact native hip record and changed only translation while retaining joint 99.
+The user confirmed the visible movement, but the pistol was now slightly too far
+forward. More importantly, a manual Draw/Put exposed two state failures: Mazur
+returned to the hand instead of the back, and P99 could disappear after Put until
+another weapon cycle. Copy 1 then crashed; the production crash observer was
+disabled and Windows recorded no matching Application Error/WER entry, so that
+crash has no attributable instruction address.
+
+The bounded rows explain both holster failures without guessing. This fresh table
+never emitted `NADINE-NATIVE-SPINE-ALIAS` or `NADINE-LOCAL-MAZUR-REBIND`.
+`pistolHolster` was nevertheless present as index 39 and the cold P99 rebind
+verified, proving the native-Nadine repair ran. During later P99 Put, every exact
+row stopped at `rightHand -> rightHand`, `bridge=1`, `hipRedirect=0`, `stock=0`,
+`call=0`: the first scoped generic request was counted, but the absent
+`targSpineProp` record made its selection fail and the stock executor exited
+before the second bridge/rebind and hip handoff.
+
+The source ordering supplies an independent cause.
+`ensure_legacy_nadine_attach_points_game_thread` set the old compatibility
+result to `-10` and skipped
+`raw_repair_legacy_nadine_attach_points` whenever no retained Chloe donor existed.
+That function was the only producer of `targSpineProp`, even though the alias is
+derived entirely from legacy Nadine's own canonical `targSpine`. The separate
+native-Nadine path does not need Chloe and successfully appended `pistolHolster`.
+Therefore **Avisual-frame-only** is rejected for this run; **Aordering** is
+confirmed. The same missing record caused Mazur's cold/final back rebind to fail.
+
+The P99 transform seam was also too broad for a local cosmetic correction: role A
+applied it to remote retained P99s and role B applied it across many transient
+Player/weapon generations. This does not prove the unlocalized crash cause, but it
+violates the intended local-Nadine scope and is rejected independently.
+
+### 2026-08-10 STATIC / IMPLEMENTED: donor-independent spine alias and local P99 depth fit (`abe`)
+
+Build `abe` separates the self-contained spine alias from Chloe-derived pelvis
+compatibility. A new fail-closed helper reads only the retained legacy-Nadine
+AttachSystem, requires canonical `targSpine 0x8E1D5EEF`, resolves
+`spineb 0xAF29E6DC` to joint 16, verifies the exact identity transform, and appends
+`targSpineProp 0x00AD047A` as an id alias before either the optional Chloe donor
+repair or native `pistolHolster` append. Existing noncanonical records are never
+rewritten. With the fresh 39-row table this deterministically makes AD index 39;
+the native hip record follows at index 40. Later Chloe availability can add only
+the independent pelvis record.
+
+Three independent evidence types meet the runtime quota. The fresh `abd` table
+proves native hip creation while AD was absent; source control flow proves donor
+absence skipped the sole old producer; native Nadine and legacy Player asset/live
+records independently prove `targSpineProp` and `targSpine` are the same identity
+frame on `spineb` joint 16. Historical confirmed build `aas` additionally proves
+that once AD exists the exact P99 executor completes both generic spine bridges
+and the final scoped hip rebind without an Anim alias.
+
+The P99 keeps the user-confirmed four-centimetre opposite-muzzle lift, then moves
+two centimetres horizontally backward in the character frame. The world body
+quaternion is reconstructed through the stock convention
+`Player parent +0x120 * local root +0x140`; local `+Z` is the confirmed locomotion
+forward axis. Only horizontal `-Z` is added, preserving the gained height. This
+correction now additionally requires role B, exact current retained owner 0,
+stable Player identity and screen index 0, excluding the remote/transient P99s
+touched by `abd`.
+
+The one-test prediction is exact. Before any weapon input,
+`NADINE-NATIVE-SPINE-ALIAS` must report `status=1`, `39->40`, joints `16->16/16`
+and `exact=1`; local Mazur must then rebind `rightHand -> targSpineProp`, finish
+its deferred native refresh and remain behind the torso. On one P99 Draw/Put,
+`NADINE-P99-POST-HANDOFF-HIP` must return to `bridge=2`, `hipRedirect=1`,
+`stock/call/verified=1`, and the local-only lift row must report `lift=0.04`,
+`back=0.02` with a nonzero horizontal `bodyBack`. P99 must remain visible in the
+thigh holster, slightly farther back than `abd`; role A must emit no P99 fit row.
+The sling is evaluated only after Mazur reaches the corrected back endpoint. Any
+missing alias, `bridge=1`, Mazur/P99 remaining in the hand, cross-role fit row,
+pose corruption, crash or lag rejects the package.
