@@ -20658,3 +20658,37 @@ state. A P99/Chloe/animation regression, selected-id change, failed exact guard,
 crash or frame-time regression rejects the package. If sling child/state verify
 but no sling is visible, the lifecycle hypothesis is rejected and the remaining
 boundary is downstream DrawControl/animation visibility, not another event.
+
+### 2026-08-10 RUNTIME PARTIAL / REJECTED: P99 frame works, Mazur frame was gated out, strap lifecycle is not missing (`aba`)
+
+Both copies loaded `2026-08-10aba` and installed the P99 binding, Mazur final-
+frame and pistol selector hooks without a partial install. The user observed a
+stable but not yet final P99 fit: the pistol is at the thigh holster, but must
+move slightly upward because the suppressor protrudes below the leather. The
+runtime binding row proves that this is now a fine calibration problem, not the
+old endpoint/frame defect: exact P99 art `0x8075397D` reported
+`hipPrimaryNeutral=1`, terminal `pistolHolster` remained index 41, and the stock
+primary before neutralization was actually
+`3BA3D70A,3C83126F,80000000,00000000,BD327EAC,BD327EAC,BAF96244,3F7F834F`
+in this asset/context. The earlier 9.31 cm primary captured from a different
+binding context is therefore not a valid fine-fit value for this cold endpoint.
+
+The user still saw Mazur about half submerged in the torso, and no
+`NADINE-MAZUR-NATIVE-BACK` row appeared. This does not reject the native spineb
+frame: the cold rebind was never admitted. Every bounded wait row found a valid
+generation-resolved child with exact ProcessWeaponStrap vtable
+`0x142A9B0A0`, state `child+0x12F0=0`, but stable `child+0xD8=0x2549DB48`
+rather than the assumed `rifle-strap-spc 0xB58FB7D7`. Thus the implementation's
+claim that `+0xD8` stores the WeaponArtDef selector is REJECTED; that false field
+guard prevented the Mazur one-shot and final-frame correction from running.
+
+The same evidence independently rejects the missing-child/event-race hypothesis
+for the absent sling. The exact strap child already exists before the rebind
+attempt and is already in the handler's holstered state zero. Re-emitting
+`player-holstered`, delaying the rebind again, or creating another child cannot
+make that state more holstered. The remaining sling candidates are the child's
+selected animation/pose, DrawControl/mesh visibility, or a different meaning of
+the observed `+0xD8` field. Next work must resolve `0x2549DB48` and trace the
+child's state-zero animation into its drawable; the native Mazur frame remains
+STATIC and untested until the false resource guard is removed or replaced by a
+proven identity invariant.
