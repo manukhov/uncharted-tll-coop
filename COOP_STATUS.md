@@ -20558,3 +20558,29 @@ the same thigh endpoint. A missing/duplicate row, failed endpoint/refresh
 verification, persistent hand image after a fully verified row, wrong active-
 weapon placement, animation/body regression, crash or frame-time regression
 rejects `aaz`.
+
+### 2026-08-10 RUNTIME CONFIRMED / AMENDED: cold P99 reaches the thigh without the optional refresh (`aaz`)
+
+Both copies loaded `2026-08-10aaz`; role A PID `3440` and role B PID `13748`
+remained responsive. Without any manual Draw/Put, local Nadine emitted exactly
+one decisive row:
+
+`NADINE-P99-COLD-HIP art=8075397D id=61A48E01->8A0249B5
+index=16->41 expected=41 current=-1 draw=0 hipRedirect=1 call=1
+parentOwner=1 verified=1`.
+
+The user immediately confirmed that the small P99 left the hand. The independent
+Mazur row remained exact (`art=33E29A1B`, `rightHand 16 -> targSpineProp 39`,
+`verified=1`), and role A independently redirected remote Nadine's P99 generic
+request to hip (`index=16->41`, `result=1`). This CONFIRMS the composed cold
+controller rebind and hip selector, and rejects the remaining claim that a
+different cold handgun drawable necessarily owned the pixels.
+
+The transform prediction is amended by direct evidence rather than credited
+incorrectly. The same local row reported
+`refresh=local-blend/0/0 tls=0/0 flags=0x15`: the fail-closed `+0x7B8` branch did
+not run because the stock attachment blend was still active. Therefore the
+visible success belongs entirely to the verified native controller rebind plus
+hip selection and subsequent ordinary stock processing. The optional refresh
+is not causal for this generation and must not be required by future admission
+or used to justify the result.
