@@ -829,9 +829,11 @@ FUNCTIONS = {
     0x14150F640: (
         "ProcessWeapon_Initialize",
         "Initializes ProcessWeapon and conditionally materializes a "
-        "ProcessWeaponStrap child when the global gate, WeaponArtDef +0x38 and "
-        "weapon mesh handle permit it; the validated child handle is stored at "
-        "ProcessWeapon+0xAE0.",
+        "ProcessWeaponStrap child when the global gate, exact strap resource "
+        "selector at runtime WeaponArtDef+0x38 and weapon mesh handle permit "
+        "it; the validated child weak handle/generation are stored at "
+        "ProcessWeapon+0xAE0/+0xAE8. Mazur resolves +0x38 to rifle-strap-spc "
+        "(StringId 0xB58FB7D7).",
     ),
     0x140FAA380: (
         "Script_DontRenderPlayerThisFrame",
@@ -900,7 +902,10 @@ FUNCTIONS = {
         "unchanged; otherwise it derives a rig-joint-relative correction from "
         "object+0x1A8 and the local/depenetration state at +0x4F0..+0x52F and "
         "+0x5F0/+0x5F4. The sole caller is the direct E8 at 0x141ED19BB in "
-        "NdAttachableObject_ResolveSelectedAttachmentTransform.",
+        "NdAttachableObject_ResolveSelectedAttachmentTransform. This direct "
+        "callsite is the narrow final-frame seam where an art-scoped caller can "
+        "substitute a stock-resolved owner attachment frame without changing "
+        "the selected attachment id or local correction.",
     ),
     0x141ED2060: (
         "NdAttachableObject_UpdateAnimatingLayersAndPublish",
@@ -1138,7 +1143,8 @@ FUNCTIONS = {
         "Exact process-weapon-strap.cpp EventHandler assertion. Handles the "
         "strap state events by publishing play-animation for "
         "ak47-holster--strap or rifle-strap-unholstered through the owner "
-        "process and updates its local strap-state flag.",
+        "process and updates ProcessWeaponStrap+0x12F0: holstered writes 0 and "
+        "unholstered writes 1.",
     ),
     0x1418F1E60: (
         "PlayerArmIKAction_ConstructForLook",
@@ -10015,7 +10021,9 @@ FUNCTIONS = {
         "primary authored transform at +0x10/+0x20, secondary transform at "
         "+0x30/+0x40 and scalar at +0x50. A non-generic first WeaponArt record "
         "such as pistol targSpineProp bypasses the character gun_holster* scan. "
-        "The controller copies the primary transform to weapon+0x4F0/+0x500.",
+        "The controller copies the primary transform to weapon+0x4F0/+0x500. "
+        "A later +0x7A8 selected-id redirect does not rebuild this art-specific "
+        "primary transform for the replacement endpoint.",
     ),
     0x1410CDF90: (
         "Player_SetupAttachSystemFromLookData",
@@ -11211,7 +11219,9 @@ FUNCTIONS = {
         "id after vtable +0x7A8, so a separately scoped endpoint rebind has no "
         "outer targSpineProp postcondition. It never calls ProcessWeapon vtable "
         "+0x7B8 and never writes the current local transform at +0x130/+0x140; "
-        "the new selected record is therefore not synchronously recomputed.",
+        "the new selected record is therefore not synchronously recomputed. It "
+        "then publishes player-holstered to the ProcessWeapon; the weapon event "
+        "handler forwards that event to a valid ProcessWeaponStrap child.",
     ),
     0x1410A9D10: (
         "PlayerWeaponController_RebindCurrentWeaponForHolster",

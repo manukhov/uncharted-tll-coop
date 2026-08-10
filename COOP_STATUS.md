@@ -20584,3 +20584,77 @@ visible success belongs entirely to the verified native controller rebind plus
 hip selection and subsequent ordinary stock processing. The optional refresh
 is not causal for this generation and must not be required by future admission
 or used to justify the result.
+
+### 2026-08-10 STATIC / IMPLEMENTED: use Nadine-native body frames for holstered P99/Mazur and gate the authored sling (`aba`)
+
+The remaining defects are placement-frame and child-lifecycle problems, not
+network synchronization or collision. Three independent evidence types close
+the P99 baseline. First, all four `nadine-holster-game.pak` LOD palettes contain
+`r_leg_holster 0xADD0C871`; legacy Player-Nadine resolves the same hash as joint
+99, and 4284 of 5990 LOD0 holster vertices are weighted to that joint. Second,
+`AttachSystem_ResolveRecordTransform 0x1418B7060` composes the selected record
+with the live joint named by record `+0x24`. The previous compatibility record
+put the weapon on upper-leg joint 5, while the leather continued to follow joint
+99, so animation necessarily changed their relative frame and caused clipping.
+The exact native `pistolHolster 0x8A0249B5` record is instead copied unchanged to
+Player joint 99 with transform dwords
+`3DA1CAC1,3D23D70A,3D1FBE77,3D23D70A,BF443E89,3CCBFD8C,3F23A8BA,3D61D9B6`.
+Third, `WeaponHolster_BuildBinding 0x1414FE540` produces an art-specific primary
+transform before ProcessWeapon vtable `+0x7A8` changes only the selected id. The
+stock P99 primary inherited from the generic/back endpoint is translation
+`(+0.076,-0.020,-0.050)m` plus a `20.395` degree rotation (9.31 cm total
+translation), which is large relative to the suppressed P99's 3.84 cm width.
+The exact look/art/generic-output hook therefore replaces only binding
+`+0x10..+0x2F` with canonical identity before the controller copies it, and only
+when the installed selector will redirect the P99 to `pistolHolster`. The
+mandatory `kStockSpineBridge` phase stays stock. Old `fk/gb` controls do not
+contradict this correction: they predate the art-id repair, and `gb` actually
+targeted Mazur `0x33E29A1B`, not P99 `0x8075397D`.
+
+Mazur uses a separate art-scoped final-frame correction. Native NPC Nadine's
+`targSpineProp 0x00AD047A` is an identity record on `spineb` joint 16; both
+`nadine-base.pak` and `nadine-dlc-base.pak` map joint 16 to hash `0xAF29E6DC`.
+Legacy Player-Nadine already owns transform-equivalent `targSpine 0x8E1D5EEF`,
+also identity on joint 16. The former Chloe-derived compatibility record is on
+`spined` joint 18 with a non-identity marker transform; `spined` is a descendant
+of `spineb`, not its parent. Build `aba` preserves selected id/index
+`targSpineProp` and the Mazur art binding. At the sole direct call
+`0x141ED19BB -> NdAttachableObject_ApplyLocalAttachmentCorrection 0x141ED0A70`,
+after the selected record has already resolved, it substitutes only R8 with a
+second stock `AttachSystem_ResolveRecordTransform` result for the existing
+`targSpine` record. Admission requires exact ProcessWeapon/Mazur art, retained
+legacy-Nadine owner and generation, selected `targSpineProp`, same valid table,
+and an identity joint-16 donor. P99's intermediate id and every Chloe/NPC/other
+art call remain untouched. A guessed outward delta is rejected for this test:
+Mazur LOD0 is highly asymmetric (about 10.7 x 29.3 x 116.3 cm), so its bbox does
+not establish a torso surface normal or a defensible numeric offset.
+
+The missing sling is already authored stock content. Mazur's runtime
+WeaponArtDef `+0x38` selects `rifle-strap-spc 0xB58FB7D7`; the global gate defaults
+on, `ProcessWeapon_Initialize 0x14150F640` creates the exact
+ProcessWeaponStrap-vtable child and stores its weak handle/generation at
+`+0xAE0/+0xAE8`, and the shipped PAK contains strap/hook/buckle geometry.
+`PlayerWeaponController_RebindWeaponToHolster 0x1410A9670` emits
+`player-holstered`; `ProcessWeapon_EventHandler 0x1415116C0` forwards it to the
+child, whose `ProcessWeaponStrap_EventHandler 0x14150C9C0` publishes
+`ak47-holster--strap` and writes child `+0x12F0=0`. Re-sending that event, making
+a second child, or adding collision would duplicate stock behavior. Instead the
+cold Mazur one-shot now waits for the exact generation-valid child/resource,
+then logs its pre/post state and requires post-state zero for `strapVerified`.
+This closes the only concrete cold creation/event race while preserving the
+authored process.
+
+The runtime prediction is one bounded fresh spawn. Both copies must load marker
+`2026-08-10aba`. `NADINE-ATTACH-REPAIR` must report the native pistol record on
+joint 99 with `exactTransform=1`; `NADINE-HOLSTER-BINDING` for art `8075397D`
+must report `hipPrimaryNeutral=1`, and the existing cold P99 row must still end
+at `pistolHolster` index 41. `NADINE-LOCAL-MAZUR-REBIND` must preserve terminal
+`targSpineProp` while reporting a valid sling child and post-state zero;
+`NADINE-MAZUR-NATIVE-BACK` must show selected `targSpineProp` unchanged and donor
+`targSpine` on joint 16. Visually, P99 should follow the leather holster rigidly
+without the old 9.31 cm back correction, Mazur should move as a rigid unit to
+Nadine's native spine frame, and the sling should be visible in its holstered
+state. A P99/Chloe/animation regression, selected-id change, failed exact guard,
+crash or frame-time regression rejects the package. If sling child/state verify
+but no sling is visible, the lifecycle hypothesis is rejected and the remaining
+boundary is downstream DrawControl/animation visibility, not another event.

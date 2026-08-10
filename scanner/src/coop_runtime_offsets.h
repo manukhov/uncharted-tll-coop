@@ -798,6 +798,7 @@ constexpr std::uintptr_t kNdAttachableObjectLocalTransformCallsiteRva =
     0x1ED19BB;
 constexpr std::uintptr_t kNdAttachableObjectApplyLocalTransformRva =
     0x1ED0A70;
+constexpr std::uintptr_t kAttachSystemResolveRecordTransformRva = 0x18B7060;
 // Final compose inside the source-identified "Animating" update. Its R8 is
 // exactly object+0x130, after the selected-attachment update and any later
 // animation-layer overwrite, immediately before FgAnimData publication.
