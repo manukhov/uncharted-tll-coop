@@ -22058,3 +22058,46 @@ Only a complete local-only bundle replacement with compatible skeleton maps and
 weights can earn the next visual test. Do not revive `0x14172CB32`, the debug
 kill switch, flashlight/blind-fire gates, individual clip substitution, scalar
 weight guesses or blanket Feather suppression.
+
+### 2026-08-11 STATIC / REJECTED: `auto -> run-gun-idle` is action policy, not the missing Mazur grip
+
+The complete static pass rejects the tempting asset edge `auto 0x11E3B022 ->
+run-gun-idle 0x8D62CB37` as a repair for ordinary drawn Mazur. The state record
+at `anim-player.bin+0x1BE40` owns blend root `+0x40670`. Its three Player clips
+`4B75F398/B5A29C05/0775BDB0` are near-full-body poses on joints
+`{0,2--13,16--35,40--42,58--62}` and are selected by the already confirmed
+directional-aim weights at Player animation parameters `+0x188/+0x18C`.
+Traversal ownership, transitions to ordinary `run`/`idle`, and the full-body
+mask identify a special run-and-gun/blind-fire locomotion state. It is neither
+the normal drawn idle `41C84248`, the ADS idle `3C347132`, nor a WeaponPartial
+hands layer.
+
+The `auto` edge is a generic root-candidate key, not an automatic-weapon or grip
+property. `ResolveActorRootCandidateEntryByStateId 0x1418A5CD0` dispatches to
+`FindResolvableCandidateEntryByStateId 0x14193D250`; selector validation at
+`0x14193CDB0` permits the candidate only when the current actor root already
+publishes the corresponding candidate table. The companion PlayerWeaponAnimControl
+methods prove that the same key is only queried as an authored marker. Vtable
+`0x142A46778` slot `+0xA0 = 0x14108D120` and slot `+0xC0 = 0x14108E470`
+find the active `WeaponPartial 0xE2B990B9` layer and call
+`AnimStateLayer_HasResolvableCurrentRootCandidate 0x14189CA20`; neither method
+writes a state id, clip, joint or IK target. The slots differ only in missing-
+layer fallback (`+0xA0` true, `+0xC0` false).
+
+All six exact indirect consumers are phase-2 completion monitors, not steady
+pose producers: GetWeaponInHand at `0x14109679F`, SwitchWeaponHand at
+`0x14109CC30/0x14109CD50`, ReloadClip at `0x141099320`, Rechamber at
+`0x141099E50`, and ReloadLoop at `0x14109B8F3`. A true `auto` result only marks
+the queued action complete; changing it would alter draw/switch/reload lifetime
+and event timing without selecting `run-gun-idle`.
+
+The steady Player composition is instead intentionally base + Hands + empty
+WeaponPartial after the transient draw action. `s_no-weapon 0x3889CC0E` owns an
+empty-pose root, while saved request rows show stock clearing WeaponPartial
+after `s_weapon-out`. The separate run-gun states and `PlayerRunNGunController`
+have no ordinary Draw edge. Three independent evidence types therefore agree:
+exact asset state/masks and transition topology; instruction-level candidate
+and no-write dataflow; and all vtable consumer callsites. Forcing the state,
+the `auto` result, nonempty WeaponPartial or individual hands clips is
+**REJECTED**. No runtime test is authorized. The frontier remains the later
+local pose owner after the intentional steady command composition.

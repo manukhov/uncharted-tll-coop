@@ -4480,6 +4480,33 @@ FUNCTIONS = {
         "field at manager+0x558. Confirmed stock modes choose coop-drake, "
         "coop-chloe, or coop-sullivan.",
     ),
+    0x140F72170: (
+        "PlayerRunNGunController_ConstructInPlace",
+        "Constructs the PlayerRunNGunController state used by the separate "
+        "run-and-gun/blind-fire locomotion family; this is not the ordinary "
+        "drawn WeaponPartial or Hands controller.",
+    ),
+    0x140F72C80: (
+        "PlayerRunNGunController_Create",
+        "Allocates and constructs PlayerRunNGunController. Player assembly "
+        "stores the resulting controller at Player+0x1E40.",
+    ),
+    0x140F722F0: (
+        "PlayerRunNGunController_UpdateAimTarget",
+        "Updates the special run-and-gun target from targRWrist, per-screen "
+        "AimAtPos and cover geometry. This path is distinct from ordinary "
+        "weapon draw and grip composition.",
+    ),
+    0x140F72ED0: (
+        "PlayerRunToRunStateAction_Construct",
+        "Constructs the run-to-run StateAction used next to the special "
+        "PlayerRunNGunController transition family.",
+    ),
+    0x140F73010: (
+        "PlayerRunToRunStateAction_UpdateTransitionSelection",
+        "Selects authored run-to-run transition variants, including mirrored "
+        "run-null states; it is not an ordinary drawn-weapon idle selector.",
+    ),
     0x140F73910: (
         "ScriptSpawnPlayer",
         "Large retained spawn-player implementation. Builds or copies a spawn "
@@ -7065,6 +7092,13 @@ FUNCTIONS = {
         "Seeds a compact selector record from actor_root+0x90 through "
         "0x1418A6010, prefers actor_root->0x38 and falls back to +0x40, then "
         "dispatches candidate resolution through 0x14193D250.",
+    ),
+    0x14193D250: (
+        "FindResolvableCandidateEntryByStateId",
+        "Walks the current actor root candidate table for a requested state "
+        "id and returns an entry only when its selector record is valid. The "
+        "authored 'auto' key uses this generic resolver; it does not itself "
+        "request run-gun-idle or write animation state.",
     ),
     0x14193CD10: (
         "FindRecursiveCandidateEntryByPointerAndStateId",
@@ -11226,10 +11260,31 @@ FUNCTIONS = {
         "weapon layer and invokes the generic state-transition/fade helper when "
         "present; it has no physical attachment write.",
     ),
+    0x14108D120: (
+        "PlayerWeaponAnimControl_IsCurrentWeaponStateAutoOrUnavailable",
+        "PlayerWeaponAnimControl vtable +0xA0. Queries the authored 'auto' "
+        "root-candidate marker on the active WeaponPartial layer; returns "
+        "true when the layer/current instance is unavailable. Its real "
+        "callers are draw and hand-switch action completion monitors.",
+    ),
     0x14108E470: (
         "PlayerWeaponAnimControl_IsCurrentWeaponStateAuto",
         "PlayerWeaponAnimControl vtable +0xC0. Queries the authored auto flag "
-        "for the current state in weapon layer 0xE2B990B9.",
+        "for the current state in WeaponPartial 0xE2B990B9 and returns false "
+        "when the layer is unavailable. Its real callers are reload-action "
+        "completion monitors; it does not select an idle pose.",
+    ),
+    0x14189C970: (
+        "AnimStateLayer_CanResolveRootCandidateStateId",
+        "Checks whether the current layer state graph can resolve an authored "
+        "root-candidate key, then validates the candidate against the current "
+        "selector record. Boolean query only; no state or pose write.",
+    ),
+    0x14189CA20: (
+        "AnimStateLayer_HasResolvableCurrentRootCandidate",
+        "Queries an authored key such as 'auto' through current state data and "
+        "ResolveActorRootCandidateEntryByStateId. Used as an action-completion "
+        "policy predicate; it does not request the candidate state.",
     ),
     0x142057380: (
         "AnimActionMgr_Init",
@@ -11547,6 +11602,11 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142A35B38: (
+        "PlayerRunNGunController_vftable",
+        "Exact PlayerRunNGunController vtable for the special run-and-gun/"
+        "blind-fire locomotion controller stored at Player+0x1E40.",
+    ),
     0x142A23EA8: (
         "PlayerFlashlightController_vftable",
         "Exact RTTI PlayerFlashlightController vtable installed by "

@@ -4291,6 +4291,18 @@ whole compatible bundle with the authored NPC-Nadine retarget path; do not
 substitute a single hands clip. The next game launch is allowed only for an
 atomic local-only visual repair supported by three independent evidence types.
 
+**STATIC / REJECTED (`auto -> run-gun-idle`):** do not force
+`run-gun-idle 0x8D62CB37` or patch the `auto 0x11E3B022` predicate. The state is
+a traversal-owned, near-full-body run-and-gun/blind-fire locomotion blend, not
+ordinary drawn idle or WeaponPartial. PlayerWeaponAnimControl slots `+0xA0`
+and `+0xC0` only query the authored `auto` candidate marker; all six real
+callers are Get/Switch/Reload phase-2 completion monitors and none requests an
+idle state or writes a pose. The steady composition intentionally returns to
+base + Hands + empty WeaponPartial after the draw transition. Mutating any of
+these paths changes action/event timing or fights a stock clear, not the grip.
+Continue after the steady command composition into the later local pose owner;
+no game launch until an atomic visual repair is statically closed.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
