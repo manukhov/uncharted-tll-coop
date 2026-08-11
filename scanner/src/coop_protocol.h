@@ -141,10 +141,12 @@ static_assert(offsetof(StatePacket, aim_leg_base_pose_joint_count) == 528);
 static_assert(offsetof(StatePacket, aim_leg_base_pose_local) == 532);
 
 // Stable drawn-idle arm palette returned by the host-rendered Nadine puppet to
-// the client that locally controls Nadine.  These are the exact final 3x4
-// skinning matrices consumed by the three visible Nadine body packages.  The
-// compact set is still too large for one MTU-safe datagram, so one atomic frame
-// is transported as four independently validated fragments.
+// the client that locally controls Nadine. These 3x4 rows are directly weighted
+// by the three validated Nadine body packages; build aby proved that replacing
+// them in the retained Player's final upload palette is not sufficient to alter
+// the observed grip. The compact set is still too large for one MTU-safe
+// datagram, so one atomic frame is transported as four independently validated
+// fragments while the rejected relay remains disabled.
 constexpr std::uint32_t kIdleArmPosePacketMagic = 0x504D5241;  // "ARMP"
 constexpr std::uint16_t kIdleArmPosePacketVersion = 2;
 constexpr std::uint16_t kIdleArmPoseFlagSteadyDrawn = 0x0001;

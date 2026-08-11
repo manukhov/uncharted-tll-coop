@@ -2759,14 +2759,34 @@ FUNCTIONS = {
         "Exact FgAnimData::PrepareSkinningMtxUploadBuffer assertion in anim-data.cpp. "
         "Copies the CPU skinning matrices at +0x230 to upload matrices at +0x240.",
     ),
+    0x141744100: (
+        "SkinningDeformer_EncodeBoneBufferDescriptors",
+        "Converts the current and companion bone-buffer pointers from "
+        "InstanceJointData plus the joint count into the GPU resource/descriptor "
+        "inputs consumed by SkinningDeformer_Skin.",
+    ),
+    0x141744210: (
+        "SkinningDeformer_Skin",
+        "Exact SkinningDeformer::Skin source assertions. Validates pJointData "
+        "and m_pCurrBoneBuf, dereferences the current and companion bone-buffer "
+        "pointers, and passes them to SkinningDeformer_EncodeBoneBufferDescriptors.",
+    ),
+    0x1417445D0: (
+        "SkinningDeformer_SkinRope",
+        "Exact SkinningDeformer::SkinRope source assertion. Separate rope/sling "
+        "skinning path; not the retained Nadine body-palette consumer.",
+    ),
     0x14181A9B0: (
         "FgDrawManager_PrepareInstanceForRendering",
         "Exact PrepareInstanceForRendering assertions in fg-draw-mgr.cpp. Copies "
-        "FgAnimData CPU matrices +0x230 to upload storage +0x240 at the sole "
-        "memcpy callsite 0x14181AB33 while holding Fg+0x220; no later write to "
-        "+0x240 occurs in this function. It separately publishes the render world "
-        "matrix returned by FgAnimData_GetRenderWorldMatrix into each driven "
-        "FgInstance at +0x140..+0x17F.",
+        "FgAnimData CPU matrices +0x230 to upload storage +0x240 at memcpy "
+        "callsite 0x14181AB33 while holding Fg+0x220, then selects +0x250 when "
+        "nonnull or +0x240 otherwise. A driven FgInstance with +0x260==0 binds "
+        "that selected pointer at +0x78 (0x14181B3C6). With +0x260!=0 it resolves "
+        "mesh bone StringIds, rebuilds a mesh-local 48-byte-row palette directly "
+        "from Fg+0x230 at 0x14181B2C4/0x14181B367, and publishes that buffer at "
+        "instance+0x78/+0x80 at 0x14181B3A1..B3A5. It separately publishes the "
+        "render world matrix into each driven instance at +0x140..+0x17F.",
     ),
     0x14181B890: (
         "FgDrawManager_PrepareInstancesJob",
@@ -2778,6 +2798,12 @@ FUNCTIONS = {
         "Exact FgDrawMgr::PostAnimProcessing source assertion in fg-draw-mgr.cpp. "
         "Builds and submits six worker records which batch FgAnimData entries "
         "through FgDrawManager_PrepareInstancesJob.",
+    ),
+    0x141931B30: (
+        "FgInstance_SetBones",
+        "Exact FgInstance::SetBones source assertion. Publishes the current and "
+        "companion bone-buffer pointers and joint count into the instance's "
+        "persistent joint-data block.",
     ),
     0x141661960: (
         "RenderMgr_MainDrawCore",

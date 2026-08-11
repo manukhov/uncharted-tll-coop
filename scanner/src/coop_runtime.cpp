@@ -1548,12 +1548,14 @@ struct StateNetState {
     bool enabled = false;                  // toggled on once peer + puppet ready
 };
 
-// Build aby replaces the RUNTIME-REJECTED twelve-local-row relay with an exact
-// final-upload-palette repair.  Player +0x408 performs only the already-proven
-// steady-state admission; the later memcpy at 0x14181AB33 captures/applies the
-// 88 directly skin-weighted arm/finger/helper matrices under the native Fg
-// lock.  No Fg+0x100 row or attachment locator is mutated.
-constexpr bool kEnableLegacyNadineIdleArmPoseRoundTrip = true;
+// Build aby is RUNTIME-REJECTED: the endpoint-authenticated four-fragment
+// packet and the write to Fg+0x240 both succeeded, but the visible local-Nadine
+// grip did not change. A post-exam read-only census also found all 20 driven
+// FgInstances bound directly to that +0x240 buffer at instance+0x78, with no
+// alternate or mesh-local palette active, while all 88 source/target CPU rows
+// differed. Keep the mutation disabled until the exact visible presentation
+// owner or the CPU-to-GPU publication/coherency failure is statically closed.
+constexpr bool kEnableLegacyNadineIdleArmPoseRoundTrip = false;
 constexpr bool kEnableLegacyNadineIdleArmPoseAdmissionCensus = false;
 constexpr std::uint32_t kLegacyNadineTargetSkeletonArtId = 0xED25C708u;
 constexpr std::uint32_t kLegacyNadineUnderlyingSkeletonId = 0xC39CA709u;

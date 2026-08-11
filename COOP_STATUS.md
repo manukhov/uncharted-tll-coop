@@ -22543,3 +22543,85 @@ during movement/ADS/reload/switch/grenade, malformed frame acceptance, crash or
 new frame-time regression rejects the package. The Mazur sling is outside this
 exam and remains disabled because Nadine has no authored `strap2..14` solver
 guide chain.
+
+### 2026-08-11 RUNTIME REJECTED (`aby`): `Fg+0x240` final-palette relay is not a sufficient visible boundary
+
+The written `aby` prediction failed. In the fresh P99 exam, role A emitted
+`NADINE-IDLE-PALETTE-CAPTURE` and four-fragment `SEND`; role B emitted matching
+four-fragment `RECV` and repeated
+`NADINE-IDLE-PALETTE-APPLY ... joints=88 applied=1` with state-sequence lag
+`1..3`. The user observed no visible change. This rejects the hypothesis that
+replacing the selected 88 rows in `FgAnimData+0x240` is by itself sufficient to
+change the local-Nadine body grip. The relay is disabled again; no second run
+was used to choose another address.
+
+The old `applied=1` telemetry had a narrower meaning than the prediction
+assumed: `seh_apply_idle_arm_palette_matrices` copied the packet rows into
+`+0x240` and immediately compared those bytes back to the packet. It did not
+compare the pre-write local rows with the remote rows, so the marker alone proved
+only successful write/readback. A subsequent read-only `ReadProcessMemory`
+snapshot of both still-running exam processes closes that ambiguity: all 88
+selected rows in the role-A and role-B live `Fg+0x230` palettes differed beyond
+epsilon (`88/88`, aggregate absolute component delta `101.106161`). The samples
+were asynchronous rather than the exact transported packet, but the complete,
+large steady-state divergence rejects a zero-delta explanation for this exam.
+
+The full static continuation corrects the earlier “sole final upload” claim.
+`FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` does perform the locked
+`Fg+0x230 -> Fg+0x240` copy at `0x14181AB33`, but then selects its render source:
+
+- if `Fg+0x250` is nonnull, `0x14181AB5A..AB6B` selects the alternate
+  `+0x250/+0x258` pair; otherwise `0x14181AB7B..AB80` selects `+0x240/+0x248`;
+- for a driven `FgInstance` with `instance+0x260 == 0`, `0x14181B3C6` binds that
+  selected pointer at `instance+0x78`;
+- with `instance+0x260 != 0`, the function resolves the mesh bone StringIds to
+  target-joint indices, copies 48-byte rows directly from unchanged `Fg+0x230`
+  at `0x14181B2C4`/`0x14181B367`, and publishes the newly allocated mesh-local
+  buffer at `instance+0x78/+0x80` at `0x14181B3A1..B3A5`. That work is later
+  than the rejected `0x14181AB33` hook.
+
+The post-exam driven-instance census closes both renderer branches rather than
+merely ranking them. Both exact retained Player FgAnimData objects had
+`Fg+0x250 == 0` and `Fg+0x258 == 0`, so the selected native pair was
+`+0x240/+0x248`. Each Fg owned 20 driven FgInstances. All `20/20` instances on
+both sides had `instance+0x260/+0x268/+0x270 == 0`, `instance+0x30 == 580`,
+`instance+0x78 == Fg+0x240`, and `instance+0x80 == Fg+0x230`. Therefore
+**H1 (alternate pair) and H2 (mesh-local remap) are RUNTIME REJECTED for this
+exam**: none of the driven body instances selected either path. **H3 (zero
+delta) is also RUNTIME REJECTED** by the `88/88` nonzero CPU-palette comparison.
+
+The downstream static consumer is now exact as well. The source-identified
+`SkinningDeformer::Skin 0x141744210` asserts `pJointData` and
+`pJointData->m_pCurrBoneBuf`, dereferences the current and companion bone-buffer
+pointers, and calls `SkinningDeformer_EncodeBoneBufferDescriptors 0x141744100`.
+That callee converts both buffers plus the joint count into the GPU resource /
+descriptor inputs used by the skinning job. `FgInstance::SetBones 0x141931B30`
+independently establishes the persistent bone-data/count fields, while
+`FgDrawManager_PrepareInstanceForRendering` publishes the current selected
+pointer into each live instance. This is three independent evidence types:
+source assertions, pointer-producing dataflow, and the live 20-instance join.
+There is no remaining supported hidden per-instance-palette explanation for
+the unchanged result.
+
+The remaining split is earlier or later than the proven retained-body palette,
+not another nearby matrix field: **C1**, the retained remote/local Player body
+Fg objects are not the exact drawable/presentation owners of the pixels being
+compared; **C2**, the post-copy CPU mutation misses the effective GPU upload or
+synchronization lifetime even though the bound pointer value is correct; or
+**C3**, the 88 directly weighted rows are insufficient to reproduce the full
+weapon grip because the unweighted palm/weapon-attachment locator chain and
+weapon transform remain receiver-local. Complete visual non-response weakens
+C3 because weighted arms/fingers should still move, but it does not statically
+eliminate it. No new mutation or runtime test is authorized until exact visible
+drawable ownership and CPU-to-GPU ordering distinguish C1 from C2; the `aby`
+relay stays disabled.
+
+Durable state is complete. `scripts/ida_scan_fg_skinning_fields.py` reproduces
+the cross-function field-access audit into a gitignored report. The canonical
+`ida/tll.i64` now names/comments `SkinningDeformer_Skin 0x141744210`,
+`SkinningDeformer_EncodeBoneBufferDescriptors 0x141744100`,
+`SkinningDeformer_SkinRope 0x1417445D0`, `FgInstance_SetBones 0x141931B30`, and
+the corrected `FgDrawManager_PrepareInstanceForRendering 0x14181A9B0`; headless
+application reported `1696 functions, 59 data names` and
+`save_database returned True`, and restarted MCP lookups resolved all five
+names. The release DLL/client build passes with the rejected relay disabled.

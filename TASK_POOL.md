@@ -97,16 +97,28 @@
       fragments reassembled atomically by `{session,sequence,art,sourceState}`.
       No `Fg+0x100`, `Fg+0x230`, attachment locator, weapon Fg, head, spine or leg
       state is changed. Release build and relay-object ABI inspection pass.
-- [ ] Run `aby` only after the static record, IDB comment, clean commit and push.
-      The static record, headless IDB save/readback, release build, asset audit
-      and relay ABI inspection are complete; this checkbox remains the sole
-      runtime exam and is not evidence until its written prediction is observed.
-      Written prediction: after 350 ms stationary WeaponOut, A emits final-palette
-      `CAPTURE/SEND`, B emits `RECV/APPLY applied=1`, and the visible Nadine
-      arm/hand vertices assume the role-A remote presentation. Complete markers
-      with unchanged body arms reject the upload boundary; corrected arms with a
-      still-floating weapon isolate the separate ProcessWeapon transform. Any
-      head/spine/leg/holster regression rejects the 88-joint selection.
+- [x] Run and reject `aby`. Role A emitted final-palette
+      `CAPTURE/SEND fragments=4`; role B emitted matching `RECV` and repeated
+      `APPLY ... joints=88 applied=1` with sequence lag 1--3. The user observed
+      no change in the local-Nadine grip, so `Fg+0x240` replacement is
+      **RUNTIME REJECTED** as a sufficient visible boundary. `applied=1` proved
+      only successful write/readback, not a nonzero source/target delta.
+- [x] Close and reject the hidden per-instance-palette alternatives after the
+      negative `aby` exam. Both retained Player Fg objects had the alternate
+      pair `+0x250/+0x258=0`; each owned 20 driven instances, and every instance
+      had `+0x260/+0x268/+0x270=0`, count `+0x30=580`, current pointer
+      `+0x78==Fg+0x240`, and CPU pointer `+0x80==Fg+0x230`. All 88 selected CPU
+      rows still differed (`88/88`, aggregate absolute delta `101.106161`).
+      `SkinningDeformer::Skin 0x141744210` consumes the current bone buffer from
+      InstanceJointData and `0x141744100` encodes that pair into GPU descriptors.
+      Alternate-pair, mesh-local-remap and zero-delta explanations are therefore
+      rejected for this exam.
+- [ ] Before any further arm-pose launch, distinguish exact visible drawable /
+      presentation ownership from CPU-to-GPU publication ordering. Prove that
+      the retained Player Fg and its 20 driven instances are the actual pixels
+      being judged in each process, then close when the post-copy CPU write is
+      visible to the skinning upload/descriptor lifetime. Do not guess another
+      adjacent palette field and do not revive the disabled ARMP relay.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that
