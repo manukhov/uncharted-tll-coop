@@ -356,6 +356,7 @@ def audit_pak_animation_masks(data: bytes, labels: list[str]) -> None:
                     f"at 0x{raw_offset:X}"
                 )
 
+            source_skeleton_id = struct.unpack_from("<I", data, raw_offset + 4)[0]
             group_count = struct.unpack_from("<H", data, raw_offset + 0xC)[0]
             group_table_offset = struct.unpack_from("<I", data, raw_offset + 0x14)[0]
             mask_offset = raw_offset + group_table_offset + group_count * 0x10
@@ -374,7 +375,8 @@ def audit_pak_animation_masks(data: bytes, labels: list[str]) -> None:
                 f"animation={label!r} id=0x{animation_id:08X} "
                 f"origin={origin} "
                 f"descriptor=page{descriptor_page}+0x{descriptor_local:X} "
-                f"raw=0x{raw_offset:X} groups={group_count} "
+                f"raw=0x{raw_offset:X} source_skeleton=0x{source_skeleton_id:08X} "
+                f"groups={group_count} "
                 f"mask={mask_words[0]:016X}:{mask_words[1]:016X} "
                 f"joints=[{rendered_joints}]"
             )
@@ -659,6 +661,123 @@ def collect_printable_string_ids(
         text = raw.decode("ascii")
         names.setdefault(string_id(raw), []).append(text)
     return names
+
+
+def audit_skeleton_joint_tables(
+    data: bytes, specifications: list[str], min_string: int
+) -> None:
+    """Print stride-16 skeleton joint hashes from explicit OFFSET:COUNT tables."""
+
+    known_names = collect_printable_string_ids(data, min_string)
+    for specification in specifications:
+        try:
+            offset_text, count_text = specification.split(":", 1)
+            table_offset = int(offset_text, 0)
+            joint_count = int(count_text, 0)
+        except (ValueError, TypeError) as exc:
+            raise ValueError(
+                "--skeleton-joint-table expects OFFSET:COUNT"
+            ) from exc
+        if table_offset < 0 or joint_count <= 0 or joint_count > 4096:
+            raise ValueError(f"invalid skeleton joint table: {specification}")
+        table_end = table_offset + joint_count * 0x10
+        if table_end > len(data):
+            raise ValueError(
+                f"skeleton joint table exceeds entry: {specification}"
+            )
+        print(
+            f"skeleton_joint_table=0x{table_offset:X} count={joint_count} "
+            "stride=0x10"
+        )
+        for joint in range(joint_count):
+            row_offset = table_offset + joint * 0x10
+            joint_id = struct.unpack_from("<I", data, row_offset)[0]
+            names = "|".join(known_names.get(joint_id, []))
+            print(
+                f"  joint={joint} offset=0x{row_offset:X} "
+                f"id=0x{joint_id:08X} names={names!r}"
+            )
+
+
+def audit_skeleton_retargets(data: bytes, specifications: list[str]) -> None:
+    """Find DC00 retarget records for explicit SOURCE_ART:TARGET_ART pairs."""
+
+    if len(data) < 0x20 or data[:4] != b"00CD":
+        raise ValueError("--skeleton-retarget requires a DC00 entry")
+    object_count = struct.unpack_from("<I", data, 0x14)[0]
+    wanted: list[tuple[int, int, str]] = []
+    for specification in specifications:
+        try:
+            source_text, target_text = specification.split(":", 1)
+        except ValueError as exc:
+            raise ValueError(
+                "--skeleton-retarget expects SOURCE_ART:TARGET_ART"
+            ) from exc
+        source_id = parse_id(source_text)[0]
+        target_id = parse_id(target_text)[0]
+        wanted.append((source_id, target_id, specification))
+
+    for source_id, target_id, specification in wanted:
+        matches = 0
+        for index in range(object_count):
+            index_offset = 0x20 + index * 0x10
+            object_id, type_id, record_offset, _reserved = struct.unpack_from(
+                "<IIII", data, index_offset
+            )
+            if record_offset + 0x10 > len(data):
+                continue
+            table_offset = struct.unpack_from("<Q", data, record_offset)[0]
+            table_count = struct.unpack_from("<I", data, record_offset + 8)[0]
+            table_end = table_offset + table_count * 0x30
+            if (
+                table_count > 4096
+                or table_offset > len(data)
+                or table_end > len(data)
+            ):
+                continue
+            for table_row in range(table_count):
+                retarget_offset = table_offset + table_row * 0x30
+                values = struct.unpack_from("<12I", data, retarget_offset)
+                if values[3] != source_id or values[4] != target_id:
+                    continue
+                map_offset = values[6]
+                map_count = values[8]
+                map_end = map_offset + map_count * 0x0C
+                if (
+                    map_count > 4096
+                    or map_offset > len(data)
+                    or map_end > len(data)
+                ):
+                    raise ValueError(
+                        f"invalid retarget map in object {index} row "
+                        f"{table_row}: offset=0x{map_offset:X} "
+                        f"count={map_count}"
+                    )
+                print(
+                    f"skeleton_retarget={specification!r} object[{index}] "
+                    f"index=0x{index_offset:X} id=0x{object_id:08X} "
+                    f"type=0x{type_id:08X} record=0x{record_offset:X} "
+                    f"table=0x{table_offset:X} row={table_row} "
+                    f"row_offset=0x{retarget_offset:X} "
+                    f"map=0x{map_offset:X} count={map_count} "
+                    f"profile=0x{values[9]:08X} "
+                    f"scale_bits=0x{values[10]:08X}"
+                )
+                for map_row in range(map_count):
+                    row_offset = map_offset + map_row * 0x0C
+                    source_joint, target_joint, mode = struct.unpack_from(
+                        "<III", data, row_offset
+                    )
+                    print(
+                        f"  row={map_row} offset=0x{row_offset:X} "
+                        f"source=0x{source_joint:08X} "
+                        f"target=0x{target_joint:08X} mode={mode}"
+                    )
+                matches += 1
+        print(
+            f"skeleton_retarget_matches={matches} "
+            f"source=0x{source_id:08X} target=0x{target_id:08X}"
+        )
 
 
 def compare_player_mesh_rows(
@@ -1323,6 +1442,26 @@ def build_parser() -> argparse.ArgumentParser:
             "joint ValidBits mask; repeatable"
         ),
     )
+    parser.add_argument(
+        "--skeleton-joint-table",
+        action="append",
+        default=[],
+        metavar="OFFSET:COUNT",
+        help=(
+            "print an explicit stride-16 PAK skeleton joint-hash table; "
+            "repeatable"
+        ),
+    )
+    parser.add_argument(
+        "--skeleton-retarget",
+        action="append",
+        default=[],
+        metavar="SOURCE_ART:TARGET_ART",
+        help=(
+            "find and print an exact DC00 skeleton-retarget record and map; "
+            "repeatable"
+        ),
+    )
     parser.add_argument("--min-string", type=int, default=3)
     parser.add_argument("--limit", type=int, default=200)
     return parser
@@ -1367,12 +1506,15 @@ def main() -> int:
             or args.dc00_map_id
             or args.gesture_node_audit
             or args.animation_mask
+            or args.skeleton_joint_table
+            or args.skeleton_retarget
         ):
             raise ValueError(
                 "--entry is required with --id, --resolve-string-id, --strings, "
                 "--player-mesh-look, --map-source, --gesture-node-audit "
                 "--dc00-record-id, --dc00-table-offset, --dc00-map-id or "
-                "--animation-mask"
+                "--animation-mask, --skeleton-joint-table or "
+                "--skeleton-retarget"
             )
         return 0
 
@@ -1381,6 +1523,14 @@ def main() -> int:
 
     if args.animation_mask:
         audit_pak_animation_masks(data, args.animation_mask)
+
+    if args.skeleton_joint_table:
+        audit_skeleton_joint_tables(
+            data, args.skeleton_joint_table, args.min_string
+        )
+
+    if args.skeleton_retarget:
+        audit_skeleton_retargets(data, args.skeleton_retarget)
 
     if args.gesture_node_audit:
         gesture_data = archive.extract(args.gesture_settings_entry)

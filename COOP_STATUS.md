@@ -21689,3 +21689,64 @@ palette-remap or visibility repair cannot run stock Rope2 physics. A synthetic
 13-locator art policy would be hand-authored retargeting, not a proven engine
 mapping, and stays disabled. Remote owner1 visibility is not generalized until
 the same full stock solver admission can be satisfied.
+
+### 2026-08-11 STATIC: shipped NPC-firearm poses retarget to Player-Nadine, but no atomic grip replacement is proven
+
+The earlier asset conclusion that generic NPC firearm clips have no path to the
+legacy Player-Nadine skeleton is **REJECTED**. A reproducible parser of
+`dc1.psarc/skel-retargets.bin` finds outer object `FE014FD2/8E53B36E`, table
+`+0x50`, exact row 133 at `+0x1940` (source field `+0x194C`):
+`npc-normal-base B91C4EA3 -> nadine-dlc-base C67A06F1`, map `+0x2720`, 74
+entries, profile `E51542CA`, scale bits `3F7851EC`. The corresponding PAKs
+independently identify source skeleton `BD7EEE2F` and target skeleton
+`C39CA709`. The map preserves the arm/palm StringIds: NPC joints 20--27 become
+Nadine joints 19--26, NPC palms 28--29 become Nadine 27--28, and
+`l/r_hand_prop_attachment` rows 30--31 become Nadine 29--30 through mode-3
+records. Thus the engine has a real authored NPC-normal-to-Nadine retarget; a
+synthetic bone-number translation is neither necessary nor permitted.
+
+The Mazur NPC donor is also selected by exact shipped content rather than by a
+name guess. `anim-overlays-thug.bin` object 264 (`E3C88576`, selector exact
+Mazur art `33E29A1B`) owns table `+0x18B28`; row 0 maps generic long-gun hands
+`21F2C55F thug-04-lg-aggr-idle--part-hands` to sniper hands `071B6E20
+thug-04-sniper-aggr-idle--part-hands`. Both are six-group `BD7EEE2F` clips with
+mask joints 28--31, which the authored map sends to Nadine palms/prop points
+27--30. The surrounding native long-gun state is an ensemble, however:
+`1C23EE55` owns the full 0--54 base, `6D51B9C2` the aim additive,
+`ED623210` the proximal-arm aim set, `21F2C55F/071B6E20` only the distal hands,
+and `EEAFC6D5` the spine additive. A hands-only substitution therefore cannot
+repair the observed one-handed shoulder/elbow pose, while replacing the full
+base would overwrite the entire body.
+
+The nine live Player-Mazur resolver rows are structurally coherent but do not
+prove their final contribution. `283966ED` is already a two-hand proximal-arms
+clip on Player joints 21--28; `77A8107C` and `7FB80CC8` are paired distal-hand
+lanes; and the right-hand-only `D350A452 -> 0A2F8976` is expected to coexist
+with them. The tempting source token `47C0A266` has two complementary Mazur
+rows (`F4B56F62` hands and `5676695B` arms), but it has no registered clip, no
+incoming overlay edge, no occurrence in `anim-player.bin` and no call in the
+fresh drawn-Mazur census. Forcing either output is therefore **REJECTED**: the
+runtime predicate/layer that selects the pair is unknown.
+
+Three alternatives remain distinct. **Gmissing-layer** predicts the two-hand
+Player arms/hands leaves exist in the snapshot but carry zero weight or an
+inactive channel. **Glater-local-owner** predicts those leaves are live and
+weighted, then the local Player IK/upper-body path overwrites their joints;
+the partial P99 response to WeaponIKFeather suppression supports but does not
+prove this branch for Mazur. **Gnative-bundle** predicts that a complete
+retargeted NPC base/add/set/hands bundle would be needed, but its availability
+inside the Player AnimSet and its local-only composition are not established.
+Direct clip injection, a global resolver change and another Feather bypass all
+remain forbidden.
+
+The next read-only boundary is exact. `AnimStateLayer_PhaseUpdateInstances
+0x14189D720` calls `AnimStateInstance_ResolveDtGroupAndSnapshot 0x1418A4670` at
+`0x14189D824` with the live instance in RCX and track-local overlay in R8.
+That function calls `AnimStateSnapshot_SnapshotAnimState 0x1418B24F0` at
+`0x1418A46D0`; after the stock overlay and `AnimSetRemap` steps the instance
+snapshot contains state id `+0x98`, resolved tuple `+0x118/+0x120/+0x124`, root
+`+0x138`, AnimSet `+0x140`, and blend scalars `+0x168/+0x16C`. A bounded
+post-stock census at this caller can finally join each of the nine rows to its
+actual instance, state, AnimSet resource and weight. No runtime or gameplay
+mutation is authorized until that join distinguishes **Gmissing-layer** from
+**Glater-local-owner**.

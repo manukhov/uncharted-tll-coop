@@ -4185,6 +4185,25 @@ engine-authored retarget relation from captured Chloe guide locators can reopen
 this branch. Both incomplete flags are disabled in `abn`; do not launch that
 rollback-only build.
 
+Static follow-up corrects one rejected premise: `dc1/skel-retargets.bin` has an
+exact authored `npc-normal-base B91C4EA3 -> nadine-dlc-base C67A06F1` row with
+74 mapped joints, including both arms, palms and hand-prop points. The exact
+Mazur NPC selector also maps generic long-gun hands `21F2C55F` to sniper hands
+`071B6E20`. This does **not** authorize a clip replacement: native firearm idle
+is a base/add/aim-set/hands ensemble, one hands leaf cannot repair proximal arms,
+and the full base owns joints 0--54. The Player source token `47C0A266` is also
+inactive/unregistered in the current graph despite having complementary Mazur
+hands/arms rows, so forcing it is REJECTED.
+
+Next exact task: add only a bounded read-only join at
+`AnimStateLayer_PhaseUpdateInstances+0x104 / 0x14189D824` (or its direct
+`0x1418A46D0` SnapshotAnimState edge). For the nine documented local Mazur
+resolver pairs record the owning `AnimStateInstance`, state id, root, AnimSet,
+post-remap tuple and `+0x168/+0x16C` weights. If the two-hand arms/hands leaves
+are live and weighted, continue after command evaluation into the local IK
+overwrite. If absent or zero-weight, locate the missing channel/source producer.
+Do not inject NPC clips, force `47C0A266`, or relaunch the disabled `abn` build.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
