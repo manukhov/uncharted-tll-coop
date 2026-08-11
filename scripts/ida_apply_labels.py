@@ -2762,7 +2762,9 @@ FUNCTIONS = {
     0x14181A9B0: (
         "FgDrawManager_PrepareInstanceForRendering",
         "Exact PrepareInstanceForRendering assertions in fg-draw-mgr.cpp. Copies "
-        "FgAnimData CPU matrices to upload storage and publishes the render world "
+        "FgAnimData CPU matrices +0x230 to upload storage +0x240 at the sole "
+        "memcpy callsite 0x14181AB33 while holding Fg+0x220; no later write to "
+        "+0x240 occurs in this function. It separately publishes the render world "
         "matrix returned by FgAnimData_GetRenderWorldMatrix into each driven "
         "FgInstance at +0x140..+0x17F.",
     ),

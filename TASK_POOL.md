@@ -73,16 +73,40 @@
       local grip remained visually unchanged. Classify the twelve-row
       `Fg+0x100` transfer after Player `+0x408` as **RUNTIME REJECTED** for this
       defect; disable it in build `abx`.
-- [ ] Close the actual final visible boundary statically. The later
+- [x] Close the actual final visible boundary statically. The later
       `AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00` consumes
       `Fg+0x100`, executes command segments, and only then publishes the current
       48-byte-per-joint skinning palette at `Fg+0x230`. The renderer copies that
       palette in `FgDrawManager_PrepareInstanceForRendering 0x14181A9B0`.
-- [ ] Prove the retained Player body-Fg identity at the renderer seam and derive
-      the smallest exact C39 arm/hand/helper matrix set. Do not restore the old
-      580-joint full-palette copy and do not request another runtime test until
-      owner, matrix set, ordering and packet budget are all closed with three
-      independent evidence types and a written falsifiable prediction.
+      Exact callsite `0x14181AB33` performs the only current-to-upload copy while
+      the native `Fg+0x220` lock is held; the upload buffer is not rewritten
+      later in the function.
+- [x] Prove the retained Player body-Fg identity at the renderer seam and derive
+      the smallest exact C39 arm/hand/helper matrix set. The read-only
+      `scripts/pak_skin_influence_audit.py` validates all 97 mesh partitions and
+      four LOD palettes in each visible Nadine body/shirt/head package. Exactly
+      88 joint matrices (4224 bytes) have direct arm/finger/shoulder-helper skin
+      weights; every weighted ordinal has the same StringId in C39. Elbow,
+      palm and weapon-attachment locators have zero direct body weights and are
+      intentionally absent from this late body-palette repair.
+- [x] Implement STATIC build `aby`: preserve stock `memcpy` at `0x14181AB33`,
+      then capture role-A retained-Nadine's 88 current final matrices or replace
+      only role-B's upload-buffer copies under the still-held native lock. The
+      exact Player/Fg/skeleton/art/WeaponOut/grenade/idle/dwell admission remains
+      unchanged. Transport is ARMP v2: four endpoint-authenticated 1104-byte
+      fragments reassembled atomically by `{session,sequence,art,sourceState}`.
+      No `Fg+0x100`, `Fg+0x230`, attachment locator, weapon Fg, head, spine or leg
+      state is changed. Release build and relay-object ABI inspection pass.
+- [ ] Run `aby` only after the static record, IDB comment, clean commit and push.
+      The static record, headless IDB save/readback, release build, asset audit
+      and relay ABI inspection are complete; this checkbox remains the sole
+      runtime exam and is not evidence until its written prediction is observed.
+      Written prediction: after 350 ms stationary WeaponOut, A emits final-palette
+      `CAPTURE/SEND`, B emits `RECV/APPLY applied=1`, and the visible Nadine
+      arm/hand vertices assume the role-A remote presentation. Complete markers
+      with unchanged body arms reject the upload boundary; corrected arms with a
+      still-floating weapon isolate the separate ProcessWeapon transform. Any
+      head/spine/leg/holster regression rejects the 88-joint selection.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that

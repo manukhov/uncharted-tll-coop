@@ -132,6 +132,7 @@ constexpr std::size_t kFgAnimDataCurrentSkinningMatsOffset = 0x230;
 constexpr std::size_t kFgAnimDataPreviousSkinningMatsOffset = 0x238;
 constexpr std::size_t kFgAnimDataCurrentUploadSkinningMatsOffset = 0x240;
 constexpr std::size_t kFgAnimDataPreviousUploadSkinningMatsOffset = 0x248;
+constexpr std::size_t kFgAnimDataSkinningPaletteLockOffset = 0x220;
 constexpr std::uintptr_t kFgAnimDataPublishWorldTransformRva = 0x18C55D0;
 constexpr std::uintptr_t kAnimManagerPublishWorldTransformCallsiteRva = 0x1A8FC00;
 // Player_PostAnimBlending_Async calls CharacterLegIkController vtable +0x18
@@ -155,6 +156,12 @@ constexpr std::uintptr_t kJointCacheRecomputeWorldLocatorRva = 0x1688320;
 // driven 0x280-byte instance owns the current render-world matrix at +0x140.
 constexpr std::uintptr_t kFgDrawManagerPrepareInstanceRva = 0x181A9B0;
 constexpr std::uintptr_t kFgDrawManagerPrepareInstanceCallsiteRva = 0x181B925;
+// PrepareInstanceForRendering holds Fg+0x220 and calls the image's memcpy thunk
+// with upload/current/48*jointCount in RCX/RDX/R8. R14 still contains the exact
+// FgAnimData. A three-byte relay surfaces R14 as the fourth Win64 argument.
+constexpr std::uintptr_t kFgDrawManagerSkinningPaletteMemcpyCallsiteRva =
+    0x181AB33;
+constexpr std::uintptr_t kMemCpyImportThunkRva = 0x24ECF8C;
 // A synchronous animation-playback path also publishes directly into an
 // owner's FgAnimData and invokes PrepareInstanceForRendering outside the normal
 // PostAnimProcessing worker batch.

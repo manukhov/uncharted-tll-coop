@@ -22450,3 +22450,96 @@ ordering and transport size satisfy the evidence quota and have a written
 falsifiable prediction. The Mazur sling remains a separate **REJECTED** manual
 ShowMesh path: legacy Nadine still lacks the authored `strap2..14` guide chain,
 so merely revealing it produces the observed floating, non-simulated mesh.
+
+### 2026-08-11 STATIC / IMPLEMENTED (`aby`): exact final body-palette relay at the native upload copy
+
+The user's final observation, "nothing changed", is consistent with the written
+`abw` rejection: the old packet reached role B and wrote all twelve local rows,
+but that state is upstream of the final JointBlend owner. No additional game
+run was used to choose the replacement boundary.
+
+The new exact hypothesis is: the correct role-A remote Nadine and the broken
+role-B local Nadine diverge in the final C39 skinning matrices used by visible
+arm vertices. Replacing only those final upload copies after the stock copy must
+make the body arms and fingers match the already-correct remote presentation.
+It deliberately makes no claim about the separately rendered ProcessWeapon or
+the rejected synthetic sling.
+
+Three independent evidence classes close the boundary and the compact set:
+
+1. **Final consumer and ordering.** In
+   `FgDrawManager_PrepareInstanceForRendering 0x14181A9B0`, R14 is the exact
+   FgAnimData from entry. The function acquires the native lock at `Fg+0x220`,
+   loads destination `Fg+0x240`, source `Fg+0x230`, derives
+   `48 * targetSkeletonJointCount`, and calls the image `memcpy` thunk at the
+   sole callsite `0x14181AB33`. The lock is released only after the call returns.
+   The remaining function reads/binds the finished palette while preparing the
+   driven FgInstances and contains no later write to `Fg+0x240`. This is later
+   than `AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00` and therefore
+   cannot be overwritten by the command evaluator that defeated `abw`.
+2. **Exact asset indices and visible influence set.** New read-only tool
+   `scripts/pak_skin_influence_audit.py` validates the paged fixups, mesh headers
+   and every sparse `{weight, encodedJoint}` record. Across all 37 body, 15
+   shirt and 45 head mesh partitions and every LOD, exactly 88 matrices have a
+   direct arm/finger/shoulder-helper skin weight; their sorted list is the
+   constexpr `coop::kIdleArmPaletteJoints` in `coop_protocol.h` and occupies
+   4224 bytes. Each package embeds four byte-identical LOD palettes with SHA-256
+   `8acbe8e55fa1ee8fa4c09e880a4c960c0c4e047d975a8c630b2f108ce168e5b7`.
+   All weighted ordinals match the C39 StringId table exactly. The only 14
+   target-table differences are unweighted slots
+   `{66,72,85,91,102,238,244,250,254,257,521,530,547,553}`. Primary elbows
+   `23/24`, palms `27/28` and hand attachment locators `29/30` have no direct
+   body weight, so copying them at this late body-only seam would add bytes
+   without changing a rendered body vertex.
+3. **Owner and ABI closure.** The already-confirmed Player `+0x408` admission
+   resolves retained Player/Fg identity, ED25/C39/580, exact P99 or Mazur
+   ProcessWeapon ownership, WeaponOut state 2, grenade idle state 0, zero-action
+   stationary dwell and the matching peer StatePacket sequence. At
+   `0x14181AB33`, the stock ABI is `RCX=upload, RDX=current, R8=bytes` and R14
+   remains the same Fg. A 17-byte near relay performs only `mov r9,r14` before a
+   register-preserving tail jump. Release-object disassembly independently
+   proves the wrapper saves the four arguments, calls stock `memcpy` first,
+   preserves its return value, and only then enters the exact role/owner gate
+   while the native lock is still held.
+
+The competing hypotheses remain explicit. **H1 (selected):** divergence is in
+the final body palette and the 88-matrix relay changes the visible arms.
+**H2:** the body arms change correctly but grip still floats because the
+separate ProcessWeapon transform also differs; this outcome selects a second,
+narrow weapon-transform investigation instead of broadening the body write.
+**H3:** another body drawable or a mesh-local ordinal remap owns the pixels; the
+97-partition influence audit, four compatible palettes per package and retained
+Player/Fg ownership strongly reject it. **H4:** a later writer restores the
+upload palette in the same preparation pass; exact instruction ordering rejects
+it. A following frame intentionally starts with a new stock copy and receives a
+new fresh remote frame.
+
+Build `aby` preserves the existing admission but removes every local-pose write.
+Role A captures the 88 matrices only at the exact final copy. ARMP protocol v2
+transports one frame as four endpoint-authenticated 1104-byte UDP fragments;
+role B reassembles all four atomically by
+`{session, sequence, sourceState, art, skeleton}` and rejects stale, duplicate,
+nonfinite or incomplete frames. Role B calls stock `memcpy` first and then
+replaces only the same 88 matrices in `Fg+0x240`; it revalidates
+`Player+0x1A8 == Fg`, `Fg+0x230 == source`, `Fg+0x240 == destination`, exact
+580-row byte count, matching art/source sequence, freshness and lag `0..32`.
+It does not modify `Fg+0x100`, `Fg+0x230`, attachment locators, Player/weapon
+world transforms, head/spine/leg matrices or gameplay state. Release build,
+Python syntax check, compatible-palette audit and relay ABI inspection pass.
+The single `ida/tll.i64` was updated headlessly (`save_database returned True`),
+MCP was restarted, and a fresh read resolves
+`FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` with the saved comment
+covering the locked `Fg+0x230 -> Fg+0x240` copy at `0x14181AB33`.
+
+**Falsifiable prediction before any runtime exam:** after at least 350 ms of
+stationary WeaponOut with P99 or Mazur, role A emits
+`NADINE-IDLE-PALETTE-CAPTURE/SEND fragments=4`, role B emits matching
+`RECV fragments=4` and `APPLY ... joints=88 applied=1`. The visible Nadine body
+arms/hands must assume the role-A remote presentation; head, spine, legs,
+holsters and weapon switching must remain stock. Complete matching markers with
+unchanged body arms reject H1/the upload-consumer interpretation. Corrected body
+arms with the weapon still displaced select H2. Any non-arm regression, apply
+during movement/ADS/reload/switch/grenade, malformed frame acceptance, crash or
+new frame-time regression rejects the package. The Mazur sling is outside this
+exam and remains disabled because Nadine has no authored `strap2..14` solver
+guide chain.

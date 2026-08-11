@@ -1446,6 +1446,29 @@ struct RespawnTransformBlock {
     std::byte bytes[0x50]{};
 };
 
+struct IdleArmPaletteFrame {
+    bool valid = false;
+    std::uint32_t sequence = 0;
+    std::uint32_t source_state_sequence = 0;
+    std::uint32_t weapon_art_id = 0;
+    std::uint32_t underlying_skeleton_id = 0;
+    std::uint64_t session_id = 0;
+    ULONGLONG captured_ms = 0;
+    float matrices[coop::kIdleArmPaletteJointCount][12]{};
+};
+
+struct IdleArmPaletteAssembly {
+    bool valid = false;
+    std::uint32_t sequence = 0;
+    std::uint32_t source_state_sequence = 0;
+    std::uint32_t weapon_art_id = 0;
+    std::uint32_t underlying_skeleton_id = 0;
+    std::uint64_t session_id = 0;
+    ULONGLONG first_fragment_ms = 0;
+    std::uint8_t received_mask = 0;
+    float matrices[coop::kIdleArmPaletteJointCount][12]{};
+};
+
 std::unordered_map<void*, ObjectControlState> g_object_states;
 void* g_controlled_object = nullptr;
 CommandSource g_command_source = CommandSource::LocalKeyboard;
@@ -1471,7 +1494,8 @@ struct StateNetState {
     std::atomic<bool> has_peer_idle_arm_pose = false;
     std::atomic<ULONGLONG> peer_idle_arm_pose_received_ms = 0;
     SRWLOCK peer_idle_arm_pose_lock = SRWLOCK_INIT;
-    coop::IdleArmPosePacket peer_idle_arm_pose{};
+    IdleArmPaletteFrame peer_idle_arm_pose{};
+    IdleArmPaletteAssembly peer_idle_arm_pose_assembly{};
     std::uint64_t peer_idle_arm_pose_session_id = 0;
     std::uint32_t peer_idle_arm_pose_sequence = 0;
     std::atomic<std::uint64_t> pending_button_presses = 0;
@@ -1524,12 +1548,12 @@ struct StateNetState {
     bool enabled = false;                  // toggled on once peer + puppet ready
 };
 
-// RUNTIME REJECTED in build abw: the A->B transport and the twelve local-pose
-// writes all completed, but the visible P99/Mazur grip did not change.  The
-// subsequent JointBlend job still rebuilds the renderer's final Fg+0x230
-// palette after this Player +0x408 boundary, so keep the disproved local-row
-// relay compiled out while that final-palette owner is resolved statically.
-constexpr bool kEnableLegacyNadineIdleArmPoseRoundTrip = false;
+// Build aby replaces the RUNTIME-REJECTED twelve-local-row relay with an exact
+// final-upload-palette repair.  Player +0x408 performs only the already-proven
+// steady-state admission; the later memcpy at 0x14181AB33 captures/applies the
+// 88 directly skin-weighted arm/finger/helper matrices under the native Fg
+// lock.  No Fg+0x100 row or attachment locator is mutated.
+constexpr bool kEnableLegacyNadineIdleArmPoseRoundTrip = true;
 constexpr bool kEnableLegacyNadineIdleArmPoseAdmissionCensus = false;
 constexpr std::uint32_t kLegacyNadineTargetSkeletonArtId = 0xED25C708u;
 constexpr std::uint32_t kLegacyNadineUnderlyingSkeletonId = 0xC39CA709u;
@@ -1543,7 +1567,16 @@ struct IdleArmPoseCapture {
     std::uint32_t weapon_art_id = 0;
     std::uint32_t underlying_skeleton_id = 0;
     ULONGLONG captured_ms = 0;
-    float local[coop::kIdleArmPoseJointCount][12]{};
+    float matrices[coop::kIdleArmPaletteJointCount][12]{};
+};
+
+struct IdleArmPaletteAdmission {
+    bool valid = false;
+    void* player = nullptr;
+    std::byte* fg_anim_data = nullptr;
+    std::uint32_t source_state_sequence = 0;
+    std::uint32_t weapon_art_id = 0;
+    ULONGLONG admitted_ms = 0;
 };
 
 struct IdleArmPoseDwellState {
@@ -1558,6 +1591,9 @@ struct IdleArmPoseDwellState {
 
 SRWLOCK g_idle_arm_pose_capture_lock = SRWLOCK_INIT;
 IdleArmPoseCapture g_idle_arm_pose_capture{};
+SRWLOCK g_idle_arm_palette_admission_lock = SRWLOCK_INIT;
+IdleArmPaletteAdmission g_idle_arm_palette_source_admission{};
+IdleArmPaletteAdmission g_idle_arm_palette_target_admission{};
 SRWLOCK g_idle_arm_pose_dwell_lock = SRWLOCK_INIT;
 IdleArmPoseDwellState g_idle_arm_pose_source_dwell{};
 IdleArmPoseDwellState g_idle_arm_pose_target_dwell{};
@@ -1863,25 +1899,25 @@ bool copy_peer_state_snapshot(coop::StatePacket& out) {
     return true;
 }
 
-bool valid_idle_arm_pose_rows(
-    const float (&local)[coop::kIdleArmPoseJointCount][12]) {
-    for (const auto& row : local) {
-        float rotation_norm_sq = 0.0F;
-        for (std::size_t component = 0; component < 12; ++component) {
-            const float value = row[component];
-            const float component_limit =
-                component < 4 ? 4.0F :
-                (component < 8 ? 1.1F : 5.0F);
-            if (!std::isfinite(value) ||
-                std::abs(value) > component_limit) {
+template <std::size_t MatrixCount>
+bool valid_idle_arm_palette_matrices(
+    const float (&matrices)[MatrixCount][12]) {
+    for (const auto& matrix : matrices) {
+        for (const float value : matrix) {
+            if (!std::isfinite(value) || std::abs(value) > 256.0F) {
                 return false;
             }
-            if (component >= 4 && component < 8) {
-                rotation_norm_sq += value * value;
-            }
         }
-        if (rotation_norm_sq < 0.90F || rotation_norm_sq > 1.10F) {
-            return false;
+        for (std::size_t row = 0; row < 3; ++row) {
+            float basis_norm_sq = 0.0F;
+            for (std::size_t column = 0; column < 3; ++column) {
+                const float value = matrix[row * 4 + column];
+                basis_norm_sq += value * value;
+            }
+            if (!std::isfinite(basis_norm_sq) || basis_norm_sq < 1.0e-8F ||
+                basis_norm_sq > 64.0F) {
+                return false;
+            }
         }
     }
     return true;
@@ -1898,37 +1934,102 @@ bool valid_idle_arm_pose_packet_wire(const coop::IdleArmPosePacket& packet) {
         packet.underlying_skeleton_id ==
             kLegacyNadineUnderlyingSkeletonId &&
         packet.gun_state == 1 && packet.draw_state == 2 &&
-        packet.first_joint == coop::kIdleArmPoseFirstJoint &&
-        packet.joint_count == coop::kIdleArmPoseJointCount &&
-        valid_idle_arm_pose_rows(packet.local);
+        packet.fragment_count == coop::kIdleArmPaletteFragmentCount &&
+        packet.fragment_index < packet.fragment_count &&
+        packet.matrix_count == coop::kIdleArmPaletteMatricesPerFragment &&
+        packet.reserved[0] == 0 && packet.reserved[1] == 0 &&
+        packet.reserved[2] == 0 &&
+        valid_idle_arm_palette_matrices(packet.matrices);
 }
 
 bool publish_peer_idle_arm_pose_snapshot(
     const coop::IdleArmPosePacket& packet) {
     constexpr ULONGLONG kSessionReplacementQuietMs = 100;
+    constexpr ULONGLONG kAssemblyFreshMs = 100;
     const ULONGLONG now = GetTickCount64();
     AcquireSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
-    const bool same_session =
+    const bool same_complete_session =
         g_state_net.peer_idle_arm_pose_session_id == packet.session_id;
     const bool has_current =
         g_state_net.has_peer_idle_arm_pose.load(std::memory_order_relaxed);
     const ULONGLONG current_received =
         g_state_net.peer_idle_arm_pose_received_ms.load(
             std::memory_order_relaxed);
-    if (!same_session && has_current && current_received != 0 &&
+    if (!same_complete_session && has_current && current_received != 0 &&
         (now < current_received ||
          now - current_received <= kSessionReplacementQuietMs)) {
         ReleaseSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
         return false;
     }
-    if (same_session &&
-        has_current &&
+    if (same_complete_session && has_current &&
         static_cast<std::int32_t>(
             packet.sequence - g_state_net.peer_idle_arm_pose_sequence) <= 0) {
         ReleaseSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
         return false;
     }
-    g_state_net.peer_idle_arm_pose = packet;
+
+    auto& assembly = g_state_net.peer_idle_arm_pose_assembly;
+    const bool same_assembly_session =
+        assembly.valid && assembly.session_id == packet.session_id;
+    const std::int32_t assembly_delta = same_assembly_session
+        ? static_cast<std::int32_t>(packet.sequence - assembly.sequence)
+        : 1;
+    if (same_assembly_session && assembly_delta < 0) {
+        ReleaseSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
+        return false;
+    }
+    if (!same_assembly_session || assembly_delta > 0) {
+        assembly = {};
+        assembly.valid = true;
+        assembly.sequence = packet.sequence;
+        assembly.source_state_sequence = packet.source_state_sequence;
+        assembly.weapon_art_id = packet.weapon_art_id;
+        assembly.underlying_skeleton_id = packet.underlying_skeleton_id;
+        assembly.session_id = packet.session_id;
+        assembly.first_fragment_ms = now;
+    }
+    if (!assembly.valid || assembly.sequence != packet.sequence ||
+        assembly.source_state_sequence != packet.source_state_sequence ||
+        assembly.weapon_art_id != packet.weapon_art_id ||
+        assembly.underlying_skeleton_id != packet.underlying_skeleton_id ||
+        assembly.session_id != packet.session_id ||
+        now < assembly.first_fragment_ms ||
+        now - assembly.first_fragment_ms > kAssemblyFreshMs) {
+        ReleaseSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
+        return false;
+    }
+    const std::uint8_t fragment_bit = static_cast<std::uint8_t>(
+        1u << packet.fragment_index);
+    if ((assembly.received_mask & fragment_bit) != 0) {
+        ReleaseSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
+        return false;
+    }
+    const std::size_t first_matrix =
+        static_cast<std::size_t>(packet.fragment_index) *
+        coop::kIdleArmPaletteMatricesPerFragment;
+    std::memcpy(
+        assembly.matrices + first_matrix, packet.matrices,
+        sizeof(packet.matrices));
+    assembly.received_mask = static_cast<std::uint8_t>(
+        assembly.received_mask | fragment_bit);
+    const std::uint8_t complete_mask = static_cast<std::uint8_t>(
+        (1u << coop::kIdleArmPaletteFragmentCount) - 1u);
+    if (assembly.received_mask != complete_mask ||
+        !valid_idle_arm_palette_matrices(assembly.matrices)) {
+        ReleaseSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
+        return false;
+    }
+
+    IdleArmPaletteFrame complete{};
+    complete.valid = true;
+    complete.sequence = assembly.sequence;
+    complete.source_state_sequence = assembly.source_state_sequence;
+    complete.weapon_art_id = assembly.weapon_art_id;
+    complete.underlying_skeleton_id = assembly.underlying_skeleton_id;
+    complete.session_id = assembly.session_id;
+    complete.captured_ms = now;
+    std::memcpy(complete.matrices, assembly.matrices, sizeof(complete.matrices));
+    g_state_net.peer_idle_arm_pose = complete;
     g_state_net.peer_idle_arm_pose_session_id = packet.session_id;
     g_state_net.peer_idle_arm_pose_sequence = packet.sequence;
     ReleaseSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
@@ -1939,7 +2040,7 @@ bool publish_peer_idle_arm_pose_snapshot(
 }
 
 bool copy_peer_idle_arm_pose_snapshot(
-    coop::IdleArmPosePacket& out, ULONGLONG maximum_age_ms) {
+    IdleArmPaletteFrame& out, ULONGLONG maximum_age_ms) {
     if (!g_state_net.has_peer_idle_arm_pose.load(std::memory_order_acquire)) {
         return false;
     }
@@ -1953,7 +2054,13 @@ bool copy_peer_idle_arm_pose_snapshot(
     AcquireSRWLockShared(&g_state_net.peer_idle_arm_pose_lock);
     out = g_state_net.peer_idle_arm_pose;
     ReleaseSRWLockShared(&g_state_net.peer_idle_arm_pose_lock);
-    return valid_idle_arm_pose_packet_wire(out);
+    return out.valid && out.sequence != 0 && out.session_id != 0 &&
+        out.source_state_sequence != 0 &&
+        (out.weapon_art_id == kCoopPistolArtId ||
+         out.weapon_art_id == kCoopRifleArtId) &&
+        out.underlying_skeleton_id ==
+            kLegacyNadineUnderlyingSkeletonId &&
+        valid_idle_arm_palette_matrices(out.matrices);
 }
 
 bool copy_idle_arm_pose_capture(IdleArmPoseCapture& out) {
@@ -1966,7 +2073,7 @@ bool copy_idle_arm_pose_capture(IdleArmPoseCapture& out) {
          out.weapon_art_id == kCoopRifleArtId) &&
         out.underlying_skeleton_id ==
             kLegacyNadineUnderlyingSkeletonId &&
-        valid_idle_arm_pose_rows(out.local);
+        valid_idle_arm_palette_matrices(out.matrices);
 }
 
 void send_idle_arm_pose_packet() {
@@ -1989,37 +2096,59 @@ void send_idle_arm_pose_packet() {
     if (capture.capture_sequence == last_capture_sequence_sent) {
         return;
     }
-    coop::IdleArmPosePacket packet{};
-    packet.flags = coop::kIdleArmPoseFlagSteadyDrawn;
-    packet.sequence = ++g_state_net.idle_arm_pose_send_seq;
-    packet.session_id = g_state_net.idle_arm_pose_session_id;
-    packet.source_state_sequence = capture.source_state_sequence;
-    packet.timestamp_ms = static_cast<std::uint32_t>(now);
-    packet.weapon_art_id = capture.weapon_art_id;
-    packet.underlying_skeleton_id = capture.underlying_skeleton_id;
-    packet.gun_state = 1;
-    packet.draw_state = 2;
-    std::memcpy(packet.local, capture.local, sizeof(packet.local));
-    if (!valid_idle_arm_pose_packet_wire(packet)) {
-        return;
+    const std::uint32_t packet_sequence =
+        ++g_state_net.idle_arm_pose_send_seq;
+    bool sent_all = true;
+    for (std::size_t fragment = 0;
+         fragment < coop::kIdleArmPaletteFragmentCount; ++fragment) {
+        coop::IdleArmPosePacket packet{};
+        packet.flags = coop::kIdleArmPoseFlagSteadyDrawn;
+        packet.sequence = packet_sequence;
+        packet.session_id = g_state_net.idle_arm_pose_session_id;
+        packet.source_state_sequence = capture.source_state_sequence;
+        packet.timestamp_ms = static_cast<std::uint32_t>(now);
+        packet.weapon_art_id = capture.weapon_art_id;
+        packet.underlying_skeleton_id = capture.underlying_skeleton_id;
+        packet.gun_state = 1;
+        packet.draw_state = 2;
+        packet.fragment_index = static_cast<std::uint8_t>(fragment);
+        packet.fragment_count = static_cast<std::uint8_t>(
+            coop::kIdleArmPaletteFragmentCount);
+        packet.matrix_count = static_cast<std::uint8_t>(
+            coop::kIdleArmPaletteMatricesPerFragment);
+        const std::size_t first_matrix =
+            fragment * coop::kIdleArmPaletteMatricesPerFragment;
+        std::memcpy(
+            packet.matrices, capture.matrices + first_matrix,
+            sizeof(packet.matrices));
+        if (!valid_idle_arm_pose_packet_wire(packet)) {
+            sent_all = false;
+            break;
+        }
+        const int sent = sendto(
+            // Send this safety-critical return channel from the bound receive
+            // socket.  The peer can then authenticate both configured IP and
+            // port; the normal state socket is intentionally left unchanged.
+            g_state_net.recv_socket,
+            reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
+            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+            sizeof(g_state_net.peer_addr));
+        if (sent != static_cast<int>(sizeof(packet))) {
+            sent_all = false;
+            break;
+        }
     }
-    const int sent = sendto(
-        // Send this safety-critical return channel from the bound receive
-        // socket.  The peer can then authenticate both configured IP and port;
-        // the normal state socket is intentionally left unchanged.
-        g_state_net.recv_socket,
-        reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
-        reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
-        sizeof(g_state_net.peer_addr));
-    if (sent == static_cast<int>(sizeof(packet))) {
+    if (sent_all) {
         last_capture_sequence_sent = capture.capture_sequence;
         static std::atomic<unsigned> send_logs{0};
         if (send_logs.fetch_add(1, std::memory_order_relaxed) < 4) {
             std::ostringstream line;
-            line << "NADINE-IDLE-ARM-SEND seq=" << packet.sequence
-                 << " sourceState=" << packet.source_state_sequence
+            line << "NADINE-IDLE-PALETTE-SEND seq=" << packet_sequence
+                 << " sourceState=" << capture.source_state_sequence
                  << " capture=" << capture.capture_sequence
-                 << " art=0x" << std::hex << packet.weapon_art_id;
+                 << " fragments=" << std::dec
+                 << coop::kIdleArmPaletteFragmentCount
+                 << " art=0x" << std::hex << capture.weapon_art_id;
             boot_log_line(line.str().c_str());
         }
     }
@@ -14806,10 +14935,12 @@ DWORD WINAPI state_recv_thread(void*) {
                 if (published && receive_logs.fetch_add(
                         1, std::memory_order_relaxed) < 4) {
                     std::ostringstream line;
-                    line << "NADINE-IDLE-ARM-RECV seq="
+                    line << "NADINE-IDLE-PALETTE-RECV seq="
                          << arm_pose.sequence
                          << " sourceState="
                          << arm_pose.source_state_sequence
+                         << " fragments=" << std::dec
+                         << static_cast<unsigned>(arm_pose.fragment_count)
                          << " art=0x" << std::hex
                          << arm_pose.weapon_art_id;
                     boot_log_line(line.str().c_str());
@@ -28867,6 +28998,57 @@ bool prepare_plain_callsite_relay(
     relay[1] = 0x25;
     *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
     *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(hook);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+    const std::int64_t displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(callsite + 5);
+    if (displacement < INT32_MIN || displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        relay = nullptr;
+        return false;
+    }
+    new_displacement = static_cast<std::int32_t>(displacement);
+    return true;
+}
+
+// At 0x14181AB33 R14 is the exact FgAnimData whose lock is held and whose
+// upload/current palette pointers supplied RCX/RDX. Surface it as Win64 arg4
+// without disturbing the original memcpy arguments or CALL return address.
+bool prepare_skinning_palette_memcpy_relay(
+    const void* hook, std::uint8_t*& callsite, std::uint8_t*& relay,
+    std::int32_t& old_displacement, std::int32_t& new_displacement) {
+    callsite = reinterpret_cast<std::uint8_t*>(
+        g_module + kFgDrawManagerSkinningPaletteMemcpyCallsiteRva);
+    relay = nullptr;
+    old_displacement = 0;
+    new_displacement = 0;
+    if (callsite[0] != 0xE8) {
+        return false;
+    }
+    std::memcpy(
+        &old_displacement, callsite + 1, sizeof(old_displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(callsite + 5) +
+        static_cast<std::intptr_t>(old_displacement);
+    if (target != g_module + kMemCpyImportThunkRva) {
+        return false;
+    }
+
+    constexpr std::size_t kRelaySize = 17;
+    relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(callsite, kRelaySize));
+    if (relay == nullptr) {
+        return false;
+    }
+    // mov r9,r14 ; jmp qword ptr [rip+0] ; dq hook
+    relay[0] = 0x4D;
+    relay[1] = 0x89;
+    relay[2] = 0xF1;
+    relay[3] = 0xFF;
+    relay[4] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 5) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 9) =
         reinterpret_cast<std::uintptr_t>(hook);
     FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
     const std::int64_t displacement =
@@ -44161,10 +44343,11 @@ bool seh_resolve_idle_arm_pose_owner_scope(
             fg + kFgAnimDataJointCacheLocalPoseOffset);
         const bool target_skeleton_readable = target_skeleton != nullptr &&
             readable_bytes(target_skeleton) >= 0x48;
+        // Preserve the already runtime-proven admission/readability boundary
+        // through legacy row 30. The new repair itself reads only Fg+0x230 at
+        // the later upload seam and never mutates this local-pose allocation.
         const std::size_t required_local_pose_bytes =
-            static_cast<std::size_t>(
-                coop::kIdleArmPoseFirstJoint +
-                coop::kIdleArmPoseJointCount) * kJointLocalPoseStride;
+            static_cast<std::size_t>(31) * kJointLocalPoseStride;
         const bool local_pose_readable = local_pose != nullptr &&
             readable_bytes(local_pose) >= required_local_pose_bytes;
         if (diagnostic != nullptr) {
@@ -44590,54 +44773,41 @@ void invalidate_idle_arm_pose_capture() {
     ReleaseSRWLockExclusive(&g_idle_arm_pose_capture_lock);
 }
 
-bool seh_copy_idle_arm_pose_rows(
-    const std::byte* local_pose,
-    float (&output)[coop::kIdleArmPoseJointCount][12]) {
-    __try {
-        if (local_pose == nullptr) {
-            return false;
-        }
-        std::memcpy(
-            output,
-            local_pose +
-                static_cast<std::size_t>(
-                    coop::kIdleArmPoseFirstJoint) *
-                    kJointLocalPoseStride,
-            sizeof(output));
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
+void invalidate_idle_arm_palette_admission(IdleArmPaletteAdmission& admission) {
+    AcquireSRWLockExclusive(&g_idle_arm_palette_admission_lock);
+    admission.valid = false;
+    ReleaseSRWLockExclusive(&g_idle_arm_palette_admission_lock);
 }
 
-bool seh_apply_idle_arm_pose_rows(
+void publish_idle_arm_palette_admission(
+    IdleArmPaletteAdmission& destination,
     const IdleArmPoseOwnerScope& scope,
-    const float (&input)[coop::kIdleArmPoseJointCount][12]) {
-    using RecomputeWorldLocatorFunction =
-        void(__fastcall*)(void*, std::uint32_t);
-    __try {
-        if (!scope.valid || scope.local_pose == nullptr ||
-            scope.fg_anim_data == nullptr || g_module == 0) {
-            return false;
-        }
-        const auto recompute_world =
-            reinterpret_cast<RecomputeWorldLocatorFunction>(
-                g_module + kJointCacheRecomputeWorldLocatorRva);
-        auto* const first_row = scope.local_pose +
-            static_cast<std::size_t>(coop::kIdleArmPoseFirstJoint) *
-                kJointLocalPoseStride;
-        std::memcpy(first_row, input, sizeof(input));
-        for (std::uint32_t joint = coop::kIdleArmPoseFirstJoint;
-             joint < static_cast<std::uint32_t>(
-                         coop::kIdleArmPoseFirstJoint +
-                         coop::kIdleArmPoseJointCount);
-             ++joint) {
-            recompute_world(scope.fg_anim_data + 0x30, joint);
-        }
-        return std::memcmp(first_row, input, sizeof(input)) == 0;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
+    std::uint32_t source_state_sequence, ULONGLONG now) {
+    IdleArmPaletteAdmission admission{};
+    admission.valid = true;
+    admission.player = scope.player;
+    admission.fg_anim_data = scope.fg_anim_data;
+    admission.source_state_sequence = source_state_sequence;
+    admission.weapon_art_id = scope.weapon_art_id;
+    admission.admitted_ms = now;
+    AcquireSRWLockExclusive(&g_idle_arm_palette_admission_lock);
+    destination = admission;
+    ReleaseSRWLockExclusive(&g_idle_arm_palette_admission_lock);
+}
+
+bool copy_idle_arm_palette_admission(
+    const IdleArmPaletteAdmission& source, IdleArmPaletteAdmission& output,
+    ULONGLONG maximum_age_ms) {
+    AcquireSRWLockShared(&g_idle_arm_palette_admission_lock);
+    output = source;
+    ReleaseSRWLockShared(&g_idle_arm_palette_admission_lock);
+    const ULONGLONG now = GetTickCount64();
+    return output.valid && output.player != nullptr &&
+        output.fg_anim_data != nullptr && output.source_state_sequence != 0 &&
+        (output.weapon_art_id == kCoopPistolArtId ||
+         output.weapon_art_id == kCoopRifleArtId) &&
+        output.admitted_ms != 0 && now >= output.admitted_ms &&
+        now - output.admitted_ms <= maximum_age_ms;
 }
 
 bool capture_remote_nadine_idle_arm_pose(void* player) {
@@ -44650,6 +44820,8 @@ bool capture_remote_nadine_idle_arm_pose(void* player) {
     if (g_net_role_b || player != retained_player_object(1)) {
         reset_idle_arm_pose_dwell(g_idle_arm_pose_source_dwell);
         invalidate_idle_arm_pose_capture();
+        invalidate_idle_arm_palette_admission(
+            g_idle_arm_palette_source_admission);
         return false;
     }
     if (!seh_resolve_idle_arm_pose_owner_scope(
@@ -44657,6 +44829,8 @@ bool capture_remote_nadine_idle_arm_pose(void* player) {
         log_idle_arm_pose_source_admission(player, diagnostic);
         reset_idle_arm_pose_dwell(g_idle_arm_pose_source_dwell);
         invalidate_idle_arm_pose_capture();
+        invalidate_idle_arm_palette_admission(
+            g_idle_arm_palette_source_admission);
         return false;
     }
     diagnostic.stage = IdleArmPoseAdmissionStage::kPeerFresh;
@@ -44668,6 +44842,8 @@ bool capture_remote_nadine_idle_arm_pose(void* player) {
         log_idle_arm_pose_source_admission(player, diagnostic);
         reset_idle_arm_pose_dwell(g_idle_arm_pose_source_dwell);
         invalidate_idle_arm_pose_capture();
+        invalidate_idle_arm_palette_admission(
+            g_idle_arm_palette_source_admission);
         return false;
     }
     diagnostic.stage = IdleArmPoseAdmissionStage::kPeerSnapshot;
@@ -44675,6 +44851,8 @@ bool capture_remote_nadine_idle_arm_pose(void* player) {
         log_idle_arm_pose_source_admission(player, diagnostic);
         reset_idle_arm_pose_dwell(g_idle_arm_pose_source_dwell);
         invalidate_idle_arm_pose_capture();
+        invalidate_idle_arm_palette_admission(
+            g_idle_arm_palette_source_admission);
         return false;
     }
     diagnostic.peer_flags = peer.flags;
@@ -44723,6 +44901,8 @@ bool capture_remote_nadine_idle_arm_pose(void* player) {
         log_idle_arm_pose_source_admission(player, diagnostic);
         reset_idle_arm_pose_dwell(g_idle_arm_pose_source_dwell);
         invalidate_idle_arm_pose_capture();
+        invalidate_idle_arm_palette_admission(
+            g_idle_arm_palette_source_admission);
         return false;
     }
     diagnostic.stage = IdleArmPoseAdmissionStage::kDwell;
@@ -44732,39 +44912,12 @@ bool capture_remote_nadine_idle_arm_pose(void* player) {
             peer.pos, peer.quat, now, &diagnostic)) {
         log_idle_arm_pose_source_admission(player, diagnostic);
         invalidate_idle_arm_pose_capture();
+        invalidate_idle_arm_palette_admission(
+            g_idle_arm_palette_source_admission);
         return false;
     }
-    IdleArmPoseCapture capture{};
-    capture.valid = true;
-    capture.capture_sequence =
-        g_idle_arm_pose_capture_sequence.fetch_add(
-            1, std::memory_order_acq_rel) + 1;
-    capture.source_state_sequence = peer.sequence;
-    capture.weapon_art_id = scope.weapon_art_id;
-    capture.underlying_skeleton_id =
-        kLegacyNadineUnderlyingSkeletonId;
-    capture.captured_ms = now;
-    if (!seh_copy_idle_arm_pose_rows(scope.local_pose, capture.local)) {
-        capture.valid = false;
-    }
-    diagnostic.stage = IdleArmPoseAdmissionStage::kPoseRows;
-    if (!capture.valid || !valid_idle_arm_pose_rows(capture.local)) {
-        log_idle_arm_pose_source_admission(player, diagnostic);
-        invalidate_idle_arm_pose_capture();
-        return false;
-    }
-    AcquireSRWLockExclusive(&g_idle_arm_pose_capture_lock);
-    g_idle_arm_pose_capture = capture;
-    ReleaseSRWLockExclusive(&g_idle_arm_pose_capture_lock);
-    static std::atomic<unsigned> capture_logs{0};
-    if (capture_logs.fetch_add(1, std::memory_order_relaxed) < 4) {
-        std::ostringstream line;
-        line << "NADINE-IDLE-ARM-CAPTURE seq="
-             << capture.capture_sequence
-             << " sourceState=" << capture.source_state_sequence
-             << " art=0x" << std::hex << capture.weapon_art_id;
-        boot_log_line(line.str().c_str());
-    }
+    publish_idle_arm_palette_admission(
+        g_idle_arm_palette_source_admission, scope, peer.sequence, now);
     return true;
 }
 
@@ -44793,7 +44946,7 @@ bool mark_idle_arm_pose_packet_applied(
 
 bool apply_remote_nadine_idle_arm_pose(void* player) {
     IdleArmPoseOwnerScope scope{};
-    coop::IdleArmPosePacket packet{};
+    IdleArmPaletteFrame packet{};
     const ULONGLONG now = GetTickCount64();
     if (!g_net_role_b || player != retained_player_object(0) ||
         !seh_resolve_idle_arm_pose_owner_scope(player, 0, &scope) ||
@@ -44801,6 +44954,8 @@ bool apply_remote_nadine_idle_arm_pose(void* player) {
         !copy_peer_idle_arm_pose_snapshot(packet, kIdleArmPoseFreshMs) ||
         packet.weapon_art_id != scope.weapon_art_id) {
         reset_idle_arm_pose_dwell(g_idle_arm_pose_target_dwell);
+        invalidate_idle_arm_palette_admission(
+            g_idle_arm_palette_target_admission);
         return false;
     }
     const std::uint32_t local_state_sequence =
@@ -44813,27 +44968,209 @@ bool apply_remote_nadine_idle_arm_pose(void* player) {
             g_idle_arm_pose_target_dwell, player, packet.session_id,
             scope.weapon_art_id,
             scope.position, scope.orientation, now) ||
-        !valid_idle_arm_pose_rows(packet.local)) {
+        !valid_idle_arm_palette_matrices(packet.matrices)) {
+        invalidate_idle_arm_palette_admission(
+            g_idle_arm_palette_target_admission);
         return false;
     }
-    const bool applied =
-        seh_apply_idle_arm_pose_rows(scope, packet.local);
+    publish_idle_arm_palette_admission(
+        g_idle_arm_palette_target_admission, scope,
+        packet.source_state_sequence, now);
+    return true;
+}
+
+bool seh_capture_idle_arm_palette_matrices(
+    void* fg_anim_data, void* player, const void* current_palette,
+    float (&output)[coop::kIdleArmPaletteJointCount][12]) {
+    __try {
+        auto* const fg = static_cast<std::byte*>(fg_anim_data);
+        if (fg == nullptr || player == nullptr || current_palette == nullptr ||
+            *reinterpret_cast<void**>(
+                fg + kFgAnimDataCurrentSkinningMatsOffset) !=
+                current_palette ||
+            *reinterpret_cast<void**>(
+                static_cast<std::byte*>(player) +
+                kPlayerFgAnimDataOffset) != fg_anim_data) {
+            return false;
+        }
+        auto* const source = static_cast<const std::byte*>(current_palette);
+        for (std::size_t index = 0;
+             index < coop::kIdleArmPaletteJointCount; ++index) {
+            const std::size_t joint = coop::kIdleArmPaletteJoints[index];
+            std::memcpy(
+                output[index], source + joint * kJointLocalPoseStride,
+                kJointLocalPoseStride);
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_apply_idle_arm_palette_matrices(
+    void* fg_anim_data, void* player, void* upload_palette,
+    const void* current_palette,
+    const float (&input)[coop::kIdleArmPaletteJointCount][12]) {
+    __try {
+        auto* const fg = static_cast<std::byte*>(fg_anim_data);
+        if (fg == nullptr || player == nullptr || upload_palette == nullptr ||
+            current_palette == nullptr ||
+            *reinterpret_cast<void**>(
+                fg + kFgAnimDataCurrentSkinningMatsOffset) !=
+                current_palette ||
+            *reinterpret_cast<void**>(
+                fg + kFgAnimDataCurrentUploadSkinningMatsOffset) !=
+                upload_palette ||
+            *reinterpret_cast<void**>(
+                static_cast<std::byte*>(player) +
+                kPlayerFgAnimDataOffset) != fg_anim_data) {
+            return false;
+        }
+        auto* const destination = static_cast<std::byte*>(upload_palette);
+        for (std::size_t index = 0;
+             index < coop::kIdleArmPaletteJointCount; ++index) {
+            const std::size_t joint = coop::kIdleArmPaletteJoints[index];
+            std::memcpy(
+                destination + joint * kJointLocalPoseStride,
+                input[index], kJointLocalPoseStride);
+        }
+        for (std::size_t index = 0;
+             index < coop::kIdleArmPaletteJointCount; ++index) {
+            const std::size_t joint = coop::kIdleArmPaletteJoints[index];
+            if (std::memcmp(
+                    destination + joint * kJointLocalPoseStride,
+                    input[index], kJointLocalPoseStride) != 0) {
+                return false;
+            }
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool capture_remote_nadine_idle_arm_palette(
+    void* fg_anim_data, const void* current_palette,
+    std::size_t palette_bytes) {
+    IdleArmPaletteAdmission admission{};
+    const ULONGLONG now = GetTickCount64();
+    if (g_net_role_b ||
+        !copy_idle_arm_palette_admission(
+            g_idle_arm_palette_source_admission, admission,
+            kIdleArmPoseFreshMs) ||
+        admission.player != retained_player_object(1) ||
+        admission.fg_anim_data != fg_anim_data ||
+        palette_bytes != static_cast<std::size_t>(
+            kLegacyNadineSkeletonJointCount) * kJointLocalPoseStride) {
+        return false;
+    }
+
+    IdleArmPoseCapture capture{};
+    capture.valid = true;
+    capture.capture_sequence =
+        g_idle_arm_pose_capture_sequence.fetch_add(
+            1, std::memory_order_acq_rel) + 1;
+    capture.source_state_sequence = admission.source_state_sequence;
+    capture.weapon_art_id = admission.weapon_art_id;
+    capture.underlying_skeleton_id = kLegacyNadineUnderlyingSkeletonId;
+    capture.captured_ms = now;
+    if (!seh_capture_idle_arm_palette_matrices(
+            fg_anim_data, admission.player, current_palette,
+            capture.matrices)) {
+        capture.valid = false;
+    }
+    if (!capture.valid ||
+        !valid_idle_arm_palette_matrices(capture.matrices)) {
+        invalidate_idle_arm_pose_capture();
+        return false;
+    }
+    AcquireSRWLockExclusive(&g_idle_arm_pose_capture_lock);
+    g_idle_arm_pose_capture = capture;
+    ReleaseSRWLockExclusive(&g_idle_arm_pose_capture_lock);
+    static std::atomic<unsigned> capture_logs{0};
+    if (capture_logs.fetch_add(1, std::memory_order_relaxed) < 4) {
+        std::ostringstream line;
+        line << "NADINE-IDLE-PALETTE-CAPTURE seq="
+             << capture.capture_sequence
+             << " sourceState=" << capture.source_state_sequence
+             << " joints=" << coop::kIdleArmPaletteJointCount
+             << " art=0x" << std::hex << capture.weapon_art_id;
+        boot_log_line(line.str().c_str());
+    }
+    return true;
+}
+
+bool apply_remote_nadine_idle_arm_palette(
+    void* fg_anim_data, void* upload_palette, const void* current_palette,
+    std::size_t palette_bytes) {
+    IdleArmPaletteAdmission admission{};
+    IdleArmPaletteFrame packet{};
+    if (!g_net_role_b ||
+        !copy_idle_arm_palette_admission(
+            g_idle_arm_palette_target_admission, admission,
+            kIdleArmPoseFreshMs) ||
+        admission.player != retained_player_object(0) ||
+        admission.fg_anim_data != fg_anim_data ||
+        !copy_peer_idle_arm_pose_snapshot(packet, kIdleArmPoseFreshMs) ||
+        packet.weapon_art_id != admission.weapon_art_id ||
+        packet.source_state_sequence != admission.source_state_sequence ||
+        palette_bytes != static_cast<std::size_t>(
+            kLegacyNadineSkeletonJointCount) * kJointLocalPoseStride ||
+        !valid_idle_arm_palette_matrices(packet.matrices)) {
+        return false;
+    }
+    const std::uint32_t local_state_sequence =
+        g_state_net.send_seq.load(std::memory_order_acquire);
+    const std::int32_t source_lag = static_cast<std::int32_t>(
+        local_state_sequence - packet.source_state_sequence);
+    if (local_state_sequence == 0 || source_lag < 0 ||
+        source_lag > kIdleArmPoseMaximumStateSequenceLag) {
+        return false;
+    }
+
+    const bool applied = seh_apply_idle_arm_palette_matrices(
+        fg_anim_data, admission.player, upload_palette, current_palette,
+        packet.matrices);
     const bool first_apply_for_packet = applied &&
-        mark_idle_arm_pose_packet_applied(
-            packet.session_id, packet.sequence);
+        mark_idle_arm_pose_packet_applied(packet.session_id, packet.sequence);
     static std::atomic<unsigned> apply_logs{0};
     if (first_apply_for_packet &&
         apply_logs.fetch_add(1, std::memory_order_relaxed) < 8) {
         std::ostringstream line;
-        line << "NADINE-IDLE-ARM-APPLY seq=" << packet.sequence
+        line << "NADINE-IDLE-PALETTE-APPLY seq=" << packet.sequence
              << " sourceState=" << packet.source_state_sequence
              << " localState=" << local_state_sequence
              << " lag=" << source_lag
+             << " joints=" << coop::kIdleArmPaletteJointCount
              << " art=0x" << std::hex << packet.weapon_art_id
              << std::dec << " applied=" << (applied ? 1 : 0);
         boot_log_line(line.str().c_str());
     }
     return applied;
+}
+
+using SkinningPaletteMemCpyFunction =
+    void*(__fastcall*)(void*, const void*, std::size_t);
+SkinningPaletteMemCpyFunction g_original_skinning_palette_memcpy = nullptr;
+
+void* __fastcall hooked_skinning_palette_memcpy(
+    void* destination, const void* source, std::size_t size,
+    void* fg_anim_data) {
+    const auto original = g_original_skinning_palette_memcpy;
+    if (original == nullptr) {
+        return destination;
+    }
+    void* const result = original(destination, source, size);
+    if constexpr (kEnableLegacyNadineIdleArmPoseRoundTrip) {
+        if (!g_net_role_b) {
+            capture_remote_nadine_idle_arm_palette(
+                fg_anim_data, source, size);
+        } else {
+            apply_remote_nadine_idle_arm_palette(
+                fg_anim_data, destination, source, size);
+        }
+    }
+    return result;
 }
 
 void log_idle_arm_pose_postblend_entry(void* player) {
@@ -45005,6 +45342,106 @@ bool install_legacy_nadine_idle_arm_pose_round_trip() {
               "(rollback race; protection restore failed)"
             : "legacy-Nadine idle-arm round trip SKIPPED (rollback race)");
     return hook_still_live;
+}
+
+bool install_legacy_nadine_idle_arm_palette_memcpy_hook() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t old_displacement = 0;
+    std::int32_t new_displacement = 0;
+    if (!prepare_skinning_palette_memcpy_relay(
+            reinterpret_cast<const void*>(&hooked_skinning_palette_memcpy),
+            callsite, relay, old_displacement, new_displacement)) {
+        boot_log_line(
+            "legacy-Nadine idle-arm palette SKIPPED (memcpy preflight)");
+        return false;
+    }
+    g_original_skinning_palette_memcpy =
+        reinterpret_cast<SkinningPaletteMemCpyFunction>(
+            g_module + kMemCpyImportThunkRva);
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_skinning_palette_memcpy = nullptr;
+        boot_log_line(
+            "legacy-Nadine idle-arm palette SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            callsite, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_skinning_palette_memcpy = nullptr;
+        boot_log_line(
+            "legacy-Nadine idle-arm palette SKIPPED (protect)");
+        return false;
+    }
+    std::memcpy(
+        callsite + 1, &new_displacement, sizeof(new_displacement));
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+
+    std::int32_t readback = 0;
+    std::memcpy(&readback, callsite + 1, sizeof(readback));
+    bool installed = callsite[0] == 0xE8 &&
+        readback == new_displacement;
+    bool rollback_verified = false;
+    if (!installed) {
+        std::memcpy(
+            callsite + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, callsite + 1,
+            sizeof(rollback_readback));
+        rollback_verified = callsite[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+    }
+    DWORD ignored = 0;
+    bool protection_restored = VirtualProtect(
+        callsite, 5, old_protection, &ignored) != 0;
+    if (installed && !protection_restored) {
+        std::memcpy(
+            callsite + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, callsite + 1,
+            sizeof(rollback_readback));
+        rollback_verified = callsite[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+        installed = !rollback_verified;
+        protection_restored = VirtualProtect(
+            callsite, 5, old_protection, &ignored) != 0;
+    }
+    resume_suspended_process_threads(suspended_threads);
+
+    if (!installed) {
+        if (rollback_verified) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            // All other threads stayed suspended through verified rollback, so
+            // no wrapper can still reference this original target.
+            g_original_skinning_palette_memcpy = nullptr;
+            boot_log_line(
+                protection_restored
+                    ? "legacy-Nadine idle-arm palette SKIPPED (verified rollback)"
+                    : "legacy-Nadine idle-arm palette SKIPPED (verified rollback; protection WARNING)");
+        } else {
+            // An indeterminate displacement may still reference the relay.
+            // Keep both relay and immutable stock target alive.
+            boot_log_line(
+                protection_restored
+                    ? "legacy-Nadine idle-arm palette SKIPPED (rollback WARNING; relay retained)"
+                    : "legacy-Nadine idle-arm palette SKIPPED (rollback/protection WARNING; relay retained)");
+        }
+        return false;
+    }
+    boot_log_line(
+        protection_restored
+            ? "legacy-Nadine idle-arm palette installed (0x14181AB33 upload memcpy)"
+            : "legacy-Nadine idle-arm palette installed PARTIAL (protection WARNING)");
+    return true;
 }
 
 bool seh_read_owner_attach_record_id(
@@ -56160,7 +56597,14 @@ DWORD WINAPI install_hook(void*) {
     if constexpr (kEnableLegacyNadineIdleArmPoseRoundTrip &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         if (state_net_started) {
-            install_legacy_nadine_idle_arm_pose_round_trip();
+            const bool admission_installed =
+                install_legacy_nadine_idle_arm_pose_round_trip();
+            if (admission_installed) {
+                install_legacy_nadine_idle_arm_palette_memcpy_hook();
+            } else {
+                boot_log_line(
+                    "legacy-Nadine idle-arm palette SKIPPED (admission hook)");
+            }
         } else {
             boot_log_line(
                 "legacy-Nadine idle-arm round trip SKIPPED (state net)");
