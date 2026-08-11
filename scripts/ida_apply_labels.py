@@ -1210,6 +1210,14 @@ FUNCTIONS = {
         "*player-ik-arm* action id. Called at top-level Player spawn and again "
         "from Player_ChangeLookId.",
     ),
+    0x1418F2700: (
+        "WeaponIKFeather_Apply",
+        "Exact armik.cpp WeaponIKFeather::Apply. Sole direct caller "
+        "PlayerWeaponIKAction_Update+0x8CC passes Player+0x4308 weapon-feather "
+        "info; the function resolves and commits both hand JointSets before "
+        "solving the arm targets. Its first stack weight is read at "
+        "0x1418F274F and zero returns false at 0x1418F2760 before any write.",
+    ),
     # --- 2026-07-13: native pickup gesture controller ---
     0x140F49300: (
         "PlayerPickupController_Construct",

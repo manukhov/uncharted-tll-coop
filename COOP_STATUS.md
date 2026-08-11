@@ -21548,3 +21548,67 @@ Prepare function is called. Prediction: after 1.5 seconds the exact child logs
 and Fg hashes remain unchanged. `shown/persistent` with no visible sling rejects
 the primary gate as the final presentation owner; `reverted` selects the later
 visibility closer.
+
+### 2026-08-11 STATIC / IMPLEMENTED: suppress local Nadine WeaponIKFeather at its native no-op boundary (`abm`)
+
+The `abk` local-versus-remote split and the exact Mazur tuple census close the
+remaining grip owner with three independent evidence types.
+
+1. RTTI/call-graph identity is exact. `PlayerWeaponController_StartWeaponIKForSlot
+   0x14109DA80` constructs the 0x100-byte `PlayerWeaponIKAction` with vtable
+   `0x142A483A0`, stores its generation-valid weapon weak pair at `+0x40/+0x48`,
+   constructs embedded `WeaponIKFeather` at `+0x50` with vtable `0x142B0FFD8`,
+   and enqueues the action on channel 4. The sole direct caller of
+   `WeaponIKFeather_Apply 0x1418F2700` is that action's update at exact callsite
+   `0x1410959AC`.
+2. Source and data flow identify the actual writer. The call passes
+   `rcx=action+0x50` and `rdx=*(Player+0x4308)`. Apply resolves both
+   `l_hand_prop_attachment` and `r_hand_prop_attachment`, writes both JointSets,
+   calls `JointSet_CommitJointTransformsAndReset`, then solves the weapon feather
+   chain through `0x1418F2E50` and `0x1418F1780`. The later
+   `PlayerArmIKAction_UpdateProcedural 0x140C7E8D0` consumes those stored goals
+   and propagates them through shoulders, elbows and wrists. This is downstream
+   of the already-correct P99 `D350A452->D350A452` resolver result and is local
+   Player action state, unlike the correct retained-remote presentation.
+3. The mutation seam is stock-equivalent. `WeaponIKFeather_Apply` reads its
+   first stack weight at `0x1418F274F`; zero returns false at `0x1418F2760`
+   before any JointSet write. `PlayerWeaponIKAction_Update` ignores that return
+   and immediately returns success. A guarded false return at the Apply entry
+   therefore preserves action lifecycle, `NewIkWeapon`, overlay and weapon
+   attachment while selecting the native no-write branch.
+
+The nine fresh Mazur rows do not justify another clip substitution. In
+particular, `D350A452 p1h-fingers -> 0A2F8976
+lg1h-sniper-tkiv-right-hand` consists of two eight-group Player clips on
+skeleton `FD6DBE03` with the identical `[30,32]` mask, and
+`283966ED lg2h-sniper-tkiv-carry-fatigue-walk-arms` passes unchanged on
+`[21..28]`. The remaining broad locomotion/hand rows are coherent authored
+Chloe movement-set remaps; `C7FB376F` even has both Player and Chloe resources,
+so its hash alone cannot select a safe replacement. HandFix callsite
+`0x141937B13` is also rejected as the mutation boundary: it receives only
+plugin data and pose lanes, has no Player/screen/weapon identity, and merely
+propagates an existing wrist goal through `SolveArmIk`.
+
+Build `abm` hooks only callsite `0x1410959AC` under exact role-B retained local
+screen-0 legacy Nadine. Both action and embedded feather vtables, `Player+0x4308`
+info identity, weak weapon generation/ProcessWeapon/owner and exact P99 or Mazur
+art must match. It covers controller states 1, 2 and 4: state 1 is mandatory
+because the action begins writing persistent targets before WeaponOut; states
+2/4 additionally require the current slot to resolve to the same weapon. The
+stock weight must be finite and nonzero. Admission logs
+`NADINE-WEAPON-IK-FEATHER-SUPPRESS` and returns false without calling Apply.
+All other Players, arts, states and weights call stock unchanged.
+The single `ida/tll.i64` now names `0x1418F2700`
+`WeaponIKFeather_Apply`; headless persistence reports 1659 functions / 56 data
+names and `save_database returned True`. The restarted MCP independently
+resolves that name and its sole code xref at `0x1410959AC`.
+
+Falsifiable combined prediction: on a clean checkpoint, drawing P99 and then
+Mazur must produce scoped suppression rows from state 1 onward. If the local
+Nadine grip/idle arms become correct while Chloe's remote view stays unchanged,
+WeaponIKFeather is CONFIRMED as the owner. Free/levitating hands instead prove
+the boundary but reject suppression as the final repair and select correction
+of its `WeaponIKFeatherInfo` inputs. No P99 change rejects this owner and moves
+the frontier to `PlayerArmIKAction_UpdateProcedural` or a later local upper-body
+writer. Independently, holstered Mazur must log sling `shown` then `persistent`;
+visible failure after both rows rejects the primary mesh gate as final owner.

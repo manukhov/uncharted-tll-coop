@@ -4152,6 +4152,23 @@ hard, and no matrix/Prepare call is synthesized. Do not launch this alone yet:
 finish the local-only grip/IK proof and combine both into one bounded test with
 the written predictions in `COOP_STATUS.md`.
 
+Build `abm` completes that grip proof and is the next single combined runtime
+test. `WeaponIKFeather_Apply 0x1418F2700` is the sole downstream writer from
+`PlayerWeaponIKAction_Update+0x8CC`; it commits both hand JointSets and then
+feeds the later arm IK. Its exact zero-weight branch returns before any write,
+and the caller ignores the result while completing normally. Suppress Apply
+only for role-B retained local screen-0 legacy Nadine, exact action/feather
+vtables, generation-valid same-owner P99 or Mazur, matching `Player+0x4308`
+info, finite nonzero weight and controller states 1/2/4. State 1 must be covered
+because its targets persist into WeaponOut. Do not mutate HandFix or another
+resolver clip.
+
+One test now has two independent predictions: P99 then Mazur should emit
+`NADINE-WEAPON-IK-FEATHER-SUPPRESS` from Draw state 1 and either restore the
+local grip/idle arms or select the next exact input owner; holstered Mazur
+should emit sling `shown` then `persistent`. Remote Nadine/Chloe and accepted
+P99 hip/Mazur back placement must remain unchanged.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
