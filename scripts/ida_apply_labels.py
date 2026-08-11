@@ -11499,6 +11499,13 @@ FUNCTIONS = {
         "active-state phase at AnimStateInstance+0x168. PlayerWeaponIKAction "
         "uses it for lifecycle and WeaponIKFeather weighting.",
     ),
+    0x1418A4CC0: (
+        "AnimStateInstance_GetPreviousPhase",
+        "Returns AnimStateInstance+0x16C. PhaseUpdate copies current phase "
+        "+0x168 into this field before advancing the current phase; command "
+        "generation reads +0x168 instead, so this is previous-phase/event "
+        "bookkeeping rather than a rendered-pose writer.",
+    ),
     0x141090AC0: (
         "Player_UpdateWeaponPartialBlendAndIkInputs",
         "Per-Player weapon-partial/IK prepass. Integrates the per-screen target "

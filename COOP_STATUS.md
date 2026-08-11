@@ -22101,3 +22101,38 @@ and no-write dataflow; and all vtable consumer callsites. Forcing the state,
 the `auto` result, nonempty WeaponPartial or individual hands clips is
 **REJECTED**. No runtime test is authorized. The frontier remains the later
 local pose owner after the intentional steady command composition.
+
+### 2026-08-11 STATIC / REJECTED: previous-phase bookkeeping and holster transforms do not own the drawn Nadine grip
+
+The remaining write in `PlayerWeaponIKAction_Update 0x1410950E0` before
+`WeaponIKFeather_Apply` is not a second pose override. At `0x141095964` the
+action stores the scalar returned by its WeaponPartial blender in the main
+`AnimStateInstance+0x16C`. `Player_GetMainAnimStateCurrentPhase 0x141090650`
+reads the distinct current phase at `+0x168`; `AnimStateInstance_PhaseUpdate
+0x1418A4FD0` copies `+0x168 -> +0x16C` at `0x1418A5154` before advancing the
+current phase, and the tiny getter `AnimStateInstance_GetPreviousPhase
+0x1418A4CC0` returns `+0x16C`. The field is therefore previous-phase/event
+bookkeeping, not a joint transform or command weight.
+
+The downstream consumer independently rejects a rendered-pose interpretation:
+`AnimStateSnapshot_GenerateAnimCommands 0x141AB6C40` reads only current phase
+`+0x168` at `0x141AB6CFD` and passes it to the authored root node; it never reads
+`+0x16C`. Removing the action write would corrupt phase/event history while
+leaving the command pose unchanged.
+
+The accepted Nadine attachment repairs are also excluded from the drawn path by
+their exact endpoint guards. The P99 lift admits only art `8075397D` selected on
+`pistolHolster 8A0249B5` at the resolved `r_leg_holster` joint; the Mazur frame
+repair admits only art `33E29A1B` selected on `targSpineProp 00AD047A`. A drawn
+weapon is selected on `rightHand 61A48E01`, so neither repair can execute. The
+older P99 binding neutralizer is compile-time disabled and cannot leak its hip
+transform into the hand binding.
+
+Three independent evidence kinds agree: direct writer/getter dataflow for
+`+0x168/+0x16C`; command-generation reads proving which phase drives the pose;
+and exact art/attachment admission in the currently enabled runtime repairs.
+The competing hypotheses “late phase pose writer”, “stale hip binding” and
+“accepted back/holster transform reaches the hand” are **REJECTED**. No runtime
+test is authorized. The remaining static frontier is the pair of scalar inputs
+to terminal `WeaponIKFeather_Apply` and the exact local-versus-remote lifecycle
+that supplies them; no scalar suppression or action bypass is yet justified.

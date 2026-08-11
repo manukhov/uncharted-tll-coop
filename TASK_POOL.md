@@ -4303,6 +4303,18 @@ these paths changes action/event timing or fights a stock clear, not the grip.
 Continue after the steady command composition into the later local pose owner;
 no game launch until an atomic visual repair is statically closed.
 
+**STATIC / REJECTED (previous phase / attachment leak):** the write at
+`PlayerWeaponIKAction_Update+0x884` (`0x141095964`) targets
+`AnimStateInstance+0x16C`, which is the previous phase copied from current
+`+0x168` by `AnimStateInstance_PhaseUpdate`; command generation reads only
+`+0x168`. It is event/transition bookkeeping, not a second pose writer. The
+enabled P99 and Mazur presentation repairs are likewise holster-only by exact
+selected endpoint (`pistolHolster` or `targSpineProp`) and cannot admit a drawn
+`rightHand` weapon; the old P99 hip binding neutralizer remains disabled. Do
+not patch `+0x16C`, reuse a hip/back transform for the hand, or request another
+runtime probe. Continue statically through the two scalar inputs and lifecycle
+of terminal `WeaponIKFeather_Apply`.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
