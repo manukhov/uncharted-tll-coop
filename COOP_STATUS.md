@@ -21745,8 +21745,71 @@ The next read-only boundary is exact. `AnimStateLayer_PhaseUpdateInstances
 That function calls `AnimStateSnapshot_SnapshotAnimState 0x1418B24F0` at
 `0x1418A46D0`; after the stock overlay and `AnimSetRemap` steps the instance
 snapshot contains state id `+0x98`, resolved tuple `+0x118/+0x120/+0x124`, root
-`+0x138`, AnimSet `+0x140`, and blend scalars `+0x168/+0x16C`. A bounded
+`+0x138`, AnimSet `+0x140`, transition weight `+0x158` and previous/current
+phase at `+0x16C/+0x168`. A bounded
 post-stock census at this caller can finally join each of the nine rows to its
 actual instance, state, AnimSet resource and weight. No runtime or gameplay
 mutation is authorized until that join distinguishes **Gmissing-layer** from
 **Glater-local-owner**.
+
+### 2026-08-11 STATIC / IMPLEMENTED: bounded grip snapshot-to-layer census (`abo`)
+
+Build `abo` implements only the read-only join above. An exact E8 relay at
+`0x14189D824` preserves all five arguments and the 64-bit return from
+`AnimStateInstance_ResolveDtGroupAndSnapshot 0x1418A4670`, calls stock first,
+then samples the now-complete snapshot. The callsite ABI is independently fixed
+by `AnimStateLayer_PhaseUpdateInstances`: RCX is the concrete instance, RDX the
+optional source snapshot, R8 the track overlay, R9 the layer phase context and
+stack `+0x20` the final option. No global resolver or command-generator entry is
+detoured.
+
+Admission is exact role-B retained local screen-0 legacy Nadine with a drawn
+P99 or Mazur whose ProcessWeapon still resolves to that Player. The incoming
+overlay is deliberately not compared with the Player master: the callsite
+passes `track+0x8`, which is normally a track-local copy and may legally be
+null. Ownership instead closes by walking only that Player's concrete
+PlayerWeaponAnimControl/AnimControl registry
+(`+0x28/+0x30`, 0x20-byte enabled rows), type-2 layers and their bounded
+`+0x4F8/+0x500` tracks. The exact instance and incoming overlay must have one
+unique registry/layer/track/instance match. This supplies the missing layer id,
+registry index, track ordering and instance ordering without retaining a
+pointer across calls.
+
+The sampled fields have independent producer/consumer proof. SnapshotAnimState
+writes state and the post-overlay/post-AnimSet tuple to instance
+`+0x98/+0x118/+0x120/+0x124`, with the actual resolver preimage at `+0x11C`;
+`+0xB0` is only the copied snapshot default and is logged separately. Heap/root/AnimSet are at
+`+0x130/+0x138/+0x140`. `AnimStateLayer_CreateAnimCommands 0x14189EA60` reads
+the last instance's `+0x158` as the transition-command weight only for older
+tracks after the newest track has generated; `abo` logs both the raw weight and
+whether that exact instance position can supply the command weight. Fields
+`+0x16C/+0x168` are correctly classified as previous/current animation phase,
+not blend weights; `+0x190` is sampled as the exact low-byte flag field. The
+expensive registry join samples one of every 16 relevant calls and is capped at
+48 actual scans independently for each exact art/source tuple; exhaustion emits
+`NADINE-GRIP-SNAPSHOT-BUDGET-EXHAUSTED` with a source-bit mask and therefore
+cannot masquerade as a missing layer.
+Only after a unique ownership join does a 192-entry semantic signature suppress
+duplicate rows; it includes track/instance indices and counts, so a newly
+appended track changes the signature even inside the same weight bucket. Bit 31
+of the same exhaustion marker reports semantic-signature saturation. The hook
+performs no write after the stock call.
+
+Falsifiable prediction for one later P99-then-Mazur idle capture:
+
+- **Gmissing-layer:** the expected Mazur two-hand rows (`283966ED` proximal arms
+  and `77A8107C`/`7FB80CC8` distal hands) either do not produce a scoped
+  `NADINE-GRIP-SNAPSHOT`, or occur only on an older track whose exact final
+  instance reports `commandWeightUsed=1` with zero weight.
+- **Glater-local-owner:** those rows resolve through nonzero keys on the newest
+  full-contribution track, or on an older track with nonzero transition weight,
+  while the visual pose remains one-handed. That moves the frontier after
+  command evaluation and before/inside the already identified local IK path.
+- A crash, changed weapon presentation, non-unique instance match or missing
+  stock progress rejects the relay/admission package; no clip or IK mutation is
+  enabled in `abo`. A budget-exhaustion marker makes an absent source row
+  explicitly inconclusive rather than evidence for **Gmissing-layer**.
+
+Release compilation and linking succeed. The game is not launched yet: this
+probe is the first evidence-bearing discriminator after the rejected `abm`, not
+a visual repair to be tested speculatively.

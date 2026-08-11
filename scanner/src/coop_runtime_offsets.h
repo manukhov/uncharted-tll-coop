@@ -739,6 +739,12 @@ constexpr std::uintptr_t kPlayerWeaponAnimControlRequestCustomPartVtableOffset =
 constexpr std::uintptr_t kAnimControlPhaseUpdateType2LayerCallsiteRva =
     0x172CB32;
 constexpr std::uintptr_t kAnimStateLayerPhaseUpdateInstancesRva = 0x189D720;
+// AnimStateLayer_PhaseUpdateInstances calls this once for every live instance
+// before AnimStateInstance_PhaseUpdate. A post-stock wrapper can join the
+// selected snapshot tuple to the concrete instance and its transition weight.
+constexpr std::uintptr_t kAnimStateLayerResolveInstanceCallsiteRva = 0x189D824;
+constexpr std::uintptr_t kAnimStateInstanceResolveDtGroupAndSnapshotRva =
+    0x18A4670;
 constexpr std::uintptr_t kAnimControlFindActiveType2LayerByIdRva = 0x172B3E0;
 constexpr std::uintptr_t kAnimSnapshotNodeAnimationResolveClipRva = 0x1918070;
 // Read-only final holster discriminator. The anim-control event hook exposes

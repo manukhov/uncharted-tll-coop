@@ -2031,6 +2031,10 @@ constexpr float kLegacyNadineP99HipBackMeters = 0.02F;
 // resolver mutation and its hot-path diagnostics out while the local-only
 // HandFix/IK presentation owner is traced downstream.
 constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
+// Read-only post-stock join for the exact live AnimStateInstance selected at
+// AnimStateLayer_PhaseUpdateInstances+0x104. It records the resolved snapshot,
+// transition weight and phase for the local P99/Mazur without changing them.
+constexpr bool kEnableLegacyNadineGripSnapshotCensus = true;
 // The common resolver already selects the compatible P99/Mazur Player clips.
 // Local PlayerWeaponIKAction then runs WeaponIKFeather::Apply and commits both
 // arm targets; the retained remote Nadine does not show the defect. Suppress
@@ -42348,6 +42352,609 @@ bool install_legacy_nadine_active_weapon_grip_overlay_repair() {
     return installed;
 }
 
+using AnimStateInstanceResolveDtGroupAndSnapshotFunction =
+    std::int64_t(__fastcall*)(
+        void*, std::int64_t, void*, void*, std::int64_t);
+AnimStateInstanceResolveDtGroupAndSnapshotFunction
+    g_original_anim_state_instance_resolve_dt_group_and_snapshot_for_grip =
+        nullptr;
+
+std::uint32_t grip_snapshot_weight_bucket(float weight) {
+    if (!std::isfinite(weight)) {
+        return 6;
+    }
+    if (weight <= 0.0F) {
+        return 0;
+    }
+    if (weight < 0.01F) {
+        return 1;
+    }
+    if (weight < 0.25F) {
+        return 2;
+    }
+    if (weight < 0.75F) {
+        return 3;
+    }
+    if (weight < 0.999F) {
+        return 4;
+    }
+    return 5;
+}
+
+int grip_snapshot_scan_budget_index(
+    std::uint32_t art, std::uint32_t source_id) {
+    if (art == kCoopPistolArtId &&
+        source_id == kP99IdleFingersPlayerClipId) {
+        return 0;
+    }
+    if (art != kCoopRifleArtId) {
+        return -1;
+    }
+    switch (source_id) {
+    case kP99IdleFingersPlayerClipId:
+        return 1;
+    case 0x41C84248u:
+        return 2;
+    case 0x283966EDu:
+        return 3;
+    case 0xEB712BFCu:
+        return 4;
+    case 0x77A8107Cu:
+        return 5;
+    case 0x20FFCB4Fu:
+        return 6;
+    case 0xBE7CB4A2u:
+        return 7;
+    case 0x8F9F1C38u:
+        return 8;
+    case 0x7FB80CC8u:
+        return 9;
+    case 0x47C0A266u:
+        return 10;
+    default:
+        return -1;
+    }
+}
+
+constexpr std::uint32_t kGripSnapshotScanBudgetPerSource = 48;
+constexpr std::uint32_t kGripSnapshotScanStride = 16;
+std::array<std::atomic<std::uint32_t>, 11>
+    g_grip_snapshot_scan_ticks{};
+std::array<std::atomic<std::uint32_t>, 11>
+    g_grip_snapshot_scan_attempts{};
+std::atomic<std::uint32_t> g_grip_snapshot_exhausted_mask{0};
+std::atomic<std::uint32_t> g_grip_snapshot_logged_exhausted_mask{0};
+
+struct NadineGripSnapshotCapture {
+    void* player = nullptr;
+    void* weapon = nullptr;
+    void* instance = nullptr;
+    void* overlay = nullptr;
+    void* phase_context = nullptr;
+    void* snapshot_heap = nullptr;
+    void* anim_set = nullptr;
+    void* layer = nullptr;
+    std::int64_t source_snapshot = 0;
+    std::int64_t option = 0;
+    int owner_index = -1;
+    int current_slot = -1;
+    std::uint32_t draw_state = 0;
+    std::uint32_t art = 0;
+    std::uint32_t state_id = 0;
+    std::uint32_t snapshot_default_id = 0;
+    std::uint32_t source_id = 0;
+    std::uint32_t resolved_id = 0;
+    std::uint32_t lookup_key_0 = 0;
+    std::uint32_t lookup_key_1 = 0;
+    std::uint32_t root_index = 0;
+    std::uint8_t flags = 0;
+    std::uint32_t layer_id = 0;
+    std::uint32_t registry_index = 0;
+    std::uint32_t track_index = 0;
+    std::uint32_t track_count = 0;
+    std::uint32_t instance_index = 0;
+    std::uint32_t instance_count = 0;
+    float transition_weight = 0.0F;
+    float previous_phase = 0.0F;
+    float current_phase = 0.0F;
+};
+
+bool seh_capture_legacy_nadine_grip_snapshot(
+    void* instance, std::int64_t source_snapshot, void* overlay,
+    void* phase_context, std::int64_t option,
+    NadineGripSnapshotCapture* capture) {
+    if (capture == nullptr) {
+        return false;
+    }
+    *capture = {};
+    __try {
+        if (!g_net_role_b || instance == nullptr ||
+            readable_bytes(instance) < 0x1C0 ||
+            *reinterpret_cast<const std::uintptr_t*>(instance) !=
+                g_module + kAnimStateInstanceVtableRva) {
+            return false;
+        }
+        // R8 is track+0x8: normally a track-local overlay copy and legally
+        // null, not the Player master object.  Ownership is closed below by
+        // finding this exact (instance, overlay) pair uniquely in the retained
+        // Player's own PlayerWeaponAnimControl registry.
+        capture->owner_index = 0;
+        capture->player = retained_player_object(0);
+        if (capture->player == nullptr ||
+            !player_object_stable(capture->player) ||
+            !player_screen_index_is(capture->player, 0)) {
+            return false;
+        }
+        std::uint32_t look = 0;
+        if (!seh_read_player_look(capture->player, &look) ||
+            look != kLegacyNadineAttachTargetLookId) {
+            return false;
+        }
+        if (!read_weapon_draw_state(
+                capture->player, capture->current_slot,
+                capture->draw_state) ||
+            capture->current_slot < 0 ||
+            (capture->draw_state != 2 && capture->draw_state != 4)) {
+            return false;
+        }
+        capture->weapon = get_weapon_from_slot(
+            capture->player, capture->current_slot);
+        if (capture->weapon == nullptr) {
+            return false;
+        }
+        capture->art = weapon_art_id_from_object(capture->weapon);
+        if ((capture->art != kCoopPistolArtId &&
+             capture->art != kCoopRifleArtId) ||
+            !seh_weapon_parent_resolves_to_owner(
+                capture->weapon, capture->player)) {
+            return false;
+        }
+
+        const auto* const bytes = static_cast<const std::byte*>(instance);
+        capture->state_id =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x98);
+        capture->snapshot_default_id =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0xB0);
+        // SnapshotAnimState writes the actual overlay-resolver preimage here
+        // at 0x1418B27F1.  +0xB0 is only the copied snapshot default.
+        capture->source_id =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x11C);
+        capture->resolved_id =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x118);
+        capture->lookup_key_0 =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x120);
+        capture->lookup_key_1 =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x124);
+        capture->snapshot_heap =
+            *reinterpret_cast<void* const*>(bytes + 0x130);
+        capture->root_index =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x138);
+        capture->anim_set =
+            *reinterpret_cast<void* const*>(bytes + 0x140);
+        capture->transition_weight =
+            *reinterpret_cast<const float*>(bytes + 0x158);
+        capture->previous_phase =
+            *reinterpret_cast<const float*>(bytes + 0x16C);
+        capture->current_phase =
+            *reinterpret_cast<const float*>(bytes + 0x168);
+        capture->flags = static_cast<std::uint8_t>(bytes[0x190]);
+        const bool p99_source = capture->art == kCoopPistolArtId &&
+            capture->source_id == kP99IdleFingersPlayerClipId;
+        const bool mazur_source = capture->art == kCoopRifleArtId &&
+            (capture->source_id == kP99IdleFingersPlayerClipId ||
+             capture->source_id == 0x41C84248u ||
+             capture->source_id == 0x283966EDu ||
+             capture->source_id == 0xEB712BFCu ||
+             capture->source_id == 0x77A8107Cu ||
+             capture->source_id == 0x20FFCB4Fu ||
+             capture->source_id == 0xBE7CB4A2u ||
+             capture->source_id == 0x8F9F1C38u ||
+             capture->source_id == 0x7FB80CC8u ||
+             capture->source_id == 0x47C0A266u);
+        if (!p99_source && !mazur_source) {
+            return false;
+        }
+        if (capture->resolved_id == 0 || capture->lookup_key_0 == 0 ||
+            capture->lookup_key_1 == 0 ||
+            capture->snapshot_heap == nullptr ||
+            capture->anim_set == nullptr ||
+            !std::isfinite(capture->transition_weight)) {
+            return false;
+        }
+
+        // Bound unsuccessful and repeated joins per exact art/source without
+        // claiming a semantic signature before ownership is proven.  Budget
+        // exhaustion is surfaced outside SEH, so absence remains falsifiable.
+        const int budget_index = grip_snapshot_scan_budget_index(
+            capture->art, capture->source_id);
+        if (budget_index < 0) {
+            return false;
+        }
+        const std::uint32_t tick =
+            g_grip_snapshot_scan_ticks[
+                static_cast<std::size_t>(budget_index)]
+                .fetch_add(1, std::memory_order_relaxed);
+        if ((tick % kGripSnapshotScanStride) != 0) {
+            return false;
+        }
+        const std::uint32_t attempt =
+            g_grip_snapshot_scan_attempts[
+                static_cast<std::size_t>(budget_index)]
+                .fetch_add(1, std::memory_order_relaxed);
+        if (attempt >= kGripSnapshotScanBudgetPerSource) {
+            g_grip_snapshot_exhausted_mask.fetch_or(
+                1u << static_cast<unsigned>(budget_index),
+                std::memory_order_relaxed);
+            return false;
+        }
+
+        const auto* const player_bytes =
+            static_cast<const std::byte*>(capture->player);
+        void* const weapon_anim_control =
+            *reinterpret_cast<void* const*>(player_bytes + 0x1DF0);
+        if (weapon_anim_control == nullptr ||
+            readable_bytes(weapon_anim_control) < 0x18 ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon_anim_control) !=
+                g_module + kPlayerWeaponAnimControlVtableRva ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(weapon_anim_control) + 0x10) !=
+                capture->player) {
+            return false;
+        }
+        void* const anim_control = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(weapon_anim_control) + 0x8);
+        if (anim_control == nullptr || readable_bytes(anim_control) < 0x38) {
+            return false;
+        }
+        const auto* const anim_control_bytes =
+            static_cast<const std::byte*>(anim_control);
+        const std::uint32_t registry_count =
+            *reinterpret_cast<const std::uint32_t*>(
+                anim_control_bytes + 0x28);
+        const auto* const registry =
+            *reinterpret_cast<const std::byte* const*>(
+                anim_control_bytes + 0x30);
+        if (registry_count == 0 || registry_count > 128 ||
+            registry == nullptr ||
+            readable_bytes(registry) <
+                static_cast<std::size_t>(registry_count) * 0x20) {
+            return false;
+        }
+        std::uint32_t instance_matches = 0;
+        for (std::uint32_t registry_index = 0;
+             registry_index < registry_count; ++registry_index) {
+            const auto* const record = registry + registry_index * 0x20;
+            if (record[0x14] == std::byte{0}) {
+                continue;
+            }
+            void* const layer =
+                *reinterpret_cast<void* const*>(record + 0x8);
+            if (layer == nullptr || readable_bytes(layer) < 0x508) {
+                continue;
+            }
+            const auto* const layer_bytes =
+                static_cast<const std::byte*>(layer);
+            if (*reinterpret_cast<const std::uint32_t*>(
+                    layer_bytes + 0x8) != 2) {
+                continue;
+            }
+            const std::uint32_t track_count =
+                *reinterpret_cast<const std::uint32_t*>(
+                    layer_bytes + 0x500);
+            const auto* const tracks =
+                *reinterpret_cast<void* const* const*>(
+                    layer_bytes + 0x4F8);
+            if (track_count == 0 || track_count > 64 || tracks == nullptr ||
+                readable_bytes(tracks) <
+                    static_cast<std::size_t>(track_count) * sizeof(void*)) {
+                continue;
+            }
+            for (std::uint32_t track_index = 0;
+                 track_index < track_count; ++track_index) {
+                const auto* const track =
+                    static_cast<const std::byte*>(tracks[track_index]);
+                if (track == nullptr || readable_bytes(track) < 0x18 ||
+                    *reinterpret_cast<void* const*>(track + 0x8) != overlay) {
+                    continue;
+                }
+                const auto* const instances =
+                    *reinterpret_cast<void* const* const*>(track);
+                const std::uint16_t capacity =
+                    *reinterpret_cast<const std::uint16_t*>(track + 0x10);
+                const std::uint16_t instance_count =
+                    *reinterpret_cast<const std::uint16_t*>(track + 0x12);
+                if (instance_count == 0 || instance_count > capacity ||
+                    instance_count > 64 || instances == nullptr ||
+                    readable_bytes(instances) <
+                        static_cast<std::size_t>(instance_count) *
+                            sizeof(void*)) {
+                    continue;
+                }
+                for (std::uint16_t instance_index = 0;
+                     instance_index < instance_count; ++instance_index) {
+                    if (instances[instance_index] != instance) {
+                        continue;
+                    }
+                    ++instance_matches;
+                    capture->layer = layer;
+                    capture->layer_id =
+                        *reinterpret_cast<const std::uint32_t*>(record);
+                    capture->registry_index = registry_index;
+                    capture->track_index = track_index;
+                    capture->track_count = track_count;
+                    capture->instance_index = instance_index;
+                    capture->instance_count = instance_count;
+                }
+            }
+        }
+        if (instance_matches != 1) {
+            *capture = {};
+            return false;
+        }
+
+        capture->instance = instance;
+        capture->overlay = overlay;
+        capture->phase_context = phase_context;
+        capture->source_snapshot = source_snapshot;
+        capture->option = option;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *capture = {};
+        return false;
+    }
+}
+
+void log_legacy_nadine_grip_snapshot(
+    const NadineGripSnapshotCapture& capture) {
+    const std::uint32_t weight_bucket =
+        grip_snapshot_weight_bucket(capture.transition_weight);
+    const bool command_transition_weight_used =
+        capture.track_index + 1 < capture.track_count &&
+        capture.instance_index + 1 == capture.instance_count;
+    std::uint64_t signature = 1469598103934665603ULL;
+    const auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(capture.art);
+    mix(capture.draw_state);
+    mix(capture.state_id);
+    mix(capture.snapshot_default_id);
+    mix(capture.source_id);
+    mix(capture.resolved_id);
+    mix(capture.lookup_key_0);
+    mix(capture.lookup_key_1);
+    mix(capture.root_index);
+    mix(capture.layer_id);
+    mix(capture.registry_index);
+    mix(capture.track_index);
+    mix(capture.track_count);
+    mix(capture.instance_index);
+    mix(capture.instance_count);
+    mix(weight_bucket);
+    static std::array<std::atomic<std::uint64_t>, 192> seen{};
+    if (!claim_holster_probe_signature(seen, signature)) {
+        return;
+    }
+    static std::atomic<std::uint32_t> unique_signature_count{0};
+    const std::uint32_t signature_count =
+        unique_signature_count.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (signature_count >= seen.size()) {
+        // Bit 31 is reserved for post-join semantic-signature saturation;
+        // bits 0..10 identify per-source scan budgets.
+        g_grip_snapshot_exhausted_mask.fetch_or(
+            1u << 31, std::memory_order_relaxed);
+    }
+
+    std::uint32_t weight_bits = 0;
+    std::uint32_t previous_phase_bits = 0;
+    std::uint32_t current_phase_bits = 0;
+    std::memcpy(
+        &weight_bits, &capture.transition_weight, sizeof(weight_bits));
+    std::memcpy(
+        &previous_phase_bits, &capture.previous_phase,
+        sizeof(previous_phase_bits));
+    std::memcpy(
+        &current_phase_bits, &capture.current_phase,
+        sizeof(current_phase_bits));
+    std::ostringstream line;
+    line << "NADINE-GRIP-SNAPSHOT player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(capture.player)
+         << " weapon=0x"
+         << reinterpret_cast<std::uintptr_t>(capture.weapon)
+         << " instance=0x"
+         << reinterpret_cast<std::uintptr_t>(capture.instance)
+         << " overlay=0x"
+         << reinterpret_cast<std::uintptr_t>(capture.overlay)
+         << " sourceSnapshot=0x"
+         << static_cast<std::uintptr_t>(capture.source_snapshot)
+         << " phaseContext=0x"
+         << reinterpret_cast<std::uintptr_t>(capture.phase_context)
+         << " layer=0x" << reinterpret_cast<std::uintptr_t>(capture.layer)
+         << " layerId=0x" << capture.layer_id
+         << " option=0x" << static_cast<std::uintptr_t>(capture.option)
+         << " art=0x" << capture.art
+         << " state=0x" << capture.state_id
+         << " snapshotDefault=0x" << capture.snapshot_default_id
+         << " source=0x" << capture.source_id
+         << " resolved=0x" << capture.resolved_id
+         << " keys=0x" << capture.lookup_key_0 << "/0x"
+         << capture.lookup_key_1
+         << " heap=0x"
+         << reinterpret_cast<std::uintptr_t>(capture.snapshot_heap)
+         << " root=0x" << capture.root_index
+         << " animSet=0x"
+         << reinterpret_cast<std::uintptr_t>(capture.anim_set)
+         << " weightBits=0x" << weight_bits
+         << " previousPhaseBits=0x" << previous_phase_bits
+         << " currentPhaseBits=0x" << current_phase_bits
+         << " flags=0x" << static_cast<unsigned>(capture.flags) << std::dec
+         << " owner=" << capture.owner_index
+         << " current=" << capture.current_slot
+         << " drawState=" << capture.draw_state
+         << " registry=" << capture.registry_index
+         << " track=" << capture.track_index << "/" << capture.track_count
+         << " instanceIndex=" << capture.instance_index << "/"
+         << capture.instance_count
+         << " commandWeightUsed="
+         << (command_transition_weight_used ? 1 : 0)
+         << " weightBucket=" << weight_bucket
+         << " weight=" << capture.transition_weight
+         << " previousPhase=" << capture.previous_phase
+         << " currentPhase=" << capture.current_phase;
+    write_log_line(line.str().c_str());
+}
+
+void log_legacy_nadine_grip_snapshot_budget_exhaustion() {
+    const std::uint32_t exhausted =
+        g_grip_snapshot_exhausted_mask.load(std::memory_order_relaxed);
+    const std::uint32_t already_logged =
+        g_grip_snapshot_logged_exhausted_mask.fetch_or(
+            exhausted, std::memory_order_relaxed);
+    const std::uint32_t newly_exhausted = exhausted & ~already_logged;
+    if (newly_exhausted == 0) {
+        return;
+    }
+    std::ostringstream line;
+    line << "NADINE-GRIP-SNAPSHOT-BUDGET-EXHAUSTED mask=0x"
+         << std::hex << newly_exhausted << std::dec
+         << " perSource=" << kGripSnapshotScanBudgetPerSource
+         << " stride=" << kGripSnapshotScanStride
+         << " signatureSaturationBit=31";
+    write_log_line(line.str().c_str());
+}
+
+std::int64_t __fastcall
+hooked_anim_state_instance_resolve_dt_group_and_snapshot_for_grip(
+    void* instance, std::int64_t source_snapshot, void* overlay,
+    void* phase_context, std::int64_t option) {
+    const auto original =
+        g_original_anim_state_instance_resolve_dt_group_and_snapshot_for_grip;
+    const std::int64_t result = original != nullptr
+        ? original(
+              instance, source_snapshot, overlay, phase_context, option)
+        : 0;
+    if (kEnableLegacyNadineGripSnapshotCensus) {
+        NadineGripSnapshotCapture capture{};
+        if (seh_capture_legacy_nadine_grip_snapshot(
+                instance, source_snapshot, overlay, phase_context, option,
+                &capture)) {
+            log_legacy_nadine_grip_snapshot(capture);
+        }
+        log_legacy_nadine_grip_snapshot_budget_exhaustion();
+    }
+    return result;
+}
+
+bool install_legacy_nadine_grip_snapshot_census() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t new_displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kAnimStateLayerResolveInstanceCallsiteRva,
+            kAnimStateInstanceResolveDtGroupAndSnapshotRva,
+            reinterpret_cast<const void*>(
+                &hooked_anim_state_instance_resolve_dt_group_and_snapshot_for_grip),
+            callsite, relay, new_displacement)) {
+        boot_log_line(
+            "legacy-Nadine grip snapshot census SKIPPED (callsite preflight)");
+        return false;
+    }
+    std::int32_t old_displacement = 0;
+    std::memcpy(
+        &old_displacement, callsite + 1, sizeof(old_displacement));
+    g_original_anim_state_instance_resolve_dt_group_and_snapshot_for_grip =
+        reinterpret_cast<
+            AnimStateInstanceResolveDtGroupAndSnapshotFunction>(
+                g_module +
+                kAnimStateInstanceResolveDtGroupAndSnapshotRva);
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_anim_state_instance_resolve_dt_group_and_snapshot_for_grip =
+            nullptr;
+        boot_log_line(
+            "legacy-Nadine grip snapshot census SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (VirtualProtect(
+            callsite, 5, PAGE_EXECUTE_READWRITE, &old_protection) == 0) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_anim_state_instance_resolve_dt_group_and_snapshot_for_grip =
+            nullptr;
+        boot_log_line(
+            "legacy-Nadine grip snapshot census SKIPPED (protect)");
+        return false;
+    }
+    std::memcpy(
+        callsite + 1, &new_displacement, sizeof(new_displacement));
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    std::int32_t readback = 0;
+    std::memcpy(&readback, callsite + 1, sizeof(readback));
+    bool installed = callsite[0] == 0xE8 &&
+        readback == new_displacement;
+    bool rollback_verified = false;
+    if (!installed) {
+        std::memcpy(
+            callsite + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, callsite + 1,
+            sizeof(rollback_readback));
+        rollback_verified = callsite[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+    }
+    DWORD ignored = 0;
+    bool protection_restored =
+        VirtualProtect(
+            callsite, 5, old_protection, &ignored) != 0;
+    if (installed && !protection_restored) {
+        std::memcpy(
+            callsite + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, callsite + 1,
+            sizeof(rollback_readback));
+        rollback_verified = callsite[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+        installed = !rollback_verified;
+        protection_restored =
+            VirtualProtect(
+                callsite, 5, old_protection, &ignored) != 0;
+    }
+    resume_suspended_process_threads(suspended_threads);
+    if (!installed) {
+        if (rollback_verified) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            g_original_anim_state_instance_resolve_dt_group_and_snapshot_for_grip =
+                nullptr;
+            boot_log_line(
+                protection_restored
+                    ? "legacy-Nadine grip snapshot census SKIPPED (verified rollback)"
+                    : "legacy-Nadine grip snapshot census SKIPPED (verified rollback, protection restore WARNING)");
+        } else {
+            boot_log_line(
+                protection_restored
+                    ? "legacy-Nadine grip snapshot census SKIPPED (rollback verification WARNING; relay retained)"
+                    : "legacy-Nadine grip snapshot census SKIPPED (rollback/protection WARNING; relay retained)");
+        }
+        return false;
+    }
+    if (!protection_restored) {
+        boot_log_line(
+            "legacy-Nadine grip snapshot census installed (rollback/protection WARNING; relay retained)");
+        return true;
+    }
+    boot_log_line(
+        "legacy-Nadine grip snapshot census installed (0x14189D824 read-only post-stock)");
+    return true;
+}
+
 using WeaponIkFeatherApplyFunction = std::uint8_t(__fastcall*)(
     void*, void*, float, void*, float, std::uint32_t, float,
     std::uint8_t, float);
@@ -53735,7 +54342,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-11abn "
+        "TLL co-op runtime init 2026-08-11abo "
         "(abm runtime recorded; incomplete IK suppression and floating sling disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
@@ -53826,6 +54433,10 @@ DWORD WINAPI install_hook(void*) {
     if constexpr (kEnableLegacyNadineActiveWeaponGripOverlayRepair &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_legacy_nadine_active_weapon_grip_overlay_repair();
+    }
+    if constexpr (kEnableLegacyNadineGripSnapshotCensus &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        install_legacy_nadine_grip_snapshot_census();
     }
     if constexpr (kEnableLegacyNadineWeaponIkFeatherSuppression &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {

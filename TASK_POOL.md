@@ -4199,10 +4199,28 @@ Next exact task: add only a bounded read-only join at
 `AnimStateLayer_PhaseUpdateInstances+0x104 / 0x14189D824` (or its direct
 `0x1418A46D0` SnapshotAnimState edge). For the nine documented local Mazur
 resolver pairs record the owning `AnimStateInstance`, state id, root, AnimSet,
-post-remap tuple and `+0x168/+0x16C` weights. If the two-hand arms/hands leaves
+post-remap tuple, transition weight `+0x158` and phases `+0x16C/+0x168`. If the two-hand arms/hands leaves
 are live and weighted, continue after command evaluation into the local IK
 overwrite. If absent or zero-weight, locate the missing channel/source producer.
 Do not inject NPC clips, force `47C0A266`, or relaunch the disabled `abn` build.
+
+Build `abo` implements that join as a read-only E8 relay at `0x14189D824` after
+stock snapshot resolution. It uniquely closes the instance back to the local
+Player's AnimControl registry/type-2 layer/track and logs state, source/resolved
+tuple, heap/root/AnimSet, transition weight `+0x158`, phases and track ordering.
+The resolver source is read from exact instance `+0x11C`; `+0xB0` is only the
+copied snapshot default. The track-local overlay may be null and is never
+mistaken for the Player master; ownership comes from the unique match in that
+Player's registry. Registry work samples one of every 16 relevant calls and is
+capped at 48 scans per exact art/source; an explicit source-mask exhaustion
+marker prevents silence from being misread as a missing layer. Post-join
+deduplication includes full track/instance topology and reports its own bit-31
+saturation, so a live
+instance moving from newest to an older contributing track is logged again.
+The command generator's exact rule is included: only the final instance of an
+older track contributes `+0x158`; the newest track is generated at full weight.
+Release build passes. Run only the written P99-then-Mazur idle discriminator;
+there is no gameplay mutation in this package.
 
 ## Rule
 
