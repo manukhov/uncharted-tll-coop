@@ -21,7 +21,7 @@
       local-pose array. No later Player arm-pose writer remains in that phase.
 - [x] Implement a narrow A-to-B return channel for the already-correct remote
       Nadine pose: role A captures only C39 joints `19..30` after stock
-      postblend, authenticates and sends a 616-byte `ARMP` packet, and role B
+      postblend, endpoint-validates and sends a 616-byte `ARMP` packet, and role B
       reapplies the fresh matching-art rows after its own stock postblend.
 - [x] Make admission fail closed on exact Player/Fg/skeleton/weapon ownership,
       P99 or Mazur art, `PlayerWeaponController::WeaponOut (state 2)`,
@@ -32,14 +32,29 @@
       `JointCache_RecomputeWorldLocatorFromLocalPose 0x141688320`; the later
       JointBlend invalidates/rebuilds descendants, so fingers/helpers inherit
       the corrected primary paired arm chains.
-- [ ] Run exactly one bounded stationary test only after release build, strict
-      review, IDB label save, documentation commit and push all succeed: draw
-      P99, stand still for at least 0.5 s, then repeat with Mazur. Expected
-      markers are A `CAPTURE/SEND` and B `RECV/APPLY`, with `lag=0..32` and
-      `applied=1`; the local Nadine grip/idle arms must match the already-correct
-      remote view. There must be no apply while moving, ADS, reload, switch,
-      rechamber, grenade action or cover. Do not melee, interact or take damage
-      during this deliberately bounded exam.
+- [x] Run the bounded stationary `abt` exam after release build, strict review,
+      IDB label save, documentation commit and push. Both hooks installed and
+      normal StatePacket traffic flowed, but role A emitted zero `CAPTURE/SEND`
+      rows and role B emitted zero `RECV/APPLY` rows. Classify the result as
+      **INCONCLUSIVE / fail-closed admission**, not as rejection of the postblend
+      pose boundary: no arm-row mutation ran.
+- [x] Statistically rank the pre-capture gates. Fresh logs already support the
+      role-A retained Player/screen/look, same-owner weapon presentation and idle
+      FastGrenade controller. The leading asymmetric candidate is the common
+      requirement `PlayerWeaponController+0x134 == 2`: puppet hand attachment is
+      accepted separately and does not prove that its local action lifecycle ever
+      reaches the authoritative local-Player state.
+- [ ] Run exactly one bounded read-only `abu` admission census after release
+      build, independent strict review, documentation commit and push. It logs
+      only the first changing source stage, at most 32 rows and no faster than
+      250 ms. Draw P99, hold stationary for at least 0.5 s, then Mazur. A
+      game-thread `PUPPET-HAND` row with matching art/rightHand plus an async
+      `weapon-controller` row with non-2 `state` confirms the leading source
+      asymmetry; an earlier skeleton/owner row or a later peer-idle/dwell row
+      selects that competing gate. A postblend entry without a retained-1 match
+      isolates retained identity; complete entry silence isolates current
+      `+0x408` reach. Do not alter any gate until this discriminator returns a
+      concrete value.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that

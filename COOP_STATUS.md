@@ -22232,3 +22232,77 @@ lag, non-arm regression or action-time apply rejects the repair. The Mazur sling
 is explicitly outside this test: manual ShowMesh is already **REJECTED** because
 legacy Nadine has no authored `strap2..14` guide chain and exposes a floating,
 non-simulated drawable.
+
+### 2026-08-11 RUNTIME INCONCLUSIVE (`abt`) / STATIC + IMPLEMENTED (`abu`): bound the first rejected arm-source gate
+
+The written `abt` exam failed closed before it exercised the arm-pose boundary.
+Fresh processes PID 3248 (role A) and PID 15996 (role B) both loaded marker
+`2026-08-11abt`, installed the exact Player `+0x408` hook, started their state
+channels and exchanged ordinary StatePackets. After stationary P99 and Mazur
+draws the complete segment contains **zero** `NADINE-IDLE-ARM-CAPTURE`, `SEND`,
+`RECV` or `APPLY` rows. Both processes remained responsive. This is
+**INCONCLUSIVE / packaging-admission failure**, not a visual rejection: no ARMP
+payload was published and no role-B local-pose row was changed.
+
+Several early source candidates are independently weakened. Fresh role-A rows
+resolve retained owner 1 through the legacy-Nadine look/attachment graph and
+same-owner P99/Mazur presentation. The retained route is screen 1, and the fresh
+peer FastGrenade diagnostic reports exact owner with state zero. Historical
+Player postblend evidence also reaches both retained screen routes through the
+shared `Player_PostAnimBlending_Async 0x1410EB6A0` slot. Current Fg skeleton
+identity and current wrapper reach were not directly observed, so they remain
+valid discriminators rather than assumed passes.
+
+The leading asymmetric candidate is the source-side
+`PlayerWeaponController+0x120/+0x134 == current-slot/WeaponOut(2)` requirement.
+`apply_peer_held_weapon_state` drives the role-A puppet from the authoritative
+role-B StatePacket through `SwitchToWeapon 0x1410A1C10` and inner
+`ApplyWeaponSwitch 0x1410A28A0`. Puppet readiness is separately accepted from
+the physical hand attachment returned by PlayerWeaponController vslot `+0x78 =
+0x1410A49E0`; the relay explicitly tolerates a failed puppet gun-state read and
+arms presentation without checking `+0x134`. State 2 is only written later by
+`PlayerWeaponController_ApplyState 0x1410AAFB0` at `0x1410AB701` after its Get
+action lifecycle. Therefore a visibly correct, same-owner remote weapon does
+not prove that the synthetic puppet maintains the local authoritative state 2.
+Removing the check is nevertheless not mutation-ready because no fresh raw
+source controller value exists.
+
+Competing pre-capture causes remain: current Player1 `+0x408` reach/retained
+pointer, Fg weak owner or ED25/C39/580 identity, peer StatePacket freshness and
+drawn-idle fields, repeated Player pointer changes resetting the anchored dwell,
+and final local-pose validation. Transport/session and role-B apply cannot be the
+first failure because capture was never published.
+
+Build `abu` adds two bounded read-only discriminators without changing any gate
+or pose mutation. The role-A Player postblend wrapper first reports exact raw
+pointer equality with retained Player 0/1 before the capture gate. The existing
+source scope then reports stages `player -> look -> fg-owner -> skeleton ->
+weapon-controller -> grenade-controller -> weapon -> transform -> peer-fresh ->
+peer-snapshot -> peer-idle -> dwell -> pose-rows`, including raw screen/look,
+skeleton IDs/counts/readability, controller vtable/owner/current/state, grenade
+state, weapon parent/art, peer flags/gun/art/action bits, age, finite
+movement/velocity maxima, and anchored-dwell reset reason/elapsed bucket. The
+async logger makes no game virtual calls. Separately, the already-authorized
+game-thread puppet reconciliation path logs physical hand slot, weapon art,
+same-parent status and resolved attachment record ID/index.
+
+Admission logging is exact role-A only, semantic-change deduplicated, capped at
+32 scope rows plus an explicit saturation marker and throttled to at most one
+scope row per 250 ms. The game-thread hand census is independently capped at 24
+rows with the same cadence. Neither path enumerates animation registries or
+relaxes the existing fail-closed repair.
+
+Three evidence classes justify this diagnostic rather than another behavioral
+guess: the fresh runtime absence boundary plus still-working StatePacket and
+weapon-presentation rows; concrete puppet switch/physical-hand/action-state
+dataflow; and exact vtable/owner/skeleton/controller fields already used by the
+scope. **Falsifiable prediction:** if the leading candidate is correct, the
+game-thread row will show matching peer art and physical right-hand record
+`0x61A48E01`, while the postblend admission row stops at
+`weapon-controller` with exact vtable/owner but `state != 2` and/or a different
+current slot. An earlier stable stage selects the corresponding
+Player/Fg/skeleton competitor; `peer-idle` or a repeatedly resetting `dwell`
+selects the network/stability competitor; a postblend entry with no retained-1
+match selects retained identity, while complete entry silence rejects current
+`+0x408` reach. No source admission policy may change until one of these
+mutually exclusive outcomes is observed.

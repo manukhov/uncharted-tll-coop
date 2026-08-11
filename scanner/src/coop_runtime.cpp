@@ -1671,6 +1671,12 @@ void* get_weapon_from_slot(void* player, int slot);
 bool read_weapon_draw_state(void* player, int& slot, std::uint32_t& state);
 std::uint32_t weapon_art_id_from_object(void* weapon);
 bool seh_weapon_parent_resolves_to_owner(void* weapon, void* owner);
+bool seh_read_weapon_attachment_state(
+    void* weapon, std::uint32_t* parent_id_out,
+    std::uint8_t* attach_index_out);
+bool seh_read_owner_attach_record_id(
+    void* owner, std::uint8_t attach_index, std::uint32_t* attach_id_out,
+    std::uintptr_t* records_generation_out);
 int resolve_give_target_slot(std::uint32_t art, int packet_slot);
 void dump_player_weapon_slots(const char* tag, void* player);
 void materialize_screen1_camera_once();
@@ -19099,6 +19105,98 @@ void service_initial_local_nadine_weapon_presentation_game_thread() {
     }
 }
 
+void census_remote_nadine_idle_arm_hand_game_thread(
+    void* puppet, const coop::StatePacket& peer, int expected_slot,
+    ULONGLONG now) {
+    if (g_net_role_b || puppet == nullptr || peer.gun_state != 1 ||
+        (peer.held_weapon_art_id != kCoopPistolArtId &&
+         peer.held_weapon_art_id != kCoopRifleArtId)) {
+        return;
+    }
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static ULONGLONG last_sample_ms = 0;
+    static std::uint64_t last_signature = 0;
+    static unsigned log_count = 0;
+    AcquireSRWLockExclusive(&lock);
+    const bool sample = log_count < 24 &&
+        (last_sample_ms == 0 || now < last_sample_ms ||
+         now - last_sample_ms >= 250);
+    if (sample) {
+        last_sample_ms = now;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    if (!sample) {
+        return;
+    }
+
+    int current_slot = -1;
+    std::uint32_t draw_state = 0xFFFFFFFFu;
+    const bool controller_readable =
+        read_weapon_draw_state(puppet, current_slot, draw_state);
+    const int hand_slot = capture_hand_attached_slot_int(puppet);
+    std::uint32_t hand_art = 0;
+    std::uint8_t attach_index = 0xFF;
+    std::uint32_t attach_id = 0;
+    std::uintptr_t records_generation = 0;
+    bool hand_parent_match = false;
+    if (hand_slot >= 0 && hand_slot < 18) {
+        void* const hand_weapon = get_weapon_from_slot(puppet, hand_slot);
+        std::uint32_t parent_id = 0;
+        hand_art = weapon_art_id_from_object(hand_weapon);
+        hand_parent_match =
+            seh_weapon_parent_resolves_to_owner(hand_weapon, puppet);
+        if (seh_read_weapon_attachment_state(
+                hand_weapon, &parent_id, &attach_index)) {
+            seh_read_owner_attach_record_id(
+                puppet, attach_index, &attach_id, &records_generation);
+        }
+    }
+
+    std::uint64_t signature = 1469598103934665603ull;
+    const auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ull;
+    };
+    mix(reinterpret_cast<std::uintptr_t>(puppet));
+    mix(controller_readable ? 1u : 0u);
+    mix(static_cast<std::uint32_t>(current_slot));
+    mix(draw_state);
+    mix(static_cast<std::uint32_t>(expected_slot));
+    mix(static_cast<std::uint32_t>(hand_slot));
+    mix(hand_art);
+    mix(attach_index);
+    mix(attach_id);
+    mix(hand_parent_match ? 1u : 0u);
+    mix(peer.held_weapon_art_id);
+
+    bool should_log = false;
+    AcquireSRWLockExclusive(&lock);
+    if (log_count < 24 && signature != last_signature) {
+        last_signature = signature;
+        ++log_count;
+        should_log = true;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    if (!should_log) {
+        return;
+    }
+
+    std::ostringstream line;
+    line << "NADINE-IDLE-ARM-PUPPET-HAND player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(puppet)
+         << " peerArt=0x" << peer.held_weapon_art_id << std::dec
+         << " expected=" << expected_slot
+         << " ctrl=" << (controller_readable ? 1 : 0)
+         << " current=" << current_slot << " state=" << draw_state
+         << " handSlot=" << hand_slot
+         << " handArt=0x" << std::hex << hand_art << std::dec
+         << " handParent=" << (hand_parent_match ? 1 : 0)
+         << " attach=" << static_cast<unsigned>(attach_index)
+         << "/0x" << std::hex << attach_id << std::dec
+         << " recordsGen=" << records_generation;
+    boot_log_line(line.str().c_str());
+}
+
 void apply_peer_held_weapon_state() {
     coop::StatePacket peer{};
     void* puppet = nullptr;
@@ -19247,6 +19345,9 @@ void apply_peer_held_weapon_state() {
     const bool holster_pending =
         peer_gun == 0 && read_weapon_draw_state(puppet, hp_slot, hp_state) &&
         (hp_state == 2 || hp_state == 4);
+
+    census_remote_nadine_idle_arm_hand_game_thread(
+        puppet, peer, use_slot, now);
 
     if (!art_changed && !mode_changed && !gun_changed &&
         !attachment_pending && !readiness_pending && !holster_pending) {
@@ -43798,13 +43899,94 @@ constexpr ULONGLONG kIdleArmPoseFreshMs = 100;
 constexpr ULONGLONG kIdleArmPoseDwellMs = 350;
 constexpr std::int32_t kIdleArmPoseMaximumStateSequenceLag = 32;
 
+enum class IdleArmPoseAdmissionStage : std::uint32_t {
+    kPlayer = 1,
+    kLook = 2,
+    kFgOwner = 3,
+    kSkeleton = 4,
+    kWeaponController = 5,
+    kGrenadeController = 6,
+    kWeapon = 7,
+    kTransform = 8,
+    kScopeComplete = 9,
+    kPeerFresh = 10,
+    kPeerSnapshot = 11,
+    kPeerIdle = 12,
+    kDwell = 13,
+    kPoseRows = 14,
+};
+
+struct IdleArmPoseAdmissionDiagnostic {
+    IdleArmPoseAdmissionStage stage = IdleArmPoseAdmissionStage::kPlayer;
+    std::uint32_t expected_screen = 0xFFFFFFFFu;
+    std::uint32_t screen = 0xFFFFFFFFu;
+    std::uint32_t look = 0;
+    bool player_stable = false;
+    bool player_vtable_match = false;
+    bool fg_owner_match = false;
+    std::uint32_t target_skeleton_id = 0;
+    std::uint32_t target_joint_count = 0;
+    std::uint32_t underlying_skeleton_id = 0;
+    std::uint32_t underlying_joint_count = 0;
+    bool target_skeleton_readable = false;
+    bool underlying_skeleton_readable = false;
+    bool local_pose_readable = false;
+    std::uintptr_t weapon_controller_vtable_rva = 0;
+    bool weapon_controller_owner_match = false;
+    int weapon_slot = -1;
+    std::uint32_t weapon_state = 0xFFFFFFFFu;
+    std::uintptr_t grenade_controller_vtable_rva = 0;
+    bool grenade_controller_owner_match = false;
+    std::uint32_t grenade_state = 0xFFFFFFFFu;
+    std::uintptr_t weapon_vtable_rva = 0;
+    bool weapon_parent_match = false;
+    std::uint32_t weapon_art_id = 0;
+    bool position_valid = false;
+    bool orientation_valid = false;
+    ULONGLONG peer_age_ms = ~ULONGLONG{0};
+    std::uint16_t peer_flags = 0;
+    std::uint8_t peer_gun_state = 0xFF;
+    std::uint8_t peer_grenade_arc = 0xFF;
+    std::uint32_t peer_weapon_art_id = 0;
+    std::uint64_t peer_action_bits = 0;
+    float peer_max_movement = 0.0F;
+    float peer_max_velocity = 0.0F;
+    bool peer_motion_finite = true;
+    std::uint32_t dwell_reset_reason = 0;
+    std::uint32_t dwell_elapsed_bucket = 0;
+};
+
+const char* idle_arm_pose_admission_stage_name(
+    IdleArmPoseAdmissionStage stage) {
+    switch (stage) {
+    case IdleArmPoseAdmissionStage::kPlayer: return "player";
+    case IdleArmPoseAdmissionStage::kLook: return "look";
+    case IdleArmPoseAdmissionStage::kFgOwner: return "fg-owner";
+    case IdleArmPoseAdmissionStage::kSkeleton: return "skeleton";
+    case IdleArmPoseAdmissionStage::kWeaponController:
+        return "weapon-controller";
+    case IdleArmPoseAdmissionStage::kGrenadeController:
+        return "grenade-controller";
+    case IdleArmPoseAdmissionStage::kWeapon: return "weapon";
+    case IdleArmPoseAdmissionStage::kTransform: return "transform";
+    case IdleArmPoseAdmissionStage::kScopeComplete: return "scope-complete";
+    case IdleArmPoseAdmissionStage::kPeerFresh: return "peer-fresh";
+    case IdleArmPoseAdmissionStage::kPeerSnapshot: return "peer-snapshot";
+    case IdleArmPoseAdmissionStage::kPeerIdle: return "peer-idle";
+    case IdleArmPoseAdmissionStage::kDwell: return "dwell";
+    case IdleArmPoseAdmissionStage::kPoseRows: return "pose-rows";
+    }
+    return "unknown";
+}
+
 // The controller state machines outlive their input pulses.  They are therefore
 // the authoritative fail-closed boundary for the 350 ms steady-pose dwell: the
 // weapon must be fully WeaponOut and the grenade controller fully idle.  The
 // normal WeaponOut state intentionally owns an overlay action on sequencer
 // channel one, so channel emptiness is not an idle predicate.
 bool seh_read_idle_arm_pose_weapon_state(
-    void* player, int* slot_out, std::uint32_t* state_out) {
+    void* player, int* slot_out, std::uint32_t* state_out,
+    IdleArmPoseAdmissionDiagnostic* diagnostic) {
     if (slot_out == nullptr || state_out == nullptr) {
         return false;
     }
@@ -43818,17 +44000,28 @@ bool seh_read_idle_arm_pose_weapon_state(
         }
         auto* const controller = *reinterpret_cast<std::byte**>(
             static_cast<std::byte*>(player) + kPlayerWeaponControllerOffset);
-        if (controller == nullptr || readable_bytes(controller) < 0x138 ||
-            *reinterpret_cast<const std::uintptr_t*>(controller) !=
-                g_module + kPlayerWeaponControllerVtableRva ||
-            *reinterpret_cast<void* const*>(controller + 0x108) != player) {
+        if (controller == nullptr || readable_bytes(controller) < 0x138) {
             return false;
+        }
+        const std::uintptr_t vtable =
+            *reinterpret_cast<const std::uintptr_t*>(controller);
+        const bool owner_match =
+            *reinterpret_cast<void* const*>(controller + 0x108) == player;
+        if (diagnostic != nullptr) {
+            diagnostic->weapon_controller_vtable_rva =
+                vtable >= g_module ? vtable - g_module : vtable;
+            diagnostic->weapon_controller_owner_match = owner_match;
         }
         *slot_out = *reinterpret_cast<const std::int32_t*>(
             controller + kWeaponCtrlCurrentSlotOffset);
         *state_out = *reinterpret_cast<const std::uint32_t*>(
             controller + kWeaponCtrlDrawStateOffset);
-        return true;
+        if (diagnostic != nullptr) {
+            diagnostic->weapon_slot = *slot_out;
+            diagnostic->weapon_state = *state_out;
+        }
+        return vtable == g_module + kPlayerWeaponControllerVtableRva &&
+            owner_match;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *slot_out = -1;
         *state_out = 0;
@@ -43836,7 +44029,8 @@ bool seh_read_idle_arm_pose_weapon_state(
     }
 }
 
-bool seh_idle_arm_pose_fast_grenade_controller_is_idle(void* player) {
+bool seh_idle_arm_pose_fast_grenade_controller_is_idle(
+    void* player, IdleArmPoseAdmissionDiagnostic* diagnostic) {
     __try {
         if (player == nullptr || g_module == 0 ||
             readable_bytes(static_cast<std::byte*>(player) +
@@ -43846,11 +44040,23 @@ bool seh_idle_arm_pose_fast_grenade_controller_is_idle(void* player) {
         auto* const controller = *reinterpret_cast<std::byte**>(
             static_cast<std::byte*>(player) +
             kPlayerFastGrenadeControllerOffset);
-        return controller != nullptr && readable_bytes(controller) >= 0x124 &&
-            *reinterpret_cast<const std::uintptr_t*>(controller) ==
-                g_module + kFastGrenadeControllerVtableRva &&
-            *reinterpret_cast<void* const*>(controller + 0x108) == player &&
-            *reinterpret_cast<const std::uint32_t*>(controller + 0x120) == 0;
+        if (controller == nullptr || readable_bytes(controller) < 0x124) {
+            return false;
+        }
+        const std::uintptr_t vtable =
+            *reinterpret_cast<const std::uintptr_t*>(controller);
+        const bool owner_match =
+            *reinterpret_cast<void* const*>(controller + 0x108) == player;
+        const std::uint32_t state =
+            *reinterpret_cast<const std::uint32_t*>(controller + 0x120);
+        if (diagnostic != nullptr) {
+            diagnostic->grenade_controller_vtable_rva =
+                vtable >= g_module ? vtable - g_module : vtable;
+            diagnostic->grenade_controller_owner_match = owner_match;
+            diagnostic->grenade_state = state;
+        }
+        return vtable == g_module + kFastGrenadeControllerVtableRva &&
+            owner_match && state == 0;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
     }
@@ -43873,23 +44079,52 @@ struct IdleArmPoseOwnerScope {
 
 bool seh_resolve_idle_arm_pose_owner_scope(
     void* player, std::uint32_t expected_screen,
-    IdleArmPoseOwnerScope* output) {
+    IdleArmPoseOwnerScope* output,
+    IdleArmPoseAdmissionDiagnostic* diagnostic = nullptr) {
     if (output == nullptr) {
         return false;
     }
     *output = {};
+    if (diagnostic != nullptr) {
+        *diagnostic = {};
+        diagnostic->expected_screen = expected_screen;
+    }
     __try {
-        if (!g_state_net.enabled || g_module == 0 ||
-            !player_object_stable(player) ||
-            *reinterpret_cast<const std::uintptr_t*>(player) !=
-                g_module + kPlayerVtableRva ||
-            !player_screen_index_is(player, expected_screen)) {
+        const bool stable = player_object_stable(player);
+        const bool player_vtable_match = player != nullptr && g_module != 0 &&
+            *reinterpret_cast<const std::uintptr_t*>(player) ==
+                g_module + kPlayerVtableRva;
+        std::uint32_t screen = 0xFFFFFFFFu;
+        if (player != nullptr &&
+            readable_bytes(static_cast<std::byte*>(player) + 0x4010) >=
+                sizeof(screen)) {
+            screen = *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(player) + 0x4010);
+        }
+        if (diagnostic != nullptr) {
+            diagnostic->stage = IdleArmPoseAdmissionStage::kPlayer;
+            diagnostic->player_stable = stable;
+            diagnostic->player_vtable_match = player_vtable_match;
+            diagnostic->screen = screen;
+        }
+        if (!g_state_net.enabled || g_module == 0 || !stable ||
+            !player_vtable_match || screen != expected_screen) {
             return false;
         }
         std::uint32_t look = 0;
+        if (diagnostic != nullptr) {
+            diagnostic->stage = IdleArmPoseAdmissionStage::kLook;
+        }
         if (!seh_read_player_look(player, &look) ||
             look != kLegacyNadineAttachTargetLookId) {
+            if (diagnostic != nullptr) {
+                diagnostic->look = look;
+            }
             return false;
+        }
+        if (diagnostic != nullptr) {
+            diagnostic->look = look;
+            diagnostic->stage = IdleArmPoseAdmissionStage::kFgOwner;
         }
         auto* const player_bytes = static_cast<std::byte*>(player);
         if (readable_bytes(player_bytes) < 0x4014) {
@@ -43914,12 +44149,35 @@ bool seh_resolve_idle_arm_pose_owner_scope(
                 player_bytes + kGameObjectRuntimeIdOffset)) {
             return false;
         }
+        if (diagnostic != nullptr) {
+            diagnostic->fg_owner_match = true;
+            diagnostic->stage = IdleArmPoseAdmissionStage::kSkeleton;
+        }
         auto* const target_skeleton = *reinterpret_cast<std::byte**>(
             fg + kFgAnimDataSkeletonOffset);
         auto* const local_pose = *reinterpret_cast<std::byte**>(
             fg + kFgAnimDataJointCacheLocalPoseOffset);
-        if (target_skeleton == nullptr || local_pose == nullptr ||
-            readable_bytes(target_skeleton) < 0x48 ||
+        const bool target_skeleton_readable = target_skeleton != nullptr &&
+            readable_bytes(target_skeleton) >= 0x48;
+        const std::size_t required_local_pose_bytes =
+            static_cast<std::size_t>(
+                coop::kIdleArmPoseFirstJoint +
+                coop::kIdleArmPoseJointCount) * kJointLocalPoseStride;
+        const bool local_pose_readable = local_pose != nullptr &&
+            readable_bytes(local_pose) >= required_local_pose_bytes;
+        if (diagnostic != nullptr) {
+            diagnostic->target_skeleton_readable = target_skeleton_readable;
+            diagnostic->local_pose_readable = local_pose_readable;
+        }
+        if (target_skeleton_readable && diagnostic != nullptr) {
+            diagnostic->target_skeleton_id =
+                *reinterpret_cast<const std::uint32_t*>(
+                    target_skeleton + 0x24);
+            diagnostic->target_joint_count =
+                *reinterpret_cast<const std::uint32_t*>(
+                    target_skeleton + kSkeletonJointCountOffset);
+        }
+        if (!target_skeleton_readable || !local_pose_readable ||
             *reinterpret_cast<const std::uint32_t*>(
                 target_skeleton + 0x24) !=
                 kLegacyNadineTargetSkeletonArtId ||
@@ -43930,37 +44188,69 @@ bool seh_resolve_idle_arm_pose_owner_scope(
         }
         auto* const underlying_skeleton =
             *reinterpret_cast<std::byte**>(target_skeleton + 0x40);
-        if (underlying_skeleton == nullptr ||
-            readable_bytes(underlying_skeleton) < 0x12 ||
+        const bool underlying_skeleton_readable =
+            underlying_skeleton != nullptr &&
+            readable_bytes(underlying_skeleton) >= 0x12;
+        if (diagnostic != nullptr) {
+            diagnostic->underlying_skeleton_readable =
+                underlying_skeleton_readable;
+        }
+        if (underlying_skeleton_readable && diagnostic != nullptr) {
+            diagnostic->underlying_skeleton_id =
+                *reinterpret_cast<const std::uint32_t*>(
+                    underlying_skeleton + 0x04);
+            diagnostic->underlying_joint_count =
+                *reinterpret_cast<const std::uint16_t*>(
+                    underlying_skeleton + 0x10);
+        }
+        if (!underlying_skeleton_readable ||
             *reinterpret_cast<const std::uint32_t*>(
                 underlying_skeleton + 0x04) !=
                 kLegacyNadineUnderlyingSkeletonId ||
             *reinterpret_cast<const std::uint16_t*>(
                 underlying_skeleton + 0x10) !=
-                kLegacyNadineSkeletonJointCount ||
-            readable_bytes(local_pose) <
-                static_cast<std::size_t>(
-                    coop::kIdleArmPoseFirstJoint +
-                    coop::kIdleArmPoseJointCount) *
-                    kJointLocalPoseStride) {
+                kLegacyNadineSkeletonJointCount) {
             return false;
         }
         int weapon_slot = -1;
         std::uint32_t draw_state = 0;
+        if (diagnostic != nullptr) {
+            diagnostic->stage = IdleArmPoseAdmissionStage::kWeaponController;
+        }
         if (!seh_read_idle_arm_pose_weapon_state(
-                player, &weapon_slot, &draw_state) ||
-            draw_state != 2 || weapon_slot < 0 || weapon_slot >= 18 ||
-            !seh_idle_arm_pose_fast_grenade_controller_is_idle(player)) {
+                player, &weapon_slot, &draw_state, diagnostic) ||
+            draw_state != 2 || weapon_slot < 0 || weapon_slot >= 18) {
             return false;
+        }
+        if (diagnostic != nullptr) {
+            diagnostic->stage = IdleArmPoseAdmissionStage::kGrenadeController;
+        }
+        if (!seh_idle_arm_pose_fast_grenade_controller_is_idle(
+                player, diagnostic)) {
+            return false;
+        }
+        if (diagnostic != nullptr) {
+            diagnostic->stage = IdleArmPoseAdmissionStage::kWeapon;
         }
         void* const weapon = get_weapon_from_slot(player, weapon_slot);
-        if (weapon == nullptr || readable_bytes(weapon) < 0x864 ||
-            *reinterpret_cast<const std::uintptr_t*>(weapon) !=
-                g_module + kProcessWeaponVtableRva ||
-            !seh_weapon_parent_resolves_to_owner(weapon, player)) {
+        if (weapon == nullptr || readable_bytes(weapon) < 0x864) {
             return false;
         }
+        const std::uintptr_t weapon_vtable =
+            *reinterpret_cast<const std::uintptr_t*>(weapon);
+        const bool weapon_parent_match =
+            seh_weapon_parent_resolves_to_owner(weapon, player);
         const std::uint32_t art = weapon_art_id_from_object(weapon);
+        if (diagnostic != nullptr) {
+            diagnostic->weapon_vtable_rva = weapon_vtable >= g_module
+                ? weapon_vtable - g_module : weapon_vtable;
+            diagnostic->weapon_parent_match = weapon_parent_match;
+            diagnostic->weapon_art_id = art;
+        }
+        if (weapon_vtable != g_module + kProcessWeaponVtableRva ||
+            !weapon_parent_match) {
+            return false;
+        }
         if (art != kCoopPistolArtId && art != kCoopRifleArtId) {
             return false;
         }
@@ -43978,8 +44268,15 @@ bool seh_resolve_idle_arm_pose_owner_scope(
             sizeof(output->move_world));
         output->move_magnitude = *reinterpret_cast<const float*>(
             player_bytes + 0x3A1C);
-        if (!valid_network_position(output->position) ||
-            !valid_network_orientation(output->orientation)) {
+        const bool position_valid = valid_network_position(output->position);
+        const bool orientation_valid =
+            valid_network_orientation(output->orientation);
+        if (diagnostic != nullptr) {
+            diagnostic->stage = IdleArmPoseAdmissionStage::kTransform;
+            diagnostic->position_valid = position_valid;
+            diagnostic->orientation_valid = orientation_valid;
+        }
+        if (!position_valid || !orientation_valid) {
             return false;
         }
         output->player = player;
@@ -43989,6 +44286,9 @@ bool seh_resolve_idle_arm_pose_owner_scope(
         output->weapon_art_id = art;
         output->weapon_slot = weapon_slot;
         output->valid = true;
+        if (diagnostic != nullptr) {
+            diagnostic->stage = IdleArmPoseAdmissionStage::kScopeComplete;
+        }
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *output = {};
@@ -44064,6 +44364,129 @@ bool local_player_is_steady_drawn_idle(
             ~kInputBlockButtonBaseMask) == 0;
 }
 
+void log_idle_arm_pose_source_admission(
+    void* player, const IdleArmPoseAdmissionDiagnostic& diagnostic) {
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static std::uint64_t last_signature = 0;
+    static ULONGLONG last_log_ms = 0;
+    static unsigned log_count = 0;
+    static bool saturation_logged = false;
+
+    std::uint64_t signature = 1469598103934665603ull;
+    const auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ull;
+    };
+    mix(reinterpret_cast<std::uintptr_t>(player));
+    mix(static_cast<std::uint32_t>(diagnostic.stage));
+    mix(diagnostic.screen);
+    mix(diagnostic.look);
+    mix(diagnostic.target_skeleton_id);
+    mix(diagnostic.target_joint_count);
+    mix(diagnostic.underlying_skeleton_id);
+    mix(diagnostic.underlying_joint_count);
+    mix(diagnostic.target_skeleton_readable ? 1u : 0u);
+    mix(diagnostic.underlying_skeleton_readable ? 1u : 0u);
+    mix(diagnostic.local_pose_readable ? 1u : 0u);
+    mix(diagnostic.weapon_controller_vtable_rva);
+    mix(diagnostic.weapon_controller_owner_match ? 1u : 0u);
+    mix(static_cast<std::uint32_t>(diagnostic.weapon_slot));
+    mix(diagnostic.weapon_state);
+    mix(diagnostic.grenade_controller_vtable_rva);
+    mix(diagnostic.grenade_controller_owner_match ? 1u : 0u);
+    mix(diagnostic.grenade_state);
+    mix(diagnostic.weapon_vtable_rva);
+    mix(diagnostic.weapon_parent_match ? 1u : 0u);
+    mix(diagnostic.weapon_art_id);
+    mix(diagnostic.position_valid ? 1u : 0u);
+    mix(diagnostic.orientation_valid ? 1u : 0u);
+    mix(diagnostic.peer_flags);
+    mix(diagnostic.peer_gun_state);
+    mix(diagnostic.peer_weapon_art_id);
+    mix(diagnostic.peer_grenade_arc);
+    mix(diagnostic.peer_action_bits != 0 ? 1u : 0u);
+    mix(diagnostic.peer_motion_finite ? 1u : 0u);
+    mix(diagnostic.dwell_reset_reason);
+    mix(diagnostic.dwell_elapsed_bucket);
+
+    const ULONGLONG now = GetTickCount64();
+    bool should_log = false;
+    bool log_saturation = false;
+    AcquireSRWLockExclusive(&lock);
+    if (log_count >= 32 && !saturation_logged) {
+        saturation_logged = true;
+        log_saturation = true;
+    } else if (log_count < 32 && signature != last_signature &&
+        (last_log_ms == 0 || now < last_log_ms || now - last_log_ms >= 250)) {
+        last_signature = signature;
+        last_log_ms = now;
+        ++log_count;
+        should_log = true;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    if (log_saturation) {
+        boot_log_line("NADINE-IDLE-ARM-ADMISSION-SATURATED rows=32");
+        return;
+    }
+    if (!should_log) {
+        return;
+    }
+
+    std::ostringstream line;
+    line << "NADINE-IDLE-ARM-ADMISSION stage="
+         << static_cast<std::uint32_t>(diagnostic.stage) << ":"
+         << idle_arm_pose_admission_stage_name(diagnostic.stage)
+         << " player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(player) << std::dec
+         << " stable=" << (diagnostic.player_stable ? 1 : 0)
+         << " playerVt=" << (diagnostic.player_vtable_match ? 1 : 0)
+         << " screen=" << diagnostic.screen << "/"
+         << diagnostic.expected_screen
+         << " look=0x" << std::hex << diagnostic.look
+         << " fgOwner=" << std::dec
+         << (diagnostic.fg_owner_match ? 1 : 0)
+         << " skel=0x" << std::hex << diagnostic.target_skeleton_id
+         << "/" << std::dec << diagnostic.target_joint_count
+         << " under=0x" << std::hex << diagnostic.underlying_skeleton_id
+         << "/" << std::dec << diagnostic.underlying_joint_count
+         << " readable=" << (diagnostic.target_skeleton_readable ? 1 : 0)
+         << "/" << (diagnostic.underlying_skeleton_readable ? 1 : 0)
+         << "/" << (diagnostic.local_pose_readable ? 1 : 0)
+         << " wcVt=0x" << std::hex
+         << diagnostic.weapon_controller_vtable_rva
+         << " wcOwner=" << std::dec
+         << (diagnostic.weapon_controller_owner_match ? 1 : 0)
+         << " slot=" << diagnostic.weapon_slot
+         << " state=" << diagnostic.weapon_state
+         << " grVt=0x" << std::hex
+         << diagnostic.grenade_controller_vtable_rva
+         << " grOwner=" << std::dec
+         << (diagnostic.grenade_controller_owner_match ? 1 : 0)
+         << " grState=" << diagnostic.grenade_state
+         << " weaponVt=0x" << std::hex << diagnostic.weapon_vtable_rva
+         << " parent=" << std::dec
+         << (diagnostic.weapon_parent_match ? 1 : 0)
+         << " art=0x" << std::hex << diagnostic.weapon_art_id
+         << std::dec << " xf=" << (diagnostic.position_valid ? 1 : 0)
+         << "/" << (diagnostic.orientation_valid ? 1 : 0)
+         << " age=" << std::dec << diagnostic.peer_age_ms
+         << " flags=0x" << std::hex << diagnostic.peer_flags
+         << " gun=" << std::dec
+         << static_cast<unsigned>(diagnostic.peer_gun_state)
+         << " peerArt=0x" << std::hex
+         << diagnostic.peer_weapon_art_id
+         << " grenade=" << std::dec
+         << static_cast<unsigned>(diagnostic.peer_grenade_arc)
+         << " action=0x" << std::hex << diagnostic.peer_action_bits
+         << std::dec << " moveMax=" << diagnostic.peer_max_movement
+         << " velMax=" << diagnostic.peer_max_velocity
+         << " motionFinite=" << (diagnostic.peer_motion_finite ? 1 : 0)
+         << " dwellReset=0x" << std::hex
+         << diagnostic.dwell_reset_reason << std::dec
+         << " dwellBucket=" << diagnostic.dwell_elapsed_bucket;
+    boot_log_line(line.str().c_str());
+}
+
 void reset_idle_arm_pose_dwell(IdleArmPoseDwellState& state) {
     AcquireSRWLockExclusive(&g_idle_arm_pose_dwell_lock);
     state = {};
@@ -44074,13 +44497,23 @@ bool idle_arm_pose_dwell_ready(
     IdleArmPoseDwellState& state, void* player,
     std::uint64_t session_id, std::uint32_t weapon_art_id,
     const float position[3],
-    const float orientation[4], ULONGLONG now) {
+    const float orientation[4], ULONGLONG now,
+    IdleArmPoseAdmissionDiagnostic* diagnostic = nullptr) {
     bool ready = false;
     AcquireSRWLockExclusive(&g_idle_arm_pose_dwell_lock);
-    bool reset = state.player != player || state.session_id != session_id ||
-        state.weapon_art_id != weapon_art_id ||
-        state.stable_since_ms == 0 || state.last_seen_ms == 0 ||
-        now < state.last_seen_ms || now - state.last_seen_ms > 100;
+    std::uint32_t reset_reason = 0;
+    if (state.player != player) reset_reason |= 0x01;
+    if (state.session_id != session_id) reset_reason |= 0x02;
+    if (state.weapon_art_id != weapon_art_id) reset_reason |= 0x04;
+    if (state.stable_since_ms == 0 || state.last_seen_ms == 0) {
+        reset_reason |= 0x08;
+    }
+    if (now < state.last_seen_ms) {
+        reset_reason |= 0x10;
+    } else if (state.last_seen_ms != 0 && now - state.last_seen_ms > 100) {
+        reset_reason |= 0x20;
+    }
+    bool reset = reset_reason != 0;
     if (!reset) {
         float position_delta_sq = 0.0F;
         float orientation_dot = 0.0F;
@@ -44091,10 +44524,15 @@ bool idle_arm_pose_dwell_ready(
         for (std::size_t i = 0; i < 4; ++i) {
             orientation_dot += orientation[i] * state.quat[i];
         }
-        reset = !std::isfinite(position_delta_sq) ||
-            position_delta_sq > 0.01F * 0.01F ||
-            !std::isfinite(orientation_dot) ||
-            std::abs(orientation_dot) < 0.9998F;
+        if (!std::isfinite(position_delta_sq) ||
+            position_delta_sq > 0.01F * 0.01F) {
+            reset_reason |= 0x40;
+        }
+        if (!std::isfinite(orientation_dot) ||
+            std::abs(orientation_dot) < 0.9998F) {
+            reset_reason |= 0x80;
+        }
+        reset = reset_reason != 0;
     }
     if (reset) {
         state.player = player;
@@ -44107,6 +44545,13 @@ bool idle_arm_pose_dwell_ready(
     state.last_seen_ms = now;
     ready = now >= state.stable_since_ms &&
         now - state.stable_since_ms >= kIdleArmPoseDwellMs;
+    if (diagnostic != nullptr) {
+        diagnostic->dwell_reset_reason = reset_reason;
+        const ULONGLONG elapsed = now >= state.stable_since_ms
+            ? now - state.stable_since_ms : 0;
+        diagnostic->dwell_elapsed_bucket = static_cast<std::uint32_t>(
+            (std::min)(elapsed / 100, ULONGLONG{0xFFFFFFFFu}));
+    }
     ReleaseSRWLockExclusive(&g_idle_arm_pose_dwell_lock);
     return ready;
 }
@@ -44169,24 +44614,88 @@ bool seh_apply_idle_arm_pose_rows(
 
 bool capture_remote_nadine_idle_arm_pose(void* player) {
     IdleArmPoseOwnerScope scope{};
+    IdleArmPoseAdmissionDiagnostic diagnostic{};
     coop::StatePacket peer{};
     const ULONGLONG now = GetTickCount64();
     const ULONGLONG received =
         g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
-    if (g_net_role_b || player != retained_player_object(1) ||
-        !seh_resolve_idle_arm_pose_owner_scope(player, 1, &scope) ||
-        received == 0 || now < received ||
-        now - received > kIdleArmPoseFreshMs ||
-        !copy_peer_state_snapshot(peer) ||
-        !peer_state_is_steady_drawn_idle(peer, scope.weapon_art_id)) {
+    if (g_net_role_b || player != retained_player_object(1)) {
         reset_idle_arm_pose_dwell(g_idle_arm_pose_source_dwell);
         invalidate_idle_arm_pose_capture();
         return false;
     }
+    if (!seh_resolve_idle_arm_pose_owner_scope(
+            player, 1, &scope, &diagnostic)) {
+        log_idle_arm_pose_source_admission(player, diagnostic);
+        reset_idle_arm_pose_dwell(g_idle_arm_pose_source_dwell);
+        invalidate_idle_arm_pose_capture();
+        return false;
+    }
+    diagnostic.stage = IdleArmPoseAdmissionStage::kPeerFresh;
+    if (received != 0 && now >= received) {
+        diagnostic.peer_age_ms = now - received;
+    }
+    if (received == 0 || now < received ||
+        now - received > kIdleArmPoseFreshMs) {
+        log_idle_arm_pose_source_admission(player, diagnostic);
+        reset_idle_arm_pose_dwell(g_idle_arm_pose_source_dwell);
+        invalidate_idle_arm_pose_capture();
+        return false;
+    }
+    diagnostic.stage = IdleArmPoseAdmissionStage::kPeerSnapshot;
+    if (!copy_peer_state_snapshot(peer)) {
+        log_idle_arm_pose_source_admission(player, diagnostic);
+        reset_idle_arm_pose_dwell(g_idle_arm_pose_source_dwell);
+        invalidate_idle_arm_pose_capture();
+        return false;
+    }
+    diagnostic.peer_flags = peer.flags;
+    diagnostic.peer_gun_state = peer.gun_state;
+    diagnostic.peer_weapon_art_id = peer.held_weapon_art_id;
+    diagnostic.peer_grenade_arc = peer.grenade_arc_active;
+    diagnostic.peer_action_bits =
+        (peer.input_buttons | peer.buttons_pressed | peer.buttons_released) &
+        ~kInputBlockButtonBaseMask;
+    diagnostic.peer_motion_finite = std::isfinite(peer.move_magnitude);
+    diagnostic.peer_max_movement = diagnostic.peer_motion_finite
+        ? std::abs(peer.move_magnitude) : 0.0F;
+    for (const float value : peer.move_stick) {
+        if (!std::isfinite(value)) {
+            diagnostic.peer_motion_finite = false;
+        } else {
+            diagnostic.peer_max_movement =
+                (std::max)(diagnostic.peer_max_movement, std::abs(value));
+        }
+    }
+    for (const float value : peer.move_world) {
+        if (!std::isfinite(value)) {
+            diagnostic.peer_motion_finite = false;
+        } else {
+            diagnostic.peer_max_movement =
+                (std::max)(diagnostic.peer_max_movement, std::abs(value));
+        }
+    }
+    for (const float value : peer.velocity) {
+        if (!std::isfinite(value)) {
+            diagnostic.peer_motion_finite = false;
+        } else {
+            diagnostic.peer_max_velocity =
+                (std::max)(diagnostic.peer_max_velocity, std::abs(value));
+        }
+    }
+    diagnostic.stage = IdleArmPoseAdmissionStage::kPeerIdle;
+    if (!peer_state_is_steady_drawn_idle(peer, scope.weapon_art_id)) {
+        log_idle_arm_pose_source_admission(player, diagnostic);
+        reset_idle_arm_pose_dwell(g_idle_arm_pose_source_dwell);
+        invalidate_idle_arm_pose_capture();
+        return false;
+    }
+    diagnostic.stage = IdleArmPoseAdmissionStage::kDwell;
     if (!idle_arm_pose_dwell_ready(
             g_idle_arm_pose_source_dwell, player,
             g_state_net.idle_arm_pose_session_id, scope.weapon_art_id,
-            peer.pos, peer.quat, now)) {
+            peer.pos, peer.quat, now, &diagnostic)) {
+        log_idle_arm_pose_source_admission(player, diagnostic);
         invalidate_idle_arm_pose_capture();
         return false;
     }
@@ -44203,7 +44712,9 @@ bool capture_remote_nadine_idle_arm_pose(void* player) {
     if (!seh_copy_idle_arm_pose_rows(scope.local_pose, capture.local)) {
         capture.valid = false;
     }
+    diagnostic.stage = IdleArmPoseAdmissionStage::kPoseRows;
     if (!capture.valid || !valid_idle_arm_pose_rows(capture.local)) {
+        log_idle_arm_pose_source_admission(player, diagnostic);
         invalidate_idle_arm_pose_capture();
         return false;
     }
@@ -44290,6 +44801,71 @@ bool apply_remote_nadine_idle_arm_pose(void* player) {
     return applied;
 }
 
+void log_idle_arm_pose_postblend_entry(void* player) {
+    if (g_net_role_b) {
+        return;
+    }
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static std::uint64_t signatures[16]{};
+    static unsigned signature_count = 0;
+    static std::uint64_t total_count = 0;
+    static std::uint64_t retained0_count = 0;
+    static std::uint64_t retained1_count = 0;
+
+    void* const retained0 = retained_player_object(0);
+    void* const retained1 = retained_player_object(1);
+    const bool is_retained0 = player != nullptr && player == retained0;
+    const bool is_retained1 = player != nullptr && player == retained1;
+    std::uint64_t signature =
+        static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(player));
+    signature ^= is_retained0 ? 0x1000000000000000ull : 0;
+    signature ^= is_retained1 ? 0x2000000000000000ull : 0;
+    if (signature == 0) {
+        signature = 1;
+    }
+
+    bool should_log = false;
+    std::uint64_t total = 0;
+    std::uint64_t count0 = 0;
+    std::uint64_t count1 = 0;
+    AcquireSRWLockExclusive(&lock);
+    ++total_count;
+    if (is_retained0) {
+        ++retained0_count;
+    }
+    if (is_retained1) {
+        ++retained1_count;
+    }
+    bool seen = false;
+    for (unsigned i = 0; i < signature_count; ++i) {
+        if (signatures[i] == signature) {
+            seen = true;
+            break;
+        }
+    }
+    if (!seen && signature_count < 16) {
+        signatures[signature_count++] = signature;
+        should_log = true;
+        total = total_count;
+        count0 = retained0_count;
+        count1 = retained1_count;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    if (!should_log) {
+        return;
+    }
+
+    std::ostringstream line;
+    line << "NADINE-IDLE-ARM-POSTBLEND-ENTRY player=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(player)
+         << " retained0=0x" << reinterpret_cast<std::uintptr_t>(retained0)
+         << " retained1=0x" << reinterpret_cast<std::uintptr_t>(retained1)
+         << std::dec << " eq0=" << (is_retained0 ? 1 : 0)
+         << " eq1=" << (is_retained1 ? 1 : 0)
+         << " counts=" << total << "/" << count0 << "/" << count1;
+    boot_log_line(line.str().c_str());
+}
+
 using PlayerPostAnimBlendingAsyncFunction =
     std::int64_t(__fastcall*)(void*);
 PlayerPostAnimBlendingAsyncFunction
@@ -44302,6 +44878,7 @@ std::int64_t __fastcall hooked_player_post_anim_blending_async(void* player) {
     }
     const std::int64_t result = original(player);
     if constexpr (kEnableLegacyNadineIdleArmPoseRoundTrip) {
+        log_idle_arm_pose_postblend_entry(player);
         if (!g_net_role_b) {
             if (player == retained_player_object(1)) {
                 capture_remote_nadine_idle_arm_pose(player);
@@ -55135,8 +55712,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-11abt "
-        "(strict stable-idle Nadine arm round trip; floating sling disabled)");
+        "TLL co-op runtime init 2026-08-11abu "
+        "(bounded Nadine arm admission census; floating sling disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
