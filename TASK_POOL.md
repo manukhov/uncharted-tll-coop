@@ -9,16 +9,16 @@
 - синхронизация всего состояния и всех действий игроков;
 - синхронизация противников только после игроков.
 
-## P0 CURRENT: return the visually correct remote Nadine arm pose to local Nadine (2026-08-11)
+## P0 CURRENT: locate the final rendered Nadine arm-pose owner (2026-08-11)
 
 - [x] Reject the local-only presentation candidates that do not own the final
       drawn pose: holster/back transforms, the flashlight/debug kill switch,
       `auto -> run-gun-idle`, a forced nonempty WeaponPartial, individual Chloe
       hands clips and blanket `WeaponIKFeather` suppression.
-- [x] Close the final scheduling boundary. `AnimManager` performs the normal
-      blend and Player vtable `+0x408 = Player_PostAnimBlending_Async
+- [x] Close the local-pose scheduling boundary. `AnimManager` performs the
+      normal blend and Player vtable `+0x408 = Player_PostAnimBlending_Async
       0x1410EB6A0` before the subsequent JointBlend job consumes the persistent
-      local-pose array. No later Player arm-pose writer remains in that phase.
+      local-pose array. This is not the final rendered-palette boundary.
 - [x] Implement a narrow A-to-B return channel for the already-correct remote
       Nadine pose: role A captures only C39 joints `19..30` after stock
       postblend, endpoint-validates and sends a 616-byte `ARMP` packet, and role B
@@ -68,13 +68,21 @@
       fix is necessary but not sufficient because full valid weapon packets
       alternate with producer-suppressed metadata packets and the latter reset
       the 350 ms source dwell.
-- [ ] Run one final bounded `abw` visual exam after build/review/commit/push.
-      A packet is treated as a non-resetting metadata gap only when `flag80=0`,
-      `gun=255`, `art=0` and the complete movement/action/ADS/cover/grenade idle
-      predicate passes after filling only those three weapon fields. It cannot
-      create a pose; capture still requires the next full `gun=1`, matching-art
-      packet. Expected: A `CAPTURE/SEND`, B `RECV/APPLY applied=1`, then local
-      Nadine P99/Mazur idle arms match the already-correct remote view.
+- [x] Run the final bounded `abw` local-row exam. Role A emitted
+      `CAPTURE/SEND`, role B emitted matching `RECV/APPLY applied=1`, and the
+      local grip remained visually unchanged. Classify the twelve-row
+      `Fg+0x100` transfer after Player `+0x408` as **RUNTIME REJECTED** for this
+      defect; disable it in build `abx`.
+- [ ] Close the actual final visible boundary statically. The later
+      `AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00` consumes
+      `Fg+0x100`, executes command segments, and only then publishes the current
+      48-byte-per-joint skinning palette at `Fg+0x230`. The renderer copies that
+      palette in `FgDrawManager_PrepareInstanceForRendering 0x14181A9B0`.
+- [ ] Prove the retained Player body-Fg identity at the renderer seam and derive
+      the smallest exact C39 arm/hand/helper matrix set. Do not restore the old
+      580-joint full-palette copy and do not request another runtime test until
+      owner, matrix set, ordering and packet budget are all closed with three
+      independent evidence types and a written falsifiable prediction.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that

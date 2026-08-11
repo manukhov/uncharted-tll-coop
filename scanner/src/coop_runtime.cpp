@@ -1524,13 +1524,12 @@ struct StateNetState {
     bool enabled = false;                  // toggled on once peer + puppet ready
 };
 
-// The local legacy-Nadine weapon pose and the correctly rendered remote Nadine
-// use the same exact 580-joint C39 skeleton, but only the local Player runs the
-// defective late weapon-IK composition. Role A therefore returns the remote
-// Nadine's final post-IK clavicle-to-hand local rows to role B. Admission is
-// deliberately restricted to a settled, non-aiming, non-moving draw-state 2
-// P99/Mazur idle; all transitions and dynamic actions remain stock.
-constexpr bool kEnableLegacyNadineIdleArmPoseRoundTrip = true;
+// RUNTIME REJECTED in build abw: the A->B transport and the twelve local-pose
+// writes all completed, but the visible P99/Mazur grip did not change.  The
+// subsequent JointBlend job still rebuilds the renderer's final Fg+0x230
+// palette after this Player +0x408 boundary, so keep the disproved local-row
+// relay compiled out while that final-palette owner is resolved statically.
+constexpr bool kEnableLegacyNadineIdleArmPoseRoundTrip = false;
 constexpr bool kEnableLegacyNadineIdleArmPoseAdmissionCensus = false;
 constexpr std::uint32_t kLegacyNadineTargetSkeletonArtId = 0xED25C708u;
 constexpr std::uint32_t kLegacyNadineUnderlyingSkeletonId = 0xC39CA709u;
@@ -55750,8 +55749,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-11abw "
-        "(gap-tolerant Nadine arm relay; floating sling disabled)");
+        "TLL co-op runtime init 2026-08-11abx "
+        "(rejected Nadine local-row relay disabled; floating sling disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

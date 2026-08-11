@@ -22398,3 +22398,55 @@ by B `RECV/APPLY applied=1` with matching art and bounded sequence lag. Missing
 markers reject a later admission gate; complete markers with unchanged arms
 reject the postblend row-transfer hypothesis; any dynamic-action apply or
 non-arm regression rejects the gap policy.
+
+### 2026-08-11 RUNTIME REJECTED (`abw`) / STATIC CORRECTION (`abx`): Player local-pose rows are not the visible grip boundary
+
+The written `abw` exam reached the behavioral boundary completely. Role A
+captured and sent matching-art Mazur arm packets, role B received them with
+bounded lag and repeatedly logged `NADINE-IDLE-ARM-APPLY ... applied=1`. The
+user observed **no visual change** in the P99/Mazur grip. Transport, endpoint,
+session, admission and the immediate twelve-row write therefore pass; the
+hypothesis that copying C39 local-pose rows `19..30` after Player vtable
+`+0x408` is visually sufficient is **RUNTIME REJECTED**. Build `abx` compiles
+that relay out. No further game run is authorized at this boundary.
+
+The exact scheduler order corrects the earlier claim that Player `+0x408` was
+the final arm-pose boundary. `AnimManager_AsyncObjectUpdateJointBlendJob
+0x141A92A00` runs afterward, reads the persistent local-pose pointer at
+`FgAnimData+0x100`, builds and evaluates command segments through
+`ProcessAnimCmdListSegment 0x141AB97C0`, and only at `0x141A93410..0x141A9341E`
+swaps the newly built 48-byte-per-joint skinning palette into `Fg+0x230`.
+`AnimCmdEvaluator_WriteSkinningPalette 0x14218B170` is the opcode-26 writer.
+Independently, `FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` copies
+exactly `48 * jointCount` bytes from `Fg+0x230` into the upload palette before
+preparing driven instances. Thus the first engine state directly consumed by
+the renderer is the final palette, not the pre-JointBlend local rows.
+
+This does not mean that the transferred rows were fake inputs.
+`PlayerWeaponIKAction_Update 0x1410950E0` reaches
+`WeaponIKFeather_Apply 0x1418F2700`; its paired JointSets commit through
+`JointSet_CommitJointTransformsAndReset 0x14181ECD0`, whose writes at
+`0x14181ED53..0x14181ED5A` target the same `Fg+0x100 + 48*joint` array. The
+relay overwrote a genuine local IK result, but a later palette owner or an
+already-identical source/target local pose made that overwrite visually
+insufficient.
+
+The remaining competitors are explicit. **Leading:** the role-A and role-B
+local rows are already identical while the correct remote presentation is
+created later in the final `Fg+0x230` palette. **Open:** the rows differ but the
+later JointBlend command stream overwrites or ignores those joints. **Weaker:**
+the retained Player body palette is correct but a different drawable/Fg owner
+reaches rendering. The renderer's direct `Fg+0x230` consumer weakens the last
+two only after exact retained-owner identity is closed.
+
+The next work is static-only: prove the retained Player body-Fg at the renderer
+seam, derive the smallest explicit C39 matrix set for both arms, palms,
+attachment joints, fingers and required helpers, and prove no later overwrite.
+Final palette matrices are already absolute in their object frame, so omitted
+finger/helper matrices cannot be assumed to inherit from copied parents. The
+old 580-joint full-palette copies/probes caused severe lag and remain
+**REJECTED**. No new runtime test is allowed until the compact set, owner,
+ordering and transport size satisfy the evidence quota and have a written
+falsifiable prediction. The Mazur sling remains a separate **REJECTED** manual
+ShowMesh path: legacy Nadine still lacks the authored `strap2..14` guide chain,
+so merely revealing it produces the observed floating, non-simulated mesh.
