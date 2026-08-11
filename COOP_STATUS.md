@@ -22136,3 +22136,99 @@ The competing hypotheses “late phase pose writer”, “stale hip binding” a
 test is authorized. The remaining static frontier is the pair of scalar inputs
 to terminal `WeaponIKFeather_Apply` and the exact local-versus-remote lifecycle
 that supplies them; no scalar suppression or action bypass is yet justified.
+
+### 2026-08-11 STATIC / IMPLEMENTED (`abt`): return the correct remote Nadine arm pose after Player postblend
+
+The local/remote visual split supplies a stronger boundary than another guessed
+clip or IK switch. On role A, the network Nadine is already rendered with the
+correct P99 grip and Mazur two-hand idle pose. On role B, the same legacy-Nadine
+Player is visibly wrong only in its local presentation. Build `abt` therefore
+returns the final, already-evaluated remote Nadine arm rows from A to B instead
+of trying to synthesize a new pose.
+
+The implementation hooks exact Player vtable slot `+0x408` at
+`0x142A4C3F0`, whose stock target is
+`Player_PostAnimBlending_Async 0x1410EB6A0`, and always calls stock first.
+`AnimManager_CreateAsyncUpdateJobFunctor 0x141781390` schedules the normal
+Step/blend job, this Player postblend call, and then
+`AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00`. The latter consumes
+the persistent local-pose pointer at `FgAnimData+0x100`; its setup clears the
+world-valid set before rebuilding the final palette. The copied rows therefore
+survive the correct boundary and their omitted descendants are rebuilt rather
+than left stale. The later Player `+0x410` update and attachable post-joint phase
+do not write the Player arm locals; they consume the resulting pose.
+
+The payload is deliberately smaller than a character pose. C39 joints `19..30`
+are the two primary paired chains `clavicle -> shoulder -> elbow -> wrist ->
+palm -> hand_prop_attachment`, with parent indices
+`18,18,19,20,21,22,23,24,25,26,27,28`. Build `abt` copies the twelve 48-byte
+local rows and calls the native
+`JointCache_RecomputeWorldLocatorFromLocalPose 0x141688320` in ascending order.
+It does not replace `spined`/head/legs, finger locals, helper policy, animation
+states or weapon attachment records. The IDB label records the exact ABI
+`RCX=JointCache, EDX=joint` and its local-to-world/valid-bit behavior.
+
+The transport is an endpoint-validated 616-byte `ARMP` packet. Role A captures only
+retained Player 1 on screen 1 and sends from its bound receive socket; role B
+accepts only the configured peer IP and bound port, a valid session epoch,
+monotonic sequence and a packet no older than 100 ms. Role B reapplies the
+latest admitted packet after stock on every qualifying frame rather than once
+per datagram. A 350 ms anchored dwell is required independently at source and
+target, and source StatePacket lag must be `0..32`.
+
+Admission is exact and symmetric. Both sides require the stable legacy-Nadine
+Player/vtable/look, screen, Fg weak owner and generation, target skeleton
+`ED25C708`, underlying C39 skeleton `C39CA709` with 580 joints, an exact
+same-owner ProcessWeapon of art P99 `8075397D` or Mazur `33E29A1B`, and the
+current inventory slot. `Player+0x1D88` must resolve exact
+PlayerWeaponController vtable `0x142A47F90`, owner `+0x108` must be the same
+Player, and state `+0x134` must be exactly `WeaponOut (2)`. This persistent state
+excludes Draw, Reloading, Aiming, Holster, hand switch, Rechamber and Drop for
+their full action lifetime. Requiring sequencer channel 1 to be empty was
+statically **REJECTED**: normal WeaponOut intentionally owns/replenishes a
+`PlayerPlayWeaponOverlayAction` there; persistent WeaponIK lives separately on
+channel 4.
+
+The remaining post-input action gap is grenade throw. The short
+`grenade_arc_active` pulse can end before the authored throw completes, so both
+sides additionally require `Player+0x1E50` to resolve exact
+FastGrenadeController vtable `0x142A227A0`, same owner at `+0x108`, and idle
+state `+0x120 == 0`. Concrete writers keep StartArc/throw states `1/7/8/9`
+nonzero until `UpdateStateAndCommitThrow 0x140E21310` or reset returns to idle.
+Movement/input/velocity, cover, PeerCamera, PoseSeed, AimPitch and AimFootTurn
+also reject the sample. Normal non-ADS PeerFreeLook remains allowed because its
+known StrafeIK path owns `headb/spined`, while the transferred arm rows remain
+local children of the receiver's native `spined`.
+
+Three independent evidence classes support the bounded test: scheduler/call-order and
+no-late-writer dataflow; exact C39 hierarchy plus native JointCache consumer;
+and the endpoint/session/owner/state-machine closure above. Competing
+hypotheses are recorded as **REJECTED**: holster/back transforms cannot admit a
+drawn right-hand endpoint; `auto -> run-gun-idle` is a special locomotion/action
+policy; nonempty WeaponPartial fights a stock clear; individual Chloe clip
+substitution crosses skeleton/mask semantics; and blanket WeaponIKFeather
+suppression improved P99 only partially while leaving the base defect.
+
+This is not yet an always-on general-action repair. Player melee is owned by the
+independent controller at `Player+0x1DE0` (vtable `0x142A6C2E8`), and
+`Player_BuildStrafeIkReferenceLocator 0x1410F9050` has an explicit
+`StrafeMelee 0x72803DCA` branch outside the weapon/grenade state machines.
+Flinch/interact partial actions have the same unclosed class of lifetime. Thus
+the claim that state 2/state 0 means every Player action is idle remains a
+**HYPOTHESIS**. Runtime is authorized only as the written stationary P99/Mazur
+exam with no melee, damage/flinch or interaction; general activation stays
+blocked until that independent action scope is positively closed.
+
+**Falsifiable runtime prediction:** after at least 0.5 s stationary with P99,
+then separately Mazur, role A must log `NADINE-IDLE-ARM-CAPTURE` and `SEND`; role
+B must log `RECV` and `APPLY` with matching art, `lag=0..32` and `applied=1`.
+The local role-B Nadine grip/idle arms must then match the already-correct remote
+view without changing head, spine, legs or attachment placement. Moving,
+aiming, reloading, switching/rechambering, using a grenade or entering cover
+must produce no apply. The bounded exam must contain no melee, damage/flinch or
+interaction. Missing markers reject packaging/admission; complete
+markers with unchanged local arms reject the chosen pose boundary; any crash,
+lag, non-arm regression or action-time apply rejects the repair. The Mazur sling
+is explicitly outside this test: manual ShowMesh is already **REJECTED** because
+legacy Nadine has no authored `strap2..14` guide chain and exposes a floating,
+non-simulated drawable.

@@ -141,6 +141,15 @@ constexpr std::uintptr_t kAnimManagerPublishWorldTransformCallsiteRva = 0x1A8FC0
 constexpr std::uintptr_t kCharacterLegIkControllerUpdateRva = 0x1F9E6F0;
 constexpr std::uintptr_t kCharacterLegIkControllerUpdateVtableSlotRva =
     0x2BBB478;
+// Player vtable +0x408. AnimManager calls this after PerformAnimBlend and before
+// the separately queued AsyncObjectUpdate_JointBlend job builds the final
+// skinning palette.  The stock method runs all Player phase-3/late IK first.
+constexpr std::uintptr_t kPlayerPostAnimBlendingAsyncRva = 0x10EB6A0;
+constexpr std::uintptr_t kPlayerPostAnimBlendingAsyncVtableSlotRva =
+    0x2A4C3F0;
+// Recompute one JointCache world locator from its local-pose row and the
+// already-current parent locator. RCX is FgAnimData+0x30, EDX is joint index.
+constexpr std::uintptr_t kJointCacheRecomputeWorldLocatorRva = 0x1688320;
 // FgDrawManager worker callsite. The worker passes one FgAnimData and the
 // global FgInstance pool to PrepareInstanceForRendering; after the call every
 // driven 0x280-byte instance owns the current render-world matrix at +0x140.
@@ -469,9 +478,11 @@ constexpr std::size_t kLocomotionControllerOffset = 0x15B8;
 // PlayerWeaponController (player+0x1D88) fields. Runtime-pinned 2026-07-06 by a
 // 500ms live watch across holster/draw/ADS cycles (+ SwitchToWeapon 0x1410A1C10
 // decompile: compares the requested slot against +0x120, owner Player at +0x108).
+constexpr std::size_t kPlayerWeaponControllerOffset = 0x1D88;
 constexpr std::size_t kWeaponCtrlCurrentSlotOffset = 0x120;  // int32; -1 = none
-// Draw state machine: 0 = holstered/idle, 2 = drawn (no ADS), 4 = ADS,
-// 1/5 = draw/holster transitions.
+// Draw state machine: 0 inactive, 1 Draw, 2 WeaponOut, 3 Reloading, 4 Aiming,
+// 5 Holster, 6/7 hand switch, 8 Rechamber, 9/10 WeaponIK, 11 FinishShield,
+// 12 UnholsterDisabled, 13/14 Drop.  Exact names are in ApplyState 0x1410AAFB0.
 constexpr std::size_t kWeaponCtrlDrawStateOffset = 0x134;
 // Normalizes the peer's horizontal ground speed (units/s) into a 0..1 left-stick
 // magnitude fed to the clone's slot-1 input so its own locomotion blends walk/run.

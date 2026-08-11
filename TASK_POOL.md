@@ -9,6 +9,45 @@
 - синхронизация всего состояния и всех действий игроков;
 - синхронизация противников только после игроков.
 
+## P0 CURRENT: return the visually correct remote Nadine arm pose to local Nadine (2026-08-11)
+
+- [x] Reject the local-only presentation candidates that do not own the final
+      drawn pose: holster/back transforms, the flashlight/debug kill switch,
+      `auto -> run-gun-idle`, a forced nonempty WeaponPartial, individual Chloe
+      hands clips and blanket `WeaponIKFeather` suppression.
+- [x] Close the final scheduling boundary. `AnimManager` performs the normal
+      blend and Player vtable `+0x408 = Player_PostAnimBlending_Async
+      0x1410EB6A0` before the subsequent JointBlend job consumes the persistent
+      local-pose array. No later Player arm-pose writer remains in that phase.
+- [x] Implement a narrow A-to-B return channel for the already-correct remote
+      Nadine pose: role A captures only C39 joints `19..30` after stock
+      postblend, authenticates and sends a 616-byte `ARMP` packet, and role B
+      reapplies the fresh matching-art rows after its own stock postblend.
+- [x] Make admission fail closed on exact Player/Fg/skeleton/weapon ownership,
+      P99 or Mazur art, `PlayerWeaponController::WeaponOut (state 2)`,
+      `FastGrenadeController::Idle (state 0)`, zero movement/input, no cover,
+      350 ms anchored dwell, endpoint-validated session and at most 32
+      StatePacket sequence lag. Normal head-only FreeLook remains allowed.
+- [x] Recompute each copied world locator through the native
+      `JointCache_RecomputeWorldLocatorFromLocalPose 0x141688320`; the later
+      JointBlend invalidates/rebuilds descendants, so fingers/helpers inherit
+      the corrected primary paired arm chains.
+- [ ] Run exactly one bounded stationary test only after release build, strict
+      review, IDB label save, documentation commit and push all succeed: draw
+      P99, stand still for at least 0.5 s, then repeat with Mazur. Expected
+      markers are A `CAPTURE/SEND` and B `RECV/APPLY`, with `lag=0..32` and
+      `applied=1`; the local Nadine grip/idle arms must match the already-correct
+      remote view. There must be no apply while moving, ADS, reload, switch,
+      rechamber, grenade action or cover. Do not melee, interact or take damage
+      during this deliberately bounded exam.
+- [ ] Do not promote `abt` to an always-on general repair until independent
+      melee/flinch/interact overlays are positively excluded. Weapon state 2 and
+      grenade state 0 close their own action lifetimes but do not prove that
+      every unrelated Player partial action is idle.
+- [ ] Keep the sling separate. Manual `ShowMesh` is REJECTED because Nadine has
+      no authored `strap2..14` guide chain; exposing it produces a floating,
+      non-simulated strap and is not part of the arm-pose test.
+
 ## P0 NEXT: ADS feet and duplicate tracer follow-up (2026-08-02)
 
 - [x] REJECT duplicate-projectile cause under build `2026-08-02e`: automatic

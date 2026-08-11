@@ -139,6 +139,43 @@ static_assert(offsetof(StatePacket, aim_leg_base_pose_sequence) == 524);
 static_assert(offsetof(StatePacket, aim_leg_base_pose_joint_count) == 528);
 static_assert(offsetof(StatePacket, aim_leg_base_pose_local) == 532);
 
+// Stable drawn-idle arm pose returned by the host-rendered Nadine puppet to the
+// client that locally controls Nadine.  The normal StatePacket has only 168
+// spare bytes, while the complete authored clavicle-to-hand subtree needs
+// twelve 48-byte local-pose rows.  Keep this as an independent UDP message so
+// movement/fire protocol compatibility and the MTU-sized StatePacket remain
+// unchanged.
+constexpr std::uint32_t kIdleArmPosePacketMagic = 0x504D5241;  // "ARMP"
+constexpr std::uint16_t kIdleArmPosePacketVersion = 1;
+constexpr std::uint16_t kIdleArmPoseFlagSteadyDrawn = 0x0001;
+constexpr std::uint8_t kIdleArmPoseFirstJoint = 19;
+constexpr std::uint8_t kIdleArmPoseJointCount = 12;
+
+struct IdleArmPosePacket {
+    std::uint32_t magic = kIdleArmPosePacketMagic;
+    std::uint16_t version = kIdleArmPosePacketVersion;
+    std::uint16_t flags = 0;
+    std::uint32_t sequence = 0;
+    // Sequence of the role-B StatePacket whose rendered puppet supplied this
+    // pose.  Role B accepts only a small, non-negative round-trip lag.
+    std::uint32_t source_state_sequence = 0;
+    std::uint32_t timestamp_ms = 0;
+    std::uint32_t weapon_art_id = 0;
+    std::uint32_t underlying_skeleton_id = 0;
+    std::uint8_t gun_state = 0xFF;
+    std::uint8_t draw_state = 0xFF;
+    std::uint8_t first_joint = kIdleArmPoseFirstJoint;
+    std::uint8_t joint_count = kIdleArmPoseJointCount;
+    // Per-process sender epoch.  Unlike sequence, this changes when role A is
+    // restarted, so role B can accept the new sequence baseline immediately.
+    std::uint64_t session_id = 0;
+    float local[kIdleArmPoseJointCount][12]{};
+};
+
+static_assert(sizeof(IdleArmPosePacket) == 616);
+static_assert(sizeof(IdleArmPosePacket) <= 1472);
+static_assert(offsetof(IdleArmPosePacket, local) == 40);
+
 // Phase 3 (host-authoritative world sync): the HOST (role A) enumerates the
 // CharacterManager, picks out enemy NPCs, and sends their transforms; the CLIENT
 // (role B) matches each by name-hash to its own local enemy, disables its AI, and

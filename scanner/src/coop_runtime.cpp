@@ -1468,6 +1468,12 @@ struct StateNetState {
     SRWLOCK peer_state_lock = SRWLOCK_INIT;
     coop::StatePacket peer_state{};        // latest received peer state
     std::uint32_t peer_state_sequence = 0;
+    std::atomic<bool> has_peer_idle_arm_pose = false;
+    std::atomic<ULONGLONG> peer_idle_arm_pose_received_ms = 0;
+    SRWLOCK peer_idle_arm_pose_lock = SRWLOCK_INIT;
+    coop::IdleArmPosePacket peer_idle_arm_pose{};
+    std::uint64_t peer_idle_arm_pose_session_id = 0;
+    std::uint32_t peer_idle_arm_pose_sequence = 0;
     std::atomic<std::uint64_t> pending_button_presses = 0;
     // Peer traversal INTENT (ScaleCopy-derived OR resolved face pads). The
     // generic Joypad hook handles sustained jump/crouch; semantic evade-start
@@ -1510,12 +1516,54 @@ struct StateNetState {
     std::atomic<ULONGLONG> peer_enemies_received_ms = 0;
     SRWLOCK peer_enemies_lock = SRWLOCK_INIT;
     coop::EnemyPacket peer_enemies{};      // latest received host enemy snapshot
-    std::uint32_t send_seq = 0;
+    std::atomic<std::uint32_t> send_seq{0};
+    std::uint64_t idle_arm_pose_session_id = 0;
+    std::uint32_t idle_arm_pose_send_seq = 0;
     std::uint32_t fire_send_seq = 0;
     std::uint32_t enemy_send_seq = 0;
     bool enabled = false;                  // toggled on once peer + puppet ready
 };
+
+// The local legacy-Nadine weapon pose and the correctly rendered remote Nadine
+// use the same exact 580-joint C39 skeleton, but only the local Player runs the
+// defective late weapon-IK composition. Role A therefore returns the remote
+// Nadine's final post-IK clavicle-to-hand local rows to role B. Admission is
+// deliberately restricted to a settled, non-aiming, non-moving draw-state 2
+// P99/Mazur idle; all transitions and dynamic actions remain stock.
+constexpr bool kEnableLegacyNadineIdleArmPoseRoundTrip = true;
+constexpr std::uint32_t kLegacyNadineTargetSkeletonArtId = 0xED25C708u;
+constexpr std::uint32_t kLegacyNadineUnderlyingSkeletonId = 0xC39CA709u;
+constexpr std::uint32_t kLegacyNadineSkeletonJointCount = 580;
 StateNetState g_state_net{};
+
+struct IdleArmPoseCapture {
+    bool valid = false;
+    std::uint32_t capture_sequence = 0;
+    std::uint32_t source_state_sequence = 0;
+    std::uint32_t weapon_art_id = 0;
+    std::uint32_t underlying_skeleton_id = 0;
+    ULONGLONG captured_ms = 0;
+    float local[coop::kIdleArmPoseJointCount][12]{};
+};
+
+struct IdleArmPoseDwellState {
+    void* player = nullptr;
+    std::uint64_t session_id = 0;
+    std::uint32_t weapon_art_id = 0;
+    ULONGLONG stable_since_ms = 0;
+    ULONGLONG last_seen_ms = 0;
+    float pos[3]{};
+    float quat[4]{};
+};
+
+SRWLOCK g_idle_arm_pose_capture_lock = SRWLOCK_INIT;
+IdleArmPoseCapture g_idle_arm_pose_capture{};
+SRWLOCK g_idle_arm_pose_dwell_lock = SRWLOCK_INIT;
+IdleArmPoseDwellState g_idle_arm_pose_source_dwell{};
+IdleArmPoseDwellState g_idle_arm_pose_target_dwell{};
+std::atomic<std::uint32_t> g_idle_arm_pose_capture_sequence{0};
+std::atomic<std::uint64_t> g_idle_arm_pose_last_applied_session{0};
+std::atomic<std::uint32_t> g_idle_arm_pose_last_applied_sequence{0};
 
 struct FireEventRing {
     coop::FirePacket packets[16]{};
@@ -1620,6 +1668,9 @@ void force_puppet_ads_flag(void* puppet, bool active);
 bool safe_request_gun_state(void* player, int desired_state);
 int find_weapon_slot_by_art_id(void* player, std::uint32_t art_id);
 void* get_weapon_from_slot(void* player, int slot);
+bool read_weapon_draw_state(void* player, int& slot, std::uint32_t& state);
+std::uint32_t weapon_art_id_from_object(void* weapon);
+bool seh_weapon_parent_resolves_to_owner(void* weapon, void* owner);
 int resolve_give_target_slot(std::uint32_t art, int packet_slot);
 void dump_player_weapon_slots(const char* tag, void* player);
 void materialize_screen1_camera_once();
@@ -1804,6 +1855,168 @@ bool copy_peer_state_snapshot(coop::StatePacket& out) {
     out = g_state_net.peer_state;
     ReleaseSRWLockShared(&g_state_net.peer_state_lock);
     return true;
+}
+
+bool valid_idle_arm_pose_rows(
+    const float (&local)[coop::kIdleArmPoseJointCount][12]) {
+    for (const auto& row : local) {
+        float rotation_norm_sq = 0.0F;
+        for (std::size_t component = 0; component < 12; ++component) {
+            const float value = row[component];
+            const float component_limit =
+                component < 4 ? 4.0F :
+                (component < 8 ? 1.1F : 5.0F);
+            if (!std::isfinite(value) ||
+                std::abs(value) > component_limit) {
+                return false;
+            }
+            if (component >= 4 && component < 8) {
+                rotation_norm_sq += value * value;
+            }
+        }
+        if (rotation_norm_sq < 0.90F || rotation_norm_sq > 1.10F) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool valid_idle_arm_pose_packet_wire(const coop::IdleArmPosePacket& packet) {
+    return packet.magic == coop::kIdleArmPosePacketMagic &&
+        packet.version == coop::kIdleArmPosePacketVersion &&
+        packet.flags == coop::kIdleArmPoseFlagSteadyDrawn &&
+        packet.sequence != 0 && packet.session_id != 0 &&
+        packet.source_state_sequence != 0 &&
+        (packet.weapon_art_id == kCoopPistolArtId ||
+         packet.weapon_art_id == kCoopRifleArtId) &&
+        packet.underlying_skeleton_id ==
+            kLegacyNadineUnderlyingSkeletonId &&
+        packet.gun_state == 1 && packet.draw_state == 2 &&
+        packet.first_joint == coop::kIdleArmPoseFirstJoint &&
+        packet.joint_count == coop::kIdleArmPoseJointCount &&
+        valid_idle_arm_pose_rows(packet.local);
+}
+
+bool publish_peer_idle_arm_pose_snapshot(
+    const coop::IdleArmPosePacket& packet) {
+    constexpr ULONGLONG kSessionReplacementQuietMs = 100;
+    const ULONGLONG now = GetTickCount64();
+    AcquireSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
+    const bool same_session =
+        g_state_net.peer_idle_arm_pose_session_id == packet.session_id;
+    const bool has_current =
+        g_state_net.has_peer_idle_arm_pose.load(std::memory_order_relaxed);
+    const ULONGLONG current_received =
+        g_state_net.peer_idle_arm_pose_received_ms.load(
+            std::memory_order_relaxed);
+    if (!same_session && has_current && current_received != 0 &&
+        (now < current_received ||
+         now - current_received <= kSessionReplacementQuietMs)) {
+        ReleaseSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
+        return false;
+    }
+    if (same_session &&
+        has_current &&
+        static_cast<std::int32_t>(
+            packet.sequence - g_state_net.peer_idle_arm_pose_sequence) <= 0) {
+        ReleaseSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
+        return false;
+    }
+    g_state_net.peer_idle_arm_pose = packet;
+    g_state_net.peer_idle_arm_pose_session_id = packet.session_id;
+    g_state_net.peer_idle_arm_pose_sequence = packet.sequence;
+    ReleaseSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
+    g_state_net.peer_idle_arm_pose_received_ms.store(
+        now, std::memory_order_release);
+    g_state_net.has_peer_idle_arm_pose.store(true, std::memory_order_release);
+    return true;
+}
+
+bool copy_peer_idle_arm_pose_snapshot(
+    coop::IdleArmPosePacket& out, ULONGLONG maximum_age_ms) {
+    if (!g_state_net.has_peer_idle_arm_pose.load(std::memory_order_acquire)) {
+        return false;
+    }
+    const ULONGLONG received =
+        g_state_net.peer_idle_arm_pose_received_ms.load(
+            std::memory_order_acquire);
+    const ULONGLONG now = GetTickCount64();
+    if (received == 0 || now < received || now - received > maximum_age_ms) {
+        return false;
+    }
+    AcquireSRWLockShared(&g_state_net.peer_idle_arm_pose_lock);
+    out = g_state_net.peer_idle_arm_pose;
+    ReleaseSRWLockShared(&g_state_net.peer_idle_arm_pose_lock);
+    return valid_idle_arm_pose_packet_wire(out);
+}
+
+bool copy_idle_arm_pose_capture(IdleArmPoseCapture& out) {
+    AcquireSRWLockShared(&g_idle_arm_pose_capture_lock);
+    out = g_idle_arm_pose_capture;
+    ReleaseSRWLockShared(&g_idle_arm_pose_capture_lock);
+    return out.valid && out.capture_sequence != 0 &&
+        out.source_state_sequence != 0 &&
+        (out.weapon_art_id == kCoopPistolArtId ||
+         out.weapon_art_id == kCoopRifleArtId) &&
+        out.underlying_skeleton_id ==
+            kLegacyNadineUnderlyingSkeletonId &&
+        valid_idle_arm_pose_rows(out.local);
+}
+
+void send_idle_arm_pose_packet() {
+    if constexpr (!kEnableLegacyNadineIdleArmPoseRoundTrip) {
+        return;
+    }
+    if (g_net_role_b || !g_state_net.enabled || !g_state_net.peer_set) {
+        return;
+    }
+    IdleArmPoseCapture capture{};
+    if (!copy_idle_arm_pose_capture(capture)) {
+        return;
+    }
+    const ULONGLONG now = GetTickCount64();
+    if (capture.captured_ms == 0 || now < capture.captured_ms ||
+        now - capture.captured_ms > 100) {
+        return;
+    }
+    static std::uint32_t last_capture_sequence_sent = 0;
+    if (capture.capture_sequence == last_capture_sequence_sent) {
+        return;
+    }
+    coop::IdleArmPosePacket packet{};
+    packet.flags = coop::kIdleArmPoseFlagSteadyDrawn;
+    packet.sequence = ++g_state_net.idle_arm_pose_send_seq;
+    packet.session_id = g_state_net.idle_arm_pose_session_id;
+    packet.source_state_sequence = capture.source_state_sequence;
+    packet.timestamp_ms = static_cast<std::uint32_t>(now);
+    packet.weapon_art_id = capture.weapon_art_id;
+    packet.underlying_skeleton_id = capture.underlying_skeleton_id;
+    packet.gun_state = 1;
+    packet.draw_state = 2;
+    std::memcpy(packet.local, capture.local, sizeof(packet.local));
+    if (!valid_idle_arm_pose_packet_wire(packet)) {
+        return;
+    }
+    const int sent = sendto(
+        // Send this safety-critical return channel from the bound receive
+        // socket.  The peer can then authenticate both configured IP and port;
+        // the normal state socket is intentionally left unchanged.
+        g_state_net.recv_socket,
+        reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
+        reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+        sizeof(g_state_net.peer_addr));
+    if (sent == static_cast<int>(sizeof(packet))) {
+        last_capture_sequence_sent = capture.capture_sequence;
+        static std::atomic<unsigned> send_logs{0};
+        if (send_logs.fetch_add(1, std::memory_order_relaxed) < 4) {
+            std::ostringstream line;
+            line << "NADINE-IDLE-ARM-SEND seq=" << packet.sequence
+                 << " sourceState=" << packet.source_state_sequence
+                 << " capture=" << capture.capture_sequence
+                 << " art=0x" << std::hex << packet.weapon_art_id;
+            boot_log_line(line.str().c_str());
+        }
+    }
 }
 
 // Input and transform require a fresh packet. The last confirmed health remains
@@ -14537,9 +14750,13 @@ void swap_character_manager_0_1() {
 DWORD WINAPI state_recv_thread(void*) {
     // One buffer big enough for the largest packet (EnemyPacket); dispatch by magic.
     alignas(8) char buf[sizeof(coop::EnemyPacket) + 64];
+    static_assert(sizeof(buf) >= sizeof(coop::IdleArmPosePacket));
     while (g_state_net.running.load()) {
-        const int received = recvfrom(g_state_net.recv_socket, buf, sizeof(buf), 0,
-                                      nullptr, nullptr);
+        sockaddr_in source_addr{};
+        int source_addr_size = sizeof(source_addr);
+        const int received = recvfrom(
+            g_state_net.recv_socket, buf, sizeof(buf), 0,
+            reinterpret_cast<sockaddr*>(&source_addr), &source_addr_size);
         if (received == SOCKET_ERROR) {
             if (!g_state_net.running.load()) break;
             continue;
@@ -14563,6 +14780,34 @@ DWORD WINAPI state_recv_thread(void*) {
                     boot_log_line(line.str().c_str());
                 }
                 publish_peer_state_snapshot(packet);
+            }
+        } else if (magic == coop::kIdleArmPosePacketMagic &&
+                   received == static_cast<int>(
+                       sizeof(coop::IdleArmPosePacket))) {
+            coop::IdleArmPosePacket arm_pose{};
+            std::memcpy(&arm_pose, buf, sizeof(arm_pose));
+            const bool configured_peer = g_state_net.peer_set &&
+                source_addr_size >= static_cast<int>(sizeof(sockaddr_in)) &&
+                source_addr.sin_family == g_state_net.peer_addr.sin_family &&
+                source_addr.sin_port == g_state_net.peer_addr.sin_port &&
+                source_addr.sin_addr.s_addr ==
+                    g_state_net.peer_addr.sin_addr.s_addr;
+            if (g_net_role_b && configured_peer &&
+                valid_idle_arm_pose_packet_wire(arm_pose)) {
+                const bool published =
+                    publish_peer_idle_arm_pose_snapshot(arm_pose);
+                static std::atomic<unsigned> receive_logs{0};
+                if (published && receive_logs.fetch_add(
+                        1, std::memory_order_relaxed) < 4) {
+                    std::ostringstream line;
+                    line << "NADINE-IDLE-ARM-RECV seq="
+                         << arm_pose.sequence
+                         << " sourceState="
+                         << arm_pose.source_state_sequence
+                         << " art=0x" << std::hex
+                         << arm_pose.weapon_art_id;
+                    boot_log_line(line.str().c_str());
+                }
             }
         } else if (magic == coop::kEnemyPacketMagic &&
                    received >= static_cast<int>(offsetof(coop::EnemyPacket, enemies)) &&
@@ -14946,8 +15191,28 @@ bool start_state_net() {
     if (InetPtonA(AF_INET, peer_ip.c_str(), &g_state_net.peer_addr.sin_addr) == 1) {
         g_state_net.peer_set = true;
     }
+    LARGE_INTEGER idle_arm_pose_qpc{};
+    QueryPerformanceCounter(&idle_arm_pose_qpc);
+    g_state_net.idle_arm_pose_session_id =
+        static_cast<std::uint64_t>(idle_arm_pose_qpc.QuadPart) ^
+        (static_cast<std::uint64_t>(GetCurrentProcessId()) << 32) ^
+        GetTickCount64() ^
+        static_cast<std::uint64_t>(
+            reinterpret_cast<std::uintptr_t>(&g_state_net));
+    if (g_state_net.idle_arm_pose_session_id == 0) {
+        g_state_net.idle_arm_pose_session_id = 1;
+    }
     g_state_net.running.store(true);
     g_state_net.thread = CreateThread(nullptr, 0, state_recv_thread, nullptr, 0, nullptr);
+    if (g_state_net.thread == nullptr) {
+        g_state_net.running.store(false);
+        closesocket(g_state_net.recv_socket);
+        closesocket(g_state_net.send_socket);
+        g_state_net.recv_socket = INVALID_SOCKET;
+        g_state_net.send_socket = INVALID_SOCKET;
+        boot_log_line("state net: receiver thread creation failed");
+        return false;
+    }
     g_state_net.enabled = true;
     std::ostringstream line;
     line << "state net started: recv :" << my_port << " -> peer " << peer_ip
@@ -19193,7 +19458,8 @@ void send_local_player_state() {
         return;
     }
     coop::StatePacket pkt{};
-    pkt.sequence = ++g_state_net.send_seq;
+    pkt.sequence = g_state_net.send_seq.fetch_add(
+        1, std::memory_order_acq_rel) + 1;
     pkt.timestamp_ms = static_cast<std::uint32_t>(GetTickCount64());
     pkt.flags = 1;
     const bool grenade_arc_active =
@@ -19790,6 +20056,7 @@ void send_local_player_state() {
         }
         boot_log_line(line.str().c_str());
     }
+    send_idle_arm_pose_packet();
 }
 
 // Returns the latest peer state with the loopback offset applied, or false if
@@ -43527,6 +43794,605 @@ bool seh_weapon_parent_resolves_to_owner(void* weapon, void* owner) {
     }
 }
 
+constexpr ULONGLONG kIdleArmPoseFreshMs = 100;
+constexpr ULONGLONG kIdleArmPoseDwellMs = 350;
+constexpr std::int32_t kIdleArmPoseMaximumStateSequenceLag = 32;
+
+// The controller state machines outlive their input pulses.  They are therefore
+// the authoritative fail-closed boundary for the 350 ms steady-pose dwell: the
+// weapon must be fully WeaponOut and the grenade controller fully idle.  The
+// normal WeaponOut state intentionally owns an overlay action on sequencer
+// channel one, so channel emptiness is not an idle predicate.
+bool seh_read_idle_arm_pose_weapon_state(
+    void* player, int* slot_out, std::uint32_t* state_out) {
+    if (slot_out == nullptr || state_out == nullptr) {
+        return false;
+    }
+    *slot_out = -1;
+    *state_out = 0;
+    __try {
+        if (player == nullptr || g_module == 0 ||
+            readable_bytes(static_cast<std::byte*>(player) +
+                           kPlayerWeaponControllerOffset) < sizeof(void*)) {
+            return false;
+        }
+        auto* const controller = *reinterpret_cast<std::byte**>(
+            static_cast<std::byte*>(player) + kPlayerWeaponControllerOffset);
+        if (controller == nullptr || readable_bytes(controller) < 0x138 ||
+            *reinterpret_cast<const std::uintptr_t*>(controller) !=
+                g_module + kPlayerWeaponControllerVtableRva ||
+            *reinterpret_cast<void* const*>(controller + 0x108) != player) {
+            return false;
+        }
+        *slot_out = *reinterpret_cast<const std::int32_t*>(
+            controller + kWeaponCtrlCurrentSlotOffset);
+        *state_out = *reinterpret_cast<const std::uint32_t*>(
+            controller + kWeaponCtrlDrawStateOffset);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *slot_out = -1;
+        *state_out = 0;
+        return false;
+    }
+}
+
+bool seh_idle_arm_pose_fast_grenade_controller_is_idle(void* player) {
+    __try {
+        if (player == nullptr || g_module == 0 ||
+            readable_bytes(static_cast<std::byte*>(player) +
+                           kPlayerFastGrenadeControllerOffset) < sizeof(void*)) {
+            return false;
+        }
+        auto* const controller = *reinterpret_cast<std::byte**>(
+            static_cast<std::byte*>(player) +
+            kPlayerFastGrenadeControllerOffset);
+        return controller != nullptr && readable_bytes(controller) >= 0x124 &&
+            *reinterpret_cast<const std::uintptr_t*>(controller) ==
+                g_module + kFastGrenadeControllerVtableRva &&
+            *reinterpret_cast<void* const*>(controller + 0x108) == player &&
+            *reinterpret_cast<const std::uint32_t*>(controller + 0x120) == 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+struct IdleArmPoseOwnerScope {
+    bool valid = false;
+    void* player = nullptr;
+    std::byte* fg_anim_data = nullptr;
+    std::byte* local_pose = nullptr;
+    void* weapon = nullptr;
+    std::uint32_t weapon_art_id = 0;
+    int weapon_slot = -1;
+    float position[3]{};
+    float orientation[4]{};
+    float move_stick[2]{};
+    float move_world[4]{};
+    float move_magnitude = 0.0F;
+};
+
+bool seh_resolve_idle_arm_pose_owner_scope(
+    void* player, std::uint32_t expected_screen,
+    IdleArmPoseOwnerScope* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (!g_state_net.enabled || g_module == 0 ||
+            !player_object_stable(player) ||
+            *reinterpret_cast<const std::uintptr_t*>(player) !=
+                g_module + kPlayerVtableRva ||
+            !player_screen_index_is(player, expected_screen)) {
+            return false;
+        }
+        std::uint32_t look = 0;
+        if (!seh_read_player_look(player, &look) ||
+            look != kLegacyNadineAttachTargetLookId) {
+            return false;
+        }
+        auto* const player_bytes = static_cast<std::byte*>(player);
+        if (readable_bytes(player_bytes) < 0x4014) {
+            return false;
+        }
+        auto* const fg = *reinterpret_cast<std::byte**>(
+            player_bytes + kPlayerFgAnimDataOffset);
+        if (fg == nullptr ||
+            readable_bytes(fg) <
+                kFgAnimDataRetainedIdOffset + sizeof(std::uint32_t)) {
+            return false;
+        }
+        auto* const fg_owner_cell = *reinterpret_cast<std::byte* const*>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        const std::uint32_t fg_owner_generation =
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset);
+        if (fg_owner_cell == nullptr ||
+            readable_bytes(fg_owner_cell) < 0x10 ||
+            *reinterpret_cast<void* const*>(fg_owner_cell + 0x8) != player ||
+            fg_owner_generation != *reinterpret_cast<const std::uint32_t*>(
+                player_bytes + kGameObjectRuntimeIdOffset)) {
+            return false;
+        }
+        auto* const target_skeleton = *reinterpret_cast<std::byte**>(
+            fg + kFgAnimDataSkeletonOffset);
+        auto* const local_pose = *reinterpret_cast<std::byte**>(
+            fg + kFgAnimDataJointCacheLocalPoseOffset);
+        if (target_skeleton == nullptr || local_pose == nullptr ||
+            readable_bytes(target_skeleton) < 0x48 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                target_skeleton + 0x24) !=
+                kLegacyNadineTargetSkeletonArtId ||
+            *reinterpret_cast<const std::uint32_t*>(
+                target_skeleton + kSkeletonJointCountOffset) !=
+                kLegacyNadineSkeletonJointCount) {
+            return false;
+        }
+        auto* const underlying_skeleton =
+            *reinterpret_cast<std::byte**>(target_skeleton + 0x40);
+        if (underlying_skeleton == nullptr ||
+            readable_bytes(underlying_skeleton) < 0x12 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                underlying_skeleton + 0x04) !=
+                kLegacyNadineUnderlyingSkeletonId ||
+            *reinterpret_cast<const std::uint16_t*>(
+                underlying_skeleton + 0x10) !=
+                kLegacyNadineSkeletonJointCount ||
+            readable_bytes(local_pose) <
+                static_cast<std::size_t>(
+                    coop::kIdleArmPoseFirstJoint +
+                    coop::kIdleArmPoseJointCount) *
+                    kJointLocalPoseStride) {
+            return false;
+        }
+        int weapon_slot = -1;
+        std::uint32_t draw_state = 0;
+        if (!seh_read_idle_arm_pose_weapon_state(
+                player, &weapon_slot, &draw_state) ||
+            draw_state != 2 || weapon_slot < 0 || weapon_slot >= 18 ||
+            !seh_idle_arm_pose_fast_grenade_controller_is_idle(player)) {
+            return false;
+        }
+        void* const weapon = get_weapon_from_slot(player, weapon_slot);
+        if (weapon == nullptr || readable_bytes(weapon) < 0x864 ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon) !=
+                g_module + kProcessWeaponVtableRva ||
+            !seh_weapon_parent_resolves_to_owner(weapon, player)) {
+            return false;
+        }
+        const std::uint32_t art = weapon_art_id_from_object(weapon);
+        if (art != kCoopPistolArtId && art != kCoopRifleArtId) {
+            return false;
+        }
+        std::memcpy(
+            output->position, player_bytes + kWorldPositionOffset,
+            sizeof(output->position));
+        std::memcpy(
+            output->orientation, player_bytes + kPlayerQuatOffset,
+            sizeof(output->orientation));
+        std::memcpy(
+            output->move_stick, player_bytes + 0x39C8,
+            sizeof(output->move_stick));
+        std::memcpy(
+            output->move_world, player_bytes + 0x3A30,
+            sizeof(output->move_world));
+        output->move_magnitude = *reinterpret_cast<const float*>(
+            player_bytes + 0x3A1C);
+        if (!valid_network_position(output->position) ||
+            !valid_network_orientation(output->orientation)) {
+            return false;
+        }
+        output->player = player;
+        output->fg_anim_data = fg;
+        output->local_pose = local_pose;
+        output->weapon = weapon;
+        output->weapon_art_id = art;
+        output->weapon_slot = weapon_slot;
+        output->valid = true;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+bool idle_arm_pose_movement_is_zero(
+    const float move_stick[2], const float move_world[4],
+    float move_magnitude) {
+    if (!std::isfinite(move_magnitude) ||
+        std::abs(move_magnitude) > 0.025F) {
+        return false;
+    }
+    for (std::size_t i = 0; i < 2; ++i) {
+        if (!std::isfinite(move_stick[i]) ||
+            std::abs(move_stick[i]) > 0.025F) {
+            return false;
+        }
+    }
+    for (std::size_t i = 0; i < 4; ++i) {
+        if (!std::isfinite(move_world[i]) ||
+            std::abs(move_world[i]) > 0.025F) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool peer_state_is_steady_drawn_idle(
+    const coop::StatePacket& peer, std::uint32_t weapon_art_id) {
+    constexpr std::uint16_t kRequiredFlags = 4u | 8u | 0x80u;
+    constexpr std::uint16_t kRejectedFlags =
+        16u | coop::kStateFlagPeerCamera | coop::kStateFlagPoseSeed |
+        coop::kStateFlagPeerInCover | coop::kStateFlagPeerCoverEnterPulse |
+        coop::kStateFlagAimPitch | coop::kStateFlagAimFootTurn;
+    if ((peer.flags & kRequiredFlags) != kRequiredFlags ||
+        (peer.flags & kRejectedFlags) != 0 ||
+        peer.gun_state != 1 ||
+        peer.held_weapon_art_id != weapon_art_id ||
+        peer.grenade_arc_active != 0 ||
+        !valid_network_position(peer.pos) ||
+        !valid_network_orientation(peer.quat) ||
+        !valid_network_movement(peer) ||
+        !idle_arm_pose_movement_is_zero(
+            peer.move_stick, peer.move_world, peer.move_magnitude)) {
+        return false;
+    }
+    const std::uint64_t action_bits =
+        (peer.input_buttons | peer.buttons_pressed |
+         peer.buttons_released) &
+        ~kInputBlockButtonBaseMask;
+    if (action_bits != 0) {
+        return false;
+    }
+    for (const float velocity : peer.velocity) {
+        if (!std::isfinite(velocity) || std::abs(velocity) > 0.05F) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool local_player_is_steady_drawn_idle(
+    const IdleArmPoseOwnerScope& scope) {
+    if (!scope.valid ||
+        !idle_arm_pose_movement_is_zero(
+            scope.move_stick, scope.move_world, scope.move_magnitude) ||
+        player_cover_state_field(scope.player)) {
+        return false;
+    }
+    return (g_cached_local_input_buttons.load(std::memory_order_acquire) &
+            ~kInputBlockButtonBaseMask) == 0;
+}
+
+void reset_idle_arm_pose_dwell(IdleArmPoseDwellState& state) {
+    AcquireSRWLockExclusive(&g_idle_arm_pose_dwell_lock);
+    state = {};
+    ReleaseSRWLockExclusive(&g_idle_arm_pose_dwell_lock);
+}
+
+bool idle_arm_pose_dwell_ready(
+    IdleArmPoseDwellState& state, void* player,
+    std::uint64_t session_id, std::uint32_t weapon_art_id,
+    const float position[3],
+    const float orientation[4], ULONGLONG now) {
+    bool ready = false;
+    AcquireSRWLockExclusive(&g_idle_arm_pose_dwell_lock);
+    bool reset = state.player != player || state.session_id != session_id ||
+        state.weapon_art_id != weapon_art_id ||
+        state.stable_since_ms == 0 || state.last_seen_ms == 0 ||
+        now < state.last_seen_ms || now - state.last_seen_ms > 100;
+    if (!reset) {
+        float position_delta_sq = 0.0F;
+        float orientation_dot = 0.0F;
+        for (std::size_t i = 0; i < 3; ++i) {
+            const float delta = position[i] - state.pos[i];
+            position_delta_sq += delta * delta;
+        }
+        for (std::size_t i = 0; i < 4; ++i) {
+            orientation_dot += orientation[i] * state.quat[i];
+        }
+        reset = !std::isfinite(position_delta_sq) ||
+            position_delta_sq > 0.01F * 0.01F ||
+            !std::isfinite(orientation_dot) ||
+            std::abs(orientation_dot) < 0.9998F;
+    }
+    if (reset) {
+        state.player = player;
+        state.session_id = session_id;
+        state.weapon_art_id = weapon_art_id;
+        state.stable_since_ms = now;
+        std::memcpy(state.pos, position, sizeof(state.pos));
+        std::memcpy(state.quat, orientation, sizeof(state.quat));
+    }
+    state.last_seen_ms = now;
+    ready = now >= state.stable_since_ms &&
+        now - state.stable_since_ms >= kIdleArmPoseDwellMs;
+    ReleaseSRWLockExclusive(&g_idle_arm_pose_dwell_lock);
+    return ready;
+}
+
+void invalidate_idle_arm_pose_capture() {
+    AcquireSRWLockExclusive(&g_idle_arm_pose_capture_lock);
+    g_idle_arm_pose_capture.valid = false;
+    ReleaseSRWLockExclusive(&g_idle_arm_pose_capture_lock);
+}
+
+bool seh_copy_idle_arm_pose_rows(
+    const std::byte* local_pose,
+    float (&output)[coop::kIdleArmPoseJointCount][12]) {
+    __try {
+        if (local_pose == nullptr) {
+            return false;
+        }
+        std::memcpy(
+            output,
+            local_pose +
+                static_cast<std::size_t>(
+                    coop::kIdleArmPoseFirstJoint) *
+                    kJointLocalPoseStride,
+            sizeof(output));
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_apply_idle_arm_pose_rows(
+    const IdleArmPoseOwnerScope& scope,
+    const float (&input)[coop::kIdleArmPoseJointCount][12]) {
+    using RecomputeWorldLocatorFunction =
+        void(__fastcall*)(void*, std::uint32_t);
+    __try {
+        if (!scope.valid || scope.local_pose == nullptr ||
+            scope.fg_anim_data == nullptr || g_module == 0) {
+            return false;
+        }
+        const auto recompute_world =
+            reinterpret_cast<RecomputeWorldLocatorFunction>(
+                g_module + kJointCacheRecomputeWorldLocatorRva);
+        auto* const first_row = scope.local_pose +
+            static_cast<std::size_t>(coop::kIdleArmPoseFirstJoint) *
+                kJointLocalPoseStride;
+        std::memcpy(first_row, input, sizeof(input));
+        for (std::uint32_t joint = coop::kIdleArmPoseFirstJoint;
+             joint < static_cast<std::uint32_t>(
+                         coop::kIdleArmPoseFirstJoint +
+                         coop::kIdleArmPoseJointCount);
+             ++joint) {
+            recompute_world(scope.fg_anim_data + 0x30, joint);
+        }
+        return std::memcmp(first_row, input, sizeof(input)) == 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool capture_remote_nadine_idle_arm_pose(void* player) {
+    IdleArmPoseOwnerScope scope{};
+    coop::StatePacket peer{};
+    const ULONGLONG now = GetTickCount64();
+    const ULONGLONG received =
+        g_state_net.peer_state_received_ms.load(std::memory_order_acquire);
+    if (g_net_role_b || player != retained_player_object(1) ||
+        !seh_resolve_idle_arm_pose_owner_scope(player, 1, &scope) ||
+        received == 0 || now < received ||
+        now - received > kIdleArmPoseFreshMs ||
+        !copy_peer_state_snapshot(peer) ||
+        !peer_state_is_steady_drawn_idle(peer, scope.weapon_art_id)) {
+        reset_idle_arm_pose_dwell(g_idle_arm_pose_source_dwell);
+        invalidate_idle_arm_pose_capture();
+        return false;
+    }
+    if (!idle_arm_pose_dwell_ready(
+            g_idle_arm_pose_source_dwell, player,
+            g_state_net.idle_arm_pose_session_id, scope.weapon_art_id,
+            peer.pos, peer.quat, now)) {
+        invalidate_idle_arm_pose_capture();
+        return false;
+    }
+    IdleArmPoseCapture capture{};
+    capture.valid = true;
+    capture.capture_sequence =
+        g_idle_arm_pose_capture_sequence.fetch_add(
+            1, std::memory_order_acq_rel) + 1;
+    capture.source_state_sequence = peer.sequence;
+    capture.weapon_art_id = scope.weapon_art_id;
+    capture.underlying_skeleton_id =
+        kLegacyNadineUnderlyingSkeletonId;
+    capture.captured_ms = now;
+    if (!seh_copy_idle_arm_pose_rows(scope.local_pose, capture.local)) {
+        capture.valid = false;
+    }
+    if (!capture.valid || !valid_idle_arm_pose_rows(capture.local)) {
+        invalidate_idle_arm_pose_capture();
+        return false;
+    }
+    AcquireSRWLockExclusive(&g_idle_arm_pose_capture_lock);
+    g_idle_arm_pose_capture = capture;
+    ReleaseSRWLockExclusive(&g_idle_arm_pose_capture_lock);
+    static std::atomic<unsigned> capture_logs{0};
+    if (capture_logs.fetch_add(1, std::memory_order_relaxed) < 4) {
+        std::ostringstream line;
+        line << "NADINE-IDLE-ARM-CAPTURE seq="
+             << capture.capture_sequence
+             << " sourceState=" << capture.source_state_sequence
+             << " art=0x" << std::hex << capture.weapon_art_id;
+        boot_log_line(line.str().c_str());
+    }
+    return true;
+}
+
+bool mark_idle_arm_pose_packet_applied(
+    std::uint64_t session_id, std::uint32_t sequence) {
+    const std::uint64_t previous_session =
+        g_idle_arm_pose_last_applied_session.load(std::memory_order_acquire);
+    if (previous_session != session_id) {
+        g_idle_arm_pose_last_applied_session.store(
+            session_id, std::memory_order_release);
+        g_idle_arm_pose_last_applied_sequence.store(
+            sequence, std::memory_order_release);
+        return true;
+    }
+    std::uint32_t previous =
+        g_idle_arm_pose_last_applied_sequence.load(std::memory_order_acquire);
+    while (static_cast<std::int32_t>(sequence - previous) > 0) {
+        if (g_idle_arm_pose_last_applied_sequence.compare_exchange_weak(
+                previous, sequence, std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool apply_remote_nadine_idle_arm_pose(void* player) {
+    IdleArmPoseOwnerScope scope{};
+    coop::IdleArmPosePacket packet{};
+    const ULONGLONG now = GetTickCount64();
+    if (!g_net_role_b || player != retained_player_object(0) ||
+        !seh_resolve_idle_arm_pose_owner_scope(player, 0, &scope) ||
+        !local_player_is_steady_drawn_idle(scope) ||
+        !copy_peer_idle_arm_pose_snapshot(packet, kIdleArmPoseFreshMs) ||
+        packet.weapon_art_id != scope.weapon_art_id) {
+        reset_idle_arm_pose_dwell(g_idle_arm_pose_target_dwell);
+        return false;
+    }
+    const std::uint32_t local_state_sequence =
+        g_state_net.send_seq.load(std::memory_order_acquire);
+    const std::int32_t source_lag = static_cast<std::int32_t>(
+        local_state_sequence - packet.source_state_sequence);
+    if (local_state_sequence == 0 || source_lag < 0 ||
+        source_lag > kIdleArmPoseMaximumStateSequenceLag ||
+        !idle_arm_pose_dwell_ready(
+            g_idle_arm_pose_target_dwell, player, packet.session_id,
+            scope.weapon_art_id,
+            scope.position, scope.orientation, now) ||
+        !valid_idle_arm_pose_rows(packet.local)) {
+        return false;
+    }
+    const bool applied =
+        seh_apply_idle_arm_pose_rows(scope, packet.local);
+    const bool first_apply_for_packet = applied &&
+        mark_idle_arm_pose_packet_applied(
+            packet.session_id, packet.sequence);
+    static std::atomic<unsigned> apply_logs{0};
+    if (first_apply_for_packet &&
+        apply_logs.fetch_add(1, std::memory_order_relaxed) < 8) {
+        std::ostringstream line;
+        line << "NADINE-IDLE-ARM-APPLY seq=" << packet.sequence
+             << " sourceState=" << packet.source_state_sequence
+             << " localState=" << local_state_sequence
+             << " lag=" << source_lag
+             << " art=0x" << std::hex << packet.weapon_art_id
+             << std::dec << " applied=" << (applied ? 1 : 0);
+        boot_log_line(line.str().c_str());
+    }
+    return applied;
+}
+
+using PlayerPostAnimBlendingAsyncFunction =
+    std::int64_t(__fastcall*)(void*);
+PlayerPostAnimBlendingAsyncFunction
+    g_original_player_post_anim_blending_async = nullptr;
+
+std::int64_t __fastcall hooked_player_post_anim_blending_async(void* player) {
+    const auto original = g_original_player_post_anim_blending_async;
+    if (original == nullptr) {
+        return 0;
+    }
+    const std::int64_t result = original(player);
+    if constexpr (kEnableLegacyNadineIdleArmPoseRoundTrip) {
+        if (!g_net_role_b) {
+            if (player == retained_player_object(1)) {
+                capture_remote_nadine_idle_arm_pose(player);
+            }
+        } else if (player == retained_player_object(0)) {
+            apply_remote_nadine_idle_arm_pose(player);
+        }
+    }
+    return result;
+}
+
+bool install_legacy_nadine_idle_arm_pose_round_trip() {
+    auto* const slot = reinterpret_cast<void**>(
+        g_module + kPlayerPostAnimBlendingAsyncVtableSlotRva);
+    void* const expected = reinterpret_cast<void*>(
+        g_module + kPlayerPostAnimBlendingAsyncRva);
+    if (slot == nullptr || *slot != expected) {
+        boot_log_line(
+            "legacy-Nadine idle-arm round trip SKIPPED (slot mismatch)");
+        return false;
+    }
+    g_original_player_post_anim_blending_async =
+        reinterpret_cast<PlayerPostAnimBlendingAsyncFunction>(expected);
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            slot, sizeof(void*), PAGE_READWRITE, &old_protection)) {
+        g_original_player_post_anim_blending_async = nullptr;
+        boot_log_line(
+            "legacy-Nadine idle-arm round trip SKIPPED (protect)");
+        return false;
+    }
+    void* const previous = InterlockedCompareExchangePointer(
+        reinterpret_cast<PVOID volatile*>(slot),
+        reinterpret_cast<void*>(&hooked_player_post_anim_blending_async),
+        expected);
+    if (previous != expected) {
+        DWORD ignored = 0;
+        VirtualProtect(slot, sizeof(void*), old_protection, &ignored);
+        g_original_player_post_anim_blending_async = nullptr;
+        boot_log_line(
+            "legacy-Nadine idle-arm round trip SKIPPED (slot race)");
+        return false;
+    }
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    DWORD ignored = 0;
+    const BOOL protection_restored = VirtualProtect(
+        slot, sizeof(void*), old_protection, &ignored);
+    if (protection_restored) {
+        boot_log_line(
+            "legacy-Nadine idle-arm round trip installed (Player +0x408)");
+        return true;
+    }
+
+    // Do not leave a successfully patched vtable page writable.  The page is
+    // still PAGE_READWRITE here, so roll the single aligned slot back while no
+    // relay lifetime is involved, verify it, and make one final protection
+    // restore attempt before reporting a skipped install.
+    void* const hook =
+        reinterpret_cast<void*>(&hooked_player_post_anim_blending_async);
+    InterlockedCompareExchangePointer(
+        reinterpret_cast<PVOID volatile*>(slot), expected, hook);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    const bool rollback_verified = *slot == expected;
+    DWORD rollback_ignored = 0;
+    const BOOL rollback_protection_restored = VirtualProtect(
+        slot, sizeof(void*), old_protection, &rollback_ignored);
+    if (rollback_verified) {
+        // The hook was published before this rollback.  A worker may already
+        // have fetched it, so keep its immutable stock target callable even
+        // after the vtable slot is restored.
+        boot_log_line(
+            rollback_protection_restored
+                ? "legacy-Nadine idle-arm round trip SKIPPED "
+                  "(protection restore rollback)"
+                : "legacy-Nadine idle-arm round trip SKIPPED "
+                  "(rollback verified; protection restore failed)");
+        return false;
+    }
+
+    // A concurrent writer displaced the slot between the install and rollback.
+    // Keep the stock target callable if our hook is still live; never null the
+    // original under a potentially reachable wrapper.
+    const bool hook_still_live = *slot == hook;
+    boot_log_line(
+        hook_still_live
+            ? "legacy-Nadine idle-arm round trip installed PARTIAL "
+              "(rollback race; protection restore failed)"
+            : "legacy-Nadine idle-arm round trip SKIPPED (rollback race)");
+    return hook_still_live;
+}
+
 bool seh_read_owner_attach_record_id(
     void* owner, std::uint8_t attach_index, std::uint32_t* attach_id_out,
     std::uintptr_t* records_generation_out) {
@@ -54269,8 +55135,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-11abs "
-        "(abr census rejected; incomplete IK suppression and floating sling disabled)");
+        "TLL co-op runtime init 2026-08-11abt "
+        "(strict stable-idle Nadine arm round trip; floating sling disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -54673,7 +55539,19 @@ DWORD WINAPI install_hook(void*) {
     start_udp_receiver();
     log_line("local-player-1 -> Nadine bind hook ENABLED");
     log_line("one-shot split render activation ENABLED after login_state==3");
-    start_state_net();
+    const bool state_net_started = start_state_net();
+    // Install only after role, peer endpoint and the ARMP session epoch are
+    // immutable.  The vtable CAS is the publication barrier seen by animation
+    // workers, so the hook never races partially initialized network state.
+    if constexpr (kEnableLegacyNadineIdleArmPoseRoundTrip &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        if (state_net_started) {
+            install_legacy_nadine_idle_arm_pose_round_trip();
+        } else {
+            boot_log_line(
+                "legacy-Nadine idle-arm round trip SKIPPED (state net)");
+        }
+    }
     // Role A applies its own attacks normally and receives relayed damage in the
     // network tick. Only role B needs to observe local hits and forward them.
     if (g_install_npc_damage_hook && g_net_role_b) {

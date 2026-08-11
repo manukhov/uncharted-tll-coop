@@ -85,6 +85,12 @@ FUNCTIONS = {
         "Converts one 64-byte JointCache matrix into the 32-byte world Locator "
         "array and marks that skeleton joint valid in the cache bitset.",
     ),
+    0x141688320: (
+        "JointCache_RecomputeWorldLocatorFromLocalPose",
+        "Reads one 48-byte local-pose row from the JointCache, resolves and "
+        "composes its parent world Locator, writes the joint's 32-byte world "
+        "Locator, and marks that joint valid. ABI: RCX=JointCache, EDX=joint.",
+    ),
     0x14181ECD0: (
         "JointSet_CommitJointTransformsAndReset",
         "Copies each valid numeric JointSet result into the live 48-byte-per-joint "
