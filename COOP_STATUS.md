@@ -21981,3 +21981,80 @@ remains `PlayerWeaponIKAction_Update 0x1410950E0 -> WeaponIKFeather_Apply
 is supported by three independent static evidence types. The user explicitly
 requested that further tests be reserved for a fully proved fix rather than
 additional diagnostic probes.
+
+### 2026-08-11 STATIC / REJECTED: no stock local/remote grip switch; keep runtime closed
+
+The next static pass deliberately did not launch another diagnostic build. It
+closes every early branch of `PlayerWeaponIKAction_Update 0x1410950E0` that
+could have explained the user-visible split "local Nadine broken, remote Nadine
+correct" as a stock switch to a known-good pose. None is such a switch.
+
+The exact per-screen byte read at `0x14109516E` is the registered debug setting
+`hack-disable-weapon-partials`, not a remote-Player policy. The handler
+`Settings_RegisterHackDisableWeaponPartialsForScreen 0x140FB1790` selects
+`0x143073319 + 0xC0*screen`, registers default byte zero, and only writes one
+when the setting is explicitly enabled. The image initializes both screen
+records to zero and no direct writer enables screen 1 automatically. Forcing
+this byte on screen 0 would make Update return before NewIkWeapon,
+WeaponPartial blending and `WeaponIKFeather_Apply`; the wrapper would execute
+the stock `WeaponIKFeatherInfo` reset. That is a broad debug kill switch, not a
+proven Nadine grip repair, and is **REJECTED** for runtime.
+
+The adjacent `Player+0x1FF0` branch also corrects a durable old error. The
+assembly pass calls `PlayerFlashlightController_Create 0x140E3E660` at
+`0x1410CD006`, stores the result at Player+0x1FF0 at `0x1410CD00B`, and the
+constructor `0x140E3E6A0` installs exact RTTI vtable `0x142A23EA8`. Slot
+`+0x18 = 0x140E35620` compares either of the controller's two flashlight hand-
+process tokens with the current GestureController token. Only when one is
+active does Update call slot `+0xD8 = 0x140E35AD0`, which resolves and marks the
+retained flashlight effect process before suppressing weapon IK. Thus
+Player+0x1FF0 is **PlayerFlashlightController, not Skill**; ordinary P99/Mazur
+idle without a torch does not take this branch. The 2026-07-10 `Skill*` claim
+was a cross-class offset conflation and is superseded here.
+
+The remaining apparent target candidates are scalar/state helpers rather than
+pose donors. `Player+0x4320` points to a separately allocated 0x30-byte
+`PlayerBlindFireAimGestureState`, constructed at `0x140CCF6E0`. Its `+0x0C`
+qword is an actor-local `{GestureLayer index,generation}` token and `+0x8` is a
+transient continuation latch. `GestureController_IsLayerTokenCurrent
+0x141ECE250` validates that token; `0x140CCFB70` only attenuates the desired IK
+weight/ramp for active blind-fire gestures. Copying, clearing or forcing this
+state would alter blind-fire, cover, flinch and weapon-selection behavior
+without supplying either hand transform and is **REJECTED**.
+
+The four locator calls at `0x14109578A/799/7A8/7B7` likewise do not create a
+weapon grip target. They read the current Player joint-cache transforms for
+`r/l_wrist` and `r/l_hand_prop_attachment`, compute only a distance attenuation
+`clamp((maxDistance-0.25)/0.1)`, and multiply the final Apply weight. The
+`WeaponIKFeatherInfo` constructor `0x1418F1E60` builds both JointTrees through
+`JointTree_BuildFromRootToNamedLeaves 0x141820E80` against the Player primary
+FgAnimData skeleton. It has no art, screen, network-role or render-look branch.
+This rejects both hand-index guessing and the hypothesis that local Nadine kept
+Chloe joint indices while remote Nadine rebuilt them from its visible look.
+
+The shared lifecycle is also closed statically. Both retained entities are the
+exact Player class; Draw and immediate-switch paths converge on
+`PlayerWeaponController_StartWeaponIKForSlot 0x14109DA80`, which creates the
+same channel-4 `PlayerWeaponIKAction`. The common phase-3 scheduler calls it for
+both screens. An early false return only resets the two IK transform arrays and
+keeps the action alive; only main animation phase `<0.0001` writes action state
+3 and removes it. Remote action absence remains possible as a session timing
+state, but is not a stock consequence of remote role and supplies no portable
+donor.
+
+Three independent evidence kinds therefore agree: exact RTTI/vtable ownership
+for the flashlight and gesture objects; instruction-level token/scalar and
+joint-tree dataflow; and the common Draw -> StartWeaponIK -> phase-3 lifecycle.
+Competing stock-switch explanations are rejected, while the `abm` result still
+shows only that WeaponIKFeather contributes to P99 misalignment. There is no
+fully supported visual mutation yet, so **no game launch is authorized**.
+
+The next static frontier is before, not after, `WeaponIKFeather_Apply`: resolve
+the complete steady Player command bundle that produces joints 21--32 for P99
+and Mazur from the normal `AnimControl_CreateAnimCommands 0x14172C370 ->
+AnimStateLayer_CreateAnimCommands 0x14189EA60` path, then compare that atomic
+base/add/set/hands bundle with the already proved NPC-Nadine retarget bundle.
+Only a complete local-only bundle replacement with compatible skeleton maps and
+weights can earn the next visual test. Do not revive `0x14172CB32`, the debug
+kill switch, flashlight/blind-fire gates, individual clip substitution, scalar
+weight guesses or blanket Feather suppression.

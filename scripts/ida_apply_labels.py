@@ -11437,10 +11437,128 @@ FUNCTIONS = {
         "builds the fall/ledge-grab-fall action pair and enqueues it at "
         "0x14131A25E; geometry/break variants occupy adjacent slots.",
     ),
+    # --- 2026-08-11: local Nadine weapon-grip static closure ---
+    0x141090650: (
+        "Player_GetMainAnimStateCurrentPhase",
+        "Resolves the owning Player main AnimControl and returns the current "
+        "active-state phase at AnimStateInstance+0x168. PlayerWeaponIKAction "
+        "uses it for lifecycle and WeaponIKFeather weighting.",
+    ),
+    0x141090AC0: (
+        "Player_UpdateWeaponPartialBlendAndIkInputs",
+        "Per-Player weapon-partial/IK prepass. Integrates the per-screen target "
+        "and transition duration into the main active-state phase and applies "
+        "blind-fire gesture attenuation before PlayerWeaponIKAction_Update.",
+    ),
+    0x140FB1790: (
+        "Settings_RegisterHackDisableWeaponPartialsForScreen",
+        "Registers the exact per-screen debug setting "
+        "hack-disable-weapon-partials. The backing byte defaults to zero and is "
+        "indexed by Player screen with a 0xC0 stride; screen 1 is not enabled "
+        "automatically.",
+    ),
+    0x140E3E660: (
+        "PlayerFlashlightController_Create",
+        "Allocates 0x270 bytes and constructs the PlayerFlashlightController "
+        "later stored at Player+0x1FF0.",
+    ),
+    0x140E3E6A0: (
+        "PlayerFlashlightController_Construct",
+        "Installs the PlayerFlashlightController vtable and initializes its two "
+        "flashlight process tokens, pose state, ArmIkChain and retained effect "
+        "handle. This proves Player+0x1FF0 is not a Skill.",
+    ),
+    0x140E35620: (
+        "PlayerFlashlightController_HasActiveHandProcesses",
+        "PlayerFlashlightController vtable +0x18. Compares either stored "
+        "flashlight process token at +0x1C/+0x24 with the owning Player "
+        "GestureController current token and reports whether flashlight hand "
+        "presentation is active.",
+    ),
+    0x140E35AD0: (
+        "PlayerFlashlightController_GetAndMarkActiveEffectProcess",
+        "PlayerFlashlightController vtable +0xD8. Resolves the retained effect "
+        "process at +0x1B8/+0x1C0, validates its generation and marks object+0x72.",
+    ),
+    0x140CCF6E0: (
+        "PlayerBlindFireAimGestureState_Construct",
+        "Constructs the 0x30-byte Player-owned blind-fire/aim gesture state "
+        "stored by pointer at Player+0x4320; initializes its GestureLayer token "
+        "to {-1,-1}, latch to zero and timers to zero.",
+    ),
+    0x140CCE350: (
+        "PlayerBlindFireAimGestureState_SelectGestureId",
+        "Selects the authored blind-fire/cover/ledge/rope/slope aim gesture id "
+        "for the PlayerBlindFireAimGestureState update.",
+    ),
+    0x140CCECD0: (
+        "PlayerBlindFireAimGestureState_IsActiveOrLatched",
+        "Returns true when the stored GestureLayer index/generation token is "
+        "still current or when the transient continuation latch at +0x8 is set.",
+    ),
+    0x140CCED10: (
+        "PlayerBlindFireAimGestureState_Update",
+        "Starts, advances or releases the selected blind-fire/aim gesture and "
+        "stores its actor-local GestureLayer token in the state at +0x0C.",
+    ),
+    0x140CCFB70: (
+        "PlayerBlindFireAimGestureState_AdjustWeaponIKBlend",
+        "Adjusts the desired weapon-IK scalar and ramp for active blind-fire "
+        "gestures. It does not construct or replace either hand target.",
+    ),
+    0x140CD0070: (
+        "PlayerBlindFireAimGestureState_GetActiveGestureId",
+        "Returns the currently active authored blind-fire/aim gesture id from "
+        "the Player-owned gesture state.",
+    ),
+    0x140CD0100: (
+        "PlayerBlindFireAimGestureState_IsActiveOrRecentlyActive",
+        "Extends the exact active-token predicate with the state+0x28 recent-"
+        "activity grace interval.",
+    ),
+    0x141ECE250: (
+        "GestureController_IsLayerTokenCurrent",
+        "Validates a stored {GestureLayer index,generation} pair against the "
+        "current token returned by GestureController vtable +0x90 and the "
+        "selected GestureLayer vtable +0xC0.",
+    ),
+    0x141ECE2C0: (
+        "GestureController_StopGestureByCurrentLayerToken",
+        "Validates a GestureLayer token, then dispatches the normal release "
+        "request through GestureController +0x78 / GestureLayer +0x28.",
+    ),
+    0x1420F9020: (
+        "GestureLayer_GetCurrentToken",
+        "GestureLayer vtable +0xC0. Returns {layer+0x10 index,layer+0x1B0 "
+        "generation} while an authored gesture is active, else {-1,-1}.",
+    ),
+    0x141820BF0: (
+        "JointTree_BuildFromRootToNamedLeaves_Varargs",
+        "Varargs wrapper that collects named leaf joints and forwards them to "
+        "JointTree_BuildFromRootToNamedLeaves.",
+    ),
+    0x141820E80: (
+        "JointTree_BuildFromRootToNamedLeaves",
+        "Builds a concrete joint tree from one root to named leaf joints in the "
+        "supplied FgAnimData skeleton. WeaponIKFeatherInfo uses the Player "
+        "primary skeleton, not the render-look retarget skeleton.",
+    ),
 }
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142A23EA8: (
+        "PlayerFlashlightController_vftable",
+        "Exact RTTI PlayerFlashlightController vtable installed by "
+        "PlayerFlashlightController_Construct; +0x18 checks active flashlight "
+        "hand processes and +0xD8 resolves the retained effect process.",
+    ),
+    0x143073319: (
+        "g_PerScreenHackDisableWeaponPartials",
+        "Screen-0 byte of the 0xC0-stride per-screen "
+        "hack-disable-weapon-partials setting. The registered default is zero; "
+        "screen 1 is at +0xC0.",
+    ),
     0x142A9A630: (
         "ProcessWeaponBase_vftable",
         "Exact MSVC RTTI ProcessWeaponBase vtable. COL 0x142CD85D8 names "

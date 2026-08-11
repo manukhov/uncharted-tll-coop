@@ -4270,6 +4270,27 @@ Continue statically from the terminal ordinary path
 runtime probe. The next launch must contain a fully supported visual fix and a
 three-evidence, falsifiable prediction.
 
+**STATIC grip closure after `abr`:** do not use another runtime discriminator.
+The remaining apparent stock switches are all rejected. The per-screen byte at
+`0x143073319 + 0xC0*screen` is the default-off debug setting
+`hack-disable-weapon-partials`, not a remote-screen policy. Player+0x1FF0 is
+exact `PlayerFlashlightController` (created at `0x140E3E660`, vtable
+`0x142A23EA8`), not Skill; its `+0x18/+0xD8` branch suppresses weapon IK only for
+an active flashlight hand process. Player+0x4320 is a blind-fire GestureLayer
+token/latch whose only weapon link is scalar IK attenuation. The four
+wrist/hand-prop locator reads in PlayerWeaponIKAction are also only distance
+attenuation, while both WeaponIKFeather JointTrees are built from the common
+Player primary skeleton. Therefore no screen flag, token reset, joint-index
+rewrite or full action bypass has a proven correct resulting pose.
+
+Continue statically from the ordinary steady command producer, not the rejected
+event-driven phase hook: close the full P99/Mazur base/add/set/hands command
+bundle reaching Player joints 21--32 through `AnimControl_CreateAnimCommands
+0x14172C370 -> AnimStateLayer_CreateAnimCommands 0x14189EA60`. Compare the
+whole compatible bundle with the authored NPC-Nadine retarget path; do not
+substitute a single hands clip. The next game launch is allowed only for an
+atomic local-only visual repair supported by three independent evidence types.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
