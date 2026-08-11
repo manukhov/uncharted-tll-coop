@@ -2031,9 +2031,10 @@ constexpr float kLegacyNadineP99HipBackMeters = 0.02F;
 // resolver mutation and its hot-path diagnostics out while the local-only
 // HandFix/IK presentation owner is traced downstream.
 constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
-// Read-only post-stock join for the exact live AnimStateInstance selected at
-// AnimStateLayer_PhaseUpdateInstances+0x104. It records the resolved snapshot,
-// transition weight and phase for the local P99/Mazur without changing them.
+// Read-only post-stock census at the exact type-2-layer callsite. It first
+// proves the concrete layer belongs to local legacy Nadine's AnimControl, then
+// enumerates that layer's freshly resolved instances and records their snapshot,
+// transition weight and phase without changing them.
 constexpr bool kEnableLegacyNadineGripSnapshotCensus = true;
 // The common resolver already selects the compatible P99/Mazur Player clips.
 // Local PlayerWeaponIKAction then runs WeaponIKFeather::Apply and commits both
@@ -28510,6 +28511,60 @@ bool prepare_plain_callsite_relay(
     return true;
 }
 
+// AnimControl_PhaseUpdateType2Layers keeps the exact current AnimControl in
+// RBX and the current registry index in RSI at its sole call to
+// AnimStateLayer_PhaseUpdateInstances.  Preserve the stock RCX/RDX arguments,
+// surface those two nonvolatile values as R8/R9, then tail-jump to a normal
+// four-argument hook.  The original CALL return address remains untouched.
+bool prepare_nadine_type2_phase_callsite_relay(
+    std::uintptr_t callsite_rva, std::uintptr_t expected_target_rva,
+    const void* hook, std::uint8_t*& callsite, std::uint8_t*& relay,
+    std::int32_t& old_displacement, std::int32_t& new_displacement) {
+    callsite = reinterpret_cast<std::uint8_t*>(g_module + callsite_rva);
+    relay = nullptr;
+    old_displacement = 0;
+    new_displacement = 0;
+    if (callsite[0] != 0xE8) {
+        return false;
+    }
+    std::memcpy(
+        &old_displacement, callsite + 1, sizeof(old_displacement));
+    const std::uintptr_t target =
+        reinterpret_cast<std::uintptr_t>(callsite + 5) +
+        static_cast<std::intptr_t>(old_displacement);
+    if (target != g_module + expected_target_rva) {
+        return false;
+    }
+
+    constexpr std::size_t kRelaySize = 20;
+    relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(callsite, kRelaySize));
+    if (relay == nullptr) {
+        return false;
+    }
+    constexpr std::array<std::uint8_t, 12> kPrefix{
+        0x49, 0x89, 0xD8,              // mov r8, rbx
+        0x49, 0x89, 0xF1,              // mov r9, rsi
+        0xFF, 0x25, 0x00, 0x00, 0x00, 0x00 // jmp qword ptr [rip]
+    };
+    std::memcpy(relay, kPrefix.data(), kPrefix.size());
+    const std::uintptr_t hook_address =
+        reinterpret_cast<std::uintptr_t>(hook);
+    std::memcpy(relay + kPrefix.size(), &hook_address, sizeof(hook_address));
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(callsite + 5);
+    if (displacement < INT32_MIN || displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        relay = nullptr;
+        return false;
+    }
+    new_displacement = static_cast<std::int32_t>(displacement);
+    return true;
+}
+
 bool prepare_plain_jumpsite_relay(
     std::uintptr_t jumpsite_rva, std::uintptr_t expected_target_rva,
     const void* hook, std::uint8_t*& jumpsite, std::uint8_t*& relay,
@@ -40202,6 +40257,9 @@ AnimSnapshotNodeAnimationResolveClipFunction
     g_anim_snapshot_node_animation_resolve_clip_for_nadine_weapon_partial =
         nullptr;
 
+void census_legacy_nadine_grip_layer(
+    void* layer, void* anim_control, std::uint32_t registry_index);
+
 const LegacyNadineWeaponPartialLegClipReplacement*
 find_legacy_nadine_weapon_partial_leg_clip_replacement(
     std::uint32_t source) {
@@ -40505,48 +40563,40 @@ void seh_retarget_legacy_nadine_weapon_partial_live_snapshots(
 }
 
 void __fastcall hooked_anim_state_layer_phase_update_instances_for_nadine(
-    void* layer, void* knowledge) {
+    void* layer, void* knowledge, void* anim_control,
+    std::uint32_t registry_index) {
     if (g_anim_state_layer_phase_update_instances_for_nadine_weapon_partial !=
         nullptr) {
         g_anim_state_layer_phase_update_instances_for_nadine_weapon_partial(
             layer, knowledge);
     }
-    int owner_index = -1;
-    void* player = nullptr;
-    if (seh_classify_retained_legacy_nadine_weapon_partial_layer(
-            layer, &owner_index, &player)) {
-        seh_retarget_legacy_nadine_weapon_partial_live_snapshots(
-            layer, owner_index, player);
+    if constexpr (kEnableLegacyNadineGripSnapshotCensus) {
+        census_legacy_nadine_grip_layer(
+            layer, anim_control, registry_index);
+    }
+    if constexpr (kEnableLegacyNadineWeaponPartialLiveSnapshotLegRetarget) {
+        int owner_index = -1;
+        void* player = nullptr;
+        if (seh_classify_retained_legacy_nadine_weapon_partial_layer(
+                layer, &owner_index, &player)) {
+            seh_retarget_legacy_nadine_weapon_partial_live_snapshots(
+                layer, owner_index, player);
+        }
     }
 }
 
-bool install_legacy_nadine_weapon_partial_live_snapshot_leg_retarget() {
+bool install_legacy_nadine_type2_phase_hook() {
     std::uint8_t* callsite = nullptr;
     std::uint8_t* relay = nullptr;
-    std::int32_t displacement = 0;
-    if (!prepare_plain_callsite_relay(
+    std::int32_t old_displacement = 0;
+    std::int32_t new_displacement = 0;
+    if (!prepare_nadine_type2_phase_callsite_relay(
             kAnimControlPhaseUpdateType2LayerCallsiteRva,
             kAnimStateLayerPhaseUpdateInstancesRva,
             reinterpret_cast<const void*>(
                 &hooked_anim_state_layer_phase_update_instances_for_nadine),
-            callsite, relay, displacement)) {
-        boot_log_line(
-            "Nadine WeaponPartial live-snapshot retarget SKIPPED (preflight)");
-        return false;
-    }
-    SuspendedProcessThreads suspended_threads{};
-    if (!suspend_other_process_threads(suspended_threads)) {
-        VirtualFree(relay, 0, MEM_RELEASE);
-        boot_log_line(
-            "Nadine WeaponPartial live-snapshot retarget SKIPPED (thread suspend)");
-        return false;
-    }
-    DWORD old = 0;
-    if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
-        resume_suspended_process_threads(suspended_threads);
-        VirtualFree(relay, 0, MEM_RELEASE);
-        boot_log_line(
-            "Nadine WeaponPartial live-snapshot retarget SKIPPED (protect)");
+            callsite, relay, old_displacement, new_displacement)) {
+        boot_log_line("Nadine type-2 phase hook SKIPPED (preflight)");
         return false;
     }
     g_anim_control_find_active_type2_layer_by_id =
@@ -40561,14 +40611,91 @@ bool install_legacy_nadine_weapon_partial_live_snapshot_leg_retarget() {
     g_anim_snapshot_node_animation_resolve_clip_for_nadine_weapon_partial =
         reinterpret_cast<AnimSnapshotNodeAnimationResolveClipFunction>(
             g_module + kAnimSnapshotNodeAnimationResolveClipRva);
-    std::memcpy(callsite + 1, &displacement, sizeof(displacement));
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_anim_state_layer_phase_update_instances_for_nadine_weapon_partial =
+            nullptr;
+        boot_log_line("Nadine type-2 phase hook SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD old = 0;
+    if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_anim_state_layer_phase_update_instances_for_nadine_weapon_partial =
+            nullptr;
+        boot_log_line("Nadine type-2 phase hook SKIPPED (protect)");
+        return false;
+    }
+    std::memcpy(
+        callsite + 1, &new_displacement, sizeof(new_displacement));
     FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+
+    std::int32_t readback = 0;
+    std::memcpy(&readback, callsite + 1, sizeof(readback));
+    bool installed = callsite[0] == 0xE8 &&
+        readback == new_displacement;
+    bool rollback_verified = false;
+    if (!installed) {
+        std::memcpy(
+            callsite + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, callsite + 1,
+            sizeof(rollback_readback));
+        rollback_verified = callsite[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+    }
     DWORD ignored = 0;
-    VirtualProtect(callsite, 5, old, &ignored);
+    bool protection_restored =
+        VirtualProtect(callsite, 5, old, &ignored) != 0;
+    if (installed && !protection_restored) {
+        std::memcpy(
+            callsite + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, callsite + 1,
+            sizeof(rollback_readback));
+        rollback_verified = callsite[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+        installed = !rollback_verified;
+        protection_restored =
+            VirtualProtect(callsite, 5, old, &ignored) != 0;
+    }
     resume_suspended_process_threads(suspended_threads);
+    if (!installed) {
+        if (rollback_verified) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            g_anim_state_layer_phase_update_instances_for_nadine_weapon_partial =
+                nullptr;
+            boot_log_line(
+                protection_restored
+                    ? "Nadine type-2 phase hook SKIPPED (verified rollback)"
+                    : "Nadine type-2 phase hook SKIPPED (verified rollback, protection restore WARNING)");
+        } else {
+            boot_log_line(
+                protection_restored
+                    ? "Nadine type-2 phase hook SKIPPED (rollback verification WARNING; relay retained)"
+                    : "Nadine type-2 phase hook SKIPPED (rollback/protection WARNING; relay retained)");
+        }
+        return false;
+    }
+    if (!protection_restored) {
+        boot_log_line(
+            "Nadine type-2 phase hook installed (rollback/protection WARNING; relay retained)");
+        return true;
+    }
     boot_log_line(
-        "Nadine WeaponPartial live-snapshot retarget installed "
-        "(post 0x14172CB32 / 0x14189D720)");
+        kEnableLegacyNadineGripSnapshotCensus &&
+                kEnableLegacyNadineWeaponPartialLiveSnapshotLegRetarget
+            ? "Nadine type-2 phase hook installed (grip census + live-snapshot retarget, post 0x14172CB32)"
+            : kEnableLegacyNadineGripSnapshotCensus
+                ? "Nadine type-2 phase hook installed (grip census read-only, RBX/RSI ownership relay at 0x14172CB32)"
+                : "Nadine type-2 phase hook installed (live-snapshot retarget, post 0x14172CB32)");
     return true;
 }
 
@@ -42352,13 +42479,6 @@ bool install_legacy_nadine_active_weapon_grip_overlay_repair() {
     return installed;
 }
 
-using AnimStateInstanceResolveDtGroupAndSnapshotFunction =
-    std::int64_t(__fastcall*)(
-        void*, std::int64_t, void*, void*, std::int64_t);
-AnimStateInstanceResolveDtGroupAndSnapshotFunction
-    g_original_anim_state_instance_resolve_dt_group_and_snapshot_for_grip =
-        nullptr;
-
 std::uint32_t grip_snapshot_weight_bucket(float weight) {
     if (!std::isfinite(weight)) {
         return 6;
@@ -42381,50 +42501,6 @@ std::uint32_t grip_snapshot_weight_bucket(float weight) {
     return 5;
 }
 
-int grip_snapshot_scan_budget_index(
-    std::uint32_t art, std::uint32_t source_id) {
-    if (art == kCoopPistolArtId &&
-        source_id == kP99IdleFingersPlayerClipId) {
-        return 0;
-    }
-    if (art != kCoopRifleArtId) {
-        return -1;
-    }
-    switch (source_id) {
-    case kP99IdleFingersPlayerClipId:
-        return 1;
-    case 0x41C84248u:
-        return 2;
-    case 0x283966EDu:
-        return 3;
-    case 0xEB712BFCu:
-        return 4;
-    case 0x77A8107Cu:
-        return 5;
-    case 0x20FFCB4Fu:
-        return 6;
-    case 0xBE7CB4A2u:
-        return 7;
-    case 0x8F9F1C38u:
-        return 8;
-    case 0x7FB80CC8u:
-        return 9;
-    case 0x47C0A266u:
-        return 10;
-    default:
-        return -1;
-    }
-}
-
-constexpr std::uint32_t kGripSnapshotScanBudgetPerSource = 48;
-constexpr std::uint32_t kGripSnapshotScanStride = 16;
-std::array<std::atomic<std::uint32_t>, 11>
-    g_grip_snapshot_scan_ticks{};
-std::array<std::atomic<std::uint32_t>, 11>
-    g_grip_snapshot_scan_attempts{};
-std::atomic<std::uint32_t> g_grip_snapshot_exhausted_mask{0};
-std::atomic<std::uint32_t> g_grip_snapshot_logged_exhausted_mask{0};
-
 struct NadineGripSnapshotCapture {
     void* player = nullptr;
     void* weapon = nullptr;
@@ -42434,10 +42510,9 @@ struct NadineGripSnapshotCapture {
     void* snapshot_heap = nullptr;
     void* anim_set = nullptr;
     void* layer = nullptr;
-    std::int64_t source_snapshot = 0;
-    std::int64_t option = 0;
     int owner_index = -1;
     int current_slot = -1;
+    std::uint32_t look = 0;
     std::uint32_t draw_state = 0;
     std::uint32_t art = 0;
     std::uint32_t state_id = 0;
@@ -42457,252 +42532,8 @@ struct NadineGripSnapshotCapture {
     float transition_weight = 0.0F;
     float previous_phase = 0.0F;
     float current_phase = 0.0F;
+    bool weapon_parent_match = false;
 };
-
-bool seh_capture_legacy_nadine_grip_snapshot(
-    void* instance, std::int64_t source_snapshot, void* overlay,
-    void* phase_context, std::int64_t option,
-    NadineGripSnapshotCapture* capture) {
-    if (capture == nullptr) {
-        return false;
-    }
-    *capture = {};
-    __try {
-        if (!g_net_role_b || instance == nullptr ||
-            readable_bytes(instance) < 0x1C0 ||
-            *reinterpret_cast<const std::uintptr_t*>(instance) !=
-                g_module + kAnimStateInstanceVtableRva) {
-            return false;
-        }
-        // R8 is track+0x8: normally a track-local overlay copy and legally
-        // null, not the Player master object.  Ownership is closed below by
-        // finding this exact (instance, overlay) pair uniquely in the retained
-        // Player's own PlayerWeaponAnimControl registry.
-        capture->owner_index = 0;
-        capture->player = retained_player_object(0);
-        if (capture->player == nullptr ||
-            !player_object_stable(capture->player) ||
-            !player_screen_index_is(capture->player, 0)) {
-            return false;
-        }
-        std::uint32_t look = 0;
-        if (!seh_read_player_look(capture->player, &look) ||
-            look != kLegacyNadineAttachTargetLookId) {
-            return false;
-        }
-        if (!read_weapon_draw_state(
-                capture->player, capture->current_slot,
-                capture->draw_state) ||
-            capture->current_slot < 0 ||
-            (capture->draw_state != 2 && capture->draw_state != 4)) {
-            return false;
-        }
-        capture->weapon = get_weapon_from_slot(
-            capture->player, capture->current_slot);
-        if (capture->weapon == nullptr) {
-            return false;
-        }
-        capture->art = weapon_art_id_from_object(capture->weapon);
-        if ((capture->art != kCoopPistolArtId &&
-             capture->art != kCoopRifleArtId) ||
-            !seh_weapon_parent_resolves_to_owner(
-                capture->weapon, capture->player)) {
-            return false;
-        }
-
-        const auto* const bytes = static_cast<const std::byte*>(instance);
-        capture->state_id =
-            *reinterpret_cast<const std::uint32_t*>(bytes + 0x98);
-        capture->snapshot_default_id =
-            *reinterpret_cast<const std::uint32_t*>(bytes + 0xB0);
-        // SnapshotAnimState writes the actual overlay-resolver preimage here
-        // at 0x1418B27F1.  +0xB0 is only the copied snapshot default.
-        capture->source_id =
-            *reinterpret_cast<const std::uint32_t*>(bytes + 0x11C);
-        capture->resolved_id =
-            *reinterpret_cast<const std::uint32_t*>(bytes + 0x118);
-        capture->lookup_key_0 =
-            *reinterpret_cast<const std::uint32_t*>(bytes + 0x120);
-        capture->lookup_key_1 =
-            *reinterpret_cast<const std::uint32_t*>(bytes + 0x124);
-        capture->snapshot_heap =
-            *reinterpret_cast<void* const*>(bytes + 0x130);
-        capture->root_index =
-            *reinterpret_cast<const std::uint32_t*>(bytes + 0x138);
-        capture->anim_set =
-            *reinterpret_cast<void* const*>(bytes + 0x140);
-        capture->transition_weight =
-            *reinterpret_cast<const float*>(bytes + 0x158);
-        capture->previous_phase =
-            *reinterpret_cast<const float*>(bytes + 0x16C);
-        capture->current_phase =
-            *reinterpret_cast<const float*>(bytes + 0x168);
-        capture->flags = static_cast<std::uint8_t>(bytes[0x190]);
-        const bool p99_source = capture->art == kCoopPistolArtId &&
-            capture->source_id == kP99IdleFingersPlayerClipId;
-        const bool mazur_source = capture->art == kCoopRifleArtId &&
-            (capture->source_id == kP99IdleFingersPlayerClipId ||
-             capture->source_id == 0x41C84248u ||
-             capture->source_id == 0x283966EDu ||
-             capture->source_id == 0xEB712BFCu ||
-             capture->source_id == 0x77A8107Cu ||
-             capture->source_id == 0x20FFCB4Fu ||
-             capture->source_id == 0xBE7CB4A2u ||
-             capture->source_id == 0x8F9F1C38u ||
-             capture->source_id == 0x7FB80CC8u ||
-             capture->source_id == 0x47C0A266u);
-        if (!p99_source && !mazur_source) {
-            return false;
-        }
-        if (capture->resolved_id == 0 || capture->lookup_key_0 == 0 ||
-            capture->lookup_key_1 == 0 ||
-            capture->snapshot_heap == nullptr ||
-            capture->anim_set == nullptr ||
-            !std::isfinite(capture->transition_weight)) {
-            return false;
-        }
-
-        // Bound unsuccessful and repeated joins per exact art/source without
-        // claiming a semantic signature before ownership is proven.  Budget
-        // exhaustion is surfaced outside SEH, so absence remains falsifiable.
-        const int budget_index = grip_snapshot_scan_budget_index(
-            capture->art, capture->source_id);
-        if (budget_index < 0) {
-            return false;
-        }
-        const std::uint32_t tick =
-            g_grip_snapshot_scan_ticks[
-                static_cast<std::size_t>(budget_index)]
-                .fetch_add(1, std::memory_order_relaxed);
-        if ((tick % kGripSnapshotScanStride) != 0) {
-            return false;
-        }
-        const std::uint32_t attempt =
-            g_grip_snapshot_scan_attempts[
-                static_cast<std::size_t>(budget_index)]
-                .fetch_add(1, std::memory_order_relaxed);
-        if (attempt >= kGripSnapshotScanBudgetPerSource) {
-            g_grip_snapshot_exhausted_mask.fetch_or(
-                1u << static_cast<unsigned>(budget_index),
-                std::memory_order_relaxed);
-            return false;
-        }
-
-        const auto* const player_bytes =
-            static_cast<const std::byte*>(capture->player);
-        void* const weapon_anim_control =
-            *reinterpret_cast<void* const*>(player_bytes + 0x1DF0);
-        if (weapon_anim_control == nullptr ||
-            readable_bytes(weapon_anim_control) < 0x18 ||
-            *reinterpret_cast<const std::uintptr_t*>(weapon_anim_control) !=
-                g_module + kPlayerWeaponAnimControlVtableRva ||
-            *reinterpret_cast<void* const*>(
-                static_cast<const std::byte*>(weapon_anim_control) + 0x10) !=
-                capture->player) {
-            return false;
-        }
-        void* const anim_control = *reinterpret_cast<void* const*>(
-            static_cast<const std::byte*>(weapon_anim_control) + 0x8);
-        if (anim_control == nullptr || readable_bytes(anim_control) < 0x38) {
-            return false;
-        }
-        const auto* const anim_control_bytes =
-            static_cast<const std::byte*>(anim_control);
-        const std::uint32_t registry_count =
-            *reinterpret_cast<const std::uint32_t*>(
-                anim_control_bytes + 0x28);
-        const auto* const registry =
-            *reinterpret_cast<const std::byte* const*>(
-                anim_control_bytes + 0x30);
-        if (registry_count == 0 || registry_count > 128 ||
-            registry == nullptr ||
-            readable_bytes(registry) <
-                static_cast<std::size_t>(registry_count) * 0x20) {
-            return false;
-        }
-        std::uint32_t instance_matches = 0;
-        for (std::uint32_t registry_index = 0;
-             registry_index < registry_count; ++registry_index) {
-            const auto* const record = registry + registry_index * 0x20;
-            if (record[0x14] == std::byte{0}) {
-                continue;
-            }
-            void* const layer =
-                *reinterpret_cast<void* const*>(record + 0x8);
-            if (layer == nullptr || readable_bytes(layer) < 0x508) {
-                continue;
-            }
-            const auto* const layer_bytes =
-                static_cast<const std::byte*>(layer);
-            if (*reinterpret_cast<const std::uint32_t*>(
-                    layer_bytes + 0x8) != 2) {
-                continue;
-            }
-            const std::uint32_t track_count =
-                *reinterpret_cast<const std::uint32_t*>(
-                    layer_bytes + 0x500);
-            const auto* const tracks =
-                *reinterpret_cast<void* const* const*>(
-                    layer_bytes + 0x4F8);
-            if (track_count == 0 || track_count > 64 || tracks == nullptr ||
-                readable_bytes(tracks) <
-                    static_cast<std::size_t>(track_count) * sizeof(void*)) {
-                continue;
-            }
-            for (std::uint32_t track_index = 0;
-                 track_index < track_count; ++track_index) {
-                const auto* const track =
-                    static_cast<const std::byte*>(tracks[track_index]);
-                if (track == nullptr || readable_bytes(track) < 0x18 ||
-                    *reinterpret_cast<void* const*>(track + 0x8) != overlay) {
-                    continue;
-                }
-                const auto* const instances =
-                    *reinterpret_cast<void* const* const*>(track);
-                const std::uint16_t capacity =
-                    *reinterpret_cast<const std::uint16_t*>(track + 0x10);
-                const std::uint16_t instance_count =
-                    *reinterpret_cast<const std::uint16_t*>(track + 0x12);
-                if (instance_count == 0 || instance_count > capacity ||
-                    instance_count > 64 || instances == nullptr ||
-                    readable_bytes(instances) <
-                        static_cast<std::size_t>(instance_count) *
-                            sizeof(void*)) {
-                    continue;
-                }
-                for (std::uint16_t instance_index = 0;
-                     instance_index < instance_count; ++instance_index) {
-                    if (instances[instance_index] != instance) {
-                        continue;
-                    }
-                    ++instance_matches;
-                    capture->layer = layer;
-                    capture->layer_id =
-                        *reinterpret_cast<const std::uint32_t*>(record);
-                    capture->registry_index = registry_index;
-                    capture->track_index = track_index;
-                    capture->track_count = track_count;
-                    capture->instance_index = instance_index;
-                    capture->instance_count = instance_count;
-                }
-            }
-        }
-        if (instance_matches != 1) {
-            *capture = {};
-            return false;
-        }
-
-        capture->instance = instance;
-        capture->overlay = overlay;
-        capture->phase_context = phase_context;
-        capture->source_snapshot = source_snapshot;
-        capture->option = option;
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        *capture = {};
-        return false;
-    }
-}
 
 void log_legacy_nadine_grip_snapshot(
     const NadineGripSnapshotCapture& capture) {
@@ -42732,18 +42563,36 @@ void log_legacy_nadine_grip_snapshot(
     mix(capture.instance_index);
     mix(capture.instance_count);
     mix(weight_bucket);
-    static std::array<std::atomic<std::uint64_t>, 192> seen{};
-    if (!claim_holster_probe_signature(seen, signature)) {
-        return;
+    if (signature == 0) {
+        signature = 1;
     }
-    static std::atomic<std::uint32_t> unique_signature_count{0};
-    const std::uint32_t signature_count =
-        unique_signature_count.fetch_add(1, std::memory_order_relaxed) + 1;
-    if (signature_count >= seen.size()) {
-        // Bit 31 is reserved for post-join semantic-signature saturation;
-        // bits 0..10 identify per-source scan budgets.
-        g_grip_snapshot_exhausted_mask.fetch_or(
-            1u << 31, std::memory_order_relaxed);
+    static std::array<std::atomic<std::uint64_t>, 512> seen{};
+    const std::size_t start =
+        static_cast<std::size_t>(signature) & (seen.size() - 1);
+    bool claimed = false;
+    bool duplicate = false;
+    for (std::size_t probe = 0; probe < 16; ++probe) {
+        auto& slot = seen[(start + probe) & (seen.size() - 1)];
+        std::uint64_t value = slot.load(std::memory_order_relaxed);
+        if (value == signature) {
+            duplicate = true;
+            break;
+        }
+        if (value == 0 && slot.compare_exchange_strong(
+                              value, signature,
+                              std::memory_order_relaxed)) {
+            claimed = true;
+            break;
+        }
+    }
+    if (!claimed) {
+        if (!duplicate) {
+            static std::atomic<bool> saturation_logged{false};
+            if (!saturation_logged.exchange(true, std::memory_order_relaxed)) {
+                write_log_line("NADINE-GRIP-LAYER-SNAPSHOT-CENSUS-SATURATED");
+            }
+        }
+        return;
     }
 
     std::uint32_t weight_bits = 0;
@@ -42758,7 +42607,7 @@ void log_legacy_nadine_grip_snapshot(
         &current_phase_bits, &capture.current_phase,
         sizeof(current_phase_bits));
     std::ostringstream line;
-    line << "NADINE-GRIP-SNAPSHOT player=0x" << std::hex
+    line << "NADINE-GRIP-LAYER-SNAPSHOT player=0x" << std::hex
          << reinterpret_cast<std::uintptr_t>(capture.player)
          << " weapon=0x"
          << reinterpret_cast<std::uintptr_t>(capture.weapon)
@@ -42766,13 +42615,10 @@ void log_legacy_nadine_grip_snapshot(
          << reinterpret_cast<std::uintptr_t>(capture.instance)
          << " overlay=0x"
          << reinterpret_cast<std::uintptr_t>(capture.overlay)
-         << " sourceSnapshot=0x"
-         << static_cast<std::uintptr_t>(capture.source_snapshot)
          << " phaseContext=0x"
          << reinterpret_cast<std::uintptr_t>(capture.phase_context)
          << " layer=0x" << reinterpret_cast<std::uintptr_t>(capture.layer)
          << " layerId=0x" << capture.layer_id
-         << " option=0x" << static_cast<std::uintptr_t>(capture.option)
          << " art=0x" << capture.art
          << " state=0x" << capture.state_id
          << " snapshotDefault=0x" << capture.snapshot_default_id
@@ -42805,154 +42651,245 @@ void log_legacy_nadine_grip_snapshot(
     write_log_line(line.str().c_str());
 }
 
-void log_legacy_nadine_grip_snapshot_budget_exhaustion() {
-    const std::uint32_t exhausted =
-        g_grip_snapshot_exhausted_mask.load(std::memory_order_relaxed);
-    const std::uint32_t already_logged =
-        g_grip_snapshot_logged_exhausted_mask.fetch_or(
-            exhausted, std::memory_order_relaxed);
-    const std::uint32_t newly_exhausted = exhausted & ~already_logged;
-    if (newly_exhausted == 0) {
+constexpr std::uint64_t kGripLayerCensusCadenceMs = 100;
+constexpr std::uint32_t kGripLayerCensusSamplesPerArtAndLayer = 32;
+constexpr std::size_t kGripLayerCensusMaxRegistryEntries = 128;
+std::array<std::atomic<std::uint64_t>, kGripLayerCensusMaxRegistryEntries>
+    g_grip_layer_census_last_tick{};
+std::array<std::array<std::atomic<std::uint32_t>,
+                      kGripLayerCensusMaxRegistryEntries>, 2>
+    g_grip_layer_census_samples{};
+
+void census_legacy_nadine_grip_layer(
+    void* layer, void* anim_control, std::uint32_t registry_index) {
+    __try {
+        if (!g_net_role_b || layer == nullptr || anim_control == nullptr ||
+            registry_index >= kGripLayerCensusMaxRegistryEntries) {
+            return;
+        }
+        // The relay supplies RBX from AnimControl_PhaseUpdateType2Layers.
+        // Before any expensive readable-page probes, close it against the
+        // retained local Player's PlayerWeaponAnimControl by two direct reads
+        // under SEH. Global/non-player AnimControls leave here in O(1).
+        void* const player = retained_player_object(0);
+        if (player == nullptr) {
+            return;
+        }
+        const auto* const player_bytes =
+            static_cast<const std::byte*>(player);
+        void* const weapon_anim_control =
+            *reinterpret_cast<void* const*>(player_bytes + 0x1DF0);
+        if (weapon_anim_control == nullptr) {
+            return;
+        }
+        const auto* const weapon_anim_control_bytes =
+            static_cast<const std::byte*>(weapon_anim_control);
+        if (*reinterpret_cast<void* const*>(
+                weapon_anim_control_bytes + 0x8) != anim_control) {
+            return;
+        }
+
+        // Sample each exact local registry index at most every 100 ms. This is
+        // before player/weapon/page validation and bounds the global hot path.
+        const std::uint64_t now = GetTickCount64();
+        auto& last_tick = g_grip_layer_census_last_tick[registry_index];
+        std::uint64_t previous_tick =
+            last_tick.load(std::memory_order_relaxed);
+        if (previous_tick != 0 &&
+            now - previous_tick < kGripLayerCensusCadenceMs) {
+            return;
+        }
+        if (!last_tick.compare_exchange_strong(
+                previous_tick, now, std::memory_order_relaxed)) {
+            return;
+        }
+
+        if (!player_object_stable(player) ||
+            !player_screen_index_is(player, 0) ||
+            readable_bytes(weapon_anim_control) < 0x18 ||
+            *reinterpret_cast<const std::uintptr_t*>(
+                weapon_anim_control_bytes) !=
+                g_module + kPlayerWeaponAnimControlVtableRva ||
+            *reinterpret_cast<void* const*>(
+                weapon_anim_control_bytes + 0x10) != player ||
+            readable_bytes(anim_control) < 0x38 ||
+            readable_bytes(layer) < 0x508) {
+            return;
+        }
+        const auto* const layer_bytes =
+            static_cast<const std::byte*>(layer);
+        if (*reinterpret_cast<const std::uintptr_t*>(layer_bytes) !=
+                g_module + kAnimStateLayerVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(layer_bytes + 0x8) !=
+                kAnimStateLayerType) {
+            return;
+        }
+
+        const auto* const anim_control_bytes =
+            static_cast<const std::byte*>(anim_control);
+        const std::uint32_t registry_count =
+            *reinterpret_cast<const std::uint32_t*>(
+                anim_control_bytes + 0x28);
+        const auto* const registry =
+            *reinterpret_cast<const std::byte* const*>(
+                anim_control_bytes + 0x30);
+        if (registry_count == 0 ||
+            registry_count > kGripLayerCensusMaxRegistryEntries ||
+            registry_index >= registry_count ||
+            registry == nullptr ||
+            readable_bytes(registry) <
+                static_cast<std::size_t>(registry_count) * 0x20) {
+            return;
+        }
+        const auto* const record = registry + registry_index * 0x20;
+        if (record[0x14] == std::byte{0} ||
+            *reinterpret_cast<void* const*>(record + 0x8) != layer) {
+            return;
+        }
+        const std::uint32_t layer_id =
+            *reinterpret_cast<const std::uint32_t*>(record);
+
+        std::uint32_t look = 0;
+        if (!seh_read_player_look(player, &look) ||
+            look != kLegacyNadineAttachTargetLookId) {
+            return;
+        }
+
+        int current_slot = -1;
+        std::uint32_t draw_state = 0;
+        if (!read_weapon_draw_state(player, current_slot, draw_state) ||
+            current_slot < 0 ||
+            (draw_state != 2 && draw_state != 4)) {
+            return;
+        }
+        void* const weapon = get_weapon_from_slot(player, current_slot);
+        if (weapon == nullptr) {
+            return;
+        }
+        const std::uint32_t art = weapon_art_id_from_object(weapon);
+        if ((art != kCoopPistolArtId && art != kCoopRifleArtId) ||
+            !seh_weapon_parent_resolves_to_owner(weapon, player)) {
+            return;
+        }
+        const std::size_t art_index = art == kCoopPistolArtId ? 0 : 1;
+        const std::uint32_t sample =
+            g_grip_layer_census_samples[art_index][registry_index].fetch_add(
+                1, std::memory_order_relaxed);
+        if (sample >= kGripLayerCensusSamplesPerArtAndLayer) {
+            if (sample == kGripLayerCensusSamplesPerArtAndLayer) {
+                char line[224]{};
+                std::snprintf(
+                    line, sizeof(line),
+                    "NADINE-GRIP-LAYER-SNAPSHOT-BUDGET-EXHAUSTED art=0x%08X registry=%u samples=%u cadenceMs=%llu",
+                    art, registry_index,
+                    kGripLayerCensusSamplesPerArtAndLayer,
+                    static_cast<unsigned long long>(
+                        kGripLayerCensusCadenceMs));
+                write_log_line(line);
+            }
+            return;
+        }
+
+        const std::uint32_t track_count =
+            *reinterpret_cast<const std::uint32_t*>(layer_bytes + 0x500);
+        const auto* const tracks =
+            *reinterpret_cast<void* const* const*>(layer_bytes + 0x4F8);
+        if (track_count == 0 || track_count > 64 || tracks == nullptr ||
+            readable_bytes(tracks) <
+                static_cast<std::size_t>(track_count) * sizeof(void*)) {
+            return;
+        }
+
+        for (std::uint32_t track_index = 0;
+             track_index < track_count; ++track_index) {
+            const auto* const track =
+                static_cast<const std::byte*>(tracks[track_index]);
+            if (track == nullptr || readable_bytes(track) < 0x18) {
+                continue;
+            }
+            void* const overlay =
+                *reinterpret_cast<void* const*>(track + 0x8);
+            const auto* const instances =
+                *reinterpret_cast<void* const* const*>(track);
+            const std::uint16_t capacity =
+                *reinterpret_cast<const std::uint16_t*>(track + 0x10);
+            const std::uint16_t instance_count =
+                *reinterpret_cast<const std::uint16_t*>(track + 0x12);
+            if (instance_count == 0 || instance_count > capacity ||
+                instance_count > 64 || instances == nullptr ||
+                readable_bytes(instances) <
+                    static_cast<std::size_t>(instance_count) * sizeof(void*)) {
+                continue;
+            }
+
+            for (std::uint16_t instance_index = 0;
+                 instance_index < instance_count; ++instance_index) {
+                void* const instance = instances[instance_index];
+                if (instance == nullptr || readable_bytes(instance) < 0x1C0 ||
+                    *reinterpret_cast<const std::uintptr_t*>(instance) !=
+                        g_module + kAnimStateInstanceVtableRva) {
+                    continue;
+                }
+                const auto* const bytes =
+                    static_cast<const std::byte*>(instance);
+                NadineGripSnapshotCapture capture{};
+                capture.player = player;
+                capture.weapon = weapon;
+                capture.instance = instance;
+                capture.overlay = overlay;
+                capture.phase_context =
+                    *reinterpret_cast<void* const*>(layer_bytes + 0x40);
+                capture.layer = layer;
+                capture.owner_index = 0;
+                capture.current_slot = current_slot;
+                capture.look = look;
+                capture.draw_state = draw_state;
+                capture.art = art;
+                capture.state_id =
+                    *reinterpret_cast<const std::uint32_t*>(bytes + 0x98);
+                capture.snapshot_default_id =
+                    *reinterpret_cast<const std::uint32_t*>(bytes + 0xB0);
+                capture.source_id =
+                    *reinterpret_cast<const std::uint32_t*>(bytes + 0x11C);
+                capture.resolved_id =
+                    *reinterpret_cast<const std::uint32_t*>(bytes + 0x118);
+                capture.lookup_key_0 =
+                    *reinterpret_cast<const std::uint32_t*>(bytes + 0x120);
+                capture.lookup_key_1 =
+                    *reinterpret_cast<const std::uint32_t*>(bytes + 0x124);
+                capture.snapshot_heap =
+                    *reinterpret_cast<void* const*>(bytes + 0x130);
+                capture.root_index =
+                    *reinterpret_cast<const std::uint32_t*>(bytes + 0x138);
+                capture.anim_set =
+                    *reinterpret_cast<void* const*>(bytes + 0x140);
+                capture.transition_weight =
+                    *reinterpret_cast<const float*>(bytes + 0x158);
+                capture.current_phase =
+                    *reinterpret_cast<const float*>(bytes + 0x168);
+                capture.previous_phase =
+                    *reinterpret_cast<const float*>(bytes + 0x16C);
+                capture.flags = static_cast<std::uint8_t>(bytes[0x190]);
+                capture.layer_id = layer_id;
+                capture.registry_index = registry_index;
+                capture.track_index = track_index;
+                capture.track_count = track_count;
+                capture.instance_index = instance_index;
+                capture.instance_count = instance_count;
+                capture.weapon_parent_match = true;
+                if (capture.source_id == 0 || capture.resolved_id == 0 ||
+                    capture.lookup_key_0 == 0 || capture.lookup_key_1 == 0 ||
+                    capture.snapshot_heap == nullptr ||
+                    capture.anim_set == nullptr ||
+                    !std::isfinite(capture.transition_weight)) {
+                    continue;
+                }
+                log_legacy_nadine_grip_snapshot(capture);
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
         return;
     }
-    std::ostringstream line;
-    line << "NADINE-GRIP-SNAPSHOT-BUDGET-EXHAUSTED mask=0x"
-         << std::hex << newly_exhausted << std::dec
-         << " perSource=" << kGripSnapshotScanBudgetPerSource
-         << " stride=" << kGripSnapshotScanStride
-         << " signatureSaturationBit=31";
-    write_log_line(line.str().c_str());
-}
-
-std::int64_t __fastcall
-hooked_anim_state_instance_resolve_dt_group_and_snapshot_for_grip(
-    void* instance, std::int64_t source_snapshot, void* overlay,
-    void* phase_context, std::int64_t option) {
-    const auto original =
-        g_original_anim_state_instance_resolve_dt_group_and_snapshot_for_grip;
-    const std::int64_t result = original != nullptr
-        ? original(
-              instance, source_snapshot, overlay, phase_context, option)
-        : 0;
-    if (kEnableLegacyNadineGripSnapshotCensus) {
-        NadineGripSnapshotCapture capture{};
-        if (seh_capture_legacy_nadine_grip_snapshot(
-                instance, source_snapshot, overlay, phase_context, option,
-                &capture)) {
-            log_legacy_nadine_grip_snapshot(capture);
-        }
-        log_legacy_nadine_grip_snapshot_budget_exhaustion();
-    }
-    return result;
-}
-
-bool install_legacy_nadine_grip_snapshot_census() {
-    std::uint8_t* callsite = nullptr;
-    std::uint8_t* relay = nullptr;
-    std::int32_t new_displacement = 0;
-    if (!prepare_plain_callsite_relay(
-            kAnimStateLayerResolveInstanceCallsiteRva,
-            kAnimStateInstanceResolveDtGroupAndSnapshotRva,
-            reinterpret_cast<const void*>(
-                &hooked_anim_state_instance_resolve_dt_group_and_snapshot_for_grip),
-            callsite, relay, new_displacement)) {
-        boot_log_line(
-            "legacy-Nadine grip snapshot census SKIPPED (callsite preflight)");
-        return false;
-    }
-    std::int32_t old_displacement = 0;
-    std::memcpy(
-        &old_displacement, callsite + 1, sizeof(old_displacement));
-    g_original_anim_state_instance_resolve_dt_group_and_snapshot_for_grip =
-        reinterpret_cast<
-            AnimStateInstanceResolveDtGroupAndSnapshotFunction>(
-                g_module +
-                kAnimStateInstanceResolveDtGroupAndSnapshotRva);
-
-    SuspendedProcessThreads suspended_threads{};
-    if (!suspend_other_process_threads(suspended_threads)) {
-        VirtualFree(relay, 0, MEM_RELEASE);
-        g_original_anim_state_instance_resolve_dt_group_and_snapshot_for_grip =
-            nullptr;
-        boot_log_line(
-            "legacy-Nadine grip snapshot census SKIPPED (thread suspend)");
-        return false;
-    }
-    DWORD old_protection = 0;
-    if (VirtualProtect(
-            callsite, 5, PAGE_EXECUTE_READWRITE, &old_protection) == 0) {
-        resume_suspended_process_threads(suspended_threads);
-        VirtualFree(relay, 0, MEM_RELEASE);
-        g_original_anim_state_instance_resolve_dt_group_and_snapshot_for_grip =
-            nullptr;
-        boot_log_line(
-            "legacy-Nadine grip snapshot census SKIPPED (protect)");
-        return false;
-    }
-    std::memcpy(
-        callsite + 1, &new_displacement, sizeof(new_displacement));
-    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
-    std::int32_t readback = 0;
-    std::memcpy(&readback, callsite + 1, sizeof(readback));
-    bool installed = callsite[0] == 0xE8 &&
-        readback == new_displacement;
-    bool rollback_verified = false;
-    if (!installed) {
-        std::memcpy(
-            callsite + 1, &old_displacement, sizeof(old_displacement));
-        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
-        std::int32_t rollback_readback = 0;
-        std::memcpy(
-            &rollback_readback, callsite + 1,
-            sizeof(rollback_readback));
-        rollback_verified = callsite[0] == 0xE8 &&
-            rollback_readback == old_displacement;
-    }
-    DWORD ignored = 0;
-    bool protection_restored =
-        VirtualProtect(
-            callsite, 5, old_protection, &ignored) != 0;
-    if (installed && !protection_restored) {
-        std::memcpy(
-            callsite + 1, &old_displacement, sizeof(old_displacement));
-        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
-        std::int32_t rollback_readback = 0;
-        std::memcpy(
-            &rollback_readback, callsite + 1,
-            sizeof(rollback_readback));
-        rollback_verified = callsite[0] == 0xE8 &&
-            rollback_readback == old_displacement;
-        installed = !rollback_verified;
-        protection_restored =
-            VirtualProtect(
-                callsite, 5, old_protection, &ignored) != 0;
-    }
-    resume_suspended_process_threads(suspended_threads);
-    if (!installed) {
-        if (rollback_verified) {
-            VirtualFree(relay, 0, MEM_RELEASE);
-            g_original_anim_state_instance_resolve_dt_group_and_snapshot_for_grip =
-                nullptr;
-            boot_log_line(
-                protection_restored
-                    ? "legacy-Nadine grip snapshot census SKIPPED (verified rollback)"
-                    : "legacy-Nadine grip snapshot census SKIPPED (verified rollback, protection restore WARNING)");
-        } else {
-            boot_log_line(
-                protection_restored
-                    ? "legacy-Nadine grip snapshot census SKIPPED (rollback verification WARNING; relay retained)"
-                    : "legacy-Nadine grip snapshot census SKIPPED (rollback/protection WARNING; relay retained)");
-        }
-        return false;
-    }
-    if (!protection_restored) {
-        boot_log_line(
-            "legacy-Nadine grip snapshot census installed (rollback/protection WARNING; relay retained)");
-        return true;
-    }
-    boot_log_line(
-        "legacy-Nadine grip snapshot census installed (0x14189D824 read-only post-stock)");
-    return true;
 }
 
 using WeaponIkFeatherApplyFunction = std::uint8_t(__fastcall*)(
@@ -54342,7 +54279,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-11abo "
+        "TLL co-op runtime init 2026-08-11abq "
         "(abm runtime recorded; incomplete IK suppression and floating sling disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
@@ -54434,10 +54371,6 @@ DWORD WINAPI install_hook(void*) {
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_legacy_nadine_active_weapon_grip_overlay_repair();
     }
-    if constexpr (kEnableLegacyNadineGripSnapshotCensus &&
-                  !kEnableRejectedNadineWeaponRuntimeProbes) {
-        install_legacy_nadine_grip_snapshot_census();
-    }
     if constexpr (kEnableLegacyNadineWeaponIkFeatherSuppression &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_legacy_nadine_weapon_ik_feather_suppression();
@@ -54446,8 +54379,10 @@ DWORD WINAPI install_hook(void*) {
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_legacy_nadine_mazur_strap_visibility_repair();
     }
-    if constexpr (kEnableLegacyNadineWeaponPartialLiveSnapshotLegRetarget) {
-        install_legacy_nadine_weapon_partial_live_snapshot_leg_retarget();
+    if constexpr ((kEnableLegacyNadineGripSnapshotCensus ||
+                   kEnableLegacyNadineWeaponPartialLiveSnapshotLegRetarget) &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        install_legacy_nadine_type2_phase_hook();
     }
     if constexpr (kEnableLegacyNadinePistolHipAttachment &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {

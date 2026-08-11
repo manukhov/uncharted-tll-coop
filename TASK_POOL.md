@@ -4222,6 +4222,29 @@ older track contributes `+0x158`; the newest track is generated at full weight.
 Release build passes. Run only the written P99-then-Mazur idle discriminator;
 there is no gameplay mutation in this package.
 
+**RUNTIME INCONCLUSIVE (`abo`) / STATIC REJECTED (`abp`) / STATIC IMPLEMENTED
+(`abq`):** exact `abo` marker and relay installed in PIDs `14348/440`; role-B
+P99 and Mazur stock presentation paths were live, but the grip census emitted
+neither a result nor its per-source budget marker. Therefore no allowlisted
+source reached the registry scan and the run cannot select missing-layer. The
+first `abp` reject-stage draft was not launched: it interpreted source before
+proving local instance ownership and misreported intentional stride skips as
+admission failures.
+
+`abq` removes that ambiguity by using the exact outer type-2 layer callsite
+`0x14172CB32`. A custom relay carries the caller's exact `RBX=AnimControl` and
+`RSI=registry index`; stock runs first, then that O(1) identity and indexed
+active record must close against local retained Nadine before any instance
+source is read. Every local layer is sampled at 100 ms cadence, at most 32 times
+independently per P99/Mazur art, with explicit exhaustion. Only that owned
+layer's bounded tracks/live instances are enumerated. The census has no source
+allowlist and emits unique `NADINE-GRIP-LAYER-SNAPSHOT` rows plus an explicit
+512-slot saturation marker. The abandoned inner census was deleted.
+All gameplay mutations remain off. Object-code review passes. Run P99 idle for
+at least 3.5 s, then Mazur idle for at least 3.5 s: missing owned two-hand rows
+selects the producer/channel branch; present weighted rows select the later
+command/IK owner branch. Neither rows nor explicit exhaustion rejects packaging.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

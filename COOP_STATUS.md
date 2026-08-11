@@ -19872,12 +19872,15 @@ is permitted.
 The retained-owner lifetime gap is now closed at a boundary that runs every
 animation phase rather than only during one-time snapshot construction. Exact
 `AnimControl_PhaseUpdateType2Layers 0x14172CAB0` walks enabled registry entries,
-requires `record+0x18 == 2`, and has one direct call to
+requires active `record+0x14`, a non-null `record+0x8` layer and
+`layer+0x8 == 2`, and has one direct call to
 `AnimStateLayer_PhaseUpdateInstances 0x14189D720` at `0x14172CB32`. The latter
 walks each layer track and instance, resolves or reuses its snapshot, then
 phase-updates it. `AnimControl_CreateAnimCommands 0x14172C370` is a later,
 separate pass. Therefore a post-call relay sees a complete live snapshot before
-its clips are consumed by command generation.
+its clips are consumed by command generation. Correction: the older
+`record+0x18 == 2` attribution was inaccurate; that field belongs to the later
+knowledge-publication loop, not this phase-update admission.
 
 The mutable data contract is independently exact. Every admitted
 `AnimStateInstance` has RTTI vtable `0x142B0C730`, state id at `+0x98`,
@@ -21813,3 +21816,94 @@ Falsifiable prediction for one later P99-then-Mazur idle capture:
 Release compilation and linking succeed. The game is not launched yet: this
 probe is the first evidence-bearing discriminator after the rejected `abm`, not
 a visual repair to be tested speculatively.
+
+### 2026-08-11 RUNTIME INCONCLUSIVE (`abo`) / STATIC IMPLEMENTED (`abp`): the census stops before its source budget
+
+Fresh PIDs `14348/440` loaded exact marker `2026-08-11abo`; both installed the
+post-stock relay at `0x14189D824` and remained responsive. On role-B PID `440`
+the user drew P99, idled, then drew Mazur and idled. Independent stock-path rows
+proved the same retained local Nadine and exact arts were live: P99 completed
+the `rightHand -> targSpineProp -> pistolHolster` handoff, while Mazur continued
+to resolve its exact local `targSpineProp` back frame. Nevertheless the run
+emitted zero `NADINE-GRIP-SNAPSHOT` rows and zero
+`NADINE-GRIP-SNAPSHOT-BUDGET-EXHAUSTED` rows.
+
+This is **INCONCLUSIVE**, not evidence for **Gmissing-layer**. The absence of a
+budget marker proves no allowlisted `art/source` tuple reached the scan-budget
+gate. It leaves distinct earlier competitors: **Gdraw-gate** (the controller
+state is not 2/4 at this snapshot boundary), **Gsource-different** (the live
+`instance+0x11C` preimage is outside the historical nine-id list), and
+**Gowner-precheck** (retained screen/look/weapon identity rejects before the
+tuple read). Registry uniqueness and transition weight were never tested by
+this run.
+
+The underlying field interpretation remains exact rather than guessed. IDA
+reconfirms that `AnimStateInstance_ResolveDtGroupAndSnapshot 0x1418A4670`
+passes `instance+0x90` to `AnimStateSnapshot_SnapshotAnimState 0x1418B24F0`;
+the latter writes its phase-selected resolver preimage to snapshot `+0x8C`
+(`instance+0x11C`) at `0x1418B27F1`, invokes the optional overlay resolver at
+`0x1418B2940`, invokes AnimSet remap at `0x1418B2954`, and writes the final
+tuple to instance `+0x118/+0x120/+0x124` at
+`0x1418B2972/0x1418B2962/0x1418B296C`. Historical resolver rows at
+`0x1418B2945` prove the nine ids can exist in this pipeline, but do not prove
+which preimage is live in the tested idle epoch.
+
+The first `abp` draft is **STATIC REJECTED before runtime**. Its inner callsite
+is global over every live `AnimStateLayer`; it read `instance+0x11C` before
+proving that the instance belonged to retained Player 0. A stage-6 source could
+therefore have come from remote Player 1 or another Player-family actor and was
+not an actionable local candidate. The same draft also labelled 15 of every 16
+intentional sampling skips as `REJECT stage=8`, conflating throttle with a
+failed admission gate. It was never launched.
+
+### 2026-08-11 STATIC / IMPLEMENTED (`abq`): move the census to the owning type-2 layer
+
+Build `abq` replaces the rejected inner per-instance admission with the already
+proved outer type-2 phase boundary. `AnimControl_PhaseUpdateType2Layers
+0x14172CAB0` walks its own enabled 0x20-byte registry, keeps the current
+`AnimControl` in `RBX` and registry index in `RSI`, requires active
+`record+0x14`, non-null `record+0x8` and concrete `layer+0x8 == 2`, then calls
+`AnimStateLayer_PhaseUpdateInstances 0x14189D720` at the sole direct callsite
+`0x14172CB32`. A 20-byte near relay preserves stock `RCX/RDX`, supplies
+`R8=RBX` and `R9=RSI`, and tail-jumps to the wrapper. The wrapper calls stock
+first, closes the supplied `AnimControl` against local retained Nadine's exact
+`PlayerWeaponAnimControl+0x8`, then validates the indexed active record in O(1).
+Thus ownership is proved before any snapshot source is interpreted; no global
+registry scan, remote Player or track-local-overlay inference remains.
+
+After O(1) admission, every exact local registry index is sampled at most once
+per 100 ms and at most 32 times independently for P99 and Mazur; exhaustion is
+explicit per art/index. The exact layer is enumerated through its bounded
+`+0x4F8/+0x500` tracks and `track+0x00/+0x12` live instances. For every complete stock snapshot,
+the read-only `NADINE-GRIP-LAYER-SNAPSHOT` row records layer/state, actual
+resolver preimage `instance+0x11C`, post-overlay/post-AnimSet tuple
+`+0x118/+0x120/+0x124`, heap/root/AnimSet, transition weight, phase and exact
+track/instance topology. It intentionally has no historical source allowlist:
+the point is to inventory the actual local P99/Mazur sources rather than assume
+the old nine. A 512-slot bounded open-addressed semantic census emits an explicit
+`...-CENSUS-SATURATED` marker on loss; continuous phase values and pointers are
+not part of its dedup key. Installation verifies the new displacement, restores
+page protection and uses a verified rollback while other threads remain
+suspended. The discarded inner `abp` relay/capture/reject machinery was deleted;
+all clip/IK/strap mutations remain disabled.
+
+Three independent facts earn one new read-only test: the outer caller owns the
+registry and passes its exact layer; `0x14189D720` resolves every live track
+instance before returning; and `0x1418B27F1/0x1418B2940/0x1418B2954` prove the
+logged source/final tuple's producer ordering. Competing outcomes remain:
+
+- **Gmissing-layer/source:** the exact owned Mazur inventory lacks a live
+  proximal-arms plus two-hand distal-hands contribution, or its only older-track
+  final instance has zero `+0x158` transition weight;
+- **Glater-local-owner:** the required arms/hands rows are present with full or
+  nonzero contribution while the visible pose remains broken, moving the
+  frontier after command generation into the local IK/late joint owner;
+- no owned snapshot row despite live P99/Mazur stock presentation, a saturation
+  marker, crash or visual change rejects/inconclusively packages `abq`.
+
+Release compilation succeeds and the final object-code review verifies relay
+bytes `49 89 D8 49 89 F1 FF 25 00 00 00 00`, the wrapper's original-argument
+preservation, bounded admission and rollback path. One read-only test is earned:
+idle at least 3.5 s with P99, then at least 3.5 s with Mazur. Each art must emit
+owned snapshot rows or explicit per-index exhaustion; neither output, a crash,
+new lag or any visual change rejects the package rather than the layer theory.

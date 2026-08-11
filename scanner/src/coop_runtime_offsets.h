@@ -735,16 +735,11 @@ constexpr std::uintptr_t kPlayerWeaponAnimControlRequestCustomPartVtableOffset =
 // AnimControl's type-2 phase loop has one direct call to
 // AnimStateLayer_PhaseUpdateInstances. After the call, every live instance has
 // either materialized or reused its SnapshotNodeHeap and the command generator
-// has not run yet.
+// has not run yet. At the callsite RBX is this AnimControl and RSI is the exact
+// registry index, so a relay can prove layer ownership without a global scan.
 constexpr std::uintptr_t kAnimControlPhaseUpdateType2LayerCallsiteRva =
     0x172CB32;
 constexpr std::uintptr_t kAnimStateLayerPhaseUpdateInstancesRva = 0x189D720;
-// AnimStateLayer_PhaseUpdateInstances calls this once for every live instance
-// before AnimStateInstance_PhaseUpdate. A post-stock wrapper can join the
-// selected snapshot tuple to the concrete instance and its transition weight.
-constexpr std::uintptr_t kAnimStateLayerResolveInstanceCallsiteRva = 0x189D824;
-constexpr std::uintptr_t kAnimStateInstanceResolveDtGroupAndSnapshotRva =
-    0x18A4670;
 constexpr std::uintptr_t kAnimControlFindActiveType2LayerByIdRva = 0x172B3E0;
 constexpr std::uintptr_t kAnimSnapshotNodeAnimationResolveClipRva = 0x1918070;
 // Read-only final holster discriminator. The anim-control event hook exposes
