@@ -4122,18 +4122,26 @@ census is conclusive: the exact authored child/pose/frame are valid, but its onl
 mesh has primary gate zero and `0/3` active instances because legacy Nadine lacks
 the dynamic `strap2/strap14` endpoints.
 
-Build `abi` is RUNTIME REJECTED, but its three first failures are statically
-closed in `abj`. The grip admission compared overlay object ids with art
-selectors; it now reads selector `set+0x18` and validates the resolved object id
-against `set+0x10`. The sling hook targeted disabled vtable phase `+0x408`; it
-now relays the live custom-callback call at `0x14150C990`, and no longer treats
-the varying diagnostic resource id as identity. The accepted Mazur final-frame
-substitution is extended presentation-only to role-A retained owner 1/screen 1,
-without remote rebind or attachment mutation. One combined `abj` runtime test is
-now permitted: P99 and drawn-idle Mazur grip, local holstered sling after a
-two-second dwell, and remote Nadine's back placement on Chloe's copy. Use the
-bounded candidate/scope-stage rows to classify any remaining visual failure;
-do not add another speculative repair from appearance alone.
+Build `abj` is PARTIAL: the remote owner-1 Mazur back frame is visually
+CONFIRMED and must be preserved. The local grip and sling did not improve. Its
+bounded evidence now identifies three independent causes: local cold rebinds
+were peer-packet-gated; drawn P99 resolves `D350A452 p1h-fingers` through the
+inactive Mazur overlay to `0A2F8976 lg1h-sniper-tkiv-right-hand`; and the sling
+scope sampled Fg/instance state before the callback tail published it.
+
+Build `abk` is STATIC / IMPLEMENTED. Local alias/P99/Mazur cold service now runs
+from native NadineBuddy's game-thread update before peer receive. The sole grip
+mutation is exact drawn P99 `D350A452/0A2F8976 -> D350A452`, guarded by current
+slot, draw state 2/4, exact art/owner, exact master/caller `0x18B2945` and both
+unique overlay-chain rows. Mazur pose remains diagnostic-only: a separate
+deduplicated census records every resolver pair on the exact drawn-Mazur
+master/caller because its known terminal clips are already Player-compatible;
+do not guess a replacement before that census isolates HandFix/IK/attachment.
+The sling visibility state machine now runs after stock
+tail `0x14150C9B3 -> 0x141F19070` publication, retaining all strict topology,
+world and generation guards plus a per-predicate fail mask. One combined `abk`
+test is permitted: cold spawn before network, drawn P99 grip, drawn-idle Mazur
+census, local holstered sling after two seconds, and remote back regression.
 
 ## Rule
 

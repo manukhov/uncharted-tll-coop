@@ -21387,3 +21387,89 @@ later presentation overwrite. P99 hip placement and all ordinary pistols remain
 outside the new scopes. Release compilation and linking pass. The two newly
 resolved strap functions are named in the single IDB, `save_database returned
 True`, and MCP readback plus xrefs verify both labels.
+
+### 2026-08-11 RUNTIME PARTIAL / REJECTED: `abj` confirms the remote back frame and exposes three different local failures
+
+The combined `abj` run remained responsive and cleanly separated the four
+visual reports. The remote presentation branch is **CONFIRMED**: role-A PID
+7720 repeatedly emitted `NADINE-MAZUR-NATIVE-BACK scope=remote ownerIndex=1`
+for selected `targSpineProp`, and the user confirmed that Chloe now sees the
+retained Nadine rifle at the accepted upper-back position. Preserve that branch.
+
+The local cold rifle delay is not a render-refresh delay. In role-B PID 14832,
+the first P99 handoff remained at `rightHand 16`, then the first peer receive and
+remote synchronization occurred, the local aliases were appended, P99 completed
+`16 -> 39 -> 41`, and Mazur completed `16 -> 39`; the first local
+`NADINE-MAZUR-NATIVE-BACK` row followed immediately. The later deferred Mazur
+refresh aborted with `scope-drift` after 141 attempts although the user saw the
+rifle move. The same peer-before-rebind ordering exists in four independent
+runs. Therefore the local cold repair was incorrectly driven from
+`apply_peer_held_weapon_state`, whose `latest_peer_state` guard necessarily
+waits for a peer packet.
+
+The P99 grip tuples from `abi` are **REJECTED**, but the resolver boundary is
+confirmed. Exact local master rows at caller `0x1418B2945` show live
+`D350A452 -> 0A2F8976`, while all three proposed tuples emitted zero mutation.
+A complete scan of the 16 overlay files gives one graph path:
+`D350A452 p1h-fingers -> EBEFDD92 lg1h-ak47-right-hand` through selector
+`D09D7E11` or `905377B5`, then `EBEFDD92 -> 0A2F8976
+lg1h-sniper-tkiv-right-hand` through the holstered Mazur selector/art
+`33E29A1B`. Thus an inactive inventory rifle is leaking its right-hand leaf into
+the drawn P99. All three clips are eight-group Player clips with the same
+`[30,32]` hand mask, while the P99 selector `8075397D` has only reload rows;
+the exact generic P99 donor is the original `D350A452`.
+
+The sling reached the correct child but still did not reveal. The sole exact
+row passed child identity, parent/owner, selected AD39, state 0, rope 1/15 and
+simulation bytes, then failed the former stage-5 composite. That composite was
+sampled immediately after `ProcessWeaponStrap_SimulateAndBuildJointPose` at
+`0x14150C990`, before `ProcessWeaponStrap_CustomUpdateCallback 0x14150C910`
+tail-jumps to `0x141F19070`, which copies/publishes the final object/Fg/instance
+world state. The old log cannot identify which of the 21 collapsed predicates
+failed. Competing causes are pre-publication child/world mismatch (leading),
+transition-time child transform mismatch, or a different mesh topology; a
+post-publication sample distinguishes them without weakening any guard.
+
+### 2026-08-11 STATIC / IMPLEMENTED: drawn-P99 leak repair, pre-peer cold service and post-publication sling (`abk`)
+
+Build `abk` fixes only the paths earned by the `abj` evidence. A role-B-only
+local presentation service now runs directly after the exact native NadineBuddy
+update stores `g_last_nadine_object`. It performs alias creation, pending
+refresh service, cold P99 and cold Mazur rebind without consulting peer state.
+All existing Player/controller/table/generation and one-shot guards remain;
+role A retains alias discovery in the peer path. The prediction is that local
+alias/P99/Mazur/back rows precede `state net first receive`, and the cold rifle
+leaves the hand within one or two ready-Player frames. A pre-peer verified row
+with unchanged pixels would instead prove a later render owner.
+
+The active-grip resolver now has one mutation tuple only:
+`D350A452 / 0A2F8976 -> D350A452`. Admission requires role B, retained local
+screen-0 legacy Nadine, exact current P99 art/owner, nonnegative current slot
+equal to that P99, draw state 2 or 4, exactly one active generic-pistol-to-longgun
+bridge row among selectors `D09D7E11/905377B5`, and exactly one Mazur
+`EBEFDD92 -> 0A2F8976` row. The first write is further restricted to the exact
+master state and observed caller return RVA `0x18B2945`; tagged copies and other
+resolver callers cannot mutate. Holstered/cache calls and a genuinely drawn
+Mazur cannot enter. The former guessed P99/Mazur Chloe-terminal tuples are
+removed. P99 telemetry still records the exact pair in every readable
+nonnegative current-slot draw state, including transitions 1/5, while mutation
+remains restricted to 2/4; draw state participates in deduplication. Mazur is
+diagnostic-only: on the same exact master/caller, a separate
+deduplicated budget records every unique source/final/variant pair while the
+current drawn art is `33E29A1B`, rather than filtering only guessed hashes.
+Known candidate terminals are already eight-group Player clips, so no Mazur
+pose mutation is justified until a later HandFix/IK/attachment overwrite is
+isolated.
+
+The sling hook moves from the pre-publication `E8 0x14150C990` to the exact tail
+`E9 0x14150C9B3 -> 0x141F19070`. Stock tail publication runs first under ABI
+`int64(child,FgAnimData,float,uint8)`, then the existing strict visibility scope
+runs on the final frame. The installer validates both untouched C990 and C9B3,
+uses a near register-preserving relay, suspends other threads, verifies the
+written displacement and rolls back on mismatch. A fail mask now reports every
+former stage-5 predicate. Prediction: the exact local Mazur child reaches the
+closed `0/3` gate after publication, dwells 1.5 seconds, then logs `shown` and
+`persistent` at `1/3` without changing parent/child transforms. A structural
+post-tail fail mask forbids ShowMesh and selects a different drawable topology.
+Remote owner 1 remains outside sling mutation. Release compilation and linking
+pass; build marker and payload strings confirm `2026-08-11abk`.

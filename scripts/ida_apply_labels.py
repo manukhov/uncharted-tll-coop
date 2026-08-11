@@ -856,6 +856,14 @@ FUNCTIONS = {
         "ProcessWeaponStrap_SimulateAndBuildJointPose at 0x14150C990, consumes "
         "its AL result, then performs the custom post-simulation publication.",
     ),
+    0x141F19070: (
+        "NdGameObject_CustomUpdatePublishTransform",
+        "Common tail target of ProcessWeaponStrap_CustomUpdateCallback. Receives "
+        "the resolved child, FgAnimData, delta time and simulation-result byte, "
+        "then completes the custom object-transform and Fg/instance publication. "
+        "The tail jump at 0x14150C9B3 is the first stable boundary after both "
+        "strap simulation and final frame publication.",
+    ),
     0x14150C8A0: (
         "ProcessWeaponStrap_UpdateAnimatingLayersAndPublish",
         "ProcessWeaponStrap vtable 0x142A9B0A0 slot +0x408. Forces the full "
