@@ -1202,13 +1202,24 @@ FUNCTIONS = {
         "process and updates ProcessWeaponStrap+0x12F0: holstered writes 0 and "
         "unholstered writes 1.",
     ),
+    0x1418F1610: (
+        "WeaponIKFeather_InitializeForPlayer",
+        "Initializes the embedded WeaponIKFeather in PlayerWeaponIKAction "
+        "against a Player and resolves its paired arm-chain joint indices. "
+        "The action constructor passes action+0x50 and the owning Player.",
+    ),
+    0x1418F1780: (
+        "WeaponIK_Apply",
+        "Terminal WeaponIK apply called by WeaponIKFeather_Apply after both "
+        "hand JointSets are solved and committed. It uses the shared arm-side "
+        "selector, not a weapon-art-specific policy.",
+    ),
     0x1418F1E60: (
-        "PlayerArmIKAction_ConstructForLook",
-        "Constructs the 336-byte per-look PlayerArmIKAction stored at "
-        "Player+0x4308. Configures paired right/left procedural chains from "
-        "spined to r_hand_prop_attachment/l_hand_prop_attachment and binds the "
-        "*player-ik-arm* action id. Called at top-level Player spawn and again "
-        "from Player_ChangeLookId.",
+        "WeaponIKFeatherInfo_ConstructForPlayerLook",
+        "Constructs the 0x150-byte look/skeleton-owned WeaponIKFeatherInfo "
+        "stored at Player+0x4308. It contains paired left/right JointSets and "
+        "solver maps, installs no AnimAction vtable, and is rebuilt by "
+        "Player_ChangeLookId.",
     ),
     0x1418F2700: (
         "WeaponIKFeather_Apply",
@@ -1217,6 +1228,12 @@ FUNCTIONS = {
         "info; the function resolves and commits both hand JointSets before "
         "solving the arm targets. Its first stack weight is read at "
         "0x1418F274F and zero returns false at 0x1418F2760 before any write.",
+    ),
+    0x1418F2E50: (
+        "WeaponIKFeather_SolveWeaponFeatherIk",
+        "Exact armik.cpp WeaponIKFeather::SolveWeaponFeatherIk assertion. "
+        "Consumes the paired left/right JointSets and solver maps; it is not "
+        "safe to suppress or substitute only one hand independently.",
     ),
     # --- 2026-07-13: native pickup gesture controller ---
     0x140F49300: (

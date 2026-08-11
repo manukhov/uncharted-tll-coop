@@ -4166,16 +4166,24 @@ resolver clip.
 Runtime `abm` completed this discriminator. P99 improved only partially under
 continuous WeaponIKFeather suppression, while Mazur remained a broken one-hand
 idle pose. Treat Apply as a CONFIRMED contributor but the suppression as
-REJECTED; trace its per-weapon input/target producer and the later local arm
-writer before another mutation.
+REJECTED. The alleged later ordinary arm writer was corrected: `0x140C7E8D0`
+is turret-only, and Apply is terminal in `PlayerWeaponIKAction_Update`. All 96
+bounded rows were P99, so Mazur suppression was never exercised. Keep Mazur
+stock and do not skip one hand: the paired JointSets/solver maps are consumed
+together. The next admissible grip step is a read-only per-art comparison of
+the fixed `WeaponIKFeatherInfo` inputs and pre/post left/right transforms, not
+another scalar or blanket bypass.
 
 The sling emitted exact `shown -> persistent` and became visible after the
 expected dwell, but floated independently without rope/body physics and was not
 present for remote Chloe. ShowMesh-only is REJECTED as a final repair. The next
-sling task is to establish a valid legacy-Nadine mapping for the missing
-`strap2..strap14` solver endpoints, then apply the same proven presentation to
-owner0 and owner1. Both incomplete flags are disabled in `abn`; do not launch
-that rollback-only build.
+sling task is no longer a visibility patch: all five native solver loops require
+the full `strap2..strap14` owner-guide chain, and neither Nadine skeleton has
+those thirteen hashes. No stock-compatible donor/mapping is currently proven.
+Keep the sling override disabled for owner0 and owner1; only a reproducible
+engine-authored retarget relation from captured Chloe guide locators can reopen
+this branch. Both incomplete flags are disabled in `abn`; do not launch that
+rollback-only build.
 
 ## Rule
 

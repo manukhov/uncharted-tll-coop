@@ -21565,11 +21565,9 @@ remaining grip owner with three independent evidence types.
    `rcx=action+0x50` and `rdx=*(Player+0x4308)`. Apply resolves both
    `l_hand_prop_attachment` and `r_hand_prop_attachment`, writes both JointSets,
    calls `JointSet_CommitJointTransformsAndReset`, then solves the weapon feather
-   chain through `0x1418F2E50` and `0x1418F1780`. The later
-   `PlayerArmIKAction_UpdateProcedural 0x140C7E8D0` consumes those stored goals
-   and propagates them through shoulders, elbows and wrists. This is downstream
-   of the already-correct P99 `D350A452->D350A452` resolver result and is local
-   Player action state, unlike the correct retained-remote presentation.
+   chain through `0x1418F2E50` and `0x1418F1780`. This is downstream of the
+   already-correct P99 `D350A452->D350A452` resolver result and is local Player
+   action state, unlike the correct retained-remote presentation.
 3. The mutation seam is stock-equivalent. `WeaponIKFeather_Apply` reads its
    first stack weight at `0x1418F274F`; zero returns false at `0x1418F2760`
    before any JointSet write. `PlayerWeaponIKAction_Update` ignores that return
@@ -21609,8 +21607,8 @@ Nadine grip/idle arms become correct while Chloe's remote view stays unchanged,
 WeaponIKFeather is CONFIRMED as the owner. Free/levitating hands instead prove
 the boundary but reject suppression as the final repair and select correction
 of its `WeaponIKFeatherInfo` inputs. No P99 change rejects this owner and moves
-the frontier to `PlayerArmIKAction_UpdateProcedural` or a later local upper-body
-writer. Independently, holstered Mazur must log sling `shown` then `persistent`;
+the frontier to another local upper-body writer. Independently, holstered Mazur
+must log sling `shown` then `persistent`;
 visible failure after both rows rejects the primary mesh gate as final owner.
 
 ### 2026-08-11 CONFIRMED / REJECTED: `abm` proves WeaponIKFeather is only one grip contributor and ShowMesh cannot repair the sling
@@ -21652,3 +21650,42 @@ Build marker `abn` retains the accepted P99 hip, Mazur back and cold-rebind
 repairs but disables both `kEnableLegacyNadineWeaponIkFeatherSuppression` and
 `kEnableLegacyNadineMazurStrapVisibilityRepair`. Do not launch `abn` merely to
 reconfirm the rollback; continue statically from the two exact owners above.
+
+### 2026-08-11 STATIC CORRECTION: ordinary weapon IK terminates in WeaponIKFeather, while the sling has no Nadine guide chain
+
+The post-`abm` call-graph audit corrects two earlier overstatements and closes
+the next safe boundary without another game launch.
+
+1. `PlayerArmIKAction_UpdateProcedural 0x140C7E8D0` is **REJECTED** as an
+   ordinary P99/Mazur consumer. Its only code xref is `0x1410589B6` inside the
+   source-identified `PlayerArmIKActionTurret::UpdateProcedural` path; it never
+   reads or receives `Player+0x4308`. Ordinary `PlayerWeaponIKAction_Update`
+   calls `WeaponIKFeather_Apply` at `0x1410959AC`, then immediately returns
+   success. Apply itself writes the paired JointSets, calls
+   `WeaponIKFeather_SolveWeaponFeatherIk 0x1418F2E50`, commits both hands and
+   finishes in `WeaponIK_Apply 0x1418F1780`.
+2. `Player+0x4308` is a fixed 0x150-byte per-look
+   `WeaponIKFeatherInfo`, not an AnimAction. Its constructor
+   `WeaponIKFeatherInfo_ConstructForPlayerLook 0x1418F1E60` installs no action
+   vtable, owns left `JointSet +0x00`, right `JointSet +0x50` and their solver
+   maps at `+0xA0/+0xF8`, and is rebuilt when the Player look changes. Inside
+   Apply, loop arm 0 resolves `l_hand_prop_attachment` and arm 1 resolves
+   `r_hand_prop_attachment`; the pair is consumed together, so skipping one arm
+   is not a safe discriminator.
+3. The `abm` telemetry did **not** exercise Mazur suppression: all 96 bounded
+   rows were consumed by P99 before Mazur was drawn. P99 proves Feather is one
+   contributor but that its zero-write branch exposes an independently bad base
+   pose. No scalar or one-arm correction has a static donor, so Mazur remains on
+   stock IK and no replacement mutation is enabled.
+
+The sling is also statically closed more narrowly. The ProcessWeaponStrap child
+uses a mesh skeleton `root + strap1..strap15`; its native simulator performs
+five exact StringId-to-owner-joint lookup passes at `0x14150ABFD`,
+`0x14150AD6D`, `0x14150AFEA`, `0x14150B68A` and `0x14150BC8D`. Chloe has the
+complete authored `strap2..strap14` guide subtree, while both legacy and native
+Nadine skeletons contain none of those thirteen hashes. `r_palm/l_palm` are
+only `Rope2::AddIgnoreCollisionBody` inputs, not endpoints. Thus a two-anchor,
+palette-remap or visibility repair cannot run stock Rope2 physics. A synthetic
+13-locator art policy would be hand-authored retargeting, not a proven engine
+mapping, and stays disabled. Remote owner1 visibility is not generalized until
+the same full stock solver admission can be satisfied.
