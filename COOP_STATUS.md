@@ -21424,8 +21424,9 @@ row passed child identity, parent/owner, selected AD39, state 0, rope 1/15 and
 simulation bytes, then failed the former stage-5 composite. That composite was
 sampled immediately after `ProcessWeaponStrap_SimulateAndBuildJointPose` at
 `0x14150C990`, before `ProcessWeaponStrap_CustomUpdateCallback 0x14150C910`
-tail-jumps to `0x141F19070`, which copies/publishes the final object/Fg/instance
-world state. The old log cannot identify which of the 21 collapsed predicates
+tail-jumps to `0x141F19070`, which copies/publishes the final object/Fg world
+state. The downstream render preparation owns the separate instance-world
+copy. The old log cannot identify which of the 21 collapsed predicates
 failed. Competing causes are pre-publication child/world mismatch (leading),
 transition-time child transform mismatch, or a different mesh topology; a
 post-publication sample distinguishes them without weakening any guard.
@@ -21518,3 +21519,32 @@ the instance world; or a separate local-view drawable is selected. Do not
 remove the world guards until `DrawControl_ShowMesh 0x141754A30` and
 `FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` prove which ordering is
 stock-safe.
+
+The follow-up static audit closes that ordering with four independent evidence
+types. `NdGameObject_CustomUpdatePublishTransform 0x141F19070` publishes the
+fresh Fg world but never writes `FgInstance+0x140`. The only normal downstream
+copy is `FgDrawManager_PrepareInstanceForRendering 0x14181A9B0`: it reads the
+Fg render world at `0x14181B3F4`, writes instance `+0x140..+0x17F`, and only
+afterwards tests instance visibility `+0x1A0` before queueing the instance.
+`IDrawControl_ShowMesh 0x141754A30` writes the primary mesh gate at
+`0x141754A97` and recomputes visibility `+0x1A0`; it does not copy a world
+matrix. Finally, delayed `abh` census rows already showed the same hidden
+`0/3` child eventually reaching equal Fg/instance worlds, while fresh `abk`
+rows alternate `0x2000/0xA000` even for the active parent weapon. The mismatch
+is therefore a normal producer/consumer phase lag, not bad child topology.
+
+Build `abl` makes only fail bits 13 and 15 (child instance versus child/weapon
+Fg world) diagnostic at the existing post-tail boundary. Every identity,
+owner, AD39, state, rope, mesh, object-transform, nonzero-world and
+child-Fg-versus-weapon-Fg guard remains hard. The immediate and persistence
+captures use the same rule, and instance hashes are excluded from the
+`presentationUnchanged` assertion because the renderer may legitimately
+advance them between captures. Result rows retain the before/after diagnostic
+fail masks. A hard-scope rejection while awaiting persistence is terminal and
+logs `persistence-scope-reject` instead of resetting the epoch and later
+masquerading as `stock-visible`. No matrix is copied manually and no renderer
+Prepare function is called. Prediction: after 1.5 seconds the exact child logs
+`shown` with `0/0 -> 1/3`, then one `persistent` row, while parent/child object
+and Fg hashes remain unchanged. `shown/persistent` with no visible sling rejects
+the primary gate as the final presentation owner; `reverted` selects the later
+visibility closer.

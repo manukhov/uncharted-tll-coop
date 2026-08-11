@@ -4141,14 +4141,16 @@ upper-body presentation path. Resolve the nine exact Mazur census pairs from
 `COOP_STATUS.md`, then trace their command6/HandFix/IK ownership before any
 mutation.
 
-The post-tail sling hook also remained fail-closed. Exact Mazur scope reaches
-only `failMask=0x2000/0xA000`: the hidden child Fg world and its rendered
-instance world differ while the mesh remains primary-gate zero and `0/3`
-active. Trace `DrawControl_ShowMesh 0x141754A30` through
-`FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` and prove whether a
-hidden instance is expected to be stale before weakening either world guard.
-No further runtime test is permitted until both branches meet the three-source
-static evidence quota and have a falsifiable local-versus-remote prediction.
+The sling static branch is now mutation-ready in `abl`. Exact code ordering
+proves `0x141F19070` publishes Fg world first, while
+`FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` later copies that world
+to `FgInstance+0x140..+0x17F` before checking visibility `+0x1A0`.
+`IDrawControl_ShowMesh 0x141754A30` changes only the mesh gate/visibility, and
+delayed `abh` rows prove the hidden instance eventually catches up. Therefore
+only fail bits 13/15 are diagnostic; all identity/topology/Fg guards remain
+hard, and no matrix/Prepare call is synthesized. Do not launch this alone yet:
+finish the local-only grip/IK proof and combine both into one bounded test with
+the written predictions in `COOP_STATUS.md`.
 
 ## Rule
 

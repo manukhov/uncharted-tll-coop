@@ -44613,6 +44613,14 @@ struct MazurStrapVisibilityScope {
     MazurStrapSnapshot snapshot{};
 };
 
+// ProcessWeaponStrap's custom tail publishes the fresh Fg world first. The
+// renderer copies that producer matrix into each FgInstance later in
+// FgDrawManager_PrepareInstanceForRendering, before it checks +0x1A0. Thus
+// instance-world comparisons are useful telemetry here, but cannot be
+// preconditions for opening the still-hidden mesh.
+constexpr std::uint32_t kMazurStrapDeferredInstanceWorldFailBits =
+    (1u << 13) | (1u << 15);
+
 bool seh_capture_legacy_nadine_mazur_strap_visibility_scope(
     void* child, MazurStrapVisibilityScope* scope) {
     if (scope == nullptr) {
@@ -44718,7 +44726,8 @@ bool seh_capture_legacy_nadine_mazur_strap_visibility_scope(
         fail(14, draw.fg_world_hash == weapon_draw.fg_world_hash);
         fail(15, draw.fg_world_hash ==
                  weapon_draw.first_instance_world_hash);
-        if (scope->diagnostic_fail_mask != 0) {
+        if ((scope->diagnostic_fail_mask &
+             ~kMazurStrapDeferredInstanceWorldFailBits) != 0) {
             return false;
         }
         scope->diagnostic_stage = 6;
@@ -44856,16 +44865,28 @@ SRWLOCK g_mazur_strap_visibility_lock = SRWLOCK_INIT;
 std::array<MazurStrapVisibilityMemo, 16> g_mazur_strap_visibility_memos{};
 std::size_t g_mazur_strap_visibility_replacement_cursor = 0;
 
-void reset_mazur_strap_visibility_epoch(void* child) {
+bool reject_mazur_strap_visibility_scope(void* child) {
+    bool rejected_persistence = false;
     AcquireSRWLockExclusive(&g_mazur_strap_visibility_lock);
     for (auto& memo : g_mazur_strap_visibility_memos) {
         if (memo.child == child) {
-            memo.eligible = false;
-            memo.first_seen_ms = 0;
-            memo.phase = MazurStrapVisibilityPhase::kPending;
+            if (memo.phase ==
+                MazurStrapVisibilityPhase::kAwaitPersistence) {
+                // A transient hard-scope failure after Show must remain a
+                // terminal, observable failure. Resetting here would let the
+                // next open capture masquerade as stock-visible and bypass the
+                // promised persistence check.
+                memo.phase = MazurStrapVisibilityPhase::kTerminalFailure;
+                rejected_persistence = true;
+            } else {
+                memo.eligible = false;
+                memo.first_seen_ms = 0;
+                memo.phase = MazurStrapVisibilityPhase::kPending;
+            }
         }
     }
     ReleaseSRWLockExclusive(&g_mazur_strap_visibility_lock);
+    return rejected_persistence;
 }
 
 enum class MazurStrapVisibilityAction : std::uint8_t {
@@ -44984,7 +45005,12 @@ void log_mazur_strap_visibility_result(
              << "/" << after->snapshot.child_draw.active_instances;
     }
     line << " call=" << (call_ok ? 1 : 0)
-         << " presentationUnchanged=" << parent_unchanged;
+         << " presentationUnchanged=" << parent_unchanged
+         << " failMask=0x" << std::hex << before.diagnostic_fail_mask;
+    if (after != nullptr) {
+        line << "->0x" << after->diagnostic_fail_mask;
+    }
+    line << std::dec;
     write_log_line(line.str().c_str());
 }
 
@@ -44996,7 +45022,10 @@ void repair_legacy_nadine_mazur_strap_visibility(void* child) {
     if (!seh_capture_legacy_nadine_mazur_strap_visibility_scope(
             child, &before)) {
         log_nadine_mazur_strap_scope_reject_once(child, before);
-        reset_mazur_strap_visibility_epoch(child);
+        if (reject_mazur_strap_visibility_scope(child)) {
+            log_mazur_strap_visibility_result(
+                "persistence-scope-reject", before, nullptr, false, -1);
+        }
         return;
     }
     const MazurStrapVisibilityAction action =
@@ -45031,12 +45060,8 @@ void repair_legacy_nadine_mazur_strap_visibility(void* child) {
             after.snapshot.child_transform_bits &&
         before.snapshot.child_draw.fg_world_hash ==
             after.snapshot.child_draw.fg_world_hash &&
-        before.snapshot.child_draw.first_instance_world_hash ==
-            after.snapshot.child_draw.first_instance_world_hash &&
         before.snapshot.weapon_draw.fg_world_hash ==
-            after.snapshot.weapon_draw.fg_world_hash &&
-        before.snapshot.weapon_draw.first_instance_world_hash ==
-            after.snapshot.weapon_draw.first_instance_world_hash;
+            after.snapshot.weapon_draw.fg_world_hash;
     const bool verified = after_ok && presentation_unchanged &&
         after.player == before.player && after.weapon == before.weapon &&
         after.snapshot.child == before.snapshot.child &&
