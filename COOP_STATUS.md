@@ -21863,7 +21863,7 @@ proved outer type-2 phase boundary. `AnimControl_PhaseUpdateType2Layers
 0x14172CAB0` walks its own enabled 0x20-byte registry, keeps the current
 `AnimControl` in `RBX` and registry index in `RSI`, requires active
 `record+0x14`, non-null `record+0x8` and concrete `layer+0x8 == 2`, then calls
-`AnimStateLayer_PhaseUpdateInstances 0x14189D720` at the sole direct callsite
+`AnimStateLayer_PhaseUpdateInstances 0x14189D720` at event-loop callsite
 `0x14172CB32`. A 20-byte near relay preserves stock `RCX/RDX`, supplies
 `R8=RBX` and `R9=RSI`, and tail-jumps to the wrapper. The wrapper calls stock
 first, closes the supplied `AnimControl` against local retained Nadine's exact
@@ -21927,8 +21927,8 @@ seen by the local pose. Independently, ordinary `PlayerWeaponIKAction_Update
 0x1410950E0` calls `AnimControl_FindActiveType2LayerById` at `0x141095924` with
 the exact pointer stored at `Player+0x1A0` and requests `WeaponPartial
 0xE2B990B9`. The already verified outer phase loop keeps this same concrete
-`AnimControl` in `RBX` while walking its registry and invokes the sole snapshot
-producer at `0x14172CB32`. The zero-row `abq` run supplies the independent
+`AnimControl` in `RBX` while walking its registry and invokes that event-loop
+snapshot path at `0x14172CB32`. The zero-row `abq` run supplies the independent
 runtime rejection of `PlayerWeaponController+0x8` as the steady owner.
 
 Build `abr` changes only that O(1), pre-probe identity gate: the relay-provided
@@ -21945,3 +21945,39 @@ two-hand rows while the pose stays broken select the later command/IK owner;
 missing or zero-weight rows select the source/channel producer. Zero rows and
 zero exhaustion again reject the `Player+0x1A0` packaging rather than prove a
 missing animation layer. A crash, new lag or visual change rejects the probe.
+
+### 2026-08-11 RUNTIME REJECTED (`abr`): `0x14172CB32` is not a steady weapon-pose seam
+
+Fresh PIDs `512/14160` loaded exact marker `2026-08-11abr`; both installed the
+read-only relay, and role-B PID `14160` subsequently completed the stock P99
+cold handoff plus the accepted Mazur back-frame path. The requested P99 and
+Mazur idle dwell again produced zero `NADINE-GRIP-LAYER-SNAPSHOT`, zero
+`...-BUDGET-EXHAUSTED` and zero `...-CENSUS-SATURATED` rows. There was no
+reported new crash or lag. This does **not** reject `Player+0x1A0`: the install
+row precedes `co-op role = B`, while the stock presentation rows occur only
+after role assignment.
+
+Static caller closure rejects the temporal seam itself. `AnimControl_PhaseUpdateType2Layers
+0x14172CAB0` has exactly three direct callers: `0x1403B7710`, `0x1403B78D0`
+and `0x1417F98F0`. The first two belong to the module-import observer scheduling
+path rooted at `AiScriptObserver::OnModuleImported 0x1403B7950`; the third is
+the dirty/DC-update path for animation overlays. None is the steady
+`PlayerWeaponIKAction` update. Thus `0x14172CB32` can execute during startup or a
+DC refresh, be rejected before `g_net_role_b` becomes true, and never execute
+again while the weapon is held. The zero rows are exactly that packaging
+failure, not evidence for a missing grip layer or against the main Player
+`AnimControl` identity.
+
+This also corrects the earlier description of `0x14172CB32` as a sole snapshot
+producer. `AnimStateInstance_ResolveDtGroupAndSnapshot 0x1418A4670` has four
+direct callsites (`0x14189D824`, `0x14189DAA4`, `0x1418A40C6`,
+`0x141AB7190`); the live draw/action pipeline can enter through the other
+paths. The relay proved only one event-driven caller, not the complete producer
+topology.
+
+Build `abs` disables this read-only census. The proven terminal local owner
+remains `PlayerWeaponIKAction_Update 0x1410950E0 -> WeaponIKFeather_Apply
+0x1418F2700`; no new runtime test is authorized until a concrete visual repair
+is supported by three independent static evidence types. The user explicitly
+requested that further tests be reserved for a fully proved fix rather than
+additional diagnostic probes.

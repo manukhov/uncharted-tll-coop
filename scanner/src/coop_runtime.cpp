@@ -2031,12 +2031,11 @@ constexpr float kLegacyNadineP99HipBackMeters = 0.02F;
 // resolver mutation and its hot-path diagnostics out while the local-only
 // HandFix/IK presentation owner is traced downstream.
 constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
-// Read-only post-stock census at the exact type-2-layer callsite. It first
-// proves the concrete layer belongs to local legacy Nadine's main Player
-// AnimControl at Player+0x1A0, then
-// enumerates that layer's freshly resolved instances and records their snapshot,
-// transition weight and phase without changing them.
-constexpr bool kEnableLegacyNadineGripSnapshotCensus = true;
+// REJECTED in build abr: this callsite belongs to module-import/DC-update work,
+// not the steady per-frame weapon-pose path. It can run before the co-op role is
+// assigned and then remain silent while P99/Mazur are drawn. Keep the bounded
+// census dormant while the terminal PlayerWeaponIKAction path is resolved.
+constexpr bool kEnableLegacyNadineGripSnapshotCensus = false;
 // The common resolver already selects the compatible P99/Mazur Player clips.
 // Local PlayerWeaponIKAction then runs WeaponIKFeather::Apply and commits both
 // arm targets; the retained remote Nadine does not show the defect. Suppress
@@ -54270,8 +54269,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-11abr "
-        "(abm runtime recorded; incomplete IK suppression and floating sling disabled)");
+        "TLL co-op runtime init 2026-08-11abs "
+        "(abr census rejected; incomplete IK suppression and floating sling disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

@@ -4258,6 +4258,18 @@ read-only and unchanged. Run the same bounded P99-then-Mazur idle discriminator.
 Rows/nonzero weight select the late command/IK branch; absent/zero-weight rows
 select the source/channel branch. Complete silence again rejects packaging.
 
+**RUNTIME REJECTED (`abr`):** PIDs `512/14160` again emitted no owned snapshot
+or bounded-loss marker despite live P99 and Mazur presentation. Exact caller
+closure shows why: `AnimControl_PhaseUpdateType2Layers 0x14172CAB0` is reached
+only from two module-import observer jobs (`0x1403B7710/0x1403B78D0`) and the
+dirty/DC-update overlay path `0x1417F98F0`. The hook installed before role B was
+assigned and is not a steady per-frame weapon-pose seam. This rejects the
+`0x14172CB32` packaging, not `Player+0x1A0`. Build `abs` disables the census.
+Continue statically from the terminal ordinary path
+`PlayerWeaponIKAction_Update -> WeaponIKFeather_Apply`; do not request another
+runtime probe. The next launch must contain a fully supported visual fix and a
+three-evidence, falsifiable prediction.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
