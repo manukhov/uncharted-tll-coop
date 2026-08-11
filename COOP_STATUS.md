@@ -21185,3 +21185,112 @@ state boundary. Mazur must retain its confirmed position, P99 holster placement
 must not regress, and one `NADINE-MAZUR-STRAP-CENSUS` row must classify the
 independent sling without changing it. Crash, lag, wrong selector, Mazur
 movement or weapon ownership regression rejects the package.
+
+### 2026-08-10 RUNTIME REJECTED / STATIC CORRECTION: `abh` targeted Colt rows, while the Mazur sling is a hidden valid drawable
+
+The user confirmed that `abh` changed none of the three remaining visuals: P99
+still floated outside the hands, drawn idle Mazur still used a broken hand pose,
+and the sling was absent. This is now a decisive admission failure rather than a
+negative result for compatible Player clips. Role-B emitted 21 bounded
+`NADINE-P99-OVERLAY-COPY` ownership rows but zero
+`NADINE-P99-GENERIC-GRIP` rows and zero occurrences of the two proposed clip
+pairs. Raw `weapon-art.bin` preimages correct the earlier identity error:
+`0x8075397D` is `pistol-silenced-dlc`, while `0xC938AAA1` is `pistol-colt`.
+The selector-`0xC938AAA1` rows used by `abh` are revolver/reload content, not the
+P99 idle grip. Substituting their generic sources would also put full reload
+clips into a hand-additive lane. That implementation is REJECTED and removed.
+
+The delayed strap census independently selected the exact visibility branch.
+Across six generations, the local Mazur owned a generation-valid
+ProcessWeaponStrap child with vtable `0x142A9B0A0`, resource `0xFDDDD5B6`, state
+zero, rope range `1..15`, one readable mesh and three valid instances. Parent
+and child transforms were identical; their FgAnimData and instance-world hashes
+were identical and nonzero. The parent Mazur mesh gates were `1/1` with `3/3`
+active instances, but the child was exactly `primary=0`, `secondary=1`,
+`active=0/3`. This rejects missing child, missing event, wrong parent frame and
+unpublished transform. The remaining owner is the child's primary visibility
+gate.
+
+### 2026-08-10 STATIC / IMPLEMENTED: retain Player hand clips and reveal the authored Mazur sling (`abi`)
+
+Three independent evidence types close the hand-pose owner. First, the raw
+overlay chain is exact. For P99, campaign-Chloe player-mesh selector/value
+`0x3F334972` maps Player clip `D350A452 p1h-fingers` to Chloe-only
+`B8FC6B25 clo-gun-grip-opener-r-hand--add`; the real P99 selector
+`0x8075397D` is present but contains only reload rows. For Mazur, weapon selector
+`0x33E29A1B` first maps `EBEFDD92 lg1h-ak47-right-hand` to the compatible
+weapon-specific `0A2F8976 lg1h-sniper-tkiv-right-hand`, after which the Chloe
+player-mesh maps it to `B8FC6B25`. Its two-hand idle/aim source
+`47C0A266` similarly becomes Player clip
+`F4B56F62 lg2h-sniper-tkiv-basic-hands` and is then replaced by Chloe-only
+`E117618A`. Shipped vill-Nadine player-mesh contains none of these three Chloe
+replacement rows.
+
+Second, the ANIM payloads separate compatibility rather than merely sharing
+names: `D350A452`, `0A2F8976` and `F4B56F62` are eight-group Player clips on the
+Player skeleton (`FD6DBE03`) with hand masks `[30,32]` or `[29..32]`;
+`B8FC6B25/E117618A` are seven-group Chloe clips on `4B0...` with joints
+`[39,41]` or `[38..41]`. Third,
+`AnimationDatabase_ResolveClipWithOverlays 0x140516230` calls
+`AnimOverlayState_ResolveAnimationId 0x1417F9F00` while the original source is
+still available, then continues through the normal AnimSet remap and clip
+resolver. `AnimOverlayState_Copy 0x1417F9DD0`, reached from
+`AnimStateLayer_Step 0x1418A3725`, supplies the already runtime-proven
+master-to-track ownership boundary. A post-phase rewrite is rejected because
+`E117618A` is a many-to-one terminal also reached by shotgun content, and
+HandFix/ArmIK owns wrist/elbow/shoulder propagation rather than choosing these
+finger/palm clips.
+
+Build `abi` therefore changes only the resolver's caller-owned output under an
+exact local scope. The master state or a transitively tagged copy must belong to
+role-B retained owner 0, stable screen-0 legacy Nadine with the exact
+PlayerWeaponController. The inventory object must be the same-owner exact
+ProcessWeapon with the tuple's art. Each weapon selector/value and the
+campaign-Chloe player-mesh selector/value must be unique, as must every required
+row. A nonnegative current slot must resolve to that exact weapon; a negative
+slot is deliberately allowed because the resolver can cache the leaf before
+Draw. The three replacements are exactly `D350A452/B8FC6B25 -> D350A452`,
+`EBEFDD92/B8FC6B25 -> 0A2F8976`, and
+`47C0A266/E117618A -> F4B56F62`. Holster, reload, Chloe, remote Nadine and other
+arts fail before mutation.
+
+The sling repair also has three independent static supports. The state-zero
+asset `B9C03DE4 ak47-holster--strap` authors every child joint 0..15 and has a
+nonempty payload. `ProcessWeaponStrap_SimulateAndBuildJointPose 0x14150A340`
+searches its rope range from both ends, but legacy Player-Nadine has neither
+`strap2 0x15619154` nor `strap14 0x8F98A084`; both searches return `-1`, the
+solver-write block is skipped, and the transition path calls the native mesh
+hide function. This does not collapse or zero the authored state-zero pose.
+Finally, `IDrawControl_ShowMesh 0x141754A30` changes only mesh primary gate
+`+0x243` and synchronously recomputes the three instance visibility bytes.
+
+The repair detours the exact ProcessWeaponStrap vtable slot
+`0x142A9B0A0+0x408 -> ProcessWeaponStrap_UpdateAnimatingLayersAndPublish
+0x14150C8A0` after stock has simulated and published. Its exact ABI
+`int64(this,int64)` is preserved, including the second argument and return
+value. Admission revalidates the runtime child/resource, Mazur parent and local
+owner, terminal `targSpineProp` index 39, state zero, rope range, stable
+simulation bytes, visible parent, equal child/parent transforms and equal
+nonzero Fg/instance hashes. After a 1.5-second stable closed dwell it calls
+ShowMesh once, requires `0/3 -> 3/3` plus unchanged presentation transforms, and
+checks persistence on the next wrapper call. A failed immediate/persistence
+check is terminal and never loops. Only a later native open-to-closed edge
+re-arms the same generation.
+
+The falsifiable combined test is now one fresh `abi` run. Both copies must load
+marker `2026-08-10abi`, and role B must report both active-grip detours plus the
+ProcessWeaponStrap `+0x408` hook as fully installed. Drawing P99 must emit
+`NADINE-ACTIVE-GRIP kind=p99-idle-fingers` with
+`D350A452/B8FC6B25 -> D350A452`. Drawing Mazur and standing without input must
+emit `kind=mazur-right-hand` and `kind=mazur-basic-hands` with effective clips
+`0A2F8976` and `F4B56F62`. Visually the P99 grip and Mazur idle hand placement
+must improve without changing the accepted P99 thigh fit or Mazur back frame.
+After Mazur is holstered for at least two seconds,
+`NADINE-MAZUR-STRAP-VISIBILITY` must report `stage=shown`, gate/instances
+`0/0->1/3`, unchanged presentation, then one `stage=persistent`; the authored
+sling must be visible. A partial install, wrong tuple, verified rows with no hand
+change, verified ShowMesh with no sling, placement regression, lag, crash or body
+corruption rejects the corresponding branch. Release `cl` compilation and
+direct CMake/MSVC link both pass; the produced DLL contains the exact `abi`
+marker and diagnostic strings. All engine functions used here were already
+labeled in the single IDB, so no IDB write was required.

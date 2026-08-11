@@ -4113,20 +4113,25 @@ Do not reopen these as the first move:
       confirmed the old weapon now appears at the exchange point. No expiry,
       rollback, duplicate or crash occurred. World-weapon reliability is closed.
 
-## P0 — Nadine local weapon presentation (`abh`)
+## P0 — Nadine local weapon presentation (`abi`)
 
-`abg` is partial runtime-confirmed: preserve the corrected Mazur upper-back
-placement and accepted P99 thigh holster. The sling remained absent, and the
-P99 grip repair emitted zero mutation rows, so do not tune either from that
-visual result. Build `abh` moves the P99 scope to the exact track-local state
-copied from Nadine's master and additionally requires the unique
-`pistol-colt 0xC938AAA1` overlay set plus real owner-local P99 inventory object.
-It also performs one delayed read-only ProcessWeaponStrap census; it does not
-force strap visibility or alter its frame. Run one combined test: draw and aim
-P99, then leave Mazur holstered for at least two seconds. Use the exact row and
-three-way sling predictions in `COOP_STATUS.md`. If P99 rows occur without a
-visual grip change, next isolate generic-base insufficiency versus later ArmIK;
-if the strap census selects one failed gate, repair only that proven boundary.
+Preserve the accepted P99 thigh fit and corrected Mazur upper-back placement.
+`abh` is REJECTED for grip: it accidentally targeted `pistol-colt C938AAA1`
+reload rows, not P99 `8075397D`, and emitted no mutation. Its read-only sling
+census is conclusive: the exact authored child/pose/frame are valid, but its only
+mesh has primary gate zero and `0/3` active instances because legacy Nadine lacks
+the dynamic `strap2/strap14` endpoints.
+
+Build `abi` is STATIC / IMPLEMENTED and release-linked. At the exact overlay
+resolver it retains Player-compatible P99 `D350A452`, Mazur right-hand
+`0A2F8976`, and Mazur basic-hands `F4B56F62` instead of the later Chloe-only
+terminals, under unique art/player-mesh rows and transitive local-owner tags.
+Separately, after a stable 1.5-second holstered epoch it reveals only the proven
+Mazur ProcessWeaponStrap mesh through stock `IDrawControl_ShowMesh`, verifies
+`0/3 -> 3/3`, then performs one persistence check. Run one combined fresh test:
+draw/idle P99, draw/idle Mazur, then holster Mazur for at least two seconds.
+Use the exact tuple and `shown -> persistent` prediction in `COOP_STATUS.md`.
+Do not adjust holster/back transforms in this test.
 
 ## Rule
 
