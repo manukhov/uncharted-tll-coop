@@ -21294,3 +21294,35 @@ corruption rejects the corresponding branch. Release `cl` compilation and
 direct CMake/MSVC link both pass; the produced DLL contains the exact `abi`
 marker and diagnostic strings. All engine functions used here were already
 labeled in the single IDB, so no IDB write was required.
+
+### 2026-08-11 RUNTIME REJECTED: `abi` reached neither active-grip tuple nor sling visibility admission
+
+The combined user test loaded marker `2026-08-10abi` in both processes and
+confirmed complete hook installation. PID 17316 was role A/local Chloe and PID
+13488 was role B/local legacy Nadine; both remained responsive. Nevertheless,
+P99 still had the wrong grip, drawn-idle Mazur still had the broken holding pose,
+and the Mazur sling remained absent. Chloe also continued to see remote Nadine's
+holstered Mazur at the old low-body endpoint rather than the accepted local
+upper-back placement.
+
+The bounded log distinguishes installation from admission. Role B produced
+many `NADINE-ACTIVE-GRIP-OVERLAY-COPY` rows for exact local owner 0, proving the
+master/copy hook and ownership propagation ran, but produced zero
+`NADINE-ACTIVE-GRIP` rows for all three proposed tuples. It also produced zero
+`NADINE-MAZUR-STRAP-VISIBILITY` rows: neither the 1.5-second dwell nor ShowMesh
+was reached. Therefore the visual rejection does not test the proposed donor
+clips or the authored sling pose; it rejects the selected resolver/visibility
+admission boundaries. Both experimental repairs are disabled pending an exact
+first-failed-guard audit.
+
+The accepted attachment repairs remained independently active: role B logged
+verified P99 hip rebind/lift rows and repeated
+`NADINE-MAZUR-NATIVE-BACK` rows on the selected local Mazur endpoint. No
+equivalent Mazur-back row occurred in role A for owner 1. This separates the
+remote Chloe-view regression from the failed hand/strap experiments: the
+current back-frame correction is scoped only to local role-B owner 0 and cannot
+repair the retained remote Nadine presentation. The next test is forbidden
+until static analysis identifies (1) the real live grip source/final boundary,
+(2) the first sling scope predicate that rejects the proven child, and (3) the
+owner-1-safe Mazur back-frame path with a prediction that distinguishes it from
+local attachment mutation.

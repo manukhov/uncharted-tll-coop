@@ -2028,12 +2028,12 @@ constexpr float kLegacyNadineP99HipBackMeters = 0.02F;
 // Campaign Chloe's player-mesh set replaces two weapon-specific Player hand
 // clips with a seven-group Chloe-only grip opener. Retain the compatible
 // Player clip only for the exact drawn P99/Mazur owned by local legacy Nadine.
-constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = true;
+constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
 // The Mazur strap child owns a complete authored state-zero pose, but its
 // dynamic endpoint lookup fails because legacy Nadine has no strap2..strap14
 // joints and hides the otherwise valid mesh. Reveal that exact published child
 // once per stable holstered epoch; never synthesize endpoints or pose rows.
-constexpr bool kEnableLegacyNadineMazurStrapVisibilityRepair = true;
+constexpr bool kEnableLegacyNadineMazurStrapVisibilityRepair = false;
 constexpr bool kEnableLegacyNadineMazurStrapCensus = false;
 // Build zm proved that all observed legacy-Nadine selections pass through the
 // Chloe-base map but receive no mapped id or record. Keep that rejected probe
