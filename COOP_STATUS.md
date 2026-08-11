@@ -21326,3 +21326,64 @@ until static analysis identifies (1) the real live grip source/final boundary,
 (2) the first sling scope predicate that rejects the proven child, and (3) the
 owner-1-safe Mazur back-frame path with a prediction that distinguishes it from
 local attachment mutation.
+
+### 2026-08-11 STATIC / IMPLEMENTED: correct overlay metadata, live sling callback and remote Mazur frame (`abj`)
+
+The three `abi` zero-admission results now have exact, independent causes rather
+than new animation hypotheses. For the grip path, raw overlay objects and the
+resolved-state writer agree that overlay-set `+0x10` is the set object id while
+`+0x18` is the art/look selector; the resolved value array mirrors the object
+id. `AnimOverlayState_FindMatchingRow 0x1417FA6E0` consumes the same layout, and
+`CommitResolvedKnowledgeRecordIntoSinkSlot 0x1417F9150` writes the object id to
+the value array. `abi` instead required `set+0x10 == selector` and
+`values[index] == selector`, making the P99 object/selector pair
+`43DC560C/8075397D` and Mazur pair `D689AA08/33E29A1B` impossible. Build `abj`
+uses `set+0x18` for the selector and requires `values[index] == set+0x10`; the
+exact three fail-closed tuple replacements remain unchanged. Bounded
+`NADINE-ACTIVE-GRIP-CANDIDATE` telemetry records the live source/final pair and
+unique selector/row counts in the same visual test, including the alternate
+Mazur terminal `5676695B` without mutating it.
+
+The sling path was attached to a provably inactive phase. Exact disassembly
+shows `ProcessWeaponStrap_DisableAsyncPhasesAndRegisterCallbacks 0x14150C8D0`
+calling `NdGameObject_DisableAnimationAsyncPhases 0x141BB7DD0`, which clears
+FgAnimData bits `0x08/0x10/0x20`, then registering
+`ProcessWeaponStrap_CustomUpdateCallback 0x14150C910`. Historical exact children
+have flags `0x200440`, confirming custom-callback bit `0x400` and absence of the
+`0x10` phase that would call vtable `+0x408`. The live callback calls
+`ProcessWeaponStrap_SimulateAndBuildJointPose 0x14150A340` at `0x14150C990` and
+immediately consumes its `AL` result. `abj` therefore relays that exact `E8`
+callsite, preserves the `int64(this,int64)` ABI and original return, and runs the
+same one-shot visibility state machine after stock simulation. The former exact
+`child+0xD8 == FDDDD5B6` predicate is removed: current and historical confirmed
+children use several resource ids, so `+0xD8` is diagnostic rather than stable
+identity. Exact child vtable/generation, Mazur parent, retained local owner,
+terminal AD index 39, rope/state, DrawControl and transform/world invariants all
+remain. A bounded stage marker now identifies the first remaining scope reject.
+Remote owner 1 is intentionally excluded from sling visibility until its parent
+frame is confirmed by this build.
+
+The remote rifle regression has a separate exact cause. The final presentation
+seam at `0x141ED19BB` previously admitted only role-B owner 0 although stock
+`NdAttachableObject_ResolveSelectedAttachmentTransform 0x141ED1780` uses the
+same selected owner record for local and retained remote Players. `abj` extends
+only the already accepted Mazur frame/depth substitution to role A with an
+enabled peer, retained owner 1 and screen 1. All ProcessWeapon/art/inventory,
+generation, Nadine look, selected `targSpineProp` and canonical donor guards are
+unchanged. Drawn Mazur selects `rightHand`, so it cannot enter this path; no
+rebind, selector, packet or attachment-state mutation is added for owner 1.
+
+Competing outcomes are explicit. If the corrected overlay tuples occur,
+`NADINE-ACTIVE-GRIP` must follow the candidate row and P99/Mazur hands must
+improve; a candidate without mutation identifies a later exact admission guard,
+while no candidate selects a different cached source boundary. For a holstered
+local Mazur, the live callback must first show either a bounded scope-reject
+stage or, after 1.5 seconds, `shown` followed by `persistent` with `0/0 -> 1/3`
+and unchanged parent/child transforms. On Chloe's copy, role A must emit
+`NADINE-MAZUR-NATIVE-BACK scope=remote ownerIndex=1` and move the retained
+Nadine rifle to the accepted upper-back frame; absence selects a different
+remote attachment id, while a verified row without visual movement selects a
+later presentation overwrite. P99 hip placement and all ordinary pistols remain
+outside the new scopes. Release compilation and linking pass. The two newly
+resolved strap functions are named in the single IDB, `save_database returned
+True`, and MCP readback plus xrefs verify both labels.

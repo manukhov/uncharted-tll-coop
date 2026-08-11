@@ -836,11 +836,25 @@ FUNCTIONS = {
     ),
     0x14150A340: (
         "ProcessWeaponStrap_SimulateAndBuildJointPose",
-        "Internal per-frame strap simulation called by the concrete vtable "
-        "+0x408 wrapper. Reads the exact ProcessWeapon parent weak pair, "
+        "Internal per-frame strap simulation called by the disabled async "
+        "wrapper and by the live custom-update callback at 0x14150C910. Reads "
+        "the exact ProcessWeapon parent weak pair, "
         "consumes holstered/unholstered state at strap+0x12F0, updates the "
         "strap's joint cache and authored/physics pose, then refreshes its "
         "drawable activity. The state-zero path is the holstered strap pose.",
+    ),
+    0x14150C8D0: (
+        "ProcessWeaponStrap_DisableAsyncPhasesAndRegisterCallbacks",
+        "Disables the normal FgAnimData async phases through "
+        "NdGameObject_DisableAnimationAsyncPhases, then registers the custom "
+        "ProcessWeaponStrap update callbacks. This makes vtable +0x408 a dead "
+        "steady-state boundary for ordinary strap simulation.",
+    ),
+    0x14150C910: (
+        "ProcessWeaponStrap_CustomUpdateCallback",
+        "Live custom ProcessWeaponStrap callback. Calls "
+        "ProcessWeaponStrap_SimulateAndBuildJointPose at 0x14150C990, consumes "
+        "its AL result, then performs the custom post-simulation publication.",
     ),
     0x14150C8A0: (
         "ProcessWeaponStrap_UpdateAnimatingLayersAndPublish",

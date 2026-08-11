@@ -4122,15 +4122,18 @@ census is conclusive: the exact authored child/pose/frame are valid, but its onl
 mesh has primary gate zero and `0/3` active instances because legacy Nadine lacks
 the dynamic `strap2/strap14` endpoints.
 
-Build `abi` is RUNTIME REJECTED. Both exact detours installed, but the complete
-P99/Mazur visual test emitted no `NADINE-ACTIVE-GRIP` mutation and no
-`NADINE-MAZUR-STRAP-VISIBILITY` admission row; all three visuals stayed stock.
-The overlay-copy owner tag did run, so the first missing boundary is after copy
-and before the proposed tuple mutation. The remote Nadine on Chloe's copy also
-still uses the wrong low Mazur back frame, while the accepted correction only
-emits on role-B/local owner 0. Both rejected repairs are disabled. Continue
-statically: identify the first rejected grip/strap guard and close the separate
-remote-owner back-frame path before another combined runtime test.
+Build `abi` is RUNTIME REJECTED, but its three first failures are statically
+closed in `abj`. The grip admission compared overlay object ids with art
+selectors; it now reads selector `set+0x18` and validates the resolved object id
+against `set+0x10`. The sling hook targeted disabled vtable phase `+0x408`; it
+now relays the live custom-callback call at `0x14150C990`, and no longer treats
+the varying diagnostic resource id as identity. The accepted Mazur final-frame
+substitution is extended presentation-only to role-A retained owner 1/screen 1,
+without remote rebind or attachment mutation. One combined `abj` runtime test is
+now permitted: P99 and drawn-idle Mazur grip, local holstered sling after a
+two-second dwell, and remote Nadine's back placement on Chloe's copy. Use the
+bounded candidate/scope-stage rows to classify any remaining visual failure;
+do not add another speculative repair from appearance alone.
 
 ## Rule
 
