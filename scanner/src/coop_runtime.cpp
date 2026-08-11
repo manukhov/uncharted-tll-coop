@@ -2036,12 +2036,12 @@ constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
 // arm targets; the retained remote Nadine does not show the defect. Suppress
 // only this exact local legacy-Nadine action through Apply's native zero-weight
 // no-op boundary while preserving action/NewIkWeapon/overlay lifecycle.
-constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = true;
+constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
 // The Mazur strap child owns a complete authored state-zero pose, but its
 // dynamic endpoint lookup fails because legacy Nadine has no strap2..strap14
 // joints and hides the otherwise valid mesh. Reveal that exact published child
 // once per stable holstered epoch; never synthesize endpoints or pose rows.
-constexpr bool kEnableLegacyNadineMazurStrapVisibilityRepair = true;
+constexpr bool kEnableLegacyNadineMazurStrapVisibilityRepair = false;
 constexpr bool kEnableLegacyNadineMazurStrapCensus = false;
 // Build zm proved that all observed legacy-Nadine selections pass through the
 // Chloe-base map but receive no mapped id or record. Keep that rejected probe
@@ -53735,8 +53735,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-11abm "
-        "(local Nadine WeaponIKFeather no-op, ordered Mazur sling visibility)");
+        "TLL co-op runtime init 2026-08-11abn "
+        "(abm runtime recorded; incomplete IK suppression and floating sling disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

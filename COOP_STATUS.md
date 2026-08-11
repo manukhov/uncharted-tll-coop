@@ -21612,3 +21612,43 @@ of its `WeaponIKFeatherInfo` inputs. No P99 change rejects this owner and moves
 the frontier to `PlayerArmIKAction_UpdateProcedural` or a later local upper-body
 writer. Independently, holstered Mazur must log sling `shown` then `persistent`;
 visible failure after both rows rejects the primary mesh gate as final owner.
+
+### 2026-08-11 CONFIRMED / REJECTED: `abm` proves WeaponIKFeather is only one grip contributor and ShowMesh cannot repair the sling
+
+The bounded `abm` run used PID 5276 for retained local screen-0 Nadine and
+PID 14560 for the other copy. Both installed the exact
+`PlayerWeaponIKAction+0x8CC` callsite relay and the ProcessWeaponStrap custom
+callback tail relay without a crash.
+
+- **CONFIRMED contributor:** PID 5276 emitted 96 bounded
+  `NADINE-WEAPON-IK-FEATHER-SUPPRESS` rows for exact P99 art `0x8075397D`.
+  The ramp covered controller state 2 from weight `0.0780502` through
+  `0.312588`, then state 4 through weight `1.0`. The user observed that the
+  local P99 hands closed slightly and no longer separated as severely, while
+  Chloe's view of retained Nadine remained correct. Therefore
+  `WeaponIKFeather_Apply 0x1418F2700` is causally involved in the local grip
+  defect.
+- **REJECTED final repair:** even with Apply suppressed continuously at weight
+  1, P99 still did not match Chloe. Drawn/idle Mazur was still held with a
+  broken one-hand pose instead of the authored two-hand pose. Full feather
+  suppression is therefore not sufficient and must not remain enabled; the
+  next static frontier is its per-weapon target/input producer plus the later
+  local arm/upper-body writer.
+- **CONFIRMED visibility boundary:** the exact local Mazur child emitted
+  `shown` then `persistent` at log 69865-69866 (and later holster epochs), with
+  primary gate/active instances `0/0 -> 1/3`, `call=1`, unchanged presentation
+  transforms and only diagnostic instance-lag bit `0x2000`. The sling became
+  visible after roughly one second, matching the deliberate dwell.
+- **REJECTED sling repair:** the visible sling floated away from Nadine and the
+  rifle, had no shoulder/body-conforming physics, and was absent in Chloe's
+  remote view. This exactly matches the known missing legacy-Nadine
+  `strap2..strap14` endpoint map: exposing the intact child mesh is not the same
+  as running its rope solver. `IDrawControl_ShowMesh` is rejected as a final
+  repair and the local visibility override is disabled until a valid Nadine
+  joint/rope mapping is proven. Owner1 must not be generalized independently
+  of that mapping.
+
+Build marker `abn` retains the accepted P99 hip, Mazur back and cold-rebind
+repairs but disables both `kEnableLegacyNadineWeaponIkFeatherSuppression` and
+`kEnableLegacyNadineMazurStrapVisibilityRepair`. Do not launch `abn` merely to
+reconfirm the rollback; continue statically from the two exact owners above.

@@ -4163,11 +4163,19 @@ info, finite nonzero weight and controller states 1/2/4. State 1 must be covered
 because its targets persist into WeaponOut. Do not mutate HandFix or another
 resolver clip.
 
-One test now has two independent predictions: P99 then Mazur should emit
-`NADINE-WEAPON-IK-FEATHER-SUPPRESS` from Draw state 1 and either restore the
-local grip/idle arms or select the next exact input owner; holstered Mazur
-should emit sling `shown` then `persistent`. Remote Nadine/Chloe and accepted
-P99 hip/Mazur back placement must remain unchanged.
+Runtime `abm` completed this discriminator. P99 improved only partially under
+continuous WeaponIKFeather suppression, while Mazur remained a broken one-hand
+idle pose. Treat Apply as a CONFIRMED contributor but the suppression as
+REJECTED; trace its per-weapon input/target producer and the later local arm
+writer before another mutation.
+
+The sling emitted exact `shown -> persistent` and became visible after the
+expected dwell, but floated independently without rope/body physics and was not
+present for remote Chloe. ShowMesh-only is REJECTED as a final repair. The next
+sling task is to establish a valid legacy-Nadine mapping for the missing
+`strap2..strap14` solver endpoints, then apply the same proven presentation to
+owner0 and owner1. Both incomplete flags are disabled in `abn`; do not launch
+that rollback-only build.
 
 ## Rule
 
