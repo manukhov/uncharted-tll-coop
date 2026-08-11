@@ -61,13 +61,20 @@
       The first stable rejection is `peer-idle` with zero movement/velocity and
       only `action=0x9`. Historical idle Joypad rows independently identify
       `0x9` as the normal PC neutral pattern; aim adds `0x200` (`0x209`).
-- [ ] Run one final bounded `abv` visual exam after build/review/commit/push.
+- [x] Run one bounded `abv` visual exam after build/review/commit/push.
       Admit only exact neutral input patterns `0` or `0x9` on both source and
       target; every additional action bit remains rejected. Detailed `abu`
-      census is disabled. Expected: A `CAPTURE/SEND`, B `RECV/APPLY applied=1`,
-      then local Nadine P99/Mazur idle arms match the already-correct remote
-      view. Any missing marker, unchanged arms, crash or non-arm regression
-      rejects the repair.
+      census was disabled. Result: zero `CAPTURE/SEND/RECV/APPLY`; the neutral
+      fix is necessary but not sufficient because full valid weapon packets
+      alternate with producer-suppressed metadata packets and the latter reset
+      the 350 ms source dwell.
+- [ ] Run one final bounded `abw` visual exam after build/review/commit/push.
+      A packet is treated as a non-resetting metadata gap only when `flag80=0`,
+      `gun=255`, `art=0` and the complete movement/action/ADS/cover/grenade idle
+      predicate passes after filling only those three weapon fields. It cannot
+      create a pose; capture still requires the next full `gun=1`, matching-art
+      packet. Expected: A `CAPTURE/SEND`, B `RECV/APPLY applied=1`, then local
+      Nadine P99/Mazur idle arms match the already-correct remote view.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that

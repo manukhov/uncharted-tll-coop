@@ -22353,3 +22353,48 @@ the already-correct remote view. Missing markers reject remaining admission;
 complete markers with unchanged arms reject the row-transfer boundary; any
 apply during ADS/movement/action, crash, or head/spine/leg/attachment regression
 rejects the package. Sling behavior remains explicitly outside this test.
+
+### 2026-08-11 RUNTIME INCONCLUSIVE (`abv`) / STATIC + IMPLEMENTED (`abw`): preserve dwell across producer-suppressed weapon metadata
+
+The exact-neutral `abv` build loaded in PID 16240/16052 with correct A/B roles,
+StatePacket exchange and Player `+0x408` hooks, but the written P99/Mazur exam
+again produced zero `CAPTURE/SEND/RECV/APPLY`. Therefore the `0x9` correction is
+necessary but not sufficient; no arm-row mutation ran and the postblend transfer
+boundary remains untested rather than visually rejected.
+
+The preceding `abu` census already contains the next exact discriminator. In a
+stable P99 state it repeatedly alternates full idle packets
+`flags=0x24CF, gun=1, art=0x8075397D` with equally fresh packets
+`flags=0x244F, gun=255, art=0`; the same pattern occurs around Mazur. Every full
+packet passes exact controller state 2, weapon parent/art, zero movement and
+action-neutral checks. The metadata-free packet currently takes the same failure
+path as an action and resets the 350 ms anchored source dwell, so alternating
+valid/gap frames make readiness mathematically unreachable.
+
+Static producer dataflow independently explains the gap. `send_local_player_state`
+reads authoritative `PlayerWeaponController+0x120/+0x134`; states 2/4 publish a
+full `0x80` weapon section and state 0 publishes a real holstered `gun=0` section,
+but transient states 1/5 deliberately set `suppress_held_weapon_wire` and send a
+fresh packet with default `gun=255, art=0`. This avoids relaying stale weapon art;
+it is not a semantic holster/action assertion. A genuine holster, new drawn art,
+movement, ADS, cover, grenade or input action remains independently observable.
+
+Build `abw` adds a single non-mutating gap classifier. It matches only
+`flag0x80 clear && gun==255 && art==0`, then copies the packet, fills only
+`flag0x80/gun=1/expected art`, and reuses the complete steady-idle predicate.
+Only if every other safety field passes does the source skip the frame without
+resetting dwell or invalidating a capture younger than 100 ms. It never captures
+from the incomplete packet: the next full `gun=1` packet with matching art must
+still pass before publication. Real `gun=0`, mismatched-art, action, movement,
+ADS, cover or grenade packets continue to reset immediately. Target admission is
+unchanged.
+
+Three evidence classes support this boundary: exact alternating runtime rows;
+the producer's state-specific `suppress_held_weapon_wire` dataflow; and the
+independent exact source Player/controller/physical-hand/skeleton ownership
+closure from `abu`. **Falsifiable prediction:** full packets sampled less than
+100 ms apart now accumulate the 350 ms dwell and emit A `CAPTURE/SEND`, followed
+by B `RECV/APPLY applied=1` with matching art and bounded sequence lag. Missing
+markers reject a later admission gate; complete markers with unchanged arms
+reject the postblend row-transfer hypothesis; any dynamic-action apply or
+non-arm regression rejects the gap policy.

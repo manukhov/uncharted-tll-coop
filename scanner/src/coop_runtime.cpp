@@ -44359,6 +44359,23 @@ bool peer_state_is_steady_drawn_idle(
     return true;
 }
 
+bool peer_state_is_idle_with_only_weapon_metadata_missing(
+    const coop::StatePacket& peer, std::uint32_t weapon_art_id) {
+    if ((peer.flags & 0x80u) != 0 || peer.gun_state != 0xFFu ||
+        peer.held_weapon_art_id != 0) {
+        return false;
+    }
+    // The StatePacket producer deliberately suppresses the complete weapon
+    // section while its live resolver observes Draw/Holster (states 1/5), so it
+    // cannot publish a stale art. Prove that weapon metadata is the ONLY missing
+    // part by filling just those three fields and reusing the full idle predicate.
+    coop::StatePacket completed = peer;
+    completed.flags |= 0x80u;
+    completed.gun_state = 1;
+    completed.held_weapon_art_id = weapon_art_id;
+    return peer_state_is_steady_drawn_idle(completed, weapon_art_id);
+}
+
 bool local_player_is_steady_drawn_idle(
     const IdleArmPoseOwnerScope& scope) {
     if (!scope.valid ||
@@ -44697,6 +44714,13 @@ bool capture_remote_nadine_idle_arm_pose(void* player) {
     }
     diagnostic.stage = IdleArmPoseAdmissionStage::kPeerIdle;
     if (!peer_state_is_steady_drawn_idle(peer, scope.weapon_art_id)) {
+        if (peer_state_is_idle_with_only_weapon_metadata_missing(
+                peer, scope.weapon_art_id)) {
+            // Preserve both the anchored dwell and any <100 ms valid capture.
+            // No new pose is captured from this incomplete packet; the next
+            // full gun=1/matching-art packet must pass before publication.
+            return false;
+        }
         log_idle_arm_pose_source_admission(player, diagnostic);
         reset_idle_arm_pose_dwell(g_idle_arm_pose_source_dwell);
         invalidate_idle_arm_pose_capture();
@@ -55726,8 +55750,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-11abv "
-        "(exact neutral-input Nadine arm relay; floating sling disabled)");
+        "TLL co-op runtime init 2026-08-11abw "
+        "(gap-tolerant Nadine arm relay; floating sling disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
