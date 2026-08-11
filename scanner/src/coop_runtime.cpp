@@ -44865,11 +44865,15 @@ SRWLOCK g_mazur_strap_visibility_lock = SRWLOCK_INIT;
 std::array<MazurStrapVisibilityMemo, 16> g_mazur_strap_visibility_memos{};
 std::size_t g_mazur_strap_visibility_replacement_cursor = 0;
 
-bool reject_mazur_strap_visibility_scope(void* child) {
+bool reject_mazur_strap_visibility_scope(
+    void* child, std::uint32_t generation) {
+    if (child == nullptr || generation == 0) {
+        return false;
+    }
     bool rejected_persistence = false;
     AcquireSRWLockExclusive(&g_mazur_strap_visibility_lock);
     for (auto& memo : g_mazur_strap_visibility_memos) {
-        if (memo.child == child) {
+        if (memo.child == child && memo.generation == generation) {
             if (memo.phase ==
                 MazurStrapVisibilityPhase::kAwaitPersistence) {
                 // A transient hard-scope failure after Show must remain a
@@ -44883,6 +44887,7 @@ bool reject_mazur_strap_visibility_scope(void* child) {
                 memo.first_seen_ms = 0;
                 memo.phase = MazurStrapVisibilityPhase::kPending;
             }
+            break;
         }
     }
     ReleaseSRWLockExclusive(&g_mazur_strap_visibility_lock);
@@ -45022,7 +45027,8 @@ void repair_legacy_nadine_mazur_strap_visibility(void* child) {
     if (!seh_capture_legacy_nadine_mazur_strap_visibility_scope(
             child, &before)) {
         log_nadine_mazur_strap_scope_reject_once(child, before);
-        if (reject_mazur_strap_visibility_scope(child)) {
+        if (reject_mazur_strap_visibility_scope(
+                child, before.snapshot.generation)) {
             log_mazur_strap_visibility_result(
                 "persistence-scope-reject", before, nullptr, false, -1);
         }
