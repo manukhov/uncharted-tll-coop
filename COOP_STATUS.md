@@ -21907,3 +21907,41 @@ preservation, bounded admission and rollback path. One read-only test is earned:
 idle at least 3.5 s with P99, then at least 3.5 s with Mazur. Each art must emit
 owned snapshot rows or explicit per-index exhaustion; neither output, a crash,
 new lag or any visual change rejects the package rather than the layer theory.
+
+### 2026-08-11 RUNTIME INCONCLUSIVE (`abq`) / STATIC IMPLEMENTED (`abr`): bind the census to Player+0x1A0
+
+Fresh PIDs `12952/4056` loaded exact marker `2026-08-11abq`; both installed the
+read-only `0x14172CB32` relay without a partial-install warning. Role-B PID
+`4056` then exercised both requested stock presentation paths: P99 completed its
+cold handoff/hip sequence and Mazur repeatedly resolved the accepted authored
+back frame. Nevertheless the complete log contains zero
+`NADINE-GRIP-LAYER-SNAPSHOT`, zero `...-BUDGET-EXHAUSTED` and zero
+`...-CENSUS-SATURATED` rows. Both processes exited without a reported new crash
+or performance regression.
+
+This is **RUNTIME INCONCLUSIVE** for the missing-layer versus late-IK split, but
+it rejects the `abq` owner gate. `PlayerWeaponAnimControl_RequestWeaponPart
+0x14108C0C0` uses `PlayerWeaponController+0x8` to request, create and fade the
+WeaponPartial layer; that request/build control is not the steady phase owner
+seen by the local pose. Independently, ordinary `PlayerWeaponIKAction_Update
+0x1410950E0` calls `AnimControl_FindActiveType2LayerById` at `0x141095924` with
+the exact pointer stored at `Player+0x1A0` and requests `WeaponPartial
+0xE2B990B9`. The already verified outer phase loop keeps this same concrete
+`AnimControl` in `RBX` while walking its registry and invokes the sole snapshot
+producer at `0x14172CB32`. The zero-row `abq` run supplies the independent
+runtime rejection of `PlayerWeaponController+0x8` as the steady owner.
+
+Build `abr` changes only that O(1), pre-probe identity gate: the relay-provided
+`RBX` must equal local retained Nadine's main Player `AnimControl*` at
+`Player+0x1A0`. The indexed active-record validation, 100 ms cadence, 32-sample
+per-art/index bound, snapshot enumeration, semantic deduplication and explicit
+exhaustion/saturation markers remain unchanged. It is still read-only; no grip,
+clip, IK, holster, back-frame or sling mutation is enabled.
+
+Competing outcomes remain falsifiable. With P99 idle for at least 3.5 seconds
+and then Mazur idle for at least 3.5 seconds, `abr` must now emit owned snapshot
+rows or an explicit exhaustion marker for each active art. Present nonzero
+two-hand rows while the pose stays broken select the later command/IK owner;
+missing or zero-weight rows select the source/channel producer. Zero rows and
+zero exhaustion again reject the `Player+0x1A0` packaging rather than prove a
+missing animation layer. A crash, new lag or visual change rejects the probe.

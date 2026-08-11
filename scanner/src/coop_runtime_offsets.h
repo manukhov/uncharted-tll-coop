@@ -63,6 +63,8 @@ constexpr std::uintptr_t kNdGameObjectRefreshWorldTransformRva = 0x1BB8320;
 // Player animation runtime. Player+0x1A8 is FgAnimData*; async phase bits in the
 // first DWORD select owner vtable +0x400/+0x408/+0x410 for bits 8/0x10/0x20.
 constexpr std::size_t kPlayerFgAnimDataOffset = 0x1A8;
+// Main Player AnimControl/upper-state owner. The ordinary weapon-IK path reads
+// its active WeaponPartial layer from this object at 0x141095924.
 constexpr std::size_t kPlayerUpperStateOwnerOffset = 0x1A0;
 // The upper owner owns a wrapper at +0x60; dereferencing the wrapper yields the
 // Player master AnimOverlayState installed at AnimStateLayer+0x18. The layer

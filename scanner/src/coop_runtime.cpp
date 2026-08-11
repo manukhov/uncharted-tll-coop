@@ -2032,7 +2032,8 @@ constexpr float kLegacyNadineP99HipBackMeters = 0.02F;
 // HandFix/IK presentation owner is traced downstream.
 constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
 // Read-only post-stock census at the exact type-2-layer callsite. It first
-// proves the concrete layer belongs to local legacy Nadine's AnimControl, then
+// proves the concrete layer belongs to local legacy Nadine's main Player
+// AnimControl at Player+0x1A0, then
 // enumerates that layer's freshly resolved instances and records their snapshot,
 // transition weight and phase without changing them.
 constexpr bool kEnableLegacyNadineGripSnapshotCensus = true;
@@ -42668,24 +42669,20 @@ void census_legacy_nadine_grip_layer(
             return;
         }
         // The relay supplies RBX from AnimControl_PhaseUpdateType2Layers.
-        // Before any expensive readable-page probes, close it against the
-        // retained local Player's PlayerWeaponAnimControl by two direct reads
-        // under SEH. Global/non-player AnimControls leave here in O(1).
+        // PlayerWeaponIKAction_Update consumes WeaponPartial from the main
+        // Player AnimControl stored at Player+0x1A0 (0x141095924), not from
+        // PlayerWeaponController+0x8. Close that exact pointer under SEH before
+        // any expensive readable-page probes. Global/non-player AnimControls
+        // leave here in O(1).
         void* const player = retained_player_object(0);
         if (player == nullptr) {
             return;
         }
         const auto* const player_bytes =
             static_cast<const std::byte*>(player);
-        void* const weapon_anim_control =
-            *reinterpret_cast<void* const*>(player_bytes + 0x1DF0);
-        if (weapon_anim_control == nullptr) {
-            return;
-        }
-        const auto* const weapon_anim_control_bytes =
-            static_cast<const std::byte*>(weapon_anim_control);
         if (*reinterpret_cast<void* const*>(
-                weapon_anim_control_bytes + 0x8) != anim_control) {
+                player_bytes + kPlayerUpperStateOwnerOffset) !=
+            anim_control) {
             return;
         }
 
@@ -42706,12 +42703,6 @@ void census_legacy_nadine_grip_layer(
 
         if (!player_object_stable(player) ||
             !player_screen_index_is(player, 0) ||
-            readable_bytes(weapon_anim_control) < 0x18 ||
-            *reinterpret_cast<const std::uintptr_t*>(
-                weapon_anim_control_bytes) !=
-                g_module + kPlayerWeaponAnimControlVtableRva ||
-            *reinterpret_cast<void* const*>(
-                weapon_anim_control_bytes + 0x10) != player ||
             readable_bytes(anim_control) < 0x38 ||
             readable_bytes(layer) < 0x508) {
             return;
@@ -54279,7 +54270,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-11abq "
+        "TLL co-op runtime init 2026-08-11abr "
         "(abm runtime recorded; incomplete IK suppression and floating sling disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

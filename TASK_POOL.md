@@ -4245,6 +4245,19 @@ at least 3.5 s, then Mazur idle for at least 3.5 s: missing owned two-hand rows
 selects the producer/channel branch; present weighted rows select the later
 command/IK owner branch. Neither rows nor explicit exhaustion rejects packaging.
 
+**RUNTIME INCONCLUSIVE (`abq`) / STATIC IMPLEMENTED (`abr`):** PIDs
+`12952/4056` installed the exact outer relay and exercised the live P99/Mazur
+stock paths, but emitted neither an owned snapshot nor either bounded-loss
+marker. The `abq` identity gate was aimed at the request/build control
+`PlayerWeaponController+0x8`. Exact ordinary grip consumption instead calls
+`AnimControl_FindActiveType2LayerById(..., WeaponPartial)` at `0x141095924`
+using the main Player `AnimControl*` stored at `Player+0x1A0`; the outer phase
+caller independently carries that concrete object in `RBX`. `abr` changes only
+the O(1) owner identity to `Player+0x1A0`; all enumeration and limits remain
+read-only and unchanged. Run the same bounded P99-then-Mazur idle discriminator.
+Rows/nonzero weight select the late command/IK branch; absent/zero-weight rows
+select the source/channel branch. Complete silence again rejects packaging.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
