@@ -4129,19 +4129,26 @@ were peer-packet-gated; drawn P99 resolves `D350A452 p1h-fingers` through the
 inactive Mazur overlay to `0A2F8976 lg1h-sniper-tkiv-right-hand`; and the sling
 scope sampled Fg/instance state before the callback tail published it.
 
-Build `abk` is STATIC / IMPLEMENTED. Local alias/P99/Mazur cold service now runs
-from native NadineBuddy's game-thread update before peer receive. The sole grip
-mutation is exact drawn P99 `D350A452/0A2F8976 -> D350A452`, guarded by current
-slot, draw state 2/4, exact art/owner, exact master/caller `0x18B2945` and both
-unique overlay-chain rows. Mazur pose remains diagnostic-only: a separate
-deduplicated census records every resolver pair on the exact drawn-Mazur
-master/caller because its known terminal clips are already Player-compatible;
-do not guess a replacement before that census isolates HandFix/IK/attachment.
-The sling visibility state machine now runs after stock
-tail `0x14150C9B3 -> 0x141F19070` publication, retaining all strict topology,
-world and generation guards plus a per-predicate fail mask. One combined `abk`
-test is permitted: cold spawn before network, drawn P99 grip, drawn-idle Mazur
-census, local holstered sling after two seconds, and remote back regression.
+Build `abk` is RUNTIME PARTIAL / REJECTED. The native NadineBuddy-driven cold
+service is CONFIRMED: P99/Mazur endpoint repairs completed before first peer
+receive, and the user confirmed that the rifle no longer appears in the hand
+after spawn. The P99 overlay mutation is REJECTED and disabled in `abl`: the
+real drawn P99 already resolves `D350A452 -> D350A452`; the suspected
+`D350A452 -> 0A2F8976` pair belongs only to the drawn Mazur. Because local
+Nadine remains broken while Chloe sees the same remote Nadine grip correctly,
+the current P0 is the local-only downstream HandFix/PlayerWeaponIKAction or
+upper-body presentation path. Resolve the nine exact Mazur census pairs from
+`COOP_STATUS.md`, then trace their command6/HandFix/IK ownership before any
+mutation.
+
+The post-tail sling hook also remained fail-closed. Exact Mazur scope reaches
+only `failMask=0x2000/0xA000`: the hidden child Fg world and its rendered
+instance world differ while the mesh remains primary-gate zero and `0/3`
+active. Trace `DrawControl_ShowMesh 0x141754A30` through
+`FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` and prove whether a
+hidden instance is expected to be stale before weakening either world guard.
+No further runtime test is permitted until both branches meet the three-source
+static evidence quota and have a falsifiable local-versus-remote prediction.
 
 ## Rule
 

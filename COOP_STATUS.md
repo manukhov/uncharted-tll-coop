@@ -21473,3 +21473,48 @@ closed `0/3` gate after publication, dwells 1.5 seconds, then logs `shown` and
 post-tail fail mask forbids ShowMesh and selects a different drawable topology.
 Remote owner 1 remains outside sling mutation. Release compilation and linking
 pass; build marker and payload strings confirm `2026-08-11abk`.
+
+### 2026-08-11 RUNTIME PARTIAL / REJECTED: `abk` fixes cold spawn, disproves the P99 overlay mutation and isolates the hidden sling instance
+
+The role-B cold-service move is **CONFIRMED**. PID 10636 completed
+`NADINE-P99-COLD-HIP` and `NADINE-LOCAL-MAZUR-REBIND` at log rows 68577--68578,
+before the first peer synchronization at row 68580. The user confirmed that the
+rifle no longer appears glued to Nadine's hand after spawn. Preserve the native
+NadineBuddy update driver and the accepted P99/Mazur endpoint repairs.
+
+The active P99 overlay mutation is **REJECTED** as the owner of the local grip
+failure. With P99 genuinely drawn, the exact master state and caller
+`0x1418B2945` produced `D350A452 -> D350A452` at row 68994, current slot 0,
+draw state 2 and art `8075397D`; no mutation row followed. The former
+`D350A452 -> 0A2F8976` pair appeared only after Mazur became current at row
+69051, art `33E29A1B`. Thus the shared overlay resolver already selects the
+compatible P99 and Mazur hand donors. The user independently supplied the
+decisive presentation split: local Nadine's P99 and idle P99/Mazur arms remain
+broken, while Chloe sees that same remote Nadine holding the P99 correctly.
+The remaining owner is therefore downstream and local-view-specific; leading
+candidates are HandFix/PlayerWeaponIKAction or a local upper-body presentation
+layer, not the common overlay resolver. Build `abl` disables the rejected
+resolver hook entirely.
+
+The drawn-Mazur master census at the same caller recorded the exact stock pairs
+`D350A452->0A2F8976`, `41C84248->5F913F74`,
+`283966ED->283966ED`, `EB712BFC->01321972`,
+`77A8107C->7D11D4FD`, `20FFCB4F->C7FB376F`,
+`BE7CB4A2->1CEC7F3A`, `8F9F1C38->C7FB376F` and
+`7FB80CC8->7D11D4FD`. These rows are durable input for the downstream
+joint-owner audit; none is permission for another blind clip substitution.
+
+The post-tail sling test is **REJECTED** as a sufficient visibility repair, but
+its guard did its job and did not mutate. The exact local Mazur child passed
+identity, parent/owner, AD39, state-zero, rope/simulation, mesh topology and
+object-transform predicates, then failed only `failMask=0x2000` or `0xA000`.
+At row 68608 the child Fg world matched both weapon worlds while the hidden
+child instance world differed; at row 68617 child and weapon instances matched
+each other but differed from both Fg worlds. Primary visibility remained zero
+and active instances `0/3`, so no ShowMesh call occurred and the user saw no
+sling. The exact remaining alternatives are: hidden instances intentionally
+retain a stale world until visibility/prepare; a later render preparation owns
+the instance world; or a separate local-view drawable is selected. Do not
+remove the world guards until `DrawControl_ShowMesh 0x141754A30` and
+`FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` prove which ordering is
+stock-safe.

@@ -2025,10 +2025,12 @@ constexpr float kLegacyNadineMazurBackDepthMeters = 0.05F;
 constexpr bool kEnableLegacyNadineP99HipAxisLift = true;
 constexpr float kLegacyNadineP99HipAxisLiftMeters = 0.04F;
 constexpr float kLegacyNadineP99HipBackMeters = 0.02F;
-// Campaign Chloe's player-mesh set replaces two weapon-specific Player hand
-// clips with a seven-group Chloe-only grip opener. Retain the compatible
-// Player clip only for the exact drawn P99/Mazur owned by local legacy Nadine.
-constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = true;
+// Build abk disproved the active P99 overlay replacement: the exact drawn P99
+// already resolves D350A452 -> D350A452 at the live master/caller, while the
+// D350A452 -> 0A2F8976 row belongs to the drawn Mazur. Keep the rejected
+// resolver mutation and its hot-path diagnostics out while the local-only
+// HandFix/IK presentation owner is traced downstream.
+constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
 // The Mazur strap child owns a complete authored state-zero pose, but its
 // dynamic endpoint lookup fails because legacy Nadine has no strap2..strap14
 // joints and hides the otherwise valid mesh. Reveal that exact published child
@@ -53437,8 +53439,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-11abk "
-        "(drawn-P99 grip leak, pre-peer cold rebind, post-publish Mazur sling)");
+        "TLL co-op runtime init 2026-08-11abl "
+        "(abk runtime recorded; rejected P99 overlay mutation disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
