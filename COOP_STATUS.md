@@ -22306,3 +22306,50 @@ selects the network/stability competitor; a postblend entry with no retained-1
 match selects retained identity, while complete entry silence rejects current
 `+0x408` reach. No source admission policy may change until one of these
 mutually exclusive outcomes is observed.
+
+### 2026-08-11 RUNTIME CONFIRMED discriminator (`abu`) / STATIC + IMPLEMENTED (`abv`): `0x9` is the neutral PC input pattern
+
+The bounded `abu` census selected one exact cause and rejected the earlier
+controller-state leader. Fresh PID 12872 (role A) reached the shared Player
+postblend with `eq1=1`. For both P99 `0x8075397D` and Mazur `0x33E29A1B`, the
+source then passed exact stable Player/screen/look, Fg owner, ED25/C39/580
+skeleton/readability, PlayerWeaponController vtable/owner/current slot/state 2,
+FastGrenade vtable/owner/state 0, ProcessWeapon vtable/same parent/art and both
+position/quaternion checks. The independent game-thread census simultaneously
+resolved the matching physical hand weapon to attachment index 16 / authored
+`rightHand 0x61A48E01`. Thus wrapper reach, retained identity, skeleton,
+controller lifecycle, physical weapon and transform competitors are
+**REJECTED** for this stationary state.
+
+The first stable failure was exactly `peer-idle`. Its rows have fresh packets,
+required flags, `gun=1`, matching art, grenade zero, `moveMax=0`, `velMax=0` and
+finite motion; the sole rejected value is `action=0x9`. This is not a gameplay
+action. Historical independent runtime already records the neutral puppet
+Joypad as `current=0x9` / `REMOTE-ACTIONS branch=0x9`; authored aim adds its
+separate `0x200` bit and becomes `0x209`. Static producer dataflow explains the
+false rejection: `capture_peer_send_button_mask` begins with resolved input
+block `+0x518`, merges Joypad `+0xD0/+0xE0`, and the idle predicate previously
+rejected every low bit except the high resolved-block sentinel. All known
+action identities remain disjoint: aim `0x200`, fire `0x800`, face buttons
+`0x20/0x40/0x80`, traversal `0x400000+`, melee/reload protocol bits above
+`0x100000000`. Weapon state 2, grenade state 0, zero movement and cover/ADS
+flags independently close their respective lifetimes.
+
+Build `abv` therefore admits only the two exact observed neutral forms, `0` and
+`0x9`, in both the role-A source predicate and role-B local target predicate.
+It does not mask arbitrary low bits: `0x209`, `0x809` or any other added command
+still rejects the transfer and resets dwell. The detailed `abu` entry,
+admission and game-thread hand census is compile-time disabled to remove its
+post-exam locking/sampling overhead; bounded `CAPTURE/SEND/RECV/APPLY` result
+markers remain.
+
+This satisfies the pre-runtime quota through three independent evidence types:
+the exact current first-failure rows and physical-hand closure; the older
+neutral-versus-aim Joypad control; and packet-producer/authored-command static
+dataflow. **Falsifiable prediction:** after at least 0.5 seconds stationary with
+P99 and separately Mazur, role A emits matching-art `CAPTURE/SEND`, role B emits
+`RECV/APPLY applied=1` with `lag=0..32`, and local Nadine's idle grip/arms match
+the already-correct remote view. Missing markers reject remaining admission;
+complete markers with unchanged arms reject the row-transfer boundary; any
+apply during ADS/movement/action, crash, or head/spine/leg/attachment regression
+rejects the package. Sling behavior remains explicitly outside this test.

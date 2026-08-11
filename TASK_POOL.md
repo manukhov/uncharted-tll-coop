@@ -44,7 +44,7 @@
       requirement `PlayerWeaponController+0x134 == 2`: puppet hand attachment is
       accepted separately and does not prove that its local action lifecycle ever
       reaches the authoritative local-Player state.
-- [ ] Run exactly one bounded read-only `abu` admission census after release
+- [x] Run exactly one bounded read-only `abu` admission census after release
       build, independent strict review, documentation commit and push. It logs
       only the first changing source stage, at most 32 rows and no faster than
       250 ms. Draw P99, hold stationary for at least 0.5 s, then Mazur. A
@@ -55,6 +55,19 @@
       isolates retained identity; complete entry silence isolates current
       `+0x408` reach. Do not alter any gate until this discriminator returns a
       concrete value.
+- [x] Classify `abu`: both P99 and Mazur reach exact retained Player1 postblend,
+      ED25/C39/580, exact controller/owner/current slot/state 2, grenade state 0,
+      same-parent ProcessWeapon and physical rightHand record `0x61A48E01`.
+      The first stable rejection is `peer-idle` with zero movement/velocity and
+      only `action=0x9`. Historical idle Joypad rows independently identify
+      `0x9` as the normal PC neutral pattern; aim adds `0x200` (`0x209`).
+- [ ] Run one final bounded `abv` visual exam after build/review/commit/push.
+      Admit only exact neutral input patterns `0` or `0x9` on both source and
+      target; every additional action bit remains rejected. Detailed `abu`
+      census is disabled. Expected: A `CAPTURE/SEND`, B `RECV/APPLY applied=1`,
+      then local Nadine P99/Mazur idle arms match the already-correct remote
+      view. Any missing marker, unchanged arms, crash or non-arm regression
+      rejects the repair.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that

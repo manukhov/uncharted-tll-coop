@@ -1531,6 +1531,7 @@ struct StateNetState {
 // deliberately restricted to a settled, non-aiming, non-moving draw-state 2
 // P99/Mazur idle; all transitions and dynamic actions remain stock.
 constexpr bool kEnableLegacyNadineIdleArmPoseRoundTrip = true;
+constexpr bool kEnableLegacyNadineIdleArmPoseAdmissionCensus = false;
 constexpr std::uint32_t kLegacyNadineTargetSkeletonArtId = 0xED25C708u;
 constexpr std::uint32_t kLegacyNadineUnderlyingSkeletonId = 0xC39CA709u;
 constexpr std::uint32_t kLegacyNadineSkeletonJointCount = 580;
@@ -19346,8 +19347,10 @@ void apply_peer_held_weapon_state() {
         peer_gun == 0 && read_weapon_draw_state(puppet, hp_slot, hp_state) &&
         (hp_state == 2 || hp_state == 4);
 
-    census_remote_nadine_idle_arm_hand_game_thread(
-        puppet, peer, use_slot, now);
+    if constexpr (kEnableLegacyNadineIdleArmPoseAdmissionCensus) {
+        census_remote_nadine_idle_arm_hand_game_thread(
+            puppet, peer, use_slot, now);
+    }
 
     if (!art_changed && !mode_changed && !gun_changed &&
         !attachment_pending && !readiness_pending && !holster_pending) {
@@ -44341,7 +44344,11 @@ bool peer_state_is_steady_drawn_idle(
         (peer.input_buttons | peer.buttons_pressed |
          peer.buttons_released) &
         ~kInputBlockButtonBaseMask;
-    if (action_bits != 0) {
+    // The resolved PC Joypad block has a stable neutral low-bit pattern 0x9.
+    // It is present while idle and becomes 0x209/0x809 only when authored
+    // aim/fire bits are added. Admit exactly the two observed neutral forms;
+    // every real command/edge bit still rejects the transfer.
+    if (action_bits != 0 && action_bits != 0x9ull) {
         return false;
     }
     for (const float velocity : peer.velocity) {
@@ -44360,12 +44367,17 @@ bool local_player_is_steady_drawn_idle(
         player_cover_state_field(scope.player)) {
         return false;
     }
-    return (g_cached_local_input_buttons.load(std::memory_order_acquire) &
-            ~kInputBlockButtonBaseMask) == 0;
+    const std::uint64_t action_bits =
+        g_cached_local_input_buttons.load(std::memory_order_acquire) &
+        ~kInputBlockButtonBaseMask;
+    return action_bits == 0 || action_bits == 0x9ull;
 }
 
 void log_idle_arm_pose_source_admission(
     void* player, const IdleArmPoseAdmissionDiagnostic& diagnostic) {
+    if constexpr (!kEnableLegacyNadineIdleArmPoseAdmissionCensus) {
+        return;
+    }
     static SRWLOCK lock = SRWLOCK_INIT;
     static std::uint64_t last_signature = 0;
     static ULONGLONG last_log_ms = 0;
@@ -44878,7 +44890,9 @@ std::int64_t __fastcall hooked_player_post_anim_blending_async(void* player) {
     }
     const std::int64_t result = original(player);
     if constexpr (kEnableLegacyNadineIdleArmPoseRoundTrip) {
-        log_idle_arm_pose_postblend_entry(player);
+        if constexpr (kEnableLegacyNadineIdleArmPoseAdmissionCensus) {
+            log_idle_arm_pose_postblend_entry(player);
+        }
         if (!g_net_role_b) {
             if (player == retained_player_object(1)) {
                 capture_remote_nadine_idle_arm_pose(player);
@@ -55712,8 +55726,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-11abu "
-        "(bounded Nadine arm admission census; floating sling disabled)");
+        "TLL co-op runtime init 2026-08-11abv "
+        "(exact neutral-input Nadine arm relay; floating sling disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
