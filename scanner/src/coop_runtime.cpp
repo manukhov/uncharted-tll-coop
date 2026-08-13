@@ -1752,6 +1752,9 @@ bool seh_weapon_parent_resolves_to_owner(void* weapon, void* owner);
 bool seh_read_weapon_attachment_state(
     void* weapon, std::uint32_t* parent_id_out,
     std::uint8_t* attach_index_out);
+bool idle_arm_pose_movement_is_zero(
+    const float move_stick[2], const float move_world[4],
+    float move_magnitude);
 bool seh_read_owner_attach_record_id(
     void* owner, std::uint8_t attach_index, std::uint32_t* attach_id_out,
     std::uintptr_t* records_generation_out);
@@ -2431,6 +2434,12 @@ constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
 // assigned and then remain silent while P99/Mazur are drawn. Keep the bounded
 // census dormant while the terminal PlayerWeaponIKAction path is resolved.
 constexpr bool kEnableLegacyNadineGripSnapshotCensus = false;
+// The sole ordinary PlayerWeaponIKAction call at 0x1410959AC is the first
+// surviving boundary after all rejected body-palette and clip substitutions.
+// Capture the exact legacy-Nadine local arm rows immediately before and after
+// stock WeaponIKFeather::Apply for the retained Player owners.  This census is
+// read-only: it calls stock exactly once and only copies already-live rows.
+constexpr bool kEnableLegacyNadineWeaponIkFeatherInputCensus = true;
 // The common resolver already selects the compatible P99/Mazur Player clips.
 // Local PlayerWeaponIKAction then runs WeaponIKFeather::Apply and commits both
 // arm targets; the retained remote Nadine does not show the defect. Suppress
@@ -43848,17 +43857,21 @@ using WeaponIkFeatherApplyFunction = std::uint8_t(__fastcall*)(
 WeaponIkFeatherApplyFunction g_original_weapon_ik_feather_apply = nullptr;
 
 struct NadineWeaponIkFeatherScope {
+    int owner_index = -1;
     void* player = nullptr;
     void* action = nullptr;
     void* feather = nullptr;
     void* feather_info = nullptr;
     void* weapon = nullptr;
+    std::byte* fg_anim_data = nullptr;
+    std::byte* local_pose = nullptr;
+    std::uint32_t player_runtime_id = 0;
     std::uint32_t art = 0;
     std::uint32_t draw_state = 0;
     int current_slot = -1;
 };
 
-bool seh_select_legacy_nadine_weapon_ik_feather_suppression(
+bool seh_select_legacy_nadine_weapon_ik_feather_scope(
     void* feather, void* feather_info, float apply_weight,
     NadineWeaponIkFeatherScope* scope) {
     if (scope == nullptr) {
@@ -43867,7 +43880,7 @@ bool seh_select_legacy_nadine_weapon_ik_feather_suppression(
     *scope = {};
     scope->current_slot = -1;
     __try {
-        if (!g_net_role_b || feather == nullptr || feather_info == nullptr ||
+        if (g_module == 0 || feather == nullptr || feather_info == nullptr ||
             !std::isfinite(apply_weight) || apply_weight == 0.0F ||
             readable_bytes(feather) < 0x10 ||
             *reinterpret_cast<const std::uintptr_t*>(feather) !=
@@ -43901,23 +43914,82 @@ bool seh_select_legacy_nadine_weapon_ik_feather_suppression(
         if (art != kCoopPistolArtId && art != kCoopRifleArtId) {
             return false;
         }
-        void* const player = retained_player_object(0);
+        void* player = nullptr;
+        int owner_index = -1;
+        for (int index = 0; index < 2; ++index) {
+            void* const candidate = retained_player_object(index);
+            if (candidate == nullptr || !player_object_stable(candidate) ||
+                readable_bytes(static_cast<std::byte*>(candidate) + 0x4308) <
+                    sizeof(void*)) {
+                continue;
+            }
+            if (*reinterpret_cast<void* const*>(
+                    static_cast<const std::byte*>(candidate) + 0x4308) ==
+                feather_info) {
+                player = candidate;
+                owner_index = index;
+                break;
+            }
+        }
         std::uint32_t look = 0;
-        if (player == nullptr || !player_object_stable(player) ||
-            !player_screen_index_is(player, 0) ||
+        if (player == nullptr || owner_index < 0 ||
+            !player_screen_index_is(
+                player, static_cast<std::uint32_t>(owner_index)) ||
             !seh_read_player_look(player, &look) ||
             look != kLegacyNadineAttachTargetLookId ||
-            readable_bytes(static_cast<std::byte*>(player) + 0x4308) <
-                sizeof(void*) ||
-            *reinterpret_cast<void* const*>(
-                static_cast<const std::byte*>(player) + 0x4308) !=
-                feather_info ||
             !seh_weapon_parent_resolves_to_owner(weapon, player)) {
+            return false;
+        }
+        auto* const player_bytes = static_cast<std::byte*>(player);
+        const std::uint32_t player_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                player_bytes + kGameObjectRuntimeIdOffset);
+        auto* const fg = *reinterpret_cast<std::byte**>(
+            player_bytes + kPlayerFgAnimDataOffset);
+        if (player_runtime_id == 0 || fg == nullptr ||
+            readable_bytes(fg) <
+                kFgAnimDataRetainedIdOffset + sizeof(std::uint32_t)) {
+            return false;
+        }
+        auto* const fg_owner_cell = *reinterpret_cast<std::byte* const*>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        if (fg_owner_cell == nullptr || readable_bytes(fg_owner_cell) < 0x10 ||
+            *reinterpret_cast<void* const*>(fg_owner_cell + 0x8) != player ||
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset) != player_runtime_id) {
+            return false;
+        }
+        auto* const target_skeleton = *reinterpret_cast<std::byte**>(
+            fg + kFgAnimDataSkeletonOffset);
+        auto* const local_pose = *reinterpret_cast<std::byte**>(
+            fg + kFgAnimDataJointCacheLocalPoseOffset);
+        if (target_skeleton == nullptr || local_pose == nullptr ||
+            readable_bytes(target_skeleton) < 0x48 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                target_skeleton + 0x24) !=
+                kLegacyNadineTargetSkeletonArtId ||
+            *reinterpret_cast<const std::uint32_t*>(
+                target_skeleton + kSkeletonJointCountOffset) !=
+                kLegacyNadineSkeletonJointCount ||
+            readable_bytes(local_pose) <
+                static_cast<std::size_t>(31) * kJointLocalPoseStride) {
             return false;
         }
         int current_slot = -1;
         std::uint32_t draw_state = 0;
         if (!read_weapon_draw_state(player, current_slot, draw_state) ||
+            readable_bytes(player_bytes + kPlayerWeaponControllerOffset) <
+                sizeof(void*)) {
+            return false;
+        }
+        auto* const weapon_controller = *reinterpret_cast<std::byte**>(
+            player_bytes + kPlayerWeaponControllerOffset);
+        if (weapon_controller == nullptr ||
+            readable_bytes(weapon_controller) < 0x138 ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon_controller) !=
+                g_module + kPlayerWeaponControllerVtableRva ||
+            *reinterpret_cast<void* const*>(weapon_controller + 0x108) !=
+                player ||
             (draw_state != 1 && draw_state != 2 && draw_state != 4)) {
             return false;
         }
@@ -43930,11 +44002,15 @@ bool seh_select_legacy_nadine_weapon_ik_feather_suppression(
              get_weapon_from_slot(player, current_slot) != weapon)) {
             return false;
         }
+        scope->owner_index = owner_index;
         scope->player = player;
         scope->action = action;
         scope->feather = feather;
         scope->feather_info = feather_info;
         scope->weapon = weapon;
+        scope->fg_anim_data = fg;
+        scope->local_pose = local_pose;
+        scope->player_runtime_id = player_runtime_id;
         scope->art = art;
         scope->draw_state = draw_state;
         scope->current_slot = current_slot;
@@ -43946,14 +44022,262 @@ bool seh_select_legacy_nadine_weapon_ik_feather_suppression(
     }
 }
 
+constexpr std::size_t kWeaponIkFeatherCensusFirstJoint = 19;
+constexpr std::size_t kWeaponIkFeatherCensusJointCount = 12;
+constexpr ULONGLONG kWeaponIkFeatherCensusDwellMs = 350;
+
+struct WeaponIkFeatherPoseSample {
+    std::array<std::array<float, 12>, kWeaponIkFeatherCensusJointCount> rows{};
+};
+
+struct WeaponIkFeatherCensusMemo {
+    void* player = nullptr;
+    std::uint32_t runtime_id = 0;
+    ULONGLONG stable_since_ms = 0;
+    ULONGLONG last_seen_ms = 0;
+    bool emitted = false;
+};
+
+bool seh_capture_weapon_ik_feather_pose(
+    const NadineWeaponIkFeatherScope& scope,
+    WeaponIkFeatherPoseSample* sample) {
+    if (sample == nullptr) {
+        return false;
+    }
+    *sample = {};
+    __try {
+        if (scope.player == nullptr || scope.fg_anim_data == nullptr ||
+            scope.local_pose == nullptr ||
+            !player_object_stable(scope.player) ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(scope.player) +
+                kGameObjectRuntimeIdOffset) != scope.player_runtime_id ||
+            *reinterpret_cast<std::byte* const*>(
+                static_cast<const std::byte*>(scope.player) +
+                kPlayerFgAnimDataOffset) != scope.fg_anim_data ||
+            *reinterpret_cast<std::byte* const*>(
+                scope.fg_anim_data + kFgAnimDataJointCacheLocalPoseOffset) !=
+                scope.local_pose ||
+            readable_bytes(scope.local_pose) <
+                (kWeaponIkFeatherCensusFirstJoint +
+                 kWeaponIkFeatherCensusJointCount) *
+                    kJointLocalPoseStride) {
+            return false;
+        }
+        for (std::size_t index = 0;
+             index < kWeaponIkFeatherCensusJointCount; ++index) {
+            std::memcpy(
+                sample->rows[index].data(),
+                scope.local_pose +
+                    (kWeaponIkFeatherCensusFirstJoint + index) *
+                        kJointLocalPoseStride,
+                kJointLocalPoseStride);
+            if (!valid_pose_floats(sample->rows[index].data(), 12) ||
+                !valid_network_orientation(
+                    sample->rows[index].data() +
+                    kJointLocalPoseRotationOffset / sizeof(float))) {
+                *sample = {};
+                return false;
+            }
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *sample = {};
+        return false;
+    }
+}
+
+bool weapon_ik_feather_census_ready(
+    const NadineWeaponIkFeatherScope& scope) {
+    if (scope.owner_index < 0 || scope.owner_index > 1 ||
+        (scope.art != kCoopPistolArtId && scope.art != kCoopRifleArtId) ||
+        scope.draw_state != 2 || scope.current_slot < 0 ||
+        player_cover_state_field(scope.player)) {
+        return false;
+    }
+    float move_stick[2]{};
+    float move_world[4]{};
+    float move_magnitude = 0.0F;
+    __try {
+        auto* const player = static_cast<const std::byte*>(scope.player);
+        std::memcpy(move_stick, player + 0x39C8, sizeof(move_stick));
+        std::memcpy(move_world, player + 0x3A30, sizeof(move_world));
+        move_magnitude = *reinterpret_cast<const float*>(player + 0x3A1C);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+    if (!idle_arm_pose_movement_is_zero(
+            move_stick, move_world, move_magnitude)) {
+        return false;
+    }
+
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static WeaponIkFeatherCensusMemo memos[2][2]{};
+    const std::size_t art_index = scope.art == kCoopPistolArtId ? 0 : 1;
+    const ULONGLONG now = GetTickCount64();
+    bool ready = false;
+    AcquireSRWLockExclusive(&lock);
+    auto& memo = memos[scope.owner_index][art_index];
+    const bool reset = memo.player != scope.player ||
+        memo.runtime_id != scope.player_runtime_id ||
+        memo.stable_since_ms == 0 || memo.last_seen_ms == 0 ||
+        now < memo.last_seen_ms || now - memo.last_seen_ms > 100;
+    if (reset) {
+        // The census needs one successful boundary per owner/art, not one per
+        // transient Player allocation. Preserve a completed sample across
+        // retained-object recreation while restarting only the stability
+        // dwell for an unobserved pair.
+        const bool emitted = memo.emitted;
+        memo = {};
+        memo.emitted = emitted;
+        memo.player = scope.player;
+        memo.runtime_id = scope.player_runtime_id;
+        memo.stable_since_ms = now;
+    }
+    memo.last_seen_ms = now;
+    ready = !memo.emitted && now >= memo.stable_since_ms &&
+        now - memo.stable_since_ms >= kWeaponIkFeatherCensusDwellMs;
+    if (ready) {
+        memo.emitted = true;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    return ready;
+}
+
+void finish_weapon_ik_feather_census(
+    const NadineWeaponIkFeatherScope& scope,
+    const WeaponIkFeatherPoseSample& before,
+    const WeaponIkFeatherPoseSample& after, std::uint8_t stock_result,
+    float apply_weight, std::uint32_t hand_side_selector, float strength,
+    float anim_scale) {
+    std::uint32_t changed_mask = 0;
+    std::array<std::uint32_t, kWeaponIkFeatherCensusJointCount> before_hash{};
+    std::array<std::uint32_t, kWeaponIkFeatherCensusJointCount> after_hash{};
+    for (std::size_t index = 0;
+         index < kWeaponIkFeatherCensusJointCount; ++index) {
+        before_hash[index] = 2166136261u;
+        after_hash[index] = 2166136261u;
+        aim_fingerprint_mix_bytes(
+            before_hash[index], before.rows[index].data(),
+            kJointLocalPoseStride);
+        aim_fingerprint_mix_bytes(
+            after_hash[index], after.rows[index].data(),
+            kJointLocalPoseStride);
+        if (before_hash[index] != after_hash[index]) {
+            changed_mask |= 1u << index;
+        }
+    }
+    std::ostringstream summary;
+    summary << "NADINE-WEAPON-IK-BOUNDARY role="
+            << (g_net_role_b ? 'B' : 'A')
+            << " owner=" << scope.owner_index
+            << " runtime=0x" << std::hex << scope.player_runtime_id
+            << " art=0x" << scope.art << std::dec
+            << " slot=" << scope.current_slot
+            << " state=" << scope.draw_state
+            << " weight=" << apply_weight
+            << " selector=" << hand_side_selector
+            << " strength=" << strength
+            << " animScale=" << anim_scale
+            << " stock=" << static_cast<unsigned>(stock_result)
+            << " changedMask=0x" << std::hex << changed_mask
+            << " beforeHash=";
+    for (const auto value : before_hash) summary << value << ',';
+    summary << " afterHash=";
+    for (const auto value : after_hash) summary << value << ',';
+    write_log_line(summary.str().c_str());
+
+    for (std::size_t index = 0;
+         index < kWeaponIkFeatherCensusJointCount; ++index) {
+        const auto& pre = before.rows[index];
+        const auto& post = after.rows[index];
+        std::ostringstream row;
+        row << "NADINE-WEAPON-IK-ROW role="
+            << (g_net_role_b ? 'B' : 'A')
+            << " owner=" << scope.owner_index
+            << " art=0x" << std::hex << scope.art << std::dec
+            << " joint=" <<
+                kWeaponIkFeatherCensusFirstJoint + index
+            << " changed=" <<
+                (before_hash[index] != after_hash[index] ? 1 : 0)
+            << " preQ=" << pre[4] << ',' << pre[5] << ',' << pre[6]
+            << ',' << pre[7]
+            << " preT=" << pre[8] << ',' << pre[9] << ',' << pre[10]
+            << " postQ=" << post[4] << ',' << post[5] << ',' << post[6]
+            << ',' << post[7]
+            << " postT=" << post[8] << ',' << post[9] << ',' << post[10];
+        write_log_line(row.str().c_str());
+    }
+}
+
+bool seh_find_weapon_ik_feather_census_owner(
+    void* feather_info, int* owner_out, void** player_out) {
+    if (owner_out == nullptr || player_out == nullptr) {
+        return false;
+    }
+    *owner_out = -1;
+    *player_out = nullptr;
+    __try {
+        for (int owner = 0; owner < 2; ++owner) {
+            void* const player = retained_player_object(owner);
+            if (player == nullptr ||
+                readable_bytes(static_cast<std::byte*>(player) + 0x4308) <
+                    sizeof(void*) ||
+                *reinterpret_cast<void* const*>(
+                    static_cast<const std::byte*>(player) + 0x4308) !=
+                    feather_info) {
+                continue;
+            }
+            *owner_out = owner;
+            *player_out = player;
+            return true;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *owner_out = -1;
+        *player_out = nullptr;
+    }
+    return false;
+}
+
+void log_weapon_ik_feather_census_entry(void* feather_info) {
+    if constexpr (!kEnableLegacyNadineWeaponIkFeatherInputCensus) {
+        return;
+    }
+    int owner = -1;
+    void* player = nullptr;
+    if (!seh_find_weapon_ik_feather_census_owner(
+            feather_info, &owner, &player)) {
+        return;
+    }
+    static std::atomic<std::uint32_t> logged_mask{0};
+    const std::uint32_t bit = 1u << owner;
+    const std::uint32_t previous =
+        logged_mask.fetch_or(bit, std::memory_order_acq_rel);
+    if ((previous & bit) == 0) {
+        std::ostringstream line;
+        line << "NADINE-WEAPON-IK-ENTRY role="
+             << (g_net_role_b ? 'B' : 'A')
+             << " owner=" << owner
+             << " player=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(player);
+        write_log_line(line.str().c_str());
+    }
+}
+
 std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
-    void* feather, void* feather_info, float blend, void* fg_anim_data,
-    float apply_weight, std::uint32_t iterations, float strength,
-    std::uint8_t unused_mode, float delta_time) {
+    void* feather, void* feather_info, float unused_blend,
+    void* unused_fg_anim_data, float apply_weight,
+    std::uint32_t hand_side_selector, float strength,
+    std::uint8_t unused_mode, float anim_scale) {
+    log_weapon_ik_feather_census_entry(feather_info);
     NadineWeaponIkFeatherScope scope{};
-    if (kEnableLegacyNadineWeaponIkFeatherSuppression &&
-        seh_select_legacy_nadine_weapon_ik_feather_suppression(
-            feather, feather_info, apply_weight, &scope)) {
+    const bool scoped =
+        (kEnableLegacyNadineWeaponIkFeatherInputCensus ||
+         kEnableLegacyNadineWeaponIkFeatherSuppression) &&
+        seh_select_legacy_nadine_weapon_ik_feather_scope(
+            feather, feather_info, apply_weight, &scope);
+    if (kEnableLegacyNadineWeaponIkFeatherSuppression && scoped &&
+        g_net_role_b && scope.owner_index == 0) {
         static std::atomic<std::uint32_t> logged{0};
         if (logged.fetch_add(1, std::memory_order_relaxed) < 96) {
             std::ostringstream line;
@@ -43972,10 +44296,9 @@ std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
                  << " current=" << scope.current_slot
                  << " drawState=" << scope.draw_state
                  << " weight=" << apply_weight
-                 << " blend=" << blend
                  << " strength=" << strength
-                 << " iterations=" << iterations
-                 << " dt=" << delta_time;
+                 << " selector=" << hand_side_selector
+                 << " animScale=" << anim_scale;
             write_log_line(line.str().c_str());
         }
         // Exact semantic equivalent of WeaponIKFeather::Apply's stock
@@ -43983,12 +44306,32 @@ std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
         // ignores this result and completes PlayerWeaponIKAction normally.
         return 0;
     }
+    WeaponIkFeatherPoseSample before{};
+    const bool claimed = kEnableLegacyNadineWeaponIkFeatherInputCensus &&
+        scoped && weapon_ik_feather_census_ready(scope);
+    const bool sample = claimed &&
+        seh_capture_weapon_ik_feather_pose(scope, &before);
+    if (claimed && !sample) {
+        write_log_line("NADINE-WEAPON-IK-CAPTURE-FAILED stage=pre");
+    }
     const auto original = g_original_weapon_ik_feather_apply;
-    return original != nullptr
+    const std::uint8_t result = original != nullptr
         ? original(
-              feather, feather_info, blend, fg_anim_data, apply_weight,
-              iterations, strength, unused_mode, delta_time)
+              feather, feather_info, unused_blend, unused_fg_anim_data,
+              apply_weight, hand_side_selector, strength, unused_mode,
+              anim_scale)
         : 0;
+    if (sample) {
+        WeaponIkFeatherPoseSample after{};
+        if (seh_capture_weapon_ik_feather_pose(scope, &after)) {
+            finish_weapon_ik_feather_census(
+                scope, before, after, result, apply_weight,
+                hand_side_selector, strength, anim_scale);
+        } else {
+            write_log_line("NADINE-WEAPON-IK-CAPTURE-FAILED stage=post");
+        }
+    }
+    return result;
 }
 
 bool install_legacy_nadine_weapon_ik_feather_suppression() {
@@ -44001,7 +44344,7 @@ bool install_legacy_nadine_weapon_ik_feather_suppression() {
             reinterpret_cast<const void*>(&hooked_weapon_ik_feather_apply),
             callsite, relay, new_displacement)) {
         boot_log_line(
-            "legacy-Nadine WeaponIKFeather suppression SKIPPED (callsite preflight)");
+            "legacy-Nadine WeaponIKFeather boundary SKIPPED (callsite preflight)");
         return false;
     }
     std::int32_t old_displacement = 0;
@@ -44015,7 +44358,7 @@ bool install_legacy_nadine_weapon_ik_feather_suppression() {
         VirtualFree(relay, 0, MEM_RELEASE);
         g_original_weapon_ik_feather_apply = nullptr;
         boot_log_line(
-            "legacy-Nadine WeaponIKFeather suppression SKIPPED (thread suspend)");
+            "legacy-Nadine WeaponIKFeather boundary SKIPPED (thread suspend)");
         return false;
     }
     DWORD old_protection = 0;
@@ -44025,7 +44368,7 @@ bool install_legacy_nadine_weapon_ik_feather_suppression() {
         VirtualFree(relay, 0, MEM_RELEASE);
         g_original_weapon_ik_feather_apply = nullptr;
         boot_log_line(
-            "legacy-Nadine WeaponIKFeather suppression SKIPPED (protect)");
+            "legacy-Nadine WeaponIKFeather boundary SKIPPED (protect)");
         return false;
     }
     std::memcpy(
@@ -44072,16 +44415,16 @@ bool install_legacy_nadine_weapon_ik_feather_suppression() {
             g_original_weapon_ik_feather_apply = nullptr;
             boot_log_line(
                 protection_restored
-                    ? "legacy-Nadine WeaponIKFeather suppression SKIPPED (verified rollback)"
-                    : "legacy-Nadine WeaponIKFeather suppression SKIPPED (verified rollback, protection restore WARNING)");
+                    ? "legacy-Nadine WeaponIKFeather boundary SKIPPED (verified rollback)"
+                    : "legacy-Nadine WeaponIKFeather boundary SKIPPED (verified rollback, protection restore WARNING)");
         } else {
             // The site has an indeterminate displacement. Keep both the relay
             // and original target alive; freeing either could turn a recoverable
             // install fault into a jump through released memory.
             boot_log_line(
                 protection_restored
-                    ? "legacy-Nadine WeaponIKFeather suppression SKIPPED (rollback verification WARNING; relay retained)"
-                    : "legacy-Nadine WeaponIKFeather suppression SKIPPED (rollback/protection WARNING; relay retained)");
+                    ? "legacy-Nadine WeaponIKFeather boundary SKIPPED (rollback verification WARNING; relay retained)"
+                    : "legacy-Nadine WeaponIKFeather boundary SKIPPED (rollback/protection WARNING; relay retained)");
         }
         return false;
     }
@@ -44089,11 +44432,11 @@ bool install_legacy_nadine_weapon_ik_feather_suppression() {
         // A failed rollback/readback can leave the relay reachable. Retain it
         // rather than freeing executable memory behind a possibly live call.
         boot_log_line(
-            "legacy-Nadine WeaponIKFeather suppression installed (rollback/protection WARNING; relay retained)");
+            "legacy-Nadine WeaponIKFeather boundary installed (rollback/protection WARNING; relay retained)");
         return true;
     }
     boot_log_line(
-        "legacy-Nadine WeaponIKFeather suppression installed (PlayerWeaponIKAction 0x1410959AC)");
+        "legacy-Nadine WeaponIKFeather boundary installed (PlayerWeaponIKAction 0x1410959AC)");
     return true;
 }
 
@@ -57178,7 +57521,8 @@ DWORD WINAPI install_hook(void*) {
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_legacy_nadine_active_weapon_grip_overlay_repair();
     }
-    if constexpr (kEnableLegacyNadineWeaponIkFeatherSuppression &&
+    if constexpr ((kEnableLegacyNadineWeaponIkFeatherInputCensus ||
+                   kEnableLegacyNadineWeaponIkFeatherSuppression) &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_legacy_nadine_weapon_ik_feather_suppression();
     }

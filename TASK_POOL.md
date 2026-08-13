@@ -182,19 +182,24 @@
       animation scale at `+0x140` (default/initial value 1.0). The solver only
       flips its left/right interpolation for the former and multiplies its
       scalar weight by the latter; neither contains a P99/Mazur spatial target.
-- [ ] Continue statically from the semantic composition boundary: join the
-      proximal arms, palms, `*_hand_prop_attachment`, ProcessWeapon endpoint and
-      two-hand IK writers for exact local P99/Mazur idle. The next unresolved
-      split is upstream authored/retargeted hand-prop placement versus the
-      generic paired-hand convergence inside `WeaponIKFeather_SolveWeaponFeatherIk`.
-      All Feather inputs are now closed and there is no weapon-art spatial goal
-      inside it. Resolve and compare the exact pre-solve left/right hand-prop
-      world locators for selected Player1 versus Player0 before any mutation.
-      Do not mutate this composition until a local-only first writer is isolated with three
-      independent evidence types and a prediction distinct from both rejected
-      palette relays. `aca/acc` have now identified retained Player1 and local
-      Player0 as real selected main-view producers; compare their same-frame
-      semantic inputs rather than testing another body buffer.
+- [x] Close the first surviving semantic boundary at the sole ordinary call
+      `PlayerWeaponIKAction_Update+0x8CC -> WeaponIKFeather_Apply
+      0x1418F2700`. `JointSet_AllocateAndSeedBuffers 0x14181E780` seeds the
+      solver from the current JointCache and
+      `JointSet_CommitJointTransformsAndReset 0x14181ECD0` writes the result
+      back before the later, already-rejected body-palette paths. Build `ace`
+      captures exact C39 local rows `19..30` immediately before and after stock
+      Apply for selected retained Player1/Player0. The hook is read-only, calls
+      stock exactly once, preserves every register/stack argument in object-code
+      review and emits at most one P99 and one Mazur sample per owner.
+- [ ] Run only the automatic `ace` boundary exam. A role-B Player0 boundary plus
+      no role-A Player1 boundary selects a local-action lifecycle split. Boundaries
+      on both sides with differing pre rows select upstream authored/retargeted
+      composition; matching pre rows but differing post rows/scalars select the
+      Feather solve/control boundary; matching pre and post rows rejects this
+      semantic owner and authorizes no mutation. Do not patch a row, scalar,
+      action or attachment until one of those mutually exclusive outcomes is
+      observed for P99 and Mazur.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that

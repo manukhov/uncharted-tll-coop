@@ -23258,3 +23258,77 @@ getter and generic animation-scale setter/getter. Headless application reports
 `1725 functions, 60 data names` and `save_database returned True`; restarted
 MCP readback resolves all three names from the single `ida/tll.i64`. Runtime
 remains closed.
+
+### 2026-08-13 STATIC / IMPLEMENTED (`ace`): compare the exact Player1/Player0 WeaponIK boundary before any repair
+
+The remaining local-versus-remote grip split now has one bounded read-only
+runtime boundary that satisfies the static evidence quota. This is not another
+pose transfer and does not assume that `WeaponIKFeather` is the cause. It
+measures the first semantic producer that survives every rejected clip,
+postblend, final-palette and renderer-buffer experiment.
+
+The concrete call/dataflow is the first independent evidence. The sole ordinary
+callsite `PlayerWeaponIKAction_Update+0x8CC 0x1410959AC` passes the action's
+embedded `WeaponIKFeather` at `+0x50`, the Player's exact
+`WeaponIKFeatherInfo` at `Player+0x4308`, apply weight, controller hand-side
+selector, strength and ProcessWeapon animation scale into
+`WeaponIKFeather_Apply 0x1418F2700`. The caller immediately returns success
+after that call. The callee resolves both semantic hand-prop chains, solves the
+paired arm target and commits both JointSets; there is no second ordinary
+PlayerWeaponIKAction writer after it.
+
+The concrete buffer lifetime is the second evidence.
+`JointSet_AllocateAndSeedBuffers 0x14181E780` reads the current JointCache world
+locators and local 48-byte rows for every selected joint into the Feather work
+sets. After the solve, `JointSet_CommitJointTransformsAndReset 0x14181ECD0`
+copies every valid result into the same persistent local-pose array. Therefore a
+snapshot of C39 rows `19..30` immediately before and after the sole call
+separates the upstream authored/retargeted input from the terminal local IK
+write without guessing a hand locator or moving a weapon.
+
+The selected-owner and downstream evidence is independent of both. Runtime
+builds `aca/acc` proved that retained role-A Player1 is the correct external
+Nadine body producer and retained role-B Player0 is the broken local body
+producer in the main colour view. Builds `abw/aby` then proved that later local
+row and final 88-matrix transfers reached the intended destination yet were not
+sufficient visually. Consequently a difference found before or inside the
+sole Feather call is semantically earlier than both rejected transfer seams;
+an absent Player1 call is itself a concrete lifecycle distinction.
+
+Build `ace` hooks only the exact E8 at `0x1410959AC`. The relay preflights the
+stock target `0x1418F2700`, suspends other threads for the displacement update,
+verifies readback/protection restoration and retains executable memory on every
+ambiguous rollback. Release object-code inspection independently confirms that
+the wrapper preserves RCX/RDX, XMM2/R9 and all five stack arguments, calls stock
+exactly once and returns its original AL. The census then only copies twelve
+validated 48-byte rows. Admission requires the concrete
+PlayerWeaponIKAction/WeaponIKFeather/ProcessWeapon vtables and weak generations,
+retained owner 0 or 1, matching screen, legacy-Nadine look, exact Player/Fg
+retained ownership, ED25/C39/580, exact weapon-controller ownership,
+P99/Mazur as the current `WeaponOut` weapon, no cover and 350 ms of zero
+movement. It never calls an engine mutation helper. One sample is allowed for
+each `{owner,P99|Mazur}` pair and remains bounded across Player recreation.
+
+Competing hypotheses and the pre-launch prediction are explicit:
+
+1. **Hlifecycle:** role B emits owner-0 `ENTRY/BOUNDARY`, while role A never
+   emits owner-1 `ENTRY/BOUNDARY` for the same art. Correct remote Player1
+   bypasses the local PlayerWeaponIKAction lifecycle; no pose-row repair is
+   authorized.
+2. **Hupstream:** both owners emit boundaries, but at least one row differs in
+   the `preQ/preT` set before stock Apply. The first divergence already exists
+   in authored/retargeted command composition or hand-prop locator input.
+3. **Hfeather:** both pre sets agree within the same semantic pose, but the
+   selector/weight/strength/scale or post rows differ. The terminal Feather
+   solve/control is the first divergent writer.
+4. **Hdownstream/packaging:** both pre and post sets agree while the pixels
+   remain different, or the exact hook does not install. This rejects the
+   measured boundary and authorizes no mutation.
+
+A valid exam must first log the exact install marker. For each tested art it
+must produce role-B owner-0 entry and a complete boundary plus exactly twelve
+rows; the presence or absence of the symmetric role-A owner-1 boundary then
+classifies lifecycle before numeric comparison. Any capture failure, crash,
+stall, invalid quaternion, non-stock call result, incomplete row set or missing
+role-B boundary rejects only `ace`. No game was launched during this static
+pass, and all gameplay mutations remain disabled.
