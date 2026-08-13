@@ -23668,3 +23668,42 @@ is unchanged, Hlater-IK/merge wins and this repair is insufficient. If no
 marker appears, its temporal/state admission is falsified; do not widen it.
 The release DLL builds successfully, but the game has not been launched for
 this new boundary yet.
+
+### 2026-08-13 RUNTIME REJECTED / STATIC CORRECTED (`ack` -> `acl`): the first row-skip admission missed Draw state
+
+The bounded `ack` exam used PIDs 4056/7916. Both exact detours installed and
+role B repeatedly emitted `NADINE-ACTIVE-GRIP-OVERLAY-COPY` for retained
+owner0 track states, but the complete segment contained zero
+`NADINE-MAZUR-HANDS-OVERLAY-SKIP` rows. The user saw no change: local Nadine
+and Chloe's view both showed the same broken Mazur hold. Because the mutation
+marker never appeared, this result **REJECTS the `ack` admission/timing, not the
+`56C57AD2 -> E117618A` root-cause hypothesis**.
+
+Static call order gives the exact miss. `PlayerWeaponAnimControl_RequestCustomWeaponPart
+0x14108B940` stores first/second IDs at Player `+0x1CC/+0x1D0` and the second
+blend at `+0x1D4`, then requests `custom-weapon-part(-with-feather)` and
+`s_weapon-out`. This occurs from `PlayerPlayWeaponOverlayAction_OnStart
+0x141097450` during the Draw action. `PlayerWeaponController_ApplyState
+0x1410AAFB0` writes controller state `WeaponOut=2` only after the Get action
+finishes; during Draw the state is `1`, and current slot may still be `-1` or
+the old slot. Thus `ack`'s required state `2/4` plus current exact Mazur could
+not admit the initial snapshot that materialized the type-1 row.
+
+Build `acl` corrects only this proven temporal gate. It accepts controller
+state Draw/WeaponOut/Aiming (`1/2/4`). During state 1 it resolves the Mazur by
+exact inventory art rather than requiring current-slot publication; states
+2/4 still require current slot to equal that exact inventory slot. More
+importantly, it now requires the live Player fields to be bit-exact
+`+0x1CC=56C57AD2`, `+0x1D0=283966ED`, `+0x1D4=3F333333` (authored 0.7), plus
+the unique active Mazur selector, unique campaign-Chloe type-1 row, exact
+same-owner Mazur ProcessWeapon and all prior owner/look/track guards. A stale
+Mazur inventory item, P99 Draw or unrelated type-1 source therefore cannot
+admit the skip.
+
+The corrected falsifiable prediction is unchanged visually but adds temporal
+telemetry: the first exact marker may now show `drawState=1`, `current=-1`
+while `slot` is the exact Mazur inventory slot. A later state-2/4 marker must
+have `current=slot`. Any marker outside states 1/2/4, without exact pair fields,
+or in role A is packaging failure. Only a marker followed by a corrected
+two-hand pose can confirm the root cause; marker plus unchanged pose selects
+the later merge/IK competitor.

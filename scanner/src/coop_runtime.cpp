@@ -2434,7 +2434,8 @@ constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
 // (joints 29..32).  Campaign Chloe's player-mesh type-1 row materializes
 // 56C57AD2 as Chloe-only E117618A before the ordinary animation-id resolver.
 // Skip only that exact row for the retained local legacy-Nadine Player while
-// Mazur is WeaponOut/Aiming, then continue the stock row iterator.  This keeps
+// the exact Mazur pair is being materialized during Draw/WeaponOut/Aiming,
+// then continue the stock row iterator.  This keeps
 // the authored Mazur clip, the complementary arms clip, every other overlay
 // row and the entire IK path stock.
 constexpr bool kEnableLegacyNadineMazurAuthoredHandsOverlayRepair = true;
@@ -42819,6 +42820,7 @@ struct NadineMazurOverlayRowScope {
     int owner_index = -1;
     void* player = nullptr;
     void* weapon = nullptr;
+    int slot = -1;
     int current_slot = -1;
     std::uint32_t draw_state = 0;
     bool master = false;
@@ -42888,12 +42890,28 @@ bool seh_select_legacy_nadine_mazur_bad_hands_row(
                 scope->player ||
             !read_weapon_draw_state(
                 scope->player, scope->current_slot, scope->draw_state) ||
-            scope->current_slot < 0 ||
-            (scope->draw_state != 2 && scope->draw_state != 4)) {
+            (scope->draw_state != 1 && scope->draw_state != 2 &&
+             scope->draw_state != 4) ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(scope->player) + 0x1CC) !=
+                kMazurCarryPeekHandsClipId ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(scope->player) + 0x1D0) !=
+                0x283966EDu ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(scope->player) + 0x1D4) !=
+                0x3F333333u) {
+            return false;
+        }
+        scope->slot = find_weapon_slot_by_art_id(
+            scope->player, kCoopRifleArtId);
+        if (scope->slot < 0 ||
+            ((scope->draw_state == 2 || scope->draw_state == 4) &&
+             scope->current_slot != scope->slot)) {
             return false;
         }
         scope->weapon = get_weapon_from_slot(
-            scope->player, scope->current_slot);
+            scope->player, scope->slot);
         if (scope->weapon == nullptr ||
             *reinterpret_cast<const std::uintptr_t*>(scope->weapon) !=
                 g_module + kProcessWeaponVtableRva ||
@@ -43010,7 +43028,8 @@ void* __fastcall hooked_anim_overlay_state_find_matching_row(
              << " target=0x" << kChloeGunGripOpenerAddClipId
              << " callerRva=0x" << caller_rva << std::dec
              << " owner=" << scope.owner_index
-             << " slot=" << scope.current_slot
+             << " slot=" << scope.slot
+             << " current=" << scope.current_slot
              << " drawState=" << scope.draw_state
              << " master=" << (scope.master ? 1 : 0)
              << " tagged=" << (scope.tagged ? 1 : 0)

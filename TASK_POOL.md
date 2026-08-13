@@ -265,6 +265,14 @@
       current Mazur and controller state 2/4. Shared rows, clip IDs, command
       weights and IK remain untouched. Three evidence types and the exact
       falsifiable prediction are recorded in `COOP_STATUS.md`.
+- [x] Run `ack`: both detours and retained owner0 copy markers were live, but
+      zero exact skip markers appeared and the visual pose was unchanged.
+      **REJECT only the admission/timing.** Static call order proves
+      `RequestCustomWeaponPart` materializes the pair during controller Draw=1,
+      before `ApplyState` publishes WeaponOut=2/current slot. Build `acl`
+      admits state 1 by exact Mazur inventory ownership and additionally
+      requires live Player `+1CC/+1D0/+1D4 = 56C57AD2/283966ED/0.7`; states
+      2/4 retain strict current-slot equality. No broad state or art relaxation.
 - [ ] Resume statically at the last semantic producer of the left-hand grip
       target before `WeaponIKFeather::Apply 0x1418F2700` only if the bounded
       `ack` exam emits the exact skip marker but leaves Mazur's grip unchanged.
