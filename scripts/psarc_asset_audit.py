@@ -761,7 +761,8 @@ def audit_skeleton_retargets(data: bytes, specifications: list[str]) -> None:
                     f"row_offset=0x{retarget_offset:X} "
                     f"map=0x{map_offset:X} count={map_count} "
                     f"profile=0x{values[9]:08X} "
-                    f"scale_bits=0x{values[10]:08X}"
+                    f"scale_bits=0x{values[10]:08X} "
+                    f"scale={struct.unpack('<f', struct.pack('<I', values[10]))[0]:.9g}"
                 )
                 for map_row in range(map_count):
                     row_offset = map_offset + map_row * 0x0C

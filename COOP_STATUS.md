@@ -22774,3 +22774,71 @@ array and the corrected late deformer latch. Headless application reports
 `1707 functions, 60 data names` and `save_database returned True` in
 `reports/apply_status_armik_static.txt`; restarted MCP readback resolves all
 three new function names from the single `ida/tll.i64`.
+
+### 2026-08-13 STATIC / REJECTED: Player and NPC firearm clips use the same Nadine arm retarget map and profile
+
+The next asset/dataflow comparison rejects the remaining coarse form of
+**Hbase-retarget**: the local Player path does not reach Nadine through a
+different arm map, a missing palm/hand-prop row or a different target profile
+than the authored NPC firearm path.
+
+The first independent evidence is the exact DC retarget inventory. Runtime
+case-6 captures had already identified entry 124 for the Player animation pair
+`27E57F43/FD6DBE03 -> ED25C708/C39CA709`. Parsing
+`dc1.psarc/skel-retargets.bin` now resolves that entry's authored keys rather
+than treating the animation ids as table keys: row 124 at file `0x1790` is
+`proto 1003D654 -> nadine-dlc-base C67A06F1`. `actor77.psarc/proto.pak`
+independently ties this source skeleton resource to the captured
+`27E57F43/FD6DBE03` Player animation family. The previously identified correct
+NPC route is row 133 at `0x1940`,
+`npc-normal-base B91C4EA3 -> nadine-dlc-base C67A06F1`.
+
+The second evidence is byte-exact map/profile identity. Both rows point to the
+same 74-row map at raw DC offset `0x2720`, with the same target retarget-pose
+profile `E51542CA = npc-normal^nad-dlc-retarget-pose`. The arm portion maps the
+same semantic StringIds on both sides: shoulders `756E4E81/43CD3726` use mode
+2; elbows `56F87B24/64819ADF`, wrists `57F325C7/658AC43C` and palms
+`81DC7B7E/B42DF599` use mode 1; hand-prop attachments
+`A7479EC2/05FC3888` use mode 3. The source skeletons deliberately place these
+names at different ordinals -- proto `23..32`, NPC-normal `22..31` -- while
+Nadine places them at `21..30`. Sharing the StringId map therefore proves that
+the loader resolves semantic joints rather than copying either source's raw
+ordinals into C39.
+
+The third evidence is the exact runtime consumer. `SkelTable_FindRetargetEntry
+0x1417D0BD0` searches fixed 0x40-byte runtime entries by source/target skeleton
+ids. `ProcessAnimCmdListSegment` case 6 validates the returned feature word and
+map before passing the entry to `RetargetAnimUsingBatchMgr 0x14193B2C0`.
+Separately, the named-reference sampling path at `0x14182298A..0x1418229B2`
+shows the only scalar difference used there: entry `+0x24` uniformly multiplies
+the first 16-byte position vector and leaves the quaternion vector unchanged.
+The Player row authors scale `0.9` (`3F666666`); the NPC row authors about
+`0.97` (`3F7851EC`). This scale can remain a centimetric spacing contributor,
+especially for P99, but it neither changes joint coverage/modes nor removes a
+left-arm/two-hand clip contribution. It cannot by itself explain the Mazur
+one-hand steady pose.
+
+Competing hypotheses are therefore narrowed as follows. **Hwrong-map**,
+**Hmissing-palm/hand-prop**, **Hstale-source-ordinal** and
+**Hwrong-target-profile** are REJECTED. **Huniversal-scale** remains only a
+limited fit hypothesis; a future correction would need proof that the authored
+Player scale is wrong for this exact look, not merely that `0.9 != 0.97`.
+**Hsource-content/composition** is now the leading base-pose branch: the Player
+proto clip bundle and the NPC-normal firearm bundle can author different
+base/add/set/hands rows before the common, correct semantic retarget map.
+**Hgeneric-convergence** remains independently open after the partial `abm` P99
+response.
+
+No runtime or mutation is authorized by this result. Do not substitute NPC
+ordinals, copy the NPC scale globally or patch the shared 74-row map. Continue
+statically by comparing the complete Player proto and NPC-normal firearm
+base/add/set/hands contributions at the case-6 output/command-merge boundary,
+including ValidBits and weights for Nadine joints `19..30`. A later launch is
+earned only if that comparison yields one atomic local-only bundle or a proven
+weapon-specific target correction with a falsifiable visual prediction.
+
+`scripts/psarc_asset_audit.py --skeleton-retarget` now prints the decoded float
+beside the raw scale bits, making the two authored rows reproducible without a
+manual bit conversion. The canonical IDB comments for
+`SkelTable_FindRetargetEntry` and `AnimationClip_SampleNamedReferenceById` are
+updated in the accompanying label pass.

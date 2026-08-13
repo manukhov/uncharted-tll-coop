@@ -1033,7 +1033,9 @@ FUNCTIONS = {
         "Concrete animation-leaf reference lookup. Reads the clip from query "
         "context+0x8, then clip+0x30 -> {count, id-array+0x8, sample-pointer "
         "array+0x10}; linearly matches the requested id, samples its transform "
-        "and optionally applies skeleton retarget scale.",
+        "and optionally applies the matched skeleton-retarget entry's uniform "
+        "scale at +0x24 to the first 16-byte position vector while preserving "
+        "the second 16-byte quaternion vector.",
     ),
     0x14193AF80: (
         "AnimSnapshotNodeLeaf_RejectNamedReference",
@@ -3108,7 +3110,8 @@ FUNCTIONS = {
         "SkelTable_FindRetargetEntry",
         "Looks up the fixed-stride SkelTable retarget entry for a source/target "
         "ArtItemSkeleton StringId pair. ProcessAnimCmdListSegment case 6 validates "
-        "the returned entry's feature word at +0x22 and mapping table at +0x28.",
+        "the returned entry's feature word at +0x22 and mapping table at +0x28; "
+        "named-reference sampling consumes its uniform position scale at +0x24.",
     ),
     0x1417CD100: (
         "SkelTable_ResolveArtItemSkeleton",

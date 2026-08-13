@@ -4449,6 +4449,20 @@ whole compatible bundle with the authored NPC-Nadine retarget path; do not
 substitute a single hands clip. The next game launch is allowed only for an
 atomic local-only visual repair supported by three independent evidence types.
 
+**STATIC / REJECTED (retarget-map split):** runtime entry 124 is authored
+`proto 1003D654 -> nadine-dlc-base C67A06F1`, while the correct NPC-firearm
+entry 133 is `npc-normal-base B91C4EA3 -> nadine-dlc-base`. Both use the exact
+same 74-row map at raw `skel-retargets.bin+0x2720` and the same
+`npc-normal^nad-dlc-retarget-pose E51542CA` profile. Shoulders, elbows, wrists,
+palms and both hand-prop attachments map by identical StringIds/modes despite
+different source ordinals. Do not repair the grip by changing Nadine joint
+indices, copying the NPC map or replacing the common profile. The remaining
+`0.9` Player versus `~0.97` NPC uniform position scale may affect centimetric
+fit, but cannot remove the missing Mazur two-hand contribution. Continue at the
+case-6 output/command merge: compare complete proto and NPC-normal
+base/add/set/hands ValidBits and weights on Nadine joints 19--30. Runtime remains
+closed until that yields an atomic local-only bundle or exact weapon target.
+
 **STATIC / REJECTED (`auto -> run-gun-idle`):** do not force
 `run-gun-idle 0x8D62CB37` or patch the `auto 0x11E3B022` predicate. The state is
 a traversal-owned, near-full-body run-and-gun/blind-fire locomotion blend, not
