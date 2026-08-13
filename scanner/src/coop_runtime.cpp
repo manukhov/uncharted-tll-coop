@@ -44076,15 +44076,12 @@ bool seh_capture_weapon_ik_feather_pose(
                     (kWeaponIkFeatherCensusFirstJoint + index) *
                         kJointLocalPoseStride,
                 kJointLocalPoseStride);
-            // This is a local read-only census, not a network pose payload.
-            // JointCache may legitimately expose an uninitialized/identity
-            // service row while the action changes weapon state, so only
-            // reject non-finite or absurd data.  The exact raw row is itself
-            // the observation we need to compare.
-            if (!valid_pose_floats(sample->rows[index].data(), 12)) {
-                *sample = {};
-                return false;
-            }
+            // This is an exact read-only census of a raw 48-byte JointCache
+            // row, not a network pose payload.  Only +0x10/+0x20 are the
+            // rotation/translation Locators; the leading 16 bytes are
+            // companion service data and must not be interpreted as floats.
+            // Pointer identity, generation and span readability above are the
+            // complete safety contract for copying these diagnostic bytes.
         }
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -57459,8 +57456,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-13acd "
-        "(production after confirmed local Player0 body ownership)");
+        "TLL co-op runtime init 2026-08-13acg "
+        "(read-only raw WeaponIK JointCache boundary census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

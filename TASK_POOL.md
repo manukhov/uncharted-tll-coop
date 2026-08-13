@@ -192,7 +192,7 @@
       Apply for selected retained Player1/Player0. The hook is read-only, calls
       stock exactly once, preserves every register/stack argument in object-code
       review and emits at most one P99 and one Mazur sample per owner.
-- [ ] Run only the automatic `ace` boundary exam. A role-B Player0 boundary plus
+- [ ] Complete only the automatic WeaponIK boundary exam. A role-B Player0 boundary plus
       no role-A Player1 boundary selects a local-action lifecycle split. Boundaries
       on both sides with differing pre rows select upstream authored/retargeted
       composition; matching pre rows but differing post rows/scalars select the
@@ -204,9 +204,19 @@
       Player1/Player0 boundaries, rejecting a remote lifecycle bypass; both
       changed only joints `19..26`. P99 hit the census but failed a diagnostic
       network-quaternion predicate before stock and the attempt was consumed.
-      Build `acf` keeps raw rows finite/bounded, separates claim from successful
-      emission and retries after capture failure. Run only the missing P99 idle
-      pair; do not repeat Mazur or mutate the pose.
+      Build `acf` removed quaternion normalization, separates claim from
+      successful emission and retries after capture failure.
+- [x] Reject the remaining `acf` twelve-float content filter. Fresh stationary
+      P99 reached exact role-A owner1 and role-B owner0 boundaries repeatedly,
+      but both failed only the pre-capture. A 48-byte JointCache row stores its
+      Locator at rotation `+0x10` and translation `+0x20`; the leading 16 bytes
+      are not ordinary transform floats. Build `acg` copies the exact raw row
+      after retained-owner, generation, pointer and readable-span validation and
+      performs no content interpretation or game write.
+- [ ] Run only the missing stationary P99 `acg` pair. Expect one complete
+      pre/post boundary on both sides. Any further pre-capture failure selects a
+      pointer/readability race rather than pose content; do not repeat Mazur or
+      mutate the pose.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that

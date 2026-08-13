@@ -23333,7 +23333,7 @@ stall, invalid quaternion, non-stock call result, incomplete row set or missing
 role-B boundary rejects only `ace`. No game was launched during this static
 pass, and all gameplay mutations remain disabled.
 
-### 2026-08-13 RUNTIME PARTIAL (`ace`) / STATIC CORRECTION (`acf`): Mazur closes the lifecycle split; P99 validation was over-strict
+### 2026-08-13 RUNTIME PARTIAL (`ace`) / RUNTIME REJECTED (`acf`) / STATIC CORRECTION (`acg`): Mazur closes the lifecycle split; P99 raw-row filtering was invalid
 
 The automatic `ace` launch reached a valid Mazur pair in fresh PIDs
 `17292(A)/10688(B)`. Both exact relays installed, both processes remained
@@ -23363,12 +23363,30 @@ local census is intended to observe even a transient identity/service row.
 pre/post sample. Therefore the written P99 prediction was not tested and the
 two failures do not classify its pose owner.
 
-Build `acf` changes only those read-only census mechanics. It retains the
-finite/bounded 12-float validation but does not demand a normalized network
-quaternion from a local raw row. Claim and successful emission are now separate
-states under the same SRW lock; a pre/post capture failure releases the claim,
-restarts the 350-ms dwell and can retry, while a completed owner/art pair remains
-terminal across retained-Player recreation. Stock still runs exactly once and
-no pose or game state is written. A clean Release build and `git diff --check`
-pass. The only authorized next runtime action is the missing stationary P99
-pair; Mazur must not be repeated and no repair is authorized yet.
+Build `acf` changed only those read-only census mechanics. It retained a
+finite/bounded 12-float predicate but removed the normalized-network-quaternion
+test. Claim and successful emission became separate states under the same SRW
+lock; a pre/post capture failure releases the claim and retries. Stock still ran
+exactly once and no pose or game state was written.
+
+The fresh stationary P99 exam in PIDs `2284(A)/10688(B)` **rejects that remaining
+content predicate**. Both exact owner boundaries were live (`A/owner1` and
+`B/owner0`), and both repeatedly emitted `CAPTURE-FAILED stage=pre`; therefore
+the fault is symmetric and before stock Apply, not a Player0-only lifecycle or
+network result. Independent JointCache layout evidence closes the mistake:
+each row is 48 bytes, but the actual Locator rotation begins at `+0x10` and
+translation at `+0x20`; the leading 16 bytes are service/companion data. Treating
+all twelve dwords as ordinary finite floats is not a valid contract. Mazur merely
+passed that accidental content test while P99 did not. External
+`ReadProcessMemory` was denied by Windows access control and made no game write.
+
+Build `acg` removes only the invalid content predicate. It still revalidates the
+exact retained Player, runtime generation, FgAnimData and local-pose pointer and
+the full readable byte span before copying the raw diagnostic rows. Because no
+captured bytes are interpreted or written back, pointer/generation/span checks
+are the complete safety boundary. **Falsifiable prediction:** after 350 ms of
+stationary P99 WeaponOut, both role-A owner1 and role-B owner0 must emit one
+complete pre/post boundary; another `stage=pre` would instead select an
+identity/readability race, and a one-sided boundary would select a lifecycle
+split. Mazur must not be repeated and no pose mutation is authorized by this
+correction.
