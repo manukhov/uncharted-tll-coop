@@ -23390,3 +23390,43 @@ complete pre/post boundary; another `stage=pre` would instead select an
 identity/readability race, and a one-sided boundary would select a lifecycle
 split. Mazur must not be repeated and no pose mutation is authorized by this
 correction.
+
+### 2026-08-13 RUNTIME CONFIRMED diagnostic / RUNTIME REJECTED pose owner (`acg`): P99 grip divergence is not in PlayerWeaponIKAction or WeaponIKFeather
+
+The corrected written prediction passed in fresh PIDs `12940(A)/13716(B)`.
+Both loaded marker `acg`, installed the exact callsite relay and emitted one
+complete P99 boundary: role A retained owner 1 and role B retained owner 0.
+Neither process emitted another `CAPTURE-FAILED`. Both used exact art
+`8075397D`, slot zero, `WeaponOut` state 2, stock result one, weight one,
+hand-side selector one, strength one and animation scale one.
+
+The two independent owners also agree on what stock Feather writes. Both
+changed exactly joints `19..26` (`changedMask=0xFF`), while palms and hand-prop
+attachments `27..30` remained unchanged. Role-A versus role-B translation was
+identical through joints `19..29`; joint 30 differed by only `0.834 mm`.
+Quaternion separation before stock was only `0..2.04 degrees` for all twelve
+rows; after stock it remained `0..3.15 degrees`. In particular, the supposedly
+broken local path does not receive a different selector, strength, scale or
+gross paired-arm target.
+
+This **rejects Hlifecycle, Hupstream and Hfeather as causes of the visible P99
+grip error** at this boundary. The measured small deltas are ordinary
+asynchronous idle phase variation and are far below the reported separation of
+the weapon from the hands. It also explains the earlier negative `abw/aby`
+transfers: role A was not carrying a materially different arm pose to donate.
+No joint-row, clip, scalar, selector or body-palette repair is authorized.
+
+The surviving leading hypothesis is now the separately rendered ProcessWeapon
+placement after the already-near-identical `rightHand` chain. The exact stock
+path is `AttachSystem_ResolveRecordTransform 0x1418B7060 ->
+NdAttachableObject_ApplyLocalAttachmentCorrection 0x141ED0A70` at direct callsite
+`0x141ED19BB`; it combines the character hand frame with weapon-local/art state
+and returns the transform consumed by the weapon updater. The accepted hip/back
+repairs already install a wrapper at that exact callsite but are excluded while
+the selected endpoint is `rightHand`. A future discriminator may only compare
+the resolved input, local correction and output for exact stationary drawn P99
+on role-A Player1 versus role-B Player0; it must not alter the hand pose or reuse
+the broad rejected transform-probe package.
+
+Build `ach` disables the completed WeaponIK census. The two game processes
+remained responsive and no game state was changed by `acg`.

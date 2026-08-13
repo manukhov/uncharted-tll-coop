@@ -192,7 +192,7 @@
       Apply for selected retained Player1/Player0. The hook is read-only, calls
       stock exactly once, preserves every register/stack argument in object-code
       review and emits at most one P99 and one Mazur sample per owner.
-- [ ] Complete only the automatic WeaponIK boundary exam. A role-B Player0 boundary plus
+- [x] Complete the automatic WeaponIK boundary exam. A role-B Player0 boundary plus
       no role-A Player1 boundary selects a local-action lifecycle split. Boundaries
       on both sides with differing pre rows select upstream authored/retargeted
       composition; matching pre rows but differing post rows/scalars select the
@@ -213,10 +213,19 @@
       are not ordinary transform floats. Build `acg` copies the exact raw row
       after retained-owner, generation, pointer and readable-span validation and
       performs no content interpretation or game write.
-- [ ] Run only the missing stationary P99 `acg` pair. Expect one complete
-      pre/post boundary on both sides. Any further pre-capture failure selects a
-      pointer/readability race rather than pose content; do not repeat Mazur or
-      mutate the pose.
+- [x] Run the missing stationary P99 `acg` pair. Both sides produced complete
+      pre/post boundaries with identical stock scalars/result. Both changed only
+      joints 19..26; cross-owner rotation differed by at most 2.04 degrees before
+      and 3.15 degrees after, translations were identical through joint 29 and
+      hand-prop joint 30 differed by only 0.834 mm. This rejects lifecycle,
+      upstream arm pose and Feather as the visible grip owner. Build `ach`
+      disables the completed census.
+- [ ] Continue statically at the separate ProcessWeapon transform. The only
+      admissible next discriminator is exact stationary P99/rightHand at the
+      already-installed direct callsite `0x141ED19BB`, comparing role-A Player1
+      and role-B Player0 resolved hand input, weapon-local correction and stock
+      output. Do not re-enable broad rejected transform probes and do not mutate
+      any arm row, clip, selector or scalar.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that

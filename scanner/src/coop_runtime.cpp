@@ -2434,12 +2434,11 @@ constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
 // assigned and then remain silent while P99/Mazur are drawn. Keep the bounded
 // census dormant while the terminal PlayerWeaponIKAction path is resolved.
 constexpr bool kEnableLegacyNadineGripSnapshotCensus = false;
-// The sole ordinary PlayerWeaponIKAction call at 0x1410959AC is the first
-// surviving boundary after all rejected body-palette and clip substitutions.
-// Capture the exact legacy-Nadine local arm rows immediately before and after
-// stock WeaponIKFeather::Apply for the retained Player owners.  This census is
-// read-only: it calls stock exactly once and only copies already-live rows.
-constexpr bool kEnableLegacyNadineWeaponIkFeatherInputCensus = true;
+// Build acg completed the exact Player1/Player0 pre/post comparison at the sole
+// ordinary PlayerWeaponIKAction call. Both P99 paths use the same stock
+// lifecycle/scalars and near-identical arm rows, so this hot census has answered
+// its question and stays out of production.
+constexpr bool kEnableLegacyNadineWeaponIkFeatherInputCensus = false;
 // The common resolver already selects the compatible P99/Mazur Player clips.
 // Local PlayerWeaponIKAction then runs WeaponIKFeather::Apply and commits both
 // arm targets; the retained remote Nadine does not show the defect. Suppress
@@ -57456,8 +57455,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-13acg "
-        "(read-only raw WeaponIK JointCache boundary census)");
+        "TLL co-op runtime init 2026-08-13ach "
+        "(production after rejected WeaponIK grip boundary)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
