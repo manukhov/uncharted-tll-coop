@@ -23111,3 +23111,49 @@ not authorized: continue statically by joining the same-frame Player1 and
 Player0 hand-prop targets, ProcessWeapon endpoint and generic two-hand IK
 inputs, and identify the first semantic value that differs before the already
 rejected body-palette boundary.
+
+### 2026-08-13 STATIC / IMPLEMENTED (`acc`): identify the local role-B Nadine body owner symmetrically
+
+The `aca` result closes the role-A donor but exposes one exact asymmetric gap in
+the two negative transfer experiments. Builds `abw/aby` wrote the retained
+screen-zero Player0 in role B, but no prior post-cull census proved that the
+body seen by Nadine's own local camera was selected from that Player0 rather
+than the simultaneously live campaign NadineBuddy. A successful write into an
+unselected Player0 would naturally produce the observed `APPLY` markers with no
+pixel change; this is a different owner hypothesis, not another pose address.
+
+Three independent evidence classes earn the symmetric read-only exam. First,
+`aca` runtime-confirmed the complete identity chain and its bounded parser at
+the exact primary-view callsite `0x141661BE4`: concrete object -> DrawControl ->
+Fg retained owner -> driven FgInstances -> post-cull drawable -> selected
+submesh. Second, the rejected transfer admission independently identifies the
+role-B destination as stable retained Player0, screen 0, look `D27C074F`, exact
+ED25/C39/580 Fg ownership; thus this is the actual object whose buffers were
+written, not a newly inferred candidate. Third, the render structures and
+object vtables are role-independent: native NadineBuddy still resolves through
+`Npc_AllocateAnimDataForDrawable 0x1403D1CD0`, Player0 through
+`Player_AllocateAnimData 0x1410DE740`, and both feed the same proven
+`MeshCull_WaitForCullFgScene 0x141A35BE0` completed-list format. Only the exact
+Player identity/screen and role gates change from `aca`; the parser, bounds,
+world validation and zero-write behavior are identical.
+
+Competing hypotheses are explicit. **Lplayer** predicts Player0 has selected
+submeshes at its own world position: `abw/aby` did target a real local pixel
+producer, so the remaining cause is semantic composition/lifetime upstream of
+the already-rejected body buffers. **Lnative** predicts native selected rows and
+Player0 zero: the old writes targeted a non-selected body, and the next static
+repair must follow the native presentation rather than Player0. **Lboth**
+predicts both selected; `sameWorld=1` would mean overlapping bodies, while
+`sameWorld=0` requires identifying which world corresponds to the local camera
+before any write. **Lneither** is packaging failure and authorizes no mutation.
+
+Build `acc` reuses the already-reviewed `aca` code with a mechanically narrow
+scope inversion: role B only; retained Player0; screen 0; log labels `player0`.
+It remains read-only. A valid runtime result must emit one admitted target, both
+owner rows and exactly two stable, complete, untruncated samples after two
+seconds. Selected direct instances must retain `active=255` and match their
+owner Fg world. A reject stage, pointer/runtime drift, zero/truncated draw
+totals, crash or stall rejects only `acc`. Before a valid result, no pose,
+WeaponIK, ProcessWeapon or renderer mutation is authorized. Release build and
+`git diff --check` pass; no new IDB label is required because every engine
+boundary is the same already-labelled `aca` boundary.

@@ -447,12 +447,11 @@ std::uint64_t g_nadine_per_view_rifle_sampled_generation = 0;
 std::uint32_t g_nadine_per_view_rifle_generation_samples = 0;
 ULONGLONG g_nadine_per_view_rifle_last_sample_ms = 0;
 
-// Build aca: the old five-mesh probe proved only that a renderable Nadine body
-// existed; it did not prove whether the externally correct grip came from the
-// retained screen-one Player or from the still-live campaign NadineBuddy.  The
-// game thread now publishes both exact object -> DrawControl -> FgAnimData
-// ownership chains.  The proven main SceneWindow post-cull seam compares only
-// their concrete FgInstance pointers with the completed draw lists.
+// Builds aca/acc: compare the two concrete Nadine-shaped body owners at the
+// already-proven main SceneWindow post-cull seam.  aca confirmed native versus
+// retained screen-one Player in role A.  acc is the symmetric, read-only role-B
+// exam: native NadineBuddy versus the local retained screen-zero Player whose
+// buffers were written by the rejected abw/aby transfers.
 constexpr std::size_t kNadineBodyVisualOwnerCount = 2;
 constexpr std::size_t kNadineBodyVisualMaxMeshes = 32;
 constexpr std::size_t kNadineBodyVisualMaxInstances = 64;
@@ -2346,7 +2345,7 @@ constexpr bool kEnableNadinePerViewRifleCensus = false;
 // enough to distinguish which exact Nadine body reaches the primary colour
 // view: native NadineBuddy, retained Player1, both, or neither.  It never edits
 // an actor, DrawControl, FgInstance, cull row or matrix.
-constexpr bool kEnableNadineBodyVisualOwnerCensus = false;
+constexpr bool kEnableNadineBodyVisualOwnerCensus = true;
 // Build aah: the completed aaf census plus the exact descriptor/cull audit
 // proves that current LOD0/list0 is view type 3 and is admitted only while
 // FgInstance+0x18 bit 0x40 is clear. Apply that one exclusion to the exact
@@ -17567,9 +17566,9 @@ bool seh_capture_nadine_body_visual_owner(
         } else {
             std::uint32_t look = 0;
             if (vtable != g_module + kPlayerVtableRva ||
-                object != retained_player_object(1) ||
+                object != retained_player_object(0) ||
                 !player_object_stable(object) ||
-                !player_screen_index_is(object, 1) ||
+                !player_screen_index_is(object, 0) ||
                 !seh_read_player_look(object, &look) ||
                 look != 0xD27C074Fu) {
                 return false;
@@ -17756,12 +17755,12 @@ void publish_nadine_body_visual_target_game_thread(void* updated_object) {
         (void)updated_object;
         return;
     }
-    if (g_net_role_b || !g_state_net.enabled) {
+    if (!g_net_role_b || !g_state_net.enabled) {
         return;
     }
     void* const native_nadine = g_last_nadine_object;
-    void* const player_one = retained_player_object(1);
-    if (updated_object != native_nadine && updated_object != player_one) {
+    void* const player_zero = retained_player_object(0);
+    if (updated_object != native_nadine && updated_object != player_zero) {
         return;
     }
 
@@ -17773,7 +17772,7 @@ void publish_nadine_body_visual_target_game_thread(void* updated_object) {
     const bool native_ok = seh_capture_nadine_body_visual_owner(
         native_nadine, true, &candidate.owners[0], &native_stage);
     const bool player_ok = seh_capture_nadine_body_visual_owner(
-        player_one, false, &candidate.owners[1], &player_stage);
+        player_zero, false, &candidate.owners[1], &player_stage);
     if (!native_ok || !player_ok) {
         std::uint64_t reject_signature = 1469598103934665603ULL;
         const auto mix = [&reject_signature](std::uint64_t value) {
@@ -17781,7 +17780,7 @@ void publish_nadine_body_visual_target_game_thread(void* updated_object) {
             reject_signature *= 1099511628211ULL;
         };
         mix(reinterpret_cast<std::uintptr_t>(native_nadine));
-        mix(reinterpret_cast<std::uintptr_t>(player_one));
+        mix(reinterpret_cast<std::uintptr_t>(player_zero));
         mix(static_cast<std::uint8_t>(native_stage));
         mix(static_cast<std::uint8_t>(player_stage));
         if (reject_signature == 0) {
@@ -17805,8 +17804,8 @@ void publish_nadine_body_visual_target_game_thread(void* updated_object) {
             std::ostringstream line;
             line << "NADINE-BODY-TARGET-REJECT native=0x" << std::hex
                  << reinterpret_cast<std::uintptr_t>(native_nadine)
-                 << " player1=0x"
-                 << reinterpret_cast<std::uintptr_t>(player_one)
+                 << " player0=0x"
+                 << reinterpret_cast<std::uintptr_t>(player_zero)
                  << std::dec << " nativeStage="
                  << static_cast<unsigned>(native_stage)
                  << " playerStage="
@@ -17856,7 +17855,7 @@ void publish_nadine_body_visual_target_game_thread(void* updated_object) {
     header << "NADINE-BODY-TARGET generation=" << candidate.generation
            << " native=0x" << std::hex << candidate.owners[0].object
            << "/0x" << candidate.owners[0].runtime_id
-           << " player1=0x" << candidate.owners[1].object
+           << " player0=0x" << candidate.owners[1].object
            << "/0x" << candidate.owners[1].runtime_id << std::dec;
     write_log_line(header.str().c_str());
     for (std::size_t owner_index = 0;
@@ -17866,7 +17865,7 @@ void publish_nadine_body_visual_target_game_thread(void* updated_object) {
         std::ostringstream line;
         line << "NADINE-BODY-TARGET-OWNER generation="
              << candidate.generation << " owner="
-             << (owner_index == 0 ? "native" : "player1")
+             << (owner_index == 0 ? "native" : "player0")
              << " object=0x" << std::hex << owner.object
              << " runtime=0x" << owner.runtime_id
              << " vtable=0x" << owner.vtable_rva
@@ -53635,7 +53634,7 @@ bool seh_capture_nadine_body_visual_view(
     }
     *snapshot = {};
     __try {
-        if (g_net_role_b || cull_job == nullptr ||
+        if (!g_net_role_b || cull_job == nullptr ||
             readable_bytes(cull_job) < 592) {
             return false;
         }
@@ -53922,7 +53921,7 @@ void census_nadine_body_visual_owners(void* cull_job) {
         (void)cull_job;
         return;
     }
-    if (g_net_role_b) {
+    if (!g_net_role_b) {
         return;
     }
     NadineBodyVisualTarget target{};
@@ -53983,7 +53982,7 @@ void census_nadine_body_visual_owners(void* cull_job) {
            << "/" << snapshot.owner_hits[0]
            << "/" << snapshot.selected_instances[0]
            << "/" << snapshot.selected_submeshes[0]
-           << " player1=" << snapshot.direct_hits[1]
+           << " player0=" << snapshot.direct_hits[1]
            << "/" << snapshot.owner_hits[1]
            << "/" << snapshot.selected_instances[1]
            << "/" << snapshot.selected_submeshes[1]
@@ -53997,7 +53996,7 @@ void census_nadine_body_visual_owners(void* cull_job) {
         line << "NADINE-BODY-VIEW-ENTRY generation=" << target.generation
              << " sample=" << sample_index
              << " owner="
-             << (match.owner_index == 0 ? "native" : "player1")
+             << (match.owner_index == 0 ? "native" : "player0")
              << " sceneIndex=" << match.scene_index
              << " instance=0x" << std::hex << match.instance
              << " runtime=0x" << match.owner_id
@@ -57086,8 +57085,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-13acb "
-        "(confirmed Player1 Nadine body producer; census disabled)");
+        "TLL co-op runtime init 2026-08-13acc "
+        "(read-only local Player0-vs-native body main-view census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

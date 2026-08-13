@@ -144,6 +144,14 @@
       Therefore retained Player1 is a real rendered donor candidate, not an
       unrendered body; native-only and overlapping-owner explanations are
       rejected.
+- [ ] Close the symmetric local pixel-owner premise with read-only build `acc`.
+      The rejected `abw/aby` writes targeted role-B retained Player0, but only
+      role-A Player1 has been joined to final selected body submeshes. Reuse the
+      proven `0x141661BE4` post-cull census on role B, comparing native
+      NadineBuddy with retained screen-zero Player0. `player0>0/native=0`
+      confirms the old destination; `native>0/player0=0` selects the native
+      body; both selected require the world-position discriminator; neither is
+      packaging failure. No pose or visibility mutation is part of this test.
 - [x] REJECT `abz` before runtime. The engine seam at `0x14181AB33` is an
       ordinary imported three-argument `memcpy`; staging the same 88 rows in
       `Fg+0x230` only makes that copy produce the same `Fg+0x240` bytes that the
