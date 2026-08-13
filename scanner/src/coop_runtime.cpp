@@ -2445,7 +2445,7 @@ constexpr bool kEnableLegacyNadineWeaponIkFeatherInputCensus = false;
 // from the separately rendered ProcessWeapon correction at the already-live
 // 0x141ED19BB boundary. This is a bounded read-only census: exact P99,
 // rightHand/joint30, WeaponOut and retained legacy Nadine only.
-constexpr bool kEnableLegacyNadineDrawnP99LocalTransformCensus = true;
+constexpr bool kEnableLegacyNadineDrawnP99LocalTransformCensus = false;
 // The common resolver already selects the compatible P99/Mazur Player clips.
 // Local PlayerWeaponIKAction then runs WeaponIKFeather::Apply and commits both
 // arm targets; the retained remote Nadine does not show the defect. Suppress
@@ -57547,8 +57547,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-13aci "
-        "(bounded drawn-P99 local-transform census)");
+        "TLL co-op runtime init 2026-08-13acj "
+        "(production after drawn-P99 local-transform census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

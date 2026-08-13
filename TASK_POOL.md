@@ -231,11 +231,20 @@
       ownership and takes four read-only samples per owner. Do not re-enable
       broad rejected transform probes and do not mutate any arm row, clip,
       selector or scalar.
-- [ ] Run the written `aci` stationary drawn-P99 exam. Unequal stable
-      `weapon+0x4F0..+0x52F` or relative input/output selects a distinct
-      ProcessWeapon offset; identical local correction selects upstream
-      arm/phase. Missing role1/role2 rows or another endpoint/state rejects only
-      packaging. No visual mutation follows from this census alone.
+- [x] Run the written `aci` stationary drawn-P99 exam. Both owners produced all
+      four exact P99/rightHand/joint30/WeaponOut samples. Their primary
+      `weapon+0x4F0/+0x500` corrections were the same identity transform and
+      stock output equalled the resolved hand input to within at most
+      `5.67e-6` degrees, with zero translation delta. **Hweapon-local is
+      REJECTED:** the drawn P99 rigid body follows joint 30; the remaining local
+      grip defect is upstream in the arm/hand pose or its semantic timing, not
+      an art-local weapon offset. Build `acj` disables the completed census.
+- [ ] Resume statically at the last semantic producer of the left-hand grip
+      target before `WeaponIKFeather::Apply 0x1418F2700`. Do not retry the
+      rejected post-`+0x408` local-row transfer, final-palette transfer,
+      Feather suppression or ProcessWeapon local correction. Any next runtime
+      proposal must first distinguish an authored target/input error from a
+      later pose-command ownership error with three independent evidence types.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that

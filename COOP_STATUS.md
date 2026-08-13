@@ -23494,3 +23494,36 @@ four `NADINE-P99-DRAWN-XFORM` rows for role `1`/Player0 and four for role
 world frame changing rejects it and selects **Harm-phase/upstream**. A missing
 owner, another endpoint/state, changing correction blend, crash or stall rejects
 only `aci`; it authorizes no transform or arm mutation.
+
+### 2026-08-13 RUNTIME CONFIRMED diagnostic / REJECTED (`aci`): drawn P99 has no owner-specific local correction
+
+The written exam completed in role-A PID 8508 and role-B PID 15936 without a
+crash or stall. Each exact owner produced all four bounded samples: role 1
+Player0 in the role-B process and role 2 Player1 in the role-A process. Every
+row was the same P99 art `8075397D`, selected `rightHand 61A48E01` at index 16
+on target joint 30, local joint 0, current slot 0 and `WeaponOut` state 2. This
+closes the packaging/downstream alternative at the measured boundary.
+
+All eight primary transform DWORDs at `weapon+0x4F0/+0x500` were bit-identical
+identity on all eight samples:
+`00000000,00000000,00000000,00000000,00000000,00000000,00000000,3F800000`.
+The resolved input and stock output had zero translation delta. Their largest
+relative quaternion delta across both owners was only
+`5.663293681020316e-6` degrees, consistent with one-to-two ULP normalization,
+not a spatial weapon correction. `weapon+0x5F0/+0x5F4` remained unchanged.
+Some trailing words in the broader 16-DWORD diagnostic block changed on normal
+frames (`localChangedMask=0x6000`), but the primary transform stayed identity
+and those words produced no input-to-output displacement.
+
+Therefore **Hweapon-local is RUNTIME REJECTED**. The separately rendered P99
+does not add a local offset capable of explaining the first-person grip split;
+at this stock boundary its rigid transform follows the right-hand attachment
+input. Together with corrected `acg`, the remaining defect is upstream in the
+arm/hand pose or in the semantic command/target that owns it. This does not
+authorize another pose transfer: post-`+0x408` local-row transfer (`abw`), final
+palette transfer (`aby`), full Feather suppression (`abm`) and weapon-local
+correction are all already rejected boundaries. The next work is static tracing
+of the last left-hand grip-target producer before
+`WeaponIKFeather::Apply 0x1418F2700`, with later pose-command ownership retained
+as the competing hypothesis. Build `acj` disables the completed census; no IDB
+rename is required because all participating functions were already labelled.
