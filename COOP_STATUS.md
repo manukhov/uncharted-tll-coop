@@ -23707,3 +23707,91 @@ have `current=slot`. Any marker outside states 1/2/4, without exact pair fields,
 or in role A is packaging failure. Only a marker followed by a corrected
 two-hand pose can confirm the root cause; marker plus unchanged pose selects
 the later merge/IK competitor.
+
+### 2026-08-13 RUNTIME REJECTED (`acl`) / STATIC IMPLEMENTED (`acm`): replace the complete Chloe run bundle with the shipped Player bundle
+
+The second bounded exam used fresh PIDs `2180/18004`. Both exact detours
+installed and the role-B process produced fourteen retained-owner0
+`NADINE-ACTIVE-GRIP-OVERLAY-COPY` rows, but the complete segment again contains
+zero `NADINE-MAZUR-HANDS-OVERLAY-SKIP` rows. The user observed no visual change.
+This rejects the `ack/acl` mutation boundary: the custom pair stored at Player
+`+0x1CC/+0x1D0/+0x1D4` is action/request-time state, not a proven persistent
+steady-pose selector. The code and obsolete `0x1417FA6E0` offsets are removed;
+the earlier claim that the pair's static existence proved its steady visual
+ownership is superseded.
+
+The user's decisive visual correction is that Chloe also sees Nadine hold
+Mazur with the same broken one-hand/crossed-arm pose. That rejects a purely
+local screen-0 IK/render owner for this rifle symptom and selects a common
+animation-setting mismatch. Historical live resolver rows already close the
+steady bundle at `AnimOverlayState_ResolveAnimationId 0x1417F9F00`, caller
+`0x1418B2945`, with exact Mazur art `33E29A1B`, controller `WeaponOut=2` and
+retained owner0:
+
+- `41C84248 -> 5F913F74` (idle base);
+- `77A8107C/7FB80CC8 -> 7D11D4FD` (run/idle hands);
+- `20FFCB4F/8F9F1C38 -> C7FB376F` (randomness/breathing);
+- `BE7CB4A2 -> 1CEC7F3A`, `EB712BFC -> 01321972` (run-idle/run base);
+- the Mazur proximal-arms clip `283966ED` survives unchanged.
+
+Three independent evidence classes identify the incompatibility and the exact
+stock donor. First, every changed row belongs to
+`dc1.psarc/player-anim-settings-chloe.bin` object `FF5562B1`, category
+`0B7AD9B2`, selector `25A767CF` whose printable preimage is `run`, table
+`0x2D970`. The shipped generic counterpart is
+`player-anim-settings.bin` object `2AC1B317`, the same category/owner/`run`
+selector, table `0xAA5D8`. Generic `run` maps only `41C84248` to
+`2AD31AAC`; its absent rows preserve `77A8107C`, `7FB80CC8`, `20FFCB4F`,
+`8F9F1C38` and `EB712BFC`, while it maps `BE7CB4A2` to `19CFD6FF`.
+
+Second, direct PAK decode proves the semantic/skeleton split. Generic
+`2AD31AAC bindpose-no-hands`, `7FB80CC8 idle-hands`, the run/breathing rows and
+Mazur `283966ED` are eight-group `FD6DBE03` Player clips. The Chloe targets
+`5F913F74 clo-uneasy-idle`, `7D11D4FD clo-uneasy-idle-hands`,
+`1CEC7F3A clo-uneasy-run^idle` and `01321972 clo-uneasy-run` are seven-group
+`4B0F5DE3` clips. In particular, the generic distal lane owns Player joints
+`29..32`, the Chloe hands own Chloe joints `38..41`, and `283966ED` owns the
+adjacent Player proximal lane `21..28`. The stock Chloe setting therefore
+combines a Player Mazur arm lane with Chloe base/hands rows; the generic setting
+restores one internally consistent Player skeleton bundle.
+
+Third, the runtime rows occur on the exact retained master at the ordinary
+resolver after all overlay sets have chained, not at the rejected transition
+hook. Build `acm` changes only the resolver output for those seven exact
+source/Chloe-target tuples. Admission requires the sole normal caller
+`0x1418B2945`, exact `run` selector/value and unique row, stable legacy-Nadine
+look `D27C074F`, the process's actual Nadine owner (`B/owner0/screen0` or
+`A/owner1/screen1`), exact `PlayerWeaponController` identity/owner, the
+same-owner Mazur `ProcessWeapon`, and selected attachment `rightHand 61A48E01`.
+Role B additionally requires the local controller's exact `WeaponOut=2` and
+current Mazur slot. Role A instead requires a fresh authoritative peer packet
+received within 100 ms and declaring non-ADS `GunOut` with held Mazur. Its
+private controller may be only `Inactive=0` or `WeaponOut=2`; Draw, ADS,
+holster and every other transition state are rejected. The puppet path can publish
+the physical rightHand attachment before its private controller publishes
+state 2/current slot, so requiring that local completion field on the remote
+presentation would be a known false-negative. P99, a holstered Mazur, real
+Chloe, other overlay selectors and other weapons fall through stock. The shared
+DC tables are never edited. Only the resolver is detoured; the rejected
+transition/copy hook is not installed.
+
+Competing hypotheses are now explicit. **Htransition-pair** is RUNTIME REJECTED
+by two zero-marker exams. **Hlocal-only IK** is rejected for the Mazur symptom
+by the identical remote visual defect. **HChloe player-settings bundle** is the
+STATIC winner by live resolver provenance, exact shipped generic counterpart
+and incompatible mask/skeleton split. A later common merge/IK writer remains
+the visual competitor.
+
+Falsifiable prediction for `acm`: with Mazur drawn and no ADS, both processes
+must emit `NADINE-MAZUR-PLAYER-SETTINGS` rows for the exact changed steady
+tuples, always `attach=61A48E01`, `sets=1`, `rows=1`; role B must report owner0
+with `drawState=2`. Role A must report owner1 and may expose its private
+controller state `0/2` and current slot independently of the authoritative packet, but
+must still report the exact rightHand attachment. No row may appear for P99 or a holstered
+Mazur. If both sides then show a coherent two-hand hold, the player-settings
+cause is CONFIRMED. Rows on both sides with the same old pose select the later
+common writer. Missing rows reject packaging and must not be widened. The
+release DLL builds successfully. No new IDB label is warranted because this
+implementation reuses the already named `AnimOverlayState_ResolveAnimationId`
+boundary and resolves no new executable function. No game launch has been
+performed for `acm`.

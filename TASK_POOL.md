@@ -273,11 +273,40 @@
       admits state 1 by exact Mazur inventory ownership and additionally
       requires live Player `+1CC/+1D0/+1D4 = 56C57AD2/283966ED/0.7`; states
       2/4 retain strict current-slot equality. No broad state or art relaxation.
+- [x] Run `acl`: fresh PIDs `2180/18004` again installed both hooks and emitted
+      fourteen owner0 overlay-copy rows, but zero row-skip markers; the pose was
+      unchanged. **REJECT `ack/acl` completely.** The custom-pair fields are
+      transition/request storage and do not close the steady owner. Remove the
+      mutation and its `0x1417FA6E0` offsets rather than widening it.
+- [x] Close the common steady Mazur bundle and implement `acm`. Historical live
+      WeaponOut rows on the exact retained master are the `run 25A767CF` table
+      from `player-anim-settings-chloe.bin`: base `41C84248->5F913F74`, hands
+      `77A8107C/7FB80CC8->7D11D4FD`, randomness/breathing to `C7FB376F`, and
+      run transitions to `1CEC7F3A/01321972`, while Mazur Player-arms
+      `283966ED` survive unchanged. The shipped generic `player-anim-settings.bin`
+      `run` object supplies the exact Player counterpart: `2AD31AAC`,
+      `19CFD6FF`, or the unchanged Player source. PAK masks independently prove
+      Player eight-group versus Chloe seven-group lanes. `acm` replaces only
+      those exact chained resolver outputs for a physically drawn/rightHand
+      Mazur on the actual legacy-Nadine owner in each process; P99, holster,
+      ADS/transitions, real Chloe and shared DC rows remain stock. Full evidence
+      and prediction are in `COOP_STATUS.md`; release build succeeds.
+- [ ] Run only the earned `acm` exam: draw Mazur, do not aim, and stand still.
+      Both processes must log `NADINE-MAZUR-PLAYER-SETTINGS` with owner0/B or
+      owner1/A, `attach=61A48E01`, `sets=1`, `rows=1`. Role B must report
+      `drawState=2`; role A is admitted by the fresh authoritative peer packet
+      received within 100 ms in non-ADS `GunOut`, private controller state
+      `0/2`, plus the physical same-owner rightHand endpoint because its private
+      controller can lag that presentation state. Confirm
+      whether both own and Chloe's view now show a coherent two-hand hold. Zero
+      markers reject packaging; markers plus unchanged pose select the later
+      common merge/IK writer. Do not test P99 or sling in this exam.
 - [ ] Resume statically at the last semantic producer of the left-hand grip
       target before `WeaponIKFeather::Apply 0x1418F2700` only if the bounded
-      `ack` exam emits the exact skip marker but leaves Mazur's grip unchanged.
-      In that outcome, close the later command-6/7 merge and same-frame weights
-      for `custom-weapon-part`, `custom-weapon-part-with-feather` and the
+      `acm` exam emits the exact Player-settings markers on both processes but
+      leaves Mazur's grip unchanged. In that outcome, close the later
+      command-6/7 merge and same-frame weights for `custom-weapon-part`,
+      `custom-weapon-part-with-feather` and the
       adjacent Hands lane. Do not retry the
       rejected post-`+0x408` local-row transfer, final-palette transfer,
       Feather suppression or ProcessWeapon local correction. Any next runtime
