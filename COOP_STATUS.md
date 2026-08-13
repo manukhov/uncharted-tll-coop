@@ -23332,3 +23332,43 @@ classifies lifecycle before numeric comparison. Any capture failure, crash,
 stall, invalid quaternion, non-stock call result, incomplete row set or missing
 role-B boundary rejects only `ace`. No game was launched during this static
 pass, and all gameplay mutations remain disabled.
+
+### 2026-08-13 RUNTIME PARTIAL (`ace`) / STATIC CORRECTION (`acf`): Mazur closes the lifecycle split; P99 validation was over-strict
+
+The automatic `ace` launch reached a valid Mazur pair in fresh PIDs
+`17292(A)/10688(B)`. Both exact relays installed, both processes remained
+responsive and the same art `33E29A1B` reached `WeaponOut` on role-A retained
+Player1 and role-B retained Player0. Each boundary returned stock result one,
+used hand-side selector one and animation scale one, and changed exactly local
+joints `19..26`; palms and hand-prop rows `27..30` were byte-stable across
+Apply. This **rejects Hlifecycle for Mazur**: the correct remote Nadine does run
+the same PlayerWeaponIKAction/WeaponIKFeather lifecycle.
+
+The measured Mazur split is modest but real and begins before the Feather
+write. All paired translations were identical except sub-millimetre variation
+at hand-prop joint 30. Pre-Apply quaternion separation was approximately
+`0.82..5.29 degrees` over joints `19..26`; post-Apply separation was
+`0.53..8.96 degrees`. Both sides used close but not identical dynamic weights
+(`0.692347` versus `0.736485`) and strengths (`0.878221` versus `0.873883`).
+This keeps **Hupstream** ahead of **Hfeather**, but one time sample is not yet a
+mutation-ready proof because ordinary idle phase can explain part of the small
+numeric delta.
+
+P99 did reach the claimed pre-boundary on both sides, but emitted
+`NADINE-WEAPON-IK-CAPTURE-FAILED stage=pre` and never retried. The cause is in
+the diagnostic, not the game: `seh_capture_weapon_ik_feather_pose` reused the
+network-packet quaternion predicate for every raw JointCache row, although this
+local census is intended to observe even a transient identity/service row.
+`weapon_ik_feather_census_ready` also marked the pair emitted before a valid
+pre/post sample. Therefore the written P99 prediction was not tested and the
+two failures do not classify its pose owner.
+
+Build `acf` changes only those read-only census mechanics. It retains the
+finite/bounded 12-float validation but does not demand a normalized network
+quaternion from a local raw row. Claim and successful emission are now separate
+states under the same SRW lock; a pre/post capture failure releases the claim,
+restarts the 350-ms dwell and can retry, while a completed owner/art pair remains
+terminal across retained-Player recreation. Stock still runs exactly once and
+no pose or game state is written. A clean Release build and `git diff --check`
+pass. The only authorized next runtime action is the missing stationary P99
+pair; Mazur must not be repeated and no repair is authorized yet.

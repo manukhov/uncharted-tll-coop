@@ -200,6 +200,13 @@
       semantic owner and authorizes no mutation. Do not patch a row, scalar,
       action or attachment until one of those mutually exclusive outcomes is
       observed for P99 and Mazur.
+- [x] Classify the first `ace` run as partial. Mazur produced complete symmetric
+      Player1/Player0 boundaries, rejecting a remote lifecycle bypass; both
+      changed only joints `19..26`. P99 hit the census but failed a diagnostic
+      network-quaternion predicate before stock and the attempt was consumed.
+      Build `acf` keeps raw rows finite/bounded, separates claim from successful
+      emission and retries after capture failure. Run only the missing P99 idle
+      pair; do not repeat Mazur or mutate the pose.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that

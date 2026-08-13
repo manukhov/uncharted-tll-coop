@@ -44035,8 +44035,12 @@ struct WeaponIkFeatherCensusMemo {
     std::uint32_t runtime_id = 0;
     ULONGLONG stable_since_ms = 0;
     ULONGLONG last_seen_ms = 0;
+    bool claimed = false;
     bool emitted = false;
 };
+
+SRWLOCK g_weapon_ik_feather_census_lock = SRWLOCK_INIT;
+WeaponIkFeatherCensusMemo g_weapon_ik_feather_census_memos[2][2]{};
 
 bool seh_capture_weapon_ik_feather_pose(
     const NadineWeaponIkFeatherScope& scope,
@@ -44072,10 +44076,12 @@ bool seh_capture_weapon_ik_feather_pose(
                     (kWeaponIkFeatherCensusFirstJoint + index) *
                         kJointLocalPoseStride,
                 kJointLocalPoseStride);
-            if (!valid_pose_floats(sample->rows[index].data(), 12) ||
-                !valid_network_orientation(
-                    sample->rows[index].data() +
-                    kJointLocalPoseRotationOffset / sizeof(float))) {
+            // This is a local read-only census, not a network pose payload.
+            // JointCache may legitimately expose an uninitialized/identity
+            // service row while the action changes weapon state, so only
+            // reject non-finite or absurd data.  The exact raw row is itself
+            // the observation we need to compare.
+            if (!valid_pose_floats(sample->rows[index].data(), 12)) {
                 *sample = {};
                 return false;
             }
@@ -44111,13 +44117,12 @@ bool weapon_ik_feather_census_ready(
         return false;
     }
 
-    static SRWLOCK lock = SRWLOCK_INIT;
-    static WeaponIkFeatherCensusMemo memos[2][2]{};
     const std::size_t art_index = scope.art == kCoopPistolArtId ? 0 : 1;
     const ULONGLONG now = GetTickCount64();
     bool ready = false;
-    AcquireSRWLockExclusive(&lock);
-    auto& memo = memos[scope.owner_index][art_index];
+    AcquireSRWLockExclusive(&g_weapon_ik_feather_census_lock);
+    auto& memo =
+        g_weapon_ik_feather_census_memos[scope.owner_index][art_index];
     const bool reset = memo.player != scope.player ||
         memo.runtime_id != scope.player_runtime_id ||
         memo.stable_since_ms == 0 || memo.last_seen_ms == 0 ||
@@ -44135,13 +44140,36 @@ bool weapon_ik_feather_census_ready(
         memo.stable_since_ms = now;
     }
     memo.last_seen_ms = now;
-    ready = !memo.emitted && now >= memo.stable_since_ms &&
+    ready = !memo.claimed && !memo.emitted && now >= memo.stable_since_ms &&
         now - memo.stable_since_ms >= kWeaponIkFeatherCensusDwellMs;
     if (ready) {
-        memo.emitted = true;
+        memo.claimed = true;
     }
-    ReleaseSRWLockExclusive(&lock);
+    ReleaseSRWLockExclusive(&g_weapon_ik_feather_census_lock);
     return ready;
+}
+
+void finish_weapon_ik_feather_census_claim(
+    const NadineWeaponIkFeatherScope& scope, bool emitted) {
+    if (scope.owner_index < 0 || scope.owner_index > 1 ||
+        (scope.art != kCoopPistolArtId && scope.art != kCoopRifleArtId)) {
+        return;
+    }
+    const std::size_t art_index = scope.art == kCoopPistolArtId ? 0 : 1;
+    const ULONGLONG now = GetTickCount64();
+    AcquireSRWLockExclusive(&g_weapon_ik_feather_census_lock);
+    auto& memo =
+        g_weapon_ik_feather_census_memos[scope.owner_index][art_index];
+    if (memo.player == scope.player &&
+        memo.runtime_id == scope.player_runtime_id && memo.claimed) {
+        memo.claimed = false;
+        memo.emitted = emitted;
+        if (!emitted) {
+            memo.stable_since_ms = now;
+            memo.last_seen_ms = now;
+        }
+    }
+    ReleaseSRWLockExclusive(&g_weapon_ik_feather_census_lock);
 }
 
 void finish_weapon_ik_feather_census(
@@ -44313,6 +44341,7 @@ std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
         seh_capture_weapon_ik_feather_pose(scope, &before);
     if (claimed && !sample) {
         write_log_line("NADINE-WEAPON-IK-CAPTURE-FAILED stage=pre");
+        finish_weapon_ik_feather_census_claim(scope, false);
     }
     const auto original = g_original_weapon_ik_feather_apply;
     const std::uint8_t result = original != nullptr
@@ -44327,8 +44356,10 @@ std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
             finish_weapon_ik_feather_census(
                 scope, before, after, result, apply_weight,
                 hand_side_selector, strength, anim_scale);
+            finish_weapon_ik_feather_census_claim(scope, true);
         } else {
             write_log_line("NADINE-WEAPON-IK-CAPTURE-FAILED stage=post");
+            finish_weapon_ik_feather_census_claim(scope, false);
         }
     }
     return result;
