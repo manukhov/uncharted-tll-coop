@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 from collections import deque
 import ctypes
+import math
 import re
 import struct
 import sys
@@ -699,6 +700,139 @@ def audit_skeleton_joint_tables(
             )
 
 
+def decode_packed_quaternion_48(raw: bytes) -> tuple[float, float, float, float]:
+    """Decode the engine's 48-bit smallest-three quaternion representation."""
+
+    if len(raw) != 6:
+        raise ValueError("packed quaternion must contain exactly six bytes")
+    packed = int.from_bytes(raw, "little")
+    omitted = packed & 3
+    inv_sqrt_two = math.sqrt(0.5)
+    full_scale = (2.0 * inv_sqrt_two) / 32767.0
+    half_scale = inv_sqrt_two / 32767.0
+    components = [
+        ((packed >> 2) & 0x7FFF) * full_scale - inv_sqrt_two,
+        ((packed >> 17) & 0x7FFF) * full_scale - inv_sqrt_two,
+        ((packed >> 32) & 0xFFFF) * half_scale - inv_sqrt_two,
+    ]
+    missing = math.sqrt(max(0.0, 1.0 - sum(value * value for value in components)))
+    components.insert(omitted, missing)
+    return tuple(components)  # type: ignore[return-value]
+
+
+def audit_constant_animation_poses(data: bytes, specifications: list[str]) -> None:
+    """Decode group-zero constant scale/rotation/translation pose rows."""
+
+    for specification in specifications:
+        fields = specification.split(":")
+        if len(fields) > 3:
+            raise ValueError(
+                "--animation-constant-pose expects OFFSET[:START[:COUNT]]"
+            )
+        try:
+            animation_offset = int(fields[0], 0)
+            first_joint = int(fields[1], 0) if len(fields) >= 2 else 0
+            joint_count = int(fields[2], 0) if len(fields) >= 3 else 0
+        except ValueError as exc:
+            raise ValueError(
+                "--animation-constant-pose expects OFFSET[:START[:COUNT]]"
+            ) from exc
+        if animation_offset < 0 or animation_offset + 0x30 > len(data):
+            raise ValueError(f"animation header exceeds entry: {specification}")
+        if struct.unpack_from("<I", data, animation_offset)[0] != 0x41430102:
+            raise ValueError(
+                f"animation magic mismatch at 0x{animation_offset:X}"
+            )
+        group_count = struct.unpack_from("<H", data, animation_offset + 0x0C)[0]
+        group_table = struct.unpack_from("<I", data, animation_offset + 0x14)[0]
+        if group_count == 0 or animation_offset + group_table + 0x10 > len(data):
+            raise ValueError(f"invalid animation group table: {specification}")
+        program = struct.unpack_from(
+            "<I", data, animation_offset + group_table
+        )[0]
+        vectors: dict[int, tuple[float, float, float]] = {}
+        quaternions: dict[int, tuple[float, float, float, float]] = {}
+        cursor = program
+        for _ in range(16):
+            command = struct.unpack_from("<H", data, animation_offset + cursor)[0]
+            opcode = command & 0xFF
+            argument_count = command >> 8
+            if opcode == 0:
+                break
+            if argument_count != 3:
+                raise ValueError(
+                    f"unsupported animation command 0x{command:04X} at "
+                    f"0x{animation_offset + cursor:X}"
+                )
+            count, _source_selector, payload_offset = struct.unpack_from(
+                "<3H", data, animation_offset + cursor + 2
+            )
+            map_offset = animation_offset + program + payload_offset
+            map_end = map_offset + 2 * count
+            payload_end = map_end + 6 * count
+            if payload_end > len(data):
+                raise ValueError(
+                    f"animation command payload exceeds entry at "
+                    f"0x{animation_offset + cursor:X}"
+                )
+            destinations = struct.unpack_from(f"<{count}H", data, map_offset)
+            if opcode == 22:
+                for index, destination in enumerate(destinations):
+                    vectors[destination] = struct.unpack_from(
+                        "<3e", data, map_end + 6 * index
+                    )
+            elif opcode == 24:
+                for index, destination in enumerate(destinations):
+                    packed_offset = map_end + 6 * index
+                    quaternions[destination] = decode_packed_quaternion_48(
+                        data[packed_offset : packed_offset + 6]
+                    )
+            cursor += 2 * (1 + argument_count)
+        else:
+            raise ValueError(f"unterminated animation program: {specification}")
+
+        available_joints = sorted(
+            destination // 0x30
+            for destination in quaternions
+            if destination % 0x30 == 0x10
+        )
+        if not available_joints:
+            raise ValueError(f"animation has no group-zero pose rows: {specification}")
+        if joint_count <= 0:
+            joint_count = available_joints[-1] - first_joint + 1
+        if first_joint < 0 or joint_count <= 0 or joint_count > 4096:
+            raise ValueError(f"invalid animation joint range: {specification}")
+        print(
+            f"animation_constant_pose={specification!r} "
+            f"offset=0x{animation_offset:X} groups={group_count} "
+            f"group0_program=0x{program:X} first_joint={first_joint} "
+            f"count={joint_count}"
+        )
+        for joint in range(first_joint, first_joint + joint_count):
+            scale = vectors.get(joint * 0x30)
+            rotation = quaternions.get(joint * 0x30 + 0x10)
+            translation = vectors.get(joint * 0x30 + 0x20)
+            if scale is None and rotation is None and translation is None:
+                continue
+            scale_text = (
+                "n/a" if scale is None else ",".join(f"{value:.9g}" for value in scale)
+            )
+            rotation_text = (
+                "n/a"
+                if rotation is None
+                else ",".join(f"{value:.9g}" for value in rotation)
+            )
+            translation_text = (
+                "n/a"
+                if translation is None
+                else ",".join(f"{value:.9g}" for value in translation)
+            )
+            print(
+                f"  joint={joint} scale=({scale_text}) "
+                f"rotation=({rotation_text}) translation=({translation_text})"
+            )
+
+
 def audit_skeleton_retargets(data: bytes, specifications: list[str]) -> None:
     """Find DC00 retarget records for explicit SOURCE_ART:TARGET_ART pairs."""
 
@@ -762,7 +896,10 @@ def audit_skeleton_retargets(data: bytes, specifications: list[str]) -> None:
                     f"map=0x{map_offset:X} count={map_count} "
                     f"profile=0x{values[9]:08X} "
                     f"scale_bits=0x{values[10]:08X} "
-                    f"scale={struct.unpack('<f', struct.pack('<I', values[10]))[0]:.9g}"
+                    f"scale={struct.unpack('<f', struct.pack('<I', values[10]))[0]:.9g} "
+                    f"flags=0x{values[11]:08X} "
+                    f"arm_ik={values[11] & 0xFF} "
+                    f"leg_ik={(values[11] >> 8) & 0xFF}"
                 )
                 for map_row in range(map_count):
                     row_offset = map_offset + map_row * 0x0C
@@ -1444,6 +1581,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--animation-constant-pose",
+        action="append",
+        default=[],
+        metavar="OFFSET[:START[:COUNT]]",
+        help=(
+            "decode group-zero constant scale/rotation/translation rows from "
+            "an explicit paged-PAK ANIM offset; repeatable"
+        ),
+    )
+    parser.add_argument(
         "--skeleton-joint-table",
         action="append",
         default=[],
@@ -1507,6 +1654,7 @@ def main() -> int:
             or args.dc00_map_id
             or args.gesture_node_audit
             or args.animation_mask
+            or args.animation_constant_pose
             or args.skeleton_joint_table
             or args.skeleton_retarget
         ):
@@ -1515,7 +1663,7 @@ def main() -> int:
                 "--player-mesh-look, --map-source, --gesture-node-audit "
                 "--dc00-record-id, --dc00-table-offset, --dc00-map-id or "
                 "--animation-mask, --skeleton-joint-table or "
-                "--skeleton-retarget"
+                "--animation-constant-pose or --skeleton-retarget"
             )
         return 0
 
@@ -1524,6 +1672,9 @@ def main() -> int:
 
     if args.animation_mask:
         audit_pak_animation_masks(data, args.animation_mask)
+
+    if args.animation_constant_pose:
+        audit_constant_animation_poses(data, args.animation_constant_pose)
 
     if args.skeleton_joint_table:
         audit_skeleton_joint_tables(

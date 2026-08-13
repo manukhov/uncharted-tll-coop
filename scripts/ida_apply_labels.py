@@ -3113,6 +3113,78 @@ FUNCTIONS = {
         "the returned entry's feature word at +0x22 and mapping table at +0x28; "
         "named-reference sampling consumes its uniform position scale at +0x24.",
     ),
+    0x1417CDDC0: (
+        "SkelTable_BuildRetargetEntries",
+        "Exact SkelTable::BuildRetargetEntries source assertion at skel-table.cpp:482. "
+        "Resolves every authored raw source/target skeleton pair, samples the "
+        "optional reference-pose animation id from raw field 9, then constructs the "
+        "fixed-stride runtime retarget entry consumed by case-6 animation commands.",
+    ),
+    0x1417CE210: (
+        "SkelTable_BuildRetargetEntry",
+        "Builds one runtime skeleton-retarget entry from the authored StringId map, "
+        "uniform scale and sampled target reference pose. Raw bytes +0x2C/+0x2D gate "
+        "the optional arm/leg IK structures stored at runtime +0x30/+0x38.",
+    ),
+    0x141936490: (
+        "RetargetPlugin_AddJointRetargetCommands",
+        "Exact AddRetargetPlugin source assertion in nd-anim-plugins.cpp:181. "
+        "Publishes the selected runtime retarget entry and its StringId joint map "
+        "into the animation command stream before target-pose evaluation.",
+    ),
+    0x141AE2A50: (
+        "RetargetPlugin_ApplyJointRetargets",
+        "Exact ApplyJointRetargets source assertion. Applies the authored joint map "
+        "and sampled reference-pose correction, then conditionally dispatches the "
+        "separate arm/leg IK stages only when their runtime entry pointers exist.",
+    ),
+    0x141AE3320: (
+        "RetargetPlugin_DoRetargetArmIk",
+        "Exact DoRetargetArmIk source assertion. Optional post-map arm-chain retarget "
+        "stage created only when the raw retarget record's arm-IK enable byte is set.",
+    ),
+    0x141AE3640: (
+        "RetargetPlugin_DoRetargetLegIk",
+        "Exact DoRetargetLegIk source assertion. Optional post-map leg-chain retarget "
+        "stage created only when the raw retarget record's leg-IK enable byte is set.",
+    ),
+    0x142193CE0: (
+        "AnimJointProgramOp22_DecodeHalfVectors",
+        "Animation joint-program opcode 22 dispatcher. Resolves its destination map "
+        "and decodes half-float three-component vector blocks used by constant-pose "
+        "scale and translation lanes.",
+    ),
+    0x142185770: (
+        "AnimJointProgram_DecodeHalfVectors8",
+        "SIMD body for animation opcode 22. Decodes three IEEE half components for "
+        "each mapped destination in eight-row blocks and writes the float lanes.",
+    ),
+    0x142193D60: (
+        "AnimJointProgramOp24_DecodePackedQuaternions",
+        "Animation joint-program opcode 24 dispatcher for the engine's six-byte "
+        "smallest-three quaternion representation.",
+    ),
+    0x1421861A0: (
+        "AnimJointProgram_DecodePackedQuaternionBlocks",
+        "Block wrapper for opcode 24. Walks the destination map and packed six-byte "
+        "quaternion payload before invoking the eight-row SIMD decoder.",
+    ),
+    0x142185CF0: (
+        "AnimJointProgram_DecodePackedQuaternions8",
+        "Decodes the low two-bit omitted-component selector and three quantized "
+        "smallest-three components, reconstructs the positive missing component, "
+        "normalizes the quaternion and writes eight mapped rows at a time.",
+    ),
+    0x142193DA0: (
+        "AnimJointProgramOp25_CopyFloatLanes",
+        "Animation joint-program opcode 25 dispatcher for mapped constant float-lane "
+        "payloads.",
+    ),
+    0x142186270: (
+        "AnimJointProgram_CopyFloatLanes8",
+        "SIMD body used by opcode 25 to copy authored constant float lanes to their "
+        "mapped joint-program destinations in eight-row blocks.",
+    ),
     0x1417CD100: (
         "SkelTable_ResolveArtItemSkeleton",
         "Resolves an ArtItemSkeleton from its StringId through the skeleton registry. "

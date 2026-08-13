@@ -22775,7 +22775,7 @@ array and the corrected late deformer latch. Headless application reports
 `reports/apply_status_armik_static.txt`; restarted MCP readback resolves all
 three new function names from the single `ida/tll.i64`.
 
-### 2026-08-13 STATIC / REJECTED: Player and NPC firearm clips use the same Nadine arm retarget map and profile
+### 2026-08-13 STATIC / REJECTED: Player and NPC firearm clips use the same Nadine arm retarget map; Chloe-resolved lanes use a second profile
 
 The next asset/dataflow comparison rejects the remaining coarse form of
 **Hbase-retarget**: the local Player path does not reach Nadine through a
@@ -22793,9 +22793,10 @@ independently ties this source skeleton resource to the captured
 NPC route is row 133 at `0x1940`,
 `npc-normal-base B91C4EA3 -> nadine-dlc-base C67A06F1`.
 
-The second evidence is byte-exact map/profile identity. Both rows point to the
-same 74-row map at raw DC offset `0x2720`, with the same target retarget-pose
-profile `E51542CA = npc-normal^nad-dlc-retarget-pose`. The arm portion maps the
+The second evidence is byte-exact map/profile identity for the two direct
+Player/NPC routes. Both rows point to the same 74-row map at raw DC offset
+`0x2720`, with target retarget-pose profile
+`E51542CA = npc-normal^nad-dlc-retarget-pose`. The arm portion maps the
 same semantic StringIds on both sides: shoulders `756E4E81/43CD3726` use mode
 2; elbows `56F87B24/64819ADF`, wrists `57F325C7/658AC43C` and palms
 `81DC7B7E/B42DF599` use mode 1; hand-prop attachments
@@ -22819,8 +22820,10 @@ left-arm/two-hand clip contribution. It cannot by itself explain the Mazur
 one-hand steady pose.
 
 Competing hypotheses are therefore narrowed as follows. **Hwrong-map**,
-**Hmissing-palm/hand-prop**, **Hstale-source-ordinal** and
-**Hwrong-target-profile** are REJECTED. **Huniversal-scale** remains only a
+**Hmissing-palm/hand-prop** and **Hstale-source-ordinal** are REJECTED.
+The broader **Hwrong-target-profile** question remained open here because
+Player steady composition also contains authored Chloe-resolved lanes; the
+next section closes that distinction numerically. **Huniversal-scale** remains only a
 limited fit hypothesis; a future correction would need proof that the authored
 Player scale is wrong for this exact look, not merely that `0.9 != 0.97`.
 **Hsource-content/composition** is now the leading base-pose branch: the Player
@@ -22842,3 +22845,68 @@ beside the raw scale bits, making the two authored rows reproducible without a
 manual bit conversion. The canonical IDB comments for
 `SkelTable_FindRetargetEntry` and `AnimationClip_SampleNamedReferenceById` are
 updated in the accompanying label pass.
+
+### 2026-08-13 STATIC / REJECTED: the Chloe-vs-NPC reference-pose split is real but too small to own the broken grip
+
+The remaining coarse form of **Hwrong-target-profile** is now rejected without
+another game launch. The authored steady Player bundle can combine direct
+Player/NPC-compatible lanes with Chloe-resolved lanes, but the two reference
+poses differ only by a narrow local fit correction. They do not contain a
+missing arm, palm or hand-prop transform capable of producing the observed
+one-hand Mazur pose or the left arm crossing the torso.
+
+The first independent evidence is the complete retarget inventory rather than
+only rows 124 and 133. Player row 124 (`proto -> nadine-dlc-base`) and NPC row
+133 (`npc-normal-base -> nadine-dlc-base`) use profile `E51542CA`; Chloe row 157
+at raw `skel-retargets.bin+0x1DC0` (`chloe-base B70B7EAF -> nadine-dlc-base
+C67A06F1`) uses `FC34096C = retarget-pose-npc-normal`. All three use the same
+74-row StringId map at `+0x2720`. Their raw final flag word is zero, so the
+optional runtime `DoRetargetArmIk` and `DoRetargetLegIk` stages are disabled;
+there is no hidden arm-chain mode unique to one route.
+
+The second evidence is a direct decode of the two one-frame ANIM profiles.
+`E51542CA` is the group-zero constant pose at
+`actor77.psarc/nadine-dlc-base.pak+0x2DA0`; `FC34096C` is the corresponding pose
+at `elena-base.pak+0x43AA0`. The ANIM program uses opcode 22 for half-float
+scale/translation rows and opcode 24 for the engine's 48-bit smallest-three
+quaternions. After aligning the semantic arm joints by their real skeleton
+name tables, clavicle rotations are identical; the largest shoulder rotation
+difference is about `3.13 degrees`, elbow rotation about `0.24 degrees`, and
+wrist rotation about `5.76 degrees`. Palm and hand-prop local rotations are
+identical. Bone-translation differences are only `0.8..7.1 mm`. These are raw
+authored reference-pose differences, not a claim that the final sampled runtime
+delta is bit-identical after scale and retarget composition.
+
+The third, behaviorally independent evidence is the already completed negative
+boundary pair. Build `abw` copied all twelve Nadine local arm rows `19..30`
+from the visually correct remote pose into local Nadine every admitted frame;
+build `aby` then copied the 88 final weighted body-palette rows after animation
+evaluation. Both recorded nonzero source/target differences and completed their
+written admissions, yet neither changed the visible grip. A smaller
+`3..6 degree` reference-pose correction at the same local/palette boundary
+therefore cannot be promoted into a new gross visual repair.
+
+Competing hypotheses are now explicit. **Hwrong-map/ordinal**,
+**Hmissing-palm**, **Hoptional-arm-IK** and **Hmixed-profile-primary** are
+REJECTED. The profile split may remain a secondary centimetric fit contributor,
+but not the owner of the persistent crossed/one-hand pose. The exact masks also
+reject the apparent semantic split: Chloe `7D11D4FD[38..41]` resolves to both
+palms and both hand-prop attachments, matching Player
+`7FB80CC8/77A8107C[29..32]`. **Hsource-content/composition** and
+**Hgeneric-convergence** remain structurally possible upstream, but the
+successful `aby` final-palette write means another local-row, command-weight,
+profile or CPU body-palette substitution is not a distinct visual boundary.
+
+No runtime or mutation is authorized. Do not patch profiles `E51542CA` or
+`FC34096C`, retarget scale, the common map, hands clip ids or final body rows.
+The next static frontier must identify a separate local presentation/pose
+consumer whose pixels are not sourced from the already replaced `Fg+0x240`
+body palette, or prove an explicit later overwrite/publication mechanism. A new
+launch is earned only after that owner has three independent evidence types and
+a prediction distinct from `abw/aby`.
+
+`scripts/psarc_asset_audit.py --animation-constant-pose` now reproduces the
+group-zero constant scale/rotation/translation rows, and
+`--skeleton-retarget` reports the authored flags plus arm/leg-IK enable bytes.
+The canonical IDB names the retarget-entry builders, joint-retarget consumer and
+ANIM opcode 22/24/25 decoders used for this result.

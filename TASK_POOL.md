@@ -4449,19 +4449,22 @@ whole compatible bundle with the authored NPC-Nadine retarget path; do not
 substitute a single hands clip. The next game launch is allowed only for an
 atomic local-only visual repair supported by three independent evidence types.
 
-**STATIC / REJECTED (retarget-map split):** runtime entry 124 is authored
-`proto 1003D654 -> nadine-dlc-base C67A06F1`, while the correct NPC-firearm
-entry 133 is `npc-normal-base B91C4EA3 -> nadine-dlc-base`. Both use the exact
-same 74-row map at raw `skel-retargets.bin+0x2720` and the same
-`npc-normal^nad-dlc-retarget-pose E51542CA` profile. Shoulders, elbows, wrists,
-palms and both hand-prop attachments map by identical StringIds/modes despite
-different source ordinals. Do not repair the grip by changing Nadine joint
-indices, copying the NPC map or replacing the common profile. The remaining
-`0.9` Player versus `~0.97` NPC uniform position scale may affect centimetric
-fit, but cannot remove the missing Mazur two-hand contribution. Continue at the
-case-6 output/command merge: compare complete proto and NPC-normal
-base/add/set/hands ValidBits and weights on Nadine joints 19--30. Runtime remains
-closed until that yields an atomic local-only bundle or exact weapon target.
+**STATIC / REJECTED (retarget map/profile split):** runtime entry 124 is
+authored `proto 1003D654 -> nadine-dlc-base C67A06F1`, while the correct
+NPC-firearm entry 133 is `npc-normal-base B91C4EA3 -> nadine-dlc-base`. Both use
+the exact 74-row StringId map at raw `skel-retargets.bin+0x2720` and profile
+`E51542CA`. Chloe entry 157 uses the same map but profile `FC34096C`; direct
+ANIM decode shows only about `3.13 degrees` at the shoulders, `0.24 degrees` at
+the elbows, `5.76 degrees` at the wrists and `0.8..7.1 mm` translation deltas.
+Palm/hand-prop rotations and their semantic mask coverage are identical, and
+all three rows disable optional arm/leg retarget IK. Together with the rejected
+`abw` full local-row and `aby` final 88-row body-palette transfers, this rejects
+the mixed profile as the primary owner of the gross crossed/one-hand pose. Do
+not patch Nadine joint indices, profiles, scale, hands clips, command weights or
+`Fg+0x240` rows. Continue only at a separate local presentation/pose consumer
+not sourced from the already replaced body palette, or at a proved later
+overwrite/publication mechanism. Runtime remains closed until that distinct
+owner has three independent evidence types and a falsifiable prediction.
 
 **STATIC / REJECTED (`auto -> run-gun-idle`):** do not force
 `run-gun-idle 0x8D62CB37` or patch the `auto 0x11E3B022` predicate. The state is
