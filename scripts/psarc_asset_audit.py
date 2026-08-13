@@ -557,12 +557,13 @@ def audit_dc00_objects(
 
 
 def audit_dc00_overlay_rows(data: bytes, map_labels: list[str], limit: int) -> None:
-    """Find source/target occurrences across every well-formed overlay-set table."""
+    """Find source/target occurrences across every well-formed overlay table."""
 
     if len(data) < 0x20 or data[:4] != b"00CD":
         raise ValueError("--dc00-map-id requires DC00")
     wanted = {value for value, _ in map(parse_id, map_labels)}
     overlay_set_id = string_id(b"anim-overlay-set")
+    weapon_overlay_id = string_id(b"weapon-anim-overlay")
     object_count = struct.unpack_from("<I", data, 0x14)[0]
     shown = 0
 
@@ -571,6 +572,54 @@ def audit_dc00_overlay_rows(data: bytes, map_labels: list[str], limit: int) -> N
         object_id, type_id, record_offset, _reserved = struct.unpack_from(
             "<IIII", data, index_offset
         )
+        if type_id == weapon_overlay_id:
+            if record_offset + 8 > len(data):
+                continue
+            map_offset = read_u64(data, record_offset) - 4
+            if not 0 < map_offset <= len(data) - 0x18:
+                continue
+            table_count = read_u32(data, map_offset + 4)
+            key_offset = read_u64(data, map_offset + 0xC)
+            value_offset = read_u64(data, map_offset + 0x14)
+            if (
+                table_count > 0x10000
+                or key_offset > len(data)
+                or value_offset > len(data)
+                or key_offset + table_count * 4 > len(data)
+                or value_offset + table_count * 8 > len(data)
+            ):
+                continue
+            for row in range(table_count):
+                source_id = read_u32(data, key_offset + row * 4)
+                if source_id not in wanted:
+                    continue
+                info_offset = read_u64(data, value_offset + row * 8)
+                if (
+                    not 4 <= info_offset <= len(data) - 0x18
+                    or read_u32(data, info_offset - 4)
+                    != string_id(b"weapon-anim-overlay-info")
+                ):
+                    continue
+                first_id, first_blend, second_id, second_blend = struct.unpack_from(
+                    "<IfIf", data, info_offset
+                )
+                flags = read_u32(data, info_offset + 0x10)
+                tail = struct.unpack_from("<f", data, info_offset + 0x14)[0]
+                print(
+                    f"object[{index}] id=0x{object_id:08X} "
+                    f"record=0x{record_offset:X} "
+                    f"record_type=0x{type_id:08X} map=0x{map_offset:X} "
+                    f"count={table_count} row={row} source=0x{source_id:08X} "
+                    f"info=0x{info_offset:X} first=0x{first_id:08X} "
+                    f"first_blend={first_blend:.9g} second=0x{second_id:08X} "
+                    f"second_blend={second_blend:.9g} flags=0x{flags:08X} "
+                    f"tail={tail:.9g}"
+                )
+                shown += 1
+                if shown >= limit:
+                    print(f"dc00_overlay_rows_shown={shown} limit={limit}")
+                    return
+            continue
         if type_id != overlay_set_id or record_offset + 0x30 > len(data):
             continue
         table_offset = struct.unpack_from("<Q", data, record_offset)[0]
@@ -580,7 +629,7 @@ def audit_dc00_overlay_rows(data: bytes, map_labels: list[str], limit: int) -> N
         record_type = struct.unpack_from("<I", data, record_offset + 0x2C)[0]
         table_end = table_offset + table_count * 0x28
         if (
-            record_type != overlay_set_id
+            record_type not in (overlay_set_id, weapon_overlay_id)
             or table_offset > len(data)
             or table_end > len(data)
         ):
@@ -590,12 +639,18 @@ def audit_dc00_overlay_rows(data: bytes, map_labels: list[str], limit: int) -> N
             source_id, target_id = struct.unpack_from("<II", data, row_offset)
             if source_id not in wanted and target_id not in wanted:
                 continue
+            variant_group = struct.unpack_from("<I", data, row_offset + 0x20)[0]
+            row_type = data[row_offset + 0x24]
+            row_flags = struct.unpack_from("<H", data, row_offset + 0x26)[0]
             print(
                 f"object[{index}] id=0x{object_id:08X} record=0x{record_offset:X} "
+                f"record_type=0x{record_type:08X} "
                 f"category=0x{category_id:08X} owner=0x{owner_id:08X} "
                 f"selector=0x{selector_id:08X} table=0x{table_offset:X} "
                 f"count={table_count} row={row} offset=0x{row_offset:X} "
-                f"source=0x{source_id:08X} target=0x{target_id:08X}"
+                f"source=0x{source_id:08X} target=0x{target_id:08X} "
+                f"variant=0x{variant_group:08X} type={row_type} "
+                f"flags=0x{row_flags:04X}"
             )
             shown += 1
             if shown >= limit:
@@ -1081,6 +1136,30 @@ def state_record_for_graph_reference(
     return record_offset, name, state_id, animation_id
 
 
+def state_record_for_callback_reference(
+    data: bytes, reference_offset: int, callback_offset: int
+) -> tuple[int, str, int, int] | None:
+    """Recognize the direct script-selector field at animation-state +0x70."""
+
+    record_offset = reference_offset - 0x70
+    if record_offset < 0 or record_offset + 0x78 > len(data):
+        return None
+    if read_u64(data, record_offset + 0x70) != callback_offset:
+        return None
+    name_offset = read_u64(data, record_offset)
+    name = read_c_string(data, name_offset)
+    if name is None:
+        return None
+    state_id = read_u32(data, record_offset + 0x8)
+    if string_id(name.encode("ascii")) != state_id:
+        return None
+    graph_offset = read_u64(data, record_offset + 0x18)
+    if not 0 < graph_offset < len(data):
+        return None
+    animation_id = read_u32(data, record_offset + 0x20)
+    return record_offset, name, state_id, animation_id
+
+
 def containing_typed_descriptor(data: bytes, reference_offset: int) -> int | None:
     """Find a nearby descriptor start marked by the duplicated type-id prefix."""
 
@@ -1141,6 +1220,8 @@ def trace_state_owners(
             continue
         for reference in qword_references(data, target):
             state = state_record_for_graph_reference(data, reference, target)
+            if state is None:
+                state = state_record_for_callback_reference(data, reference, target)
             if state is not None:
                 states.add(state)
                 continue
@@ -1242,7 +1323,7 @@ def audit_script_member_accesses(data: bytes, base_offset: int) -> None:
     script_lambda_id = string_id(b"script-lambda")
     function_id = string_id(b"function")
     store_opcodes = {0x10, 0x11, 0x12, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57}
-    rows: list[tuple[int, int, int, int]] = []
+    rows: list[tuple[int, int, int, int, str]] = []
     for signature_offset in find_all(data, struct.pack("<I", script_lambda_id)):
         descriptor_offset = signature_offset + 4
         if descriptor_offset + 0x1C > len(data):
@@ -1271,10 +1352,18 @@ def audit_script_member_accesses(data: bytes, base_offset: int) -> None:
             opcode in store_opcodes
             for opcode, _destination, _source_a, _source_b in instructions
         )
-        rows.append((descriptor_offset, code_offset, script_id, store_count))
+        owners, _searched, _complete = trace_state_owners(data, descriptor_offset)
+        rendered_owners = ";".join(
+            f"0x{offset:X}:{name}:0x{state_id:08X}"
+            for offset, name, state_id, _animation_id in owners
+        )
+        rows.append(
+            (descriptor_offset, code_offset, script_id, store_count, rendered_owners)
+        )
     rendered = ",".join(
-        f"0x{descriptor:X}/0x{code:X}/0x{script_id:08X}/stores={stores}"
-        for descriptor, code, script_id, stores in rows
+        f"0x{descriptor:X}/0x{code:X}/0x{script_id:08X}/stores={stores}/"
+        f"owners=[{owners}]"
+        for descriptor, code, script_id, stores, owners in rows
     )
     print(
         f"vm_member_base=0x{base_offset:X} callbacks={len(rows)} "
@@ -1571,6 +1660,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="DC00 gesture settings entry used by --gesture-node-audit",
     )
     parser.add_argument(
+        "--script-member-base",
+        action="append",
+        default=[],
+        metavar="OFFSET",
+        help=(
+            "summarize straight-line script callbacks that materialize this "
+            "structure-member base and report their owning animation states"
+        ),
+    )
+    parser.add_argument(
         "--animation-mask",
         action="append",
         default=[],
@@ -1653,6 +1752,7 @@ def main() -> int:
             or args.dc00_table_offset
             or args.dc00_map_id
             or args.gesture_node_audit
+            or args.script_member_base
             or args.animation_mask
             or args.animation_constant_pose
             or args.skeleton_joint_table
@@ -1660,7 +1760,8 @@ def main() -> int:
         ):
             raise ValueError(
                 "--entry is required with --id, --resolve-string-id, --strings, "
-                "--player-mesh-look, --map-source, --gesture-node-audit "
+                "--player-mesh-look, --map-source, --gesture-node-audit, "
+                "--script-member-base, "
                 "--dc00-record-id, --dc00-table-offset, --dc00-map-id or "
                 "--animation-mask, --skeleton-joint-table or "
                 "--animation-constant-pose or --skeleton-retarget"
@@ -1691,6 +1792,9 @@ def main() -> int:
             f"bytes={len(gesture_data)}"
         )
         audit_anim_node_gestures(data, gesture_data)
+
+    for base_offset in args.script_member_base:
+        audit_script_member_accesses(data, int(base_offset, 0))
 
     if args.player_mesh_look or args.map_source:
         inspect_player_mesh_dc00(data, args.player_mesh_look, args.map_source)

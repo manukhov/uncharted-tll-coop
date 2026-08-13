@@ -592,13 +592,6 @@ FUNCTIONS = {
         "history at state+0x18. Supports sequential or randomized selection and "
         "refreshes the state hash after updating the selected index.",
     ),
-    0x1417FA6E0: (
-        "AnimOverlayState_FindMatchingRow",
-        "Walks the state+0x8 overlay-set array (count at +0x24). Each set has "
-        "0x28-byte rows at +0, row count at +0x8 and a parallel source-id array "
-        "at +0x20. Returns the row matching the input animation and mirror flag, "
-        "plus its set and row indices.",
-    ),
     # --- 2026-07-22: Player Look2 -> player-mesh animation knowledge ---
     0x140A1DCC0: (
         "Player_GetAppearanceHash",
@@ -1094,10 +1087,24 @@ FUNCTIONS = {
     ),
     0x14108B940: (
         "PlayerWeaponAnimControl_RequestCustomWeaponPart",
-        "PlayerWeaponAnimControl vtable +0x28. Stores the selected weapon "
-        "overlay animation id at control+0x18, requests custom-weapon-part "
-        "(or its feather variant) on WeaponPartial 0xE2B990B9, and requests "
-        "the corresponding s_weapon-out state.",
+        "PlayerWeaponAnimControl vtable +0x28. Stores both animation ids from "
+        "one paired WeaponAnimOverlayInfo at control+0x20/+0x24, stores its "
+        "second blend scalar at +0x28, mirrors them at Player+0x1CC/+0x1D0/"
+        "+0x1D4, requests custom-weapon-part (or its feather "
+        "variant) on WeaponPartial 0xE2B990B9, and requests s_weapon-out. The "
+        "second authored clip is retained by this path rather than discarded.",
+    ),
+    0x14108B860: (
+        "PlayerWeaponAnimControl_MatchesCustomWeaponPartRequest",
+        "Compares both requested WeaponAnimOverlayInfo animation ids and its "
+        "second blend scalar against PlayerWeaponAnimControl+0x20/+0x24/+0x28. This "
+        "is the exact paired-request identity check used by the custom weapon "
+        "partial path.",
+    ),
+    0x14108CF70: (
+        "PlayerWeaponAnimControl_GetCurrentWeaponPartAnimIdIfSettled",
+        "Returns PlayerWeaponAnimControl+0x18 only after the WeaponPartial "
+        "request has reached its settled state; otherwise returns zero.",
     ),
     0x14108C0C0: (
         "PlayerWeaponAnimControl_RequestWeaponPart",
@@ -1125,6 +1132,27 @@ FUNCTIONS = {
         "Constructs the PlayerWeaponController, installs vtable 0x142A47F90, "
         "initializes its weapon-slot records, and clears the two cached overlay "
         "table handle blocks later searched at controller+0x468/+0x488.",
+    ),
+    0x14109D350: (
+        "PlayerWeaponController_SetGenericWeaponOverlayId",
+        "PlayerWeaponController vtable +0x3B0. Stores the generic weapon-class "
+        "overlay-set id used by Player_ConfigureWeaponAnimationOverlays.",
+    ),
+    0x14109D3D0: (
+        "PlayerWeaponController_SetSpecificWeaponOverlayId",
+        "PlayerWeaponController vtable +0x3B8. Stores the art-specific weapon "
+        "overlay-set id used by Player_ConfigureWeaponAnimationOverlays.",
+    ),
+    0x14109D8E0: (
+        "PlayerWeaponController_FindHandSwitchOverlayRecord",
+        "Finds the hand-switch WeaponAnimOverlayInfo for the requested animation "
+        "in the controller's cached generic and art-specific overlay tables.",
+    ),
+    0x1410923A0: (
+        "Player_ConfigureWeaponAnimationOverlays",
+        "Loads the generic weapon-class and art-specific animation-overlay set "
+        "ids for the current ProcessWeapon and publishes them through "
+        "PlayerWeaponController vtable slots +0x3B0/+0x3B8.",
     ),
     0x14109D650: (
         "PlayerWeaponController_FindWeaponOverlayRecordByAnimId",
@@ -1415,9 +1443,31 @@ FUNCTIONS = {
         "Source assertion identifies AnimStateSnapshot::SnapshotAnimState. Copies "
         "the 0x80-byte state snapshot to instance+0x90, resolves the state id at "
         "+0x98 into authored callbacks/flags, and selects the root snapshot node. "
+        "Before the ordinary animation-id resolver, call 0x1418B28B3 invokes "
+        "AnimStateSnapshot_TransformState to materialize type-1/type-5 overlay "
+        "rows as snapshot blend nodes keyed by the state id at snapshot+0x8. "
         "At 0x1418B2940 it resolves the requested animation through the track-local "
         "AnimOverlayState supplied as a4, calls AnimSetRemap at 0x1418B2954, then "
         "stores the resolved id/key tuple at snapshot+0x88/+0x90/+0x94.",
+    ),
+    0x1418B2A40: (
+        "AnimStateSnapshot_TransformState",
+        "Exact source assertion identifies AnimStateSnapshot::TransformState. "
+        "Before the ordinary animation-id resolver, it searches the supplied "
+        "AnimOverlayState for rows keyed by snapshot+0x8, accepts authored row "
+        "types 1 and 5, and materializes their targets as runtime snapshot/blend "
+        "nodes. Multiple same-source type-1 rows are therefore complementary "
+        "state children rather than competing direct animation remaps.",
+    ),
+    0x1417FA6E0: (
+        "AnimOverlayState_FindMatchingRow",
+        "Walks the AnimOverlayState set array for the source id and mirror bit "
+        "in a 32-byte cursor. Cursor +4/+8 are the last set/row indices and "
+        "+0x10 is the returned 0x28-byte row pointer; passing the returned "
+        "cursor back advances to the next matching row. TransformState uses "
+        "this twice at 0x1418B2AFE/0x1418B2E93 to materialize every type-1/5 "
+        "row, which is the exact boundary for the scoped legacy-Nadine Mazur "
+        "56C57AD2 to E117618A row skip.",
     ),
     0x1418B2EF0: (
         "AnimStateSnapshot_SelectRootNodeIndex",
@@ -2681,6 +2731,31 @@ FUNCTIONS = {
         "Player vtable +0x408. Exact Player::PostAnimBlending_Async source "
         "assertion. Runs CharacterLegIkController and other post-blend IK "
         "controllers after the animation manager's phase-0x10 dispatch.",
+    ),
+    0x140CC7F80: (
+        "PlayerBearClimbIK_Construct",
+        "Constructs PlayerBearClimbIK, installs vtable 0x142A0CC60 and "
+        "initializes its four traversal-only JointSets.",
+    ),
+    0x140CC81F0: (
+        "PlayerBearClimbIK_Update",
+        "Exact player-bear-climb-ik.cpp PlayerBearClimbIK::Update. It performs "
+        "joint work only while PlayerBearClimbIK_IsActive reports a nonzero "
+        "blend; it is not the ordinary steady weapon-hand IK owner.",
+    ),
+    0x140CC8360: (
+        "PlayerBearClimbIK_SetBlendTarget",
+        "Sets the PlayerBearClimbIK transition target consumed by its active "
+        "blend/update path.",
+    ),
+    0x140CC8440: (
+        "PlayerBearClimbIK_StopBlend",
+        "Stops or fades the PlayerBearClimbIK traversal blend.",
+    ),
+    0x140CC8520: (
+        "PlayerBearClimbIK_IsActive",
+        "Concrete PlayerBearClimbIK vtable +0x20 predicate. Returns whether the "
+        "controller's traversal blend scalar at +0x300 remains positive.",
     ),
     0x14100B370: (
         "PlayerStrafeController_UpdateStrafeIk",

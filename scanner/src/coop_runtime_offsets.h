@@ -76,6 +76,10 @@ constexpr std::uintptr_t kAnimSetRemapResolveAnimationIdRva = 0x17CA2E0;
 constexpr std::uintptr_t kAnimationDatabaseResolveClipRva = 0x17C8E20;
 constexpr std::uintptr_t kAnimOverlayStateResolveAnimationIdRva = 0x17F9F00;
 constexpr std::uintptr_t kAnimOverlayStateFindMatchingRowRva = 0x17FA6E0;
+constexpr std::uintptr_t kAnimStateSnapshotTransformFirstRowCallerRva =
+    0x18B2B03;
+constexpr std::uintptr_t kAnimStateSnapshotTransformNextRowCallerRva =
+    0x18B2E98;
 // PlayerAimController_PublishDirectionalAimWeights 0x140CB41F0 writes directional
 // fields to [[Player+0x1A0]+0x58]+0x10 at +0x188..+0x194 (D/U/L/R layout).
 constexpr std::size_t kPlayerAnimHubChildOffset = 0x58;

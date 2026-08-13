@@ -2429,6 +2429,19 @@ constexpr float kLegacyNadineP99HipBackMeters = 0.02F;
 // resolver mutation and its hot-path diagnostics out while the local-only
 // HandFix/IK presentation owner is traced downstream.
 constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
+// STATIC ack: the Mazur custom pair already supplies Player-compatible
+// proximal arms 283966ED (joints 21..28) and distal hands 56C57AD2
+// (joints 29..32).  Campaign Chloe's player-mesh type-1 row materializes
+// 56C57AD2 as Chloe-only E117618A before the ordinary animation-id resolver.
+// Skip only that exact row for the retained local legacy-Nadine Player while
+// Mazur is WeaponOut/Aiming, then continue the stock row iterator.  This keeps
+// the authored Mazur clip, the complementary arms clip, every other overlay
+// row and the entire IK path stock.
+constexpr bool kEnableLegacyNadineMazurAuthoredHandsOverlayRepair = true;
+static_assert(
+    !kEnableLegacyNadineMazurAuthoredHandsOverlayRepair ||
+    !kEnableLegacyNadineActiveWeaponGripOverlayRepair,
+    "the two repairs share the AnimOverlayState copy detour");
 // REJECTED in build abr: this callsite belongs to module-import/DC-update work,
 // not the steady per-frame weapon-pose path. It can run before the co-op role is
 // assigned and then remain silent while P99/Mazur are drawn. Keep the bounded
@@ -42407,12 +42420,14 @@ bool seh_weapon_parent_resolves_to_owner(void* weapon, void* owner);
 // Scoped legacy-Nadine overlay repair. The authored campaign-Chloe player-mesh
 // map is shared, so mutating its 0x28-byte row would also redirect real Chloe.
 // Instead, observe the engine's master->track copy and mutate only the exact
-// copied P99 overlay set belonging to local legacy Nadine.
+// copied active-weapon overlay state belonging to local legacy Nadine.
 using AnimOverlayStateCopyFunction =
     std::uintptr_t(__fastcall*)(void*, void*);
 using AnimOverlayStateResolveAnimationIdFunction =
     std::uint32_t*(__fastcall*)(
         void*, std::uint32_t*, std::uint32_t, std::uint8_t);
+using AnimOverlayStateFindMatchingRowFunction =
+    void*(__fastcall*)(void*, void*, const void*);
 using AnimSetRemapResolveAnimationIdFunction =
     std::uint32_t*(__fastcall*)(void*, std::uint32_t*, std::uint32_t);
 using AnimationDatabaseResolveClipFunction =
@@ -42422,6 +42437,8 @@ using AnimationDatabaseResolveClipFunction =
 AnimOverlayStateCopyFunction g_original_anim_overlay_state_copy = nullptr;
 AnimOverlayStateResolveAnimationIdFunction
     g_original_anim_overlay_state_resolve_animation_id = nullptr;
+AnimOverlayStateFindMatchingRowFunction
+    g_original_anim_overlay_state_find_matching_row = nullptr;
 std::atomic<bool> g_legacy_nadine_active_grip_hooks_ready{false};
 AnimSetRemapResolveAnimationIdFunction
     g_original_anim_set_remap_resolve_animation_id = nullptr;
@@ -42716,6 +42733,292 @@ bool is_legacy_nadine_active_grip_overlay_state(void* state) {
     return g_legacy_nadine_active_grip_overlay_states[slot_index].load(
                std::memory_order_acquire) ==
         (value | kLegacyNadineActiveGripStateTag);
+}
+
+bool seh_legacy_nadine_overlay_state_is_current_track_copy(
+    void* player, void* state) {
+    __try {
+        if (player == nullptr || state == nullptr ||
+            readable_bytes(
+                static_cast<std::byte*>(player) +
+                kPlayerUpperStateOwnerOffset) < sizeof(void*)) {
+            return false;
+        }
+        void* const control = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(player) +
+            kPlayerUpperStateOwnerOffset);
+        if (control == nullptr || readable_bytes(control) < 0x60) {
+            return false;
+        }
+        auto* const control_bytes = static_cast<std::byte*>(control);
+        const std::uint32_t registry_count =
+            *reinterpret_cast<const std::uint32_t*>(control_bytes + 0x28);
+        auto* const records = *reinterpret_cast<std::byte**>(
+            control_bytes + 0x30);
+        if (registry_count == 0 || registry_count > 128 ||
+            records == nullptr ||
+            readable_bytes(records) <
+                static_cast<std::size_t>(registry_count) * 0x20) {
+            return false;
+        }
+        std::uint32_t matches = 0;
+        for (std::uint32_t record_index = 0;
+             record_index < registry_count; ++record_index) {
+            auto* const record =
+                records + static_cast<std::size_t>(record_index) * 0x20;
+            if (*reinterpret_cast<const std::uint8_t*>(record + 0x14) == 0) {
+                continue;
+            }
+            auto* const layer = *reinterpret_cast<std::byte**>(record + 0x8);
+            if (layer == nullptr || readable_bytes(layer) < 0x508 ||
+                *reinterpret_cast<const std::uint32_t*>(layer + 0x8) != 2) {
+                continue;
+            }
+            const std::uint32_t track_count =
+                *reinterpret_cast<const std::uint32_t*>(layer + 0x500);
+            auto* const track_slots = *reinterpret_cast<std::byte**>(
+                layer + 0x4F8);
+            if (track_count == 0 || track_count > 64 ||
+                track_slots == nullptr ||
+                readable_bytes(track_slots) <
+                    static_cast<std::size_t>(track_count) * sizeof(void*)) {
+                continue;
+            }
+            for (std::uint32_t track_index = 0;
+                 track_index < track_count; ++track_index) {
+                auto* const track = *reinterpret_cast<std::byte**>(
+                    track_slots +
+                    static_cast<std::size_t>(track_index) * sizeof(void*));
+                if (track == nullptr || readable_bytes(track) < 0x18) {
+                    continue;
+                }
+                if (*reinterpret_cast<void* const*>(track + 0x8) == state) {
+                    ++matches;
+                    if (matches > 1) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return matches == 1;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+constexpr std::uint32_t kCampaignChloePlayerMeshSelectorId = 0x3F334972u;
+constexpr std::uint32_t kMazurCarryPeekHandsClipId = 0x56C57AD2u;
+constexpr std::uint32_t kChloeGunGripOpenerAddClipId = 0xE117618Au;
+
+bool seh_count_active_overlay_matches(
+    void* state, std::uint32_t selector, std::uint32_t source,
+    std::uint32_t target, std::uint32_t* selector_sets_out,
+    std::uint32_t* matching_rows_out);
+
+struct NadineMazurOverlayRowScope {
+    int owner_index = -1;
+    void* player = nullptr;
+    void* weapon = nullptr;
+    int current_slot = -1;
+    std::uint32_t draw_state = 0;
+    bool master = false;
+    bool tagged = false;
+    std::uint32_t selector_sets = 0;
+    std::uint32_t matching_rows = 0;
+};
+
+bool seh_select_legacy_nadine_mazur_bad_hands_row(
+    void* state, const void* cursor, const void* row,
+    std::uintptr_t caller_rva, NadineMazurOverlayRowScope* scope) {
+    if (scope == nullptr) {
+        return false;
+    }
+    *scope = {};
+    __try {
+        if (!g_legacy_nadine_active_grip_hooks_ready.load(
+                std::memory_order_acquire) ||
+            !g_net_role_b || state == nullptr || cursor == nullptr ||
+            row == nullptr ||
+            (caller_rva != kAnimStateSnapshotTransformFirstRowCallerRva &&
+             caller_rva != kAnimStateSnapshotTransformNextRowCallerRva) ||
+            readable_bytes(cursor) < 0x20 || readable_bytes(row) < 0x28 ||
+            *reinterpret_cast<const std::uint32_t*>(cursor) !=
+                kMazurCarryPeekHandsClipId ||
+            *reinterpret_cast<const std::uint32_t*>(row) !=
+                kMazurCarryPeekHandsClipId ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(row) + 0x4) !=
+                kChloeGunGripOpenerAddClipId ||
+            *reinterpret_cast<const std::uint8_t*>(
+                static_cast<const std::byte*>(row) + 0x24) != 1) {
+            return false;
+        }
+
+        scope->master = seh_classify_legacy_nadine_master_overlay_state(
+            state, &scope->owner_index, &scope->player);
+        scope->tagged =
+            is_legacy_nadine_active_grip_overlay_state(state);
+        if (!scope->master && scope->tagged) {
+            scope->owner_index = 0;
+            scope->player = retained_player_object(0);
+        }
+        std::uint32_t look = 0;
+        if ((!scope->master && !scope->tagged) ||
+            scope->owner_index != 0 || scope->player == nullptr ||
+            scope->player != retained_player_object(0) ||
+            !player_object_stable(scope->player) ||
+            !player_screen_index_is(scope->player, 0) ||
+            !seh_read_player_look(scope->player, &look) ||
+            look != kLegacyNadineAttachTargetLookId) {
+            return false;
+        }
+        if (!scope->master &&
+            !seh_legacy_nadine_overlay_state_is_current_track_copy(
+                scope->player, state)) {
+            return false;
+        }
+
+        void* const controller = *reinterpret_cast<void**>(
+            static_cast<std::byte*>(scope->player) + 0x1D88);
+        if (controller == nullptr || readable_bytes(controller) < 0x138 ||
+            *reinterpret_cast<const std::uintptr_t*>(controller) !=
+                g_module + kPlayerWeaponControllerVtableRva ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(controller) + 0x108) !=
+                scope->player ||
+            !read_weapon_draw_state(
+                scope->player, scope->current_slot, scope->draw_state) ||
+            scope->current_slot < 0 ||
+            (scope->draw_state != 2 && scope->draw_state != 4)) {
+            return false;
+        }
+        scope->weapon = get_weapon_from_slot(
+            scope->player, scope->current_slot);
+        if (scope->weapon == nullptr ||
+            *reinterpret_cast<const std::uintptr_t*>(scope->weapon) !=
+                g_module + kProcessWeaponVtableRva ||
+            weapon_art_id_from_object(scope->weapon) != kCoopRifleArtId ||
+            !seh_weapon_parent_resolves_to_owner(
+                scope->weapon, scope->player)) {
+            return false;
+        }
+        if (!seh_count_active_overlay_matches(
+                state, kCampaignChloePlayerMeshSelectorId,
+                kMazurCarryPeekHandsClipId,
+                kChloeGunGripOpenerAddClipId,
+                &scope->selector_sets, &scope->matching_rows) ||
+            scope->selector_sets != 1 || scope->matching_rows != 1) {
+            return false;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *scope = {};
+        return false;
+    }
+}
+
+bool seh_prefilter_legacy_nadine_mazur_bad_hands_row(
+    void* output, void** row_out) {
+    if (row_out == nullptr) {
+        return false;
+    }
+    *row_out = nullptr;
+    __try {
+        if (output == nullptr) {
+            return false;
+        }
+        auto* const output_bytes = static_cast<std::byte*>(output);
+        if (*reinterpret_cast<const std::uint32_t*>(output_bytes) !=
+            kMazurCarryPeekHandsClipId) {
+            return false;
+        }
+        void* const row = *reinterpret_cast<void**>(output_bytes + 0x10);
+        if (row == nullptr) {
+            return false;
+        }
+        auto* const row_bytes = static_cast<const std::byte*>(row);
+        if (*reinterpret_cast<const std::uint32_t*>(row_bytes) !=
+                kMazurCarryPeekHandsClipId ||
+            *reinterpret_cast<const std::uint32_t*>(row_bytes + 0x4) !=
+                kChloeGunGripOpenerAddClipId ||
+            *reinterpret_cast<const std::uint8_t*>(row_bytes + 0x24) != 1) {
+            return false;
+        }
+        *row_out = row;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *row_out = nullptr;
+        return false;
+    }
+}
+
+void* __fastcall hooked_anim_overlay_state_find_matching_row(
+    void* state, void* output, const void* input) {
+    if (g_original_anim_overlay_state_find_matching_row == nullptr) {
+        return output;
+    }
+    void* result = g_original_anim_overlay_state_find_matching_row(
+        state, output, input);
+    if (output == nullptr) {
+        return result;
+    }
+    const std::uintptr_t return_address =
+        reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const std::uintptr_t caller_rva = return_address >= g_module
+        ? return_address - g_module
+        : return_address;
+    if (caller_rva != kAnimStateSnapshotTransformFirstRowCallerRva &&
+        caller_rva != kAnimStateSnapshotTransformNextRowCallerRva) {
+        return result;
+    }
+    void* row = nullptr;
+    if (!seh_prefilter_legacy_nadine_mazur_bad_hands_row(
+            output, &row)) {
+        return result;
+    }
+    NadineMazurOverlayRowScope scope{};
+    if (!seh_select_legacy_nadine_mazur_bad_hands_row(
+            state, output, row, caller_rva, &scope)) {
+        return result;
+    }
+
+    // The stock cursor stores the selected set/row at +4/+8.  Feeding that
+    // complete 32-byte result back as the next input advances to the following
+    // matching row.  Use a separate local copy so the stock routine never has
+    // to support aliased input/output buffers.
+    alignas(32) std::array<std::byte, 0x20> cursor{};
+    std::memcpy(cursor.data(), output, cursor.size());
+    result = g_original_anim_overlay_state_find_matching_row(
+        state, output, cursor.data());
+
+    static std::atomic<std::uint32_t> logged{0};
+    if (logged.fetch_add(1, std::memory_order_relaxed) < 64) {
+        std::uint64_t next_row_value = 0;
+        seh_read_qword(
+            static_cast<std::byte*>(output) + 0x10, next_row_value);
+        void* const next_row = reinterpret_cast<void*>(next_row_value);
+        std::ostringstream line;
+        line << "NADINE-MAZUR-HANDS-OVERLAY-SKIP player=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(scope.player)
+             << " weapon=0x"
+             << reinterpret_cast<std::uintptr_t>(scope.weapon)
+             << " state=0x" << reinterpret_cast<std::uintptr_t>(state)
+             << " skipped=0x"
+             << reinterpret_cast<std::uintptr_t>(row)
+             << " next=0x" << reinterpret_cast<std::uintptr_t>(next_row)
+             << " source=0x" << kMazurCarryPeekHandsClipId
+             << " target=0x" << kChloeGunGripOpenerAddClipId
+             << " callerRva=0x" << caller_rva << std::dec
+             << " owner=" << scope.owner_index
+             << " slot=" << scope.current_slot
+             << " drawState=" << scope.draw_state
+             << " master=" << (scope.master ? 1 : 0)
+             << " tagged=" << (scope.tagged ? 1 : 0)
+             << " sets=" << scope.selector_sets
+             << " rows=" << scope.matching_rows;
+        write_log_line(line.str().c_str());
+    }
+    return result;
 }
 
 bool seh_count_active_overlay_matches(
@@ -43451,6 +43754,44 @@ bool install_legacy_nadine_active_weapon_grip_overlay_repair() {
         installed
             ? "legacy-Nadine active-weapon grip overlay repair installed (drawn P99 Mazur-overlay leak)"
             : "legacy-Nadine active-weapon grip overlay repair PARTIAL");
+    return installed;
+}
+
+bool install_legacy_nadine_mazur_authored_hands_overlay_repair() {
+    constexpr std::array<std::uint8_t, 15> kFindRowPrologue{
+        0x48, 0x89, 0x5C, 0x24, 0x08,
+        0x48, 0x89, 0x6C, 0x24, 0x10,
+        0x48, 0x89, 0x74, 0x24, 0x18,
+    };
+    constexpr std::array<std::uint8_t, 13> kCopyPrologue{
+        0x48, 0x89, 0x5C, 0x24, 0x08, 0x57, 0x48,
+        0x83, 0xEC, 0x20, 0x48, 0x8B, 0xDA,
+    };
+    g_legacy_nadine_active_grip_hooks_ready.store(
+        false, std::memory_order_release);
+    g_original_anim_overlay_state_copy =
+        reinterpret_cast<AnimOverlayStateCopyFunction>(
+            install_fire_gate_detour(
+                kAnimOverlayStateCopyRva,
+                kCopyPrologue.data(), kCopyPrologue.size(),
+                reinterpret_cast<void*>(&hooked_anim_overlay_state_copy),
+                "legacy-Nadine Mazur hands overlay ownership copy"));
+    g_original_anim_overlay_state_find_matching_row =
+        reinterpret_cast<AnimOverlayStateFindMatchingRowFunction>(
+            install_fire_gate_detour(
+                kAnimOverlayStateFindMatchingRowRva,
+                kFindRowPrologue.data(), kFindRowPrologue.size(),
+                reinterpret_cast<void*>(
+                    &hooked_anim_overlay_state_find_matching_row),
+                "legacy-Nadine Mazur authored hands overlay row skip"));
+    const bool installed = g_original_anim_overlay_state_copy != nullptr &&
+        g_original_anim_overlay_state_find_matching_row != nullptr;
+    g_legacy_nadine_active_grip_hooks_ready.store(
+        installed, std::memory_order_release);
+    boot_log_line(
+        installed
+            ? "legacy-Nadine Mazur authored hands overlay repair installed (skip exact Chloe type-1 row, keep stock iterator)"
+            : "legacy-Nadine Mazur authored hands overlay repair PARTIAL");
     return installed;
 }
 
@@ -57640,6 +57981,10 @@ DWORD WINAPI install_hook(void*) {
     if constexpr (kEnableLegacyNadineActiveWeaponGripOverlayRepair &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_legacy_nadine_active_weapon_grip_overlay_repair();
+    }
+    if constexpr (kEnableLegacyNadineMazurAuthoredHandsOverlayRepair &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        install_legacy_nadine_mazur_authored_hands_overlay_repair();
     }
     if constexpr ((kEnableLegacyNadineWeaponIkFeatherInputCensus ||
                    kEnableLegacyNadineWeaponIkFeatherSuppression) &&

@@ -23527,3 +23527,144 @@ of the last left-hand grip-target producer before
 `WeaponIKFeather::Apply 0x1418F2700`, with later pose-command ownership retained
 as the competing hypothesis. Build `acj` disables the completed census; no IDB
 rename is required because all participating functions were already labelled.
+
+### 2026-08-13 STATIC: Mazur's ordinary two-arm overlay pair survives selection and feeds two authored states
+
+This static pass corrects an old false negative before any further runtime
+work. `player-specific-weapon-overlays.bin` object `8B9C0AA6` is the exact
+art-specific Mazur wrapper chosen by
+`Player_ConfigureWeaponAnimationOverlays 0x1410923A0`. Its keyed table is a
+`weapon-anim-overlay 0x2CF6C3B6` map of 1007 source states to pointers whose
+marker is `weapon-anim-overlay-info 0x65DAEC7C`. Ordinary idle/run keys
+`BE7CB4A2` and `EB712BFC` both select the same pair at raw `0x84480`:
+
+- first `56C57AD2 lg2h-sniper-tkiv-carry-peek-hands`, blend `0.8`;
+- second `283966ED lg2h-sniper-tkiv-carry-fatigue-walk-arms`, blend `0.7`;
+- flags zero and tail `-1`.
+
+The aim key `8762EA9D` independently selects `6EF309B0` plus the same
+`283966ED`. Direct PAK decode identifies `283966ED` as a Player-compatible
+eight-group animation owning joints `21..28`, the complete proximal left/right
+arm lane. It is not the earlier abstract `47C0A266` cover/turn token and does
+not justify forcing that token.
+
+The native code preserves the pair. `PlayerPlayWeaponOverlayAction_OnStart
+0x141097450` receives the record through controller vtable `+0x3C0`, passes both
+IDs and blends to vtable `+0x28`, and
+`PlayerWeaponAnimControl_RequestCustomWeaponPart 0x14108B940` writes the first
+ID to `Player+0x1CC`, the second to `Player+0x1D0`, and the second blend to
+`Player+0x1D4`; the same values are cached at control `+0x20/+0x24/+0x28`.
+`PlayerWeaponAnimControl_MatchesCustomWeaponPartRequest 0x14108B860` compares
+all three fields. The second arms clip is not discarded by the request ABI or
+reduced to a selector byte.
+
+The authored consumers close a third evidence class. In `anim-player.bin`, VM
+descriptor `0x45AC0` reads exactly `Player+0x1CC` and is a direct selector of
+state `custom-weapon-part F5D4FF02`; descriptor `0x55498` reads exactly
+`Player+0x1D0` and is a direct selector of
+`custom-weapon-part-with-feather 11EE475B`. Their respective roots are
+`0x58FD8` and `0x64518`. The audit now recognizes callback ownership directly
+from animation-state `+0x70`, so these are not unowned script fragments.
+
+The root topology explains how the pair is combined. Plain
+`custom-weapon-part` is a two-child `anim-node-blend`: its first child is the
+dynamic `anim-node-instance-0` and its second animation node reads the first ID
+from `Player+0x1CC`. The feather root is also a two-child blend. Its first child
+contains another first-ID animation node; its second animation node reads the
+second ID from `Player+0x1D0`. The root blend callback at raw `0x88E38` reads
+the signed scalar at `Player+0x1D4`. Native
+`AnimSnapshotNodeBlend_RefreshPhasesAndBlends 0x14191E180` evaluates that exact
+callback into snapshot node `+0x60`, and
+`AnimSnapshotNodeBlend_GenerateAnimCommands 0x14191E5F0` generates both child
+streams before appending command 7 with that weight. Thus both authored IDs and
+the second blend scalar remain live all the way to the command DAG; a
+single-clip or missing-second-reader explanation is statically impossible.
+
+Historical build `zo` supplies independent runtime consistency: exact local
+legacy Nadine selected `56C57AD2` before the normal holster request. That first
+ID joins the live event to the Mazur-specific pair containing `283966ED`. The
+old `zn` conclusion that zero calls to the instrumented vtable-`+0x28` slot
+meant this pair was not live is therefore **REJECTED as temporal packaging**:
+the hook was installed after persistent custom-state creation and observed only
+later draw/put events. It did not prove absence of the paired idle layer.
+
+Competing hypotheses are now narrower. **Hmissing-pair is STATIC REJECTED**:
+the asset, native request storage and both authored state readers agree on the
+two-clip contract. **Hwrong-pair-content remains open** because a Chloe-born
+Player tree may blend the selected Mazur pair with an incompatible Hands/base
+lane. **Hlater-merge/IK remains open** because exact same-frame weights and
+command ownership of the two custom states are not yet joined, and prior
+transfers/suppression prove that a later-buffer write is insufficient. No clip,
+weight, pose row or IK field is mutation-ready, so no game was launched. The
+next static boundary is the CreateAnimCommands command-6/7 merge for these two
+state IDs and the adjacent Hands lane; it must prove which contributor first
+produces the local-only left-hand divergence.
+
+### 2026-08-13 STATIC / IMPLEMENTED (`ack`): skip the exact Chloe-only Mazur hands materialization before snapshot creation
+
+The next static boundary identified the first incompatible contributor without
+another game launch. The campaign-Chloe player-mesh object `4C9FB65C`, selected
+by exact look value `3F334972`, contains one and only one type-1 row at raw
+`0xE5758`: `56C57AD2 -> E117618A`. The matching `vill-nadine` object
+`41666B5A` contains no row for `56C57AD2` or the complementary `283966ED`.
+The two endpoints are not interchangeable clips: direct decode from
+`anim-player-movement.pak` gives Player source skeleton `FD6DBE03`, eight
+groups and joints `29..32` for `56C57AD2`, but Chloe source skeleton
+`4B0F5DE3`, seven groups and joints `38..41` for `E117618A`. The paired Mazur
+arms clip `283966ED` remains Player-compatible and authors joints `21..28`.
+Together the native Mazur pair therefore owns Player joints `21..32`; the
+Chloe type-1 target replaces only its distal hands with a differently numbered
+Chloe lane.
+
+The exact materialization boundary is before the ordinary animation-id
+resolver. `AnimStateSnapshot_SnapshotAnimState 0x1418B24F0` calls
+`AnimStateSnapshot_TransformState 0x1418B2A40` at `0x1418B28B3`.
+`TransformState` calls `AnimOverlayState_FindMatchingRow 0x1417FA6E0` first at
+`0x1418B2AFE` (return `0x1418B2B03`) and again at `0x1418B2E93` (return
+`0x1418B2E98`) while materializing every authored type-1/type-5 row. Only after
+that does `SnapshotAnimState` call the ordinary resolver at `0x1418B2940`.
+This resolves the old runtime observation `E117618A -> E117618A`: the source
+had already been transformed, so the late resolver could never expose
+`56C57AD2`.
+
+`FindMatchingRow` also supplies a stock-preserving repair seam. Its 32-byte
+cursor stores the requested source at `+0`, the last set/row indices at
+`+4/+8`, and the returned 0x28-byte row pointer at `+0x10`. Passing a copy of
+the returned cursor back to the same native function advances to the next
+matching row. Build `ack` therefore calls stock once, admits only the exact
+`56C57AD2 -> E117618A`, type-1, campaign-Chloe row, then calls stock a second
+time with a stack-local copy of the cursor. It does not edit the shared DC row,
+replace a clip ID, suppress a blend command or bypass IK.
+
+Ownership is fail-closed. The existing `AnimOverlayState_Copy 0x1417F9DD0`
+hook tags only descendants copied from the exact retained Player's type-2
+master state. A tagged state must also occur exactly once as `track+0x8` in the
+current retained Player0 `AnimControl` registry; master states retain their
+native owner classification. The row skip additionally requires role B,
+retained owner0, screen0, stable legacy-Nadine look `D27C074F`, exact
+`PlayerWeaponController` owner, controller state WeaponOut/Aiming (`2/4`), the
+current exact Mazur `ProcessWeapon` art `33E29A1B`, same parent Player, exactly
+one active selector set `3F334972`, and exactly one matching row. Chloe,
+owner1, other weapons, transition states and stale/collided state pointers all
+fall through stock.
+
+Competing hypotheses are now separated. **Hmissing-Mazur-content is STATIC
+REJECTED** by the exact paired weapon record, native field readers and command
+blend. **Hordinary-resolver-corruption is REJECTED** because type-1
+materialization precedes it. **Hglobal-row-edit is REJECTED as unsafe** because
+the row is shared with real Chloe. **Hlater-IK/merge remains the only visual
+competitor**: it would be selected only if this exact upstream correction runs
+and the grip remains wrong. P99 remains explicitly outside this repair; its
+first-person grip is a separate unresolved owner.
+
+Falsifiable runtime prediction for the earned `ack` exam: after drawing Mazur
+and standing still as local Nadine on role B, the log must contain
+`NADINE-MAZUR-HANDS-OVERLAY-SKIP` with `source=56C57AD2`,
+`target=E117618A`, `owner=0`, `sets=1`, `rows=1`, and only caller RVA
+`18B2B03` or `18B2E98`. No such row may appear in role A, for P99, or while the
+weapon is holstered. If the marker appears and Mazur becomes a stable
+two-handed hold, Hwrong-type1 is CONFIRMED. If the marker appears but the pose
+is unchanged, Hlater-IK/merge wins and this repair is insufficient. If no
+marker appears, its temporal/state admission is falsified; do not widen it.
+The release DLL builds successfully, but the game has not been launched for
+this new boundary yet.

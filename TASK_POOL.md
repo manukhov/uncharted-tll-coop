@@ -239,8 +239,38 @@
       REJECTED:** the drawn P99 rigid body follows joint 30; the remaining local
       grip defect is upstream in the arm/hand pose or its semantic timing, not
       an art-local weapon offset. Build `acj` disables the completed census.
+- [x] Correct the old `zn` special-pair false negative statically. Exact Mazur
+      object `8B9C0AA6` maps ordinary source states `BE7CB4A2/EB712BFC` to the
+      atomic pair `56C57AD2 + 283966ED` with blends `0.8/0.7`; the second clip is
+      the Player-compatible two-arm lane `[21..28]`. Native
+      `PlayerWeaponAnimControl_RequestCustomWeaponPart 0x14108B940` retains both
+      IDs at control `+0x20/+0x24` and Player `+0x1CC/+0x1D0`. Independent VM
+      selectors owned by `custom-weapon-part F5D4FF02` and
+      `custom-weapon-part-with-feather 11EE475B` read those Player fields.
+      The feather root reads `Player+0x1D4` as its blend scalar, generates both
+      child command streams and appends native command 7 with that weight.
+      Historical `zo` selected the pair's unique first ID; zero later `zn`
+      calls only proved its event-time hook missed persistent creation.
+      **Hmissing-pair is STATIC REJECTED; do not force 47C0A266, 283966ED, a
+      clip weight or another late pose transfer.**
+- [x] Close the exact Mazur distal-hands overwrite before snapshot creation.
+      Campaign-Chloe player-mesh selector `3F334972` owns exactly one type-1
+      row `56C57AD2 -> E117618A`; vill-Nadine owns none. The source is Player
+      eight-group joints `[29..32]`, the target is Chloe seven-group joints
+      `[38..41]`, while paired `283966ED` correctly owns Player `[21..28]`.
+      `AnimStateSnapshot_TransformState 0x1418B2A40` materializes this row via
+      `AnimOverlayState_FindMatchingRow 0x1417FA6E0` before the ordinary
+      resolver. Build `ack` skips only this exact row by advancing the stock
+      32-byte cursor, scoped to the unique retained local-Nadine track/master,
+      current Mazur and controller state 2/4. Shared rows, clip IDs, command
+      weights and IK remain untouched. Three evidence types and the exact
+      falsifiable prediction are recorded in `COOP_STATUS.md`.
 - [ ] Resume statically at the last semantic producer of the left-hand grip
-      target before `WeaponIKFeather::Apply 0x1418F2700`. Do not retry the
+      target before `WeaponIKFeather::Apply 0x1418F2700` only if the bounded
+      `ack` exam emits the exact skip marker but leaves Mazur's grip unchanged.
+      In that outcome, close the later command-6/7 merge and same-frame weights
+      for `custom-weapon-part`, `custom-weapon-part-with-feather` and the
+      adjacent Hands lane. Do not retry the
       rejected post-`+0x408` local-row transfer, final-palette transfer,
       Feather suppression or ProcessWeapon local correction. Any next runtime
       proposal must first distinguish an authored target/input error from a
